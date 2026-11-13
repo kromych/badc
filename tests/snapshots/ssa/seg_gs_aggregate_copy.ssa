@@ -622,21 +622,21 @@ fn ent_pc=14 n_params=0 variadic=false locals=8
     v217 LocalAddr(-8)                                    -> x6
     v218 BinopI { op=add, lhs=v214, rhs_imm=8 }           -> x6
     v219 Imm(287454020)                                   -> x6
-    v220 StoreLocal { off=-8, disp=8, value=v219, kind=I32 } -> -
-    v221 LocalAddr(-8)                                    -> x6
-    v222 BinopI { op=add, lhs=v214, rhs_imm=8 }           -> x6
-    v223 Imm(4)                                           -> x6
-    v224 BinopI { op=add, lhs=v214, rhs_imm=12 }          -> x6
-    v225 StoreLocal { off=-8, disp=12, value=v209, kind=I32 } -> -
+    v220 Imm(287454020)                                   -> x6
+    v221 LocalAddr(-8)                                    -> x7
+    v222 BinopI { op=add, lhs=v214, rhs_imm=8 }           -> x7
+    v223 Imm(4)                                           -> x7
+    v224 BinopI { op=add, lhs=v214, rhs_imm=12 }          -> x7
+    v225 StoreLocal { off=-8, disp=8, value=v220, kind=I64 } -> -
     v226 LocalAddr(-8)                                    -> x6
     v227 BinopI { op=add, lhs=v214, rhs_imm=8 }           -> x6
     v228 Imm(8)                                           -> x6
     v229 BinopI { op=add, lhs=v214, rhs_imm=16 }          -> x6
     v230 Imm(1432778632)                                  -> x6
-    v231 StoreLocal { off=-8, disp=16, value=v230, kind=I32 } -> -
-    v232 LocalAddr(-8)                                    -> x6
-    v233 BinopI { op=add, lhs=v214, rhs_imm=20 }          -> x6
-    v234 StoreLocal { off=-8, disp=20, value=v209, kind=I32 } -> -
+    v231 Imm(1432778632)                                  -> x6
+    v232 LocalAddr(-8)                                    -> x7
+    v233 BinopI { op=add, lhs=v214, rhs_imm=20 }          -> x7
+    v234 StoreLocal { off=-8, disp=16, value=v231, kind=I64 } -> -
     v235 LocalAddr(-8)                                    -> x7
     v236 BinopI { op=add, lhs=v235, rhs_imm=24 }          -> x6
     v237 Imm(81985529216486895)                           -> x6

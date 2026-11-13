@@ -32,8 +32,8 @@ Disassembly of section .text:
                	andq	$-0x20, %rsp
                	leaq	(%rsp), %rax
                	movq	%rax, <rip> # <addr>
-               	movl	$0x9, (%rsp)
-               	movl	$0xa, 0x4(%rsp)
+               	movabsq	$0xa00000009, %rcx      # imm = 0xA00000009
+               	movq	%rcx, (%rsp)
                	movq	%rax, %rcx
                	andq	$0x1f, %rcx
                	xorl	%eax, %eax

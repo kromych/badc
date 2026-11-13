@@ -142,54 +142,30 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x138, %rsp            # imm = 0x138
                	pushq	%rbx
-               	movb	$-0x64, -0x130(%rbp)
-               	movb	$0x7f, -0x120(%rbp)
-               	movb	$-0x3f, -0x12f(%rbp)
-               	movb	$0x6c, -0x11f(%rbp)
-               	movb	$-0x1a, -0x12e(%rbp)
-               	movb	$0x59, -0x11e(%rbp)
-               	movb	$0xb, -0x12d(%rbp)
-               	movb	$0x46, -0x11d(%rbp)
-               	movb	$0x30, -0x12c(%rbp)
-               	movb	$0x33, -0x11c(%rbp)
-               	movb	$0x55, -0x12b(%rbp)
-               	movb	$0x20, -0x11b(%rbp)
-               	movb	$0x7a, -0x12a(%rbp)
-               	movb	$0xd, -0x11a(%rbp)
-               	movb	$-0x61, -0x129(%rbp)
-               	movb	$-0x6, -0x119(%rbp)
-               	movb	$-0x3c, -0x128(%rbp)
-               	movb	$-0x19, -0x118(%rbp)
-               	movb	$-0x17, -0x127(%rbp)
-               	movb	$-0x2c, -0x117(%rbp)
-               	movb	$0xe, -0x126(%rbp)
-               	movb	$-0x3f, -0x116(%rbp)
-               	movb	$0x33, -0x125(%rbp)
-               	movb	$-0x52, -0x115(%rbp)
-               	movb	$0x58, -0x124(%rbp)
-               	movb	$-0x65, -0x114(%rbp)
-               	movb	$0x7d, -0x123(%rbp)
-               	movb	$-0x78, -0x113(%rbp)
-               	movb	$-0x5e, -0x122(%rbp)
-               	movb	$0x75, -0x112(%rbp)
-               	movb	$-0x39, -0x121(%rbp)
-               	movb	$0x62, -0x111(%rbp)
-               	movw	$0x8ad0, -0x110(%rbp)   # imm = 0x8AD0
-               	movw	$0x3, -0x100(%rbp)
-               	movw	$0xadf9, -0x10e(%rbp)   # imm = 0xADF9
-               	movw	$0xa, -0xfe(%rbp)
-               	movw	$0xd122, -0x10c(%rbp)   # imm = 0xD122
-               	movw	$0x11, -0xfc(%rbp)
-               	movw	$0xf44b, -0x10a(%rbp)   # imm = 0xF44B
-               	movw	$0x18, -0xfa(%rbp)
-               	movw	$0x1774, -0x108(%rbp)   # imm = 0x1774
-               	movw	$0x1f, -0xf8(%rbp)
-               	movw	$0x3a9d, -0x106(%rbp)   # imm = 0x3A9D
-               	movw	$0x26, -0xf6(%rbp)
-               	movw	$0x5dc6, -0x104(%rbp)   # imm = 0x5DC6
-               	movw	$0x2d, -0xf4(%rbp)
-               	movw	$0x80ef, -0x102(%rbp)   # imm = 0x80EF
-               	movw	$0x34, -0xf2(%rbp)
+               	movw	$0xc19c, -0x130(%rbp)   # imm = 0xC19C
+               	movw	$0x6c7f, -0x120(%rbp)   # imm = 0x6C7F
+               	movw	$0xbe6, -0x12e(%rbp)    # imm = 0xBE6
+               	movw	$0x4659, -0x11e(%rbp)   # imm = 0x4659
+               	movw	$0x5530, -0x12c(%rbp)   # imm = 0x5530
+               	movw	$0x2033, -0x11c(%rbp)   # imm = 0x2033
+               	movw	$0x9f7a, -0x12a(%rbp)   # imm = 0x9F7A
+               	movw	$0xfa0d, -0x11a(%rbp)   # imm = 0xFA0D
+               	movw	$0xe9c4, -0x128(%rbp)   # imm = 0xE9C4
+               	movw	$0xd4e7, -0x118(%rbp)   # imm = 0xD4E7
+               	movw	$0x330e, -0x126(%rbp)   # imm = 0x330E
+               	movw	$0xaec1, -0x116(%rbp)   # imm = 0xAEC1
+               	movw	$0x7d58, -0x124(%rbp)   # imm = 0x7D58
+               	movw	$0x889b, -0x114(%rbp)   # imm = 0x889B
+               	movw	$0xc7a2, -0x122(%rbp)   # imm = 0xC7A2
+               	movw	$0x6275, -0x112(%rbp)   # imm = 0x6275
+               	movl	$0xadf98ad0, -0x110(%rbp) # imm = 0xADF98AD0
+               	movl	$0xa0003, -0x100(%rbp)  # imm = 0xA0003
+               	movl	$0xf44bd122, -0x10c(%rbp) # imm = 0xF44BD122
+               	movl	$0x180011, -0xfc(%rbp)  # imm = 0x180011
+               	movl	$0x3a9d1774, -0x108(%rbp) # imm = 0x3A9D1774
+               	movl	$0x26001f, -0xf8(%rbp)  # imm = 0x26001F
+               	movl	$0x80ef5dc6, -0x104(%rbp) # imm = 0x80EF5DC6
+               	movl	$0x34002d, -0xf4(%rbp)  # imm = 0x34002D
                	movl	$0x88ca6c00, -0xf0(%rbp) # imm = 0x88CA6C00
                	movl	$0x9c40, -0xe0(%rbp)    # imm = 0x9C40
                	movl	$0xf0000000, -0xd0(%rbp) # imm = 0xF0000000
@@ -501,30 +477,18 @@ Disassembly of section .text:
                	ucomisd	%xmm2, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	movb	$-0x38, -0x40(%rbp)
-               	movb	$0x63, -0x38(%rbp)
-               	movb	$-0xf, -0x3f(%rbp)
-               	movb	$0x70, -0x37(%rbp)
-               	movb	$0x1a, -0x3e(%rbp)
-               	movb	$0x7d, -0x36(%rbp)
-               	movb	$0x43, -0x3d(%rbp)
-               	movb	$-0x76, -0x35(%rbp)
-               	movb	$0x6c, -0x3c(%rbp)
-               	movb	$-0x69, -0x34(%rbp)
-               	movb	$-0x6b, -0x3b(%rbp)
-               	movb	$-0x5c, -0x33(%rbp)
-               	movb	$-0x42, -0x3a(%rbp)
-               	movb	$-0x4f, -0x32(%rbp)
-               	movb	$-0x19, -0x39(%rbp)
-               	movb	$-0x42, -0x31(%rbp)
-               	movw	$0xb1e0, -0x30(%rbp)    # imm = 0xB1E0
-               	movw	$0x7, -0x28(%rbp)
-               	movw	$0xe219, -0x2e(%rbp)    # imm = 0xE219
-               	movw	$0x8, -0x26(%rbp)
-               	movw	$0x1252, -0x2c(%rbp)    # imm = 0x1252
-               	movw	$0x9, -0x24(%rbp)
-               	movw	$0x428b, -0x2a(%rbp)    # imm = 0x428B
-               	movw	$0xa, -0x22(%rbp)
+               	movw	$0xf1c8, -0x40(%rbp)    # imm = 0xF1C8
+               	movw	$0x7063, -0x38(%rbp)    # imm = 0x7063
+               	movw	$0x431a, -0x3e(%rbp)    # imm = 0x431A
+               	movw	$0x8a7d, -0x36(%rbp)    # imm = 0x8A7D
+               	movw	$0x956c, -0x3c(%rbp)    # imm = 0x956C
+               	movw	$0xa497, -0x34(%rbp)    # imm = 0xA497
+               	movw	$0xe7be, -0x3a(%rbp)    # imm = 0xE7BE
+               	movw	$0xbeb1, -0x32(%rbp)    # imm = 0xBEB1
+               	movl	$0xe219b1e0, -0x30(%rbp) # imm = 0xE219B1E0
+               	movl	$0x80007, -0x28(%rbp)   # imm = 0x80007
+               	movl	$0x428b1252, -0x2c(%rbp) # imm = 0x428B1252
+               	movl	$0xa0009, -0x24(%rbp)   # imm = 0xA0009
                	movl	$0x77359400, -0x20(%rbp) # imm = 0x77359400
                	movl	$0x88ca6c00, -0x18(%rbp) # imm = 0x88CA6C00
                	movl	$0x40200000, -0x10(%rbp) # imm = 0x40200000

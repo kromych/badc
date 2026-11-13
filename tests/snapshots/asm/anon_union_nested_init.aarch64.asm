@@ -55,15 +55,10 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x40]
                	ldp	x20, x21, [sp], #0x50
                	ret
-               	mov	x1, #0x9                // =9
                	sub	x0, x29, #0x28
-               	sturb	w1, [x29, #-0x28]
-               	mov	x1, #0x8                // =8
-               	sturb	w1, [x29, #-0x27]
-               	mov	x1, #0x7                // =7
-               	sturb	w1, [x29, #-0x26]
-               	mov	x1, #0x6                // =6
-               	sturb	w1, [x29, #-0x25]
+               	mov	x1, #0x809              // =2057
+               	movk	x1, #0x607, lsl #16
+               	stur	w1, [x29, #-0x28]
                	stur	w20, [x29, #-0x24]
                	bl	<addr>
                	ldrb	w1, [x0]

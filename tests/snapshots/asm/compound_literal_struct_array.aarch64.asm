@@ -361,15 +361,13 @@ Disassembly of section .text:
                	stp	x16, x17, [x1]
                	ldp	x16, x17, [x0, #0x10]
                	stp	x16, x17, [x1, #0x10]
-               	mov	x0, #0x3                // =3
                	sub	x3, x29, #0x30
-               	stur	w0, [x29, #-0x30]
-               	mov	x0, #0x4                // =4
-               	stur	w0, [x29, #-0x2c]
+               	mov	x0, #0x3                // =3
+               	movk	x0, #0x4, lsl #32
+               	stur	x0, [x29, #-0x30]
                	mov	x0, #0x5                // =5
-               	stur	w0, [x29, #-0x28]
-               	mov	x0, #0x6                // =6
-               	stur	w0, [x29, #-0x24]
+               	movk	x0, #0x6, lsl #32
+               	stur	x0, [x29, #-0x28]
                	mov	x4, #0xa                // =10
                	mov	x0, #0x0                // =0
                	mov	x1, x0

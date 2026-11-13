@@ -286,9 +286,8 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x40
                	ret
                	mov	x0, #0x3fc00000         // =1069547520
-               	str	w0, [x20]
-               	mov	x0, #0x40200000         // =1075838976
-               	str	w0, [x20, #0x4]
+               	movk	x0, #0x4020, lsl #48
+               	str	x0, [x20]
                	mov	x0, #0x40600000         // =1080033280
                	str	w0, [x20, #0x8]
                	ldr	s0, [x20]

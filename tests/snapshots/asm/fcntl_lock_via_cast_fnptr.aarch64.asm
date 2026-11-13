@@ -38,13 +38,11 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x90
                	ret
                	sub	x2, x29, #0x60
-               	stur	xzr, [x29, #-0x60]
                	stur	xzr, [x29, #-0x58]
                	stur	xzr, [x29, #-0x50]
                	stur	xzr, [x29, #-0x48]
-               	mov	x1, #0x1                // =1
-               	sturh	w1, [x29, #-0x60]
-               	sturh	wzr, [x29, #-0x5e]
+               	mov	x0, #0x1                // =1
+               	stur	x0, [x29, #-0x60]
                	mov	x1, #0x6                // =6
                	mov	x0, x20
                	bl	<addr>

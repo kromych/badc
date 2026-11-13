@@ -98,38 +98,22 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x20, %eax
                	jl	<addr>
-               	movw	$0x8ad0, 0x40(%rsp)     # imm = 0x8AD0
-               	movw	$0x3, 0x60(%rsp)
-               	movw	$0xadf9, 0x42(%rsp)     # imm = 0xADF9
-               	movw	$0xa, 0x62(%rsp)
-               	movw	$0xd122, 0x44(%rsp)     # imm = 0xD122
-               	movw	$0x11, 0x64(%rsp)
-               	movw	$0xf44b, 0x46(%rsp)     # imm = 0xF44B
-               	movw	$0x18, 0x66(%rsp)
-               	movw	$0x1774, 0x48(%rsp)     # imm = 0x1774
-               	movw	$0x1f, 0x68(%rsp)
-               	movw	$0x3a9d, 0x4a(%rsp)     # imm = 0x3A9D
-               	movw	$0x26, 0x6a(%rsp)
-               	movw	$0x5dc6, 0x4c(%rsp)     # imm = 0x5DC6
-               	movw	$0x2d, 0x6c(%rsp)
-               	movw	$0x80ef, 0x4e(%rsp)     # imm = 0x80EF
-               	movw	$0x34, 0x6e(%rsp)
-               	movw	$0xa418, 0x50(%rsp)     # imm = 0xA418
-               	movw	$0x3b, 0x70(%rsp)
-               	movw	$0xc741, 0x52(%rsp)     # imm = 0xC741
-               	movw	$0x42, 0x72(%rsp)
-               	movw	$0xea6a, 0x54(%rsp)     # imm = 0xEA6A
-               	movw	$0x49, 0x74(%rsp)
-               	movw	$0xd93, 0x56(%rsp)      # imm = 0xD93
-               	movw	$0x50, 0x76(%rsp)
-               	movw	$0x30bc, 0x58(%rsp)     # imm = 0x30BC
-               	movw	$0x57, 0x78(%rsp)
-               	movw	$0x53e5, 0x5a(%rsp)     # imm = 0x53E5
-               	movw	$0x5e, 0x7a(%rsp)
-               	movw	$0x770e, 0x5c(%rsp)     # imm = 0x770E
-               	movw	$0x65, 0x7c(%rsp)
-               	movw	$0x9a37, 0x5e(%rsp)     # imm = 0x9A37
-               	movw	$0x6c, 0x7e(%rsp)
+               	movl	$0xadf98ad0, 0x40(%rsp) # imm = 0xADF98AD0
+               	movl	$0xa0003, 0x60(%rsp)    # imm = 0xA0003
+               	movl	$0xf44bd122, 0x44(%rsp) # imm = 0xF44BD122
+               	movl	$0x180011, 0x64(%rsp)   # imm = 0x180011
+               	movl	$0x3a9d1774, 0x48(%rsp) # imm = 0x3A9D1774
+               	movl	$0x26001f, 0x68(%rsp)   # imm = 0x26001F
+               	movl	$0x80ef5dc6, 0x4c(%rsp) # imm = 0x80EF5DC6
+               	movl	$0x34002d, 0x6c(%rsp)   # imm = 0x34002D
+               	movl	$0xc741a418, 0x50(%rsp) # imm = 0xC741A418
+               	movl	$0x42003b, 0x70(%rsp)   # imm = 0x42003B
+               	movl	$0xd93ea6a, 0x54(%rsp)  # imm = 0xD93EA6A
+               	movl	$0x500049, 0x74(%rsp)   # imm = 0x500049
+               	movl	$0x53e530bc, 0x58(%rsp) # imm = 0x53E530BC
+               	movl	$0x5e0057, 0x78(%rsp)   # imm = 0x5E0057
+               	movl	$0x9a37770e, 0x5c(%rsp) # imm = 0x9A37770E
+               	movl	$0x6c0065, 0x7c(%rsp)   # imm = 0x6C0065
                	movl	$0x88ca6c00, 0x80(%rsp) # imm = 0x88CA6C00
                	movl	$0x9c40, 0xa0(%rsp)     # imm = 0x9C40
                	movl	$0xf0000000, 0xc0(%rsp) # imm = 0xF0000000

@@ -261,31 +261,27 @@ Disassembly of section .text:
                	pushq	%rbx
                	subq	$0x80, %rsp
                	andq	$-0x20, %rsp
-               	leaq	(%rsp), %rcx
+               	leaq	(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rax)
+               	movq	$-0x1, (%rsp)
+               	movq	$-0x1, 0x8(%rsp)
+               	movq	$-0x1, 0x10(%rsp)
+               	movq	$-0x1, 0x18(%rsp)
+               	leaq	0x20(%rsp), %rcx
                	vxorps	%ymm14, %ymm14, %ymm14
                	vmovups	%ymm14, (%rcx)
-               	movl	$0xffffffff, (%rsp)     # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x4(%rsp)  # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x8(%rsp)  # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0xc(%rsp)  # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x10(%rsp) # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x14(%rsp) # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x18(%rsp) # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x1c(%rsp) # imm = 0xFFFFFFFF
-               	leaq	0x20(%rsp), %rax
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%ymm14, (%rax)
                	leaq	0x40(%rsp), %rdx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rdx)
-               	leaq	0x20(%rsp), %rax
                	vmovups	(%rcx), %ymm14
-               	vmovups	%ymm14, (%rax)
+               	vmovups	%ymm14, (%rdx)
+               	leaq	0x20(%rsp), %rsi
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rsi)
                	leaq	0x60(%rsp), %rcx
                	vmovups	(%rdx), %ymm14
                	vmovups	%ymm14, (%rcx)
                	leaq	(%rsp), %rdx
-               	vmovups	(%rax), %ymm14
+               	vmovups	(%rsi), %ymm14
                	vmovups	%ymm14, (%rdx)
                	leaq	0x40(%rsp), %rsi
                	vxorps	%ymm14, %ymm14, %ymm14
@@ -640,31 +636,27 @@ Disassembly of section .text:
                	pushq	%rbx
                	subq	$0x80, %rsp
                	andq	$-0x20, %rsp
-               	leaq	(%rsp), %rcx
+               	leaq	(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rax)
+               	movq	$-0x1, (%rsp)
+               	movq	$-0x1, 0x8(%rsp)
+               	movq	$-0x1, 0x10(%rsp)
+               	movq	$-0x1, 0x18(%rsp)
+               	leaq	0x20(%rsp), %rcx
                	vxorps	%ymm14, %ymm14, %ymm14
                	vmovups	%ymm14, (%rcx)
-               	movl	$0xffffffff, (%rsp)     # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x4(%rsp)  # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x8(%rsp)  # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0xc(%rsp)  # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x10(%rsp) # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x14(%rsp) # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x18(%rsp) # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x1c(%rsp) # imm = 0xFFFFFFFF
-               	leaq	0x20(%rsp), %rax
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%ymm14, (%rax)
                	leaq	0x40(%rsp), %rdx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rdx)
-               	leaq	0x20(%rsp), %rax
                	vmovups	(%rcx), %ymm14
-               	vmovups	%ymm14, (%rax)
+               	vmovups	%ymm14, (%rdx)
+               	leaq	0x20(%rsp), %rsi
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rsi)
                	leaq	0x60(%rsp), %rcx
                	vmovups	(%rdx), %ymm14
                	vmovups	%ymm14, (%rcx)
                	leaq	(%rsp), %rdx
-               	vmovups	(%rax), %ymm14
+               	vmovups	(%rsi), %ymm14
                	vmovups	%ymm14, (%rdx)
                	leaq	0x40(%rsp), %rsi
                	vxorps	%ymm14, %ymm14, %ymm14

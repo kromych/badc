@@ -18,14 +18,7 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x90
                	sub	x0, x29, #0x90
-               	sturb	wzr, [x29, #-0x90]
-               	sturb	wzr, [x29, #-0x8f]
-               	sturb	wzr, [x29, #-0x8e]
-               	sturb	wzr, [x29, #-0x8d]
-               	sturb	wzr, [x29, #-0x8c]
-               	sturb	wzr, [x29, #-0x8b]
-               	sturb	wzr, [x29, #-0x8a]
-               	sturb	wzr, [x29, #-0x89]
+               	stur	xzr, [x29, #-0x90]
                	ldur	w1, [x29, #-0x90]
                	and	x1, x1, #0xffffffffc0000000
                	orr	x1, x1, #0x3fffffff
@@ -60,12 +53,9 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x88
                	sturb	wzr, [x29, #-0x88]
-               	sturb	wzr, [x29, #-0x87]
-               	sturb	wzr, [x29, #-0x86]
-               	sturb	wzr, [x29, #-0x85]
+               	mov	x2, #0x1                // =1
                	sturb	wzr, [x29, #-0x84]
-               	mov	x1, #0x1                // =1
-               	sturb	w1, [x29, #-0x88]
+               	stur	w2, [x29, #-0x88]
                	ldurh	w1, [x29, #-0x87]
                	and	x1, x1, #0xffffffffffff8000
                	orr	x1, x1, #0x7ffe
@@ -96,17 +86,9 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x70
                	sturb	wzr, [x29, #-0x70]
-               	sturb	wzr, [x29, #-0x6f]
-               	sturb	wzr, [x29, #-0x6e]
-               	sturb	wzr, [x29, #-0x6d]
-               	sturb	wzr, [x29, #-0x6c]
-               	sturb	wzr, [x29, #-0x6b]
-               	sturb	wzr, [x29, #-0x6a]
-               	sturb	wzr, [x29, #-0x69]
-               	sturb	wzr, [x29, #-0x68]
-               	sturb	wzr, [x29, #-0x67]
                	mov	x1, #0x1                // =1
-               	sturb	w1, [x29, #-0x70]
+               	sturh	wzr, [x29, #-0x68]
+               	stur	x1, [x29, #-0x70]
                	ldur	x1, [x29, #-0x6f]
                	and	x1, x1, #0xf000000000000000
                	orr	x1, x1, #0xffffffffffffff
@@ -176,20 +158,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x60
-               	sturb	wzr, [x29, #-0x60]
-               	sturb	wzr, [x29, #-0x5f]
-               	sturb	wzr, [x29, #-0x5e]
-               	sturb	wzr, [x29, #-0x5d]
-               	sturb	wzr, [x29, #-0x5c]
-               	sturb	wzr, [x29, #-0x5b]
-               	sturb	wzr, [x29, #-0x5a]
-               	sturb	wzr, [x29, #-0x59]
-               	sturb	wzr, [x29, #-0x58]
-               	sturb	wzr, [x29, #-0x57]
-               	sturb	wzr, [x29, #-0x56]
-               	sturb	wzr, [x29, #-0x55]
-               	sturb	wzr, [x29, #-0x54]
-               	sturb	wzr, [x29, #-0x53]
+               	stur	xzr, [x29, #-0x60]
+               	stur	wzr, [x29, #-0x58]
+               	sturh	wzr, [x29, #-0x54]
                	sturb	wzr, [x29, #-0x52]
                	ldur	w1, [x29, #-0x60]
                	and	x1, x1, #0xffffffffffc00000
@@ -234,13 +205,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x50
-               	sturh	wzr, [x29, #-0x50]
-               	sturh	wzr, [x29, #-0x4e]
-               	sturh	wzr, [x29, #-0x4c]
-               	sturh	wzr, [x29, #-0x4a]
+               	mov	x2, #0x1                // =1
                	sturh	wzr, [x29, #-0x48]
-               	mov	x1, #0x1                // =1
-               	sturb	w1, [x29, #-0x50]
+               	stur	x2, [x29, #-0x50]
                	ldur	w1, [x29, #-0x4f]
                	and	x1, x1, #0xffffffffc0000000
                	orr	x1, x1, #0x3fffffff
@@ -284,10 +251,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x80
-               	sturh	wzr, [x29, #-0x80]
-               	sturh	wzr, [x29, #-0x7e]
                	mov	x1, #0x1                // =1
-               	sturb	w1, [x29, #-0x80]
+               	stur	w1, [x29, #-0x80]
                	ldurh	w1, [x29, #-0x7f]
                	and	x1, x1, #0xffffffffffff8000
                	orr	x1, x1, #0x7ffe
@@ -313,11 +278,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x40
-               	stur	wzr, [x29, #-0x40]
-               	stur	wzr, [x29, #-0x3c]
+               	mov	x2, #0x1                // =1
                	stur	wzr, [x29, #-0x38]
-               	mov	x1, #0x1                // =1
-               	sturb	w1, [x29, #-0x40]
+               	stur	x2, [x29, #-0x40]
                	ldur	x1, [x29, #-0x3f]
                	and	x1, x1, #0xf000000000000000
                	orr	x1, x1, #0xffffffffffffff
@@ -343,21 +306,19 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x30
-               	stur	wzr, [x29, #-0x30]
-               	stur	wzr, [x29, #-0x2c]
+               	mov	x2, #0x1                // =1
                	stur	wzr, [x29, #-0x28]
-               	stur	wzr, [x29, #-0x20]
-               	stur	wzr, [x29, #-0x1c]
+               	mov	x3, #0x1                // =1
                	stur	wzr, [x29, #-0x18]
-               	stur	wzr, [x29, #-0x10]
                	stur	wzr, [x29, #-0xc]
                	stur	wzr, [x29, #-0x8]
-               	mov	x1, #0x1                // =1
-               	sturb	w1, [x29, #-0x10]
-               	sturb	w1, [x29, #-0x20]
-               	sturb	w1, [x29, #-0x30]
+               	mov	x4, #0x1                // =1
+               	movk	x4, #0xffff, lsl #32
+               	movk	x4, #0x3fff, lsl #48
+               	stur	x3, [x29, #-0x20]
+               	stur	x2, [x29, #-0x30]
                	mov	x1, #0x3fffffff         // =1073741823
-               	stur	w1, [x29, #-0xc]
+               	stur	x4, [x29, #-0x10]
                	ldur	w2, [x29, #-0x1f]
                	and	x2, x2, #0xffffffffc0000000
                	orr	x2, x2, x1

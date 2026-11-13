@@ -71,10 +71,7 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x28(%rbp), %rdi
-               	movb	$0x9, -0x28(%rbp)
-               	movb	$0x8, -0x27(%rbp)
-               	movb	$0x7, -0x26(%rbp)
-               	movb	$0x6, -0x25(%rbp)
+               	movl	$0x6070809, -0x28(%rbp) # imm = 0x6070809
                	movl	%ebx, -0x24(%rbp)
                	callq	<addr>
                	movzbq	(%rax), %rcx

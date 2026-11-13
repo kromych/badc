@@ -17,37 +17,22 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
-               	sturb	wzr, [x29, #-0x20]
-               	mov	x0, #0x1                // =1
-               	sturb	w0, [x29, #-0x1f]
-               	mov	x0, #0x2                // =2
-               	sturb	w0, [x29, #-0x1e]
-               	mov	x0, #0x3                // =3
-               	sturb	w0, [x29, #-0x1d]
-               	mov	x0, #0x4                // =4
-               	sturb	w0, [x29, #-0x1c]
-               	mov	x0, #0x5                // =5
-               	sturb	w0, [x29, #-0x1b]
-               	mov	x0, #0x6                // =6
-               	sturb	w0, [x29, #-0x1a]
-               	mov	x0, #0x7                // =7
-               	sturb	w0, [x29, #-0x19]
-               	mov	x0, #0x8                // =8
-               	sturb	w0, [x29, #-0x18]
-               	mov	x0, #0x9                // =9
-               	sturb	w0, [x29, #-0x17]
-               	mov	x0, #0xa                // =10
-               	sturb	w0, [x29, #-0x16]
-               	mov	x0, #0xb                // =11
-               	sturb	w0, [x29, #-0x15]
-               	mov	x0, #0xc                // =12
-               	sturb	w0, [x29, #-0x14]
-               	mov	x0, #0xd                // =13
-               	sturb	w0, [x29, #-0x13]
-               	mov	x0, #0xe                // =14
-               	sturb	w0, [x29, #-0x12]
-               	mov	x0, #0xf                // =15
-               	sturb	w0, [x29, #-0x11]
+               	mov	x0, #0x100              // =256
+               	sturh	w0, [x29, #-0x20]
+               	mov	x0, #0x302              // =770
+               	sturh	w0, [x29, #-0x1e]
+               	mov	x0, #0x504              // =1284
+               	sturh	w0, [x29, #-0x1c]
+               	mov	x0, #0x706              // =1798
+               	sturh	w0, [x29, #-0x1a]
+               	mov	x0, #0x908              // =2312
+               	sturh	w0, [x29, #-0x18]
+               	mov	x0, #0xb0a              // =2826
+               	sturh	w0, [x29, #-0x16]
+               	mov	x0, #0xd0c              // =3340
+               	sturh	w0, [x29, #-0x14]
+               	mov	x0, #0xf0e              // =3854
+               	sturh	w0, [x29, #-0x12]
                	movi	v0.16b, #0xa
                	sub	x1, x29, #0x10
                	sub	x2, x29, #0x20

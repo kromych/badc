@@ -64,22 +64,8 @@ Disassembly of section .text:
                	retq
                	leaq	-0x28(%rbp), %rsi
                	xorl	%ecx, %ecx
-               	movb	%cl, -0x28(%rbp)
-               	movb	%cl, -0x27(%rbp)
-               	movb	%cl, -0x26(%rbp)
-               	movb	%cl, -0x25(%rbp)
-               	movb	%cl, -0x24(%rbp)
-               	movb	%cl, -0x23(%rbp)
-               	movb	%cl, -0x22(%rbp)
-               	movb	%cl, -0x21(%rbp)
-               	movb	%cl, -0x20(%rbp)
-               	movb	%cl, -0x1f(%rbp)
-               	movb	%cl, -0x1e(%rbp)
-               	movb	%cl, -0x1d(%rbp)
-               	movb	%cl, -0x1c(%rbp)
-               	movb	%cl, -0x1b(%rbp)
-               	movb	%cl, -0x1a(%rbp)
-               	movb	%cl, -0x19(%rbp)
+               	movq	$0x0, -0x28(%rbp)
+               	movq	$0x0, -0x20(%rbp)
                	movl	$0x10, %edx
                	movq	0x8(%rsp), %rdi
                	xorl	%eax, %eax
@@ -123,22 +109,8 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x28(%rbp), %rsi
-               	movb	$0x0, -0x28(%rbp)
-               	movb	$0x0, -0x27(%rbp)
-               	movb	$0x0, -0x26(%rbp)
-               	movb	$0x0, -0x25(%rbp)
-               	movb	$0x0, -0x24(%rbp)
-               	movb	$0x0, -0x23(%rbp)
-               	movb	$0x0, -0x22(%rbp)
-               	movb	$0x0, -0x21(%rbp)
-               	movb	$0x0, -0x20(%rbp)
-               	movb	$0x0, -0x1f(%rbp)
-               	movb	$0x0, -0x1e(%rbp)
-               	movb	$0x0, -0x1d(%rbp)
-               	movb	$0x0, -0x1c(%rbp)
-               	movb	$0x0, -0x1b(%rbp)
-               	movb	$0x0, -0x1a(%rbp)
-               	movb	$0x0, -0x19(%rbp)
+               	movq	$0x0, -0x28(%rbp)
+               	movq	$0x0, -0x20(%rbp)
                	movl	$0x8, %edx
                	movl	$0x10, %ecx
                	movq	(%rsp), %r11

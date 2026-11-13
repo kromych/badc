@@ -1472,14 +1472,14 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     terminator Return(v878)   (exit_acc=v878)
   block 53  start_pc=0
     v882 Imm(0)                                           -> x0
-    v883 StoreLocal { off=-1, value=v882, kind=I32 }      -> -
+    v883 Imm(15360)                                       -> x0
     v884 LocalAddr(-1)                                    -> x7
-    v885 Imm(0)                                           -> x0
-    v886 Imm(0)                                           -> x0
-    v887 Imm(1)                                           -> x0
-    v888 BinopI { op=add, lhs=v884, rhs_imm=1 }           -> x0
-    v889 Imm(60)                                          -> x0
-    v890 StoreLocal { off=-1, disp=1, value=v889, kind=I8 } -> -
+    v885 Imm(0)                                           -> x1
+    v886 Imm(0)                                           -> x1
+    v887 Imm(1)                                           -> x1
+    v888 BinopI { op=add, lhs=v884, rhs_imm=1 }           -> x1
+    v889 Imm(60)                                          -> x1
+    v890 StoreLocal { off=-1, value=v883, kind=I32 }      -> -
     v891 Imm(0)                                           -> x0
     v892 ImmData(32)                                      -> x0
     v893 Load { addr=v892, disp=0, kind=I32, volatile pc_rel } -> x0
@@ -1502,9 +1502,9 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v906 ImmData(80)                                      -> x0
     v907 Imm(0)                                           -> x0
     v908 Imm(1)                                           -> x0
-    v909 Store { addr=v906, disp=0, value=v908, kind=I8 pc_rel } -> -
+    v909 Imm(257)                                         -> x0
     v910 BinopI { op=add, lhs=v906, rhs_imm=1 }           -> x1
-    v911 Store { addr=v906, disp=1, value=v908, kind=I8 pc_rel } -> -
+    v911 Store { addr=v906, disp=0, value=v909, kind=I16, align=1 pc_rel } -> -
     v912 Imm(2)                                           -> x3
     v913 ImmData(80)                                      -> x1
     v914 Imm(0)                                           -> x0

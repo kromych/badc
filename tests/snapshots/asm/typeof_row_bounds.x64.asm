@@ -30,22 +30,22 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
                	leaq	-0x30(%rbp), %rax
-               	movl	$0x0, -0x30(%rbp)
-               	movl	$0x1, -0x2c(%rbp)
-               	movl	$0x2, -0x28(%rbp)
-               	movl	$0x3, -0x24(%rbp)
+               	movabsq	$0x100000000, %rcx      # imm = 0x100000000
+               	movq	%rcx, -0x30(%rbp)
+               	movabsq	$0x300000002, %rcx      # imm = 0x300000002
+               	movq	%rcx, -0x28(%rbp)
                	addq	$0x10, %rax
-               	movl	$0xa, (%rax)
-               	movl	$0xb, 0x4(%rax)
+               	movabsq	$0xb0000000a, %rcx      # imm = 0xB0000000A
+               	movq	%rcx, (%rax)
                	movl	$0xc, 0x8(%rax)
                	leaq	-0x30(%rbp), %rax
                	leaq	0x10(%rax), %rcx
                	movl	$0xd, 0xc(%rcx)
                	addq	$0x20, %rax
-               	movl	$0x14, (%rax)
-               	movl	$0x15, 0x4(%rax)
-               	movl	$0x16, 0x8(%rax)
-               	movl	$0x17, 0xc(%rax)
+               	movabsq	$0x1500000014, %rcx     # imm = 0x1500000014
+               	movq	%rcx, (%rax)
+               	movabsq	$0x1700000016, %rcx     # imm = 0x1700000016
+               	movq	%rcx, 0x8(%rax)
                	leaq	-0x30(%rbp), %rax
                	movl	-0x4(%rbp), %ecx
                	cmpl	$0x17, %ecx

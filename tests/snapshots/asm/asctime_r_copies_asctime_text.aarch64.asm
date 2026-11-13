@@ -24,17 +24,15 @@ Disassembly of section .text:
                	str	xzr, [x0, #0x30]
                	mov	x1, #0x46               // =70
                	stur	w1, [x29, #-0x24]
-               	mov	x1, #0xf                // =15
-               	stur	w1, [x29, #-0x2c]
-               	mov	x1, #0x4                // =4
-               	stur	w1, [x29, #-0x20]
-               	mov	x2, #0xe                // =14
-               	stur	w2, [x29, #-0x1c]
-               	mov	x2, #0xd                // =13
-               	stur	w2, [x29, #-0x30]
-               	stur	w1, [x29, #-0x34]
+               	mov	x1, #0xd                // =13
+               	movk	x1, #0xf, lsl #32
+               	mov	x2, #0x4                // =4
+               	movk	x2, #0xe, lsl #32
+               	stur	x2, [x29, #-0x20]
+               	stur	x1, [x29, #-0x30]
                	mov	x1, #0x5                // =5
-               	stur	w1, [x29, #-0x38]
+               	movk	x1, #0x4, lsl #32
+               	stur	x1, [x29, #-0x38]
                	adrp	x1, <page>
                	ldr	x1, [x1, <lo12>]
                	blr	x1
@@ -49,33 +47,12 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x1, x29, #0x58
-               	mov	x0, #0x78               // =120
-               	sturb	w0, [x29, #-0x58]
-               	sturb	w0, [x29, #-0x57]
-               	sturb	w0, [x29, #-0x56]
-               	sturb	w0, [x29, #-0x55]
-               	sturb	w0, [x29, #-0x54]
-               	sturb	w0, [x29, #-0x53]
-               	sturb	w0, [x29, #-0x52]
-               	sturb	w0, [x29, #-0x51]
-               	sturb	w0, [x29, #-0x50]
-               	sturb	w0, [x29, #-0x4f]
-               	sturb	w0, [x29, #-0x4e]
-               	sturb	w0, [x29, #-0x4d]
-               	sturb	w0, [x29, #-0x4c]
-               	sturb	w0, [x29, #-0x4b]
-               	sturb	w0, [x29, #-0x4a]
-               	sturb	w0, [x29, #-0x49]
-               	sturb	w0, [x29, #-0x48]
-               	sturb	w0, [x29, #-0x47]
-               	sturb	w0, [x29, #-0x46]
-               	sturb	w0, [x29, #-0x45]
-               	sturb	w0, [x29, #-0x44]
-               	sturb	w0, [x29, #-0x43]
-               	sturb	w0, [x29, #-0x42]
-               	sturb	w0, [x29, #-0x41]
-               	sturb	w0, [x29, #-0x40]
-               	sturb	w0, [x29, #-0x3f]
+               	mov	x0, #0x7878787878787878 // =8680820740569200760
+               	stur	x0, [x29, #-0x58]
+               	stur	x0, [x29, #-0x50]
+               	stur	x0, [x29, #-0x48]
+               	mov	x0, #0x7878             // =30840
+               	sturh	w0, [x29, #-0x40]
                	sub	x0, x29, #0x38
                	bl	<addr>
                	mov	x1, x0

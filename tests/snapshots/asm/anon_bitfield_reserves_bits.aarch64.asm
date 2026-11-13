@@ -19,30 +19,15 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	sub	x1, x29, #0x10
                	mov	x0, #0x0                // =0
-               	sturb	w0, [x29, #-0x10]
-               	sturb	w0, [x29, #-0xf]
-               	sturb	w0, [x29, #-0xe]
-               	sturb	w0, [x29, #-0xd]
-               	sturb	w0, [x29, #-0xc]
-               	sturb	w0, [x29, #-0xb]
-               	sturb	w0, [x29, #-0xa]
-               	sturb	w0, [x29, #-0x9]
-               	sturb	w0, [x29, #-0x8]
-               	sturb	w0, [x29, #-0x7]
-               	sturb	w0, [x29, #-0x6]
-               	sturb	w0, [x29, #-0x5]
-               	sturb	w0, [x29, #-0x4]
-               	sturb	w0, [x29, #-0x3]
-               	sturb	w0, [x29, #-0x2]
-               	sturb	w0, [x29, #-0x1]
+               	stur	wzr, [x29, #-0x10]
                	mov	x2, #0x1                // =1
-               	stur	w2, [x29, #-0x10]
+               	stur	xzr, [x29, #-0x8]
+               	stur	x2, [x29, #-0x10]
                	mov	x2, #0x3344             // =13124
                	movk	x2, #0x1122, lsl #16
-               	stur	w2, [x29, #-0x8]
-               	mov	x2, #0x7788             // =30600
-               	movk	x2, #0x5566, lsl #16
-               	stur	w2, [x29, #-0x4]
+               	movk	x2, #0x7788, lsl #32
+               	movk	x2, #0x5566, lsl #48
+               	stur	x2, [x29, #-0x8]
                	ldur	w2, [x29, #-0x10]
                	cmp	w2, #0x1
                	b.eq	<addr>

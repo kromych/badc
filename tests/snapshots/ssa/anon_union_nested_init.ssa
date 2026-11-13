@@ -137,19 +137,19 @@ fn ent_pc=3 n_params=0 variadic=false locals=5
   block 4  start_pc=0
     v120 Imm(9)                                           -> x0
     v121 LocalAddr(-5)                                    -> x7
-    v122 StoreLocal { off=-5, value=v120, kind=I8 }       -> -
+    v122 Imm(0)                                           -> x0
     v123 Imm(8)                                           -> x0
-    v124 LocalAddr(-5)                                    -> x1
-    v125 BinopI { op=add, lhs=v121, rhs_imm=1 }           -> x1
-    v126 StoreLocal { off=-5, disp=1, value=v123, kind=I8 } -> -
+    v124 LocalAddr(-5)                                    -> x0
+    v125 BinopI { op=add, lhs=v121, rhs_imm=1 }           -> x0
+    v126 Imm(0)                                           -> x0
     v127 Imm(7)                                           -> x0
-    v128 LocalAddr(-5)                                    -> x1
-    v129 BinopI { op=add, lhs=v121, rhs_imm=2 }           -> x1
-    v130 StoreLocal { off=-5, disp=2, value=v127, kind=I8 } -> -
-    v131 Imm(6)                                           -> x0
+    v128 LocalAddr(-5)                                    -> x0
+    v129 BinopI { op=add, lhs=v121, rhs_imm=2 }           -> x0
+    v130 Imm(101124105)                                   -> x0
+    v131 Imm(6)                                           -> x1
     v132 LocalAddr(-5)                                    -> x1
     v133 BinopI { op=add, lhs=v121, rhs_imm=3 }           -> x1
-    v134 StoreLocal { off=-5, disp=3, value=v131, kind=I8 } -> -
+    v134 StoreLocal { off=-5, value=v130, kind=I32 }      -> -
     v135 LocalAddr(-5)                                    -> x0
     v136 BinopI { op=add, lhs=v121, rhs_imm=4 }           -> x0
     v137 StoreLocal { off=-5, disp=4, value=v73, kind=I32 } -> -

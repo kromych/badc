@@ -20,25 +20,25 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	bl	<addr>
                	mov	x20, x0
-               	sub	x1, x29, #0x20
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrh	w16, [x0]
-               	strh	w16, [x1]
-               	ldrb	w16, [x0, #0x2]
-               	strb	w16, [x1, #0x2]
+               	sub	x0, x29, #0x20
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldrh	w16, [x1]
+               	strh	w16, [x0]
+               	ldrb	w16, [x1, #0x2]
+               	strb	w16, [x0, #0x2]
                	cbnz	x20, <addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x20, [sp], #0x40
                	ret
-               	mov	x0, #0xff               // =255
-               	strb	w0, [x20]
-               	strb	w0, [x20, #0x1]
-               	strb	w0, [x20, #0x2]
-               	ldrh	w16, [x1]
+               	mov	x1, #0xff               // =255
+               	mov	x2, #0xffff             // =65535
+               	strh	w2, [x20]
+               	strb	w1, [x20, #0x2]
+               	ldrh	w16, [x0]
                	strh	w16, [x20]
-               	ldrb	w16, [x1, #0x2]
+               	ldrb	w16, [x0, #0x2]
                	strb	w16, [x20, #0x2]
                	sub	x2, x29, #0x10
                	mov	x0, #0x3                // =3

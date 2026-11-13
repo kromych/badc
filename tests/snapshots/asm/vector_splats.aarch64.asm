@@ -289,17 +289,15 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x30
                	stur	x8, [x29, #-0x8]
+               	sub	x0, x29, #0x30
                	mov	x1, #0x2345             // =9029
                	movk	x1, #0x1, lsl #16
-               	sub	x0, x29, #0x30
-               	stur	w1, [x29, #-0x30]
-               	stur	w1, [x29, #-0x2c]
-               	stur	w1, [x29, #-0x28]
-               	stur	w1, [x29, #-0x24]
-               	stur	w1, [x29, #-0x20]
-               	stur	w1, [x29, #-0x1c]
-               	stur	w1, [x29, #-0x18]
-               	stur	w1, [x29, #-0x14]
+               	movk	x1, #0x2345, lsl #32
+               	movk	x1, #0x1, lsl #48
+               	stur	x1, [x29, #-0x30]
+               	stur	x1, [x29, #-0x28]
+               	stur	x1, [x29, #-0x20]
+               	stur	x1, [x29, #-0x18]
                	mov	x16, x0
                	ldur	x17, [x29, #-0x8]
                	ldp	x0, x1, [x16]
@@ -316,16 +314,12 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x30
                	stur	x8, [x29, #-0x8]
-               	mov	x1, #-0x1               // =-1
                	sub	x0, x29, #0x30
-               	stur	w1, [x29, #-0x30]
-               	stur	w1, [x29, #-0x2c]
-               	stur	w1, [x29, #-0x28]
-               	stur	w1, [x29, #-0x24]
-               	stur	w1, [x29, #-0x20]
-               	stur	w1, [x29, #-0x1c]
-               	stur	w1, [x29, #-0x18]
-               	stur	w1, [x29, #-0x14]
+               	mov	x1, #-0x1               // =-1
+               	stur	x1, [x29, #-0x30]
+               	stur	x1, [x29, #-0x28]
+               	stur	x1, [x29, #-0x20]
+               	stur	x1, [x29, #-0x18]
                	mov	x16, x0
                	ldur	x17, [x29, #-0x8]
                	ldp	x0, x1, [x16]

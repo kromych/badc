@@ -18,20 +18,16 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	mov	x1, #0x3                // =3
                	str	w1, [x0]
-               	mov	x1, #0xa                // =10
-               	strb	w1, [x0, #0x4]
-               	mov	x1, #0x14               // =20
-               	strb	w1, [x0, #0x5]
+               	mov	x1, #0x140a             // =5130
+               	strh	w1, [x0, #0x4]
                	mov	x1, #0x1e               // =30
                	strb	w1, [x0, #0x6]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x1, #0x1                // =1
                	str	w1, [x0]
-               	mov	x1, #0xab               // =171
-               	strb	w1, [x0, #0x4]
-               	mov	x1, #0xcd               // =205
-               	strb	w1, [x0, #0x5]
+               	mov	x1, #0xcdab             // =52651
+               	strh	w1, [x0, #0x4]
                	ldrh	w0, [x0, #0x4]
                	and	x0, x0, #0xff
                	cmp	w0, #0xab

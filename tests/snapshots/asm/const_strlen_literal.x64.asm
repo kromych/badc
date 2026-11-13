@@ -64,8 +64,7 @@ Disassembly of section .text:
                	subq	$0x1, %r11
                	jne	<addr>
                	movq	%rax, %rsp
-               	movb	$0x78, (%rax)
-               	movb	$0x0, 0x1(%rax)
+               	movw	$0x78, (%rax)
                	leaq	<rip>, %rcx
                	movsbq	(%rax), %rdx
                	testq	%rdx, %rdx

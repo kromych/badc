@@ -42,8 +42,8 @@ Disassembly of section .text:
                	movl	$0x1000, -0x8(%rbp)     # imm = 0x1000
                	movslq	-0x8(%rbp), %rbx
                	leaq	-0x18(%rbp), %rdi
-               	movl	$0xa1b2c3d4, -0x18(%rbp) # imm = 0xA1B2C3D4
-               	movl	$0x2, -0x14(%rbp)
+               	movabsq	$0x2a1b2c3d4, %rax      # imm = 0x2A1B2C3D4
+               	movq	%rax, -0x18(%rbp)
                	movl	$0x100, %eax            # imm = 0x100
                	cmpl	$0x100, %ebx            # imm = 0x100
                	cmovgq	%rbx, %rax

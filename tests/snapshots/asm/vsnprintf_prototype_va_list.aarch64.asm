@@ -107,23 +107,9 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	sub	x0, x29, #0x10
-               	mov	x1, #0x78               // =120
-               	sturb	w1, [x29, #-0x10]
-               	sturb	w1, [x29, #-0xf]
-               	sturb	w1, [x29, #-0xe]
-               	sturb	w1, [x29, #-0xd]
-               	sturb	w1, [x29, #-0xc]
-               	sturb	w1, [x29, #-0xb]
-               	sturb	w1, [x29, #-0xa]
-               	sturb	w1, [x29, #-0x9]
-               	sturb	w1, [x29, #-0x8]
-               	sturb	w1, [x29, #-0x7]
-               	sturb	w1, [x29, #-0x6]
-               	sturb	w1, [x29, #-0x5]
-               	sturb	w1, [x29, #-0x4]
-               	sturb	w1, [x29, #-0x3]
-               	sturb	w1, [x29, #-0x2]
-               	sturb	w1, [x29, #-0x1]
+               	mov	x1, #0x7878787878787878 // =8680820740569200760
+               	stur	x1, [x29, #-0x10]
+               	stur	x1, [x29, #-0x8]
                	mov	x1, #0x10               // =16
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
@@ -149,23 +135,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x10
-               	mov	x1, #0x78               // =120
-               	sturb	w1, [x29, #-0x10]
-               	sturb	w1, [x29, #-0xf]
-               	sturb	w1, [x29, #-0xe]
-               	sturb	w1, [x29, #-0xd]
-               	sturb	w1, [x29, #-0xc]
-               	sturb	w1, [x29, #-0xb]
-               	sturb	w1, [x29, #-0xa]
-               	sturb	w1, [x29, #-0x9]
-               	sturb	w1, [x29, #-0x8]
-               	sturb	w1, [x29, #-0x7]
-               	sturb	w1, [x29, #-0x6]
-               	sturb	w1, [x29, #-0x5]
-               	sturb	w1, [x29, #-0x4]
-               	sturb	w1, [x29, #-0x3]
-               	sturb	w1, [x29, #-0x2]
-               	sturb	w1, [x29, #-0x1]
+               	mov	x1, #0x7878787878787878 // =8680820740569200760
+               	stur	x1, [x29, #-0x10]
+               	stur	x1, [x29, #-0x8]
                	mov	x1, #0x4                // =4
                	adrp	x2, <page>
                	add	x2, x2, <lo12>

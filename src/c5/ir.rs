@@ -1382,6 +1382,22 @@ pub(crate) enum StoreKind {
     V512,
 }
 
+impl StoreKind {
+    /// Bytes the access writes; an `F80` writes 10 of its object's 16.
+    pub(crate) fn bytes(self) -> u8 {
+        match self {
+            StoreKind::I8 => 1,
+            StoreKind::I16 => 2,
+            StoreKind::I32 | StoreKind::F32 => 4,
+            StoreKind::I64 | StoreKind::F64 => 8,
+            StoreKind::F80 => 10,
+            StoreKind::F128 | StoreKind::V128 => 16,
+            StoreKind::V256 => 32,
+            StoreKind::V512 => 64,
+        }
+    }
+}
+
 /// Integer / FP binary opcode. The planner's choice between
 /// signed / unsigned forms is preserved (Div vs Divu, Shr vs
 /// Shru).

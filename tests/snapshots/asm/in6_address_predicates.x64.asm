@@ -29,22 +29,10 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movb	$0x0, -0x10(%rbp)
-               	movb	$0x0, -0xf(%rbp)
-               	movb	$0x0, -0xe(%rbp)
-               	movb	$0x0, -0xd(%rbp)
-               	movb	$0x0, -0xc(%rbp)
-               	movb	$0x0, -0xb(%rbp)
-               	movb	$0x0, -0xa(%rbp)
-               	movb	$0x0, -0x9(%rbp)
-               	movb	$0x0, -0x8(%rbp)
-               	movb	$0x0, -0x7(%rbp)
-               	movb	$0x0, -0x6(%rbp)
-               	movb	$0x0, -0x5(%rbp)
-               	movb	$0x0, -0x4(%rbp)
-               	movb	$0x0, -0x3(%rbp)
-               	movb	$0x0, -0x2(%rbp)
-               	movb	$0x0, -0x1(%rbp)
+               	movl	$0x0, -0x10(%rbp)
+               	movl	$0x0, -0xc(%rbp)
+               	movl	$0x0, -0x8(%rbp)
+               	movl	$0x0, -0x4(%rbp)
                	andq	$0xff, %rdi
                	movb	%dil, -0x10(%rbp)
                	andq	$0xff, %rsi

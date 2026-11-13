@@ -356,20 +356,20 @@ fn ent_pc=19 n_params=0 variadic=false locals=9
     v81  Imm(1)                                           -> x0
     v82  Imm(1)                                           -> x0
     v83  Imm(1)                                           -> x0
-    v84  Store { addr=v77, disp=0, value=v83, kind=I32 pc_rel } -> -
-    v85  Imm(0)                                           -> x0
-    v86  Imm(1)                                           -> x0
-    v87  Imm(1)                                           -> x0
-    v88  Imm(1)                                           -> x0
-    v89  Imm(1)                                           -> x0
-    v90  ImmData(112)                                     -> x0
-    v91  Imm(1)                                           -> x0
-    v92  Imm(4)                                           -> x0
-    v93  BinopI { op=add, lhs=v77, rhs_imm=4 }            -> x0
-    v94  Imm(1)                                           -> x0
-    v95  Imm(2)                                           -> x0
-    v96  Imm(2)                                           -> x0
-    v97  Store { addr=v77, disp=4, value=v96, kind=I32 pc_rel } -> -
+    v84  Imm(8589934593)                                  -> x0
+    v85  Imm(0)                                           -> x1
+    v86  Imm(1)                                           -> x1
+    v87  Imm(1)                                           -> x1
+    v88  Imm(1)                                           -> x1
+    v89  Imm(1)                                           -> x1
+    v90  ImmData(112)                                     -> x1
+    v91  Imm(1)                                           -> x1
+    v92  Imm(4)                                           -> x1
+    v93  BinopI { op=add, lhs=v77, rhs_imm=4 }            -> x1
+    v94  Imm(1)                                           -> x1
+    v95  Imm(2)                                           -> x1
+    v96  Imm(2)                                           -> x1
+    v97  Store { addr=v77, disp=0, value=v84, kind=I64, align=4 pc_rel } -> -
     v98  Imm(1)                                           -> x0
     v99  Imm(2)                                           -> x0
     v100 Imm(2)                                           -> x0
@@ -382,20 +382,20 @@ fn ent_pc=19 n_params=0 variadic=false locals=9
     v107 Imm(1)                                           -> x0
     v108 Imm(4)                                           -> x0
     v109 Imm(4)                                           -> x0
-    v110 Store { addr=v77, disp=8, value=v109, kind=I32 pc_rel } -> -
-    v111 Imm(2)                                           -> x0
-    v112 Imm(3)                                           -> x0
-    v113 Imm(3)                                           -> x0
-    v114 Imm(3)                                           -> x0
-    v115 Imm(1)                                           -> x0
-    v116 ImmData(112)                                     -> x0
-    v117 Imm(3)                                           -> x0
-    v118 Imm(12)                                          -> x0
-    v119 BinopI { op=add, lhs=v77, rhs_imm=12 }           -> x0
-    v120 Imm(1)                                           -> x0
-    v121 Imm(8)                                           -> x0
-    v122 Imm(8)                                           -> x0
-    v123 Store { addr=v77, disp=12, value=v122, kind=I32 pc_rel } -> -
+    v110 Imm(34359738372)                                 -> x0
+    v111 Imm(2)                                           -> x1
+    v112 Imm(3)                                           -> x1
+    v113 Imm(3)                                           -> x1
+    v114 Imm(3)                                           -> x1
+    v115 Imm(1)                                           -> x1
+    v116 ImmData(112)                                     -> x1
+    v117 Imm(3)                                           -> x1
+    v118 Imm(12)                                          -> x1
+    v119 BinopI { op=add, lhs=v77, rhs_imm=12 }           -> x1
+    v120 Imm(1)                                           -> x1
+    v121 Imm(8)                                           -> x1
+    v122 Imm(8)                                           -> x1
+    v123 Store { addr=v77, disp=8, value=v110, kind=I64, align=4 pc_rel } -> -
     v124 Imm(3)                                           -> x0
     v125 Imm(4)                                           -> x0
     v126 Imm(4)                                           -> x0

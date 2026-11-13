@@ -97,14 +97,12 @@ Disassembly of section .text:
                	mov	x20, x0
                	mov	x1, #0x0                // =0
                	mov	x0, #0xc                // =12
-               	str	w0, [x20]
+               	movk	x0, #0x7, lsl #32
                	mov	x2, #0x4                // =4
-               	mov	x0, #0x7                // =7
-               	str	w0, [x20, #0x4]
+               	str	x0, [x20]
                	mov	x0, #0xf                // =15
-               	str	w0, [x20, #0x8]
-               	mov	x0, #0x5                // =5
-               	str	w0, [x20, #0xc]
+               	movk	x0, #0x5, lsl #32
+               	str	x0, [x20, #0x8]
                	mov	x0, #0xa                // =10
                	str	w0, [x20, #0x10]
                	mov	x0, x20

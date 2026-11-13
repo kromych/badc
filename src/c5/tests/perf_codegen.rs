@@ -3249,9 +3249,35 @@ void put2(struct P *o, int a, int b) { *o = (struct P){a, b}; }\n\
 void put3(struct Q *o, int a) { *o = (struct Q){a}; }\n\
 void put4(struct R *o, char c, int i) { *o = (struct R){c, i}; }\n";
     let mut m = Misses::default();
-    // Two member stores; one and two zero stores; a byte, its padding and
-    // the int.
-    for (name, stores) in [("put", 2), ("put2", 2), ("put3", 3), ("put4", 4)] {
+    // Two member stores; the first member with the zeros beside it and the
+    // zero last one; the byte with its zero padding and the int.
+    for (name, stores) in [("put", 2), ("put2", 2), ("put3", 2), ("put4", 2)] {
+        let words = a64(SRC, name);
+        let n = words
+            .iter()
+            .filter(|&&w| a64_mem_imm(w).is_some_and(|(_, st, _)| st))
+            .count();
+        m.expect(n == stores, || format!("aarch64 {name}: {words:08x?}"));
+        let insns = x64(SRC, name);
+        let n = insns.iter().filter(|i| x64_is_store(i)).count();
+        m.expect(n == stores, || format!("x86-64 {name}: {insns:x?}"));
+    }
+    m.finish();
+}
+
+/// Stores that tile a word with one value and zeros beside it, or with
+/// constants only, are one store of the word: a union written through a
+/// narrower member, a flag beside its tag, and a constant initializer.
+#[test]
+fn stores_tiling_a_word_are_one_store() {
+    const SRC: &str = "typedef union { int i; long l; } U;\n\
+typedef struct { U u; long tag; } V;\n\
+struct S { unsigned char a, b; unsigned short c; int d; };\n\
+void push(V *sp, int v) { *sp = (V){ (U){ .i = v }, 0 }; }\n\
+void flag(V *sp, int a, int b) { *sp = (V){ (U){ .i = a < b }, 1 }; }\n\
+void consts(struct S *s) { *s = (struct S){ 1, 2, 3, 4 }; }\n";
+    let mut m = Misses::default();
+    for (name, stores) in [("push", 2), ("flag", 2), ("consts", 1)] {
         let words = a64(SRC, name);
         let n = words
             .iter()
@@ -5548,12 +5574,13 @@ fn a64_fmov_d_to_x(w: u32) -> bool {
     w & 0xFFFE_0000 == 0x9E66_0000
 }
 
-/// The x86-64 stores the backend emits to a frame slot.
+/// The x86-64 stores the backend emits: a store opcode with a memory
+/// operand, not the register form of the same opcode.
 fn x64_is_store(i: &X64Insn) -> bool {
     matches!(
         i.op,
         0x88 | 0x89 | 0xC6 | 0xC7 | 0x0F11 | 0x0F29 | 0x0FD6 | 0x0F7F
-    )
+    ) && i.modrm.is_some_and(|m| m >> 6 != 3)
 }
 
 const RBP: u8 = 5;

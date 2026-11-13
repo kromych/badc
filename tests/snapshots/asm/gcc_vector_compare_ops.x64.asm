@@ -114,14 +114,8 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x10, %eax
                	jl	<addr>
-               	movb	$-0x1, -0x8(%rbp)
-               	movb	$0x0, -0x7(%rbp)
-               	movb	$0x0, -0x6(%rbp)
-               	movb	$-0x1, -0x5(%rbp)
-               	movb	$0x0, -0x4(%rbp)
-               	movb	$0x0, -0x3(%rbp)
-               	movb	$-0x1, -0x2(%rbp)
-               	movb	$0x0, -0x1(%rbp)
+               	movl	$0xff0000ff, -0x8(%rbp) # imm = 0xFF0000FF
+               	movl	$0xff0000, -0x4(%rbp)   # imm = 0xFF0000
                	movsd	-0x8(%rbp), %xmm0
                	vpextrb	$0x0, %xmm0, %eax
                	movsbq	%al, %rax

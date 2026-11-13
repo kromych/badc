@@ -928,13 +928,13 @@ Disassembly of section .text:
                	cmpl	$0x20, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	movzbq	-0x3d(%rbp), %rcx
-               	movl	%ecx, (%rsp)
+               	movzbq	-0x3d(%rbp), %rax
+               	movl	%eax, (%rsp)
                	movl	$0x6, 0x4(%rsp)
-               	movl	$0x80000000, 0x8(%rsp)  # imm = 0x80000000
-               	movl	$0x7fffffff, 0xc(%rsp)  # imm = 0x7FFFFFFF
-               	movl	$0x3, 0x10(%rsp)
-               	movl	$0xfffffffe, 0x14(%rsp) # imm = 0xFFFFFFFE
+               	movabsq	$0x7fffffff80000000, %rax # imm = 0x7FFFFFFF80000000
+               	movq	%rax, 0x8(%rsp)
+               	movabsq	$-0x1fffffffd, %rax     # imm = 0xFFFFFFFE00000003
+               	movq	%rax, 0x10(%rsp)
                	leaq	(%rsp), %rcx
                	movl	$0x1, 0x18(%rsp)
                	movl	-0x58(%rbp), %eax
@@ -955,10 +955,10 @@ Disassembly of section .text:
                	movl	-0x58(%rbp), %eax
                	movl	%eax, (%rsp)
                	movl	$0x1, 0x4(%rsp)
-               	movl	$0xfffffffe, 0x8(%rsp)  # imm = 0xFFFFFFFE
-               	movl	$0x3, 0xc(%rsp)
-               	movl	$0x7fffffff, 0x10(%rsp) # imm = 0x7FFFFFFF
-               	movl	$0x80000000, 0x14(%rsp) # imm = 0x80000000
+               	movabsq	$0x3fffffffe, %rax      # imm = 0x3FFFFFFFE
+               	movq	%rax, 0x8(%rsp)
+               	movabsq	$-0x7fffffff80000001, %rax # imm = 0x800000007FFFFFFF
+               	movq	%rax, 0x10(%rsp)
                	movl	$0x6, 0x18(%rsp)
                	movzbq	-0x3d(%rbp), %rax
                	leaq	(%rsp), %rcx
@@ -996,42 +996,20 @@ Disassembly of section .text:
                	cmpl	$0x20, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	movb	$-0x80, (%rsp)
-               	movb	$0x1e, 0x1(%rsp)
-               	movb	$0x1d, 0x2(%rsp)
-               	movb	$0x1c, 0x3(%rsp)
-               	movb	$0x1b, 0x4(%rsp)
-               	movb	$0x1a, 0x5(%rsp)
-               	movb	$0x19, 0x6(%rsp)
-               	movb	$0x18, 0x7(%rsp)
-               	movb	$0x17, 0x8(%rsp)
-               	movb	$0x16, 0x9(%rsp)
-               	movb	$0x15, 0xa(%rsp)
-               	movb	$0x14, 0xb(%rsp)
-               	movb	$0x13, 0xc(%rsp)
-               	movb	$0x12, 0xd(%rsp)
-               	movb	$0x11, 0xe(%rsp)
-               	movb	$0x10, 0xf(%rsp)
-               	movb	$0xf, 0x10(%rsp)
-               	movb	$0xe, 0x11(%rsp)
-               	movb	$0xd, 0x12(%rsp)
-               	movb	$0xc, 0x13(%rsp)
-               	movb	$0xb, 0x14(%rsp)
-               	movb	$0xa, 0x15(%rsp)
-               	movb	$0x9, 0x16(%rsp)
-               	movb	$0x8, 0x17(%rsp)
-               	movb	$0x7, 0x18(%rsp)
-               	movb	$0x6, 0x19(%rsp)
-               	movb	$0x5, 0x1a(%rsp)
-               	movb	$0x4, 0x1b(%rsp)
-               	leaq	(%rsp), %rcx
-               	movb	$0x3, 0x1c(%rsp)
-               	movb	$0x2, 0x1d(%rsp)
+               	movabsq	$0x18191a1b1c1d1e80, %rax # imm = 0x18191A1B1C1D1E80
+               	movq	%rax, (%rsp)
+               	movabsq	$0x1011121314151617, %rax # imm = 0x1011121314151617
+               	movq	%rax, 0x8(%rsp)
+               	movabsq	$0x8090a0b0c0d0e0f, %rax # imm = 0x8090A0B0C0D0E0F
+               	movq	%rax, 0x10(%rsp)
+               	movl	$0x4050607, 0x18(%rsp)  # imm = 0x4050607
+               	leaq	(%rsp), %rax
+               	movw	$0x203, 0x1c(%rsp)      # imm = 0x203
                	movb	$0x1, 0x1e(%rsp)
-               	movzbq	-0x40(%rbp), %rax
-               	movb	%al, 0x1f(%rsp)
+               	movzbq	-0x40(%rbp), %rcx
+               	movb	%cl, 0x1f(%rsp)
                	leaq	0x20(%rsp), %rdx
-               	vmovups	(%rcx), %ymm14
+               	vmovups	(%rax), %ymm14
                	vmovups	%ymm14, (%rdx)
                	movq	<rip>, %rcx # <addr>
                	movabsq	$0x100000001b3, %rsi    # imm = 0x100000001B3
@@ -1046,39 +1024,17 @@ Disassembly of section .text:
                	movzbq	-0x40(%rbp), %rax
                	movb	%al, (%rsp)
                	movb	$0x1, 0x1(%rsp)
-               	movb	$0x2, 0x2(%rsp)
-               	movb	$0x3, 0x3(%rsp)
-               	movb	$0x4, 0x4(%rsp)
-               	movb	$0x5, 0x5(%rsp)
-               	movb	$0x6, 0x6(%rsp)
-               	movb	$0x7, 0x7(%rsp)
-               	movb	$0x8, 0x8(%rsp)
-               	movb	$0x9, 0x9(%rsp)
-               	movb	$0xa, 0xa(%rsp)
-               	movb	$0xb, 0xb(%rsp)
-               	movb	$0xc, 0xc(%rsp)
-               	movb	$0xd, 0xd(%rsp)
-               	movb	$0xe, 0xe(%rsp)
-               	movb	$0xf, 0xf(%rsp)
-               	movb	$0x10, 0x10(%rsp)
-               	movb	$0x11, 0x11(%rsp)
-               	movb	$0x12, 0x12(%rsp)
-               	movb	$0x13, 0x13(%rsp)
-               	movb	$0x14, 0x14(%rsp)
-               	movb	$0x15, 0x15(%rsp)
-               	movb	$0x16, 0x16(%rsp)
-               	movb	$0x17, 0x17(%rsp)
-               	movb	$0x18, 0x18(%rsp)
-               	movb	$0x19, 0x19(%rsp)
-               	movb	$0x1a, 0x1a(%rsp)
-               	movb	$0x1b, 0x1b(%rsp)
-               	leaq	(%rsp), %rcx
-               	movb	$0x1c, 0x1c(%rsp)
-               	movb	$0x1d, 0x1d(%rsp)
-               	movb	$0x1e, 0x1e(%rsp)
-               	movb	$-0x80, 0x1f(%rsp)
+               	movw	$0x302, 0x2(%rsp)       # imm = 0x302
+               	movl	$0x7060504, 0x4(%rsp)   # imm = 0x7060504
+               	movabsq	$0xf0e0d0c0b0a0908, %rax # imm = 0xF0E0D0C0B0A0908
+               	movq	%rax, 0x8(%rsp)
+               	movabsq	$0x1716151413121110, %rax # imm = 0x1716151413121110
+               	movq	%rax, 0x10(%rsp)
+               	leaq	(%rsp), %rax
+               	movabsq	$-0x7fe1e2e3e4e5e6e8, %rcx # imm = 0x801E1D1C1B1A1918
+               	movq	%rcx, 0x18(%rsp)
                	leaq	0x20(%rsp), %rdx
-               	vmovups	(%rcx), %ymm14
+               	vmovups	(%rax), %ymm14
                	vmovups	%ymm14, (%rdx)
                	movq	<rip>, %rcx # <addr>
                	movabsq	$0x100000001b3, %rsi    # imm = 0x100000001B3

@@ -509,22 +509,14 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x7, x29, #0x8
-               	mov	x0, #0x5                // =5
-               	sturb	w0, [x29, #-0x8]
-               	mov	x0, #0x6                // =6
-               	sturb	w0, [x29, #-0x7]
-               	mov	x0, #0x7                // =7
-               	sturb	w0, [x29, #-0x6]
-               	mov	x0, #0x8                // =8
-               	sturb	w0, [x29, #-0x5]
-               	mov	x0, #0x9                // =9
-               	sturb	w0, [x29, #-0x4]
-               	mov	x0, #0xa                // =10
-               	sturb	w0, [x29, #-0x3]
-               	mov	x0, #0xb                // =11
-               	sturb	w0, [x29, #-0x2]
-               	mov	x0, #0xc                // =12
-               	sturb	w0, [x29, #-0x1]
+               	mov	x0, #0x605              // =1541
+               	sturh	w0, [x29, #-0x8]
+               	mov	x0, #0x807              // =2055
+               	sturh	w0, [x29, #-0x6]
+               	mov	x0, #0xa09              // =2569
+               	sturh	w0, [x29, #-0x4]
+               	mov	x0, #0xc0b              // =3083
+               	sturh	w0, [x29, #-0x2]
                	mov	x0, #0x1                // =1
                	ldr	d0, [x7]
                	bl	<addr>

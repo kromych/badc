@@ -30,16 +30,16 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	xorl	%r9d, %r9d
-               	movl	%r9d, <rip> # <addr>
-               	movl	$0x1, <rip> # <addr>
-               	movl	$0x4, <rip> # <addr>
-               	movl	$0x9, <rip> # <addr>
+               	movabsq	$0x100000000, %rax      # imm = 0x100000000
+               	movq	%rax, <rip> # <addr>
+               	movabsq	$0x900000004, %rax      # imm = 0x900000004
+               	movq	%rax, <rip> # <addr>
                	movl	$0x10, <rip> # <addr>
                	movl	$0x19, <rip> # <addr>
-               	movl	$0x24, <rip> # <addr>
-               	movl	$0x31, <rip> # <addr>
-               	movl	$0x40, <rip> # <addr>
-               	movl	$0x51, <rip> # <addr>
+               	movabsq	$0x3100000024, %rax     # imm = 0x3100000024
+               	movq	%rax, <rip> # <addr>
+               	movabsq	$0x5100000040, %rax     # imm = 0x5100000040
+               	movq	%rax, <rip> # <addr>
                	movq	$0x0, <rip> # <addr>
                	movq	$0x3b9aca07, <rip> # imm = 0x3B9ACA07
                                                 # <addr>

@@ -43,11 +43,11 @@ Disassembly of section .text:
                	subq	$0x1, %r11
                	jne	<addr>
                	movq	%rcx, %rsp
-               	movl	$0x0, (%rcx)
+               	movabsq	$0x100000000, %rdx      # imm = 0x100000000
                	movl	$0x1, %eax
-               	movl	%eax, 0x4(%rcx)
-               	movl	$0x2, 0x8(%rcx)
-               	movl	$0x3, 0xc(%rcx)
+               	movq	%rdx, (%rcx)
+               	movabsq	$0x300000002, %rdx      # imm = 0x300000002
+               	movq	%rdx, 0x8(%rcx)
                	leave
                	retq
 

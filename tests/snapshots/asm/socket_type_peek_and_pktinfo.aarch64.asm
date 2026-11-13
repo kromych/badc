@@ -143,12 +143,9 @@ Disassembly of section .text:
                	mov	x1, x0
                	bl	<addr>
                	mov	x22, x0
-               	stur	wzr, [x29, #-0x68]
-               	stur	wzr, [x29, #-0x64]
-               	stur	wzr, [x29, #-0x60]
-               	stur	wzr, [x29, #-0x5c]
                	mov	x0, #0x2                // =2
-               	sturh	w0, [x29, #-0x68]
+               	stur	xzr, [x29, #-0x60]
+               	stur	x0, [x29, #-0x68]
                	mov	x0, #0x1                // =1
                	movk	x0, #0x7f00, lsl #16
                	bl	<addr>

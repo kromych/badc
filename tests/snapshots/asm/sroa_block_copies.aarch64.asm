@@ -68,21 +68,17 @@ Disassembly of section .text:
                	ret
 
 <bitfield_copy>:
-               	and	x3, x1, #0xfff
-               	mov	x4, #0x8d               // =141
-               	orr	x3, x4, x3, lsl #8
-               	str	w3, [x0]
-               	str	wzr, [x0, #0x4]
+               	and	x2, x1, #0xfff
+               	mov	x3, #0x8d               // =141
+               	orr	x2, x3, x2, lsl #8
+               	str	x2, [x0]
                	str	x1, [x0, #0x8]
                	ret
 
 <padded_copy>:
-               	and	x3, x1, #0xff
+               	and	x2, x1, #0xff
                	add	x1, x1, x1, lsl #1
-               	strb	w3, [x0]
-               	strb	wzr, [x0, #0x1]
-               	strh	wzr, [x0, #0x2]
-               	str	wzr, [x0, #0x4]
+               	str	x2, [x0]
                	str	x1, [x0, #0x8]
                	ret
 

@@ -250,11 +250,11 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     v186 Imm(0)                                           -> x0
     v187 Imm(0)                                           -> x0
     v188 Imm(0)                                           -> x0
-    v189 Imm(0)                                           -> x2
-    v190 Imm(0)                                           -> x2
-    v191 StoreLocal { off=-3, value=v188, kind=I32 }      -> -
+    v189 Imm(0)                                           -> x0
+    v190 Imm(0)                                           -> x0
+    v191 Imm(0)                                           -> x0
     v192 BinopI { op=add, lhs=v184, rhs_imm=4 }           -> x2
-    v193 StoreLocal { off=-3, disp=4, value=v188, kind=I32 } -> -
+    v193 StoreLocal { off=-3, value=v191, kind=I64 }      -> -
     v194 LocalAddr(-2)                                    -> x7
     v195 ImmData(68)                                      -> x6
     v196 Imm(1)                                           -> x2
@@ -282,11 +282,11 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     v212 Imm(0)                                           -> x0
     v213 Imm(0)                                           -> x0
     v214 Imm(0)                                           -> x0
-    v215 Imm(0)                                           -> x1
-    v216 Imm(0)                                           -> x1
-    v217 StoreLocal { off=-3, value=v214, kind=I32 }      -> -
+    v215 Imm(0)                                           -> x0
+    v216 Imm(0)                                           -> x0
+    v217 Imm(0)                                           -> x0
     v218 BinopI { op=add, lhs=v210, rhs_imm=4 }           -> x1
-    v219 StoreLocal { off=-3, disp=4, value=v214, kind=I32 } -> -
+    v219 StoreLocal { off=-3, value=v217, kind=I64 }      -> -
     v220 LocalAddr(-1)                                    -> x7
     v221 Imm(107)                                         -> x6
     v222 LocalAddr(-3)                                    -> x0

@@ -52,10 +52,9 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movl	$0x2a, -0x20(%rbp)
-               	movl	$0x2a, -0x1c(%rbp)
-               	movl	$0x2a, -0x18(%rbp)
-               	movl	$0x2a, -0x14(%rbp)
+               	movabsq	$0x2a0000002a, %rax     # imm = 0x2A0000002A
+               	movq	%rax, -0x20(%rbp)
+               	movq	%rax, -0x18(%rbp)
                	leaq	-0x10(%rbp), %rax
                	leaq	-0x20(%rbp), %rcx
                	movdqu	(%rcx), %xmm0

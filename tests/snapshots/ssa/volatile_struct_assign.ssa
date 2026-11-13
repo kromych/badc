@@ -47,27 +47,27 @@ fn ent_pc=5 n_params=0 variadic=false locals=2
     v35  Imm(0)                                           -> x0
     v36  ImmData(16)                                      -> x0
     v37  Imm(5)                                           -> x0
-    v38  Store { addr=v12, disp=0, value=v37, kind=I32 pc_rel } -> -
-    v39  Imm(6)                                           -> x1
-    v40  Store { addr=v12, disp=4, value=v39, kind=I32 pc_rel } -> -
-    v41  ImmData(16)                                      -> x2
-    v42  Imm(5)                                           -> x2
-    v43  Imm(0)                                           -> x2
-    v44  Imm(0)                                           -> x2
+    v38  Imm(25769803781)                                 -> x1
+    v39  Imm(6)                                           -> x2
+    v40  Store { addr=v12, disp=0, value=v38, kind=I64, align=4 pc_rel } -> -
+    v41  ImmData(16)                                      -> x1
+    v42  Imm(5)                                           -> x1
+    v43  Imm(0)                                           -> x1
+    v44  Imm(0)                                           -> x1
     terminator Jmp(b4)   (exit_acc=v43)
   block 4  start_pc=0
-    v45  ImmData(16)                                      -> x2
-    v46  BinopI { op=add, lhs=v12, rhs_imm=4 }            -> x2
-    v47  Imm(6)                                           -> x2
-    v48  Imm(0)                                           -> x2
-    v49  Imm(0)                                           -> x2
-    v50  Imm(0)                                           -> x2
-    v51  Imm(0)                                           -> x2
+    v45  ImmData(16)                                      -> x1
+    v46  BinopI { op=add, lhs=v12, rhs_imm=4 }            -> x1
+    v47  Imm(6)                                           -> x1
+    v48  Imm(0)                                           -> x1
+    v49  Imm(0)                                           -> x1
+    v50  Imm(0)                                           -> x1
+    v51  Imm(0)                                           -> x1
     terminator Jmp(b5)   (exit_acc=v48)
   block 5  start_pc=0
-    v57  Imm(0)                                           -> x2
-    v58  ImmData(24)                                      -> x2
-    v59  Imm(5)                                           -> x2
+    v57  Imm(0)                                           -> x1
+    v58  ImmData(24)                                      -> x1
+    v59  Imm(5)                                           -> x1
     v60  Store { addr=v58, disp=0, value=v37, kind=I32, volatile, align=4 pc_rel } -> -
     v61  Imm(0)                                           -> x0
     v62  Imm(6)                                           -> x0

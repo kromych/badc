@@ -30,39 +30,11 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	leaq	<rip>, %rcx # <addr>
                	xorl	%eax, %eax
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
                	leaq	0x3(%rcx), %rsi
-               	movb	%al, (%rsi)
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
+               	movq	$0x0, <rip> # <addr>
+               	movq	$0x0, <rip> # <addr>
+               	movq	$0x0, <rip> # <addr>
+               	movq	$0x0, <rip> # <addr>
                	leaq	<rip>, %rdx
                	movzwq	(%rdx), %r10
                	movw	%r10w, (%rcx)
@@ -90,39 +62,11 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rcx # <addr>
                	xorl	%eax, %eax
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
                	leaq	0x3(%rcx), %rsi
-               	movb	%al, (%rsi)
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
+               	movq	$0x0, <rip> # <addr>
+               	movq	$0x0, <rip> # <addr>
+               	movq	$0x0, <rip> # <addr>
+               	movq	$0x0, <rip> # <addr>
                	leaq	<rip>, %rdx
                	movq	(%rdx), %r10
                	movq	%r10, (%rcx)
@@ -149,38 +93,10 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rcx # <addr>
                	xorl	%eax, %eax
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
+               	movq	$0x0, <rip> # <addr>
+               	movq	$0x0, <rip> # <addr>
+               	movq	$0x0, <rip> # <addr>
+               	movq	$0x0, <rip> # <addr>
                	leaq	<rip>, %rdx
                	movzwq	(%rdx), %r10
                	movw	%r10w, (%rcx)

@@ -532,9 +532,8 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movl	$0x0, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rdi
-               	movb	$0x3c, -0x7(%rbp)
+               	movl	$0x3c00, -0x8(%rbp)     # imm = 0x3C00
                	movl	<rip>, %eax # <addr>
                	leaq	0x1(%rax), %rsi
                	movq	%rdi, %rdx
@@ -545,8 +544,8 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movb	$0x1, <rip> # <addr>
-               	movb	$0x1, <rip> # <addr>
+               	movw	$0x101, <rip> # imm = 0x101
+                                                # <addr>
                	movl	$0x2, %ebx
                	leaq	<rip>, %rcx # <addr>
                	cmpb	$0x0, (%rcx,%rbx)

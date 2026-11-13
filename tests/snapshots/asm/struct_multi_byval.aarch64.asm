@@ -78,17 +78,14 @@ Disassembly of section .text:
                	mov	x7, #0x7d0              // =2000
                	sub	x3, x29, #0x18
                	mov	x6, #0x64               // =100
-               	stur	w6, [x29, #-0x18]
-               	mov	x6, #0x65               // =101
-               	stur	w6, [x29, #-0x14]
+               	movk	x6, #0x65, lsl #32
+               	stur	x6, [x29, #-0x18]
                	mov	x6, #0x66               // =102
-               	stur	w6, [x29, #-0x10]
-               	mov	x6, #0x67               // =103
-               	stur	w6, [x29, #-0xc]
+               	movk	x6, #0x67, lsl #32
+               	stur	x6, [x29, #-0x10]
                	mov	x6, #0x68               // =104
-               	stur	w6, [x29, #-0x8]
-               	mov	x6, #0x69               // =105
-               	stur	w6, [x29, #-0x4]
+               	movk	x6, #0x69, lsl #32
+               	stur	x6, [x29, #-0x8]
                	str	x3, [sp]
                	mov	x16, #0xbb8             // =3000
                	str	x16, [sp, #0x8]

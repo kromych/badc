@@ -169,11 +169,8 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %r10
                	movq	%r10, 0x18(%rsp)
-               	movl	$0x0, -0x68(%rbp)
-               	movl	$0x0, -0x64(%rbp)
-               	movl	$0x0, -0x60(%rbp)
-               	movl	$0x0, -0x5c(%rbp)
-               	movw	$0x2, -0x68(%rbp)
+               	movq	$0x0, -0x60(%rbp)
+               	movq	$0x2, -0x68(%rbp)
                	movl	$0x7f000001, %edi       # imm = 0x7F000001
                	xorl	%eax, %eax
                	callq	<addr>

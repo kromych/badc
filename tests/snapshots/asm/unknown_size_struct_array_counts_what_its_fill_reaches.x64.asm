@@ -28,8 +28,7 @@ Disassembly of section .text:
 <block_scope>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x48, %rsp
-               	pushq	%rbx
+               	subq	$0x40, %rsp
                	leaq	-0x40(%rbp), %rax
                	leaq	<rip>, %rdx
                	movups	(%rdx), %xmm14
@@ -37,34 +36,28 @@ Disassembly of section .text:
                	leaq	-0x30(%rbp), %rax
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rax)
-               	movb	$0x61, -0x30(%rbp)
-               	movb	$0x62, -0x2f(%rbp)
+               	movw	$0x6261, -0x30(%rbp)    # imm = 0x6261
                	movb	$0x0, -0x2e(%rbp)
                	movl	$0x7, -0x2c(%rbp)
-               	movb	$0x64, -0x28(%rbp)
-               	movb	$0x65, -0x27(%rbp)
+               	movw	$0x6564, -0x28(%rbp)    # imm = 0x6564
                	movb	$0x0, -0x26(%rbp)
                	movl	$0x2, -0x24(%rbp)
-               	leaq	-0x20(%rbp), %rbx
+               	leaq	-0x20(%rbp), %rsi
                	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rbx)
-               	movb	$0x61, -0x20(%rbp)
-               	movb	$0x62, -0x1f(%rbp)
+               	movups	%xmm14, (%rsi)
+               	movw	$0x6261, -0x20(%rbp)    # imm = 0x6261
                	movb	$0x0, -0x1e(%rbp)
                	movl	$0x1, -0x1c(%rbp)
-               	movb	$0x64, -0x18(%rbp)
-               	movb	$0x65, -0x17(%rbp)
+               	movw	$0x6564, -0x18(%rbp)    # imm = 0x6564
                	movb	$0x0, -0x16(%rbp)
                	movl	$0x7, -0x14(%rbp)
-               	leaq	-0x10(%rbp), %rbx
+               	leaq	-0x10(%rbp), %rsi
                	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rbx)
-               	movb	$0x61, -0x10(%rbp)
-               	movb	$0x62, -0xf(%rbp)
+               	movups	%xmm14, (%rsi)
+               	movw	$0x6261, -0x10(%rbp)    # imm = 0x6261
                	movb	$0x0, -0xe(%rbp)
                	movl	$0x7, -0xc(%rbp)
-               	movb	$0x64, -0x8(%rbp)
-               	movb	$0x65, -0x7(%rbp)
+               	movw	$0x6564, -0x8(%rbp)     # imm = 0x6564
                	movb	$0x0, -0x6(%rbp)
                	movl	$0x2, -0x4(%rbp)
                	leaq	<rip>, %rax # <addr>
@@ -99,7 +92,6 @@ Disassembly of section .text:
                	cmpl	$0x3, %eax
                	je	<addr>
                	movl	$0xb, %eax
-               	popq	%rbx
                	leave
                	retq
                	leaq	-0x40(%rbp), %rax
@@ -167,23 +159,18 @@ Disassembly of section .text:
                	cmpl	$0x2, %eax
                	je	<addr>
                	movl	$0xe, %eax
-               	popq	%rbx
                	leave
                	retq
                	xorl	%eax, %eax
-               	popq	%rbx
                	leave
                	retq
                	movl	$0xd, %eax
-               	popq	%rbx
                	leave
                	retq
                	movl	$0xc, %eax
-               	popq	%rbx
                	leave
                	retq
                	movl	$0xa, %eax
-               	popq	%rbx
                	leave
                	retq
 

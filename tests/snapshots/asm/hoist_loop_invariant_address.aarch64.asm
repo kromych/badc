@@ -17,54 +17,49 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	mov	x9, #0x0                // =0
-               	adrp	x4, <page>
-               	add	x4, x4, <lo12>
-               	str	w9, [x4]
-               	mov	x0, #0x1                // =1
-               	str	w0, [x4, #0x4]
-               	mov	x0, #0x4                // =4
-               	str	w0, [x4, #0x8]
-               	mov	x0, #0x9                // =9
-               	str	w0, [x4, #0xc]
-               	mov	x0, #0x10               // =16
-               	str	w0, [x4, #0x10]
-               	mov	x0, #0x19               // =25
-               	str	w0, [x4, #0x14]
-               	mov	x0, #0x24               // =36
-               	str	w0, [x4, #0x18]
-               	mov	x0, #0x31               // =49
-               	str	w0, [x4, #0x1c]
-               	mov	x0, #0x40               // =64
-               	str	w0, [x4, #0x20]
-               	mov	x0, #0x51               // =81
-               	str	w0, [x4, #0x24]
                	adrp	x5, <page>
                	add	x5, x5, <lo12>
-               	str	x9, [x5]
+               	mov	x0, #0x100000000        // =4294967296
+               	str	x0, [x5]
+               	mov	x0, #0x4                // =4
+               	movk	x0, #0x9, lsl #32
+               	str	x0, [x5, #0x8]
+               	mov	x0, #0x10               // =16
+               	movk	x0, #0x19, lsl #32
+               	str	x0, [x5, #0x10]
+               	mov	x0, #0x24               // =36
+               	movk	x0, #0x31, lsl #32
+               	str	x0, [x5, #0x18]
+               	mov	x0, #0x40               // =64
+               	movk	x0, #0x51, lsl #32
+               	str	x0, [x5, #0x20]
+               	adrp	x4, <page>
+               	add	x4, x4, <lo12>
+               	str	x9, [x4]
                	mov	x0, #0xca07             // =51719
                	movk	x0, #0x3b9a, lsl #16
-               	str	x0, [x5, #0x8]
+               	str	x0, [x4, #0x8]
                	mov	x0, #0x940e             // =37902
                	movk	x0, #0x7735, lsl #16
-               	str	x0, [x5, #0x10]
+               	str	x0, [x4, #0x10]
                	mov	x0, #0x5e15             // =24085
                	movk	x0, #0xb2d0, lsl #16
-               	str	x0, [x5, #0x18]
+               	str	x0, [x4, #0x18]
                	mov	x0, #0x281c             // =10268
                	movk	x0, #0xee6b, lsl #16
-               	str	x0, [x5, #0x20]
+               	str	x0, [x4, #0x20]
                	mov	x0, #0xf223             // =61987
                	movk	x0, #0x2a05, lsl #16
                	movk	x0, #0x1, lsl #32
-               	str	x0, [x5, #0x28]
+               	str	x0, [x4, #0x28]
                	mov	x0, #0xbc2a             // =48170
                	movk	x0, #0x65a0, lsl #16
                	movk	x0, #0x1, lsl #32
-               	str	x0, [x5, #0x30]
+               	str	x0, [x4, #0x30]
                	mov	x0, #0x8631             // =34353
                	movk	x0, #0xa13b, lsl #16
                	movk	x0, #0x1, lsl #32
-               	str	x0, [x5, #0x38]
+               	str	x0, [x4, #0x38]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	mov	x0, x9
@@ -89,7 +84,7 @@ Disassembly of section .text:
                	lsr	x2, x2, #32
                	mul	x8, x2, x6
                	sub	x1, x1, x8
-               	ldrsw	x1, [x4, x1, lsl #2]
+               	ldrsw	x1, [x5, x1, lsl #2]
                	add	x0, x0, x1
                	mov	x1, x2
                	cmp	w1, #0x0
@@ -116,9 +111,9 @@ Disassembly of section .text:
                	mov	x6, #0x0                // =0
                	mov	x1, x6
                	mov	x0, #0x0                // =0
-               	ldr	x2, [x5, x0, lsl #3]
-               	smulh	x4, x2, x3
-               	add	x2, x4, x2
+               	ldr	x2, [x4, x0, lsl #3]
+               	smulh	x5, x2, x3
+               	add	x2, x5, x2
                	asr	x2, x2, #29
                	add	x2, x2, x2, lsr #63
                	add	x1, x1, x2

@@ -472,8 +472,7 @@ Disassembly of section .text:
                	xorq	%rsi, %rdx
                	movl	%edx, 0xc(%rcx)
                	addq	$0xf0, %rax
-               	movl	$0xffffffff, (%rax)     # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x4(%rax)  # imm = 0xFFFFFFFF
+               	movq	$-0x1, (%rax)
                	movl	$0xffffffff, 0x8(%rax)  # imm = 0xFFFFFFFF
                	leaq	-0x140(%rbp), %r9
                	leaq	0xf0(%r9), %rax

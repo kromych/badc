@@ -274,15 +274,15 @@ fn ent_pc=6 n_params=0 variadic=false locals=2
     v6   Imm(0)                                           -> x0
     v7   Imm(0)                                           -> x0
     v8   Imm(0)                                           -> x0
-    v9   StoreLocal { off=-2, value=v8, kind=I64 }        -> -
-    v10  BinopI { op=add, lhs=v3, rhs_imm=8 }             -> x2
+    v9   Imm(1144201745)                                  -> x2
+    v10  BinopI { op=add, lhs=v3, rhs_imm=8 }             -> x6
     v11  StoreLocal { off=-2, disp=8, value=v8, kind=I64 } -> -
-    v12  Imm(16)                                          -> x2
-    v13  Imm(0)                                           -> x2
-    v14  LocalAddr(-2)                                    -> x2
-    v15  Imm(287454020)                                   -> x2
-    v16  Imm(1144201745)                                  -> x2
-    v17  StoreLocal { off=-2, value=v16, kind=I32 }       -> -
+    v12  Imm(16)                                          -> x6
+    v13  Imm(0)                                           -> x6
+    v14  LocalAddr(-2)                                    -> x6
+    v15  Imm(287454020)                                   -> x6
+    v16  Imm(1144201745)                                  -> x6
+    v17  StoreLocal { off=-2, value=v9, kind=I64 }        -> -
     v18  LocalAddr(-2)                                    -> x2
     v19  ImmData(1)                                       -> x2
     v20  Imm(4)                                           -> x6
@@ -448,11 +448,11 @@ fn ent_pc=6 n_params=0 variadic=false locals=2
     v178 Imm(7833753)                                     -> x0
     v179 Imm(30600)                                       -> x0
     v180 Imm(136)                                         -> x0
-    v181 Store { addr=v171, disp=1, value=v180, kind=I8 } -> -
-    v182 BinopI { op=add, lhs=v171, rhs_imm=2 }           -> x0
-    v183 Imm(7833753)                                     -> x0
-    v184 Imm(153)                                         -> x0
-    v185 Store { addr=v171, disp=2, value=v184, kind=I8 } -> -
+    v181 Imm(39304)                                       -> x0
+    v182 BinopI { op=add, lhs=v171, rhs_imm=2 }           -> x2
+    v183 Imm(7833753)                                     -> x2
+    v184 Imm(153)                                         -> x2
+    v185 Store { addr=v171, disp=1, value=v181, kind=I16, align=1 } -> -
     v186 LocalAddr(-2)                                    -> x0
     v187 BinopI { op=add, lhs=v170, rhs_imm=13 }          -> x0
     v188 ImmData(23)                                      -> x2

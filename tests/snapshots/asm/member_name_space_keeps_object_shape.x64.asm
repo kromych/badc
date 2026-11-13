@@ -80,22 +80,22 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	retq
                	leaq	<rip>, %rax # <addr>
-               	movl	$0x0, <rip> # <addr>
-               	movl	$0x1, <rip> # <addr>
-               	movl	$0x2, <rip> # <addr>
-               	movl	$0x3, <rip> # <addr>
+               	movabsq	$0x100000000, %rcx      # imm = 0x100000000
+               	movq	%rcx, <rip> # <addr>
+               	movabsq	$0x300000002, %rcx      # imm = 0x300000002
+               	movq	%rcx, <rip> # <addr>
                	addq	$0x10, %rax
-               	movl	$0xa, (%rax)
-               	movl	$0xb, 0x4(%rax)
+               	movabsq	$0xb0000000a, %rcx      # imm = 0xB0000000A
+               	movq	%rcx, (%rax)
                	movl	$0xc, 0x8(%rax)
                	leaq	<rip>, %rax # <addr>
                	leaq	0x10(%rax), %rcx
                	movl	$0xd, 0xc(%rcx)
                	addq	$0x20, %rax
-               	movl	$0x14, (%rax)
-               	movl	$0x15, 0x4(%rax)
-               	movl	$0x16, 0x8(%rax)
-               	movl	$0x17, 0xc(%rax)
+               	movabsq	$0x1500000014, %rcx     # imm = 0x1500000014
+               	movq	%rcx, (%rax)
+               	movabsq	$0x1700000016, %rcx     # imm = 0x1700000016
+               	movq	%rcx, 0x8(%rax)
                	leaq	<rip>, %rax # <addr>
                	movl	<rip>, %ecx # <addr>
                	cmpl	$0x17, %ecx

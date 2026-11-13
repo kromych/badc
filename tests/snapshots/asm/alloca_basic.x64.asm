@@ -43,38 +43,11 @@ Disassembly of section .text:
                	subq	$0x1, %r11
                	jne	<addr>
                	movq	%rcx, %rsp
-               	movb	$0x55, (%rcx)
-               	movb	$0x55, 0x1(%rcx)
-               	movb	$0x55, 0x2(%rcx)
-               	movb	$0x55, 0x3(%rcx)
-               	movb	$0x55, 0x4(%rcx)
-               	movb	$0x55, 0x5(%rcx)
-               	movb	$0x55, 0x6(%rcx)
-               	movb	$0x55, 0x7(%rcx)
-               	movb	$0x55, 0x8(%rcx)
-               	movb	$0x55, 0x9(%rcx)
-               	movb	$0x55, 0xa(%rcx)
-               	movb	$0x55, 0xb(%rcx)
-               	movb	$0x55, 0xc(%rcx)
-               	movb	$0x55, 0xd(%rcx)
-               	movb	$0x55, 0xe(%rcx)
-               	movb	$0x55, 0xf(%rcx)
-               	movb	$0x55, 0x10(%rcx)
-               	movb	$0x55, 0x11(%rcx)
-               	movb	$0x55, 0x12(%rcx)
-               	movb	$0x55, 0x13(%rcx)
-               	movb	$0x55, 0x14(%rcx)
-               	movb	$0x55, 0x15(%rcx)
-               	movb	$0x55, 0x16(%rcx)
-               	movb	$0x55, 0x17(%rcx)
-               	movb	$0x55, 0x18(%rcx)
-               	movb	$0x55, 0x19(%rcx)
-               	movb	$0x55, 0x1a(%rcx)
-               	movb	$0x55, 0x1b(%rcx)
-               	movb	$0x55, 0x1c(%rcx)
-               	movb	$0x55, 0x1d(%rcx)
-               	movb	$0x55, 0x1e(%rcx)
-               	movb	$0x55, 0x1f(%rcx)
+               	movabsq	$0x5555555555555555, %rax # imm = 0x5555555555555555
+               	movq	%rax, (%rcx)
+               	movq	%rax, 0x8(%rcx)
+               	movq	%rax, 0x10(%rcx)
+               	movq	%rax, 0x18(%rcx)
                	xorl	%eax, %eax
                	movsbq	(%rcx,%rax), %rdx
                	cmpl	$0x55, %edx
@@ -161,38 +134,12 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	leave
                	retq
-               	movb	$0x41, (%rax)
-               	movb	$0x41, 0x1(%rax)
-               	movb	$0x41, 0x2(%rax)
-               	movb	$0x41, 0x3(%rax)
-               	movb	$0x41, 0x4(%rax)
-               	movb	$0x41, 0x5(%rax)
-               	movb	$0x41, 0x6(%rax)
-               	movb	$0x41, 0x7(%rax)
-               	movb	$0x41, 0x8(%rax)
-               	movb	$0x41, 0x9(%rax)
-               	movb	$0x41, 0xa(%rax)
-               	movb	$0x41, 0xb(%rax)
-               	movb	$0x41, 0xc(%rax)
-               	movb	$0x41, 0xd(%rax)
-               	movb	$0x41, 0xe(%rax)
-               	movb	$0x41, 0xf(%rax)
-               	movb	$0x42, (%rcx)
-               	movb	$0x42, 0x1(%rcx)
-               	movb	$0x42, 0x2(%rcx)
-               	movb	$0x42, 0x3(%rcx)
-               	movb	$0x42, 0x4(%rcx)
-               	movb	$0x42, 0x5(%rcx)
-               	movb	$0x42, 0x6(%rcx)
-               	movb	$0x42, 0x7(%rcx)
-               	movb	$0x42, 0x8(%rcx)
-               	movb	$0x42, 0x9(%rcx)
-               	movb	$0x42, 0xa(%rcx)
-               	movb	$0x42, 0xb(%rcx)
-               	movb	$0x42, 0xc(%rcx)
-               	movb	$0x42, 0xd(%rcx)
-               	movb	$0x42, 0xe(%rcx)
-               	movb	$0x42, 0xf(%rcx)
+               	movabsq	$0x4141414141414141, %rdx # imm = 0x4141414141414141
+               	movq	%rdx, (%rax)
+               	movq	%rdx, 0x8(%rax)
+               	movabsq	$0x4242424242424242, %rdx # imm = 0x4242424242424242
+               	movq	%rdx, (%rcx)
+               	movq	%rdx, 0x8(%rcx)
                	movsbq	(%rax), %rcx
                	cmpl	$0x41, %ecx
                	jne	<addr>

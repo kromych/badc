@@ -174,23 +174,9 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x21, x0
                	sub	x23, x29, #0x110
-               	mov	x0, #0xaa               // =170
-               	strb	w0, [sp, #0x50]
-               	strb	w0, [sp, #0x51]
-               	strb	w0, [sp, #0x52]
-               	strb	w0, [sp, #0x53]
-               	strb	w0, [sp, #0x54]
-               	strb	w0, [sp, #0x55]
-               	strb	w0, [sp, #0x56]
-               	strb	w0, [sp, #0x57]
-               	strb	w0, [sp, #0x58]
-               	strb	w0, [sp, #0x59]
-               	strb	w0, [sp, #0x5a]
-               	strb	w0, [sp, #0x5b]
-               	strb	w0, [sp, #0x5c]
-               	strb	w0, [sp, #0x5d]
-               	strb	w0, [sp, #0x5e]
-               	strb	w0, [sp, #0x5f]
+               	mov	x0, #-0x5555555555555556 // =-6148914691236517206
+               	str	x0, [sp, #0x50]
+               	str	x0, [sp, #0x58]
                	cbz	x21, <addr>
                	cmp	w20, #0x6
                	b.ne	<addr>

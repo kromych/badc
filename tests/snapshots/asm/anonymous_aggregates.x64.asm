@@ -43,8 +43,8 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	leave
                	retq
-               	movl	$0xcafebabe, -0x8(%rbp) # imm = 0xCAFEBABE
-               	movl	$0xbadf00d, -0x4(%rbp)  # imm = 0xBADF00D
+               	movabsq	$0xbadf00dcafebabe, %rax # imm = 0xBADF00DCAFEBABE
+               	movq	%rax, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
                	movabsq	$0xbadf00dcafebabe, %r11 # imm = 0xBADF00DCAFEBABE
                	cmpq	%r11, %rax
@@ -52,9 +52,8 @@ Disassembly of section .text:
                	movl	$0x8, %eax
                	leave
                	retq
-               	movl	$0x7, -0x10(%rbp)
-               	movw	$0x1234, -0xc(%rbp)     # imm = 0x1234
-               	movw	$0x5678, -0xa(%rbp)     # imm = 0x5678
+               	movabsq	$0x5678123400000007, %rax # imm = 0x5678123400000007
+               	movq	%rax, -0x10(%rbp)
                	movl	$0x9, -0x8(%rbp)
                	movl	-0xc(%rbp), %eax
                	cmpl	$0x56781234, %eax       # imm = 0x56781234

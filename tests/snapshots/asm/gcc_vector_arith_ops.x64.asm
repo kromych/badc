@@ -6536,23 +6536,11 @@ Disassembly of section .text:
                	vmovups	(%rax), %xmm14
                	vmovups	%xmm14, (%rdi)
                	leaq	0x40(%rsp), %rax
-               	movb	$0x42, 0x40(%rsp)
                	xorl	%ecx, %ecx
-               	movb	%cl, 0x41(%rsp)
-               	movb	$0x28, 0x42(%rsp)
-               	movb	%cl, 0x43(%rsp)
-               	movb	$0x1d, 0x44(%rsp)
-               	movb	%cl, 0x45(%rsp)
-               	movb	$0x16, 0x46(%rsp)
-               	movb	%cl, 0x47(%rsp)
-               	movb	$0x1, 0x48(%rsp)
-               	movb	$0x2, 0x49(%rsp)
-               	movb	$0x3, 0x4a(%rsp)
-               	movb	$0x4, 0x4b(%rsp)
-               	movb	$0x5, 0x4c(%rsp)
-               	movb	$0x6, 0x4d(%rsp)
-               	movb	$0x7, 0x4e(%rsp)
-               	movb	$0x8, 0x4f(%rsp)
+               	movl	$0x280042, 0x40(%rsp)   # imm = 0x280042
+               	movl	$0x16001d, 0x44(%rsp)   # imm = 0x16001D
+               	movl	$0x4030201, 0x48(%rsp)  # imm = 0x4030201
+               	movl	$0x8070605, 0x4c(%rsp)  # imm = 0x8070605
                	leaq	0x20(%rsp), %rdx
                	vmovups	(%rax), %xmm14
                	vmovups	%xmm14, (%rdx)

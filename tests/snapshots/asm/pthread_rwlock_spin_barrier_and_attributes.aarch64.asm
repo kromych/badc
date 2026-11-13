@@ -80,18 +80,15 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x150
                	str	xzr, [sp, #0x50]
-               	str	xzr, [sp, #0x58]
-               	str	xzr, [sp, #0x60]
-               	str	xzr, [sp, #0x68]
+               	mov	x2, #0x100000000        // =4294967296
+               	mov	x3, #0x4600000000       // =300647710720
+               	mov	x4, #0x4                // =4
                	str	xzr, [sp, #0x70]
                	str	xzr, [sp, #0x78]
                	str	xzr, [sp, #0x80]
-               	mov	x1, #0x46               // =70
-               	str	w1, [sp, #0x64]
-               	mov	x1, #0x1                // =1
-               	str	w1, [sp, #0x5c]
-               	mov	x1, #0x4                // =4
-               	str	w1, [sp, #0x68]
+               	str	x3, [sp, #0x60]
+               	str	x2, [sp, #0x58]
+               	str	x4, [sp, #0x68]
                	sub	x1, x29, #0x170
                	bl	<addr>
                	mov	x1, x0

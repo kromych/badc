@@ -80,24 +80,20 @@ Disassembly of section .text:
                	retq
 
 <bitfield_copy>:
-               	movq	%rsi, %rcx
-               	andq	$0xfff, %rcx            # imm = 0xFFF
-               	shlq	$0x8, %rcx
-               	orq	$0x8d, %rcx
-               	movl	%ecx, (%rdi)
-               	movl	$0x0, 0x4(%rdi)
+               	movq	%rsi, %rax
+               	andq	$0xfff, %rax            # imm = 0xFFF
+               	shlq	$0x8, %rax
+               	orq	$0x8d, %rax
+               	movq	%rax, (%rdi)
                	movq	%rsi, 0x8(%rdi)
                	retq
 
 <padded_copy>:
-               	movsbq	%sil, %rcx
-               	leaq	(%rsi,%rsi,2), %rdx
-               	andq	$0xff, %rcx
-               	movb	%cl, (%rdi)
-               	movb	$0x0, 0x1(%rdi)
-               	movw	$0x0, 0x2(%rdi)
-               	movl	$0x0, 0x4(%rdi)
-               	movq	%rdx, 0x8(%rdi)
+               	movsbq	%sil, %rax
+               	leaq	(%rsi,%rsi,2), %rcx
+               	andq	$0xff, %rax
+               	movq	%rax, (%rdi)
+               	movq	%rcx, 0x8(%rdi)
                	retq
 
 <fam_copy>:

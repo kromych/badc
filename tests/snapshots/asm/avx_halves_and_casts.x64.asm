@@ -79,18 +79,18 @@ Disassembly of section .text:
                	subq	$0x130, %rsp            # imm = 0x130
                	subq	$0x40, %rsp
                	andq	$-0x20, %rsp
-               	movl	$0xffc2f700, -0xd0(%rbp) # imm = 0xFFC2F700
-               	movl	$0xffd23943, -0xcc(%rbp) # imm = 0xFFD23943
-               	movl	$0xffe17b86, -0xc8(%rbp) # imm = 0xFFE17B86
-               	movl	$0xfff0bdc9, -0xc4(%rbp) # imm = 0xFFF0BDC9
-               	movl	$0xc, -0xc0(%rbp)
-               	movl	$0xf424f, -0xbc(%rbp)   # imm = 0xF424F
-               	movl	$0x1e8492, -0xb8(%rbp)  # imm = 0x1E8492
-               	movl	$0x2dc6d5, -0xb4(%rbp)  # imm = 0x2DC6D5
-               	movl	$0xffffffff, -0x100(%rbp) # imm = 0xFFFFFFFF
-               	movl	$0xfffffff8, -0xfc(%rbp) # imm = 0xFFFFFFF8
-               	movl	$0xfffffff1, -0xf8(%rbp) # imm = 0xFFFFFFF1
-               	movl	$0xffffffea, -0xf4(%rbp) # imm = 0xFFFFFFEA
+               	movabsq	$-0x2dc6bc003d0900, %rax # imm = 0xFFD23943FFC2F700
+               	movq	%rax, -0xd0(%rbp)
+               	movabsq	$-0xf4236001e847a, %rax # imm = 0xFFF0BDC9FFE17B86
+               	movq	%rax, -0xc8(%rbp)
+               	movabsq	$0xf424f0000000c, %rax  # imm = 0xF424F0000000C
+               	movq	%rax, -0xc0(%rbp)
+               	movabsq	$0x2dc6d5001e8492, %rax # imm = 0x2DC6D5001E8492
+               	movq	%rax, -0xb8(%rbp)
+               	movabsq	$-0x700000001, %rax     # imm = 0xFFFFFFF8FFFFFFFF
+               	movq	%rax, -0x100(%rbp)
+               	movabsq	$-0x150000000f, %rax    # imm = 0xFFFFFFEAFFFFFFF1
+               	movq	%rax, -0xf8(%rbp)
                	vmovups	-0xd0(%rbp), %ymm0
                	leaq	(%rsp), %r9
                	vmovups	%ymm0, (%rsp)

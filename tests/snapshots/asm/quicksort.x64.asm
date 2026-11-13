@@ -115,11 +115,11 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %rbx
                	xorl	%esi, %esi
-               	movl	$0xc, (%rbx)
+               	movabsq	$0x70000000c, %rax      # imm = 0x70000000C
                	movl	$0x4, %edx
-               	movl	$0x7, 0x4(%rbx)
-               	movl	$0xf, 0x8(%rbx)
-               	movl	$0x5, 0xc(%rbx)
+               	movq	%rax, (%rbx)
+               	movabsq	$0x50000000f, %rax      # imm = 0x50000000F
+               	movq	%rax, 0x8(%rbx)
                	movl	$0xa, 0x10(%rbx)
                	movq	%rbx, %rdi
                	callq	<addr>

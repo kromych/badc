@@ -48,8 +48,8 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	leave
                	retq
-               	movl	$0x3f800000, -0x10(%rbp) # imm = 0x3F800000
-               	movl	$0x40000000, -0xc(%rbp) # imm = 0x40000000
+               	movabsq	$0x400000003f800000, %rax # imm = 0x400000003F800000
+               	movq	%rax, -0x10(%rbp)
                	movl	$0x40400000, -0x8(%rbp) # imm = 0x40400000
                	movss	-0x10(%rbp), %xmm0
                	movl	$0x3f800000, %eax       # imm = 0x3F800000

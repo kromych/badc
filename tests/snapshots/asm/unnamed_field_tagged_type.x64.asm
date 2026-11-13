@@ -32,8 +32,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movq	%rax, -0x48(%rbp)
                	movl	$0x3, -0x40(%rbp)
-               	movb	$0x61, -0x38(%rbp)
-               	movb	$0x0, -0x37(%rbp)
+               	movw	$0x61, -0x38(%rbp)
                	leaq	<rip>, %rcx
                	movsbq	(%rax), %rdx
                	testq	%rdx, %rdx

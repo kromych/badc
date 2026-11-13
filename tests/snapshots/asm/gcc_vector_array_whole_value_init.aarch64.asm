@@ -40,23 +40,9 @@ Disassembly of section .text:
                	stp	xzr, xzr, [x0, #0x10]
                	stp	xzr, xzr, [x0, #0x20]
                	stur	q2, [x29, #-0x60]
-               	mov	x0, #0x7                // =7
-               	sturb	w0, [x29, #-0x60]
-               	sturb	w0, [x29, #-0x5f]
-               	sturb	w0, [x29, #-0x5e]
-               	sturb	w0, [x29, #-0x5d]
-               	sturb	w0, [x29, #-0x5c]
-               	sturb	w0, [x29, #-0x5b]
-               	sturb	w0, [x29, #-0x5a]
-               	sturb	w0, [x29, #-0x59]
-               	sturb	w0, [x29, #-0x58]
-               	sturb	w0, [x29, #-0x57]
-               	sturb	w0, [x29, #-0x56]
-               	sturb	w0, [x29, #-0x55]
-               	sturb	w0, [x29, #-0x54]
-               	sturb	w0, [x29, #-0x53]
-               	sturb	w0, [x29, #-0x52]
-               	sturb	w0, [x29, #-0x51]
+               	mov	x0, #0x707070707070707  // =506381209866536711
+               	stur	x0, [x29, #-0x60]
+               	stur	x0, [x29, #-0x58]
                	stur	q1, [x29, #-0x50]
                	ldurb	w0, [x29, #-0x60]
                	cmp	w0, #0x7
@@ -68,23 +54,9 @@ Disassembly of section .text:
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x3                // =3
-               	sturb	w0, [x29, #-0x60]
-               	sturb	w0, [x29, #-0x5f]
-               	sturb	w0, [x29, #-0x5e]
-               	sturb	w0, [x29, #-0x5d]
-               	sturb	w0, [x29, #-0x5c]
-               	sturb	w0, [x29, #-0x5b]
-               	sturb	w0, [x29, #-0x5a]
-               	sturb	w0, [x29, #-0x59]
-               	sturb	w0, [x29, #-0x58]
-               	sturb	w0, [x29, #-0x57]
-               	sturb	w0, [x29, #-0x56]
-               	sturb	w0, [x29, #-0x55]
-               	sturb	w0, [x29, #-0x54]
-               	sturb	w0, [x29, #-0x53]
-               	sturb	w0, [x29, #-0x52]
-               	sturb	w0, [x29, #-0x51]
+               	mov	x0, #0x303030303030303  // =217020518514230019
+               	stur	x0, [x29, #-0x60]
+               	stur	x0, [x29, #-0x58]
                	stur	q0, [x29, #-0x50]
                	ldurb	w0, [x29, #-0x59]
                	cmp	w0, #0x3

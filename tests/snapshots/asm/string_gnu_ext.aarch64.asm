@@ -131,11 +131,9 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x8
                	mov	x1, #0x61               // =97
-               	sturb	w1, [x29, #-0x8]
-               	sturb	wzr, [x29, #-0x7]
-               	mov	x3, #0x62               // =98
-               	sturb	w3, [x29, #-0x6]
-               	sturb	wzr, [x29, #-0x5]
+               	mov	x2, #0x61               // =97
+               	movk	x2, #0x62, lsl #16
+               	stur	w2, [x29, #-0x8]
                	sturb	w1, [x29, #-0x4]
                	mov	x2, #0x5                // =5
                	bl	<addr>

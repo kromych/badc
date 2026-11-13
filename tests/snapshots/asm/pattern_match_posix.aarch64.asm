@@ -52,11 +52,9 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cbnz	x0, <addr>
                	sub	x3, x29, #0x50
-               	mov	x0, #-0x2               // =-2
-               	stur	w0, [x29, #-0x50]
-               	stur	w0, [x29, #-0x4c]
-               	stur	w0, [x29, #-0x48]
-               	stur	w0, [x29, #-0x44]
+               	mov	x0, #-0x100000002       // =-4294967298
+               	stur	x0, [x29, #-0x50]
+               	stur	x0, [x29, #-0x48]
                	ldr	x1, [x21, #0x10]
                	mov	x2, #0x2                // =2
                	add	x0, x23, x24

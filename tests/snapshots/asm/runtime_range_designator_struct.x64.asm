@@ -67,8 +67,8 @@ Disassembly of section .text:
                	movl	<rip>, %eax # <addr>
                	incq	%rax
                	movl	%eax, <rip> # <addr>
-               	movl	$0x1d, -0x70(%rbp)
-               	movl	$0x5, -0x6c(%rbp)
+               	movabsq	$0x50000001d, %rax      # imm = 0x50000001D
+               	movq	%rax, -0x70(%rbp)
                	movq	-0x70(%rbp), %rax
                	movq	%rax, -0x68(%rbp)
                	movq	%rax, -0x60(%rbp)

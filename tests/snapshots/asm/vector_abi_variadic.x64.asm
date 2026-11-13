@@ -463,15 +463,11 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	leave
                	retq
-               	movb	$0x5, -0x8(%rbp)
-               	movb	$0x6, -0x7(%rbp)
-               	movb	$0x7, -0x6(%rbp)
-               	movb	$0x8, -0x5(%rbp)
-               	movb	$0x9, -0x4(%rbp)
-               	movb	$0xa, -0x3(%rbp)
-               	movb	$0xb, -0x2(%rbp)
+               	movw	$0x605, -0x8(%rbp)      # imm = 0x605
+               	movw	$0x807, -0x6(%rbp)      # imm = 0x807
+               	movw	$0xa09, -0x4(%rbp)      # imm = 0xA09
                	leaq	-0x8(%rbp), %r9
-               	movb	$0xc, -0x1(%rbp)
+               	movw	$0xc0b, -0x2(%rbp)      # imm = 0xC0B
                	movl	$0x1, %edi
                	movq	%r9, %r10
                	movsd	(%r10), %xmm0

@@ -72,10 +72,9 @@ Disassembly of section .text:
                	sturh	w0, [x29, #-0x20]
                	mov	x0, #0x9                // =9
                	stur	w0, [x29, #-0x1e]
-               	mov	x0, #0x4                // =4
-               	sturb	w0, [x29, #-0x18]
+               	mov	x1, #0x504              // =1284
                	mov	x0, #0x5                // =5
-               	sturb	w0, [x29, #-0x17]
+               	sturh	w1, [x29, #-0x18]
                	mov	x1, #0x6                // =6
                	stur	w1, [x29, #-0x16]
                	sub	x1, x29, #0x8

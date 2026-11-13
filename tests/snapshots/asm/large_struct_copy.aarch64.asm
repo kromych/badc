@@ -19,25 +19,22 @@ Disassembly of section .text:
                	sub	sp, sp, #0x420
                	sub	x3, x29, #0x420
                	mov	x0, #0x64               // =100
-               	str	w0, [sp]
-               	mov	x0, #0xc8               // =200
-               	str	w0, [sp, #0x4]
+               	movk	x0, #0xc8, lsl #32
+               	str	x0, [sp]
                	mov	x0, #0x12c              // =300
-               	str	w0, [sp, #0x8]
-               	mov	x0, #0x190              // =400
-               	str	w0, [sp, #0xc]
+               	movk	x0, #0x190, lsl #32
+               	str	x0, [sp, #0x8]
                	mov	x0, #-0x1               // =-1
                	str	w0, [sp, #0xb0]
                	mov	x0, #-0x2               // =-2
                	str	w0, [sp, #0x154]
-               	mov	x0, #-0x3               // =-3
-               	str	w0, [sp, #0x1f8]
-               	mov	x0, #0x1f4              // =500
-               	str	w0, [sp, #0x1fc]
+               	mov	x0, #0xfffd             // =65533
+               	movk	x0, #0xffff, lsl #16
+               	movk	x0, #0x1f4, lsl #32
+               	str	x0, [sp, #0x1f8]
                	mov	x0, #0x258              // =600
-               	str	w0, [sp, #0x200]
-               	mov	x0, #0x2bc              // =700
-               	str	w0, [sp, #0x204]
+               	movk	x0, #0x2bc, lsl #32
+               	str	x0, [sp, #0x200]
                	mov	x0, #0x320              // =800
                	str	w0, [sp, #0x208]
                	mov	x0, #0x0                // =0

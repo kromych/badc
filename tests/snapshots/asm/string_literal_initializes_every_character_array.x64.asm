@@ -75,17 +75,14 @@ Disassembly of section .text:
                	je	<addr>
                	leave
                	retq
-               	movl	$0x61, -0x40(%rbp)
-               	movl	$0x62, -0x3c(%rbp)
-               	movl	$0x0, -0x38(%rbp)
-               	movl	$0x71, -0x34(%rbp)
-               	leaq	-0x28(%rbp), %rdi
-               	movq	$0x0, (%rdi)
-               	movl	$0x0, 0x8(%rdi)
-               	movb	$0x61, -0x28(%rbp)
-               	movb	$0x62, -0x27(%rbp)
-               	movb	$0x0, -0x26(%rbp)
-               	movb	$0x71, -0x25(%rbp)
+               	movabsq	$0x6200000061, %rax     # imm = 0x6200000061
+               	movq	%rax, -0x40(%rbp)
+               	movabsq	$0x7100000000, %rax     # imm = 0x7100000000
+               	movq	%rax, -0x38(%rbp)
+               	leaq	-0x28(%rbp), %rax
+               	movq	$0x0, (%rax)
+               	movl	$0x0, 0x8(%rax)
+               	movl	$0x71006261, -0x28(%rbp) # imm = 0x71006261
                	movl	-0x3c(%rbp), %eax
                	cmpl	$0x62, %eax
                	jne	<addr>

@@ -105,37 +105,37 @@ fn ent_pc=10 n_params=0 variadic=false locals=38
     v260 Imm(0)                                           -> x0
     v261 LocalAddr(-34)                                   -> x0
     v262 Imm(170)                                         -> x0
-    v263 StoreLocal { off=-34, value=v262, kind=I8 }      -> -
-    v264 BinopI { op=add, lhs=v261, rhs_imm=1 }           -> x1
-    v265 StoreLocal { off=-34, disp=1, value=v262, kind=I8 } -> -
-    v266 BinopI { op=add, lhs=v261, rhs_imm=2 }           -> x1
-    v267 StoreLocal { off=-34, disp=2, value=v262, kind=I8 } -> -
-    v268 BinopI { op=add, lhs=v261, rhs_imm=3 }           -> x1
-    v269 StoreLocal { off=-34, disp=3, value=v262, kind=I8 } -> -
-    v270 BinopI { op=add, lhs=v261, rhs_imm=4 }           -> x1
-    v271 StoreLocal { off=-34, disp=4, value=v262, kind=I8 } -> -
-    v272 BinopI { op=add, lhs=v261, rhs_imm=5 }           -> x1
-    v273 StoreLocal { off=-34, disp=5, value=v262, kind=I8 } -> -
-    v274 BinopI { op=add, lhs=v261, rhs_imm=6 }           -> x1
-    v275 StoreLocal { off=-34, disp=6, value=v262, kind=I8 } -> -
+    v263 Imm(0)                                           -> x0
+    v264 BinopI { op=add, lhs=v261, rhs_imm=1 }           -> x0
+    v265 Imm(0)                                           -> x0
+    v266 BinopI { op=add, lhs=v261, rhs_imm=2 }           -> x0
+    v267 Imm(0)                                           -> x0
+    v268 BinopI { op=add, lhs=v261, rhs_imm=3 }           -> x0
+    v269 Imm(0)                                           -> x0
+    v270 BinopI { op=add, lhs=v261, rhs_imm=4 }           -> x0
+    v271 Imm(0)                                           -> x0
+    v272 BinopI { op=add, lhs=v261, rhs_imm=5 }           -> x0
+    v273 Imm(0)                                           -> x0
+    v274 BinopI { op=add, lhs=v261, rhs_imm=6 }           -> x0
+    v275 Imm(-6148914691236517206)                        -> x0
     v276 BinopI { op=add, lhs=v261, rhs_imm=7 }           -> x1
-    v277 StoreLocal { off=-34, disp=7, value=v262, kind=I8 } -> -
-    v278 BinopI { op=add, lhs=v261, rhs_imm=8 }           -> x1
-    v279 StoreLocal { off=-34, disp=8, value=v262, kind=I8 } -> -
-    v280 BinopI { op=add, lhs=v261, rhs_imm=9 }           -> x1
-    v281 StoreLocal { off=-34, disp=9, value=v262, kind=I8 } -> -
-    v282 BinopI { op=add, lhs=v261, rhs_imm=10 }          -> x1
-    v283 StoreLocal { off=-34, disp=10, value=v262, kind=I8 } -> -
-    v284 BinopI { op=add, lhs=v261, rhs_imm=11 }          -> x1
-    v285 StoreLocal { off=-34, disp=11, value=v262, kind=I8 } -> -
-    v286 BinopI { op=add, lhs=v261, rhs_imm=12 }          -> x1
-    v287 StoreLocal { off=-34, disp=12, value=v262, kind=I8 } -> -
-    v288 BinopI { op=add, lhs=v261, rhs_imm=13 }          -> x1
-    v289 StoreLocal { off=-34, disp=13, value=v262, kind=I8 } -> -
-    v290 BinopI { op=add, lhs=v261, rhs_imm=14 }          -> x1
-    v291 StoreLocal { off=-34, disp=14, value=v262, kind=I8 } -> -
+    v277 StoreLocal { off=-34, value=v275, kind=I64 }     -> -
+    v278 BinopI { op=add, lhs=v261, rhs_imm=8 }           -> x0
+    v279 Imm(0)                                           -> x0
+    v280 BinopI { op=add, lhs=v261, rhs_imm=9 }           -> x0
+    v281 Imm(0)                                           -> x0
+    v282 BinopI { op=add, lhs=v261, rhs_imm=10 }          -> x0
+    v283 Imm(0)                                           -> x0
+    v284 BinopI { op=add, lhs=v261, rhs_imm=11 }          -> x0
+    v285 Imm(0)                                           -> x0
+    v286 BinopI { op=add, lhs=v261, rhs_imm=12 }          -> x0
+    v287 Imm(0)                                           -> x0
+    v288 BinopI { op=add, lhs=v261, rhs_imm=13 }          -> x0
+    v289 Imm(0)                                           -> x0
+    v290 BinopI { op=add, lhs=v261, rhs_imm=14 }          -> x0
+    v291 Imm(-6148914691236517206)                        -> x0
     v292 BinopI { op=add, lhs=v261, rhs_imm=15 }          -> x1
-    v293 StoreLocal { off=-34, disp=15, value=v262, kind=I8 } -> -
+    v293 StoreLocal { off=-34, disp=8, value=v291, kind=I64 } -> -
     terminator Bz { cond=v259, target=b46, fall=b7 }   (exit_acc=v259)
   block 7  start_pc=0
     v294 Extend { value=v239, kind=I32 }                  -> x0

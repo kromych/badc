@@ -290,10 +290,10 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movl	$0x1, <rip> # <addr>
-               	movl	$0x2, <rip> # <addr>
-               	movl	$0x4, <rip> # <addr>
-               	movl	$0x8, <rip> # <addr>
+               	movabsq	$0x200000001, %rax      # imm = 0x200000001
+               	movq	%rax, <rip> # <addr>
+               	movabsq	$0x800000004, %rax      # imm = 0x800000004
+               	movq	%rax, <rip> # <addr>
                	leaq	<rip>, %rdi # <addr>
                	leaq	-<rip>, %rsi # <addr>
                	xorl	%eax, %eax

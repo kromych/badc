@@ -86,14 +86,14 @@ fn ent_pc=7 n_params=0 variadic=false locals=2
     v66  Binop { op=or, lhs=v63, rhs=v65 }                -> x0
     v67  BinopI { op=ne, lhs=v66, rhs_imm=0 }             -> x0
     v68  LocalAddr(-2)                                    -> x1
-    v69  StoreLocal { off=-2, value=v67, kind=I8 }        -> -
-    v70  Imm(0)                                           -> x0
-    v71  LocalAddr(-2)                                    -> x0
-    v72  BinopI { op=add, lhs=v60, rhs_imm=1 }            -> x0
-    v73  Imm(0)                                           -> x0
-    v74  Imm(0)                                           -> x0
+    v69  Imm(0)                                           -> x1
+    v70  Imm(0)                                           -> x1
+    v71  LocalAddr(-2)                                    -> x1
+    v72  BinopI { op=add, lhs=v60, rhs_imm=1 }            -> x1
+    v73  Imm(0)                                           -> x1
+    v74  Imm(0)                                           -> x1
     v75  Imm(0)                                           -> x1
-    v76  StoreLocal { off=-2, disp=1, value=v74, kind=I8 } -> -
+    v76  StoreLocal { off=-2, value=v67, kind=I16 }       -> -
     v77  LocalAddr(-2)                                    -> x0
     v78  LoadLocal { off=-2, kind=U32 }                   -> x0
     v79  BinopI { op=and, lhs=v78, rhs_imm=-65025 }       -> x0
@@ -1488,8 +1488,8 @@ fn ent_pc=9 n_params=0 variadic=false locals=3
     v47  BinopI { op=add, lhs=v40, rhs_imm=2 }            -> x1
     v48  Imm(120)                                         -> x1
     v49  Store { addr=v40, disp=2, value=v48, kind=I8 }   -> -
-    v50  Store { addr=v40, disp=1, value=v48, kind=I8 }   -> -
-    v51  Store { addr=v40, disp=0, value=v48, kind=I8 }   -> -
+    v50  Imm(30840)                                       -> x1
+    v51  Store { addr=v40, disp=0, value=v50, kind=I16, align=1 } -> -
     v52  Imm(0)                                           -> x0
     v53  BinopI { op=add, lhs=v40, rhs_imm=2 }            -> x0
     v54  Imm(120)                                         -> x0

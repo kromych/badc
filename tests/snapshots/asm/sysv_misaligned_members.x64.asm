@@ -174,8 +174,7 @@ Disassembly of section .text:
                	movl	$0x7, -0xf(%rbp)
                	movw	$0x2, -0x28(%rbp)
                	movl	$0x9, -0x26(%rbp)
-               	movb	$0x4, -0x18(%rbp)
-               	movb	$0x5, -0x17(%rbp)
+               	movw	$0x504, -0x18(%rbp)     # imm = 0x504
                	movl	$0x6, -0x16(%rbp)
                	movl	$0x2a, %edi
                	subq	$0x10, %rsp

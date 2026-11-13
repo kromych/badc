@@ -313,55 +313,55 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v307 LifetimeEnd(0)                                   -> -
     v308 LocalAddr(-2)                                    -> x0
     v309 Imm(0)                                           -> x0
-    v310 Imm(0)                                           -> x1
-    v311 Imm(0)                                           -> x1
-    v312 Imm(0)                                           -> x1
-    v313 Imm(0)                                           -> x1
-    v314 Imm(0)                                           -> x1
-    v315 StoreLocal { off=-2, value=v309, kind=I8 }       -> -
-    v316 BinopI { op=add, lhs=v308, rhs_imm=1 }           -> x1
-    v317 StoreLocal { off=-2, disp=1, value=v309, kind=I8 } -> -
-    v318 BinopI { op=add, lhs=v308, rhs_imm=2 }           -> x1
-    v319 StoreLocal { off=-2, disp=2, value=v309, kind=I8 } -> -
+    v310 Imm(0)                                           -> x0
+    v311 Imm(0)                                           -> x0
+    v312 Imm(0)                                           -> x0
+    v313 Imm(0)                                           -> x0
+    v314 Imm(0)                                           -> x0
+    v315 Imm(0)                                           -> x0
+    v316 BinopI { op=add, lhs=v308, rhs_imm=1 }           -> x0
+    v317 Imm(0)                                           -> x0
+    v318 BinopI { op=add, lhs=v308, rhs_imm=2 }           -> x0
+    v319 Imm(0)                                           -> x0
     v320 BinopI { op=add, lhs=v308, rhs_imm=3 }           -> x1
-    v321 StoreLocal { off=-2, disp=3, value=v309, kind=I8 } -> -
-    v322 BinopI { op=add, lhs=v308, rhs_imm=4 }           -> x1
-    v323 StoreLocal { off=-2, disp=4, value=v309, kind=I8 } -> -
-    v324 BinopI { op=add, lhs=v308, rhs_imm=5 }           -> x1
-    v325 StoreLocal { off=-2, disp=5, value=v309, kind=I8 } -> -
-    v326 BinopI { op=add, lhs=v308, rhs_imm=6 }           -> x1
-    v327 StoreLocal { off=-2, disp=6, value=v309, kind=I8 } -> -
-    v328 BinopI { op=add, lhs=v308, rhs_imm=7 }           -> x1
-    v329 StoreLocal { off=-2, disp=7, value=v309, kind=I8 } -> -
+    v321 StoreLocal { off=-2, value=v319, kind=I32 }      -> -
+    v322 BinopI { op=add, lhs=v308, rhs_imm=4 }           -> x0
+    v323 Imm(0)                                           -> x0
+    v324 BinopI { op=add, lhs=v308, rhs_imm=5 }           -> x0
+    v325 Imm(0)                                           -> x0
+    v326 BinopI { op=add, lhs=v308, rhs_imm=6 }           -> x0
+    v327 Imm(0)                                           -> x0
+    v328 BinopI { op=add, lhs=v308, rhs_imm=7 }           -> x0
+    v329 Imm(1)                                           -> x0
     v330 BinopI { op=add, lhs=v308, rhs_imm=8 }           -> x1
-    v331 StoreLocal { off=-2, disp=8, value=v309, kind=I8 } -> -
+    v331 Imm(0)                                           -> x1
     v332 BinopI { op=add, lhs=v308, rhs_imm=9 }           -> x1
-    v333 StoreLocal { off=-2, disp=9, value=v309, kind=I8 } -> -
+    v333 Imm(0)                                           -> x1
     v334 BinopI { op=add, lhs=v308, rhs_imm=10 }          -> x1
-    v335 StoreLocal { off=-2, disp=10, value=v309, kind=I8 } -> -
+    v335 Imm(0)                                           -> x1
     v336 BinopI { op=add, lhs=v308, rhs_imm=11 }          -> x1
-    v337 StoreLocal { off=-2, disp=11, value=v309, kind=I8 } -> -
+    v337 Imm(0)                                           -> x1
     v338 BinopI { op=add, lhs=v308, rhs_imm=12 }          -> x1
-    v339 StoreLocal { off=-2, disp=12, value=v309, kind=I8 } -> -
+    v339 Imm(0)                                           -> x1
     v340 BinopI { op=add, lhs=v308, rhs_imm=13 }          -> x1
-    v341 StoreLocal { off=-2, disp=13, value=v309, kind=I8 } -> -
+    v341 Imm(0)                                           -> x1
     v342 BinopI { op=add, lhs=v308, rhs_imm=14 }          -> x1
-    v343 StoreLocal { off=-2, disp=14, value=v309, kind=I8 } -> -
-    v344 BinopI { op=add, lhs=v308, rhs_imm=15 }          -> x1
-    v345 StoreLocal { off=-2, disp=15, value=v309, kind=I8 } -> -
-    v346 LocalAddr(-2)                                    -> x0
-    v347 Imm(1)                                           -> x0
-    v348 StoreLocal { off=-2, value=v347, kind=I32 }      -> -
+    v343 Imm(0)                                           -> x1
+    v344 BinopI { op=add, lhs=v308, rhs_imm=15 }          -> x2
+    v345 StoreLocal { off=-2, disp=8, value=v343, kind=I64 } -> -
+    v346 LocalAddr(-2)                                    -> x1
+    v347 Imm(1)                                           -> x1
+    v348 StoreLocal { off=-2, value=v329, kind=I64 }      -> -
     v349 LocalAddr(-2)                                    -> x0
     v350 BinopI { op=add, lhs=v308, rhs_imm=8 }           -> x0
     v351 Imm(287454020)                                   -> x0
-    v352 StoreLocal { off=-2, disp=8, value=v351, kind=I32 } -> -
-    v353 LocalAddr(-2)                                    -> x0
-    v354 BinopI { op=add, lhs=v308, rhs_imm=8 }           -> x0
-    v355 Imm(4)                                           -> x0
-    v356 BinopI { op=add, lhs=v308, rhs_imm=12 }          -> x0
-    v357 Imm(1432778632)                                  -> x0
-    v358 StoreLocal { off=-2, disp=12, value=v357, kind=I32 } -> -
+    v352 Imm(6153737367135073092)                         -> x0
+    v353 LocalAddr(-2)                                    -> x1
+    v354 BinopI { op=add, lhs=v308, rhs_imm=8 }           -> x1
+    v355 Imm(4)                                           -> x1
+    v356 BinopI { op=add, lhs=v308, rhs_imm=12 }          -> x1
+    v357 Imm(1432778632)                                  -> x1
+    v358 StoreLocal { off=-2, disp=8, value=v352, kind=I64 } -> -
     v359 LocalAddr(-2)                                    -> x0
     v360 LoadLocal { off=-2, kind=U32 }                   -> x0
     v361 BinopI { op=ne, lhs=v360, rhs_imm=1 }            -> x0

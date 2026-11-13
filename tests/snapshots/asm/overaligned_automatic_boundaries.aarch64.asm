@@ -23,9 +23,8 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	str	x0, [x1, #0x20]
                	mov	x1, #0x9                // =9
-               	str	w1, [sp]
-               	mov	x1, #0xa                // =10
-               	str	w1, [sp, #0x4]
+               	movk	x1, #0xa, lsl #32
+               	str	x1, [sp]
                	tst	x0, #0x1f
                	mov	x0, #0x0                // =0
                	mov	x2, #0x1                // =1

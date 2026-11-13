@@ -38,8 +38,8 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %r12
-               	movl	$0x3f800000, (%rbx)     # imm = 0x3F800000
-               	movl	$0x40000000, 0x4(%rbx)  # imm = 0x40000000
+               	movabsq	$0x400000003f800000, %rax # imm = 0x400000003F800000
+               	movq	%rax, (%rbx)
                	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
                	movq	%rax, (%r12)
                	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000

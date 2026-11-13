@@ -29,8 +29,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x40, %rsp
-               	movq	$0x0, -0x8(%rbp)
-               	movb	$0x2, -0x7(%rbp)
+               	movq	$0x200, -0x8(%rbp)      # imm = 0x200
                	movl	-0x8(%rbp), %eax
                	andq	$-0x10, %rax
                	orq	$0xd, %rax
@@ -61,8 +60,7 @@ Disassembly of section .text:
                	movl	$0x15, %eax
                	leave
                	retq
-               	movq	$0x0, -0x8(%rbp)
-               	movb	$0x4, -0x7(%rbp)
+               	movq	$0x400, -0x8(%rbp)      # imm = 0x400
                	movl	-0x8(%rbp), %ecx
                	andq	$-0x10, %rcx
                	orq	$0x8, %rcx
@@ -78,13 +76,9 @@ Disassembly of section .text:
                	leave
                	retq
                	movb	$0x0, -0x8(%rbp)
-               	movb	$0x0, -0x7(%rbp)
-               	movb	$0x0, -0x6(%rbp)
-               	movb	$0x0, -0x5(%rbp)
-               	movb	$0x0, -0x4(%rbp)
                	movb	$0x0, -0x3(%rbp)
-               	movb	$0x5, -0x8(%rbp)
-               	movb	$0x6, -0x3(%rbp)
+               	movl	$0x5, -0x8(%rbp)
+               	movw	$0x600, -0x4(%rbp)      # imm = 0x600
                	movl	-0x7(%rbp), %eax
                	andq	$-0x40000000, %rax      # imm = 0xC0000000
                	orq	$0x38a432eb, %rax       # imm = 0x38A432EB
@@ -101,8 +95,8 @@ Disassembly of section .text:
                	sarq	$0x22, %rax
                	cmpl	$0x1fffffff, %eax       # imm = 0x1FFFFFFF
                	jne	<addr>
-               	movq	$0x0, -0x30(%rbp)
-               	movb	$0x8, -0x2b(%rbp)
+               	movabsq	$0x80000000000, %rax    # imm = 0x80000000000
+               	movq	%rax, -0x30(%rbp)
                	movq	-0x30(%rbp), %rax
                	movabsq	$-0x10000000000, %r11   # imm = 0xFFFFFF0000000000
                	andq	%r11, %rax
@@ -126,8 +120,7 @@ Disassembly of section .text:
                	movl	$0x1a, %eax
                	leave
                	retq
-               	movb	$0x0, -0x8(%rbp)
-               	movb	$0x0, -0x7(%rbp)
+               	movw	$0x0, -0x8(%rbp)
                	movb	$0x0, -0x6(%rbp)
                	movb	$0xb, -0x6(%rbp)
                	movzwq	-0x8(%rbp), %rax

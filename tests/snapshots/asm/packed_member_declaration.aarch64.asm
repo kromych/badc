@@ -18,15 +18,11 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	sturb	wzr, [x29, #-0x8]
-               	sturb	wzr, [x29, #-0x7]
-               	sturb	wzr, [x29, #-0x6]
-               	sturb	wzr, [x29, #-0x5]
-               	sturb	wzr, [x29, #-0x4]
-               	sturb	wzr, [x29, #-0x3]
                	mov	x1, #0x1                // =1
-               	sturb	w1, [x29, #-0x8]
-               	mov	x1, #0x2                // =2
-               	sturb	w1, [x29, #-0x3]
+               	mov	x2, #0x200              // =512
+               	sturb	wzr, [x29, #-0x3]
+               	stur	w1, [x29, #-0x8]
+               	sturh	w2, [x29, #-0x4]
                	ldur	w1, [x29, #-0x7]
                	and	x1, x1, #0xffffffffc0000000
                	mov	x17, #0x32eb            // =13035
@@ -45,10 +41,8 @@ Disassembly of section .text:
                	mov	x17, #0x1fffffff        // =536870911
                	cmp	w1, w17
                	b.ne	<addr>
-               	stur	wzr, [x29, #-0x8]
-               	stur	wzr, [x29, #-0x4]
                	mov	x1, #0x3                // =3
-               	sturb	w1, [x29, #-0x8]
+               	stur	x1, [x29, #-0x8]
                	ldur	w1, [x29, #-0x8]
                	and	x1, x1, #0xfffffffff00000ff
                	mov	x17, #0x100             // =256
@@ -95,14 +89,10 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sturb	wzr, [x29, #-0x8]
-               	sturb	wzr, [x29, #-0x7]
-               	sturb	wzr, [x29, #-0x6]
-               	sturb	wzr, [x29, #-0x5]
-               	sturb	wzr, [x29, #-0x4]
-               	sturb	wzr, [x29, #-0x3]
+               	mov	x1, #0x5                // =5
+               	sturh	wzr, [x29, #-0x4]
                	sturb	wzr, [x29, #-0x2]
-               	mov	x0, #0x5                // =5
-               	sturb	w0, [x29, #-0x8]
+               	stur	w1, [x29, #-0x8]
                	mov	x0, #0x6                // =6
                	sturb	w0, [x29, #-0x2]
                	ldur	w0, [x29, #-0x7]

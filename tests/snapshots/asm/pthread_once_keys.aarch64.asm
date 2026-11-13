@@ -296,13 +296,11 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x1, #0x1                // =1
-               	str	w1, [x0]
-               	mov	x1, #0x2                // =2
-               	str	w1, [x0, #0x4]
+               	movk	x1, #0x2, lsl #32
+               	str	x1, [x0]
                	mov	x1, #0x4                // =4
-               	str	w1, [x0, #0x8]
-               	mov	x1, #0x8                // =8
-               	str	w1, [x0, #0xc]
+               	movk	x1, #0x8, lsl #32
+               	str	x1, [x0, #0x8]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	adrp	x1, <page>

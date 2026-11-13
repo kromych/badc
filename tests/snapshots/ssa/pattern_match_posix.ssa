@@ -68,18 +68,18 @@ fn ent_pc=0 n_params=0 variadic=false locals=10
     v70  LocalAddr(-10)                                   -> x1
     v71  Imm(0)                                           -> x0
     v72  Imm(-2)                                          -> x0
-    v73  StoreLocal { off=-10, value=v72, kind=I32 }      -> -
+    v73  Imm(-4294967298)                                 -> x0
     v74  LocalAddr(-10)                                   -> x2
     v75  BinopI { op=add, lhs=v70, rhs_imm=4 }            -> x2
-    v76  StoreLocal { off=-10, disp=4, value=v72, kind=I32 } -> -
-    v77  LocalAddr(-10)                                   -> x2
-    v78  Imm(8)                                           -> x2
-    v79  BinopI { op=add, lhs=v70, rhs_imm=8 }            -> x2
-    v80  StoreLocal { off=-10, disp=8, value=v72, kind=I32 } -> -
+    v76  StoreLocal { off=-10, value=v73, kind=I64 }      -> -
+    v77  LocalAddr(-10)                                   -> x0
+    v78  Imm(8)                                           -> x0
+    v79  BinopI { op=add, lhs=v70, rhs_imm=8 }            -> x0
+    v80  Imm(-4294967298)                                 -> x0
     v81  LocalAddr(-10)                                   -> x2
     v82  BinopI { op=add, lhs=v70, rhs_imm=8 }            -> x2
     v83  BinopI { op=add, lhs=v70, rhs_imm=12 }           -> x2
-    v84  StoreLocal { off=-10, disp=12, value=v72, kind=I32 } -> -
+    v84  StoreLocal { off=-10, disp=8, value=v80, kind=I64 } -> -
     v85  LocalAddr(-8)                                    -> x7
     v86  ImmData(2464)                                    -> x0
     v87  Extend { value=v45, kind=I32 }                   -> x2

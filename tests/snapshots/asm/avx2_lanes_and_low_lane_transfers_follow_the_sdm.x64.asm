@@ -319,46 +319,26 @@ Disassembly of section .text:
                	incq	%r12
                	cmpl	$0x3, %r12d
                	jl	<addr>
-               	leaq	-0x18(%rbp), %rcx
-               	movb	$-0x56, -0x18(%rbp)
-               	movb	$-0x56, -0x17(%rbp)
-               	movb	$-0x56, -0x16(%rbp)
-               	movb	$-0x56, -0x15(%rbp)
-               	movb	$-0x56, -0x14(%rbp)
-               	movb	$-0x56, -0x13(%rbp)
-               	movb	$-0x56, -0x12(%rbp)
-               	movb	$-0x56, -0x11(%rbp)
-               	movb	$-0x56, -0x10(%rbp)
-               	movb	$-0x56, -0xf(%rbp)
-               	movb	$-0x56, -0xe(%rbp)
-               	movb	$-0x56, -0xd(%rbp)
-               	movb	$-0x56, -0xc(%rbp)
-               	movb	$-0x56, -0xb(%rbp)
-               	movb	$-0x56, -0xa(%rbp)
-               	movb	$-0x56, -0x9(%rbp)
-               	movb	$-0x56, -0x8(%rbp)
-               	movb	$-0x56, -0x7(%rbp)
-               	movb	$-0x56, -0x6(%rbp)
-               	movb	$-0x56, -0x5(%rbp)
-               	movb	$-0x56, -0x4(%rbp)
-               	movb	$-0x56, -0x3(%rbp)
-               	movb	$-0x56, -0x2(%rbp)
-               	movb	$-0x56, -0x1(%rbp)
-               	leaq	0x1(%rcx), %rdx
+               	leaq	-0x18(%rbp), %rax
+               	movabsq	$-0x5555555555555556, %rcx # imm = 0xAAAAAAAAAAAAAAAA
+               	movq	%rcx, -0x18(%rbp)
+               	movq	%rcx, -0x10(%rbp)
+               	movq	%rcx, -0x8(%rbp)
+               	leaq	0x1(%rax), %rdx
                	movups	-0x50(%rbp), %xmm0
-               	vmovq	%xmm0, %rax
-               	movq	%rax, -0x20(%rbp)
-               	leaq	-0x20(%rbp), %rax
-               	movq	(%rax), %r10
+               	vmovq	%xmm0, %rcx
+               	movq	%rcx, -0x20(%rbp)
+               	leaq	-0x20(%rbp), %rcx
+               	movq	(%rcx), %r10
                	movq	%r10, (%rdx)
-               	leaq	0xb(%rcx), %rdx
+               	leaq	0xb(%rax), %rdx
                	movups	-0x40(%rbp), %xmm0
                	vmovd	%xmm0, %esi
                	movslq	%esi, %rsi
                	movl	%esi, -0x20(%rbp)
-               	movl	(%rax), %r10d
+               	movl	(%rcx), %r10d
                	movl	%r10d, (%rdx)
-               	leaq	0x11(%rcx), %rax
+               	addq	$0x11, %rax
                	movups	-0x30(%rbp), %xmm0
                	vpextrw	$0x0, %xmm0, %ecx
                	movswq	%cx, %rcx

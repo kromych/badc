@@ -64,8 +64,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	setne	%al
                	movzbq	%al, %rax
-               	movb	%al, -0x10(%rbp)
-               	movb	$0x0, -0xf(%rbp)
+               	movw	%ax, -0x10(%rbp)
                	movl	-0x10(%rbp), %eax
                	andq	$-0xfe01, %rax          # imm = 0xFFFF01FF
                	movl	%eax, -0x10(%rbp)
@@ -633,8 +632,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	%rax, %rsp
                	movb	$0x78, 0x2(%rax)
-               	movb	$0x78, 0x1(%rax)
-               	movb	$0x78, (%rax)
+               	movw	$0x7878, (%rax)         # imm = 0x7878
                	xorl	%eax, %eax
                	leave
                	retq

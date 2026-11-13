@@ -26,12 +26,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	stur	wzr, [x29, #-0x10]
-               	mov	x1, #0x18               // =24
-               	sturh	w1, [x29, #-0x8]
-               	mov	x1, #0x50               // =80
-               	sturh	w1, [x29, #-0x6]
-               	sturh	wzr, [x29, #-0x4]
-               	sturh	wzr, [x29, #-0x2]
+               	mov	x0, #0x18               // =24
+               	movk	x0, #0x50, lsl #16
+               	stur	x0, [x29, #-0x8]
                	ldursw	x0, [x29, #-0x18]
                	mov	x1, #0x5415             // =21525
                	sub	x2, x29, #0x10

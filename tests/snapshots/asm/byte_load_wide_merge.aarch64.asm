@@ -44,38 +44,22 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x0, #0x11               // =17
-               	sturb	w0, [x29, #-0x10]
-               	mov	x0, #0x22               // =34
-               	sturb	w0, [x29, #-0xf]
-               	mov	x0, #0x33               // =51
-               	sturb	w0, [x29, #-0xe]
-               	mov	x0, #0x44               // =68
-               	sturb	w0, [x29, #-0xd]
-               	mov	x0, #0x55               // =85
-               	sturb	w0, [x29, #-0xc]
-               	mov	x0, #0x66               // =102
-               	sturb	w0, [x29, #-0xb]
-               	mov	x0, #0x77               // =119
-               	sturb	w0, [x29, #-0xa]
-               	mov	x0, #0x88               // =136
-               	sturb	w0, [x29, #-0x9]
-               	mov	x0, #0x99               // =153
-               	sturb	w0, [x29, #-0x8]
-               	mov	x0, #0xaa               // =170
-               	sturb	w0, [x29, #-0x7]
-               	mov	x0, #0xbb               // =187
-               	sturb	w0, [x29, #-0x6]
-               	mov	x0, #0xcc               // =204
-               	sturb	w0, [x29, #-0x5]
-               	mov	x0, #0xdd               // =221
-               	sturb	w0, [x29, #-0x4]
-               	mov	x0, #0xee               // =238
-               	sturb	w0, [x29, #-0x3]
-               	mov	x0, #0xff               // =255
-               	sturb	w0, [x29, #-0x2]
-               	mov	x0, #0x10               // =16
-               	sturb	w0, [x29, #-0x1]
+               	mov	x0, #0x2211             // =8721
+               	sturh	w0, [x29, #-0x10]
+               	mov	x0, #0x4433             // =17459
+               	sturh	w0, [x29, #-0xe]
+               	mov	x0, #0x6655             // =26197
+               	sturh	w0, [x29, #-0xc]
+               	mov	x0, #0x8877             // =34935
+               	sturh	w0, [x29, #-0xa]
+               	mov	x0, #0xaa99             // =43673
+               	sturh	w0, [x29, #-0x8]
+               	mov	x0, #0xccbb             // =52411
+               	sturh	w0, [x29, #-0x6]
+               	mov	x0, #0xeedd             // =61149
+               	sturh	w0, [x29, #-0x4]
+               	mov	x0, #0x10ff             // =4351
+               	sturh	w0, [x29, #-0x2]
                	ldur	w0, [x29, #-0x10]
                	rev	w1, w0
                	mov	x17, #0x3344            // =13124

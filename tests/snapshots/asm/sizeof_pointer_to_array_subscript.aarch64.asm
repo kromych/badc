@@ -81,50 +81,41 @@ Disassembly of section .text:
                	mov	x0, #0x13               // =19
                	ret
                	mov	x1, #0x3e8              // =1000
-               	strh	w1, [x0]
-               	mov	x1, #0x3e9              // =1001
-               	strh	w1, [x0, #0x2]
-               	mov	x1, #0x3ea              // =1002
-               	strh	w1, [x0, #0x4]
-               	mov	x1, #0x3eb              // =1003
-               	strh	w1, [x0, #0x6]
-               	mov	x1, #0x3ec              // =1004
-               	strh	w1, [x0, #0x8]
-               	mov	x1, #0x3ed              // =1005
-               	strh	w1, [x0, #0xa]
-               	mov	x1, #0x3ee              // =1006
-               	strh	w1, [x0, #0xc]
-               	mov	x1, #0x3ef              // =1007
-               	strh	w1, [x0, #0xe]
-               	str	wzr, [x3]
-               	mov	x0, #0x1                // =1
-               	str	w0, [x3, #0x4]
-               	mov	x0, #0x2                // =2
-               	str	w0, [x3, #0x8]
-               	mov	x10, #0x3               // =3
-               	str	w10, [x3, #0xc]
-               	mov	x11, #0x4               // =4
-               	str	w11, [x3, #0x10]
-               	add	x0, x3, #0x14
-               	mov	x1, #0x64               // =100
+               	movk	x1, #0x3e9, lsl #16
                	str	w1, [x0]
-               	mov	x1, #0x65               // =101
+               	mov	x1, #0x3ea              // =1002
+               	movk	x1, #0x3eb, lsl #16
                	str	w1, [x0, #0x4]
-               	mov	x1, #0x66               // =102
+               	mov	x1, #0x3ec              // =1004
+               	movk	x1, #0x3ed, lsl #16
                	str	w1, [x0, #0x8]
-               	mov	x1, #0x67               // =103
+               	mov	x1, #0x3ee              // =1006
+               	movk	x1, #0x3ef, lsl #16
                	str	w1, [x0, #0xc]
-               	mov	x1, #0x68               // =104
-               	str	w1, [x0, #0x10]
+               	mov	x0, #0x100000000        // =4294967296
+               	str	x0, [x3]
+               	mov	x0, #0x2                // =2
+               	movk	x0, #0x3, lsl #32
+               	mov	x10, #0x3               // =3
+               	str	x0, [x3, #0x8]
+               	mov	x11, #0x4               // =4
+               	mov	x1, #0x4                // =4
+               	movk	x1, #0x64, lsl #32
+               	add	x0, x3, #0x14
+               	str	x1, [x3, #0x10]
+               	mov	x1, #0x65               // =101
+               	movk	x1, #0x66, lsl #32
+               	stur	x1, [x0, #0x4]
+               	mov	x1, #0x67               // =103
+               	movk	x1, #0x68, lsl #32
+               	stur	x1, [x0, #0xc]
                	add	x0, x3, #0x28
                	mov	x1, #0xc8               // =200
-               	str	w1, [x0]
-               	mov	x1, #0xc9               // =201
-               	str	w1, [x0, #0x4]
+               	movk	x1, #0xc9, lsl #32
+               	str	x1, [x0]
                	mov	x1, #0xca               // =202
-               	str	w1, [x0, #0x8]
-               	mov	x1, #0xcb               // =203
-               	str	w1, [x0, #0xc]
+               	movk	x1, #0xcb, lsl #32
+               	str	x1, [x0, #0x8]
                	mov	x1, #0xcc               // =204
                	str	w1, [x0, #0x10]
                	mov	x4, #0x0                // =0

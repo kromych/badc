@@ -29,17 +29,17 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
-               	movl	$0x0, -0x28(%rbp)
-               	movl	$0x1, -0x24(%rbp)
-               	movl	$0x4, -0x20(%rbp)
-               	movl	$0x9, -0x1c(%rbp)
-               	movl	$0x10, -0x18(%rbp)
-               	movl	$0x19, -0x14(%rbp)
-               	movl	$0x24, -0x10(%rbp)
+               	movabsq	$0x100000000, %rax      # imm = 0x100000000
+               	movq	%rax, -0x28(%rbp)
+               	movabsq	$0x900000004, %rax      # imm = 0x900000004
+               	movq	%rax, -0x20(%rbp)
+               	movabsq	$0x1900000010, %rax     # imm = 0x1900000010
+               	movq	%rax, -0x18(%rbp)
+               	movabsq	$0x3100000024, %rax     # imm = 0x3100000024
                	leaq	-0x28(%rbp), %rsi
-               	movl	$0x31, -0xc(%rbp)
-               	movl	$0x40, -0x8(%rbp)
-               	movl	$0x51, -0x4(%rbp)
+               	movq	%rax, -0x10(%rbp)
+               	movabsq	$0x5100000040, %rax     # imm = 0x5100000040
+               	movq	%rax, -0x8(%rbp)
                	movl	$0x99, %ecx
                	xorl	%eax, %eax
                	imulq	$0x1999999a, %rcx, %rdx # imm = 0x1999999A

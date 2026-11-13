@@ -268,38 +268,22 @@ Disassembly of section .text:
                	retq
                	leaq	-0x50(%rbp), %rcx
                	leaq	-0x70(%rbp), %rdx
-               	movb	$0x1, -0x50(%rbp)
-               	movb	$-0x38, -0x70(%rbp)
-               	movb	$0x8, -0x4f(%rbp)
-               	movb	$-0x39, -0x6f(%rbp)
-               	movb	$0xf, -0x4e(%rbp)
-               	movb	$-0x3a, -0x6e(%rbp)
-               	movb	$0x16, -0x4d(%rbp)
-               	movb	$-0x3b, -0x6d(%rbp)
-               	movb	$0x1d, -0x4c(%rbp)
-               	movb	$-0x3c, -0x6c(%rbp)
-               	movb	$0x24, -0x4b(%rbp)
-               	movb	$-0x3d, -0x6b(%rbp)
-               	movb	$0x2b, -0x4a(%rbp)
-               	movb	$-0x3e, -0x6a(%rbp)
-               	movb	$0x32, -0x49(%rbp)
-               	movb	$-0x3f, -0x69(%rbp)
-               	movb	$0x39, -0x48(%rbp)
-               	movb	$-0x40, -0x68(%rbp)
-               	movb	$0x40, -0x47(%rbp)
-               	movb	$-0x41, -0x67(%rbp)
-               	movb	$0x47, -0x46(%rbp)
-               	movb	$-0x42, -0x66(%rbp)
-               	movb	$0x4e, -0x45(%rbp)
-               	movb	$-0x43, -0x65(%rbp)
-               	movb	$0x55, -0x44(%rbp)
-               	movb	$-0x44, -0x64(%rbp)
-               	movb	$0x5c, -0x43(%rbp)
-               	movb	$-0x45, -0x63(%rbp)
-               	movb	$0x63, -0x42(%rbp)
-               	movb	$-0x46, -0x62(%rbp)
-               	movb	$0x6a, -0x41(%rbp)
-               	movb	$-0x47, -0x61(%rbp)
+               	movw	$0x801, -0x50(%rbp)     # imm = 0x801
+               	movw	$0xc7c8, -0x70(%rbp)    # imm = 0xC7C8
+               	movw	$0x160f, -0x4e(%rbp)    # imm = 0x160F
+               	movw	$0xc5c6, -0x6e(%rbp)    # imm = 0xC5C6
+               	movw	$0x241d, -0x4c(%rbp)    # imm = 0x241D
+               	movw	$0xc3c4, -0x6c(%rbp)    # imm = 0xC3C4
+               	movw	$0x322b, -0x4a(%rbp)    # imm = 0x322B
+               	movw	$0xc1c2, -0x6a(%rbp)    # imm = 0xC1C2
+               	movw	$0x4039, -0x48(%rbp)    # imm = 0x4039
+               	movw	$0xbfc0, -0x68(%rbp)    # imm = 0xBFC0
+               	movw	$0x4e47, -0x46(%rbp)    # imm = 0x4E47
+               	movw	$0xbdbe, -0x66(%rbp)    # imm = 0xBDBE
+               	movw	$0x5c55, -0x44(%rbp)    # imm = 0x5C55
+               	movw	$0xbbbc, -0x64(%rbp)    # imm = 0xBBBC
+               	movw	$0x6a63, -0x42(%rbp)    # imm = 0x6A63
+               	movw	$0xb9ba, -0x62(%rbp)    # imm = 0xB9BA
                	leaq	-0x60(%rbp), %rsi
                	movups	-0x50(%rbp), %xmm0
                	movups	-0x70(%rbp), %xmm1

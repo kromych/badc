@@ -3129,6 +3129,14 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 }
             }
         });
+        // Narrow stores the forwarding left that tile a word become one.
+        pipeline.run("passes::merge_stores::run", &mut ssa_funcs, |funcs| {
+            super::super::passes::merge_stores::run(
+                funcs,
+                target.is_little_endian(),
+                native.strict_align,
+            );
+        });
         // The merges above can leave an operation reading one value twice,
         // or a constant, and a branch it decides.
         pipeline.run(

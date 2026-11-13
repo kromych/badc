@@ -59,8 +59,7 @@ Disassembly of section .text:
                	orr	x2, x2, x4
                	cmp	x2, #0x0
                	cset	x2, ne
-               	sturb	w2, [x29, #-0x10]
-               	sturb	wzr, [x29, #-0xf]
+               	sturh	w2, [x29, #-0x10]
                	ldur	w2, [x29, #-0x10]
                	and	x2, x2, #0xffffffffffff01ff
                	stur	w2, [x29, #-0x10]
@@ -595,8 +594,8 @@ Disassembly of section .text:
                	mov	sp, x0
                	mov	x1, #0x78               // =120
                	strb	w1, [x0, #0x2]
-               	strb	w1, [x0, #0x1]
-               	strb	w1, [x0]
+               	mov	x1, #0x7878             // =30840
+               	strh	w1, [x0]
                	mov	x0, #0x0                // =0
                	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10

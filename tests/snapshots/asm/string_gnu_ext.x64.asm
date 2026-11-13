@@ -124,10 +124,7 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x61, %esi
-               	movb	%sil, -0x8(%rbp)
-               	movb	$0x0, -0x7(%rbp)
-               	movb	$0x62, -0x6(%rbp)
-               	movb	$0x0, -0x5(%rbp)
+               	movl	$0x620061, -0x8(%rbp)   # imm = 0x620061
                	leaq	-0x8(%rbp), %rdi
                	movb	%sil, -0x4(%rbp)
                	movl	$0x5, %edx

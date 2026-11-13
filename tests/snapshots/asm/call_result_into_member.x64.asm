@@ -95,8 +95,7 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rax
                	movb	%dil, -0x8(%rbp)
                	movb	$0x2, -0x7(%rbp)
-               	movb	$0x3, -0x6(%rbp)
-               	movb	$0x4, -0x5(%rbp)
+               	movw	$0x403, -0x6(%rbp)      # imm = 0x403
                	movb	$0x5, -0x4(%rbp)
                	movq	%rax, %rcx
                	movl	(%rcx), %eax
@@ -130,10 +129,8 @@ Disassembly of section .text:
                	andq	$0xff, %rdi
                	movb	%dil, -0x8(%rbp)
                	movb	$0x2, -0x7(%rbp)
-               	movb	$0x3, -0x6(%rbp)
-               	movb	$0x4, -0x5(%rbp)
-               	movb	$0x5, -0x4(%rbp)
-               	movb	$0x6, -0x3(%rbp)
+               	movw	$0x403, -0x6(%rbp)      # imm = 0x403
+               	movw	$0x605, -0x4(%rbp)      # imm = 0x605
                	movb	$0x7, -0x2(%rbp)
                	leaq	-0x8(%rbp), %rax
                	movq	%rax, %rcx

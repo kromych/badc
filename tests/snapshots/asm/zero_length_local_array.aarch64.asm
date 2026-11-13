@@ -45,9 +45,9 @@ Disassembly of section .text:
                	ret
                	sub	x2, x29, #0x10
                	mov	x0, #0x5                // =5
-               	stur	w0, [x29, #-0x10]
-               	mov	x3, #0x6                // =6
-               	stur	w3, [x29, #-0xc]
+               	mov	x3, #0x5                // =5
+               	movk	x3, #0x6, lsl #32
+               	stur	x3, [x29, #-0x10]
                	mov	x3, #0x7                // =7
                	stur	w3, [x29, #-0x8]
                	sub	x3, x29, #0x18

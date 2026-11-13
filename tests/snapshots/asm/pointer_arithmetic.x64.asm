@@ -31,8 +31,8 @@ Disassembly of section .text:
                	movl	$0x8, %edi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movl	$0x1, (%rax)
-               	movl	$0x2, 0x4(%rax)
+               	movabsq	$0x200000001, %rcx      # imm = 0x200000001
+               	movq	%rcx, (%rax)
                	movl	$0x3, %eax
                	popq	%rbp
                	retq

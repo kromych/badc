@@ -93,15 +93,14 @@ Disassembly of section .text:
                	retq
                	leaq	-0x150(%rbp), %rdi
                	movq	$0x0, -0x150(%rbp)
-               	movq	$0x0, -0x148(%rbp)
-               	movq	$0x0, -0x140(%rbp)
-               	movq	$0x0, -0x138(%rbp)
+               	movabsq	$0x100000000, %rcx      # imm = 0x100000000
+               	movabsq	$0x4600000000, %rdx     # imm = 0x4600000000
                	movq	$0x0, -0x130(%rbp)
                	movq	$0x0, -0x128(%rbp)
                	movq	$0x0, -0x120(%rbp)
-               	movl	$0x46, -0x13c(%rbp)
-               	movl	$0x1, -0x144(%rbp)
-               	movl	$0x4, -0x138(%rbp)
+               	movq	%rdx, -0x140(%rbp)
+               	movq	%rcx, -0x148(%rbp)
+               	movq	$0x4, -0x138(%rbp)
                	leaq	-0x170(%rbp), %rsi
                	xorl	%eax, %eax
                	callq	<addr>

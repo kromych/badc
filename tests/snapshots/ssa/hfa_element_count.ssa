@@ -92,9 +92,9 @@ fn ent_pc=24 n_params=0 variadic=false locals=4
     v124 Imm(0)                                           -> x0
     v125 Imm(0)                                           -> x0
     v126 Imm(1065353216)                                  -> x0
-    v127 StoreLocal { off=-2, value=v126, kind=I32 }      -> -
-    v128 Imm(1073741824)                                  -> x0
-    v129 StoreLocal { off=-2, disp=4, value=v128, kind=I32 } -> -
+    v127 Imm(4611686019492741120)                         -> x0
+    v128 Imm(1073741824)                                  -> x2
+    v129 StoreLocal { off=-2, value=v127, kind=I64 }      -> -
     v130 Imm(1077936128)                                  -> x0
     v131 StoreLocal { off=-2, disp=8, value=v130, kind=I32 } -> -
     v132 LifetimeEnd(0)                                   -> -

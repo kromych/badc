@@ -112,33 +112,27 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x110
-               	sub	x2, x29, #0x108
+               	sub	x1, x29, #0x108
                	mov	x0, #0x0                // =0
-               	str	w0, [sp, #0x8]
-               	mov	x1, #0x1                // =1
-               	str	w1, [sp, #0xc]
-               	mov	x1, #0x2                // =2
-               	stur	w1, [x29, #-0x100]
-               	mov	x1, #0x3                // =3
-               	stur	w1, [x29, #-0xfc]
-               	add	x1, x2, #0x10
+               	mov	x2, #0x100000000        // =4294967296
+               	str	x2, [sp, #0x8]
+               	mov	x2, #0x2                // =2
+               	movk	x2, #0x3, lsl #32
+               	stur	x2, [x29, #-0x100]
+               	add	x2, x1, #0x10
                	mov	x3, #0xa                // =10
-               	str	w3, [x1]
-               	mov	x3, #0xb                // =11
-               	str	w3, [x1, #0x4]
+               	movk	x3, #0xb, lsl #32
+               	str	x3, [x2]
                	mov	x3, #0xc                // =12
-               	str	w3, [x1, #0x8]
-               	mov	x3, #0xd                // =13
-               	str	w3, [x1, #0xc]
-               	add	x1, x2, #0x20
+               	movk	x3, #0xd, lsl #32
+               	str	x3, [x2, #0x8]
+               	add	x1, x1, #0x20
                	mov	x2, #0x14               // =20
-               	str	w2, [x1]
-               	mov	x2, #0x15               // =21
-               	str	w2, [x1, #0x4]
+               	movk	x2, #0x15, lsl #32
+               	str	x2, [x1]
                	mov	x2, #0x16               // =22
-               	str	w2, [x1, #0x8]
-               	mov	x2, #0x17               // =23
-               	str	w2, [x1, #0xc]
+               	movk	x2, #0x17, lsl #32
+               	str	x2, [x1, #0x8]
                	mov	x3, #0x30               // =48
                	mov	x4, #0x64               // =100
                	sub	x1, x29, #0xd8

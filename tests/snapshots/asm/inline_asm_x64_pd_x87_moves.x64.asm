@@ -138,16 +138,9 @@ Disassembly of section .text:
                	movzwq	0x8(%rcx), %r10
                	movw	%r10w, 0x8(%rax)
                	movq	$0x0, -0x8(%rbp)
-               	movb	$-0x56, -0x48(%rbp)
-               	movb	$-0x56, -0x47(%rbp)
-               	movb	$-0x56, -0x46(%rbp)
-               	movb	$-0x56, -0x45(%rbp)
-               	movb	$-0x56, -0x44(%rbp)
-               	movb	$-0x56, -0x43(%rbp)
-               	movb	$-0x56, -0x42(%rbp)
-               	movb	$-0x56, -0x41(%rbp)
-               	movb	$-0x56, -0x40(%rbp)
-               	movb	$-0x56, -0x3f(%rbp)
+               	movabsq	$-0x5555555555555556, %rax # imm = 0xAAAAAAAAAAAAAAAA
+               	movq	%rax, -0x48(%rbp)
+               	movw	$0xaaaa, -0x40(%rbp)    # imm = 0xAAAA
                	leaq	-0x48(%rbp), %rax
                	leaq	-0x58(%rbp), %rcx
                	fldt	(%rcx)

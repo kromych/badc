@@ -57,22 +57,14 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movb	$0x11, -0x10(%rbp)
-               	movb	$0x22, -0xf(%rbp)
-               	movb	$0x33, -0xe(%rbp)
-               	movb	$0x44, -0xd(%rbp)
-               	movb	$0x55, -0xc(%rbp)
-               	movb	$0x66, -0xb(%rbp)
-               	movb	$0x77, -0xa(%rbp)
-               	movb	$-0x78, -0x9(%rbp)
-               	movb	$-0x67, -0x8(%rbp)
-               	movb	$-0x56, -0x7(%rbp)
-               	movb	$-0x45, -0x6(%rbp)
-               	movb	$-0x34, -0x5(%rbp)
-               	movb	$-0x23, -0x4(%rbp)
-               	movb	$-0x12, -0x3(%rbp)
-               	movb	$-0x1, -0x2(%rbp)
-               	movb	$0x10, -0x1(%rbp)
+               	movw	$0x2211, -0x10(%rbp)    # imm = 0x2211
+               	movw	$0x4433, -0xe(%rbp)     # imm = 0x4433
+               	movw	$0x6655, -0xc(%rbp)     # imm = 0x6655
+               	movw	$0x8877, -0xa(%rbp)     # imm = 0x8877
+               	movw	$0xaa99, -0x8(%rbp)     # imm = 0xAA99
+               	movw	$0xccbb, -0x6(%rbp)     # imm = 0xCCBB
+               	movw	$0xeedd, -0x4(%rbp)     # imm = 0xEEDD
+               	movw	$0x10ff, -0x2(%rbp)     # imm = 0x10FF
                	movl	-0x10(%rbp), %eax
                	movl	%eax, %ecx
                	bswapl	%ecx

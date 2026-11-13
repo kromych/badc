@@ -46,30 +46,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x1, x29, #0x18
-               	sturb	wzr, [x29, #-0x18]
-               	sturb	wzr, [x29, #-0x17]
-               	sturb	wzr, [x29, #-0x16]
-               	sturb	wzr, [x29, #-0x15]
-               	sturb	wzr, [x29, #-0x14]
-               	sturb	wzr, [x29, #-0x13]
-               	sturb	wzr, [x29, #-0x12]
-               	sturb	wzr, [x29, #-0x11]
-               	sturb	wzr, [x29, #-0x10]
-               	sturb	wzr, [x29, #-0xf]
-               	sturb	wzr, [x29, #-0xe]
-               	sturb	wzr, [x29, #-0xd]
-               	sturb	wzr, [x29, #-0xc]
-               	sturb	wzr, [x29, #-0xb]
-               	sturb	wzr, [x29, #-0xa]
-               	sturb	wzr, [x29, #-0x9]
-               	sturb	wzr, [x29, #-0x8]
-               	sturb	wzr, [x29, #-0x7]
-               	sturb	wzr, [x29, #-0x6]
-               	sturb	wzr, [x29, #-0x5]
-               	sturb	wzr, [x29, #-0x4]
-               	sturb	wzr, [x29, #-0x3]
-               	sturb	wzr, [x29, #-0x2]
-               	sturb	wzr, [x29, #-0x1]
+               	stur	xzr, [x29, #-0x18]
+               	stur	xzr, [x29, #-0x10]
+               	stur	xzr, [x29, #-0x8]
                	mov	x2, #0x38               // =56
                	sturb	w2, [x29, #-0x10]
                	mov	x2, #0x18               // =24

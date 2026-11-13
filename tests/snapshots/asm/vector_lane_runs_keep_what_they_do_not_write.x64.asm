@@ -106,8 +106,8 @@ Disassembly of section .text:
                	retq
 
 <put3>:
-               	movl	%esi, (%rdi)
-               	movl	$0x0, 0x4(%rdi)
+               	movl	%esi, %ecx
+               	movq	%rcx, (%rdi)
                	movl	$0x0, 0x8(%rdi)
                	retq
 

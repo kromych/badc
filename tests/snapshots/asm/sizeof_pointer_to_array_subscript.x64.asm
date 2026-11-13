@@ -137,38 +137,30 @@ Disassembly of section .text:
                	popq	%r14
                	popq	%rbp
                	retq
-               	movw	$0x3e8, <rip> # imm = 0x3E8
+               	movl	$0x3e903e8, <rip> # imm = 0x3E903E8
                                                 # <addr>
-               	movw	$0x3e9, <rip> # imm = 0x3E9
+               	movl	$0x3eb03ea, <rip> # imm = 0x3EB03EA
                                                 # <addr>
-               	movw	$0x3ea, <rip> # imm = 0x3EA
+               	movl	$0x3ed03ec, <rip> # imm = 0x3ED03EC
                                                 # <addr>
-               	movw	$0x3eb, <rip> # imm = 0x3EB
+               	movl	$0x3ef03ee, <rip> # imm = 0x3EF03EE
                                                 # <addr>
-               	movw	$0x3ec, <rip> # imm = 0x3EC
-                                                # <addr>
-               	movw	$0x3ed, <rip> # imm = 0x3ED
-                                                # <addr>
-               	movw	$0x3ee, <rip> # imm = 0x3EE
-                                                # <addr>
-               	movw	$0x3ef, <rip> # imm = 0x3EF
-                                                # <addr>
-               	movl	$0x0, <rip> # <addr>
-               	movl	$0x1, <rip> # <addr>
-               	movl	$0x2, <rip> # <addr>
-               	movl	$0x3, <rip> # <addr>
-               	movl	$0x4, <rip> # <addr>
+               	movabsq	$0x100000000, %rax      # imm = 0x100000000
+               	movq	%rax, <rip> # <addr>
+               	movabsq	$0x300000002, %rax      # imm = 0x300000002
+               	movq	%rax, <rip> # <addr>
+               	movabsq	$0x6400000004, %rdx     # imm = 0x6400000004
                	leaq	0x14(%rcx), %rax
-               	movl	$0x64, (%rax)
-               	movl	$0x65, 0x4(%rax)
-               	movl	$0x66, 0x8(%rax)
-               	movl	$0x67, 0xc(%rax)
-               	movl	$0x68, 0x10(%rax)
+               	movq	%rdx, <rip> # <addr>
+               	movabsq	$0x6600000065, %rdx     # imm = 0x6600000065
+               	movq	%rdx, 0x4(%rax)
+               	movabsq	$0x6800000067, %rdx     # imm = 0x6800000067
+               	movq	%rdx, 0xc(%rax)
                	leaq	0x28(%rcx), %rax
-               	movl	$0xc8, (%rax)
-               	movl	$0xc9, 0x4(%rax)
-               	movl	$0xca, 0x8(%rax)
-               	movl	$0xcb, 0xc(%rax)
+               	movabsq	$0xc9000000c8, %rdx     # imm = 0xC9000000C8
+               	movq	%rdx, (%rax)
+               	movabsq	$0xcb000000ca, %rdx     # imm = 0xCB000000CA
+               	movq	%rdx, 0x8(%rax)
                	movl	$0xcc, 0x10(%rax)
                	xorl	%r8d, %r8d
                	movq	%r8, %rax

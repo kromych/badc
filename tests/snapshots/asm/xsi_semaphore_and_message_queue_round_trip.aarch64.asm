@@ -80,15 +80,12 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0xa0
                	ret
                	sub	x1, x29, #0x68
-               	sturh	wzr, [x29, #-0x68]
-               	mov	x2, #-0x2               // =-2
-               	sturh	w2, [x29, #-0x66]
-               	sturh	wzr, [x29, #-0x64]
+               	mov	x0, #0xfffe0000         // =4294836224
+               	movk	x0, #0x1, lsl #48
+               	stur	x0, [x29, #-0x68]
                	mov	x0, #0x1                // =1
-               	sturh	w0, [x29, #-0x62]
-               	sturh	w0, [x29, #-0x60]
-               	mov	x0, #0x1000             // =4096
-               	sturh	w0, [x29, #-0x5e]
+               	movk	x0, #0x1000, lsl #16
+               	stur	w0, [x29, #-0x60]
                	mov	x2, #0x2                // =2
                	mov	x0, x20
                	bl	<addr>
@@ -118,12 +115,11 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x90]
                	ldp	x20, x21, [sp], #0xa0
                	ret
-               	sub	x1, x29, #0x78
-               	mov	x0, #0xffff             // =65535
-               	sturh	w0, [x29, #-0x78]
-               	sturh	w0, [x29, #-0x76]
+               	sub	x0, x29, #0x78
+               	mov	x1, #0xffffffff         // =4294967295
+               	stur	w1, [x29, #-0x78]
                	sub	x3, x29, #0x70
-               	stur	x1, [x29, #-0x70]
+               	stur	x0, [x29, #-0x70]
                	mov	x1, #0x0                // =0
                	mov	x2, #0xd                // =13
                	mov	x0, x20

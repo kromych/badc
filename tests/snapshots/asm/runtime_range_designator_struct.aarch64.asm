@@ -63,9 +63,8 @@ Disassembly of section .text:
                	add	x3, x3, #0x1
                	str	w3, [x1, #0x20]
                	mov	x3, #0x1d               // =29
-               	stur	w3, [x29, #-0x70]
-               	mov	x3, #0x5                // =5
-               	stur	w3, [x29, #-0x6c]
+               	movk	x3, #0x5, lsl #32
+               	stur	x3, [x29, #-0x70]
                	ldur	x3, [x29, #-0x70]
                	stur	x3, [x29, #-0x68]
                	stur	x3, [x29, #-0x60]

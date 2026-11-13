@@ -67,32 +67,29 @@ Disassembly of section .text:
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x71               // =113
-               	mov	x2, #0x61               // =97
-               	mov	x3, #0x62               // =98
                	mov	x0, #0x0                // =0
-               	stur	w2, [x29, #-0x40]
-               	stur	w3, [x29, #-0x3c]
-               	stur	w0, [x29, #-0x38]
-               	stur	w1, [x29, #-0x34]
-               	sub	x4, x29, #0x28
-               	str	xzr, [x4]
-               	str	wzr, [x4, #0x8]
-               	sturb	w2, [x29, #-0x28]
-               	sturb	w3, [x29, #-0x27]
-               	sturb	w0, [x29, #-0x26]
-               	sturb	w1, [x29, #-0x25]
-               	ldur	w2, [x29, #-0x3c]
-               	cmp	w2, #0x62
+               	mov	x1, #0x61               // =97
+               	movk	x1, #0x62, lsl #32
+               	stur	x1, [x29, #-0x40]
+               	mov	x1, #0x7100000000       // =485331304448
+               	stur	x1, [x29, #-0x38]
+               	sub	x1, x29, #0x28
+               	str	xzr, [x1]
+               	str	wzr, [x1, #0x8]
+               	mov	x1, #0x6261             // =25185
+               	movk	x1, #0x7100, lsl #16
+               	stur	w1, [x29, #-0x28]
+               	ldur	w1, [x29, #-0x3c]
+               	cmp	w1, #0x62
                	b.ne	<addr>
-               	ldursw	x2, [x29, #-0x34]
-               	cmp	w2, #0x71
+               	ldursw	x1, [x29, #-0x34]
+               	cmp	w1, #0x71
                	b.ne	<addr>
-               	ldurb	w2, [x29, #-0x27]
-               	cmp	w2, #0x62
+               	ldurb	w1, [x29, #-0x27]
+               	cmp	w1, #0x62
                	b.ne	<addr>
-               	ldurb	w2, [x29, #-0x25]
-               	cmp	w2, w1
+               	ldurb	w1, [x29, #-0x25]
+               	cmp	w1, #0x71
                	b.ne	<addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>

@@ -29,13 +29,12 @@ Disassembly of section .text:
                	subs	x17, x17, #0x1
                	b.ne	<addr>
                	mov	sp, x1
-               	str	wzr, [x1]
+               	mov	x2, #0x100000000        // =4294967296
                	mov	x0, #0x1                // =1
-               	str	w0, [x1, #0x4]
+               	str	x2, [x1]
                	mov	x2, #0x2                // =2
-               	str	w2, [x1, #0x8]
-               	mov	x2, #0x3                // =3
-               	str	w2, [x1, #0xc]
+               	movk	x2, #0x3, lsl #32
+               	str	x2, [x1, #0x8]
                	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret

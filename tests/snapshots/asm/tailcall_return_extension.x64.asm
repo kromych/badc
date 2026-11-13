@@ -76,10 +76,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	leaq	-0x8(%rbp), %rdi
-               	movb	$0x0, -0x8(%rbp)
-               	movb	$0x10, -0x7(%rbp)
-               	movb	$-0x41, -0x6(%rbp)
-               	movb	$-0x2, -0x5(%rbp)
+               	movl	$0xfebf1000, -0x8(%rbp) # imm = 0xFEBF1000
                	xorl	%esi, %esi
                	callq	<addr>
                	cmpl	$0xfebf1000, %eax       # imm = 0xFEBF1000

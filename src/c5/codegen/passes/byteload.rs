@@ -88,7 +88,7 @@ fn byte_survives(keep: u64, shift: u32) -> bool {
 /// Evaluate constant integer arithmetic. Reaches the index expressions
 /// an unrolled loop leaves behind, which the constant folder only
 /// collapses later in the pipeline.
-fn eval_const(func: &FunctionSsa, v: ValueId, depth: u32) -> Option<i64> {
+pub(super) fn eval_const(func: &FunctionSsa, v: ValueId, depth: u32) -> Option<i64> {
     if depth > 32 {
         return None;
     }
@@ -132,7 +132,7 @@ fn eval_const(func: &FunctionSsa, v: ValueId, depth: u32) -> Option<i64> {
 
 /// Trace an access address to a base value plus a constant byte
 /// offset, seeded with the access's own `disp`.
-fn resolve_base_offset(func: &FunctionSsa, addr: ValueId, disp: i32) -> (ValueId, i64) {
+pub(super) fn resolve_base_offset(func: &FunctionSsa, addr: ValueId, disp: i32) -> (ValueId, i64) {
     let mut base = addr;
     let mut off = disp as i64;
     for _ in 0..16 {
@@ -169,7 +169,7 @@ fn resolve_base_offset(func: &FunctionSsa, addr: ValueId, disp: i32) -> (ValueId
 /// True when the base cannot name a slot of the current frame: a
 /// parameter's value predates the frame, and a global or TLS address
 /// is not in it. Frame accesses then cannot alias the merged range.
-fn base_avoids_frame(func: &FunctionSsa, base: ValueId) -> bool {
+pub(super) fn base_avoids_frame(func: &FunctionSsa, base: ValueId) -> bool {
     matches!(
         func.insts.get(base as usize),
         Some(Inst::ParamRef { .. }) | Some(Inst::ImmData(_)) | Some(Inst::TlsAddr(_))

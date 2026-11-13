@@ -29,38 +29,22 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
-               	movb	$0x3, -0x30(%rbp)
-               	movb	$-0x10, -0x20(%rbp)
-               	movb	$0x14, -0x2f(%rbp)
-               	movb	$-0x11, -0x1f(%rbp)
-               	movb	$0x25, -0x2e(%rbp)
-               	movb	$-0x12, -0x1e(%rbp)
-               	movb	$0x36, -0x2d(%rbp)
-               	movb	$-0x13, -0x1d(%rbp)
-               	movb	$0x47, -0x2c(%rbp)
-               	movb	$-0x14, -0x1c(%rbp)
-               	movb	$0x58, -0x2b(%rbp)
-               	movb	$-0x15, -0x1b(%rbp)
-               	movb	$0x69, -0x2a(%rbp)
-               	movb	$-0x16, -0x1a(%rbp)
-               	movb	$0x7a, -0x29(%rbp)
-               	movb	$-0x17, -0x19(%rbp)
-               	movb	$-0x75, -0x28(%rbp)
-               	movb	$-0x18, -0x18(%rbp)
-               	movb	$-0x64, -0x27(%rbp)
-               	movb	$-0x19, -0x17(%rbp)
-               	movb	$-0x53, -0x26(%rbp)
-               	movb	$-0x1a, -0x16(%rbp)
-               	movb	$-0x42, -0x25(%rbp)
-               	movb	$-0x1b, -0x15(%rbp)
-               	movb	$-0x31, -0x24(%rbp)
-               	movb	$-0x1c, -0x14(%rbp)
-               	movb	$-0x20, -0x23(%rbp)
-               	movb	$-0x1d, -0x13(%rbp)
-               	movb	$-0xf, -0x22(%rbp)
-               	movb	$-0x1e, -0x12(%rbp)
-               	movb	$0x2, -0x21(%rbp)
-               	movb	$-0x1f, -0x11(%rbp)
+               	movw	$0x1403, -0x30(%rbp)    # imm = 0x1403
+               	movw	$0xeff0, -0x20(%rbp)    # imm = 0xEFF0
+               	movw	$0x3625, -0x2e(%rbp)    # imm = 0x3625
+               	movw	$0xedee, -0x1e(%rbp)    # imm = 0xEDEE
+               	movw	$0x5847, -0x2c(%rbp)    # imm = 0x5847
+               	movw	$0xebec, -0x1c(%rbp)    # imm = 0xEBEC
+               	movw	$0x7a69, -0x2a(%rbp)    # imm = 0x7A69
+               	movw	$0xe9ea, -0x1a(%rbp)    # imm = 0xE9EA
+               	movw	$0x9c8b, -0x28(%rbp)    # imm = 0x9C8B
+               	movw	$0xe7e8, -0x18(%rbp)    # imm = 0xE7E8
+               	movw	$0xbead, -0x26(%rbp)    # imm = 0xBEAD
+               	movw	$0xe5e6, -0x16(%rbp)    # imm = 0xE5E6
+               	movw	$0xe0cf, -0x24(%rbp)    # imm = 0xE0CF
+               	movw	$0xe3e4, -0x14(%rbp)    # imm = 0xE3E4
+               	movw	$0x2f1, -0x22(%rbp)     # imm = 0x2F1
+               	movw	$0xe1e2, -0x12(%rbp)    # imm = 0xE1E2
                	movzbq	-0x30(%rbp), %rax
                	movzbq	-0x20(%rbp), %rcx
                	xorq	%rcx, %rax

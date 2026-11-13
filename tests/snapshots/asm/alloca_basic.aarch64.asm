@@ -29,39 +29,11 @@ Disassembly of section .text:
                	subs	x17, x17, #0x1
                	b.ne	<addr>
                	mov	sp, x1
-               	mov	x0, #0x55               // =85
-               	strb	w0, [x1]
-               	strb	w0, [x1, #0x1]
-               	strb	w0, [x1, #0x2]
-               	strb	w0, [x1, #0x3]
-               	strb	w0, [x1, #0x4]
-               	strb	w0, [x1, #0x5]
-               	strb	w0, [x1, #0x6]
-               	strb	w0, [x1, #0x7]
-               	strb	w0, [x1, #0x8]
-               	strb	w0, [x1, #0x9]
-               	strb	w0, [x1, #0xa]
-               	strb	w0, [x1, #0xb]
-               	strb	w0, [x1, #0xc]
-               	strb	w0, [x1, #0xd]
-               	strb	w0, [x1, #0xe]
-               	strb	w0, [x1, #0xf]
-               	strb	w0, [x1, #0x10]
-               	strb	w0, [x1, #0x11]
-               	strb	w0, [x1, #0x12]
-               	strb	w0, [x1, #0x13]
-               	strb	w0, [x1, #0x14]
-               	strb	w0, [x1, #0x15]
-               	strb	w0, [x1, #0x16]
-               	strb	w0, [x1, #0x17]
-               	strb	w0, [x1, #0x18]
-               	strb	w0, [x1, #0x19]
-               	strb	w0, [x1, #0x1a]
-               	strb	w0, [x1, #0x1b]
-               	strb	w0, [x1, #0x1c]
-               	strb	w0, [x1, #0x1d]
-               	strb	w0, [x1, #0x1e]
-               	strb	w0, [x1, #0x1f]
+               	mov	x0, #0x5555555555555555 // =6148914691236517205
+               	str	x0, [x1]
+               	str	x0, [x1, #0x8]
+               	str	x0, [x1, #0x10]
+               	str	x0, [x1, #0x18]
                	mov	x0, #0x0                // =0
                	ldrb	w2, [x1, x0]
                	cmp	w2, #0x55
@@ -147,40 +119,18 @@ Disassembly of section .text:
                	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x2, #0x41               // =65
-               	strb	w2, [x0]
-               	strb	w2, [x0, #0x1]
-               	strb	w2, [x0, #0x2]
-               	strb	w2, [x0, #0x3]
-               	strb	w2, [x0, #0x4]
-               	strb	w2, [x0, #0x5]
-               	strb	w2, [x0, #0x6]
-               	strb	w2, [x0, #0x7]
-               	strb	w2, [x0, #0x8]
-               	strb	w2, [x0, #0x9]
-               	strb	w2, [x0, #0xa]
-               	strb	w2, [x0, #0xb]
-               	strb	w2, [x0, #0xc]
-               	strb	w2, [x0, #0xd]
-               	strb	w2, [x0, #0xe]
-               	strb	w2, [x0, #0xf]
-               	mov	x2, #0x42               // =66
-               	strb	w2, [x1]
-               	strb	w2, [x1, #0x1]
-               	strb	w2, [x1, #0x2]
-               	strb	w2, [x1, #0x3]
-               	strb	w2, [x1, #0x4]
-               	strb	w2, [x1, #0x5]
-               	strb	w2, [x1, #0x6]
-               	strb	w2, [x1, #0x7]
-               	strb	w2, [x1, #0x8]
-               	strb	w2, [x1, #0x9]
-               	strb	w2, [x1, #0xa]
-               	strb	w2, [x1, #0xb]
-               	strb	w2, [x1, #0xc]
-               	strb	w2, [x1, #0xd]
-               	strb	w2, [x1, #0xe]
-               	strb	w2, [x1, #0xf]
+               	mov	x2, #0x4141             // =16705
+               	movk	x2, #0x4141, lsl #16
+               	movk	x2, #0x4141, lsl #32
+               	movk	x2, #0x4141, lsl #48
+               	str	x2, [x0]
+               	str	x2, [x0, #0x8]
+               	mov	x2, #0x4242             // =16962
+               	movk	x2, #0x4242, lsl #16
+               	movk	x2, #0x4242, lsl #32
+               	movk	x2, #0x4242, lsl #48
+               	str	x2, [x1]
+               	str	x2, [x1, #0x8]
                	ldrb	w1, [x0]
                	cmp	w1, #0x41
                	b.ne	<addr>

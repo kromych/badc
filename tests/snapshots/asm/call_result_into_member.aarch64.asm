@@ -91,10 +91,8 @@ Disassembly of section .text:
                	sturb	w1, [x29, #-0x8]
                	mov	x1, #0x2                // =2
                	sturb	w1, [x29, #-0x7]
-               	mov	x1, #0x3                // =3
-               	sturb	w1, [x29, #-0x6]
-               	mov	x1, #0x4                // =4
-               	sturb	w1, [x29, #-0x5]
+               	mov	x1, #0x403              // =1027
+               	sturh	w1, [x29, #-0x6]
                	mov	x1, #0x5                // =5
                	sturb	w1, [x29, #-0x4]
                	mov	x16, x0
@@ -133,14 +131,10 @@ Disassembly of section .text:
                	sturb	w1, [x29, #-0x8]
                	mov	x1, #0x2                // =2
                	sturb	w1, [x29, #-0x7]
-               	mov	x1, #0x3                // =3
-               	sturb	w1, [x29, #-0x6]
-               	mov	x1, #0x4                // =4
-               	sturb	w1, [x29, #-0x5]
-               	mov	x1, #0x5                // =5
-               	sturb	w1, [x29, #-0x4]
-               	mov	x1, #0x6                // =6
-               	sturb	w1, [x29, #-0x3]
+               	mov	x1, #0x403              // =1027
+               	sturh	w1, [x29, #-0x6]
+               	mov	x1, #0x605              // =1541
+               	sturh	w1, [x29, #-0x4]
                	mov	x1, #0x7                // =7
                	sturb	w1, [x29, #-0x2]
                	mov	x16, x0

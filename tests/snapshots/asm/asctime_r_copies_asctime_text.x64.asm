@@ -36,12 +36,12 @@ Disassembly of section .text:
                	movups	%xmm14, 0x20(%rax)
                	movq	$0x0, 0x30(%rax)
                	movl	$0x46, -0x24(%rbp)
-               	movl	$0xf, -0x2c(%rbp)
-               	movl	$0x4, -0x20(%rbp)
-               	movl	$0xe, -0x1c(%rbp)
-               	movl	$0xd, -0x30(%rbp)
-               	movl	$0x4, -0x34(%rbp)
-               	movl	$0x5, -0x38(%rbp)
+               	movabsq	$0xf0000000d, %rax      # imm = 0xF0000000D
+               	movabsq	$0xe00000004, %rcx      # imm = 0xE00000004
+               	movq	%rcx, -0x20(%rbp)
+               	movq	%rax, -0x30(%rbp)
+               	movabsq	$0x400000005, %rax      # imm = 0x400000005
+               	movq	%rax, -0x38(%rbp)
                	movq	<rip>, %rax # <addr>
                	leaq	-0x38(%rbp), %rdi
                	callq	*%rax
@@ -58,32 +58,11 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x58(%rbp), %rsi
-               	movb	$0x78, -0x58(%rbp)
-               	movb	$0x78, -0x57(%rbp)
-               	movb	$0x78, -0x56(%rbp)
-               	movb	$0x78, -0x55(%rbp)
-               	movb	$0x78, -0x54(%rbp)
-               	movb	$0x78, -0x53(%rbp)
-               	movb	$0x78, -0x52(%rbp)
-               	movb	$0x78, -0x51(%rbp)
-               	movb	$0x78, -0x50(%rbp)
-               	movb	$0x78, -0x4f(%rbp)
-               	movb	$0x78, -0x4e(%rbp)
-               	movb	$0x78, -0x4d(%rbp)
-               	movb	$0x78, -0x4c(%rbp)
-               	movb	$0x78, -0x4b(%rbp)
-               	movb	$0x78, -0x4a(%rbp)
-               	movb	$0x78, -0x49(%rbp)
-               	movb	$0x78, -0x48(%rbp)
-               	movb	$0x78, -0x47(%rbp)
-               	movb	$0x78, -0x46(%rbp)
-               	movb	$0x78, -0x45(%rbp)
-               	movb	$0x78, -0x44(%rbp)
-               	movb	$0x78, -0x43(%rbp)
-               	movb	$0x78, -0x42(%rbp)
-               	movb	$0x78, -0x41(%rbp)
-               	movb	$0x78, -0x40(%rbp)
-               	movb	$0x78, -0x3f(%rbp)
+               	movabsq	$0x7878787878787878, %rax # imm = 0x7878787878787878
+               	movq	%rax, -0x58(%rbp)
+               	movq	%rax, -0x50(%rbp)
+               	movq	%rax, -0x48(%rbp)
+               	movw	$0x7878, -0x40(%rbp)    # imm = 0x7878
                	leaq	-0x38(%rbp), %rdi
                	xorl	%eax, %eax
                	callq	<addr>

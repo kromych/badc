@@ -90,8 +90,8 @@ Disassembly of section .text:
                	ret
 
 <put3>:
-               	str	w1, [x0]
-               	str	wzr, [x0, #0x4]
+               	mov	w1, w1
+               	str	x1, [x0]
                	str	wzr, [x0, #0x8]
                	ret
 

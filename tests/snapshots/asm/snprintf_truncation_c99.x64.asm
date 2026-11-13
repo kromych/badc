@@ -68,14 +68,8 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	leaq	-0x8(%rbp), %rdi
-               	movb	$0x41, -0x8(%rbp)
-               	movb	$0x41, -0x7(%rbp)
-               	movb	$0x41, -0x6(%rbp)
-               	movb	$0x41, -0x5(%rbp)
-               	movb	$0x41, -0x4(%rbp)
-               	movb	$0x41, -0x3(%rbp)
-               	movb	$0x41, -0x2(%rbp)
-               	movb	$0x41, -0x1(%rbp)
+               	movabsq	$0x4141414141414141, %rax # imm = 0x4141414141414141
+               	movq	%rax, -0x8(%rbp)
                	movl	$0x4, %esi
                	leaq	<rip>, %rdx
                	movl	$0x1e240, %ecx          # imm = 0x1E240
@@ -110,14 +104,8 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x8(%rbp), %rdi
-               	movb	$0x41, -0x8(%rbp)
-               	movb	$0x41, -0x7(%rbp)
-               	movb	$0x41, -0x6(%rbp)
-               	movb	$0x41, -0x5(%rbp)
-               	movb	$0x41, -0x4(%rbp)
-               	movb	$0x41, -0x3(%rbp)
-               	movb	$0x41, -0x2(%rbp)
-               	movb	$0x41, -0x1(%rbp)
+               	movabsq	$0x4141414141414141, %rax # imm = 0x4141414141414141
+               	movq	%rax, -0x8(%rbp)
                	movl	$0x4, %esi
                	leaq	<rip>, %rdx
                	movl	$0xf1206, %ecx          # imm = 0xF1206

@@ -18,11 +18,9 @@ Disassembly of section .text:
                	mov	x29, sp
                	mov	x0, #0x5                // =5
                	bl	<addr>
-               	mov	x1, #0x41               // =65
-               	strb	w1, [x0]
-               	strb	w1, [x0, #0x1]
-               	strb	w1, [x0, #0x2]
-               	strb	w1, [x0, #0x3]
+               	mov	x1, #0x4141             // =16705
+               	movk	x1, #0x4141, lsl #16
+               	str	w1, [x0]
                	strb	wzr, [x0, #0x4]
                	mov	x0, #0x2a               // =42
                	ldp	x29, x30, [sp], #0x10

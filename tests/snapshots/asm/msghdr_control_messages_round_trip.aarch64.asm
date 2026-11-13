@@ -40,17 +40,12 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x100
                	ret
                	sub	x1, x29, #0x98
-               	stur	wzr, [x29, #-0x98]
-               	stur	wzr, [x29, #-0x94]
-               	stur	wzr, [x29, #-0x90]
-               	stur	wzr, [x29, #-0x8c]
-               	stur	wzr, [x29, #-0x88]
-               	stur	wzr, [x29, #-0x84]
+               	mov	x2, #0xa                // =10
+               	stur	xzr, [x29, #-0x90]
+               	mov	x3, #0x100000000000000  // =72057594037927936
                	stur	wzr, [x29, #-0x80]
-               	mov	x0, #0xa                // =10
-               	sturh	w0, [x29, #-0x98]
-               	mov	x0, #0x1                // =1
-               	sturb	w0, [x29, #-0x81]
+               	stur	x2, [x29, #-0x98]
+               	stur	x3, [x29, #-0x88]
                	mov	x2, #0x1c               // =28
                	mov	x0, x21
                	bl	<addr>
@@ -251,12 +246,9 @@ Disassembly of section .text:
                	mov	x1, x0
                	bl	<addr>
                	mov	x22, x0
-               	stur	wzr, [x29, #-0x10]
-               	stur	wzr, [x29, #-0xc]
-               	stur	wzr, [x29, #-0x8]
-               	stur	wzr, [x29, #-0x4]
                	mov	x0, #0x2                // =2
-               	sturh	w0, [x29, #-0x10]
+               	stur	xzr, [x29, #-0x8]
+               	stur	x0, [x29, #-0x10]
                	mov	x0, #0x1                // =1
                	movk	x0, #0x7f00, lsl #16
                	bl	<addr>
@@ -396,10 +388,10 @@ Disassembly of section .text:
                	stur	x4, [x29, #-0x60]
                	stur	x3, [x29, #-0x58]
                	stur	x0, [x29, #-0x50]
-               	mov	x4, #0x18               // =24
-               	stur	x4, [x29, #-0x48]
-               	str	w3, [x0, #0x8]
-               	str	w3, [x0, #0xc]
+               	mov	x3, #0x18               // =24
+               	stur	x3, [x29, #-0x48]
+               	mov	x3, #0x100000001        // =4294967297
+               	str	x3, [x0, #0x8]
                	mov	x3, #0x14               // =20
                	str	x3, [x0]
                	add	x0, x0, #0x10
@@ -513,7 +505,6 @@ Disassembly of section .text:
                	stur	x1, [x29, #-0x58]
                	mov	x1, #0x3                // =3
                	stur	x1, [x29, #-0x50]
-               	mov	x3, #0x10               // =16
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	stur	x1, [x29, #-0x48]
@@ -521,7 +512,7 @@ Disassembly of section .text:
                	stur	x1, [x29, #-0x40]
                	sub	x1, x29, #0x90
                	stur	x2, [x29, #-0x90]
-               	stur	x2, [x29, #-0x88]
+               	mov	x3, #0x10               // =16
                	stur	x2, [x29, #-0x80]
                	stur	x2, [x29, #-0x78]
                	stur	x2, [x29, #-0x70]
@@ -529,7 +520,7 @@ Disassembly of section .text:
                	stur	x2, [x29, #-0x60]
                	sub	x4, x29, #0x10
                	stur	x4, [x29, #-0x90]
-               	stur	w3, [x29, #-0x88]
+               	stur	x3, [x29, #-0x88]
                	stur	x0, [x29, #-0x80]
                	mov	x0, #0x2                // =2
                	stur	x0, [x29, #-0x78]
@@ -545,26 +536,23 @@ Disassembly of section .text:
                	stur	x1, [x29, #-0x58]
                	mov	x1, #0x4                // =4
                	stur	x1, [x29, #-0x50]
-               	mov	x3, #0x10               // =16
                	sub	x1, x29, #0x38
                	stur	x1, [x29, #-0x48]
                	mov	x1, #0x8                // =8
                	stur	x1, [x29, #-0x40]
                	sub	x1, x29, #0x90
                	stur	x2, [x29, #-0x90]
-               	stur	x2, [x29, #-0x88]
+               	mov	x3, #0x10               // =16
                	stur	x2, [x29, #-0x80]
                	stur	x2, [x29, #-0x78]
                	stur	x2, [x29, #-0x70]
                	stur	x2, [x29, #-0x68]
                	stur	x2, [x29, #-0x60]
                	sub	x4, x29, #0x20
-               	stur	w2, [x29, #-0x20]
-               	stur	w2, [x29, #-0x1c]
-               	stur	w2, [x29, #-0x18]
-               	stur	w2, [x29, #-0x14]
+               	stur	xzr, [x29, #-0x20]
+               	stur	xzr, [x29, #-0x18]
                	stur	x4, [x29, #-0x90]
-               	stur	w3, [x29, #-0x88]
+               	stur	x3, [x29, #-0x88]
                	stur	x0, [x29, #-0x80]
                	mov	x0, #0x2                // =2
                	stur	x0, [x29, #-0x78]

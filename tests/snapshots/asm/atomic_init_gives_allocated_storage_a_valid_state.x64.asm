@@ -34,24 +34,23 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %rbx
-               	leaq	-0x20(%rbp), %rcx
-               	leaq	<rip>, %rax
-               	movzwq	(%rax), %r10
-               	movw	%r10w, (%rcx)
-               	movzbq	0x2(%rax), %r10
-               	movb	%r10b, 0x2(%rcx)
+               	leaq	-0x20(%rbp), %rax
+               	leaq	<rip>, %rcx
+               	movzwq	(%rcx), %r10
+               	movw	%r10w, (%rax)
+               	movzbq	0x2(%rcx), %r10
+               	movb	%r10b, 0x2(%rax)
                	testq	%rbx, %rbx
                	jne	<addr>
                	movl	$0x1, %eax
                	popq	%rbx
                	leave
                	retq
-               	movb	$-0x1, (%rbx)
-               	movb	$-0x1, 0x1(%rbx)
+               	movw	$0xffff, (%rbx)         # imm = 0xFFFF
                	movb	$-0x1, 0x2(%rbx)
-               	movzwq	(%rcx), %r10
+               	movzwq	(%rax), %r10
                	movw	%r10w, (%rbx)
-               	movzbq	0x2(%rcx), %r10
+               	movzbq	0x2(%rax), %r10
                	movb	%r10b, 0x2(%rbx)
                	leaq	-0x10(%rbp), %rdx
                	movl	$0x3, %edi

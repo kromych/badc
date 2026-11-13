@@ -21,8 +21,7 @@ Disassembly of section .text:
                	str	x1, [x0, #0x8]
                	adrp	x1, <page>
                	ldr	w1, [x1, #0x38]
-               	str	w1, [x0, #0x10]
-               	str	wzr, [x0, #0x14]
+               	str	x1, [x0, #0x10]
                	ret
 
 <main>:

@@ -53,9 +53,8 @@ Disassembly of section .text:
                	subs	x17, x17, #0x1
                	b.ne	<addr>
                	mov	sp, x0
-               	mov	x2, #0x78               // =120
-               	strb	w2, [x0]
-               	strb	wzr, [x0, #0x1]
+               	mov	x1, #0x78               // =120
+               	strh	w1, [x0]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldrb	w2, [x0]

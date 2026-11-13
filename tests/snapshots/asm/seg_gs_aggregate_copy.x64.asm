@@ -392,10 +392,8 @@ Disassembly of section .text:
                	movl	$0x20, %ecx
                	movabsq	$-0x112053135014111, %rdx # imm = 0xFEEDFACECAFEBEEF
                	movq	%rdx, -0x40(%rbp)
-               	movl	$0x11223344, -0x38(%rbp) # imm = 0x11223344
-               	movl	%eax, -0x34(%rbp)
-               	movl	$0x55667788, -0x30(%rbp) # imm = 0x55667788
-               	movl	%eax, -0x2c(%rbp)
+               	movq	$0x11223344, -0x38(%rbp) # imm = 0x11223344
+               	movq	$0x55667788, -0x30(%rbp) # imm = 0x55667788
                	leaq	-0x40(%rbp), %rdi
                	movabsq	$0x123456789abcdef, %rsi # imm = 0x123456789ABCDEF
                	movq	%rsi, -0x28(%rbp)

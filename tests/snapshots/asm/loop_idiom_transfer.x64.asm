@@ -87,18 +87,9 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	leaq	-0x40(%rbp), %rcx
-               	movb	$0x3, -0x40(%rbp)
-               	movb	$0x3, -0x3f(%rbp)
-               	movb	$0x3, -0x3e(%rbp)
-               	movb	$0x3, -0x3d(%rbp)
-               	movb	$0x3, -0x3c(%rbp)
-               	movb	$0x3, -0x3b(%rbp)
-               	movb	$0x3, -0x3a(%rbp)
-               	movb	$0x3, -0x39(%rbp)
-               	movb	$0x3, -0x38(%rbp)
-               	movb	$0x3, -0x37(%rbp)
-               	movb	$0x3, -0x36(%rbp)
-               	movb	$0x3, -0x35(%rbp)
+               	movabsq	$0x303030303030303, %rax # imm = 0x303030303030303
+               	movq	%rax, -0x40(%rbp)
+               	movl	$0x3030303, -0x38(%rbp) # imm = 0x3030303
                	xorl	%eax, %eax
                	movsbq	(%rcx,%rax), %rdx
                	cmpl	$0x3, %edx
@@ -118,19 +109,13 @@ Disassembly of section .text:
                	movl	$0x40, %edx
                	xorl	%eax, %eax
                	callq	<addr>
-               	leaq	-0x40(%rbp), %rcx
-               	movb	$0x5, -0x3c(%rbp)
-               	movb	$0x5, -0x3b(%rbp)
-               	movb	$0x5, -0x3a(%rbp)
-               	movb	$0x5, -0x39(%rbp)
-               	movb	$0x5, -0x38(%rbp)
-               	movb	$0x5, -0x37(%rbp)
-               	movb	$0x5, -0x36(%rbp)
-               	movb	$0x5, -0x35(%rbp)
-               	movsbq	-0x3d(%rbp), %rax
-               	cmpl	$0x7f, %eax
+               	leaq	-0x40(%rbp), %rax
+               	movl	$0x5050505, -0x3c(%rbp) # imm = 0x5050505
+               	movl	$0x5050505, -0x38(%rbp) # imm = 0x5050505
+               	movsbq	-0x3d(%rbp), %rcx
+               	cmpl	$0x7f, %ecx
                	jne	<addr>
-               	addq	$0x4, %rcx
+               	leaq	0x4(%rax), %rcx
                	xorl	%eax, %eax
                	movsbq	(%rcx,%rax), %rdx
                	cmpl	$0x5, %edx
@@ -146,38 +131,14 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rbx # <addr>
-               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
-                                                # <addr>
-               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
-                                                # <addr>
-               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
-                                                # <addr>
-               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
-                                                # <addr>
-               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
-                                                # <addr>
-               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
-                                                # <addr>
-               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
-                                                # <addr>
-               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
-                                                # <addr>
-               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
-                                                # <addr>
-               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
-                                                # <addr>
-               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
-                                                # <addr>
-               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
-                                                # <addr>
-               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
-                                                # <addr>
-               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
-                                                # <addr>
-               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
-                                                # <addr>
-               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
-                                                # <addr>
+               	movq	$-0x1, <rip> # <addr>
+               	movq	$-0x1, <rip> # <addr>
+               	movq	$-0x1, <rip> # <addr>
+               	movq	$-0x1, <rip> # <addr>
+               	movq	$-0x1, <rip> # <addr>
+               	movq	$-0x1, <rip> # <addr>
+               	movq	$-0x1, <rip> # <addr>
+               	movq	$-0x1, <rip> # <addr>
                	xorl	%esi, %esi
                	movl	$0x28, %edx
                	movq	%rbx, %rdi

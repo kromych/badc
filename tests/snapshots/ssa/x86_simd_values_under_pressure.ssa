@@ -2028,7 +2028,7 @@ fn ent_pc=505 n_params=0 variadic=false locals=80
     v1882 Imm(0)                                           -> x1
     v1883 BinopI { op=add, lhs=v1880, rhs_imm=0 }          -> x1
     v1884 Imm(4294967295)                                  -> x1
-    v1885 Store { addr=v1880, disp=0, value=v1884, kind=I32 } -> -
+    v1885 Imm(-1)                                          -> x1
     v1886 Imm(0)                                           -> x2
     v1887 Imm(1)                                           -> x2
     v1888 Imm(1)                                           -> x2
@@ -2041,7 +2041,7 @@ fn ent_pc=505 n_params=0 variadic=false locals=80
     v1895 Imm(4)                                           -> x2
     v1896 BinopI { op=add, lhs=v1880, rhs_imm=4 }          -> x2
     v1897 Imm(4294967295)                                  -> x2
-    v1898 Store { addr=v1880, disp=4, value=v1884, kind=I32 } -> -
+    v1898 Store { addr=v1880, disp=0, value=v1885, kind=I64, align=4 } -> -
     v1899 Imm(1)                                           -> x1
     v1900 Imm(2)                                           -> x1
     v1901 Imm(2)                                           -> x1

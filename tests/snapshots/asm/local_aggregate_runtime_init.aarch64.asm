@@ -30,25 +30,16 @@ Disassembly of section .text:
                	sub	x0, x29, #0x18
                	stp	xzr, xzr, [x0]
                	str	xzr, [x0, #0x10]
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	ldrsw	x1, [x2]
-               	stur	w1, [x29, #-0x18]
-               	mov	x1, #0x68               // =104
-               	sturb	w1, [x29, #-0x14]
-               	mov	x1, #0x6f               // =111
-               	sturb	w1, [x29, #-0x13]
-               	mov	x1, #0x6c               // =108
-               	sturb	w1, [x29, #-0x12]
-               	mov	x1, #0x61               // =97
-               	sturb	w1, [x29, #-0x11]
-               	sturb	wzr, [x29, #-0x10]
-               	sturb	wzr, [x29, #-0xf]
-               	sturb	wzr, [x29, #-0xe]
-               	sturb	wzr, [x29, #-0xd]
-               	sturb	wzr, [x29, #-0xc]
-               	sturb	wzr, [x29, #-0xb]
-               	stur	x2, [x29, #-0x8]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldrsw	x2, [x1]
+               	stur	w2, [x29, #-0x18]
+               	mov	x2, #0x6f68             // =28520
+               	movk	x2, #0x616c, lsl #16
+               	stur	w2, [x29, #-0x14]
+               	stur	wzr, [x29, #-0x10]
+               	sturh	wzr, [x29, #-0xc]
+               	stur	x1, [x29, #-0x8]
                	bl	<addr>
                	ldrsw	x1, [x0]
                	cmp	w1, #0x3

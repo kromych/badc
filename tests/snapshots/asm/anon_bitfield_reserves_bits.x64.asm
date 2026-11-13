@@ -29,25 +29,11 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movb	$0x0, -0x10(%rbp)
-               	movb	$0x0, -0xf(%rbp)
-               	movb	$0x0, -0xe(%rbp)
-               	movb	$0x0, -0xd(%rbp)
-               	movb	$0x0, -0xc(%rbp)
-               	movb	$0x0, -0xb(%rbp)
-               	movb	$0x0, -0xa(%rbp)
-               	movb	$0x0, -0x9(%rbp)
-               	movb	$0x0, -0x8(%rbp)
-               	movb	$0x0, -0x7(%rbp)
-               	movb	$0x0, -0x6(%rbp)
-               	movb	$0x0, -0x5(%rbp)
-               	movb	$0x0, -0x4(%rbp)
-               	movb	$0x0, -0x3(%rbp)
-               	movb	$0x0, -0x2(%rbp)
-               	movb	$0x0, -0x1(%rbp)
-               	movl	$0x1, -0x10(%rbp)
-               	movl	$0x11223344, -0x8(%rbp) # imm = 0x11223344
-               	movl	$0x55667788, -0x4(%rbp) # imm = 0x55667788
+               	movl	$0x0, -0x10(%rbp)
+               	movq	$0x0, -0x8(%rbp)
+               	movq	$0x1, -0x10(%rbp)
+               	movabsq	$0x5566778811223344, %rax # imm = 0x5566778811223344
+               	movq	%rax, -0x8(%rbp)
                	movl	-0x10(%rbp), %eax
                	cmpl	$0x1, %eax
                	je	<addr>

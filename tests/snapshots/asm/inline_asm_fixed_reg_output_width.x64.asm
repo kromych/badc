@@ -77,9 +77,8 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	leaq	-0x8(%rbp), %rax
-               	movw	$0xbeef, -0x8(%rbp)     # imm = 0xBEEF
                	xorl	%ecx, %ecx
-               	movw	%cx, -0x6(%rbp)
+               	movl	$0xbeef, -0x8(%rbp)     # imm = 0xBEEF
                	movw	$0xfeed, -0x4(%rbp)     # imm = 0xFEED
                	leaq	0x2(%rax), %rdx
                	movl	$0x11223344, %eax       # imm = 0x11223344

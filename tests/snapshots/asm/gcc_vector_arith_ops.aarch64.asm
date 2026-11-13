@@ -5850,35 +5850,19 @@ Disassembly of section .text:
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x3]
                	sub	x4, x29, #0x70
-               	mov	x0, #0x42               // =66
-               	sturb	w0, [x29, #-0x70]
                	mov	x0, #0x0                // =0
-               	sturb	w0, [x29, #-0x6f]
-               	mov	x5, #0x28               // =40
-               	sturb	w5, [x29, #-0x6e]
-               	sturb	w0, [x29, #-0x6d]
+               	mov	x5, #0x42               // =66
+               	movk	x5, #0x28, lsl #16
+               	stur	w5, [x29, #-0x70]
                	mov	x5, #0x1d               // =29
-               	sturb	w5, [x29, #-0x6c]
-               	sturb	w0, [x29, #-0x6b]
-               	mov	x5, #0x16               // =22
-               	sturb	w5, [x29, #-0x6a]
-               	sturb	w0, [x29, #-0x69]
-               	mov	x5, #0x1                // =1
-               	sturb	w5, [x29, #-0x68]
-               	mov	x5, #0x2                // =2
-               	sturb	w5, [x29, #-0x67]
-               	mov	x5, #0x3                // =3
-               	sturb	w5, [x29, #-0x66]
-               	mov	x5, #0x4                // =4
-               	sturb	w5, [x29, #-0x65]
-               	mov	x5, #0x5                // =5
-               	sturb	w5, [x29, #-0x64]
-               	mov	x5, #0x6                // =6
-               	sturb	w5, [x29, #-0x63]
-               	mov	x5, #0x7                // =7
-               	sturb	w5, [x29, #-0x62]
-               	mov	x5, #0x8                // =8
-               	sturb	w5, [x29, #-0x61]
+               	movk	x5, #0x16, lsl #16
+               	stur	w5, [x29, #-0x6c]
+               	mov	x5, #0x201              // =513
+               	movk	x5, #0x403, lsl #16
+               	stur	w5, [x29, #-0x68]
+               	mov	x5, #0x605              // =1541
+               	movk	x5, #0x807, lsl #16
+               	stur	w5, [x29, #-0x64]
                	sub	x5, x29, #0x90
                	ldp	x16, x17, [x4]
                	stp	x16, x17, [x5]

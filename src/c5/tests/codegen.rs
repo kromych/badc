@@ -13033,8 +13033,9 @@ fn copy_of_a_union_read_at_two_widths_keeps_its_bytes() {
 }
 
 /// A split object copied out stores each field and each byte its
-/// initializer wrote: a bitfield storage unit at its width, and padding the
-/// initializer zeroed as zero.
+/// initializer wrote: a bitfield storage unit with the padding the
+/// initializer zeroed beside it as one word, and a `char` with its zeroed
+/// padding as the `char` zero-extended.
 #[test]
 fn copied_bitfields_and_padding_carry_the_bytes_their_initializer_wrote() {
     for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
@@ -13045,10 +13046,10 @@ fn copied_bitfields_and_padding_carry_the_bytes_their_initializer_wrote() {
         let stores = stores_through(&insts, out);
         assert_eq!(
             store_shape(&stores),
-            [(0, "I32"), (4, "I32"), (8, "I64")],
+            [(0, "I64"), (8, "I64")],
             "{target:?}: {body}"
         );
-        assert_eq!(stores[2].2, x, "{target:?}: the long member: {body}");
+        assert_eq!(stores[1].2, x, "{target:?}: the long member: {body}");
         assert!(
             !has_inst(&insts, &["Mcpy", "LocalAddr"]),
             "{target:?}: {body}"
@@ -13059,15 +13060,15 @@ fn copied_bitfields_and_padding_carry_the_bytes_their_initializer_wrote() {
         let stores = stores_through(&insts, out);
         assert_eq!(
             store_shape(&stores),
-            [(0, "I8"), (1, "I8"), (2, "I16"), (4, "I32"), (8, "I64")],
+            [(0, "I64"), (8, "I64")],
             "{target:?}: {body}"
         );
-        for (disp, _, value) in &stores[1..4] {
-            assert!(
-                insts.iter().any(|(id, i)| id == value && i == "Imm(0)"),
-                "{target:?}: the padding at {disp} is stored as zero: {body}"
-            );
-        }
+        assert!(
+            insts
+                .iter()
+                .any(|(id, i)| *id == stores[0].2 && i.contains("op=and") && i.contains("=255 ")),
+            "{target:?}: the padding beside the char is stored as zero: {body}"
+        );
         assert!(
             !has_inst(&insts, &["Mcpy", "LocalAddr"]),
             "{target:?}: {body}"

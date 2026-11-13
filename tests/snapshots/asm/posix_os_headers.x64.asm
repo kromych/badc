@@ -65,11 +65,10 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x60(%rbp), %rdi
-               	movl	-0x68(%rbp), %ecx
-               	movl	%ecx, -0x60(%rbp)
+               	movl	-0x68(%rbp), %eax
+               	movl	%eax, -0x60(%rbp)
                	movl	$0x1, %esi
-               	movw	%si, -0x5c(%rbp)
-               	movw	$0x0, -0x5a(%rbp)
+               	movl	$0x1, -0x5c(%rbp)
                	movl	$0x3e8, %edx            # imm = 0x3E8
                	xorl	%eax, %eax
                	callq	<addr>

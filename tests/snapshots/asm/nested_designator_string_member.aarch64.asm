@@ -59,24 +59,16 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x77               // =119
-               	sub	x2, x29, #0x10
-               	sturb	w1, [x29, #-0xc]
-               	mov	x1, #0x78               // =120
-               	sturb	w1, [x29, #-0xb]
-               	mov	x1, #0x79               // =121
-               	sturb	w1, [x29, #-0xa]
-               	mov	x1, #0x7a               // =122
-               	sturb	w1, [x29, #-0x9]
-               	sturb	wzr, [x29, #-0x8]
-               	sturb	wzr, [x29, #-0x7]
-               	sturb	wzr, [x29, #-0x6]
-               	sturb	wzr, [x29, #-0x5]
-               	add	x1, x0, #0x6
-               	stur	w1, [x29, #-0x4]
-               	add	x1, x0, #0x4
-               	stur	w1, [x29, #-0x10]
-               	add	x1, x2, #0x4
+               	sub	x1, x29, #0x10
+               	mov	x2, #0x7877             // =30839
+               	movk	x2, #0x7a79, lsl #16
+               	stur	w2, [x29, #-0xc]
+               	stur	wzr, [x29, #-0x8]
+               	add	x2, x0, #0x6
+               	stur	w2, [x29, #-0x4]
+               	add	x2, x0, #0x4
+               	stur	w2, [x29, #-0x10]
+               	add	x1, x1, #0x4
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	ldrb	w3, [x1]

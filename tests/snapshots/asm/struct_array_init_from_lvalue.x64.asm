@@ -32,12 +32,10 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	leaq	-0x30(%rbp), %rsi
                	movq	$0x8, -0x30(%rbp)
-               	movl	$0x3, -0x28(%rbp)
-               	movl	%eax, -0x24(%rbp)
+               	movq	$0x3, -0x28(%rbp)
                	leaq	-0x20(%rbp), %rdx
                	movq	$0x2, -0x20(%rbp)
-               	movl	$0x1, -0x18(%rbp)
-               	movl	%eax, -0x14(%rbp)
+               	movq	$0x1, -0x18(%rbp)
                	leaq	0x10(%rdx), %rcx
                	movups	(%rsi), %xmm14
                	movups	%xmm14, (%rcx)

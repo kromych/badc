@@ -68,31 +68,26 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	mov	x0, #0x0                // =0
-               	str	w0, [x1]
-               	mov	x2, #0x1                // =1
-               	str	w2, [x1, #0x4]
+               	mov	x2, #0x100000000        // =4294967296
+               	str	x2, [x1]
                	mov	x2, #0x2                // =2
-               	str	w2, [x1, #0x8]
+               	movk	x2, #0x3, lsl #32
                	mov	x4, #0x3                // =3
-               	str	w4, [x1, #0xc]
+               	str	x2, [x1, #0x8]
                	add	x2, x1, #0x10
                	mov	x3, #0xa                // =10
-               	str	w3, [x2]
-               	mov	x3, #0xb                // =11
-               	str	w3, [x2, #0x4]
+               	movk	x3, #0xb, lsl #32
+               	str	x3, [x2]
                	mov	x3, #0xc                // =12
-               	str	w3, [x2, #0x8]
-               	mov	x3, #0xd                // =13
-               	str	w3, [x2, #0xc]
+               	movk	x3, #0xd, lsl #32
+               	str	x3, [x2, #0x8]
                	add	x3, x1, #0x20
                	mov	x5, #0x14               // =20
-               	str	w5, [x3]
-               	mov	x5, #0x15               // =21
-               	str	w5, [x3, #0x4]
+               	movk	x5, #0x15, lsl #32
+               	str	x5, [x3]
                	mov	x5, #0x16               // =22
-               	str	w5, [x3, #0x8]
-               	mov	x5, #0x17               // =23
-               	str	w5, [x3, #0xc]
+               	movk	x5, #0x17, lsl #32
+               	str	x5, [x3, #0x8]
                	ldrsw	x3, [x1, #0x2c]
                	cmp	w3, #0x17
                	b.ne	<addr>

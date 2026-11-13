@@ -667,10 +667,9 @@ Disassembly of section .text:
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x50
                	ret
-               	stur	wzr, [x29, #-0x8]
+               	mov	x1, #0x3c00             // =15360
                	sub	x0, x29, #0x8
-               	mov	x1, #0x3c               // =60
-               	sturb	w1, [x29, #-0x7]
+               	stur	w1, [x29, #-0x8]
                	adrp	x22, <page>
                	ldrsw	x1, [x22, #0x20]
                	add	x1, x1, #0x1
@@ -686,9 +685,8 @@ Disassembly of section .text:
                	ret
                	adrp	x21, <page>
                	add	x21, x21, <lo12>
-               	mov	x0, #0x1                // =1
-               	strb	w0, [x21]
-               	strb	w0, [x21, #0x1]
+               	mov	x0, #0x101              // =257
+               	strh	w0, [x21]
                	mov	x20, #0x2               // =2
                	ldrb	w0, [x21, x20]
                	cbnz	w0, <addr>

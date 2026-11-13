@@ -29,17 +29,17 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x420, %rsp            # imm = 0x420
-               	movl	$0x64, -0x420(%rbp)
-               	movl	$0xc8, -0x41c(%rbp)
-               	movl	$0x12c, -0x418(%rbp)    # imm = 0x12C
-               	movl	$0x190, -0x414(%rbp)    # imm = 0x190
+               	movabsq	$0xc800000064, %rax     # imm = 0xC800000064
+               	movq	%rax, -0x420(%rbp)
+               	movabsq	$0x1900000012c, %rax    # imm = 0x1900000012C
+               	movq	%rax, -0x418(%rbp)
                	movl	$0xffffffff, -0x370(%rbp) # imm = 0xFFFFFFFF
                	movl	$0xfffffffe, -0x2cc(%rbp) # imm = 0xFFFFFFFE
-               	movl	$0xfffffffd, -0x228(%rbp) # imm = 0xFFFFFFFD
+               	movabsq	$0x1f4fffffffd, %rax    # imm = 0x1F4FFFFFFFD
                	leaq	-0x420(%rbp), %rsi
-               	movl	$0x1f4, -0x224(%rbp)    # imm = 0x1F4
-               	movl	$0x258, -0x220(%rbp)    # imm = 0x258
-               	movl	$0x2bc, -0x21c(%rbp)    # imm = 0x2BC
+               	movq	%rax, -0x228(%rbp)
+               	movabsq	$0x2bc00000258, %rax    # imm = 0x2BC00000258
+               	movq	%rax, -0x220(%rbp)
                	movl	$0x320, -0x218(%rbp)    # imm = 0x320
                	xorl	%eax, %eax
                	leaq	0x10(%rsi), %rcx

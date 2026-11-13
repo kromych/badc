@@ -65,11 +65,11 @@ fn ent_pc=3 n_params=0 variadic=false locals=3
   block 9  start_pc=0
     v40  LocalAddr(-2)                                    -> x1
     v41  Imm(5)                                           -> x0
-    v42  StoreLocal { off=-2, value=v41, kind=I32 }       -> -
-    v43  LocalAddr(-2)                                    -> x2
-    v44  BinopI { op=add, lhs=v40, rhs_imm=4 }            -> x2
-    v45  Imm(6)                                           -> x2
-    v46  StoreLocal { off=-2, disp=4, value=v45, kind=I32 } -> -
+    v42  Imm(25769803781)                                 -> x2
+    v43  LocalAddr(-2)                                    -> x6
+    v44  BinopI { op=add, lhs=v40, rhs_imm=4 }            -> x6
+    v45  Imm(6)                                           -> x6
+    v46  StoreLocal { off=-2, value=v42, kind=I64 }       -> -
     v47  LocalAddr(-2)                                    -> x2
     v48  BinopI { op=add, lhs=v40, rhs_imm=8 }            -> x2
     v49  Imm(7)                                           -> x2

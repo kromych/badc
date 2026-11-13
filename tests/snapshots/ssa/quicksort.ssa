@@ -215,21 +215,21 @@ fn ent_pc=9 n_params=0 variadic=false locals=0
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x6
     v6   Imm(12)                                          -> x0
-    v7   Store { addr=v2, disp=0, value=v6, kind=I32 }    -> -
-    v8   Imm(0)                                           -> x0
+    v7   Imm(30064771084)                                 -> x0
+    v8   Imm(0)                                           -> x1
     v9   Imm(4)                                           -> x2
-    v10  BinopI { op=add, lhs=v2, rhs_imm=4 }             -> x0
-    v11  Imm(7)                                           -> x0
-    v12  Store { addr=v2, disp=4, value=v11, kind=I32 }   -> -
+    v10  BinopI { op=add, lhs=v2, rhs_imm=4 }             -> x1
+    v11  Imm(7)                                           -> x1
+    v12  Store { addr=v2, disp=0, value=v7, kind=I64, align=4 } -> -
     v13  Imm(0)                                           -> x0
     v14  Imm(8)                                           -> x0
     v15  BinopI { op=add, lhs=v2, rhs_imm=8 }             -> x0
     v16  Imm(15)                                          -> x0
-    v17  Store { addr=v2, disp=8, value=v16, kind=I32 }   -> -
-    v18  Imm(0)                                           -> x0
-    v19  BinopI { op=add, lhs=v2, rhs_imm=12 }            -> x0
-    v20  Imm(5)                                           -> x0
-    v21  Store { addr=v2, disp=12, value=v20, kind=I32 }  -> -
+    v17  Imm(21474836495)                                 -> x0
+    v18  Imm(0)                                           -> x1
+    v19  BinopI { op=add, lhs=v2, rhs_imm=12 }            -> x1
+    v20  Imm(5)                                           -> x1
+    v21  Store { addr=v2, disp=8, value=v17, kind=I64, align=4 } -> -
     v22  Imm(0)                                           -> x0
     v23  Imm(16)                                          -> x0
     v24  BinopI { op=add, lhs=v2, rhs_imm=16 }            -> x0

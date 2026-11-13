@@ -17,101 +17,55 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x50
-               	mov	x0, #0x7                // =7
-               	sturb	w0, [x29, #-0x50]
-               	mov	x0, #0xc3               // =195
-               	sturb	w0, [x29, #-0x40]
-               	mov	x0, #0x1                // =1
-               	sturb	w0, [x29, #-0x30]
-               	mov	x0, #0x26               // =38
-               	sturb	w0, [x29, #-0x4f]
-               	mov	x0, #0xc6               // =198
-               	sturb	w0, [x29, #-0x3f]
-               	mov	x0, #0x2                // =2
-               	sturb	w0, [x29, #-0x2f]
-               	mov	x0, #0x45               // =69
-               	sturb	w0, [x29, #-0x4e]
-               	mov	x0, #0xc9               // =201
-               	sturb	w0, [x29, #-0x3e]
-               	mov	x0, #0x5                // =5
-               	sturb	w0, [x29, #-0x2e]
-               	mov	x0, #0x64               // =100
-               	sturb	w0, [x29, #-0x4d]
-               	mov	x0, #0xcc               // =204
-               	sturb	w0, [x29, #-0x3d]
-               	mov	x0, #0xa                // =10
-               	sturb	w0, [x29, #-0x2d]
-               	mov	x0, #0x83               // =131
-               	sturb	w0, [x29, #-0x4c]
-               	mov	x0, #0xd7               // =215
-               	sturb	w0, [x29, #-0x3c]
-               	mov	x0, #0x11               // =17
-               	sturb	w0, [x29, #-0x2c]
-               	mov	x0, #0xa2               // =162
-               	sturb	w0, [x29, #-0x4b]
-               	mov	x0, #0xda               // =218
-               	sturb	w0, [x29, #-0x3b]
-               	mov	x0, #0x1a               // =26
-               	sturb	w0, [x29, #-0x2b]
-               	mov	x0, #0xc1               // =193
-               	sturb	w0, [x29, #-0x4a]
-               	mov	x0, #0xdd               // =221
-               	sturb	w0, [x29, #-0x3a]
-               	mov	x0, #0x25               // =37
-               	sturb	w0, [x29, #-0x2a]
-               	mov	x0, #0xe0               // =224
-               	sturb	w0, [x29, #-0x49]
-               	sturb	w0, [x29, #-0x39]
-               	mov	x0, #0x32               // =50
-               	sturb	w0, [x29, #-0x29]
-               	mov	x0, #0xff               // =255
-               	sturb	w0, [x29, #-0x48]
-               	mov	x1, #0xeb               // =235
-               	sturb	w1, [x29, #-0x38]
-               	mov	x1, #0x41               // =65
-               	sturb	w1, [x29, #-0x28]
-               	mov	x1, #0x1e               // =30
-               	sturb	w1, [x29, #-0x47]
-               	mov	x1, #0xee               // =238
-               	sturb	w1, [x29, #-0x37]
-               	mov	x1, #0x52               // =82
-               	sturb	w1, [x29, #-0x27]
-               	mov	x1, #0x3d               // =61
-               	sturb	w1, [x29, #-0x46]
-               	mov	x1, #0xf1               // =241
-               	sturb	w1, [x29, #-0x36]
-               	mov	x1, #0x65               // =101
-               	sturb	w1, [x29, #-0x26]
-               	mov	x1, #0x5c               // =92
-               	sturb	w1, [x29, #-0x45]
-               	mov	x1, #0xf4               // =244
-               	sturb	w1, [x29, #-0x35]
-               	mov	x1, #0x7a               // =122
-               	sturb	w1, [x29, #-0x25]
-               	mov	x1, #0x7b               // =123
-               	sturb	w1, [x29, #-0x44]
-               	sturb	w0, [x29, #-0x34]
-               	mov	x0, #0x91               // =145
-               	sturb	w0, [x29, #-0x24]
-               	mov	x0, #0x9a               // =154
-               	sturb	w0, [x29, #-0x43]
-               	mov	x0, #0x82               // =130
-               	sturb	w0, [x29, #-0x33]
-               	mov	x0, #0xaa               // =170
-               	sturb	w0, [x29, #-0x23]
-               	mov	x0, #0xb9               // =185
-               	sturb	w0, [x29, #-0x42]
-               	mov	x0, #0x85               // =133
-               	sturb	w0, [x29, #-0x32]
-               	mov	x0, #0xc5               // =197
-               	sturb	w0, [x29, #-0x22]
+               	mov	x0, #0x2607             // =9735
+               	mov	x1, #0xc6c3             // =50883
+               	mov	x2, #0x201              // =513
+               	sturh	w0, [x29, #-0x50]
+               	sturh	w1, [x29, #-0x40]
+               	sturh	w2, [x29, #-0x30]
+               	mov	x0, #0x6445             // =25669
+               	mov	x1, #0xccc9             // =52425
+               	mov	x2, #0xa05              // =2565
+               	sturh	w0, [x29, #-0x4e]
+               	sturh	w1, [x29, #-0x3e]
+               	sturh	w2, [x29, #-0x2e]
+               	mov	x0, #0xa283             // =41603
+               	mov	x1, #0xdad7             // =56023
+               	mov	x2, #0x1a11             // =6673
+               	sturh	w0, [x29, #-0x4c]
+               	sturh	w1, [x29, #-0x3c]
+               	sturh	w2, [x29, #-0x2c]
+               	mov	x0, #0xe0c1             // =57537
+               	mov	x1, #0xe0dd             // =57565
+               	mov	x2, #0x3225             // =12837
+               	sturh	w0, [x29, #-0x4a]
+               	sturh	w1, [x29, #-0x3a]
+               	sturh	w2, [x29, #-0x2a]
+               	mov	x0, #0x1eff             // =7935
+               	mov	x1, #0xeeeb             // =61163
+               	mov	x2, #0x5241             // =21057
+               	sturh	w0, [x29, #-0x48]
+               	sturh	w1, [x29, #-0x38]
+               	sturh	w2, [x29, #-0x28]
+               	mov	x0, #0x5c3d             // =23613
+               	mov	x1, #0xf4f1             // =62705
+               	mov	x2, #0x7a65             // =31333
+               	sturh	w0, [x29, #-0x46]
+               	sturh	w1, [x29, #-0x36]
+               	sturh	w2, [x29, #-0x26]
+               	mov	x0, #0x9a7b             // =39547
+               	mov	x1, #0x82ff             // =33535
+               	mov	x2, #0xaa91             // =43665
+               	sturh	w0, [x29, #-0x44]
+               	sturh	w1, [x29, #-0x34]
+               	sturh	w2, [x29, #-0x24]
+               	mov	x0, #0xd8b9             // =55481
+               	mov	x2, #0x8885             // =34949
+               	mov	x3, #0xe2c5             // =58053
                	sub	x1, x29, #0x50
-               	mov	x0, #0xd8               // =216
-               	sturb	w0, [x29, #-0x41]
-               	mov	x0, #0x88               // =136
-               	sturb	w0, [x29, #-0x31]
-               	mov	x0, #0xe2               // =226
-               	sturb	w0, [x29, #-0x21]
+               	sturh	w0, [x29, #-0x42]
+               	sturh	w2, [x29, #-0x32]
+               	sturh	w3, [x29, #-0x22]
                	movi	v2.16b, #0x1d
                	ldur	q0, [x29, #-0x50]
                	ldur	q1, [x29, #-0x40]
@@ -153,38 +107,22 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>
-               	mov	x0, #0x2                // =2
-               	sturb	w0, [x29, #-0x10]
-               	mov	x0, #0xb                // =11
-               	sturb	w0, [x29, #-0xf]
-               	mov	x0, #0x14               // =20
-               	sturb	w0, [x29, #-0xe]
-               	mov	x0, #0x1d               // =29
-               	sturb	w0, [x29, #-0xd]
-               	mov	x0, #0x26               // =38
-               	sturb	w0, [x29, #-0xc]
-               	mov	x0, #0x2f               // =47
-               	sturb	w0, [x29, #-0xb]
-               	mov	x0, #0x38               // =56
-               	sturb	w0, [x29, #-0xa]
-               	mov	x0, #0x41               // =65
-               	sturb	w0, [x29, #-0x9]
-               	mov	x0, #0x4a               // =74
-               	sturb	w0, [x29, #-0x8]
-               	mov	x0, #0x53               // =83
-               	sturb	w0, [x29, #-0x7]
-               	mov	x0, #0x5c               // =92
-               	sturb	w0, [x29, #-0x6]
-               	mov	x0, #0x65               // =101
-               	sturb	w0, [x29, #-0x5]
-               	mov	x0, #0x6e               // =110
-               	sturb	w0, [x29, #-0x4]
-               	mov	x0, #0x77               // =119
-               	sturb	w0, [x29, #-0x3]
-               	mov	x0, #0x80               // =128
-               	sturb	w0, [x29, #-0x2]
-               	mov	x0, #0x89               // =137
-               	sturb	w0, [x29, #-0x1]
+               	mov	x0, #0xb02              // =2818
+               	sturh	w0, [x29, #-0x10]
+               	mov	x0, #0x1d14             // =7444
+               	sturh	w0, [x29, #-0xe]
+               	mov	x0, #0x2f26             // =12070
+               	sturh	w0, [x29, #-0xc]
+               	mov	x0, #0x4138             // =16696
+               	sturh	w0, [x29, #-0xa]
+               	mov	x0, #0x534a             // =21322
+               	sturh	w0, [x29, #-0x8]
+               	mov	x0, #0x655c             // =25948
+               	sturh	w0, [x29, #-0x6]
+               	mov	x0, #0x776e             // =30574
+               	sturh	w0, [x29, #-0x4]
+               	mov	x0, #0x8980             // =35200
+               	sturh	w0, [x29, #-0x2]
                	ldur	q0, [x29, #-0x10]
                	sub	x1, x29, #0x30
                	ldur	q1, [x29, #-0x30]

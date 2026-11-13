@@ -25,40 +25,36 @@ Disassembly of section .text:
                	stp	x16, x17, [x0]
                	sub	x0, x29, #0x30
                	stp	xzr, xzr, [x0]
-               	mov	x2, #0x61               // =97
-               	sturb	w2, [x29, #-0x30]
-               	mov	x3, #0x62               // =98
-               	sturb	w3, [x29, #-0x2f]
+               	mov	x0, #0x6261             // =25185
+               	sturh	w0, [x29, #-0x30]
                	sturb	wzr, [x29, #-0x2e]
                	stur	w1, [x29, #-0x2c]
-               	mov	x4, #0x64               // =100
-               	sturb	w4, [x29, #-0x28]
-               	mov	x5, #0x65               // =101
-               	sturb	w5, [x29, #-0x27]
+               	mov	x2, #0x6564             // =25956
+               	sturh	w2, [x29, #-0x28]
                	sturb	wzr, [x29, #-0x26]
-               	mov	x6, #0x2                // =2
-               	stur	w6, [x29, #-0x24]
-               	sub	x7, x29, #0x20
-               	stp	xzr, xzr, [x7]
-               	sturb	w2, [x29, #-0x20]
-               	sturb	w3, [x29, #-0x1f]
+               	mov	x2, #0x2                // =2
+               	stur	w2, [x29, #-0x24]
+               	sub	x3, x29, #0x20
+               	stp	xzr, xzr, [x3]
+               	mov	x3, #0x6261             // =25185
+               	sturh	w3, [x29, #-0x20]
                	sturb	wzr, [x29, #-0x1e]
-               	mov	x7, #0x1                // =1
-               	stur	w7, [x29, #-0x1c]
-               	sturb	w4, [x29, #-0x18]
-               	sturb	w5, [x29, #-0x17]
+               	mov	x3, #0x1                // =1
+               	stur	w3, [x29, #-0x1c]
+               	mov	x3, #0x6564             // =25956
+               	sturh	w3, [x29, #-0x18]
                	sturb	wzr, [x29, #-0x16]
                	stur	w1, [x29, #-0x14]
-               	sub	x7, x29, #0x10
-               	stp	xzr, xzr, [x7]
-               	sturb	w2, [x29, #-0x10]
-               	sturb	w3, [x29, #-0xf]
+               	sub	x3, x29, #0x10
+               	stp	xzr, xzr, [x3]
+               	mov	x3, #0x6261             // =25185
+               	sturh	w3, [x29, #-0x10]
                	sturb	wzr, [x29, #-0xe]
                	stur	w1, [x29, #-0xc]
-               	sturb	w4, [x29, #-0x8]
-               	sturb	w5, [x29, #-0x7]
+               	mov	x1, #0x6564             // =25956
+               	sturh	w1, [x29, #-0x8]
                	sturb	wzr, [x29, #-0x6]
-               	stur	w6, [x29, #-0x4]
+               	stur	w2, [x29, #-0x4]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	add	x0, x0, #0x8

@@ -52,8 +52,8 @@ Disassembly of section .text:
                	retq
                	leaq	-0x10(%rbp), %rcx
                	movl	$0x5, %eax
-               	movl	%eax, -0x10(%rbp)
-               	movl	$0x6, -0xc(%rbp)
+               	movabsq	$0x600000005, %rdx      # imm = 0x600000005
+               	movq	%rdx, -0x10(%rbp)
                	movl	$0x7, -0x8(%rbp)
                	leaq	-0x18(%rbp), %rdx
                	cmpq	%rcx, %rdx

@@ -141,14 +141,14 @@ Disassembly of section .text:
                	andq	$-0x80, %rsp
                	movq	%rsp, %rbx
                	movl	$0x7, %r15d
-               	movl	$0x0, (%rbx)
-               	movl	%r15d, 0x4(%rbx)
-               	movl	$0xe, 0x8(%rbx)
-               	movl	$0x15, 0xc(%rbx)
-               	movl	$0x1c, 0x10(%rbx)
-               	movl	$0x23, 0x14(%rbx)
-               	movl	$0x2a, 0x18(%rbx)
-               	movl	$0x31, 0x1c(%rbx)
+               	movabsq	$0x700000000, %rax      # imm = 0x700000000
+               	movq	%rax, (%rbx)
+               	movabsq	$0x150000000e, %rax     # imm = 0x150000000E
+               	movq	%rax, 0x8(%rbx)
+               	movabsq	$0x230000001c, %rax     # imm = 0x230000001C
+               	movq	%rax, 0x10(%rbx)
+               	movabsq	$0x310000002a, %rax     # imm = 0x310000002A
+               	movq	%rax, 0x18(%rbx)
                	xorl	%r13d, %r13d
                	movl	$0x1, %r12d
                	movq	%rsp, %r10

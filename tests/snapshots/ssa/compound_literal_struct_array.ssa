@@ -1060,28 +1060,28 @@ fn ent_pc=1 n_params=0 variadic=false locals=10
     v894 Imm(0)                                           -> x0
     v895 Imm(0)                                           -> x0
     v896 Imm(3)                                           -> x0
-    v897 Imm(0)                                           -> x1
-    v898 Imm(0)                                           -> x1
+    v897 Imm(0)                                           -> x0
+    v898 Imm(0)                                           -> x0
     v899 LocalAddr(-6)                                    -> x6
-    v900 StoreLocal { off=-6, value=v896, kind=I32 }      -> -
-    v901 Imm(0)                                           -> x0
-    v902 Imm(4)                                           -> x0
-    v903 Imm(4)                                           -> x0
+    v900 Imm(17179869187)                                 -> x0
+    v901 Imm(0)                                           -> x1
+    v902 Imm(4)                                           -> x1
+    v903 Imm(4)                                           -> x1
     v904 LocalAddr(-6)                                    -> x1
     v905 BinopI { op=add, lhs=v899, rhs_imm=4 }           -> x1
-    v906 StoreLocal { off=-6, disp=4, value=v903, kind=I32 } -> -
+    v906 StoreLocal { off=-6, value=v900, kind=I64 }      -> -
     v907 Imm(0)                                           -> x0
     v908 Imm(5)                                           -> x0
     v909 Imm(5)                                           -> x0
-    v910 LocalAddr(-6)                                    -> x1
-    v911 BinopI { op=add, lhs=v899, rhs_imm=8 }           -> x1
-    v912 StoreLocal { off=-6, disp=8, value=v909, kind=I32 } -> -
-    v913 Imm(0)                                           -> x0
-    v914 Imm(6)                                           -> x0
-    v915 Imm(6)                                           -> x0
+    v910 LocalAddr(-6)                                    -> x0
+    v911 BinopI { op=add, lhs=v899, rhs_imm=8 }           -> x0
+    v912 Imm(25769803781)                                 -> x0
+    v913 Imm(0)                                           -> x1
+    v914 Imm(6)                                           -> x1
+    v915 Imm(6)                                           -> x1
     v916 LocalAddr(-6)                                    -> x1
     v917 BinopI { op=add, lhs=v899, rhs_imm=12 }          -> x1
-    v918 StoreLocal { off=-6, disp=12, value=v915, kind=I32 } -> -
+    v918 StoreLocal { off=-6, disp=8, value=v912, kind=I64 } -> -
     v919 LocalAddr(-6)                                    -> x0
     v920 Imm(2)                                           -> x0
     v921 Imm(2)                                           -> x0

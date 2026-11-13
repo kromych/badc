@@ -941,70 +941,54 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x20
                	b.lt	<addr>
-               	mov	x0, #-0x7530            // =-30000
-               	strh	w0, [sp, #0x50]
-               	mov	x0, #0x3                // =3
-               	strh	w0, [sp, #0x70]
-               	mov	x0, #-0x5207            // =-20999
-               	strh	w0, [sp, #0x52]
-               	mov	x0, #0xa                // =10
-               	strh	w0, [sp, #0x72]
-               	mov	x0, #-0x2ede            // =-11998
-               	strh	w0, [sp, #0x54]
-               	mov	x0, #0x11               // =17
-               	strh	w0, [sp, #0x74]
-               	mov	x0, #-0xbb5             // =-2997
-               	strh	w0, [sp, #0x56]
-               	mov	x0, #0x18               // =24
-               	strh	w0, [sp, #0x76]
+               	mov	x0, #0x8ad0             // =35536
+               	movk	x0, #0xadf9, lsl #16
+               	mov	x1, #0x3                // =3
+               	movk	x1, #0xa, lsl #16
+               	str	w0, [sp, #0x50]
+               	str	w1, [sp, #0x70]
+               	mov	x0, #0xd122             // =53538
+               	movk	x0, #0xf44b, lsl #16
+               	mov	x1, #0x11               // =17
+               	movk	x1, #0x18, lsl #16
+               	str	w0, [sp, #0x54]
+               	str	w1, [sp, #0x74]
                	mov	x0, #0x1774             // =6004
-               	strh	w0, [sp, #0x58]
-               	mov	x0, #0x1f               // =31
-               	strh	w0, [sp, #0x78]
-               	mov	x0, #0x3a9d             // =15005
-               	strh	w0, [sp, #0x5a]
-               	mov	x0, #0x26               // =38
-               	strh	w0, [sp, #0x7a]
+               	movk	x0, #0x3a9d, lsl #16
+               	mov	x1, #0x1f               // =31
+               	movk	x1, #0x26, lsl #16
+               	str	w0, [sp, #0x58]
+               	str	w1, [sp, #0x78]
                	mov	x0, #0x5dc6             // =24006
-               	strh	w0, [sp, #0x5c]
-               	mov	x0, #0x2d               // =45
-               	strh	w0, [sp, #0x7c]
-               	mov	x0, #-0x7f11            // =-32529
-               	strh	w0, [sp, #0x5e]
-               	mov	x0, #0x34               // =52
-               	strh	w0, [sp, #0x7e]
-               	mov	x0, #-0x5be8            // =-23528
-               	strh	w0, [sp, #0x60]
-               	mov	x0, #0x3b               // =59
-               	strh	w0, [sp, #0x80]
-               	mov	x0, #-0x38bf            // =-14527
-               	strh	w0, [sp, #0x62]
-               	mov	x0, #0x42               // =66
-               	strh	w0, [sp, #0x82]
-               	mov	x0, #-0x1596            // =-5526
-               	strh	w0, [sp, #0x64]
-               	mov	x0, #0x49               // =73
-               	strh	w0, [sp, #0x84]
-               	mov	x0, #0xd93              // =3475
-               	strh	w0, [sp, #0x66]
-               	mov	x0, #0x50               // =80
-               	strh	w0, [sp, #0x86]
+               	movk	x0, #0x80ef, lsl #16
+               	mov	x1, #0x2d               // =45
+               	movk	x1, #0x34, lsl #16
+               	str	w0, [sp, #0x5c]
+               	str	w1, [sp, #0x7c]
+               	mov	x0, #0xa418             // =42008
+               	movk	x0, #0xc741, lsl #16
+               	mov	x1, #0x3b               // =59
+               	movk	x1, #0x42, lsl #16
+               	str	w0, [sp, #0x60]
+               	str	w1, [sp, #0x80]
+               	mov	x0, #0xea6a             // =60010
+               	movk	x0, #0xd93, lsl #16
+               	mov	x1, #0x49               // =73
+               	movk	x1, #0x50, lsl #16
+               	str	w0, [sp, #0x64]
+               	str	w1, [sp, #0x84]
                	mov	x0, #0x30bc             // =12476
-               	strh	w0, [sp, #0x68]
-               	mov	x0, #0x57               // =87
-               	strh	w0, [sp, #0x88]
-               	mov	x0, #0x53e5             // =21477
-               	strh	w0, [sp, #0x6a]
-               	mov	x0, #0x5e               // =94
-               	strh	w0, [sp, #0x8a]
+               	movk	x0, #0x53e5, lsl #16
+               	mov	x1, #0x57               // =87
+               	movk	x1, #0x5e, lsl #16
+               	str	w0, [sp, #0x68]
+               	str	w1, [sp, #0x88]
                	mov	x0, #0x770e             // =30478
-               	strh	w0, [sp, #0x6c]
-               	mov	x0, #0x65               // =101
-               	strh	w0, [sp, #0x8c]
-               	mov	x0, #-0x65c9            // =-26057
-               	strh	w0, [sp, #0x6e]
-               	mov	x0, #0x6c               // =108
-               	strh	w0, [sp, #0x8e]
+               	movk	x0, #0x9a37, lsl #16
+               	mov	x1, #0x65               // =101
+               	movk	x1, #0x6c, lsl #16
+               	str	w0, [sp, #0x6c]
+               	str	w1, [sp, #0x8c]
                	mov	x0, #-0x9400            // =-37888
                	movk	x0, #0x88ca, lsl #16
                	str	w0, [sp, #0x90]

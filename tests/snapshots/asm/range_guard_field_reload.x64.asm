@@ -30,8 +30,7 @@ Disassembly of section .text:
                	movq	<rip>, %rax # <addr>
                	movq	%rax, 0x8(%rdi)
                	movl	<rip>, %eax # <addr>
-               	movl	%eax, 0x10(%rdi)
-               	movl	$0x0, 0x14(%rdi)
+               	movq	%rax, 0x10(%rdi)
                	retq
 
 <main>:

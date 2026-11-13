@@ -120,20 +120,17 @@ Disassembly of section .text:
                	mov	x20, sp
                	mov	x25, #0x7               // =7
                	mov	x22, #0x0               // =0
-               	str	w22, [x20]
-               	str	w25, [x20, #0x4]
+               	mov	x0, #0x700000000        // =30064771072
+               	str	x0, [x20]
                	mov	x0, #0xe                // =14
-               	str	w0, [x20, #0x8]
-               	mov	x0, #0x15               // =21
-               	str	w0, [x20, #0xc]
+               	movk	x0, #0x15, lsl #32
+               	str	x0, [x20, #0x8]
                	mov	x0, #0x1c               // =28
-               	str	w0, [x20, #0x10]
-               	mov	x0, #0x23               // =35
-               	str	w0, [x20, #0x14]
+               	movk	x0, #0x23, lsl #32
+               	str	x0, [x20, #0x10]
                	mov	x0, #0x2a               // =42
-               	str	w0, [x20, #0x18]
-               	mov	x0, #0x31               // =49
-               	str	w0, [x20, #0x1c]
+               	movk	x0, #0x31, lsl #32
+               	str	x0, [x20, #0x18]
                	mov	x21, #0x1               // =1
                	mov	x26, sp
                	mul	x24, x25, x21

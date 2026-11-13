@@ -29,10 +29,8 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movq	$0x0, -0x10(%rbp)
-               	movq	$0x0, -0x8(%rbp)
-               	movb	$0x1, -0x10(%rbp)
-               	movb	$0x2, -0x7(%rbp)
+               	movq	$0x1, -0x10(%rbp)
+               	movq	$0x200, -0x8(%rbp)      # imm = 0x200
                	movl	-0x8(%rbp), %ecx
                	andq	$-0x8, %rcx
                	orq	$0x5, %rcx
@@ -48,13 +46,9 @@ Disassembly of section .text:
                	leave
                	retq
                	movb	$0x0, -0x8(%rbp)
-               	movb	$0x0, -0x7(%rbp)
-               	movb	$0x0, -0x6(%rbp)
-               	movb	$0x0, -0x5(%rbp)
-               	movb	$0x0, -0x4(%rbp)
                	movb	$0x0, -0x3(%rbp)
-               	movb	$0x3, -0x8(%rbp)
-               	movb	$0x4, -0x3(%rbp)
+               	movl	$0x3, -0x8(%rbp)
+               	movw	$0x400, -0x4(%rbp)      # imm = 0x400
                	movl	-0x7(%rbp), %eax
                	andq	$-0x40000000, %rax      # imm = 0xC0000000
                	orq	$0x38a432eb, %rax       # imm = 0x38A432EB
@@ -71,35 +65,31 @@ Disassembly of section .text:
                	sarq	$0x22, %rax
                	cmpl	$0x1fffffff, %eax       # imm = 0x1FFFFFFF
                	jne	<addr>
-               	movl	$0x0, -0x8(%rbp)
-               	movl	$0x0, -0x4(%rbp)
-               	movb	$0x5, -0x8(%rbp)
-               	movb	$0x6, -0x2(%rbp)
-               	movq	-0x8(%rbp), %rcx
+               	movabsq	$0x6000000000005, %rax  # imm = 0x6000000000005
+               	movq	%rax, -0x8(%rbp)
+               	movq	-0x8(%rbp), %rax
                	movabsq	$-0xffffffffff01, %r11  # imm = 0xFFFF0000000000FF
-               	andq	%r11, %rcx
+               	andq	%r11, %rax
                	movabsq	$0xfedcba987700, %r11   # imm = 0xFEDCBA987700
-               	orq	%r11, %rcx
-               	movq	%rcx, -0x8(%rbp)
-               	movsbq	-0x8(%rbp), %rdx
-               	cmpl	$0x5, %edx
+               	orq	%r11, %rax
+               	movq	%rax, -0x8(%rbp)
+               	movsbq	-0x8(%rbp), %rcx
+               	cmpl	$0x5, %ecx
                	jne	<addr>
-               	sarq	$0x8, %rcx
-               	shlq	$0x18, %rcx
-               	sarq	$0x18, %rcx
+               	sarq	$0x8, %rax
+               	shlq	$0x18, %rax
+               	sarq	$0x18, %rax
                	movabsq	$-0x123456789, %r11     # imm = 0xFFFFFFFEDCBA9877
-               	cmpq	%r11, %rcx
+               	cmpq	%r11, %rax
                	jne	<addr>
-               	movsbq	-0x2(%rbp), %rcx
-               	cmpl	$0x6, %ecx
+               	movsbq	-0x2(%rbp), %rax
+               	cmpl	$0x6, %eax
                	je	<addr>
                	movl	$0xd, %eax
                	leave
                	retq
-               	movq	$0x0, -0x10(%rbp)
-               	movq	$0x0, -0x8(%rbp)
-               	movb	$0x9, -0x10(%rbp)
-               	movb	$0xa, -0x7(%rbp)
+               	movq	$0x9, -0x10(%rbp)
+               	movq	$0xa00, -0x8(%rbp)      # imm = 0xA00
                	movzwq	-0x8(%rbp), %rax
                	andq	$-0x10, %rax
                	orq	$0x8, %rax
@@ -115,20 +105,11 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%eax, %eax
-               	movb	%al, -0x10(%rbp)
-               	movb	%al, -0xf(%rbp)
-               	movb	%al, -0xe(%rbp)
-               	movb	%al, -0xd(%rbp)
-               	movb	%al, -0xc(%rbp)
                	movb	%al, -0xb(%rbp)
                	movb	%al, -0xa(%rbp)
-               	movb	%al, -0x9(%rbp)
-               	movb	%al, -0x8(%rbp)
-               	movb	%al, -0x7(%rbp)
-               	movb	%al, -0x6(%rbp)
-               	movb	%al, -0x5(%rbp)
-               	movb	$0xc, -0xb(%rbp)
-               	movb	$0xd, -0xa(%rbp)
+               	movl	$0x0, -0x8(%rbp)
+               	movabsq	$0xd0c0000000000, %rcx  # imm = 0xD0C0000000000
+               	movq	%rcx, -0x10(%rbp)
                	movl	-0xf(%rbp), %ecx
                	andq	$-0x40000000, %rcx      # imm = 0xC0000000
                	orq	$0x3fffffff, %rcx       # imm = 0x3FFFFFFF

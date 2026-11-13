@@ -17,22 +17,10 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	sturb	wzr, [x29, #-0x10]
-               	sturb	wzr, [x29, #-0xf]
-               	sturb	wzr, [x29, #-0xe]
-               	sturb	wzr, [x29, #-0xd]
-               	sturb	wzr, [x29, #-0xc]
-               	sturb	wzr, [x29, #-0xb]
-               	sturb	wzr, [x29, #-0xa]
-               	sturb	wzr, [x29, #-0x9]
-               	sturb	wzr, [x29, #-0x8]
-               	sturb	wzr, [x29, #-0x7]
-               	sturb	wzr, [x29, #-0x6]
-               	sturb	wzr, [x29, #-0x5]
-               	sturb	wzr, [x29, #-0x4]
-               	sturb	wzr, [x29, #-0x3]
-               	sturb	wzr, [x29, #-0x2]
-               	sturb	wzr, [x29, #-0x1]
+               	stur	wzr, [x29, #-0x10]
+               	stur	wzr, [x29, #-0xc]
+               	stur	wzr, [x29, #-0x8]
+               	stur	wzr, [x29, #-0x4]
                	sub	x5, x29, #0x10
                	and	x0, x0, #0xff
                	sturb	w0, [x29, #-0x10]

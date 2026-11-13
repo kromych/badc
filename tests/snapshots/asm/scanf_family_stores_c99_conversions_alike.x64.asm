@@ -170,22 +170,9 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %r12
-               	movb	$-0x56, -0x110(%rbp)
-               	movb	$-0x56, -0x10f(%rbp)
-               	movb	$-0x56, -0x10e(%rbp)
-               	movb	$-0x56, -0x10d(%rbp)
-               	movb	$-0x56, -0x10c(%rbp)
-               	movb	$-0x56, -0x10b(%rbp)
-               	movb	$-0x56, -0x10a(%rbp)
-               	movb	$-0x56, -0x109(%rbp)
-               	movb	$-0x56, -0x108(%rbp)
-               	movb	$-0x56, -0x107(%rbp)
-               	movb	$-0x56, -0x106(%rbp)
-               	movb	$-0x56, -0x105(%rbp)
-               	movb	$-0x56, -0x104(%rbp)
-               	movb	$-0x56, -0x103(%rbp)
-               	movb	$-0x56, -0x102(%rbp)
-               	movb	$-0x56, -0x101(%rbp)
+               	movabsq	$-0x5555555555555556, %rax # imm = 0xAAAAAAAAAAAAAAAA
+               	movq	%rax, -0x110(%rbp)
+               	movq	%rax, -0x108(%rbp)
                	testq	%r12, %r12
                	je	<addr>
                	cmpl	$0x6, %ebx

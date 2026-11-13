@@ -37,10 +37,7 @@ Disassembly of section .text:
                	movl	$0x4, %edi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movb	$0x41, (%rbx)
-               	movb	$0x41, 0x1(%rbx)
-               	movb	$0x41, 0x2(%rbx)
-               	movb	$0x41, 0x3(%rbx)
+               	movl	$0x41414141, (%rbx)     # imm = 0x41414141
                	movl	(%rbx), %r10d
                	movl	%r10d, (%rax)
                	movsbq	(%rax), %rax

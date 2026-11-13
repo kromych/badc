@@ -1829,22 +1829,22 @@ fn ent_pc=404 n_params=0 variadic=false locals=1
     v1838 LocalAddr(-1)                                    -> x0
     v1839 Imm(1)                                           -> x0
     v1840 Imm(32768)                                       -> x0
-    v1841 StoreLocal { off=-1, value=v1840, kind=I16 }     -> -
-    v1842 Imm(2)                                           -> x1
-    v1843 Imm(1)                                           -> x1
-    v1844 Imm(32768)                                       -> x1
-    v1845 BinopI { op=add, lhs=v1838, rhs_imm=2 }          -> x1
-    v1846 StoreLocal { off=-1, disp=2, value=v1840, kind=I16 } -> -
-    v1847 Imm(4)                                           -> x1
-    v1848 Imm(1)                                           -> x1
-    v1849 Imm(32768)                                       -> x1
-    v1850 BinopI { op=add, lhs=v1838, rhs_imm=4 }          -> x1
-    v1851 StoreLocal { off=-1, disp=4, value=v1840, kind=I16 } -> -
+    v1841 Imm(0)                                           -> x0
+    v1842 Imm(2)                                           -> x0
+    v1843 Imm(1)                                           -> x0
+    v1844 Imm(32768)                                       -> x0
+    v1845 BinopI { op=add, lhs=v1838, rhs_imm=2 }          -> x0
+    v1846 Imm(0)                                           -> x0
+    v1847 Imm(4)                                           -> x0
+    v1848 Imm(1)                                           -> x0
+    v1849 Imm(32768)                                       -> x0
+    v1850 BinopI { op=add, lhs=v1838, rhs_imm=4 }          -> x0
+    v1851 Imm(-9223231297218904064)                        -> x0
     v1852 Imm(6)                                           -> x1
     v1853 Imm(1)                                           -> x1
     v1854 Imm(32768)                                       -> x1
     v1855 BinopI { op=add, lhs=v1838, rhs_imm=6 }          -> x1
-    v1856 StoreLocal { off=-1, disp=6, value=v1840, kind=I16 } -> -
+    v1856 StoreLocal { off=-1, value=v1851, kind=I64 }     -> -
     v1857 Imm(0)                                           -> x0
     v1858 LifetimeEnd(0)                                   -> -
     v1859 LifetimeEnd(0)                                   -> -
@@ -2044,12 +2044,12 @@ fn ent_pc=404 n_params=0 variadic=false locals=1
     v2049 LocalAddr(-1)                                    -> x1
     v2050 Imm(4294967295)                                  -> x1
     v2051 Imm(15)                                          -> x1
-    v2052 StoreLocal { off=-1, value=v2051, kind=I32 }     -> -
+    v2052 Imm(64424509455)                                 -> x1
     v2053 Imm(4)                                           -> x2
     v2054 Imm(4294967295)                                  -> x2
     v2055 Imm(15)                                          -> x2
     v2056 BinopI { op=add, lhs=v1838, rhs_imm=4 }          -> x2
-    v2057 StoreLocal { off=-1, disp=4, value=v2051, kind=I32 } -> -
+    v2057 StoreLocal { off=-1, value=v2052, kind=I64 }     -> -
     v2058 Imm(0)                                           -> x1
     v2059 LifetimeEnd(0)                                   -> -
     v2060 LifetimeEnd(0)                                   -> -

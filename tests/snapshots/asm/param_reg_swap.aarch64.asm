@@ -30,37 +30,18 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x40
                	mov	x0, #0x0                // =0
-               	sturb	w0, [x29, #-0x30]
-               	mov	x1, #0x1                // =1
-               	sturb	w1, [x29, #-0x2f]
-               	mov	x1, #0x2                // =2
-               	sturb	w1, [x29, #-0x2e]
-               	mov	x1, #0x3                // =3
-               	sturb	w1, [x29, #-0x2d]
-               	mov	x1, #0x4                // =4
-               	sturb	w1, [x29, #-0x2c]
-               	mov	x1, #0x5                // =5
-               	sturb	w1, [x29, #-0x2b]
-               	mov	x1, #0x6                // =6
-               	sturb	w1, [x29, #-0x2a]
-               	mov	x1, #0x7                // =7
-               	sturb	w1, [x29, #-0x29]
-               	mov	x1, #0x8                // =8
-               	sturb	w1, [x29, #-0x28]
-               	mov	x1, #0x9                // =9
-               	sturb	w1, [x29, #-0x27]
-               	mov	x1, #0xa                // =10
-               	sturb	w1, [x29, #-0x26]
-               	mov	x1, #0xb                // =11
-               	sturb	w1, [x29, #-0x25]
-               	mov	x1, #0xc                // =12
-               	sturb	w1, [x29, #-0x24]
-               	mov	x1, #0xd                // =13
-               	sturb	w1, [x29, #-0x23]
-               	mov	x1, #0xe                // =14
-               	sturb	w1, [x29, #-0x22]
-               	mov	x1, #0xf                // =15
-               	sturb	w1, [x29, #-0x21]
+               	mov	x1, #0x100              // =256
+               	movk	x1, #0x302, lsl #16
+               	stur	w1, [x29, #-0x30]
+               	mov	x1, #0x504              // =1284
+               	movk	x1, #0x706, lsl #16
+               	stur	w1, [x29, #-0x2c]
+               	mov	x1, #0x908              // =2312
+               	movk	x1, #0xb0a, lsl #16
+               	stur	w1, [x29, #-0x28]
+               	mov	x1, #0xd0c              // =3340
+               	movk	x1, #0xf0e, lsl #16
+               	stur	w1, [x29, #-0x24]
                	sub	x1, x29, #0x20
                	strb	w0, [x1, x0]
                	add	x0, x0, #0x1

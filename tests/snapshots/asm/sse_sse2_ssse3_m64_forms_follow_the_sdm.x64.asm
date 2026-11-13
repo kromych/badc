@@ -942,26 +942,16 @@ Disassembly of section .text:
                	vmovq	%xmm2, %rax
                	cmpq	%rax, %rcx
                	jne	<addr>
-               	movb	$-0x60, -0x10(%rbp)
-               	movb	$-0x60, -0x20(%rbp)
-               	movb	$-0x5f, -0xf(%rbp)
-               	movb	$-0x5f, -0x1f(%rbp)
-               	movb	$-0x5e, -0xe(%rbp)
-               	movb	$-0x5e, -0x1e(%rbp)
-               	movb	$-0x5d, -0xd(%rbp)
-               	movb	$-0x5d, -0x1d(%rbp)
-               	movb	$-0x5c, -0xc(%rbp)
-               	movb	$-0x5c, -0x1c(%rbp)
-               	movb	$-0x5b, -0xb(%rbp)
-               	movb	$-0x5b, -0x1b(%rbp)
-               	movb	$-0x5a, -0xa(%rbp)
-               	movb	$-0x5a, -0x1a(%rbp)
-               	movb	$-0x59, -0x9(%rbp)
-               	movb	$-0x59, -0x19(%rbp)
-               	movb	$-0x58, -0x8(%rbp)
-               	movb	$-0x58, -0x18(%rbp)
-               	movb	$-0x57, -0x7(%rbp)
-               	movb	$-0x57, -0x17(%rbp)
+               	movw	$0xa1a0, -0x10(%rbp)    # imm = 0xA1A0
+               	movw	$0xa1a0, -0x20(%rbp)    # imm = 0xA1A0
+               	movw	$0xa3a2, -0xe(%rbp)     # imm = 0xA3A2
+               	movw	$0xa3a2, -0x1e(%rbp)    # imm = 0xA3A2
+               	movw	$0xa5a4, -0xc(%rbp)     # imm = 0xA5A4
+               	movw	$0xa5a4, -0x1c(%rbp)    # imm = 0xA5A4
+               	movw	$0xa7a6, -0xa(%rbp)     # imm = 0xA7A6
+               	movw	$0xa7a6, -0x1a(%rbp)    # imm = 0xA7A6
+               	movw	$0xa9a8, -0x8(%rbp)     # imm = 0xA9A8
+               	movw	$0xa9a8, -0x18(%rbp)    # imm = 0xA9A8
                	xorl	%eax, %eax
                	movq	%rax, %rcx
                	shlq	$0x3, %rcx

@@ -50,22 +50,9 @@ Disassembly of section .text:
                	movups	%xmm14, 0x10(%rax)
                	movups	%xmm14, 0x20(%rax)
                	movups	%xmm2, -0x60(%rbp)
-               	movb	$0x7, -0x60(%rbp)
-               	movb	$0x7, -0x5f(%rbp)
-               	movb	$0x7, -0x5e(%rbp)
-               	movb	$0x7, -0x5d(%rbp)
-               	movb	$0x7, -0x5c(%rbp)
-               	movb	$0x7, -0x5b(%rbp)
-               	movb	$0x7, -0x5a(%rbp)
-               	movb	$0x7, -0x59(%rbp)
-               	movb	$0x7, -0x58(%rbp)
-               	movb	$0x7, -0x57(%rbp)
-               	movb	$0x7, -0x56(%rbp)
-               	movb	$0x7, -0x55(%rbp)
-               	movb	$0x7, -0x54(%rbp)
-               	movb	$0x7, -0x53(%rbp)
-               	movb	$0x7, -0x52(%rbp)
-               	movb	$0x7, -0x51(%rbp)
+               	movabsq	$0x707070707070707, %rax # imm = 0x707070707070707
+               	movq	%rax, -0x60(%rbp)
+               	movq	%rax, -0x58(%rbp)
                	movups	%xmm1, -0x50(%rbp)
                	movzbq	-0x60(%rbp), %rax
                	cmpl	$0x7, %eax
@@ -76,22 +63,9 @@ Disassembly of section .text:
                	movl	$0xa, %eax
                	leave
                	retq
-               	movb	$0x3, -0x60(%rbp)
-               	movb	$0x3, -0x5f(%rbp)
-               	movb	$0x3, -0x5e(%rbp)
-               	movb	$0x3, -0x5d(%rbp)
-               	movb	$0x3, -0x5c(%rbp)
-               	movb	$0x3, -0x5b(%rbp)
-               	movb	$0x3, -0x5a(%rbp)
-               	movb	$0x3, -0x59(%rbp)
-               	movb	$0x3, -0x58(%rbp)
-               	movb	$0x3, -0x57(%rbp)
-               	movb	$0x3, -0x56(%rbp)
-               	movb	$0x3, -0x55(%rbp)
-               	movb	$0x3, -0x54(%rbp)
-               	movb	$0x3, -0x53(%rbp)
-               	movb	$0x3, -0x52(%rbp)
-               	movb	$0x3, -0x51(%rbp)
+               	movabsq	$0x303030303030303, %rax # imm = 0x303030303030303
+               	movq	%rax, -0x60(%rbp)
+               	movq	%rax, -0x58(%rbp)
                	movups	%xmm0, -0x50(%rbp)
                	movzbq	-0x59(%rbp), %rax
                	cmpl	$0x3, %eax

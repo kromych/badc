@@ -51,12 +51,10 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x60(%rbp), %rdx
-               	movq	$0x0, -0x60(%rbp)
                	movq	$0x0, -0x58(%rbp)
                	movq	$0x0, -0x50(%rbp)
                	movq	$0x0, -0x48(%rbp)
-               	movw	$0x1, -0x60(%rbp)
-               	movw	$0x0, -0x5e(%rbp)
+               	movq	$0x1, -0x60(%rbp)
                	movl	$0x6, %esi
                	movq	%rbx, %rdi
                	movb	$0x0, %al

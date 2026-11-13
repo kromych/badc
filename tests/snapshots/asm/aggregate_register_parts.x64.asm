@@ -140,9 +140,7 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	addss	%xmm15, %xmm0
                	movss	%xmm0, -0x8(%rbp)
-               	movl	-0x4(%rbp), %eax
-               	incq	%rax
-               	movl	%eax, -0x4(%rbp)
+               	addl	$0x1, -0x4(%rbp)
                	movq	-0x8(%rbp), %rax
                	leave
                	retq

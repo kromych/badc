@@ -674,12 +674,8 @@ Disassembly of section .text:
                	movq	%rax, -0x58(%rbp)
                	cmpq	$0x3b9aca00, %rax       # imm = 0x3B9ACA00
                	jl	<addr>
-               	movq	-0x58(%rbp), %rax
-               	subq	$0x3b9aca00, %rax       # imm = 0x3B9ACA00
-               	movq	%rax, -0x58(%rbp)
-               	movq	-0x60(%rbp), %rax
-               	incq	%rax
-               	movq	%rax, -0x60(%rbp)
+               	subq	$0x3b9aca00, -0x58(%rbp) # imm = 0x3B9ACA00
+               	addq	$0x1, -0x60(%rbp)
                	leaq	<rip>, %rdi # <addr>
                	xorl	%eax, %eax
                	callq	<addr>
@@ -770,12 +766,8 @@ Disassembly of section .text:
                	movq	%rax, -0x58(%rbp)
                	cmpq	$0x3b9aca00, %rax       # imm = 0x3B9ACA00
                	jl	<addr>
-               	movq	-0x58(%rbp), %rax
-               	subq	$0x3b9aca00, %rax       # imm = 0x3B9ACA00
-               	movq	%rax, -0x58(%rbp)
-               	movq	-0x60(%rbp), %rax
-               	incq	%rax
-               	movq	%rax, -0x60(%rbp)
+               	subq	$0x3b9aca00, -0x58(%rbp) # imm = 0x3B9ACA00
+               	addq	$0x1, -0x60(%rbp)
                	leaq	<rip>, %rdi # <addr>
                	xorl	%eax, %eax
                	callq	<addr>

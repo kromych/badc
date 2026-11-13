@@ -273,21 +273,13 @@ Disassembly of section .text:
                	andq	%rcx, %rax
                	movl	%eax, -0xf4(%rbp)
                	movl	-0x100(%rbp), %eax
-               	movl	-0xf0(%rbp), %ecx
-               	addq	%rcx, %rax
-               	movl	%eax, -0xf0(%rbp)
+               	addl	%eax, -0xf0(%rbp)
                	movl	-0xfc(%rbp), %eax
-               	movl	-0xec(%rbp), %ecx
-               	addq	%rcx, %rax
-               	movl	%eax, -0xec(%rbp)
+               	addl	%eax, -0xec(%rbp)
                	movl	-0xf8(%rbp), %eax
-               	movl	-0xe8(%rbp), %ecx
-               	addq	%rcx, %rax
-               	movl	%eax, -0xe8(%rbp)
+               	addl	%eax, -0xe8(%rbp)
                	movl	-0xf4(%rbp), %eax
-               	movl	-0xe4(%rbp), %ecx
-               	addq	%rcx, %rax
-               	movl	%eax, -0xe4(%rbp)
+               	addl	%eax, -0xe4(%rbp)
                	movl	-0xe0(%rbp), %eax
                	shlq	$0x3, %rax
                	movl	%eax, -0xe0(%rbp)

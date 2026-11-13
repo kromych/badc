@@ -80,9 +80,7 @@ Disassembly of section .text:
                	movq	%rsi, %rax
                	shrq	$0x10, %rax
                	movw	%ax, -0x6(%rbp)
-               	movsbq	-0x10(%rbp), %rax
-               	incq	%rax
-               	movb	%al, -0x10(%rbp)
+               	addb	$0x1, -0x10(%rbp)
                	movss	-0xc(%rbp), %xmm0
                	movl	$0x40000000, %eax       # imm = 0x40000000
                	movq	%rax, %xmm15

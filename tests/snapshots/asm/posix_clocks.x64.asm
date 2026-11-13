@@ -208,9 +208,7 @@ Disassembly of section .text:
                	jl	<addr>
                	subq	$0x3b9aca00, %rax       # imm = 0x3B9ACA00
                	movq	%rax, -0x98(%rbp)
-               	movq	-0xa0(%rbp), %rax
-               	incq	%rax
-               	movq	%rax, -0xa0(%rbp)
+               	addq	$0x1, -0xa0(%rbp)
                	movl	$0x1, %edi
                	xorl	%ecx, %ecx
                	movq	%rdi, %rsi

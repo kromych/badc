@@ -2310,9 +2310,10 @@ long abs_get_long(unsigned i) { return tab[i]; }\n";
         (movslq, movl)
     };
     let loads = |name: &str| loads_at(name, false);
+    // The reloads an update in place leaves.
     let (movslq, movl) = loads("count");
     assert!(
-        movslq == 0 && movl >= 4,
+        movslq == 0 && movl >= 2,
         "count: {movslq} movslq, {movl} movl"
     );
     for name in ["index_of", "to_long", "store_long", "passes", "div2"] {
@@ -7719,15 +7720,19 @@ fn x64_branch_groups_stay_within_32_byte_windows() {
 }
 
 /// A load, an addition, subtraction or bitwise operation on it and the store
-/// of the result to the same bytes is one memory-destination instruction at
-/// the store's width, an immediate taken at that width.
+/// of the result to the same bytes -- through a pointer or in a frame
+/// object -- is one memory-destination instruction at the store's width, an
+/// immediate taken at that width.
 #[test]
 fn x64_a_location_updated_in_place_is_one_instruction() {
     const SRC: &str = "struct obj { int ref_count; };\n\
 void dup(struct obj *p) { p->ref_count++; }\n\
 void bump(unsigned char *p) { *p += 300; }\n\
 void mask(long *p, long m) { *p &= m; }\n\
-void sub3(short *p) { p[2] -= 3; }\n";
+void sub3(short *p) { p[2] -= 3; }\n\
+struct pair { long x, y; };\n\
+void use(struct pair *);\n\
+void frame(long k) { struct pair r = {1, 2}; use(&r); r.x += 5; r.y -= k; use(&r); }\n";
     let mut m = Misses::default();
     // (function, opcode, ModRM reg field of the immediate forms, immediate)
     for (name, op, ext, imm) in [
@@ -7746,6 +7751,17 @@ void sub3(short *p) { p[2] -= 3; }\n";
         });
         m.expect(rmw.is_some(), || format!("{name}: {insns:x?}"));
     }
+    // The members of a frame object, addressed off the frame: `add qword
+    // [rbp + disp], 5` and `sub qword [rbp + disp], reg`.
+    let insns = x64(SRC, "frame");
+    let on_frame = |op: u16| {
+        insns
+            .iter()
+            .any(|i| i.op == op && i.rex_w() && matches!(i.mem_base(), Some(4 | 5)))
+    };
+    m.expect(on_frame(0x83) && on_frame(0x29), || {
+        format!("frame: {insns:x?}")
+    });
     m.finish();
 }
 

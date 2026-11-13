@@ -221,9 +221,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movb	$0x0, %al
                	callq	<addr>
-               	movl	-0x1d0(%rbp), %eax
-               	incq	%rax
-               	movl	%eax, -0x1d0(%rbp)
+               	addl	$0x1, -0x1d0(%rbp)
                	movl	-0x1d0(%rbp), %eax
                	cmpl	$0x9, %eax
                	jg	<addr>

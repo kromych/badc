@@ -2013,11 +2013,63 @@ pub(super) enum MemDest {
     },
 }
 
+/// The bytes a plain store writes or a plain load reads: through a pointer
+/// value, or in a frame slot.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Location {
+    Ptr(super::super::ir::ValueId, i32),
+    Slot(i64, i32),
+}
+
+fn stored_at(inst: &Inst) -> Option<(Location, super::super::ir::ValueId, StoreKind)> {
+    match *inst {
+        Inst::Store {
+            addr,
+            disp,
+            value,
+            kind,
+            volatile: false,
+            align: 0,
+            pc_rel: false,
+        } => Some((Location::Ptr(addr, disp), value, kind)),
+        Inst::StoreLocal {
+            off,
+            disp,
+            value,
+            kind,
+            volatile: false,
+            ..
+        } => Some((Location::Slot(off, disp), value, kind)),
+        _ => None,
+    }
+}
+
+fn loaded_at(inst: &Inst) -> Option<(Location, LoadKind)> {
+    match *inst {
+        Inst::Load {
+            addr,
+            disp,
+            kind,
+            volatile: false,
+            pc_rel: false,
+            align: 0,
+        } => Some((Location::Ptr(addr, disp), kind)),
+        Inst::LoadLocal {
+            off,
+            disp,
+            kind,
+            volatile: false,
+        } => Some((Location::Slot(off, disp), kind)),
+        _ => None,
+    }
+}
+
 /// Stores of `op(load, src)` to the bytes the load read, at the store's
 /// width, where `op` is an addition, subtraction or bitwise operation, whose
 /// low bytes the operands' low bytes alone decide: the load and the
 /// operation each read only by the next, nothing emitted between them, and
-/// no flags another instruction set read past the store.
+/// no flags another instruction set read past the store. The bytes are a
+/// pointer's, held in a register, or a frame slot's.
 pub(super) fn memory_destinations(
     func: &FunctionSsa,
     alloc: &Allocation,
@@ -2039,16 +2091,7 @@ pub(super) fn memory_destinations(
     for block in &func.blocks {
         let range = block.inst_range.clone();
         for s in range.clone() {
-            let Inst::Store {
-                addr,
-                disp,
-                value: o,
-                kind,
-                volatile: false,
-                align: 0,
-                pc_rel: false,
-            } = func.insts[s as usize]
-            else {
+            let Some((at, o, kind)) = stored_at(&func.insts[s as usize]) else {
                 continue;
             };
             let width: u8 = match kind {
@@ -2058,26 +2101,23 @@ pub(super) fn memory_destinations(
                 StoreKind::I64 => 8,
                 _ => continue,
             };
+            let addressable = match at {
+                Location::Ptr(addr, _) => in_reg(addr).is_some(),
+                Location::Slot(..) => true,
+            };
             if place_of(alloc, s) != Place::None
                 || !range.contains(&o)
                 || o >= s
                 || !single(o)
                 || !(o + 1..s).all(silent)
                 || (range.start..s).any(sets_flags)
-                || in_reg(addr).is_none()
+                || !addressable
             {
                 continue;
             }
-            let loaded = |l: ValueId| match func.insts[l as usize] {
-                Inst::Load {
-                    addr: a,
-                    disp: d,
-                    kind,
-                    volatile: false,
-                    pc_rel: false,
-                    align: 0,
-                } => a == addr && d == disp && kind.bytes() == width,
-                _ => false,
+            let loaded = |l: ValueId| {
+                loaded_at(&func.insts[l as usize])
+                    .is_some_and(|(a, kind)| a == at && kind.bytes() == width)
             };
             // The immediate's low bytes at the store's width, which alone
             // decide the stored bytes.
@@ -2144,15 +2184,22 @@ pub(super) fn emit_memory_destination(
             reg,
         } => (mnem, width, imm, reg),
     };
-    let Inst::Store { addr, disp, .. } = fcx.func.insts[v as usize] else {
-        return None;
-    };
-    let Place::IntReg(base) = place_of(fcx.alloc, addr) else {
-        return Some(fail("memory destination: address not in a register"));
+    let (base, disp) = match stored_at(&fcx.func.insts[v as usize])?.0 {
+        Location::Ptr(addr, disp) => match place_of(fcx.alloc, addr) {
+            Place::IntReg(base) => (Reg(base), disp),
+            _ => return Some(fail("memory destination: address not in a register")),
+        },
+        Location::Slot(off, disp) => {
+            let (base, bytes) = super::mem::local_slot_base_disp(off, fcx.func, fcx.frame, fcx.abi);
+            match i32::try_from(bytes + i64::from(disp)) {
+                Ok(disp) => (base, disp),
+                Err(_) => return Some(fail("memory destination: slot offset past disp32")),
+            }
+        }
     };
     match imm {
-        Some(k) => super::encode::emit_mi(code, mnem, width, Reg(base), disp, k),
-        None => super::encode::emit_mr(code, mnem, width, Reg(base), disp, Reg(reg)),
+        Some(k) => super::encode::emit_mi(code, mnem, width, base, disp, k),
+        None => super::encode::emit_mr(code, mnem, width, base, disp, Reg(reg)),
     }
     Some(Ok(()))
 }

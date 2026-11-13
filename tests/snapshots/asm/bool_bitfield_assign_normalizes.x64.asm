@@ -129,9 +129,7 @@ Disassembly of section .text:
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rax)
                	movb	$0x2, -0x8(%rbp)
-               	movzbq	-0x8(%rbp), %rax
-               	andq	$-0x3, %rax
-               	movb	%al, -0x8(%rbp)
+               	andb	$-0x3, -0x8(%rbp)
                	movzbq	-0x8(%rbp), %rax
                	sarq	%rax
                	testb	$0x1, %al

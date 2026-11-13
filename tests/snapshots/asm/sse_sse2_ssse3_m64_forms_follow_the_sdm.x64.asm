@@ -1579,10 +1579,7 @@ Disassembly of section .text:
                	retq
                	leaq	-0x8(%rbp), %rax
                	stmxcsr	(%rax)
-               	movl	-0x8(%rbp), %eax
-               	movl	$0xffff9fff, %r11d      # imm = 0xFFFF9FFF
-               	andq	%r11, %rax
-               	movl	%eax, -0x8(%rbp)
+               	andl	$0xffff9fff, -0x8(%rbp) # imm = 0xFFFF9FFF
                	leaq	-0x8(%rbp), %rax
                	ldmxcsr	(%rax)
                	movl	$0x3fc00000, -0x18(%rbp) # imm = 0x3FC00000
@@ -2152,10 +2149,7 @@ Disassembly of section .text:
                	retq
                	leaq	-0x8(%rbp), %rax
                	stmxcsr	(%rax)
-               	movl	-0x8(%rbp), %eax
-               	movl	$0xffff9fff, %r11d      # imm = 0xFFFF9FFF
-               	andq	%r11, %rax
-               	movl	%eax, -0x8(%rbp)
+               	andl	$0xffff9fff, -0x8(%rbp) # imm = 0xFFFF9FFF
                	leaq	-0x8(%rbp), %rax
                	ldmxcsr	(%rax)
                	movabsq	$-0x3ffa666666666666, %rax # imm = 0xC00599999999999A

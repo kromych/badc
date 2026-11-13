@@ -42,18 +42,10 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x80, %eax
                	jl	<addr>
-               	movzbq	-0x80(%rbp), %rax
-               	orq	$0x1, %rax
-               	movb	%al, -0x80(%rbp)
-               	movzbq	-0x80(%rbp), %rax
-               	orq	$0x80, %rax
-               	movb	%al, -0x80(%rbp)
-               	movzbq	-0x7f(%rbp), %rax
-               	orq	$0x1, %rax
-               	movb	%al, -0x7f(%rbp)
-               	movzbq	-0x74(%rbp), %rax
-               	orq	$0x10, %rax
-               	movb	%al, -0x74(%rbp)
+               	orb	$0x1, -0x80(%rbp)
+               	orb	$-0x80, -0x80(%rbp)
+               	orb	$0x1, -0x7f(%rbp)
+               	orb	$0x10, -0x74(%rbp)
                	movzbq	-0x80(%rbp), %rax
                	testb	$0x1, %al
                	jne	<addr>
@@ -106,9 +98,7 @@ Disassembly of section .text:
                	movl	$0xd, %eax
                	leave
                	retq
-               	movzbq	-0x80(%rbp), %rax
-               	andq	$-0x81, %rax
-               	movb	%al, -0x80(%rbp)
+               	andb	$0x7f, -0x80(%rbp)
                	movzbq	-0x80(%rbp), %rax
                	testb	$-0x80, %al
                	je	<addr>

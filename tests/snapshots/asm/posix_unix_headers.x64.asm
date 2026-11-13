@@ -36,12 +36,8 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x80, %eax
                	jl	<addr>
-               	movzbq	-0x80(%rbp), %rax
-               	orq	$0x8, %rax
-               	movb	%al, -0x80(%rbp)
-               	movzbq	-0x7b(%rbp), %rax
-               	orq	$0x1, %rax
-               	movb	%al, -0x7b(%rbp)
+               	orb	$0x8, -0x80(%rbp)
+               	orb	$0x1, -0x7b(%rbp)
                	movzbq	-0x80(%rbp), %rax
                	testb	$0x8, %al
                	je	<addr>

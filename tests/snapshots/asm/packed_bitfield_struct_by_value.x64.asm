@@ -93,9 +93,7 @@ Disassembly of section .text:
                	movq	%r10, (%rax)
                	movl	0x8(%rcx), %r10d
                	movl	%r10d, 0x8(%rax)
-               	movzbq	-0x5(%rbp), %rcx
-               	incq	%rcx
-               	movb	%cl, -0x5(%rbp)
+               	addb	$0x1, -0x5(%rbp)
                	leaq	-0x20(%rbp), %rdx
                	movq	-0x10(%rbp), %rsi
                	movl	-0x8(%rbp), %ecx

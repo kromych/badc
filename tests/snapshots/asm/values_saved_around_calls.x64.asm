@@ -200,9 +200,7 @@ Disassembly of section .text:
                	cmpl	%r12d, %ebx
                	jge	<addr>
                	leaq	-0x70(%rbp), %rdx
-               	movq	-0x70(%rbp), %rax
-               	addq	%rbx, %rax
-               	movq	%rax, -0x70(%rbp)
+               	addq	%rbx, -0x70(%rbp)
                	movl	$0x1, %eax
                	jmp	<addr>
                	movq	%rcx, (%rdx,%rax,8)

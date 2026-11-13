@@ -2,7 +2,8 @@
 // and a read between two lane stores sees the vector as it stood; one whose
 // stores write every lane holds just those values. A brace initializer
 // that names every member stores them, and one that leaves a member out
-// zeroes it (C17 6.7.9p21). Returns 0 when every check passes; each failure
+// zeroes it (C17 6.7.9p21), a pointer member covering the pointer's bytes
+// alone, whatever it points to. Returns 0 when every check passes; each failure
 // returns a distinct code.
 
 typedef int i4 __attribute__((vector_size(16)));
@@ -46,6 +47,25 @@ __attribute__((noinline)) u8x16 bytes(const unsigned char *p) {
     return r;
 }
 
+struct Big {
+    long a[32];
+};
+struct Ctx {
+    struct Big *p;
+    long x[4];
+};
+
+__attribute__((noinline)) void dirty(void) {
+    volatile long junk[64];
+    for (int i = 0; i < 64; i++)
+        junk[i] = -1;
+}
+
+__attribute__((noinline)) long pointer_member(struct Big *b) {
+    struct Ctx c = {.p = b};
+    return c.x[0] | c.x[1] | c.x[2] | c.x[3];
+}
+
 __attribute__((noinline)) void put2(struct P *o, int a, int b) { *o = (struct P){a, b}; }
 __attribute__((noinline)) void put3(struct Q *o, int a) { *o = (struct Q){a}; }
 
@@ -77,5 +97,9 @@ int main(void) {
     put3(&q, k);
     if (q.a != 7 || q.b != 0 || q.c != 0)
         return 6;
+    static struct Big big;
+    dirty();
+    if (pointer_member(&big) != 0)
+        return 7;
     return 0;
 }

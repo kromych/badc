@@ -80,6 +80,26 @@ Disassembly of section .text:
                	vpinsrb	$0xf, %eax, %xmm0, %xmm0
                	retq
 
+<dirty>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x200, %rsp            # imm = 0x200
+               	xorl	%eax, %eax
+               	leaq	-0x200(%rbp), %rcx
+               	movq	%rax, %rdx
+               	shlq	$0x3, %rdx
+               	addq	%rdx, %rcx
+               	movq	$-0x1, (%rcx)
+               	incq	%rax
+               	cmpl	$0x40, %eax
+               	jl	<addr>
+               	leave
+               	retq
+
+<pointer_member>:
+               	xorl	%eax, %eax
+               	retq
+
 <put2>:
                	movl	%esi, (%rdi)
                	movl	%edx, 0x4(%rdi)
@@ -292,6 +312,14 @@ Disassembly of section .text:
                	cmpl	$0x0, -0x10(%rbp)
                	je	<addr>
                	movl	$0x6, %eax
+               	leave
+               	retq
+               	callq	<addr>
+               	leaq	<rip>, %rdi # <addr>
+               	callq	<addr>
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x7, %eax
                	leave
                	retq
                	xorl	%eax, %eax

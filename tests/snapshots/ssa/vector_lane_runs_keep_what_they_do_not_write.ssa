@@ -367,8 +367,73 @@ fn ent_pc=3 n_params=1 variadic=false locals=0
     v234 AggParts { desc=0, parts=[v224], fp_mask=0x1 }   -> -
     terminator Return(v234)
 ; --- SSA dump (ok=true) ent_pc=4 ---
+; name=dirty
+fn ent_pc=4 n_params=0 variadic=false locals=64
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   Imm(0)                                           -> x0
+    v2   Imm(0)                                           -> x1
+    terminator Jmp(b2)   (exit_acc=v1)
+  block 1  start_pc=0
+    v6   LocalAddr(-64)                                   -> x1
+    v7   Extend { value=v3, kind=I32 }                    -> x2
+    v8   BinopI { op=shl, lhs=v3, rhs_imm=3 }             -> x2
+    v9   Binop { op=add, lhs=v6, rhs=v8 }                 -> x1
+    v10  Imm(-1)                                          -> x2
+    v11  Store { addr=v9, disp=0, value=v10, kind=I64, volatile } -> -
+    v12  Extend { value=v3, kind=I32 }                    -> x1
+    v13  BinopI { op=add, lhs=v3, rhs_imm=1 }             -> x0
+    v14  Extend { value=v13, kind=I32, nsw }              -> x1
+    terminator Jmp(b2)   (exit_acc=v13)
+  block 2  start_pc=0
+    v3   Phi { incoming=[b0:v1, b1:v13], kind=I64 }       -> x0
+    v4   Extend { value=v3, kind=I32 }                    -> x1
+    v5   BinopI { op=lt, lhs=v3, rhs_imm=64 }             -> x1
+    terminator Bz { cond=v5, target=b3, fall=b1 }   (exit_acc=v5)
+  block 3  start_pc=0
+    v15  LifetimeEnd(-64)                                 -> -
+    terminator Return
+; --- SSA dump (ok=true) ent_pc=5 ---
+; name=pointer_member
+fn ent_pc=5 n_params=1 variadic=false locals=0
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ParamRef(0, kind=I64)                            -> x7
+    v2   Imm(0)                                           -> x0
+    v3   Imm(0)                                           -> x0
+    v4   Imm(0)                                           -> x0
+    v5   Imm(0)                                           -> x0
+    v6   Imm(0)                                           -> x0
+    v7   Imm(0)                                           -> x0
+    v8   Imm(0)                                           -> x0
+    v9   Imm(0)                                           -> x0
+    v10  Imm(0)                                           -> x0
+    v11  Imm(0)                                           -> x0
+    v12  Imm(0)                                           -> x0
+    v13  Imm(0)                                           -> x0
+    v14  Imm(8)                                           -> x0
+    v15  Imm(0)                                           -> x0
+    v16  Imm(0)                                           -> x0
+    v17  Imm(0)                                           -> x0
+    v18  Imm(0)                                           -> x0
+    v19  Imm(0)                                           -> x0
+    v20  Imm(16)                                          -> x0
+    v21  Imm(0)                                           -> x0
+    v22  Imm(0)                                           -> x0
+    v23  Imm(0)                                           -> x0
+    v24  Imm(0)                                           -> x0
+    v25  Imm(0)                                           -> x0
+    v26  Imm(24)                                          -> x0
+    v27  Imm(0)                                           -> x0
+    v28  Imm(0)                                           -> x0
+    v29  Imm(0)                                           -> x0
+    v30  LifetimeEnd(0)                                   -> -
+    terminator Return(v29)   (exit_acc=v29)
+; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=put2
-fn ent_pc=4 n_params=3 variadic=false locals=0
+fn ent_pc=6 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -392,9 +457,9 @@ fn ent_pc=4 n_params=3 variadic=false locals=0
     v18  BinopI { op=and, lhs=v5, rhs_imm=4294967295 }    -> x0
     v19  Store { addr=v1, disp=4, value=v5, kind=I32 }    -> -
     terminator Return
-; --- SSA dump (ok=true) ent_pc=5 ---
+; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=put3
-fn ent_pc=5 n_params=2 variadic=false locals=0
+fn ent_pc=7 n_params=2 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -421,9 +486,9 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     v21  Imm(0)                                           -> x1
     v22  Store { addr=v1, disp=8, value=v9, kind=I32 }    -> -
     terminator Return
-; --- SSA dump (ok=true) ent_pc=6 ---
+; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=main
-fn ent_pc=6 n_params=0 variadic=false locals=7
+fn ent_pc=8 n_params=0 variadic=false locals=7
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -989,7 +1054,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v478 LoadLocal { off=-1, kind=I32, volatile }         -> x0
     v479 Neg(v478)                                        -> x2
     v480 Extend { value=v479, kind=I32, nsw }             -> x0
-    v481 Call { target_pc=4, args=[v473, v477, v479], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v481 Call { target_pc=6, args=[v473, v477, v479], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v482 LocalAddr(-6)                                    -> x0
     v483 LoadLocal { off=-6, kind=I32 }                   -> x0
     v484 BinopI { op=ne, lhs=v483, rhs_imm=7 }            -> x0
@@ -1022,7 +1087,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v515 Mcpy { dst=v513, src=v514, size=12, align=8 }    -> -
     v516 LocalAddr(-3)                                    -> x0
     v517 LoadLocal { off=-1, kind=I32, volatile }         -> x6
-    v518 Call { target_pc=5, args=[v513, v517], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v518 Call { target_pc=7, args=[v513, v517], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v519 LocalAddr(-3)                                    -> x0
     v520 LoadLocal { off=-3, kind=I32 }                   -> x0
     v521 BinopI { op=ne, lhs=v520, rhs_imm=7 }            -> x0
@@ -1062,17 +1127,35 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v549 LifetimeEnd(-51)                                 -> -
     terminator Return(v540)   (exit_acc=v540)
   block 43  start_pc=0
-    v550 Imm(0)                                           -> x0
-    v551 LifetimeEnd(-3)                                  -> -
-    v552 LifetimeEnd(-6)                                  -> -
-    v553 LifetimeEnd(0)                                   -> -
-    v554 LifetimeEnd(-5)                                  -> -
-    v555 LifetimeEnd(0)                                   -> -
-    v556 LifetimeEnd(0)                                   -> -
-    v557 LifetimeEnd(-7)                                  -> -
-    v558 LifetimeEnd(0)                                   -> -
-    v559 LifetimeEnd(-51)                                 -> -
-    terminator Return(v550)   (exit_acc=v550)
+    v550 Call { target_pc=4, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v551 ImmData(48)                                      -> x7
+    v552 Call { target_pc=5, args=[v551], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v553 BinopI { op=ne, lhs=v552, rhs_imm=0 }            -> x1
+    terminator Bz { cond=v552, target=b45, fall=b44 }   (exit_acc=v553)
+  block 44  start_pc=0
+    v554 Imm(7)                                           -> x0
+    v555 LifetimeEnd(-3)                                  -> -
+    v556 LifetimeEnd(-6)                                  -> -
+    v557 LifetimeEnd(0)                                   -> -
+    v558 LifetimeEnd(-5)                                  -> -
+    v559 LifetimeEnd(0)                                   -> -
+    v560 LifetimeEnd(0)                                   -> -
+    v561 LifetimeEnd(-7)                                  -> -
+    v562 LifetimeEnd(0)                                   -> -
+    v563 LifetimeEnd(-51)                                 -> -
+    terminator Return(v554)   (exit_acc=v554)
+  block 45  start_pc=0
+    v564 Imm(0)                                           -> x0
+    v565 LifetimeEnd(-3)                                  -> -
+    v566 LifetimeEnd(-6)                                  -> -
+    v567 LifetimeEnd(0)                                   -> -
+    v568 LifetimeEnd(-5)                                  -> -
+    v569 LifetimeEnd(0)                                   -> -
+    v570 LifetimeEnd(0)                                   -> -
+    v571 LifetimeEnd(-7)                                  -> -
+    v572 LifetimeEnd(0)                                   -> -
+    v573 LifetimeEnd(-51)                                 -> -
+    terminator Return(v564)   (exit_acc=v564)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

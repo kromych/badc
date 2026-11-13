@@ -64,6 +64,26 @@ Disassembly of section .text:
                	mov	v0.b[15], w0
                	ret
 
+<dirty>:
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x200
+               	mov	x0, #0x0                // =0
+               	sub	x1, x29, #0x200
+               	add	x1, x1, x0, lsl #3
+               	mov	x2, #-0x1               // =-1
+               	str	x2, [x1]
+               	add	x0, x0, #0x1
+               	cmp	w0, #0x40
+               	b.lt	<addr>
+               	add	sp, sp, #0x200
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+
+<pointer_member>:
+               	mov	x0, #0x0                // =0
+               	ret
+
 <put2>:
                	str	w1, [x0]
                	str	w2, [x0, #0x4]
@@ -272,6 +292,15 @@ Disassembly of section .text:
                	ldursw	x0, [x29, #-0x10]
                	cbz	w0, <addr>
                	mov	x0, #0x6                // =6
+               	add	sp, sp, #0x50
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	bl	<addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	bl	<addr>
+               	cbz	x0, <addr>
+               	mov	x0, #0x7                // =7
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret

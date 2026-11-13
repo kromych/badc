@@ -151,10 +151,12 @@ impl<'a> Walker<'a> {
                 let bytes = match e.value {
                     RuntimeInitValue::Copy { bytes, .. } => bytes,
                     RuntimeInitValue::Expr(_) if is_long_double_scalar(e.ty) => 0,
-                    RuntimeInitValue::Expr(_) => match self.struct_size(e.ty) {
-                        0 => super::types::type_size_bytes(e.ty, self.target) as i64,
-                        n => n,
-                    },
+                    // A pointer to a structure shares its band; only a
+                    // structure value takes the structure's size.
+                    RuntimeInitValue::Expr(_) if is_struct_value_ty(e.ty) => self.struct_size(e.ty),
+                    RuntimeInitValue::Expr(_) => {
+                        super::types::type_size_bytes(e.ty, self.target) as i64
+                    }
                 };
                 (bytes > 0).then_some((e.offset, e.offset + bytes))
             })

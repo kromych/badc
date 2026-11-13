@@ -74,15 +74,13 @@ Disassembly of section .text:
                	movl	$0x9, %eax
                	leave
                	retq
-               	movq	%rax, %rcx
-               	xorq	$-0x56, %rcx
-               	testq	%rcx, %rcx
+               	cmpl	$-0x56, %eax
                	je	<addr>
                	movl	$0xa, %eax
                	leave
                	retq
                	xorq	$0xffaa, %rax           # imm = 0xFFAA
-               	cmpq	$-0x10000, %rax         # imm = 0xFFFF0000
+               	cmpl	$0xffff0000, %eax       # imm = 0xFFFF0000
                	je	<addr>
                	movl	$0xb, %eax
                	leave

@@ -44,7 +44,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v38  Imm(122)                                         -> x7
     v39  Extend { value=v2, kind=I8 }                     -> [spill 0]
     v40  BinopI { op=xor, lhs=v39, rhs_imm=122 }          -> x7
-    v41  Extend { value=v40, kind=I8 }                    -> x7
+    v41  Extend { value=v40, kind=I8 }                    -> x8
     v42  Imm(0)                                           -> x8
     v43  Imm(0)                                           -> x8
     v44  BinopI { op=add, lhs=v2, rhs_imm=1 }             -> x8
@@ -63,10 +63,10 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v57  Extend { value=v56, kind=I16 }                   -> x6
     v58  Imm(0)                                           -> x9
     v59  Imm(0)                                           -> x9
-    v60  Extend { value=v41, kind=I8 }                    -> x9
+    v60  Extend { value=v40, kind=I8 }                    -> x9
     v61  Extend { value=v25, kind=I8 }                    -> x0
-    v62  Binop { op=xor, lhs=v41, rhs=v61 }               -> x0
-    v63  Extend { value=v62, kind=I8 }                    -> x0
+    v62  Binop { op=xor, lhs=v40, rhs=v61 }               -> x0
+    v63  Extend { value=v62, kind=I8 }                    -> x7
     v64  Imm(0)                                           -> x7
     v65  Imm(0)                                           -> x7
     v66  Extend { value=v47, kind=I32 }                   -> x7
@@ -80,8 +80,8 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v74  Binop { op=add, lhs=v70, rhs=v57 }               -> x1
     v75  Imm(0)                                           -> x6
     v76  Imm(0)                                           -> x6
-    v77  Extend { value=v63, kind=I8 }                    -> x6
-    v78  Binop { op=add, lhs=v74, rhs=v63 }               -> x0
+    v77  Extend { value=v62, kind=I8 }                    -> x6
+    v78  Binop { op=add, lhs=v74, rhs=v62 }               -> x0
     v79  LifetimeEnd(0)                                   -> -
     v80  Imm(0)                                           -> x1
     v81  Imm(0)                                           -> x1
@@ -226,7 +226,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v291 Imm(122)                                         -> x7
     v292 Extend { value=v2, kind=I8 }                     -> x7
     v293 BinopI { op=xor, lhs=v39, rhs_imm=122 }          -> x7
-    v294 Extend { value=v293, kind=I8 }                   -> x7
+    v294 Extend { value=v293, kind=I8 }                   -> x8
     v295 Imm(0)                                           -> x8
     v296 Imm(0)                                           -> x8
     v297 BinopI { op=add, lhs=v2, rhs_imm=1 }             -> x8
@@ -245,10 +245,10 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v310 Extend { value=v309, kind=I16 }                  -> x6
     v311 Imm(0)                                           -> x9
     v312 Imm(0)                                           -> x9
-    v313 Extend { value=v294, kind=I8 }                   -> x9
+    v313 Extend { value=v293, kind=I8 }                   -> x9
     v314 Extend { value=v278, kind=I8 }                   -> x0
-    v315 Binop { op=xor, lhs=v294, rhs=v314 }             -> x0
-    v316 Extend { value=v315, kind=I8 }                   -> x0
+    v315 Binop { op=xor, lhs=v293, rhs=v314 }             -> x0
+    v316 Extend { value=v315, kind=I8 }                   -> x7
     v317 Imm(0)                                           -> x7
     v318 Imm(0)                                           -> x7
     v319 Extend { value=v300, kind=I32 }                  -> x7
@@ -262,8 +262,8 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v327 Binop { op=add, lhs=v323, rhs=v310 }             -> x1
     v328 Imm(0)                                           -> x6
     v329 Imm(0)                                           -> x6
-    v330 Extend { value=v316, kind=I8 }                   -> x6
-    v331 Binop { op=add, lhs=v327, rhs=v316 }             -> x0
+    v330 Extend { value=v315, kind=I8 }                   -> x6
+    v331 Binop { op=add, lhs=v327, rhs=v315 }             -> x0
     v332 LifetimeEnd(0)                                   -> -
     v333 BinopI { op=ne, lhs=v331, rhs_imm=176 }          -> x0
     terminator Bz { cond=v333, target=b6, fall=b5 }   (exit_acc=v333)

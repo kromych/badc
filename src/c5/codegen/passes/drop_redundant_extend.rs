@@ -41,6 +41,11 @@
 //! induction variable (`value_range::iv`), in a defined execution where
 //! only addresses and comparisons read the upper half.
 //!
+//! Ahead of it, `normalize_loop_entries` moves the normalization of a
+//! loop-carried value onto the edges entering the loop when only its
+//! normalizations read its upper half and the back edges carry
+//! normalized values; the phi then fits and the fifth case applies.
+//!
 //! Finally, `drop_call_arg_reextends` removes the caller-side
 //! re-extension of an argument to a direct internal call whose callee
 //! re-derives the parameter from the low bits of the incoming register
@@ -52,8 +57,8 @@
 //! redirect chains so stacked extends collapse.
 
 use crate::c5::ir::{
-    BinOp, FpCastKind, FunctionSsa, IndexExt, Inst, LoadKind, NO_VALUE, StoreKind, Terminator,
-    ValueId,
+    BinOp, BlockId, FpCastKind, FunctionSsa, IndexExt, Inst, LoadKind, NO_VALUE, StoreKind,
+    Terminator, ValueId,
 };
 use alloc::vec::Vec;
 
@@ -65,8 +70,9 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
         // does a 32-bit division.
         super::narrow::mark_compares(func, true);
         super::narrow::mark_narrow_divs(func);
-        let assumed = super::value_range::iv::assumptions(func);
+        let mut assumed = super::value_range::iv::assumptions(func);
         run_one(func);
+        normalize_loop_entries(func, &mut assumed);
         drop_fitting(func, &assumed);
     }
     drop_call_arg_reextends(funcs);
@@ -1071,7 +1077,7 @@ fn drop_fitting(func: &mut FunctionSsa, assumed: &[Option<LoadKind>]) {
     };
     let mut redirect: Vec<Option<ValueId>> = alloc::vec![None; func.insts.len()];
     for (b, block) in func.blocks.iter().enumerate() {
-        let b = b as crate::c5::ir::BlockId;
+        let b = b as BlockId;
         let kept =
             |v: ValueId, mask: Option<i64>| mask.is_some_and(|k| ranges.at(b, v).kept_by_mask(k));
         for idx in block.inst_range.clone() {
@@ -1118,15 +1124,208 @@ fn drop_fitting(func: &mut FunctionSsa, assumed: &[Option<LoadKind>]) {
                 ..
             }) = func.insts.get(idx as usize)
                 && !escaping[idx as usize]
-                && ranges
-                    .at(b as crate::c5::ir::BlockId, value)
-                    .fits(LoadKind::I32)
+                && ranges.at(b as BlockId, value).fits(LoadKind::I32)
             {
                 redirect[idx as usize] = Some(value);
             }
         }
     }
     apply_redirects(func, &redirect);
+}
+
+/// A low-word normalization: an `And` by `0xffff_ffff` or an `I32` extend.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Norm {
+    Zero,
+    Sign,
+}
+
+impl Norm {
+    fn of(inst: &Inst) -> Option<(ValueId, Norm)> {
+        match *inst {
+            Inst::BinopI {
+                op: BinOp::And,
+                lhs,
+                rhs_imm: 0xffff_ffff,
+            } => Some((lhs, Norm::Zero)),
+            Inst::Extend {
+                value,
+                kind: LoadKind::I32,
+                ..
+            } => Some((value, Norm::Sign)),
+            _ => None,
+        }
+    }
+
+    fn holds(self, r: super::value_range::Range) -> bool {
+        match self {
+            Norm::Zero => r.kept_by_mask(0xffff_ffff),
+            Norm::Sign => r.fits(LoadKind::I32),
+        }
+    }
+
+    fn apply(self, v: ValueId) -> Inst {
+        match self {
+            Norm::Zero => Inst::BinopI {
+                op: BinOp::And,
+                lhs: v,
+                rhs_imm: 0xffff_ffff,
+            },
+            Norm::Sign => Inst::Extend {
+                value: v,
+                kind: LoadKind::I32,
+                nsw: false,
+            },
+        }
+    }
+}
+
+/// A loop header's phi that a normalization reads and no consumer reads
+/// above bit 31 otherwise: its entering values not yet normalized, by
+/// predecessor.
+struct EntryPlan {
+    phi: ValueId,
+    norm: Norm,
+    entering: Vec<(BlockId, ValueId)>,
+}
+
+/// Normalize the values entering a loop through a header phi whose upper
+/// half only its normalizations read. Every consumer then sees the bits
+/// it read before, and when the back edges carry normalized values the
+/// phi holds one, so `drop_fitting` drops the normalizations in the loop.
+/// A phi the ranges do not then bound keeps its entering values.
+fn normalize_loop_entries(func: &mut FunctionSsa, assumed: &mut Vec<Option<LoadKind>>) {
+    use crate::c5::codegen::passes::layout::{natural_loops, rpo_numbers};
+    use crate::c5::codegen::ssa::mem2reg::{dominators, predecessors};
+    use crate::c5::codegen::ssa::tape::{At, Insertion};
+    let n = func.insts.len();
+    let mut block_of = alloc::vec![BlockId::MAX; n];
+    for (b, block) in func.blocks.iter().enumerate() {
+        for i in block.inst_range.clone() {
+            block_of[i as usize] = b as BlockId;
+        }
+    }
+    // Per phi: its normalization and the blocks where one is read.
+    let uses = crate::c5::codegen::ssa::reg_alloc::compute_use_counts(func);
+    let mut norm_of: Vec<Option<(Norm, Vec<BlockId>)>> = alloc::vec![None; n];
+    for (i, inst) in func.insts.iter().enumerate() {
+        if let Some((v, norm)) = Norm::of(inst)
+            && matches!(func.insts.get(v as usize), Some(Inst::Phi { .. }))
+            && block_of[i] != BlockId::MAX
+            && uses[i] > 0
+        {
+            let (first, at) = norm_of[v as usize].get_or_insert((norm, Vec::new()));
+            if *first == norm {
+                at.push(block_of[i]);
+            }
+        }
+    }
+    if norm_of.iter().all(Option::is_none) {
+        return;
+    }
+    let idom = dominators(func);
+    let loops = natural_loops(func, &idom, &predecessors(func), &rpo_numbers(func));
+    let high = compute_high_observed(func);
+    let ranges = super::value_range::Ranges::compute(func, &[]);
+    let mut plans: Vec<EntryPlan> = Vec::new();
+    for l in &loops {
+        for p in func.blocks[l.header as usize].inst_range.clone() {
+            let (Some((norm, at)), Some(Inst::Phi { incoming, kind })) =
+                (&norm_of[p as usize], func.insts.get(p as usize))
+            else {
+                continue;
+            };
+            if high[p as usize]
+                || matches!(kind, LoadKind::F32 | LoadKind::F64)
+                || !at.iter().any(|&b| l.contains(b))
+            {
+                continue;
+            }
+            let entering: Vec<_> = (incoming.iter())
+                .filter(|&&(pred, x)| !l.contains(pred) && !norm.holds(ranges.at(pred, x)))
+                .copied()
+                .collect();
+            if !entering.is_empty() {
+                plans.push(EntryPlan {
+                    phi: p,
+                    norm: *norm,
+                    entering,
+                });
+            }
+        }
+    }
+    // The end of `pred`, ahead of a compare its branch may fuse.
+    let end_of = |func: &FunctionSsa, pred: BlockId, x: ValueId| {
+        let block = &func.blocks[pred as usize];
+        let r = block.inst_range.clone();
+        if r.is_empty() {
+            return Some(At::Empty(pred));
+        }
+        let mut cond = NO_VALUE;
+        block.terminator.for_each_operand(|v| cond = v);
+        if r.contains(&cond) && !matches!(func.insts[cond as usize], Inst::Phi { .. }) {
+            return (!r.contains(&x) || x < cond).then_some(At::Before(cond));
+        }
+        Some(At::After(r.end - 1))
+    };
+    plans.retain(|p| (p.entering.iter()).all(|&(pred, x)| end_of(func, pred, x).is_some()));
+    for _ in 0..3 {
+        if plans.is_empty() {
+            return;
+        }
+        let mut ins: Vec<Insertion> = Vec::new();
+        let mut keys: Vec<(BlockId, ValueId, Norm)> = Vec::new();
+        let mut uses: Vec<(ValueId, BlockId, usize)> = Vec::new();
+        for plan in &plans {
+            for &(pred, x) in &plan.entering {
+                let key = (pred, x, plan.norm);
+                let j = match keys.iter().position(|&k| k == key) {
+                    Some(j) => j,
+                    None => {
+                        keys.push(key);
+                        ins.push(Insertion {
+                            at: end_of(func, pred, x).expect("retained"),
+                            inst: plan.norm.apply(x),
+                            is_f32: false,
+                            copy_of: None,
+                        });
+                        ins.len() - 1
+                    }
+                };
+                uses.push((plan.phi, pred, j));
+            }
+        }
+        let new_pos = crate::c5::codegen::ssa::tape::sort(&mut ins, &func.blocks, n);
+        let (rewrite, undo) = crate::c5::codegen::ssa::tape::insert_undoable(func, &ins);
+        for &(phi, pred, j) in &uses {
+            let id = rewrite.ids[new_pos[j]];
+            if let Some(Inst::Phi { incoming, .. }) =
+                func.insts.get_mut(rewrite.remap[phi as usize] as usize)
+            {
+                for (p, v) in incoming.iter_mut() {
+                    if *p == pred {
+                        *v = id;
+                    }
+                }
+            }
+        }
+        let ranges = super::value_range::Ranges::compute(func, &[]);
+        let fits = |p: &EntryPlan| p.norm.holds(ranges.def(rewrite.remap[p.phi as usize]));
+        if plans.iter().all(fits) {
+            if !assumed.is_empty() {
+                let mut moved = alloc::vec![None; func.insts.len()];
+                for (old, &k) in assumed.iter().enumerate() {
+                    moved[rewrite.remap[old] as usize] = k;
+                }
+                *assumed = moved;
+            }
+            return;
+        }
+        let keep: Vec<bool> = plans.iter().map(fits).collect();
+        undo.restore(func);
+        let mut k = keep.into_iter();
+        plans.retain(|_| k.next().unwrap_or(false));
+    }
 }
 
 #[cfg(test)]

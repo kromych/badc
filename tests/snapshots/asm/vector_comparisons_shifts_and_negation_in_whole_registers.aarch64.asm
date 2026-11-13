@@ -700,7 +700,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	ldrsw	x5, [x4, x0, lsl #2]
                	mvn	x1, x1
-               	cmp	x5, x1
+               	cmp	w5, w1
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x4

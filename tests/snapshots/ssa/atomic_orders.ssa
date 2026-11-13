@@ -5416,9 +5416,9 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v223 Extend { value=v221, kind=I8 }                   -> x0
     v224 Binop { op=or, lhs=v223, rhs=v193 }              -> x0
     v225 BinopI { op=shl, lhs=v224, rhs_imm=56 }          -> x1
-    v226 Extend { value=v224, kind=I8 }                   -> x0
+    v226 Extend { value=v224, kind=I8 }                   -> x1
     v227 Imm(-1)                                          -> x1
-    v228 BinopI { op=eq, lhs=v226, rhs_imm=-1 }           -> x0
+    v228 BinopI { op=eq, lhs=v224, rhs_imm=-1 }           -> x0
     v229 Imm(0)                                           -> x1
     v230 Imm(0)                                           -> x1
     terminator Bz { cond=v228, target=b29, fall=b28 }   (exit_acc=v228)
@@ -5449,9 +5449,9 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v250 Extend { value=v248, kind=I8 }                   -> x0
     v251 Binop { op=xor, lhs=v250, rhs=v247 }             -> x0
     v252 BinopI { op=shl, lhs=v251, rhs_imm=56 }          -> x6
-    v253 Extend { value=v251, kind=I8 }                   -> x0
+    v253 Extend { value=v251, kind=I8 }                   -> x6
     v254 Imm(-5)                                          -> x6
-    v255 BinopI { op=eq, lhs=v253, rhs_imm=-5 }           -> x0
+    v255 BinopI { op=eq, lhs=v251, rhs_imm=-5 }           -> x0
     v256 Imm(0)                                           -> x6
     v257 Imm(0)                                           -> x6
     terminator Bz { cond=v255, target=b32, fall=b31 }   (exit_acc=v255)
@@ -7314,9 +7314,9 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v224 Extend { value=v222, kind=I16 }                  -> x0
     v225 Binop { op=or, lhs=v224, rhs=v194 }              -> x0
     v226 BinopI { op=shl, lhs=v225, rhs_imm=48 }          -> x1
-    v227 Extend { value=v225, kind=I16 }                  -> x0
+    v227 Extend { value=v225, kind=I16 }                  -> x1
     v228 Imm(-298)                                        -> x1
-    v229 BinopI { op=eq, lhs=v227, rhs_imm=-298 }         -> x0
+    v229 BinopI { op=eq, lhs=v225, rhs_imm=-298 }         -> x0
     v230 Imm(0)                                           -> x1
     v231 Imm(0)                                           -> x1
     terminator Bz { cond=v229, target=b29, fall=b28 }   (exit_acc=v229)
@@ -7347,9 +7347,9 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v251 Extend { value=v249, kind=I16 }                  -> x0
     v252 Binop { op=xor, lhs=v251, rhs=v248 }             -> x0
     v253 BinopI { op=shl, lhs=v252, rhs_imm=48 }          -> x6
-    v254 Extend { value=v252, kind=I16 }                  -> x0
+    v254 Extend { value=v252, kind=I16 }                  -> x6
     v255 Imm(-302)                                        -> x6
-    v256 BinopI { op=eq, lhs=v254, rhs_imm=-302 }         -> x0
+    v256 BinopI { op=eq, lhs=v252, rhs_imm=-302 }         -> x0
     v257 Imm(0)                                           -> x6
     v258 Imm(0)                                           -> x6
     terminator Bz { cond=v256, target=b32, fall=b31 }   (exit_acc=v256)

@@ -2833,7 +2833,6 @@ Disassembly of section .text:
                	ldsetalb	w3, w0, [x0]
                	sxtb	x0, w0
                	orr	x0, x0, x3
-               	sxtb	x0, w0
                	mov	x17, #-0x1              // =-1
                	cmp	w0, w17
                	b.ne	<addr>
@@ -2851,7 +2850,6 @@ Disassembly of section .text:
                	ldeoralb	w3, w6, [x0]
                	sxtb	x6, w6
                	eor	x3, x6, x3
-               	sxtb	x3, w3
                	mov	x17, #-0x5              // =-5
                	cmp	w3, w17
                	b.ne	<addr>
@@ -3635,7 +3633,6 @@ Disassembly of section .text:
                	ldsetlh	w3, w0, [x0]
                	sxth	x0, w0
                	orr	x0, x0, x3
-               	sxth	x0, w0
                	mov	x17, #-0x12a            // =-298
                	cmp	w0, w17
                	b.ne	<addr>
@@ -3653,7 +3650,6 @@ Disassembly of section .text:
                	ldeorlh	w3, w6, [x0]
                	sxth	x6, w6
                	eor	x3, x6, x3
-               	sxth	x3, w3
                	mov	x17, #-0x12e            // =-302
                	cmp	w3, w17
                	b.ne	<addr>

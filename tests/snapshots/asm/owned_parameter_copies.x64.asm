@@ -204,7 +204,6 @@ Disassembly of section .text:
                	movsbq	-0x6(%rbp), %rax
                	xorq	$0x1, %rax
                	movb	%al, -0x6(%rbp)
-               	movsbq	%al, %rax
                	movsbq	-0x18(%rbp), %rcx
                	addq	%rcx, %rax
                	leave

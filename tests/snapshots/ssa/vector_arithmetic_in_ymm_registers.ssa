@@ -1511,7 +1511,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=72
     v1282 BinopI { op=and, lhs=v1281, rhs_imm=4294967295 } -> x8
     v1283 Binop { op=add, lhs=v1275, rhs=v1281 }           -> x7
     v1284 BinopI { op=and, lhs=v1283, rhs_imm=4294967295 } -> x8
-    v1285 Extend { value=v1283, kind=I32 }                 -> x7
+    v1285 Extend { value=v1283, kind=I32 }                 -> x8
     v1286 LocalAddr(-534)                                  -> x8
     v1287 Extend { value=v1260, kind=I32 }                 -> x9
     v1288 BinopI { op=shl, lhs=v1260, rhs_imm=2 }          -> x9
@@ -1527,7 +1527,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=72
     v1298 Binop { op=sub, lhs=v1290, rhs=v1281 }           -> x8
     v1299 BinopI { op=and, lhs=v1298, rhs_imm=4294967295 } -> x1
     v1300 Extend { value=v1298, kind=I32 }                 -> x1
-    v1301 Binop { op=xor, lhs=v1285, rhs=v1300 }           -> x1
+    v1301 Binop { op=xor, lhs=v1283, rhs=v1298 }           -> x7
     v1302 Binop { op=ne, lhs=v1270, rhs=v1301 }            -> x1
     terminator Bz { cond=v1302, target=b13, fall=b72 }   (exit_acc=v1302)
   block 13  start_pc=0

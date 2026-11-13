@@ -412,11 +412,11 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movslq	<rip>, %rax # <addr>
-               	movslq	<rip>, %rcx # <addr>
-               	movslq	<rip>, %rdx # <addr>
+               	movl	<rip>, %eax # <addr>
+               	movl	<rip>, %ecx # <addr>
+               	movl	<rip>, %edx # <addr>
                	orq	%rdx, %rcx
-               	cmpq	%rcx, %rax
+               	cmpl	%ecx, %eax
                	je	<addr>
                	movl	$0x92, %eax
                	popq	%rbx

@@ -7532,3 +7532,40 @@ long s = 0; for (long i = 0; i < n; i++) s += a[i] * (x * y + 3); return s; }\n"
         "the invariant product is in the loop: {ws:08x?}"
     );
 }
+
+#[test]
+fn a_loop_carried_unsigned_is_zero_extended_ahead_of_the_loop() {
+    const SRC: &str = "unsigned table[256];\n\
+unsigned crc(unsigned crc, const unsigned char *p, unsigned long len) {\n\
+    unsigned c = ~crc;\n\
+    while (len--) c = table[(c ^ *p++) & 0xff] ^ (c >> 8);\n\
+    return ~c;\n\
+}\n";
+    let mut m = Misses::default();
+    // x86-64: no `mov r32, r32` between the back edge's target and it.
+    let insns = x64(SRC, "crc");
+    let back = insns
+        .iter()
+        .position(|i| matches!(i.op, 0x70..=0x7F | 0x0F80..=0x0F8F) && i.target() < i.at);
+    let body = back.map(|b| {
+        let head = insns.iter().position(|i| i.at == insns[b].target());
+        &insns[head.unwrap_or(b)..=b]
+    });
+    let mov32 = |i: &X64Insn| matches!(i.op, 0x89 | 0x8B) && i.reg_form() && i.rex & 8 == 0;
+    m.expect(body.is_some_and(|b| !b.iter().any(mov32)), || {
+        format!("x86-64: {insns:x?}")
+    });
+    // AArch64: no `mov wd, wn` in the loop closed by a backward branch.
+    let ws = a64(SRC, "crc");
+    let back = ws.iter().enumerate().find_map(|(i, &w)| {
+        let imm = (((w >> 5) & 0x7_FFFF) << 13) as i32 >> 13;
+        let branch = w & 0xFF00_0010 == 0x5400_0000 || w & 0x7E00_0000 == 0x3400_0000;
+        (branch && imm < 0).then(|| ((i as i32 + imm) as usize, i))
+    });
+    let mov32 = |w: &u32| w & 0xFFE0_FFE0 == 0x2A00_03E0;
+    m.expect(
+        back.is_some_and(|(h, b)| !ws[h..=b].iter().any(mov32)),
+        || format!("aarch64: {ws:08x?}"),
+    );
+    m.finish();
+}

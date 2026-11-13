@@ -1220,11 +1220,9 @@ Disassembly of section .text:
                	ldrsw	x1, [x20, x0, lsl #2]
                	ldrsw	x2, [x21, x0, lsl #2]
                	add	x5, x1, x2
-               	sxtw	x5, w5
                	sub	x1, x1, x2
-               	sxtw	x1, w1
                	eor	x1, x5, x1
-               	cmp	x4, x1
+               	cmp	w4, w1
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x8

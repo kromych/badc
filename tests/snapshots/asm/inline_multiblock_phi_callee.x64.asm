@@ -69,7 +69,6 @@ Disassembly of section .text:
                	shlq	%rsi
                	andq	$0x1, %rcx
                	addq	%rsi, %rcx
-               	movslq	%ecx, %rcx
                	addq	%rcx, %rdx
                	leaq	-0x2(%rax), %rcx
                	movq	%rcx, %rsi
@@ -112,7 +111,6 @@ Disassembly of section .text:
                	shlq	%rsi
                	andq	$0x1, %rcx
                	addq	%rsi, %rcx
-               	movslq	%ecx, %rcx
                	addq	%rcx, %rdx
                	leaq	-0x1(%rax), %rcx
                	movq	%rcx, %rsi
@@ -154,7 +152,6 @@ Disassembly of section .text:
                	shlq	%rdi
                	andq	$0x1, %rdx
                	addq	%rdi, %rdx
-               	movslq	%edx, %rdx
                	addq	%rdx, %rsi
                	testl	%eax, %eax
                	movq	%rax, %rdx
@@ -228,7 +225,6 @@ Disassembly of section .text:
                	shlq	%rsi
                	andq	$0x1, %rcx
                	addq	%rsi, %rcx
-               	movslq	%ecx, %rcx
                	addq	%rcx, %rdx
                	leaq	0x2(%rax), %rcx
                	movq	%rcx, %rsi
@@ -272,7 +268,6 @@ Disassembly of section .text:
                	shlq	%rsi
                	andq	$0x1, %rcx
                	addq	%rsi, %rcx
-               	movslq	%ecx, %rcx
                	addq	%rcx, %rdx
                	leaq	0x3(%rax), %rcx
                	movq	%rcx, %rsi
@@ -315,7 +310,6 @@ Disassembly of section .text:
                	shlq	%rsi
                	andq	$0x1, %rcx
                	addq	%rsi, %rcx
-               	movslq	%ecx, %rcx
                	addq	%rdx, %rcx
                	incq	%rax
                	cmpl	$0x4, %eax

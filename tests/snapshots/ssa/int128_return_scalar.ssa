@@ -62,7 +62,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v52  BinopI { op=xor, lhs=v37, rhs_imm=-1 }           -> x1
     v53  Binop { op=or, lhs=v51, rhs=v52 }                -> x0
     v54  BinopI { op=ne, lhs=v53, rhs_imm=0 }             -> x1
-    terminator Bz { cond=v53, target=b4, fall=b3 }   (exit_acc=v54)
+    terminator Bz { cond=v53, target=b4, fall=b3 }   (low word)   (exit_acc=v54)
   block 3  start_pc=0
     v55  Imm(3)                                           -> x0
     terminator Return(v55)   (exit_acc=v55)

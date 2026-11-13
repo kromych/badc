@@ -63,14 +63,14 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v131 Imm(97)                                          -> x1
     v132 Extend { value=v2, kind=I8 }                     -> [spill 0]
     v133 BinopI { op=xor, lhs=v132, rhs_imm=97 }          -> x1
-    v134 Extend { value=v133, kind=I8 }                   -> x1
+    v134 Extend { value=v133, kind=I8 }                   -> x7
     v135 Imm(0)                                           -> x7
     v136 Extend { value=v128, kind=I16 }                  -> x7
     v137 BinopI { op=shl, lhs=v128, rhs_imm=1 }           -> x7
     v138 Extend { value=v137, kind=I32, nsw }             -> x8
     v139 Imm(0)                                           -> x8
-    v140 Extend { value=v134, kind=I8 }                   -> x8
-    v141 Binop { op=add, lhs=v137, rhs=v134 }             -> x1
+    v140 Extend { value=v133, kind=I8 }                   -> x8
+    v141 Binop { op=add, lhs=v137, rhs=v133 }             -> x1
     v142 Extend { value=v141, kind=I32, nsw }             -> x7
     v143 Imm(0)                                           -> x7
     v144 Imm(3)                                           -> x7
@@ -186,14 +186,14 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v28  Imm(97)                                          -> x1
     v29  Extend { value=v2, kind=I8 }                     -> x1
     v30  BinopI { op=xor, lhs=v132, rhs_imm=97 }          -> x1
-    v31  Extend { value=v30, kind=I8 }                    -> x1
+    v31  Extend { value=v30, kind=I8 }                    -> x2
     v32  Imm(0)                                           -> x2
     v33  Extend { value=v25, kind=I16 }                   -> x2
     v34  BinopI { op=shl, lhs=v25, rhs_imm=1 }            -> x2
     v35  Extend { value=v34, kind=I32, nsw }              -> x7
     v36  Imm(0)                                           -> x7
-    v37  Extend { value=v31, kind=I8 }                    -> x7
-    v38  Binop { op=add, lhs=v34, rhs=v31 }               -> x1
+    v37  Extend { value=v30, kind=I8 }                    -> x7
+    v38  Binop { op=add, lhs=v34, rhs=v30 }               -> x1
     v39  Extend { value=v38, kind=I32, nsw }              -> x2
     v40  Imm(0)                                           -> x2
     v41  Imm(3)                                           -> x2

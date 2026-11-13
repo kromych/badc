@@ -239,7 +239,6 @@ Disassembly of section .text:
                	sub	x2, x1, x2
                	sxtb	x2, w2
                	eor	x2, x4, x2
-               	sxtb	x2, w2
                	sub	x4, x29, #0x120
                	ldrsb	x4, [x4, x0]
                	and	x1, x1, x4

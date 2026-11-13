@@ -263,18 +263,16 @@ Disassembly of section .text:
                	leaq	0x1c0(%rsp), %rdx
                	vmovups	%ymm0, 0x1c0(%rsp)
                	xorl	%eax, %eax
-               	movslq	(%rdx,%rax,4), %rsi
+               	movl	(%rdx,%rax,4), %esi
                	movl	(%rbx,%rax,4), %edi
                	leaq	0xa0(%rsp), %rcx
                	movl	(%rcx,%rax,4), %ecx
                	addq	%rcx, %rdi
-               	movslq	%edi, %rdi
                	leaq	0x80(%rsp), %r8
                	movl	(%r8,%rax,4), %r8d
                	subq	%rcx, %r8
-               	movslq	%r8d, %rcx
-               	xorq	%rdi, %rcx
-               	cmpq	%rcx, %rsi
+               	xorq	%r8, %rdi
+               	cmpl	%edi, %esi
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x8, %eax

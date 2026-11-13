@@ -50,7 +50,6 @@ Disassembly of section .text:
                	movq	%r10, 0x18(%rsp)
                	movq	0x18(%rsp), %rcx
                	xorq	$0x61, %rcx
-               	movsbq	%cl, %rcx
                	movq	%rax, %rdi
                	shlq	%rdi
                	addq	%rdi, %rcx
@@ -101,7 +100,6 @@ Disassembly of section .text:
                	movswq	%ax, %rax
                	movq	0x18(%rsp), %rcx
                	xorq	$0x61, %rcx
-               	movsbq	%cl, %rcx
                	movq	%rax, %rdx
                	shlq	%rdx
                	addq	%rdx, %rcx

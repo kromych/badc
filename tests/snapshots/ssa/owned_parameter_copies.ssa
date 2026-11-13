@@ -163,14 +163,14 @@ fn ent_pc=8 n_params=1 variadic=false locals=3
     v4   LoadLocal { off=-3, disp=18, kind=I8 }           -> x0
     v5   BinopI { op=xor, lhs=v4, rhs_imm=1 }             -> x0
     v6   StoreLocal { off=-3, disp=18, value=v5, kind=I8 } -> -
-    v7   Extend { value=v5, kind=I8 }                     -> x0
+    v7   Extend { value=v5, kind=I8 }                     -> x1
     v8   LocalAddr(-3)                                    -> x1
     v9   Imm(0)                                           -> x1
     v10  LoadLocal { off=-3, kind=I8 }                    -> x1
     v11  LocalAddr(-3)                                    -> x2
     v12  BinopI { op=add, lhs=v11, rhs_imm=18 }           -> x2
     v13  Extend { value=v5, kind=I8 }                     -> x2
-    v14  Binop { op=add, lhs=v10, rhs=v7 }                -> x0
+    v14  Binop { op=add, lhs=v10, rhs=v5 }                -> x0
     v15  Extend { value=v14, kind=I32, nsw }              -> x1
     v16  Extend { value=v14, kind=I32 }                   -> x1
     v17  LifetimeEnd(-3)                                  -> -

@@ -738,12 +738,15 @@ fn is_low_mask(k: i64) -> bool {
     k > 0 && k & k.wrapping_add(1) == 0
 }
 
-/// Bounds a bitwise `or` / `xor` of two non-negative ranges: the result
+/// Bounds a bitwise `or` / `xor`. Of two non-negative ranges, the result
 /// has no bit set above the highest either operand can hold, and `or` is
-/// at least each operand.
+/// at least each operand. Otherwise both lie in `-(m + 1) ..= m` for some
+/// `m = 2^n - 1`, so both are sign-extended from bit `n`, and so is the
+/// result.
 fn bitwise(a: Range, b: Range, or: bool) -> Range {
     if !(a.non_negative() && b.non_negative()) {
-        return UNIVERSE;
+        let m = low_mask_above(a.hi.max(b.hi).max(-a.lo - 1).max(-b.lo - 1));
+        return Range { lo: -m - 1, hi: m };
     }
     Range {
         lo: if or { a.lo.max(b.lo) } else { 0 },
@@ -3199,6 +3202,16 @@ mod tests {
             2,
         );
         assert!(!run_one(&mut f, &[]));
+    }
+
+    /// Operands sign-extended from one bit combine into a value
+    /// sign-extended from it.
+    #[test]
+    fn bitwise_of_signed_ranges_stays_sign_extended() {
+        let r = |lo: i128, hi: i128| Range { lo, hi };
+        assert_eq!(bitwise(r(-128, 5), r(-3, 100), false), r(-128, 127));
+        assert_eq!(bitwise(r(-1, 0), r(0, 1), true), r(-2, 1));
+        assert!(bitwise(r(i64::MIN as i128, 0), r(0, 1), false).is_universe());
     }
 
     /// Bitwise and shift bounds. Each is checked through a comparison

@@ -106,7 +106,7 @@ Disassembly of section .text:
                	ja	<addr>
                	xorq	$-0x1, %rcx
                	sarq	%rcx
-               	cmpq	$-0x1, %rcx
+               	cmpl	$-0x1, %ecx
                	je	<addr>
                	movl	$0x7, %eax
                	leave

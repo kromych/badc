@@ -328,10 +328,9 @@ Disassembly of section .text:
                	mov	x17, #0x86a0            // =34464
                	movk	x17, #0x1, lsl #16
                	mul	x2, x20, x17
-               	sxtw	x2, w2
                	mov	x17, #0x55              // =85
                	eor	x2, x2, x17
-               	cmp	x0, x2
+               	cmp	w0, w2
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ldr	x20, [sp, #0x40]

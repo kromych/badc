@@ -428,7 +428,7 @@ Disassembly of section .text:
                	ldrsw	x2, [x0]
                	ldrsw	x0, [x0, #0x4]
                	orr	x0, x2, x0
-               	cmp	x1, x0
+               	cmp	w1, w0
                	b.eq	<addr>
                	mov	x0, #0x92               // =146
                	ldp	x29, x30, [sp, #0x70]

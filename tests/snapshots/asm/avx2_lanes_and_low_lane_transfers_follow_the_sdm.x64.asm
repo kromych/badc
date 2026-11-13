@@ -287,37 +287,37 @@ Disassembly of section .text:
                	vpinsrw	$0x6, %eax, %xmm0, %xmm0
                	vpinsrw	$0x7, %eax, %xmm0, %xmm0
                	movups	%xmm0, -0x30(%rbp)
-               	xorl	%r12d, %r12d
+               	xorl	%ebx, %ebx
                	leaq	0x1(%r14), %r13
                	movl	$0x8, %eax
-               	sarxq	%r12, %rax, %rbx
+               	sarxq	%rbx, %rax, %r12
                	leaq	-0x18(%rbp), %rdi
                	leaq	-0x50(%rbp), %rax
-               	movq	%r12, %rcx
+               	movq	%rbx, %rcx
                	shlq	$0x4, %rcx
                	addq	%rcx, %rax
                	movups	(%rax), %xmm0
                	movups	%xmm0, -0x18(%rbp)
-               	movq	%r12, %rax
+               	movq	%rbx, %rax
                	shlq	%rax
                	leaq	(%r13,%rax), %rsi
-               	movslq	%ebx, %rdx
+               	movslq	%r12d, %rdx
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	cmpl	$0x10, %ebx
+               	movslq	%r12d, %rax
+               	cmpl	$0x10, %eax
                	jge	<addr>
-               	leaq	-0x18(%rbp), %rax
-               	movslq	%ebx, %rcx
-               	cmpb	$0x0, (%rax,%rcx)
+               	leaq	-0x18(%rbp), %rcx
+               	cmpb	$0x0, (%rcx,%rax)
                	jne	<addr>
-               	incq	%rbx
-               	cmpl	$0x10, %ebx
+               	incq	%rax
+               	cmpl	$0x10, %eax
                	jl	<addr>
-               	incq	%r12
-               	cmpl	$0x3, %r12d
+               	incq	%rbx
+               	cmpl	$0x3, %ebx
                	jl	<addr>
                	leaq	-0x18(%rbp), %rax
                	movabsq	$-0x5555555555555556, %rcx # imm = 0xAAAAAAAAAAAAAAAA

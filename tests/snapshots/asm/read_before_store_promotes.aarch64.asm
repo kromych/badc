@@ -74,7 +74,8 @@ Disassembly of section .text:
 <probe>:
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
-               	ldrh	w2, [x3, w2, uxtw #1]
+               	mov	w2, w2
+               	ldrh	w2, [x3, x2, lsl #1]
                	cbz	w2, <addr>
                	mov	x0, #0x14               // =20
                	sub	x0, x0, x2
@@ -84,7 +85,7 @@ Disassembly of section .text:
                	and	x2, x2, #0xf
                	cmp	w2, #0x9
                	b.eq	<addr>
-               	ldrh	w2, [x3, w2, uxtw #1]
+               	ldrh	w2, [x3, x2, lsl #1]
                	cbnz	w2, <addr>
                	mov	x0, #0x0                // =0
                	ret

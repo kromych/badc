@@ -43,7 +43,7 @@ Disassembly of section .text:
                	xorq	$-0x1, %rax
                	xorq	$-0x1, %rcx
                	orq	%rcx, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	retq

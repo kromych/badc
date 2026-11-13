@@ -28,7 +28,7 @@ Disassembly of section .text:
                	mvn	x0, x0
                	mvn	x2, x2
                	orr	x0, x0, x2
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x3                // =3
                	ret
                	adrp	x0, <page>

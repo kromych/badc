@@ -228,7 +228,6 @@ Disassembly of section .text:
                	subq	%rcx, %rdi
                	movsbq	%dil, %rdi
                	xorq	%rdi, %rsi
-               	movsbq	%sil, %rsi
                	andq	%rdx, %rcx
                	orq	%rsi, %rcx
                	leaq	-0x50(%rbp), %rdx

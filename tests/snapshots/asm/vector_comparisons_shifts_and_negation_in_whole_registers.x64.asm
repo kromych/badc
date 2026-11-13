@@ -833,14 +833,14 @@ Disassembly of section .text:
                	vpxor	%xmm1, %xmm2, %xmm1
                	movups	%xmm1, -0xb0(%rbp)
                	movl	(%rsi,%rax,4), %r8d
-               	movslq	(%rdx,%rax,4), %rcx
+               	movl	(%rdx,%rax,4), %ecx
                	movq	%rcx, %r9
                	negq	%r9
                	cmpl	%r9d, %r8d
                	jne	<addr>
-               	movslq	(%rdi,%rax,4), %r8
+               	movl	(%rdi,%rax,4), %r8d
                	xorq	$-0x1, %rcx
-               	cmpq	%rcx, %r8
+               	cmpl	%ecx, %r8d
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x4, %eax

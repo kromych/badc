@@ -47,7 +47,6 @@ Disassembly of section .text:
                	csel	x1, x6, x1, lt
                	and	x6, x1, #0x1
                	add	x1, x6, x1, lsl #1
-               	sxtw	x1, w1
                	add	x2, x2, x1
                	sub	x1, x0, #0x2
                	neg	x6, x1
@@ -77,7 +76,6 @@ Disassembly of section .text:
                	csel	x1, x6, x1, lt
                	and	x6, x1, #0x1
                	add	x1, x6, x1, lsl #1
-               	sxtw	x1, w1
                	add	x2, x2, x1
                	sub	x1, x0, #0x1
                	neg	x6, x1
@@ -105,7 +103,6 @@ Disassembly of section .text:
                	csel	x2, x7, x2, lt
                	and	x7, x2, #0x1
                	add	x2, x7, x2, lsl #1
-               	sxtw	x2, w2
                	add	x6, x6, x2
                	cmp	w0, #0x0
                	csel	x2, x1, x0, lt
@@ -155,7 +152,6 @@ Disassembly of section .text:
                	csel	x1, x6, x1, lt
                	and	x6, x1, #0x1
                	add	x1, x6, x1, lsl #1
-               	sxtw	x1, w1
                	add	x2, x2, x1
                	add	x1, x0, #0x2
                	neg	x6, x1
@@ -185,7 +181,6 @@ Disassembly of section .text:
                	csel	x1, x6, x1, lt
                	and	x6, x1, #0x1
                	add	x1, x6, x1, lsl #1
-               	sxtw	x1, w1
                	add	x2, x2, x1
                	add	x1, x0, #0x3
                	neg	x6, x1
@@ -215,7 +210,6 @@ Disassembly of section .text:
                	csel	x1, x6, x1, lt
                	and	x6, x1, #0x1
                	add	x1, x6, x1, lsl #1
-               	sxtw	x1, w1
                	add	x1, x2, x1
                	add	x0, x0, #0x1
                	cmp	w0, #0x4

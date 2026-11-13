@@ -182,11 +182,10 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movslq	-0x20(%rbp), %rax
+               	movl	-0x20(%rbp), %eax
                	imulq	$0x186a0, %rbx, %rdx    # imm = 0x186A0
-               	movslq	%edx, %rdx
                	xorq	$0x55, %rdx
-               	cmpq	%rdx, %rax
+               	cmpl	%edx, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbx

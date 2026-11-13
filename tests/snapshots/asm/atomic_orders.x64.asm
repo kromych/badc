@@ -2860,7 +2860,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movsbq	%al, %rax
                	orq	%rcx, %rax
-               	movsbq	%al, %rax
                	cmpl	$-0x1, %eax
                	jne	<addr>
                	movsbq	<rip>, %rax # <addr>
@@ -2879,7 +2878,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movsbq	%al, %rax
                	xorq	%rsi, %rax
-               	movsbq	%al, %rax
                	cmpl	$-0x5, %eax
                	jne	<addr>
                	movsbq	<rip>, %rax # <addr>
@@ -3772,7 +3770,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movswq	%ax, %rax
                	orq	%rcx, %rax
-               	movswq	%ax, %rax
                	cmpl	$0xfffffed6, %eax       # imm = 0xFFFFFED6
                	jne	<addr>
                	movswq	<rip>, %rax # <addr>
@@ -3792,7 +3789,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movswq	%ax, %rax
                	xorq	%rsi, %rax
-               	movswq	%ax, %rax
                	cmpl	$0xfffffed2, %eax       # imm = 0xFFFFFED2
                	jne	<addr>
                	movswq	<rip>, %rax # <addr>

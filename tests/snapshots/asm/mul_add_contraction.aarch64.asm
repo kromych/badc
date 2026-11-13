@@ -39,14 +39,12 @@ Disassembly of section .text:
                	ldrsw	x0, [x0, #0x14]
                	cmp	w10, w0
                	b.ne	<addr>
-               	eor	x0, x9, x3
-               	sxtw	x3, w0
+               	eor	x3, x9, x3
                	add	x0, x4, x6
                	ldrsw	x6, [x0, #0x10]
                	mul	x0, x7, x8
-               	sxtw	x7, w0
-               	eor	x6, x6, x7
-               	cmp	x3, x6
+               	eor	x6, x6, x0
+               	cmp	w3, w6
                	b.ne	<addr>
                	sub	x0, x2, x0
                	mul	x2, x1, x5

@@ -252,8 +252,8 @@ fn ent_pc=5 n_params=1 variadic=false locals=519
     v107 LoadLocal { off=-4, kind=I32, volatile }         -> x0
     v108 Imm(0)                                           -> x2
     v109 BinopI { op=mul, lhs=v1, rhs_imm=100000 }        -> x2
-    v110 Extend { value=v109, kind=I32, nsw }             -> x2
-    v111 BinopI { op=xor, lhs=v110, rhs_imm=85 }          -> x2
+    v110 Extend { value=v109, kind=I32, nsw }             -> x6
+    v111 BinopI { op=xor, lhs=v109, rhs_imm=85 }          -> x2
     v112 Binop { op=ne, lhs=v107, rhs=v111 }              -> x0
     terminator Bz { cond=v112, target=b6, fall=b5 }   (exit_acc=v112)
   block 5  start_pc=0

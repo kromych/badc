@@ -766,15 +766,11 @@ Disassembly of section .text:
                	movq	%r11, %r10
                	cmovneq	%rcx, %r10
                	movq	%r10, 0xc0(%rsp)
-               	movq	0xc8(%rsp), %r10
-               	incq	%r10
-               	movq	%r10, 0xc8(%rsp)
+               	addq	$0x1, 0xc8(%rsp)
                	movq	0xc8(%rsp), %rax
                	cmpl	$0x8, %eax
                	jl	<addr>
-               	movq	0xb8(%rsp), %r10
-               	incq	%r10
-               	movq	%r10, 0xb8(%rsp)
+               	addq	$0x1, 0xb8(%rsp)
                	movq	0xb8(%rsp), %rax
                	cmpl	$0x12, %eax
                	jb	<addr>

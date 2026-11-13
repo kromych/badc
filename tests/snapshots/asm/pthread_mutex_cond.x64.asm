@@ -564,9 +564,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	xorl	%eax, %eax
                	callq	<addr>
-               	movq	0x18(%rsp), %r10
-               	incq	%r10
-               	movq	%r10, 0x18(%rsp)
+               	addq	$0x1, 0x18(%rsp)
                	movq	0x18(%rsp), %rax
                	cmpl	$0x3e8, %eax            # imm = 0x3E8
                	jle	<addr>

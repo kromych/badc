@@ -647,9 +647,7 @@ Disassembly of section .text:
                	incq	%rdx
                	cmpl	$0x8, %edx
                	jl	<addr>
-               	movq	-0x2c8(%rbp), %r10
-               	incq	%r10
-               	movq	%r10, -0x2c8(%rbp)
+               	addq	$0x1, -0x2c8(%rbp)
                	movq	-0x2c8(%rbp), %rax
                	cmpl	$0xa, %eax
                	jl	<addr>

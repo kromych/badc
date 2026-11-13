@@ -2519,9 +2519,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	-0x18(%rbp), %rdi
                	jmp	<addr>
-               	movq	0x48(%rsp), %r10
-               	incq	%r10
-               	movq	%r10, 0x48(%rsp)
+               	addq	$0x1, 0x48(%rsp)
                	movq	0x48(%rsp), %rax
                	cmpl	$0x3, %eax
                	jl	<addr>
@@ -3730,9 +3728,7 @@ Disassembly of section .text:
                	cmpl	$0xffff8000, %r12d      # imm = 0xFFFF8000
                	cmovgeq	%r12, %r9
                	jmp	<addr>
-               	movq	0x40(%rsp), %r10
-               	incq	%r10
-               	movq	%r10, 0x40(%rsp)
+               	addq	$0x1, 0x40(%rsp)
                	movq	0x40(%rsp), %rax
                	cmpl	$0x7d0, %eax            # imm = 0x7D0
                	jl	<addr>

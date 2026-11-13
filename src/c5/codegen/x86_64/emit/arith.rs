@@ -1656,6 +1656,19 @@ pub(super) fn emit_binop_imm(
         return fail("BinopI: dst not int reg / spill");
     };
     let lhs_place = place_of(alloc, lhs);
+    // A slot both the operand and the result live in is updated in place.
+    if let (Place::Spill(slot), true) = (dst, dst == lhs_place)
+        && let Ok(imm) = i32::try_from(rhs_imm)
+        && matches!(
+            op,
+            BinOp::Add | BinOp::Sub | BinOp::And | BinOp::Or | BinOp::Xor
+        )
+        && !(op == BinOp::And && alloc.branch_fused.get(v as usize).copied().unwrap_or(false))
+    {
+        let (base, disp) = spill_slot_addr(frame, slot);
+        super::encode::emit_mi(code, alu_mnem(op).unwrap(), 8, base, disp, imm);
+        return Ok(());
+    }
     let Some(rn) = int_operand_into_rd(code, lhs_place, rd, frame) else {
         return fail("BinopI: lhs not int reg / spill");
     };

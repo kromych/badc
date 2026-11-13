@@ -443,9 +443,7 @@ Disassembly of section .text:
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>
-               	movq	0xb0(%rsp), %r10
-               	incq	%r10
-               	movq	%r10, 0xb0(%rsp)
+               	addq	$0x1, 0xb0(%rsp)
                	movq	0xb0(%rsp), %rax
                	cmpl	$0xc8, %eax
                	jl	<addr>

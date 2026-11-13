@@ -10034,9 +10034,7 @@ Disassembly of section .text:
                	addq	$0x4, %r12
                	cmpl	$0x8, %r12d
                	jle	<addr>
-               	movq	-0xd0(%rbp), %r10
-               	incq	%r10
-               	movq	%r10, -0xd0(%rbp)
+               	addq	$0x1, -0xd0(%rbp)
                	movq	-0xd0(%rbp), %rax
                	cmpl	$0x4, %eax
                	jl	<addr>

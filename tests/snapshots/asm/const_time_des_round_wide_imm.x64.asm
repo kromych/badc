@@ -122,21 +122,15 @@ Disassembly of section .text:
                	movq	%rax, %r10
                	andq	$0x26f320b, %r10        # imm = 0x26F320B
                	movq	%r10, 0xd0(%rsp)
-               	movq	0xd0(%rsp), %r10
-               	xorq	$0x3069300c, %r10       # imm = 0x3069300C
-               	movq	%r10, 0xd0(%rsp)
+               	xorq	$0x3069300c, 0xd0(%rsp) # imm = 0x3069300C
                	movq	%rax, %r10
                	andq	$0x7640b01a, %r10       # imm = 0x7640B01A
                	movq	%r10, 0xc8(%rsp)
-               	movq	0xc8(%rsp), %r10
-               	xorq	$0x6ce0d5cc, %r10       # imm = 0x6CE0D5CC
-               	movq	%r10, 0xc8(%rsp)
+               	xorq	$0x6ce0d5cc, 0xc8(%rsp) # imm = 0x6CE0D5CC
                	movq	%rax, %r10
                	andq	$0x238f1572, %r10       # imm = 0x238F1572
                	movq	%r10, 0xc0(%rsp)
-               	movq	0xc0(%rsp), %r10
-               	xorq	$0x59a9a22d, %r10       # imm = 0x59A9A22D
-               	movq	%r10, 0xc0(%rsp)
+               	xorq	$0x59a9a22d, 0xc0(%rsp) # imm = 0x59A9A22D
                	movq	%rax, %r10
                	andq	$0x7a63c083, %r10       # imm = 0x7A63C083
                	movq	%r10, 0xb8(%rsp)
@@ -147,9 +141,7 @@ Disassembly of section .text:
                	movq	%rax, %r10
                	andq	$0x11cca000, %r10       # imm = 0x11CCA000
                	movq	%r10, 0xb0(%rsp)
-               	movq	0xb0(%rsp), %r10
-               	xorq	$0x21c83200, %r10       # imm = 0x21C83200
-               	movq	%r10, 0xb0(%rsp)
+               	xorq	$0x21c83200, 0xb0(%rsp) # imm = 0x21C83200
                	movq	%rax, %r10
                	andq	$0x202f69aa, %r10       # imm = 0x202F69AA
                	movq	%r10, 0xa8(%rsp)
@@ -181,15 +173,11 @@ Disassembly of section .text:
                	movq	%rax, %r10
                	andq	$0x9e34f9b, %r10        # imm = 0x9E34F9B
                	movq	%r10, 0x88(%rsp)
-               	movq	0x88(%rsp), %r10
-               	xorq	$0x5ab2750a, %r10       # imm = 0x5AB2750A
-               	movq	%r10, 0x88(%rsp)
+               	xorq	$0x5ab2750a, 0x88(%rsp) # imm = 0x5AB2750A
                	movq	%rax, %r10
                	andq	$0x103be88, %r10        # imm = 0x103BE88
                	movq	%r10, 0x80(%rsp)
-               	movq	0x80(%rsp), %r10
-               	xorq	$0x5391be65, %r10       # imm = 0x5391BE65
-               	movq	%r10, 0x80(%rsp)
+               	xorq	$0x5391be65, 0x80(%rsp) # imm = 0x5391BE65
                	movq	%rax, %r10
                	andq	$0x49ac8e25, %r10       # imm = 0x49AC8E25
                	movq	%r10, 0x78(%rsp)
@@ -214,15 +202,11 @@ Disassembly of section .text:
                	movq	%rax, %r10
                	andq	$0x6a707100, %r10       # imm = 0x6A707100
                	movq	%r10, 0x60(%rsp)
-               	movq	0x60(%rsp), %r10
-               	xorq	$0x63d312c0, %r10       # imm = 0x63D312C0
-               	movq	%r10, 0x60(%rsp)
+               	xorq	$0x63d312c0, 0x60(%rsp) # imm = 0x63D312C0
                	movl	$0xb97c9011, %r10d      # imm = 0xB97C9011
                	andq	%rax, %r10
                	movq	%r10, 0x58(%rsp)
-               	movq	0x58(%rsp), %r10
-               	xorq	$0x537b3006, %r10       # imm = 0x537B3006
-               	movq	%r10, 0x58(%rsp)
+               	xorq	$0x537b3006, 0x58(%rsp) # imm = 0x537B3006
                	movl	$0xa320c959, %r10d      # imm = 0xA320C959
                	andq	%rax, %r10
                	movq	%r10, 0x50(%rsp)
@@ -247,9 +231,7 @@ Disassembly of section .text:
                	movl	$0xf74f3e2b, %r10d      # imm = 0xF74F3E2B
                	andq	%rax, %r10
                	movq	%r10, 0x38(%rsp)
-               	movq	0x38(%rsp), %r10
-               	xorq	$0x665a14a3, %r10       # imm = 0x665A14A3
-               	movq	%r10, 0x38(%rsp)
+               	xorq	$0x665a14a3, 0x38(%rsp) # imm = 0x665A14A3
                	movl	$0xf0306cad, %r11d      # imm = 0xF0306CAD
                	andq	%r11, %rax
                	movl	$0xf2eff0cc, %r11d      # imm = 0xF2EFF0CC

@@ -64,9 +64,7 @@ Disassembly of section .text:
                	addq	%r14, %r10
                	movq	%r10, 0x60(%rsp)
                	xorq	%rax, %r9
-               	movq	0x68(%rsp), %r10
-               	incq	%r10
-               	movq	%r10, 0x68(%rsp)
+               	addq	$0x1, 0x68(%rsp)
                	movq	0x68(%rsp), %rax
                	cmpq	0x50(%rsp), %rax
                	jge	<addr>
@@ -280,9 +278,7 @@ Disassembly of section .text:
                	movq	0x60(%rsp), %r10
                	addq	%rax, %r10
                	movq	%r10, 0x50(%rsp)
-               	movq	0x58(%rsp), %r10
-               	incq	%r10
-               	movq	%r10, 0x58(%rsp)
+               	addq	$0x1, 0x58(%rsp)
                	movq	0x58(%rsp), %rax
                	cmpq	0x40(%rsp), %rax
                	jge	<addr>

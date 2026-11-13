@@ -6067,9 +6067,7 @@ Disassembly of section .text:
                	incq	%r13
                	cmpl	$0x8, %r13d
                	jl	<addr>
-               	movq	-0x48(%rbp), %r10
-               	incq	%r10
-               	movq	%r10, -0x48(%rbp)
+               	addq	$0x1, -0x48(%rbp)
                	movq	-0x48(%rbp), %rax
                	cmpl	$0x2, %eax
                	jl	<addr>
@@ -6224,9 +6222,7 @@ Disassembly of section .text:
                	incq	%r13
                	cmpl	$0x8, %r13d
                	jl	<addr>
-               	movq	-0x48(%rbp), %r10
-               	incq	%r10
-               	movq	%r10, -0x48(%rbp)
+               	addq	$0x1, -0x48(%rbp)
                	movq	-0x48(%rbp), %rax
                	cmpl	$0x2, %eax
                	jl	<addr>
@@ -6385,9 +6381,7 @@ Disassembly of section .text:
                	incq	%r13
                	cmpl	$0x8, %r13d
                	jl	<addr>
-               	movq	-0x48(%rbp), %r10
-               	incq	%r10
-               	movq	%r10, -0x48(%rbp)
+               	addq	$0x1, -0x48(%rbp)
                	movq	-0x48(%rbp), %rax
                	cmpl	$0x2, %eax
                	jl	<addr>
@@ -6548,9 +6542,7 @@ Disassembly of section .text:
                	incq	%r13
                	cmpl	$0x8, %r13d
                	jl	<addr>
-               	movq	-0x48(%rbp), %r10
-               	incq	%r10
-               	movq	%r10, -0x48(%rbp)
+               	addq	$0x1, -0x48(%rbp)
                	movq	-0x48(%rbp), %rax
                	cmpl	$0x2, %eax
                	jl	<addr>
@@ -6711,9 +6703,7 @@ Disassembly of section .text:
                	incq	%r13
                	cmpl	$0x8, %r13d
                	jl	<addr>
-               	movq	-0x48(%rbp), %r10
-               	incq	%r10
-               	movq	%r10, -0x48(%rbp)
+               	addq	$0x1, -0x48(%rbp)
                	movq	-0x48(%rbp), %rax
                	cmpl	$0x2, %eax
                	jl	<addr>
@@ -6872,9 +6862,7 @@ Disassembly of section .text:
                	incq	%r13
                	cmpl	$0x8, %r13d
                	jl	<addr>
-               	movq	-0x48(%rbp), %r10
-               	incq	%r10
-               	movq	%r10, -0x48(%rbp)
+               	addq	$0x1, -0x48(%rbp)
                	movq	-0x48(%rbp), %rax
                	cmpl	$0x2, %eax
                	jl	<addr>

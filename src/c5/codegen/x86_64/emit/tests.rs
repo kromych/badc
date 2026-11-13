@@ -896,6 +896,68 @@ mod two_address_tests {
         panic!("no {op:?} in {src}")
     }
 
+    /// A value and the immediate update of it that share a spill slot are
+    /// one `add qword [slot], imm`; in two slots the update loads, adds and
+    /// stores.
+    #[test]
+    fn an_update_in_its_own_slot_is_one_instruction() {
+        let target = Target::LinuxX64;
+        let program = crate::Compiler::with_target(
+            "long f(long a){ return a + 3; } int main(void){ return 0; }".to_string(),
+            target,
+        )
+        .compile()
+        .expect("compile");
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        let (func, v) = (funcs.into_iter())
+            .find_map(|f| {
+                let at = f.insts.iter().position(|i| {
+                    matches!(
+                        i,
+                        Inst::BinopI {
+                            op: BinOp::Add,
+                            rhs_imm: 3,
+                            ..
+                        }
+                    )
+                })?;
+                Some((f, at as u32))
+            })
+            .expect("the addition");
+        let Inst::BinopI { lhs, .. } = func.insts[v as usize] else {
+            unreachable!()
+        };
+        let emit = |lhs_at: u32, dst_at: u32| {
+            let mut alloc = super::super::ssa::reg_alloc::allocate(
+                &func,
+                target,
+                crate::c5::codegen::FixedRegs::NONE,
+            );
+            alloc.spill_count = alloc.spill_count.max(2);
+            alloc.places[lhs as usize] = Place::Spill(lhs_at);
+            alloc.places[v as usize] = Place::Spill(dst_at);
+            let frame = compute_frame(&func, &alloc, target.abi(), target);
+            let mut code = Vec::new();
+            let dst = Place::Spill(dst_at);
+            emit_binop_imm(&mut code, BinOp::Add, v, dst, lhs, 3, &alloc, frame).expect("emit");
+            code
+        };
+        let same = emit(0, 0);
+        // REX.W 83 /0 with a memory operand, imm8 3, and nothing else.
+        assert!(
+            same.len() <= 8
+                && same[..2] == [0x48, 0x83]
+                && same[2] >> 6 != 3
+                && (same[2] >> 3) & 7 == 0
+                && same.last() == Some(&3),
+            "{same:02x?}"
+        );
+        let apart = emit(1, 0);
+        assert!(apart.len() > same.len() + 4, "{apart:02x?}");
+    }
+
     /// A difference placed in its subtrahend's register negates it in
     /// place and adds the minuend: `neg rax; add rax, rsi`. When the
     /// minuend is in the same register or spilled, the subtrahend

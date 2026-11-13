@@ -802,9 +802,7 @@ Disassembly of section .text:
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>
-               	movq	-0xc0(%rbp), %r10
-               	incq	%r10
-               	movq	%r10, -0xc0(%rbp)
+               	addq	$0x1, -0xc0(%rbp)
                	movq	-0xc0(%rbp), %rax
                	cmpl	$0xc8, %eax
                	jl	<addr>

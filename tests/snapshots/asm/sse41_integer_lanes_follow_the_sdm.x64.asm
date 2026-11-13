@@ -487,9 +487,7 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movq	0xf8(%rsp), %r10
-               	incq	%r10
-               	movq	%r10, 0xf8(%rsp)
+               	addq	$0x1, 0xf8(%rsp)
                	movq	0xf8(%rsp), %rax
                	cmpl	$0xc, %eax
                	jl	<addr>
@@ -2099,9 +2097,7 @@ Disassembly of section .text:
                	movq	%rbx, %r10
                	orq	%rax, %r10
                	movq	%r10, 0xb0(%rsp)
-               	movq	0xb8(%rsp), %r10
-               	incq	%r10
-               	movq	%r10, 0xb8(%rsp)
+               	addq	$0x1, 0xb8(%rsp)
                	movq	0xb8(%rsp), %rax
                	cmpl	$0x12c, %eax            # imm = 0x12C
                	jge	<addr>
@@ -2370,9 +2366,7 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movq	0xc0(%rsp), %r10
-               	incq	%r10
-               	movq	%r10, 0xc0(%rsp)
+               	addq	$0x1, 0xc0(%rsp)
                	movq	0xc0(%rsp), %rax
                	cmpl	$0x8, %eax
                	jl	<addr>

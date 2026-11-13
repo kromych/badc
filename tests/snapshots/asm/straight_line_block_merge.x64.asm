@@ -467,9 +467,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x6, %ebx
                	jmp	<addr>
-               	movq	0x38(%rsp), %r10
-               	incq	%r10
-               	movq	%r10, 0x38(%rsp)
+               	addq	$0x1, 0x38(%rsp)
                	movq	0x38(%rsp), %rax
                	cmpl	$0x8, %eax
                	jl	<addr>

@@ -130,9 +130,7 @@ Disassembly of section .text:
                	idivl	%r9d
                	cmpl	%eax, %r14d
                	jl	<addr>
-               	movq	0x38(%rsp), %r10
-               	incq	%r10
-               	movq	%r10, 0x38(%rsp)
+               	addq	$0x1, 0x38(%rsp)
                	movq	0x38(%rsp), %rax
                	cmpl	$0x3, %eax
                	jl	<addr>
@@ -1217,9 +1215,7 @@ Disassembly of section .text:
                	movq	%rbx, %r10
                	orq	%rax, %r10
                	movq	%r10, 0x30(%rsp)
-               	movq	0x38(%rsp), %r10
-               	incq	%r10
-               	movq	%r10, 0x38(%rsp)
+               	addq	$0x1, 0x38(%rsp)
                	movq	0x38(%rsp), %rax
                	cmpl	$0x190, %eax            # imm = 0x190
                	jge	<addr>
@@ -1357,9 +1353,7 @@ Disassembly of section .text:
                	idivl	%esi
                	cmpl	%eax, %r13d
                	jl	<addr>
-               	movq	0x40(%rsp), %r10
-               	incq	%r10
-               	movq	%r10, 0x40(%rsp)
+               	addq	$0x1, 0x40(%rsp)
                	movq	0x40(%rsp), %rax
                	cmpl	$0x3, %eax
                	jl	<addr>

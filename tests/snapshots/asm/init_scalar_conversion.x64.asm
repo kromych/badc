@@ -84,28 +84,15 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
+               	movabsq	$0x408a400000000000, %rcx # imm = 0x408A400000000000
+               	movabsq	$0x4080e00000000000, %rdx # imm = 0x4080E00000000000
                	leaq	-0x20(%rbp), %r9
                	movq	$0x0, -0x20(%rbp)
                	movq	$0x0, -0x18(%rbp)
-               	movabsq	$0x408a400000000000, %rax # imm = 0x408A400000000000
-               	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x10(%rbp)
-               	movabsq	$0x4080e00000000000, %rcx # imm = 0x4080E00000000000
                	movq	%rcx, %xmm14
+               	movsd	%xmm14, -0x10(%rbp)
+               	movq	%rdx, %xmm14
                	movsd	%xmm14, -0x8(%rbp)
-               	movsd	-0x10(%rbp), %xmm0
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
-               	jp	<addr>
-               	jne	<addr>
-               	movsd	-0x8(%rbp), %xmm0
-               	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm0
-               	jp	<addr>
-               	je	<addr>
-               	movl	$0x2, %eax
-               	leave
-               	retq
                	subq	$0x20, %rsp
                	movq	%r9, %r10
                	movq	(%r10), %r11
@@ -123,14 +110,14 @@ Disassembly of section .text:
                	movl	$0x6, %eax
                	leave
                	retq
+               	movabsq	$0x408a400000000000, %rcx # imm = 0x408A400000000000
+               	movabsq	$0x4080e00000000000, %rdx # imm = 0x4080E00000000000
                	leaq	-0x20(%rbp), %r9
                	movq	$0x0, -0x20(%rbp)
                	movq	$0x0, -0x18(%rbp)
-               	movabsq	$0x408a400000000000, %rax # imm = 0x408A400000000000
-               	movq	%rax, %xmm14
+               	movq	%rcx, %xmm14
                	movsd	%xmm14, -0x10(%rbp)
-               	movabsq	$0x4080e00000000000, %rax # imm = 0x4080E00000000000
-               	movq	%rax, %xmm14
+               	movq	%rdx, %xmm14
                	movsd	%xmm14, -0x8(%rbp)
                	subq	$0x20, %rsp
                	movq	%r9, %r10

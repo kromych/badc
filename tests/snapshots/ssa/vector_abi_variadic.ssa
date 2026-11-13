@@ -490,22 +490,22 @@ fn ent_pc=5 n_params=1 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=main
 fn ent_pc=6 n_params=0 variadic=false locals=7
-  spill_count=6 gpr_used=[] fp_used=[]
+  spill_count=7 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(2)                                           -> x0
     v2   Imm(1)                                           -> x7
     v3   Call { target_pc=5, args=[v2], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v4   RetPart(0, kind=V128)                            -> d0
-    v5   StoreLocal { off=-71, value=v4, kind=V128 }      -> -
-    v6   LocalAddr(-71)                                   -> x0
+    v5   StoreLocal { off=-78, value=v4, kind=V128 }      -> -
+    v6   LocalAddr(-78)                                   -> x0
     v7   Imm(3)                                           -> x7
     v8   Call { target_pc=5, args=[v7], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v9   RetPart(0, kind=V128)                            -> d0
-    v10  StoreLocal { off=-72, value=v9, kind=V128 }      -> -
-    v11  LocalAddr(-72)                                   -> x9
+    v10  StoreLocal { off=-79, value=v9, kind=V128 }      -> -
+    v11  LocalAddr(-79)                                   -> x9
     v12  Imm(2)                                           -> x7
-    v13  LocalAddr(-71)                                   -> x0
+    v13  LocalAddr(-78)                                   -> x0
     v14  Call { target_pc=0, args=[v12, v13, v11], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v15  Extend { value=v14, kind=I32 }                   -> x1
     v16  BinopI { op=ne, lhs=v14, rhs_imm=38 }            -> x0
@@ -675,63 +675,63 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v176 Imm(1)                                           -> x7
     v177 Call { target_pc=5, args=[v176], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v178 RetPart(0, kind=V128)                            -> d0
-    v179 StoreLocal { off=-73, value=v178, kind=V128 }    -> -
-    v180 LocalAddr(-73)                                   -> x0
+    v179 StoreLocal { off=-80, value=v178, kind=V128 }    -> -
+    v180 LocalAddr(-80)                                   -> x0
     v181 Imm(2)                                           -> x7
     v182 Call { target_pc=5, args=[v181], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v183 RetPart(0, kind=V128)                            -> d0
-    v184 StoreLocal { off=-74, value=v183, kind=V128 }    -> -
-    v185 LocalAddr(-74)                                   -> x0
+    v184 StoreLocal { off=-81, value=v183, kind=V128 }    -> -
+    v185 LocalAddr(-81)                                   -> x0
     v186 Imm(3)                                           -> x7
     v187 Call { target_pc=5, args=[v186], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v188 RetPart(0, kind=V128)                            -> d0
-    v189 StoreLocal { off=-75, value=v188, kind=V128 }    -> -
-    v190 LocalAddr(-75)                                   -> x0
+    v189 StoreLocal { off=-82, value=v188, kind=V128 }    -> -
+    v190 LocalAddr(-82)                                   -> x0
     v191 Imm(4)                                           -> x7
     v192 Call { target_pc=5, args=[v191], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v193 RetPart(0, kind=V128)                            -> d0
-    v194 StoreLocal { off=-76, value=v193, kind=V128 }    -> -
-    v195 LocalAddr(-76)                                   -> x0
+    v194 StoreLocal { off=-83, value=v193, kind=V128 }    -> -
+    v195 LocalAddr(-83)                                   -> x0
     v196 Imm(5)                                           -> x7
     v197 Call { target_pc=5, args=[v196], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v198 RetPart(0, kind=V128)                            -> d0
-    v199 StoreLocal { off=-77, value=v198, kind=V128 }    -> -
-    v200 LocalAddr(-77)                                   -> x0
+    v199 StoreLocal { off=-84, value=v198, kind=V128 }    -> -
+    v200 LocalAddr(-84)                                   -> x0
     v201 Imm(6)                                           -> x7
     v202 Call { target_pc=5, args=[v201], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v203 RetPart(0, kind=V128)                            -> d0
-    v204 StoreLocal { off=-78, value=v203, kind=V128 }    -> -
-    v205 LocalAddr(-78)                                   -> x0
+    v204 StoreLocal { off=-85, value=v203, kind=V128 }    -> -
+    v205 LocalAddr(-85)                                   -> x0
     v206 Imm(7)                                           -> x7
     v207 Call { target_pc=5, args=[v206], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v208 RetPart(0, kind=V128)                            -> d0
-    v209 StoreLocal { off=-79, value=v208, kind=V128 }    -> -
-    v210 LocalAddr(-79)                                   -> x0
+    v209 StoreLocal { off=-86, value=v208, kind=V128 }    -> -
+    v210 LocalAddr(-86)                                   -> x0
     v211 Imm(8)                                           -> x7
     v212 Call { target_pc=5, args=[v211], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v213 RetPart(0, kind=V128)                            -> d0
-    v214 StoreLocal { off=-80, value=v213, kind=V128 }    -> -
-    v215 LocalAddr(-80)                                   -> x0
+    v214 StoreLocal { off=-87, value=v213, kind=V128 }    -> -
+    v215 LocalAddr(-87)                                   -> x0
     v216 Imm(9)                                           -> x7
     v217 Call { target_pc=5, args=[v216], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v218 RetPart(0, kind=V128)                            -> d0
-    v219 StoreLocal { off=-81, value=v218, kind=V128 }    -> -
-    v220 LocalAddr(-81)                                   -> x0
+    v219 StoreLocal { off=-88, value=v218, kind=V128 }    -> -
+    v220 LocalAddr(-88)                                   -> x0
     v221 Imm(10)                                          -> x7
     v222 Call { target_pc=5, args=[v221], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v223 RetPart(0, kind=V128)                            -> d0
-    v224 StoreLocal { off=-82, value=v223, kind=V128 }    -> -
-    v225 LocalAddr(-82)                                   -> x9
+    v224 StoreLocal { off=-89, value=v223, kind=V128 }    -> -
+    v225 LocalAddr(-89)                                   -> x9
     v226 Imm(10)                                          -> x7
-    v227 LocalAddr(-73)                                   -> x0
-    v228 LocalAddr(-74)                                   -> x1
-    v229 LocalAddr(-75)                                   -> x2
-    v230 LocalAddr(-76)                                   -> x6
-    v231 LocalAddr(-77)                                   -> x8
-    v232 LocalAddr(-78)                                   -> [spill 0]
-    v233 LocalAddr(-79)                                   -> [spill 1]
-    v234 LocalAddr(-80)                                   -> [spill 2]
-    v235 LocalAddr(-81)                                   -> [spill 3]
+    v227 LocalAddr(-80)                                   -> x0
+    v228 LocalAddr(-81)                                   -> x1
+    v229 LocalAddr(-82)                                   -> x2
+    v230 LocalAddr(-83)                                   -> x6
+    v231 LocalAddr(-84)                                   -> x8
+    v232 LocalAddr(-85)                                   -> [spill 0]
+    v233 LocalAddr(-86)                                   -> [spill 1]
+    v234 LocalAddr(-87)                                   -> [spill 2]
+    v235 LocalAddr(-88)                                   -> [spill 3]
     v236 Call { target_pc=0, args=[v226, v227, v228, v229, v230, v231, v232, v233, v234, v235, v225], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v237 Extend { value=v236, kind=I32 }                  -> x1
     v238 Imm(260)                                         -> x1
@@ -844,672 +844,692 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v341 Imm(0)                                           -> x0
     v342 Imm(1)                                           -> x7
     v343 LocalAddr(-1)                                    -> x0
-    v344 Call { target_pc=1, args=[v342, v330], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v345 Extend { value=v344, kind=I32 }                  -> x1
-    v346 Imm(17)                                          -> x1
-    v347 BinopI { op=ne, lhs=v344, rhs_imm=17 }           -> x0
-    terminator Bz { cond=v347, target=b6, fall=b5 }   (exit_acc=v347)
+    v344 Imm(0)                                           -> x0
+    v345 Imm(0)                                           -> x0
+    v346 Call { target_pc=1, args=[v342, v330], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v347 Extend { value=v346, kind=I32 }                  -> x1
+    v348 Imm(17)                                          -> x1
+    v349 BinopI { op=ne, lhs=v346, rhs_imm=17 }           -> x0
+    terminator Bz { cond=v349, target=b6, fall=b5 }   (exit_acc=v349)
   block 5  start_pc=0
-    v348 Imm(3)                                           -> x0
-    v349 LifetimeEnd(-1)                                  -> -
-    terminator Return(v348)   (exit_acc=v348)
+    v350 Imm(3)                                           -> x0
+    v351 LifetimeEnd(-1)                                  -> -
+    terminator Return(v350)   (exit_acc=v350)
   block 6  start_pc=0
-    v350 Imm(2)                                           -> x0
-    v351 Imm(7)                                           -> x0
-    v352 Imm(4602678819172646912)                         -> x0
-    v353 Imm(10)                                          -> x7
-    v354 Call { target_pc=5, args=[v353], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v355 RetPart(0, kind=V128)                            -> d0
-    v356 StoreLocal { off=-83, value=v355, kind=V128 }    -> -
-    v357 LocalAddr(-83)                                   -> x0
-    v358 Imm(9)                                           -> x0
-    v359 Imm(4598175219545276416)                         -> x0
-    v360 Imm(20)                                          -> x7
-    v361 Call { target_pc=5, args=[v360], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v362 RetPart(0, kind=V128)                            -> d0
-    v363 StoreLocal { off=-84, value=v362, kind=V128 }    -> -
-    v364 LocalAddr(-84)                                   -> x9
-    v365 Imm(2)                                           -> x7
-    v366 Imm(7)                                           -> x6
-    v367 Imm(4602678819172646912)                         -> x0
-    v368 LocalAddr(-83)                                   -> x1
-    v369 Imm(9)                                           -> x2
-    v370 Imm(4598175219545276416)                         -> x8
-    v371 Call { target_pc=2, args=[v365, v366, v367, v368, v369, v370, v364], fixed_args=1, fp_return=true, fp_arg_mask=0x24 } -> d0
-    v372 Imm(4632620719820242944)                         -> x0
-    v373 Binop { op=fne, lhs=v371, rhs=v372 }             -> x0
-    terminator Bz { cond=v373, target=b8, fall=b7 }   (exit_acc=v373)
+    v352 Imm(2)                                           -> x0
+    v353 Imm(7)                                           -> x0
+    v354 Imm(4602678819172646912)                         -> x0
+    v355 Imm(10)                                          -> x7
+    v356 Call { target_pc=5, args=[v355], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v357 RetPart(0, kind=V128)                            -> d0
+    v358 StoreLocal { off=-90, value=v357, kind=V128 }    -> -
+    v359 LocalAddr(-90)                                   -> x0
+    v360 Imm(9)                                           -> x0
+    v361 Imm(4598175219545276416)                         -> x0
+    v362 Imm(20)                                          -> x7
+    v363 Call { target_pc=5, args=[v362], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v364 RetPart(0, kind=V128)                            -> d0
+    v365 StoreLocal { off=-91, value=v364, kind=V128 }    -> -
+    v366 LocalAddr(-91)                                   -> x9
+    v367 Imm(2)                                           -> x7
+    v368 Imm(7)                                           -> x6
+    v369 Imm(4602678819172646912)                         -> x0
+    v370 LocalAddr(-90)                                   -> x1
+    v371 Imm(9)                                           -> x2
+    v372 Imm(4598175219545276416)                         -> x8
+    v373 Call { target_pc=2, args=[v367, v368, v369, v370, v371, v372, v366], fixed_args=1, fp_return=true, fp_arg_mask=0x24 } -> d0
+    v374 Imm(4632620719820242944)                         -> x0
+    v375 Binop { op=fne, lhs=v373, rhs=v374 }             -> x0
+    terminator Bz { cond=v375, target=b8, fall=b7 }   (exit_acc=v375)
   block 7  start_pc=0
-    v374 Imm(4)                                           -> x0
-    v375 LifetimeEnd(-1)                                  -> -
-    terminator Return(v374)   (exit_acc=v374)
+    v376 Imm(4)                                           -> x0
+    v377 LifetimeEnd(-1)                                  -> -
+    terminator Return(v376)   (exit_acc=v376)
   block 8  start_pc=0
-    v376 Imm(0)                                           -> x0
-    v377 Imm(0)                                           -> x0
-    v378 Imm(1)                                           -> x0
+    v378 Imm(0)                                           -> x0
     v379 Imm(0)                                           -> x0
     v380 Imm(1)                                           -> x0
-    v381 Imm(1)                                           -> x0
-    v382 Imm(0)                                           -> x0
+    v381 Imm(0)                                           -> x0
+    v382 Imm(1)                                           -> x0
     v383 Imm(1)                                           -> x0
-    v384 Imm(4607182418800017408)                         -> x0
-    v385 Imm(4616189618054758400)                         -> x0
-    v386 Imm(4598175219545276416)                         -> x0
-    v387 Imm(2)                                           -> x0
-    v388 Imm(2)                                           -> x0
+    v384 Imm(0)                                           -> x0
+    v385 Imm(1)                                           -> x0
+    v386 Imm(4607182418800017408)                         -> x0
+    v387 Imm(4616189618054758400)                         -> x0
+    v388 Imm(4598175219545276416)                         -> x0
     v389 Imm(2)                                           -> x0
-    v390 Imm(9)                                           -> x0
-    v391 Imm(9)                                           -> x0
-    v392 Imm(4621256167635550208)                         -> x0
-    v393 Imm(4621396905123905536)                         -> x0
-    v394 Imm(4621396905123905536)                         -> x0
-    v395 Imm(0)                                           -> x0
-    v396 Imm(0)                                           -> x0
-    v397 Imm(1)                                           -> x0
-    v398 Imm(2)                                           -> x0
-    v399 Imm(2)                                           -> x0
+    v390 Imm(2)                                           -> x0
+    v391 Imm(2)                                           -> x0
+    v392 Imm(9)                                           -> x0
+    v393 Imm(9)                                           -> x0
+    v394 Imm(4621256167635550208)                         -> x0
+    v395 Imm(4621396905123905536)                         -> x0
+    v396 Imm(4621396905123905536)                         -> x0
+    v397 Imm(0)                                           -> x0
+    v398 Imm(0)                                           -> x0
+    v399 Imm(1)                                           -> x0
     v400 Imm(2)                                           -> x0
-    v401 Imm(1)                                           -> x0
-    v402 Imm(0)                                           -> x0
-    v403 Imm(2)                                           -> x0
-    v404 Imm(4611686018427387904)                         -> x0
-    v405 Imm(4616189618054758400)                         -> x0
-    v406 Imm(4602678819172646912)                         -> x0
-    v407 Imm(2)                                           -> x0
-    v408 Imm(4)                                           -> x0
-    v409 Imm(4)                                           -> x0
-    v410 Imm(11)                                          -> x0
-    v411 Imm(11)                                          -> x0
-    v412 Imm(4622382067542392832)                         -> x0
-    v413 Imm(4622663542519103488)                         -> x0
-    v414 Imm(4626533823448875008)                         -> x0
-    v415 Imm(0)                                           -> x0
-    v416 Imm(0)                                           -> x0
-    v417 Imm(2)                                           -> x0
-    v418 Imm(3)                                           -> x0
-    v419 Imm(3)                                           -> x0
+    v401 Imm(2)                                           -> x0
+    v402 Imm(2)                                           -> x0
+    v403 Imm(1)                                           -> x0
+    v404 Imm(0)                                           -> x0
+    v405 Imm(2)                                           -> x0
+    v406 Imm(4611686018427387904)                         -> x0
+    v407 Imm(4616189618054758400)                         -> x0
+    v408 Imm(4602678819172646912)                         -> x0
+    v409 Imm(2)                                           -> x0
+    v410 Imm(4)                                           -> x0
+    v411 Imm(4)                                           -> x0
+    v412 Imm(11)                                          -> x0
+    v413 Imm(11)                                          -> x0
+    v414 Imm(4622382067542392832)                         -> x0
+    v415 Imm(4622663542519103488)                         -> x0
+    v416 Imm(4626533823448875008)                         -> x0
+    v417 Imm(0)                                           -> x0
+    v418 Imm(0)                                           -> x0
+    v419 Imm(2)                                           -> x0
     v420 Imm(3)                                           -> x0
-    v421 Imm(1)                                           -> x0
-    v422 Imm(0)                                           -> x0
-    v423 Imm(3)                                           -> x0
-    v424 Imm(4613937818241073152)                         -> x0
-    v425 Imm(4616189618054758400)                         -> x0
-    v426 Imm(4604930618986332160)                         -> x0
-    v427 Imm(2)                                           -> x0
-    v428 Imm(6)                                           -> x0
-    v429 Imm(6)                                           -> x0
-    v430 Imm(13)                                          -> x0
-    v431 Imm(13)                                          -> x0
-    v432 Imm(4623507967449235456)                         -> x0
-    v433 Imm(4623930179914301440)                         -> x0
-    v434 Imm(4630052260657758208)                         -> x0
-    v435 Imm(0)                                           -> x0
-    v436 Imm(0)                                           -> x0
-    v437 Imm(3)                                           -> x0
-    v438 Imm(4)                                           -> x0
-    v439 Imm(4)                                           -> x0
+    v421 Imm(3)                                           -> x0
+    v422 Imm(3)                                           -> x0
+    v423 Imm(1)                                           -> x0
+    v424 Imm(0)                                           -> x0
+    v425 Imm(3)                                           -> x0
+    v426 Imm(4613937818241073152)                         -> x0
+    v427 Imm(4616189618054758400)                         -> x0
+    v428 Imm(4604930618986332160)                         -> x0
+    v429 Imm(2)                                           -> x0
+    v430 Imm(6)                                           -> x0
+    v431 Imm(6)                                           -> x0
+    v432 Imm(13)                                          -> x0
+    v433 Imm(13)                                          -> x0
+    v434 Imm(4623507967449235456)                         -> x0
+    v435 Imm(4623930179914301440)                         -> x0
+    v436 Imm(4630052260657758208)                         -> x0
+    v437 Imm(0)                                           -> x0
+    v438 Imm(0)                                           -> x0
+    v439 Imm(3)                                           -> x0
     v440 Imm(4)                                           -> x0
-    v441 Imm(1)                                           -> x0
-    v442 Imm(0)                                           -> x0
-    v443 Imm(4)                                           -> x0
-    v444 Imm(4616189618054758400)                         -> x0
-    v445 Imm(4616189618054758400)                         -> x0
-    v446 Imm(4607182418800017408)                         -> x0
-    v447 Imm(2)                                           -> x0
-    v448 Imm(8)                                           -> x0
-    v449 Imm(8)                                           -> x0
-    v450 Imm(15)                                          -> x0
-    v451 Imm(15)                                          -> x0
-    v452 Imm(4624633867356078080)                         -> x0
-    v453 Imm(4625196817309499392)                         -> x0
-    v454 Imm(4632304060471443456)                         -> x0
-    v455 Imm(0)                                           -> x0
-    v456 Imm(0)                                           -> x0
-    v457 Imm(4)                                           -> x0
-    v458 Imm(5)                                           -> x0
-    v459 Imm(5)                                           -> x0
+    v441 Imm(4)                                           -> x0
+    v442 Imm(4)                                           -> x0
+    v443 Imm(1)                                           -> x0
+    v444 Imm(0)                                           -> x0
+    v445 Imm(4)                                           -> x0
+    v446 Imm(4616189618054758400)                         -> x0
+    v447 Imm(4616189618054758400)                         -> x0
+    v448 Imm(4607182418800017408)                         -> x0
+    v449 Imm(2)                                           -> x0
+    v450 Imm(8)                                           -> x0
+    v451 Imm(8)                                           -> x0
+    v452 Imm(15)                                          -> x0
+    v453 Imm(15)                                          -> x0
+    v454 Imm(4624633867356078080)                         -> x0
+    v455 Imm(4625196817309499392)                         -> x0
+    v456 Imm(4632304060471443456)                         -> x0
+    v457 Imm(0)                                           -> x0
+    v458 Imm(0)                                           -> x0
+    v459 Imm(4)                                           -> x0
     v460 Imm(5)                                           -> x0
-    v461 Imm(1)                                           -> x0
-    v462 Imm(0)                                           -> x0
-    v463 Imm(5)                                           -> x0
-    v464 Imm(4617315517961601024)                         -> x0
-    v465 Imm(4616189618054758400)                         -> x0
-    v466 Imm(4608308318706860032)                         -> x0
-    v467 Imm(2)                                           -> x0
-    v468 Imm(10)                                          -> x0
-    v469 Imm(10)                                          -> x0
-    v470 Imm(17)                                          -> x0
-    v471 Imm(17)                                          -> x0
-    v472 Imm(4625478292286210048)                         -> x0
-    v473 Imm(4625830136007098368)                         -> x0
-    v474 Imm(4634538268099084288)                         -> x0
-    v475 Imm(0)                                           -> x0
-    v476 Imm(0)                                           -> x0
-    v477 Imm(5)                                           -> x0
-    v478 Imm(6)                                           -> x0
-    v479 Imm(6)                                           -> x0
+    v461 Imm(5)                                           -> x0
+    v462 Imm(5)                                           -> x0
+    v463 Imm(1)                                           -> x0
+    v464 Imm(0)                                           -> x0
+    v465 Imm(5)                                           -> x0
+    v466 Imm(4617315517961601024)                         -> x0
+    v467 Imm(4616189618054758400)                         -> x0
+    v468 Imm(4608308318706860032)                         -> x0
+    v469 Imm(2)                                           -> x0
+    v470 Imm(10)                                          -> x0
+    v471 Imm(10)                                          -> x0
+    v472 Imm(17)                                          -> x0
+    v473 Imm(17)                                          -> x0
+    v474 Imm(4625478292286210048)                         -> x0
+    v475 Imm(4625830136007098368)                         -> x0
+    v476 Imm(4634538268099084288)                         -> x0
+    v477 Imm(0)                                           -> x0
+    v478 Imm(0)                                           -> x0
+    v479 Imm(5)                                           -> x0
     v480 Imm(6)                                           -> x0
-    v481 Imm(1)                                           -> x0
-    v482 Imm(0)                                           -> x0
-    v483 Imm(6)                                           -> x0
-    v484 Imm(4618441417868443648)                         -> x0
-    v485 Imm(4616189618054758400)                         -> x0
-    v486 Imm(4609434218613702656)                         -> x0
-    v487 Imm(2)                                           -> x0
-    v488 Imm(12)                                          -> x0
-    v489 Imm(12)                                          -> x0
-    v490 Imm(19)                                          -> x0
-    v491 Imm(19)                                          -> x0
-    v492 Imm(4626041242239631360)                         -> x0
-    v493 Imm(4626463454704697344)                         -> x0
-    v494 Imm(4635980827354726400)                         -> x0
-    v495 Imm(0)                                           -> x0
-    v496 Imm(0)                                           -> x0
-    v497 Imm(6)                                           -> x0
-    v498 Imm(7)                                           -> x0
-    v499 Imm(7)                                           -> x0
+    v481 Imm(6)                                           -> x0
+    v482 Imm(6)                                           -> x0
+    v483 Imm(1)                                           -> x0
+    v484 Imm(0)                                           -> x0
+    v485 Imm(6)                                           -> x0
+    v486 Imm(4618441417868443648)                         -> x0
+    v487 Imm(4616189618054758400)                         -> x0
+    v488 Imm(4609434218613702656)                         -> x0
+    v489 Imm(2)                                           -> x0
+    v490 Imm(12)                                          -> x0
+    v491 Imm(12)                                          -> x0
+    v492 Imm(19)                                          -> x0
+    v493 Imm(19)                                          -> x0
+    v494 Imm(4626041242239631360)                         -> x0
+    v495 Imm(4626463454704697344)                         -> x0
+    v496 Imm(4635980827354726400)                         -> x0
+    v497 Imm(0)                                           -> x0
+    v498 Imm(0)                                           -> x0
+    v499 Imm(6)                                           -> x0
     v500 Imm(7)                                           -> x0
-    v501 Imm(0)                                           -> x0
-    v502 Imm(6)                                           -> x7
-    v503 Imm(4598175219545276416)                         -> x0
-    v504 Imm(1)                                           -> x1
-    v505 Imm(0)                                           -> x1
-    v506 Imm(0)                                           -> x1
-    v507 Imm(1)                                           -> x1
-    v508 Imm(1)                                           -> x1
+    v501 Imm(7)                                           -> x0
+    v502 Imm(7)                                           -> x0
+    v503 Imm(0)                                           -> x0
+    v504 Imm(6)                                           -> x7
+    v505 Imm(4598175219545276416)                         -> x0
+    v506 Imm(1)                                           -> x1
+    v507 Imm(0)                                           -> x1
+    v508 Imm(0)                                           -> x1
     v509 Imm(1)                                           -> x1
-    v510 Undef                                            -> x1
-    v511 VecConst { imm=1, kind=I64, bytes=8 }            -> d0
-    v512 Imm(0)                                           -> x1
-    v513 Imm(0)                                           -> x1
-    v514 Imm(1)                                           -> x1
-    v515 Imm(1)                                           -> x1
-    v516 Imm(2)                                           -> x1
-    v517 Imm(2)                                           -> x1
+    v510 Imm(1)                                           -> x1
+    v511 Imm(1)                                           -> x1
+    v512 Undef                                            -> x1
+    v513 VecConst { imm=1, kind=I64, bytes=8 }            -> d0
+    v514 Imm(0)                                           -> x1
+    v515 Imm(0)                                           -> x1
+    v516 Imm(1)                                           -> x1
+    v517 Imm(1)                                           -> x1
     v518 Imm(2)                                           -> x1
-    v519 Imm(0)                                           -> x1
-    v520 VecConst { imm=513, kind=I64, bytes=8 }          -> d0
+    v519 Imm(2)                                           -> x1
+    v520 Imm(2)                                           -> x1
     v521 Imm(0)                                           -> x1
-    v522 Imm(0)                                           -> x1
-    v523 Imm(2)                                           -> x1
-    v524 Imm(1)                                           -> x1
-    v525 Imm(3)                                           -> x1
-    v526 Imm(3)                                           -> x1
+    v522 VecConst { imm=513, kind=I64, bytes=8 }          -> d0
+    v523 Imm(0)                                           -> x1
+    v524 Imm(0)                                           -> x1
+    v525 Imm(2)                                           -> x1
+    v526 Imm(1)                                           -> x1
     v527 Imm(3)                                           -> x1
-    v528 Imm(0)                                           -> x1
-    v529 VecConst { imm=197121, kind=I64, bytes=8 }       -> d0
+    v528 Imm(3)                                           -> x1
+    v529 Imm(3)                                           -> x1
     v530 Imm(0)                                           -> x1
-    v531 Imm(0)                                           -> x1
-    v532 Imm(3)                                           -> x1
-    v533 Imm(1)                                           -> x1
-    v534 Imm(4)                                           -> x1
-    v535 Imm(4)                                           -> x1
+    v531 VecConst { imm=197121, kind=I64, bytes=8 }       -> d0
+    v532 Imm(0)                                           -> x1
+    v533 Imm(0)                                           -> x1
+    v534 Imm(3)                                           -> x1
+    v535 Imm(1)                                           -> x1
     v536 Imm(4)                                           -> x1
-    v537 Imm(0)                                           -> x1
-    v538 VecConst { imm=67305985, kind=I64, bytes=8 }     -> d0
+    v537 Imm(4)                                           -> x1
+    v538 Imm(4)                                           -> x1
     v539 Imm(0)                                           -> x1
-    v540 Imm(0)                                           -> x1
-    v541 Imm(4)                                           -> x1
-    v542 Imm(1)                                           -> x1
-    v543 Imm(5)                                           -> x1
-    v544 Imm(5)                                           -> x1
+    v540 VecConst { imm=67305985, kind=I64, bytes=8 }     -> d0
+    v541 Imm(0)                                           -> x1
+    v542 Imm(0)                                           -> x1
+    v543 Imm(4)                                           -> x1
+    v544 Imm(1)                                           -> x1
     v545 Imm(5)                                           -> x1
-    v546 Imm(0)                                           -> x1
-    v547 VecConst { imm=21542142465, kind=I64, bytes=8 }  -> d0
+    v546 Imm(5)                                           -> x1
+    v547 Imm(5)                                           -> x1
     v548 Imm(0)                                           -> x1
-    v549 Imm(0)                                           -> x1
-    v550 Imm(5)                                           -> x1
-    v551 Imm(1)                                           -> x1
-    v552 Imm(6)                                           -> x1
-    v553 Imm(6)                                           -> x1
+    v549 VecConst { imm=21542142465, kind=I64, bytes=8 }  -> d0
+    v550 Imm(0)                                           -> x1
+    v551 Imm(0)                                           -> x1
+    v552 Imm(5)                                           -> x1
+    v553 Imm(1)                                           -> x1
     v554 Imm(6)                                           -> x1
-    v555 Imm(0)                                           -> x1
-    v556 VecConst { imm=6618611909121, kind=I64, bytes=8 } -> d0
+    v555 Imm(6)                                           -> x1
+    v556 Imm(6)                                           -> x1
     v557 Imm(0)                                           -> x1
-    v558 Imm(0)                                           -> x1
-    v559 Imm(6)                                           -> x1
-    v560 Imm(1)                                           -> x1
-    v561 Imm(7)                                           -> x1
-    v562 Imm(7)                                           -> x1
+    v558 VecConst { imm=6618611909121, kind=I64, bytes=8 } -> d0
+    v559 Imm(0)                                           -> x1
+    v560 Imm(0)                                           -> x1
+    v561 Imm(6)                                           -> x1
+    v562 Imm(1)                                           -> x1
     v563 Imm(7)                                           -> x1
-    v564 Imm(0)                                           -> x1
-    v565 VecConst { imm=1976943448883713, kind=I64, bytes=8 } -> d0
+    v564 Imm(7)                                           -> x1
+    v565 Imm(7)                                           -> x1
     v566 Imm(0)                                           -> x1
-    v567 Imm(0)                                           -> x1
-    v568 Imm(7)                                           -> x1
-    v569 Imm(1)                                           -> x1
-    v570 Imm(8)                                           -> x1
-    v571 Imm(8)                                           -> x1
+    v567 VecConst { imm=1976943448883713, kind=I64, bytes=8 } -> d0
+    v568 Imm(0)                                           -> x1
+    v569 Imm(0)                                           -> x1
+    v570 Imm(7)                                           -> x1
+    v571 Imm(1)                                           -> x1
     v572 Imm(8)                                           -> x1
-    v573 Imm(0)                                           -> x1
-    v574 VecConst { imm=578437695752307201, kind=I64, bytes=8 } -> d0
+    v573 Imm(8)                                           -> x1
+    v574 Imm(8)                                           -> x1
     v575 Imm(0)                                           -> x1
-    v576 Imm(0)                                           -> x1
+    v576 VecConst { imm=578437695752307201, kind=I64, bytes=8 } -> d0
     v577 Imm(0)                                           -> x1
-    v578 LocalAddr(-7)                                    -> x9
+    v578 Imm(0)                                           -> x1
     v579 Imm(0)                                           -> x1
-    v580 Imm(578437695752307201)                          -> x1
-    v581 StoreLocal { off=-7, value=v580, kind=I64 }      -> -
-    v582 LifetimeEnd(0)                                   -> -
-    v583 LocalAddr(-7)                                    -> x1
-    v584 Imm(4602678819172646912)                         -> x1
-    v585 Imm(2)                                           -> x2
-    v586 Imm(0)                                           -> x2
-    v587 Imm(0)                                           -> x2
-    v588 Imm(2)                                           -> x2
-    v589 Imm(2)                                           -> x2
-    v590 Imm(2)                                           -> x2
-    v591 Undef                                            -> x2
-    v592 VecConst { imm=2, kind=I64, bytes=8 }            -> d0
-    v593 Imm(0)                                           -> x2
-    v594 Imm(0)                                           -> x2
-    v595 Imm(1)                                           -> x2
-    v596 Imm(2)                                           -> x2
-    v597 Imm(3)                                           -> x2
-    v598 Imm(3)                                           -> x2
-    v599 Imm(3)                                           -> x2
-    v600 Imm(0)                                           -> x2
-    v601 VecConst { imm=770, kind=I64, bytes=8 }          -> d0
-    v602 Imm(0)                                           -> x2
-    v603 Imm(0)                                           -> x2
-    v604 Imm(2)                                           -> x2
-    v605 Imm(2)                                           -> x2
-    v606 Imm(4)                                           -> x2
-    v607 Imm(4)                                           -> x2
-    v608 Imm(4)                                           -> x2
-    v609 Imm(0)                                           -> x2
-    v610 VecConst { imm=262914, kind=I64, bytes=8 }       -> d0
-    v611 Imm(0)                                           -> x2
-    v612 Imm(0)                                           -> x2
-    v613 Imm(3)                                           -> x2
-    v614 Imm(2)                                           -> x2
-    v615 Imm(5)                                           -> x2
-    v616 Imm(5)                                           -> x2
-    v617 Imm(5)                                           -> x2
-    v618 Imm(0)                                           -> x2
-    v619 VecConst { imm=84148994, kind=I64, bytes=8 }     -> d0
-    v620 Imm(0)                                           -> x2
-    v621 Imm(0)                                           -> x2
-    v622 Imm(4)                                           -> x2
-    v623 Imm(2)                                           -> x2
-    v624 Imm(6)                                           -> x2
-    v625 Imm(6)                                           -> x2
-    v626 Imm(6)                                           -> x2
-    v627 Imm(0)                                           -> x2
-    v628 VecConst { imm=25853952770, kind=I64, bytes=8 }  -> d0
-    v629 Imm(0)                                           -> x2
-    v630 Imm(0)                                           -> x2
-    v631 Imm(5)                                           -> x2
-    v632 Imm(2)                                           -> x2
-    v633 Imm(7)                                           -> x2
-    v634 Imm(7)                                           -> x2
-    v635 Imm(7)                                           -> x2
-    v636 Imm(0)                                           -> x2
-    v637 VecConst { imm=7722435347202, kind=I64, bytes=8 } -> d0
-    v638 Imm(0)                                           -> x2
-    v639 Imm(0)                                           -> x2
-    v640 Imm(6)                                           -> x2
-    v641 Imm(2)                                           -> x2
-    v642 Imm(8)                                           -> x2
-    v643 Imm(8)                                           -> x2
-    v644 Imm(8)                                           -> x2
-    v645 Imm(0)                                           -> x2
-    v646 VecConst { imm=2259522249032450, kind=I64, bytes=8 } -> d0
-    v647 Imm(0)                                           -> x2
-    v648 Imm(0)                                           -> x2
-    v649 Imm(7)                                           -> x2
-    v650 Imm(2)                                           -> x2
-    v651 Imm(9)                                           -> x2
-    v652 Imm(9)                                           -> x2
-    v653 Imm(9)                                           -> x2
-    v654 Imm(0)                                           -> x2
-    v655 VecConst { imm=650777868590383874, kind=I64, bytes=8 } -> d0
-    v656 Imm(0)                                           -> x2
-    v657 Imm(0)                                           -> x2
-    v658 Imm(0)                                           -> x2
-    v659 LocalAddr(-6)                                    -> x2
+    v580 Imm(0)                                           -> x1
+    v581 Imm(0)                                           -> x1
+    v582 Imm(578437695752307201)                          -> x1
+    v583 Imm(0)                                           -> x2
+    v584 LifetimeEnd(0)                                   -> -
+    v585 Imm(0)                                           -> x2
+    v586 Imm(4602678819172646912)                         -> x2
+    v587 Imm(2)                                           -> x6
+    v588 Imm(0)                                           -> x6
+    v589 Imm(0)                                           -> x6
+    v590 Imm(2)                                           -> x6
+    v591 Imm(2)                                           -> x6
+    v592 Imm(2)                                           -> x6
+    v593 Undef                                            -> x6
+    v594 VecConst { imm=2, kind=I64, bytes=8 }            -> d0
+    v595 Imm(0)                                           -> x6
+    v596 Imm(0)                                           -> x6
+    v597 Imm(1)                                           -> x6
+    v598 Imm(2)                                           -> x6
+    v599 Imm(3)                                           -> x6
+    v600 Imm(3)                                           -> x6
+    v601 Imm(3)                                           -> x6
+    v602 Imm(0)                                           -> x6
+    v603 VecConst { imm=770, kind=I64, bytes=8 }          -> d0
+    v604 Imm(0)                                           -> x6
+    v605 Imm(0)                                           -> x6
+    v606 Imm(2)                                           -> x6
+    v607 Imm(2)                                           -> x6
+    v608 Imm(4)                                           -> x6
+    v609 Imm(4)                                           -> x6
+    v610 Imm(4)                                           -> x6
+    v611 Imm(0)                                           -> x6
+    v612 VecConst { imm=262914, kind=I64, bytes=8 }       -> d0
+    v613 Imm(0)                                           -> x6
+    v614 Imm(0)                                           -> x6
+    v615 Imm(3)                                           -> x6
+    v616 Imm(2)                                           -> x6
+    v617 Imm(5)                                           -> x6
+    v618 Imm(5)                                           -> x6
+    v619 Imm(5)                                           -> x6
+    v620 Imm(0)                                           -> x6
+    v621 VecConst { imm=84148994, kind=I64, bytes=8 }     -> d0
+    v622 Imm(0)                                           -> x6
+    v623 Imm(0)                                           -> x6
+    v624 Imm(4)                                           -> x6
+    v625 Imm(2)                                           -> x6
+    v626 Imm(6)                                           -> x6
+    v627 Imm(6)                                           -> x6
+    v628 Imm(6)                                           -> x6
+    v629 Imm(0)                                           -> x6
+    v630 VecConst { imm=25853952770, kind=I64, bytes=8 }  -> d0
+    v631 Imm(0)                                           -> x6
+    v632 Imm(0)                                           -> x6
+    v633 Imm(5)                                           -> x6
+    v634 Imm(2)                                           -> x6
+    v635 Imm(7)                                           -> x6
+    v636 Imm(7)                                           -> x6
+    v637 Imm(7)                                           -> x6
+    v638 Imm(0)                                           -> x6
+    v639 VecConst { imm=7722435347202, kind=I64, bytes=8 } -> d0
+    v640 Imm(0)                                           -> x6
+    v641 Imm(0)                                           -> x6
+    v642 Imm(6)                                           -> x6
+    v643 Imm(2)                                           -> x6
+    v644 Imm(8)                                           -> x6
+    v645 Imm(8)                                           -> x6
+    v646 Imm(8)                                           -> x6
+    v647 Imm(0)                                           -> x6
+    v648 VecConst { imm=2259522249032450, kind=I64, bytes=8 } -> d0
+    v649 Imm(0)                                           -> x6
+    v650 Imm(0)                                           -> x6
+    v651 Imm(7)                                           -> x6
+    v652 Imm(2)                                           -> x6
+    v653 Imm(9)                                           -> x6
+    v654 Imm(9)                                           -> x6
+    v655 Imm(9)                                           -> x6
+    v656 Imm(0)                                           -> x6
+    v657 VecConst { imm=650777868590383874, kind=I64, bytes=8 } -> d0
+    v658 Imm(0)                                           -> x6
+    v659 Imm(0)                                           -> x6
     v660 Imm(0)                                           -> x6
-    v661 Imm(650777868590383874)                          -> x6
-    v662 StoreLocal { off=-6, value=v661, kind=I64 }      -> -
-    v663 LifetimeEnd(0)                                   -> -
-    v664 LocalAddr(-6)                                    -> x6
-    v665 Imm(4604930618986332160)                         -> x6
-    v666 Imm(3)                                           -> x8
-    v667 Imm(0)                                           -> x8
-    v668 Imm(0)                                           -> x8
-    v669 Imm(3)                                           -> x8
-    v670 Imm(3)                                           -> x8
-    v671 Imm(3)                                           -> x8
-    v672 Undef                                            -> x8
-    v673 VecConst { imm=3, kind=I64, bytes=8 }            -> d0
-    v674 Imm(0)                                           -> x8
-    v675 Imm(0)                                           -> x8
-    v676 Imm(1)                                           -> x8
-    v677 Imm(3)                                           -> x8
-    v678 Imm(4)                                           -> x8
-    v679 Imm(4)                                           -> x8
-    v680 Imm(4)                                           -> x8
-    v681 Imm(0)                                           -> x8
-    v682 VecConst { imm=1027, kind=I64, bytes=8 }         -> d0
-    v683 Imm(0)                                           -> x8
-    v684 Imm(0)                                           -> x8
-    v685 Imm(2)                                           -> x8
-    v686 Imm(3)                                           -> x8
-    v687 Imm(5)                                           -> x8
-    v688 Imm(5)                                           -> x8
-    v689 Imm(5)                                           -> x8
-    v690 Imm(0)                                           -> x8
-    v691 VecConst { imm=328707, kind=I64, bytes=8 }       -> d0
-    v692 Imm(0)                                           -> x8
-    v693 Imm(0)                                           -> x8
-    v694 Imm(3)                                           -> x8
-    v695 Imm(3)                                           -> x8
-    v696 Imm(6)                                           -> x8
-    v697 Imm(6)                                           -> x8
-    v698 Imm(6)                                           -> x8
-    v699 Imm(0)                                           -> x8
-    v700 VecConst { imm=100992003, kind=I64, bytes=8 }    -> d0
-    v701 Imm(0)                                           -> x8
-    v702 Imm(0)                                           -> x8
-    v703 Imm(4)                                           -> x8
-    v704 Imm(3)                                           -> x8
-    v705 Imm(7)                                           -> x8
-    v706 Imm(7)                                           -> x8
-    v707 Imm(7)                                           -> x8
-    v708 Imm(0)                                           -> x8
-    v709 VecConst { imm=30165763075, kind=I64, bytes=8 }  -> d0
-    v710 Imm(0)                                           -> x8
-    v711 Imm(0)                                           -> x8
-    v712 Imm(5)                                           -> x8
-    v713 Imm(3)                                           -> x8
-    v714 Imm(8)                                           -> x8
-    v715 Imm(8)                                           -> x8
-    v716 Imm(8)                                           -> x8
-    v717 Imm(0)                                           -> x8
-    v718 VecConst { imm=8826258785283, kind=I64, bytes=8 } -> d0
-    v719 Imm(0)                                           -> x8
-    v720 Imm(0)                                           -> x8
-    v721 Imm(6)                                           -> x8
-    v722 Imm(3)                                           -> x8
-    v723 Imm(9)                                           -> x8
-    v724 Imm(9)                                           -> x8
-    v725 Imm(9)                                           -> x8
-    v726 Imm(0)                                           -> x8
-    v727 VecConst { imm=2542101049181187, kind=I64, bytes=8 } -> d0
-    v728 Imm(0)                                           -> x8
-    v729 Imm(0)                                           -> x8
-    v730 Imm(7)                                           -> x8
-    v731 Imm(3)                                           -> x8
-    v732 Imm(10)                                          -> x8
-    v733 Imm(10)                                          -> x8
-    v734 Imm(10)                                          -> x8
-    v735 Imm(0)                                           -> x8
-    v736 VecConst { imm=723118041428460547, kind=I64, bytes=8 } -> d0
-    v737 Imm(0)                                           -> x8
-    v738 Imm(0)                                           -> x8
-    v739 Imm(0)                                           -> x8
-    v740 LocalAddr(-5)                                    -> x8
-    v741 Imm(0)                                           -> x8
-    v742 Imm(723118041428460547)                          -> x8
-    v743 StoreLocal { off=-5, value=v742, kind=I64 }      -> -
-    v744 LifetimeEnd(0)                                   -> -
-    v745 LocalAddr(-5)                                    -> x8
-    v746 Imm(4607182418800017408)                         -> [spill 0]
-    v747 Imm(4)                                           -> [spill 1]
-    v748 Imm(0)                                           -> [spill 1]
-    v749 Imm(0)                                           -> [spill 1]
-    v750 Imm(4)                                           -> [spill 1]
-    v751 Imm(4)                                           -> [spill 1]
+    v661 Imm(0)                                           -> x6
+    v662 Imm(0)                                           -> x6
+    v663 Imm(650777868590383874)                          -> x6
+    v664 Imm(0)                                           -> x8
+    v665 LifetimeEnd(0)                                   -> -
+    v666 Imm(0)                                           -> x8
+    v667 Imm(4604930618986332160)                         -> x8
+    v668 Imm(3)                                           -> x9
+    v669 Imm(0)                                           -> x9
+    v670 Imm(0)                                           -> x9
+    v671 Imm(3)                                           -> x9
+    v672 Imm(3)                                           -> x9
+    v673 Imm(3)                                           -> x9
+    v674 Undef                                            -> x9
+    v675 VecConst { imm=3, kind=I64, bytes=8 }            -> d0
+    v676 Imm(0)                                           -> x9
+    v677 Imm(0)                                           -> x9
+    v678 Imm(1)                                           -> x9
+    v679 Imm(3)                                           -> x9
+    v680 Imm(4)                                           -> x9
+    v681 Imm(4)                                           -> x9
+    v682 Imm(4)                                           -> x9
+    v683 Imm(0)                                           -> x9
+    v684 VecConst { imm=1027, kind=I64, bytes=8 }         -> d0
+    v685 Imm(0)                                           -> x9
+    v686 Imm(0)                                           -> x9
+    v687 Imm(2)                                           -> x9
+    v688 Imm(3)                                           -> x9
+    v689 Imm(5)                                           -> x9
+    v690 Imm(5)                                           -> x9
+    v691 Imm(5)                                           -> x9
+    v692 Imm(0)                                           -> x9
+    v693 VecConst { imm=328707, kind=I64, bytes=8 }       -> d0
+    v694 Imm(0)                                           -> x9
+    v695 Imm(0)                                           -> x9
+    v696 Imm(3)                                           -> x9
+    v697 Imm(3)                                           -> x9
+    v698 Imm(6)                                           -> x9
+    v699 Imm(6)                                           -> x9
+    v700 Imm(6)                                           -> x9
+    v701 Imm(0)                                           -> x9
+    v702 VecConst { imm=100992003, kind=I64, bytes=8 }    -> d0
+    v703 Imm(0)                                           -> x9
+    v704 Imm(0)                                           -> x9
+    v705 Imm(4)                                           -> x9
+    v706 Imm(3)                                           -> x9
+    v707 Imm(7)                                           -> x9
+    v708 Imm(7)                                           -> x9
+    v709 Imm(7)                                           -> x9
+    v710 Imm(0)                                           -> x9
+    v711 VecConst { imm=30165763075, kind=I64, bytes=8 }  -> d0
+    v712 Imm(0)                                           -> x9
+    v713 Imm(0)                                           -> x9
+    v714 Imm(5)                                           -> x9
+    v715 Imm(3)                                           -> x9
+    v716 Imm(8)                                           -> x9
+    v717 Imm(8)                                           -> x9
+    v718 Imm(8)                                           -> x9
+    v719 Imm(0)                                           -> x9
+    v720 VecConst { imm=8826258785283, kind=I64, bytes=8 } -> d0
+    v721 Imm(0)                                           -> x9
+    v722 Imm(0)                                           -> x9
+    v723 Imm(6)                                           -> x9
+    v724 Imm(3)                                           -> x9
+    v725 Imm(9)                                           -> x9
+    v726 Imm(9)                                           -> x9
+    v727 Imm(9)                                           -> x9
+    v728 Imm(0)                                           -> x9
+    v729 VecConst { imm=2542101049181187, kind=I64, bytes=8 } -> d0
+    v730 Imm(0)                                           -> x9
+    v731 Imm(0)                                           -> x9
+    v732 Imm(7)                                           -> x9
+    v733 Imm(3)                                           -> x9
+    v734 Imm(10)                                          -> x9
+    v735 Imm(10)                                          -> x9
+    v736 Imm(10)                                          -> x9
+    v737 Imm(0)                                           -> x9
+    v738 VecConst { imm=723118041428460547, kind=I64, bytes=8 } -> d0
+    v739 Imm(0)                                           -> x9
+    v740 Imm(0)                                           -> x9
+    v741 Imm(0)                                           -> x9
+    v742 Imm(0)                                           -> x9
+    v743 Imm(0)                                           -> x9
+    v744 Imm(723118041428460547)                          -> x9
+    v745 Imm(0)                                           -> [spill 0]
+    v746 LifetimeEnd(0)                                   -> -
+    v747 Imm(0)                                           -> [spill 0]
+    v748 Imm(4607182418800017408)                         -> [spill 0]
+    v749 Imm(4)                                           -> [spill 1]
+    v750 Imm(0)                                           -> [spill 1]
+    v751 Imm(0)                                           -> [spill 1]
     v752 Imm(4)                                           -> [spill 1]
-    v753 Undef                                            -> [spill 1]
-    v754 VecConst { imm=4, kind=I64, bytes=8 }            -> d0
-    v755 Imm(0)                                           -> [spill 1]
-    v756 Imm(0)                                           -> [spill 1]
-    v757 Imm(1)                                           -> [spill 1]
-    v758 Imm(4)                                           -> [spill 1]
-    v759 Imm(5)                                           -> [spill 1]
-    v760 Imm(5)                                           -> [spill 1]
+    v753 Imm(4)                                           -> [spill 1]
+    v754 Imm(4)                                           -> [spill 1]
+    v755 Undef                                            -> [spill 1]
+    v756 VecConst { imm=4, kind=I64, bytes=8 }            -> d0
+    v757 Imm(0)                                           -> [spill 1]
+    v758 Imm(0)                                           -> [spill 1]
+    v759 Imm(1)                                           -> [spill 1]
+    v760 Imm(4)                                           -> [spill 1]
     v761 Imm(5)                                           -> [spill 1]
-    v762 Imm(0)                                           -> [spill 1]
-    v763 VecConst { imm=1284, kind=I64, bytes=8 }         -> d0
+    v762 Imm(5)                                           -> [spill 1]
+    v763 Imm(5)                                           -> [spill 1]
     v764 Imm(0)                                           -> [spill 1]
-    v765 Imm(0)                                           -> [spill 1]
-    v766 Imm(2)                                           -> [spill 1]
-    v767 Imm(4)                                           -> [spill 1]
-    v768 Imm(6)                                           -> [spill 1]
-    v769 Imm(6)                                           -> [spill 1]
+    v765 VecConst { imm=1284, kind=I64, bytes=8 }         -> d0
+    v766 Imm(0)                                           -> [spill 1]
+    v767 Imm(0)                                           -> [spill 1]
+    v768 Imm(2)                                           -> [spill 1]
+    v769 Imm(4)                                           -> [spill 1]
     v770 Imm(6)                                           -> [spill 1]
-    v771 Imm(0)                                           -> [spill 1]
-    v772 VecConst { imm=394500, kind=I64, bytes=8 }       -> d0
+    v771 Imm(6)                                           -> [spill 1]
+    v772 Imm(6)                                           -> [spill 1]
     v773 Imm(0)                                           -> [spill 1]
-    v774 Imm(0)                                           -> [spill 1]
-    v775 Imm(3)                                           -> [spill 1]
-    v776 Imm(4)                                           -> [spill 1]
-    v777 Imm(7)                                           -> [spill 1]
-    v778 Imm(7)                                           -> [spill 1]
+    v774 VecConst { imm=394500, kind=I64, bytes=8 }       -> d0
+    v775 Imm(0)                                           -> [spill 1]
+    v776 Imm(0)                                           -> [spill 1]
+    v777 Imm(3)                                           -> [spill 1]
+    v778 Imm(4)                                           -> [spill 1]
     v779 Imm(7)                                           -> [spill 1]
-    v780 Imm(0)                                           -> [spill 1]
-    v781 VecConst { imm=117835012, kind=I64, bytes=8 }    -> d0
+    v780 Imm(7)                                           -> [spill 1]
+    v781 Imm(7)                                           -> [spill 1]
     v782 Imm(0)                                           -> [spill 1]
-    v783 Imm(0)                                           -> [spill 1]
-    v784 Imm(4)                                           -> [spill 1]
-    v785 Imm(4)                                           -> [spill 1]
-    v786 Imm(8)                                           -> [spill 1]
-    v787 Imm(8)                                           -> [spill 1]
+    v783 VecConst { imm=117835012, kind=I64, bytes=8 }    -> d0
+    v784 Imm(0)                                           -> [spill 1]
+    v785 Imm(0)                                           -> [spill 1]
+    v786 Imm(4)                                           -> [spill 1]
+    v787 Imm(4)                                           -> [spill 1]
     v788 Imm(8)                                           -> [spill 1]
-    v789 Imm(0)                                           -> [spill 1]
-    v790 VecConst { imm=34477573380, kind=I64, bytes=8 }  -> d0
+    v789 Imm(8)                                           -> [spill 1]
+    v790 Imm(8)                                           -> [spill 1]
     v791 Imm(0)                                           -> [spill 1]
-    v792 Imm(0)                                           -> [spill 1]
-    v793 Imm(5)                                           -> [spill 1]
-    v794 Imm(4)                                           -> [spill 1]
-    v795 Imm(9)                                           -> [spill 1]
-    v796 Imm(9)                                           -> [spill 1]
+    v792 VecConst { imm=34477573380, kind=I64, bytes=8 }  -> d0
+    v793 Imm(0)                                           -> [spill 1]
+    v794 Imm(0)                                           -> [spill 1]
+    v795 Imm(5)                                           -> [spill 1]
+    v796 Imm(4)                                           -> [spill 1]
     v797 Imm(9)                                           -> [spill 1]
-    v798 Imm(0)                                           -> [spill 1]
-    v799 VecConst { imm=9930082223364, kind=I64, bytes=8 } -> d0
+    v798 Imm(9)                                           -> [spill 1]
+    v799 Imm(9)                                           -> [spill 1]
     v800 Imm(0)                                           -> [spill 1]
-    v801 Imm(0)                                           -> [spill 1]
-    v802 Imm(6)                                           -> [spill 1]
-    v803 Imm(4)                                           -> [spill 1]
-    v804 Imm(10)                                          -> [spill 1]
-    v805 Imm(10)                                          -> [spill 1]
+    v801 VecConst { imm=9930082223364, kind=I64, bytes=8 } -> d0
+    v802 Imm(0)                                           -> [spill 1]
+    v803 Imm(0)                                           -> [spill 1]
+    v804 Imm(6)                                           -> [spill 1]
+    v805 Imm(4)                                           -> [spill 1]
     v806 Imm(10)                                          -> [spill 1]
-    v807 Imm(0)                                           -> [spill 1]
-    v808 VecConst { imm=2824679849329924, kind=I64, bytes=8 } -> d0
+    v807 Imm(10)                                          -> [spill 1]
+    v808 Imm(10)                                          -> [spill 1]
     v809 Imm(0)                                           -> [spill 1]
-    v810 Imm(0)                                           -> [spill 1]
-    v811 Imm(7)                                           -> [spill 1]
-    v812 Imm(4)                                           -> [spill 1]
-    v813 Imm(11)                                          -> [spill 1]
-    v814 Imm(11)                                          -> [spill 1]
+    v810 VecConst { imm=2824679849329924, kind=I64, bytes=8 } -> d0
+    v811 Imm(0)                                           -> [spill 1]
+    v812 Imm(0)                                           -> [spill 1]
+    v813 Imm(7)                                           -> [spill 1]
+    v814 Imm(4)                                           -> [spill 1]
     v815 Imm(11)                                          -> [spill 1]
-    v816 Imm(0)                                           -> [spill 1]
-    v817 VecConst { imm=795458214266537220, kind=I64, bytes=8 } -> d0
+    v816 Imm(11)                                          -> [spill 1]
+    v817 Imm(11)                                          -> [spill 1]
     v818 Imm(0)                                           -> [spill 1]
-    v819 Imm(0)                                           -> [spill 1]
+    v819 VecConst { imm=795458214266537220, kind=I64, bytes=8 } -> d0
     v820 Imm(0)                                           -> [spill 1]
-    v821 LocalAddr(-4)                                    -> [spill 1]
+    v821 Imm(0)                                           -> [spill 1]
     v822 Imm(0)                                           -> [spill 1]
-    v823 Imm(795458214266537220)                          -> [spill 1]
-    v824 StoreLocal { off=-4, value=v823, kind=I64 }      -> -
-    v825 LifetimeEnd(0)                                   -> -
-    v826 LocalAddr(-4)                                    -> [spill 1]
-    v827 Imm(4608308318706860032)                         -> [spill 2]
-    v828 Imm(5)                                           -> [spill 3]
-    v829 Imm(0)                                           -> [spill 3]
-    v830 Imm(0)                                           -> [spill 3]
-    v831 Imm(5)                                           -> [spill 3]
-    v832 Imm(5)                                           -> [spill 3]
+    v823 Imm(0)                                           -> [spill 1]
+    v824 Imm(0)                                           -> [spill 1]
+    v825 Imm(795458214266537220)                          -> [spill 1]
+    v826 Imm(0)                                           -> [spill 2]
+    v827 LifetimeEnd(0)                                   -> -
+    v828 Imm(0)                                           -> [spill 2]
+    v829 Imm(4608308318706860032)                         -> [spill 2]
+    v830 Imm(5)                                           -> [spill 3]
+    v831 Imm(0)                                           -> [spill 3]
+    v832 Imm(0)                                           -> [spill 3]
     v833 Imm(5)                                           -> [spill 3]
-    v834 Undef                                            -> [spill 3]
-    v835 VecConst { imm=5, kind=I64, bytes=8 }            -> d0
-    v836 Imm(0)                                           -> [spill 3]
-    v837 Imm(0)                                           -> [spill 3]
-    v838 Imm(1)                                           -> [spill 3]
-    v839 Imm(5)                                           -> [spill 3]
-    v840 Imm(6)                                           -> [spill 3]
-    v841 Imm(6)                                           -> [spill 3]
+    v834 Imm(5)                                           -> [spill 3]
+    v835 Imm(5)                                           -> [spill 3]
+    v836 Undef                                            -> [spill 3]
+    v837 VecConst { imm=5, kind=I64, bytes=8 }            -> d0
+    v838 Imm(0)                                           -> [spill 3]
+    v839 Imm(0)                                           -> [spill 3]
+    v840 Imm(1)                                           -> [spill 3]
+    v841 Imm(5)                                           -> [spill 3]
     v842 Imm(6)                                           -> [spill 3]
-    v843 Imm(0)                                           -> [spill 3]
-    v844 VecConst { imm=1541, kind=I64, bytes=8 }         -> d0
+    v843 Imm(6)                                           -> [spill 3]
+    v844 Imm(6)                                           -> [spill 3]
     v845 Imm(0)                                           -> [spill 3]
-    v846 Imm(0)                                           -> [spill 3]
-    v847 Imm(2)                                           -> [spill 3]
-    v848 Imm(5)                                           -> [spill 3]
-    v849 Imm(7)                                           -> [spill 3]
-    v850 Imm(7)                                           -> [spill 3]
+    v846 VecConst { imm=1541, kind=I64, bytes=8 }         -> d0
+    v847 Imm(0)                                           -> [spill 3]
+    v848 Imm(0)                                           -> [spill 3]
+    v849 Imm(2)                                           -> [spill 3]
+    v850 Imm(5)                                           -> [spill 3]
     v851 Imm(7)                                           -> [spill 3]
-    v852 Imm(0)                                           -> [spill 3]
-    v853 VecConst { imm=460293, kind=I64, bytes=8 }       -> d0
+    v852 Imm(7)                                           -> [spill 3]
+    v853 Imm(7)                                           -> [spill 3]
     v854 Imm(0)                                           -> [spill 3]
-    v855 Imm(0)                                           -> [spill 3]
-    v856 Imm(3)                                           -> [spill 3]
-    v857 Imm(5)                                           -> [spill 3]
-    v858 Imm(8)                                           -> [spill 3]
-    v859 Imm(8)                                           -> [spill 3]
+    v855 VecConst { imm=460293, kind=I64, bytes=8 }       -> d0
+    v856 Imm(0)                                           -> [spill 3]
+    v857 Imm(0)                                           -> [spill 3]
+    v858 Imm(3)                                           -> [spill 3]
+    v859 Imm(5)                                           -> [spill 3]
     v860 Imm(8)                                           -> [spill 3]
-    v861 Imm(0)                                           -> [spill 3]
-    v862 VecConst { imm=134678021, kind=I64, bytes=8 }    -> d0
+    v861 Imm(8)                                           -> [spill 3]
+    v862 Imm(8)                                           -> [spill 3]
     v863 Imm(0)                                           -> [spill 3]
-    v864 Imm(0)                                           -> [spill 3]
-    v865 Imm(4)                                           -> [spill 3]
-    v866 Imm(5)                                           -> [spill 3]
-    v867 Imm(9)                                           -> [spill 3]
-    v868 Imm(9)                                           -> [spill 3]
+    v864 VecConst { imm=134678021, kind=I64, bytes=8 }    -> d0
+    v865 Imm(0)                                           -> [spill 3]
+    v866 Imm(0)                                           -> [spill 3]
+    v867 Imm(4)                                           -> [spill 3]
+    v868 Imm(5)                                           -> [spill 3]
     v869 Imm(9)                                           -> [spill 3]
-    v870 Imm(0)                                           -> [spill 3]
-    v871 VecConst { imm=38789383685, kind=I64, bytes=8 }  -> d0
+    v870 Imm(9)                                           -> [spill 3]
+    v871 Imm(9)                                           -> [spill 3]
     v872 Imm(0)                                           -> [spill 3]
-    v873 Imm(0)                                           -> [spill 3]
-    v874 Imm(5)                                           -> [spill 3]
-    v875 Imm(5)                                           -> [spill 3]
-    v876 Imm(10)                                          -> [spill 3]
-    v877 Imm(10)                                          -> [spill 3]
+    v873 VecConst { imm=38789383685, kind=I64, bytes=8 }  -> d0
+    v874 Imm(0)                                           -> [spill 3]
+    v875 Imm(0)                                           -> [spill 3]
+    v876 Imm(5)                                           -> [spill 3]
+    v877 Imm(5)                                           -> [spill 3]
     v878 Imm(10)                                          -> [spill 3]
-    v879 Imm(0)                                           -> [spill 3]
-    v880 VecConst { imm=11033905661445, kind=I64, bytes=8 } -> d0
+    v879 Imm(10)                                          -> [spill 3]
+    v880 Imm(10)                                          -> [spill 3]
     v881 Imm(0)                                           -> [spill 3]
-    v882 Imm(0)                                           -> [spill 3]
-    v883 Imm(6)                                           -> [spill 3]
-    v884 Imm(5)                                           -> [spill 3]
-    v885 Imm(11)                                          -> [spill 3]
-    v886 Imm(11)                                          -> [spill 3]
+    v882 VecConst { imm=11033905661445, kind=I64, bytes=8 } -> d0
+    v883 Imm(0)                                           -> [spill 3]
+    v884 Imm(0)                                           -> [spill 3]
+    v885 Imm(6)                                           -> [spill 3]
+    v886 Imm(5)                                           -> [spill 3]
     v887 Imm(11)                                          -> [spill 3]
-    v888 Imm(0)                                           -> [spill 3]
-    v889 VecConst { imm=3107258649478661, kind=I64, bytes=8 } -> d0
+    v888 Imm(11)                                          -> [spill 3]
+    v889 Imm(11)                                          -> [spill 3]
     v890 Imm(0)                                           -> [spill 3]
-    v891 Imm(0)                                           -> [spill 3]
-    v892 Imm(7)                                           -> [spill 3]
-    v893 Imm(5)                                           -> [spill 3]
-    v894 Imm(12)                                          -> [spill 3]
-    v895 Imm(12)                                          -> [spill 3]
+    v891 VecConst { imm=3107258649478661, kind=I64, bytes=8 } -> d0
+    v892 Imm(0)                                           -> [spill 3]
+    v893 Imm(0)                                           -> [spill 3]
+    v894 Imm(7)                                           -> [spill 3]
+    v895 Imm(5)                                           -> [spill 3]
     v896 Imm(12)                                          -> [spill 3]
-    v897 Imm(0)                                           -> [spill 3]
-    v898 VecConst { imm=867798387104613893, kind=I64, bytes=8 } -> d0
+    v897 Imm(12)                                          -> [spill 3]
+    v898 Imm(12)                                          -> [spill 3]
     v899 Imm(0)                                           -> [spill 3]
-    v900 Imm(0)                                           -> [spill 3]
+    v900 VecConst { imm=867798387104613893, kind=I64, bytes=8 } -> d0
     v901 Imm(0)                                           -> [spill 3]
-    v902 LocalAddr(-3)                                    -> [spill 3]
+    v902 Imm(0)                                           -> [spill 3]
     v903 Imm(0)                                           -> [spill 3]
-    v904 Imm(867798387104613893)                          -> [spill 3]
-    v905 StoreLocal { off=-3, value=v904, kind=I64 }      -> -
-    v906 LifetimeEnd(0)                                   -> -
-    v907 LocalAddr(-3)                                    -> [spill 3]
-    v908 Imm(4609434218613702656)                         -> [spill 4]
-    v909 Imm(6)                                           -> [spill 5]
-    v910 Imm(0)                                           -> [spill 5]
-    v911 Imm(0)                                           -> [spill 5]
-    v912 Imm(6)                                           -> [spill 5]
-    v913 Imm(6)                                           -> [spill 5]
+    v904 Imm(0)                                           -> [spill 3]
+    v905 Imm(0)                                           -> [spill 3]
+    v906 Imm(867798387104613893)                          -> [spill 3]
+    v907 Imm(0)                                           -> [spill 4]
+    v908 LifetimeEnd(0)                                   -> -
+    v909 Imm(0)                                           -> [spill 4]
+    v910 Imm(4609434218613702656)                         -> [spill 4]
+    v911 Imm(6)                                           -> [spill 5]
+    v912 Imm(0)                                           -> [spill 5]
+    v913 Imm(0)                                           -> [spill 5]
     v914 Imm(6)                                           -> [spill 5]
-    v915 Undef                                            -> [spill 5]
-    v916 VecConst { imm=6, kind=I64, bytes=8 }            -> d0
-    v917 Imm(0)                                           -> [spill 5]
-    v918 Imm(0)                                           -> [spill 5]
-    v919 Imm(1)                                           -> [spill 5]
-    v920 Imm(6)                                           -> [spill 5]
-    v921 Imm(7)                                           -> [spill 5]
-    v922 Imm(7)                                           -> [spill 5]
+    v915 Imm(6)                                           -> [spill 5]
+    v916 Imm(6)                                           -> [spill 5]
+    v917 Undef                                            -> [spill 5]
+    v918 VecConst { imm=6, kind=I64, bytes=8 }            -> d0
+    v919 Imm(0)                                           -> [spill 5]
+    v920 Imm(0)                                           -> [spill 5]
+    v921 Imm(1)                                           -> [spill 5]
+    v922 Imm(6)                                           -> [spill 5]
     v923 Imm(7)                                           -> [spill 5]
-    v924 Imm(0)                                           -> [spill 5]
-    v925 VecConst { imm=1798, kind=I64, bytes=8 }         -> d0
+    v924 Imm(7)                                           -> [spill 5]
+    v925 Imm(7)                                           -> [spill 5]
     v926 Imm(0)                                           -> [spill 5]
-    v927 Imm(0)                                           -> [spill 5]
-    v928 Imm(2)                                           -> [spill 5]
-    v929 Imm(6)                                           -> [spill 5]
-    v930 Imm(8)                                           -> [spill 5]
-    v931 Imm(8)                                           -> [spill 5]
+    v927 VecConst { imm=1798, kind=I64, bytes=8 }         -> d0
+    v928 Imm(0)                                           -> [spill 5]
+    v929 Imm(0)                                           -> [spill 5]
+    v930 Imm(2)                                           -> [spill 5]
+    v931 Imm(6)                                           -> [spill 5]
     v932 Imm(8)                                           -> [spill 5]
-    v933 Imm(0)                                           -> [spill 5]
-    v934 VecConst { imm=526086, kind=I64, bytes=8 }       -> d0
+    v933 Imm(8)                                           -> [spill 5]
+    v934 Imm(8)                                           -> [spill 5]
     v935 Imm(0)                                           -> [spill 5]
-    v936 Imm(0)                                           -> [spill 5]
-    v937 Imm(3)                                           -> [spill 5]
-    v938 Imm(6)                                           -> [spill 5]
-    v939 Imm(9)                                           -> [spill 5]
-    v940 Imm(9)                                           -> [spill 5]
+    v936 VecConst { imm=526086, kind=I64, bytes=8 }       -> d0
+    v937 Imm(0)                                           -> [spill 5]
+    v938 Imm(0)                                           -> [spill 5]
+    v939 Imm(3)                                           -> [spill 5]
+    v940 Imm(6)                                           -> [spill 5]
     v941 Imm(9)                                           -> [spill 5]
-    v942 Imm(0)                                           -> [spill 5]
-    v943 VecConst { imm=151521030, kind=I64, bytes=8 }    -> d0
+    v942 Imm(9)                                           -> [spill 5]
+    v943 Imm(9)                                           -> [spill 5]
     v944 Imm(0)                                           -> [spill 5]
-    v945 Imm(0)                                           -> [spill 5]
-    v946 Imm(4)                                           -> [spill 5]
-    v947 Imm(6)                                           -> [spill 5]
-    v948 Imm(10)                                          -> [spill 5]
-    v949 Imm(10)                                          -> [spill 5]
+    v945 VecConst { imm=151521030, kind=I64, bytes=8 }    -> d0
+    v946 Imm(0)                                           -> [spill 5]
+    v947 Imm(0)                                           -> [spill 5]
+    v948 Imm(4)                                           -> [spill 5]
+    v949 Imm(6)                                           -> [spill 5]
     v950 Imm(10)                                          -> [spill 5]
-    v951 Imm(0)                                           -> [spill 5]
-    v952 VecConst { imm=43101193990, kind=I64, bytes=8 }  -> d0
+    v951 Imm(10)                                          -> [spill 5]
+    v952 Imm(10)                                          -> [spill 5]
     v953 Imm(0)                                           -> [spill 5]
-    v954 Imm(0)                                           -> [spill 5]
-    v955 Imm(5)                                           -> [spill 5]
-    v956 Imm(6)                                           -> [spill 5]
-    v957 Imm(11)                                          -> [spill 5]
-    v958 Imm(11)                                          -> [spill 5]
+    v954 VecConst { imm=43101193990, kind=I64, bytes=8 }  -> d0
+    v955 Imm(0)                                           -> [spill 5]
+    v956 Imm(0)                                           -> [spill 5]
+    v957 Imm(5)                                           -> [spill 5]
+    v958 Imm(6)                                           -> [spill 5]
     v959 Imm(11)                                          -> [spill 5]
-    v960 Imm(0)                                           -> [spill 5]
-    v961 VecConst { imm=12137729099526, kind=I64, bytes=8 } -> d0
+    v960 Imm(11)                                          -> [spill 5]
+    v961 Imm(11)                                          -> [spill 5]
     v962 Imm(0)                                           -> [spill 5]
-    v963 Imm(0)                                           -> [spill 5]
-    v964 Imm(6)                                           -> [spill 5]
-    v965 Imm(6)                                           -> [spill 5]
-    v966 Imm(12)                                          -> [spill 5]
-    v967 Imm(12)                                          -> [spill 5]
+    v963 VecConst { imm=12137729099526, kind=I64, bytes=8 } -> d0
+    v964 Imm(0)                                           -> [spill 5]
+    v965 Imm(0)                                           -> [spill 5]
+    v966 Imm(6)                                           -> [spill 5]
+    v967 Imm(6)                                           -> [spill 5]
     v968 Imm(12)                                          -> [spill 5]
-    v969 Imm(0)                                           -> [spill 5]
-    v970 VecConst { imm=3389837449627398, kind=I64, bytes=8 } -> d0
+    v969 Imm(12)                                          -> [spill 5]
+    v970 Imm(12)                                          -> [spill 5]
     v971 Imm(0)                                           -> [spill 5]
-    v972 Imm(0)                                           -> [spill 5]
-    v973 Imm(7)                                           -> [spill 5]
-    v974 Imm(6)                                           -> [spill 5]
-    v975 Imm(13)                                          -> [spill 5]
-    v976 Imm(13)                                          -> [spill 5]
+    v972 VecConst { imm=3389837449627398, kind=I64, bytes=8 } -> d0
+    v973 Imm(0)                                           -> [spill 5]
+    v974 Imm(0)                                           -> [spill 5]
+    v975 Imm(7)                                           -> [spill 5]
+    v976 Imm(6)                                           -> [spill 5]
     v977 Imm(13)                                          -> [spill 5]
-    v978 Imm(0)                                           -> [spill 5]
-    v979 VecConst { imm=940138559942690566, kind=I64, bytes=8 } -> d0
+    v978 Imm(13)                                          -> [spill 5]
+    v979 Imm(13)                                          -> [spill 5]
     v980 Imm(0)                                           -> [spill 5]
-    v981 Imm(0)                                           -> [spill 5]
+    v981 VecConst { imm=940138559942690566, kind=I64, bytes=8 } -> d0
     v982 Imm(0)                                           -> [spill 5]
-    v983 LocalAddr(-1)                                    -> [spill 5]
+    v983 Imm(0)                                           -> [spill 5]
     v984 Imm(0)                                           -> [spill 5]
-    v985 Imm(940138559942690566)                          -> [spill 5]
-    v986 StoreLocal { off=-1, value=v985, kind=I64 }      -> -
-    v987 LifetimeEnd(0)                                   -> -
-    v988 LocalAddr(-1)                                    -> [spill 5]
-    v989 Call { target_pc=3, args=[v502, v503, v578, v584, v659, v665, v745, v746, v826, v827, v907, v908, v988], fixed_args=1, fp_return=true, fp_arg_mask=0xaaa } -> d0
-    v990 Imm(0)                                           -> x0
-    v991 Imm(4635980827354726400)                         -> x0
-    v992 Binop { op=fne, lhs=v989, rhs=v991 }             -> x0
-    terminator Bz { cond=v992, target=b10, fall=b9 }   (exit_acc=v992)
+    v985 Imm(0)                                           -> [spill 5]
+    v986 Imm(0)                                           -> [spill 5]
+    v987 Imm(940138559942690566)                          -> [spill 5]
+    v988 Imm(0)                                           -> [spill 6]
+    v989 LifetimeEnd(0)                                   -> -
+    v990 Imm(0)                                           -> [spill 6]
+    v991 LocalAddr(-7)                                    -> [spill 6]
+    v992 Imm(0)                                           -> [spill 7]
+    v993 StoreLocal { off=-7, value=v582, kind=I64 }      -> -
+    v994 LocalAddr(-6)                                    -> x1
+    v995 Imm(0)                                           -> [spill 7]
+    v996 StoreLocal { off=-6, value=v663, kind=I64 }      -> -
+    v997 LocalAddr(-5)                                    -> x6
+    v998 Imm(0)                                           -> [spill 7]
+    v999 StoreLocal { off=-5, value=v744, kind=I64 }      -> -
+    v1000 LocalAddr(-4)                                    -> x9
+    v1001 Imm(0)                                           -> [spill 7]
+    v1002 StoreLocal { off=-4, value=v825, kind=I64 }      -> -
+    v1003 LocalAddr(-3)                                    -> [spill 1]
+    v1004 Imm(0)                                           -> [spill 7]
+    v1005 StoreLocal { off=-3, value=v906, kind=I64 }      -> -
+    v1006 LocalAddr(-1)                                    -> [spill 3]
+    v1007 Imm(0)                                           -> [spill 7]
+    v1008 StoreLocal { off=-1, value=v987, kind=I64 }      -> -
+    v1009 Call { target_pc=3, args=[v504, v505, v991, v586, v994, v667, v997, v748, v1000, v829, v1003, v910, v1006], fixed_args=1, fp_return=true, fp_arg_mask=0xaaa } -> d0
+    v1010 Imm(0)                                           -> x0
+    v1011 Imm(4635980827354726400)                         -> x0
+    v1012 Binop { op=fne, lhs=v1009, rhs=v1011 }           -> x0
+    terminator Bz { cond=v1012, target=b10, fall=b9 }   (exit_acc=v1012)
   block 9  start_pc=0
-    v993 Imm(5)                                           -> x0
-    v994 LifetimeEnd(-1)                                  -> -
-    terminator Return(v993)   (exit_acc=v993)
+    v1013 Imm(5)                                           -> x0
+    v1014 LifetimeEnd(-1)                                  -> -
+    terminator Return(v1013)   (exit_acc=v1013)
   block 10  start_pc=0
-    v995 Imm(0)                                           -> x0
-    v996 LifetimeEnd(-1)                                  -> -
-    terminator Return(v995)   (exit_acc=v995)
+    v1015 Imm(0)                                           -> x0
+    v1016 LifetimeEnd(-1)                                  -> -
+    terminator Return(v1015)   (exit_acc=v1015)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

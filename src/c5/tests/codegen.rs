@@ -13295,20 +13295,41 @@ fn self_assignment_goes_and_a_copy_inside_one_object_stays() {
     }
 }
 
-/// An object a call writes after the copy, or reads whole as a by-value
-/// argument, keeps its storage, and its copy out stays a block copy.
+/// An object a call writes after the copy keeps its storage, and its copy
+/// out stays a block copy.
 #[test]
 fn copy_out_of_an_object_a_call_reaches_stays_a_block_copy() {
     for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
-        for name in ["escape_after_copy", "by_value_arg"] {
-            let (body, insts) = optimized_function_full_pool(BLOCK_COPY_SHAPES, name, target);
-            let out = inst_id(&insts, "ParamRef(0", &body);
-            let copy = alloc::format!("Mcpy {{ dst=v{out}, ");
-            assert!(
-                has_inst(&insts, &[copy.as_str()]) && has_inst(&insts, &["LocalAddr("]),
-                "{target:?}: {name}: {body}"
-            );
-        }
+        let (body, insts) =
+            optimized_function_full_pool(BLOCK_COPY_SHAPES, "escape_after_copy", target);
+        let out = inst_id(&insts, "ParamRef(0", &body);
+        let copy = alloc::format!("Mcpy {{ dst=v{out}, ");
+        assert!(
+            has_inst(&insts, &[copy.as_str()]) && has_inst(&insts, &["LocalAddr("]),
+            "{target:?}: {body}"
+        );
+    }
+}
+
+/// An object passed by value reaches the call through a copy into the
+/// call's argument temporary, so it splits: the copy out and the temporary
+/// take its fields, and no block copy is left.
+#[test]
+fn an_object_passed_by_value_splits_into_the_argument_copy() {
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let (body, insts) = optimized_function_full_pool(BLOCK_COPY_SHAPES, "by_value_arg", target);
+        let out = inst_id(&insts, "ParamRef(0", &body);
+        assert!(!has_inst(&insts, &["Mcpy"]), "{target:?}: {body}");
+        assert_eq!(
+            store_shape(&stores_through(&insts, out)),
+            [(0, "I64"), (8, "I64")],
+            "{target:?}: {body}"
+        );
+        let temp_stores = insts
+            .iter()
+            .filter(|(_, i)| i.starts_with("StoreLocal"))
+            .count();
+        assert_eq!(temp_stores, 2, "{target:?}: {body}");
     }
 }
 

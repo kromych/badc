@@ -52,40 +52,38 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x60
-               	sub	x0, x29, #0x48
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x16, [x1]
-               	str	x16, [x0]
-               	sub	x2, x29, #0x38
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x16, [x1]
-               	str	x16, [x2]
-               	ldr	w16, [x1, #0x8]
-               	str	w16, [x2, #0x8]
-               	sub	x4, x29, #0x40
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	w16, [x1]
-               	str	w16, [x4]
-               	sub	x5, x29, #0x28
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldp	x16, x17, [x1]
-               	stp	x16, x17, [x5]
                	mov	x1, #0x3e8              // =1000
                	mov	x7, #0x7d0              // =2000
                	sub	x3, x29, #0x18
-               	mov	x6, #0x64               // =100
-               	movk	x6, #0x65, lsl #32
-               	stur	x6, [x29, #-0x18]
-               	mov	x6, #0x66               // =102
-               	movk	x6, #0x67, lsl #32
-               	stur	x6, [x29, #-0x10]
-               	mov	x6, #0x68               // =104
-               	movk	x6, #0x69, lsl #32
-               	stur	x6, [x29, #-0x8]
+               	mov	x0, #0x64               // =100
+               	movk	x0, #0x65, lsl #32
+               	stur	x0, [x29, #-0x18]
+               	mov	x0, #0x66               // =102
+               	movk	x0, #0x67, lsl #32
+               	stur	x0, [x29, #-0x10]
+               	mov	x0, #0x68               // =104
+               	movk	x0, #0x69, lsl #32
+               	stur	x0, [x29, #-0x8]
+               	sub	x0, x29, #0x48
+               	mov	x2, #0xa                // =10
+               	movk	x2, #0x14, lsl #32
+               	stur	x2, [x29, #-0x48]
+               	sub	x2, x29, #0x38
+               	mov	x4, #0x3                // =3
+               	movk	x4, #0x4, lsl #32
+               	stur	x4, [x29, #-0x38]
+               	mov	x4, #0x5                // =5
+               	stur	w4, [x29, #-0x30]
+               	sub	x4, x29, #0x40
+               	mov	x5, #0x7                // =7
+               	stur	w5, [x29, #-0x40]
+               	sub	x5, x29, #0x28
+               	mov	x6, #0x1                // =1
+               	movk	x6, #0x2, lsl #32
+               	stur	x6, [x29, #-0x28]
+               	mov	x6, #0x3                // =3
+               	movk	x6, #0x4, lsl #32
+               	stur	x6, [x29, #-0x20]
                	str	x3, [sp]
                	mov	x16, #0xbb8             // =3000
                	str	x16, [sp, #0x8]

@@ -57,42 +57,45 @@ Disassembly of section .text:
 <caller>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x38, %rsp
+               	subq	$0x30, %rsp
+               	pushq	%r13
                	pushq	%rbx
                	leaq	0x1(%rcx), %rax
-               	leaq	-0x30(%rbp), %rdi
-               	movq	%rax, -0x30(%rbp)
-               	movq	$0x2, -0x28(%rbp)
                	movq	0x18(%rbp), %rdx
-               	leaq	(%r8,%r8,8), %rax
-               	leaq	0x2(%rax), %rcx
-               	leaq	0x1(%rsi), %rax
-               	leaq	-0x20(%rbp), %r8
-               	movq	%rax, -0x20(%rbp)
-               	movq	$0x5, -0x18(%rbp)
-               	movq	0x10(%rbp), %rax
-               	incq	%rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	$0x6, -0x8(%rbp)
-               	leaq	-0x10(%rbp), %rax
+               	leaq	(%r8,%r8,8), %rcx
+               	addq	$0x2, %rcx
+               	leaq	0x1(%rsi), %rdi
+               	movq	0x10(%rbp), %rbx
+               	incq	%rbx
                	shlq	%rsi
                	addq	$0x5, %rsi
-               	movq	0x18(%rbp), %rbx
+               	leaq	-0x30(%rbp), %r13
+               	movq	%rax, -0x30(%rbp)
+               	movq	$0x2, -0x28(%rbp)
+               	leaq	-0x20(%rbp), %rax
+               	movq	%rdi, -0x20(%rbp)
+               	movq	$0x5, -0x18(%rbp)
+               	leaq	-0x10(%rbp), %rdi
+               	movq	%rbx, -0x10(%rbp)
+               	movq	$0x6, -0x8(%rbp)
                	subq	$0x20, %rsp
                	movq	%rsi, 0x10(%rsp)
                	movq	$0x134ac, 0x18(%rsp)    # imm = 0x134AC
-               	movq	%rax, %r10
+               	movq	%rdi, %r10
                	movq	(%r10), %r11
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
+               	movq	%r13, %rdi
+               	movq	%rax, %r8
                	movq	0x8(%rdi), %rsi
                	movq	(%rdi), %rdi
                	movq	0x8(%r8), %r9
                	movq	(%r8), %r8
-               	callq	*%rbx
+               	callq	*%rdx
                	addq	$0x20, %rsp
                	popq	%rbx
+               	popq	%r13
                	leave
                	retq
 

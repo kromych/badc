@@ -173,13 +173,12 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x2, x0
+               	mov	x2, #0x4                // =4
+               	str	x1, [x0]
+               	str	x2, [x0, #0x8]
                	sub	x0, x29, #0x10
                	stur	x1, [x29, #-0x10]
-               	mov	x1, #0x4                // =4
-               	stur	x1, [x29, #-0x8]
-               	ldp	x16, x17, [x0]
-               	stp	x16, x17, [x2]
+               	stur	x2, [x29, #-0x8]
                	ldr	x1, [x0, #0x8]
                	ldr	x0, [x0]
                	bl	<addr>

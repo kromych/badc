@@ -137,11 +137,8 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x30
-               	sub	x7, x29, #0x10
-               	mov	x0, #0x6f               // =111
-               	stur	x0, [x29, #-0x10]
-               	mov	x0, #0xde               // =222
-               	stur	x0, [x29, #-0x8]
+               	mov	x8, #0x6f               // =111
+               	mov	x9, #0xde               // =222
                	mov	x0, #0x1                // =1
                	mov	x1, #0x2                // =2
                	mov	x2, #0x3                // =3
@@ -149,6 +146,9 @@ Disassembly of section .text:
                	mov	x4, #0x5                // =5
                	mov	x5, #0x6                // =6
                	mov	x6, #0x7                // =7
+               	sub	x7, x29, #0x10
+               	stur	x8, [x29, #-0x10]
+               	stur	x9, [x29, #-0x8]
                	mov	x16, #0x309             // =777
                	str	x16, [sp, #0x10]
                	mov	x16, x7

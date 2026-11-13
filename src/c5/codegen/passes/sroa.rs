@@ -37,6 +37,11 @@
 //! write defined included, through its destination; an object holding an
 //! array, or of more cells than the usable GPR file, keeps its block copies.
 //!
+//! An aggregate passed by value is read whole by the call's ABI transfer.
+//! The call reads a copy made just ahead of it in a temporary of its own,
+//! so the object reaches it only through a copy out; an object left whole
+//! passes itself again and the temporary goes.
+//!
 //! A fixed argument of a same-unit call is admitted on what the callee
 //! does with it ([`param_footprints`]): the object stays where it is,
 //! keeping its storage and its base address for the callee to read, and
@@ -70,6 +75,7 @@ use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 
 use crate::c5::codegen::ssa::reg_alloc::for_each_operand;
+use crate::c5::codegen::ssa::tape::{self, At, Insertion};
 use crate::c5::ir::{BinOp, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId};
 
 /// Byte ranges, relative to the object a pointer parameter points at,
@@ -362,6 +368,7 @@ pub(crate) fn run(func: &mut FunctionSsa, budget: Budget, footprints: &Footprint
     //
     // A batch whose fields mem2reg leaves in fresh slots take no fewer cells
     // than their object had is redone with those fields kept in the object.
+    let temps = copy_arguments(func);
     let mut fully: Vec<i64> = Vec::new();
     let mut settled: BTreeSet<i64> = BTreeSet::new();
     let mut retained: BTreeMap<i64, BTreeSet<(i64, i64)>> = BTreeMap::new();
@@ -418,7 +425,131 @@ pub(crate) fn run(func: &mut FunctionSsa, budget: Budget, footprints: &Footprint
             }
         }
     }
+    uncopy_arguments(func, &temps);
     fully
+}
+
+/// Give each by-value aggregate argument naming a candidate object a copy
+/// in a call-site temporary the call reads instead. The object then
+/// reaches the call only through a copy out, which a split decomposes into
+/// field stores; [`uncopy_arguments`] drops the copies of objects left
+/// whole. Returns the temporaries.
+fn copy_arguments(func: &mut FunctionSsa) -> BTreeSet<i64> {
+    let mut temps = BTreeSet::new();
+    let Some(cells_of) = candidate_objects(func) else {
+        return temps;
+    };
+    if (func.insts.iter()).any(|i| matches!(i, Inst::ParentLocalAddr { .. })) {
+        return temps;
+    }
+    // (call, argument, object address, size, align)
+    let mut sites: Vec<(usize, usize, ValueId, i64, i64)> = Vec::new();
+    for (i, inst) in func.insts.iter().enumerate() {
+        let (Inst::Call { args, arg_aggs, .. }
+        | Inst::CallIndirect { args, arg_aggs, .. }
+        | Inst::CallExt { args, arg_aggs, .. }) = inst
+        else {
+            continue;
+        };
+        for (j, agg) in arg_aggs.iter().enumerate() {
+            let (Some(d), Some(&a)) = (agg, args.get(j)) else {
+                continue;
+            };
+            let Some(Inst::LocalAddr(obj)) = func.insts.get(a as usize) else {
+                continue;
+            };
+            let desc = &func.agg_descs[*d as usize];
+            let (size, align) = (i64::from(desc.size), i64::from(desc.align));
+            if cells_of
+                .get(obj)
+                .is_some_and(|&c| size > 0 && size <= c * 8)
+                && align <= 8
+            {
+                sites.push((i, j, a, size, align));
+            }
+        }
+    }
+    if sites.is_empty() {
+        return temps;
+    }
+    let base = func.insts.len() as ValueId;
+    let mut ins: Vec<Insertion> = Vec::new();
+    for &(i, _, a, size, align) in &sites {
+        let cells = (size + 7) / 8;
+        func.locals += cells;
+        let t = -func.locals;
+        func.multi_cell_slots.push((t, cells));
+        temps.insert(t);
+        let at = At::Before(i as ValueId);
+        let addr = base + ins.len() as ValueId;
+        for inst in [
+            Inst::LocalAddr(t),
+            Inst::Mcpy {
+                dst: addr,
+                src: a,
+                size,
+                align: align as u32,
+            },
+        ] {
+            ins.push(Insertion {
+                at,
+                inst,
+                is_f32: false,
+                copy_of: None,
+            });
+        }
+    }
+    let pos = tape::sort(&mut ins, &func.blocks, base as usize);
+    let rewrite = tape::insert(func, &ins);
+    for (k, &(i, j, ..)) in sites.iter().enumerate() {
+        let addr = rewrite.ids[pos[2 * k]];
+        if let Inst::Call { args, .. }
+        | Inst::CallIndirect { args, .. }
+        | Inst::CallExt { args, .. } = &mut func.insts[rewrite.remap[i] as usize]
+        {
+            args[j] = addr;
+        }
+    }
+    temps
+}
+
+/// Undo [`copy_arguments`] where the object stayed whole: its copy into a
+/// temporary is still a block copy, and the call reads the object again.
+fn uncopy_arguments(func: &mut FunctionSsa, temps: &BTreeSet<i64>) {
+    if temps.is_empty() {
+        return;
+    }
+    let mut back: BTreeMap<ValueId, ValueId> = BTreeMap::new();
+    let mut unused: BTreeSet<i64> = BTreeSet::new();
+    for i in 0..func.insts.len() {
+        if let Inst::Mcpy { dst, src, .. } = func.insts[i]
+            && let Some(&Inst::LocalAddr(t)) = func.insts.get(dst as usize)
+            && temps.contains(&t)
+        {
+            back.insert(dst, src);
+            unused.insert(t);
+            func.insts[i] = Inst::Imm(0);
+        }
+    }
+    func.multi_cell_slots.retain(|(t, _)| !unused.contains(t));
+    if back.is_empty() {
+        return;
+    }
+    for inst in &mut func.insts {
+        if let Inst::Call { args, .. }
+        | Inst::CallIndirect { args, .. }
+        | Inst::CallExt { args, .. } = inst
+        {
+            for a in args.iter_mut() {
+                if let Some(&src) = back.get(a) {
+                    *a = src;
+                }
+            }
+        }
+    }
+    for &dst in back.keys() {
+        func.insts[dst as usize] = Inst::Imm(0);
+    }
 }
 
 /// Fields in fresh slots mem2reg did not lift, by object, where they are no

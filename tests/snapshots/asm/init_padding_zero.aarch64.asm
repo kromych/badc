@@ -195,11 +195,9 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x1, #0x1                // =1
                	sub	x0, x29, #0x8
-               	str	xzr, [x0]
-               	sturb	w1, [x29, #-0x8]
-               	stur	w1, [x29, #-0x4]
+               	mov	x1, #0x100000001        // =4294967297
+               	stur	x1, [x29, #-0x8]
                	ldr	x0, [x0]
                	bl	<addr>
                	add	sp, sp, #0x10

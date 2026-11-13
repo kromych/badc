@@ -328,12 +328,12 @@ Disassembly of section .text:
                	movl	$0xb, %eax
                	leave
                	retq
+               	leaq	<rip>, %rax # <addr>
+               	movl	$0x1, %edx
                	leaq	-0x78(%rbp), %rdi
                	movq	0x8(%rsp), %r10
                	movq	%r10, -0x78(%rbp)
-               	leaq	<rip>, %rax # <addr>
                	movq	%rax, -0x70(%rbp)
-               	movl	$0x1, %edx
                	movq	0x8(%rdi), %rsi
                	movq	(%rdi), %rdi
                	xorl	%eax, %eax
@@ -343,13 +343,13 @@ Disassembly of section .text:
                	movl	$0xc, %eax
                	leave
                	retq
+               	leaq	<rip>, %rax # <addr>
+               	addq	$0x4, %rax
+               	movl	$0x1, %edx
                	leaq	-0x78(%rbp), %rdi
                	movq	(%rsp), %r10
                	movq	%r10, -0x78(%rbp)
-               	leaq	<rip>, %rax # <addr>
-               	addq	$0x4, %rax
                	movq	%rax, -0x70(%rbp)
-               	movl	$0x1, %edx
                	movq	0x8(%rdi), %rsi
                	movq	(%rdi), %rdi
                	xorl	%eax, %eax
@@ -359,10 +359,13 @@ Disassembly of section .text:
                	movl	$0xd, %eax
                	leave
                	retq
-               	leaq	-0x78(%rbp), %rdi
                	leaq	<rip>, %rax
-               	movq	%rax, -0x78(%rbp)
                	xorl	%edx, %edx
+               	leaq	-0x78(%rbp), %rdi
+               	movq	%rax, -0x78(%rbp)
+               	leaq	<rip>, %rax # <addr>
+               	addq	$0x4, %rax
+               	movq	%rax, -0x70(%rbp)
                	movq	0x8(%rdi), %rsi
                	movq	(%rdi), %rdi
                	xorl	%eax, %eax
@@ -376,10 +379,13 @@ Disassembly of section .text:
                	movl	$0xe, %eax
                	leave
                	retq
-               	leaq	-0x78(%rbp), %rdi
                	leaq	<rip>, %rax
-               	movq	%rax, -0x78(%rbp)
                	xorl	%edx, %edx
+               	leaq	-0x78(%rbp), %rdi
+               	movq	%rax, -0x78(%rbp)
+               	leaq	<rip>, %rax # <addr>
+               	addq	$0x4, %rax
+               	movq	%rax, -0x70(%rbp)
                	movq	0x8(%rdi), %rsi
                	movq	(%rdi), %rdi
                	xorl	%eax, %eax

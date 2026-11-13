@@ -43,25 +43,25 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x40
                	mov	x2, x7
-               	add	x3, x3, #0x1
+               	add	x5, x3, #0x1
+               	mov	x7, #0x2                // =2
+               	add	x0, x4, x4, lsl #3
+               	add	x3, x0, #0x2
+               	add	x8, x1, #0x1
+               	mov	x9, #0x5                // =5
+               	add	x10, x6, #0x1
+               	mov	x11, #0x6               // =6
+               	lsl	x0, x1, #1
+               	add	x1, x0, #0x5
                	sub	x0, x29, #0x30
-               	stur	x3, [x29, #-0x30]
-               	mov	x3, #0x2                // =2
-               	stur	x3, [x29, #-0x28]
-               	add	x3, x4, x4, lsl #3
-               	add	x3, x3, #0x2
-               	add	x5, x1, #0x1
+               	stur	x5, [x29, #-0x30]
+               	stur	x7, [x29, #-0x28]
                	sub	x4, x29, #0x20
-               	stur	x5, [x29, #-0x20]
-               	mov	x5, #0x5                // =5
-               	stur	x5, [x29, #-0x18]
-               	add	x5, x6, #0x1
+               	stur	x8, [x29, #-0x20]
+               	stur	x9, [x29, #-0x18]
                	sub	x6, x29, #0x10
-               	stur	x5, [x29, #-0x10]
-               	mov	x5, #0x6                // =6
-               	stur	x5, [x29, #-0x8]
-               	lsl	x1, x1, #1
-               	add	x1, x1, #0x5
+               	stur	x10, [x29, #-0x10]
+               	stur	x11, [x29, #-0x8]
                	str	x1, [sp]
                	mov	x16, #0x34ac            // =13484
                	movk	x16, #0x1, lsl #16

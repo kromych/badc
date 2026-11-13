@@ -268,13 +268,13 @@ Disassembly of section .text:
                	add	sp, sp, #0x160
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x2a               // =42
-               	stur	w0, [x29, #-0x8]
                	bl	<addr>
                	mov	x20, x0
                	bl	<addr>
                	mov	x1, x0
                	sub	x2, x29, #0x8
+               	mov	x0, #0x2a               // =42
+               	stur	w0, [x29, #-0x8]
                	mov	x0, x20
                	ldr	x2, [x2]
                	bl	<addr>

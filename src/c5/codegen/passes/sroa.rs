@@ -442,6 +442,34 @@ fn copy_arguments(func: &mut FunctionSsa) -> BTreeSet<i64> {
     if (func.insts.iter()).any(|i| matches!(i, Inst::ParentLocalAddr { .. })) {
         return temps;
     }
+    // Objects something other than a call's by-value transfer reads: a load
+    // or a copy out. One only written and passed gains nothing from a split,
+    // whose copy into the temporary would replace the one the call makes.
+    let base_of = |mut v: ValueId| {
+        for _ in 0..16 {
+            match func.insts.get(v as usize)? {
+                Inst::LocalAddr(obj) => return Some(*obj),
+                Inst::BinopI {
+                    op: BinOp::Add | BinOp::Sub,
+                    lhs,
+                    ..
+                } => v = *lhs,
+                _ => return None,
+            }
+        }
+        None
+    };
+    let mut read: BTreeSet<i64> = BTreeSet::new();
+    for inst in &func.insts {
+        let addr = match inst {
+            Inst::Load { addr, .. } => *addr,
+            Inst::Mcpy { src, .. } => *src,
+            _ => continue,
+        };
+        if let Some(obj) = base_of(addr) {
+            read.insert(obj);
+        }
+    }
     // (call, argument, object address, size, align)
     let mut sites: Vec<(usize, usize, ValueId, i64, i64)> = Vec::new();
     for (i, inst) in func.insts.iter().enumerate() {
@@ -464,6 +492,7 @@ fn copy_arguments(func: &mut FunctionSsa) -> BTreeSet<i64> {
                 .get(obj)
                 .is_some_and(|&c| size > 0 && size <= c * 8)
                 && align <= 8
+                && read.contains(obj)
             {
                 sites.push((i, j, a, size, align));
             }
@@ -1894,6 +1923,60 @@ mod tests {
             locals: 4,
             ..FunctionSsa::default()
         }
+    }
+
+    /// A 16-byte object of two integer eightbytes passed by value to an
+    /// external call, after `extra`.
+    fn passed_object(extra: Vec<Inst>) -> FunctionSsa {
+        let mut insts = alloc::vec![
+            Inst::LocalAddr(-2),
+            Inst::Imm(7),
+            store(0, 1),
+            Inst::Store {
+                addr: 0,
+                disp: 8,
+                value: 1,
+                kind: StoreKind::I64,
+                volatile: false,
+                align: 0,
+                pc_rel: false,
+            },
+        ];
+        insts.extend(extra);
+        insts.push(Inst::CallExt {
+            binding_idx: 0,
+            args: alloc::vec![0],
+            fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+            low_word_args: 0,
+            arg_widths: crate::c5::ir::ArgWidths::default(),
+            fp_return: false,
+            arg_aggs: alloc::vec![Some(0)],
+            ret_agg: None,
+            ret_slot_local: 0,
+        });
+        let mut f = func(insts, Terminator::Return(NO_VALUE), alloc::vec![(-2, 2)]);
+        f.agg_descs = alloc::vec![crate::c5::ir::AggDesc {
+            size: 16,
+            align: 8,
+            member_align: 8,
+            fields: Vec::new(),
+            homogeneous: None,
+            vector: false,
+        }];
+        f
+    }
+
+    /// An object only written and passed by value takes no argument copy:
+    /// the copy would move the bytes the call's transfer moves. A call
+    /// taking thousands of call results compiled for minutes under the
+    /// two-register caps while sroa split them a few per round. An object
+    /// also read is copied.
+    #[test]
+    fn only_an_object_read_besides_its_call_takes_an_argument_copy() {
+        let mut f = passed_object(Vec::new());
+        assert!(copy_arguments(&mut f).is_empty());
+        let mut f = passed_object(alloc::vec![load(0)]);
+        assert_eq!(copy_arguments(&mut f).len(), 1);
     }
 
     fn store(addr: ValueId, value: ValueId) -> Inst {

@@ -169,11 +169,11 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	leave
                	retq
-               	movl	$0x1, %edi
                	leaq	-0x30(%rbp), %r9
                	movq	$0xa, -0x30(%rbp)
                	movq	$0xb, -0x28(%rbp)
                	movq	$0xc, -0x20(%rbp)
+               	movl	$0x1, %edi
                	subq	$0x20, %rsp
                	movq	%r9, %r10
                	movq	(%r10), %r11

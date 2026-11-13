@@ -298,6 +298,7 @@ Disassembly of section .text:
                	movl	$0x26, %eax
                	leave
                	retq
+               	movl	$0x2a, -0x8(%rbp)
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %r10
@@ -306,7 +307,6 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %rsi
                	leaq	-0x8(%rbp), %rdx
-               	movl	$0x2a, -0x8(%rbp)
                	movq	0x8(%rsp), %rdi
                	movq	(%rdx), %rdx
                	xorl	%eax, %eax

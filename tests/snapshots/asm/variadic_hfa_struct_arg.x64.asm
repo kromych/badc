@@ -90,14 +90,14 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000
-               	movabsq	$0x4002000000000000, %rcx # imm = 0x4002000000000000
-               	movl	$0x1, %edi
                	leaq	-0x10(%rbp), %r9
+               	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000
                	movq	%rax, %xmm14
                	movsd	%xmm14, -0x10(%rbp)
-               	movq	%rcx, %xmm14
+               	movabsq	$0x4002000000000000, %rax # imm = 0x4002000000000000
+               	movq	%rax, %xmm14
                	movsd	%xmm14, -0x8(%rbp)
+               	movl	$0x1, %edi
                	movq	%r9, %r10
                	movsd	(%r10), %xmm0
                	movsd	0x8(%r10), %xmm1

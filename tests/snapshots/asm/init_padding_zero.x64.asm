@@ -180,8 +180,9 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	leaq	-0x8(%rbp), %rdi
-               	movabsq	$0x100000001, %rax      # imm = 0x100000001
-               	movq	%rax, -0x8(%rbp)
+               	movq	$0x0, (%rdi)
+               	movb	$0x1, -0x8(%rbp)
+               	movl	$0x1, -0x4(%rbp)
                	movq	(%rdi), %rdi
                	callq	<addr>
                	leave

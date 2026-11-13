@@ -92,17 +92,15 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
+               	sub	x1, x29, #0x10
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldp	x16, x17, [x0]
+               	stp	x16, x17, [x1]
                	mov	x0, #0x0                // =0
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	mov	x4, #0x63               // =99
-               	sub	x1, x29, #0x10
-               	mov	x2, #0xa                // =10
-               	movk	x2, #0x14, lsl #32
-               	stur	x2, [x29, #-0x10]
-               	mov	x2, #0x1e               // =30
-               	movk	x2, #0x28, lsl #32
-               	stur	x2, [x29, #-0x8]
                	ldr	x2, [x1, #0x8]
                	ldr	x1, [x1]
                	bl	<addr>

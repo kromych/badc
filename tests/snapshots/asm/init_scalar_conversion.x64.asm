@@ -110,14 +110,14 @@ Disassembly of section .text:
                	movl	$0x6, %eax
                	leave
                	retq
-               	movabsq	$0x408a400000000000, %rcx # imm = 0x408A400000000000
-               	movabsq	$0x4080e00000000000, %rdx # imm = 0x4080E00000000000
                	leaq	-0x20(%rbp), %r9
                	movq	$0x0, -0x20(%rbp)
                	movq	$0x0, -0x18(%rbp)
-               	movq	%rcx, %xmm14
+               	movabsq	$0x408a400000000000, %rax # imm = 0x408A400000000000
+               	movq	%rax, %xmm14
                	movsd	%xmm14, -0x10(%rbp)
-               	movq	%rdx, %xmm14
+               	movabsq	$0x4080e00000000000, %rax # imm = 0x4080E00000000000
+               	movq	%rax, %xmm14
                	movsd	%xmm14, -0x8(%rbp)
                	subq	$0x20, %rsp
                	movq	%r9, %r10

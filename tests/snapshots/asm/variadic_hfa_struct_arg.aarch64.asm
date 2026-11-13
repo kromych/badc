@@ -87,12 +87,12 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	fmov	d0, #1.50000000
-               	fmov	d1, #2.25000000
-               	mov	x0, #0x1                // =1
                	sub	x7, x29, #0x10
+               	fmov	d0, #1.50000000
                	stur	d0, [x29, #-0x10]
-               	stur	d1, [x29, #-0x8]
+               	fmov	d0, #2.25000000
+               	stur	d0, [x29, #-0x8]
+               	mov	x0, #0x1                // =1
                	ldr	d0, [x7]
                	ldr	d1, [x7, #0x8]
                	bl	<addr>

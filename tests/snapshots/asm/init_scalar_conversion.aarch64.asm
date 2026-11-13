@@ -60,15 +60,15 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x16, <page>
-               	ldr	d1, [x16]
-               	adrp	x16, <page>
-               	ldr	d2, [x16, #0x8]
                	sub	x7, x29, #0x20
                	stur	xzr, [x29, #-0x20]
                	stur	xzr, [x29, #-0x18]
-               	stur	d1, [x29, #-0x10]
-               	stur	d2, [x29, #-0x8]
+               	adrp	x16, <page>
+               	ldr	d0, [x16]
+               	stur	d0, [x29, #-0x10]
+               	adrp	x16, <page>
+               	ldr	d0, [x16, #0x8]
+               	stur	d0, [x29, #-0x8]
                	ldr	d0, [x7]
                	ldr	d1, [x7, #0x8]
                	ldr	d2, [x7, #0x10]

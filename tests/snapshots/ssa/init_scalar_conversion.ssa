@@ -215,51 +215,42 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     terminator Return(v167)   (exit_acc=v167)
   block 2  start_pc=0
     v173 Imm(0)                                           -> x0
-    v174 Imm(0)                                           -> x1
-    v175 Imm(0)                                           -> x1
-    v176 Imm(0)                                           -> x1
-    v177 Imm(0)                                           -> x1
-    v178 Imm(0)                                           -> x1
-    v179 Imm(0)                                           -> x1
-    v180 Imm(4650599933957636096)                         -> x1
-    v181 Imm(0)                                           -> x2
-    v182 Imm(0)                                           -> x2
-    v183 Imm(0)                                           -> x2
-    v184 Imm(0)                                           -> x2
-    v185 Imm(4647961106050973696)                         -> x2
-    v186 Imm(0)                                           -> x6
-    v187 Imm(0)                                           -> x6
-    v188 Imm(0)                                           -> x6
-    v189 Imm(0)                                           -> x6
-    v190 LocalAddr(-4)                                    -> x9
-    v191 Imm(0)                                           -> x6
-    v192 StoreLocal { off=-4, value=v173, kind=F64 }      -> -
-    v193 Imm(0)                                           -> x6
-    v194 StoreLocal { off=-4, disp=8, value=v173, kind=F64 } -> -
-    v195 Imm(0)                                           -> x0
-    v196 StoreLocal { off=-4, disp=16, value=v180, kind=F64 } -> -
-    v197 Imm(0)                                           -> x0
-    v198 StoreLocal { off=-4, disp=24, value=v185, kind=F64 } -> -
-    v199 Call { target_pc=0, args=[v190], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v200 Extend { value=v199, kind=I32 }                  -> x1
-    v201 BinopI { op=eq, lhs=v199, rhs_imm=0 }            -> x1
-    terminator Bnz { cond=v199, target=b4, fall=b3 }   (low word)   (exit_acc=v201)
+    v174 LocalAddr(-4)                                    -> x9
+    v175 StoreLocal { off=-4, value=v173, kind=F64 }      -> -
+    v176 LocalAddr(-4)                                    -> x1
+    v177 BinopI { op=add, lhs=v174, rhs_imm=8 }           -> x1
+    v178 StoreLocal { off=-4, disp=8, value=v173, kind=F64 } -> -
+    v179 Imm(0)                                           -> x0
+    v180 Imm(4650599933957636096)                         -> x0
+    v181 LocalAddr(-4)                                    -> x1
+    v182 BinopI { op=add, lhs=v174, rhs_imm=16 }          -> x1
+    v183 StoreLocal { off=-4, disp=16, value=v180, kind=F64 } -> -
+    v184 Imm(0)                                           -> x0
+    v185 Imm(4647961106050973696)                         -> x0
+    v186 LocalAddr(-4)                                    -> x1
+    v187 BinopI { op=add, lhs=v174, rhs_imm=24 }          -> x1
+    v188 StoreLocal { off=-4, disp=24, value=v185, kind=F64 } -> -
+    v189 LocalAddr(-4)                                    -> x0
+    v190 Call { target_pc=0, args=[v174], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v191 Extend { value=v190, kind=I32 }                  -> x1
+    v192 BinopI { op=eq, lhs=v190, rhs_imm=0 }            -> x1
+    terminator Bnz { cond=v190, target=b4, fall=b3 }   (low word)   (exit_acc=v192)
   block 3  start_pc=0
-    v202 Imm(7)                                           -> x0
+    v193 Imm(7)                                           -> x0
+    v194 LifetimeEnd(0)                                   -> -
+    v195 LifetimeEnd(0)                                   -> -
+    v196 LifetimeEnd(0)                                   -> -
+    v197 LifetimeEnd(0)                                   -> -
+    v198 LifetimeEnd(0)                                   -> -
+    terminator Return(v193)   (exit_acc=v193)
+  block 4  start_pc=0
+    v199 Imm(0)                                           -> x0
+    v200 LifetimeEnd(0)                                   -> -
+    v201 LifetimeEnd(0)                                   -> -
+    v202 LifetimeEnd(0)                                   -> -
     v203 LifetimeEnd(0)                                   -> -
     v204 LifetimeEnd(0)                                   -> -
-    v205 LifetimeEnd(0)                                   -> -
-    v206 LifetimeEnd(0)                                   -> -
-    v207 LifetimeEnd(0)                                   -> -
-    terminator Return(v202)   (exit_acc=v202)
-  block 4  start_pc=0
-    v208 Imm(0)                                           -> x0
-    v209 LifetimeEnd(0)                                   -> -
-    v210 LifetimeEnd(0)                                   -> -
-    v211 LifetimeEnd(0)                                   -> -
-    v212 LifetimeEnd(0)                                   -> -
-    v213 LifetimeEnd(0)                                   -> -
-    terminator Return(v208)   (exit_acc=v208)
+    terminator Return(v199)   (exit_acc=v199)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

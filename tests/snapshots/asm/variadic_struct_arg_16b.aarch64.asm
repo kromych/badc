@@ -89,21 +89,22 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x30
-               	mov	x0, #0x3                // =3
-               	mov	x2, #0x4                // =4
-               	mov	x4, #0x5                // =5
-               	mov	x5, #0x6                // =6
-               	mov	x6, #0x7                // =7
-               	mov	x7, #0x8                // =8
                	sub	x1, x29, #0x30
-               	stur	x0, [x29, #-0x30]
-               	stur	x2, [x29, #-0x28]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldp	x16, x17, [x0]
+               	stp	x16, x17, [x1]
                	sub	x3, x29, #0x20
-               	stur	x4, [x29, #-0x20]
-               	stur	x5, [x29, #-0x18]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldp	x16, x17, [x0]
+               	stp	x16, x17, [x3]
                	sub	x5, x29, #0x10
-               	stur	x6, [x29, #-0x10]
-               	stur	x7, [x29, #-0x8]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldp	x16, x17, [x0]
+               	stp	x16, x17, [x5]
+               	mov	x0, #0x3                // =3
                	ldr	x2, [x1, #0x8]
                	ldr	x1, [x1]
                	ldr	x4, [x3, #0x8]

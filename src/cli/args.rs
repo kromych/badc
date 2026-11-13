@@ -176,6 +176,7 @@ pub(crate) struct Codegen {
     pub(crate) keep_local_labels: bool,
     pub(crate) min_function_alignment: u32,
     pub(crate) align_functions: u32,
+    pub(crate) branches_within_32b: bool,
     pub(crate) patchable_function_entry: badc::PatchableEntry,
     pub(crate) profiling: badc::Profiling,
     pub(crate) fpic: bool,
@@ -217,6 +218,7 @@ impl Default for Codegen {
             keep_local_labels: false,
             min_function_alignment: 1,
             align_functions: 1,
+            branches_within_32b: false,
             patchable_function_entry: badc::PatchableEntry::NONE,
             profiling: badc::Profiling::OFF,
             fpic: false,
@@ -1748,6 +1750,10 @@ impl Parser {
             // an alignment fault instead of being fixed up.
             "-mstrict-align" => code.strict_align = true,
             "-mno-strict-align" => code.strict_align = false,
+            // GNU as / clang: no jump or fused compare-and-jump crosses or
+            // ends on a 32-byte boundary.
+            "-mbranches-within-32B-boundaries" => code.branches_within_32b = true,
+            "-mno-branches-within-32B-boundaries" => code.branches_within_32b = false,
             // The x86 baseline, which every x86-64 unit already targets.
             "-mmmx" | "-msse" | "-msse2" => self.isa_args.push(arg.to_string()),
             s if s.starts_with("-march=") || s.starts_with("-mtune=") => {
@@ -3167,6 +3173,7 @@ impl Codegen {
         opts.zero_init_in_bss = self.zero_init_in_bss;
         opts.sibling_calls = self.sibling_calls;
         opts.min_function_alignment = self.min_function_alignment.max(self.align_functions);
+        opts.branches_within_32b = self.branches_within_32b;
         opts.patchable_function_entry = self.patchable_function_entry;
         opts.profiling = self.profiling;
         opts.pic = self.fpic;

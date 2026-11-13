@@ -3289,6 +3289,11 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         .map(|f| (f.name.clone(), f.ent_pc))
         .collect();
     let fn_align = native.min_function_alignment.max(1) as usize;
+    let fn_align = if native.branches_within_32b && target.is_x86_64() {
+        fn_align.max(32)
+    } else {
+        fn_align
+    };
     st.text_align = st.text_align.max(fn_align);
     // `aligned(N)` on a function raises its own entry's boundary.
     let code_aligns: alloc::collections::BTreeMap<&str, usize> = (program.symbols.iter())

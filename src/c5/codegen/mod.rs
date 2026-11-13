@@ -4633,6 +4633,10 @@ pub struct NativeOptions {
     /// A symbol's `st_size`
     /// covers its code only; the fill belongs to no function.
     pub min_function_alignment: u32,
+    /// x86-64 `-mbranches-within-32B-boundaries`: function entries on 32
+    /// bytes, and no local jump or fused compare-and-jump crossing or ending
+    /// on a 32-byte boundary.
+    pub branches_within_32b: bool,
     /// Leave the program, the lowering and dead bodies unfreed to the process exit.
     pub freed_by_exit: bool,
     /// `-fpatchable-function-entry=N,M`: the NOP area at every function
@@ -5053,6 +5057,7 @@ impl NativeOptions {
             stack_protect: StackProtect::OFF,
             fixed_regs: FixedRegs::NONE,
             min_function_alignment: 1,
+            branches_within_32b: false,
             freed_by_exit: false,
             patchable_function_entry: PatchableEntry::NONE,
             profiling: Profiling::OFF,

@@ -8,7 +8,9 @@
 //! The checks decode the function's machine code: AArch64 by instruction
 //! class masks, x86-64 through [`x64_insns`].
 
-use super::codegen::{function_bytes, function_words, optimized_function_full_pool};
+use super::codegen::{
+    elf_func_value, function_bytes, function_words, optimized_function_full_pool,
+};
 use crate::Target;
 
 /// The relocatable object of `src` at `-O` or `-O0`, over the full register
@@ -7647,4 +7649,71 @@ fn a64_a_compare_with_a_small_negative_is_cmn() {
         ws.iter().any(|&w| w & 0xFFFF_FC1F == 0xB100_1C1F),
         "no cmn: {ws:08x?}"
     );
+}
+
+/// Under `-mbranches-within-32B-boundaries` no local jump, nor a flag-setting
+/// instruction with the conditional jump it fuses with, crosses or ends on a
+/// 32-byte boundary, and the function starts on one; the same source has such
+/// groups without the option.
+#[test]
+fn x64_branch_groups_stay_within_32_byte_windows() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, emit_native_with_options};
+    const SRC: &str = "int match(const unsigned char *a, const unsigned char *b, int n, int lim) {\n\
+    int best = 0;\n\
+    for (int s = 0; s < n; s++) {\n\
+        int k = 0;\n\
+        while (k < lim && a[s + k] == b[k]) k++;\n\
+        if (k > best) best = k;\n\
+        if (best == lim) break;\n\
+        if (a[s] == 0) s += 2; else if (a[s] < 16) s++;\n\
+    }\n\
+    return best;\n\
+}\n";
+    let program = Compiler::with_options(
+        SRC.to_string(),
+        Target::LinuxX64,
+        CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_optimize(true),
+    )
+    .compile()
+    .expect("compile");
+    let groups = |on: bool| {
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            branches_within_32b: on,
+            ..NativeOptions::new().with_optimize()
+        };
+        let obj = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+        let start = elf_func_value(&obj, "match").expect("match") as usize;
+        let insns = x64_insns(&function_bytes(&obj, "match"));
+        // cmp, test, add, sub, and, inc and dec in the forms the backend emits.
+        let fuses = |i: &X64Insn| {
+            let r = i.modrm.map_or(8, |m| (m >> 3) & 7);
+            matches!(i.op, 0x00..=0x05 | 0x20..=0x25 | 0x28..=0x2D | 0x38..=0x3D | 0x84 | 0x85)
+                || (matches!(i.op, 0x80 | 0x81 | 0x83) && matches!(r, 0 | 4 | 5 | 7))
+                || (matches!(i.op, 0xF6 | 0xF7) && r == 0)
+                || (matches!(i.op, 0xFE | 0xFF) && r <= 1)
+        };
+        let crossing = (insns.iter().enumerate())
+            .filter(|(_, i)| i.is_jcc() || i.is_jmp())
+            .filter(|&(k, i)| {
+                let from = match k.checked_sub(1).map(|p| &insns[p]) {
+                    Some(p) if i.is_jcc() && fuses(p) => p.at,
+                    _ => i.at,
+                };
+                let (lo, end) = (start + from, start + i.at + i.len);
+                lo / 32 != (end - 1) / 32 || end % 32 == 0
+            })
+            .count();
+        (start, crossing)
+    };
+    let (_, without) = groups(false);
+    assert!(
+        without > 0,
+        "no group crosses a boundary without the option"
+    );
+    let (start, with) = groups(true);
+    assert_eq!(start % 32, 0);
+    assert_eq!(with, 0);
 }

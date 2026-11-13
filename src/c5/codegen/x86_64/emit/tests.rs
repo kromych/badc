@@ -1539,21 +1539,21 @@ mod relax_branches_tests {
     fn near_forward_branch_shortens() {
         // Single jmp at offset 0 to a block 100 bytes ahead: short rel
         // = 100 - 2 = 98, within i8.
-        let short = relax_branches(&[(0, 5, 1, false)], &[0, 100]);
+        let short = relax_branches(&[(0, 5, 1, false)], &[0, 100], &[]);
         assert_eq!(short, vec![true]);
     }
 
     #[test]
     fn far_forward_branch_stays_long() {
         // Target 200 bytes ahead: short rel = 198, out of i8 range.
-        let short = relax_branches(&[(0, 5, 1, false)], &[0, 200]);
+        let short = relax_branches(&[(0, 5, 1, false)], &[0, 200], &[]);
         assert_eq!(short, vec![false]);
     }
 
     #[test]
     fn backward_branch_shortens() {
         // jmp at offset 50 back to offset 0: short rel = 0 - 52 = -52.
-        let short = relax_branches(&[(50, 5, 0, false)], &[0, 50]);
+        let short = relax_branches(&[(50, 5, 0, false)], &[0, 50], &[]);
         assert_eq!(short, vec![true]);
     }
 
@@ -1561,8 +1561,14 @@ mod relax_branches_tests {
     fn forward_boundary_127_shortens_128_does_not() {
         // Short instr ends at offset 2; target 129 -> rel 127 (fits),
         // target 130 -> rel 128 (does not).
-        assert_eq!(relax_branches(&[(0, 5, 1, false)], &[0, 129]), vec![true]);
-        assert_eq!(relax_branches(&[(0, 5, 1, false)], &[0, 130]), vec![false]);
+        assert_eq!(
+            relax_branches(&[(0, 5, 1, false)], &[0, 129], &[]),
+            vec![true]
+        );
+        assert_eq!(
+            relax_branches(&[(0, 5, 1, false)], &[0, 130], &[]),
+            vec![false]
+        );
     }
 
     #[test]
@@ -1572,10 +1578,10 @@ mod relax_branches_tests {
         // bytes before branch0's target. branch0's short rel then
         // becomes 132 - 3 - 2 = 127 -> fits. A single all-long pass
         // (rel 130) would have missed branch0.
-        let short = relax_branches(&[(0, 5, 2, false), (5, 5, 1, false)], &[0, 10, 132]);
+        let short = relax_branches(&[(0, 5, 2, false), (5, 5, 1, false)], &[0, 10, 132], &[]);
         assert_eq!(short, vec![true, true]);
         // One more byte of distance defeats the cascade for branch0.
-        let short = relax_branches(&[(0, 5, 2, false), (5, 5, 1, false)], &[0, 10, 133]);
+        let short = relax_branches(&[(0, 5, 2, false), (5, 5, 1, false)], &[0, 10, 133], &[]);
         assert_eq!(short, vec![false, true]);
     }
 
@@ -1583,10 +1589,10 @@ mod relax_branches_tests {
     fn pinned_branch_keeps_the_long_form() {
         // An inline-asm template branch is emitted before relaxation runs, so
         // it stays long however close its target is.
-        let short = relax_branches(&[(0, 5, 1, true)], &[0, 10]);
+        let short = relax_branches(&[(0, 5, 1, true)], &[0, 10], &[]);
         assert_eq!(short, vec![false]);
         // Its bytes still count for the branches around it.
-        let short = relax_branches(&[(0, 5, 1, true), (5, 5, 2, false)], &[0, 10, 20]);
+        let short = relax_branches(&[(0, 5, 1, true), (5, 5, 2, false)], &[0, 10, 20], &[]);
         assert_eq!(short, vec![false, true]);
     }
 
@@ -1600,6 +1606,7 @@ mod relax_branches_tests {
         let short = relax_branches(
             &[(0, 6, 3, false), (8, 6, 1, false), (16, 6, 2, false)],
             &[0, 4, 8, 140],
+            &[],
         );
         assert!(short[1]);
         assert!(short[2]);
@@ -1608,6 +1615,7 @@ mod relax_branches_tests {
         let short = relax_branches(
             &[(0, 6, 3, false), (8, 6, 1, false), (16, 6, 2, false)],
             &[0, 4, 8, 134],
+            &[],
         );
         assert!(short[0]);
     }

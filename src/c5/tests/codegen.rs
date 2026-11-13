@@ -3865,7 +3865,7 @@ pub(super) fn elf_func_symbols(b: &[u8]) -> alloc::vec::Vec<(alloc::string::Stri
 /// `st_value` of the named FUNC symbol. In a relocatable object `.text`
 /// starts at vaddr 0, so this is the function's byte offset within the
 /// `.text` section bytes returned by [`elf64_section`].
-fn elf_func_value(b: &[u8], name: &str) -> Option<u64> {
+pub(super) fn elf_func_value(b: &[u8], name: &str) -> Option<u64> {
     let u16a = |o: usize| u16::from_le_bytes(b[o..o + 2].try_into().unwrap());
     let u32a = |o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap());
     let u64a = |o: usize| u64::from_le_bytes(b[o..o + 8].try_into().unwrap());

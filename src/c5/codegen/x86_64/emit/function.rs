@@ -217,6 +217,7 @@ pub(crate) fn emit_function(
     // `-O`: the block plan may repeat a small test in place of a jump to it.
     repeat_tests: bool,
     sibling_calls: bool,
+    branches_within_32b: bool,
 ) -> Emit {
     let abi = {
         let mut a = target.abi_for(func.conv);
@@ -356,6 +357,10 @@ pub(crate) fn emit_function(
         block_offsets: alloc::vec![0; func.blocks.len()],
         branch_fixups: Vec::new(),
         branch_short: Vec::new(),
+        windows: BranchWindows {
+            on: branches_within_32b,
+            ..BranchWindows::default()
+        },
         seh_placed: Vec::new(),
         block_addr_fixups: Vec::new(),
         jump_table_fixups: Vec::new(),
@@ -370,6 +375,26 @@ pub(crate) fn emit_function(
             Err(e)
         }
     }
+}
+
+/// `-mbranches-within-32B-boundaries`: a branch group -- a local jump, or
+/// the flag-setting instruction a conditional jump fuses with through the
+/// jump -- padded so that it neither crosses nor ends on a 32-byte boundary.
+/// Function entries are 32-byte aligned, so the offset in `code` places the
+/// boundaries.
+#[derive(Default)]
+struct BranchWindows {
+    on: bool,
+    /// Per group, keyed by its first branch's emission index, its length in
+    /// the previous pass, 0 where unknown. A pass shortens branches only, so
+    /// the length bounds the group's length in the next pass.
+    prev: Vec<u8>,
+    now: Vec<u8>,
+    /// Each group's start and the padding it can take ahead of it, in this
+    /// pass's layout.
+    starts: Vec<(usize, usize)>,
+    /// Where the open group starts.
+    open: Option<usize>,
 }
 
 /// State of one function's emission, shared by the phases below.
@@ -404,6 +429,7 @@ struct FnEmit<'a, 'b> {
     /// Per recorded branch, whether the layout pass chose the rel8 form;
     /// empty on the first pass.
     branch_short: Vec<bool>,
+    windows: BranchWindows,
     /// `(lea_start, target_block)` per `Inst::BlockAddr`; the disp32 resolves
     /// against `block_offsets` once the layout is final.
     block_addr_fixups: Vec<(usize, u32)>,
@@ -625,12 +651,13 @@ impl FnEmit<'_, '_> {
     }
 
     /// The block loop. It runs once with every local branch in the rel32
-    /// form and, when `relax_branches` finds shortenable branches, once
-    /// more against the shortened layout, re-recording every offset-keyed
-    /// datum. Returns the mark taken where the body begins.
+    /// form and, when `relax_branches` finds shortenable branches or branch
+    /// groups are kept off 32-byte boundaries, once more against the
+    /// shortened and padded layout, re-recording every offset-keyed datum.
+    /// Returns the mark taken where the body begins.
     fn emit_body(&mut self) -> Emit<OutputMark> {
         let body = self.out.mark();
-        loop {
+        for pass in 0.. {
             self.block_addr_fixups.clear();
             self.jump_table_fixups.clear();
             self.seh_placed.clear();
@@ -653,7 +680,7 @@ impl FnEmit<'_, '_> {
                     self.block_offsets[b] = self.block_offsets[lands as usize];
                 }
             }
-            if !self.branch_short.is_empty() {
+            if pass == 1 {
                 break;
             }
             let branches: Vec<(usize, usize, usize, bool)> = self
@@ -667,14 +694,20 @@ impl FnEmit<'_, '_> {
                     (opcode_start, long_size, fx.target as usize, fx.pinned_long)
                 })
                 .collect();
-            self.branch_short = relax_branches(&branches, &self.block_offsets);
-            if !self.branch_short.iter().any(|&s| s) {
+            self.branch_short =
+                relax_branches(&branches, &self.block_offsets, &self.windows.starts);
+            // The groups the first pass measured are padded in the second.
+            if !self.windows.on && !self.branch_short.iter().any(|&s| s) {
                 break;
             }
             // pc_to_native is index-keyed and overwritten in place.
             self.out.restore(&body);
             self.block_offsets.fill(0);
             self.branch_fixups.clear();
+            let w = &mut self.windows;
+            w.prev = core::mem::take(&mut w.now);
+            w.starts.clear();
+            w.open = None;
         }
         Ok(body)
     }
@@ -738,6 +771,7 @@ impl FnEmit<'_, '_> {
         } = self.fcx;
         let block = &func.blocks[block_idx];
         self.block_offsets[block_idx] = self.out.cx.code.len();
+        self.windows.open = None;
         // A `__try` handler is entered with rsp where the exception left it:
         // the prologue's rsp, realigned as the prologue realigns it.
         if func.is_seh_target(block_idx as super::super::ir::BlockId) {
@@ -829,6 +863,19 @@ impl FnEmit<'_, '_> {
             && (v as usize) == tail_pc
         {
             return Ok(());
+        }
+        // A conditional jump fuses with the instruction setting its flags:
+        // the comparison it reads, or the step a counted loop closes on.
+        let branch_reads = matches!(block.terminator,
+            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } if cond == v);
+        if self.windows.on
+            && ((branch_reads && alloc.branch_fused.get(v as usize) == Some(&true))
+                || matches!(
+                    self.flag_steps.get(v as usize),
+                    Some(Some(FlagStep::Sets { .. }))
+                ))
+        {
+            self.open_branch_group(true);
         }
         super::ssa::emit_common::record_inst_src(
             func,
@@ -1061,6 +1108,7 @@ impl FnEmit<'_, '_> {
             };
         let stepped = flag_step_cc(&self.flag_steps, cond, negate).map(FusedBranch::Jcc);
         if let Some(fused) = stepped.or_else(|| fused_branch_cc(func, alloc, cond, negate)) {
+            let first = self.open_branch_group(false);
             emit_fused_branch(
                 self.out.cx.code,
                 &mut self.branch_fixups,
@@ -1069,6 +1117,7 @@ impl FnEmit<'_, '_> {
                 target,
                 fall_through,
             );
+            self.close_branch_group(first);
         } else {
             let code = &mut *self.out.cx.code;
             let cond_place = place_of(alloc, cond);
@@ -1080,6 +1129,8 @@ impl FnEmit<'_, '_> {
                 });
             };
             let low_word = func.low_word_tests.get(owner).copied().unwrap_or(false);
+            self.open_branch_group(true);
+            let code = &mut *self.out.cx.code;
             super::encode::emit_rr(code, Mnem::Test, if low_word { 4 } else { 8 }, rc, rc);
             let cc = if negate { Cc::E } else { Cc::Ne };
             self.emit_local(LocalBranchKind::Jcc(cc), target);
@@ -1088,6 +1139,7 @@ impl FnEmit<'_, '_> {
     }
 
     fn emit_local(&mut self, kind: LocalBranchKind, target: super::super::ir::BlockId) {
+        let first = self.open_branch_group(false);
         emit_local_branch(
             self.out.cx.code,
             &mut self.branch_fixups,
@@ -1095,6 +1147,41 @@ impl FnEmit<'_, '_> {
             kind,
             target,
         );
+        self.close_branch_group(first);
+    }
+
+    /// Open a branch group at the current offset, unless `fresh` is unset
+    /// and one is open, padding first when the group the previous pass
+    /// measured would cross or end on a 32-byte boundary here. Returns the
+    /// emission index of the group's first branch.
+    fn open_branch_group(&mut self, fresh: bool) -> usize {
+        let first = self.branch_fixups.len();
+        let w = &mut self.windows;
+        if !w.on || (!fresh && w.open.is_some()) {
+            return first;
+        }
+        let code = &mut *self.out.cx.code;
+        let len = usize::from(w.prev.get(first).copied().unwrap_or(0));
+        let at = code.len() % 32;
+        if len > 0 && len < 32 && at + len >= 32 {
+            push_x86_nops(code, 32 - at);
+        }
+        w.open = Some(code.len());
+        first
+    }
+
+    /// Close the open group, whose first branch has emission index `first`.
+    fn close_branch_group(&mut self, first: usize) {
+        let w = &mut self.windows;
+        let Some(start) = w.open.take() else {
+            return;
+        };
+        let len = self.out.cx.code.len() - start;
+        if w.now.len() <= first {
+            w.now.resize(first + 1, 0);
+        }
+        w.now[first] = len.min(usize::from(u8::MAX)) as u8;
+        w.starts.push((start, if len < 32 { len } else { 0 }));
     }
 
     /// Reach where an edge to `t` lands from the end of `block_idx`:
@@ -1244,6 +1331,17 @@ impl FnEmit<'_, '_> {
     }
 }
 
+/// Fill `n` bytes with the multi-byte NOPs GNU as pads executable gaps
+/// with, the longest form first.
+fn push_x86_nops(code: &mut Vec<u8>, mut n: usize) {
+    use crate::c5::asm::X86_NOPS;
+    while n > 0 {
+        let k = n.min(X86_NOPS.len());
+        code.extend_from_slice(X86_NOPS[k - 1]);
+        n -= k;
+    }
+}
+
 /// Which local branches take the 2-byte rel8 form instead of the 5 / 6-byte
 /// rel32 form. `branches` holds `(opcode_start, long_size, target_block,
 /// pinned_long)` per branch in emission order against the all-long layout
@@ -1252,12 +1350,25 @@ impl FnEmit<'_, '_> {
 /// fixpoint: a branch is marked short once its displacement, less the
 /// bytes the branches marked so far remove and excluding its own saving,
 /// fits a signed byte, so a short branch fits in the final layout.
+/// `pads` holds, in offset order, where padding may go ahead of a branch
+/// group and how much; a displacement counts all it spans.
 pub(super) fn relax_branches(
     branches: &[(usize, usize, usize, bool)],
     block_offsets: &[usize],
+    pads: &[(usize, usize)],
 ) -> alloc::vec::Vec<bool> {
     let n = branches.len();
     let mut short = alloc::vec![false; n];
+    // pad_prefix[k] = padding pads[0..k] may take; a group's padding lies
+    // after a block start at its offset.
+    let mut pad_prefix = alloc::vec![0usize; pads.len() + 1];
+    for (i, &(_, p)) in pads.iter().enumerate() {
+        pad_prefix[i + 1] = pad_prefix[i] + p;
+    }
+    let padding_in = |lo: usize, hi: usize| -> i64 {
+        let at = |off: usize| pad_prefix[pads.partition_point(|p| p.0 < off)];
+        (at(hi) - at(lo)) as i64
+    };
     loop {
         // prefix[k] = bytes removed by short branches among branches[0..k].
         // `opcode_start` is non-decreasing in emission order, so the bytes
@@ -1277,6 +1388,11 @@ pub(super) fn relax_branches(
             let instr_end = (opcode_start - saved_before(opcode_start)) + 2;
             let tgt = block_offsets[target] - saved_before(block_offsets[target]);
             let rel = tgt as i64 - instr_end as i64;
+            let rel = if block_offsets[target] > opcode_start {
+                rel + padding_in(opcode_start, block_offsets[target])
+            } else {
+                rel - padding_in(block_offsets[target], opcode_start)
+            };
             if (-128..=127).contains(&rel) {
                 short[i] = true;
                 changed = true;

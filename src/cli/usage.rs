@@ -544,6 +544,13 @@ Compile knobs:
                            Keep every compiler-generated memory access
                            naturally aligned for its width, as memory
                            that faults on an unaligned access needs.
+  -mbranches-within-32B-boundaries
+                           x86-64: start every function at a multiple of
+                           32 bytes and pad with NOPs before a jump or a
+                           fused compare-and-jump that would cross or end
+                           on a 32-byte boundary, which cores with the
+                           update for Intel erratum SKX102 decode
+                           without the uop cache.
   -mindirect-branch=keep|thunk-extern|thunk-inline
                            x86-64: route each indirect call and jump
                            through __x86_indirect_thunk_<reg>, or

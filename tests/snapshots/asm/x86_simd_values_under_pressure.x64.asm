@@ -481,9 +481,8 @@ Disassembly of section .text:
                	shlq	$0x4, %rcx
                	leaq	(%r9,%rcx), %rdx
                	movups	(%rdx), %xmm0
-               	leaq	-0x150(%rbp), %rsi
                	movups	%xmm0, -0x150(%rbp)
-               	movl	(%rsi,%rax,4), %esi
+               	movl	-0x150(%rbp,%rax,4), %esi
                	leaq	-0x140(%rbp), %rdi
                	addq	%rcx, %rdi
                	movl	(%rdi,%rax,4), %edi

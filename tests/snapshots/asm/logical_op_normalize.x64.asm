@@ -102,8 +102,7 @@ Disassembly of section .text:
                	movq	0x8(%rsp), %rdi
                	callq	<addr>
                	movslq	%eax, %rax
-               	leaq	-0x8(%rbp), %rcx
-               	movl	(%rcx,%rax,4), %eax
+               	movl	-0x8(%rbp,%rax,4), %eax
                	cmpl	$0x14, %eax
                	je	<addr>
                	movl	$0x6, %eax
@@ -113,8 +112,7 @@ Disassembly of section .text:
                	movl	$0x9, %esi
                	callq	<addr>
                	movslq	%eax, %rax
-               	leaq	-0x8(%rbp), %rcx
-               	movl	(%rcx,%rax,4), %eax
+               	movl	-0x8(%rbp,%rax,4), %eax
                	cmpl	$0xa, %eax
                	je	<addr>
                	movl	$0x7, %eax

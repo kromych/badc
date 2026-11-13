@@ -44,10 +44,9 @@ Disassembly of section .text:
                	incq	%rax
                	testl	%edx, %edx
                	jne	<addr>
-               	leaq	-0x10(%rbp), %rdi
                	leaq	0x1(%rcx), %rdx
                	movzbq	-0x8(%rbp), %r8
-               	movb	%r8b, (%rdi,%rcx)
+               	movb	%r8b, -0x10(%rbp,%rcx)
                	cmpl	$0x4, %edx
                	jge	<addr>
                	movq	%rdx, %rcx

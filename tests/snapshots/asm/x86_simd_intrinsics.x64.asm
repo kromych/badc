@@ -1313,9 +1313,8 @@ Disassembly of section .text:
                	cmpq	$0xf, %rax
                	jne	<addr>
                	xorl	%eax, %eax
-               	leaq	-0x18(%rbp), %rdx
                	leaq	0x1(%rax), %rcx
-               	movb	%cl, (%rdx,%rax)
+               	movb	%cl, -0x18(%rbp,%rax)
                	movq	%rcx, %rax
                	cmpl	$0x18, %eax
                	jl	<addr>

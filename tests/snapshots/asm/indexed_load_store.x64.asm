@@ -59,7 +59,7 @@ Disassembly of section .text:
                	movl	(%rdi), %ebx
                	subq	$0x3, %rbx
                	movl	%ebx, (%rdx)
-               	movl	%r9d, (%rsi,%rax,4)
+               	movl	%r9d, -0x20(%rbp,%rax,4)
                	movl	(%rdx), %edx
                	movl	(%rdi), %edi
                	imulq	%rdi, %rdx

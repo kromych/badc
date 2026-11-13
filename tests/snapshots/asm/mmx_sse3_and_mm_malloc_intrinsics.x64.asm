@@ -455,8 +455,7 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%eax, %eax
-               	leaq	-0x20(%rbp), %rcx
-               	movb	%al, (%rcx,%rax)
+               	movb	%al, -0x20(%rbp,%rax)
                	incq	%rax
                	cmpl	$0x11, %eax
                	jl	<addr>

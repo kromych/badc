@@ -134,20 +134,17 @@ Disassembly of section .text:
                	jge	<addr>
                	cmpl	$0x16, %eax
                	jge	<addr>
-               	leaq	-0x48(%rbp), %rcx
                	leaq	0x1(%rax), %rdx
-               	movb	%dl, (%rcx,%rax)
-               	leaq	-0x30(%rbp), %rcx
+               	movb	%dl, -0x48(%rbp,%rax)
                	movq	%rax, %rdx
                	shlq	%rdx
                	incq	%rdx
-               	movb	%dl, (%rcx,%rax)
+               	movb	%dl, -0x30(%rbp,%rax)
                	cmpl	$0x11, %eax
                	jge	<addr>
-               	leaq	-0x18(%rbp), %rcx
                	movl	$0x28, %edx
                	subq	%rax, %rdx
-               	movb	%dl, (%rcx,%rax)
+               	movb	%dl, -0x18(%rbp,%rax)
                	jmp	<addr>
                	leaq	-0x60(%rbp), %r9
                	subq	$0x20, %rsp

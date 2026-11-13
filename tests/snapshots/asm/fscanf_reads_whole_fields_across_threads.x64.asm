@@ -199,10 +199,9 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%ebx, %ebx
-               	leaq	-0xa0(%rbp), %r12
                	xorl	%eax, %eax
                	callq	<addr>
-               	movq	%rax, (%r12,%rbx,8)
+               	movq	%rax, -0xa0(%rbp,%rbx,8)
                	testq	%rax, %rax
                	je	<addr>
                	incq	%rbx
@@ -224,8 +223,7 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%ebx, %ebx
-               	leaq	-0xa0(%rbp), %rax
-               	movq	(%rax,%rbx,8), %rdi
+               	movq	-0xa0(%rbp,%rbx,8), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	incq	%rbx

@@ -29,9 +29,8 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
-               	leaq	-0x18(%rbp), %rcx
                	xorl	%eax, %eax
-               	movb	%al, (%rcx,%rax)
+               	movb	%al, -0x18(%rbp,%rax)
                	incq	%rax
                	cmpl	$0x18, %eax
                	jb	<addr>

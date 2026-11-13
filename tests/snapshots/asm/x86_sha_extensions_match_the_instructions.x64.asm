@@ -101,8 +101,7 @@ Disassembly of section .text:
                	movl	%edi, %ebx
                	rorl	$0x1b, %ebx
                	addq	%rbx, %r9
-               	leaq	-0x10(%rbp), %rbx
-               	movl	(%rbx,%rax,4), %ebx
+               	movl	-0x10(%rbp,%rax,4), %ebx
                	addq	%rbx, %r9
                	addq	%r9, %r8
                	addq	$0x5a827999, %r8        # imm = 0x5A827999
@@ -149,8 +148,7 @@ Disassembly of section .text:
                	movl	%edi, %ebx
                	rorl	$0x1b, %ebx
                	addq	%rbx, %r9
-               	leaq	-0x10(%rbp), %rbx
-               	movl	(%rbx,%rax,4), %ebx
+               	movl	-0x10(%rbp,%rax,4), %ebx
                	addq	%rbx, %r9
                	addq	%r9, %r8
                	addq	$0x6ed9eba1, %r8        # imm = 0x6ED9EBA1
@@ -202,8 +200,7 @@ Disassembly of section .text:
                	movl	%edi, %ebx
                	rorl	$0x1b, %ebx
                	addq	%rbx, %r9
-               	leaq	-0x10(%rbp), %rbx
-               	movl	(%rbx,%rax,4), %ebx
+               	movl	-0x10(%rbp,%rax,4), %ebx
                	addq	%rbx, %r9
                	addq	%r9, %r8
                	movl	$0x8f1bbcdc, %r11d      # imm = 0x8F1BBCDC
@@ -251,8 +248,7 @@ Disassembly of section .text:
                	movl	%edi, %ebx
                	rorl	$0x1b, %ebx
                	addq	%rbx, %r9
-               	leaq	-0x10(%rbp), %rbx
-               	movl	(%rbx,%rax,4), %ebx
+               	movl	-0x10(%rbp,%rax,4), %ebx
                	addq	%rbx, %r9
                	addq	%r9, %r8
                	movl	$0xca62c1d6, %r11d      # imm = 0xCA62C1D6

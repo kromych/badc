@@ -49,12 +49,11 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x200, %eax            # imm = 0x200
                	jl	<addr>
-               	leaq	-0x38(%rbp), %rax
                	leaq	<rip>, %rcx # <addr>
                	movq	%r9, %rdx
                	shlq	$0x9, %rdx
                	addq	%rdx, %rcx
-               	movq	%rcx, (%rax,%r9,8)
+               	movq	%rcx, -0x38(%rbp,%r9,8)
                	incq	%r9
                	cmpl	$0x7, %r9d
                	jl	<addr>

@@ -39,9 +39,8 @@ Disassembly of section .text:
                	movl	$0x2, %esi
                	xorl	%eax, %eax
                	callq	<addr>
-               	leaq	-0x40(%rbp), %rcx
                	xorl	%eax, %eax
-               	movsbq	(%rcx,%rax), %rdx
+               	movsbq	-0x40(%rbp,%rax), %rdx
                	cmpl	$0x2, %edx
                	jne	<addr>
                	incq	%rax
@@ -58,9 +57,8 @@ Disassembly of section .text:
                	movl	$0x40, %edx
                	xorl	%eax, %eax
                	callq	<addr>
-               	leaq	-0x40(%rbp), %rcx
                	xorl	%eax, %eax
-               	movsbq	(%rcx,%rax), %rdx
+               	movsbq	-0x40(%rbp,%rax), %rdx
                	cmpl	$0x7f, %edx
                	jne	<addr>
                	incq	%rax
@@ -71,9 +69,8 @@ Disassembly of section .text:
                	movl	$0x40, %edx
                	xorl	%eax, %eax
                	callq	<addr>
-               	leaq	-0x40(%rbp), %rcx
                	xorl	%eax, %eax
-               	movsbq	(%rcx,%rax), %rdx
+               	movsbq	-0x40(%rbp,%rax), %rdx
                	cmpl	$0x7f, %edx
                	jne	<addr>
                	incq	%rax
@@ -84,12 +81,11 @@ Disassembly of section .text:
                	movl	$0x40, %edx
                	xorl	%eax, %eax
                	callq	<addr>
-               	leaq	-0x40(%rbp), %rcx
                	movabsq	$0x303030303030303, %rax # imm = 0x303030303030303
                	movq	%rax, -0x40(%rbp)
                	movl	$0x3030303, -0x38(%rbp) # imm = 0x3030303
                	xorl	%eax, %eax
-               	movsbq	(%rcx,%rax), %rdx
+               	movsbq	-0x40(%rbp,%rax), %rdx
                	cmpl	$0x3, %edx
                	jne	<addr>
                	incq	%rax
@@ -190,9 +186,8 @@ Disassembly of section .text:
                	movl	$0x1, %esi
                	xorl	%eax, %eax
                	callq	<addr>
-               	leaq	-0x40(%rbp), %rcx
                	xorl	%eax, %eax
-               	movsbq	(%rcx,%rax), %rdx
+               	movsbq	-0x40(%rbp,%rax), %rdx
                	cmpl	$0x1, %edx
                	jne	<addr>
                	incq	%rax

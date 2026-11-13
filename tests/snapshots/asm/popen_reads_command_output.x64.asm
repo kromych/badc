@@ -57,14 +57,12 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	0x8(%rsp), %r8
                	jmp	<addr>
-               	leaq	-0x40(%rbp), %rcx
                	decq	%rax
-               	movb	$0x0, (%rcx,%rax)
+               	movb	$0x0, -0x40(%rbp,%rax)
                	testq	%rax, %rax
                	je	<addr>
-               	leaq	-0x40(%rbp), %rcx
                	leaq	-0x1(%rax), %rdx
-               	movsbq	(%rcx,%rdx), %rcx
+               	movsbq	-0x40(%rbp,%rdx), %rcx
                	cmpl	$0xa, %ecx
                	je	<addr>
                	cmpl	$0xd, %ecx

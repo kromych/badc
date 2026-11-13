@@ -613,8 +613,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	xorl	%ecx, %ecx
-               	leaq	-0x50(%rbp), %rax
-               	movq	(%rax,%rcx,8), %rdi
+               	movq	-0x50(%rbp,%rcx,8), %rdi
                	xorl	%esi, %esi
                	movq	%rcx, 0x8(%rsp)
                	xorl	%eax, %eax

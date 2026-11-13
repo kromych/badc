@@ -37,7 +37,7 @@ Disassembly of section .text:
                	movb	%r10b, 0x4(%rdx)
                	xorl	%ecx, %ecx
                	movq	%rcx, %rax
-               	movzbq	(%rdx,%rax), %rsi
+               	movzbq	-0x8(%rbp,%rax), %rsi
                	movl	$0x1, %edi
                	cmpl	$0x1, %eax
                	cmoveq	%rcx, %rdi

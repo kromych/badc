@@ -167,12 +167,11 @@ Disassembly of section .text:
                	movq	$0x3, -0x8(%rbp)
                	movq	-0x8(%rbp), %rsi
                	callq	<addr>
-               	leaq	-0xd8(%rbp), %rcx
                	movzbq	-0xd5(%rbp), %rax
                	cmpl	$0xc3, %eax
                	jne	<addr>
                	xorl	%eax, %eax
-               	movzbq	(%rcx,%rax), %rdx
+               	movzbq	-0xd8(%rbp,%rax), %rdx
                	cmpl	$0xaa, %edx
                	jne	<addr>
                	incq	%rax

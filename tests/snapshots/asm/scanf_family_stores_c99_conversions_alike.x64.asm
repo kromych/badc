@@ -225,9 +225,8 @@ Disassembly of section .text:
                	setp	%r10b
                	movzbq	%r10b, %r10
                	orq	%r10, %rax
-               	leaq	-0x110(%rbp), %rcx
                	movslq	%r12d, %rsi
-               	movzbq	(%rcx,%rsi), %rcx
+               	movzbq	-0x110(%rbp,%rsi), %rcx
                	cmpl	$0xaa, %ecx
                	movl	$0x1, %ecx
                	je	<addr>
@@ -240,18 +239,16 @@ Disassembly of section .text:
                	xorl	%edx, %edx
                	testq	%rcx, %rcx
                	je	<addr>
-               	leaq	-0x110(%rbp), %rcx
                	leaq	-0x1(%r12), %rdx
                	movslq	%edx, %rdx
-               	movzbq	(%rcx,%rdx), %rcx
+               	movzbq	-0x110(%rbp,%rdx), %rcx
                	testl	%ecx, %ecx
                	sete	%dl
                	movzbq	%dl, %rdx
                	xorl	%ecx, %ecx
                	testq	%rdx, %rdx
                	je	<addr>
-               	leaq	-0x110(%rbp), %rcx
-               	movzbq	(%rcx,%rsi), %rcx
+               	movzbq	-0x110(%rbp,%rsi), %rcx
                	testl	%ecx, %ecx
                	sete	%cl
                	movzbq	%cl, %rcx

@@ -47,14 +47,13 @@ Disassembly of section .text:
                	jae	<addr>
                	incq	%r9
                	addq	%rdx, %r8
-               	leaq	-0x10(%rbp), %rsi
                	leaq	0x1(%rdx), %rcx
                	movl	$0x64, %edx
                	cmpl	$0x64, %ecx
                	jae	<addr>
                	movq	%rcx, %rax
                	shrq	$0x6, %rax
-               	movq	(%rsi,%rax,8), %rbx
+               	movq	-0x10(%rbp,%rax,8), %rbx
                	movq	$-0x1, %r12
                	andq	$0x3f, %rcx
                	shlxq	%rcx, %r12, %rcx
@@ -66,7 +65,7 @@ Disassembly of section .text:
                	shlq	$0x6, %rcx
                	cmpq	$0x64, %rcx
                	jae	<addr>
-               	movq	(%rsi,%rax,8), %rcx
+               	movq	-0x10(%rbp,%rax,8), %rcx
                	testq	%rcx, %rcx
                	je	<addr>
                	shlq	$0x6, %rax
@@ -91,7 +90,6 @@ Disassembly of section .text:
                	popq	%r12
                	leave
                	retq
-               	leaq	-0x10(%rbp), %rdx
                	movl	$0x1, %eax
                	xorl	%ecx, %ecx
                	incq	%rax
@@ -99,7 +97,7 @@ Disassembly of section .text:
                	shlq	$0x6, %rcx
                	cmpq	$0x64, %rcx
                	jae	<addr>
-               	movq	(%rdx,%rax,8), %rcx
+               	movq	-0x10(%rbp,%rax,8), %rcx
                	testq	%rcx, %rcx
                	je	<addr>
                	shlq	$0x6, %rax

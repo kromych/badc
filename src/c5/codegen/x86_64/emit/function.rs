@@ -354,6 +354,7 @@ pub(crate) fn emit_function(
         endbr_targets,
         param_prebatched: alloc::vec![false; func.insts.len()],
         mem_dest: memory_destinations(func, alloc, &steps),
+        frame_bases: frame_bases_only(func, alloc),
         flag_steps: steps,
         plan,
         block_offsets: alloc::vec![0; func.blocks.len()],
@@ -399,6 +400,68 @@ struct BranchWindows {
     open: Option<usize>,
 }
 
+/// Per value, whether it is a frame object's address that only indexed
+/// accesses read, as their base; an instruction that emits nothing reads
+/// nothing.
+fn frame_bases_only(func: &FunctionSsa, alloc: &Allocation) -> Vec<bool> {
+    use super::super::ir::NO_VALUE;
+    let n = func.insts.len();
+    let mut only = alloc::vec![false; n];
+    let mut read = alloc::vec![false; n];
+    for (v, inst) in func.insts.iter().enumerate() {
+        if matches!(inst, Inst::LocalAddr(_)) {
+            only[v] = true;
+        }
+    }
+    let mut other = |o: u32| {
+        if let Some(x) = only.get_mut(o as usize) {
+            *x = false;
+        }
+    };
+    for (u, inst) in func.insts.iter().enumerate() {
+        // A phi emits nothing, but its predecessors' exit moves read its operands.
+        if !matches!(inst, Inst::Phi { .. })
+            && super::ssa::emit_common::inst_emits_nothing(inst, u as u32, alloc)
+        {
+            continue;
+        }
+        let integer = |bytes: u8| matches!(bytes, 1 | 2 | 4 | 8);
+        let base = match inst {
+            Inst::LoadIndexed {
+                base,
+                kind,
+                abs_base: false,
+                ..
+            } if !super::is_fp_load(*kind) && integer(kind.bytes()) => Some(*base),
+            Inst::StoreIndexed {
+                base,
+                kind,
+                abs_base: false,
+                ..
+            } if !super::is_fp_store(*kind) && integer(kind.bytes()) => Some(*base),
+            _ => None,
+        };
+        let mut seen_base = false;
+        inst.for_each_operand(|o| {
+            if Some(o) == base && !seen_base {
+                seen_base = true;
+                if let Some(r) = read.get_mut(o as usize) {
+                    *r = true;
+                }
+            } else {
+                other(o);
+            }
+        });
+    }
+    for block in &func.blocks {
+        block.terminator.for_each_operand(&mut other);
+        if block.exit_acc != NO_VALUE {
+            other(block.exit_acc);
+        }
+    }
+    only.iter().zip(&read).map(|(&o, &r)| o && r).collect()
+}
+
 /// State of one function's emission, shared by the phases below.
 struct FnEmit<'a, 'b> {
     out: Out<'a, 'b>,
@@ -425,6 +488,9 @@ struct FnEmit<'a, 'b> {
     /// Loads, operations and stores one memory-destination instruction
     /// performs ([`memory_destinations`]).
     mem_dest: Vec<Option<MemDest>>,
+    /// Frame objects' addresses read only as an indexed access's base, which
+    /// addresses off the frame register instead ([`frame_bases_only`]).
+    frame_bases: Vec<bool>,
     /// Which blocks are emitted and where each branch lands. Fixed before
     /// the first pass: the short forms are keyed by emission index, so both
     /// passes have to write the same branches.
@@ -867,6 +933,9 @@ impl FnEmit<'_, '_> {
         if let Some((tail_pc, _, _)) = tail_call
             && (v as usize) == tail_pc
         {
+            return Ok(());
+        }
+        if self.frame_bases.get(v as usize) == Some(&true) {
             return Ok(());
         }
         // A conditional jump fuses with the instruction setting its flags:

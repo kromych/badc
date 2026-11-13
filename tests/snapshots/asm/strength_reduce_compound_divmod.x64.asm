@@ -2239,10 +2239,9 @@ Disassembly of section .text:
                	incq	%rax
                	movl	%eax, <rip> # <addr>
                	xorl	%eax, %eax
-               	leaq	-0x88(%rbp), %rcx
                	leaq	<rip>, %rdx # <addr>
                	movq	(%rdx,%rax,8), %rdx
-               	movl	%edx, (%rcx,%rax,4)
+               	movl	%edx, -0x88(%rbp,%rax,4)
                	incq	%rax
                	cmpl	$0x18, %eax
                	jl	<addr>
@@ -2254,15 +2253,14 @@ Disassembly of section .text:
                	cltd
                	idivl	%esi
                	movslq	%eax, %rdi
-               	leaq	-0x88(%rbp), %rsi
-               	movslq	(%rsi,%rcx,4), %rax
+               	movslq	-0x88(%rbp,%rcx,4), %rax
                	imulq	$0x38e38e39, %rax, %rax # imm = 0x38E38E39
                	sarq	$0x21, %rax
                	movq	%rax, %rdx
                	shrq	$0x3f, %rdx
                	addq	%rdx, %rax
                	negq	%rax
-               	movl	%eax, (%rsi,%rcx,4)
+               	movl	%eax, -0x88(%rbp,%rcx,4)
                	cmpl	%edi, %eax
                	jne	<addr>
                	cmpl	%edi, %eax
@@ -2271,7 +2269,7 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	cqto
                	idivq	%r8
-               	movslq	(%rsi,%rcx,4), %rax
+               	movslq	-0x88(%rbp,%rcx,4), %rax
                	imulq	$0x38e38e39, %rax, %rdi # imm = 0x38E38E39
                	sarq	$0x21, %rdi
                	movq	%rdi, %r8
@@ -2280,7 +2278,7 @@ Disassembly of section .text:
                	negq	%rdi
                	imulq	$-0x9, %rdi, %rdi
                	subq	%rdi, %rax
-               	movl	%eax, (%rsi,%rcx,4)
+               	movl	%eax, -0x88(%rbp,%rcx,4)
                	cmpl	%edx, %eax
                	jne	<addr>
                	incq	%rcx

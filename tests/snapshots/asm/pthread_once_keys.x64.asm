@@ -246,8 +246,7 @@ Disassembly of section .text:
                	cmpl	$0x8, %ebx
                	jl	<addr>
                	xorl	%ebx, %ebx
-               	leaq	-0x40(%rbp), %rax
-               	movq	(%rax,%rbx,8), %rdi
+               	movq	-0x40(%rbp,%rbx,8), %rdi
                	xorl	%esi, %esi
                	xorl	%eax, %eax
                	callq	<addr>
@@ -392,8 +391,7 @@ Disassembly of section .text:
                	cmpl	$0x2, %r8d
                	jl	<addr>
                	xorl	%ebx, %ebx
-               	leaq	-0x40(%rbp), %rax
-               	movq	(%rax,%rbx,8), %rdi
+               	movq	-0x40(%rbp,%rbx,8), %rdi
                	leaq	-0x48(%rbp), %rsi
                	xorl	%eax, %eax
                	callq	<addr>

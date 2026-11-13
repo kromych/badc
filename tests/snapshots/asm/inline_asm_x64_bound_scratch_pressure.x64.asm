@@ -350,11 +350,10 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x90, %rsp
                	xorl	%eax, %eax
-               	leaq	-0x90(%rbp), %rcx
                	leaq	(%rax,%rax,2), %rdx
                	incq	%rdx
                	movslq	%edx, %rdx
-               	movq	%rdx, (%rcx,%rax,8)
+               	movq	%rdx, -0x90(%rbp,%rax,8)
                	incq	%rax
                	cmpl	$0x12, %eax
                	jl	<addr>

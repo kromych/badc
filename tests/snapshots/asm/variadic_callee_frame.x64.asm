@@ -173,7 +173,6 @@ Disassembly of section .text:
                	leaq	-0xd0(%rbp), %r10
                	movq	%r10, 0x10(%rax)
                	xorl	%eax, %eax
-               	leaq	(%rsp), %rcx
                	leaq	-0x18(%rbp), %rdx
                	movq	%rdx, %r11
                	movl	(%r11), %r10d
@@ -186,7 +185,7 @@ Disassembly of section .text:
                	addq	$0x8, 0x8(%r11)
                	movq	%r10, %rdx
                	movq	(%rdx), %rdx
-               	movq	%rdx, (%rcx,%rax,8)
+               	movq	%rdx, (%rsp,%rax,8)
                	incq	%rax
                	cmpl	$0x4, %eax
                	jl	<addr>

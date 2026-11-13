@@ -209,11 +209,10 @@ Disassembly of section .text:
                	cmpl	$0x100, %edx            # imm = 0x100
                	jb	<addr>
                	xorl	%eax, %eax
-               	leaq	-0x130(%rbp), %rcx
                	imulq	$0x25, %rax, %rdx
                	addq	$0xb, %rdx
                	andq	$0xff, %rdx
-               	movb	%dl, (%rcx,%rax)
+               	movb	%dl, -0x130(%rbp,%rax)
                	incq	%rax
                	cmpl	$0x12c, %eax            # imm = 0x12C
                	jl	<addr>
@@ -224,66 +223,56 @@ Disassembly of section .text:
                	movq	0x10(%rcx), %r10
                	movq	%r10, 0x10(%rax)
                	xorl	%ebx, %ebx
-               	leaq	-0x148(%rbp), %rax
-               	movq	(%rax,%rbx,8), %rdi
+               	movq	-0x148(%rbp,%rbx,8), %rdi
                	leaq	-0x130(%rbp), %rsi
                	movl	$0x12c, %edx            # imm = 0x12C
                	callq	<addr>
                	movq	%rax, %r12
-               	leaq	-0x148(%rbp), %rax
-               	movq	(%rax,%rbx,8), %rdi
-               	leaq	-0x130(%rbp), %rsi
-               	movl	$0x12c, %edx            # imm = 0x12C
-               	callq	<addr>
-               	cmpl	%eax, %r12d
-               	jne	<addr>
-               	leaq	-0x148(%rbp), %rax
-               	movq	(%rax,%rbx,8), %rdi
-               	leaq	-0x130(%rbp), %rsi
-               	xorl	%edx, %edx
-               	callq	<addr>
-               	movq	%rax, %r12
-               	leaq	-0x148(%rbp), %rax
-               	movq	(%rax,%rbx,8), %rdi
-               	leaq	-0x130(%rbp), %rsi
-               	xorl	%edx, %edx
-               	callq	<addr>
-               	cmpl	%eax, %r12d
-               	jne	<addr>
-               	leaq	-0x148(%rbp), %rax
-               	movq	(%rax,%rbx,8), %rdi
-               	leaq	-0x130(%rbp), %rsi
-               	movl	$0x12c, %edx            # imm = 0x12C
-               	callq	<addr>
-               	movq	%rax, %r12
-               	leaq	-0x148(%rbp), %rax
-               	movq	(%rax,%rbx,8), %rdi
+               	movq	-0x148(%rbp,%rbx,8), %rdi
                	leaq	-0x130(%rbp), %rsi
                	movl	$0x12c, %edx            # imm = 0x12C
                	callq	<addr>
                	cmpl	%eax, %r12d
                	jne	<addr>
-               	leaq	-0x148(%rbp), %rax
-               	movq	(%rax,%rbx,8), %rdi
+               	movq	-0x148(%rbp,%rbx,8), %rdi
                	leaq	-0x130(%rbp), %rsi
                	xorl	%edx, %edx
                	callq	<addr>
                	movq	%rax, %r12
-               	leaq	-0x148(%rbp), %rax
-               	movq	(%rax,%rbx,8), %rdi
+               	movq	-0x148(%rbp,%rbx,8), %rdi
                	leaq	-0x130(%rbp), %rsi
                	xorl	%edx, %edx
                	callq	<addr>
                	cmpl	%eax, %r12d
                	jne	<addr>
-               	leaq	-0x148(%rbp), %rax
-               	movq	(%rax,%rbx,8), %rdi
+               	movq	-0x148(%rbp,%rbx,8), %rdi
                	leaq	-0x130(%rbp), %rsi
                	movl	$0x12c, %edx            # imm = 0x12C
                	callq	<addr>
                	movq	%rax, %r12
-               	leaq	-0x148(%rbp), %rax
-               	movq	(%rax,%rbx,8), %rdi
+               	movq	-0x148(%rbp,%rbx,8), %rdi
+               	leaq	-0x130(%rbp), %rsi
+               	movl	$0x12c, %edx            # imm = 0x12C
+               	callq	<addr>
+               	cmpl	%eax, %r12d
+               	jne	<addr>
+               	movq	-0x148(%rbp,%rbx,8), %rdi
+               	leaq	-0x130(%rbp), %rsi
+               	xorl	%edx, %edx
+               	callq	<addr>
+               	movq	%rax, %r12
+               	movq	-0x148(%rbp,%rbx,8), %rdi
+               	leaq	-0x130(%rbp), %rsi
+               	xorl	%edx, %edx
+               	callq	<addr>
+               	cmpl	%eax, %r12d
+               	jne	<addr>
+               	movq	-0x148(%rbp,%rbx,8), %rdi
+               	leaq	-0x130(%rbp), %rsi
+               	movl	$0x12c, %edx            # imm = 0x12C
+               	callq	<addr>
+               	movq	%rax, %r12
+               	movq	-0x148(%rbp,%rbx,8), %rdi
                	leaq	-0x130(%rbp), %rsi
                	movl	$0x12c, %edx            # imm = 0x12C
                	callq	<addr>

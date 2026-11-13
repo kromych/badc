@@ -466,11 +466,10 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	movq	%rcx, %rax
                	jmp	<addr>
-               	movb	%dl, (%rdi,%rax)
+               	movb	%dl, -0x60(%rbp,%rax)
                	incq	%rax
                	cmpl	$0x60, %eax
                	jge	<addr>
-               	leaq	-0x60(%rbp), %rdi
                	imulq	$0x7, %rax, %rdx
                	movslq	%edx, %rdx
                	imulq	$0x66666667, %rdx, %rsi # imm = 0x66666667
@@ -492,14 +491,13 @@ Disassembly of section .text:
                	leaq	0x1(%rsi), %rdx
                	jmp	<addr>
                	xorl	%eax, %eax
-               	leaq	-0xe8(%rbp), %rcx
                	imulq	$0x55555556, %rax, %rdx # imm = 0x55555556
                	shrq	$0x20, %rdx
                	leaq	(%rdx,%rdx,2), %rdx
                	movq	%rax, %rsi
                	subq	%rdx, %rsi
                	leaq	0x1(%rsi), %rdx
-               	movb	%dl, (%rcx,%rax)
+               	movb	%dl, -0xe8(%rbp,%rax)
                	incq	%rax
                	cmpl	$0x30, %eax
                	jl	<addr>

@@ -121,11 +121,9 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	0x8(%rsp), %rdi
                	xorl	%eax, %eax
-               	movsbq	(%rdi,%rax), %rsi
-               	leaq	-0x70(%rbp), %rcx
-               	movsbq	(%rcx,%rax), %rcx
-               	leaq	-0x68(%rbp), %rdx
-               	movsbq	(%rdx,%rax), %rdx
+               	movsbq	-0x48(%rbp,%rax), %rsi
+               	movsbq	-0x70(%rbp,%rax), %rcx
+               	movsbq	-0x68(%rbp,%rax), %rdx
                	leaq	(%rcx,%rdx), %r8
                	movsbq	%r8b, %r8
                	cmpl	%r8d, %esi

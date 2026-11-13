@@ -298,11 +298,10 @@ Disassembly of section .text:
                	movabsq	$0x5851f42d4c957f2d, %rsi # imm = 0x5851F42D4C957F2D
                	imulq	%rsi, %rcx
                	addq	%rdx, %rcx
-               	leaq	-0x200(%rbp), %rdi
                	movq	%rcx, %r8
                	shrq	$0x21, %r8
                	subq	$0x40000000, %r8        # imm = 0x40000000
-               	movq	%r8, (%rdi,%rax,8)
+               	movq	%r8, -0x200(%rbp,%rax,8)
                	incq	%rax
                	cmpl	$0x40, %eax
                	jl	<addr>
@@ -315,9 +314,8 @@ Disassembly of section .text:
                	movq	0x18(%rsp), %rcx
                	movl	$0x1, %eax
                	leaq	-0x1(%rax), %rdx
-               	movq	(%rcx,%rdx,8), %rdx
-               	leaq	-0x200(%rbp), %rsi
-               	movq	(%rsi,%rax,8), %rsi
+               	movq	-0x200(%rbp,%rdx,8), %rdx
+               	movq	-0x200(%rbp,%rax,8), %rsi
                	cmpq	%rsi, %rdx
                	jg	<addr>
                	incq	%rax

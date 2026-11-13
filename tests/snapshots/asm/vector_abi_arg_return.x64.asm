@@ -327,10 +327,9 @@ Disassembly of section .text:
                	vpaddb	%xmm0, %xmm1, %xmm1
                	vpaddb	%xmm0, %xmm1, %xmm1
                	vpaddb	%xmm0, %xmm1, %xmm0
-               	leaq	0x20(%rsp), %rcx
                	movups	%xmm0, 0x20(%rsp)
                	xorl	%eax, %eax
-               	movzbq	(%rcx,%rax), %rdx
+               	movzbq	0x20(%rsp,%rax), %rdx
                	leaq	0x1(%rax), %rsi
                	leaq	(%rsi,%rsi,8), %rsi
                	andq	$0xff, %rsi
@@ -366,22 +365,19 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%eax, %eax
-               	leaq	(%rsp), %rdx
                	leaq	0x1(%rax), %rcx
-               	movb	%cl, (%rdx,%rax)
-               	leaq	0x20(%rsp), %rdx
+               	movb	%cl, (%rsp,%rax)
                	leaq	0x46(%rax), %rsi
-               	movb	%sil, (%rdx,%rax)
+               	movb	%sil, 0x20(%rsp,%rax)
                	movq	%rcx, %rax
                	cmpl	$0x20, %eax
                	jl	<addr>
                	vmovups	0x20(%rsp), %ymm0
                	vmovups	(%rsp), %ymm1
                	vpsubb	%ymm1, %ymm0, %ymm0
-               	leaq	0x20(%rsp), %rcx
                	vmovups	%ymm0, 0x20(%rsp)
                	xorl	%eax, %eax
-               	movzbq	(%rcx,%rax), %rdx
+               	movzbq	0x20(%rsp,%rax), %rdx
                	cmpl	$0x45, %edx
                	jne	<addr>
                	incq	%rax

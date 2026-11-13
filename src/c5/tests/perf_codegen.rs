@@ -7894,3 +7894,53 @@ int parse(void) {\n\
         crate::c5::codegen::ssa::reg_alloc::with_allocation_check(|| object_at(SRC, target, true));
     }
 }
+
+/// An element of a frame object read or written through an index -- a
+/// load, a store, a store of a constant, a load only a zero test reads --
+/// addresses off the frame register with the object's offset as the
+/// displacement, `mov r, [rbp + index * 8 - disp]`, with no `lea` of the
+/// object's address ahead of it; the one `lea` passes the array to the call.
+#[test]
+fn x64_a_frame_array_element_addresses_off_the_frame() {
+    const SRC: &str = "void fill(long *p);\n\
+long mix(int n) {\n\
+    long w[16];\n\
+    fill(w);\n\
+    long s = 0;\n\
+    for (int i = 0; i < n; i++) {\n\
+        w[i & 15] += w[(i + 9) & 15];\n\
+        s ^= w[(i + 1) & 15];\n\
+        if (w[(i + 3) & 15] == 0)\n\
+            w[(i + 5) & 15] = 16;\n\
+    }\n\
+    return s;\n\
+}\n";
+    let insns = x64(SRC, "mix");
+    // Every indexed access names rbp as its SIB base.
+    let indexed = |i: &X64Insn| {
+        i.modrm.is_some_and(|m| m >> 6 != 3 && m & 7 == 4)
+            && i.sib.is_some_and(|b| (b >> 3) & 7 != 4)
+    };
+    let stray = (insns.iter())
+        .filter(|i| indexed(i) && i.sib.is_some_and(|b| b & 7 != 5 || i.rex & 1 != 0))
+        .count();
+    assert_eq!(stray, 0, "{insns:x?}");
+    // ModRM rm = 100 (SIB) with SIB base = rbp (101) and a displacement.
+    let off_frame = |i: &X64Insn| {
+        i.modrm.is_some_and(|m| m >> 6 != 3 && m & 7 == 4)
+            && i.sib.is_some_and(|b| b & 7 == 5)
+            && i.disp < 0
+    };
+    let loads = insns
+        .iter()
+        .filter(|i| i.op == 0x8B && off_frame(i))
+        .count();
+    let stores = insns
+        .iter()
+        .filter(|i| i.op == 0x89 && off_frame(i))
+        .count();
+    let frame_leas = (insns.iter())
+        .filter(|i| i.op == 0x8D && i.mem_base() == Some(5))
+        .count();
+    assert!(loads >= 2 && stores >= 1 && frame_leas == 1, "{insns:x?}");
+}

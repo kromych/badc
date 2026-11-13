@@ -62,12 +62,11 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	leaq	-0x10(%rbp), %rcx
                	xorl	%eax, %eax
                	movq	%rax, -0x8(%rbp)
                	movq	$0x44332211, -0x10(%rbp) # imm = 0x44332211
                	leaq	<rip>, %rdx # <addr>
-               	movzbq	(%rcx,%rax), %rsi
+               	movzbq	-0x10(%rbp,%rax), %rsi
                	movzbq	(%rdx,%rax), %rdi
                	cmpl	%edi, %esi
                	jne	<addr>

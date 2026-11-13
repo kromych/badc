@@ -37,7 +37,7 @@ Disassembly of section .text:
                	movups	%xmm14, 0x30(%rax)
                	movq	%rdi, %rcx
                	andq	$0x7, %rcx
-               	movq	%rdi, (%rax,%rcx,8)
+               	movq	%rdi, -0x40(%rbp,%rcx,8)
                	movq	-0x40(%rbp), %rax
                	movq	-0x8(%rbp), %rcx
                	addq	%rcx, %rax
@@ -68,7 +68,7 @@ Disassembly of section .text:
                	movups	%xmm14, 0xf0(%rax)
                	movq	%rdi, %rcx
                	andq	$0x1f, %rcx
-               	movq	%rdi, (%rax,%rcx,8)
+               	movq	%rdi, -0x100(%rbp,%rcx,8)
                	movq	-0x100(%rbp), %rax
                	movq	-0x8(%rbp), %rcx
                	addq	%rcx, %rax
@@ -105,7 +105,7 @@ Disassembly of section .text:
                	imulq	$0x21, %rdx, %rax
                	movq	%rdi, %rdx
                	subq	%rax, %rdx
-               	movq	%rdi, (%rcx,%rdx,8)
+               	movq	%rdi, -0x108(%rbp,%rdx,8)
                	movq	-0x108(%rbp), %rax
                	movq	-0x8(%rbp), %rcx
                	addq	%rcx, %rax
@@ -127,7 +127,7 @@ Disassembly of section .text:
                	jb	<addr>
                	movq	%rdi, %rcx
                	andq	$0x1ff, %rcx            # imm = 0x1FF
-               	movq	%rdi, (%rax,%rcx,8)
+               	movq	%rdi, -0x1000(%rbp,%rcx,8)
                	movq	-0x1000(%rbp), %rax
                	movq	-0x8(%rbp), %rcx
                	addq	%rcx, %rax
@@ -152,7 +152,7 @@ Disassembly of section .text:
                	jb	<addr>
                	movq	%rdi, %rcx
                	andq	$0x1fff, %rcx           # imm = 0x1FFF
-               	movq	%rdi, (%rax,%rcx,8)
+               	movq	%rdi, -0x10000(%rbp,%rcx,8)
                	movq	-0x10000(%rbp), %rcx
                	addq	$0xfff8, %rax           # imm = 0xFFF8
                	movq	(%rax), %rax
@@ -185,7 +185,7 @@ Disassembly of section .text:
                	imulq	$0x3fd, %rax, %rax      # imm = 0x3FD
                	movq	%rdi, %rdx
                	subq	%rax, %rdx
-               	movl	%edi, (%rcx,%rdx,4)
+               	movl	%edi, -0xff8(%rbp,%rdx,4)
                	movl	-0xff8(%rbp), %eax
                	movl	-0x8(%rbp), %ecx
                	addq	%rcx, %rax

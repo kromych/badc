@@ -36,9 +36,8 @@ Disassembly of section .text:
                	movups	0x10(%rax), %xmm14
                	movups	%xmm14, 0x10(%rcx)
                	xorl	%eax, %eax
-               	leaq	-0x40(%rbp), %rdx
-               	movq	(%rcx,%rax,8), %rsi
-               	movq	%rsi, (%rdx,%rax,8)
+               	movq	-0x20(%rbp,%rax,8), %rsi
+               	movq	%rsi, -0x40(%rbp,%rax,8)
                	incq	%rax
                	cmpl	$0x4, %eax
                	jl	<addr>

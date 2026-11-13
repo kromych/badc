@@ -95,10 +95,9 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	imulq	$0x41c64e6d, %rcx, %rcx # imm = 0x41C64E6D
                	addq	$0x3039, %rcx           # imm = 0x3039
-               	leaq	-0x100(%rbp), %rdx
                	movq	%rcx, %rsi
                	andq	$0x7fffffff, %rsi       # imm = 0x7FFFFFFF
-               	movl	%esi, (%rdx,%rax,4)
+               	movl	%esi, -0x100(%rbp,%rax,4)
                	incq	%rax
                	cmpl	$0x40, %eax
                	jl	<addr>
@@ -108,10 +107,9 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	callq	<addr>
                	movl	$0x1, %eax
-               	movl	(%rbx,%rax,4), %ecx
-               	leaq	-0x100(%rbp), %rdx
+               	movl	-0x100(%rbp,%rax,4), %ecx
                	leaq	-0x1(%rax), %rsi
-               	movl	(%rdx,%rsi,4), %edx
+               	movl	-0x100(%rbp,%rsi,4), %edx
                	cmpl	%edx, %ecx
                	jl	<addr>
                	incq	%rax

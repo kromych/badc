@@ -41,8 +41,7 @@ Disassembly of section .text:
                	xorl	%r9d, %r9d
                	movl	$0x1, -0x10(%rbp)
                	jmp	<addr>
-               	leaq	-0x40(%rbp), %rax
-               	movq	(%rax,%r9,8), %rdx
+               	movq	-0x40(%rbp,%r9,8), %rdx
                	movslq	-0x10(%rbp), %rcx
                	movq	%rdx, %rbx
                	rorq	%cl, %rbx

@@ -545,17 +545,21 @@ pub(crate) fn emit_mi_sib(
     code: &mut Vec<u8>,
     mnem: Mnem,
     width: u8,
-    (base, index, scale): (Reg, Reg, u8),
+    (base, index, scale, disp): (Reg, Reg, u8, i32),
     imm: i32,
 ) {
+    let mem = super::table::Opnd::Mem {
+        base: base.0,
+        index: Some(index.0),
+        scale,
+        disp,
+        width,
+    };
     super::table::encode_into(
         code,
         mnem,
         Some(width),
-        &[
-            msib(base, index, scale, width),
-            super::table::Opnd::Imm(imm as i64),
-        ],
+        &[mem, super::table::Opnd::Imm(imm as i64)],
     );
 }
 
@@ -1810,6 +1814,60 @@ pub(crate) fn emit_movsxd_r_sib(code: &mut Vec<u8>, dst: Reg, base: Reg, index: 
         None,
         &[rw(dst, 8), msib(base, index, scale, 4)],
     );
+}
+
+/// A load of `mem_width` bytes from `[base + index * scale + disp]` into
+/// `dst` at `dst_width` by `mnem` (`mov`, `movsx`, `movzx`, `movsxd`).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn emit_load_sib_disp(
+    code: &mut Vec<u8>,
+    mnem: Mnem,
+    (dst_width, mem_width): (u8, u8),
+    dst: Reg,
+    (base, index, scale, disp): (Reg, Reg, u8, i32),
+) {
+    let width = (mnem == Mnem::Mov).then_some(dst_width);
+    let mem = super::table::Opnd::Mem {
+        base: base.0,
+        index: Some(index.0),
+        scale,
+        disp,
+        width: mem_width,
+    };
+    super::table::encode_into(code, mnem, width, &[rw(dst, dst_width), mem]);
+}
+
+/// `lea dst, [base + index * scale + disp]`.
+pub(crate) fn emit_lea_sib_disp(
+    code: &mut Vec<u8>,
+    dst: Reg,
+    (base, index, scale, disp): (Reg, Reg, u8, i32),
+) {
+    let mem = super::table::Opnd::Mem {
+        base: base.0,
+        index: Some(index.0),
+        scale,
+        disp,
+        width: 8,
+    };
+    super::table::encode_into(code, Mnem::Lea, Some(8), &[rw(dst, 8), mem]);
+}
+
+/// A store of `width` bytes of `src` to `[base + index * scale + disp]`.
+pub(crate) fn emit_store_sib_disp(
+    code: &mut Vec<u8>,
+    width: u8,
+    (base, index, scale, disp): (Reg, Reg, u8, i32),
+    src: Reg,
+) {
+    let mem = super::table::Opnd::Mem {
+        base: base.0,
+        index: Some(index.0),
+        scale,
+        disp,
+        width,
+    };
+    super::table::encode_into(code, Mnem::Mov, Some(width), &[mem, rw(src, width)]);
 }
 
 /// `MOV r64, [base + index * scale]` -- 64-bit indexed load.

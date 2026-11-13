@@ -280,7 +280,7 @@ Disassembly of section .text:
                	setne	%cl
                	movzbq	%cl, %rcx
                	incq	%rcx
-               	movl	(%rax,%rcx,4), %eax
+               	movl	-0x10(%rbp,%rcx,4), %eax
                	cmpl	$0x1e, %eax
                	je	<addr>
                	movl	$0xb, %eax

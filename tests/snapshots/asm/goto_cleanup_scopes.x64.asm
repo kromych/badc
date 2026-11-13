@@ -308,7 +308,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx # <addr>
                	incq	%rax
                	movzbq	(%rcx,%rax), %rcx
-               	movq	(%rdi,%rcx,8), %rcx
+               	movq	-0x10(%rbp,%rcx,8), %rcx
                	jmpq	*%rcx
                	leaq	<rip>, %rax # <addr>
                	movslq	<rip>, %rcx # <addr>

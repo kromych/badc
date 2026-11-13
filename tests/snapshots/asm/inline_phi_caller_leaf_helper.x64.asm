@@ -45,7 +45,7 @@ Disassembly of section .text:
                	xorq	$-0x1, %r9
                	andq	%rsi, %r9
                	xorq	%r9, %r8
-               	movl	(%rdi,%rax,4), %esi
+               	movl	-0x20(%rbp,%rax,4), %esi
                	addq	%r8, %rsi
                	incq	%rax
                	xchgq	%rdx, %rsi

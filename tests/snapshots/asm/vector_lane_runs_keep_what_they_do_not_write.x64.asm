@@ -200,12 +200,11 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%eax, %eax
-               	leaq	-0x28(%rbp), %rcx
                	imulq	$0xd, %rax, %rdx
                	movl	-0x8(%rbp), %esi
                	addq	%rsi, %rdx
                	andq	$0xff, %rdx
-               	movb	%dl, (%rcx,%rax)
+               	movb	%dl, -0x28(%rbp,%rax)
                	incq	%rax
                	cmpl	$0x10, %eax
                	jl	<addr>

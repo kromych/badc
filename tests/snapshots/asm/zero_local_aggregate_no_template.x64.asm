@@ -64,7 +64,7 @@ Disassembly of section .text:
                	movups	%xmm14, 0x1e0(%rcx)
                	movups	%xmm14, 0x1f0(%rcx)
                	xorl	%eax, %eax
-               	cmpb	$0x0, (%rcx,%rax)
+               	cmpb	$0x0, -0x200(%rbp,%rax)
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x200, %eax            # imm = 0x200
@@ -89,7 +89,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	movq	(%rax,%rdi,8), %rax
+               	movq	-0x10(%rbp,%rdi,8), %rax
                	jmpq	*%rax
                	movl	$0xa, %eax
                	leave

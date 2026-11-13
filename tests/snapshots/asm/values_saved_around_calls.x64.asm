@@ -199,26 +199,23 @@ Disassembly of section .text:
                	incq	%rbx
                	cmpl	%r12d, %ebx
                	jge	<addr>
-               	leaq	-0x70(%rbp), %rdx
                	addq	%rbx, -0x70(%rbp)
                	movl	$0x1, %eax
                	jmp	<addr>
-               	movq	%rcx, (%rdx,%rax,8)
+               	movq	%rcx, -0x70(%rbp,%rax,8)
                	incq	%rax
                	cmpl	$0xe, %eax
                	jge	<addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	-0x70(%rbp), %rcx
-               	movq	(%rcx,%rax,8), %rdi
+               	movq	-0x70(%rbp,%rax,8), %rdi
                	leaq	-0x1(%rax), %r8
-               	movq	(%rcx,%r8,8), %rcx
+               	movq	-0x70(%rbp,%r8,8), %rcx
                	xorq	%rdi, %rcx
                	jmp	<addr>
-               	leaq	-0x70(%rbp), %rcx
-               	movq	(%rcx,%rax,8), %rdi
+               	movq	-0x70(%rbp,%rax,8), %rdi
                	leaq	-0x1(%rax), %r8
-               	movq	(%rcx,%r8,8), %rcx
+               	movq	-0x70(%rbp,%r8,8), %rcx
                	addq	%rdi, %rcx
                	jmp	<addr>
                	testb	$0x7, %bl

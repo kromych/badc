@@ -176,11 +176,10 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%eax, %eax
-               	leaq	(%rsp), %rcx
                	movq	-0x8(%rbp), %rdx
                	addq	%rax, %rdx
                	andq	$0xff, %rdx
-               	movb	%dl, (%rcx,%rax)
+               	movb	%dl, (%rsp,%rax)
                	incq	%rax
                	cmpl	$0x10, %eax
                	jl	<addr>
@@ -188,10 +187,9 @@ Disassembly of section .text:
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	callq	<addr>
-               	leaq	-0x10(%rbp), %rcx
                	movsd	%xmm0, -0x10(%rbp)
                	xorl	%eax, %eax
-               	movzbq	(%rcx,%rax), %rdx
+               	movzbq	-0x10(%rbp,%rax), %rdx
                	movq	-0x8(%rbp), %rsi
                	addq	$0x8, %rsi
                	addq	%rax, %rsi

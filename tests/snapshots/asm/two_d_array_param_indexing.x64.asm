@@ -75,7 +75,7 @@ Disassembly of section .text:
                	movq	%rax, %rsi
                	shlq	$0x2, %rsi
                	leaq	0x41(%rax), %rcx
-               	movb	%cl, (%rdx,%rsi)
+               	movb	%cl, -0x20(%rbp,%rsi)
                	addq	%rsi, %rdx
                	leaq	0x1(%rcx), %rsi
                	movb	%sil, 0x1(%rdx)

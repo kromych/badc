@@ -36,7 +36,7 @@ Disassembly of section .text:
                	movups	%xmm14, (%rax)
                	movq	0x10(%rcx), %r10
                	movq	%r10, 0x10(%rax)
-               	movq	(%rax,%rdi,8), %rax
+               	movq	-0x18(%rbp,%rdi,8), %rax
                	jmpq	*%rax
                	movl	$0xa, %eax
                	leave

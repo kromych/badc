@@ -29,7 +29,6 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	leaq	-0x10(%rbp), %rdx
                	xorl	%eax, %eax
                	leaq	<rip>, %rcx # <addr>
                	movq	%rcx, -0x10(%rbp)
@@ -40,7 +39,7 @@ Disassembly of section .text:
                	jge	<addr>
                	movq	%rax, %rsi
                	andq	$0x1, %rsi
-               	movq	(%rdx,%rsi,8), %rsi
+               	movq	-0x10(%rbp,%rsi,8), %rsi
                	jmpq	*%rsi
                	addq	$0x2, %rcx
                	incq	%rax

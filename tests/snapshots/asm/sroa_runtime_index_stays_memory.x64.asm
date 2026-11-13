@@ -49,7 +49,6 @@ Disassembly of section .text:
                	leaq	(%rax,%rax,2), %rax
                	incq	%rax
                	movq	%rax, -0x20(%rbp)
-               	leaq	-0x40(%rbp), %rax
                	movq	0x28(%rdi), %rcx
                	leaq	(%rcx,%rcx,2), %rcx
                	incq	%rcx
@@ -64,10 +63,10 @@ Disassembly of section .text:
                	movq	%rcx, -0x8(%rbp)
                	movq	%rsi, %rcx
                	andq	$0x7, %rcx
-               	movq	(%rax,%rcx,8), %rcx
+               	movq	-0x40(%rbp,%rcx,8), %rcx
                	leaq	0x5(%rsi), %rdx
                	andq	$0x7, %rdx
-               	movq	(%rax,%rdx,8), %rax
+               	movq	-0x40(%rbp,%rdx,8), %rax
                	addq	%rcx, %rax
                	leave
                	retq

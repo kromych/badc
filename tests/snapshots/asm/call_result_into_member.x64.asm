@@ -1289,8 +1289,7 @@ Disassembly of section .text:
                	leaq	-<rip>, %rax # <addr>
                	movq	%rax, -0x8(%rbp)
                	xorl	%ebx, %ebx
-               	leaq	-0xa0(%rbp), %rax
-               	movq	(%rax,%rbx,8), %rax
+               	movq	-0xa0(%rbp,%rbx,8), %rax
                	movl	$0x27, %edi
                	callq	*%rax
                	testl	%eax, %eax

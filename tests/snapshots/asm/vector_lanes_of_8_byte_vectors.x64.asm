@@ -30,10 +30,9 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	vpaddb	%xmm1, %xmm0, %xmm0
-               	leaq	-0x8(%rbp), %rax
                	movsd	%xmm0, -0x8(%rbp)
                	andq	$0x7, %rdi
-               	movsbq	(%rax,%rdi), %rax
+               	movsbq	-0x8(%rbp,%rdi), %rax
                	movsbq	-0x1(%rbp), %rcx
                	addq	%rcx, %rax
                	leave

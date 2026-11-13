@@ -73,11 +73,10 @@ Disassembly of section .text:
                	movl	(%rdx), %r10d
                	movl	%r10d, (%rax)
                	movb	%sil, -0x14(%rbp)
-               	movsbq	(%rcx,%rsi), %rdx
+               	movsbq	-0x20(%rbp,%rsi), %rdx
                	cmpl	$0x20, %edx
                	jl	<addr>
-               	leaq	-0x20(%rbp), %rdx
-               	movsbq	(%rdx,%rsi), %rdx
+               	movsbq	-0x20(%rbp,%rsi), %rdx
                	cmpl	$0x7e, %edx
                	jg	<addr>
                	incq	%rsi

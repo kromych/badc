@@ -734,6 +734,7 @@ fn emit_mem_inst(
             !alloc.high_dead(v),
             alloc,
             frame,
+            frame_object_base(func, *base, frame, abi),
         ),
         Inst::StoreIndexed {
             base,
@@ -753,9 +754,25 @@ fn emit_mem_inst(
             *kind,
             alloc,
             frame,
+            frame_object_base(func, *base, frame, abi),
         ),
         _ => unreachable!(),
     }
+}
+
+/// The frame register and displacement a frame object's address `base`
+/// names, for an access to address off the frame directly.
+pub(super) fn frame_object_base(
+    func: &FunctionSsa,
+    base: super::super::ir::ValueId,
+    frame: Frame,
+    abi: super::Abi,
+) -> Option<(Reg, i32)> {
+    let &Inst::LocalAddr(off) = func.insts.get(base as usize)? else {
+        return None;
+    };
+    let (reg, bytes) = super::mem::local_slot_base_disp(off, func, frame, abi);
+    Some((reg, i32::try_from(bytes).ok()?))
 }
 
 /// The call instructions.

@@ -93,11 +93,10 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	cmpl	%ecx, %eax
                	jge	<addr>
-               	leaq	-0xa0(%rbp), %rdx
                	leaq	(%rax,%rax,2), %rsi
                	incq	%rsi
                	movslq	%esi, %rsi
-               	movq	%rsi, (%rdx,%rax,8)
+               	movq	%rsi, -0xa0(%rbp,%rax,8)
                	incq	%rax
                	cmpl	%ecx, %eax
                	jl	<addr>

@@ -101,21 +101,18 @@ Disassembly of section .text:
                	movzbq	-0x13(%rbp), %rcx
                	xorq	%rcx, %rax
                	movb	%al, -0x3(%rbp)
-               	leaq	-0x30(%rbp), %rcx
                	movzbq	-0x22(%rbp), %rax
-               	leaq	-0x20(%rbp), %rdx
                	movzbq	-0x12(%rbp), %rsi
                	xorq	%rsi, %rax
                	movb	%al, -0x2(%rbp)
-               	leaq	-0x10(%rbp), %rsi
                	movzbq	-0x21(%rbp), %rax
                	movzbq	-0x11(%rbp), %rdi
                	xorq	%rdi, %rax
                	movb	%al, -0x1(%rbp)
                	xorl	%eax, %eax
-               	movzbq	(%rsi,%rax), %rdi
-               	movzbq	(%rcx,%rax), %r8
-               	movzbq	(%rdx,%rax), %r9
+               	movzbq	-0x10(%rbp,%rax), %rdi
+               	movzbq	-0x30(%rbp,%rax), %r8
+               	movzbq	-0x20(%rbp,%rax), %r9
                	xorq	%r9, %r8
                	cmpl	%r8d, %edi
                	jne	<addr>

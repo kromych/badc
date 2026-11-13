@@ -42,7 +42,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v28  Imm(0)                                           -> x0
     v29  LocalAddr(-1)                                    -> x0
     v30  BinopI { op=add, lhs=v29, rhs_imm=4 }            -> x0
-    v31  LoadLocal { off=-1, disp=4, kind=I32 }           -> x0
+    v31  Load { addr=v30, disp=0, kind=I32 }              -> x0
     v32  Imm(305419896)                                   -> x0
     v33  Imm(0)                                           -> x0
     v34  LocalAddr(-1)                                    -> x0

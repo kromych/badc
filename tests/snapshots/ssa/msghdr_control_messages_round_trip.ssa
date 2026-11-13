@@ -629,7 +629,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=29
     v659 StoreLocal { off=-15, disp=40, value=v658, kind=I64 } -> -
     v660 LocalAddr(-15)                                   -> x0
     v661 BinopI { op=add, lhs=v660, rhs_imm=40 }          -> x0
-    v662 LoadLocal { off=-15, disp=40, kind=I64 }         -> x0
+    v662 Load { addr=v661, disp=0, kind=I64 }             -> x0
     v663 Imm(1)                                           -> x0
     v664 LocalAddr(-15)                                   -> x0
     v665 BinopI { op=add, lhs=v638, rhs_imm=32 }          -> x0
@@ -714,7 +714,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=29
     v721 StoreLocal { off=-15, disp=40, value=v720, kind=I64 } -> -
     v722 LocalAddr(-15)                                   -> x0
     v723 BinopI { op=add, lhs=v722, rhs_imm=40 }          -> x0
-    v724 LoadLocal { off=-15, disp=40, kind=I64 }         -> x0
+    v724 Load { addr=v723, disp=0, kind=I64 }             -> x0
     v725 Imm(0)                                           -> x0
     v726 Imm(0)                                           -> x0
     v727 Imm(0)                                           -> x0
@@ -777,7 +777,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=29
     v452 StoreLocal { off=-14, disp=40, value=v451, kind=I64 } -> -
     v453 LocalAddr(-14)                                   -> x0
     v454 BinopI { op=add, lhs=v453, rhs_imm=40 }          -> x0
-    v455 LoadLocal { off=-14, disp=40, kind=I64 }         -> x0
+    v455 Load { addr=v454, disp=0, kind=I64 }             -> x0
     v456 Imm(1)                                           -> x0
     v457 LocalAddr(-14)                                   -> x0
     v458 BinopI { op=add, lhs=v449, rhs_imm=32 }          -> x0

@@ -98,8 +98,7 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x30]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	add	x1, x0, #0x10
-               	ldrb	w1, [x1]
+               	ldrb	w1, [x0, #0x10]
                	cmp	w1, #0x9
                	b.ne	<addr>
                	ldrb	w0, [x0, #0xf]

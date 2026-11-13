@@ -612,17 +612,17 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v536 StoreLocal { off=-2, disp=8, value=v426, kind=I8 } -> -
     v537 LocalAddr(-2)                                    -> x1
     v538 BinopI { op=add, lhs=v537, rhs_imm=8 }           -> x1
-    v539 LoadLocal { off=-2, disp=8, kind=U8 }            -> x1
-    v540 Imm(1)                                           -> x2
-    v541 Imm(1)                                           -> x2
-    v542 Imm(0)                                           -> x2
-    v543 LocalAddr(-2)                                    -> x2
-    v544 BinopI { op=add, lhs=v521, rhs_imm=8 }           -> x2
-    v545 Imm(0)                                           -> x2
-    v546 Imm(0)                                           -> x2
-    v547 Imm(0)                                           -> x2
-    v548 LoadLocal { off=-2, disp=8, kind=U8 }            -> x2
-    v549 BinopI { op=and, lhs=v539, rhs_imm=-3 }          -> x1
+    v539 Load { addr=v538, disp=0, kind=U8 }              -> x1
+    v540 Imm(1)                                           -> x1
+    v541 Imm(1)                                           -> x1
+    v542 Imm(0)                                           -> x1
+    v543 LocalAddr(-2)                                    -> x1
+    v544 BinopI { op=add, lhs=v521, rhs_imm=8 }           -> x1
+    v545 Imm(0)                                           -> x1
+    v546 Imm(0)                                           -> x1
+    v547 Imm(0)                                           -> x1
+    v548 LoadLocal { off=-2, disp=8, kind=U8 }            -> x1
+    v549 BinopI { op=and, lhs=v548, rhs_imm=-3 }          -> x1
     v550 Imm(0)                                           -> x2
     v551 BinopI { op=or, lhs=v549, rhs_imm=0 }            -> x2
     v552 StoreLocal { off=-2, disp=8, value=v549, kind=I8 } -> -

@@ -102,164 +102,164 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v5   BinopI { op=lt, lhs=v3, rhs_imm=12 }             -> x0
     terminator Bz { cond=v5, target=b7, fall=b1 }   (exit_acc=v5)
   block 7  start_pc=0
-    v23  Imm(0)                                           -> x1 [f32]
-    v24  Imm(0)                                           -> x0
-    v25  Imm(0)                                           -> x0
-    v26  Imm(0)                                           -> x0
-    v27  Imm(0)                                           -> x0
-    v28  Imm(1)                                           -> x0
-    v29  Imm(0)                                           -> x0 [f32]
-    v30  ImmData(272)                                     -> x0
-    v31  Imm(0)                                           -> x2
-    v32  Imm(0)                                           -> x2
-    v33  BinopI { op=add, lhs=v30, rhs_imm=0 }            -> x2
-    v34  Imm(0)                                           -> x2
+    v23  Imm(0)                                           -> x0 [f32]
+    v24  Imm(0)                                           -> x1
+    v25  Imm(0)                                           -> x1
+    v26  Imm(0)                                           -> x1
+    v27  Imm(0)                                           -> x1
+    v28  Imm(1)                                           -> x1
+    v29  Imm(0)                                           -> x1 [f32]
+    v30  ImmData(272)                                     -> x1
+    v31  Imm(0)                                           -> x1
+    v32  Imm(0)                                           -> x1
+    v33  BinopI { op=add, lhs=v30, rhs_imm=0 }            -> x1
+    v34  Imm(0)                                           -> x1
     v35  Load { addr=v30, disp=0, kind=F32 pc_rel }       -> d0 [f32]
-    v36  Imm(4)                                           -> x2
-    v37  BinopI { op=add, lhs=v30, rhs_imm=4 }            -> x2
+    v36  Imm(4)                                           -> x1
+    v37  BinopI { op=add, lhs=v30, rhs_imm=4 }            -> x1
     v38  Load { addr=v30, disp=4, kind=F32 pc_rel }       -> d1 [f32]
     v39  Binop { op=fadd, lhs=v35, rhs=v38 }              -> d0 [f32]
-    v40  Imm(8)                                           -> x2
-    v41  BinopI { op=add, lhs=v30, rhs_imm=8 }            -> x2
+    v40  Imm(8)                                           -> x1
+    v41  BinopI { op=add, lhs=v30, rhs_imm=8 }            -> x1
     v42  Load { addr=v30, disp=8, kind=F32 pc_rel }       -> d1 [f32]
     v43  Binop { op=fadd, lhs=v39, rhs=v42 }              -> d0 [f32]
     v44  Binop { op=fadd, lhs=v23, rhs=v43 }              -> d0 [f32]
-    v45  Imm(0)                                           -> x1
-    v46  Imm(0)                                           -> x1 [f32]
-    v47  Imm(0)                                           -> x1
-    v48  Imm(1)                                           -> x1
-    v49  Imm(1)                                           -> x1
-    v50  Imm(1)                                           -> x1
-    v51  Imm(1)                                           -> x1
-    v52  Imm(0)                                           -> x1 [f32]
-    v53  ImmData(272)                                     -> x1
-    v54  Imm(1)                                           -> x1
-    v55  Imm(16)                                          -> x1
-    v56  BinopI { op=add, lhs=v30, rhs_imm=16 }           -> x1
-    v57  Imm(0)                                           -> x2
-    v58  Load { addr=v56, disp=0, kind=F32 }              -> d1 [f32]
-    v59  Imm(4)                                           -> x2
-    v60  BinopI { op=add, lhs=v56, rhs_imm=4 }            -> x2
-    v61  Load { addr=v56, disp=4, kind=F32 }              -> d2 [f32]
+    v45  Imm(0)                                           -> x0
+    v46  Imm(0)                                           -> x0 [f32]
+    v47  Imm(0)                                           -> x0
+    v48  Imm(1)                                           -> x0
+    v49  Imm(1)                                           -> x0
+    v50  Imm(1)                                           -> x0
+    v51  Imm(1)                                           -> x0
+    v52  Imm(0)                                           -> x0 [f32]
+    v53  ImmData(272)                                     -> x0
+    v54  Imm(1)                                           -> x0
+    v55  Imm(16)                                          -> x0
+    v56  BinopI { op=add, lhs=v30, rhs_imm=16 }           -> x0
+    v57  Imm(0)                                           -> x0
+    v58  Load { addr=v30, disp=16, kind=F32 pc_rel }      -> d1 [f32]
+    v59  Imm(4)                                           -> x0
+    v60  BinopI { op=add, lhs=v56, rhs_imm=4 }            -> x0
+    v61  Load { addr=v30, disp=20, kind=F32 pc_rel }      -> d2 [f32]
     v62  Binop { op=fadd, lhs=v58, rhs=v61 }              -> d1 [f32]
-    v63  Imm(8)                                           -> x2
-    v64  BinopI { op=add, lhs=v56, rhs_imm=8 }            -> x2
-    v65  Load { addr=v56, disp=8, kind=F32 }              -> d2 [f32]
+    v63  Imm(8)                                           -> x0
+    v64  BinopI { op=add, lhs=v56, rhs_imm=8 }            -> x0
+    v65  Load { addr=v30, disp=24, kind=F32 pc_rel }      -> d2 [f32]
     v66  Binop { op=fadd, lhs=v62, rhs=v65 }              -> d1 [f32]
     v67  Binop { op=fadd, lhs=v44, rhs=v66 }              -> d0 [f32]
-    v68  Imm(0)                                           -> x1
-    v69  Imm(0)                                           -> x1 [f32]
-    v70  Imm(1)                                           -> x1
-    v71  Imm(2)                                           -> x1
-    v72  Imm(2)                                           -> x1
-    v73  Imm(2)                                           -> x1
-    v74  Imm(1)                                           -> x1
-    v75  Imm(0)                                           -> x1 [f32]
-    v76  ImmData(272)                                     -> x1
-    v77  Imm(2)                                           -> x1
-    v78  Imm(32)                                          -> x1
-    v79  BinopI { op=add, lhs=v30, rhs_imm=32 }           -> x1
-    v80  Imm(0)                                           -> x2
-    v81  Load { addr=v79, disp=0, kind=F32 }              -> d1 [f32]
-    v82  Imm(4)                                           -> x2
-    v83  BinopI { op=add, lhs=v79, rhs_imm=4 }            -> x2
-    v84  Load { addr=v79, disp=4, kind=F32 }              -> d2 [f32]
+    v68  Imm(0)                                           -> x0
+    v69  Imm(0)                                           -> x0 [f32]
+    v70  Imm(1)                                           -> x0
+    v71  Imm(2)                                           -> x0
+    v72  Imm(2)                                           -> x0
+    v73  Imm(2)                                           -> x0
+    v74  Imm(1)                                           -> x0
+    v75  Imm(0)                                           -> x0 [f32]
+    v76  ImmData(272)                                     -> x0
+    v77  Imm(2)                                           -> x0
+    v78  Imm(32)                                          -> x0
+    v79  BinopI { op=add, lhs=v30, rhs_imm=32 }           -> x0
+    v80  Imm(0)                                           -> x0
+    v81  Load { addr=v30, disp=32, kind=F32 pc_rel }      -> d1 [f32]
+    v82  Imm(4)                                           -> x0
+    v83  BinopI { op=add, lhs=v79, rhs_imm=4 }            -> x0
+    v84  Load { addr=v30, disp=36, kind=F32 pc_rel }      -> d2 [f32]
     v85  Binop { op=fadd, lhs=v81, rhs=v84 }              -> d1 [f32]
-    v86  Imm(8)                                           -> x2
-    v87  BinopI { op=add, lhs=v79, rhs_imm=8 }            -> x2
-    v88  Load { addr=v79, disp=8, kind=F32 }              -> d2 [f32]
+    v86  Imm(8)                                           -> x0
+    v87  BinopI { op=add, lhs=v79, rhs_imm=8 }            -> x0
+    v88  Load { addr=v30, disp=40, kind=F32 pc_rel }      -> d2 [f32]
     v89  Binop { op=fadd, lhs=v85, rhs=v88 }              -> d1 [f32]
     v90  Binop { op=fadd, lhs=v67, rhs=v89 }              -> d0 [f32]
-    v91  Imm(0)                                           -> x1
-    v92  Imm(0)                                           -> x1 [f32]
-    v93  Imm(2)                                           -> x1
-    v94  Imm(3)                                           -> x1
-    v95  Imm(3)                                           -> x1
-    v96  Imm(3)                                           -> x1
-    v97  Imm(1)                                           -> x1
-    v98  Imm(0)                                           -> x1 [f32]
-    v99  ImmData(272)                                     -> x1
-    v100 Imm(3)                                           -> x1
-    v101 Imm(48)                                          -> x1
-    v102 BinopI { op=add, lhs=v30, rhs_imm=48 }           -> x1
-    v103 Imm(0)                                           -> x2
-    v104 Load { addr=v102, disp=0, kind=F32 }             -> d1 [f32]
-    v105 Imm(4)                                           -> x2
-    v106 BinopI { op=add, lhs=v102, rhs_imm=4 }           -> x2
-    v107 Load { addr=v102, disp=4, kind=F32 }             -> d2 [f32]
+    v91  Imm(0)                                           -> x0
+    v92  Imm(0)                                           -> x0 [f32]
+    v93  Imm(2)                                           -> x0
+    v94  Imm(3)                                           -> x0
+    v95  Imm(3)                                           -> x0
+    v96  Imm(3)                                           -> x0
+    v97  Imm(1)                                           -> x0
+    v98  Imm(0)                                           -> x0 [f32]
+    v99  ImmData(272)                                     -> x0
+    v100 Imm(3)                                           -> x0
+    v101 Imm(48)                                          -> x0
+    v102 BinopI { op=add, lhs=v30, rhs_imm=48 }           -> x0
+    v103 Imm(0)                                           -> x0
+    v104 Load { addr=v30, disp=48, kind=F32 pc_rel }      -> d1 [f32]
+    v105 Imm(4)                                           -> x0
+    v106 BinopI { op=add, lhs=v102, rhs_imm=4 }           -> x0
+    v107 Load { addr=v30, disp=52, kind=F32 pc_rel }      -> d2 [f32]
     v108 Binop { op=fadd, lhs=v104, rhs=v107 }            -> d1 [f32]
-    v109 Imm(8)                                           -> x2
-    v110 BinopI { op=add, lhs=v102, rhs_imm=8 }           -> x2
-    v111 Load { addr=v102, disp=8, kind=F32 }             -> d2 [f32]
+    v109 Imm(8)                                           -> x0
+    v110 BinopI { op=add, lhs=v102, rhs_imm=8 }           -> x0
+    v111 Load { addr=v30, disp=56, kind=F32 pc_rel }      -> d2 [f32]
     v112 Binop { op=fadd, lhs=v108, rhs=v111 }            -> d1 [f32]
     v113 Binop { op=fadd, lhs=v90, rhs=v112 }             -> d0 [f32]
-    v114 Imm(0)                                           -> x1
-    v115 Imm(0)                                           -> x1 [f32]
-    v116 Imm(3)                                           -> x1
-    v117 Imm(4)                                           -> x1
-    v118 Imm(4)                                           -> x1
-    v119 Imm(4)                                           -> x1
-    v120 Imm(1)                                           -> x1
-    v121 Imm(0)                                           -> x1 [f32]
-    v122 ImmData(272)                                     -> x1
-    v123 Imm(4)                                           -> x1
-    v124 Imm(64)                                          -> x1
-    v125 BinopI { op=add, lhs=v30, rhs_imm=64 }           -> x1
-    v126 Imm(0)                                           -> x2
-    v127 Load { addr=v125, disp=0, kind=F32 }             -> d1 [f32]
-    v128 Imm(4)                                           -> x2
-    v129 BinopI { op=add, lhs=v125, rhs_imm=4 }           -> x2
-    v130 Load { addr=v125, disp=4, kind=F32 }             -> d2 [f32]
+    v114 Imm(0)                                           -> x0
+    v115 Imm(0)                                           -> x0 [f32]
+    v116 Imm(3)                                           -> x0
+    v117 Imm(4)                                           -> x0
+    v118 Imm(4)                                           -> x0
+    v119 Imm(4)                                           -> x0
+    v120 Imm(1)                                           -> x0
+    v121 Imm(0)                                           -> x0 [f32]
+    v122 ImmData(272)                                     -> x0
+    v123 Imm(4)                                           -> x0
+    v124 Imm(64)                                          -> x0
+    v125 BinopI { op=add, lhs=v30, rhs_imm=64 }           -> x0
+    v126 Imm(0)                                           -> x0
+    v127 Load { addr=v30, disp=64, kind=F32 pc_rel }      -> d1 [f32]
+    v128 Imm(4)                                           -> x0
+    v129 BinopI { op=add, lhs=v125, rhs_imm=4 }           -> x0
+    v130 Load { addr=v30, disp=68, kind=F32 pc_rel }      -> d2 [f32]
     v131 Binop { op=fadd, lhs=v127, rhs=v130 }            -> d1 [f32]
-    v132 Imm(8)                                           -> x2
-    v133 BinopI { op=add, lhs=v125, rhs_imm=8 }           -> x2
-    v134 Load { addr=v125, disp=8, kind=F32 }             -> d2 [f32]
+    v132 Imm(8)                                           -> x0
+    v133 BinopI { op=add, lhs=v125, rhs_imm=8 }           -> x0
+    v134 Load { addr=v30, disp=72, kind=F32 pc_rel }      -> d2 [f32]
     v135 Binop { op=fadd, lhs=v131, rhs=v134 }            -> d1 [f32]
     v136 Binop { op=fadd, lhs=v113, rhs=v135 }            -> d0 [f32]
-    v137 Imm(0)                                           -> x1
-    v138 Imm(0)                                           -> x1 [f32]
-    v139 Imm(4)                                           -> x1
-    v140 Imm(5)                                           -> x1
-    v141 Imm(5)                                           -> x1
-    v142 Imm(5)                                           -> x1
-    v143 Imm(1)                                           -> x1
-    v144 Imm(0)                                           -> x1 [f32]
-    v145 ImmData(272)                                     -> x1
-    v146 Imm(5)                                           -> x1
-    v147 Imm(80)                                          -> x1
-    v148 BinopI { op=add, lhs=v30, rhs_imm=80 }           -> x1
-    v149 Imm(0)                                           -> x2
-    v150 Load { addr=v148, disp=0, kind=F32 }             -> d1 [f32]
-    v151 Imm(4)                                           -> x2
-    v152 BinopI { op=add, lhs=v148, rhs_imm=4 }           -> x2
-    v153 Load { addr=v148, disp=4, kind=F32 }             -> d2 [f32]
+    v137 Imm(0)                                           -> x0
+    v138 Imm(0)                                           -> x0 [f32]
+    v139 Imm(4)                                           -> x0
+    v140 Imm(5)                                           -> x0
+    v141 Imm(5)                                           -> x0
+    v142 Imm(5)                                           -> x0
+    v143 Imm(1)                                           -> x0
+    v144 Imm(0)                                           -> x0 [f32]
+    v145 ImmData(272)                                     -> x0
+    v146 Imm(5)                                           -> x0
+    v147 Imm(80)                                          -> x0
+    v148 BinopI { op=add, lhs=v30, rhs_imm=80 }           -> x0
+    v149 Imm(0)                                           -> x0
+    v150 Load { addr=v30, disp=80, kind=F32 pc_rel }      -> d1 [f32]
+    v151 Imm(4)                                           -> x0
+    v152 BinopI { op=add, lhs=v148, rhs_imm=4 }           -> x0
+    v153 Load { addr=v30, disp=84, kind=F32 pc_rel }      -> d2 [f32]
     v154 Binop { op=fadd, lhs=v150, rhs=v153 }            -> d1 [f32]
-    v155 Imm(8)                                           -> x2
-    v156 BinopI { op=add, lhs=v148, rhs_imm=8 }           -> x2
-    v157 Load { addr=v148, disp=8, kind=F32 }             -> d2 [f32]
+    v155 Imm(8)                                           -> x0
+    v156 BinopI { op=add, lhs=v148, rhs_imm=8 }           -> x0
+    v157 Load { addr=v30, disp=88, kind=F32 pc_rel }      -> d2 [f32]
     v158 Binop { op=fadd, lhs=v154, rhs=v157 }            -> d1 [f32]
     v159 Binop { op=fadd, lhs=v136, rhs=v158 }            -> d0 [f32]
-    v160 Imm(0)                                           -> x1
-    v161 Imm(0)                                           -> x1 [f32]
-    v162 Imm(5)                                           -> x1
-    v163 Imm(6)                                           -> x1
-    v164 Imm(6)                                           -> x1
-    v165 Imm(6)                                           -> x1
-    v166 Imm(1)                                           -> x1
-    v167 Imm(0)                                           -> x1 [f32]
-    v168 ImmData(272)                                     -> x1
-    v169 Imm(6)                                           -> x1
-    v170 Imm(96)                                          -> x1
+    v160 Imm(0)                                           -> x0
+    v161 Imm(0)                                           -> x0 [f32]
+    v162 Imm(5)                                           -> x0
+    v163 Imm(6)                                           -> x0
+    v164 Imm(6)                                           -> x0
+    v165 Imm(6)                                           -> x0
+    v166 Imm(1)                                           -> x0
+    v167 Imm(0)                                           -> x0 [f32]
+    v168 ImmData(272)                                     -> x0
+    v169 Imm(6)                                           -> x0
+    v170 Imm(96)                                          -> x0
     v171 BinopI { op=add, lhs=v30, rhs_imm=96 }           -> x0
-    v172 Imm(0)                                           -> x1
-    v173 Load { addr=v171, disp=0, kind=F32 }             -> d1 [f32]
-    v174 Imm(4)                                           -> x1
-    v175 BinopI { op=add, lhs=v171, rhs_imm=4 }           -> x1
-    v176 Load { addr=v171, disp=4, kind=F32 }             -> d2 [f32]
+    v172 Imm(0)                                           -> x0
+    v173 Load { addr=v30, disp=96, kind=F32 pc_rel }      -> d1 [f32]
+    v174 Imm(4)                                           -> x0
+    v175 BinopI { op=add, lhs=v171, rhs_imm=4 }           -> x0
+    v176 Load { addr=v30, disp=100, kind=F32 pc_rel }     -> d2 [f32]
     v177 Binop { op=fadd, lhs=v173, rhs=v176 }            -> d1 [f32]
-    v178 Imm(8)                                           -> x1
-    v179 BinopI { op=add, lhs=v171, rhs_imm=8 }           -> x1
-    v180 Load { addr=v171, disp=8, kind=F32 }             -> d2 [f32]
+    v178 Imm(8)                                           -> x0
+    v179 BinopI { op=add, lhs=v171, rhs_imm=8 }           -> x0
+    v180 Load { addr=v30, disp=104, kind=F32 pc_rel }     -> d2 [f32]
     v181 Binop { op=fadd, lhs=v177, rhs=v180 }            -> d1 [f32]
     v182 Binop { op=fadd, lhs=v159, rhs=v181 }            -> d0 [f32]
     v183 Imm(0)                                           -> x0
@@ -271,110 +271,110 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v189 Imm(1)                                           -> x0
     v190 Imm(0)                                           -> x0 [f32]
     v191 ImmData(272)                                     -> x0
-    v192 Imm(7)                                           -> x1
-    v193 Imm(112)                                         -> x1
-    v194 BinopI { op=add, lhs=v191, rhs_imm=112 }         -> x1
-    v195 Imm(0)                                           -> x2
-    v196 Load { addr=v194, disp=0, kind=F32 }             -> d1 [f32]
-    v197 Imm(4)                                           -> x2
-    v198 BinopI { op=add, lhs=v194, rhs_imm=4 }           -> x2
-    v199 Load { addr=v194, disp=4, kind=F32 }             -> d2 [f32]
+    v192 Imm(7)                                           -> x0
+    v193 Imm(112)                                         -> x0
+    v194 BinopI { op=add, lhs=v191, rhs_imm=112 }         -> x0
+    v195 Imm(0)                                           -> x0
+    v196 Load { addr=v191, disp=112, kind=F32 pc_rel }    -> d1 [f32]
+    v197 Imm(4)                                           -> x0
+    v198 BinopI { op=add, lhs=v194, rhs_imm=4 }           -> x0
+    v199 Load { addr=v191, disp=116, kind=F32 pc_rel }    -> d2 [f32]
     v200 Binop { op=fadd, lhs=v196, rhs=v199 }            -> d1 [f32]
-    v201 Imm(8)                                           -> x2
-    v202 BinopI { op=add, lhs=v194, rhs_imm=8 }           -> x2
-    v203 Load { addr=v194, disp=8, kind=F32 }             -> d2 [f32]
+    v201 Imm(8)                                           -> x0
+    v202 BinopI { op=add, lhs=v194, rhs_imm=8 }           -> x0
+    v203 Load { addr=v191, disp=120, kind=F32 pc_rel }    -> d2 [f32]
     v204 Binop { op=fadd, lhs=v200, rhs=v203 }            -> d1 [f32]
     v205 Binop { op=fadd, lhs=v182, rhs=v204 }            -> d0 [f32]
-    v206 Imm(0)                                           -> x1
-    v207 Imm(0)                                           -> x1 [f32]
-    v208 Imm(7)                                           -> x1
-    v209 Imm(8)                                           -> x1
-    v210 Imm(8)                                           -> x1
-    v211 Imm(8)                                           -> x1
-    v212 Imm(1)                                           -> x1
-    v213 Imm(0)                                           -> x1 [f32]
-    v214 ImmData(272)                                     -> x1
-    v215 Imm(8)                                           -> x1
-    v216 Imm(128)                                         -> x1
-    v217 BinopI { op=add, lhs=v191, rhs_imm=128 }         -> x1
-    v218 Imm(0)                                           -> x2
-    v219 Load { addr=v217, disp=0, kind=F32 }             -> d1 [f32]
-    v220 Imm(4)                                           -> x2
-    v221 BinopI { op=add, lhs=v217, rhs_imm=4 }           -> x2
-    v222 Load { addr=v217, disp=4, kind=F32 }             -> d2 [f32]
+    v206 Imm(0)                                           -> x0
+    v207 Imm(0)                                           -> x0 [f32]
+    v208 Imm(7)                                           -> x0
+    v209 Imm(8)                                           -> x0
+    v210 Imm(8)                                           -> x0
+    v211 Imm(8)                                           -> x0
+    v212 Imm(1)                                           -> x0
+    v213 Imm(0)                                           -> x0 [f32]
+    v214 ImmData(272)                                     -> x0
+    v215 Imm(8)                                           -> x0
+    v216 Imm(128)                                         -> x0
+    v217 BinopI { op=add, lhs=v191, rhs_imm=128 }         -> x0
+    v218 Imm(0)                                           -> x0
+    v219 Load { addr=v191, disp=128, kind=F32 pc_rel }    -> d1 [f32]
+    v220 Imm(4)                                           -> x0
+    v221 BinopI { op=add, lhs=v217, rhs_imm=4 }           -> x0
+    v222 Load { addr=v191, disp=132, kind=F32 pc_rel }    -> d2 [f32]
     v223 Binop { op=fadd, lhs=v219, rhs=v222 }            -> d1 [f32]
-    v224 Imm(8)                                           -> x2
-    v225 BinopI { op=add, lhs=v217, rhs_imm=8 }           -> x2
-    v226 Load { addr=v217, disp=8, kind=F32 }             -> d2 [f32]
+    v224 Imm(8)                                           -> x0
+    v225 BinopI { op=add, lhs=v217, rhs_imm=8 }           -> x0
+    v226 Load { addr=v191, disp=136, kind=F32 pc_rel }    -> d2 [f32]
     v227 Binop { op=fadd, lhs=v223, rhs=v226 }            -> d1 [f32]
     v228 Binop { op=fadd, lhs=v205, rhs=v227 }            -> d0 [f32]
-    v229 Imm(0)                                           -> x1
-    v230 Imm(0)                                           -> x1 [f32]
-    v231 Imm(8)                                           -> x1
-    v232 Imm(9)                                           -> x1
-    v233 Imm(9)                                           -> x1
-    v234 Imm(9)                                           -> x1
-    v235 Imm(1)                                           -> x1
-    v236 Imm(0)                                           -> x1 [f32]
-    v237 ImmData(272)                                     -> x1
-    v238 Imm(9)                                           -> x1
-    v239 Imm(144)                                         -> x1
-    v240 BinopI { op=add, lhs=v191, rhs_imm=144 }         -> x1
-    v241 Imm(0)                                           -> x2
-    v242 Load { addr=v240, disp=0, kind=F32 }             -> d1 [f32]
-    v243 Imm(4)                                           -> x2
-    v244 BinopI { op=add, lhs=v240, rhs_imm=4 }           -> x2
-    v245 Load { addr=v240, disp=4, kind=F32 }             -> d2 [f32]
+    v229 Imm(0)                                           -> x0
+    v230 Imm(0)                                           -> x0 [f32]
+    v231 Imm(8)                                           -> x0
+    v232 Imm(9)                                           -> x0
+    v233 Imm(9)                                           -> x0
+    v234 Imm(9)                                           -> x0
+    v235 Imm(1)                                           -> x0
+    v236 Imm(0)                                           -> x0 [f32]
+    v237 ImmData(272)                                     -> x0
+    v238 Imm(9)                                           -> x0
+    v239 Imm(144)                                         -> x0
+    v240 BinopI { op=add, lhs=v191, rhs_imm=144 }         -> x0
+    v241 Imm(0)                                           -> x0
+    v242 Load { addr=v191, disp=144, kind=F32 pc_rel }    -> d1 [f32]
+    v243 Imm(4)                                           -> x0
+    v244 BinopI { op=add, lhs=v240, rhs_imm=4 }           -> x0
+    v245 Load { addr=v191, disp=148, kind=F32 pc_rel }    -> d2 [f32]
     v246 Binop { op=fadd, lhs=v242, rhs=v245 }            -> d1 [f32]
-    v247 Imm(8)                                           -> x2
-    v248 BinopI { op=add, lhs=v240, rhs_imm=8 }           -> x2
-    v249 Load { addr=v240, disp=8, kind=F32 }             -> d2 [f32]
+    v247 Imm(8)                                           -> x0
+    v248 BinopI { op=add, lhs=v240, rhs_imm=8 }           -> x0
+    v249 Load { addr=v191, disp=152, kind=F32 pc_rel }    -> d2 [f32]
     v250 Binop { op=fadd, lhs=v246, rhs=v249 }            -> d1 [f32]
     v251 Binop { op=fadd, lhs=v228, rhs=v250 }            -> d0 [f32]
-    v252 Imm(0)                                           -> x1
-    v253 Imm(0)                                           -> x1 [f32]
-    v254 Imm(9)                                           -> x1
-    v255 Imm(10)                                          -> x1
-    v256 Imm(10)                                          -> x1
-    v257 Imm(10)                                          -> x1
-    v258 Imm(1)                                           -> x1
-    v259 Imm(0)                                           -> x1 [f32]
-    v260 ImmData(272)                                     -> x1
-    v261 Imm(10)                                          -> x1
-    v262 Imm(160)                                         -> x1
-    v263 BinopI { op=add, lhs=v191, rhs_imm=160 }         -> x1
-    v264 Imm(0)                                           -> x2
-    v265 Load { addr=v263, disp=0, kind=F32 }             -> d1 [f32]
-    v266 Imm(4)                                           -> x2
-    v267 BinopI { op=add, lhs=v263, rhs_imm=4 }           -> x2
-    v268 Load { addr=v263, disp=4, kind=F32 }             -> d2 [f32]
+    v252 Imm(0)                                           -> x0
+    v253 Imm(0)                                           -> x0 [f32]
+    v254 Imm(9)                                           -> x0
+    v255 Imm(10)                                          -> x0
+    v256 Imm(10)                                          -> x0
+    v257 Imm(10)                                          -> x0
+    v258 Imm(1)                                           -> x0
+    v259 Imm(0)                                           -> x0 [f32]
+    v260 ImmData(272)                                     -> x0
+    v261 Imm(10)                                          -> x0
+    v262 Imm(160)                                         -> x0
+    v263 BinopI { op=add, lhs=v191, rhs_imm=160 }         -> x0
+    v264 Imm(0)                                           -> x0
+    v265 Load { addr=v191, disp=160, kind=F32 pc_rel }    -> d1 [f32]
+    v266 Imm(4)                                           -> x0
+    v267 BinopI { op=add, lhs=v263, rhs_imm=4 }           -> x0
+    v268 Load { addr=v191, disp=164, kind=F32 pc_rel }    -> d2 [f32]
     v269 Binop { op=fadd, lhs=v265, rhs=v268 }            -> d1 [f32]
-    v270 Imm(8)                                           -> x2
-    v271 BinopI { op=add, lhs=v263, rhs_imm=8 }           -> x2
-    v272 Load { addr=v263, disp=8, kind=F32 }             -> d2 [f32]
+    v270 Imm(8)                                           -> x0
+    v271 BinopI { op=add, lhs=v263, rhs_imm=8 }           -> x0
+    v272 Load { addr=v191, disp=168, kind=F32 pc_rel }    -> d2 [f32]
     v273 Binop { op=fadd, lhs=v269, rhs=v272 }            -> d1 [f32]
     v274 Binop { op=fadd, lhs=v251, rhs=v273 }            -> d0 [f32]
-    v275 Imm(0)                                           -> x1
-    v276 Imm(0)                                           -> x1 [f32]
-    v277 Imm(10)                                          -> x1
-    v278 Imm(11)                                          -> x1
-    v279 Imm(11)                                          -> x1
-    v280 Imm(11)                                          -> x1
-    v281 Imm(1)                                           -> x1
-    v282 Imm(0)                                           -> x1 [f32]
-    v283 ImmData(272)                                     -> x1
-    v284 Imm(11)                                          -> x1
-    v285 Imm(176)                                         -> x1
+    v275 Imm(0)                                           -> x0
+    v276 Imm(0)                                           -> x0 [f32]
+    v277 Imm(10)                                          -> x0
+    v278 Imm(11)                                          -> x0
+    v279 Imm(11)                                          -> x0
+    v280 Imm(11)                                          -> x0
+    v281 Imm(1)                                           -> x0
+    v282 Imm(0)                                           -> x0 [f32]
+    v283 ImmData(272)                                     -> x0
+    v284 Imm(11)                                          -> x0
+    v285 Imm(176)                                         -> x0
     v286 BinopI { op=add, lhs=v191, rhs_imm=176 }         -> x0
-    v287 Imm(0)                                           -> x1
-    v288 Load { addr=v286, disp=0, kind=F32 }             -> d1 [f32]
-    v289 Imm(4)                                           -> x1
-    v290 BinopI { op=add, lhs=v286, rhs_imm=4 }           -> x1
-    v291 Load { addr=v286, disp=4, kind=F32 }             -> d2 [f32]
+    v287 Imm(0)                                           -> x0
+    v288 Load { addr=v191, disp=176, kind=F32 pc_rel }    -> d1 [f32]
+    v289 Imm(4)                                           -> x0
+    v290 BinopI { op=add, lhs=v286, rhs_imm=4 }           -> x0
+    v291 Load { addr=v191, disp=180, kind=F32 pc_rel }    -> d2 [f32]
     v292 Binop { op=fadd, lhs=v288, rhs=v291 }            -> d1 [f32]
-    v293 Imm(8)                                           -> x1
-    v294 BinopI { op=add, lhs=v286, rhs_imm=8 }           -> x1
-    v295 Load { addr=v286, disp=8, kind=F32 }             -> d2 [f32]
+    v293 Imm(8)                                           -> x0
+    v294 BinopI { op=add, lhs=v286, rhs_imm=8 }           -> x0
+    v295 Load { addr=v191, disp=184, kind=F32 pc_rel }    -> d2 [f32]
     v296 Binop { op=fadd, lhs=v292, rhs=v295 }            -> d1 [f32]
     v297 Binop { op=fadd, lhs=v274, rhs=v296 }            -> d0 [f32]
     v298 Imm(0)                                           -> x0

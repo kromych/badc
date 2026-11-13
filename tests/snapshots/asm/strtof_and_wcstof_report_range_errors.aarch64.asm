@@ -76,8 +76,7 @@ Disassembly of section .text:
                	bl	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	add	x0, x0, #0x18
-               	ldr	s1, [x0, #0x10]
+               	ldr	s1, [x0, #0x28]
                	fcmp	s0, s1
                	b.ne	<addr>
                	ldur	x0, [x29, #-0x10]
@@ -99,8 +98,7 @@ Disassembly of section .text:
                	bl	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	add	x0, x0, #0x18
-               	ldr	s1, [x0, #0x10]
+               	ldr	s1, [x0, #0x28]
                	fcmp	s0, s1
                	b.ne	<addr>
                	ldur	x0, [x29, #-0x8]
@@ -124,8 +122,7 @@ Disassembly of section .text:
                	bl	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	add	x0, x0, #0x30
-               	ldr	s1, [x0, #0x10]
+               	ldr	s1, [x0, #0x40]
                	fcmp	s0, s1
                	b.ne	<addr>
                	ldur	x0, [x29, #-0x10]
@@ -147,8 +144,7 @@ Disassembly of section .text:
                	bl	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	add	x0, x0, #0x30
-               	ldr	s1, [x0, #0x10]
+               	ldr	s1, [x0, #0x40]
                	fcmp	s0, s1
                	b.ne	<addr>
                	ldur	x0, [x29, #-0x8]
@@ -172,8 +168,7 @@ Disassembly of section .text:
                	bl	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	add	x0, x0, #0x48
-               	ldr	s1, [x0, #0x10]
+               	ldr	s1, [x0, #0x58]
                	fcmp	s0, s1
                	b.ne	<addr>
                	ldur	x0, [x29, #-0x10]
@@ -195,8 +190,7 @@ Disassembly of section .text:
                	bl	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	add	x0, x0, #0x48
-               	ldr	s1, [x0, #0x10]
+               	ldr	s1, [x0, #0x58]
                	fcmp	s0, s1
                	b.ne	<addr>
                	ldur	x0, [x29, #-0x8]
@@ -220,8 +214,7 @@ Disassembly of section .text:
                	bl	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	add	x0, x0, #0x60
-               	ldr	s1, [x0, #0x10]
+               	ldr	s1, [x0, #0x70]
                	fcmp	s0, s1
                	b.ne	<addr>
                	ldur	x0, [x29, #-0x10]
@@ -241,8 +234,7 @@ Disassembly of section .text:
                	bl	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	add	x0, x0, #0x60
-               	ldr	s1, [x0, #0x10]
+               	ldr	s1, [x0, #0x70]
                	fcmp	s0, s1
                	b.ne	<addr>
                	ldur	x0, [x29, #-0x8]

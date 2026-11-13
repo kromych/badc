@@ -313,7 +313,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=36
   block 16  start_pc=0
     v276 LoadLocal { off=-24, kind=I64 }                  -> x9
     v277 BinopI { op=add, lhs=v271, rhs_imm=8 }           -> x9
-    v278 LoadLocal { off=-24, disp=8, kind=I64 }          -> x9
+    v278 Load { addr=v277, disp=0, kind=I64 }             -> x9
     v279 StoreLocal { off=-137, value=v265, kind=I64 }    -> -
     v280 BinopI { op=add, lhs=v275, rhs_imm=8 }           -> x9
     v281 StoreLocal { off=-137, disp=8, value=v267, kind=I64 } -> -
@@ -611,7 +611,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=36
   block 34  start_pc=0
     v538 LoadLocal { off=-16, kind=I64 }                  -> x8
     v539 BinopI { op=add, lhs=v533, rhs_imm=8 }           -> x8
-    v540 LoadLocal { off=-16, disp=8, kind=I64 }          -> x8
+    v540 Load { addr=v539, disp=0, kind=I64 }             -> x8
     v541 StoreLocal { off=-141, value=v522, kind=I64 }    -> -
     v542 BinopI { op=add, lhs=v537, rhs_imm=8 }           -> x8
     v543 StoreLocal { off=-141, disp=8, value=v525, kind=I64 } -> -
@@ -740,7 +740,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=36
   block 40  start_pc=0
     v655 LoadLocal { off=-6, kind=I64 }                   -> x7
     v656 BinopI { op=add, lhs=v650, rhs_imm=8 }           -> x7
-    v657 LoadLocal { off=-6, disp=8, kind=I64 }           -> x7
+    v657 Load { addr=v656, disp=0, kind=I64 }             -> x7
     v658 StoreLocal { off=-142, value=v634, kind=I64 }    -> -
     v659 BinopI { op=add, lhs=v654, rhs_imm=8 }           -> x7
     v660 StoreLocal { off=-142, disp=8, value=v634, kind=I64 } -> -

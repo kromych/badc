@@ -122,11 +122,11 @@ Disassembly of section .text:
                	cmp	w0, #0x2
                	b.lo	<addr>
                	sub	x0, x29, #0x10
+               	mov	x1, #0x77               // =119
+               	sturb	w1, [x29, #-0x3]
+               	mov	x1, #0x9988             // =39304
+               	sturh	w1, [x29, #-0x2]
                	add	x1, x0, #0xd
-               	mov	x0, #0x77               // =119
-               	strb	w0, [x1]
-               	mov	x0, #0x9988             // =39304
-               	sturh	w0, [x1, #0x1]
                	adrp	x2, <addr>
                	add	x2, x2, <lo12>
                	mov	x0, #0x0                // =0

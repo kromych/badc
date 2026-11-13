@@ -30,8 +30,7 @@ Disassembly of section .text:
                	movl	<rip>, %ecx # <addr>
                	cmpl	$0xb, %ecx
                	jne	<addr>
-               	leaq	0xd8(%rax), %rcx
-               	movl	0x10(%rcx), %ecx
+               	movl	<rip>, %ecx # <addr>
                	cmpl	$0x13, %ecx
                	je	<addr>
                	movl	$0x2, %eax

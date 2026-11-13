@@ -116,7 +116,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=1
     v30  Imm(1)                                           -> x2
     v31  Imm(1)                                           -> x2
     v32  Imm(16)                                          -> x2
-    v33  BinopI { op=add, lhs=v6, rhs_imm=16 }            -> x0
+    v33  BinopI { op=add, lhs=v6, rhs_imm=16 }            -> x2
     v34  Imm(3)                                           -> x2
     v35  Imm(6)                                           -> x2
     v36  Imm(6)                                           -> x2
@@ -126,9 +126,9 @@ fn ent_pc=1 n_params=1 variadic=false locals=1
     v40  Imm(0)                                           -> x6
     v41  Imm(0)                                           -> x6
     v42  Imm(0)                                           -> x6
-    v43  Store { addr=v33, disp=0, value=v36, kind=I64 }  -> -
+    v43  Store { addr=v6, disp=16, value=v36, kind=I64 }  -> -
     v44  Imm(0)                                           -> x2
-    v45  Store { addr=v33, disp=8, value=v21, kind=I64 }  -> -
+    v45  Store { addr=v6, disp=24, value=v21, kind=I64 }  -> -
     v46  Imm(0)                                           -> x0
     v47  Imm(2)                                           -> x0
     v48  BinopI { op=add, lhs=v6, rhs_imm=8 }             -> x0

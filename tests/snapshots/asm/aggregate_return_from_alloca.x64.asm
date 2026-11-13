@@ -340,42 +340,43 @@ Disassembly of section .text:
                	cmpq	%r13, %rax
                	jge	<addr>
                	imulq	$0xc, %rax, %rcx
-               	leaq	(%rbx,%rcx), %rdx
-               	leaq	(%rax,%r12), %rsi
-               	movb	%sil, (%rdx)
-               	incq	%rsi
-               	movb	%sil, 0x1(%rdx)
+               	leaq	(%rax,%r12), %rdx
+               	movb	%dl, (%rbx,%rcx)
+               	leaq	(%rbx,%rcx), %rsi
+               	leaq	0x1(%rdx), %rdi
+               	movb	%dil, 0x1(%rsi)
+               	addq	$0x2, %rdx
+               	movb	%dl, 0x2(%rsi)
                	leaq	(%rbx,%rcx), %rdx
                	leaq	(%rax,%r12), %rcx
-               	leaq	0x2(%rcx), %rsi
-               	movb	%sil, 0x2(%rdx)
                	leaq	0x3(%rcx), %rsi
                	movb	%sil, 0x3(%rdx)
                	imulq	$0xc, %rax, %rdx
                	leaq	(%rbx,%rdx), %rsi
-               	addq	$0x4, %rcx
-               	movb	%cl, 0x4(%rsi)
-               	leaq	(%rax,%r12), %rcx
-               	leaq	0x5(%rcx), %rdi
-               	movb	%dil, 0x5(%rsi)
+               	leaq	0x4(%rcx), %rdi
+               	movb	%dil, 0x4(%rsi)
+               	addq	$0x5, %rcx
+               	movb	%cl, 0x5(%rsi)
                	addq	%rbx, %rdx
+               	leaq	(%rax,%r12), %rcx
                	leaq	0x6(%rcx), %rsi
                	movb	%sil, 0x6(%rdx)
-               	addq	$0x7, %rcx
-               	movb	%cl, 0x7(%rdx)
-               	imulq	$0xc, %rax, %rcx
-               	leaq	(%rbx,%rcx), %rdx
-               	leaq	(%rax,%r12), %rsi
-               	leaq	0x8(%rsi), %rdi
-               	movb	%dil, 0x8(%rdx)
-               	addq	$0x9, %rsi
+               	imulq	$0xc, %rax, %rdx
+               	leaq	(%rbx,%rdx), %rsi
+               	leaq	0x7(%rcx), %rdi
+               	movb	%dil, 0x7(%rsi)
+               	addq	$0x8, %rcx
+               	movb	%cl, 0x8(%rsi)
+               	addq	%rbx, %rdx
+               	leaq	(%rax,%r12), %rcx
+               	leaq	0x9(%rcx), %rsi
                	movb	%sil, 0x9(%rdx)
-               	addq	%rbx, %rcx
-               	leaq	(%rax,%r12), %rdx
-               	leaq	0xa(%rdx), %rsi
-               	movb	%sil, 0xa(%rcx)
-               	addq	$0xb, %rdx
-               	movb	%dl, 0xb(%rcx)
+               	imulq	$0xc, %rax, %rdx
+               	addq	%rbx, %rdx
+               	leaq	0xa(%rcx), %rsi
+               	movb	%sil, 0xa(%rdx)
+               	addq	$0xb, %rcx
+               	movb	%cl, 0xb(%rdx)
                	incq	%rax
                	cmpq	%r13, %rax
                	jl	<addr>

@@ -40,25 +40,21 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x4, %eax
                	jl	<addr>
-               	leaq	<rip>, %rax # <addr>
+               	movq	<rip>, %rax # <addr>
+               	movq	<rip>, %rcx # <addr>
+               	addq	%rcx, %rax
+               	addq	$0x7, %rax
                	movq	<rip>, %rcx # <addr>
                	movq	<rip>, %rdx # <addr>
                	addq	%rdx, %rcx
-               	leaq	0x7(%rcx), %rdx
-               	leaq	0x10(%rax), %rcx
-               	movq	(%rcx), %rsi
-               	movq	0x8(%rcx), %rcx
-               	addq	%rsi, %rcx
-               	addq	%rcx, %rdx
-               	leaq	0x20(%rax), %rcx
-               	movq	(%rcx), %rsi
-               	movq	0x8(%rcx), %rcx
-               	addq	%rsi, %rcx
+               	addq	%rcx, %rax
+               	movq	<rip>, %rcx # <addr>
+               	movq	<rip>, %rdx # <addr>
                	addq	%rdx, %rcx
-               	addq	$0x30, %rax
-               	movq	(%rax), %rdx
-               	movq	0x8(%rax), %rax
-               	addq	%rdx, %rax
+               	addq	%rcx, %rax
+               	movq	<rip>, %rcx # <addr>
+               	movq	<rip>, %rdx # <addr>
+               	addq	%rdx, %rcx
                	addq	%rcx, %rax
                	movq	$0x3, <rip> # <addr>
                	movq	$0x4, <rip> # <addr>

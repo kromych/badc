@@ -118,12 +118,12 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	add	x3, x0, #0x8
-               	sub	x1, x3, x0
-               	asr	x4, x1, #63
-               	add	x5, x1, x4, lsr #61
-               	asr	x5, x5, #3
-               	cmp	x5, #0x1
+               	add	x1, x0, #0x8
+               	sub	x1, x1, x0
+               	asr	x3, x1, #63
+               	add	x4, x1, x3, lsr #61
+               	asr	x4, x4, #3
+               	cmp	x4, #0x1
                	b.ne	<addr>
                	cmp	x1, #0x8
                	b.eq	<addr>
@@ -131,40 +131,40 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldrsw	x0, [x0, #0xc]
-               	cmp	w0, #0x4
+               	ldrsw	x4, [x0, #0xc]
+               	cmp	w4, #0x4
                	b.ne	<addr>
-               	ldrsw	x0, [x2, #0x5c]
-               	cmp	w0, #0x2a
+               	ldrsw	x2, [x2, #0x5c]
+               	cmp	w2, #0x2a
                	b.eq	<addr>
                	mov	x0, #0xf                // =15
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x40
+               	sub	x2, x29, #0x40
+               	adrp	x4, <page>
+               	add	x4, x4, <lo12>
+               	ldr	x16, [x4]
+               	str	x16, [x2]
+               	ldr	w16, [x4, #0x8]
+               	str	w16, [x2, #0x8]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	ldr	x16, [x2]
-               	str	x16, [x0]
-               	ldr	w16, [x2, #0x8]
-               	str	w16, [x0, #0x8]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0, #0x4]
-               	cmp	w0, #0x6
+               	ldrsw	x2, [x2, #0x4]
+               	cmp	w2, #0x6
                	b.eq	<addr>
                	mov	x0, #0x12               // =18
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldrsw	x0, [x3, #0x4]
+               	ldrsw	x0, [x0, #0xc]
                	cmp	w0, #0x4
                	b.ne	<addr>
                	add	x0, x1, #0xf
                	and	x0, x0, #0xfffffffffffffff0
                	cmp	x0, #0x10
                	b.ne	<addr>
-               	add	x0, x1, x4, lsr #62
+               	add	x0, x1, x3, lsr #62
                	asr	x0, x0, #2
                	add	x0, x0, #0x3
                	and	x0, x0, #0xfffffffffffffffc

@@ -283,46 +283,44 @@ Disassembly of section .text:
                	add	sp, sp, #0x120
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x60
-               	sub	x1, x29, #0x40
-               	ldp	x16, x17, [x1]
-               	stp	x16, x17, [x0]
-               	ldp	x16, x17, [x1, #0x10]
-               	stp	x16, x17, [x0, #0x10]
-               	sub	x0, x29, #0xc0
-               	ldurh	w1, [x29, #-0x60]
-               	sturh	w1, [x29, #-0xc0]
-               	ldurh	w1, [x29, #-0x5e]
-               	sturh	w1, [x29, #-0xb0]
-               	ldurh	w1, [x29, #-0x5c]
-               	sturh	w1, [x29, #-0xbe]
-               	add	x0, x0, #0x10
-               	ldurh	w1, [x29, #-0x5a]
-               	strh	w1, [x0, #0x2]
-               	ldurh	w1, [x29, #-0x58]
-               	sturh	w1, [x29, #-0xbc]
-               	ldurh	w1, [x29, #-0x56]
-               	strh	w1, [x0, #0x4]
-               	ldurh	w1, [x29, #-0x54]
-               	sturh	w1, [x29, #-0xba]
-               	ldurh	w1, [x29, #-0x52]
-               	strh	w1, [x0, #0x6]
-               	ldurh	w1, [x29, #-0x50]
-               	sturh	w1, [x29, #-0xb8]
-               	ldurh	w1, [x29, #-0x4e]
-               	strh	w1, [x0, #0x8]
-               	ldurh	w1, [x29, #-0x4c]
-               	sturh	w1, [x29, #-0xb6]
-               	ldurh	w1, [x29, #-0x4a]
-               	strh	w1, [x0, #0xa]
-               	ldurh	w1, [x29, #-0x48]
-               	sturh	w1, [x29, #-0xb4]
-               	ldurh	w1, [x29, #-0x46]
-               	strh	w1, [x0, #0xc]
-               	ldurh	w1, [x29, #-0x44]
-               	sturh	w1, [x29, #-0xb2]
-               	ldurh	w1, [x29, #-0x42]
-               	strh	w1, [x0, #0xe]
+               	sub	x1, x29, #0x60
+               	sub	x0, x29, #0x40
+               	ldp	x16, x17, [x0]
+               	stp	x16, x17, [x1]
+               	ldp	x16, x17, [x0, #0x10]
+               	stp	x16, x17, [x1, #0x10]
+               	ldurh	w0, [x29, #-0x60]
+               	sturh	w0, [x29, #-0xc0]
+               	ldurh	w0, [x29, #-0x5e]
+               	sturh	w0, [x29, #-0xb0]
+               	ldurh	w0, [x29, #-0x5c]
+               	sturh	w0, [x29, #-0xbe]
+               	ldurh	w0, [x29, #-0x5a]
+               	sturh	w0, [x29, #-0xae]
+               	ldurh	w0, [x29, #-0x58]
+               	sturh	w0, [x29, #-0xbc]
+               	ldurh	w0, [x29, #-0x56]
+               	sturh	w0, [x29, #-0xac]
+               	ldurh	w0, [x29, #-0x54]
+               	sturh	w0, [x29, #-0xba]
+               	ldurh	w0, [x29, #-0x52]
+               	sturh	w0, [x29, #-0xaa]
+               	ldurh	w0, [x29, #-0x50]
+               	sturh	w0, [x29, #-0xb8]
+               	ldurh	w0, [x29, #-0x4e]
+               	sturh	w0, [x29, #-0xa8]
+               	ldurh	w0, [x29, #-0x4c]
+               	sturh	w0, [x29, #-0xb6]
+               	ldurh	w0, [x29, #-0x4a]
+               	sturh	w0, [x29, #-0xa6]
+               	ldurh	w0, [x29, #-0x48]
+               	sturh	w0, [x29, #-0xb4]
+               	ldurh	w0, [x29, #-0x46]
+               	sturh	w0, [x29, #-0xa4]
+               	ldurh	w0, [x29, #-0x44]
+               	sturh	w0, [x29, #-0xb2]
+               	ldurh	w0, [x29, #-0x42]
+               	sturh	w0, [x29, #-0xa2]
                	sub	x0, x29, #0x100
                	ldur	q0, [x29, #-0xc0]
                	ldur	q1, [x29, #-0xb0]
@@ -336,15 +334,14 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	add	x4, x3, #0x10
                	ldrh	w5, [x3, x0, lsl #1]
-               	sub	x1, x29, #0x60
                	lsl	x2, x0, #1
                	ldrh	w6, [x1, x2, lsl #1]
                	cmp	w5, w6
                	b.ne	<addr>
                	ldrh	w5, [x4, x0, lsl #1]
                	add	x2, x2, #0x1
-               	ldrh	w1, [x1, x2, lsl #1]
-               	cmp	w5, w1
+               	ldrh	w2, [x1, x2, lsl #1]
+               	cmp	w5, w2
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x8

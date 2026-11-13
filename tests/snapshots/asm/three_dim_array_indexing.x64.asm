@@ -28,39 +28,36 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	leaq	<rip>, %rcx # <addr>
                	movzbq	<rip>, %rax # <addr>
-               	movzbq	<rip>, %rdx # <addr>
-               	addq	%rdx, %rax
-               	movzbq	<rip>, %rdx # <addr>
-               	addq	%rdx, %rax
-               	movzbq	<rip>, %rdx # <addr>
-               	addq	%rdx, %rax
+               	movzbq	<rip>, %rcx # <addr>
+               	addq	%rcx, %rax
+               	movzbq	<rip>, %rcx # <addr>
+               	addq	%rcx, %rax
+               	movzbq	<rip>, %rcx # <addr>
+               	addq	%rcx, %rax
                	cmpl	$0xa, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
-               	leaq	0x8(%rcx), %rax
-               	movzbq	(%rax), %rdx
-               	movzbq	0x1(%rax), %rsi
-               	addq	%rsi, %rdx
-               	movzbq	0x2(%rax), %rsi
-               	addq	%rsi, %rdx
-               	movzbq	0x3(%rax), %rax
-               	addq	%rdx, %rax
+               	movzbq	<rip>, %rax # <addr>
+               	movzbq	<rip>, %rcx # <addr>
+               	addq	%rcx, %rax
+               	movzbq	<rip>, %rcx # <addr>
+               	addq	%rcx, %rax
+               	movzbq	<rip>, %rcx # <addr>
+               	addq	%rcx, %rax
                	cmpl	$0x2a, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
-               	leaq	0x10(%rcx), %rax
-               	movzbq	(%rax), %rcx
-               	movzbq	0x1(%rax), %rdx
-               	addq	%rdx, %rcx
-               	movzbq	0x2(%rax), %rdx
-               	addq	%rdx, %rcx
-               	movzbq	0x3(%rax), %rax
+               	movzbq	<rip>, %rax # <addr>
+               	movzbq	<rip>, %rcx # <addr>
+               	addq	%rcx, %rax
+               	movzbq	<rip>, %rcx # <addr>
+               	addq	%rcx, %rax
+               	movzbq	<rip>, %rcx # <addr>
                	addq	%rcx, %rax
                	cmpl	$0x4a, %eax
                	je	<addr>

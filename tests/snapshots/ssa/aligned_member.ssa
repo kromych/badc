@@ -93,7 +93,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v71  LocalAddr(-20)                                   -> x0
     v72  BinopI { op=add, lhs=v71, rhs_imm=16 }           -> x0
     v73  BinopI { op=add, lhs=v71, rhs_imm=24 }           -> x0
-    v74  LoadLocal { off=-20, disp=24, kind=I64 }         -> x0
+    v74  Load { addr=v73, disp=0, kind=I64 }              -> x0
     v75  Imm(0)                                           -> x0
     v76  Imm(0)                                           -> x0
     v77  Imm(0)                                           -> x0

@@ -56,81 +56,70 @@ Disassembly of section .text:
                	ldr	s2, [x0, #0x8]
                	fadd	s1, s1, s2
                	fadd	s0, s0, s1
-               	add	x1, x0, #0x10
-               	ldr	s1, [x1]
-               	ldr	s2, [x1, #0x4]
+               	ldr	s1, [x0, #0x10]
+               	ldr	s2, [x0, #0x14]
                	fadd	s1, s1, s2
-               	ldr	s2, [x1, #0x8]
-               	fadd	s1, s1, s2
-               	fadd	s0, s0, s1
-               	add	x1, x0, #0x20
-               	ldr	s1, [x1]
-               	ldr	s2, [x1, #0x4]
-               	fadd	s1, s1, s2
-               	ldr	s2, [x1, #0x8]
+               	ldr	s2, [x0, #0x18]
                	fadd	s1, s1, s2
                	fadd	s0, s0, s1
-               	add	x1, x0, #0x30
-               	ldr	s1, [x1]
-               	ldr	s2, [x1, #0x4]
+               	ldr	s1, [x0, #0x20]
+               	ldr	s2, [x0, #0x24]
                	fadd	s1, s1, s2
-               	ldr	s2, [x1, #0x8]
-               	fadd	s1, s1, s2
-               	fadd	s0, s0, s1
-               	add	x1, x0, #0x40
-               	ldr	s1, [x1]
-               	ldr	s2, [x1, #0x4]
-               	fadd	s1, s1, s2
-               	ldr	s2, [x1, #0x8]
+               	ldr	s2, [x0, #0x28]
                	fadd	s1, s1, s2
                	fadd	s0, s0, s1
-               	add	x1, x0, #0x50
-               	ldr	s1, [x1]
-               	ldr	s2, [x1, #0x4]
+               	ldr	s1, [x0, #0x30]
+               	ldr	s2, [x0, #0x34]
                	fadd	s1, s1, s2
-               	ldr	s2, [x1, #0x8]
-               	fadd	s1, s1, s2
-               	fadd	s0, s0, s1
-               	add	x1, x0, #0x60
-               	ldr	s1, [x1]
-               	ldr	s2, [x1, #0x4]
-               	fadd	s1, s1, s2
-               	ldr	s2, [x1, #0x8]
+               	ldr	s2, [x0, #0x38]
                	fadd	s1, s1, s2
                	fadd	s0, s0, s1
-               	add	x1, x0, #0x70
-               	ldr	s1, [x1]
-               	ldr	s2, [x1, #0x4]
+               	ldr	s1, [x0, #0x40]
+               	ldr	s2, [x0, #0x44]
                	fadd	s1, s1, s2
-               	ldr	s2, [x1, #0x8]
-               	fadd	s1, s1, s2
-               	fadd	s0, s0, s1
-               	add	x1, x0, #0x80
-               	ldr	s1, [x1]
-               	ldr	s2, [x1, #0x4]
-               	fadd	s1, s1, s2
-               	ldr	s2, [x1, #0x8]
+               	ldr	s2, [x0, #0x48]
                	fadd	s1, s1, s2
                	fadd	s0, s0, s1
-               	add	x1, x0, #0x90
-               	ldr	s1, [x1]
-               	ldr	s2, [x1, #0x4]
+               	ldr	s1, [x0, #0x50]
+               	ldr	s2, [x0, #0x54]
                	fadd	s1, s1, s2
-               	ldr	s2, [x1, #0x8]
-               	fadd	s1, s1, s2
-               	fadd	s0, s0, s1
-               	add	x1, x0, #0xa0
-               	ldr	s1, [x1]
-               	ldr	s2, [x1, #0x4]
-               	fadd	s1, s1, s2
-               	ldr	s2, [x1, #0x8]
+               	ldr	s2, [x0, #0x58]
                	fadd	s1, s1, s2
                	fadd	s0, s0, s1
-               	add	x0, x0, #0xb0
-               	ldr	s1, [x0]
-               	ldr	s2, [x0, #0x4]
+               	ldr	s1, [x0, #0x60]
+               	ldr	s2, [x0, #0x64]
                	fadd	s1, s1, s2
-               	ldr	s2, [x0, #0x8]
+               	ldr	s2, [x0, #0x68]
+               	fadd	s1, s1, s2
+               	fadd	s0, s0, s1
+               	ldr	s1, [x0, #0x70]
+               	ldr	s2, [x0, #0x74]
+               	fadd	s1, s1, s2
+               	ldr	s2, [x0, #0x78]
+               	fadd	s1, s1, s2
+               	fadd	s0, s0, s1
+               	ldr	s1, [x0, #0x80]
+               	ldr	s2, [x0, #0x84]
+               	fadd	s1, s1, s2
+               	ldr	s2, [x0, #0x88]
+               	fadd	s1, s1, s2
+               	fadd	s0, s0, s1
+               	ldr	s1, [x0, #0x90]
+               	ldr	s2, [x0, #0x94]
+               	fadd	s1, s1, s2
+               	ldr	s2, [x0, #0x98]
+               	fadd	s1, s1, s2
+               	fadd	s0, s0, s1
+               	ldr	s1, [x0, #0xa0]
+               	ldr	s2, [x0, #0xa4]
+               	fadd	s1, s1, s2
+               	ldr	s2, [x0, #0xa8]
+               	fadd	s1, s1, s2
+               	fadd	s0, s0, s1
+               	ldr	s1, [x0, #0xb0]
+               	ldr	s2, [x0, #0xb4]
+               	fadd	s1, s1, s2
+               	ldr	s2, [x0, #0xb8]
                	fadd	s1, s1, s2
                	fadd	s0, s0, s1
                	movi	d1, #0000000000000000

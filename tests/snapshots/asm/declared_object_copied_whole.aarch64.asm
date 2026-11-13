@@ -57,10 +57,9 @@ Disassembly of section .text:
                	stp	xzr, xzr, [x0, #0x30]
                	stp	xzr, xzr, [x0, #0x40]
                	str	xzr, [x0, #0x50]
-               	add	x2, x0, #0x44
                	str	w1, [x0, #0x54]
-               	add	x0, x1, #0x1
-               	str	w0, [x2]
+               	add	x1, x1, #0x1
+               	str	w1, [x0, #0x44]
                	ret
 
 <main>:

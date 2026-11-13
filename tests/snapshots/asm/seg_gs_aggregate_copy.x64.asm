@@ -560,36 +560,34 @@ Disassembly of section .text:
                	movl	$0xa, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movq	<rip>, %rcx # <addr>
+               	movq	<rip>, %rax # <addr>
                	movabsq	$-0x112053135014111, %r11 # imm = 0xFEEDFACECAFEBEEF
-               	cmpq	%r11, %rcx
+               	cmpq	%r11, %rax
                	jne	<addr>
-               	movl	<rip>, %ecx # <addr>
-               	cmpl	$0x11223344, %ecx       # imm = 0x11223344
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0x11223344, %eax       # imm = 0x11223344
                	jne	<addr>
-               	movl	<rip>, %ecx # <addr>
-               	cmpl	$0x55667788, %ecx       # imm = 0x55667788
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0x55667788, %eax       # imm = 0x55667788
                	jne	<addr>
-               	movq	<rip>, %rcx # <addr>
+               	movq	<rip>, %rax # <addr>
                	movabsq	$0x123456789abcdef, %r11 # imm = 0x123456789ABCDEF
-               	cmpq	%r11, %rcx
+               	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0xb, %eax
                	leave
                	retq
-               	addq	$0x20, %rax
-               	movq	(%rax), %rcx
+               	movq	<rip>, %rax # <addr>
                	movabsq	$-0x112053135014111, %r11 # imm = 0xFEEDFACECAFEBEEF
-               	cmpq	%r11, %rcx
+               	cmpq	%r11, %rax
                	jne	<addr>
-               	movl	0x8(%rax), %ecx
-               	cmpl	$0x11223344, %ecx       # imm = 0x11223344
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0x11223344, %eax       # imm = 0x11223344
                	jne	<addr>
-               	movl	0x10(%rax), %ecx
-               	cmpl	$0x55667788, %ecx       # imm = 0x55667788
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0x55667788, %eax       # imm = 0x55667788
                	jne	<addr>
-               	movq	0x18(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	movabsq	$0x123456789abcdef, %r11 # imm = 0x123456789ABCDEF
                	cmpq	%r11, %rax
                	je	<addr>

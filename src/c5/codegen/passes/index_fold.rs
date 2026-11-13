@@ -25,12 +25,15 @@
 //! uses is left alone.
 //!
 //! The same pass folds a constant pointer offset (a struct field offset)
-//! into the load/store displacement: a `BinopI(Add, base, c)` address
-//! with an aligned, in-range `c` becomes `Load { addr=base, disp=c }`.
+//! into the load/store displacement: a `BinopI(Add, base, c)` or
+//! `BinopI(Sub, base, -c)` address with an in-range `c` becomes
+//! `Load { addr=base, disp=c }`, added to the displacement the access
+//! already has.
 //! Unlike the scaled-index fold this covers the floating kinds too.
 //! As with the scaled-index case this fires for a shared address too --
-//! the load and store of a read-modify-write of one field fold the
-//! offset into both accesses, provided every use is a same-width access.
+//! the accesses of a read-modify-write, or of several members, fold the
+//! offset into each, provided every use is an access the composed
+//! displacement reaches.
 
 use alloc::vec::Vec;
 
@@ -202,6 +205,12 @@ pub(crate) fn mark_pc_rel_accesses(func: &mut FunctionSsa, strict_align: bool) {
 
 /// Count uses of every value across instructions, terminators, and
 /// block exit accumulators.
+/// A pure value nothing reads, which [`use_counts`] does not count as a
+/// use of its operands.
+fn dead(counts: &[u32], inst: &Inst, i: usize) -> bool {
+    counts.get(i) == Some(&0) && inst.is_pure()
+}
+
 fn use_counts(func: &FunctionSsa) -> Vec<u32> {
     let mut counts = alloc::vec![0u32; func.insts.len()];
     let bump = |v: ValueId, counts: &mut [u32]| {
@@ -228,6 +237,23 @@ fn use_counts(func: &FunctionSsa) -> Vec<u32> {
         if block.exit_acc != NO_VALUE {
             bump(block.exit_acc, &mut counts);
         }
+    }
+    // A pure value nothing reads goes with the emit's dead-pure skip, and
+    // its operands lose that use.
+    let mut dead: Vec<usize> = (0..counts.len())
+        .filter(|&i| counts[i] == 0 && func.insts[i].is_pure())
+        .collect();
+    while let Some(i) = dead.pop() {
+        crate::c5::codegen::ssa::reg_alloc::for_each_operand(&func.insts[i], |v| {
+            if let Some(c) = counts.get_mut(v as usize)
+                && *c > 0
+            {
+                *c -= 1;
+                if *c == 0 && func.insts[v as usize].is_pure() {
+                    dead.push(v as usize);
+                }
+            }
+        });
     }
     counts
 }
@@ -296,7 +322,10 @@ fn foldable_scaled_addresses(
     // count; any other use leaves the count short of the total.
     let mut seen: alloc::collections::BTreeMap<ValueId, (u8, u32)> =
         alloc::collections::BTreeMap::new();
-    for inst in &func.insts {
+    for (i, inst) in func.insts.iter().enumerate() {
+        if dead(counts, inst, i) {
+            continue;
+        }
         let (addr, width) = match inst {
             Inst::Load {
                 addr,
@@ -361,82 +390,85 @@ fn foldable_scaled_addresses(
 fn foldable_displaced_addresses(
     func: &FunctionSsa,
     counts: &[u32],
-) -> alloc::collections::BTreeMap<ValueId, (ValueId, i32)> {
+) -> alloc::collections::BTreeMap<ValueId, (ValueId, i64)> {
     let mut cand: alloc::collections::BTreeMap<ValueId, (ValueId, i64)> =
         alloc::collections::BTreeMap::new();
     for (p, inst) in func.insts.iter().enumerate() {
-        if let Inst::BinopI {
-            op: BinOp::Add,
-            lhs,
-            rhs_imm,
-        } = inst
-            && *rhs_imm != 0
-        {
-            cand.insert(p as ValueId, (*lhs, *rhs_imm));
+        let c = match inst {
+            Inst::BinopI {
+                op: BinOp::Add,
+                lhs,
+                rhs_imm,
+            } => Some((*lhs, *rhs_imm)),
+            Inst::BinopI {
+                op: BinOp::Sub,
+                lhs,
+                rhs_imm,
+            } => rhs_imm.checked_neg().map(|c| (*lhs, c)),
+            _ => None,
+        };
+        if let Some((lhs, c)) = c.filter(|&(_, c)| c != 0) {
+            cand.insert(p as ValueId, (lhs, c));
         }
     }
-    // Per candidate, require every use to be a same-width load or store
-    // with no existing displacement. `width_seen` records the first
-    // access width and marks `0xff` on a width conflict; `valid` counts
-    // the qualifying accesses so a non-access use (valid < total) drops
-    // the candidate.
-    let mut width_seen: alloc::collections::BTreeMap<ValueId, u8> =
+    // Per candidate, the width, displacement and alignment bound of each
+    // load or store through it; a use of another kind drops the candidate
+    // through the count below.
+    let mut uses: alloc::collections::BTreeMap<ValueId, Vec<(u8, i64, bool)>> =
         alloc::collections::BTreeMap::new();
-    let mut valid: alloc::collections::BTreeMap<ValueId, u32> = alloc::collections::BTreeMap::new();
-    // Addresses an access carries a proven alignment for: the lowering
-    // may split such an access into byte units, whose scaled immediate
-    // reaches only 4095 rather than the width-scaled range below.
-    let mut bounded: alloc::collections::BTreeSet<ValueId> = alloc::collections::BTreeSet::new();
-    for inst in &func.insts {
-        let (addr, w, align) = match inst {
-            Inst::Load {
-                addr,
-                disp: 0,
-                kind,
-                align,
-                ..
-            } => (*addr, load_width(*kind), *align),
-            Inst::Store {
-                addr,
-                disp: 0,
-                kind,
-                align,
-                ..
-            } => (*addr, store_width(*kind), *align),
-            _ => continue,
-        };
-        if !cand.contains_key(&addr) {
+    for (i, inst) in func.insts.iter().enumerate() {
+        if dead(counts, inst, i) {
             continue;
         }
-        let seen = width_seen.entry(addr).or_insert(0);
-        *seen = if *seen == 0 || *seen == w { w } else { 0xff };
-        *valid.entry(addr).or_insert(0) += 1;
-        if align != 0 {
-            bounded.insert(addr);
+        let (addr, w, disp, align) = match inst {
+            Inst::Load {
+                addr,
+                disp,
+                kind,
+                align,
+                pc_rel: false,
+                ..
+            } => (*addr, load_width(*kind), *disp, *align),
+            Inst::Store {
+                addr,
+                disp,
+                kind,
+                align,
+                pc_rel: false,
+                ..
+            } => (*addr, store_width(*kind), *disp, *align),
+            _ => continue,
+        };
+        if cand.contains_key(&addr) {
+            (uses.entry(addr).or_default()).push((w, i64::from(disp), align != 0));
         }
     }
     cand.into_iter()
-        .filter_map(|(p, (base, c))| {
-            let total = counts.get(p as usize).copied().unwrap_or(0);
-            let w = width_seen.get(&p).copied().unwrap_or(0);
-            if w == 0 || w == 0xff || valid.get(&p).copied().unwrap_or(0) != total {
-                return None;
-            }
-            // A negative offset takes the unscaled form, whose 9-bit field
-            // reaches -256 at every width.
-            let fits = if c < 0 {
-                c >= -256 && c + (w as i64) <= 256
-            } else if bounded.contains(&p) {
-                c + (w as i64) <= 4096
-            } else {
-                displacement_fits(c, w) || c < 256
-            };
-            if !fits {
-                return None;
-            }
-            i32::try_from(c).ok().map(|disp| (p, (base, disp)))
+        .filter(|(p, (_, c))| {
+            let total = counts.get(*p as usize).copied().unwrap_or(0);
+            uses.get(p).is_some_and(|u| {
+                u.len() == total as usize
+                    && u.iter().all(|&(w, d, bounded)| {
+                        displacement_reaches(c + d, w, bounded) && i32::try_from(c + d).is_ok()
+                    })
+            })
         })
         .collect()
+}
+
+/// Whether a `w`-byte access reaches byte offset `off` through its
+/// displacement on both targets. A negative offset takes AArch64's
+/// unscaled form, whose 9-bit field reaches -256 at every width; an access
+/// with a proven alignment may be split into byte units, whose scaled
+/// immediate reaches only 4095.
+fn displacement_reaches(off: i64, w: u8, bounded: bool) -> bool {
+    if off < 0 {
+        off >= -256 && off + (w as i64) <= 256
+    } else if bounded {
+        off + (w as i64) <= 4096
+    } else {
+        displacement_fits(off, w) || off < 256
+    }
 }
 
 /// The slot and displacement a frame address names, for a `width`-byte
@@ -597,23 +629,36 @@ fn narrow_store_values(func: &mut FunctionSsa) {
 pub(crate) fn run(funcs: &mut [FunctionSsa]) {
     for func in funcs.iter_mut() {
         narrow_store_values(func);
+        // An offset folded into its accesses leaves the address it was
+        // added to read by accesses alone, which the next round folds.
+        for _ in 0..4 {
+            if !fold_round(func) {
+                break;
+            }
+        }
+    }
+}
+
+/// One round of the scaled-index and displacement folds; whether any
+/// access was rewritten.
+fn fold_round(func: &mut FunctionSsa) -> bool {
+    {
         let counts = use_counts(func);
         let scaled = foldable_scaled_addresses(func, &counts);
         let displaced = foldable_displaced_addresses(func, &counts);
         let mut rewrites: Vec<(usize, Inst)> = Vec::new();
         for (idx, inst) in func.insts.iter().enumerate() {
             match inst {
-                // A displacement already present means the address was
-                // folded once; leave it rather than compose for now.
                 Inst::Load {
                     addr,
-                    disp: 0,
+                    disp,
                     kind,
                     volatile,
                     align,
                     ..
                 } => {
-                    if let (Some(width), Some(&(base, index, scale))) = (
+                    if let (0, Some(width), Some(&(base, index, scale))) = (
+                        *disp,
                         int_load_width(*kind),
                         scaled.get(addr).filter(|_| *align == 0 && !*volatile),
                     ) {
@@ -629,12 +674,12 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
                                 abs_base: false,
                             },
                         ));
-                    } else if let Some(&(base, disp)) = displaced.get(addr) {
+                    } else if let Some(&(base, c)) = displaced.get(addr) {
                         rewrites.push((
                             idx,
                             Inst::Load {
                                 addr: base,
-                                disp,
+                                disp: (i64::from(*disp) + c) as i32,
                                 kind: *kind,
                                 volatile: *volatile,
                                 align: *align,
@@ -645,14 +690,15 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
                 }
                 Inst::Store {
                     addr,
-                    disp: 0,
+                    disp,
                     value,
                     kind,
                     volatile,
                     align,
                     ..
                 } => {
-                    if let (Some(width), Some(&(base, index, scale))) = (
+                    if let (0, Some(width), Some(&(base, index, scale))) = (
+                        *disp,
                         int_store_width(*kind),
                         scaled.get(addr).filter(|_| *align == 0 && !*volatile),
                     ) {
@@ -669,12 +715,12 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
                                 abs_base: false,
                             },
                         ));
-                    } else if let Some(&(base, disp)) = displaced.get(addr) {
+                    } else if let Some(&(base, c)) = displaced.get(addr) {
                         rewrites.push((
                             idx,
                             Inst::Store {
                                 addr: base,
-                                disp,
+                                disp: (i64::from(*disp) + c) as i32,
                                 value: *value,
                                 kind: *kind,
                                 volatile: *volatile,
@@ -687,9 +733,11 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
                 _ => {}
             }
         }
+        let changed = !rewrites.is_empty();
         for (idx, inst) in rewrites {
             func.insts[idx] = inst;
         }
+        changed
     }
 }
 

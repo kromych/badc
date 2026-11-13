@@ -86,9 +86,7 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rsi
                	xorl	%eax, %eax
                	callq	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	addq	$0x18, %rax
-               	movss	0x10(%rax), %xmm1
+               	movss	<rip>, %xmm1 # <addr>
                	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	jne	<addr>
@@ -112,9 +110,7 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rsi
                	xorl	%eax, %eax
                	callq	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	addq	$0x18, %rax
-               	movss	0x10(%rax), %xmm1
+               	movss	<rip>, %xmm1 # <addr>
                	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	jne	<addr>
@@ -140,9 +136,7 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rsi
                	xorl	%eax, %eax
                	callq	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	addq	$0x30, %rax
-               	movss	0x10(%rax), %xmm1
+               	movss	<rip>, %xmm1 # <addr>
                	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	jne	<addr>
@@ -166,9 +160,7 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rsi
                	xorl	%eax, %eax
                	callq	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	addq	$0x30, %rax
-               	movss	0x10(%rax), %xmm1
+               	movss	<rip>, %xmm1 # <addr>
                	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	jne	<addr>
@@ -194,9 +186,7 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rsi
                	xorl	%eax, %eax
                	callq	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	addq	$0x48, %rax
-               	movss	0x10(%rax), %xmm1
+               	movss	<rip>, %xmm1 # <addr>
                	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	jne	<addr>
@@ -220,9 +210,7 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rsi
                	xorl	%eax, %eax
                	callq	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	addq	$0x48, %rax
-               	movss	0x10(%rax), %xmm1
+               	movss	<rip>, %xmm1 # <addr>
                	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	jne	<addr>
@@ -248,9 +236,7 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rsi
                	xorl	%eax, %eax
                	callq	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	addq	$0x60, %rax
-               	movss	0x10(%rax), %xmm1
+               	movss	<rip>, %xmm1 # <addr>
                	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	jne	<addr>
@@ -271,9 +257,7 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rsi
                	xorl	%eax, %eax
                	callq	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	addq	$0x60, %rax
-               	movss	0x10(%rax), %xmm1
+               	movss	<rip>, %xmm1 # <addr>
                	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	jne	<addr>

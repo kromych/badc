@@ -94,9 +94,8 @@ Disassembly of section .text:
                	movl	%ecx, <rip> # <addr>
                	movq	$0x2, (%rax)
                	movq	$0x0, 0x8(%rax)
-               	addq	$0x10, %rax
-               	movq	$0x6, (%rax)
-               	movq	$0x0, 0x8(%rax)
+               	movq	$0x6, 0x10(%rax)
+               	movq	$0x0, 0x18(%rax)
                	movl	$0x8, %eax
                	leave
                	retq

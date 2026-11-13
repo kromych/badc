@@ -558,7 +558,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v456 Extend { value=v455, kind=I32, nsw }             -> x0
     v457 BinopI { op=shl, lhs=v456, rhs_imm=2 }           -> x0
     v458 Binop { op=add, lhs=v453, rhs=v457 }             -> x0
-    v459 LoadIndexed { base=v453, index=v456, scale=4, kind=I32 } -> x0
+    v459 Load { addr=v458, disp=0, kind=I32 }             -> x0
     v460 Imm(0)                                           -> x0
     v461 Imm(0)                                           -> x0
     v462 Imm(0)                                           -> x0

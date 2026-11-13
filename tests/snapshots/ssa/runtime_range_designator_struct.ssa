@@ -485,7 +485,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=18
   block 51  start_pc=0
     v313 LocalAddr(-6)                                    -> x0
     v314 BinopI { op=add, lhs=v313, rhs_imm=24 }          -> x0
-    v315 LoadLocal { off=-6, disp=24, kind=I64 }          -> x0
+    v315 Load { addr=v314, disp=0, kind=I64 }             -> x0
     v316 Imm(0)                                           -> x0
     v317 Imm(0)                                           -> x0
     v318 Imm(0)                                           -> x0

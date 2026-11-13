@@ -149,10 +149,10 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rax # <addr>
-               	leaq	0x8(%rax), %rcx
-               	movl	0x4(%rcx), %edx
-               	cmpl	$0x4, %edx
+               	movl	<rip>, %ecx # <addr>
+               	cmpl	$0x4, %ecx
                	jne	<addr>
+               	leaq	0x8(%rax), %rcx
                	subq	%rax, %rcx
                	leaq	0xf(%rcx), %rdx
                	andq	$-0x10, %rdx

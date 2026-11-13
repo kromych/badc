@@ -18,71 +18,61 @@ Disassembly of section .text:
                	str	x1, [x0, #0x20]
                	str	x3, [x0]
                	str	xzr, [x0, #0x28]
-               	mov	x4, #0x100000001        // =4294967297
-               	add	x3, x0, #0x30
-               	str	x1, [x3, #0x20]
-               	str	x4, [x0, #0x30]
-               	str	xzr, [x3, #0x28]
-               	mov	x4, #0x1                // =1
-               	movk	x4, #0x2, lsl #32
-               	add	x3, x0, #0x60
-               	str	x1, [x3, #0x20]
-               	str	x4, [x0, #0x60]
-               	str	xzr, [x3, #0x28]
-               	mov	x4, #0x1                // =1
-               	movk	x4, #0x3, lsl #32
-               	add	x3, x0, #0x90
-               	str	x1, [x3, #0x20]
-               	str	x4, [x0, #0x90]
-               	str	xzr, [x3, #0x28]
-               	mov	x4, #0x1                // =1
-               	movk	x4, #0x4, lsl #32
-               	add	x3, x0, #0xc0
-               	str	x1, [x3, #0x20]
-               	str	x4, [x0, #0xc0]
-               	str	xzr, [x3, #0x28]
-               	mov	x4, #0x1                // =1
-               	movk	x4, #0x5, lsl #32
-               	add	x3, x0, #0xf0
-               	str	x1, [x3, #0x20]
-               	str	x4, [x0, #0xf0]
-               	str	xzr, [x3, #0x28]
-               	mov	x4, #0x1                // =1
-               	movk	x4, #0x6, lsl #32
-               	add	x3, x0, #0x120
-               	str	x1, [x3, #0x20]
-               	str	x4, [x0, #0x120]
-               	str	xzr, [x3, #0x28]
-               	mov	x4, #0x1                // =1
-               	movk	x4, #0x7, lsl #32
-               	add	x3, x0, #0x150
-               	str	x1, [x3, #0x20]
-               	str	x4, [x0, #0x150]
-               	str	xzr, [x3, #0x28]
-               	add	x0, x0, #0x180
+               	mov	x3, #0x100000001        // =4294967297
+               	str	x1, [x0, #0x50]
+               	str	x3, [x0, #0x30]
+               	str	xzr, [x0, #0x58]
+               	mov	x3, #0x1                // =1
+               	movk	x3, #0x2, lsl #32
+               	str	x1, [x0, #0x80]
+               	str	x3, [x0, #0x60]
+               	str	xzr, [x0, #0x88]
+               	mov	x3, #0x1                // =1
+               	movk	x3, #0x3, lsl #32
+               	str	x1, [x0, #0xb0]
+               	str	x3, [x0, #0x90]
+               	str	xzr, [x0, #0xb8]
+               	mov	x3, #0x1                // =1
+               	movk	x3, #0x4, lsl #32
+               	str	x1, [x0, #0xe0]
+               	str	x3, [x0, #0xc0]
+               	str	xzr, [x0, #0xe8]
+               	mov	x3, #0x1                // =1
+               	movk	x3, #0x5, lsl #32
+               	str	x1, [x0, #0x110]
+               	str	x3, [x0, #0xf0]
+               	str	xzr, [x0, #0x118]
+               	mov	x3, #0x1                // =1
+               	movk	x3, #0x6, lsl #32
+               	str	x1, [x0, #0x140]
+               	str	x3, [x0, #0x120]
+               	str	xzr, [x0, #0x148]
+               	mov	x3, #0x1                // =1
+               	movk	x3, #0x7, lsl #32
+               	str	x1, [x0, #0x170]
+               	str	x3, [x0, #0x150]
+               	str	xzr, [x0, #0x178]
                	mov	x2, #0x2                // =2
                	movk	x2, #0x20, lsl #32
-               	str	x1, [x0, #0x20]
-               	str	x2, [x0]
-               	str	xzr, [x0, #0x28]
+               	str	x1, [x0, #0x1a0]
+               	str	x2, [x0, #0x180]
+               	str	xzr, [x0, #0x1a8]
                	mov	x3, #0xb00              // =2816
-               	str	x3, [x0, #0x10]
-               	mov	x4, #0x2                // =2
-               	movk	x4, #0x21, lsl #32
-               	add	x3, x0, #0x30
-               	str	x1, [x3, #0x20]
-               	str	x4, [x0, #0x30]
-               	str	xzr, [x3, #0x28]
-               	mov	x4, #0x1600             // =5632
-               	str	x4, [x3, #0x10]
-               	mov	x4, #0x2                // =2
-               	movk	x4, #0x22, lsl #32
-               	add	x3, x0, #0x60
-               	str	x1, [x3, #0x20]
-               	str	x4, [x0, #0x60]
-               	str	xzr, [x3, #0x28]
-               	mov	x0, #0x2100             // =8448
-               	str	x0, [x3, #0x10]
+               	str	x3, [x0, #0x190]
+               	mov	x3, #0x2                // =2
+               	movk	x3, #0x21, lsl #32
+               	str	x1, [x0, #0x1d0]
+               	str	x3, [x0, #0x1b0]
+               	str	xzr, [x0, #0x1d8]
+               	mov	x3, #0x1600             // =5632
+               	str	x3, [x0, #0x1c0]
+               	mov	x3, #0x2                // =2
+               	movk	x3, #0x22, lsl #32
+               	str	x1, [x0, #0x200]
+               	str	x3, [x0, #0x1e0]
+               	str	xzr, [x0, #0x208]
+               	mov	x1, #0x2100             // =8448
+               	str	x1, [x0, #0x1f0]
                	ret
 
 <main>:

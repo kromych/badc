@@ -124,9 +124,9 @@ Disassembly of section .text:
                	cmpl	$0x2, %eax
                	jb	<addr>
                	leaq	-0x10(%rbp), %rax
+               	movb	$0x77, -0x3(%rbp)
+               	movw	$0x9988, -0x2(%rbp)     # imm = 0x9988
                	leaq	0xd(%rax), %rcx
-               	movb	$0x77, (%rcx)
-               	movw	$0x9988, 0x1(%rcx)      # imm = 0x9988
                	leaq	<rip>, %rdx # <addr>
                	xorl	%eax, %eax
                	movzbq	(%rcx,%rax), %rsi

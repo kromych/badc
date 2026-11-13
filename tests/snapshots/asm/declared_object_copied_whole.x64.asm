@@ -67,10 +67,9 @@ Disassembly of section .text:
                	movups	%xmm14, 0x30(%rdi)
                	movups	%xmm14, 0x40(%rdi)
                	movq	$0x0, 0x50(%rdi)
-               	leaq	0x44(%rdi), %rax
                	movl	%esi, 0x54(%rdi)
-               	leaq	0x1(%rsi), %rcx
-               	movl	%ecx, (%rax)
+               	leaq	0x1(%rsi), %rax
+               	movl	%eax, 0x44(%rdi)
                	retq
 
 <main>:

@@ -54,11 +54,10 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	mov	x1, #0x8                // =8
                	strb	w1, [x0, #0x7]
-               	add	x0, x0, #0x4
-               	ldrb	w1, [x0]
-               	ldrb	w2, [x0, #0x1]
-               	ldrb	w3, [x0, #0x2]
-               	ldrb	w0, [x0, #0x3]
+               	ldrb	w1, [x0, #0x4]
+               	ldrb	w2, [x0, #0x5]
+               	ldrb	w3, [x0, #0x6]
+               	ldrb	w0, [x0, #0x7]
                	cmp	w1, #0x4
                	b.ne	<addr>
                	cbnz	w2, <addr>

@@ -652,19 +652,19 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v633 Imm(72)                                          -> x0
     v634 Imm(0)                                           -> x0
     v635 LocalAddr(-3)                                    -> x0
-    v636 Imm(8)                                           -> x1
+    v636 Imm(8)                                           -> x0
     v637 BinopI { op=add, lhs=v635, rhs_imm=8 }           -> x0
-    v638 Imm(0)                                           -> x1
-    v639 Imm(0)                                           -> x1
-    v640 Imm(0)                                           -> x1
-    v641 Load { addr=v637, disp=0, kind=I32 }             -> x1
-    v642 Imm(4)                                           -> x2
-    v643 BinopI { op=add, lhs=v637, rhs_imm=4 }           -> x2
-    v644 Load { addr=v637, disp=4, kind=I32 }             -> x2
-    v645 Binop { op=add, lhs=v641, rhs=v644 }             -> x1
-    v646 Extend { value=v645, kind=I32, nsw }             -> x2
-    v647 BinopI { op=add, lhs=v637, rhs_imm=8 }           -> x2
-    v648 Load { addr=v637, disp=8, kind=I32 }             -> x0
+    v638 Imm(0)                                           -> x0
+    v639 Imm(0)                                           -> x0
+    v640 Imm(0)                                           -> x0
+    v641 LoadLocal { off=-3, disp=8, kind=I32 }           -> x0
+    v642 Imm(4)                                           -> x1
+    v643 BinopI { op=add, lhs=v637, rhs_imm=4 }           -> x1
+    v644 LoadLocal { off=-3, disp=12, kind=I32 }          -> x1
+    v645 Binop { op=add, lhs=v641, rhs=v644 }             -> x0
+    v646 Extend { value=v645, kind=I32, nsw }             -> x1
+    v647 BinopI { op=add, lhs=v637, rhs_imm=8 }           -> x1
+    v648 LoadLocal { off=-3, disp=16, kind=I32 }          -> x1
     v649 Binop { op=add, lhs=v645, rhs=v648 }             -> x0
     v650 Extend { value=v649, kind=I32, nsw }             -> x1
     v651 Imm(0)                                           -> x1

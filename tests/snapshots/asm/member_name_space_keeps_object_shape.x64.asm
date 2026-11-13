@@ -40,34 +40,28 @@ Disassembly of section .text:
                	leaq	(%rax,%rdi), %rdx
                	leaq	0x1(%r8), %rsi
                	movl	%r8d, 0xc(%rdx)
-               	imulq	$0x30, %rcx, %rdx
-               	leaq	(%rax,%rdx), %rdi
-               	addq	$0x10, %rdi
+               	imulq	$0x30, %rcx, %rdi
+               	leaq	(%rax,%rdi), %rdx
                	leaq	0x1(%rsi), %r8
-               	movl	%esi, (%rdi)
+               	movl	%esi, 0x10(%rdx)
                	leaq	0x1(%r8), %rsi
-               	movl	%r8d, 0x4(%rdi)
-               	leaq	(%rax,%rdx), %rdi
-               	addq	$0x10, %rdi
+               	movl	%r8d, 0x14(%rdx)
                	leaq	0x1(%rsi), %r8
-               	movl	%esi, 0x8(%rdi)
+               	movl	%esi, 0x18(%rdx)
+               	leaq	(%rax,%rdi), %rdx
                	leaq	0x1(%r8), %rsi
-               	movl	%r8d, 0xc(%rdi)
-               	addq	%rax, %rdx
-               	leaq	0x20(%rdx), %rdi
-               	leaq	0x1(%rsi), %rdx
-               	movl	%esi, (%rdi)
-               	imulq	$0x30, %rcx, %rsi
-               	leaq	(%rax,%rsi), %rdi
-               	addq	$0x20, %rdi
-               	leaq	0x1(%rdx), %r8
-               	movl	%edx, 0x4(%rdi)
-               	leaq	0x1(%r8), %r9
-               	movl	%r8d, 0x8(%rdi)
-               	leaq	(%rax,%rsi), %rdx
-               	leaq	0x20(%rdx), %rsi
-               	leaq	0x1(%r9), %rdx
-               	movl	%r9d, 0xc(%rsi)
+               	movl	%r8d, 0x1c(%rdx)
+               	imulq	$0x30, %rcx, %rdi
+               	leaq	(%rax,%rdi), %rdx
+               	leaq	0x1(%rsi), %r8
+               	movl	%esi, 0x20(%rdx)
+               	leaq	0x1(%r8), %rsi
+               	movl	%r8d, 0x24(%rdx)
+               	leaq	0x1(%rsi), %r8
+               	movl	%esi, 0x28(%rdx)
+               	leaq	(%rax,%rdi), %rsi
+               	leaq	0x1(%r8), %rdx
+               	movl	%r8d, 0x2c(%rsi)
                	incq	%rcx
                	cmpl	$0x2, %ecx
                	jl	<addr>
@@ -79,32 +73,24 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movabsq	$0x100000000, %rcx      # imm = 0x100000000
-               	movq	%rcx, <rip> # <addr>
-               	movabsq	$0x300000002, %rcx      # imm = 0x300000002
-               	movq	%rcx, <rip> # <addr>
-               	addq	$0x10, %rax
-               	movabsq	$0xb0000000a, %rcx      # imm = 0xB0000000A
-               	movq	%rcx, (%rax)
-               	movl	$0xc, 0x8(%rax)
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x10(%rax), %rcx
-               	movl	$0xd, 0xc(%rcx)
-               	addq	$0x20, %rax
-               	movabsq	$0x1500000014, %rcx     # imm = 0x1500000014
-               	movq	%rcx, (%rax)
-               	movabsq	$0x1700000016, %rcx     # imm = 0x1700000016
-               	movq	%rcx, 0x8(%rax)
-               	leaq	<rip>, %rax # <addr>
-               	movl	<rip>, %ecx # <addr>
-               	cmpl	$0x17, %ecx
-               	jne	<addr>
-               	movl	<rip>, %ecx # <addr>
-               	cmpl	$0x1, %ecx
+               	movabsq	$0x100000000, %rax      # imm = 0x100000000
+               	movq	%rax, <rip> # <addr>
+               	movabsq	$0x300000002, %rax      # imm = 0x300000002
+               	movq	%rax, <rip> # <addr>
+               	movabsq	$0xb0000000a, %rax      # imm = 0xB0000000A
+               	movq	%rax, <rip> # <addr>
+               	movl	$0xc, <rip> # <addr>
+               	movl	$0xd, <rip> # <addr>
+               	movabsq	$0x1500000014, %rax     # imm = 0x1500000014
+               	movq	%rax, <rip> # <addr>
+               	movabsq	$0x1700000016, %rax     # imm = 0x1700000016
+               	movq	%rax, <rip> # <addr>
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	retq
+               	leaq	<rip>, %rax # <addr>
                	leaq	0x10(%rax), %rcx
                	subq	%rax, %rcx
                	movq	%rcx, %rax

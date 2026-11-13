@@ -28,45 +28,37 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
                	b.lt	<addr>
-               	sub	x0, x29, #0x80
-               	ldursw	x1, [x29, #-0x80]
-               	ldur	x2, [x29, #-0x78]
+               	ldursw	x0, [x29, #-0x80]
+               	ldur	x1, [x29, #-0x78]
+               	add	x0, x0, x1
+               	ldursw	x1, [x29, #-0x70]
+               	ldur	x2, [x29, #-0x68]
                	add	x1, x1, x2
-               	ldursw	x2, [x29, #-0x70]
-               	add	x3, x0, #0x10
-               	ldr	x3, [x3, #0x8]
-               	add	x2, x2, x3
+               	add	x0, x0, x1
+               	ldursw	x1, [x29, #-0x60]
+               	ldur	x2, [x29, #-0x58]
                	add	x1, x1, x2
-               	ldursw	x2, [x29, #-0x60]
-               	add	x3, x0, #0x20
-               	ldr	x3, [x3, #0x8]
-               	add	x2, x2, x3
+               	add	x0, x0, x1
+               	ldursw	x1, [x29, #-0x50]
+               	ldur	x2, [x29, #-0x48]
                	add	x1, x1, x2
-               	ldursw	x2, [x29, #-0x50]
-               	add	x3, x0, #0x30
-               	ldr	x3, [x3, #0x8]
-               	add	x2, x2, x3
+               	add	x0, x0, x1
+               	ldursw	x1, [x29, #-0x40]
+               	ldur	x2, [x29, #-0x38]
                	add	x1, x1, x2
-               	ldursw	x2, [x29, #-0x40]
-               	add	x3, x0, #0x40
-               	ldr	x3, [x3, #0x8]
-               	add	x2, x2, x3
+               	add	x0, x0, x1
+               	ldursw	x1, [x29, #-0x30]
+               	ldur	x2, [x29, #-0x28]
                	add	x1, x1, x2
-               	ldursw	x2, [x29, #-0x30]
-               	add	x3, x0, #0x50
-               	ldr	x3, [x3, #0x8]
-               	add	x2, x2, x3
+               	add	x0, x0, x1
+               	ldursw	x1, [x29, #-0x20]
+               	ldur	x2, [x29, #-0x18]
                	add	x1, x1, x2
-               	ldursw	x2, [x29, #-0x20]
-               	add	x3, x0, #0x60
-               	ldr	x3, [x3, #0x8]
-               	add	x2, x2, x3
+               	add	x0, x0, x1
+               	ldursw	x1, [x29, #-0x10]
+               	ldur	x2, [x29, #-0x8]
                	add	x1, x1, x2
-               	ldursw	x2, [x29, #-0x10]
-               	add	x0, x0, #0x70
-               	ldr	x0, [x0, #0x8]
-               	add	x0, x2, x0
-               	add	x0, x1, x0
+               	add	x0, x0, x1
                	mov	x17, #0x6665            // =26213
                	movk	x17, #0x1, lsl #16
                	add	x0, x0, x17

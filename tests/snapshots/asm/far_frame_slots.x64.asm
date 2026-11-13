@@ -125,74 +125,74 @@ Disassembly of section .text:
                	movl	-0x20(%rbp), %eax
                	xorq	$0x55, %rax
                	movl	%eax, -0x20(%rbp)
-               	movq	-0x18(%rbp), %rcx
-               	leaq	-0x1030(%rbp), %rax
-               	addq	$0x740, %rax            # imm = 0x740
-               	movq	(%rax), %rdx
-               	movq	0x8(%rax), %rsi
+               	movq	-0x18(%rbp), %rax
+               	leaq	-0x1030(%rbp), %rcx
+               	movq	-0x8f0(%rbp), %rdx
+               	movq	-0x8e8(%rbp), %rsi
                	addq	%rsi, %rdx
-               	movq	0x10(%rax), %rsi
+               	movq	-0x8e0(%rbp), %rsi
                	addq	%rsi, %rdx
-               	movq	0x18(%rax), %rsi
+               	movq	-0x8d8(%rbp), %rsi
                	addq	%rsi, %rdx
-               	movq	0x20(%rax), %rsi
+               	movq	-0x8d0(%rbp), %rsi
                	addq	%rsi, %rdx
-               	movq	0x28(%rax), %rsi
+               	movq	-0x8c8(%rbp), %rsi
                	addq	%rsi, %rdx
-               	movq	0x30(%rax), %rsi
+               	movq	-0x8c0(%rbp), %rsi
                	addq	%rsi, %rdx
-               	movq	0x38(%rax), %rsi
+               	movq	-0x8b8(%rbp), %rsi
                	addq	%rsi, %rdx
-               	addq	%rdx, %rcx
-               	movq	%rcx, -0x18(%rbp)
+               	addq	%rdx, %rax
+               	movq	%rax, -0x18(%rbp)
                	movss	-0x10(%rbp), %xmm0
-               	movl	$0x3f800000, %ecx       # imm = 0x3F800000
-               	movq	%rcx, %xmm15
+               	movl	$0x3f800000, %eax       # imm = 0x3F800000
+               	movq	%rax, %xmm15
                	addss	%xmm15, %xmm0
                	movss	%xmm0, -0x10(%rbp)
                	movsd	-0x8(%rbp), %xmm0
-               	movabsq	$0x4008000000000000, %rcx # imm = 0x4008000000000000
-               	movq	%rcx, %xmm15
+               	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
+               	movq	%rax, %xmm15
                	mulsd	%xmm15, %xmm0
                	movsd	%xmm0, -0x8(%rbp)
                	fldt	-0x1050(%rbp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
-               	movabsq	$0x3fe0000000000000, %rcx # imm = 0x3FE0000000000000
-               	movq	%rcx, %xmm15
+               	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
+               	movq	%rax, %xmm15
                	subsd	%xmm15, %xmm0
                	movsd	%xmm0, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	-0x1050(%rbp)
-               	movsbq	-0x30(%rbp), %rcx
+               	movsbq	-0x30(%rbp), %rax
                	leaq	-0x63(%rbx), %rdx
                	movsbq	%dl, %rdx
-               	cmpl	%edx, %ecx
+               	cmpl	%edx, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbx
                	leave
                	retq
-               	movswq	-0x28(%rbp), %rcx
+               	movswq	-0x28(%rbp), %rax
                	imulq	$-0x12c, %rbx, %rdx     # imm = 0xFED4
                	subq	$0x2, %rdx
                	movswq	%dx, %rdx
-               	cmpl	%edx, %ecx
+               	cmpl	%edx, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbx
                	leave
                	retq
-               	movslq	-0x20(%rbp), %rcx
+               	movslq	-0x20(%rbp), %rax
                	imulq	$0x186a0, %rbx, %rdx    # imm = 0x186A0
                	movslq	%edx, %rdx
                	xorq	$0x55, %rdx
-               	cmpq	%rdx, %rcx
+               	cmpq	%rdx, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbx
                	leave
                	retq
+               	leaq	0x740(%rcx), %rax
                	xorl	%ecx, %ecx
                	movq	%rcx, %rsi
                	movq	%rcx, %rdx

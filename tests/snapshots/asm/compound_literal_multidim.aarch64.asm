@@ -21,14 +21,11 @@ Disassembly of section .text:
                	add	x2, x2, x3
                	ldrsb	x3, [x0, #0x2]
                	add	x2, x2, x3
-               	add	x3, x0, #0x3
-               	ldrsb	x3, [x3]
+               	ldrsb	x3, [x0, #0x3]
                	add	x2, x2, x3
-               	add	x3, x0, #0x3
-               	ldrsb	x3, [x3, #0x1]
+               	ldrsb	x3, [x0, #0x4]
                	add	x2, x2, x3
-               	add	x0, x0, #0x3
-               	ldrsb	x0, [x0, #0x2]
+               	ldrsb	x0, [x0, #0x5]
                	add	x0, x2, x0
                	cmp	w0, #0x15
                	b.ne	<addr>

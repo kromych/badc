@@ -3266,15 +3266,18 @@ void put4(struct R *o, char c, int i) { *o = (struct R){c, i}; }\n";
 }
 
 /// A member of an element before the pointer is reached through the
-/// access's own displacement: no `lea` on x86-64, an unscaled `ldur` /
-/// `stur` and no `sub` on AArch64.
+/// access's own displacement, composed with the member's offset where the
+/// element's address feeds several members: no `lea` on x86-64, an
+/// unscaled `ldur` / `stur` and no `sub` on AArch64.
 #[test]
 fn a_negative_offset_is_the_access_displacement() {
     const SRC: &str = "typedef struct { long u; long tag; } V;\n\
 long f(V *sp) { return sp[-2].tag + sp[1].tag; }\n\
-void g(V *sp) { sp[-1].u += 3; }\n";
+void g(V *sp) { sp[-1].u += 3; }\n\
+void put(V *sp, long r) { sp[-2] = (V){ r, 0 }; }\n\
+long rd(V *sp) { V *p = sp - 3; return p->u + p->tag; }\n";
     let mut m = Misses::default();
-    for name in ["f", "g"] {
+    for name in ["f", "g", "put", "rd"] {
         let words = a64(SRC, name);
         m.expect(
             !words.iter().any(|&w| w & 0xFF00_0000 == 0xD100_0000),

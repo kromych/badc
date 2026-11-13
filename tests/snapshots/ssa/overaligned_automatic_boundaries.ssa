@@ -347,7 +347,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=0
   block 2  start_pc=0
     v49  LocalAddr(-34)                                   -> x0
     v50  BinopI { op=add, lhs=v49, rhs_imm=126 }          -> x0
-    v51  LoadLocal { off=-34, disp=126, kind=I16 }        -> x0
+    v51  Load { addr=v50, disp=0, kind=I16 }              -> x0
     v52  Imm(1)                                           -> x0
     v53  Imm(0)                                           -> x0
     v54  Imm(1)                                           -> x0
@@ -383,7 +383,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=0
   block 4  start_pc=0
     v81  LocalAddr(-35)                                   -> x0
     v82  BinopI { op=add, lhs=v81, rhs_imm=24 }           -> x0
-    v83  LoadLocal { off=-35, disp=24, kind=I64 }         -> x0
+    v83  Load { addr=v82, disp=0, kind=I64 }              -> x0
     v84  Imm(1)                                           -> x0
     v85  Imm(0)                                           -> x0
     v86  Imm(0)                                           -> x0

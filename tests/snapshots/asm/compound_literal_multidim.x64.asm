@@ -32,14 +32,11 @@ Disassembly of section .text:
                	addq	%rdx, %rcx
                	movsbq	0x2(%rax), %rdx
                	addq	%rdx, %rcx
-               	leaq	0x3(%rax), %rdx
-               	movsbq	(%rdx), %rdx
+               	movsbq	0x3(%rax), %rdx
                	addq	%rdx, %rcx
-               	leaq	0x3(%rax), %rdx
-               	movsbq	0x1(%rdx), %rdx
+               	movsbq	0x4(%rax), %rdx
                	addq	%rdx, %rcx
-               	addq	$0x3, %rax
-               	movsbq	0x2(%rax), %rax
+               	movsbq	0x5(%rax), %rax
                	addq	%rcx, %rax
                	cmpl	$0x15, %eax
                	jne	<addr>

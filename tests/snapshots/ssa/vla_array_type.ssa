@@ -114,7 +114,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
     v88  Imm(0)                                           -> x0
     v89  Imm(12)                                          -> x0
     v90  BinopI { op=add, lhs=v6, rhs_imm=12 }            -> x0
-    v91  Load { addr=v6, disp=12, kind=I32 }              -> x0
+    v91  Load { addr=v90, disp=0, kind=I32 }              -> x0
     v92  Imm(0)                                           -> x0
     v93  Imm(0)                                           -> x0
     v94  Imm(0)                                           -> x0
@@ -421,7 +421,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=1
     v183 BinopI { op=add, lhs=v6, rhs_imm=12 }            -> x0
     v184 Imm(8)                                           -> x0
     v185 BinopI { op=add, lhs=v6, rhs_imm=20 }            -> x0
-    v186 Load { addr=v6, disp=20, kind=I32 }              -> x0
+    v186 Load { addr=v185, disp=0, kind=I32 }             -> x0
     v187 Imm(0)                                           -> x0
     v188 Imm(0)                                           -> x0
     v189 Imm(0)                                           -> x0

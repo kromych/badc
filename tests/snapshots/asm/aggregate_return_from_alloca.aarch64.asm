@@ -433,51 +433,51 @@ Disassembly of section .text:
                	mov	sp, x20
                	add	x21, x22, x22, lsl #1
                	mov	x1, #0x0                // =0
-               	mov	x4, #0xc                // =12
+               	mov	x5, #0xc                // =12
                	cmp	x1, x22
                	b.ge	<addr>
-               	mul	x5, x1, x4
-               	add	x2, x20, x5
-               	add	x3, x1, x21
-               	and	x0, x3, #0xff
-               	strb	w0, [x2]
-               	add	x0, x3, #0x1
+               	mul	x4, x1, x5
+               	add	x2, x1, x21
+               	and	x0, x2, #0xff
+               	strb	w0, [x20, x4]
+               	add	x3, x20, x4
+               	add	x0, x2, #0x1
                	and	x0, x0, #0xff
-               	strb	w0, [x2, #0x1]
-               	add	x0, x3, #0x2
+               	strb	w0, [x3, #0x1]
+               	add	x0, x2, #0x2
                	and	x0, x0, #0xff
-               	strb	w0, [x2, #0x2]
-               	add	x0, x3, #0x3
+               	strb	w0, [x3, #0x2]
+               	add	x0, x2, #0x3
                	and	x0, x0, #0xff
-               	strb	w0, [x2, #0x3]
-               	add	x0, x3, #0x4
+               	strb	w0, [x3, #0x3]
+               	add	x0, x2, #0x4
                	and	x0, x0, #0xff
-               	strb	w0, [x2, #0x4]
-               	add	x0, x3, #0x5
+               	strb	w0, [x3, #0x4]
+               	add	x0, x2, #0x5
                	and	x0, x0, #0xff
-               	strb	w0, [x2, #0x5]
-               	add	x3, x1, x21
-               	add	x0, x3, #0x6
+               	strb	w0, [x3, #0x5]
+               	add	x0, x2, #0x6
                	and	x0, x0, #0xff
-               	strb	w0, [x2, #0x6]
-               	add	x0, x20, x5
-               	add	x2, x3, #0x7
-               	and	x2, x2, #0xff
-               	strb	w2, [x0, #0x7]
-               	mul	x0, x1, x4
-               	add	x2, x20, x0
-               	add	x0, x3, #0x8
+               	strb	w0, [x3, #0x6]
+               	add	x3, x20, x4
+               	add	x2, x1, x21
+               	add	x0, x2, #0x7
                	and	x0, x0, #0xff
-               	strb	w0, [x2, #0x8]
-               	add	x0, x3, #0x9
+               	strb	w0, [x3, #0x7]
+               	add	x0, x2, #0x8
                	and	x0, x0, #0xff
-               	strb	w0, [x2, #0x9]
-               	add	x0, x3, #0xa
+               	strb	w0, [x3, #0x8]
+               	mul	x0, x1, x5
+               	add	x3, x20, x0
+               	add	x0, x2, #0x9
                	and	x0, x0, #0xff
-               	strb	w0, [x2, #0xa]
-               	add	x0, x3, #0xb
+               	strb	w0, [x3, #0x9]
+               	add	x0, x2, #0xa
                	and	x0, x0, #0xff
-               	strb	w0, [x2, #0xb]
+               	strb	w0, [x3, #0xa]
+               	add	x0, x2, #0xb
+               	and	x0, x0, #0xff
+               	strb	w0, [x3, #0xb]
                	add	x1, x1, #0x1
                	cmp	x1, x22
                	b.lt	<addr>

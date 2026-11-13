@@ -105,9 +105,7 @@ Disassembly of section .text:
                	movl	$0x5, -0x50(%rbp)
                	movups	%xmm1, -0x40(%rbp)
                	movl	$0x6, -0x30(%rbp)
-               	leaq	<rip>, %rax # <addr>
-               	addq	$0x10, %rax
-               	movzbq	(%rax), %rax
+               	movzbq	<rip>, %rax # <addr>
                	cmpl	$0x9, %eax
                	jne	<addr>
                	cmpb	$0x0, <rip> # <addr>

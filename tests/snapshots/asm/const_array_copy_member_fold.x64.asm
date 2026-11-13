@@ -65,20 +65,18 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	leaq	<rip>, %rax # <addr>
                	movb	$0x8, <rip> # <addr>
-               	addq	$0x4, %rax
-               	movzbq	(%rax), %rcx
-               	movzbq	0x1(%rax), %rdx
-               	movzbq	0x2(%rax), %rsi
-               	movzbq	0x3(%rax), %rax
-               	cmpl	$0x4, %ecx
+               	movzbq	<rip>, %rax # <addr>
+               	movzbq	<rip>, %rcx # <addr>
+               	movzbq	<rip>, %rdx # <addr>
+               	movzbq	<rip>, %rsi # <addr>
+               	cmpl	$0x4, %eax
                	jne	<addr>
-               	testl	%edx, %edx
+               	testl	%ecx, %ecx
                	jne	<addr>
-               	cmpl	$0x1, %esi
+               	cmpl	$0x1, %edx
                	jne	<addr>
-               	cmpl	$0x8, %eax
+               	cmpl	$0x8, %esi
                	je	<addr>
                	movl	<rip>, %eax # <addr>
                	incq	%rax

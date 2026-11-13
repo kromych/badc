@@ -55,12 +55,10 @@ Disassembly of section .text:
                	movw	$0x6968, <rip> # imm = 0x6968
                                                 # <addr>
                	movb	$0x0, <rip> # <addr>
-               	leaq	-0x18(%rbp), %rax
-               	addq	$0x8, %rax
-               	movl	(%rax), %ecx
-               	movl	0x4(%rax), %edx
-               	addq	%rdx, %rcx
-               	movl	0x8(%rax), %eax
+               	movl	-0x10(%rbp), %eax
+               	movl	-0xc(%rbp), %ecx
+               	addq	%rcx, %rax
+               	movl	-0x8(%rbp), %ecx
                	addq	%rcx, %rax
                	cmpl	$0xc, %eax
                	je	<addr>

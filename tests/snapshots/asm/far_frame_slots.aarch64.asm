@@ -157,21 +157,20 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x20]
                	ldur	x0, [x29, #-0x18]
                	add	x1, sp, #0x70
-               	add	x1, x1, #0x740
-               	ldr	x2, [x1]
-               	ldr	x3, [x1, #0x8]
+               	ldr	x2, [sp, #0x7b0]
+               	ldr	x3, [sp, #0x7b8]
                	add	x2, x2, x3
-               	ldr	x3, [x1, #0x10]
+               	ldr	x3, [sp, #0x7c0]
                	add	x2, x2, x3
-               	ldr	x3, [x1, #0x18]
+               	ldr	x3, [sp, #0x7c8]
                	add	x2, x2, x3
-               	ldr	x3, [x1, #0x20]
+               	ldr	x3, [sp, #0x7d0]
                	add	x2, x2, x3
-               	ldr	x3, [x1, #0x28]
+               	ldr	x3, [sp, #0x7d8]
                	add	x2, x2, x3
-               	ldr	x3, [x1, #0x30]
+               	ldr	x3, [sp, #0x7e0]
                	add	x2, x2, x3
-               	ldr	x3, [x1, #0x38]
+               	ldr	x3, [sp, #0x7e8]
                	add	x2, x2, x3
                	add	x0, x0, x2
                	stur	x0, [x29, #-0x18]
@@ -340,6 +339,7 @@ Disassembly of section .text:
                	add	sp, sp, #0xa0
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	add	x1, x1, #0x740
                	mov	x3, #0x0                // =0
                	mov	x4, x3
                	lsl	x2, x3, #3

@@ -124,7 +124,9 @@ pub(super) fn runs_without_linker(name: &str) -> bool {
 /// The locale (C17 7.11.1.1), the working directory, the signal actions and,
 /// on macOS, where `sigprocmask` applies to the process, the signal mask are
 /// the program's, and the programs the JIT runs share one process: a program
-/// that sets any of them runs with no other beside it.
+/// that sets any of them runs with no other beside it. So does one that starts
+/// a process, which inherits the inheritable handles of every program open
+/// then; on Windows a file a child holds open cannot be removed.
 static C_LIBRARY_STATE: std::sync::RwLock<()> = std::sync::RwLock::new(());
 
 /// The sources running now. A fixture names its files by process, and the
@@ -167,6 +169,12 @@ fn beside_others<R>(src: &str, run: impl FnOnce() -> R) -> R {
         "sigprocmask(",
         "sigaction(",
         "signal(",
+        "popen(",
+        "system(",
+        "_spawn",
+        "posix_spawn",
+        "CreateProcess",
+        "fork(",
     ]
     .iter()
     .any(|call| src.contains(call))

@@ -34,10 +34,8 @@ Disassembly of section .text:
                	retq
 
 <bs1>:
-               	movq	%rdi, %rax
-               	rorq	$0xe, %rax
-               	movq	%rdi, %rcx
-               	rorq	$0x12, %rcx
+               	rorxq	$0xe, %rdi, %rax
+               	rorxq	$0x12, %rdi, %rcx
                	xorq	%rcx, %rax
                	rorq	$0x29, %rdi
                	xorq	%rdi, %rax

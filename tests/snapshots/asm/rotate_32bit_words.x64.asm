@@ -26,18 +26,15 @@ Disassembly of section .text:
                	int3
 
 <ror2>:
-               	movq	%rdi, %rax
-               	rorl	$0x2, %eax
+               	rorxl	$0x2, %edi, %eax
                	retq
 
 <ror7>:
-               	movq	%rdi, %rax
-               	rorl	$0x7, %eax
+               	rorxl	$0x7, %edi, %eax
                	retq
 
 <rol13>:
-               	movq	%rdi, %rax
-               	rorl	$0x13, %eax
+               	rorxl	$0x13, %edi, %eax
                	retq
 
 <rotr_var>:

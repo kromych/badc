@@ -186,8 +186,7 @@ Disassembly of section .text:
                	movabsq	$-0xff00ff00ff0100, %rdx # imm = 0xFF00FF00FF00FF00
                	cmpl	%esi, %ecx
                	jge	<addr>
-               	movq	%rax, %r8
-               	rorq	$0x39, %r8
+               	rorxq	$0x39, %rax, %r8
                	movq	(%rdi,%rcx,8), %rax
                	movq	%rax, %r9
                	andq	%rdx, %r9
@@ -465,8 +464,7 @@ Disassembly of section .text:
                	movq	$0x1234, -0x10(%rbp)    # imm = 0x1234
                	movl	$0x1, %edx
                	xorl	%ecx, %ecx
-               	movq	%rdx, %rdi
-               	rorq	$0x39, %rdi
+               	rorxq	$0x39, %rdx, %rdi
                	movq	(%rsi,%rcx,8), %rdx
                	movq	-0x20(%rbp), %r8
                	andq	%rdx, %r8

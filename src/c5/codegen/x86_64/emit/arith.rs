@@ -1743,6 +1743,13 @@ pub(super) fn emit_binop_imm(
             super::encode::emit_imul_r_r_imm32(code, rd, rn, rhs_imm as i32);
             true
         }
+        // A rotate into another register is one `rorx` (BMI2, x86-64-v3).
+        BinOp::Ror | BinOp::Ror32 if rd.0 != rn.0 && shift_amount.is_some() => {
+            let w64 = op == BinOp::Ror;
+            let count = shift_amount.unwrap() & if w64 { 63 } else { 31 };
+            super::encode::emit_rorx(code, w64, rd, rn, count);
+            true
+        }
         BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror | BinOp::Ror32
             if shift_amount.is_some() =>
         {

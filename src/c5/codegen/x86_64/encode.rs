@@ -1310,6 +1310,20 @@ pub(crate) fn emit_vex_shift(
     emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
 }
 
+/// `RORX dst, src, imm` -- rotate right by an immediate into another
+/// register, flags untouched (BMI2). Encoding: `VEX.LZ.F2.0F3A.W1 F0 /r ib`,
+/// W0 for the 32-bit form.
+pub(crate) fn emit_rorx(code: &mut Vec<u8>, w64: bool, dst: Reg, src: Reg, imm: u8) {
+    let r = if dst.high() { 0u8 } else { 1u8 };
+    let b_bit = if src.high() { 0u8 } else { 1u8 };
+    emit_byte(code, 0xC4);
+    emit_byte(code, (r << 7) | (1 << 6) | (b_bit << 5) | 0b00011);
+    emit_byte(code, ((w64 as u8) << 7) | (0xF << 3) | 0b11);
+    emit_byte(code, 0xF0);
+    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
+    emit_byte(code, imm);
+}
+
 /// `CVTSI2SD xmm, r64` -- signed 64-bit int to double, with REX.W.
 /// Encoding: `F2 REX.W 0F 2A /r`.
 pub(crate) fn emit_cvtsi2sd(code: &mut Vec<u8>, dst: Reg, src: Reg) {

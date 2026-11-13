@@ -60,8 +60,7 @@ Disassembly of section .text:
                	movl	$0x28, %eax
                	leave
                	retq
-               	movq	%rax, %rcx
-               	rorq	$0x7, %rcx
+               	rorxq	$0x7, %rax, %rcx
                	movabsq	$-0x21fdb97530eca865, %r11 # imm = 0xDE02468ACF13579B
                	cmpq	%r11, %rcx
                	je	<addr>

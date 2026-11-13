@@ -61,10 +61,8 @@ Disassembly of section .text:
                	shlq	$0x4, %rdx
                	subq	%rax, %rdx
                	movl	%edx, %r8d
-               	movq	%r8, %rax
-               	rorl	$0x1c, %eax
-               	movq	%rcx, %rbx
-               	rorl	$0x4, %ebx
+               	rorxl	$0x1c, %r8d, %eax
+               	rorxl	$0x4, %ecx, %ebx
                	movl	(%rsi), %edx
                	xorq	%rdx, %rax
                	movl	0x4(%rsi), %edx

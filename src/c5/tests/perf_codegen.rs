@@ -7944,3 +7944,25 @@ long mix(int n) {\n\
         .count();
     assert!(loads >= 2 && stores >= 1 && frame_leas == 1, "{insns:x?}");
 }
+
+/// A rotate by an immediate whose source stays live is one `rorx` into the
+/// result's register (BMI2, part of the x86-64-v3 baseline), not a copy and
+/// a `ror`; the 32-bit rotate takes the W0 form.
+#[test]
+fn x64_a_rotate_into_another_register_is_rorx() {
+    const SRC: &str = "unsigned long sigma(unsigned long x) {\n\
+    return (x >> 14 | x << 50) ^ (x >> 18 | x << 46) ^ x;\n\
+}\n\
+unsigned sigma32(unsigned x) { return (x >> 7 | x << 25) ^ (x >> 18 | x << 14) ^ x; }\n";
+    use super::codegen::function_bytes;
+    let obj = object_at(SRC, Target::LinuxX64, true);
+    // C4, RXB / map 0F3A, W / vvvv=1111 / L0 / pp=F2, F0: `rorx`.
+    let rorx = |name: &str, w: u8| {
+        let code = function_bytes(&obj, name);
+        code.windows(4)
+            .filter(|b| b[0] == 0xC4 && b[1] & 0x1F == 3 && b[2] == (w << 7) | 0x7B && b[3] == 0xF0)
+            .count()
+    };
+    assert_eq!(rorx("sigma", 1), 2);
+    assert!(rorx("sigma32", 0) >= 1);
+}

@@ -7685,7 +7685,13 @@ fn x64_branch_groups_stay_within_32_byte_windows() {
             branches_within_32b: on,
             ..NativeOptions::new().with_optimize()
         };
-        let obj = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+        // The full banks, whatever caps the environment sets.
+        let obj = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(
+            usize::MAX,
+            usize::MAX,
+            || emit_native_with_options(&program, Target::LinuxX64, opts),
+        )
+        .expect("emit");
         let start = elf_func_value(&obj, "match").expect("match") as usize;
         let insns = x64_insns(&function_bytes(&obj, "match"));
         // cmp, test, add, sub, and, inc and dec in the forms the backend emits.

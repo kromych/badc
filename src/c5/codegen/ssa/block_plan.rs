@@ -459,7 +459,8 @@ fn forwards_to(func: &FunctionSsa, alloc: &Allocation, b: BlockId) -> Option<Blo
         .inst_range
         .clone()
         .all(|v| emits_nothing(&func.insts[v as usize], v, alloc));
-    (t != b && silent && edge_moves(func, alloc, b, t).is_empty()).then_some(t)
+    (t != b && silent && edge_moves(func, alloc, b, t).is_empty() && !alloc.loop_saves.touches(b))
+        .then_some(t)
 }
 
 /// The arms of `h` when a second copy of it may run: a bounded run of
@@ -515,13 +516,15 @@ fn repeatable_arms(
         }
     }
     let quiet = |s: BlockId| edge_moves(func, alloc, h, s).is_empty();
-    (quiet(target) && quiet(fall_through)).then_some((target, fall_through))
+    (quiet(target) && quiet(fall_through) && !alloc.loop_saves.touches(h))
+        .then_some((target, fall_through))
 }
 
 /// `h` is only an indirect branch whose edges move nothing.
 fn repeatable_indirect(func: &FunctionSsa, alloc: &Allocation, h: BlockId) -> bool {
     let block = &func.blocks[h as usize];
     matches!(block.terminator, Terminator::GotoIndirect { .. })
+        && !alloc.loop_saves.touches(h)
         && block
             .inst_range
             .clone()
@@ -621,6 +624,7 @@ mod tests {
             wide: alloc::vec![crate::c5::codegen::ssa::reg_alloc::VecWidth::Scalar; n],
             asm_preserve: (u32::MAX, u32::MAX),
             call_saves: Vec::new(),
+            loop_saves: Default::default(),
         }
     }
 

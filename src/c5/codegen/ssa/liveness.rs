@@ -525,6 +525,28 @@ impl BlockLiveness {
         }
     }
 
+    /// Every value live on entry to `b`, in ascending value order.
+    pub(crate) fn for_each_live_in(&self, b: BlockId, mut f: impl FnMut(ValueId)) {
+        match &self.live {
+            LiveSets::Dense { words, live_in, .. } => {
+                let base = b as usize * words;
+                for w in 0..*words {
+                    let mut bits = live_in[base + w];
+                    while bits != 0 {
+                        let r = w * 64 + bits.trailing_zeros() as usize;
+                        f(self.universe[r]);
+                        bits &= bits - 1;
+                    }
+                }
+            }
+            LiveSets::Sparse(s) => {
+                for &r in s.in_row(b) {
+                    f(self.universe[r as usize]);
+                }
+            }
+        }
+    }
+
     /// Every value live on exit from `b`, in ascending value order.
     pub(crate) fn for_each_live_out(&self, b: BlockId, mut f: impl FnMut(ValueId)) {
         match &self.live {

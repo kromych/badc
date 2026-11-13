@@ -38,7 +38,7 @@
 use alloc::vec;
 use alloc::vec::Vec;
 
-use super::super::ir::{FunctionSsa, Inst, NO_VALUE, Terminator, ValueId};
+use super::super::ir::{BlockId, FunctionSsa, Inst, NO_VALUE, Terminator, ValueId};
 use super::reg_alloc::{Allocation, Place};
 use super::tape::{At, Insertion, Undo};
 use super::{FixedRegs, Target};
@@ -280,6 +280,13 @@ pub(super) fn spill_traffic(func: &FunctionSsa, alloc: &Allocation) -> u64 {
                 total = total.saturating_add(wb);
             }
         });
+        // The stores and loads of the registers saved around loops.
+        let saves = &alloc.loop_saves;
+        let b = b as BlockId;
+        let moved = saves.stores_at(b).len()
+            + saves.loads_at_start_of(b).len()
+            + saves.loads_at_end_of(b).len();
+        total = total.saturating_add(wb.saturating_mul(moved as u64));
     }
     total
 }
@@ -413,6 +420,7 @@ mod tests {
             wide: vec![crate::c5::codegen::ssa::reg_alloc::VecWidth::Scalar; n],
             asm_preserve: (u32::MAX, u32::MAX),
             call_saves: Vec::new(),
+            loop_saves: Default::default(),
         }
     }
 

@@ -3265,6 +3265,84 @@ void put4(struct R *o, char c, int i) { *o = (struct R){c, i}; }\n";
     m.finish();
 }
 
+/// Ten values used in one inner loop live through a second that never reads
+/// them; they give their registers up for its duration, stored ahead of it
+/// and loaded past it, so the second loop's own values touch no frame slot.
+#[test]
+fn a_loop_takes_the_registers_of_values_living_through_it() {
+    const SRC: &str = "long f(const unsigned char *a, const unsigned char *b, long n, long m,\n\
+        const long *o) {\n\
+    long x0 = o[0], x1 = o[1], x2 = o[2], x3 = o[3], x4 = o[4], x5 = o[5], x6 = o[6];\n\
+    long x7 = o[7], x8 = o[8], x9 = o[9];\n\
+    long k = 0;\n\
+    for (long r = 0; r < n; r++) {\n\
+        for (long j = 0; j < m; j++)\n\
+            k += (x0 * j) ^ (x1 + j) ^ (x2 - j) ^ (x3 | j) ^ (x4 & j) ^ (x5 << (j & 7))\n\
+                ^ (x6 >> (j & 7)) ^ (x7 + x8 * j) ^ x9;\n\
+        const unsigned char *p = a + r, *q = b;\n\
+        long len = 0;\n\
+        for (; len < m; len++)\n\
+            if (*p++ != *q++)\n\
+                break;\n\
+        k += len;\n\
+    }\n\
+    return k;\n\
+}\n";
+    let mut m = Misses::default();
+    // x86-64: from the back edge's target to the back edge that closes the
+    // loop holding the first byte load.
+    let insns = x64(SRC, "f");
+    let frame = |i: &X64Insn| {
+        let Some(modrm) = i.modrm.filter(|m| m >> 6 != 3) else {
+            return false;
+        };
+        match modrm & 7 {
+            4 => i.sib.is_some_and(|s| s & 7 == 4) && i.rex & 1 == 0,
+            5 => modrm >> 6 != 0 && i.rex & 1 == 0,
+            _ => false,
+        }
+    };
+    let jcc = |i: &X64Insn| matches!(i.op, 0x70..=0x7F | 0x0F80..=0x0F8F);
+    let load = insns.iter().position(|i| i.op == 0x0FB6);
+    let back = load.and_then(|l| (l..insns.len()).find(|&k| jcc(&insns[k]) && insns[k].imm < 0));
+    let body = load.zip(back).map(|(_, b)| {
+        let target = (insns[b].at + insns[b].len) as i64 + insns[b].imm;
+        let head = insns
+            .iter()
+            .position(|i| i.at as i64 == target)
+            .unwrap_or(b);
+        &insns[head..=b]
+    });
+    m.expect(body.is_some_and(|body| !body.iter().any(frame)), || {
+        format!("x86-64: {insns:x?}")
+    });
+    // AArch64: the same span between the byte load and its back edge.
+    let words = a64(SRC, "f");
+    let ldrb = |w: u32| w & 0xFFC0_0000 == 0x3940_0000;
+    let off_frame = |w: u32| {
+        let base = (w >> 5) & 31;
+        let access = a64_mem_imm(w).is_some() || w & 0x3A00_0000 == 0x2800_0000;
+        access && (base == 31 || base == 29)
+    };
+    let back = |k: usize| {
+        let w = words[k];
+        (w & 0xFF00_0010 == 0x5400_0000 && (w >> 23) & 1 == 1)
+            || (w & 0x7E00_0000 == 0x3400_0000 && (w >> 23) & 1 == 1)
+    };
+    let load = words.iter().position(|&w| ldrb(w));
+    let closing = load.and_then(|l| (l..words.len()).find(|&k| back(k)));
+    let span = load.zip(closing).map(|(_, b)| {
+        let imm19 = ((words[b] >> 5) & 0x7FFFF) as i64;
+        let target = b as i64 + (imm19 - (1 << 19));
+        &words[target.max(0) as usize..=b]
+    });
+    m.expect(
+        span.is_some_and(|s| !s.iter().any(|&w| off_frame(w))),
+        || format!("aarch64: {words:08x?}"),
+    );
+    m.finish();
+}
+
 /// A member of an element before the pointer is reached through the
 /// access's own displacement, composed with the member's offset where the
 /// element's address feeds several members: no `lea` on x86-64, an

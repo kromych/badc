@@ -874,6 +874,11 @@ impl FunctionEmitter<'_, '_> {
             if bti {
                 emit(self.cx.code, super::encode::BTI_J);
             }
+            let saves = &alloc.loop_saves;
+            let b = block_idx as BlockId;
+            for s in saves.loads_at_start_of(b) {
+                call_save(self.cx.code, frame, s, false);
+            }
             for v in block.inst_range.clone() {
                 if self.plan.lowers(block_idx, v) {
                     self.emit_block_inst(block, v)?;
@@ -883,6 +888,11 @@ impl FunctionEmitter<'_, '_> {
             // a naked function's synthetic return, which emits nothing.
             if !(func.is_naked && matches!(block.terminator, Terminator::Return(_))) {
                 self.align_stream();
+            }
+            // A loop's saves go ahead of the moves into its header's phis,
+            // which may take the saved registers.
+            for s in saves.stores_at(b) {
+                call_save(self.cx.code, frame, s, true);
             }
             if let Err(e) = emit_phi_predecessor_moves(
                 self.cx.code,
@@ -894,6 +904,9 @@ impl FunctionEmitter<'_, '_> {
                 &mut self.fp_literals,
             ) {
                 return self.rollback(e);
+            }
+            for s in saves.loads_at_end_of(b) {
+                call_save(self.cx.code, frame, s, false);
             }
             self.emit_terminator(block_idx, block)?;
         }

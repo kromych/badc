@@ -13,6 +13,7 @@ pub(crate) mod early_exit;
 pub(crate) mod emit_common;
 pub(crate) mod licm;
 pub(crate) mod liveness;
+pub(crate) mod loop_saves;
 pub(crate) mod mem2reg;
 pub(crate) mod native;
 pub(crate) mod phi_class;

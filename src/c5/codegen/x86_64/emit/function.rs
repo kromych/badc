@@ -770,10 +770,20 @@ impl FnEmit<'_, '_> {
             self.ret_tags,
             target,
         );
+        let saves = &alloc.loop_saves;
+        let b = block_idx as super::super::ir::BlockId;
+        for s in saves.loads_at_start_of(b) {
+            call_save(self.out.cx.code, frame, s, false);
+        }
         for v in block.inst_range.clone() {
             if self.plan.lowers(block_idx, v) {
                 self.emit_block_inst(block, v, tail_call)?;
             }
+        }
+        // A loop's saves go ahead of the moves into its header's phis, which
+        // may take the saved registers.
+        for s in saves.stores_at(b) {
+            call_save(self.out.cx.code, frame, s, true);
         }
         // Predecessor-exit moves for the phis at every successor's head.
         emit_phi_predecessor_moves(
@@ -783,6 +793,9 @@ impl FnEmit<'_, '_> {
             alloc,
             frame,
         )?;
+        for s in saves.loads_at_end_of(b) {
+            call_save(self.out.cx.code, frame, s, false);
+        }
         self.emit_terminator(block_idx, block, tail_call)
     }
 

@@ -23,8 +23,10 @@
 //!    a fresh spill slot -- or, for a value surviving calls whose
 //!    loop-weighted saves cost less than its spill, a caller-saved
 //!    register each of those calls stores and reloads around itself
-//!    ([`Allocation::call_saves`]). Pre-coloring of call arguments into
-//!    the host argument registers is left to the per-arch emit pass.
+//!    ([`Allocation::call_saves`]), or, for a value lying in a loop, a
+//!    register only values living through the loop hold, saved around it
+//!    ([`super::loop_saves`]). Pre-coloring of call arguments into the
+//!    host argument registers is left to the per-arch emit pass.
 //!
 //! The output is intentionally minimal: each `Place` is either
 //! one of the host's GPRs / FP regs or a stack slot's byte offset
@@ -229,6 +231,57 @@ pub(crate) struct Allocation {
     /// live across it, each stored to its slot ahead of the call and
     /// loaded back after it.
     pub call_saves: Vec<(ValueId, Vec<CallSave>)>,
+    /// The registers saved around loops.
+    pub loop_saves: LoopSaveCode,
+}
+
+/// The code the saves around loops add at block boundaries
+/// ([`super::loop_saves`]).
+#[derive(Clone, Debug, Default)]
+pub(crate) struct LoopSaveCode {
+    /// Per block: saves stored at its end, ahead of its phi moves.
+    pub stores: Vec<(crate::c5::ir::BlockId, Vec<CallSave>)>,
+    /// Per block: saves loaded at its start.
+    pub loads_at_start: Vec<(crate::c5::ir::BlockId, Vec<CallSave>)>,
+    /// Per block: saves loaded at its end, past its phi moves.
+    pub loads_at_end: Vec<(crate::c5::ir::BlockId, Vec<CallSave>)>,
+}
+
+impl LoopSaveCode {
+    fn of(
+        list: &[(crate::c5::ir::BlockId, Vec<CallSave>)],
+        b: crate::c5::ir::BlockId,
+    ) -> &[CallSave] {
+        list.iter()
+            .find(|(x, _)| *x == b)
+            .map_or(&[][..], |(_, s)| s.as_slice())
+    }
+
+    pub(crate) fn stores_at(&self, b: crate::c5::ir::BlockId) -> &[CallSave] {
+        Self::of(&self.stores, b)
+    }
+
+    pub(crate) fn loads_at_start_of(&self, b: crate::c5::ir::BlockId) -> &[CallSave] {
+        Self::of(&self.loads_at_start, b)
+    }
+
+    pub(crate) fn loads_at_end_of(&self, b: crate::c5::ir::BlockId) -> &[CallSave] {
+        Self::of(&self.loads_at_end, b)
+    }
+
+    /// Whether block `b` holds any of this code.
+    pub(crate) fn touches(&self, b: crate::c5::ir::BlockId) -> bool {
+        !(self.stores_at(b).is_empty()
+            && self.loads_at_start_of(b).is_empty()
+            && self.loads_at_end_of(b).is_empty())
+    }
+
+    fn all(&self) -> impl Iterator<Item = &CallSave> {
+        (self.stores.iter())
+            .chain(&self.loads_at_start)
+            .chain(&self.loads_at_end)
+            .flat_map(|(_, s)| s)
+    }
 }
 
 /// A register a call saves and restores around itself ([`Allocation::call_saves`]).
@@ -1614,6 +1667,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             wide: Vec::new(),
             asm_preserve: (u32::MAX, u32::MAX),
             call_saves: Vec::new(),
+            loop_saves: LoopSaveCode::default(),
         };
     }
 
@@ -1758,6 +1812,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     }
     let (max_gpr, max_fpr) = pool_size_limits();
     let spill_weights = compute_spill_weights(func, &node_of, &liveness);
+    let loops = (!func.has_returns_twice_call)
+        .then(|| super::loop_saves::analyze(func, &liveness, &node_of, &block_weights(func)))
+        .flatten();
     let color = |node_cons: &[Option<NodeConstraints>]| {
         color_graph(
             &value_interference,
@@ -1769,6 +1826,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             func.has_returns_twice_call,
             &spill_weights,
             &apart,
+            loops.as_ref(),
         )
     };
     let mut coloring = color(&node_cons);
@@ -1864,6 +1922,12 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     let saves_at = call_save_lists(
         (&crossings, &node_of),
         (&coloring.saved, &node_cons, &places),
+        &mut spill_count,
+    );
+    let loop_code = loop_save_code(
+        loops.as_ref(),
+        &coloring.loop_saved,
+        (&node_cons, &places),
         &mut spill_count,
     );
     // A copy or an atomic read-modify-write may take any register as a
@@ -2401,7 +2465,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             Place::None => {}
         }
     }
-    for save in saves_at.iter().flat_map(|(_, saves)| saves) {
+    for save in (saves_at.iter().flat_map(|(_, saves)| saves)).chain(loop_code.all()) {
         slots_end = slots_end.max(save.slot + save.wide.units());
     }
     let spill_count = spill_count.min(slots_end);
@@ -2469,11 +2533,26 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     verify_allocation(
         func,
         &places,
-        target,
-        &banks,
+        (target, &banks),
         &liveness,
         &fp_const,
         &use_counts,
+        (
+            &|a: ValueId, b: ValueId| {
+                let Some(info) = loops.as_ref() else {
+                    return false;
+                };
+                let (na, nb) = (node_of[a as usize], node_of[b as usize]);
+                let lies = |x: ValueId, saved: ValueId| {
+                    info.inside[x as usize].is_some_and(|inner| {
+                        (coloring.loop_saved.iter())
+                            .any(|&(l, n)| n == saved && info.encloses(l, inner))
+                    })
+                };
+                lies(na, nb) || lies(nb, na)
+            },
+            &saves_at,
+        ),
     );
 
     let asm_preserve = asm_preserve_masks(func, target, region_base);
@@ -2513,6 +2592,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         wide,
         asm_preserve,
         call_saves: saves_at,
+        loop_saves: loop_code,
     }
 }
 
@@ -2561,6 +2641,60 @@ fn call_save_lists(
     }
     out.sort_unstable_by_key(|&(site, _)| site);
     out
+}
+
+/// The stores and loads of the saves around loops the coloring chose, with a
+/// slot per node, which the reservation grows by.
+fn loop_save_code(
+    loops: Option<&super::loop_saves::LoopSaves>,
+    saved: &[(u32, ValueId)],
+    (node_cons, places): (&[Option<NodeConstraints>], &[Place]),
+    spill_count: &mut u32,
+) -> LoopSaveCode {
+    let mut code = LoopSaveCode::default();
+    let Some(info) = loops else {
+        return code;
+    };
+    let mut slots: alloc::collections::BTreeMap<ValueId, u32> = alloc::collections::BTreeMap::new();
+    let at = |list: &mut Vec<(crate::c5::ir::BlockId, Vec<CallSave>)>,
+              b: crate::c5::ir::BlockId,
+              save: CallSave| {
+        match list.iter_mut().find(|(x, _)| *x == b) {
+            Some((_, saves)) if !saves.contains(&save) => saves.push(save),
+            Some(_) => {}
+            None => list.push((b, alloc::vec![save])),
+        }
+    };
+    for &(l, node) in saved {
+        let (reg, is_fp) = match places[node as usize] {
+            Place::IntReg(r) => (r, false),
+            Place::FpReg(r) => (r, true),
+            _ => continue,
+        };
+        let Some(t) = info.through(l, node) else {
+            continue;
+        };
+        let wide = node_cons[node as usize].map_or(VecWidth::Scalar, |c| c.wide);
+        let slot = *slots.entry(node).or_insert_with(|| {
+            let s = *spill_count;
+            *spill_count += wide.units();
+            s
+        });
+        let save = CallSave {
+            reg,
+            is_fp,
+            wide,
+            slot,
+        };
+        at(&mut code.stores, info.loops[l as usize].preheader, save);
+        for &r in &t.reloads {
+            match r {
+                super::loop_saves::Reload::Start(b) => at(&mut code.loads_at_start, b, save),
+                super::loop_saves::Reload::End(b) => at(&mut code.loads_at_end, b, save),
+            }
+        }
+    }
+    code
 }
 
 /// Values live across each `Inst::InlineAsm` site, paired with the
@@ -2823,14 +2957,25 @@ fn asm_preserve_masks(func: &FunctionSsa, target: Target, region_base: Option<u8
 fn verify_allocation(
     func: &FunctionSsa,
     places: &[Place],
-    target: Target,
-    banks: &RegBanks,
+    (target, banks): (Target, &RegBanks),
     liveness: &super::liveness::Liveness,
     fp_const: &[bool],
     use_counts: &[u32],
+    saves: (
+        &dyn Fn(ValueId, ValueId) -> bool,
+        &[(ValueId, Vec<CallSave>)],
+    ),
 ) {
     if std::env::var("BADC_VERIFY_ALLOC").is_ok() {
-        check_allocation(func, places, target, banks, liveness, fp_const, use_counts);
+        check_allocation(
+            func,
+            places,
+            (target, banks),
+            liveness,
+            fp_const,
+            use_counts,
+            saves,
+        );
     }
 }
 
@@ -2861,15 +3006,21 @@ fn verify_allocation(
 /// instructions in `insts` as inert immediates; nothing emits them, so
 /// their place names no register any code writes. The coverage check is
 /// what establishes that per function rather than assuming it.
+/// Two values `shares` names may hold one register while both are live: one
+/// lies in a loop the other's register is saved around. A register a call
+/// saves around itself (`call_saves`) holds a value across it.
 #[cfg(feature = "codegen_test")]
 fn check_allocation(
     func: &FunctionSsa,
     places: &[Place],
-    target: Target,
-    banks: &RegBanks,
+    (target, banks): (Target, &RegBanks),
     liveness: &super::liveness::Liveness,
     fp_const: &[bool],
     use_counts: &[u32],
+    (shares, call_saves): (
+        &dyn Fn(ValueId, ValueId) -> bool,
+        &[(ValueId, Vec<CallSave>)],
+    ),
 ) {
     let first = core::cell::RefCell::new(None::<alloc::string::String>);
     let report = |msg: alloc::string::String| {
@@ -2907,12 +3058,19 @@ fn check_allocation(
         }
         let (gpr, fpr) = call_clobbers(inst, target, target, FixedRegs::NONE);
         let cid = c as ValueId;
+        // A register the call saves and restores around itself.
+        let kept = (call_saves.iter())
+            .find(|(site, _)| *site == cid)
+            .map_or(&[][..], |(_, s)| s.as_slice());
+        let kept = |r: u8, fp: bool| kept.iter().any(|s| s.reg == r && s.is_fp == fp);
         for v in 0..func.insts.len() {
             let vid = v as ValueId;
             if vid == cid || !covered(v) || !liveness.live_after(func, vid, cid) {
                 continue;
             }
             match places.get(v).copied().unwrap_or(Place::None) {
+                Place::IntReg(r) if kept(r, false) => {}
+                Place::FpReg(r) if kept(r, true) => {}
                 Place::IntReg(r) if banks.caller_gprs.contains(&r) || gpr & (1 << r) != 0 => {
                     report(alloc::format!(
                         "cross-call: v{v} in int reg {r}, which the call at v{c} may change, \
@@ -3002,7 +3160,8 @@ fn check_allocation(
     for (k, vs) in &by_place {
         for i in 0..vs.len() {
             for j in (i + 1)..vs.len() {
-                if liveness.interfere(func, vs[i] as ValueId, vs[j] as ValueId) {
+                let (a, b) = (vs[i] as ValueId, vs[j] as ValueId);
+                if liveness.interfere(func, a, b) && !(k.0 < 2 && shares(a, b)) {
                     report(alloc::format!(
                         "interference: v{} and v{} share place {k:?} yet interfere",
                         vs[i],
@@ -3207,6 +3366,9 @@ pub(crate) struct Coloring {
     /// Per node: in a caller-saved register saved around the calls it
     /// crosses.
     pub saved: Vec<bool>,
+    /// `(loop, node)`: a node whose register is saved around a loop
+    /// ([`super::loop_saves`]).
+    pub loop_saved: Vec<(u32, ValueId)>,
 }
 
 #[cfg(feature = "std")]
@@ -3319,10 +3481,12 @@ pub(crate) fn color_graph(
     no_slot_share: bool,
     weights: &[u64],
     apart: &[Vec<ValueId>],
+    loops: Option<&super::loop_saves::LoopSaves>,
 ) -> Coloring {
     let n = node_of.len();
     let mut color: Vec<Place> = vec![Place::None; n];
     let mut saved: Vec<bool> = vec![false; n];
+    let mut loop_saved: Vec<(u32, ValueId)> = Vec::new();
     let mut spill_count: u32 = 0;
     // Coloring order: highest spill weight first, so the coldest values
     // are the ones left without a register when a bank fills. The id
@@ -3496,6 +3660,61 @@ pub(crate) fn color_graph(
             saved[node] = true;
             Some(r)
         });
+        // Left to spill, a node lying in a loop takes a register only values
+        // living through the loop hold, saved around it, when the saves
+        // cost less than its spill.
+        let pick = pick.or_else(|| {
+            let info = loops?;
+            let l = (*info.inside.get(node)?)?;
+            let spill_cost = weights
+                .get(node)
+                .copied()
+                .unwrap_or(0)
+                .saturating_add(c.def_cost);
+            let around = |saves: &[(u32, ValueId)], root: ValueId| {
+                saves.iter().any(|&(o, n)| n == root && info.encloses(o, l))
+            };
+            let mut cost = [0u64; 64];
+            let mut blocked = [false; 64];
+            for (r, b) in blocked.iter_mut().enumerate() {
+                *b = ((c.forbid | c.call_forbid) >> r) & 1 != 0;
+            }
+            let mut holders: Vec<(u8, ValueId)> = Vec::new();
+            for &m in &memb_val[memb_off[node] as usize..memb_off[node + 1] as usize] {
+                for &nb in interference.neighbors(m) {
+                    let root = node_of[nb as usize];
+                    let r = match color[root as usize] {
+                        Place::IntReg(r) if !c.is_fp => r,
+                        Place::FpReg(r) if c.is_fp => r,
+                        _ => continue,
+                    };
+                    if root as usize == node || holders.contains(&(r, root)) {
+                        continue;
+                    }
+                    holders.push((r, root));
+                    if around(&loop_saved, root) {
+                        continue;
+                    }
+                    match info.through(l, root) {
+                        Some(t) => cost[r as usize] = cost[r as usize].saturating_add(t.cost),
+                        None => blocked[r as usize] = true,
+                    }
+                }
+            }
+            let r = (caller.iter().filter(|_| !c.must_callee))
+                .chain(callee)
+                .copied()
+                .filter(|&r| !blocked[r as usize])
+                .min_by_key(|&r| cost[r as usize])
+                .filter(|&r| cost[r as usize] < spill_cost)?;
+            for &(_, root) in holders.iter().filter(|&&(hr, _)| hr == r) {
+                if !around(&loop_saved, root) {
+                    loop_saved.retain(|&(o, n)| !(n == root && info.encloses(l, o)));
+                    loop_saved.push((l, root));
+                }
+            }
+            Some(r)
+        });
         color[node] = match pick {
             Some(r) if c.is_fp => Place::FpReg(r),
             Some(r) => Place::IntReg(r),
@@ -3544,6 +3763,7 @@ pub(crate) fn color_graph(
         places,
         spill_count,
         saved,
+        loop_saved,
     }
 }
 
@@ -5280,6 +5500,7 @@ mod tests {
             false,
             &[],
             &[],
+            None,
         );
         assert_eq!(
             r.places,
@@ -5308,6 +5529,7 @@ mod tests {
             false,
             &[],
             &[],
+            None,
         );
         assert_eq!(r.places, vec![Place::FpReg(8), Place::Spill(0)]);
     }
@@ -5415,11 +5637,11 @@ mod tests {
                 check_allocation(
                     func,
                     places,
-                    target,
-                    &banks,
+                    (target, &banks),
                     &liveness,
                     &fp_const,
                     &alloc.use_counts,
+                    (&|_, _| false, &alloc.call_saves),
                 )
             }))
         };
@@ -5712,6 +5934,7 @@ int main(void) { return 0; }
             false,
             &[],
             &[],
+            None,
         );
         assert_eq!(r.spill_count, 0);
         let regs: Vec<Place> = r.places.clone();
@@ -5739,6 +5962,7 @@ int main(void) { return 0; }
             false,
             &[],
             &[],
+            None,
         );
         assert_eq!(
             r.spill_count, 1,
@@ -5778,6 +6002,7 @@ int main(void) { return 0; }
                     false,
                     &[],
                     &[],
+                    None,
                 )
             };
             let callee = banks.callee_gprs.len();
@@ -5820,6 +6045,7 @@ int main(void) { return 0; }
             false,
             &[],
             &[],
+            None,
         );
         assert_eq!(shared.spill_count, 1, "non-interfering spills share");
         assert_eq!(shared.places[4], shared.places[5]);
@@ -5833,6 +6059,7 @@ int main(void) { return 0; }
             true,
             &[],
             &[],
+            None,
         );
         assert_eq!(r.spill_count, 2, "returns-twice: one slot per value");
         assert_eq!(r.places[4], Place::Spill(0));
@@ -5856,6 +6083,7 @@ int main(void) { return 0; }
             false,
             &[],
             &[],
+            None,
         );
         assert!(
             matches!(r.places[0], Place::IntReg(20) | Place::IntReg(21)),
@@ -5887,6 +6115,7 @@ int main(void) { return 0; }
                 false,
                 &[30, 20, 10],
                 &[],
+                None,
             );
             let want = if saved {
                 matches!(r.places[2], Place::IntReg(0 | 1))
@@ -5915,6 +6144,7 @@ int main(void) { return 0; }
             false,
             &[],
             &[],
+            None,
         );
         assert!(
             matches!(r.places[0], Place::IntReg(0) | Place::IntReg(1)),
@@ -5938,6 +6168,7 @@ int main(void) { return 0; }
             false,
             &[],
             &[],
+            None,
         );
         assert_eq!(
             r.places[0],
@@ -5964,6 +6195,7 @@ int main(void) { return 0; }
             false,
             &[],
             &[],
+            None,
         );
         assert_eq!(r.places[0], r.places[1], "class members share a register");
         assert_ne!(r.places[0], r.places[2]);
@@ -5991,6 +6223,7 @@ int main(void) { return 0; }
             false,
             &[1, 100, 100],
             &[],
+            None,
         );
         assert_eq!(cold.spill_count, 1);
         assert!(
@@ -6010,6 +6243,7 @@ int main(void) { return 0; }
             false,
             &[100, 1, 1],
             &[],
+            None,
         );
         assert!(
             matches!(hot.places[0], Place::IntReg(_)),
@@ -6047,6 +6281,7 @@ int main(void) { return 0; }
             false,
             &equal,
             &[],
+            None,
         );
         let b = color_graph(
             &g,
@@ -6058,6 +6293,7 @@ int main(void) { return 0; }
             false,
             &equal,
             &[],
+            None,
         );
         assert_eq!(
             a.places, b.places,
@@ -7532,6 +7768,7 @@ int main(void) { return 0; }
             false,
             weights,
             apart,
+            None,
         )
         .places
     }

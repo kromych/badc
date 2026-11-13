@@ -101,12 +101,10 @@ Disassembly of section .text:
                	cmp	x0, #0xc6
                	b.ne	<addr>
                	smov	x0, v8.h[2]
-               	mov	x17, #-0x7              // =-7
-               	cmp	x0, x17
+               	cmn	x0, #0x7
                	b.ne	<addr>
                	smov	x0, v8.h[3]
-               	mov	x17, #-0x194            // =-404
-               	cmp	x0, x17
+               	cmn	x0, #0x194
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp, #0x20]
@@ -129,8 +127,7 @@ Disassembly of section .text:
                	ret
                	smov	x0, v8.h[3]
                	sxth	x0, w0
-               	mov	x17, #-0x194            // =-404
-               	cmp	w0, w17
+               	cmn	w0, #0x194
                	b.ne	<addr>
                	smov	x0, v8.h[1]
                	cmp	x0, #0xc6

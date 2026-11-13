@@ -375,8 +375,7 @@ Disassembly of section .text:
                	bl	<addr>
                	ldrsw	x0, [x0]
                	cbnz	x0, <addr>
-               	mov	x17, #-0x14             // =-20
-               	cmp	w20, w17
+               	cmn	w20, #0x14
                	b.lt	<addr>
                	cmp	w20, #0x14
                	b.gt	<addr>
@@ -404,8 +403,7 @@ Disassembly of section .text:
                	ldursw	x0, [x29, #-0x28]
                	bl	<addr>
                	sxtw	x0, w0
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	b.ne	<addr>
                	bl	<addr>
                	ldrsw	x0, [x0]

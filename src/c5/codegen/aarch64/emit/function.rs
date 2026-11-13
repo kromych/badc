@@ -132,6 +132,9 @@ struct FunctionEmitter<'a, 'b> {
     lane_mem: Vec<bool>,
     /// Pointer steps and the accesses performing them ([`post_indexed`]).
     post_index: Vec<Option<PostIndex>>,
+    /// Steps whose flags a branch reads, and the comparisons they answer
+    /// ([`flag_steps`]).
+    flag_steps: Vec<Option<FlagStep>>,
     block_offsets: Vec<usize>,
     branch_fixups: Vec<BranchFixup>,
     /// Per block: its conditional branch does not reach its target and
@@ -339,6 +342,7 @@ pub(crate) fn emit_function(
         prebatched: Vec::new(),
         lane_mem: lane_memory(func, alloc),
         post_index: post_indexed(func, alloc),
+        flag_steps: flag_steps(func, alloc),
         block_offsets: alloc::vec![0; func.blocks.len()],
         branch_fixups: Vec::new(),
         far_cond: alloc::vec![false; func.blocks.len()],
@@ -1016,7 +1020,8 @@ impl FunctionEmitter<'_, '_> {
             call_save(self.cx.code, self.fcx.frame, s, true);
         }
         let fused = emit_lane_memory(self.cx.code, inst, &self.lane_mem, place, &self.fcx)
-            .or_else(|| emit_post_indexed(self.cx.code, v, &self.post_index, &self.fcx));
+            .or_else(|| emit_post_indexed(self.cx.code, v, &self.post_index, &self.fcx))
+            .or_else(|| emit_flag_step(self.cx.code, v, &self.flag_steps, &self.fcx));
         let lowered = fused.unwrap_or_else(|| {
             emit_inst(
                 self.cx,
@@ -1273,7 +1278,9 @@ impl FunctionEmitter<'_, '_> {
                     negate,
                 } => (taken, other, negate),
             };
-        if let Some(bcc) = fused_branch_cond(func, alloc, cond, negate) {
+        if let Some(bcc) = flag_step_cond(&self.flag_steps, cond, negate)
+            .or_else(|| fused_branch_cond(func, alloc, cond, negate))
+        {
             self.emit_cond(block_idx, target, LocalBranchKind::Bcc(bcc));
             return self.branch_unless_next(block_idx, fall_through);
         }

@@ -228,14 +228,12 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x1, #0x34               // =52
                	mov	x2, #0x0                // =0
-               	mov	x17, #-0x2              // =-2
-               	cmp	x0, x17
+               	cmn	x0, #0x2
                	csel	x4, x2, x1, eq
                	b	<addr>
                	mov	x1, #0x33               // =51
                	mov	x2, #0x0                // =0
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	csel	x4, x2, x1, eq
                	b	<addr>
                	mov	x1, #0x32               // =50
@@ -288,8 +286,7 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x1, #0x2b               // =43
                	mov	x2, #0x0                // =0
-               	mov	x17, #-0x10             // =-16
-               	cmp	x0, x17
+               	cmn	x0, #0x10
                	csel	x4, x2, x1, eq
                	b	<addr>
                	and	x1, x5, #0xff
@@ -301,8 +298,7 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x1, #0x29               // =41
                	mov	x2, #0x0                // =0
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	csel	x4, x2, x1, eq
                	b	<addr>
                	ubfx	x1, x5, #8, #12

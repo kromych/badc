@@ -164,8 +164,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	adrp	x0, <page>
                	ldrsw	x0, [x0, #0xb0]
-               	mov	x17, #-0x1              // =-1
-               	cmp	w0, w17
+               	cmn	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x9                // =9
                	add	sp, sp, #0x10

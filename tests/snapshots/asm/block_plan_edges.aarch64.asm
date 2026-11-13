@@ -101,8 +101,8 @@ Disassembly of section .text:
                	add	x2, x2, #0x5
                	tst	x0, #0x1
                	csel	x2, x1, x2, ne
-               	add	x0, x0, #0x1
-               	cbnz	w0, <addr>
+               	adds	w0, w0, #0x1
+               	b.ne	<addr>
                	mov	x0, x2
                	ret
 
@@ -480,8 +480,7 @@ Disassembly of section .text:
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	bl	<addr>
-               	mov	x17, #-0x3c             // =-60
-               	cmp	x0, x17
+               	cmn	x0, #0x3c
                	b.eq	<addr>
                	mov	x0, #0x2f               // =47
                	ldp	x29, x30, [sp], #0x10

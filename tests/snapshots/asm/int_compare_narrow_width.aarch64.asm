@@ -101,8 +101,7 @@ Disassembly of section .text:
                	mov	x17, #0x7               // =7
                	mul	x0, x0, x17
                	sub	x0, x4, x0
-               	mov	x17, #-0x1              // =-1
-               	cmp	w0, w17
+               	cmn	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x1a               // =26
                	ret
@@ -115,8 +114,7 @@ Disassembly of section .text:
                	sxth	x0, w0
                	cmp	w2, #0x0
                	b.ge	<addr>
-               	mov	x17, #-0x6e             // =-110
-               	cmp	w2, w17
+               	cmn	w2, #0x6e
                	b.eq	<addr>
                	mov	x0, #0x1d               // =29
                	ret
@@ -161,8 +159,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x23               // =35
                	ret
-               	mov	x17, #-0x5              // =-5
-               	cmp	w1, w17
+               	cmn	w1, #0x5
                	b.ge	<addr>
                	mov	x0, #0x26               // =38
                	ret

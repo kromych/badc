@@ -581,8 +581,7 @@ Disassembly of section .text:
                	cset	x1, eq
                	cmp	x3, #0x12
                	csel	x1, x1, x0, eq
-               	mov	x17, #-0x7              // =-7
-               	cmp	w2, w17
+               	cmn	w2, #0x7
                	cset	x2, eq
                	cmp	x1, #0x0
                	csel	x0, x2, x0, ne

@@ -73,8 +73,7 @@ Disassembly of section .text:
                	smulh	x0, x0, x2
                	asr	x0, x0, #1
                	add	x0, x0, x0, lsr #63
-               	mov	x17, #-0x3              // =-3
-               	cmp	x0, x17
+               	cmn	x0, #0x3
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp, #0x60]

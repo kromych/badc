@@ -15,14 +15,13 @@ Disassembly of section .text:
 
 <sum_u8>:
                	mov	x2, #0x0                // =0
-               	sub	x3, x1, #0x1
-               	cbz	x1, <addr>
-               	add	x1, x2, x2, lsl #1
-               	ldrb	w2, [x0], #0x1
-               	add	x2, x1, x2
-               	mov	x1, x3
-               	sub	x3, x1, #0x1
-               	cbnz	x1, <addr>
+               	subs	x1, x1, #0x1
+               	b.lo	<addr>
+               	add	x2, x2, x2, lsl #1
+               	ldrb	w3, [x0], #0x1
+               	add	x2, x2, x3
+               	subs	x1, x1, #0x1
+               	b.hs	<addr>
                	mov	x0, x2
                	ret
 
@@ -50,14 +49,13 @@ Disassembly of section .text:
 
 <sum_i8>:
                	mov	x2, #0x0                // =0
-               	sub	x3, x1, #0x1
-               	cbz	x1, <addr>
-               	add	x1, x2, x2, lsl #1
-               	ldrsb	x2, [x0], #0x1
-               	add	x2, x1, x2
-               	mov	x1, x3
-               	sub	x3, x1, #0x1
-               	cbnz	x1, <addr>
+               	subs	x1, x1, #0x1
+               	b.lo	<addr>
+               	add	x2, x2, x2, lsl #1
+               	ldrsb	x3, [x0], #0x1
+               	add	x2, x2, x3
+               	subs	x1, x1, #0x1
+               	b.hs	<addr>
                	mov	x0, x2
                	ret
 
@@ -85,14 +83,13 @@ Disassembly of section .text:
 
 <sum_u16>:
                	mov	x2, #0x0                // =0
-               	sub	x3, x1, #0x1
-               	cbz	x1, <addr>
-               	add	x1, x2, x2, lsl #1
-               	ldrh	w2, [x0], #0x2
-               	add	x2, x1, x2
-               	mov	x1, x3
-               	sub	x3, x1, #0x1
-               	cbnz	x1, <addr>
+               	subs	x1, x1, #0x1
+               	b.lo	<addr>
+               	add	x2, x2, x2, lsl #1
+               	ldrh	w3, [x0], #0x2
+               	add	x2, x2, x3
+               	subs	x1, x1, #0x1
+               	b.hs	<addr>
                	mov	x0, x2
                	ret
 
@@ -120,14 +117,13 @@ Disassembly of section .text:
 
 <sum_i16>:
                	mov	x2, #0x0                // =0
-               	sub	x3, x1, #0x1
-               	cbz	x1, <addr>
-               	add	x1, x2, x2, lsl #1
-               	ldrsh	x2, [x0], #0x2
-               	add	x2, x1, x2
-               	mov	x1, x3
-               	sub	x3, x1, #0x1
-               	cbnz	x1, <addr>
+               	subs	x1, x1, #0x1
+               	b.lo	<addr>
+               	add	x2, x2, x2, lsl #1
+               	ldrsh	x3, [x0], #0x2
+               	add	x2, x2, x3
+               	subs	x1, x1, #0x1
+               	b.hs	<addr>
                	mov	x0, x2
                	ret
 
@@ -155,14 +151,13 @@ Disassembly of section .text:
 
 <sum_u32>:
                	mov	x2, #0x0                // =0
-               	sub	x3, x1, #0x1
-               	cbz	x1, <addr>
-               	add	x1, x2, x2, lsl #1
-               	ldr	w2, [x0], #0x4
-               	add	x2, x1, x2
-               	mov	x1, x3
-               	sub	x3, x1, #0x1
-               	cbnz	x1, <addr>
+               	subs	x1, x1, #0x1
+               	b.lo	<addr>
+               	add	x2, x2, x2, lsl #1
+               	ldr	w3, [x0], #0x4
+               	add	x2, x2, x3
+               	subs	x1, x1, #0x1
+               	b.hs	<addr>
                	mov	x0, x2
                	ret
 
@@ -190,14 +185,13 @@ Disassembly of section .text:
 
 <sum_i32>:
                	mov	x2, #0x0                // =0
-               	sub	x3, x1, #0x1
-               	cbz	x1, <addr>
-               	add	x1, x2, x2, lsl #1
-               	ldrsw	x2, [x0], #0x4
-               	add	x2, x1, x2
-               	mov	x1, x3
-               	sub	x3, x1, #0x1
-               	cbnz	x1, <addr>
+               	subs	x1, x1, #0x1
+               	b.lo	<addr>
+               	add	x2, x2, x2, lsl #1
+               	ldrsw	x3, [x0], #0x4
+               	add	x2, x2, x3
+               	subs	x1, x1, #0x1
+               	b.hs	<addr>
                	mov	x0, x2
                	ret
 
@@ -225,14 +219,13 @@ Disassembly of section .text:
 
 <sum_u64>:
                	mov	x2, #0x0                // =0
-               	sub	x3, x1, #0x1
-               	cbz	x1, <addr>
-               	add	x1, x2, x2, lsl #1
-               	ldr	x2, [x0], #0x8
-               	add	x2, x1, x2
-               	mov	x1, x3
-               	sub	x3, x1, #0x1
-               	cbnz	x1, <addr>
+               	subs	x1, x1, #0x1
+               	b.lo	<addr>
+               	add	x2, x2, x2, lsl #1
+               	ldr	x3, [x0], #0x8
+               	add	x2, x2, x3
+               	subs	x1, x1, #0x1
+               	b.hs	<addr>
                	mov	x0, x2
                	ret
 
@@ -260,15 +253,14 @@ Disassembly of section .text:
 
 <dot>:
                	movi	d0, #0000000000000000
-               	sub	x3, x2, #0x1
-               	cbz	x2, <addr>
+               	subs	x2, x2, #0x1
+               	b.lo	<addr>
                	ldr	d1, [x0], #0x8
                	ldr	s2, [x1], #0x4
                	fcvt	d2, s2
                	fmadd	d0, d1, d2, d0
-               	mov	x2, x3
-               	sub	x3, x2, #0x1
-               	cbnz	x2, <addr>
+               	subs	x2, x2, #0x1
+               	b.hs	<addr>
                	ret
 
 <dot_ref>:
@@ -299,26 +291,24 @@ Disassembly of section .text:
 
 <fill>:
                	mov	x4, #0x7                // =7
-               	sub	x5, x2, #0x1
-               	cbz	x2, <addr>
+               	subs	x2, x2, #0x1
+               	b.lo	<addr>
                	add	x0, x0, #0x2
-               	and	x2, x3, #0xffff
-               	sturh	w2, [x0, #-0x2]
+               	and	x5, x3, #0xffff
+               	sturh	w5, [x0, #-0x2]
                	str	w3, [x1], #0x4
-               	mul	x2, x3, x4
-               	add	x3, x2, #0x1
-               	mov	x2, x5
-               	sub	x5, x2, #0x1
-               	cbnz	x2, <addr>
+               	mul	x3, x3, x4
+               	add	x3, x3, #0x1
+               	subs	x2, x2, #0x1
+               	b.hs	<addr>
                	ret
 
 <clear>:
-               	sub	x2, x1, #0x1
-               	cbz	x1, <addr>
+               	subs	x1, x1, #0x1
+               	b.lo	<addr>
                	strh	wzr, [x0], #0x2
-               	mov	x1, x2
-               	sub	x2, x1, #0x1
-               	cbnz	x1, <addr>
+               	subs	x1, x1, #0x1
+               	b.hs	<addr>
                	ret
 
 <cut>:

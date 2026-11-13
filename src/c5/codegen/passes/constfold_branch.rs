@@ -526,6 +526,105 @@ pub(crate) fn low_word_xor_to_compare(func: &mut FunctionSsa, is_x86: bool) -> b
     changed
 }
 
+/// A branch on a counter `x` whose block computes its decrement `y = x - 1`
+/// tests `y != -1` instead, the same test, when nothing else reads `x` past
+/// `y` and `x` is not live out of the block. `x` then ends at `y`, so the
+/// two share a register, and the decrement can set the flags the branch
+/// reads. Runs after [`strip_zero_test_conds`]: a low-word test compares
+/// the low words.
+pub(crate) fn test_decrements(func: &mut FunctionSsa) {
+    use crate::c5::codegen::ssa::liveness::{self, AT_END};
+    use crate::c5::codegen::ssa::mem2reg::{predecessors, successors};
+    use crate::c5::codegen::ssa::reg_alloc::compute_use_counts;
+    use crate::c5::codegen::ssa::tape::{self, At, Insertion};
+    use crate::c5::ir::{BinOp, NO_VALUE, ValueId};
+    let live = compute_use_counts(func);
+    let mut cand: alloc::vec::Vec<(BlockId, ValueId, ValueId)> = alloc::vec::Vec::new();
+    for (b, block) in func.blocks.iter().enumerate() {
+        let (Terminator::Bz { cond: x, .. } | Terminator::Bnz { cond: x, .. }) = block.terminator
+        else {
+            continue;
+        };
+        let decrement = |i: &Inst| {
+            matches!(*i, Inst::BinopI { op: BinOp::Add, lhs, rhs_imm: -1 }
+                | Inst::BinopI { op: BinOp::Sub, lhs, rhs_imm: 1 } if lhs == x)
+        };
+        let y = (block.inst_range.clone())
+            .find(|&i| live[i as usize] > 0 && decrement(&func.insts[i as usize]));
+        if let Some(y) = y
+            && x != NO_VALUE
+        {
+            cand.push((b as BlockId, x, y));
+        }
+    }
+    if cand.is_empty() {
+        return;
+    }
+    let of = cand.iter().map(|c| c.1).collect();
+    let (uses, def_block) = liveness::uses_of(func, &of);
+    let preds = predecessors(func);
+    let mut ins: alloc::vec::Vec<Insertion> = alloc::vec::Vec::new();
+    let mut tests: alloc::vec::Vec<(BlockId, bool)> = alloc::vec::Vec::new();
+    for (b, x, y) in cand {
+        let us = &uses[&x];
+        let past_y = us.iter().filter(|&&(ub, at)| ub == b && at > y).count();
+        let ends = us
+            .iter()
+            .filter(|&&(ub, at)| ub == b && at == AT_END)
+            .count();
+        if past_y != 1 || ends != 1 {
+            continue;
+        }
+        let block = &func.blocks[b as usize];
+        let succs = successors(
+            &block.terminator,
+            &func.computed_goto_targets,
+            &func.jump_tables,
+        );
+        let into = liveness::value_live_in(&preds, def_block[x as usize], us);
+        if succs.iter().any(|&s| into[s as usize]) {
+            continue;
+        }
+        ins.push(Insertion {
+            at: At::After(block.inst_range.end - 1),
+            inst: Inst::BinopI {
+                op: BinOp::Ne,
+                lhs: y,
+                rhs_imm: -1,
+            },
+            is_f32: false,
+            copy_of: None,
+        });
+        let low_word = func
+            .low_word_tests
+            .get(b as usize)
+            .copied()
+            .unwrap_or(false);
+        tests.push((b, low_word));
+    }
+    if ins.is_empty() {
+        return;
+    }
+    let n = func.insts.len();
+    let pos = tape::sort(&mut ins, &func.blocks, n);
+    let rewrite = tape::insert(func, &ins);
+    for (j, &(b, low_word)) in tests.iter().enumerate() {
+        let c = rewrite.ids[pos[j]];
+        if let Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } =
+            &mut func.blocks[b as usize].terminator
+        {
+            *cond = c;
+        }
+        if low_word {
+            if func.cmp32.len() <= c as usize {
+                func.cmp32.resize(func.insts.len(), false);
+            }
+            func.cmp32[c as usize] = true;
+            func.low_word_tests[b as usize] = false;
+        }
+    }
+}
+
 /// Resolve `v` to a constant: an `Inst::Imm`, or one reached through
 /// phis -- a single-incoming phi always takes that value, and a merge
 /// whose predecessors all supply the same constant is that constant.

@@ -646,10 +646,9 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
 /// copy on the back edge. A value set again rather than kept live is not
 /// rebased, nor onto a step nothing else reads.
 pub(crate) fn rebase_on_steps(func: &mut FunctionSsa) {
+    use crate::c5::codegen::ssa::liveness::{self, AT_END};
     use crate::c5::codegen::ssa::mem2reg::{predecessors, successors};
     use crate::c5::ir::BlockId;
-    // A use at a block's end: a terminator, an accumulator, a phi income.
-    const END: u32 = u32::MAX;
     let mut steps: Vec<(BlockId, ValueId, ValueId, i64)> = Vec::new();
     for (b, block) in func.blocks.iter().enumerate() {
         for q in block.inst_range.clone() {
@@ -686,36 +685,7 @@ pub(crate) fn rebase_on_steps(func: &mut FunctionSsa) {
         return;
     }
     let stepped: alloc::collections::BTreeSet<ValueId> = steps.iter().map(|s| s.2).collect();
-    let mut def_block = alloc::vec![BlockId::MAX; func.insts.len()];
-    let mut uses: alloc::collections::BTreeMap<ValueId, Vec<(BlockId, u32)>> =
-        alloc::collections::BTreeMap::new();
-    for (b, block) in func.blocks.iter().enumerate() {
-        let b = b as BlockId;
-        for i in block.inst_range.clone() {
-            def_block[i as usize] = b;
-            match &func.insts[i as usize] {
-                Inst::Phi { incoming, .. } => {
-                    for &(pred, v) in incoming {
-                        if stepped.contains(&v) {
-                            uses.entry(v).or_default().push((pred, END));
-                        }
-                    }
-                }
-                inst => inst.for_each_operand(|v| {
-                    if stepped.contains(&v) {
-                        uses.entry(v).or_default().push((b, i));
-                    }
-                }),
-            }
-        }
-        let mut at_end = |v: ValueId| {
-            if stepped.contains(&v) {
-                uses.entry(v).or_default().push((b, END));
-            }
-        };
-        block.terminator.for_each_operand(&mut at_end);
-        at_end(block.exit_acc);
-    }
+    let (uses, def_block) = liveness::uses_of(func, &stepped);
     let preds = predecessors(func);
     let succs: Vec<Vec<BlockId>> = (func.blocks.iter())
         .map(|b| {
@@ -726,33 +696,6 @@ pub(crate) fn rebase_on_steps(func: &mut FunctionSsa) {
             )
         })
         .collect();
-    // Blocks `p` is live into, from its uses back to its definition.
-    let live_in = |p: ValueId, us: &[(BlockId, u32)]| {
-        let def = def_block[p as usize];
-        let mut live = alloc::vec![false; func.blocks.len()];
-        let mut work: Vec<BlockId> = Vec::new();
-        let enter = |b: BlockId, live: &mut Vec<bool>, work: &mut Vec<BlockId>| {
-            if b != def && !core::mem::replace(&mut live[b as usize], true) {
-                work.push(b);
-            }
-        };
-        for &(b, at) in us {
-            match at {
-                END => {
-                    if b != def {
-                        enter(b, &mut live, &mut work);
-                    }
-                }
-                _ => enter(b, &mut live, &mut work),
-            }
-        }
-        while let Some(b) = work.pop() {
-            for &pr in &preds[b as usize] {
-                enter(pr, &mut live, &mut work);
-            }
-        }
-        live
-    };
     let mut rewrites: Vec<(usize, ValueId, i32)> = Vec::new();
     for &(b, q, p, k) in &steps {
         let Some(us) = uses.get(&p) else {
@@ -760,7 +703,7 @@ pub(crate) fn rebase_on_steps(func: &mut FunctionSsa) {
         };
         let mut moved = Vec::new();
         let rebasable = us.iter().all(|&(ub, at)| {
-            if ub != b || (at != END && at <= q) {
+            if ub != b || (at != AT_END && at <= q) {
                 return true;
             }
             let access = match func.insts.get(at as usize) {
@@ -795,7 +738,7 @@ pub(crate) fn rebase_on_steps(func: &mut FunctionSsa) {
         if !rebasable || moved.is_empty() {
             continue;
         }
-        let live = live_in(p, us);
+        let live = liveness::value_live_in(&preds, def_block[p as usize], us);
         if succs[b as usize].iter().any(|&s| live[s as usize]) {
             continue;
         }

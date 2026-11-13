@@ -110,79 +110,62 @@ Disassembly of section .text:
                	ldr	q0, [sp]
                	cmeq	v0.16b, v0.16b, v0.16b
                	smov	x0, v0.b[0]
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x150
                	ldp	x29, x30, [sp], #0x10
                	ret
                	smov	x0, v0.b[1]
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	b.ne	<addr>
                	smov	x0, v0.b[2]
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	b.ne	<addr>
                	smov	x0, v0.b[3]
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	b.ne	<addr>
                	smov	x0, v0.b[4]
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	b.ne	<addr>
                	smov	x0, v0.b[5]
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	b.ne	<addr>
                	smov	x0, v0.b[6]
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	b.ne	<addr>
                	smov	x0, v0.b[7]
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	b.ne	<addr>
                	smov	x0, v0.b[8]
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	b.ne	<addr>
                	smov	x0, v0.b[9]
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	b.ne	<addr>
                	smov	x0, v0.b[10]
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	b.ne	<addr>
                	smov	x0, v0.b[11]
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	b.ne	<addr>
                	smov	x0, v0.b[12]
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	b.ne	<addr>
                	smov	x0, v0.b[13]
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	b.ne	<addr>
                	smov	x0, v0.b[14]
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	b.ne	<addr>
                	smov	x0, v0.b[15]
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	b.ne	<addr>
                	ldur	d0, [x29, #-0x20]
                	ldur	d1, [x29, #-0x28]
                	cmhi	v0.8b, v0.8b, v1.8b
                	smov	x0, v0.b[0]
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	b.ne	<addr>
                	smov	x0, v0.b[1]
                	cbz	x0, <addr>
@@ -2170,11 +2153,10 @@ Disassembly of section .text:
                	sub	x2, x29, #0x40
                	ldp	x16, x17, [x3]
                	stp	x16, x17, [x2]
-               	mov	x6, #-0x5               // =-5
                	mov	x2, #-0x1               // =-1
                	mov	x3, #0x0                // =0
                	ldrsb	x4, [x5, x0]
-               	cmp	w4, w6
+               	cmn	w4, #0x5
                	csel	x2, x2, x3, gt
                	strb	w2, [x1, x0]
                	add	x0, x0, #0x1
@@ -2425,16 +2407,14 @@ Disassembly of section .text:
                	ldr	q1, [x0]
                	cmhi	v0.16b, v0.16b, v1.16b
                	smov	x0, v0.b[0]
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	b.ne	<addr>
                	smov	x0, v0.b[1]
                	cbnz	x0, <addr>
                	smov	x0, v0.b[2]
                	cbnz	x0, <addr>
                	smov	x0, v0.b[3]
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x32               // =50
                	add	sp, sp, #0x150

@@ -63,8 +63,7 @@ Disassembly of section .text:
                	str	x1, [x0]
                	ldr	w0, [x0]
                	sbfx	x0, x0, #0, #29
-               	mov	x17, #-0x5              // =-5
-               	cmp	w0, w17
+               	cmn	w0, #0x5
                	b.ne	<addr>
                	sbfx	x0, x1, #29, #30
                	cmp	w0, #0x4d

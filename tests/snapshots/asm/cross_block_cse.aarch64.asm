@@ -72,8 +72,7 @@ Disassembly of section .text:
                	mov	x1, x2
                	cmp	w1, #0x0
                	b.gt	<addr>
-               	mov	x17, #-0x1              // =-1
-               	cmp	w0, w17
+               	cmn	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x30

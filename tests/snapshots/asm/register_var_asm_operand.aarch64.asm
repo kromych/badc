@@ -42,8 +42,7 @@ Disassembly of section .text:
                	str	x16, [sp]
                	ldr	x12, [sp]
                	mov	x12, x0
-               	mov	x17, #-0x7              // =-7
-               	cmp	x0, x17
+               	cmn	x0, #0x7
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x10

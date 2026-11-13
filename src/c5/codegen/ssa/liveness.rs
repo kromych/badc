@@ -72,6 +72,61 @@ fn rows_by_elem<T: Copy + Default>(nelems: usize, pairs: &[(u32, T)]) -> (Vec<u3
     (off, dat)
 }
 
+/// A use at its block's end: a terminator, or a phi income on an edge out.
+pub(crate) const AT_END: u32 = u32::MAX;
+
+/// Per value, its uses as (block, instruction) or (block, [`AT_END`]).
+pub(crate) type ValueUses = alloc::collections::BTreeMap<ValueId, Vec<(BlockId, u32)>>;
+
+/// The uses of each value in `of` ([`ValueUses`]), and the block holding
+/// each instruction. `Block::exit_acc` reads none.
+pub(crate) fn uses_of(
+    func: &FunctionSsa,
+    of: &alloc::collections::BTreeSet<ValueId>,
+) -> (ValueUses, Vec<BlockId>) {
+    let mut def_block = vec![BlockId::MAX; func.insts.len()];
+    let mut uses = ValueUses::new();
+    let mut note = |v: ValueId, at: (BlockId, u32)| {
+        if of.contains(&v) {
+            uses.entry(v).or_default().push(at);
+        }
+    };
+    for (b, block) in func.blocks.iter().enumerate() {
+        let b = b as BlockId;
+        for i in block.inst_range.clone() {
+            def_block[i as usize] = b;
+            match &func.insts[i as usize] {
+                Inst::Phi { incoming, .. } => {
+                    for &(pred, v) in incoming {
+                        note(v, (pred, AT_END));
+                    }
+                }
+                inst => inst.for_each_operand(|v| note(v, (b, i))),
+            }
+        }
+        block.terminator.for_each_operand(|v| note(v, (b, AT_END)));
+    }
+    (uses, def_block)
+}
+
+/// Per block, whether a value defined in `def` with `uses` ([`uses_of`]) is
+/// live into it.
+pub(crate) fn value_live_in(
+    preds: &[Vec<BlockId>],
+    def: BlockId,
+    uses: &[(BlockId, u32)],
+) -> Vec<bool> {
+    let mut live = vec![false; preds.len()];
+    let mut work: Vec<BlockId> = uses.iter().map(|&(b, _)| b).collect();
+    while let Some(b) = work.pop() {
+        if b == def || core::mem::replace(&mut live[b as usize], true) {
+            continue;
+        }
+        work.extend_from_slice(&preds[b as usize]);
+    }
+    live
+}
+
 /// Least fixed point of the backward liveness equations
 ///
 ///   live_out[b] = exit_seed[b] + U live_in[s] for s in succ(b)

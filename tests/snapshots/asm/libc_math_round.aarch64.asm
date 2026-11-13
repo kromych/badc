@@ -49,8 +49,7 @@ Disassembly of section .text:
                	ret
                	fmov	d0, #-2.50000000
                	bl	<addr>
-               	mov	x17, #-0x3              // =-3
-               	cmp	x0, x17
+               	cmn	x0, #0x3
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ldp	x29, x30, [sp], #0x10

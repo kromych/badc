@@ -1372,29 +1372,28 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	str	w1, [x0, #0xe0]
                	mov	x0, #0x0                // =0
-               	mov	x3, #-0x1               // =-1
-               	mov	x4, #0x5555555555555555 // =6148914691236517205
-               	adrp	x5, <page>
-               	add	x5, x5, <lo12>
+               	mov	x3, #0x5555555555555555 // =6148914691236517205
+               	adrp	x4, <page>
+               	add	x4, x4, <lo12>
                	b	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x18
                	b.ge	<addr>
                	mov	x1, #-0x1               // =-1
                	stur	x1, [x29, #-0x48]
-               	ldr	x1, [x5, x0, lsl #3]
-               	cmp	x1, x4
-               	b.eq	<addr>
+               	ldr	x1, [x4, x0, lsl #3]
                	cmp	x1, x3
+               	b.eq	<addr>
+               	cmn	x1, #0x1
                	cset	x2, hs
-               	ldur	x6, [x29, #-0x48]
-               	udiv	x6, x1, x6
-               	cmp	x2, x6
+               	ldur	x5, [x29, #-0x48]
+               	udiv	x5, x1, x5
+               	cmp	x2, x5
                	b.ne	<addr>
                	add	x2, x1, x2
-               	ldur	x6, [x29, #-0x48]
-               	udiv	x17, x1, x6
-               	msub	x1, x17, x6, x1
+               	ldur	x5, [x29, #-0x48]
+               	udiv	x17, x1, x5
+               	msub	x1, x17, x5, x1
                	cmp	x2, x1
                	b.eq	<addr>
                	adrp	x0, <page>
@@ -1413,24 +1412,23 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	str	w1, [x0, #0xe0]
                	mov	x0, #0x0                // =0
-               	mov	x4, #-0x3               // =-3
-               	mov	x5, #0x5555555555555555 // =6148914691236517205
-               	adrp	x6, <page>
-               	add	x6, x6, <lo12>
+               	mov	x4, #0x5555555555555555 // =6148914691236517205
+               	adrp	x5, <page>
+               	add	x5, x5, <lo12>
                	b	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x18
                	b.ge	<addr>
                	mov	x2, #-0x3               // =-3
                	stur	x2, [x29, #-0x40]
-               	ldr	x1, [x6, x0, lsl #3]
-               	cmp	x1, x5
-               	b.eq	<addr>
+               	ldr	x1, [x5, x0, lsl #3]
                	cmp	x1, x4
+               	b.eq	<addr>
+               	cmn	x1, #0x3
                	cset	x3, hs
-               	ldur	x7, [x29, #-0x40]
-               	udiv	x7, x1, x7
-               	cmp	x3, x7
+               	ldur	x6, [x29, #-0x40]
+               	udiv	x6, x1, x6
+               	cmp	x3, x6
                	b.ne	<addr>
                	msub	x2, x3, x2, x1
                	ldur	x3, [x29, #-0x40]
@@ -1712,24 +1710,23 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	str	w1, [x0, #0xe0]
                	mov	x0, #0x0                // =0
-               	mov	x4, #-0x3               // =-3
-               	mov	x5, #0x5555555555555555 // =6148914691236517205
-               	adrp	x6, <page>
-               	add	x6, x6, <lo12>
+               	mov	x4, #0x5555555555555555 // =6148914691236517205
+               	adrp	x5, <page>
+               	add	x5, x5, <lo12>
                	b	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x18
                	b.ge	<addr>
                	mov	x2, #-0x3               // =-3
                	stur	x2, [x29, #-0x8]
-               	ldr	x1, [x6, x0, lsl #3]
-               	cmp	x1, x5
-               	b.eq	<addr>
+               	ldr	x1, [x5, x0, lsl #3]
                	cmp	x1, x4
+               	b.eq	<addr>
+               	cmn	x1, #0x3
                	cset	x3, hs
-               	ldur	x7, [x29, #-0x8]
-               	udiv	x7, x1, x7
-               	cmp	x3, x7
+               	ldur	x6, [x29, #-0x8]
+               	udiv	x6, x1, x6
+               	cmp	x3, x6
                	b.ne	<addr>
                	msub	x2, x3, x2, x1
                	ldur	x3, [x29, #-0x8]

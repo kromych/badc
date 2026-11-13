@@ -32,8 +32,7 @@ Disassembly of section .text:
                	cset	x0, eq
                	cmp	x20, #0x12
                	csel	x0, x0, x1, eq
-               	mov	x17, #-0x7              // =-7
-               	cmp	w2, w17
+               	cmn	w2, #0x7
                	cset	x2, eq
                	cmp	x0, #0x0
                	csel	x0, x2, x1, ne

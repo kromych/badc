@@ -469,8 +469,7 @@ Disassembly of section .text:
                	ldr	q0, [x7]
                	bl	<addr>
                	smov	x0, v0.s[0]
-               	mov	x17, #-0x7              // =-7
-               	cmp	x0, x17
+               	cmn	x0, #0x7
                	b.ne	<addr>
                	smov	x0, v0.s[1]
                	cmp	x0, #0x8
@@ -526,8 +525,7 @@ Disassembly of section .text:
                	sub	x7, x29, #0x210
                	str	q0, [sp, #0x50]
                	mov	x0, v0.d[0]
-               	mov	x17, #-0xa              // =-10
-               	cmp	x0, x17
+               	cmn	x0, #0xa
                	b.ne	<addr>
                	mov	x0, v0.d[1]
                	mov	x17, #0xf134            // =61748

@@ -287,8 +287,7 @@ Disassembly of section .text:
                	xorq	%r9, %rcx
                	subq	%rcx, %rdi
                	incq	%rax
-               	decq	%rbx
-               	testl	%ebx, %ebx
+               	subl	$0x1, %ebx
                	jne	<addr>
                	movq	%r12, %rax
                	xorq	%r13, %rax

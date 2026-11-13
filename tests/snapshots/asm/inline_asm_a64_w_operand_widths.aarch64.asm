@@ -147,8 +147,7 @@ Disassembly of section .text:
                	cmp	x0, #0x58
                	b.ne	<addr>
                	smov	x0, v0.b[3]
-               	mov	x17, #-0x4              // =-4
-               	cmp	x0, x17
+               	cmn	x0, #0x4
                	b.eq	<addr>
                	mov	x0, #0xa6               // =166
                	add	sp, sp, #0x70

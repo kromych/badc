@@ -1517,24 +1517,24 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	str	w1, [x0, #0x200]
                	mov	x0, #0x0                // =0
-               	mov	x2, #-0x5               // =-5
+               	mov	x3, #-0x5               // =-5
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
                	mov	x1, #-0x5               // =-5
                	stur	x1, [x29, #-0x28]
                	ldr	x1, [x4, x0, lsl #3]
-               	cmp	x1, x2
-               	cset	x3, hs
+               	cmn	x1, #0x5
+               	cset	x2, hs
                	ldur	x5, [x29, #-0x28]
                	udiv	x5, x1, x5
-               	cmp	x3, x5
+               	cmp	x2, x5
                	b.ne	<addr>
-               	mul	x3, x3, x2
-               	sub	x3, x1, x3
+               	mul	x2, x2, x3
+               	sub	x2, x1, x2
                	ldur	x5, [x29, #-0x28]
                	udiv	x17, x1, x5
                	msub	x1, x17, x5, x1
-               	cmp	x3, x1
+               	cmp	x2, x1
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x14

@@ -265,8 +265,7 @@ Disassembly of section .text:
                	ret
                	mov	x0, #-0x3               // =-3
                	bl	<addr>
-               	mov	x17, #-0x3              // =-3
-               	cmp	x0, x17
+               	cmn	x0, #0x3
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldr	x28, [sp, #0x50]
@@ -371,8 +370,7 @@ Disassembly of section .text:
                	mov	x1, #-0x12c             // =-300
                	bl	<addr>
                	sxth	x0, w0
-               	mov	x17, #-0x12c            // =-300
-               	cmp	w0, w17
+               	cmn	w0, #0x12c
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	ldr	x28, [sp, #0x50]

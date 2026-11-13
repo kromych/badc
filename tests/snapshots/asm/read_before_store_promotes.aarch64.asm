@@ -211,8 +211,7 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	bl	<addr>
                	sxth	x0, w0
-               	mov	x17, #-0x3              // =-3
-               	cmp	w0, w17
+               	cmn	w0, #0x3
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
                	bl	<addr>

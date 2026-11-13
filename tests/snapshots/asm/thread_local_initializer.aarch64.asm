@@ -26,8 +26,7 @@ Disassembly of section .text:
                	add	x2, x2, #0x0, lsl #12   // =0x0
                	add	x2, x2, #0x14
                	ldrsw	x2, [x2]
-               	mov	x17, #-0x3              // =-3
-               	cmp	w2, w17
+               	cmn	w2, #0x3
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret

@@ -92,8 +92,7 @@ Disassembly of section .text:
                	sturh	w0, [x29, #-0x8]
                	sub	x0, x29, #0x30
                	ldar	w1, [x0]
-               	mov	x17, #-0x7              // =-7
-               	cmp	w1, w17
+               	cmn	w1, #0x7
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	add	sp, sp, #0x40

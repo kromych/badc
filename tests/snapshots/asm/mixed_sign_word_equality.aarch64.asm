@@ -39,8 +39,7 @@ Disassembly of section .text:
                	cset	x3, eq
                	cmp	w2, w3
                	b.ne	<addr>
-               	mov	x17, #-0x1              // =-1
-               	cmp	w21, w17
+               	cmn	w21, #0x1
                	cset	x2, eq
                	mov	x17, #0xffffffff        // =4294967295
                	cmp	w1, w17

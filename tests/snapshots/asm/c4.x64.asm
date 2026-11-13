@@ -385,7 +385,6 @@ Disassembly of section .text:
                	movq	<rip>, %rax # <addr>
                	subq	$0x30, %rax
                	movq	%rax, <rip> # <addr>
-               	testq	%rax, %rax
                	je	<addr>
                	movq	<rip>, %rax # <addr>
                	movsbq	(%rax), %rcx

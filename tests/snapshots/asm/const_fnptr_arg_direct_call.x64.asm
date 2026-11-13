@@ -22,8 +22,7 @@ Disassembly of section .text:
                	movl	$0x1a, %r13d
                	movl	$0xa, %ebx
                	jmp	<addr>
-               	decq	%rbx
-               	testq	%rbx, %rbx
+               	subq	$0x1, %rbx
                	je	<addr>
                	addl	$0x1, (%rip)            # <addr>
 		R_X86_64_PC32	nest_count-0x5

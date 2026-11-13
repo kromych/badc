@@ -97,8 +97,7 @@ Disassembly of section .text:
                	shrn	v1.8b, v0.8h, #0x3
                	rshrn	v2.4h, v0.4s, #0x10
                	smov	x0, v1.b[0]
-               	mov	x17, #-0x10             // =-16
-               	cmp	x0, x17
+               	cmn	x0, #0x10
                	cset	x0, ne
                	orr	x0, x1, x0, lsl #4
                	smov	x1, v1.b[1]
@@ -106,8 +105,7 @@ Disassembly of section .text:
                	cset	x1, ne
                	orr	x0, x0, x1, lsl #4
                	smov	x1, v1.b[2]
-               	mov	x17, #-0x60             // =-96
-               	cmp	x1, x17
+               	cmn	x1, #0x60
                	cset	x1, ne
                	orr	x0, x0, x1, lsl #4
                	smov	x1, v1.b[3]
@@ -115,18 +113,15 @@ Disassembly of section .text:
                	cset	x1, ne
                	orr	x0, x0, x1, lsl #4
                	smov	x1, v1.b[4]
-               	mov	x17, #-0x3a             // =-58
-               	cmp	x1, x17
+               	cmn	x1, #0x3a
                	cset	x1, ne
                	orr	x0, x0, x1, lsl #4
                	smov	x1, v1.b[5]
-               	mov	x17, #-0x30             // =-48
-               	cmp	x1, x17
+               	cmn	x1, #0x30
                	cset	x1, ne
                	orr	x0, x0, x1, lsl #4
                	smov	x1, v1.b[6]
-               	mov	x17, #-0x60             // =-96
-               	cmp	x1, x17
+               	cmn	x1, #0x60
                	cset	x1, ne
                	orr	x0, x0, x1, lsl #4
                	smov	x1, v1.b[7]

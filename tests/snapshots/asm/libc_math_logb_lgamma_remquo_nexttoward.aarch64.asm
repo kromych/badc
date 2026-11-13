@@ -595,8 +595,7 @@ Disassembly of section .text:
                	add	x0, x0, x1
                	and	x0, x0, #0x7
                	sub	x0, x0, x1
-               	mov	x17, #-0x4              // =-4
-               	cmp	w0, w17
+               	cmn	w0, #0x4
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	ldr	d8, [sp, #0x40]

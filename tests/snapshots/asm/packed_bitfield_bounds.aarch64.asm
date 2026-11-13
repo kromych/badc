@@ -28,8 +28,7 @@ Disassembly of section .text:
                	mov	x5, x0
                	bl	<addr>
                	mov	x21, x0
-               	mov	x17, #-0x1              // =-1
-               	cmp	x21, x17
+               	cmn	x21, #0x1
                	b.eq	<addr>
                	add	x0, x21, x20
                	mov	x2, #0x0                // =0
@@ -205,8 +204,7 @@ Disassembly of section .text:
                	ldurb	w1, [x0, #-0x1]
                	orr	x5, x5, x1, lsl #48
                	sbfx	x5, x5, #0, #52
-               	mov	x17, #-0x6              // =-6
-               	cmp	x5, x17
+               	cmn	x5, #0x6
                	b.ne	<addr>
                	cmp	w1, #0xff
                	b.eq	<addr>
@@ -522,8 +520,7 @@ Disassembly of section .text:
                	ldurb	w2, [x0, #-0x1]
                	lsr	x4, x1, #1
                	orr	x4, x4, x2, lsl #63
-               	mov	x17, #-0x3              // =-3
-               	cmp	x4, x17
+               	cmn	x4, #0x3
                	cset	x4, hs
                	and	x1, x1, #0x1
                	and	x5, x2, #0xfffffffffffffffe

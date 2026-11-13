@@ -376,8 +376,7 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldursw	x1, [x29, #-0x28]
                	bl	<addr>
-               	mov	x17, #-0x9b8            // =-2488
-               	cmp	x0, x17
+               	cmn	x0, #0x9b8
                	b.eq	<addr>
                	mov	x0, #0x9                // =9
                	ldp	x29, x30, [sp, #0x40]

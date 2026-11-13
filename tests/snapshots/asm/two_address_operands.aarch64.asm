@@ -147,8 +147,7 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	bl	<addr>
-               	mov	x17, #-0x5              // =-5
-               	cmp	x0, x17
+               	cmn	x0, #0x5
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp], #0x10

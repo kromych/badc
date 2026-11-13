@@ -112,8 +112,7 @@ Disassembly of section .text:
                	addq	$0x5, %rax
                	testb	$0x1, %dil
                	cmovneq	%rcx, %rax
-               	incq	%rdi
-               	testl	%edi, %edi
+               	addl	$0x1, %edi
                	jne	<addr>
                	retq
 

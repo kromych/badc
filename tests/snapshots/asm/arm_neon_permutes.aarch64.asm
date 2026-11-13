@@ -1772,42 +1772,40 @@ Disassembly of section .text:
                	ldr	q0, [x0]
                	dup	v2.2d, v0.d[1]
                	mov	x0, #0x0                // =0
-               	mov	x8, #-0x40              // =-64
-               	mov	x9, #-0x3               // =-3
-               	mov	x10, #0x12aa            // =4778
-               	mov	x11, #0xfd02            // =64770
+               	mov	x8, #0x12aa             // =4778
+               	mov	x9, #0xfd02             // =64770
                	b	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.ge	<addr>
                	cmp	w0, #0x8
                	b.ge	<addr>
-               	ldrsb	x12, [x1, x0]
-               	cmp	w12, #0x55
+               	ldrsb	x10, [x1, x0]
+               	cmp	w10, #0x55
                	b.ne	<addr>
-               	ldrsb	x12, [x2, x0]
-               	cmp	w12, w9
+               	ldrsb	x10, [x2, x0]
+               	cmn	w10, #0x3
                	b.ne	<addr>
-               	ldrsb	x12, [x3, x0]
-               	cmp	w12, #0x12
+               	ldrsb	x10, [x3, x0]
+               	cmp	w10, #0x12
                	b.ne	<addr>
-               	ldrsb	x12, [x4, x0]
-               	cmp	w12, w8
+               	ldrsb	x10, [x4, x0]
+               	cmn	w10, #0x40
                	b.ne	<addr>
                	cmp	w0, #0x4
                	b.ge	<addr>
-               	ldrh	w12, [x5, x0, lsl #1]
-               	cmp	w12, w11
+               	ldrh	w10, [x5, x0, lsl #1]
+               	cmp	w10, w9
                	b.ne	<addr>
                	cmp	w0, #0x8
                	b.ge	<addr>
-               	ldrh	w12, [x6, x0, lsl #1]
-               	cmp	w12, w10
+               	ldrh	w10, [x6, x0, lsl #1]
+               	cmp	w10, w8
                	b.ne	<addr>
                	cmp	w0, #0x4
                	b.ge	<addr>
-               	add	x12, x7, x0, lsl #2
-               	ldr	s0, [x12]
+               	add	x10, x7, x0, lsl #2
+               	ldr	s0, [x10]
                	fmov	s1, #-2.50000000
                	fcmp	s0, s1
                	b.eq	<addr>
@@ -1828,13 +1826,11 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, v2.d[0]
-               	mov	x17, #-0x9              // =-9
-               	cmp	x0, x17
+               	cmn	x0, #0x9
                	mov	x0, #0x1                // =1
                	b.ne	<addr>
                	mov	x0, v2.d[1]
-               	mov	x17, #-0x9              // =-9
-               	cmp	x0, x17
+               	cmn	x0, #0x9
                	cset	x0, ne
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10

@@ -20,8 +20,7 @@ Disassembly of section .text:
                	str	w2, [x0, #0x10]
                	mov	x0, #0x1                // =1
                	mov	x2, #-0x64              // =-100
-               	mov	x17, #-0x1              // =-1
-               	cmp	w1, w17
+               	cmn	w1, #0x1
                	csel	x0, x0, x2, ge
                	add	x0, x0, #0x1
                	add	x0, x0, #0x1

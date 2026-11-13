@@ -56,8 +56,7 @@ Disassembly of section .text:
                	cmp	x22, x0
                	cset	x0, lo
                	sub	x0, x23, x0
-               	mov	x17, #-0x1              // =-1
-               	cmp	x1, x17
+               	cmn	x1, #0x1
                	b.ne	<addr>
                	cbz	x0, <addr>
                	mov	x0, #0x2                // =2
@@ -72,11 +71,9 @@ Disassembly of section .text:
                	cmp	x0, #0x0
                	cset	x1, eq
                	sub	x1, x1, #0x1
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	b.ne	<addr>
-               	mov	x17, #-0x1              // =-1
-               	cmp	w1, w17
+               	cmn	w1, #0x1
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp, #0x20]

@@ -74,8 +74,7 @@ Disassembly of section .text:
                	str	x2, [x3]
                	cmp	x0, #0x0
                	cset	x4, eq
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	cset	x3, eq
                	orr	x4, x4, x3
                	eor	x5, x4, #0x1

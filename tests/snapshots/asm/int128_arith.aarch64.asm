@@ -23,8 +23,7 @@ Disassembly of section .text:
                	adrp	x3, <page>
                	ldr	x4, [x3, #0x20]
                	sub	x4, x4, #0x1
-               	mov	x17, #-0x1              // =-1
-               	cmp	x4, x17
+               	cmn	x4, #0x1
                	cset	x6, lo
                	cbnz	x4, <addr>
                	cmp	w6, #0x1
@@ -38,8 +37,7 @@ Disassembly of section .text:
                	cset	x7, lo
                	sub	x4, x4, x5
                	sub	x5, x6, x7
-               	mov	x17, #-0x1              // =-1
-               	cmp	x4, x17
+               	cmn	x4, #0x1
                	b.ne	<addr>
                	cbz	w5, <addr>
                	mov	x4, #0x2                // =2

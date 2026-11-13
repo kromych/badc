@@ -68,8 +68,7 @@ Disassembly of section .text:
                	cmp	x3, #0x0
                	b.ls	<addr>
                	sub	x3, x3, #0x11
-               	mov	x17, #-0x11             // =-17
-               	cmp	x3, x17
+               	cmn	x3, #0x11
                	b.ls	<addr>
                	mov	x0, #0x4                // =4
                	cbz	w0, <addr>

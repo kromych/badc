@@ -209,8 +209,8 @@ Disassembly of section .text:
                	eor	x2, x28, x1, lsr #3
                	sub	x2, x1, x2
                	add	x0, x0, #0x1
-               	sub	x20, x20, #0x1
-               	cbnz	w20, <addr>
+               	subs	w20, w20, #0x1
+               	b.ne	<addr>
                	eor	x0, x21, x22
                	eor	x0, x0, x23
                	eor	x0, x0, x24

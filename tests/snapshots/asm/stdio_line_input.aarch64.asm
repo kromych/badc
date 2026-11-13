@@ -134,8 +134,7 @@ Disassembly of section .text:
                	sub	x1, x29, #0x48
                	mov	x2, x20
                	bl	<addr>
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	b.eq	<addr>
                	mov	x0, #0xa                // =10
                	ldp	x29, x30, [sp, #0x60]

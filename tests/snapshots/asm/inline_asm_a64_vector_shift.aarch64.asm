@@ -26,8 +26,7 @@ Disassembly of section .text:
                	dup	v0.4s, w16
                	sshr	v0.4s, v0.4s, #0x1
                	fmov	w0, s0
-               	mov	x17, #-0x2a             // =-42
-               	cmp	w0, w17
+               	cmn	w0, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret

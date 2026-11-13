@@ -21,8 +21,7 @@ Disassembly of section .text:
                	add	x0, x0, #0x8
                	sub	x1, x0, #0x23e
                	sub	x0, x1, x0
-               	mov	x17, #-0x23e            // =-574
-               	cmp	x0, x17
+               	cmn	x0, #0x23e
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x10

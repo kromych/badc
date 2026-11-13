@@ -37,8 +37,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sbfx	x2, x1, #0, #4
-               	mov	x17, #-0x3              // =-3
-               	cmp	w2, w17
+               	cmn	w2, #0x3
                	b.ne	<addr>
                	mov	w1, w1
                	sbfx	x1, x1, #4, #4
@@ -58,8 +57,7 @@ Disassembly of section .text:
                	orr	x1, x1, #0x8
                	stur	w1, [x29, #-0x8]
                	sbfx	x1, x1, #0, #4
-               	mov	x17, #-0x8              // =-8
-               	cmp	w1, w17
+               	cmn	w1, #0x8
                	b.ne	<addr>
                	ldurb	w1, [x29, #-0x7]
                	cmp	w1, #0x4
@@ -142,8 +140,7 @@ Disassembly of section .text:
                	orr	x1, x1, #0x800
                	sturh	w1, [x29, #-0x8]
                	sbfx	x1, x1, #0, #12
-               	mov	x17, #-0x800            // =-2048
-               	cmp	w1, w17
+               	cmn	w1, #0x800
                	b.ne	<addr>
                	ldurb	w1, [x29, #-0x8]
                	cbnz	w1, <addr>

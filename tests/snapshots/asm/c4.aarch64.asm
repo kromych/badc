@@ -461,9 +461,9 @@ Disassembly of section .text:
                	adrp	x2, <page>
                	ldr	x1, [x2, #0x58]
                	mov	x3, #0xa                // =10
-               	sub	x1, x1, #0x30
+               	subs	x1, x1, #0x30
                	str	x1, [x0, #0x60]
-               	cbz	x1, <addr>
+               	b.eq	<addr>
                	ldr	x1, [x20, #0x20]
                	ldrb	w2, [x1]
                	cmp	w2, #0x30

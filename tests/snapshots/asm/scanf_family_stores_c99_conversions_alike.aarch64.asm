@@ -212,8 +212,7 @@ Disassembly of section .text:
                	cmp	w1, #0x0
                	csel	x21, x2, x1, lt
                	ldrsw	x1, [x22, #0x14]
-               	mov	x17, #-0x4              // =-4
-               	cmp	w1, w17
+               	cmn	w1, #0x4
                	b.ne	<addr>
                	ldr	s0, [sp, #0x40]
                	fcmp	s0, s0
@@ -245,8 +244,7 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x3, x0
                	b	<addr>
-               	mov	x17, #-0x8              // =-8
-               	cmp	w1, w17
+               	cmn	w1, #0x8
                	b.ne	<addr>
                	ldr	d0, [sp, #0x48]
                	fcmp	d0, d0

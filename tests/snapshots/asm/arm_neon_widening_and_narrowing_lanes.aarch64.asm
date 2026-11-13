@@ -226,16 +226,15 @@ Disassembly of section .text:
                	sub	x4, x29, #0x8
                	stur	d1, [x29, #-0x8]
                	mov	x0, #0x0                // =0
-               	mov	x5, #-0x80              // =-128
                	sub	x1, x29, #0x48
                	ldrsh	x1, [x1, x0, lsl #1]
-               	cmp	w1, w5
+               	cmn	w1, #0x80
                	b.ge	<addr>
                	mov	x2, #-0x80              // =-128
-               	ldrsb	x6, [x3, x0]
+               	ldrsb	x5, [x3, x0]
                	and	x1, x1, #0xffff
                	sxtb	x1, w1
-               	cmp	w6, w1
+               	cmp	w5, w1
                	b.ne	<addr>
                	ldrsb	x1, [x4, x0]
                	cmp	w1, w2

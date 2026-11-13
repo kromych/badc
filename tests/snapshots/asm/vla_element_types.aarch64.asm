@@ -293,8 +293,7 @@ Disassembly of section .text:
                	ret
                	add	x0, x8, x2
                	ldrsw	x0, [x0, #0x4]
-               	mov	x17, #-0xb              // =-11
-               	cmp	w0, w17
+               	cmn	w0, #0xb
                	b.ne	<addr>
                	add	x0, x9, x2, lsl #1
                	ldrsw	x0, [x0, #0xc]

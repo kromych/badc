@@ -7597,3 +7597,54 @@ fn a_pointer_stepped_in_a_loop_is_read_through_its_step() {
     });
     m.finish();
 }
+
+#[test]
+fn a_counted_loop_closes_on_its_decrement() {
+    const SRC: &str = "unsigned long post(const unsigned char *p, unsigned long n) {\n\
+    unsigned long s = 0;\n\
+    while (n--) s += *p++;\n\
+    return s;\n\
+}\n\
+unsigned long pre(const unsigned char *p, unsigned long n) {\n\
+    unsigned long s = 0;\n\
+    do s += *p++; while (--n);\n\
+    return s;\n\
+}\n";
+    let mut m = Misses::default();
+    // x86-64: `sub r64, 1` then `jae` (the old count was not zero) or
+    // `jne` (the new one is not), with no `cmp` or `test` between.
+    for (f, jcc) in [("post", 0x73u16), ("pre", 0x75)] {
+        let insns = x64(SRC, f);
+        let closes = insns.windows(2).any(|w| {
+            w[0].op == 0x83
+                && w[0].modrm.is_some_and(|r| r >> 3 & 7 == 5)
+                && w[0].imm == 1
+                && (w[1].op == jcc || w[1].op == 0x0F10 + jcc)
+                && w[1].target() < w[1].at
+        });
+        m.expect(closes, || format!("x86-64 {f}: {insns:x?}"));
+    }
+    // AArch64: `subs xN, xN, #1` then `b.hs` or `b.ne` back.
+    for (f, cond) in [("post", 2u32), ("pre", 1)] {
+        let ws = a64(SRC, f);
+        let closes = ws.windows(2).any(|w| {
+            w[0] & 0xFFFF_FC00 == 0xF100_0400
+                && (w[0] >> 5) & 31 == w[0] & 31
+                && w[1] & 0xFF00_001F == 0x5400_0000 | cond
+                && (w[1] >> 23) & 1 == 1
+        });
+        m.expect(closes, || format!("aarch64 {f}: {ws:08x?}"));
+    }
+    m.finish();
+}
+
+#[test]
+fn a64_a_compare_with_a_small_negative_is_cmn() {
+    const SRC: &str = "int f(long x) { return x == -7 ? 3 : 5; }\n";
+    let ws = a64(SRC, "f");
+    // `cmn xN, #7` (`adds xzr, xN, #7`), and no constant built for it.
+    assert!(
+        ws.iter().any(|&w| w & 0xFFFF_FC1F == 0xB100_1C1F),
+        "no cmn: {ws:08x?}"
+    );
+}

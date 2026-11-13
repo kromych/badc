@@ -187,7 +187,6 @@ Disassembly of section .text:
 <scan>:
                	mov	x5, x0
                	mov	x0, #0x0                // =0
-               	mov	x7, #-0x1               // =-1
                	mov	x4, x0
                	b	<addr>
                	add	x0, x0, #0x1
@@ -201,7 +200,7 @@ Disassembly of section .text:
                	add	x4, x4, #0x1
                	b	<addr>
                	ldrsw	x6, [x5, x0, lsl #2]
-               	cmp	w6, w7
+               	cmn	w6, #0x1
                	b.eq	<addr>
                	cmp	w6, #0x63
                	b.eq	<addr>
@@ -556,8 +555,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	x0, #-0x3               // =-3
                	bl	<addr>
-               	mov	x17, #-0x3              // =-3
-               	cmp	w0, w17
+               	cmn	w0, #0x3
                	b.eq	<addr>
                	mov	x20, #0xe               // =14
                	b	<addr>

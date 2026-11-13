@@ -134,8 +134,7 @@ Disassembly of section .text:
                	ret
                	ldur	x0, [x29, #-0x8]
                	bl	<addr>
-               	mov	x17, #-0x3              // =-3
-               	cmp	x0, x17
+               	cmn	x0, #0x3
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x10
@@ -152,8 +151,7 @@ Disassembly of section .text:
                	ldur	x0, [x29, #-0x10]
                	ldur	x1, [x29, #-0x8]
                	bl	<addr>
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x10
@@ -184,8 +182,7 @@ Disassembly of section .text:
                	movk	x0, #0x5678, lsl #32
                	movk	x0, #0x1234, lsl #48
                	bl	<addr>
-               	mov	x17, #-0x7b             // =-123
-               	cmp	x0, x17
+               	cmn	x0, #0x7b
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	add	sp, sp, #0x10

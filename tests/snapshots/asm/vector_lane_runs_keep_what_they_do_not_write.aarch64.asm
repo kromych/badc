@@ -268,8 +268,7 @@ Disassembly of section .text:
                	cmp	w0, #0x7
                	b.ne	<addr>
                	ldursw	x0, [x29, #-0x2c]
-               	mov	x17, #-0x7              // =-7
-               	cmp	w0, w17
+               	cmn	w0, #0x7
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x50

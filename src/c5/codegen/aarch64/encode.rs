@@ -1419,6 +1419,18 @@ pub(crate) fn enc_subs_imm_w(rd: Reg, rn: Reg, imm12: u32) -> u32 {
     0x7100_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
 
+/// `ADDS Xd, Xn, #imm12`; `cmn Xn, #imm12` with Xd = XZR.
+pub(crate) fn enc_adds_imm(rd: Reg, rn: Reg, imm12: u32) -> u32 {
+    debug_assert!(imm12 < 4096, "adds imm: {imm12} > 12-bit max");
+    0xB100_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// `ADDS Wd, Wn, #imm12`; `cmn Wn, #imm12` with Wd = WZR.
+pub(crate) fn enc_adds_imm_w(rd: Reg, rn: Reg, imm12: u32) -> u32 {
+    debug_assert!(imm12 < 4096, "adds imm: {imm12} > 12-bit max");
+    0x3100_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
 /// AArch64 condition codes -- the 4-bit field that follows comparisons
 /// and conditional moves. Names match the ARM ARM. The Mi/Ls
 /// variants are the FP-comparison flavor: after `FCMP`, the

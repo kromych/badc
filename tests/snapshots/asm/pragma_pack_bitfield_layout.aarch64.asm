@@ -38,8 +38,7 @@ Disassembly of section .text:
                	cbnz	x0, <addr>
                	ldur	w0, [x29, #-0x90]
                	sbfx	x0, x0, #0, #30
-               	mov	x17, #-0x1              // =-1
-               	cmp	w0, w17
+               	cmn	w0, #0x1
                	b.ne	<addr>
                	ldur	x0, [x29, #-0x90]
                	sbfx	x0, x0, #30, #30
@@ -73,8 +72,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	ldurh	w0, [x29, #-0x87]
                	sbfx	x0, x0, #0, #15
-               	mov	x17, #-0x2              // =-2
-               	cmp	w0, w17
+               	cmn	w0, #0x2
                	b.ne	<addr>
                	ldursh	x0, [x29, #-0x85]
                	mov	x17, #0x1234            // =4660
@@ -133,8 +131,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	ldur	w1, [x0, #0x2]
                	sbfx	x1, x1, #6, #23
-               	mov	x17, #-0x771            // =-1905
-               	cmp	w1, w17
+               	cmn	w1, #0x771
                	b.ne	<addr>
                	ldur	w1, [x0, #0x5]
                	ubfx	x1, x1, #5, #26
@@ -235,8 +232,7 @@ Disassembly of section .text:
                	cbnz	x0, <addr>
                	ldur	w0, [x29, #-0x4f]
                	sbfx	x0, x0, #0, #30
-               	mov	x17, #-0x1              // =-1
-               	cmp	w0, w17
+               	cmn	w0, #0x1
                	b.ne	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -267,8 +263,7 @@ Disassembly of section .text:
                	cbnz	x0, <addr>
                	ldurh	w0, [x29, #-0x7f]
                	sbfx	x0, x0, #0, #15
-               	mov	x17, #-0x2              // =-2
-               	cmp	w0, w17
+               	cmn	w0, #0x2
                	b.ne	<addr>
                	ldurb	w0, [x29, #-0x7d]
                	cmp	w0, #0x3
@@ -367,8 +362,7 @@ Disassembly of section .text:
                	ret
                	ldur	w0, [x29, #-0x2f]
                	sbfx	x0, x0, #0, #30
-               	mov	x17, #-0x1              // =-1
-               	cmp	w0, w17
+               	cmn	w0, #0x1
                	b.ne	<addr>
                	ldur	x0, [x29, #-0x1c]
                	sbfx	x0, x0, #6, #30
@@ -378,8 +372,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	ldur	w0, [x29, #-0xc]
                	sbfx	x0, x0, #0, #30
-               	mov	x17, #-0x1              // =-1
-               	cmp	w0, w17
+               	cmn	w0, #0x1
                	b.ne	<addr>
                	ldur	w0, [x29, #-0x8]
                	sbfx	x0, x0, #0, #30
@@ -401,8 +394,7 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldrh	w1, [x0]
                	sbfx	x1, x1, #0, #15
-               	mov	x17, #-0x1              // =-1
-               	cmp	w1, w17
+               	cmn	w1, #0x1
                	b.ne	<addr>
                	ldrh	w0, [x0, #0x2]
                	sbfx	x0, x0, #0, #15
@@ -430,8 +422,7 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldrh	w0, [x0]
                	sbfx	x0, x0, #0, #15
-               	mov	x17, #-0x3              // =-3
-               	cmp	w0, w17
+               	cmn	w0, #0x3
                	b.eq	<addr>
                	mov	x0, #0x14               // =20
                	add	sp, sp, #0x90
@@ -449,8 +440,7 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldrh	w0, [x0]
                	sbfx	x0, x0, #0, #15
-               	mov	x17, #-0x3              // =-3
-               	cmp	w0, w17
+               	cmn	w0, #0x3
                	b.eq	<addr>
                	mov	x0, #0x16               // =22
                	add	sp, sp, #0x90
@@ -468,8 +458,7 @@ Disassembly of section .text:
                	cbnz	x0, <addr>
                	ldurh	w0, [x29, #-0x78]
                	sbfx	x0, x0, #0, #15
-               	mov	x17, #-0x3              // =-3
-               	cmp	w0, w17
+               	cmn	w0, #0x3
                	b.ne	<addr>
                	ldurb	w0, [x29, #-0x78]
                	cmp	w0, #0xfd

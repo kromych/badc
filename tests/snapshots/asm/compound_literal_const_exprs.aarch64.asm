@@ -24,8 +24,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	adrp	x0, <page>
                	ldrsw	x0, [x0, #0x14]
-               	mov	x17, #-0x6              // =-6
-               	cmp	w0, w17
+               	cmn	w0, #0x6
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret

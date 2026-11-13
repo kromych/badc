@@ -474,8 +474,7 @@ Disassembly of section .text:
                	mov	x0, v20.d[0]
                	cbnz	x0, <addr>
                	mov	x0, v20.d[1]
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x1d               // =29
                	add	sp, sp, #0x40
@@ -484,14 +483,12 @@ Disassembly of section .text:
                	fcmp	d3, d3
                	cset	x0, eq
                	neg	x0, x0
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	b.ne	<addr>
                	fcmpe	d3, d4
                	cset	x0, gt
                	neg	x0, x0
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	b.ne	<addr>
                	fcmpe	d3, d4
                	cset	x0, ls
@@ -553,8 +550,7 @@ Disassembly of section .text:
                	ldr	q7, [x0]
                	fcvtzs	v4.4s, v7.4s
                	smov	x0, v4.s[0]
-               	mov	x17, #-0x2              // =-2
-               	cmp	x0, x17
+               	cmn	x0, #0x2
                	b.ne	<addr>
                	smov	x0, v4.s[1]
                	cmp	x0, #0x2
@@ -644,8 +640,7 @@ Disassembly of section .text:
                	cmp	w0, #0x1
                	b.ne	<addr>
                	ldursw	x0, [x29, #-0x14]
-               	mov	x17, #-0x2              // =-2
-               	cmp	w0, w17
+               	cmn	w0, #0x2
                	b.eq	<addr>
                	mov	x0, #0x26               // =38
                	add	sp, sp, #0x40

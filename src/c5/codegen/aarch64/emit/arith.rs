@@ -837,6 +837,13 @@ pub(crate) fn cmp_imm12(imm: i64) -> Option<u32> {
     u32::try_from(imm).ok().filter(|v| *v < (1u32 << 12))
 }
 
+/// The magnitude of a `cmp Xn, #imm` that `cmn Xn, #magnitude` performs:
+/// both set the flags of `Xn - imm`, for `imm` in -4095..=-1.
+pub(crate) fn cmn_imm12(imm: i64) -> Option<u32> {
+    let m = u32::try_from(imm.checked_neg()?).ok()?;
+    (1..1 << 12).contains(&m).then_some(m)
+}
+
 /// The single-instruction encoding of `rd = rn op imm` when one exists:
 /// shifts by 0..63, a multiply by a power of two as a shift, add / sub
 /// of a 12-bit magnitude, plain or shifted by 12 (a negative immediate swaps
@@ -941,12 +948,12 @@ pub(crate) fn binop_imm_materializes(op: BinOp, imm: i64, high_dead: bool) -> bo
     if binop_imm_peephole(op, imm, high_dead, Reg(0), Reg(0)).is_some() {
         return false;
     }
-    !(compare_cond(op).is_some() && cmp_imm12(imm).is_some())
+    !(compare_cond(op).is_some() && (cmp_imm12(imm).is_some() || cmn_imm12(imm).is_some()))
 }
 
 /// Whether comparison `v` reads its operands at 32 bits
 /// (`passes::narrow`).
-fn narrow_cmp(alloc: &Allocation, v: super::super::ir::ValueId) -> bool {
+pub(super) fn narrow_cmp(alloc: &Allocation, v: super::super::ir::ValueId) -> bool {
     crate::c5::codegen::passes::narrow::is_cmp32(&alloc.cmp32, v)
 }
 
@@ -1031,18 +1038,23 @@ pub(super) fn emit_binop_imm(
         store_spilled_int(code, frame, dst, rd);
         return Ok(());
     }
-    // `cmp Xn, #imm12` covers 0..4095.
+    // `cmp Xn, #imm12` covers 0..4095, `cmn Xn, #imm12` -4095..-1.
+    let narrow_compare = narrow_cmp(alloc, v);
+    let imm_compare = cmp_imm12(rhs_imm)
+        .map(|k| match narrow_compare {
+            true => super::encode::enc_subs_imm_w(Reg::SP, rn, k),
+            false => enc_subs_imm(Reg::SP, rn, k),
+        })
+        .or_else(|| {
+            cmn_imm12(rhs_imm).map(|k| match narrow_compare {
+                true => super::encode::enc_adds_imm_w(Reg::SP, rn, k),
+                false => super::encode::enc_adds_imm(Reg::SP, rn, k),
+            })
+        });
     if compare_cond(op).is_some()
-        && let Some(imm) = cmp_imm12(rhs_imm)
+        && let Some(word) = imm_compare
     {
-        emit(
-            code,
-            if narrow_cmp(alloc, v) {
-                super::encode::enc_subs_imm_w(Reg::SP, rn, imm)
-            } else {
-                enc_subs_imm(Reg::SP, rn, imm)
-            },
-        );
+        emit(code, word);
         if alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {
             return Ok(());
         }

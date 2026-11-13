@@ -27,17 +27,14 @@ Disassembly of section .text:
 
 <sum_u8>:
                	xorl	%eax, %eax
-               	leaq	-0x1(%rsi), %rcx
-               	testq	%rsi, %rsi
-               	je	<addr>
+               	subq	$0x1, %rsi
+               	jb	<addr>
                	leaq	(%rax,%rax,2), %rax
                	incq	%rdi
-               	movzbq	-0x1(%rdi), %rdx
-               	addq	%rdx, %rax
-               	movq	%rcx, %rsi
-               	leaq	-0x1(%rsi), %rcx
-               	testq	%rsi, %rsi
-               	jne	<addr>
+               	movzbq	-0x1(%rdi), %rcx
+               	addq	%rcx, %rax
+               	subq	$0x1, %rsi
+               	jae	<addr>
                	retq
 
 <sum_u8_ref>:
@@ -62,17 +59,14 @@ Disassembly of section .text:
 
 <sum_i8>:
                	xorl	%eax, %eax
-               	leaq	-0x1(%rsi), %rcx
-               	testq	%rsi, %rsi
-               	je	<addr>
+               	subq	$0x1, %rsi
+               	jb	<addr>
                	leaq	(%rax,%rax,2), %rax
                	incq	%rdi
-               	movsbq	-0x1(%rdi), %rdx
-               	addq	%rdx, %rax
-               	movq	%rcx, %rsi
-               	leaq	-0x1(%rsi), %rcx
-               	testq	%rsi, %rsi
-               	jne	<addr>
+               	movsbq	-0x1(%rdi), %rcx
+               	addq	%rcx, %rax
+               	subq	$0x1, %rsi
+               	jae	<addr>
                	retq
 
 <sum_i8_ref>:
@@ -97,17 +91,14 @@ Disassembly of section .text:
 
 <sum_u16>:
                	xorl	%eax, %eax
-               	leaq	-0x1(%rsi), %rcx
-               	testq	%rsi, %rsi
-               	je	<addr>
+               	subq	$0x1, %rsi
+               	jb	<addr>
                	leaq	(%rax,%rax,2), %rax
                	addq	$0x2, %rdi
-               	movzwq	-0x2(%rdi), %rdx
-               	addq	%rdx, %rax
-               	movq	%rcx, %rsi
-               	leaq	-0x1(%rsi), %rcx
-               	testq	%rsi, %rsi
-               	jne	<addr>
+               	movzwq	-0x2(%rdi), %rcx
+               	addq	%rcx, %rax
+               	subq	$0x1, %rsi
+               	jae	<addr>
                	retq
 
 <sum_u16_ref>:
@@ -132,17 +123,14 @@ Disassembly of section .text:
 
 <sum_i16>:
                	xorl	%eax, %eax
-               	leaq	-0x1(%rsi), %rcx
-               	testq	%rsi, %rsi
-               	je	<addr>
+               	subq	$0x1, %rsi
+               	jb	<addr>
                	leaq	(%rax,%rax,2), %rax
                	addq	$0x2, %rdi
-               	movswq	-0x2(%rdi), %rdx
-               	addq	%rdx, %rax
-               	movq	%rcx, %rsi
-               	leaq	-0x1(%rsi), %rcx
-               	testq	%rsi, %rsi
-               	jne	<addr>
+               	movswq	-0x2(%rdi), %rcx
+               	addq	%rcx, %rax
+               	subq	$0x1, %rsi
+               	jae	<addr>
                	retq
 
 <sum_i16_ref>:
@@ -167,17 +155,14 @@ Disassembly of section .text:
 
 <sum_u32>:
                	xorl	%eax, %eax
-               	leaq	-0x1(%rsi), %rcx
-               	testq	%rsi, %rsi
-               	je	<addr>
+               	subq	$0x1, %rsi
+               	jb	<addr>
                	leaq	(%rax,%rax,2), %rax
                	addq	$0x4, %rdi
-               	movl	-0x4(%rdi), %edx
-               	addq	%rdx, %rax
-               	movq	%rcx, %rsi
-               	leaq	-0x1(%rsi), %rcx
-               	testq	%rsi, %rsi
-               	jne	<addr>
+               	movl	-0x4(%rdi), %ecx
+               	addq	%rcx, %rax
+               	subq	$0x1, %rsi
+               	jae	<addr>
                	retq
 
 <sum_u32_ref>:
@@ -202,17 +187,14 @@ Disassembly of section .text:
 
 <sum_i32>:
                	xorl	%eax, %eax
-               	leaq	-0x1(%rsi), %rcx
-               	testq	%rsi, %rsi
-               	je	<addr>
+               	subq	$0x1, %rsi
+               	jb	<addr>
                	leaq	(%rax,%rax,2), %rax
                	addq	$0x4, %rdi
-               	movslq	-0x4(%rdi), %rdx
-               	addq	%rdx, %rax
-               	movq	%rcx, %rsi
-               	leaq	-0x1(%rsi), %rcx
-               	testq	%rsi, %rsi
-               	jne	<addr>
+               	movslq	-0x4(%rdi), %rcx
+               	addq	%rcx, %rax
+               	subq	$0x1, %rsi
+               	jae	<addr>
                	retq
 
 <sum_i32_ref>:
@@ -237,17 +219,14 @@ Disassembly of section .text:
 
 <sum_u64>:
                	xorl	%eax, %eax
-               	leaq	-0x1(%rsi), %rcx
-               	testq	%rsi, %rsi
-               	je	<addr>
+               	subq	$0x1, %rsi
+               	jb	<addr>
                	leaq	(%rax,%rax,2), %rax
                	addq	$0x8, %rdi
-               	movq	-0x8(%rdi), %rdx
-               	addq	%rdx, %rax
-               	movq	%rcx, %rsi
-               	leaq	-0x1(%rsi), %rcx
-               	testq	%rsi, %rsi
-               	jne	<addr>
+               	movq	-0x8(%rdi), %rcx
+               	addq	%rcx, %rax
+               	subq	$0x1, %rsi
+               	jae	<addr>
                	retq
 
 <sum_u64_ref>:
@@ -273,19 +252,16 @@ Disassembly of section .text:
 <dot>:
                	xorl	%r11d, %r11d
                	movq	%r11, %xmm0
-               	leaq	-0x1(%rdx), %rax
-               	testq	%rdx, %rdx
-               	je	<addr>
+               	subq	$0x1, %rdx
+               	jb	<addr>
                	addq	$0x8, %rdi
                	movsd	-0x8(%rdi), %xmm1
                	addq	$0x4, %rsi
                	movss	-0x4(%rsi), %xmm2
                	cvtss2sd	%xmm2, %xmm2
                	vfmadd231sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm2) + xmm0
-               	movq	%rax, %rdx
-               	leaq	-0x1(%rdx), %rax
-               	testq	%rdx, %rdx
-               	jne	<addr>
+               	subq	$0x1, %rdx
+               	jae	<addr>
                	retq
 
 <dot_ref>:
@@ -316,33 +292,27 @@ Disassembly of section .text:
                	retq
 
 <fill>:
-               	leaq	-0x1(%rdx), %rax
-               	testq	%rdx, %rdx
-               	je	<addr>
+               	subq	$0x1, %rdx
+               	jb	<addr>
                	addq	$0x2, %rdi
-               	movq	%rcx, %rdx
-               	andq	$0xffff, %rdx           # imm = 0xFFFF
-               	movw	%dx, -0x2(%rdi)
+               	movq	%rcx, %rax
+               	andq	$0xffff, %rax           # imm = 0xFFFF
+               	movw	%ax, -0x2(%rdi)
                	addq	$0x4, %rsi
                	movl	%ecx, -0x4(%rsi)
-               	imulq	$0x7, %rcx, %rcx
-               	incq	%rcx
-               	movq	%rax, %rdx
-               	leaq	-0x1(%rdx), %rax
-               	testq	%rdx, %rdx
-               	jne	<addr>
+               	imulq	$0x7, %rcx, %rax
+               	leaq	0x1(%rax), %rcx
+               	subq	$0x1, %rdx
+               	jae	<addr>
                	retq
 
 <clear>:
-               	leaq	-0x1(%rsi), %rax
-               	testq	%rsi, %rsi
-               	je	<addr>
+               	subq	$0x1, %rsi
+               	jb	<addr>
                	addq	$0x2, %rdi
                	movw	$0x0, -0x2(%rdi)
-               	movq	%rax, %rsi
-               	leaq	-0x1(%rsi), %rax
-               	testq	%rsi, %rsi
-               	jne	<addr>
+               	subq	$0x1, %rsi
+               	jae	<addr>
                	retq
 
 <cut>:

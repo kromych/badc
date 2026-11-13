@@ -240,8 +240,7 @@ Disassembly of section .text:
                	orr	x0, x1, x0, lsl #32
                	sbfx	x0, x0, #0, #40
                	asr	x1, x0, #63
-               	mov	x17, #-0x3              // =-3
-               	cmp	x0, x17
+               	cmn	x0, #0x3
                	b.eq	<addr>
                	mov	x0, #0x79               // =121
                	cbz	x0, <addr>
@@ -252,8 +251,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x17, #-0x1              // =-1
-               	cmp	w1, w17
+               	cmn	w1, #0x1
                	b.eq	<addr>
                	mov	x0, #0x7a               // =122
                	b	<addr>

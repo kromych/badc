@@ -17,8 +17,8 @@ Disassembly of section .text:
                	add	x1, x0, #0x1
                	sxtw	x2, w1
                	cbz	x0, <addr>
-               	add	x0, x0, #0x64
-               	cbnz	x0, <addr>
+               	adds	x0, x0, #0x64
+               	b.ne	<addr>
                	mov	x0, #-0x1               // =-1
                	ret
                	lsl	x0, x0, #1

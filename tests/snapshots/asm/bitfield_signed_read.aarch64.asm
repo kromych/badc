@@ -39,8 +39,7 @@ Disassembly of section .text:
                	ret
                	and	x0, x0, #0xffff
                	sbfx	x1, x0, #12, #2
-               	mov	x17, #-0x1              // =-1
-               	cmp	w1, w17
+               	cmn	w1, #0x1
                	b.eq	<addr>
                	mov	x0, #0x20               // =32
                	add	sp, sp, #0x10

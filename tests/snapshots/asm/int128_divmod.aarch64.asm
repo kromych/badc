@@ -524,11 +524,9 @@ Disassembly of section .text:
                	cset	x1, lo
                	add	x0, x0, #0x1
                	neg	x1, x1
-               	mov	x17, #-0x3              // =-3
-               	cmp	x0, x17
+               	cmn	x0, #0x3
                	b.ne	<addr>
-               	mov	x17, #-0x1              // =-1
-               	cmp	w1, w17
+               	cmn	w1, #0x1
                	b.eq	<addr>
                	mov	x0, #0x8                // =8
                	cbz	x0, <addr>
@@ -644,8 +642,7 @@ Disassembly of section .text:
                	sub	x2, x0, x2
                	mvn	x0, x1
                	mvn	x1, x2
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	cset	x2, lo
                	add	x0, x0, #0x1
                	add	x1, x1, #0x1
@@ -653,8 +650,7 @@ Disassembly of section .text:
                	mov	x17, #-0x3039           // =-12345
                	cmp	x0, x17
                	b.ne	<addr>
-               	mov	x17, #-0x1              // =-1
-               	cmp	x1, x17
+               	cmn	x1, #0x1
                	b.eq	<addr>
                	mov	x0, #0xa                // =10
                	cbz	x0, <addr>
@@ -710,8 +706,7 @@ Disassembly of section .text:
                	eor	x1, x1, #0x1
                	add	x0, x0, x1
                	mvn	x0, x0
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	cset	x1, lo
                	add	x0, x0, #0x1
                	neg	x1, x1
@@ -719,8 +714,7 @@ Disassembly of section .text:
                	movk	x17, #0x4000, lsl #16
                	cmp	x0, x17
                	b.ne	<addr>
-               	mov	x17, #-0x1              // =-1
-               	cmp	w1, w17
+               	cmn	w1, #0x1
                	b.eq	<addr>
                	mov	x0, #0xb                // =11
                	cbz	x0, <addr>
@@ -1005,8 +999,7 @@ Disassembly of section .text:
                	sub	x2, x0, x2
                	mvn	x0, x1
                	mvn	x1, x2
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	cset	x2, lo
                	add	x0, x0, #0x1
                	add	x1, x1, #0x1

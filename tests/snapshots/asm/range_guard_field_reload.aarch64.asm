@@ -104,8 +104,7 @@ Disassembly of section .text:
                	sub	x1, x2, x1
                	cmp	x0, x1
                	csel	x0, x0, x1, lo
-               	mov	x17, #-0x16             // =-22
-               	cmp	w0, w17
+               	cmn	w0, #0x16
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x20

@@ -1084,6 +1084,144 @@ pub(super) fn emit_post_indexed(
     Some(Ok(()))
 }
 
+/// An add or subtract of an immediate whose flags the branch ending its
+/// block reads ([`flag_steps`]), and the comparison those flags answer.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum FlagStep {
+    /// `adds` / `subs`, of the low words when `w32`.
+    Sets { w32: bool },
+    /// A comparison the step's flags answer with the condition: no code.
+    Answered(Cond),
+}
+
+/// Steps `y = x + k` whose flags answer the branch ending their block: a
+/// zero test of `y` -- the branch condition itself or a fused `==` / `!=`
+/// with 0 -- reads Z, and `y != -1` of `y = x - 1` reads C, set exactly
+/// when `x != 0`. Nothing is emitted between the step and its comparison,
+/// and nothing after the step sets the flags. A low-word test takes the
+/// 32-bit form, which only a step whose upper half nothing reads may.
+pub(super) fn flag_steps(func: &FunctionSsa, alloc: &Allocation) -> Vec<Option<FlagStep>> {
+    use super::super::ir::ValueId;
+    let mut out = alloc::vec![None; func.insts.len()];
+    let step = |y: ValueId| match func.insts[y as usize] {
+        Inst::BinopI {
+            op: BinOp::Add,
+            lhs,
+            rhs_imm,
+        } => Some((lhs, rhs_imm)),
+        Inst::BinopI {
+            op: BinOp::Sub,
+            lhs,
+            rhs_imm,
+        } => rhs_imm.checked_neg().map(|k| (lhs, k)),
+        _ => None,
+    };
+    let silent =
+        |u: ValueId| super::ssa::emit_common::inst_emits_nothing(&func.insts[u as usize], u, alloc);
+    let in_reg = |v: ValueId| matches!(place_of(alloc, v), Place::IntReg(r) if r != 31);
+    for (b, block) in func.blocks.iter().enumerate().skip(1) {
+        let (Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. }) = block.terminator else {
+            continue;
+        };
+        if !block.inst_range.contains(&cond) {
+            continue;
+        }
+        let (y, answer, w32) = if alloc.branch_fused.get(cond as usize) == Some(&true) {
+            let Inst::BinopI {
+                op: op @ (BinOp::Eq | BinOp::Ne),
+                lhs: y,
+                rhs_imm,
+            } = func.insts[cond as usize]
+            else {
+                continue;
+            };
+            if !block.inst_range.contains(&y) || y >= cond || !(y + 1..cond).all(silent) {
+                continue;
+            }
+            let decrement = step(y).is_some_and(|(_, k)| k == -1);
+            let cc = match (rhs_imm, op) {
+                (0, BinOp::Eq) => Cond::Eq,
+                (0, _) => Cond::Ne,
+                (-1, BinOp::Eq) if decrement => Cond::Lo,
+                (-1, _) if decrement => Cond::Hs,
+                _ => continue,
+            };
+            (y, Some(cc), narrow_cmp(alloc, cond))
+        } else {
+            let keeps = |u: ValueId| {
+                silent(u) || super::ssa::reg_alloc::flags_survive(&func.insts[u as usize], false)
+            };
+            if !(cond + 1..block.inst_range.end).all(keeps) {
+                continue;
+            }
+            let low_word = func.low_word_tests.get(b).copied().unwrap_or(false);
+            (cond, None, low_word)
+        };
+        let Some((x, k)) = step(y) else { continue };
+        if k.unsigned_abs() >= 4096 || !in_reg(y) || !in_reg(x) || (w32 && !alloc.high_dead(y)) {
+            continue;
+        }
+        out[y as usize] = Some(FlagStep::Sets { w32 });
+        if let Some(cc) = answer {
+            out[cond as usize] = Some(FlagStep::Answered(cc));
+        }
+    }
+    out
+}
+
+/// The step or comparison [`flag_steps`] marked; `None` for any other
+/// instruction.
+pub(super) fn emit_flag_step(
+    code: &mut Vec<u8>,
+    v: super::super::ir::ValueId,
+    steps: &[Option<FlagStep>],
+    fcx: &FnCtx,
+) -> Option<Emit> {
+    let (lhs, k) = match (
+        steps.get(v as usize).copied().flatten()?,
+        &fcx.func.insts[v as usize],
+    ) {
+        (FlagStep::Answered(_), _) => return Some(Ok(())),
+        (FlagStep::Sets { .. }, &Inst::BinopI { op, lhs, rhs_imm }) => match op {
+            BinOp::Sub => (lhs, rhs_imm.checked_neg()?),
+            _ => (lhs, rhs_imm),
+        },
+        _ => return None,
+    };
+    let Some(FlagStep::Sets { w32 }) = steps[v as usize] else {
+        return None;
+    };
+    let (Place::IntReg(rd), Place::IntReg(rn)) = (place_of(fcx.alloc, v), place_of(fcx.alloc, lhs))
+    else {
+        return Some(fail("flag step: operand not in a register"));
+    };
+    let (rd, rn, m) = (Reg(rd), Reg(rn), k.unsigned_abs() as u32);
+    emit(
+        code,
+        match (k >= 0, w32) {
+            (true, false) => super::encode::enc_adds_imm(rd, rn, m),
+            (true, true) => super::encode::enc_adds_imm_w(rd, rn, m),
+            (false, false) => enc_subs_imm(rd, rn, m),
+            (false, true) => super::encode::enc_subs_imm_w(rd, rn, m),
+        },
+    );
+    Some(Ok(()))
+}
+
+/// The condition a branch on `cond` takes off a [`flag_steps`] step's
+/// flags: the comparison's answer, or the step's own zero test.
+pub(super) fn flag_step_cond(
+    steps: &[Option<FlagStep>],
+    cond: super::super::ir::ValueId,
+    negate: bool,
+) -> Option<Cond> {
+    let cc = match steps.get(cond as usize).copied().flatten()? {
+        FlagStep::Answered(cc) => cc,
+        FlagStep::Sets { .. } => Cond::Ne,
+    };
+    Some(if negate { cc.flip() } else { cc })
+}
+
 /// `ld1` or `st1` of one lane for a lane insert or store whose value
 /// [`lane_memory`] fused into it; `None` for any other instruction.
 pub(super) fn emit_lane_memory(

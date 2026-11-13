@@ -42,8 +42,7 @@ Disassembly of section .text:
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	sub	x1, x1, x2
-               	mov	x17, #-0x2              // =-2
-               	cmp	x1, x17
+               	cmn	x1, #0x2
                	cset	x1, eq
                	cbz	x1, <addr>
                	adrp	x1, <page>

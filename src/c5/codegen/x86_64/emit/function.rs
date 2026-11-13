@@ -351,6 +351,7 @@ pub(crate) fn emit_function(
         abs32_addrs,
         endbr_targets,
         param_prebatched: alloc::vec![false; func.insts.len()],
+        flag_steps: flag_steps(func, alloc),
         plan,
         block_offsets: alloc::vec![0; func.blocks.len()],
         branch_fixups: Vec::new(),
@@ -391,6 +392,9 @@ struct FnEmit<'a, 'b> {
     endbr_targets: alloc::collections::BTreeSet<super::super::ir::BlockId>,
     /// `ParamRef` values the entry parallel copy already placed.
     param_prebatched: Vec<bool>,
+    /// Steps whose flags a branch reads, and the comparisons they answer
+    /// ([`flag_steps`]).
+    flag_steps: Vec<Option<FlagStep>>,
     /// Which blocks are emitted and where each branch lands. Fixed before
     /// the first pass: the short forms are keyed by emission index, so both
     /// passes have to write the same branches.
@@ -870,7 +874,9 @@ impl FnEmit<'_, '_> {
         for s in saves {
             call_save(self.out.cx.code, self.fcx.frame, s, true);
         }
-        emit_inst(&mut self.out, inst, v, place, &self.fcx).inspect_err(|_| {
+        let lowered = emit_flag_step(self.out.cx.code, v, &self.flag_steps, &self.fcx)
+            .unwrap_or_else(|| emit_inst(&mut self.out, inst, v, place, &self.fcx));
+        lowered.inspect_err(|_| {
             #[cfg(feature = "codegen_test")]
             if std::env::var("BADC_DUMP_SSA").is_ok() {
                 eprintln!(
@@ -1053,7 +1059,8 @@ impl FnEmit<'_, '_> {
                     negate,
                 } => (taken, other, negate),
             };
-        if let Some(fused) = fused_branch_cc(func, alloc, cond, negate) {
+        let stepped = flag_step_cc(&self.flag_steps, cond, negate).map(FusedBranch::Jcc);
+        if let Some(fused) = stepped.or_else(|| fused_branch_cc(func, alloc, cond, negate)) {
             emit_fused_branch(
                 self.out.cx.code,
                 &mut self.branch_fixups,

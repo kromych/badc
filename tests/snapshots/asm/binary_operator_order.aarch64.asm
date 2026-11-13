@@ -32,8 +32,8 @@ Disassembly of section .text:
                	ret
                	sub	x4, x1, #0x1
                	str	w4, [x0, #0x20]
-               	sub	x0, x1, #0x2
-               	cbnz	w0, <addr>
+               	subs	w0, w1, #0x2
+               	b.ne	<addr>
                	mov	x0, x4
                	cmp	w0, #0x1
                	cset	x0, eq

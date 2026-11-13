@@ -1154,8 +1154,7 @@ Disassembly of section .text:
                	stur	x21, [x29, #-0x20]
                	cmp	x20, #0xf
                	b.ne	<addr>
-               	mov	x17, #-0x9              // =-9
-               	cmp	x21, x17
+               	cmn	x21, #0x9
                	b.eq	<addr>
                	mov	x0, #0x1c               // =28
                	ldp	x29, x30, [sp, #0xd0]

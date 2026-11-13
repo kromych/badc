@@ -98,8 +98,7 @@ Disassembly of section .text:
                	mov	x1, #0x1                // =1
                	bl	<addr>
                	mov	x21, x0
-               	mov	x17, #-0x1              // =-1
-               	cmp	x21, x17
+               	cmn	x21, #0x1
                	b.ne	<addr>
                	mov	x20, #0x5               // =5
                	b	<addr>

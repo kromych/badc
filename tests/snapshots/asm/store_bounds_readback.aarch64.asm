@@ -61,8 +61,7 @@ Disassembly of section .text:
                	sxtb	x1, w1
                	cmp	w1, #0x0
                	cset	x2, lt
-               	mov	x17, #-0x38             // =-56
-               	cmp	w1, w17
+               	cmn	w1, #0x38
                	cset	x1, eq
                	add	x1, x2, x1, lsl #1
                	mov	x2, #0x2                // =2
@@ -119,8 +118,7 @@ Disassembly of section .text:
                	ldursw	x0, [x29, #-0x18]
                	cmp	w0, #0x0
                	cset	x1, lt
-               	mov	x17, #-0x7              // =-7
-               	cmp	w0, w17
+               	cmn	w0, #0x7
                	cset	x0, eq
                	add	x0, x1, x0, lsl #1
                	orr	x1, x20, #0x20
@@ -141,8 +139,7 @@ Disassembly of section .text:
                	ldursw	x0, [x29, #-0x18]
                	cmp	w0, #0x0
                	cset	x1, lt
-               	mov	x17, #-0x3              // =-3
-               	cmp	w0, w17
+               	cmn	w0, #0x3
                	cset	x0, eq
                	add	x0, x1, x0, lsl #1
                	orr	x1, x20, #0x40

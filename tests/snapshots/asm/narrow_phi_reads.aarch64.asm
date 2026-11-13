@@ -164,8 +164,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	x0, #0x2b               // =43
                	bl	<addr>
-               	mov	x17, #-0x7f             // =-127
-               	cmp	w0, w17
+               	cmn	w0, #0x7f
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
                	bl	<addr>
@@ -217,16 +216,14 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	x0, #0x80               // =128
                	bl	<addr>
-               	mov	x17, #-0x80             // =-128
-               	cmp	w0, w17
+               	cmn	w0, #0x80
                	b.eq	<addr>
                	mov	x0, #0x9                // =9
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x1ff              // =511
                	bl	<addr>
-               	mov	x17, #-0x1              // =-1
-               	cmp	w0, w17
+               	cmn	w0, #0x1
                	b.ne	<addr>
                	mov	x0, #-0x5               // =-5
                	bl	<addr>

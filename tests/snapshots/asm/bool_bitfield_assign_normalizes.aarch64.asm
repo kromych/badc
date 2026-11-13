@@ -86,8 +86,7 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x8]
                	mov	w0, w0
                	sbfx	x0, x0, #5, #4
-               	mov	x17, #-0x7              // =-7
-               	cmp	w0, w17
+               	cmn	w0, #0x7
                	b.eq	<addr>
                	mov	x0, #0x11               // =17
                	add	sp, sp, #0x10

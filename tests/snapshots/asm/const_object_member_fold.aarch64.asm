@@ -46,8 +46,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	adrp	x1, <page>
                	ldrsw	x1, [x1, #0x34]
-               	mov	x17, #-0x5              // =-5
-               	cmp	w1, w17
+               	cmn	w1, #0x5
                	b.eq	<addr>
                	orr	x0, x0, #0x8
                	adrp	x1, <page>

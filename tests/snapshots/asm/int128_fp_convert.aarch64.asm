@@ -1018,8 +1018,7 @@ Disassembly of section .text:
                	and	x3, x3, x6
                	and	x2, x5, x2
                	orr	x2, x3, x2
-               	mov	x17, #-0x3              // =-3
-               	cmp	x2, x17
+               	cmn	x2, #0x3
                	b.ne	<addr>
                	ldr	s0, [x1, #0x38]
                	fcvt	d0, s0
@@ -1081,8 +1080,7 @@ Disassembly of section .text:
                	and	x3, x3, x4
                	and	x1, x1, x2
                	orr	x1, x3, x1
-               	mov	x17, #-0x1              // =-1
-               	cmp	x1, x17
+               	cmn	x1, #0x1
                	b.eq	<addr>
                	mov	x0, #0x54               // =84
                	ldp	x29, x30, [sp], #0x10

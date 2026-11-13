@@ -14,14 +14,12 @@ Disassembly of section .text:
                	brk	#0x1
 
 <ne_rhs>:
-               	mov	x17, #-0x1              // =-1
-               	cmp	w0, w17
+               	cmn	w0, #0x1
                	cset	x0, ne
                	ret
 
 <eq_rhs>:
-               	mov	x17, #-0x1              // =-1
-               	cmp	w0, w17
+               	cmn	w0, #0x1
                	cset	x0, eq
                	ret
 
@@ -30,8 +28,7 @@ Disassembly of section .text:
                	ret
 
 <swapped>:
-               	mov	x17, #-0x1              // =-1
-               	cmp	w0, w17
+               	cmn	w0, #0x1
                	cset	x0, ne
                	ret
 

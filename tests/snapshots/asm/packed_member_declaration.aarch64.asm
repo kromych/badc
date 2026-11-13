@@ -78,8 +78,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	w1, w1
                	sbfx	x1, x1, #4, #20
-               	mov	x17, #-0x1              // =-1
-               	cmp	w1, w17
+               	cmn	w1, #0x1
                	b.ne	<addr>
                	ldurb	w1, [x29, #-0x2]
                	cmp	w1, #0x4

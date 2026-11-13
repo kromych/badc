@@ -343,8 +343,7 @@ Disassembly of section .text:
                	cset	x1, eq
                	ldr	x0, [x20, #0x10]
                	fmov	x2, d8
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	b.ne	<addr>
                	fcmp	d8, d8
                	cset	x0, ne

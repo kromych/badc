@@ -63,8 +63,7 @@ Disassembly of section .text:
                	mov	x1, x20
                	bl	<addr>
                	sxtw	x0, w0
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	b.eq	<addr>
                	mov	x0, x20
                	bl	<addr>

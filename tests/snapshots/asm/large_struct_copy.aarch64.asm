@@ -99,24 +99,21 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrsw	x0, [sp, #0xb0]
-               	mov	x17, #-0x1              // =-1
-               	cmp	w0, w17
+               	cmn	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x420
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrsw	x0, [sp, #0x154]
-               	mov	x17, #-0x2              // =-2
-               	cmp	w0, w17
+               	cmn	w0, #0x2
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x420
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrsw	x0, [sp, #0x1f8]
-               	mov	x17, #-0x3              // =-3
-               	cmp	w0, w17
+               	cmn	w0, #0x3
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x420

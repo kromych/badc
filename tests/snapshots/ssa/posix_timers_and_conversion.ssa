@@ -27,7 +27,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=main
 fn ent_pc=8 n_params=0 variadic=false locals=46
-  spill_count=1 gpr_used=[] fp_used=[]
+  spill_count=3 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(48)                                      -> x0
@@ -302,7 +302,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=46
   block 21  start_pc=0
     v229 ImmData(25)                                      -> x7
     v230 ImmData(31)                                      -> x6
-    v231 CallExt { binding_idx=0, args=[v229, v230], fp_arg_mask=0x0 } -> [spill 0]
+    v231 CallExt { binding_idx=0, args=[v229, v230], fp_arg_mask=0x0 } -> x7
     v232 Imm(0)                                           -> x0
     v233 Imm(0)                                           -> x0
     v234 Imm(-1)                                          -> x0
@@ -753,11 +753,11 @@ fn ent_pc=8 n_params=0 variadic=false locals=46
     terminator Return(v598)   (exit_acc=v598)
   block 55  start_pc=0
     v613 Imm(250)                                         -> x7
-    v614 CallExt { binding_idx=296, args=[v613], fp_arg_mask=0x0 } -> [spill 0]
+    v614 CallExt { binding_idx=296, args=[v613], fp_arg_mask=0x0 } -> x1
     v615 Imm(0)                                           -> x0
     v616 Imm(0)                                           -> x0
     v617 BinopI { op=ne, lhs=v614, rhs_imm=-1 }           -> x0
-    v618 Imm(0)                                           -> x1
+    v618 Imm(0)                                           -> x2
     terminator Bz { cond=v617, target=b58, fall=b56 }   (exit_acc=v617)
   block 56  start_pc=0
     v619 Imm(0)                                           -> x0

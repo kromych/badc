@@ -272,33 +272,35 @@ Disassembly of section .text:
                	movq	-0x10(%rbp), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movq	%rax, %r10
-               	movq	%r10, 0x18(%rsp)
-               	movq	0x18(%rsp), %r10
-               	testq	%r10, %r10
+               	movq	%rax, %rcx
+               	testq	%rcx, %rcx
                	jne	<addr>
                	movl	$0xb, %eax
                	leave
                	retq
                	leaq	-0x58(%rbp), %rsi
                	movq	-0x10(%rbp), %rdx
-               	movq	0x18(%rsp), %rdi
+               	movq	%rcx, 0x10(%rsp)
+               	movq	%rcx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
+               	movq	0x10(%rsp), %rcx
                	leaq	<rip>, %rsi
                	movq	-0x10(%rbp), %rdx
-               	movq	0x18(%rsp), %rdi
+               	movq	%rcx, 0x10(%rsp)
+               	movq	%rcx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	movq	%rax, %r10
-               	movq	%r10, 0x10(%rsp)
-               	movq	0x18(%rsp), %rdi
+               	movq	%r10, 0x18(%rsp)
+               	movq	0x10(%rsp), %rcx
+               	movq	%rcx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	xorl	%eax, %eax
                	movl	$0xc, %ecx
-               	movq	0x10(%rsp), %r10
+               	movq	0x18(%rsp), %r10
                	testq	%r10, %r10
                	cmovneq	%rcx, %rax
                	leave

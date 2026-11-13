@@ -72,7 +72,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v6   Imm(3)                                           -> x2
     v7   Imm(4616471093031469056)                         -> x1
     v8   Imm(0)                                           -> x8
-    v9   Call { target_pc=0, args=[v3, v4, v5, v6, v7], fixed_args=1, fp_return=true, fp_arg_mask=0x14 } -> [spill 0]
+    v9   Call { target_pc=0, args=[v3, v4, v5, v6, v7], fixed_args=1, fp_return=true, fp_arg_mask=0x14 } -> d1
     v10  Imm(0)                                           -> x0
     v11  Imm(0)                                           -> x0
     v12  Imm(4622241330054037504)                         -> x0

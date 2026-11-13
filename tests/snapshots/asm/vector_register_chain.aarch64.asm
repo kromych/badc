@@ -56,43 +56,39 @@ Disassembly of section .text:
                	mov	x21, x2
                	mov	x24, x4
                	mov	x23, x3
-               	movi	v16.16b, #0x1d
-               	str	q16, [sp, #0x30]
+               	movi	v3.16b, #0x1d
                	mov	x20, #0x0               // =0
                	mov	x22, x20
                	ldr	x0, [x21, #0x18]
                	add	x0, x0, x20
-               	ldr	q16, [x0]
-               	str	q16, [sp, #0x50]
+               	ldr	q0, [x0]
                	mov	x0, #0x2                // =2
-               	ldr	q16, [sp, #0x50]
-               	str	q16, [sp, #0x40]
+               	mov	v1.16b, v0.16b
                	ldr	x1, [x21, x0, lsl #3]
                	add	x1, x1, x20
-               	ldr	q0, [x1]
-               	ldr	q16, [sp, #0x40]
-               	eor	v16.16b, v16.16b, v0.16b
-               	str	q16, [sp, #0x40]
-               	ldr	q1, [sp, #0x50]
-               	sshr	v2.16b, v1.16b, #0x7
-               	shl	v1.16b, v1.16b, #0x1
-               	ldr	q17, [sp, #0x30]
-               	and	v2.16b, v2.16b, v17.16b
+               	ldr	q2, [x1]
                	eor	v1.16b, v1.16b, v2.16b
-               	eor	v16.16b, v1.16b, v0.16b
-               	str	q16, [sp, #0x50]
+               	sshr	v4.16b, v0.16b, #0x7
+               	shl	v0.16b, v0.16b, #0x1
+               	and	v4.16b, v4.16b, v3.16b
+               	eor	v0.16b, v0.16b, v4.16b
+               	eor	v0.16b, v0.16b, v2.16b
                	sub	x0, x0, #0x1
                	cmp	w0, #0x0
                	b.ge	<addr>
                	ldr	x0, [x21, #0x18]
                	add	x0, x0, x20
+               	str	q3, [sp, #0x50]
+               	str	q0, [sp, #0x40]
+               	str	q1, [sp, #0x30]
                	bl	<addr>
+               	ldr	q3, [sp, #0x50]
+               	ldr	q0, [sp, #0x40]
+               	ldr	q1, [sp, #0x30]
                	add	x0, x22, x0
                	add	x1, x23, x20
-               	ldr	q16, [sp, #0x40]
-               	str	q16, [x1]
+               	str	q1, [x1]
                	add	x1, x24, x20
-               	ldr	q0, [sp, #0x50]
                	str	q0, [x1]
                	mov	x1, v0.d[0]
                	and	x1, x1, #0xff

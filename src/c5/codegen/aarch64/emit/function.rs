@@ -990,6 +990,12 @@ impl FunctionEmitter<'_, '_> {
             return self.emit_asm_goto(asm, args, v, table);
         }
         let data_fixups_pre_inst = self.cx.data_fixups.len();
+        let saves = (alloc.call_saves)
+            .binary_search_by_key(&v, |&(site, _)| site)
+            .map_or(&[][..], |i| alloc.call_saves[i].1.as_slice());
+        for s in saves {
+            call_save(self.cx.code, self.fcx.frame, s, true);
+        }
         let fused = emit_lane_memory(self.cx.code, inst, &self.lane_mem, place, &self.fcx);
         let lowered = fused.unwrap_or_else(|| {
             emit_inst(
@@ -1016,6 +1022,9 @@ impl FunctionEmitter<'_, '_> {
                 );
             }
             return self.rollback(e);
+        }
+        for s in saves {
+            call_save(self.cx.code, self.fcx.frame, s, false);
         }
         // An `Inst::ImmData` naming a cross-TU object replaces its unit-local
         // `.data` fixup with a named reference, so the ET_REL writer emits an
@@ -2531,5 +2540,21 @@ fn emit_scalar_return(
         && src.0 != 0
     {
         emit_mov_reg(code, Reg(0), src);
+    }
+}
+
+/// Store a register a call clobbers to its slot ahead of the call, or load
+/// it back after ([`super::ssa::reg_alloc::Allocation::call_saves`]).
+fn call_save(code: &mut Vec<u8>, frame: Frame, s: &super::ssa::reg_alloc::CallSave, store: bool) {
+    use super::ssa::reg_alloc::VecWidth;
+    let off = spill_off(frame, s.slot);
+    let q = v128_spill_off(frame, s.slot);
+    match (s.is_fp, s.wide, store) {
+        (false, _, true) => emit_spill_str_x_auto(code, frame, Reg(s.reg), off),
+        (false, _, false) => emit_spill_ldr_x(code, frame, Reg(s.reg), off),
+        (true, VecWidth::Scalar, true) => emit_spill_str_d_auto(code, frame, s.reg, off),
+        (true, VecWidth::Scalar, false) => emit_spill_ldr_d_auto(code, frame, s.reg, off),
+        (true, _, true) => emit_spill_str_q(code, frame, s.reg, q, Reg(16)),
+        (true, _, false) => emit_spill_ldr_q(code, frame, s.reg, q, Reg(16)),
     }
 }

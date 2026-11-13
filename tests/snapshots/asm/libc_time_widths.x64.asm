@@ -44,20 +44,19 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movq	%rax, %r10
-               	movq	%r10, 0x8(%rsp)
+               	movq	%rax, %rcx
                	movq	$0x0, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rdi
+               	movq	%rcx, 0x8(%rsp)
                	xorl	%eax, %eax
                	callq	<addr>
-               	movq	0x8(%rsp), %rax
-               	cmpq	$0x63b0cd00, %rax       # imm = 0x63B0CD00
+               	movq	0x8(%rsp), %rcx
+               	cmpq	$0x63b0cd00, %rcx       # imm = 0x63B0CD00
                	jge	<addr>
                	movl	$0x2, %eax
                	leave
                	retq
                	movq	-0x8(%rbp), %rax
-               	movq	0x8(%rsp), %rcx
                	cmpq	%rcx, %rax
                	jl	<addr>
                	subq	%rcx, %rax

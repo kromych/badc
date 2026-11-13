@@ -121,17 +121,17 @@ Disassembly of section .text:
                	cmpl	$0x4, %r14d
                	jl	<addr>
                	vmovdqa	%xmm1, %xmm0
-               	vinserti128	$0x1, %xmm2, %ymm0, %ymm14
-               	vmovups	%ymm14, -0x40(%rbp)
+               	vinserti128	$0x1, %xmm2, %ymm0, %ymm0
                	leaq	-0x20(%rbp), %rdi
-               	vmovups	-0x40(%rbp), %ymm14
-               	vmovups	%ymm14, -0x20(%rbp)
+               	vmovups	%ymm0, -0x20(%rbp)
                	movl	$0x20, %edx
+               	vmovups	%ymm0, -0x40(%rbp)
                	movq	%rbx, %rsi
                	xorl	%eax, %eax
                	vzeroupper
                	callq	<addr>
                	movslq	%eax, %rax
+               	vmovups	-0x40(%rbp), %ymm0
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
@@ -143,7 +143,6 @@ Disassembly of section .text:
                	vzeroupper
                	leave
                	retq
-               	vmovups	-0x40(%rbp), %ymm0
                	vmovdqa	%xmm0, %xmm1
                	leaq	(%rsp), %rdi
                	movups	%xmm1, (%rsp)

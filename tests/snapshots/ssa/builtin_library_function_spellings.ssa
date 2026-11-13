@@ -162,7 +162,7 @@ fn ent_pc=26 n_params=0 variadic=false locals=4
     v168 Imm(0)                                           -> x0
     v169 Imm(0)                                           -> x0
     v170 ImmData(23)                                      -> x7
-    v171 CallExt { binding_idx=101, args=[v170], fp_arg_mask=0x0 } -> [spill 0]
+    v171 CallExt { binding_idx=101, args=[v170], fp_arg_mask=0x0 } -> x1
     v172 Imm(0)                                           -> x0
     v173 Imm(0)                                           -> x0
     v174 BinopI { op=eq, lhs=v171, rhs_imm=0 }            -> x0
@@ -173,20 +173,20 @@ fn ent_pc=26 n_params=0 variadic=false locals=4
     v98  Imm(0)                                           -> x0
     v99  CallExt { binding_idx=87, args=[v171], fp_arg_mask=0x0 } -> x0
     v100 BinopI { op=ne, lhs=v99, rhs_imm=3 }             -> x0
-    v101 BinopI { op=ne, lhs=v100, rhs_imm=0 }            -> x1
-    v102 Imm(0)                                           -> x1
-    v103 Imm(0)                                           -> x1
-    v104 Imm(0)                                           -> x1
-    v105 Imm(0)                                           -> x1
+    v101 BinopI { op=ne, lhs=v100, rhs_imm=0 }            -> x2
+    v102 Imm(0)                                           -> x2
+    v103 Imm(0)                                           -> x2
+    v104 Imm(0)                                           -> x2
+    v105 Imm(0)                                           -> x2
     terminator Bnz { cond=v100, target=b18, fall=b17 }   (exit_acc=v100)
   block 17  start_pc=0
     v106 Imm(0)                                           -> x0
     v107 ImmData(27)                                      -> x6
     v108 CallExt { binding_idx=72, args=[v171, v107], fp_arg_mask=0x0 } -> x0
-    v109 BinopI { op=ne, lhs=v108, rhs_imm=0 }            -> x1
-    v110 Imm(0)                                           -> x1
-    v111 Imm(0)                                           -> x1
-    v112 Imm(0)                                           -> x1
+    v109 BinopI { op=ne, lhs=v108, rhs_imm=0 }            -> x2
+    v110 Imm(0)                                           -> x2
+    v111 Imm(0)                                           -> x2
+    v112 Imm(0)                                           -> x2
     terminator Bz { cond=v108, target=b19, fall=b18 }   (exit_acc=v109)
   block 18  start_pc=0
     v113 Imm(8)                                           -> x0

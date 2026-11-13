@@ -172,7 +172,7 @@ fn ent_pc=12 n_params=1 variadic=false locals=0
     v16  Binop { op=fmul.c, lhs=v7, rhs=v15 }             -> d0
     v17  Imm(4598175219545276416)                         -> x0
     v18  Call { target_pc=0, args=[v17], fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0
-    v19  Fma { a=v7, b=v15, c=v18, neg_product=false, neg_addend=false } -> [spill 0]
+    v19  Fma { a=v7, b=v15, c=v18, neg_product=false, neg_addend=false } -> d1
     v20  Imm(0)                                           -> x0
     v21  Imm(0)                                           -> x0
     v22  Call { target_pc=0, args=[v19], fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0
@@ -186,7 +186,7 @@ fn ent_pc=12 n_params=1 variadic=false locals=0
     terminator Jmp(b3)   (exit_acc=v12)
   block 3  start_pc=0
     v6   Phi { incoming=[b0:v3, b2:v12], kind=I64 }       -> x3
-    v7   Phi { incoming=[b0:v3, b2:v19], kind=F64 }       -> [spill 0]
+    v7   Phi { incoming=[b0:v3, b2:v19], kind=F64 }       -> d1
     v8   Extend { value=v6, kind=I32 }                    -> x0
     v9   Imm(0)                                           -> x0
     v10  BinopI { op=lt, lhs=v6, rhs_imm=3 }              -> x0

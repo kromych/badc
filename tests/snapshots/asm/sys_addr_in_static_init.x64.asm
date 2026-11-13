@@ -43,23 +43,23 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	movq	%rsi, %rdx
                	callq	*%rax
-               	movq	%rax, 0x8(%rsp)
-               	movq	0x8(%rsp), %rax
                	testl	%eax, %eax
                	jge	<addr>
                	movl	$0x2, %eax
                	leave
                	retq
-               	movq	<rip>, %rax # <addr>
+               	movq	<rip>, %rcx # <addr>
                	leaq	-0x8(%rbp), %rsi
                	movl	$0x4, %edx
-               	movq	0x8(%rsp), %rdi
-               	callq	*%rax
                	movq	%rax, (%rsp)
-               	movq	<rip>, %rax # <addr>
-               	movq	0x8(%rsp), %rdi
-               	callq	*%rax
+               	movq	%rax, %rdi
+               	callq	*%rcx
+               	movq	%rax, 0x8(%rsp)
                	movq	(%rsp), %rax
+               	movq	<rip>, %rcx # <addr>
+               	movq	%rax, %rdi
+               	callq	*%rcx
+               	movq	0x8(%rsp), %rax
                	cmpl	$0x4, %eax
                	je	<addr>
                	movl	$0x3, %eax

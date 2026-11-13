@@ -412,6 +412,7 @@ mod tests {
             high_clear: Vec::new(),
             wide: vec![crate::c5::codegen::ssa::reg_alloc::VecWidth::Scalar; n],
             asm_preserve: (u32::MAX, u32::MAX),
+            call_saves: Vec::new(),
         }
     }
 

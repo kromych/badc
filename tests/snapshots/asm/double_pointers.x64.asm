@@ -49,9 +49,9 @@ Disassembly of section .text:
                	movl	$0x8, %edi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movq	%rax, %r10
-               	movq	%r10, 0x8(%rsp)
+               	movq	%rax, %rcx
                	movl	$0x4, %edi
+               	movq	%rcx, 0x8(%rsp)
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	0x8(%rsp), %rcx

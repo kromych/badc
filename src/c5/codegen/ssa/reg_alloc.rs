@@ -20,8 +20,11 @@
 //!    the registers held by its live neighbors, then take the hinted
 //!    register if free, else a free register of the right bank
 //!    (caller-saved first unless the value must survive a call), else
-//!    a fresh spill slot. Pre-coloring of call arguments into the host
-//!    argument registers is left to the per-arch emit pass.
+//!    a fresh spill slot -- or, for a value surviving calls whose
+//!    loop-weighted saves cost less than its spill, a caller-saved
+//!    register each of those calls stores and reloads around itself
+//!    ([`Allocation::call_saves`]). Pre-coloring of call arguments into
+//!    the host argument registers is left to the per-arch emit pass.
 //!
 //! The output is intentionally minimal: each `Place` is either
 //! one of the host's GPRs / FP regs or a stack slot's byte offset
@@ -222,6 +225,19 @@ pub(crate) struct Allocation {
     /// alone: they hold nothing at that point. See
     /// [`asm_preserve_masks`].
     pub asm_preserve: (u32, u32),
+    /// Per call, in site order: the caller-saved registers holding values
+    /// live across it, each stored to its slot ahead of the call and
+    /// loaded back after it.
+    pub call_saves: Vec<(ValueId, Vec<CallSave>)>,
+}
+
+/// A register a call saves and restores around itself ([`Allocation::call_saves`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct CallSave {
+    pub reg: u8,
+    pub is_fp: bool,
+    pub wide: VecWidth,
+    pub slot: u32,
 }
 
 /// Each value output of the asm statement at `site` with its place;
@@ -1262,6 +1278,52 @@ fn call_forbid_masks(
     out
 }
 
+/// Each call with the values live across it, for the saves around calls;
+/// empty where the function may not save around one: it calls a
+/// returns-twice function, has a `__try` region, or has no frame.
+fn call_crossings(
+    func: &FunctionSsa,
+    liveness: &super::liveness::Liveness,
+    target: Target,
+) -> Vec<(ValueId, Vec<ValueId>)> {
+    if func.has_returns_twice_call || func.has_seh() || func.is_naked {
+        return Vec::new();
+    }
+    let tls = tls_addr_is_call(target, func);
+    liveness.values_live_after(func, &|inst: &Inst| is_call_site(inst, tls))
+}
+
+/// Per phi-class root, what keeping it in a caller-saved register across
+/// the calls it lives across ([`call_crossings`]) costs: a store and a
+/// load at each, by the call's loop weight.
+fn call_save_costs(
+    func: &FunctionSsa,
+    crossings: &[(ValueId, Vec<ValueId>)],
+    node_of: &[ValueId],
+) -> Vec<u64> {
+    let mut cost = alloc::vec![0u64; func.insts.len()];
+    if crossings.is_empty() {
+        return cost;
+    }
+    let weights = block_weights(func);
+    let mut block_of = alloc::vec![0usize; func.insts.len()];
+    for (b, block) in func.blocks.iter().enumerate() {
+        for v in block.inst_range.clone() {
+            block_of[v as usize] = b;
+        }
+    }
+    for (site, live) in crossings {
+        let w = weights[block_of[*site as usize]].saturating_mul(2);
+        let mut roots: Vec<ValueId> = live.iter().map(|&v| node_of[v as usize]).collect();
+        roots.sort_unstable();
+        roots.dedup();
+        for r in roots {
+            cost[r as usize] = cost[r as usize].saturating_add(w);
+        }
+    }
+    cost
+}
+
 /// The target's full register banks.
 struct Rows {
     callee_gprs: &'static [u8],
@@ -1551,6 +1613,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             count_nonzero: Vec::new(),
             wide: Vec::new(),
             asm_preserve: (u32::MAX, u32::MAX),
+            call_saves: Vec::new(),
         };
     }
 
@@ -1626,6 +1689,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     let mut asm_live = asm_live_values(func, &liveness, target, fixed);
     let asm_forbid = asm_forbid_masks(func, &asm_live, &node_of);
     let call_forbid = call_forbid_masks(func, &liveness, target, fixed, &node_of);
+    let crossings = call_crossings(func, &liveness, target);
     let wide = wide_values(func);
     let mut node_cons: Vec<Option<NodeConstraints>> = vec![None; func.insts.len()];
     for (v, inst) in func.insts.iter().enumerate() {
@@ -1636,6 +1700,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         let entry = node_cons[root].get_or_insert(NodeConstraints {
             is_fp: false,
             must_callee: false,
+            call_forbid: 0,
+            save_cost: 0,
+            def_cost: 0,
             hint: None,
             forbid: 0,
             avoid: 0,
@@ -1652,12 +1719,21 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         entry.forbid |= param_incoming_forbid[v] | call_target_forbid[v];
         entry.avoid |= avoid.get(v).copied().unwrap_or(0);
         entry.loop_avoid |= loop_avoid.get(v).copied().unwrap_or(0);
-        for &(gpr, fpr) in asm_forbid
-            .get(root)
-            .into_iter()
-            .chain(call_forbid.get(root))
-        {
+        if let Some(&(gpr, fpr)) = asm_forbid.get(root) {
             entry.forbid |= u64::from(if entry.is_fp { fpr } else { gpr });
+        }
+        if let Some(&(gpr, fpr)) = call_forbid.get(root) {
+            entry.call_forbid |= u64::from(if entry.is_fp { fpr } else { gpr });
+        }
+    }
+    let save_costs = call_save_costs(func, &crossings, &node_of);
+    if save_costs.iter().any(|&c| c > 0) {
+        let defs = compute_def_weights(func, &node_of, &use_counts);
+        for (root, c) in node_cons.iter_mut().enumerate() {
+            if let Some(c) = c {
+                c.save_cost = save_costs[root];
+                c.def_cost = defs[root];
+            }
         }
     }
     // A two-address result and an operand dying at it follow each other.
@@ -1784,7 +1860,12 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     for &v in stack_imm.keys().chain(stack_load.keys()) {
         places[v as usize] = Place::None;
     }
-    let spill_count = coloring.spill_count;
+    let mut spill_count = coloring.spill_count;
+    let saves_at = call_save_lists(
+        (&crossings, &node_of),
+        (&coloring.saved, &node_cons, &places),
+        &mut spill_count,
+    );
     // A copy or an atomic read-modify-write may take any register as a
     // temporary, so its record covers them all; the x86-64 shift and
     // division records cover the registers they write.
@@ -2320,6 +2401,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             Place::None => {}
         }
     }
+    for save in saves_at.iter().flat_map(|(_, saves)| saves) {
+        slots_end = slots_end.max(save.slot + save.wide.units());
+    }
     let spill_count = spill_count.min(slots_end);
     // Only callee-saved registers need prologue / epilogue
     // save and restore. Caller-saved registers are preserved
@@ -2428,7 +2512,55 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         },
         wide,
         asm_preserve,
+        call_saves: saves_at,
     }
+}
+
+/// Each call a node the coloring saved crosses, with the caller-saved
+/// registers of those nodes and a slot per node, which the reservation
+/// grows by.
+fn call_save_lists(
+    (crossings, node_of): (&[(ValueId, Vec<ValueId>)], &[ValueId]),
+    (saved, node_cons, places): (&[bool], &[Option<NodeConstraints>], &[Place]),
+    spill_count: &mut u32,
+) -> Vec<(ValueId, Vec<CallSave>)> {
+    if !saved.iter().any(|&s| s) {
+        return Vec::new();
+    }
+    let mut slot = alloc::vec![u32::MAX; saved.len()];
+    for (node, &s) in saved.iter().enumerate() {
+        if s {
+            slot[node] = *spill_count;
+            *spill_count += node_cons[node].map_or(1, |c| c.wide.units());
+        }
+    }
+    let mut out = Vec::new();
+    for (site, live) in crossings {
+        let mut saves: Vec<CallSave> = Vec::new();
+        for &v in live {
+            let root = node_of[v as usize] as usize;
+            if !saved[root] || saves.iter().any(|s| s.slot == slot[root]) {
+                continue;
+            }
+            let (reg, is_fp) = match places[v as usize] {
+                Place::IntReg(r) => (r, false),
+                Place::FpReg(r) => (r, true),
+                _ => continue,
+            };
+            let wide = node_cons[root].map_or(VecWidth::Scalar, |c| c.wide);
+            saves.push(CallSave {
+                reg,
+                is_fp,
+                wide,
+                slot: slot[root],
+            });
+        }
+        if !saves.is_empty() {
+            out.push((*site, saves));
+        }
+    }
+    out.sort_unstable_by_key(|&(site, _)| site);
+    out
 }
 
 /// Values live across each `Inst::InlineAsm` site, paired with the
@@ -3034,8 +3166,16 @@ pub(crate) struct NodeConstraints {
     pub is_fp: bool,
     /// The node's live range crosses a call, so a caller-saved
     /// register would be clobbered; it must take a callee-saved
-    /// register or spill.
+    /// register, spill, or be saved around each call it crosses.
     pub must_callee: bool,
+    /// The registers the calls the node crosses clobber.
+    pub call_forbid: u64,
+    /// What saving a caller-saved register around those calls costs
+    /// ([`call_save_costs`]), and what spilling costs beyond the uses the
+    /// coloring weighs: the loop-weighted definitions. A zero save cost
+    /// takes no caller-saved register.
+    pub save_cost: u64,
+    pub def_cost: u64,
     /// Preferred register, honored when free and bank-legal.
     pub hint: Option<u8>,
     /// Physical registers (in this node's bank) the colorer must not
@@ -3064,6 +3204,9 @@ pub(crate) struct Coloring {
     /// placement; nodes with no constraint stay `Place::None`.
     pub places: Vec<Place>,
     pub spill_count: u32,
+    /// Per node: in a caller-saved register saved around the calls it
+    /// crosses.
+    pub saved: Vec<bool>,
 }
 
 #[cfg(feature = "std")]
@@ -3179,6 +3322,7 @@ pub(crate) fn color_graph(
 ) -> Coloring {
     let n = node_of.len();
     let mut color: Vec<Place> = vec![Place::None; n];
+    let mut saved: Vec<bool> = vec![false; n];
     let mut spill_count: u32 = 0;
     // Coloring order: highest spill weight first, so the coldest values
     // are the ones left without a register when a bank fills. The id
@@ -3244,6 +3388,14 @@ pub(crate) fn color_graph(
         // node's bank (set only for matching `is_fp`).
         for r in 0..64u8 {
             if (c.forbid >> r) & 1 != 0 {
+                forbidden[r as usize] = true;
+            }
+        }
+        // What only the calls the node crosses rule out, which a save
+        // around each of them gives back.
+        let unsaved = forbidden;
+        for r in 0..64u8 {
+            if (c.call_forbid >> r) & 1 != 0 {
                 forbidden[r as usize] = true;
             }
         }
@@ -3326,6 +3478,24 @@ pub(crate) fn color_graph(
                         .or_else(|| callee.iter().copied().find(|&r| free(r)))
                 }
             });
+        // Left to spill, a node crossing calls whose saves cost less than
+        // its spill takes a caller-saved register saved around them.
+        let pick = pick.or_else(|| {
+            let spill_cost = weights
+                .get(node)
+                .copied()
+                .unwrap_or(0)
+                .saturating_add(c.def_cost);
+            if c.save_cost == 0 || c.save_cost >= spill_cost {
+                return None;
+            }
+            let r = caller
+                .iter()
+                .copied()
+                .find(|&r| !unsaved[r as usize] && (avoid >> r) & 1 == 0)?;
+            saved[node] = true;
+            Some(r)
+        });
         color[node] = match pick {
             Some(r) if c.is_fp => Place::FpReg(r),
             Some(r) => Place::IntReg(r),
@@ -3373,6 +3543,7 @@ pub(crate) fn color_graph(
     Coloring {
         places,
         spill_count,
+        saved,
     }
 }
 
@@ -5051,6 +5222,9 @@ mod tests {
         Some(NodeConstraints {
             is_fp: false,
             must_callee,
+            call_forbid: 0,
+            save_cost: 0,
+            def_cost: 0,
             hint,
             forbid: 0,
             avoid: 0,
@@ -5069,6 +5243,9 @@ mod tests {
         Some(NodeConstraints {
             is_fp: true,
             must_callee,
+            call_forbid: 0,
+            save_cost: 0,
+            def_cost: 0,
             hint: None,
             forbid: 0,
             avoid: 0,
@@ -5680,6 +5857,40 @@ int main(void) { return 0; }
             "call-crossing value must take a callee-saved register, got {:?}",
             r.places[0],
         );
+    }
+
+    /// A call-crossing node left without a callee-saved register takes a
+    /// caller-saved one, saved around its calls, when the saves cost less
+    /// than its spill; otherwise it spills.
+    #[test]
+    fn a_call_crossing_node_saves_a_caller_saved_register_when_cheaper() {
+        let g = Interference::from_edges(3, &[(0, 1), (0, 2), (1, 2)]);
+        let node_of = [0u32, 1, 2];
+        for (save_cost, saved) in [(5, true), (50, false)] {
+            let mut cons = [int_node(true, None); 3];
+            if let Some(c) = cons[2].as_mut() {
+                c.save_cost = save_cost;
+                c.def_cost = 10;
+            }
+            let r = color_graph(
+                &g,
+                &node_of,
+                &cons,
+                &tiny_banks(),
+                usize::MAX,
+                usize::MAX,
+                false,
+                &[30, 20, 10],
+                &[],
+            );
+            let want = if saved {
+                matches!(r.places[2], Place::IntReg(0 | 1))
+            } else {
+                matches!(r.places[2], Place::Spill(_))
+            };
+            assert!(want && r.saved[2] == saved, "{save_cost}: {:?}", r.places);
+            assert!(!r.saved[0] && !r.saved[1]);
+        }
     }
 
     #[test]

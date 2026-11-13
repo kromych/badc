@@ -83,26 +83,28 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	movb	$0x0, %al
                	callq	<addr>
-               	movq	%rax, %r10
-               	movq	%r10, 0x18(%rsp)
-               	movq	0x18(%rsp), %rax
-               	testl	%eax, %eax
+               	movq	%rax, %rcx
+               	testl	%ecx, %ecx
                	jl	<addr>
                	leaq	-0xb0(%rbp), %rsi
-               	movq	0x18(%rsp), %rdi
+               	movq	%rcx, 0x10(%rsp)
+               	movq	%rcx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
+               	movq	0x10(%rsp), %rcx
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x1a0, %esi            # imm = 0x1A0
-               	movq	0x18(%rsp), %rdi
+               	movq	%rcx, 0x10(%rsp)
+               	movq	%rcx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
+               	movq	0x10(%rsp), %rcx
                	testq	%rax, %rax
                	jne	<addr>
-               	movq	0x18(%rsp), %rdi
+               	movq	%rcx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax

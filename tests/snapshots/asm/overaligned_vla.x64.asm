@@ -44,7 +44,7 @@ Disassembly of section .text:
                	xorl	%r15d, %r15d
                	movl	$0x1, %ebx
                	movq	%rsp, %r10
-               	movq	%r10, -0x28(%rbp)
+               	movq	%r10, -0x20(%rbp)
                	leaq	(%rbx,%rbx,2), %rax
                	incq	%rax
                	movslq	%eax, %r12
@@ -110,14 +110,14 @@ Disassembly of section .text:
                	subq	$0x1, %r11
                	jne	<addr>
                	movq	%rax, %rsp
-               	addq	$0x1f, %rax
-               	movq	%rax, %r10
-               	andq	$-0x20, %r10
-               	movq	%r10, -0x20(%rbp)
+               	leaq	0x1f(%rax), %rcx
+               	andq	$-0x20, %rcx
                	leaq	0x1(%rbx), %rsi
-               	movq	-0x20(%rbp), %rdi
+               	movq	%rcx, -0x28(%rbp)
+               	movq	%rcx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
+               	movq	-0x28(%rbp), %rcx
                	testb	$0x3f, %r14b
                	movl	$0x1, %eax
                	jne	<addr>
@@ -126,10 +126,9 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	setne	%al
                	movzbq	%al, %rax
-               	movq	%r15, %rcx
-               	orq	%rax, %rcx
-               	movq	-0x20(%rbp), %rdx
-               	testb	$0x1f, %dl
+               	movq	%r15, %rdx
+               	orq	%rax, %rdx
+               	testb	$0x1f, %cl
                	movl	$0x1, %eax
                	jne	<addr>
                	leaq	0x3(%rbx), %rax
@@ -139,7 +138,6 @@ Disassembly of section .text:
                	cmpl	%r10d, %eax
                	setne	%al
                	movzbq	%al, %rax
-               	movq	%rcx, %rdx
                	orq	%rax, %rdx
                	leaq	0x3(%rbx), %rax
                	decq	%rax
@@ -166,7 +164,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	jmp	<addr>
                	orq	%rdx, %r15
-               	movq	-0x28(%rbp), %r10
+               	movq	-0x20(%rbp), %r10
                	movq	%r10, %rsp
                	incq	%rbx
                	cmpl	$0x4, %ebx

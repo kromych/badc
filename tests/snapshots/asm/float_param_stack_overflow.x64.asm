@@ -68,23 +68,23 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movss	<rip>, %xmm14 # <addr>
-               	movsd	%xmm14, 0x8(%rsp)
+               	movss	<rip>, %xmm0 # <addr>
+               	movsd	%xmm0, 0x8(%rsp)
                	subq	$0x10, %rsp
-               	movq	0x18(%rsp), %r10
+               	movq	%xmm0, %r10
                	movq	%r10, (%rsp)
-               	movq	0x18(%rsp), %r10
+               	movq	%xmm0, %r10
                	movq	%r10, 0x8(%rsp)
-               	movsd	0x18(%rsp), %xmm0
-               	movsd	0x18(%rsp), %xmm1
-               	movsd	0x18(%rsp), %xmm2
-               	movsd	0x18(%rsp), %xmm3
-               	movsd	0x18(%rsp), %xmm4
-               	movsd	0x18(%rsp), %xmm5
-               	movsd	0x18(%rsp), %xmm6
-               	movsd	0x18(%rsp), %xmm7
+               	movapd	%xmm0, %xmm1
+               	movapd	%xmm0, %xmm7
+               	movapd	%xmm0, %xmm6
+               	movapd	%xmm0, %xmm5
+               	movapd	%xmm0, %xmm4
+               	movapd	%xmm0, %xmm3
+               	movapd	%xmm0, %xmm2
                	callq	<addr>
                	addq	$0x10, %rsp
+               	movsd	0x8(%rsp), %xmm0
                	cmpl	$0x3ff, %eax            # imm = 0x3FF
                	je	<addr>
                	movl	$0x1, %eax
@@ -95,14 +95,13 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movq	%rcx, 0x8(%rsp)
-               	movsd	0x18(%rsp), %xmm0
-               	movsd	0x18(%rsp), %xmm1
-               	movsd	0x18(%rsp), %xmm2
-               	movsd	0x18(%rsp), %xmm3
-               	movsd	0x18(%rsp), %xmm4
-               	movsd	0x18(%rsp), %xmm5
-               	movsd	0x18(%rsp), %xmm6
-               	movsd	0x18(%rsp), %xmm7
+               	movapd	%xmm0, %xmm1
+               	movapd	%xmm0, %xmm7
+               	movapd	%xmm0, %xmm6
+               	movapd	%xmm0, %xmm5
+               	movapd	%xmm0, %xmm4
+               	movapd	%xmm0, %xmm3
+               	movapd	%xmm0, %xmm2
                	callq	<addr>
                	addq	$0x10, %rsp
                	cmpl	$0x37f, %eax            # imm = 0x37F

@@ -587,56 +587,56 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v43  Load { addr=v33, disp=24, kind=F64, volatile pc_rel } -> [spill 6]
     v44  Imm(0)                                           -> x0
     v45  ImmData(120)                                     -> x0
-    v46  Load { addr=v45, disp=0, kind=I64 pc_rel }       -> [spill 7]
+    v46  Load { addr=v45, disp=0, kind=I64 pc_rel }       -> x1
     v47  Imm(0)                                           -> x0
     v48  Load { addr=v45, disp=0, kind=I64 pc_rel }       -> x0
     v49  Imm(0)                                           -> x0
     v50  Imm(0)                                           -> x0
     v51  CallIndirect { target=v46, args=[], callee_variadic=false, fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v52  Imm(0)                                           -> x1
-    v53  Imm(0)                                           -> x1
-    v54  BinopI { op=shl, lhs=v7, rhs_imm=1 }             -> x1
-    v55  Binop { op=add, lhs=v3, rhs=v54 }                -> x1
-    v56  Imm(0)                                           -> x2
-    v57  BinopI { op=mul, lhs=v11, rhs_imm=3 }            -> x2
-    v58  Binop { op=add, lhs=v55, rhs=v57 }               -> x1
-    v59  Imm(0)                                           -> x2
-    v60  BinopI { op=shl, lhs=v15, rhs_imm=2 }            -> x2
-    v61  Binop { op=add, lhs=v58, rhs=v60 }               -> x1
-    v62  Imm(0)                                           -> x2
-    v63  BinopI { op=mul, lhs=v19, rhs_imm=5 }            -> x2
-    v64  Binop { op=add, lhs=v61, rhs=v63 }               -> x1
-    v65  Imm(0)                                           -> x2
-    v66  BinopI { op=mul, lhs=v23, rhs_imm=6 }            -> x2
-    v67  Binop { op=add, lhs=v64, rhs=v66 }               -> x1
-    v68  Imm(0)                                           -> x2
-    v69  BinopI { op=mul, lhs=v27, rhs_imm=7 }            -> x2
-    v70  Binop { op=add, lhs=v67, rhs=v69 }               -> x1
-    v71  Imm(0)                                           -> x2
-    v72  BinopI { op=shl, lhs=v31, rhs_imm=3 }            -> x2
-    v73  Binop { op=add, lhs=v70, rhs=v72 }               -> x1
-    v74  Imm(0)                                           -> x2
-    v75  Imm(2)                                           -> x2
-    v76  Imm(4611686018427387904)                         -> x2
+    v52  Imm(0)                                           -> x2
+    v53  Imm(0)                                           -> x2
+    v54  BinopI { op=shl, lhs=v7, rhs_imm=1 }             -> x2
+    v55  Binop { op=add, lhs=v3, rhs=v54 }                -> x2
+    v56  Imm(0)                                           -> x6
+    v57  BinopI { op=mul, lhs=v11, rhs_imm=3 }            -> x6
+    v58  Binop { op=add, lhs=v55, rhs=v57 }               -> x2
+    v59  Imm(0)                                           -> x6
+    v60  BinopI { op=shl, lhs=v15, rhs_imm=2 }            -> x6
+    v61  Binop { op=add, lhs=v58, rhs=v60 }               -> x2
+    v62  Imm(0)                                           -> x6
+    v63  BinopI { op=mul, lhs=v19, rhs_imm=5 }            -> x6
+    v64  Binop { op=add, lhs=v61, rhs=v63 }               -> x2
+    v65  Imm(0)                                           -> x6
+    v66  BinopI { op=mul, lhs=v23, rhs_imm=6 }            -> x6
+    v67  Binop { op=add, lhs=v64, rhs=v66 }               -> x2
+    v68  Imm(0)                                           -> x6
+    v69  BinopI { op=mul, lhs=v27, rhs_imm=7 }            -> x6
+    v70  Binop { op=add, lhs=v67, rhs=v69 }               -> x2
+    v71  Imm(0)                                           -> x6
+    v72  BinopI { op=shl, lhs=v31, rhs_imm=3 }            -> x6
+    v73  Binop { op=add, lhs=v70, rhs=v72 }               -> x2
+    v74  Imm(0)                                           -> x6
+    v75  Imm(2)                                           -> x6
+    v76  Imm(4611686018427387904)                         -> x6
     v77  Binop { op=fmul.c, lhs=v34, rhs=v76 }            -> d0
-    v78  Imm(0)                                           -> x6
-    v79  Imm(4)                                           -> x6
-    v80  Imm(4616189618054758400)                         -> x6
+    v78  Imm(0)                                           -> x7
+    v79  Imm(4)                                           -> x7
+    v80  Imm(4616189618054758400)                         -> x7
     v81  Binop { op=fmul.c, lhs=v37, rhs=v80 }            -> d0
     v82  Fma { a=v34, b=v76, c=v81, neg_product=false, neg_addend=false } -> d0
-    v83  Imm(0)                                           -> x2
-    v84  Imm(6)                                           -> x2
-    v85  Imm(4618441417868443648)                         -> x2
+    v83  Imm(0)                                           -> x6
+    v84  Imm(6)                                           -> x6
+    v85  Imm(4618441417868443648)                         -> x6
     v86  Binop { op=fmul.c, lhs=v40, rhs=v85 }            -> d1
     v87  Fma { a=v40, b=v85, c=v82, neg_product=false, neg_addend=false } -> d0
-    v88  Imm(0)                                           -> x2
-    v89  Imm(8)                                           -> x2
-    v90  Imm(4620693217682128896)                         -> x2
+    v88  Imm(0)                                           -> x6
+    v89  Imm(8)                                           -> x6
+    v90  Imm(4620693217682128896)                         -> x6
     v91  Binop { op=fmul.c, lhs=v43, rhs=v90 }            -> d1
     v92  Fma { a=v43, b=v90, c=v87, neg_product=false, neg_addend=false } -> d0
-    v93  FpCast { kind=FpToInt, value=v92 }               -> x2
-    v94  Binop { op=add, lhs=v73, rhs=v93 }               -> x1
-    v95  Binop { op=add, lhs=v51, rhs=v94 }               -> [spill 8]
+    v93  FpCast { kind=FpToInt, value=v92 }               -> x6
+    v94  Binop { op=add, lhs=v73, rhs=v93 }               -> x2
+    v95  Binop { op=add, lhs=v51, rhs=v94 }               -> [spill 7]
     v96  Imm(0)                                           -> x0
     v97  Imm(0)                                           -> x0
     v98  Imm(0)                                           -> x0

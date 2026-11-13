@@ -86,21 +86,22 @@ Disassembly of section .text:
                	movq	%r10, 0x18(%rsp)
                	movq	<rip>, %r10 # <addr>
                	movq	%r10, 0x10(%rsp)
-               	movq	<rip>, %r10 # <addr>
-               	movq	%r10, 0x8(%rsp)
+               	movq	<rip>, %rcx # <addr>
+               	movq	%rcx, 0x8(%rsp)
+               	movq	%rcx, %rdx
                	movq	0x18(%rsp), %rdi
                	movq	0x10(%rsp), %rsi
-               	movq	0x8(%rsp), %rdx
                	callq	<addr>
+               	movq	0x8(%rsp), %rcx
                	movabsq	$-0x24bbe557ef188b23, %r11 # imm = 0xDB441AA810E774DD
                	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
+               	movq	%rcx, %rdx
                	movq	0x18(%rsp), %rdi
                	movq	0x10(%rsp), %rsi
-               	movq	0x8(%rsp), %rdx
                	callq	<addr>
                	cmpq	$0x5, %rax
                	je	<addr>

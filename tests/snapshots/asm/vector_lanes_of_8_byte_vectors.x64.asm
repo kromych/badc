@@ -103,21 +103,19 @@ Disassembly of section .text:
                	movq	%rax, %r10
                	movsd	(%r10), %xmm1
                	callq	<addr>
-               	movsd	%xmm0, 0x8(%rsp)
-               	movsd	0x8(%rsp), %xmm1
-               	vpextrw	$0x0, %xmm1, %eax
+               	vpextrw	$0x0, %xmm0, %eax
                	movswq	%ax, %rax
                	cmpq	$0x63, %rax
                	jne	<addr>
-               	vpextrw	$0x1, %xmm1, %eax
+               	vpextrw	$0x1, %xmm0, %eax
                	movswq	%ax, %rax
                	cmpq	$0xc6, %rax
                	jne	<addr>
-               	vpextrw	$0x2, %xmm1, %eax
+               	vpextrw	$0x2, %xmm0, %eax
                	movswq	%ax, %rax
                	cmpq	$-0x7, %rax
                	jne	<addr>
-               	vpextrw	$0x3, %xmm1, %eax
+               	vpextrw	$0x3, %xmm0, %eax
                	movswq	%ax, %rax
                	cmpq	$-0x194, %rax           # imm = 0xFE6C
                	je	<addr>
@@ -128,15 +126,16 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movq	(%rax), %r10
                	movq	%r10, (%r9)
+               	movsd	%xmm0, 0x8(%rsp)
                	movq	%r9, %r10
                	movsd	(%r10), %xmm0
                	callq	<addr>
+               	movsd	0x8(%rsp), %xmm0
                	cmpl	$0x80000002, %eax       # imm = 0x80000002
                	je	<addr>
                	movl	$0x4, %eax
                	leave
                	retq
-               	movsd	0x8(%rsp), %xmm0
                	vpextrw	$0x3, %xmm0, %eax
                	movswq	%ax, %rax
                	movswq	%ax, %rax

@@ -292,7 +292,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=main
 fn ent_pc=8 n_params=0 variadic=false locals=72
-  spill_count=72 gpr_used=[3, 12] fp_used=[]
+  spill_count=76 gpr_used=[3, 12] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x0
@@ -2269,109 +2269,109 @@ fn ent_pc=8 n_params=0 variadic=false locals=72
     v2115 LocalAddr(-549)                                  -> x0
     v2116 Imm(0)                                           -> x3
     v2117 Imm(0)                                           -> x0
-    v2118 LoadLocal { off=-549, kind=V256 }                -> [spill 64]
+    v2118 LoadLocal { off=-549, kind=V256 }                -> [spill 12]
     v2119 Imm(0)                                           -> x0
     v2120 LocalAddr(-549)                                  -> x0
     v2121 Imm(32)                                          -> x0
     v2122 BinopI { op=add, lhs=v2115, rhs_imm=32 }         -> x0
     v2123 Imm(0)                                           -> x0
-    v2124 LoadLocal { off=-549, disp=32, kind=V256 }       -> [spill 60]
+    v2124 LoadLocal { off=-549, disp=32, kind=V256 }       -> [spill 8]
     v2125 Imm(0)                                           -> x0
     v2126 LocalAddr(-549)                                  -> x0
     v2127 Imm(64)                                          -> x0
     v2128 BinopI { op=add, lhs=v2115, rhs_imm=64 }         -> x0
     v2129 Imm(0)                                           -> x0
-    v2130 LoadLocal { off=-549, disp=64, kind=V256 }       -> [spill 56]
+    v2130 LoadLocal { off=-549, disp=64, kind=V256 }       -> [spill 4]
     v2131 Imm(0)                                           -> x0
     v2132 LocalAddr(-549)                                  -> x0
     v2133 Imm(96)                                          -> x0
     v2134 BinopI { op=add, lhs=v2115, rhs_imm=96 }         -> x0
     v2135 Imm(0)                                           -> x0
-    v2136 LoadLocal { off=-549, disp=96, kind=V256 }       -> [spill 52]
+    v2136 LoadLocal { off=-549, disp=96, kind=V256 }       -> [spill 0]
     v2137 Imm(0)                                           -> x0
     v2138 LocalAddr(-549)                                  -> x0
     v2139 Imm(128)                                         -> x0
     v2140 BinopI { op=add, lhs=v2115, rhs_imm=128 }        -> x0
     v2141 Imm(0)                                           -> x0
-    v2142 LoadLocal { off=-549, disp=128, kind=V256 }      -> [spill 48]
+    v2142 LoadLocal { off=-549, disp=128, kind=V256 }      -> d12
     v2143 Imm(0)                                           -> x0
     v2144 LocalAddr(-549)                                  -> x0
     v2145 Imm(160)                                         -> x0
     v2146 BinopI { op=add, lhs=v2115, rhs_imm=160 }        -> x0
     v2147 Imm(0)                                           -> x0
-    v2148 LoadLocal { off=-549, disp=160, kind=V256 }      -> [spill 44]
+    v2148 LoadLocal { off=-549, disp=160, kind=V256 }      -> d11
     v2149 Imm(0)                                           -> x0
     v2150 LocalAddr(-549)                                  -> x0
     v2151 Imm(192)                                         -> x0
     v2152 BinopI { op=add, lhs=v2115, rhs_imm=192 }        -> x0
     v2153 Imm(0)                                           -> x0
-    v2154 LoadLocal { off=-549, disp=192, kind=V256 }      -> [spill 40]
+    v2154 LoadLocal { off=-549, disp=192, kind=V256 }      -> d10
     v2155 Imm(0)                                           -> x0
     v2156 LocalAddr(-549)                                  -> x0
     v2157 Imm(224)                                         -> x0
     v2158 BinopI { op=add, lhs=v2156, rhs_imm=224 }        -> x0
     v2159 Imm(0)                                           -> x0
-    v2160 LoadLocal { off=-549, disp=224, kind=V256 }      -> [spill 36]
+    v2160 LoadLocal { off=-549, disp=224, kind=V256 }      -> d9
     v2161 Imm(0)                                           -> x0
     v2162 LocalAddr(-549)                                  -> x0
     v2163 Imm(256)                                         -> x0
     v2164 BinopI { op=add, lhs=v2156, rhs_imm=256 }        -> x0
     v2165 Imm(0)                                           -> x0
-    v2166 LoadLocal { off=-549, disp=256, kind=V256 }      -> [spill 32]
+    v2166 LoadLocal { off=-549, disp=256, kind=V256 }      -> d8
     v2167 Imm(0)                                           -> x0
     v2168 LocalAddr(-549)                                  -> x0
     v2169 Imm(288)                                         -> x0
     v2170 BinopI { op=add, lhs=v2156, rhs_imm=288 }        -> x0
     v2171 Imm(0)                                           -> x0
-    v2172 LoadLocal { off=-549, disp=288, kind=V256 }      -> [spill 28]
+    v2172 LoadLocal { off=-549, disp=288, kind=V256 }      -> d7
     v2173 Imm(0)                                           -> x0
     v2174 LocalAddr(-549)                                  -> x0
     v2175 Imm(320)                                         -> x0
     v2176 BinopI { op=add, lhs=v2156, rhs_imm=320 }        -> x0
     v2177 Imm(0)                                           -> x0
-    v2178 LoadLocal { off=-549, disp=320, kind=V256 }      -> [spill 24]
+    v2178 LoadLocal { off=-549, disp=320, kind=V256 }      -> d6
     v2179 Imm(0)                                           -> x0
     v2180 LocalAddr(-549)                                  -> x0
     v2181 Imm(352)                                         -> x0
     v2182 BinopI { op=add, lhs=v2156, rhs_imm=352 }        -> x0
     v2183 Imm(0)                                           -> x0
-    v2184 LoadLocal { off=-549, disp=352, kind=V256 }      -> [spill 20]
+    v2184 LoadLocal { off=-549, disp=352, kind=V256 }      -> d5
     v2185 Imm(0)                                           -> x0
     v2186 LocalAddr(-549)                                  -> x0
     v2187 Imm(384)                                         -> x0
     v2188 BinopI { op=add, lhs=v2156, rhs_imm=384 }        -> x0
     v2189 Imm(0)                                           -> x0
-    v2190 LoadLocal { off=-549, disp=384, kind=V256 }      -> [spill 16]
+    v2190 LoadLocal { off=-549, disp=384, kind=V256 }      -> d4
     v2191 Imm(0)                                           -> x0
     v2192 LocalAddr(-549)                                  -> x0
     v2193 Imm(416)                                         -> x0
     v2194 BinopI { op=add, lhs=v2156, rhs_imm=416 }        -> x0
     v2195 Imm(0)                                           -> x0
-    v2196 LoadLocal { off=-549, disp=416, kind=V256 }      -> [spill 12]
+    v2196 LoadLocal { off=-549, disp=416, kind=V256 }      -> d3
     v2197 Imm(0)                                           -> x0
     v2198 LocalAddr(-549)                                  -> x0
     v2199 Imm(448)                                         -> x0
     v2200 BinopI { op=add, lhs=v2198, rhs_imm=448 }        -> x0
     v2201 Imm(0)                                           -> x0
-    v2202 LoadLocal { off=-549, disp=448, kind=V256 }      -> [spill 8]
+    v2202 LoadLocal { off=-549, disp=448, kind=V256 }      -> d2
     v2203 Imm(0)                                           -> x0
     v2204 LocalAddr(-549)                                  -> x0
     v2205 Imm(480)                                         -> x0
     v2206 BinopI { op=add, lhs=v2198, rhs_imm=480 }        -> x0
     v2207 Imm(0)                                           -> x0
-    v2208 LoadLocal { off=-549, disp=480, kind=V256 }      -> [spill 4]
+    v2208 LoadLocal { off=-549, disp=480, kind=V256 }      -> d1
     v2209 Imm(0)                                           -> x0
     v2210 LocalAddr(-549)                                  -> x0
     v2211 Imm(512)                                         -> x0
     v2212 BinopI { op=add, lhs=v2198, rhs_imm=512 }        -> x0
     v2213 Imm(0)                                           -> x0
-    v2214 LoadLocal { off=-549, disp=512, kind=V256 }      -> [spill 0]
+    v2214 LoadLocal { off=-549, disp=512, kind=V256 }      -> d0
     v2215 Imm(0)                                           -> x0
     v2216 LocalAddr(-549)                                  -> x0
     v2217 Imm(544)                                         -> x0
     v2218 BinopI { op=add, lhs=v2198, rhs_imm=544 }        -> x0
     v2219 Imm(0)                                           -> x0
-    v2220 LoadLocal { off=-549, disp=544, kind=V256 }      -> [spill 68]
+    v2220 LoadLocal { off=-549, disp=544, kind=V256 }      -> [spill 16]
     v2221 Imm(0)                                           -> x0
     v2222 Imm(0)                                           -> x0
     terminator Jmp(b38)   (exit_acc=v2116)
@@ -2380,8 +2380,8 @@ fn ent_pc=8 n_params=0 variadic=false locals=72
     v2245 Imm(0)                                           -> x0
     v2246 LocalAddr(-535)                                  -> x0
     v2247 Imm(0)                                           -> x0
-    v2248 LoadLocal { off=-535, kind=V256 }                -> d0
-    v2249 VecBinop { op=Add, lane=I32, bytes=32, lhs=v2241, rhs=v2248 } -> [spill 64]
+    v2248 LoadLocal { off=-535, kind=V256 }                -> [spill 20]
+    v2249 VecBinop { op=Add, lane=I32, bytes=32, lhs=v2241, rhs=v2248 } -> [spill 12]
     v2250 Imm(0)                                           -> x0
     v2251 Imm(0)                                           -> x0
     v2252 Imm(0)                                           -> x0
@@ -2391,7 +2391,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=72
     v2256 Imm(0)                                           -> x0
     v2257 Imm(0)                                           -> x0
     v2258 Imm(0)                                           -> x0
-    v2259 VecBinop { op=Xor, lane=I32, bytes=32, lhs=v2240, rhs=v2249 } -> [spill 60]
+    v2259 VecBinop { op=Xor, lane=I32, bytes=32, lhs=v2240, rhs=v2249 } -> [spill 8]
     v2260 Imm(0)                                           -> x0
     v2261 Imm(0)                                           -> x0
     v2262 Imm(0)                                           -> x0
@@ -2401,7 +2401,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=72
     v2266 Imm(0)                                           -> x0
     v2267 Imm(0)                                           -> x0
     v2268 Imm(0)                                           -> x0
-    v2269 VecBinop { op=Add, lane=I32, bytes=32, lhs=v2239, rhs=v2259 } -> [spill 56]
+    v2269 VecBinop { op=Add, lane=I32, bytes=32, lhs=v2239, rhs=v2259 } -> [spill 4]
     v2270 Imm(0)                                           -> x0
     v2271 Imm(0)                                           -> x0
     v2272 Imm(0)                                           -> x0
@@ -2411,7 +2411,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=72
     v2276 Imm(0)                                           -> x0
     v2277 Imm(0)                                           -> x0
     v2278 Imm(0)                                           -> x0
-    v2279 VecBinop { op=Sub, lane=I32, bytes=32, lhs=v2238, rhs=v2269 } -> [spill 52]
+    v2279 VecBinop { op=Sub, lane=I32, bytes=32, lhs=v2238, rhs=v2269 } -> [spill 0]
     v2280 Imm(0)                                           -> x0
     v2281 Imm(0)                                           -> x0
     v2282 Imm(0)                                           -> x0
@@ -2421,7 +2421,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=72
     v2286 Imm(0)                                           -> x0
     v2287 Imm(0)                                           -> x0
     v2288 Imm(0)                                           -> x0
-    v2289 VecBinop { op=Add, lane=I32, bytes=32, lhs=v2237, rhs=v2279 } -> [spill 48]
+    v2289 VecBinop { op=Add, lane=I32, bytes=32, lhs=v2237, rhs=v2279 } -> d12
     v2290 Imm(0)                                           -> x0
     v2291 Imm(0)                                           -> x0
     v2292 Imm(0)                                           -> x0
@@ -2431,7 +2431,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=72
     v2296 Imm(0)                                           -> x0
     v2297 Imm(0)                                           -> x0
     v2298 Imm(0)                                           -> x0
-    v2299 VecBinop { op=Xor, lane=I32, bytes=32, lhs=v2236, rhs=v2289 } -> [spill 44]
+    v2299 VecBinop { op=Xor, lane=I32, bytes=32, lhs=v2236, rhs=v2289 } -> d11
     v2300 Imm(0)                                           -> x0
     v2301 Imm(0)                                           -> x0
     v2302 Imm(0)                                           -> x0
@@ -2443,7 +2443,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=72
     v2308 Imm(0)                                           -> x0
     v2309 Imm(0)                                           -> x0
     v2310 Imm(0)                                           -> x0
-    v2311 VecBinop { op=Add, lane=I32, bytes=32, lhs=v2235, rhs=v2299 } -> [spill 40]
+    v2311 VecBinop { op=Add, lane=I32, bytes=32, lhs=v2235, rhs=v2299 } -> d10
     v2312 Imm(0)                                           -> x0
     v2313 Imm(0)                                           -> x0
     v2314 Imm(0)                                           -> x0
@@ -2453,7 +2453,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=72
     v2318 Imm(0)                                           -> x0
     v2319 Imm(0)                                           -> x0
     v2320 Imm(0)                                           -> x0
-    v2321 VecBinop { op=Sub, lane=I32, bytes=32, lhs=v2234, rhs=v2311 } -> [spill 36]
+    v2321 VecBinop { op=Sub, lane=I32, bytes=32, lhs=v2234, rhs=v2311 } -> d9
     v2322 Imm(0)                                           -> x0
     v2323 Imm(0)                                           -> x0
     v2324 Imm(0)                                           -> x0
@@ -2463,7 +2463,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=72
     v2328 Imm(0)                                           -> x0
     v2329 Imm(0)                                           -> x0
     v2330 Imm(0)                                           -> x0
-    v2331 VecBinop { op=Add, lane=I32, bytes=32, lhs=v2233, rhs=v2321 } -> [spill 32]
+    v2331 VecBinop { op=Add, lane=I32, bytes=32, lhs=v2233, rhs=v2321 } -> d8
     v2332 Imm(0)                                           -> x0
     v2333 Imm(0)                                           -> x0
     v2334 Imm(0)                                           -> x0
@@ -2473,7 +2473,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=72
     v2338 Imm(0)                                           -> x0
     v2339 Imm(0)                                           -> x0
     v2340 Imm(0)                                           -> x0
-    v2341 VecBinop { op=Xor, lane=I32, bytes=32, lhs=v2232, rhs=v2331 } -> [spill 28]
+    v2341 VecBinop { op=Xor, lane=I32, bytes=32, lhs=v2232, rhs=v2331 } -> d7
     v2342 Imm(0)                                           -> x0
     v2343 Imm(0)                                           -> x0
     v2344 Imm(0)                                           -> x0
@@ -2483,7 +2483,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=72
     v2348 Imm(0)                                           -> x0
     v2349 Imm(0)                                           -> x0
     v2350 Imm(0)                                           -> x0
-    v2351 VecBinop { op=Add, lane=I32, bytes=32, lhs=v2231, rhs=v2341 } -> [spill 24]
+    v2351 VecBinop { op=Add, lane=I32, bytes=32, lhs=v2231, rhs=v2341 } -> d6
     v2352 Imm(0)                                           -> x0
     v2353 Imm(0)                                           -> x0
     v2354 Imm(0)                                           -> x0
@@ -2493,7 +2493,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=72
     v2358 Imm(0)                                           -> x0
     v2359 Imm(0)                                           -> x0
     v2360 Imm(0)                                           -> x0
-    v2361 VecBinop { op=Sub, lane=I32, bytes=32, lhs=v2230, rhs=v2351 } -> [spill 20]
+    v2361 VecBinop { op=Sub, lane=I32, bytes=32, lhs=v2230, rhs=v2351 } -> d5
     v2362 Imm(0)                                           -> x0
     v2363 Imm(0)                                           -> x0
     v2364 Imm(0)                                           -> x0
@@ -2503,7 +2503,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=72
     v2368 Imm(0)                                           -> x0
     v2369 Imm(0)                                           -> x0
     v2370 Imm(0)                                           -> x0
-    v2371 VecBinop { op=Add, lane=I32, bytes=32, lhs=v2229, rhs=v2361 } -> [spill 16]
+    v2371 VecBinop { op=Add, lane=I32, bytes=32, lhs=v2229, rhs=v2361 } -> d4
     v2372 Imm(0)                                           -> x0
     v2373 Imm(0)                                           -> x0
     v2374 Imm(0)                                           -> x0
@@ -2513,7 +2513,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=72
     v2378 Imm(0)                                           -> x0
     v2379 Imm(0)                                           -> x0
     v2380 Imm(0)                                           -> x0
-    v2381 VecBinop { op=Xor, lane=I32, bytes=32, lhs=v2228, rhs=v2371 } -> [spill 12]
+    v2381 VecBinop { op=Xor, lane=I32, bytes=32, lhs=v2228, rhs=v2371 } -> d3
     v2382 Imm(0)                                           -> x0
     v2383 Imm(0)                                           -> x0
     v2384 Imm(0)                                           -> x0
@@ -2523,7 +2523,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=72
     v2388 Imm(0)                                           -> x0
     v2389 Imm(0)                                           -> x0
     v2390 Imm(0)                                           -> x0
-    v2391 VecBinop { op=Add, lane=I32, bytes=32, lhs=v2227, rhs=v2381 } -> [spill 8]
+    v2391 VecBinop { op=Add, lane=I32, bytes=32, lhs=v2227, rhs=v2381 } -> d2
     v2392 Imm(0)                                           -> x0
     v2393 Imm(0)                                           -> x0
     v2394 Imm(0)                                           -> x0
@@ -2533,7 +2533,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=72
     v2398 Imm(0)                                           -> x0
     v2399 Imm(0)                                           -> x0
     v2400 Imm(0)                                           -> x0
-    v2401 VecBinop { op=Sub, lane=I32, bytes=32, lhs=v2226, rhs=v2391 } -> [spill 4]
+    v2401 VecBinop { op=Sub, lane=I32, bytes=32, lhs=v2226, rhs=v2391 } -> d1
     v2402 Imm(0)                                           -> x0
     v2403 Imm(0)                                           -> x0
     v2404 Imm(0)                                           -> x0
@@ -2543,7 +2543,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=72
     v2408 Imm(0)                                           -> x0
     v2409 Imm(0)                                           -> x0
     v2410 Imm(0)                                           -> x0
-    v2411 VecBinop { op=Add, lane=I32, bytes=32, lhs=v2225, rhs=v2401 } -> [spill 0]
+    v2411 VecBinop { op=Add, lane=I32, bytes=32, lhs=v2225, rhs=v2401 } -> d0
     v2412 Imm(0)                                           -> x0
     v2413 Imm(0)                                           -> x0
     v2414 Imm(0)                                           -> x0
@@ -2553,7 +2553,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=72
     v2418 Imm(0)                                           -> x0
     v2419 Imm(0)                                           -> x0
     v2420 Imm(0)                                           -> x0
-    v2421 VecBinop { op=Xor, lane=I32, bytes=32, lhs=v2224, rhs=v2411 } -> [spill 68]
+    v2421 VecBinop { op=Xor, lane=I32, bytes=32, lhs=v2224, rhs=v2411 } -> [spill 16]
     v2422 Imm(0)                                           -> x0
     v2423 Imm(0)                                           -> x0
     v2424 Imm(0)                                           -> x0
@@ -2564,24 +2564,24 @@ fn ent_pc=8 n_params=0 variadic=false locals=72
     terminator Jmp(b38)   (exit_acc=v2427)
   block 38  start_pc=0
     v2223 Phi { incoming=[b36:v2116, b37:v2427], kind=I64 } -> x3
-    v2224 Phi { incoming=[b36:v2220, b37:v2421], kind=V256 } -> [spill 68]
-    v2225 Phi { incoming=[b36:v2214, b37:v2411], kind=V256 } -> [spill 0]
-    v2226 Phi { incoming=[b36:v2208, b37:v2401], kind=V256 } -> [spill 4]
-    v2227 Phi { incoming=[b36:v2202, b37:v2391], kind=V256 } -> [spill 8]
-    v2228 Phi { incoming=[b36:v2196, b37:v2381], kind=V256 } -> [spill 12]
-    v2229 Phi { incoming=[b36:v2190, b37:v2371], kind=V256 } -> [spill 16]
-    v2230 Phi { incoming=[b36:v2184, b37:v2361], kind=V256 } -> [spill 20]
-    v2231 Phi { incoming=[b36:v2178, b37:v2351], kind=V256 } -> [spill 24]
-    v2232 Phi { incoming=[b36:v2172, b37:v2341], kind=V256 } -> [spill 28]
-    v2233 Phi { incoming=[b36:v2166, b37:v2331], kind=V256 } -> [spill 32]
-    v2234 Phi { incoming=[b36:v2160, b37:v2321], kind=V256 } -> [spill 36]
-    v2235 Phi { incoming=[b36:v2154, b37:v2311], kind=V256 } -> [spill 40]
-    v2236 Phi { incoming=[b36:v2148, b37:v2299], kind=V256 } -> [spill 44]
-    v2237 Phi { incoming=[b36:v2142, b37:v2289], kind=V256 } -> [spill 48]
-    v2238 Phi { incoming=[b36:v2136, b37:v2279], kind=V256 } -> [spill 52]
-    v2239 Phi { incoming=[b36:v2130, b37:v2269], kind=V256 } -> [spill 56]
-    v2240 Phi { incoming=[b36:v2124, b37:v2259], kind=V256 } -> [spill 60]
-    v2241 Phi { incoming=[b36:v2118, b37:v2249], kind=V256 } -> [spill 64]
+    v2224 Phi { incoming=[b36:v2220, b37:v2421], kind=V256 } -> [spill 16]
+    v2225 Phi { incoming=[b36:v2214, b37:v2411], kind=V256 } -> d0
+    v2226 Phi { incoming=[b36:v2208, b37:v2401], kind=V256 } -> d1
+    v2227 Phi { incoming=[b36:v2202, b37:v2391], kind=V256 } -> d2
+    v2228 Phi { incoming=[b36:v2196, b37:v2381], kind=V256 } -> d3
+    v2229 Phi { incoming=[b36:v2190, b37:v2371], kind=V256 } -> d4
+    v2230 Phi { incoming=[b36:v2184, b37:v2361], kind=V256 } -> d5
+    v2231 Phi { incoming=[b36:v2178, b37:v2351], kind=V256 } -> d6
+    v2232 Phi { incoming=[b36:v2172, b37:v2341], kind=V256 } -> d7
+    v2233 Phi { incoming=[b36:v2166, b37:v2331], kind=V256 } -> d8
+    v2234 Phi { incoming=[b36:v2160, b37:v2321], kind=V256 } -> d9
+    v2235 Phi { incoming=[b36:v2154, b37:v2311], kind=V256 } -> d10
+    v2236 Phi { incoming=[b36:v2148, b37:v2299], kind=V256 } -> d11
+    v2237 Phi { incoming=[b36:v2142, b37:v2289], kind=V256 } -> d12
+    v2238 Phi { incoming=[b36:v2136, b37:v2279], kind=V256 } -> [spill 0]
+    v2239 Phi { incoming=[b36:v2130, b37:v2269], kind=V256 } -> [spill 4]
+    v2240 Phi { incoming=[b36:v2124, b37:v2259], kind=V256 } -> [spill 8]
+    v2241 Phi { incoming=[b36:v2118, b37:v2249], kind=V256 } -> [spill 12]
     v2242 Extend { value=v2223, kind=I32 }                 -> x0
     v2243 BinopI { op=lt, lhs=v2223, rhs_imm=10 }          -> x0
     terminator Bz { cond=v2243, target=b39, fall=b37 }   (exit_acc=v2243)

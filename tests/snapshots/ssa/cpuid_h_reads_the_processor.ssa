@@ -28,9 +28,9 @@ fn ent_pc=5 n_params=0 variadic=false locals=7
     v22  BinopI { op=and, lhs=v12, rhs_imm=4294967295 }   -> x0
     v23  Imm(0)                                           -> x0
     v24  Imm(0)                                           -> x0
-    v25  LocalAddr(-5)                                    -> x8
+    v25  LocalAddr(-5)                                    -> x9
     v26  Imm(0)                                           -> x0
-    v27  InlineAsm { template="cpuid\n\t", ops=5, args=[-, -, -, -, v26] } -> [spill 0]
+    v27  InlineAsm { template="cpuid\n\t", ops=5, args=[-, -, -, -, v26] } -> x8
     v28  AsmOut(1, kind=I64)                              -> x3
     terminator Bz { cond=v25, target=b2, fall=b1 }   (exit_acc=v25)
   block 1  start_pc=0
@@ -310,7 +310,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=7
     v255 InlineAsm { template="cpuid", ops=4, args=[v253, -, v254, -] } -> x0
     v256 AsmOut(1, kind=I64)                              -> x3
     v257 AsmOut(2, kind=I64)                              -> x7
-    v258 AsmOut(3, kind=I64)                              -> x8
+    v258 AsmOut(3, kind=I64)                              -> x9
     v259 BinopI { op=and, lhs=v255, rhs_imm=4294967295 }  -> x0
     v260 Imm(0)                                           -> x0
     v261 Imm(0)                                           -> x0

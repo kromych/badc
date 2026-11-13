@@ -111,11 +111,10 @@ Disassembly of section .text:
                	movq	%rcx, %xmm1
                	movb	$0x2, %al
                	callq	<addr>
-               	movsd	%xmm0, 0x8(%rsp)
+               	movapd	%xmm0, %xmm1
                	movabsq	$0x4025800000000000, %rax # imm = 0x4025800000000000
-               	movsd	0x8(%rsp), %xmm14
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm14
+               	ucomisd	%xmm15, %xmm1
                	jp	<addr>
                	je	<addr>
                	movl	$0x1, %eax
@@ -126,12 +125,13 @@ Disassembly of section .text:
                	movabsq	$0x4004000000000000, %rax # imm = 0x4004000000000000
                	movl	$0x3, %edx
                	movabsq	$0x4011000000000000, %rcx # imm = 0x4011000000000000
+               	movsd	%xmm1, 0x8(%rsp)
                	movq	%rax, %xmm0
                	movq	%rcx, %xmm1
                	movb	$0x2, %al
                	callq	<addr>
-               	movsd	0x8(%rsp), %xmm14
-               	ucomisd	%xmm0, %xmm14
+               	movsd	0x8(%rsp), %xmm1
+               	ucomisd	%xmm0, %xmm1
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax

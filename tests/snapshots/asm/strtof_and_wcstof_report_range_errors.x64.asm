@@ -297,11 +297,11 @@ Disassembly of section .text:
                	movsd	%xmm0, 0x18(%rsp)
                	xorl	%eax, %eax
                	callq	<addr>
+               	movsd	0x18(%rsp), %xmm0
                	movl	(%rax), %eax
                	cmpl	$0x22, %eax
                	jne	<addr>
                	xorl	%eax, %eax
-               	movsd	0x18(%rsp), %xmm0
                	movq	%rax, %xmm15
                	comiss	%xmm15, %xmm0
                	jbe	<addr>

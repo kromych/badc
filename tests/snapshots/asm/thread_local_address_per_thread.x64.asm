@@ -54,7 +54,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x30, %rsp
                	movq	%fs:0x0, %rax
                	addq	$-0x10, %rax
                	movq	(%rax), %rax
@@ -78,29 +78,29 @@ Disassembly of section .text:
                	movl	$0x2, %esi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movq	%rax, %r10
-               	movq	%r10, 0x8(%rsp)
                	leaq	<rip>, %rsi
-               	movq	0x8(%rsp), %rdi
+               	movq	%rax, 0x8(%rsp)
+               	movq	%rax, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %r10
-               	movq	%r10, (%rsp)
+               	movq	%r10, 0x18(%rsp)
+               	movq	0x8(%rsp), %rax
                	leaq	<rip>, %rsi
-               	movq	0x8(%rsp), %rdi
+               	movq	%rax, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %r10
-               	movq	%r10, 0x8(%rsp)
+               	movq	%r10, 0x10(%rsp)
                	leaq	-0x10(%rbp), %rdi
                	xorl	%esi, %esi
                	leaq	-<rip>, %rdx # <addr>
-               	movq	(%rsp), %r11
+               	movq	0x18(%rsp), %r11
                	movq	%rsi, %rcx
                	callq	*%r11
                	movq	-0x10(%rbp), %rdi
                	leaq	-0x8(%rbp), %rsi
-               	movq	0x8(%rsp), %r11
+               	movq	0x10(%rsp), %r11
                	callq	*%r11
                	movq	-0x8(%rbp), %rax
                	cmpq	$0x63, %rax
@@ -136,12 +136,12 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rdi
                	xorl	%esi, %esi
                	leaq	-<rip>, %rdx # <addr>
-               	movq	(%rsp), %r11
+               	movq	0x18(%rsp), %r11
                	movq	%rsi, %rcx
                	callq	*%r11
                	movq	-0x10(%rbp), %rdi
                	leaq	-0x8(%rbp), %rsi
-               	movq	0x8(%rsp), %r11
+               	movq	0x10(%rsp), %r11
                	callq	*%r11
                	movq	-0x8(%rbp), %rax
                	cmpq	$0x63, %rax

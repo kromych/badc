@@ -68,24 +68,23 @@ Disassembly of section .text:
                	xorl	%esi, %esi
                	movb	$0x0, %al
                	callq	<addr>
-               	movq	%rax, %r10
-               	movq	%r10, 0x8(%rsp)
-               	movq	0x8(%rsp), %rax
                	testl	%eax, %eax
                	jge	<addr>
                	movl	$0x6, %eax
                	leave
                	retq
                	leaq	-0x70(%rbp), %rsi
-               	movq	0x8(%rsp), %rdi
+               	movq	%rax, (%rsp)
+               	movq	%rax, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %r10
-               	movq	%r10, (%rsp)
-               	movq	0x8(%rsp), %rdi
+               	movq	%r10, 0x8(%rsp)
+               	movq	(%rsp), %rax
+               	movq	%rax, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movq	(%rsp), %r10
+               	movq	0x8(%rsp), %r10
                	testl	%r10d, %r10d
                	jne	<addr>
                	movq	-0x68(%rbp), %rax

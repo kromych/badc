@@ -219,22 +219,21 @@ Disassembly of section .text:
                	leaq	-0x88(%rbp), %rsi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movsd	%xmm0, 0x28(%rsp)
                	movq	-0x88(%rbp), %r13
                	movq	(%rbx), %rax
                	subq	%rax, %r13
+               	movsd	%xmm0, 0x28(%rsp)
                	xorl	%eax, %eax
                	callq	<addr>
+               	movsd	0x28(%rsp), %xmm0
                	movl	(%rax), %eax
                	cmpl	$0x22, %eax
                	sete	%cl
                	movzbq	%cl, %rcx
                	movq	0x10(%rbx), %rax
-               	movsd	0x28(%rsp), %xmm14
-               	movq	%xmm14, %rdx
+               	movq	%xmm0, %rdx
                	cmpq	$-0x1, %rax
                	jne	<addr>
-               	movsd	0x28(%rsp), %xmm0
                	ucomisd	%xmm0, %xmm0
                	setne	%al
                	movzbq	%al, %rax
@@ -264,7 +263,6 @@ Disassembly of section .text:
                	leaq	-0x90(%rbp), %rsi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movsd	%xmm0, 0x28(%rsp)
                	movq	-0x90(%rbp), %rax
                	leaq	-0x80(%rbp), %rcx
                	subq	%rcx, %rax
@@ -277,7 +275,6 @@ Disassembly of section .text:
                	movq	(%rbx), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movsd	%xmm0, 0x28(%rsp)
                	jmp	<addr>
                	incq	%r12
                	cmpl	$0x3, %r12d

@@ -77,13 +77,13 @@ Disassembly of section .text:
                	movq	%rax, %r10
                	movq	0x38(%rsp), %rax
                	addq	%r10, %rax
-               	movq	%rax, %r10
-               	addq	0x58(%rsp), %r10
-               	movq	%r10, 0x58(%rsp)
+               	movq	%rax, %rcx
+               	addq	0x58(%rsp), %rcx
                	movq	<rip>, %rax # <addr>
+               	movq	%rcx, 0x30(%rsp)
                	movq	%r13, %rdi
                	callq	*%rax
-               	movq	0x58(%rsp), %rcx
+               	movq	0x30(%rsp), %rcx
                	movq	0x50(%rsp), %rdx
                	addq	%rcx, %rdx
                	addq	%rcx, %rax

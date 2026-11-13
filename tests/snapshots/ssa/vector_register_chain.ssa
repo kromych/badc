@@ -251,7 +251,7 @@ fn ent_pc=10 n_params=5 variadic=false locals=2
     v22  BinopI { op=add, lhs=v13, rhs_imm=8 }            -> x1
     v23  StoreLocal { off=-2, disp=8, value=v20, kind=I64 } -> -
     v24  LocalAddr(-2)                                    -> x0
-    v25  InlineAsm { template="movdqu %1, %0", ops=2, args=[-, v13] } -> [spill 4]
+    v25  InlineAsm { template="movdqu %1, %0", ops=2, args=[-, v13] } -> d5
     v26  Imm(0)                                           -> x0
     v27  Imm(0)                                           -> x0
     v28  Imm(0)                                           -> x0
@@ -286,7 +286,7 @@ fn ent_pc=10 n_params=5 variadic=false locals=2
     v60  Load { addr=v5, disp=24, kind=I64 }              -> x0
     v61  Extend { value=v49, kind=I32 }                   -> x1
     v62  Binop { op=add, lhs=v60, rhs=v49 }               -> x0
-    v63  InlineAsm { template="movdqu %1, %0", ops=2, args=[-, v62] } -> [spill 0]
+    v63  InlineAsm { template="movdqu %1, %0", ops=2, args=[-, v62] } -> d2
     v64  Imm(0)                                           -> x0
     v65  Imm(0)                                           -> x0
     v66  Imm(0)                                           -> x0
@@ -313,7 +313,7 @@ fn ent_pc=10 n_params=5 variadic=false locals=2
     v92  LoadIndexed { base=v5, index=v84, scale=8, kind=I64 } -> x0
     v93  Extend { value=v49, kind=I32 }                   -> x1
     v94  Binop { op=add, lhs=v92, rhs=v49 }               -> x0
-    v95  InlineAsm { template="movdqu %1, %0", ops=2, args=[-, v94] } -> d2
+    v95  InlineAsm { template="movdqu %1, %0", ops=2, args=[-, v94] } -> d4
     v96  Imm(0)                                           -> x0
     v97  Imm(0)                                           -> x0
     v98  Imm(0)                                           -> x0
@@ -340,7 +340,7 @@ fn ent_pc=10 n_params=5 variadic=false locals=2
     v119 Imm(0)                                           -> x0
     v120 Imm(0)                                           -> x0
     v121 Imm(0)                                           -> x0
-    v122 InlineAsm { template="pxor %1, %0", ops=2, args=[v83, v95] } -> [spill 2]
+    v122 InlineAsm { template="pxor %1, %0", ops=2, args=[v83, v95] } -> d3
     v123 Imm(0)                                           -> x0
     v124 Imm(0)                                           -> x0
     v125 LifetimeEnd(0)                                   -> -
@@ -468,7 +468,7 @@ fn ent_pc=10 n_params=5 variadic=false locals=2
     v247 Imm(0)                                           -> x0
     v248 Imm(0)                                           -> x0
     v249 Imm(0)                                           -> x0
-    v250 InlineAsm { template="pxor %1, %0", ops=2, args=[v221, v95] } -> [spill 0]
+    v250 InlineAsm { template="pxor %1, %0", ops=2, args=[v221, v95] } -> d2
     v251 Imm(0)                                           -> x0
     v252 Imm(0)                                           -> x0
     v253 LifetimeEnd(0)                                   -> -
@@ -486,8 +486,8 @@ fn ent_pc=10 n_params=5 variadic=false locals=2
     v265 Extend { value=v264, kind=I32, nsw }             -> x0
     terminator Jmp(b3)   (exit_acc=v264)
   block 3  start_pc=0
-    v82  Phi { incoming=[b1:v63, b2:v250], kind=V128 }    -> [spill 0]
-    v83  Phi { incoming=[b1:v63, b2:v122], kind=V128 }    -> [spill 2]
+    v82  Phi { incoming=[b1:v63, b2:v250], kind=V128 }    -> d2
+    v83  Phi { incoming=[b1:v63, b2:v122], kind=V128 }    -> d3
     v84  Phi { incoming=[b1:v78, b2:v264], kind=I64 }     -> x6
     v85  Extend { value=v84, kind=I32 }                   -> x0
     v86  BinopI { op=ge, lhs=v84, rhs_imm=0 }             -> x0

@@ -851,6 +851,12 @@ impl FnEmit<'_, '_> {
             );
         }
         let data_fixups_pre_inst = self.out.cx.data_fixups.len();
+        let saves = (alloc.call_saves)
+            .binary_search_by_key(&v, |&(site, _)| site)
+            .map_or(&[][..], |i| alloc.call_saves[i].1.as_slice());
+        for s in saves {
+            call_save(self.out.cx.code, self.fcx.frame, s, true);
+        }
         emit_inst(&mut self.out, inst, v, place, &self.fcx).inspect_err(|_| {
             #[cfg(feature = "codegen_test")]
             if std::env::var("BADC_DUMP_SSA").is_ok() {
@@ -860,6 +866,9 @@ impl FnEmit<'_, '_> {
                 );
             }
         })?;
+        for s in saves {
+            call_save(self.out.cx.code, self.fcx.frame, s, false);
+        }
         name_extern_data_ref(
             self.out.cx,
             v,
@@ -2212,5 +2221,30 @@ fn emit_hardened_jmp_r(
     }
     if abi.hardening.sls_indirect_jmp {
         super::encode::emit_int3(code);
+    }
+}
+
+/// Store a register a call clobbers to its slot ahead of the call, or load
+/// it back after ([`super::ssa::reg_alloc::Allocation::call_saves`]).
+fn call_save(code: &mut Vec<u8>, frame: Frame, s: &super::ssa::reg_alloc::CallSave, store: bool) {
+    use super::ssa::reg_alloc::VecWidth;
+    let (slot, r) = (Place::Spill(s.slot), Reg(s.reg));
+    match (s.is_fp, s.wide, store) {
+        (false, _, true) => spill_dst_to_slot(code, slot, r, frame),
+        (false, _, false) => {
+            materialize_int(code, slot, r, frame);
+        }
+        (true, VecWidth::Scalar, true) => fp_spill_dst_to_slot(code, slot, r, frame),
+        (true, VecWidth::Scalar, false) => {
+            materialize_fp(code, slot, r, frame);
+        }
+        (true, VecWidth::V128, true) => mirror_v128_dst(code, slot, r, frame),
+        (true, VecWidth::V128, false) => {
+            materialize_v128(code, slot, r, frame);
+        }
+        (true, w, true) => mirror_wide_dst(code, w, slot, r, frame),
+        (true, w, false) => {
+            materialize_wide(code, w, slot, r, frame);
+        }
     }
 }

@@ -194,8 +194,8 @@ Disassembly of section .text:
                	addq	0x18(%rsp), %rax
                	addq	0x28(%rsp), %rax
                	leaq	(%rax,%rax,2), %rax
-               	leaq	0x1(%rax), %r10
-               	movq	%r10, 0x10(%rsp)
+               	leaq	0x1(%rax), %rcx
+               	movq	%rcx, 0x10(%rsp)
                	movq	%rbx, %rdi
                	movq	0x38(%rsp), %rsi
                	movq	0x30(%rsp), %rdx

@@ -283,15 +283,15 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x430, %rsp            # imm = 0x430
-               	movq	%rdi, 0x428(%rsp)
+               	movq	%rdi, %rcx
                	leaq	-0x430(%rbp), %rdi
                	movl	$0x96, %esi
+               	movq	%rcx, 0x428(%rsp)
                	callq	<addr>
-               	movq	0x428(%rsp), %rax
-               	cmpl	$0x1, %eax
+               	movq	0x428(%rsp), %rcx
+               	cmpl	$0x1, %ecx
                	jl	<addr>
-               	movq	0x428(%rsp), %rax
-               	cmpl	$0x1, %eax
+               	cmpl	$0x1, %ecx
                	je	<addr>
                	leaq	-0x430(%rbp), %rdi
                	movl	$0x96, %esi

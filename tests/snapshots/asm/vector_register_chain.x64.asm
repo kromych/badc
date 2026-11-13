@@ -76,49 +76,49 @@ Disassembly of section .text:
                	movq	%rax, -0x8(%rbp)
                	leaq	-0x10(%rbp), %rax
                	movdqu	(%rax), %xmm0
-               	movups	%xmm0, -0x40(%rbp)
+               	movapd	%xmm0, %xmm5
                	xorl	%ebx, %ebx
                	movq	%rbx, %r13
                	movq	0x18(%r12), %rax
                	addq	%rbx, %rax
                	movdqu	(%rax), %xmm0
-               	movups	%xmm0, -0x20(%rbp)
+               	movapd	%xmm0, %xmm2
                	movl	$0x2, %esi
-               	movups	0x50(%rsp), %xmm14
-               	movups	%xmm14, 0x40(%rsp)
+               	movapd	%xmm2, %xmm3
                	movq	(%r12,%rsi,8), %rax
                	addq	%rbx, %rax
                	movdqu	(%rax), %xmm0
-               	movapd	%xmm0, %xmm2
-               	movups	0x40(%rsp), %xmm14
-               	pxor	%xmm2, %xmm14
-               	movups	%xmm14, -0x30(%rbp)
-               	movups	0x50(%rsp), %xmm1
+               	movapd	%xmm0, %xmm4
+               	pxor	%xmm4, %xmm3
+               	movapd	%xmm2, %xmm1
                	pxor	%xmm0, %xmm0
                	pcmpgtb	%xmm1, %xmm0
-               	movups	0x50(%rsp), %xmm1
+               	movapd	%xmm2, %xmm1
                	paddb	%xmm1, %xmm1
-               	movups	0x30(%rsp), %xmm14
-               	pand	%xmm14, %xmm0
+               	pand	%xmm5, %xmm0
                	pxor	%xmm0, %xmm1
-               	movapd	%xmm1, %xmm14
-               	pxor	%xmm2, %xmm14
-               	movups	%xmm14, -0x20(%rbp)
+               	movapd	%xmm1, %xmm2
+               	pxor	%xmm4, %xmm2
                	decq	%rsi
                	testl	%esi, %esi
                	jge	<addr>
                	movq	0x18(%r12), %rax
                	leaq	(%rax,%rbx), %rdi
+               	movups	%xmm5, 0x50(%rsp)
+               	movups	%xmm2, 0x40(%rsp)
+               	movups	%xmm3, 0x30(%rsp)
                	callq	<addr>
+               	movups	0x50(%rsp), %xmm5
+               	movups	0x40(%rsp), %xmm2
+               	movups	0x30(%rsp), %xmm3
                	leaq	(%r13,%rax), %rcx
                	leaq	(%r14,%rbx), %rax
-               	movups	0x40(%rsp), %xmm0
+               	movapd	%xmm3, %xmm0
                	movdqu	%xmm0, (%rax)
                	leaq	(%r15,%rbx), %rax
-               	movups	0x50(%rsp), %xmm0
+               	movapd	%xmm2, %xmm0
                	movdqu	%xmm0, (%rax)
-               	movups	0x50(%rsp), %xmm14
-               	movq	%xmm14, %rax
+               	movq	%xmm2, %rax
                	andq	$0xff, %rax
                	leaq	(%rcx,%rax), %r13
                	addq	$0x10, %rbx

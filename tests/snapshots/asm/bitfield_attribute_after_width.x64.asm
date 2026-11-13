@@ -48,7 +48,6 @@ Disassembly of section .text:
                	sarq	$0x3c, %rcx
                	cmpl	$-0x3, %ecx
                	jne	<addr>
-               	movl	%eax, %eax
                	sarq	$0x4, %rax
                	shlq	$0x3c, %rax
                	sarq	$0x3c, %rax

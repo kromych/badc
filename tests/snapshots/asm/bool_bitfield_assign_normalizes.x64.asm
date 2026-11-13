@@ -50,7 +50,7 @@ Disassembly of section .text:
                	andq	$-0x1d, %rax
                	orq	$0x8, %rax
                	movl	%eax, -0x8(%rbp)
-               	movl	%eax, %edx
+               	movq	%rax, %rdx
                	sarq	$0x2, %rdx
                	andq	$0x7, %rdx
                	cmpl	$0x2, %edx
@@ -61,7 +61,7 @@ Disassembly of section .text:
                	andq	$-0x1e1, %rax           # imm = 0xFE1F
                	orq	$0x20, %rax
                	movl	%eax, -0x8(%rbp)
-               	movl	%eax, %edx
+               	movq	%rax, %rdx
                	sarq	$0x5, %rdx
                	shlq	$0x3c, %rdx
                	sarq	$0x3c, %rdx
@@ -72,7 +72,7 @@ Disassembly of section .text:
                	retq
                	andq	$-0x1d, %rax
                	movl	%eax, -0x8(%rbp)
-               	movl	%eax, %edx
+               	movq	%rax, %rdx
                	sarq	$0x2, %rdx
                	testb	$0x7, %dl
                	je	<addr>
@@ -82,7 +82,7 @@ Disassembly of section .text:
                	andq	$-0x1d, %rax
                	orq	$0x4, %rax
                	movl	%eax, -0x8(%rbp)
-               	movl	%eax, %edx
+               	movq	%rax, %rdx
                	sarq	$0x2, %rdx
                	andq	$0x7, %rdx
                	cmpl	$0x1, %edx
@@ -93,7 +93,6 @@ Disassembly of section .text:
                	andq	$-0x1e1, %rax           # imm = 0xFE1F
                	orq	$0x120, %rax            # imm = 0x120
                	movl	%eax, -0x8(%rbp)
-               	movl	%eax, %eax
                	sarq	$0x5, %rax
                	shlq	$0x3c, %rax
                	sarq	$0x3c, %rax

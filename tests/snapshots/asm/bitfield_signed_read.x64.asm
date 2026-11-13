@@ -37,7 +37,6 @@ Disassembly of section .text:
                	andq	$-0x3001, %rax          # imm = 0xCFFF
                	orq	$0x3000, %rax           # imm = 0x3000
                	movw	%ax, -0x8(%rbp)
-               	andq	$0xffff, %rax           # imm = 0xFFFF
                	andq	$-0xc001, %rax          # imm = 0xFFFF3FFF
                	orq	$0x4000, %rax           # imm = 0x4000
                	movw	%ax, -0x8(%rbp)
@@ -48,7 +47,6 @@ Disassembly of section .text:
                	movl	$0x1f, %eax
                	leave
                	retq
-               	andq	$0xffff, %rax           # imm = 0xFFFF
                	movq	%rax, %rcx
                	sarq	$0xc, %rcx
                	shlq	$0x3e, %rcx

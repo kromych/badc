@@ -76,8 +76,7 @@ Disassembly of section .text:
                	and	x2, x2, #0xffffffffffff01ff
                	orr	x2, x2, #0x200
                	stur	w2, [x29, #-0x10]
-               	mov	w4, w2
-               	sbfx	x4, x4, #9, #7
+               	sbfx	x4, x2, #9, #7
                	ldr	x3, [x3, #0x40]
                	lsl	x3, x4, x3
                	and	x3, x3, #0x7f
@@ -88,7 +87,6 @@ Disassembly of section .text:
                	cbz	w3, <addr>
                	ldurb	w3, [x29, #-0xf]
                	tbz	w3, #0x0, <addr>
-               	mov	w2, w2
                	sbfx	x2, x2, #9, #7
                	cmp	w2, #0x8
                	b.eq	<addr>

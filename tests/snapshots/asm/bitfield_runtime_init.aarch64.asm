@@ -18,18 +18,15 @@ Disassembly of section .text:
                	and	x4, x1, #0xf
                	orr	x0, x3, x4, lsl #4
                	and	x1, x2, #0x1f
-               	and	x0, x0, #0xffffffffffffe0ff
                	orr	x0, x0, x1, lsl #8
                	and	x1, x0, #0xf
                	cmp	w1, w3
                	mov	x1, #0x0                // =0
                	b.ne	<addr>
-               	mov	w3, w0
-               	ubfx	x3, x3, #4, #4
+               	ubfx	x3, x0, #4, #4
                	cmp	w3, w4
                	cset	x3, eq
                	cbz	x3, <addr>
-               	mov	w0, w0
                	sbfx	x0, x0, #8, #5
                	cmp	w0, w2
                	cset	x0, eq
@@ -66,12 +63,10 @@ Disassembly of section .text:
                	cmp	w3, w0
                	mov	x0, #0x0                // =0
                	b.ne	<addr>
-               	mov	w3, w1
-               	ubfx	x3, x3, #16, #3
+               	ubfx	x3, x1, #16, #3
                	cmp	w3, w4
                	cset	x3, eq
                	cbz	x3, <addr>
-               	mov	w1, w1
                	ubfx	x1, x1, #19, #10
                	cmp	w1, w2
                	cset	x1, eq

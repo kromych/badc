@@ -33,7 +33,6 @@ Disassembly of section .text:
                	orq	%rdi, %rax
                	movq	%rdx, %rcx
                	andq	$0x1f, %rcx
-               	andq	$-0x1f01, %rax          # imm = 0xE0FF
                	shlq	$0x8, %rcx
                	orq	%rcx, %rax
                	movq	%rax, %rcx
@@ -42,7 +41,7 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	testl	%edi, %edi
                	jne	<addr>
-               	movl	%eax, %ecx
+               	movq	%rax, %rcx
                	sarq	$0x4, %rcx
                	andq	$0xf, %rcx
                	cmpl	%esi, %ecx
@@ -51,7 +50,6 @@ Disassembly of section .text:
                	xorl	%esi, %esi
                	testq	%rcx, %rcx
                	je	<addr>
-               	movl	%eax, %eax
                	sarq	$0x8, %rax
                	shlq	$0x3b, %rax
                	sarq	$0x3b, %rax
@@ -99,7 +97,7 @@ Disassembly of section .text:
                	xorl	%edx, %edx
                	testq	%rdi, %rdi
                	je	<addr>
-               	movl	%eax, %edx
+               	movq	%rax, %rdx
                	sarq	$0x10, %rdx
                	andq	$0x7, %rdx
                	cmpl	%esi, %edx
@@ -108,7 +106,6 @@ Disassembly of section .text:
                	xorl	%esi, %esi
                	testq	%rdx, %rdx
                	je	<addr>
-               	movl	%eax, %eax
                	sarq	$0x13, %rax
                	andq	$0x3ff, %rax            # imm = 0x3FF
                	cmpl	%r8d, %eax

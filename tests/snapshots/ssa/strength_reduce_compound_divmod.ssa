@@ -4249,7 +4249,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=18
     v361 StoreLocal { off=-6, value=v360, kind=I32 }      -> -
     v362 LocalAddr(-18)                                   -> x0
     v363 BinopI { op=and, lhs=v349, rhs_imm=4294967295 }  -> x0
-    v364 BinopI { op=shr, lhs=v363, rhs_imm=11 }          -> x0
+    v364 BinopI { op=shr, lhs=v349, rhs_imm=11 }          -> x0
     v365 BinopI { op=and, lhs=v364, rhs_imm=8191 }        -> x0
     v366 BinopI { op=mul, lhs=v365, rhs_imm=1431655766 }  -> x0
     v367 BinopI { op=shru, lhs=v366, rhs_imm=32 }         -> x0
@@ -4261,7 +4261,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=18
     v373 StoreLocal { off=-18, value=v372, kind=I32 }     -> -
     v374 LocalAddr(-6)                                    -> x0
     v375 BinopI { op=and, lhs=v360, rhs_imm=4294967295 }  -> x0
-    v376 BinopI { op=shr, lhs=v375, rhs_imm=11 }          -> x0
+    v376 BinopI { op=shr, lhs=v360, rhs_imm=11 }          -> x0
     v377 BinopI { op=and, lhs=v376, rhs_imm=8191 }        -> x0
     v378 LoadLocal { off=-1, kind=I32, volatile }         -> x6
     v379 Binop { op=div, lhs=v377, rhs=v378 }             -> x0
@@ -4417,7 +4417,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=18
     v533 StoreLocal { off=-6, value=v532, kind=I32 }      -> -
     v534 LocalAddr(-18)                                   -> x0
     v535 BinopI { op=and, lhs=v519, rhs_imm=4294967295 }  -> x0
-    v536 BinopI { op=shr, lhs=v535, rhs_imm=11 }          -> x0
+    v536 BinopI { op=shr, lhs=v519, rhs_imm=11 }          -> x0
     v537 BinopI { op=and, lhs=v536, rhs_imm=8191 }        -> x0
     v538 BinopI { op=mul, lhs=v537, rhs_imm=1431655766 }  -> x2
     v539 BinopI { op=shru, lhs=v538, rhs_imm=32 }         -> x2
@@ -4431,7 +4431,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=18
     v547 StoreLocal { off=-18, value=v546, kind=I32 }     -> -
     v548 LocalAddr(-6)                                    -> x0
     v549 BinopI { op=and, lhs=v532, rhs_imm=4294967295 }  -> x0
-    v550 BinopI { op=shr, lhs=v549, rhs_imm=11 }          -> x0
+    v550 BinopI { op=shr, lhs=v532, rhs_imm=11 }          -> x0
     v551 BinopI { op=and, lhs=v550, rhs_imm=8191 }        -> x6
     v552 LoadLocal { off=-1, kind=I32, volatile }         -> x8
     v553 Binop { op=div, lhs=v551, rhs=v552 }             -> x0

@@ -34,7 +34,6 @@ Disassembly of section .text:
                	mov	x17, #0xfde8            // =65000
                	cmp	w2, w17
                	b.ne	<addr>
-               	and	x1, x1, #0xffff
                	sbfx	x1, x1, #1, #10
                	cmp	w1, #0x1f4
                	b.ne	<addr>
@@ -52,7 +51,6 @@ Disassembly of section .text:
                	and	x2, x2, #0x7
                	cmp	w2, #0x3
                	b.ne	<addr>
-               	and	x1, x1, #0xffff
                	ubfx	x1, x1, #3, #7
                	cmp	w1, #0x3c
                	b.ne	<addr>
@@ -79,7 +77,6 @@ Disassembly of section .text:
                	ldurb	w1, [x29, #-0x8]
                	cmp	w1, #0x6
                	b.ne	<addr>
-               	mov	w0, w0
                	mov	x1, #0xcdef             // =52719
                	movk	x1, #0xab, lsl #16
                	eor	x0, x1, x0, asr #8

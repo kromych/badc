@@ -25,7 +25,6 @@ Disassembly of section .text:
                	and	x0, x0, #0xfffffffffffffffe
                	orr	x0, x0, #0x1
                	sturb	w0, [x29, #-0x7]
-               	and	x0, x0, #0xff
                	and	x0, x0, #0xfffffffffffffffd
                	sturb	w0, [x29, #-0x7]
                	ldur	w0, [x29, #-0x8]
@@ -62,15 +61,14 @@ Disassembly of section .text:
                	ldurb	w0, [x29, #-0x7]
                	ubfx	x0, x0, #1, #1
                	cbnz	w0, <addr>
-               	mov	w0, w1
-               	ubfx	x1, x0, #11, #1
-               	cmp	w1, #0x1
+               	ubfx	x0, x1, #11, #1
+               	cmp	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sbfx	x0, x0, #10, #1
+               	sbfx	x0, x1, #10, #1
                	cmn	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x6                // =6

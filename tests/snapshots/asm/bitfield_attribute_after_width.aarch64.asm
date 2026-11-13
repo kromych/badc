@@ -39,7 +39,6 @@ Disassembly of section .text:
                	sbfx	x2, x1, #0, #4
                	cmn	w2, #0x3
                	b.ne	<addr>
-               	mov	w1, w1
                	sbfx	x1, x1, #4, #4
                	cmp	w1, #0x5
                	b.ne	<addr>

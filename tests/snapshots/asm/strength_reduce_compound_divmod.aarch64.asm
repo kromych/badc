@@ -2331,15 +2331,13 @@ Disassembly of section .text:
                	and	x4, x4, #0xfffffffffffff800
                	orr	x4, x4, x6
                	stur	w4, [x29, #-0x30]
-               	mov	w6, w3
-               	ubfx	x6, x6, #11, #13
+               	ubfx	x6, x3, #11, #13
                	mul	x6, x6, x2
                	lsr	x6, x6, #32
                	and	x3, x3, #0xffffffffff0007ff
                	orr	x3, x3, x6, lsl #11
                	stur	w3, [x29, #-0x90]
-               	mov	w3, w4
-               	ubfx	x3, x3, #11, #13
+               	ubfx	x3, x4, #11, #13
                	ldursw	x6, [x29, #-0x8]
                	sdiv	x3, x3, x6
                	and	x3, x3, #0x1fff
@@ -2425,8 +2423,7 @@ Disassembly of section .text:
                	and	x4, x4, #0xfffffffffffff800
                	orr	x4, x4, x6
                	stur	w4, [x29, #-0x30]
-               	mov	w6, w3
-               	ubfx	x6, x6, #11, #13
+               	ubfx	x6, x3, #11, #13
                	mul	x7, x6, x2
                	lsr	x7, x7, #32
                	add	x7, x7, x7, lsl #1
@@ -2434,8 +2431,7 @@ Disassembly of section .text:
                	and	x3, x3, #0xffffffffff0007ff
                	orr	x3, x3, x6, lsl #11
                	stur	w3, [x29, #-0x90]
-               	mov	w3, w4
-               	ubfx	x3, x3, #11, #13
+               	ubfx	x3, x4, #11, #13
                	ldursw	x6, [x29, #-0x8]
                	sdiv	x17, x3, x6
                	msub	x3, x17, x6, x3

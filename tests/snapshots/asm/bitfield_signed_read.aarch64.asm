@@ -25,7 +25,6 @@ Disassembly of section .text:
                	and	x0, x0, #0xffffffffffffcfff
                	orr	x0, x0, #0x3000
                	sturh	w0, [x29, #-0x8]
-               	and	x0, x0, #0xffff
                	and	x0, x0, #0xffffffffffff3fff
                	orr	x0, x0, #0x4000
                	sturh	w0, [x29, #-0x8]
@@ -37,7 +36,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	and	x0, x0, #0xffff
                	sbfx	x1, x0, #12, #2
                	cmn	w1, #0x1
                	b.eq	<addr>

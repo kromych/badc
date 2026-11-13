@@ -84,7 +84,6 @@ Disassembly of section .text:
                	sarq	$0x2c, %rcx
                	cmpl	$0xfff80001, %ecx       # imm = 0xFFF80001
                	jne	<addr>
-               	movl	%eax, %eax
                	sarq	$0x4, %rax
                	shlq	$0x2c, %rax
                	sarq	$0x2c, %rax
@@ -102,47 +101,10 @@ Disassembly of section .text:
                	movb	%al, -0x2(%rbp)
                	movl	$0x5, -0x8(%rbp)
                	movb	$0x6, -0x2(%rbp)
-               	movl	-0x7(%rbp), %ecx
-               	movabsq	$-0x10000000000, %r11   # imm = 0xFFFFFF0000000000
-               	andq	%r11, %rcx
-               	movabsq	$0x7fffffffff, %r11     # imm = 0x7FFFFFFFFF
-               	orq	%r11, %rcx
-               	movl	%ecx, -0x7(%rbp)
-               	shrq	$0x20, %rcx
-               	movb	%cl, -0x3(%rbp)
-               	andq	$0xff, %rcx
-               	shlq	$0x20, %rcx
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	orq	%r11, %rcx
-               	movq	%rcx, %rdx
-               	shlq	$0x18, %rdx
-               	sarq	$0x18, %rdx
-               	movabsq	$0x7fffffffff, %r11     # imm = 0x7FFFFFFFFF
-               	cmpq	%r11, %rdx
-               	jne	<addr>
-               	movabsq	$-0x10000000000, %r11   # imm = 0xFFFFFF0000000000
-               	andq	%r11, %rcx
-               	movabsq	$0xfedcba9877, %r11     # imm = 0xFEDCBA9877
-               	orq	%r11, %rcx
-               	movl	%ecx, -0x7(%rbp)
-               	movq	%rcx, %rdx
-               	shrq	$0x20, %rdx
-               	movb	%dl, -0x3(%rbp)
-               	movl	%ecx, %ecx
-               	andq	$0xff, %rdx
-               	shlq	$0x20, %rdx
-               	orq	%rdx, %rcx
-               	shlq	$0x18, %rcx
-               	sarq	$0x18, %rcx
-               	movabsq	$-0x123456789, %r11     # imm = 0xFFFFFFFEDCBA9877
-               	cmpq	%r11, %rcx
-               	jne	<addr>
-               	leave
-               	retq
-               	movl	$0x19, %eax
-               	leave
-               	retq
-               	movl	$0x18, %eax
+               	movl	$0xffffffff, -0x7(%rbp) # imm = 0xFFFFFFFF
+               	movb	$0x7f, -0x3(%rbp)
+               	movl	$0xdcba9877, -0x7(%rbp) # imm = 0xDCBA9877
+               	movb	$-0x2, -0x3(%rbp)
                	leave
                	retq
                	movl	$0x16, %eax

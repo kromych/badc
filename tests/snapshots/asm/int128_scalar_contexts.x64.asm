@@ -82,7 +82,7 @@ Disassembly of section .text:
                	andq	$-0xfe01, %rax          # imm = 0xFFFF01FF
                	orq	$0x200, %rax            # imm = 0x200
                	movl	%eax, -0x10(%rbp)
-               	movl	%eax, %ecx
+               	movq	%rax, %rcx
                	sarq	$0x9, %rcx
                	shlq	$0x39, %rcx
                	sarq	$0x39, %rcx
@@ -98,7 +98,6 @@ Disassembly of section .text:
                	movzbq	-0xf(%rbp), %rcx
                	testb	$0x1, %cl
                	je	<addr>
-               	movl	%eax, %eax
                	sarq	$0x9, %rax
                	shlq	$0x39, %rax
                	sarq	$0x39, %rax

@@ -37,7 +37,6 @@ Disassembly of section .text:
                	andq	$-0x2, %rax
                	orq	$0x1, %rax
                	movb	%al, -0x7(%rbp)
-               	andq	$0xff, %rax
                	andq	$-0x3, %rax
                	movb	%al, -0x7(%rbp)
                	movl	-0x8(%rbp), %eax
@@ -45,18 +44,17 @@ Disassembly of section .text:
                	orq	$0x400, %rax            # imm = 0x400
                	movl	%eax, -0x8(%rbp)
                	andq	$-0x801, %rax           # imm = 0xF7FF
-               	movq	%rax, %rcx
-               	orq	$0x800, %rcx            # imm = 0x800
-               	movl	%ecx, -0x8(%rbp)
-               	movzbq	-0x7(%rbp), %rax
-               	movq	%rax, %rdx
+               	orq	$0x800, %rax            # imm = 0x800
+               	movl	%eax, -0x8(%rbp)
+               	movzbq	-0x7(%rbp), %rcx
+               	movq	%rcx, %rdx
                	andq	$0x1, %rdx
                	cmpl	$0x1, %edx
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
-               	movq	%rax, %rdx
+               	movq	%rcx, %rdx
                	sarq	%rdx
                	testb	$0x1, %dl
                	je	<addr>
@@ -64,21 +62,20 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x40, %edx
-               	andq	$0x1, %rax
-               	shlq	$0x3, %rax
-               	subq	%rax, %rdx
+               	andq	$0x1, %rcx
+               	shlq	$0x3, %rcx
+               	subq	%rcx, %rdx
                	cmpl	$0x38, %edx
                	je	<addr>
                	movl	$0x3, %eax
                	leave
                	retq
-               	movzbq	-0x7(%rbp), %rax
-               	testb	$0x1, %al
+               	movzbq	-0x7(%rbp), %rcx
+               	testb	$0x1, %cl
                	je	<addr>
-               	sarq	%rax
-               	testb	$0x1, %al
+               	sarq	%rcx
+               	testb	$0x1, %cl
                	jne	<addr>
-               	movl	%ecx, %eax
                	movq	%rax, %rcx
                	sarq	$0xb, %rcx
                	andq	$0x1, %rcx

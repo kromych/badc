@@ -2348,7 +2348,7 @@ Disassembly of section .text:
                	andq	$-0x800, %rdi           # imm = 0xF800
                	orq	%rax, %rdi
                	movl	%edi, -0x30(%rbp)
-               	movl	%esi, %eax
+               	movq	%rsi, %rax
                	sarq	$0xb, %rax
                	andq	$0x1fff, %rax           # imm = 0x1FFF
                	imulq	$0x55555556, %rax, %rax # imm = 0x55555556
@@ -2357,7 +2357,7 @@ Disassembly of section .text:
                	shlq	$0xb, %rax
                	orq	%rsi, %rax
                	movl	%eax, -0x90(%rbp)
-               	movl	%edi, %eax
+               	movq	%rdi, %rax
                	sarq	$0xb, %rax
                	andq	$0x1fff, %rax           # imm = 0x1FFF
                	movslq	-0x8(%rbp), %rsi
@@ -2486,7 +2486,7 @@ Disassembly of section .text:
                	andq	$-0x800, %rdi           # imm = 0xF800
                	orq	%rdx, %rdi
                	movl	%edi, -0x30(%rbp)
-               	movl	%esi, %eax
+               	movq	%rsi, %rax
                	sarq	$0xb, %rax
                	andq	$0x1fff, %rax           # imm = 0x1FFF
                	imulq	$0x55555556, %rax, %rdx # imm = 0x55555556
@@ -2497,7 +2497,7 @@ Disassembly of section .text:
                	shlq	$0xb, %rax
                	orq	%rsi, %rax
                	movl	%eax, -0x90(%rbp)
-               	movl	%edi, %eax
+               	movq	%rdi, %rax
                	sarq	$0xb, %rax
                	movq	%rax, %rsi
                	andq	$0x1fff, %rsi           # imm = 0x1FFF

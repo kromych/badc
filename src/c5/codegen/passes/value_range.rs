@@ -967,6 +967,9 @@ fn eval(inst: &Inst, params: &[Range], mut range_of: impl FnMut(ValueId) -> Rang
                     },
                 }
             }
+            // A mask clearing bits of a non-negative value keeps it in
+            // `0 ..= value`.
+            BinOp::And => binop(BinOp::And, range_of(*lhs), Range::exact(*rhs_imm)),
             BinOp::Add => arith(range_of(*lhs), Range::exact(*rhs_imm), false),
             BinOp::Sub => arith(range_of(*lhs), Range::exact(*rhs_imm), true),
             BinOp::Or | BinOp::Xor => bitwise(
@@ -3260,6 +3263,16 @@ mod tests {
             ),
             Some(1)
         );
+        // A mask clearing bits keeps a non-negative value at most itself,
+        // whatever the mask's sign bit.
+        let and = |k| Inst::BinopI {
+            op: BinOp::And,
+            lhs: 0,
+            rhs_imm: k,
+        };
+        assert_eq!(decides(and(!0xf0), BinOp::Le, 255), Some(1));
+        assert_eq!(decides(and(!0xf0), BinOp::Ge, 0), Some(1));
+        assert_eq!(decides(and(!0xf0), BinOp::Le, 100), None);
         // Shifts move both endpoints; a shift left out of the register
         // is not modeled and settles nothing.
         let shl = |k| Inst::BinopI {

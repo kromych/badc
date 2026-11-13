@@ -23,16 +23,16 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x10]
                	ldurb	w0, [x29, #-0xd]
                	and	x0, x0, #0xffffffffffffff7f
-               	orr	x0, x0, #0x80
-               	sturb	w0, [x29, #-0xd]
-               	ldur	w1, [x29, #-0xc]
-               	and	x1, x1, #0xffffffffc0000000
-               	orr	x1, x1, #0x3fffffff
-               	stur	w1, [x29, #-0xc]
-               	ldurb	w1, [x29, #-0x9]
-               	and	x1, x1, #0xffffffffffffff3f
-               	orr	x1, x1, #0xc0
-               	sturb	w1, [x29, #-0x9]
+               	orr	x1, x0, #0x80
+               	sturb	w1, [x29, #-0xd]
+               	ldur	w0, [x29, #-0xc]
+               	and	x0, x0, #0xffffffffc0000000
+               	orr	x0, x0, #0x3fffffff
+               	stur	w0, [x29, #-0xc]
+               	ldurb	w0, [x29, #-0x9]
+               	and	x0, x0, #0xffffffffffffff3f
+               	orr	x0, x0, #0xc0
+               	sturb	w0, [x29, #-0x9]
                	ldur	w2, [x29, #-0x10]
                	and	x2, x2, #0x7fffffff
                	mov	x17, #0x7fffffff        // =2147483647
@@ -42,24 +42,22 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	and	x0, x0, #0xff
-               	asr	x0, x0, #7
-               	cmp	w0, #0x1
+               	asr	x1, x1, #7
+               	cmp	w1, #0x1
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldur	w0, [x29, #-0xc]
-               	and	x0, x0, #0x3fffffff
+               	ldur	w1, [x29, #-0xc]
+               	and	x1, x1, #0x3fffffff
                	mov	x17, #0x3fffffff        // =1073741823
-               	cmp	w0, w17
+               	cmp	w1, w17
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	and	x0, x1, #0xff
                	asr	x1, x0, #6
                	cmp	w1, #0x3
                	b.eq	<addr>

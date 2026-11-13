@@ -106,15 +106,9 @@ Disassembly of section .text:
                	ret
 
 <take_fd>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	stur	x0, [x29, #-0x8]
-               	ldur	d1, [x29, #-0x8]
+               	fmov	d1, x0
                	fmov	d2, #10.00000000
                	fmadd	d0, d1, d2, d0
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <after_u1>:
@@ -437,7 +431,7 @@ Disassembly of section .text:
                	ret
                	bl	<addr>
                	stur	x0, [x29, #-0x8]
-               	ldur	d0, [x29, #-0x8]
+               	fmov	d0, x0
                	fmov	d1, #0.75000000
                	fcmp	d0, d1
                	b.eq	<addr>

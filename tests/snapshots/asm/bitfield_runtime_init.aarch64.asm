@@ -40,35 +40,21 @@ Disassembly of section .text:
                	b	<addr>
 
 <build_mixed>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	sub	x4, x29, #0x10
-               	str	xzr, [x4]
-               	str	wzr, [x4, #0x8]
-               	sturh	w0, [x29, #-0x10]
-               	and	x4, x1, #0x7
-               	ldur	w1, [x29, #-0x10]
-               	and	x1, x1, #0xfffffffffff8ffff
-               	orr	x1, x1, x4, lsl #16
-               	stur	w1, [x29, #-0x10]
-               	and	x2, x2, #0x3ff
-               	and	x1, x1, #0xffffffffe007ffff
-               	orr	x1, x1, x2, lsl #19
-               	stur	w1, [x29, #-0x10]
-               	and	x3, x3, #0x7ffff
-               	stur	w3, [x29, #-0xc]
-               	ldurh	w3, [x29, #-0x10]
                	and	x0, x0, #0xffff
-               	cmp	w3, w0
+               	and	x3, x1, #0x7
+               	orr	x1, x0, x3, lsl #16
+               	and	x2, x2, #0x3ff
+               	orr	x1, x1, x2, lsl #19
+               	and	x4, x1, #0xffff
+               	cmp	w4, w0
                	mov	x0, #0x0                // =0
                	b.ne	<addr>
-               	ubfx	x3, x1, #16, #3
-               	cmp	w3, w4
+               	ubfx	x4, x1, #16, #3
+               	cmp	w4, w3
                	cset	x3, eq
                	cbz	x3, <addr>
-               	ubfx	x1, x1, #19, #10
-               	cmp	w1, w2
+               	eor	x1, x2, x1, asr #19
+               	cmp	w1, #0x0
                	cset	x1, eq
                	mov	x2, #0x1                // =1
                	cmp	x1, #0x0
@@ -76,8 +62,6 @@ Disassembly of section .text:
                	mov	x2, #0x1                // =1
                	cmp	x1, #0x0
                	csel	x0, x2, x0, ne
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x1, x0
                	b	<addr>

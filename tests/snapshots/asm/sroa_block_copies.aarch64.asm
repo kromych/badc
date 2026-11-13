@@ -52,19 +52,11 @@ Disassembly of section .text:
                	ret
 
 <union_two_widths>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	sub	x2, x29, #0x8
-               	stur	x1, [x29, #-0x8]
-               	mov	x1, #0x5                // =5
-               	stur	w1, [x29, #-0x8]
-               	ldr	x16, [x2]
-               	str	x16, [x0]
-               	ldur	x0, [x29, #-0x8]
-               	mov	w0, w0
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	and	x1, x1, #0xffffffff00000000
+               	mov	x17, #0x5               // =5
+               	orr	x1, x1, x17
+               	str	x1, [x0]
+               	mov	w0, w1
                	ret
 
 <bitfield_copy>:

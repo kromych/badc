@@ -16,12 +16,12 @@
 //! the fields and drops the padding stores nothing reads, and a function
 //! whose parameter and result stay in registers keeps no frame.
 //!
-//! A field moves as a load or store of its own width, so the pass takes an
-//! aggregate only when its fields tile its registers that way: integer
-//! fields of 1, 2, 4 or 8 bytes in an integer register, shifted into
-//! place, one `float` or `double` filling a floating-point register, and a
-//! vector filling one whole, a 16-byte one as a 128-bit value. A union, a
-//! `float` beside an integer in one register and two `float`s in one SSE
+//! A field moves as a load or store of its own width where the fields tile
+//! a register that way: integer fields of 1, 2, 4 or 8 bytes in an integer
+//! register, shifted into place, one `float` or `double` filling a
+//! floating-point register, and a vector filling one whole, a 16-byte one
+//! as a 128-bit value. Any other integer register -- a union's members, a
+//! `float` beside an integer -- moves as its bytes; two `float`s in one SSE
 //! eightbyte keep the prologue and epilogue transfers. A parameter object whose address escapes, or that a member
 //! access reaches at a variable offset, stays in memory whatever the
 //! stores look like, so its registers are stored whole, as the prologue
@@ -62,22 +62,29 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], target: Target) {
     }
 }
 
-/// Whether every part moves as loads and stores of its fields' own widths.
+/// Whether an integer part's fields tile it at their own widths: integer
+/// fields of 1, 2, 4 or 8 bytes, none overlapping another.
+fn tiles(p: &RegPart) -> bool {
+    let fields = sorted_fields(p);
+    fields
+        .iter()
+        .all(|f| f.kind == ScalarKind::Int && matches!(f.size, 1 | 2 | 4 | 8))
+        && fields
+            .windows(2)
+            .all(|w| w[0].offset + w[0].size <= w[1].offset)
+}
+
+/// Whether every part moves in the tape: an integer part whose fields tile
+/// it as loads and stores of their widths, any other integer part -- a
+/// union's members, a `float` beside an integer -- as its bytes, and a
+/// floating-point or vector part filled by one field.
 fn tape_carries(parts: &[RegPart], n_fields: usize) -> bool {
     let covered: usize = parts.iter().map(|p| p.fields.len()).sum();
     if covered != n_fields {
         return false;
     }
     parts.iter().all(|p| match p.class {
-        RegClass::Integer => {
-            let fields = sorted_fields(p);
-            fields
-                .iter()
-                .all(|f| f.kind == ScalarKind::Int && matches!(f.size, 1 | 2 | 4 | 8))
-                && fields
-                    .windows(2)
-                    .all(|w| w[0].offset + w[0].size <= w[1].offset)
-        }
+        RegClass::Integer => true,
         RegClass::Sse => matches!(
             p.fields.as_slice(),
             [f] if f.offset == p.offset
@@ -237,7 +244,7 @@ fn scatter(
     let mut pieces: Vec<(u32, u32, StoreKind)> = Vec::new();
     if p.class == RegClass::Vector256 {
         pieces.push((p.offset, p.width, StoreKind::V256));
-    } else if p.class == RegClass::Integer && !split {
+    } else if p.class == RegClass::Integer && !(split && tiles(p)) {
         gap_stores(&mut pieces, p.offset, p.offset + p.width);
     } else {
         let mut pos = p.offset;
@@ -326,10 +333,21 @@ fn gather(plan: &mut Plan, at: At, addr: ValueId, p: &RegPart, desc: &AggDesc) -
         let kind = part_kind(p);
         return load(plan, f.offset, f.size, kind, kind == LoadKind::F32);
     }
+    // A part its fields do not tile is read as its bytes.
+    let pieces: Vec<(u32, u32)> = if tiles(p) {
+        sorted_fields(p)
+            .iter()
+            .map(|f| (f.offset, f.size))
+            .collect()
+    } else {
+        let mut bytes = Vec::new();
+        gap_stores(&mut bytes, p.offset, p.offset + p.width);
+        bytes.iter().map(|&(off, size, _)| (off, size)).collect()
+    };
     let mut acc = None;
-    for f in sorted_fields(p) {
-        let l = load(plan, f.offset, f.size, load_kind(f.size), false);
-        let bits = 8 * (f.offset - p.offset);
+    for (off, size) in pieces {
+        let l = load(plan, off, size, load_kind(size), false);
+        let bits = 8 * (off - p.offset);
         let v = if bits == 0 {
             l
         } else {
@@ -899,17 +917,48 @@ mod tests {
         }
     }
 
-    /// A union, and two `float`s in one SSE eightbyte, keep the prologue
-    /// and epilogue transfers; an HFA of two `double`s takes two
-    /// floating-point parts on AAPCS64 and two SSE parts on System V.
+    /// A union moves as its register's bytes: one 8-byte store of the part
+    /// and one 8-byte load for the return. Two `float`s in one SSE
+    /// eightbyte keep the prologue and epilogue transfers; an HFA of two
+    /// `double`s takes two floating-point parts on AAPCS64 and two SSE
+    /// parts on System V.
     #[test]
     fn admission_follows_the_field_tiling() {
         const UNION: &str = "union U { long a; double d; }; union U id(union U u) { return u; }";
         for target in [Target::LinuxAarch64, Target::LinuxX64] {
             let mut f = walked(UNION, "id", target);
-            let before = text(&f);
             run(core::slice::from_mut(&mut f), target);
-            assert_eq!(before, text(&f), "{target:?}");
+            let t = text(&f);
+            let parts = f.insts.iter().filter(|i| {
+                matches!(
+                    i,
+                    Inst::ParamPart {
+                        kind: LoadKind::I64,
+                        ..
+                    }
+                )
+            });
+            assert_eq!(parts.count(), 1, "{target:?}: {t}");
+            let whole = f.insts.iter().any(|i| {
+                matches!(
+                    i,
+                    Inst::StoreLocal {
+                        kind: StoreKind::I64,
+                        ..
+                    } | Inst::Store {
+                        kind: StoreKind::I64,
+                        ..
+                    }
+                )
+            });
+            assert!(whole, "{target:?}: {t}");
+            let Terminator::Return(r) = f.blocks[0].terminator else {
+                panic!("{t}")
+            };
+            assert!(
+                matches!(f.insts[r as usize], Inst::AggParts { .. }),
+                "{target:?}: {t}"
+            );
         }
         const FLOATS: &str = "struct F { float x, y; }; struct F id(struct F u) { return u; }";
         let mut f = walked(FLOATS, "id", Target::LinuxX64);
@@ -953,7 +1002,7 @@ mod tests {
 
     /// A call returning in registers: its parts are read right after it,
     /// in part order and per bank, stored into its result temporary, and
-    /// the call names no slot. A union keeps the call's own store.
+    /// the call names no slot. A union's part is read as its bytes.
     #[test]
     fn call_results_are_read_as_parts() {
         const SRC: &str = "struct P { long a, b; }; struct P makep(long);\n\
@@ -999,10 +1048,14 @@ mod tests {
                 .count();
             assert!(stores >= 2, "{target:?}: {t}");
             let mut f = walked(SRC, "un", target);
-            let before = slot_of(&f);
             run(core::slice::from_mut(&mut f), target);
-            assert_eq!(slot_of(&f), before, "{target:?}: {}", text(&f));
-            assert!(parts_after_call(&f).is_empty(), "{target:?}");
+            assert_eq!(slot_of(&f), Some(0), "{target:?}: {}", text(&f));
+            assert_eq!(
+                parts_after_call(&f),
+                [(0, LoadKind::I64)],
+                "{target:?}: {}",
+                text(&f)
+            );
         }
         // System V: the double in xmm0, the long in rax, each slot 0 of its bank.
         let mut f = walked(SRC, "mixed", Target::LinuxX64);

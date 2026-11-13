@@ -56,32 +56,20 @@ Disassembly of section .text:
                	movl	$0x9, %eax
                	leave
                	retq
-               	leaq	-0x10(%rbp), %rax
-               	movl	$0x0, (%rax)
                	movq	<rip>, %rax # <addr>
                	movq	<rip>, %rcx # <addr>
+               	movq	%rax, %rdx
+               	orq	%rcx, %rdx
+               	testq	%rdx, %rdx
+               	setne	%dl
+               	movzbq	%dl, %rdx
                	orq	%rcx, %rax
                	testq	%rax, %rax
                	setne	%al
                	movzbq	%al, %rax
-               	movw	%ax, -0x10(%rbp)
-               	movl	-0x10(%rbp), %eax
-               	andq	$-0xfe01, %rax          # imm = 0xFFFF01FF
-               	movl	%eax, -0x10(%rbp)
-               	movq	<rip>, %rax # <addr>
-               	movq	<rip>, %rcx # <addr>
-               	orq	%rcx, %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	movzbq	-0xf(%rbp), %rcx
-               	andq	$-0x2, %rcx
-               	orq	%rcx, %rax
-               	movb	%al, -0xf(%rbp)
-               	movl	-0x10(%rbp), %eax
-               	andq	$-0xfe01, %rax          # imm = 0xFFFF01FF
+               	shlq	$0x8, %rax
+               	orq	%rdx, %rax
                	orq	$0x200, %rax            # imm = 0x200
-               	movl	%eax, -0x10(%rbp)
                	movq	%rax, %rcx
                	sarq	$0x9, %rcx
                	shlq	$0x39, %rcx
@@ -92,10 +80,10 @@ Disassembly of section .text:
                	andq	$-0xfe01, %rax          # imm = 0xFFFF01FF
                	shlq	$0x9, %rcx
                	orq	%rcx, %rax
-               	movl	%eax, -0x10(%rbp)
-               	cmpb	$0x0, -0x10(%rbp)
+               	testb	$-0x1, %al
                	je	<addr>
-               	movzbq	-0xf(%rbp), %rcx
+               	movq	%rax, %rcx
+               	shrq	$0x8, %rcx
                	testb	$0x1, %cl
                	je	<addr>
                	sarq	$0x9, %rax

@@ -14,19 +14,12 @@ Disassembly of section .text:
                	brk	#0x1
 
 <take_b1>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	stur	x1, [x29, #-0x10]
-               	stur	x2, [x29, #-0x8]
-               	ldur	d0, [x29, #-0x8]
+               	fmov	d0, x2
                	fmov	d1, #10.00000000
                	fmul	d0, d0, d1
                	fcvtzs	x0, d0
                	add	x0, x0, #0xbb8
                	add	x0, x0, #0x2
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <take_b2>:
@@ -40,16 +33,8 @@ Disassembly of section .text:
                	ret
 
 <make_b1>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	sub	x0, x29, #0x10
-               	stur	d0, [x29, #-0x8]
-               	mov	x16, x0
-               	ldr	x1, [x16, #0x8]
-               	ldr	x0, [x16]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	mov	x0, #0x0                // =0
+               	fmov	x1, d0
                	ret
 
 <make_b2>:
@@ -159,7 +144,7 @@ Disassembly of section .text:
                	bl	<addr>
                	stur	x0, [x29, #-0x10]
                	stur	x1, [x29, #-0x8]
-               	ldur	d0, [x29, #-0x8]
+               	fmov	d0, x1
                	fmov	d1, #2.50000000
                	fcmp	d0, d1
                	b.eq	<addr>

@@ -13009,16 +13009,20 @@ fn store_shape(stores: &[(i64, String, u32)]) -> Vec<(i64, &str)> {
     stores.iter().map(|(d, k, _)| (*d, k.as_str())).collect()
 }
 
-/// A copy transfers the object representation: a union read at two widths
-/// keeps its bytes and its block copy, and one read at one width becomes
-/// the value stored in it.
+/// A copy transfers the object representation: a union written at two
+/// widths holds the narrower store merged into the wider one, which the
+/// copy stores as one word, and one read at one width becomes the value
+/// stored in it.
 #[test]
 fn copy_of_a_union_read_at_two_widths_keeps_its_bytes() {
     for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
         let (body, insts) =
             optimized_function_full_pool(BLOCK_COPY_SHAPES, "union_two_widths", target);
+        let out = inst_id(&insts, "ParamRef(0", &body);
+        let stores = stores_through(&insts, out);
+        assert_eq!(store_shape(&stores), [(0, "I64")], "{target:?}: {body}");
         assert!(
-            has_inst(&insts, &["Mcpy {"]) && has_inst(&insts, &["LocalAddr("]),
+            !has_inst(&insts, &["Mcpy", "LocalAddr"]),
             "{target:?}: {body}"
         );
         let (body, insts) =
@@ -13027,6 +13031,29 @@ fn copy_of_a_union_read_at_two_widths_keeps_its_bytes() {
         assert!(
             !has_inst(&insts, &["Mcpy", "LocalAddr", "Load {", "Store {"])
                 && body.contains(&alloc::format!("Return(v{x})")),
+            "{target:?}: {body}"
+        );
+    }
+}
+
+/// A structure whose first member is a union moves through its register
+/// parts: a call's result, a member update read at the union's narrower
+/// member, and the return leave it no frame object.
+#[test]
+fn an_aggregate_holding_a_union_moves_through_its_registers() {
+    const SRC: &str = "typedef union { int i; double d; void *p; } U;\n\
+typedef struct { U u; long tag; } V;\n\
+V call(V f, int n);\n\
+V run(V *sp, int k) {\n\
+    V r = call(sp[-1], k);\n\
+    if ((int)r.tag == 6) return sp[0];\n\
+    r.u.i += k;\n\
+    return r;\n\
+}\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let (body, insts) = optimized_function_full_pool(SRC, "run", target);
+        assert!(
+            !has_inst(&insts, &["Mcpy", "LocalAddr"]),
             "{target:?}: {body}"
         );
     }

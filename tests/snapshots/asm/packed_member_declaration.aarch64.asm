@@ -17,30 +17,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	sturb	wzr, [x29, #-0x8]
-               	mov	x1, #0x1                // =1
-               	mov	x2, #0x200              // =512
-               	sturb	wzr, [x29, #-0x3]
-               	stur	w1, [x29, #-0x8]
-               	sturh	w2, [x29, #-0x4]
-               	ldur	w1, [x29, #-0x7]
-               	and	x1, x1, #0xffffffffc0000000
-               	mov	x17, #0x32eb            // =13035
-               	movk	x17, #0x38a4, lsl #16
-               	orr	x1, x1, x17
-               	stur	w1, [x29, #-0x7]
-               	sbfx	x2, x1, #0, #30
-               	mov	x17, #-0xcd15           // =-52501
-               	movk	x17, #0xf8a4, lsl #16
-               	cmp	w2, w17
-               	b.ne	<addr>
-               	and	x1, x1, #0xffffffffc0000000
-               	orr	x1, x1, #0x1fffffff
-               	stur	w1, [x29, #-0x7]
-               	sbfx	x1, x1, #0, #30
-               	mov	x17, #0x1fffffff        // =536870911
-               	cmp	w1, w17
-               	b.ne	<addr>
+               	mov	x0, #0x0                // =0
                	mov	x1, #0x3                // =3
                	stur	x1, [x29, #-0x8]
                	ldur	w1, [x29, #-0x8]
@@ -86,36 +63,10 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sturb	wzr, [x29, #-0x8]
-               	mov	x1, #0x5                // =5
-               	sturh	wzr, [x29, #-0x4]
-               	sturb	wzr, [x29, #-0x2]
-               	stur	w1, [x29, #-0x8]
-               	mov	x0, #0x6                // =6
-               	sturb	w0, [x29, #-0x2]
-               	mov	x0, #0x7fffffffff       // =549755813887
-               	stur	w0, [x29, #-0x7]
-               	mov	x0, #0x7f               // =127
-               	sturb	w0, [x29, #-0x3]
-               	mov	x0, #0x9877             // =39031
-               	movk	x0, #0xdcba, lsl #16
-               	movk	x0, #0xfe, lsl #32
-               	stur	w0, [x29, #-0x7]
-               	mov	x0, #0xfe               // =254
-               	sturb	w0, [x29, #-0x3]
-               	mov	x0, #0x0                // =0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x16               // =22
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x0, #0x15               // =21
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x0, #0x14               // =20
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

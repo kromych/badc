@@ -29,26 +29,6 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movb	$0x0, -0x8(%rbp)
-               	movb	$0x0, -0x3(%rbp)
-               	movl	$0x1, -0x8(%rbp)
-               	movw	$0x200, -0x4(%rbp)      # imm = 0x200
-               	movl	-0x7(%rbp), %eax
-               	andq	$-0x40000000, %rax      # imm = 0xC0000000
-               	orq	$0x38a432eb, %rax       # imm = 0x38A432EB
-               	movl	%eax, -0x7(%rbp)
-               	movq	%rax, %rcx
-               	shlq	$0x22, %rcx
-               	sarq	$0x22, %rcx
-               	cmpl	$0xf8a432eb, %ecx       # imm = 0xF8A432EB
-               	jne	<addr>
-               	andq	$-0x40000000, %rax      # imm = 0xC0000000
-               	orq	$0x1fffffff, %rax       # imm = 0x1FFFFFFF
-               	movl	%eax, -0x7(%rbp)
-               	shlq	$0x22, %rax
-               	sarq	$0x22, %rax
-               	cmpl	$0x1fffffff, %eax       # imm = 0x1FFFFFFF
-               	jne	<addr>
                	movq	$0x3, -0x8(%rbp)
                	movl	-0x8(%rbp), %eax
                	andq	$-0xfffff01, %rax       # imm = 0xF00000FF
@@ -96,23 +76,8 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%eax, %eax
-               	movb	%al, -0x8(%rbp)
-               	movw	$0x0, -0x4(%rbp)
-               	movb	%al, -0x2(%rbp)
-               	movl	$0x5, -0x8(%rbp)
-               	movb	$0x6, -0x2(%rbp)
-               	movl	$0xffffffff, -0x7(%rbp) # imm = 0xFFFFFFFF
-               	movb	$0x7f, -0x3(%rbp)
-               	movl	$0xdcba9877, -0x7(%rbp) # imm = 0xDCBA9877
-               	movb	$-0x2, -0x3(%rbp)
                	leave
                	retq
                	movl	$0x16, %eax
-               	leave
-               	retq
-               	movl	$0x15, %eax
-               	leave
-               	retq
-               	movl	$0x14, %eax
                	leave
                	retq

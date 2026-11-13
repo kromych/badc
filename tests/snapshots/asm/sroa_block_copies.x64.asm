@@ -66,17 +66,11 @@ Disassembly of section .text:
                	retq
 
 <union_two_widths>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x8(%rbp), %rax
-               	movq	%rsi, -0x8(%rbp)
-               	movl	$0x5, -0x8(%rbp)
-               	movq	(%rax), %r10
-               	movq	%r10, (%rdi)
-               	movq	-0x8(%rbp), %rax
+               	movabsq	$-0x100000000, %rax     # imm = 0xFFFFFFFF00000000
+               	andq	%rsi, %rax
+               	orq	$0x5, %rax
+               	movq	%rax, (%rdi)
                	movl	%eax, %eax
-               	leave
                	retq
 
 <bitfield_copy>:

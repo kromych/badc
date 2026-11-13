@@ -63,17 +63,12 @@ Disassembly of section .text:
                	retq
 
 <take_a3>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rdi, -0x10(%rbp)
-               	movsd	-0x10(%rbp), %xmm0
+               	movq	%rdi, %xmm0
                	movabsq	$0x4059000000000000, %rax # imm = 0x4059000000000000
                	movq	%rax, %xmm15
                	mulsd	%xmm15, %xmm0
                	cvttsd2si	%xmm0, %rax
                	addq	%rsi, %rax
-               	leave
                	retq
 
 <take_a5>:
@@ -212,7 +207,7 @@ Disassembly of section .text:
                	retq
                	callq	<addr>
                	movq	%rax, -0x40(%rbp)
-               	movsd	-0x40(%rbp), %xmm0
+               	movq	%rax, %xmm0
                	movabsq	$0x4004000000000000, %rax # imm = 0x4004000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0

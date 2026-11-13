@@ -16,276 +16,316 @@ Disassembly of section .text:
 <c_ops>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x70
+               	sub	sp, sp, #0x30
                	stur	x8, [x29, #-0x8]
                	ldrsb	x2, [x0]
                	ldrsb	x3, [x1]
                	add	x2, x2, x3
-               	sturb	w2, [x29, #-0x70]
-               	ldrsb	x2, [x0, #0x1]
-               	ldrsb	x3, [x1, #0x1]
-               	add	x2, x2, x3
-               	sturb	w2, [x29, #-0x6f]
-               	ldrsb	x2, [x0, #0x2]
-               	ldrsb	x3, [x1, #0x2]
-               	add	x2, x2, x3
-               	sturb	w2, [x29, #-0x6e]
-               	ldrsb	x2, [x0, #0x3]
-               	ldrsb	x3, [x1, #0x3]
-               	add	x2, x2, x3
-               	sturb	w2, [x29, #-0x6d]
-               	ldrsb	x2, [x0, #0x4]
-               	ldrsb	x3, [x1, #0x4]
-               	add	x2, x2, x3
-               	sturb	w2, [x29, #-0x6c]
-               	ldrsb	x2, [x0, #0x5]
-               	ldrsb	x3, [x1, #0x5]
-               	add	x2, x2, x3
-               	sturb	w2, [x29, #-0x6b]
-               	ldrsb	x2, [x0, #0x6]
-               	ldrsb	x3, [x1, #0x6]
-               	add	x2, x2, x3
-               	sturb	w2, [x29, #-0x6a]
-               	ldrsb	x2, [x0, #0x7]
-               	ldrsb	x3, [x1, #0x7]
-               	add	x2, x2, x3
-               	sturb	w2, [x29, #-0x69]
-               	ldrsb	x2, [x0, #0x8]
-               	ldrsb	x3, [x1, #0x8]
-               	add	x2, x2, x3
-               	sturb	w2, [x29, #-0x68]
-               	ldrsb	x2, [x0, #0x9]
-               	ldrsb	x3, [x1, #0x9]
-               	add	x2, x2, x3
-               	sturb	w2, [x29, #-0x67]
-               	ldrsb	x2, [x0, #0xa]
-               	ldrsb	x3, [x1, #0xa]
-               	add	x2, x2, x3
-               	sturb	w2, [x29, #-0x66]
-               	ldrsb	x2, [x0, #0xb]
-               	ldrsb	x3, [x1, #0xb]
-               	add	x2, x2, x3
-               	sturb	w2, [x29, #-0x65]
-               	ldrsb	x2, [x0, #0xc]
-               	ldrsb	x3, [x1, #0xc]
-               	add	x2, x2, x3
-               	sturb	w2, [x29, #-0x64]
-               	ldrsb	x2, [x0, #0xd]
-               	ldrsb	x3, [x1, #0xd]
-               	add	x2, x2, x3
-               	sturb	w2, [x29, #-0x63]
-               	ldrsb	x2, [x0, #0xe]
-               	ldrsb	x3, [x1, #0xe]
-               	add	x2, x2, x3
-               	sturb	w2, [x29, #-0x62]
-               	ldrsb	x2, [x0, #0xf]
-               	ldrsb	x3, [x1, #0xf]
-               	add	x2, x2, x3
-               	sturb	w2, [x29, #-0x61]
-               	ldrsb	x2, [x0, #0x10]
-               	ldrsb	x3, [x1, #0x10]
-               	add	x2, x2, x3
-               	sturb	w2, [x29, #-0x60]
-               	ldrsb	x2, [x0, #0x11]
-               	ldrsb	x3, [x1, #0x11]
-               	add	x2, x2, x3
-               	sturb	w2, [x29, #-0x5f]
-               	ldrsb	x2, [x0, #0x12]
-               	ldrsb	x3, [x1, #0x12]
-               	add	x2, x2, x3
-               	sturb	w2, [x29, #-0x5e]
-               	ldrsb	x2, [x0, #0x13]
-               	ldrsb	x3, [x1, #0x13]
-               	add	x2, x2, x3
-               	sturb	w2, [x29, #-0x5d]
-               	ldrsb	x2, [x0, #0x14]
-               	ldrsb	x3, [x1, #0x14]
-               	add	x2, x2, x3
-               	sturb	w2, [x29, #-0x5c]
-               	ldrsb	x2, [x0, #0x15]
-               	ldrsb	x3, [x1, #0x15]
-               	add	x2, x2, x3
-               	sturb	w2, [x29, #-0x5b]
-               	ldrsb	x2, [x0, #0x16]
-               	ldrsb	x3, [x1, #0x16]
-               	add	x2, x2, x3
-               	sturb	w2, [x29, #-0x5a]
-               	ldrsb	x2, [x0, #0x17]
-               	ldrsb	x3, [x1, #0x17]
-               	add	x2, x2, x3
-               	sturb	w2, [x29, #-0x59]
-               	ldrsb	x2, [x0, #0x18]
-               	ldrsb	x3, [x1, #0x18]
-               	add	x2, x2, x3
-               	sturb	w2, [x29, #-0x58]
-               	ldrsb	x2, [x0, #0x19]
-               	ldrsb	x3, [x1, #0x19]
-               	add	x2, x2, x3
-               	sturb	w2, [x29, #-0x57]
-               	ldrsb	x2, [x0, #0x1a]
-               	ldrsb	x3, [x1, #0x1a]
-               	add	x2, x2, x3
-               	sturb	w2, [x29, #-0x56]
-               	ldrsb	x2, [x0, #0x1b]
-               	ldrsb	x3, [x1, #0x1b]
-               	add	x2, x2, x3
-               	sturb	w2, [x29, #-0x55]
-               	ldrsb	x2, [x0, #0x1c]
-               	ldrsb	x3, [x1, #0x1c]
-               	add	x2, x2, x3
-               	sturb	w2, [x29, #-0x54]
-               	ldrsb	x2, [x0, #0x1d]
-               	ldrsb	x3, [x1, #0x1d]
-               	add	x2, x2, x3
-               	sturb	w2, [x29, #-0x53]
-               	ldrsb	x2, [x0, #0x1e]
-               	ldrsb	x3, [x1, #0x1e]
-               	add	x2, x2, x3
-               	sturb	w2, [x29, #-0x52]
-               	ldrsb	x2, [x0, #0x1f]
-               	ldrsb	x3, [x1, #0x1f]
-               	add	x2, x2, x3
-               	sturb	w2, [x29, #-0x51]
-               	ldrsb	x2, [x0]
-               	ldrsb	x3, [x1]
-               	sub	x2, x2, x3
-               	sturb	w2, [x29, #-0x50]
-               	ldrsb	x2, [x0, #0x1]
-               	ldrsb	x3, [x1, #0x1]
-               	sub	x2, x2, x3
-               	sturb	w2, [x29, #-0x4f]
-               	ldrsb	x2, [x0, #0x2]
-               	ldrsb	x3, [x1, #0x2]
-               	sub	x2, x2, x3
-               	sturb	w2, [x29, #-0x4e]
-               	ldrsb	x2, [x0, #0x3]
-               	ldrsb	x3, [x1, #0x3]
-               	sub	x2, x2, x3
-               	sturb	w2, [x29, #-0x4d]
-               	ldrsb	x2, [x0, #0x4]
-               	ldrsb	x3, [x1, #0x4]
-               	sub	x2, x2, x3
-               	sturb	w2, [x29, #-0x4c]
-               	ldrsb	x2, [x0, #0x5]
-               	ldrsb	x3, [x1, #0x5]
-               	sub	x2, x2, x3
-               	sturb	w2, [x29, #-0x4b]
-               	ldrsb	x2, [x0, #0x6]
-               	ldrsb	x3, [x1, #0x6]
-               	sub	x2, x2, x3
-               	sturb	w2, [x29, #-0x4a]
-               	ldrsb	x2, [x0, #0x7]
-               	ldrsb	x3, [x1, #0x7]
-               	sub	x2, x2, x3
-               	sturb	w2, [x29, #-0x49]
-               	ldrsb	x2, [x0, #0x8]
-               	ldrsb	x3, [x1, #0x8]
-               	sub	x2, x2, x3
-               	sturb	w2, [x29, #-0x48]
-               	ldrsb	x2, [x0, #0x9]
-               	ldrsb	x3, [x1, #0x9]
-               	sub	x2, x2, x3
-               	sturb	w2, [x29, #-0x47]
-               	ldrsb	x2, [x0, #0xa]
-               	ldrsb	x3, [x1, #0xa]
-               	sub	x2, x2, x3
-               	sturb	w2, [x29, #-0x46]
-               	ldrsb	x2, [x0, #0xb]
-               	ldrsb	x3, [x1, #0xb]
-               	sub	x2, x2, x3
-               	sturb	w2, [x29, #-0x45]
-               	ldrsb	x2, [x0, #0xc]
-               	ldrsb	x3, [x1, #0xc]
-               	sub	x2, x2, x3
-               	sturb	w2, [x29, #-0x44]
-               	ldrsb	x2, [x0, #0xd]
-               	ldrsb	x3, [x1, #0xd]
-               	sub	x2, x2, x3
-               	sturb	w2, [x29, #-0x43]
-               	ldrsb	x2, [x0, #0xe]
-               	ldrsb	x3, [x1, #0xe]
-               	sub	x2, x2, x3
-               	sturb	w2, [x29, #-0x42]
-               	ldrsb	x2, [x0, #0xf]
-               	ldrsb	x3, [x1, #0xf]
-               	sub	x2, x2, x3
-               	sturb	w2, [x29, #-0x41]
-               	ldrsb	x2, [x0, #0x10]
-               	ldrsb	x3, [x1, #0x10]
-               	sub	x2, x2, x3
-               	sturb	w2, [x29, #-0x40]
-               	ldrsb	x2, [x0, #0x11]
-               	ldrsb	x3, [x1, #0x11]
-               	sub	x2, x2, x3
-               	sturb	w2, [x29, #-0x3f]
-               	ldrsb	x2, [x0, #0x12]
-               	ldrsb	x3, [x1, #0x12]
-               	sub	x2, x2, x3
-               	sturb	w2, [x29, #-0x3e]
-               	ldrsb	x2, [x0, #0x13]
-               	ldrsb	x3, [x1, #0x13]
-               	sub	x2, x2, x3
-               	sturb	w2, [x29, #-0x3d]
-               	ldrsb	x2, [x0, #0x14]
-               	ldrsb	x3, [x1, #0x14]
-               	sub	x2, x2, x3
-               	sturb	w2, [x29, #-0x3c]
-               	ldrsb	x2, [x0, #0x15]
-               	ldrsb	x3, [x1, #0x15]
-               	sub	x2, x2, x3
-               	sturb	w2, [x29, #-0x3b]
-               	ldrsb	x2, [x0, #0x16]
-               	ldrsb	x3, [x1, #0x16]
-               	sub	x2, x2, x3
-               	sturb	w2, [x29, #-0x3a]
-               	ldrsb	x2, [x0, #0x17]
-               	ldrsb	x3, [x1, #0x17]
-               	sub	x2, x2, x3
-               	sturb	w2, [x29, #-0x39]
-               	ldrsb	x2, [x0, #0x18]
-               	ldrsb	x3, [x1, #0x18]
-               	sub	x2, x2, x3
-               	sturb	w2, [x29, #-0x38]
-               	ldrsb	x2, [x0, #0x19]
-               	ldrsb	x3, [x1, #0x19]
-               	sub	x2, x2, x3
-               	sturb	w2, [x29, #-0x37]
-               	ldrsb	x2, [x0, #0x1a]
-               	ldrsb	x3, [x1, #0x1a]
-               	sub	x2, x2, x3
-               	sturb	w2, [x29, #-0x36]
-               	ldrsb	x2, [x0, #0x1b]
-               	ldrsb	x3, [x1, #0x1b]
-               	sub	x2, x2, x3
-               	sturb	w2, [x29, #-0x35]
-               	ldrsb	x2, [x0, #0x1c]
-               	ldrsb	x3, [x1, #0x1c]
-               	sub	x2, x2, x3
-               	sturb	w2, [x29, #-0x34]
-               	ldrsb	x2, [x0, #0x1d]
-               	ldrsb	x3, [x1, #0x1d]
-               	sub	x2, x2, x3
-               	sturb	w2, [x29, #-0x33]
-               	ldrsb	x2, [x0, #0x1e]
-               	ldrsb	x3, [x1, #0x1e]
-               	sub	x2, x2, x3
-               	sturb	w2, [x29, #-0x32]
-               	ldrsb	x2, [x0, #0x1f]
-               	ldrsb	x3, [x1, #0x1f]
-               	sub	x2, x2, x3
-               	sturb	w2, [x29, #-0x31]
-               	ldur	x2, [x29, #-0x70]
-               	ldur	x3, [x29, #-0x50]
-               	eor	x2, x2, x3
-               	ldur	x3, [x29, #-0x68]
-               	ldur	x4, [x29, #-0x48]
-               	eor	x3, x3, x4
-               	ldur	x4, [x29, #-0x60]
-               	ldur	x5, [x29, #-0x40]
-               	eor	x4, x4, x5
-               	ldur	x5, [x29, #-0x58]
-               	ldur	x6, [x29, #-0x38]
-               	eor	x5, x5, x6
+               	and	x2, x2, #0xff
+               	ldrsb	x3, [x0, #0x1]
+               	ldrsb	x4, [x1, #0x1]
+               	add	x3, x3, x4
+               	and	x3, x3, #0xff
+               	orr	x2, x2, x3, lsl #8
+               	ldrsb	x3, [x0, #0x2]
+               	ldrsb	x4, [x1, #0x2]
+               	add	x3, x3, x4
+               	and	x3, x3, #0xff
+               	orr	x2, x2, x3, lsl #16
+               	ldrsb	x3, [x0, #0x3]
+               	ldrsb	x4, [x1, #0x3]
+               	add	x3, x3, x4
+               	and	x3, x3, #0xff
+               	orr	x2, x2, x3, lsl #24
+               	ldrsb	x3, [x0, #0x4]
+               	ldrsb	x4, [x1, #0x4]
+               	add	x3, x3, x4
+               	and	x3, x3, #0xff
+               	orr	x2, x2, x3, lsl #32
+               	ldrsb	x3, [x0, #0x5]
+               	ldrsb	x4, [x1, #0x5]
+               	add	x3, x3, x4
+               	and	x3, x3, #0xff
+               	orr	x2, x2, x3, lsl #40
+               	ldrsb	x3, [x0, #0x6]
+               	ldrsb	x4, [x1, #0x6]
+               	add	x3, x3, x4
+               	and	x3, x3, #0xff
+               	orr	x2, x2, x3, lsl #48
+               	ldrsb	x3, [x0, #0x7]
+               	ldrsb	x4, [x1, #0x7]
+               	add	x3, x3, x4
+               	orr	x2, x2, x3, lsl #56
+               	ldrsb	x3, [x0, #0x8]
+               	ldrsb	x4, [x1, #0x8]
+               	add	x3, x3, x4
+               	and	x3, x3, #0xff
+               	ldrsb	x4, [x0, #0x9]
+               	ldrsb	x5, [x1, #0x9]
+               	add	x4, x4, x5
+               	and	x4, x4, #0xff
+               	orr	x3, x3, x4, lsl #8
+               	ldrsb	x4, [x0, #0xa]
+               	ldrsb	x5, [x1, #0xa]
+               	add	x4, x4, x5
+               	and	x4, x4, #0xff
+               	orr	x3, x3, x4, lsl #16
+               	ldrsb	x4, [x0, #0xb]
+               	ldrsb	x5, [x1, #0xb]
+               	add	x4, x4, x5
+               	and	x4, x4, #0xff
+               	orr	x3, x3, x4, lsl #24
+               	ldrsb	x4, [x0, #0xc]
+               	ldrsb	x5, [x1, #0xc]
+               	add	x4, x4, x5
+               	and	x4, x4, #0xff
+               	orr	x3, x3, x4, lsl #32
+               	ldrsb	x4, [x0, #0xd]
+               	ldrsb	x5, [x1, #0xd]
+               	add	x4, x4, x5
+               	and	x4, x4, #0xff
+               	orr	x3, x3, x4, lsl #40
+               	ldrsb	x4, [x0, #0xe]
+               	ldrsb	x5, [x1, #0xe]
+               	add	x4, x4, x5
+               	and	x4, x4, #0xff
+               	orr	x3, x3, x4, lsl #48
+               	ldrsb	x4, [x0, #0xf]
+               	ldrsb	x5, [x1, #0xf]
+               	add	x4, x4, x5
+               	orr	x3, x3, x4, lsl #56
+               	ldrsb	x4, [x0, #0x10]
+               	ldrsb	x5, [x1, #0x10]
+               	add	x4, x4, x5
+               	and	x4, x4, #0xff
+               	ldrsb	x5, [x0, #0x11]
+               	ldrsb	x6, [x1, #0x11]
+               	add	x5, x5, x6
+               	and	x5, x5, #0xff
+               	orr	x4, x4, x5, lsl #8
+               	ldrsb	x5, [x0, #0x12]
+               	ldrsb	x6, [x1, #0x12]
+               	add	x5, x5, x6
+               	and	x5, x5, #0xff
+               	orr	x4, x4, x5, lsl #16
+               	ldrsb	x5, [x0, #0x13]
+               	ldrsb	x6, [x1, #0x13]
+               	add	x5, x5, x6
+               	and	x5, x5, #0xff
+               	orr	x4, x4, x5, lsl #24
+               	ldrsb	x5, [x0, #0x14]
+               	ldrsb	x6, [x1, #0x14]
+               	add	x5, x5, x6
+               	and	x5, x5, #0xff
+               	orr	x4, x4, x5, lsl #32
+               	ldrsb	x5, [x0, #0x15]
+               	ldrsb	x6, [x1, #0x15]
+               	add	x5, x5, x6
+               	and	x5, x5, #0xff
+               	orr	x4, x4, x5, lsl #40
+               	ldrsb	x5, [x0, #0x16]
+               	ldrsb	x6, [x1, #0x16]
+               	add	x5, x5, x6
+               	and	x5, x5, #0xff
+               	orr	x4, x4, x5, lsl #48
+               	ldrsb	x5, [x0, #0x17]
+               	ldrsb	x6, [x1, #0x17]
+               	add	x5, x5, x6
+               	orr	x4, x4, x5, lsl #56
+               	ldrsb	x5, [x0, #0x18]
+               	ldrsb	x6, [x1, #0x18]
+               	add	x5, x5, x6
+               	and	x5, x5, #0xff
+               	ldrsb	x6, [x0, #0x19]
+               	ldrsb	x7, [x1, #0x19]
+               	add	x6, x6, x7
+               	and	x6, x6, #0xff
+               	orr	x5, x5, x6, lsl #8
+               	ldrsb	x6, [x0, #0x1a]
+               	ldrsb	x7, [x1, #0x1a]
+               	add	x6, x6, x7
+               	and	x6, x6, #0xff
+               	orr	x5, x5, x6, lsl #16
+               	ldrsb	x6, [x0, #0x1b]
+               	ldrsb	x7, [x1, #0x1b]
+               	add	x6, x6, x7
+               	and	x6, x6, #0xff
+               	orr	x5, x5, x6, lsl #24
+               	ldrsb	x6, [x0, #0x1c]
+               	ldrsb	x7, [x1, #0x1c]
+               	add	x6, x6, x7
+               	and	x6, x6, #0xff
+               	orr	x5, x5, x6, lsl #32
+               	ldrsb	x6, [x0, #0x1d]
+               	ldrsb	x7, [x1, #0x1d]
+               	add	x6, x6, x7
+               	and	x6, x6, #0xff
+               	orr	x5, x5, x6, lsl #40
+               	ldrsb	x6, [x0, #0x1e]
+               	ldrsb	x7, [x1, #0x1e]
+               	add	x6, x6, x7
+               	and	x6, x6, #0xff
+               	orr	x5, x5, x6, lsl #48
+               	ldrsb	x6, [x0, #0x1f]
+               	ldrsb	x7, [x1, #0x1f]
+               	add	x6, x6, x7
+               	orr	x5, x5, x6, lsl #56
+               	ldrsb	x6, [x0]
+               	ldrsb	x7, [x1]
+               	sub	x6, x6, x7
+               	and	x6, x6, #0xff
+               	ldrsb	x7, [x0, #0x1]
+               	ldrsb	x8, [x1, #0x1]
+               	sub	x7, x7, x8
+               	and	x7, x7, #0xff
+               	orr	x6, x6, x7, lsl #8
+               	ldrsb	x7, [x0, #0x2]
+               	ldrsb	x8, [x1, #0x2]
+               	sub	x7, x7, x8
+               	and	x7, x7, #0xff
+               	orr	x6, x6, x7, lsl #16
+               	ldrsb	x7, [x0, #0x3]
+               	ldrsb	x8, [x1, #0x3]
+               	sub	x7, x7, x8
+               	and	x7, x7, #0xff
+               	orr	x6, x6, x7, lsl #24
+               	ldrsb	x7, [x0, #0x4]
+               	ldrsb	x8, [x1, #0x4]
+               	sub	x7, x7, x8
+               	and	x7, x7, #0xff
+               	orr	x6, x6, x7, lsl #32
+               	ldrsb	x7, [x0, #0x5]
+               	ldrsb	x8, [x1, #0x5]
+               	sub	x7, x7, x8
+               	and	x7, x7, #0xff
+               	orr	x6, x6, x7, lsl #40
+               	ldrsb	x7, [x0, #0x6]
+               	ldrsb	x8, [x1, #0x6]
+               	sub	x7, x7, x8
+               	and	x7, x7, #0xff
+               	orr	x6, x6, x7, lsl #48
+               	ldrsb	x7, [x0, #0x7]
+               	ldrsb	x8, [x1, #0x7]
+               	sub	x7, x7, x8
+               	orr	x6, x6, x7, lsl #56
+               	ldrsb	x7, [x0, #0x8]
+               	ldrsb	x8, [x1, #0x8]
+               	sub	x7, x7, x8
+               	and	x7, x7, #0xff
+               	ldrsb	x8, [x0, #0x9]
+               	ldrsb	x9, [x1, #0x9]
+               	sub	x8, x8, x9
+               	and	x8, x8, #0xff
+               	orr	x7, x7, x8, lsl #8
+               	ldrsb	x8, [x0, #0xa]
+               	ldrsb	x9, [x1, #0xa]
+               	sub	x8, x8, x9
+               	and	x8, x8, #0xff
+               	orr	x7, x7, x8, lsl #16
+               	ldrsb	x8, [x0, #0xb]
+               	ldrsb	x9, [x1, #0xb]
+               	sub	x8, x8, x9
+               	and	x8, x8, #0xff
+               	orr	x7, x7, x8, lsl #24
+               	ldrsb	x8, [x0, #0xc]
+               	ldrsb	x9, [x1, #0xc]
+               	sub	x8, x8, x9
+               	and	x8, x8, #0xff
+               	orr	x7, x7, x8, lsl #32
+               	ldrsb	x8, [x0, #0xd]
+               	ldrsb	x9, [x1, #0xd]
+               	sub	x8, x8, x9
+               	and	x8, x8, #0xff
+               	orr	x7, x7, x8, lsl #40
+               	ldrsb	x8, [x0, #0xe]
+               	ldrsb	x9, [x1, #0xe]
+               	sub	x8, x8, x9
+               	and	x8, x8, #0xff
+               	orr	x7, x7, x8, lsl #48
+               	ldrsb	x8, [x0, #0xf]
+               	ldrsb	x9, [x1, #0xf]
+               	sub	x8, x8, x9
+               	orr	x7, x7, x8, lsl #56
+               	ldrsb	x8, [x0, #0x10]
+               	ldrsb	x9, [x1, #0x10]
+               	sub	x8, x8, x9
+               	and	x8, x8, #0xff
+               	ldrsb	x9, [x0, #0x11]
+               	ldrsb	x10, [x1, #0x11]
+               	sub	x9, x9, x10
+               	and	x9, x9, #0xff
+               	orr	x8, x8, x9, lsl #8
+               	ldrsb	x9, [x0, #0x12]
+               	ldrsb	x10, [x1, #0x12]
+               	sub	x9, x9, x10
+               	and	x9, x9, #0xff
+               	orr	x8, x8, x9, lsl #16
+               	ldrsb	x9, [x0, #0x13]
+               	ldrsb	x10, [x1, #0x13]
+               	sub	x9, x9, x10
+               	and	x9, x9, #0xff
+               	orr	x8, x8, x9, lsl #24
+               	ldrsb	x9, [x0, #0x14]
+               	ldrsb	x10, [x1, #0x14]
+               	sub	x9, x9, x10
+               	and	x9, x9, #0xff
+               	orr	x8, x8, x9, lsl #32
+               	ldrsb	x9, [x0, #0x15]
+               	ldrsb	x10, [x1, #0x15]
+               	sub	x9, x9, x10
+               	and	x9, x9, #0xff
+               	orr	x8, x8, x9, lsl #40
+               	ldrsb	x9, [x0, #0x16]
+               	ldrsb	x10, [x1, #0x16]
+               	sub	x9, x9, x10
+               	and	x9, x9, #0xff
+               	orr	x8, x8, x9, lsl #48
+               	ldrsb	x9, [x0, #0x17]
+               	ldrsb	x10, [x1, #0x17]
+               	sub	x9, x9, x10
+               	orr	x8, x8, x9, lsl #56
+               	ldrsb	x9, [x0, #0x18]
+               	ldrsb	x10, [x1, #0x18]
+               	sub	x9, x9, x10
+               	and	x9, x9, #0xff
+               	ldrsb	x10, [x0, #0x19]
+               	ldrsb	x11, [x1, #0x19]
+               	sub	x10, x10, x11
+               	and	x10, x10, #0xff
+               	orr	x9, x9, x10, lsl #8
+               	ldrsb	x10, [x0, #0x1a]
+               	ldrsb	x11, [x1, #0x1a]
+               	sub	x10, x10, x11
+               	and	x10, x10, #0xff
+               	orr	x9, x9, x10, lsl #16
+               	ldrsb	x10, [x0, #0x1b]
+               	ldrsb	x11, [x1, #0x1b]
+               	sub	x10, x10, x11
+               	and	x10, x10, #0xff
+               	orr	x9, x9, x10, lsl #24
+               	ldrsb	x10, [x0, #0x1c]
+               	ldrsb	x11, [x1, #0x1c]
+               	sub	x10, x10, x11
+               	and	x10, x10, #0xff
+               	orr	x9, x9, x10, lsl #32
+               	ldrsb	x10, [x0, #0x1d]
+               	ldrsb	x11, [x1, #0x1d]
+               	sub	x10, x10, x11
+               	and	x10, x10, #0xff
+               	orr	x9, x9, x10, lsl #40
+               	ldrsb	x10, [x0, #0x1e]
+               	ldrsb	x11, [x1, #0x1e]
+               	sub	x10, x10, x11
+               	and	x10, x10, #0xff
+               	orr	x9, x9, x10, lsl #48
+               	ldrsb	x10, [x0, #0x1f]
+               	ldrsb	x11, [x1, #0x1f]
+               	sub	x10, x10, x11
+               	orr	x9, x9, x10, lsl #56
+               	eor	x2, x2, x6
+               	eor	x3, x3, x7
+               	eor	x4, x4, x8
+               	eor	x5, x5, x9
                	ldr	x6, [x0]
                	ldr	x7, [x1]
                	and	x6, x6, x7
@@ -314,7 +354,7 @@ Disassembly of section .text:
                	ldp	x0, x1, [x16, #0x10]
                	stp	x0, x1, [x17, #0x10]
                	mov	x0, x17
-               	add	sp, sp, #0x70
+               	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -556,88 +596,80 @@ Disassembly of section .text:
 <i_ops>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x70
+               	sub	sp, sp, #0x30
                	stur	x8, [x29, #-0x8]
                	ldrsw	x2, [x0]
                	ldrsw	x3, [x1]
                	add	x2, x2, x3
-               	stur	w2, [x29, #-0x70]
-               	ldrsw	x2, [x0, #0x4]
-               	ldrsw	x3, [x1, #0x4]
-               	add	x2, x2, x3
-               	stur	w2, [x29, #-0x6c]
-               	ldrsw	x2, [x0, #0x8]
-               	ldrsw	x3, [x1, #0x8]
-               	add	x2, x2, x3
-               	stur	w2, [x29, #-0x68]
-               	ldrsw	x2, [x0, #0xc]
-               	ldrsw	x3, [x1, #0xc]
-               	add	x2, x2, x3
-               	stur	w2, [x29, #-0x64]
-               	ldrsw	x2, [x0, #0x10]
-               	ldrsw	x3, [x1, #0x10]
-               	add	x2, x2, x3
-               	stur	w2, [x29, #-0x60]
-               	ldrsw	x2, [x0, #0x14]
-               	ldrsw	x3, [x1, #0x14]
-               	add	x2, x2, x3
-               	stur	w2, [x29, #-0x5c]
-               	ldrsw	x2, [x0, #0x18]
-               	ldrsw	x3, [x1, #0x18]
-               	add	x2, x2, x3
-               	stur	w2, [x29, #-0x58]
-               	ldrsw	x2, [x0, #0x1c]
-               	ldrsw	x3, [x1, #0x1c]
-               	add	x2, x2, x3
-               	stur	w2, [x29, #-0x54]
-               	ldrsw	x2, [x0]
-               	ldrsw	x3, [x1]
-               	sub	x2, x2, x3
-               	stur	w2, [x29, #-0x50]
-               	ldrsw	x2, [x0, #0x4]
-               	ldrsw	x3, [x1, #0x4]
-               	sub	x2, x2, x3
-               	stur	w2, [x29, #-0x4c]
-               	ldrsw	x2, [x0, #0x8]
-               	ldrsw	x3, [x1, #0x8]
-               	sub	x2, x2, x3
-               	stur	w2, [x29, #-0x48]
-               	ldrsw	x2, [x0, #0xc]
-               	ldrsw	x3, [x1, #0xc]
-               	sub	x2, x2, x3
-               	stur	w2, [x29, #-0x44]
-               	ldrsw	x2, [x0, #0x10]
-               	ldrsw	x3, [x1, #0x10]
-               	sub	x2, x2, x3
-               	stur	w2, [x29, #-0x40]
-               	ldrsw	x2, [x0, #0x14]
-               	ldrsw	x3, [x1, #0x14]
-               	sub	x2, x2, x3
-               	stur	w2, [x29, #-0x3c]
-               	ldrsw	x2, [x0, #0x18]
-               	ldrsw	x3, [x1, #0x18]
-               	sub	x2, x2, x3
-               	stur	w2, [x29, #-0x38]
+               	ldrsw	x3, [x0, #0x4]
+               	ldrsw	x4, [x1, #0x4]
+               	add	x3, x3, x4
+               	mov	w2, w2
+               	orr	x2, x2, x3, lsl #32
+               	ldrsw	x3, [x0, #0x8]
+               	ldrsw	x4, [x1, #0x8]
+               	add	x3, x3, x4
+               	ldrsw	x4, [x0, #0xc]
+               	ldrsw	x5, [x1, #0xc]
+               	add	x4, x4, x5
+               	mov	w3, w3
+               	orr	x3, x3, x4, lsl #32
+               	ldrsw	x4, [x0, #0x10]
+               	ldrsw	x5, [x1, #0x10]
+               	add	x4, x4, x5
+               	ldrsw	x5, [x0, #0x14]
+               	ldrsw	x6, [x1, #0x14]
+               	add	x5, x5, x6
+               	mov	w4, w4
+               	orr	x4, x4, x5, lsl #32
+               	ldrsw	x5, [x0, #0x18]
+               	ldrsw	x6, [x1, #0x18]
+               	add	x5, x5, x6
+               	ldrsw	x6, [x0, #0x1c]
+               	ldrsw	x7, [x1, #0x1c]
+               	add	x6, x6, x7
+               	mov	w5, w5
+               	orr	x5, x5, x6, lsl #32
+               	ldrsw	x6, [x0]
+               	ldrsw	x7, [x1]
+               	sub	x6, x6, x7
+               	ldrsw	x7, [x0, #0x4]
+               	ldrsw	x8, [x1, #0x4]
+               	sub	x7, x7, x8
+               	mov	w6, w6
+               	orr	x6, x6, x7, lsl #32
+               	ldrsw	x7, [x0, #0x8]
+               	ldrsw	x8, [x1, #0x8]
+               	sub	x7, x7, x8
+               	ldrsw	x8, [x0, #0xc]
+               	ldrsw	x9, [x1, #0xc]
+               	sub	x8, x8, x9
+               	mov	w7, w7
+               	orr	x7, x7, x8, lsl #32
+               	ldrsw	x8, [x0, #0x10]
+               	ldrsw	x9, [x1, #0x10]
+               	sub	x8, x8, x9
+               	ldrsw	x9, [x0, #0x14]
+               	ldrsw	x10, [x1, #0x14]
+               	sub	x9, x9, x10
+               	mov	w8, w8
+               	orr	x8, x8, x9, lsl #32
+               	ldrsw	x9, [x0, #0x18]
+               	ldrsw	x10, [x1, #0x18]
+               	sub	x9, x9, x10
                	ldrsw	x0, [x0, #0x1c]
                	ldrsw	x1, [x1, #0x1c]
                	sub	x0, x0, x1
-               	stur	w0, [x29, #-0x34]
+               	mov	w1, w9
+               	orr	x1, x1, x0, lsl #32
                	sub	x0, x29, #0x30
-               	ldur	x1, [x29, #-0x70]
-               	ldur	x2, [x29, #-0x50]
-               	eor	x1, x1, x2
-               	stur	x1, [x29, #-0x30]
-               	ldur	x1, [x29, #-0x68]
-               	ldur	x2, [x29, #-0x48]
-               	eor	x1, x1, x2
-               	stur	x1, [x29, #-0x28]
-               	ldur	x1, [x29, #-0x60]
-               	ldur	x2, [x29, #-0x40]
-               	eor	x1, x1, x2
-               	stur	x1, [x29, #-0x20]
-               	ldur	x1, [x29, #-0x58]
-               	ldur	x2, [x29, #-0x38]
-               	eor	x1, x1, x2
+               	eor	x2, x2, x6
+               	stur	x2, [x29, #-0x30]
+               	eor	x2, x3, x7
+               	stur	x2, [x29, #-0x28]
+               	eor	x2, x4, x8
+               	stur	x2, [x29, #-0x20]
+               	eor	x1, x5, x1
                	stur	x1, [x29, #-0x18]
                	mov	x16, x0
                	ldur	x17, [x29, #-0x8]
@@ -646,71 +678,67 @@ Disassembly of section .text:
                	ldp	x0, x1, [x16, #0x10]
                	stp	x0, x1, [x17, #0x10]
                	mov	x0, x17
-               	add	sp, sp, #0x70
+               	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
 
 <u_ops>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x50
+               	sub	sp, sp, #0x30
                	stur	x8, [x29, #-0x8]
                	ldr	w2, [x0]
                	ldr	w3, [x1]
                	sub	x2, x2, x3
-               	stur	w2, [x29, #-0x50]
-               	ldr	w2, [x0, #0x4]
-               	ldr	w3, [x1, #0x4]
-               	sub	x2, x2, x3
-               	stur	w2, [x29, #-0x4c]
-               	ldr	w2, [x0, #0x8]
-               	ldr	w3, [x1, #0x8]
-               	sub	x2, x2, x3
-               	stur	w2, [x29, #-0x48]
-               	ldr	w2, [x0, #0xc]
-               	ldr	w3, [x1, #0xc]
-               	sub	x2, x2, x3
-               	stur	w2, [x29, #-0x44]
-               	ldr	w2, [x0, #0x10]
-               	ldr	w3, [x1, #0x10]
-               	sub	x2, x2, x3
-               	stur	w2, [x29, #-0x40]
-               	ldr	w2, [x0, #0x14]
-               	ldr	w3, [x1, #0x14]
-               	sub	x2, x2, x3
-               	stur	w2, [x29, #-0x3c]
-               	ldr	w2, [x0, #0x18]
-               	ldr	w3, [x1, #0x18]
-               	sub	x2, x2, x3
-               	stur	w2, [x29, #-0x38]
-               	ldr	w2, [x0, #0x1c]
-               	ldr	w3, [x1, #0x1c]
-               	sub	x2, x2, x3
-               	stur	w2, [x29, #-0x34]
-               	ldr	x2, [x0]
-               	ldr	x3, [x1]
-               	orr	x2, x2, x3
-               	ldr	x3, [x0, #0x8]
-               	ldr	x4, [x1, #0x8]
-               	orr	x3, x3, x4
-               	ldr	x4, [x0, #0x10]
-               	ldr	x5, [x1, #0x10]
-               	orr	x4, x4, x5
+               	ldr	w3, [x0, #0x4]
+               	ldr	w4, [x1, #0x4]
+               	sub	x3, x3, x4
+               	mov	w2, w2
+               	orr	x2, x2, x3, lsl #32
+               	ldr	w3, [x0, #0x8]
+               	ldr	w4, [x1, #0x8]
+               	sub	x3, x3, x4
+               	ldr	w4, [x0, #0xc]
+               	ldr	w5, [x1, #0xc]
+               	sub	x4, x4, x5
+               	mov	w3, w3
+               	orr	x3, x3, x4, lsl #32
+               	ldr	w4, [x0, #0x10]
+               	ldr	w5, [x1, #0x10]
+               	sub	x4, x4, x5
+               	ldr	w5, [x0, #0x14]
+               	ldr	w6, [x1, #0x14]
+               	sub	x5, x5, x6
+               	mov	w4, w4
+               	orr	x4, x4, x5, lsl #32
+               	ldr	w5, [x0, #0x18]
+               	ldr	w6, [x1, #0x18]
+               	sub	x5, x5, x6
+               	ldr	w6, [x0, #0x1c]
+               	ldr	w7, [x1, #0x1c]
+               	sub	x6, x6, x7
+               	mov	w5, w5
+               	orr	x5, x5, x6, lsl #32
+               	ldr	x6, [x0]
+               	ldr	x7, [x1]
+               	orr	x6, x6, x7
+               	ldr	x7, [x0, #0x8]
+               	ldr	x8, [x1, #0x8]
+               	orr	x7, x7, x8
+               	ldr	x8, [x0, #0x10]
+               	ldr	x9, [x1, #0x10]
+               	orr	x8, x8, x9
                	ldr	x0, [x0, #0x18]
                	ldr	x1, [x1, #0x18]
                	orr	x1, x0, x1
                	sub	x0, x29, #0x30
-               	ldur	x5, [x29, #-0x50]
-               	eor	x2, x5, x2
+               	eor	x2, x2, x6
                	stur	x2, [x29, #-0x30]
-               	ldur	x2, [x29, #-0x48]
-               	eor	x2, x2, x3
+               	eor	x2, x3, x7
                	stur	x2, [x29, #-0x28]
-               	ldur	x2, [x29, #-0x40]
-               	eor	x2, x2, x4
+               	eor	x2, x4, x8
                	stur	x2, [x29, #-0x20]
-               	ldur	x2, [x29, #-0x38]
-               	eor	x1, x2, x1
+               	eor	x1, x5, x1
                	stur	x1, [x29, #-0x18]
                	mov	x16, x0
                	ldur	x17, [x29, #-0x8]
@@ -719,7 +747,7 @@ Disassembly of section .text:
                	ldp	x0, x1, [x16, #0x10]
                	stp	x0, x1, [x17, #0x10]
                	mov	x0, x17
-               	add	sp, sp, #0x50
+               	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
 

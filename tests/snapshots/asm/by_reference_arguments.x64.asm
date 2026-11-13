@@ -210,12 +210,6 @@ Disassembly of section .text:
                	leaq	-0x30(%rbp), %rdi
                	movq	<rip>, %rax # <addr>
                	callq	*%rax
-               	leaq	-0x70(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	movzwq	(%rcx), %r10
-               	movw	%r10w, (%rax)
-               	movzbq	0x2(%rcx), %r10
-               	movb	%r10b, 0x2(%rax)
                	movl	$0x2, %edi
                	movl	$0x30201, %esi          # imm = 0x30201
                	leaq	-0x68(%rbp), %rdx
@@ -275,12 +269,6 @@ Disassembly of section .text:
                	movl	$0x8, %eax
                	leave
                	retq
-               	movsbq	-0x70(%rbp), %rax
-               	cmpl	$0x1, %eax
-               	jne	<addr>
                	xorl	%eax, %eax
-               	leave
-               	retq
-               	movl	$0x9, %eax
                	leave
                	retq

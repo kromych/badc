@@ -82,24 +82,11 @@ Disassembly of section .text:
                	ret
 
 <dl>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	stur	x0, [x29, #-0x10]
-               	stur	x1, [x29, #-0x8]
-               	sub	x0, x29, #0x10
-               	ldur	d0, [x29, #-0x10]
+               	fmov	d0, x0
                	fmov	d1, #2.00000000
                	fmul	d0, d0, d1
-               	stur	d0, [x29, #-0x10]
-               	ldur	x1, [x29, #-0x8]
+               	fmov	x0, d0
                	add	x1, x1, #0x1
-               	stur	x1, [x29, #-0x8]
-               	mov	x16, x0
-               	ldr	x1, [x16, #0x8]
-               	ldr	x0, [x16]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <fi>:
@@ -107,33 +94,20 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	stur	x0, [x29, #-0x8]
-               	sub	x0, x29, #0x8
                	ldur	s0, [x29, #-0x8]
                	fmov	s1, #1.00000000
                	fadd	s0, s0, s1
                	stur	s0, [x29, #-0x8]
-               	ldursw	x1, [x29, #-0x4]
-               	add	x1, x1, #0x1
-               	stur	w1, [x29, #-0x4]
-               	mov	x16, x0
-               	ldr	x0, [x16]
+               	ldursw	x0, [x29, #-0x4]
+               	add	x0, x0, #0x1
+               	stur	w0, [x29, #-0x4]
+               	ldur	x0, [x29, #-0x8]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
 
 <ubump>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	stur	x0, [x29, #-0x8]
-               	sub	x0, x29, #0x8
-               	ldur	x1, [x29, #-0x8]
-               	add	x1, x1, #0x1
-               	stur	x1, [x29, #-0x8]
-               	mov	x16, x0
-               	ldr	x0, [x16]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	add	x0, x0, #0x1
                	ret
 
 <w1>:
@@ -788,8 +762,8 @@ Disassembly of section .text:
                	ldr	x0, [x0]
                	bl	<addr>
                	stur	x0, [x29, #-0x28]
-               	stur	x1, [x29, #-0x20]
                	sub	x0, x29, #0x28
+               	stur	x1, [x29, #-0x20]
                	sub	x1, x29, #0x50
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x1]
@@ -829,8 +803,8 @@ Disassembly of section .text:
                	stur	x1, [x29, #-0x20]
                	ldr	x0, [x0]
                	bl	<addr>
-               	stur	x0, [x29, #-0x48]
-               	ldur	x0, [x29, #-0x48]
+               	stur	x0, [x29, #-0x20]
+               	sub	x1, x29, #0x20
                	cmp	x0, #0x2a
                	b.eq	<addr>
                	mov	x0, #0xc                // =12
@@ -838,9 +812,9 @@ Disassembly of section .text:
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0xe0
                	ret
-               	sub	x0, x29, #0x20
-               	mov	x1, #0x5                // =5
-               	sturb	w1, [x29, #-0x20]
+               	mov	x0, #0x5                // =5
+               	sturb	w0, [x29, #-0x20]
+               	mov	x0, x1
                	ldrb	w0, [x0]
                	bl	<addr>
                	sturb	w0, [x29, #-0x20]

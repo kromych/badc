@@ -370,7 +370,7 @@ fn foldable_displaced_addresses(
             lhs,
             rhs_imm,
         } = inst
-            && *rhs_imm > 0
+            && *rhs_imm != 0
         {
             cand.insert(p as ValueId, (*lhs, *rhs_imm));
         }
@@ -422,7 +422,11 @@ fn foldable_displaced_addresses(
             if w == 0 || w == 0xff || valid.get(&p).copied().unwrap_or(0) != total {
                 return None;
             }
-            let fits = if bounded.contains(&p) {
+            // A negative offset takes the unscaled form, whose 9-bit field
+            // reaches -256 at every width.
+            let fits = if c < 0 {
+                c >= -256 && c + (w as i64) <= 256
+            } else if bounded.contains(&p) {
                 c + (w as i64) <= 4096
             } else {
                 displacement_fits(c, w) || c < 256

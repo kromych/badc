@@ -104,8 +104,7 @@ Disassembly of section .text:
                	movsbq	0x1(%rax), %rcx
                	cmpl	$0x64, %ecx
                	jne	<addr>
-               	addq	$-0x4, %rax
-               	movsbq	(%rax), %rax
+               	movsbq	-0x4(%rax), %rax
                	cmpl	$0x61, %eax
                	jne	<addr>
                	movq	<rip>, %rax # <addr>
@@ -127,8 +126,7 @@ Disassembly of section .text:
                	movl	(%rcx), %ecx
                	cmpl	$0x62, %ecx
                	jne	<addr>
-               	addq	$-0x8, %rax
-               	movq	(%rax), %rax
+               	movq	-0x8(%rax), %rax
                	movl	(%rax), %eax
                	cmpl	$0x61, %eax
                	je	<addr>

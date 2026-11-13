@@ -107,8 +107,7 @@ Disassembly of section .text:
                	ldrb	w1, [x0, #0x1]
                	cmp	w1, #0x64
                	b.ne	<addr>
-               	sub	x0, x0, #0x4
-               	ldrb	w0, [x0]
+               	ldurb	w0, [x0, #-0x4]
                	cmp	w0, #0x61
                	b.ne	<addr>
                	adrp	x0, <page>
@@ -133,8 +132,7 @@ Disassembly of section .text:
                	ldr	w1, [x1]
                	cmp	w1, #0x62
                	b.ne	<addr>
-               	sub	x0, x0, #0x8
-               	ldr	x0, [x0]
+               	ldur	x0, [x0, #-0x8]
                	ldr	w0, [x0]
                	cmp	w0, #0x61
                	b.eq	<addr>

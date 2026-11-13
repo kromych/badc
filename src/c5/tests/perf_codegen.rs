@@ -3265,6 +3265,29 @@ void put4(struct R *o, char c, int i) { *o = (struct R){c, i}; }\n";
     m.finish();
 }
 
+/// A member of an element before the pointer is reached through the
+/// access's own displacement: no `lea` on x86-64, an unscaled `ldur` /
+/// `stur` and no `sub` on AArch64.
+#[test]
+fn a_negative_offset_is_the_access_displacement() {
+    const SRC: &str = "typedef struct { long u; long tag; } V;\n\
+long f(V *sp) { return sp[-2].tag + sp[1].tag; }\n\
+void g(V *sp) { sp[-1].u += 3; }\n";
+    let mut m = Misses::default();
+    for name in ["f", "g"] {
+        let words = a64(SRC, name);
+        m.expect(
+            !words.iter().any(|&w| w & 0xFF00_0000 == 0xD100_0000),
+            || format!("aarch64 {name}: {words:08x?}"),
+        );
+        let insns = x64(SRC, name);
+        m.expect(!insns.iter().any(|i| i.op == 0x8D), || {
+            format!("x86-64 {name}: {insns:x?}")
+        });
+    }
+    m.finish();
+}
+
 /// The arm `__builtin_expect` predicts against is laid out past the
 /// function's return, in a loop, in straight-line code, and in a function
 /// dispatching through computed `goto`, whose CFG is irreducible.

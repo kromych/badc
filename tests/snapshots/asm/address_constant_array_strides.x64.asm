@@ -60,8 +60,7 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	retq
                	movq	<rip>, %rdx # <addr>
-               	addq	$-0x3, %rdx
-               	movsbq	(%rdx), %rdx
+               	movsbq	-0x3(%rdx), %rdx
                	cmpl	$0x62, %edx
                	je	<addr>
                	movl	$0x6, %eax

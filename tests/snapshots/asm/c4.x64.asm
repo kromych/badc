@@ -2779,18 +2779,12 @@ Disassembly of section .text:
                	movq	0x8(%r15), %rax
                	shlq	$0x3, %rax
                	addq	%rbx, %rax
-               	leaq	-0x8(%rax), %rcx
-               	movq	(%rcx), %rdi
-               	leaq	-0x10(%rax), %rcx
-               	movq	(%rcx), %rsi
-               	leaq	-0x18(%rax), %rcx
-               	movq	(%rcx), %rdx
-               	leaq	-0x20(%rax), %rcx
-               	movq	(%rcx), %rcx
-               	leaq	-0x28(%rax), %r8
-               	movq	(%r8), %r8
-               	addq	$-0x30, %rax
-               	movq	(%rax), %r9
+               	movq	-0x8(%rax), %rdi
+               	movq	-0x10(%rax), %rsi
+               	movq	-0x18(%rax), %rdx
+               	movq	-0x20(%rax), %rcx
+               	movq	-0x28(%rax), %r8
+               	movq	-0x30(%rax), %r9
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax

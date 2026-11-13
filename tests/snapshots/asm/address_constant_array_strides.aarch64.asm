@@ -57,8 +57,7 @@ Disassembly of section .text:
                	ret
                	adrp	x2, <page>
                	ldr	x2, [x2, <lo12>]
-               	sub	x2, x2, #0x3
-               	ldrb	w2, [x2]
+               	ldurb	w2, [x2, #-0x3]
                	cmp	w2, #0x62
                	b.eq	<addr>
                	mov	x0, #0x6                // =6

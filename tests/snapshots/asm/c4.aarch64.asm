@@ -3113,18 +3113,12 @@ Disassembly of section .text:
                	b.ne	<addr>
                	ldr	x0, [x24, #0x8]
                	add	x5, x20, x0, lsl #3
-               	sub	x0, x5, #0x8
-               	ldr	x0, [x0]
-               	sub	x1, x5, #0x10
-               	ldr	x1, [x1]
-               	sub	x2, x5, #0x18
-               	ldr	x2, [x2]
-               	sub	x3, x5, #0x20
-               	ldr	x3, [x3]
-               	sub	x4, x5, #0x28
-               	ldr	x4, [x4]
-               	sub	x5, x5, #0x30
-               	ldr	x5, [x5]
+               	ldur	x0, [x5, #-0x8]
+               	ldur	x1, [x5, #-0x10]
+               	ldur	x2, [x5, #-0x18]
+               	ldur	x3, [x5, #-0x20]
+               	ldur	x4, [x5, #-0x28]
+               	ldur	x5, [x5, #-0x30]
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x21, x0

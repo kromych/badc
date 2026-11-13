@@ -2574,14 +2574,16 @@ fn emit_scalar_return(
 /// it back after ([`super::ssa::reg_alloc::Allocation::call_saves`]).
 fn call_save(code: &mut Vec<u8>, frame: Frame, s: &super::ssa::reg_alloc::CallSave, store: bool) {
     use super::ssa::reg_alloc::VecWidth;
-    let off = spill_off(frame, s.slot);
-    let q = v128_spill_off(frame, s.slot);
+    // A scalar save takes one slot, which may be the frame's last: only a
+    // 128-bit save has the slot below it.
+    let off = || spill_off(frame, s.slot);
+    let q = || v128_spill_off(frame, s.slot);
     match (s.is_fp, s.wide, store) {
-        (false, _, true) => emit_spill_str_x_auto(code, frame, Reg(s.reg), off),
-        (false, _, false) => emit_spill_ldr_x(code, frame, Reg(s.reg), off),
-        (true, VecWidth::Scalar, true) => emit_spill_str_d_auto(code, frame, s.reg, off),
-        (true, VecWidth::Scalar, false) => emit_spill_ldr_d_auto(code, frame, s.reg, off),
-        (true, _, true) => emit_spill_str_q(code, frame, s.reg, q, Reg(16)),
-        (true, _, false) => emit_spill_ldr_q(code, frame, s.reg, q, Reg(16)),
+        (false, _, true) => emit_spill_str_x_auto(code, frame, Reg(s.reg), off()),
+        (false, _, false) => emit_spill_ldr_x(code, frame, Reg(s.reg), off()),
+        (true, VecWidth::Scalar, true) => emit_spill_str_d_auto(code, frame, s.reg, off()),
+        (true, VecWidth::Scalar, false) => emit_spill_ldr_d_auto(code, frame, s.reg, off()),
+        (true, _, true) => emit_spill_str_q(code, frame, s.reg, q(), Reg(16)),
+        (true, _, false) => emit_spill_ldr_q(code, frame, s.reg, q(), Reg(16)),
     }
 }

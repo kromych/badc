@@ -2539,6 +2539,25 @@ pub(crate) struct OwnedParam {
     pub align: u8,
 }
 
+/// An arm of a conditional branch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Arm {
+    Target,
+    FallThrough,
+}
+
+impl Arm {
+    /// The arm a `Bz` (`nonzero` false) or `Bnz` takes when its condition
+    /// is `truthy`.
+    pub(crate) fn taken(nonzero: bool, truthy: bool) -> Arm {
+        if nonzero == truthy {
+            Arm::Target
+        } else {
+            Arm::FallThrough
+        }
+    }
+}
+
 /// Per-function SSA program. Consumed by the allocator and the
 /// per-arch lowering.
 #[derive(Debug, Clone, Default)]
@@ -2855,6 +2874,9 @@ pub(crate) struct FunctionSsa {
     /// Per block, the innermost region its code lies in; empty when
     /// `seh_scopes` is, and a block past its end lies in none.
     pub block_seh: Vec<Option<u32>>,
+    /// Per block, the arm of its `Bz` / `Bnz` its controlling expression's
+    /// `__builtin_expect` predicts; read through [`Self::predicted_arm`].
+    pub predicted: Vec<Option<Arm>>,
     /// The slots the function's filter funclets reach, by the index of an
     /// [`Inst::ParentLocalAddr`]: they stay in the frame for the whole body.
     pub funclet_slots: Vec<i64>,
@@ -2929,6 +2951,39 @@ impl FunctionSsa {
     }
 
     /// The innermost `__try` region block `b` lies in.
+    /// The arm block `b`'s conditional branch is predicted to take: the one
+    /// `__builtin_expect` names, else the one of two whose block does not
+    /// end the program's path (a noreturn call or `__builtin_unreachable`).
+    pub(crate) fn predicted_arm(&self, b: BlockId) -> Option<Arm> {
+        let (Terminator::Bz {
+            target,
+            fall_through,
+            ..
+        }
+        | Terminator::Bnz {
+            target,
+            fall_through,
+            ..
+        }) = self.blocks.get(b as usize)?.terminator
+        else {
+            return None;
+        };
+        if let Some(arm) = self.predicted.get(b as usize).copied().flatten() {
+            return Some(arm);
+        }
+        let ends = |t: BlockId| {
+            matches!(
+                self.blocks.get(t as usize).map(|b| b.terminator),
+                Some(Terminator::Unreachable)
+            )
+        };
+        match (ends(target), ends(fall_through)) {
+            (true, false) => Some(Arm::FallThrough),
+            (false, true) => Some(Arm::Target),
+            _ => None,
+        }
+    }
+
     pub(crate) fn seh_scope_of(&self, b: BlockId) -> Option<u32> {
         self.block_seh.get(b as usize).copied().flatten()
     }
@@ -3146,6 +3201,7 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
             ssp: _,
             seh_scopes: _,
             block_seh: _,
+            predicted: _,
             funclet_slots: _,
             n_params: _,
             is_variadic: _,

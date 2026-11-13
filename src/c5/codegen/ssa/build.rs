@@ -163,6 +163,8 @@ pub(crate) struct SsaBuilder {
     current: Option<BlockId>,
     /// The `__try` region blocks created now lie in.
     seh_current: Option<u32>,
+    /// The truth predicted for the next conditional branch's condition.
+    expected: Option<bool>,
     /// In a filter funclet, the frame of the function it filters for.
     parent_frame: Option<ParentFrame>,
     /// Per-block CSE cache for `load_local` / `store_local`. The
@@ -228,6 +230,7 @@ impl SsaBuilder {
             is_variadic,
             seh_scopes: Vec::new(),
             block_seh: Vec::new(),
+            predicted: Vec::new(),
             funclet_slots: Vec::new(),
             is_inline: false,
             is_always_inline: false,
@@ -283,6 +286,7 @@ impl SsaBuilder {
             func,
             current: None,
             seh_current: None,
+            expected: None,
             parent_frame: None,
             local_cache: Vec::new(),
             pure_cache: hashbrown::HashMap::new(),
@@ -568,6 +572,7 @@ impl SsaBuilder {
     pub(crate) fn new_block(&mut self) -> BlockId {
         let id = self.block_starts.len() as BlockId;
         self.func.block_seh.push(self.seh_current);
+        self.func.predicted.push(None);
         self.block_starts.push(self.func.insts.len() as u32);
         self.block_ends.push(self.func.insts.len() as u32);
         self.block_terminators.push(None);
@@ -2073,6 +2078,7 @@ impl SsaBuilder {
     /// value tested; control transfers to `target` when zero, else
     /// falls through to `fall_through`.
     pub(crate) fn branch_zero(&mut self, cond: ValueId, target: BlockId, fall_through: BlockId) {
+        self.predict(false);
         self.close(
             Terminator::Bz {
                 cond,
@@ -2085,6 +2091,7 @@ impl SsaBuilder {
 
     /// Close the current block with `Terminator::Bnz`.
     pub(crate) fn branch_nonzero(&mut self, cond: ValueId, target: BlockId, fall_through: BlockId) {
+        self.predict(true);
         self.close(
             Terminator::Bnz {
                 cond,
@@ -2145,7 +2152,22 @@ impl SsaBuilder {
         }
     }
 
+    /// The truth `__builtin_expect` predicts for the condition of the
+    /// conditional branch closing the current block.
+    pub(crate) fn expect(&mut self, truthy: Option<bool>) {
+        self.expected = truthy;
+    }
+
+    fn predict(&mut self, nonzero: bool) {
+        if let (Some(truthy), Some(b)) = (self.expected, self.current)
+            && let Some(arm) = self.func.predicted.get_mut(b as usize)
+        {
+            *arm = Some(crate::c5::ir::Arm::taken(nonzero, truthy));
+        }
+    }
+
     fn close(&mut self, term: Terminator, exit_acc: ValueId) {
+        self.expected = None;
         let id = self
             .current
             .expect("SsaBuilder: close called with no active block");

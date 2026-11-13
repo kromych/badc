@@ -3557,13 +3557,18 @@ const LOOP_WEIGHT: u64 = 10;
 const LOOP_DEPTH_CAP: u32 = 6;
 
 /// Per-block execution-frequency estimate: `LOOP_WEIGHT` raised to the
-/// block's natural-loop nesting depth, capped at `LOOP_DEPTH_CAP`.
+/// block's loop nesting depth, one level less for a block only an arm
+/// predicted against reaches, capped at `LOOP_DEPTH_CAP`.
 /// Shared by the spill-cost ordering and the split's traffic metric so
 /// both rank blocks the same way.
 pub(crate) fn block_weights(func: &FunctionSsa) -> Vec<u64> {
+    let cold = crate::c5::codegen::passes::layout::cold_blocks(func);
     crate::c5::codegen::passes::layout::loop_depths(func)
         .iter()
-        .map(|&d| LOOP_WEIGHT.saturating_pow(d.min(LOOP_DEPTH_CAP)))
+        .zip(cold)
+        .map(|(&d, cold)| {
+            LOOP_WEIGHT.saturating_pow(d.saturating_sub(u32::from(cold)).min(LOOP_DEPTH_CAP))
+        })
         .collect()
 }
 
@@ -6864,6 +6869,7 @@ int main(void) { return 0; }
         let func = FunctionSsa {
             seh_scopes: Vec::new(),
             block_seh: Vec::new(),
+            predicted: Vec::new(),
             funclet_slots: Vec::new(),
             name: alloc::string::String::new(),
             ent_pc: 0,
@@ -7114,6 +7120,7 @@ int main(void) { return 0; }
         FunctionSsa {
             seh_scopes: Vec::new(),
             block_seh: Vec::new(),
+            predicted: Vec::new(),
             funclet_slots: Vec::new(),
             name: alloc::string::String::new(),
             ent_pc: 0,

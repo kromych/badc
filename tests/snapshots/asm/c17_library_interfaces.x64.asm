@@ -176,10 +176,6 @@ Disassembly of section .text:
                	movl	$0x2b, %eax
                	leave
                	retq
-               	movl	$0x1e, %edi
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	ud2
                	leaq	<rip>, %rsi
                	leaq	-0x40(%rbp), %rcx
                	movq	$0x0, -0x40(%rbp)
@@ -380,3 +376,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	xorl	%eax, %eax
                	jmp	<addr>
+               	movl	$0x1e, %edi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	ud2

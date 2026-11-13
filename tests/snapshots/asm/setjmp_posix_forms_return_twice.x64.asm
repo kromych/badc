@@ -78,15 +78,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	testl	%eax, %eax
-               	jne	<addr>
-               	movl	$0x2, -0x108(%rbp)
-               	xorl	%edi, %edi
-               	leaq	-0x100(%rbp), %rsi
-               	movq	%rdi, %rdx
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	callq	<addr>
-               	ud2
+               	je	<addr>
                	cmpl	$0x5, %eax
                	jne	<addr>
                	movl	-0x108(%rbp), %eax
@@ -113,3 +105,11 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	leave
                	retq
+               	movl	$0x2, -0x108(%rbp)
+               	xorl	%edi, %edi
+               	leaq	-0x100(%rbp), %rsi
+               	movq	%rdi, %rdx
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	callq	<addr>
+               	ud2

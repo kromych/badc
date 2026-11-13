@@ -1158,28 +1158,28 @@ Disassembly of section .text:
                	popq	%r13
                	leave
                	retq
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	ud2
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	ud2
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	ud2
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	ud2
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	ud2
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	ud2
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	ud2
                	movq	%rcx, %rax
                	jmp	<addr>
                	movq	%rax, %rcx
                	jmp	<addr>
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	ud2
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	ud2
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	ud2
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	ud2
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	ud2
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	ud2
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	ud2

@@ -22,12 +22,8 @@ fn ent_pc=7 n_params=1 variadic=false locals=8
     v7   StoreLocal { off=-8, value=v1, kind=I8, volatile } -> -
     v8   Imm(0)                                           -> x0
     v9   BinopI { op=eq, lhs=v1, rhs_imm=0 }              -> x0
-    terminator Bnz { cond=v1, target=b2, fall=b1 }   (low word)   (exit_acc=v9)
+    terminator Bnz { cond=v1, target=b1, fall=b2 }   (low word)   (exit_acc=v9)
   block 1  start_pc=0
-    v10  Imm(2)                                           -> x7
-    v11  CallExt { binding_idx=19, args=[v10], fp_arg_mask=0x0 } -> x0
-    terminator Unreachable
-  block 2  start_pc=0
     v12  Imm(0)                                           -> x0
     v13  BinopI { op=sub, lhs=v1, rhs_imm=1 }             -> x7
     v14  Extend { value=v13, kind=I32, nsw }              -> x0
@@ -41,6 +37,10 @@ fn ent_pc=7 n_params=1 variadic=false locals=8
     v22  Extend { value=v20, kind=I32 }                   -> x1
     v23  LifetimeEnd(-8)                                  -> -
     terminator Return(v20)   (exit_acc=v20)
+  block 2  start_pc=0
+    v10  Imm(2)                                           -> x7
+    v11  CallExt { binding_idx=19, args=[v10], fp_arg_mask=0x0 } -> x0
+    terminator Unreachable
 ; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=main
 fn ent_pc=8 n_params=0 variadic=false locals=0

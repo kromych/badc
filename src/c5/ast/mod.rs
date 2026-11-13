@@ -1002,6 +1002,9 @@ pub(crate) struct Ast {
     /// convention the walker places them by. Absent where the callee's
     /// type carries no function type.
     pub callee_types: alloc::collections::BTreeMap<ExprId, crate::c5::symbol::FnType>,
+    /// The truth `__builtin_expect` predicts for its value, keyed by the
+    /// node the call became.
+    pub expected: alloc::collections::BTreeMap<ExprId, bool>,
     /// `Expr::Ident` nodes that reference a block-scope `extern` which
     /// shadows an enclosing bound name (a local, parameter, or enum
     /// constant). The shadowed binding is restored at block exit, so the

@@ -26,10 +26,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0x40
                	and	x1, x0, #0xff
                	sturb	w1, [x29, #-0x40]
-               	cbnz	w0, <addr>
-               	mov	x0, #0x2                // =2
-               	bl	<addr>
-               	brk	#0x1
+               	cbz	w0, <addr>
                	sub	x0, x0, #0x1
                	bl	<addr>
                	ldurb	w1, [x29, #-0x40]
@@ -37,6 +34,9 @@ Disassembly of section .text:
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	mov	x0, #0x2                // =2
+               	bl	<addr>
+               	brk	#0x1
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!

@@ -82,11 +82,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x90]
                	ldr	x20, [sp], #0xa0
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	mov	x1, #0x1                // =1
-               	bl	<addr>
-               	brk	#0x1
                	mov	x0, #0x0                // =0
                	sub	x2, x29, #0x80
                	mov	x1, x0
@@ -104,21 +99,7 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	bl	<addr>
                	sxtw	x0, w0
-               	cbnz	x0, <addr>
-               	sub	x0, x29, #0x80
-               	bl	<addr>
-               	sub	x0, x29, #0x80
-               	mov	x1, #0xc                // =12
-               	bl	<addr>
-               	mov	x0, #0x0                // =0
-               	sub	x1, x29, #0x80
-               	mov	x2, x0
-               	bl	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	mov	x1, #0x1                // =1
-               	bl	<addr>
-               	brk	#0x1
+               	cbz	x0, <addr>
                	mov	x0, #0x0                // =0
                	sub	x2, x29, #0x80
                	mov	x1, x0
@@ -143,3 +124,22 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x90]
                	ldr	x20, [sp], #0xa0
                	ret
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	mov	x1, #0x1                // =1
+               	bl	<addr>
+               	brk	#0x1
+               	sub	x0, x29, #0x80
+               	bl	<addr>
+               	sub	x0, x29, #0x80
+               	mov	x1, #0xc                // =12
+               	bl	<addr>
+               	mov	x0, #0x0                // =0
+               	sub	x1, x29, #0x80
+               	mov	x2, x0
+               	bl	<addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	mov	x1, #0x1                // =1
+               	bl	<addr>
+               	brk	#0x1

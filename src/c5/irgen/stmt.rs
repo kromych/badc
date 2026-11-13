@@ -1001,6 +1001,7 @@ impl<'a> Walker<'a> {
             }
         }
         let cond_v = self.walk_cond_value(b, cond)?;
+        b.expect(self.expected_truth(cond));
         let then_blk = b.new_block();
         let after_blk = b.new_block();
         let else_blk = if else_s.is_some() {
@@ -1071,6 +1072,7 @@ impl<'a> Walker<'a> {
         b.switch_to(header);
         self.stamp_expr(b, cond);
         let cond_v = self.walk_cond_value(b, cond)?;
+        b.expect(self.expected_truth(cond));
         b.branch_zero(cond_v, after, body_blk);
         self.walk_loop_body(b, body_blk, body, header, after)?;
         b.switch_to(after);
@@ -1100,6 +1102,7 @@ impl<'a> Walker<'a> {
         b.switch_to(cond_blk);
         self.stamp_expr(b, cond);
         let cond_v = self.walk_cond_value(b, cond)?;
+        b.expect(self.expected_truth(cond));
         b.branch_nonzero(cond_v, body_blk, after);
         b.switch_to(after);
         Ok(false)
@@ -1138,6 +1141,7 @@ impl<'a> Walker<'a> {
             }
             None => b.imm(1),
         };
+        b.expect(cond.and_then(|c| self.expected_truth(c)));
         b.branch_zero(cond_v, after, body_blk);
         // C99 6.8.5.3 fixes the evaluation order (cond, body, post)
         // but leaves the layout open. Post is walked before the body so

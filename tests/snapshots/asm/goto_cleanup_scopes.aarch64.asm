@@ -1218,23 +1218,23 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x60
                	ret
-               	bl	<addr>
-               	brk	#0x1
-               	bl	<addr>
-               	brk	#0x1
-               	bl	<addr>
-               	brk	#0x1
-               	bl	<addr>
-               	brk	#0x1
-               	bl	<addr>
-               	brk	#0x1
-               	bl	<addr>
-               	brk	#0x1
-               	bl	<addr>
-               	brk	#0x1
                	mov	x2, x1
                	b	<addr>
                	mov	x2, x1
                	b	<addr>
                	mov	x1, x0
                	b	<addr>
+               	bl	<addr>
+               	brk	#0x1
+               	bl	<addr>
+               	brk	#0x1
+               	bl	<addr>
+               	brk	#0x1
+               	bl	<addr>
+               	brk	#0x1
+               	bl	<addr>
+               	brk	#0x1
+               	bl	<addr>
+               	brk	#0x1
+               	bl	<addr>
+               	brk	#0x1

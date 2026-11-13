@@ -13,7 +13,9 @@
 //!   (that hop holds the edge's phi moves), and the bypassed blocks
 //!   are pruned;
 //! * blocks are placed depth-first from the entry with every natural
-//!   loop's body contiguous;
+//!   loop's body contiguous and a conditional's predicted arm
+//!   (`FunctionSsa::predicted_arm`) next; the arms predicted against
+//!   follow everything else, each placed the same way from its start;
 //! * a loop whose header conditionally exits the loop is rotated to
 //!   bottom-test form: the header moves to the end of the loop's
 //!   chain, and an unconditional latch is placed directly before it
@@ -24,13 +26,13 @@
 //!
 //! A `GotoIndirect` is an edge to every address-taken label. A function
 //! with an irreducible loop (a retreating edge whose target does not
-//! dominate its source) keeps its source order.
+//! dominate its source) is placed without loop units.
 
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
 use super::super::ssa::mem2reg::{DomOrder, dominators, postorder, predecessors, successors};
-use crate::c5::ir::{BlockId, FunctionSsa, Inst, Terminator};
+use crate::c5::ir::{Arm, BlockId, FunctionSsa, Inst, Terminator};
 
 /// Sentinel matching `mem2reg`'s undefined immediate dominator.
 const NO_BLOCK: BlockId = BlockId::MAX;
@@ -55,11 +57,13 @@ fn run_one(func: &mut FunctionSsa, chains: &mut JumpChains) {
     super::prune_unreachable::run_one(func);
     let rpo = rpo_numbers(func);
     let idom = dominators(func);
-    if is_irreducible(func, &idom, &rpo) {
-        return;
-    }
-    let preds = predecessors(func);
-    let loops = natural_loops(func, &idom, &preds, &rpo);
+    // A multiple-entry loop has no header to lay its body out from: the
+    // function is placed without loop units.
+    let loops = if is_irreducible(func, &idom, &rpo) {
+        Vec::new()
+    } else {
+        natural_loops(func, &idom, &predecessors(func), &rpo)
+    };
     let forest = LoopForest::build(func.blocks.len(), &loops);
     let order = layout_order(func, &loops, &forest);
     debug_assert_eq!(order.first(), Some(&0), "entry block must stay first");
@@ -436,13 +440,10 @@ fn collect_loop_body(
     }
 }
 
-/// Per-block natural-loop nesting depth: the number of natural loops
-/// whose body contains the block. Nested loop bodies are subsets, so
-/// a block inside `k` enclosing loops is counted `k` times. Zero for
-/// every block when the CFG is irreducible (no rotation-safe loop
-/// structure); callers fall back to unweighted ordering there. Reuses
-/// `natural_loops` so there is one loop-detection path shared with the
-/// block-layout pass.
+/// Per-block loop nesting depth: the number of natural loops whose body
+/// contains the block. Nested loop bodies are subsets, so a block inside
+/// `k` enclosing loops is counted `k` times. An irreducible CFG, which has
+/// no natural loops to count, counts its cycles ([`cycle_depths`]).
 pub(crate) fn loop_depths(func: &FunctionSsa) -> Vec<u32> {
     let n = func.blocks.len();
     let mut depth = alloc::vec![0u32; n];
@@ -452,7 +453,7 @@ pub(crate) fn loop_depths(func: &FunctionSsa) -> Vec<u32> {
     let rpo = rpo_numbers(func);
     let idom = dominators(func);
     if is_irreducible(func, &idom, &rpo) {
-        return depth;
+        return cycle_depths(func, &rpo);
     }
     let preds = predecessors(func);
     for l in natural_loops(func, &idom, &preds, &rpo) {
@@ -461,6 +462,154 @@ pub(crate) fn loop_depths(func: &FunctionSsa) -> Vec<u32> {
         }
     }
     depth
+}
+
+/// Per block, the number of nested cycles it lies on. A strongly connected
+/// component holding a cycle is one level; the edges from inside it into
+/// its entry blocks are cut, and the components left inside are the levels
+/// below. On a reducible CFG this is the natural-loop nesting; on an
+/// irreducible one each multiple-entry loop is a level.
+fn cycle_depths(func: &FunctionSsa, rpo: &[usize]) -> Vec<u32> {
+    let n = func.blocks.len();
+    let succs: Vec<Vec<BlockId>> = (func.blocks.iter())
+        .map(|b| {
+            successors(
+                &b.terminator,
+                &func.computed_goto_targets,
+                &func.jump_tables,
+            )
+        })
+        .collect();
+    let preds = predecessors(func);
+    let mut depth = alloc::vec![0u32; n];
+    let mut cut = alloc::vec![false; n];
+    let mut region_of = alloc::vec![usize::MAX; n];
+    let mut scc_of = alloc::vec![usize::MAX; n];
+    let mut next_scc = 0;
+    let reachable: Vec<BlockId> = (0..n as BlockId)
+        .filter(|&b| rpo[b as usize] != usize::MAX)
+        .collect();
+    let mut regions = alloc::vec![reachable];
+    let mut next_region = 0;
+    while let Some(region) = regions.pop() {
+        let id = next_region;
+        next_region += 1;
+        for &b in &region {
+            region_of[b as usize] = id;
+        }
+        let inside = |s: BlockId| region_of[s as usize] == id && !cut[s as usize];
+        for scc in components(&region, &succs, inside) {
+            let cyclic = scc.len() > 1 || succs[scc[0] as usize].iter().any(|&s| s == scc[0]);
+            if !cyclic {
+                continue;
+            }
+            let token = next_scc;
+            next_scc += 1;
+            for &b in &scc {
+                scc_of[b as usize] = token;
+            }
+            let headers: Vec<BlockId> = (scc.iter().copied())
+                .filter(|&b| {
+                    b == 0 || (preds[b as usize].iter()).any(|&p| scc_of[p as usize] != token)
+                })
+                .collect();
+            for &b in &scc {
+                depth[b as usize] = depth[b as usize].saturating_add(1);
+            }
+            if headers.is_empty() || depth[scc[0] as usize] > 8 {
+                continue;
+            }
+            for &h in &headers {
+                cut[h as usize] = true;
+            }
+            regions.push(scc);
+        }
+    }
+    depth
+}
+
+/// The strongly connected components of `nodes` over the edges `inside`
+/// admits (Tarjan, iterative).
+fn components(
+    nodes: &[BlockId],
+    succs: &[Vec<BlockId>],
+    inside: impl Fn(BlockId) -> bool,
+) -> Vec<Vec<BlockId>> {
+    let n = succs.len();
+    let mut index = alloc::vec![usize::MAX; n];
+    let mut low = alloc::vec![0usize; n];
+    let mut on_stack = alloc::vec![false; n];
+    let mut stack: Vec<BlockId> = Vec::new();
+    let mut out = Vec::new();
+    let mut counter = 0;
+    for &root in nodes {
+        if index[root as usize] != usize::MAX {
+            continue;
+        }
+        let mut frames: Vec<(BlockId, usize)> = alloc::vec![(root, 0)];
+        index[root as usize] = counter;
+        low[root as usize] = counter;
+        counter += 1;
+        stack.push(root);
+        on_stack[root as usize] = true;
+        while let Some(&mut (v, ref mut next)) = frames.last_mut() {
+            let edges = &succs[v as usize];
+            if let Some(&w) = edges.get(*next) {
+                *next += 1;
+                if !inside(w) {
+                    continue;
+                }
+                if index[w as usize] == usize::MAX {
+                    index[w as usize] = counter;
+                    low[w as usize] = counter;
+                    counter += 1;
+                    stack.push(w);
+                    on_stack[w as usize] = true;
+                    frames.push((w, 0));
+                } else if on_stack[w as usize] {
+                    low[v as usize] = low[v as usize].min(index[w as usize]);
+                }
+                continue;
+            }
+            frames.pop();
+            if let Some(&(parent, _)) = frames.last() {
+                low[parent as usize] = low[parent as usize].min(low[v as usize]);
+            }
+            if low[v as usize] == index[v as usize] {
+                let mut scc = Vec::new();
+                while let Some(w) = stack.pop() {
+                    on_stack[w as usize] = false;
+                    scc.push(w);
+                    if w == v {
+                        break;
+                    }
+                }
+                out.push(scc);
+            }
+        }
+    }
+    out
+}
+
+/// Blocks reached from the entry only through an arm a branch is
+/// predicted not to take.
+pub(crate) fn cold_blocks(func: &FunctionSsa) -> Vec<bool> {
+    let n = func.blocks.len();
+    let mut hot = alloc::vec![false; n];
+    let mut work: Vec<BlockId> = alloc::vec![0];
+    while let Some(b) = work.pop() {
+        if b as usize >= n || core::mem::replace(&mut hot[b as usize], true) {
+            continue;
+        }
+        let against = predicted_against(func, b);
+        let term = &func.blocks[b as usize].terminator;
+        for s in successors(term, &func.computed_goto_targets, &func.jump_tables) {
+            if Some(s) != against {
+                work.push(s);
+            }
+        }
+    }
+    hot.iter().map(|&h| !h).collect()
 }
 
 /// Loop nesting derived from body containment. Two distinct natural
@@ -536,6 +685,7 @@ fn rotatable(func: &FunctionSsa, l: &NaturalLoop) -> bool {
 /// rotated loop the header chunk moves to the end and an
 /// unconditional latch is placed directly before it. Appends the
 /// placed blocks to `out`.
+#[allow(clippy::too_many_arguments)]
 fn lay_out(
     func: &FunctionSsa,
     loops: &[NaturalLoop],
@@ -544,6 +694,7 @@ fn lay_out(
     entry: BlockId,
     placed: &mut [bool],
     out: &mut Vec<BlockId>,
+    cold: &mut Vec<BlockId>,
 ) {
     let in_level = |b: BlockId| level.is_none_or(|li| loops[li].contains(b));
     // Chunks in placement order: a single block, or a whole inner
@@ -573,10 +724,21 @@ fn lay_out(
                         target,
                         fall_through,
                         ..
-                    } => {
-                        stack.push(target);
-                        stack.push(fall_through);
-                    }
+                    } => match func.predicted_arm(b) {
+                        // The arm predicted against waits for the cold tail.
+                        Some(Arm::Target) => {
+                            cold.push(fall_through);
+                            stack.push(target);
+                        }
+                        Some(Arm::FallThrough) => {
+                            cold.push(target);
+                            stack.push(fall_through);
+                        }
+                        None => {
+                            stack.push(target);
+                            stack.push(fall_through);
+                        }
+                    },
                     Terminator::Return(_) | Terminator::TailExt(_) | Terminator::Unreachable => {}
                     // Labels in block order, the first popping first.
                     Terminator::GotoIndirect { .. } => {
@@ -609,6 +771,7 @@ fn lay_out(
                     loops[li].header,
                     placed,
                     &mut chunk,
+                    cold,
                 );
                 // Exit successors, collected tail-first so the last
                 // block's exit (the rotated header's) continues the
@@ -616,8 +779,14 @@ fn lay_out(
                 let mut exits: Vec<BlockId> = Vec::new();
                 for &cb in chunk.iter().rev() {
                     let term = &func.blocks[cb as usize].terminator;
+                    let against = predicted_against(func, cb);
                     for s in successors(term, &func.computed_goto_targets, &func.jump_tables) {
-                        if !loops[li].contains(s) && !exits.contains(&s) {
+                        if loops[li].contains(s) || exits.contains(&s) {
+                            continue;
+                        }
+                        if against == Some(s) {
+                            cold.push(s);
+                        } else {
                             exits.push(s);
                         }
                     }
@@ -680,11 +849,61 @@ fn move_latch_before_header(func: &FunctionSsa, header: BlockId, chunks: &mut Ve
 /// Layout order for the whole function: old block ids in the new
 /// emission order. Blocks unreachable from the entry keep their
 /// relative order at the tail.
+/// The successor block `b`'s conditional branch is predicted not to take.
+fn predicted_against(func: &FunctionSsa, b: BlockId) -> Option<BlockId> {
+    let (target, fall_through) = match func.blocks[b as usize].terminator {
+        Terminator::Bz {
+            target,
+            fall_through,
+            ..
+        }
+        | Terminator::Bnz {
+            target,
+            fall_through,
+            ..
+        } => (target, fall_through),
+        _ => return None,
+    };
+    match func.predicted_arm(b)? {
+        Arm::Target => Some(fall_through),
+        Arm::FallThrough => Some(target),
+    }
+}
+
+/// Blocks depth-first from the entry, then the arms predicted against,
+/// each laid out the same way from where it starts, without loop units.
 fn layout_order(func: &FunctionSsa, loops: &[NaturalLoop], forest: &LoopForest) -> Vec<BlockId> {
     let n = func.blocks.len();
     let mut placed = alloc::vec![false; n];
     let mut order: Vec<BlockId> = Vec::with_capacity(n);
-    lay_out(func, loops, forest, None, 0, &mut placed, &mut order);
+    let mut cold: Vec<BlockId> = Vec::new();
+    lay_out(
+        func,
+        loops,
+        forest,
+        None,
+        0,
+        &mut placed,
+        &mut order,
+        &mut cold,
+    );
+    let flat = LoopForest::build(n, &[]);
+    let mut next = 0;
+    while let Some(&c) = cold.get(next) {
+        next += 1;
+        if !placed[c as usize] {
+            lay_out(
+                func,
+                &[],
+                &flat,
+                None,
+                c,
+                &mut placed,
+                &mut order,
+                &mut cold,
+            );
+        }
+    }
     for (b, done) in placed.iter().enumerate() {
         if !done {
             order.push(b as BlockId);
@@ -1063,7 +1282,7 @@ mod tests {
 
     /// b0 enters both the label b1 and b2; b1 jumps to b2, which branches
     /// indirectly back to b1: a two-entry cycle only the indirect edge
-    /// closes.
+    /// closes, one level deep.
     #[test]
     fn an_indirect_branch_can_close_an_irreducible_cycle() {
         let mut f = func_with(
@@ -1084,7 +1303,32 @@ mod tests {
         f.computed_goto_targets = vec![1];
         let (rpo, idom) = (rpo_numbers(&f), dominators(&f));
         assert!(is_irreducible(&f, &idom, &rpo));
-        assert_eq!(loop_depths(&f), vec![0; 3]);
+        assert_eq!(loop_depths(&f), vec![0, 1, 1]);
+    }
+
+    /// The arm a branch is predicted not to take, and what only it reaches,
+    /// is cold; the join both arms reach is not.
+    #[test]
+    fn only_a_predicted_against_arm_reaches_cold_blocks() {
+        let mut f = func_with(
+            vec![Inst::Imm(0)],
+            vec![
+                block(
+                    0..1,
+                    Terminator::Bz {
+                        cond: 0,
+                        target: 1,
+                        fall_through: 3,
+                    },
+                ),
+                block(1..1, Terminator::Jmp(2)),
+                block(1..1, Terminator::Jmp(3)),
+                block(1..1, Terminator::Return(0)),
+            ],
+        );
+        assert_eq!(cold_blocks(&f), vec![false; 4]);
+        f.predicted = vec![Some(Arm::FallThrough), None, None, None];
+        assert_eq!(cold_blocks(&f), vec![false, true, true, false]);
     }
 
     #[test]

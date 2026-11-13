@@ -3571,6 +3571,23 @@ fn splice_multi_block(
         merged_jump_tables.push(row.iter().map(|&b| shift_callee_bid(b)).collect());
     }
 
+    // The postfix block ends in the splice block's branch.
+    let mut predicted = alloc::vec![None; new_blocks.len()];
+    for b in 0..n_caller {
+        let to = if b == splice_block_idx {
+            postfix_id
+        } else {
+            shift_caller_bid(b as u32)
+        };
+        if let Some(slot) = predicted.get_mut(to as usize) {
+            *slot = original.predicted.get(b).copied().flatten();
+        }
+    }
+    for ci in 0..n_callee {
+        if let Some(slot) = predicted.get_mut(shift_callee_bid(ci as u32) as usize) {
+            *slot = callee.predicted.get(ci).copied().flatten();
+        }
+    }
     *caller = FunctionSsa {
         name: original.name,
         ent_pc: original.ent_pc,
@@ -3579,6 +3596,7 @@ fn splice_multi_block(
         // Neither side of an inline holds a `__try` region.
         seh_scopes: Vec::new(),
         block_seh: Vec::new(),
+        predicted,
         funclet_slots: Vec::new(),
         // The caller's frame now holds the callee's automatic objects, so it
         // inherits their stack-protector classification.

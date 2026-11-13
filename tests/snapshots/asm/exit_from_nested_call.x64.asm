@@ -39,17 +39,17 @@ Disassembly of section .text:
                	subq	$0x40, %rsp
                	movb	%dil, -0x40(%rbp)
                	testl	%edi, %edi
-               	jne	<addr>
-               	movl	$0x2, %edi
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	ud2
+               	je	<addr>
                	decq	%rdi
                	callq	<addr>
                	movsbq	-0x40(%rbp), %rcx
                	addq	%rcx, %rax
                	leave
                	retq
+               	movl	$0x2, %edi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	ud2
 
 <main>:
                	pushq	%rbp

@@ -3265,6 +3265,43 @@ void put4(struct R *o, char c, int i) { *o = (struct R){c, i}; }\n";
     m.finish();
 }
 
+/// The arm `__builtin_expect` predicts against is laid out past the
+/// function's return, in a loop, in straight-line code, and in a function
+/// dispatching through computed `goto`, whose CFG is irreducible.
+#[test]
+fn an_arm_predicted_against_follows_the_return() {
+    const SRC: &str = "#define unlikely(x) __builtin_expect(!!(x), 0)\n\
+void slow(int);\n\
+int sum(int *p, int n) {\n\
+    int s = 0;\n\
+    for (int i = 0; i < n; i++) {\n\
+        if (unlikely(p[i] < 0)) { slow(i); continue; }\n\
+        s += p[i];\n\
+    }\n\
+    return s;\n\
+}\n\
+int check(int *p, int x) { if (unlikely(x <= 0)) { slow(x); return 0; } return p[x] + 1; }\n\
+int run(const unsigned char *pc, int acc) {\n\
+    static void *ops[] = { &&inc, &&dec, &&end };\n\
+    goto *ops[*pc++];\n\
+inc: if (unlikely(acc == 100)) slow(acc); acc++; goto *ops[*pc++];\n\
+dec: acc--; goto *ops[*pc++];\n\
+end: return acc;\n\
+}\n";
+    let mut m = Misses::default();
+    for name in ["sum", "check", "run"] {
+        let words = a64(SRC, name);
+        let ret = words.iter().position(|&w| w == 0xD65F_03C0);
+        let call = words.iter().position(|&w| w & 0xFC00_0000 == 0x9400_0000);
+        m.expect(ret < call, || format!("aarch64 {name}: {words:08x?}"));
+        let insns = x64(SRC, name);
+        let ret = insns.iter().position(|i| i.op == 0xC3);
+        let call = insns.iter().position(|i| i.op == 0xE8);
+        m.expect(ret < call, || format!("x86-64 {name}: {insns:x?}"));
+    }
+    m.finish();
+}
+
 /// Stores that tile a word with one value and zeros beside it, or with
 /// constants only, are one store of the word: a union written through a
 /// narrower member, a flag beside its tag, and a constant initializer.

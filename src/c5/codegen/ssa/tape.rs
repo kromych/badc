@@ -36,6 +36,7 @@ fn keyed(func: &mut FunctionSsa) -> Keyed<'_> {
         ssp: _,
         seh_scopes: _,
         block_seh: _,
+        predicted: _,
         funclet_slots: _,
         n_params: _,
         is_variadic: _,

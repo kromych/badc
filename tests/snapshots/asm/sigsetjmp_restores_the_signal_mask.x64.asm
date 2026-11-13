@@ -111,11 +111,6 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	leave
                	retq
-               	leaq	<rip>, %rdi # <addr>
-               	movl	$0x1, %esi
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	ud2
                	xorl	%edi, %edi
                	leaq	-0x80(%rbp), %rdx
                	movq	%rdi, %rsi
@@ -136,24 +131,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
-               	jne	<addr>
-               	leaq	-0x80(%rbp), %rdi
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	leaq	-0x80(%rbp), %rdi
-               	movl	$0xc, %esi
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	xorl	%edi, %edi
-               	leaq	-0x80(%rbp), %rsi
-               	movq	%rdi, %rdx
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	leaq	<rip>, %rdi # <addr>
-               	movl	$0x1, %esi
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	ud2
+               	je	<addr>
                	xorl	%edi, %edi
                	leaq	-0x80(%rbp), %rdx
                	movq	%rdi, %rsi
@@ -184,3 +162,25 @@ Disassembly of section .text:
                	cmoveq	%rcx, %rax
                	leave
                	retq
+               	leaq	<rip>, %rdi # <addr>
+               	movl	$0x1, %esi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	ud2
+               	leaq	-0x80(%rbp), %rdi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	leaq	-0x80(%rbp), %rdi
+               	movl	$0xc, %esi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	xorl	%edi, %edi
+               	leaq	-0x80(%rbp), %rsi
+               	movq	%rdi, %rdx
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	leaq	<rip>, %rdi # <addr>
+               	movl	$0x1, %esi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	ud2

@@ -41,6 +41,7 @@ impl<'a> Walker<'a> {
         b.store_local(slot, short_val, kind_s);
         let rhs_blk = b.new_block();
         let after_blk = b.new_block();
+        b.expect(self.expected_truth(lhs));
         match op {
             // `a && b`: skip rhs when lhs == 0.
             ShortCircuitOp::Lan => b.branch_zero(lhs_t, after_blk, rhs_blk),

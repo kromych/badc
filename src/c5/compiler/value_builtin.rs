@@ -272,7 +272,11 @@ impl Compiler {
             (ValueBuiltin::Expect, &[Arg::Value(exp), Arg::Value(c)]) => {
                 // C99 6.5.2.2p10 leaves the order of the arguments unspecified.
                 let long = Ty::Long as i64;
-                (self.ast_after(c, exp, long), long)
+                let node = self.ast_after(c, exp, long);
+                if let Some(k) = self.expr_const_int(c) {
+                    self.ast.expected.insert(node, k != 0);
+                }
+                (node, long)
             }
             (ValueBuiltin::Prefetch, &[Arg::Value(addr), ..]) => {
                 let void = void_ty();

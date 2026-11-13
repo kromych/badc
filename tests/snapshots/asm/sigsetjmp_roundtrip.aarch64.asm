@@ -22,14 +22,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>
-               	cbnz	w0, <addr>
-               	mov	x0, #0x1                // =1
-               	stur	w0, [x29, #-0x8]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	mov	x1, #0x7                // =7
-               	bl	<addr>
-               	brk	#0x1
+               	cbz	w0, <addr>
                	cmp	w0, #0x7
                	b.ne	<addr>
                	ldursw	x0, [x29, #-0x8]
@@ -43,3 +36,10 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	mov	x0, #0x1                // =1
+               	stur	w0, [x29, #-0x8]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	mov	x1, #0x7                // =7
+               	bl	<addr>
+               	brk	#0x1

@@ -183,6 +183,11 @@ fn merge(func: &mut FunctionSsa, preds: &[Vec<BlockId>]) -> bool {
         let (head, last) = (chain[0] as usize, chain[chain.len() - 1] as usize);
         func.blocks[head].terminator = func.blocks[last].terminator;
         func.blocks[head].exit_acc = func.blocks[last].exit_acc;
+        if let Some(&arm) = func.predicted.get(last)
+            && let Some(slot) = func.predicted.get_mut(head)
+        {
+            *slot = arm;
+        }
         for &b in &chain[1..] {
             func.blocks[b as usize].terminator = Terminator::Unreachable;
             func.blocks[b as usize].exit_acc = NO_VALUE;

@@ -36,7 +36,7 @@
 
 #![allow(dead_code)]
 
-use alloc::collections::BinaryHeap;
+use alloc::collections::{BTreeMap, BinaryHeap};
 use alloc::vec;
 use alloc::vec::Vec;
 use core::cmp::Reverse;
@@ -1346,6 +1346,56 @@ fn call_crossings(
     liveness.values_live_after(func, &|inst: &Inst| is_call_site(inst, tls))
 }
 
+/// Per phi-class root, the result registers the `RetPart`s of a call it
+/// lives across read: a save around that call is restored into its
+/// register before they are read.
+fn ret_part_crossing_forbid(
+    func: &FunctionSsa,
+    target: Target,
+    crossings: &[(ValueId, Vec<ValueId>)],
+    node_of: &[ValueId],
+) -> Vec<(u64, u64)> {
+    let read = ret_part_reads(func, target);
+    if read.is_empty() {
+        return Vec::new();
+    }
+    let mut out = alloc::vec![(0u64, 0u64); func.insts.len()];
+    for (site, live) in crossings {
+        if let Some(&(gpr, fpr)) = read.get(site) {
+            for &v in live {
+                let entry = &mut out[node_of[v as usize] as usize];
+                entry.0 |= gpr;
+                entry.1 |= fpr;
+            }
+        }
+    }
+    out
+}
+
+/// Per call followed by `RetPart`s, the result registers they read, as
+/// integer and floating-point masks.
+fn ret_part_reads(func: &FunctionSsa, target: Target) -> BTreeMap<ValueId, (u64, u64)> {
+    let tls = tls_addr_is_call(target, func);
+    let mut read: BTreeMap<ValueId, (u64, u64)> = BTreeMap::new();
+    for block in &func.blocks {
+        let mut site = None;
+        for v in block.inst_range.clone() {
+            let inst = &func.insts[v as usize];
+            if is_call_site(inst, tls) {
+                site = Some(v);
+            } else if let (Some(s), Some((fp, reg))) = (site, ret_part_reg(target, inst)) {
+                let entry = read.entry(s).or_default();
+                if fp {
+                    entry.1 |= 1 << reg;
+                } else {
+                    entry.0 |= 1 << reg;
+                }
+            }
+        }
+    }
+    read
+}
+
 /// Per phi-class root, what keeping it in a caller-saved register across
 /// the calls it lives across ([`call_crossings`]) costs: a store and a
 /// load at each, by the call's loop weight.
@@ -1744,6 +1794,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     let asm_forbid = asm_forbid_masks(func, &asm_live, &node_of);
     let call_forbid = call_forbid_masks(func, &liveness, target, fixed, &node_of);
     let crossings = call_crossings(func, &liveness, target);
+    let ret_part_forbid = ret_part_crossing_forbid(func, target, &crossings, &node_of);
     let wide = wide_values(func);
     let mut node_cons: Vec<Option<NodeConstraints>> = vec![None; func.insts.len()];
     for (v, inst) in func.insts.iter().enumerate() {
@@ -1775,6 +1826,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         entry.loop_avoid |= loop_avoid.get(v).copied().unwrap_or(0);
         if let Some(&(gpr, fpr)) = asm_forbid.get(root) {
             entry.forbid |= u64::from(if entry.is_fp { fpr } else { gpr });
+        }
+        if let Some(&(gpr, fpr)) = ret_part_forbid.get(root) {
+            entry.forbid |= if entry.is_fp { fpr } else { gpr };
         }
         if let Some(&(gpr, fpr)) = call_forbid.get(root) {
             entry.call_forbid |= u64::from(if entry.is_fp { fpr } else { gpr });
@@ -3291,6 +3345,19 @@ fn check_allocation(
             if !after_call {
                 report(alloc::format!(
                     "ret-part: v{v} follows no call in its block"
+                ));
+            }
+        }
+    }
+    let reads = ret_part_reads(func, target);
+    for (site, saves) in call_saves {
+        let Some(&(gpr, fpr)) = reads.get(site) else {
+            continue;
+        };
+        for s in saves {
+            if (if s.is_fp { fpr } else { gpr }) >> s.reg & 1 != 0 {
+                report(alloc::format!(
+                    "ret-part-restore: call v{site} restores the result register its RetPart reads"
                 ));
             }
         }
@@ -8194,6 +8261,89 @@ int main(void) { return 0; }
                 a.places
             );
         }
+    }
+
+    /// The parts of a call's result live across a second call and take
+    /// callee-saved registers, which leaves the result registers to the
+    /// values saved around the first call: none is saved in one, which its
+    /// restore would overwrite before the part is read.
+    #[test]
+    fn a_value_saved_around_a_call_stays_off_its_result_registers() {
+        let bin = |op, lhs, rhs| Inst::Binop { op, lhs, rhs };
+        let call = Inst::Call {
+            target_pc: 0,
+            args: Vec::new(),
+            fixed_args: 0,
+            fp_return: false,
+            fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+            low_word_args: 0,
+            arg_widths: crate::c5::ir::ArgWidths::default(),
+            callee_conv: crate::c5::codegen::CallConv::Target,
+            arg_aggs: Vec::new(),
+            ret_agg: None,
+            ret_slot_local: 0,
+        };
+        let part = |slot| Inst::RetPart {
+            slot,
+            kind: LoadKind::I64,
+        };
+        // Stores rank a value: the more it has, the dearer its spill.
+        let stores = |insts: &mut Vec<Inst>, values: &[ValueId], n: i64| {
+            for off in 4..4 + n {
+                for &value in values {
+                    insts.push(Inst::StoreLocal {
+                        off,
+                        disp: 0,
+                        value,
+                        kind: StoreKind::I64,
+                        volatile: false,
+                        nsw: false,
+                    });
+                }
+            }
+        };
+        // v2 lives across the second call too, v3 and v4 across the first.
+        let mut insts = vec![
+            local_i64(2),
+            local_i64(3),
+            bin(BinOp::Sub, 0, 1),
+            bin(BinOp::Xor, 0, 1),
+            bin(BinOp::Add, 0, 1),
+        ];
+        stores(&mut insts, &[2], 12);
+        stores(&mut insts, &[3], 8);
+        stores(&mut insts, &[4], 4);
+        let site = insts.len() as ValueId;
+        insts.extend([call.clone(), part(0), part(1), bin(BinOp::Add, 3, 4), call]);
+        stores(&mut insts, &[site + 1, site + 2], 16);
+        let sum = insts.len() as ValueId;
+        insts.extend([
+            bin(BinOp::Add, site + 1, site + 2),
+            bin(BinOp::Add, sum, site + 3),
+            bin(BinOp::Add, sum + 1, 2),
+        ]);
+        let func = store_func(insts, sum + 2);
+        let mut saved = 0;
+        for (target, results) in [
+            (Target::LinuxAarch64, [0u8, 1]),
+            (Target::LinuxX64, [X86_RAX, X86_RDX]),
+        ] {
+            for cap in 1..5 {
+                let a = with_pool_size_override(cap, usize::MAX, || allocate(&func, target));
+                for (_, saves) in a.call_saves.iter().filter(|(at, _)| *at == site) {
+                    saved += saves.len();
+                    for s in saves {
+                        assert!(
+                            !results.contains(&s.reg),
+                            "{target:?} {cap}: {:?} {:?}",
+                            a.places,
+                            a.call_saves
+                        );
+                    }
+                }
+            }
+        }
+        assert!(saved > 0);
     }
 
     /// The parts of a return in registers are hinted to their class's

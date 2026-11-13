@@ -261,17 +261,17 @@ fn ent_pc=20 n_params=0 variadic=false locals=7
   block 29  start_pc=0
     v198 ImmData(16)                                      -> x0
     v199 Imm(0)                                           -> x0
-    v200 Store { addr=v198, disp=0, value=v199, kind=I32 pc_rel } -> -
+    v200 Imm(0)                                           -> x0
     v201 Imm(4607182418800017408)                         -> x0
     v202 ImmData(16)                                      -> x0
     v203 Imm(0)                                           -> x0
     v204 Imm(1)                                           -> x0
-    v205 Store { addr=v198, disp=0, value=v204, kind=I32 pc_rel } -> -
+    v205 Imm(0)                                           -> x0
     v206 Imm(4611686018427387904)                         -> x0
     v207 ImmData(16)                                      -> x0
     v208 Imm(1)                                           -> x0
     v209 Imm(2)                                           -> x0
-    v210 Store { addr=v198, disp=0, value=v209, kind=I32 pc_rel } -> -
+    v210 Imm(0)                                           -> x0
     v211 Imm(1)                                           -> x0
     v212 Imm(0)                                           -> x0
     v213 Imm(1)                                           -> x0
@@ -280,7 +280,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=7
     v216 ImmData(16)                                      -> x0
     v217 Imm(2)                                           -> x0
     v218 Imm(3)                                           -> x0
-    v219 Store { addr=v198, disp=0, value=v218, kind=I32 pc_rel } -> -
+    v219 Imm(0)                                           -> x0
     v220 Imm(4611686018427387904)                         -> x0
     v221 ImmData(16)                                      -> x0
     v222 Imm(3)                                           -> x0

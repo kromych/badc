@@ -44,9 +44,7 @@ Disassembly of section .text:
 <update>:
                	ldr	x3, [x0, #0x8]
                	and	x1, x3, x1
-               	str	x1, [x0, #0x8]
                	orr	x1, x1, #0x100
-               	str	x1, [x0, #0x8]
                	eor	x1, x1, x2
                	str	x1, [x0, #0x8]
                	ldrb	w1, [x0, #0x6]

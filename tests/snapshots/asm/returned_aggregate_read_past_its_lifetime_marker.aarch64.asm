@@ -19,7 +19,6 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	adrp	x1, <page>
                	strb	wzr, [x1, #0x48]
-               	strb	wzr, [x1, #0x48]
                	ldrb	w1, [x1, #0x48]
                	cmp	w1, #0x7
                	b.eq	<addr>
@@ -39,7 +38,6 @@ Disassembly of section .text:
                	str	x16, [x0]
                	adrp	x1, <page>
                	mov	x2, #0x0                // =0
-               	strb	w2, [x1, #0x48]
                	strb	w2, [x1, #0x48]
                	ldrb	w1, [x1, #0x48]
                	cmp	w1, #0x7

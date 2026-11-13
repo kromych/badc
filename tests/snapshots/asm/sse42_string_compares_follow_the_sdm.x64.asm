@@ -2027,89 +2027,83 @@ Disassembly of section .text:
                	movl	$0xcccccccd, %edi       # imm = 0xCCCCCCCD
                	movabsq	$0x2545f4914f6cdd1d, %r8 # imm = 0x2545F4914F6CDD1D
                	leaq	<rip>, %r9 # <addr>
-               	xorl	%edx, %edx
-               	movq	%rdx, %rax
+               	xorl	%ecx, %ecx
+               	movq	%rcx, %rax
                	jmp	<addr>
-               	movb	%cl, (%rsi,%rax)
+               	movb	%dl, (%rsi,%rax)
                	incq	%rax
                	cmpl	$0x10, %eax
                	jge	<addr>
-               	movq	<rip>, %rcx # <addr>
-               	movq	%rcx, %rbx
+               	movq	<rip>, %rdx # <addr>
+               	movq	%rdx, %rbx
                	shrq	$0xc, %rbx
-               	xorq	%rbx, %rcx
-               	movq	%rcx, <rip> # <addr>
-               	movq	%rcx, %rbx
+               	xorq	%rbx, %rdx
+               	movq	%rdx, %rbx
                	shlq	$0x19, %rbx
-               	xorq	%rbx, %rcx
-               	movq	%rcx, <rip> # <addr>
-               	movq	%rcx, %rbx
+               	xorq	%rbx, %rdx
+               	movq	%rdx, %rbx
                	shrq	$0x1b, %rbx
-               	xorq	%rbx, %rcx
-               	movq	%rcx, <rip> # <addr>
-               	imulq	%r8, %rcx
-               	movq	%rcx, %rbx
+               	xorq	%rbx, %rdx
+               	movq	%rdx, <rip> # <addr>
+               	imulq	%r8, %rdx
+               	movq	%rdx, %rbx
                	shrq	$0x3d, %rbx
                	testl	%ebx, %ebx
                	jne	<addr>
-               	movq	%rdx, %rcx
+               	movq	%rcx, %rdx
                	jmp	<addr>
-               	shrq	$0x20, %rcx
-               	movq	%rcx, %rbx
+               	shrq	$0x20, %rdx
+               	movq	%rdx, %rbx
                	imulq	%rdi, %rbx
                	shrq	$0x22, %rbx
                	leaq	(%rbx,%rbx,4), %rbx
-               	subq	%rbx, %rcx
-               	movzbq	(%r9,%rcx), %rcx
+               	subq	%rbx, %rdx
+               	movzbq	(%r9,%rdx), %rdx
                	jmp	<addr>
                	leaq	-0x3be8(%rbp), %rsi
                	movl	$0xcccccccd, %edi       # imm = 0xCCCCCCCD
                	movabsq	$0x2545f4914f6cdd1d, %r8 # imm = 0x2545F4914F6CDD1D
                	leaq	<rip>, %r9 # <addr>
-               	xorl	%edx, %edx
-               	movq	%rdx, %rax
+               	xorl	%ecx, %ecx
+               	movq	%rcx, %rax
                	jmp	<addr>
-               	movb	%cl, (%rsi,%rax)
+               	movb	%dl, (%rsi,%rax)
                	incq	%rax
                	cmpl	$0x10, %eax
                	jge	<addr>
-               	movq	<rip>, %rcx # <addr>
-               	movq	%rcx, %rbx
+               	movq	<rip>, %rdx # <addr>
+               	movq	%rdx, %rbx
                	shrq	$0xc, %rbx
-               	xorq	%rbx, %rcx
-               	movq	%rcx, <rip> # <addr>
-               	movq	%rcx, %rbx
+               	xorq	%rbx, %rdx
+               	movq	%rdx, %rbx
                	shlq	$0x19, %rbx
-               	xorq	%rbx, %rcx
-               	movq	%rcx, <rip> # <addr>
-               	movq	%rcx, %rbx
+               	xorq	%rbx, %rdx
+               	movq	%rdx, %rbx
                	shrq	$0x1b, %rbx
-               	xorq	%rbx, %rcx
-               	movq	%rcx, <rip> # <addr>
-               	imulq	%r8, %rcx
-               	movq	%rcx, %rbx
+               	xorq	%rbx, %rdx
+               	movq	%rdx, <rip> # <addr>
+               	imulq	%r8, %rdx
+               	movq	%rdx, %rbx
                	shrq	$0x3d, %rbx
                	testl	%ebx, %ebx
                	jne	<addr>
-               	movq	%rdx, %rcx
+               	movq	%rcx, %rdx
                	jmp	<addr>
-               	shrq	$0x20, %rcx
-               	movq	%rcx, %rbx
+               	shrq	$0x20, %rdx
+               	movq	%rdx, %rbx
                	imulq	%rdi, %rbx
                	shrq	$0x22, %rbx
                	leaq	(%rbx,%rbx,4), %rbx
-               	subq	%rbx, %rcx
-               	movzbq	(%r9,%rcx), %rcx
+               	subq	%rbx, %rdx
+               	movzbq	(%r9,%rdx), %rdx
                	jmp	<addr>
                	movq	<rip>, %rax # <addr>
                	movq	%rax, %rcx
                	shrq	$0xc, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shlq	$0x19, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shrq	$0x1b, %rcx
                	xorq	%rcx, %rax

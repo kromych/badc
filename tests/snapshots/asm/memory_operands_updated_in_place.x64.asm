@@ -49,12 +49,10 @@ Disassembly of section .text:
 
 <update>:
                	movq	0x8(%rdi), %rax
-               	andq	%rax, %rsi
-               	movq	%rsi, 0x8(%rdi)
-               	orq	$0x100, %rsi            # imm = 0x100
-               	movq	%rsi, 0x8(%rdi)
-               	xorq	%rsi, %rdx
-               	movq	%rdx, 0x8(%rdi)
+               	andq	%rsi, %rax
+               	orq	$0x100, %rax            # imm = 0x100
+               	xorq	%rdx, %rax
+               	movq	%rax, 0x8(%rdi)
                	xorb	$-0x7f, 0x6(%rdi)
                	orb	$0x2, 0x6(%rdi)
                	retq

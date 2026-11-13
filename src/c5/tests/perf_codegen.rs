@@ -2664,10 +2664,10 @@ fn x64_fma_form_follows_the_dying_operand() {
 /// copy-free case where both rows are four bytes.
 #[test]
 fn x64_scalar_fp_arith_picks_the_vex_three_operand_row() {
-    const SRC: &str = "double g, h;\n\
+    const SRC: &str = "double g, h, k;\n\
         void spread(double a, double b) {\n\
             double x = a + b; double y = a - b; double z = a * b;\n\
-            g = x; h = y; g = z;\n}\n\
+            g = x; h = y; k = z;\n}\n\
         double acc(double a, double b) { return a + b; }\n";
     let copies = |i: &X64Insn| matches!(i.op, 0x0F28 | 0x0F10 | 0x0F6E);
     let arith = |i: &X64Insn| matches!(i.op, 0x0F58 | 0x0F5C | 0x0F59);
@@ -7745,6 +7745,33 @@ void sub3(short *p) { p[2] -= 3; }\n";
                 && insns.len() == 2
         });
         m.expect(rmw.is_some(), || format!("{name}: {insns:x?}"));
+    }
+    m.finish();
+}
+
+/// Stores to one member in sequence, with no read between, leave the last:
+/// one store on both targets.
+#[test]
+fn stores_overwritten_before_a_read_leave_one() {
+    const SRC: &str = "typedef struct { int tag; long long bits; } S;\n\
+void update(S *s, long long m, long long x) { s->bits &= m; s->bits |= 0x100; s->bits ^= x; }\n\
+void set3(int *p, int a) { *p = a; *p = a + 1; *p = a + 2; }\n";
+    let mut m = Misses::default();
+    for f in ["update", "set3"] {
+        // STR (unsigned offset), 32- or 64-bit.
+        let ws = a64(SRC, f);
+        let stores = ws
+            .iter()
+            .filter(|&&w| w & 0xBFC0_0000 == 0xB900_0000)
+            .count();
+        m.expect(stores == 1, || format!("aarch64 {f}: {ws:08x?}"));
+        // MOV r/m, r to memory, or the memory-destination form of the
+        // last operation.
+        let insns = x64(SRC, f);
+        let stores = (insns.iter())
+            .filter(|i| matches!(i.op, 0x89 | 0x09 | 0x21 | 0x31 | 0x81 | 0x83) && !i.reg_form())
+            .count();
+        m.expect(stores == 1, || format!("x86-64 {f}: {insns:x?}"));
     }
     m.finish();
 }

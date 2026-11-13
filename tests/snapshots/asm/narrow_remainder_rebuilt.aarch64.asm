@@ -20,13 +20,6 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	mov	x1, #-0x1               // =-1
                	str	w1, [x0, #0x28]
-               	str	w1, [x0, #0x28]
-               	str	w1, [x0, #0x28]
-               	str	w1, [x0, #0x28]
-               	str	w1, [x0, #0x28]
-               	str	w1, [x0, #0x28]
-               	str	w1, [x0, #0x28]
-               	str	w1, [x0, #0x28]
                	mov	x0, #-0x1               // =-1
                	adrp	x1, <page>
                	ldrsw	x1, [x1, #0xc]

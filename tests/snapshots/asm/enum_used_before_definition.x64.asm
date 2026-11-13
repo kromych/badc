@@ -87,7 +87,6 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x6, %eax
                	jmp	<addr>
-               	movq	$0x0, <rip> # <addr>
                	movl	$0x80000000, %eax       # imm = 0x80000000
                	movq	%rax, <rip> # <addr>
                	movq	<rip>, %rbx # <addr>

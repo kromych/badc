@@ -21,18 +21,9 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x8]
                	ldur	x0, [x29, #-0x8]
                	mov	x1, #0x1                // =1
-               	movk	x1, #0x63, lsl #32
-               	mov	x2, #0x16               // =22
-               	str	w2, [x0, #0x4]
-               	mov	x2, #0x14d              // =333
-               	str	x2, [x0, #0x8]
-               	mov	x2, #0x2c               // =44
-               	strh	w2, [x0, #0x10]
-               	mov	x2, #0x5                // =5
-               	strb	w2, [x0, #0x12]
-               	str	x1, [x0]
-               	mov	x1, #0x309              // =777
-               	str	x1, [x0, #0x8]
+               	str	w1, [x0]
+               	mov	x1, #0x2c               // =44
+               	strh	w1, [x0, #0x10]
                	mov	x1, #0x64               // =100
                	str	w1, [x0, #0x4]
                	mov	x1, #0x313              // =787

@@ -87,8 +87,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	mov	x1, #0x4                // =4
-               	strb	w1, [x0, #0x28]
                	mov	x1, #0x4d               // =77
                	strb	w1, [x0, #0x28]
                	ldrb	w0, [x0, #0x28]

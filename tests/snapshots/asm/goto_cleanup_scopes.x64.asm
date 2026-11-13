@@ -337,7 +337,6 @@ Disassembly of section .text:
                	movl	%eax, -0x10(%rbp)
                	movl	%eax, <rip> # <addr>
                	leaq	<rip>, %rcx # <addr>
-               	movl	$0x1, <rip> # <addr>
                	movq	%rcx, -0x8(%rbp)
                	movl	%eax, <rip> # <addr>
                	movl	<rip>, %ecx # <addr>
@@ -359,13 +358,11 @@ Disassembly of section .text:
                	movl	%eax, <rip> # <addr>
                	movl	$0x0, <rip> # <addr>
                	leaq	<rip>, %rcx # <addr>
-               	movl	$0x1, <rip> # <addr>
                	movq	%rcx, -0x28(%rbp)
                	movl	$0x0, <rip> # <addr>
                	movl	<rip>, %eax # <addr>
                	incq	%rax
                	movl	%eax, <rip> # <addr>
-               	movl	$0x1, <rip> # <addr>
                	movq	%rcx, -0x28(%rbp)
                	xorl	%eax, %eax
                	movl	%eax, <rip> # <addr>

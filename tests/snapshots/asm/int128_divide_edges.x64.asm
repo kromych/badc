@@ -2136,7 +2136,6 @@ Disassembly of section .text:
                	imulq	%r11, %rax
                	movabsq	$0x14057b7ef767814f, %r11 # imm = 0x14057B7EF767814F
                	addq	%r11, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shrq	$0x1d, %rcx
                	xorq	%rax, %rcx
@@ -2528,7 +2527,6 @@ Disassembly of section .text:
                	imulq	%r11, %rax
                	movabsq	$0x14057b7ef767814f, %r11 # imm = 0x14057B7EF767814F
                	addq	%r11, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shrq	$0x1d, %rcx
                	xorq	%rax, %rcx
@@ -2547,7 +2545,6 @@ Disassembly of section .text:
                	imulq	%r11, %rax
                	movabsq	$0x14057b7ef767814f, %r11 # imm = 0x14057B7EF767814F
                	addq	%r11, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shrq	$0x1d, %rcx
                	xorq	%rax, %rcx
@@ -2555,7 +2552,6 @@ Disassembly of section .text:
                	imulq	%r11, %rax
                	movabsq	$0x14057b7ef767814f, %r11 # imm = 0x14057B7EF767814F
                	addq	%r11, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rdx
                	shrq	$0x1d, %rdx
                	movq	%rax, %r8

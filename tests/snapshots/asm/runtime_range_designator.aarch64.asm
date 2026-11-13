@@ -19,7 +19,6 @@ Disassembly of section .text:
                	sub	sp, sp, #0x70
                	adrp	x3, <page>
                	mov	x0, #0x0                // =0
-               	str	w0, [x3, #0x20]
                	mov	x1, #0x1                // =1
                	str	w1, [x3, #0x20]
                	mov	x2, #0xb                // =11
@@ -56,14 +55,6 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	str	w0, [x1, #0x20]
                	mov	x0, #0x0                // =0
-               	str	w0, [x1, #0x20]
-               	mov	x2, #0x1                // =1
-               	str	w2, [x1, #0x20]
-               	mov	x2, #0x2                // =2
-               	str	w2, [x1, #0x20]
-               	str	w0, [x1, #0x20]
-               	mov	x2, #0x1                // =1
-               	str	w2, [x1, #0x20]
                	mov	x2, #0x2                // =2
                	str	w2, [x1, #0x20]
                	mov	x2, #0x3                // =3
@@ -91,7 +82,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	str	w0, [x1, #0x20]
                	mov	x2, #0x1                // =1
                	str	w2, [x1, #0x20]
                	mov	x3, #0x13               // =19

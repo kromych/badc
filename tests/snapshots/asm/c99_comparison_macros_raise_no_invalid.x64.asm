@@ -166,10 +166,6 @@ Disassembly of section .text:
                	movl	$0x6, %eax
                	leave
                	retq
-               	movl	$0x0, <rip> # <addr>
-               	movl	$0x1, <rip> # <addr>
-               	movl	$0x2, <rip> # <addr>
-               	movl	$0x3, <rip> # <addr>
                	movl	$0x4, <rip> # <addr>
                	movsd	-0x20(%rbp), %xmm0
                	movsd	-0x30(%rbp), %xmm1

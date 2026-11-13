@@ -26,34 +26,27 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	xorl	%ecx, %ecx
-               	movb	$0x20, <rip> # <addr>
+               	xorl	%eax, %eax
                	movl	$0x80008080, <rip> # imm = 0x80008080
                                                 # <addr>
                	movw	$0x8000, <rip> # imm = 0x8000
                                                 # <addr>
-               	movabsq	$-0x7fffffff80000000, %rax # imm = 0x8000000080000000
-               	movq	%rax, <rip> # <addr>
+               	movabsq	$-0x7fffffff80000000, %rcx # imm = 0x8000000080000000
+               	movq	%rcx, <rip> # <addr>
                	movq	$-0x1, <rip> # <addr>
-               	leaq	<rip>, %rax # <addr>
-               	movb	$0x1, <rip> # <addr>
-               	movw	$0x203, <rip> # imm = 0x203
-                                                # <addr>
-               	movq	%rax, <rip> # <addr>
-               	movb	$0x4, <rip> # <addr>
-               	movb	$0x9, <rip> # <addr>
-               	movb	$0x4, <rip> # <addr>
+               	leaq	<rip>, %rcx # <addr>
+               	movq	%rcx, <rip> # <addr>
                	movw	$0x905, <rip> # imm = 0x905
                                                 # <addr>
-               	movq	<rip>, %rax # <addr>
-               	movb	$0x7, (%rax)
-               	movl	<rip>, %eax # <addr>
-               	incq	%rax
-               	movl	%eax, <rip> # <addr>
-               	movl	$0x20, %eax
+               	movq	<rip>, %rcx # <addr>
+               	movb	$0x7, (%rcx)
+               	movl	<rip>, %ecx # <addr>
+               	incq	%rcx
+               	movl	%ecx, <rip> # <addr>
+               	movl	$0x20, %ecx
                	movzbq	<rip>, %rdx # <addr>
                	cmpl	$0x7, %edx
-               	cmoveq	%rcx, %rax
+               	cmovneq	%rcx, %rax
                	movb	$0x6, <rip> # <addr>
                	movzbq	<rip>, %rcx # <addr>
                	movq	%rax, %rdx

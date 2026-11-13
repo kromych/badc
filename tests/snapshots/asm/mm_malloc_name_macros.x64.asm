@@ -31,7 +31,6 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movl	<rip>, %eax # <addr>
                	incq	%rax
-               	movl	%eax, <rip> # <addr>
                	incq	%rax
                	movl	%eax, <rip> # <addr>
                	cmpl	$0x2, %eax

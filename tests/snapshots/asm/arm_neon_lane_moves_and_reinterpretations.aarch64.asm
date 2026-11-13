@@ -720,8 +720,6 @@ Disassembly of section .text:
 
 <w_vst1_lane_s64>:
                	ldr	d0, [x1]
-               	ldr	d1, [x2]
-               	str	d1, [x0]
                	str	d0, [x0]
                	ret
 
@@ -776,8 +774,6 @@ Disassembly of section .text:
 
 <w_vst1_lane_u64>:
                	ldr	d0, [x1]
-               	ldr	d1, [x2]
-               	str	d1, [x0]
                	str	d0, [x0]
                	ret
 
@@ -832,8 +828,6 @@ Disassembly of section .text:
 
 <w_vst1_lane_p64>:
                	ldr	d0, [x1]
-               	ldr	d1, [x2]
-               	str	d1, [x0]
                	str	d0, [x0]
                	ret
 
@@ -888,8 +882,6 @@ Disassembly of section .text:
 
 <w_vst1_lane_f64>:
                	ldr	d0, [x1]
-               	ldr	d1, [x2]
-               	str	d1, [x0]
                	str	d0, [x0]
                	ret
 

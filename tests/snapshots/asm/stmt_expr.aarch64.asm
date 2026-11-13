@@ -23,27 +23,11 @@ Disassembly of section .text:
 
 <main>:
                	adrp	x0, <page>
-               	str	wzr, [x0, #0x20]
-               	mov	x2, #0x1                // =1
-               	str	w2, [x0, #0x20]
-               	mov	x2, #0x2                // =2
-               	str	w2, [x0, #0x20]
-               	mov	x2, #0x3                // =3
-               	str	w2, [x0, #0x20]
-               	str	wzr, [x0, #0x20]
-               	mov	x2, #0x1                // =1
-               	str	w2, [x0, #0x20]
-               	mov	x2, #0x2                // =2
-               	str	w2, [x0, #0x20]
-               	str	wzr, [x0, #0x20]
-               	mov	x2, #0x1                // =1
-               	str	w2, [x0, #0x20]
-               	mov	x2, #0x2                // =2
-               	str	w2, [x0, #0x20]
-               	mov	x2, #0x3                // =3
-               	str	w2, [x0, #0x20]
-               	str	wzr, [x0, #0x20]
-               	mov	x1, #0x1                // =1
+               	mov	x1, #0x3                // =3
+               	str	w1, [x0, #0x20]
+               	mov	x1, #0x2                // =2
+               	str	w1, [x0, #0x20]
+               	mov	x1, #0x3                // =3
                	str	w1, [x0, #0x20]
                	mov	x1, #0x2                // =2
                	str	w1, [x0, #0x20]

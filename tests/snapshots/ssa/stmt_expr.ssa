@@ -90,18 +90,18 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v71  Imm(0)                                           -> x0
     v72  ImmData(16)                                      -> x0
     v73  Imm(0)                                           -> x0
-    v74  Store { addr=v72, disp=0, value=v73, kind=I32 pc_rel } -> -
+    v74  Imm(0)                                           -> x1
     v75  ImmData(16)                                      -> x1
     v76  Imm(0)                                           -> x1
     v77  Imm(1)                                           -> x1
-    v78  Store { addr=v72, disp=0, value=v77, kind=I32 pc_rel } -> -
+    v78  Imm(0)                                           -> x1
     v79  Imm(1)                                           -> x1
     v80  Imm(1)                                           -> x1
     v81  Imm(1)                                           -> x1
     v82  ImmData(16)                                      -> x1
     v83  Load { addr=v72, disp=0, kind=I32 pc_rel }       -> x1
     v84  Imm(2)                                           -> x1
-    v85  Store { addr=v72, disp=0, value=v84, kind=I32 pc_rel } -> -
+    v85  Imm(0)                                           -> x1
     v86  Imm(2)                                           -> x1
     v87  Imm(2)                                           -> x1
     v88  Imm(2)                                           -> x1
@@ -138,7 +138,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v117 ImmData(16)                                      -> x0
     v118 Load { addr=v117, disp=0, kind=I32 pc_rel }      -> x0
     v119 BinopI { op=add, lhs=v118, rhs_imm=1 }           -> x0
-    v120 Store { addr=v117, disp=0, value=v119, kind=I32 pc_rel } -> -
+    v120 Imm(0)                                           -> x1
     v121 Extend { value=v119, kind=I32 }                  -> x0
     v122 Extend { value=v121, kind=I32 }                  -> x1
     v123 Extend { value=v121, kind=I32 }                  -> x1
@@ -187,18 +187,18 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
   block 6  start_pc=0
     v159 ImmData(16)                                      -> x0
     v160 Imm(0)                                           -> x0
-    v161 Store { addr=v117, disp=0, value=v160, kind=I32 pc_rel } -> -
+    v161 Imm(0)                                           -> x1
     v162 ImmData(16)                                      -> x1
     v163 Imm(0)                                           -> x1
     v164 Imm(1)                                           -> x1
-    v165 Store { addr=v117, disp=0, value=v164, kind=I32 pc_rel } -> -
+    v165 Imm(0)                                           -> x1
     v166 Imm(1)                                           -> x1
     v167 Imm(1)                                           -> x1
     v168 Imm(1)                                           -> x1
     v169 ImmData(16)                                      -> x1
     v170 Load { addr=v117, disp=0, kind=I32 pc_rel }      -> x1
     v171 Imm(2)                                           -> x1
-    v172 Store { addr=v117, disp=0, value=v171, kind=I32 pc_rel } -> -
+    v172 Imm(0)                                           -> x1
     v173 Imm(2)                                           -> x1
     v174 Imm(2)                                           -> x1
     v175 Imm(2)                                           -> x1
@@ -232,11 +232,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
   block 9  start_pc=0
     v198 ImmData(16)                                      -> x1
     v199 Imm(0)                                           -> x1
-    v200 Store { addr=v191, disp=0, value=v160, kind=I32 pc_rel } -> -
+    v200 Imm(0)                                           -> x1
     v201 ImmData(16)                                      -> x1
     v202 Imm(0)                                           -> x1
     v203 Imm(1)                                           -> x1
-    v204 Store { addr=v191, disp=0, value=v203, kind=I32 pc_rel } -> -
+    v204 Imm(0)                                           -> x1
     v205 Imm(1)                                           -> x1
     v206 Imm(1)                                           -> x1
     v207 Imm(1)                                           -> x1

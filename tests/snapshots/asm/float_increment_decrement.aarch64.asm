@@ -66,7 +66,6 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	ldr	d2, [x0, #0x10]
                	fadd	d2, d2, d0
-               	str	d2, [x0, #0x10]
                	fadd	d2, d2, d0
                	str	d2, [x0, #0x10]
                	fmov	d3, #7.00000000

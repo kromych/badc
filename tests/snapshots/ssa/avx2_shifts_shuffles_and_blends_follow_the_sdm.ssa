@@ -9,12 +9,12 @@ fn ent_pc=1357 n_params=0 variadic=false locals=0
     v3   Load { addr=v1, disp=0, kind=I64 pc_rel }        -> x1
     v4   BinopI { op=shru, lhs=v2, rhs_imm=12 }           -> x1
     v5   Binop { op=xor, lhs=v2, rhs=v4 }                 -> x0
-    v6   Store { addr=v1, disp=0, value=v5, kind=I64 pc_rel } -> -
+    v6   Imm(0)                                           -> x1
     v7   Load { addr=v1, disp=0, kind=I64 pc_rel }        -> x1
     v8   Load { addr=v1, disp=0, kind=I64 pc_rel }        -> x1
     v9   BinopI { op=shl, lhs=v5, rhs_imm=25 }            -> x1
     v10  Binop { op=xor, lhs=v5, rhs=v9 }                 -> x0
-    v11  Store { addr=v1, disp=0, value=v10, kind=I64 pc_rel } -> -
+    v11  Imm(0)                                           -> x1
     v12  Load { addr=v1, disp=0, kind=I64 pc_rel }        -> x1
     v13  Load { addr=v1, disp=0, kind=I64 pc_rel }        -> x1
     v14  BinopI { op=shru, lhs=v10, rhs_imm=27 }          -> x1
@@ -20218,12 +20218,12 @@ fn ent_pc=1375 n_params=0 variadic=false locals=20
     v36  Load { addr=v34, disp=0, kind=I64 pc_rel }       -> x6
     v37  BinopI { op=shru, lhs=v35, rhs_imm=12 }          -> x6
     v38  Binop { op=xor, lhs=v35, rhs=v37 }               -> x1
-    v39  Store { addr=v34, disp=0, value=v38, kind=I64 pc_rel } -> -
+    v39  Imm(0)                                           -> x6
     v40  Load { addr=v34, disp=0, kind=I64 pc_rel }       -> x6
     v41  Load { addr=v34, disp=0, kind=I64 pc_rel }       -> x6
     v42  BinopI { op=shl, lhs=v38, rhs_imm=25 }           -> x6
     v43  Binop { op=xor, lhs=v38, rhs=v42 }               -> x1
-    v44  Store { addr=v34, disp=0, value=v43, kind=I64 pc_rel } -> -
+    v44  Imm(0)                                           -> x6
     v45  Load { addr=v34, disp=0, kind=I64 pc_rel }       -> x6
     v46  Load { addr=v34, disp=0, kind=I64 pc_rel }       -> x6
     v47  BinopI { op=shru, lhs=v43, rhs_imm=27 }          -> x6
@@ -20272,12 +20272,12 @@ fn ent_pc=1375 n_params=0 variadic=false locals=20
     v74  Load { addr=v72, disp=0, kind=I64 pc_rel }       -> x6
     v75  BinopI { op=shru, lhs=v73, rhs_imm=12 }          -> x6
     v76  Binop { op=xor, lhs=v73, rhs=v75 }               -> x1
-    v77  Store { addr=v72, disp=0, value=v76, kind=I64 pc_rel } -> -
+    v77  Imm(0)                                           -> x6
     v78  Load { addr=v72, disp=0, kind=I64 pc_rel }       -> x6
     v79  Load { addr=v72, disp=0, kind=I64 pc_rel }       -> x6
     v80  BinopI { op=shl, lhs=v76, rhs_imm=25 }           -> x6
     v81  Binop { op=xor, lhs=v76, rhs=v80 }               -> x1
-    v82  Store { addr=v72, disp=0, value=v81, kind=I64 pc_rel } -> -
+    v82  Imm(0)                                           -> x6
     v83  Load { addr=v72, disp=0, kind=I64 pc_rel }       -> x6
     v84  Load { addr=v72, disp=0, kind=I64 pc_rel }       -> x6
     v85  BinopI { op=shru, lhs=v81, rhs_imm=27 }          -> x6
@@ -20326,12 +20326,12 @@ fn ent_pc=1375 n_params=0 variadic=false locals=20
     v112 Load { addr=v110, disp=0, kind=I64 pc_rel }      -> x6
     v113 BinopI { op=shru, lhs=v111, rhs_imm=12 }         -> x6
     v114 Binop { op=xor, lhs=v111, rhs=v113 }             -> x1
-    v115 Store { addr=v110, disp=0, value=v114, kind=I64 pc_rel } -> -
+    v115 Imm(0)                                           -> x6
     v116 Load { addr=v110, disp=0, kind=I64 pc_rel }      -> x6
     v117 Load { addr=v110, disp=0, kind=I64 pc_rel }      -> x6
     v118 BinopI { op=shl, lhs=v114, rhs_imm=25 }          -> x6
     v119 Binop { op=xor, lhs=v114, rhs=v118 }             -> x1
-    v120 Store { addr=v110, disp=0, value=v119, kind=I64 pc_rel } -> -
+    v120 Imm(0)                                           -> x6
     v121 Load { addr=v110, disp=0, kind=I64 pc_rel }      -> x6
     v122 Load { addr=v110, disp=0, kind=I64 pc_rel }      -> x6
     v123 BinopI { op=shru, lhs=v119, rhs_imm=27 }         -> x6

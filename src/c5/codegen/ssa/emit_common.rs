@@ -3115,6 +3115,9 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         // register-starved unrolled loop.
         pipeline.run("passes::store_forward::run", &mut ssa_funcs, |funcs| {
             super::super::passes::store_forward::run(funcs);
+            for f in funcs.iter_mut() {
+                super::super::passes::store_forward::drop_overwritten_stores(f);
+            }
         });
         // The stores the forwarding left to slots nothing reads go; the
         // slots lose their frame location.

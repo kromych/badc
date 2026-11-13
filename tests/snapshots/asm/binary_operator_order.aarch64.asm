@@ -20,7 +20,6 @@ Disassembly of section .text:
                	str	w1, [x0, #0x20]
                	mov	x1, #0x2                // =2
                	str	w1, [x0, #0x20]
-               	str	wzr, [x0, #0x20]
                	mov	x3, #0x1                // =1
                	str	w3, [x0, #0x20]
                	mov	x1, #0x2                // =2
@@ -42,7 +41,6 @@ Disassembly of section .text:
                	mov	x0, #0x17               // =23
                	ret
                	adrp	x0, <page>
-               	str	wzr, [x0, #0x44]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	mov	x4, #0x0                // =0
@@ -73,7 +71,6 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x19               // =25
                	ret
-               	str	wzr, [x0, #0x44]
                	mov	x3, #0x0                // =0
                	mov	x4, #0x1                // =1
                	str	w4, [x0, #0x44]
@@ -98,7 +95,6 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x1b               // =27
                	ret
-               	str	wzr, [x0, #0x44]
                	mov	x3, #0x1                // =1
                	mov	x4, #0x0                // =0
                	mov	x5, #0x1                // =1
@@ -113,7 +109,6 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x1c               // =28
                	ret
-               	str	wzr, [x0, #0x44]
                	mov	x4, #0x0                // =0
                	mov	x5, #0x1                // =1
                	str	w5, [x0, #0x44]
@@ -188,7 +183,6 @@ Disassembly of section .text:
                	mov	x0, #0x21               // =33
                	ret
                	mov	x0, #0x0                // =0
-               	str	w0, [x1, #0x44]
                	mov	x3, #0x0                // =0
                	mov	x4, #0x1                // =1
                	str	w4, [x1, #0x44]

@@ -82,7 +82,6 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	b	<addr>
-               	str	xzr, [x0, #0x78]
                	mov	x1, #0x80000000         // =2147483648
                	str	x1, [x0, #0x78]
                	adrp	x0, <page>

@@ -102,7 +102,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=2
     v72  StoreLocal { off=-2, value=v71, kind=I32 }       -> -
     v73  LocalAddr(-2)                                    -> x1
     v74  ImmData(16)                                      -> x2
-    v75  Store { addr=v32, disp=0, value=v73, kind=I64 pc_rel } -> -
+    v75  Imm(0)                                           -> x2
     v76  Imm(6)                                           -> x2
     v77  StoreLocal { off=-1, value=v76, kind=I32 }       -> -
     v78  LocalAddr(-1)                                    -> x2

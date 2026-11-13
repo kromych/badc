@@ -220,11 +220,9 @@ Disassembly of section .text:
                	movq	%rcx, %rsi
                	shrq	$0xc, %rsi
                	xorq	%rsi, %rcx
-               	movq	%rcx, <rip> # <addr>
                	movq	%rcx, %rsi
                	shlq	$0x19, %rsi
                	xorq	%rsi, %rcx
-               	movq	%rcx, <rip> # <addr>
                	movq	%rcx, %rsi
                	shrq	$0x1b, %rsi
                	xorq	%rsi, %rcx
@@ -254,11 +252,9 @@ Disassembly of section .text:
                	movq	%rcx, %rsi
                	shrq	$0xc, %rsi
                	xorq	%rsi, %rcx
-               	movq	%rcx, <rip> # <addr>
                	movq	%rcx, %rsi
                	shlq	$0x19, %rsi
                	xorq	%rsi, %rcx
-               	movq	%rcx, <rip> # <addr>
                	movq	%rcx, %rsi
                	shrq	$0x1b, %rsi
                	xorq	%rsi, %rcx

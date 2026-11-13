@@ -30,12 +30,12 @@ fn ent_pc=1359 n_params=0 variadic=false locals=12
     v1889 Load { addr=v1887, disp=0, kind=I64 pc_rel }     -> x8
     v1890 BinopI { op=shru, lhs=v1888, rhs_imm=12 }        -> x8
     v1891 Binop { op=xor, lhs=v1888, rhs=v1890 }           -> x1
-    v1892 Store { addr=v1887, disp=0, value=v1891, kind=I64 pc_rel } -> -
+    v1892 Imm(0)                                           -> x8
     v1893 Load { addr=v1887, disp=0, kind=I64 pc_rel }     -> x8
     v1894 Load { addr=v1887, disp=0, kind=I64 pc_rel }     -> x8
     v1895 BinopI { op=shl, lhs=v1891, rhs_imm=25 }         -> x8
     v1896 Binop { op=xor, lhs=v1891, rhs=v1895 }           -> x1
-    v1897 Store { addr=v1887, disp=0, value=v1896, kind=I64 pc_rel } -> -
+    v1897 Imm(0)                                           -> x8
     v1898 Load { addr=v1887, disp=0, kind=I64 pc_rel }     -> x8
     v1899 Load { addr=v1887, disp=0, kind=I64 pc_rel }     -> x8
     v1900 BinopI { op=shru, lhs=v1896, rhs_imm=27 }        -> x8
@@ -86,12 +86,12 @@ fn ent_pc=1359 n_params=0 variadic=false locals=12
     v1927 Load { addr=v1925, disp=0, kind=I64 pc_rel }     -> x8
     v1928 BinopI { op=shru, lhs=v1926, rhs_imm=12 }        -> x8
     v1929 Binop { op=xor, lhs=v1926, rhs=v1928 }           -> x1
-    v1930 Store { addr=v1925, disp=0, value=v1929, kind=I64 pc_rel } -> -
+    v1930 Imm(0)                                           -> x8
     v1931 Load { addr=v1925, disp=0, kind=I64 pc_rel }     -> x8
     v1932 Load { addr=v1925, disp=0, kind=I64 pc_rel }     -> x8
     v1933 BinopI { op=shl, lhs=v1929, rhs_imm=25 }         -> x8
     v1934 Binop { op=xor, lhs=v1929, rhs=v1933 }           -> x1
-    v1935 Store { addr=v1925, disp=0, value=v1934, kind=I64 pc_rel } -> -
+    v1935 Imm(0)                                           -> x8
     v1936 Load { addr=v1925, disp=0, kind=I64 pc_rel }     -> x8
     v1937 Load { addr=v1925, disp=0, kind=I64 pc_rel }     -> x8
     v1938 BinopI { op=shru, lhs=v1934, rhs_imm=27 }        -> x8
@@ -142,12 +142,12 @@ fn ent_pc=1359 n_params=0 variadic=false locals=12
     v1965 Load { addr=v1963, disp=0, kind=I64 pc_rel }     -> x8
     v1966 BinopI { op=shru, lhs=v1964, rhs_imm=12 }        -> x8
     v1967 Binop { op=xor, lhs=v1964, rhs=v1966 }           -> x1
-    v1968 Store { addr=v1963, disp=0, value=v1967, kind=I64 pc_rel } -> -
+    v1968 Imm(0)                                           -> x8
     v1969 Load { addr=v1963, disp=0, kind=I64 pc_rel }     -> x8
     v1970 Load { addr=v1963, disp=0, kind=I64 pc_rel }     -> x8
     v1971 BinopI { op=shl, lhs=v1967, rhs_imm=25 }         -> x8
     v1972 Binop { op=xor, lhs=v1967, rhs=v1971 }           -> x1
-    v1973 Store { addr=v1963, disp=0, value=v1972, kind=I64 pc_rel } -> -
+    v1973 Imm(0)                                           -> x8
     v1974 Load { addr=v1963, disp=0, kind=I64 pc_rel }     -> x8
     v1975 Load { addr=v1963, disp=0, kind=I64 pc_rel }     -> x8
     v1976 BinopI { op=shru, lhs=v1972, rhs_imm=27 }        -> x8
@@ -198,12 +198,12 @@ fn ent_pc=1359 n_params=0 variadic=false locals=12
     v2003 Load { addr=v2001, disp=0, kind=I64 pc_rel }     -> x8
     v2004 BinopI { op=shru, lhs=v2002, rhs_imm=12 }        -> x8
     v2005 Binop { op=xor, lhs=v2002, rhs=v2004 }           -> x1
-    v2006 Store { addr=v2001, disp=0, value=v2005, kind=I64 pc_rel } -> -
+    v2006 Imm(0)                                           -> x8
     v2007 Load { addr=v2001, disp=0, kind=I64 pc_rel }     -> x8
     v2008 Load { addr=v2001, disp=0, kind=I64 pc_rel }     -> x8
     v2009 BinopI { op=shl, lhs=v2005, rhs_imm=25 }         -> x8
     v2010 Binop { op=xor, lhs=v2005, rhs=v2009 }           -> x1
-    v2011 Store { addr=v2001, disp=0, value=v2010, kind=I64 pc_rel } -> -
+    v2011 Imm(0)                                           -> x8
     v2012 Load { addr=v2001, disp=0, kind=I64 pc_rel }     -> x8
     v2013 Load { addr=v2001, disp=0, kind=I64 pc_rel }     -> x8
     v2014 BinopI { op=shru, lhs=v2010, rhs_imm=27 }        -> x8

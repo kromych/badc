@@ -80,7 +80,6 @@ Disassembly of section .text:
                	mov	x2, #0x5                // =5
                	stur	w2, [x29, #-0x10]
                	sub	x2, x29, #0x10
-               	str	x2, [x1, #0x20]
                	mov	x5, #0x6                // =6
                	stur	w5, [x29, #-0x8]
                	str	x0, [x1, #0x20]

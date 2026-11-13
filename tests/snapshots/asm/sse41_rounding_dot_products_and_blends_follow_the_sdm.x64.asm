@@ -224,11 +224,9 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	shrq	$0xc, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shlq	$0x19, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shrq	$0x1b, %rcx
                	xorq	%rcx, %rax
@@ -310,11 +308,9 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	shrq	$0xc, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shlq	$0x19, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shrq	$0x1b, %rcx
                	xorq	%rcx, %rax
@@ -2656,11 +2652,9 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	shrq	$0xc, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shlq	$0x19, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shrq	$0x1b, %rcx
                	xorq	%rcx, %rax
@@ -2682,11 +2676,9 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	shrq	$0xc, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shlq	$0x19, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shrq	$0x1b, %rcx
                	xorq	%rcx, %rax
@@ -2708,11 +2700,9 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	shrq	$0xc, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shlq	$0x19, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shrq	$0x1b, %rcx
                	xorq	%rcx, %rax
@@ -2734,11 +2724,9 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	shrq	$0xc, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shlq	$0x19, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shrq	$0x1b, %rcx
                	xorq	%rcx, %rax
@@ -2760,11 +2748,9 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	shrq	$0xc, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shlq	$0x19, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shrq	$0x1b, %rcx
                	xorq	%rcx, %rax
@@ -2786,11 +2772,9 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	shrq	$0xc, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shlq	$0x19, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shrq	$0x1b, %rcx
                	xorq	%rcx, %rax
@@ -2812,11 +2796,9 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	shrq	$0xc, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shlq	$0x19, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shrq	$0x1b, %rcx
                	xorq	%rcx, %rax
@@ -2838,11 +2820,9 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	shrq	$0xc, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shlq	$0x19, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shrq	$0x1b, %rcx
                	xorq	%rcx, %rax
@@ -4136,86 +4116,69 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	shrq	$0xc, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shlq	$0x19, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shrq	$0x1b, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movabsq	$0x2545f4914f6cdd1d, %rcx # imm = 0x2545F4914F6CDD1D
                	imulq	%rax, %rcx
                	vmovd	%ecx, %xmm0
                	movq	%rax, %rcx
                	shrq	$0xc, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shlq	$0x19, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shrq	$0x1b, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movabsq	$0x2545f4914f6cdd1d, %rbx # imm = 0x2545F4914F6CDD1D
                	imulq	%rax, %rbx
                	shrq	$0x7, %rbx
                	movq	%rax, %rcx
                	shrq	$0xc, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shlq	$0x19, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shrq	$0x1b, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movabsq	$0x2545f4914f6cdd1d, %rcx # imm = 0x2545F4914F6CDD1D
                	imulq	%rax, %rcx
                	vpinsrd	$0x1, %ecx, %xmm0, %xmm0
                	movq	%rax, %rcx
                	shrq	$0xc, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shlq	$0x19, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shrq	$0x1b, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movabsq	$0x2545f4914f6cdd1d, %r14 # imm = 0x2545F4914F6CDD1D
                	imulq	%rax, %r14
                	shrq	$0x7, %r14
                	movq	%rax, %rcx
                	shrq	$0xc, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shlq	$0x19, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shrq	$0x1b, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movabsq	$0x2545f4914f6cdd1d, %rcx # imm = 0x2545F4914F6CDD1D
                	imulq	%rax, %rcx
                	vpinsrd	$0x2, %ecx, %xmm0, %xmm0
                	movq	%rax, %rcx
                	shrq	$0xc, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shlq	$0x19, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shrq	$0x1b, %rcx
                	xorq	%rcx, %rax
@@ -4227,11 +4190,9 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	shrq	$0xc, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shlq	$0x19, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shrq	$0x1b, %rcx
                	xorq	%rcx, %rax
@@ -4243,11 +4204,9 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	shrq	$0xc, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shlq	$0x19, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shrq	$0x1b, %rcx
                	xorq	%rcx, %rax
@@ -4604,11 +4563,9 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	shrq	$0xc, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shlq	$0x19, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shrq	$0x1b, %rcx
                	xorq	%rcx, %rax
@@ -4620,11 +4577,9 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	shrq	$0xc, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shlq	$0x19, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shrq	$0x1b, %rcx
                	xorq	%rcx, %rax
@@ -4637,11 +4592,9 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	shrq	$0xc, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shlq	$0x19, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shrq	$0x1b, %rcx
                	xorq	%rcx, %rax
@@ -4654,11 +4607,9 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	shrq	$0xc, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shlq	$0x19, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shrq	$0x1b, %rcx
                	xorq	%rcx, %rax
@@ -4670,11 +4621,9 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	shrq	$0xc, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shlq	$0x19, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shrq	$0x1b, %rcx
                	xorq	%rcx, %rax
@@ -4687,11 +4636,9 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	shrq	$0xc, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shlq	$0x19, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shrq	$0x1b, %rcx
                	xorq	%rcx, %rax
@@ -4704,11 +4651,9 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	shrq	$0xc, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shlq	$0x19, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shrq	$0x1b, %rcx
                	xorq	%rcx, %rax
@@ -4720,11 +4665,9 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	shrq	$0xc, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shlq	$0x19, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shrq	$0x1b, %rcx
                	xorq	%rcx, %rax
@@ -4737,11 +4680,9 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	shrq	$0xc, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shlq	$0x19, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shrq	$0x1b, %rcx
                	xorq	%rcx, %rax
@@ -4754,11 +4695,9 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	shrq	$0xc, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shlq	$0x19, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shrq	$0x1b, %rcx
                	xorq	%rcx, %rax
@@ -4770,11 +4709,9 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	shrq	$0xc, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shlq	$0x19, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shrq	$0x1b, %rcx
                	xorq	%rcx, %rax
@@ -4787,11 +4724,9 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	shrq	$0xc, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shlq	$0x19, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, <rip> # <addr>
                	movq	%rax, %rcx
                	shrq	$0x1b, %rcx
                	xorq	%rcx, %rax

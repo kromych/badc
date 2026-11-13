@@ -13,17 +13,17 @@ fn ent_pc=435 n_params=0 variadic=false locals=0
     v7   Load { addr=v5, disp=0, kind=I64 pc_rel }        -> x1
     v8   BinopI { op=shru, lhs=v6, rhs_imm=12 }           -> x1
     v9   Binop { op=xor, lhs=v6, rhs=v8 }                 -> x0
-    v10  Store { addr=v5, disp=0, value=v9, kind=I64 pc_rel } -> -
+    v10  Imm(0)                                           -> x1
     v11  Load { addr=v5, disp=0, kind=I64 pc_rel }        -> x1
     v12  Load { addr=v5, disp=0, kind=I64 pc_rel }        -> x1
     v13  BinopI { op=shl, lhs=v9, rhs_imm=25 }            -> x1
     v14  Binop { op=xor, lhs=v9, rhs=v13 }                -> x0
-    v15  Store { addr=v5, disp=0, value=v14, kind=I64 pc_rel } -> -
+    v15  Imm(0)                                           -> x1
     v16  Load { addr=v5, disp=0, kind=I64 pc_rel }        -> x1
     v17  Load { addr=v5, disp=0, kind=I64 pc_rel }        -> x1
     v18  BinopI { op=shru, lhs=v14, rhs_imm=27 }          -> x1
     v19  Binop { op=xor, lhs=v14, rhs=v18 }               -> x1
-    v20  Store { addr=v5, disp=0, value=v19, kind=I64 pc_rel } -> -
+    v20  Imm(0)                                           -> x0
     v21  Imm(0)                                           -> x0
     v22  Imm(0)                                           -> x0
     v23  Imm(0)                                           -> x0
@@ -41,12 +41,12 @@ fn ent_pc=435 n_params=0 variadic=false locals=0
     v35  Load { addr=v5, disp=0, kind=I64 pc_rel }        -> x2
     v36  BinopI { op=shru, lhs=v19, rhs_imm=12 }          -> x2
     v37  Binop { op=xor, lhs=v19, rhs=v36 }               -> x1
-    v38  Store { addr=v5, disp=0, value=v37, kind=I64 pc_rel } -> -
+    v38  Imm(0)                                           -> x2
     v39  Load { addr=v5, disp=0, kind=I64 pc_rel }        -> x2
     v40  Load { addr=v5, disp=0, kind=I64 pc_rel }        -> x2
     v41  BinopI { op=shl, lhs=v37, rhs_imm=25 }           -> x2
     v42  Binop { op=xor, lhs=v37, rhs=v41 }               -> x1
-    v43  Store { addr=v5, disp=0, value=v42, kind=I64 pc_rel } -> -
+    v43  Imm(0)                                           -> x2
     v44  Load { addr=v5, disp=0, kind=I64 pc_rel }        -> x2
     v45  Load { addr=v5, disp=0, kind=I64 pc_rel }        -> x2
     v46  BinopI { op=shru, lhs=v42, rhs_imm=27 }          -> x2

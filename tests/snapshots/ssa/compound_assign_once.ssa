@@ -558,8 +558,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v532 Load { addr=v520, disp=8, kind=I64 pc_rel }      -> x0
     v533 BinopI { op=and, lhs=v532, rhs_imm=-68719476736 } -> x0
     v534 Imm(3)                                           -> x1
-    v535 BinopI { op=or, lhs=v533, rhs_imm=0 }            -> x2
-    v536 Store { addr=v520, disp=0, value=v534, kind=I64 pc_rel } -> -
+    v535 BinopI { op=or, lhs=v533, rhs_imm=0 }            -> x1
+    v536 Imm(0)                                           -> x1
     v537 Store { addr=v520, disp=8, value=v533, kind=I64 pc_rel } -> -
     v538 Imm(805306368)                                   -> x1
     v539 Imm(0)                                           -> x1
@@ -845,7 +845,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v177 Load { addr=v175, disp=56, kind=I64 pc_rel }     -> x0
     v178 BinopI { op=and, lhs=v177, rhs_imm=-4503599627366401 } -> x0
     v179 BinopI { op=or, lhs=v178, rhs_imm=2251799813681152 } -> x0
-    v180 Store { addr=v175, disp=56, value=v179, kind=I64 pc_rel } -> -
+    v180 Imm(0)                                           -> x1
     v181 Load { addr=v175, disp=56, kind=I64 pc_rel }     -> x1
     v182 BinopI { op=shr, lhs=v179, rhs_imm=12 }          -> x1
     v183 BinopI { op=shl, lhs=v182, rhs_imm=24 }          -> x1
@@ -1204,7 +1204,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
   block 34  start_pc=0
     v73  ImmData(152)                                     -> x0
     v74  Imm(0)                                           -> x0
-    v75  Store { addr=v73, disp=0, value=v74, kind=I32 pc_rel } -> -
+    v75  Imm(0)                                           -> x0
     v76  ImmData(152)                                     -> x0
     v77  Imm(0)                                           -> x0
     v78  Imm(1)                                           -> x0

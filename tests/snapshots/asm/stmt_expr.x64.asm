@@ -32,14 +32,10 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	movl	$0x0, <rip> # <addr>
-               	movl	$0x1, <rip> # <addr>
-               	movl	$0x2, <rip> # <addr>
                	movl	$0x3, <rip> # <addr>
                	movl	$0x0, <rip> # <addr>
                	movl	<rip>, %eax # <addr>
                	incq	%rax
-               	movl	%eax, <rip> # <addr>
                	imulq	$0xa, %rax, %rcx
                	incq	%rax
                	movl	%eax, <rip> # <addr>
@@ -53,16 +49,11 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	retq
                	xorl	%eax, %eax
-               	movl	%eax, <rip> # <addr>
-               	movl	$0x1, <rip> # <addr>
-               	movl	$0x2, <rip> # <addr>
                	movl	$0x3, <rip> # <addr>
                	movl	<rip>, %ecx # <addr>
                	cmpl	$0x3, %ecx
                	je	<addr>
                	movl	$0x5, %eax
                	retq
-               	movl	%eax, <rip> # <addr>
-               	movl	$0x1, <rip> # <addr>
                	movl	$0x2, <rip> # <addr>
                	retq

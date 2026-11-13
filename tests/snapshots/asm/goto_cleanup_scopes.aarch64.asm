@@ -371,46 +371,42 @@ Disassembly of section .text:
                	stp	x22, x23, [sp, #0x10]
                	stp	x29, x30, [sp, #0x50]
                	add	x29, sp, #0x50
-               	mov	x2, #0x0                // =0
-               	stur	w2, [x29, #-0x10]
-               	adrp	x1, <page>
-               	str	w2, [x1, #0x80]
+               	mov	x1, #0x0                // =0
+               	stur	w1, [x29, #-0x10]
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	mov	x4, #0x1                // =1
-               	str	w4, [x0]
-               	stur	x0, [x29, #-0x8]
-               	str	w2, [x0]
-               	ldrsw	x3, [x1, #0x80]
+               	str	w1, [x0, #0x80]
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	stur	x2, [x29, #-0x8]
+               	str	w1, [x2]
+               	ldrsw	x3, [x0, #0x80]
                	add	x3, x3, #0x1
-               	str	w3, [x1, #0x80]
+               	str	w3, [x0, #0x80]
                	cmp	w3, #0x1
                	cset	x3, eq
-               	ldrsw	x5, [x0]
-               	cmp	w5, #0x0
-               	csel	x5, x2, x3, ne
+               	ldrsw	x4, [x2]
+               	cmp	w4, #0x0
+               	csel	x4, x1, x3, ne
                	adrp	x3, <page>
-               	ldrsw	x6, [x3, #0x74]
-               	add	x6, x6, #0x1
-               	str	w6, [x3, #0x74]
-               	cbnz	w5, <addr>
-               	adrp	x5, <page>
-               	ldrsw	x6, [x5, #0x78]
-               	cbnz	w6, <addr>
-               	ldrsw	x6, [x3, #0x74]
-               	str	w6, [x5, #0x78]
-               	str	w2, [x1, #0x80]
-               	str	w4, [x0]
-               	str	w2, [x0]
-               	ldrsw	x5, [x1, #0x80]
+               	ldrsw	x5, [x3, #0x74]
                	add	x5, x5, #0x1
-               	str	w5, [x1, #0x80]
-               	str	w4, [x0]
-               	str	w2, [x0]
-               	ldrsw	x2, [x1, #0x80]
-               	add	x2, x2, #0x1
-               	str	w2, [x1, #0x80]
-               	ldrsw	x1, [x0]
+               	str	w5, [x3, #0x74]
+               	cbnz	w4, <addr>
+               	adrp	x4, <page>
+               	ldrsw	x5, [x4, #0x78]
+               	cbnz	w5, <addr>
+               	ldrsw	x5, [x3, #0x74]
+               	str	w5, [x4, #0x78]
+               	str	w1, [x0, #0x80]
+               	str	w1, [x2]
+               	ldrsw	x4, [x0, #0x80]
+               	add	x4, x4, #0x1
+               	str	w4, [x0, #0x80]
+               	str	w1, [x2]
+               	ldrsw	x1, [x0, #0x80]
+               	add	x1, x1, #0x1
+               	str	w1, [x0, #0x80]
+               	ldrsw	x1, [x2]
                	mov	x0, #0x0                // =0
                	cbnz	w1, <addr>
                	adrp	x1, <page>

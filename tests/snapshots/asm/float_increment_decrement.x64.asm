@@ -84,7 +84,6 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm0 # <addr>
                	movq	%rax, %xmm15
                	addsd	%xmm15, %xmm0
-               	movsd	%xmm0, <rip> # <addr>
                	movq	%rax, %xmm15
                	addsd	%xmm15, %xmm0
                	movsd	%xmm0, <rip> # <addr>

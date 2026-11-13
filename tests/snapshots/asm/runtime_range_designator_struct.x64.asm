@@ -57,7 +57,6 @@ Disassembly of section .text:
                	je	<addr>
                	leave
                	retq
-               	movl	$0x0, <rip> # <addr>
                	movl	$0x1, <rip> # <addr>
                	movl	$0x0, <rip> # <addr>
                	leaq	-0x70(%rbp), %rdx

@@ -1020,6 +1020,93 @@ fn writes_memory(inst: &Inst) -> bool {
     )
 }
 
+/// Drop each store a later store in its block overwrites, with no access
+/// between that may read the bytes: nothing reads what it writes. Two
+/// stores through one base ([`base_disp`]) compare by their byte ranges. A
+/// load through that base keeps the stores whose bytes it reads; any other
+/// read of memory -- a load through another base or of a slot, a call, an
+/// asm statement, a copy, a volatile or atomic access -- keeps every
+/// earlier store, and a store between, which only writes, keeps none. A
+/// store whose value something reads through its id stays. A function with
+/// a `__try` region, whose handlers may read memory a fault between the
+/// stores leaves, keeps its stores.
+pub(crate) fn drop_overwritten_stores(func: &mut FunctionSsa) {
+    if func.has_seh() {
+        return;
+    }
+    let mut uses = crate::c5::codegen::ssa::reg_alloc::compute_use_counts(func);
+    for b in &func.blocks {
+        if let Some(u) = uses.get_mut(b.exit_acc as usize) {
+            *u += 1;
+        }
+    }
+    let reads = |inst: &Inst| {
+        matches!(
+            inst,
+            Inst::Load { .. }
+                | Inst::LoadLocal { .. }
+                | Inst::LoadIndexed { .. }
+                | Inst::SegLoad { .. }
+        )
+    };
+    let mut dead = Vec::new();
+    for block in &func.blocks {
+        // The byte ranges the block's later stores write, by base.
+        let mut written: Vec<(ValueId, i64, u8)> = Vec::new();
+        for i in block.inst_range.clone().rev() {
+            match func.insts[i as usize] {
+                Inst::Store {
+                    addr,
+                    disp,
+                    kind,
+                    volatile: false,
+                    pc_rel: false,
+                    ..
+                } => {
+                    let (base, at) = base_disp(func, addr, disp);
+                    let w = store_width(kind);
+                    let covered = |&(b, a, aw): &(ValueId, i64, u8)| {
+                        b == base && a <= at && at + i64::from(w) <= a + i64::from(aw)
+                    };
+                    if written.iter().any(covered) {
+                        if uses[i as usize] == 0 {
+                            dead.push(i);
+                        }
+                    } else {
+                        written.push((base, at, w));
+                    }
+                }
+                Inst::Store {
+                    volatile: false, ..
+                }
+                | Inst::StoreLocal {
+                    volatile: false, ..
+                } => {}
+                Inst::Load {
+                    addr,
+                    disp,
+                    kind,
+                    volatile: false,
+                    pc_rel: false,
+                    ..
+                } if uses[i as usize] > 0 => {
+                    let (base, at) = base_disp(func, addr, disp);
+                    let w = load_width(kind);
+                    written.retain(|&(b, a, aw)| b == base && !overlaps64(a, aw, at, w));
+                }
+                // A plain load nothing reads is not emitted.
+                ref inst
+                    if !writes_memory(inst)
+                        && (!reads(inst) || (uses[i as usize] == 0 && inst.is_pure())) => {}
+                _ => written.clear(),
+            }
+        }
+    }
+    for i in dead {
+        func.insts[i as usize] = Inst::Imm(0);
+    }
+}
+
 /// A location the block prefix has written a known constant to.
 #[derive(Clone, Copy, PartialEq)]
 struct ConstEntry {
@@ -1681,6 +1768,72 @@ mod tests {
     /// A block copy between the store and the load clears the table: the
     /// copy can write through the destination pointer, so the reload is
     /// not forwarded.
+    /// A store through `p` (v0) a later store to the same bytes overwrites
+    /// goes, unless something between may read them: a load through
+    /// another base `q` (v1), a volatile load, a reader of the store's own
+    /// value; a narrower later store covers only part of it.
+    #[test]
+    fn a_store_overwritten_before_any_read_goes() {
+        use crate::c5::ir::NO_VALUE;
+        let store = |disp, value, kind| Inst::Store {
+            addr: 0,
+            disp,
+            value,
+            kind,
+            volatile: false,
+            align: 0,
+            pc_rel: false,
+        };
+        let load = |addr, disp, volatile| Inst::Load {
+            addr,
+            disp,
+            kind: LoadKind::I64,
+            volatile,
+            align: 0,
+            pc_rel: false,
+        };
+        // Whether the first store (v4) survives `between` and a store of
+        // `last` at displacement `at`; the function returns `ret`.
+        let survives = |between: Option<Inst>, at: i32, last: StoreKind, ret: u32| {
+            let mut insts = alloc::vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64
+                },
+                Inst::ParamRef {
+                    idx: 1,
+                    kind: LoadKind::I64
+                },
+                Inst::Imm(1),
+                Inst::Imm(2),
+                store(0, 2, StoreKind::I64),
+            ];
+            insts.extend(between);
+            insts.push(store(at, 3, last));
+            let mut f = fresh(insts, Terminator::Return(ret), NO_VALUE);
+            super::drop_overwritten_stores(&mut f);
+            matches!(f.insts[4], Inst::Store { .. })
+        };
+        assert!(!survives(None, 0, StoreKind::I64, NO_VALUE));
+        assert!(!survives(Some(load(0, 8, false)), 0, StoreKind::I64, 5));
+        assert!(survives(Some(load(1, 0, false)), 0, StoreKind::I64, 5));
+        assert!(survives(Some(load(0, 0, false)), 0, StoreKind::I64, 5));
+        assert!(survives(
+            Some(load(0, 8, true)),
+            0,
+            StoreKind::I64,
+            NO_VALUE
+        ));
+        assert!(!survives(
+            Some(load(1, 0, false)),
+            0,
+            StoreKind::I64,
+            NO_VALUE
+        ));
+        assert!(survives(None, 4, StoreKind::I32, NO_VALUE));
+        assert!(survives(None, 0, StoreKind::I64, 4));
+    }
+
     #[test]
     fn clobber_between_store_and_load_blocks_forward() {
         let mut f = fresh(

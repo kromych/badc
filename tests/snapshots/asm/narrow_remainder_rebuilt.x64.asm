@@ -34,18 +34,6 @@ Disassembly of section .text:
                                                 # <addr>
                	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
                                                 # <addr>
-               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
-                                                # <addr>
-               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
-                                                # <addr>
-               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
-                                                # <addr>
-               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
-                                                # <addr>
-               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
-                                                # <addr>
-               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
-                                                # <addr>
                	movl	<rip>, %ecx # <addr>
                	movl	<rip>, %esi # <addr>
                	movl	%ecx, %eax

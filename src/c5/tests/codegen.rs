@@ -17964,6 +17964,56 @@ fn a64_inline_asm_assembles_the_sve_immediate_forms() {
     }
 }
 
+/// The SVE by-element forms assemble in inline asm: an index in one field
+/// or split in two, the multiplicand in a 3- or 4-bit field, the widening
+/// ones, and the indexed dup with its `mov` alias, whose index and element
+/// size share one field. The words are Apple clang 21.0.0's.
+#[test]
+fn a64_inline_asm_assembles_the_sve_indexed_forms() {
+    const SRC: &str = "void f(void) { __asm__ volatile(\"\
+        fmla z0.h, z1.h, z7.h[7]\\n fmla z2.s, z3.s, z4.s[3]\\n fmla z5.d, z6.d, z15.d[1]\\n\
+        fmul z8.s, z9.s, z2.s[2]\\n sdot z10.s, z11.b, z3.b[3]\\n sdot z12.d, z13.h, z14.h[1]\\n\
+        mul z16.h, z17.h, z5.h[6]\\n smlalb z18.s, z19.h, z6.h[7]\\n\
+        umlalt z20.d, z21.s, z13.s[3]\\n sqdmullb z22.d, z23.s, z12.s[2]\\n\
+        dup z24.b, z25.b[63]\\n dup z26.q, z27.q[3]\\n mov z28.s, z29.s[15]\\n\
+        dup z30.d, z31.d[0]\"); }\n";
+    let words = a64_opt_function_words(SRC, "f");
+    assert_eq!(
+        words[..words.len() - 1],
+        [
+            0x647F0020, 0x64BC0062, 0x64FF00C5, 0x64B22128, 0x44BB016A, 0x44FE01AC, 0x4475FA30,
+            0x44BE8A72, 0x44FD9EB4, 0x44FCE2F6, 0x05FF2338, 0x05F0237A, 0x05FC23BC, 0x052823FE,
+        ],
+        "{words:08x?}"
+    );
+    let assembles = |insn: &str| {
+        use crate::{CompileOptions, NativeOptions, OutputKind, Target};
+        let src = alloc::format!("void f(void) {{ __asm__ volatile(\"{insn}\"); }}\n");
+        let options = CompileOptions::default().with_no_entry_point(true);
+        crate::Compiler::with_options(src, Target::LinuxAarch64, options)
+            .compile()
+            .is_ok_and(|p| {
+                let opts = NativeOptions {
+                    output_kind: OutputKind::Relocatable,
+                    ..NativeOptions::new().with_optimize()
+                };
+                crate::emit_native_with_options(&p, Target::LinuxAarch64, opts).is_ok()
+            })
+    };
+    assert!(assembles("fmla z0.s, z1.s, z7.s[3]"));
+    for bad in [
+        "fmla z0.s, z1.s, z7.s[4]",
+        "fmla z0.s, z1.s, z8.s[0]",
+        "fmla z0.d, z1.d, z16.d[0]",
+        "umlalt z20.d, z21.s, z13.s[4]",
+        "dup z0.d, z1.d[8]",
+        "dup z0.q, z1.q[4]",
+        "dup z0.s, z1.d[0]",
+    ] {
+        assert!(!assembles(bad), "{bad}");
+    }
+}
+
 /// Followed from x0, the byte loads of `from_big` read offsets 1 and 8192.
 #[test]
 fn a64_far_field_load_reads_its_displacement() {

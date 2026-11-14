@@ -196,6 +196,8 @@ pub(crate) enum AsmOpndA64 {
     PRegQ { num: u8, merge: bool },
     /// An SVE register list `{zN.T, ..}` of `count` consecutive registers.
     ZList { first: u8, count: u8, size: u8 },
+    /// An element `zN.T[index]` of an SVE vector.
+    ZElem { num: u8, size: u8, index: u8 },
     /// `[base, #imm, mul vl]`: a memory reference whose offset counts vector
     /// or predicate lengths, as the SVE and SME loads and stores scale it.
     MemVl { base: MemBase, off: i64 },
@@ -1317,6 +1319,13 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
             size,
             index,
         });
+    }
+    if let Some((reg, index)) = tok.strip_suffix(']').and_then(|t| t.split_once('['))
+        && let Some((num, Some(size))) = parse_sve_reg(reg.trim(), 'z', 32)
+        && let Some(index) =
+            parse_int(index.trim().trim_start_matches('#')).and_then(|i| u8::try_from(i).ok())
+    {
+        return Ok(AsmOpndA64::ZElem { num, size, index });
     }
     if let Some((first, count, size)) = parse_sve_list(tok) {
         return Ok(AsmOpndA64::ZList { first, count, size });
@@ -2699,6 +2708,14 @@ mod tests {
             parse_operand("p1.q"),
             Ok(AsmOpndA64::PReg { .. })
         ));
+        assert_eq!(
+            parse_operand("z3.s[2]"),
+            Ok(AsmOpndA64::ZElem {
+                num: 3,
+                size: 2,
+                index: 2
+            })
+        );
     }
 
     #[test]

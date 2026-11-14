@@ -309,6 +309,13 @@ BARE = {'Rm': 5, 'Rn': 5, 'Rd': 5, 'Ra': 5, 'Rt': 5, 'Rt2': 5, 'Rs': 5,
 SVE_BARE = dict(BARE, sz=2, **{f'Z{r}': 5 for r in ('d', 'n', 'm', 'a', 'da', 'dn', 't', 'k')},
                 **{f'P{r}': 4 for r in ('d', 'n', 'm', 'g', 'dn', 'dm', 't')})
 
+# The by-element fmul rows spell the destination Zd and encode it as Zda.
+for _sz, _idx in (('H', '0|idx:1|1|idx:2|Zm:3'), ('S', '10|1|idx:2|Zm:3'),
+                  ('D', '11|1|idx:1|Zm:4')):
+    DB_FIXES[(f'fmul Zd.{_sz}, Zn.{_sz}, Zm.{_sz}[#idx]',
+              f'01100100|{_idx}|001000|Zn|Zda')] = (
+        None, f'01100100|{_idx}|001000|Zn|Zd')
+
 # The SVE shifts by an immediate that move left; the rest move right.
 SVE_LEFT_SHIFTS = {'lsl', 'sqshl', 'uqshl', 'sqshlu', 'sli'}
 
@@ -322,7 +329,8 @@ SVE_FP_PAIRS = {
 
 # An SVE register operand: the field name, an element-size suffix, and a
 # governing predicate's qualifier.
-SVE_REG = re.compile(r'([ZP](?:da|dn|dm|[dnmgatk]))(?:\.(ta|tb|t|[BHSDQ]))?(/MZ|/M|/Z)?')
+SVE_REG = re.compile(
+    r'([ZP](?:da|dn|dm|[dnmgatk]))(?:\.(ta|tb|t|[BHSDQ]))?(\[#idx\])?(/MZ|/M|/Z)?')
 
 # Aliases that store the inverted written condition (al/nv invalid there).
 COND_INV = {'cset', 'csetm', 'cinc', 'cinv', 'cneg'}
@@ -403,7 +411,7 @@ def classify(heads, toks, op, im, scaled_wb=False, meta=None):
     everywhere else. `meta` marks an SVE row and carries its element sizes."""
     meta = meta or {}
     sve = meta.get('sve', False)
-    if 'mov' in heads and not (sve and not any('#' in t for t in toks)):
+    if 'mov' in heads and not (sve and not (len(toks) > 1 and toks[1].startswith('#'))):
         # mov's row set is an alias family whose member choice depends on the
         # operand values (wide/inverted/bitmask immediate, SP form); selecting
         # among them is the encoder caller's job. The SVE register aliases
@@ -422,24 +430,30 @@ def classify(heads, toks, op, im, scaled_wb=False, meta=None):
     bfmm = re.match(r'ImmBFM\(', im or '')
     i, rd_width, width, sp = 0, None, None, 0
     t_ops, tb_ops = [], []
-    # The element size an immediate encodes, for a row without an sz field.
-    size_in_imm = False
+    # The element size an immediate encodes, for a row without an sz field,
+    # and whether the indexed dup's quadword element is one of them.
+    size_in_imm, dup_q = False, False
     while i < len(toks):
         t = toks[i]
         t0 = t.split('|')[0]
         if sve and (m := SVE_REG.fullmatch(t)):
             # A Z or P register: its field, the element size (`.t` the form's
             # sz, or fixed), and a governing predicate's /M, /Z or /MZ.
-            kind, size, qual = m.group(1)[0], m.group(2), m.group(3)
+            kind, size, indexed, qual = m.group(1)[0], m.group(2), m.group(3), m.group(4)
             fname = m.group(1)
             fv = fl.get(fname)
-            if fv is None or fv[0] not in ((5,) if kind == 'Z' else (3, 4)):
+            # An indexed vector's register field may be 3 or 4 bits wide.
+            widths = (3, 4, 5) if indexed else (5,) if kind == 'Z' else (3, 4)
+            if fv is None or fv[0] not in widths:
                 return ('residual', f'register field {fname} not a register field')
             if fname in consumed:
                 first = next(re.search(r'op: (\d+)', f).group(1) for f in fields
                              if f.startswith(('Reg', 'PLow'))
                              and f.endswith(f'shift: {fv[1]} }}'))
                 fields.append(f'SameReg {{ op: {i}, first: {first} }}')
+            elif kind == 'Z' and fv[0] < 5:
+                consumed.add(fname)
+                fields.append(f'ZLow {{ op: {i}, shift: {fv[1]}, width: {fv[0]} }}')
             else:
                 consumed.add(fname)
                 reg = 'PLow' if fv[0] == 3 else 'Reg'
@@ -447,6 +461,33 @@ def classify(heads, toks, op, im, scaled_wb=False, meta=None):
                 if any(w != fv[0] for w, _ in dups.get(fname, ())):
                     return ('residual', f'register field {fname} split')
                 fields += [f'Reg {{ op: {i}, shift: {d} }}' for _, d in dups.get(fname, ())]
+            if indexed:
+                # The element index: `idx` in one or two fields, or the
+                # imm2:tsz of the indexed dup, which also encodes the size.
+                if im.startswith('SveDupImm') and size == 't':
+                    if fl.get('imm', (0,))[0] != 5 or [w for w, _ in dups.get('imm', ())] != [2]:
+                        return ('residual', 'indexed dup not imm5 + imm2')
+                    consumed.add('imm')
+                    fields.append(f'SveDupIndex {{ op: {i}, lo: {fl["imm"][1]}, '
+                                  f'hi: {dups["imm"][0][1]} }}')
+                    size_in_imm, dup_q = True, True
+                elif 'idx' in fl and size not in (None, 't', 'ta', 'tb'):
+                    consumed.add('idx')
+                    lo_w, lo = fl['idx']
+                    hi_w, hi = dups['idx'][0] if 'idx' in dups else (0, 0)
+                    if len(dups.get('idx', ())) > 1:
+                        return ('residual', 'index in three fields')
+                    fields.append(f'SveIndex {{ op: {i}, lo: {lo}, lo_w: {lo_w}, '
+                                  f'hi: {hi}, hi_w: {hi_w} }}')
+                else:
+                    return ('residual', 'index without an index field')
+                if size == 't':
+                    ops.append('ZtElem')
+                    t_ops.append(i)
+                else:
+                    ops.append(f'ZElem({"BHSDQ".index(size)})')
+                i += 1
+                continue
             if qual:
                 if size:
                     return ('residual', 'qualified predicate with an element size')
@@ -791,7 +832,7 @@ def classify(heads, toks, op, im, scaled_wb=False, meta=None):
                       f'sizes: [{", ".join(sizes)}] }}')
     elif size_in_imm and not tb_ops:
         # The immediate encodes the size: the `.t` operands agree on it.
-        mask = meta.get('t') or 'BHSD'
+        mask = meta.get('t') or ('BHSDQ' if dup_q else 'BHSD')
         fields.append(f'SveSizeAgree {{ a: 0b{sum(1 << k for k in t_ops):b}, '
                       f'sizes: 0b{sum(1 << k for k, c in enumerate(mask) if c != "~"):04b} }}')
     elif t_ops or tb_ops:
@@ -827,6 +868,19 @@ def expand_width(inst, op):
                         for t in op.split('|')))
 
 
+def fix_long_indexed(inst, op):
+    """The SVE2 widening by-element forms as the architecture has them: a
+    doubleword result from word elements takes a 1+1-bit index and z0 to z15
+    (the database gives it the 2+1-bit index and z0 to z7 of the word
+    result), and sqdmullb/sqdmullt read elements of half the result's size."""
+    if re.search(r'\.D, Zn\.S, Zm\.S\[#idx\]', inst):
+        op = op.replace('|11|1|idx:2|Zm:3|', '|11|1|idx:1|Zm:4|')
+    if inst.startswith(('sqdmullb ', 'sqdmullt ')):
+        inst = (inst.replace('Zd.S, Zn.S, Zm.S', 'Zd.S, Zn.H, Zm.H')
+                .replace('Zd.D, Zn.D, Zm.D', 'Zd.D, Zn.S, Zm.S'))
+    return inst, op
+
+
 def load_rows(db):
     rows = []
     for g in json.load(open(db))['instructions']:
@@ -842,7 +896,8 @@ def load_rows(db):
             if inst in EXCLUDED_ROWS or UNDEFINED_ROW(inst):
                 continue
             fi, fo = DB_FIXES.get((inst, op), (None, None))
-            for winst, wop in expand_width(fi or inst, fo or op):
+            fi, fo = fix_long_indexed(fi or inst, fo or op)
+            for winst, wop in expand_width(fi, fo):
                 for einst, eop, scaled_wb in expand_wb(winst, wop):
                     rows.append((einst, eop, it.get('imm', ''), scaled_wb, meta))
     return rows

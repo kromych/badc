@@ -150,6 +150,21 @@ pub(crate) enum Field {
     },
     /// A VFP imm8 constant at `shift`.
     VfpImm8 { op: u8, shift: u8 },
+    /// A vector register in a field of `width` bits at `shift`, z0 up to
+    /// z(2^width - 1).
+    ZLow { op: u8, shift: u8, width: u8 },
+    /// The element index of operand `op`: its low `lo_w` bits at `lo` and
+    /// the next `hi_w` at `hi`.
+    SveIndex {
+        op: u8,
+        lo: u8,
+        lo_w: u8,
+        hi: u8,
+        hi_w: u8,
+    },
+    /// The indexed dup's imm2:tsz, `index << (size + 1) | 1 << size`: its
+    /// low five bits at `lo` and the high two at `hi`.
+    SveDupIndex { op: u8, lo: u8, hi: u8 },
     /// An unsigned immediate split in two: its low `lo_w` bits at `lo` and
     /// the next `hi_w` at `hi`.
     SplitImm {
@@ -238,6 +253,10 @@ pub(crate) enum A64Op {
     Fpr(u8),
     /// A list of one SVE vector register of the element size log2.
     ZList(u8),
+    /// An element `zN.T[i]` of an SVE vector of a fixed size log2.
+    ZElem(u8),
+    /// An element `zN.T[i]` of the form's element size.
+    ZtElem,
     /// A floating-point immediate: an imm8 VFP constant or `#0.0`.
     FImm,
     /// An imm8 VFP constant.
@@ -372,6 +391,12 @@ pub(crate) enum Opnd {
         num: u8,
         merge: bool,
     },
+    /// An element `zN.T[index]` of an SVE vector.
+    ZElem {
+        num: u8,
+        size: u8,
+        index: u8,
+    },
     /// An SVE register list `{zN.T, ..}` of `count` consecutive registers.
     ZList {
         first: u8,
@@ -397,7 +422,8 @@ fn reg(o: Opnd) -> Result<u8, String> {
         | Opnd::PReg { num, .. }
         | Opnd::PRegQ { num, .. }
         | Opnd::VReg { num, .. }
-        | Opnd::VScalar { num, .. } => Ok(num),
+        | Opnd::VScalar { num, .. }
+        | Opnd::ZElem { num, .. } => Ok(num),
         Opnd::ZList {
             first, count: 1, ..
         } => Ok(first),
@@ -462,6 +488,8 @@ fn op_matches(p: A64Op, o: Opnd) -> bool {
         (A64Op::Fpr(k), Opnd::VScalar { size, .. }) => k == size,
         (A64Op::ZList(k), Opnd::ZList { count: 1, size, .. }) => size == k,
         (A64Op::FImm, Opnd::FpImm(_) | Opnd::Imm(0)) | (A64Op::FImm8, Opnd::FpImm(_)) => true,
+        (A64Op::ZElem(k), Opnd::ZElem { size, .. }) => size == k,
+        (A64Op::ZtElem, Opnd::ZElem { .. }) => true,
         (A64Op::Zero, Opnd::Imm(0)) => true,
         (
             A64Op::MemVl,
@@ -4034,6 +4062,48 @@ fn pack(f: &Form, ops: &[Opnd]) -> Result<u32, String> {
                 word |= u32::from(code) << shift;
             }
             Field::SveSizeAgree { .. } => {}
+            Field::ZLow { op, shift, width } => {
+                let num = reg(ops[op as usize])?;
+                if num >> width != 0 {
+                    return Err(format!(
+                        "inline asm: the indexed vector must be z0 to z{}",
+                        (1 << width) - 1
+                    ));
+                }
+                word |= u32::from(num) << shift;
+            }
+            Field::SveIndex {
+                op,
+                lo,
+                lo_w,
+                hi,
+                hi_w,
+            } => {
+                let Opnd::ZElem { index, .. } = ops[op as usize] else {
+                    return Err(String::from("inline asm: an indexed vector expected"));
+                };
+                let index = u32::from(index);
+                if index >> (lo_w + hi_w) != 0 {
+                    return Err(format!(
+                        "inline asm: the index must be 0 to {}",
+                        (1 << (lo_w + hi_w)) - 1
+                    ));
+                }
+                word |= (index & ((1 << lo_w) - 1)) << lo | (index >> lo_w) << hi;
+            }
+            Field::SveDupIndex { op, lo, hi } => {
+                let Opnd::ZElem { size, index, .. } = ops[op as usize] else {
+                    return Err(String::from("inline asm: an indexed vector expected"));
+                };
+                if u32::from(index) >= 64 >> size {
+                    return Err(format!(
+                        "inline asm: the index must be 0 to {}",
+                        (64 >> size) - 1
+                    ));
+                }
+                let v = u32::from(index) << (size + 1) | 1 << size;
+                word |= (v & 31) << lo | (v >> 5) << hi;
+            }
             Field::SplitImm {
                 op,
                 lo,
@@ -4127,7 +4197,9 @@ fn sve_size(mask: u8, ops: &[Opnd]) -> Option<u8> {
     let mut size = None;
     for (_, o) in ops.iter().enumerate().filter(|(i, _)| mask >> i & 1 != 0) {
         let s = match *o {
-            Opnd::ZReg { size: Some(s), .. } | Opnd::PReg { size: Some(s), .. } => s,
+            Opnd::ZReg { size: Some(s), .. }
+            | Opnd::PReg { size: Some(s), .. }
+            | Opnd::ZElem { size: s, .. } => s,
             _ => return None,
         };
         if size.is_some_and(|z| z != s) {

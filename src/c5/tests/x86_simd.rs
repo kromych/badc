@@ -598,6 +598,34 @@ fn the_variable_shifts_are_rows_the_interpreter_runs() {
     assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 0);
 }
 
+/// The blends by the sign of each mask lane are rows the interpreter
+/// runs: a lane of the second operand where the mask lane's top bit is
+/// set, at every lane width and at 16 and 32 bytes, and the AVX blend by
+/// an immediate bit for each of its eight lanes.
+#[test]
+fn the_variable_blends_are_rows_the_interpreter_runs() {
+    let src = "#include <immintrin.h>\n\
+        int main(void) {\n\
+            __m128i a = _mm_set1_epi8(1), b = _mm_set1_epi8(2);\n\
+            __m128i m = _mm_setr_epi8(-1, 0, 127, -128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -2);\n\
+            __m128i r = _mm_blendv_epi8(a, b, m);\n\
+            if (_mm_extract_epi8(r, 0) != 2 || _mm_extract_epi8(r, 2) != 1 || \
+                _mm_extract_epi8(r, 3) != 2 || _mm_extract_epi8(r, 15) != 2) return 1;\n\
+            __m256 x = _mm256_set1_ps(1), y = _mm256_set1_ps(2);\n\
+            __m256 s = _mm256_setr_ps(-0.0f, 0.0f, -1, 1, 0, 0, 0, -3);\n\
+            __m256 v = _mm256_blendv_ps(x, y, s);\n\
+            if (v[0] != 2 || v[1] != 1 || v[2] != 2 || v[3] != 1 || v[7] != 2) return 2;\n\
+            __m256d d = _mm256_blendv_pd(_mm256_set1_pd(1), _mm256_set1_pd(2), \
+                                          _mm256_setr_pd(0, -1, 0, -0.0));\n\
+            if (d[0] != 1 || d[1] != 2 || d[2] != 1 || d[3] != 2) return 3;\n\
+            __m256 i = _mm256_blend_ps(x, y, 0x81);\n\
+            if (i[0] != 2 || i[1] != 1 || i[6] != 1 || i[7] != 2) return 4;\n\
+            return 0;\n\
+        }\n";
+    let program = super::compile_str_bare_for(src, crate::Target::LinuxX64);
+    assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 0);
+}
+
 /// `<pmmintrin.h>` and the `<mmintrin.h>` it reaches give each MMX and SSE3
 /// operation the result the SDM defines for its instruction, saturation,
 /// out-of-range shift counts and the pair-sum wrap included, as the
@@ -1841,6 +1869,7 @@ fn floating_rows_compute_in_the_environment() {
         | Sem::MulEven(_)
         | Sem::Extend(..)
         | Sem::Blend(_)
+        | Sem::BlendVar(_)
         | Sem::AddSat(..)
         | Sem::SubSat(..)
         | Sem::SadBytes

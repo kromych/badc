@@ -498,7 +498,7 @@ Disassembly of section .text:
 <check_blends>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x50, %rsp
+               	subq	$0x20, %rsp
                	pushq	%r14
                	pushq	%r13
                	pushq	%r12
@@ -754,21 +754,7 @@ Disassembly of section .text:
                	movups	(%rbx), %xmm0
                	movups	(%r12), %xmm1
                	movups	(%r13), %xmm2
-               	movups	%xmm0, -0x50(%rbp)
-               	movups	%xmm1, -0x40(%rbp)
-               	movups	%xmm2, -0x30(%rbp)
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	incq	%rax
-               	cmpl	$0x10, %eax
-               	jge	<addr>
-               	movsbq	-0x30(%rbp,%rax), %rdi
-               	testb	$-0x80, %dil
-               	je	<addr>
-               	movsbq	-0x40(%rbp,%rax), %rdi
-               	movb	%dil, -0x50(%rbp,%rax)
-               	jmp	<addr>
-               	movups	-0x50(%rbp), %xmm0
+               	vpblendvb	%xmm2, %xmm1, %xmm0, %xmm0
                	leaq	-0x20(%rbp), %rsi
                	leaq	-0x10(%rbp), %rdi
                	movups	%xmm0, -0x10(%rbp)

@@ -2257,6 +2257,15 @@ fn emit_x86_simd_wide(
             let ops = wide_operands(row, imm, dst_x, Some(WideSrc::Reg(src_x)), dst_x);
             encode_wide(code, row.mnem, &ops)?;
         }
+        Form::Vvv if matches!(row.sem, simd::Sem::BlendVar(_)) => {
+            // The is4 blend reads the mask from a register and the second
+            // source from memory.
+            load(code, 1, dst_x)?;
+            load(code, 3, src_x)?;
+            let b = operand(code, 2, SCRATCH_R11)?;
+            let r = |n| wide_reg(row.bytes, n);
+            encode_wide(code, row.mnem, &[r(src_x), mem_at(b), r(dst_x), r(dst_x)])?;
+        }
         Form::Vvv | Form::VvvI => {
             load(code, 1, dst_x)?;
             load(code, 2, src_x)?;
@@ -2443,6 +2452,32 @@ fn emit_x86_simd_val_wide(
                 row.mnem,
                 &wide_operands(row, imm, a, Some(WideSrc::Reg(b)), rd),
             )?;
+        }
+        Form::Vvv if matches!(row.sem, simd::Sem::BlendVar(_)) => {
+            // The is4 blend writes any register: the first source and the
+            // mask in registers, the second in one or its spill slot.
+            let a = vector(code, 0, sa)?;
+            let m = vector(code, 2, sb)?;
+            let b = match place(1) {
+                Some(Place::FpReg(r)) => WideSrc::Reg(r),
+                Some(Place::Spill(slot)) => {
+                    let (base, off) = wide_spill_addr(frame, w, slot);
+                    WideSrc::Mem(base, off)
+                }
+                _ => return fail("x86 simd: operand 1 has no place"),
+            };
+            let r = |n| wide_reg(row.bytes, n);
+            let b = match b {
+                WideSrc::Reg(n) => r(n),
+                WideSrc::Mem(base, disp) => super::asm::Concrete::Mem {
+                    base: base.0,
+                    index: None,
+                    scale: 1,
+                    disp,
+                    size: crate::c5::ir::AsmRegSize::Quad,
+                },
+            };
+            encode_wide(code, row.mnem, &[r(m), b, r(a), r(rd)])?;
         }
         Form::Vvv | Form::VvvI => {
             // The accumulator is copied into the register the result forms

@@ -115,28 +115,16 @@ __BADC_EXTEND(cvtepu32_epi64, pmovzxdq128, __v4si)
 
 /* PBLENDVB, BLENDVPS, BLENDVPD: lane of the second operand where the mask
 ** lane's sign bit is set. */
-static inline __m128i _mm_blendv_epi8(__m128i __X, __m128i __Y, __m128i __M) {
-    __v16qi __x = (__v16qi)__X, __y = (__v16qi)__Y, __m = (__v16qi)__M;
-    for (int __i = 0; __i < 16; __i++)
-        if (__m[__i] & 0x80)
-            __x[__i] = __y[__i];
-    return (__m128i)__x;
+__BADC_INTRIN __m128i _mm_blendv_epi8(__m128i __X, __m128i __Y, __m128i __M) {
+    return (__m128i)__builtin_ia32_pblendvb128((__v16qi)__X, (__v16qi)__Y, (__v16qi)__M);
 }
 
-static inline __m128 _mm_blendv_ps(__m128 __X, __m128 __Y, __m128 __M) {
-    __v4si __x = (__v4si)__X, __y = (__v4si)__Y, __m = (__v4si)__M;
-    for (int __i = 0; __i < 4; __i++)
-        if (__m[__i] < 0)
-            __x[__i] = __y[__i];
-    return (__m128)__x;
+__BADC_INTRIN __m128 _mm_blendv_ps(__m128 __X, __m128 __Y, __m128 __M) {
+    return (__m128)__builtin_ia32_blendvps((__v4sf)__X, (__v4sf)__Y, (__v4sf)__M);
 }
 
-static inline __m128d _mm_blendv_pd(__m128d __X, __m128d __Y, __m128d __M) {
-    __v2di __x = (__v2di)__X, __y = (__v2di)__Y, __m = (__v2di)__M;
-    for (int __i = 0; __i < 2; __i++)
-        if (__m[__i] < 0)
-            __x[__i] = __y[__i];
-    return (__m128d)__x;
+__BADC_INTRIN __m128d _mm_blendv_pd(__m128d __X, __m128d __Y, __m128d __M) {
+    return (__m128d)__builtin_ia32_blendvpd((__v2df)__X, (__v2df)__Y, (__v2df)__M);
 }
 
 /* PTEST: ZF when the AND of the operands is zero, CF when the AND of the

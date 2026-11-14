@@ -337,8 +337,13 @@ pub(crate) enum Sem {
     /// the first flag is set; the high half's lanes when the second is. A
     /// shift form shifts each left by its count (`sshll`, `shll`).
     Extend(u8, u8, bool, bool),
-    /// Lane `i` of the second operand where immediate bit `i` is set.
+    /// Lane `i` of the second operand where immediate bit `i` is set; past
+    /// eight lanes the bits repeat (`vpblendw` on each 128-bit lane).
     Blend(u8),
+    /// The lane of the second operand where the top bit of the same lane
+    /// of the third (the mask) is set, else the first's (`pblendvb`,
+    /// `blendvps`, `vblendvpd`).
+    BlendVar(u8),
     /// Floating-point arithmetic on lanes of the width; the scalar form
     /// computes lane 0 alone, the others from the first operand.
     Float(FOp, u8, bool),
@@ -1293,6 +1298,11 @@ pub(crate) fn eval_acc(sem: Sem, acc: &[u8; 16], a: &[u8; 16], b: &[u8; 16]) -> 
             }
             return Some(o);
         }
+        Sem::BlendVar(w) => {
+            let mut o = [0u8; 16];
+            blend_var(w, (acc, a, b), &mut o);
+            return Some(o);
+        }
         Sem::BitSelect => {
             let mut o = [0u8; 16];
             for i in 0..16 {
@@ -2149,6 +2159,7 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
         // permutations across a 32-byte vector.
         Sem::Float(..) | Sem::FloatCmp(..) | Sem::Convert(_) | Sem::ToInt(..) => {}
         Sem::MulAcc(_) | Sem::MulSub(_) | Sem::AbsDiffAcc(..) | Sem::BitSelect | Sem::Tbx(_) => {}
+        Sem::BlendVar(_) => {}
         Sem::Eor3 | Sem::Bcax | Sem::Sha256Hash(_) | Sem::Sha256Su1 => {}
         Sem::Sha1Hash(_) | Sem::Sha1Su0 | Sem::Sha512Hash(_) | Sem::Sha512Su1 => {}
         Sem::FloatRel(..) | Sem::FloatFma(..) | Sem::LongAcc(..) => {}
@@ -2274,6 +2285,14 @@ pub(crate) fn eval_wide(
                 o[4 * i..4 * i + 4].copy_from_slice(&r.to_le_bytes());
             }
         }
+        Sem::Blend(w) => {
+            for i in 0..n / usize::from(w) {
+                let src = if imm >> (i % 8) & 1 != 0 { b } else { a };
+                let k = i * usize::from(w);
+                o[k..k + usize::from(w)].copy_from_slice(&src[k..k + usize::from(w)]);
+            }
+        }
+        Sem::BlendVar(w) => blend_var(w, (&a[..n], &b[..n], &c[..n]), &mut o[..n]),
         Sem::TernLog => {
             for k in 0..n {
                 for bit in 0..8 {
@@ -2289,6 +2308,18 @@ pub(crate) fn eval_wide(
         }
     }
     o
+}
+
+/// [`Sem::BlendVar`] over the `w`-byte lanes of `a`, `b` and the mask `m`.
+fn blend_var(w: u8, (a, b, m): (&[u8], &[u8], &[u8]), o: &mut [u8]) {
+    for k in (0..o.len()).step_by(usize::from(w)) {
+        let src = if m[k + usize::from(w) - 1] & 0x80 != 0 {
+            b
+        } else {
+            a
+        };
+        o[k..k + usize::from(w)].copy_from_slice(&src[k..k + usize::from(w)]);
+    }
 }
 
 /// The Arm ARM's `SHA512H` (`part1`) and `SHA512H2` over the accumulator

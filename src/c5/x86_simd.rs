@@ -468,6 +468,16 @@ pub(crate) const OPS: &[SimdOp] = &[
     op256("__builtin_ia32_vpdpbusds256", "vpdpbusds", Form::Vvv, Ret::V8si, Sem::DotBytes(true), 0),
     op256("__builtin_ia32_vpdpwssd256", "vpdpwssd", Form::Vvv, Ret::V8si, Sem::DotWords(false), 0),
     op256("__builtin_ia32_vpdpwssds256", "vpdpwssds", Form::Vvv, Ret::V8si, Sem::DotWords(true), 0),
+    // The blends by the sign of each mask lane, the mask last, VEX only;
+    // and the AVX blends by an immediate bit per lane.
+    op("__builtin_ia32_pblendvb128", "vpblendvb", Form::Vvv, Ret::V16qi, Sem::BlendVar(1), 0),
+    op("__builtin_ia32_blendvps", "vblendvps", Form::Vvv, Ret::V4sf, Sem::BlendVar(4), 0),
+    op("__builtin_ia32_blendvpd", "vblendvpd", Form::Vvv, Ret::V2df, Sem::BlendVar(8), 0),
+    op256("__builtin_ia32_pblendvb256", "vpblendvb", Form::Vvv, Ret::V32qi, Sem::BlendVar(1), 0),
+    op256("__builtin_ia32_blendvps256", "vblendvps", Form::Vvv, Ret::V8sf, Sem::BlendVar(4), 0),
+    op256("__builtin_ia32_blendvpd256", "vblendvpd", Form::Vvv, Ret::V4df, Sem::BlendVar(8), 0),
+    op256("__builtin_ia32_blendps256", "vblendps", Form::VvI, Ret::V8sf, Sem::Blend(4), 0),
+    op256("__builtin_ia32_blendpd256", "vblendpd", Form::VvI, Ret::V4df, Sem::Blend(8), 0),
     // The AVX2 shifts by a count in each lane.
     op("__builtin_ia32_psllv4si", "psllvd", Form::Vv, Ret::V4si, Sem::ShlVar(4), 0),
     op256("__builtin_ia32_psllv8si", "vpsllvd", Form::Vv, Ret::V8si, Sem::ShlVar(4), 0),

@@ -3164,6 +3164,27 @@ void add64(v16si *r, const v16si *a, const v16si *b) { *r = *a + *b; }\n";
     m.finish();
 }
 
+/// A blend intrinsic is its one instruction: `vpblendvb` and `vblendvps`
+/// with the mask in the trailing register, `vblendpd` with its immediate,
+/// and `ret`. Each took a select per lane.
+#[test]
+fn a_blend_intrinsic_is_one_instruction() {
+    const SRC: &str = "#include <immintrin.h>\n\
+__m128i bv8(__m128i a, __m128i b, __m128i m) { return _mm_blendv_epi8(a, b, m); }\n\
+__m256 bvps(__m256 a, __m256 b, __m256 m) { return _mm256_blendv_ps(a, b, m); }\n\
+__m256d bpd(__m256d a, __m256d b) { return _mm256_blend_pd(a, b, 5); }\n";
+    let mut m = Misses::default();
+    // VEX 0F3A 4C, 4A and 0D.
+    for (name, op) in [("bv8", 0x3A4Cu16), ("bvps", 0x3A4A), ("bpd", 0x3A0D)] {
+        let insns = x64(SRC, name);
+        m.expect(
+            insns.len() == 2 && insns[0].vex && insns[0].op == op,
+            || format!("x86-64 {name}: {insns:x?}"),
+        );
+    }
+    m.finish();
+}
+
 /// A GNU vector shifted by a vector of counts is one shift: on x86-64 the
 /// AVX2 shift by a count per lane, `vpsllvd`, `vpsravd` or `vpsrlvq`, and
 /// `ret`; on AArch64 `ushl` for a left shift and `neg` and `sshl` or `ushl`

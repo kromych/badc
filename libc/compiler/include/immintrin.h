@@ -472,8 +472,7 @@ __BADC_SHIFTV(_mm256_srlv_epi64, __m256i, __v4di, __builtin_ia32_psrlv4di)
 #undef __BADC_SHIFTV
 
 __BADC_INTRIN __m256i _mm256_blendv_epi8(__m256i __A, __m256i __B, __m256i __M) {
-    return __badc_join_si(_mm_blendv_epi8(__badc_lo_si(__A), __badc_lo_si(__B), __badc_lo_si(__M)),
-                          _mm_blendv_epi8(__badc_hi_si(__A), __badc_hi_si(__B), __badc_hi_si(__M)));
+    return (__m256i)__builtin_ia32_pblendvb256((__v32qi)__A, (__v32qi)__B, (__v32qi)__M);
 }
 
 /* VMPSADBW: the low lane by imm8[2:0], the high one by imm8[5:3]. */
@@ -937,38 +936,19 @@ static inline __m256d _mm256_shuffle_pd(__m256d __A, __m256d __B, const int __M)
                              __b[2 + ((__M >> 3) & 1)]};
 }
 
-static inline __m256 _mm256_blend_ps(__m256 __A, __m256 __B, const int __M) {
-    __v8si __a = (__v8si)__A, __b = (__v8si)__B;
-    for (int __i = 0; __i < 8; __i++)
-        if (__M >> __i & 1)
-            __a[__i] = __b[__i];
-    return (__m256)__a;
-}
-
-static inline __m256d _mm256_blend_pd(__m256d __A, __m256d __B, const int __M) {
-    __v4di __a = (__v4di)__A, __b = (__v4di)__B;
-    for (int __i = 0; __i < 4; __i++)
-        if (__M >> __i & 1)
-            __a[__i] = __b[__i];
-    return (__m256d)__a;
-}
+#define _mm256_blend_ps(A, B, M)                                                  \
+    ((__m256)__builtin_ia32_blendps256((__v8sf)(__m256)(A), (__v8sf)(__m256)(B), (int)(M)))
+#define _mm256_blend_pd(A, B, M)                                                  \
+    ((__m256d)__builtin_ia32_blendpd256((__v4df)(__m256d)(A), (__v4df)(__m256d)(B), (int)(M)))
 
 /* BLENDVPS / BLENDVPD take a lane of the second operand where the mask
 ** lane's sign bit is set. */
-static inline __m256 _mm256_blendv_ps(__m256 __A, __m256 __B, __m256 __M) {
-    __v8si __a = (__v8si)__A, __b = (__v8si)__B, __m = (__v8si)__M;
-    for (int __i = 0; __i < 8; __i++)
-        if (__m[__i] < 0)
-            __a[__i] = __b[__i];
-    return (__m256)__a;
+__BADC_INTRIN __m256 _mm256_blendv_ps(__m256 __A, __m256 __B, __m256 __M) {
+    return (__m256)__builtin_ia32_blendvps256((__v8sf)__A, (__v8sf)__B, (__v8sf)__M);
 }
 
-static inline __m256d _mm256_blendv_pd(__m256d __A, __m256d __B, __m256d __M) {
-    __v4di __a = (__v4di)__A, __b = (__v4di)__B, __m = (__v4di)__M;
-    for (int __i = 0; __i < 4; __i++)
-        if (__m[__i] < 0)
-            __a[__i] = __b[__i];
-    return (__m256d)__a;
+__BADC_INTRIN __m256d _mm256_blendv_pd(__m256d __A, __m256d __B, __m256d __M) {
+    return (__m256d)__builtin_ia32_blendvpd256((__v4df)__A, (__v4df)__B, (__v4df)__M);
 }
 
 __BADC_INTRIN int _mm256_movemask_ps(__m256 __A) {

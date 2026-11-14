@@ -35,16 +35,41 @@ Disassembly of section .text:
 <descend>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
-               	movb	%dil, -0x40(%rbp)
+               	subq	$0x100, %rsp            # imm = 0x100
+               	movb	%dil, -0x100(%rbp)
                	testl	%edi, %edi
                	je	<addr>
-               	decq	%rdi
+               	movq	%rdi, %rax
+               	subl	$0x1, %eax
+               	movb	%al, -0xc0(%rbp)
+               	je	<addr>
+               	subl	$0x1, %eax
+               	movb	%al, -0x80(%rbp)
+               	je	<addr>
+               	subl	$0x1, %eax
+               	movb	%al, -0x40(%rbp)
+               	je	<addr>
+               	leaq	-0x1(%rax), %rdi
                	callq	<addr>
                	movsbq	-0x40(%rbp), %rcx
                	addq	%rcx, %rax
+               	movsbq	-0x80(%rbp), %rcx
+               	addq	%rcx, %rax
+               	movsbq	-0xc0(%rbp), %rcx
+               	addq	%rcx, %rax
+               	movsbq	-0x100(%rbp), %rcx
+               	addq	%rcx, %rax
                	leave
                	retq
+               	movl	$0x2, %edi
+               	callq	<addr>
+               	ud2
+               	movl	$0x2, %edi
+               	callq	<addr>
+               	ud2
+               	movl	$0x2, %edi
+               	callq	<addr>
+               	ud2
                	movl	$0x2, %edi
                	callq	<addr>
                	ud2

@@ -306,7 +306,8 @@ fn every_exit_mirrors_the_prologue() {
     );
 }
 
-const FIB: &str = "long fib(int n) { if (n < 2) return n; return fib(n - 1) + fib(n - 2); }\n";
+/// Kept out of its own recursive calls, which would add levels to its frame.
+const FIB: &str = "__attribute__((noinline)) long fib(int n) { if (n < 2) return n; return fib(n - 1) + fib(n - 2); }\n";
 
 /// The pushes are the whole frame of `fib`: no `sub`, and `pop rbp` in place
 /// of `leave`.

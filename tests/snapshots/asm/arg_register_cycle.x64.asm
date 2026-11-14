@@ -27,13 +27,29 @@ Disassembly of section .text:
 
 <rec>:
                	testl	%edx, %edx
+               	je	<addr>
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	movq	%rdx, %rax
+               	subl	$0x1, %eax
+               	jne	<addr>
+               	movq	%rsi, %rax
+               	subq	%rdi, %rax
+               	popq	%rbp
+               	retq
+               	subl	$0x1, %eax
                	jne	<addr>
                	movq	%rdi, %rax
                	subq	%rsi, %rax
-               	retq
-               	decq	%rdx
-               	xchgq	%rsi, %rdi
                	jmp	<addr>
+               	leaq	-0x1(%rax), %rdx
+               	xchgq	%rsi, %rdi
+               	callq	<addr>
+               	jmp	<addr>
+               	movslq	%edi, %rax
+               	movslq	%esi, %r10
+               	subq	%r10, %rax
+               	retq
 
 <main>:
                	pushq	%rbp

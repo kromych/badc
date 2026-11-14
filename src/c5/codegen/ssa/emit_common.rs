@@ -2830,6 +2830,26 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         pipeline.run("passes::tailrec::run", &mut ssa_funcs, |funcs| {
             super::super::passes::tailrec::run(funcs);
         });
+        // A small self-recursive body, its tail calls now loops, goes into
+        // its own recursive calls a few levels deep.
+        pipeline.run("passes::inline::inline_self", &mut ssa_funcs, |funcs| {
+            let stack = if native.conserve_stack {
+                super::super::passes::inline::StackGrowth::CONSERVE
+            } else {
+                super::super::passes::inline::StackGrowth::DEFAULT
+            };
+            super::super::passes::inline::inline_self(
+                funcs,
+                super::super::passes::inline::Limits {
+                    cap: native.inline_cap,
+                    stack,
+                },
+                target.abi(),
+                super::reg_alloc::RegBanks::for_target(target)
+                    .callee_gprs
+                    .len(),
+            );
+        });
         // A function no path of which returns ends the blocks of the calls
         // to it, once the inliner has taken the small callees whole.
         pipeline.run("passes::noreturn::run", &mut ssa_funcs, |funcs| {

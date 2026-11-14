@@ -126,11 +126,12 @@ Disassembly of section .text:
                	ret
 
 <walk>:
-               	str	x20, [sp, #-0x40]!
-               	stp	x29, x30, [sp, #0x30]
-               	add	x29, sp, #0x30
+               	stp	x20, x21, [sp, #-0x90]!
+               	stp	x22, x23, [sp, #0x10]
+               	stp	x29, x30, [sp, #0x80]
+               	add	x29, sp, #0x80
                	sxtw	x20, w0
-               	sub	x1, x29, #0x18
+               	sub	x1, x29, #0x60
                	mov	x17, #0x5556            // =21846
                	movk	x17, #0x5555, lsl #16
                	mul	x0, x20, x17
@@ -146,9 +147,84 @@ Disassembly of section .text:
                	bl	<addr>
                	cmp	w20, #0x0
                	b.le	<addr>
-               	sub	x0, x20, #0x1
+               	sub	x21, x20, #0x1
+               	sub	x0, x29, #0x48
+               	mov	x17, #0x5556            // =21846
+               	movk	x17, #0x5555, lsl #16
+               	mul	x1, x21, x17
+               	lsr	x1, x1, #32
+               	add	x1, x1, x1, lsl #1
+               	sub	x1, x21, x1
+               	add	x0, x0, x1, lsl #3
+               	str	x21, [x0]
+               	mov	x0, x21
                	bl	<addr>
-               	sub	x1, x29, #0x18
+               	mov	x0, x21
+               	bl	<addr>
+               	cmp	w21, #0x0
+               	b.le	<addr>
+               	sub	x22, x21, #0x1
+               	sub	x0, x29, #0x30
+               	mov	x17, #0x5556            // =21846
+               	movk	x17, #0x5555, lsl #16
+               	mul	x1, x22, x17
+               	lsr	x1, x1, #32
+               	add	x1, x1, x1, lsl #1
+               	sub	x1, x22, x1
+               	add	x0, x0, x1, lsl #3
+               	str	x22, [x0]
+               	mov	x0, x22
+               	bl	<addr>
+               	mov	x0, x22
+               	bl	<addr>
+               	cmp	w22, #0x0
+               	b.le	<addr>
+               	sub	x23, x22, #0x1
+               	sub	x0, x29, #0x18
+               	mov	x17, #0x5556            // =21846
+               	movk	x17, #0x5555, lsl #16
+               	mul	x1, x23, x17
+               	lsr	x1, x1, #32
+               	add	x1, x1, x1, lsl #1
+               	sub	x1, x23, x1
+               	add	x0, x0, x1, lsl #3
+               	str	x23, [x0]
+               	mov	x0, x23
+               	bl	<addr>
+               	mov	x0, x23
+               	bl	<addr>
+               	cmp	w23, #0x0
+               	b.le	<addr>
+               	sub	x0, x23, #0x1
+               	bl	<addr>
+               	sub	x0, x29, #0x18
+               	mov	x17, #0x5556            // =21846
+               	movk	x17, #0x5555, lsl #16
+               	mul	x1, x23, x17
+               	lsr	x1, x1, #32
+               	add	x1, x1, x1, lsl #1
+               	sub	x1, x23, x1
+               	add	x0, x0, x1, lsl #3
+               	ldr	x0, [x0]
+               	sub	x0, x29, #0x30
+               	mov	x17, #0x5556            // =21846
+               	movk	x17, #0x5555, lsl #16
+               	mul	x1, x22, x17
+               	lsr	x1, x1, #32
+               	add	x1, x1, x1, lsl #1
+               	sub	x1, x22, x1
+               	add	x0, x0, x1, lsl #3
+               	ldr	x0, [x0]
+               	sub	x0, x29, #0x48
+               	mov	x17, #0x5556            // =21846
+               	movk	x17, #0x5555, lsl #16
+               	mul	x1, x21, x17
+               	lsr	x1, x1, #32
+               	add	x1, x1, x1, lsl #1
+               	sub	x1, x21, x1
+               	add	x0, x0, x1, lsl #3
+               	ldr	x0, [x0]
+               	sub	x1, x29, #0x60
                	mov	x17, #0x5556            // =21846
                	movk	x17, #0x5555, lsl #16
                	mul	x0, x20, x17
@@ -158,8 +234,9 @@ Disassembly of section .text:
                	sub	x0, x20, x0
                	add	x0, x1, x0, lsl #3
                	ldr	x0, [x0]
-               	ldp	x29, x30, [sp, #0x30]
-               	ldr	x20, [sp], #0x40
+               	ldp	x29, x30, [sp, #0x80]
+               	ldp	x22, x23, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x90
                	ret
 
 <main>:

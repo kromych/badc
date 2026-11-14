@@ -8824,3 +8824,49 @@ fn x64_a_bitwise_accumulating_recursion_is_a_loop() {
     let insns = x64(SRC, "load_le32");
     assert!(!insns.iter().any(|i| i.op == 0xE8), "{insns:x?}");
 }
+
+/// A small self-recursive function goes into its own recursive call a few
+/// levels deep, its tail calls loops by then: `fib`'s spliced levels are
+/// nested loops around the one call left. One with more values live across
+/// its recursive call than the callee-saved registers hold, levels deep,
+/// keeps its call: `place` still has its one loop.
+#[test]
+fn x64_a_small_recursion_goes_into_itself_while_its_values_fit_the_saved_registers() {
+    const SRC: &str = "long fib(int n) { if (n < 2) return n; return fib(n - 1) + fib(n - 2); }\n\
+long place(unsigned cols, unsigned left, unsigned right, unsigned full) {\n\
+    if (cols == full) return 1;\n\
+    long count = 0;\n\
+    unsigned free_squares = full & ~(cols | left | right);\n\
+    while (free_squares != 0) {\n\
+        unsigned bit = free_squares & -free_squares;\n\
+        free_squares ^= bit;\n\
+        count += place(cols | bit, (left | bit) << 1, (right | bit) >> 1, full);\n\
+    }\n\
+    return count;\n\
+}\n";
+    let back = |name: &str| {
+        let insns = x64(SRC, name);
+        insns
+            .iter()
+            .filter(|i| (i.is_jcc() || i.is_jmp()) && i.target() < i.at)
+            .count()
+    };
+    assert!(
+        back("fib") >= 2,
+        "fib keeps one loop: {:x?}",
+        x64(SRC, "fib")
+    );
+    assert_eq!(back("place"), 1, "{:x?}", x64(SRC, "place"));
+}
+
+/// An `always_inline` function calling itself is not spliced into itself:
+/// the mandatory splice has no level bound, so the compile would not end.
+#[test]
+fn an_always_inline_recursion_is_not_spliced_into_itself() {
+    const SRC: &str = "__attribute__((always_inline)) static int rec(int n) {\n\
+    return n <= 1 ? 1 : n * rec(n - 1);\n\
+}\n\
+int main(void) { return rec(5) & 1; }\n";
+    let insns = x64(SRC, "main");
+    assert!(!insns.is_empty());
+}

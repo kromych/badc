@@ -835,7 +835,19 @@ fn is_inline_candidate(
     func: &FunctionSsa,
     cap: u32,
     abi: Abi,
+    reason_out: Option<&mut alloc::string::String>,
+) -> bool {
+    candidacy(func, cap, abi, reason_out, false)
+}
+
+/// [`is_inline_candidate`], with the self-recursion gate waived when
+/// `into_itself`: the splice of [`inline_self`] bounds the depth itself.
+fn candidacy(
+    func: &FunctionSsa,
+    cap: u32,
+    abi: Abi,
     mut reason_out: Option<&mut alloc::string::String>,
+    into_itself: bool,
 ) -> bool {
     #[cfg(feature = "codegen_test")]
     let trace = std::env::var("BADC_LOG_INLINE").is_ok();
@@ -900,10 +912,11 @@ fn is_inline_candidate(
     // remove the recursion -- the recursive calls come along -- so
     // inlining only unrolls the call tree one level per candidacy-fixpoint
     // round, unbounded code growth for no call elimination.
-    if func
-        .insts
-        .iter()
-        .any(|i| matches!(i, Inst::Call { target_pc, .. } if *target_pc == func.ent_pc))
+    if !into_itself
+        && func
+            .insts
+            .iter()
+            .any(|i| matches!(i, Inst::Call { target_pc, .. } if *target_pc == func.ent_pc))
     {
         say(format_args!("self-recursive"));
         return false;
@@ -4687,6 +4700,163 @@ pub(crate) fn run(
                     name = funcs[i].name,
                 ),
             );
+        }
+    }
+}
+
+/// Emitted instructions past which a self-recursive body is not spliced
+/// into itself ([`inline_self`]).
+const SELF_INLINE_BODY: usize = 48;
+
+/// Splice rounds [`inline_self`] runs: recursion levels one call covers
+/// beyond its own.
+const SELF_INLINE_DEPTH: usize = 3;
+
+/// Emitted instructions past which [`inline_self`] runs no further round.
+const SELF_INLINE_TOTAL: usize = 240;
+
+/// Multiple of its own size past which [`inline_self`] grows a function no
+/// further: a body with one recursive call left takes its levels, one with
+/// two, whose copies double each round, about one.
+const SELF_INLINE_GROWTH: usize = 4;
+
+/// The most values live across one of the function's own recursive calls.
+fn live_across_self_calls(f: &FunctionSsa) -> usize {
+    use crate::c5::codegen::ssa::{liveness::Liveness, reg_alloc};
+    let reads = reg_alloc::operands_read(f, &reg_alloc::compute_use_counts(f));
+    let ent = f.ent_pc;
+    let own = |i: &Inst| matches!(i, Inst::Call { target_pc, .. } if *target_pc == ent);
+    (Liveness::compute_reading(f, reads)
+        .values_live_after(f, &own)
+        .iter())
+    .map(|(site, live)| live.iter().filter(|&&v| v != *site).count())
+    .max()
+    .unwrap_or(0)
+}
+
+/// Splice a small self-recursive function into its own recursive call
+/// sites, a bounded number of levels deep, so each call does the work of
+/// several recursion levels and pays the call, the return and the frame
+/// once for them. Every round splices the body as it stood before the
+/// first, after tail calls became loops, so a body with one recursive call
+/// left grows by one copy a round; a round whose copies would take the
+/// function past [`SELF_INLINE_TOTAL`] instructions, or past
+/// [`SELF_INLINE_GROWTH`] times its own size, does not run. Each
+/// level adds the values live across a recursive call to those the
+/// innermost call crosses, so the levels stop where those values would
+/// outnumber the `callee_saved` registers and spill.
+pub(crate) fn inline_self(
+    funcs: &mut [FunctionSsa],
+    Limits { cap, stack }: Limits,
+    abi: Abi,
+    callee_saved: usize,
+) {
+    if cap == 0 {
+        return;
+    }
+    let sp_tainted = crate::c5::ir::sp_asm_reachers(funcs);
+    let sccs = call_graph_sccs(funcs);
+    let cycle_of: BTreeMap<usize, usize> = funcs
+        .iter()
+        .enumerate()
+        .filter(|(_, f)| sccs.cyclic.contains(&f.ent_pc))
+        .map(|(i, f)| (f.ent_pc, sccs.comp[i]))
+        .collect();
+    let whole_vector = if abi.arch == crate::c5::codegen::Arch::X86_64 {
+        32
+    } else {
+        16
+    };
+    // A call whose block returns its result is a tail call, already a
+    // jump, which a splice would only copy.
+    let self_calls = |f: &FunctionSsa| {
+        let live = live_inst_mask(f);
+        (f.blocks.iter())
+            .flat_map(|b| b.inst_range.clone().map(move |v| (b, v)))
+            .filter(|&(b, v)| {
+                live[v as usize]
+                    && matches!(f.insts[v as usize], Inst::Call { target_pc, .. } if target_pc == f.ent_pc)
+                    && !matches!(b.terminator, crate::c5::ir::Terminator::Return(r) if r == v)
+            })
+            .count()
+    };
+    // A binary128 or x87 access lowers to a conversion sequence many times
+    // the one instruction the size counts.
+    let extended = |f: &FunctionSsa| {
+        f.insts.iter().any(|i| match i {
+            Inst::Load { kind, .. } | Inst::LoadLocal { kind, .. } => {
+                matches!(kind, LoadKind::F80 | LoadKind::F128)
+            }
+            Inst::Store { kind, .. } | Inst::StoreLocal { kind, .. } => {
+                matches!(kind, StoreKind::F80 | StoreKind::F128)
+            }
+            _ => false,
+        })
+    };
+    for f in funcs.iter_mut() {
+        let body_size = emitted_inst_count(f);
+        // A mandatory request is spliced wherever its call appears, its
+        // own recursive call included, with no level bound.
+        if self_calls(f) == 0
+            || f.is_always_inline
+            || extended(f)
+            || f.has_seh()
+            || f.locals > RECURSIVE_FRAME_SLOTS
+            || body_size > SELF_INLINE_BODY
+            || !candidacy(f, cap, abi, None, true)
+        {
+            continue;
+        }
+        let across = live_across_self_calls(f).max(1);
+        let depth = (callee_saved / across)
+            .saturating_sub(1)
+            .min(SELF_INLINE_DEPTH);
+        if depth == 0 {
+            continue;
+        }
+        let bodies = [f.clone()];
+        let facts: FactsMap = bodies.iter().map(|c| (c.ent_pc, callee_facts(c))).collect();
+        let pool = CandidatePool::build(&bodies, |_| true);
+        let orig_locals = f.locals;
+        let own_cells = lasting_cells(f, &live_inst_mask(f), true, 0);
+        let mut regions = CallerRegions::default();
+        for _ in 0..depth {
+            let caller = &mut *f;
+            let sites = self_calls(caller);
+            let grown = emitted_inst_count(caller) + sites * body_size;
+            if sites == 0
+                || caller.locals > RECURSIVE_FRAME_SLOTS
+                || grown > SELF_INLINE_TOTAL.min(SELF_INLINE_GROWTH * body_size)
+            {
+                break;
+            }
+            // Each site of the function's own cycle is spliced once a round.
+            let mut cycle_budget: BTreeMap<usize, usize> = BTreeMap::new();
+            if let Some(&k) = cycle_of.get(&caller.ent_pc) {
+                cycle_budget.insert(k, sites);
+            }
+            // No entry pc names nothing, so the view keeps the function's own.
+            let local = pool.view(usize::MAX, caller.section.clone());
+            let spliced = inline_caller(
+                caller,
+                &local,
+                &facts,
+                &mut SlotPlacement {
+                    regions: &mut regions,
+                    cyclic: &sccs.cyclic,
+                    sp_tainted: &sp_tainted,
+                    orig_locals,
+                    own_cells,
+                    stack,
+                    cycle_of: &cycle_of,
+                    cycle_budget: &mut cycle_budget,
+                    whole_vector,
+                },
+            );
+            if !spliced {
+                break;
+            }
+            caller.did_inline = true;
         }
     }
 }

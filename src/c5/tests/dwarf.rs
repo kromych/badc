@@ -677,8 +677,9 @@ fn lldb_backtrace_has_no_duplicate_caller_frame() {
 /// the return lands in the calling `fib` with the returned value.
 #[test]
 fn lldb_steps_out_of_a_return_ahead_of_the_frame() {
+    // Kept out of its own recursive calls, so each call is one frame.
     const SRC: &str = r#"
-        long fib(int n) {
+        __attribute__((noinline)) long fib(int n) {
             if (n < 2) return n;
             return fib(n - 1) + fib(n - 2);
         }

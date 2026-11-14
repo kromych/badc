@@ -33,9 +33,36 @@ Disassembly of section .text:
                	movl	%eax, <rip> # <addr>
                	testl	%edi, %edi
                	jle	<addr>
-               	decq	%rdi
+               	leaq	-0x1(%rdi), %rax
+               	movl	<rip>, %ecx # <addr>
+               	incq	%rcx
+               	movl	%ecx, <rip> # <addr>
+               	testl	%eax, %eax
+               	jle	<addr>
+               	decq	%rax
+               	movl	<rip>, %ecx # <addr>
+               	incq	%rcx
+               	movl	%ecx, <rip> # <addr>
+               	testl	%eax, %eax
+               	jle	<addr>
+               	decq	%rax
+               	movl	<rip>, %ecx # <addr>
+               	incq	%rcx
+               	movl	%ecx, <rip> # <addr>
+               	testl	%eax, %eax
+               	jle	<addr>
+               	leaq	-0x1(%rax), %rdi
                	popq	%rbp
                	jmp	<addr>
+               	leaq	<rip>, %rdi # <addr>
+               	callq	<addr>
+               	ud2
+               	leaq	<rip>, %rdi # <addr>
+               	callq	<addr>
+               	ud2
+               	leaq	<rip>, %rdi # <addr>
+               	callq	<addr>
+               	ud2
                	leaq	<rip>, %rdi # <addr>
                	callq	<addr>
                	ud2

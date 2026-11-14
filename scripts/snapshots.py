@@ -704,8 +704,14 @@ def access_counts(text: str, arch: str) -> tuple[int, int, int, int]:
 # most of them 256-bit intrinsic bodies with no saves, and their test drivers
 # keep the operands live across the checks they call (0.5338 -> 0.5405);
 # the corpus lost 651 instructions and 346 memory accesses.
+#
+# aarch64 0.292 -> 0.298: splicing a small self-recursive function into
+# itself keeps each level's values across the recursive call left in it,
+# in the callee-saved registers its depth bound counts; 27 recursive
+# functions grew (0.2910 -> 0.2971), and fib runs at 0.56 of its time on
+# the aarch64 box, binary_trees at 0.91.
 SAVED_PER_FUNCTION: dict[str, float] = {
-    "aarch64": 0.292,
+    "aarch64": 0.298,
     "x64": 0.545,
 }
 

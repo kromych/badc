@@ -23,8 +23,38 @@ Disassembly of section .text:
                	cmp	w0, #0x0
                	b.le	<addr>
                	sub	x0, x0, #0x1
+               	ldrsw	x3, [x2, #0x158]
+               	add	x3, x3, #0x1
+               	str	w3, [x2, #0x158]
+               	cmp	w0, #0x0
+               	b.le	<addr>
+               	sub	x0, x0, #0x1
+               	ldrsw	x3, [x2, #0x158]
+               	add	x3, x3, #0x1
+               	str	w3, [x2, #0x158]
+               	cmp	w0, #0x0
+               	b.le	<addr>
+               	sub	x0, x0, #0x1
+               	ldrsw	x3, [x2, #0x158]
+               	add	x3, x3, #0x1
+               	str	w3, [x2, #0x158]
+               	cmp	w0, #0x0
+               	b.le	<addr>
+               	sub	x0, x0, #0x1
                	ldp	x29, x30, [sp], #0x10
                	b	<addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	bl	<addr>
+               	brk	#0x1
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	bl	<addr>
+               	brk	#0x1
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	bl	<addr>
+               	brk	#0x1
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>

@@ -121,6 +121,9 @@ pub(super) struct FpEnv {
     tiny_before_rounding: bool,
     /// The NaN an invalid operation delivers.
     default_nan: u64,
+    /// AArch64 returns the first signaling NaN operand before the first
+    /// quiet one (the Arm ARM's FPProcessNaNs), x86-64 the first NaN.
+    signaling_first: bool,
     convert_out_of_range: OutOfRange,
     lrint_out_of_range: OutOfRange,
 }
@@ -273,6 +276,7 @@ impl FpEnv {
             } else {
                 0xfff8_0000_0000_0000
             },
+            signaling_first: aarch64,
             convert_out_of_range: if aarch64 {
                 OutOfRange::Saturate
             } else {
@@ -366,12 +370,14 @@ impl FpEnv {
         self.default_nan
     }
 
-    /// The first NaN operand quieted; a signaling one raises invalid.
+    /// The first NaN operand quieted, or the first signaling one where
+    /// the target prefers it; a signaling one raises invalid.
     fn propagate(&mut self, a: u64, b: u64, f: Format) -> u64 {
         if is_snan(a) || is_snan(b) {
             self.flags |= INVALID;
         }
-        let n = if is_nan(a) { a } else { b } | QUIET;
+        let first = is_nan(a) && !(self.signaling_first && is_snan(b) && !is_snan(a));
+        let n = if first { a } else { b } | QUIET;
         if f == BINARY32 {
             (f64::from_bits(n) as f32 as f64).to_bits()
         } else {
@@ -539,6 +545,19 @@ impl FpEnv {
     /// `a * b + c` rounded once (C99 7.12.13.1).
     pub(super) fn fma(&mut self, a: u64, b: u64, c: u64, f: Format) -> u64 {
         let np = negative(a) != negative(b);
+        // AArch64 ranks the addend first (FPProcessNaNs3), and a quiet NaN
+        // addend to infinity times zero gives the default NaN.
+        if self.signaling_first && is_nan(c) {
+            let inf_zero = matches!(
+                (class(a), class(b)),
+                (Class::Inf, Class::Zero) | (Class::Zero, Class::Inf)
+            );
+            return match () {
+                _ if inf_zero && !is_snan(c) => self.invalid(),
+                _ if is_snan(c) || !(is_snan(a) || is_snan(b)) => self.propagate(c, c, f),
+                _ => self.propagate(a, b, f),
+            };
+        }
         match (class(a), class(b), class(c)) {
             (Class::Nan, ..) | (_, Class::Nan, _) => self.propagate(a, b, f),
             (.., Class::Nan) => self.propagate(c, c, f),

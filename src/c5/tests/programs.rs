@@ -578,6 +578,22 @@ fn the_interpreter_copies_a_signaling_nan_float_unchanged() {
     }
 }
 
+/// On an AArch64 target the interpreter returns the NaN the Arm ARM ranks
+/// first: a signaling operand before a quiet one, and a fused
+/// multiply-add's addend before its factors.
+#[test]
+fn the_interpreter_ranks_nan_operands_as_aarch64_does() {
+    use crate::{Compiler, Target};
+    let src = super::load_fixture("aarch64_nan_operands_rank_signaling_and_addend_first.c");
+    for target in [Target::LinuxAarch64, Target::WindowsAarch64] {
+        let program = Compiler::with_options(src.clone(), target, Default::default())
+            .compile()
+            .expect("compile");
+        let rc = super::Vm::new(program).run().expect("run");
+        assert_eq!(rc, 0, "{target:?}: failing groups {rc:#x}");
+    }
+}
+
 /// The interpreter computes CRC32 as the instructions do: x86's CRC32 and
 /// AArch64's CRC32C* the CRC-32C, AArch64's CRC32* the IEEE CRC-32, each
 /// giving its check value over "123456789" from all ones, inverted at the end.

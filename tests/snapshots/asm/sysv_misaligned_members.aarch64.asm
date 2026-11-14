@@ -77,15 +77,10 @@ Disassembly of section .text:
                	sturh	w1, [x29, #-0x18]
                	mov	x1, #0x6                // =6
                	stur	w1, [x29, #-0x16]
-               	sub	x1, x29, #0x8
-               	sturb	w0, [x29, #-0x8]
+               	sturb	w0, [x29, #-0x10]
                	mov	x2, #0x2a               // =42
-               	stur	w2, [x29, #-0x7]
-               	sub	x3, x29, #0x10
-               	ldr	w16, [x1]
-               	str	w16, [x3]
-               	ldrb	w16, [x1, #0x4]
-               	strb	w16, [x3, #0x4]
+               	stur	w2, [x29, #-0xf]
+               	sub	x1, x29, #0x8
                	sturb	w0, [x29, #-0x8]
                	stur	w2, [x29, #-0x7]
                	mov	x0, #0x3                // =3

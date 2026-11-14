@@ -5813,11 +5813,8 @@ Disassembly of section .text:
                	movl	%eax, 0x90(%rsp)
                	movl	%eax, 0x94(%rsp)
                	movl	%eax, 0x98(%rsp)
-               	leaq	0x80(%rsp), %rcx
+               	leaq	0x80(%rsp), %rsi
                	movl	%eax, 0x9c(%rsp)
-               	leaq	0x60(%rsp), %rsi
-               	vmovups	(%rcx), %ymm14
-               	vmovups	%ymm14, (%rsi)
                	movl	$0x20, %edx
                	movq	<rip>, %rdi # <addr>
                	vmovups	%ymm0, -0x1950(%rbp)

@@ -973,16 +973,12 @@ Disassembly of section .text:
                	movq	%rax, 0x8(%rsp)
                	movabsq	$0x1716151413121110, %rax # imm = 0x1716151413121110
                	movq	%rax, 0x10(%rsp)
-               	leaq	(%rsp), %rax
-               	movabsq	$-0x7fe1e2e3e4e5e6e8, %rcx # imm = 0x801E1D1C1B1A1918
-               	movq	%rcx, 0x18(%rsp)
-               	leaq	0x20(%rsp), %rdx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rdx)
+               	movabsq	$-0x7fe1e2e3e4e5e6e8, %rax # imm = 0x801E1D1C1B1A1918
+               	movq	%rax, 0x18(%rsp)
                	movq	<rip>, %rcx # <addr>
                	movabsq	$0x100000001b3, %rsi    # imm = 0x100000001B3
                	xorl	%eax, %eax
-               	movzbq	0x20(%rsp,%rax), %rdi
+               	movzbq	(%rsp,%rax), %rdi
                	xorq	%rdi, %rcx
                	imulq	%rsi, %rcx
                	incq	%rax

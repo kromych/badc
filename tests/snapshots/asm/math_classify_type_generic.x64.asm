@@ -28,7 +28,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x90, %rsp
+               	subq	$0x80, %rsp
                	movl	$0x400000, -0x30(%rbp)  # imm = 0x400000
                	movl	$0x800000, -0x28(%rbp)  # imm = 0x800000
                	movl	$0x7fc00000, -0x20(%rbp) # imm = 0x7FC00000
@@ -41,17 +41,17 @@ Disassembly of section .text:
                	movq	%rax, %xmm14
                	movsd	%xmm14, -0x8(%rsp)
                	fldl	-0x8(%rsp)
-               	fstpt	-0x90(%rbp)
+               	fstpt	-0x80(%rbp)
                	xorl	%eax, %eax
                	movq	%rax, %xmm14
                	movsd	%xmm14, -0x8(%rsp)
                	fldl	-0x8(%rsp)
-               	fstpt	-0x80(%rbp)
+               	fstpt	-0x70(%rbp)
                	movabsq	$0x7ff0000000000000, %rcx # imm = 0x7FF0000000000000
                	movq	%rcx, %xmm14
                	movsd	%xmm14, -0x8(%rsp)
                	fldl	-0x8(%rsp)
-               	fstpt	-0x70(%rbp)
+               	fstpt	-0x60(%rbp)
                	movsd	-0x8(%rbp), %xmm1
                	movq	%xmm1, %rcx
                	shrq	$0x34, %rcx
@@ -262,66 +262,56 @@ Disassembly of section .text:
                	shrq	$0x1f, %rax
                	testl	%eax, %eax
                	je	<addr>
-               	fldt	-0x90(%rbp)
+               	fldt	-0x80(%rbp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
-               	leaq	-0x60(%rbp), %rcx
                	movsd	%xmm0, -0x8(%rsp)
                	fldl	-0x8(%rsp)
-               	fstpt	-0x60(%rbp)
-               	leaq	-0x50(%rbp), %rax
-               	movups	(%rcx), %xmm14
-               	movups	%xmm14, (%rax)
-               	fldt	-0x60(%rbp)
+               	fstpt	-0x50(%rbp)
+               	fldt	-0x50(%rbp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
-               	movq	%xmm0, %rcx
-               	shrq	$0x34, %rcx
-               	andq	$0x7ff, %rcx            # imm = 0x7FF
-               	testl	%ecx, %ecx
+               	movq	%xmm0, %rax
+               	shrq	$0x34, %rax
+               	andq	$0x7ff, %rax            # imm = 0x7FF
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x7, %eax
                	leave
                	retq
-               	cmpl	$0x7ff, %ecx            # imm = 0x7FF
+               	cmpl	$0x7ff, %eax            # imm = 0x7FF
                	je	<addr>
-               	fldt	-0x80(%rbp)
-               	fstpl	-0x8(%rsp)
-               	movsd	-0x8(%rsp), %xmm0
-               	leaq	-0x60(%rbp), %rcx
-               	movsd	%xmm0, -0x8(%rsp)
-               	fldl	-0x8(%rsp)
-               	fstpt	-0x60(%rbp)
-               	movups	(%rcx), %xmm14
-               	movups	%xmm14, (%rax)
-               	fldt	-0x60(%rbp)
-               	fstpl	-0x8(%rsp)
-               	movsd	-0x8(%rsp), %xmm0
-               	movq	%xmm0, %rcx
-               	movq	%rcx, %rdx
-               	shrq	$0x34, %rdx
-               	andq	$0x7ff, %rdx            # imm = 0x7FF
-               	movabsq	$0xfffffffffffff, %r11  # imm = 0xFFFFFFFFFFFFF
-               	andq	%r11, %rcx
-               	testl	%edx, %edx
-               	jne	<addr>
-               	movl	$0x2, %edx
-               	movl	$0x3, %esi
-               	testq	%rcx, %rcx
-               	movq	%rdx, %rcx
-               	cmovneq	%rsi, %rcx
-               	cmpl	$0x2, %ecx
-               	jne	<addr>
                	fldt	-0x70(%rbp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
-               	leaq	-0x60(%rbp), %rcx
                	movsd	%xmm0, -0x8(%rsp)
                	fldl	-0x8(%rsp)
-               	fstpt	-0x60(%rbp)
-               	movups	(%rcx), %xmm14
-               	movups	%xmm14, (%rax)
+               	fstpt	-0x50(%rbp)
+               	fldt	-0x50(%rbp)
+               	fstpl	-0x8(%rsp)
+               	movsd	-0x8(%rsp), %xmm0
+               	movq	%xmm0, %rax
+               	movq	%rax, %rcx
+               	shrq	$0x34, %rcx
+               	andq	$0x7ff, %rcx            # imm = 0x7FF
+               	movabsq	$0xfffffffffffff, %r11  # imm = 0xFFFFFFFFFFFFF
+               	andq	%r11, %rax
+               	testl	%ecx, %ecx
+               	jne	<addr>
+               	movl	$0x2, %ecx
+               	movl	$0x3, %edx
+               	testq	%rax, %rax
+               	movq	%rcx, %rax
+               	cmovneq	%rdx, %rax
+               	cmpl	$0x2, %eax
+               	jne	<addr>
                	fldt	-0x60(%rbp)
+               	fstpl	-0x8(%rsp)
+               	movsd	-0x8(%rsp), %xmm0
+               	movsd	%xmm0, -0x8(%rsp)
+               	fldl	-0x8(%rsp)
+               	fstpt	-0x50(%rbp)
+               	fldt	-0x50(%rbp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
                	movq	%xmm0, %rax
@@ -339,17 +329,13 @@ Disassembly of section .text:
                	cmovneq	%rdx, %rax
                	cmpl	$0x1, %eax
                	jne	<addr>
-               	fldt	-0x90(%rbp)
+               	fldt	-0x80(%rbp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
-               	leaq	-0x60(%rbp), %rax
                	movsd	%xmm0, -0x8(%rsp)
                	fldl	-0x8(%rsp)
-               	fstpt	-0x60(%rbp)
-               	leaq	-0x50(%rbp), %rcx
-               	movups	(%rax), %xmm14
-               	movups	%xmm14, (%rcx)
-               	fldt	-0x60(%rbp)
+               	fstpt	-0x50(%rbp)
+               	fldt	-0x50(%rbp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
                	movq	%xmm0, %rax
@@ -405,13 +391,13 @@ Disassembly of section .text:
                	movq	%rcx, %rax
                	cmovneq	%rdx, %rax
                	jmp	<addr>
-               	cmpl	$0x7ff, %edx            # imm = 0x7FF
+               	cmpl	$0x7ff, %ecx            # imm = 0x7FF
                	jne	<addr>
-               	movl	$0x1, %edx
-               	xorl	%esi, %esi
-               	testq	%rcx, %rcx
-               	movq	%rdx, %rcx
-               	cmovneq	%rsi, %rcx
+               	movl	$0x1, %ecx
+               	xorl	%edx, %edx
+               	testq	%rax, %rax
+               	movq	%rcx, %rax
+               	cmovneq	%rdx, %rax
                	jmp	<addr>
                	movl	$0x6, %eax
                	leave

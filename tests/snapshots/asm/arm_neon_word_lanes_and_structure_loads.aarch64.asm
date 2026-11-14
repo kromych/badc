@@ -295,14 +295,9 @@ Disassembly of section .text:
                	stur	q2, [x29, #-0xc0]
                	uzp2	v0.8h, v0.8h, v1.8h
                	stur	q0, [x29, #-0xb0]
-               	sub	x0, x29, #0x100
-               	stur	q2, [x29, #-0x100]
-               	stur	q0, [x29, #-0xf0]
                	sub	x3, x29, #0x120
-               	ldp	x16, x17, [x0]
-               	stp	x16, x17, [x3]
-               	ldp	x16, x17, [x0, #0x10]
-               	stp	x16, x17, [x3, #0x10]
+               	str	q2, [sp]
+               	str	q0, [sp, #0x10]
                	mov	x0, #0x0                // =0
                	add	x4, x3, #0x10
                	ldrh	w5, [x3, x0, lsl #1]
@@ -318,7 +313,7 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
                	b.lt	<addr>
-               	sub	x3, x29, #0x40
+               	sub	x2, x29, #0x40
                	ldur	q0, [x29, #-0x40]
                	ldur	q1, [x29, #-0x30]
                	ldur	q2, [x29, #-0x20]
@@ -335,26 +330,17 @@ Disassembly of section .text:
                	stur	q1, [x29, #-0xa0]
                	uzp2	v0.16b, v0.16b, v2.16b
                	stur	q0, [x29, #-0x90]
-               	sub	x0, x29, #0x100
+               	sub	x3, x29, #0x100
                	stur	q3, [x29, #-0x100]
                	stur	q5, [x29, #-0xf0]
                	stur	q1, [x29, #-0xe0]
                	stur	q0, [x29, #-0xd0]
-               	sub	x2, x29, #0xc0
-               	ldp	x16, x17, [x0]
-               	stp	x16, x17, [x2]
-               	ldp	x16, x17, [x0, #0x10]
-               	stp	x16, x17, [x2, #0x10]
-               	ldp	x16, x17, [x0, #0x20]
-               	stp	x16, x17, [x2, #0x20]
-               	ldp	x16, x17, [x0, #0x30]
-               	stp	x16, x17, [x2, #0x30]
                	mov	x1, #0x0                // =0
                	mov	x0, #0x0                // =0
-               	add	x4, x2, x0, lsl #4
+               	add	x4, x3, x0, lsl #4
                	ldrb	w4, [x4, x1]
                	add	x5, x0, x1, lsl #2
-               	ldrb	w5, [x3, x5]
+               	ldrb	w5, [x2, x5]
                	cmp	w4, w5
                	b.ne	<addr>
                	add	x0, x0, #0x1

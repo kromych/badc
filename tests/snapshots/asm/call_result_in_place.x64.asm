@@ -581,15 +581,12 @@ Disassembly of section .text:
 <regs_fresh>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x10, %rsp
                	movl	$0x4, %edi
                	callq	<addr>
-               	leaq	-0x10(%rbp), %rcx
+               	leaq	-0x10(%rbp), %rdi
                	movq	%rax, -0x10(%rbp)
                	movq	%rdx, -0x8(%rbp)
-               	leaq	-0x20(%rbp), %rdi
-               	movups	(%rcx), %xmm14
-               	movups	%xmm14, (%rdi)
                	callq	<addr>
                	cmpq	$0x54, %rax
                	sete	%al

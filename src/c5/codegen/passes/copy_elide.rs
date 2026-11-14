@@ -702,6 +702,7 @@ fn plan_one(
                 | Inst::ImmExtCode(_)
                 | Inst::BlockAddr(_)
                 | Inst::TlsAddr(_)
+                | Inst::LocalAddr(_)
                 | Inst::Binop { .. }
                 | Inst::BinopI { .. }
                 | Inst::Neg(_)
@@ -1069,6 +1070,20 @@ mod tests {
         assert!(matches!(f.insts[2], Inst::Mzero { dst: 1, .. }));
         assert!(matches!(f.insts[5], Inst::Copy { value: 3, .. }));
         assert_eq!(f.extern_imm_data_refs, [(1, 5), (3, 5)]);
+        assert!(defs_precede_uses(&f), "{:?}", shape(&f));
+    }
+
+    /// `T t = {0}; T u = t;`: the declared object's address, set after the
+    /// writes, reads no memory and replaces the base.
+    #[test]
+    fn a_local_destination_set_after_the_writes_is_named_at_the_base() {
+        let mut f = filled_then_copied(Inst::LocalAddr(-4));
+        f.locals = 4;
+        f.multi_cell_slots.push((-4, 2));
+        run_one(&mut f);
+        assert!(matches!(f.insts[1], Inst::LocalAddr(-4)), "{:?}", shape(&f));
+        assert!(matches!(f.insts[2], Inst::Mzero { dst: 1, .. }));
+        assert!(matches!(f.insts[5], Inst::Copy { value: 3, .. }));
         assert!(defs_precede_uses(&f), "{:?}", shape(&f));
     }
 

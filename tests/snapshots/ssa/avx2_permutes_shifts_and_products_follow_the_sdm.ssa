@@ -3072,30 +3072,30 @@ fn ent_pc=1359 n_params=0 variadic=false locals=12
     v1840 BinopI { op=add, lhs=v1815, rhs_imm=27 }         -> x0
     v1841 Imm(0)                                           -> x0
     v1842 Imm(28)                                          -> x0
-    v1843 LocalAddr(-677)                                  -> x0
-    v1844 BinopI { op=add, lhs=v1843, rhs_imm=28 }         -> x1
-    v1845 Imm(0)                                           -> x1
-    v1846 Imm(29)                                          -> x1
-    v1847 LocalAddr(-677)                                  -> x1
-    v1848 BinopI { op=add, lhs=v1843, rhs_imm=29 }         -> x1
-    v1849 Imm(0)                                           -> x1
-    v1850 Imm(30)                                          -> x1
-    v1851 LocalAddr(-677)                                  -> x1
-    v1852 BinopI { op=add, lhs=v1843, rhs_imm=30 }         -> x1
-    v1853 Imm(-9214895781002471144)                        -> x1
-    v1854 Imm(128)                                         -> x2
-    v1855 Imm(-128)                                        -> x2
-    v1856 LocalAddr(-677)                                  -> x2
-    v1857 BinopI { op=add, lhs=v1843, rhs_imm=31 }         -> x2
+    v1843 LocalAddr(-677)                                  -> x2
+    v1844 BinopI { op=add, lhs=v1843, rhs_imm=28 }         -> x0
+    v1845 Imm(0)                                           -> x0
+    v1846 Imm(29)                                          -> x0
+    v1847 LocalAddr(-677)                                  -> x0
+    v1848 BinopI { op=add, lhs=v1843, rhs_imm=29 }         -> x0
+    v1849 Imm(0)                                           -> x0
+    v1850 Imm(30)                                          -> x0
+    v1851 LocalAddr(-677)                                  -> x0
+    v1852 BinopI { op=add, lhs=v1843, rhs_imm=30 }         -> x0
+    v1853 Imm(-9214895781002471144)                        -> x0
+    v1854 Imm(128)                                         -> x1
+    v1855 Imm(-128)                                        -> x1
+    v1856 LocalAddr(-677)                                  -> x1
+    v1857 BinopI { op=add, lhs=v1843, rhs_imm=31 }         -> x1
     v1858 StoreLocal { off=-677, disp=24, value=v1853, kind=I64 } -> -
-    v1859 LocalAddr(-677)                                  -> x1
-    v1860 LocalAddr(-678)                                  -> x2
-    v1861 Mcpy { dst=v1860, src=v1843, size=32, align=32 } -> -
+    v1859 Imm(0)                                           -> x0
+    v1860 LocalAddr(-677)                                  -> x0
+    v1861 Copy { value=v1860, fp=false }                   -> x0
     v1862 ImmData(208)                                     -> x0
     v1863 Imm(160)                                         -> x0
     v1864 BinopI { op=add, lhs=v1862, rhs_imm=160 }        -> x0
     v1865 Load { addr=v1862, disp=160, kind=I64 pc_rel }   -> x1
-    v1866 LocalAddr(-678)                                  -> x0
+    v1866 LocalAddr(-677)                                  -> x0
     v1867 Imm(32)                                          -> x0
     v1868 Imm(32)                                          -> x0
     v1869 Imm(1099511628211)                               -> x6
@@ -3103,8 +3103,8 @@ fn ent_pc=1359 n_params=0 variadic=false locals=12
     terminator Jmp(b197)   (exit_acc=v1870)
   block 196  start_pc=0
     v2724 Extend { value=v2720, kind=I32 }                 -> x7
-    v2725 Binop { op=add, lhs=v1860, rhs=v2720 }           -> x7
-    v2726 LoadIndexed { base=v1860, index=v2720, scale=1, kind=U8 } -> x7
+    v2725 Binop { op=add, lhs=v1843, rhs=v2720 }           -> x7
+    v2726 LoadIndexed { base=v1843, index=v2720, scale=1, kind=U8 } -> x7
     v2727 Binop { op=xor, lhs=v2721, rhs=v2726 }           -> x1
     v2728 Binop { op=mul, lhs=v2727, rhs=v1869 }           -> x1
     v2729 Extend { value=v2720, kind=I32 }                 -> x7
@@ -3119,7 +3119,7 @@ fn ent_pc=1359 n_params=0 variadic=false locals=12
     terminator Bz { cond=v2723, target=b198, fall=b196 }   (exit_acc=v2723)
   block 198  start_pc=0
     v1871 Store { addr=v1862, disp=160, value=v2721, kind=I64 pc_rel } -> -
-    v1872 LifetimeEnd(-678)                                -> -
+    v1872 LifetimeEnd(-677)                                -> -
     v1873 Imm(0)                                           -> x0
     v1874 LifetimeEnd(-9)                                  -> -
     v1875 LifetimeEnd(-11)                                 -> -

@@ -3767,17 +3767,12 @@ Disassembly of section .text:
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	zip1	v2.16b, v0.16b, v1.16b
-               	stur	q2, [x29, #-0x40]
-               	zip2	v0.16b, v0.16b, v1.16b
-               	stur	q0, [x29, #-0x30]
-               	sub	x2, x29, #0x20
                	stur	q2, [x29, #-0x20]
+               	zip2	v0.16b, v0.16b, v1.16b
                	stur	q0, [x29, #-0x10]
                	sub	x1, x29, #0x40
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x2, #0x10]
-               	stp	x16, x17, [x1, #0x10]
+               	stur	q2, [x29, #-0x40]
+               	stur	q0, [x29, #-0x30]
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
                	ldp	x16, x17, [x1, #0x10]
@@ -3802,17 +3797,12 @@ Disassembly of section .text:
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	uzp1	v2.16b, v0.16b, v1.16b
-               	stur	q2, [x29, #-0x40]
-               	uzp2	v0.16b, v0.16b, v1.16b
-               	stur	q0, [x29, #-0x30]
-               	sub	x2, x29, #0x20
                	stur	q2, [x29, #-0x20]
+               	uzp2	v0.16b, v0.16b, v1.16b
                	stur	q0, [x29, #-0x10]
                	sub	x1, x29, #0x40
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x2, #0x10]
-               	stp	x16, x17, [x1, #0x10]
+               	stur	q2, [x29, #-0x40]
+               	stur	q0, [x29, #-0x30]
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
                	ldp	x16, x17, [x1, #0x10]
@@ -3837,17 +3827,12 @@ Disassembly of section .text:
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	trn1	v2.16b, v0.16b, v1.16b
-               	stur	q2, [x29, #-0x40]
-               	trn2	v0.16b, v0.16b, v1.16b
-               	stur	q0, [x29, #-0x30]
-               	sub	x2, x29, #0x20
                	stur	q2, [x29, #-0x20]
+               	trn2	v0.16b, v0.16b, v1.16b
                	stur	q0, [x29, #-0x10]
                	sub	x1, x29, #0x40
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x2, #0x10]
-               	stp	x16, x17, [x1, #0x10]
+               	stur	q2, [x29, #-0x40]
+               	stur	q0, [x29, #-0x30]
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
                	ldp	x16, x17, [x1, #0x10]
@@ -3956,17 +3941,12 @@ Disassembly of section .text:
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	zip1	v2.16b, v0.16b, v1.16b
-               	stur	q2, [x29, #-0x40]
-               	zip2	v0.16b, v0.16b, v1.16b
-               	stur	q0, [x29, #-0x30]
-               	sub	x2, x29, #0x20
                	stur	q2, [x29, #-0x20]
+               	zip2	v0.16b, v0.16b, v1.16b
                	stur	q0, [x29, #-0x10]
                	sub	x1, x29, #0x40
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x2, #0x10]
-               	stp	x16, x17, [x1, #0x10]
+               	stur	q2, [x29, #-0x40]
+               	stur	q0, [x29, #-0x30]
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
                	ldp	x16, x17, [x1, #0x10]
@@ -3991,17 +3971,12 @@ Disassembly of section .text:
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	uzp1	v2.16b, v0.16b, v1.16b
-               	stur	q2, [x29, #-0x40]
-               	uzp2	v0.16b, v0.16b, v1.16b
-               	stur	q0, [x29, #-0x30]
-               	sub	x2, x29, #0x20
                	stur	q2, [x29, #-0x20]
+               	uzp2	v0.16b, v0.16b, v1.16b
                	stur	q0, [x29, #-0x10]
                	sub	x1, x29, #0x40
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x2, #0x10]
-               	stp	x16, x17, [x1, #0x10]
+               	stur	q2, [x29, #-0x40]
+               	stur	q0, [x29, #-0x30]
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
                	ldp	x16, x17, [x1, #0x10]
@@ -4026,17 +4001,12 @@ Disassembly of section .text:
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	trn1	v2.16b, v0.16b, v1.16b
-               	stur	q2, [x29, #-0x40]
-               	trn2	v0.16b, v0.16b, v1.16b
-               	stur	q0, [x29, #-0x30]
-               	sub	x2, x29, #0x20
                	stur	q2, [x29, #-0x20]
+               	trn2	v0.16b, v0.16b, v1.16b
                	stur	q0, [x29, #-0x10]
                	sub	x1, x29, #0x40
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x2, #0x10]
-               	stp	x16, x17, [x1, #0x10]
+               	stur	q2, [x29, #-0x40]
+               	stur	q0, [x29, #-0x30]
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
                	ldp	x16, x17, [x1, #0x10]
@@ -4145,17 +4115,12 @@ Disassembly of section .text:
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	zip1	v2.16b, v0.16b, v1.16b
-               	stur	q2, [x29, #-0x40]
-               	zip2	v0.16b, v0.16b, v1.16b
-               	stur	q0, [x29, #-0x30]
-               	sub	x2, x29, #0x20
                	stur	q2, [x29, #-0x20]
+               	zip2	v0.16b, v0.16b, v1.16b
                	stur	q0, [x29, #-0x10]
                	sub	x1, x29, #0x40
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x2, #0x10]
-               	stp	x16, x17, [x1, #0x10]
+               	stur	q2, [x29, #-0x40]
+               	stur	q0, [x29, #-0x30]
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
                	ldp	x16, x17, [x1, #0x10]
@@ -4180,17 +4145,12 @@ Disassembly of section .text:
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	uzp1	v2.16b, v0.16b, v1.16b
-               	stur	q2, [x29, #-0x40]
-               	uzp2	v0.16b, v0.16b, v1.16b
-               	stur	q0, [x29, #-0x30]
-               	sub	x2, x29, #0x20
                	stur	q2, [x29, #-0x20]
+               	uzp2	v0.16b, v0.16b, v1.16b
                	stur	q0, [x29, #-0x10]
                	sub	x1, x29, #0x40
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x2, #0x10]
-               	stp	x16, x17, [x1, #0x10]
+               	stur	q2, [x29, #-0x40]
+               	stur	q0, [x29, #-0x30]
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
                	ldp	x16, x17, [x1, #0x10]
@@ -4215,17 +4175,12 @@ Disassembly of section .text:
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	trn1	v2.16b, v0.16b, v1.16b
-               	stur	q2, [x29, #-0x40]
-               	trn2	v0.16b, v0.16b, v1.16b
-               	stur	q0, [x29, #-0x30]
-               	sub	x2, x29, #0x20
                	stur	q2, [x29, #-0x20]
+               	trn2	v0.16b, v0.16b, v1.16b
                	stur	q0, [x29, #-0x10]
                	sub	x1, x29, #0x40
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x2, #0x10]
-               	stp	x16, x17, [x1, #0x10]
+               	stur	q2, [x29, #-0x40]
+               	stur	q0, [x29, #-0x30]
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
                	ldp	x16, x17, [x1, #0x10]
@@ -4334,17 +4289,12 @@ Disassembly of section .text:
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	zip1	v2.8h, v0.8h, v1.8h
-               	stur	q2, [x29, #-0x40]
-               	zip2	v0.8h, v0.8h, v1.8h
-               	stur	q0, [x29, #-0x30]
-               	sub	x2, x29, #0x20
                	stur	q2, [x29, #-0x20]
+               	zip2	v0.8h, v0.8h, v1.8h
                	stur	q0, [x29, #-0x10]
                	sub	x1, x29, #0x40
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x2, #0x10]
-               	stp	x16, x17, [x1, #0x10]
+               	stur	q2, [x29, #-0x40]
+               	stur	q0, [x29, #-0x30]
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
                	ldp	x16, x17, [x1, #0x10]
@@ -4369,17 +4319,12 @@ Disassembly of section .text:
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	uzp1	v2.8h, v0.8h, v1.8h
-               	stur	q2, [x29, #-0x40]
-               	uzp2	v0.8h, v0.8h, v1.8h
-               	stur	q0, [x29, #-0x30]
-               	sub	x2, x29, #0x20
                	stur	q2, [x29, #-0x20]
+               	uzp2	v0.8h, v0.8h, v1.8h
                	stur	q0, [x29, #-0x10]
                	sub	x1, x29, #0x40
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x2, #0x10]
-               	stp	x16, x17, [x1, #0x10]
+               	stur	q2, [x29, #-0x40]
+               	stur	q0, [x29, #-0x30]
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
                	ldp	x16, x17, [x1, #0x10]
@@ -4404,17 +4349,12 @@ Disassembly of section .text:
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	trn1	v2.8h, v0.8h, v1.8h
-               	stur	q2, [x29, #-0x40]
-               	trn2	v0.8h, v0.8h, v1.8h
-               	stur	q0, [x29, #-0x30]
-               	sub	x2, x29, #0x20
                	stur	q2, [x29, #-0x20]
+               	trn2	v0.8h, v0.8h, v1.8h
                	stur	q0, [x29, #-0x10]
                	sub	x1, x29, #0x40
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x2, #0x10]
-               	stp	x16, x17, [x1, #0x10]
+               	stur	q2, [x29, #-0x40]
+               	stur	q0, [x29, #-0x30]
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
                	ldp	x16, x17, [x1, #0x10]
@@ -4523,17 +4463,12 @@ Disassembly of section .text:
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	zip1	v2.8h, v0.8h, v1.8h
-               	stur	q2, [x29, #-0x40]
-               	zip2	v0.8h, v0.8h, v1.8h
-               	stur	q0, [x29, #-0x30]
-               	sub	x2, x29, #0x20
                	stur	q2, [x29, #-0x20]
+               	zip2	v0.8h, v0.8h, v1.8h
                	stur	q0, [x29, #-0x10]
                	sub	x1, x29, #0x40
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x2, #0x10]
-               	stp	x16, x17, [x1, #0x10]
+               	stur	q2, [x29, #-0x40]
+               	stur	q0, [x29, #-0x30]
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
                	ldp	x16, x17, [x1, #0x10]
@@ -4558,17 +4493,12 @@ Disassembly of section .text:
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	uzp1	v2.8h, v0.8h, v1.8h
-               	stur	q2, [x29, #-0x40]
-               	uzp2	v0.8h, v0.8h, v1.8h
-               	stur	q0, [x29, #-0x30]
-               	sub	x2, x29, #0x20
                	stur	q2, [x29, #-0x20]
+               	uzp2	v0.8h, v0.8h, v1.8h
                	stur	q0, [x29, #-0x10]
                	sub	x1, x29, #0x40
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x2, #0x10]
-               	stp	x16, x17, [x1, #0x10]
+               	stur	q2, [x29, #-0x40]
+               	stur	q0, [x29, #-0x30]
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
                	ldp	x16, x17, [x1, #0x10]
@@ -4593,17 +4523,12 @@ Disassembly of section .text:
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	trn1	v2.8h, v0.8h, v1.8h
-               	stur	q2, [x29, #-0x40]
-               	trn2	v0.8h, v0.8h, v1.8h
-               	stur	q0, [x29, #-0x30]
-               	sub	x2, x29, #0x20
                	stur	q2, [x29, #-0x20]
+               	trn2	v0.8h, v0.8h, v1.8h
                	stur	q0, [x29, #-0x10]
                	sub	x1, x29, #0x40
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x2, #0x10]
-               	stp	x16, x17, [x1, #0x10]
+               	stur	q2, [x29, #-0x40]
+               	stur	q0, [x29, #-0x30]
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
                	ldp	x16, x17, [x1, #0x10]
@@ -4712,17 +4637,12 @@ Disassembly of section .text:
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	zip1	v2.8h, v0.8h, v1.8h
-               	stur	q2, [x29, #-0x40]
-               	zip2	v0.8h, v0.8h, v1.8h
-               	stur	q0, [x29, #-0x30]
-               	sub	x2, x29, #0x20
                	stur	q2, [x29, #-0x20]
+               	zip2	v0.8h, v0.8h, v1.8h
                	stur	q0, [x29, #-0x10]
                	sub	x1, x29, #0x40
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x2, #0x10]
-               	stp	x16, x17, [x1, #0x10]
+               	stur	q2, [x29, #-0x40]
+               	stur	q0, [x29, #-0x30]
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
                	ldp	x16, x17, [x1, #0x10]
@@ -4747,17 +4667,12 @@ Disassembly of section .text:
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	uzp1	v2.8h, v0.8h, v1.8h
-               	stur	q2, [x29, #-0x40]
-               	uzp2	v0.8h, v0.8h, v1.8h
-               	stur	q0, [x29, #-0x30]
-               	sub	x2, x29, #0x20
                	stur	q2, [x29, #-0x20]
+               	uzp2	v0.8h, v0.8h, v1.8h
                	stur	q0, [x29, #-0x10]
                	sub	x1, x29, #0x40
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x2, #0x10]
-               	stp	x16, x17, [x1, #0x10]
+               	stur	q2, [x29, #-0x40]
+               	stur	q0, [x29, #-0x30]
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
                	ldp	x16, x17, [x1, #0x10]
@@ -4782,17 +4697,12 @@ Disassembly of section .text:
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	trn1	v2.8h, v0.8h, v1.8h
-               	stur	q2, [x29, #-0x40]
-               	trn2	v0.8h, v0.8h, v1.8h
-               	stur	q0, [x29, #-0x30]
-               	sub	x2, x29, #0x20
                	stur	q2, [x29, #-0x20]
+               	trn2	v0.8h, v0.8h, v1.8h
                	stur	q0, [x29, #-0x10]
                	sub	x1, x29, #0x40
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x2, #0x10]
-               	stp	x16, x17, [x1, #0x10]
+               	stur	q2, [x29, #-0x40]
+               	stur	q0, [x29, #-0x30]
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
                	ldp	x16, x17, [x1, #0x10]
@@ -4901,17 +4811,12 @@ Disassembly of section .text:
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	zip1	v2.4s, v0.4s, v1.4s
-               	stur	q2, [x29, #-0x40]
-               	zip2	v0.4s, v0.4s, v1.4s
-               	stur	q0, [x29, #-0x30]
-               	sub	x2, x29, #0x20
                	stur	q2, [x29, #-0x20]
+               	zip2	v0.4s, v0.4s, v1.4s
                	stur	q0, [x29, #-0x10]
                	sub	x1, x29, #0x40
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x2, #0x10]
-               	stp	x16, x17, [x1, #0x10]
+               	stur	q2, [x29, #-0x40]
+               	stur	q0, [x29, #-0x30]
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
                	ldp	x16, x17, [x1, #0x10]
@@ -4936,17 +4841,12 @@ Disassembly of section .text:
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	uzp1	v2.4s, v0.4s, v1.4s
-               	stur	q2, [x29, #-0x40]
-               	uzp2	v0.4s, v0.4s, v1.4s
-               	stur	q0, [x29, #-0x30]
-               	sub	x2, x29, #0x20
                	stur	q2, [x29, #-0x20]
+               	uzp2	v0.4s, v0.4s, v1.4s
                	stur	q0, [x29, #-0x10]
                	sub	x1, x29, #0x40
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x2, #0x10]
-               	stp	x16, x17, [x1, #0x10]
+               	stur	q2, [x29, #-0x40]
+               	stur	q0, [x29, #-0x30]
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
                	ldp	x16, x17, [x1, #0x10]
@@ -4971,17 +4871,12 @@ Disassembly of section .text:
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	trn1	v2.4s, v0.4s, v1.4s
-               	stur	q2, [x29, #-0x40]
-               	trn2	v0.4s, v0.4s, v1.4s
-               	stur	q0, [x29, #-0x30]
-               	sub	x2, x29, #0x20
                	stur	q2, [x29, #-0x20]
+               	trn2	v0.4s, v0.4s, v1.4s
                	stur	q0, [x29, #-0x10]
                	sub	x1, x29, #0x40
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x2, #0x10]
-               	stp	x16, x17, [x1, #0x10]
+               	stur	q2, [x29, #-0x40]
+               	stur	q0, [x29, #-0x30]
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
                	ldp	x16, x17, [x1, #0x10]
@@ -5090,17 +4985,12 @@ Disassembly of section .text:
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	zip1	v2.4s, v0.4s, v1.4s
-               	stur	q2, [x29, #-0x40]
-               	zip2	v0.4s, v0.4s, v1.4s
-               	stur	q0, [x29, #-0x30]
-               	sub	x2, x29, #0x20
                	stur	q2, [x29, #-0x20]
+               	zip2	v0.4s, v0.4s, v1.4s
                	stur	q0, [x29, #-0x10]
                	sub	x1, x29, #0x40
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x2, #0x10]
-               	stp	x16, x17, [x1, #0x10]
+               	stur	q2, [x29, #-0x40]
+               	stur	q0, [x29, #-0x30]
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
                	ldp	x16, x17, [x1, #0x10]
@@ -5125,17 +5015,12 @@ Disassembly of section .text:
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	uzp1	v2.4s, v0.4s, v1.4s
-               	stur	q2, [x29, #-0x40]
-               	uzp2	v0.4s, v0.4s, v1.4s
-               	stur	q0, [x29, #-0x30]
-               	sub	x2, x29, #0x20
                	stur	q2, [x29, #-0x20]
+               	uzp2	v0.4s, v0.4s, v1.4s
                	stur	q0, [x29, #-0x10]
                	sub	x1, x29, #0x40
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x2, #0x10]
-               	stp	x16, x17, [x1, #0x10]
+               	stur	q2, [x29, #-0x40]
+               	stur	q0, [x29, #-0x30]
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
                	ldp	x16, x17, [x1, #0x10]
@@ -5160,17 +5045,12 @@ Disassembly of section .text:
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	trn1	v2.4s, v0.4s, v1.4s
-               	stur	q2, [x29, #-0x40]
-               	trn2	v0.4s, v0.4s, v1.4s
-               	stur	q0, [x29, #-0x30]
-               	sub	x2, x29, #0x20
                	stur	q2, [x29, #-0x20]
+               	trn2	v0.4s, v0.4s, v1.4s
                	stur	q0, [x29, #-0x10]
                	sub	x1, x29, #0x40
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x2, #0x10]
-               	stp	x16, x17, [x1, #0x10]
+               	stur	q2, [x29, #-0x40]
+               	stur	q0, [x29, #-0x30]
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
                	ldp	x16, x17, [x1, #0x10]
@@ -5279,17 +5159,12 @@ Disassembly of section .text:
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	zip1	v2.4s, v0.4s, v1.4s
-               	stur	q2, [x29, #-0x40]
-               	zip2	v0.4s, v0.4s, v1.4s
-               	stur	q0, [x29, #-0x30]
-               	sub	x2, x29, #0x20
                	stur	q2, [x29, #-0x20]
+               	zip2	v0.4s, v0.4s, v1.4s
                	stur	q0, [x29, #-0x10]
                	sub	x1, x29, #0x40
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x2, #0x10]
-               	stp	x16, x17, [x1, #0x10]
+               	stur	q2, [x29, #-0x40]
+               	stur	q0, [x29, #-0x30]
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
                	ldp	x16, x17, [x1, #0x10]
@@ -5314,17 +5189,12 @@ Disassembly of section .text:
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	uzp1	v2.4s, v0.4s, v1.4s
-               	stur	q2, [x29, #-0x40]
-               	uzp2	v0.4s, v0.4s, v1.4s
-               	stur	q0, [x29, #-0x30]
-               	sub	x2, x29, #0x20
                	stur	q2, [x29, #-0x20]
+               	uzp2	v0.4s, v0.4s, v1.4s
                	stur	q0, [x29, #-0x10]
                	sub	x1, x29, #0x40
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x2, #0x10]
-               	stp	x16, x17, [x1, #0x10]
+               	stur	q2, [x29, #-0x40]
+               	stur	q0, [x29, #-0x30]
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
                	ldp	x16, x17, [x1, #0x10]
@@ -5349,17 +5219,12 @@ Disassembly of section .text:
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	trn1	v2.4s, v0.4s, v1.4s
-               	stur	q2, [x29, #-0x40]
-               	trn2	v0.4s, v0.4s, v1.4s
-               	stur	q0, [x29, #-0x30]
-               	sub	x2, x29, #0x20
                	stur	q2, [x29, #-0x20]
+               	trn2	v0.4s, v0.4s, v1.4s
                	stur	q0, [x29, #-0x10]
                	sub	x1, x29, #0x40
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x2, #0x10]
-               	stp	x16, x17, [x1, #0x10]
+               	stur	q2, [x29, #-0x40]
+               	stur	q0, [x29, #-0x30]
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
                	ldp	x16, x17, [x1, #0x10]

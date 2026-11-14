@@ -545,19 +545,17 @@ Disassembly of section .text:
 <regs_fresh>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x20
+               	sub	sp, sp, #0x10
                	mov	x0, #0x4                // =4
                	bl	<addr>
                	sub	x2, x29, #0x10
                	stur	x0, [x29, #-0x10]
                	stur	x1, [x29, #-0x8]
-               	sub	x0, x29, #0x20
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x0]
+               	mov	x0, x2
                	bl	<addr>
                	cmp	x0, #0x54
                	cset	x0, eq
-               	add	sp, sp, #0x20
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
 

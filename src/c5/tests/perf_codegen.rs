@@ -3164,6 +3164,39 @@ void add64(v16si *r, const v16si *a, const v16si *b) { *r = *a + *b; }\n";
     m.finish();
 }
 
+/// A GNU vector shifted by a vector of counts is one shift: on x86-64 the
+/// AVX2 shift by a count per lane, `vpsllvd`, `vpsravd` or `vpsrlvq`, and
+/// `ret`; on AArch64 `ushl` for a left shift and `neg` and `sshl` or `ushl`
+/// for a right one, and `ret`. Each took a scalar shift per lane.
+#[test]
+fn a_vector_shifted_by_a_vector_is_one_shift() {
+    const SRC: &str = "typedef int v4si __attribute__((vector_size(16)));\n\
+typedef unsigned long long v2du __attribute__((vector_size(16)));\n\
+v4si shl(v4si a, v4si c) { return a << c; }\n\
+v4si sar(v4si a, v4si c) { return a >> c; }\n\
+v2du shr(v2du a, v2du c) { return a >> c; }\n";
+    let mut m = Misses::default();
+    // VEX 0F38 47 (`vpsllv`), 46 (`vpsrav`) and 45 (`vpsrlv`).
+    for (name, op) in [("shl", 0x3847u16), ("sar", 0x3846), ("shr", 0x3845)] {
+        let insns = x64(SRC, name);
+        m.expect(
+            insns.len() == 2 && insns[0].vex && insns[0].op == op,
+            || format!("x86-64 {name}: {insns:x?}"),
+        );
+    }
+    // `ushl v0.4s, v0.4s, v1.4s`; `neg v1.4s, v1.4s` and `sshl`; `neg v1.2d`
+    // and `ushl v0.2d`.
+    for (name, words) in [
+        ("shl", &[0x6EA1_4400u32, 0xD65F_03C0][..]),
+        ("sar", &[0x6EA0_B821, 0x4EA1_4400, 0xD65F_03C0]),
+        ("shr", &[0x6EE0_B821, 0x6EE1_4400, 0xD65F_03C0]),
+    ] {
+        let got = a64(SRC, name);
+        m.expect(got == words, || format!("aarch64 {name}: {got:08x?}"));
+    }
+    m.finish();
+}
+
 /// An FMA3 intrinsic is its instruction over the whole vector, the result
 /// in the accumulator's register: a step of `y = a * x + y` over 8 floats
 /// is two loads, `vfmadd231ps` and a store. Each took a scalar fused

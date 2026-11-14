@@ -468,6 +468,17 @@ pub(crate) const OPS: &[SimdOp] = &[
     op256("__builtin_ia32_vpdpbusds256", "vpdpbusds", Form::Vvv, Ret::V8si, Sem::DotBytes(true), 0),
     op256("__builtin_ia32_vpdpwssd256", "vpdpwssd", Form::Vvv, Ret::V8si, Sem::DotWords(false), 0),
     op256("__builtin_ia32_vpdpwssds256", "vpdpwssds", Form::Vvv, Ret::V8si, Sem::DotWords(true), 0),
+    // The AVX2 shifts by a count in each lane.
+    op("__builtin_ia32_psllv4si", "psllvd", Form::Vv, Ret::V4si, Sem::ShlVar(4), 0),
+    op256("__builtin_ia32_psllv8si", "vpsllvd", Form::Vv, Ret::V8si, Sem::ShlVar(4), 0),
+    op("__builtin_ia32_psllv2di", "psllvq", Form::Vv, Ret::V2di, Sem::ShlVar(8), 0),
+    op256("__builtin_ia32_psllv4di", "vpsllvq", Form::Vv, Ret::V4di, Sem::ShlVar(8), 0),
+    op("__builtin_ia32_psrlv4si", "psrlvd", Form::Vv, Ret::V4si, Sem::ShrVar(4), 0),
+    op256("__builtin_ia32_psrlv8si", "vpsrlvd", Form::Vv, Ret::V8si, Sem::ShrVar(4), 0),
+    op("__builtin_ia32_psrlv2di", "psrlvq", Form::Vv, Ret::V2di, Sem::ShrVar(8), 0),
+    op256("__builtin_ia32_psrlv4di", "vpsrlvq", Form::Vv, Ret::V4di, Sem::ShrVar(8), 0),
+    op("__builtin_ia32_psrav4si", "psravd", Form::Vv, Ret::V4si, Sem::SarVar(4), 0),
+    op256("__builtin_ia32_psrav8si", "vpsravd", Form::Vv, Ret::V8si, Sem::SarVar(4), 0),
     // The FMA forms in the 231 encoding, the accumulator first: the product
     // of the other two, negated by the `n` forms, plus or minus it.
     op("__builtin_ia32_vfmadd231ps", "vfmadd231ps", Form::Vvv, Ret::V4sf, Sem::FloatFma(4, false, Addend::Plus), 0),

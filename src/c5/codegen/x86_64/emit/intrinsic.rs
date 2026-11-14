@@ -106,11 +106,23 @@ pub(super) fn emit_x86_simd(
                 return fail("x86 simd: operand 2 has no place");
             };
             load128(code, src_x, b)?;
-            if row.form == Form::Vv {
-                insn(code, row.mnem, &[xmm(src_x), xmm(dst_x)])
+            let mut ops = alloc::vec![xmm(src_x), xmm(dst_x)];
+            if row.form == Form::VvI {
+                ops.insert(0, imm8);
+            }
+            // A VEX-only row (`psllvd`) has no two-operand SSE encoding: the
+            // VEX form writes over its first source.
+            let mut probe = CodeBuf::default();
+            if insn(&mut probe, row.mnem, &ops).is_ok() {
+                code.extend_from_slice(&probe);
+            } else if let Some(m) = super::asm::vex_mnemonic(row.mnem) {
+                ops.push(xmm(dst_x));
+                if let Err(e) = super::asm::encode(code, 8, m, None, &ops) {
+                    return fail(alloc::format!("x86 simd: {e}"));
+                }
             } else {
-                insn(code, row.mnem, &[imm8, xmm(src_x), xmm(dst_x)])
-            }?;
+                insn(code, row.mnem, &ops)?;
+            }
         }
         Form::V | Form::VI => {
             let Some(a) = operand(code, 1, SCRATCH_R10) else {

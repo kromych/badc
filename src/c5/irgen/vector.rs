@@ -237,8 +237,10 @@ impl<'a> Walker<'a> {
     /// computes it ([`crate::c5::simd::find`]), once per part of the width
     /// the row takes ([`widest_part`]): a comparison of two vectors,
     /// `<` and `<=` and their unsigned forms as the swapped `>` and `>=`,
-    /// or a shift by a constant count less than the lane width. `None`
-    /// leaves `op` to the lane-wise lowering.
+    /// a shift by a constant count less than the lane width, or one by the
+    /// counts of a second vector, whose counts past the lane width are
+    /// undefined (C17 6.5.7p3). `None` leaves `op` to the lane-wise
+    /// lowering.
     fn walk_vector_row(
         &mut self,
         b: &mut SsaBuilder,
@@ -276,6 +278,9 @@ impl<'a> Walker<'a> {
             (B::Ult, true, _) => (Sem::CmpHi(w), Form::Vv, true),
             (B::Uge, true, _) => (Sem::CmpHs(w), Form::Vv, false),
             (B::Ule, true, _) => (Sem::CmpHs(w), Form::Vv, true),
+            (B::Shl, true, _) => (Sem::ShlVar(w), Form::Vv, false),
+            (B::Shr, true, _) => (Sem::SarVar(w), Form::Vv, false),
+            (B::Shru, true, _) => (Sem::ShrVar(w), Form::Vv, false),
             (B::Shl, false, Some(_)) => (Sem::Shl(w), Form::Shift, false),
             (B::Shr, false, Some(_)) => (Sem::Sar(w), Form::Shift, false),
             (B::Shru, false, Some(_)) => (Sem::Shr(w), Form::Shift, false),
@@ -283,7 +288,12 @@ impl<'a> Walker<'a> {
         };
         let find = |n: i64| crate::c5::simd::find(self.target, self.x86, sem, form, n as u8);
         let Some((row, width)) = widest_part(size, find) else {
-            return Ok(None);
+            return match sem {
+                Sem::ShlVar(_) | Sem::ShrVar(_) | Sem::SarVar(_) => {
+                    self.walk_shift_by_signed_lanes(b, sem, lhs, rhs, size)
+                }
+                _ => Ok(None),
+            };
         };
         let mut ops = alloc::vec![self.walk_copy_operand(b, lhs)?];
         if pair {
@@ -294,6 +304,48 @@ impl<'a> Walker<'a> {
         }
         let imm = if form == Form::Shift { count } else { None };
         Ok(Some(self.emit_simd_parts(b, row, imm, ops, size, width)))
+    }
+
+    /// A shift by the counts of a second vector as the shift by the signed
+    /// count in each lane (`ushl`, `sshl`) where the target has that one
+    /// instead: a left shift by the counts, a right one by their negations.
+    fn walk_shift_by_signed_lanes(
+        &mut self,
+        b: &mut SsaBuilder,
+        sem: crate::c5::simd::Sem,
+        lhs: ExprId,
+        rhs: ExprId,
+        size: i64,
+    ) -> Result<Option<ValueId>, WalkError> {
+        use crate::c5::simd::{Form, Sem, find};
+        let (w, signed, right) = match sem {
+            Sem::ShlVar(w) => (w, false, false),
+            Sem::ShrVar(w) => (w, false, true),
+            Sem::SarVar(w) => (w, true, true),
+            _ => return Ok(None),
+        };
+        let (target, x86) = (self.target, self.x86);
+        let shl = widest_part(size, |n| {
+            find(
+                target,
+                x86,
+                Sem::ShlReg(w, signed, false, false),
+                Form::Vv,
+                n as u8,
+            )
+        });
+        let neg = widest_part(size, |n| find(target, x86, Sem::Neg(w), Form::V, n as u8));
+        let (Some((shl, width)), Some((neg, neg_width))) = (shl, neg) else {
+            return Ok(None);
+        };
+        let lv = self.walk_copy_operand(b, lhs)?;
+        let mut counts = self.walk_copy_operand(b, rhs)?;
+        if right {
+            let ops = alloc::vec![counts];
+            counts = self.emit_simd_parts(b, neg, None, ops, size, neg_width);
+        }
+        let ops = alloc::vec![lv, counts];
+        Ok(Some(self.emit_simd_parts(b, shl, None, ops, size, width)))
     }
 
     /// Element-wise unary `-` / `~` over a vector: the target's SIMD row

@@ -224,6 +224,28 @@ fn shuffles_carry_their_immediate() {
     );
 }
 
+/// A 128-bit row with no SSE encoding takes its VEX form at `-O0`, the
+/// first source loaded into the destination: `vpsllvd %xmm14, %xmm15,
+/// %xmm15` is `c4 42 01 47 fe`, `vpsrlvq` `c4 42 81 45 fe`.
+#[cfg(feature = "full")]
+#[test]
+fn a_vex_only_row_takes_its_vex_form_in_memory() {
+    let v4si = "typedef int __v4si_ __attribute__((vector_size(16))); ";
+    assert_emits(
+        &format!(
+            "{v4si}__m128i f(__m128i a, __m128i b) {{ \
+             return (__m128i)__builtin_ia32_psllv4si((__v4si_)a, (__v4si_)b); }}"
+        ),
+        &[0xc4, 0x42, 0x01, 0x47, 0xfe],
+        "vpsllvd",
+    );
+    assert_emits(
+        "__m128i f(__m128i a, __m128i b) { return (__m128i)__builtin_ia32_psrlv2di(a, b); }",
+        &[0xc4, 0x42, 0x81, 0x45, 0xfe],
+        "vpsrlvq",
+    );
+}
+
 /// The SSSE3 forms take the 0F38 map, `66 45 0f 38 <op> fe`; PALIGNR's
 /// builtin counts bits and the instruction bytes.
 #[cfg(feature = "full")]
@@ -555,6 +577,25 @@ fn the_fma_forms_are_rows_the_interpreter_runs() {
             "{fixture} in the interpreter"
         );
     }
+}
+
+/// The AVX2 shifts by a count per lane are rows the interpreter runs as
+/// the SDM defines them, a count past the lane width and one past 32 bits
+/// in a 64-bit lane included, which the
+/// `avx2_shifts_shuffles_and_blends_follow_the_sdm` model checks.
+#[test]
+fn the_variable_shifts_are_rows_the_interpreter_runs() {
+    for (name, sem) in [
+        ("__builtin_ia32_psllv8si", Sem::ShlVar(4)),
+        ("__builtin_ia32_psrlv2di", Sem::ShrVar(8)),
+        ("__builtin_ia32_psrav4si", Sem::SarVar(4)),
+    ] {
+        let row = x86_simd::OPS.iter().find(|r| r.name == name).expect(name);
+        assert!(row.sem == sem && row.form == simd::Form::Vv, "{name}");
+    }
+    let fixture = super::load_fixture("avx2_shifts_shuffles_and_blends_follow_the_sdm.c");
+    let program = super::compile_str_bare_for(&fixture, crate::Target::LinuxX64);
+    assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 0);
 }
 
 /// `<pmmintrin.h>` and the `<mmintrin.h>` it reaches give each MMX and SSE3
@@ -1900,7 +1941,10 @@ fn floating_rows_compute_in_the_environment() {
         | Sem::MatMul(..)
         | Sem::NarrowHigh(..)
         | Sem::SatAccMixed(..)
-        | Sem::BitReverse => false,
+        | Sem::BitReverse
+        | Sem::ShlVar(_)
+        | Sem::ShrVar(_)
+        | Sem::SarVar(_) => false,
     };
     /// Counts the operations a row asks of the environment.
     struct Counting(u32);

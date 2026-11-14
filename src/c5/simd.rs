@@ -248,6 +248,13 @@ pub(crate) enum Sem {
     Shr(u8),
     /// Arithmetic (sign-propagating) right shift.
     Sar(u8),
+    /// Each lane shifted by the unsigned count in the same lane of the
+    /// second operand, left, right, or right propagating the sign; a count
+    /// past the lane width gives zero, or the sign in every bit
+    /// (`vpsllvd`, `vpsrlvq`, `vpsravd`).
+    ShlVar(u8),
+    ShrVar(u8),
+    SarVar(u8),
     /// Left shift of the whole register by a byte count.
     ShlBytes,
     /// Right shift of the whole register by a byte count.
@@ -1563,6 +1570,19 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
             let n = count.min(8 * w as u64 - 1) as u32;
             for i in 0..16 / w as usize {
                 let x = (slane(a, w, i) >> n) as u64 & mask(w);
+                set_lane(&mut o, w, i, x);
+            }
+        }
+        Sem::ShlVar(w) | Sem::ShrVar(w) | Sem::SarVar(w) => {
+            let bits = 8 * u64::from(w);
+            for i in 0..16 / w as usize {
+                let n = lane(b, w, i);
+                let x = match sem {
+                    Sem::ShlVar(_) if n < bits => lane(a, w, i) << n & mask(w),
+                    Sem::ShrVar(_) if n < bits => lane(a, w, i) >> n,
+                    Sem::SarVar(_) => (slane(a, w, i) >> n.min(bits - 1)) as u64 & mask(w),
+                    _ => 0,
+                };
                 set_lane(&mut o, w, i, x);
             }
         }

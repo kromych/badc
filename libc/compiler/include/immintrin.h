@@ -457,30 +457,19 @@ __BADC_AVX2_SHIFT(sra_epi32, __m128i)
 /* VPSLLV / VPSRLV / VPSRAV: each lane shifted by the unsigned count in the
 ** same lane of the second operand; a count past the lane width clears it,
 ** or fills it with the sign. */
-#define __BADC_SHIFTV(name, ty, vec, lane, n, bits, op)                           \
-    static inline ty name(ty __A, ty __C) {                                       \
-        vec __a = (vec)__A, __c = (vec)__C;                                       \
-        for (int __i = 0; __i < n; __i++)                                         \
-            __a[__i] = op;                                                        \
-        return (ty)__a;                                                           \
-    }
-#define __BADC_SLL(u, bits) ((u)__c[__i] >= bits ? 0 : (u)__a[__i] << (u)__c[__i])
-#define __BADC_SRL(u, bits) ((u)__c[__i] >= bits ? 0 : (u)__a[__i] >> (u)__c[__i])
-#define __BADC_SRA(u, bits) (__a[__i] >> ((u)__c[__i] >= bits ? bits - 1 : (u)__c[__i]))
-__BADC_SHIFTV(_mm_sllv_epi32, __m128i, __v4si, int, 4, 32, __BADC_SLL(unsigned, 32))
-__BADC_SHIFTV(_mm_srlv_epi32, __m128i, __v4si, int, 4, 32, __BADC_SRL(unsigned, 32))
-__BADC_SHIFTV(_mm_srav_epi32, __m128i, __v4si, int, 4, 32, __BADC_SRA(unsigned, 32))
-__BADC_SHIFTV(_mm_sllv_epi64, __m128i, __v2di, long long, 2, 64, __BADC_SLL(unsigned long long, 64))
-__BADC_SHIFTV(_mm_srlv_epi64, __m128i, __v2di, long long, 2, 64, __BADC_SRL(unsigned long long, 64))
-__BADC_SHIFTV(_mm256_sllv_epi32, __m256i, __v8si, int, 8, 32, __BADC_SLL(unsigned, 32))
-__BADC_SHIFTV(_mm256_srlv_epi32, __m256i, __v8si, int, 8, 32, __BADC_SRL(unsigned, 32))
-__BADC_SHIFTV(_mm256_srav_epi32, __m256i, __v8si, int, 8, 32, __BADC_SRA(unsigned, 32))
-__BADC_SHIFTV(_mm256_sllv_epi64, __m256i, __v4di, long long, 4, 64, __BADC_SLL(unsigned long long, 64))
-__BADC_SHIFTV(_mm256_srlv_epi64, __m256i, __v4di, long long, 4, 64, __BADC_SRL(unsigned long long, 64))
+#define __BADC_SHIFTV(name, ty, vec, builtin)                                 \
+    __BADC_INTRIN ty name(ty __A, ty __C) { return (ty)builtin((vec)__A, (vec)__C); }
+__BADC_SHIFTV(_mm_sllv_epi32, __m128i, __v4si, __builtin_ia32_psllv4si)
+__BADC_SHIFTV(_mm_srlv_epi32, __m128i, __v4si, __builtin_ia32_psrlv4si)
+__BADC_SHIFTV(_mm_srav_epi32, __m128i, __v4si, __builtin_ia32_psrav4si)
+__BADC_SHIFTV(_mm_sllv_epi64, __m128i, __v2di, __builtin_ia32_psllv2di)
+__BADC_SHIFTV(_mm_srlv_epi64, __m128i, __v2di, __builtin_ia32_psrlv2di)
+__BADC_SHIFTV(_mm256_sllv_epi32, __m256i, __v8si, __builtin_ia32_psllv8si)
+__BADC_SHIFTV(_mm256_srlv_epi32, __m256i, __v8si, __builtin_ia32_psrlv8si)
+__BADC_SHIFTV(_mm256_srav_epi32, __m256i, __v8si, __builtin_ia32_psrav8si)
+__BADC_SHIFTV(_mm256_sllv_epi64, __m256i, __v4di, __builtin_ia32_psllv4di)
+__BADC_SHIFTV(_mm256_srlv_epi64, __m256i, __v4di, __builtin_ia32_psrlv4di)
 #undef __BADC_SHIFTV
-#undef __BADC_SLL
-#undef __BADC_SRL
-#undef __BADC_SRA
 
 __BADC_INTRIN __m256i _mm256_blendv_epi8(__m256i __A, __m256i __B, __m256i __M) {
     return __badc_join_si(_mm_blendv_epi8(__badc_lo_si(__A), __badc_lo_si(__B), __badc_lo_si(__M)),

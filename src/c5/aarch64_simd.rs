@@ -344,6 +344,11 @@ pub(crate) const OPS: &[SimdOp] = table! {
     "frint32x" V RoundIntN {Current, 32}: f2s f4s fd f2d;
     "frint64z" V RoundIntN {Zero, 64}: f2s f4s fd f2d;
     "frint64x" V RoundIntN {Current, 64}: f2s f4s fd f2d;
+    "facge" Vv FloatAbsRel (13): f2s f4s fd f2d;
+    "facgt" Vv FloatAbsRel (14): f2s f4s fd f2d;
+    "suqadd" Vv SatAccMixed (true): b8 b16 h4 h8 s2 s4 d1 d2;
+    "usqadd" Vv SatAccMixed (false): b8 b16 h4 h8 s2 s4 d1 d2;
+    "rbit" V BitReverse -: b8 b16;
     "fcmeq" Vv FloatRel (0): f2s f4s f2d;
     "fcmge" Vv FloatRel (13): f2s f4s f2d;
     "fcmgt" Vv FloatRel (14): f2s f4s f2d;
@@ -910,6 +915,18 @@ const NARROW: &[SimdOp] = &[
     row("__builtin_neon_smmla_4s", "smmla", Form::Vvv, Ret::V4si, Sem::MatMul(true, true), 16),
     row("__builtin_neon_ummla_4s", "ummla", Form::Vvv, Ret::V4si, Sem::MatMul(false, false), 16),
     row("__builtin_neon_usmmla_4s", "usmmla", Form::Vvv, Ret::V4si, Sem::MatMul(false, true), 16),
+    row("__builtin_neon_addhn_8h", "addhn", Form::Vv, Ret::V8qi, Sem::NarrowHigh(2, false, false), 16),
+    row("__builtin_neon_addhn_4s", "addhn", Form::Vv, Ret::V4hi, Sem::NarrowHigh(4, false, false), 16),
+    row("__builtin_neon_addhn_2d", "addhn", Form::Vv, Ret::V2si, Sem::NarrowHigh(8, false, false), 16),
+    row("__builtin_neon_raddhn_8h", "raddhn", Form::Vv, Ret::V8qi, Sem::NarrowHigh(2, false, true), 16),
+    row("__builtin_neon_raddhn_4s", "raddhn", Form::Vv, Ret::V4hi, Sem::NarrowHigh(4, false, true), 16),
+    row("__builtin_neon_raddhn_2d", "raddhn", Form::Vv, Ret::V2si, Sem::NarrowHigh(8, false, true), 16),
+    row("__builtin_neon_subhn_8h", "subhn", Form::Vv, Ret::V8qi, Sem::NarrowHigh(2, true, false), 16),
+    row("__builtin_neon_subhn_4s", "subhn", Form::Vv, Ret::V4hi, Sem::NarrowHigh(4, true, false), 16),
+    row("__builtin_neon_subhn_2d", "subhn", Form::Vv, Ret::V2si, Sem::NarrowHigh(8, true, false), 16),
+    row("__builtin_neon_rsubhn_8h", "rsubhn", Form::Vv, Ret::V8qi, Sem::NarrowHigh(2, true, true), 16),
+    row("__builtin_neon_rsubhn_4s", "rsubhn", Form::Vv, Ret::V4hi, Sem::NarrowHigh(4, true, true), 16),
+    row("__builtin_neon_rsubhn_2d", "rsubhn", Form::Vv, Ret::V2si, Sem::NarrowHigh(8, true, true), 16),
     dupl("__builtin_neon_dup_8b_d", Ret::V8qi, 1, 8),
     dupl("__builtin_neon_dup_8b_q", Ret::V8qi, 1, 16),
     dupl("__builtin_neon_dup_16b_d", Ret::V16qi, 1, 8),

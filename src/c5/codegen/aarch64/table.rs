@@ -1031,6 +1031,46 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         };
         return Ok(word | qbit | (u32::from(rn) << 5) | u32::from(rd));
     }
+    // SIMD high-half narrowing `<addhn|raddhn|subhn|rsubhn>{2} Vd.<Tb>, Vn.<Ta>,
+    // Vm.<Ta>`: size (bit 22) is the destination width, the sources one size
+    // wider; the `2` form writes the upper half (Q at 30).
+    if let Some((nmnem, upper)) = strip_widen2(mnemonic)
+        && let Some(base) = match nmnem {
+            "addhn" => Some(0x0E20_4000u32),
+            "raddhn" => Some(0x2E20_4000),
+            "subhn" => Some(0x0E20_6000),
+            "rsubhn" => Some(0x2E20_6000),
+            _ => None,
+        }
+        && let [
+            Opnd::VecReg {
+                num: rd,
+                size: ds,
+                q: dq,
+            },
+            Opnd::VecReg {
+                num: rn,
+                size: s1,
+                q: true,
+            },
+            Opnd::VecReg {
+                num: rm,
+                size: s2,
+                q: true,
+            },
+        ] = *ops
+        && s1 == s2
+        && s1 == ds + 1
+        && ds < 3
+        && dq == upper
+    {
+        return Ok(base
+            | (u32::from(upper) << 30)
+            | (u32::from(ds) << 22)
+            | (u32::from(rm) << 16)
+            | (u32::from(rn) << 5)
+            | u32::from(rd));
+    }
     // SIMD by element `<op> Vd.T, Vn.T, Vm.Ts[i]`, and the FP forms' scalar
     // `Rd, Rn, Vm.Ts[i]` (bits 30 and 28 set): size at 22 (1:sz for FP),
     // opcode at 12 and U at 29 name the operation. The index is H:L:M for a
@@ -1612,6 +1652,8 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         "fmaxnmp" => Some(0x2E20_C400),
         "fminnmp" => Some(0x2EA0_C400),
         "fmulx" => Some(0x0E20_DC00),
+        "facge" => Some(0x2E20_EC00),
+        "facgt" => Some(0x2EA0_EC00),
         _ => None,
     } && let [
         Opnd::VecReg { num: rd, size, q },
@@ -1648,6 +1690,8 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         "frsqrts" => Some(0x5EA0_FC00),
         "fmulx" => Some(0x5E20_DC00),
         "fabd" => Some(0x7EA0_D400),
+        "facge" => Some(0x7E20_EC00),
+        "facgt" => Some(0x7EA0_EC00),
         _ => None,
     } && let [
         Opnd::VReg { num: rd, is_d },
@@ -2039,6 +2083,8 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         "fsqrt" => Some((0x2E21_F800, 2, 3, None)),
         "frecpe" => Some((0x0E21_D800, 2, 3, Some(2))),
         "frsqrte" => Some((0x2E21_D800, 2, 3, Some(2))),
+        "suqadd" => Some((0x0E20_3800, 0, 3, Some(0))),
+        "usqadd" => Some((0x2E20_3800, 0, 3, Some(0))),
         "urecpe" => Some((0x0E21_C800, 2, 2, None)),
         "ursqrte" => Some((0x2E21_C800, 2, 2, None)),
         _ => None,

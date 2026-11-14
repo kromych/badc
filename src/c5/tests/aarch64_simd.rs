@@ -1147,6 +1147,37 @@ fn the_scalar_rdm_lane_forms_saturate_as_the_hardware_does() {
     assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 0);
 }
 
+/// The magnitude compares, the high-half narrowing sums and differences,
+/// the saturating accumulates of the other signedness and the bit
+/// reversal are rows: over seeded lanes the interpreter's results hash to
+/// the hardware's, and each is one instruction under -O, `vcalt` the
+/// `facgt` with its operands swapped.
+#[cfg(feature = "full")]
+#[test]
+fn the_magnitude_compares_and_high_narrowing_forms_are_rows() {
+    let src = super::load_fixture(
+        "arm_neon_magnitude_compares_high_narrowing_and_mixed_accumulates_on_seeded_lanes.c",
+    );
+    let program = super::compile_str_bare_for(&src, crate::Target::LinuxAarch64);
+    assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 0);
+    const OPS: &str = "#include <arm_neon.h>\n\
+        uint32x4_t a(float32x4_t x, float32x4_t y) { return vcaltq_f32(x, y); }\n\
+        int8x8_t b(int16x8_t x, int16x8_t y) { return vraddhn_s16(x, y); }\n\
+        int32x4_t c(int32x4_t x, uint32x4_t y) { return vuqaddq_s32(x, y); }\n\
+        uint8x16_t d(uint8x16_t x) { return vrbitq_u8(x); }\n\
+        uint64x1_t e(float64x1_t x, float64x1_t y) { return vcage_f64(x, y); }\n";
+    for (name, want) in [
+        ("a", 0x6EA0_EC20u32),
+        ("b", 0x2E21_4000),
+        ("c", 0x4EA0_3820),
+        ("d", 0x6E60_5800),
+        ("e", 0x7E61_EC00),
+    ] {
+        let words = super::perf_codegen::a64_at(OPS, name, true);
+        assert_eq!(words, [want, 0xD65F_03C0], "{name}: {words:08x?}");
+    }
+}
+
 /// `vld1`, `vst1`, `vdup_n` and `vld1_dup` are the load, store and
 /// broadcast of their vector under `-O`, as with gcc 16, with no inline asm
 /// between them and the operations that use them: `ldr q`, `str q`,

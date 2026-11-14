@@ -39,7 +39,8 @@ fn accumulates(row: &SimdOp) -> bool {
         | Sem::Sha256Su0
         | Sem::Sha1Su1
         | Sem::Sha512Su0
-        | Sem::PairAddLongAcc(..) => true,
+        | Sem::PairAddLongAcc(..)
+        | Sem::SatAccMixed(..) => true,
         _ => matches!(row.form, Form::Vvv | Form::VvvI),
     }
 }

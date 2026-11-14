@@ -1250,6 +1250,30 @@ fn vector_one_source_counts_and_estimates() {
     assert_eq!(enc("fcvtzs", &[d(1), d(2)]), 0x5EE1_B841);
     assert_eq!(enc("ucvtf", &[d(1), d(2)]), 0x7E61_D841);
     assert!(encode("fcvtns", &[v(1, 2, true), v(2, 2, true), i(3)]).is_err());
+    assert_eq!(v3("facge", 2, true), 0x6E23_EC41);
+    assert_eq!(v3("facgt", 3, true), 0x6EE3_EC41);
+    assert_eq!(enc("facge", &[d(1), d(2), d(3)]), 0x7E63_EC41);
+    assert_eq!(enc("facgt", &[s(1), s(2), s(3)]), 0x7EA3_EC41);
+    assert_eq!(
+        enc("addhn", &[v(1, 0, false), v(2, 1, true), v(3, 1, true)]),
+        0x0E23_4041
+    );
+    assert_eq!(
+        enc("raddhn", &[v(1, 1, false), v(2, 2, true), v(3, 2, true)]),
+        0x2E63_4041
+    );
+    assert_eq!(
+        enc("subhn", &[v(1, 2, false), v(2, 3, true), v(3, 3, true)]),
+        0x0EA3_6041
+    );
+    assert_eq!(
+        enc("rsubhn", &[v(1, 0, false), v(2, 1, true), v(3, 1, true)]),
+        0x2E23_6041
+    );
+    assert_eq!(enc("suqadd", &[v(1, 0, true), v(2, 0, true)]), 0x4E20_3841);
+    assert_eq!(enc("usqadd", &[v(1, 2, true), v(2, 2, true)]), 0x6EA0_3841);
+    assert_eq!(enc("suqadd", &[d(1), d(2)]), 0x5EE0_3841);
+    assert_eq!(enc("usqadd", &[d(1), d(2)]), 0x7EE0_3841);
     let z = Opnd::Imm(0);
     assert_eq!(enc("cmeq", &[v(1, 2, true), v(2, 2, true), z]), 0x4EA0_9841);
     assert_eq!(

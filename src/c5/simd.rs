@@ -538,6 +538,19 @@ pub(crate) enum Sem {
     /// rows in the order of the lanes, signedness as [`Sem::Dot`]'s
     /// (`smmla`, `ummla`, `usmmla`).
     MatMul(bool, bool),
+    /// A floating comparison of the lanes' magnitudes by a fixed predicate,
+    /// numbered as [`Sem::FloatRel`]'s (`facge` 13, `facgt` 14).
+    FloatAbsRel(u8, u8),
+    /// The high half of the sum, or difference when the first flag is set,
+    /// of lanes of the width, rounded when the second is, in lanes half as
+    /// wide (`addhn`, `rsubhn`).
+    NarrowHigh(u8, bool, bool),
+    /// The accumulator plus the other operand, the accumulator signed and
+    /// the operand unsigned when `true` or the converse, saturated to the
+    /// accumulator's range (`suqadd`, `usqadd`).
+    SatAccMixed(u8, bool),
+    /// Each byte with its bits reversed (`rbit`).
+    BitReverse,
     /// The high half of twice the signed product of each lane pair, rounded
     /// when `true`, saturated (`sqdmulh`, `sqrdmulh`).
     SatDoublingMulHigh(u8, bool),
@@ -930,7 +943,7 @@ impl SimdOp {
             Sem::PairAddLongAcc(w, _) if i > 1 => w,
             Sem::Dot(..) | Sem::MatMul(..) if i > 1 => 1,
             Sem::Wide(_, w, ..) | Sem::LongAcc(_, w, ..) if i > 1 => w,
-            Sem::Narrow(w, _) | Sem::ShrNarrow(w, ..) => w,
+            Sem::Narrow(w, _) | Sem::ShrNarrow(w, ..) | Sem::NarrowHigh(w, ..) => w,
             Sem::Extend(from, ..) => from,
             Sem::Convert(Cvt::SingleToDouble | Cvt::SingleToDoubleHigh) => 4,
             Sem::Convert(Cvt::DoubleToSingle) => 8,
@@ -2030,6 +2043,38 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
                 set_lane(&mut o, w, i, r.clamp(-max - 1, max) as u64 & mask(w));
             }
         }
+        Sem::NarrowHigh(w, sub, round) => {
+            let half = 4 * u32::from(w);
+            for i in 0..16 / w as usize {
+                let (x, y) = (lane(a, w, i), lane(b, w, i));
+                let s = if sub {
+                    x.wrapping_sub(y)
+                } else {
+                    x.wrapping_add(y)
+                };
+                let s = s.wrapping_add(if round { 1 << (half - 1) } else { 0 }) & mask(w);
+                set_lane(&mut o, w / 2, i, s >> half);
+            }
+        }
+        Sem::SatAccMixed(w, signed_acc) => {
+            let bits = 8 * u32::from(w);
+            for i in 0..16 / w as usize {
+                let (x, y) = match signed_acc {
+                    true => (i128::from(slane(a, w, i)), i128::from(lane(b, w, i))),
+                    false => (i128::from(lane(a, w, i)), i128::from(slane(b, w, i))),
+                };
+                let (low, high) = match signed_acc {
+                    true => (-(1i128 << (bits - 1)), (1i128 << (bits - 1)) - 1),
+                    false => (0, (1i128 << bits) - 1),
+                };
+                set_lane(&mut o, w, i, (x + y).clamp(low, high) as u64 & mask(w));
+            }
+        }
+        Sem::BitReverse => {
+            for i in 0..16 {
+                o[i] = a[i].reverse_bits();
+            }
+        }
         Sem::FractionEstimate(w, sqrt) => {
             for i in 0..16 / usize::from(w) {
                 let x = lane(a, w, i);
@@ -2051,7 +2096,7 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
         Sem::FloatRel(..) | Sem::FloatFma(..) | Sem::LongAcc(..) => {}
         Sem::Estimate(..) | Sem::Step(..) | Sem::FloatPair(..) | Sem::FloatAcross(..) => {}
         Sem::RoundInt(..) | Sem::RoundIntN(..) | Sem::SatRoundingDoublingMulAcc(..) => {}
-        Sem::ByElement(..) | Sem::Dot(..) | Sem::MatMul(..) => {}
+        Sem::ByElement(..) | Sem::Dot(..) | Sem::MatMul(..) | Sem::FloatAbsRel(..) => {}
         Sem::Perm4x64
         | Sem::PermVar32
         | Sem::Perm2x128
@@ -2573,8 +2618,13 @@ pub(crate) fn eval_float_in(
     let lanes = |w: u8, scalar: bool| if scalar { 1 } else { bytes / w as usize };
     let (imm, cmp) = match sem {
         Sem::FloatCmp(w, scalar) => (imm, Some((w, scalar))),
-        Sem::FloatRel(w, p) => (p, Some((w, false))),
+        Sem::FloatRel(w, p) | Sem::FloatAbsRel(w, p) => (p, Some((w, false))),
         _ => (imm, None),
+    };
+    // The magnitude compares clear both lanes' signs, a NaN's included.
+    let abs = match sem {
+        Sem::FloatAbsRel(..) => !(1u64 << 63),
+        _ => u64::MAX,
     };
     match sem {
         Sem::Float(op, w, scalar) => {
@@ -2635,12 +2685,12 @@ pub(crate) fn eval_float_in(
         // The 32 predicates of the VEX form, 0 to 7 those of the SSE one:
         // the relation in bits 3:0, bit 4 flipping whether a quiet NaN
         // signals invalid.
-        Sem::FloatCmp(..) | Sem::FloatRel(..) => {
+        Sem::FloatCmp(..) | Sem::FloatRel(..) | Sem::FloatAbsRel(..) => {
             let (w, scalar) = cmp.unwrap_or((8, false));
             for i in 0..lanes(w, scalar) {
                 let p = imm & 31;
                 let signals = matches!(p & 3, 1 | 2) ^ (p & 16 != 0);
-                let c = env.compare(flane(a, w, i), flane(b, w, i), signals);
+                let c = env.compare(flane(a, w, i) & abs, flane(b, w, i) & abs, signals);
                 let holds = match p & 15 {
                     0 => c == Some(Equal),
                     1 => c == Some(Less),

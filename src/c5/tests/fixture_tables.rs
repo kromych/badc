@@ -815,6 +815,10 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("arm_neon_doubling_multiplies_on_seeded_lanes.c", 0),
     ("arm_neon_lane_indexed_forms_on_seeded_lanes.c", 0),
     ("arm_neon_dot_products_on_seeded_lanes.c", 0),
+    (
+        "arm_neon_magnitude_compares_high_narrowing_and_mixed_accumulates_on_seeded_lanes.c",
+        0,
+    ),
     ("aarch64_nan_operands_rank_signaling_and_addend_first.c", 0),
     ("inline_asm_a64_vector_w_d_view.c", 0),
     ("inline_asm_a64_w_operand_widths.c", 0),
@@ -2466,6 +2470,10 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("arm_neon_doubling_multiplies_on_seeded_lanes.c", 0),
     ("arm_neon_lane_indexed_forms_on_seeded_lanes.c", 0),
     ("arm_neon_dot_products_on_seeded_lanes.c", 0),
+    (
+        "arm_neon_magnitude_compares_high_narrowing_and_mixed_accumulates_on_seeded_lanes.c",
+        0,
+    ),
     ("aarch64_nan_operands_rank_signaling_and_addend_first.c", 0),
     ("inline_asm_a64_vector_w_d_view.c", 0),
     ("inline_asm_a64_w_operand_widths.c", 0),
@@ -5053,6 +5061,10 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("arm_neon_doubling_multiplies_on_seeded_lanes.c", 0),
     ("arm_neon_lane_indexed_forms_on_seeded_lanes.c", 0),
     ("arm_neon_dot_products_on_seeded_lanes.c", 0),
+    (
+        "arm_neon_magnitude_compares_high_narrowing_and_mixed_accumulates_on_seeded_lanes.c",
+        0,
+    ),
     ("aarch64_nan_operands_rank_signaling_and_addend_first.c", 0),
     ("inline_asm_a64_vector_w_d_view.c", 0),
     ("inline_asm_a64_w_operand_widths.c", 0),

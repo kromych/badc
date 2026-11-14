@@ -31,7 +31,6 @@ Disassembly of section .text:
                	subq	$0x40, %rsp
                	leaq	<rip>, %rdi
                	xorl	%esi, %esi
-               	xorl	%eax, %eax
                	callq	<addr>
                	fstpt	-0x30(%rbp)
                	fldt	-0x30(%rbp)
@@ -42,7 +41,6 @@ Disassembly of section .text:
                	fstpt	-0x40(%rbp)
                	leaq	<rip>, %rdi
                	xorl	%esi, %esi
-               	xorl	%eax, %eax
                	callq	<addr>
                	fstpt	-0x30(%rbp)
                	fldt	-0x30(%rbp)
@@ -75,7 +73,6 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rdi
                	xorl	%esi, %esi
-               	xorl	%eax, %eax
                	callq	<addr>
                	fstpt	-0x30(%rbp)
                	fldt	-0x30(%rbp)

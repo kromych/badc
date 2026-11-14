@@ -38,7 +38,6 @@ Disassembly of section .text:
                	movq	%rax, -0x10(%rbp)
                	movq	%rdx, -0x8(%rbp)
                	movl	$0x14, %esi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %rcx
                	testq	%rcx, %rcx
@@ -48,7 +47,6 @@ Disassembly of section .text:
                	retq
                	movq	%rcx, (%rsp)
                	movq	%rcx, %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	(%rsp), %rcx
                	testq	%rax, %rax
@@ -74,7 +72,6 @@ Disassembly of section .text:
                	movzwq	0x40(%rax), %r10
                	movq	%r10, 0x8(%rsp)
                	movq	%rcx, (%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	(%rsp), %rcx
                	andq	$0xffff, %rax           # imm = 0xFFFF
@@ -86,7 +83,6 @@ Disassembly of section .text:
                	leave
                	retq
                	movq	%rcx, %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	xorl	%eax, %eax
                	leave

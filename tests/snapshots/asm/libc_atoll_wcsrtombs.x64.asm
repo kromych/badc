@@ -30,7 +30,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	leaq	<rip>, %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movabsq	$-0x218711a00, %r11     # imm = 0xFFFFFFFDE78EE600
                	cmpq	%r11, %rax
@@ -44,13 +43,11 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rsi
                	movl	$0x8, %edx
                	xorl	%ecx, %ecx
-               	xorl	%eax, %eax
                	callq	<addr>
                	cmpq	$0x2, %rax
                	jne	<addr>
                	leaq	-0x8(%rbp), %rdi
                	leaq	<rip>, %rsi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

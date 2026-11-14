@@ -97,6 +97,9 @@ pub struct Binding {
     /// platform's variadic ABI (macOS arm64 stack packing, SysV
     /// `xor eax, eax`).
     pub is_variadic: bool,
+    /// The declaration has a parameter type list (C17 6.7.6.3), so a call
+    /// to a non-variadic one passes no System V vector-register count.
+    pub prototyped: bool,
     /// Fixed (non-variadic) parameter count, meaningful only with
     /// `is_variadic`: AAPCS64 passes those in registers and spills only
     /// the variadic tail.

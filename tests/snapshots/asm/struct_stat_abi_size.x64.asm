@@ -37,7 +37,6 @@ Disassembly of section .text:
                	movl	%r10d, 0x10(%rdi)
                	movzbq	0x14(%rax), %r10
                	movb	%r10b, 0x14(%rdi)
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %rcx
                	testl	%ecx, %ecx
@@ -49,13 +48,11 @@ Disassembly of section .text:
                	movl	$0x10, %edx
                	movq	%rcx, 0x8(%rsp)
                	movq	%rcx, %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	0x8(%rsp), %rcx
                	cmpq	$0x10, %rax
                	je	<addr>
                	leaq	-0xa8(%rbp), %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movl	$0x4, %eax
                	leave
@@ -81,14 +78,12 @@ Disassembly of section .text:
                	movq	$0x0, -0x8(%rbp)
                	movq	%rcx, 0x8(%rsp)
                	movq	%rcx, %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	movq	0x8(%rsp), %rcx
                	testq	%rax, %rax
                	je	<addr>
                	leaq	-0xa8(%rbp), %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movl	$0x5, %eax
                	leave
@@ -97,7 +92,6 @@ Disassembly of section .text:
                	cmpq	$0x10, %rax
                	je	<addr>
                	leaq	-0xa8(%rbp), %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movl	$0x6, %eax
                	leave
@@ -107,16 +101,13 @@ Disassembly of section .text:
                	cmpl	$0x8000, %eax           # imm = 0x8000
                	je	<addr>
                	leaq	-0xa8(%rbp), %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movl	$0x7, %eax
                	leave
                	retq
                	movq	%rcx, %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	leaq	-0xa8(%rbp), %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	xorl	%eax, %eax
                	leave

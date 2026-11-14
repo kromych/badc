@@ -47,12 +47,10 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x8, %edi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %rcx
                	movl	$0x4, %edi
                	movq	%rcx, 0x8(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	0x8(%rsp), %rcx
                	movq	%rax, (%rcx)

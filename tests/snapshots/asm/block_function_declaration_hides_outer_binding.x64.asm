@@ -53,7 +53,6 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movq	$-0x5, %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	popq	%rbp
                	retq

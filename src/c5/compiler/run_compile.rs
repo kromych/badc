@@ -1278,6 +1278,8 @@ impl Compiler {
             for binding in spec.bindings.iter_mut() {
                 if binding.local_name == name {
                     binding.is_variadic = variadic;
+                    binding.prototyped =
+                        matches!(params.form, super::function::ParamForm::Prototype);
                     binding.fixed_args = fixed;
                     binding.return_type_tag = Some(ret_ty);
                     // Per-param types for the

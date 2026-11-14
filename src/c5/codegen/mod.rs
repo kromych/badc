@@ -1375,6 +1375,8 @@ pub(crate) struct ResolvedImport {
     /// SysV `xor eax, eax`). Default `false` for bindings whose
     /// prototype the parser hasn't seen.
     pub is_variadic: bool,
+    /// [`crate::c5::preprocessor::Binding::prototyped`].
+    pub prototyped: bool,
     /// Number of fixed (non-variadic) parameters from the
     /// prototype -- the count *before* the trailing `...`.
     /// macOS arm64's variadic ABI passes these in `int_arg_regs`
@@ -1580,6 +1582,7 @@ impl ResolvedImports {
             ordinal: None,
             kind: ImportKind::Function,
             is_variadic: false,
+            prototyped: false,
             fixed_args: 4,
             return_type_tag: None,
             param_types: Vec::new(),
@@ -1660,6 +1663,7 @@ impl ResolvedImports {
             ordinal: None,
             kind: crate::c5::codegen::ImportKind::Function,
             is_variadic: b.is_variadic,
+            prototyped: b.prototyped,
             fixed_args: b.fixed_args,
             return_type_tag: b.return_type_tag,
             param_types: b.param_types.clone(),
@@ -1688,6 +1692,7 @@ impl ResolvedImports {
             ordinal: None,
             kind: crate::c5::codegen::ImportKind::Function,
             is_variadic: false,
+            prototyped: true,
             fixed_args: 1,
             return_type_tag: Some(crate::c5::compiler::types::void_ty()),
             param_types: alloc::vec![super::token::Ty::Int as i64],
@@ -1829,6 +1834,7 @@ impl ResolvedImports {
                 ordinal: None,
                 kind: crate::c5::codegen::ImportKind::Function,
                 is_variadic: b.is_variadic,
+                prototyped: b.prototyped,
                 fixed_args: b.fixed_args,
                 return_type_tag: b.return_type_tag,
                 param_types: b.param_types.clone(),
@@ -4005,6 +4011,7 @@ impl DataImportSlots {
                 ImportKind::Object
             },
             is_variadic: false,
+            prototyped: false,
             fixed_args: 0,
             return_type_tag: None,
             param_types: Vec::new(),

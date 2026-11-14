@@ -31,7 +31,6 @@ Disassembly of section .text:
                	subq	$0xb8, %rsp
                	pushq	%rbx
                	leaq	<rip>, %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %rbx
                	leaq	-0xa0(%rbp), %rax
@@ -41,18 +40,15 @@ Disassembly of section .text:
                	testq	%rbx, %rbx
                	jne	<addr>
                	leaq	<rip>, %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %rbx
                	testq	%rbx, %rbx
                	jne	<addr>
                	leaq	<rip>, %rbx
                	xorl	%edi, %edi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %r10
                	movq	%r10, 0x18(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %r9
                	leaq	<rip>, %rdi # <addr>
@@ -64,7 +60,6 @@ Disassembly of section .text:
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
                	leaq	<rip>, %rsi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %rdi
                	testq	%rdi, %rdi
@@ -73,18 +68,15 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	xorl	%eax, %eax
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
                	leaq	-0xa0(%rbp), %rsi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %ebx
                	leaq	<rip>, %rdi # <addr>
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rbx, %rax
                	popq	%rbx
@@ -92,7 +84,6 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rdi # <addr>
                	leaq	-0x90(%rbp), %rsi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

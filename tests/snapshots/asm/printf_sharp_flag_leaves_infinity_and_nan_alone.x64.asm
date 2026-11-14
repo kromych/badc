@@ -56,7 +56,6 @@ Disassembly of section .text:
                	callq	<addr>
                	leaq	-0x180(%rbp), %rdi
                	leaq	<rip>, %rsi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -77,7 +76,6 @@ Disassembly of section .text:
                	callq	<addr>
                	leaq	-0x100(%rbp), %rdi
                	leaq	<rip>, %rsi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	movl	$0x2, %ecx

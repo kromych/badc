@@ -31,12 +31,10 @@ Disassembly of section .text:
                	subq	$0x20, %rsp
                	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
                	movq	%rax, %xmm0
-               	xorl	%eax, %eax
                	callq	<addr>
                	movsd	%xmm0, 0x18(%rsp)
                	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
                	movq	%rax, %xmm0
-               	xorl	%eax, %eax
                	callq	<addr>
                	movsd	%xmm0, 0x10(%rsp)
                	movabsq	$0x4010000000000000, %rax # imm = 0x4010000000000000
@@ -45,7 +43,6 @@ Disassembly of section .text:
                	movsd	%xmm14, 0x8(%rsp)
                	xorl	%eax, %eax
                	movq	%rax, %xmm0
-               	xorl	%eax, %eax
                	callq	<addr>
                	movabsq	$0x3fdea7ef9db22d0e, %rax # imm = 0x3FDEA7EF9DB22D0E
                	movsd	0x18(%rsp), %xmm1

@@ -90,7 +90,6 @@ Disassembly of section .text:
                	retq
                	xorl	%eax, %eax
                	movq	%rax, %xmm0
-               	xorl	%eax, %eax
                	callq	<addr>
                	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
                	movq	%rax, %xmm15

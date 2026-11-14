@@ -1170,6 +1170,7 @@ impl Preprocessor {
         };
         self.dylibs[at].bindings.push(Binding {
             is_variadic: false,
+            prototyped: false,
             fixed_args: 0,
             return_type_tag: None,
             param_types: Vec::new(),

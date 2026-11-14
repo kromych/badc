@@ -1169,6 +1169,7 @@ fn synth_imports(merged: &MergedNative, target: Target) -> Result<ResolvedImport
                 ImportKind::Function
             },
             is_variadic: false,
+            prototyped: false,
             fixed_args: 0,
             return_type_tag: None,
             param_types: Vec::new(),

@@ -56,7 +56,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rsi
                	testq	%rdi, %rdi
                	je	<addr>
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -75,7 +74,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rsi
                	testq	%rdi, %rdi
                	je	<addr>
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -94,7 +92,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rsi
                	testq	%rdi, %rdi
                	je	<addr>
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -111,7 +108,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rsi
                	testq	%rdi, %rdi
                	je	<addr>
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -128,7 +124,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rsi
                	testq	%rdi, %rdi
                	je	<addr>
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -145,7 +140,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rsi
                	testq	%rdi, %rdi
                	je	<addr>
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -194,18 +188,14 @@ Disassembly of section .text:
 <call_wcstok>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	xorl	%eax, %eax
-               	callq	<addr>
                	popq	%rbp
-               	retq
+               	jmp	<addr>
 
 <call_strtok_r>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	xorl	%eax, %eax
-               	callq	<addr>
                	popq	%rbp
-               	retq
+               	jmp	<addr>
 
 <main>:
                	pushq	%rbp
@@ -241,7 +231,6 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %rdi
                	leaq	<rip>, %rsi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -262,7 +251,6 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %rdi
                	leaq	<rip>, %rsi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -277,7 +265,6 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %rdi
                	leaq	<rip>, %rsi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -290,7 +277,6 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %rdi
                	leaq	<rip>, %rsi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -303,7 +289,6 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %rdi
                	leaq	<rip>, %rsi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -316,7 +301,6 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %rdi
                	leaq	<rip>, %rsi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

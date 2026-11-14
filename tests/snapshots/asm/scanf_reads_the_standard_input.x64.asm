@@ -66,12 +66,10 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %rbx
                	movl	$0x6, %edi
                	xorl	%esi, %esi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %rsi
                	movq	(%rbx), %rdx
@@ -82,7 +80,6 @@ Disassembly of section .text:
                	callq	<addr>
                	movl	$0x6, %edi
                	leaq	<rip>, %rsi
-               	xorl	%eax, %eax
                	callq	<addr>
                	testq	%rax, %rax
                	sete	%sil

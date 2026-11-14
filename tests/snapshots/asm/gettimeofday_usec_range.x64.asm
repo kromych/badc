@@ -33,7 +33,6 @@ Disassembly of section .text:
                	xorl	%ebx, %ebx
                	leaq	-0x10(%rbp), %rdi
                	xorl	%esi, %esi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

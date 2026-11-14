@@ -68,7 +68,6 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movq	%rdi, -0x10(%rbp)
                	movq	-0x10(%rbp), %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	leave
                	retq

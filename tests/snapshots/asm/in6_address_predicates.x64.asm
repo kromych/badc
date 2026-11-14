@@ -343,7 +343,6 @@ Disassembly of section .text:
                	movq	%rcx, 0x8(%rsp)
                	movq	%rdx, (%rsp)
                	movq	0x20(%rsp), %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movl	%eax, %eax
                	movq	0x8(%rsp), %rcx
@@ -353,7 +352,6 @@ Disassembly of section .text:
                	movq	%rcx, 0x8(%rsp)
                	movq	%rdx, (%rsp)
                	movq	0x110(%rsp), %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movl	%eax, %eax
                	movq	0x8(%rsp), %rcx

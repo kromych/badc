@@ -31,7 +31,6 @@ Disassembly of section .text:
                	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
                	movl	$0x3, %edi
                	movq	%rax, %xmm0
-               	xorl	%eax, %eax
                	callq	<addr>
                	movabsq	$0x4020000000000000, %rax # imm = 0x4020000000000000
                	movq	%rax, %xmm15
@@ -44,7 +43,6 @@ Disassembly of section .text:
                	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
                	movq	$-0x1, %rdi
                	movq	%rax, %xmm0
-               	xorl	%eax, %eax
                	callq	<addr>
                	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000
                	movq	%rax, %xmm15
@@ -57,7 +55,6 @@ Disassembly of section .text:
                	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
                	movl	$0x4, %edi
                	movq	%rax, %xmm0
-               	xorl	%eax, %eax
                	callq	<addr>
                	movabsq	$0x4030000000000000, %rax # imm = 0x4030000000000000
                	movq	%rax, %xmm15
@@ -70,7 +67,6 @@ Disassembly of section .text:
                	movl	$0x2, %edi
                	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
                	movq	%rax, %xmm0
-               	xorl	%eax, %eax
                	callq	<addr>
                	cvtsd2ss	%xmm0, %xmm0
                	movl	$0x40800000, %eax       # imm = 0x40800000

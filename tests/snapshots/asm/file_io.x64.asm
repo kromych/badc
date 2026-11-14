@@ -42,19 +42,16 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0xa, %edi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %rcx
                	movl	$0x9, %edx
                	movq	%rcx, 0x18(%rsp)
                	movq	%rbx, %rdi
                	movq	%rcx, %rsi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	0x18(%rsp), %rcx
                	movb	$0x0, 0x9(%rcx)
                	movq	%rbx, %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	xorl	%eax, %eax
                	popq	%rbx

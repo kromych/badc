@@ -1956,7 +1956,6 @@ Disassembly of section .text:
                	movq	%rax, %rdi
                	movq	%rdx, %rsi
                	movq	%rbx, %rdx
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	movq	0x38(%rsp), %rdi

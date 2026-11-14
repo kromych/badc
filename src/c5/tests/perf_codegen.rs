@@ -8008,3 +8008,34 @@ double g(const double *p, double a, double b, double c) {\n\
         );
     }
 }
+
+/// A prototyped library call returning a value that needs no extension is
+/// a tail call, a non-variadic one leaves `al` alone, and a variadic one
+/// still passes its vector-register count (System V AMD64 3.2.3).
+#[test]
+fn x64_a_library_call_in_tail_position_is_a_jump() {
+    const SRC: &str = "#include <stdio.h>\n\
+#include <string.h>\n\
+size_t length(const char *s) { return strlen(s); }\n\
+int order(const char *a, const char *b) { return strcmp(a, b); }\n\
+int show(double d) { return printf(\"%f\\n\", d); }\n";
+    use super::codegen::function_bytes;
+    let obj = object_at(SRC, Target::LinuxX64, true);
+    let insns = |name: &str| x64_insns(&function_bytes(&obj, name));
+    let length = insns("length");
+    assert!(
+        length.last().is_some_and(X64Insn::is_jmp),
+        "length ends in a call"
+    );
+    assert!(!length.iter().any(|i| i.op == 0xE8), "length calls");
+    // `xor eax, eax` or `mov al, imm8`.
+    let sets_al = |i: &X64Insn| (i.op == 0x31 && i.modrm == Some(0xC0)) || i.op == 0xB0;
+    assert!(
+        !insns("order").iter().any(sets_al),
+        "order sets al for strcmp"
+    );
+    assert!(
+        insns("show").iter().any(|i| i.op == 0xB0 && i.imm == 1),
+        "printf gets no al"
+    );
+}

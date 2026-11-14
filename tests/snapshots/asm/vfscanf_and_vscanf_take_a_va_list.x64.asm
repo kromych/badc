@@ -56,7 +56,6 @@ Disassembly of section .text:
                	movq	-0xd0(%rbp), %rdi
                	movq	-0xc8(%rbp), %rsi
                	leaq	-0x18(%rbp), %rdx
-               	xorl	%eax, %eax
                	callq	<addr>
                	leaq	-0x18(%rbp), %rcx
                	leave
@@ -92,7 +91,6 @@ Disassembly of section .text:
                	movq	%r10, 0x10(%rax)
                	movq	-0xd0(%rbp), %rdi
                	leaq	-0x18(%rbp), %rsi
-               	xorl	%eax, %eax
                	callq	<addr>
                	leaq	-0x18(%rbp), %rcx
                	leave
@@ -102,7 +100,6 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x40, %rsp
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %r10
                	movq	%r10, 0x8(%rsp)
@@ -119,7 +116,6 @@ Disassembly of section .text:
                	je	<addr>
                	leaq	<rip>, %rdi # <addr>
                	movq	0x8(%rsp), %rsi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -128,7 +124,6 @@ Disassembly of section .text:
                	leave
                	retq
                	movq	0x8(%rsp), %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	leaq	<rip>, %rsi # <addr>
                	leaq	-0x30(%rbp), %rdx
@@ -154,7 +149,6 @@ Disassembly of section .text:
                	jne	<addr>
                	leaq	-0x18(%rbp), %rdi
                	leaq	<rip>, %rsi # <addr>
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -164,7 +158,6 @@ Disassembly of section .text:
                	jne	<addr>
                	leaq	-0x8(%rbp), %rdi
                	leaq	<rip>, %rsi # <addr>
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -192,7 +185,6 @@ Disassembly of section .text:
                	leave
                	retq
                	movq	0x8(%rsp), %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	leaq	<rip>, %rdi
                	movb	$0x0, %al

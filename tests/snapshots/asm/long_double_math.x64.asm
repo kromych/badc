@@ -60,7 +60,6 @@ Disassembly of section .text:
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	addq	$0x10, %rsp
                	fstpt	-0x40(%rbp)
@@ -88,7 +87,6 @@ Disassembly of section .text:
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	addq	$0x10, %rsp
                	fstpt	-0x40(%rbp)
@@ -117,7 +115,6 @@ Disassembly of section .text:
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	addq	$0x10, %rsp
                	fstpt	-0x40(%rbp)
@@ -149,7 +146,6 @@ Disassembly of section .text:
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	addq	$0x10, %rsp
                	fstpt	-0x40(%rbp)
@@ -181,7 +177,6 @@ Disassembly of section .text:
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	addq	$0x10, %rsp
                	fstpt	-0x40(%rbp)
@@ -228,7 +223,6 @@ Disassembly of section .text:
                	movq	%r11, 0x10(%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x18(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	addq	$0x20, %rsp
                	fstpt	-0x40(%rbp)
@@ -256,7 +250,6 @@ Disassembly of section .text:
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	addq	$0x10, %rsp
                	fstpt	-0x40(%rbp)
@@ -281,7 +274,6 @@ Disassembly of section .text:
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	addq	$0x10, %rsp
                	fstpt	-0x40(%rbp)
@@ -306,7 +298,6 @@ Disassembly of section .text:
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	addq	$0x10, %rsp
                	fstpt	-0x40(%rbp)
@@ -334,7 +325,6 @@ Disassembly of section .text:
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	addq	$0x10, %rsp
                	fstpt	-0x40(%rbp)
@@ -359,7 +349,6 @@ Disassembly of section .text:
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	addq	$0x10, %rsp
                	cmpq	$-0x3, %rax
@@ -377,7 +366,6 @@ Disassembly of section .text:
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	addq	$0x10, %rsp
                	cmpq	$0x1, %rax
@@ -398,7 +386,6 @@ Disassembly of section .text:
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	addq	$0x10, %rsp
                	fstpt	-0x40(%rbp)
@@ -423,7 +410,6 @@ Disassembly of section .text:
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	addq	$0x10, %rsp
                	cmpq	$-0x2, %rax
@@ -441,7 +427,6 @@ Disassembly of section .text:
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	addq	$0x10, %rsp
                	cmpq	$0x2, %rax
@@ -462,7 +447,6 @@ Disassembly of section .text:
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	addq	$0x10, %rsp
                	fstpt	-0x40(%rbp)
@@ -504,7 +488,6 @@ Disassembly of section .text:
                	movq	%r11, 0x10(%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x18(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	addq	$0x20, %rsp
                	fstpt	-0x40(%rbp)
@@ -543,7 +526,6 @@ Disassembly of section .text:
                	movq	%r11, 0x10(%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x18(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	addq	$0x20, %rsp
                	fstpt	-0x40(%rbp)
@@ -581,7 +563,6 @@ Disassembly of section .text:
                	movq	%r11, 0x10(%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x18(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	addq	$0x20, %rsp
                	fstpt	-0x40(%rbp)
@@ -621,7 +602,6 @@ Disassembly of section .text:
                	movq	%r11, 0x10(%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x18(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	addq	$0x20, %rsp
                	fstpt	-0x40(%rbp)
@@ -658,7 +638,6 @@ Disassembly of section .text:
                	movq	%r11, 0x10(%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x18(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	addq	$0x20, %rsp
                	fstpt	-0x40(%rbp)
@@ -689,7 +668,6 @@ Disassembly of section .text:
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	addq	$0x10, %rsp
                	movslq	%eax, %rax
@@ -714,7 +692,6 @@ Disassembly of section .text:
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	addq	$0x10, %rsp
                	fstpt	-0x40(%rbp)
@@ -741,7 +718,6 @@ Disassembly of section .text:
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	addq	$0x10, %rsp
                	fstpt	-0x40(%rbp)
@@ -764,7 +740,6 @@ Disassembly of section .text:
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	addq	$0x10, %rsp
                	fstpt	-0x40(%rbp)
@@ -792,7 +767,6 @@ Disassembly of section .text:
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	addq	$0x10, %rsp
                	fstpt	-0x40(%rbp)
@@ -815,7 +789,6 @@ Disassembly of section .text:
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	addq	$0x10, %rsp
                	fstpt	-0x40(%rbp)
@@ -842,7 +815,6 @@ Disassembly of section .text:
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	addq	$0x10, %rsp
                	fstpt	-0x40(%rbp)
@@ -869,7 +841,6 @@ Disassembly of section .text:
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	addq	$0x10, %rsp
                	fstpt	-0x40(%rbp)
@@ -892,7 +863,6 @@ Disassembly of section .text:
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	addq	$0x10, %rsp
                	fstpt	-0x40(%rbp)
@@ -926,7 +896,6 @@ Disassembly of section .text:
                	movq	%r11, 0x10(%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x18(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	addq	$0x20, %rsp
                	fstpt	-0x40(%rbp)
@@ -966,7 +935,6 @@ Disassembly of section .text:
                	movq	%r11, 0x10(%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x18(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	addq	$0x20, %rsp
                	fstpt	-0x40(%rbp)
@@ -1006,7 +974,6 @@ Disassembly of section .text:
                	movq	%r11, 0x10(%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x18(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	addq	$0x20, %rsp
                	fstpt	-0x40(%rbp)
@@ -1043,7 +1010,6 @@ Disassembly of section .text:
                	movq	%r11, 0x10(%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x18(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	addq	$0x20, %rsp
                	fstpt	-0x40(%rbp)
@@ -1072,7 +1038,6 @@ Disassembly of section .text:
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	addq	$0x10, %rsp
                	fstpt	-0x40(%rbp)
@@ -1098,7 +1063,6 @@ Disassembly of section .text:
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	addq	$0x10, %rsp
                	fstpt	-0x40(%rbp)
@@ -1150,7 +1114,6 @@ Disassembly of section .text:
                	movq	%r11, 0x20(%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x28(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	addq	$0x30, %rsp
                	fstpt	-0x40(%rbp)

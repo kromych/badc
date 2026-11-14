@@ -94,17 +94,14 @@ Disassembly of section .text:
                	pushq	%rbx
                	xorl	%edi, %edi
                	movl	$0x2, %esi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %r12
                	leaq	<rip>, %rsi
                	movq	%r12, %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %rbx
                	leaq	<rip>, %rsi
                	movq	%r12, %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %r12
                	testq	%rbx, %rbx

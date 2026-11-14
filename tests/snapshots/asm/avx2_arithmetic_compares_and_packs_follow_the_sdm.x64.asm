@@ -388,7 +388,6 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rdi
                	vmovups	%ymm0, -0x20(%rbp)
                	movl	$0x20, %edx
-               	xorl	%eax, %eax
                	vzeroupper
                	callq	<addr>
                	movslq	%eax, %rax
@@ -401,7 +400,6 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rdi
                	vmovups	%ymm0, -0x20(%rbp)
                	movl	$0x20, %edx
-               	xorl	%eax, %eax
                	vzeroupper
                	callq	<addr>
                	movslq	%eax, %rax
@@ -414,7 +412,6 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rdi
                	vmovups	%ymm0, -0x20(%rbp)
                	movl	$0x20, %edx
-               	xorl	%eax, %eax
                	vzeroupper
                	callq	<addr>
                	movslq	%eax, %rax
@@ -427,7 +424,6 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rdi
                	vmovups	%ymm0, -0x20(%rbp)
                	movl	$0x20, %edx
-               	xorl	%eax, %eax
                	vzeroupper
                	callq	<addr>
                	movslq	%eax, %rax
@@ -440,7 +436,6 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rdi
                	vmovups	%ymm0, -0x20(%rbp)
                	movl	$0x20, %edx
-               	xorl	%eax, %eax
                	vzeroupper
                	callq	<addr>
                	movslq	%eax, %rax
@@ -453,7 +448,6 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rdi
                	vmovups	%ymm0, -0x20(%rbp)
                	movl	$0x20, %edx
-               	xorl	%eax, %eax
                	vzeroupper
                	callq	<addr>
                	movslq	%eax, %rax
@@ -466,7 +460,6 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rdi
                	vmovups	%ymm0, -0x20(%rbp)
                	movl	$0x20, %edx
-               	xorl	%eax, %eax
                	vzeroupper
                	callq	<addr>
                	movslq	%eax, %rax
@@ -657,7 +650,6 @@ Disassembly of section .text:
                	vmovups	(%rax), %ymm14
                	vmovups	%ymm14, (%rdi)
                	movl	$0x20, %edx
-               	xorl	%eax, %eax
                	vzeroupper
                	callq	<addr>
                	movslq	%eax, %rax
@@ -851,7 +843,6 @@ Disassembly of section .text:
                	vmovups	(%rax), %ymm14
                	vmovups	%ymm14, (%rdi)
                	movl	$0x20, %edx
-               	xorl	%eax, %eax
                	vzeroupper
                	callq	<addr>
                	movslq	%eax, %rax
@@ -869,7 +860,6 @@ Disassembly of section .text:
                	vmovups	(%rax), %ymm14
                	vmovups	%ymm14, (%rdi)
                	movl	$0x20, %edx
-               	xorl	%eax, %eax
                	vzeroupper
                	callq	<addr>
                	movslq	%eax, %rax
@@ -1091,7 +1081,6 @@ Disassembly of section .text:
                	vmovups	(%rax), %ymm14
                	vmovups	%ymm14, (%rdi)
                	movl	$0x20, %edx
-               	xorl	%eax, %eax
                	vzeroupper
                	callq	<addr>
                	movslq	%eax, %rax
@@ -1122,7 +1111,6 @@ Disassembly of section .text:
                	vmovups	(%rax), %ymm14
                	vmovups	%ymm14, (%rdi)
                	movl	$0x20, %edx
-               	xorl	%eax, %eax
                	vzeroupper
                	callq	<addr>
                	movslq	%eax, %rax
@@ -1146,7 +1134,6 @@ Disassembly of section .text:
                	vmovups	(%rax), %ymm14
                	vmovups	%ymm14, (%rdi)
                	movl	$0x20, %edx
-               	xorl	%eax, %eax
                	vzeroupper
                	callq	<addr>
                	movslq	%eax, %rax
@@ -1170,7 +1157,6 @@ Disassembly of section .text:
                	vmovups	(%rax), %ymm14
                	vmovups	%ymm14, (%rdi)
                	movl	$0x20, %edx
-               	xorl	%eax, %eax
                	vzeroupper
                	callq	<addr>
                	movslq	%eax, %rax
@@ -1194,7 +1180,6 @@ Disassembly of section .text:
                	vmovups	(%rax), %ymm14
                	vmovups	%ymm14, (%rdi)
                	movl	$0x20, %edx
-               	xorl	%eax, %eax
                	vzeroupper
                	callq	<addr>
                	movslq	%eax, %rax
@@ -1218,7 +1203,6 @@ Disassembly of section .text:
                	vmovups	(%rax), %ymm14
                	vmovups	%ymm14, (%rdi)
                	movl	$0x20, %edx
-               	xorl	%eax, %eax
                	vzeroupper
                	callq	<addr>
                	movslq	%eax, %rax
@@ -1360,7 +1344,6 @@ Disassembly of section .text:
                	vmovups	(%rax), %ymm14
                	vmovups	%ymm14, (%rdi)
                	movl	$0x20, %edx
-               	xorl	%eax, %eax
                	vzeroupper
                	callq	<addr>
                	movslq	%eax, %rax
@@ -1556,7 +1539,6 @@ Disassembly of section .text:
                	vmovups	(%rax), %ymm14
                	vmovups	%ymm14, (%rdi)
                	movl	$0x20, %edx
-               	xorl	%eax, %eax
                	vzeroupper
                	callq	<addr>
                	movslq	%eax, %rax
@@ -1737,7 +1719,6 @@ Disassembly of section .text:
                	vmovups	(%rax), %ymm14
                	vmovups	%ymm14, (%rdi)
                	movl	$0x20, %edx
-               	xorl	%eax, %eax
                	vzeroupper
                	callq	<addr>
                	movslq	%eax, %rax
@@ -2060,7 +2041,6 @@ Disassembly of section .text:
                	vmovups	%ymm14, (%rax)
                	leaq	-0x20(%rbp), %rdi
                	movl	$0x20, %edx
-               	xorl	%eax, %eax
                	vzeroupper
                	callq	<addr>
                	movslq	%eax, %rax

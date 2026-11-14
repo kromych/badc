@@ -30,7 +30,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	movl	$0x7, %esi
                	movl	%esi, 0xc8(%rdi)
-               	xorl	%eax, %eax
                	callq	<addr>
                	ud2
 
@@ -40,7 +39,6 @@ Disassembly of section .text:
                	subq	$0xe0, %rsp
                	movl	$0x0, -0xd8(%rbp)
                	leaq	-0xd0(%rbp), %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>

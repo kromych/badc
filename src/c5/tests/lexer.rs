@@ -273,6 +273,7 @@ fn binding_names_seed_their_binding_slot_when_dylibs_provided() {
         path: "libc.so.6".into(),
         bindings: vec![Binding {
             is_variadic: false,
+            prototyped: false,
             fixed_args: 1,
             return_type_tag: None,
             param_types: Vec::new(),

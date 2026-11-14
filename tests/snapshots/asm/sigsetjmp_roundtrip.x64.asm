@@ -32,7 +32,6 @@ Disassembly of section .text:
                	xorl	%esi, %esi
                	movl	%esi, -0x8(%rbp)
                	leaq	<rip>, %rdi # <addr>
-               	xorl	%eax, %eax
                	callq	<addr>
                	testl	%eax, %eax
                	je	<addr>
@@ -50,6 +49,5 @@ Disassembly of section .text:
                	movl	$0x1, -0x8(%rbp)
                	leaq	<rip>, %rdi # <addr>
                	movl	$0x7, %esi
-               	xorl	%eax, %eax
                	callq	<addr>
                	ud2

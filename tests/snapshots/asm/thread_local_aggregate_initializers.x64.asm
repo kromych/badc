@@ -184,7 +184,6 @@ Disassembly of section .text:
                	xorl	%esi, %esi
                	leaq	-<rip>, %rdx # <addr>
                	movq	%rsi, %rcx
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -194,7 +193,6 @@ Disassembly of section .text:
                	retq
                	movq	-0x10(%rbp), %rdi
                	leaq	-0x8(%rbp), %rsi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	-0x8(%rbp), %rax
                	movslq	%eax, %rax

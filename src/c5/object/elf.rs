@@ -4487,6 +4487,7 @@ mod tests {
                 ordinal: None,
                 kind: crate::c5::codegen::ImportKind::Function,
                 is_variadic: false,
+                prototyped: false,
                 fixed_args: 1,
                 return_type_tag: None,
                 param_types: Vec::new(),

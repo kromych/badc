@@ -133,7 +133,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x50, %rsp
                	movl	$0x1e, %edi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %r9
                	xorl	%edi, %edi
@@ -144,7 +143,6 @@ Disassembly of section .text:
                	movq	$-0x1, %r8
                	movq	%r9, 0x10(%rsp)
                	movq	%rdi, %r9
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %rcx
                	movq	0x10(%rsp), %r9
@@ -155,7 +153,6 @@ Disassembly of section .text:
                	movq	%r9, 0x10(%rsp)
                	movq	%rcx, 0x8(%rsp)
                	movq	%r9, %rsi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	movq	0x10(%rsp), %r9

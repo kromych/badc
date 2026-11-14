@@ -244,14 +244,12 @@ Disassembly of section .text:
                	addq	$0x80, %rsp
                	movl	-0x288(%rbp), %r12d
                	leaq	-0x200(%rbp), %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	cmpl	%eax, %r12d
                	sete	%r12b
                	movzbq	%r12b, %r12
                	leaq	-0x200(%rbp), %rdi
                	leaq	-0x100(%rbp), %rsi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

@@ -31,7 +31,6 @@ Disassembly of section .text:
                	subq	$0x20, %rsp
                	movl	$0x1, %edi
                	leaq	-0x10(%rbp), %rsi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

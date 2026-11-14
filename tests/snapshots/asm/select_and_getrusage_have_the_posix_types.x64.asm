@@ -36,7 +36,6 @@ Disassembly of section .text:
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rax)
                	leaq	-0x1b8(%rbp), %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -44,7 +43,6 @@ Disassembly of section .text:
                	movl	-0x1b4(%rbp), %edi
                	leaq	<rip>, %rsi
                	movl	$0x1, %edx
-               	xorl	%eax, %eax
                	callq	<addr>
                	cmpq	$0x1, %rax
                	je	<addr>
@@ -97,7 +95,6 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x190(%rbp), %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	xorl	%ecx, %ecx
                	movq	%rcx, %rax
@@ -162,10 +159,8 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	-0x1b8(%rbp), %edi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movl	-0x1b4(%rbp), %edi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	<rip>, %rax # <addr>
                	testq	%rax, %rax

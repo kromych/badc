@@ -727,14 +727,10 @@ pub(super) fn emit_call_ext(
     }
     marshal_args(code, &plan, args, &aggs, alloc, frame, abi, "CallExt")?;
     // System V AMD64 3.2.3: a variadic callee reads the XMM argument count
-    // from `al`; a non-variadic one ignores it, zeroed for determinism.
-    // Win64 clears `variadic_zero_xmm_count`.
-    if abi.variadic_zero_xmm_count {
-        if imp.is_variadic {
-            super::encode::emit_mov_al_imm8(code, xmm_used);
-        } else {
-            super::encode::emit_xor_eax_eax(code);
-        }
+    // from `al`, which a call without a prototype passes as well. Win64
+    // clears `variadic_zero_xmm_count`.
+    if abi.variadic_zero_xmm_count && (imp.is_variadic || !imp.prototyped) {
+        super::encode::emit_mov_al_imm8(code, xmm_used);
     }
     clear_upper(code, frame, wide_args(args, &aggs, &plan, alloc));
     let call_site = code.len();
@@ -1147,16 +1143,35 @@ fn emit_va_arg_eightbytes(
     Ok(jmp_at)
 }
 
-/// `Some((call_pc, target_pc, args))` when `block` returns the value of
-/// its last instruction that emits code, a direct `Inst::Call` the epilogue can replace by
-/// a jump (a sibling call, which `-fno-optimize-sibling-calls` turns off):
+/// The callee a tail call jumps to: a function of the unit by its entry
+/// pc, or a library function by its import slot.
+#[derive(Clone, Copy)]
+pub(super) enum TailTarget {
+    Local(usize),
+    Import(usize),
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct TailCall<'a> {
+    pub(super) pc: usize,
+    pub(super) target: TailTarget,
+    pub(super) args: &'a [u32],
+    pub(super) fp_arg_mask: &'a crate::c5::ir::FpMask,
+}
+
+/// The tail call when `block` returns the value of its last instruction
+/// that emits code, a direct `Inst::Call` or a library `Inst::CallExt` the
+/// epilogue can replace by a jump (a sibling call, which
+/// `-fno-optimize-sibling-calls` turns off):
 /// the arguments fit the host argument-register window, this function is
 /// not variadic, the callee -- defined in this unit or declared with a
-/// prototype -- is on the same convention with a known return extension,
-/// no aggregate rides the call, and no `LocalAddr` (user local or c5 cdecl
+/// prototype -- is on the same convention with a known return extension
+/// (none for a library callee, which is not variadic and whose result
+/// needs none), no aggregate rides the call, and no `LocalAddr` (user local or c5 cdecl
 /// cell) exists that could dangle once the frame is gone. The marshalled
 /// arguments ride caller-saved registers, disjoint from the callee-saved
 /// ones the epilogue restores.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn detect_tail_call<'a>(
     func: &'a FunctionSsa,
     alloc: &Allocation,
@@ -1164,8 +1179,9 @@ pub(super) fn detect_tail_call<'a>(
     abi: super::Abi,
     variadic_targets: &alloc::collections::BTreeSet<usize>,
     ret_tags: &alloc::collections::BTreeMap<usize, i64>,
+    imports: &super::ResolvedImports,
     target: Target,
-) -> Option<(usize, usize, &'a [u32])> {
+) -> Option<TailCall<'a>> {
     let Terminator::Return(v) = block.terminator else {
         return None;
     };
@@ -1184,26 +1200,67 @@ pub(super) fn detect_tail_call<'a>(
     {
         return None;
     }
-    let (target_pc, args, arg_aggs, fp_arg_mask, fixed_args, callee_conv) =
-        match &func.insts[v as usize] {
-            Inst::Call {
-                target_pc,
-                args,
-                arg_aggs,
-                fp_arg_mask,
-                fixed_args,
-                callee_conv,
-                ..
-            } => (
-                *target_pc,
-                args.as_slice(),
-                arg_aggs.as_slice(),
-                fp_arg_mask,
-                *fixed_args,
-                *callee_conv,
-            ),
-            _ => return None,
-        };
+    let callee_ext = |tag: i64| super::return_extension(tag, target);
+    let own_ext = callee_ext(func.ret_type_tag?);
+    let (target, args, fp_arg_mask) = match &func.insts[v as usize] {
+        Inst::Call {
+            target_pc,
+            args,
+            arg_aggs,
+            fp_arg_mask,
+            fixed_args,
+            callee_conv,
+            ..
+        } => {
+            // The tail-call plan is the scalar one, which would pass an
+            // aggregate by address rather than in its eightbytes.
+            if arg_aggs.iter().any(Option::is_some) {
+                return None;
+            }
+            // A variadic callee, or one called with fewer named arguments than
+            // arguments (without a prototype on Win64), takes its own placement.
+            if variadic_targets.contains(target_pc) || *fixed_args < args.len() {
+                return None;
+            }
+            // A callee on another convention wants a different argument
+            // window, shadow space and preserved-register set.
+            if *callee_conv != func.conv {
+                return None;
+            }
+            // The callee's return extension replaces this function's, so the
+            // two contracts must agree; a function without a recorded type
+            // has none.
+            if callee_ext(*ret_tags.get(target_pc)?) != own_ext {
+                return None;
+            }
+            (TailTarget::Local(*target_pc), args.as_slice(), fp_arg_mask)
+        }
+        Inst::CallExt {
+            binding_idx,
+            args,
+            fp_arg_mask,
+            arg_aggs,
+            ret_agg: None,
+            ..
+        } => {
+            let index = imports.index_of_binding(*binding_idx)?;
+            let imp = &imports.imports[index];
+            // A library callee extends nothing, and the extension this call
+            // would apply to its result is skipped by the jump.
+            let scalar = arg_aggs.iter().all(Option::is_none);
+            if !scalar
+                || !imp.prototyped
+                || imp.is_variadic
+                || func.conv != crate::c5::codegen::CallConv::Target
+                || callee_ext(imp.return_type_tag?) != ReturnExt::None
+                || own_ext != ReturnExt::None
+            {
+                return None;
+            }
+            (TailTarget::Import(index), args.as_slice(), fp_arg_mask)
+        }
+        _ => return None,
+    };
     // A stack argument would land in this function's incoming argument area.
     let plan = super::plan_call_args(args.len(), args.len(), fp_arg_mask, abi);
     if plan
@@ -1213,30 +1270,7 @@ pub(super) fn detect_tail_call<'a>(
     {
         return None;
     }
-    // The tail-call plan is the scalar one, which would pass an aggregate by
-    // address rather than in its eightbytes.
-    if arg_aggs.iter().any(Option::is_some) {
-        return None;
-    }
     if func.is_variadic {
-        return None;
-    }
-    // A variadic callee, or one called with fewer named arguments than
-    // arguments (without a prototype on Win64), takes its own placement.
-    if variadic_targets.contains(&target_pc) || fixed_args < args.len() {
-        return None;
-    }
-    // A callee on another convention wants a different argument window,
-    // shadow space and preserved-register set.
-    if callee_conv != func.conv {
-        return None;
-    }
-    // The callee's return extension replaces this function's, so the two
-    // contracts must agree; a function without a recorded type has none.
-    let &callee_tag = ret_tags.get(&target_pc)?;
-    if super::return_extension(callee_tag, target)
-        != super::return_extension(func.ret_type_tag?, target)
-    {
         return None;
     }
     // A taken local or parameter-cell address may be held by an earlier
@@ -1250,7 +1284,12 @@ pub(super) fn detect_tail_call<'a>(
     if super::ssa::emit_common::uses_dynamic_alloca(func) {
         return None;
     }
-    Some((v as usize, target_pc, args))
+    Some(TailCall {
+        pc: v as usize,
+        target,
+        args,
+        fp_arg_mask,
+    })
 }
 
 /// A tail call: `marshal_args; epilogue; jmp target`. The epilogue is
@@ -1259,17 +1298,19 @@ pub(super) fn detect_tail_call<'a>(
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_tail_call(
     code: &mut CodeBuf,
-    target_pc: usize,
-    args: &[u32],
+    tail: TailCall<'_>,
     alloc: &Allocation,
     frame: Frame,
     abi: super::Abi,
     fixups: &mut Vec<Fixup>,
+    plt_call_fixups: &mut Vec<PltCallFixup>,
     func: &FunctionSsa,
-    fp_arg_mask: &crate::c5::ir::FpMask,
     extern_sites: &mut Vec<super::UserExternCallSite>,
     extern_data_refs: &mut Vec<super::UserExternDataRef>,
 ) -> Emit {
+    let TailCall {
+        args, fp_arg_mask, ..
+    } = tail;
     // The restores below write only registers the shared convention keeps,
     // none of which carries an argument.
     let mut plan = super::plan_call_args(args.len(), args.len(), fp_arg_mask, abi);
@@ -1297,14 +1338,22 @@ pub(super) fn emit_tail_call(
     restore_callee_saved(code, frame, alloc);
     clear_upper(code, frame, wide_args(args, &[], &plan, alloc));
     emit_frame_teardown(code, func, frame, alloc, abi);
-    // A Call-kind fixup resolves the rel32 like an intra-unit call; the
-    // opcode is `jmp`.
+    // A Call-kind fixup resolves the rel32 like an intra-unit call, an import
+    // fixup as a call through the import's trampoline; the opcode is `jmp`.
     let jmp_site = code.len();
-    fixups.push(Fixup {
-        native_offset: jmp_site,
-        target_ent_pc: target_pc,
-        kind: super::encode::BranchKind::Jmp,
-    });
+    match tail.target {
+        TailTarget::Local(target_pc) => fixups.push(Fixup {
+            native_offset: jmp_site,
+            target_ent_pc: target_pc,
+            kind: super::encode::BranchKind::Jmp,
+        }),
+        TailTarget::Import(import_index) => plt_call_fixups.push(PltCallFixup {
+            instr_offset: jmp_site,
+            import_index,
+            is_tail: true,
+            is_addr: false,
+        }),
+    }
     super::encode::emit_jmp_rel32(code, 0);
     Ok(())
 }

@@ -45,7 +45,6 @@ Disassembly of section .text:
                	movl	$0x4b800000, -0x10(%rbp) # imm = 0x4B800000
                	movl	$0x1000001, -0x8(%rbp)  # imm = 0x1000001
                	movl	$0x3d, %edi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movsd	-0x38(%rbp), %xmm0
                	movsd	-0x30(%rbp), %xmm1
@@ -94,7 +93,6 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x1, %edi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -189,7 +187,6 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x1, %edi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	movl	$0x9, %ecx

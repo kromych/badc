@@ -29,7 +29,6 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movl	$0x8, %edi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movabsq	$0x400000003, %rcx      # imm = 0x400000003
                	movq	%rcx, (%rax)

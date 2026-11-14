@@ -33,7 +33,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x18, %edi
                	movq	%rsi, (%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	(%rsp), %rsi
                	movq	%rsi, (%rax)

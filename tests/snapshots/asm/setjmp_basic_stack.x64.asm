@@ -30,7 +30,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0xd0, %rsp
                	leaq	-0xc8(%rbp), %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	leave
                	retq

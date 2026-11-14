@@ -57,7 +57,6 @@ Disassembly of section .text:
                	leaq	-0x210(%rbp), %rdi
                	movl	$0x7e, %esi
                	movl	$0x20c, %edx            # imm = 0x20C
-               	xorl	%eax, %eax
                	callq	<addr>
                	leaq	-0x210(%rbp), %rax
                	leaq	-0x420(%rbp), %rcx

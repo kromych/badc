@@ -43,7 +43,6 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movl	$0x63, %edi
-               	xorl	%eax, %eax
                	callq	<addr>
                	ud2
 
@@ -55,7 +54,6 @@ Disassembly of section .text:
                	movl	<rip>, %ecx # <addr>
                	cmpl	$0x15, %ecx
                	cmovneq	%rax, %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	ud2
 
@@ -65,21 +63,16 @@ Disassembly of section .text:
                	leaq	-<rip>, %rdi # <addr>
                	xorl	%esi, %esi
                	movq	%rsi, %rdx
-               	xorl	%eax, %eax
                	callq	<addr>
                	leaq	-<rip>, %rdi # <addr>
                	xorl	%esi, %esi
-               	xorl	%eax, %eax
                	callq	<addr>
                	leaq	-<rip>, %rdi # <addr>
                	xorl	%esi, %esi
-               	xorl	%eax, %eax
                	callq	<addr>
                	leaq	-<rip>, %rdi # <addr>
                	xorl	%esi, %esi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movl	$0x3, %edi
-               	xorl	%eax, %eax
                	callq	<addr>
                	ud2

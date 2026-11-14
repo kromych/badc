@@ -31,11 +31,9 @@ Disassembly of section .text:
                	subq	$0x8, %rsp
                	pushq	%rbx
                	movl	$0x4, %edi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %rbx
                	movl	$0x4, %edi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movl	$0x41414141, (%rbx)     # imm = 0x41414141
                	movl	(%rbx), %r10d

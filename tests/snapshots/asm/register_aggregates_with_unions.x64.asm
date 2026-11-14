@@ -432,7 +432,6 @@ Disassembly of section .text:
                	incq	%rax
                	movb	%al, -0x48(%rbp)
                	movl	$0x8, %edx
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

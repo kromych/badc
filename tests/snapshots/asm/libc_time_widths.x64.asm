@@ -31,7 +31,6 @@ Disassembly of section .text:
                	subq	$0x20, %rsp
                	movabsq	$0x12a05f200, %rdi      # imm = 0x12A05F200
                	movl	$0x3b9aca00, %esi       # imm = 0x3B9ACA00
-               	xorl	%eax, %eax
                	callq	<addr>
                	movabsq	$0x41edcd6500000000, %rax # imm = 0x41EDCD6500000000
                	movq	%rax, %xmm15
@@ -42,13 +41,11 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%edi, %edi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %rcx
                	movq	$0x0, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rdi
                	movq	%rcx, 0x8(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	0x8(%rsp), %rcx
                	cmpq	$0x63b0cd00, %rcx       # imm = 0x63B0CD00

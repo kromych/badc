@@ -29,7 +29,6 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	leaq	<rip>, %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	cmpl	$0x2a, %eax
                	je	<addr>
@@ -37,7 +36,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	<rip>, %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	cmpl	$-0x11, %eax
                	je	<addr>
@@ -45,7 +43,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	<rip>, %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	testl	%eax, %eax
                	je	<addr>

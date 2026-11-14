@@ -31,7 +31,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rsi
                	movl	$0x1, %edx
-               	xorl	%eax, %eax
                	callq	<addr>
                	xorl	%ecx, %ecx
                	leaq	<rip>, %rax # <addr>

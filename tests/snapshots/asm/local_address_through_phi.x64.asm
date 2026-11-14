@@ -60,7 +60,6 @@ Disassembly of section .text:
                	movq	%rax, %rdi
                	callq	<addr>
                	movq	%rax, %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	popq	%rbx
                	leave

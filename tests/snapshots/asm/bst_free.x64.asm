@@ -38,7 +38,6 @@ Disassembly of section .text:
                	movq	0x10(%rbx), %rdi
                	callq	<addr>
                	movq	%rbx, %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	popq	%rbx
                	leave
@@ -53,7 +52,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x18, %edi
                	movq	%rsi, (%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	(%rsp), %rsi
                	movq	%rsi, (%rax)

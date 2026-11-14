@@ -531,7 +531,6 @@ Disassembly of section .text:
                	movl	$0x64, %edx
                	movl	$0x40, %esi
                	leaq	-0x8(%rbp), %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -550,12 +549,10 @@ Disassembly of section .text:
                	cmpl	$0x64, %eax
                	jl	<addr>
                	movq	%rcx, %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movl	$0x10, %edx
                	movl	$0x8, %esi
                	leaq	-0x8(%rbp), %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -568,7 +565,6 @@ Disassembly of section .text:
                	testb	$0x7, %al
                	jne	<addr>
                	movq	%rax, %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	xorl	%eax, %eax
                	jmp	<addr>

@@ -31,11 +31,9 @@ Disassembly of section .text:
                	pushq	%r12
                	pushq	%rbx
                	movl	$0xa, %edi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %r12
                	movl	$0xa, %edi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %rbx
                	movabsq	$0x4141414141414141, %rax # imm = 0x4141414141414141
@@ -46,7 +44,6 @@ Disassembly of section .text:
                	movl	$0xa, %edx
                	movq	%r12, %rdi
                	movq	%rbx, %rsi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -60,7 +57,6 @@ Disassembly of section .text:
                	movl	$0xa, %edx
                	movq	%r12, %rdi
                	movq	%rbx, %rsi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

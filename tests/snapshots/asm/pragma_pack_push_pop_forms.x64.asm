@@ -60,7 +60,6 @@ Disassembly of section .text:
                	movq	$0x0, -0x8(%rbp)
                	movb	$0x38, -0x10(%rbp)
                	movl	$0x18, %edx
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

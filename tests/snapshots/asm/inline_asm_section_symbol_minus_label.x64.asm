@@ -53,7 +53,6 @@ Disassembly of section .text:
                	movslq	0x4(%rcx), %rax
                	leaq	(%rcx,%rax), %rdi
                	leaq	<rip>, %rsi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

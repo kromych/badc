@@ -32,7 +32,6 @@ Disassembly of section .text:
                	movl	$0x3d, %edi
                	movups	%xmm0, 0x40(%rsp)
                	movups	%xmm1, 0x30(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	movups	0x40(%rsp), %xmm0
                	movups	0x30(%rsp), %xmm1
@@ -160,7 +159,6 @@ Disassembly of section .text:
                	movl	$0x3d, %edi
                	movups	%xmm0, 0x40(%rsp)
                	movups	%xmm1, 0x30(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	movups	0x40(%rsp), %xmm0
                	movups	0x30(%rsp), %xmm1
@@ -225,7 +223,6 @@ Disassembly of section .text:
                	movl	$0x3d, %edi
                	movups	%xmm0, 0x40(%rsp)
                	movups	%xmm1, 0x30(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	movups	0x40(%rsp), %xmm0
                	movups	0x30(%rsp), %xmm1
@@ -282,7 +279,6 @@ Disassembly of section .text:
                	movl	$0x3d, %edi
                	movups	%xmm0, 0x40(%rsp)
                	movups	%xmm1, 0x30(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	movups	0x40(%rsp), %xmm0
                	movups	0x30(%rsp), %xmm1
@@ -347,7 +343,6 @@ Disassembly of section .text:
                	movl	$0x3d, %edi
                	movups	%xmm0, 0x40(%rsp)
                	movups	%xmm1, 0x30(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	movups	0x40(%rsp), %xmm0
                	movups	0x30(%rsp), %xmm1
@@ -566,7 +561,6 @@ Disassembly of section .text:
                	movl	$0x3d, %edi
                	movups	%xmm0, 0x40(%rsp)
                	movups	%xmm1, 0x30(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	movups	0x40(%rsp), %xmm0
                	movups	0x30(%rsp), %xmm1
@@ -631,7 +625,6 @@ Disassembly of section .text:
                	movl	$0x3d, %edi
                	movups	%xmm0, 0x40(%rsp)
                	movups	%xmm1, 0x30(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	movups	0x40(%rsp), %xmm0
                	movups	0x30(%rsp), %xmm1
@@ -745,7 +738,6 @@ Disassembly of section .text:
                	movl	$0x3d, %edi
                	movups	%xmm0, 0x40(%rsp)
                	movups	%xmm1, 0x30(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	movups	0x40(%rsp), %xmm0
                	movups	0x30(%rsp), %xmm1
@@ -810,7 +802,6 @@ Disassembly of section .text:
                	movl	$0x3d, %edi
                	movups	%xmm0, 0x40(%rsp)
                	movups	%xmm1, 0x30(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	movups	0x40(%rsp), %xmm0
                	movups	0x30(%rsp), %xmm1
@@ -919,7 +910,6 @@ Disassembly of section .text:
                	movl	$0x3d, %edi
                	movups	%xmm0, 0x40(%rsp)
                	movups	%xmm1, 0x30(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	movups	0x40(%rsp), %xmm0
                	movups	0x30(%rsp), %xmm1
@@ -984,7 +974,6 @@ Disassembly of section .text:
                	movl	$0x3d, %edi
                	movups	%xmm0, 0x40(%rsp)
                	movups	%xmm1, 0x30(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	movups	0x40(%rsp), %xmm0
                	movups	0x30(%rsp), %xmm1
@@ -1146,7 +1135,6 @@ Disassembly of section .text:
                	movl	$0x3d, %edi
                	movups	%xmm0, 0x40(%rsp)
                	movups	%xmm1, 0x30(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	movups	0x40(%rsp), %xmm0
                	movups	0x30(%rsp), %xmm1
@@ -1471,7 +1459,6 @@ Disassembly of section .text:
                	movl	$0x3d, %edi
                	movups	%xmm0, 0x50(%rsp)
                	movups	%xmm1, 0x40(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	movups	0x50(%rsp), %xmm0
                	movups	0x40(%rsp), %xmm1
@@ -1602,7 +1589,6 @@ Disassembly of section .text:
                	movl	$0x3d, %edi
                	movups	%xmm0, 0x50(%rsp)
                	movups	%xmm1, 0x40(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	movups	0x50(%rsp), %xmm0
                	movups	0x40(%rsp), %xmm1
@@ -1667,7 +1653,6 @@ Disassembly of section .text:
                	movl	$0x3d, %edi
                	movups	%xmm0, 0x50(%rsp)
                	movups	%xmm1, 0x40(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	movups	0x50(%rsp), %xmm0
                	movups	0x40(%rsp), %xmm1
@@ -1724,7 +1709,6 @@ Disassembly of section .text:
                	movl	$0x3d, %edi
                	movups	%xmm0, 0x50(%rsp)
                	movups	%xmm1, 0x40(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	movups	0x50(%rsp), %xmm0
                	movups	0x40(%rsp), %xmm1
@@ -1789,7 +1773,6 @@ Disassembly of section .text:
                	movl	$0x3d, %edi
                	movups	%xmm0, 0x50(%rsp)
                	movups	%xmm1, 0x40(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	movups	0x50(%rsp), %xmm0
                	movups	0x40(%rsp), %xmm1
@@ -2006,7 +1989,6 @@ Disassembly of section .text:
                	movl	$0x3d, %edi
                	movups	%xmm0, 0x50(%rsp)
                	movups	%xmm1, 0x40(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	movups	0x50(%rsp), %xmm0
                	movups	0x40(%rsp), %xmm1
@@ -2071,7 +2053,6 @@ Disassembly of section .text:
                	movl	$0x3d, %edi
                	movups	%xmm0, 0x50(%rsp)
                	movups	%xmm1, 0x40(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	movups	0x50(%rsp), %xmm0
                	movups	0x40(%rsp), %xmm1
@@ -2153,7 +2134,6 @@ Disassembly of section .text:
                	movl	$0x3d, %edi
                	movups	%xmm0, 0x50(%rsp)
                	movups	%xmm1, 0x40(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	movups	0x50(%rsp), %xmm0
                	movups	0x40(%rsp), %xmm1
@@ -2218,7 +2198,6 @@ Disassembly of section .text:
                	movl	$0x3d, %edi
                	movups	%xmm0, 0x50(%rsp)
                	movups	%xmm1, 0x40(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	movups	0x50(%rsp), %xmm0
                	movups	0x40(%rsp), %xmm1
@@ -2295,7 +2274,6 @@ Disassembly of section .text:
                	movl	$0x3d, %edi
                	movups	%xmm0, 0x50(%rsp)
                	movups	%xmm1, 0x40(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	movups	0x50(%rsp), %xmm0
                	movups	0x40(%rsp), %xmm1
@@ -2360,7 +2338,6 @@ Disassembly of section .text:
                	movl	$0x3d, %edi
                	movups	%xmm0, 0x50(%rsp)
                	movups	%xmm1, 0x40(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	movups	0x50(%rsp), %xmm0
                	movups	0x40(%rsp), %xmm1
@@ -2555,7 +2532,6 @@ Disassembly of section .text:
                	movl	$0x3d, %edi
                	movups	%xmm0, 0x50(%rsp)
                	movups	%xmm1, 0x40(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	movups	0x50(%rsp), %xmm0
                	movups	0x40(%rsp), %xmm1
@@ -2795,7 +2771,6 @@ Disassembly of section .text:
                	movups	%xmm2, 0x80(%rsp)
                	movups	%xmm0, 0x70(%rsp)
                	movups	%xmm3, 0x60(%rsp)
-               	xorl	%eax, %eax
                	callq	<addr>
                	movups	0x90(%rsp), %xmm1
                	movups	0x80(%rsp), %xmm2
@@ -3367,7 +3342,6 @@ Disassembly of section .text:
                	cmpl	$0x4, %r12d
                	jl	<addr>
                	xorl	%edi, %edi
-               	xorl	%eax, %eax
                	callq	<addr>
                	xorl	%eax, %eax
                	movq	<rip>, %rcx # <addr>

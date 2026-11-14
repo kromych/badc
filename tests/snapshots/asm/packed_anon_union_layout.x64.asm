@@ -40,7 +40,6 @@ Disassembly of section .text:
                	leaq	-0x80(%rbp), %rdi
                	xorl	%esi, %esi
                	movl	$0x80, %edx
-               	xorl	%eax, %eax
                	callq	<addr>
                	movl	$0x3, -0x80(%rbp)
                	movl	$0x8, -0x44(%rbp)

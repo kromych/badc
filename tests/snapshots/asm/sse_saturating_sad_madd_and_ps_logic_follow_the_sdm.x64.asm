@@ -184,7 +184,6 @@ Disassembly of section .text:
                	movl	$0x10, %edx
                	movq	%rdi, %rsi
                	movq	%rax, %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

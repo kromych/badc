@@ -31,7 +31,6 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	leaq	<rip>, %rdi
                	leaq	-0x8(%rbp), %rsi
-               	xorl	%eax, %eax
                	callq	<addr>
                	cvtss2sd	%xmm0, %xmm0
                	movabsq	$0x400c000000000000, %rax # imm = 0x400C000000000000
@@ -51,7 +50,6 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rdi
                	xorl	%esi, %esi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movabsq	$-0x4030000000000000, %rax # imm = 0xBFD0000000000000
                	cvtss2sd	%xmm0, %xmm0

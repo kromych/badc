@@ -60,7 +60,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	movq	<rip>, %rax # <addr>
                	movq	(%rax), %rsi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

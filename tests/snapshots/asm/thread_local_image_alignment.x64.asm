@@ -77,19 +77,16 @@ Disassembly of section .text:
                	retq
                	xorl	%edi, %edi
                	movl	$0x2, %esi
-               	xorl	%eax, %eax
                	callq	<addr>
                	leaq	<rip>, %rsi
                	movq	%rax, 0x8(%rsp)
                	movq	%rax, %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %r10
                	movq	%r10, 0x18(%rsp)
                	movq	0x8(%rsp), %rax
                	leaq	<rip>, %rsi
                	movq	%rax, %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %r10
                	movq	%r10, 0x10(%rsp)

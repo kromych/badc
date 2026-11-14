@@ -205,7 +205,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	%rbx, %rsp
                	movq	%rbx, %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movl	$0x14, %edi
                	callq	<addr>

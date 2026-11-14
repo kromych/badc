@@ -31,10 +31,8 @@ Disassembly of section .text:
                	subq	$0x50, %rsp
                	leaq	<rip>, %rsi
                	leaq	-0x48(%rbp), %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	leaq	-0x48(%rbp), %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	cmpq	$0x7, %rax
                	je	<addr>

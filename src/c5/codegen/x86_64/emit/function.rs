@@ -871,8 +871,8 @@ impl FnEmit<'_, '_> {
         {
             super::encode::emit_endbr64(self.out.cx.code);
         }
-        // A direct call whose result the block returns lowers as `marshal;
-        // epilogue; jmp` in the terminator; see `detect_tail_call`.
+        // A direct or library call whose result the block returns lowers as
+        // `marshal; epilogue; jmp` in the terminator; see `detect_tail_call`.
         let tail_call = detect_tail_call(
             func,
             alloc,
@@ -880,6 +880,7 @@ impl FnEmit<'_, '_> {
             abi,
             variadic_targets,
             self.ret_tags,
+            self.fcx.imports,
             target,
         );
         let saves = &alloc.loop_saves;
@@ -915,7 +916,7 @@ impl FnEmit<'_, '_> {
         &mut self,
         block: &super::super::ir::Block,
         v: super::super::ir::ValueId,
-        tail_call: Option<(usize, usize, &[u32])>,
+        tail_call: Option<TailCall<'_>>,
     ) -> Emit {
         let FnCtx {
             func,
@@ -934,8 +935,8 @@ impl FnEmit<'_, '_> {
             return Ok(());
         }
         // The tail call's argument setup is part of the terminator.
-        if let Some((tail_pc, _, _)) = tail_call
-            && (v as usize) == tail_pc
+        if let Some(tail) = tail_call
+            && (v as usize) == tail.pc
         {
             return Ok(());
         }
@@ -1028,7 +1029,7 @@ impl FnEmit<'_, '_> {
         &mut self,
         block_idx: usize,
         block: &super::super::ir::Block,
-        tail_call: Option<(usize, usize, &[u32])>,
+        tail_call: Option<TailCall<'_>>,
     ) -> Emit {
         let FnCtx {
             func,
@@ -1045,22 +1046,16 @@ impl FnEmit<'_, '_> {
             // A naked function's inline-asm body provides its own return.
             Terminator::Return(_) if func.is_naked => Ok(()),
             Terminator::Return(v) => {
-                if let Some((tail_pc, target_pc, args)) = tail_call {
-                    let empty = crate::c5::ir::FpMask::EMPTY;
-                    let fp_arg_mask = match &func.insts[tail_pc] {
-                        Inst::Call { fp_arg_mask, .. } => fp_arg_mask,
-                        _ => &empty,
-                    };
+                if let Some(tail) = tail_call {
                     emit_tail_call(
                         self.out.cx.code,
-                        target_pc,
-                        args,
+                        tail,
                         alloc,
                         frame,
                         abi,
                         self.out.fixups,
+                        self.out.cx.plt_call_fixups,
                         func,
-                        fp_arg_mask,
                         self.out.cx.asm_extern_call_sites,
                         self.out.cx.user_extern_data_refs,
                     )

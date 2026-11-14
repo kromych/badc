@@ -1622,6 +1622,21 @@ mod relax_branches_tests {
     }
 
     #[test]
+    fn a_backward_branch_counts_the_padding_ahead_of_its_own_group() {
+        // A jmp that opens its own group at offset 120, back to offset 0:
+        // short rel -122 fits, but up to 10 bytes of padding ahead of the
+        // jmp move it to -132.
+        assert_eq!(
+            relax_branches(&[(120, 5, 0, false)], &[0, 200], &[]),
+            vec![true]
+        );
+        assert_eq!(
+            relax_branches(&[(120, 5, 0, false)], &[0, 200], &[(120, 10)]),
+            vec![false]
+        );
+    }
+
+    #[test]
     fn forward_boundary_127_shortens_128_does_not() {
         // Short instr ends at offset 2; target 129 -> rel 127 (fits),
         // target 130 -> rel 128 (does not).

@@ -1497,7 +1497,8 @@ fn push_x86_nops(code: &mut Vec<u8>, mut n: usize) {
 /// bytes the branches marked so far remove and excluding its own saving,
 /// fits a signed byte, so a short branch fits in the final layout.
 /// `pads` holds, in offset order, where padding may go ahead of a branch
-/// group and how much; a displacement counts all it spans.
+/// group and how much; a displacement counts all it spans, a backward one
+/// the padding ahead of the branch's own group too.
 pub(super) fn relax_branches(
     branches: &[(usize, usize, usize, bool)],
     block_offsets: &[usize],
@@ -1537,7 +1538,7 @@ pub(super) fn relax_branches(
             let rel = if block_offsets[target] > opcode_start {
                 rel + padding_in(opcode_start, block_offsets[target])
             } else {
-                rel - padding_in(block_offsets[target], opcode_start)
+                rel - padding_in(block_offsets[target], opcode_start + 1)
             };
             if (-128..=127).contains(&rel) {
                 short[i] = true;

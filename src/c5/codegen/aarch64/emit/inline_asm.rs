@@ -476,7 +476,7 @@ pub(crate) fn a64_align_asm_stream(
 
 /// The output tables an inline-asm statement writes.
 struct AsmSink<'a> {
-    code: &'a mut Vec<u8>,
+    code: &'a mut CodeBuf,
     fixups: &'a mut Vec<super::encode::Fixup>,
     data_fixups: &'a mut Vec<DataFixup>,
     pending_func_fixups: &'a mut Vec<(usize, usize)>,
@@ -903,19 +903,19 @@ impl AsmRegion {
         self.region_base + ((self.n_cap + self.save_list.len() + k) * 8) as u32
     }
 
-    fn ldr_x(&self, code: &mut Vec<u8>, rt: Reg, off: u32) {
+    fn ldr_x(&self, code: &mut CodeBuf, rt: Reg, off: u32) {
         emit_spill_ldr_x(code, self.frame, rt, off);
     }
 
-    fn str_x(&self, code: &mut Vec<u8>, rt: Reg, off: u32) {
+    fn str_x(&self, code: &mut CodeBuf, rt: Reg, off: u32) {
         emit_spill_str_x_auto(code, self.frame, rt, off);
     }
 
-    fn ldr_d(&self, code: &mut Vec<u8>, dt: u8, off: u32) {
+    fn ldr_d(&self, code: &mut CodeBuf, dt: u8, off: u32) {
         emit_spill_ldr_d_auto(code, self.frame, dt, off);
     }
 
-    fn str_d(&self, code: &mut Vec<u8>, dt: u8, off: u32) {
+    fn str_d(&self, code: &mut CodeBuf, dt: u8, off: u32) {
         emit_spill_str_d_auto(code, self.frame, dt, off);
     }
 
@@ -931,11 +931,11 @@ impl AsmRegion {
         Ok(Reg(16))
     }
 
-    fn ldr_q(&self, code: &mut Vec<u8>, qt: u8, off: u32) {
+    fn ldr_q(&self, code: &mut CodeBuf, qt: u8, off: u32) {
         emit_spill_ldr_q(code, self.frame, qt, off, Reg(16));
     }
 
-    fn str_q(&self, code: &mut Vec<u8>, qt: u8, off: u32) {
+    fn str_q(&self, code: &mut CodeBuf, qt: u8, off: u32) {
         emit_spill_str_q(code, self.frame, qt, off, Reg(16));
     }
 
@@ -1011,7 +1011,7 @@ impl AsmRegion {
     /// address.
     fn emit_input_loads(
         &self,
-        code: &mut Vec<u8>,
+        code: &mut CodeBuf,
         ops: &AsmOperands,
     ) -> Result<(), alloc::string::String> {
         use super::super::ir::AsmConstraint;
@@ -1063,7 +1063,7 @@ impl AsmRegion {
     /// Store the register outputs back through their captured addresses
     /// (x16 holds the address; the operand pool is untouched). `Err` for an
     /// output width with no store form.
-    fn emit_outputs(&self, code: &mut Vec<u8>, ops: &AsmOperands) -> Emit {
+    fn emit_outputs(&self, code: &mut CodeBuf, ops: &AsmOperands) -> Emit {
         use super::super::ir::AsmConstraint;
         for (i, op) in ops.asm.operands.iter().enumerate() {
             if !op.is_output
@@ -1128,7 +1128,7 @@ impl AsmRegion {
             .or_else(fail)
     }
 
-    fn emit_restore(&self, code: &mut Vec<u8>) {
+    fn emit_restore(&self, code: &mut CodeBuf) {
         for (j, &r) in self.save_list.iter().enumerate() {
             self.ldr_x(code, Reg(r), self.save_off(j));
         }
@@ -1141,7 +1141,7 @@ impl AsmRegion {
     /// of the template runs.
     fn emit_exit(
         &self,
-        code: &mut Vec<u8>,
+        code: &mut CodeBuf,
         ops: &AsmOperands,
     ) -> Result<(), alloc::string::String> {
         if self.emit_outputs(code, ops).is_err() {
@@ -2295,7 +2295,7 @@ fn emit_goto_exits(
 /// for `asm goto`.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_inline_asm_aarch64(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     asm: &super::super::ir::AsmBlock,
     args: &[u32],
     site: super::super::ir::ValueId,
@@ -2326,6 +2326,9 @@ pub(super) fn emit_inline_asm_aarch64(
     if crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::A64) {
         return Ok(());
     }
+    // The template's words may hold data, and its labels lie outside the
+    // instruction's own scan.
+    code.note_branch();
     let mut out = AsmSink {
         code,
         fixups,

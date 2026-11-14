@@ -1484,7 +1484,7 @@ fn a_copy_into_its_source_s_place_emits_nothing() {
     for place in [Place::Spill(0), Place::IntReg(19)] {
         alloc.places[v as usize] = place;
         let frame = compute_frame(&func, &alloc, target.abi(), target, 0);
-        let mut code = Vec::new();
+        let mut code = CodeBuf::default();
         super::arith::emit_copy(
             &mut code,
             place,
@@ -1556,7 +1556,7 @@ fn store_indexed_spilled_operands_precompute_address() {
     alloc.spill_count = alloc.spill_count.max(3);
     let frame = compute_frame(&func, &alloc, target.abi(), target, 0);
     let scratch = ScratchPool::new();
-    let mut code = Vec::new();
+    let mut code = CodeBuf::default();
     let ok = emit_store_indexed(
         &mut code,
         0,
@@ -1673,7 +1673,7 @@ fn copy_temporaries_are_free_at_the_site() {
     let scratch = ScratchPool::new();
     let emit = |alloc: &Allocation, size: i64, align: u32, strict: bool| {
         let frame = compute_frame(&func, alloc, target.abi(), target, 0);
-        let mut code = Vec::new();
+        let mut code = CodeBuf::default();
         emit_mcpy(
             &mut code,
             v,
@@ -1768,7 +1768,7 @@ fn byte_indexed_access_is_unscaled() {
         alloc.places[base as usize] = Place::IntReg(1);
         alloc.places[index as usize] = Place::IntReg(2);
         let frame = compute_frame(&func, &alloc, target.abi(), target, 0);
-        let mut code = Vec::new();
+        let mut code = CodeBuf::default();
         emit_load_indexed(
             &mut code,
             Place::IntReg(0),
@@ -1803,7 +1803,7 @@ fn byte_indexed_access_is_unscaled() {
         alloc.places[index as usize] = places[1];
         alloc.places[value as usize] = places[2];
         let frame = compute_frame(&func, &alloc, target.abi(), target, 0);
-        let mut code = Vec::new();
+        let mut code = CodeBuf::default();
         emit_store_indexed(
             &mut code,
             0,
@@ -1864,7 +1864,7 @@ fn word_index_widens_in_the_access() {
         alloc.places[base as usize] = Place::IntReg(1);
         alloc.places[index as usize] = Place::IntReg(2);
         let frame = compute_frame(&func, &alloc, target.abi(), target, 0);
-        let mut code = Vec::new();
+        let mut code = CodeBuf::default();
         emit_load_indexed(
             &mut code,
             Place::IntReg(0),
@@ -1905,7 +1905,7 @@ fn word_index_widens_in_the_access() {
             alloc.places[index as usize] = places[1];
             alloc.places[value as usize] = places[2];
             let frame = compute_frame(&func, &alloc, target.abi(), target, 0);
-            let mut code = Vec::new();
+            let mut code = CodeBuf::default();
             emit_store_indexed(
                 &mut code,
                 0,
@@ -1981,7 +1981,7 @@ fn fp_store_keeps_its_spilled_address_across_the_value_reload() {
         alloc.spill_count = alloc.spill_count.max(2);
         let frame = compute_frame(&func, &alloc, target.abi(), target, 0);
         assert!(frame.dynamic_sp, "{ty}: the VLA moves sp");
-        let mut code = Vec::new();
+        let mut code = CodeBuf::default();
         let kind = want;
         emit_store(
             &mut code,
@@ -2084,7 +2084,7 @@ fn try_emit_spilled_mul_add(dst: Place) -> Result<Vec<u32>, Unsupported> {
     alloc.spill_count = alloc.spill_count.max(4);
     let frame = compute_frame(&func, &alloc, target.abi(), target, 0);
     let scratch = ScratchPool::new();
-    let mut code = Vec::new();
+    let mut code = CodeBuf::default();
     emit_mul_add(&mut code, dst, a, b, c, true, &alloc, frame, &scratch)?;
     Ok(code
         .as_chunks::<4>()
@@ -2186,7 +2186,7 @@ fn try_emit_spilled_shift_op(dst: Place) -> Result<Vec<u32>, Unsupported> {
     alloc.spill_count = alloc.spill_count.max(3);
     let frame = compute_frame(&func, &alloc, target.abi(), target, 0);
     let scratch = ScratchPool::new();
-    let mut code = Vec::new();
+    let mut code = CodeBuf::default();
     emit_shift_op(
         &mut code, dst, op, lhs, rhs, shift, amount, &alloc, frame, &scratch,
     )?;
@@ -2286,7 +2286,7 @@ fn try_emit_spilled_bit_field(dst: Place) -> Result<Vec<u32>, Unsupported> {
     alloc.spill_count = alloc.spill_count.max(2);
     let frame = compute_frame(&func, &alloc, target.abi(), target, 0);
     let scratch = ScratchPool::new();
-    let mut code = Vec::new();
+    let mut code = CodeBuf::default();
     emit_bit_field(
         &mut code, dst, value, lsb, width, signed, &alloc, frame, &scratch,
     )?;
@@ -2370,7 +2370,7 @@ fn emit_forced_modulo(places: [Place; 3]) -> (bool, Vec<u32>) {
     }
     alloc.spill_count = alloc.spill_count.max(3);
     let frame = compute_frame(&func, &alloc, target.abi(), target, 0);
-    let mut code = Vec::new();
+    let mut code = CodeBuf::default();
     emit_binop(
         &mut code,
         BinOp::Mod,
@@ -2413,7 +2413,7 @@ fn div_words(src: &str, narrow: bool) -> Vec<u32> {
     alloc.div32.resize(v as usize + 1, false);
     alloc.div32[v as usize] = narrow;
     let frame = compute_frame(&func, &alloc, target.abi(), target, 0);
-    let mut code = Vec::new();
+    let mut code = CodeBuf::default();
     emit_binop(
         &mut code,
         op,
@@ -2504,7 +2504,7 @@ fn x19_taken_without_its_save_is_refused() {
     let frame = compute_frame(&func, &alloc, target.abi(), target, 0);
     assert!(!frame.uses_x19);
     alloc.places[v as usize] = Place::Spill(2);
-    let mut code = Vec::new();
+    let mut code = CodeBuf::default();
     let _ = emit_binop(
         &mut code,
         BinOp::Mod,
@@ -2554,7 +2554,7 @@ fn cursor_va_arg_takes_x19_only_with_both_places_spilled() {
         };
         let frame = compute_frame(&func, &alloc, target.abi(), target, 0);
         assert_eq!(frame.uses_x19, takes, "{dst:?}");
-        let mut code = Vec::new();
+        let mut code = CodeBuf::default();
         emit_va_arg_cursor(
             &mut code,
             &func,

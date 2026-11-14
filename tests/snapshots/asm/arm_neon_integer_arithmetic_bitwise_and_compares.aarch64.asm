@@ -4298,7 +4298,7 @@ Disassembly of section .text:
                	str	x16, [sp, #0x100]
                	mov	x16, #0x0               // =0
                	str	x16, [sp, #0x108]
-               	ldr	x0, [sp, #0x108]
+               	mov	x0, x16
                	cmp	w0, #0x6
                	b.ge	<addr>
                	adrp	x1, <page>

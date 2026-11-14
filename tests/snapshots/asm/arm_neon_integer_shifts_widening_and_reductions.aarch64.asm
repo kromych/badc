@@ -5182,7 +5182,6 @@ Disassembly of section .text:
                	str	x16, [sp, #0x298]
                	lsl	x16, x21, #1
                	str	x16, [sp, #0x340]
-               	ldr	x16, [sp, #0x340]
                	add	x16, x16, #0x5
                	str	x16, [sp, #0x2d0]
                	add	x16, x21, #0x2
@@ -5195,7 +5194,6 @@ Disassembly of section .text:
                	lsr	x1, x1, #6
                	neg	x16, x1
                	str	x16, [sp, #0x338]
-               	ldr	x16, [sp, #0x338]
                	mvn	x16, x16
                	str	x16, [sp, #0x328]
                	and	x1, x21, #0x7f
@@ -5204,7 +5202,6 @@ Disassembly of section .text:
                	lsr	x1, x1, #6
                	neg	x16, x1
                	str	x16, [sp, #0x2e0]
-               	ldr	x16, [sp, #0x2e0]
                	mvn	x16, x16
                	str	x16, [sp, #0x2b8]
                	sub	x0, x0, #0x1
@@ -5214,7 +5211,6 @@ Disassembly of section .text:
                	lsr	x0, x1, #6
                	neg	x16, x0
                	str	x16, [sp, #0x2d8]
-               	ldr	x16, [sp, #0x2d8]
                	mvn	x16, x16
                	str	x16, [sp, #0x2a8]
                	mov	x16, #0x0               // =0

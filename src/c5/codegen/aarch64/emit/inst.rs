@@ -748,7 +748,7 @@ fn emit_incoming(
 /// a spilled one reloaded into an FP scratch, the result spilled from one.
 /// An 8-byte vector takes the 64-bit form on the d registers.
 fn emit_vec_binop(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     (op, lane, bytes): (super::super::ir::BinOp, super::super::ir::VecLane, u8),
     (lhs, rhs): (super::super::ir::ValueId, super::super::ir::ValueId),
     dst: Place,
@@ -809,7 +809,7 @@ fn emit_vec_binop(
 /// `Inst::VecExtract`: `umov` / `smov` of the lane into an integer register,
 /// extended as `kind` reads it, or `dup` of it into a scalar FP one.
 fn emit_vec_extract(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     (vec, off, kind, bytes): (super::super::ir::ValueId, u8, LoadKind, u8),
     dst: Place,
     alloc: &Allocation,
@@ -1225,7 +1225,7 @@ pub(super) fn flag_step_cond(
 /// `ld1` or `st1` of one lane for a lane insert or store whose value
 /// [`lane_memory`] fused into it; `None` for any other instruction.
 pub(super) fn emit_lane_memory(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     inst: &Inst,
     fused: &[bool],
     dst: Place,
@@ -1316,7 +1316,7 @@ pub(super) fn emit_lane_memory(
 /// vector, from a general register or from the low element of an FP one.
 /// `blank` is `Some(undefined)` for a vector of no value or of zero.
 fn emit_vec_insert(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     (vec, value, off, kind, bytes): (
         super::super::ir::ValueId,
         super::super::ir::ValueId,
@@ -1333,7 +1333,7 @@ fn emit_vec_insert(
     }
     // The result at the vector's width: an 8-byte one is its D register,
     // moved there when it formed in the scratch.
-    let propagate = |code: &mut Vec<u8>, qd: u8| {
+    let propagate = |code: &mut CodeBuf, qd: u8| {
         if bytes == 16 {
             propagate_v128(code, frame, dst, qd, scratch.primary);
             return;
@@ -1442,7 +1442,7 @@ fn emit_vec_insert(
 /// `Inst::VecSplat`: `dup` of a general register, or of an FP register's
 /// low element, into every lane; one 64-bit lane is the value's `fmov`.
 fn emit_vec_splat(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     (value, kind, bytes): (super::super::ir::ValueId, StoreKind, u8),
     (dst, alloc, frame, scratch): (Place, &Allocation, Frame, &ScratchPool),
 ) -> Emit {
@@ -1490,7 +1490,7 @@ fn emit_vec_splat(
 /// immediate form -- zero, all ones, bytes of either, a byte shifted within
 /// its lane -- else the lane built in a general register and `dup`ed.
 fn emit_vec_const(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     (imm, kind, bytes): (i64, StoreKind, u8),
     (dst, frame, scratch): (Place, Frame, &ScratchPool),
 ) -> Emit {
@@ -1578,7 +1578,7 @@ fn emit_vec_const(
 /// the result's f32 marker mirrors the operand's. A spilled result stages
 /// through the second FP scratch, since the source may occupy the first.
 fn emit_fneg(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     src: u32,
     v: super::super::ir::ValueId,
     dst: Place,
@@ -1616,7 +1616,7 @@ fn emit_fneg(
 /// register may hold a loop-carried addend, so `dc` is never reused.
 #[allow(clippy::too_many_arguments)]
 fn emit_fma(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     [a, b, c]: [u32; 3],
     neg_product: bool,
     neg_addend: bool,
@@ -1660,7 +1660,7 @@ fn emit_fma(
 /// widening or narrowing `fcvt` needs no separate move.
 #[allow(clippy::too_many_arguments)]
 fn emit_fp_cast(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     kind: super::super::ir::FpCastKind,
     value: u32,
     v: super::super::ir::ValueId,

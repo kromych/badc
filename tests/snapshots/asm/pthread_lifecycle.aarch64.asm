@@ -261,7 +261,7 @@ Disassembly of section .text:
                	adrp	x16, <page>
                	add	x16, x16, <lo12>
                	str	x16, [sp, #0x28]
-               	ldr	x0, [sp, #0x28]
+               	mov	x0, x16
                	bl	<addr>
                	b	<addr>
                	adrp	x0, <page>

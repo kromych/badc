@@ -41,6 +41,8 @@ pub(crate) struct CodeBuf {
     stored: Option<SpillStore>,
     /// A branch was emitted since the current instruction began.
     branched: bool,
+    /// Where the current instruction's bytes begin.
+    inst_start: usize,
 }
 
 impl CodeBuf {
@@ -51,6 +53,18 @@ impl CodeBuf {
     /// An instruction's lowering begins: branches before it land nowhere in it.
     pub(crate) fn begin_instruction(&mut self) {
         self.branched = false;
+        self.inst_start = self.bytes.len();
+    }
+
+    /// The 4-byte words the current instruction emitted ahead of `end`, for
+    /// a target of fixed-width instructions to find its branches among.
+    pub(crate) fn instruction_words(&self, end: usize) -> impl Iterator<Item = u32> + '_ {
+        let from = self.inst_start.min(end);
+        self.bytes[from..end]
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|&w| u32::from_le_bytes(w))
     }
 
     /// A block begins here, which a branch may enter.

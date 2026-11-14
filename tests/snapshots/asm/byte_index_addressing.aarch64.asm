@@ -642,7 +642,6 @@ Disassembly of section .text:
                	stur	w1, [x29, #-0x8]
                	adrp	x16, <page>
                	str	x16, [sp, #0x18]
-               	ldr	x16, [sp, #0x18]
                	ldrsw	x1, [x16, #0x20]
                	add	x1, x1, #0x1
                	mov	x2, x0

@@ -7,7 +7,7 @@ const BRK_DIVIDE_BY_ZERO: u32 = 0xD43E_0080;
 /// `Inst::Extend { value, kind }` -- sign-extend the low bytes of a
 /// GPR value to 64 bits via the `SXTB` / `SXTH` / `SXTW` aliases.
 pub(super) fn emit_extend(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     v: super::super::ir::ValueId,
     value: u32,
@@ -53,7 +53,7 @@ pub(super) fn emit_sign_extend(code: &mut Vec<u8>, rd: Reg, rn: Reg, kind: LoadK
 /// `Inst::Copy`: move `value` into this instruction's place, bit-exact
 /// in both banks.
 pub(super) fn emit_copy(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     value: u32,
     is_fp: bool,
@@ -120,7 +120,7 @@ pub(super) fn emit_copy(
 
 /// `Inst::Neg`: `neg Xd, Xn` (the `sub Xd, XZR, Xn` alias).
 pub(super) fn emit_neg(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     value: u32,
     alloc: &Allocation,
@@ -144,7 +144,7 @@ pub(super) fn emit_neg(
 /// for an arm the other plus one (`Allocation::select_inc`).
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_select(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     (v, cond, a, b, kind): (u32, u32, u32, u32, LoadKind),
     func: &super::super::ir::FunctionSsa,
@@ -235,7 +235,7 @@ pub(super) fn emit_select(
 /// `rev Wd` (zero-extending), or `rev Wd` then `lsr Wd, #16`, which
 /// drops the reversed upper halfword.
 pub(super) fn emit_bswap(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     value: u32,
     width: u8,
@@ -271,7 +271,7 @@ pub(super) fn emit_bswap(
 /// count; `cnt` + `addv` through [`Frame::count_fp`] for the set bits, or
 /// the general-register reduction when there is none.
 pub(super) fn emit_bit_count(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     op: BitCountOp,
     value: u32,
@@ -358,7 +358,7 @@ fn emit_popcount_gpr(code: &mut Vec<u8>, rd: Reg, rn: Reg, t: Reg, is64: bool) {
 /// `mul` / `sub` pair the contraction replaced.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_mul_add(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     a: u32,
     b: u32,
@@ -398,7 +398,7 @@ pub(super) fn emit_mul_add(
         emit(code, word);
     } else {
         let mut reloads = [scratch.primary, scratch.secondary, rd].into_iter();
-        let mut operand = |code: &mut Vec<u8>, p: Place| -> Option<Reg> {
+        let mut operand = |code: &mut CodeBuf, p: Place| -> Option<Reg> {
             match p {
                 Place::IntReg(r) => Some(Reg(r)),
                 Place::Spill(_) => materialize_int(code, p, reloads.next()?, frame),
@@ -428,7 +428,7 @@ pub(super) fn emit_mul_add(
 /// `Inst::BitField`: one SBFX / UBFX; a spilled operand reloads into a scratch.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_bit_field(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     value: u32,
     lsb: u8,
@@ -474,7 +474,7 @@ pub(super) fn shifted_reg_form(op: BinOp, shift: BinOp) -> Option<(u32, super::e
 /// sources before writing `rd`; a spilled operand reloads into a scratch.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_shift_op(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     op: BinOp,
     lhs: u32,
@@ -507,7 +507,7 @@ pub(super) fn emit_shift_op(
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_binop(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     op: BinOp,
     v: super::super::ir::ValueId,
     dst: Place,
@@ -973,7 +973,7 @@ fn cmp_reg_word(alloc: &Allocation, v: super::super::ir::ValueId, rn: Reg, rm: R
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_binop_imm(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     op: BinOp,
     v: super::super::ir::ValueId,
     dst: Place,

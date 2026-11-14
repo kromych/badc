@@ -915,6 +915,7 @@ impl FunctionEmitter<'_, '_> {
                 self.align_stream();
             }
             self.block_offsets[block_idx] = self.cx.code.len();
+            self.cx.code.begin_block();
             if func.has_seh() {
                 self.seh_placed
                     .push((block_idx as BlockId, self.cx.code.len()));
@@ -1031,6 +1032,7 @@ impl FunctionEmitter<'_, '_> {
         let FnCtx { func, alloc, .. } = self.fcx;
         let inst = &func.insts[v as usize];
         let place = place_of(alloc, v);
+        self.cx.code.begin_instruction();
         if super::ssa::emit_common::inst_emits_nothing(inst, v, alloc) {
             return Ok(());
         }
@@ -1720,7 +1722,7 @@ pub(super) fn emit_stack_alloc(code: &mut Vec<u8>, bytes: u32, scratch: Option<R
 /// Emit the function prologue, with the unwind step of each instruction up to
 /// where fp is set, which is where it returns; `None` for a full leaf.
 fn emit_prologue(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     func: &FunctionSsa,
     alloc: &Allocation,
     frame: Frame,
@@ -1850,7 +1852,7 @@ fn emit_param_homes(code: &mut Vec<u8>, func: &FunctionSsa, alloc: &Allocation, 
 /// and before anything clobbers x0..x7 / d0..d7. The body reads the
 /// aggregate from that local; its 16-byte argument cell stays unused.
 fn emit_struct_param_scatter(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     func: &FunctionSsa,
     abi: super::Abi,
     frame: Frame,
@@ -2376,7 +2378,7 @@ fn push_sp_from_fp(
 /// step.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_return(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     value: u32,
     alloc: &Allocation,
     frame: Frame,
@@ -2548,7 +2550,7 @@ fn emit_parts_return(
 /// pointer is returned in x0.
 #[allow(clippy::too_many_arguments)]
 fn emit_aggregate_return(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     value: u32,
     ai: u32,
     alloc: &Allocation,
@@ -2635,7 +2637,7 @@ fn emit_aggregate_return(
 /// the 8-byte forms preserve), decided by the producing instruction even
 /// when the value is spilled or integer-materialized; x0 otherwise.
 fn emit_scalar_return(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     value: u32,
     alloc: &Allocation,
     frame: Frame,

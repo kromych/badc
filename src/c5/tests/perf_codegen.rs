@@ -8237,6 +8237,51 @@ double g(const double *p, double a, double b, double c) {\n\
     }
 }
 
+/// AArch64 reads a spill slot right after the store that filled it from the
+/// stored register: under two registers per bank, no `ldr`/`ldur` from the
+/// frame follows a `str`/`stur` to the same slot.
+#[test]
+fn a64_a_spill_slot_read_right_after_its_store_is_no_load() {
+    const SRC: &str = "long f(const unsigned char *p, const long *t, long a, long b, long c, long d) {\n\
+    long i = p[a] ^ b;\n\
+    long v = t[i & 7];\n\
+    long w = t[(i >> 3) & 7];\n\
+    return v * w + a + b + c + d + i;\n\
+}\n\
+double g(const double *p, double a, double b, double c) {\n\
+    double x = p[0] * a;\n\
+    double y = x * b;\n\
+    return y + a + b + c + x;\n\
+}\n";
+    use super::codegen::function_words;
+    let obj = object_with_pool(SRC, Target::LinuxAarch64, (2, 2));
+    // A 64-bit `str`/`stur` of x or d off sp or x29; the load of the same
+    // slot sets bit 22.
+    let slot_store = |w: u32| {
+        matches!(w & 0xFFC0_0000, 0xF900_0000 | 0xFD00_0000)
+            || (matches!(w & 0xFFE0_0C00, 0xF800_0000 | 0xFC00_0000))
+    };
+    let frame_base = |w: u32| matches!((w >> 5) & 31, 29 | 31);
+    for name in ["f", "g"] {
+        let ws = function_words(&obj, name);
+        let stores = ws
+            .iter()
+            .filter(|&&w| slot_store(w) && frame_base(w))
+            .count();
+        let reloads = ws
+            .windows(2)
+            .filter(|p| {
+                slot_store(p[0]) && frame_base(p[0]) && p[1] & !31 == (p[0] | 1 << 22) & !31
+            })
+            .count();
+        assert!(stores > 0, "{name}: nothing spilled under two registers");
+        assert_eq!(
+            reloads, 0,
+            "{name}: a slot is reloaded right after its store: {ws:08x?}"
+        );
+    }
+}
+
 /// A prototyped library call returning a value that needs no extension is
 /// a tail call, a non-variadic one leaves `al` alone, and a variadic one
 /// still passes its vector-register count (System V AMD64 3.2.3).

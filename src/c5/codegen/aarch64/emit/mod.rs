@@ -46,6 +46,7 @@ use super::encode::{
     enc_strh_imm, enc_sub_imm, enc_sub_reg, enc_subs_imm, enc_ucvtf_d_x, enc_ucvtf_s_x, enc_udiv,
     load_imm64,
 };
+use super::ssa::code_buf::{CodeBuf, SpillWidth};
 use super::ssa::emit_common::{
     Emit, MAX_UNPROBED_STACK_STEP, PlaceMove, STACK_PROBE_PAGE, STACK_PROBE_UNROLL_MAX,
     Unsupported, build_arg_aggs, param_entry_ext, place_same_loc,

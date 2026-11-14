@@ -236,7 +236,7 @@ fn count(row: &SimdOp, imm: Option<u8>, shift: bool) -> Result<Option<u8>, alloc
 /// scratches, the instruction on the first, which holds an accumulator,
 /// and the result stored through the destination address.
 pub(super) fn emit_a64_simd(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     (op, imm): (u32, Option<u8>),
     args: &[ValueId],
     alloc: &Allocation,
@@ -257,7 +257,7 @@ pub(super) fn emit_a64_simd(
     if args.len() < n + 1 {
         return fail(alloc::format!("{}: expects {n} operands", row.name));
     }
-    let transfer = |code: &mut Vec<u8>, addr: ValueId, v: u8, (bytes, load): (u8, bool)| -> Emit {
+    let transfer = |code: &mut CodeBuf, addr: ValueId, v: u8, (bytes, load): (u8, bool)| -> Emit {
         let Some(rn) = materialize_int(code, place_of(alloc, addr), scratch.primary, frame) else {
             return fail(alloc::format!(
                 "{}: operand address not int reg / spill",
@@ -304,7 +304,7 @@ pub(super) fn emit_a64_simd(
 /// accumulator into the destination first, or computes in the first
 /// scratch when the destination holds one of its other operands.
 pub(super) fn emit_a64_simd_val(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     (op, imm): (u32, Option<u8>),
     args: &[ValueId],
     dst: Place,

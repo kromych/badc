@@ -1221,14 +1221,10 @@ __BADC_INTRIN int _mm256_testnzc_pd(__m256d __A, __m256d __B) {
     return !_mm256_testz_pd(__A, __B) && !_mm256_testc_pd(__A, __B);
 }
 
-/* ROUNDPS / ROUNDPD and DPPS on each 128-bit half. */
-__BADC_INTRIN __m256 _mm256_round_ps(__m256 __A, const int __M) {
-    return __badc_join_ps(_mm_round_ps(__badc_lo_ps(__A), __M), _mm_round_ps(__badc_hi_ps(__A), __M));
-}
+#define _mm256_round_ps(V, M) ((__m256)__builtin_ia32_roundps256((__v8sf)(__m256)(V), (int)(M)))
+#define _mm256_round_pd(V, M) ((__m256d)__builtin_ia32_roundpd256((__v4df)(__m256d)(V), (int)(M)))
 
-__BADC_INTRIN __m256d _mm256_round_pd(__m256d __A, const int __M) {
-    return __badc_join_pd(_mm_round_pd(__badc_lo_pd(__A), __M), _mm_round_pd(__badc_hi_pd(__A), __M));
-}
+/* DPPS on each 128-bit half. */
 
 #define _mm256_floor_ps(V) _mm256_round_ps((V), _MM_FROUND_FLOOR)
 #define _mm256_floor_pd(V) _mm256_round_pd((V), _MM_FROUND_FLOOR)

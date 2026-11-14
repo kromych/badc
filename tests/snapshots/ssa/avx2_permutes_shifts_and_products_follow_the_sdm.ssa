@@ -1,6 +1,6 @@
-; --- SSA dump (ok=true) ent_pc=1357 ---
+; --- SSA dump (ok=true) ent_pc=1348 ---
 ; name=round_of
-fn ent_pc=1357 n_params=0 variadic=false locals=12
+fn ent_pc=1348 n_params=0 variadic=false locals=12
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -3132,9 +3132,9 @@ fn ent_pc=1357 n_params=0 variadic=false locals=12
     v1882 LifetimeEnd(-4)                                  -> -
     v1883 LifetimeEnd(-8)                                  -> -
     terminator Return
-; --- SSA dump (ok=true) ent_pc=1358 ---
+; --- SSA dump (ok=true) ent_pc=1349 ---
 ; name=main
-fn ent_pc=1358 n_params=0 variadic=false locals=0
+fn ent_pc=1349 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -3163,7 +3163,7 @@ fn ent_pc=1358 n_params=0 variadic=false locals=0
     v17  Imm(0)                                           -> x0
     terminator Jmp(b5)   (exit_acc=v16)
   block 4  start_pc=0
-    v21  Call { target_pc=1357, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v21  Call { target_pc=1348, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
     v22  Extend { value=v18, kind=I32 }                   -> x0
     v23  BinopI { op=add, lhs=v18, rhs_imm=1 }            -> x3
     v24  Extend { value=v23, kind=I32, nsw }              -> x0

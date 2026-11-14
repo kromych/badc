@@ -4213,7 +4213,23 @@ fn run_x86_simd_wide(
             }
             if float { out } else { eval(&a, &b, &c, 0) }
         }
-        Form::V | Form::VI => eval(&read(mem, operand(1)?)?, &zero, &zero, 0),
+        Form::V | Form::VI => {
+            let a = read(mem, operand(1)?)?;
+            let mut out = [0u8; 64];
+            let mut float = true;
+            for k in (0..n).step_by(16) {
+                let part: [u8; 16] = a[k..k + 16].try_into().unwrap();
+                match simd::eval_float(&mut mem.fp, row.sem, &part, &[0; 16], imm8) {
+                    Some(o) => out[k..k + 16].copy_from_slice(&o),
+                    None => float = false,
+                }
+            }
+            if float {
+                out
+            } else {
+                eval(&a, &zero, &zero, 0)
+            }
+        }
         Form::Shift => {
             let count = match imm {
                 Some(n) => u64::from(n),

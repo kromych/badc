@@ -1,6 +1,6 @@
-; --- SSA dump (ok=true) ent_pc=1356 ---
+; --- SSA dump (ok=true) ent_pc=1347 ---
 ; name=lanes
-fn ent_pc=1356 n_params=3 variadic=false locals=0
+fn ent_pc=1347 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   ParamPart(0, part=0, kind=V256)                  -> d0
@@ -96,9 +96,9 @@ fn ent_pc=1356 n_params=3 variadic=false locals=0
     terminator Return(v80)   (exit_acc=v80)
   block 3  start_pc=0
     terminator Jmp(b2)
-; --- SSA dump (ok=true) ent_pc=1357 ---
+; --- SSA dump (ok=true) ent_pc=1348 ---
 ; name=main
-fn ent_pc=1357 n_params=0 variadic=false locals=0
+fn ent_pc=1348 n_params=0 variadic=false locals=0
   spill_count=16 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -404,7 +404,7 @@ fn ent_pc=1357 n_params=0 variadic=false locals=0
     v300 SimdVal { op=__builtin_ia32_aesenc128, imm=None, args=[v52, v84] } -> d2
     v301 StoreLocal { off=-379, value=v300, kind=V128 }   -> -
     v302 LocalAddr(-379)                                  -> x2
-    v303 Call { target_pc=1356, args=[v283, v289, v297], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v303 Call { target_pc=1347, args=[v283, v289, v297], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v304 Extend { value=v303, kind=I32 }                  -> x1
     v305 BinopI { op=eq, lhs=v303, rhs_imm=0 }            -> x1
     terminator Bnz { cond=v303, target=b2, fall=b1 }   (low word)   (exit_acc=v305)
@@ -625,7 +625,7 @@ fn ent_pc=1357 n_params=0 variadic=false locals=0
     v517 SimdVal { op=__builtin_ia32_aesenclast128, imm=None, args=[v11, v27] } -> d2
     v518 StoreLocal { off=-381, value=v517, kind=V128 }   -> -
     v519 LocalAddr(-381)                                  -> x2
-    v520 Call { target_pc=1356, args=[v500, v506, v514], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v520 Call { target_pc=1347, args=[v500, v506, v514], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v521 Extend { value=v520, kind=I32 }                  -> x1
     v522 BinopI { op=eq, lhs=v520, rhs_imm=0 }            -> x1
     terminator Bnz { cond=v520, target=b4, fall=b3 }   (low word)   (exit_acc=v522)
@@ -846,7 +846,7 @@ fn ent_pc=1357 n_params=0 variadic=false locals=0
     v734 SimdVal { op=__builtin_ia32_aesdec128, imm=None, args=[v11, v27] } -> d2
     v735 StoreLocal { off=-383, value=v734, kind=V128 }   -> -
     v736 LocalAddr(-383)                                  -> x2
-    v737 Call { target_pc=1356, args=[v717, v723, v731], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v737 Call { target_pc=1347, args=[v717, v723, v731], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v738 Extend { value=v737, kind=I32 }                  -> x1
     v739 BinopI { op=eq, lhs=v737, rhs_imm=0 }            -> x1
     terminator Bnz { cond=v737, target=b6, fall=b5 }   (low word)   (exit_acc=v739)
@@ -1067,7 +1067,7 @@ fn ent_pc=1357 n_params=0 variadic=false locals=0
     v951 SimdVal { op=__builtin_ia32_aesdeclast128, imm=None, args=[v11, v27] } -> d2
     v952 StoreLocal { off=-385, value=v951, kind=V128 }   -> -
     v953 LocalAddr(-385)                                  -> x2
-    v954 Call { target_pc=1356, args=[v934, v940, v948], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v954 Call { target_pc=1347, args=[v934, v940, v948], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v955 Extend { value=v954, kind=I32 }                  -> x1
     v956 BinopI { op=eq, lhs=v954, rhs_imm=0 }            -> x1
     terminator Bnz { cond=v954, target=b8, fall=b7 }   (low word)   (exit_acc=v956)
@@ -1278,7 +1278,7 @@ fn ent_pc=1357 n_params=0 variadic=false locals=0
     v1158 Imm(0)                                           -> x2
     v1159 SimdVal { op=__builtin_ia32_pclmulqdq128, imm=Some(0), args=[v11, v27] } -> d2
     v1160 StoreLocal { off=-387, value=v1159, kind=V128 }  -> -
-    v1161 Call { target_pc=1356, args=[v1143, v1149, v1156], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1161 Call { target_pc=1347, args=[v1143, v1149, v1156], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1162 Extend { value=v1161, kind=I32 }                 -> x1
     v1163 BinopI { op=eq, lhs=v1161, rhs_imm=0 }           -> x1
     terminator Bnz { cond=v1161, target=b10, fall=b9 }   (low word)   (exit_acc=v1163)
@@ -1489,7 +1489,7 @@ fn ent_pc=1357 n_params=0 variadic=false locals=0
     v1365 Imm(0)                                           -> x2
     v1366 SimdVal { op=__builtin_ia32_pclmulqdq128, imm=Some(17), args=[v11, v27] } -> d2
     v1367 StoreLocal { off=-389, value=v1366, kind=V128 }  -> -
-    v1368 Call { target_pc=1356, args=[v1350, v1356, v1363], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1368 Call { target_pc=1347, args=[v1350, v1356, v1363], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1369 Extend { value=v1368, kind=I32 }                 -> x1
     v1370 BinopI { op=eq, lhs=v1368, rhs_imm=0 }           -> x1
     terminator Bnz { cond=v1368, target=b12, fall=b11 }   (low word)   (exit_acc=v1370)

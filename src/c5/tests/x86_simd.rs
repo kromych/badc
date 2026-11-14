@@ -626,6 +626,34 @@ fn the_variable_blends_are_rows_the_interpreter_runs() {
     assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 0);
 }
 
+/// SSE4.1's ROUNDPS family are rows the interpreter runs as the SDM
+/// defines them: imm8[1:0] picks the direction, bit 2 takes MXCSR's, and
+/// bit 3 suppresses the inexact exception; the scalar forms keep the first
+/// operand's upper lanes, and the AVX forms round all eight or four lanes.
+#[test]
+fn the_roundings_are_rows_the_interpreter_runs() {
+    let src = "#include <immintrin.h>\n#include <fenv.h>\n\
+        int main(void) {\n\
+            feclearexcept(FE_ALL_EXCEPT);\n\
+            __m128 r = _mm_round_ps(_mm_setr_ps(1.5f, -1.5f, 2.5f, -0.5f), \
+                                    _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC);\n\
+            if (r[0] != 2 || r[1] != -2 || r[2] != 2 || r[3] != 0) return 1;\n\
+            if (fetestexcept(FE_INEXACT)) return 2;\n\
+            __m128d d = _mm_floor_pd(_mm_setr_pd(1.5, -1.5));\n\
+            if (d[0] != 1 || d[1] != -2 || !fetestexcept(FE_INEXACT)) return 3;\n\
+            fesetround(FE_UPWARD);\n\
+            __m128 s = _mm_round_ss(_mm_set1_ps(7), _mm_set1_ps(0.25f), _MM_FROUND_CUR_DIRECTION);\n\
+            fesetround(FE_TONEAREST);\n\
+            if (s[0] != 1 || s[1] != 7 || s[3] != 7) return 4;\n\
+            __m256 t = _mm256_round_ps(_mm256_set1_ps(-2.75f), _MM_FROUND_TO_ZERO | _MM_FROUND_NO_EXC);\n\
+            if (t[0] != -2 || t[7] != -2) return 5;\n\
+            __m256d u = _mm256_ceil_pd(_mm256_setr_pd(0.5, -0.5, 3, -3.25));\n\
+            return u[0] == 1 && u[1] == 0 && u[2] == 3 && u[3] == -3 ? 0 : 6;\n\
+        }\n";
+    let program = super::compile_str_bare_for(src, crate::Target::LinuxX64);
+    assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 0);
+}
+
 /// `<pmmintrin.h>` and the `<mmintrin.h>` it reaches give each MMX and SSE3
 /// operation the result the SDM defines for its instruction, saturation,
 /// out-of-range shift counts and the pair-sum wrap included, as the
@@ -1840,6 +1868,7 @@ fn floating_rows_compute_in_the_environment() {
         | Sem::FloatAcross(..)
         | Sem::RoundInt(..)
         | Sem::RoundIntN(..)
+        | Sem::RoundImm(..)
         | Sem::RecipExponent(_) => true,
         Sem::Add(_)
         | Sem::Sub(_)

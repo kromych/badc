@@ -152,79 +152,15 @@ __BADC_INTRIN __m128i _mm_stream_load_si128(void const *__P) {
     return _mm_loadu_si128((__m128i const *)__P);
 }
 
-/* ROUNDPS and its kin on one lane's bits, of `__mant` fraction bits and
-** exponent bias `__bias`: the integral value in the direction imm8[1:0]
-** names, or MXCSR.RC's when imm8[2] is set, keeping the sign of a zero; the
-** precision exception for an inexact result unless imm8[3] is set. A NaN
-** lane is quieted by the caller. */
-static inline unsigned long long __badc_round(unsigned long long __x, int __mant, int __bias,
-                                              int __m) {
-    unsigned long long __sign = 1ULL << (__mant + (__bias == 127 ? 8 : 11));
-    unsigned long long __mag = __x & ~__sign, __one, __r;
-    int __e = (int)(__mag >> __mant) - __bias, __neg = (__x & __sign) != 0, __up;
-    int __mode = __m & 4 ? (int)(_mm_getcsr() >> 13) & 3 : __m & 3;
-    if (__e >= __mant)
-        return __x;
-    if (__e < 0) {
-        if (__mag == 0)
-            return __x;
-        __one = (unsigned long long)__bias << __mant;
-        __r = 0;
-        __up = __mode == 0 ? __mag > (unsigned long long)(__bias - 1) << __mant : 0;
-    } else {
-        __one = 1ULL << (__mant - __e);
-        unsigned long long __f = __mag & (__one - 1);
-        if (__f == 0)
-            return __x;
-        __r = __mag - __f;
-        __up = __mode == 0 ? __f > __one >> 1 || (__f == __one >> 1 && (__mag & __one)) : 0;
-    }
-    if (__mode == 1 || __mode == 2)
-        __up = __neg == (__mode == 1);
-    if (!(__m & 8)) {
-        volatile double __t = 1.0;
-        __t += 0x1p-60;
-    }
-    return (__up ? __r + __one : __r) | (__x & __sign);
-}
-
-static inline float __badc_round_f(float __x, int __m) {
-    if (__x != __x)
-        return __x + __x;
-    __v4si __b = (__v4si)(__m128){__x, 0, 0, 0};
-    __b[0] = (int)__badc_round((unsigned)__b[0], 23, 127, __m);
-    return ((__m128)__b)[0];
-}
-
-static inline double __badc_round_d(double __x, int __m) {
-    if (__x != __x)
-        return __x + __x;
-    __v2di __b = (__v2di)(__m128d){__x, 0};
-    __b[0] = (long long)__badc_round((unsigned long long)__b[0], 52, 1023, __m);
-    return ((__m128d)__b)[0];
-}
-
-static inline __m128 _mm_round_ps(__m128 __V, const int __M) {
-    for (int __i = 0; __i < 4; __i++)
-        __V[__i] = __badc_round_f(__V[__i], __M);
-    return __V;
-}
-
-static inline __m128d _mm_round_pd(__m128d __V, const int __M) {
-    for (int __i = 0; __i < 2; __i++)
-        __V[__i] = __badc_round_d(__V[__i], __M);
-    return __V;
-}
-
-static inline __m128 _mm_round_ss(__m128 __D, __m128 __V, const int __M) {
-    __D[0] = __badc_round_f(__V[0], __M);
-    return __D;
-}
-
-static inline __m128d _mm_round_sd(__m128d __D, __m128d __V, const int __M) {
-    __D[0] = __badc_round_d(__V[0], __M);
-    return __D;
-}
+/* ROUNDPS / ROUNDPD / ROUNDSS / ROUNDSD: imm8[1:0] picks the direction
+** (nearest even, down, up, toward zero), bit 2 MXCSR's instead, and bit 3
+** suppresses the inexact exception. */
+#define _mm_round_ps(V, M) ((__m128)__builtin_ia32_roundps((__v4sf)(__m128)(V), (int)(M)))
+#define _mm_round_pd(V, M) ((__m128d)__builtin_ia32_roundpd((__v2df)(__m128d)(V), (int)(M)))
+#define _mm_round_ss(D, V, M)                                                     \
+    ((__m128)__builtin_ia32_roundss((__v4sf)(__m128)(D), (__v4sf)(__m128)(V), (int)(M)))
+#define _mm_round_sd(D, V, M)                                                     \
+    ((__m128d)__builtin_ia32_roundsd((__v2df)(__m128d)(D), (__v2df)(__m128d)(V), (int)(M)))
 
 #define _mm_floor_ps(V) _mm_round_ps((V), _MM_FROUND_FLOOR)
 #define _mm_floor_pd(V) _mm_round_pd((V), _MM_FROUND_FLOOR)

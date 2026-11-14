@@ -340,6 +340,12 @@ pub(crate) enum Sem {
     /// Lane `i` of the second operand where immediate bit `i` is set; past
     /// eight lanes the bits repeat (`vpblendw` on each 128-bit lane).
     Blend(u8),
+    /// Each lane, or lane 0 of the second operand over the first when
+    /// `true`, rounded to an integral value in the direction imm8[1:0]
+    /// names (to nearest even, down, up, toward zero), or MXCSR's when
+    /// imm8 bit 2 is set; inexact unless imm8 bit 3 suppresses it
+    /// (`roundps`, `roundsd`).
+    RoundImm(u8, bool),
     /// The lane of the second operand where the top bit of the same lane
     /// of the third (the mask) is set, else the first's (`pblendvb`,
     /// `blendvps`, `vblendvpd`).
@@ -2159,7 +2165,7 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
         // permutations across a 32-byte vector.
         Sem::Float(..) | Sem::FloatCmp(..) | Sem::Convert(_) | Sem::ToInt(..) => {}
         Sem::MulAcc(_) | Sem::MulSub(_) | Sem::AbsDiffAcc(..) | Sem::BitSelect | Sem::Tbx(_) => {}
-        Sem::BlendVar(_) => {}
+        Sem::BlendVar(_) | Sem::RoundImm(..) => {}
         Sem::Eor3 | Sem::Bcax | Sem::Sha256Hash(_) | Sem::Sha256Su1 => {}
         Sem::Sha1Hash(_) | Sem::Sha1Su0 | Sem::Sha512Hash(_) | Sem::Sha512Su1 => {}
         Sem::FloatRel(..) | Sem::FloatFma(..) | Sem::LongAcc(..) => {}
@@ -2754,6 +2760,20 @@ pub(crate) fn eval_float_in(
                 }
             };
             set_flane(&mut o, w, 0, r);
+        }
+        Sem::RoundImm(w, scalar) => {
+            let to = match (imm & 4, imm & 3) {
+                (4, _) => RoundTo::Current,
+                (_, 0) => RoundTo::NearestEven,
+                (_, 1) => RoundTo::Down,
+                (_, 2) => RoundTo::Up,
+                _ => RoundTo::Zero,
+            };
+            let src = if scalar { b } else { a };
+            for i in 0..lanes(w, scalar) {
+                let x = env.round_to_integral(flane(src, w, i), to, imm & 8 == 0);
+                set_flane(&mut o, w, i, x);
+            }
         }
         Sem::RoundInt(to, w, exact) => {
             for i in 0..lanes(w, false) {

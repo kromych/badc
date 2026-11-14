@@ -3190,6 +3190,32 @@ v2l part(v4l a) { g(); return (v2l){a[2], a[3]}; }\n";
     m.finish();
 }
 
+/// A rounding intrinsic is its one instruction: `roundps` for
+/// `_mm_floor_ps`, `vroundpd` on ymm for `_mm256_round_pd` and the
+/// three-operand `vroundsd` for `_mm_ceil_sd`, and `ret`. Each was a C
+/// emulation over the lane's bits.
+#[test]
+fn a_rounding_intrinsic_is_one_instruction() {
+    const SRC: &str = "#include <immintrin.h>\n\
+__m128 fl(__m128 a) { return _mm_floor_ps(a); }\n\
+__m256d rn(__m256d a) { return _mm256_round_pd(a, _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC); }\n\
+__m128d cs(__m128d d, __m128d a) { return _mm_ceil_sd(d, a); }\n";
+    let mut m = Misses::default();
+    // 0F3A 08 (`roundps`, legacy), 09 and 0B (VEX).
+    for (name, op, vex) in [
+        ("fl", 0x3A08u16, false),
+        ("rn", 0x3A09, true),
+        ("cs", 0x3A0B, true),
+    ] {
+        let insns = x64(SRC, name);
+        m.expect(
+            insns.len() == 2 && insns[0].vex == vex && insns[0].op == op,
+            || format!("x86-64 {name}: {insns:x?}"),
+        );
+    }
+    m.finish();
+}
+
 /// A blend intrinsic is its one instruction: `vpblendvb` and `vblendvps`
 /// with the mask in the trailing register, `vblendpd` with its immediate,
 /// and `ret`. Each took a select per lane.

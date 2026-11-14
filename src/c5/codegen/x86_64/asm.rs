@@ -1628,6 +1628,8 @@ fn sse_imm(name: &str) -> Option<Mnemonic> {
         ("gf2p8affineinvqb", 0x66, 3, 0xCF, false, false),
         ("blendps", 0x66, 3, 0x0C, false, false), ("blendpd", 0x66, 3, 0x0D, false, false),
         ("pblendw", 0x66, 3, 0x0E, false, false),
+        ("roundps", 0x66, 3, 0x08, false, false), ("roundpd", 0x66, 3, 0x09, false, false),
+        ("roundss", 0x66, 3, 0x0A, false, false), ("roundsd", 0x66, 3, 0x0B, false, false),
         ("aeskeygenassist", 0x66, 3, 0xDF, false, false),
         ("sha1rnds4", 0, 3, 0xCC, false, false),
         ("pinsrb", 0x66, 3, 0x20, false, false), ("pinsrd", 0x66, 3, 0x22, false, false),
@@ -2009,6 +2011,8 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
         "vinserti128" => Some((1, 3, false, 0x38, Xmm)),
         "vpclmulqdq" => Some((1, 3, false, 0x44, Vl)),
         "vpblendw" => Some((1, 3, false, 0x0E, Vl)),
+        "vroundss" => Some((1, 3, false, 0x0A, Vl)),
+        "vroundsd" => Some((1, 3, false, 0x0B, Vl)),
         // GFNI: qword elements, so VEX.W is set.
         "vgf2p8affineqb" => Some((1, 3, true, 0xCE, Vl)),
         "vgf2p8affineinvqb" => Some((1, 3, true, 0xCF, Vl)),
@@ -2089,6 +2093,8 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
         "vpshufhw" => Some((2, 1, false, 0x70)),
         "vpermilps" => Some((1, 3, false, 0x04)),
         "vpermilpd" => Some((1, 3, false, 0x05)),
+        "vroundps" => Some((1, 3, false, 0x08)),
+        "vroundpd" => Some((1, 3, false, 0x09)),
         "vpermq" => Some((1, 3, true, 0x00)),
         "vpermpd" => Some((1, 3, true, 0x01)),
         _ => None,
@@ -7894,6 +7900,25 @@ mod tests {
         assert_eq!(
             e("vfnmsub132ps", &[xmm(10), xmm(9), xmm(8)]),
             [0xC4, 0x42, 0x31, 0x9E, 0xC2]
+        );
+        // VROUNDPS and its kin: VEX 0F3A 08..0B ib, 2-operand packed and
+        // 3-operand scalar.
+        let i = Concrete::Imm;
+        assert_eq!(
+            e("vroundps", &[i(1), ymm(1), ymm(0)]),
+            [0xC4, 0xE3, 0x7D, 0x08, 0xC1, 0x01]
+        );
+        assert_eq!(
+            e("vroundpd", &[i(12), xmm(9), xmm(8)]),
+            [0xC4, 0x43, 0x79, 0x09, 0xC1, 0x0C]
+        );
+        assert_eq!(
+            e("vroundss", &[i(2), xmm(2), xmm(1), xmm(0)]),
+            [0xC4, 0xE3, 0x71, 0x0A, 0xC2, 0x02]
+        );
+        assert_eq!(
+            e("vroundsd", &[i(4), xmm(10), xmm(9), xmm(8)]),
+            [0xC4, 0x43, 0x31, 0x0B, 0xC2, 0x04]
         );
         assert_eq!(
             e("vfmaddsub231ps", &[xmm(2), xmm(1), xmm(0)]),

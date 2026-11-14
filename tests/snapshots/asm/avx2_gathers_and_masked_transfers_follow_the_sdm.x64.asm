@@ -25,195 +25,6 @@ Disassembly of section .text:
                	int3
                	int3
 
-<__badc_round>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	movq	%rdi, %r9
-               	movslq	%ecx, %r11
-               	movq	%r11, 0x18(%rsp)
-               	movslq	%edx, %rdx
-               	movslq	%esi, %rsi
-               	movl	$0x1, %eax
-               	movl	$0x8, %ecx
-               	movl	$0xb, %edi
-               	cmpl	$0x7f, %edx
-               	cmovneq	%rdi, %rcx
-               	addq	%rsi, %rcx
-               	movslq	%ecx, %rcx
-               	shlxq	%rcx, %rax, %r10
-               	movq	%r10, 0x10(%rsp)
-               	movq	%r10, %rax
-               	movq	%rax, %rcx
-               	xorq	$-0x1, %rcx
-               	andq	%r9, %rcx
-               	shrxq	%rsi, %rcx, %r8
-               	subq	%rdx, %r8
-               	andq	%r9, %rax
-               	testq	%rax, %rax
-               	setne	%r10b
-               	movzbq	%r10b, %r10
-               	movq	%r10, 0x8(%rsp)
-               	movq	0x18(%rsp), %rdi
-               	testb	$0x4, %dil
-               	je	<addr>
-               	leaq	-0x8(%rbp), %rax
-               	stmxcsr	(%rax)
-               	movl	-0x8(%rbp), %eax
-               	shrq	$0xd, %rax
-               	movq	%rax, %rdi
-               	andq	$0x3, %rdi
-               	cmpl	%esi, %r8d
-               	jl	<addr>
-               	movq	%r9, %rax
-               	leave
-               	retq
-               	testl	%r8d, %r8d
-               	jge	<addr>
-               	testq	%rcx, %rcx
-               	jne	<addr>
-               	movq	%r9, %rax
-               	leave
-               	retq
-               	shlxq	%rsi, %rdx, %r8
-               	xorl	%eax, %eax
-               	testl	%edi, %edi
-               	jne	<addr>
-               	decq	%rdx
-               	movslq	%edx, %rdx
-               	shlxq	%rsi, %rdx, %rdx
-               	cmpq	%rdx, %rcx
-               	seta	%dl
-               	movzbq	%dl, %rdx
-               	cmpl	$0x1, %edi
-               	je	<addr>
-               	cmpl	$0x2, %edi
-               	jne	<addr>
-               	cmpl	$0x1, %edi
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	movq	0x8(%rsp), %rdx
-               	cmpl	%ecx, %edx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	movq	0x18(%rsp), %rcx
-               	testb	$0x8, %cl
-               	jne	<addr>
-               	movsd	<rip>, %xmm0
-               	movsd	%xmm0, -0x10(%rbp)
-               	movsd	-0x10(%rbp), %xmm0
-               	movsd	<rip>, %xmm1
-               	addsd	%xmm1, %xmm0
-               	movsd	%xmm0, -0x10(%rbp)
-               	leaq	(%rax,%r8), %rcx
-               	testq	%rdx, %rdx
-               	cmovneq	%rcx, %rax
-               	movq	%r9, %rcx
-               	andq	0x10(%rsp), %rcx
-               	orq	%rcx, %rax
-               	leave
-               	retq
-               	xorl	%edx, %edx
-               	jmp	<addr>
-               	movl	$0x1, %eax
-               	movq	%rsi, %rdx
-               	subq	%r8, %rdx
-               	movslq	%edx, %rdx
-               	shlxq	%rdx, %rax, %r8
-               	leaq	-0x1(%r8), %rsi
-               	andq	%rcx, %rsi
-               	testq	%rsi, %rsi
-               	jne	<addr>
-               	movq	%r9, %rax
-               	leave
-               	retq
-               	movq	%rcx, %rax
-               	subq	%rsi, %rax
-               	testl	%edi, %edi
-               	jne	<addr>
-               	movq	%r8, %rdx
-               	shrq	%rdx
-               	cmpq	%rdx, %rsi
-               	movl	$0x1, %edx
-               	ja	<addr>
-               	movq	%r8, %rdx
-               	shrq	%rdx
-               	xorl	%r10d, %r10d
-               	movq	%r10, (%rsp)
-               	andq	%r8, %rcx
-               	testq	%rcx, %rcx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	cmpq	%rdx, %rsi
-               	movq	(%rsp), %r11
-               	movq	%r11, %rdx
-               	cmoveq	%rcx, %rdx
-               	jmp	<addr>
-               	xorl	%edx, %edx
-               	jmp	<addr>
-               	andq	$0x3, %rdi
-               	jmp	<addr>
-
-<__badc_round_f>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rdi, %rcx
-               	ucomiss	%xmm0, %xmm0
-               	jp	<addr>
-               	je	<addr>
-               	addss	%xmm0, %xmm0
-               	leave
-               	retq
-               	vmovd	%xmm0, %r11d
-               	vmovd	%r11d, %xmm0
-               	xorl	%eax, %eax
-               	movq	%rax, %xmm15
-               	vmovd	%xmm15, %r11d
-               	vpinsrd	$0x1, %r11d, %xmm0, %xmm0
-               	movq	%rax, %xmm15
-               	vmovd	%xmm15, %r11d
-               	vpinsrd	$0x2, %r11d, %xmm0, %xmm0
-               	movq	%rax, %xmm15
-               	vmovd	%xmm15, %r11d
-               	vpinsrd	$0x3, %r11d, %xmm0, %xmm0
-               	vmovd	%xmm0, %eax
-               	movslq	%eax, %rax
-               	movl	%eax, %edi
-               	movl	$0x17, %esi
-               	movl	$0x7f, %edx
-               	movups	%xmm0, (%rsp)
-               	callq	<addr>
-               	movups	(%rsp), %xmm0
-               	vpinsrd	$0x0, %eax, %xmm0, %xmm0
-               	leave
-               	retq
-
-<__badc_round_d>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rdi, %rcx
-               	ucomisd	%xmm0, %xmm0
-               	jp	<addr>
-               	je	<addr>
-               	addsd	%xmm0, %xmm0
-               	leave
-               	retq
-               	xorl	%eax, %eax
-               	movq	%rax, %xmm15
-               	vmovq	%xmm15, %r11
-               	vpinsrq	$0x1, %r11, %xmm0, %xmm0
-               	vmovq	%xmm0, %rdi
-               	movl	$0x34, %esi
-               	movl	$0x3ff, %edx            # imm = 0x3FF
-               	movups	%xmm0, (%rsp)
-               	callq	<addr>
-               	movups	(%rsp), %xmm0
-               	vpinsrq	$0x0, %rax, %xmm0, %xmm0
-               	leave
-               	retq
-
 <_mm_i32gather_epi32>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -9505,7 +9316,7 @@ Disassembly of section .text:
 <check_permutes_and_halves>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x298, %rsp            # imm = 0x298
+               	subq	$0x238, %rsp            # imm = 0x238
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
@@ -10039,12 +9850,11 @@ Disassembly of section .text:
                	movq	-0x1d8(%rbp), %rbx
                	orq	%rax, %rbx
                	leaq	<rip>, %rax
+               	vmovups	(%rax), %ymm0
+               	leaq	-0x108(%rbp), %rsi
+               	leaq	<rip>, %rax
                	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, -0x1b0(%rbp)
-               	leaq	-0x108(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	vmovups	(%rcx), %ymm14
-               	vmovups	%ymm14, (%rax)
+               	vmovups	%ymm14, (%rsi)
                	leaq	-0xe8(%rbp), %rax
                	leaq	<rip>, %rcx
                	vmovups	(%rcx), %ymm14
@@ -10053,245 +9863,13 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	vmovups	(%rcx), %ymm14
                	vmovups	%ymm14, (%rax)
-               	vmovdqu	-0x1b0(%rbp), %xmm14
-               	movups	%xmm14, -0x1c0(%rbp)
-               	movl	$0x8, %edi
-               	movups	-0x1c0(%rbp), %xmm14
-               	vpermilps	$0x0, %xmm14, %xmm0 # xmm0 = xmm14[0,0,0,0]
-               	vzeroupper
-               	callq	<addr>
-               	movups	-0x1c0(%rbp), %xmm1
-               	vmovd	%xmm0, %r11d
-               	movapd	%xmm1, %xmm14
-               	vpinsrd	$0x0, %r11d, %xmm14, %xmm14
-               	movups	%xmm14, -0x1d0(%rbp)
-               	vpermilps	$0x1, %xmm1, %xmm0 # xmm0 = xmm1[1,0,0,0]
-               	movl	$0x8, %edi
-               	vzeroupper
-               	callq	<addr>
-               	vmovd	%xmm0, %r11d
-               	movups	-0x1d0(%rbp), %xmm14
-               	vpinsrd	$0x1, %r11d, %xmm14, %xmm14
-               	movups	%xmm14, -0x1d0(%rbp)
-               	movups	-0x1c0(%rbp), %xmm14
-               	vpermilps	$0x2, %xmm14, %xmm0 # xmm0 = xmm14[2,0,0,0]
-               	movl	$0x8, %edi
-               	vzeroupper
-               	callq	<addr>
-               	vmovd	%xmm0, %r11d
-               	movups	-0x1d0(%rbp), %xmm14
-               	vpinsrd	$0x2, %r11d, %xmm14, %xmm14
-               	movups	%xmm14, -0x1d0(%rbp)
-               	movups	-0x1c0(%rbp), %xmm14
-               	vpermilps	$0x3, %xmm14, %xmm0 # xmm0 = xmm14[3,0,0,0]
-               	movl	$0x8, %edi
-               	vzeroupper
-               	callq	<addr>
-               	vmovd	%xmm0, %r11d
-               	movups	-0x1d0(%rbp), %xmm14
-               	vpinsrd	$0x3, %r11d, %xmm14, %xmm14
-               	movups	%xmm14, -0x1d0(%rbp)
-               	vmovdqu	-0x1a0(%rbp), %xmm14
-               	movups	%xmm14, -0x1c0(%rbp)
-               	movl	$0x8, %edi
-               	movups	-0x1c0(%rbp), %xmm14
-               	vpermilps	$0x0, %xmm14, %xmm0 # xmm0 = xmm14[0,0,0,0]
-               	vzeroupper
-               	callq	<addr>
-               	movups	-0x1c0(%rbp), %xmm1
-               	vmovd	%xmm0, %r11d
-               	movapd	%xmm1, %xmm14
-               	vpinsrd	$0x0, %r11d, %xmm14, %xmm14
-               	movups	%xmm14, -0x1e0(%rbp)
-               	vpermilps	$0x1, %xmm1, %xmm0 # xmm0 = xmm1[1,0,0,0]
-               	movl	$0x8, %edi
-               	vzeroupper
-               	callq	<addr>
-               	vmovd	%xmm0, %r11d
-               	movups	-0x1e0(%rbp), %xmm14
-               	vpinsrd	$0x1, %r11d, %xmm14, %xmm14
-               	movups	%xmm14, -0x1e0(%rbp)
-               	movups	-0x1c0(%rbp), %xmm14
-               	vpermilps	$0x2, %xmm14, %xmm0 # xmm0 = xmm14[2,0,0,0]
-               	movl	$0x8, %edi
-               	vzeroupper
-               	callq	<addr>
-               	vmovd	%xmm0, %r11d
-               	movups	-0x1e0(%rbp), %xmm14
-               	vpinsrd	$0x2, %r11d, %xmm14, %xmm14
-               	movups	%xmm14, -0x1e0(%rbp)
-               	movups	-0x1c0(%rbp), %xmm14
-               	vpermilps	$0x3, %xmm14, %xmm0 # xmm0 = xmm14[3,0,0,0]
-               	movl	$0x8, %edi
-               	vzeroupper
-               	callq	<addr>
-               	vmovd	%xmm0, %r11d
-               	movups	-0x1e0(%rbp), %xmm0
-               	vpinsrd	$0x3, %r11d, %xmm0, %xmm0
-               	movups	-0x1d0(%rbp), %xmm15
-               	vmovdqa	%xmm15, %xmm1
-               	vinserti128	$0x1, %xmm0, %ymm1, %ymm0
-               	vmovups	%ymm0, 0x40(%rsp)
-               	vmovdqu	-0x1b0(%rbp), %xmm14
-               	movups	%xmm14, -0x1c0(%rbp)
-               	movl	$0x1, %edi
-               	movups	-0x1c0(%rbp), %xmm14
-               	vpermilps	$0x0, %xmm14, %xmm0 # xmm0 = xmm14[0,0,0,0]
-               	vzeroupper
-               	callq	<addr>
-               	movups	-0x1c0(%rbp), %xmm1
-               	vmovd	%xmm0, %r11d
-               	movapd	%xmm1, %xmm14
-               	vpinsrd	$0x0, %r11d, %xmm14, %xmm14
-               	movups	%xmm14, -0x1d0(%rbp)
-               	vpermilps	$0x1, %xmm1, %xmm0 # xmm0 = xmm1[1,0,0,0]
-               	movl	$0x1, %edi
-               	vzeroupper
-               	callq	<addr>
-               	vmovd	%xmm0, %r11d
-               	movups	-0x1d0(%rbp), %xmm14
-               	vpinsrd	$0x1, %r11d, %xmm14, %xmm14
-               	movups	%xmm14, -0x1d0(%rbp)
-               	movups	-0x1c0(%rbp), %xmm14
-               	vpermilps	$0x2, %xmm14, %xmm0 # xmm0 = xmm14[2,0,0,0]
-               	movl	$0x1, %edi
-               	vzeroupper
-               	callq	<addr>
-               	vmovd	%xmm0, %r11d
-               	movups	-0x1d0(%rbp), %xmm14
-               	vpinsrd	$0x2, %r11d, %xmm14, %xmm14
-               	movups	%xmm14, -0x1d0(%rbp)
-               	movups	-0x1c0(%rbp), %xmm14
-               	vpermilps	$0x3, %xmm14, %xmm0 # xmm0 = xmm14[3,0,0,0]
-               	movl	$0x1, %edi
-               	vzeroupper
-               	callq	<addr>
-               	vmovd	%xmm0, %r11d
-               	movups	-0x1d0(%rbp), %xmm14
-               	vpinsrd	$0x3, %r11d, %xmm14, %xmm14
-               	movups	%xmm14, -0x1d0(%rbp)
-               	vmovdqu	-0x1a0(%rbp), %xmm14
-               	movups	%xmm14, -0x1c0(%rbp)
-               	movl	$0x1, %edi
-               	movups	-0x1c0(%rbp), %xmm14
-               	vpermilps	$0x0, %xmm14, %xmm0 # xmm0 = xmm14[0,0,0,0]
-               	vzeroupper
-               	callq	<addr>
-               	movups	-0x1c0(%rbp), %xmm1
-               	vmovd	%xmm0, %r11d
-               	movapd	%xmm1, %xmm14
-               	vpinsrd	$0x0, %r11d, %xmm14, %xmm14
-               	movups	%xmm14, -0x1e0(%rbp)
-               	vpermilps	$0x1, %xmm1, %xmm0 # xmm0 = xmm1[1,0,0,0]
-               	movl	$0x1, %edi
-               	vzeroupper
-               	callq	<addr>
-               	vmovd	%xmm0, %r11d
-               	movups	-0x1e0(%rbp), %xmm14
-               	vpinsrd	$0x1, %r11d, %xmm14, %xmm14
-               	movups	%xmm14, -0x1e0(%rbp)
-               	movups	-0x1c0(%rbp), %xmm14
-               	vpermilps	$0x2, %xmm14, %xmm0 # xmm0 = xmm14[2,0,0,0]
-               	movl	$0x1, %edi
-               	vzeroupper
-               	callq	<addr>
-               	vmovd	%xmm0, %r11d
-               	movups	-0x1e0(%rbp), %xmm14
-               	vpinsrd	$0x2, %r11d, %xmm14, %xmm14
-               	movups	%xmm14, -0x1e0(%rbp)
-               	movups	-0x1c0(%rbp), %xmm14
-               	vpermilps	$0x3, %xmm14, %xmm0 # xmm0 = xmm14[3,0,0,0]
-               	movl	$0x1, %edi
-               	vzeroupper
-               	callq	<addr>
-               	vmovd	%xmm0, %r11d
-               	movups	-0x1e0(%rbp), %xmm0
-               	vpinsrd	$0x3, %r11d, %xmm0, %xmm0
-               	movups	-0x1d0(%rbp), %xmm15
-               	vmovdqa	%xmm15, %xmm1
-               	vinserti128	$0x1, %xmm0, %ymm1, %ymm0
-               	vmovups	%ymm0, 0x60(%rsp)
-               	vmovdqu	-0x1b0(%rbp), %xmm14
-               	movups	%xmm14, -0x1c0(%rbp)
-               	movl	$0x2, %edi
-               	movups	-0x1c0(%rbp), %xmm14
-               	vpermilps	$0x0, %xmm14, %xmm0 # xmm0 = xmm14[0,0,0,0]
-               	vzeroupper
-               	callq	<addr>
-               	movups	-0x1c0(%rbp), %xmm1
-               	vmovd	%xmm0, %r11d
-               	movapd	%xmm1, %xmm14
-               	vpinsrd	$0x0, %r11d, %xmm14, %xmm14
-               	movups	%xmm14, -0x1d0(%rbp)
-               	vpermilps	$0x1, %xmm1, %xmm0 # xmm0 = xmm1[1,0,0,0]
-               	movl	$0x2, %edi
-               	vzeroupper
-               	callq	<addr>
-               	vmovd	%xmm0, %r11d
-               	movups	-0x1d0(%rbp), %xmm14
-               	vpinsrd	$0x1, %r11d, %xmm14, %xmm14
-               	movups	%xmm14, -0x1d0(%rbp)
-               	movups	-0x1c0(%rbp), %xmm14
-               	vpermilps	$0x2, %xmm14, %xmm0 # xmm0 = xmm14[2,0,0,0]
-               	movl	$0x2, %edi
-               	vzeroupper
-               	callq	<addr>
-               	vmovd	%xmm0, %r11d
-               	movups	-0x1d0(%rbp), %xmm14
-               	vpinsrd	$0x2, %r11d, %xmm14, %xmm14
-               	movups	%xmm14, -0x1d0(%rbp)
-               	movups	-0x1c0(%rbp), %xmm14
-               	vpermilps	$0x3, %xmm14, %xmm0 # xmm0 = xmm14[3,0,0,0]
-               	movl	$0x2, %edi
-               	vzeroupper
-               	callq	<addr>
-               	vmovd	%xmm0, %r11d
-               	movups	-0x1d0(%rbp), %xmm14
-               	vpinsrd	$0x3, %r11d, %xmm14, %xmm14
-               	movups	%xmm14, -0x1c0(%rbp)
-               	vmovdqu	-0x1a0(%rbp), %xmm14
-               	movups	%xmm14, -0x1a0(%rbp)
-               	movl	$0x2, %edi
-               	movups	-0x1a0(%rbp), %xmm14
-               	vpermilps	$0x0, %xmm14, %xmm0 # xmm0 = xmm14[0,0,0,0]
-               	vzeroupper
-               	callq	<addr>
-               	movups	-0x1a0(%rbp), %xmm1
-               	vmovd	%xmm0, %r11d
-               	movapd	%xmm1, %xmm14
-               	vpinsrd	$0x0, %r11d, %xmm14, %xmm14
-               	movups	%xmm14, -0x1b0(%rbp)
-               	vpermilps	$0x1, %xmm1, %xmm0 # xmm0 = xmm1[1,0,0,0]
-               	movl	$0x2, %edi
-               	vzeroupper
-               	callq	<addr>
-               	vmovd	%xmm0, %r11d
-               	movups	-0x1b0(%rbp), %xmm14
-               	vpinsrd	$0x1, %r11d, %xmm14, %xmm14
-               	movups	%xmm14, -0x1b0(%rbp)
-               	movups	-0x1a0(%rbp), %xmm14
-               	vpermilps	$0x2, %xmm14, %xmm0 # xmm0 = xmm14[2,0,0,0]
-               	movl	$0x2, %edi
-               	vzeroupper
-               	callq	<addr>
-               	vmovd	%xmm0, %r11d
-               	movups	-0x1b0(%rbp), %xmm14
-               	vpinsrd	$0x2, %r11d, %xmm14, %xmm14
-               	movups	%xmm14, -0x1b0(%rbp)
-               	movups	-0x1a0(%rbp), %xmm14
-               	vpermilps	$0x3, %xmm14, %xmm0 # xmm0 = xmm14[3,0,0,0]
-               	movl	$0x2, %edi
-               	vzeroupper
-               	callq	<addr>
-               	vmovd	%xmm0, %r11d
-               	movups	-0x1b0(%rbp), %xmm0
-               	vpinsrd	$0x3, %r11d, %xmm0, %xmm0
-               	movups	-0x1c0(%rbp), %xmm15
-               	vmovdqa	%xmm15, %xmm1
-               	vinserti128	$0x1, %xmm0, %ymm1, %ymm0
-               	vmovups	%ymm0, 0x80(%rsp)
+               	vroundps	$0x8, %ymm0, %ymm1
                	leaq	0x40(%rsp), %rdi
-               	leaq	-0x108(%rbp), %rsi
+               	vmovups	%ymm1, 0x40(%rsp)
+               	vroundps	$0x1, %ymm0, %ymm1
+               	vmovups	%ymm1, 0x60(%rsp)
+               	vroundps	$0x2, %ymm0, %ymm0
+               	vmovups	%ymm0, 0x80(%rsp)
                	movl	$0x20, %edx
                	vzeroupper
                	callq	<addr>
@@ -10322,145 +9900,26 @@ Disassembly of section .text:
                	movzbq	%al, %rax
                	orq	%rax, %rbx
                	leaq	<rip>, %rax
+               	vmovups	(%rax), %ymm0
+               	leaq	-0xa8(%rbp), %rsi
+               	leaq	<rip>, %rax
                	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, -0x1b0(%rbp)
-               	leaq	-0xa8(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	vmovups	(%rcx), %ymm14
-               	vmovups	%ymm14, (%rax)
+               	vmovups	%ymm14, (%rsi)
                	leaq	-0x88(%rbp), %rax
                	leaq	<rip>, %rcx
                	vmovups	(%rcx), %ymm14
                	vmovups	%ymm14, (%rax)
-               	vmovdqu	-0x1b0(%rbp), %xmm1
-               	movl	$0x3, %edi
-               	vpermilpd	$0x0, %xmm1, %xmm0 # xmm0 = xmm1[0,0]
-               	movups	%xmm1, -0x240(%rbp)
-               	vzeroupper
-               	callq	<addr>
-               	movups	-0x240(%rbp), %xmm1
-               	vmovq	%xmm0, %r11
-               	movapd	%xmm1, %xmm14
-               	vpinsrq	$0x0, %r11, %xmm14, %xmm14
-               	movups	%xmm14, -0x1c0(%rbp)
-               	vpermilpd	$0x1, %xmm1, %xmm0 # xmm0 = xmm1[1,0]
-               	movl	$0x3, %edi
-               	vzeroupper
-               	callq	<addr>
-               	vmovq	%xmm0, %r11
-               	movups	-0x1c0(%rbp), %xmm14
-               	vpinsrq	$0x1, %r11, %xmm14, %xmm14
-               	movups	%xmm14, -0x1c0(%rbp)
-               	vmovdqu	-0x1a0(%rbp), %xmm1
-               	movl	$0x3, %edi
-               	vpermilpd	$0x0, %xmm1, %xmm0 # xmm0 = xmm1[0,0]
-               	movups	%xmm1, -0x250(%rbp)
-               	vzeroupper
-               	callq	<addr>
-               	movups	-0x250(%rbp), %xmm1
-               	vmovq	%xmm0, %r11
-               	movapd	%xmm1, %xmm14
-               	vpinsrq	$0x0, %r11, %xmm14, %xmm14
-               	movups	%xmm14, -0x1d0(%rbp)
-               	vpermilpd	$0x1, %xmm1, %xmm0 # xmm0 = xmm1[1,0]
-               	movl	$0x3, %edi
-               	vzeroupper
-               	callq	<addr>
-               	vmovq	%xmm0, %r11
-               	movups	-0x1d0(%rbp), %xmm0
-               	vpinsrq	$0x1, %r11, %xmm0, %xmm0
-               	movups	-0x1c0(%rbp), %xmm15
-               	vmovdqa	%xmm15, %xmm1
-               	vinserti128	$0x1, %xmm0, %ymm1, %ymm0
-               	vmovups	%ymm0, 0xa0(%rsp)
-               	vmovdqu	-0x1b0(%rbp), %xmm1
-               	movl	$0x2, %edi
-               	vpermilpd	$0x0, %xmm1, %xmm0 # xmm0 = xmm1[0,0]
-               	movups	%xmm1, -0x260(%rbp)
-               	vzeroupper
-               	callq	<addr>
-               	movups	-0x260(%rbp), %xmm1
-               	vmovq	%xmm0, %r11
-               	movapd	%xmm1, %xmm14
-               	vpinsrq	$0x0, %r11, %xmm14, %xmm14
-               	movups	%xmm14, -0x1c0(%rbp)
-               	vpermilpd	$0x1, %xmm1, %xmm0 # xmm0 = xmm1[1,0]
-               	movl	$0x2, %edi
-               	vzeroupper
-               	callq	<addr>
-               	vmovq	%xmm0, %r11
-               	movups	-0x1c0(%rbp), %xmm14
-               	vpinsrq	$0x1, %r11, %xmm14, %xmm14
-               	movups	%xmm14, -0x1c0(%rbp)
-               	vmovdqu	-0x1a0(%rbp), %xmm1
-               	movl	$0x2, %edi
-               	vpermilpd	$0x0, %xmm1, %xmm0 # xmm0 = xmm1[0,0]
-               	movups	%xmm1, -0x270(%rbp)
-               	vzeroupper
-               	callq	<addr>
-               	movups	-0x270(%rbp), %xmm1
-               	vmovq	%xmm0, %r11
-               	movapd	%xmm1, %xmm14
-               	vpinsrq	$0x0, %r11, %xmm14, %xmm14
-               	movups	%xmm14, -0x1d0(%rbp)
-               	vpermilpd	$0x1, %xmm1, %xmm0 # xmm0 = xmm1[1,0]
-               	movl	$0x2, %edi
-               	vzeroupper
-               	callq	<addr>
-               	vmovq	%xmm0, %r11
-               	movups	-0x1d0(%rbp), %xmm0
-               	vpinsrq	$0x1, %r11, %xmm0, %xmm0
-               	movups	-0x1c0(%rbp), %xmm15
-               	vmovdqa	%xmm15, %xmm1
-               	vinserti128	$0x1, %xmm0, %ymm1, %ymm0
-               	vmovups	%ymm0, 0xc0(%rsp)
-               	vmovdqu	-0x1b0(%rbp), %xmm1
-               	movl	$0x1, %edi
-               	vpermilpd	$0x0, %xmm1, %xmm0 # xmm0 = xmm1[0,0]
-               	movups	%xmm1, -0x280(%rbp)
-               	vzeroupper
-               	callq	<addr>
-               	movups	-0x280(%rbp), %xmm1
-               	vmovq	%xmm0, %r11
-               	movapd	%xmm1, %xmm14
-               	vpinsrq	$0x0, %r11, %xmm14, %xmm14
-               	movups	%xmm14, -0x1c0(%rbp)
-               	vpermilpd	$0x1, %xmm1, %xmm0 # xmm0 = xmm1[1,0]
-               	movl	$0x1, %edi
-               	vzeroupper
-               	callq	<addr>
-               	vmovq	%xmm0, %r11
-               	movups	-0x1c0(%rbp), %xmm14
-               	vpinsrq	$0x1, %r11, %xmm14, %xmm14
-               	movups	%xmm14, -0x1c0(%rbp)
-               	vmovdqu	-0x1a0(%rbp), %xmm1
-               	movl	$0x1, %edi
-               	vpermilpd	$0x0, %xmm1, %xmm0 # xmm0 = xmm1[0,0]
-               	movups	%xmm1, -0x290(%rbp)
-               	vzeroupper
-               	callq	<addr>
-               	movups	-0x290(%rbp), %xmm1
-               	vmovq	%xmm0, %r11
-               	movapd	%xmm1, %xmm14
-               	vpinsrq	$0x0, %r11, %xmm14, %xmm14
-               	movups	%xmm14, -0x1a0(%rbp)
-               	vpermilpd	$0x1, %xmm1, %xmm0 # xmm0 = xmm1[1,0]
-               	movl	$0x1, %edi
-               	vzeroupper
-               	callq	<addr>
-               	vmovq	%xmm0, %r11
-               	movups	-0x1a0(%rbp), %xmm0
-               	vpinsrq	$0x1, %r11, %xmm0, %xmm0
-               	movups	-0x1c0(%rbp), %xmm15
-               	vmovdqa	%xmm15, %xmm1
-               	vinserti128	$0x1, %xmm0, %ymm1, %ymm0
+               	vroundpd	$0x3, %ymm0, %ymm1
+               	leaq	0xa0(%rsp), %rdi
+               	vmovups	%ymm1, 0xa0(%rsp)
+               	vroundpd	$0x2, %ymm0, %ymm1
+               	vmovups	%ymm1, 0xc0(%rsp)
+               	vroundpd	$0x1, %ymm0, %ymm0
                	vmovups	%ymm0, 0xe0(%rsp)
                	leaq	-0x68(%rbp), %rax
                	leaq	<rip>, %rcx
                	vmovups	(%rcx), %ymm14
                	vmovups	%ymm14, (%rax)
-               	leaq	0xa0(%rsp), %rdi
-               	leaq	-0xa8(%rbp), %rsi
                	movl	$0x20, %edx
                	vzeroupper
                	callq	<addr>
@@ -10623,7 +10082,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	cmoveq	%rdx, %rcx
                	movq	%rcx, %rax
-               	leaq	-0x2c0(%rbp), %rsp
+               	leaq	-0x260(%rbp), %rsp
                	popq	%rbx
                	popq	%r12
                	popq	%r13

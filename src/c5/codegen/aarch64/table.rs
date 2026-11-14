@@ -180,6 +180,12 @@ pub(crate) enum Field {
     /// The base at bit 5 and the signed 4-bit offset at `shift` of an
     /// [`A64Op::MemVl`] operand, in multiples of `scale` vector lengths.
     SveMemVl { op: u8, shift: u8, scale: u8 },
+    /// A vector base at bit 5 and its offset at 16, scaled by the memory
+    /// size log2 `msz`.
+    SveZMem { op: u8, msz: u8 },
+    /// A scalar base at bit 5 and a vector index at 16, the index's shift
+    /// the memory size log2 `msz`, and a `sxtw` index's bit at `xs`.
+    SveZMemReg { op: u8, msz: u8, xs: u8 },
     /// The base at bit 5 and the index at 16 of a register-offset address
     /// whose index is shifted left by the memory size log2 `msz`; `xzr`
     /// admits the zero register as the index.
@@ -267,6 +273,12 @@ pub(crate) enum A64Op {
     Zero,
     /// `[Xn|SP{, #imm, mul vl}]`: a base and an offset in vector lengths.
     MemVl,
+    /// `[zN.T{, #imm}]`: a vector base of the element size log2.
+    ZMem(u8),
+    /// `[Xn|SP, zM.T{, <mod>}]`: a scalar base and a vector index of the
+    /// element size log2; the kind is 0 for a 64-bit index, 1 for one
+    /// shifted by `lsl`, 2 for a 32-bit `uxtw`/`sxtw` one, 3 scaled.
+    ZMemReg(u8, u8),
 }
 
 /// A resolved operand handed to [`encode`].
@@ -393,6 +405,21 @@ pub(crate) enum Opnd {
         num: u8,
         merge: bool,
     },
+    /// `[zN.T{, #off}]`: a vector base.
+    ZMem {
+        base: u8,
+        size: u8,
+        off: i64,
+    },
+    /// `[Xn|SP, zM.T{, <mod> {#amount}}]`: a scalar base and a vector
+    /// index; `ext` is 0 none, 1 `lsl`, 2 `uxtw`, 3 `sxtw`.
+    ZMemReg {
+        base: u8,
+        index: u8,
+        size: u8,
+        ext: u8,
+        amount: Option<u8>,
+    },
     /// An element `zN.T[index]` of an SVE vector.
     ZElem {
         num: u8,
@@ -489,6 +516,21 @@ fn op_matches(p: A64Op, o: Opnd) -> bool {
         (A64Op::ZList(c, k), Opnd::ZList { count, size, .. }) => count == c && size == k,
         (A64Op::FImm, Opnd::FpImm(_) | Opnd::Imm(0)) | (A64Op::FImm8, Opnd::FpImm(_)) => true,
         (A64Op::ZElem(k), Opnd::ZElem { size, .. }) => size == k,
+        (A64Op::ZMem(k), Opnd::ZMem { size, .. }) => size == k,
+        (
+            A64Op::ZMemReg(k, kind),
+            Opnd::ZMemReg {
+                size, ext, amount, ..
+            },
+        ) => {
+            size == k
+                && match kind {
+                    0 => ext == 0,
+                    1 => ext == 1 && amount.is_some(),
+                    2 => ext >= 2 && amount.is_none(),
+                    _ => ext >= 2 && amount.is_some(),
+                }
+        }
         (A64Op::ZtElem, Opnd::ZElem { .. }) => true,
         (A64Op::Zero, Opnd::Imm(0)) => true,
         (
@@ -4136,6 +4178,35 @@ fn pack(f: &Form, ops: &[Opnd]) -> Result<u32, String> {
                     ));
                 }
                 word |= u32::from(base) << 5 | ((off / scale) as u32 & 0xF) << shift;
+            }
+            Field::SveZMem { op, msz } => {
+                let Opnd::ZMem { base, off, .. } = ops[op as usize] else {
+                    return Err(String::from("inline asm: a vector base expected"));
+                };
+                let scale = 1i64 << msz;
+                if off % scale != 0 || !(0..=31).contains(&(off / scale)) {
+                    return Err(format!(
+                        "inline asm: the offset must be a multiple of {scale} from 0 to {}",
+                        31 * scale
+                    ));
+                }
+                word |= u32::from(base) << 5 | ((off / scale) as u32) << 16;
+            }
+            Field::SveZMemReg { op, msz, xs } => {
+                let Opnd::ZMemReg {
+                    base,
+                    index,
+                    ext,
+                    amount,
+                    ..
+                } = ops[op as usize]
+                else {
+                    return Err(String::from("inline asm: a vector index expected"));
+                };
+                if amount.is_some_and(|a| a != msz) {
+                    return Err(format!("inline asm: the index shift must be #{msz}"));
+                }
+                word |= u32::from(base) << 5 | u32::from(index) << 16 | u32::from(ext == 3) << xs;
             }
             Field::SveMemReg { op, msz, xzr } => {
                 let Opnd::MemReg {

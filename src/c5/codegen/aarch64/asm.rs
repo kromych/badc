@@ -198,6 +198,17 @@ pub(crate) enum AsmOpndA64 {
     ZList { first: u8, count: u8, size: u8 },
     /// An element `zN.T[index]` of an SVE vector.
     ZElem { num: u8, size: u8, index: u8 },
+    /// `[zN.T{, #off}]`: an SVE vector base.
+    ZMem { base: u8, size: u8, off: i64 },
+    /// `[Xn|SP, zM.T{, <mod> {#amount}}]`: a scalar base and an SVE vector
+    /// index; `ext` is 0 none, 1 `lsl`, 2 `uxtw`, 3 `sxtw`.
+    ZMemReg {
+        base: u8,
+        index: u8,
+        size: u8,
+        ext: u8,
+        amount: Option<u8>,
+    },
     /// `[base, #imm, mul vl]`: a memory reference whose offset counts vector
     /// or predicate lengths, as the SVE and SME loads and stores scale it.
     MemVl { base: MemBase, off: i64 },
@@ -829,6 +840,60 @@ fn parse_sve_list(tok: &str) -> Option<(u8, u8, u8)> {
     (list.len() <= 4 && consecutive).then_some((first, list.len() as u8, size))
 }
 
+/// An SVE address with a vector part: `[zN.T{, #off}]` or `[Xn|SP, zM.T{,
+/// <mod> {#amount}}]`. `None` when no part is a vector; `Some(None)` when
+/// one is and the rest is malformed.
+fn parse_sve_vector_address(parts: &[&str]) -> Option<Option<AsmOpndA64>> {
+    let zreg = |t: &str| match parse_sve_reg(t.trim(), 'z', 32) {
+        Some((n, Some(s))) => Some((n, s)),
+        _ => None,
+    };
+    if let Some((base, size)) = zreg(parts[0]) {
+        let off = match parts.get(1) {
+            None => Some(0),
+            Some(o) => o.trim().strip_prefix('#').and_then(parse_int),
+        };
+        return Some(
+            off.filter(|_| parts.len() <= 2)
+                .map(|off| AsmOpndA64::ZMem { base, size, off }),
+        );
+    }
+    let (index, size) = zreg(parts.get(1)?)?;
+    let base = match parse_reg(parts[0].trim()) {
+        Some((num, true, _)) => num,
+        _ => return Some(None),
+    };
+    let (ext, amount) = match parts.get(2).map(|m| m.trim().to_ascii_lowercase()) {
+        None => (0, None),
+        Some(m) => {
+            let (kind, rest) = m.split_once([' ', '\t', '#']).unwrap_or((m.as_str(), ""));
+            let ext = match kind {
+                "lsl" => 1,
+                "uxtw" => 2,
+                "sxtw" => 3,
+                _ => return Some(None),
+            };
+            let rest = rest.trim().trim_start_matches('#');
+            let amount = if rest.is_empty() {
+                None
+            } else {
+                match parse_int(rest).and_then(|a| u8::try_from(a).ok()) {
+                    Some(a) => Some(a),
+                    None => return Some(None),
+                }
+            };
+            (ext, amount)
+        }
+    };
+    Some(Some(AsmOpndA64::ZMemReg {
+        base,
+        index,
+        size,
+        ext,
+        amount,
+    }))
+}
+
 /// An assembler integer operand: a literal or a GNU as constant expression
 /// (`(1 << 16)`, `4 * 0`). Operand references do not appear here, so the
 /// expression resolver yields None for them.
@@ -865,6 +930,9 @@ fn parse_mem(inner: &str, pre: bool) -> Result<AsmOpndA64, String> {
     let parts = split_operands(inner);
     if parts.is_empty() || parts.len() > 3 {
         return Err(format!("inline asm: bad memory operand `[{inner}]`"));
+    }
+    if !pre && let Some(sve) = parse_sve_vector_address(&parts) {
+        return sve.ok_or_else(|| format!("inline asm: bad SVE address `[{inner}]`"));
     }
     let mem_base = |tok: &str| match parse_operand(tok) {
         Ok(AsmOpndA64::Ref { idx, .. }) => Ok(MemBase::Ref(idx)),
@@ -2716,6 +2784,27 @@ mod tests {
                 index: 2
             })
         );
+        // The vector-base and vector-index addresses of the gathers.
+        assert_eq!(
+            parse_operand("[z3.s, #4]"),
+            Ok(AsmOpndA64::ZMem {
+                base: 3,
+                size: 2,
+                off: 4
+            })
+        );
+        assert_eq!(
+            parse_operand("[x1, z2.d, SXTW #3]"),
+            Ok(AsmOpndA64::ZMemReg {
+                base: 1,
+                index: 2,
+                size: 3,
+                ext: 3,
+                amount: Some(3)
+            })
+        );
+        assert!(parse_operand("[z3.s, x1]").is_err());
+        assert!(parse_operand("[x1, z2.d, ror #3]").is_err());
     }
 
     #[test]

@@ -18069,6 +18069,61 @@ fn a64_inline_asm_assembles_the_sve_structure_and_faulting_loads() {
     }
 }
 
+/// The SVE gathers, their first-faulting forms and the scatters assemble
+/// in inline asm to Apple clang 21.0.0's words: a vector base with a
+/// scaled offset, and a scalar base with a 64-bit index, shifted or not,
+/// or a 32-bit one zero- or sign-extended, scaled or not.
+#[test]
+fn a64_inline_asm_assembles_the_sve_gathers_and_scatters() {
+    const SRC: &str = "void f(void) { __asm__ volatile(\"\
+        ld1w {z1.s}, p2/z, [z3.s]\\n ld1w {z1.s}, p2/z, [z3.s, #124]\\n\
+        ld1d {z4.d}, p5/z, [z6.d, #8]\\n ld1sb {z7.d}, p1/z, [z8.d, #31]\\n\
+        ld1w {z9.s}, p3/z, [x10, z11.s, uxtw]\\n ld1sh {z12.s}, p4/z, [sp, z13.s, sxtw #1]\\n\
+        ld1d {z14.d}, p6/z, [x15, z16.d]\\n ld1d {z17.d}, p7/z, [x18, z19.d, lsl #3]\\n\
+        ld1sw {z20.d}, p0/z, [x21, z22.d, uxtw #2]\\n ld1h {z23.d}, p1/z, [x24, z25.d, sxtw]\\n\
+        ldff1d {z26.d}, p2/z, [z27.d, #248]\\n ldff1w {z28.s}, p3/z, [x29, z30.s, uxtw #2]\\n\
+        st1w {z1.s}, p2, [z3.s, #4]\\n st1b {z4.s}, p5, [x6, z7.s, sxtw]\\n\
+        st1h {z8.d}, p1, [x9, z10.d, lsl #1]\\n st1d {z11.d}, p4, [x12, z13.d, sxtw #3]\\n\
+        st1d {z14.d}, p7, [z15.d, #248]\"); }\n";
+    let words = a64_opt_function_words(SRC, "f");
+    assert_eq!(
+        words[..words.len() - 1],
+        [
+            0x8520C861, 0x853FC861, 0xC5A1D4C4, 0xC43F8507, 0x850B4D49, 0x84ED13EC, 0xC5D0D9EE,
+            0xC5F3DE51, 0xC53602B4, 0xC4D94717, 0xC5BFEB7A, 0x853E6FBC, 0xE561A861, 0xE447D4C4,
+            0xE4AAA528, 0xE5ADD18B, 0xE5DFBDEE,
+        ],
+        "{words:08x?}"
+    );
+    let assembles = |insn: &str| {
+        use crate::{CompileOptions, NativeOptions, OutputKind, Target};
+        let src = alloc::format!("void f(void) {{ __asm__ volatile(\"{insn}\"); }}\n");
+        let options = CompileOptions::default().with_no_entry_point(true);
+        crate::Compiler::with_options(src, Target::LinuxAarch64, options)
+            .compile()
+            .is_ok_and(|p| {
+                let opts = NativeOptions {
+                    output_kind: OutputKind::Relocatable,
+                    ..NativeOptions::new().with_optimize()
+                };
+                crate::emit_native_with_options(&p, Target::LinuxAarch64, opts).is_ok()
+            })
+    };
+    assert!(assembles("ld1w {z1.s}, p2/z, [z3.s, #4]"));
+    for bad in [
+        "ld1w {z1.s}, p2/z, [z3.s, #2]",
+        "ld1w {z1.s}, p2/z, [z3.s, #128]",
+        "ld1w {z1.s}, p2/z, [x0, z3.s]",
+        "ld1w {z1.s}, p2/z, [x0, z3.s, uxtw #1]",
+        "ld1d {z1.d}, p2/z, [x0, z3.d, lsl #2]",
+        "ld1b {z1.d}, p2/z, [x0, z3.d, lsl #0]",
+        "ld1sw {z1.s}, p2/z, [z3.s]",
+        "st1w {z1.s}, p2/z, [z3.s]",
+    ] {
+        assert!(!assembles(bad), "{bad}");
+    }
+}
+
 /// Followed from x0, the byte loads of `from_big` read offsets 1 and 8192.
 #[test]
 fn a64_far_field_load_reads_its_displacement() {

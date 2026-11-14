@@ -351,6 +351,50 @@ for _msz, _t in enumerate('bhwd'):
         0xA4000000 | _msz << 23,
         _regs + [f'SveMemReg {{ op: 2, msz: {_msz}, xzr: false }}'],
         f'{_m} {{Zt}}, Pg/Z, [Xn|SP, Xm, lsl #{_msz}]', 0x04)
+# The SVE gathers and scatters (Arm ARM C8.2 encoding classes): the memory
+# size at bit 23, the unsigned (U) bit 14 and first-faulting (ff) bit 13 of a
+# load. An address is a vector base with a 5-bit unsigned offset scaled by
+# the memory size, or a scalar base and a vector index: 64-bit, unscaled or
+# shifted by the memory size, or 32-bit, zero- or sign-extended (the xs bit,
+# 22 in a load, 14 in a store) and unscaled or scaled. A doubleword element
+# takes its index unpacked from the low half of each lane.
+SVE_GATHER = {
+    'b': (0, 1), 'sb': (0, 0), 'h': (1, 1), 'sh': (1, 0), 'w': (2, 1), 'sw': (2, 0), 'd': (3, 1),
+}
+for _sfx, (_msz, _u) in SVE_GATHER.items():
+    for _e in (2, 3):
+        if _msz > _e or (_e == 2 and _sfx in ('sw',)):
+            continue
+        _t = 'BHSD'[_e]
+        _regs = ['Reg { op: 0, shift: 0 }', 'PLow { op: 1, shift: 10 }']
+        _top = 0x84000000 if _e == 2 else 0xC4000000
+        # (address kind, load bits, store bits)
+        _kinds = [
+            (f'ZMem({_e})', 0x00208000, 0x0060A000 if _e == 2 else 0x0040A000),
+            (f'ZMemReg({_e}, 2)', 0x00000000, 0x00408000 if _e == 2 else 0x00008000),
+        ]
+        if _msz > 0:
+            _kinds.append((f'ZMemReg({_e}, 3)', 0x00200000,
+                           0x00608000 if _e == 2 else 0x00208000))
+        if _e == 3:
+            _kinds.append((f'ZMemReg({_e}, 0)', 0x00408000, 0x0000A000))
+            if _msz > 0:
+                _kinds.append((f'ZMemReg({_e}, 1)', 0x00608000, 0x0020A000))
+        for _kind, _ld, _stb in _kinds:
+            _field = (f'SveZMem {{ op: 2, msz: {_msz} }}' if _kind.startswith('ZMem(')
+                      else f'SveZMemReg {{ op: 2, msz: {_msz}, xs: {{xs}} }}')
+            for _ff in (0, 1):
+                _m = ('ldff1' if _ff else 'ld1') + _sfx
+                EXTRA_FORMS[(_m, (f'ZList(1, {_e})', 'PgZ', _kind))] = (
+                    _top | _msz << 23 | _ld | _u << 14 | _ff << 13,
+                    _regs + [_field.replace('{xs}', '22')],
+                    f'{_m} {{Zt.{_t}}}, Pg/Z, [{_kind}]', 0x04)
+            if _u and _sfx != 'sw':
+                _m = 'st1' + _sfx
+                EXTRA_FORMS[(_m, (f'ZList(1, {_e})', 'P', _kind))] = (
+                    0xE4000000 | _msz << 23 | _stb,
+                    _regs + [_field.replace('{xs}', '14')],
+                    f'{_m} {{Zt.{_t}}}, Pg, [{_kind}]', 0x04)
 for _mnem, _base in LSUI_CAS.items():
     EXTRA_FORMS[(_mnem, ('X', 'X', 'Mem'))] = (
         _base, LSE_RMW_FIELDS, f'{_mnem} Xs, Xd, [Xn|SP]', 0x04)

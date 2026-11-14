@@ -229,8 +229,8 @@ impl<'a> Walker<'a> {
             // `t->f = v` lowers to `*(t + field_off) = v` with the
             // Deref absorbed into the address expression, so the lhs
             // arrives as `Binary{Add, t, off}` whose value is the
-            // address (C99 6.5.6).
-            Expr::Binary { .. } => self.walk_expr_rvalue(b, id),
+            // address (C99 6.5.6). An SVE object's base is its address.
+            Expr::Binary { .. } | Expr::VlaBase { .. } => self.walk_expr_rvalue(b, id),
             // `arr[i] = v`: the address, without the load the rvalue
             // path would append.
             Expr::Index { array, idx, .. } => {

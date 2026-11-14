@@ -3564,6 +3564,7 @@ impl Compiler {
                         | super::super::ast::Expr::Index { .. }
                         | super::super::ast::Expr::Binary { .. }
                         | super::super::ast::Expr::CompoundLiteral { .. }
+                        | super::super::ast::Expr::VlaBase { .. }
                         | super::super::ast::Expr::Unary {
                             op: super::super::ast::UnOp::Deref,
                             ..

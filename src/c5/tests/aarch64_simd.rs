@@ -1533,6 +1533,26 @@ fn sve_objects_take_the_vector_length_and_copy_whole() {
     }
 }
 
+/// `&x` of an SVE object is a pointer to it: passed to a function, the
+/// argument register takes the object's base.
+#[cfg(feature = "full")]
+#[test]
+fn an_sve_object_s_address_is_a_pointer_argument() {
+    const SRC: &str = "#include <arm_sve.h>\n\
+        void g(svint32_t *dst, svint32_t *src, void (*f)(svint32_t *)) {\n\
+            svint32_t kept = *src; f(&kept); *dst = kept; }\n";
+    let w = super::perf_codegen::a64_at(SRC, "g", true);
+    // STR z, [xb] into the object, then MOV x0, xb ahead of BLR.
+    let base = (w.iter().find(|&&x| x & 0xFFFF_FC00 == 0xE580_4000))
+        .map(|&x| x >> 5 & 0x1F)
+        .expect("str z");
+    let call = w
+        .iter()
+        .position(|&x| x & 0xFFFF_FC1F == 0xD63F_0000)
+        .expect("blr");
+    assert!(w[..call].contains(&(0xAA00_03E0 | base << 16)), "{w:08x?}");
+}
+
 /// The SVE object's storage is the vector length (`cntb`) or the
 /// predicate length (`cntd`) of bytes, and a copy is `ldr` and `str` of a
 /// whole Z or P register.

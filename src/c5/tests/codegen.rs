@@ -18014,6 +18014,61 @@ fn a64_inline_asm_assembles_the_sve_indexed_forms() {
     }
 }
 
+/// The SVE structure loads and stores of two to four registers, the
+/// non-temporal, first-faulting and non-faulting loads, and the
+/// replicating ones assemble in inline asm to Apple clang 21.0.0's words:
+/// lists that wrap past z31, offsets in multiples of the register count,
+/// an xzr index and the bare base of the first-faulting load.
+#[test]
+fn a64_inline_asm_assembles_the_sve_structure_and_faulting_loads() {
+    const SRC: &str = "void f(void) { __asm__ volatile(\"\
+        ld2w {z0.s, z1.s}, p0/z, [x0]\\n ld2w {z0.s, z1.s}, p0/z, [x0, #2, mul vl]\\n\
+        ld2w {z0.s, z1.s}, p0/z, [x0, x1, lsl #2]\\n ld3b {z0.b, z1.b, z2.b}, p0/z, [x0, #3, mul vl]\\n\
+        ld4d {z30.d, z31.d, z0.d, z1.d}, p7/z, [sp, x1, lsl #3]\\n\
+        st2w {z0.s - z1.s}, p0, [x0, #-16, mul vl]\\n st4h {z0.h, z1.h, z2.h, z3.h}, p0, [x0, x1, lsl #1]\\n\
+        ldff1w {z0.s}, p0/z, [x0, x1, lsl #2]\\n ldff1w {z0.s}, p0/z, [x0]\\n\
+        ldff1sh {z5.d}, p3/z, [x2, xzr, lsl #1]\\n ldnf1w {z0.s}, p0/z, [x0, #1, mul vl]\\n\
+        ldnf1sb {z0.h}, p0/z, [x0]\\n ld1rw {z0.s}, p0/z, [x0, #4]\\n ld1rsb {z9.d}, p1/z, [x3, #63]\\n\
+        ld1rqw {z0.s}, p0/z, [x0, #16]\\n ld1rqd {z2.d}, p4/z, [x5, x6, lsl #3]\\n\
+        ldnt1w {z0.s}, p0/z, [x0, #1, mul vl]\\n stnt1w {z0.s}, p0, [x0, x1, lsl #2]\"); }\n";
+    let words = a64_opt_function_words(SRC, "f");
+    assert_eq!(
+        words[..words.len() - 1],
+        [
+            0xA520E000, 0xA521E000, 0xA521C000, 0xA441E000, 0xA5E1DFFE, 0xE538E000, 0xE4E16000,
+            0xA5416000, 0xA55F6000, 0xA51F6C45, 0xA551A000, 0xA5D0A000, 0x8541C000, 0x85FF8469,
+            0xA5012000, 0xA58610A2, 0xA501E000, 0xE5016000,
+        ],
+        "{words:08x?}"
+    );
+    let assembles = |insn: &str| {
+        use crate::{CompileOptions, NativeOptions, OutputKind, Target};
+        let src = alloc::format!("void f(void) {{ __asm__ volatile(\"{insn}\"); }}\n");
+        let options = CompileOptions::default().with_no_entry_point(true);
+        crate::Compiler::with_options(src, Target::LinuxAarch64, options)
+            .compile()
+            .is_ok_and(|p| {
+                let opts = NativeOptions {
+                    output_kind: OutputKind::Relocatable,
+                    ..NativeOptions::new().with_optimize()
+                };
+                crate::emit_native_with_options(&p, Target::LinuxAarch64, opts).is_ok()
+            })
+    };
+    assert!(assembles("ld2w {z0.s, z1.s}, p0/z, [x0, #14, mul vl]"));
+    for bad in [
+        "ld2w {z0.s, z1.s}, p0/z, [x0, #3, mul vl]",
+        "ld2w {z0.s, z2.s}, p0/z, [x0]",
+        "ld3w {z0.s, z1.s}, p0/z, [x0]",
+        "ld1w {z0.s}, p0/z, [x0, xzr, lsl #2]",
+        "ld1rw {z0.s}, p0/z, [x0, #2]",
+        "ld1rqw {z0.s}, p0/z, [x0, #8]",
+        "ldnf1w {z0.s}, p0/z, [x0, x1, lsl #2]",
+    ] {
+        assert!(!assembles(bad), "{bad}");
+    }
+}
+
 /// Followed from x0, the byte loads of `from_big` read offsets 1 and 8192.
 #[test]
 fn a64_far_field_load_reads_its_displacement() {

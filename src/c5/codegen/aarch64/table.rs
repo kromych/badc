@@ -177,12 +177,13 @@ pub(crate) enum Field {
     /// The operands in bitmask `a` agree on an element size of the
     /// `sizes` bitmask, which the form's immediate encodes.
     SveSizeAgree { a: u8, sizes: u8 },
-    /// The base at bit 5 and the signed 4-bit offset in vector lengths at
-    /// `shift` of an [`A64Op::MemVl`] operand.
-    SveMemVl { op: u8, shift: u8 },
+    /// The base at bit 5 and the signed 4-bit offset at `shift` of an
+    /// [`A64Op::MemVl`] operand, in multiples of `scale` vector lengths.
+    SveMemVl { op: u8, shift: u8, scale: u8 },
     /// The base at bit 5 and the index at 16 of a register-offset address
-    /// whose index is shifted left by the memory size log2 `msz`.
-    SveMemReg { op: u8, msz: u8 },
+    /// whose index is shifted left by the memory size log2 `msz`; `xzr`
+    /// admits the zero register as the index.
+    SveMemReg { op: u8, msz: u8, xzr: bool },
 }
 
 /// One catalog entry: a base word and the fields spliced into it.
@@ -251,8 +252,9 @@ pub(crate) enum A64Op {
     PgMZ,
     /// A scalar SIMD&FP register of the element size log2 (`bN` .. `dN`).
     Fpr(u8),
-    /// A list of one SVE vector register of the element size log2.
-    ZList(u8),
+    /// A list of a count of consecutive SVE vector registers of the
+    /// element size log2.
+    ZList(u8, u8),
     /// An element `zN.T[i]` of an SVE vector of a fixed size log2.
     ZElem(u8),
     /// An element `zN.T[i]` of the form's element size.
@@ -424,9 +426,7 @@ fn reg(o: Opnd) -> Result<u8, String> {
         | Opnd::VReg { num, .. }
         | Opnd::VScalar { num, .. }
         | Opnd::ZElem { num, .. } => Ok(num),
-        Opnd::ZList {
-            first, count: 1, ..
-        } => Ok(first),
+        Opnd::ZList { first, .. } => Ok(first),
         // A memory reference contributes its base register (the Rn field).
         Opnd::Mem { base, .. } | Opnd::MemReg { base, .. } => Ok(base),
         _ => Err(String::from("inline asm: register operand expected")),
@@ -486,7 +486,7 @@ fn op_matches(p: A64Op, o: Opnd) -> bool {
         (A64Op::PgMZ, Opnd::PRegQ { .. }) => true,
         (A64Op::Fpr(k), Opnd::VReg { is_d, .. }) => k == 2 + u8::from(is_d),
         (A64Op::Fpr(k), Opnd::VScalar { size, .. }) => k == size,
-        (A64Op::ZList(k), Opnd::ZList { count: 1, size, .. }) => size == k,
+        (A64Op::ZList(c, k), Opnd::ZList { count, size, .. }) => count == c && size == k,
         (A64Op::FImm, Opnd::FpImm(_) | Opnd::Imm(0)) | (A64Op::FImm8, Opnd::FpImm(_)) => true,
         (A64Op::ZElem(k), Opnd::ZElem { size, .. }) => size == k,
         (A64Op::ZtElem, Opnd::ZElem { .. }) => true,
@@ -4121,20 +4121,23 @@ fn pack(f: &Form, ops: &[Opnd]) -> Result<u32, String> {
                 let v = v as u32;
                 word |= (v & ((1 << lo_w) - 1)) << lo | (v >> lo_w) << hi;
             }
-            Field::SveMemVl { op, shift } => {
+            Field::SveMemVl { op, shift, scale } => {
                 let (base, off) = match ops[op as usize] {
                     Opnd::MemVl { base, off } => (base, off),
                     Opnd::Mem { base, .. } => (base, 0),
                     _ => return Err(String::from("inline asm: SVE address expected")),
                 };
-                if !(-8..=7).contains(&off) {
-                    return Err(String::from(
-                        "inline asm: the offset must be -8 to 7 vector lengths",
+                let scale = i64::from(scale);
+                if off % scale != 0 || !(-8..=7).contains(&(off / scale)) {
+                    return Err(format!(
+                        "inline asm: the offset must be a multiple of {scale} from {} to {} vector lengths",
+                        -8 * scale,
+                        7 * scale
                     ));
                 }
-                word |= u32::from(base) << 5 | (off as u32 & 0xF) << shift;
+                word |= u32::from(base) << 5 | ((off / scale) as u32 & 0xF) << shift;
             }
-            Field::SveMemReg { op, msz } => {
+            Field::SveMemReg { op, msz, xzr } => {
                 let Opnd::MemReg {
                     base,
                     index,
@@ -4144,7 +4147,7 @@ fn pack(f: &Form, ops: &[Opnd]) -> Result<u32, String> {
                 else {
                     return Err(String::from("inline asm: SVE index must be `lsl`"));
                 };
-                if shift.unwrap_or(0) != msz || index == 31 {
+                if shift.unwrap_or(0) != msz || (index == 31 && !xzr) {
                     return Err(format!(
                         "inline asm: SVE index must be an X register shifted by lsl #{msz}"
                     ));

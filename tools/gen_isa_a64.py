@@ -286,14 +286,71 @@ for _m, _sizes in SVE_LD1.items():
         _pg, _t = ('P', 'Pg') if _st else ('PgZ', 'Pg/Z')
         _src = f'{_m} {{Zt.{"BHSD"[_e]}}}, {_t}, '
         _regs = ['Reg { op: 0, shift: 0 }', 'PLow { op: 1, shift: 10 }']
-        EXTRA_FORMS[(_m, (f'ZList({_e})', _pg, 'MemVl'))] = (
+        EXTRA_FORMS[(_m, (f'ZList(1, {_e})', _pg, 'MemVl'))] = (
             (0xE400E000 if _st else 0xA400A000) | _dt << 21,
-            _regs + ['SveMemVl { op: 2, shift: 16 }'],
+            _regs + ['SveMemVl { op: 2, shift: 16, scale: 1 }'],
             _src + '[Xn|SP, #imm, mul vl]', 0x04)
-        EXTRA_FORMS[(_m, (f'ZList({_e})', _pg, 'MemReg'))] = (
+        EXTRA_FORMS[(_m, (f'ZList(1, {_e})', _pg, 'MemReg'))] = (
             (0xE4004000 if _st else 0xA4004000) | _dt << 21,
-            _regs + [f'SveMemReg {{ op: 2, msz: {_msz} }}'],
+            _regs + [f'SveMemReg {{ op: 2, msz: {_msz}, xzr: false }}'],
             _src + f'[Xn|SP, Xm, lsl #{_msz}]', 0x04)
+        if _st:
+            continue
+        # The first-faulting loads take the scalar-plus-scalar address with
+        # bits 15:13 011 and an index that may be xzr, absent from `[Xn]`;
+        # the non-faulting ones the scalar-plus-immediate one with bit 20 set;
+        # the replicating ones a 6-bit unsigned offset scaled by the memory
+        # size, the dtype split across bits 24:23 and 14:13.
+        _ff, _nf, _r = 'ldff1' + _m[3:], 'ldnf1' + _m[3:], 'ld1r' + _m[3:]
+        EXTRA_FORMS[(_ff, (f'ZList(1, {_e})', _pg, 'MemReg'))] = (
+            0xA4006000 | _dt << 21,
+            _regs + [f'SveMemReg {{ op: 2, msz: {_msz}, xzr: true }}'],
+            f'{_ff} {{Zt.{"BHSD"[_e]}}}, Pg/Z, [Xn|SP, Xm, lsl #{_msz}]', 0x04)
+        EXTRA_FORMS[(_ff, (f'ZList(1, {_e})', _pg, 'Mem'))] = (
+            0xA41F6000 | _dt << 21, _regs + ['Reg { op: 2, shift: 5 }'],
+            f'{_ff} {{Zt.{"BHSD"[_e]}}}, Pg/Z, [Xn|SP]', 0x04)
+        EXTRA_FORMS[(_nf, (f'ZList(1, {_e})', _pg, 'MemVl'))] = (
+            0xA410A000 | _dt << 21, _regs + ['SveMemVl { op: 2, shift: 16, scale: 1 }'],
+            f'{_nf} {{Zt.{"BHSD"[_e]}}}, Pg/Z, [Xn|SP, #imm, mul vl]', 0x04)
+        EXTRA_FORMS[(_r, (f'ZList(1, {_e})', _pg, 'Mem'))] = (
+            0x84408000 | (_dt >> 2) << 23 | (_dt & 3) << 13,
+            _regs + ['Reg { op: 2, shift: 5 }',
+                     f'ScaledUImm {{ op: 2, shift: 16, width: 6, scale: {1 << _msz} }}'],
+            f'{_r} {{Zt.{"BHSD"[_e]}}}, Pg/Z, [Xn|SP, #imm]', 0x04)
+# The SVE structure loads and stores of one to four registers: LDNT1, LD2
+# to LD4, STNT1 and ST2 to ST4, of the memory size, at bit 23, and the
+# register count less one at bit 21. The address is a base with a signed
+# 4-bit offset in multiples of the count of vector lengths, or a base with
+# an index shifted by the memory size. LD1RQ replicates a quadword: its
+# offset is a signed 4-bit multiple of 16 bytes.
+for _n in (1, 2, 3, 4):
+    for _msz, _t in enumerate('bhwd'):
+        for _st in (False, True):
+            _m = ('st' if _st else 'ld') + ('nt1' if _n == 1 else str(_n)) + _t
+            _sel = _msz << 23 | (_n - 1) << 21
+            _key = (f'ZList({_n}, {_msz})', 'P' if _st else 'PgZ')
+            _regs = ['Reg { op: 0, shift: 0 }', 'PLow { op: 1, shift: 10 }']
+            _src = f'{_m} {{Zt.{"BHSD"[_msz]}, ..}}, Pg, '
+            EXTRA_FORMS[(_m, _key + ('MemVl',))] = (
+                (0xE410E000 if _st else 0xA400E000) | _sel,
+                _regs + [f'SveMemVl {{ op: 2, shift: 16, scale: {_n} }}'],
+                _src + '[Xn|SP, #imm, mul vl]', 0x04)
+            EXTRA_FORMS[(_m, _key + ('MemReg',))] = (
+                (0xE4006000 if _st else 0xA400C000) | _sel,
+                _regs + [f'SveMemReg {{ op: 2, msz: {_msz}, xzr: false }}'],
+                _src + f'[Xn|SP, Xm, lsl #{_msz}]', 0x04)
+for _msz, _t in enumerate('bhwd'):
+    _m = 'ld1rq' + _t
+    _regs = ['Reg { op: 0, shift: 0 }', 'PLow { op: 1, shift: 10 }']
+    EXTRA_FORMS[(_m, (f'ZList(1, {_msz})', 'PgZ', 'Mem'))] = (
+        0xA4002000 | _msz << 23,
+        _regs + ['Reg { op: 2, shift: 5 }',
+                 'ScaledSImm { op: 2, shift: 16, width: 4, scale: 16 }'],
+        f'{_m} {{Zt}}, Pg/Z, [Xn|SP, #imm]', 0x04)
+    EXTRA_FORMS[(_m, (f'ZList(1, {_msz})', 'PgZ', 'MemReg'))] = (
+        0xA4000000 | _msz << 23,
+        _regs + [f'SveMemReg {{ op: 2, msz: {_msz}, xzr: false }}'],
+        f'{_m} {{Zt}}, Pg/Z, [Xn|SP, Xm, lsl #{_msz}]', 0x04)
 for _mnem, _base in LSUI_CAS.items():
     EXTRA_FORMS[(_mnem, ('X', 'X', 'Mem'))] = (
         _base, LSE_RMW_FIELDS, f'{_mnem} Xs, Xd, [Xn|SP]', 0x04)

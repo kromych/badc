@@ -1557,12 +1557,19 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     // #shift`: shift each wide element right and write the low half of the
     // result. immh:immb is 2*esize-shift over the DESTINATION element size, the
     // source being one size wider; opcode (15..11) is 10000, or 10001 for the
-    // rounding form. The `2` mnemonic writes the top half of a 128-bit
+    // rounding form, 1001x for the saturating sqshrn/uqshrn (U at 29), and
+    // sqshrun/sqrshrun are the 1000x opcodes with U set. The `2` mnemonic writes the top half of a 128-bit
     // destination (Q at 30).
     if let Some((nmnem, upper)) = strip_widen2(mnemonic)
-        && let Some(opcode) = match nmnem {
-            "shrn" => Some(0b10000u32),
-            "rshrn" => Some(0b10001),
+        && let Some((opcode, u)) = match nmnem {
+            "shrn" => Some((0b10000u32, 0u32)),
+            "rshrn" => Some((0b10001, 0)),
+            "sqshrun" => Some((0b10000, 1)),
+            "sqrshrun" => Some((0b10001, 1)),
+            "sqshrn" => Some((0b10010, 0)),
+            "sqrshrn" => Some((0b10011, 0)),
+            "uqshrn" => Some((0b10010, 1)),
+            "uqrshrn" => Some((0b10011, 1)),
             _ => None,
         }
         && let [
@@ -1596,6 +1603,7 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             ));
         }
         return Ok(0x0F00_0000
+            | (u << 29)
             | (opcode << 11)
             | (1u32 << 10)
             | (if upper { 1u32 << 30 } else { 0 })

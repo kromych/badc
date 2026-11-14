@@ -908,6 +908,29 @@ fn the_qshlu_shll_and_padal_forms_are_rows() {
     }
 }
 
+/// The saturating narrowing shifts are rows: over seeded lanes the
+/// interpreter's results hash to the hardware's, and each is one
+/// instruction under -O.
+#[cfg(feature = "full")]
+#[test]
+fn the_saturating_narrowing_shifts_are_rows() {
+    let src = super::load_fixture("arm_neon_saturating_narrowing_shifts_on_seeded_lanes.c");
+    let program = super::compile_str_bare_for(&src, crate::Target::LinuxAarch64);
+    assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 0);
+    const OPS: &str = "#include <arm_neon.h>\n\
+        int8x8_t a(int16x8_t x) { return vqshrn_n_s16(x, 3); }\n\
+        uint16x4_t b(int32x4_t x) { return vqrshrun_n_s32(x, 16); }\n\
+        uint32x2_t c(uint64x2_t x) { return vqrshrn_n_u64(x, 7); }\n";
+    for (name, want) in [
+        ("a", 0x0F0D_9400u32),
+        ("b", 0x2F10_8C00),
+        ("c", 0x2F39_9C00),
+    ] {
+        let words = super::perf_codegen::a64_at(OPS, name, true);
+        assert_eq!(words, [want, 0xD65F_03C0], "{name}: {words:08x?}");
+    }
+}
+
 /// `vld1`, `vst1`, `vdup_n` and `vld1_dup` are the load, store and
 /// broadcast of their vector under `-O`, as with gcc 16, with no inline asm
 /// between them and the operations that use them: `ldr q`, `str q`,

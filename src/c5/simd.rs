@@ -482,8 +482,10 @@ pub(crate) enum Sem {
     /// unsigned range of the lane (`sqshlu`).
     ShlSatU(u8),
     /// A right shift by the immediate of lanes of the width into lanes half
-    /// as wide, rounding when `true` (`shrn`, `rshrn`).
-    ShrNarrow(u8, bool),
+    /// as wide, rounding when `true`, truncated or saturated as the kind
+    /// says (`shrn`, `rshrn`, `sqshrn`, `uqrshrn`, `sqshrun`); a saturating
+    /// kind shifts signed lanes arithmetically.
+    ShrNarrow(u8, bool, NarrowKind),
     /// The bytes of a 16-byte table the second operand's bytes index, zero
     /// for an index past it, over results of the width (`tbl`).
     Tbl(u8),
@@ -830,7 +832,7 @@ impl SimdOp {
             Sem::Long(_, w, ..) | Sem::Across(_, w, ..) | Sem::PairAddLong(w, _) => w,
             Sem::PairAddLongAcc(w, _) if i > 1 => w,
             Sem::Wide(_, w, ..) | Sem::LongAcc(_, w, ..) if i > 1 => w,
-            Sem::Narrow(w, _) | Sem::ShrNarrow(w, _) => w,
+            Sem::Narrow(w, _) | Sem::ShrNarrow(w, ..) => w,
             Sem::Extend(from, ..) => from,
             Sem::Convert(Cvt::SingleToDouble | Cvt::SingleToDoubleHigh) => 4,
             Sem::Convert(Cvt::DoubleToSingle) => 8,
@@ -1622,11 +1624,22 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
             let sums = eval(Sem::PairAddLong(w, signed), b, &[0; 16], 0, 0);
             o = eval(Sem::Add(2 * w), a, &sums, 0, 0);
         }
-        Sem::ShrNarrow(w, round) => {
-            let n = count.min(64) as i64;
-            let wide = eval(Sem::ShlReg(w, false, round, false), a, &splat(w, -n), 0, 0);
+        Sem::ShrNarrow(w, round, kind) => {
+            let (n, bits) = (count.min(64) as u32, 4 * u32::from(w));
+            let signed = matches!(kind, NarrowKind::SatSigned | NarrowKind::SatSignedToUns);
             for i in 0..16 / w as usize {
-                set_lane(&mut o, w / 2, i, lane(&wide, w, i) & mask(w / 2));
+                let x = match signed {
+                    true => i128::from(slane(a, w, i)),
+                    false => i128::from(lane(a, w, i)),
+                };
+                let r = (x + if round && n > 0 { 1 << (n - 1) } else { 0 }) >> n;
+                let v = match kind {
+                    NarrowKind::Trunc => r,
+                    NarrowKind::SatSigned => r.clamp(-(1 << (bits - 1)), (1 << (bits - 1)) - 1),
+                    NarrowKind::SatUns => r.min((1 << bits) - 1),
+                    NarrowKind::SatSignedToUns => r.clamp(0, (1 << bits) - 1),
+                };
+                set_lane(&mut o, w / 2, i, v as u64 & mask(w / 2));
             }
         }
         Sem::Tbl(bytes) => {

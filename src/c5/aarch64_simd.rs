@@ -614,6 +614,25 @@ const SHIFT_N: &[[SimdOp; 8]] = &[
     shift_n!("uqshl", ShlSat, false),
 ];
 
+/// A narrowing shift right by the immediate, named by its wide source.
+const fn shrn(
+    name: &'static str,
+    mnem: &'static str,
+    ret: Ret,
+    w: u8,
+    round: bool,
+    kind: NarrowKind,
+) -> SimdOp {
+    row(
+        name,
+        mnem,
+        Form::Shift,
+        ret,
+        Sem::ShrNarrow(w, round, kind),
+        16,
+    )
+}
+
 /// `dup` from lane `imm` of a `src`-byte vector into every lane of `ret`.
 const fn dupl(name: &'static str, ret: Ret, w: u8, src: u8) -> SimdOp {
     row(name, "dup", Form::VI, ret, Sem::DupLane(w), src)
@@ -621,12 +640,30 @@ const fn dupl(name: &'static str, ret: Ret, w: u8, src: u8) -> SimdOp {
 
 #[rustfmt::skip]
 const NARROW: &[SimdOp] = &[
-    row("__builtin_neon_shrn_8h", "shrn", Form::Shift, Ret::V8qi, Sem::ShrNarrow(2, false), 16),
-    row("__builtin_neon_shrn_4s", "shrn", Form::Shift, Ret::V4hi, Sem::ShrNarrow(4, false), 16),
-    row("__builtin_neon_shrn_2d", "shrn", Form::Shift, Ret::V2si, Sem::ShrNarrow(8, false), 16),
-    row("__builtin_neon_rshrn_8h", "rshrn", Form::Shift, Ret::V8qi, Sem::ShrNarrow(2, true), 16),
-    row("__builtin_neon_rshrn_4s", "rshrn", Form::Shift, Ret::V4hi, Sem::ShrNarrow(4, true), 16),
-    row("__builtin_neon_rshrn_2d", "rshrn", Form::Shift, Ret::V2si, Sem::ShrNarrow(8, true), 16),
+    shrn("__builtin_neon_shrn_8h", "shrn", Ret::V8qi, 2, false, NarrowKind::Trunc),
+    shrn("__builtin_neon_shrn_4s", "shrn", Ret::V4hi, 4, false, NarrowKind::Trunc),
+    shrn("__builtin_neon_shrn_2d", "shrn", Ret::V2si, 8, false, NarrowKind::Trunc),
+    shrn("__builtin_neon_rshrn_8h", "rshrn", Ret::V8qi, 2, true, NarrowKind::Trunc),
+    shrn("__builtin_neon_rshrn_4s", "rshrn", Ret::V4hi, 4, true, NarrowKind::Trunc),
+    shrn("__builtin_neon_rshrn_2d", "rshrn", Ret::V2si, 8, true, NarrowKind::Trunc),
+    shrn("__builtin_neon_sqshrn_8h", "sqshrn", Ret::V8qi, 2, false, NarrowKind::SatSigned),
+    shrn("__builtin_neon_sqshrn_4s", "sqshrn", Ret::V4hi, 4, false, NarrowKind::SatSigned),
+    shrn("__builtin_neon_sqshrn_2d", "sqshrn", Ret::V2si, 8, false, NarrowKind::SatSigned),
+    shrn("__builtin_neon_sqrshrn_8h", "sqrshrn", Ret::V8qi, 2, true, NarrowKind::SatSigned),
+    shrn("__builtin_neon_sqrshrn_4s", "sqrshrn", Ret::V4hi, 4, true, NarrowKind::SatSigned),
+    shrn("__builtin_neon_sqrshrn_2d", "sqrshrn", Ret::V2si, 8, true, NarrowKind::SatSigned),
+    shrn("__builtin_neon_uqshrn_8h", "uqshrn", Ret::V8qi, 2, false, NarrowKind::SatUns),
+    shrn("__builtin_neon_uqshrn_4s", "uqshrn", Ret::V4hi, 4, false, NarrowKind::SatUns),
+    shrn("__builtin_neon_uqshrn_2d", "uqshrn", Ret::V2si, 8, false, NarrowKind::SatUns),
+    shrn("__builtin_neon_uqrshrn_8h", "uqrshrn", Ret::V8qi, 2, true, NarrowKind::SatUns),
+    shrn("__builtin_neon_uqrshrn_4s", "uqrshrn", Ret::V4hi, 4, true, NarrowKind::SatUns),
+    shrn("__builtin_neon_uqrshrn_2d", "uqrshrn", Ret::V2si, 8, true, NarrowKind::SatUns),
+    shrn("__builtin_neon_sqshrun_8h", "sqshrun", Ret::V8qi, 2, false, NarrowKind::SatSignedToUns),
+    shrn("__builtin_neon_sqshrun_4s", "sqshrun", Ret::V4hi, 4, false, NarrowKind::SatSignedToUns),
+    shrn("__builtin_neon_sqshrun_2d", "sqshrun", Ret::V2si, 8, false, NarrowKind::SatSignedToUns),
+    shrn("__builtin_neon_sqrshrun_8h", "sqrshrun", Ret::V8qi, 2, true, NarrowKind::SatSignedToUns),
+    shrn("__builtin_neon_sqrshrun_4s", "sqrshrun", Ret::V4hi, 4, true, NarrowKind::SatSignedToUns),
+    shrn("__builtin_neon_sqrshrun_2d", "sqrshrun", Ret::V2si, 8, true, NarrowKind::SatSignedToUns),
     row("__builtin_neon_tbl_8b", "tbl", Form::Vv, Ret::V8qi, Sem::Tbl(8), 8),
     row("__builtin_neon_tbl_16b", "tbl", Form::Vv, Ret::V16qi, Sem::Tbl(16), 16),
     row("__builtin_neon_tbx_8b", "tbx", Form::Vvv, Ret::V8qi, Sem::Tbx(8), 8),

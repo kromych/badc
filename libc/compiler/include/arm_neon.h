@@ -19,7 +19,8 @@
  * vqabs vqadd vqsub vhadd vrhadd vhsub vmax vmin vpadd vpmax vpmin vpaddl,
  * vand vorr veor vbic vorn vmvn vtst vcnt vclz vcls, vceq vcge vcgt vcle
  * vclt, vshl/vrshl/vqshl by register, vshl_n vqshl_n vshr_n vrshr_n vsra_n
- * vrsra_n vsli_n vsri_n vshrn_n vrshrn_n vqshlu_n vshll_n, vpadal, vmovl vmovn vqmovn vqmovun vaddl
+ * vrsra_n vsli_n vsri_n vshrn_n vrshrn_n vqshrn_n vqrshrn_n vqshrun_n
+ * vqrshrun_n with their _high forms, vqshlu_n vshll_n, vpadal, vmovl vmovn vqmovn vqmovun vaddl
  * vsubl vaddw vsubw vmull vmlal vmlsl vabdl vabal with their _high forms, vaddv vaddlv
  * vmaxv vminv. Floating: vadd vsub vmul vdiv vmax vmin vabs vneg vsqrt vfma
  * vfms vrecpe vrecps vrsqrte vrsqrts with their scalar forms, the
@@ -31,8 +32,7 @@
  * SM4 intrinsics, vld2q_u16 and vld4q_u8.
  *
  * Not provided: float16, bfloat16, the lane-indexed and by-scalar forms,
- * the doubling multiplies, the saturating narrowing shifts, the other
- * structure
+ * the doubling multiplies, the other structure
  * loads, stores and table lookups, the floating pairwise, across-lane,
  * absolute-difference, rounding and maxnum forms, the fixed-point and
  * rounding-mode conversions and the dot products.
@@ -987,6 +987,59 @@ __BADC_NEON_I32(__BADC_NEON_F_ADDLV2, _)
 #define vrshrn_n_s64(__a, __n) __BADC_NEON_SHN(int32x2_t, int64x2_t, __builtin_neon_rshrn, 2s, 2d, __a, __n)
 #define vshrn_n_u64(__a, __n) __BADC_NEON_SHN(uint32x2_t, uint64x2_t, __builtin_neon_shrn, 2s, 2d, __a, __n)
 #define vrshrn_n_u64(__a, __n) __BADC_NEON_SHN(uint32x2_t, uint64x2_t, __builtin_neon_rshrn, 2s, 2d, __a, __n)
+
+/* The saturating narrowing shifts: the wide lanes shifted right by an
+ * immediate in [1, narrow bits], rounding in the vqr forms, saturated to
+ * the narrow type (vqshrun: signed to unsigned). The _high forms place the
+ * result above the first operand. */
+#define vqshrn_n_s16(__a, __n) __BADC_NEON_SHN(int8x8_t, int16x8_t, __builtin_neon_sqshrn, 8b, 8h, __a, __n)
+#define vqshrn_n_s32(__a, __n) __BADC_NEON_SHN(int16x4_t, int32x4_t, __builtin_neon_sqshrn, 4h, 4s, __a, __n)
+#define vqshrn_n_s64(__a, __n) __BADC_NEON_SHN(int32x2_t, int64x2_t, __builtin_neon_sqshrn, 2s, 2d, __a, __n)
+#define vqshrn_n_u16(__a, __n) __BADC_NEON_SHN(uint8x8_t, uint16x8_t, __builtin_neon_uqshrn, 8b, 8h, __a, __n)
+#define vqshrn_n_u32(__a, __n) __BADC_NEON_SHN(uint16x4_t, uint32x4_t, __builtin_neon_uqshrn, 4h, 4s, __a, __n)
+#define vqshrn_n_u64(__a, __n) __BADC_NEON_SHN(uint32x2_t, uint64x2_t, __builtin_neon_uqshrn, 2s, 2d, __a, __n)
+#define vqrshrn_n_s16(__a, __n) __BADC_NEON_SHN(int8x8_t, int16x8_t, __builtin_neon_sqrshrn, 8b, 8h, __a, __n)
+#define vqrshrn_n_s32(__a, __n) __BADC_NEON_SHN(int16x4_t, int32x4_t, __builtin_neon_sqrshrn, 4h, 4s, __a, __n)
+#define vqrshrn_n_s64(__a, __n) __BADC_NEON_SHN(int32x2_t, int64x2_t, __builtin_neon_sqrshrn, 2s, 2d, __a, __n)
+#define vqrshrn_n_u16(__a, __n) __BADC_NEON_SHN(uint8x8_t, uint16x8_t, __builtin_neon_uqrshrn, 8b, 8h, __a, __n)
+#define vqrshrn_n_u32(__a, __n) __BADC_NEON_SHN(uint16x4_t, uint32x4_t, __builtin_neon_uqrshrn, 4h, 4s, __a, __n)
+#define vqrshrn_n_u64(__a, __n) __BADC_NEON_SHN(uint32x2_t, uint64x2_t, __builtin_neon_uqrshrn, 2s, 2d, __a, __n)
+#define vqshrun_n_s16(__a, __n) __BADC_NEON_SHN(uint8x8_t, int16x8_t, __builtin_neon_sqshrun, 8b, 8h, __a, __n)
+#define vqshrun_n_s32(__a, __n) __BADC_NEON_SHN(uint16x4_t, int32x4_t, __builtin_neon_sqshrun, 4h, 4s, __a, __n)
+#define vqshrun_n_s64(__a, __n) __BADC_NEON_SHN(uint32x2_t, int64x2_t, __builtin_neon_sqshrun, 2s, 2d, __a, __n)
+#define vqrshrun_n_s16(__a, __n) __BADC_NEON_SHN(uint8x8_t, int16x8_t, __builtin_neon_sqrshrun, 8b, 8h, __a, __n)
+#define vqrshrun_n_s32(__a, __n) __BADC_NEON_SHN(uint16x4_t, int32x4_t, __builtin_neon_sqrshrun, 4h, 4s, __a, __n)
+#define vqrshrun_n_s64(__a, __n) __BADC_NEON_SHN(uint32x2_t, int64x2_t, __builtin_neon_sqrshrun, 2s, 2d, __a, __n)
+#define vshrn_high_n_s16(__r, __a, __n) vcombine_s8((__r), vshrn_n_s16(__a, __n))
+#define vshrn_high_n_s32(__r, __a, __n) vcombine_s16((__r), vshrn_n_s32(__a, __n))
+#define vshrn_high_n_s64(__r, __a, __n) vcombine_s32((__r), vshrn_n_s64(__a, __n))
+#define vshrn_high_n_u16(__r, __a, __n) vcombine_u8((__r), vshrn_n_u16(__a, __n))
+#define vshrn_high_n_u32(__r, __a, __n) vcombine_u16((__r), vshrn_n_u32(__a, __n))
+#define vshrn_high_n_u64(__r, __a, __n) vcombine_u32((__r), vshrn_n_u64(__a, __n))
+#define vrshrn_high_n_s16(__r, __a, __n) vcombine_s8((__r), vrshrn_n_s16(__a, __n))
+#define vrshrn_high_n_s32(__r, __a, __n) vcombine_s16((__r), vrshrn_n_s32(__a, __n))
+#define vrshrn_high_n_s64(__r, __a, __n) vcombine_s32((__r), vrshrn_n_s64(__a, __n))
+#define vrshrn_high_n_u16(__r, __a, __n) vcombine_u8((__r), vrshrn_n_u16(__a, __n))
+#define vrshrn_high_n_u32(__r, __a, __n) vcombine_u16((__r), vrshrn_n_u32(__a, __n))
+#define vrshrn_high_n_u64(__r, __a, __n) vcombine_u32((__r), vrshrn_n_u64(__a, __n))
+#define vqshrn_high_n_s16(__r, __a, __n) vcombine_s8((__r), vqshrn_n_s16(__a, __n))
+#define vqshrn_high_n_s32(__r, __a, __n) vcombine_s16((__r), vqshrn_n_s32(__a, __n))
+#define vqshrn_high_n_s64(__r, __a, __n) vcombine_s32((__r), vqshrn_n_s64(__a, __n))
+#define vqshrn_high_n_u16(__r, __a, __n) vcombine_u8((__r), vqshrn_n_u16(__a, __n))
+#define vqshrn_high_n_u32(__r, __a, __n) vcombine_u16((__r), vqshrn_n_u32(__a, __n))
+#define vqshrn_high_n_u64(__r, __a, __n) vcombine_u32((__r), vqshrn_n_u64(__a, __n))
+#define vqrshrn_high_n_s16(__r, __a, __n) vcombine_s8((__r), vqrshrn_n_s16(__a, __n))
+#define vqrshrn_high_n_s32(__r, __a, __n) vcombine_s16((__r), vqrshrn_n_s32(__a, __n))
+#define vqrshrn_high_n_s64(__r, __a, __n) vcombine_s32((__r), vqrshrn_n_s64(__a, __n))
+#define vqrshrn_high_n_u16(__r, __a, __n) vcombine_u8((__r), vqrshrn_n_u16(__a, __n))
+#define vqrshrn_high_n_u32(__r, __a, __n) vcombine_u16((__r), vqrshrn_n_u32(__a, __n))
+#define vqrshrn_high_n_u64(__r, __a, __n) vcombine_u32((__r), vqrshrn_n_u64(__a, __n))
+#define vqshrun_high_n_s16(__r, __a, __n) vcombine_u8((__r), vqshrun_n_s16(__a, __n))
+#define vqshrun_high_n_s32(__r, __a, __n) vcombine_u16((__r), vqshrun_n_s32(__a, __n))
+#define vqshrun_high_n_s64(__r, __a, __n) vcombine_u32((__r), vqshrun_n_s64(__a, __n))
+#define vqrshrun_high_n_s16(__r, __a, __n) vcombine_u8((__r), vqrshrun_n_s16(__a, __n))
+#define vqrshrun_high_n_s32(__r, __a, __n) vcombine_u16((__r), vqrshrun_n_s32(__a, __n))
+#define vqrshrun_high_n_s64(__r, __a, __n) vcombine_u32((__r), vqrshrun_n_s64(__a, __n))
 
 /* vqshlu_n: signed lanes shifted left by an immediate in [0, bits - 1],
  * saturating to the unsigned range. */

@@ -364,7 +364,7 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x480
                	stp	d8, d9, [sp]
-               	str	x20, [sp, #0x10]
+               	stp	x20, x21, [sp, #0x10]
                	mov	x20, #0x0               // =0
                	bl	<addr>
                	mov	v2.16b, v0.16b
@@ -2219,8 +2219,45 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
                	b.lo	<addr>
-               	mov	x0, #0x1f               // =31
+               	mov	x0, #0x1                // =1
                	bl	<addr>
+               	sxtw	x0, w0
+               	cmp	x0, #0x0
+               	cset	x0, eq
+               	cmp	w0, #0x0
+               	cset	x21, eq
+               	mov	x0, #0x2                // =2
+               	bl	<addr>
+               	sxtw	x0, w0
+               	cmp	x0, #0x0
+               	cset	x0, eq
+               	cmp	w0, #0x0
+               	cset	x0, eq
+               	orr	x21, x21, x0, lsl #1
+               	mov	x0, #0x4                // =4
+               	bl	<addr>
+               	sxtw	x0, w0
+               	cmp	x0, #0x0
+               	cset	x0, eq
+               	cmp	w0, #0x0
+               	cset	x0, eq
+               	orr	x21, x21, x0, lsl #2
+               	mov	x0, #0x8                // =8
+               	bl	<addr>
+               	sxtw	x0, w0
+               	cmp	x0, #0x0
+               	cset	x0, eq
+               	cmp	w0, #0x0
+               	cset	x0, eq
+               	orr	x21, x21, x0, lsl #3
+               	mov	x0, #0x10               // =16
+               	bl	<addr>
+               	sxtw	x0, w0
+               	cmp	x0, #0x0
+               	cset	x0, eq
+               	cmp	w0, #0x0
+               	cset	x0, eq
+               	orr	x0, x21, x0, lsl #4
                	stur	w0, [x29, #-0x10]
                	sub	x2, x29, #0x10
                	mov	x0, #0x0                // =0
@@ -2248,7 +2285,7 @@ Disassembly of section .text:
                	movk	x17, #0xba11, lsl #48
                	cmp	x0, x17
                	csel	x0, x1, x2, eq
-               	ldr	x20, [sp, #0x10]
+               	ldp	x20, x21, [sp, #0x10]
                	ldp	d8, d9, [sp]
                	add	sp, sp, #0x480
                	ldp	x29, x30, [sp], #0x10

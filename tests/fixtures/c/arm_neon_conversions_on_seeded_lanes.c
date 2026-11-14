@@ -65,6 +65,13 @@ static int64x2_t i64(void) { int64x2_t v; for (int i = 0; i < 2; i++) v[i] = (rn
     int64x2_t b7 = vcvtq_n_s64_f64(e, 1 + (N)); uint64x1_t b8 = vcvt_n_u64_f64(g, 1 + (N)); \
     float32_t b9 = vcvts_n_f32_s32(x[0], 1 + (N) % 32); int64_t b10 = vcvtd_n_s64_f64(e[0], 1 + (N)); \
     MIX(b1); MIX(b2); MIX(b3); MIX(b4); MIX(b5); MIX(b6); MIX(b7); MIX(b8); MIX(b9); MIX(b10); } while (0)
+/* The raised flags in one encoding on every target: the FE_ values are the
+ * FPSR's bits on Linux and macOS and the UCRT's own on Windows. */
+static int raised(void) {
+    return !!fetestexcept(FE_INVALID) | !!fetestexcept(FE_DIVBYZERO) << 1
+        | !!fetestexcept(FE_OVERFLOW) << 2 | !!fetestexcept(FE_UNDERFLOW) << 3
+        | !!fetestexcept(FE_INEXACT) << 4;
+}
 int main(void) {
     int n = 500;
     for (int i = 0; i < n; i++) {
@@ -82,7 +89,7 @@ int main(void) {
         float32x4_t f1 = vcvtq_f32_s32(x); float64x1_t f3 = vcvt_f64_s64(vget_low_s64(y));
         float32_t f4_ = vcvts_f32_u32((uint32_t)x[1]); float64_t f5 = vcvtd_f64_u64((uint64_t)y[1]);
         MIX(f1); MIX(f3); MIX(f4_); MIX(f5);
-        int fl = fetestexcept(FE_ALL_EXCEPT); MIX(fl);
+        int fl = raised(); MIX(fl);
     }
     return h == EXPECTED ? 0 : 1;
 }

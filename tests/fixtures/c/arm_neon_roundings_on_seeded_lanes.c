@@ -54,6 +54,13 @@ static uint32x2_t u2(void) { uint32x2_t v; for (int i = 0; i < 2; i++) v[i] = (u
     float32x4_t r1 = op##q_f32(a); float32x2_t r2 = op##_f32(c); \
     float64x2_t r3 = op##q_f64(e); float64x1_t r4 = op##_f64(g); \
     MIX(r1); MIX(r2); MIX(r3); MIX(r4); } while (0)
+/* The raised flags in one encoding on every target: the FE_ values are the
+ * FPSR's bits on Linux and macOS and the UCRT's own on Windows. */
+static int raised(void) {
+    return !!fetestexcept(FE_INVALID) | !!fetestexcept(FE_DIVBYZERO) << 1
+        | !!fetestexcept(FE_OVERFLOW) << 2 | !!fetestexcept(FE_UNDERFLOW) << 3
+        | !!fetestexcept(FE_INEXACT) << 4;
+}
 int main(void) {
     int n = 1000;
     for (int i = 0; i < n; i++) {
@@ -64,7 +71,7 @@ int main(void) {
         R(vrnd); R(vrndn); R(vrndm); R(vrndp); R(vrnda); R(vrndi); R(vrndx);
         R(vrnd32x); R(vrnd32z); R(vrnd64x); R(vrnd64z);
         float32_t s = vrndns_f32(a[0]); MIX(s);
-        int fl = fetestexcept(FE_ALL_EXCEPT); MIX(fl);
+        int fl = raised(); MIX(fl);
         if (i % 4 == 2) {
             fesetround(i % 8 == 2 ? FE_UPWARD : FE_TOWARDZERO);
             R(vrndi); R(vrndx); R(vrnd32x); R(vrnd64x);

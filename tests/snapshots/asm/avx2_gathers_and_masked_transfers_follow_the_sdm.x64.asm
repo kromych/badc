@@ -99,13 +99,11 @@ Disassembly of section .text:
                	movq	0x18(%rsp), %rcx
                	testb	$0x8, %cl
                	jne	<addr>
-               	movabsq	$0x3ff0000000000000, %rcx # imm = 0x3FF0000000000000
-               	movq	%rcx, %xmm14
-               	movsd	%xmm14, -0x10(%rbp)
+               	movsd	<rip>, %xmm0
+               	movsd	%xmm0, -0x10(%rbp)
                	movsd	-0x10(%rbp), %xmm0
-               	movabsq	$0x3c30000000000000, %rcx # imm = 0x3C30000000000000
-               	movq	%rcx, %xmm15
-               	addsd	%xmm15, %xmm0
+               	movsd	<rip>, %xmm1
+               	addsd	%xmm1, %xmm0
                	movsd	%xmm0, -0x10(%rbp)
                	leaq	(%rax,%r8), %rcx
                	testq	%rdx, %rdx
@@ -10563,8 +10561,7 @@ Disassembly of section .text:
                	movss	(%rcx), %xmm1
                	mulss	%xmm1, %xmm0
                	jmp	<addr>
-               	xorl	%r11d, %r11d
-               	movq	%r11, %xmm0
+               	xorps	%xmm0, %xmm0
                	jmp	<addr>
                	leaq	-0x38(%rbp), %rsi
                	xorl	%eax, %eax
@@ -10589,8 +10586,7 @@ Disassembly of section .text:
                	je	<addr>
                	movapd	%xmm0, %xmm1
                	jmp	<addr>
-               	xorl	%r11d, %r11d
-               	movq	%r11, %xmm1
+               	xorps	%xmm1, %xmm1
                	jmp	<addr>
                	leaq	0x140(%rsp), %rdi
                	movups	0x140(%rsp), %xmm4
@@ -10619,8 +10615,7 @@ Disassembly of section .text:
                	movss	(%rcx), %xmm1
                	mulss	%xmm1, %xmm0
                	jmp	<addr>
-               	xorl	%r11d, %r11d
-               	movq	%r11, %xmm0
+               	xorps	%xmm0, %xmm0
                	jmp	<addr>
                	xorl	%eax, %eax
                	movss	-0x38(%rbp), %xmm0
@@ -10644,8 +10639,7 @@ Disassembly of section .text:
                	je	<addr>
                	movapd	%xmm0, %xmm1
                	jmp	<addr>
-               	xorl	%r11d, %r11d
-               	movq	%r11, %xmm1
+               	xorps	%xmm1, %xmm1
                	jmp	<addr>
                	movups	0x140(%rsp), %xmm0
                	vmovdqa	%xmm4, %xmm1

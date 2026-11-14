@@ -114,11 +114,11 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v92  Phi { incoming=[b17:v77, b9:v89], kind=I64 }     -> x0
     v93  ImmData(96)                                      -> x1
     v94  Load { addr=v93, disp=0, kind=F64 pc_rel }       -> d0
-    v95  Imm(4615626668101337088)                         -> x1
-    v96  Binop { op=fne, lhs=v94, rhs=v95 }               -> x2
-    v97  BinopI { op=or, lhs=v92, rhs_imm=16 }            -> x2
-    v98  Load { addr=v93, disp=0, kind=F64 pc_rel }       -> d0
-    v99  Binop { op=fne, lhs=v98, rhs=v95 }               -> x1
+    v95  Imm(4615626668101337088)                         -> d0
+    v96  Binop { op=fne, lhs=v94, rhs=v95 }               -> x1
+    v97  BinopI { op=or, lhs=v92, rhs_imm=16 }            -> x1
+    v98  Load { addr=v93, disp=0, kind=F64 pc_rel }       -> d1
+    v99  Binop { op=fne, lhs=v98, rhs=v95 }               -> x2
     v100 Select { cond=v99, a=v97, b=v92, kind=I64 }      -> x0
     terminator Jmp(b11)
   block 11  start_pc=0

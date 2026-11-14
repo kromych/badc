@@ -6,10 +6,10 @@ fn ent_pc=19 n_params=0 variadic=false locals=1
     v0   AllocaInit(0)                                    -> -
     v1   Imm(4613937818241073152)                         -> x0
     v2   Imm(4607182418800017408)                         -> x0
-    v3   Imm(-4616189618054758400)                        -> x0
-    v4   Imm(0)                                           -> x1
-    v5   Imm(0)                                           -> x1
-    v6   LocalAddr(-1)                                    -> x1
+    v3   Imm(-4616189618054758400)                        -> d0
+    v4   Imm(0)                                           -> x0
+    v5   Imm(0)                                           -> x0
+    v6   LocalAddr(-1)                                    -> x0
     v7   StoreLocal { off=-1, value=v3, kind=F64 }        -> -
     v8   Imm(0)                                           -> x0
     v9   Imm(0)                                           -> x0
@@ -25,7 +25,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=1
     v19  LifetimeEnd(-1)                                  -> -
     v20  LifetimeEnd(0)                                   -> -
     v21  Imm(4613937818241073152)                         -> x0
-    v22  Imm(-4609434218613702656)                        -> x0
+    v22  Imm(-4609434218613702656)                        -> d1
     v23  Binop { op=fne, lhs=v18, rhs=v22 }               -> x0
     terminator Bz { cond=v23, target=b2, fall=b1 }   (exit_acc=v23)
   block 1  start_pc=0
@@ -34,10 +34,10 @@ fn ent_pc=19 n_params=0 variadic=false locals=1
   block 2  start_pc=0
     v25  Imm(4613937818241073152)                         -> x0
     v26  Imm(-4609434218613702656)                        -> x0
-    v27  Imm(4607182418800017408)                         -> x0
-    v28  Imm(0)                                           -> x1
-    v29  Imm(0)                                           -> x1
-    v30  LocalAddr(-1)                                    -> x1
+    v27  Imm(4607182418800017408)                         -> d0
+    v28  Imm(0)                                           -> x0
+    v29  Imm(0)                                           -> x0
+    v30  LocalAddr(-1)                                    -> x0
     v31  StoreLocal { off=-1, value=v27, kind=F64 }       -> -
     v32  Imm(0)                                           -> x0
     v33  Imm(0)                                           -> x0
@@ -52,7 +52,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=1
     v42  FpCast { kind=BitsFp, value=v39 }                -> d0
     v43  LifetimeEnd(-1)                                  -> -
     v44  LifetimeEnd(0)                                   -> -
-    v45  Imm(4613937818241073152)                         -> x0
+    v45  Imm(4613937818241073152)                         -> d1
     v46  Binop { op=fne, lhs=v42, rhs=v45 }               -> x0
     terminator Bz { cond=v46, target=b4, fall=b3 }   (exit_acc=v46)
   block 3  start_pc=0
@@ -63,10 +63,10 @@ fn ent_pc=19 n_params=0 variadic=false locals=1
     v49  Imm(1084227584)                                  -> x0 [f32]
     v50  Imm(3231711232)                                  -> x0 [f32]
     v51  Imm(4611686018427387904)                         -> x0
-    v52  Imm(-4606056518893174784)                        -> x0
-    v53  Imm(0)                                           -> x1
-    v54  Imm(0)                                           -> x1
-    v55  LocalAddr(-1)                                    -> x1
+    v52  Imm(-4606056518893174784)                        -> d0
+    v53  Imm(0)                                           -> x0
+    v54  Imm(0)                                           -> x0
+    v55  LocalAddr(-1)                                    -> x0
     v56  StoreLocal { off=-1, value=v52, kind=F64 }       -> -
     v57  Imm(0)                                           -> x0
     v58  Imm(0)                                           -> x0
@@ -83,7 +83,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=1
     v69  LifetimeEnd(0)                                   -> -
     v70  FpCast { kind=F64ToF32, value=v67 }              -> d0 [f32]
     v71  Imm(1073741824)                                  -> x0 [f32]
-    v72  Imm(3221225472)                                  -> x0 [f32]
+    v72  Imm(3221225472)                                  -> d1 [f32]
     v73  Binop { op=fne, lhs=v70, rhs=v72 }               -> x0
     terminator Bz { cond=v73, target=b6, fall=b5 }   (exit_acc=v73)
   block 5  start_pc=0
@@ -157,8 +157,8 @@ fn ent_pc=19 n_params=0 variadic=false locals=1
     v139 Imm(0)                                           -> x0
     v140 Imm(4)                                           -> x0
     v141 LifetimeEnd(0)                                   -> -
-    v142 Imm(2139095040)                                  -> x0 [f32]
-    v143 LocalAddr(-1)                                    -> x1
+    v142 Imm(2139095040)                                  -> d0 [f32]
+    v143 LocalAddr(-1)                                    -> x0
     v144 StoreLocal { off=-1, value=v142, kind=F32 }      -> -
     v145 LocalAddr(-1)                                    -> x0
     v146 LoadLocal { off=-1, kind=U32 }                   -> x0
@@ -192,8 +192,8 @@ fn ent_pc=19 n_params=0 variadic=false locals=1
     v159 Imm(9)                                           -> x0
     terminator Return(v159)   (exit_acc=v159)
   block 11  start_pc=0
-    v160 Imm(2143289344)                                  -> x0 [f32]
-    v161 LocalAddr(-1)                                    -> x1
+    v160 Imm(2143289344)                                  -> d0 [f32]
+    v161 LocalAddr(-1)                                    -> x0
     v162 StoreLocal { off=-1, value=v160, kind=F32 }      -> -
     v163 LocalAddr(-1)                                    -> x0
     v164 LoadLocal { off=-1, kind=U32 }                   -> x0

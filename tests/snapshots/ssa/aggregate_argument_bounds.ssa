@@ -321,7 +321,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=3
     v188 BinopI { op=add, lhs=v27, rhs_imm=8 }            -> x2
     v189 Load { addr=v27, disp=8, kind=F32 }              -> d1 [f32]
     v190 Binop { op=fadd, lhs=v187, rhs=v189 }            -> d0 [f32]
-    v191 Imm(1084227584)                                  -> x1 [f32]
+    v191 Imm(1084227584)                                  -> d1 [f32]
     v192 Binop { op=fne, lhs=v190, rhs=v191 }             -> x1
     terminator Bz { cond=v192, target=b21, fall=b20 }   (exit_acc=v192)
   block 20  start_pc=0
@@ -341,7 +341,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=3
     v204 Imm(0)                                           -> x0
     v205 Imm(0)                                           -> x0
     v206 LoadLocal { off=-3, kind=F32 }                   -> d0 [f32]
-    v207 Imm(1080033280)                                  -> x0 [f32]
+    v207 Imm(1080033280)                                  -> d1 [f32]
     v208 Binop { op=fne, lhs=v206, rhs=v207 }             -> x0
     terminator Bz { cond=v208, target=b23, fall=b22 }   (exit_acc=v208)
   block 22  start_pc=0

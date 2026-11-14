@@ -1132,81 +1132,73 @@ Disassembly of section .text:
                	je	<addr>
                	leave
                	retq
-               	movabsq	$0x400ffdf3b645a1cb, %rax # imm = 0x400FFDF3B645A1CB
+               	movsd	<rip>, %xmm0
                	xorl	%edi, %edi
                	movl	$0x3, %esi
                	movl	$0x43, %edx
-               	movq	%rax, %xmm0
                	callq	<addr>
                	testl	%eax, %eax
                	je	<addr>
                	leave
                	retq
-               	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
+               	movsd	<rip>, %xmm0
                	xorl	%edi, %edi
                	movl	$0x45, %edx
-               	movq	%rax, %xmm0
                	movq	%rdi, %rsi
                	callq	<addr>
                	testl	%eax, %eax
                	je	<addr>
                	leave
                	retq
-               	movabsq	$-0x4020000000000000, %rax # imm = 0xBFE0000000000000
+               	movsd	<rip>, %xmm0
                	xorl	%edi, %edi
                	movl	$0x47, %edx
-               	movq	%rax, %xmm0
                	movq	%rdi, %rsi
                	callq	<addr>
                	testl	%eax, %eax
                	je	<addr>
                	leave
                	retq
-               	movabsq	$-0x3ff0020c49ba5e35, %rax # imm = 0xC00FFDF3B645A1CB
+               	movsd	<rip>, %xmm0
                	movq	$-0x1, %rdi
                	movq	$-0x3, %rsi
                	movl	$0x49, %edx
-               	movq	%rax, %xmm0
                	callq	<addr>
                	testl	%eax, %eax
                	je	<addr>
                	leave
                	retq
-               	movabsq	$0x43ea055690d9db80, %rax # imm = 0x43EA055690D9DB80
+               	movsd	<rip>, %xmm0
                	xorl	%edi, %edi
                	movabsq	$-0x2fd54b7931240000, %rsi # imm = 0xD02AB486CEDC0000
                	movl	$0x4b, %edx
-               	movq	%rax, %xmm0
                	callq	<addr>
                	testl	%eax, %eax
                	je	<addr>
                	leave
                	retq
-               	movabsq	$0x43f0000000000000, %rax # imm = 0x43F0000000000000
+               	movsd	<rip>, %xmm0
                	movl	$0x1, %edi
                	xorl	%esi, %esi
                	movl	$0x4d, %edx
-               	movq	%rax, %xmm0
                	callq	<addr>
                	testl	%eax, %eax
                	je	<addr>
                	leave
                	retq
-               	movabsq	$0x45c0000000000000, %rax # imm = 0x45C0000000000000
+               	movsd	<rip>, %xmm0
                	movl	$0x20000000, %edi       # imm = 0x20000000
                	xorl	%esi, %esi
                	movl	$0x4f, %edx
-               	movq	%rax, %xmm0
                	callq	<addr>
                	testl	%eax, %eax
                	je	<addr>
                	leave
                	retq
-               	movabsq	$-0x3820000000000000, %rax # imm = 0xC7E0000000000000
+               	movsd	<rip>, %xmm0
                	movabsq	$-0x8000000000000000, %rdi # imm = 0x8000000000000000
                	xorl	%esi, %esi
                	movl	$0x51, %edx
-               	movq	%rax, %xmm0
                	callq	<addr>
                	testl	%eax, %eax
                	je	<addr>
@@ -1917,9 +1909,8 @@ Disassembly of section .text:
                	retq
                	movq	$0x0, <rip> # <addr>
                	movq	$0x3, <rip> # <addr>
-               	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000
-               	movq	%rax, %xmm14
-               	movsd	%xmm14, <rip> # <addr>
+               	movsd	<rip>, %xmm0
+               	movsd	%xmm0, <rip> # <addr>
                	movq	<rip>, %rax # <addr>
                	movq	<rip>, %rsi # <addr>
                	testq	%rax, %rax

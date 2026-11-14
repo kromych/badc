@@ -12,10 +12,10 @@ fn ent_pc=19 n_params=0 variadic=false locals=0
     v6   Imm(0)                                           -> x1
     v7   ImmExtCode(binding=51)                           -> x1
     v8   Imm(0)                                           -> x1
-    v9   Imm(1098907648)                                  -> x1 [f32]
-    v10  Imm(0)                                           -> x2
+    v9   Imm(1098907648)                                  -> d0 [f32]
+    v10  Imm(0)                                           -> x1
     v11  CallIndirect { target=v1, args=[v9], callee_variadic=false, fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
-    v12  Imm(1082130432)                                  -> x0 [f32]
+    v12  Imm(1082130432)                                  -> d1 [f32]
     v13  Binop { op=fne, lhs=v11, rhs=v12 }               -> x0
     terminator Bz { cond=v13, target=b2, fall=b1 }   (exit_acc=v13)
   block 1  start_pc=0
@@ -23,11 +23,11 @@ fn ent_pc=19 n_params=0 variadic=false locals=0
     v15  LifetimeEnd(0)                                   -> -
     terminator Return(v14)   (exit_acc=v14)
   block 2  start_pc=0
-    v16  Imm(1076677837)                                  -> x0 [f32]
-    v17  Imm(0)                                           -> x1
-    v18  ImmExtCode(binding=49)                           -> x1
+    v16  Imm(1076677837)                                  -> d0 [f32]
+    v17  Imm(0)                                           -> x0
+    v18  ImmExtCode(binding=49)                           -> x0
     v19  CallIndirect { target=v18, args=[v16], callee_variadic=false, fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
-    v20  Imm(1073741824)                                  -> x0 [f32]
+    v20  Imm(1073741824)                                  -> d1 [f32]
     v21  Binop { op=fne, lhs=v19, rhs=v20 }               -> x0
     terminator Bz { cond=v21, target=b4, fall=b3 }   (exit_acc=v21)
   block 3  start_pc=0
@@ -35,11 +35,11 @@ fn ent_pc=19 n_params=0 variadic=false locals=0
     v23  LifetimeEnd(0)                                   -> -
     terminator Return(v22)   (exit_acc=v22)
   block 4  start_pc=0
-    v24  Imm(1074161254)                                  -> x0 [f32]
-    v25  Imm(0)                                           -> x1
-    v26  ImmExtCode(binding=50)                           -> x1
+    v24  Imm(1074161254)                                  -> d0 [f32]
+    v25  Imm(0)                                           -> x0
+    v26  ImmExtCode(binding=50)                           -> x0
     v27  CallIndirect { target=v26, args=[v24], callee_variadic=false, fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
-    v28  Imm(1077936128)                                  -> x0 [f32]
+    v28  Imm(1077936128)                                  -> d1 [f32]
     v29  Binop { op=fne, lhs=v27, rhs=v28 }               -> x0
     terminator Bz { cond=v29, target=b6, fall=b5 }   (exit_acc=v29)
   block 5  start_pc=0
@@ -47,11 +47,11 @@ fn ent_pc=19 n_params=0 variadic=false locals=0
     v31  LifetimeEnd(0)                                   -> -
     terminator Return(v30)   (exit_acc=v30)
   block 6  start_pc=0
-    v32  Imm(1077516698)                                  -> x0 [f32]
-    v33  Imm(0)                                           -> x1
-    v34  ImmExtCode(binding=51)                           -> x1
+    v32  Imm(1077516698)                                  -> d0 [f32]
+    v33  Imm(0)                                           -> x0
+    v34  ImmExtCode(binding=51)                           -> x0
     v35  CallIndirect { target=v34, args=[v32], callee_variadic=false, fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
-    v36  Imm(1073741824)                                  -> x0 [f32]
+    v36  Imm(1073741824)                                  -> d1 [f32]
     v37  Binop { op=fne, lhs=v35, rhs=v36 }               -> x0
     terminator Bz { cond=v37, target=b8, fall=b7 }   (exit_acc=v37)
   block 7  start_pc=0
@@ -62,10 +62,10 @@ fn ent_pc=19 n_params=0 variadic=false locals=0
     v40  ImmExtCode(binding=48)                           -> x0
     v41  Imm(0)                                           -> x1
     v42  Imm(1080033280)                                  -> x1 [f32]
-    v43  Imm(3227516928)                                  -> x1 [f32]
-    v44  Imm(0)                                           -> x2
+    v43  Imm(3227516928)                                  -> d0 [f32]
+    v44  Imm(0)                                           -> x1
     v45  CallIndirect { target=v40, args=[v43], callee_variadic=false, fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
-    v46  Imm(1080033280)                                  -> x0 [f32]
+    v46  Imm(1080033280)                                  -> d1 [f32]
     v47  Binop { op=fne, lhs=v45, rhs=v46 }               -> x0
     terminator Bz { cond=v47, target=b10, fall=b9 }   (exit_acc=v47)
   block 9  start_pc=0
@@ -81,18 +81,18 @@ fn ent_pc=19 n_params=0 variadic=false locals=0
     v55  Imm(0)                                           -> x1
     v56  ImmExtCode(binding=50)                           -> x1
     v57  Imm(0)                                           -> x1
-    v58  Imm(1117913088)                                  -> x1 [f32]
-    v59  Imm(0)                                           -> x2
-    v60  Imm(1086115021)                                  -> x2 [f32]
-    v61  Imm(0)                                           -> x2
-    v62  Imm(1074161254)                                  -> x2 [f32]
-    v63  Imm(0)                                           -> x2
-    v64  Imm(0)                                           -> x2
-    v65  Imm(0)                                           -> x2
-    v66  Imm(0)                                           -> x2
-    v67  Imm(0)                                           -> x2 [f32]
+    v58  Imm(1117913088)                                  -> d0 [f32]
+    v59  Imm(0)                                           -> x1
+    v60  Imm(1086115021)                                  -> x1 [f32]
+    v61  Imm(0)                                           -> x1
+    v62  Imm(1074161254)                                  -> x1 [f32]
+    v63  Imm(0)                                           -> x1
+    v64  Imm(0)                                           -> x1
+    v65  Imm(0)                                           -> x1
+    v66  Imm(0)                                           -> x1
+    v67  Imm(0)                                           -> x1 [f32]
     v68  CallIndirect { target=v52, args=[v58], callee_variadic=false, fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
-    v69  Imm(1091567616)                                  -> x0 [f32]
+    v69  Imm(1091567616)                                  -> d1 [f32]
     v70  Binop { op=fne, lhs=v68, rhs=v69 }               -> x0
     terminator Bz { cond=v70, target=b12, fall=b11 }   (exit_acc=v70)
   block 11  start_pc=0
@@ -106,9 +106,9 @@ fn ent_pc=19 n_params=0 variadic=false locals=0
     v76  Imm(0)                                           -> x0
     v77  Imm(0)                                           -> x0 [f32]
     v78  ImmExtCode(binding=49)                           -> x0
-    v79  Imm(1086115021)                                  -> x1 [f32]
+    v79  Imm(1086115021)                                  -> d0 [f32]
     v80  CallIndirect { target=v78, args=[v79], callee_variadic=false, fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
-    v81  Imm(1084227584)                                  -> x0 [f32]
+    v81  Imm(1084227584)                                  -> d1 [f32]
     v82  Binop { op=fne, lhs=v80, rhs=v81 }               -> x0
     terminator Bz { cond=v82, target=b14, fall=b13 }   (exit_acc=v82)
   block 13  start_pc=0
@@ -122,9 +122,9 @@ fn ent_pc=19 n_params=0 variadic=false locals=0
     v88  Imm(0)                                           -> x0
     v89  Imm(0)                                           -> x0 [f32]
     v90  ImmExtCode(binding=50)                           -> x0
-    v91  Imm(1074161254)                                  -> x1 [f32]
+    v91  Imm(1074161254)                                  -> d0 [f32]
     v92  CallIndirect { target=v90, args=[v91], callee_variadic=false, fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
-    v93  Imm(1077936128)                                  -> x0 [f32]
+    v93  Imm(1077936128)                                  -> d1 [f32]
     v94  Binop { op=fne, lhs=v92, rhs=v93 }               -> x0
     terminator Bz { cond=v94, target=b16, fall=b15 }   (exit_acc=v94)
   block 15  start_pc=0
@@ -132,9 +132,9 @@ fn ent_pc=19 n_params=0 variadic=false locals=0
     v96  LifetimeEnd(0)                                   -> -
     terminator Return(v95)   (exit_acc=v95)
   block 16  start_pc=0
-    v97  Imm(1088421888)                                  -> x0 [f32]
-    v98  Imm(3235905536)                                  -> x1 [f32]
-    v99  Intrinsic { kind=Fabsf, args=[v98] }             -> d0 [f32]
+    v97  Imm(1088421888)                                  -> d0 [f32]
+    v98  Imm(3235905536)                                  -> d1 [f32]
+    v99  Intrinsic { kind=Fabsf, args=[v98] }             -> d1 [f32]
     v100 Binop { op=fne, lhs=v99, rhs=v97 }               -> x0
     terminator Bz { cond=v100, target=b18, fall=b17 }   (exit_acc=v100)
   block 17  start_pc=0
@@ -142,9 +142,9 @@ fn ent_pc=19 n_params=0 variadic=false locals=0
     v102 LifetimeEnd(0)                                   -> -
     terminator Return(v101)   (exit_acc=v101)
   block 18  start_pc=0
-    v103 Imm(1111752704)                                  -> x0 [f32]
+    v103 Imm(1111752704)                                  -> d0 [f32]
     v104 Intrinsic { kind=Sqrtf, args=[v103] }            -> d0 [f32]
-    v105 Imm(1088421888)                                  -> x0 [f32]
+    v105 Imm(1088421888)                                  -> d1 [f32]
     v106 Binop { op=fne, lhs=v104, rhs=v105 }             -> x0
     terminator Bz { cond=v106, target=b20, fall=b19 }   (exit_acc=v106)
   block 19  start_pc=0

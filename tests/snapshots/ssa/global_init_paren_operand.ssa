@@ -18,7 +18,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v12  Imm(0)                                           -> x0
     v13  ImmData(8)                                       -> x0
     v14  Load { addr=v13, disp=0, kind=F64 pc_rel }       -> d0
-    v15  Imm(4618441417868443648)                         -> x0
+    v15  Imm(4618441417868443648)                         -> d1
     v16  Binop { op=fne, lhs=v14, rhs=v15 }               -> x0
     terminator Bz { cond=v16, target=b2, fall=b1 }   (exit_acc=v16)
   block 1  start_pc=0

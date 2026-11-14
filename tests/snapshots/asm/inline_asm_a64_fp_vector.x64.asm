@@ -35,14 +35,12 @@ Disassembly of section .text:
                	movss	%xmm0, -0x8(%rbp)
                	movl	-0x8(%rbp), %eax
                	movl	%eax, -0x8(%rbp)
-               	movl	$0x42280000, %eax       # imm = 0x42280000
-               	movl	$0x2a, %ecx
-               	xorl	%edx, %edx
-               	movss	-0x8(%rbp), %xmm0
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
-               	movq	%rcx, %rax
-               	cmovneq	%rdx, %rax
-               	cmovpq	%rdx, %rax
+               	movss	<rip>, %xmm0
+               	movl	$0x2a, %eax
+               	xorl	%ecx, %ecx
+               	movss	-0x8(%rbp), %xmm1
+               	ucomiss	%xmm0, %xmm1
+               	cmovneq	%rcx, %rax
+               	cmovpq	%rcx, %rax
                	leave
                	retq

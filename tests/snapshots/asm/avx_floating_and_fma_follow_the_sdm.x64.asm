@@ -7144,15 +7144,11 @@ Disassembly of section .text:
                	cmpl	$0x20, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
-               	movq	%rax, %xmm14
-               	movsd	%xmm14, (%rsp)
-               	movq	%rax, %xmm14
-               	movsd	%xmm14, 0x8(%rsp)
-               	movq	%rax, %xmm14
-               	movsd	%xmm14, 0x10(%rsp)
-               	movq	%rax, %xmm14
-               	movsd	%xmm14, 0x18(%rsp)
+               	movsd	<rip>, %xmm0 # <addr>
+               	movsd	%xmm0, (%rsp)
+               	movsd	%xmm0, 0x8(%rsp)
+               	movsd	%xmm0, 0x10(%rsp)
+               	movsd	%xmm0, 0x18(%rsp)
                	movq	<rip>, %rcx # <addr>
                	movabsq	$0x100000001b3, %rsi    # imm = 0x100000001B3
                	xorl	%eax, %eax

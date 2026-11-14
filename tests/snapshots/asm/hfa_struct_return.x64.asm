@@ -40,9 +40,8 @@ Disassembly of section .text:
                	addss	%xmm1, %xmm0
                	movss	-0x4(%rbp), %xmm1
                	addss	%xmm1, %xmm0
-               	movl	$0x41200000, %eax       # imm = 0x41200000
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	movss	<rip>, %xmm1
+               	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x8, %eax

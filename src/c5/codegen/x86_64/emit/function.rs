@@ -138,6 +138,15 @@ impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::X64Backen
     fn int_reg_load_imm(&self, code: &mut Vec<u8>, dst: u8, bits: i64) {
         emit_mov_r_imm64(code, Reg(dst), bits);
     }
+    /// +0.0 by a zeroing xor; the rest through `stage`.
+    fn fp_reg_load_const(&self, code: &mut Vec<u8>, dst: u8, stage: u8, bits: i64, is_f64: bool) {
+        if bits == 0 {
+            emit_xorps(code, Reg(dst), Reg(dst));
+        } else {
+            self.int_reg_load_imm(code, stage, bits);
+            self.fp_reg_from_int_reg(code, dst, stage, is_f64);
+        }
+    }
     fn fp_reg_from_int_reg(&self, code: &mut Vec<u8>, dst: u8, src: u8, _is_f64: bool) {
         // `movq xmm, r` copies all 64 bits; for an f32 the constant occupies
         // the low 32 (the immediate load zero-extends), which a scalar-single
@@ -383,6 +392,7 @@ pub(crate) fn emit_function(
         },
         seh_placed: Vec::new(),
         block_addr_fixups: Vec::new(),
+        fp_literals: Vec::new(),
         jump_table_fixups: Vec::new(),
     };
     match fe.run(rodata) {
@@ -523,6 +533,9 @@ struct FnEmit<'a, 'b> {
     /// `(lea_start, target_block)` per `Inst::BlockAddr`; the disp32 resolves
     /// against `block_offsets` once the layout is final.
     block_addr_fixups: Vec<(usize, u32)>,
+    /// `(displacement offset, bits, single)` per floating constant loaded
+    /// from a read-only literal.
+    fp_literals: Vec<(usize, u64, bool)>,
     /// `(site, table_idx)` per `Terminator::JumpTable`, the site the `lea`
     /// or, under `abs32_addrs`, the load's displacement field; each table is
     /// materialized into the read-only blob once the layout is final.
@@ -586,6 +599,11 @@ impl FnEmit<'_, '_> {
         );
         self.patch_branches()?;
         self.materialize_jump_tables(rodata);
+        for (field, bits, single) in core::mem::take(&mut self.fp_literals) {
+            rodata
+                .literals
+                .load_disp32(field, bits, if single { 4 } else { 8 });
+        }
         uw.end = self.out.cx.code.len() as u32;
         Ok(uw)
     }
@@ -751,6 +769,7 @@ impl FnEmit<'_, '_> {
         let body = self.out.mark();
         for pass in 0.. {
             self.block_addr_fixups.clear();
+            self.fp_literals.clear();
             self.jump_table_fixups.clear();
             self.seh_placed.clear();
             for block_idx in 0..self.fcx.func.blocks.len() {
@@ -966,6 +985,22 @@ impl FnEmit<'_, '_> {
             self.out.cx.code.len(),
             self.out.cx.ssa_line_rows,
         );
+        // A floating constant in an xmm register: +0.0 by a zeroing xor, the
+        // rest by a load of a read-only literal of its precision.
+        if let (Inst::Imm(bits), Place::FpReg(d)) = (inst, place)
+            && !alloc.imm_held.get(v as usize).copied().unwrap_or(false)
+        {
+            let code = &mut *self.out.cx.code;
+            if *bits == 0 {
+                super::encode::emit_xorps(code, Reg(d), Reg(d));
+            } else {
+                let single = alloc.is_f32(v);
+                let prefix = if single { 0xF3 } else { 0xF2 };
+                let field = super::encode::emit_sse_mov_rip(code, prefix, false, Reg(d));
+                self.fp_literals.push((field, *bits as u64, single));
+            }
+            return Ok(());
+        }
         // `&&label`: a PC-relative lea whose disp32 resolves against this
         // function's block offsets once every block is laid out.
         if let Inst::BlockAddr(tb) = inst {
@@ -1386,6 +1421,7 @@ impl FnEmit<'_, '_> {
                 rodata.addr_fixups.push(super::RodataAddrFixup {
                     code_offset: site,
                     rodata_offset: base,
+                    part: crate::c5::codegen::AddrPart::Whole,
                 });
             }
             for (i, &t) in self.fcx.func.jump_tables[table as usize].iter().enumerate() {

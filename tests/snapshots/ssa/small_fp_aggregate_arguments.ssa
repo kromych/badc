@@ -33,7 +33,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=2
     v27  StoreLocal { off=-2, value=v24, kind=I64 }       -> -
     v28  LocalAddr(-2)                                    -> x2
     v29  BinopI { op=add, lhs=v15, rhs_imm=4 }            -> x2
-    v30  Imm(1075838976)                                  -> x2 [f32]
+    v30  Imm(1075838976)                                  -> d0 [f32]
     v31  StoreLocal { off=-2, disp=4, value=v30, kind=F32 } -> -
     v32  Imm(0)                                           -> x2
     v33  LocalAddr(-1)                                    -> x2
@@ -101,17 +101,17 @@ fn ent_pc=5 n_params=0 variadic=false locals=2
     v88  LifetimeEnd(0)                                   -> -
     terminator Return(v84)   (exit_acc=v84)
   block 7  start_pc=0
-    v89  Imm(1077936128)                                  -> x0 [f32]
-    v90  Imm(1082130432)                                  -> x1 [f32]
-    v91  Imm(0)                                           -> x2
-    v92  Imm(0)                                           -> x2
-    v93  Imm(0)                                           -> x2
-    v94  Imm(0)                                           -> x2
-    v95  Imm(0)                                           -> x2
-    v96  Imm(0)                                           -> x2
-    v97  Imm(0)                                           -> x2
-    v98  LocalAddr(-1)                                    -> x2
-    v99  Imm(0)                                           -> x2 [f32]
+    v89  Imm(1077936128)                                  -> d0 [f32]
+    v90  Imm(1082130432)                                  -> d1 [f32]
+    v91  Imm(0)                                           -> x0
+    v92  Imm(0)                                           -> x0
+    v93  Imm(0)                                           -> x0
+    v94  Imm(0)                                           -> x0
+    v95  Imm(0)                                           -> x0
+    v96  Imm(0)                                           -> x0
+    v97  Imm(0)                                           -> x0
+    v98  LocalAddr(-1)                                    -> x0
+    v99  Imm(0)                                           -> x0 [f32]
     v100 StoreLocal { off=-1, value=v89, kind=F32 }       -> -
     v101 Imm(0)                                           -> x0 [f32]
     v102 StoreLocal { off=-1, disp=4, value=v90, kind=F32 } -> -

@@ -161,9 +161,8 @@ Disassembly of section .text:
                	movq	0x48(%rsp), %r10
                	addq	0x40(%rsp), %r10
                	movq	%r10, 0x48(%rsp)
-               	movabsq	$0x4000000000000000, %r10 # imm = 0x4000000000000000
-               	movq	%r10, 0x40(%rsp)
-               	vmulsd	0x40(%rsp), %xmm0, %xmm1
+               	movsd	<rip>, %xmm1
+               	vmulsd	%xmm1, %xmm0, %xmm1
                	movq	0x50(%rsp), %r10
                	movsd	%xmm1, -0x8(%rsp)
                	fldl	-0x8(%rsp)
@@ -194,21 +193,19 @@ Disassembly of section .text:
                	movsd	0x38(%rsp), %xmm0
                	leaq	<rip>, %rcx # <addr>
                	addq	0x48(%rsp), %rax
-               	movabsq	$0x4010000000000000, %rdx # imm = 0x4010000000000000
-               	movq	%rdx, %xmm15
-               	mulsd	%xmm15, %xmm0
+               	movsd	<rip>, %xmm1
+               	mulsd	%xmm1, %xmm0
                	cvttsd2si	%xmm0, %rdx
                	addq	%rdx, %rax
-               	movabsq	$0x7e031cfd3999f7b0, %rdx # imm = 0x7E031CFD3999F7B0
-               	movl	$0x1, %esi
-               	xorl	%edi, %edi
+               	movsd	<rip>, %xmm0
+               	movl	$0x1, %edx
+               	xorl	%esi, %esi
                	fldt	0x20(%rcx)
                	fstpl	-0x8(%rsp)
-               	movsd	-0x8(%rsp), %xmm0
-               	movq	%rdx, %xmm15
-               	comisd	%xmm15, %xmm0
-               	cmovbeq	%rdi, %rsi
-               	addq	%rsi, %rax
+               	movsd	-0x8(%rsp), %xmm1
+               	comisd	%xmm0, %xmm1
+               	cmovbeq	%rsi, %rdx
+               	addq	%rdx, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13
@@ -374,9 +371,8 @@ Disassembly of section .text:
                	fldt	0x10(%rax)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
-               	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	movsd	<rip>, %xmm1
+               	ucomisd	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax

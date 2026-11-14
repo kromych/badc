@@ -250,8 +250,7 @@ Disassembly of section .text:
                	retq
 
 <dot>:
-               	xorl	%r11d, %r11d
-               	movq	%r11, %xmm0
+               	xorps	%xmm0, %xmm0
                	subq	$0x1, %rdx
                	jb	<addr>
                	addq	$0x8, %rdi
@@ -269,8 +268,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movq	$0x0, -0x8(%rbp)
-               	xorl	%r11d, %r11d
-               	movq	%r11, %xmm0
+               	xorps	%xmm0, %xmm0
                	jmp	<addr>
                	movq	-0x8(%rbp), %rax
                	shlq	$0x3, %rax
@@ -366,20 +364,16 @@ Disassembly of section .text:
                	addq	%rsi, %rdx
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rax, %xmm0
-               	movabsq	$0x3fd0000000000000, %rsi # imm = 0x3FD0000000000000
-               	movabsq	$0x4008000000000000, %rdi # imm = 0x4008000000000000
-               	movq	%rsi, %xmm1
-               	movq	%rdi, %xmm15
-               	vfmsub213sd	%xmm15, %xmm0, %xmm1 # xmm1 = (xmm0 * xmm1) - xmm15
+               	movsd	<rip>, %xmm1
+               	movsd	<rip>, %xmm2
+               	vfmsub213sd	%xmm2, %xmm0, %xmm1 # xmm1 = (xmm0 * xmm1) - xmm2
                	movsd	%xmm1, (%rdx)
                	leaq	<rip>, %rdx # <addr>
                	shlq	$0x2, %rax
                	addq	%rdx, %rax
-               	movabsq	$0x3ff8000000000000, %rdx # imm = 0x3FF8000000000000
-               	movabsq	$0x4034000000000000, %rsi # imm = 0x4034000000000000
-               	movq	%rsi, %xmm14
-               	movq	%rdx, %xmm15
-               	vfmsub132sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm0 * xmm15) - xmm14
+               	movsd	<rip>, %xmm1
+               	movsd	<rip>, %xmm2
+               	vfmsub213sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm0) - xmm2
                	cvtsd2ss	%xmm0, %xmm0
                	movss	%xmm0, (%rax)
                	movq	%rcx, %rax

@@ -106,24 +106,24 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     v1319 Imm(61)                                          -> x7
     v1320 CallExt { binding_idx=2, args=[v1319], fp_arg_mask=0x0 } -> x0
     v1321 ImmData(344)                                     -> x7
-    v1322 Imm(4598175219545276416)                         -> x0
-    v1323 Imm(4612811918334230528)                         -> x1
-    v1324 Imm(-4625196817309499392)                        -> x2
-    v1325 ImmData(624)                                     -> x6
-    v1326 Load { addr=v1325, disp=0, kind=F64, volatile pc_rel } -> d0
-    v1327 ImmData(632)                                     -> x6
-    v1328 Load { addr=v1327, disp=0, kind=F64, volatile pc_rel } -> d1
-    v1329 Binop { op=fdiv, lhs=v1326, rhs=v1328 }          -> d0
-    v1330 Load { addr=v1325, disp=0, kind=F64, volatile pc_rel } -> d1
-    v1331 Fneg(v1330)                                      -> d1
-    v1332 Load { addr=v1327, disp=0, kind=F64, volatile pc_rel } -> d2
-    v1333 Binop { op=fdiv, lhs=v1331, rhs=v1332 }          -> d1
-    v1334 Load { addr=v1325, disp=0, kind=F64, volatile pc_rel } -> d2
-    v1335 Load { addr=v1327, disp=0, kind=F64, volatile pc_rel } -> d3
-    v1336 Binop { op=fdiv, lhs=v1334, rhs=v1335 }          -> d2
-    v1337 Load { addr=v1325, disp=0, kind=F64, volatile pc_rel } -> d3
-    v1338 Load { addr=v1327, disp=0, kind=F64, volatile pc_rel } -> d4
-    v1339 Binop { op=fdiv, lhs=v1337, rhs=v1338 }          -> d3
+    v1322 Imm(4598175219545276416)                         -> d0
+    v1323 Imm(4612811918334230528)                         -> d1
+    v1324 Imm(-4625196817309499392)                        -> d2
+    v1325 ImmData(624)                                     -> x0
+    v1326 Load { addr=v1325, disp=0, kind=F64, volatile pc_rel } -> d3
+    v1327 ImmData(632)                                     -> x0
+    v1328 Load { addr=v1327, disp=0, kind=F64, volatile pc_rel } -> d4
+    v1329 Binop { op=fdiv, lhs=v1326, rhs=v1328 }          -> d3
+    v1330 Load { addr=v1325, disp=0, kind=F64, volatile pc_rel } -> d4
+    v1331 Fneg(v1330)                                      -> d4
+    v1332 Load { addr=v1327, disp=0, kind=F64, volatile pc_rel } -> d5
+    v1333 Binop { op=fdiv, lhs=v1331, rhs=v1332 }          -> d4
+    v1334 Load { addr=v1325, disp=0, kind=F64, volatile pc_rel } -> d5
+    v1335 Load { addr=v1327, disp=0, kind=F64, volatile pc_rel } -> d6
+    v1336 Binop { op=fdiv, lhs=v1334, rhs=v1335 }          -> d5
+    v1337 Load { addr=v1325, disp=0, kind=F64, volatile pc_rel } -> d6
+    v1338 Load { addr=v1327, disp=0, kind=F64, volatile pc_rel } -> d7
+    v1339 Binop { op=fdiv, lhs=v1337, rhs=v1338 }          -> d6
     v1340 CallExt { binding_idx=178, args=[v1321, v1322, v1323, v1324, v1329, v1333, v1336, v1339], fp_arg_mask=0xfe } -> x0
     v1341 Imm(61)                                          -> x7
     v1342 CallExt { binding_idx=2, args=[v1341], fp_arg_mask=0x0 } -> x0
@@ -287,7 +287,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     v135 ImmData(134)                                     -> x6
     v136 ImmData(624)                                     -> x0
     v137 Load { addr=v136, disp=0, kind=F64, volatile pc_rel } -> d0
-    v138 Imm(4336966441157787648)                         -> x0
+    v138 Imm(4336966441157787648)                         -> d1
     v139 Binop { op=fadd, lhs=v137, rhs=v138 }            -> d0
     v140 FpCast { kind=FpBits, value=v139 }               -> x2
     v141 ImmData(34)                                      -> x7
@@ -472,7 +472,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     v266 ImmData(640)                                     -> x0
     v267 Load { addr=v266, disp=0, kind=F64, volatile pc_rel } -> d0
     v268 Imm(2)                                           -> x0
-    v269 Imm(4611686018427387904)                         -> x0
+    v269 Imm(4611686018427387904)                         -> d1
     v270 Binop { op=fmul, lhs=v267, rhs=v269 }            -> d0
     v271 FpCast { kind=FpBits, value=v270 }               -> x2
     v272 ImmData(34)                                      -> x7
@@ -535,7 +535,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     v311 Load { addr=v310, disp=0, kind=F64, volatile pc_rel } -> d0
     v312 Fneg(v311)                                       -> d0
     v313 Imm(2)                                           -> x0
-    v314 Imm(4611686018427387904)                         -> x0
+    v314 Imm(4611686018427387904)                         -> d1
     v315 Binop { op=fmul, lhs=v312, rhs=v314 }            -> d0
     v316 FpCast { kind=FpBits, value=v315 }               -> x2
     v317 ImmData(34)                                      -> x7
@@ -597,8 +597,8 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     v355 ImmData(640)                                     -> x0
     v356 Load { addr=v355, disp=0, kind=F64, volatile pc_rel } -> d0
     v357 Load { addr=v355, disp=0, kind=F64, volatile pc_rel } -> d1
-    v358 Imm(4363988038922010624)                         -> x0
-    v359 Binop { op=fmul.c, lhs=v357, rhs=v358 }          -> d2
+    v358 Imm(4363988038922010624)                         -> d2
+    v359 Binop { op=fmul.c, lhs=v357, rhs=v358 }          -> d3
     v360 Fma { a=v357, b=v358, c=v356, neg_product=false, neg_addend=false } -> d0
     v361 FpCast { kind=FpBits, value=v360 }               -> x2
     v362 ImmData(34)                                      -> x7
@@ -659,7 +659,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     v399 ImmData(163)                                     -> x6
     v400 ImmData(656)                                     -> x0
     v401 Load { addr=v400, disp=0, kind=F64, volatile pc_rel } -> d0
-    v402 Imm(4602678819172646912)                         -> x0
+    v402 Imm(4602678819172646912)                         -> d1
     v403 Binop { op=fmul, lhs=v401, rhs=v402 }            -> d0
     v404 FpCast { kind=FpBits, value=v403 }               -> x2
     v405 ImmData(34)                                      -> x7
@@ -721,7 +721,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     v443 ImmData(656)                                     -> x0
     v444 Load { addr=v443, disp=0, kind=F64, volatile pc_rel } -> d0
     v445 Fneg(v444)                                       -> d0
-    v446 Imm(4602678819172646912)                         -> x0
+    v446 Imm(4602678819172646912)                         -> d1
     v447 Binop { op=fmul, lhs=v445, rhs=v446 }            -> d0
     v448 FpCast { kind=FpBits, value=v447 }               -> x2
     v449 ImmData(34)                                      -> x7
@@ -784,7 +784,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     v488 Load { addr=v487, disp=0, kind=F64, volatile pc_rel } -> d0
     v489 Load { addr=v487, disp=0, kind=F64, volatile pc_rel } -> d1
     v490 Binop { op=fmul, lhs=v488, rhs=v489 }            -> d0
-    v491 Imm(103582791429521408)                          -> x0
+    v491 Imm(103582791429521408)                          -> d1
     v492 Binop { op=fmul, lhs=v490, rhs=v491 }            -> d0
     v493 FpCast { kind=FpBits, value=v492 }               -> x2
     v494 ImmData(34)                                      -> x7
@@ -907,7 +907,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     v575 ImmData(194)                                     -> x6
     v576 ImmData(680)                                     -> x0
     v577 Load { addr=v576, disp=0, kind=F64, volatile pc_rel } -> d0
-    v578 Imm(1)                                           -> x0
+    v578 Imm(1)                                           -> d1
     v579 Binop { op=fsub, lhs=v577, rhs=v578 }            -> d0
     v580 FpCast { kind=FpBits, value=v579 }               -> x2
     v581 ImmData(34)                                      -> x7
@@ -1029,7 +1029,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     v661 ImmData(624)                                     -> x0
     v662 Load { addr=v661, disp=0, kind=F64, volatile pc_rel } -> d0
     v663 Imm(3)                                           -> x0
-    v664 Imm(4613937818241073152)                         -> x0
+    v664 Imm(4613937818241073152)                         -> d1
     v665 Binop { op=fdiv, lhs=v662, rhs=v664 }            -> d0
     v666 ImmData(632)                                     -> x0
     v667 Load { addr=v666, disp=0, kind=F64, volatile pc_rel } -> d1
@@ -1095,9 +1095,9 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     v709 ImmData(211)                                     -> x6
     v710 ImmData(680)                                     -> x0
     v711 Load { addr=v710, disp=0, kind=F64, volatile pc_rel } -> d0
-    v712 Imm(4593671619917905920)                         -> x0
-    v713 ImmData(656)                                     -> x1
-    v714 Load { addr=v713, disp=0, kind=F64, volatile pc_rel } -> d1
+    v712 Imm(4593671619917905920)                         -> d1
+    v713 ImmData(656)                                     -> x0
+    v714 Load { addr=v713, disp=0, kind=F64, volatile pc_rel } -> d2
     v715 Fma { a=v711, b=v712, c=v714, neg_product=false, neg_addend=false } -> d0
     v716 FpCast { kind=FpBits, value=v715 }               -> x2
     v717 ImmData(34)                                      -> x7
@@ -2505,7 +2505,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     v1376 ImmData(399)                                     -> x6
     v1377 ImmData(648)                                     -> x0
     v1378 Load { addr=v1377, disp=0, kind=F64, volatile pc_rel } -> d0
-    v1379 Imm(4607182418800017407)                         -> x0
+    v1379 Imm(4607182418800017407)                         -> d1
     v1380 Binop { op=fmul, lhs=v1378, rhs=v1379 }          -> d0
     v1381 FpCast { kind=FpBits, value=v1380 }              -> x2
     v1382 ImmData(34)                                      -> x7
@@ -3784,7 +3784,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     v2295 CallExt { binding_idx=2, args=[v2294], fp_arg_mask=0x0 } -> x0
     v2296 ImmData(640)                                     -> x0
     v2297 Load { addr=v2296, disp=0, kind=F64, volatile pc_rel } -> d0
-    v2298 Imm(4602678819172646912)                         -> x0
+    v2298 Imm(4602678819172646912)                         -> d1
     v2299 Binop { op=fmul, lhs=v2297, rhs=v2298 }          -> d0
     v2300 FpCast { kind=FpToInt, value=v2299 }             -> x0
     v2301 StoreLocal { off=-2, value=v2300, kind=I64, volatile } -> -

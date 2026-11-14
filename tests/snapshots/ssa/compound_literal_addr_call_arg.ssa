@@ -426,13 +426,13 @@ fn ent_pc=5 n_params=0 variadic=false locals=17
     terminator Return(v171)   (exit_acc=v171)
   block 52  start_pc=0
     v352 LoadLocal { off=-2, kind=F64 }                   -> d0
-    v353 Imm(4609434218613702656)                         -> x6
+    v353 Imm(4609434218613702656)                         -> d1
     v354 Binop { op=fne, lhs=v352, rhs=v353 }             -> x6
     terminator Bnz { cond=v354, target=b54, fall=b53 }   (exit_acc=v354)
   block 53  start_pc=0
     v355 BinopI { op=add, lhs=v159, rhs_imm=8 }           -> x6
     v356 LoadLocal { off=-2, disp=8, kind=F64 }           -> d0
-    v357 Imm(4612811918334230528)                         -> x6
+    v357 Imm(4612811918334230528)                         -> d1
     v358 Binop { op=fne, lhs=v356, rhs=v357 }             -> x6
     v359 Imm(0)                                           -> x7
     terminator Bz { cond=v358, target=b55, fall=b54 }   (exit_acc=v358)

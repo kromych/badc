@@ -71,9 +71,8 @@ Disassembly of section .text:
                	movl	$0x3fc00000, (%rdi)     # imm = 0x3FC00000
                	movl	$0x80000000, 0x4(%rdi)  # imm = 0x80000000
                	movq	$0x0, (%rsi)
-               	movabsq	$-0x8000000000000000, %rax # imm = 0x8000000000000000
-               	movq	%rax, %xmm14
-               	movsd	%xmm14, 0x8(%rsi)
+               	movsd	<rip>, %xmm0
+               	movsd	%xmm0, 0x8(%rsi)
                	retq
 
 <both>:
@@ -296,9 +295,8 @@ Disassembly of section .text:
                	cmpl	$0x80000000, %eax       # imm = 0x80000000
                	jne	<addr>
                	movss	-0x80(%rbp), %xmm0
-               	movl	$0x41100000, %eax       # imm = 0x41100000
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	movss	<rip>, %xmm1
+               	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0xc, %eax
@@ -314,9 +312,8 @@ Disassembly of section .text:
                	cmpq	%r11, %rax
                	jne	<addr>
                	movsd	-0x38(%rbp), %xmm0
-               	movabsq	$0x4022000000000000, %rax # imm = 0x4022000000000000
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	movsd	<rip>, %xmm1
+               	ucomisd	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0xd, %eax

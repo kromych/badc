@@ -2553,49 +2553,44 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x10, %eax
                	jl	<addr>
-               	leaq	-0x70(%rbp), %rbx
-               	movl	$0x40000000, %edx       # imm = 0x40000000
-               	movss	-0x70(%rbp), %xmm0
-               	movq	%rdx, %xmm15
-               	comiss	%xmm15, %xmm0
+               	leaq	-0x70(%rbp), %r9
+               	movss	<rip>, %xmm0
+               	movss	-0x70(%rbp), %xmm1
+               	comiss	%xmm0, %xmm1
+               	seta	%dl
+               	movzbq	%dl, %rdx
+               	xorl	%eax, %eax
+               	negq	%rdx
+               	movss	-0x6c(%rbp), %xmm1
+               	comiss	%xmm0, %xmm1
                	seta	%sil
                	movzbq	%sil, %rsi
-               	xorl	%eax, %eax
                	negq	%rsi
-               	movss	-0x6c(%rbp), %xmm0
-               	movq	%rdx, %xmm15
-               	comiss	%xmm15, %xmm0
+               	movss	-0x68(%rbp), %xmm1
+               	comiss	%xmm0, %xmm1
                	seta	%dil
                	movzbq	%dil, %rdi
                	negq	%rdi
-               	movss	-0x68(%rbp), %xmm0
-               	movq	%rdx, %xmm15
-               	comiss	%xmm15, %xmm0
+               	movss	-0x64(%rbp), %xmm1
+               	comiss	%xmm0, %xmm1
                	seta	%r8b
                	movzbq	%r8b, %r8
                	negq	%r8
-               	movss	-0x64(%rbp), %xmm0
-               	movq	%rdx, %xmm15
-               	comiss	%xmm15, %xmm0
-               	seta	%dl
-               	movzbq	%dl, %rdx
-               	negq	%rdx
-               	movl	%esi, -0x60(%rbp)
-               	movl	%edi, -0x5c(%rbp)
-               	movl	%r8d, -0x58(%rbp)
-               	movl	%edx, -0x54(%rbp)
+               	movl	%edx, -0x60(%rbp)
+               	movl	%esi, -0x5c(%rbp)
+               	movl	%edi, -0x58(%rbp)
+               	movl	%r8d, -0x54(%rbp)
                	movq	%rax, %rdx
                	shlq	$0x2, %rdx
                	leaq	(%rcx,%rdx), %rsi
-               	addq	%rbx, %rdx
-               	movl	$0x40000000, %edi       # imm = 0x40000000
-               	movq	$-0x1, %r8
-               	xorl	%r9d, %r9d
-               	movss	(%rdx), %xmm0
-               	movq	%rdi, %xmm15
-               	comiss	%xmm15, %xmm0
-               	cmovbeq	%r9, %r8
-               	movl	%r8d, (%rsi)
+               	addq	%r9, %rdx
+               	movss	<rip>, %xmm0
+               	movq	$-0x1, %rdi
+               	xorl	%r8d, %r8d
+               	movss	(%rdx), %xmm1
+               	comiss	%xmm0, %xmm1
+               	cmovbeq	%r8, %rdi
+               	movl	%edi, (%rsi)
                	incq	%rax
                	cmpl	$0x4, %eax
                	jl	<addr>

@@ -698,24 +698,20 @@ Disassembly of section .text:
                	jmp	<addr>
                	testl	%ebx, %ebx
                	jne	<addr>
-               	movabsq	$0x3fd0000000000000, %rax # imm = 0x3FD0000000000000
-               	movq	%rax, %xmm0
+               	movsd	<rip>, %xmm0 # <addr>
                	callq	<addr>
-               	movabsq	$0x3ffc000000000000, %rax # imm = 0x3FFC000000000000
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	movsd	<rip>, %xmm1 # <addr>
+               	ucomisd	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x14, %ebx
                	jmp	<addr>
                	testl	%ebx, %ebx
                	jne	<addr>
-               	movl	$0x3f000000, %eax       # imm = 0x3F000000
-               	movq	%rax, %xmm0
+               	movss	<rip>, %xmm0 # <addr>
                	callq	<addr>
-               	movl	$0x3fa00000, %eax       # imm = 0x3FA00000
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	movss	<rip>, %xmm1 # <addr>
+               	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x15, %ebx

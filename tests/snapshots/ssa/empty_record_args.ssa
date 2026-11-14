@@ -214,8 +214,8 @@ fn ent_pc=6 n_params=0 variadic=false locals=5
     v35  LocalAddr(-4)                                    -> x9
     v36  Imm(2)                                           -> x6
     v37  LocalAddr(-1)                                    -> x0
-    v38  Imm(4613937818241073152)                         -> x1
-    v39  LocalAddr(-3)                                    -> x8
+    v38  Imm(4613937818241073152)                         -> d0
+    v39  LocalAddr(-3)                                    -> x1
     v40  Imm(4)                                           -> x2
     v41  Call { target_pc=2, args=[v34, v35, v36, v37, v38, v39, v40], fixed_args=7, fp_return=false, fp_arg_mask=0x10 } -> x0
     v42  Extend { value=v41, kind=I32 }                   -> x1
@@ -249,13 +249,13 @@ fn ent_pc=6 n_params=0 variadic=false locals=5
     v64  LifetimeEnd(-5)                                  -> -
     terminator Return(v57)   (exit_acc=v57)
   block 8  start_pc=0
-    v65  Imm(4609434218613702656)                         -> x0
+    v65  Imm(4609434218613702656)                         -> d0
     v66  LocalAddr(-5)                                    -> x9
-    v67  Imm(1074790400)                                  -> x1 [f32]
-    v68  LocalAddr(-3)                                    -> x2
-    v69  Imm(4616189618054758400)                         -> x6
+    v67  Imm(1074790400)                                  -> d1 [f32]
+    v68  LocalAddr(-3)                                    -> x0
+    v69  Imm(4616189618054758400)                         -> d2
     v70  Call { target_pc=4, args=[v65, v66, v67, v68, v69], fixed_args=5, fp_return=true, fp_arg_mask=0x15 } -> d0
-    v71  Imm(4620411742705418240)                         -> x0
+    v71  Imm(4620411742705418240)                         -> d1
     v72  Binop { op=fne, lhs=v70, rhs=v71 }               -> x0
     terminator Bz { cond=v72, target=b10, fall=b9 }   (exit_acc=v72)
   block 9  start_pc=0
@@ -274,7 +274,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=5
     v83  LocalAddr(-5)                                    -> x9
     v84  Imm(3)                                           -> x2
     v85  LocalAddr(-1)                                    -> x0
-    v86  Imm(4616189618054758400)                         -> x1
+    v86  Imm(4616189618054758400)                         -> d0
     v87  Call { target_pc=5, args=[v81, v82, v83, v84, v85, v86], fixed_args=1, fp_return=false, fp_arg_mask=0x20 } -> x0
     v88  Extend { value=v87, kind=I32 }                   -> x1
     v89  BinopI { op=ne, lhs=v87, rhs_imm=4321 }          -> x0

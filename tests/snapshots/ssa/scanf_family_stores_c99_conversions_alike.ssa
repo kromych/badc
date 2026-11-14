@@ -528,7 +528,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=38
     v137 LifetimeEnd(-38)                                 -> -
     terminator Return(v130)   (exit_acc=v130)
   block 68  start_pc=0
-    v138 Imm(0)                                           -> x0
+    v138 Imm(0)                                           -> d0
     v139 StoreLocal { off=-33, value=v138, kind=F64 }     -> -
     v140 ImmData(636)                                     -> x7
     v141 ImmData(647)                                     -> x6
@@ -562,7 +562,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=38
     terminator Bnz { cond=v159, target=b72, fall=b71 }   (exit_acc=v160)
   block 71  start_pc=0
     v165 LoadLocal { off=-33, kind=F64 }                  -> d0
-    v166 Imm(4615063718147915776)                         -> x0
+    v166 Imm(4615063718147915776)                         -> d1
     v167 Binop { op=fne, lhs=v165, rhs=v166 }             -> x0
     v168 Imm(0)                                           -> x1
     v169 Imm(0)                                           -> x1

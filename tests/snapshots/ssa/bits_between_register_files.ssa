@@ -250,7 +250,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=14
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(4653144478742216704)                         -> x0
-    v2   Imm(-4570227558112559104)                        -> x0
+    v2   Imm(-4570227558112559104)                        -> d0
     v3   StoreLocal { off=-2, value=v2, kind=F64, volatile } -> -
     v4   LoadLocal { off=-2, kind=F64, volatile }         -> [spill 0]
     v5   Imm(0)                                           -> x0
@@ -327,18 +327,18 @@ fn ent_pc=14 n_params=0 variadic=false locals=14
     terminator Bnz { cond=v45, target=b8, fall=b6 }   (exit_acc=v45)
   block 6  start_pc=0
     v82  Imm(0)                                           -> x0
-    v83  Imm(-9223372036854775808)                        -> x0
+    v83  Imm(-9223372036854775808)                        -> d0
     v84  Call { target_pc=2, args=[v83], fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0
-    v85  Imm(0)                                           -> x0
-    v86  Binop { op=fne, lhs=v84, rhs=v85 }               -> x1
-    v87  BinopI { op=ne, lhs=v86, rhs_imm=0 }             -> x2
-    v88  Imm(0)                                           -> x2
-    v89  Imm(0)                                           -> x2
-    v90  Imm(0)                                           -> x2
-    v91  Imm(0)                                           -> x2
+    v85  Imm(0)                                           -> d1
+    v86  Binop { op=fne, lhs=v84, rhs=v85 }               -> x0
+    v87  BinopI { op=ne, lhs=v86, rhs_imm=0 }             -> x1
+    v88  Imm(0)                                           -> x1
+    v89  Imm(0)                                           -> x1
+    v90  Imm(0)                                           -> x1
+    v91  Imm(0)                                           -> x1
     terminator Bnz { cond=v86, target=b8, fall=b7 }   (exit_acc=v86)
   block 7  start_pc=0
-    v92  Imm(0)                                           -> x1
+    v92  Imm(0)                                           -> x0
     v93  Call { target_pc=2, args=[v85], fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0
     v94  StoreLocal { off=-1, value=v93, kind=F64, volatile } -> -
     v95  LocalAddr(-10)                                   -> x0
@@ -820,7 +820,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=14
     terminator Return(v529)   (exit_acc=v529)
   block 25  start_pc=0
     v537 Imm(1069547520)                                  -> x0 [f32]
-    v538 Imm(3217031168)                                  -> x0 [f32]
+    v538 Imm(3217031168)                                  -> d0 [f32]
     v539 Call { target_pc=11, args=[v538], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
     v540 BinopI { op=and, lhs=v539, rhs_imm=4294967295 }  -> x1
     v541 BinopI { op=ne, lhs=v539, rhs_imm=3217031168 }   -> x0

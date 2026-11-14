@@ -31,14 +31,14 @@ fn ent_pc=20 n_params=0 variadic=false locals=3
     v4   ImmData(1408)                                    -> x7
     v5   Imm(160)                                         -> x6
     v6   ImmData(1)                                       -> x2
-    v7   Imm(4607182418800017408)                         -> x0
-    v8   LoadLocal { off=-1, kind=F64, volatile }         -> d0
-    v9   Binop { op=fdiv, lhs=v7, rhs=v8 }                -> d1
-    v10  Imm(-4616189618054758400)                        -> x1
-    v11  LoadLocal { off=-1, kind=F64, volatile }         -> d0
-    v12  Binop { op=fdiv, lhs=v10, rhs=v11 }              -> d2
-    v13  LoadLocal { off=-1, kind=F64, volatile }         -> d0
-    v14  Binop { op=fdiv, lhs=v7, rhs=v13 }               -> d3
+    v7   Imm(4607182418800017408)                         -> d0
+    v8   LoadLocal { off=-1, kind=F64, volatile }         -> d1
+    v9   Binop { op=fdiv, lhs=v7, rhs=v8 }                -> d2
+    v10  Imm(-4616189618054758400)                        -> d1
+    v11  LoadLocal { off=-1, kind=F64, volatile }         -> d3
+    v12  Binop { op=fdiv, lhs=v10, rhs=v11 }              -> d1
+    v13  LoadLocal { off=-1, kind=F64, volatile }         -> d3
+    v14  Binop { op=fdiv, lhs=v7, rhs=v13 }               -> d0
     v15  CallExt { binding_idx=9, args=[v4, v5, v6, v9, v12, v14], fp_arg_mask=0x38 } -> x3
     v16  Imm(0)                                           -> x0
     v17  Extend { value=v15, kind=I32 }                   -> x0
@@ -63,14 +63,14 @@ fn ent_pc=20 n_params=0 variadic=false locals=3
     v48  ImmData(1408)                                    -> x7
     v49  Imm(160)                                         -> x6
     v50  ImmData(23)                                      -> x2
-    v51  Imm(4607182418800017408)                         -> x0
-    v52  LoadLocal { off=-1, kind=F64, volatile }         -> d0
-    v53  Binop { op=fdiv, lhs=v51, rhs=v52 }              -> d1
-    v54  Imm(-4616189618054758400)                        -> x1
-    v55  LoadLocal { off=-1, kind=F64, volatile }         -> d0
-    v56  Binop { op=fdiv, lhs=v54, rhs=v55 }              -> d2
-    v57  LoadLocal { off=-1, kind=F64, volatile }         -> d0
-    v58  Binop { op=fdiv, lhs=v51, rhs=v57 }              -> d3
+    v51  Imm(4607182418800017408)                         -> d0
+    v52  LoadLocal { off=-1, kind=F64, volatile }         -> d1
+    v53  Binop { op=fdiv, lhs=v51, rhs=v52 }              -> d2
+    v54  Imm(-4616189618054758400)                        -> d1
+    v55  LoadLocal { off=-1, kind=F64, volatile }         -> d3
+    v56  Binop { op=fdiv, lhs=v54, rhs=v55 }              -> d1
+    v57  LoadLocal { off=-1, kind=F64, volatile }         -> d3
+    v58  Binop { op=fdiv, lhs=v51, rhs=v57 }              -> d0
     v59  Call { target_pc=19, args=[v48, v49, v50, v53, v56, v58], fixed_args=3, fp_return=false, fp_arg_mask=0x38 } -> x0
     v60  Extend { value=v59, kind=I32 }                   -> x1
     v61  Extend { value=v15, kind=I32 }                   -> x1
@@ -211,11 +211,11 @@ fn ent_pc=20 n_params=0 variadic=false locals=3
     v120 ImmData(1408)                                    -> x7
     v121 Imm(160)                                         -> x6
     v122 ImmData(123)                                     -> x2
-    v123 Imm(4609434218613702656)                         -> x0
-    v124 Imm(4607182418800017408)                         -> x1
-    v125 Imm(3)                                           -> x1
-    v126 Imm(4613937818241073152)                         -> x1
-    v127 Imm(4599676419421066581)                         -> x1
+    v123 Imm(4609434218613702656)                         -> d0
+    v124 Imm(4607182418800017408)                         -> x0
+    v125 Imm(3)                                           -> x0
+    v126 Imm(4613937818241073152)                         -> x0
+    v127 Imm(4599676419421066581)                         -> d1
     v128 CallExt { binding_idx=9, args=[v120, v121, v122, v123, v123, v127], fp_arg_mask=0x38 } -> x3
     v129 Imm(0)                                           -> x0
     v130 Extend { value=v128, kind=I32 }                  -> x0
@@ -240,11 +240,11 @@ fn ent_pc=20 n_params=0 variadic=false locals=3
     v185 ImmData(1408)                                    -> x7
     v186 Imm(160)                                         -> x6
     v187 ImmData(168)                                     -> x2
-    v188 Imm(4609434218613702656)                         -> x0
-    v189 Imm(4607182418800017408)                         -> x1
-    v190 Imm(3)                                           -> x1
-    v191 Imm(4613937818241073152)                         -> x1
-    v192 Imm(4599676419421066581)                         -> x1
+    v188 Imm(4609434218613702656)                         -> d0
+    v189 Imm(4607182418800017408)                         -> x0
+    v190 Imm(3)                                           -> x0
+    v191 Imm(4613937818241073152)                         -> x0
+    v192 Imm(4599676419421066581)                         -> d1
     v193 Call { target_pc=19, args=[v185, v186, v187, v188, v188, v192], fixed_args=3, fp_return=false, fp_arg_mask=0x38 } -> x0
     v194 Extend { value=v193, kind=I32 }                  -> x1
     v195 Extend { value=v128, kind=I32 }                  -> x1
@@ -269,10 +269,10 @@ fn ent_pc=20 n_params=0 variadic=false locals=3
     v163 ImmData(1408)                                    -> x7
     v164 Imm(160)                                         -> x6
     v165 ImmData(213)                                     -> x2
-    v166 Imm(4602678819172646912)                         -> x0
-    v167 Imm(4609434218613702656)                         -> x1
-    v168 Imm(4612811918334230528)                         -> x8
-    v169 Imm(-4610560118520545280)                        -> x9
+    v166 Imm(4602678819172646912)                         -> d0
+    v167 Imm(4609434218613702656)                         -> d1
+    v168 Imm(4612811918334230528)                         -> d2
+    v169 Imm(-4610560118520545280)                        -> d3
     v170 CallExt { binding_idx=9, args=[v163, v164, v165, v166, v167, v168, v169], fp_arg_mask=0x78 } -> x3
     v171 Imm(0)                                           -> x0
     v172 Extend { value=v170, kind=I32 }                  -> x0
@@ -297,10 +297,10 @@ fn ent_pc=20 n_params=0 variadic=false locals=3
     v227 ImmData(1408)                                    -> x7
     v228 Imm(160)                                         -> x6
     v229 ImmData(242)                                     -> x2
-    v230 Imm(4602678819172646912)                         -> x0
-    v231 Imm(4609434218613702656)                         -> x1
-    v232 Imm(4612811918334230528)                         -> x8
-    v233 Imm(-4610560118520545280)                        -> x9
+    v230 Imm(4602678819172646912)                         -> d0
+    v231 Imm(4609434218613702656)                         -> d1
+    v232 Imm(4612811918334230528)                         -> d2
+    v233 Imm(-4610560118520545280)                        -> d3
     v234 Call { target_pc=19, args=[v227, v228, v229, v230, v231, v232, v233], fixed_args=3, fp_return=false, fp_arg_mask=0x78 } -> x0
     v235 Extend { value=v234, kind=I32 }                  -> x1
     v236 Extend { value=v170, kind=I32 }                  -> x1
@@ -325,7 +325,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=3
     v208 ImmData(1408)                                    -> x7
     v209 Imm(160)                                         -> x6
     v210 ImmData(271)                                     -> x2
-    v211 Imm(4591870180066957722)                         -> x0
+    v211 Imm(4591870180066957722)                         -> d0
     v212 CallExt { binding_idx=9, args=[v208, v209, v210, v211], fp_arg_mask=0x8 } -> x3
     v213 Imm(0)                                           -> x0
     v214 Extend { value=v212, kind=I32 }                  -> x0
@@ -350,7 +350,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=3
     v271 ImmData(1408)                                    -> x7
     v272 Imm(160)                                         -> x6
     v273 ImmData(300)                                     -> x2
-    v274 Imm(4591870180066957722)                         -> x0
+    v274 Imm(4591870180066957722)                         -> d0
     v275 Call { target_pc=19, args=[v271, v272, v273, v274], fixed_args=3, fp_return=false, fp_arg_mask=0x8 } -> x0
     v276 Extend { value=v275, kind=I32 }                  -> x1
     v277 Extend { value=v212, kind=I32 }                  -> x1
@@ -375,10 +375,10 @@ fn ent_pc=20 n_params=0 variadic=false locals=3
     v249 ImmData(1408)                                    -> x7
     v250 Imm(160)                                         -> x6
     v251 ImmData(329)                                     -> x2
-    v252 Imm(4609434218613702656)                         -> x0
-    v253 Imm(118622047889322841)                          -> x1
-    v254 Imm(4532020583610935537)                         -> x8
-    v255 Imm(6103021453049119613)                         -> x9
+    v252 Imm(4609434218613702656)                         -> d0
+    v253 Imm(118622047889322841)                          -> d1
+    v254 Imm(4532020583610935537)                         -> d2
+    v255 Imm(6103021453049119613)                         -> d3
     v256 CallExt { binding_idx=9, args=[v249, v250, v251, v252, v253, v254, v255], fp_arg_mask=0x78 } -> x3
     v257 Imm(0)                                           -> x0
     v258 Extend { value=v256, kind=I32 }                  -> x0
@@ -403,10 +403,10 @@ fn ent_pc=20 n_params=0 variadic=false locals=3
     v313 ImmData(1408)                                    -> x7
     v314 Imm(160)                                         -> x6
     v315 ImmData(381)                                     -> x2
-    v316 Imm(4609434218613702656)                         -> x0
-    v317 Imm(118622047889322841)                          -> x1
-    v318 Imm(4532020583610935537)                         -> x8
-    v319 Imm(6103021453049119613)                         -> x9
+    v316 Imm(4609434218613702656)                         -> d0
+    v317 Imm(118622047889322841)                          -> d1
+    v318 Imm(4532020583610935537)                         -> d2
+    v319 Imm(6103021453049119613)                         -> d3
     v320 Call { target_pc=19, args=[v313, v314, v315, v316, v317, v318, v319], fixed_args=3, fp_return=false, fp_arg_mask=0x78 } -> x0
     v321 Extend { value=v320, kind=I32 }                  -> x1
     v322 Extend { value=v256, kind=I32 }                  -> x1
@@ -489,8 +489,8 @@ fn ent_pc=20 n_params=0 variadic=false locals=3
     v335 ImmData(1408)                                    -> x7
     v336 Imm(160)                                         -> x6
     v337 ImmData(503)                                     -> x2
-    v338 Imm(4614256650576692846)                         -> x0
-    v339 Imm(4612811918334230528)                         -> x9
+    v338 Imm(4614256650576692846)                         -> d0
+    v339 Imm(4612811918334230528)                         -> d1
     v340 Imm(5)                                           -> x1
     v341 Imm(6)                                           -> x8
     v342 CallExt { binding_idx=9, args=[v335, v336, v337, v338, v339, v340, v341], fp_arg_mask=0x18 } -> x3
@@ -517,8 +517,8 @@ fn ent_pc=20 n_params=0 variadic=false locals=3
     v402 ImmData(1408)                                    -> x7
     v403 Imm(160)                                         -> x6
     v404 ImmData(545)                                     -> x2
-    v405 Imm(4614256650576692846)                         -> x0
-    v406 Imm(4612811918334230528)                         -> x9
+    v405 Imm(4614256650576692846)                         -> d0
+    v406 Imm(4612811918334230528)                         -> d1
     v407 Imm(5)                                           -> x1
     v408 Imm(6)                                           -> x8
     v409 Call { target_pc=19, args=[v402, v403, v404, v405, v406, v407, v408], fixed_args=3, fp_return=false, fp_arg_mask=0x18 } -> x0
@@ -547,8 +547,8 @@ fn ent_pc=20 n_params=0 variadic=false locals=3
     v382 ImmData(587)                                     -> x2
     v383 Imm(255)                                         -> x1
     v384 Imm(8)                                           -> x8
-    v385 Imm(4613937818241073152)                         -> x0
-    v386 Imm(4607182418800017408)                         -> x9
+    v385 Imm(4613937818241073152)                         -> d0
+    v386 Imm(4607182418800017408)                         -> d1
     v387 CallExt { binding_idx=9, args=[v380, v381, v382, v383, v384, v385, v386], fp_arg_mask=0x60 } -> x3
     v388 Imm(0)                                           -> x0
     v389 Extend { value=v387, kind=I32 }                  -> x0
@@ -575,8 +575,8 @@ fn ent_pc=20 n_params=0 variadic=false locals=3
     v447 ImmData(625)                                     -> x2
     v448 Imm(255)                                         -> x1
     v449 Imm(8)                                           -> x8
-    v450 Imm(4613937818241073152)                         -> x0
-    v451 Imm(4607182418800017408)                         -> x9
+    v450 Imm(4613937818241073152)                         -> d0
+    v451 Imm(4607182418800017408)                         -> d1
     v452 Call { target_pc=19, args=[v445, v446, v447, v448, v449, v450, v451], fixed_args=3, fp_return=false, fp_arg_mask=0x60 } -> x0
     v453 Extend { value=v452, kind=I32 }                  -> x1
     v454 Extend { value=v387, kind=I32 }                  -> x1
@@ -656,7 +656,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=3
     v468 Imm(160)                                         -> x6
     v469 ImmData(762)                                     -> x2
     v470 Imm(4609434218613702656)                         -> x0
-    v471 Imm(-4613937818241073152)                        -> x0
+    v471 Imm(-4613937818241073152)                        -> d0
     v472 Imm(42)                                          -> x1
     v473 CallExt { binding_idx=9, args=[v467, v468, v469, v471, v472], fp_arg_mask=0x8 } -> x3
     v474 Imm(0)                                           -> x0
@@ -683,7 +683,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=3
     v531 Imm(160)                                         -> x6
     v532 ImmData(795)                                     -> x2
     v533 Imm(4609434218613702656)                         -> x0
-    v534 Imm(-4613937818241073152)                        -> x0
+    v534 Imm(-4613937818241073152)                        -> d0
     v535 Imm(42)                                          -> x1
     v536 Call { target_pc=19, args=[v530, v531, v532, v534, v535], fixed_args=3, fp_return=false, fp_arg_mask=0x8 } -> x0
     v537 Extend { value=v536, kind=I32 }                  -> x1
@@ -709,9 +709,9 @@ fn ent_pc=20 n_params=0 variadic=false locals=3
     v509 ImmData(1408)                                    -> x7
     v510 Imm(160)                                         -> x6
     v511 ImmData(828)                                     -> x2
-    v512 Imm(4950912855330343670)                         -> x0
-    v513 Imm(4696837146684686336)                         -> x1
-    v514 Imm(4591870180066957722)                         -> x8
+    v512 Imm(4950912855330343670)                         -> d0
+    v513 Imm(4696837146684686336)                         -> d1
+    v514 Imm(4591870180066957722)                         -> d2
     v515 CallExt { binding_idx=9, args=[v509, v510, v511, v512, v513, v514], fp_arg_mask=0x38 } -> x3
     v516 Imm(0)                                           -> x0
     v517 Extend { value=v515, kind=I32 }                  -> x0
@@ -736,9 +736,9 @@ fn ent_pc=20 n_params=0 variadic=false locals=3
     v569 ImmData(1408)                                    -> x7
     v570 Imm(160)                                         -> x6
     v571 ImmData(893)                                     -> x2
-    v572 Imm(4950912855330343670)                         -> x0
-    v573 Imm(4696837146684686336)                         -> x1
-    v574 Imm(4591870180066957722)                         -> x8
+    v572 Imm(4950912855330343670)                         -> d0
+    v573 Imm(4696837146684686336)                         -> d1
+    v574 Imm(4591870180066957722)                         -> d2
     v575 Call { target_pc=19, args=[v569, v570, v571, v572, v573, v574], fixed_args=3, fp_return=false, fp_arg_mask=0x38 } -> x0
     v576 Extend { value=v575, kind=I32 }                  -> x1
     v577 Extend { value=v515, kind=I32 }                  -> x1
@@ -860,7 +860,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=3
   block 90  start_pc=0
     v654 Imm(0)                                           -> x0
     v655 ImmData(993)                                     -> x6
-    v656 Imm(4612248968380809216)                         -> x0
+    v656 Imm(4612248968380809216)                         -> d0
     v657 Imm(513)                                         -> x2
     v658 CallExt { binding_idx=7, args=[v649, v655, v656, v657], fp_arg_mask=0x4 } -> x0
     v659 BinopI { op=ne, lhs=v658, rhs_imm=5 }            -> x0
@@ -909,7 +909,7 @@ fn ent_pc=21 n_params=0 variadic=false locals=35
   spill_count=1 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(0)                                           -> x0
+    v1   Imm(0)                                           -> d0
     v2   StoreLocal { off=-1, value=v1, kind=F64, volatile } -> -
     v3   LocalAddr(-33)                                   -> x7
     v4   Imm(64)                                          -> x6
@@ -919,9 +919,9 @@ fn ent_pc=21 n_params=0 variadic=false locals=35
     v8   Imm(99)                                          -> x9
     v9   Imm(119)                                         -> -
     v10  Imm(300)                                         -> -
-    v11  Imm(4607182418800017408)                         -> x0
-    v12  LoadLocal { off=-1, kind=F64, volatile }         -> d0
-    v13  Binop { op=fdiv, lhs=v11, rhs=v12 }              -> d1
+    v11  Imm(4607182418800017408)                         -> d0
+    v12  LoadLocal { off=-1, kind=F64, volatile }         -> d1
+    v13  Binop { op=fdiv, lhs=v11, rhs=v12 }              -> d0
     v14  CallExt { binding_idx=155, args=[v3, v4, v5, v6, v7, v8, v9, v10, v13], fp_arg_mask=0x100 } -> x0
     v15  BinopI { op=ne, lhs=v14, rhs_imm=18 }            -> x0
     v16  Imm(0)                                           -> x1
@@ -1098,8 +1098,8 @@ fn ent_pc=23 n_params=0 variadic=false locals=0
     v61  ImmData(1408)                                    -> x7
     v62  Imm(160)                                         -> x6
     v63  ImmData(1345)                                    -> x2
-    v64  Imm(4609434218613702656)                         -> x0
-    v65  Imm(4598175219545276416)                         -> x1
+    v64  Imm(4609434218613702656)                         -> d0
+    v65  Imm(4598175219545276416)                         -> d1
     v66  CallExt { binding_idx=9, args=[v61, v62, v63, v64, v65], fp_arg_mask=0x18 } -> x0
     v67  BinopI { op=ne, lhs=v66, rhs_imm=8 }             -> x0
     v68  Imm(1)                                           -> x1

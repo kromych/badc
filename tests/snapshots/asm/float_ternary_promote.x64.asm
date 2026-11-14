@@ -31,9 +31,8 @@ Disassembly of section .text:
                	movl	$0x40500000, %r11d      # imm = 0x40500000
                	movq	%r11, %xmm1
                	addss	%xmm1, %xmm0
-               	movl	$0x40d00000, %eax       # imm = 0x40D00000
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	movss	<rip>, %xmm1
+               	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x3, %eax

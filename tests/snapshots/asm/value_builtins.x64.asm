@@ -49,14 +49,12 @@ Disassembly of section .text:
                	leave
                	retq
                	movsd	<rip>, %xmm0 # <addr>
-               	movabsq	$0x7fe1ccf385ebc8a0, %rax # imm = 0x7FE1CCF385EBC8A0
-               	movq	%rax, %xmm15
-               	comisd	%xmm15, %xmm0
+               	movsd	<rip>, %xmm1
+               	comisd	%xmm1, %xmm0
                	jbe	<addr>
                	movss	<rip>, %xmm0 # <addr>
-               	movl	$0x7f61b1e6, %eax       # imm = 0x7F61B1E6
-               	movq	%rax, %xmm15
-               	comiss	%xmm15, %xmm0
+               	movss	<rip>, %xmm1
+               	comiss	%xmm1, %xmm0
                	jbe	<addr>
                	movq	<rip>, %rax # <addr>
                	cmpq	$0x5, %rax

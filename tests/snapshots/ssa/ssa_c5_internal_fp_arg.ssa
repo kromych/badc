@@ -20,10 +20,10 @@ fn ent_pc=2 n_params=2 variadic=false locals=0
     v14  Imm(0)                                           -> x1
     v15  Imm(0)                                           -> x1
     v16  Imm(0)                                           -> x1
-    v17  Imm(4632304060471443456)                         -> x1
-    v18  Imm(0)                                           -> x2
-    v19  Imm(0)                                           -> x2
-    v20  Imm(0)                                           -> x2
+    v17  Imm(4632304060471443456)                         -> d1
+    v18  Imm(0)                                           -> x1
+    v19  Imm(0)                                           -> x1
+    v20  Imm(0)                                           -> x1
     v21  FpCast { kind=IntToFp, value=v11 }               -> d0
     v22  Binop { op=flt, lhs=v17, rhs=v21 }               -> x0
     v23  Extend { value=v22, kind=I32 }                   -> x1
@@ -34,9 +34,9 @@ fn ent_pc=2 n_params=2 variadic=false locals=0
     v26  Imm(1)                                           -> x0
     terminator Return(v26)   (exit_acc=v26)
   block 2  start_pc=0
-    v27  Imm(4639499264563609600)                         -> x0
-    v28  Imm(0)                                           -> x1
-    v29  FpCast { kind=IntToFp, value=v11 }               -> d1
+    v27  Imm(4639499264563609600)                         -> d1
+    v28  Imm(0)                                           -> x0
+    v29  FpCast { kind=IntToFp, value=v11 }               -> d2
     v30  Binop { op=flt, lhs=v27, rhs=v21 }               -> x0
     v31  Extend { value=v30, kind=I32 }                   -> x1
     v32  Extend { value=v31, kind=I32 }                   -> x1
@@ -60,7 +60,7 @@ fn ent_pc=2 n_params=2 variadic=false locals=0
   block 6  start_pc=0
     v43  Imm(0)                                           -> x0
     v44  FpCast { kind=IntToFp, value=v11 }               -> d1
-    v45  Imm(4602678819172646912)                         -> x0
+    v45  Imm(4602678819172646912)                         -> d1
     v46  Binop { op=fadd, lhs=v21, rhs=v45 }              -> d1
     v47  FpCast { kind=IntToFp, value=v11 }               -> d2
     v48  Binop { op=fle, lhs=v46, rhs=v21 }               -> x0

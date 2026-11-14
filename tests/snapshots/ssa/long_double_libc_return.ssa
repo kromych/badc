@@ -12,7 +12,7 @@ fn ent_pc=25 n_params=0 variadic=false locals=0
     v6   Imm(0)                                           -> x0
     v7   LifetimeEnd(-14)                                 -> -
     v8   Imm(0)                                           -> x0
-    v9   Imm(5039527983027585024)                         -> x0
+    v9   Imm(5039527983027585024)                         -> d1
     v10  Binop { op=fne, lhs=v5, rhs=v9 }                 -> x0
     terminator Bz { cond=v10, target=b2, fall=b1 }   (exit_acc=v10)
   block 1  start_pc=0
@@ -27,7 +27,7 @@ fn ent_pc=25 n_params=0 variadic=false locals=0
     v17  Imm(0)                                           -> x0
     v18  LifetimeEnd(-15)                                 -> -
     v19  Imm(0)                                           -> x0
-    v20  Imm(4895412794951729152)                         -> x0
+    v20  Imm(4895412794951729152)                         -> d1
     v21  Binop { op=fne, lhs=v16, rhs=v20 }               -> x0
     terminator Bz { cond=v21, target=b4, fall=b3 }   (exit_acc=v21)
   block 3  start_pc=0
@@ -44,7 +44,7 @@ fn ent_pc=25 n_params=0 variadic=false locals=0
     v30  Imm(0)                                           -> x0
     v31  LifetimeEnd(-17)                                 -> -
     v32  Imm(0)                                           -> x0
-    v33  Imm(4845873199050653696)                         -> x0
+    v33  Imm(4845873199050653696)                         -> d1
     v34  Binop { op=fne, lhs=v29, rhs=v33 }               -> x0
     terminator Bz { cond=v34, target=b6, fall=b5 }   (exit_acc=v34)
   block 5  start_pc=0

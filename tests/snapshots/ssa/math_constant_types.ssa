@@ -4,14 +4,14 @@ fn ent_pc=19 n_params=0 variadic=false locals=2
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(2143289344)                                  -> x0 [f32]
+    v1   Imm(2143289344)                                  -> d0 [f32]
     v2   StoreLocal { off=-2, value=v1, kind=F32 }        -> -
-    v3   LoadLocal { off=-2, kind=U32 }                   -> x1
-    v4   Imm(0)                                           -> x2
-    v5   Imm(0)                                           -> x2
-    v6   BinopI { op=and, lhs=v3, rhs_imm=4294967295 }    -> x2
-    v7   BinopI { op=and, lhs=v3, rhs_imm=4290772992 }    -> x1
-    v8   BinopI { op=ne, lhs=v7, rhs_imm=2143289344 }     -> x1
+    v3   LoadLocal { off=-2, kind=U32 }                   -> x0
+    v4   Imm(0)                                           -> x1
+    v5   Imm(0)                                           -> x1
+    v6   BinopI { op=and, lhs=v3, rhs_imm=4294967295 }    -> x1
+    v7   BinopI { op=and, lhs=v3, rhs_imm=4290772992 }    -> x0
+    v8   BinopI { op=ne, lhs=v7, rhs_imm=2143289344 }     -> x0
     terminator Bz { cond=v8, target=b2, fall=b1 }   (exit_acc=v8)
   block 1  start_pc=0
     v9   Imm(7)                                           -> x0
@@ -19,33 +19,33 @@ fn ent_pc=19 n_params=0 variadic=false locals=2
     v11  LifetimeEnd(-2)                                  -> -
     terminator Return(v9)   (exit_acc=v9)
   block 2  start_pc=0
-    v12  ImmData(4)                                       -> x1
-    v13  Load { addr=v12, disp=0, kind=F32 pc_rel }       -> d0 [f32]
-    v14  Load { addr=v12, disp=0, kind=F32 pc_rel }       -> d1 [f32]
-    v15  Binop { op=feq, lhs=v13, rhs=v13 }               -> x1
-    v16  Imm(1)                                           -> x2
-    v17  Imm(0)                                           -> x2
+    v12  ImmData(4)                                       -> x0
+    v13  Load { addr=v12, disp=0, kind=F32 pc_rel }       -> d1 [f32]
+    v14  Load { addr=v12, disp=0, kind=F32 pc_rel }       -> d2 [f32]
+    v15  Binop { op=feq, lhs=v13, rhs=v13 }               -> x0
+    v16  Imm(1)                                           -> x1
+    v17  Imm(0)                                           -> x1
     terminator Bnz { cond=v15, target=b8, fall=b3 }   (exit_acc=v15)
   block 3  start_pc=0
-    v18  ImmData(8)                                       -> x1
-    v19  Load { addr=v18, disp=0, kind=F32 pc_rel }       -> d0 [f32]
-    v20  Imm(2137108966)                                  -> x1 [f32]
-    v21  Binop { op=fgt, lhs=v19, rhs=v20 }               -> x1
-    v22  BinopI { op=eq, lhs=v21, rhs_imm=0 }             -> x2
-    v23  BinopI { op=ne, lhs=v22, rhs_imm=0 }             -> x2
-    v24  Imm(0)                                           -> x2
-    v25  Imm(0)                                           -> x2
-    v26  Imm(0)                                           -> x2
-    v27  Imm(0)                                           -> x2
+    v18  ImmData(8)                                       -> x0
+    v19  Load { addr=v18, disp=0, kind=F32 pc_rel }       -> d1 [f32]
+    v20  Imm(2137108966)                                  -> d2 [f32]
+    v21  Binop { op=fgt, lhs=v19, rhs=v20 }               -> x0
+    v22  BinopI { op=eq, lhs=v21, rhs_imm=0 }             -> x1
+    v23  BinopI { op=ne, lhs=v22, rhs_imm=0 }             -> x1
+    v24  Imm(0)                                           -> x1
+    v25  Imm(0)                                           -> x1
+    v26  Imm(0)                                           -> x1
+    v27  Imm(0)                                           -> x1
     terminator Bz { cond=v21, target=b8, fall=b4 }   (exit_acc=v22)
   block 4  start_pc=0
-    v28  Imm(9218868437227405312)                         -> x1
-    v29  Imm(9214871658872686752)                         -> x1
-    v30  Imm(1)                                           -> x1
-    v31  Imm(0)                                           -> x1
-    v32  Imm(0)                                           -> x1
-    v33  Imm(2143289344)                                  -> x1 [f32]
-    v34  Imm(0)                                           -> x1
+    v28  Imm(9218868437227405312)                         -> x0
+    v29  Imm(9214871658872686752)                         -> x0
+    v30  Imm(1)                                           -> x0
+    v31  Imm(0)                                           -> x0
+    v32  Imm(0)                                           -> x0
+    v33  Imm(2143289344)                                  -> x0 [f32]
+    v34  Imm(0)                                           -> x0
     v35  StoreLocal { off=-1, value=v1, kind=F32 }        -> -
     v36  Imm(0)                                           -> x0
     v37  LoadLocal { off=-1, kind=U32 }                   -> x0
@@ -58,8 +58,8 @@ fn ent_pc=19 n_params=0 variadic=false locals=2
     terminator Bnz { cond=v38, target=b6, fall=b5 }   (exit_acc=v38)
   block 5  start_pc=0
     v47  Imm(2143289344)                                  -> x0 [f32]
-    v48  Imm(4290772992)                                  -> x0 [f32]
-    v49  Imm(0)                                           -> x1
+    v48  Imm(4290772992)                                  -> d0 [f32]
+    v49  Imm(0)                                           -> x0
     v50  StoreLocal { off=-1, value=v48, kind=F32 }       -> -
     v51  Imm(0)                                           -> x0
     v52  LoadLocal { off=-1, kind=U32 }                   -> x0

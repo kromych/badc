@@ -39,46 +39,46 @@ Disassembly of section .text:
                	movq	$-0x7fffffff, %r9       # imm = 0x80000001
                	movl	$0x0, -0x288(%rbp)
                	movl	$0x0, -0x280(%rbp)
-               	movabsq	$0x4005bf0a8b145769, %rax # imm = 0x4005BF0A8B145769
-               	movabsq	$0x400a000000000000, %rdx # imm = 0x400A000000000000
-               	movq	%rdx, %xmm14
+               	movsd	<rip>, %xmm0
+               	movabsq	$0x400a000000000000, %rax # imm = 0x400A000000000000
+               	movq	%rax, %xmm14
                	movsd	%xmm14, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	-0x330(%rbp)
-               	movabsq	$-0x7e5a91e03d070ca7, %rdx # imm = 0x81A56E1FC2F8F359
-               	movq	%rdx, %xmm14
+               	movabsq	$-0x7e5a91e03d070ca7, %rax # imm = 0x81A56E1FC2F8F359
+               	movq	%rax, %xmm14
                	movsd	%xmm14, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	-0x320(%rbp)
-               	movabsq	$0x3ff8000000000000, %rdx # imm = 0x3FF8000000000000
-               	movq	%rdx, %xmm14
+               	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000
+               	movq	%rax, %xmm14
                	movsd	%xmm14, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	-0x310(%rbp)
                	leaq	-0x200(%rbp), %rdi
                	movl	$0x100, %esi            # imm = 0x100
                	leaq	<rip>, %rdx
-               	movabsq	$0x3fb99999a0000000, %rbx # imm = 0x3FB99999A0000000
+               	movsd	<rip>, %xmm1
                	fldt	-0x330(%rbp)
                	fstpl	-0x8(%rsp)
-               	movsd	-0x8(%rsp), %xmm0
+               	movsd	-0x8(%rsp), %xmm2
                	fldt	-0x320(%rbp)
                	fstpl	-0x8(%rsp)
-               	movsd	-0x8(%rsp), %xmm1
+               	movsd	-0x8(%rsp), %xmm3
                	fldt	-0x310(%rbp)
                	fstpl	-0x8(%rsp)
-               	movsd	-0x8(%rsp), %xmm2
-               	leaq	<rip>, %r12
-               	leaq	-0x330(%rbp), %r13
-               	movsd	%xmm0, -0x8(%rsp)
+               	movsd	-0x8(%rsp), %xmm4
+               	leaq	<rip>, %rax
+               	leaq	-0x330(%rbp), %rbx
+               	movsd	%xmm2, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	-0x330(%rbp)
-               	leaq	-0x320(%rbp), %r14
-               	movsd	%xmm1, -0x8(%rsp)
+               	leaq	-0x320(%rbp), %r12
+               	movsd	%xmm3, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	-0x320(%rbp)
-               	leaq	-0x310(%rbp), %r15
-               	movsd	%xmm2, -0x8(%rsp)
+               	leaq	-0x310(%rbp), %r13
+               	movsd	%xmm4, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	-0x310(%rbp)
                	subq	$0x80, %rsp
@@ -90,26 +90,27 @@ Disassembly of section .text:
                	movl	$0xdeadbeef, %r10d      # imm = 0xDEADBEEF
                	movq	%r10, 0x18(%rsp)
                	movq	$0x1ed, 0x20(%rsp)      # imm = 0x1ED
-               	movq	%r12, 0x60(%rsp)
+               	movq	%rax, 0x60(%rsp)
                	movq	$0x71, 0x68(%rsp)
                	movq	$0x1234, 0x70(%rsp)     # imm = 0x1234
-               	movq	%r13, %r10
+               	movq	%rbx, %r10
                	movq	(%r10), %r11
                	movq	%r11, 0x30(%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x38(%rsp)
-               	movq	%r14, %r10
+               	movq	%r12, %r10
                	movq	(%r10), %r11
                	movq	%r11, 0x40(%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x48(%rsp)
-               	movq	%r15, %r10
+               	movq	%r13, %r10
                	movq	(%r10), %r11
                	movq	%r11, 0x50(%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x58(%rsp)
-               	movq	%rbx, %xmm0
-               	movq	%rax, %xmm1
+               	movapd	%xmm1, %xmm15
+               	movapd	%xmm0, %xmm1
+               	movapd	%xmm15, %xmm0
                	movb	$0x2, %al
                	callq	<addr>
                	addq	$0x80, %rsp

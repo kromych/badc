@@ -72,7 +72,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
   block 7  start_pc=0
     v53  ImmData(8)                                       -> x0
     v54  Load { addr=v53, disp=0, kind=F64 pc_rel }       -> d0
-    v55  Imm(4609434218613702656)                         -> x0
+    v55  Imm(4609434218613702656)                         -> d1
     v56  Binop { op=fne, lhs=v54, rhs=v55 }               -> x0
     v57  Imm(0)                                           -> x1
     v58  Imm(0)                                           -> x1
@@ -232,7 +232,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
   block 24  start_pc=0
     v90  ImmData(24)                                      -> x0
     v91  Load { addr=v90, disp=0, kind=F64 pc_rel }       -> d0
-    v92  Imm(4612811918334230528)                         -> x0
+    v92  Imm(4612811918334230528)                         -> d1
     v93  Binop { op=fne, lhs=v91, rhs=v92 }               -> x0
     v94  Imm(0)                                           -> x1
     terminator Bz { cond=v93, target=b26, fall=b25 }   (exit_acc=v93)

@@ -455,9 +455,8 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	movsd	-0x108(%rbp), %xmm0
-               	movabsq	$0x400c000000000000, %rax # imm = 0x400C000000000000
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	movsd	<rip>, %xmm1
+               	ucomisd	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x68, %eax

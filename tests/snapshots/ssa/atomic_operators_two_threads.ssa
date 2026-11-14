@@ -73,7 +73,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=8
     terminator Bz { cond=v54, target=b4, fall=b6 }   (exit_acc=v54)
   block 6  start_pc=0
     v55  ImmData(320088)                                  -> x2
-    v56  Imm(4602678819172646912)                         -> x6
+    v56  Imm(4602678819172646912)                         -> d1
     v57  AtomicLoad { addr=v55, width=8, order=SeqCst }   -> x1
     v58  Imm(0)                                           -> x0
     terminator Jmp(b8)   (exit_acc=v57)
@@ -88,17 +88,17 @@ fn ent_pc=0 n_params=1 variadic=false locals=8
     v64  Binop { op=fadd, lhs=v63, rhs=v56 }              -> d0
     v65  LocalAddr(-6)                                    -> x0
     v66  StoreLocal { off=-6, value=v64, kind=F64 }       -> -
-    v67  FpCast { kind=FpBits, value=v64 }                -> x7
+    v67  FpCast { kind=FpBits, value=v64 }                -> x6
     v68  AtomicCas { addr=v55, expected=v59, desired=v67, width=8, order=SeqCst } -> x0
-    v69  Imm(0)                                           -> x7
+    v69  Imm(0)                                           -> x6
     v70  Binop { op=eq, lhs=v68, rhs=v59 }                -> x1
     terminator Bz { cond=v70, target=b7, fall=b9 }   (exit_acc=v70)
   block 9  start_pc=0
     v71  ImmData(320096)                                  -> x2
-    v72  Imm(4598175219545276416)                         -> x6
+    v72  Imm(4598175219545276416)                         -> d0
     v73  Load { addr=v71, disp=0, kind=I64 pc_rel }       -> x1
     v74  BinopI { op=add, lhs=v71, rhs_imm=8 }            -> x0
-    v75  Load { addr=v71, disp=8, kind=I64 pc_rel }       -> x7
+    v75  Load { addr=v71, disp=8, kind=I64 pc_rel }       -> x6
     v76  LocalAddr(-5)                                    -> x0
     v77  StoreLocal { off=-5, value=v73, kind=I64 }       -> -
     v78  BinopI { op=add, lhs=v76, rhs_imm=8 }            -> x1
@@ -106,11 +106,11 @@ fn ent_pc=0 n_params=1 variadic=false locals=8
     v80  LocalAddr(-31)                                   -> x1
     terminator Jmp(b10)   (exit_acc=v80)
   block 10  start_pc=0
-    v81  LoadLocal { off=-5, kind=F80 }                   -> d0
-    v82  Binop { op=fadd, lhs=v81, rhs=v72 }              -> d0
+    v81  LoadLocal { off=-5, kind=F80 }                   -> d1
+    v82  Binop { op=fadd, lhs=v81, rhs=v72 }              -> d1
     v83  Mcpy { dst=v80, src=v76, size=16, align=16 }     -> -
     v84  StoreLocal { off=-31, value=v82, kind=F80 }      -> -
-    v85  AtomicCas16 { addr=v71, expected=v76, desired=v80, order=SeqCst } -> x7
+    v85  AtomicCas16 { addr=v71, expected=v76, desired=v80, order=SeqCst } -> x6
     terminator Bz { cond=v85, target=b10, fall=b11 }   (exit_acc=v85)
   block 11  start_pc=0
     v86  ImmData(320112)                                  -> x7
@@ -394,7 +394,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=10
     v67  StoreLocal { off=-9, value=v65, kind=I64 }       -> -
     v68  FpCast { kind=BitsFp, value=v65 }                -> d0
     v69  Imm(20000)                                       -> x0
-    v70  Imm(4671226772094713856)                         -> x0
+    v70  Imm(4671226772094713856)                         -> d1
     v71  Binop { op=feq, lhs=v68, rhs=v70 }               -> x0
     v72  BinopI { op=eq, lhs=v71, rhs_imm=0 }             -> x1
     terminator Bnz { cond=v71, target=b22, fall=b21 }   (exit_acc=v72)
@@ -418,7 +418,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=10
     v87  Imm(20000)                                       -> x1
     v88  Imm(2)                                           -> x1
     v89  Imm(10000)                                       -> x1
-    v90  Imm(4666723172467343360)                         -> x1
+    v90  Imm(4666723172467343360)                         -> d1
     v91  Binop { op=feq, lhs=v86, rhs=v90 }               -> x1
     v92  BinopI { op=eq, lhs=v91, rhs_imm=0 }             -> x2
     terminator Bnz { cond=v91, target=b24, fall=b23 }   (exit_acc=v92)

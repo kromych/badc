@@ -278,9 +278,8 @@ Disassembly of section .text:
                	movss	(%rcx), %xmm0
                	movss	0x8(%rcx), %xmm1
                	addss	%xmm1, %xmm0
-               	movl	$0x40a00000, %ecx       # imm = 0x40A00000
-               	movq	%rcx, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	movss	<rip>, %xmm1
+               	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x9, %eax
@@ -288,9 +287,8 @@ Disassembly of section .text:
                	retq
                	movl	$0x40600000, -0x18(%rbp) # imm = 0x40600000
                	movss	-0x18(%rbp), %xmm0
-               	movl	$0x40600000, %eax       # imm = 0x40600000
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	movss	<rip>, %xmm1
+               	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0xa, %eax

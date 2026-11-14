@@ -163,12 +163,11 @@ Disassembly of section .text:
                	movb	%r11b, 0x13(%rsp)
                	callq	<addr>
                	addq	$0x20, %rsp
-               	movl	$0x41700000, %eax       # imm = 0x41700000
+               	movss	<rip>, %xmm1
                	movl	$0x1, %ebx
-               	xorl	%ecx, %ecx
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
-               	movq	%rcx, %r10
+               	xorl	%eax, %eax
+               	ucomiss	%xmm1, %xmm0
+               	movq	%rax, %r10
                	cmovpq	%rbx, %r10
                	cmoveq	%r10, %rbx
                	leaq	-0x48(%rbp), %r9

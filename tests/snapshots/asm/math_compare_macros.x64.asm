@@ -30,38 +30,31 @@ Disassembly of section .text:
                	movq	%rax, %xmm14
                	movq	%rax, %xmm15
                	vdivsd	%xmm15, %xmm14, %xmm0
-               	movabsq	$0x3ff0000000000000, %rdx # imm = 0x3FF0000000000000
-               	movq	%rdx, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	movsd	<rip>, %xmm2
+               	ucomisd	%xmm2, %xmm0
                	jbe	<addr>
                	movl	$0x1, %eax
                	retq
-               	movabsq	$0x4000000000000000, %rcx # imm = 0x4000000000000000
-               	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	movsd	<rip>, %xmm1
+               	ucomisd	%xmm1, %xmm0
                	jb	<addr>
                	movl	$0x2, %eax
                	retq
-               	movq	%rcx, %xmm15
-               	ucomisd	%xmm0, %xmm15
+               	ucomisd	%xmm0, %xmm1
                	jbe	<addr>
                	movl	$0x3, %eax
                	retq
-               	movq	%rcx, %xmm15
-               	ucomisd	%xmm0, %xmm15
+               	ucomisd	%xmm0, %xmm1
                	jb	<addr>
                	movl	$0x4, %eax
                	retq
-               	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	ucomisd	%xmm1, %xmm0
                	je	<addr>
                	movl	$0x5, %eax
                	retq
-               	movq	%rdx, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	ucomisd	%xmm2, %xmm0
                	jnp	<addr>
-               	movq	%rdx, %xmm14
-               	ucomisd	%xmm0, %xmm14
+               	ucomisd	%xmm0, %xmm2
                	jnp	<addr>
                	retq
                	movl	$0x6, %eax

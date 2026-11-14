@@ -10,7 +10,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v4   FpCast { kind=F32ToF64, value=v3 }               -> d0
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
-    v7   Imm(4615063718147915776)                         -> x0
+    v7   Imm(4615063718147915776)                         -> d1
     v8   Binop { op=fne, lhs=v4, rhs=v7 }                 -> x0
     terminator Bz { cond=v8, target=b2, fall=b1 }   (exit_acc=v8)
   block 1  start_pc=0
@@ -31,7 +31,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v17  Imm(0)                                           -> x6
     v18  CallExt { binding_idx=15, args=[v16, v17], fp_arg_mask=0x0, fp_return=true } -> d0 [f32]
     v19  Imm(4598175219545276416)                         -> x0
-    v20  Imm(-4625196817309499392)                        -> x0
+    v20  Imm(-4625196817309499392)                        -> d1
     v21  FpCast { kind=F32ToF64, value=v18 }              -> d0
     v22  Binop { op=fne, lhs=v21, rhs=v20 }               -> x0
     terminator Bz { cond=v22, target=b6, fall=b5 }   (exit_acc=v22)

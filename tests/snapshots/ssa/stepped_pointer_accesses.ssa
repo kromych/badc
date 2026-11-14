@@ -778,9 +778,9 @@ fn ent_pc=20 n_params=0 variadic=false locals=42
     v47  BinopI { op=shl, lhs=v3, rhs_imm=3 }             -> x6
     v48  Binop { op=add, lhs=v45, rhs=v47 }               -> x2
     v49  FpCast { kind=IntToFp, value=v3 }                -> d0
-    v50  Imm(4598175219545276416)                         -> x6
-    v51  Binop { op=fmul.c, lhs=v49, rhs=v50 }            -> d1
-    v52  Imm(4613937818241073152)                         -> x7
+    v50  Imm(4598175219545276416)                         -> d1
+    v51  Binop { op=fmul.c, lhs=v49, rhs=v50 }            -> d2
+    v52  Imm(4613937818241073152)                         -> d2
     v53  Fma { a=v49, b=v50, c=v52, neg_product=false, neg_addend=true } -> d1
     v54  Store { addr=v48, disp=0, value=v53, kind=F64 }  -> -
     v55  ImmData(1520)                                    -> x2
@@ -788,9 +788,9 @@ fn ent_pc=20 n_params=0 variadic=false locals=42
     v57  BinopI { op=shl, lhs=v3, rhs_imm=2 }             -> x0
     v58  Binop { op=add, lhs=v55, rhs=v57 }               -> x0
     v59  FpCast { kind=IntToFp, value=v3 }                -> d1
-    v60  Imm(4609434218613702656)                         -> x2
-    v61  Binop { op=fmul.c, lhs=v49, rhs=v60 }            -> d1
-    v62  Imm(4626322717216342016)                         -> x6
+    v60  Imm(4609434218613702656)                         -> d1
+    v61  Binop { op=fmul.c, lhs=v49, rhs=v60 }            -> d2
+    v62  Imm(4626322717216342016)                         -> d2
     v63  Fma { a=v49, b=v60, c=v62, neg_product=false, neg_addend=true } -> d0
     v64  FpCast { kind=F64ToF32, value=v63 }              -> d0 [f32]
     v65  Store { addr=v58, disp=0, value=v64, kind=F32 }  -> -

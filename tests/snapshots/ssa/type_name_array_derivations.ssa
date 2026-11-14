@@ -8,7 +8,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
     v4   Imm(2)                                           -> x0
-    v5   Imm(4611686018427387904)                         -> x0
+    v5   Imm(4611686018427387904)                         -> d1
     v6   Binop { op=fdiv, lhs=v1, rhs=v5 }                -> d0
     terminator Return(v6)   (exit_acc=v6)
 ; --- SSA dump (ok=true) ent_pc=1 ---
@@ -21,7 +21,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
     v4   Imm(2)                                           -> x0
-    v5   Imm(4611686018427387904)                         -> x0
+    v5   Imm(4611686018427387904)                         -> d1
     v6   Binop { op=fmul, lhs=v1, rhs=v5 }                -> d0
     terminator Return(v6)   (exit_acc=v6)
 ; --- SSA dump (ok=true) ent_pc=2 ---
@@ -56,9 +56,9 @@ fn ent_pc=3 n_params=0 variadic=false locals=6
     v16  BinopI { op=add, lhs=v12, rhs_imm=8 }            -> x0
     v17  Load { addr=v16, disp=0, kind=I64 }              -> x0
     v18  Imm(3)                                           -> x0
-    v19  Imm(4613937818241073152)                         -> x0
+    v19  Imm(4613937818241073152)                         -> d0
     v20  Call { target_pc=1, args=[v19], fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0
-    v21  Imm(4618441417868443648)                         -> x0
+    v21  Imm(4618441417868443648)                         -> d1
     v22  Binop { op=fne, lhs=v20, rhs=v21 }               -> x0
     v23  Imm(0)                                           -> x1
     terminator Bnz { cond=v22, target=b2, fall=b1 }   (exit_acc=v22)
@@ -68,9 +68,9 @@ fn ent_pc=3 n_params=0 variadic=false locals=6
     v26  BinopI { op=add, lhs=v12, rhs_imm=16 }           -> x0
     v27  Load { addr=v26, disp=0, kind=I64 }              -> x0
     v28  Imm(3)                                           -> x0
-    v29  Imm(4613937818241073152)                         -> x0
+    v29  Imm(4613937818241073152)                         -> d0
     v30  Call { target_pc=0, args=[v29], fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0
-    v31  Imm(4609434218613702656)                         -> x0
+    v31  Imm(4609434218613702656)                         -> d1
     v32  Binop { op=fne, lhs=v30, rhs=v31 }               -> x0
     v33  Imm(0)                                           -> x1
     v34  Imm(0)                                           -> x1
@@ -110,9 +110,9 @@ fn ent_pc=3 n_params=0 variadic=false locals=6
     v64  BinopI { op=add, lhs=v60, rhs_imm=32 }           -> x0
     v65  Load { addr=v64, disp=0, kind=I64 }              -> x0
     v66  Imm(4)                                           -> x0
-    v67  Imm(4616189618054758400)                         -> x0
+    v67  Imm(4616189618054758400)                         -> d0
     v68  Call { target_pc=1, args=[v67], fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0
-    v69  Imm(4620693217682128896)                         -> x0
+    v69  Imm(4620693217682128896)                         -> d1
     v70  Binop { op=fne, lhs=v68, rhs=v69 }               -> x0
     terminator Bz { cond=v70, target=b5, fall=b4 }   (exit_acc=v70)
   block 4  start_pc=0
@@ -134,9 +134,9 @@ fn ent_pc=3 n_params=0 variadic=false locals=6
     v84  Load { addr=v83, disp=0, kind=I64 }              -> x0
     v85  Call { target_pc=2, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
     v86  Imm(5)                                           -> x1
-    v87  Imm(4617315517961601024)                         -> x1
+    v87  Imm(4617315517961601024)                         -> d0
     v88  CallIndirect { target=v85, args=[v87], callee_variadic=false, fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0
-    v89  Imm(4621819117588971520)                         -> x0
+    v89  Imm(4621819117588971520)                         -> d1
     v90  Binop { op=fne, lhs=v88, rhs=v89 }               -> x0
     terminator Bz { cond=v90, target=b7, fall=b6 }   (exit_acc=v90)
   block 6  start_pc=0
@@ -163,9 +163,9 @@ fn ent_pc=3 n_params=0 variadic=false locals=6
     v109 Imm(0)                                           -> x0
     v110 Imm(0)                                           -> x0
     v111 Imm(7)                                           -> x0
-    v112 Imm(4619567317775286272)                         -> x0
+    v112 Imm(4619567317775286272)                         -> d0
     v113 Call { target_pc=1, args=[v112], fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0
-    v114 Imm(4624070917402656768)                         -> x0
+    v114 Imm(4624070917402656768)                         -> d1
     v115 Binop { op=fne, lhs=v113, rhs=v114 }             -> x0
     terminator Bz { cond=v115, target=b9, fall=b8 }   (exit_acc=v115)
   block 8  start_pc=0
@@ -180,9 +180,9 @@ fn ent_pc=3 n_params=0 variadic=false locals=6
     v122 Imm(0)                                           -> x0
     v123 Imm(0)                                           -> x0
     v124 Imm(7)                                           -> x0
-    v125 Imm(4619567317775286272)                         -> x0
+    v125 Imm(4619567317775286272)                         -> d0
     v126 Call { target_pc=0, args=[v125], fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0
-    v127 Imm(4615063718147915776)                         -> x0
+    v127 Imm(4615063718147915776)                         -> d1
     v128 Binop { op=fne, lhs=v126, rhs=v127 }             -> x0
     terminator Bz { cond=v128, target=b11, fall=b10 }   (exit_acc=v128)
   block 10  start_pc=0
@@ -256,9 +256,9 @@ fn ent_pc=3 n_params=0 variadic=false locals=6
     v182 BinopI { op=add, lhs=v180, rhs_imm=8 }           -> x0
     v183 Load { addr=v182, disp=0, kind=I64 }             -> x0
     v184 Imm(2)                                           -> x0
-    v185 Imm(4611686018427387904)                         -> x0
+    v185 Imm(4611686018427387904)                         -> d0
     v186 Call { target_pc=1, args=[v185], fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0
-    v187 Imm(4616189618054758400)                         -> x0
+    v187 Imm(4616189618054758400)                         -> d1
     v188 Binop { op=fne, lhs=v186, rhs=v187 }             -> x0
     terminator Bz { cond=v188, target=b19, fall=b18 }   (exit_acc=v188)
   block 18  start_pc=0

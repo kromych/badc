@@ -2476,33 +2476,33 @@ fn ent_pc=505 n_params=0 variadic=false locals=80
     v2235 Imm(0)                                           -> x0
     v2236 Imm(0)                                           -> x0
     v2237 Imm(0)                                           -> x0
-    v2238 VecExtract { vec=v2219, off=0, kind=F32, bytes=16 } -> d1 [f32]
-    v2239 Imm(1082130432)                                  -> x0 [f32]
-    v2240 Binop { op=fne, lhs=v2238, rhs=v2239 }           -> x1
-    v2241 Imm(1)                                           -> x2
-    v2242 Imm(0)                                           -> x2
+    v2238 VecExtract { vec=v2219, off=0, kind=F32, bytes=16 } -> d2 [f32]
+    v2239 Imm(1082130432)                                  -> d1 [f32]
+    v2240 Binop { op=fne, lhs=v2238, rhs=v2239 }           -> x0
+    v2241 Imm(1)                                           -> x1
+    v2242 Imm(0)                                           -> x1
     terminator Bnz { cond=v2240, target=b49, fall=b47 }   (exit_acc=v2240)
   block 47  start_pc=0
-    v2243 Imm(0)                                           -> x1
-    v2244 Imm(4)                                           -> x1
-    v2245 Imm(4)                                           -> x1
-    v2246 Imm(0)                                           -> x1
-    v2247 VecExtract { vec=v2219, off=4, kind=F32, bytes=16 } -> d1 [f32]
-    v2248 Imm(1073741824)                                  -> x1 [f32]
-    v2249 Binop { op=fne, lhs=v2247, rhs=v2248 }           -> x1
-    v2250 BinopI { op=ne, lhs=v2249, rhs_imm=0 }           -> x2
-    v2251 Imm(0)                                           -> x2
-    v2252 Imm(0)                                           -> x2
-    v2253 Imm(0)                                           -> x2
-    v2254 Imm(0)                                           -> x2
+    v2243 Imm(0)                                           -> x0
+    v2244 Imm(4)                                           -> x0
+    v2245 Imm(4)                                           -> x0
+    v2246 Imm(0)                                           -> x0
+    v2247 VecExtract { vec=v2219, off=4, kind=F32, bytes=16 } -> d2 [f32]
+    v2248 Imm(1073741824)                                  -> d3 [f32]
+    v2249 Binop { op=fne, lhs=v2247, rhs=v2248 }           -> x0
+    v2250 BinopI { op=ne, lhs=v2249, rhs_imm=0 }           -> x1
+    v2251 Imm(0)                                           -> x1
+    v2252 Imm(0)                                           -> x1
+    v2253 Imm(0)                                           -> x1
+    v2254 Imm(0)                                           -> x1
     terminator Bnz { cond=v2249, target=b49, fall=b48 }   (exit_acc=v2249)
   block 48  start_pc=0
-    v2255 Imm(0)                                           -> x1
-    v2256 Imm(12)                                          -> x1
-    v2257 Imm(12)                                          -> x1
-    v2258 Imm(0)                                           -> x1
+    v2255 Imm(0)                                           -> x0
+    v2256 Imm(12)                                          -> x0
+    v2257 Imm(12)                                          -> x0
+    v2258 Imm(0)                                           -> x0
     v2259 VecExtract { vec=v2219, off=12, kind=F32, bytes=16 } -> d0 [f32]
-    v2260 Imm(1082130432)                                  -> x1 [f32]
+    v2260 Imm(1082130432)                                  -> x0 [f32]
     v2261 Binop { op=fne, lhs=v2259, rhs=v2239 }           -> x0
     v2262 Imm(0)                                           -> x1
     v2263 Imm(0)                                           -> x1

@@ -135,7 +135,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v65  Imm(1069547520)                                  -> x0 [f32]
     v66  Imm(1075838976)                                  -> x0 [f32]
     v67  Imm(3223322624)                                  -> x0 [f32]
-    v68  Imm(3212836864)                                  -> x0 [f32]
+    v68  Imm(3212836864)                                  -> d1 [f32]
     v69  Binop { op=fne, lhs=v64, rhs=v68 }               -> x0
     terminator Bz { cond=v69, target=b8, fall=b7 }   (exit_acc=v69)
   block 7  start_pc=0
@@ -159,7 +159,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v75  Imm(1088946176)                                  -> x0 [f32]
     v76  Imm(3236429824)                                  -> x0 [f32]
     v77  Imm(1040187392)                                  -> x0 [f32]
-    v78  Imm(3236167680)                                  -> x0 [f32]
+    v78  Imm(3236167680)                                  -> d1 [f32]
     v79  Binop { op=fne, lhs=v74, rhs=v78 }               -> x0
     terminator Bz { cond=v79, target=b12, fall=b11 }   (exit_acc=v79)
   block 11  start_pc=0
@@ -181,7 +181,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v85  Binop { op=fadd, lhs=v81, rhs=v84 }              -> d0 [f32]
     v86  Imm(1077936128)                                  -> x0 [f32]
     v87  Imm(1082130432)                                  -> x0 [f32]
-    v88  Imm(1088421888)                                  -> x0 [f32]
+    v88  Imm(1088421888)                                  -> d1 [f32]
     v89  Binop { op=fne, lhs=v85, rhs=v88 }               -> x0
     terminator Bz { cond=v89, target=b16, fall=b15 }   (exit_acc=v89)
   block 15  start_pc=0

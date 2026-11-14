@@ -94,18 +94,15 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x10, %eax
                	retq
-               	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
-               	movq	%rax, %xmm15
-               	comisd	%xmm1, %xmm15
+               	movsd	<rip>, %xmm0
+               	comisd	%xmm1, %xmm0
                	jbe	<addr>
-               	movq	%rax, %xmm15
-               	comisd	%xmm15, %xmm1
+               	comisd	%xmm0, %xmm1
                	jbe	<addr>
                	movl	$0x12, %eax
                	retq
-               	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm1
+               	movsd	<rip>, %xmm0
+               	ucomisd	%xmm0, %xmm1
                	jp	<addr>
                	jne	<addr>
                	comiss	%xmm2, %xmm3
@@ -132,9 +129,8 @@ Disassembly of section .text:
                	ucomiss	%xmm2, %xmm2
                	jp	<addr>
                	je	<addr>
-               	movl	$0x40000000, %eax       # imm = 0x40000000
-               	movq	%rax, %xmm15
-               	comiss	%xmm3, %xmm15
+               	movss	<rip>, %xmm0
+               	comiss	%xmm3, %xmm0
                	jbe	<addr>
                	xorl	%eax, %eax
                	retq

@@ -3269,14 +3269,17 @@ pub(crate) enum AbsAddrTarget {
 
 /// Address-materialization site in `Build::text` reaching a byte of
 /// `RodataBuild::bytes`: `lea reg, [rip+disp32]` on x86_64 (disp32 at
-/// `code_offset + 3`), `adrp + add` on aarch64. Same patch shape as
+/// `code_offset + 3`) or any rip-relative operand's displacement
+/// ([`AddrPart::Disp32`]), `adrp + add` on aarch64. Same patch shape as
 /// [`DataFixup`], resolved against the read-only blob's base instead.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct RodataAddrFixup {
-    /// Byte offset within `Build::text` of the instruction (pair).
+    /// Byte offset within `Build::text` of the instruction (pair), or of
+    /// the displacement for `Disp32`.
     pub code_offset: usize,
     /// Offset into `RodataBuild::bytes`.
     pub rodata_offset: u64,
+    pub part: AddrPart,
 }
 
 /// 4-byte slot inside `RodataBuild::bytes` holding a text-relative
@@ -3349,8 +3352,8 @@ pub(crate) struct RodataBuild {
 pub(crate) struct LiteralPool {
     slots: alloc::collections::BTreeMap<(u64, u8), u64>,
     runs: [Vec<u8>; 2],
-    /// `(code_offset, width, offset in run)` per load.
-    loads: Vec<(usize, u8, u64)>,
+    /// `(code_offset, width, offset in run, part)` per load.
+    loads: Vec<(usize, u8, u64, AddrPart)>,
     /// `(offset, len)` of each run in `RodataBuild::bytes` once placed.
     pub spans: [(u64, u64); 2],
 }
@@ -3362,13 +3365,23 @@ impl LiteralPool {
 
     /// The `adrp` + `ldr` pair at `code_offset` loads `width` bytes of `bits`.
     pub(crate) fn load(&mut self, code_offset: usize, bits: u64, width: u8) {
+        self.load_part(code_offset, bits, width, AddrPart::Whole);
+    }
+
+    /// The rip-relative operand whose displacement is at `field` reads
+    /// `width` bytes of `bits`.
+    pub(crate) fn load_disp32(&mut self, field: usize, bits: u64, width: u8) {
+        self.load_part(field, bits, width, AddrPart::Disp32);
+    }
+
+    fn load_part(&mut self, code_offset: usize, bits: u64, width: u8, part: AddrPart) {
         let run = &mut self.runs[Self::run(width)];
         let at = *self.slots.entry((bits, width)).or_insert_with(|| {
             let at = run.len() as u64;
             run.extend_from_slice(&bits.to_le_bytes()[..width.into()]);
             at
         });
-        self.loads.push((code_offset, width, at));
+        self.loads.push((code_offset, width, at, part));
     }
 }
 
@@ -3386,10 +3399,11 @@ impl RodataBuild {
             self.bytes.append(&mut pool.runs[k]);
             pool.spans[k] = (at as u64, (self.bytes.len() - at) as u64);
         }
-        for (code_offset, width, at) in pool.loads.drain(..) {
+        for (code_offset, width, at, part) in pool.loads.drain(..) {
             self.addr_fixups.push(RodataAddrFixup {
                 code_offset,
                 rodata_offset: pool.spans[LiteralPool::run(width)].0 + at,
+                part,
             });
         }
     }

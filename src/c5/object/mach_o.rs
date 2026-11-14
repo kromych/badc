@@ -2780,7 +2780,7 @@ impl<'a> MachOWriter<'a> {
                 code_vmaddr_base,
                 fx.code_offset,
                 const_vmaddr + l.jt_off + fx.rodata_offset,
-                AddrPart::Whole,
+                fx.part,
                 "table fixup",
             )?;
         }

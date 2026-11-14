@@ -1167,7 +1167,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v590 Imm(0)                                           -> x0
     v591 Imm(0)                                           -> x0
     v592 VecExtract { vec=v581, off=0, kind=F32, bytes=16 } -> d1 [f32]
-    v593 Imm(1093664768)                                  -> x0 [f32]
+    v593 Imm(1093664768)                                  -> d2 [f32]
     v594 Binop { op=fne, lhs=v592, rhs=v593 }             -> x0
     v595 Imm(1)                                           -> x1
     v596 Imm(0)                                           -> x1
@@ -1178,7 +1178,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v616 Imm(4)                                           -> x0
     v617 Imm(0)                                           -> x0
     v618 VecExtract { vec=v581, off=4, kind=F32, bytes=16 } -> d1 [f32]
-    v619 Imm(1102053376)                                  -> x0 [f32]
+    v619 Imm(1102053376)                                  -> d2 [f32]
     v620 Binop { op=fne, lhs=v618, rhs=v619 }             -> x0
     v621 BinopI { op=ne, lhs=v620, rhs_imm=0 }            -> x1
     v622 Imm(0)                                           -> x1
@@ -1193,7 +1193,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v629 Imm(8)                                           -> x0
     v630 Imm(0)                                           -> x0
     v631 VecExtract { vec=v581, off=8, kind=F32, bytes=16 } -> d1 [f32]
-    v632 Imm(1107558400)                                  -> x0 [f32]
+    v632 Imm(1107558400)                                  -> d2 [f32]
     v633 Binop { op=fne, lhs=v631, rhs=v632 }             -> x0
     v634 BinopI { op=ne, lhs=v633, rhs_imm=0 }            -> x1
     v635 Imm(0)                                           -> x1
@@ -1207,7 +1207,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v641 Imm(12)                                          -> x0
     v642 Imm(0)                                           -> x0
     v643 VecExtract { vec=v581, off=12, kind=F32, bytes=16 } -> d0 [f32]
-    v644 Imm(1110441984)                                  -> x0 [f32]
+    v644 Imm(1110441984)                                  -> d1 [f32]
     v645 Binop { op=fne, lhs=v643, rhs=v644 }             -> x0
     v646 Imm(0)                                           -> x1
     v647 Imm(0)                                           -> x1
@@ -1674,9 +1674,9 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v1062 Binop { op=sub, lhs=v1059, rhs=v1061 }           -> x0
     v1063 Extend { value=v1062, kind=I32, nsw }            -> x0
     v1064 FpCast { kind=IntToFp, value=v1063 }             -> d0
-    v1065 Imm(4622945017495814144)                         -> x0
+    v1065 Imm(4622945017495814144)                         -> d1
     v1066 Binop { op=fadd, lhs=v1064, rhs=v1065 }          -> d0
-    v1067 Imm(4632515166703976448)                         -> x0
+    v1067 Imm(4632515166703976448)                         -> d1
     v1068 Binop { op=fne, lhs=v1066, rhs=v1067 }           -> x0
     terminator Bz { cond=v1068, target=b54, fall=b53 }   (exit_acc=v1068)
   block 53  start_pc=0

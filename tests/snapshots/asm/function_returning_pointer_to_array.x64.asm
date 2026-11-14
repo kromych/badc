@@ -26,9 +26,8 @@ Disassembly of section .text:
                	int3
 
 <half>:
-               	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
-               	movq	%rax, %xmm15
-               	divsd	%xmm15, %xmm0
+               	movsd	<rip>, %xmm1
+               	divsd	%xmm1, %xmm0
                	retq
 
 <twice>:
@@ -57,12 +56,10 @@ Disassembly of section .text:
                	cmpl	$0x6, %eax
                	jne	<addr>
                	movq	<rip>, %rax # <addr>
-               	movabsq	$0x4010000000000000, %rcx # imm = 0x4010000000000000
-               	movq	%rcx, %xmm0
+               	movsd	<rip>, %xmm0
                	callq	*%rax
-               	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	movsd	<rip>, %xmm1
+               	ucomisd	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x4, %eax

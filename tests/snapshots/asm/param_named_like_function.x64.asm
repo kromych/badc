@@ -26,9 +26,8 @@ Disassembly of section .text:
                	int3
 
 <gp>:
-               	movl	$0x40000000, %eax       # imm = 0x40000000
-               	movq	%rax, %xmm15
-               	mulss	%xmm15, %xmm0
+               	movss	<rip>, %xmm1
+               	mulss	%xmm1, %xmm0
                	cvtss2sd	%xmm0, %xmm0
                	retq
 

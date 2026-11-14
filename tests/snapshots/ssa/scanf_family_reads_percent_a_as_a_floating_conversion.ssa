@@ -68,7 +68,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=5
   block 1  start_pc=0
     v21  LocalAddr(-5)                                    -> x0
     v22  LoadLocal { off=-5, kind=F32 }                   -> d0 [f32]
-    v23  Imm(1069547520)                                  -> x0 [f32]
+    v23  Imm(1069547520)                                  -> d1 [f32]
     v24  Binop { op=fne, lhs=v22, rhs=v23 }               -> x0
     v25  BinopI { op=ne, lhs=v24, rhs_imm=0 }             -> x1
     v26  Imm(0)                                           -> x1
@@ -103,7 +103,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=5
   block 5  start_pc=0
     v48  LocalAddr(-4)                                    -> x0
     v49  LoadLocal { off=-4, kind=F32 }                   -> d0 [f32]
-    v50  Imm(1048576000)                                  -> x0 [f32]
+    v50  Imm(1048576000)                                  -> d1 [f32]
     v51  Binop { op=fne, lhs=v49, rhs=v50 }               -> x0
     v52  Imm(0)                                           -> x1
     v53  Imm(0)                                           -> x1
@@ -152,7 +152,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=5
   block 11  start_pc=0
     v85  LocalAddr(-3)                                    -> x0
     v86  LoadLocal { off=-3, kind=F32 }                   -> d0 [f32]
-    v87  Imm(1075838976)                                  -> x0 [f32]
+    v87  Imm(1075838976)                                  -> d1 [f32]
     v88  Binop { op=fne, lhs=v86, rhs=v87 }               -> x0
     v89  Imm(0)                                           -> x1
     v90  Imm(0)                                           -> x1
@@ -179,7 +179,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=5
     v105 LocalAddr(-2)                                    -> x0
     v106 LoadLocal { off=-2, kind=F32 }                   -> d0 [f32]
     v107 Imm(1090519040)                                  -> x0 [f32]
-    v108 Imm(3238002688)                                  -> x0 [f32]
+    v108 Imm(3238002688)                                  -> d1 [f32]
     v109 Binop { op=fne, lhs=v106, rhs=v108 }             -> x0
     v110 Imm(0)                                           -> x1
     v111 Imm(0)                                           -> x1

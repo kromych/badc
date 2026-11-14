@@ -2077,9 +2077,9 @@ fn ent_pc=22 n_params=0 variadic=false locals=0
     v660 Imm(0)                                           -> x0
     terminator Bnz { cond=v656, target=b129, fall=b121 }   (low word)   (exit_acc=v659)
   block 121  start_pc=0
-    v661 Imm(4598175219545276416)                         -> x0
+    v661 Imm(4598175219545276416)                         -> d0
     v662 Call { target_pc=20, args=[v661], fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0
-    v663 Imm(4610560118520545280)                         -> x0
+    v663 Imm(4610560118520545280)                         -> d1
     v664 Binop { op=feq, lhs=v662, rhs=v663 }             -> x0
     v665 BinopI { op=eq, lhs=v664, rhs_imm=0 }            -> x1
     v666 Imm(0)                                           -> x1
@@ -2100,9 +2100,9 @@ fn ent_pc=22 n_params=0 variadic=false locals=0
     v675 Imm(0)                                           -> x0
     terminator Bnz { cond=v671, target=b128, fall=b125 }   (low word)   (exit_acc=v674)
   block 125  start_pc=0
-    v676 Imm(1056964608)                                  -> x0 [f32]
+    v676 Imm(1056964608)                                  -> d0 [f32]
     v677 Call { target_pc=21, args=[v676], fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
-    v678 Imm(1067450368)                                  -> x0 [f32]
+    v678 Imm(1067450368)                                  -> d1 [f32]
     v679 Binop { op=feq, lhs=v677, rhs=v678 }             -> x0
     v680 BinopI { op=eq, lhs=v679, rhs_imm=0 }            -> x1
     v681 Imm(0)                                           -> x1

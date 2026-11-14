@@ -4076,14 +4076,14 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(2143289344)                                  -> x1 [f32]
+    v1   Imm(2143289344)                                  -> d2 [f32]
     v2   Imm(0)                                           -> x0
-    v3   Imm(1075838976)                                  -> x0 [f32]
-    v4   Imm(1080033280)                                  -> x2 [f32]
-    v5   Imm(3227516928)                                  -> x2 [f32]
-    v6   Imm(1343554297)                                  -> x6 [f32]
-    v7   Imm(0)                                           -> x7 [f32]
-    v8   LocalAddr(-3)                                    -> x7
+    v3   Imm(1075838976)                                  -> d0 [f32]
+    v4   Imm(1080033280)                                  -> x0 [f32]
+    v5   Imm(3227516928)                                  -> d1 [f32]
+    v6   Imm(1343554297)                                  -> d3 [f32]
+    v7   Imm(0)                                           -> x0 [f32]
+    v8   LocalAddr(-3)                                    -> x0
     v9   StoreLocal { off=-3, value=v3, kind=F32, volatile } -> -
     v10  LocalAddr(-3)                                    -> x0
     v11  BinopI { op=add, lhs=v8, rhs_imm=4 }             -> x0
@@ -4151,26 +4151,26 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v73  Imm(0)                                           -> x0
     v74  Imm(0)                                           -> x0
     v75  VecExtract { vec=v47, off=0, kind=I32, bytes=16 } -> x0
-    v76  Imm(0)                                           -> x2
-    v77  Undef                                            -> x2
+    v76  Imm(0)                                           -> x1
+    v77  Undef                                            -> x1
     v78  VecInsert { vec=v77, value=v75, off=0, kind=I32, bytes=16 } -> d1
     v79  Imm(0)                                           -> x0
     v80  VecExtract { vec=v47, off=4, kind=I32, bytes=16 } -> x0
-    v81  Imm(0)                                           -> x2
-    v82  Imm(4)                                           -> x2
-    v83  Imm(0)                                           -> x2
+    v81  Imm(0)                                           -> x1
+    v82  Imm(4)                                           -> x1
+    v83  Imm(0)                                           -> x1
     v84  VecInsert { vec=v78, value=v80, off=4, kind=I32, bytes=16 } -> d1
     v85  Imm(0)                                           -> x0
     v86  VecExtract { vec=v47, off=0, kind=I32, bytes=16 } -> x0
-    v87  Imm(0)                                           -> x2
-    v88  Imm(8)                                           -> x2
-    v89  Imm(0)                                           -> x2
+    v87  Imm(0)                                           -> x1
+    v88  Imm(8)                                           -> x1
+    v89  Imm(0)                                           -> x1
     v90  VecInsert { vec=v84, value=v86, off=8, kind=I32, bytes=16 } -> d1
     v91  Imm(0)                                           -> x0
     v92  VecExtract { vec=v47, off=4, kind=I32, bytes=16 } -> x0
-    v93  Imm(0)                                           -> x2
-    v94  Imm(12)                                          -> x2
-    v95  Imm(0)                                           -> x2
+    v93  Imm(0)                                           -> x1
+    v94  Imm(12)                                          -> x1
+    v95  Imm(0)                                           -> x1
     v96  VecInsert { vec=v90, value=v92, off=12, kind=I32, bytes=16 } -> d1
     v97  Imm(0)                                           -> x0
     v98  Imm(0)                                           -> x0
@@ -4202,11 +4202,11 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v124 Imm(0)                                           -> x0
     v125 Imm(0)                                           -> x0
     v126 VecExtract { vec=v119, off=0, kind=I64, bytes=8 } -> x0
-    v127 Imm(0)                                           -> x2
-    v128 Imm(0)                                           -> x2
-    v129 Undef                                            -> x2
+    v127 Imm(0)                                           -> x1
+    v128 Imm(0)                                           -> x1
+    v129 Undef                                            -> x1
     v130 BinopI { op=eq, lhs=v126, rhs_imm=-17179869182 } -> x0
-    v131 BinopI { op=eq, lhs=v130, rhs_imm=0 }            -> x2
+    v131 BinopI { op=eq, lhs=v130, rhs_imm=0 }            -> x1
     terminator Bnz { cond=v130, target=b2, fall=b1 }   (low word)   (exit_acc=v131)
   block 1  start_pc=0
     v206 Imm(176)                                         -> x0
@@ -4235,26 +4235,26 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v147 Imm(0)                                           -> x0
     v148 Imm(0)                                           -> x0
     v149 VecExtract { vec=v47, off=0, kind=I32, bytes=16 } -> x0
-    v150 Imm(0)                                           -> x2
-    v151 Undef                                            -> x2
+    v150 Imm(0)                                           -> x1
+    v151 Undef                                            -> x1
     v152 VecInsert { vec=v151, value=v149, off=0, kind=I32, bytes=16 } -> d1
     v153 Imm(0)                                           -> x0
     v154 VecExtract { vec=v47, off=4, kind=I32, bytes=16 } -> x0
-    v155 Imm(0)                                           -> x2
-    v156 Imm(4)                                           -> x2
-    v157 Imm(0)                                           -> x2
+    v155 Imm(0)                                           -> x1
+    v156 Imm(4)                                           -> x1
+    v157 Imm(0)                                           -> x1
     v158 VecInsert { vec=v152, value=v154, off=4, kind=I32, bytes=16 } -> d1
     v159 Imm(0)                                           -> x0
     v160 VecExtract { vec=v47, off=0, kind=I32, bytes=16 } -> x0
-    v161 Imm(0)                                           -> x2
-    v162 Imm(8)                                           -> x2
-    v163 Imm(0)                                           -> x2
+    v161 Imm(0)                                           -> x1
+    v162 Imm(8)                                           -> x1
+    v163 Imm(0)                                           -> x1
     v164 VecInsert { vec=v158, value=v160, off=8, kind=I32, bytes=16 } -> d1
     v165 Imm(0)                                           -> x0
     v166 VecExtract { vec=v47, off=4, kind=I32, bytes=16 } -> x0
-    v167 Imm(0)                                           -> x2
-    v168 Imm(12)                                          -> x2
-    v169 Imm(0)                                           -> x2
+    v167 Imm(0)                                           -> x1
+    v168 Imm(12)                                          -> x1
+    v169 Imm(0)                                           -> x1
     v170 VecInsert { vec=v164, value=v166, off=12, kind=I32, bytes=16 } -> d0
     v171 Imm(0)                                           -> x0
     v172 Imm(0)                                           -> x0
@@ -4286,11 +4286,11 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v198 Imm(0)                                           -> x0
     v199 Imm(0)                                           -> x0
     v200 VecExtract { vec=v193, off=0, kind=I64, bytes=8 } -> x0
-    v201 Imm(0)                                           -> x2
-    v202 Imm(0)                                           -> x2
-    v203 Undef                                            -> x2
+    v201 Imm(0)                                           -> x1
+    v202 Imm(0)                                           -> x1
+    v203 Undef                                            -> x1
     v204 BinopI { op=eq, lhs=v200, rhs_imm=-17179869182 } -> x0
-    v205 BinopI { op=eq, lhs=v204, rhs_imm=0 }            -> x2
+    v205 BinopI { op=eq, lhs=v204, rhs_imm=0 }            -> x1
     terminator Bnz { cond=v204, target=b4, fall=b3 }   (low word)   (exit_acc=v205)
   block 3  start_pc=0
     v336 Imm(177)                                         -> x0
@@ -4302,129 +4302,129 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     terminator Return(v336)   (exit_acc=v336)
   block 4  start_pc=0
     v212 Imm(0)                                           -> x0
-    v213 Imm(1343554297)                                  -> x2 [f32]
+    v213 Imm(1343554297)                                  -> d1 [f32]
     v214 Imm(0)                                           -> x0 [f32]
     v215 Imm(0)                                           -> x0
-    v216 Imm(0)                                           -> x0 [f32]
-    v217 LocalAddr(-3)                                    -> x6
+    v216 Imm(0)                                           -> d0 [f32]
+    v217 LocalAddr(-3)                                    -> x0
     v218 StoreLocal { off=-3, value=v213, kind=F32, volatile } -> -
-    v219 LocalAddr(-3)                                    -> x2
-    v220 BinopI { op=add, lhs=v19, rhs_imm=4 }            -> x2
+    v219 LocalAddr(-3)                                    -> x0
+    v220 BinopI { op=add, lhs=v19, rhs_imm=4 }            -> x0
     v221 StoreLocal { off=-3, disp=4, value=v1, kind=F32, volatile } -> -
-    v222 LocalAddr(-3)                                    -> x2
-    v223 BinopI { op=add, lhs=v19, rhs_imm=8 }            -> x2
+    v222 LocalAddr(-3)                                    -> x0
+    v223 BinopI { op=add, lhs=v19, rhs_imm=8 }            -> x0
     v224 StoreLocal { off=-3, disp=8, value=v216, kind=F32, volatile } -> -
-    v225 LocalAddr(-3)                                    -> x2
-    v226 BinopI { op=add, lhs=v225, rhs_imm=12 }          -> x2
+    v225 LocalAddr(-3)                                    -> x0
+    v226 BinopI { op=add, lhs=v225, rhs_imm=12 }          -> x0
     v227 StoreLocal { off=-3, disp=12, value=v216, kind=F32, volatile } -> -
-    v228 LocalAddr(-3)                                    -> x2
-    v229 LoadLocal { off=-3, kind=F32, volatile }         -> d0 [f32]
-    v230 Imm(0)                                           -> x2
-    v231 Undef                                            -> x2
-    v232 VecInsert { vec=v231, value=v229, off=0, kind=F32, bytes=16 } -> d0
-    v233 Imm(0)                                           -> x2
-    v234 LocalAddr(-3)                                    -> x2
-    v235 BinopI { op=add, lhs=v225, rhs_imm=4 }           -> x2
-    v236 LoadLocal { off=-3, disp=4, kind=F32, volatile } -> d1 [f32]
-    v237 Imm(0)                                           -> x2
-    v238 Imm(4)                                           -> x2
-    v239 Imm(0)                                           -> x2
-    v240 VecInsert { vec=v232, value=v236, off=4, kind=F32, bytes=16 } -> d0
-    v241 Imm(0)                                           -> x2
-    v242 LocalAddr(-3)                                    -> x2
-    v243 BinopI { op=add, lhs=v225, rhs_imm=8 }           -> x2
-    v244 LoadLocal { off=-3, disp=8, kind=F32, volatile } -> d1 [f32]
-    v245 Imm(0)                                           -> x2
-    v246 Imm(8)                                           -> x2
-    v247 Imm(0)                                           -> x2
-    v248 VecInsert { vec=v240, value=v244, off=8, kind=F32, bytes=16 } -> d0
-    v249 Imm(0)                                           -> x2
-    v250 LocalAddr(-3)                                    -> x2
-    v251 BinopI { op=add, lhs=v225, rhs_imm=12 }          -> x2
-    v252 LoadLocal { off=-3, disp=12, kind=F32, volatile } -> d1 [f32]
-    v253 Imm(0)                                           -> x2
-    v254 Imm(12)                                          -> x2
-    v255 Imm(0)                                           -> x2
-    v256 VecInsert { vec=v248, value=v252, off=12, kind=F32, bytes=16 } -> d0
-    v257 Imm(0)                                           -> x2
-    v258 Imm(0)                                           -> x2
+    v228 LocalAddr(-3)                                    -> x0
+    v229 LoadLocal { off=-3, kind=F32, volatile }         -> d1 [f32]
+    v230 Imm(0)                                           -> x0
+    v231 Undef                                            -> x0
+    v232 VecInsert { vec=v231, value=v229, off=0, kind=F32, bytes=16 } -> d1
+    v233 Imm(0)                                           -> x0
+    v234 LocalAddr(-3)                                    -> x0
+    v235 BinopI { op=add, lhs=v225, rhs_imm=4 }           -> x0
+    v236 LoadLocal { off=-3, disp=4, kind=F32, volatile } -> d3 [f32]
+    v237 Imm(0)                                           -> x0
+    v238 Imm(4)                                           -> x0
+    v239 Imm(0)                                           -> x0
+    v240 VecInsert { vec=v232, value=v236, off=4, kind=F32, bytes=16 } -> d1
+    v241 Imm(0)                                           -> x0
+    v242 LocalAddr(-3)                                    -> x0
+    v243 BinopI { op=add, lhs=v225, rhs_imm=8 }           -> x0
+    v244 LoadLocal { off=-3, disp=8, kind=F32, volatile } -> d3 [f32]
+    v245 Imm(0)                                           -> x0
+    v246 Imm(8)                                           -> x0
+    v247 Imm(0)                                           -> x0
+    v248 VecInsert { vec=v240, value=v244, off=8, kind=F32, bytes=16 } -> d1
+    v249 Imm(0)                                           -> x0
+    v250 LocalAddr(-3)                                    -> x0
+    v251 BinopI { op=add, lhs=v225, rhs_imm=12 }          -> x0
+    v252 LoadLocal { off=-3, disp=12, kind=F32, volatile } -> d3 [f32]
+    v253 Imm(0)                                           -> x0
+    v254 Imm(12)                                          -> x0
+    v255 Imm(0)                                           -> x0
+    v256 VecInsert { vec=v248, value=v252, off=12, kind=F32, bytes=16 } -> d1
+    v257 Imm(0)                                           -> x0
+    v258 Imm(0)                                           -> x0
     v259 LifetimeEnd(-3)                                  -> -
-    v260 Imm(0)                                           -> x2
-    v261 Imm(0)                                           -> x2
-    v262 Imm(0)                                           -> x2
-    v263 Imm(0)                                           -> x2
-    v264 Imm(0)                                           -> x2
-    v265 Imm(0)                                           -> x2
-    v266 Imm(0)                                           -> x2
-    v267 Imm(0)                                           -> x2
-    v268 Imm(0)                                           -> x2
-    v269 Imm(0)                                           -> x2
-    v270 Imm(0)                                           -> x2
-    v271 Imm(0)                                           -> x2
-    v272 Imm(0)                                           -> x2
-    v273 Imm(0)                                           -> x2
-    v274 Imm(0)                                           -> x2
-    v275 Imm(0)                                           -> x2
-    v276 Imm(0)                                           -> x2
-    v277 Imm(0)                                           -> x2
-    v278 Imm(0)                                           -> x2
-    v279 VecExtract { vec=v256, off=0, kind=I32, bytes=16 } -> x2
-    v280 Imm(0)                                           -> x6
-    v281 Undef                                            -> x6
-    v282 VecInsert { vec=v281, value=v279, off=0, kind=I32, bytes=16 } -> d1
-    v283 Imm(0)                                           -> x2
-    v284 VecExtract { vec=v256, off=4, kind=I32, bytes=16 } -> x2
-    v285 Imm(0)                                           -> x6
-    v286 Imm(4)                                           -> x6
-    v287 Imm(0)                                           -> x6
-    v288 VecInsert { vec=v282, value=v284, off=4, kind=I32, bytes=16 } -> d1
-    v289 Imm(0)                                           -> x2
-    v290 VecExtract { vec=v256, off=0, kind=I32, bytes=16 } -> x2
-    v291 Imm(0)                                           -> x6
-    v292 Imm(8)                                           -> x6
-    v293 Imm(0)                                           -> x6
-    v294 VecInsert { vec=v288, value=v290, off=8, kind=I32, bytes=16 } -> d1
-    v295 Imm(0)                                           -> x2
-    v296 VecExtract { vec=v256, off=4, kind=I32, bytes=16 } -> x2
-    v297 Imm(0)                                           -> x6
-    v298 Imm(12)                                          -> x6
-    v299 Imm(0)                                           -> x6
-    v300 VecInsert { vec=v294, value=v296, off=12, kind=I32, bytes=16 } -> d0
-    v301 Imm(0)                                           -> x2
-    v302 Imm(0)                                           -> x2
+    v260 Imm(0)                                           -> x0
+    v261 Imm(0)                                           -> x0
+    v262 Imm(0)                                           -> x0
+    v263 Imm(0)                                           -> x0
+    v264 Imm(0)                                           -> x0
+    v265 Imm(0)                                           -> x0
+    v266 Imm(0)                                           -> x0
+    v267 Imm(0)                                           -> x0
+    v268 Imm(0)                                           -> x0
+    v269 Imm(0)                                           -> x0
+    v270 Imm(0)                                           -> x0
+    v271 Imm(0)                                           -> x0
+    v272 Imm(0)                                           -> x0
+    v273 Imm(0)                                           -> x0
+    v274 Imm(0)                                           -> x0
+    v275 Imm(0)                                           -> x0
+    v276 Imm(0)                                           -> x0
+    v277 Imm(0)                                           -> x0
+    v278 Imm(0)                                           -> x0
+    v279 VecExtract { vec=v256, off=0, kind=I32, bytes=16 } -> x0
+    v280 Imm(0)                                           -> x1
+    v281 Undef                                            -> x1
+    v282 VecInsert { vec=v281, value=v279, off=0, kind=I32, bytes=16 } -> d3
+    v283 Imm(0)                                           -> x0
+    v284 VecExtract { vec=v256, off=4, kind=I32, bytes=16 } -> x0
+    v285 Imm(0)                                           -> x1
+    v286 Imm(4)                                           -> x1
+    v287 Imm(0)                                           -> x1
+    v288 VecInsert { vec=v282, value=v284, off=4, kind=I32, bytes=16 } -> d3
+    v289 Imm(0)                                           -> x0
+    v290 VecExtract { vec=v256, off=0, kind=I32, bytes=16 } -> x0
+    v291 Imm(0)                                           -> x1
+    v292 Imm(8)                                           -> x1
+    v293 Imm(0)                                           -> x1
+    v294 VecInsert { vec=v288, value=v290, off=8, kind=I32, bytes=16 } -> d3
+    v295 Imm(0)                                           -> x0
+    v296 VecExtract { vec=v256, off=4, kind=I32, bytes=16 } -> x0
+    v297 Imm(0)                                           -> x1
+    v298 Imm(12)                                          -> x1
+    v299 Imm(0)                                           -> x1
+    v300 VecInsert { vec=v294, value=v296, off=12, kind=I32, bytes=16 } -> d1
+    v301 Imm(0)                                           -> x0
+    v302 Imm(0)                                           -> x0
     v303 LifetimeEnd(0)                                   -> -
     v304 LifetimeEnd(0)                                   -> -
     v305 LifetimeEnd(0)                                   -> -
     v306 LifetimeEnd(0)                                   -> -
-    v307 Imm(0)                                           -> x2
-    v308 Imm(0)                                           -> x2
-    v309 Imm(0)                                           -> x2
-    v310 Imm(0)                                           -> x2
-    v311 Imm(0)                                           -> x2
-    v312 SimdVal { op=__builtin_ia32_cvtps2dq, imm=None, args=[v300] } -> d0
+    v307 Imm(0)                                           -> x0
+    v308 Imm(0)                                           -> x0
+    v309 Imm(0)                                           -> x0
+    v310 Imm(0)                                           -> x0
+    v311 Imm(0)                                           -> x0
+    v312 SimdVal { op=__builtin_ia32_cvtps2dq, imm=None, args=[v300] } -> d1
     v313 LifetimeEnd(0)                                   -> -
-    v314 VecExtract { vec=v312, off=0, kind=I32, bytes=16 } -> x2
-    v315 Imm(0)                                           -> x2
-    v316 Undef                                            -> x2
-    v317 Undef                                            -> x2
-    v318 Imm(0)                                           -> x2
-    v319 VecExtract { vec=v312, off=4, kind=I32, bytes=16 } -> x2
-    v320 Imm(0)                                           -> x2
-    v321 Imm(4)                                           -> x2
-    v322 Imm(0)                                           -> x2
-    v323 VecExtract { vec=v312, off=0, kind=F64, bytes=16 } -> d0
-    v324 Imm(0)                                           -> x2
-    v325 Imm(0)                                           -> x2
+    v314 VecExtract { vec=v312, off=0, kind=I32, bytes=16 } -> x0
+    v315 Imm(0)                                           -> x0
+    v316 Undef                                            -> x0
+    v317 Undef                                            -> x0
+    v318 Imm(0)                                           -> x0
+    v319 VecExtract { vec=v312, off=4, kind=I32, bytes=16 } -> x0
+    v320 Imm(0)                                           -> x0
+    v321 Imm(4)                                           -> x0
+    v322 Imm(0)                                           -> x0
+    v323 VecExtract { vec=v312, off=0, kind=F64, bytes=16 } -> d1
+    v324 Imm(0)                                           -> x0
+    v325 Imm(0)                                           -> x0
     v326 LifetimeEnd(0)                                   -> -
     v327 LifetimeEnd(0)                                   -> -
-    v328 Imm(0)                                           -> x2
-    v329 Imm(0)                                           -> x2
-    v330 VecExtract { vec=v323, off=0, kind=I64, bytes=8 } -> x2
-    v331 Imm(0)                                           -> x6
-    v332 Imm(0)                                           -> x6
-    v333 Undef                                            -> x6
-    v334 BinopI { op=eq, lhs=v330, rhs_imm=-9223372034707292160 } -> x2
-    v335 BinopI { op=eq, lhs=v334, rhs_imm=0 }            -> x6
+    v328 Imm(0)                                           -> x0
+    v329 Imm(0)                                           -> x0
+    v330 VecExtract { vec=v323, off=0, kind=I64, bytes=8 } -> x0
+    v331 Imm(0)                                           -> x1
+    v332 Imm(0)                                           -> x1
+    v333 Undef                                            -> x1
+    v334 BinopI { op=eq, lhs=v330, rhs_imm=-9223372034707292160 } -> x0
+    v335 BinopI { op=eq, lhs=v334, rhs_imm=0 }            -> x1
     terminator Bnz { cond=v334, target=b6, fall=b5 }   (low word)   (exit_acc=v335)
   block 5  start_pc=0
     v466 Imm(178)                                         -> x0
@@ -4435,21 +4435,21 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v471 LifetimeEnd(0)                                   -> -
     terminator Return(v466)   (exit_acc=v466)
   block 6  start_pc=0
-    v342 Imm(0)                                           -> x2
-    v343 Imm(1076677837)                                  -> x2 [f32]
-    v344 Imm(3224161485)                                  -> x6 [f32]
-    v345 Imm(0)                                           -> x7
-    v346 Imm(0)                                           -> x7 [f32]
-    v347 LocalAddr(-3)                                    -> x7
+    v342 Imm(0)                                           -> x0
+    v343 Imm(1076677837)                                  -> d1 [f32]
+    v344 Imm(3224161485)                                  -> d3 [f32]
+    v345 Imm(0)                                           -> x0
+    v346 Imm(0)                                           -> x0 [f32]
+    v347 LocalAddr(-3)                                    -> x0
     v348 StoreLocal { off=-3, value=v344, kind=F32, volatile } -> -
-    v349 LocalAddr(-3)                                    -> x6
-    v350 BinopI { op=add, lhs=v347, rhs_imm=4 }           -> x6
+    v349 LocalAddr(-3)                                    -> x0
+    v350 BinopI { op=add, lhs=v347, rhs_imm=4 }           -> x0
     v351 StoreLocal { off=-3, disp=4, value=v343, kind=F32, volatile } -> -
-    v352 LocalAddr(-3)                                    -> x2
-    v353 BinopI { op=add, lhs=v347, rhs_imm=8 }           -> x2
+    v352 LocalAddr(-3)                                    -> x0
+    v353 BinopI { op=add, lhs=v347, rhs_imm=8 }           -> x0
     v354 StoreLocal { off=-3, disp=8, value=v216, kind=F32, volatile } -> -
-    v355 LocalAddr(-3)                                    -> x2
-    v356 BinopI { op=add, lhs=v347, rhs_imm=12 }          -> x2
+    v355 LocalAddr(-3)                                    -> x0
+    v356 BinopI { op=add, lhs=v347, rhs_imm=12 }          -> x0
     v357 StoreLocal { off=-3, disp=12, value=v216, kind=F32, volatile } -> -
     v358 LocalAddr(-3)                                    -> x0
     v359 LoadLocal { off=-3, kind=F32, volatile }         -> d0 [f32]
@@ -4503,26 +4503,26 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v407 Imm(0)                                           -> x0
     v408 Imm(0)                                           -> x0
     v409 VecExtract { vec=v386, off=0, kind=I32, bytes=16 } -> x0
-    v410 Imm(0)                                           -> x2
-    v411 Undef                                            -> x2
+    v410 Imm(0)                                           -> x1
+    v411 Undef                                            -> x1
     v412 VecInsert { vec=v411, value=v409, off=0, kind=I32, bytes=16 } -> d1
     v413 Imm(0)                                           -> x0
     v414 VecExtract { vec=v386, off=4, kind=I32, bytes=16 } -> x0
-    v415 Imm(0)                                           -> x2
-    v416 Imm(4)                                           -> x2
-    v417 Imm(0)                                           -> x2
+    v415 Imm(0)                                           -> x1
+    v416 Imm(4)                                           -> x1
+    v417 Imm(0)                                           -> x1
     v418 VecInsert { vec=v412, value=v414, off=4, kind=I32, bytes=16 } -> d1
     v419 Imm(0)                                           -> x0
     v420 VecExtract { vec=v386, off=0, kind=I32, bytes=16 } -> x0
-    v421 Imm(0)                                           -> x2
-    v422 Imm(8)                                           -> x2
-    v423 Imm(0)                                           -> x2
+    v421 Imm(0)                                           -> x1
+    v422 Imm(8)                                           -> x1
+    v423 Imm(0)                                           -> x1
     v424 VecInsert { vec=v418, value=v420, off=8, kind=I32, bytes=16 } -> d1
     v425 Imm(0)                                           -> x0
     v426 VecExtract { vec=v386, off=4, kind=I32, bytes=16 } -> x0
-    v427 Imm(0)                                           -> x2
-    v428 Imm(12)                                          -> x2
-    v429 Imm(0)                                           -> x2
+    v427 Imm(0)                                           -> x1
+    v428 Imm(12)                                          -> x1
+    v429 Imm(0)                                           -> x1
     v430 VecInsert { vec=v424, value=v426, off=12, kind=I32, bytes=16 } -> d0
     v431 Imm(0)                                           -> x0
     v432 Imm(0)                                           -> x0
@@ -4554,11 +4554,11 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v458 Imm(0)                                           -> x0
     v459 Imm(0)                                           -> x0
     v460 VecExtract { vec=v453, off=0, kind=I64, bytes=8 } -> x0
-    v461 Imm(0)                                           -> x2
-    v462 Imm(0)                                           -> x2
-    v463 Undef                                            -> x2
+    v461 Imm(0)                                           -> x1
+    v462 Imm(0)                                           -> x1
+    v463 Undef                                            -> x1
     v464 BinopI { op=eq, lhs=v460, rhs_imm=12884901886 }  -> x0
-    v465 BinopI { op=eq, lhs=v464, rhs_imm=0 }            -> x2
+    v465 BinopI { op=eq, lhs=v464, rhs_imm=0 }            -> x1
     terminator Bnz { cond=v464, target=b8, fall=b7 }   (low word)   (exit_acc=v465)
   block 7  start_pc=0
     v596 Imm(179)                                         -> x0
@@ -4570,20 +4570,20 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     terminator Return(v596)   (exit_acc=v596)
   block 8  start_pc=0
     v472 Imm(0)                                           -> x0
-    v473 Imm(1325400064)                                  -> x2 [f32]
-    v474 Imm(3472883712)                                  -> x6 [f32]
+    v473 Imm(1325400064)                                  -> d1 [f32]
+    v474 Imm(3472883712)                                  -> d3 [f32]
     v475 Imm(0)                                           -> x0
-    v476 Imm(0)                                           -> x0 [f32]
-    v477 LocalAddr(-3)                                    -> x7
+    v476 Imm(0)                                           -> d0 [f32]
+    v477 LocalAddr(-3)                                    -> x0
     v478 StoreLocal { off=-3, value=v474, kind=F32, volatile } -> -
-    v479 LocalAddr(-3)                                    -> x6
-    v480 BinopI { op=add, lhs=v358, rhs_imm=4 }           -> x6
+    v479 LocalAddr(-3)                                    -> x0
+    v480 BinopI { op=add, lhs=v358, rhs_imm=4 }           -> x0
     v481 StoreLocal { off=-3, disp=4, value=v473, kind=F32, volatile } -> -
-    v482 LocalAddr(-3)                                    -> x2
-    v483 BinopI { op=add, lhs=v358, rhs_imm=8 }           -> x2
+    v482 LocalAddr(-3)                                    -> x0
+    v483 BinopI { op=add, lhs=v358, rhs_imm=8 }           -> x0
     v484 StoreLocal { off=-3, disp=8, value=v476, kind=F32, volatile } -> -
-    v485 LocalAddr(-3)                                    -> x2
-    v486 BinopI { op=add, lhs=v485, rhs_imm=12 }          -> x2
+    v485 LocalAddr(-3)                                    -> x0
+    v486 BinopI { op=add, lhs=v485, rhs_imm=12 }          -> x0
     v487 StoreLocal { off=-3, disp=12, value=v476, kind=F32, volatile } -> -
     v488 LocalAddr(-3)                                    -> x0
     v489 LoadLocal { off=-3, kind=F32, volatile }         -> d0 [f32]
@@ -4637,26 +4637,26 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v537 Imm(0)                                           -> x0
     v538 Imm(0)                                           -> x0
     v539 VecExtract { vec=v516, off=0, kind=I32, bytes=16 } -> x0
-    v540 Imm(0)                                           -> x2
-    v541 Undef                                            -> x2
+    v540 Imm(0)                                           -> x1
+    v541 Undef                                            -> x1
     v542 VecInsert { vec=v541, value=v539, off=0, kind=I32, bytes=16 } -> d1
     v543 Imm(0)                                           -> x0
     v544 VecExtract { vec=v516, off=4, kind=I32, bytes=16 } -> x0
-    v545 Imm(0)                                           -> x2
-    v546 Imm(4)                                           -> x2
-    v547 Imm(0)                                           -> x2
+    v545 Imm(0)                                           -> x1
+    v546 Imm(4)                                           -> x1
+    v547 Imm(0)                                           -> x1
     v548 VecInsert { vec=v542, value=v544, off=4, kind=I32, bytes=16 } -> d1
     v549 Imm(0)                                           -> x0
     v550 VecExtract { vec=v516, off=0, kind=I32, bytes=16 } -> x0
-    v551 Imm(0)                                           -> x2
-    v552 Imm(8)                                           -> x2
-    v553 Imm(0)                                           -> x2
+    v551 Imm(0)                                           -> x1
+    v552 Imm(8)                                           -> x1
+    v553 Imm(0)                                           -> x1
     v554 VecInsert { vec=v548, value=v550, off=8, kind=I32, bytes=16 } -> d1
     v555 Imm(0)                                           -> x0
     v556 VecExtract { vec=v516, off=4, kind=I32, bytes=16 } -> x0
-    v557 Imm(0)                                           -> x2
-    v558 Imm(12)                                          -> x2
-    v559 Imm(0)                                           -> x2
+    v557 Imm(0)                                           -> x1
+    v558 Imm(12)                                          -> x1
+    v559 Imm(0)                                           -> x1
     v560 VecInsert { vec=v554, value=v556, off=12, kind=I32, bytes=16 } -> d0
     v561 Imm(0)                                           -> x0
     v562 Imm(0)                                           -> x0
@@ -4688,11 +4688,11 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v588 Imm(0)                                           -> x0
     v589 Imm(0)                                           -> x0
     v590 VecExtract { vec=v583, off=0, kind=I64, bytes=8 } -> x0
-    v591 Imm(0)                                           -> x2
-    v592 Imm(0)                                           -> x2
-    v593 Undef                                            -> x2
+    v591 Imm(0)                                           -> x1
+    v592 Imm(0)                                           -> x1
+    v593 Undef                                            -> x1
     v594 BinopI { op=eq, lhs=v590, rhs_imm=-9223372034707292160 } -> x0
-    v595 BinopI { op=eq, lhs=v594, rhs_imm=0 }            -> x2
+    v595 BinopI { op=eq, lhs=v594, rhs_imm=0 }            -> x1
     terminator Bnz { cond=v594, target=b10, fall=b9 }   (low word)   (exit_acc=v595)
   block 9  start_pc=0
     v736 Imm(180)                                         -> x0
@@ -4709,25 +4709,25 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v605 InlineAsm { template="stmxcsr %0", ops=1, args=[v604] } -> -
     v606 LoadLocal { off=-1, kind=U32 }                   -> x0
     v607 BinopI { op=and, lhs=v606, rhs_imm=4294942719 }  -> x0
-    v608 Imm(8192)                                        -> x2
+    v608 Imm(8192)                                        -> x1
     v609 BinopI { op=or, lhs=v607, rhs_imm=8192 }         -> x0
     v610 StoreLocal { off=-1, value=v609, kind=I32 }      -> -
     v611 LocalAddr(-1)                                    -> x0
     v612 InlineAsm { template="ldmxcsr %0", ops=1, args=[v611] } -> -
-    v613 Imm(1075838976)                                  -> x2 [f32]
-    v614 Imm(3223322624)                                  -> x6 [f32]
+    v613 Imm(1075838976)                                  -> d1 [f32]
+    v614 Imm(3223322624)                                  -> d3 [f32]
     v615 Imm(0)                                           -> x0
-    v616 Imm(0)                                           -> x0 [f32]
-    v617 LocalAddr(-3)                                    -> x7
+    v616 Imm(0)                                           -> d0 [f32]
+    v617 LocalAddr(-3)                                    -> x0
     v618 StoreLocal { off=-3, value=v613, kind=F32, volatile } -> -
-    v619 LocalAddr(-3)                                    -> x2
-    v620 BinopI { op=add, lhs=v617, rhs_imm=4 }           -> x2
+    v619 LocalAddr(-3)                                    -> x0
+    v620 BinopI { op=add, lhs=v617, rhs_imm=4 }           -> x0
     v621 StoreLocal { off=-3, disp=4, value=v614, kind=F32, volatile } -> -
-    v622 LocalAddr(-3)                                    -> x2
-    v623 BinopI { op=add, lhs=v617, rhs_imm=8 }           -> x2
+    v622 LocalAddr(-3)                                    -> x0
+    v623 BinopI { op=add, lhs=v617, rhs_imm=8 }           -> x0
     v624 StoreLocal { off=-3, disp=8, value=v616, kind=F32, volatile } -> -
-    v625 LocalAddr(-3)                                    -> x2
-    v626 BinopI { op=add, lhs=v617, rhs_imm=12 }          -> x2
+    v625 LocalAddr(-3)                                    -> x0
+    v626 BinopI { op=add, lhs=v617, rhs_imm=12 }          -> x0
     v627 StoreLocal { off=-3, disp=12, value=v616, kind=F32, volatile } -> -
     v628 LocalAddr(-3)                                    -> x0
     v629 LoadLocal { off=-3, kind=F32, volatile }         -> d0 [f32]
@@ -4781,26 +4781,26 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v677 Imm(0)                                           -> x0
     v678 Imm(0)                                           -> x0
     v679 VecExtract { vec=v656, off=0, kind=I32, bytes=16 } -> x0
-    v680 Imm(0)                                           -> x2
-    v681 Undef                                            -> x2
+    v680 Imm(0)                                           -> x1
+    v681 Undef                                            -> x1
     v682 VecInsert { vec=v681, value=v679, off=0, kind=I32, bytes=16 } -> d1
     v683 Imm(0)                                           -> x0
     v684 VecExtract { vec=v656, off=4, kind=I32, bytes=16 } -> x0
-    v685 Imm(0)                                           -> x2
-    v686 Imm(4)                                           -> x2
-    v687 Imm(0)                                           -> x2
+    v685 Imm(0)                                           -> x1
+    v686 Imm(4)                                           -> x1
+    v687 Imm(0)                                           -> x1
     v688 VecInsert { vec=v682, value=v684, off=4, kind=I32, bytes=16 } -> d1
     v689 Imm(0)                                           -> x0
     v690 VecExtract { vec=v656, off=0, kind=I32, bytes=16 } -> x0
-    v691 Imm(0)                                           -> x2
-    v692 Imm(8)                                           -> x2
-    v693 Imm(0)                                           -> x2
+    v691 Imm(0)                                           -> x1
+    v692 Imm(8)                                           -> x1
+    v693 Imm(0)                                           -> x1
     v694 VecInsert { vec=v688, value=v690, off=8, kind=I32, bytes=16 } -> d1
     v695 Imm(0)                                           -> x0
     v696 VecExtract { vec=v656, off=4, kind=I32, bytes=16 } -> x0
-    v697 Imm(0)                                           -> x2
-    v698 Imm(12)                                          -> x2
-    v699 Imm(0)                                           -> x2
+    v697 Imm(0)                                           -> x1
+    v698 Imm(12)                                          -> x1
+    v699 Imm(0)                                           -> x1
     v700 VecInsert { vec=v694, value=v696, off=12, kind=I32, bytes=16 } -> d0
     v701 Imm(0)                                           -> x0
     v702 Imm(0)                                           -> x0
@@ -4832,11 +4832,11 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v728 Imm(0)                                           -> x0
     v729 Imm(0)                                           -> x0
     v730 VecExtract { vec=v723, off=0, kind=I64, bytes=8 } -> x0
-    v731 Imm(0)                                           -> x2
-    v732 Imm(0)                                           -> x2
-    v733 Undef                                            -> x2
+    v731 Imm(0)                                           -> x1
+    v732 Imm(0)                                           -> x1
+    v733 Undef                                            -> x1
     v734 BinopI { op=eq, lhs=v730, rhs_imm=-12884901886 } -> x0
-    v735 BinopI { op=eq, lhs=v734, rhs_imm=0 }            -> x2
+    v735 BinopI { op=eq, lhs=v734, rhs_imm=0 }            -> x1
     terminator Bnz { cond=v734, target=b12, fall=b11 }   (low word)   (exit_acc=v735)
   block 11  start_pc=0
     v876 Imm(182)                                         -> x0
@@ -4853,25 +4853,25 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v745 InlineAsm { template="stmxcsr %0", ops=1, args=[v744] } -> -
     v746 LoadLocal { off=-1, kind=U32 }                   -> x0
     v747 BinopI { op=and, lhs=v746, rhs_imm=4294942719 }  -> x0
-    v748 Imm(16384)                                       -> x2
+    v748 Imm(16384)                                       -> x1
     v749 BinopI { op=or, lhs=v747, rhs_imm=16384 }        -> x0
     v750 StoreLocal { off=-1, value=v749, kind=I32 }      -> -
     v751 LocalAddr(-1)                                    -> x0
     v752 InlineAsm { template="ldmxcsr %0", ops=1, args=[v751] } -> -
-    v753 Imm(1075838976)                                  -> x2 [f32]
-    v754 Imm(3223322624)                                  -> x6 [f32]
+    v753 Imm(1075838976)                                  -> d1 [f32]
+    v754 Imm(3223322624)                                  -> d3 [f32]
     v755 Imm(0)                                           -> x0
-    v756 Imm(0)                                           -> x0 [f32]
-    v757 LocalAddr(-3)                                    -> x7
+    v756 Imm(0)                                           -> d0 [f32]
+    v757 LocalAddr(-3)                                    -> x0
     v758 StoreLocal { off=-3, value=v753, kind=F32, volatile } -> -
-    v759 LocalAddr(-3)                                    -> x2
-    v760 BinopI { op=add, lhs=v757, rhs_imm=4 }           -> x2
+    v759 LocalAddr(-3)                                    -> x0
+    v760 BinopI { op=add, lhs=v757, rhs_imm=4 }           -> x0
     v761 StoreLocal { off=-3, disp=4, value=v754, kind=F32, volatile } -> -
-    v762 LocalAddr(-3)                                    -> x2
-    v763 BinopI { op=add, lhs=v757, rhs_imm=8 }           -> x2
+    v762 LocalAddr(-3)                                    -> x0
+    v763 BinopI { op=add, lhs=v757, rhs_imm=8 }           -> x0
     v764 StoreLocal { off=-3, disp=8, value=v756, kind=F32, volatile } -> -
-    v765 LocalAddr(-3)                                    -> x2
-    v766 BinopI { op=add, lhs=v757, rhs_imm=12 }          -> x2
+    v765 LocalAddr(-3)                                    -> x0
+    v766 BinopI { op=add, lhs=v757, rhs_imm=12 }          -> x0
     v767 StoreLocal { off=-3, disp=12, value=v756, kind=F32, volatile } -> -
     v768 LocalAddr(-3)                                    -> x0
     v769 LoadLocal { off=-3, kind=F32, volatile }         -> d0 [f32]
@@ -4925,26 +4925,26 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v817 Imm(0)                                           -> x0
     v818 Imm(0)                                           -> x0
     v819 VecExtract { vec=v796, off=0, kind=I32, bytes=16 } -> x0
-    v820 Imm(0)                                           -> x2
-    v821 Undef                                            -> x2
+    v820 Imm(0)                                           -> x1
+    v821 Undef                                            -> x1
     v822 VecInsert { vec=v821, value=v819, off=0, kind=I32, bytes=16 } -> d1
     v823 Imm(0)                                           -> x0
     v824 VecExtract { vec=v796, off=4, kind=I32, bytes=16 } -> x0
-    v825 Imm(0)                                           -> x2
-    v826 Imm(4)                                           -> x2
-    v827 Imm(0)                                           -> x2
+    v825 Imm(0)                                           -> x1
+    v826 Imm(4)                                           -> x1
+    v827 Imm(0)                                           -> x1
     v828 VecInsert { vec=v822, value=v824, off=4, kind=I32, bytes=16 } -> d1
     v829 Imm(0)                                           -> x0
     v830 VecExtract { vec=v796, off=0, kind=I32, bytes=16 } -> x0
-    v831 Imm(0)                                           -> x2
-    v832 Imm(8)                                           -> x2
-    v833 Imm(0)                                           -> x2
+    v831 Imm(0)                                           -> x1
+    v832 Imm(8)                                           -> x1
+    v833 Imm(0)                                           -> x1
     v834 VecInsert { vec=v828, value=v830, off=8, kind=I32, bytes=16 } -> d1
     v835 Imm(0)                                           -> x0
     v836 VecExtract { vec=v796, off=4, kind=I32, bytes=16 } -> x0
-    v837 Imm(0)                                           -> x2
-    v838 Imm(12)                                          -> x2
-    v839 Imm(0)                                           -> x2
+    v837 Imm(0)                                           -> x1
+    v838 Imm(12)                                          -> x1
+    v839 Imm(0)                                           -> x1
     v840 VecInsert { vec=v834, value=v836, off=12, kind=I32, bytes=16 } -> d0
     v841 Imm(0)                                           -> x0
     v842 Imm(0)                                           -> x0
@@ -4976,11 +4976,11 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v868 Imm(0)                                           -> x0
     v869 Imm(0)                                           -> x0
     v870 VecExtract { vec=v863, off=0, kind=I64, bytes=8 } -> x0
-    v871 Imm(0)                                           -> x2
-    v872 Imm(0)                                           -> x2
-    v873 Undef                                            -> x2
+    v871 Imm(0)                                           -> x1
+    v872 Imm(0)                                           -> x1
+    v873 Undef                                            -> x1
     v874 BinopI { op=eq, lhs=v870, rhs_imm=-8589934589 }  -> x0
-    v875 BinopI { op=eq, lhs=v874, rhs_imm=0 }            -> x2
+    v875 BinopI { op=eq, lhs=v874, rhs_imm=0 }            -> x1
     terminator Bnz { cond=v874, target=b14, fall=b13 }   (low word)   (exit_acc=v875)
   block 13  start_pc=0
     v958 Imm(184)                                         -> x0
@@ -4992,11 +4992,11 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     terminator Return(v958)   (exit_acc=v958)
   block 14  start_pc=0
     v882 Imm(0)                                           -> x0
-    v883 Imm(1067030938)                                  -> x0 [f32]
-    v884 Imm(3214514586)                                  -> x2 [f32]
-    v885 Imm(1193033728)                                  -> x6 [f32]
-    v886 Imm(3340517376)                                  -> x7 [f32]
-    v887 LocalAddr(-3)                                    -> x8
+    v883 Imm(1067030938)                                  -> d0 [f32]
+    v884 Imm(3214514586)                                  -> d1 [f32]
+    v885 Imm(1193033728)                                  -> d3 [f32]
+    v886 Imm(3340517376)                                  -> d4 [f32]
+    v887 LocalAddr(-3)                                    -> x0
     v888 StoreLocal { off=-3, value=v883, kind=F32, volatile } -> -
     v889 LocalAddr(-3)                                    -> x0
     v890 BinopI { op=add, lhs=v768, rhs_imm=4 }           -> x0
@@ -5055,7 +5055,7 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v943 Imm(0)                                           -> x0
     v944 Imm(0)                                           -> x0
     v945 Imm(0)                                           -> x0
-    v946 VecExtract { vec=v939, off=0, kind=I32, bytes=16 } -> x2
+    v946 VecExtract { vec=v939, off=0, kind=I32, bytes=16 } -> x1
     v947 Imm(16)                                          -> x0
     v948 Extend { value=v946, kind=I32 }                  -> x0
     v949 Imm(16)                                          -> x0
@@ -5066,100 +5066,100 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v954 Imm(32768)                                       -> x0
     v955 Imm(32767)                                       -> x0
     v956 Imm(32767)                                       -> x0
-    v957 Binop { op=gt, lhs=v946, rhs=v956 }              -> x6
+    v957 Binop { op=gt, lhs=v946, rhs=v956 }              -> x2
     terminator Bz { cond=v957, target=b121, fall=b15 }   (exit_acc=v957)
   block 15  start_pc=0
     terminator Jmp(b16)   (exit_acc=v956)
   block 16  start_pc=0
-    v2491 Phi { incoming=[b15:v956, b122:v2490], kind=I64 } -> x2
-    v2492 Extend { value=v2491, kind=I32 }                 -> x6
-    v2493 Extend { value=v2491, kind=I32 }                 -> x6
-    v2494 Extend { value=v2491, kind=I16 }                 -> x2
-    v2495 Undef                                            -> x6
+    v2491 Phi { incoming=[b15:v956, b122:v2490], kind=I64 } -> x1
+    v2492 Extend { value=v2491, kind=I32 }                 -> x2
+    v2493 Extend { value=v2491, kind=I32 }                 -> x2
+    v2494 Extend { value=v2491, kind=I16 }                 -> x1
+    v2495 Undef                                            -> x2
     v2496 VecInsert { vec=v2495, value=v2494, off=0, kind=I16, bytes=8 } -> d1
-    v2497 Imm(0)                                           -> x2
-    v2498 Imm(0)                                           -> x2
-    v2499 Imm(2)                                           -> x2
-    v2500 Imm(0)                                           -> x2
-    v2501 Imm(4)                                           -> x2
-    v2502 Imm(0)                                           -> x2
-    v2503 VecExtract { vec=v939, off=4, kind=I32, bytes=16 } -> x2
-    v2504 Imm(16)                                          -> x6
-    v2505 Extend { value=v2503, kind=I32 }                 -> x6
-    v2506 Imm(16)                                          -> x6
-    v2507 Imm(1)                                           -> x6
-    v2508 Imm(15)                                          -> x6
-    v2509 Imm(15)                                          -> x6
-    v2510 Imm(32768)                                       -> x6
-    v2511 Imm(32768)                                       -> x6
-    v2512 Imm(32767)                                       -> x6
-    v2513 Imm(32767)                                       -> x6
-    v2514 Binop { op=gt, lhs=v2503, rhs=v956 }             -> x6
+    v2497 Imm(0)                                           -> x1
+    v2498 Imm(0)                                           -> x1
+    v2499 Imm(2)                                           -> x1
+    v2500 Imm(0)                                           -> x1
+    v2501 Imm(4)                                           -> x1
+    v2502 Imm(0)                                           -> x1
+    v2503 VecExtract { vec=v939, off=4, kind=I32, bytes=16 } -> x1
+    v2504 Imm(16)                                          -> x2
+    v2505 Extend { value=v2503, kind=I32 }                 -> x2
+    v2506 Imm(16)                                          -> x2
+    v2507 Imm(1)                                           -> x2
+    v2508 Imm(15)                                          -> x2
+    v2509 Imm(15)                                          -> x2
+    v2510 Imm(32768)                                       -> x2
+    v2511 Imm(32768)                                       -> x2
+    v2512 Imm(32767)                                       -> x2
+    v2513 Imm(32767)                                       -> x2
+    v2514 Binop { op=gt, lhs=v2503, rhs=v956 }             -> x2
     terminator Bz { cond=v2514, target=b119, fall=b17 }   (exit_acc=v2514)
   block 17  start_pc=0
     terminator Jmp(b18)   (exit_acc=v956)
   block 18  start_pc=0
-    v2528 Phi { incoming=[b17:v956, b120:v2527], kind=I64 } -> x2
-    v2529 Extend { value=v2528, kind=I32 }                 -> x6
-    v2530 Extend { value=v2528, kind=I32 }                 -> x6
-    v2531 Extend { value=v2528, kind=I16 }                 -> x2
-    v2532 Imm(0)                                           -> x6
+    v2528 Phi { incoming=[b17:v956, b120:v2527], kind=I64 } -> x1
+    v2529 Extend { value=v2528, kind=I32 }                 -> x2
+    v2530 Extend { value=v2528, kind=I32 }                 -> x2
+    v2531 Extend { value=v2528, kind=I16 }                 -> x1
+    v2532 Imm(0)                                           -> x2
     v2533 VecInsert { vec=v2496, value=v2531, off=2, kind=I16, bytes=8 } -> d1
-    v2534 Imm(0)                                           -> x2
-    v2535 Imm(0)                                           -> x2
-    v2536 Imm(4)                                           -> x2
-    v2537 Imm(0)                                           -> x2
-    v2538 Imm(8)                                           -> x2
-    v2539 Imm(0)                                           -> x2
-    v2540 VecExtract { vec=v939, off=8, kind=I32, bytes=16 } -> x2
-    v2541 Imm(16)                                          -> x6
-    v2542 Extend { value=v2540, kind=I32 }                 -> x6
-    v2543 Imm(16)                                          -> x6
-    v2544 Imm(1)                                           -> x6
-    v2545 Imm(15)                                          -> x6
-    v2546 Imm(15)                                          -> x6
-    v2547 Imm(32768)                                       -> x6
-    v2548 Imm(32768)                                       -> x6
-    v2549 Imm(32767)                                       -> x6
-    v2550 Imm(32767)                                       -> x6
-    v2551 Binop { op=gt, lhs=v2540, rhs=v956 }             -> x6
+    v2534 Imm(0)                                           -> x1
+    v2535 Imm(0)                                           -> x1
+    v2536 Imm(4)                                           -> x1
+    v2537 Imm(0)                                           -> x1
+    v2538 Imm(8)                                           -> x1
+    v2539 Imm(0)                                           -> x1
+    v2540 VecExtract { vec=v939, off=8, kind=I32, bytes=16 } -> x1
+    v2541 Imm(16)                                          -> x2
+    v2542 Extend { value=v2540, kind=I32 }                 -> x2
+    v2543 Imm(16)                                          -> x2
+    v2544 Imm(1)                                           -> x2
+    v2545 Imm(15)                                          -> x2
+    v2546 Imm(15)                                          -> x2
+    v2547 Imm(32768)                                       -> x2
+    v2548 Imm(32768)                                       -> x2
+    v2549 Imm(32767)                                       -> x2
+    v2550 Imm(32767)                                       -> x2
+    v2551 Binop { op=gt, lhs=v2540, rhs=v956 }             -> x2
     terminator Bz { cond=v2551, target=b117, fall=b19 }   (exit_acc=v2551)
   block 19  start_pc=0
     terminator Jmp(b20)   (exit_acc=v956)
   block 20  start_pc=0
-    v2565 Phi { incoming=[b19:v956, b118:v2564], kind=I64 } -> x2
-    v2566 Extend { value=v2565, kind=I32 }                 -> x6
-    v2567 Extend { value=v2565, kind=I32 }                 -> x6
-    v2568 Extend { value=v2565, kind=I16 }                 -> x2
-    v2569 Imm(0)                                           -> x6
+    v2565 Phi { incoming=[b19:v956, b118:v2564], kind=I64 } -> x1
+    v2566 Extend { value=v2565, kind=I32 }                 -> x2
+    v2567 Extend { value=v2565, kind=I32 }                 -> x2
+    v2568 Extend { value=v2565, kind=I16 }                 -> x1
+    v2569 Imm(0)                                           -> x2
     v2570 VecInsert { vec=v2533, value=v2568, off=4, kind=I16, bytes=8 } -> d1
-    v2571 Imm(0)                                           -> x2
-    v2572 Imm(0)                                           -> x2
-    v2573 Imm(6)                                           -> x2
-    v2574 Imm(0)                                           -> x2
-    v2575 Imm(12)                                          -> x2
-    v2576 Imm(0)                                           -> x2
-    v2577 VecExtract { vec=v939, off=12, kind=I32, bytes=16 } -> x2
-    v2578 Imm(16)                                          -> x6
-    v2579 Extend { value=v2577, kind=I32 }                 -> x6
-    v2580 Imm(16)                                          -> x6
-    v2581 Imm(1)                                           -> x6
-    v2582 Imm(15)                                          -> x6
-    v2583 Imm(15)                                          -> x6
-    v2584 Imm(32768)                                       -> x6
-    v2585 Imm(32768)                                       -> x6
-    v2586 Imm(32767)                                       -> x6
-    v2587 Imm(32767)                                       -> x6
-    v2588 Binop { op=gt, lhs=v2577, rhs=v956 }             -> x6
+    v2571 Imm(0)                                           -> x1
+    v2572 Imm(0)                                           -> x1
+    v2573 Imm(6)                                           -> x1
+    v2574 Imm(0)                                           -> x1
+    v2575 Imm(12)                                          -> x1
+    v2576 Imm(0)                                           -> x1
+    v2577 VecExtract { vec=v939, off=12, kind=I32, bytes=16 } -> x1
+    v2578 Imm(16)                                          -> x2
+    v2579 Extend { value=v2577, kind=I32 }                 -> x2
+    v2580 Imm(16)                                          -> x2
+    v2581 Imm(1)                                           -> x2
+    v2582 Imm(15)                                          -> x2
+    v2583 Imm(15)                                          -> x2
+    v2584 Imm(32768)                                       -> x2
+    v2585 Imm(32768)                                       -> x2
+    v2586 Imm(32767)                                       -> x2
+    v2587 Imm(32767)                                       -> x2
+    v2588 Binop { op=gt, lhs=v2577, rhs=v956 }             -> x2
     terminator Bz { cond=v2588, target=b115, fall=b21 }   (exit_acc=v2588)
   block 21  start_pc=0
     terminator Jmp(b22)   (exit_acc=v956)
   block 22  start_pc=0
     v2602 Phi { incoming=[b21:v956, b116:v2601], kind=I64 } -> x0
-    v2603 Extend { value=v2602, kind=I32 }                 -> x2
-    v2604 Extend { value=v2602, kind=I32 }                 -> x2
+    v2603 Extend { value=v2602, kind=I32 }                 -> x1
+    v2604 Extend { value=v2602, kind=I32 }                 -> x1
     v2605 Extend { value=v2602, kind=I16 }                 -> x0
-    v2606 Imm(0)                                           -> x2
+    v2606 Imm(0)                                           -> x1
     v2607 VecInsert { vec=v2570, value=v2605, off=6, kind=I16, bytes=8 } -> d1
     v2608 Imm(0)                                           -> x0
     v2609 Imm(0)                                           -> x0
@@ -5169,12 +5169,12 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v2613 Imm(0)                                           -> x0
     v2614 Imm(0)                                           -> x0
     v2615 VecExtract { vec=v2607, off=0, kind=I64, bytes=8 } -> x0
-    v2616 Imm(0)                                           -> x2
+    v2616 Imm(0)                                           -> x1
     v2617 LifetimeEnd(0)                                   -> -
-    v2618 Imm(0)                                           -> x2
-    v2619 Undef                                            -> x2
+    v2618 Imm(0)                                           -> x1
+    v2619 Undef                                            -> x1
     v2620 BinopI { op=eq, lhs=v2615, rhs_imm=-9223231299366486014 } -> x0
-    v2621 BinopI { op=eq, lhs=v2620, rhs_imm=0 }           -> x2
+    v2621 BinopI { op=eq, lhs=v2620, rhs_imm=0 }           -> x1
     terminator Bnz { cond=v2620, target=b24, fall=b23 }   (low word)   (exit_acc=v2621)
   block 23  start_pc=0
     v1098 Imm(185)                                         -> x0
@@ -5191,25 +5191,25 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v967 InlineAsm { template="stmxcsr %0", ops=1, args=[v966] } -> -
     v968 LoadLocal { off=-1, kind=U32 }                   -> x0
     v969 BinopI { op=and, lhs=v968, rhs_imm=4294942719 }  -> x0
-    v970 Imm(24576)                                       -> x2
+    v970 Imm(24576)                                       -> x1
     v971 BinopI { op=or, lhs=v969, rhs_imm=24576 }        -> x0
     v972 StoreLocal { off=-1, value=v971, kind=I32 }      -> -
     v973 LocalAddr(-1)                                    -> x0
     v974 InlineAsm { template="ldmxcsr %0", ops=1, args=[v973] } -> -
-    v975 Imm(1075838976)                                  -> x2 [f32]
-    v976 Imm(3223322624)                                  -> x6 [f32]
+    v975 Imm(1075838976)                                  -> d3 [f32]
+    v976 Imm(3223322624)                                  -> d4 [f32]
     v977 Imm(0)                                           -> x0
-    v978 Imm(0)                                           -> x0 [f32]
-    v979 LocalAddr(-3)                                    -> x7
+    v978 Imm(0)                                           -> d0 [f32]
+    v979 LocalAddr(-3)                                    -> x0
     v980 StoreLocal { off=-3, value=v975, kind=F32, volatile } -> -
-    v981 LocalAddr(-3)                                    -> x2
-    v982 BinopI { op=add, lhs=v979, rhs_imm=4 }           -> x2
+    v981 LocalAddr(-3)                                    -> x0
+    v982 BinopI { op=add, lhs=v979, rhs_imm=4 }           -> x0
     v983 StoreLocal { off=-3, disp=4, value=v976, kind=F32, volatile } -> -
-    v984 LocalAddr(-3)                                    -> x2
-    v985 BinopI { op=add, lhs=v979, rhs_imm=8 }           -> x2
+    v984 LocalAddr(-3)                                    -> x0
+    v985 BinopI { op=add, lhs=v979, rhs_imm=8 }           -> x0
     v986 StoreLocal { off=-3, disp=8, value=v978, kind=F32, volatile } -> -
-    v987 LocalAddr(-3)                                    -> x2
-    v988 BinopI { op=add, lhs=v979, rhs_imm=12 }          -> x2
+    v987 LocalAddr(-3)                                    -> x0
+    v988 BinopI { op=add, lhs=v979, rhs_imm=12 }          -> x0
     v989 StoreLocal { off=-3, disp=12, value=v978, kind=F32, volatile } -> -
     v990 LocalAddr(-3)                                    -> x0
     v991 LoadLocal { off=-3, kind=F32, volatile }         -> d0 [f32]
@@ -5219,7 +5219,7 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v995 Imm(0)                                           -> x0
     v996 LocalAddr(-3)                                    -> x0
     v997 BinopI { op=add, lhs=v990, rhs_imm=4 }           -> x0
-    v998 LoadLocal { off=-3, disp=4, kind=F32, volatile } -> d2 [f32]
+    v998 LoadLocal { off=-3, disp=4, kind=F32, volatile } -> d3 [f32]
     v999 Imm(0)                                           -> x0
     v1000 Imm(4)                                           -> x0
     v1001 Imm(0)                                           -> x0
@@ -5227,7 +5227,7 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v1003 Imm(0)                                           -> x0
     v1004 LocalAddr(-3)                                    -> x0
     v1005 BinopI { op=add, lhs=v990, rhs_imm=8 }           -> x0
-    v1006 LoadLocal { off=-3, disp=8, kind=F32, volatile } -> d2 [f32]
+    v1006 LoadLocal { off=-3, disp=8, kind=F32, volatile } -> d3 [f32]
     v1007 Imm(0)                                           -> x0
     v1008 Imm(8)                                           -> x0
     v1009 Imm(0)                                           -> x0
@@ -5235,7 +5235,7 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v1011 Imm(0)                                           -> x0
     v1012 LocalAddr(-3)                                    -> x0
     v1013 BinopI { op=add, lhs=v990, rhs_imm=12 }          -> x0
-    v1014 LoadLocal { off=-3, disp=12, kind=F32, volatile } -> d2 [f32]
+    v1014 LoadLocal { off=-3, disp=12, kind=F32, volatile } -> d3 [f32]
     v1015 Imm(0)                                           -> x0
     v1016 Imm(12)                                          -> x0
     v1017 Imm(0)                                           -> x0
@@ -5263,26 +5263,26 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v1039 Imm(0)                                           -> x0
     v1040 Imm(0)                                           -> x0
     v1041 VecExtract { vec=v1018, off=0, kind=I32, bytes=16 } -> x0
-    v1042 Imm(0)                                           -> x2
-    v1043 Undef                                            -> x2
-    v1044 VecInsert { vec=v1043, value=v1041, off=0, kind=I32, bytes=16 } -> d2
+    v1042 Imm(0)                                           -> x1
+    v1043 Undef                                            -> x1
+    v1044 VecInsert { vec=v1043, value=v1041, off=0, kind=I32, bytes=16 } -> d3
     v1045 Imm(0)                                           -> x0
     v1046 VecExtract { vec=v1018, off=4, kind=I32, bytes=16 } -> x0
-    v1047 Imm(0)                                           -> x2
-    v1048 Imm(4)                                           -> x2
-    v1049 Imm(0)                                           -> x2
-    v1050 VecInsert { vec=v1044, value=v1046, off=4, kind=I32, bytes=16 } -> d2
+    v1047 Imm(0)                                           -> x1
+    v1048 Imm(4)                                           -> x1
+    v1049 Imm(0)                                           -> x1
+    v1050 VecInsert { vec=v1044, value=v1046, off=4, kind=I32, bytes=16 } -> d3
     v1051 Imm(0)                                           -> x0
     v1052 VecExtract { vec=v1018, off=0, kind=I32, bytes=16 } -> x0
-    v1053 Imm(0)                                           -> x2
-    v1054 Imm(8)                                           -> x2
-    v1055 Imm(0)                                           -> x2
-    v1056 VecInsert { vec=v1050, value=v1052, off=8, kind=I32, bytes=16 } -> d2
+    v1053 Imm(0)                                           -> x1
+    v1054 Imm(8)                                           -> x1
+    v1055 Imm(0)                                           -> x1
+    v1056 VecInsert { vec=v1050, value=v1052, off=8, kind=I32, bytes=16 } -> d3
     v1057 Imm(0)                                           -> x0
     v1058 VecExtract { vec=v1018, off=4, kind=I32, bytes=16 } -> x0
-    v1059 Imm(0)                                           -> x2
-    v1060 Imm(12)                                          -> x2
-    v1061 Imm(0)                                           -> x2
+    v1059 Imm(0)                                           -> x1
+    v1060 Imm(12)                                          -> x1
+    v1061 Imm(0)                                           -> x1
     v1062 VecInsert { vec=v1056, value=v1058, off=12, kind=I32, bytes=16 } -> d0
     v1063 Imm(0)                                           -> x0
     v1064 Imm(0)                                           -> x0
@@ -5314,11 +5314,11 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v1090 Imm(0)                                           -> x0
     v1091 Imm(0)                                           -> x0
     v1092 VecExtract { vec=v1085, off=0, kind=I64, bytes=8 } -> x0
-    v1093 Imm(0)                                           -> x2
-    v1094 Imm(0)                                           -> x2
-    v1095 Undef                                            -> x2
+    v1093 Imm(0)                                           -> x1
+    v1094 Imm(0)                                           -> x1
+    v1095 Undef                                            -> x1
     v1096 BinopI { op=eq, lhs=v1092, rhs_imm=-8589934590 } -> x0
-    v1097 BinopI { op=eq, lhs=v1096, rhs_imm=0 }           -> x2
+    v1097 BinopI { op=eq, lhs=v1096, rhs_imm=0 }           -> x1
     terminator Bnz { cond=v1096, target=b26, fall=b25 }   (low word)   (exit_acc=v1097)
   block 25  start_pc=0
     v1228 Imm(187)                                         -> x0
@@ -5330,20 +5330,20 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     terminator Return(v1228)   (exit_acc=v1228)
   block 26  start_pc=0
     v1104 Imm(0)                                           -> x0
-    v1105 Imm(1075838976)                                  -> x2 [f32]
-    v1106 Imm(3223322624)                                  -> x6 [f32]
+    v1105 Imm(1075838976)                                  -> d3 [f32]
+    v1106 Imm(3223322624)                                  -> d4 [f32]
     v1107 Imm(0)                                           -> x0
-    v1108 Imm(0)                                           -> x0 [f32]
-    v1109 LocalAddr(-3)                                    -> x7
+    v1108 Imm(0)                                           -> d0 [f32]
+    v1109 LocalAddr(-3)                                    -> x0
     v1110 StoreLocal { off=-3, value=v1105, kind=F32, volatile } -> -
-    v1111 LocalAddr(-3)                                    -> x2
-    v1112 BinopI { op=add, lhs=v990, rhs_imm=4 }           -> x2
+    v1111 LocalAddr(-3)                                    -> x0
+    v1112 BinopI { op=add, lhs=v990, rhs_imm=4 }           -> x0
     v1113 StoreLocal { off=-3, disp=4, value=v1106, kind=F32, volatile } -> -
-    v1114 LocalAddr(-3)                                    -> x2
-    v1115 BinopI { op=add, lhs=v990, rhs_imm=8 }           -> x2
+    v1114 LocalAddr(-3)                                    -> x0
+    v1115 BinopI { op=add, lhs=v990, rhs_imm=8 }           -> x0
     v1116 StoreLocal { off=-3, disp=8, value=v1108, kind=F32, volatile } -> -
-    v1117 LocalAddr(-3)                                    -> x2
-    v1118 BinopI { op=add, lhs=v1117, rhs_imm=12 }         -> x2
+    v1117 LocalAddr(-3)                                    -> x0
+    v1118 BinopI { op=add, lhs=v1117, rhs_imm=12 }         -> x0
     v1119 StoreLocal { off=-3, disp=12, value=v1108, kind=F32, volatile } -> -
     v1120 LocalAddr(-3)                                    -> x0
     v1121 LoadLocal { off=-3, kind=F32, volatile }         -> d0 [f32]
@@ -5353,7 +5353,7 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v1125 Imm(0)                                           -> x0
     v1126 LocalAddr(-3)                                    -> x0
     v1127 BinopI { op=add, lhs=v1117, rhs_imm=4 }          -> x0
-    v1128 LoadLocal { off=-3, disp=4, kind=F32, volatile } -> d2 [f32]
+    v1128 LoadLocal { off=-3, disp=4, kind=F32, volatile } -> d3 [f32]
     v1129 Imm(0)                                           -> x0
     v1130 Imm(4)                                           -> x0
     v1131 Imm(0)                                           -> x0
@@ -5361,7 +5361,7 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v1133 Imm(0)                                           -> x0
     v1134 LocalAddr(-3)                                    -> x0
     v1135 BinopI { op=add, lhs=v1117, rhs_imm=8 }          -> x0
-    v1136 LoadLocal { off=-3, disp=8, kind=F32, volatile } -> d2 [f32]
+    v1136 LoadLocal { off=-3, disp=8, kind=F32, volatile } -> d3 [f32]
     v1137 Imm(0)                                           -> x0
     v1138 Imm(8)                                           -> x0
     v1139 Imm(0)                                           -> x0
@@ -5369,7 +5369,7 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v1141 Imm(0)                                           -> x0
     v1142 LocalAddr(-3)                                    -> x0
     v1143 BinopI { op=add, lhs=v1117, rhs_imm=12 }         -> x0
-    v1144 LoadLocal { off=-3, disp=12, kind=F32, volatile } -> d2 [f32]
+    v1144 LoadLocal { off=-3, disp=12, kind=F32, volatile } -> d3 [f32]
     v1145 Imm(0)                                           -> x0
     v1146 Imm(12)                                          -> x0
     v1147 Imm(0)                                           -> x0
@@ -5397,26 +5397,26 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v1169 Imm(0)                                           -> x0
     v1170 Imm(0)                                           -> x0
     v1171 VecExtract { vec=v1148, off=0, kind=I32, bytes=16 } -> x0
-    v1172 Imm(0)                                           -> x2
-    v1173 Undef                                            -> x2
-    v1174 VecInsert { vec=v1173, value=v1171, off=0, kind=I32, bytes=16 } -> d2
+    v1172 Imm(0)                                           -> x1
+    v1173 Undef                                            -> x1
+    v1174 VecInsert { vec=v1173, value=v1171, off=0, kind=I32, bytes=16 } -> d3
     v1175 Imm(0)                                           -> x0
     v1176 VecExtract { vec=v1148, off=4, kind=I32, bytes=16 } -> x0
-    v1177 Imm(0)                                           -> x2
-    v1178 Imm(4)                                           -> x2
-    v1179 Imm(0)                                           -> x2
-    v1180 VecInsert { vec=v1174, value=v1176, off=4, kind=I32, bytes=16 } -> d2
+    v1177 Imm(0)                                           -> x1
+    v1178 Imm(4)                                           -> x1
+    v1179 Imm(0)                                           -> x1
+    v1180 VecInsert { vec=v1174, value=v1176, off=4, kind=I32, bytes=16 } -> d3
     v1181 Imm(0)                                           -> x0
     v1182 VecExtract { vec=v1148, off=0, kind=I32, bytes=16 } -> x0
-    v1183 Imm(0)                                           -> x2
-    v1184 Imm(8)                                           -> x2
-    v1185 Imm(0)                                           -> x2
-    v1186 VecInsert { vec=v1180, value=v1182, off=8, kind=I32, bytes=16 } -> d2
+    v1183 Imm(0)                                           -> x1
+    v1184 Imm(8)                                           -> x1
+    v1185 Imm(0)                                           -> x1
+    v1186 VecInsert { vec=v1180, value=v1182, off=8, kind=I32, bytes=16 } -> d3
     v1187 Imm(0)                                           -> x0
     v1188 VecExtract { vec=v1148, off=4, kind=I32, bytes=16 } -> x0
-    v1189 Imm(0)                                           -> x2
-    v1190 Imm(12)                                          -> x2
-    v1191 Imm(0)                                           -> x2
+    v1189 Imm(0)                                           -> x1
+    v1190 Imm(12)                                          -> x1
+    v1191 Imm(0)                                           -> x1
     v1192 VecInsert { vec=v1186, value=v1188, off=12, kind=I32, bytes=16 } -> d0
     v1193 Imm(0)                                           -> x0
     v1194 Imm(0)                                           -> x0
@@ -5448,11 +5448,11 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v1220 Imm(0)                                           -> x0
     v1221 Imm(0)                                           -> x0
     v1222 VecExtract { vec=v1215, off=0, kind=I64, bytes=8 } -> x0
-    v1223 Imm(0)                                           -> x2
-    v1224 Imm(0)                                           -> x2
-    v1225 Undef                                            -> x2
+    v1223 Imm(0)                                           -> x1
+    v1224 Imm(0)                                           -> x1
+    v1225 Undef                                            -> x1
     v1226 BinopI { op=eq, lhs=v1222, rhs_imm=-8589934590 } -> x0
-    v1227 BinopI { op=eq, lhs=v1226, rhs_imm=0 }           -> x2
+    v1227 BinopI { op=eq, lhs=v1226, rhs_imm=0 }           -> x1
     terminator Bnz { cond=v1226, target=b28, fall=b27 }   (low word)   (exit_acc=v1227)
   block 27  start_pc=0
     v1320 Imm(188)                                         -> x0
@@ -5469,16 +5469,16 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v1237 InlineAsm { template="stmxcsr %0", ops=1, args=[v1236] } -> -
     v1238 LoadLocal { off=-1, kind=U32 }                   -> x0
     v1239 BinopI { op=and, lhs=v1238, rhs_imm=4294942719 } -> x0
-    v1240 Imm(0)                                           -> x2
-    v1241 BinopI { op=or, lhs=v1239, rhs_imm=0 }           -> x2
+    v1240 Imm(0)                                           -> x1
+    v1241 BinopI { op=or, lhs=v1239, rhs_imm=0 }           -> x1
     v1242 StoreLocal { off=-1, value=v1239, kind=I32 }     -> -
     v1243 LocalAddr(-1)                                    -> x0
     v1244 InlineAsm { template="ldmxcsr %0", ops=1, args=[v1243] } -> -
-    v1245 Imm(1069547520)                                  -> x0 [f32]
-    v1246 Imm(3217031168)                                  -> x2 [f32]
-    v1247 Imm(1193033728)                                  -> x6 [f32]
-    v1248 Imm(0)                                           -> x7 [f32]
-    v1249 LocalAddr(-3)                                    -> x7
+    v1245 Imm(1069547520)                                  -> d0 [f32]
+    v1246 Imm(3217031168)                                  -> d3 [f32]
+    v1247 Imm(1193033728)                                  -> d4 [f32]
+    v1248 Imm(0)                                           -> x0 [f32]
+    v1249 LocalAddr(-3)                                    -> x0
     v1250 StoreLocal { off=-3, value=v1245, kind=F32, volatile } -> -
     v1251 LocalAddr(-3)                                    -> x0
     v1252 BinopI { op=add, lhs=v1249, rhs_imm=4 }          -> x0
@@ -5668,12 +5668,12 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     terminator Return(v1409)   (exit_acc=v1409)
   block 38  start_pc=0
     v1326 Imm(0)                                           -> x0
-    v1327 Imm(1133903872)                                  -> x0 [f32]
-    v1328 Imm(3281387520)                                  -> x1 [f32]
-    v1329 Imm(1056964608)                                  -> x2 [f32]
-    v1330 Imm(1088421888)                                  -> x6 [f32]
-    v1331 Imm(3235905536)                                  -> x6 [f32]
-    v1332 LocalAddr(-3)                                    -> x7
+    v1327 Imm(1133903872)                                  -> d0 [f32]
+    v1328 Imm(3281387520)                                  -> d1 [f32]
+    v1329 Imm(1056964608)                                  -> d2 [f32]
+    v1330 Imm(1088421888)                                  -> x0 [f32]
+    v1331 Imm(3235905536)                                  -> d3 [f32]
+    v1332 LocalAddr(-3)                                    -> x0
     v1333 StoreLocal { off=-3, value=v1327, kind=F32, volatile } -> -
     v1334 LocalAddr(-3)                                    -> x0
     v1335 BinopI { op=add, lhs=v1260, rhs_imm=4 }          -> x0
@@ -5888,62 +5888,62 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v1432 Imm(0)                                           -> x0
     v1433 Imm(0)                                           -> x0
     v1434 Imm(16777217)                                    -> x0
-    v1435 Imm(1266679808)                                  -> x0 [f32]
-    v1436 Imm(0)                                           -> x1
-    v1437 Undef                                            -> x1
-    v1438 VecInsert { vec=v1437, value=v1435, off=0, kind=F32, bytes=16 } -> d1
-    v1439 Imm(0)                                           -> x1
-    v1440 Imm(-5)                                          -> x1
-    v1441 Imm(3231711232)                                  -> x1 [f32]
-    v1442 Imm(0)                                           -> x2
-    v1443 Imm(4)                                           -> x2
-    v1444 Imm(0)                                           -> x2
-    v1445 VecInsert { vec=v1438, value=v1441, off=4, kind=F32, bytes=16 } -> d1
-    v1446 Imm(0)                                           -> x2
-    v1447 Imm(0)                                           -> x2
-    v1448 Imm(8)                                           -> x2
-    v1449 Imm(0)                                           -> x2
-    v1450 VecExtract { vec=v1418, off=8, kind=F32, bytes=16 } -> d1 [f32]
-    v1451 Imm(0)                                           -> x2
-    v1452 Imm(8)                                           -> x2
-    v1453 Imm(0)                                           -> x2
-    v1454 VecInsert { vec=v1445, value=v1450, off=8, kind=F32, bytes=16 } -> d2
-    v1455 Imm(0)                                           -> x2
-    v1456 Imm(0)                                           -> x2
-    v1457 Imm(12)                                          -> x2
-    v1458 Imm(0)                                           -> x2
-    v1459 VecExtract { vec=v1418, off=12, kind=F32, bytes=16 } -> d0 [f32]
-    v1460 Imm(0)                                           -> x2
-    v1461 Imm(12)                                          -> x2
-    v1462 Imm(0)                                           -> x2
-    v1463 VecInsert { vec=v1454, value=v1459, off=12, kind=F32, bytes=16 } -> d2
-    v1464 Imm(0)                                           -> x2
-    v1465 Imm(0)                                           -> x2
+    v1435 Imm(1266679808)                                  -> d1 [f32]
+    v1436 Imm(0)                                           -> x0
+    v1437 Undef                                            -> x0
+    v1438 VecInsert { vec=v1437, value=v1435, off=0, kind=F32, bytes=16 } -> d2
+    v1439 Imm(0)                                           -> x0
+    v1440 Imm(-5)                                          -> x0
+    v1441 Imm(3231711232)                                  -> d2 [f32]
+    v1442 Imm(0)                                           -> x0
+    v1443 Imm(4)                                           -> x0
+    v1444 Imm(0)                                           -> x0
+    v1445 VecInsert { vec=v1438, value=v1441, off=4, kind=F32, bytes=16 } -> d3
+    v1446 Imm(0)                                           -> x0
+    v1447 Imm(0)                                           -> x0
+    v1448 Imm(8)                                           -> x0
+    v1449 Imm(0)                                           -> x0
+    v1450 VecExtract { vec=v1418, off=8, kind=F32, bytes=16 } -> d3 [f32]
+    v1451 Imm(0)                                           -> x0
+    v1452 Imm(8)                                           -> x0
+    v1453 Imm(0)                                           -> x0
+    v1454 VecInsert { vec=v1445, value=v1450, off=8, kind=F32, bytes=16 } -> d4
+    v1455 Imm(0)                                           -> x0
+    v1456 Imm(0)                                           -> x0
+    v1457 Imm(12)                                          -> x0
+    v1458 Imm(0)                                           -> x0
+    v1459 VecExtract { vec=v1418, off=12, kind=F32, bytes=16 } -> d4 [f32]
+    v1460 Imm(0)                                           -> x0
+    v1461 Imm(12)                                          -> x0
+    v1462 Imm(0)                                           -> x0
+    v1463 VecInsert { vec=v1454, value=v1459, off=12, kind=F32, bytes=16 } -> d0
+    v1464 Imm(0)                                           -> x0
+    v1465 Imm(0)                                           -> x0
     v1466 LifetimeEnd(0)                                   -> -
     v1467 LifetimeEnd(0)                                   -> -
     v1468 LifetimeEnd(0)                                   -> -
-    v1469 Imm(0)                                           -> x2
-    v1470 Imm(0)                                           -> x2
-    v1471 Imm(0)                                           -> x2
-    v1472 Imm(0)                                           -> x2
-    v1473 Imm(0)                                           -> x2
-    v1474 Imm(0)                                           -> x2
-    v1475 Imm(0)                                           -> x2
+    v1469 Imm(0)                                           -> x0
+    v1470 Imm(0)                                           -> x0
+    v1471 Imm(0)                                           -> x0
+    v1472 Imm(0)                                           -> x0
+    v1473 Imm(0)                                           -> x0
+    v1474 Imm(0)                                           -> x0
+    v1475 Imm(0)                                           -> x0
     v1476 LifetimeEnd(0)                                   -> -
-    v1477 Imm(0)                                           -> x2
-    v1478 Imm(0)                                           -> x2
-    v1479 Imm(0)                                           -> x2
-    v1480 Copy { value=v1435, fp=true }                    -> d2 [f32]
-    v1481 Imm(1266679808)                                  -> x2 [f32]
+    v1477 Imm(0)                                           -> x0
+    v1478 Imm(0)                                           -> x0
+    v1479 Imm(0)                                           -> x0
+    v1480 Copy { value=v1435, fp=true }                    -> d0 [f32]
+    v1481 Imm(1266679808)                                  -> x0 [f32]
     v1482 Binop { op=feq, lhs=v1480, rhs=v1435 }           -> x0
-    v1483 Imm(0)                                           -> x2
+    v1483 Imm(0)                                           -> x1
     terminator Bz { cond=v1482, target=b52, fall=b49 }   (exit_acc=v1482)
   block 49  start_pc=0
     v1559 Imm(0)                                           -> x0
     v1560 Imm(4)                                           -> x0
     v1561 Imm(4)                                           -> x0
     v1562 Imm(0)                                           -> x0
-    v1563 Copy { value=v1441, fp=true }                    -> d2 [f32]
+    v1563 Copy { value=v1441, fp=true }                    -> d0 [f32]
     v1564 Imm(1084227584)                                  -> x0 [f32]
     v1565 Imm(3231711232)                                  -> x0 [f32]
     v1566 Binop { op=feq, lhs=v1563, rhs=v1441 }           -> x0
@@ -5960,22 +5960,22 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v1575 Imm(8)                                           -> x0
     v1576 Imm(0)                                           -> x0
     v1577 Copy { value=v1450, fp=true }                    -> d1 [f32]
-    v1578 Imm(1091567616)                                  -> x0 [f32]
-    v1579 Binop { op=feq, lhs=v1577, rhs=v1578 }           -> x1
-    v1580 BinopI { op=ne, lhs=v1579, rhs_imm=0 }           -> x2
-    v1581 Imm(0)                                           -> x2
-    v1582 Imm(0)                                           -> x2
-    v1583 Imm(0)                                           -> x2
-    v1584 Imm(0)                                           -> x2
-    v1585 Imm(0)                                           -> x2
+    v1578 Imm(1091567616)                                  -> d0 [f32]
+    v1579 Binop { op=feq, lhs=v1577, rhs=v1578 }           -> x0
+    v1580 BinopI { op=ne, lhs=v1579, rhs_imm=0 }           -> x1
+    v1581 Imm(0)                                           -> x1
+    v1582 Imm(0)                                           -> x1
+    v1583 Imm(0)                                           -> x1
+    v1584 Imm(0)                                           -> x1
+    v1585 Imm(0)                                           -> x1
     terminator Bz { cond=v1579, target=b52, fall=b51 }   (exit_acc=v1579)
   block 51  start_pc=0
-    v1586 Imm(0)                                           -> x1
-    v1587 Imm(12)                                          -> x1
-    v1588 Imm(12)                                          -> x1
-    v1589 Imm(0)                                           -> x1
-    v1590 Copy { value=v1459, fp=true }                    -> d0 [f32]
-    v1591 Imm(1091567616)                                  -> x1 [f32]
+    v1586 Imm(0)                                           -> x0
+    v1587 Imm(12)                                          -> x0
+    v1588 Imm(12)                                          -> x0
+    v1589 Imm(0)                                           -> x0
+    v1590 Copy { value=v1459, fp=true }                    -> d1 [f32]
+    v1591 Imm(1091567616)                                  -> x0 [f32]
     v1592 Binop { op=feq, lhs=v1590, rhs=v1578 }           -> x0
     v1593 BinopI { op=ne, lhs=v1592, rhs_imm=0 }           -> x1
     v1594 Imm(0)                                           -> x1
@@ -6013,61 +6013,61 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v1508 Imm(0)                                           -> x0
     v1509 Imm(0)                                           -> x0
     v1510 Imm(6)                                           -> x0
-    v1511 Imm(1086324736)                                  -> x0 [f32]
-    v1512 Imm(0)                                           -> x1
-    v1513 Undef                                            -> x1
-    v1514 VecInsert { vec=v1513, value=v1511, off=0, kind=F32, bytes=16 } -> d1
-    v1515 Imm(0)                                           -> x1
-    v1516 Imm(7)                                           -> x1
-    v1517 Imm(1088421888)                                  -> x1 [f32]
-    v1518 Imm(0)                                           -> x2
-    v1519 Imm(4)                                           -> x2
-    v1520 Imm(0)                                           -> x2
-    v1521 VecInsert { vec=v1514, value=v1517, off=4, kind=F32, bytes=16 } -> d1
-    v1522 Imm(0)                                           -> x2
-    v1523 Imm(0)                                           -> x2
-    v1524 Imm(8)                                           -> x2
-    v1525 Imm(0)                                           -> x2
-    v1526 VecExtract { vec=v1494, off=8, kind=F32, bytes=16 } -> d1 [f32]
-    v1527 Imm(0)                                           -> x2
-    v1528 Imm(8)                                           -> x2
-    v1529 Imm(0)                                           -> x2
-    v1530 VecInsert { vec=v1521, value=v1526, off=8, kind=F32, bytes=16 } -> d2
-    v1531 Imm(0)                                           -> x2
-    v1532 Imm(0)                                           -> x2
-    v1533 Imm(12)                                          -> x2
-    v1534 Imm(0)                                           -> x2
+    v1511 Imm(1086324736)                                  -> d1 [f32]
+    v1512 Imm(0)                                           -> x0
+    v1513 Undef                                            -> x0
+    v1514 VecInsert { vec=v1513, value=v1511, off=0, kind=F32, bytes=16 } -> d2
+    v1515 Imm(0)                                           -> x0
+    v1516 Imm(7)                                           -> x0
+    v1517 Imm(1088421888)                                  -> d2 [f32]
+    v1518 Imm(0)                                           -> x0
+    v1519 Imm(4)                                           -> x0
+    v1520 Imm(0)                                           -> x0
+    v1521 VecInsert { vec=v1514, value=v1517, off=4, kind=F32, bytes=16 } -> d3
+    v1522 Imm(0)                                           -> x0
+    v1523 Imm(0)                                           -> x0
+    v1524 Imm(8)                                           -> x0
+    v1525 Imm(0)                                           -> x0
+    v1526 VecExtract { vec=v1494, off=8, kind=F32, bytes=16 } -> d3 [f32]
+    v1527 Imm(0)                                           -> x0
+    v1528 Imm(8)                                           -> x0
+    v1529 Imm(0)                                           -> x0
+    v1530 VecInsert { vec=v1521, value=v1526, off=8, kind=F32, bytes=16 } -> d4
+    v1531 Imm(0)                                           -> x0
+    v1532 Imm(0)                                           -> x0
+    v1533 Imm(12)                                          -> x0
+    v1534 Imm(0)                                           -> x0
     v1535 VecExtract { vec=v1494, off=12, kind=F32, bytes=16 } -> d0 [f32]
-    v1536 Imm(0)                                           -> x2
-    v1537 Imm(12)                                          -> x2
-    v1538 Imm(0)                                           -> x2
-    v1539 VecInsert { vec=v1530, value=v1535, off=12, kind=F32, bytes=16 } -> d2
-    v1540 Imm(0)                                           -> x2
-    v1541 Imm(0)                                           -> x2
+    v1536 Imm(0)                                           -> x0
+    v1537 Imm(12)                                          -> x0
+    v1538 Imm(0)                                           -> x0
+    v1539 VecInsert { vec=v1530, value=v1535, off=12, kind=F32, bytes=16 } -> d4
+    v1540 Imm(0)                                           -> x0
+    v1541 Imm(0)                                           -> x0
     v1542 LifetimeEnd(0)                                   -> -
     v1543 LifetimeEnd(0)                                   -> -
     v1544 LifetimeEnd(0)                                   -> -
-    v1545 Imm(0)                                           -> x2
-    v1546 Imm(0)                                           -> x2
-    v1547 Imm(0)                                           -> x2
-    v1548 Imm(0)                                           -> x2
-    v1549 Imm(0)                                           -> x2
-    v1550 Imm(0)                                           -> x2
+    v1545 Imm(0)                                           -> x0
+    v1546 Imm(0)                                           -> x0
+    v1547 Imm(0)                                           -> x0
+    v1548 Imm(0)                                           -> x0
+    v1549 Imm(0)                                           -> x0
+    v1550 Imm(0)                                           -> x0
     v1551 LifetimeEnd(0)                                   -> -
-    v1552 Imm(0)                                           -> x2
-    v1553 Imm(0)                                           -> x2
-    v1554 Imm(0)                                           -> x2
-    v1555 Copy { value=v1511, fp=true }                    -> d2 [f32]
-    v1556 Imm(1086324736)                                  -> x2 [f32]
+    v1552 Imm(0)                                           -> x0
+    v1553 Imm(0)                                           -> x0
+    v1554 Imm(0)                                           -> x0
+    v1555 Copy { value=v1511, fp=true }                    -> d4 [f32]
+    v1556 Imm(1086324736)                                  -> x0 [f32]
     v1557 Binop { op=feq, lhs=v1555, rhs=v1511 }           -> x0
-    v1558 Imm(0)                                           -> x2
+    v1558 Imm(0)                                           -> x1
     terminator Bz { cond=v1557, target=b57, fall=b54 }   (exit_acc=v1557)
   block 54  start_pc=0
     v1661 Imm(0)                                           -> x0
     v1662 Imm(4)                                           -> x0
     v1663 Imm(4)                                           -> x0
     v1664 Imm(0)                                           -> x0
-    v1665 Copy { value=v1517, fp=true }                    -> d2 [f32]
+    v1665 Copy { value=v1517, fp=true }                    -> d1 [f32]
     v1666 Imm(1088421888)                                  -> x0 [f32]
     v1667 Binop { op=feq, lhs=v1665, rhs=v1517 }           -> x0
     v1668 BinopI { op=ne, lhs=v1667, rhs_imm=0 }           -> x1
@@ -6083,7 +6083,7 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v1676 Imm(8)                                           -> x0
     v1677 Imm(0)                                           -> x0
     v1678 Copy { value=v1526, fp=true }                    -> d1 [f32]
-    v1679 Imm(1077936128)                                  -> x0 [f32]
+    v1679 Imm(1077936128)                                  -> d2 [f32]
     v1680 Binop { op=feq, lhs=v1678, rhs=v1679 }           -> x0
     v1681 BinopI { op=ne, lhs=v1680, rhs_imm=0 }           -> x1
     v1682 Imm(0)                                           -> x1
@@ -6098,7 +6098,7 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v1689 Imm(12)                                          -> x0
     v1690 Imm(0)                                           -> x0
     v1691 Copy { value=v1535, fp=true }                    -> d0 [f32]
-    v1692 Imm(1082130432)                                  -> x0 [f32]
+    v1692 Imm(1082130432)                                  -> d1 [f32]
     v1693 Binop { op=feq, lhs=v1691, rhs=v1692 }           -> x0
     v1694 BinopI { op=ne, lhs=v1693, rhs_imm=0 }           -> x1
     v1695 Imm(0)                                           -> x1
@@ -6128,50 +6128,50 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v1614 Imm(0)                                           -> x0
     v1615 Imm(0)                                           -> x0
     v1616 Imm(-32768)                                      -> x0
-    v1617 Imm(3338665984)                                  -> x0 [f32]
-    v1618 Imm(0)                                           -> x1
-    v1619 Undef                                            -> x1
-    v1620 VecInsert { vec=v1619, value=v1617, off=0, kind=F32, bytes=16 } -> d0
-    v1621 Imm(0)                                           -> x1
-    v1622 Imm(32767)                                       -> x1
-    v1623 Imm(1191181824)                                  -> x1 [f32]
-    v1624 Imm(0)                                           -> x2
-    v1625 Imm(4)                                           -> x2
-    v1626 Imm(0)                                           -> x2
-    v1627 VecInsert { vec=v1620, value=v1623, off=4, kind=F32, bytes=16 } -> d0
-    v1628 Imm(0)                                           -> x2
-    v1629 Imm(-1)                                          -> x2
-    v1630 Imm(3212836864)                                  -> x2 [f32]
-    v1631 Imm(0)                                           -> x6
-    v1632 Imm(8)                                           -> x6
-    v1633 Imm(0)                                           -> x6
-    v1634 VecInsert { vec=v1627, value=v1630, off=8, kind=F32, bytes=16 } -> d0
-    v1635 Imm(0)                                           -> x6
-    v1636 Imm(0)                                           -> x6
-    v1637 Imm(0)                                           -> x6 [f32]
-    v1638 Imm(0)                                           -> x7
-    v1639 Imm(12)                                          -> x7
-    v1640 Imm(0)                                           -> x7
-    v1641 VecInsert { vec=v1634, value=v1637, off=12, kind=F32, bytes=16 } -> d0
-    v1642 Imm(0)                                           -> x7
-    v1643 Imm(0)                                           -> x7
+    v1617 Imm(3338665984)                                  -> d0 [f32]
+    v1618 Imm(0)                                           -> x0
+    v1619 Undef                                            -> x0
+    v1620 VecInsert { vec=v1619, value=v1617, off=0, kind=F32, bytes=16 } -> d1
+    v1621 Imm(0)                                           -> x0
+    v1622 Imm(32767)                                       -> x0
+    v1623 Imm(1191181824)                                  -> d1 [f32]
+    v1624 Imm(0)                                           -> x0
+    v1625 Imm(4)                                           -> x0
+    v1626 Imm(0)                                           -> x0
+    v1627 VecInsert { vec=v1620, value=v1623, off=4, kind=F32, bytes=16 } -> d2
+    v1628 Imm(0)                                           -> x0
+    v1629 Imm(-1)                                          -> x0
+    v1630 Imm(3212836864)                                  -> d2 [f32]
+    v1631 Imm(0)                                           -> x0
+    v1632 Imm(8)                                           -> x0
+    v1633 Imm(0)                                           -> x0
+    v1634 VecInsert { vec=v1627, value=v1630, off=8, kind=F32, bytes=16 } -> d3
+    v1635 Imm(0)                                           -> x0
+    v1636 Imm(0)                                           -> x0
+    v1637 Imm(0)                                           -> d3 [f32]
+    v1638 Imm(0)                                           -> x0
+    v1639 Imm(12)                                          -> x0
+    v1640 Imm(0)                                           -> x0
+    v1641 VecInsert { vec=v1634, value=v1637, off=12, kind=F32, bytes=16 } -> d4
+    v1642 Imm(0)                                           -> x0
+    v1643 Imm(0)                                           -> x0
     v1644 LifetimeEnd(0)                                   -> -
     v1645 LifetimeEnd(0)                                   -> -
-    v1646 Imm(0)                                           -> x7
-    v1647 Imm(0)                                           -> x7
-    v1648 Imm(0)                                           -> x7
-    v1649 Imm(0)                                           -> x7
-    v1650 Imm(0)                                           -> x7
-    v1651 Imm(0)                                           -> x7
+    v1646 Imm(0)                                           -> x0
+    v1647 Imm(0)                                           -> x0
+    v1648 Imm(0)                                           -> x0
+    v1649 Imm(0)                                           -> x0
+    v1650 Imm(0)                                           -> x0
+    v1651 Imm(0)                                           -> x0
     v1652 LifetimeEnd(0)                                   -> -
-    v1653 Imm(0)                                           -> x7
-    v1654 Imm(0)                                           -> x7
-    v1655 Imm(0)                                           -> x7
-    v1656 Copy { value=v1617, fp=true }                    -> d0 [f32]
-    v1657 Imm(1191182336)                                  -> x7 [f32]
-    v1658 Imm(3338665984)                                  -> x7 [f32]
+    v1653 Imm(0)                                           -> x0
+    v1654 Imm(0)                                           -> x0
+    v1655 Imm(0)                                           -> x0
+    v1656 Copy { value=v1617, fp=true }                    -> d4 [f32]
+    v1657 Imm(1191182336)                                  -> x0 [f32]
+    v1658 Imm(3338665984)                                  -> x0 [f32]
     v1659 Binop { op=feq, lhs=v1656, rhs=v1617 }           -> x0
-    v1660 Imm(0)                                           -> x7
+    v1660 Imm(0)                                           -> x1
     terminator Bz { cond=v1659, target=b62, fall=b59 }   (exit_acc=v1659)
   block 59  start_pc=0
     v1761 Imm(0)                                           -> x0
@@ -6240,49 +6240,49 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v1715 Imm(0)                                           -> x0
     v1716 Imm(0)                                           -> x0
     v1717 Imm(32768)                                       -> x0
-    v1718 Imm(1191182336)                                  -> x0 [f32]
-    v1719 Imm(0)                                           -> x1
-    v1720 Undef                                            -> x1
-    v1721 VecInsert { vec=v1720, value=v1718, off=0, kind=F32, bytes=16 } -> d0
-    v1722 Imm(0)                                           -> x1
-    v1723 Imm(32767)                                       -> x1
-    v1724 Imm(1191181824)                                  -> x1 [f32]
-    v1725 Imm(0)                                           -> x2
-    v1726 Imm(4)                                           -> x2
-    v1727 Imm(0)                                           -> x2
-    v1728 VecInsert { vec=v1721, value=v1724, off=4, kind=F32, bytes=16 } -> d0
-    v1729 Imm(0)                                           -> x2
-    v1730 Imm(65535)                                       -> x2
-    v1731 Imm(1199570688)                                  -> x2 [f32]
-    v1732 Imm(0)                                           -> x6
-    v1733 Imm(8)                                           -> x6
-    v1734 Imm(0)                                           -> x6
-    v1735 VecInsert { vec=v1728, value=v1731, off=8, kind=F32, bytes=16 } -> d0
-    v1736 Imm(0)                                           -> x6
-    v1737 Imm(0)                                           -> x6
-    v1738 Imm(0)                                           -> x6 [f32]
-    v1739 Imm(0)                                           -> x7
-    v1740 Imm(12)                                          -> x7
-    v1741 Imm(0)                                           -> x7
-    v1742 VecInsert { vec=v1735, value=v1738, off=12, kind=F32, bytes=16 } -> d0
-    v1743 Imm(0)                                           -> x7
-    v1744 Imm(0)                                           -> x7
+    v1718 Imm(1191182336)                                  -> d0 [f32]
+    v1719 Imm(0)                                           -> x0
+    v1720 Undef                                            -> x0
+    v1721 VecInsert { vec=v1720, value=v1718, off=0, kind=F32, bytes=16 } -> d1
+    v1722 Imm(0)                                           -> x0
+    v1723 Imm(32767)                                       -> x0
+    v1724 Imm(1191181824)                                  -> d1 [f32]
+    v1725 Imm(0)                                           -> x0
+    v1726 Imm(4)                                           -> x0
+    v1727 Imm(0)                                           -> x0
+    v1728 VecInsert { vec=v1721, value=v1724, off=4, kind=F32, bytes=16 } -> d2
+    v1729 Imm(0)                                           -> x0
+    v1730 Imm(65535)                                       -> x0
+    v1731 Imm(1199570688)                                  -> d2 [f32]
+    v1732 Imm(0)                                           -> x0
+    v1733 Imm(8)                                           -> x0
+    v1734 Imm(0)                                           -> x0
+    v1735 VecInsert { vec=v1728, value=v1731, off=8, kind=F32, bytes=16 } -> d3
+    v1736 Imm(0)                                           -> x0
+    v1737 Imm(0)                                           -> x0
+    v1738 Imm(0)                                           -> d3 [f32]
+    v1739 Imm(0)                                           -> x0
+    v1740 Imm(12)                                          -> x0
+    v1741 Imm(0)                                           -> x0
+    v1742 VecInsert { vec=v1735, value=v1738, off=12, kind=F32, bytes=16 } -> d4
+    v1743 Imm(0)                                           -> x0
+    v1744 Imm(0)                                           -> x0
     v1745 LifetimeEnd(0)                                   -> -
     v1746 LifetimeEnd(0)                                   -> -
-    v1747 Imm(0)                                           -> x7
-    v1748 Imm(0)                                           -> x7
-    v1749 Imm(0)                                           -> x7
-    v1750 Imm(0)                                           -> x7
-    v1751 Imm(0)                                           -> x7
-    v1752 Imm(0)                                           -> x7
+    v1747 Imm(0)                                           -> x0
+    v1748 Imm(0)                                           -> x0
+    v1749 Imm(0)                                           -> x0
+    v1750 Imm(0)                                           -> x0
+    v1751 Imm(0)                                           -> x0
+    v1752 Imm(0)                                           -> x0
     v1753 LifetimeEnd(0)                                   -> -
-    v1754 Imm(0)                                           -> x7
-    v1755 Imm(0)                                           -> x7
-    v1756 Imm(0)                                           -> x7
-    v1757 Copy { value=v1718, fp=true }                    -> d0 [f32]
-    v1758 Imm(1191182336)                                  -> x7 [f32]
+    v1754 Imm(0)                                           -> x0
+    v1755 Imm(0)                                           -> x0
+    v1756 Imm(0)                                           -> x0
+    v1757 Copy { value=v1718, fp=true }                    -> d4 [f32]
+    v1758 Imm(1191182336)                                  -> x0 [f32]
     v1759 Binop { op=feq, lhs=v1757, rhs=v1718 }           -> x0
-    v1760 Imm(0)                                           -> x7
+    v1760 Imm(0)                                           -> x1
     terminator Bz { cond=v1759, target=b67, fall=b64 }   (exit_acc=v1759)
   block 64  start_pc=0
     v1863 Imm(0)                                           -> x0
@@ -6350,50 +6350,50 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v1816 Imm(0)                                           -> x0
     v1817 Imm(0)                                           -> x0
     v1818 Imm(-128)                                        -> x0
-    v1819 Imm(3271557120)                                  -> x0 [f32]
-    v1820 Imm(0)                                           -> x1
-    v1821 Undef                                            -> x1
-    v1822 VecInsert { vec=v1821, value=v1819, off=0, kind=F32, bytes=16 } -> d0
-    v1823 Imm(0)                                           -> x1
-    v1824 Imm(127)                                         -> x1
-    v1825 Imm(1123942400)                                  -> x1 [f32]
-    v1826 Imm(0)                                           -> x2
-    v1827 Imm(4)                                           -> x2
-    v1828 Imm(0)                                           -> x2
-    v1829 VecInsert { vec=v1822, value=v1825, off=4, kind=F32, bytes=16 } -> d0
-    v1830 Imm(0)                                           -> x2
-    v1831 Imm(-1)                                          -> x2
-    v1832 Imm(3212836864)                                  -> x2 [f32]
-    v1833 Imm(0)                                           -> x6
-    v1834 Imm(8)                                           -> x6
-    v1835 Imm(0)                                           -> x6
-    v1836 VecInsert { vec=v1829, value=v1832, off=8, kind=F32, bytes=16 } -> d0
-    v1837 Imm(0)                                           -> x6
-    v1838 Imm(5)                                           -> x6
-    v1839 Imm(1084227584)                                  -> x6 [f32]
-    v1840 Imm(0)                                           -> x7
-    v1841 Imm(12)                                          -> x7
-    v1842 Imm(0)                                           -> x7
-    v1843 VecInsert { vec=v1836, value=v1839, off=12, kind=F32, bytes=16 } -> d0
-    v1844 Imm(0)                                           -> x7
-    v1845 Imm(0)                                           -> x7
+    v1819 Imm(3271557120)                                  -> d0 [f32]
+    v1820 Imm(0)                                           -> x0
+    v1821 Undef                                            -> x0
+    v1822 VecInsert { vec=v1821, value=v1819, off=0, kind=F32, bytes=16 } -> d1
+    v1823 Imm(0)                                           -> x0
+    v1824 Imm(127)                                         -> x0
+    v1825 Imm(1123942400)                                  -> d1 [f32]
+    v1826 Imm(0)                                           -> x0
+    v1827 Imm(4)                                           -> x0
+    v1828 Imm(0)                                           -> x0
+    v1829 VecInsert { vec=v1822, value=v1825, off=4, kind=F32, bytes=16 } -> d2
+    v1830 Imm(0)                                           -> x0
+    v1831 Imm(-1)                                          -> x0
+    v1832 Imm(3212836864)                                  -> d2 [f32]
+    v1833 Imm(0)                                           -> x0
+    v1834 Imm(8)                                           -> x0
+    v1835 Imm(0)                                           -> x0
+    v1836 VecInsert { vec=v1829, value=v1832, off=8, kind=F32, bytes=16 } -> d3
+    v1837 Imm(0)                                           -> x0
+    v1838 Imm(5)                                           -> x0
+    v1839 Imm(1084227584)                                  -> d3 [f32]
+    v1840 Imm(0)                                           -> x0
+    v1841 Imm(12)                                          -> x0
+    v1842 Imm(0)                                           -> x0
+    v1843 VecInsert { vec=v1836, value=v1839, off=12, kind=F32, bytes=16 } -> d4
+    v1844 Imm(0)                                           -> x0
+    v1845 Imm(0)                                           -> x0
     v1846 LifetimeEnd(0)                                   -> -
     v1847 LifetimeEnd(0)                                   -> -
-    v1848 Imm(0)                                           -> x7
-    v1849 Imm(0)                                           -> x7
-    v1850 Imm(0)                                           -> x7
-    v1851 Imm(0)                                           -> x7
-    v1852 Imm(0)                                           -> x7
-    v1853 Imm(0)                                           -> x7
+    v1848 Imm(0)                                           -> x0
+    v1849 Imm(0)                                           -> x0
+    v1850 Imm(0)                                           -> x0
+    v1851 Imm(0)                                           -> x0
+    v1852 Imm(0)                                           -> x0
+    v1853 Imm(0)                                           -> x0
     v1854 LifetimeEnd(0)                                   -> -
-    v1855 Imm(0)                                           -> x7
-    v1856 Imm(0)                                           -> x7
-    v1857 Imm(0)                                           -> x7
-    v1858 Copy { value=v1819, fp=true }                    -> d0 [f32]
-    v1859 Imm(1124073472)                                  -> x7 [f32]
-    v1860 Imm(3271557120)                                  -> x7 [f32]
+    v1855 Imm(0)                                           -> x0
+    v1856 Imm(0)                                           -> x0
+    v1857 Imm(0)                                           -> x0
+    v1858 Copy { value=v1819, fp=true }                    -> d4 [f32]
+    v1859 Imm(1124073472)                                  -> x0 [f32]
+    v1860 Imm(3271557120)                                  -> x0 [f32]
     v1861 Binop { op=feq, lhs=v1858, rhs=v1819 }           -> x0
-    v1862 Imm(0)                                           -> x7
+    v1862 Imm(0)                                           -> x1
     terminator Bz { cond=v1861, target=b72, fall=b69 }   (exit_acc=v1861)
   block 69  start_pc=0
     v1963 Imm(0)                                           -> x0
@@ -6462,49 +6462,49 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v1917 Imm(0)                                           -> x0
     v1918 Imm(0)                                           -> x0
     v1919 Imm(128)                                         -> x0
-    v1920 Imm(1124073472)                                  -> x0 [f32]
-    v1921 Imm(0)                                           -> x1
-    v1922 Undef                                            -> x1
-    v1923 VecInsert { vec=v1922, value=v1920, off=0, kind=F32, bytes=16 } -> d0
-    v1924 Imm(0)                                           -> x1
-    v1925 Imm(127)                                         -> x1
-    v1926 Imm(1123942400)                                  -> x1 [f32]
-    v1927 Imm(0)                                           -> x2
-    v1928 Imm(4)                                           -> x2
-    v1929 Imm(0)                                           -> x2
-    v1930 VecInsert { vec=v1923, value=v1926, off=4, kind=F32, bytes=16 } -> d0
-    v1931 Imm(0)                                           -> x2
-    v1932 Imm(255)                                         -> x2
-    v1933 Imm(1132396544)                                  -> x2 [f32]
-    v1934 Imm(0)                                           -> x6
-    v1935 Imm(8)                                           -> x6
-    v1936 Imm(0)                                           -> x6
-    v1937 VecInsert { vec=v1930, value=v1933, off=8, kind=F32, bytes=16 } -> d0
-    v1938 Imm(0)                                           -> x6
-    v1939 Imm(5)                                           -> x6
-    v1940 Imm(1084227584)                                  -> x6 [f32]
-    v1941 Imm(0)                                           -> x7
-    v1942 Imm(12)                                          -> x7
-    v1943 Imm(0)                                           -> x7
-    v1944 VecInsert { vec=v1937, value=v1940, off=12, kind=F32, bytes=16 } -> d0
-    v1945 Imm(0)                                           -> x7
-    v1946 Imm(0)                                           -> x7
+    v1920 Imm(1124073472)                                  -> d0 [f32]
+    v1921 Imm(0)                                           -> x0
+    v1922 Undef                                            -> x0
+    v1923 VecInsert { vec=v1922, value=v1920, off=0, kind=F32, bytes=16 } -> d1
+    v1924 Imm(0)                                           -> x0
+    v1925 Imm(127)                                         -> x0
+    v1926 Imm(1123942400)                                  -> d1 [f32]
+    v1927 Imm(0)                                           -> x0
+    v1928 Imm(4)                                           -> x0
+    v1929 Imm(0)                                           -> x0
+    v1930 VecInsert { vec=v1923, value=v1926, off=4, kind=F32, bytes=16 } -> d2
+    v1931 Imm(0)                                           -> x0
+    v1932 Imm(255)                                         -> x0
+    v1933 Imm(1132396544)                                  -> d2 [f32]
+    v1934 Imm(0)                                           -> x0
+    v1935 Imm(8)                                           -> x0
+    v1936 Imm(0)                                           -> x0
+    v1937 VecInsert { vec=v1930, value=v1933, off=8, kind=F32, bytes=16 } -> d3
+    v1938 Imm(0)                                           -> x0
+    v1939 Imm(5)                                           -> x0
+    v1940 Imm(1084227584)                                  -> d3 [f32]
+    v1941 Imm(0)                                           -> x0
+    v1942 Imm(12)                                          -> x0
+    v1943 Imm(0)                                           -> x0
+    v1944 VecInsert { vec=v1937, value=v1940, off=12, kind=F32, bytes=16 } -> d4
+    v1945 Imm(0)                                           -> x0
+    v1946 Imm(0)                                           -> x0
     v1947 LifetimeEnd(0)                                   -> -
     v1948 LifetimeEnd(0)                                   -> -
-    v1949 Imm(0)                                           -> x7
-    v1950 Imm(0)                                           -> x7
-    v1951 Imm(0)                                           -> x7
-    v1952 Imm(0)                                           -> x7
-    v1953 Imm(0)                                           -> x7
-    v1954 Imm(0)                                           -> x7
+    v1949 Imm(0)                                           -> x0
+    v1950 Imm(0)                                           -> x0
+    v1951 Imm(0)                                           -> x0
+    v1952 Imm(0)                                           -> x0
+    v1953 Imm(0)                                           -> x0
+    v1954 Imm(0)                                           -> x0
     v1955 LifetimeEnd(0)                                   -> -
-    v1956 Imm(0)                                           -> x7
-    v1957 Imm(0)                                           -> x7
-    v1958 Imm(0)                                           -> x7
-    v1959 Copy { value=v1920, fp=true }                    -> d0 [f32]
-    v1960 Imm(1124073472)                                  -> x7 [f32]
+    v1956 Imm(0)                                           -> x0
+    v1957 Imm(0)                                           -> x0
+    v1958 Imm(0)                                           -> x0
+    v1959 Copy { value=v1920, fp=true }                    -> d4 [f32]
+    v1960 Imm(1124073472)                                  -> x0 [f32]
     v1961 Binop { op=feq, lhs=v1959, rhs=v1920 }           -> x0
-    v1962 Imm(0)                                           -> x7
+    v1962 Imm(0)                                           -> x1
     terminator Bz { cond=v1961, target=b77, fall=b74 }   (exit_acc=v1961)
   block 74  start_pc=0
     v2076 Imm(0)                                           -> x0
@@ -6582,51 +6582,51 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v2028 Imm(0)                                           -> x0
     v2029 Imm(0)                                           -> x0
     v2030 Imm(1)                                           -> x0
-    v2031 Imm(1065353216)                                  -> x0 [f32]
-    v2032 Imm(0)                                           -> x1
-    v2033 Undef                                            -> x1
-    v2034 VecInsert { vec=v2033, value=v2031, off=0, kind=F32, bytes=16 } -> d0
-    v2035 Imm(0)                                           -> x1
-    v2036 Imm(2)                                           -> x1
-    v2037 Imm(1073741824)                                  -> x1 [f32]
-    v2038 Imm(0)                                           -> x2
-    v2039 Imm(4)                                           -> x2
-    v2040 Imm(0)                                           -> x2
-    v2041 VecInsert { vec=v2034, value=v2037, off=4, kind=F32, bytes=16 } -> d0
-    v2042 Imm(0)                                           -> x2
-    v2043 Imm(3)                                           -> x2
-    v2044 Imm(1077936128)                                  -> x2 [f32]
-    v2045 Imm(0)                                           -> x6
-    v2046 Imm(8)                                           -> x6
-    v2047 Imm(0)                                           -> x6
-    v2048 VecInsert { vec=v2041, value=v2044, off=8, kind=F32, bytes=16 } -> d0
-    v2049 Imm(0)                                           -> x6
-    v2050 Imm(-4)                                          -> x6
-    v2051 Imm(3229614080)                                  -> x6 [f32]
-    v2052 Imm(0)                                           -> x7
-    v2053 Imm(12)                                          -> x7
-    v2054 Imm(0)                                           -> x7
-    v2055 VecInsert { vec=v2048, value=v2051, off=12, kind=F32, bytes=16 } -> d0
-    v2056 Imm(0)                                           -> x7
-    v2057 Imm(0)                                           -> x7
+    v2031 Imm(1065353216)                                  -> d0 [f32]
+    v2032 Imm(0)                                           -> x0
+    v2033 Undef                                            -> x0
+    v2034 VecInsert { vec=v2033, value=v2031, off=0, kind=F32, bytes=16 } -> d1
+    v2035 Imm(0)                                           -> x0
+    v2036 Imm(2)                                           -> x0
+    v2037 Imm(1073741824)                                  -> d1 [f32]
+    v2038 Imm(0)                                           -> x0
+    v2039 Imm(4)                                           -> x0
+    v2040 Imm(0)                                           -> x0
+    v2041 VecInsert { vec=v2034, value=v2037, off=4, kind=F32, bytes=16 } -> d2
+    v2042 Imm(0)                                           -> x0
+    v2043 Imm(3)                                           -> x0
+    v2044 Imm(1077936128)                                  -> d2 [f32]
+    v2045 Imm(0)                                           -> x0
+    v2046 Imm(8)                                           -> x0
+    v2047 Imm(0)                                           -> x0
+    v2048 VecInsert { vec=v2041, value=v2044, off=8, kind=F32, bytes=16 } -> d3
+    v2049 Imm(0)                                           -> x0
+    v2050 Imm(-4)                                          -> x0
+    v2051 Imm(3229614080)                                  -> d3 [f32]
+    v2052 Imm(0)                                           -> x0
+    v2053 Imm(12)                                          -> x0
+    v2054 Imm(0)                                           -> x0
+    v2055 VecInsert { vec=v2048, value=v2051, off=12, kind=F32, bytes=16 } -> d4
+    v2056 Imm(0)                                           -> x0
+    v2057 Imm(0)                                           -> x0
     v2058 LifetimeEnd(0)                                   -> -
     v2059 LifetimeEnd(0)                                   -> -
     v2060 LifetimeEnd(0)                                   -> -
     v2061 LifetimeEnd(0)                                   -> -
-    v2062 Imm(0)                                           -> x7
-    v2063 Imm(0)                                           -> x7
-    v2064 Imm(0)                                           -> x7
-    v2065 Imm(0)                                           -> x7
-    v2066 Imm(0)                                           -> x7
-    v2067 Imm(0)                                           -> x7
+    v2062 Imm(0)                                           -> x0
+    v2063 Imm(0)                                           -> x0
+    v2064 Imm(0)                                           -> x0
+    v2065 Imm(0)                                           -> x0
+    v2066 Imm(0)                                           -> x0
+    v2067 Imm(0)                                           -> x0
     v2068 LifetimeEnd(0)                                   -> -
-    v2069 Imm(0)                                           -> x7
-    v2070 Imm(0)                                           -> x7
-    v2071 Imm(0)                                           -> x7
-    v2072 Copy { value=v2031, fp=true }                    -> d0 [f32]
-    v2073 Imm(1065353216)                                  -> x7 [f32]
+    v2069 Imm(0)                                           -> x0
+    v2070 Imm(0)                                           -> x0
+    v2071 Imm(0)                                           -> x0
+    v2072 Copy { value=v2031, fp=true }                    -> d4 [f32]
+    v2073 Imm(1065353216)                                  -> x0 [f32]
     v2074 Binop { op=feq, lhs=v2072, rhs=v2031 }           -> x0
-    v2075 Imm(0)                                           -> x7
+    v2075 Imm(0)                                           -> x1
     terminator Bz { cond=v2074, target=b82, fall=b79 }   (exit_acc=v2074)
   block 79  start_pc=0
     v2185 Imm(0)                                           -> x0
@@ -6744,7 +6744,7 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v2179 Imm(0)                                           -> x0
     v2180 Imm(0)                                           -> x0
     v2181 Copy { value=v2142, fp=true }                    -> d2 [f32]
-    v2182 Imm(1065353216)                                  -> x0 [f32]
+    v2182 Imm(1065353216)                                  -> d4 [f32]
     v2183 Binop { op=feq, lhs=v2181, rhs=v2182 }           -> x0
     v2184 Imm(0)                                           -> x2
     terminator Bz { cond=v2183, target=b87, fall=b84 }   (exit_acc=v2183)
@@ -6754,7 +6754,7 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v2291 Imm(4)                                           -> x0
     v2292 Imm(0)                                           -> x0
     v2293 Copy { value=v2150, fp=true }                    -> d0 [f32]
-    v2294 Imm(1073741824)                                  -> x0 [f32]
+    v2294 Imm(1073741824)                                  -> d2 [f32]
     v2295 Binop { op=feq, lhs=v2293, rhs=v2294 }           -> x0
     v2296 BinopI { op=ne, lhs=v2295, rhs_imm=0 }           -> x2
     v2297 Imm(0)                                           -> x2
@@ -6769,7 +6769,7 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v2304 Imm(8)                                           -> x0
     v2305 Imm(0)                                           -> x0
     v2306 Copy { value=v2156, fp=true }                    -> d0 [f32]
-    v2307 Imm(1067450368)                                  -> x0 [f32]
+    v2307 Imm(1067450368)                                  -> d2 [f32]
     v2308 Binop { op=feq, lhs=v2306, rhs=v2307 }           -> x0
     v2309 BinopI { op=ne, lhs=v2308, rhs_imm=0 }           -> x2
     v2310 Imm(0)                                           -> x2
@@ -6785,13 +6785,13 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v2318 Imm(0)                                           -> x0
     v2319 Copy { value=v2162, fp=true }                    -> d0 [f32]
     v2320 Imm(1075838976)                                  -> x0 [f32]
-    v2321 Imm(3223322624)                                  -> x0 [f32]
-    v2322 Binop { op=feq, lhs=v2319, rhs=v2321 }           -> x2
-    v2323 BinopI { op=ne, lhs=v2322, rhs_imm=0 }           -> x6
-    v2324 Imm(0)                                           -> x6
-    v2325 Imm(0)                                           -> x6
-    v2326 Imm(0)                                           -> x6
-    v2327 BinopI { op=eq, lhs=v2322, rhs_imm=0 }           -> x6
+    v2321 Imm(3223322624)                                  -> d2 [f32]
+    v2322 Binop { op=feq, lhs=v2319, rhs=v2321 }           -> x0
+    v2323 BinopI { op=ne, lhs=v2322, rhs_imm=0 }           -> x2
+    v2324 Imm(0)                                           -> x2
+    v2325 Imm(0)                                           -> x2
+    v2326 Imm(0)                                           -> x2
+    v2327 BinopI { op=eq, lhs=v2322, rhs_imm=0 }           -> x2
     terminator Bnz { cond=v2322, target=b88, fall=b87 }   (exit_acc=v2327)
   block 87  start_pc=0
     v2328 Imm(210)                                         -> x0
@@ -6802,74 +6802,74 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v2333 LifetimeEnd(0)                                   -> -
     terminator Return(v2328)   (exit_acc=v2328)
   block 88  start_pc=0
-    v2230 Imm(0)                                           -> x2
-    v2231 Imm(0)                                           -> x2
-    v2232 Imm(0)                                           -> x2
-    v2233 ImmData(64)                                      -> x2
+    v2230 Imm(0)                                           -> x0
+    v2231 Imm(0)                                           -> x0
+    v2232 Imm(0)                                           -> x0
+    v2233 ImmData(64)                                      -> x0
     v2234 Load { addr=v2233, disp=0, kind=V128, align=8 }  -> d0
-    v2235 Imm(0)                                           -> x2
-    v2236 Imm(0)                                           -> x2
-    v2237 LocalAddr(-6)                                    -> x2
-    v2238 BinopI { op=add, lhs=v2124, rhs_imm=1 }          -> x2
-    v2239 Imm(0)                                           -> x2
-    v2240 Imm(0)                                           -> x2
-    v2241 Imm(0)                                           -> x2
+    v2235 Imm(0)                                           -> x0
+    v2236 Imm(0)                                           -> x0
+    v2237 LocalAddr(-6)                                    -> x0
+    v2238 BinopI { op=add, lhs=v2124, rhs_imm=1 }          -> x0
+    v2239 Imm(0)                                           -> x0
+    v2240 Imm(0)                                           -> x0
+    v2241 Imm(0)                                           -> x0
     v2242 LoadLocal { off=-6, disp=1, kind=F64 }           -> d1
-    v2243 VecExtract { vec=v2242, off=0, kind=F32, bytes=8 } -> d2 [f32]
-    v2244 Imm(0)                                           -> x2
-    v2245 Undef                                            -> x2
-    v2246 VecInsert { vec=v2245, value=v2243, off=0, kind=F32, bytes=16 } -> d3
-    v2247 Imm(0)                                           -> x2
+    v2243 VecExtract { vec=v2242, off=0, kind=F32, bytes=8 } -> d3 [f32]
+    v2244 Imm(0)                                           -> x0
+    v2245 Undef                                            -> x0
+    v2246 VecInsert { vec=v2245, value=v2243, off=0, kind=F32, bytes=16 } -> d4
+    v2247 Imm(0)                                           -> x0
     v2248 VecExtract { vec=v2242, off=4, kind=F32, bytes=8 } -> d1 [f32]
-    v2249 Imm(0)                                           -> x2
-    v2250 Imm(4)                                           -> x2
-    v2251 Imm(0)                                           -> x2
-    v2252 VecInsert { vec=v2246, value=v2248, off=4, kind=F32, bytes=16 } -> d3
-    v2253 Imm(0)                                           -> x2
-    v2254 Imm(0)                                           -> x2
-    v2255 Imm(8)                                           -> x2
-    v2256 Imm(0)                                           -> x2
-    v2257 VecExtract { vec=v2234, off=8, kind=F32, bytes=16 } -> d3 [f32]
-    v2258 Imm(0)                                           -> x2
-    v2259 Imm(8)                                           -> x2
-    v2260 Imm(0)                                           -> x2
-    v2261 VecInsert { vec=v2252, value=v2257, off=8, kind=F32, bytes=16 } -> d4
-    v2262 Imm(0)                                           -> x2
-    v2263 Imm(0)                                           -> x2
-    v2264 Imm(12)                                          -> x2
-    v2265 Imm(0)                                           -> x2
+    v2249 Imm(0)                                           -> x0
+    v2250 Imm(4)                                           -> x0
+    v2251 Imm(0)                                           -> x0
+    v2252 VecInsert { vec=v2246, value=v2248, off=4, kind=F32, bytes=16 } -> d4
+    v2253 Imm(0)                                           -> x0
+    v2254 Imm(0)                                           -> x0
+    v2255 Imm(8)                                           -> x0
+    v2256 Imm(0)                                           -> x0
+    v2257 VecExtract { vec=v2234, off=8, kind=F32, bytes=16 } -> d4 [f32]
+    v2258 Imm(0)                                           -> x0
+    v2259 Imm(8)                                           -> x0
+    v2260 Imm(0)                                           -> x0
+    v2261 VecInsert { vec=v2252, value=v2257, off=8, kind=F32, bytes=16 } -> d5
+    v2262 Imm(0)                                           -> x0
+    v2263 Imm(0)                                           -> x0
+    v2264 Imm(12)                                          -> x0
+    v2265 Imm(0)                                           -> x0
     v2266 VecExtract { vec=v2234, off=12, kind=F32, bytes=16 } -> d0 [f32]
-    v2267 Imm(0)                                           -> x2
-    v2268 Imm(12)                                          -> x2
-    v2269 Imm(0)                                           -> x2
-    v2270 VecInsert { vec=v2261, value=v2266, off=12, kind=F32, bytes=16 } -> d4
-    v2271 Imm(0)                                           -> x2
-    v2272 Imm(0)                                           -> x2
+    v2267 Imm(0)                                           -> x0
+    v2268 Imm(12)                                          -> x0
+    v2269 Imm(0)                                           -> x0
+    v2270 VecInsert { vec=v2261, value=v2266, off=12, kind=F32, bytes=16 } -> d5
+    v2271 Imm(0)                                           -> x0
+    v2272 Imm(0)                                           -> x0
     v2273 LifetimeEnd(0)                                   -> -
     v2274 LifetimeEnd(0)                                   -> -
-    v2275 Imm(0)                                           -> x2
-    v2276 Imm(0)                                           -> x2
-    v2277 Imm(0)                                           -> x2
-    v2278 Imm(0)                                           -> x2
-    v2279 Imm(0)                                           -> x2
-    v2280 Imm(0)                                           -> x2
+    v2275 Imm(0)                                           -> x0
+    v2276 Imm(0)                                           -> x0
+    v2277 Imm(0)                                           -> x0
+    v2278 Imm(0)                                           -> x0
+    v2279 Imm(0)                                           -> x0
+    v2280 Imm(0)                                           -> x0
     v2281 LifetimeEnd(0)                                   -> -
-    v2282 Imm(0)                                           -> x2
-    v2283 Imm(0)                                           -> x2
-    v2284 Imm(0)                                           -> x2
-    v2285 Copy { value=v2243, fp=true }                    -> d2 [f32]
-    v2286 Imm(1067450368)                                  -> x2 [f32]
-    v2287 Binop { op=feq, lhs=v2285, rhs=v2286 }           -> x2
-    v2288 Imm(0)                                           -> x6
+    v2282 Imm(0)                                           -> x0
+    v2283 Imm(0)                                           -> x0
+    v2284 Imm(0)                                           -> x0
+    v2285 Copy { value=v2243, fp=true }                    -> d3 [f32]
+    v2286 Imm(1067450368)                                  -> d5 [f32]
+    v2287 Binop { op=feq, lhs=v2285, rhs=v2286 }           -> x0
+    v2288 Imm(0)                                           -> x2
     terminator Bz { cond=v2287, target=b92, fall=b89 }   (exit_acc=v2287)
   block 89  start_pc=0
-    v2390 Imm(0)                                           -> x2
-    v2391 Imm(4)                                           -> x2
-    v2392 Imm(4)                                           -> x2
-    v2393 Imm(0)                                           -> x2
+    v2390 Imm(0)                                           -> x0
+    v2391 Imm(4)                                           -> x0
+    v2392 Imm(4)                                           -> x0
+    v2393 Imm(0)                                           -> x0
     v2394 Copy { value=v2248, fp=true }                    -> d1 [f32]
-    v2395 Imm(1075838976)                                  -> x2 [f32]
-    v2396 Imm(3223322624)                                  -> x2 [f32]
+    v2395 Imm(1075838976)                                  -> x0 [f32]
+    v2396 Imm(3223322624)                                  -> x0 [f32]
     v2397 Binop { op=feq, lhs=v2394, rhs=v2321 }           -> x0
     v2398 BinopI { op=ne, lhs=v2397, rhs_imm=0 }           -> x2
     v2399 Imm(0)                                           -> x2
@@ -6884,7 +6884,7 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v2406 Imm(8)                                           -> x0
     v2407 Imm(0)                                           -> x0
     v2408 Copy { value=v2257, fp=true }                    -> d1 [f32]
-    v2409 Imm(1077936128)                                  -> x0 [f32]
+    v2409 Imm(1077936128)                                  -> d2 [f32]
     v2410 Binop { op=feq, lhs=v2408, rhs=v2409 }           -> x0
     v2411 BinopI { op=ne, lhs=v2410, rhs_imm=0 }           -> x2
     v2412 Imm(0)                                           -> x2
@@ -6898,14 +6898,14 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v2418 Imm(12)                                          -> x0
     v2419 Imm(12)                                          -> x0
     v2420 Imm(0)                                           -> x0
-    v2421 Copy { value=v2266, fp=true }                    -> d0 [f32]
-    v2422 Imm(1082130432)                                  -> x0 [f32]
-    v2423 Binop { op=feq, lhs=v2421, rhs=v2422 }           -> x2
-    v2424 BinopI { op=ne, lhs=v2423, rhs_imm=0 }           -> x6
-    v2425 Imm(0)                                           -> x6
-    v2426 Imm(0)                                           -> x6
-    v2427 Imm(0)                                           -> x6
-    v2428 BinopI { op=eq, lhs=v2423, rhs_imm=0 }           -> x6
+    v2421 Copy { value=v2266, fp=true }                    -> d1 [f32]
+    v2422 Imm(1082130432)                                  -> d0 [f32]
+    v2423 Binop { op=feq, lhs=v2421, rhs=v2422 }           -> x0
+    v2424 BinopI { op=ne, lhs=v2423, rhs_imm=0 }           -> x2
+    v2425 Imm(0)                                           -> x2
+    v2426 Imm(0)                                           -> x2
+    v2427 Imm(0)                                           -> x2
+    v2428 BinopI { op=eq, lhs=v2423, rhs_imm=0 }           -> x2
     terminator Bnz { cond=v2423, target=b93, fall=b92 }   (exit_acc=v2428)
   block 92  start_pc=0
     v2429 Imm(212)                                         -> x0
@@ -6916,69 +6916,69 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v2434 LifetimeEnd(0)                                   -> -
     terminator Return(v2429)   (exit_acc=v2429)
   block 93  start_pc=0
-    v2334 Imm(0)                                           -> x2
-    v2335 LocalAddr(-6)                                    -> x2
-    v2336 BinopI { op=add, lhs=v2124, rhs_imm=1 }          -> x2
-    v2337 Imm(0)                                           -> x2
-    v2338 ImmData(80)                                      -> x2
-    v2339 Load { addr=v2338, disp=0, kind=V128, align=8 }  -> d0
-    v2340 Imm(0)                                           -> x2
-    v2341 Imm(0)                                           -> x2
-    v2342 Imm(0)                                           -> x2
-    v2343 Imm(0)                                           -> x2
-    v2344 Imm(0)                                           -> x2
-    v2345 Imm(0)                                           -> x2
-    v2346 Imm(8)                                           -> x2
-    v2347 Imm(0)                                           -> x2
-    v2348 VecExtract { vec=v2339, off=8, kind=F32, bytes=16 } -> d1 [f32]
-    v2349 Undef                                            -> x2
-    v2350 Undef                                            -> x2
-    v2351 Imm(0)                                           -> x2
-    v2352 Imm(12)                                          -> x2
-    v2353 Imm(0)                                           -> x2
-    v2354 VecExtract { vec=v2339, off=12, kind=F32, bytes=16 } -> d1 [f32]
-    v2355 VecExtract { vec=v2339, off=8, kind=F64, bytes=16 } -> d0
+    v2334 Imm(0)                                           -> x0
+    v2335 LocalAddr(-6)                                    -> x0
+    v2336 BinopI { op=add, lhs=v2124, rhs_imm=1 }          -> x0
+    v2337 Imm(0)                                           -> x0
+    v2338 ImmData(80)                                      -> x0
+    v2339 Load { addr=v2338, disp=0, kind=V128, align=8 }  -> d1
+    v2340 Imm(0)                                           -> x0
+    v2341 Imm(0)                                           -> x0
+    v2342 Imm(0)                                           -> x0
+    v2343 Imm(0)                                           -> x0
+    v2344 Imm(0)                                           -> x0
+    v2345 Imm(0)                                           -> x0
+    v2346 Imm(8)                                           -> x0
+    v2347 Imm(0)                                           -> x0
+    v2348 VecExtract { vec=v2339, off=8, kind=F32, bytes=16 } -> d2 [f32]
+    v2349 Undef                                            -> x0
+    v2350 Undef                                            -> x0
+    v2351 Imm(0)                                           -> x0
+    v2352 Imm(12)                                          -> x0
+    v2353 Imm(0)                                           -> x0
+    v2354 VecExtract { vec=v2339, off=12, kind=F32, bytes=16 } -> d2 [f32]
+    v2355 VecExtract { vec=v2339, off=8, kind=F64, bytes=16 } -> d1
     v2356 StoreLocal { off=-6, disp=1, value=v2355, kind=F64 } -> -
     v2357 LifetimeEnd(0)                                   -> -
-    v2358 LocalAddr(-6)                                    -> x2
-    v2359 BinopI { op=add, lhs=v2124, rhs_imm=9 }          -> x2
-    v2360 Imm(0)                                           -> x2
-    v2361 ImmData(96)                                      -> x2
-    v2362 Load { addr=v2361, disp=0, kind=V128, align=8 }  -> d0
-    v2363 Imm(0)                                           -> x2
-    v2364 Imm(0)                                           -> x2
-    v2365 Imm(0)                                           -> x2
-    v2366 Imm(0)                                           -> x2
-    v2367 Imm(0)                                           -> x2
-    v2368 Imm(0)                                           -> x2
-    v2369 Imm(0)                                           -> x2
-    v2370 VecExtract { vec=v2362, off=0, kind=F32, bytes=16 } -> d1 [f32]
-    v2371 Undef                                            -> x2
-    v2372 Undef                                            -> x2
-    v2373 Imm(0)                                           -> x2
-    v2374 Imm(4)                                           -> x2
-    v2375 Imm(0)                                           -> x2
-    v2376 VecExtract { vec=v2362, off=4, kind=F32, bytes=16 } -> d1 [f32]
-    v2377 VecExtract { vec=v2362, off=0, kind=F64, bytes=16 } -> d0
+    v2358 LocalAddr(-6)                                    -> x0
+    v2359 BinopI { op=add, lhs=v2124, rhs_imm=9 }          -> x0
+    v2360 Imm(0)                                           -> x0
+    v2361 ImmData(96)                                      -> x0
+    v2362 Load { addr=v2361, disp=0, kind=V128, align=8 }  -> d1
+    v2363 Imm(0)                                           -> x0
+    v2364 Imm(0)                                           -> x0
+    v2365 Imm(0)                                           -> x0
+    v2366 Imm(0)                                           -> x0
+    v2367 Imm(0)                                           -> x0
+    v2368 Imm(0)                                           -> x0
+    v2369 Imm(0)                                           -> x0
+    v2370 VecExtract { vec=v2362, off=0, kind=F32, bytes=16 } -> d2 [f32]
+    v2371 Undef                                            -> x0
+    v2372 Undef                                            -> x0
+    v2373 Imm(0)                                           -> x0
+    v2374 Imm(4)                                           -> x0
+    v2375 Imm(0)                                           -> x0
+    v2376 VecExtract { vec=v2362, off=4, kind=F32, bytes=16 } -> d2 [f32]
+    v2377 VecExtract { vec=v2362, off=0, kind=F64, bytes=16 } -> d1
     v2378 StoreLocal { off=-6, disp=9, value=v2377, kind=F64 } -> -
     v2379 LifetimeEnd(0)                                   -> -
-    v2380 LocalAddr(-8)                                    -> x2
-    v2381 LocalAddr(-6)                                    -> x6
-    v2382 BinopI { op=add, lhs=v2124, rhs_imm=1 }          -> x6
+    v2380 LocalAddr(-8)                                    -> x0
+    v2381 LocalAddr(-6)                                    -> x2
+    v2382 BinopI { op=add, lhs=v2124, rhs_imm=1 }          -> x2
     v2383 Mcpy { dst=v2380, src=v2125, size=16, align=1 }  -> -
-    v2384 LocalAddr(-8)                                    -> x1
-    v2385 Imm(0)                                           -> x1
-    v2386 LoadLocal { off=-8, kind=F32 }                   -> d0 [f32]
-    v2387 Imm(1077936128)                                  -> x1 [f32]
-    v2388 Binop { op=feq, lhs=v2386, rhs=v2387 }           -> x1
-    v2389 Imm(0)                                           -> x2
+    v2384 LocalAddr(-8)                                    -> x0
+    v2385 Imm(0)                                           -> x0
+    v2386 LoadLocal { off=-8, kind=F32 }                   -> d1 [f32]
+    v2387 Imm(1077936128)                                  -> d2 [f32]
+    v2388 Binop { op=feq, lhs=v2386, rhs=v2387 }           -> x0
+    v2389 Imm(0)                                           -> x1
     terminator Bz { cond=v2388, target=b97, fall=b94 }   (exit_acc=v2388)
   block 94  start_pc=0
-    v2442 LocalAddr(-8)                                    -> x1
-    v2443 Imm(4)                                           -> x1
-    v2444 BinopI { op=add, lhs=v2380, rhs_imm=4 }          -> x1
-    v2445 LoadLocal { off=-8, disp=4, kind=F32 }           -> d0 [f32]
-    v2446 Imm(1082130432)                                  -> x1 [f32]
+    v2442 LocalAddr(-8)                                    -> x0
+    v2443 Imm(4)                                           -> x0
+    v2444 BinopI { op=add, lhs=v2380, rhs_imm=4 }          -> x0
+    v2445 LoadLocal { off=-8, disp=4, kind=F32 }           -> d1 [f32]
+    v2446 Imm(1082130432)                                  -> x0 [f32]
     v2447 Binop { op=feq, lhs=v2445, rhs=v2422 }           -> x0
     v2448 BinopI { op=ne, lhs=v2447, rhs_imm=0 }           -> x1
     v2449 Imm(0)                                           -> x1
@@ -6992,7 +6992,7 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v2455 Imm(8)                                           -> x0
     v2456 BinopI { op=add, lhs=v2380, rhs_imm=8 }          -> x0
     v2457 LoadLocal { off=-8, disp=8, kind=F32 }           -> d0 [f32]
-    v2458 Imm(1084227584)                                  -> x0 [f32]
+    v2458 Imm(1084227584)                                  -> d1 [f32]
     v2459 Binop { op=feq, lhs=v2457, rhs=v2458 }           -> x0
     v2460 BinopI { op=ne, lhs=v2459, rhs_imm=0 }           -> x1
     v2461 Imm(0)                                           -> x1
@@ -7006,7 +7006,7 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v2467 Imm(12)                                          -> x0
     v2468 BinopI { op=add, lhs=v2466, rhs_imm=12 }         -> x0
     v2469 LoadLocal { off=-8, disp=12, kind=F32 }          -> d0 [f32]
-    v2470 Imm(1086324736)                                  -> x0 [f32]
+    v2470 Imm(1086324736)                                  -> d1 [f32]
     v2471 Binop { op=feq, lhs=v2469, rhs=v2470 }           -> x0
     v2472 BinopI { op=ne, lhs=v2471, rhs_imm=0 }           -> x1
     v2473 Imm(0)                                           -> x1
@@ -7142,50 +7142,50 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v2597 Imm(-32768)                                      -> x0
     v2598 BinopI { op=lt, lhs=v2577, rhs_imm=-32768 }      -> x0
     v2599 Imm(-32768)                                      -> x0
-    v2600 BinopI { op=lt, lhs=v2577, rhs_imm=-32768 }      -> x6
+    v2600 BinopI { op=lt, lhs=v2577, rhs_imm=-32768 }      -> x2
     v2601 Select { cond=v2600, a=v2599, b=v2577, kind=I64 } -> x0
     terminator Jmp(b116)
   block 116  start_pc=0
-    v2626 Copy { value=v2601, fp=false }                   -> x2
+    v2626 Copy { value=v2601, fp=false }                   -> x1
     terminator Jmp(b22)   (exit_acc=v2601)
   block 117  start_pc=0
-    v2557 Imm(-32767)                                      -> x6
-    v2558 Imm(-32767)                                      -> x6
-    v2559 Imm(-32768)                                      -> x6
-    v2560 Imm(-32768)                                      -> x6
-    v2561 BinopI { op=lt, lhs=v2540, rhs_imm=-32768 }      -> x6
-    v2562 Imm(-32768)                                      -> x6
-    v2563 BinopI { op=lt, lhs=v2540, rhs_imm=-32768 }      -> x7
-    v2564 Select { cond=v2563, a=v2562, b=v2540, kind=I64 } -> x2
+    v2557 Imm(-32767)                                      -> x2
+    v2558 Imm(-32767)                                      -> x2
+    v2559 Imm(-32768)                                      -> x2
+    v2560 Imm(-32768)                                      -> x2
+    v2561 BinopI { op=lt, lhs=v2540, rhs_imm=-32768 }      -> x2
+    v2562 Imm(-32768)                                      -> x2
+    v2563 BinopI { op=lt, lhs=v2540, rhs_imm=-32768 }      -> x6
+    v2564 Select { cond=v2563, a=v2562, b=v2540, kind=I64 } -> x1
     terminator Jmp(b118)
   block 118  start_pc=0
-    v2593 Copy { value=v2564, fp=false }                   -> x6
+    v2593 Copy { value=v2564, fp=false }                   -> x2
     terminator Jmp(b20)   (exit_acc=v2564)
   block 119  start_pc=0
-    v2520 Imm(-32767)                                      -> x6
-    v2521 Imm(-32767)                                      -> x6
-    v2522 Imm(-32768)                                      -> x6
-    v2523 Imm(-32768)                                      -> x6
-    v2524 BinopI { op=lt, lhs=v2503, rhs_imm=-32768 }      -> x6
-    v2525 Imm(-32768)                                      -> x6
-    v2526 BinopI { op=lt, lhs=v2503, rhs_imm=-32768 }      -> x7
-    v2527 Select { cond=v2526, a=v2525, b=v2503, kind=I64 } -> x2
+    v2520 Imm(-32767)                                      -> x2
+    v2521 Imm(-32767)                                      -> x2
+    v2522 Imm(-32768)                                      -> x2
+    v2523 Imm(-32768)                                      -> x2
+    v2524 BinopI { op=lt, lhs=v2503, rhs_imm=-32768 }      -> x2
+    v2525 Imm(-32768)                                      -> x2
+    v2526 BinopI { op=lt, lhs=v2503, rhs_imm=-32768 }      -> x6
+    v2527 Select { cond=v2526, a=v2525, b=v2503, kind=I64 } -> x1
     terminator Jmp(b120)
   block 120  start_pc=0
-    v2556 Copy { value=v2527, fp=false }                   -> x6
+    v2556 Copy { value=v2527, fp=false }                   -> x2
     terminator Jmp(b18)   (exit_acc=v2527)
   block 121  start_pc=0
-    v2483 Imm(-32767)                                      -> x6
-    v2484 Imm(-32767)                                      -> x6
-    v2485 Imm(-32768)                                      -> x6
-    v2486 Imm(-32768)                                      -> x6
-    v2487 BinopI { op=lt, lhs=v946, rhs_imm=-32768 }       -> x6
-    v2488 Imm(-32768)                                      -> x6
-    v2489 BinopI { op=lt, lhs=v946, rhs_imm=-32768 }       -> x7
-    v2490 Select { cond=v2489, a=v2488, b=v946, kind=I64 } -> x2
+    v2483 Imm(-32767)                                      -> x2
+    v2484 Imm(-32767)                                      -> x2
+    v2485 Imm(-32768)                                      -> x2
+    v2486 Imm(-32768)                                      -> x2
+    v2487 BinopI { op=lt, lhs=v946, rhs_imm=-32768 }       -> x2
+    v2488 Imm(-32768)                                      -> x2
+    v2489 BinopI { op=lt, lhs=v946, rhs_imm=-32768 }       -> x6
+    v2490 Select { cond=v2489, a=v2488, b=v946, kind=I64 } -> x1
     terminator Jmp(b122)
   block 122  start_pc=0
-    v2519 Copy { value=v2490, fp=false }                   -> x6
+    v2519 Copy { value=v2490, fp=false }                   -> x2
     terminator Jmp(b16)   (exit_acc=v2490)
 ; --- SSA dump (ok=true) ent_pc=447 ---
 ; name=sse2
@@ -7488,10 +7488,10 @@ fn ent_pc=447 n_params=0 variadic=false locals=3
     v226 BinopI { op=lt, lhs=v224, rhs_imm=2000 }         -> x0
     terminator Bz { cond=v226, target=b6, fall=b1 }   (exit_acc=v226)
   block 6  start_pc=0
-    v312 Imm(4612811918334230528)                         -> x0
-    v313 Imm(4615063718147915776)                         -> x1
-    v314 Imm(-4608308318706860032)                        -> x1
-    v315 LocalAddr(-3)                                    -> x2
+    v312 Imm(4612811918334230528)                         -> d0
+    v313 Imm(4615063718147915776)                         -> x0
+    v314 Imm(-4608308318706860032)                        -> d1
+    v315 LocalAddr(-3)                                    -> x0
     v316 StoreLocal { off=-3, value=v312, kind=F64, volatile } -> -
     v317 LocalAddr(-3)                                    -> x0
     v318 BinopI { op=add, lhs=v315, rhs_imm=8 }           -> x0
@@ -7553,10 +7553,10 @@ fn ent_pc=447 n_params=0 variadic=false locals=3
     terminator Return(v425)   (exit_acc=v425)
   block 8  start_pc=0
     v368 Imm(0)                                           -> x0
-    v369 Imm(4746794007245986202)                         -> x0
-    v370 Imm(4746794007248502784)                         -> x1
-    v371 Imm(-4476578029606273024)                        -> x1
-    v372 LocalAddr(-3)                                    -> x2
+    v369 Imm(4746794007245986202)                         -> d0
+    v370 Imm(4746794007248502784)                         -> x0
+    v371 Imm(-4476578029606273024)                        -> d1
+    v372 LocalAddr(-3)                                    -> x0
     v373 StoreLocal { off=-3, value=v369, kind=F64, volatile } -> -
     v374 LocalAddr(-3)                                    -> x0
     v375 BinopI { op=add, lhs=v374, rhs_imm=8 }           -> x0
@@ -7618,13 +7618,13 @@ fn ent_pc=447 n_params=0 variadic=false locals=3
     terminator Return(v486)   (exit_acc=v486)
   block 10  start_pc=0
     v429 Imm(0)                                           -> x0
-    v430 Imm(4748581863621132288)                         -> x0
-    v431 Imm(0)                                           -> x1
-    v432 LocalAddr(-3)                                    -> x1
+    v430 Imm(4748581863621132288)                         -> d0
+    v431 Imm(0)                                           -> x0
+    v432 LocalAddr(-3)                                    -> x0
     v433 StoreLocal { off=-3, value=v430, kind=F64, volatile } -> -
     v434 LocalAddr(-3)                                    -> x0
     v435 BinopI { op=add, lhs=v374, rhs_imm=8 }           -> x0
-    v436 Imm(9221120237041090560)                         -> x0
+    v436 Imm(9221120237041090560)                         -> d0
     v437 StoreLocal { off=-3, disp=8, value=v436, kind=F64, volatile } -> -
     v438 LocalAddr(-3)                                    -> x0
     v439 LoadLocal { off=-3, kind=F64, volatile }         -> d0
@@ -7693,9 +7693,9 @@ fn ent_pc=447 n_params=0 variadic=false locals=3
     v498 StoreLocal { off=-1, value=v497, kind=I32 }      -> -
     v499 LocalAddr(-1)                                    -> x0
     v500 InlineAsm { template="ldmxcsr %0", ops=1, args=[v499] } -> -
-    v501 Imm(4612811918334230528)                         -> x0
-    v502 Imm(-4610560118520545280)                        -> x1
-    v503 LocalAddr(-3)                                    -> x2
+    v501 Imm(4612811918334230528)                         -> d0
+    v502 Imm(-4610560118520545280)                        -> d1
+    v503 LocalAddr(-3)                                    -> x0
     v504 StoreLocal { off=-3, value=v501, kind=F64, volatile } -> -
     v505 LocalAddr(-3)                                    -> x0
     v506 BinopI { op=add, lhs=v503, rhs_imm=8 }           -> x0
@@ -7768,9 +7768,9 @@ fn ent_pc=447 n_params=0 variadic=false locals=3
     v569 LocalAddr(-1)                                    -> x0
     v570 InlineAsm { template="ldmxcsr %0", ops=1, args=[v569] } -> -
     v571 Imm(4613262278296967578)                         -> x0
-    v572 Imm(-4610109758557808230)                        -> x0
-    v573 Imm(4746794007248083354)                         -> x1
-    v574 LocalAddr(-3)                                    -> x2
+    v572 Imm(-4610109758557808230)                        -> d0
+    v573 Imm(4746794007248083354)                         -> d1
+    v574 LocalAddr(-3)                                    -> x0
     v575 StoreLocal { off=-3, value=v572, kind=F64, volatile } -> -
     v576 LocalAddr(-3)                                    -> x0
     v577 BinopI { op=add, lhs=v574, rhs_imm=8 }           -> x0
@@ -7833,13 +7833,13 @@ fn ent_pc=447 n_params=0 variadic=false locals=3
   block 16  start_pc=0
     v631 Imm(0)                                           -> x0
     v632 Imm(4746794007250599936)                         -> x0
-    v633 Imm(-4476578029604175872)                        -> x0
-    v634 Imm(0)                                           -> x1
-    v635 LocalAddr(-3)                                    -> x1
+    v633 Imm(-4476578029604175872)                        -> d0
+    v634 Imm(0)                                           -> x0
+    v635 LocalAddr(-3)                                    -> x0
     v636 StoreLocal { off=-3, value=v633, kind=F64, volatile } -> -
     v637 LocalAddr(-3)                                    -> x0
     v638 BinopI { op=add, lhs=v637, rhs_imm=8 }           -> x0
-    v639 Imm(9221120237041090560)                         -> x0
+    v639 Imm(9221120237041090560)                         -> d0
     v640 StoreLocal { off=-3, disp=8, value=v639, kind=F64, volatile } -> -
     v641 LocalAddr(-3)                                    -> x0
     v642 LoadLocal { off=-3, kind=F64, volatile }         -> d0
@@ -7909,36 +7909,36 @@ fn ent_pc=447 n_params=0 variadic=false locals=3
     v702 Imm(0)                                           -> x0
     v703 Imm(0)                                           -> x0
     v704 Imm(2147483647)                                  -> x0
-    v705 Imm(4746794007244308480)                         -> x0
-    v706 Imm(0)                                           -> x1
-    v707 Undef                                            -> x1
-    v708 VecInsert { vec=v707, value=v705, off=0, kind=F64, bytes=16 } -> d0
-    v709 Imm(0)                                           -> x1
-    v710 Imm(-2147483648)                                 -> x1
-    v711 Imm(-4476578029606273024)                        -> x1
-    v712 Imm(0)                                           -> x2
-    v713 Imm(8)                                           -> x2
-    v714 Imm(0)                                           -> x2
-    v715 VecInsert { vec=v708, value=v711, off=8, kind=F64, bytes=16 } -> d0
-    v716 Imm(0)                                           -> x2
-    v717 Imm(0)                                           -> x2
+    v705 Imm(4746794007244308480)                         -> d0
+    v706 Imm(0)                                           -> x0
+    v707 Undef                                            -> x0
+    v708 VecInsert { vec=v707, value=v705, off=0, kind=F64, bytes=16 } -> d1
+    v709 Imm(0)                                           -> x0
+    v710 Imm(-2147483648)                                 -> x0
+    v711 Imm(-4476578029606273024)                        -> d1
+    v712 Imm(0)                                           -> x0
+    v713 Imm(8)                                           -> x0
+    v714 Imm(0)                                           -> x0
+    v715 VecInsert { vec=v708, value=v711, off=8, kind=F64, bytes=16 } -> d2
+    v716 Imm(0)                                           -> x0
+    v717 Imm(0)                                           -> x0
     v718 LifetimeEnd(0)                                   -> -
     v719 LifetimeEnd(0)                                   -> -
-    v720 Imm(0)                                           -> x2
-    v721 Imm(0)                                           -> x2
-    v722 Imm(0)                                           -> x2
-    v723 Imm(0)                                           -> x2
-    v724 Imm(0)                                           -> x2
-    v725 Imm(0)                                           -> x2
-    v726 Imm(0)                                           -> x2
+    v720 Imm(0)                                           -> x0
+    v721 Imm(0)                                           -> x0
+    v722 Imm(0)                                           -> x0
+    v723 Imm(0)                                           -> x0
+    v724 Imm(0)                                           -> x0
+    v725 Imm(0)                                           -> x0
+    v726 Imm(0)                                           -> x0
     v727 LifetimeEnd(0)                                   -> -
-    v728 Imm(0)                                           -> x2
-    v729 Imm(0)                                           -> x2
-    v730 Imm(0)                                           -> x2
-    v731 Copy { value=v705, fp=true }                     -> d0
-    v732 Imm(4746794007244308480)                         -> x2
+    v728 Imm(0)                                           -> x0
+    v729 Imm(0)                                           -> x0
+    v730 Imm(0)                                           -> x0
+    v731 Copy { value=v705, fp=true }                     -> d2
+    v732 Imm(4746794007244308480)                         -> x0
     v733 Binop { op=feq, lhs=v731, rhs=v705 }             -> x0
-    v734 Imm(0)                                           -> x2
+    v734 Imm(0)                                           -> x1
     terminator Bz { cond=v733, target=b20, fall=b19 }   (exit_acc=v733)
   block 19  start_pc=0
     v744 Imm(0)                                           -> x0

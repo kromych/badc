@@ -19269,28 +19269,28 @@ fn ent_pc=1363 n_params=6 variadic=false locals=1
     v2302 Store { addr=v2293, disp=56, value=v2974, kind=I64 pc_rel } -> -
     v2303 LifetimeEnd(-777)                                -> -
     v2304 Imm(0)                                           -> x0
-    v2305 Imm(4602678819172646912)                         -> x0
-    v2306 Imm(0)                                           -> x1
-    v2307 Imm(0)                                           -> x1
-    v2308 Imm(0)                                           -> x1
-    v2309 Imm(0)                                           -> x1
-    v2310 Imm(0)                                           -> x1
-    v2311 Imm(0)                                           -> x1
-    v2312 Imm(0)                                           -> x1
-    v2313 Imm(0)                                           -> x1
-    v2314 Imm(0)                                           -> x1
-    v2315 Imm(0)                                           -> x1
-    v2316 Imm(0)                                           -> x1
-    v2317 Imm(0)                                           -> x1
-    v2318 Imm(0)                                           -> x1
+    v2305 Imm(4602678819172646912)                         -> d0
+    v2306 Imm(0)                                           -> x0
+    v2307 Imm(0)                                           -> x0
+    v2308 Imm(0)                                           -> x0
+    v2309 Imm(0)                                           -> x0
+    v2310 Imm(0)                                           -> x0
+    v2311 Imm(0)                                           -> x0
+    v2312 Imm(0)                                           -> x0
+    v2313 Imm(0)                                           -> x0
+    v2314 Imm(0)                                           -> x0
+    v2315 Imm(0)                                           -> x0
+    v2316 Imm(0)                                           -> x0
+    v2317 Imm(0)                                           -> x0
+    v2318 Imm(0)                                           -> x0
     v2319 LocalAddr(-778)                                  -> x2
-    v2320 Imm(0)                                           -> x1
+    v2320 Imm(0)                                           -> x0
     v2321 StoreLocal { off=-778, value=v2305, kind=F64 }   -> -
-    v2322 Imm(0)                                           -> x1
+    v2322 Imm(0)                                           -> x0
     v2323 StoreLocal { off=-778, disp=8, value=v2305, kind=F64 } -> -
-    v2324 Imm(0)                                           -> x1
+    v2324 Imm(0)                                           -> x0
     v2325 StoreLocal { off=-778, disp=16, value=v2305, kind=F64 } -> -
-    v2326 Imm(0)                                           -> x1
+    v2326 Imm(0)                                           -> x0
     v2327 StoreLocal { off=-778, disp=24, value=v2305, kind=F64 } -> -
     v2328 LifetimeEnd(0)                                   -> -
     v2329 ImmData(240)                                     -> x0

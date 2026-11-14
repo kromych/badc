@@ -135,10 +135,10 @@ fn ent_pc=468 n_params=4 variadic=false locals=2
     v156 BinopI { op=eq, lhs=v155, rhs_imm=0 }            -> x6
     terminator Bnz { cond=v155, target=b16, fall=b15 }   (low word)   (exit_acc=v156)
   block 15  start_pc=0
-    v157 Imm(4607182418800017408)                         -> x1
+    v157 Imm(4607182418800017408)                         -> d0
     v158 StoreLocal { off=-2, value=v157, kind=F64, volatile } -> -
     v159 LoadLocal { off=-2, kind=F64, volatile }         -> d0
-    v160 Imm(4336966441157787648)                         -> x1
+    v160 Imm(4336966441157787648)                         -> d1
     v161 Binop { op=fadd, lhs=v159, rhs=v160 }            -> d0
     v162 StoreLocal { off=-2, value=v161, kind=F64, volatile } -> -
     terminator Jmp(b16)   (exit_acc=v162)

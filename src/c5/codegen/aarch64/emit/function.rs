@@ -1595,6 +1595,7 @@ impl FunctionEmitter<'_, '_> {
             rodata.addr_fixups.push(super::RodataAddrFixup {
                 code_offset: addr_site,
                 rodata_offset: base,
+                part: crate::c5::codegen::AddrPart::Whole,
             });
             for (i, &t) in func.jump_tables[table as usize].iter().enumerate() {
                 let slot_offset = base + (i * width) as u64;

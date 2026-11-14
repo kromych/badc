@@ -1686,7 +1686,16 @@ impl<'a> RelocWriter<'a> {
             let base = self.place_in_entry(e, 8, tables_len);
             self.layout.jt_placement = Some((e, base));
         }
-        // Floating literals take GNU as's mergeable constant sections.
+        // Floating literals take GNU as's mergeable constant sections. An
+        // x86-64 load reaches its literal through a displacement whose addend
+        // carries -4, which a linker resolving a section-relative reference
+        // into a mergeable section reads as a place ahead of the element, so
+        // there they are plain read-only data.
+        let merge = if self.machine == Machine::Aarch64 {
+            SHF_MERGE
+        } else {
+            0
+        };
         for (k, (name, width)) in [(".rodata.cst8", 8), (".rodata.cst4", 4)]
             .into_iter()
             .enumerate()
@@ -1699,9 +1708,11 @@ impl<'a> RelocWriter<'a> {
                 .layout
                 .carve
                 .table
-                .get_or_insert(name, SHT_PROGBITS, SHF_ALLOC | SHF_MERGE, width)
+                .get_or_insert(name, SHT_PROGBITS, SHF_ALLOC | merge, width)
                 .map_err(Self::internal)?;
-            self.layout.carve.table.entries[e].entsize = width;
+            if merge != 0 {
+                self.layout.carve.table.entries[e].entsize = width;
+            }
             let base = self.place_in_entry(e, width, len);
             self.layout.literal_placements[k] = Some((e, base));
         }
@@ -3428,7 +3439,7 @@ impl<'a> RelocWriter<'a> {
                 fx.code_offset as u64,
                 sym,
                 addend,
-                AddrPart::Whole,
+                fx.part,
             )?;
         }
         self.relocs.text = table;

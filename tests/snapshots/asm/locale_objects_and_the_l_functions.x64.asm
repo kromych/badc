@@ -180,8 +180,7 @@ Disassembly of section .text:
                	leaq	-0x78(%rbp), %rdi
                	movl	$0x20, %esi
                	leaq	<rip>, %rcx
-               	movabsq	$0x40934a0000000000, %rax # imm = 0x40934A0000000000
-               	movq	%rax, %xmm0
+               	movsd	<rip>, %xmm0
                	movq	%rbx, %rdx
                	movb	$0x1, %al
                	callq	<addr>

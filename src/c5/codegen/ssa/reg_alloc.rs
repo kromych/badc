@@ -548,10 +548,10 @@ fn store_immediate(func: &FunctionSsa, inst: &Inst, target: Target) -> Option<Va
 }
 
 /// Per value: an `Imm` each reader of which takes in an FP register, where
-/// the aarch64 allocation places it. `reads` as for `operands_read`.
+/// the allocation places it. `reads` as for `operands_read`.
 pub(crate) fn fp_constants(func: &FunctionSsa, target: Target, reads: &[bool]) -> Vec<bool> {
     let n = func.insts.len();
-    if !target.is_aarch64() {
+    if !target.is_aarch64() && !target.is_x86_64() {
         return vec![false; n];
     }
     let mut seen = vec![(false, false); n];
@@ -576,7 +576,7 @@ pub(crate) fn fp_constants(func: &FunctionSsa, target: Target, reads: &[bool]) -
     seen.iter().map(|&(fp, int)| fp && !int).collect()
 }
 
-/// `f(v, fp)` per operand `v` of `inst`: `fp` when the aarch64 lowering reads
+/// `f(v, fp)` per operand `v` of `inst`: `fp` when the lowering reads
 /// `v` in an FP register at `v`'s precision. Rebuilt phi incomes are skipped.
 fn operand_files(func: &FunctionSsa, inst: &Inst, f: &mut impl FnMut(ValueId, bool)) {
     let single = |v: ValueId| func.f32_values.get(v as usize).copied().unwrap_or(false);

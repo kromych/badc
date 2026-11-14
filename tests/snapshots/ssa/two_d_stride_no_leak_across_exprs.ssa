@@ -29,7 +29,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=32
     v27  BinopI { op=shl, lhs=v22, rhs_imm=2 }            -> x2
     v28  Binop { op=add, lhs=v25, rhs=v27 }               -> x1
     v29  FpCast { kind=IntToFp, value=v22 }               -> d0 [f32]
-    v30  Imm(1048576000)                                  -> x2 [f32]
+    v30  Imm(1048576000)                                  -> d1 [f32]
     v31  Binop { op=fmul, lhs=v29, rhs=v30 }              -> d0 [f32]
     v32  Store { addr=v28, disp=0, value=v31, kind=F32 }  -> -
     v33  Extend { value=v22, kind=I32 }                   -> x1
@@ -46,7 +46,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=32
     v37  Imm(32)                                          -> x0
     v38  BinopI { op=add, lhs=v36, rhs_imm=32 }           -> x0
     v39  LoadLocal { off=-32, disp=32, kind=F32 }         -> d0 [f32]
-    v40  Imm(1073741824)                                  -> x0 [f32]
+    v40  Imm(1073741824)                                  -> d1 [f32]
     v41  Binop { op=fne, lhs=v39, rhs=v40 }               -> x0
     terminator Bz { cond=v41, target=b5, fall=b4 }   (exit_acc=v41)
   block 4  start_pc=0
@@ -62,10 +62,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=32
     v49  Imm(0)                                           -> x0
     v50  LocalAddr(-32)                                   -> x0
     v51  Imm(0)                                           -> x0
-    v52  Imm(1120272384)                                  -> x0 [f32]
+    v52  Imm(1120272384)                                  -> d0 [f32]
     v53  StoreLocal { off=-32, value=v52, kind=F32 }      -> -
-    v54  LocalAddr(-32)                                   -> x1
-    v55  LoadLocal { off=-32, kind=F32 }                  -> d0 [f32]
+    v54  LocalAddr(-32)                                   -> x0
+    v55  LoadLocal { off=-32, kind=F32 }                  -> d1 [f32]
     v56  Binop { op=fne, lhs=v55, rhs=v52 }               -> x0
     terminator Bz { cond=v56, target=b7, fall=b6 }   (exit_acc=v56)
   block 6  start_pc=0

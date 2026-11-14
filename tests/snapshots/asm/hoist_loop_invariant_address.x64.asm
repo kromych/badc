@@ -226,8 +226,7 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%eax, %eax
-               	xorl	%r11d, %r11d
-               	movq	%r11, %xmm0
+               	xorps	%xmm0, %xmm0
                	leaq	<rip>, %rcx # <addr>
                	movq	%rax, %rdx
                	shlq	$0x2, %rdx
@@ -238,21 +237,18 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x10, %eax
                	jl	<addr>
-               	movl	$0x41804000, %eax       # imm = 0x41804000
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	movss	<rip>, %xmm1
+               	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	jne	<addr>
                	movss	<rip>, %xmm0 # <addr>
-               	movl	$0x3f804000, %eax       # imm = 0x3F804000
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	movss	<rip>, %xmm1
+               	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	leaq	<rip>, %rsi
                	xorl	%eax, %eax
-               	xorl	%r11d, %r11d
-               	movq	%r11, %xmm0
+               	xorps	%xmm0, %xmm0
                	leaq	<rip>, %rcx # <addr>
                	movq	%rax, %rdx
                	shlq	$0x2, %rdx

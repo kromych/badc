@@ -56,9 +56,8 @@ Disassembly of section .text:
                	movl	$0xc0200000, %r11d      # imm = 0xC0200000
                	movq	%r11, %xmm1
                	addss	%xmm1, %xmm0
-               	movl	$0xbf800000, %eax       # imm = 0xBF800000
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	movss	<rip>, %xmm1
+               	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x5, %eax
@@ -68,9 +67,8 @@ Disassembly of section .text:
                	movl	$0x3e000000, %r11d      # imm = 0x3E000000
                	movq	%r11, %xmm1
                	addss	%xmm1, %xmm0
-               	movl	$0xc0e40000, %eax       # imm = 0xC0E40000
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	movss	<rip>, %xmm1
+               	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x6, %eax
@@ -80,9 +78,8 @@ Disassembly of section .text:
                	movl	$0x40800000, %r11d      # imm = 0x40800000
                	movq	%r11, %xmm1
                	addss	%xmm1, %xmm0
-               	movl	$0x40e00000, %eax       # imm = 0x40E00000
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	movss	<rip>, %xmm1
+               	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x7, %eax

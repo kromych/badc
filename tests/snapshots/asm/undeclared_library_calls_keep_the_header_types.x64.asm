@@ -37,17 +37,16 @@ Disassembly of section .text:
                	movb	$0x1, %al
                	callq	<addr>
                	movsd	0x8(%rsp), %xmm0
-               	movabsq	$0x3ff8000000000000, %rcx # imm = 0x3FF8000000000000
-               	xorl	%edx, %edx
-               	movl	$0x1, %esi
-               	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm0
-               	cmovneq	%rsi, %rdx
-               	cmovpq	%rsi, %rdx
+               	movsd	<rip>, %xmm1
                	xorl	%ecx, %ecx
+               	movl	$0x1, %edx
+               	ucomisd	%xmm1, %xmm0
+               	cmovneq	%rdx, %rcx
+               	cmovpq	%rdx, %rcx
+               	xorl	%edx, %edx
                	movl	$0x2, %esi
                	cmpl	$0x5, %eax
-               	cmovneq	%rsi, %rcx
+               	cmovneq	%rsi, %rdx
                	orq	%rdx, %rcx
                	movq	%rcx, %rax
                	leave

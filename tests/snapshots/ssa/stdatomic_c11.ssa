@@ -103,19 +103,19 @@ fn ent_pc=0 n_params=0 variadic=false locals=7
     v78  Intrinsic { kind=AtomicAcquireFence, args=[] }   -> x0
     v79  Intrinsic { kind=AtomicReleaseFence, args=[] }   -> x0
     v80  Intrinsic { kind=AtomicSignalFence, args=[] }    -> x0
-    v81  Imm(0)                                           -> x0
+    v81  Imm(0)                                           -> d0
     v82  StoreLocal { off=-6, value=v81, kind=F64 }       -> -
     v83  LocalAddr(-6)                                    -> x0
-    v84  Imm(4612811918334230528)                         -> x1
-    v85  LocalAddr(-1)                                    -> x2
+    v84  Imm(4612811918334230528)                         -> d0
+    v85  LocalAddr(-1)                                    -> x1
     v86  StoreLocal { off=-1, value=v84, kind=F64 }       -> -
-    v87  LoadLocal { off=-1, kind=I64 }                   -> x2
+    v87  LoadLocal { off=-1, kind=I64 }                   -> x1
     v88  AtomicStore { addr=v83, value=v87, width=8, order=Release } -> -
-    v89  LocalAddr(-6)                                    -> x2
+    v89  LocalAddr(-6)                                    -> x1
     v90  AtomicLoad { addr=v83, width=8, order=Acquire }  -> x0
-    v91  LocalAddr(-1)                                    -> x2
+    v91  LocalAddr(-1)                                    -> x1
     v92  StoreLocal { off=-1, value=v90, kind=I64 }       -> -
-    v93  FpCast { kind=BitsFp, value=v90 }                -> d0
+    v93  FpCast { kind=BitsFp, value=v90 }                -> d1
     v94  Binop { op=fne, lhs=v93, rhs=v84 }               -> x0
     terminator Bz { cond=v94, target=b12, fall=b11 }   (exit_acc=v94)
   block 11  start_pc=0
@@ -131,14 +131,14 @@ fn ent_pc=0 n_params=0 variadic=false locals=7
   block 12  start_pc=0
     v103 LocalAddr(-5)                                    -> x0
     v104 Imm(1067450368)                                  -> x1 [f32]
-    v105 Imm(3214934016)                                  -> x1 [f32]
+    v105 Imm(3214934016)                                  -> d0 [f32]
     v106 StoreLocal { off=-5, value=v105, kind=F32 }      -> -
-    v107 Imm(0)                                           -> x2
-    v108 LocalAddr(-5)                                    -> x2
-    v109 AtomicLoad { addr=v103, width=4, order=SeqCst }  -> x2
-    v110 LocalAddr(-1)                                    -> x6
+    v107 Imm(0)                                           -> x1
+    v108 LocalAddr(-5)                                    -> x1
+    v109 AtomicLoad { addr=v103, width=4, order=SeqCst }  -> x1
+    v110 LocalAddr(-1)                                    -> x2
     v111 StoreLocal { off=-1, value=v109, kind=I32 }      -> -
-    v112 LoadLocal { off=-1, kind=F32 }                   -> d0 [f32]
+    v112 LoadLocal { off=-1, kind=F32 }                   -> d1 [f32]
     v113 Binop { op=fne, lhs=v112, rhs=v105 }             -> x1
     terminator Bz { cond=v113, target=b14, fall=b13 }   (exit_acc=v113)
   block 13  start_pc=0
@@ -153,17 +153,17 @@ fn ent_pc=0 n_params=0 variadic=false locals=7
     terminator Return(v114)   (exit_acc=v114)
   block 14  start_pc=0
     v122 LocalAddr(-5)                                    -> x1
-    v123 Imm(1077936128)                                  -> x1 [f32]
-    v124 LocalAddr(-1)                                    -> x2
+    v123 Imm(1077936128)                                  -> d0 [f32]
+    v124 LocalAddr(-1)                                    -> x1
     v125 StoreLocal { off=-1, value=v123, kind=F32 }      -> -
-    v126 LoadLocal { off=-1, kind=U32 }                   -> x2
+    v126 LoadLocal { off=-1, kind=U32 }                   -> x1
     v127 AtomicStore { addr=v103, value=v126, width=4, order=SeqCst } -> -
-    v128 Imm(0)                                           -> x2
-    v129 LocalAddr(-5)                                    -> x2
+    v128 Imm(0)                                           -> x1
+    v129 LocalAddr(-5)                                    -> x1
     v130 AtomicLoad { addr=v103, width=4, order=SeqCst }  -> x0
-    v131 LocalAddr(-1)                                    -> x2
+    v131 LocalAddr(-1)                                    -> x1
     v132 StoreLocal { off=-1, value=v130, kind=I32 }      -> -
-    v133 LoadLocal { off=-1, kind=F32 }                   -> d0 [f32]
+    v133 LoadLocal { off=-1, kind=F32 }                   -> d1 [f32]
     v134 Binop { op=fne, lhs=v133, rhs=v123 }             -> x0
     terminator Bz { cond=v134, target=b16, fall=b15 }   (exit_acc=v134)
   block 15  start_pc=0

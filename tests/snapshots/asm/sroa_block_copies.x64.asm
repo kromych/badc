@@ -335,10 +335,9 @@ Disassembly of section .text:
 <fp_copy>:
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rsi, %xmm0
-               	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
+               	movsd	<rip>, %xmm1
                	movsd	%xmm0, (%rdi)
-               	movq	%rax, %xmm14
-               	movsd	%xmm14, 0x8(%rdi)
+               	movsd	%xmm1, 0x8(%rdi)
                	retq
 
 <sub_object_copy>:
@@ -754,9 +753,8 @@ Disassembly of section .text:
                	jp	<addr>
                	jne	<addr>
                	movsd	-0x1e0(%rbp), %xmm0
-               	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	movsd	<rip>, %xmm1
+               	ucomisd	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x19, %eax

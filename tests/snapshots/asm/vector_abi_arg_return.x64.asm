@@ -233,27 +233,23 @@ Disassembly of section .text:
                	movups	(%rax), %xmm1
                	vaddps	%xmm1, %xmm0, %xmm0
                	vpermilps	$0x0, %xmm0, %xmm1 # xmm1 = xmm0[0,0,0,0]
-               	movl	$0x41300000, %eax       # imm = 0x41300000
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm1
+               	movss	<rip>, %xmm2
+               	ucomiss	%xmm2, %xmm1
                	jp	<addr>
                	jne	<addr>
                	vpermilps	$0x1, %xmm0, %xmm1 # xmm1 = xmm0[1,0,0,0]
-               	movl	$0x41b00000, %eax       # imm = 0x41B00000
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm1
+               	movss	<rip>, %xmm2
+               	ucomiss	%xmm2, %xmm1
                	jp	<addr>
                	jne	<addr>
                	vpermilps	$0x2, %xmm0, %xmm1 # xmm1 = xmm0[2,0,0,0]
-               	movl	$0x42040000, %eax       # imm = 0x42040000
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm1
+               	movss	<rip>, %xmm2
+               	ucomiss	%xmm2, %xmm1
                	jp	<addr>
                	jne	<addr>
                	vpermilps	$0x3, %xmm0, %xmm0 # xmm0 = xmm0[3,0,0,0]
-               	movl	$0x42300000, %eax       # imm = 0x42300000
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	movss	<rip>, %xmm1
+               	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x3, %eax
@@ -352,12 +348,10 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rax, %xmm0
-               	movabsq	$0x4028000000000000, %rax # imm = 0x4028000000000000
-               	movq	%rax, %xmm15
-               	addsd	%xmm15, %xmm0
-               	movabsq	$0x404a000000000000, %rax # imm = 0x404A000000000000
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	movsd	<rip>, %xmm1
+               	addsd	%xmm1, %xmm0
+               	movsd	<rip>, %xmm1
+               	ucomisd	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x6, %eax

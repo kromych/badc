@@ -245,9 +245,8 @@ Disassembly of section .text:
                	movabsq	$0x7fedcba987654321, %rax # imm = 0x7FEDCBA987654321
                	movq	%rax, -0x18(%rbp)
                	movl	$0xc0300000, -0x10(%rbp) # imm = 0xC0300000
-               	movabsq	$0x7e37e43c8800759c, %rax # imm = 0x7E37E43C8800759C
-               	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x8(%rbp)
+               	movsd	<rip>, %xmm0
+               	movsd	%xmm0, -0x8(%rbp)
                	movslq	-0x20(%rbp), %rbx
                	movq	-0x18(%rbp), %r10
                	movq	%r10, -0x68(%rbp)

@@ -70,14 +70,7 @@ Disassembly of section .text:
                	incq	%rdx
                	cmpl	$0xc, %edx
                	jl	<addr>
-               	xorl	%eax, %eax
-               	movss	<rip>, %xmm0 # <addr>
-               	movss	<rip>, %xmm1 # <addr>
-               	addss	%xmm1, %xmm0
-               	movss	<rip>, %xmm1 # <addr>
-               	addss	%xmm1, %xmm0
-               	movq	%rax, %xmm14
-               	vaddss	%xmm0, %xmm14, %xmm0
+               	xorps	%xmm0, %xmm0
                	movss	<rip>, %xmm1 # <addr>
                	movss	<rip>, %xmm2 # <addr>
                	addss	%xmm2, %xmm1
@@ -144,8 +137,14 @@ Disassembly of section .text:
                	movss	<rip>, %xmm2 # <addr>
                	addss	%xmm2, %xmm1
                	addss	%xmm1, %xmm0
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	movss	<rip>, %xmm1 # <addr>
+               	movss	<rip>, %xmm2 # <addr>
+               	addss	%xmm2, %xmm1
+               	movss	<rip>, %xmm2 # <addr>
+               	addss	%xmm2, %xmm1
+               	addss	%xmm1, %xmm0
+               	xorps	%xmm1, %xmm1
+               	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movq	<rip>, %rax # <addr>

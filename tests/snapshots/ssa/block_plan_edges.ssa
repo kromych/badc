@@ -716,10 +716,10 @@ fn ent_pc=21 n_params=0 variadic=false locals=0
     v743 BinopI { op=lt, lhs=v739, rhs_imm=1 }            -> x0
     terminator Bz { cond=v743, target=b47, fall=b45 }   (exit_acc=v743)
   block 47  start_pc=0
-    v751 Imm(4616189618054758400)                         -> x0
-    v752 Binop { op=fmul.c, lhs=v740, rhs=v751 }          -> d2
+    v751 Imm(4616189618054758400)                         -> d2
+    v752 Binop { op=fmul.c, lhs=v740, rhs=v751 }          -> d3
     v753 Fma { a=v740, b=v751, c=v741, neg_product=false, neg_addend=false } -> d0
-    v754 Imm(4618441417868443648)                         -> x0
+    v754 Imm(4618441417868443648)                         -> d1
     v755 Binop { op=fne, lhs=v753, rhs=v754 }             -> x0
     terminator Bz { cond=v755, target=b49, fall=b48 }   (exit_acc=v755)
   block 48  start_pc=0
@@ -755,10 +755,10 @@ fn ent_pc=21 n_params=0 variadic=false locals=0
   block 54  start_pc=0
     terminator Jmp(b50)
   block 55  start_pc=0
-    v763 Imm(4616189618054758400)                         -> x0
-    v764 Binop { op=fmul.c, lhs=v757, rhs=v763 }          -> d2
+    v763 Imm(4616189618054758400)                         -> d2
+    v764 Binop { op=fmul.c, lhs=v757, rhs=v763 }          -> d3
     v765 Fma { a=v757, b=v763, c=v758, neg_product=false, neg_addend=false } -> d0
-    v766 Imm(4621256167635550208)                         -> x0
+    v766 Imm(4621256167635550208)                         -> d1
     v767 Binop { op=fne, lhs=v765, rhs=v766 }             -> x0
     terminator Bz { cond=v767, target=b57, fall=b56 }   (exit_acc=v767)
   block 56  start_pc=0
@@ -794,10 +794,10 @@ fn ent_pc=21 n_params=0 variadic=false locals=0
   block 62  start_pc=0
     terminator Jmp(b58)
   block 63  start_pc=0
-    v780 Imm(4616189618054758400)                         -> x0
-    v781 Binop { op=fmul.c, lhs=v774, rhs=v780 }          -> d2
+    v780 Imm(4616189618054758400)                         -> d2
+    v781 Binop { op=fmul.c, lhs=v774, rhs=v780 }          -> d3
     v782 Fma { a=v774, b=v780, c=v775, neg_product=false, neg_addend=false } -> d0
-    v783 Imm(4618441417868443648)                         -> x0
+    v783 Imm(4618441417868443648)                         -> d1
     v784 Binop { op=fne, lhs=v782, rhs=v783 }             -> x0
     terminator Bz { cond=v784, target=b65, fall=b64 }   (exit_acc=v784)
   block 64  start_pc=0

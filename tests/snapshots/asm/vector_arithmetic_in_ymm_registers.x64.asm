@@ -162,39 +162,31 @@ Disassembly of section .text:
                	movabsq	$0x7ffffffffffffff0, %rax # imm = 0x7FFFFFFFFFFFFFF0
                	movq	%rax, 0x100(%rsp)
                	movq	$0x10, 0x120(%rsp)
-               	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
-               	movq	%rax, %xmm14
-               	movsd	%xmm14, 0x180(%rsp)
-               	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
-               	movq	%rax, %xmm14
-               	movsd	%xmm14, 0x1a0(%rsp)
+               	movsd	<rip>, %xmm0
+               	movsd	%xmm0, 0x180(%rsp)
+               	movsd	<rip>, %xmm0
+               	movsd	%xmm0, 0x1a0(%rsp)
                	movabsq	$0x7ffffffffffffff1, %rax # imm = 0x7FFFFFFFFFFFFFF1
                	movq	%rax, 0x108(%rsp)
                	movq	$0x11, 0x128(%rsp)
-               	movabsq	$0x4010000000000000, %rax # imm = 0x4010000000000000
-               	movq	%rax, %xmm14
-               	movsd	%xmm14, 0x188(%rsp)
-               	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000
-               	movq	%rax, %xmm14
-               	movsd	%xmm14, 0x1a8(%rsp)
+               	movsd	<rip>, %xmm0
+               	movsd	%xmm0, 0x188(%rsp)
+               	movsd	<rip>, %xmm0
+               	movsd	%xmm0, 0x1a8(%rsp)
                	movabsq	$0x7ffffffffffffff2, %rax # imm = 0x7FFFFFFFFFFFFFF2
                	movq	%rax, 0x110(%rsp)
                	movq	$0x12, 0x130(%rsp)
-               	movabsq	$0x4014000000000000, %rax # imm = 0x4014000000000000
-               	movq	%rax, %xmm14
-               	movsd	%xmm14, 0x190(%rsp)
-               	movabsq	$0x4004000000000000, %rax # imm = 0x4004000000000000
-               	movq	%rax, %xmm14
-               	movsd	%xmm14, 0x1b0(%rsp)
+               	movsd	<rip>, %xmm0
+               	movsd	%xmm0, 0x190(%rsp)
+               	movsd	<rip>, %xmm0
+               	movsd	%xmm0, 0x1b0(%rsp)
                	movabsq	$0x7ffffffffffffff3, %rax # imm = 0x7FFFFFFFFFFFFFF3
                	movq	%rax, 0x118(%rsp)
                	movq	$0x13, 0x138(%rsp)
-               	movabsq	$0x4018000000000000, %rax # imm = 0x4018000000000000
-               	movq	%rax, %xmm14
-               	movsd	%xmm14, 0x198(%rsp)
-               	movabsq	$0x400c000000000000, %rax # imm = 0x400C000000000000
-               	movq	%rax, %xmm14
-               	movsd	%xmm14, 0x1b8(%rsp)
+               	movsd	<rip>, %xmm0
+               	movsd	%xmm0, 0x198(%rsp)
+               	movsd	<rip>, %xmm0
+               	movsd	%xmm0, 0x1b8(%rsp)
                	leaq	(%rsp), %rbx
                	leaq	0x20(%rsp), %r9
                	movq	%rbx, %r10

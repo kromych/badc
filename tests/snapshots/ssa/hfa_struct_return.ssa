@@ -210,7 +210,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=2
     v204 BinopI { op=add, lhs=v173, rhs_imm=12 }          -> x0
     v205 LoadLocal { off=-2, disp=12, kind=F32 }          -> d1 [f32]
     v206 Binop { op=fadd, lhs=v203, rhs=v205 }            -> d0 [f32]
-    v207 Imm(1092616192)                                  -> x0 [f32]
+    v207 Imm(1092616192)                                  -> d1 [f32]
     v208 Binop { op=fne, lhs=v206, rhs=v207 }             -> x0
     terminator Bz { cond=v208, target=b2, fall=b1 }   (exit_acc=v208)
   block 1  start_pc=0

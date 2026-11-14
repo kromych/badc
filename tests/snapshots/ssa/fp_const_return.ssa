@@ -40,7 +40,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     v15  BinopI { op=eq, lhs=v7, rhs_imm=0 }              -> x1
     terminator Bnz { cond=v7, target=b6, fall=b5 }   (low word)   (exit_acc=v15)
   block 5  start_pc=0
-    v27  Imm(0)                                           -> x0
+    v27  Imm(0)                                           -> d0
     terminator Return(v27)   (exit_acc=v27)
   block 6  start_pc=0
     v28  Imm(0)                                           -> x1

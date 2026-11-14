@@ -785,7 +785,7 @@ fn ent_pc=12 n_params=0 variadic=false locals=0
     v253 LifetimeEnd(-107)                                -> -
     terminator Return(v251)   (exit_acc=v251)
   block 14  start_pc=0
-    v254 Imm(4611686018427387904)                         -> x0
+    v254 Imm(4611686018427387904)                         -> d0
     v255 Imm(1)                                           -> x7
     v256 LocalAddr(-107)                                  -> x6
     v257 Imm(3)                                           -> x1
@@ -803,7 +803,7 @@ fn ent_pc=12 n_params=0 variadic=false locals=0
     terminator Return(v264)   (exit_acc=v264)
   block 16  start_pc=0
     v267 Imm(4607182418800017408)                         -> x0
-    v268 Imm(-4616189618054758400)                        -> x0
+    v268 Imm(-4616189618054758400)                        -> d0
     v269 Imm(4)                                           -> x7
     v270 LocalAddr(-108)                                  -> x6
     v271 Imm(5)                                           -> x1

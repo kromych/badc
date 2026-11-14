@@ -1256,7 +1256,7 @@ mod jit_impl {
                     code_vmaddr,
                     fx.code_offset as u64,
                     code_vmaddr + rodata_blob_off as u64 + fx.rodata_offset,
-                    AddrPart::Whole,
+                    fx.part,
                     "rodata fixup",
                 )?;
             }

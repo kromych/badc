@@ -55,7 +55,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=3
   block 5  start_pc=0
     v40  ImmData(8)                                       -> x0
     v41  Load { addr=v40, disp=0, kind=F64 pc_rel }       -> d0
-    v42  Imm(9214871658872686752)                         -> x0
+    v42  Imm(9214871658872686752)                         -> d1
     v43  Binop { op=fgt, lhs=v41, rhs=v42 }               -> x0
     v44  BinopI { op=eq, lhs=v43, rhs_imm=0 }             -> x1
     v45  Imm(1)                                           -> x1
@@ -64,7 +64,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=3
   block 6  start_pc=0
     v47  ImmData(16)                                      -> x0
     v48  Load { addr=v47, disp=0, kind=F32 pc_rel }       -> d0 [f32]
-    v49  Imm(2137108966)                                  -> x0 [f32]
+    v49  Imm(2137108966)                                  -> d1 [f32]
     v50  Binop { op=fgt, lhs=v48, rhs=v49 }               -> x0
     v51  BinopI { op=eq, lhs=v50, rhs_imm=0 }             -> x1
     v52  BinopI { op=ne, lhs=v51, rhs_imm=0 }             -> x1
@@ -136,8 +136,8 @@ fn ent_pc=3 n_params=0 variadic=false locals=3
     v102 Imm(9221120237041090568)                         -> x0
     v103 LifetimeEnd(0)                                   -> -
     v104 Imm(0)                                           -> x0
-    v105 Imm(2143289345)                                  -> x0 [f32]
-    v106 Imm(0)                                           -> x1
+    v105 Imm(2143289345)                                  -> d0 [f32]
+    v106 Imm(0)                                           -> x0
     v107 StoreLocal { off=-3, value=v105, kind=F32 }      -> -
     v108 Imm(0)                                           -> x0
     v109 LoadLocal { off=-3, kind=U32 }                   -> x0

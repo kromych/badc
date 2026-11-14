@@ -35,9 +35,7 @@ Disassembly of section .text:
                	jg	<addr>
                	testl	%eax, %eax
                	jne	<addr>
-               	xorl	%eax, %eax
-               	movq	%rax, %xmm14
-               	movapd	%xmm14, %xmm0
+               	xorps	%xmm0, %xmm0
                	retq
                	decq	%rax
                	movq	(%rdi,%rax,8), %rax

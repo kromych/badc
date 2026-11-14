@@ -29,9 +29,8 @@ Disassembly of section .text:
                	movl	<rip>, %eax # <addr>
                	movsd	<rip>, %xmm0 # <addr>
                	leaq	0x2(%rax), %rcx
-               	movabsq	$0x4024000000000000, %rdx # imm = 0x4024000000000000
-               	movq	%rdx, %xmm15
-               	mulsd	%xmm15, %xmm0
+               	movsd	<rip>, %xmm1
+               	mulsd	%xmm1, %xmm0
                	cvttsd2si	%xmm0, %rdx
                	addq	%rdx, %rax
                	addq	%rcx, %rax

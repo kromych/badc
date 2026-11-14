@@ -411,7 +411,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v307 Extend { value=v302, kind=I32 }                  -> x2
     v308 BinopI { op=shl, lhs=v302, rhs_imm=2 }           -> x2
     v309 Binop { op=add, lhs=v306, rhs=v308 }             -> x1
-    v310 Imm(1065369600)                                  -> x2 [f32]
+    v310 Imm(1065369600)                                  -> d1 [f32]
     v311 Store { addr=v309, disp=0, value=v310, kind=F32 } -> -
     v312 Extend { value=v302, kind=I32 }                  -> x2
     v313 BinopI { op=shl, lhs=v302, rhs_imm=2 }           -> x2
@@ -430,7 +430,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v305 BinopI { op=lt, lhs=v302, rhs_imm=16 }           -> x1
     terminator Bz { cond=v305, target=b51, fall=b49 }   (exit_acc=v305)
   block 51  start_pc=0
-    v147 Imm(1098924032)                                  -> x0 [f32]
+    v147 Imm(1098924032)                                  -> d1 [f32]
     v148 Binop { op=fne, lhs=v303, rhs=v147 }             -> x0
     v149 Imm(0)                                           -> x1
     terminator Bnz { cond=v148, target=b53, fall=b52 }   (exit_acc=v148)
@@ -439,7 +439,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v151 Imm(60)                                          -> x0
     v152 BinopI { op=add, lhs=v150, rhs_imm=60 }          -> x0
     v153 Load { addr=v150, disp=60, kind=F32 pc_rel }     -> d0 [f32]
-    v154 Imm(1065369600)                                  -> x0 [f32]
+    v154 Imm(1065369600)                                  -> d1 [f32]
     v155 Binop { op=fne, lhs=v153, rhs=v154 }             -> x0
     v156 Imm(0)                                           -> x1
     v157 Imm(0)                                           -> x1
@@ -457,7 +457,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v326 Extend { value=v321, kind=I32 }                  -> x2
     v327 BinopI { op=shl, lhs=v321, rhs_imm=2 }           -> x2
     v328 Binop { op=add, lhs=v325, rhs=v327 }             -> x1
-    v329 Imm(1065369600)                                  -> x2 [f32]
+    v329 Imm(1065369600)                                  -> d1 [f32]
     v330 Store { addr=v328, disp=0, value=v329, kind=F32 } -> -
     v331 Extend { value=v321, kind=I32 }                  -> x2
     v332 BinopI { op=shl, lhs=v321, rhs_imm=2 }           -> x2

@@ -52,7 +52,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v54  ImmData(144)                                     -> x1
     v55  Imm(0)                                           -> x1
     v56  Load { addr=v54, disp=0, kind=F32 pc_rel }       -> d0 [f32]
-    v57  Imm(1069547520)                                  -> x1 [f32]
+    v57  Imm(1069547520)                                  -> d1 [f32]
     v58  Binop { op=fne, lhs=v56, rhs=v57 }               -> x1
     terminator Bz { cond=v58, target=b17, fall=b3 }   (exit_acc=v58)
   block 3  start_pc=0
@@ -71,7 +71,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v69  Imm(4)                                           -> x1
     v70  BinopI { op=add, lhs=v68, rhs_imm=4 }            -> x1
     v71  Load { addr=v68, disp=4, kind=F32 pc_rel }       -> d0 [f32]
-    v72  Imm(1075838976)                                  -> x1 [f32]
+    v72  Imm(1075838976)                                  -> d1 [f32]
     v73  Binop { op=fne, lhs=v71, rhs=v72 }               -> x1
     terminator Bz { cond=v73, target=b16, fall=b5 }   (exit_acc=v73)
   block 5  start_pc=0
@@ -91,7 +91,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v85  Imm(8)                                           -> x1
     v86  BinopI { op=add, lhs=v84, rhs_imm=8 }            -> x1
     v87  Load { addr=v84, disp=8, kind=F32 pc_rel }       -> d0 [f32]
-    v88  Imm(1080033280)                                  -> x1 [f32]
+    v88  Imm(1080033280)                                  -> d1 [f32]
     v89  Binop { op=fne, lhs=v87, rhs=v88 }               -> x1
     terminator Bz { cond=v89, target=b15, fall=b7 }   (exit_acc=v89)
   block 7  start_pc=0
@@ -111,7 +111,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v101 Imm(12)                                          -> x1
     v102 BinopI { op=add, lhs=v100, rhs_imm=12 }          -> x1
     v103 Load { addr=v100, disp=12, kind=F32 pc_rel }     -> d0 [f32]
-    v104 Imm(1083179008)                                  -> x1 [f32]
+    v104 Imm(1083179008)                                  -> d1 [f32]
     v105 Binop { op=fne, lhs=v103, rhs=v104 }             -> x1
     terminator Bz { cond=v105, target=b14, fall=b9 }   (exit_acc=v105)
   block 9  start_pc=0
@@ -161,7 +161,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v147 Imm(1078984704)                                  -> x1 [f32]
     v148 Imm(0)                                           -> x1
     v149 Imm(0)                                           -> x1
-    v150 Imm(1065353216)                                  -> x1 [f32]
+    v150 Imm(1065353216)                                  -> d0 [f32]
     v151 StoreLocal { off=-1, value=v150, kind=F32 }      -> -
     v152 LoadLocal { off=-1, kind=U32 }                   -> x6
     v153 Imm(0)                                           -> x1

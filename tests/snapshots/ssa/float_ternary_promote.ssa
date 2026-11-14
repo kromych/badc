@@ -48,7 +48,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v17  Binop { op=fadd, lhs=v8, rhs=v15 }               -> d0 [f32]
     v18  Imm(0)                                           -> x0
     v19  Imm(0)                                           -> x0 [f32]
-    v20  Imm(1087373312)                                  -> x0 [f32]
+    v20  Imm(1087373312)                                  -> d1 [f32]
     v21  Binop { op=fne, lhs=v17, rhs=v20 }               -> x0
     terminator Bz { cond=v21, target=b6, fall=b5 }   (exit_acc=v21)
   block 5  start_pc=0

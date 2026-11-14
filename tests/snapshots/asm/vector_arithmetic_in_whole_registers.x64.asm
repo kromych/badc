@@ -193,21 +193,17 @@ Disassembly of section .text:
                	movabsq	$0x7ffffffffffffff0, %rax # imm = 0x7FFFFFFFFFFFFFF0
                	movq	%rax, -0xb0(%rbp)
                	movq	$0x10, -0xa0(%rbp)
-               	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
-               	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x70(%rbp)
-               	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
-               	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x60(%rbp)
+               	movsd	<rip>, %xmm0
+               	movsd	%xmm0, -0x70(%rbp)
+               	movsd	<rip>, %xmm0
+               	movsd	%xmm0, -0x60(%rbp)
                	movabsq	$0x7ffffffffffffff1, %rax # imm = 0x7FFFFFFFFFFFFFF1
                	movq	%rax, -0xa8(%rbp)
                	movq	$0x11, -0x98(%rbp)
-               	movabsq	$0x4010000000000000, %rax # imm = 0x4010000000000000
-               	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x68(%rbp)
-               	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000
-               	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x58(%rbp)
+               	movsd	<rip>, %xmm0
+               	movsd	%xmm0, -0x68(%rbp)
+               	movsd	<rip>, %xmm0
+               	movsd	%xmm0, -0x58(%rbp)
                	leaq	-0x130(%rbp), %rbx
                	leaq	-0x120(%rbp), %r9
                	movq	%rbx, %r10

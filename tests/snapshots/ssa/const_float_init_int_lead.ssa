@@ -6,7 +6,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(8)                                       -> x0
     v2   Load { addr=v1, disp=0, kind=F64 pc_rel }        -> d0
-    v3   Imm(4609434218613702656)                         -> x0
+    v3   Imm(4609434218613702656)                         -> d1
     v4   Binop { op=feq, lhs=v2, rhs=v3 }                 -> x0
     v5   BinopI { op=eq, lhs=v4, rhs_imm=0 }              -> x1
     terminator Bnz { cond=v4, target=b2, fall=b1 }   (exit_acc=v5)
@@ -16,7 +16,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
   block 2  start_pc=0
     v7   ImmData(16)                                      -> x0
     v8   Load { addr=v7, disp=0, kind=F64 pc_rel }        -> d0
-    v9   Imm(4615063718147915776)                         -> x0
+    v9   Imm(4615063718147915776)                         -> d1
     v10  Binop { op=feq, lhs=v8, rhs=v9 }                 -> x0
     v11  BinopI { op=eq, lhs=v10, rhs_imm=0 }             -> x1
     terminator Bnz { cond=v10, target=b4, fall=b3 }   (exit_acc=v11)
@@ -26,7 +26,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
   block 4  start_pc=0
     v13  ImmData(24)                                      -> x0
     v14  Load { addr=v13, disp=0, kind=F32 pc_rel }       -> d0 [f32]
-    v15  Imm(1069547520)                                  -> x0 [f32]
+    v15  Imm(1069547520)                                  -> d1 [f32]
     v16  Binop { op=feq, lhs=v14, rhs=v15 }               -> x0
     v17  BinopI { op=eq, lhs=v16, rhs_imm=0 }             -> x1
     terminator Bnz { cond=v16, target=b6, fall=b5 }   (exit_acc=v17)

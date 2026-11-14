@@ -449,15 +449,13 @@ Disassembly of section .text:
                	vextracti128	$0x1, %ymm1, %xmm0
                	movups	%xmm0, -0x70(%rbp)
                	vpermilpd	$0x0, %xmm0, %xmm2 # xmm2 = xmm0[0,0]
-               	movabsq	$0x400a000000000000, %rax # imm = 0x400A000000000000
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm2
+               	movsd	<rip>, %xmm3
+               	ucomisd	%xmm3, %xmm2
                	jp	<addr>
                	jne	<addr>
                	vpermilpd	$0x1, %xmm0, %xmm0 # xmm0 = xmm0[1,0]
-               	movabsq	$0x7e37e43c8800759c, %rax # imm = 0x7E37E43C8800759C
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	movsd	<rip>, %xmm2
+               	ucomisd	%xmm2, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0xe, %eax
@@ -468,15 +466,13 @@ Disassembly of section .text:
                	vmovdqa	%xmm0, %xmm0
                	vmovups	%ymm0, -0x70(%rbp)
                	vpermilpd	$0x0, %xmm0, %xmm1 # xmm1 = xmm0[0,0]
-               	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm1
+               	movsd	<rip>, %xmm2
+               	ucomisd	%xmm2, %xmm1
                	jp	<addr>
                	jne	<addr>
                	vpermilpd	$0x1, %xmm0, %xmm1 # xmm1 = xmm0[1,0]
-               	movabsq	$-0x3ffc000000000000, %rax # imm = 0xC004000000000000
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm1
+               	movsd	<rip>, %xmm2
+               	ucomisd	%xmm2, %xmm1
                	jp	<addr>
                	jne	<addr>
                	vextracti128	$0x1, %ymm0, %xmm15

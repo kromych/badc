@@ -23,7 +23,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v17  Extend { value=v4, kind=I32 }                    -> x2
     v18  Extend { value=v11, kind=I32 }                   -> x2
     v19  Imm(7)                                           -> x2
-    v20  Imm(4621819117588971520)                         -> x2
+    v20  Imm(4621819117588971520)                         -> d1
     v21  Binop { op=fmul, lhs=v7, rhs=v20 }               -> d0
     v22  FpCast { kind=FpToInt, value=v21 }               -> x2
     v23  Binop { op=add, lhs=v4, rhs=v22 }                -> x0

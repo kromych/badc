@@ -1416,14 +1416,7 @@ impl<'a> PeWriter<'a> {
         for f in &build.rodata.addr_fixups {
             let instr_off = (f.code_offset as u32) + prologue;
             let target_rva = i64::from(jt_rva + f.rodata_offset as u32);
-            patch_addr_load(
-                machine,
-                &mut text,
-                instr_off,
-                text_rva,
-                target_rva,
-                AddrPart::Whole,
-            )?;
+            patch_addr_load(machine, &mut text, instr_off, text_rva, target_rva, f.part)?;
         }
         let mut jt_bytes = build.rodata.bytes.clone();
         image::patch_jump_table(

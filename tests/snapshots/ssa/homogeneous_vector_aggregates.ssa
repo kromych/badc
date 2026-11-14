@@ -19,15 +19,15 @@ fn ent_pc=14 n_params=1 variadic=true locals=3
     v16  Mcpy { dst=v15, src=v14, size=16, align=16 }     -> -
     v17  Imm(0)                                           -> x1
     v18  Imm(100)                                         -> x1
-    v19  Imm(4636737291354636288)                         -> x1
-    v20  Binop { op=fmul.c, lhs=v8, rhs=v19 }             -> d1
-    v21  LocalAddr(-8)                                    -> x2
-    v22  Imm(0)                                           -> x2
-    v23  LoadLocal { off=-8, kind=F32 }                   -> d1 [f32]
-    v24  Imm(10)                                          -> x2
-    v25  Imm(1092616192)                                  -> x2 [f32]
-    v26  Binop { op=fmul.c, lhs=v23, rhs=v25 }            -> d1 [f32]
-    v27  FpCast { kind=F32ToF64, value=v26 }              -> d1
+    v19  Imm(4636737291354636288)                         -> d1
+    v20  Binop { op=fmul.c, lhs=v8, rhs=v19 }             -> d2
+    v21  LocalAddr(-8)                                    -> x1
+    v22  Imm(0)                                           -> x1
+    v23  LoadLocal { off=-8, kind=F32 }                   -> d2 [f32]
+    v24  Imm(10)                                          -> x1
+    v25  Imm(1092616192)                                  -> d3 [f32]
+    v26  Binop { op=fmul.c, lhs=v23, rhs=v25 }            -> d2 [f32]
+    v27  FpCast { kind=F32ToF64, value=v26 }              -> d2
     v28  Fma { a=v8, b=v19, c=v27, neg_product=false, neg_addend=false } -> d0
     v29  LocalAddr(-8)                                    -> x1
     v30  Imm(12)                                          -> x1
@@ -75,16 +75,16 @@ fn ent_pc=15 n_params=1 variadic=true locals=3
     v16  Mcpy { dst=v15, src=v14, size=32, align=16 }     -> -
     v17  Imm(0)                                           -> x1
     v18  Imm(1000)                                        -> x1
-    v19  Imm(4652007308841189376)                         -> x1
-    v20  Binop { op=fmul.c, lhs=v8, rhs=v19 }             -> d1
-    v21  LocalAddr(-10)                                   -> x2
-    v22  Imm(12)                                          -> x2
-    v23  BinopI { op=add, lhs=v15, rhs_imm=12 }           -> x2
-    v24  LoadLocal { off=-10, disp=12, kind=F32 }         -> d1 [f32]
-    v25  Imm(100)                                         -> x2
-    v26  Imm(1120403456)                                  -> x2 [f32]
-    v27  Binop { op=fmul.c, lhs=v24, rhs=v26 }            -> d1 [f32]
-    v28  FpCast { kind=F32ToF64, value=v27 }              -> d1
+    v19  Imm(4652007308841189376)                         -> d1
+    v20  Binop { op=fmul.c, lhs=v8, rhs=v19 }             -> d2
+    v21  LocalAddr(-10)                                   -> x1
+    v22  Imm(12)                                          -> x1
+    v23  BinopI { op=add, lhs=v15, rhs_imm=12 }           -> x1
+    v24  LoadLocal { off=-10, disp=12, kind=F32 }         -> d2 [f32]
+    v25  Imm(100)                                         -> x1
+    v26  Imm(1120403456)                                  -> d3 [f32]
+    v27  Binop { op=fmul.c, lhs=v24, rhs=v26 }            -> d2 [f32]
+    v28  FpCast { kind=F32ToF64, value=v27 }              -> d2
     v29  Fma { a=v8, b=v19, c=v28, neg_product=false, neg_addend=false } -> d0
     v30  LocalAddr(-10)                                   -> x1
     v31  BinopI { op=add, lhs=v15, rhs_imm=16 }           -> x1
@@ -140,15 +140,15 @@ fn ent_pc=16 n_params=1 variadic=true locals=6
     v16  Mcpy { dst=v15, src=v14, size=24, align=8 }      -> -
     v17  Imm(0)                                           -> x1
     v18  Imm(1000)                                        -> x1
-    v19  Imm(4652007308841189376)                         -> x1
-    v20  Binop { op=fmul.c, lhs=v8, rhs=v19 }             -> d1
-    v21  LocalAddr(-3)                                    -> x2
-    v22  Imm(0)                                           -> x2
-    v23  LoadLocal { off=-3, kind=F32 }                   -> d1 [f32]
-    v24  Imm(100)                                         -> x2
-    v25  Imm(1120403456)                                  -> x2 [f32]
-    v26  Binop { op=fmul.c, lhs=v23, rhs=v25 }            -> d1 [f32]
-    v27  FpCast { kind=F32ToF64, value=v26 }              -> d1
+    v19  Imm(4652007308841189376)                         -> d1
+    v20  Binop { op=fmul.c, lhs=v8, rhs=v19 }             -> d2
+    v21  LocalAddr(-3)                                    -> x1
+    v22  Imm(0)                                           -> x1
+    v23  LoadLocal { off=-3, kind=F32 }                   -> d2 [f32]
+    v24  Imm(100)                                         -> x1
+    v25  Imm(1120403456)                                  -> d3 [f32]
+    v26  Binop { op=fmul.c, lhs=v23, rhs=v25 }            -> d2 [f32]
+    v27  FpCast { kind=F32ToF64, value=v26 }              -> d2
     v28  Fma { a=v8, b=v19, c=v27, neg_product=false, neg_addend=false } -> d0
     v29  LocalAddr(-3)                                    -> x1
     v30  BinopI { op=add, lhs=v15, rhs_imm=8 }            -> x1
@@ -156,7 +156,7 @@ fn ent_pc=16 n_params=1 variadic=true locals=6
     v32  BinopI { op=add, lhs=v15, rhs_imm=12 }           -> x1
     v33  LoadLocal { off=-3, disp=12, kind=F32 }          -> d1 [f32]
     v34  Imm(10)                                          -> x1
-    v35  Imm(1092616192)                                  -> x1 [f32]
+    v35  Imm(1092616192)                                  -> d2 [f32]
     v36  Binop { op=fmul.c, lhs=v33, rhs=v35 }            -> d1 [f32]
     v37  FpCast { kind=F32ToF64, value=v36 }              -> d1
     v38  Binop { op=fadd, lhs=v28, rhs=v37 }              -> d0
@@ -252,7 +252,7 @@ fn ent_pc=17 n_params=0 variadic=false locals=8
     v60  LocalAddr(-8)                                    -> x0
     v61  BinopI { op=add, lhs=v52, rhs_imm=8 }            -> x0
     v62  Imm(3)                                           -> x0
-    v63  Imm(4613937818241073152)                         -> x0
+    v63  Imm(4613937818241073152)                         -> d0
     v64  StoreLocal { off=-8, disp=8, value=v63, kind=F64 } -> -
     v65  LocalAddr(-86)                                   -> x0
     v66  Imm(4602678819172646912)                         -> x0
@@ -272,7 +272,7 @@ fn ent_pc=17 n_params=0 variadic=false locals=8
     v80  Imm(0)                                           -> x0
     v81  Imm(0)                                           -> x0
     v82  ImmData(8)                                       -> x0
-    v83  Load { addr=v82, disp=0, kind=V128, align=8 }    -> d0
+    v83  Load { addr=v82, disp=0, kind=V128, align=8 }    -> d1
     v84  Imm(0)                                           -> x0
     v85  Imm(0)                                           -> x0
     v86  Imm(0)                                           -> x0
@@ -283,24 +283,24 @@ fn ent_pc=17 n_params=0 variadic=false locals=8
     v91  Imm(0)                                           -> x0
     v92  Imm(0)                                           -> x0
     v93  Imm(0)                                           -> x0
-    v94  VecExtract { vec=v83, off=0, kind=F32, bytes=16 } -> d1 [f32]
+    v94  VecExtract { vec=v83, off=0, kind=F32, bytes=16 } -> d2 [f32]
     v95  Imm(1)                                           -> x0
-    v96  Imm(1065353216)                                  -> x0 [f32]
-    v97  Binop { op=fne, lhs=v94, rhs=v96 }               -> x1
-    v98  Imm(0)                                           -> x2
+    v96  Imm(1065353216)                                  -> d0 [f32]
+    v97  Binop { op=fne, lhs=v94, rhs=v96 }               -> x0
+    v98  Imm(0)                                           -> x1
     terminator Bnz { cond=v97, target=b2, fall=b1 }   (exit_acc=v97)
   block 1  start_pc=0
-    v131 Imm(0)                                           -> x1
-    v132 Imm(12)                                          -> x1
-    v133 Imm(12)                                          -> x1
-    v134 Imm(0)                                           -> x1
-    v135 VecExtract { vec=v83, off=12, kind=F32, bytes=16 } -> d0 [f32]
-    v136 Imm(2)                                           -> x1
-    v137 Imm(1073741824)                                  -> x1 [f32]
-    v138 Binop { op=fne, lhs=v135, rhs=v137 }             -> x2
-    v139 Imm(0)                                           -> x6
-    v140 Imm(0)                                           -> x6
-    v141 Imm(0)                                           -> x6
+    v131 Imm(0)                                           -> x0
+    v132 Imm(12)                                          -> x0
+    v133 Imm(12)                                          -> x0
+    v134 Imm(0)                                           -> x0
+    v135 VecExtract { vec=v83, off=12, kind=F32, bytes=16 } -> d2 [f32]
+    v136 Imm(2)                                           -> x0
+    v137 Imm(1073741824)                                  -> d1 [f32]
+    v138 Binop { op=fne, lhs=v135, rhs=v137 }             -> x0
+    v139 Imm(0)                                           -> x1
+    v140 Imm(0)                                           -> x1
+    v141 Imm(0)                                           -> x1
     terminator Bz { cond=v138, target=b3, fall=b2 }   (exit_acc=v138)
   block 2  start_pc=0
     v142 Imm(5)                                           -> x0
@@ -313,52 +313,52 @@ fn ent_pc=17 n_params=0 variadic=false locals=8
     v149 LifetimeEnd(-86)                                 -> -
     terminator Return(v142)   (exit_acc=v142)
   block 3  start_pc=0
-    v150 LocalAddr(-89)                                   -> x2
-    v151 Imm(0)                                           -> x6
-    v152 Imm(0)                                           -> x6
-    v153 ImmData(24)                                      -> x6
-    v154 Load { addr=v153, disp=0, kind=V128, align=8 }   -> d0
+    v150 LocalAddr(-89)                                   -> x0
+    v151 Imm(0)                                           -> x1
+    v152 Imm(0)                                           -> x1
+    v153 ImmData(24)                                      -> x1
+    v154 Load { addr=v153, disp=0, kind=V128, align=8 }   -> d2
     v155 StoreLocal { off=-89, value=v154, kind=V128 }    -> -
-    v156 BinopI { op=add, lhs=v150, rhs_imm=16 }          -> x6
-    v157 ImmData(40)                                      -> x6
-    v158 Load { addr=v157, disp=0, kind=V128, align=8 }   -> d0
+    v156 BinopI { op=add, lhs=v150, rhs_imm=16 }          -> x1
+    v157 ImmData(40)                                      -> x1
+    v158 Load { addr=v157, disp=0, kind=V128, align=8 }   -> d2
     v159 StoreLocal { off=-89, disp=16, value=v158, kind=V128 } -> -
-    v160 LocalAddr(-89)                                   -> x6
-    v161 LocalAddr(-88)                                   -> x6
+    v160 LocalAddr(-89)                                   -> x1
+    v161 LocalAddr(-88)                                   -> x1
     v162 Mcpy { dst=v161, src=v150, size=32, align=16 }   -> -
     v163 LifetimeEnd(-89)                                 -> -
-    v164 LocalAddr(-88)                                   -> x2
-    v165 Imm(0)                                           -> x2
-    v166 LoadLocal { off=-88, kind=F32 }                  -> d0 [f32]
-    v167 Imm(1)                                           -> x2
-    v168 Imm(1065353216)                                  -> x2 [f32]
-    v169 Binop { op=fne, lhs=v166, rhs=v96 }              -> x2
-    v170 Imm(0)                                           -> x6
+    v164 LocalAddr(-88)                                   -> x0
+    v165 Imm(0)                                           -> x0
+    v166 LoadLocal { off=-88, kind=F32 }                  -> d2 [f32]
+    v167 Imm(1)                                           -> x0
+    v168 Imm(1065353216)                                  -> x0 [f32]
+    v169 Binop { op=fne, lhs=v166, rhs=v96 }              -> x0
+    v170 Imm(0)                                           -> x1
     terminator Bnz { cond=v169, target=b6, fall=b4 }   (exit_acc=v169)
   block 4  start_pc=0
-    v171 LocalAddr(-88)                                   -> x2
-    v172 Imm(12)                                          -> x2
-    v173 BinopI { op=add, lhs=v161, rhs_imm=12 }          -> x2
-    v174 LoadLocal { off=-88, disp=12, kind=F32 }         -> d0 [f32]
-    v175 Imm(2)                                           -> x2
-    v176 Imm(1073741824)                                  -> x2 [f32]
-    v177 Binop { op=fne, lhs=v174, rhs=v137 }             -> x1
-    v178 BinopI { op=ne, lhs=v177, rhs_imm=0 }            -> x2
-    v179 Imm(0)                                           -> x2
-    v180 Imm(0)                                           -> x2
-    v181 Imm(0)                                           -> x2
-    v182 Imm(0)                                           -> x2
+    v171 LocalAddr(-88)                                   -> x0
+    v172 Imm(12)                                          -> x0
+    v173 BinopI { op=add, lhs=v161, rhs_imm=12 }          -> x0
+    v174 LoadLocal { off=-88, disp=12, kind=F32 }         -> d2 [f32]
+    v175 Imm(2)                                           -> x0
+    v176 Imm(1073741824)                                  -> x0 [f32]
+    v177 Binop { op=fne, lhs=v174, rhs=v137 }             -> x0
+    v178 BinopI { op=ne, lhs=v177, rhs_imm=0 }            -> x1
+    v179 Imm(0)                                           -> x1
+    v180 Imm(0)                                           -> x1
+    v181 Imm(0)                                           -> x1
+    v182 Imm(0)                                           -> x1
     terminator Bnz { cond=v177, target=b6, fall=b5 }   (exit_acc=v177)
   block 5  start_pc=0
-    v183 LocalAddr(-88)                                   -> x1
-    v184 BinopI { op=add, lhs=v161, rhs_imm=16 }          -> x1
-    v185 Imm(8)                                           -> x1
-    v186 BinopI { op=add, lhs=v161, rhs_imm=24 }          -> x1
-    v187 LoadLocal { off=-88, disp=24, kind=I32 }         -> x1
-    v188 BinopI { op=ne, lhs=v187, rhs_imm=3 }            -> x1
-    v189 Imm(0)                                           -> x2
-    v190 Imm(0)                                           -> x2
-    v191 Imm(0)                                           -> x2
+    v183 LocalAddr(-88)                                   -> x0
+    v184 BinopI { op=add, lhs=v161, rhs_imm=16 }          -> x0
+    v185 Imm(8)                                           -> x0
+    v186 BinopI { op=add, lhs=v161, rhs_imm=24 }          -> x0
+    v187 LoadLocal { off=-88, disp=24, kind=I32 }         -> x0
+    v188 BinopI { op=ne, lhs=v187, rhs_imm=3 }            -> x0
+    v189 Imm(0)                                           -> x1
+    v190 Imm(0)                                           -> x1
+    v191 Imm(0)                                           -> x1
     terminator Bz { cond=v188, target=b7, fall=b6 }   (exit_acc=v188)
   block 6  start_pc=0
     v192 Imm(6)                                           -> x0
@@ -371,34 +371,34 @@ fn ent_pc=17 n_params=0 variadic=false locals=8
     v199 LifetimeEnd(-86)                                 -> -
     terminator Return(v192)   (exit_acc=v192)
   block 7  start_pc=0
-    v200 Imm(0)                                           -> x1
-    v201 Imm(0)                                           -> x1
-    v202 Imm(0)                                           -> x1
-    v203 ImmData(56)                                      -> x1
-    v204 Load { addr=v203, disp=0, kind=F64 pc_rel }      -> d0
-    v205 Imm(0)                                           -> x1
-    v206 Imm(0)                                           -> x1
-    v207 ImmData(64)                                      -> x1
-    v208 Load { addr=v207, disp=0, kind=F64 pc_rel }      -> d1
-    v209 Imm(0)                                           -> x1
-    v210 Imm(0)                                           -> x1
-    v211 ImmData(72)                                      -> x1
-    v212 Load { addr=v211, disp=0, kind=F64 pc_rel }      -> d2
-    v213 Imm(0)                                           -> x1
-    v214 Imm(0)                                           -> x1
-    v215 LocalAddr(-3)                                    -> x1
-    v216 Imm(0)                                           -> x1
+    v200 Imm(0)                                           -> x0
+    v201 Imm(0)                                           -> x0
+    v202 Imm(0)                                           -> x0
+    v203 ImmData(56)                                      -> x0
+    v204 Load { addr=v203, disp=0, kind=F64 pc_rel }      -> d1
+    v205 Imm(0)                                           -> x0
+    v206 Imm(0)                                           -> x0
+    v207 ImmData(64)                                      -> x0
+    v208 Load { addr=v207, disp=0, kind=F64 pc_rel }      -> d2
+    v209 Imm(0)                                           -> x0
+    v210 Imm(0)                                           -> x0
+    v211 ImmData(72)                                      -> x0
+    v212 Load { addr=v211, disp=0, kind=F64 pc_rel }      -> d3
+    v213 Imm(0)                                           -> x0
+    v214 Imm(0)                                           -> x0
+    v215 LocalAddr(-3)                                    -> x0
+    v216 Imm(0)                                           -> x0
     v217 StoreLocal { off=-3, value=v204, kind=F64 }      -> -
-    v218 Imm(0)                                           -> x1
+    v218 Imm(0)                                           -> x0
     v219 StoreLocal { off=-3, disp=8, value=v208, kind=F64 } -> -
-    v220 Imm(0)                                           -> x1
+    v220 Imm(0)                                           -> x0
     v221 StoreLocal { off=-3, disp=16, value=v212, kind=F64 } -> -
     v222 LifetimeEnd(0)                                   -> -
-    v223 LocalAddr(-3)                                    -> x1
-    v224 Imm(0)                                           -> x1
-    v225 LoadLocal { off=-3, kind=F32 }                   -> d0 [f32]
-    v226 Imm(1)                                           -> x1
-    v227 Imm(1065353216)                                  -> x1 [f32]
+    v223 LocalAddr(-3)                                    -> x0
+    v224 Imm(0)                                           -> x0
+    v225 LoadLocal { off=-3, kind=F32 }                   -> d1 [f32]
+    v226 Imm(1)                                           -> x0
+    v227 Imm(1065353216)                                  -> x0 [f32]
     v228 Binop { op=fne, lhs=v225, rhs=v96 }              -> x0
     v229 Imm(0)                                           -> x1
     terminator Bnz { cond=v228, target=b10, fall=b8 }   (exit_acc=v228)
@@ -408,7 +408,7 @@ fn ent_pc=17 n_params=0 variadic=false locals=8
     v232 Imm(0)                                           -> x0
     v233 LoadLocal { off=-3, disp=8, kind=F32 }           -> d0 [f32]
     v234 Imm(2)                                           -> x0
-    v235 Imm(1073741824)                                  -> x0 [f32]
+    v235 Imm(1073741824)                                  -> d1 [f32]
     v236 Binop { op=fne, lhs=v233, rhs=v235 }             -> x0
     v237 BinopI { op=ne, lhs=v236, rhs_imm=0 }            -> x1
     v238 Imm(0)                                           -> x1
@@ -422,7 +422,7 @@ fn ent_pc=17 n_params=0 variadic=false locals=8
     v244 Imm(0)                                           -> x0
     v245 LoadLocal { off=-3, disp=16, kind=F32 }          -> d0 [f32]
     v246 Imm(3)                                           -> x0
-    v247 Imm(1077936128)                                  -> x0 [f32]
+    v247 Imm(1077936128)                                  -> d1 [f32]
     v248 Binop { op=fne, lhs=v245, rhs=v247 }             -> x0
     v249 Imm(0)                                           -> x1
     v250 Imm(0)                                           -> x1
@@ -445,22 +445,22 @@ fn ent_pc=17 n_params=0 variadic=false locals=8
     v263 Load { addr=v262, disp=0, kind=V128, align=8 }   -> d0
     v264 Imm(0)                                           -> x0
     v265 Imm(0)                                           -> x0
-    v266 Imm(4602678819172646912)                         -> x0
-    v267 Imm(0)                                           -> x1
-    v268 VecExtract { vec=v263, off=0, kind=F32, bytes=16 } -> d1 [f32]
-    v269 Imm(1120403456)                                  -> x1 [f32]
-    v270 Binop { op=fmul.c, lhs=v268, rhs=v269 }          -> d2 [f32]
-    v271 Imm(12)                                          -> x2
-    v272 Imm(0)                                           -> x2
+    v266 Imm(4602678819172646912)                         -> d1
+    v267 Imm(0)                                           -> x0
+    v268 VecExtract { vec=v263, off=0, kind=F32, bytes=16 } -> d3 [f32]
+    v269 Imm(1120403456)                                  -> d2 [f32]
+    v270 Binop { op=fmul.c, lhs=v268, rhs=v269 }          -> d4 [f32]
+    v271 Imm(12)                                          -> x0
+    v272 Imm(0)                                           -> x0
     v273 VecExtract { vec=v263, off=12, kind=F32, bytes=16 } -> d0 [f32]
-    v274 Imm(1092616192)                                  -> x2 [f32]
+    v274 Imm(1092616192)                                  -> d4 [f32]
     v275 Binop { op=fmul.c, lhs=v273, rhs=v274 }          -> d0 [f32]
     v276 Fma { a=v268, b=v269, c=v275, neg_product=false, neg_addend=false } -> d0 [f32]
     v277 FpCast { kind=F32ToF64, value=v276 }             -> d0
     v278 Binop { op=fadd, lhs=v277, rhs=v266 }            -> d0
     v279 LifetimeEnd(0)                                   -> -
-    v280 Imm(4644697755539734528)                         -> x2
-    v281 Binop { op=fne, lhs=v278, rhs=v280 }             -> x2
+    v280 Imm(4644697755539734528)                         -> d3
+    v281 Binop { op=fne, lhs=v278, rhs=v280 }             -> x0
     terminator Bz { cond=v281, target=b13, fall=b12 }   (exit_acc=v281)
   block 12  start_pc=0
     v282 Imm(8)                                           -> x0
@@ -473,32 +473,32 @@ fn ent_pc=17 n_params=0 variadic=false locals=8
     v289 LifetimeEnd(-86)                                 -> -
     terminator Return(v282)   (exit_acc=v282)
   block 13  start_pc=0
-    v290 ImmCode(ent_pc=1)                                -> x2
-    v291 LocalAddr(-90)                                   -> x2
-    v292 ImmData(96)                                      -> x2
+    v290 ImmCode(ent_pc=1)                                -> x0
+    v291 LocalAddr(-90)                                   -> x0
+    v292 ImmData(96)                                      -> x0
     v293 Load { addr=v292, disp=0, kind=V128, align=8 }   -> d0
     v294 StoreLocal { off=-90, value=v293, kind=V128 }    -> -
-    v295 LocalAddr(-90)                                   -> x2
-    v296 BinopI { op=add, lhs=v291, rhs_imm=16 }          -> x2
-    v297 ImmData(112)                                     -> x2
-    v298 Load { addr=v297, disp=0, kind=V128, align=8 }   -> d1
+    v295 LocalAddr(-90)                                   -> x0
+    v296 BinopI { op=add, lhs=v291, rhs_imm=16 }          -> x0
+    v297 ImmData(112)                                     -> x0
+    v298 Load { addr=v297, disp=0, kind=V128, align=8 }   -> d3
     v299 StoreLocal { off=-90, disp=16, value=v298, kind=V128 } -> -
-    v300 LocalAddr(-90)                                   -> x2
-    v301 Imm(4602678819172646912)                         -> x2
-    v302 BinopI { op=add, lhs=v291, rhs_imm=12 }          -> x2
+    v300 LocalAddr(-90)                                   -> x0
+    v301 Imm(4602678819172646912)                         -> x0
+    v302 BinopI { op=add, lhs=v291, rhs_imm=12 }          -> x0
     v303 VecExtract { vec=v293, off=12, kind=F32, bytes=16 } -> d0 [f32]
-    v304 Imm(1120403456)                                  -> x2 [f32]
-    v305 Binop { op=fmul.c, lhs=v303, rhs=v269 }          -> d1 [f32]
-    v306 BinopI { op=add, lhs=v291, rhs_imm=24 }          -> x2
-    v307 Imm(5)                                           -> x2
-    v308 Imm(50)                                          -> x2
-    v309 Imm(50)                                          -> x2
-    v310 Imm(1112014848)                                  -> x2 [f32]
+    v304 Imm(1120403456)                                  -> x0 [f32]
+    v305 Binop { op=fmul.c, lhs=v303, rhs=v269 }          -> d3 [f32]
+    v306 BinopI { op=add, lhs=v291, rhs_imm=24 }          -> x0
+    v307 Imm(5)                                           -> x0
+    v308 Imm(50)                                          -> x0
+    v309 Imm(50)                                          -> x0
+    v310 Imm(1112014848)                                  -> d3 [f32]
     v311 Fma { a=v303, b=v269, c=v310, neg_product=false, neg_addend=false } -> d0 [f32]
     v312 FpCast { kind=F32ToF64, value=v311 }             -> d0
     v313 Binop { op=fadd, lhs=v312, rhs=v266 }            -> d0
     v314 LifetimeEnd(-90)                                 -> -
-    v315 Imm(4646632896004620288)                         -> x0
+    v315 Imm(4646632896004620288)                         -> d1
     v316 Binop { op=fne, lhs=v313, rhs=v315 }             -> x0
     terminator Bz { cond=v316, target=b15, fall=b14 }   (exit_acc=v316)
   block 14  start_pc=0
@@ -528,23 +528,23 @@ fn ent_pc=17 n_params=0 variadic=false locals=8
     v338 Load { addr=v337, disp=0, kind=F64 pc_rel }      -> d0
     v339 StoreLocal { off=-3, disp=16, value=v338, kind=F64 } -> -
     v340 LocalAddr(-3)                                    -> x0
-    v341 Imm(4602678819172646912)                         -> x0
-    v342 LoadLocal { off=-3, kind=F32 }                   -> d0 [f32]
-    v343 Imm(1120403456)                                  -> x1 [f32]
-    v344 Binop { op=fmul.c, lhs=v342, rhs=v343 }          -> d1 [f32]
-    v345 BinopI { op=add, lhs=v330, rhs_imm=8 }           -> x2
-    v346 LoadLocal { off=-3, disp=8, kind=F32 }           -> d1 [f32]
-    v347 Imm(1092616192)                                  -> x2 [f32]
-    v348 Binop { op=fmul.c, lhs=v346, rhs=v347 }          -> d1 [f32]
-    v349 Fma { a=v342, b=v343, c=v348, neg_product=false, neg_addend=false } -> d0 [f32]
-    v350 BinopI { op=add, lhs=v330, rhs_imm=20 }          -> x2
-    v351 LoadLocal { off=-3, disp=20, kind=F32 }          -> d1 [f32]
-    v352 Binop { op=fadd, lhs=v349, rhs=v351 }            -> d0 [f32]
-    v353 FpCast { kind=F32ToF64, value=v352 }             -> d0
-    v354 Binop { op=fadd, lhs=v353, rhs=v341 }            -> d0
+    v341 Imm(4602678819172646912)                         -> d0
+    v342 LoadLocal { off=-3, kind=F32 }                   -> d2 [f32]
+    v343 Imm(1120403456)                                  -> d1 [f32]
+    v344 Binop { op=fmul.c, lhs=v342, rhs=v343 }          -> d3 [f32]
+    v345 BinopI { op=add, lhs=v330, rhs_imm=8 }           -> x0
+    v346 LoadLocal { off=-3, disp=8, kind=F32 }           -> d3 [f32]
+    v347 Imm(1092616192)                                  -> d4 [f32]
+    v348 Binop { op=fmul.c, lhs=v346, rhs=v347 }          -> d3 [f32]
+    v349 Fma { a=v342, b=v343, c=v348, neg_product=false, neg_addend=false } -> d2 [f32]
+    v350 BinopI { op=add, lhs=v330, rhs_imm=20 }          -> x0
+    v351 LoadLocal { off=-3, disp=20, kind=F32 }          -> d3 [f32]
+    v352 Binop { op=fadd, lhs=v349, rhs=v351 }            -> d2 [f32]
+    v353 FpCast { kind=F32ToF64, value=v352 }             -> d2
+    v354 Binop { op=fadd, lhs=v353, rhs=v341 }            -> d2
     v355 LifetimeEnd(-3)                                  -> -
-    v356 Imm(4644785716469956608)                         -> x2
-    v357 Binop { op=fne, lhs=v354, rhs=v356 }             -> x2
+    v356 Imm(4644785716469956608)                         -> d3
+    v357 Binop { op=fne, lhs=v354, rhs=v356 }             -> x0
     terminator Bz { cond=v357, target=b17, fall=b16 }   (exit_acc=v357)
   block 16  start_pc=0
     v358 Imm(10)                                          -> x0
@@ -557,20 +557,20 @@ fn ent_pc=17 n_params=0 variadic=false locals=8
     v365 LifetimeEnd(-86)                                 -> -
     terminator Return(v358)   (exit_acc=v358)
   block 17  start_pc=0
-    v366 LocalAddr(-8)                                    -> x2
-    v367 Imm(4602678819172646912)                         -> x2
-    v368 BinopI { op=add, lhs=v366, rhs_imm=4 }           -> x2
-    v369 LoadLocal { off=-8, disp=4, kind=F32 }           -> d0 [f32]
-    v370 Imm(1120403456)                                  -> x2 [f32]
-    v371 Binop { op=fmul.c, lhs=v369, rhs=v343 }          -> d0 [f32]
-    v372 BinopI { op=add, lhs=v366, rhs_imm=8 }           -> x1
-    v373 LoadLocal { off=-8, disp=8, kind=F64 }           -> d1
-    v374 Imm(4621819117588971520)                         -> x1
-    v375 Binop { op=fmul.c, lhs=v373, rhs=v374 }          -> d2
-    v376 FpCast { kind=F32ToF64, value=v371 }             -> d0
-    v377 Fma { a=v373, b=v374, c=v376, neg_product=false, neg_addend=false } -> d0
+    v366 LocalAddr(-8)                                    -> x0
+    v367 Imm(4602678819172646912)                         -> x0
+    v368 BinopI { op=add, lhs=v366, rhs_imm=4 }           -> x0
+    v369 LoadLocal { off=-8, disp=4, kind=F32 }           -> d2 [f32]
+    v370 Imm(1120403456)                                  -> x0 [f32]
+    v371 Binop { op=fmul.c, lhs=v369, rhs=v343 }          -> d1 [f32]
+    v372 BinopI { op=add, lhs=v366, rhs_imm=8 }           -> x0
+    v373 LoadLocal { off=-8, disp=8, kind=F64 }           -> d2
+    v374 Imm(4621819117588971520)                         -> d3
+    v375 Binop { op=fmul.c, lhs=v373, rhs=v374 }          -> d4
+    v376 FpCast { kind=F32ToF64, value=v371 }             -> d1
+    v377 Fma { a=v373, b=v374, c=v376, neg_product=false, neg_addend=false } -> d1
     v378 Binop { op=fadd, lhs=v377, rhs=v341 }            -> d0
-    v379 Imm(4642314014330716160)                         -> x0
+    v379 Imm(4642314014330716160)                         -> d1
     v380 Binop { op=fne, lhs=v378, rhs=v379 }             -> x0
     terminator Bz { cond=v380, target=b19, fall=b18 }   (exit_acc=v380)
   block 18  start_pc=0
@@ -590,7 +590,7 @@ fn ent_pc=17 n_params=0 variadic=false locals=8
     v392 LocalAddr(-86)                                   -> x0
     v393 Call { target_pc=14, args=[v389, v390, v390, v390], fixed_args=1, fp_return=true, fp_arg_mask=0x0 } -> d0
     v394 Imm(121212)                                      -> x0
-    v395 Imm(4683066038424698880)                         -> x0
+    v395 Imm(4683066038424698880)                         -> d1
     v396 Binop { op=fne, lhs=v393, rhs=v395 }             -> x0
     terminator Bz { cond=v396, target=b21, fall=b20 }   (exit_acc=v396)
   block 20  start_pc=0
@@ -610,7 +610,7 @@ fn ent_pc=17 n_params=0 variadic=false locals=8
     v408 LocalAddr(-87)                                   -> x0
     v409 Call { target_pc=15, args=[v405, v406, v406, v406], fixed_args=1, fp_return=true, fp_arg_mask=0x0 } -> d0
     v410 Imm(231231231)                                   -> x0
-    v411 Imm(4732034841728516096)                         -> x0
+    v411 Imm(4732034841728516096)                         -> d1
     v412 Binop { op=fne, lhs=v409, rhs=v411 }             -> x0
     terminator Bz { cond=v412, target=b23, fall=b22 }   (exit_acc=v412)
   block 22  start_pc=0
@@ -631,7 +631,7 @@ fn ent_pc=17 n_params=0 variadic=false locals=8
     v425 LocalAddr(-6)                                    -> x0
     v426 LocalAddr(-6)                                    -> x0
     v427 Call { target_pc=16, args=[v421, v422, v422, v422, v422, v422], fixed_args=1, fp_return=true, fp_arg_mask=0x0 } -> d0
-    v428 Imm(4818428986616274304)                         -> x0
+    v428 Imm(4818428986616274304)                         -> d1
     v429 Binop { op=fne, lhs=v427, rhs=v428 }             -> x0
     terminator Bz { cond=v429, target=b25, fall=b24 }   (exit_acc=v429)
   block 24  start_pc=0

@@ -19,7 +19,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=4
     v13  StoreLocal { off=-22, value=v12, kind=F80 }      -> -
     v14  LifetimeEnd(-25)                                 -> -
     v15  LoadLocal { off=-21, kind=F80 }                  -> d0
-    v16  Imm(4751297606875873280)                         -> x0
+    v16  Imm(4751297606875873280)                         -> d1
     v17  Binop { op=fne, lhs=v15, rhs=v16 }               -> x0
     terminator Bz { cond=v17, target=b2, fall=b1 }   (exit_acc=v17)
   block 1  start_pc=0
@@ -28,7 +28,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=4
     terminator Return(v18)   (exit_acc=v18)
   block 2  start_pc=0
     v20  LoadLocal { off=-22, kind=F80 }                  -> d0
-    v21  Imm(4895412794951729152)                         -> x0
+    v21  Imm(4895412794951729152)                         -> d1
     v22  Binop { op=fne, lhs=v20, rhs=v21 }               -> x0
     terminator Bz { cond=v22, target=b4, fall=b3 }   (exit_acc=v22)
   block 3  start_pc=0
@@ -45,7 +45,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=4
     v31  LifetimeEnd(-26)                                 -> -
     v32  LoadLocal { off=-23, kind=F80 }                  -> d0
     v33  Imm(4652218415073722368)                         -> x0
-    v34  Imm(-4571153621781053440)                        -> x0
+    v34  Imm(-4571153621781053440)                        -> d1
     v35  Binop { op=fne, lhs=v32, rhs=v34 }               -> x0
     terminator Bz { cond=v35, target=b6, fall=b5 }   (exit_acc=v35)
   block 5  start_pc=0

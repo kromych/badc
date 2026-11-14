@@ -4426,7 +4426,7 @@ impl<'a> ElfImageWriter<'a> {
                 code,
                 stub_len + fx.code_offset as u64,
                 jt_vmaddr + fx.rodata_offset,
-                AddrPart::Whole,
+                fx.part,
                 "table fixup",
             )?;
         }

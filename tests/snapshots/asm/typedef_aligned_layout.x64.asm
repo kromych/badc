@@ -107,18 +107,16 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
                	movl	$0x1, -0x8(%rbp)
-               	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
-               	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x20(%rbp)
-               	leaq	-0x20(%rbp), %rcx
-               	testb	$0xf, %cl
+               	movsd	<rip>, %xmm0
+               	movsd	%xmm0, -0x20(%rbp)
+               	leaq	-0x20(%rbp), %rax
+               	testb	$0xf, %al
                	je	<addr>
                	movl	$0x35, %eax
                	leave
                	retq
-               	movsd	-0x20(%rbp), %xmm0
-               	movq	%rax, %xmm14
-               	vaddsd	%xmm0, %xmm14, %xmm0
+               	movsd	-0x20(%rbp), %xmm1
+               	addsd	%xmm1, %xmm0
                	cvttsd2si	%xmm0, %rax
                	subq	$0x6, %rax
                	leave

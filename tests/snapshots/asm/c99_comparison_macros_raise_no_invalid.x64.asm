@@ -29,18 +29,14 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x40, %rsp
-               	movabsq	$0x7ff8000000000000, %rax # imm = 0x7FF8000000000000
-               	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x38(%rbp)
-               	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
-               	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x30(%rbp)
-               	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
-               	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x28(%rbp)
-               	movabsq	$0x7ff0000000000000, %rax # imm = 0x7FF0000000000000
-               	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x20(%rbp)
+               	movsd	<rip>, %xmm0
+               	movsd	%xmm0, -0x38(%rbp)
+               	movsd	<rip>, %xmm0
+               	movsd	%xmm0, -0x30(%rbp)
+               	movsd	<rip>, %xmm0
+               	movsd	%xmm0, -0x28(%rbp)
+               	movsd	<rip>, %xmm0
+               	movsd	%xmm0, -0x20(%rbp)
                	movl	$0x3f800000, -0x18(%rbp) # imm = 0x3F800000
                	movl	$0x4b800000, -0x10(%rbp) # imm = 0x4B800000
                	movl	$0x1000001, -0x8(%rbp)  # imm = 0x1000001
@@ -131,10 +127,9 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	leave
                	retq
-               	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
-               	movsd	-0x30(%rbp), %xmm0
-               	movq	%rax, %xmm14
-               	ucomisd	%xmm0, %xmm14
+               	movsd	<rip>, %xmm0
+               	movsd	-0x30(%rbp), %xmm1
+               	ucomisd	%xmm1, %xmm0
                	jbe	<addr>
                	movss	-0x18(%rbp), %xmm0
                	cvtss2sd	%xmm0, %xmm0

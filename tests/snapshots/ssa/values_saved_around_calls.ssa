@@ -18,9 +18,9 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
     v1   ParamRef(0, kind=F64)                            -> d0
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
-    v4   Imm(4602678819172646912)                         -> x0
-    v5   Binop { op=fmul.c, lhs=v1, rhs=v4 }              -> d1
-    v6   Imm(4607182418800017408)                         -> x1
+    v4   Imm(4602678819172646912)                         -> d1
+    v5   Binop { op=fmul.c, lhs=v1, rhs=v4 }              -> d2
+    v6   Imm(4607182418800017408)                         -> d2
     v7   Fma { a=v1, b=v4, c=v6, neg_product=false, neg_addend=false } -> d0
     terminator Return(v7)   (exit_acc=v7)
 ; --- SSA dump (ok=true) ent_pc=2 ---
@@ -827,7 +827,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     terminator Bz { cond=v69, target=b6, fall=b3 }   (exit_acc=v69)
   block 3  start_pc=0
     v70  Imm(0)                                           -> x0
-    v71  Imm(4607182418800017408)                         -> x0
+    v71  Imm(4607182418800017408)                         -> d12
     v72  Binop { op=fadd, lhs=v66, rhs=v71 }              -> d0
     v73  Imm(0)                                           -> x0
     v74  Imm(0)                                           -> x0
@@ -1112,7 +1112,7 @@ fn ent_pc=6 n_params=2 variadic=false locals=0
     v183 Imm(0)                                           -> x0
     v184 Imm(0)                                           -> x0
     v185 Imm(0)                                           -> x0
-    v186 Imm(4607182418800017408)                         -> x0
+    v186 Imm(4607182418800017408)                         -> d12
     v187 Binop { op=fadd, lhs=v167, rhs=v186 }            -> d0
     v188 Imm(0)                                           -> x0
     v189 Imm(0)                                           -> x0
@@ -1355,17 +1355,17 @@ fn ent_pc=6 n_params=2 variadic=false locals=0
   block 5  start_pc=0
     terminator Jmp(b1)
   block 6  start_pc=0
-    v417 Imm(0)                                           -> x0
-    v418 Imm(0)                                           -> x1
-    v419 Imm(0)                                           -> x1
-    v420 Imm(0)                                           -> x1
-    v421 Imm(1)                                           -> x1
-    v422 Imm(0)                                           -> x1
-    v423 Imm(0)                                           -> x1
-    v424 Imm(0)                                           -> x1
-    v425 Imm(0)                                           -> x1
-    v426 Imm(0)                                           -> x1
-    v427 Imm(0)                                           -> x1
+    v417 Imm(0)                                           -> d12
+    v418 Imm(0)                                           -> x0
+    v419 Imm(0)                                           -> x0
+    v420 Imm(0)                                           -> x0
+    v421 Imm(1)                                           -> x0
+    v422 Imm(0)                                           -> x0
+    v423 Imm(0)                                           -> x0
+    v424 Imm(0)                                           -> x0
+    v425 Imm(0)                                           -> x0
+    v426 Imm(0)                                           -> x0
+    v427 Imm(0)                                           -> x0
     v428 Binop { op=fadd, lhs=v417, rhs=v167 }            -> d0
     v429 Imm(0)                                           -> x0
     v430 Imm(0)                                           -> x0
@@ -1881,7 +1881,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=27
     v222 BinopI { op=add, lhs=v219, rhs_imm=0 }           -> x0
     v223 Imm(4598175219545276416)                         -> x0
     v224 Imm(0)                                           -> x0
-    v225 Imm(0)                                           -> x0
+    v225 Imm(0)                                           -> d0
     v226 StoreLocal { off=-27, value=v225, kind=F64 }     -> -
     v227 Imm(0)                                           -> x0
     v228 Imm(1)                                           -> x0
@@ -1894,7 +1894,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=27
     v235 BinopI { op=add, lhs=v219, rhs_imm=8 }           -> x0
     v236 Imm(4598175219545276416)                         -> x0
     v237 Imm(4607182418800017408)                         -> x0
-    v238 Imm(4598175219545276416)                         -> x0
+    v238 Imm(4598175219545276416)                         -> d0
     v239 StoreLocal { off=-27, disp=8, value=v238, kind=F64 } -> -
     v240 Imm(1)                                           -> x0
     v241 Imm(2)                                           -> x0
@@ -1907,7 +1907,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=27
     v248 BinopI { op=add, lhs=v219, rhs_imm=16 }          -> x0
     v249 Imm(4598175219545276416)                         -> x0
     v250 Imm(4611686018427387904)                         -> x0
-    v251 Imm(4602678819172646912)                         -> x0
+    v251 Imm(4602678819172646912)                         -> d0
     v252 StoreLocal { off=-27, disp=16, value=v251, kind=F64 } -> -
     v253 Imm(2)                                           -> x0
     v254 Imm(3)                                           -> x0
@@ -1920,7 +1920,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=27
     v261 BinopI { op=add, lhs=v219, rhs_imm=24 }          -> x0
     v262 Imm(4598175219545276416)                         -> x0
     v263 Imm(4613937818241073152)                         -> x0
-    v264 Imm(4604930618986332160)                         -> x0
+    v264 Imm(4604930618986332160)                         -> d0
     v265 StoreLocal { off=-27, disp=24, value=v264, kind=F64 } -> -
     v266 Imm(3)                                           -> x0
     v267 Imm(4)                                           -> x0
@@ -1933,7 +1933,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=27
     v274 BinopI { op=add, lhs=v219, rhs_imm=32 }          -> x0
     v275 Imm(4598175219545276416)                         -> x0
     v276 Imm(4616189618054758400)                         -> x0
-    v277 Imm(4607182418800017408)                         -> x0
+    v277 Imm(4607182418800017408)                         -> d0
     v278 StoreLocal { off=-27, disp=32, value=v277, kind=F64 } -> -
     v279 Imm(4)                                           -> x0
     v280 Imm(5)                                           -> x0
@@ -1946,7 +1946,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=27
     v287 BinopI { op=add, lhs=v219, rhs_imm=40 }          -> x0
     v288 Imm(4598175219545276416)                         -> x0
     v289 Imm(4617315517961601024)                         -> x0
-    v290 Imm(4608308318706860032)                         -> x0
+    v290 Imm(4608308318706860032)                         -> d0
     v291 StoreLocal { off=-27, disp=40, value=v290, kind=F64 } -> -
     v292 Imm(5)                                           -> x0
     v293 Imm(6)                                           -> x0
@@ -1959,7 +1959,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=27
     v300 BinopI { op=add, lhs=v219, rhs_imm=48 }          -> x0
     v301 Imm(4598175219545276416)                         -> x0
     v302 Imm(4618441417868443648)                         -> x0
-    v303 Imm(4609434218613702656)                         -> x0
+    v303 Imm(4609434218613702656)                         -> d0
     v304 StoreLocal { off=-27, disp=48, value=v303, kind=F64 } -> -
     v305 Imm(6)                                           -> x0
     v306 Imm(7)                                           -> x0
@@ -1972,7 +1972,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=27
     v313 BinopI { op=add, lhs=v310, rhs_imm=56 }          -> x0
     v314 Imm(4598175219545276416)                         -> x0
     v315 Imm(4619567317775286272)                         -> x0
-    v316 Imm(4610560118520545280)                         -> x0
+    v316 Imm(4610560118520545280)                         -> d0
     v317 StoreLocal { off=-27, disp=56, value=v316, kind=F64 } -> -
     v318 Imm(7)                                           -> x0
     v319 Imm(8)                                           -> x0
@@ -1985,7 +1985,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=27
     v326 BinopI { op=add, lhs=v310, rhs_imm=64 }          -> x0
     v327 Imm(4598175219545276416)                         -> x0
     v328 Imm(4620693217682128896)                         -> x0
-    v329 Imm(4611686018427387904)                         -> x0
+    v329 Imm(4611686018427387904)                         -> d0
     v330 StoreLocal { off=-27, disp=64, value=v329, kind=F64 } -> -
     v331 Imm(8)                                           -> x0
     v332 Imm(9)                                           -> x0
@@ -1998,7 +1998,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=27
     v339 BinopI { op=add, lhs=v310, rhs_imm=72 }          -> x0
     v340 Imm(4598175219545276416)                         -> x0
     v341 Imm(4621256167635550208)                         -> x0
-    v342 Imm(4612248968380809216)                         -> x0
+    v342 Imm(4612248968380809216)                         -> d0
     v343 StoreLocal { off=-27, disp=72, value=v342, kind=F64 } -> -
     v344 Imm(9)                                           -> x0
     v345 Imm(10)                                          -> x0
@@ -2011,7 +2011,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=27
     v352 BinopI { op=add, lhs=v310, rhs_imm=80 }          -> x0
     v353 Imm(4598175219545276416)                         -> x0
     v354 Imm(4621819117588971520)                         -> x0
-    v355 Imm(4612811918334230528)                         -> x0
+    v355 Imm(4612811918334230528)                         -> d0
     v356 StoreLocal { off=-27, disp=80, value=v355, kind=F64 } -> -
     v357 Imm(10)                                          -> x0
     v358 Imm(11)                                          -> x0
@@ -2024,7 +2024,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=27
     v365 BinopI { op=add, lhs=v310, rhs_imm=88 }          -> x0
     v366 Imm(4598175219545276416)                         -> x0
     v367 Imm(4622382067542392832)                         -> x0
-    v368 Imm(4613374868287651840)                         -> x0
+    v368 Imm(4613374868287651840)                         -> d0
     v369 StoreLocal { off=-27, disp=88, value=v368, kind=F64 } -> -
     v370 Imm(11)                                          -> x0
     v371 Imm(12)                                          -> x0

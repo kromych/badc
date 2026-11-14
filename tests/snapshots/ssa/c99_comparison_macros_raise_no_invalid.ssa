@@ -4,17 +4,17 @@ fn ent_pc=20 n_params=0 variadic=false locals=7
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(9221120237041090560)                         -> x0
+    v1   Imm(9221120237041090560)                         -> d0
     v2   StoreLocal { off=-7, value=v1, kind=F64, volatile } -> -
-    v3   Imm(4607182418800017408)                         -> x0
+    v3   Imm(4607182418800017408)                         -> d0
     v4   StoreLocal { off=-6, value=v3, kind=F64, volatile } -> -
-    v5   Imm(4611686018427387904)                         -> x0
+    v5   Imm(4611686018427387904)                         -> d0
     v6   StoreLocal { off=-5, value=v5, kind=F64, volatile } -> -
-    v7   Imm(9218868437227405312)                         -> x0
+    v7   Imm(9218868437227405312)                         -> d0
     v8   StoreLocal { off=-4, value=v7, kind=F64, volatile } -> -
-    v9   Imm(1065353216)                                  -> x0 [f32]
+    v9   Imm(1065353216)                                  -> d0 [f32]
     v10  StoreLocal { off=-3, value=v9, kind=F32, volatile } -> -
-    v11  Imm(1266679808)                                  -> x0 [f32]
+    v11  Imm(1266679808)                                  -> d0 [f32]
     v12  StoreLocal { off=-2, value=v11, kind=F32, volatile } -> -
     v13  Imm(16777217)                                    -> x0
     v14  StoreLocal { off=-1, value=v13, kind=I32, volatile } -> -
@@ -207,8 +207,8 @@ fn ent_pc=20 n_params=0 variadic=false locals=7
     terminator Return(v158)   (exit_acc=v158)
   block 22  start_pc=0
     v159 Imm(2)                                           -> x0
-    v160 Imm(4611686018427387904)                         -> x0
-    v161 LoadLocal { off=-6, kind=F64, volatile }         -> d0
+    v160 Imm(4611686018427387904)                         -> d0
+    v161 LoadLocal { off=-6, kind=F64, volatile }         -> d1
     v162 Binop { op=fgt.quiet, lhs=v160, rhs=v161 }       -> x0
     v163 BinopI { op=eq, lhs=v162, rhs_imm=0 }            -> x1
     v164 Imm(1)                                           -> x1

@@ -340,6 +340,20 @@ pub(crate) enum Sem {
     /// Lane `i` of the second operand where immediate bit `i` is set; past
     /// eight lanes the bits repeat (`vpblendw` on each 128-bit lane).
     Blend(u8),
+    /// The sum of the products of the lanes imm8[7:4] selects, the others
+    /// +0.0, added in pairs and the pair sums added, in each lane imm8[3:0]
+    /// selects and +0.0 in the others, per 128-bit part (`dpps`, `dppd`).
+    DotFloat(u8),
+    /// Lane imm8[7:6] of the second operand into lane imm8[5:4] of the
+    /// first, then the lanes imm8[3:0] names cleared (`insertps`).
+    InsertPs,
+    /// The least unsigned word in word 0 and the index of its first
+    /// occurrence in word 1, the rest zero (`phminposuw`).
+    MinPos,
+    /// Eight sums of the absolute differences between the four bytes of
+    /// the second operand at 4 * imm8[1:0] and the four-byte windows of the
+    /// first from 4 * imm8[2] on (`mpsadbw`).
+    MpSad,
     /// Each lane of the width taken from the lane of the first operand's
     /// 128-bit part that the same lane of the second selects, by its bits
     /// 1:0 for a 4-byte lane and its bit 1 for an 8-byte one
@@ -1607,6 +1621,34 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
                 set_lane(&mut o, w, i, x);
             }
         }
+        Sem::InsertPs => {
+            o = *a;
+            set_lane(
+                &mut o,
+                4,
+                usize::from(imm >> 4 & 3),
+                lane(b, 4, usize::from(imm >> 6)),
+            );
+            for i in 0..4 {
+                if imm >> i & 1 != 0 {
+                    set_lane(&mut o, 4, i, 0);
+                }
+            }
+        }
+        Sem::MinPos => {
+            let k = (0..8).min_by_key(|&i| (lane(a, 2, i), i)).unwrap_or(0);
+            set_lane(&mut o, 2, 0, lane(a, 2, k));
+            set_lane(&mut o, 2, 1, k as u64);
+        }
+        Sem::MpSad => {
+            let (xo, yo) = (4 * usize::from(imm >> 2 & 1), 4 * usize::from(imm & 3));
+            for i in 0..8 {
+                let sum: u64 = (0..4)
+                    .map(|k| u64::from(a[xo + i + k].abs_diff(b[yo + k])))
+                    .sum();
+                set_lane(&mut o, 2, i, sum);
+            }
+        }
         Sem::PermilVar(w) => {
             for i in 0..16 / w as usize {
                 let k = match w {
@@ -2179,7 +2221,7 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
         // permutations across a 32-byte vector.
         Sem::Float(..) | Sem::FloatCmp(..) | Sem::Convert(_) | Sem::ToInt(..) => {}
         Sem::MulAcc(_) | Sem::MulSub(_) | Sem::AbsDiffAcc(..) | Sem::BitSelect | Sem::Tbx(_) => {}
-        Sem::BlendVar(_) | Sem::RoundImm(..) => {}
+        Sem::BlendVar(_) | Sem::RoundImm(..) | Sem::DotFloat(_) => {}
         Sem::Eor3 | Sem::Bcax | Sem::Sha256Hash(_) | Sem::Sha256Su1 => {}
         Sem::Sha1Hash(_) | Sem::Sha1Su0 | Sem::Sha512Hash(_) | Sem::Sha512Su1 => {}
         Sem::FloatRel(..) | Sem::FloatFma(..) | Sem::LongAcc(..) => {}
@@ -2774,6 +2816,26 @@ pub(crate) fn eval_float_in(
                 }
             };
             set_flane(&mut o, w, 0, r);
+        }
+        Sem::DotFloat(w) => {
+            let n = 16 / usize::from(w);
+            let p: alloc::vec::Vec<u64> = (0..n)
+                .map(|i| match imm >> (4 + i) & 1 {
+                    0 => 0,
+                    _ => env.arith(FOp::Mul, flane(a, w, i), flane(b, w, i), w == 4),
+                })
+                .collect();
+            let add = |env: &mut _, x, y| FloatEnv::arith(env, FOp::Add, x, y, w == 4);
+            let sum = match n {
+                4 => {
+                    let (lo, hi) = (add(env, p[0], p[1]), add(env, p[2], p[3]));
+                    add(env, lo, hi)
+                }
+                _ => add(env, p[0], p[1]),
+            };
+            for i in 0..n {
+                set_flane(&mut o, w, i, if imm >> i & 1 != 0 { sum } else { 0 });
+            }
         }
         Sem::RoundImm(w, scalar) => {
             let to = match (imm & 4, imm & 3) {

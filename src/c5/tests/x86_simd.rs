@@ -708,6 +708,35 @@ fn the_variable_permutes_are_rows_the_interpreter_runs() {
     assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 0);
 }
 
+/// SSE4.1's dot products, INSERTPS, PHMINPOSUW and MPSADBW are rows the
+/// interpreter runs as the SDM defines them: the selected products summed
+/// in pairs into the selected lanes, +0.0 elsewhere; one lane moved and
+/// lanes cleared; the least word and its first index; and eight sums of
+/// absolute differences over the windows the immediate picks.
+#[test]
+fn the_sse41_dot_insert_minpos_and_sad_are_rows_the_interpreter_runs() {
+    let src = "#include <immintrin.h>\n\
+        int main(void) {\n\
+            __m128 a = _mm_setr_ps(1, 2, 3, 4), b = _mm_setr_ps(10, 20, 30, 40);\n\
+            __m128 d = _mm_dp_ps(a, b, 0x75);\n\
+            if (d[0] != 140 || d[1] != 0 || d[2] != 140 || d[3] != 0) return 1;\n\
+            __m128d e = _mm_dp_pd(_mm_setr_pd(1, 2), _mm_setr_pd(3, 4), 0x22);\n\
+            if (e[0] != 0 || e[1] != 8) return 2;\n\
+            __m256 y = _mm256_dp_ps(_mm256_set1_ps(1), _mm256_set1_ps(2), 0xf8);\n\
+            if (y[3] != 8 || y[7] != 8 || y[0] != 0 || y[4] != 0) return 3;\n\
+            __m128 i = _mm_insert_ps(a, b, 0xe1);\n\
+            if (i[0] != 0 || i[1] != 2 || i[2] != 40 || i[3] != 4) return 4;\n\
+            __m128i m = _mm_minpos_epu16(_mm_setr_epi16(9, 7, -1, 7, 8, 9, 10, 11));\n\
+            if (_mm_extract_epi16(m, 0) != 7 || _mm_extract_epi16(m, 1) != 1 || \
+                _mm_extract_epi16(m, 2) != 0) return 5;\n\
+            __m128i x = _mm_setr_epi8(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);\n\
+            __m128i s = _mm_mpsadbw_epu8(x, _mm_set1_epi8(3), 5);\n\
+            return _mm_extract_epi16(s, 0) == 10 && _mm_extract_epi16(s, 7) == 38 ? 0 : 6;\n\
+        }\n";
+    let program = super::compile_str_bare_for(src, crate::Target::LinuxX64);
+    assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 0);
+}
+
 /// `<pmmintrin.h>` and the `<mmintrin.h>` it reaches give each MMX and SSE3
 /// operation the result the SDM defines for its instruction, saturation,
 /// out-of-range shift counts and the pair-sum wrap included, as the
@@ -1923,6 +1952,7 @@ fn floating_rows_compute_in_the_environment() {
         | Sem::RoundInt(..)
         | Sem::RoundIntN(..)
         | Sem::RoundImm(..)
+        | Sem::DotFloat(_)
         | Sem::RecipExponent(_) => true,
         Sem::Add(_)
         | Sem::Sub(_)
@@ -1953,6 +1983,9 @@ fn floating_rows_compute_in_the_environment() {
         | Sem::Extend(..)
         | Sem::Blend(_)
         | Sem::BlendVar(_)
+        | Sem::InsertPs
+        | Sem::MinPos
+        | Sem::MpSad
         | Sem::PermilVar(_)
         | Sem::AddSat(..)
         | Sem::SubSat(..)

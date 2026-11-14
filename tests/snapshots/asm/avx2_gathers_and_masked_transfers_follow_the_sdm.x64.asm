@@ -9306,7 +9306,7 @@ Disassembly of section .text:
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	subq	$0x160, %rsp            # imm = 0x160
+               	subq	$0x140, %rsp            # imm = 0x140
                	andq	$-0x20, %rsp
                	movq	<rip>, %rax # <addr>
                	movq	%rax, %rcx
@@ -9844,101 +9844,10 @@ Disassembly of section .text:
                	movzbq	%al, %rax
                	orq	%rax, %rbx
                	leaq	<rip>, %rax
-               	vmovups	(%rax), %ymm2
+               	vmovups	(%rax), %ymm0
                	leaq	<rip>, %rax
-               	vmovups	(%rax), %ymm3
-               	vmovdqa	%xmm2, %xmm0
-               	vmovdqa	%xmm3, %xmm1
-               	leaq	0x140(%rsp), %rcx
-               	movups	%xmm0, 0x140(%rsp)
-               	leaq	0x100(%rsp), %rsi
-               	movups	%xmm1, 0x100(%rsp)
-               	movl	$0xb5, %edx
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movss	%xmm0, -0x38(%rbp,%rax,4)
-               	incq	%rax
-               	cmpl	$0x4, %eax
-               	jge	<addr>
-               	leaq	-0x38(%rbp), %rdi
-               	leaq	0x4(%rax), %r8
-               	sarxq	%r8, %rdx, %r8
-               	testb	$0x1, %r8b
-               	je	<addr>
-               	movss	0x140(%rsp,%rax,4), %xmm0
-               	movss	0x100(%rsp,%rax,4), %xmm1
-               	mulss	%xmm1, %xmm0
-               	jmp	<addr>
-               	xorps	%xmm0, %xmm0
-               	jmp	<addr>
-               	xorl	%eax, %eax
-               	movss	-0x38(%rbp), %xmm0
-               	movss	-0x34(%rbp), %xmm1
-               	addss	%xmm1, %xmm0
-               	movss	-0x30(%rbp), %xmm1
-               	movss	-0x2c(%rbp), %xmm4
-               	addss	%xmm4, %xmm1
-               	addss	%xmm1, %xmm0
-               	jmp	<addr>
-               	movss	%xmm1, 0x140(%rsp,%rax,4)
-               	incq	%rax
-               	cmpl	$0x4, %eax
-               	jge	<addr>
-               	sarxq	%rax, %rdx, %rsi
-               	testb	$0x1, %sil
-               	je	<addr>
-               	movapd	%xmm0, %xmm1
-               	jmp	<addr>
-               	xorps	%xmm1, %xmm1
-               	jmp	<addr>
-               	leaq	0x140(%rsp), %rcx
-               	movups	0x140(%rsp), %xmm4
-               	vextracti128	$0x1, %ymm2, %xmm0
-               	vextracti128	$0x1, %ymm3, %xmm1
-               	movups	%xmm0, 0x140(%rsp)
-               	leaq	0x100(%rsp), %rsi
-               	movups	%xmm1, 0x100(%rsp)
-               	movl	$0xb5, %edx
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movss	%xmm0, -0x38(%rbp,%rax,4)
-               	incq	%rax
-               	cmpl	$0x4, %eax
-               	jge	<addr>
-               	leaq	-0x38(%rbp), %rdi
-               	leaq	0x4(%rax), %r8
-               	sarxq	%r8, %rdx, %r8
-               	testb	$0x1, %r8b
-               	je	<addr>
-               	movss	0x140(%rsp,%rax,4), %xmm0
-               	movss	0x100(%rsp,%rax,4), %xmm1
-               	mulss	%xmm1, %xmm0
-               	jmp	<addr>
-               	xorps	%xmm0, %xmm0
-               	jmp	<addr>
-               	xorl	%eax, %eax
-               	movss	-0x38(%rbp), %xmm0
-               	movss	-0x34(%rbp), %xmm1
-               	addss	%xmm1, %xmm0
-               	movss	-0x30(%rbp), %xmm1
-               	movss	-0x2c(%rbp), %xmm2
-               	addss	%xmm2, %xmm1
-               	addss	%xmm1, %xmm0
-               	jmp	<addr>
-               	movss	%xmm1, 0x140(%rsp,%rax,4)
-               	incq	%rax
-               	cmpl	$0x4, %eax
-               	jge	<addr>
-               	sarxq	%rax, %rdx, %rsi
-               	testb	$0x1, %sil
-               	je	<addr>
-               	movapd	%xmm0, %xmm1
-               	jmp	<addr>
-               	xorps	%xmm1, %xmm1
-               	jmp	<addr>
-               	movups	0x140(%rsp), %xmm0
-               	vmovdqa	%xmm4, %xmm1
-               	vinserti128	$0x1, %xmm0, %ymm1, %ymm0
+               	vmovups	(%rax), %ymm1
+               	vdpps	$0xb5, %ymm1, %ymm0, %ymm0
                	leaq	0x100(%rsp), %rdi
                	vmovups	%ymm0, 0x100(%rsp)
                	leaq	-0x48(%rbp), %rsi

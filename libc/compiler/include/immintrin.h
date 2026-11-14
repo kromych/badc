@@ -476,10 +476,12 @@ __BADC_INTRIN __m256i _mm256_blendv_epi8(__m256i __A, __m256i __B, __m256i __M) 
 }
 
 /* VMPSADBW: the low lane by imm8[2:0], the high one by imm8[5:3]. */
-__BADC_INTRIN __m256i _mm256_mpsadbw_epu8(__m256i __A, __m256i __B, const int __M) {
-    return __badc_join_si(_mm_mpsadbw_epu8(__badc_lo_si(__A), __badc_lo_si(__B), __M),
-                          _mm_mpsadbw_epu8(__badc_hi_si(__A), __badc_hi_si(__B), __M >> 3));
-}
+#define _mm256_mpsadbw_epu8(A, B, M)                                               \
+    __extension__({                                                                \
+        __m256i __a = (A), __b = (B);                                              \
+        __badc_join_si(_mm_mpsadbw_epu8(__badc_lo_si(__a), __badc_lo_si(__b), (M)),    \
+                       _mm_mpsadbw_epu8(__badc_hi_si(__a), __badc_hi_si(__b), (M) >> 3)); \
+    })
 
 /* VPMOVSX / VPMOVZX: the low lanes of the 128-bit operand, widened, the
 ** upper half of the result from the lanes after the lower half's. */
@@ -1168,17 +1170,15 @@ __BADC_INTRIN int _mm256_testnzc_pd(__m256d __A, __m256d __B) {
 #define _mm256_round_ps(V, M) ((__m256)__builtin_ia32_roundps256((__v8sf)(__m256)(V), (int)(M)))
 #define _mm256_round_pd(V, M) ((__m256d)__builtin_ia32_roundpd256((__v4df)(__m256d)(V), (int)(M)))
 
-/* DPPS on each 128-bit half. */
+/* VDPPS: DPPS on each 128-bit half. */
 
 #define _mm256_floor_ps(V) _mm256_round_ps((V), _MM_FROUND_FLOOR)
 #define _mm256_floor_pd(V) _mm256_round_pd((V), _MM_FROUND_FLOOR)
 #define _mm256_ceil_ps(V) _mm256_round_ps((V), _MM_FROUND_CEIL)
 #define _mm256_ceil_pd(V) _mm256_round_pd((V), _MM_FROUND_CEIL)
 
-__BADC_INTRIN __m256 _mm256_dp_ps(__m256 __A, __m256 __B, const int __M) {
-    return __badc_join_ps(_mm_dp_ps(__badc_lo_ps(__A), __badc_lo_ps(__B), __M),
-                          _mm_dp_ps(__badc_hi_ps(__A), __badc_hi_ps(__B), __M));
-}
+#define _mm256_dp_ps(A, B, M)                                                      \
+    ((__m256)__builtin_ia32_dpps256((__v8sf)(__m256)(A), (__v8sf)(__m256)(B), (int)(M)))
 
 __BADC_INTRIN void _mm256_stream_ps(float *__P, __m256 __A) {
     _mm256_storeu_ps(__P, __A);

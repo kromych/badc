@@ -3211,6 +3211,31 @@ __m128d pd(__m128d a, __m128i c) { return _mm_permutevar_pd(a, c); }\n";
     m.finish();
 }
 
+/// SSE4.1's dot product, INSERTPS, PHMINPOSUW and MPSADBW intrinsics are
+/// one instruction each, and `ret`: `vdpps` and `vinsertps` in their VEX
+/// form, `phminposuw`, and `vmpsadbw`. Each was a C loop over the lanes.
+#[test]
+fn an_sse41_dot_insert_minpos_or_sad_is_one_instruction() {
+    const SRC: &str = "#include <immintrin.h>\n\
+__m128 dp(__m128 a, __m128 b) { return _mm_dp_ps(a, b, 0xf1); }\n\
+__m128 ins(__m128 a, __m128 b) { return _mm_insert_ps(a, b, 0x5a); }\n\
+__m128i mn(__m128i a) { return _mm_minpos_epu16(a); }\n\
+__m128i sad(__m128i a, __m128i b) { return _mm_mpsadbw_epu8(a, b, 5); }\n";
+    let mut m = Misses::default();
+    for (name, op) in [
+        ("dp", 0x3A40u16),
+        ("ins", 0x3A21),
+        ("mn", 0x3841),
+        ("sad", 0x3A42),
+    ] {
+        let insns = x64(SRC, name);
+        m.expect(insns.len() == 2 && insns[0].op == op, || {
+            format!("x86-64 {name}: {insns:x?}")
+        });
+    }
+    m.finish();
+}
+
 /// A rounding intrinsic is its one instruction: `roundps` for
 /// `_mm_floor_ps`, `vroundpd` on ymm for `_mm256_round_pd` and the
 /// three-operand `vroundsd` for `_mm_ceil_sd`, and `ret`. Each was a C

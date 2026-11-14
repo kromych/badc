@@ -1488,7 +1488,7 @@ fn sse2_op(name: &str) -> Option<Mnemonic> {
         ("pminsb", 0x66, 0x38), ("pminsd", 0x66, 0x39), ("pminuw", 0x66, 0x3A),
         ("pminud", 0x66, 0x3B), ("pmaxsb", 0x66, 0x3C), ("pmaxsd", 0x66, 0x3D),
         ("pmaxuw", 0x66, 0x3E), ("pmaxud", 0x66, 0x3F), ("pmulld", 0x66, 0x40),
-        ("ptest", 0x66, 0x17),
+        ("ptest", 0x66, 0x17), ("phminposuw", 0x66, 0x41),
         ("aesimc", 0x66, 0xDB), ("aesenc", 0x66, 0xDC), ("aesenclast", 0x66, 0xDD),
         ("aesdec", 0x66, 0xDE), ("aesdeclast", 0x66, 0xDF),
         ("gf2p8mulb", 0x66, 0xCF),
@@ -1629,6 +1629,8 @@ fn sse_imm(name: &str) -> Option<Mnemonic> {
         ("blendps", 0x66, 3, 0x0C, false, false), ("blendpd", 0x66, 3, 0x0D, false, false),
         ("pblendw", 0x66, 3, 0x0E, false, false),
         ("roundps", 0x66, 3, 0x08, false, false), ("roundpd", 0x66, 3, 0x09, false, false),
+        ("dpps", 0x66, 3, 0x40, false, false), ("dppd", 0x66, 3, 0x41, false, false),
+        ("insertps", 0x66, 3, 0x21, false, false), ("mpsadbw", 0x66, 3, 0x42, false, false),
         ("roundss", 0x66, 3, 0x0A, false, false), ("roundsd", 0x66, 3, 0x0B, false, false),
         ("aeskeygenassist", 0x66, 3, 0xDF, false, false),
         ("sha1rnds4", 0, 3, 0xCC, false, false),
@@ -2012,6 +2014,10 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
         "vpclmulqdq" => Some((1, 3, false, 0x44, Vl)),
         "vpblendw" => Some((1, 3, false, 0x0E, Vl)),
         "vroundss" => Some((1, 3, false, 0x0A, Vl)),
+        "vdpps" => Some((1, 3, false, 0x40, Vl)),
+        "vdppd" => Some((1, 3, false, 0x41, Vl)),
+        "vinsertps" => Some((1, 3, false, 0x21, Vl)),
+        "vmpsadbw" => Some((1, 3, false, 0x42, Vl)),
         "vroundsd" => Some((1, 3, false, 0x0B, Vl)),
         // GFNI: qword elements, so VEX.W is set.
         "vgf2p8affineqb" => Some((1, 3, true, 0xCE, Vl)),
@@ -7114,6 +7120,80 @@ mod tests {
         // as the other one.
         assert!(encode(&mut Vec::new(), 8, nt("movntdqa"), None, &[xmm(1), mem(0)]).is_err());
         assert!(encode(&mut Vec::new(), 8, nt("movntdq"), None, &[mem(0), xmm(1)]).is_err());
+    }
+
+    #[test]
+    fn sse41_dot_insert_minpos_and_sad_ops() {
+        let by_name = |name: &'static str, ops: &[Concrete]| {
+            let m = mnemonic_by_name(name).unwrap_or(Mnemonic::Table(name));
+            let mut code = Vec::new();
+            encode(&mut code, 8, m, None, ops).expect(name);
+            code
+        };
+        let xmm = |n: u8| Concrete::Reg {
+            reg: XMM_BASE + n,
+            size: AsmRegSize::Quad,
+        };
+        let ymm = |n: u8| Concrete::Reg {
+            reg: YMM_BASE + n,
+            size: AsmRegSize::Quad,
+        };
+        let i = Concrete::Imm;
+        let cases: [(&'static str, Vec<Concrete>, &[u8]); 10] = [
+            (
+                "dpps",
+                vec![i(0xf1), xmm(1), xmm(0)],
+                &[0x66, 0x0F, 0x3A, 0x40, 0xC1, 0xF1],
+            ),
+            (
+                "dppd",
+                vec![i(0x31), xmm(9), xmm(8)],
+                &[0x66, 0x45, 0x0F, 0x3A, 0x41, 0xC1, 0x31],
+            ),
+            (
+                "insertps",
+                vec![i(0x5a), xmm(1), xmm(0)],
+                &[0x66, 0x0F, 0x3A, 0x21, 0xC1, 0x5A],
+            ),
+            (
+                "phminposuw",
+                vec![xmm(1), xmm(0)],
+                &[0x66, 0x0F, 0x38, 0x41, 0xC1],
+            ),
+            (
+                "mpsadbw",
+                vec![i(5), xmm(1), xmm(0)],
+                &[0x66, 0x0F, 0x3A, 0x42, 0xC1, 0x05],
+            ),
+            (
+                "vdpps",
+                vec![i(0xf1), ymm(2), ymm(1), ymm(0)],
+                &[0xC4, 0xE3, 0x75, 0x40, 0xC2, 0xF1],
+            ),
+            (
+                "vdppd",
+                vec![i(0x31), xmm(2), xmm(1), xmm(0)],
+                &[0xC4, 0xE3, 0x71, 0x41, 0xC2, 0x31],
+            ),
+            (
+                "vinsertps",
+                vec![i(0x5a), xmm(2), xmm(1), xmm(0)],
+                &[0xC4, 0xE3, 0x71, 0x21, 0xC2, 0x5A],
+            ),
+            (
+                "vmpsadbw",
+                vec![i(5), xmm(10), xmm(9), xmm(8)],
+                &[0xC4, 0x43, 0x31, 0x42, 0xC2, 0x05],
+            ),
+            (
+                "dpps",
+                vec![i(0x7f), xmm(3), xmm(2)],
+                &[0x66, 0x0F, 0x3A, 0x40, 0xD3, 0x7F],
+            ),
+        ];
+        for (name, ops, want) in cases {
+            assert_eq!(by_name(name, &ops), want, "{name}");
+        }
     }
 
     #[test]

@@ -58,14 +58,8 @@ __BADC_INTRIN __m128i _mm_cmpeq_epi64(__m128i __X, __m128i __Y) {
 
 /* INSERTPS: lane imm8[7:6] of the second operand into lane imm8[5:4] of
 ** the first, then the lanes imm8[3:0] names zeroed. */
-static inline __m128 _mm_insert_ps(__m128 __X, __m128 __Y, const int __N) {
-    __v4si __x = (__v4si)__X, __y = (__v4si)__Y;
-    __x[(__N >> 4) & 3] = __y[(__N >> 6) & 3];
-    for (int __i = 0; __i < 4; __i++)
-        if (__N >> __i & 1)
-            __x[__i] = 0;
-    return (__m128)__x;
-}
+#define _mm_insert_ps(X, Y, N)                                                     \
+    ((__m128)__builtin_ia32_insertps128((__v4sf)(__m128)(X), (__v4sf)(__m128)(Y), (int)(N)))
 
 #define __BADC_BINARY(name, builtin, cast)                                      \
     __BADC_INTRIN __m128i _mm_##name(__m128i __X, __m128i __Y) {               \
@@ -174,51 +168,22 @@ __BADC_INTRIN __m128i _mm_stream_load_si128(void const *__P) {
 /* DPPS / DPPD: the products imm8[7:4] selects, the others +0.0, summed in
 ** pairs and the pair sums added; the sum goes to the lanes imm8[3:0]
 ** selects, +0.0 to the others. */
-static inline __m128 _mm_dp_ps(__m128 __X, __m128 __Y, const int __M) {
-    float __p[4];
-    for (int __i = 0; __i < 4; __i++)
-        __p[__i] = __M >> (4 + __i) & 1 ? __X[__i] * __Y[__i] : 0.0f;
-    float __s = (__p[0] + __p[1]) + (__p[2] + __p[3]);
-    for (int __i = 0; __i < 4; __i++)
-        __X[__i] = __M >> __i & 1 ? __s : 0.0f;
-    return __X;
-}
-
-static inline __m128d _mm_dp_pd(__m128d __X, __m128d __Y, const int __M) {
-    double __p0 = __M & 0x10 ? __X[0] * __Y[0] : 0.0;
-    double __p1 = __M & 0x20 ? __X[1] * __Y[1] : 0.0;
-    double __s = __p0 + __p1;
-    return (__m128d){__M & 1 ? __s : 0.0, __M & 2 ? __s : 0.0};
-}
+#define _mm_dp_ps(X, Y, M)                                                         \
+    ((__m128)__builtin_ia32_dpps((__v4sf)(__m128)(X), (__v4sf)(__m128)(Y), (int)(M)))
+#define _mm_dp_pd(X, Y, M)                                                         \
+    ((__m128d)__builtin_ia32_dppd((__v2df)(__m128d)(X), (__v2df)(__m128d)(Y), (int)(M)))
 
 /* PHMINPOSUW: the least unsigned word in word 0 and the index of its first
 ** occurrence in bits 18:16, the rest zero. */
-static inline __m128i _mm_minpos_epu16(__m128i __X) {
-    __v8hi __x = (__v8hi)__X;
-    int __k = 0;
-    for (int __i = 1; __i < 8; __i++)
-        if ((unsigned short)__x[__i] < (unsigned short)__x[__k])
-            __k = __i;
-    return (__m128i)(__v8hi){__x[__k], (short)__k, 0, 0, 0, 0, 0, 0};
+__BADC_INTRIN __m128i _mm_minpos_epu16(__m128i __X) {
+    return (__m128i)__builtin_ia32_phminposuw128((__v8hi)__X);
 }
 
 /* MPSADBW: eight sums of absolute differences between the four bytes of
 ** the second operand at 4 * imm8[1:0] and the eight four-byte windows of
 ** the first starting at 4 * imm8[2]. */
-static inline __m128i _mm_mpsadbw_epu8(__m128i __X, __m128i __Y, const int __M) {
-    __v16qi __x = (__v16qi)__X, __y = (__v16qi)__Y;
-    int __xo = (__M >> 2 & 1) * 4, __yo = (__M & 3) * 4;
-    __v8hi __r;
-    for (int __i = 0; __i < 8; __i++) {
-        int __s = 0;
-        for (int __k = 0; __k < 4; __k++) {
-            int __d = (unsigned char)__x[__xo + __i + __k] - (unsigned char)__y[__yo + __k];
-            __s += __d < 0 ? -__d : __d;
-        }
-        __r[__i] = (short)__s;
-    }
-    return (__m128i)__r;
-}
+#define _mm_mpsadbw_epu8(X, Y, M)                                                  \
+    ((__m128i)__builtin_ia32_mpsadbw128((__v16qi)(__m128i)(X), (__v16qi)(__m128i)(Y), (int)(M)))
 
 /* SSE4.2's string compares (SDM 4.1). Imm8[1:0] picks unsigned or signed
 ** bytes or words, imm8[3:2] the aggregation, imm8[5:4] the polarity and

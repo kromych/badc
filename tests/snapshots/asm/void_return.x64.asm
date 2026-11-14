@@ -65,10 +65,7 @@ Disassembly of section .text:
                	retq
 
 <call_last>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	movl	$0x4, (%rdi)
-               	popq	%rbp
                	jmp	<addr>
 
 <count_down>:

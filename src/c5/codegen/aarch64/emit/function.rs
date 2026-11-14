@@ -123,8 +123,9 @@ struct FunctionEmitter<'a, 'b> {
     early_far: bool,
     /// The test's branch to patch, and where the frame path starts.
     early_site: (usize, usize),
-    ret_tags: &'a alloc::collections::BTreeMap<usize, i64>,
-    /// The call the block being emitted ends in as a tail call.
+    /// Per block, the call it ends in as a tail call, and the one of the
+    /// block being emitted.
+    tail_calls: Vec<Option<super::TailCall<'a>>>,
     tail_call: Option<super::TailCall<'a>>,
     snapshot: EmitSnapshot,
     /// Which blocks are emitted and where each branch lands.
@@ -224,7 +225,30 @@ pub(crate) fn emit_function(
         return fail(super::ssa::emit_common::frame_too_large_msg(bytes));
     }
     let max_call_scratch = outgoing_bytes(func, alloc, abi, variadic_targets, imports);
-    let frame = compute_frame(func, alloc, abi, target, max_call_scratch);
+    // The frame and the emission read one decision on each block's tail call.
+    let tail_calls: Vec<Option<super::TailCall<'_>>> = (func.blocks.iter())
+        .map(|b| {
+            super::detect_tail_call(
+                func,
+                alloc,
+                b,
+                abi,
+                variadic_targets,
+                ret_tags,
+                imports,
+                target,
+            )
+        })
+        .collect();
+    let tail_pcs: Vec<usize> = tail_calls.iter().flatten().map(|t| t.pc).collect();
+    let frame = super::frame::compute_frame_with_tail_calls(
+        func,
+        alloc,
+        abi,
+        target,
+        max_call_scratch,
+        &tail_pcs,
+    );
     if let Some(why) = super::ssa::reg_alloc::fp_scratch_shortfall(func, frame.fp_scratch)
         .or_else(|| super::ssa::emit_common::naked_refusal(func, alloc, target))
     {
@@ -343,7 +367,7 @@ pub(crate) fn emit_function(
         early_exit,
         early_far: false,
         early_site: (0, 0),
-        ret_tags,
+        tail_calls,
         tail_call: None,
         snapshot,
         plan,
@@ -889,16 +913,7 @@ impl FunctionEmitter<'_, '_> {
             if bti {
                 emit(self.cx.code, super::encode::BTI_J);
             }
-            self.tail_call = super::detect_tail_call(
-                func,
-                alloc,
-                block,
-                self.fcx.abi,
-                self.fcx.variadic_targets,
-                self.ret_tags,
-                self.fcx.imports,
-                self.fcx.target,
-            );
+            self.tail_call = self.tail_calls[block_idx];
             let saves = &alloc.loop_saves;
             let b = block_idx as BlockId;
             for s in saves.loads_at_start_of(b) {

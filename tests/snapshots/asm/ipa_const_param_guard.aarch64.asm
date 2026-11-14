@@ -717,17 +717,11 @@ Disassembly of section .text:
                	ret
 
 <map_a>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
                	mov	x1, #0x3                // =3
-               	ldp	x29, x30, [sp], #0x10
                	b	<addr>
 
 <map_b>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
                	mov	x1, #0x3                // =3
-               	ldp	x29, x30, [sp], #0x10
                	b	<addr>
 
 <main>:

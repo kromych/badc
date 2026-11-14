@@ -66,10 +66,7 @@ Disassembly of section .text:
                	retq
 
 <load_alias>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	xorl	%esi, %esi
-               	popq	%rbp
                	jmp	<addr>
 
 <main>:

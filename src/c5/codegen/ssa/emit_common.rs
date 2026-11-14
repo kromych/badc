@@ -516,9 +516,9 @@ pub(crate) fn param_cell_written_first(
         .collect()
 }
 
-/// Whether the body needs the frame record: it makes a call, which
-/// overwrites the return address register or moves the stack under the
-/// return address, or holds an intrinsic whose lowering the backend states
+/// Whether the body needs the frame record: it makes a call other than the
+/// tail calls at `tail_calls`, which overwrites the return address register
+/// or moves the stack under the return address, or holds an intrinsic whose lowering the backend states
 /// to need it (`intrinsic_keeps_frame`). A `TlsAddr` is a call where the
 /// target's TLS access is one. The frame and register-file conditions a leaf
 /// also requires are target-specific and checked by the caller. An asm
@@ -526,6 +526,7 @@ pub(crate) fn param_cell_written_first(
 pub(crate) fn body_keeps_frame_record(
     func: &super::super::ir::FunctionSsa,
     target: super::Target,
+    tail_calls: &[usize],
     intrinsic_keeps_frame: impl Fn(crate::c5::op::Intrinsic) -> bool,
 ) -> bool {
     use super::super::ir::Inst;
@@ -534,10 +535,10 @@ pub(crate) fn body_keeps_frame_record(
     if func.has_seh() {
         return true;
     }
-    func.insts.iter().any(|inst| match inst {
-        Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. } | Inst::TailExt(_) => {
-            true
-        }
+    func.insts.iter().enumerate().any(|(pc, inst)| match inst {
+        // A tail call leaves the return address where the caller put it.
+        Inst::Call { .. } | Inst::CallExt { .. } => !tail_calls.contains(&pc),
+        Inst::CallIndirect { .. } | Inst::TailExt(_) => true,
         Inst::TlsAddr(_) => super::reg_alloc::tls_addr_is_call(target, func),
         Inst::InlineAsm { asm, .. } => asm.clobbers_sp(target),
         // An unknown discriminant has no lowering; the emit refuses it.

@@ -233,7 +233,23 @@ pub(crate) fn emit_function(
     if let Some(bytes) = super::ssa::emit_common::locals_bytes_over_limit(func) {
         return fail(super::ssa::emit_common::frame_too_large_msg(bytes));
     }
-    let frame = compute_frame(func, alloc, abi, target);
+    // The frame and the emission read one decision on each block's tail call.
+    let tail_calls: Vec<Option<TailCall<'_>>> = (func.blocks.iter())
+        .map(|b| {
+            detect_tail_call(
+                func,
+                alloc,
+                b,
+                abi,
+                variadic_targets,
+                ret_tags,
+                imports,
+                target,
+            )
+        })
+        .collect();
+    let tail_pcs: Vec<usize> = tail_calls.iter().flatten().map(|t| t.pc).collect();
+    let frame = super::frame::compute_frame_with_tail_calls(func, alloc, abi, target, &tail_pcs);
     if let Some(why) = super::ssa::reg_alloc::fp_scratch_shortfall(func, frame.fp_scratch)
         .or_else(|| super::ssa::emit_common::naked_refusal(func, alloc, target))
     {
@@ -346,6 +362,7 @@ pub(crate) fn emit_function(
         out,
         fcx,
         ret_tags,
+        tail_calls,
         entry,
         early_exit,
         early_site: (0, 0),
@@ -467,6 +484,8 @@ struct FnEmit<'a, 'b> {
     out: Out<'a, 'b>,
     fcx: FnCtx<'b>,
     ret_tags: &'b alloc::collections::BTreeMap<usize, i64>,
+    /// Per block, the call it ends in as a tail call.
+    tail_calls: Vec<Option<TailCall<'b>>>,
     entry: super::FunctionEntry,
     /// The return taken ahead of the frame, when the function has one.
     early_exit: Option<super::ssa::early_exit::EarlyExit>,
@@ -834,13 +853,7 @@ impl FnEmit<'_, '_> {
 
     fn emit_block(&mut self, block_idx: usize) -> Emit {
         let FnCtx {
-            func,
-            alloc,
-            frame,
-            abi,
-            target,
-            variadic_targets,
-            ..
+            func, alloc, frame, ..
         } = self.fcx;
         let block = &func.blocks[block_idx];
         self.block_offsets[block_idx] = self.out.cx.code.len();
@@ -873,16 +886,7 @@ impl FnEmit<'_, '_> {
         }
         // A direct or library call whose result the block returns lowers as
         // `marshal; epilogue; jmp` in the terminator; see `detect_tail_call`.
-        let tail_call = detect_tail_call(
-            func,
-            alloc,
-            block,
-            abi,
-            variadic_targets,
-            self.ret_tags,
-            self.fcx.imports,
-            target,
-        );
+        let tail_call = self.tail_calls[block_idx];
         let saves = &alloc.loop_saves;
         let b = block_idx as super::super::ir::BlockId;
         for s in saves.loads_at_start_of(b) {

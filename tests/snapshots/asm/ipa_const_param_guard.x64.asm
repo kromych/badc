@@ -569,17 +569,11 @@ Disassembly of section .text:
                	retq
 
 <map_a>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	movl	$0x3, %esi
-               	popq	%rbp
                	jmp	<addr>
 
 <map_b>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	movl	$0x3, %esi
-               	popq	%rbp
                	jmp	<addr>
 
 <main>:

@@ -21,10 +21,7 @@ Disassembly of section .text:
 
 <main>:
                	paciasp
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
                	mov	x0, #0x14               // =20
                	mov	x1, #0x2                // =2
-               	ldp	x29, x30, [sp], #0x10
                	autiasp
                	b	<addr>

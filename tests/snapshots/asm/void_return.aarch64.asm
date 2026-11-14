@@ -59,11 +59,8 @@ Disassembly of section .text:
                	ret
 
 <call_last>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
                	mov	x1, #0x4                // =4
                	str	w1, [x0]
-               	ldp	x29, x30, [sp], #0x10
                	b	<addr>
 
 <count_down>:

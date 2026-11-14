@@ -30,14 +30,11 @@ Disassembly of section .text:
                	retq
 
 <f>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	movl	$0x1, %eax
                	movl	$0x2, %ecx
                	testl	%edi, %edi
                	movq	%rcx, %rdi
                	cmovneq	%rax, %rdi
-               	popq	%rbp
                	jmp	<addr>
 
 <main>:

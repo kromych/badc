@@ -225,7 +225,4 @@ Disassembly of section .text:
                	b	<addr>
 
 <main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	ldp	x29, x30, [sp], #0x10
                	b	<addr>

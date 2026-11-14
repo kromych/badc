@@ -146,8 +146,6 @@ Disassembly of section .text:
                	ret
 
 <sieve>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
                	mov	x2, #0x2                // =2
                	b	<addr>
                	add	x2, x2, #0x1
@@ -166,7 +164,6 @@ Disassembly of section .text:
                	b	<addr>
                	add	x0, x0, #0x2
                	mov	x1, #0x3e6              // =998
-               	ldp	x29, x30, [sp], #0x10
                	b	<addr>
 
 <tenth>:

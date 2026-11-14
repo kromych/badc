@@ -186,15 +186,9 @@ Disassembly of section .text:
                	retq
 
 <call_wcstok>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	popq	%rbp
                	jmp	<addr>
 
 <call_strtok_r>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	popq	%rbp
                	jmp	<addr>
 
 <main>:

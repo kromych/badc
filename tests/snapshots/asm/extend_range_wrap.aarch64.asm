@@ -107,11 +107,8 @@ Disassembly of section .text:
                	ret
 
 <as_arg>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
                	add	x0, x0, #0x2
                	mov	w0, w0
-               	ldp	x29, x30, [sp], #0x10
                	b	<addr>
 
 <index_of>:

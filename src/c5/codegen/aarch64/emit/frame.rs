@@ -201,6 +201,18 @@ pub(crate) fn compute_frame(
     target: Target,
     max_call_scratch: u32,
 ) -> Frame {
+    compute_frame_with_tail_calls(func, alloc, abi, target, max_call_scratch, &[])
+}
+
+/// [`compute_frame`] for a body whose calls at `tail_calls` are tail calls.
+pub(crate) fn compute_frame_with_tail_calls(
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    abi: super::Abi,
+    target: Target,
+    max_call_scratch: u32,
+    tail_calls: &[usize],
+) -> Frame {
     let base = super::ssa::emit_common::compute_frame_base(func, alloc);
     let (declared_locals_bytes, alloc_spill_bytes, saved_gpr_bytes) =
         (base.locals, base.spills, base.saved_gprs);
@@ -276,9 +288,12 @@ pub(crate) fn compute_frame(
         alloc_spill_base: upper_bytes,
         canary_bytes,
         uses_x19,
-        keeps_record: super::ssa::emit_common::body_keeps_frame_record(func, target, |i| {
-            intrinsic_keeps_frame(i, abi)
-        }),
+        keeps_record: super::ssa::emit_common::body_keeps_frame_record(
+            func,
+            target,
+            tail_calls,
+            |i| intrinsic_keeps_frame(i, abi),
+        ),
         fixed_regs,
         fp_scratch: alloc.fp_scratch,
         count_fp: count_fp_register(func, alloc, abi, target),

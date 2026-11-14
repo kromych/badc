@@ -203,8 +203,6 @@ Disassembly of section .text:
                	retq
 
 <swap6>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
                	movabsq	$0x4010000000000000, %rcx # imm = 0x4010000000000000
                	movabsq	$0x4014000000000000, %rdx # imm = 0x4014000000000000
@@ -215,7 +213,6 @@ Disassembly of section .text:
                	movq	%rax, %xmm2
                	movq	%rcx, %xmm3
                	movq	%rdx, %xmm4
-               	popq	%rbp
                	jmp	<addr>
 
 <main>:

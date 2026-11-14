@@ -18,13 +18,10 @@ Disassembly of section .text:
                	ret
 
 <f>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
                	mov	x1, #0x1                // =1
                	mov	x2, #0x2                // =2
                	cmp	w0, #0x0
                	csel	x0, x1, x2, ne
-               	ldp	x29, x30, [sp], #0x10
                	b	<addr>
 
 <main>:

@@ -53,12 +53,9 @@ Disassembly of section .text:
 
 <enter_entry>:
                	endbr64
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	movq	%rdi, (%rsi)
                	xorl	%edi, %edi
                	movb	$0x1, (%rip)            # <addr>
 		R_X86_64_PC32	cache_dirty-0x5
-               	popq	%rbp
                	jmp	<addr>
 		R_X86_64_PLT32	entry_saved_ret-0x4

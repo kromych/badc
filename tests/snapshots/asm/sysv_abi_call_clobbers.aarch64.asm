@@ -143,8 +143,6 @@ Disassembly of section .text:
                	ret
 
 <swap6>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
                	fmov	d3, #3.00000000
                	fmov	d4, #4.00000000
                	fmov	d5, #5.00000000
@@ -156,7 +154,6 @@ Disassembly of section .text:
                	fmov	d2, d3
                	fmov	d3, d4
                	fmov	d4, d17
-               	ldp	x29, x30, [sp], #0x10
                	b	<addr>
 
 <main>:

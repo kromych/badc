@@ -158,8 +158,6 @@ Disassembly of section .text:
                	retq
 
 <sieve>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	movl	$0x2, %ecx
                	jmp	<addr>
                	incq	%rcx
@@ -178,7 +176,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	addq	$0x2, %rdi
                	movl	$0x3e6, %esi            # imm = 0x3E6
-               	popq	%rbp
                	jmp	<addr>
 
 <tenth>:

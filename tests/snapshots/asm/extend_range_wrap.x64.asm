@@ -116,11 +116,8 @@ Disassembly of section .text:
                	retq
 
 <as_arg>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	leaq	0x2(%rdi), %rax
                	movl	%eax, %edi
-               	popq	%rbp
                	jmp	<addr>
 
 <index_of>:

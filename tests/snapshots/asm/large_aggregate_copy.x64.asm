@@ -63,7 +63,4 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	popq	%rbp
                	jmp	<addr>

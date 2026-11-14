@@ -41,24 +41,15 @@ Disassembly of section .text:
                	ret
 
 <sum22>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
                	mov	x1, #0x16               // =22
-               	ldp	x29, x30, [sp], #0x10
                	b	<addr>
 
 <sum23>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
                	mov	x1, #0x17               // =23
-               	ldp	x29, x30, [sp], #0x10
                	b	<addr>
 
 <sum17>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
                	mov	x1, #0x11               // =17
-               	ldp	x29, x30, [sp], #0x10
                	b	<addr>
 
 <main>:

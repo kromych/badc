@@ -50,10 +50,7 @@ Disassembly of section .text:
                	ret
 
 <load_alias>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
                	mov	x1, #0x0                // =0
-               	ldp	x29, x30, [sp], #0x10
                	b	<addr>
 
 <main>:

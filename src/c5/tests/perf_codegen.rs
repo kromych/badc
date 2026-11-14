@@ -8022,12 +8022,12 @@ int show(double d) { return printf(\"%f\\n\", d); }\n";
     use super::codegen::function_bytes;
     let obj = object_at(SRC, Target::LinuxX64, true);
     let insns = |name: &str| x64_insns(&function_bytes(&obj, name));
+    // Its only call a tail call, the function keeps no frame.
     let length = insns("length");
     assert!(
-        length.last().is_some_and(X64Insn::is_jmp),
-        "length ends in a call"
+        length.len() == 1 && length[0].is_jmp(),
+        "length is more than its jump"
     );
-    assert!(!length.iter().any(|i| i.op == 0xE8), "length calls");
     // `xor eax, eax` or `mov al, imm8`.
     let sets_al = |i: &X64Insn| (i.op == 0x31 && i.modrm == Some(0xC0)) || i.op == 0xB0;
     assert!(
@@ -8052,6 +8052,8 @@ void forward(int x) { note(x + 1); note(x); }\n";
     let obj = object_at(SRC, Target::LinuxX64, true);
     for (name, calls) in [("release", 0), ("forward", 1)] {
         let insns = x64_insns(&function_bytes(&obj, name));
+        // A function whose only call is the tail call keeps no frame.
+        assert_eq!(insns.len() == 1, calls == 0, "{name}");
         assert!(
             insns.last().is_some_and(X64Insn::is_jmp),
             "{name} ends in a call"
@@ -8083,6 +8085,8 @@ void forward(int x) { note(x + 1); note(x); }\n";
     let bl = |w: &u32| w & 0xFC00_0000 == 0x9400_0000;
     for (name, calls) in [("pass", 0), ("length", 0), ("release", 0), ("forward", 1)] {
         let words = function_words(&obj, name);
+        // A function whose only call is the tail call keeps no frame.
+        assert_eq!(words.len() == 1, calls == 0, "{name}: {words:08x?}");
         assert!(words.last().is_some_and(b), "{name} ends in a return");
         assert_eq!(words.iter().filter(|w| bl(w)).count(), calls, "{name}");
     }

@@ -26,26 +26,19 @@ Disassembly of section .text:
                	int3
 
 <load_le32>:
+               	movslq	%esi, %rsi
+               	xorl	%eax, %eax
                	cmpl	$0x4, %esi
                	jge	<addr>
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movslq	%esi, %rsi
-               	movzbq	(%rdi,%rsi), %rax
-               	movq	%rsi, %rcx
-               	shlq	$0x3, %rcx
-               	movslq	%ecx, %rcx
-               	shlxq	%rcx, %rax, %r10
-               	movq	%r10, 0x8(%rsp)
+               	movzbq	(%rdi,%rsi), %rcx
+               	movq	%rsi, %rdx
+               	shlq	$0x3, %rdx
+               	movslq	%edx, %rdx
+               	shlxq	%rdx, %rcx, %rcx
                	incq	%rsi
-               	callq	<addr>
-               	movq	%rax, %r10
-               	movq	0x8(%rsp), %rax
-               	orq	%r10, %rax
-               	leave
-               	retq
-               	xorl	%eax, %eax
+               	orq	%rcx, %rax
+               	cmpl	$0x4, %esi
+               	jl	<addr>
                	retq
 
 <get_long>:

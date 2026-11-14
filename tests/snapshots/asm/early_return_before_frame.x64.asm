@@ -157,20 +157,18 @@ Disassembly of section .text:
                	retq
 
 <ucount>:
+               	xorl	%eax, %eax
                	cmpl	%esi, %edi
                	jb	<addr>
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	subq	%rsi, %rdi
-               	callq	<addr>
                	xorq	$0x1, %rax
-               	popq	%rbp
-               	retq
-               	movq	%rdi, %rax
-               	shlq	$0x2, %rax
-               	addq	%rsi, %rax
-               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
-               	andq	%r10, %rax
+               	cmpl	%esi, %edi
+               	jae	<addr>
+               	movq	%rdi, %rcx
+               	shlq	$0x2, %rcx
+               	addq	%rsi, %rcx
+               	movl	%ecx, %ecx
+               	xorq	%rcx, %rax
                	retq
 
 <many>:

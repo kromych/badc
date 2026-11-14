@@ -8812,3 +8812,15 @@ long f(long a, long b, long *out, int op) {\n\
     assert!(insns.iter().any(|i| i.op == 0xF7), "a division: {insns:x?}");
     assert!(!insns.iter().any(rdx), "{insns:x?}");
 }
+
+/// A recursion accumulating its result with `|` becomes a loop as one
+/// accumulating with `+` does: no call to itself is left.
+#[test]
+fn x64_a_bitwise_accumulating_recursion_is_a_loop() {
+    const SRC: &str = "int load_le32(const unsigned char *p, int i) {\n\
+    if (i >= 4) return 0;\n\
+    return ((int)p[i] << (8 * i)) | load_le32(p, i + 1);\n\
+}\n";
+    let insns = x64(SRC, "load_le32");
+    assert!(!insns.iter().any(|i| i.op == 0xE8), "{insns:x?}");
+}

@@ -128,17 +128,16 @@ Disassembly of section .text:
                	ret
 
 <ucount>:
+               	mov	x2, #0x0                // =0
                	cmp	w0, w1
                	b.lo	<addr>
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
                	sub	x0, x0, x1
-               	bl	<addr>
-               	eor	x0, x0, #0x1
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	add	x9, x1, x0, lsl #2
-               	mov	w0, w9
+               	eor	x2, x2, #0x1
+               	cmp	w0, w1
+               	b.hs	<addr>
+               	add	x0, x1, x0, lsl #2
+               	mov	w0, w0
+               	eor	x0, x2, x0
                	ret
 
 <many>:

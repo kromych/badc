@@ -16,9 +16,10 @@
 //!     must name the same, which the loop exit then returns (a `void`
 //!     function's recursion names no value).
 //!   * integer accumulator: `Return([narrow](op(acc, C)))` with
-//!     `op` an integer `Add` / `Mul` (associative and commutative on
-//!     two's-complement, so the reassociation the loop performs is
-//!     exact) and the non-call operand defined independently of `C`.
+//!     `op` an integer `Add`, `Mul`, `Or`, `Xor` or `And` (associative
+//!     and commutative on two's-complement, so the reassociation the loop
+//!     performs is exact) and the non-call operand defined independently
+//!     of `C`.
 //!     A narrow return type re-narrows the sum -- a signed `Extend`, or
 //!     the mask an unsigned one takes -- and that narrowing is carried
 //!     onto the loop's accumulator; `C` may appear narrowed to at least
@@ -67,6 +68,9 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
 enum AccOp {
     Add,
     Mul,
+    Or,
+    Xor,
+    And,
 }
 
 impl AccOp {
@@ -74,19 +78,26 @@ impl AccOp {
         match self {
             AccOp::Add => BinOp::Add,
             AccOp::Mul => BinOp::Mul,
+            AccOp::Or => BinOp::Or,
+            AccOp::Xor => BinOp::Xor,
+            AccOp::And => BinOp::And,
         }
     }
-    /// Additive / multiplicative identity for the accumulator seed.
+    /// The operation's identity, the accumulator's seed.
     fn identity(self) -> i64 {
         match self {
-            AccOp::Add => 0,
+            AccOp::Add | AccOp::Or | AccOp::Xor => 0,
             AccOp::Mul => 1,
+            AccOp::And => -1,
         }
     }
     fn from_binop(op: BinOp) -> Option<AccOp> {
         match op {
             BinOp::Add => Some(AccOp::Add),
             BinOp::Mul => Some(AccOp::Mul),
+            BinOp::Or => Some(AccOp::Or),
+            BinOp::Xor => Some(AccOp::Xor),
+            BinOp::And => Some(AccOp::And),
             _ => None,
         }
     }

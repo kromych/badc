@@ -14,22 +14,19 @@ Disassembly of section .text:
                	brk	#0x1
 
 <load_le32>:
+               	mov	x2, x0
+               	sxtw	x1, w1
+               	mov	x0, #0x0                // =0
                	cmp	w1, #0x4
                	b.ge	<addr>
-               	str	x20, [sp, #-0x20]!
-               	stp	x29, x30, [sp, #0x10]
-               	add	x29, sp, #0x10
-               	ldrb	w2, [x0, w1, sxtw]
-               	lsl	x3, x1, #3
-               	sxtw	x3, w3
-               	lsl	x20, x2, x3
+               	ldrb	w3, [x2, x1]
+               	lsl	x4, x1, #3
+               	sxtw	x4, w4
+               	lsl	x3, x3, x4
                	add	x1, x1, #0x1
-               	bl	<addr>
-               	orr	x0, x20, x0
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x20, [sp], #0x20
-               	ret
-               	mov	x0, #0x0                // =0
+               	orr	x0, x0, x3
+               	cmp	w1, #0x4
+               	b.lt	<addr>
                	ret
 
 <get_long>:

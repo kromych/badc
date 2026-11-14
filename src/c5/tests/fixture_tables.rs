@@ -821,6 +821,10 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ),
     ("arm_neon_structure_loads_and_stores_on_seeded_bytes.c", 0),
     ("arm_neon_multi_register_table_lookups_on_seeded_lanes.c", 0),
+    (
+        "arm_neon_qrshl_cvtx_recpx_and_poly_forms_on_seeded_lanes.c",
+        0,
+    ),
     ("aarch64_nan_operands_rank_signaling_and_addend_first.c", 0),
     ("inline_asm_a64_vector_w_d_view.c", 0),
     ("inline_asm_a64_w_operand_widths.c", 0),
@@ -2478,6 +2482,10 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ),
     ("arm_neon_structure_loads_and_stores_on_seeded_bytes.c", 0),
     ("arm_neon_multi_register_table_lookups_on_seeded_lanes.c", 0),
+    (
+        "arm_neon_qrshl_cvtx_recpx_and_poly_forms_on_seeded_lanes.c",
+        0,
+    ),
     ("aarch64_nan_operands_rank_signaling_and_addend_first.c", 0),
     ("inline_asm_a64_vector_w_d_view.c", 0),
     ("inline_asm_a64_w_operand_widths.c", 0),
@@ -5071,6 +5079,10 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ),
     ("arm_neon_structure_loads_and_stores_on_seeded_bytes.c", 0),
     ("arm_neon_multi_register_table_lookups_on_seeded_lanes.c", 0),
+    (
+        "arm_neon_qrshl_cvtx_recpx_and_poly_forms_on_seeded_lanes.c",
+        0,
+    ),
     ("aarch64_nan_operands_rank_signaling_and_addend_first.c", 0),
     ("inline_asm_a64_vector_w_d_view.c", 0),
     ("inline_asm_a64_w_operand_widths.c", 0),

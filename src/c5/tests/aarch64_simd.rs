@@ -1232,6 +1232,52 @@ fn the_multi_register_table_lookups_are_one_register_lookups_in_turn() {
     );
 }
 
+/// vqrshl, the round-to-odd vcvtx and the reciprocal exponent vrecpx are
+/// rows: over seeded lanes the interpreter's results and flags hash to the
+/// hardware's, and each is one instruction under -O, frecpx its scalar
+/// form, the only one it has.
+#[cfg(feature = "full")]
+#[test]
+fn the_qrshl_cvtx_and_recpx_forms_are_rows() {
+    let src = super::load_fixture("arm_neon_qrshl_cvtx_recpx_and_poly_forms_on_seeded_lanes.c");
+    let program = super::compile_str_bare_for(&src, crate::Target::LinuxAarch64);
+    assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 0);
+    // Round to odd overflows only from 2^128 and underflows to the least
+    // subnormal, as the M1 and clang give.
+    const ODD: &str = "#include <arm_neon.h>\n#include <fenv.h>\n#include <string.h>\n\
+        static int check(double x, unsigned want, int over, int under) {\n\
+            feclearexcept(FE_ALL_EXCEPT);\n\
+            float r = vcvtxd_f32_f64(x);\n\
+            unsigned u;\n\
+            memcpy(&u, &r, 4);\n\
+            return u == want && !!fetestexcept(FE_OVERFLOW) == over\n\
+                && !!fetestexcept(FE_UNDERFLOW) == under && fetestexcept(FE_INEXACT);\n\
+        }\n\
+        int main(void) {\n\
+            if (!check(0x1.fffffff8p127, 0x7f7fffffu, 0, 0)) return 1;\n\
+            if (!check(0x1p128, 0x7f7fffffu, 1, 0)) return 2;\n\
+            if (!check(0x1p-151, 1u, 0, 1)) return 3;\n\
+            if (!check(-0x1.0000003p+1, 0xc0000001u, 0, 0)) return 4;\n\
+            return 0;\n\
+        }\n";
+    let program = super::compile_str_bare_for(ODD, crate::Target::LinuxAarch64);
+    assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 0);
+    const OPS: &str = "#include <arm_neon.h>\n\
+        int8x16_t a(int8x16_t x, int8x16_t y) { return vqrshlq_s8(x, y); }\n\
+        float32x2_t b(float64x2_t x) { return vcvtx_f32_f64(x); }\n\
+        float64_t d(float64_t x) { return vrecpxd_f64(x); }\n\
+        uint64x1_t e(uint64x1_t x, int64x1_t y) { return vqrshl_u64(x, y); }\n";
+    for (name, want) in [
+        ("a", 0x4E21_5C00u32),
+        ("b", 0x2E61_6800),
+        ("d", 0x5EE1_F800),
+        ("e", 0x7EE1_5C00),
+    ] {
+        let words = super::perf_codegen::a64_at(OPS, name, true);
+        assert_eq!(words, [want, 0xD65F_03C0], "{name}: {words:08x?}");
+    }
+}
+
 /// `vld1`, `vst1`, `vdup_n` and `vld1_dup` are the load, store and
 /// broadcast of their vector under `-O`, as with gcc 16, with no inline asm
 /// between them and the operations that use them: `ldr q`, `str q`,

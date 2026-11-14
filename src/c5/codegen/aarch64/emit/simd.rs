@@ -138,6 +138,12 @@ fn encode(row: &SimdOp, regs: &[u8], imm: Option<u8>) -> Result<u32, alloc::stri
             // One lane is the scalar view of its width: the scalar form
             // over a 64-bit lane, or a reduction's destination; a pairwise
             // long sum into one 64-bit lane is the vector form `.1d`.
+            if row.scalar_only() {
+                return Opnd::VReg {
+                    num,
+                    is_d: size == 3,
+                };
+            }
             let pairwise = matches!(
                 row.sem,
                 crate::c5::simd::Sem::PairAddLong(..) | crate::c5::simd::Sem::PairAddLongAcc(..)

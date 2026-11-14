@@ -360,6 +360,9 @@ pub(crate) const OPS: &[SimdOp] = table! {
     "frsqrts" Vv Step (true): f2s f4s fd f2d;
     "urecpe" V FractionEstimate (false): s2 s4;
     "sqshlu" Shift ShlSatU (): b8 b16 h4 h8 s2 s4 d1 d2;
+    "sqrshl" Vv ShlReg (true, true, true): b8 b16 h4 h8 s2 s4 d1 d2;
+    "uqrshl" Vv ShlReg (false, true, true): b8 b16 h4 h8 s2 s4 d1 d2;
+    "frecpx" V RecipExponent (): f2s fd;
     "sqdmulh" Vv SatDoublingMulHigh (false): h4 h8 s2 s4;
     "sqrdmulh" Vv SatDoublingMulHigh (true): h4 h8 s2 s4;
     "sqrdmlah" Vvv SatRoundingDoublingMulAcc (false): h4 h8 s2 s4;
@@ -1046,6 +1049,7 @@ const NARROW: &[SimdOp] = &[
     row("__builtin_neon_fcvtzu_n_4s", "fcvtzu", Form::VI, Ret::V4si, Sem::Convert(Cvt::ToFixedSat { w: 4, signed: false }), 16),
     row("__builtin_neon_fcvtzu_n_2d", "fcvtzu", Form::VI, Ret::V2di, Sem::Convert(Cvt::ToFixedSat { w: 8, signed: false }), 16),
     row("__builtin_neon_fcvtzu_n_d", "fcvtzu", Form::VI, Ret::V1di, Sem::Convert(Cvt::ToFixedSat { w: 8, signed: false }), 8),
+    row("__builtin_neon_fcvtxn_2d", "fcvtxn", Form::V, Ret::V2sf, Sem::Convert(Cvt::DoubleToSingleOdd), 16),
     row("__builtin_neon_fcvtn_2d", "fcvtn", Form::V, Ret::V2sf, Sem::Convert(Cvt::DoubleToSingle), 16),
     narrow("__builtin_neon_xtn_8h", "xtn", Ret::V8qi, 2, NarrowKind::Trunc),
     narrow("__builtin_neon_xtn_4s", "xtn", Ret::V4hi, 4, NarrowKind::Trunc),

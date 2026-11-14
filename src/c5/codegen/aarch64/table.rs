@@ -817,6 +817,8 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         "fcvtl2" => Some((0x0E61_7800, true, true)),
         "fcvtn" => Some((0x0E61_6800, false, false)),
         "fcvtn2" => Some((0x0E61_6800, true, false)),
+        "fcvtxn" => Some((0x2E61_6800, false, false)),
+        "fcvtxn2" => Some((0x2E61_6800, true, false)),
         _ => None,
     } {
         let [
@@ -1145,6 +1147,17 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | (u32::from(rn) << 5)
             | u32::from(rd));
     }
+    // The reciprocal exponent `frecpx Rd, Rn`, scalar only: sz (bit 22)
+    // selects the d view.
+    if mnemonic == "frecpx"
+        && let [
+            Opnd::VReg { num: rd, is_d },
+            Opnd::VReg { num: rn, is_d: d1 },
+        ] = *ops
+        && is_d == d1
+    {
+        return Ok(0x5EA1_F800 | (u32::from(is_d) << 22) | (u32::from(rn) << 5) | u32::from(rd));
+    }
     // SIMD compares with zero `Vd.T, Vn.T, #0` (`#0.0` for the FP forms), and
     // the scalar `Rd, Rn, #0` over the d view (s or d for FP): size at bit 22,
     // or sz for FP, Q at 30, the scalar form at bits 30 and 28.
@@ -1264,6 +1277,8 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         "ushl" => Some((0x0E20_4400, 1, 0, 3, Some(3))),
         "sqshl" => Some((0x0E20_4C00, 0, 0, 3, Some(2))),
         "uqshl" => Some((0x0E20_4C00, 1, 0, 3, Some(2))),
+        "sqrshl" => Some((0x0E20_5C00, 0, 0, 3, Some(2))),
+        "uqrshl" => Some((0x0E20_5C00, 1, 0, 3, Some(2))),
         "sqdmulh" => Some((0x0E20_B400, 0, 1, 2, None)),
         "sqrdmulh" => Some((0x0E20_B400, 1, 1, 2, None)),
         "srshl" => Some((0x0E20_5400, 0, 0, 3, Some(3))),

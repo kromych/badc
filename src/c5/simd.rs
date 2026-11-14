@@ -551,6 +551,10 @@ pub(crate) enum Sem {
     SatAccMixed(u8, bool),
     /// Each byte with its bits reversed (`rbit`).
     BitReverse,
+    /// The reciprocal exponent of the floating lane 0, the rest zero: the
+    /// sign kept, the exponent inverted (one less than all ones for a zero
+    /// or a subnormal), the fraction zero (`frecpx`, a scalar form only).
+    RecipExponent(u8),
     /// The high half of twice the signed product of each lane pair, rounded
     /// when `true`, saturated (`sqdmulh`, `sqrdmulh`).
     SatDoublingMulHigh(u8, bool),
@@ -707,6 +711,9 @@ pub(crate) enum Cvt {
     /// The upper two singles.
     SingleToDoubleHigh,
     DoubleToSingle,
+    /// [`Cvt::DoubleToSingle`] rounding to odd: toward zero, the low bit
+    /// set when the value changed (`fcvtxn`).
+    DoubleToSingleOdd,
     /// Every 8-byte integer lane to a `double`, signed when set.
     Int64ToDouble {
         signed: bool,
@@ -754,6 +761,10 @@ pub(crate) trait FloatEnv {
     fn widen(&mut self, a: u64) -> u64;
     /// `a * b + c` rounded once.
     fn fma(&mut self, a: u64, b: u64, c: u64, single: bool) -> u64;
+    /// A `double` narrowed to a `float` rounding to odd: toward zero, with
+    /// the low bit of an inexact result set; a NaN quieted, with invalid for
+    /// a signaling one.
+    fn narrow_odd(&mut self, a: u64) -> u64;
     /// `a` rounded to an integral value in direction `to`, a NaN quieted
     /// with invalid for a signaling one; inexact when `exact` and the value
     /// changed.
@@ -868,6 +879,12 @@ impl Form {
 }
 
 impl SimdOp {
+    /// Whether the instruction has only a scalar form, which names the
+    /// lane's s or d view (`frecpx`).
+    pub(crate) fn scalar_only(&self) -> bool {
+        matches!(self.sem, Sem::RecipExponent(_))
+    }
+
     /// Whether the row compares its one source with zero, which the
     /// instruction names as its `#0` operand (`cmeq`, `fcmlt` #0).
     pub(crate) fn compares_with_zero(&self) -> bool {
@@ -946,7 +963,7 @@ impl SimdOp {
             Sem::Narrow(w, _) | Sem::ShrNarrow(w, ..) | Sem::NarrowHigh(w, ..) => w,
             Sem::Extend(from, ..) => from,
             Sem::Convert(Cvt::SingleToDouble | Cvt::SingleToDoubleHigh) => 4,
-            Sem::Convert(Cvt::DoubleToSingle) => 8,
+            Sem::Convert(Cvt::DoubleToSingle | Cvt::DoubleToSingleOdd) => 8,
             _ => lane,
         };
         (src, self.arg_bytes(i - 1))
@@ -2097,6 +2114,7 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
         Sem::Estimate(..) | Sem::Step(..) | Sem::FloatPair(..) | Sem::FloatAcross(..) => {}
         Sem::RoundInt(..) | Sem::RoundIntN(..) | Sem::SatRoundingDoublingMulAcc(..) => {}
         Sem::ByElement(..) | Sem::Dot(..) | Sem::MatMul(..) | Sem::FloatAbsRel(..) => {}
+        Sem::RecipExponent(_) => {}
         Sem::Perm4x64
         | Sem::PermVar32
         | Sem::Perm2x128
@@ -2640,6 +2658,31 @@ pub(crate) fn eval_float_in(
                 }
             }
         }
+        Sem::RecipExponent(w) => {
+            let x = flane(a, w, 0);
+            o = [0; 16];
+            let (top, frac_bits, emask) = if w == 4 {
+                (31, 23, 0xFF)
+            } else {
+                (63, 52, 0x7FF)
+            };
+            let bits = match w {
+                4 if !is_nan(x) => u64::from((f64::from_bits(x) as f32).to_bits()),
+                _ => x,
+            };
+            let r = match (bits >> frac_bits) & emask {
+                _ if is_nan(x) => env.widen(x),
+                exp => {
+                    let e = if exp == 0 { emask - 1 } else { !exp & emask };
+                    let r = bits >> top << top | e << frac_bits;
+                    match w {
+                        4 => f64::from(f32::from_bits(r as u32)).to_bits(),
+                        _ => r,
+                    }
+                }
+            };
+            set_flane(&mut o, w, 0, r);
+        }
         Sem::RoundInt(to, w, exact) => {
             for i in 0..lanes(w, false) {
                 let x = env.round_to_integral(flane(a, w, i), to, exact);
@@ -2752,6 +2795,10 @@ pub(crate) fn eval_float_in(
                     let from = if cvt == Cvt::SingleToDoubleHigh { 2 } else { 0 };
                     let x = env.widen(flane(a, 4, from + i));
                     set_flane(&mut o, 8, i, x);
+                }),
+                Cvt::DoubleToSingleOdd => (0..2).for_each(|i| {
+                    let x = env.narrow_odd(flane(a, 8, i));
+                    set_flane(&mut o, 4, i, x);
                 }),
                 Cvt::DoubleToSingle => (0..2).for_each(|i| {
                     let x = env.to_single(flane(a, 8, i));

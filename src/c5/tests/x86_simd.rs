@@ -1741,7 +1741,8 @@ fn floating_rows_compute_in_the_environment() {
         | Sem::FloatPair(..)
         | Sem::FloatAcross(..)
         | Sem::RoundInt(..)
-        | Sem::RoundIntN(..) => true,
+        | Sem::RoundIntN(..)
+        | Sem::RecipExponent(_) => true,
         Sem::Add(_)
         | Sem::Sub(_)
         | Sem::MulLo(_)
@@ -1904,6 +1905,10 @@ fn floating_rows_compute_in_the_environment() {
             a
         }
         fn round_to_integral(&mut self, a: u64, _: simd::RoundTo, _: bool) -> u64 {
+            self.0 += 1;
+            a
+        }
+        fn narrow_odd(&mut self, a: u64) -> u64 {
             self.0 += 1;
             a
         }

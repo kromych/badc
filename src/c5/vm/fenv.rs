@@ -1020,6 +1020,20 @@ impl crate::c5::simd::FloatEnv for FpEnv {
         self.narrow(a)
     }
 
+    fn narrow_odd(&mut self, a: u64) -> u64 {
+        let (round, inexact) = (self.round, self.flags & INEXACT);
+        self.round = Round::Zero;
+        self.flags &= !INEXACT;
+        let r = self.narrow(a);
+        self.round = round;
+        let odd = self.flags & INEXACT != 0;
+        self.flags |= inexact;
+        match odd {
+            true => f64::from(f32::from_bits(reg_to_f32(r) | 1)).to_bits(),
+            false => r,
+        }
+    }
+
     fn widen(&mut self, a: u64) -> u64 {
         if is_snan(a) {
             self.flags |= INVALID;

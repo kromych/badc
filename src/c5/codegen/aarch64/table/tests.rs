@@ -1274,6 +1274,13 @@ fn vector_one_source_counts_and_estimates() {
     assert_eq!(enc("usqadd", &[v(1, 2, true), v(2, 2, true)]), 0x6EA0_3841);
     assert_eq!(enc("suqadd", &[d(1), d(2)]), 0x5EE0_3841);
     assert_eq!(enc("usqadd", &[d(1), d(2)]), 0x7EE0_3841);
+    assert_eq!(enc("frecpx", &[s(1), s(2)]), 0x5EA1_F841);
+    assert_eq!(enc("frecpx", &[d(1), d(2)]), 0x5EE1_F841);
+    assert_eq!(enc("fcvtxn", &[v(1, 2, false), v(2, 3, true)]), 0x2E61_6841);
+    assert_eq!(enc("fcvtxn2", &[v(1, 2, true), v(2, 3, true)]), 0x6E61_6841);
+    assert_eq!(v3("sqrshl", 0, false), 0x0E23_5C41);
+    assert_eq!(v3("uqrshl", 3, true), 0x6EE3_5C41);
+    assert_eq!(enc("sqrshl", &[d(1), d(2), d(3)]), 0x5EE3_5C41);
     let z = Opnd::Imm(0);
     assert_eq!(enc("cmeq", &[v(1, 2, true), v(2, 2, true), z]), 0x4EA0_9841);
     assert_eq!(

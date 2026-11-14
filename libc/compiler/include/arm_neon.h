@@ -46,8 +46,11 @@
  * The byte table lookups vqtbl2 to vqtbl4, vqtbx2 to vqtbx4, vtbl1 to
  * vtbl4 and vtbx1 to vtbx4, as one-register lookups in turn.
  *
- * Not provided: float16, bfloat16, most scalar lane-indexed forms, vrecpx,
- * vcvtx, and the complex-arithmetic forms.
+ * Also vadd on the polynomial types, vcreate, vcls on the unsigned types,
+ * vqrshl, vcvtx and vrecpx.
+ *
+ * Not provided: float16, bfloat16, most scalar forms, and the
+ * complex-arithmetic forms.
  *
  * The element typedefs match <stdint.h>, repeated so the header serves
  * freestanding units; poly128_t is carried as a 16-byte vector.
@@ -2943,6 +2946,45 @@ __BADC_INTRIN float64x2_t vmlsq_f64(float64x2_t __a, float64x2_t __b, float64x2_
 #define vcopy_laneq_f64(__a, __l1, __b, __l2) vset_lane_f64(vgetq_lane_f64(__b, __l2), __a, __l1)
 #define vcopyq_lane_f64(__a, __l1, __b, __l2) vsetq_lane_f64(vget_lane_f64(__b, __l2), __a, __l1)
 #define vcopyq_laneq_f64(__a, __l1, __b, __l2) vsetq_lane_f64(vgetq_lane_f64(__b, __l2), __a, __l1)
+
+/* The polynomial additions (exclusive or), vcreate (a vector of the bits
+ * of a uint64_t), vcls on the unsigned types, the polynomial vtst, the
+ * saturating rounding shifts by register (vqrshl), the conversions of
+ * doubles to floats rounding to odd (vcvtx) and the reciprocal exponent
+ * (vrecpx). */
+__BADC_INTRIN poly8x8_t vadd_p8(poly8x8_t __a, poly8x8_t __b) { return (poly8x8_t)__builtin_neon_eor_8b(__a, __b); }
+__BADC_INTRIN poly8x16_t vaddq_p8(poly8x16_t __a, poly8x16_t __b) { return (poly8x16_t)__builtin_neon_eor_16b(__a, __b); }
+__BADC_INTRIN poly16x4_t vadd_p16(poly16x4_t __a, poly16x4_t __b) { return (poly16x4_t)__builtin_neon_eor_8b(__a, __b); }
+__BADC_INTRIN poly16x8_t vaddq_p16(poly16x8_t __a, poly16x8_t __b) { return (poly16x8_t)__builtin_neon_eor_16b(__a, __b); }
+__BADC_INTRIN poly64x1_t vadd_p64(poly64x1_t __a, poly64x1_t __b) { return (poly64x1_t)__builtin_neon_eor_8b(__a, __b); }
+__BADC_INTRIN poly64x2_t vaddq_p64(poly64x2_t __a, poly64x2_t __b) { return (poly64x2_t)__builtin_neon_eor_16b(__a, __b); }
+__BADC_INTRIN int8x8_t vcreate_s8(uint64_t __a) { return (int8x8_t)(uint64x1_t){__a}; }
+__BADC_INTRIN int16x4_t vcreate_s16(uint64_t __a) { return (int16x4_t)(uint64x1_t){__a}; }
+__BADC_INTRIN int32x2_t vcreate_s32(uint64_t __a) { return (int32x2_t)(uint64x1_t){__a}; }
+__BADC_INTRIN int64x1_t vcreate_s64(uint64_t __a) { return (int64x1_t)(uint64x1_t){__a}; }
+__BADC_INTRIN uint8x8_t vcreate_u8(uint64_t __a) { return (uint8x8_t)(uint64x1_t){__a}; }
+__BADC_INTRIN uint16x4_t vcreate_u16(uint64_t __a) { return (uint16x4_t)(uint64x1_t){__a}; }
+__BADC_INTRIN uint32x2_t vcreate_u32(uint64_t __a) { return (uint32x2_t)(uint64x1_t){__a}; }
+__BADC_INTRIN uint64x1_t vcreate_u64(uint64_t __a) { return (uint64x1_t)(uint64x1_t){__a}; }
+__BADC_INTRIN poly8x8_t vcreate_p8(uint64_t __a) { return (poly8x8_t)(uint64x1_t){__a}; }
+__BADC_INTRIN poly16x4_t vcreate_p16(uint64_t __a) { return (poly16x4_t)(uint64x1_t){__a}; }
+__BADC_INTRIN poly64x1_t vcreate_p64(uint64_t __a) { return (poly64x1_t)(uint64x1_t){__a}; }
+__BADC_INTRIN float32x2_t vcreate_f32(uint64_t __a) { return (float32x2_t)(uint64x1_t){__a}; }
+__BADC_INTRIN float64x1_t vcreate_f64(uint64_t __a) { return (float64x1_t)(uint64x1_t){__a}; }
+__BADC_INTRIN int8x8_t vcls_u8(uint8x8_t __a) { return (int8x8_t)__builtin_neon_cls_8b(__a); }
+__BADC_INTRIN int8x16_t vclsq_u8(uint8x16_t __a) { return (int8x16_t)__builtin_neon_cls_16b(__a); }
+__BADC_INTRIN int16x4_t vcls_u16(uint16x4_t __a) { return (int16x4_t)__builtin_neon_cls_4h(__a); }
+__BADC_INTRIN int16x8_t vclsq_u16(uint16x8_t __a) { return (int16x8_t)__builtin_neon_cls_8h(__a); }
+__BADC_INTRIN int32x2_t vcls_u32(uint32x2_t __a) { return (int32x2_t)__builtin_neon_cls_2s(__a); }
+__BADC_INTRIN int32x4_t vclsq_u32(uint32x4_t __a) { return (int32x4_t)__builtin_neon_cls_4s(__a); }
+__BADC_NEON_R_p16(__BADC_NEON_F_CMP, vtst, __builtin_neon_cmtst, __builtin_neon_cmtst)
+__BADC_NEON_R_p64(__BADC_NEON_F_CMP, vtst, __builtin_neon_cmtst, __builtin_neon_cmtst)
+__BADC_NEON_INT(__BADC_NEON_F_SHL, vqrshl, __builtin_neon_sqrshl, __builtin_neon_uqrshl)
+__BADC_INTRIN float32x2_t vcvtx_f32_f64(float64x2_t __a) { return (float32x2_t)__builtin_neon_fcvtxn_2d(__a); }
+__BADC_INTRIN float32x4_t vcvtx_high_f32_f64(float32x2_t __r, float64x2_t __a) { return vcombine_f32(__r, vcvtx_f32_f64(__a)); }
+__BADC_INTRIN float32_t vcvtxd_f32_f64(float64_t __a) { return vcvtx_f32_f64((float64x2_t){__a})[0]; }
+__BADC_INTRIN float32_t vrecpxs_f32(float32_t __a) { return __builtin_neon_frecpx_2s((float32x2_t){__a})[0]; }
+__BADC_INTRIN float64_t vrecpxd_f64(float64_t __a) { return __builtin_neon_frecpx_d((float64x1_t){__a})[0]; }
 
 /* The scalar FEAT_RDM forms by lane: lane 0 of the vector ones. */
 #define vqrdmlahh_lane_s16(__a, __b, __v, __n) (vqrdmlah_lane_s16((int16x4_t){__a}, (int16x4_t){__b}, __v, __n)[0])

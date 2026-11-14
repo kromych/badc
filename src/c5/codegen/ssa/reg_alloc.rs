@@ -728,6 +728,15 @@ fn x86_two_address(inst: &Inst) -> [Option<ValueId>; 2] {
         Inst::Select { a, b, kind, .. } if !matches!(kind, LoadKind::F32 | LoadKind::F64) => {
             return [Some(a), Some(b)];
         }
+        // A three-source SIMD form accumulates into its first operand.
+        Inst::SimdVal { op, ref args, .. }
+            if matches!(
+                crate::c5::simd::get(op).form,
+                crate::c5::simd::Form::Vvv | crate::c5::simd::Form::VvvI
+            ) =>
+        {
+            return [args.first().copied(), None];
+        }
         _ => return [None; 2],
     };
     let fits = |k: i64| i32::try_from(k).is_ok();

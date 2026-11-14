@@ -7,7 +7,7 @@
 //! through their addresses and writes the result through the destination's;
 //! under `-O` they are values in xmm registers.
 
-use super::simd::{Cvt, FOp};
+use super::simd::{Addend, Cvt, FOp};
 pub(crate) use super::simd::{Form, Ret, Sem, SimdOp};
 
 const fn op(
@@ -468,6 +468,32 @@ pub(crate) const OPS: &[SimdOp] = &[
     op256("__builtin_ia32_vpdpbusds256", "vpdpbusds", Form::Vvv, Ret::V8si, Sem::DotBytes(true), 0),
     op256("__builtin_ia32_vpdpwssd256", "vpdpwssd", Form::Vvv, Ret::V8si, Sem::DotWords(false), 0),
     op256("__builtin_ia32_vpdpwssds256", "vpdpwssds", Form::Vvv, Ret::V8si, Sem::DotWords(true), 0),
+    // The FMA forms in the 231 encoding, the accumulator first: the product
+    // of the other two, negated by the `n` forms, plus or minus it.
+    op("__builtin_ia32_vfmadd231ps", "vfmadd231ps", Form::Vvv, Ret::V4sf, Sem::FloatFma(4, false, Addend::Plus), 0),
+    op256("__builtin_ia32_vfmadd231ps256", "vfmadd231ps", Form::Vvv, Ret::V8sf, Sem::FloatFma(4, false, Addend::Plus), 0),
+    op("__builtin_ia32_vfmadd231pd", "vfmadd231pd", Form::Vvv, Ret::V2df, Sem::FloatFma(8, false, Addend::Plus), 0),
+    op256("__builtin_ia32_vfmadd231pd256", "vfmadd231pd", Form::Vvv, Ret::V4df, Sem::FloatFma(8, false, Addend::Plus), 0),
+    op("__builtin_ia32_vfmsub231ps", "vfmsub231ps", Form::Vvv, Ret::V4sf, Sem::FloatFma(4, false, Addend::Minus), 0),
+    op256("__builtin_ia32_vfmsub231ps256", "vfmsub231ps", Form::Vvv, Ret::V8sf, Sem::FloatFma(4, false, Addend::Minus), 0),
+    op("__builtin_ia32_vfmsub231pd", "vfmsub231pd", Form::Vvv, Ret::V2df, Sem::FloatFma(8, false, Addend::Minus), 0),
+    op256("__builtin_ia32_vfmsub231pd256", "vfmsub231pd", Form::Vvv, Ret::V4df, Sem::FloatFma(8, false, Addend::Minus), 0),
+    op("__builtin_ia32_vfnmadd231ps", "vfnmadd231ps", Form::Vvv, Ret::V4sf, Sem::FloatFma(4, true, Addend::Plus), 0),
+    op256("__builtin_ia32_vfnmadd231ps256", "vfnmadd231ps", Form::Vvv, Ret::V8sf, Sem::FloatFma(4, true, Addend::Plus), 0),
+    op("__builtin_ia32_vfnmadd231pd", "vfnmadd231pd", Form::Vvv, Ret::V2df, Sem::FloatFma(8, true, Addend::Plus), 0),
+    op256("__builtin_ia32_vfnmadd231pd256", "vfnmadd231pd", Form::Vvv, Ret::V4df, Sem::FloatFma(8, true, Addend::Plus), 0),
+    op("__builtin_ia32_vfnmsub231ps", "vfnmsub231ps", Form::Vvv, Ret::V4sf, Sem::FloatFma(4, true, Addend::Minus), 0),
+    op256("__builtin_ia32_vfnmsub231ps256", "vfnmsub231ps", Form::Vvv, Ret::V8sf, Sem::FloatFma(4, true, Addend::Minus), 0),
+    op("__builtin_ia32_vfnmsub231pd", "vfnmsub231pd", Form::Vvv, Ret::V2df, Sem::FloatFma(8, true, Addend::Minus), 0),
+    op256("__builtin_ia32_vfnmsub231pd256", "vfnmsub231pd", Form::Vvv, Ret::V4df, Sem::FloatFma(8, true, Addend::Minus), 0),
+    op("__builtin_ia32_vfmaddsub231ps", "vfmaddsub231ps", Form::Vvv, Ret::V4sf, Sem::FloatFma(4, false, Addend::MinusEven), 0),
+    op256("__builtin_ia32_vfmaddsub231ps256", "vfmaddsub231ps", Form::Vvv, Ret::V8sf, Sem::FloatFma(4, false, Addend::MinusEven), 0),
+    op("__builtin_ia32_vfmaddsub231pd", "vfmaddsub231pd", Form::Vvv, Ret::V2df, Sem::FloatFma(8, false, Addend::MinusEven), 0),
+    op256("__builtin_ia32_vfmaddsub231pd256", "vfmaddsub231pd", Form::Vvv, Ret::V4df, Sem::FloatFma(8, false, Addend::MinusEven), 0),
+    op("__builtin_ia32_vfmsubadd231ps", "vfmsubadd231ps", Form::Vvv, Ret::V4sf, Sem::FloatFma(4, false, Addend::MinusOdd), 0),
+    op256("__builtin_ia32_vfmsubadd231ps256", "vfmsubadd231ps", Form::Vvv, Ret::V8sf, Sem::FloatFma(4, false, Addend::MinusOdd), 0),
+    op("__builtin_ia32_vfmsubadd231pd", "vfmsubadd231pd", Form::Vvv, Ret::V2df, Sem::FloatFma(8, false, Addend::MinusOdd), 0),
+    op256("__builtin_ia32_vfmsubadd231pd256", "vfmsubadd231pd", Form::Vvv, Ret::V4df, Sem::FloatFma(8, false, Addend::MinusOdd), 0),
     // The AVX-512 opmask forms: compares into a mask, blends and the masked
     // transfers, the mask an integer the lowering moves into k1; the
     // transfers at each vector length (AVX512VL), by lane width.

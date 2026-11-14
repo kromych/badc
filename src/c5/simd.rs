@@ -425,9 +425,10 @@ pub(crate) enum Sem {
     /// A floating comparison by a fixed predicate, numbered as
     /// [`Sem::FloatCmp`]'s immediate (`fcmeq` 0, `fcmge` 13, `fcmgt` 14).
     FloatRel(u8, u8),
-    /// The accumulator plus, or minus when `true`, the product of the other
-    /// two operands, rounded once (`fmla`, `fmls`).
-    FloatFma(u8, bool),
+    /// The product of the second and third operands, negated when `true`,
+    /// plus the accumulator with the sign [`Addend`] gives each lane, rounded
+    /// once (`fmla`, `fmls`, `vfmadd231ps` and the other FMA forms).
+    FloatFma(u8, bool, Addend),
     /// Lanes of the source width, signed when the first flag is set, taken
     /// from the low half of their 16 bytes or from the high half when the
     /// second is: `op` of each pair into a lane twice as wide (`saddl`,
@@ -608,6 +609,17 @@ pub(crate) enum LongOp {
     SatDoublingMulSub,
 }
 
+/// The sign of the accumulator in each lane of [`Sem::FloatFma`]: added,
+/// subtracted, or subtracted in the even or in the odd lanes only
+/// (`vfmaddsub`, `vfmsubadd`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum Addend {
+    Plus,
+    Minus,
+    MinusEven,
+    MinusOdd,
+}
+
 /// How a narrowing form fits a lane into half its width: the low bits, or
 /// saturated to the signed or the unsigned range, from a signed or (`Uns`)
 /// unsigned lane.
@@ -761,6 +773,12 @@ pub(crate) trait FloatEnv {
     fn widen(&mut self, a: u64) -> u64;
     /// `a * b + c` rounded once.
     fn fma(&mut self, a: u64, b: u64, c: u64, single: bool) -> u64;
+    /// Whether a NaN operand a fused multiply-add negates propagates with
+    /// its sign flipped, as AArch64's FPNeg does before the operation;
+    /// x86-64 propagates the NaN operand unchanged.
+    fn negates_nan(&self) -> bool {
+        true
+    }
     /// A `double` narrowed to a `float` rounding to odd: toward zero, with
     /// the low bit of an inexact result set; a NaN quieted, with invalid for
     /// a signaling one.
@@ -2848,18 +2866,23 @@ pub(crate) fn eval_float_acc(
     (acc, a, b): (&[u8; 16], &[u8; 16], &[u8; 16]),
     bytes: usize,
 ) -> Option<[u8; 16]> {
-    let Sem::FloatFma(w, negate) = sem else {
+    let Sem::FloatFma(w, negate, addend) = sem else {
         return None;
     };
     let mut o = *acc;
     for i in 0..bytes / w as usize {
-        let x = flane(a, w, i) ^ if negate { 1 << 63 } else { 0 };
-        set_flane(
-            &mut o,
-            w,
-            i,
-            env.fma(x, flane(b, w, i), flane(acc, w, i), w == 4),
-        );
+        let minus = match addend {
+            Addend::Plus => false,
+            Addend::Minus => true,
+            Addend::MinusEven => i % 2 == 0,
+            Addend::MinusOdd => i % 2 == 1,
+        };
+        let flip = |x: u64, neg: bool| match neg && (env.negates_nan() || !is_nan(x)) {
+            true => x ^ 1 << 63,
+            false => x,
+        };
+        let (x, c) = (flip(flane(a, w, i), negate), flip(flane(acc, w, i), minus));
+        set_flane(&mut o, w, i, env.fma(x, flane(b, w, i), c, w == 4));
     }
     Some(o)
 }

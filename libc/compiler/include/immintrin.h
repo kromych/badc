@@ -1314,21 +1314,19 @@ __BADC_INTRIN void _mm256_zeroupper(void) {
 __BADC_INTRIN void _mm256_zeroall(void) {
 }
 
-/* FMA3: each lane rounds once, as fma does; the subtracting and negating
-** forms negate an operand, and the scalar forms keep the first operand's
-** upper lanes. */
-#define __BADC_FMA(name, ty, n, fma, x, y, z)                                  \
-    static inline ty name(ty __A, ty __B, ty __C) {                           \
-        ty __r;                                                               \
-        for (int __i = 0; __i < n; __i++)                                     \
-            __r[__i] = fma(x __A[__i], __B[__i], y __C[__i]);                 \
-        return __r;                                                           \
+/* FMA3: each lane rounds once. The packed forms are the 231 encoding,
+** the accumulator first; the scalar forms keep the first operand's upper
+** lanes. */
+#define __BADC_FMA(name, ty, vty, builtin)                                    \
+    __BADC_INTRIN ty name(ty __A, ty __B, ty __C) {                           \
+        return (ty)builtin((vty)__C, (vty)__A, (vty)__B);                     \
     }
-#define __BADC_FMA_ALL(op, x, y)                                               \
-    __BADC_FMA(_mm_##op##_ps, __m128, 4, __builtin_fmaf, x, y, )               \
-    __BADC_FMA(_mm_##op##_pd, __m128d, 2, __builtin_fma, x, y, )               \
-    __BADC_FMA(_mm256_##op##_ps, __m256, 8, __builtin_fmaf, x, y, )            \
-    __BADC_FMA(_mm256_##op##_pd, __m256d, 4, __builtin_fma, x, y, )            \
+#define __BADC_FMA_PACKED(op)                                                 \
+    __BADC_FMA(_mm_##op##_ps, __m128, __v4sf, __builtin_ia32_v##op##231ps)    \
+    __BADC_FMA(_mm_##op##_pd, __m128d, __v2df, __builtin_ia32_v##op##231pd)   \
+    __BADC_FMA(_mm256_##op##_ps, __m256, __v8sf, __builtin_ia32_v##op##231ps256) \
+    __BADC_FMA(_mm256_##op##_pd, __m256d, __v4df, __builtin_ia32_v##op##231pd256)
+#define __BADC_FMA_SCALAR(op, x, y)                                           \
     static inline __m128 _mm_##op##_ss(__m128 __A, __m128 __B, __m128 __C) {  \
         __A[0] = __builtin_fmaf(x __A[0], __B[0], y __C[0]);                  \
         return __A;                                                           \
@@ -1337,31 +1335,19 @@ __BADC_INTRIN void _mm256_zeroall(void) {
         __A[0] = __builtin_fma(x __A[0], __B[0], y __C[0]);                   \
         return __A;                                                           \
     }
-__BADC_FMA_ALL(fmadd, +, +)
-__BADC_FMA_ALL(fmsub, +, -)
-__BADC_FMA_ALL(fnmadd, -, +)
-__BADC_FMA_ALL(fnmsub, -, -)
-#undef __BADC_FMA_ALL
+__BADC_FMA_PACKED(fmadd)
+__BADC_FMA_PACKED(fmsub)
+__BADC_FMA_PACKED(fnmadd)
+__BADC_FMA_PACKED(fnmsub)
+__BADC_FMA_PACKED(fmaddsub)
+__BADC_FMA_PACKED(fmsubadd)
+__BADC_FMA_SCALAR(fmadd, +, +)
+__BADC_FMA_SCALAR(fmsub, +, -)
+__BADC_FMA_SCALAR(fnmadd, -, +)
+__BADC_FMA_SCALAR(fnmsub, -, -)
+#undef __BADC_FMA_SCALAR
+#undef __BADC_FMA_PACKED
 #undef __BADC_FMA
-
-/* FMADDSUB subtracts on the even lanes and adds on the odd; FMSUBADD the
-** reverse. */
-#define __BADC_FMA_ALT(name, ty, n, fma, even)                                 \
-    static inline ty name(ty __A, ty __B, ty __C) {                           \
-        ty __r;                                                               \
-        for (int __i = 0; __i < n; __i++)                                     \
-            __r[__i] = fma(__A[__i], __B[__i], (__i & 1) == even ? __C[__i] : -__C[__i]); \
-        return __r;                                                           \
-    }
-__BADC_FMA_ALT(_mm_fmaddsub_ps, __m128, 4, __builtin_fmaf, 1)
-__BADC_FMA_ALT(_mm_fmaddsub_pd, __m128d, 2, __builtin_fma, 1)
-__BADC_FMA_ALT(_mm256_fmaddsub_ps, __m256, 8, __builtin_fmaf, 1)
-__BADC_FMA_ALT(_mm256_fmaddsub_pd, __m256d, 4, __builtin_fma, 1)
-__BADC_FMA_ALT(_mm_fmsubadd_ps, __m128, 4, __builtin_fmaf, 0)
-__BADC_FMA_ALT(_mm_fmsubadd_pd, __m128d, 2, __builtin_fma, 0)
-__BADC_FMA_ALT(_mm256_fmsubadd_ps, __m256, 8, __builtin_fmaf, 0)
-__BADC_FMA_ALT(_mm256_fmsubadd_pd, __m256d, 4, __builtin_fma, 0)
-#undef __BADC_FMA_ALT
 
 __BADC_INTRIN int _rdrand16_step(unsigned short *__P) {
     return __builtin_ia32_rdrand16_step(__P);

@@ -16,7 +16,7 @@ pub(super) fn emit_x86_simd(
     use crate::c5::ir::AsmRegSize;
     use crate::c5::simd;
     use crate::c5::simd::Form;
-    if simd::get(op).bytes >= 32 || simd::get(op).form.is_opmask() {
+    if wide_lowering(simd::get(op)) {
         return emit_x86_simd_wide(code, op, imm, args, alloc, frame);
     }
     let dst_x: u8 = frame.fp_scratch[1];
@@ -256,6 +256,13 @@ pub(super) fn emit_x86_simd(
     } else {
         Ok(())
     }
+}
+
+/// Whether `row` is emitted by the VEX and EVEX lowering: a 32- or 64-byte
+/// form, an opmask one, or a three-source one, which has no SSE encoding.
+fn wide_lowering(row: &crate::c5::x86_simd::SimdOp) -> bool {
+    use crate::c5::simd::Form;
+    row.bytes >= 32 || row.form.is_opmask() || matches!(row.form, Form::Vvv | Form::VvvI)
 }
 
 /// `dst = a op b` for the two-operand SSE instruction `mnem`, with its
@@ -504,7 +511,7 @@ pub(super) fn emit_x86_simd_val(
     use crate::c5::simd;
     use crate::c5::simd::Form;
     let row = simd::get(op);
-    if row.bytes >= 32 || row.form.is_opmask() {
+    if wide_lowering(row) {
         return emit_x86_simd_val_wide(code, op, imm, args, dst, alloc, frame);
     }
     let (src_x, dst_x) = (frame.fp_scratch[0], frame.fp_scratch[1]);

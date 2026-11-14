@@ -528,6 +528,35 @@ fn the_interpreter_runs_the_builtins() {
     );
 }
 
+/// The FMA3 forms of `<immintrin.h>` are rows in the 231 encoding, the
+/// accumulator first, which the interpreter evaluates as the instructions:
+/// the hashes `avx_floating_and_fma_follow_the_sdm` recorded on x86-64
+/// hardware in each rounding direction, and a NaN operand of a negating
+/// form propagated with its sign.
+#[test]
+fn the_fma_forms_are_rows_the_interpreter_runs() {
+    for (name, mnem) in [
+        ("__builtin_ia32_vfmadd231ps256", "vfmadd231ps"),
+        ("__builtin_ia32_vfnmsub231pd", "vfnmsub231pd"),
+        ("__builtin_ia32_vfmsubadd231ps", "vfmsubadd231ps"),
+    ] {
+        let row = x86_simd::OPS.iter().find(|r| r.name == name).expect(name);
+        assert!(row.mnem == mnem && row.form == simd::Form::Vvv, "{name}");
+    }
+    for fixture in [
+        "avx_floating_and_fma_follow_the_sdm.c",
+        "x86_fma_nan_operands_keep_their_sign.c",
+    ] {
+        let program =
+            super::compile_str_bare_for(&super::load_fixture(fixture), crate::Target::LinuxX64);
+        assert_eq!(
+            super::Vm::new(program).run().expect("interpreted run"),
+            0,
+            "{fixture} in the interpreter"
+        );
+    }
+}
+
 /// `<pmmintrin.h>` and the `<mmintrin.h>` it reaches give each MMX and SSE3
 /// operation the result the SDM defines for its instruction, saturation,
 /// out-of-range shift counts and the pair-sum wrap included, as the

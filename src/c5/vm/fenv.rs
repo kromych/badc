@@ -973,6 +973,10 @@ impl crate::c5::simd::FloatEnv for FpEnv {
         self.fma(a, b, c, if single { BINARY32 } else { BINARY64 })
     }
 
+    fn negates_nan(&self) -> bool {
+        self.target.is_aarch64()
+    }
+
     fn round_to_integral(&mut self, a: u64, to: RoundTo, exact: bool) -> u64 {
         self.round_integral_to(a, to, exact)
     }

@@ -7,7 +7,7 @@
 //! between the vector types of one width, which reinterprets the bits.
 
 use super::simd::{
-    AcrossOp, Cvt, FOp, Form, LongOp, NarrowKind, PermOp, Ret, RoundTo, Sem, Sha1F, SimdOp,
+    AcrossOp, Addend, Cvt, FOp, Form, LongOp, NarrowKind, PermOp, Ret, RoundTo, Sem, Sha1F, SimdOp,
 };
 
 /// The row of `mnem` over `bytes`-byte vectors of `ret`'s lanes.
@@ -352,8 +352,8 @@ pub(crate) const OPS: &[SimdOp] = table! {
     "fcmeq" Vv FloatRel (0): f2s f4s f2d;
     "fcmge" Vv FloatRel (13): f2s f4s f2d;
     "fcmgt" Vv FloatRel (14): f2s f4s f2d;
-    "fmla" Vvv FloatFma (false): f2s f4s f2d;
-    "fmls" Vvv FloatFma (true): f2s f4s f2d;
+    "fmla" Vvv FloatFma (false, Addend::Plus): f2s f4s f2d;
+    "fmls" Vvv FloatFma (true, Addend::Plus): f2s f4s f2d;
     "frecpe" V Estimate (false): f2s f4s fd f2d;
     "frsqrte" V Estimate (true): f2s f4s fd f2d;
     "frecps" Vv Step (false): f2s f4s fd f2d;
@@ -805,22 +805,22 @@ const NARROW: &[SimdOp] = &[
     elem("__builtin_neon_fmulx_laneq_2d", "fmulx", Form::VvI, Ret::V2df, &Sem::Float(FOp::MulX, 8, false), (8, 16, 16)),
     elem("__builtin_neon_fmulx_lane_d", "fmulx", Form::VvI, Ret::V1df, &Sem::Float(FOp::MulX, 8, false), (8, 8, 8)),
     elem("__builtin_neon_fmulx_laneq_d", "fmulx", Form::VvI, Ret::V1df, &Sem::Float(FOp::MulX, 8, false), (8, 8, 16)),
-    elem("__builtin_neon_fmla_lane_2s", "fmla", Form::VvvI, Ret::V2sf, &Sem::FloatFma(4, false), (4, 8, 8)),
-    elem("__builtin_neon_fmla_laneq_2s", "fmla", Form::VvvI, Ret::V2sf, &Sem::FloatFma(4, false), (4, 8, 16)),
-    elem("__builtin_neon_fmla_lane_4s", "fmla", Form::VvvI, Ret::V4sf, &Sem::FloatFma(4, false), (4, 16, 8)),
-    elem("__builtin_neon_fmla_laneq_4s", "fmla", Form::VvvI, Ret::V4sf, &Sem::FloatFma(4, false), (4, 16, 16)),
-    elem("__builtin_neon_fmla_lane_2d", "fmla", Form::VvvI, Ret::V2df, &Sem::FloatFma(8, false), (8, 16, 8)),
-    elem("__builtin_neon_fmla_laneq_2d", "fmla", Form::VvvI, Ret::V2df, &Sem::FloatFma(8, false), (8, 16, 16)),
-    elem("__builtin_neon_fmla_lane_d", "fmla", Form::VvvI, Ret::V1df, &Sem::FloatFma(8, false), (8, 8, 8)),
-    elem("__builtin_neon_fmla_laneq_d", "fmla", Form::VvvI, Ret::V1df, &Sem::FloatFma(8, false), (8, 8, 16)),
-    elem("__builtin_neon_fmls_lane_2s", "fmls", Form::VvvI, Ret::V2sf, &Sem::FloatFma(4, true), (4, 8, 8)),
-    elem("__builtin_neon_fmls_laneq_2s", "fmls", Form::VvvI, Ret::V2sf, &Sem::FloatFma(4, true), (4, 8, 16)),
-    elem("__builtin_neon_fmls_lane_4s", "fmls", Form::VvvI, Ret::V4sf, &Sem::FloatFma(4, true), (4, 16, 8)),
-    elem("__builtin_neon_fmls_laneq_4s", "fmls", Form::VvvI, Ret::V4sf, &Sem::FloatFma(4, true), (4, 16, 16)),
-    elem("__builtin_neon_fmls_lane_2d", "fmls", Form::VvvI, Ret::V2df, &Sem::FloatFma(8, true), (8, 16, 8)),
-    elem("__builtin_neon_fmls_laneq_2d", "fmls", Form::VvvI, Ret::V2df, &Sem::FloatFma(8, true), (8, 16, 16)),
-    elem("__builtin_neon_fmls_lane_d", "fmls", Form::VvvI, Ret::V1df, &Sem::FloatFma(8, true), (8, 8, 8)),
-    elem("__builtin_neon_fmls_laneq_d", "fmls", Form::VvvI, Ret::V1df, &Sem::FloatFma(8, true), (8, 8, 16)),
+    elem("__builtin_neon_fmla_lane_2s", "fmla", Form::VvvI, Ret::V2sf, &Sem::FloatFma(4, false, Addend::Plus), (4, 8, 8)),
+    elem("__builtin_neon_fmla_laneq_2s", "fmla", Form::VvvI, Ret::V2sf, &Sem::FloatFma(4, false, Addend::Plus), (4, 8, 16)),
+    elem("__builtin_neon_fmla_lane_4s", "fmla", Form::VvvI, Ret::V4sf, &Sem::FloatFma(4, false, Addend::Plus), (4, 16, 8)),
+    elem("__builtin_neon_fmla_laneq_4s", "fmla", Form::VvvI, Ret::V4sf, &Sem::FloatFma(4, false, Addend::Plus), (4, 16, 16)),
+    elem("__builtin_neon_fmla_lane_2d", "fmla", Form::VvvI, Ret::V2df, &Sem::FloatFma(8, false, Addend::Plus), (8, 16, 8)),
+    elem("__builtin_neon_fmla_laneq_2d", "fmla", Form::VvvI, Ret::V2df, &Sem::FloatFma(8, false, Addend::Plus), (8, 16, 16)),
+    elem("__builtin_neon_fmla_lane_d", "fmla", Form::VvvI, Ret::V1df, &Sem::FloatFma(8, false, Addend::Plus), (8, 8, 8)),
+    elem("__builtin_neon_fmla_laneq_d", "fmla", Form::VvvI, Ret::V1df, &Sem::FloatFma(8, false, Addend::Plus), (8, 8, 16)),
+    elem("__builtin_neon_fmls_lane_2s", "fmls", Form::VvvI, Ret::V2sf, &Sem::FloatFma(4, true, Addend::Plus), (4, 8, 8)),
+    elem("__builtin_neon_fmls_laneq_2s", "fmls", Form::VvvI, Ret::V2sf, &Sem::FloatFma(4, true, Addend::Plus), (4, 8, 16)),
+    elem("__builtin_neon_fmls_lane_4s", "fmls", Form::VvvI, Ret::V4sf, &Sem::FloatFma(4, true, Addend::Plus), (4, 16, 8)),
+    elem("__builtin_neon_fmls_laneq_4s", "fmls", Form::VvvI, Ret::V4sf, &Sem::FloatFma(4, true, Addend::Plus), (4, 16, 16)),
+    elem("__builtin_neon_fmls_lane_2d", "fmls", Form::VvvI, Ret::V2df, &Sem::FloatFma(8, true, Addend::Plus), (8, 16, 8)),
+    elem("__builtin_neon_fmls_laneq_2d", "fmls", Form::VvvI, Ret::V2df, &Sem::FloatFma(8, true, Addend::Plus), (8, 16, 16)),
+    elem("__builtin_neon_fmls_lane_d", "fmls", Form::VvvI, Ret::V1df, &Sem::FloatFma(8, true, Addend::Plus), (8, 8, 8)),
+    elem("__builtin_neon_fmls_laneq_d", "fmls", Form::VvvI, Ret::V1df, &Sem::FloatFma(8, true, Addend::Plus), (8, 8, 16)),
     elem("__builtin_neon_smull_lane_4h", "smull", Form::VvI, Ret::V4si, &Sem::Long(LongOp::Mul, 2, true, false), (2, 8, 8)),
     elem("__builtin_neon_smull_laneq_4h", "smull", Form::VvI, Ret::V4si, &Sem::Long(LongOp::Mul, 2, true, false), (2, 8, 16)),
     elem("__builtin_neon_smull_lane_2s", "smull", Form::VvI, Ret::V2di, &Sem::Long(LongOp::Mul, 4, true, false), (4, 8, 8)),

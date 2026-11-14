@@ -3164,6 +3164,27 @@ void add64(v16si *r, const v16si *a, const v16si *b) { *r = *a + *b; }\n";
     m.finish();
 }
 
+/// An FMA3 intrinsic is its instruction over the whole vector, the result
+/// in the accumulator's register: a step of `y = a * x + y` over 8 floats
+/// is two loads, `vfmadd231ps` and a store. Each took a scalar fused
+/// multiply-add per lane.
+#[test]
+fn an_fma_intrinsic_is_one_instruction() {
+    const SRC: &str = "#include <immintrin.h>\n\
+void axpy(float *y, const float *x, float a, int n) {\n\
+    __m256 va = _mm256_set1_ps(a);\n\
+    for (int i = 0; i + 8 <= n; i += 8)\n\
+        _mm256_storeu_ps(y + i, _mm256_fmadd_ps(va, _mm256_loadu_ps(x + i), _mm256_loadu_ps(y + i)));\n\
+}\n";
+    let insns = x64(SRC, "axpy");
+    // `vfmadd231ps` (0F38 B8, W0) and `vmovaps` (0F 28).
+    let count = |op: u16| insns.iter().filter(|i| i.vex && i.op == op).count();
+    assert!(
+        count(0x38B8) == 1 && count(0x0F28) == 0 && insns.len() <= 18,
+        "x86-64 axpy: {insns:x?}"
+    );
+}
+
 /// An object of a GNU vector type is a vector though no SIMD operation
 /// reads it: copied in from bytes and out through a pointer it is one load
 /// and one store, through an inlined function's result too, and one value

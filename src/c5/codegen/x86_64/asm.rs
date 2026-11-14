@@ -1971,6 +1971,12 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
         ("vfnmadd132pd", true, 0x9C), ("vfnmadd213pd", true, 0xAC), ("vfnmadd231pd", true, 0xBC),
         ("vfnmsub132ps", false, 0x9E), ("vfnmsub213ps", false, 0xAE), ("vfnmsub231ps", false, 0xBE),
         ("vfnmsub132pd", true, 0x9E), ("vfnmsub213pd", true, 0xAE), ("vfnmsub231pd", true, 0xBE),
+        ("vfmaddsub132ps", false, 0x96), ("vfmaddsub213ps", false, 0xA6),
+        ("vfmaddsub231ps", false, 0xB6), ("vfmaddsub132pd", true, 0x96),
+        ("vfmaddsub213pd", true, 0xA6), ("vfmaddsub231pd", true, 0xB6),
+        ("vfmsubadd132ps", false, 0x97), ("vfmsubadd213ps", false, 0xA7),
+        ("vfmsubadd231ps", false, 0xB7), ("vfmsubadd132pd", true, 0x97),
+        ("vfmsubadd213pd", true, 0xA7), ("vfmsubadd231pd", true, 0xB7),
     ];
     if let Some(&(_, w, opcode)) = OPS38.iter().find(|(n, _, _)| *n == name) {
         return Some(Mnemonic::Vex {
@@ -7888,6 +7894,18 @@ mod tests {
         assert_eq!(
             e("vfnmsub132ps", &[xmm(10), xmm(9), xmm(8)]),
             [0xC4, 0x42, 0x31, 0x9E, 0xC2]
+        );
+        assert_eq!(
+            e("vfmaddsub231ps", &[xmm(2), xmm(1), xmm(0)]),
+            [0xC4, 0xE2, 0x71, 0xB6, 0xC2]
+        );
+        assert_eq!(
+            e("vfmsubadd213pd", &[ymm(2), ymm(1), ymm(0)]),
+            [0xC4, 0xE2, 0xF5, 0xA7, 0xC2]
+        );
+        assert_eq!(
+            e("vfmsubadd231ps", &[ymm(10), ymm(9), ymm(8)]),
+            [0xC4, 0x42, 0x35, 0xB7, 0xC2]
         );
         assert_eq!(
             e("vfmadd231pd", &[mem(8), ymm(1), ymm(0)]),

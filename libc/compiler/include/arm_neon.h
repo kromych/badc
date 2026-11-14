@@ -23,7 +23,8 @@
  * vsubl vaddw vsubw vmull vmlal vmlsl vabdl vabal with their _high forms, vaddv vaddlv
  * vmaxv vminv. Floating: vadd vsub vmul vdiv vmax vmin vabs vneg vsqrt vfma
  * vfms vrecpe vrecps vrsqrte vrsqrts with their scalar forms, the
- * compares, and the conversions to
+ * compares, those against zero (vceqz ... vcltz, integer too, with their
+ * scalar forms), and the conversions to
  * and from the integers of one width (truncating) and between single and
  * double. Also vrecpe_u32, vrsqrte_u32, vmul_p8, vqtbl1q_u8, vqtbx1q_u8, the FEAT_AES rounds,
  * vmull_p8, vmull_high_p8, vmull_p64, vmull_high_p64, the SHA-1, SHA-256, SHA-512, SHA3, SM3 and
@@ -31,7 +32,7 @@
  *
  * Not provided: float16, bfloat16, the lane-indexed and by-scalar forms,
  * the doubling multiplies, the saturating narrowing shifts, vqshlu_n,
- * vshll_n, vpadal, compares against zero, the other structure
+ * vshll_n, vpadal, the other structure
  * loads, stores and table lookups, the floating pairwise, across-lane,
  * absolute-difference, rounding and maxnum forms, the fixed-point and
  * rounding-mode conversions and the dot products.
@@ -1213,6 +1214,33 @@ __BADC_NEON_CMP(vcge, __BADC_NEON_B2, __builtin_neon_fcmge, >=)
 __BADC_NEON_CMP(vcgt, __BADC_NEON_B2, __builtin_neon_fcmgt, >)
 __BADC_NEON_CMP(vcle, __BADC_NEON_B2R, __builtin_neon_fcmge, <=)
 __BADC_NEON_CMP(vclt, __BADC_NEON_B2R, __builtin_neon_fcmgt, <)
+
+/* Compares against zero: all-ones lanes where the relation to 0 holds.
+ * The scalar forms are lane 0 of the vector ones. */
+#define __BADC_NEON_F_CMPZ(op, stem, sfx, k, E, D, Q, AD, AQ, UD, UQ, ...) \
+    __BADC_NEON_B1(op##_##sfx, UD, D, s, stem, stem, AD)                  \
+    __BADC_NEON_B1(op##q_##sfx, UQ, Q, s, stem, stem, AQ)
+#define __BADC_NEON_CMPZ(op, istem, fstem)                                \
+    __BADC_NEON_SINT(__BADC_NEON_F_CMPZ, op, istem)                       \
+    __BADC_NEON_R_f32(__BADC_NEON_F_CMPZ, op, fstem)                      \
+    __BADC_NEON_R_f64(__BADC_NEON_F_CMPZ, op, fstem)                      \
+    __BADC_INTRIN uint64_t op##d_s64(int64_t __a) { return op##_s64((int64x1_t){__a})[0]; } \
+    __BADC_INTRIN uint32_t op##s_f32(float32_t __a) { return op##_f32((float32x2_t){__a})[0]; } \
+    __BADC_INTRIN uint64_t op##d_f64(float64_t __a) { return op##_f64((float64x1_t){__a})[0]; }
+__BADC_NEON_CMPZ(vceqz, __builtin_neon_cmeqz, __builtin_neon_fcmeqz)
+__BADC_NEON_CMPZ(vcgez, __builtin_neon_cmgez, __builtin_neon_fcmgez)
+__BADC_NEON_CMPZ(vcgtz, __builtin_neon_cmgtz, __builtin_neon_fcmgtz)
+__BADC_NEON_CMPZ(vclez, __builtin_neon_cmlez, __builtin_neon_fcmlez)
+__BADC_NEON_CMPZ(vcltz, __builtin_neon_cmltz, __builtin_neon_fcmltz)
+#define __BADC_NEON_F_CMPZU(_, sfx, k, E, D, Q, AD, AQ, UD, UQ, ...)      \
+    __BADC_NEON_F_CMPZ(vceqz, __builtin_neon_cmeqz, sfx, k, E, D, Q, AD, AQ, UD, UQ)
+__BADC_NEON_R_u8(__BADC_NEON_F_CMPZU, _)
+__BADC_NEON_R_u16(__BADC_NEON_F_CMPZU, _)
+__BADC_NEON_R_u32(__BADC_NEON_F_CMPZU, _)
+__BADC_NEON_R_u64(__BADC_NEON_F_CMPZU, _)
+__BADC_NEON_R_p8(__BADC_NEON_F_CMPZU, _)
+__BADC_NEON_R_p64(__BADC_NEON_F_CMPZU, _)
+__BADC_INTRIN uint64_t vceqzd_u64(uint64_t __a) { return vceqz_u64((uint64x1_t){__a})[0]; }
 
 /* Integer <-> floating lanes of one width; to integer truncates toward
  * zero and saturates. */

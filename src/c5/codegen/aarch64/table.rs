@@ -944,6 +944,49 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | ((rn as u32) << 5)
             | (rd as u32));
     }
+    // SIMD compares with zero `Vd.T, Vn.T, #0` (`#0.0` for the FP forms), and
+    // the scalar `Rd, Rn, #0` over the d view (s or d for FP): size at bit 22,
+    // or sz for FP, Q at 30, the scalar form at bits 30 and 28.
+    if let Some((base, fp)) = match mnemonic {
+        "cmgt" => Some((0x0E20_8800u32, false)),
+        "cmeq" => Some((0x0E20_9800, false)),
+        "cmlt" => Some((0x0E20_A800, false)),
+        "cmge" => Some((0x2E20_8800, false)),
+        "cmle" => Some((0x2E20_9800, false)),
+        "fcmgt" => Some((0x0EA0_C800, true)),
+        "fcmeq" => Some((0x0EA0_D800, true)),
+        "fcmlt" => Some((0x0EA0_E800, true)),
+        "fcmge" => Some((0x2EA0_C800, true)),
+        "fcmle" => Some((0x2EA0_D800, true)),
+        _ => None,
+    } && let [dst, src, Opnd::Imm(0)] = *ops
+    {
+        let field = |size: u8| match fp {
+            true => u32::from(size == 3) << 22,
+            false => u32::from(size) << 22,
+        };
+        return match (dst, src) {
+            (
+                Opnd::VecReg { num: rd, size, q },
+                Opnd::VecReg {
+                    num: rn,
+                    size: s1,
+                    q: q1,
+                },
+            ) if size == s1 && q == q1 && (size < 3 || q) && (!fp || size >= 2) => Ok(base
+                | (u32::from(q) << 30)
+                | field(size)
+                | (u32::from(rn) << 5)
+                | u32::from(rd)),
+            (Opnd::VReg { num: rd, is_d }, Opnd::VReg { num: rn, is_d: d1 })
+                if is_d == d1 && (fp || is_d) =>
+            {
+                let size = if is_d { 3 } else { 2 };
+                Ok(base | 0x5000_0000 | field(size) | (u32::from(rn) << 5) | u32::from(rd))
+            }
+            _ => Err(format!("inline asm: bad `{mnemonic}` compare with zero")),
+        };
+    }
     // SIMD three-same integer ops `Vd.T, Vn.T, Vm.T`, one arrangement. size at
     // bit 22, Q at 30, U at 29, the opcode in the base word; `lo..=hi` bounds
     // the element size (mul/min/max/mla/abd have no 64-bit form). GP add/sub/mul

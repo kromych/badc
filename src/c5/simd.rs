@@ -386,6 +386,10 @@ pub(crate) enum Sem {
     CmpHs(u8),
     /// A lane of ones where `a & b` is nonzero (`cmtst`).
     CmpTst(u8),
+    /// A lane of ones where signed `a <= b` or `a < b` holds, the forms
+    /// against zero only (`cmle`, `cmlt` #0).
+    CmpLe(u8),
+    CmpLt(u8),
     /// The larger or the smaller lane of each adjacent pair, signed when
     /// `true`, the first operand's pairs low (`smaxp`, `uminp`).
     PairMax(u8, bool),
@@ -760,6 +764,21 @@ impl Form {
 }
 
 impl SimdOp {
+    /// Whether the row compares its one source with zero, which the
+    /// instruction names as its `#0` operand (`cmeq`, `fcmlt` #0).
+    pub(crate) fn compares_with_zero(&self) -> bool {
+        self.form == Form::V
+            && matches!(
+                self.sem,
+                Sem::CmpEq(_)
+                    | Sem::CmpGe(_)
+                    | Sem::CmpGt(_)
+                    | Sem::CmpLe(_)
+                    | Sem::CmpLt(_)
+                    | Sem::FloatRel(..)
+            )
+    }
+
     /// Width in bytes of vector source `i`, counted from 0 without the
     /// destination: `bytes`, `int_width` for a part, or the wide first
     /// operand of a form that adds narrow lanes to it or accumulates
@@ -1217,11 +1236,18 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
                 o[i] = a[i] | !b[i];
             }
         }
-        Sem::CmpGe(w) | Sem::CmpHi(w) | Sem::CmpHs(w) | Sem::CmpTst(w) => {
+        Sem::CmpGe(w)
+        | Sem::CmpHi(w)
+        | Sem::CmpHs(w)
+        | Sem::CmpTst(w)
+        | Sem::CmpLe(w)
+        | Sem::CmpLt(w) => {
             for i in 0..16 / w as usize {
                 let (x, y) = (lane(a, w, i), lane(b, w, i));
                 let holds = match sem {
                     Sem::CmpGe(_) => slane(a, w, i) >= slane(b, w, i),
+                    Sem::CmpLe(_) => slane(a, w, i) <= slane(b, w, i),
+                    Sem::CmpLt(_) => slane(a, w, i) < slane(b, w, i),
                     Sem::CmpHi(_) => x > y,
                     Sem::CmpHs(_) => x >= y,
                     _ => x & y != 0,

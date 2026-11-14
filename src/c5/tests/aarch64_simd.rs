@@ -845,6 +845,37 @@ fn the_estimates_and_steps_are_rows() {
     }
 }
 
+/// The compares against zero are rows of the `#0` forms: over seeded lanes
+/// the interpreter's results hash to the hardware's, and each is one
+/// instruction under -O, a 64-bit lane the scalar d-register form.
+#[cfg(feature = "full")]
+#[test]
+fn the_compares_against_zero_are_rows() {
+    let src = super::load_fixture("arm_neon_compares_against_zero_on_seeded_lanes.c");
+    let program = super::compile_str_bare_for(&src, crate::Target::LinuxAarch64);
+    assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 0);
+    const OPS: &str = "#include <arm_neon.h>\n\
+        uint32x4_t a(int32x4_t x) { return vceqzq_s32(x); }\n\
+        uint8x8_t b(int8x8_t x) { return vcltz_s8(x); }\n\
+        uint64x1_t c(int64x1_t x) { return vclez_s64(x); }\n\
+        uint16x8_t d(int16x8_t x) { return vcgtzq_s16(x); }\n\
+        uint64x2_t e(float64x2_t x) { return vcgezq_f64(x); }\n\
+        uint32x4_t f(float32x4_t x) { return vclezq_f32(x); }\n\
+        uint64x1_t g(float64x1_t x) { return vcltz_f64(x); }\n";
+    for (name, want) in [
+        ("a", 0x4EA0_9800u32),
+        ("b", 0x0E20_A800),
+        ("c", 0x7EE0_9800),
+        ("d", 0x4E60_8800),
+        ("e", 0x6EE0_C800),
+        ("f", 0x6EA0_D800),
+        ("g", 0x5EE0_E800),
+    ] {
+        let words = super::perf_codegen::a64_at(OPS, name, true);
+        assert_eq!(words, [want, 0xD65F_03C0], "{name}: {words:08x?}");
+    }
+}
+
 /// `vld1`, `vst1`, `vdup_n` and `vld1_dup` are the load, store and
 /// broadcast of their vector under `-O`, as with gcc 16, with no inline asm
 /// between them and the operations that use them: `ldr q`, `str q`,

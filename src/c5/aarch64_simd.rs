@@ -44,123 +44,142 @@ macro_rules! sem {
     };
 }
 
+/// A row's name stem and mnemonic: one literal names both, a pair
+/// `("stem" "mnemonic")` a row whose name differs from its instruction's.
+macro_rules! stem {
+    ($m:literal) => {
+        $m
+    };
+    (($n:literal $m:literal)) => {
+        $n
+    };
+}
+macro_rules! mnem {
+    ($m:literal) => {
+        $m
+    };
+    (($n:literal $m:literal)) => {
+        $m
+    };
+}
+
 /// One row: the arrangement fixes the name suffix, the result type, the
 /// vector width and the lane width.
 macro_rules! arr {
-    ($m:literal, $f:ident, $s:ident, $a:tt, b8) => {
+    ($m:tt, $f:ident, $s:ident, $a:tt, b8) => {
         row(
-            concat!("__builtin_neon_", $m, "_8b"),
-            $m,
+            concat!("__builtin_neon_", stem!($m), "_8b"),
+            mnem!($m),
             Form::$f,
             Ret::V8qi,
             sem!($s, 1, $a),
             8,
         )
     };
-    ($m:literal, $f:ident, $s:ident, $a:tt, b16) => {
+    ($m:tt, $f:ident, $s:ident, $a:tt, b16) => {
         row(
-            concat!("__builtin_neon_", $m, "_16b"),
-            $m,
+            concat!("__builtin_neon_", stem!($m), "_16b"),
+            mnem!($m),
             Form::$f,
             Ret::V16qi,
             sem!($s, 1, $a),
             16,
         )
     };
-    ($m:literal, $f:ident, $s:ident, $a:tt, h4) => {
+    ($m:tt, $f:ident, $s:ident, $a:tt, h4) => {
         row(
-            concat!("__builtin_neon_", $m, "_4h"),
-            $m,
+            concat!("__builtin_neon_", stem!($m), "_4h"),
+            mnem!($m),
             Form::$f,
             Ret::V4hi,
             sem!($s, 2, $a),
             8,
         )
     };
-    ($m:literal, $f:ident, $s:ident, $a:tt, h8) => {
+    ($m:tt, $f:ident, $s:ident, $a:tt, h8) => {
         row(
-            concat!("__builtin_neon_", $m, "_8h"),
-            $m,
+            concat!("__builtin_neon_", stem!($m), "_8h"),
+            mnem!($m),
             Form::$f,
             Ret::V8hi,
             sem!($s, 2, $a),
             16,
         )
     };
-    ($m:literal, $f:ident, $s:ident, $a:tt, s2) => {
+    ($m:tt, $f:ident, $s:ident, $a:tt, s2) => {
         row(
-            concat!("__builtin_neon_", $m, "_2s"),
-            $m,
+            concat!("__builtin_neon_", stem!($m), "_2s"),
+            mnem!($m),
             Form::$f,
             Ret::V2si,
             sem!($s, 4, $a),
             8,
         )
     };
-    ($m:literal, $f:ident, $s:ident, $a:tt, s4) => {
+    ($m:tt, $f:ident, $s:ident, $a:tt, s4) => {
         row(
-            concat!("__builtin_neon_", $m, "_4s"),
-            $m,
+            concat!("__builtin_neon_", stem!($m), "_4s"),
+            mnem!($m),
             Form::$f,
             Ret::V4si,
             sem!($s, 4, $a),
             16,
         )
     };
-    ($m:literal, $f:ident, $s:ident, $a:tt, d1) => {
+    ($m:tt, $f:ident, $s:ident, $a:tt, d1) => {
         row(
-            concat!("__builtin_neon_", $m, "_d"),
-            $m,
+            concat!("__builtin_neon_", stem!($m), "_d"),
+            mnem!($m),
             Form::$f,
             Ret::V1di,
             sem!($s, 8, $a),
             8,
         )
     };
-    ($m:literal, $f:ident, $s:ident, $a:tt, f2s) => {
+    ($m:tt, $f:ident, $s:ident, $a:tt, f2s) => {
         row(
-            concat!("__builtin_neon_", $m, "_2s"),
-            $m,
+            concat!("__builtin_neon_", stem!($m), "_2s"),
+            mnem!($m),
             Form::$f,
             Ret::V2sf,
             sem!($s, 4, $a),
             8,
         )
     };
-    ($m:literal, $f:ident, $s:ident, $a:tt, f4s) => {
+    ($m:tt, $f:ident, $s:ident, $a:tt, f4s) => {
         row(
-            concat!("__builtin_neon_", $m, "_4s"),
-            $m,
+            concat!("__builtin_neon_", stem!($m), "_4s"),
+            mnem!($m),
             Form::$f,
             Ret::V4sf,
             sem!($s, 4, $a),
             16,
         )
     };
-    ($m:literal, $f:ident, $s:ident, $a:tt, fd) => {
+    ($m:tt, $f:ident, $s:ident, $a:tt, fd) => {
         row(
-            concat!("__builtin_neon_", $m, "_d"),
-            $m,
+            concat!("__builtin_neon_", stem!($m), "_d"),
+            mnem!($m),
             Form::$f,
             Ret::V1df,
             sem!($s, 8, $a),
             8,
         )
     };
-    ($m:literal, $f:ident, $s:ident, $a:tt, f2d) => {
+    ($m:tt, $f:ident, $s:ident, $a:tt, f2d) => {
         row(
-            concat!("__builtin_neon_", $m, "_2d"),
-            $m,
+            concat!("__builtin_neon_", stem!($m), "_2d"),
+            mnem!($m),
             Form::$f,
             Ret::V2df,
             sem!($s, 8, $a),
             16,
         )
     };
-    ($m:literal, $f:ident, $s:ident, $a:tt, d2) => {
+    ($m:tt, $f:ident, $s:ident, $a:tt, d2) => {
         row(
-            concat!("__builtin_neon_", $m, "_2d"),
-            $m,
+            concat!("__builtin_neon_", stem!($m), "_2d"),
+            mnem!($m),
             Form::$f,
             Ret::V2di,
             sem!($s, 8, $a),
@@ -210,7 +229,7 @@ macro_rules! widening {
 /// semantics without a lane width, `()` one with only the width, `[op]` a
 /// floating operation.
 macro_rules! table {
-    ($($m:literal $f:ident $s:ident $a:tt : $($w:ident)*;)*) => {
+    ($($m:tt $f:ident $s:ident $a:tt : $($w:ident)*;)*) => {
         &[$($(arr!($m, $f, $s, $a, $w)),*),*]
     };
 }
@@ -304,6 +323,16 @@ pub(crate) const OPS: &[SimdOp] = table! {
     "frsqrts" Vv Step (true): f2s f4s fd f2d;
     "urecpe" V FractionEstimate (false): s2 s4;
     "ursqrte" V FractionEstimate (true): s2 s4;
+    ("cmeqz" "cmeq") V CmpEq (): b8 b16 h4 h8 s2 s4 d1 d2;
+    ("cmgez" "cmge") V CmpGe (): b8 b16 h4 h8 s2 s4 d1 d2;
+    ("cmgtz" "cmgt") V CmpGt (): b8 b16 h4 h8 s2 s4 d1 d2;
+    ("cmlez" "cmle") V CmpLe (): b8 b16 h4 h8 s2 s4 d1 d2;
+    ("cmltz" "cmlt") V CmpLt (): b8 b16 h4 h8 s2 s4 d1 d2;
+    ("fcmeqz" "fcmeq") V FloatRel (0): f2s f4s fd f2d;
+    ("fcmgez" "fcmge") V FloatRel (13): f2s f4s fd f2d;
+    ("fcmgtz" "fcmgt") V FloatRel (14): f2s f4s fd f2d;
+    ("fcmlez" "fcmle") V FloatRel (2): f2s f4s fd f2d;
+    ("fcmltz" "fcmlt") V FloatRel (1): f2s f4s fd f2d;
 };
 
 /// The widening forms, three source widths each.

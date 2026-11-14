@@ -1053,6 +1053,31 @@ fn vector_one_source_counts_and_estimates() {
     assert_eq!(enc("sqneg", &[d(1), d(2)]), 0x7EE0_7841);
     assert_eq!(enc("frecpe", &[d(1), d(2)]), 0x5EE1_D841);
     assert_eq!(enc("urecpe", &[v(1, 2, true), v(2, 2, true)]), 0x4EA1_C841);
+    let z = Opnd::Imm(0);
+    assert_eq!(enc("cmeq", &[v(1, 2, true), v(2, 2, true), z]), 0x4EA0_9841);
+    assert_eq!(
+        enc("cmge", &[v(1, 0, false), v(2, 0, false), z]),
+        0x2E20_8841
+    );
+    assert_eq!(enc("cmgt", &[v(1, 3, true), v(2, 3, true), z]), 0x4EE0_8841);
+    assert_eq!(enc("cmle", &[v(1, 1, true), v(2, 1, true), z]), 0x6E60_9841);
+    assert_eq!(enc("cmlt", &[v(1, 0, true), v(2, 0, true), z]), 0x4E20_A841);
+    assert_eq!(enc("cmlt", &[d(1), d(2), z]), 0x5EE0_A841);
+    assert_eq!(
+        enc("fcmge", &[v(1, 3, true), v(2, 3, true), z]),
+        0x6EE0_C841
+    );
+    assert_eq!(
+        enc("fcmgt", &[v(1, 2, false), v(2, 2, false), z]),
+        0x0EA0_C841
+    );
+    assert_eq!(
+        enc("fcmle", &[v(1, 2, true), v(2, 2, true), z]),
+        0x6EA0_D841
+    );
+    assert_eq!(enc("fcmeq", &[d(1), d(2), z]), 0x5EE0_D841);
+    assert_eq!(enc("fcmlt", &[s(1), s(2), z]), 0x5EA0_E841);
+    assert!(encode("cmeq", &[s(1), s(2), z]).is_err());
     assert_eq!(
         enc("ursqrte", &[v(1, 2, false), v(2, 2, false)]),
         0x2EA1_C841

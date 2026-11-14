@@ -146,6 +146,9 @@ fn encode(row: &SimdOp, regs: &[u8], imm: Option<u8>) -> Result<u32, alloc::stri
         })
         .collect();
     ops.extend(imm.map(|n| Opnd::Imm(i64::from(n))));
+    if row.compares_with_zero() {
+        ops.push(Opnd::Imm(0));
+    }
     table::encode(row.mnem, &ops)
 }
 

@@ -9,7 +9,8 @@ matches the OS ABI.
 The vendored library is trimmed to no external dependencies: HTTP, `file://`,
 and the WebSocket / URL / multi / easy APIs, with the threaded resolver and
 IPv6 on. HTTPS is provided by [Mbed TLS](https://github.com/Mbed-TLS/mbedtls)
-3.6, compiled by badc in its default configuration, when the TLS lane is built
+3.6, compiled by badc in its default configuration less what
+`mbedtls_user_config.h` turns off, when the TLS lane is built
 (`USE_MBEDTLS`); the system-libcurl flavor gets HTTPS from the OS's own TLS
 backend. The other protocols (FTP, SMTP, LDAP, ...) are compiled out via the
 `CURL_DISABLE_*` set.
@@ -34,6 +35,9 @@ TLS's `library/` and `include/` trees in `mbedtls/`. Committed alongside:
   base URL is passed -- an `http(s)://` fetch used by the loopback test.
 * `curl_syslink.h` -- `#pragma dylib` / `#pragma binding` bindings for the
   system-libcurl flavor.
+* `mbedtls_user_config.h` -- Mbed TLS's `MBEDTLS_USER_CONFIG_FILE`: turns
+  off the Armv8-A AES module, whose source requires GCC 6 or later once
+  `__ARM_NEON` is defined, while badc claims GNU C 4.3.
 
 ## Build flavors
 

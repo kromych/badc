@@ -1314,6 +1314,30 @@ fn the_scalar_forms_are_lane_zero_of_the_vector_forms() {
     );
 }
 
+/// `__ARM_NEON` is predefined on AArch64, and code keyed on it takes the
+/// intrinsics: the 128-bit polynomial adds as an exclusive or and loads
+/// and stores whole.
+#[test]
+fn neon_keyed_code_takes_the_intrinsics() {
+    const SRC: &str = "#include <arm_neon.h>\n\
+        #ifndef __ARM_NEON\n#error no NEON\n#endif\n\
+        int main(void) {\n\
+            poly128_t a = vreinterpretq_p128_u64((uint64x2_t){0xf0f0, 3}), b, c;\n\
+            b = vreinterpretq_p128_u64((uint64x2_t){0x0ff0, 5});\n\
+            vstrq_p128(&c, vaddq_p128(a, vldrq_p128(&b)));\n\
+            uint64x2_t r = vreinterpretq_u64_p128(c);\n\
+            return r[0] == 0xff00 && r[1] == 6 ? 0 : 1;\n\
+        }\n";
+    for target in [crate::Target::LinuxAarch64, crate::Target::MacOSAarch64] {
+        let program = super::compile_str_bare_for(SRC, target);
+        assert_eq!(
+            super::Vm::new(program).run().expect("interpreted run"),
+            0,
+            "{target:?}"
+        );
+    }
+}
+
 /// `vld1`, `vst1`, `vdup_n` and `vld1_dup` are the load, store and
 /// broadcast of their vector under `-O`, as with gcc 16, with no inline asm
 /// between them and the operations that use them: `ldr q`, `str q`,

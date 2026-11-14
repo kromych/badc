@@ -51,8 +51,10 @@
  *
  * The scalar forms of the operations above, lane 0 of the vector ones.
  *
- * Not provided: float16 and bfloat16, which need the __fp16 and __bf16
- * types, and the complex-arithmetic forms.
+ * The base set is complete and __ARM_NEON is predefined. Not provided:
+ * float16 and bfloat16, which need the __fp16 and __bf16 types, the
+ * complex-arithmetic forms (FEAT_FCMA) and the FEAT_LRCPC3 lane loads and
+ * stores.
  *
  * The element typedefs match <stdint.h>, repeated so the header serves
  * freestanding units; poly128_t is carried as a 16-byte vector.
@@ -2987,6 +2989,12 @@ __BADC_INTRIN float32x4_t vcvtx_high_f32_f64(float32x2_t __r, float64x2_t __a) {
 __BADC_INTRIN float32_t vcvtxd_f32_f64(float64_t __a) { return vcvtx_f32_f64((float64x2_t){__a})[0]; }
 __BADC_INTRIN float32_t vrecpxs_f32(float32_t __a) { return __builtin_neon_frecpx_2s((float32x2_t){__a})[0]; }
 __BADC_INTRIN float64_t vrecpxd_f64(float64_t __a) { return __builtin_neon_frecpx_d((float64x1_t){__a})[0]; }
+
+/* The 128-bit polynomial: its sum is the exclusive or, and it loads and
+ * stores whole. */
+__BADC_INTRIN poly128_t vaddq_p128(poly128_t __a, poly128_t __b) { return __a ^ __b; }
+__BADC_INTRIN poly128_t vldrq_p128(const poly128_t *__p) { return *__p; }
+__BADC_INTRIN void vstrq_p128(poly128_t *__p, poly128_t __v) { *__p = __v; }
 
 /* The scalar forms: lane 0 of the vector forms over a vector holding the
  * operands in lane 0; an _n or _lane form is a macro over its vector

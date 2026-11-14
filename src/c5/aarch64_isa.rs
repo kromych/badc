@@ -72,7 +72,7 @@ const FEATURES: &[Feature] = &[
     ext("flagm2", &["flagm"], &[], &[], N),
     ext("lse", &[], &[], &[], C),
     ext("fp", &[], &[], &[], C),
-    ext("simd", &["fp"], &[], &[], W),
+    ext("simd", &["fp"], &[], &[], C),
     ext("dotprod", &["simd"], &[], &[], C),
     ext("sm4", &["simd"], &[], &[], C),
     ext("rdma", &[], &["simd"], &[], C),
@@ -335,10 +335,9 @@ const CPUS: &[(&str, &str, &[&str])] = &[
 
 /// The macros a feature set defines beyond the unconditional ones, where
 /// badc carries what each promises: the name, the value, and the features
-/// it requires. `__ARM_NEON` and the macros of the features marked `W` are
-/// withheld, and so are `__ARM_FP16_FORMAT_IEEE` and `__ARM_FP16_ARGS`, as
-/// badc has no `__fp16`. TODO(#2029): `__ARM_NEON` with the Advanced SIMD
-/// intrinsic set.
+/// it requires. The macros of the features marked `W` are withheld, and so
+/// are `__ARM_FP16_FORMAT_IEEE` and `__ARM_FP16_ARGS`, as badc has no
+/// `__fp16`, which of `<arm_neon.h>` only the 16-bit floating types need.
 const FEATURE_MACROS: &[(&str, &str, &[&str])] = &[
     ("__ARM_FP", "14", &["fp"]),
     ("__ARM_FEATURE_FMA", "1", &["fp"]),
@@ -356,6 +355,7 @@ const FEATURE_MACROS: &[(&str, &str, &[&str])] = &[
     ("__ARM_FEATURE_PAUTH", "1", &["pauth"]),
     ("__ARM_FEATURE_BTI", "1", &["armv8.5-a"]),
     ("__ARM_FEATURE_RCPC", "1", &["rcpc"]),
+    ("__ARM_NEON", "1", &["simd"]),
     ("__ARM_FEATURE_NUMERIC_MAXMIN", "1", &["simd"]),
     ("__ARM_FEATURE_QRDMX", "1", &["rdma"]),
     ("__ARM_FEATURE_DOTPROD", "1", &["dotprod"]),
@@ -627,6 +627,11 @@ mod tests {
         assert!(!features(arch("armv8.4-a")).contains(&"__ARM_FEATURE_BTI"));
         let arch9 = |f: Aarch64Features| f.macros(false, false).contains(&("__ARM_ARCH", "9"));
         assert!(arch9(arch("armv9.2-a")) && !arch9(arch("armv8.9-a")));
+        assert!(
+            arch("armv8-a")
+                .macros(false, false)
+                .contains(&("__ARM_NEON", "1"))
+        );
         let r = arch("armv8-r").macros(false, false);
         assert!(r.contains(&("__ARM_ARCH_PROFILE", "82")));
     }
@@ -696,7 +701,9 @@ mod tests {
         assert_eq!(f.apply("nofrob"), Err(Aarch64ExtError::Unknown));
         assert_eq!(f.apply("armv8.1-a"), Err(Aarch64ExtError::Unknown));
         f.apply("nosimd").unwrap();
-        assert_eq!(f.apply("aes"), Err(Aarch64ExtError::Unimplemented("simd")));
+        assert_eq!(f.apply("fcma"), Err(Aarch64ExtError::Unimplemented("fcma")));
+        assert_eq!(f.apply("aes"), Ok(()));
+        assert!(f.macros(false, false).contains(&("__ARM_NEON", "1")));
         // An architecture that brings a withheld feature only withholds its
         // macros.
         assert!(!features(arch("armv8.6-a")).contains(&"__ARM_FEATURE_BF16"));

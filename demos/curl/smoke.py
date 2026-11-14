@@ -36,6 +36,8 @@ from pathlib import Path
 CURL_DIR = Path(__file__).resolve().parent
 REPO_ROOT = CURL_DIR.parents[1]
 MBEDTLS_DIR = CURL_DIR / "mbedtls"
+# Both the library and libcurl's TLS units read the configuration.
+MBEDTLS_CONFIG = f'-DMBEDTLS_USER_CONFIG_FILE="{(CURL_DIR / "mbedtls_user_config.h").as_posix()}"'
 SRC = CURL_DIR / "src"
 INC = CURL_DIR / "include"
 WIN = sys.platform == "win32"
@@ -225,16 +227,18 @@ def make_self_signed_cert(work: Path) -> tuple[str, str] | None:
 
 
 def build_mbedtls_archive(badc: Path, work: Path) -> Path | None:
-    """Compile Mbed TLS's library units, in its default configuration, into
-    libmbedtls.a. `--gnu` selects its GNU inline-assembly paths: the bignum
-    multiply-accumulate and, on x86-64, AES-NI."""
+    """Compile Mbed TLS's library units, in its default configuration less
+    what `mbedtls_user_config.h` turns off, into libmbedtls.a. `--gnu`
+    selects its GNU inline-assembly paths: the bignum multiply-accumulate
+    and, on x86-64, AES-NI."""
     srcs = sorted((MBEDTLS_DIR / "library").glob("*.c"))
     if not srcs:
         print("smoke FAIL: no Mbed TLS sources (setup.py)", file=sys.stderr)
         return None
     od = work / "mbedtls"
     od.mkdir(exist_ok=True)
-    incs = ["-I", str(MBEDTLS_DIR / "include"), "-I", str(MBEDTLS_DIR / "library")]
+    incs = [MBEDTLS_CONFIG, "-I", str(MBEDTLS_DIR / "include"),
+            "-I", str(MBEDTLS_DIR / "library")]
     objs = []
     for src in srcs:
         obj = od / (src.stem + ".o")
@@ -257,7 +261,7 @@ def build_tls_lane(badc: Path, work: Path, mbedtls: Path, https_base: str) -> bo
     libmbedtls, and run an HTTPS transfer against the TLS loopback."""
     od = work / "tls"
     od.mkdir(exist_ok=True)
-    defs = BASE_DEFINES + ["-DUSE_MBEDTLS", "-I", str(MBEDTLS_DIR / "include")]
+    defs = BASE_DEFINES + ["-DUSE_MBEDTLS", MBEDTLS_CONFIG, "-I", str(MBEDTLS_DIR / "include")]
     objs = []
     for src in lib_sources():
         obj = od / (src.stem + ".o")

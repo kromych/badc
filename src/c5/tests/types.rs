@@ -6916,8 +6916,8 @@ fn bare_aligned_follows_the_biggest_alignment() {
 
 /// The ACLE macros by target and extension set: ARMv8-A's off macOS and
 /// the Apple M1's on it, a 2-byte `wchar_t` and no AAPCS64 macro on
-/// Windows, `__ARM_NEON` withheld, and `-mgeneral-regs-only` dropping the
-/// floating-point ones.
+/// Windows, `__ARM_NEON` with the Advanced SIMD set, and
+/// `-mgeneral-regs-only` dropping the floating-point and SIMD ones.
 #[test]
 fn aarch64_targets_predefine_the_acle_macros() {
     use crate::{Aarch64Features, CompileOptions, Compiler, Target};
@@ -6930,7 +6930,7 @@ fn aarch64_targets_predefine_the_acle_macros() {
     };
     let common = "_Static_assert(__ARM_ARCH == 8 && __ARM_ARCH_PROFILE == 'A', \"\");\n\
                   _Static_assert(__ARM_64BIT_STATE && __ARM_FP == 14, \"\");\n\
-                  #ifdef __ARM_NEON\n#error NEON\n#endif\n";
+                  _Static_assert(__ARM_NEON == 1, \"\");\n";
     compiles(
         Target::LinuxAarch64,
         CompileOptions::default(),
@@ -6962,7 +6962,7 @@ fn aarch64_targets_predefine_the_acle_macros() {
     compiles(
         Target::LinuxAarch64,
         CompileOptions::default().with_no_fp_regs(true),
-        "#if defined __ARM_FP || defined __ARM_FEATURE_FMA\n#error FP\n#endif",
+        "#if defined __ARM_FP || defined __ARM_FEATURE_FMA || defined __ARM_NEON\n#error FP\n#endif",
     );
     // The Advanced SIMD extensions whose intrinsics <arm_neon.h> carries
     // predefine their macros, and code keyed on them takes those paths.

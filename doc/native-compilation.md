@@ -110,14 +110,16 @@ Feature macros:
   `-march=<arch>` or else `-mcpu=<cpu>` selects (`native` reads the host's),
   with `+<ext>` / `+no<ext>` modifiers; an extension brings those it
   requires. A macro is predefined only where badc carries what it promises:
-  `__ARM_FP`, `__ARM_FEATURE_FMA`, the CRC32, LSE atomics, RCPC, JSCVT,
-  pointer authentication, BTI, RNG, AES, SHA-2, SHA3, SHA-512, SM3, and SM4
-  ones, the Advanced SIMD maxnum, rounding doubling multiply (QRDMX), dot
-  product, FRINT, and int8 matrix multiply (MATMUL_INT8) ones, and the
-  platform's (`__ARM_ARCH`, `__ARM_SIZEOF_WCHAR_T`, ...). `__ARM_NEON` and
-  the macros of the extensions whose intrinsics the headers lack -- SVE,
-  SME, FP16, BF16, complex arithmetic, and others -- are withheld, and a
-  modifier enabling one of those extensions is refused.
+  `__ARM_FP`, `__ARM_FEATURE_FMA`, `__ARM_NEON` (`<arm_neon.h>` carries the
+  Advanced SIMD set; its 16-bit floating types need `__fp16`, which badc
+  lacks), the CRC32, LSE atomics, RCPC, JSCVT, pointer authentication, BTI,
+  RNG, AES, SHA-2, SHA3, SHA-512, SM3, and SM4 ones, the Advanced SIMD
+  maxnum, rounding doubling multiply (QRDMX), dot product, FRINT, and int8
+  matrix multiply (MATMUL_INT8) ones, and the platform's (`__ARM_ARCH`,
+  `__ARM_SIZEOF_WCHAR_T`, ...). The macros of the extensions whose
+  intrinsics the headers lack -- SVE, SME, FP16, BF16, complex arithmetic,
+  and others -- are withheld, and a modifier enabling one of those
+  extensions is refused.
   `-mgeneral-regs-only` drops the floating-point and SIMD extensions.
   `<arm_acle.h>` carries the barrier, hint, data-processing, CRC32, JSCVT,
   FRINTTS, RNG, and special-register intrinsics.

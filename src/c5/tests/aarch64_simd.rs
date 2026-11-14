@@ -1049,6 +1049,46 @@ fn the_doubling_multiplies_are_rows() {
     }
 }
 
+/// The lane-indexed forms are by-element rows: over seeded lanes the
+/// interpreter's results hash to the hardware's, and each is one
+/// instruction under -O naming its lane; a halfword element in v16 or above,
+/// which the encoding cannot name, is broadcast first and takes the vector
+/// form, as at -O0. The float vmla multiplies and adds in two roundings.
+#[cfg(feature = "full")]
+#[test]
+fn the_lane_indexed_forms_are_by_element_rows() {
+    let src = super::load_fixture("arm_neon_lane_indexed_forms_on_seeded_lanes.c");
+    let program = super::compile_str_bare_for(&src, crate::Target::LinuxAarch64);
+    assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 0);
+    const OPS: &str = "#include <arm_neon.h>\n\
+        int16x8_t a(int16x8_t x, int16x8_t v) { return vmulq_laneq_s16(x, v, 5); }\n\
+        int32x4_t b(int32x4_t acc, int32x4_t x, int32x2_t v) { return vmlaq_lane_s32(acc, x, v, 1); }\n\
+        float32x4_t c(float32x4_t acc, float32x4_t x, float32x4_t v) { return vfmaq_laneq_f32(acc, x, v, 3); }\n\
+        float64x1_t d(float64x1_t x, float64x2_t v) { return vmul_laneq_f64(x, v, 1); }\n\
+        int32x4_t e(int16x8_t x, int16x8_t v) { return vmull_high_laneq_s16(x, v, 7); }\n\
+        int64x2_t f(int64x2_t acc, int32x2_t x, int32x4_t v) { return vqdmlal_laneq_s32(acc, x, v, 2); }\n\
+        float32x4_t m(float32x4_t acc, float32x4_t x, float32x2_t v) { return vmlaq_lane_f32(acc, x, v, 1); }\n";
+    for (name, want) in [
+        ("a", &[0x4F51_8800u32][..]),
+        ("b", &[0x6FA2_0020]),
+        ("c", &[0x4FA2_1820]),
+        ("d", &[0x5FC1_9800]),
+        ("e", &[0x4F71_A800]),
+        ("f", &[0x0F82_3820]),
+        ("m", &[0x4FA2_9021, 0x4E21_D400]),
+    ] {
+        let words = super::perf_codegen::a64_at(OPS, name, true);
+        assert_eq!(words[..words.len() - 1], *want, "{name}: {words:08x?}");
+    }
+    let words = super::perf_codegen::a64_at(OPS, "a", false);
+    assert!(
+        words
+            .windows(2)
+            .any(|w| w[0] & 0xFFE0_FC00 == 0x4E00_0400 && w[1] & 0xFFE0_FC00 == 0x4E60_9C00),
+        "a at -O0: a broadcast and the vector mul expected: {words:08x?}"
+    );
+}
+
 /// `vld1`, `vst1`, `vdup_n` and `vld1_dup` are the load, store and
 /// broadcast of their vector under `-O`, as with gcc 16, with no inline asm
 /// between them and the operations that use them: `ldr q`, `str q`,

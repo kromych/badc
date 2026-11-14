@@ -1863,7 +1863,8 @@ fn floating_rows_compute_in_the_environment() {
         | Sem::ShlSatU(_)
         | Sem::PairAddLongAcc(..)
         | Sem::SatDoublingMulHigh(..)
-        | Sem::SatRoundingDoublingMulAcc(..) => false,
+        | Sem::SatRoundingDoublingMulAcc(..)
+        | Sem::ByElement(..) => false,
     };
     /// Counts the operations a row asks of the environment.
     struct Counting(u32);

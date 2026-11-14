@@ -1084,6 +1084,71 @@ fn vector_one_source_counts_and_estimates() {
     assert_eq!(v3("fmaxnmp", 3, true), 0x6E63_C441);
     assert_eq!(v3("fminnmp", 2, true), 0x6EA3_C441);
     assert_eq!(v3("fmulx", 2, true), 0x4E23_DC41);
+    let e = |num: u8, size: u8, index: u8| Opnd::VecElem { num, size, index };
+    assert_eq!(
+        enc("mul", &[v(1, 1, false), v(2, 1, false), e(3, 1, 5)]),
+        0x0F53_8841
+    );
+    assert_eq!(
+        enc("mla", &[v(1, 2, true), v(2, 2, true), e(19, 2, 3)]),
+        0x6FB3_0841
+    );
+    assert_eq!(
+        enc("mls", &[v(1, 1, true), v(2, 1, true), e(15, 1, 7)]),
+        0x6F7F_4841
+    );
+    assert_eq!(
+        enc("sqdmulh", &[v(1, 2, true), v(2, 2, true), e(20, 2, 1)]),
+        0x4FB4_C041
+    );
+    assert_eq!(
+        enc("sqrdmulh", &[v(1, 1, true), v(2, 1, true), e(3, 1, 2)]),
+        0x4F63_D041
+    );
+    assert_eq!(
+        enc("sqrdmlah", &[v(1, 1, false), v(2, 1, false), e(3, 1, 6)]),
+        0x2F63_D841
+    );
+    assert_eq!(
+        enc("sqrdmlsh", &[v(1, 2, true), v(2, 2, true), e(17, 2, 2)]),
+        0x6F91_F841
+    );
+    assert_eq!(
+        enc("fmul", &[v(1, 2, true), v(2, 2, true), e(18, 2, 3)]),
+        0x4FB2_9841
+    );
+    assert_eq!(
+        enc("fmul", &[v(1, 3, true), v(2, 3, true), e(18, 3, 1)]),
+        0x4FD2_9841
+    );
+    assert_eq!(enc("fmul", &[d(1), d(2), e(18, 3, 1)]), 0x5FD2_9841);
+    assert_eq!(
+        enc("fmla", &[v(1, 2, false), v(2, 2, false), e(3, 2, 1)]),
+        0x0FA3_1041
+    );
+    assert_eq!(
+        enc("fmls", &[v(1, 3, true), v(2, 3, true), e(31, 3, 0)]),
+        0x4FDF_5041
+    );
+    assert_eq!(
+        enc("fmulx", &[v(1, 2, true), v(2, 2, true), e(3, 2, 2)]),
+        0x6F83_9841
+    );
+    assert_eq!(enc("fmla", &[d(1), d(2), e(3, 3, 1)]), 0x5FC3_1841);
+    assert_eq!(enc("fmulx", &[d(1), d(2), e(19, 3, 0)]), 0x7FD3_9041);
+    assert_eq!(
+        enc("sqdmull", &[v(1, 2, true), v(2, 1, false), e(3, 1, 7)]),
+        0x0F73_B841
+    );
+    assert_eq!(
+        enc("sqdmlal2", &[v(1, 3, true), v(2, 2, true), e(21, 2, 3)]),
+        0x4FB5_3841
+    );
+    assert_eq!(
+        enc("sqdmlsl", &[v(1, 2, true), v(2, 1, false), e(3, 1, 1)]),
+        0x0F53_7041
+    );
+    assert!(encode("mul", &[v(1, 1, true), v(2, 1, true), e(16, 1, 0)]).is_err());
     assert_eq!(v3("sqdmulh", 1, true), 0x4E63_B441);
     assert_eq!(v3("sqrdmulh", 2, false), 0x2EA3_B441);
     assert_eq!(v3("sqrdmlah", 1, false), 0x2E43_8441);

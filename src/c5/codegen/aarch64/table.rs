@@ -976,6 +976,80 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | ((rn as u32) << 5)
             | (rd as u32));
     }
+    // SIMD by element `<op> Vd.T, Vn.T, Vm.Ts[i]`, and the FP forms' scalar
+    // `Rd, Rn, Vm.Ts[i]` (bits 30 and 28 set): size at 22 (1:sz for FP),
+    // opcode at 12 and U at 29 name the operation. The index is H:L:M for a
+    // halfword element, whose Vm is bounded to v0..v15, H:L for a word one
+    // and H for a doubleword, M carrying Vm's high bit.
+    if let Some((u, opcode, fp)) = match mnemonic {
+        "mul" => Some((0u32, 0b1000u32, false)),
+        "mla" => Some((1, 0b0000, false)),
+        "mls" => Some((1, 0b0100, false)),
+        "sqdmulh" => Some((0, 0b1100, false)),
+        "sqrdmulh" => Some((0, 0b1101, false)),
+        "sqrdmlah" => Some((1, 0b1101, false)),
+        "sqrdmlsh" => Some((1, 0b1111, false)),
+        "fmul" => Some((0, 0b1001, true)),
+        "fmulx" => Some((1, 0b1001, true)),
+        "fmla" => Some((0, 0b0001, true)),
+        "fmls" => Some((0, 0b0101, true)),
+        _ => None,
+    } && let [
+        dst,
+        src,
+        Opnd::VecElem {
+            num: rm,
+            size: es,
+            index,
+        },
+    ] = *ops
+    {
+        let (rd, rn, size, form) = match (dst, src) {
+            (
+                Opnd::VecReg { num: rd, size, q },
+                Opnd::VecReg {
+                    num: rn,
+                    size: s1,
+                    q: q1,
+                },
+            ) if size == s1 && q == q1 && (size < 3 || q) => (rd, rn, size, u32::from(q) << 30),
+            (Opnd::VReg { num: rd, is_d }, Opnd::VReg { num: rn, is_d: d1 })
+                if fp && is_d == d1 =>
+            {
+                (rd, rn, 2 + u8::from(is_d), 0x5000_0000)
+            }
+            _ => return Err(format!("inline asm: bad `{mnemonic}` by-element operands")),
+        };
+        let sizes = if fp { 2..=3 } else { 1..=2 };
+        if es != size || !sizes.contains(&size) || index >= 16 >> size {
+            return Err(format!("inline asm: bad `{mnemonic}` element"));
+        }
+        if size == 1 && rm > 15 {
+            return Err(String::from(
+                "inline asm: a halfword element selects Vm from v0..v15",
+            ));
+        }
+        let (h, l, m) = match size {
+            1 => (index >> 2 & 1, index >> 1 & 1, index & 1),
+            2 => (index >> 1 & 1, index & 1, rm >> 4 & 1),
+            _ => (index & 1, 0, rm >> 4 & 1),
+        };
+        let field = match fp {
+            true => (2 | u32::from(size == 3)) << 22,
+            false => u32::from(size) << 22,
+        };
+        return Ok(0x0F00_0000
+            | form
+            | (u << 29)
+            | field
+            | (u32::from(l) << 21)
+            | (u32::from(m) << 20)
+            | (u32::from(rm & 0xF) << 16)
+            | (opcode << 12)
+            | (u32::from(h) << 11)
+            | (u32::from(rn) << 5)
+            | u32::from(rd));
+    }
     // SIMD compares with zero `Vd.T, Vn.T, #0` (`#0.0` for the FP forms), and
     // the scalar `Rd, Rn, #0` over the d view (s or d for FP): size at bit 22,
     // or sz for FP, Q at 30, the scalar form at bits 30 and 28.
@@ -2298,6 +2372,9 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             "umlal" => Some((0b0010, 1)),
             "smlsl" => Some((0b0110, 0)),
             "umlsl" => Some((0b0110, 1)),
+            "sqdmull" => Some((0b1011, 0)),
+            "sqdmlal" => Some((0b0011, 0)),
+            "sqdmlsl" => Some((0b0111, 0)),
             _ => None,
         }
         && let [

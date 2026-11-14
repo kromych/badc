@@ -19,6 +19,7 @@ fn sources(row: &SimdOp) -> Option<(usize, bool)> {
         Form::Vvv => Some((3, false)),
         Form::Shift => Some((1, true)),
         Form::VvI => Some((2, true)),
+        Form::VvvI if row.base_sem() != row.sem => Some((3, true)),
         Form::VI => Some((1, true)),
         _ => None,
     }
@@ -39,13 +40,16 @@ fn accumulates(row: &SimdOp) -> bool {
         | Sem::Sha1Su1
         | Sem::Sha512Su0
         | Sem::PairAddLongAcc(..) => true,
-        _ => row.form == Form::Vvv,
+        _ => matches!(row.form, Form::Vvv | Form::VvvI),
     }
 }
 
 /// The instruction a row names over v registers `regs`, destination first,
 /// each in its operand's arrangement, with a shift's count. An
-/// accumulating form names its accumulator once, as the destination.
+/// accumulating form names its accumulator once, as the destination. A
+/// by-element row names its last register's lane `imm`, or without one
+/// is the vector form over that register, which holds the lane in every
+/// lane.
 fn encode(row: &SimdOp, regs: &[u8], imm: Option<u8>) -> Result<u32, alloc::string::String> {
     use super::table::{self, Opnd};
     // A table lookup names its table as a one-register list.
@@ -149,11 +153,63 @@ fn encode(row: &SimdOp, regs: &[u8], imm: Option<u8>) -> Result<u32, alloc::stri
             }
         })
         .collect();
+    if let crate::c5::simd::Sem::ByElement(_, w) = row.sem {
+        let (Some(&Opnd::VecReg { num, .. } | &Opnd::VReg { num, .. }), Some(data)) =
+            (ops.last(), ops.len().checked_sub(2).map(|k| ops[k]))
+        else {
+            return Err(alloc::format!("{}: two vector sources expected", row.name));
+        };
+        let last = ops.len() - 1;
+        ops[last] = match (imm, data) {
+            (Some(index), _) => Opnd::VecElem {
+                num,
+                size: w.trailing_zeros() as u8,
+                index,
+            },
+            (None, Opnd::VecReg { size, q, .. }) => Opnd::VecReg { num, size, q },
+            (None, Opnd::VReg { is_d, .. }) => Opnd::VReg { num, is_d },
+            (None, _) => return Err(alloc::format!("{}: no vector form", row.name)),
+        };
+        return table::encode(row.mnem, &ops);
+    }
     ops.extend(imm.map(|n| Opnd::Imm(i64::from(n))));
     if row.compares_with_zero() {
         ops.push(Opnd::Imm(0));
     }
     table::encode(row.mnem, &ops)
+}
+
+/// A halfword element's register is four bits wide: one from v16 up has
+/// its lane broadcast into `scratch`, and the by-element row then takes
+/// its vector form over it (`encode` without an index). Returns the
+/// register and index to encode.
+fn halfword_element(
+    code: &mut Vec<u8>,
+    row: &SimdOp,
+    reg: u8,
+    imm: Option<u8>,
+    scratch: u8,
+) -> Result<(u8, Option<u8>), alloc::string::String> {
+    use super::table::{self, Opnd};
+    match (row.sem, imm) {
+        (simd::Sem::ByElement(_, 2), Some(index)) if reg > 15 => {
+            let ops = [
+                Opnd::VecReg {
+                    num: scratch,
+                    size: 1,
+                    q: true,
+                },
+                Opnd::VecElem {
+                    num: reg,
+                    size: 1,
+                    index,
+                },
+            ];
+            emit(code, table::encode("dup", &ops)?);
+            Ok((scratch, None))
+        }
+        _ => Ok((reg, imm)),
+    }
 }
 
 /// A shift's count: the constant the parser folded. The instructions take
@@ -212,14 +268,23 @@ pub(super) fn emit_a64_simd(
         );
         Ok(())
     };
-    let regs = &frame.fp_scratch[..n];
-    for (k, &v) in regs.iter().enumerate() {
+    let mut regs = [0u8; 3];
+    regs[..n].copy_from_slice(&frame.fp_scratch[..n]);
+    for (k, &v) in regs[..n].iter().enumerate() {
         transfer(code, args[k + 1], v, (row.arg_bytes(k), true))?;
     }
+    let imm = match halfword_element(code, row, regs[n - 1], imm, regs[n - 1]) {
+        Ok((_, imm)) => imm,
+        Err(e) => return fail(alloc::format!("{}: {e}", row.name)),
+    };
     // An accumulating form writes its first source; the others write a
     // destination of their own, the first scratch.
     let mut ops = alloc::vec![frame.fp_scratch[0]];
-    ops.extend(if accumulates(row) { &regs[1..] } else { regs });
+    ops.extend(if accumulates(row) {
+        &regs[1..n]
+    } else {
+        &regs[..n]
+    });
     match encode(row, &ops, imm) {
         Ok(word) => emit(code, word),
         Err(e) => return fail(alloc::format!("{}: {e}", row.name)),
@@ -270,6 +335,13 @@ pub(super) fn emit_a64_simd_val(
         };
         regs[k] = reg;
     }
+    let imm = match halfword_element(code, row, regs[n - 1], imm, frame.fp_scratch[n - 1]) {
+        Ok((reg, imm)) => {
+            regs[n - 1] = reg;
+            imm
+        }
+        Err(e) => return fail(alloc::format!("{}: {e}", row.name)),
+    };
     let mut ops = alloc::vec![vd];
     let mut acc = vd;
     if accumulates(row) {

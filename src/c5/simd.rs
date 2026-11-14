@@ -523,6 +523,12 @@ pub(crate) enum Sem {
     /// The floating operation across the lanes, as halves combined, into
     /// lane 0, the rest zero (`fmaxv`, `fminnmv`).
     FloatAcross(FOp, u8),
+    /// The operation with its last vector operand's lane the immediate
+    /// names, of the width, in every lane (`mul`, `fmla`, `smull` by
+    /// element). The interpreter broadcasts the lane ([`by_element`]); a row
+    /// without an index is the operation's vector form over an operand the
+    /// lane fills.
+    ByElement(&'static Sem, u8),
     /// The high half of twice the signed product of each lane pair, rounded
     /// when `true`, saturated (`sqdmulh`, `sqrdmulh`).
     SatDoublingMulHigh(u8, bool),
@@ -860,7 +866,12 @@ impl SimdOp {
     /// operand of a form that adds narrow lanes to it or accumulates
     /// into it.
     pub(crate) fn arg_bytes(&self, i: usize) -> u8 {
-        match (self.form, self.sem) {
+        if let Sem::ByElement(..) = self.sem
+            && i + 2 == self.form.arity()
+        {
+            return self.int_width;
+        }
+        match (self.form, self.base_sem()) {
             (Form::Widen, _) if i == 1 => self.int_width,
             (Form::Zext, _) => self.int_width,
             (_, Sem::Wide(..) | Sem::LongAcc(..)) if i == 0 => 16,
@@ -868,6 +879,14 @@ impl SimdOp {
             (_, Sem::Tbl(_)) if i == 0 => 16,
             (_, Sem::Tbx(_)) if i == 1 => 16,
             _ => self.bytes,
+        }
+    }
+
+    /// The operation a by-element row applies, or the row's own.
+    pub(crate) fn base_sem(&self) -> Sem {
+        match self.sem {
+            Sem::ByElement(base, _) => *base,
+            sem => sem,
         }
     }
 
@@ -886,7 +905,7 @@ impl SimdOp {
     pub(crate) fn arrangement(&self, i: usize) -> (u8, u8) {
         let lane = self.ret.lane_bytes();
         // A reduction writes the scalar view of its lane width.
-        match self.sem {
+        match self.base_sem() {
             Sem::Across(op, w, ..) if i == 0 => {
                 let rw = if op == AcrossOp::AddLong { 2 * w } else { w };
                 return (rw, rw);
@@ -897,7 +916,7 @@ impl SimdOp {
         if i == 0 {
             return (lane, self.ret_bytes());
         }
-        let src = match self.sem {
+        let src = match self.base_sem() {
             Sem::Long(_, w, ..) | Sem::Across(_, w, ..) | Sem::PairAddLong(w, _) => w,
             Sem::PairAddLongAcc(w, _) if i > 1 => w,
             Sem::Wide(_, w, ..) | Sem::LongAcc(_, w, ..) if i > 1 => w,
@@ -1115,6 +1134,16 @@ fn wide_lanes(a: &[u8; 16], b: &[u8; 16], w: u8, i: usize, signed: bool) -> (i12
         (i128::from(slane(a, w, i)), i128::from(slane(b, w, i)))
     } else {
         (i128::from(lane(a, w, i)), i128::from(lane(b, w, i)))
+    }
+}
+
+/// A by-element row's operation and its last vector operand `last` with
+/// the lane `imm` names in every lane, and no immediate left; any other
+/// row's own.
+pub(crate) fn by_element(sem: Sem, last: &[u8; 16], imm: u8) -> (Sem, [u8; 16], u8) {
+    match sem {
+        Sem::ByElement(base, w) => (*base, splat(w, lane(last, w, usize::from(imm)) as i64), 0),
+        _ => (sem, *last, imm),
     }
 }
 
@@ -1990,6 +2019,7 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
         Sem::FloatRel(..) | Sem::FloatFma(..) | Sem::LongAcc(..) => {}
         Sem::Estimate(..) | Sem::Step(..) | Sem::FloatPair(..) | Sem::FloatAcross(..) => {}
         Sem::RoundInt(..) | Sem::RoundIntN(..) | Sem::SatRoundingDoublingMulAcc(..) => {}
+        Sem::ByElement(..) => {}
         Sem::Perm4x64
         | Sem::PermVar32
         | Sem::Perm2x128

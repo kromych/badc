@@ -475,11 +475,33 @@ def compile_one(c: Compiler, src: Path, out: Path) -> float | None:
     return compile_ms
 
 
-def run_one(out: Path) -> float | None:
+CPU_ROOT = Path("/sys/devices/system/cpu")
+
+
+def fastest_cpus(cpu_root: Path = CPU_ROOT) -> list[int]:
+    """The Linux CPUs of the highest `cpu_capacity` when the machine has
+    cores of more than one capacity, else none. A run the scheduler places
+    on such a machine lands on either kind, so one binary's runs would
+    spread over unlike cores."""
+    caps: dict[int, int] = {}
+    for d in cpu_root.glob("cpu[0-9]*"):
+        try:
+            caps[int(d.name[3:])] = int((d / "cpu_capacity").read_text())
+        except (OSError, ValueError):
+            continue
+    if len(set(caps.values())) < 2:
+        return []
+    top = max(caps.values())
+    return sorted(c for c, v in caps.items() if v == top)
+
+
+def run_one(out: Path, pin: int | None = None) -> float | None:
+    """The median of the binary's timed runs, each on CPU `pin` when set."""
+    pinned = None if pin is None else (lambda: os.sched_setaffinity(0, {pin}))
     times = []
     for _ in range(RUNS_PER_FIXTURE):
         r = subprocess.run([str(out)], capture_output=True, text=True,
-                           errors="replace")
+                           errors="replace", preexec_fn=pinned)
         if r.returncode != 0:
             print(
                 f"run fail: {out.name} -> exit {r.returncode}",
@@ -628,7 +650,7 @@ def named_compiler(c: Compiler) -> dict:
 
 
 def write_json(path: Path, compilers: list[Compiler], fixtures: list[str],
-               results: list[Result]) -> None:
+               results: list[Result], pin: int | None = None) -> None:
     """The run as data, for the page that charts it: what ran where, and one
     record per (fixture, compiler) with the three measurements.
 
@@ -644,11 +666,12 @@ def write_json(path: Path, compilers: list[Compiler], fixtures: list[str],
         "image": runner_image(),
         # The CI step overrides this with the runner's label.
         "runner": "local",
+        "pinned_cpu": pin,
     }
     doc = {
         "schema": SCHEMA,
         "taken": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "machine": {k: v for k, v in machine.items() if v},
+        "machine": {k: v for k, v in machine.items() if v not in (None, "")},
         "runs_per_fixture": RUNS_PER_FIXTURE,
         "compilers": [named_compiler(c) for c in compilers],
         "fixtures": fixtures,
@@ -863,6 +886,19 @@ def self_test() -> int:
                 if line.startswith("| ") and "---" not in line][1:] == \
             ["badc -O", "tcc", "gcc -O2"], rows
         assert "| 0.50x |" in rows, rows
+
+        # Runs go to the cores of the highest capacity only where the
+        # capacities differ.
+        cpus = d / "cpu"
+        for c, cap in enumerate((571, 571, 1024, 1024)):
+            (cpus / f"cpu{c}").mkdir(parents=True)
+            (cpus / f"cpu{c}" / "cpu_capacity").write_text(f"{cap}\n")
+        (cpus / "cpufreq").mkdir()
+        assert fastest_cpus(cpus) == [2, 3], fastest_cpus(cpus)
+        (cpus / "cpu0" / "cpu_capacity").write_text("1024\n")
+        (cpus / "cpu1" / "cpu_capacity").write_text("1024\n")
+        assert fastest_cpus(cpus) == []
+        assert fastest_cpus(d / "absent") == []
     print("[perf run] self-test OK")
     return 0
 
@@ -883,6 +919,8 @@ def main() -> int:
     if not compilers:
         print("error: no compilers found", file=sys.stderr)
         return 1
+    fastest = fastest_cpus() if sys.platform.startswith("linux") else []
+    pin = fastest[0] if fastest else None
 
     fixtures = [
         "fib.c",
@@ -945,7 +983,7 @@ def main() -> int:
             if compile_ms is None:
                 any_fail = True
                 continue
-            t = run_one(out)
+            t = run_one(out, pin)
             if t is None:
                 any_fail = True
                 continue
@@ -961,9 +999,12 @@ def main() -> int:
 
     print("## perf comparison")
     print()
+    if pin is not None:
+        print(f"Runs pinned to CPU {pin}, a core of the highest capacity.")
+        print()
     print(render_table(fixtures, results, [c.name for c in compilers]))
     if args.json:
-        write_json(args.json, compilers, fixtures, results)
+        write_json(args.json, compilers, fixtures, results, pin)
         print(f"\nwrote {args.json}")
     return 1 if any_fail else 0
 

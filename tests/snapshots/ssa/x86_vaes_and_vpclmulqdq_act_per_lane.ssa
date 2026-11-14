@@ -338,8 +338,8 @@ fn ent_pc=1357 n_params=0 variadic=false locals=0
     v234 Imm(0)                                           -> x0
     v235 VecExtract { vec=v160, off=0, kind=I64, bytes=16 } -> x0
     v236 Imm(0)                                           -> x1
-    v237 Imm(0)                                           -> x1
-    v238 Imm(0)                                           -> x2
+    v237 Undef                                            -> x1
+    v238 Undef                                            -> x2
     v239 VecInsert { vec=v238, value=v235, off=0, kind=I64, bytes=16 } -> d8
     v240 VecInsert { vec=v237, value=v239, off=0, kind=V128, bytes=32 } -> d9
     v241 Imm(0)                                           -> x0
@@ -360,7 +360,7 @@ fn ent_pc=1357 n_params=0 variadic=false locals=0
     v256 Imm(0)                                           -> x1
     v257 Imm(16)                                          -> x1
     v258 Imm(0)                                           -> x1
-    v259 Imm(0)                                           -> x1
+    v259 Undef                                            -> x1
     v260 VecInsert { vec=v259, value=v255, off=0, kind=I64, bytes=16 } -> d8
     v261 VecInsert { vec=v251, value=v260, off=16, kind=V128, bytes=32 } -> d9
     v262 Imm(0)                                           -> x0
@@ -559,8 +559,8 @@ fn ent_pc=1357 n_params=0 variadic=false locals=0
     v451 Imm(0)                                           -> x0
     v452 VecExtract { vec=v377, off=0, kind=I64, bytes=16 } -> x0
     v453 Imm(0)                                           -> x1
-    v454 Imm(0)                                           -> x1
-    v455 Imm(0)                                           -> x2
+    v454 Undef                                            -> x1
+    v455 Undef                                            -> x2
     v456 VecInsert { vec=v455, value=v452, off=0, kind=I64, bytes=16 } -> d4
     v457 VecInsert { vec=v454, value=v456, off=0, kind=V128, bytes=32 } -> d5
     v458 Imm(0)                                           -> x0
@@ -581,7 +581,7 @@ fn ent_pc=1357 n_params=0 variadic=false locals=0
     v473 Imm(0)                                           -> x1
     v474 Imm(16)                                          -> x1
     v475 Imm(0)                                           -> x1
-    v476 Imm(0)                                           -> x1
+    v476 Undef                                            -> x1
     v477 VecInsert { vec=v476, value=v472, off=0, kind=I64, bytes=16 } -> d4
     v478 VecInsert { vec=v468, value=v477, off=16, kind=V128, bytes=32 } -> d5
     v479 Imm(0)                                           -> x0
@@ -780,8 +780,8 @@ fn ent_pc=1357 n_params=0 variadic=false locals=0
     v668 Imm(0)                                           -> x0
     v669 VecExtract { vec=v594, off=0, kind=I64, bytes=16 } -> x0
     v670 Imm(0)                                           -> x1
-    v671 Imm(0)                                           -> x1
-    v672 Imm(0)                                           -> x2
+    v671 Undef                                            -> x1
+    v672 Undef                                            -> x2
     v673 VecInsert { vec=v672, value=v669, off=0, kind=I64, bytes=16 } -> d4
     v674 VecInsert { vec=v671, value=v673, off=0, kind=V128, bytes=32 } -> d5
     v675 Imm(0)                                           -> x0
@@ -802,7 +802,7 @@ fn ent_pc=1357 n_params=0 variadic=false locals=0
     v690 Imm(0)                                           -> x1
     v691 Imm(16)                                          -> x1
     v692 Imm(0)                                           -> x1
-    v693 Imm(0)                                           -> x1
+    v693 Undef                                            -> x1
     v694 VecInsert { vec=v693, value=v689, off=0, kind=I64, bytes=16 } -> d4
     v695 VecInsert { vec=v685, value=v694, off=16, kind=V128, bytes=32 } -> d5
     v696 Imm(0)                                           -> x0
@@ -1001,8 +1001,8 @@ fn ent_pc=1357 n_params=0 variadic=false locals=0
     v885 Imm(0)                                           -> x0
     v886 VecExtract { vec=v811, off=0, kind=I64, bytes=16 } -> x0
     v887 Imm(0)                                           -> x1
-    v888 Imm(0)                                           -> x1
-    v889 Imm(0)                                           -> x2
+    v888 Undef                                            -> x1
+    v889 Undef                                            -> x2
     v890 VecInsert { vec=v889, value=v886, off=0, kind=I64, bytes=16 } -> d4
     v891 VecInsert { vec=v888, value=v890, off=0, kind=V128, bytes=32 } -> d5
     v892 Imm(0)                                           -> x0
@@ -1023,7 +1023,7 @@ fn ent_pc=1357 n_params=0 variadic=false locals=0
     v907 Imm(0)                                           -> x1
     v908 Imm(16)                                          -> x1
     v909 Imm(0)                                           -> x1
-    v910 Imm(0)                                           -> x1
+    v910 Undef                                            -> x1
     v911 VecInsert { vec=v910, value=v906, off=0, kind=I64, bytes=16 } -> d4
     v912 VecInsert { vec=v902, value=v911, off=16, kind=V128, bytes=32 } -> d5
     v913 Imm(0)                                           -> x0
@@ -1220,8 +1220,8 @@ fn ent_pc=1357 n_params=0 variadic=false locals=0
     v1100 Imm(0)                                           -> x0
     v1101 VecExtract { vec=v1028, off=0, kind=I64, bytes=16 } -> x0
     v1102 Imm(0)                                           -> x1
-    v1103 Imm(0)                                           -> x1
-    v1104 Imm(0)                                           -> x2
+    v1103 Undef                                            -> x1
+    v1104 Undef                                            -> x2
     v1105 VecInsert { vec=v1104, value=v1101, off=0, kind=I64, bytes=16 } -> d4
     v1106 VecInsert { vec=v1103, value=v1105, off=0, kind=V128, bytes=32 } -> d5
     v1107 Imm(0)                                           -> x0
@@ -1242,7 +1242,7 @@ fn ent_pc=1357 n_params=0 variadic=false locals=0
     v1122 Imm(0)                                           -> x1
     v1123 Imm(16)                                          -> x1
     v1124 Imm(0)                                           -> x1
-    v1125 Imm(0)                                           -> x1
+    v1125 Undef                                            -> x1
     v1126 VecInsert { vec=v1125, value=v1121, off=0, kind=I64, bytes=16 } -> d4
     v1127 VecInsert { vec=v1117, value=v1126, off=16, kind=V128, bytes=32 } -> d5
     v1128 Imm(0)                                           -> x0
@@ -1431,8 +1431,8 @@ fn ent_pc=1357 n_params=0 variadic=false locals=0
     v1307 Imm(0)                                           -> x0
     v1308 VecExtract { vec=v1235, off=0, kind=I64, bytes=16 } -> x0
     v1309 Imm(0)                                           -> x1
-    v1310 Imm(0)                                           -> x1
-    v1311 Imm(0)                                           -> x2
+    v1310 Undef                                            -> x1
+    v1311 Undef                                            -> x2
     v1312 VecInsert { vec=v1311, value=v1308, off=0, kind=I64, bytes=16 } -> d4
     v1313 VecInsert { vec=v1310, value=v1312, off=0, kind=V128, bytes=32 } -> d5
     v1314 Imm(0)                                           -> x0
@@ -1453,7 +1453,7 @@ fn ent_pc=1357 n_params=0 variadic=false locals=0
     v1329 Imm(0)                                           -> x1
     v1330 Imm(16)                                          -> x1
     v1331 Imm(0)                                           -> x1
-    v1332 Imm(0)                                           -> x1
+    v1332 Undef                                            -> x1
     v1333 VecInsert { vec=v1332, value=v1328, off=0, kind=I64, bytes=16 } -> d4
     v1334 VecInsert { vec=v1324, value=v1333, off=16, kind=V128, bytes=32 } -> d5
     v1335 Imm(0)                                           -> x0
@@ -1652,8 +1652,8 @@ fn ent_pc=1357 n_params=0 variadic=false locals=0
     v1524 Imm(0)                                           -> x0
     v1525 VecExtract { vec=v1450, off=0, kind=I64, bytes=16 } -> x0
     v1526 Imm(0)                                           -> x1
-    v1527 Imm(0)                                           -> x1
-    v1528 Imm(0)                                           -> x2
+    v1527 Undef                                            -> x1
+    v1528 Undef                                            -> x2
     v1529 VecInsert { vec=v1528, value=v1525, off=0, kind=I64, bytes=16 } -> d1
     v1530 VecInsert { vec=v1527, value=v1529, off=0, kind=V128, bytes=32 } -> d4
     v1531 Imm(0)                                           -> x0
@@ -1674,7 +1674,7 @@ fn ent_pc=1357 n_params=0 variadic=false locals=0
     v1546 Imm(0)                                           -> x1
     v1547 Imm(16)                                          -> x1
     v1548 Imm(0)                                           -> x1
-    v1549 Imm(0)                                           -> x1
+    v1549 Undef                                            -> x1
     v1550 VecInsert { vec=v1549, value=v1545, off=0, kind=I64, bytes=16 } -> d2
     v1551 VecInsert { vec=v1541, value=v1550, off=16, kind=V128, bytes=32 } -> d4
     v1552 Imm(0)                                           -> x0

@@ -960,6 +960,7 @@ fn filled_locals(func: &FunctionSsa) -> BTreeSet<i64> {
 /// ([`super::vector_slots::pair_low`]) or under any run of inserts writing
 /// every byte ([`super::vector_slots::covered_bottom`]).
 pub(crate) fn zero_read_undefs(func: &mut FunctionSsa) {
+    undefine_covered_zeros(func);
     if !func.insts.iter().any(|i| matches!(i, Inst::Undef)) {
         return;
     }
@@ -994,6 +995,41 @@ pub(crate) fn zero_read_undefs(func: &mut FunctionSsa) {
         if read && matches!(inst, Inst::Undef) {
             *inst = Inst::Imm(0);
         }
+    }
+}
+
+/// A zero the bottom of a run of inserts writing every byte reads, and
+/// nothing else, as `Inst::Undef`: the run overwrites it everywhere.
+fn undefine_covered_zeros(func: &mut FunctionSsa) {
+    if !func
+        .insts
+        .iter()
+        .any(|i| matches!(i, Inst::VecInsert { .. }))
+    {
+        return;
+    }
+    let counts = super::reg_alloc::compute_use_counts(func);
+    let zeros: Vec<ValueId> = func
+        .insts
+        .iter()
+        .enumerate()
+        .filter(|&(v, _)| counts[v] > 0)
+        .filter_map(|(_, inst)| {
+            super::vector_slots::pair_low(func, &counts, inst)
+                .or_else(|| super::vector_slots::covered_bottom(func, &counts, inst))
+        })
+        .filter_map(|low| match func.insts[low as usize] {
+            Inst::VecInsert { vec, .. }
+                if matches!(func.insts[vec as usize], Inst::Imm(0))
+                    && counts[vec as usize] == 1 =>
+            {
+                Some(vec)
+            }
+            _ => None,
+        })
+        .collect();
+    for z in zeros {
+        func.insts[z as usize] = Inst::Undef;
     }
 }
 

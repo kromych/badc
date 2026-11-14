@@ -282,7 +282,6 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	vmovq	%xmm15, %r11
                	vpinsrq	$0x1, %r11, %xmm0, %xmm0
-               	vmovdqa	%xmm0, %xmm0
                	movq	%rax, %xmm15
                	vmovq	%xmm15, %r11
                	vmovq	%r11, %xmm1
@@ -297,7 +296,6 @@ Disassembly of section .text:
                	movq	%rdx, %xmm15
                	vmovq	%xmm15, %r11
                	vpinsrq	$0x1, %r11, %xmm0, %xmm0
-               	vmovdqa	%xmm0, %xmm0
                	movq	%rcx, %xmm15
                	vmovq	%xmm15, %r11
                	vmovq	%r11, %xmm2
@@ -312,7 +310,6 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	vmovq	%xmm15, %r11
                	vpinsrq	$0x1, %r11, %xmm0, %xmm0
-               	vmovdqa	%xmm0, %xmm0
                	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
                	movq	%rax, %xmm15
                	vmovq	%xmm15, %r11

@@ -143,6 +143,7 @@ pub(crate) fn pair_low(func: &FunctionSsa, uses: &[u32], inst: &Inst) -> Option<
     else {
         return None;
     };
+    let low = through_copy(func, uses, low);
     match func.insts.get(low as usize)? {
         &Inst::VecInsert {
             off: 0,
@@ -154,9 +155,18 @@ pub(crate) fn pair_low(func: &FunctionSsa, uses: &[u32], inst: &Inst) -> Option<
     }
 }
 
-/// The bottom of a run of lane inserts that `inst` tops and that writes every
-/// byte of its vector, each insert below `inst` read by the next alone: the
-/// vector under that bottom insert is overwritten everywhere.
+/// The value a register copy `v` that nothing else reads takes, else `v`.
+fn through_copy(func: &FunctionSsa, uses: &[u32], v: ValueId) -> ValueId {
+    match func.insts.get(v as usize) {
+        Some(&Inst::Copy { value, .. }) if uses.get(v as usize) == Some(&1) => value,
+        _ => v,
+    }
+}
+
+/// The bottom of a run of lane or 128-bit part inserts that `inst` tops and
+/// that writes every byte of its vector, each insert below `inst` read by
+/// the next alone: the vector under that bottom insert is overwritten
+/// everywhere.
 pub(crate) fn covered_bottom(func: &FunctionSsa, uses: &[u32], inst: &Inst) -> Option<ValueId> {
     let &Inst::VecInsert {
         vec,
@@ -173,9 +183,13 @@ pub(crate) fn covered_bottom(func: &FunctionSsa, uses: &[u32], inst: &Inst) -> O
         n if n < 64 => (1u64 << n) - 1,
         _ => return None,
     };
-    let lanes = |off: u8, kind| lane_store_bytes(kind).map(|n| ((1u64 << n) - 1) << off);
+    let width = |kind| match kind {
+        StoreKind::V128 => Some(16),
+        k => lane_store_bytes(k),
+    };
+    let lanes = |off: u8, kind| width(kind).map(|n| ((1u64 << n) - 1) << off);
     let mut covered = lanes(off, kind)?;
-    let mut below = vec;
+    let mut below = through_copy(func, uses, vec);
     loop {
         let &Inst::VecInsert {
             vec,
@@ -194,7 +208,7 @@ pub(crate) fn covered_bottom(func: &FunctionSsa, uses: &[u32], inst: &Inst) -> O
         if covered == full {
             return Some(below);
         }
-        below = vec;
+        below = through_copy(func, uses, vec);
     }
 }
 
@@ -582,6 +596,66 @@ fn split_wide_reads(func: &mut FunctionSsa) {
             *vec = rw.ids[k];
             *off &= 15;
             *bytes = 16;
+        }
+    }
+}
+
+/// A 64-bit integer lane that a load reads only for one insert into a
+/// 16-byte vector, loaded as the bits of a double: the load fills an FP
+/// register, which the insert takes as it is, with no trip through a
+/// general one (x86-64 `vmovq` into the low lane over a vector of no value,
+/// `vunpcklpd` pairing it with the high one).
+pub(crate) fn fp_lane_loads(func: &mut FunctionSsa) {
+    let uses = super::reg_alloc::compute_use_counts(func);
+    let lane_load = |inst: &Inst| {
+        matches!(
+            inst,
+            Inst::Load {
+                kind: LoadKind::I64,
+                volatile: false,
+                ..
+            } | Inst::LoadLocal {
+                kind: LoadKind::I64,
+                volatile: false,
+                ..
+            } | Inst::LoadIndexed {
+                kind: LoadKind::I64,
+                index_ext: super::super::ir::IndexExt::None,
+                scale: 8,
+                abs_base: false,
+                ..
+            }
+        )
+    };
+    let sites: Vec<(usize, ValueId)> = (func.insts.iter().enumerate())
+        .filter_map(|(v, inst)| match *inst {
+            Inst::VecInsert {
+                vec,
+                value,
+                off,
+                kind: StoreKind::I64,
+                bytes: 16,
+            } if uses[v] > 0
+                && uses[value as usize] == 1
+                && lane_load(&func.insts[value as usize])
+                && (off == 8 || matches!(func.insts[vec as usize], Inst::Undef | Inst::Imm(0))) =>
+            {
+                Some((v, value))
+            }
+            _ => None,
+        })
+        .collect();
+    for (v, value) in sites {
+        if let Inst::VecInsert { kind, .. } = &mut func.insts[v] {
+            *kind = StoreKind::F64;
+        }
+        match &mut func.insts[value as usize] {
+            Inst::Load { kind, .. }
+            | Inst::LoadLocal { kind, .. }
+            | Inst::LoadIndexed { kind, .. } => {
+                *kind = LoadKind::F64;
+            }
+            _ => {}
         }
     }
 }

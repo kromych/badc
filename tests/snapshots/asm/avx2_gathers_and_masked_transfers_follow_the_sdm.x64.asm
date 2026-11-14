@@ -8078,7 +8078,6 @@ Disassembly of section .text:
                	vpextrq	$0x1, %xmm0, %rax
                	movapd	%xmm2, %xmm0
                	vpinsrq	$0x1, %rax, %xmm0, %xmm0
-               	vmovdqa	%xmm0, %xmm0
                	vmovq	%xmm1, %rax
                	vmovq	%rax, %xmm2
                	vpextrq	$0x1, %xmm1, %rax
@@ -8222,7 +8221,6 @@ Disassembly of section .text:
                	vpextrq	$0x1, %xmm0, %rdx
                	movapd	%xmm2, %xmm0
                	vpinsrq	$0x1, %rdx, %xmm0, %xmm0
-               	vmovdqa	%xmm0, %xmm0
                	vmovq	%xmm1, %rdx
                	vmovq	%rdx, %xmm2
                	vpextrq	$0x1, %xmm1, %rdx
@@ -8278,15 +8276,14 @@ Disassembly of section .text:
                	movl	$0x40, %edx
                	vzeroupper
                	callq	<addr>
-               	movq	(%rsp), %rax
-               	movq	0x8(%rsp), %rcx
-               	movq	0x10(%rsp), %rdx
-               	movq	0x18(%rsp), %rsi
-               	vmovq	%rax, %xmm0
-               	vpinsrq	$0x1, %rcx, %xmm0, %xmm0
+               	movsd	(%rsp), %xmm0
+               	movsd	0x8(%rsp), %xmm1
+               	movsd	0x10(%rsp), %xmm2
+               	movsd	0x18(%rsp), %xmm3
+               	vunpcklpd	%xmm1, %xmm0, %xmm0 # xmm0 = xmm0[0],xmm1[0]
                	movups	%xmm0, -0x3b(%rbp)
-               	vmovq	%rdx, %xmm0
-               	vpinsrq	$0x1, %rsi, %xmm0, %xmm0
+               	vmovq	%xmm2, %xmm0            # xmm0 = xmm2[0],zero
+               	vunpcklpd	%xmm3, %xmm0, %xmm0 # xmm0 = xmm0[0],xmm3[0]
                	movups	%xmm0, -0x1f(%rbp)
                	leaq	-0x40(%rbp), %rax
                	leaq	0x5(%rax), %rdi
@@ -9811,7 +9808,6 @@ Disassembly of section .text:
                	andq	$0x3, %r8
                	movl	0x100(%rsp,%r8,4), %esi
                	vpinsrd	$0x3, %esi, %xmm0, %xmm0
-               	vmovdqa	%xmm0, %xmm0
                	movq	%r15, %rdi
                	andq	$0x3, %rdi
                	orq	$0x4, %rdi
@@ -9917,26 +9913,23 @@ Disassembly of section .text:
                	vmovq	%xmm0, %rcx
                	sarq	%rcx
                	andq	$0x1, %rcx
-               	movq	0x100(%rsp,%rcx,8), %rax
-               	vmovq	%rax, %xmm0
+               	vmovq	0x100(%rsp,%rcx,8), %xmm0
                	vpextrq	$0x1, %xmm1, %rdx
                	sarq	%rdx
                	andq	$0x1, %rdx
-               	movq	0x100(%rsp,%rdx,8), %rax
-               	vpinsrq	$0x1, %rax, %xmm0, %xmm0
-               	vmovdqa	%xmm0, %xmm0
+               	vmovq	0x100(%rsp,%rdx,8), %xmm1
+               	vunpcklpd	%xmm1, %xmm0, %xmm0 # xmm0 = xmm0[0],xmm1[0]
                	vmovq	%xmm2, %rcx
                	sarq	%rcx
                	andq	$0x1, %rcx
                	orq	$0x2, %rcx
-               	movq	0x100(%rsp,%rcx,8), %rax
-               	vmovq	%rax, %xmm1
+               	vmovq	0x100(%rsp,%rcx,8), %xmm1
                	vpextrq	$0x1, %xmm3, %rcx
                	sarq	%rcx
                	andq	$0x1, %rcx
                	orq	$0x2, %rcx
-               	movq	0x100(%rsp,%rcx,8), %rax
-               	vpinsrq	$0x1, %rax, %xmm1, %xmm1
+               	vmovq	0x100(%rsp,%rcx,8), %xmm2
+               	vunpcklpd	%xmm2, %xmm1, %xmm1 # xmm1 = xmm1[0],xmm2[0]
                	vinserti128	$0x1, %xmm1, %ymm0, %ymm0
                	vmovups	%ymm0, 0x20(%rsp)
                	leaq	-0x128(%rbp), %rax
@@ -9961,14 +9954,12 @@ Disassembly of section .text:
                	vmovq	%xmm0, %rcx
                	sarq	%rcx
                	andq	$0x1, %rcx
-               	movq	0x100(%rsp,%rcx,8), %rax
-               	vmovq	%rax, %xmm1
+               	vmovq	0x100(%rsp,%rcx,8), %xmm1
                	vpextrq	$0x1, %xmm0, %rcx
                	sarq	%rcx
                	andq	$0x1, %rcx
-               	movq	0x100(%rsp,%rcx,8), %rax
-               	movapd	%xmm1, %xmm0
-               	vpinsrq	$0x1, %rax, %xmm0, %xmm0
+               	vmovq	0x100(%rsp,%rcx,8), %xmm0
+               	vunpcklpd	%xmm0, %xmm1, %xmm0 # xmm0 = xmm1[0],xmm0[0]
                	movups	%xmm0, 0x130(%rsp)
                	leaq	0x130(%rsp), %rdi
                	leaq	-0x148(%rbp), %rsi

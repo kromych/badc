@@ -3244,6 +3244,41 @@ v2du shr(v2du a, v2du c) { return a >> c; }\n";
     m.finish();
 }
 
+/// A 256-bit vector of four 64-bit lanes is built as clang builds it: each
+/// lane a load reads only for the vector goes straight into an xmm register
+/// (`vmovq m64`), two pair up (`vunpcklpd`) and the pairs join
+/// (`vinserti128`), with no move of the low pair over itself; lanes in
+/// general registers take `vmovq` and `vpinsrq`. Each lane took a general
+/// register, and the low pair a `vmovdqa` onto its own register.
+#[test]
+fn a_vector_of_loaded_lanes_is_built_in_the_vector_registers() {
+    const SRC: &str = "#include <immintrin.h>\n\
+__m256i gather4(const long long *m, const unsigned char *s) {\n\
+    return _mm256_set_epi64x(m[s[3]], m[s[2]], m[s[1]], m[s[0]]);\n\
+}\n\
+__m256i four(long long a, long long b, long long c, long long d) {\n\
+    return _mm256_set_epi64x(d, c, b, a);\n\
+}\n";
+    let mut m = Misses::default();
+    let count = |insns: &[X64Insn], op: u16| insns.iter().filter(|i| i.vex && i.op == op).count();
+    // `vmovq m64, %xmm` (VEX F3 0F 7E), `vunpcklpd` (0F 14), `vinserti128`
+    // (0F3A 38), and no `vmovdqa` (0F 6F) or general-register load.
+    let g = x64(SRC, "gather4");
+    m.expect(
+        g.len() == 12
+            && count(&g, 0x0F7E) == 4
+            && count(&g, 0x0F14) == 2
+            && count(&g, 0x3A38) == 1
+            && count(&g, 0x0F6F) == 0,
+        || format!("x86-64 gather4: {g:x?}"),
+    );
+    let f = x64(SRC, "four");
+    m.expect(f.len() == 6 && count(&f, 0x0F6F) == 0, || {
+        format!("x86-64 four: {f:x?}")
+    });
+    m.finish();
+}
+
 /// An FMA3 intrinsic is its instruction over the whole vector, the result
 /// in the accumulator's register: a step of `y = a * x + y` over 8 floats
 /// is two loads, `vfmadd231ps` and a store. Each took a scalar fused

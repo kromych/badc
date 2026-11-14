@@ -253,8 +253,7 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rcx
                	movq	(%rax), %r10
                	movq	%r10, (%rcx)
-               	movq	-0x8(%rbp), %rax
-               	vmovq	%rax, %xmm0
+               	movsd	-0x8(%rbp), %xmm0
                	xorl	%eax, %eax
                	vpinsrq	$0x1, %rax, %xmm0, %xmm0
                	movups	%xmm0, -0x50(%rbp)

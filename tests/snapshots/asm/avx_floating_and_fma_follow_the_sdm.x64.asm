@@ -58,7 +58,6 @@ Disassembly of section .text:
                	vmovq	%rax, %xmm1
                	vmovq	%xmm0, %rax
                	vpinsrq	$0x1, %rax, %xmm1, %xmm1
-               	vmovdqa	%xmm1, %xmm1
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrq	$0x1, %xmm2, %rax
                	vmovq	%rax, %xmm2
@@ -74,7 +73,6 @@ Disassembly of section .text:
                	vmovq	%rax, %xmm2
                	vpextrq	$0x1, %xmm1, %rax
                	vpinsrq	$0x1, %rax, %xmm2, %xmm2
-               	vmovdqa	%xmm2, %xmm2
                	vextracti128	$0x1, %ymm0, %xmm0
                	vpextrq	$0x1, %xmm0, %rax
                	vmovq	%rax, %xmm0

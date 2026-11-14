@@ -722,7 +722,6 @@ Disassembly of section .text:
                	movss	-0x18(%rbp), %xmm2
                	vmovd	%xmm2, %r11d
                	vpinsrd	$0x3, %r11d, %xmm1, %xmm1
-               	vmovdqa	%xmm1, %xmm1
                	vpextrw	$0x4, %xmm0, %ecx
                	movswq	%cx, %rcx
                	andq	$0xffff, %rcx           # imm = 0xFFFF

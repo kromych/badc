@@ -2120,7 +2120,11 @@ fn wide_operands(
 
 /// Encode a wide form; one naming a zmm register takes its EVEX row, as the
 /// assembler settles it for the same operands.
-fn encode_wide(code: &mut Vec<u8>, mnem: &'static str, ops: &[super::asm::Concrete]) -> Emit {
+pub(super) fn encode_wide(
+    code: &mut Vec<u8>,
+    mnem: &'static str,
+    ops: &[super::asm::Concrete],
+) -> Emit {
     use super::asm::{Concrete, Mnemonic};
     let zmm = ops
         .iter()
@@ -2911,9 +2915,11 @@ pub(super) fn emit_vec_insert(
             _ => sa,
         };
         // The low part over a zero or undefined vector: a VEX move clears
-        // the bits above it.
+        // the bits above it, which an undefined one leaves as they are.
         if blank.is_some() && off == 0 {
-            encode_wide(code, "vmovdqa", &[wide_reg(16, p.0), wide_reg(16, rd)])?;
+            if blank == Some(false) || p.0 != rd {
+                encode_wide(code, "vmovdqa", &[wide_reg(16, p.0), wide_reg(16, rd)])?;
+            }
             mirror(code, rd);
             return Ok(());
         }

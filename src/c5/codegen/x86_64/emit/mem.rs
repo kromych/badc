@@ -657,6 +657,34 @@ pub(super) fn emit_load_indexed(
     frame: Frame,
     frame_base: Option<(Reg, i32)>,
 ) -> Emit {
+    // A double: `vmovq` into the low lane, the rest of the register clear.
+    if kind == LoadKind::F64 && scale == 8 && ext == IndexExt::None {
+        let Some((rbase, rindex, disp)) = indexed_operands(
+            code,
+            (place_of(alloc, base), place_of(alloc, index)),
+            frame,
+            frame_base,
+        ) else {
+            return fail("LoadIndexed: base / index not int reg / spill");
+        };
+        let Some(dd) = fp_or_spill_dst(dst, frame) else {
+            return fail("LoadIndexed: dst not fp reg / spill");
+        };
+        let at = super::asm::Concrete::Mem {
+            base: rbase.0,
+            index: Some(rindex.0),
+            scale: 8,
+            disp,
+            size: crate::c5::ir::AsmRegSize::Quad,
+        };
+        let xmm = super::asm::Concrete::Reg {
+            reg: super::asm::XMM_BASE + dd.0,
+            size: crate::c5::ir::AsmRegSize::Quad,
+        };
+        super::intrinsic::encode_wide(code, "vmovq", &[at, xmm])?;
+        mirror_fp_dst(code, dst, dd, frame);
+        return Ok(());
+    }
     if is_fp_load(kind) {
         return fail("LoadIndexed: FP not implemented");
     }

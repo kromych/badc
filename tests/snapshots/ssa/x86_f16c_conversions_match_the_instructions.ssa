@@ -1852,8 +1852,8 @@ fn ent_pc=1356 n_params=0 variadic=false locals=12
     v1657 LoadLocal { off=-3, kind=F32 }                   -> d1 [f32]
     v1658 LifetimeEnd(-3)                                  -> -
     v1659 LifetimeEnd(0)                                   -> -
-    v1660 Imm(0)                                           -> x6
-    v1661 Imm(0)                                           -> x0
+    v1660 Undef                                            -> x6
+    v1661 Undef                                            -> x0
     v1662 VecInsert { vec=v1661, value=v1657, off=0, kind=F32, bytes=16 } -> d1
     v1663 VecInsert { vec=v1660, value=v1662, off=0, kind=V128, bytes=32 } -> d2
     v1664 Imm(0)                                           -> x0
@@ -2049,7 +2049,7 @@ fn ent_pc=1356 n_params=0 variadic=false locals=12
     v1994 LifetimeEnd(-3)                                  -> -
     v1995 LifetimeEnd(0)                                   -> -
     v1996 Imm(0)                                           -> x0
-    v1997 Imm(0)                                           -> x0
+    v1997 Undef                                            -> x0
     v1998 VecInsert { vec=v1997, value=v1993, off=0, kind=F32, bytes=16 } -> d2
     v1999 VecInsert { vec=v1915, value=v1998, off=16, kind=V128, bytes=32 } -> d3
     v2000 Imm(0)                                           -> x0

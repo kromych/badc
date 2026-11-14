@@ -1173,8 +1173,8 @@ fn ent_pc=1357 n_params=0 variadic=false locals=12
     v625 Imm(0)                                           -> x1
     v626 VecExtract { vec=v36, off=0, kind=U32, bytes=32 } -> x1
     v627 Binop { op=mul, lhs=v624, rhs=v626 }             -> x0
-    v628 Imm(0)                                           -> x1
-    v629 Imm(0)                                           -> x2
+    v628 Undef                                            -> x1
+    v629 Undef                                            -> x2
     v630 VecInsert { vec=v629, value=v627, off=0, kind=I32, bytes=16 } -> d2
     v631 VecInsert { vec=v628, value=v630, off=0, kind=V128, bytes=32 } -> d3
     v632 Imm(0)                                           -> x0
@@ -1228,7 +1228,7 @@ fn ent_pc=1357 n_params=0 variadic=false locals=12
     v680 Binop { op=mul, lhs=v675, rhs=v679 }             -> x0
     v681 Imm(16)                                          -> x1
     v682 Imm(0)                                           -> x1
-    v683 Imm(0)                                           -> x1
+    v683 Undef                                            -> x1
     v684 VecInsert { vec=v683, value=v680, off=0, kind=I32, bytes=16 } -> d3
     v685 VecInsert { vec=v670, value=v684, off=16, kind=V128, bytes=32 } -> d4
     v686 Imm(0)                                           -> x0

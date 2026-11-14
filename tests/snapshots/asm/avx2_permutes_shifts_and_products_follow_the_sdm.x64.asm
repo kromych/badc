@@ -438,7 +438,6 @@ Disassembly of section .text:
                	vpextrd	$0x3, %xmm1, %edx
                	imulq	%rdx, %rax
                	vpinsrd	$0x3, %eax, %xmm2, %xmm2
-               	vmovdqa	%xmm2, %xmm2
                	vextracti128	$0x1, %ymm0, %xmm3
                	vmovd	%xmm3, %eax
                	vextracti128	$0x1, %ymm1, %xmm3

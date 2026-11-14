@@ -3317,6 +3317,9 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             funcs
                 .iter_mut()
                 .map(|f| {
+                    if target.is_x86_64() {
+                        super::vector_slots::fp_lane_loads(f);
+                    }
                     super::mem2reg::zero_read_undefs(f);
                     if native.optimize && !f.has_seh() {
                         super::remat::split_across_calls(f, target);

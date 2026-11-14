@@ -454,12 +454,17 @@ fn frame_bases_only(func: &FunctionSsa, alloc: &Allocation) -> Vec<bool> {
         }
         let integer = |bytes: u8| matches!(bytes, 1 | 2 | 4 | 8);
         let base = match inst {
+            // A double loads off the frame register as an integer does.
             Inst::LoadIndexed {
                 base,
                 kind,
                 abs_base: false,
                 ..
-            } if !super::is_fp_load(*kind) && integer(kind.bytes()) => Some(*base),
+            } if (!super::is_fp_load(*kind) || *kind == super::super::ir::LoadKind::F64)
+                && integer(kind.bytes()) =>
+            {
+                Some(*base)
+            }
             Inst::StoreIndexed {
                 base,
                 kind,

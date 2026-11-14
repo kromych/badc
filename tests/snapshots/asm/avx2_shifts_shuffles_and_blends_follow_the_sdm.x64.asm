@@ -315,7 +315,6 @@ Disassembly of section .text:
                	vpextrq	$0x1, %xmm0, %rdx
                	movapd	%xmm2, %xmm0
                	vpinsrq	$0x1, %rdx, %xmm0, %xmm0
-               	vmovdqa	%xmm0, %xmm0
                	vmovq	%xmm1, %rdx
                	vmovq	%rdx, %xmm2
                	vpextrq	$0x1, %xmm1, %rdx
@@ -343,7 +342,6 @@ Disassembly of section .text:
                	vpextrq	$0x1, %xmm0, %rdx
                	movapd	%xmm2, %xmm0
                	vpinsrq	$0x1, %rdx, %xmm0, %xmm0
-               	vmovdqa	%xmm0, %xmm0
                	vmovq	%xmm1, %rdx
                	vmovq	%rdx, %xmm2
                	vpextrq	$0x1, %xmm1, %rdx
@@ -371,7 +369,6 @@ Disassembly of section .text:
                	vpextrq	$0x1, %xmm0, %rdx
                	movapd	%xmm2, %xmm0
                	vpinsrq	$0x1, %rdx, %xmm0, %xmm0
-               	vmovdqa	%xmm0, %xmm0
                	vmovq	%xmm1, %rdx
                	vmovq	%rdx, %xmm2
                	vpextrq	$0x1, %xmm1, %rdx
@@ -399,7 +396,6 @@ Disassembly of section .text:
                	vpextrq	$0x1, %xmm0, %rdx
                	movapd	%xmm2, %xmm0
                	vpinsrq	$0x1, %rdx, %xmm0, %xmm0
-               	vmovdqa	%xmm0, %xmm0
                	vmovq	%xmm1, %rdx
                	vmovq	%rdx, %xmm2
                	vpextrq	$0x1, %xmm1, %rdx
@@ -429,7 +425,6 @@ Disassembly of section .text:
                	vpextrq	$0x1, %xmm0, %rdx
                	movapd	%xmm2, %xmm0
                	vpinsrq	$0x1, %rdx, %xmm0, %xmm0
-               	vmovdqa	%xmm0, %xmm0
                	vmovq	%xmm1, %rdx
                	vmovq	%rdx, %xmm2
                	vpextrq	$0x1, %xmm1, %rdx
@@ -459,7 +454,6 @@ Disassembly of section .text:
                	vpextrq	$0x1, %xmm0, %rdx
                	movapd	%xmm2, %xmm0
                	vpinsrq	$0x1, %rdx, %xmm0, %xmm0
-               	vmovdqa	%xmm0, %xmm0
                	vmovq	%xmm1, %rdx
                	vmovq	%rdx, %xmm2
                	vpextrq	$0x1, %xmm1, %rdx
@@ -489,7 +483,6 @@ Disassembly of section .text:
                	vpextrq	$0x1, %xmm0, %rdx
                	movapd	%xmm2, %xmm0
                	vpinsrq	$0x1, %rdx, %xmm0, %xmm0
-               	vmovdqa	%xmm0, %xmm0
                	vmovq	%xmm1, %rdx
                	vmovq	%rdx, %xmm2
                	vpextrq	$0x1, %xmm1, %rdx
@@ -519,7 +512,6 @@ Disassembly of section .text:
                	vpextrq	$0x1, %xmm0, %rax
                	movapd	%xmm2, %xmm0
                	vpinsrq	$0x1, %rax, %xmm0, %xmm0
-               	vmovdqa	%xmm0, %xmm0
                	vmovq	%xmm1, %rax
                	vmovq	%rax, %xmm2
                	vpextrq	$0x1, %xmm1, %rax
@@ -4419,7 +4411,6 @@ Disassembly of section .text:
                	vmovq	%rax, %xmm1
                	vpextrq	$0x1, %xmm2, %rax
                	vpinsrq	$0x1, %rax, %xmm1, %xmm1
-               	vmovdqa	%xmm1, %xmm1
                	vmovq	%xmm0, %rax
                	vmovq	%rax, %xmm2
                	vpextrq	$0x1, %xmm0, %rax
@@ -4556,7 +4547,6 @@ Disassembly of section .text:
                	vmovq	%rax, %xmm1
                	vpextrq	$0x1, %xmm2, %rax
                	vpinsrq	$0x1, %rax, %xmm1, %xmm1
-               	vmovdqa	%xmm1, %xmm1
                	vmovq	%xmm0, %rax
                	vmovq	%rax, %xmm2
                	vpextrq	$0x1, %xmm0, %rax
@@ -4693,7 +4683,6 @@ Disassembly of section .text:
                	vmovq	%rax, %xmm1
                	vpextrq	$0x1, %xmm2, %rax
                	vpinsrq	$0x1, %rax, %xmm1, %xmm1
-               	vmovdqa	%xmm1, %xmm1
                	vmovq	%xmm0, %rax
                	vmovq	%rax, %xmm2
                	vpextrq	$0x1, %xmm0, %rax
@@ -4830,7 +4819,6 @@ Disassembly of section .text:
                	vmovq	%rax, %xmm1
                	vpextrq	$0x1, %xmm2, %rax
                	vpinsrq	$0x1, %rax, %xmm1, %xmm1
-               	vmovdqa	%xmm1, %xmm1
                	vmovq	%xmm0, %rax
                	vmovq	%rax, %xmm2
                	vpextrq	$0x1, %xmm0, %rax
@@ -4967,7 +4955,6 @@ Disassembly of section .text:
                	vmovq	%rax, %xmm1
                	vpextrq	$0x1, %xmm2, %rax
                	vpinsrq	$0x1, %rax, %xmm1, %xmm1
-               	vmovdqa	%xmm1, %xmm1
                	vmovq	%xmm0, %rax
                	vmovq	%rax, %xmm2
                	vpextrq	$0x1, %xmm0, %rax
@@ -5104,7 +5091,6 @@ Disassembly of section .text:
                	vmovq	%rax, %xmm1
                	vpextrq	$0x1, %xmm2, %rax
                	vpinsrq	$0x1, %rax, %xmm1, %xmm1
-               	vmovdqa	%xmm1, %xmm1
                	vmovq	%xmm0, %rax
                	vmovq	%rax, %xmm2
                	vpextrq	$0x1, %xmm0, %rax
@@ -5207,7 +5193,6 @@ Disassembly of section .text:
                	vpextrq	$0x1, %xmm1, %rax
                	movapd	%xmm3, %xmm1
                	vpinsrq	$0x1, %rax, %xmm1, %xmm1
-               	vmovdqa	%xmm1, %xmm1
                	vmovq	%xmm2, %rax
                	vmovq	%rax, %xmm3
                	vpextrq	$0x1, %xmm2, %rax
@@ -5224,7 +5209,6 @@ Disassembly of section .text:
                	vpextrq	$0x1, %xmm1, %rax
                	movapd	%xmm3, %xmm1
                	vpinsrq	$0x1, %rax, %xmm1, %xmm1
-               	vmovdqa	%xmm1, %xmm1
                	vmovq	%xmm2, %rax
                	vmovq	%rax, %xmm3
                	vpextrq	$0x1, %xmm2, %rax
@@ -5241,7 +5225,6 @@ Disassembly of section .text:
                	vpextrq	$0x1, %xmm1, %rax
                	movapd	%xmm3, %xmm1
                	vpinsrq	$0x1, %rax, %xmm1, %xmm1
-               	vmovdqa	%xmm1, %xmm1
                	vmovq	%xmm2, %rax
                	vmovq	%rax, %xmm3
                	vpextrq	$0x1, %xmm2, %rax
@@ -5258,7 +5241,6 @@ Disassembly of section .text:
                	vpextrq	$0x1, %xmm1, %rax
                	movapd	%xmm3, %xmm1
                	vpinsrq	$0x1, %rax, %xmm1, %xmm1
-               	vmovdqa	%xmm1, %xmm1
                	vmovq	%xmm2, %rax
                	vmovq	%rax, %xmm3
                	vpextrq	$0x1, %xmm2, %rax
@@ -5275,7 +5257,6 @@ Disassembly of section .text:
                	vpextrq	$0x1, %xmm1, %rax
                	movapd	%xmm3, %xmm1
                	vpinsrq	$0x1, %rax, %xmm1, %xmm1
-               	vmovdqa	%xmm1, %xmm1
                	vmovq	%xmm2, %rax
                	vmovq	%rax, %xmm3
                	vpextrq	$0x1, %xmm2, %rax
@@ -5292,7 +5273,6 @@ Disassembly of section .text:
                	vpextrq	$0x1, %xmm1, %rax
                	movapd	%xmm3, %xmm1
                	vpinsrq	$0x1, %rax, %xmm1, %xmm1
-               	vmovdqa	%xmm1, %xmm1
                	vmovq	%xmm2, %rax
                	vmovq	%rax, %xmm3
                	vpextrq	$0x1, %xmm2, %rax
@@ -5309,7 +5289,6 @@ Disassembly of section .text:
                	vpextrq	$0x1, %xmm1, %rax
                	movapd	%xmm3, %xmm1
                	vpinsrq	$0x1, %rax, %xmm1, %xmm1
-               	vmovdqa	%xmm1, %xmm1
                	vmovq	%xmm2, %rax
                	vmovq	%rax, %xmm3
                	vpextrq	$0x1, %xmm2, %rax
@@ -5326,7 +5305,6 @@ Disassembly of section .text:
                	vpextrq	$0x1, %xmm1, %rax
                	movapd	%xmm3, %xmm1
                	vpinsrq	$0x1, %rax, %xmm1, %xmm1
-               	vmovdqa	%xmm1, %xmm1
                	vmovq	%xmm2, %rax
                	vmovq	%rax, %xmm3
                	vpextrq	$0x1, %xmm2, %rax
@@ -5343,7 +5321,6 @@ Disassembly of section .text:
                	vpextrq	$0x1, %xmm1, %rax
                	movapd	%xmm3, %xmm1
                	vpinsrq	$0x1, %rax, %xmm1, %xmm1
-               	vmovdqa	%xmm1, %xmm1
                	vmovq	%xmm2, %rax
                	vmovq	%rax, %xmm3
                	vpextrq	$0x1, %xmm2, %rax
@@ -5360,7 +5337,6 @@ Disassembly of section .text:
                	vpextrq	$0x1, %xmm1, %rax
                	movapd	%xmm3, %xmm1
                	vpinsrq	$0x1, %rax, %xmm1, %xmm1
-               	vmovdqa	%xmm1, %xmm1
                	vmovq	%xmm2, %rax
                	vmovq	%rax, %xmm3
                	vpextrq	$0x1, %xmm2, %rax
@@ -5377,7 +5353,6 @@ Disassembly of section .text:
                	vpextrq	$0x1, %xmm1, %rax
                	movapd	%xmm3, %xmm1
                	vpinsrq	$0x1, %rax, %xmm1, %xmm1
-               	vmovdqa	%xmm1, %xmm1
                	vmovq	%xmm2, %rax
                	vmovq	%rax, %xmm3
                	vpextrq	$0x1, %xmm2, %rax
@@ -5393,7 +5368,6 @@ Disassembly of section .text:
                	vpextrq	$0x1, %xmm1, %rax
                	movapd	%xmm2, %xmm1
                	vpinsrq	$0x1, %rax, %xmm1, %xmm1
-               	vmovdqa	%xmm1, %xmm1
                	vmovq	%xmm0, %rax
                	vmovq	%rax, %xmm2
                	vpextrq	$0x1, %xmm0, %rax
@@ -5678,7 +5652,6 @@ Disassembly of section .text:
                	vpextrq	$0x1, %xmm0, %rax
                	movapd	%xmm2, %xmm0
                	vpinsrq	$0x1, %rax, %xmm0, %xmm0
-               	vmovdqa	%xmm0, %xmm0
                	vmovq	%xmm1, %rax
                	vmovq	%rax, %xmm2
                	vpextrq	$0x1, %xmm1, %rax
@@ -5827,7 +5800,6 @@ Disassembly of section .text:
                	vpextrq	$0x1, %xmm0, %rax
                	movapd	%xmm2, %xmm0
                	vpinsrq	$0x1, %rax, %xmm0, %xmm0
-               	vmovdqa	%xmm0, %xmm0
                	vmovq	%xmm1, %rax
                	vmovq	%rax, %xmm2
                	vpextrq	$0x1, %xmm1, %rax
@@ -5980,7 +5952,6 @@ Disassembly of section .text:
                	vpextrq	$0x1, %xmm0, %rax
                	movapd	%xmm2, %xmm0
                	vpinsrq	$0x1, %rax, %xmm0, %xmm0
-               	vmovdqa	%xmm0, %xmm0
                	vmovq	%xmm1, %rax
                	vmovq	%rax, %xmm2
                	vpextrq	$0x1, %xmm1, %rax
@@ -6133,7 +6104,6 @@ Disassembly of section .text:
                	vpextrq	$0x1, %xmm0, %rax
                	movapd	%xmm2, %xmm0
                	vpinsrq	$0x1, %rax, %xmm0, %xmm0
-               	vmovdqa	%xmm0, %xmm0
                	vmovq	%xmm1, %rax
                	vmovq	%rax, %xmm2
                	vpextrq	$0x1, %xmm1, %rax
@@ -6284,7 +6254,6 @@ Disassembly of section .text:
                	vpextrq	$0x1, %xmm0, %rax
                	movapd	%xmm2, %xmm0
                	vpinsrq	$0x1, %rax, %xmm0, %xmm0
-               	vmovdqa	%xmm0, %xmm0
                	vmovq	%xmm1, %rax
                	vmovq	%rax, %xmm2
                	vpextrq	$0x1, %xmm1, %rax
@@ -6435,7 +6404,6 @@ Disassembly of section .text:
                	vpextrq	$0x1, %xmm0, %rax
                	movapd	%xmm2, %xmm0
                	vpinsrq	$0x1, %rax, %xmm0, %xmm0
-               	vmovdqa	%xmm0, %xmm0
                	vmovq	%xmm1, %rax
                	vmovq	%rax, %xmm2
                	vpextrq	$0x1, %xmm1, %rax

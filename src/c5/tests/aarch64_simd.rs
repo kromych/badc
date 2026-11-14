@@ -1089,6 +1089,45 @@ fn the_lane_indexed_forms_are_by_element_rows() {
     );
 }
 
+/// The dot products and the FEAT_I8MM mixed-sign and matrix products are
+/// rows: over seeded lanes the interpreter's results hash to the
+/// hardware's (the I8MM fixture's on hardware that has it, which the M1
+/// host lacks), and each is one instruction under -O, a lane form naming
+/// its 4-byte group.
+#[cfg(feature = "full")]
+#[test]
+fn the_dot_products_are_rows() {
+    for fixture in [
+        "arm_neon_dot_products_on_seeded_lanes.c",
+        "arm_neon_i8mm_dot_and_matrix_products.c",
+    ] {
+        let src = super::load_fixture(fixture);
+        let program = super::compile_str_bare_for(&src, crate::Target::LinuxAarch64);
+        let rc = super::Vm::new(program).run().expect("interpreted run");
+        assert_eq!(rc, 0, "{fixture}");
+    }
+    const OPS: &str = "#include <arm_neon.h>\n\
+        uint32x4_t a(uint32x4_t r, uint8x16_t x, uint8x16_t y) { return vdotq_u32(r, x, y); }\n\
+        int32x2_t b(int32x2_t r, int8x8_t x, int8x8_t y) { return vdot_s32(r, x, y); }\n\
+        uint32x4_t c(uint32x4_t r, uint8x16_t x, uint8x16_t y) { return vdotq_laneq_u32(r, x, y, 3); }\n\
+        int32x2_t d(int32x2_t r, int8x8_t x, int8x8_t y) { return vdot_lane_s32(r, x, y, 1); }\n\
+        int32x4_t e(int32x4_t r, uint8x16_t x, int8x16_t y) { return vusdotq_s32(r, x, y); }\n\
+        int32x4_t f(int32x4_t r, int8x16_t x, int8x16_t y) { return vmmlaq_s32(r, x, y); }\n\
+        int32x4_t g(int32x4_t r, int8x16_t x, uint8x16_t y) { return vsudotq_laneq_s32(r, x, y, 2); }\n";
+    for (name, want) in [
+        ("a", 0x6E82_9420u32),
+        ("b", 0x0E82_9420),
+        ("c", 0x6FA2_E820),
+        ("d", 0x0FA2_E020),
+        ("e", 0x4E82_9C20),
+        ("f", 0x4E82_A420),
+        ("g", 0x4F02_F820),
+    ] {
+        let words = super::perf_codegen::a64_at(OPS, name, true);
+        assert_eq!(words, [want, 0xD65F_03C0], "{name}: {words:08x?}");
+    }
+}
+
 /// `vld1`, `vst1`, `vdup_n` and `vld1_dup` are the load, store and
 /// broadcast of their vector under `-O`, as with gcc 16, with no inline asm
 /// between them and the operations that use them: `ldr q`, `str q`,

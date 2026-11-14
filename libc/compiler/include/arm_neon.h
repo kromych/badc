@@ -36,8 +36,7 @@
  * SM4 intrinsics, vld2q_u16 and vld4q_u8.
  *
  * Not provided: float16, bfloat16, the scalar lane-indexed forms, the
- * other structure
- * loads, stores and table lookups and the dot products.
+ * other structure loads, stores and table lookups.
  *
  * The element typedefs match <stdint.h>, repeated so the header serves
  * freestanding units; poly128_t is carried as a 16-byte vector.
@@ -1902,6 +1901,45 @@ __BADC_INTRIN int64x2_t vqdmlal_n_s32(int64x2_t __r, int32x2_t __a, int32_t __b)
 __BADC_INTRIN int64x2_t vqdmlal_high_n_s32(int64x2_t __r, int32x4_t __a, int32_t __b) { return vqdmlal_high_lane_s32(__r, __a, ((int32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
 __BADC_INTRIN int64x2_t vqdmlsl_n_s32(int64x2_t __r, int32x2_t __a, int32_t __b) { return vqdmlsl_lane_s32(__r, __a, ((int32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
 __BADC_INTRIN int64x2_t vqdmlsl_high_n_s32(int64x2_t __r, int32x4_t __a, int32_t __b) { return vqdmlsl_high_lane_s32(__r, __a, ((int32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+
+
+/* The dot products (FEAT_DotProd): each 32-bit lane of the accumulator
+ * plus the four products of the bytes in it, signed or unsigned, or by a
+ * 4-byte group __n of the last operand; FEAT_I8MM's mixed-sign forms
+ * (vusdot: unsigned by signed, vsudot: signed by an unsigned group) and
+ * the 2x8 by 8x2 matrix products into a 2x2 accumulator (vmmlaq). */
+#define __BADC_NEON_DOTL(R, T, V, stem, __r, __a, __v, __n) __extension__({ \
+    R __dr = (__r);                                                       \
+    T __da = (__a);                                                       \
+    V __dv = (__v);                                                       \
+    __BADC_NEON_LANE(__n, sizeof(__dv) / 4);                              \
+    (R)stem(__dr, __da, __dv, __n);                                       \
+})
+__BADC_NEON_B3T(vdot_u32, uint32x2_t, uint8x8_t, uint8x8_t, s, __builtin_neon_udot, _, 2s)
+__BADC_NEON_B3T(vdotq_u32, uint32x4_t, uint8x16_t, uint8x16_t, s, __builtin_neon_udot, _, 4s)
+#define vdot_lane_u32(__r, __a, __v, __n) __BADC_NEON_DOTL(uint32x2_t, uint8x8_t, uint8x8_t, __builtin_neon_udot_lane_2s, __r, __a, __v, __n)
+#define vdot_laneq_u32(__r, __a, __v, __n) __BADC_NEON_DOTL(uint32x2_t, uint8x8_t, uint8x16_t, __builtin_neon_udot_laneq_2s, __r, __a, __v, __n)
+#define vdotq_lane_u32(__r, __a, __v, __n) __BADC_NEON_DOTL(uint32x4_t, uint8x16_t, uint8x8_t, __builtin_neon_udot_lane_4s, __r, __a, __v, __n)
+#define vdotq_laneq_u32(__r, __a, __v, __n) __BADC_NEON_DOTL(uint32x4_t, uint8x16_t, uint8x16_t, __builtin_neon_udot_laneq_4s, __r, __a, __v, __n)
+__BADC_NEON_B3T(vdot_s32, int32x2_t, int8x8_t, int8x8_t, s, __builtin_neon_sdot, _, 2s)
+__BADC_NEON_B3T(vdotq_s32, int32x4_t, int8x16_t, int8x16_t, s, __builtin_neon_sdot, _, 4s)
+#define vdot_lane_s32(__r, __a, __v, __n) __BADC_NEON_DOTL(int32x2_t, int8x8_t, int8x8_t, __builtin_neon_sdot_lane_2s, __r, __a, __v, __n)
+#define vdot_laneq_s32(__r, __a, __v, __n) __BADC_NEON_DOTL(int32x2_t, int8x8_t, int8x16_t, __builtin_neon_sdot_laneq_2s, __r, __a, __v, __n)
+#define vdotq_lane_s32(__r, __a, __v, __n) __BADC_NEON_DOTL(int32x4_t, int8x16_t, int8x8_t, __builtin_neon_sdot_lane_4s, __r, __a, __v, __n)
+#define vdotq_laneq_s32(__r, __a, __v, __n) __BADC_NEON_DOTL(int32x4_t, int8x16_t, int8x16_t, __builtin_neon_sdot_laneq_4s, __r, __a, __v, __n)
+__BADC_NEON_B3T(vusdot_s32, int32x2_t, uint8x8_t, int8x8_t, s, __builtin_neon_usdot, _, 2s)
+__BADC_NEON_B3T(vusdotq_s32, int32x4_t, uint8x16_t, int8x16_t, s, __builtin_neon_usdot, _, 4s)
+#define vusdot_lane_s32(__r, __a, __v, __n) __BADC_NEON_DOTL(int32x2_t, uint8x8_t, int8x8_t, __builtin_neon_usdot_lane_2s, __r, __a, __v, __n)
+#define vusdot_laneq_s32(__r, __a, __v, __n) __BADC_NEON_DOTL(int32x2_t, uint8x8_t, int8x16_t, __builtin_neon_usdot_laneq_2s, __r, __a, __v, __n)
+#define vusdotq_lane_s32(__r, __a, __v, __n) __BADC_NEON_DOTL(int32x4_t, uint8x16_t, int8x8_t, __builtin_neon_usdot_lane_4s, __r, __a, __v, __n)
+#define vusdotq_laneq_s32(__r, __a, __v, __n) __BADC_NEON_DOTL(int32x4_t, uint8x16_t, int8x16_t, __builtin_neon_usdot_laneq_4s, __r, __a, __v, __n)
+#define vsudot_lane_s32(__r, __a, __v, __n) __BADC_NEON_DOTL(int32x2_t, int8x8_t, uint8x8_t, __builtin_neon_sudot_lane_2s, __r, __a, __v, __n)
+#define vsudot_laneq_s32(__r, __a, __v, __n) __BADC_NEON_DOTL(int32x2_t, int8x8_t, uint8x16_t, __builtin_neon_sudot_laneq_2s, __r, __a, __v, __n)
+#define vsudotq_lane_s32(__r, __a, __v, __n) __BADC_NEON_DOTL(int32x4_t, int8x16_t, uint8x8_t, __builtin_neon_sudot_lane_4s, __r, __a, __v, __n)
+#define vsudotq_laneq_s32(__r, __a, __v, __n) __BADC_NEON_DOTL(int32x4_t, int8x16_t, uint8x16_t, __builtin_neon_sudot_laneq_4s, __r, __a, __v, __n)
+__BADC_NEON_B3T(vmmlaq_s32, int32x4_t, int8x16_t, int8x16_t, s, __builtin_neon_smmla, _, 4s)
+__BADC_NEON_B3T(vmmlaq_u32, uint32x4_t, uint8x16_t, uint8x16_t, s, __builtin_neon_ummla, _, 4s)
+__BADC_NEON_B3T(vusmmlaq_s32, int32x4_t, uint8x16_t, int8x16_t, s, __builtin_neon_usmmla, _, 4s)
 
 #pragma pop_macro("__attribute__")
 

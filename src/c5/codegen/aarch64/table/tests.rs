@@ -1086,6 +1086,47 @@ fn vector_one_source_counts_and_estimates() {
     assert_eq!(v3("fmulx", 2, true), 0x4E23_DC41);
     let e = |num: u8, size: u8, index: u8| Opnd::VecElem { num, size, index };
     assert_eq!(
+        enc("sdot", &[v(1, 2, true), v(2, 0, true), v(3, 0, true)]),
+        0x4E83_9441
+    );
+    assert_eq!(
+        enc("udot", &[v(1, 2, false), v(2, 0, false), v(3, 0, false)]),
+        0x2E83_9441
+    );
+    assert_eq!(
+        enc("sdot", &[v(1, 2, true), v(2, 0, true), e(19, 2, 3)]),
+        0x4FB3_E841
+    );
+    assert_eq!(
+        enc("udot", &[v(1, 2, false), v(2, 0, false), e(3, 2, 1)]),
+        0x2FA3_E041
+    );
+    assert_eq!(
+        enc("usdot", &[v(1, 2, true), v(2, 0, true), v(3, 0, true)]),
+        0x4E83_9C41
+    );
+    assert_eq!(
+        enc("usdot", &[v(1, 2, false), v(2, 0, false), e(3, 2, 2)]),
+        0x0F83_F841
+    );
+    assert_eq!(
+        enc("sudot", &[v(1, 2, true), v(2, 0, true), e(19, 2, 1)]),
+        0x4F33_F041
+    );
+    assert_eq!(
+        enc("smmla", &[v(1, 2, true), v(2, 0, true), v(3, 0, true)]),
+        0x4E83_A441
+    );
+    assert_eq!(
+        enc("ummla", &[v(1, 2, true), v(2, 0, true), v(3, 0, true)]),
+        0x6E83_A441
+    );
+    assert_eq!(
+        enc("usmmla", &[v(1, 2, true), v(2, 0, true), v(3, 0, true)]),
+        0x4E83_AC41
+    );
+    assert!(encode("sudot", &[v(1, 2, true), v(2, 0, true), v(3, 0, true)]).is_err());
+    assert_eq!(
         enc("mul", &[v(1, 1, false), v(2, 1, false), e(3, 1, 5)]),
         0x0F53_8841
     );

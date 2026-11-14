@@ -976,6 +976,61 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | ((rn as u32) << 5)
             | (rd as u32));
     }
+    // The dot products `<sdot|udot|usdot> Vd.2s|4s, Vn.8b|16b, Vm.8b|16b`, by
+    // element `Vm.4b[i]` (an s element, H:L the index, M Vm's high bit;
+    // sudot only by element), and the FEAT_I8MM matrix products
+    // `<smmla|ummla|usmmla> Vd.4s, Vn.16b, Vm.16b`.
+    if let Some((vector, element, matrix)) = match mnemonic {
+        "sdot" => Some((Some(0x0E80_9400u32), Some(0x0F80_E000u32), false)),
+        "udot" => Some((Some(0x2E80_9400), Some(0x2F80_E000), false)),
+        "usdot" => Some((Some(0x0E80_9C00), Some(0x0F80_F000), false)),
+        "sudot" => Some((None, Some(0x0F00_F000), false)),
+        "smmla" => Some((Some(0x4E80_A400), None, true)),
+        "ummla" => Some((Some(0x6E80_A400), None, true)),
+        "usmmla" => Some((Some(0x4E80_AC00), None, true)),
+        _ => None,
+    } && let [
+        Opnd::VecReg {
+            num: rd,
+            size: 2,
+            q,
+        },
+        Opnd::VecReg {
+            num: rn,
+            size: 0,
+            q: q1,
+        },
+        m,
+    ] = *ops
+        && q == q1
+        && (q || !matrix)
+    {
+        let qbit = u32::from(q) << 30;
+        let word = match (m, vector, element) {
+            (
+                Opnd::VecReg {
+                    num: rm,
+                    size: 0,
+                    q: q2,
+                },
+                Some(base),
+                _,
+            ) if q2 == q => base | (u32::from(rm) << 16),
+            (
+                Opnd::VecElem {
+                    num: rm,
+                    size: 2,
+                    index: i @ 0..=3,
+                },
+                _,
+                Some(base),
+            ) => {
+                base | (u32::from(i & 1) << 21) | (u32::from(rm) << 16) | (u32::from(i >> 1) << 11)
+            }
+            _ => return Err(format!("inline asm: bad `{mnemonic}` operands")),
+        };
+        return Ok(word | qbit | (u32::from(rn) << 5) | u32::from(rd));
+    }
     // SIMD by element `<op> Vd.T, Vn.T, Vm.Ts[i]`, and the FP forms' scalar
     // `Rd, Rn, Vm.Ts[i]` (bits 30 and 28 set): size at 22 (1:sz for FP),
     // opcode at 12 and U at 29 name the operation. The index is H:L:M for a

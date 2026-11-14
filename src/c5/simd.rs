@@ -529,6 +529,15 @@ pub(crate) enum Sem {
     /// without an index is the operation's vector form over an operand the
     /// lane fills.
     ByElement(&'static Sem, u8),
+    /// Each 32-bit lane of the accumulator plus the sum of the four products
+    /// of the other two operands' bytes in it, each operand's bytes signed
+    /// when its flag is set (`sdot`, `udot`, `usdot`).
+    Dot(bool, bool),
+    /// The accumulator's 2x2 matrix of 32-bit lanes plus the product of
+    /// the first operand's 2x8 byte matrix and the second's transposed,
+    /// rows in the order of the lanes, signedness as [`Sem::Dot`]'s
+    /// (`smmla`, `ummla`, `usmmla`).
+    MatMul(bool, bool),
     /// The high half of twice the signed product of each lane pair, rounded
     /// when `true`, saturated (`sqdmulh`, `sqrdmulh`).
     SatDoublingMulHigh(u8, bool),
@@ -919,6 +928,7 @@ impl SimdOp {
         let src = match self.base_sem() {
             Sem::Long(_, w, ..) | Sem::Across(_, w, ..) | Sem::PairAddLong(w, _) => w,
             Sem::PairAddLongAcc(w, _) if i > 1 => w,
+            Sem::Dot(..) | Sem::MatMul(..) if i > 1 => 1,
             Sem::Wide(_, w, ..) | Sem::LongAcc(_, w, ..) if i > 1 => w,
             Sem::Narrow(w, _) | Sem::ShrNarrow(w, ..) => w,
             Sem::Extend(from, ..) => from,
@@ -1188,6 +1198,28 @@ pub(crate) fn eval_acc(sem: Sem, acc: &[u8; 16], a: &[u8; 16], b: &[u8; 16]) -> 
                 _ => Sem::Add(2 * w),
             };
             return Some(eval(combine, acc, &part, 0, 0));
+        }
+        Sem::Dot(sa, sb) | Sem::MatMul(sa, sb) => {
+            let byte = |v: &[u8; 16], k: usize, signed: bool| match signed {
+                true => i64::from(v[k] as i8),
+                false => i64::from(v[k]),
+            };
+            let mut o = [0u8; 16];
+            for i in 0..4 {
+                // A dot product pairs the lane's own bytes; a matrix lane
+                // pairs a row of the first operand with one of the second.
+                let (ra, rb) = match sem {
+                    Sem::Dot(..) => (4 * i, 4 * i),
+                    _ => (8 * (i / 2), 8 * (i % 2)),
+                };
+                let n = if matches!(sem, Sem::Dot(..)) { 4 } else { 8 };
+                let sum: i64 = (0..n)
+                    .map(|k| byte(a, ra + k, sa) * byte(b, rb + k, sb))
+                    .sum();
+                let x = (lane(acc, 4, i) as i64).wrapping_add(sum);
+                set_lane(&mut o, 4, i, x as u64 & mask(4));
+            }
+            return Some(o);
         }
         Sem::SatRoundingDoublingMulAcc(w, sub) => {
             let bits = 8 * u32::from(w);
@@ -2019,7 +2051,7 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
         Sem::FloatRel(..) | Sem::FloatFma(..) | Sem::LongAcc(..) => {}
         Sem::Estimate(..) | Sem::Step(..) | Sem::FloatPair(..) | Sem::FloatAcross(..) => {}
         Sem::RoundInt(..) | Sem::RoundIntN(..) | Sem::SatRoundingDoublingMulAcc(..) => {}
-        Sem::ByElement(..) => {}
+        Sem::ByElement(..) | Sem::Dot(..) | Sem::MatMul(..) => {}
         Sem::Perm4x64
         | Sem::PermVar32
         | Sem::Perm2x128

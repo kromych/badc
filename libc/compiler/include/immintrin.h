@@ -959,68 +959,22 @@ __BADC_INTRIN int _mm256_movemask_pd(__m256d __A) {
     return _mm_movemask_pd(__badc_lo_pd(__A)) | _mm_movemask_pd(__badc_hi_pd(__A)) << 2;
 }
 
-/* AVX's compare predicates: bits 0-3 the relation, among which those with
-** bit 0 or 1 set, but not both, signal, and bit 4 swaps quiet and signaling.
-** A signaling one raises invalid for any NaN operand, a quiet one only for a
-** signaling NaN. */
-static inline int __badc_cmp_holds(double __a, double __b, int __p) {
-    int __unord = __builtin_isunordered(__a, __b);
-    int __lt = __builtin_isless(__a, __b), __eq = __a == __b;
-    if (((__p & 3) == 1 || (__p & 3) == 2) ^ (__p >> 4 & 1)) {
-        volatile int __signal = __a < __b;
-        (void)__signal;
-    }
-    switch (__p & 15) {
-    case 0: return __eq;
-    case 1: return __lt;
-    case 2: return __lt || __eq;
-    case 3: return __unord;
-    case 4: return !__eq;
-    case 5: return !__lt;
-    case 6: return !(__lt || __eq);
-    case 7: return !__unord;
-    case 8: return __eq || __unord;
-    case 9: return __lt || __unord;
-    case 10: return __lt || __eq || __unord;
-    case 11: return 0;
-    case 12: return !__eq && !__unord;
-    case 13: return !__lt && !__unord;
-    case 14: return !__lt && !__eq && !__unord;
-    default: return 1;
-    }
-}
-
+/* AVX's compares by the 32 predicates of imm8: bits 0-3 the relation,
+** bit 4 swapping quiet and signaling, the VEX form of the compare rows. */
 #define _mm256_cmp_ps(A, B, P)                                                          \
     ((__m256)__builtin_ia32_cmpps256((__v8sf)(__m256)(A), (__v8sf)(__m256)(B), (int)(P)))
 
 #define _mm256_cmp_pd(A, B, P)                                                          \
     ((__m256d)__builtin_ia32_cmppd256((__v4df)(__m256d)(A), (__v4df)(__m256d)(B), (int)(P)))
 
-static inline __m128 _mm_cmp_ps(__m128 __A, __m128 __B, const int __P) {
-    __v4si __r;
-    for (int __i = 0; __i < 4; __i++)
-        __r[__i] = -__badc_cmp_holds(__A[__i], __B[__i], __P);
-    return (__m128)__r;
-}
-
-static inline __m128d _mm_cmp_pd(__m128d __A, __m128d __B, const int __P) {
-    __v2di __r;
-    for (int __i = 0; __i < 2; __i++)
-        __r[__i] = -(long long)__badc_cmp_holds(__A[__i], __B[__i], __P);
-    return (__m128d)__r;
-}
-
-static inline __m128 _mm_cmp_ss(__m128 __A, __m128 __B, const int __P) {
-    __v4si __r = (__v4si)__A;
-    __r[0] = -__badc_cmp_holds(__A[0], __B[0], __P);
-    return (__m128)__r;
-}
-
-static inline __m128d _mm_cmp_sd(__m128d __A, __m128d __B, const int __P) {
-    __v2di __r = (__v2di)__A;
-    __r[0] = -(long long)__badc_cmp_holds(__A[0], __B[0], __P);
-    return (__m128d)__r;
-}
+#define _mm_cmp_ps(A, B, P)                                                             \
+    ((__m128)__builtin_ia32_cmpps((__v4sf)(__m128)(A), (__v4sf)(__m128)(B), (int)(P)))
+#define _mm_cmp_pd(A, B, P)                                                             \
+    ((__m128d)__builtin_ia32_cmppd((__v2df)(__m128d)(A), (__v2df)(__m128d)(B), (int)(P)))
+#define _mm_cmp_ss(A, B, P)                                                             \
+    ((__m128)__builtin_ia32_cmpss((__v4sf)(__m128)(A), (__v4sf)(__m128)(B), (int)(P)))
+#define _mm_cmp_sd(A, B, P)                                                             \
+    ((__m128d)__builtin_ia32_cmpsd((__v2df)(__m128d)(A), (__v2df)(__m128d)(B), (int)(P)))
 
 #define _CMP_EQ_OQ 0x00
 #define _CMP_LT_OS 0x01

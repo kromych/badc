@@ -110,10 +110,12 @@ pub(super) fn emit_x86_simd(
             if row.form == Form::VvI {
                 ops.insert(0, imm8);
             }
-            // A VEX-only row (`psllvd`) has no two-operand SSE encoding: the
-            // VEX form writes over its first source.
+            // A VEX-only row (`psllvd`), or a compare by one of the
+            // predicates past 7 only AVX encodes, takes the VEX form, which
+            // writes over its first source.
+            let avx_predicate = matches!(row.sem, simd::Sem::FloatCmp(..)) && imm.unwrap_or(0) > 7;
             let mut probe = CodeBuf::default();
-            if insn(&mut probe, row.mnem, &ops).is_ok() {
+            if !avx_predicate && insn(&mut probe, row.mnem, &ops).is_ok() {
                 code.extend_from_slice(&probe);
             } else if let Some(m) = super::asm::vex_mnemonic(row.mnem) {
                 ops.push(xmm(dst_x));

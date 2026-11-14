@@ -654,6 +654,42 @@ fn the_roundings_are_rows_the_interpreter_runs() {
     assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 0);
 }
 
+/// AVX's 128-bit compares by the 32 predicates are the compare rows:
+/// a predicate past 7 takes the VEX encoding at `-O0` as well (`vcmpps
+/// $0x19, %xmm14, %xmm15, %xmm15` is `c4 41 00 c2 fe 19`), and the
+/// interpreter gives each predicate's lanes and raises invalid for a
+/// signaling NaN under the quiet ones too, `_CMP_FALSE_OQ` included.
+#[cfg(feature = "full")]
+#[test]
+fn the_avx_compares_are_rows_at_every_predicate() {
+    assert_emits(
+        "typedef float __v4sf_ __attribute__((vector_size(16))); \
+         __v4sf_ f(__v4sf_ a, __v4sf_ b) { return __builtin_ia32_cmpps(a, b, 25); }",
+        &[0xc4, 0x41, 0x00, 0xc2, 0xfe, 0x19],
+        "vcmpps",
+    );
+    let src = "#include <immintrin.h>\n#include <fenv.h>\n#include <string.h>\n\
+        static int lanes(__m128 r) { unsigned u[4]; memcpy(u, &r, 16); \
+            return (u[0] != 0) | (u[1] != 0) << 1 | (u[2] != 0) << 2 | (u[3] != 0) << 3; }\n\
+        int main(void) {\n\
+            union { unsigned u; float f; } sn = {0x7fa00000u}, qn = {0x7fc00000u};\n\
+            __m128 a = _mm_setr_ps(1, qn.f, 2, sn.f), b = _mm_setr_ps(2, 1, 2, 1);\n\
+            feclearexcept(FE_ALL_EXCEPT);\n\
+            if (lanes(_mm_cmp_ps(a, b, _CMP_NGE_UQ)) != 0xb || !fetestexcept(FE_INVALID)) return 1;\n\
+            feclearexcept(FE_ALL_EXCEPT);\n\
+            if (lanes(_mm_cmp_ps(a, b, _CMP_FALSE_OQ)) != 0 || !fetestexcept(FE_INVALID)) return 2;\n\
+            if (lanes(_mm_cmp_ps(a, b, _CMP_EQ_UQ)) != 0xe) return 3;\n\
+            __m128d c = _mm_setr_pd(1, qn.f), d = _mm_setr_pd(1, 0);\n\
+            feclearexcept(FE_ALL_EXCEPT);\n\
+            __m128d e = _mm_cmp_pd(c, d, _CMP_NEQ_OS);\n\
+            if (e[0] != 0 || e[1] != 0 || !fetestexcept(FE_INVALID)) return 4;\n\
+            __m128 s = _mm_cmp_ss(a, b, _CMP_GE_OQ);\n\
+            return s[0] == 0 && s[2] == 2 ? 0 : 5;\n\
+        }\n";
+    let program = super::compile_str_bare_for(src, crate::Target::LinuxX64);
+    assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 0);
+}
+
 /// `<pmmintrin.h>` and the `<mmintrin.h>` it reaches give each MMX and SSE3
 /// operation the result the SDM defines for its instruction, saturation,
 /// out-of-range shift counts and the pair-sum wrap included, as the

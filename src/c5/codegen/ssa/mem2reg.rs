@@ -25,6 +25,8 @@
 use alloc::collections::BTreeSet;
 use alloc::vec::Vec;
 
+use super::tape::{At, Insertion};
+
 use super::super::ir::{
     BinOp, BlockId, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator,
     ValueId,
@@ -1671,6 +1673,133 @@ fn copy_words(func: &mut FunctionSsa) {
     }
 }
 
+/// A load through a phi of frame-object addresses becomes a load of each
+/// object in the predecessor that names it, merged by that phi: a
+/// conditional choosing between two objects, each written in its arm,
+/// reads the value its arm stored, and the objects' addresses, read by
+/// nothing else, no longer pin them to the frame. Each object is read at
+/// the end of its predecessor, or ahead of the compare a conditional
+/// terminator reads, and nothing between that point and the load may
+/// write memory.
+fn split_address_phi_loads(func: &mut FunctionSsa) {
+    let uses = super::reg_alloc::compute_use_counts(func);
+    let quiet = |inst: &Inst| {
+        inst.is_pure()
+            || matches!(
+                inst,
+                Inst::Phi { .. }
+                    | Inst::LoadLocal {
+                        volatile: false,
+                        ..
+                    }
+                    | Inst::Load {
+                        volatile: false,
+                        ..
+                    }
+                    | Inst::LifetimeEnd(_)
+            )
+    };
+    // Per load: the phi, and per predecessor the object and where its read goes.
+    type Plan = (ValueId, ValueId, Vec<(i64, At)>);
+    let mut plans: Vec<Plan> = Vec::new();
+    for block in &func.blocks {
+        for l in block.inst_range.clone() {
+            let Inst::Load {
+                addr,
+                disp: _,
+                kind,
+                volatile: false,
+                pc_rel: false,
+                ..
+            } = func.insts[l as usize]
+            else {
+                if !quiet(&func.insts[l as usize]) {
+                    break;
+                }
+                continue;
+            };
+            let integer = matches!(
+                kind,
+                LoadKind::I64
+                    | LoadKind::I32
+                    | LoadKind::U32
+                    | LoadKind::I16
+                    | LoadKind::U16
+                    | LoadKind::I8
+                    | LoadKind::U8
+            );
+            let Some(Inst::Phi { incoming, .. }) = func.insts.get(addr as usize) else {
+                continue;
+            };
+            if !integer || !block.inst_range.contains(&addr) || uses.get(addr as usize) != Some(&1)
+            {
+                continue;
+            }
+            let mut reads = Vec::with_capacity(incoming.len());
+            for &(pred, v) in incoming {
+                let Some(&Inst::LocalAddr(off)) = func.insts.get(v as usize) else {
+                    break;
+                };
+                let p = &func.blocks[pred as usize];
+                let at = match p.inst_range.clone().last() {
+                    None => At::Empty(pred),
+                    Some(last) => {
+                        let mut cond = NO_VALUE;
+                        p.terminator.for_each_operand(|c| cond = c);
+                        if cond == last && !matches!(p.terminator, Terminator::Return(_)) {
+                            At::Before(last)
+                        } else {
+                            At::After(last)
+                        }
+                    }
+                };
+                reads.push((off, at));
+            }
+            if reads.len() == incoming.len() {
+                plans.push((l, addr, reads));
+            }
+        }
+    }
+    if plans.is_empty() {
+        return;
+    }
+    let mut ins: Vec<Insertion> = Vec::new();
+    for &(l, _, ref reads) in &plans {
+        let Inst::Load { disp, kind, .. } = func.insts[l as usize] else {
+            unreachable!()
+        };
+        for &(off, at) in reads {
+            ins.push(Insertion {
+                at,
+                inst: Inst::LoadLocal {
+                    off,
+                    disp,
+                    kind,
+                    volatile: false,
+                },
+                is_f32: false,
+                copy_of: None,
+            });
+        }
+    }
+    let rewrite = super::tape::insert(func, &ins);
+    let mut k = 0;
+    for (l, phi, reads) in plans {
+        let (l, phi) = (rewrite.remap[l as usize], rewrite.remap[phi as usize]);
+        if let Inst::Phi { incoming, kind } = &mut func.insts[phi as usize] {
+            for (inc, _) in incoming.iter_mut().zip(&reads) {
+                inc.1 = rewrite.ids[k];
+                k += 1;
+            }
+            *kind = LoadKind::I64;
+        }
+        func.insts[l as usize] = Inst::Copy {
+            value: phi,
+            is_fp: false,
+        };
+    }
+}
+
 pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
     // Opt out of promotion for A/B measurement against the unpromoted
     // frame-slot codegen. Diagnostic only: read under the `codegen_test`
@@ -1679,6 +1808,7 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
     if std::env::var("BADC_NO_MEM2REG").is_ok() {
         return Vec::new();
     }
+    split_address_phi_loads(func);
     // A non-zero `AllocaInit` moves sp at runtime, but both the fixed
     // locals and the allocator spills are then frame-pointer-relative
     // (`Frame::dynamic_sp`); only the alloca storage rides sp, reached

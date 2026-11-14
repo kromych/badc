@@ -8889,3 +8889,16 @@ uint64_t f(const uint16_t *p) { return read_u32(p + 1) + read_u64(p + 3); }\n";
         .count();
     assert_eq!(loads, 2, "{insns:x?}");
 }
+
+/// A conditional of struct type reads the value its arm stored: no object
+/// in the frame, no store and reload through the chosen address.
+#[test]
+fn x64_a_struct_conditional_reads_its_arm_without_the_frame() {
+    const SRC: &str = "typedef struct { unsigned long bits; } Ref;\n\
+static inline Ref borrow(void *p) { Ref r = { (unsigned long)p | 1 }; return r; }\n\
+static inline Ref steal(void *p) { Ref r = { (unsigned long)p }; return r; }\n\
+unsigned long pick(void *p, int c) { Ref r = c ? borrow(p) : steal(p); return r.bits; }\n";
+    let insns = x64(SRC, "pick");
+    let frame = |i: &X64Insn| matches!(i.mem_base(), Some(4 | 5)) && !i.reg_form();
+    assert!(!insns.iter().any(frame), "{insns:x?}");
+}

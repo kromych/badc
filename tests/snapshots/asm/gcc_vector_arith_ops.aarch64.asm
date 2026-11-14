@@ -1883,38 +1883,14 @@ Disassembly of section .text:
                	b.lt	<addr>
                	sub	x4, x29, #0xb0
                	sub	x5, x29, #0x90
-               	ldur	w0, [x29, #-0xb0]
-               	ldur	w1, [x29, #-0x90]
-               	add	x0, x0, x1
-               	ldur	w1, [x29, #-0xac]
-               	ldur	w2, [x29, #-0x8c]
-               	add	x1, x1, x2
-               	ldur	w2, [x29, #-0xa8]
-               	ldur	w3, [x29, #-0x88]
-               	add	x2, x2, x3
-               	ldur	w3, [x29, #-0xa4]
-               	ldur	w6, [x29, #-0x84]
-               	add	x3, x3, x6
-               	ldur	w6, [x29, #-0xa0]
-               	ldur	w7, [x29, #-0x80]
-               	add	x6, x6, x7
-               	ldur	w7, [x29, #-0x9c]
-               	ldur	w8, [x29, #-0x7c]
-               	add	x7, x7, x8
-               	ldur	w8, [x29, #-0x98]
-               	ldur	w9, [x29, #-0x78]
-               	add	x8, x8, x9
-               	ldur	w9, [x29, #-0x94]
-               	ldur	w10, [x29, #-0x74]
-               	add	x9, x9, x10
-               	stur	w0, [x29, #-0x70]
-               	stur	w1, [x29, #-0x6c]
-               	stur	w2, [x29, #-0x68]
-               	stur	w3, [x29, #-0x64]
-               	stur	w6, [x29, #-0x60]
-               	stur	w7, [x29, #-0x5c]
-               	stur	w8, [x29, #-0x58]
-               	stur	w9, [x29, #-0x54]
+               	ldur	q0, [x29, #-0xb0]
+               	ldur	q1, [x29, #-0x90]
+               	add	v0.4s, v0.4s, v1.4s
+               	ldur	q1, [x29, #-0xa0]
+               	ldur	q2, [x29, #-0x80]
+               	add	v1.4s, v1.4s, v2.4s
+               	stur	q0, [x29, #-0x70]
+               	stur	q1, [x29, #-0x60]
                	mov	x0, #0x0                // =0
                	sub	x2, x29, #0x20
                	lsl	x1, x0, #2
@@ -1940,38 +1916,14 @@ Disassembly of section .text:
                	b.lt	<addr>
                	sub	x5, x29, #0xb0
                	sub	x6, x29, #0x90
-               	ldur	w0, [x29, #-0xb0]
-               	ldur	w1, [x29, #-0x90]
-               	sub	x0, x0, x1
-               	ldur	w1, [x29, #-0xac]
-               	ldur	w3, [x29, #-0x8c]
-               	sub	x1, x1, x3
-               	ldur	w3, [x29, #-0xa8]
-               	ldur	w4, [x29, #-0x88]
-               	sub	x3, x3, x4
-               	ldur	w4, [x29, #-0xa4]
-               	ldur	w7, [x29, #-0x84]
-               	sub	x4, x4, x7
-               	ldur	w7, [x29, #-0xa0]
-               	ldur	w8, [x29, #-0x80]
-               	sub	x7, x7, x8
-               	ldur	w8, [x29, #-0x9c]
-               	ldur	w9, [x29, #-0x7c]
-               	sub	x8, x8, x9
-               	ldur	w9, [x29, #-0x98]
-               	ldur	w10, [x29, #-0x78]
-               	sub	x9, x9, x10
-               	ldur	w10, [x29, #-0x94]
-               	ldur	w11, [x29, #-0x74]
-               	sub	x10, x10, x11
-               	stur	w0, [x29, #-0x70]
-               	stur	w1, [x29, #-0x6c]
-               	stur	w3, [x29, #-0x68]
-               	stur	w4, [x29, #-0x64]
-               	stur	w7, [x29, #-0x60]
-               	stur	w8, [x29, #-0x5c]
-               	stur	w9, [x29, #-0x58]
-               	stur	w10, [x29, #-0x54]
+               	ldur	q0, [x29, #-0xb0]
+               	ldur	q1, [x29, #-0x90]
+               	sub	v0.4s, v0.4s, v1.4s
+               	ldur	q1, [x29, #-0xa0]
+               	ldur	q2, [x29, #-0x80]
+               	sub	v1.4s, v1.4s, v2.4s
+               	stur	q0, [x29, #-0x70]
+               	stur	q1, [x29, #-0x60]
                	mov	x0, #0x0                // =0
                	lsl	x1, x0, #2
                	add	x3, x2, x1

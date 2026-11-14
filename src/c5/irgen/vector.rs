@@ -61,10 +61,10 @@ impl<'a> Walker<'a> {
         })
     }
 
-    /// The lane of an 8-, 16- or 32-byte vector operation the target does in one
-    /// instruction on whole vectors (`Inst::VecBinop`): two vector operands,
-    /// no comparison, an element of 1, 2, 4 or 8 bytes or a `float` or
-    /// `double`.
+    /// The lane of an 8- to 64-byte vector operation the target does in one
+    /// instruction on whole vectors (`Inst::VecBinop`), and the width of the
+    /// parts ([`widest_part`]) it takes: two vector operands, no comparison,
+    /// an element of 1, 2, 4 or 8 bytes or a `float` or `double`.
     fn whole_vector_lane(
         &self,
         op: BinOp,
@@ -72,7 +72,7 @@ impl<'a> Walker<'a> {
         elem_ty: i64,
         size: i64,
         both_vectors: bool,
-    ) -> Option<crate::c5::ir::VecLane> {
+    ) -> Option<(crate::c5::ir::VecLane, i64)> {
         use crate::c5::ir::VecLane;
         if !matches!(size, 8 | 16 | 32 | 64)
             || !both_vectors
@@ -97,8 +97,35 @@ impl<'a> Walker<'a> {
             }
         };
         let x86 = self.target.is_x86_64().then_some(self.x86);
-        lane.binop_in_one_instruction(lane_op, x86, size as u8)
-            .then_some(lane)
+        widest_part(size, |n| {
+            lane.binop_in_one_instruction(lane_op, x86, n as u8)
+                .then_some(lane)
+        })
+    }
+
+    /// `lane_op` over the vectors at `lhs` and `rhs`, `width` bytes at a
+    /// time, into a fresh `size`-byte slot whose address it yields; an
+    /// operand paired with `false` is one part read for every part.
+    fn vec_binop_parts(
+        &mut self,
+        b: &mut SsaBuilder,
+        (lane_op, lane, width): (BinOp, crate::c5::ir::VecLane, i64),
+        ops: [(ValueId, bool); 2],
+        size: i64,
+        align: i64,
+    ) -> ValueId {
+        let lk = vector_access(width).0;
+        let parts = (0..size)
+            .step_by(width as usize)
+            .map(|off| {
+                let [a, c] = ops.map(|(v, whole)| {
+                    let at = if whole { lane_addr(b, v, off) } else { v };
+                    b.load(at, lk)
+                });
+                b.vec_binop((lane_op, lane, width as u8), a, c)
+            })
+            .collect();
+        store_parts(b, parts, width, align)
     }
 
     /// Element-wise `op` over two vectors, or over a vector and a scalar
@@ -129,24 +156,14 @@ impl<'a> Walker<'a> {
                 BinOp::FmulContractible => BinOp::Fmul,
                 o => o,
             };
-            if let Some(lane) =
+            if let Some((lane, width)) =
                 self.whole_vector_lane(op, lane_op, elem_ty, size, lhs_vec && rhs_vec)
             {
                 let lv = self.walk_copy_operand(b, lhs)?;
                 let rv = self.walk_copy_operand(b, rhs)?;
-                let (lk, sk) = match size {
-                    64 => (LoadKind::V512, StoreKind::V512),
-                    32 => (LoadKind::V256, StoreKind::V256),
-                    16 => (LoadKind::V128, StoreKind::V128),
-                    _ => (LoadKind::F64, StoreKind::F64),
-                };
-                let a = b.load(lv, lk);
-                let c = b.load(rv, lk);
-                let r = b.vec_binop((lane_op, lane, size as u8), a, c);
-                let slot = b.alloc_synthetic_struct(size, self.vector_temp_align(ty));
-                let dst = b.local_addr(slot);
-                b.store(dst, r, sk);
-                return Ok(dst);
+                let align = self.vector_temp_align(ty);
+                let ops = [(lv, true), (rv, true)];
+                return Ok(self.vec_binop_parts(b, (lane_op, lane, width), ops, size, align));
             }
         }
         if let Some(r) = self.walk_vector_row(b, op, lhs, rhs, ty)? {
@@ -216,8 +233,9 @@ impl<'a> Walker<'a> {
         Ok(dst)
     }
 
-    /// `op` over an integer vector as the one SIMD row of the target that
-    /// computes it ([`crate::c5::simd::find`]): a comparison of two vectors,
+    /// `op` over an integer vector as the SIMD row of the target that
+    /// computes it ([`crate::c5::simd::find`]), once per part of the width
+    /// the row takes ([`widest_part`]): a comparison of two vectors,
     /// `<` and `<=` and their unsigned forms as the swapped `>` and `>=`,
     /// or a shift by a constant count less than the lane width. `None`
     /// leaves `op` to the lane-wise lowering.
@@ -263,7 +281,8 @@ impl<'a> Walker<'a> {
             (B::Shru, false, Some(_)) => (Sem::Shr(w), Form::Shift, false),
             _ => return Ok(None),
         };
-        let Some(row) = crate::c5::simd::find(self.target, self.x86, sem, form, size as u8) else {
+        let find = |n: i64| crate::c5::simd::find(self.target, self.x86, sem, form, n as u8);
+        let Some((row, width)) = widest_part(size, find) else {
             return Ok(None);
         };
         let mut ops = alloc::vec![self.walk_copy_operand(b, lhs)?];
@@ -274,7 +293,7 @@ impl<'a> Walker<'a> {
             ops.reverse();
         }
         let imm = if form == Form::Shift { count } else { None };
-        Ok(Some(self.emit_simd_row(b, row, imm, ops)))
+        Ok(Some(self.emit_simd_parts(b, row, imm, ops, size, width)))
     }
 
     /// Element-wise unary `-` / `~` over a vector: the target's SIMD row
@@ -296,11 +315,15 @@ impl<'a> Walker<'a> {
                 (UnOp::Neg, Some(w)) => Some(Sem::Neg(w)),
                 _ => None,
             };
-            let row = sem
-                .and_then(|s| crate::c5::simd::find(self.target, self.x86, s, Form::V, size as u8));
-            if let Some(row) = row {
+            let row = sem.and_then(|s| {
+                widest_part(size, |n| {
+                    crate::c5::simd::find(self.target, self.x86, s, Form::V, n as u8)
+                })
+            });
+            if let Some((row, width)) = row {
                 let src = self.walk_copy_operand(b, child)?;
-                return Ok(self.emit_simd_row(b, row, None, alloc::vec![src]));
+                let ops = alloc::vec![src];
+                return Ok(self.emit_simd_parts(b, row, None, ops, size, width));
             }
             // Without one instruction for it, `-v` is `0 - v` and `~v` is
             // `v ^ ~0` on the whole vector.
@@ -308,33 +331,25 @@ impl<'a> Walker<'a> {
                 UnOp::Neg => (BinOp::Sub, 0),
                 _ => (BinOp::Xor, -1),
             };
-            if let Some(lane) = self.whole_vector_lane(lane_op, lane_op, elem_ty, size, true) {
+            if let Some((lane, width)) =
+                self.whole_vector_lane(lane_op, lane_op, elem_ty, size, true)
+            {
                 let src = self.walk_copy_operand(b, child)?;
-                let (lk, sk) = match size {
-                    64 => (LoadKind::V512, StoreKind::V512),
-                    32 => (LoadKind::V256, StoreKind::V256),
-                    16 => (LoadKind::V128, StoreKind::V128),
-                    _ => (LoadKind::F64, StoreKind::F64),
-                };
                 let align = self.vector_temp_align(ty);
-                let fill_slot = b.alloc_synthetic_struct(size, align);
+                let fill_slot = b.alloc_synthetic_struct(width, align);
                 let fill_addr = b.local_addr(fill_slot);
                 if fill == 0 {
-                    b.mzero(fill_addr, size, align as u32);
+                    b.mzero(fill_addr, width, align as u32);
                 } else {
-                    for off in (0..size).step_by(8) {
+                    for off in (0..width).step_by(8) {
                         let at = lane_addr(b, fill_addr, off);
                         let word = b.imm(fill);
                         b.store(at, word, StoreKind::I64);
                     }
                 }
-                let (k, v) = (b.load(fill_addr, lk), b.load(src, lk));
-                let (lhs, rhs) = if fill == 0 { (k, v) } else { (v, k) };
-                let r = b.vec_binop((lane_op, lane, size as u8), lhs, rhs);
-                let dst_slot = b.alloc_synthetic_struct(size, align);
-                let dst = b.local_addr(dst_slot);
-                b.store(dst, r, sk);
-                return Ok(dst);
+                let (k, v) = ((fill_addr, false), (src, true));
+                let ops = if fill == 0 { [k, v] } else { [v, k] };
+                return Ok(self.vec_binop_parts(b, (lane_op, lane, width), ops, size, align));
             }
         }
         let size = self.struct_size(ty);
@@ -432,6 +447,36 @@ impl<'a> Walker<'a> {
         dst
     }
 
+    /// [`Self::emit_simd_row`] over each `width`-byte part of the
+    /// `size`-byte vectors at `ops`, into the same part of the result.
+    fn emit_simd_parts(
+        &mut self,
+        b: &mut SsaBuilder,
+        op: u32,
+        imm: Option<u8>,
+        ops: alloc::vec::Vec<ValueId>,
+        size: i64,
+        width: i64,
+    ) -> ValueId {
+        if width == size {
+            return self.emit_simd_row(b, op, imm, ops);
+        }
+        // Each part in a slot of its own, read once all are computed, so
+        // the stores of the result follow every read of the operands.
+        let slots: alloc::vec::Vec<ValueId> = (0..size)
+            .step_by(width as usize)
+            .map(|off| {
+                let args = ops.iter().map(|&a| lane_addr(b, a, off)).collect();
+                self.emit_simd_row(b, op, imm, args)
+            })
+            .collect();
+        let parts = slots
+            .into_iter()
+            .map(|p| b.load(p, vector_access(width).0))
+            .collect();
+        store_parts(b, parts, width, width)
+    }
+
     /// Lower a bitwise operator (`^` / `&` / `|`) on two same-width
     /// vector values into a result temporary. Bitwise ops carry nothing
     /// between lanes, so the byte block combines in the widest chunks
@@ -489,6 +534,42 @@ impl<'a> Walker<'a> {
         }
         Ok(dst)
     }
+}
+
+/// What `f` gives for the widest part of a `size`-byte vector it takes,
+/// and that part's width: the whole vector, else 32 or 16 bytes, which
+/// the operation then takes one part at a time.
+fn widest_part<T>(size: i64, f: impl Fn(i64) -> Option<T>) -> Option<(T, i64)> {
+    core::iter::once(size)
+        .chain([32, 16].into_iter().filter(|&n| n < size))
+        .find_map(|n| f(n).map(|t| (t, n)))
+}
+
+/// The load and store kinds of a whole vector of `bytes` bytes.
+fn vector_access(bytes: i64) -> (LoadKind, StoreKind) {
+    match bytes {
+        64 => (LoadKind::V512, StoreKind::V512),
+        32 => (LoadKind::V256, StoreKind::V256),
+        16 => (LoadKind::V128, StoreKind::V128),
+        _ => (LoadKind::F64, StoreKind::F64),
+    }
+}
+
+/// A fresh slot holding the `width`-byte vectors `parts` in order; its
+/// address.
+fn store_parts(
+    b: &mut SsaBuilder,
+    parts: alloc::vec::Vec<ValueId>,
+    width: i64,
+    align: i64,
+) -> ValueId {
+    let slot = b.alloc_synthetic_struct(width * parts.len() as i64, align);
+    let dst = b.local_addr(slot);
+    for (k, r) in parts.into_iter().enumerate() {
+        let at = lane_addr(b, dst, k as i64 * width);
+        b.store(at, r, vector_access(width).1);
+    }
+    dst
 }
 
 /// Address of lane byte `off` within the vector object at `base`.

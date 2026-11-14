@@ -247,46 +247,22 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>
-               	ldur	s2, [x29, #-0x80]
-               	ldur	s3, [x29, #-0x60]
-               	fadd	s2, s2, s3
-               	ldur	s3, [x29, #-0x7c]
-               	ldur	s4, [x29, #-0x5c]
-               	fadd	s3, s3, s4
-               	ldur	s4, [x29, #-0x78]
-               	ldur	s5, [x29, #-0x58]
-               	fadd	s4, s4, s5
-               	ldur	s5, [x29, #-0x74]
-               	ldur	s6, [x29, #-0x54]
-               	fadd	s5, s5, s6
-               	ldur	s6, [x29, #-0x70]
-               	ldur	s7, [x29, #-0x50]
-               	fadd	s6, s6, s7
-               	ldur	s7, [x29, #-0x6c]
-               	ldur	s19, [x29, #-0x4c]
-               	fadd	s7, s7, s19
-               	ldur	s19, [x29, #-0x68]
-               	ldur	s20, [x29, #-0x48]
-               	fadd	s19, s19, s20
-               	ldur	s20, [x29, #-0x64]
-               	ldur	s21, [x29, #-0x44]
-               	fadd	s20, s20, s21
+               	ldur	q2, [x29, #-0x80]
+               	ldur	q3, [x29, #-0x60]
+               	fadd	v4.4s, v2.4s, v3.4s
+               	ldur	q5, [x29, #-0x70]
+               	ldur	q6, [x29, #-0x50]
+               	fadd	v5.4s, v5.4s, v6.4s
                	sub	x1, x29, #0x40
-               	stur	s2, [x29, #-0x40]
-               	stur	s3, [x29, #-0x3c]
-               	stur	s4, [x29, #-0x38]
-               	stur	s5, [x29, #-0x34]
-               	stur	s6, [x29, #-0x30]
-               	stur	s7, [x29, #-0x2c]
-               	stur	s19, [x29, #-0x28]
-               	stur	s20, [x29, #-0x24]
+               	stur	q4, [x29, #-0x40]
+               	stur	q5, [x29, #-0x30]
                	sub	x2, x29, #0x20
-               	ldur	s2, [x29, #-0x80]
-               	ldur	s3, [x29, #-0x60]
-               	fadd	s2, s2, s3
-               	stur	s2, [x29, #-0x20]
-               	ldur	s2, [x29, #-0x7c]
-               	ldur	s3, [x29, #-0x5c]
+               	mov	s4, v2.s[0]
+               	mov	s5, v3.s[0]
+               	fadd	s4, s4, s5
+               	stur	s4, [x29, #-0x20]
+               	mov	s2, v2.s[1]
+               	mov	s3, v3.s[1]
                	fadd	s2, s2, s3
                	stur	s2, [x29, #-0x1c]
                	ldur	s2, [x29, #-0x78]
@@ -321,46 +297,22 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x20
                	b.lt	<addr>
-               	ldur	s2, [x29, #-0x80]
-               	ldur	s3, [x29, #-0x60]
-               	fmul	s2, s2, s3
-               	ldur	s3, [x29, #-0x7c]
-               	ldur	s4, [x29, #-0x5c]
-               	fmul	s3, s3, s4
-               	ldur	s4, [x29, #-0x78]
-               	ldur	s5, [x29, #-0x58]
-               	fmul	s4, s4, s5
-               	ldur	s5, [x29, #-0x74]
-               	ldur	s6, [x29, #-0x54]
-               	fmul	s5, s5, s6
-               	ldur	s6, [x29, #-0x70]
-               	ldur	s7, [x29, #-0x50]
-               	fmul	s6, s6, s7
-               	ldur	s7, [x29, #-0x6c]
-               	ldur	s19, [x29, #-0x4c]
-               	fmul	s7, s7, s19
-               	ldur	s19, [x29, #-0x68]
-               	ldur	s20, [x29, #-0x48]
-               	fmul	s19, s19, s20
-               	ldur	s20, [x29, #-0x64]
-               	ldur	s21, [x29, #-0x44]
-               	fmul	s20, s20, s21
+               	ldur	q2, [x29, #-0x80]
+               	ldur	q3, [x29, #-0x60]
+               	fmul	v4.4s, v2.4s, v3.4s
+               	ldur	q5, [x29, #-0x70]
+               	ldur	q6, [x29, #-0x50]
+               	fmul	v5.4s, v5.4s, v6.4s
                	sub	x1, x29, #0x40
-               	stur	s2, [x29, #-0x40]
-               	stur	s3, [x29, #-0x3c]
-               	stur	s4, [x29, #-0x38]
-               	stur	s5, [x29, #-0x34]
-               	stur	s6, [x29, #-0x30]
-               	stur	s7, [x29, #-0x2c]
-               	stur	s19, [x29, #-0x28]
-               	stur	s20, [x29, #-0x24]
+               	stur	q4, [x29, #-0x40]
+               	stur	q5, [x29, #-0x30]
                	sub	x2, x29, #0x20
-               	ldur	s2, [x29, #-0x80]
-               	ldur	s3, [x29, #-0x60]
-               	fmul	s2, s2, s3
-               	stur	s2, [x29, #-0x20]
-               	ldur	s2, [x29, #-0x7c]
-               	ldur	s3, [x29, #-0x5c]
+               	mov	s4, v2.s[0]
+               	mov	s5, v3.s[0]
+               	fmul	s4, s4, s5
+               	stur	s4, [x29, #-0x20]
+               	mov	s2, v2.s[1]
+               	mov	s3, v3.s[1]
                	fmul	s2, s2, s3
                	stur	s2, [x29, #-0x1c]
                	ldur	s2, [x29, #-0x78]

@@ -3123,6 +3123,47 @@ __m64 mu(__m64 a, __m64 b) { return _mm_mul_su32(a, b); }\n";
     m.finish();
 }
 
+/// A GNU vector wider than the SIMD registers takes each operator in
+/// register-wide parts, as with gcc 16: a 32-byte `int` sum on AArch64 is
+/// two `add v.4s` between the loads and the stores, a comparison, a shift
+/// and a negation two of their SIMD rows, and a 64-byte sum four `add
+/// v.4s`; on x86-64 without AVX-512 the 64-byte sum is two `vpaddd ymm`.
+/// Each took a load, an operation and a store per lane.
+#[test]
+fn a_vector_wider_than_the_registers_takes_register_wide_parts() {
+    const SRC: &str = "typedef int v8si __attribute__((vector_size(32)));\n\
+typedef int v16si __attribute__((vector_size(64)));\n\
+void add(v8si *r, const v8si *a, const v8si *b) { *r = *a + *b; }\n\
+void cmp(v8si *r, const v8si *a, const v8si *b) { *r = *a < *b; }\n\
+void shl(v8si *r, const v8si *a) { *r = *a << 3; }\n\
+void neg(v8si *r, const v8si *a) { *r = -*a; }\n\
+void add64(v16si *r, const v16si *a, const v16si *b) { *r = *a + *b; }\n";
+    let mut m = Misses::default();
+    // The operation's encoding with its register fields masked, its count,
+    // and the function's length: the loads, the operations, the stores and
+    // `ret`.
+    for (name, op, mask, ops, len) in [
+        ("add", 0x4EA0_8400u32, 0xFFE0_FC00u32, 2, 9),
+        ("cmp", 0x4EA0_3400, 0xFFE0_FC00, 2, 9),
+        ("shl", 0x4F23_5400, 0xFFFF_FC00, 2, 7),
+        ("neg", 0x6EA0_B800, 0xFFFF_FC00, 2, 7),
+        ("add64", 0x4EA0_8400, 0xFFE0_FC00, 4, 17),
+    ] {
+        let words = a64(SRC, name);
+        let n = words.iter().filter(|&&w| w & mask == op).count();
+        m.expect(n == ops && words.len() == len, || {
+            format!("aarch64 {name}: {words:08x?}")
+        });
+    }
+    // Two loads, `vpaddd` and a store per half, `vzeroupper` and `ret`.
+    let insns = x64(SRC, "add64");
+    let adds = insns.iter().filter(|i| i.vex && i.op == 0x0FFE).count();
+    m.expect(adds == 2 && insns.len() == 10, || {
+        format!("x86-64 add64: {insns:x?}")
+    });
+    m.finish();
+}
+
 /// An object of a GNU vector type is a vector though no SIMD operation
 /// reads it: copied in from bytes and out through a pointer it is one load
 /// and one store, through an inlined function's result too, and one value

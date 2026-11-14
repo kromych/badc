@@ -9044,9 +9044,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=7
     v10468 Imm(0)                                           -> x0
     v10469 VecConst { imm=-1, kind=I64, bytes=16 }          -> d0
     v10470 Imm(0)                                           -> x0
-    v10471 Imm(0)                                           -> x0
-    v10472 LoadLocal { off=-1027, kind=V128 }               -> d1
-    v10473 VecBinop { op=Xor, lane=I8, bytes=16, lhs=v10472, rhs=v10469 } -> d0
+    v10471 LoadLocal { off=-1027, kind=V128 }               -> d1
+    v10472 Imm(0)                                           -> x0
+    v10473 VecBinop { op=Xor, lane=I8, bytes=16, lhs=v10471, rhs=v10469 } -> d0
     v10474 Imm(0)                                           -> x0
     v10475 Imm(0)                                           -> x0
     v10476 LocalAddr(-1123)                                 -> x0
@@ -9115,9 +9115,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=7
     v10534 Imm(0)                                           -> x0
     v10535 VecConst { imm=-1, kind=I64, bytes=16 }          -> d0
     v10536 Imm(0)                                           -> x0
-    v10537 Imm(0)                                           -> x0
-    v10538 LoadLocal { off=-1041, kind=V128 }               -> d1
-    v10539 VecBinop { op=Xor, lane=I64, bytes=16, lhs=v10538, rhs=v10535 } -> d0
+    v10537 LoadLocal { off=-1041, kind=V128 }               -> d1
+    v10538 Imm(0)                                           -> x0
+    v10539 VecBinop { op=Xor, lane=I64, bytes=16, lhs=v10537, rhs=v10535 } -> d0
     v10540 Imm(0)                                           -> x0
     v10541 Imm(0)                                           -> x0
     v10542 LocalAddr(-1124)                                 -> x0

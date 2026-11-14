@@ -125,32 +125,23 @@ Disassembly of section .text:
 <put_i8>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
+               	sub	sp, sp, #0x50
                	stur	x8, [x29, #-0x8]
-               	ldr	w2, [x0]
-               	ldr	w3, [x0, #0x8]
-               	ldr	w4, [x0, #0xc]
-               	ldr	w5, [x0, #0x10]
-               	ldr	w6, [x0, #0x14]
-               	ldr	w7, [x0, #0x1c]
-               	neg	x8, x1
+               	sub	x2, x29, #0x50
+               	ldp	x16, x17, [x0]
+               	stp	x16, x17, [x2]
+               	ldp	x16, x17, [x0, #0x10]
+               	stp	x16, x17, [x2, #0x10]
+               	stur	w1, [x29, #-0x4c]
+               	neg	x0, x1
+               	stur	w0, [x29, #-0x38]
+               	ldur	q0, [x29, #-0x50]
+               	add	v1.4s, v0.4s, v0.4s
+               	ldur	q0, [x29, #-0x40]
+               	add	v0.4s, v0.4s, v0.4s
                	sub	x0, x29, #0x30
-               	add	x2, x2, x2
-               	stur	w2, [x29, #-0x30]
-               	add	x2, x1, x1
-               	stur	w2, [x29, #-0x2c]
-               	add	x2, x3, x3
-               	stur	w2, [x29, #-0x28]
-               	add	x2, x4, x4
-               	stur	w2, [x29, #-0x24]
-               	add	x2, x5, x5
-               	stur	w2, [x29, #-0x20]
-               	add	x2, x6, x6
-               	stur	w2, [x29, #-0x1c]
-               	sub	x1, x8, x1
-               	stur	w1, [x29, #-0x18]
-               	add	x1, x7, x7
-               	stur	w1, [x29, #-0x14]
+               	stur	q1, [x29, #-0x30]
+               	stur	q0, [x29, #-0x20]
                	mov	x16, x0
                	ldur	x17, [x29, #-0x8]
                	ldp	x0, x1, [x16]
@@ -158,17 +149,17 @@ Disassembly of section .text:
                	ldp	x0, x1, [x16, #0x10]
                	stp	x0, x1, [x17, #0x10]
                	mov	x0, x17
-               	add	sp, sp, #0x30
+               	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
 
 <get_i8>:
-               	ldrsw	x1, [x0, #0x1c]
-               	add	x1, x1, x1
-               	sxtw	x1, w1
-               	ldrsw	x0, [x0, #0x8]
-               	add	x0, x0, x0
-               	sxtw	x0, w0
+               	ldr	q0, [x0, #0x10]
+               	add	v0.4s, v0.4s, v0.4s
+               	smov	x1, v0.s[3]
+               	ldr	q0, [x0]
+               	add	v0.4s, v0.4s, v0.4s
+               	smov	x0, v0.s[2]
                	sub	x0, x1, x0
                	ret
 
@@ -183,18 +174,13 @@ Disassembly of section .text:
                	ldp	x16, x17, [x0, #0x10]
                	stp	x16, x17, [x1, #0x10]
                	stur	d0, [x29, #-0x38]
+               	ldur	q0, [x29, #-0x50]
+               	fmul	v1.2d, v0.2d, v0.2d
+               	ldur	q0, [x29, #-0x40]
+               	fmul	v0.2d, v0.2d, v0.2d
                	sub	x0, x29, #0x30
-               	ldur	d1, [x29, #-0x50]
-               	fmul	d1, d1, d1
-               	stur	d1, [x29, #-0x30]
-               	ldur	d1, [x29, #-0x48]
-               	fmul	d1, d1, d1
-               	stur	d1, [x29, #-0x28]
-               	ldur	d1, [x29, #-0x40]
-               	fmul	d1, d1, d1
-               	stur	d1, [x29, #-0x20]
-               	fmul	d0, d0, d0
-               	stur	d0, [x29, #-0x18]
+               	stur	q1, [x29, #-0x30]
+               	stur	q0, [x29, #-0x20]
                	mov	x16, x0
                	ldur	x17, [x29, #-0x8]
                	ldp	x0, x1, [x16]
@@ -207,70 +193,45 @@ Disassembly of section .text:
                	ret
 
 <get_d4>:
-               	ldr	d0, [x0, #0x10]
-               	fadd	d0, d0, d0
+               	ldr	q0, [x0, #0x10]
+               	fadd	v0.2d, v0.2d, v0.2d
                	ret
 
 <get_s16>:
-               	ldrsh	x0, [x0, #0x1a]
-               	add	x0, x0, x0
-               	sxth	x0, w0
+               	ldr	q0, [x0, #0x10]
+               	add	v0.8h, v0.8h, v0.8h
+               	smov	x0, v0.h[5]
                	ret
 
 <put_i16>:
-               	str	x20, [sp, #-0x70]!
-               	stp	x29, x30, [sp, #0x60]
-               	add	x29, sp, #0x60
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x90
                	stur	x8, [x29, #-0x8]
-               	ldr	w2, [x0]
-               	ldr	w3, [x0, #0x4]
-               	ldr	w4, [x0, #0x8]
-               	ldr	w5, [x0, #0xc]
-               	ldr	w6, [x0, #0x10]
-               	ldr	w7, [x0, #0x14]
-               	ldr	w8, [x0, #0x18]
-               	ldr	w9, [x0, #0x1c]
-               	ldr	w10, [x0, #0x20]
-               	ldr	w11, [x0, #0x24]
-               	ldr	w12, [x0, #0x28]
-               	ldr	w13, [x0, #0x2c]
-               	ldr	w14, [x0, #0x30]
-               	ldr	w15, [x0, #0x38]
-               	ldr	w0, [x0, #0x3c]
-               	sub	x20, x29, #0x50
-               	add	x2, x2, x2
-               	stur	w2, [x29, #-0x50]
-               	add	x2, x3, x3
-               	stur	w2, [x29, #-0x4c]
-               	add	x2, x4, x4
-               	stur	w2, [x29, #-0x48]
-               	add	x2, x5, x5
-               	stur	w2, [x29, #-0x44]
-               	add	x2, x6, x6
-               	stur	w2, [x29, #-0x40]
-               	add	x2, x7, x7
-               	stur	w2, [x29, #-0x3c]
-               	add	x2, x8, x8
-               	stur	w2, [x29, #-0x38]
-               	add	x2, x9, x9
-               	stur	w2, [x29, #-0x34]
-               	add	x2, x10, x10
-               	stur	w2, [x29, #-0x30]
-               	add	x2, x11, x11
-               	stur	w2, [x29, #-0x2c]
-               	add	x2, x12, x12
-               	stur	w2, [x29, #-0x28]
-               	add	x2, x13, x13
-               	stur	w2, [x29, #-0x24]
-               	add	x2, x14, x14
-               	stur	w2, [x29, #-0x20]
-               	add	x1, x1, x1
-               	stur	w1, [x29, #-0x1c]
-               	add	x1, x15, x15
-               	stur	w1, [x29, #-0x18]
-               	add	x0, x0, x0
-               	stur	w0, [x29, #-0x14]
-               	mov	x16, x20
+               	sub	x2, x29, #0x90
+               	ldp	x16, x17, [x0]
+               	stp	x16, x17, [x2]
+               	ldp	x16, x17, [x0, #0x10]
+               	stp	x16, x17, [x2, #0x10]
+               	ldp	x16, x17, [x0, #0x20]
+               	stp	x16, x17, [x2, #0x20]
+               	ldp	x16, x17, [x0, #0x30]
+               	stp	x16, x17, [x2, #0x30]
+               	stur	w1, [x29, #-0x5c]
+               	ldur	q0, [x29, #-0x90]
+               	add	v1.4s, v0.4s, v0.4s
+               	ldur	q0, [x29, #-0x80]
+               	add	v2.4s, v0.4s, v0.4s
+               	ldur	q0, [x29, #-0x70]
+               	add	v3.4s, v0.4s, v0.4s
+               	ldur	q0, [x29, #-0x60]
+               	add	v0.4s, v0.4s, v0.4s
+               	sub	x0, x29, #0x50
+               	stur	q1, [x29, #-0x50]
+               	stur	q2, [x29, #-0x40]
+               	stur	q3, [x29, #-0x30]
+               	stur	q0, [x29, #-0x20]
+               	mov	x16, x0
                	ldur	x17, [x29, #-0x8]
                	ldp	x0, x1, [x16]
                	stp	x0, x1, [x17]
@@ -281,14 +242,14 @@ Disassembly of section .text:
                	ldp	x0, x1, [x16, #0x30]
                	stp	x0, x1, [x17, #0x30]
                	mov	x0, x17
-               	ldp	x29, x30, [sp, #0x60]
-               	ldr	x20, [sp], #0x70
+               	add	sp, sp, #0x90
+               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <get_i16>:
-               	ldrsw	x0, [x0, #0x38]
-               	add	x0, x0, x0
-               	sxtw	x0, w0
+               	ldr	q0, [x0, #0x30]
+               	add	v0.4s, v0.4s, v0.4s
+               	smov	x0, v0.s[2]
                	ret
 
 <get_l8>:

@@ -76,10 +76,8 @@ TEST_TIER2 = [
 # Includes common to every POSIX TU; the manifest carries any per-TU extras.
 POSIX_INCLUDES = ["Include", "Include/internal", "."]
 
-# badc has the GCC vector types but not __builtin_shufflevector, which the
-# host compilers' configure finds; pystrhex.c takes its scalar path.
-# TODO(#1997): __builtin_shufflevector in badc lifts this.
-_POSIX_UNDEF = ["_Py_HAVE_EFFICIENT_BUILTIN_SHUFFLEVECTOR"]
+# The HAVE_ macros of the host compilers' configure that badc does not back.
+_POSIX_UNDEF: list[str] = []
 # Linux modules badc cannot yet build: ELF/process introspection.
 _LINUX_EXCLUDE = [("Modules/_remote_debugging/", "_remote_debugging")]
 

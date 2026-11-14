@@ -552,6 +552,15 @@ pub(crate) enum Expr {
         imm: Option<u8>,
         ty: i64,
     },
+    /// `__builtin_shufflevector(a, b, idx...)`: lane `k` of the result is
+    /// lane `idx[k]` of `a`'s lanes followed by `b`'s, undefined for -1.
+    /// `ty` is the result vector: `a`'s element type, one lane per index.
+    ShuffleVector {
+        a: ExprId,
+        b: ExprId,
+        idx: Vec<i32>,
+        ty: i64,
+    },
     /// `__builtin_memcpy` / `__builtin_memmove` / `__builtin_memset`
     /// with an integer-constant-expression byte count. `src` is the
     /// source address for the copies and the fill byte for the set.
@@ -1074,6 +1083,7 @@ macro_rules! visit_data_offsets {
                 | Expr::StmtExpr { .. }
                 | Expr::CheckedArith { .. }
                 | Expr::Simd { .. }
+                | Expr::ShuffleVector { .. }
                 | Expr::MsIntrinsic { .. }
                 | Expr::MemTransfer { .. } => {}
             }
@@ -1394,6 +1404,7 @@ macro_rules! plain_ty_expr {
             | Expr::StmtExpr { ty: $t, .. }
             | Expr::CheckedArith { ty: $t, .. }
             | Expr::Simd { ty: $t, .. }
+            | Expr::ShuffleVector { ty: $t, .. }
             | Expr::MsIntrinsic { ty: $t, .. }
             | Expr::MemTransfer { ty: $t, .. }
     };

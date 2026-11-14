@@ -1827,6 +1827,51 @@ fn long_double_layout_follows_the_target_abi() {
     }
 }
 
+/// `__builtin_shufflevector` yields a vector of its operands' element type
+/// with one lane per index, and refuses operands of two vector types, an
+/// index past the two operands' lanes, and a count of indices that is not
+/// a power of two.
+#[test]
+fn shufflevector_types_its_result_and_checks_its_indices() {
+    use crate::{Compiler, Target};
+    const DECLS: &str = "typedef int v4 __attribute__((vector_size(16)));\n\
+        typedef int v8 __attribute__((vector_size(32)));\n\
+        typedef short h8 __attribute__((vector_size(16)));\n";
+    let ok = format!(
+        "{DECLS}#if !__has_builtin(__builtin_shufflevector)\n#error\n#endif\n\
+         _Static_assert(sizeof(__builtin_shufflevector((v4){{0}}, (v4){{0}}, 0, 1, 2, 3, 4, 5, 6, 7)) == 32, \"\");\n\
+         v8 f(v4 a, v4 b) {{ return __builtin_shufflevector(a, b, 7, -1, 2, 3, 4, 5, 6, 0); }}\n\
+         int main(void) {{ return 0; }}\n"
+    );
+    let compiled = Compiler::with_target(ok, Target::LinuxX64).compile();
+    assert!(compiled.is_ok(), "{:?}", compiled.err());
+    for (body, want) in [
+        (
+            "v4 f(v4 a, h8 b) { return __builtin_shufflevector(a, b, 0, 1, 2, 3); }",
+            "same vector type",
+        ),
+        (
+            "v4 f(v4 a, v4 b) { return __builtin_shufflevector(a, b, 0, 1, 2, 8); }",
+            "outside -1 to 7",
+        ),
+        (
+            "v4 f(v4 a, v4 b) { return __builtin_shufflevector(a, b, 0, 1, 2); }",
+            "power-of-two",
+        ),
+        (
+            "v4 f(v4 a, int b) { return __builtin_shufflevector(a, b, 0, 1, 2, 3); }",
+            "must be vectors",
+        ),
+    ] {
+        let msg = Compiler::with_target(format!("{DECLS}{body}"), Target::LinuxX64)
+            .compile()
+            .err()
+            .map(|e| e.to_string())
+            .unwrap_or_default();
+        assert!(msg.contains(want), "{body}: {msg}");
+    }
+}
+
 /// A `vector_size` type is aligned to its width up to the target's
 /// ceiling: the x86-64 psABI gives a 32-byte vector 32, AAPCS64 keeps a
 /// wider vector on the 16-byte boundary. The member offset, the struct

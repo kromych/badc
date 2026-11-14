@@ -431,6 +431,43 @@ impl<'a> Walker<'a> {
         Ok(dst)
     }
 
+    /// `__builtin_shufflevector`: each result lane moved, as its bits, from
+    /// its lane of the first operand followed by the second into a fresh
+    /// slot whose address it yields; an undefined lane is left unwritten.
+    pub(super) fn walk_shuffle_vector(
+        &mut self,
+        b: &mut SsaBuilder,
+        (x, y): (ExprId, ExprId),
+        idx: &[i32],
+        ty: i64,
+    ) -> Result<ValueId, WalkError> {
+        let src_ty = expr_ty(self.ast.expr(x)).unwrap_or(ty);
+        let (_, lanes) = self.vector_lanes(src_ty);
+        let w = self.struct_size(src_ty) / lanes;
+        let (lk, sk) = match w {
+            1 => (LoadKind::U8, StoreKind::I8),
+            2 => (LoadKind::U16, StoreKind::I16),
+            4 => (LoadKind::U32, StoreKind::I32),
+            _ => (LoadKind::I64, StoreKind::I64),
+        };
+        let xa = self.walk_copy_operand(b, x)?;
+        let ya = self.walk_copy_operand(b, y)?;
+        let slot = b.alloc_synthetic_struct(self.struct_size(ty), self.vector_temp_align(ty));
+        let dst = b.local_addr(slot);
+        for (k, &i) in idx.iter().enumerate() {
+            let i = i64::from(i);
+            if i < 0 {
+                continue;
+            }
+            let (src, lane) = if i < lanes { (xa, i) } else { (ya, i - lanes) };
+            let at = lane_addr(b, src, lane * w);
+            let v = b.load(at, lk);
+            let to = lane_addr(b, dst, k as i64 * w);
+            b.store(to, v, sk);
+        }
+        Ok(dst)
+    }
+
     /// The alignment a vector temporary of `ty` is placed at: its type's,
     /// up to the 16 bytes of the widest access badc makes to one, which
     /// `-mstrict-align` bounds by the type's alignment.

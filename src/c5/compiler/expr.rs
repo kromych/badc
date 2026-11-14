@@ -497,6 +497,85 @@ impl Compiler {
         Ok(())
     }
 
+    /// `__builtin_shufflevector(a, b, idx...)` with the `(` consumed: two
+    /// vectors of one type, then an integer constant per result lane, a
+    /// lane of `a` followed by `b` or -1 for an undefined one. The result
+    /// has `a`'s element type and one lane per index, which counts a power
+    /// of two.
+    fn parse_shufflevector_builtin(&mut self) -> Result<(), C5Error> {
+        use super::super::ast::Expr;
+        const NAME: &str = "__builtin_shufflevector";
+        let mut ops = Vec::with_capacity(2);
+        for _ in 0..2 {
+            self.expr(Token::Assign as i64)?;
+            let (Some(e), ty) = (self.ast_acc, self.ty) else {
+                return Err(self.compile_err(Code::SYNTAX, "expression expected"));
+            };
+            if !is_vector_ty(&self.structs, ty) {
+                return Err(self.compile_err(
+                    Code::INVALID_ARGUMENTS,
+                    format!("`{NAME}` operands must be vectors"),
+                ));
+            }
+            ops.push((e, ty));
+            if self.lex.tk != ',' {
+                return Err(self.compile_err(
+                    Code::INVALID_ARGUMENTS,
+                    format!("`{NAME}` expects two vectors and the lanes to take"),
+                ));
+            }
+            self.next()?;
+        }
+        let ((a, aty), (b, bty)) = (ops[0], ops[1]);
+        let lanes_of = |c: &Self, ty: i64| {
+            let f = &c.structs[struct_id_of(ty)].fields[0];
+            (unqualified_version_ty(f.ty), f.array_size.max(1))
+        };
+        let (elem, lanes) = lanes_of(self, aty);
+        if lanes_of(self, bty) != (elem, lanes) {
+            return Err(self.compile_err(
+                Code::INVALID_ARGUMENTS,
+                format!("`{NAME}` operands must have the same vector type"),
+            ));
+        }
+        let mut idx = Vec::new();
+        loop {
+            let i = self.parse_constant_int()?;
+            if !(-1..2 * lanes).contains(&i) {
+                return Err(self.compile_err(
+                    Code::INVALID_ARGUMENTS,
+                    format!("`{NAME}` index {i} is outside -1 to {}", 2 * lanes - 1),
+                ));
+            }
+            idx.push(i as i32);
+            match self.lex.tk {
+                t if t == ',' as i64 => self.next()?,
+                t if t == ')' as i64 => break,
+                _ => return Err(self.compile_err(Code::SYNTAX, "`)` expected")),
+            }
+        }
+        self.next()?; // consume ')'
+        if !idx.len().is_power_of_two() {
+            return Err(self.compile_err(
+                Code::INVALID_ARGUMENTS,
+                format!(
+                    "`{NAME}` takes a power-of-two count of indices, not {}",
+                    idx.len()
+                ),
+            ));
+        }
+        let elem_size = self.size_of_type(elem) as i64;
+        let ty = self.make_vector_type(elem, elem_size * idx.len() as i64);
+        self.mark_emit_other();
+        let pos = self.ast_src_pos();
+        let id = self
+            .ast
+            .push_expr(Expr::ShuffleVector { a, b, idx, ty }, pos);
+        self.ty = ty;
+        self.ast_acc = Some(id);
+        Ok(())
+    }
+
     /// Parse a memory-transfer builtin (`__builtin_memcpy`,
     /// `__builtin_memmove`, `__builtin_memset`) with the opening `(`
     /// already consumed. A byte count that is an integer constant
@@ -1660,6 +1739,7 @@ impl Compiler {
                 self.parse_mem_transfer_builtin(op, &name)
             }
             Some(BuiltinCall::ChooseExpr) => self.parse_choose_expr_builtin(),
+            Some(BuiltinCall::ShuffleVector) => self.parse_shufflevector_builtin(),
             Some(BuiltinCall::ConstantP) => self.parse_constant_p_builtin(),
             Some(BuiltinCall::HasAttribute) => self.parse_has_attribute_builtin(),
             Some(BuiltinCall::ObjectSize) => self.parse_object_size_builtin(),
@@ -1778,6 +1858,7 @@ impl Compiler {
             }
             match name {
                 "__builtin_choose_expr" => return Some(BuiltinCall::ChooseExpr),
+                "__builtin_shufflevector" => return Some(BuiltinCall::ShuffleVector),
                 "__builtin_constant_p" => return Some(BuiltinCall::ConstantP),
                 "__builtin_has_attribute" => return Some(BuiltinCall::HasAttribute),
                 "__builtin_object_size" => return Some(BuiltinCall::ObjectSize),
@@ -6859,6 +6940,7 @@ enum BuiltinCall {
     Simd(u32),
     MemTransfer(super::super::ast::MemTransferOp),
     ChooseExpr,
+    ShuffleVector,
     ConstantP,
     HasAttribute,
     ObjectSize,

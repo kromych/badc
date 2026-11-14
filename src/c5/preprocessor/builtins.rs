@@ -107,6 +107,7 @@ pub(super) const BUILTINS: &[Builtin] = &[
     // type is the chosen operand's, so neither fits a registry call.
     direct("__builtin_constant_p"),
     direct("__builtin_choose_expr"),
+    direct("__builtin_shufflevector"),
     direct("__builtin_types_compatible_p"),
     direct("__builtin_object_size"),
     direct("__builtin_offsetof"),

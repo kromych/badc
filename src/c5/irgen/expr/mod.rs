@@ -177,6 +177,10 @@ impl<'a> Walker<'a> {
                 let args = args.clone();
                 self.walk_simd(b, op, &args, imm)
             }
+            Expr::ShuffleVector { a, b: rhs, idx, ty } => {
+                let (a, rhs, ty, idx) = (*a, *rhs, *ty, idx.clone());
+                self.walk_shuffle_vector(b, (a, rhs), &idx, ty)
+            }
             // A short-circuit in value position: the result is used, so
             // normalize it to 0/1.
             Expr::ShortCircuit { .. } => self.walk_short_circuit(b, id, true),

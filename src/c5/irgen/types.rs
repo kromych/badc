@@ -339,6 +339,7 @@ pub(super) fn lvalue_shape_label(expr: &Expr) -> &'static str {
         Expr::StmtExpr { .. } => "StmtExpr",
         Expr::CheckedArith { .. } => "CheckedArith",
         Expr::Simd { .. } => "Simd",
+        Expr::ShuffleVector { .. } => "ShuffleVector",
         Expr::MsIntrinsic { .. } => "MsIntrinsic",
         Expr::MemTransfer { .. } => "MemTransfer",
         Expr::InlineAsm(_) => "InlineAsm",

@@ -162,6 +162,10 @@ fn resolve(
     };
     let r = match &insts[vi] {
         Inst::LocalAddr(s) if movable(*s) => Ref::Ptr(*s, Some(0)),
+        Inst::Copy {
+            value,
+            is_fp: false,
+        } => resolve(insts, *value, movable, state, memo, escaped),
         Inst::BinopI {
             op: op @ (BinOp::Add | BinOp::Sub),
             lhs,
@@ -370,8 +374,9 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
         for (i, inst) in f.insts.iter().enumerate().filter(|(i, _)| in_block[*i]) {
             let pc = i as u32;
             match inst {
-                // Address arithmetic already consumed by `resolve`.
-                Inst::BinopI {
+                // Address arithmetic and copies already consumed by `resolve`.
+                Inst::Copy { is_fp: false, .. }
+                | Inst::BinopI {
                     op: BinOp::Add | BinOp::Sub,
                     ..
                 }
@@ -2086,6 +2091,48 @@ mod tests {
             _ => unreachable!(),
         };
         assert_ne!(a, b);
+    }
+
+    /// A copy of an address names the same object: an access through it
+    /// is bounded, and the object still shares.
+    #[test]
+    fn an_address_copy_is_followed_not_escaped() {
+        let store = |addr: ValueId| Inst::Store {
+            addr,
+            disp: 0,
+            value: 0,
+            kind: StoreKind::I64,
+            volatile: false,
+            align: 0,
+            pc_rel: false,
+        };
+        let load = |addr: ValueId| Inst::Load {
+            addr,
+            disp: 0,
+            kind: LoadKind::I64,
+            volatile: false,
+            align: 0,
+            pc_rel: false,
+        };
+        let insts = alloc::vec![
+            Inst::Imm(7),
+            Inst::LocalAddr(-8),
+            Inst::Copy {
+                value: 1,
+                is_fp: false,
+            },
+            store(2),
+            load(2),
+            Inst::LocalAddr(-4),
+            store(5),
+            load(5),
+        ];
+        let mut f = one_block(insts, 7, 8);
+        f.multi_cell_slots = alloc::vec![(-8, 4), (-4, 4)];
+        coalesce(&mut f, true, false);
+        assert_eq!(f.locals, 4, "disjoint objects share one block");
+        assert!(matches!(f.insts[1], Inst::LocalAddr(-4)));
+        assert!(matches!(f.insts[5], Inst::LocalAddr(-4)));
     }
 
     /// A by-value aggregate call argument is a bounded access, so the

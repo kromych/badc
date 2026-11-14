@@ -433,7 +433,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0xa0, %rsp
+               	subq	$0x90, %rsp
                	pushq	%r12
                	pushq	%rbx
                	movq	<rip>, %r12 # <addr>
@@ -456,12 +456,12 @@ Disassembly of section .text:
                	imulq	$0x7, %r12, %rbx
                	movq	%r12, %rdi
                	callq	<addr>
-               	fstpt	-0x90(%rbp)
-               	leaq	-0x90(%rbp), %rax
-               	leaq	-0xa0(%rbp), %rcx
+               	fstpt	-0x80(%rbp)
+               	leaq	-0x80(%rbp), %rax
+               	leaq	-0x90(%rbp), %rcx
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%rcx)
-               	fldt	-0xa0(%rbp)
+               	fldt	-0x90(%rbp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
                	xorps	%xmm1, %xmm1
@@ -476,14 +476,14 @@ Disassembly of section .text:
                	retq
                	movq	%r12, %rdi
                	callq	<addr>
-               	movsd	%xmm0, -0x28(%rbp)
-               	movss	-0x28(%rbp), %xmm0
+               	movsd	%xmm0, -0x8(%rbp)
+               	movss	-0x8(%rbp), %xmm0
                	xorps	%xmm1, %xmm1
                	cvtsi2ss	%rbx, %xmm1
                	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	movss	-0x24(%rbp), %xmm0
+               	movss	-0x4(%rbp), %xmm0
                	leaq	0x1(%rbx), %rax
                	xorps	%xmm1, %xmm1
                	cvtsi2ss	%rax, %xmm1

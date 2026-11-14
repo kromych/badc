@@ -55,7 +55,9 @@ use alloc::vec;
 use alloc::vec::Vec;
 use hashbrown::HashMap;
 
-use super::super::ir::{BinOp, BlockId, FunctionSsa, Inst, LoadKind, NO_VALUE, ValueId};
+use super::super::ir::{
+    BinOp, BlockId, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, ValueId,
+};
 use super::mem2reg::{dominators, predecessors};
 use super::reg_alloc::Allocation;
 use super::tape::{At, Insertion, Undo};
@@ -572,7 +574,7 @@ fn load_key(inst: &Inst) -> Option<(i64, ValueId, i32, LoadKind, u8, bool)> {
     }
 }
 
-/// A pure integer instruction moved before the loops that hold it.
+/// A pure instruction moved before the loops that hold it.
 struct PureHoist {
     /// Tape index the copy goes ahead of; inside the destination block.
     at: ValueId,
@@ -582,10 +584,14 @@ struct PureHoist {
     profit: u64,
 }
 
-/// Integer arithmetic whose value depends on its operands alone and which
-/// cannot trap: division by a register can, by a constant only `MIN / -1`,
-/// which a divisor other than 0 and -1 rules out.
-fn invariant_op(inst: &Inst) -> bool {
+/// Arithmetic whose value depends on its operands alone and which neither
+/// traps nor raises a floating-point exception: integer arithmetic --
+/// division by a register can trap, by a constant only `MIN / -1`, which a
+/// divisor other than 0 and -1 rules out -- a bit move between the
+/// register files, and an integer converted to floating where the result's
+/// precision holds it exactly (C17 6.3.1.4p2), which sets no flag.
+fn invariant_op(func: &FunctionSsa, v: ValueId) -> bool {
+    let inst = &func.insts[v as usize];
     let plain = |op: BinOp| {
         matches!(
             op,
@@ -613,7 +619,50 @@ fn invariant_op(inst: &Inst) -> bool {
                     && rhs_imm != -1)
         }
         Inst::Extend { .. } | Inst::Neg(_) => true,
+        Inst::FpCast {
+            kind: FpCastKind::FpBits | FpCastKind::BitsFp,
+            ..
+        } => true,
+        Inst::FpCast {
+            kind: kind @ (FpCastKind::IntToFp | FpCastKind::UIntToFp),
+            value,
+        } => {
+            let single = func.f32_values.get(v as usize).copied().unwrap_or(false);
+            let significand = if single { 24 } else { 53 };
+            // A signed value of `bits` is at most 2^(bits - 1) in magnitude.
+            narrow_integer(func, value).is_some_and(|(bits, signed)| {
+                bits - u32::from(signed) <= significand && (kind == FpCastKind::IntToFp || !signed)
+            })
+        }
         _ => false,
+    }
+}
+
+/// The bits and signedness of an integer `v` holds as the extension of a
+/// narrower one: by an `Extend`, by the load that read it, as a parameter
+/// of that type, or by a mask clearing its upper bits.
+fn narrow_integer(func: &FunctionSsa, v: ValueId) -> Option<(u32, bool)> {
+    let kind = match *func.insts.get(v as usize)? {
+        Inst::Extend { kind, .. }
+        | Inst::Load { kind, .. }
+        | Inst::LoadLocal { kind, .. }
+        | Inst::LoadIndexed { kind, .. }
+        | Inst::ParamRef { kind, .. } => kind,
+        Inst::BinopI {
+            op: BinOp::And,
+            rhs_imm,
+            ..
+        } if rhs_imm >= 0 => return Some((64 - rhs_imm.leading_zeros(), false)),
+        _ => return None,
+    };
+    match kind {
+        LoadKind::I8 => Some((8, true)),
+        LoadKind::U8 => Some((8, false)),
+        LoadKind::I16 => Some((16, true)),
+        LoadKind::U16 => Some((16, false)),
+        LoadKind::I32 => Some((32, true)),
+        LoadKind::U32 => Some((32, false)),
+        _ => None,
     }
 }
 
@@ -664,7 +713,7 @@ fn plan_pure(func: &FunctionSsa) -> Vec<PureHoist> {
                 let inst = &func.insts[v as usize];
                 if moved[v as usize]
                     || uses.get(v as usize).copied().unwrap_or(0) == 0
-                    || !invariant_op(inst)
+                    || !invariant_op(func, v)
                 {
                     continue;
                 }

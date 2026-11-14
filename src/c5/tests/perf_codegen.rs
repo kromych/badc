@@ -8741,3 +8741,49 @@ fn x64_a_fused_multiply_add_result_takes_a_dying_operands_register() {
         "{insns:x?}"
     );
 }
+
+/// An integer of 32 bits or fewer converted to `double` in a loop is
+/// converted once ahead of it: the result is exact and sets no flag
+/// (C17 6.3.1.4p2). A 64-bit one, which may round and raise inexact, stays.
+#[test]
+fn a_narrow_integer_converted_in_a_loop_is_converted_before_it() {
+    const SRC: &str = "void addk(double *a, const double *b, int k, int n) {\n\
+    for (int i = 0; i < n; i++) a[i] = b[i] + (double)k;\n\
+}\n\
+void addu(double *a, const double *b, unsigned k, int n) {\n\
+    for (int i = 0; i < n; i++) a[i] = b[i] * (double)k;\n\
+}\n\
+void addl(double *a, const double *b, long k, int n) {\n\
+    for (int i = 0; i < n; i++) a[i] = b[i] + (double)k;\n\
+}\n";
+    let mut m = Misses::default();
+    for (name, inside) in [("addk", false), ("addu", false), ("addl", true)] {
+        let insns = x64(SRC, name);
+        // The loop: from a backward branch's target to the branch.
+        let body = insns
+            .iter()
+            .find(|i| i.is_jcc() && i.target() < i.at)
+            .map(|b| (b.target(), b.at));
+        // `cvtsi2sd`.
+        let in_loop = insns
+            .iter()
+            .any(|i| i.op == 0x0F2A && body.is_some_and(|(lo, hi)| (lo..hi).contains(&i.at)));
+        m.expect(body.is_some() && in_loop == inside, || {
+            format!("x86-64 {name}: converts in the loop: {in_loop}: {insns:x?}")
+        });
+        let ws = a64(SRC, name);
+        let body = ws.iter().enumerate().find_map(|(k, &w)| {
+            a64_branch(w, k).and_then(|(t, _)| (t < k as i64).then_some((t as usize, k)))
+        });
+        // `scvtf` / `ucvtf` from a general register to a double.
+        let cvt = |w: u32| w & 0x7FFE_FC00 == 0x1E62_0000;
+        let in_loop = ws
+            .iter()
+            .enumerate()
+            .any(|(k, &w)| cvt(w) && body.is_some_and(|(lo, hi)| (lo..hi).contains(&k)));
+        m.expect(body.is_some() && in_loop == inside, || {
+            format!("aarch64 {name}: converts in the loop: {in_loop}: {ws:08x?}")
+        });
+    }
+    m.finish();
+}

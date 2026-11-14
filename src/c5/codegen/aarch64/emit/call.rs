@@ -594,6 +594,195 @@ fn emit_extend_x0_for_return(code: &mut Vec<u8>, ext: super::ReturnExt) {
 /// host ABI, `bl` a placeholder with a `Fixup::Bl` for the outer fixup
 /// pass, and bridge the result to `dst`.
 #[allow(clippy::too_many_arguments)]
+/// The callee a tail call branches to: a function of the unit by its entry
+/// pc, or a library function by its import slot.
+#[derive(Clone, Copy)]
+pub(super) enum TailTarget {
+    Local(usize),
+    Import(usize),
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct TailCall<'a> {
+    pub(super) pc: usize,
+    target: TailTarget,
+    ops: CallOperands<'a>,
+    fixed_args: usize,
+}
+
+/// The tail call `block` ends in, under the conditions x86-64's
+/// `detect_tail_call` states: the arguments fit the argument registers, no
+/// aggregate rides the call, neither function is variadic, both are on one
+/// convention and agree on the result's extension, and nothing addresses
+/// the frame. Windows on Arm describes each epilogue in its unwind data,
+/// which records the one a return ends, so it takes none.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn detect_tail_call<'a>(
+    func: &'a FunctionSsa,
+    alloc: &Allocation,
+    block: &super::super::ir::Block,
+    abi: super::Abi,
+    variadic_targets: &alloc::collections::BTreeSet<usize>,
+    ret_tags: &alloc::collections::BTreeMap<usize, i64>,
+    imports: &super::ResolvedImports,
+    target: Target,
+) -> Option<TailCall<'a>> {
+    if !abi.sibling_calls || target == Target::WindowsAarch64 || func.is_variadic {
+        return None;
+    }
+    let (v, void) = super::ssa::emit_common::tail_call_site(func, alloc, block)?;
+    let ext = |tag: i64| super::return_extension(tag, target);
+    let own = ext(func.ret_type_tag?);
+    let operands = |args, fp_arg_mask, arg_widths, arg_aggs| CallOperands {
+        args,
+        fp_arg_mask,
+        arg_widths,
+        arg_aggs,
+        ret_agg: None,
+        ret_slot_off: 0,
+        ends_path: false,
+    };
+    let (callee, ops, fixed_args) = match &func.insts[v as usize] {
+        Inst::Call {
+            target_pc,
+            args,
+            fixed_args,
+            fp_arg_mask,
+            arg_widths,
+            arg_aggs,
+            callee_conv,
+            ret_agg: None,
+            ..
+        } => {
+            if variadic_targets.contains(target_pc)
+                || *fixed_args < args.len()
+                || *callee_conv != func.conv
+                || (!void && ext(*ret_tags.get(target_pc)?) != own)
+            {
+                return None;
+            }
+            let ops = operands(
+                args.as_slice(),
+                fp_arg_mask,
+                *arg_widths,
+                arg_aggs.as_slice(),
+            );
+            (TailTarget::Local(*target_pc), ops, *fixed_args)
+        }
+        Inst::CallExt {
+            binding_idx,
+            args,
+            fp_arg_mask,
+            arg_widths,
+            arg_aggs,
+            ret_agg: None,
+            ..
+        } => {
+            let index = imports.index_of_binding(*binding_idx)?;
+            let imp = &imports.imports[index];
+            // The caller extends a library function's result, which the
+            // jump skips.
+            if !imp.prototyped
+                || imp.is_variadic
+                || func.conv != crate::c5::codegen::CallConv::Target
+                || own != ReturnExt::None
+                || (!void && ext(imp.return_type_tag?) != ReturnExt::None)
+            {
+                return None;
+            }
+            let ops = operands(
+                args.as_slice(),
+                fp_arg_mask,
+                *arg_widths,
+                arg_aggs.as_slice(),
+            );
+            (TailTarget::Import(index), ops, args.len())
+        }
+        _ => return None,
+    };
+    if ops.arg_aggs.iter().any(Option::is_some) {
+        return None;
+    }
+    // A stack argument would land in this function's incoming argument area.
+    let plan = ops.plan(&func.agg_descs, abi, false, fixed_args);
+    if plan.scratch_bytes > 0
+        || plan
+            .placements
+            .iter()
+            .any(|p| matches!(p, super::ArgPlacement::Stack(_)))
+    {
+        return None;
+    }
+    super::ssa::emit_common::frame_outlives_no_address(func).then_some(TailCall {
+        pc: v as usize,
+        target: callee,
+        ops,
+        fixed_args,
+    })
+}
+
+/// A tail call: `marshal_args`, the epilogue without the return, and `b` to
+/// the callee, whose own return reaches this function's caller. The
+/// epilogue restores only registers the convention preserves, none of
+/// which carries an argument, and its canary check takes x16 / x17.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn emit_tail_call(
+    code: &mut Vec<u8>,
+    tail: TailCall<'_>,
+    fcx: &FnCtx,
+    fixups: &mut Vec<Fixup>,
+    plt_call_fixups: &mut Vec<PltCallFixup>,
+    extern_sites: &mut Vec<super::UserExternCallSite>,
+    extern_data_refs: &mut Vec<super::UserExternDataRef>,
+) -> Emit {
+    let FnCtx {
+        func,
+        alloc,
+        frame,
+        scratch,
+        abi,
+        ..
+    } = *fcx;
+    let ops = tail.ops;
+    let plan = ops.plan(&func.agg_descs, abi, false, tail.fixed_args);
+    marshal_args(
+        code,
+        &plan,
+        ops.args,
+        alloc,
+        scratch,
+        frame,
+        ops.arg_aggs,
+        &func.agg_descs,
+        abi,
+    )?;
+    emit_frame_exit(
+        code,
+        alloc,
+        frame,
+        func,
+        abi,
+        extern_sites,
+        extern_data_refs,
+        None,
+    );
+    match tail.target {
+        TailTarget::Local(target_pc) => fixups.push(Fixup {
+            native_offset: code.len(),
+            target_ent_pc: target_pc,
+            kind: BranchKind::B,
+        }),
+        TailTarget::Import(import_index) => plt_call_fixups.push(PltCallFixup {
+            instr_offset: code.len(),
+            import_index,
+            is_tail: true,
+            is_addr: false,
+        }),
+    }
+    emit(code, enc_b(0));
+    Ok(())
+}
+
 pub(super) fn emit_call(
     code: &mut Vec<u8>,
     dst: Place,

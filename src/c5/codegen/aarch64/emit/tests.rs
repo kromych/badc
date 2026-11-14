@@ -1440,6 +1440,8 @@ fn emit_return_42() {
             super::super::FunctionEntry::default(),
             super::super::FixedRegs::NONE,
             false,
+            true,
+            &alloc::collections::BTreeMap::new(),
         )
     };
     assert!(
@@ -2666,6 +2668,8 @@ fn emit_return_one_plus_two() {
             super::super::FunctionEntry::default(),
             super::super::FixedRegs::NONE,
             false,
+            true,
+            &alloc::collections::BTreeMap::new(),
         )
     };
     assert!(ok.is_ok(), "binop handler should cover Add + Shl + Shr");
@@ -2767,6 +2771,8 @@ fn emit_if_else_returns() {
             super::super::FunctionEntry::default(),
             super::super::FixedRegs::NONE,
             false,
+            true,
+            &alloc::collections::BTreeMap::new(),
         )
     };
     assert!(

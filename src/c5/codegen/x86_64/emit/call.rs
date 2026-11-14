@@ -1182,34 +1182,10 @@ pub(super) fn detect_tail_call<'a>(
     imports: &super::ResolvedImports,
     target: Target,
 ) -> Option<TailCall<'a>> {
-    let Terminator::Return(ret) = block.terminator else {
-        return None;
-    };
-    // A second return of a returns-twice call (C99 7.13.2.1) resumes in this
-    // frame, which a jump to the callee would already have torn down.
-    if !abi.sibling_calls || func.has_returns_twice_call {
+    if !abi.sibling_calls {
         return None;
     }
-    let emits = |p: u32| {
-        let inst = &func.insts[p as usize];
-        !inst.is_lifetime_marker() && !super::ssa::emit_common::inst_emits_nothing(inst, p, alloc)
-    };
-    // A function returning nothing ends in its last call, whose result
-    // nothing reads.
-    let void = ret == super::super::ir::NO_VALUE;
-    let v = if void {
-        if !crate::c5::compiler::types::is_void_ty(func.ret_type_tag?) {
-            return None;
-        }
-        block.inst_range.clone().rev().find(|&p| emits(p))?
-    } else {
-        ret
-    };
-    // The call ends the block but for lifetime markers, which the frame
-    // teardown makes moot, and values that emit no code.
-    if !block.inst_range.contains(&v) || (v + 1..block.inst_range.end).any(emits) {
-        return None;
-    }
+    let (v, void) = super::ssa::emit_common::tail_call_site(func, alloc, block)?;
     let callee_ext = |tag: i64| super::return_extension(tag, target);
     let own_ext = callee_ext(func.ret_type_tag?);
     let (target, args, fp_arg_mask) = match &func.insts[v as usize] {
@@ -1284,15 +1260,7 @@ pub(super) fn detect_tail_call<'a>(
     if func.is_variadic {
         return None;
     }
-    // A taken local or parameter-cell address may be held by an earlier
-    // callee; the frame teardown would leave it dangling.
-    if func.insts.iter().any(|i| matches!(i, Inst::LocalAddr(_))) {
-        return None;
-    }
-    // An alloca / VLA frame keeps its runtime allocations live until
-    // the function returns; a tail jmp would tear them down under the
-    // callee (same reason `LocalAddr` disqualifies above).
-    if super::ssa::emit_common::uses_dynamic_alloca(func) {
+    if !super::ssa::emit_common::frame_outlives_no_address(func) {
         return None;
     }
     Some(TailCall {

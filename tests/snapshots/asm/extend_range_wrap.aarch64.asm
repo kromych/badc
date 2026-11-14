@@ -111,9 +111,8 @@ Disassembly of section .text:
                	mov	x29, sp
                	add	x0, x0, #0x2
                	mov	w0, w0
-               	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
 
 <index_of>:
                	add	x1, x1, #0x2

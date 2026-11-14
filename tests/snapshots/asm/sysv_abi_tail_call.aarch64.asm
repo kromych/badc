@@ -78,14 +78,13 @@ Disassembly of section .text:
                	add	x0, x1, x0
                	add	x1, x24, x25
                	add	x2, x26, x27
-               	bl	<addr>
                	ldp	x29, x30, [sp, #0x50]
                	ldr	x28, [sp, #0x40]
                	ldp	x26, x27, [sp, #0x30]
                	ldp	x24, x25, [sp, #0x20]
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x60
-               	ret
+               	b	<addr>
 
 <tail_fp>:
                	stp	d8, d9, [sp, #-0x60]!
@@ -120,13 +119,12 @@ Disassembly of section .text:
                	fmov	d3, d12
                	fmov	d2, d11
                	ldr	d7, [sp, #0x48]
-               	bl	<addr>
                	ldp	x29, x30, [sp, #0x50]
                	ldp	d14, d15, [sp, #0x30]
                	ldp	d12, d13, [sp, #0x20]
                	ldp	d10, d11, [sp, #0x10]
                	ldp	d8, d9, [sp], #0x60
-               	ret
+               	b	<addr>
 
 <main>:
                	str	x20, [sp, #-0x20]!

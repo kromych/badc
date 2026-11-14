@@ -23,9 +23,8 @@ Disassembly of section .text:
                	cmp	w4, #0x3e8
                	b.le	<addr>
                	sub	x4, x4, #0x1
-               	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
                	mov	x17, #0x1               // =1
                	movk	x17, #0x4, lsl #16
                	cmp	w0, w17

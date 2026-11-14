@@ -63,9 +63,8 @@ Disassembly of section .text:
                	mov	x29, sp
                	mov	x1, #0x4                // =4
                	str	w1, [x0]
-               	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
 
 <count_down>:
                	cbz	w0, <addr>

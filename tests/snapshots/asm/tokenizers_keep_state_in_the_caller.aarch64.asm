@@ -174,16 +174,14 @@ Disassembly of section .text:
 <call_wcstok>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
 
 <call_strtok_r>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!

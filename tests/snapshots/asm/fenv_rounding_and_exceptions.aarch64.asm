@@ -48,10 +48,9 @@ Disassembly of section .text:
                	mov	x0, x7
                	bl	<addr>
                	mov	x0, #0x1f               // =31
-               	bl	<addr>
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
                	adrp	x6, <addr>
                	add	x6, x6, <lo12>
                	b	<addr>

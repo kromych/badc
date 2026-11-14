@@ -21,9 +21,8 @@ Disassembly of section .text:
                	mov	x16, x1
                	mov	x1, x0
                	mov	x0, x16
-               	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
                	sxtw	x9, w0
                	sxtw	x10, w1
                	sub	x0, x9, x10

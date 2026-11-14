@@ -4278,10 +4278,12 @@ fn a_declared_stack_pointer_clobber_moves_sp_and_the_frame_follows() {
         }
     }
     let sets_sp = |w: u32| w & 0xFFFF_FC1F == 0x9100_001F;
+    // The `bl`, or the `b` a tail call ends the function with.
     let call_at = |w: &[u32]| {
         w.iter()
             .position(|&w| w & 0xFC00_0000 == 0x9400_0000)
-            .expect("bl")
+            .or_else(|| w.iter().rposition(|&w| w & 0xFC00_0000 == 0x1400_0000))
+            .expect("bl or b")
     };
     // `31` is sp to both compilers, `63` and the octal `077` clang's sp.
     for name in ["sp", "#wsp", "31", "63", "077"] {
@@ -4295,19 +4297,17 @@ fn a_declared_stack_pointer_clobber_moves_sp_and_the_frame_follows() {
             words.collect::<alloc::vec::Vec<u32>>()
         };
         let moves = words("mov sp, %0", false, "use(p);");
+        // A tail call's epilogue restores sp from x29 ahead of its `b`.
         assert_eq!(
             moves[..call_at(&moves)]
                 .iter()
-                .filter(|&&w| sets_sp(w))
+                .filter(|&&w| sets_sp(w) && w != MOV_SP_X29)
                 .count(),
             1,
             "{name}: only the template writes sp ahead of the call: {moves:08x?}"
         );
         let nop = words("nop", true, "use(p);");
-        assert!(
-            nop[call_at(&nop)..].contains(&MOV_SP_X29),
-            "{name}: the return: {nop:08x?}"
-        );
+        assert!(nop.contains(&MOV_SP_X29), "{name}: the return: {nop:08x?}");
         for optimize in [false, true] {
             let leaf = words("sub sp, sp, #16", optimize, "");
             assert!(

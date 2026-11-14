@@ -156,9 +156,8 @@ Disassembly of section .text:
                	fmov	d2, d3
                	fmov	d3, d4
                	fmov	d4, d17
-               	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
 
 <main>:
                	stp	d8, d9, [sp, #-0xa0]!

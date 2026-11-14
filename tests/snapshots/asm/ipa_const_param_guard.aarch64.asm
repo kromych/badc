@@ -720,17 +720,15 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	mov	x1, #0x3                // =3
-               	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
 
 <map_b>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	mov	x1, #0x3                // =3
-               	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
 
 <main>:
                	str	x20, [sp, #-0x20]!

@@ -2425,6 +2425,8 @@ struct Aarch64Lower {
     /// The mapping state spans the section: a body ending in data leaves the
     /// padding to the next function's first instruction, as under GNU as.
     text_map_state: Option<super::map_syms::MapClass>,
+    /// Callee entry pc -> return type tag, for the tail-call contract.
+    ret_tags: alloc::collections::BTreeMap<usize, i64>,
 }
 
 impl Aarch64Lower {
@@ -2450,6 +2452,7 @@ impl Aarch64Lower {
             macho_tlv_descriptors: Vec::new(),
             data_sym_offsets,
             text_map_state: None,
+            ret_tags: alloc::collections::BTreeMap::new(),
         }
     }
 }
@@ -2492,9 +2495,19 @@ impl super::ssa::emit_common::LowerTarget for Aarch64Lower {
         });
     }
 
-    fn note_callees(&mut self, _funcs: &[crate::c5::ir::FunctionSsa]) {}
+    fn note_callees(&mut self, funcs: &[crate::c5::ir::FunctionSsa]) {
+        self.ret_tags = (funcs.iter())
+            .filter_map(|f| f.ret_type_tag.map(|tag| (f.ent_pc, tag)))
+            .collect();
+    }
 
-    fn note_extern_callee(&mut self, _sym: &crate::c5::symbol::Symbol) {}
+    /// A declaration without a prototype states no return contract a tail
+    /// call could rely on.
+    fn note_extern_callee(&mut self, sym: &crate::c5::symbol::Symbol) {
+        if sym.prototyped() {
+            self.ret_tags.insert(sym.val as usize, sym.type_);
+        }
+    }
 
     #[cfg(feature = "std")]
     fn dump_unit(
@@ -2574,6 +2587,8 @@ impl super::ssa::emit_common::LowerTarget for Aarch64Lower {
             entry,
             native.fixed_regs,
             native.optimize,
+            native.sibling_calls,
+            &self.ret_tags,
         )
     }
 

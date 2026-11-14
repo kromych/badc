@@ -70,10 +70,9 @@ Disassembly of section .text:
                	str	w0, [x1, #0x88]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	bl	<addr>
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
-               	ret
+               	b	<addr>
 
 <destroy_again>:
                	str	x20, [sp, #-0x20]!
@@ -96,10 +95,9 @@ Disassembly of section .text:
                	bl	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	bl	<addr>
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
-               	ret
+               	b	<addr>
 
 <never>:
                	stp	x29, x30, [sp, #-0x10]!
@@ -113,9 +111,8 @@ Disassembly of section .text:
                	str	w1, [x0, #0x84]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
 
 <ends_process>:
                	stp	x29, x30, [sp, #-0x10]!

@@ -58,13 +58,11 @@ Disassembly of section .text:
                	cmp	x1, x2
                	b.ge	<addr>
                	ldr	x0, [x0, #0x8]
-               	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
                	ldr	x0, [x0, #0x10]
-               	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
                	mov	x0, #0x0                // =0
                	ret
 

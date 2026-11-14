@@ -60,9 +60,8 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	cmp	x1, #0x0
                	csel	x1, x1, x2, ne
-               	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp], #0x10
                	ret

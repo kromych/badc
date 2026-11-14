@@ -19,17 +19,15 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	ldrsw	x0, [x0, #0x50]
                	add	x0, x0, #0xe
-               	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
 
 <block_plain>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	mov	x0, #0x2                // =2
-               	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
 
 <hidden_by_local>:
                	str	x20, [sp, #-0x20]!
@@ -49,9 +47,8 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	mov	x0, #0x1                // =1
-               	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
 
 <keeps_values>:
                	stp	x20, x21, [sp, #-0x50]!

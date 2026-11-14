@@ -166,9 +166,8 @@ Disassembly of section .text:
                	b	<addr>
                	add	x0, x0, #0x2
                	mov	x1, #0x3e6              // =998
-               	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
 
 <tenth>:
                	sxtw	x0, w0

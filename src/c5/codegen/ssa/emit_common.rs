@@ -2101,6 +2101,51 @@ pub(crate) fn calls_ending_paths(func: &super::super::ir::FunctionSsa) -> alloc:
     ends
 }
 
+/// The call `block` may end in as a tail call: the value its `Return`
+/// names, or, in a function returning nothing, its last instruction that
+/// emits code, with whether it is the latter. A second return of a
+/// returns-twice call (C99 7.13.2.1) resumes in the frame a jump to the
+/// callee tears down, so such a function has none.
+pub(crate) fn tail_call_site(
+    func: &super::super::ir::FunctionSsa,
+    alloc: &super::reg_alloc::Allocation,
+    block: &super::super::ir::Block,
+) -> Option<(super::super::ir::ValueId, bool)> {
+    let super::super::ir::Terminator::Return(ret) = block.terminator else {
+        return None;
+    };
+    if func.has_returns_twice_call {
+        return None;
+    }
+    let emits = |p: u32| {
+        let inst = &func.insts[p as usize];
+        !inst.is_lifetime_marker() && !inst_emits_nothing(inst, p, alloc)
+    };
+    let void = ret == super::super::ir::NO_VALUE;
+    let v = if void {
+        if !crate::c5::compiler::types::is_void_ty(func.ret_type_tag?) {
+            return None;
+        }
+        block.inst_range.clone().rev().find(|&p| emits(p))?
+    } else {
+        ret
+    };
+    // Lifetime markers after the call are moot once the frame is gone.
+    (block.inst_range.contains(&v) && !(v + 1..block.inst_range.end).any(emits))
+        .then_some((v, void))
+}
+
+/// No address into the frame can outlive it: a taken local or parameter
+/// cell may be held by an earlier callee, and an alloca or VLA lives until
+/// the function returns.
+pub(crate) fn frame_outlives_no_address(func: &super::super::ir::FunctionSsa) -> bool {
+    !func
+        .insts
+        .iter()
+        .any(|i| matches!(i, super::super::ir::Inst::LocalAddr(_)))
+        && !uses_dynamic_alloca(func)
+}
+
 /// Whether `inst` lowers to no machine code and records nothing: a phi,
 /// whose value the predecessors' exit moves place, an undefined value, or
 /// a dead pure value.

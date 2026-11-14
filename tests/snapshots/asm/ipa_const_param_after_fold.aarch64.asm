@@ -27,10 +27,9 @@ Disassembly of section .text:
                	stur	x1, [x29, #-0x20]
                	cbz	x1, <addr>
                	mov	x1, #0x0                // =0
-               	bl	<addr>
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
                	mov	x0, #-0x16              // =-22
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10

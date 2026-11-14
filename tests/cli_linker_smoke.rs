@@ -18658,7 +18658,7 @@ fn the_system_unwinder_walks_a_badc_image_to_main() {
         &dir,
         "mw.c",
         "#include <stdio.h>\nint frames(char *out);\n\
-         void inner(char *out) { frames(out); }\n\
+         int inner(char *out) { return frames(out) + 1; }\n\
          int main(void) { char out[512] = \"\"; inner(out); puts(out); return 0; }\n",
     );
     run(

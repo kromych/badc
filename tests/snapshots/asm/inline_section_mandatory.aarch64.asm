@@ -17,9 +17,8 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	mov	x0, #0x5                // =5
-               	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
 
 <run_text>:
                	stp	x29, x30, [sp, #-0x10]!
@@ -50,6 +49,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	udf	#0x0
 
 <boot_offset>:
                	mov	x0, #0xb                // =11

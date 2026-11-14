@@ -8063,3 +8063,27 @@ void forward(int x) { note(x + 1); note(x); }\n";
         );
     }
 }
+
+/// AArch64 makes the tail calls x86-64 makes: a returned call, a library
+/// call whose result needs no extension and a void function's last call end
+/// the function as `b`, with no `bl` and no `ret`.
+#[test]
+fn a64_a_call_in_tail_position_is_a_branch() {
+    const SRC: &str = "#include <stdlib.h>\n\
+#include <string.h>\n\
+long ext(char *);\n\
+void note(int);\n\
+long pass(char *s) { return ext(s); }\n\
+size_t length(const char *s) { return strlen(s); }\n\
+void release(void *p) { free(p); }\n\
+void forward(int x) { note(x + 1); note(x); }\n";
+    use super::codegen::function_words;
+    let obj = object_at(SRC, Target::LinuxAarch64, true);
+    let b = |w: &u32| w & 0xFC00_0000 == 0x1400_0000;
+    let bl = |w: &u32| w & 0xFC00_0000 == 0x9400_0000;
+    for (name, calls) in [("pass", 0), ("length", 0), ("release", 0), ("forward", 1)] {
+        let words = function_words(&obj, name);
+        assert!(words.last().is_some_and(b), "{name} ends in a return");
+        assert_eq!(words.iter().filter(|w| bl(w)).count(), calls, "{name}");
+    }
+}

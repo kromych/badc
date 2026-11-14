@@ -45,6 +45,5 @@ Disassembly of section .text:
                	mov	x29, sp
                	mov	x0, #0x3                // =3
                	mov	x1, #0x4                // =4
-               	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>

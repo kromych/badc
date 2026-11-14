@@ -53,64 +53,56 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	orr	x0, x0, #0x1
-               	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
 
 <via_widen>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	add	x0, x0, #0x1
-               	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
 
 <via_halve>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	eor	x0, x0, #0x2
-               	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
 
 <via_sum>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	x1, x1, #0x1
-               	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
 
 <via_pick>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	x1, x1, #0x5
-               	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
 
 <via_pick_u>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	add	x1, x1, #0x1
-               	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
 
 <via_byte>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
 
 <via_half>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	and	x0, x0, #0xffff
-               	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!

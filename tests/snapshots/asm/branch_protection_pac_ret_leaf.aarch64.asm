@@ -25,7 +25,6 @@ Disassembly of section .text:
                	mov	x29, sp
                	mov	x0, #0x14               // =20
                	mov	x1, #0x2                // =2
-               	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
                	autiasp
-               	ret
+               	b	<addr>

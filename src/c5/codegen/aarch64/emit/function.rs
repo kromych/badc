@@ -123,6 +123,9 @@ struct FunctionEmitter<'a, 'b> {
     early_far: bool,
     /// The test's branch to patch, and where the frame path starts.
     early_site: (usize, usize),
+    ret_tags: &'a alloc::collections::BTreeMap<usize, i64>,
+    /// The call the block being emitted ends in as a tail call.
+    tail_call: Option<super::TailCall<'a>>,
     snapshot: EmitSnapshot,
     /// Which blocks are emitted and where each branch lands.
     plan: super::ssa::block_plan::BlockPlan,
@@ -203,9 +206,12 @@ pub(crate) fn emit_function(
     fixed_regs: super::FixedRegs,
     // `-O`: the block plan may repeat a small test in place of a jump to it.
     repeat_tests: bool,
+    sibling_calls: bool,
+    ret_tags: &alloc::collections::BTreeMap<usize, i64>,
 ) -> Emit {
     let abi = {
         let mut a = target.abi();
+        a.sibling_calls = sibling_calls;
         a.no_fp_regs = no_fp_regs;
         a.strict_align = strict_align;
         a.hardening = hardening;
@@ -337,6 +343,8 @@ pub(crate) fn emit_function(
         early_exit,
         early_far: false,
         early_site: (0, 0),
+        ret_tags,
+        tail_call: None,
         snapshot,
         plan,
         prebatched: Vec::new(),
@@ -881,6 +889,16 @@ impl FunctionEmitter<'_, '_> {
             if bti {
                 emit(self.cx.code, super::encode::BTI_J);
             }
+            self.tail_call = super::detect_tail_call(
+                func,
+                alloc,
+                block,
+                self.fcx.abi,
+                self.fcx.variadic_targets,
+                self.ret_tags,
+                self.fcx.imports,
+                self.fcx.target,
+            );
             let saves = &alloc.loop_saves;
             let b = block_idx as BlockId;
             for s in saves.loads_at_start_of(b) {
@@ -976,6 +994,10 @@ impl FunctionEmitter<'_, '_> {
         let inst = &func.insts[v as usize];
         let place = place_of(alloc, v);
         if super::ssa::emit_common::inst_emits_nothing(inst, v, alloc) {
+            return Ok(());
+        }
+        // The terminator lowers the tail call.
+        if self.tail_call.is_some_and(|t| t.pc == v as usize) {
             return Ok(());
         }
         if self.prebatched[v as usize]
@@ -1163,6 +1185,18 @@ impl FunctionEmitter<'_, '_> {
         match block.terminator {
             // A naked function's inline-asm body provides its own return.
             Terminator::Return(_) if func.is_naked => {}
+            Terminator::Return(_) if self.tail_call.is_some() => {
+                let tail = self.tail_call.take().expect("tail call");
+                return emit_tail_call(
+                    self.cx.code,
+                    tail,
+                    &self.fcx,
+                    self.fixups,
+                    self.cx.plt_call_fixups,
+                    self.cx.asm_extern_call_sites,
+                    self.cx.user_extern_data_refs,
+                );
+            }
             Terminator::Return(v) => {
                 let mut steps = Vec::new();
                 let windows = self.fcx.target == Target::WindowsAarch64;
@@ -2312,14 +2346,42 @@ pub(super) fn emit_return(
     abi: super::Abi,
     extern_sites: &mut Vec<super::UserExternCallSite>,
     extern_data_refs: &mut Vec<super::UserExternDataRef>,
-    mut uw: Option<&mut Vec<super::A64Step>>,
+    uw: Option<&mut Vec<super::A64Step>>,
 ) -> Emit<usize> {
-    use super::A64Step as S;
     if let Some(ai) = func.ret_agg {
         emit_aggregate_return(code, value, ai, alloc, frame, scratch, func, abi)?;
     } else if value != super::super::ir::NO_VALUE {
         emit_scalar_return(code, value, alloc, frame, scratch, func);
     }
+    let start = emit_frame_exit(
+        code,
+        alloc,
+        frame,
+        func,
+        abi,
+        extern_sites,
+        extern_data_refs,
+        uw,
+    );
+    emit(code, enc_ret(Reg(30)));
+    Ok(start)
+}
+
+/// The epilogue up to the return: the canary check, the restores, the frame
+/// teardown and the return-address authentication. The offset where the
+/// part the unwind steps describe starts.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn emit_frame_exit(
+    code: &mut Vec<u8>,
+    alloc: &Allocation,
+    frame: Frame,
+    func: &FunctionSsa,
+    abi: super::Abi,
+    extern_sites: &mut Vec<super::UserExternCallSite>,
+    extern_data_refs: &mut Vec<super::UserExternDataRef>,
+    mut uw: Option<&mut Vec<super::A64Step>>,
+) -> usize {
+    use super::A64Step as S;
     let signs = signs_return_address(func, frame, alloc, abi);
     // A full leaf saved nothing, and moved no sp its signing read.
     if is_full_leaf(frame, alloc) {
@@ -2328,8 +2390,7 @@ pub(super) fn emit_return(
             emit(code, super::encode::pac_pair(abi.hardening).1);
             push_steps(&mut uw, &[S::PacSignLr]);
         }
-        emit(code, enc_ret(Reg(30)));
-        return Ok(start);
+        return start;
     }
     emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
     let start = code.len();
@@ -2387,8 +2448,7 @@ pub(super) fn emit_return(
         emit(code, super::encode::pac_pair(abi.hardening).1);
         push_steps(&mut uw, &[S::PacSignLr]);
     }
-    emit(code, enc_ret(Reg(30)));
-    Ok(start)
+    start
 }
 
 /// A return in registers: each part moves into its class's register

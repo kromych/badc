@@ -23,9 +23,8 @@ Disassembly of section .text:
                	cmp	w0, #0x0
                	b.le	<addr>
                	sub	x0, x0, #0x1
-               	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>

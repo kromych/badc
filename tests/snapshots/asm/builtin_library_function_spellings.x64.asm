@@ -118,7 +118,7 @@ Disassembly of section .text:
                	jp	<addr>
                	jne	<addr>
                	movsd	<rip>, %xmm0
-               	roundsd	$0x9, %xmm0, %xmm1
+               	vroundsd	$0x9, %xmm0, %xmm0, %xmm1
                	movsd	<rip>, %xmm0
                	ucomisd	%xmm0, %xmm1
                	jp	<addr>

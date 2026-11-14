@@ -120,7 +120,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	cvtss2sd	%xmm0, %xmm0
                	callq	<addr>
-               	cvtsd2ss	%xmm0, %xmm1
+               	vcvtsd2ss	%xmm0, %xmm0, %xmm1
                	movss	<rip>, %xmm0
                	vfmadd213ss	%xmm0, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm0) + xmm0
                	popq	%rbp

@@ -125,7 +125,7 @@ Disassembly of section .text:
                	movl	$0x7fffffff, %r10d      # imm = 0x7FFFFFFF
                	movq	%r10, %xmm15
                	andpd	%xmm15, %xmm0
-               	sqrtss	%xmm0, %xmm1
+               	vsqrtss	%xmm0, %xmm0, %xmm1
                	movss	<rip>, %xmm0
                	ucomiss	%xmm0, %xmm1
                	jp	<addr>

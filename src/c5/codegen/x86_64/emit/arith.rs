@@ -690,6 +690,10 @@ pub(super) fn emit_fp_unary(
     };
     let is_f32 = alloc.is_f32(v);
     match kind {
+        // The SSE scalar forms merge into the destination's other lanes and
+        // so read it; apart from the source, the VEX forms take those lanes
+        // from the source instead, with no wait on the destination's writer.
+        I::Sqrt | I::Sqrtf if dd != dn => emit_vex_fp_arith(code, 0x51, is_f32, dd, dn, dn),
         I::Sqrt | I::Sqrtf => {
             if is_f32 {
                 emit_sqrtss(code, dd, dn);
@@ -716,7 +720,9 @@ pub(super) fn emit_fp_unary(
                 I::Ceil | I::Ceilf => 0x0A,
                 _ => 0x0B,
             };
-            if is_f32 {
+            if dd != dn {
+                super::encode::emit_vex_round(code, is_f32, dd, dn, dn, imm);
+            } else if is_f32 {
                 emit_roundss(code, dd, dn, imm);
             } else {
                 emit_roundsd(code, dd, dn, imm);
@@ -875,7 +881,11 @@ pub(super) fn emit_fp_cast(
             let Some(dd) = fp_or_spill_dst(dst, frame) else {
                 return fail("FpCast F32ToF64: dst not fp reg / spill");
             };
-            emit_cvtss2sd(code, dd, dn);
+            if dd != dn {
+                emit_vex_fp_arith(code, 0x5A, true, dd, dn, dn);
+            } else {
+                emit_cvtss2sd(code, dd, dn);
+            }
             fp_spill_dst_to_slot(code, dst, dd, frame);
             Ok(())
         }
@@ -908,7 +918,11 @@ pub(super) fn emit_fp_cast(
             let Some(dd) = fp_or_spill_dst(dst, frame) else {
                 return fail("FpCast F64ToF32: dst not fp reg / spill");
             };
-            emit_cvtsd2ss(code, dd, dn);
+            if dd != dn {
+                emit_vex_fp_arith(code, 0x5A, false, dd, dn, dn);
+            } else {
+                emit_cvtsd2ss(code, dd, dn);
+            }
             fp_spill_dst_to_slot(code, dst, dd, frame);
             Ok(())
         }

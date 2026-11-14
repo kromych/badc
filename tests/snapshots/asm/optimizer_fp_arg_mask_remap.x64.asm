@@ -36,7 +36,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movsd	%xmm0, 0x10(%rsp)
                	movsd	<rip>, %xmm0
-               	sqrtsd	%xmm0, %xmm14
+               	vsqrtsd	%xmm0, %xmm0, %xmm14
                	movsd	%xmm14, 0x8(%rsp)
                	xorps	%xmm0, %xmm0
                	callq	<addr>

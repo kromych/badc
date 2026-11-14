@@ -179,7 +179,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	xorl	%esi, %esi
                	callq	<addr>
-               	cvtss2sd	%xmm0, %xmm14
+               	vcvtss2sd	%xmm0, %xmm0, %xmm14
                	movsd	%xmm14, 0x48(%rsp)
                	leaq	<rip>, %rdi
                	xorl	%esi, %esi

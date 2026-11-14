@@ -30,7 +30,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
                	movss	<rip>, %xmm0
-               	cvtss2sd	%xmm0, %xmm1
+               	vcvtss2sd	%xmm0, %xmm0, %xmm1
                	movsd	%xmm1, -0x20(%rbp)
                	movsd	<rip>, %xmm1
                	movsd	%xmm1, -0x18(%rbp)

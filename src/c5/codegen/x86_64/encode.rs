@@ -1080,6 +1080,22 @@ pub(crate) fn emit_roundss(code: &mut Vec<u8>, dst: Reg, src: Reg, imm: u8) {
     emit_byte(code, imm);
 }
 
+/// `VROUNDSS` / `VROUNDSD xmm, xmm, xmm, imm8`: `dst` takes `b` rounded
+/// per `imm` in its low element and `a`'s other elements.
+/// `VEX.LIG.66.0F3A.WIG 0A` (single) / `0B` (double) `/r ib`.
+pub(crate) fn emit_vex_round(code: &mut Vec<u8>, is_f32: bool, dst: Reg, a: Reg, b: Reg, imm: u8) {
+    let v = !(((a.high() as u8) << 3) | a.lo()) & 0xF;
+    emit_byte(code, 0xC4);
+    emit_byte(
+        code,
+        (u8::from(!dst.high()) << 7) | (1 << 6) | (u8::from(!b.high()) << 5) | 0b00011,
+    );
+    emit_byte(code, (v << 3) | 0b01);
+    emit_byte(code, if is_f32 { 0x0A } else { 0x0B });
+    emit_byte(code, modrm(0b11, dst.lo(), b.lo()));
+    emit_byte(code, imm);
+}
+
 /// `XORPD xmm, xmm` -- bitwise XOR of two doubles. With identical
 /// operands it zeroes the register, used as a building block for
 /// `FNEG` (we XOR with the sign-bit mask in another XMM).

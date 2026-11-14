@@ -8414,3 +8414,22 @@ int plain(int x) { if (x > 0) return x; slow(x); return 0; }\n";
         assert_eq!(ret < stp, predicted, "{name}: {words:08x?}");
     }
 }
+
+/// A scalar square root, rounding or precision conversion into a register
+/// apart from its source takes the VEX form, whose other lanes come from
+/// the source: the SSE form merges into the destination and so waits on
+/// that register's last writer.
+#[test]
+fn x64_a_scalar_unary_op_apart_from_its_source_reads_no_destination() {
+    const SRC: &str = "double s(double x) { return __builtin_sqrt(x) + x; }\n\
+float t(float x) { return __builtin_truncf(x) * x; }\n\
+double w(float x) { return (double)x * x; }\n\
+float n(double x) { return (float)x * (float)(x * 3.0); }\n";
+    let unary = |i: &X64Insn| matches!(i.op, 0x0F51 | 0x0F5A | 0x3A0A | 0x3A0B);
+    for name in ["s", "t", "w", "n"] {
+        let insns = x64(SRC, name);
+        assert!(insns.iter().any(unary), "{name}: {insns:x?}");
+        let merging = |i: &X64Insn| unary(i) && !i.vex && i.regs().0 != i.regs().1;
+        assert!(!insns.iter().any(merging), "{name}: {insns:x?}");
+    }
+}

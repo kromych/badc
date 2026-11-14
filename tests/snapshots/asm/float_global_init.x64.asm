@@ -48,7 +48,7 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	retq
                	movss	<rip>, %xmm3 # <addr>
-               	cvtss2sd	%xmm3, %xmm4
+               	vcvtss2sd	%xmm3, %xmm3, %xmm4
                	movsd	<rip>, %xmm3
                	subsd	%xmm3, %xmm4
                	comisd	%xmm4, %xmm0

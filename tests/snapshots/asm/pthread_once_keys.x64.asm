@@ -71,10 +71,9 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	movl	%eax, <rip> # <addr>
                	leaq	<rip>, %rdi # <addr>
-               	callq	<addr>
                	popq	%rbx
                	leave
-               	retq
+               	jmp	<addr>
 
 <destroy_again>:
                	pushq	%rbp
@@ -92,9 +91,8 @@ Disassembly of section .text:
                	movq	0x8(%rsp), %rsi
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
-               	callq	<addr>
                	leave
-               	retq
+               	jmp	<addr>
 
 <never>:
                	pushq	%rbp
@@ -105,9 +103,8 @@ Disassembly of section .text:
                	addq	$0x64, %rax
                	movl	%eax, <rip> # <addr>
                	leaq	<rip>, %rdi # <addr>
-               	callq	<addr>
                	popq	%rbp
-               	retq
+               	jmp	<addr>
 
 <ends_process>:
                	pushq	%rbp

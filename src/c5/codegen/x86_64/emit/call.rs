@@ -1182,22 +1182,32 @@ pub(super) fn detect_tail_call<'a>(
     imports: &super::ResolvedImports,
     target: Target,
 ) -> Option<TailCall<'a>> {
-    let Terminator::Return(v) = block.terminator else {
+    let Terminator::Return(ret) = block.terminator else {
         return None;
     };
     // A second return of a returns-twice call (C99 7.13.2.1) resumes in this
     // frame, which a jump to the callee would already have torn down.
-    if v == super::super::ir::NO_VALUE || !abi.sibling_calls || func.has_returns_twice_call {
+    if !abi.sibling_calls || func.has_returns_twice_call {
         return None;
     }
+    let emits = |p: u32| {
+        let inst = &func.insts[p as usize];
+        !inst.is_lifetime_marker() && !super::ssa::emit_common::inst_emits_nothing(inst, p, alloc)
+    };
+    // A function returning nothing ends in its last call, whose result
+    // nothing reads.
+    let void = ret == super::super::ir::NO_VALUE;
+    let v = if void {
+        if !crate::c5::compiler::types::is_void_ty(func.ret_type_tag?) {
+            return None;
+        }
+        block.inst_range.clone().rev().find(|&p| emits(p))?
+    } else {
+        ret
+    };
     // The call ends the block but for lifetime markers, which the frame
     // teardown makes moot, and values that emit no code.
-    if !block.inst_range.contains(&v)
-        || !(v + 1..block.inst_range.end).all(|p| {
-            let inst = &func.insts[p as usize];
-            inst.is_lifetime_marker() || super::ssa::emit_common::inst_emits_nothing(inst, p, alloc)
-        })
-    {
+    if !block.inst_range.contains(&v) || (v + 1..block.inst_range.end).any(emits) {
         return None;
     }
     let callee_ext = |tag: i64| super::return_extension(tag, target);
@@ -1210,6 +1220,7 @@ pub(super) fn detect_tail_call<'a>(
             fp_arg_mask,
             fixed_args,
             callee_conv,
+            ret_agg: None,
             ..
         } => {
             // The tail-call plan is the scalar one, which would pass an
@@ -1230,7 +1241,7 @@ pub(super) fn detect_tail_call<'a>(
             // The callee's return extension replaces this function's, so the
             // two contracts must agree; a function without a recorded type
             // has none.
-            if callee_ext(*ret_tags.get(target_pc)?) != own_ext {
+            if !void && callee_ext(*ret_tags.get(target_pc)?) != own_ext {
                 return None;
             }
             (TailTarget::Local(*target_pc), args.as_slice(), fp_arg_mask)
@@ -1252,7 +1263,7 @@ pub(super) fn detect_tail_call<'a>(
                 || !imp.prototyped
                 || imp.is_variadic
                 || func.conv != crate::c5::codegen::CallConv::Target
-                || callee_ext(imp.return_type_tag?) != ReturnExt::None
+                || (!void && callee_ext(imp.return_type_tag?) != ReturnExt::None)
                 || own_ext != ReturnExt::None
             {
                 return None;

@@ -38,10 +38,9 @@ Disassembly of section .text:
                	movq	0x10(%rbx), %rdi
                	callq	<addr>
                	movq	%rbx, %rdi
-               	callq	<addr>
                	popq	%rbx
                	leave
-               	retq
+               	jmp	<addr>
                	retq
 
 <insert>:

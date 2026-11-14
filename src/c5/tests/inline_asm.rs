@@ -4267,8 +4267,12 @@ fn a_declared_stack_pointer_clobber_moves_sp_and_the_frame_follows() {
         );
         for (optimize, tail) in [(true, "use(p);"), (false, ""), (true, "")] {
             let pushes = text("pushq $0x77", name, crate::Target::LinuxX64, optimize, tail);
+            // `leave` restores rsp from the frame, then a return or the jump
+            // of a tail call.
+            let jumps =
+                pushes.len() > 6 && pushes[pushes.len() - 6..pushes.len() - 4] == [0xC9, 0xE9];
             assert!(
-                pushes.ends_with(&LEAVE_RET),
+                pushes.ends_with(&LEAVE_RET) || jumps,
                 "{name} {tail:?}: the return: {pushes:02x?}"
             );
         }

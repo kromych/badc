@@ -62,9 +62,8 @@ Disassembly of section .text:
                	callq	<addr>
                	addq	$0x10, %rsp
                	movl	$0x3d, %edi
-               	callq	<addr>
                	leave
-               	retq
+               	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
                	leaq	<rip>, %r9

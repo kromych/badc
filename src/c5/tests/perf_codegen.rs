@@ -8039,3 +8039,27 @@ int show(double d) { return printf(\"%f\\n\", d); }\n";
         "printf gets no al"
     );
 }
+
+/// A function returning nothing ends in its last call: a library call and a
+/// call to another function both become the jump that returns to its caller.
+#[test]
+fn x64_a_void_functions_last_call_is_a_jump() {
+    const SRC: &str = "#include <stdlib.h>\n\
+void note(int);\n\
+void release(void *p) { free(p); }\n\
+void forward(int x) { note(x + 1); note(x); }\n";
+    use super::codegen::function_bytes;
+    let obj = object_at(SRC, Target::LinuxX64, true);
+    for (name, calls) in [("release", 0), ("forward", 1)] {
+        let insns = x64_insns(&function_bytes(&obj, name));
+        assert!(
+            insns.last().is_some_and(X64Insn::is_jmp),
+            "{name} ends in a call"
+        );
+        assert_eq!(
+            insns.iter().filter(|i| i.op == 0xE8).count(),
+            calls,
+            "{name}"
+        );
+    }
+}

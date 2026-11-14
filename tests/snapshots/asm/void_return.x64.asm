@@ -68,9 +68,8 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movl	$0x4, (%rdi)
-               	callq	<addr>
                	popq	%rbp
-               	retq
+               	jmp	<addr>
 
 <count_down>:
                	testl	%edi, %edi

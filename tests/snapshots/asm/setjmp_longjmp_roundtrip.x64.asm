@@ -34,9 +34,8 @@ Disassembly of section .text:
                	testl	%edi, %edi
                	jle	<addr>
                	decq	%rdi
-               	callq	<addr>
                	popq	%rbp
-               	retq
+               	jmp	<addr>
                	leaq	<rip>, %rdi # <addr>
                	callq	<addr>
                	ud2

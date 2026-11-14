@@ -1903,6 +1903,16 @@ __BADC_INTRIN int64x2_t vqdmlsl_n_s32(int64x2_t __r, int32x2_t __a, int32_t __b)
 __BADC_INTRIN int64x2_t vqdmlsl_high_n_s32(int64x2_t __r, int32x4_t __a, int32_t __b) { return vqdmlsl_high_lane_s32(__r, __a, ((int32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
 
 
+/* The scalar FEAT_RDM forms by lane: lane 0 of the vector ones. */
+#define vqrdmlahh_lane_s16(__a, __b, __v, __n) (vqrdmlah_lane_s16((int16x4_t){__a}, (int16x4_t){__b}, __v, __n)[0])
+#define vqrdmlahh_laneq_s16(__a, __b, __v, __n) (vqrdmlah_laneq_s16((int16x4_t){__a}, (int16x4_t){__b}, __v, __n)[0])
+#define vqrdmlahs_lane_s32(__a, __b, __v, __n) (vqrdmlah_lane_s32((int32x2_t){__a}, (int32x2_t){__b}, __v, __n)[0])
+#define vqrdmlahs_laneq_s32(__a, __b, __v, __n) (vqrdmlah_laneq_s32((int32x2_t){__a}, (int32x2_t){__b}, __v, __n)[0])
+#define vqrdmlshh_lane_s16(__a, __b, __v, __n) (vqrdmlsh_lane_s16((int16x4_t){__a}, (int16x4_t){__b}, __v, __n)[0])
+#define vqrdmlshh_laneq_s16(__a, __b, __v, __n) (vqrdmlsh_laneq_s16((int16x4_t){__a}, (int16x4_t){__b}, __v, __n)[0])
+#define vqrdmlshs_lane_s32(__a, __b, __v, __n) (vqrdmlsh_lane_s32((int32x2_t){__a}, (int32x2_t){__b}, __v, __n)[0])
+#define vqrdmlshs_laneq_s32(__a, __b, __v, __n) (vqrdmlsh_laneq_s32((int32x2_t){__a}, (int32x2_t){__b}, __v, __n)[0])
+
 /* The dot products (FEAT_DotProd): each 32-bit lane of the accumulator
  * plus the four products of the bytes in it, signed or unsigned, or by a
  * 4-byte group __n of the last operand; FEAT_I8MM's mixed-sign forms

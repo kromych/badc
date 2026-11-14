@@ -73,9 +73,9 @@ const FEATURES: &[Feature] = &[
     ext("lse", &[], &[], &[], C),
     ext("fp", &[], &[], &[], C),
     ext("simd", &["fp"], &[], &[], W),
-    ext("dotprod", &["simd"], &[], &[], W),
+    ext("dotprod", &["simd"], &[], &[], C),
     ext("sm4", &["simd"], &[], &[], C),
-    ext("rdma", &[], &["simd"], &[], W),
+    ext("rdma", &[], &["simd"], &[], C),
     ext("crc", &[], &[], &[], C),
     ext("sha2", &["simd"], &[], &[], C),
     ext("sha3", &["sha2"], &[], &[], C),
@@ -88,8 +88,8 @@ const FEATURES: &[Feature] = &[
     ext("rcpc", &[], &[], &[], C),
     ext("rcpc2", &["rcpc"], &[], &[], N),
     ext("rcpc3", &["rcpc2"], &[], &[], N),
-    ext("frintts", &["fp"], &[], &[], W),
-    ext("i8mm", &["simd"], &[], &[], W),
+    ext("frintts", &["fp"], &[], &[], C),
+    ext("i8mm", &["simd"], &[], &[], C),
     ext("bf16", &["fp"], &["simd"], &[], W),
     ext("sve", &["simd", "fp16", "fcma"], &[], &[], W),
     ext("sve-b16b16", &[], &[], &[], W),
@@ -335,8 +335,8 @@ const CPUS: &[(&str, &str, &[&str])] = &[
 
 /// The macros a feature set defines beyond the unconditional ones, where
 /// badc carries what each promises: the name, the value, and the features
-/// it requires. `__ARM_NEON`, `__ARM_FEATURE_NUMERIC_MAXMIN` and those of
-/// the features marked `W` are withheld, and so are `__ARM_FP16_FORMAT_IEEE` and `__ARM_FP16_ARGS`, as
+/// it requires. `__ARM_NEON` and the macros of the features marked `W` are
+/// withheld, and so are `__ARM_FP16_FORMAT_IEEE` and `__ARM_FP16_ARGS`, as
 /// badc has no `__fp16`. TODO(#2029): `__ARM_NEON` with the Advanced SIMD
 /// intrinsic set.
 const FEATURE_MACROS: &[(&str, &str, &[&str])] = &[
@@ -356,6 +356,11 @@ const FEATURE_MACROS: &[(&str, &str, &[&str])] = &[
     ("__ARM_FEATURE_PAUTH", "1", &["pauth"]),
     ("__ARM_FEATURE_BTI", "1", &["armv8.5-a"]),
     ("__ARM_FEATURE_RCPC", "1", &["rcpc"]),
+    ("__ARM_FEATURE_NUMERIC_MAXMIN", "1", &["simd"]),
+    ("__ARM_FEATURE_QRDMX", "1", &["rdma"]),
+    ("__ARM_FEATURE_DOTPROD", "1", &["dotprod"]),
+    ("__ARM_FEATURE_FRINT", "1", &["frintts"]),
+    ("__ARM_FEATURE_MATMUL_INT8", "1", &["i8mm"]),
 ];
 
 /// What a `+` modifier can be refused for.
@@ -586,16 +591,30 @@ mod tests {
     /// The macros of the architecture levels, less the withheld ones.
     #[test]
     fn architectures_predefine_as_gccs() {
-        assert_eq!(features(arch("armv8-a")), ["__ARM_FEATURE_FMA", "__ARM_FP"]);
+        assert_eq!(
+            features(arch("armv8-a")),
+            [
+                "__ARM_FEATURE_FMA",
+                "__ARM_FEATURE_NUMERIC_MAXMIN",
+                "__ARM_FP"
+            ]
+        );
         assert_eq!(
             features(arch("armv8.1-a")),
             [
                 "__ARM_FEATURE_ATOMICS",
                 "__ARM_FEATURE_CRC32",
                 "__ARM_FEATURE_FMA",
+                "__ARM_FEATURE_NUMERIC_MAXMIN",
+                "__ARM_FEATURE_QRDMX",
                 "__ARM_FP"
             ]
         );
+        assert!(features(arch("armv8.4-a")).contains(&"__ARM_FEATURE_DOTPROD"));
+        assert!(!features(arch("armv8.4-a")).contains(&"__ARM_FEATURE_FRINT"));
+        assert!(features(arch("armv8.5-a")).contains(&"__ARM_FEATURE_FRINT"));
+        assert!(!features(arch("armv8.5-a")).contains(&"__ARM_FEATURE_MATMUL_INT8"));
+        assert!(features(arch("armv8.6-a")).contains(&"__ARM_FEATURE_MATMUL_INT8"));
         let v85 = features(arch("armv8.5-a"));
         for m in [
             "__ARM_FEATURE_BTI",
@@ -626,7 +645,12 @@ mod tests {
         }
         assert_eq!(
             features(Aarch64Features::for_cpu("cortex-a53").unwrap()),
-            ["__ARM_FEATURE_CRC32", "__ARM_FEATURE_FMA", "__ARM_FP"]
+            [
+                "__ARM_FEATURE_CRC32",
+                "__ARM_FEATURE_FMA",
+                "__ARM_FEATURE_NUMERIC_MAXMIN",
+                "__ARM_FP"
+            ]
         );
         let n1 = features(Aarch64Features::for_cpu("neoverse-n1").unwrap());
         assert!(n1.contains(&"__ARM_FEATURE_RCPC") && !n1.contains(&"__ARM_FEATURE_JCVT"));
@@ -666,6 +690,8 @@ mod tests {
         assert_eq!(f.apply("bf16"), Err(Aarch64ExtError::Unimplemented("bf16")));
         assert_eq!(f.apply("simd"), Ok(()));
         assert_eq!(f.apply("lse128"), Ok(()));
+        assert_eq!(f.apply("dotprod"), Ok(()));
+        assert!(features(f).contains(&"__ARM_FEATURE_DOTPROD"));
         assert_eq!(f.apply("frob"), Err(Aarch64ExtError::Unknown));
         assert_eq!(f.apply("nofrob"), Err(Aarch64ExtError::Unknown));
         assert_eq!(f.apply("armv8.1-a"), Err(Aarch64ExtError::Unknown));

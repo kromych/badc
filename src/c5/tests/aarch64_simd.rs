@@ -1128,6 +1128,25 @@ fn the_dot_products_are_rows() {
     }
 }
 
+/// The scalar FEAT_RDM lane forms are lane 0 of the vector ones: the
+/// interpreter gives the values the hardware and clang give, saturated at
+/// both ends.
+#[test]
+fn the_scalar_rdm_lane_forms_saturate_as_the_hardware_does() {
+    const SRC: &str = "#include <arm_neon.h>\n\
+        int main(void) {\n\
+            int16x8_t v = {3, -7, 0x7fff, (int16_t)0x8000, 12345, -2, 99, -32767};\n\
+            int32x4_t w = {0x40000000, (int32_t)0x80000000u, -5, 77};\n\
+            if (vqrdmlahh_lane_s16(1000, (int16_t)0x8000, vget_low_s16(v), 3) != 32767) return 1;\n\
+            if (vqrdmlshh_laneq_s16(-20000, 30000, v, 4) != -31302) return 2;\n\
+            if (vqrdmlahs_laneq_s32(0x7ffffff0, 0x40000000, w, 0) != 2147483647) return 3;\n\
+            if (vqrdmlshs_lane_s32(5, (int32_t)0x80000000u, vget_high_s32(w), 0) != 0) return 4;\n\
+            return 0;\n\
+        }\n";
+    let program = super::compile_str_bare_for(SRC, crate::Target::LinuxAarch64);
+    assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 0);
+}
+
 /// `vld1`, `vst1`, `vdup_n` and `vld1_dup` are the load, store and
 /// broadcast of their vector under `-O`, as with gcc 16, with no inline asm
 /// between them and the operations that use them: `ldr q`, `str q`,

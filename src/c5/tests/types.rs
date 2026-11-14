@@ -6964,6 +6964,28 @@ fn aarch64_targets_predefine_the_acle_macros() {
         CompileOptions::default().with_no_fp_regs(true),
         "#if defined __ARM_FP || defined __ARM_FEATURE_FMA\n#error FP\n#endif",
     );
+    // The Advanced SIMD extensions whose intrinsics <arm_neon.h> carries
+    // predefine their macros, and code keyed on them takes those paths.
+    let keyed = "#include <arm_neon.h>\n\
+        #if !defined __ARM_FEATURE_DOTPROD || !defined __ARM_FEATURE_QRDMX \\\n\
+            || !defined __ARM_FEATURE_FRINT || !defined __ARM_FEATURE_NUMERIC_MAXMIN\n\
+        #error keyed\n#endif\n\
+        uint32x4_t d(uint32x4_t r, uint8x16_t a, uint8x16_t b) { return vdotq_u32(r, a, b); }\n\
+        int16x4_t q(int16x4_t r, int16x4_t a, int16x4_t b) { return vqrdmlah_s16(r, a, b); }\n\
+        float32x4_t f(float32x4_t a) { return vrnd32xq_f32(a); }\n\
+        float64x2_t m(float64x2_t a, float64x2_t b) { return vmaxnmq_f64(a, b); }";
+    compiles(Target::MacOSAarch64, CompileOptions::default(), keyed);
+    compiles(
+        Target::LinuxAarch64,
+        CompileOptions::default(),
+        "#if !defined __ARM_FEATURE_NUMERIC_MAXMIN || defined __ARM_FEATURE_DOTPROD\n#error v8\n#endif",
+    );
+    let v86 = Aarch64Features::for_arch("armv8.6-a").unwrap();
+    compiles(
+        Target::LinuxAarch64,
+        CompileOptions::default().with_aarch64_features(Some(v86)),
+        "_Static_assert(__ARM_FEATURE_MATMUL_INT8 && __ARM_FEATURE_DOTPROD, \"\");",
+    );
     compiles(
         Target::LinuxX64,
         CompileOptions::default(),

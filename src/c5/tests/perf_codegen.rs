@@ -8787,3 +8787,28 @@ void addl(double *a, const double *b, long k, int n) {\n\
     }
     m.finish();
 }
+
+/// A parameter live across a call and across a division, which writes
+/// rdx:rax, is saved around the call in a register the division leaves
+/// alone: no push and pop of rdx surround the `idiv`.
+#[test]
+fn x64_a_value_saved_around_a_call_avoids_the_registers_a_division_writes() {
+    const SRC: &str = "int add64(long *a, long b);\n\
+long f(long a, long b, long *out, int op) {\n\
+    long iA = a, iB = b;\n\
+    if (op == 1) {\n\
+        if (add64(&iB, iA)) return 0;\n\
+    } else {\n\
+        if (iB == -1) iB = 1;\n\
+        iA %= iB;\n\
+        iB = iA;\n\
+    }\n\
+    *out = iB;\n\
+    return 1;\n\
+}\n";
+    let insns = x64(SRC, "f");
+    // `push %rdx` / `pop %rdx`.
+    let rdx = |i: &X64Insn| matches!(i.op, 0x52 | 0x5A) && i.rex & 1 == 0;
+    assert!(insns.iter().any(|i| i.op == 0xF7), "a division: {insns:x?}");
+    assert!(!insns.iter().any(rdx), "{insns:x?}");
+}

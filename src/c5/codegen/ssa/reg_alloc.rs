@@ -3840,9 +3840,10 @@ pub(crate) fn color_graph(
                 return None;
             }
             // Its own hint first -- a parameter stays in its argument
-            // register -- then one no neighbor is hinted to, then any.
+            // register -- unless an instruction it lives across writes it,
+            // then one no neighbor is hinted to, then any.
             let savable = |r: &u8| caller.contains(r) && !unsaved[*r as usize];
-            let r = (c.hint.filter(savable))
+            let r = (c.hint.filter(|h| savable(h) && (c.avoid >> h) & 1 == 0))
                 .or_else(|| {
                     caller
                         .iter()

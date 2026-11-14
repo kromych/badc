@@ -89,8 +89,8 @@ TIMED = {
     # A 10 ms timer against an idle-time handler.
     "interp.test": ("interp-36.7",),
     # A 5 ms timer against a 720000-byte client write, and a 200 ms one
-    # against a failed asynchronous connect's readable event.
-    "socket.test": ("socket_*-2.13", "socket-14.14"),
+    # against a failed asynchronous connect's writable and readable events.
+    "socket.test": ("socket_*-2.13", "socket-14.2", "socket-14.14"),
 }
 TEST_SETS = ("all", "untimed", "timed")
 

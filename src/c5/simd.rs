@@ -487,6 +487,18 @@ pub(crate) enum Sem {
     /// `true`, into the first's, which keeps the bits the shift vacates
     /// (`sli`, `sri`).
     ShiftInsert(u8, bool),
+    /// The reciprocal, or reciprocal square root when `true`, estimate of
+    /// each floating lane from the Arm ARM's 8-bit tables (`frecpe`,
+    /// `frsqrte`).
+    Estimate(u8, bool),
+    /// The Newton-Raphson step of each floating lane pair, rounded once:
+    /// `2 - a * b`, or `(3 - a * b) / 2` when `true`; infinity times zero
+    /// gives 2 or 1.5 (`frecps`, `frsqrts`).
+    Step(u8, bool),
+    /// The estimate of each 32-bit lane as an unsigned fraction below 1,
+    /// all ones for an operand under 1/2, or 1/4 when `true` (`urecpe`,
+    /// `ursqrte`).
+    FractionEstimate(u8, bool),
 }
 
 /// The permutation of a [`Sem::Perm`] form.
@@ -1799,6 +1811,17 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
             }
         }
         Sem::Move | Sem::Rand => o = *a,
+        Sem::FractionEstimate(w, sqrt) => {
+            for i in 0..16 / usize::from(w) {
+                let x = lane(a, w, i);
+                let r = match (x >> (31 - u32::from(sqrt)), sqrt) {
+                    (0, _) => 0xFFFF_FFFF,
+                    (_, false) => u64::from(recip_estimate(x >> 23)) << 23,
+                    (_, true) => u64::from(rsqrt_estimate(x >> 23)) << 23,
+                };
+                set_lane(&mut o, w, i, r);
+            }
+        }
         // `eval_float` computes these in a floating-point environment,
         // `eval_acc` the accumulating forms, and `eval_wide` the
         // permutations across a 32-byte vector.
@@ -1807,6 +1830,7 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
         Sem::Eor3 | Sem::Bcax | Sem::Sha256Hash(_) | Sem::Sha256Su1 => {}
         Sem::Sha1Hash(_) | Sem::Sha1Su0 | Sem::Sha512Hash(_) | Sem::Sha512Su1 => {}
         Sem::FloatRel(..) | Sem::FloatFma(..) | Sem::LongAcc(..) => {}
+        Sem::Estimate(..) | Sem::Step(..) => {}
         Sem::Perm4x64
         | Sem::PermVar32
         | Sem::Perm2x128
@@ -2069,6 +2093,135 @@ fn saturate_to_int(env: &mut impl FloatEnv, a: u64, bits: u32, signed: bool) -> 
     env.to_int(a, true, if signed { bits } else { 64 }, true) as u64
 }
 
+/// The Arm ARM's RecipEstimate: the reciprocal of `a / 512`, `a` in
+/// 256..512, in units of 1/256, rounded.
+fn recip_estimate(a: u64) -> u32 {
+    let b = (1 << 19) / (2 * a as u32 + 1);
+    b.div_ceil(2)
+}
+
+/// The Arm ARM's RecipSqrtEstimate: the reciprocal square root of `a / 512`
+/// (`a` in 128..256) or of `a / 256` with its low bit dropped (`a` in
+/// 256..512), in units of 1/256, rounded.
+fn rsqrt_estimate(a: u64) -> u32 {
+    let a = if a < 256 {
+        2 * a + 1
+    } else {
+        2 * ((a & !1) + 1)
+    };
+    let mut b = 512u64;
+    while a * (b + 1) * (b + 1) < 1 << 28 {
+        b += 1;
+    }
+    b.div_ceil(2) as u32
+}
+
+/// FPRecipEstimate, or FPRSqrtEstimate when `sqrt` (Arm ARM, FPCR.AH and FZ
+/// clear), of the `w`-byte lane `x`, a `double` bit pattern, in `env`. A
+/// NaN, a zero, an infinity, a negative square root operand and an operand
+/// whose reciprocal overflows give what `1 / x` and `sqrt(x)` give, flags
+/// included; the others take the 8-bit tables.
+fn estimate(env: &mut impl FloatEnv, x: u64, w: u8, sqrt: bool) -> u64 {
+    let single = w == 4;
+    let bits = if single && !is_nan(x) {
+        u64::from((f64::from_bits(x) as f32).to_bits())
+    } else {
+        x
+    };
+    let (frac_bits, exp_mask, top) = if single {
+        (23, 0xFF, 31)
+    } else {
+        (52, 0x7FF, 63)
+    };
+    let sign = bits >> top;
+    let mut exp = (bits >> frac_bits & exp_mask) as i64;
+    // The fraction widened to 52 bits.
+    let mut frac = (bits & ((1 << frac_bits) - 1)) << (52 - frac_bits);
+    let one = 1f64.to_bits();
+    let tiny = (bits & !(1 << top)) < 1 << (frac_bits - 2);
+    if is_nan(x) {
+        return env.widen(x);
+    }
+    if exp == exp_mask as i64 || frac == 0 && exp == 0 || sqrt && sign == 1 || !sqrt && tiny {
+        return match sqrt {
+            true if sign == 1 && x << 1 != 0 => env.arith(FOp::Sqrt, x, 0, single),
+            true if exp == exp_mask as i64 => 0,
+            _ => env.arith(FOp::Div, one, x, single),
+        };
+    }
+    const MASK52: u64 = (1 << 52) - 1;
+    let (scaled, rexp) = if sqrt {
+        if exp == 0 {
+            while frac >> 51 == 0 {
+                frac = frac << 1 & MASK52;
+                exp -= 1;
+            }
+            frac = frac << 1 & MASK52;
+        }
+        let scaled = match exp & 1 {
+            0 => 256 | frac >> 44,
+            _ => 128 | frac >> 45,
+        };
+        (
+            rsqrt_estimate(scaled),
+            ((if single { 380 } else { 3068 }) - exp) / 2,
+        )
+    } else {
+        if exp == 0 {
+            let shift = if frac >> 51 == 0 { 2 } else { 1 };
+            exp -= shift - 1;
+            frac = frac << shift & MASK52;
+        }
+        (
+            recip_estimate(256 | frac >> 44),
+            (if single { 253 } else { 2045 }) - exp,
+        )
+    };
+    let mut frac = u64::from(scaled & 0xFF) << 44;
+    let mut rexp = rexp;
+    if rexp == 0 {
+        frac = 1 << 51 | frac >> 1;
+    } else if rexp == -1 {
+        frac = 1 << 50 | frac >> 2;
+        rexp = 0;
+    }
+    let r = sign << top | (rexp as u64) << frac_bits | frac >> (52 - frac_bits);
+    match single {
+        true => f64::from(f32::from_bits(r as u32)).to_bits(),
+        false => r,
+    }
+}
+
+/// FPRecipStepFused, or FPRSqrtStepFused when `sqrt`: `2 - a * b` or
+/// `(3 - a * b) / 2` of the `double` bit patterns `a` and `b`, rounded once
+/// in `env`. A NaN operand propagates with the first one negated, and
+/// infinity times zero gives 2 or 1.5.
+fn step(env: &mut impl FloatEnv, a: u64, b: u64, single: bool, sqrt: bool) -> u64 {
+    let neg = a ^ 1 << 63;
+    let inf = |x: u64| x << 1 == 0xFFE0_0000_0000_0000;
+    let zero = |x: u64| x << 1 == 0;
+    if !is_nan(a) && !is_nan(b) && (inf(a) && zero(b) || zero(a) && inf(b)) {
+        return if sqrt { 1.5f64 } else { 2.0 }.to_bits();
+    }
+    if !sqrt || is_nan(a) || is_nan(b) {
+        return env.fma(neg, b, 2f64.to_bits(), single);
+    }
+    // Halving the factor of the larger exponent is exact, so the sum rounds
+    // once; with both tiny the product only nudges 3, halved exactly after.
+    let half = |x: u64| (f64::from_bits(x) * 0.5).to_bits();
+    let ea = (a >> 52 & 0x7FF).max(b >> 52 & 0x7FF);
+    if ea > 1 {
+        let (p, q) = if a >> 52 & 0x7FF == ea {
+            (half(neg), b)
+        } else {
+            (neg, half(b))
+        };
+        return env.fma(p, q, 1.5f64.to_bits(), single);
+    }
+    let r = env.fma(neg, b, 3f64.to_bits(), single);
+    env.arith(FOp::Mul, r, 0.5f64.to_bits(), single)
+}
+
 /// Lane `i` of width 4 or 8 as a `double` bit pattern; a NaN keeps its
 /// payload and whether it signals.
 fn flane(v: &[u8; 16], width: u8, i: usize) -> u64 {
@@ -2192,6 +2345,17 @@ pub(crate) fn eval_float_in(
                     _ => true,
                 };
                 set_lane(&mut o, w, i, if holds { mask(w) } else { 0 });
+            }
+        }
+        Sem::Estimate(w, sqrt) => {
+            for i in 0..lanes(w, false) {
+                set_flane(&mut o, w, i, estimate(env, flane(a, w, i), w, sqrt));
+            }
+        }
+        Sem::Step(w, sqrt) => {
+            for i in 0..lanes(w, false) {
+                let x = step(env, flane(a, w, i), flane(b, w, i), w == 4, sqrt);
+                set_flane(&mut o, w, i, x);
             }
         }
         Sem::Convert(cvt) => {

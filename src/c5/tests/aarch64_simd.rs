@@ -807,6 +807,44 @@ fn the_sha512_updates_are_rows() {
     }
 }
 
+/// The reciprocal and reciprocal square root estimates and their steps are
+/// rows: the Arm ARM's 8-bit tables, the steps rounded once with infinity
+/// times zero giving 2 or 1.5, a NaN operand propagated with the first one
+/// negated, and the u32 forms' fractions. Over seeded lanes the
+/// interpreter's results hash to the hardware's, and each is one
+/// instruction under -O, the f64 forms the scalar d-register one.
+#[cfg(feature = "full")]
+#[test]
+fn the_estimates_and_steps_are_rows() {
+    for fixture in [
+        "arm_neon_float_estimates_and_steps.c",
+        "arm_neon_estimates_on_seeded_lanes.c",
+    ] {
+        let src = super::load_fixture(fixture);
+        let program = super::compile_str_bare_for(&src, crate::Target::LinuxAarch64);
+        let rc = super::Vm::new(program).run().expect("interpreted run");
+        assert_eq!(rc, 0, "{fixture}: failing groups {rc:#x}");
+    }
+    const OPS: &str = "#include <arm_neon.h>\n\
+        float32x4_t e(float32x4_t a) { return vrecpeq_f32(a); }\n\
+        float64x1_t q(float64x1_t a) { return vrsqrte_f64(a); }\n\
+        float32x2_t s(float32x2_t a, float32x2_t b) { return vrecps_f32(a, b); }\n\
+        float64x2_t t(float64x2_t a, float64x2_t b) { return vrsqrtsq_f64(a, b); }\n\
+        uint32x4_t u(uint32x4_t a) { return vrecpeq_u32(a); }\n\
+        uint32x2_t v(uint32x2_t a) { return vrsqrte_u32(a); }\n";
+    for (name, want) in [
+        ("e", 0x4EA1_D800u32),
+        ("q", 0x7EE1_D800),
+        ("s", 0x0E21_FC00),
+        ("t", 0x4EE1_FC00),
+        ("u", 0x4EA1_C800),
+        ("v", 0x2EA1_C800),
+    ] {
+        let words = super::perf_codegen::a64_at(OPS, name, true);
+        assert_eq!(words, [want, 0xD65F_03C0], "{name}: {words:08x?}");
+    }
+}
+
 /// `vld1`, `vst1`, `vdup_n` and `vld1_dup` are the load, store and
 /// broadcast of their vector under `-O`, as with gcc 16, with no inline asm
 /// between them and the operations that use them: `ldr q`, `str q`,

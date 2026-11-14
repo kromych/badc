@@ -1052,6 +1052,11 @@ fn vector_one_source_counts_and_estimates() {
     assert_eq!(enc("sqabs", &[d(1), d(2)]), 0x5EE0_7841);
     assert_eq!(enc("sqneg", &[d(1), d(2)]), 0x7EE0_7841);
     assert_eq!(enc("frecpe", &[d(1), d(2)]), 0x5EE1_D841);
+    assert_eq!(enc("urecpe", &[v(1, 2, true), v(2, 2, true)]), 0x4EA1_C841);
+    assert_eq!(
+        enc("ursqrte", &[v(1, 2, false), v(2, 2, false)]),
+        0x2EA1_C841
+    );
     assert_eq!(enc("frsqrte", &[d(1), d(2)]), 0x7EE1_D841);
     assert_eq!(enc("frecpe", &[s(1), s(2)]), 0x5EA1_D841);
     assert!(encode("clz", &[v(1, 3, true), v(2, 3, true)]).is_err());

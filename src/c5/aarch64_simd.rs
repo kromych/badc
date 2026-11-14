@@ -298,6 +298,12 @@ pub(crate) const OPS: &[SimdOp] = table! {
     "fcmgt" Vv FloatRel (14): f2s f4s f2d;
     "fmla" Vvv FloatFma (false): f2s f4s f2d;
     "fmls" Vvv FloatFma (true): f2s f4s f2d;
+    "frecpe" V Estimate (false): f2s f4s fd f2d;
+    "frsqrte" V Estimate (true): f2s f4s fd f2d;
+    "frecps" Vv Step (false): f2s f4s fd f2d;
+    "frsqrts" Vv Step (true): f2s f4s fd f2d;
+    "urecpe" V FractionEstimate (false): s2 s4;
+    "ursqrte" V FractionEstimate (true): s2 s4;
 };
 
 /// The widening forms, three source widths each.

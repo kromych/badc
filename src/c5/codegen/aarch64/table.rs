@@ -1736,7 +1736,7 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     // SIMD two-register misc (one source): the sign ops abs/neg and their
     // saturating sqabs/sqneg, bitwise not/mvn, popcount cnt, the leading-bit
     // counts cls/clz, the reverses rev16/rev32/rev64, the FP unary
-    // fabs/fneg/fsqrt and the estimates frecpe/frsqrte. Each base word bakes U
+    // fabs/fneg/fsqrt and the estimates frecpe/frsqrte/urecpe/ursqrte. Each base word bakes U
     // and the opcode; `lo..=hi` bounds the element size (byte-only for
     // not/cnt/rev16, up to word for rev64 and cls/clz, all sizes for the sign
     // ops, 2s/4s/2d for the FP ops, whose sz lands at bit 22). GP neg/mvn/cls/
@@ -1758,6 +1758,8 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         "fsqrt" => Some((0x2E21_F800, 2, 3, None)),
         "frecpe" => Some((0x0E21_D800, 2, 3, Some(2))),
         "frsqrte" => Some((0x2E21_D800, 2, 3, Some(2))),
+        "urecpe" => Some((0x0E21_C800, 2, 2, None)),
+        "ursqrte" => Some((0x2E21_C800, 2, 2, None)),
         _ => None,
     };
     // The scalar form `Rd, Rn` over the s or d view (bits 30 and 28 set), from

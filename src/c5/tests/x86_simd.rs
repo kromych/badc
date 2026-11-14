@@ -1723,8 +1723,9 @@ fn floating_rows_emit_their_instruction() {
 }
 
 /// A floating-point row computes in the interpreter's floating-point
-/// environment, which rounds in its direction and raises its exceptions; the
-/// others compute over integer lanes. A new semantics takes its place here.
+/// environment, which rounds in its direction and raises its exceptions, for
+/// ordinary lanes or for NaN ones; the others compute over integer lanes. A
+/// new semantics takes its place here.
 #[test]
 fn floating_rows_compute_in_the_environment() {
     let floating = |sem: Sem| match sem {
@@ -1733,7 +1734,9 @@ fn floating_rows_compute_in_the_environment() {
         | Sem::FloatRel(..)
         | Sem::FloatFma(..)
         | Sem::Convert(_)
-        | Sem::ToInt(..) => true,
+        | Sem::ToInt(..)
+        | Sem::Estimate(..)
+        | Sem::Step(..) => true,
         Sem::Add(_)
         | Sem::Sub(_)
         | Sem::MulLo(_)
@@ -1849,7 +1852,8 @@ fn floating_rows_compute_in_the_environment() {
         | Sem::ShiftInsert(..)
         | Sem::ShrRound(..)
         | Sem::ShlSat(..)
-        | Sem::ShrNarrow(..) => false,
+        | Sem::ShrNarrow(..)
+        | Sem::FractionEstimate(..) => false,
     };
     /// Counts the operations a row asks of the environment.
     struct Counting(u32);
@@ -1884,11 +1888,13 @@ fn floating_rows_compute_in_the_environment() {
         }
     }
     for op in x86_simd::OPS.iter().chain(crate::c5::aarch64_simd::rows()) {
-        let (mut env, a) = (Counting(0), [0x3f; 16]);
-        let packed = simd::eval_float(&mut env, op.sem, &a, &a, 0).is_some()
-            || simd::eval_float_acc(&mut env, op.sem, (&a, &a, &a), 16).is_some();
-        let scalar = simd::eval_to_int(&mut env, op.sem, &a, 32).is_some();
-        assert_eq!(packed || scalar, floating(op.sem), "{}", op.name);
+        let mut env = Counting(0);
+        for a in [[0x3f; 16], [0xff; 16]] {
+            let packed = simd::eval_float(&mut env, op.sem, &a, &a, 0).is_some()
+                || simd::eval_float_acc(&mut env, op.sem, (&a, &a, &a), 16).is_some();
+            let scalar = simd::eval_to_int(&mut env, op.sem, &a, 32).is_some();
+            assert_eq!(packed || scalar, floating(op.sem), "{}", op.name);
+        }
         assert_eq!(env.0 > 0, floating(op.sem), "{}", op.name);
     }
 }

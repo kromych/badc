@@ -22,9 +22,10 @@
  * vrsra_n vsli_n vsri_n vshrn_n vrshrn_n, vmovl vmovn vqmovn vqmovun vaddl
  * vsubl vaddw vsubw vmull vmlal vmlsl vabdl vabal with their _high forms, vaddv vaddlv
  * vmaxv vminv. Floating: vadd vsub vmul vdiv vmax vmin vabs vneg vsqrt vfma
- * vfms vrecpe vrecps vrsqrte vrsqrts, the compares, and the conversions to
+ * vfms vrecpe vrecps vrsqrte vrsqrts with their scalar forms, the
+ * compares, and the conversions to
  * and from the integers of one width (truncating) and between single and
- * double. Also vmul_p8, vqtbl1q_u8, vqtbx1q_u8, the FEAT_AES rounds,
+ * double. Also vrecpe_u32, vrsqrte_u32, vmul_p8, vqtbl1q_u8, vqtbx1q_u8, the FEAT_AES rounds,
  * vmull_p8, vmull_high_p8, vmull_p64, vmull_high_p64, the SHA-1, SHA-256, SHA-512, SHA3, SM3 and
  * SM4 intrinsics, vld2q_u16 and vld4q_u8.
  *
@@ -102,23 +103,11 @@ typedef struct uint8x16x4_t {
     uint8x16_t val[4];
 } uint8x16x4_t;
 
-/* Operand n of a template in arrangement A; `d` is the 64-bit scalar view
- * the single-lane 64-bit forms take. */
-#define __BADC_NEON_V_8b(n) "%" #n ".8b"
-#define __BADC_NEON_V_16b(n) "%" #n ".16b"
-#define __BADC_NEON_V_4h(n) "%" #n ".4h"
-#define __BADC_NEON_V_8h(n) "%" #n ".8h"
-#define __BADC_NEON_V_2s(n) "%" #n ".2s"
+/* Operand n of a template in arrangement 4s, and `insn` over operands 0,
+ * 1 and 2 in it: the SM3 and SM4 forms, which have no rows. */
 #define __BADC_NEON_V_4s(n) "%" #n ".4s"
-#define __BADC_NEON_V_1d(n) "%" #n ".1d"
-#define __BADC_NEON_V_2d(n) "%" #n ".2d"
-#define __BADC_NEON_V_d(n) "%d" #n
-/* `insn` over operands 0, 1 (and 2) in arrangements A, B (and C). */
-#define __BADC_NEON_I2(insn, A, B) insn " " __BADC_NEON_V_##A(0) ", " __BADC_NEON_V_##B(1)
 #define __BADC_NEON_I3(insn, A, B, C)                                     \
     insn " " __BADC_NEON_V_##A(0) ", " __BADC_NEON_V_##B(1) ", " __BADC_NEON_V_##C(2)
-#define __BADC_NEON_I3R(insn, A, B, C)                                    \
-    insn " " __BADC_NEON_V_##A(0) ", " __BADC_NEON_V_##B(2) ", " __BADC_NEON_V_##C(1)
 /* The signed or unsigned choice by kind; a polynomial lane is unsigned,
  * and a floating one takes the first, as a lane permute does. */
 #define __BADC_NEON_PICK(k, s, u) __BADC_NEON_PICK_##k(s, u)
@@ -126,8 +115,6 @@ typedef struct uint8x16x4_t {
 #define __BADC_NEON_PICK_u(s, u) u
 #define __BADC_NEON_PICK_p(s, u) u
 #define __BADC_NEON_PICK_f(s, u) s
-/* The kind's instruction over three operands in arrangement A. */
-#define __BADC_NEON_K3(k, si, ui, A) __BADC_NEON_I3(__BADC_NEON_PICK(k, si, ui), A, A, A)
 /* The compiler's row of the instruction a builtin stem names, in
  * arrangement A; its result is read as the vector R. B2R swaps the
  * operands. */
@@ -153,13 +140,7 @@ typedef struct uint8x16x4_t {
         return (R)__BADC_NEON_B(__BADC_NEON_PICK(k, si, ui), A)(__a, __b, __c); \
     }
 
-/* One instruction into R; FN3 accumulates into __a, FROMR reads an `r`. */
-#define __BADC_NEON_FN1(name, R, T, tmpl)                                 \
-    __BADC_INTRIN R name(T __a) {                                         \
-        R __r;                                                            \
-        __asm__(tmpl : "=w"(__r) : "w"(__a));                             \
-        return __r;                                                       \
-    }
+/* One instruction into R; FN3 accumulates into __a. */
 #define __BADC_NEON_FN2(name, R, T, U, tmpl)                              \
     __BADC_INTRIN R name(T __a, U __b) {                                  \
         R __r;                                                            \
@@ -1156,7 +1137,7 @@ __BADC_NEON_FN2(vsm4ekeyq_u32, uint32x4_t, uint32x4_t, uint32x4_t,
 
 /* Floating vectors. The float64x1_t arithmetic is the scalar d-register
  * instruction; its compares and integer conversions are C on the one lane.
- * ARITH2 and ARITH1 call the rows of `stem`; the A forms are asm. */
+ * ARITH2 and ARITH1 call the rows of `stem`. */
 #define __BADC_NEON_ARITH2(op, stem)                                      \
     __BADC_NEON_B2(op##_f32, float32x2_t, float32x2_t, float32x2_t, s, stem, stem, 2s) \
     __BADC_NEON_B2(op##q_f32, float32x4_t, float32x4_t, float32x4_t, s, stem, stem, 4s) \
@@ -1167,20 +1148,6 @@ __BADC_NEON_FN2(vsm4ekeyq_u32, uint32x4_t, uint32x4_t, uint32x4_t,
     __BADC_NEON_B1(op##q_f32, float32x4_t, float32x4_t, s, stem, stem, 4s) \
     __BADC_NEON_B1(op##q_f64, float64x2_t, float64x2_t, s, stem, stem, 2d) \
     __BADC_NEON_B1(op##_f64, float64x1_t, float64x1_t, s, stem, stem, d)
-#define __BADC_NEON_ARITH2A(op, insn)                                     \
-    __BADC_NEON_FN2(op##_f32, float32x2_t, float32x2_t, float32x2_t,      \
-                    __BADC_NEON_I3(insn, 2s, 2s, 2s))                     \
-    __BADC_NEON_FN2(op##q_f32, float32x4_t, float32x4_t, float32x4_t,     \
-                    __BADC_NEON_I3(insn, 4s, 4s, 4s))                     \
-    __BADC_NEON_FN2(op##q_f64, float64x2_t, float64x2_t, float64x2_t,     \
-                    __BADC_NEON_I3(insn, 2d, 2d, 2d))                     \
-    __BADC_NEON_FN2(op##_f64, float64x1_t, float64x1_t, float64x1_t,      \
-                    __BADC_NEON_I3(insn, d, d, d))
-#define __BADC_NEON_ARITH1A(op, insn)                                     \
-    __BADC_NEON_FN1(op##_f32, float32x2_t, float32x2_t, __BADC_NEON_I2(insn, 2s, 2s)) \
-    __BADC_NEON_FN1(op##q_f32, float32x4_t, float32x4_t, __BADC_NEON_I2(insn, 4s, 4s)) \
-    __BADC_NEON_FN1(op##q_f64, float64x2_t, float64x2_t, __BADC_NEON_I2(insn, 2d, 2d)) \
-    __BADC_NEON_FN1(op##_f64, float64x1_t, float64x1_t, __BADC_NEON_I2(insn, d, d))
 /* A compare, operands in B's order; C on the one lane of float64x1_t. */
 #define __BADC_NEON_CMP(op, B, stem, rel)                                 \
     B(op##_f32, uint32x2_t, float32x2_t, float32x2_t, s, stem, stem, 2s)  \
@@ -1201,11 +1168,31 @@ __BADC_NEON_ARITH1(vneg, __builtin_neon_fneg)
 __BADC_NEON_ARITH1(vsqrt, __builtin_neon_fsqrt)
 
 /* The reciprocal and reciprocal square root estimates, and their
- * Newton-Raphson steps: vrecps is 2 - a * b, vrsqrts (3 - a * b) / 2. */
-__BADC_NEON_ARITH1A(vrecpe, "frecpe")
-__BADC_NEON_ARITH1A(vrsqrte, "frsqrte")
-__BADC_NEON_ARITH2A(vrecps, "frecps")
-__BADC_NEON_ARITH2A(vrsqrts, "frsqrts")
+ * Newton-Raphson steps: vrecps is 2 - a * b, vrsqrts (3 - a * b) / 2. The
+ * scalar forms are lane 0 of the vector ones; the u32 estimates read each
+ * lane as a fraction below 1. */
+__BADC_NEON_ARITH1(vrecpe, __builtin_neon_frecpe)
+__BADC_NEON_ARITH1(vrsqrte, __builtin_neon_frsqrte)
+__BADC_NEON_ARITH2(vrecps, __builtin_neon_frecps)
+__BADC_NEON_ARITH2(vrsqrts, __builtin_neon_frsqrts)
+#define __BADC_NEON_EST_SCALAR(op)                                        \
+    __BADC_INTRIN float32_t op##s_f32(float32_t __a) { return op##_f32((float32x2_t){__a})[0]; } \
+    __BADC_INTRIN float64_t op##d_f64(float64_t __a) { return op##_f64((float64x1_t){__a})[0]; }
+#define __BADC_NEON_STEP_SCALAR(op)                                       \
+    __BADC_INTRIN float32_t op##s_f32(float32_t __a, float32_t __b) {     \
+        return op##_f32((float32x2_t){__a}, (float32x2_t){__b})[0];       \
+    }                                                                     \
+    __BADC_INTRIN float64_t op##d_f64(float64_t __a, float64_t __b) {     \
+        return op##_f64((float64x1_t){__a}, (float64x1_t){__b})[0];       \
+    }
+__BADC_NEON_EST_SCALAR(vrecpe)
+__BADC_NEON_EST_SCALAR(vrsqrte)
+__BADC_NEON_STEP_SCALAR(vrecps)
+__BADC_NEON_STEP_SCALAR(vrsqrts)
+__BADC_NEON_B1(vrecpe_u32, uint32x2_t, uint32x2_t, s, __builtin_neon_urecpe, _, 2s)
+__BADC_NEON_B1(vrecpeq_u32, uint32x4_t, uint32x4_t, s, __builtin_neon_urecpe, _, 4s)
+__BADC_NEON_B1(vrsqrte_u32, uint32x2_t, uint32x2_t, s, __builtin_neon_ursqrte, _, 2s)
+__BADC_NEON_B1(vrsqrteq_u32, uint32x4_t, uint32x4_t, s, __builtin_neon_ursqrte, _, 4s)
 
 /* vfma: a + b * c, vfms: a - b * c, each rounded once. */
 #define __BADC_NEON_FUSED(op, stem)                                       \

@@ -194,6 +194,8 @@ pub(crate) enum AsmOpndA64 {
     PReg { num: u8, size: Option<u8> },
     /// A governing predicate `pN/m` (`merge`) or `pN/z`.
     PRegQ { num: u8, merge: bool },
+    /// An SVE register list `{zN.T, ..}` of `count` consecutive registers.
+    ZList { first: u8, count: u8, size: u8 },
     /// `[base, #imm, mul vl]`: a memory reference whose offset counts vector
     /// or predicate lengths, as the SVE and SME loads and stores scale it.
     MemVl { base: MemBase, off: i64 },
@@ -798,6 +800,33 @@ fn parse_vec_list(tok: &str) -> Option<(u8, u8, u8, bool)> {
     Some((first, regs.len() as u8, size, q))
 }
 
+/// An SVE register list `{zN.T, ..}` or `{zN.T-zM.T}`: up to four
+/// consecutive registers (wrapping from z31 to z0) of one element size.
+fn parse_sve_list(tok: &str) -> Option<(u8, u8, u8)> {
+    let inner = tok.strip_prefix('{')?.strip_suffix('}')?.trim();
+    let regs = |p: &str| match parse_sve_reg(p.trim(), 'z', 32)? {
+        (n, Some(s)) => Some((n, s)),
+        _ => None,
+    };
+    let list: Vec<(u8, u8)> = if let Some((lo, hi)) = inner.split_once('-') {
+        let ((f, fs), (l, ls)) = (regs(lo)?, regs(hi)?);
+        if fs != ls {
+            return None;
+        }
+        (0..=(l.wrapping_sub(f) & 31))
+            .map(|i| ((f + i) & 31, fs))
+            .collect()
+    } else {
+        inner.split(',').map(regs).collect::<Option<Vec<_>>>()?
+    };
+    let &(first, size) = list.first()?;
+    let consecutive = list
+        .iter()
+        .enumerate()
+        .all(|(i, &(n, s))| s == size && n == (first + i as u8) & 31);
+    (list.len() <= 4 && consecutive).then_some((first, list.len() as u8, size))
+}
+
 /// An assembler integer operand: a literal or a GNU as constant expression
 /// (`(1 << 16)`, `4 * 0`). Operand references do not appear here, so the
 /// expression resolver yields None for them.
@@ -1288,6 +1317,9 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
             size,
             index,
         });
+    }
+    if let Some((first, count, size)) = parse_sve_list(tok) {
+        return Ok(AsmOpndA64::ZList { first, count, size });
     }
     if let Some((first, count, size, q)) = parse_vec_list(tok) {
         return Ok(AsmOpndA64::VecList {

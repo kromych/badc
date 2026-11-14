@@ -267,6 +267,33 @@ for _stem, _base in LSUI_RMW.items():
             EXTRA_FORMS[(_stem + _suffix, (_w, _w, 'Mem'))] = (
                 _base | _order | _sf, LSE_RMW_FIELDS,
                 f'{_stem}{_suffix} {_w}s, {_w}d, [Xn|SP]', 0x04)
+# The SVE contiguous loads and stores of one register, absent from the
+# database (Arm ARM C8.2: LD1B..LD1D, LD1SB..LD1SW, ST1B..ST1D). The memory
+# and element sizes pick the 4-bit dtype (msz:size for a store) at bit 21; the
+# address is a base and a signed 4-bit offset in vector lengths at bit 16, or
+# a base and an index scaled by the memory size. Base words measured from
+# Apple clang 21.0.0's assembler.
+SVE_LD1 = {
+    'ld1b': {0: 0, 1: 1, 2: 2, 3: 3}, 'ld1sw': {3: 4}, 'ld1h': {1: 5, 2: 6, 3: 7},
+    'ld1sh': {3: 8, 2: 9}, 'ld1w': {2: 10, 3: 11}, 'ld1sb': {3: 12, 2: 13, 1: 14},
+    'ld1d': {3: 15}, 'st1b': {0: 0, 1: 1, 2: 2, 3: 3}, 'st1h': {1: 5, 2: 6, 3: 7},
+    'st1w': {2: 10, 3: 11}, 'st1d': {3: 15},
+}
+for _m, _sizes in SVE_LD1.items():
+    _st = _m.startswith('st')
+    _msz = 'bhwd'.index(_m[-1])
+    for _e, _dt in _sizes.items():
+        _pg, _t = ('P', 'Pg') if _st else ('PgZ', 'Pg/Z')
+        _src = f'{_m} {{Zt.{"BHSD"[_e]}}}, {_t}, '
+        _regs = ['Reg { op: 0, shift: 0 }', 'PLow { op: 1, shift: 10 }']
+        EXTRA_FORMS[(_m, (f'ZList({_e})', _pg, 'MemVl'))] = (
+            (0xE400E000 if _st else 0xA400A000) | _dt << 21,
+            _regs + ['SveMemVl { op: 2, shift: 16 }'],
+            _src + '[Xn|SP, #imm, mul vl]', 0x04)
+        EXTRA_FORMS[(_m, (f'ZList({_e})', _pg, 'MemReg'))] = (
+            (0xE4004000 if _st else 0xA4004000) | _dt << 21,
+            _regs + [f'SveMemReg {{ op: 2, msz: {_msz} }}'],
+            _src + f'[Xn|SP, Xm, lsl #{_msz}]', 0x04)
 for _mnem, _base in LSUI_CAS.items():
     EXTRA_FORMS[(_mnem, ('X', 'X', 'Mem'))] = (
         _base, LSE_RMW_FIELDS, f'{_mnem} Xs, Xd, [Xn|SP]', 0x04)

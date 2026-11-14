@@ -17855,6 +17855,56 @@ fn a64_inline_asm_assembles_the_sve_data_processing_forms() {
     );
 }
 
+/// The SVE contiguous loads and stores of one register assemble in inline
+/// asm, with each memory and element size, an offset in vector lengths and
+/// a scaled index. The words are Apple clang 21.0.0's.
+#[test]
+fn a64_inline_asm_assembles_the_sve_contiguous_loads_and_stores() {
+    const SRC: &str = "void f(void) { __asm__ volatile(\"\
+        ld1b {z0.h}, p0/z, [x0]\\n ld1sw {z0.d}, p0/z, [x0]\\n ld1h { z0.s }, p0/z, [x0]\\n\
+        ld1sh {z0.s}, p0/z, [x0]\\n ld1w {z0.d}, p0/z, [x0]\\n ld1sb {z0.h}, p0/z, [x0]\\n\
+        ld1d {z0.d}, p0/z, [x0]\\n ld1w {z1.s}, p2/z, [x3, #-8, mul vl]\\n\
+        ld1w {z1.s}, p2/z, [x3, x4, lsl #2]\\n ld1b {z1.b}, p2/z, [x3, x4]\\n\
+        st1b {z0.d}, p0, [x0]\\n st1h {z0.s}, p0, [x0]\\n st1w {z0.s}, p0, [x0]\\n\
+        st1d {z0.d}, p0, [x0]\\n st1w {z1.s}, p2, [x3, #7, mul vl]\\n\
+        st1w {z1.s}, p2, [x3, x4, lsl #2]\\n st1b {z1.b}, p2, [sp, x4]\"); }\n";
+    let words = a64_opt_function_words(SRC, "f");
+    assert_eq!(
+        words[..words.len() - 1],
+        [
+            0xA420A000, 0xA480A000, 0xA4C0A000, 0xA520A000, 0xA560A000, 0xA5C0A000, 0xA5E0A000,
+            0xA548A861, 0xA5444861, 0xA4044861, 0xE460E000, 0xE4C0E000, 0xE540E000, 0xE5E0E000,
+            0xE547E861, 0xE5444861, 0xE4044BE1,
+        ],
+        "{words:08x?}"
+    );
+    let assembles = |insn: &str| {
+        use crate::{CompileOptions, NativeOptions, OutputKind, Target};
+        let src = alloc::format!("void f(void) {{ __asm__ volatile(\"{insn}\"); }}\n");
+        let options = CompileOptions::default().with_no_entry_point(true);
+        crate::Compiler::with_options(src, Target::LinuxAarch64, options)
+            .compile()
+            .is_ok_and(|p| {
+                let opts = NativeOptions {
+                    output_kind: OutputKind::Relocatable,
+                    ..NativeOptions::new().with_optimize()
+                };
+                crate::emit_native_with_options(&p, Target::LinuxAarch64, opts).is_ok()
+            })
+    };
+    assert!(assembles("ld1w {z0.s}, p0/z, [x0]"));
+    for bad in [
+        "ld1w {z0.s}, p0/m, [x0]",
+        "ld1w {z0.s}, p0/z, [x0, #8, mul vl]",
+        "ld1w {z0.s}, p0/z, [x0, x1, lsl #1]",
+        "ld1w {z0.s}, p8/z, [x0]",
+        "ld1w {z0.h}, p0/z, [x0]",
+        "st1w {z0.s}, p0/z, [x0]",
+    ] {
+        assert!(!assembles(bad), "{bad}");
+    }
+}
+
 /// Followed from x0, the byte loads of `from_big` read offsets 1 and 8192.
 #[test]
 fn a64_far_field_load_reads_its_displacement() {

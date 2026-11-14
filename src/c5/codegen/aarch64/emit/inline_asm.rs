@@ -2579,6 +2579,7 @@ fn concrete_opnd(o: &super::asm::AsmOpndA64) -> Option<super::table::Opnd> {
         AsmOpndA64::ZReg { num, size } => Opnd::ZReg { num, size },
         AsmOpndA64::PReg { num, size } => Opnd::PReg { num, size },
         AsmOpndA64::PRegQ { num, merge } => Opnd::PRegQ { num, merge },
+        AsmOpndA64::ZList { first, count, size } => Opnd::ZList { first, count, size },
         AsmOpndA64::MemVl {
             base: super::asm::MemBase::Reg(base),
             off,

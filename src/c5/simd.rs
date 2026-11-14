@@ -1638,14 +1638,17 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
             for i in 0..2 * pairs {
                 let src = if i < pairs { a } else { b };
                 let k = 2 * (i % pairs);
-                let (x, y) = (slane(src, w, k), slane(src, w, k + 1));
+                let (x, y) = (
+                    i128::from(slane(src, w, k)),
+                    i128::from(slane(src, w, k + 1)),
+                );
                 let mut r = if matches!(sem, Sem::HAdd(..)) {
                     x + y
                 } else {
                     x - y
                 };
                 if sat {
-                    r = r.clamp(-(1i64 << (bits - 1)), (1i64 << (bits - 1)) - 1);
+                    r = r.clamp(-(1i128 << (bits - 1)), (1i128 << (bits - 1)) - 1);
                 }
                 set_lane(&mut o, w, i, r as u64 & mask(w));
             }

@@ -1278,6 +1278,21 @@ fn the_qrshl_cvtx_and_recpx_forms_are_rows() {
     }
 }
 
+/// The pairwise sum of two 64-bit lanes wraps, as `addp` does: the
+/// interpreter computes it without overflowing its own arithmetic.
+#[test]
+fn a_pairwise_sum_of_64_bit_lanes_wraps() {
+    const SRC: &str = "#include <arm_neon.h>\n\
+        int main(void) {\n\
+            int64x2_t a = {0x7fffffffffffffffLL, 1}, b = {-0x7fffffffffffffffLL - 1, -1};\n\
+            int64x2_t r = vpaddq_s64(a, b);\n\
+            if (r[0] != -0x7fffffffffffffffLL - 1 || r[1] != 0x7fffffffffffffffLL) return 1;\n\
+            return vaddvq_s64(a) == -0x7fffffffffffffffLL - 1 ? 0 : 2;\n\
+        }\n";
+    let program = super::compile_str_bare_for(SRC, crate::Target::LinuxAarch64);
+    assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 0);
+}
+
 /// `vld1`, `vst1`, `vdup_n` and `vld1_dup` are the load, store and
 /// broadcast of their vector under `-O`, as with gcc 16, with no inline asm
 /// between them and the operations that use them: `ldr q`, `str q`,

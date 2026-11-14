@@ -523,6 +523,13 @@ pub(crate) enum Sem {
     /// The floating operation across the lanes, as halves combined, into
     /// lane 0, the rest zero (`fmaxv`, `fminnmv`).
     FloatAcross(FOp, u8),
+    /// The high half of twice the signed product of each lane pair, rounded
+    /// when `true`, saturated (`sqdmulh`, `sqrdmulh`).
+    SatDoublingMulHigh(u8, bool),
+    /// The accumulator's lane as the high half plus, or minus when `true`,
+    /// twice the signed product of the other two, rounded to the high half
+    /// and saturated (`sqrdmlah`, `sqrdmlsh`).
+    SatRoundingDoublingMulAcc(u8, bool),
     /// The estimate of each 32-bit lane as an unsigned fraction below 1,
     /// all ones for an operand under 1/2, or 1/4 when `true` (`urecpe`,
     /// `ursqrte`).
@@ -562,6 +569,11 @@ pub(crate) enum LongOp {
     AbsDiff,
     /// The carry-less (polynomial) product (`pmull`).
     PolyMul,
+    /// Twice the signed product, saturated to the wide lane, added to the
+    /// accumulator or, `Sub`, taken from it, saturating again (`sqdmull`,
+    /// `sqdmlal`, `sqdmlsl`).
+    SatDoublingMul,
+    SatDoublingMulSub,
 }
 
 /// How a narrowing form fits a lane into half its width: the low bits, or
@@ -1134,18 +1146,36 @@ pub(crate) fn eval_acc(sem: Sem, acc: &[u8; 16], a: &[u8; 16], b: &[u8; 16]) -> 
         Sem::MulAcc(w) | Sem::MulSub(w) => (w, eval(Sem::MulLo(w), a, b, 0, 0)),
         Sem::AbsDiffAcc(w, signed) => (w, eval(Sem::AbsDiff(w, signed), a, b, 0, 0)),
         Sem::LongAcc(op, w, signed, high) => {
-            let part_op = if op == LongOp::MulSub {
-                LongOp::Mul
-            } else {
-                op
+            let part_op = match op {
+                LongOp::MulSub => LongOp::Mul,
+                LongOp::SatDoublingMulSub => LongOp::SatDoublingMul,
+                _ => op,
             };
             let part = eval(Sem::Long(part_op, w, signed, high), a, b, 0, 0);
-            let combine = if op == LongOp::MulSub {
-                Sem::Sub(2 * w)
-            } else {
-                Sem::Add(2 * w)
+            let combine = match op {
+                LongOp::MulSub => Sem::Sub(2 * w),
+                LongOp::SatDoublingMul => Sem::AddSat(2 * w, true),
+                LongOp::SatDoublingMulSub => Sem::SubSat(2 * w, true),
+                _ => Sem::Add(2 * w),
             };
             return Some(eval(combine, acc, &part, 0, 0));
+        }
+        Sem::SatRoundingDoublingMulAcc(w, sub) => {
+            let bits = 8 * u32::from(w);
+            let max = (1i128 << (bits - 1)) - 1;
+            let mut o = [0u8; 16];
+            for i in 0..16 / w as usize {
+                let p = 2 * i128::from(slane(a, w, i)) * i128::from(slane(b, w, i));
+                let c = i128::from(slane(acc, w, i)) << bits;
+                let r = (if sub { c - p } else { c + p }) + (1 << (bits - 1));
+                set_lane(
+                    &mut o,
+                    w,
+                    i,
+                    (r >> bits).clamp(-max - 1, max) as u64 & mask(w),
+                );
+            }
+            return Some(o);
         }
         Sem::BitSelect => {
             let mut o = [0u8; 16];
@@ -1600,6 +1630,10 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
                     LongOp::Mul | LongOp::MulSub => x * y,
                     LongOp::AbsDiff => (x - y).abs(),
                     LongOp::PolyMul => i128::from(clmul(x as u64, y as u64).0),
+                    LongOp::SatDoublingMul | LongOp::SatDoublingMulSub => {
+                        let max = (1i128 << (16 * u32::from(w) - 1)) - 1;
+                        (2 * x * y).clamp(-max - 1, max)
+                    }
                 };
                 set_lane(&mut o, 2 * w, i, r as u64 & mask(2 * w));
             }
@@ -1926,6 +1960,15 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
             }
         }
         Sem::Move | Sem::Rand => o = *a,
+        Sem::SatDoublingMulHigh(w, round) => {
+            let bits = 8 * u32::from(w);
+            let max = (1i128 << (bits - 1)) - 1;
+            for i in 0..16 / w as usize {
+                let p = 2 * i128::from(slane(a, w, i)) * i128::from(slane(b, w, i));
+                let r = (p + if round { 1 << (bits - 1) } else { 0 }) >> bits;
+                set_lane(&mut o, w, i, r.clamp(-max - 1, max) as u64 & mask(w));
+            }
+        }
         Sem::FractionEstimate(w, sqrt) => {
             for i in 0..16 / usize::from(w) {
                 let x = lane(a, w, i);
@@ -1946,7 +1989,7 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
         Sem::Sha1Hash(_) | Sem::Sha1Su0 | Sem::Sha512Hash(_) | Sem::Sha512Su1 => {}
         Sem::FloatRel(..) | Sem::FloatFma(..) | Sem::LongAcc(..) => {}
         Sem::Estimate(..) | Sem::Step(..) | Sem::FloatPair(..) | Sem::FloatAcross(..) => {}
-        Sem::RoundInt(..) | Sem::RoundIntN(..) => {}
+        Sem::RoundInt(..) | Sem::RoundIntN(..) | Sem::SatRoundingDoublingMulAcc(..) => {}
         Sem::Perm4x64
         | Sem::PermVar32
         | Sem::Perm2x128

@@ -1084,6 +1084,26 @@ fn vector_one_source_counts_and_estimates() {
     assert_eq!(v3("fmaxnmp", 3, true), 0x6E63_C441);
     assert_eq!(v3("fminnmp", 2, true), 0x6EA3_C441);
     assert_eq!(v3("fmulx", 2, true), 0x4E23_DC41);
+    assert_eq!(v3("sqdmulh", 1, true), 0x4E63_B441);
+    assert_eq!(v3("sqrdmulh", 2, false), 0x2EA3_B441);
+    assert_eq!(v3("sqrdmlah", 1, false), 0x2E43_8441);
+    assert_eq!(v3("sqrdmlsh", 2, true), 0x6E83_8C41);
+    assert_eq!(
+        enc("sqdmull", &[v(1, 2, true), v(2, 1, false), v(3, 1, false)]),
+        0x0E63_D041
+    );
+    assert_eq!(
+        enc("sqdmull2", &[v(1, 3, true), v(2, 2, true), v(3, 2, true)]),
+        0x4EA3_D041
+    );
+    assert_eq!(
+        enc("sqdmlal", &[v(1, 3, true), v(2, 2, false), v(3, 2, false)]),
+        0x0EA3_9041
+    );
+    assert_eq!(
+        enc("sqdmlsl2", &[v(1, 2, true), v(2, 1, true), v(3, 1, true)]),
+        0x4E63_B041
+    );
     assert_eq!(enc("fmulx", &[d(1), d(2), d(3)]), 0x5E63_DC41);
     assert_eq!(enc("fabd", &[d(1), d(2), d(3)]), 0x7EE3_D441);
     assert_eq!(enc("fabd", &[s(1), s(2), s(3)]), 0x7EA3_D441);

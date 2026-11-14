@@ -1021,6 +1021,34 @@ fn the_rounding_and_fixed_point_conversions_are_rows() {
     }
 }
 
+/// The doubling multiplies are rows: over seeded lanes with the extremes
+/// that saturate the interpreter's results hash to the hardware's, and
+/// each is one instruction under -O, an accumulating one in its
+/// accumulator's register.
+#[cfg(feature = "full")]
+#[test]
+fn the_doubling_multiplies_are_rows() {
+    let src = super::load_fixture("arm_neon_doubling_multiplies_on_seeded_lanes.c");
+    let program = super::compile_str_bare_for(&src, crate::Target::LinuxAarch64);
+    assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 0);
+    const OPS: &str = "#include <arm_neon.h>\n\
+        int16x8_t a(int16x8_t x, int16x8_t y) { return vqdmulhq_s16(x, y); }\n\
+        int32x2_t b(int32x2_t x, int32x2_t y) { return vqrdmulh_s32(x, y); }\n\
+        int16x4_t c(int16x4_t acc, int16x4_t x, int16x4_t y) { return vqrdmlah_s16(acc, x, y); }\n\
+        int64x2_t d(int32x4_t x, int32x4_t y) { return vqdmull_high_s32(x, y); }\n\
+        int32x4_t e(int32x4_t acc, int16x4_t x, int16x4_t y) { return vqdmlsl_s16(acc, x, y); }\n";
+    for (name, want) in [
+        ("a", 0x4E61_B400u32),
+        ("b", 0x2EA1_B400),
+        ("c", 0x2E42_8420),
+        ("d", 0x4EA1_D000),
+        ("e", 0x0E62_B020),
+    ] {
+        let words = super::perf_codegen::a64_at(OPS, name, true);
+        assert_eq!(words, [want, 0xD65F_03C0], "{name}: {words:08x?}");
+    }
+}
+
 /// `vld1`, `vst1`, `vdup_n` and `vld1_dup` are the load, store and
 /// broadcast of their vector under `-O`, as with gcc 16, with no inline asm
 /// between them and the operations that use them: `ldr q`, `str q`,

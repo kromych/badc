@@ -1019,6 +1019,36 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             _ => Err(format!("inline asm: bad `{mnemonic}` compare with zero")),
         };
     }
+    // SIMD three-same extension `<sqrdmlah|sqrdmlsh> Vd.T, Vn.T, Vm.T`
+    // (FEAT_RDM) on halfword and word lanes: size at 22, Q at 30.
+    if let Some(base) = match mnemonic {
+        "sqrdmlah" => Some(0x2E00_8400u32),
+        "sqrdmlsh" => Some(0x2E00_8C00),
+        _ => None,
+    } && let [
+        Opnd::VecReg { num: rd, size, q },
+        Opnd::VecReg {
+            num: rn,
+            size: s1,
+            q: q1,
+        },
+        Opnd::VecReg {
+            num: rm,
+            size: s2,
+            q: q2,
+        },
+    ] = *ops
+    {
+        if size != s1 || size != s2 || q != q1 || q != q2 || !(1..=2).contains(&size) {
+            return Err(format!("inline asm: bad `{mnemonic}` arrangement"));
+        }
+        return Ok(base
+            | (u32::from(q) << 30)
+            | (u32::from(size) << 22)
+            | (u32::from(rm) << 16)
+            | (u32::from(rn) << 5)
+            | u32::from(rd));
+    }
     // SIMD three-same integer ops `Vd.T, Vn.T, Vm.T`, one arrangement. size at
     // bit 22, Q at 30, U at 29, the opcode in the base word; `lo..=hi` bounds
     // the element size (mul/min/max/mla/abd have no 64-bit form). GP add/sub/mul
@@ -1065,6 +1095,8 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         "ushl" => Some((0x0E20_4400, 1, 0, 3, Some(3))),
         "sqshl" => Some((0x0E20_4C00, 0, 0, 3, Some(2))),
         "uqshl" => Some((0x0E20_4C00, 1, 0, 3, Some(2))),
+        "sqdmulh" => Some((0x0E20_B400, 0, 1, 2, None)),
+        "sqrdmulh" => Some((0x0E20_B400, 1, 1, 2, None)),
         "srshl" => Some((0x0E20_5400, 0, 0, 3, Some(3))),
         "urshl" => Some((0x0E20_5400, 1, 0, 3, Some(3))),
         _ => None,
@@ -2162,6 +2194,9 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             "uabal" => Some((0x0E20_5000, 1)),
             "sabdl" => Some((0x0E20_7000, 0)),
             "uabdl" => Some((0x0E20_7000, 1)),
+            "sqdmull" => Some((0x0E20_D000, 0)),
+            "sqdmlal" => Some((0x0E20_9000, 0)),
+            "sqdmlsl" => Some((0x0E20_B000, 0)),
             _ => None,
         }
         && let [

@@ -22,7 +22,8 @@
  * vrsra_n vsli_n vsri_n vshrn_n vrshrn_n vqshrn_n vqrshrn_n vqshrun_n
  * vqrshrun_n with their _high forms, vqshlu_n vshll_n, vpadal, vmovl vmovn vqmovn vqmovun vaddl
  * vsubl vaddw vsubw vmull vmlal vmlsl vabdl vabal with their _high forms, vaddv vaddlv
- * vmaxv vminv. Floating: vadd vsub vmul vdiv vmax vmin vabs vneg vsqrt vfma
+ * vmaxv vminv, the doubling multiplies vqdmulh vqrdmulh vqdmull vqdmlal
+ * vqdmlsl vqrdmlah vqrdmlsh with their _high and scalar forms. Floating: vadd vsub vmul vdiv vmax vmin vabs vneg vsqrt vfma
  * vfms vrecpe vrecps vrsqrte vrsqrts vabd vmaxnm vminnm vmulx with their
  * scalar forms, the pairwise vpadd vpmax vpmin vpmaxnm vpminnm and the
  * across-lane vaddv vmaxv vminv vmaxnmv vminnmv, the roundings vrnd vrndn
@@ -35,7 +36,7 @@
  * SM4 intrinsics, vld2q_u16 and vld4q_u8.
  *
  * Not provided: float16, bfloat16, the lane-indexed and by-scalar forms,
- * the doubling multiplies, the other structure
+ * the other structure
  * loads, stores and table lookups and the dot products.
  *
  * The element typedefs match <stdint.h>, repeated so the header serves
@@ -507,6 +508,55 @@ __BADC_NEON_WIDE(__BADC_NEON_F_PADAL, _)
 __BADC_NEON_WIDE(__BADC_NEON_F_MOVN, vmovn, __builtin_neon_xtn, __builtin_neon_xtn)
 __BADC_NEON_WIDE(__BADC_NEON_F_MOVN, vqmovn, __builtin_neon_sqxtn, __builtin_neon_uqxtn)
 __BADC_NEON_SWIDE(__BADC_NEON_F_QMOVUN, _)
+
+/* The doubling multiplies, signed and saturating: the high half of twice
+ * the product (vqdmulh), rounded (vqrdmulh); twice the product into lanes
+ * twice as wide (vqdmull), added to or taken from an accumulator
+ * (vqdmlal, vqdmlsl); and the accumulating rounded high halves of
+ * FEAT_RDM (vqrdmlah, vqrdmlsh). The scalar forms are lane 0 of the
+ * vector ones. */
+__BADC_NEON_B2(vqdmulh_s16, int16x4_t, int16x4_t, int16x4_t, s, __builtin_neon_sqdmulh, _, 4h)
+__BADC_NEON_B2(vqdmulhq_s16, int16x8_t, int16x8_t, int16x8_t, s, __builtin_neon_sqdmulh, _, 8h)
+__BADC_INTRIN int16_t vqdmulhh_s16(int16_t __a, int16_t __b) { return vqdmulh_s16((int16x4_t){__a}, (int16x4_t){__b})[0]; }
+__BADC_NEON_B2(vqdmulh_s32, int32x2_t, int32x2_t, int32x2_t, s, __builtin_neon_sqdmulh, _, 2s)
+__BADC_NEON_B2(vqdmulhq_s32, int32x4_t, int32x4_t, int32x4_t, s, __builtin_neon_sqdmulh, _, 4s)
+__BADC_INTRIN int32_t vqdmulhs_s32(int32_t __a, int32_t __b) { return vqdmulh_s32((int32x2_t){__a}, (int32x2_t){__b})[0]; }
+__BADC_NEON_B2(vqrdmulh_s16, int16x4_t, int16x4_t, int16x4_t, s, __builtin_neon_sqrdmulh, _, 4h)
+__BADC_NEON_B2(vqrdmulhq_s16, int16x8_t, int16x8_t, int16x8_t, s, __builtin_neon_sqrdmulh, _, 8h)
+__BADC_INTRIN int16_t vqrdmulhh_s16(int16_t __a, int16_t __b) { return vqrdmulh_s16((int16x4_t){__a}, (int16x4_t){__b})[0]; }
+__BADC_NEON_B2(vqrdmulh_s32, int32x2_t, int32x2_t, int32x2_t, s, __builtin_neon_sqrdmulh, _, 2s)
+__BADC_NEON_B2(vqrdmulhq_s32, int32x4_t, int32x4_t, int32x4_t, s, __builtin_neon_sqrdmulh, _, 4s)
+__BADC_INTRIN int32_t vqrdmulhs_s32(int32_t __a, int32_t __b) { return vqrdmulh_s32((int32x2_t){__a}, (int32x2_t){__b})[0]; }
+__BADC_NEON_B3(vqrdmlah_s16, int16x4_t, s, __builtin_neon_sqrdmlah, _, 4h)
+__BADC_NEON_B3(vqrdmlahq_s16, int16x8_t, s, __builtin_neon_sqrdmlah, _, 8h)
+__BADC_INTRIN int16_t vqrdmlahh_s16(int16_t __a, int16_t __b, int16_t __c) { return vqrdmlah_s16((int16x4_t){__a}, (int16x4_t){__b}, (int16x4_t){__c})[0]; }
+__BADC_NEON_B3(vqrdmlah_s32, int32x2_t, s, __builtin_neon_sqrdmlah, _, 2s)
+__BADC_NEON_B3(vqrdmlahq_s32, int32x4_t, s, __builtin_neon_sqrdmlah, _, 4s)
+__BADC_INTRIN int32_t vqrdmlahs_s32(int32_t __a, int32_t __b, int32_t __c) { return vqrdmlah_s32((int32x2_t){__a}, (int32x2_t){__b}, (int32x2_t){__c})[0]; }
+__BADC_NEON_B3(vqrdmlsh_s16, int16x4_t, s, __builtin_neon_sqrdmlsh, _, 4h)
+__BADC_NEON_B3(vqrdmlshq_s16, int16x8_t, s, __builtin_neon_sqrdmlsh, _, 8h)
+__BADC_INTRIN int16_t vqrdmlshh_s16(int16_t __a, int16_t __b, int16_t __c) { return vqrdmlsh_s16((int16x4_t){__a}, (int16x4_t){__b}, (int16x4_t){__c})[0]; }
+__BADC_NEON_B3(vqrdmlsh_s32, int32x2_t, s, __builtin_neon_sqrdmlsh, _, 2s)
+__BADC_NEON_B3(vqrdmlshq_s32, int32x4_t, s, __builtin_neon_sqrdmlsh, _, 4s)
+__BADC_INTRIN int32_t vqrdmlshs_s32(int32_t __a, int32_t __b, int32_t __c) { return vqrdmlsh_s32((int32x2_t){__a}, (int32x2_t){__b}, (int32x2_t){__c})[0]; }
+__BADC_NEON_B2(vqdmull_s16, int32x4_t, int16x4_t, int16x4_t, s, __builtin_neon_sqdmull, _, 4h)
+__BADC_NEON_B2(vqdmull_high_s16, int32x4_t, int16x8_t, int16x8_t, s, __builtin_neon_sqdmull2, _, 8h)
+__BADC_INTRIN int32_t vqdmullh_s16(int16_t __a, int16_t __b) { return vqdmull_s16((int16x4_t){__a}, (int16x4_t){__b})[0]; }
+__BADC_NEON_B3T(vqdmlal_s16, int32x4_t, int16x4_t, int16x4_t, s, __builtin_neon_sqdmlal, _, 4h)
+__BADC_NEON_B3T(vqdmlal_high_s16, int32x4_t, int16x8_t, int16x8_t, s, __builtin_neon_sqdmlal2, _, 8h)
+__BADC_INTRIN int32_t vqdmlalh_s16(int32_t __a, int16_t __b, int16_t __c) { return vqdmlal_s16((int32x4_t){__a}, (int16x4_t){__b}, (int16x4_t){__c})[0]; }
+__BADC_NEON_B3T(vqdmlsl_s16, int32x4_t, int16x4_t, int16x4_t, s, __builtin_neon_sqdmlsl, _, 4h)
+__BADC_NEON_B3T(vqdmlsl_high_s16, int32x4_t, int16x8_t, int16x8_t, s, __builtin_neon_sqdmlsl2, _, 8h)
+__BADC_INTRIN int32_t vqdmlslh_s16(int32_t __a, int16_t __b, int16_t __c) { return vqdmlsl_s16((int32x4_t){__a}, (int16x4_t){__b}, (int16x4_t){__c})[0]; }
+__BADC_NEON_B2(vqdmull_s32, int64x2_t, int32x2_t, int32x2_t, s, __builtin_neon_sqdmull, _, 2s)
+__BADC_NEON_B2(vqdmull_high_s32, int64x2_t, int32x4_t, int32x4_t, s, __builtin_neon_sqdmull2, _, 4s)
+__BADC_INTRIN int64_t vqdmulls_s32(int32_t __a, int32_t __b) { return vqdmull_s32((int32x2_t){__a}, (int32x2_t){__b})[0]; }
+__BADC_NEON_B3T(vqdmlal_s32, int64x2_t, int32x2_t, int32x2_t, s, __builtin_neon_sqdmlal, _, 2s)
+__BADC_NEON_B3T(vqdmlal_high_s32, int64x2_t, int32x4_t, int32x4_t, s, __builtin_neon_sqdmlal2, _, 4s)
+__BADC_INTRIN int64_t vqdmlals_s32(int64_t __a, int32_t __b, int32_t __c) { return vqdmlal_s32((int64x2_t){__a}, (int32x2_t){__b}, (int32x2_t){__c})[0]; }
+__BADC_NEON_B3T(vqdmlsl_s32, int64x2_t, int32x2_t, int32x2_t, s, __builtin_neon_sqdmlsl, _, 2s)
+__BADC_NEON_B3T(vqdmlsl_high_s32, int64x2_t, int32x4_t, int32x4_t, s, __builtin_neon_sqdmlsl2, _, 4s)
+__BADC_INTRIN int64_t vqdmlsls_s32(int64_t __a, int32_t __b, int32_t __c) { return vqdmlsl_s32((int64x2_t){__a}, (int32x2_t){__b}, (int32x2_t){__c})[0]; }
 
 /* Across lanes: lane 0 of the reduction's row. A 2-lane 32-bit or 64-bit
  * vector takes the pairwise form of the vector with itself. */

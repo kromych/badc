@@ -355,6 +355,10 @@ pub(crate) const OPS: &[SimdOp] = table! {
     "frsqrts" Vv Step (true): f2s f4s fd f2d;
     "urecpe" V FractionEstimate (false): s2 s4;
     "sqshlu" Shift ShlSatU (): b8 b16 h4 h8 s2 s4 d1 d2;
+    "sqdmulh" Vv SatDoublingMulHigh (false): h4 h8 s2 s4;
+    "sqrdmulh" Vv SatDoublingMulHigh (true): h4 h8 s2 s4;
+    "sqrdmlah" Vvv SatRoundingDoublingMulAcc (false): h4 h8 s2 s4;
+    "sqrdmlsh" Vvv SatRoundingDoublingMulAcc (true): h4 h8 s2 s4;
     "ursqrte" V FractionEstimate (true): s2 s4;
     ("cmeqz" "cmeq") V CmpEq (): b8 b16 h4 h8 s2 s4 d1 d2;
     ("cmgez" "cmge") V CmpGe (): b8 b16 h4 h8 s2 s4 d1 d2;
@@ -717,6 +721,18 @@ const NARROW: &[SimdOp] = &[
     row("__builtin_neon_ext_8b", "ext", Form::VvI, Ret::V8qi, Sem::Ext(8), 8),
     row("__builtin_neon_ext_16b", "ext", Form::VvI, Ret::V16qi, Sem::Ext(16), 16),
     row("__builtin_neon_fcvtl_2s", "fcvtl", Form::V, Ret::V2df, Sem::Convert(Cvt::SingleToDouble), 8),
+    long!("sqdmull", Vv, Long, (SatDoublingMul, true), "4h", V4si, 2, 8, false),
+    long!("sqdmull", Vv, Long, (SatDoublingMul, true), "2s", V2di, 4, 8, false),
+    long!("sqdmull2", Vv, Long, (SatDoublingMul, true), "8h", V4si, 2, 16, true),
+    long!("sqdmull2", Vv, Long, (SatDoublingMul, true), "4s", V2di, 4, 16, true),
+    long!("sqdmlal", Vvv, LongAcc, (SatDoublingMul, true), "4h", V4si, 2, 8, false),
+    long!("sqdmlal", Vvv, LongAcc, (SatDoublingMul, true), "2s", V2di, 4, 8, false),
+    long!("sqdmlal2", Vvv, LongAcc, (SatDoublingMul, true), "8h", V4si, 2, 16, true),
+    long!("sqdmlal2", Vvv, LongAcc, (SatDoublingMul, true), "4s", V2di, 4, 16, true),
+    long!("sqdmlsl", Vvv, LongAcc, (SatDoublingMulSub, true), "4h", V4si, 2, 8, false),
+    long!("sqdmlsl", Vvv, LongAcc, (SatDoublingMulSub, true), "2s", V2di, 4, 8, false),
+    long!("sqdmlsl2", Vvv, LongAcc, (SatDoublingMulSub, true), "8h", V4si, 2, 16, true),
+    long!("sqdmlsl2", Vvv, LongAcc, (SatDoublingMulSub, true), "4s", V2di, 4, 16, true),
     long!("pmull", Vv, Long, (PolyMul, false), "8b", V8hi, 1, 8, false),
     long!("pmull2", Vv, Long, (PolyMul, false), "16b", V8hi, 1, 16, true),
     long!("pmull", Vv, Long, (PolyMul, false), "1d", V2di, 8, 8, false),

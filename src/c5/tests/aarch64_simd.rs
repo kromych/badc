@@ -876,6 +876,38 @@ fn the_compares_against_zero_are_rows() {
     }
 }
 
+/// `vqshlu_n`, `vshll_n` and `vpadal` are rows: over seeded lanes the
+/// interpreter's results hash to the hardware's, and each is one
+/// instruction under -O -- `shll` for a shift by the lane width, and the
+/// pairwise accumulation in its accumulator's register.
+#[cfg(feature = "full")]
+#[test]
+fn the_qshlu_shll_and_padal_forms_are_rows() {
+    let src = super::load_fixture("arm_neon_qshlu_shll_and_padal_on_seeded_lanes.c");
+    let program = super::compile_str_bare_for(&src, crate::Target::LinuxAarch64);
+    assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 0);
+    const OPS: &str = "#include <arm_neon.h>\n\
+        int16x8_t a(int8x8_t x) { return vshll_n_s8(x, 3); }\n\
+        uint16x8_t b(uint8x8_t x) { return vshll_n_u8(x, 8); }\n\
+        int64x2_t c(int32x4_t x) { return vshll_high_n_s32(x, 32); }\n\
+        uint32x4_t d(uint32x4_t acc, uint16x8_t x) { return vpadalq_u16(acc, x); }\n\
+        int64x1_t e(int64x1_t acc, int32x2_t x) { return vpadal_s32(acc, x); }\n\
+        uint8x16_t f(int8x16_t x) { return vqshluq_n_s8(x, 3); }\n\
+        uint64x1_t g(int64x1_t x) { return vqshlu_n_s64(x, 5); }\n";
+    for (name, want) in [
+        ("a", 0x0F0B_A400u32),
+        ("b", 0x2E21_3800),
+        ("c", 0x6EA1_3800),
+        ("d", 0x6E60_6820),
+        ("e", 0x0EA0_6820),
+        ("f", 0x6F0B_6400),
+        ("g", 0x7F45_6400),
+    ] {
+        let words = super::perf_codegen::a64_at(OPS, name, true);
+        assert_eq!(words, [want, 0xD65F_03C0], "{name}: {words:08x?}");
+    }
+}
+
 /// `vld1`, `vst1`, `vdup_n` and `vld1_dup` are the load, store and
 /// broadcast of their vector under `-O`, as with gcc 16, with no inline asm
 /// between them and the operations that use them: `ldr q`, `str q`,

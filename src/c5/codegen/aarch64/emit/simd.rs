@@ -27,7 +27,7 @@ fn sources(row: &SimdOp) -> Option<(usize, bool)> {
 /// Whether the instruction computes in the register of the row's first
 /// source: the three-operand forms but the four-register `eor3` and
 /// `bcax`, the accumulating and inserting shifts by an immediate, the AES
-/// rounds and the two-operand schedule updates.
+/// rounds, the two-operand schedule updates and the pairwise accumulations.
 fn accumulates(row: &SimdOp) -> bool {
     use simd::Sem;
     match row.sem {
@@ -37,7 +37,8 @@ fn accumulates(row: &SimdOp) -> bool {
         | Sem::AesRound(_)
         | Sem::Sha256Su0
         | Sem::Sha1Su1
-        | Sem::Sha512Su0 => true,
+        | Sem::Sha512Su0
+        | Sem::PairAddLongAcc(..) => true,
         _ => row.form == Form::Vvv,
     }
 }
@@ -132,7 +133,10 @@ fn encode(row: &SimdOp, regs: &[u8], imm: Option<u8>) -> Result<u32, alloc::stri
             // One lane is the scalar view of its width: the scalar form
             // over a 64-bit lane, or a reduction's destination; a pairwise
             // long sum into one 64-bit lane is the vector form `.1d`.
-            let pairwise = matches!(row.sem, crate::c5::simd::Sem::PairAddLong(..));
+            let pairwise = matches!(
+                row.sem,
+                crate::c5::simd::Sem::PairAddLong(..) | crate::c5::simd::Sem::PairAddLongAcc(..)
+            );
             match (size, bytes) {
                 (3, 8) if !pairwise => Opnd::VReg { num, is_d: true },
                 (0 | 1, b) if b == lane => Opnd::VScalar { num, size },

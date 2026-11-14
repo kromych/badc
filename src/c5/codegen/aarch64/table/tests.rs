@@ -1053,6 +1053,29 @@ fn vector_one_source_counts_and_estimates() {
     assert_eq!(enc("sqneg", &[d(1), d(2)]), 0x7EE0_7841);
     assert_eq!(enc("frecpe", &[d(1), d(2)]), 0x5EE1_D841);
     assert_eq!(enc("urecpe", &[v(1, 2, true), v(2, 2, true)]), 0x4EA1_C841);
+    assert_eq!(
+        enc("shll", &[v(1, 1, true), v(2, 0, false), Opnd::Imm(8)]),
+        0x2E21_3841
+    );
+    assert_eq!(
+        enc("shll2", &[v(1, 2, true), v(2, 1, true), Opnd::Imm(16)]),
+        0x6E61_3841
+    );
+    assert_eq!(
+        enc("shll", &[v(1, 3, true), v(2, 2, false), Opnd::Imm(32)]),
+        0x2EA1_3841
+    );
+    assert!(encode("shll", &[v(1, 1, true), v(2, 0, false), Opnd::Imm(7)]).is_err());
+    assert_eq!(
+        enc("sadalp", &[v(1, 1, false), v(2, 0, false)]),
+        0x0E20_6841
+    );
+    assert_eq!(enc("uadalp", &[v(1, 3, true), v(2, 2, true)]), 0x6EA0_6841);
+    assert_eq!(
+        enc("sqshlu", &[v(1, 0, true), v(2, 0, true), Opnd::Imm(3)]),
+        0x6F0B_6441
+    );
+    assert_eq!(enc("sqshlu", &[d(1), d(2), Opnd::Imm(5)]), 0x7F45_6441);
     let z = Opnd::Imm(0);
     assert_eq!(enc("cmeq", &[v(1, 2, true), v(2, 2, true), z]), 0x4EA0_9841);
     assert_eq!(

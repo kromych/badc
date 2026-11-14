@@ -327,7 +327,8 @@ pub(crate) enum Sem {
     /// Products of each quadword's low doubleword, signed when `true`.
     MulEven(bool),
     /// The low lanes widened from the first width to the second, signed when
-    /// the first flag is set; the high half's lanes when the second is.
+    /// the first flag is set; the high half's lanes when the second is. A
+    /// shift form shifts each left by its count (`sshll`, `shll`).
     Extend(u8, u8, bool, bool),
     /// Lane `i` of the second operand where immediate bit `i` is set.
     Blend(u8),
@@ -456,6 +457,9 @@ pub(crate) enum Sem {
     /// The sums of adjacent lane pairs into lanes twice as wide, signed
     /// when `true` (`saddlp`, `uaddlp`).
     PairAddLong(u8, bool),
+    /// The accumulator plus [`Sem::PairAddLong`] of the second operand
+    /// (`sadalp`, `uadalp`).
+    PairAddLongAcc(u8, bool),
     /// The lanes of the width reversed within each group of the second
     /// width (`rev16`, `rev32`, `rev64`).
     Rev(u8, u8),
@@ -474,6 +478,9 @@ pub(crate) enum Sem {
     /// A left shift by the immediate saturating to the lane, signed when
     /// `true` (`sqshl`, `uqshl` by an immediate).
     ShlSat(u8, bool),
+    /// A left shift by the immediate of signed lanes saturating to the
+    /// unsigned range of the lane (`sqshlu`).
+    ShlSatU(u8),
     /// A right shift by the immediate of lanes of the width into lanes half
     /// as wide, rounding when `true` (`shrn`, `rshrn`).
     ShrNarrow(u8, bool),
@@ -821,6 +828,7 @@ impl SimdOp {
         }
         let src = match self.sem {
             Sem::Long(_, w, ..) | Sem::Across(_, w, ..) | Sem::PairAddLong(w, _) => w,
+            Sem::PairAddLongAcc(w, _) if i > 1 => w,
             Sem::Wide(_, w, ..) | Sem::LongAcc(_, w, ..) if i > 1 => w,
             Sem::Narrow(w, _) | Sem::ShrNarrow(w, _) => w,
             Sem::Extend(from, ..) => from,
@@ -1603,6 +1611,17 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
             let n = count.min(64) as i64;
             o = eval(Sem::ShlReg(w, signed, false, true), a, &splat(w, n), 0, 0);
         }
+        Sem::ShlSatU(w) => {
+            let umax = (1i128 << (8 * w)) - 1;
+            for i in 0..16 / w as usize {
+                let x = (i128::from(slane(a, w, i)) << count.min(64)).clamp(0, umax);
+                set_lane(&mut o, w, i, x as u64);
+            }
+        }
+        Sem::PairAddLongAcc(w, signed) => {
+            let sums = eval(Sem::PairAddLong(w, signed), b, &[0; 16], 0, 0);
+            o = eval(Sem::Add(2 * w), a, &sums, 0, 0);
+        }
         Sem::ShrNarrow(w, round) => {
             let n = count.min(64) as i64;
             let wide = eval(Sem::ShlReg(w, false, round, false), a, &splat(w, -n), 0, 0);
@@ -1827,7 +1846,7 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
                 } else {
                     lane(a, from, base + i)
                 };
-                set_lane(&mut o, to, i, x & mask(to));
+                set_lane(&mut o, to, i, x << count.min(63) & mask(to));
             }
         }
         Sem::Blend(w) => {

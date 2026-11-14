@@ -322,6 +322,7 @@ pub(crate) const OPS: &[SimdOp] = table! {
     "frecps" Vv Step (false): f2s f4s fd f2d;
     "frsqrts" Vv Step (true): f2s f4s fd f2d;
     "urecpe" V FractionEstimate (false): s2 s4;
+    "sqshlu" Shift ShlSatU (): b8 b16 h4 h8 s2 s4 d1 d2;
     "ursqrte" V FractionEstimate (true): s2 s4;
     ("cmeqz" "cmeq") V CmpEq (): b8 b16 h4 h8 s2 s4 d1 d2;
     ("cmgez" "cmge") V CmpGe (): b8 b16 h4 h8 s2 s4 d1 d2;
@@ -334,6 +335,39 @@ pub(crate) const OPS: &[SimdOp] = table! {
     ("fcmlez" "fcmle") V FloatRel (2): f2s f4s fd f2d;
     ("fcmltz" "fcmlt") V FloatRel (1): f2s f4s fd f2d;
 };
+
+/// A lengthening shift by the immediate, named by its source arrangement.
+const fn shll(
+    name: &'static str,
+    mnem: &'static str,
+    ret: Ret,
+    w: u8,
+    sg: bool,
+    high: bool,
+) -> SimdOp {
+    let bytes = if high { 16 } else { 8 };
+    row(
+        name,
+        mnem,
+        Form::Shift,
+        ret,
+        Sem::Extend(w, 2 * w, sg, high),
+        bytes,
+    )
+}
+
+/// A pairwise long sum into the accumulator, named by its source
+/// arrangement.
+const fn adalp(
+    name: &'static str,
+    mnem: &'static str,
+    ret: Ret,
+    w: u8,
+    sg: bool,
+    bytes: u8,
+) -> SimdOp {
+    row(name, mnem, Form::Vv, ret, Sem::PairAddLongAcc(w, sg), bytes)
+}
 
 /// The widening forms, three source widths each.
 #[rustfmt::skip]
@@ -689,6 +723,36 @@ const NARROW: &[SimdOp] = &[
     unary("__builtin_neon_uaddlp_8h", "uaddlp", Ret::V4si, Sem::PairAddLong(2, false), 16),
     unary("__builtin_neon_uaddlp_2s", "uaddlp", Ret::V1di, Sem::PairAddLong(4, false), 8),
     unary("__builtin_neon_uaddlp_4s", "uaddlp", Ret::V2di, Sem::PairAddLong(4, false), 16),
+    shll("__builtin_neon_sshll_8b", "sshll", Ret::V8hi, 1, true, false),
+    shll("__builtin_neon_sshll_4h", "sshll", Ret::V4si, 2, true, false),
+    shll("__builtin_neon_sshll_2s", "sshll", Ret::V2di, 4, true, false),
+    shll("__builtin_neon_ushll_8b", "ushll", Ret::V8hi, 1, false, false),
+    shll("__builtin_neon_ushll_4h", "ushll", Ret::V4si, 2, false, false),
+    shll("__builtin_neon_ushll_2s", "ushll", Ret::V2di, 4, false, false),
+    shll("__builtin_neon_sshll2_16b", "sshll2", Ret::V8hi, 1, true, true),
+    shll("__builtin_neon_sshll2_8h", "sshll2", Ret::V4si, 2, true, true),
+    shll("__builtin_neon_sshll2_4s", "sshll2", Ret::V2di, 4, true, true),
+    shll("__builtin_neon_ushll2_16b", "ushll2", Ret::V8hi, 1, false, true),
+    shll("__builtin_neon_ushll2_8h", "ushll2", Ret::V4si, 2, false, true),
+    shll("__builtin_neon_ushll2_4s", "ushll2", Ret::V2di, 4, false, true),
+    shll("__builtin_neon_shll_8b", "shll", Ret::V8hi, 1, false, false),
+    shll("__builtin_neon_shll_4h", "shll", Ret::V4si, 2, false, false),
+    shll("__builtin_neon_shll_2s", "shll", Ret::V2di, 4, false, false),
+    shll("__builtin_neon_shll2_16b", "shll2", Ret::V8hi, 1, false, true),
+    shll("__builtin_neon_shll2_8h", "shll2", Ret::V4si, 2, false, true),
+    shll("__builtin_neon_shll2_4s", "shll2", Ret::V2di, 4, false, true),
+    adalp("__builtin_neon_sadalp_8b", "sadalp", Ret::V4hi, 1, true, 8),
+    adalp("__builtin_neon_sadalp_16b", "sadalp", Ret::V8hi, 1, true, 16),
+    adalp("__builtin_neon_sadalp_4h", "sadalp", Ret::V2si, 2, true, 8),
+    adalp("__builtin_neon_sadalp_8h", "sadalp", Ret::V4si, 2, true, 16),
+    adalp("__builtin_neon_sadalp_2s", "sadalp", Ret::V1di, 4, true, 8),
+    adalp("__builtin_neon_sadalp_4s", "sadalp", Ret::V2di, 4, true, 16),
+    adalp("__builtin_neon_uadalp_8b", "uadalp", Ret::V4hi, 1, false, 8),
+    adalp("__builtin_neon_uadalp_16b", "uadalp", Ret::V8hi, 1, false, 16),
+    adalp("__builtin_neon_uadalp_4h", "uadalp", Ret::V2si, 2, false, 8),
+    adalp("__builtin_neon_uadalp_8h", "uadalp", Ret::V4si, 2, false, 16),
+    adalp("__builtin_neon_uadalp_2s", "uadalp", Ret::V1di, 4, false, 8),
+    adalp("__builtin_neon_uadalp_4s", "uadalp", Ret::V2di, 4, false, 16),
     unary("__builtin_neon_rev16_8b", "rev16", Ret::V8qi, Sem::Rev(1, 2), 8),
     unary("__builtin_neon_rev16_16b", "rev16", Ret::V16qi, Sem::Rev(1, 2), 16),
     unary("__builtin_neon_rev32_8b", "rev32", Ret::V8qi, Sem::Rev(1, 4), 8),

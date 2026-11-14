@@ -19,7 +19,7 @@
  * vqabs vqadd vqsub vhadd vrhadd vhsub vmax vmin vpadd vpmax vpmin vpaddl,
  * vand vorr veor vbic vorn vmvn vtst vcnt vclz vcls, vceq vcge vcgt vcle
  * vclt, vshl/vrshl/vqshl by register, vshl_n vqshl_n vshr_n vrshr_n vsra_n
- * vrsra_n vsli_n vsri_n vshrn_n vrshrn_n, vmovl vmovn vqmovn vqmovun vaddl
+ * vrsra_n vsli_n vsri_n vshrn_n vrshrn_n vqshlu_n vshll_n, vpadal, vmovl vmovn vqmovn vqmovun vaddl
  * vsubl vaddw vsubw vmull vmlal vmlsl vabdl vabal with their _high forms, vaddv vaddlv
  * vmaxv vminv. Floating: vadd vsub vmul vdiv vmax vmin vabs vneg vsqrt vfma
  * vfms vrecpe vrecps vrsqrte vrsqrts with their scalar forms, the
@@ -31,8 +31,8 @@
  * SM4 intrinsics, vld2q_u16 and vld4q_u8.
  *
  * Not provided: float16, bfloat16, the lane-indexed and by-scalar forms,
- * the doubling multiplies, the saturating narrowing shifts, vqshlu_n,
- * vshll_n, vpadal, the other structure
+ * the doubling multiplies, the saturating narrowing shifts, the other
+ * structure
  * loads, stores and table lookups, the floating pairwise, across-lane,
  * absolute-difference, rounding and maxnum forms, the fixed-point and
  * rounding-mode conversions and the dot products.
@@ -497,6 +497,12 @@ __BADC_NEON_WIDE(__BADC_NEON_F_LONGACC, vabal, __builtin_neon_sabal, __builtin_n
 __BADC_NEON_WIDE(__BADC_NEON_F_WIDEN, vaddw, __builtin_neon_saddw, __builtin_neon_uaddw)
 __BADC_NEON_WIDE(__BADC_NEON_F_WIDEN, vsubw, __builtin_neon_ssubw, __builtin_neon_usubw)
 __BADC_NEON_WIDE(__BADC_NEON_F_MOVL, _)
+/* vpadal: the accumulator plus the pairwise long sums of the second
+ * operand. */
+#define __BADC_NEON_F_PADAL(_, n, w, k, ND, NQ, WD, WQ, NA, NAQ, ...)     \
+    __BADC_NEON_B2(vpadal_##n, WD, WD, ND, k, __builtin_neon_sadalp, __builtin_neon_uadalp, NA) \
+    __BADC_NEON_B2(vpadalq_##n, WQ, WQ, NQ, k, __builtin_neon_sadalp, __builtin_neon_uadalp, NAQ)
+__BADC_NEON_WIDE(__BADC_NEON_F_PADAL, _)
 __BADC_NEON_WIDE(__BADC_NEON_F_MOVN, vmovn, __builtin_neon_xtn, __builtin_neon_xtn)
 __BADC_NEON_WIDE(__BADC_NEON_F_MOVN, vqmovn, __builtin_neon_sqxtn, __builtin_neon_uqxtn)
 __BADC_NEON_SWIDE(__BADC_NEON_F_QMOVUN, _)
@@ -981,6 +987,57 @@ __BADC_NEON_I32(__BADC_NEON_F_ADDLV2, _)
 #define vrshrn_n_s64(__a, __n) __BADC_NEON_SHN(int32x2_t, int64x2_t, __builtin_neon_rshrn, 2s, 2d, __a, __n)
 #define vshrn_n_u64(__a, __n) __BADC_NEON_SHN(uint32x2_t, uint64x2_t, __builtin_neon_shrn, 2s, 2d, __a, __n)
 #define vrshrn_n_u64(__a, __n) __BADC_NEON_SHN(uint32x2_t, uint64x2_t, __builtin_neon_rshrn, 2s, 2d, __a, __n)
+
+/* vqshlu_n: signed lanes shifted left by an immediate in [0, bits - 1],
+ * saturating to the unsigned range. */
+#define __BADC_NEON_SHU(R, T, A, __a, __n) __extension__({                \
+    T __sa = (__a);                                                       \
+    __BADC_NEON_SHIFT_RANGE(__n, 0, __sa[0]);                             \
+    (R)__builtin_neon_sqshlu_##A(__sa, __n);                              \
+})
+#define vqshlu_n_s8(__a, __n) __BADC_NEON_SHU(uint8x8_t, int8x8_t, 8b, __a, __n)
+#define vqshluq_n_s8(__a, __n) __BADC_NEON_SHU(uint8x16_t, int8x16_t, 16b, __a, __n)
+#define vqshlu_n_s16(__a, __n) __BADC_NEON_SHU(uint16x4_t, int16x4_t, 4h, __a, __n)
+#define vqshluq_n_s16(__a, __n) __BADC_NEON_SHU(uint16x8_t, int16x8_t, 8h, __a, __n)
+#define vqshlu_n_s32(__a, __n) __BADC_NEON_SHU(uint32x2_t, int32x2_t, 2s, __a, __n)
+#define vqshluq_n_s32(__a, __n) __BADC_NEON_SHU(uint32x4_t, int32x4_t, 4s, __a, __n)
+#define vqshlu_n_s64(__a, __n) __BADC_NEON_SHU(uint64x1_t, int64x1_t, d, __a, __n)
+#define vqshluq_n_s64(__a, __n) __BADC_NEON_SHU(uint64x2_t, int64x2_t, 2d, __a, __n)
+
+/* vshll_n: lanes lengthened and shifted left by an immediate in [0, bits];
+ * a shift by the lane width is `shll`, the others `sshll` / `ushll`, and
+ * the _high forms read the upper half. */
+#define __BADC_NEON_SHLL(R, T, sstem, lstem, A, __a, __n) __extension__({  \
+    T __sa = (__a);                                                       \
+    _Static_assert((__n) >= 0 && (__n) <= 8 * (int)sizeof(__sa[0]), "shift count out of range"); \
+    (__n) == 8 * (int)sizeof(__sa[0])                                     \
+        ? (R)__BADC_NEON_B(lstem, A)(__sa, 8 * (int)sizeof(__sa[0]))      \
+        : (R)__BADC_NEON_B(sstem, A)(__sa, (__n) % (8 * (int)sizeof(__sa[0]))); \
+})
+#define vshll_n_s8(__a, __n) \
+    __BADC_NEON_SHLL(int16x8_t, int8x8_t, __builtin_neon_sshll, __builtin_neon_shll, 8b, __a, __n)
+#define vshll_n_u8(__a, __n) \
+    __BADC_NEON_SHLL(uint16x8_t, uint8x8_t, __builtin_neon_ushll, __builtin_neon_shll, 8b, __a, __n)
+#define vshll_n_s16(__a, __n) \
+    __BADC_NEON_SHLL(int32x4_t, int16x4_t, __builtin_neon_sshll, __builtin_neon_shll, 4h, __a, __n)
+#define vshll_n_u16(__a, __n) \
+    __BADC_NEON_SHLL(uint32x4_t, uint16x4_t, __builtin_neon_ushll, __builtin_neon_shll, 4h, __a, __n)
+#define vshll_n_s32(__a, __n) \
+    __BADC_NEON_SHLL(int64x2_t, int32x2_t, __builtin_neon_sshll, __builtin_neon_shll, 2s, __a, __n)
+#define vshll_n_u32(__a, __n) \
+    __BADC_NEON_SHLL(uint64x2_t, uint32x2_t, __builtin_neon_ushll, __builtin_neon_shll, 2s, __a, __n)
+#define vshll_high_n_s8(__a, __n) \
+    __BADC_NEON_SHLL(int16x8_t, int8x16_t, __builtin_neon_sshll2, __builtin_neon_shll2, 16b, __a, __n)
+#define vshll_high_n_u8(__a, __n) \
+    __BADC_NEON_SHLL(uint16x8_t, uint8x16_t, __builtin_neon_ushll2, __builtin_neon_shll2, 16b, __a, __n)
+#define vshll_high_n_s16(__a, __n) \
+    __BADC_NEON_SHLL(int32x4_t, int16x8_t, __builtin_neon_sshll2, __builtin_neon_shll2, 8h, __a, __n)
+#define vshll_high_n_u16(__a, __n) \
+    __BADC_NEON_SHLL(uint32x4_t, uint16x8_t, __builtin_neon_ushll2, __builtin_neon_shll2, 8h, __a, __n)
+#define vshll_high_n_s32(__a, __n) \
+    __BADC_NEON_SHLL(int64x2_t, int32x4_t, __builtin_neon_sshll2, __builtin_neon_shll2, 4s, __a, __n)
+#define vshll_high_n_u32(__a, __n) \
+    __BADC_NEON_SHLL(uint64x2_t, uint32x4_t, __builtin_neon_ushll2, __builtin_neon_shll2, 4s, __a, __n)
 
 /* Byte table lookups in one 16-byte table: an out-of-range index gives 0
  * (vqtbl1), or keeps the destination byte (vqtbx1). */

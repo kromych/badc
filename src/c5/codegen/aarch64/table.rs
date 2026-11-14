@@ -1471,6 +1471,7 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         "shl" => Some((0x0F00_5400u32, 0u32, true)),
         "sqshl" => Some((0x0F00_7400, 0, true)),
         "uqshl" => Some((0x0F00_7400, 1, true)),
+        "sqshlu" => Some((0x0F00_6400, 1, true)),
         "sshr" => Some((0x0F00_0400, 0, false)),
         "ushr" => Some((0x0F00_0400, 1, false)),
         "ssra" => Some((0x0F00_1400, 0, false)),
@@ -1657,6 +1658,33 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | (((esize + shift) as u32) << 16)
             | ((rn as u32) << 5)
             | (rd as u32));
+    }
+    // SIMD shift left long by the element width `shll{2} Vd.<Ta>, Vn.<Tb>,
+    // #esize`: size (bit 22) is the source element, the destination one size
+    // wider and 128-bit; the `2` form reads the source's upper half.
+    if let Some(("shll", upper)) = strip_widen2(mnemonic)
+        && let [
+            Opnd::VecReg {
+                num: rd,
+                size: ds,
+                q: dq,
+            },
+            Opnd::VecReg {
+                num: rn,
+                size: ss,
+                q: sq,
+            },
+            Opnd::Imm(shift),
+        ] = *ops
+    {
+        if ds != ss + 1 || ss > 2 || !dq || sq != upper || shift != 8 << ss {
+            return Err(String::from("inline asm: bad `shll` operands"));
+        }
+        return Ok(0x2E21_3800
+            | (if upper { 1u32 << 30 } else { 0 })
+            | (u32::from(ss) << 22)
+            | (u32::from(rn) << 5)
+            | u32::from(rd));
     }
     // SIMD modified immediate `<movi|mvni|orr|bic> Vd.T, #imm{, lsl #s}`. The
     // 8-bit value splits abc:defgh across bits 18..16 and 9..5; cmode selects
@@ -1921,10 +1949,13 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     // SIMD long pairwise add `<saddlp|uaddlp> Vd.<Ta>, Vn.<Tb>`: each pair of
     // adjacent elements summed into one of twice the width, so the
     // destination has half the lanes in the same register size (.1d from .2s
-    // included). size (bit 22) is the source width, U at 29 the unsigned op.
-    if let Some(u) = match mnemonic {
-        "saddlp" => Some(0u32),
-        "uaddlp" => Some(1),
+    // included); sadalp/uadalp add them into the destination. size (bit 22)
+    // is the source width, U at 29 the unsigned op.
+    if let Some((u, base)) = match mnemonic {
+        "saddlp" => Some((0u32, 0x0E20_2800u32)),
+        "uaddlp" => Some((1, 0x0E20_2800)),
+        "sadalp" => Some((0, 0x0E20_6800)),
+        "uadalp" => Some((1, 0x0E20_6800)),
         _ => None,
     } && let [
         Opnd::VecReg {
@@ -1944,7 +1975,7 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
                 "inline asm: long pairwise destination must be one element size wider",
             ));
         }
-        return Ok(0x0E20_2800
+        return Ok(base
             | (u << 29)
             | (if sq { 1u32 << 30 } else { 0 })
             | ((ss as u32) << 22)

@@ -1855,7 +1855,9 @@ fn floating_rows_compute_in_the_environment() {
         | Sem::ShrNarrow(..)
         | Sem::FractionEstimate(..)
         | Sem::CmpLe(_)
-        | Sem::CmpLt(_) => false,
+        | Sem::CmpLt(_)
+        | Sem::ShlSatU(_)
+        | Sem::PairAddLongAcc(..) => false,
     };
     /// Counts the operations a row asks of the environment.
     struct Counting(u32);

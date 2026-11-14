@@ -4107,7 +4107,7 @@ fn run_x86_simd(
                 None => frame.regs[args[2] as usize] as u64,
             };
             let out = simd::eval(row.sem, &a, &[0u8; 16], 0, count);
-            mem.write_bytes(reg(0), &out[..n])?;
+            mem.write_bytes(reg(0), &out[..ret_n])?;
         }
         Form::Load => {
             let a = read(mem, reg(1))?;

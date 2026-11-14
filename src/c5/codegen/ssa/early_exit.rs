@@ -2,8 +2,9 @@
 //! jumps into with its phis at their entry values, ends in a test with one
 //! arm that only returns. Where both need no more than the argument
 //! registers, the backends evaluate the test from them ahead of the prologue
-//! and the returned value in a return placed after the body; the frame path
-//! follows the test.
+//! and the returned value in a return placed after the body, the frame path
+//! following the test. A return `__builtin_expect` predicts follows the test
+//! instead, and the test branches to the frame path.
 
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
@@ -14,7 +15,7 @@ use crate::c5::codegen::ArgPlacement;
 use crate::c5::codegen::passes::constfold::mirror;
 use crate::c5::codegen::passes::narrow::is_cmp32;
 use crate::c5::ir::{
-    BinOp, BlockId, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator, ValueId,
+    Arm, BinOp, BlockId, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator, ValueId,
     is_int_comparison_op,
 };
 
@@ -78,6 +79,9 @@ pub(crate) struct EarlyExit {
     pub exit_when: bool,
     /// The returned value; `None` for a `Return` naming none.
     pub ret: Option<ShadowExpr>,
+    /// `__builtin_expect` predicts the return: it follows the test, and the
+    /// frame path is the branch target.
+    pub predicted: bool,
 }
 
 /// Instructions that neither trap nor touch memory, a register the frame
@@ -294,6 +298,11 @@ pub(crate) fn early_exit(func: &FunctionSsa, plan: &[ArgPlacement]) -> Option<Ea
             ShadowTest::Value { value, low_word }
         }
     };
+    let exit_arm = if exit == target {
+        Arm::Target
+    } else {
+        Arm::FallThrough
+    };
     Some(EarlyExit {
         test_block: t,
         exit_block: exit,
@@ -301,6 +310,7 @@ pub(crate) fn early_exit(func: &FunctionSsa, plan: &[ArgPlacement]) -> Option<Ea
         test,
         exit_when,
         ret,
+        predicted: func.predicted_arm(t) == Some(exit_arm),
     })
 }
 

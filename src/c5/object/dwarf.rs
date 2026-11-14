@@ -721,7 +721,9 @@ fn collect_subprograms(
             frame_rules: (build.func_prologue_native.contains_key(&ent_pc))
                 .then(|| FrameRules::of(build, CfiArch::of(target), ent_pc, lo)),
             ra_signed_at: paciasp_offset(build, lo, early.map(|e| e.frame)),
-            early_return: early.map(|e| e.exit),
+            // A predicted return follows the test, ahead of the frame, and
+            // leaves no code after the body to take the entry's rules.
+            early_return: early.map(|e| e.exit).filter(|&x| (x as usize) < hi - lo),
             variables,
             external: !internal_pcs.contains(&ent_pc),
             prototyped: !unprototyped_pcs.contains(&ent_pc),
@@ -2985,6 +2987,49 @@ mod tests {
             &[DW_CFA_ADVANCE_LOC_HI | 3, DW_CFA_NEGATE_RA_STATE]
         );
         assert_eq!(&displaced[2..], &plain[1..], "same rules follow");
+    }
+
+    /// A predicted early return follows its test, ahead of the signed frame
+    /// path, and no row after the body restates the entry's rules.
+    #[test]
+    fn debug_frame_takes_a_predicted_early_return_ahead_of_the_frame() {
+        use crate::c5::codegen::aarch64::encode;
+        let src = "long fib(int n) { if (__builtin_expect(n < 2, 1)) return n;\n\
+                   return fib(n - 1) + fib(n - 2); }\n\
+                   int main(int argc, char **argv) { (void)argv; return (int)fib(argc); }\n";
+        let program = crate::Compiler::new(crate::c5::tests::with_prelude(src))
+            .compile()
+            .expect("compile");
+        let options = crate::NativeOptions {
+            optimize: true,
+            debug_info: true,
+            hardening: crate::Hardening {
+                pac_ret: true,
+                ..crate::Hardening::NONE
+            },
+            ..Default::default()
+        };
+        let build =
+            crate::c5::codegen::lower_for(&program, Target::LinuxAarch64, options).expect("lower");
+        let word = |at: usize| u32::from_le_bytes(build.text[at..at + 4].try_into().unwrap());
+        let subs = collect_subprograms(
+            &program,
+            &build,
+            Target::LinuxAarch64,
+            0,
+            &mut StrTable::new(),
+        );
+        let early = build.early_returns[0];
+        let fib = subs
+            .iter()
+            .find(|s| s.low_pc as usize == early.begin as usize)
+            .expect("fib returns ahead of its frame");
+        let (lo, frame) = (fib.low_pc as usize, early.frame as usize);
+        assert_eq!(early.exit as u64, fib.high_pc - fib.low_pc);
+        assert_eq!(fib.early_return, None);
+        assert_eq!(word(lo + frame - 4), encode::enc_ret(encode::Reg(30)));
+        assert_eq!(word(lo + frame), encode::PACIASP);
+        assert_eq!(fib.ra_signed_at, Some(frame as u32));
     }
 
     /// The frame path signs x30 at the `PACIASP` past the entry's test, where

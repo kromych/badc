@@ -157,8 +157,10 @@ impl Shadow<'_> {
         Some(())
     }
 
-    /// The test and its branch; the offset of the word to patch.
+    /// The test and its branch, inverted to skip the `B` when `far` or the
+    /// predicted return that follows it; the offset of the word to patch.
     fn test(&mut self, exit: &EarlyExit, far: bool) -> Option<usize> {
+        let inverted = far || exit.predicted;
         let word = match &exit.test {
             ShadowTest::Cmp {
                 op,
@@ -168,7 +170,7 @@ impl Shadow<'_> {
             } => {
                 self.cmp(lhs, rhs, *narrow)?;
                 let holds = compare_cond(*op)?;
-                let taken = if exit.exit_when != far {
+                let taken = if exit.exit_when != inverted {
                     holds
                 } else {
                     holds.flip()
@@ -181,7 +183,7 @@ impl Shadow<'_> {
                 } else {
                     self.reg(value)?
                 };
-                match (exit.exit_when != far, low_word) {
+                match (exit.exit_when != inverted, low_word) {
                     (true, false) => enc_cbnz(rt, 0),
                     (false, false) => enc_cbz(rt, 0),
                     (true, true) => super::encode::enc_cbnz_w(rt, 0),
@@ -200,8 +202,8 @@ impl Shadow<'_> {
 }
 
 /// The entry's test of `exit`, branching to the early return, through a `B`
-/// when `far`. The branch's offset, or `None`, with nothing emitted, where
-/// the test needs more temporaries than it has.
+/// when `far`, or past a predicted one. The branch's offset, or `None`, with
+/// nothing emitted, where the test needs more temporaries than it has.
 pub(super) fn emit_early_test(
     code: &mut Vec<u8>,
     exit: &EarlyExit,

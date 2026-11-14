@@ -660,7 +660,26 @@ impl FnEmit<'_, '_> {
             );
             let site = emit_early_test(code, exit, self.fcx.frame.fixed_regs);
             debug_assert!(site.is_some(), "the test fit its temporaries at planning");
-            self.early_site = (site.unwrap_or(0), code.len());
+            let site = site.unwrap_or(0);
+            if exit.predicted {
+                super::ssa::emit_common::record_block_src(
+                    func,
+                    exit.exit_block,
+                    code.len(),
+                    self.out.cx.ssa_line_rows,
+                );
+                let emitted = emit_early_return(
+                    code,
+                    exit,
+                    abi,
+                    self.fcx.frame.fixed_regs,
+                    self.out.cx.asm_extern_call_sites,
+                );
+                debug_assert!(emitted, "the return fit its temporaries at planning");
+                let frame_at = code.len();
+                patch_early_branch(code, site, frame_at);
+            }
+            self.early_site = (site, code.len());
         }
         emit_prologue(
             code,
@@ -673,14 +692,23 @@ impl FnEmit<'_, '_> {
         )
     }
 
-    /// The early return after the body, with the entry's test pointed at it
-    /// and the function recorded.
+    /// The early return after the body, with the entry's test pointed at it,
+    /// unless it follows the test; and the function recorded.
     fn emit_early_return(&mut self) {
         let Some(exit) = &self.early_exit else {
             return;
         };
         let code = &mut *self.out.cx.code;
         let exit_at = code.len();
+        let (site, frame) = self.early_site;
+        if exit.predicted {
+            self.out.cx.early_returns.push(super::EarlyReturn {
+                begin: self.start as u32,
+                frame: (frame - self.start) as u32,
+                exit: (exit_at - self.start) as u32,
+            });
+            return;
+        }
         super::ssa::emit_common::record_block_src(
             self.fcx.func,
             exit.exit_block,
@@ -695,7 +723,6 @@ impl FnEmit<'_, '_> {
             self.out.cx.asm_extern_call_sites,
         );
         debug_assert!(emitted, "the return fit its temporaries at planning");
-        let (site, frame) = self.early_site;
         patch_early_branch(code, site, exit_at);
         self.out.cx.early_returns.push(super::EarlyReturn {
             begin: self.start as u32,

@@ -2060,13 +2060,15 @@ fn inline_intrinsic_keeps_the_leaf_frameless() {
 }
 
 /// `stp x29, x30, [sp, #imm]`, pre-indexed or at an offset: the frame record.
+fn a64_is_frame_record(w: u32) -> bool {
+    matches!(w & 0xFFC0_0000, 0xA980_0000 | 0xA900_0000)
+        && w & 31 == 29
+        && (w >> 10) & 31 == 30
+        && (w >> 5) & 31 == 31
+}
+
 fn a64_has_frame_record(ws: &[u32]) -> bool {
-    ws.iter().any(|&w| {
-        matches!(w & 0xFFC0_0000, 0xA980_0000 | 0xA900_0000)
-            && w & 31 == 29
-            && (w >> 10) & 31 == 30
-            && (w >> 5) & 31 == 31
-    })
+    ws.iter().any(|&w| a64_is_frame_record(w))
 }
 
 /// `push rbp`.
@@ -8379,5 +8381,36 @@ float shrink(float x) { return x * 0.3f; }\n";
             }
         }
         assert!(literal_refs > 0, "{target:?}: no literal reference");
+    }
+}
+
+/// An early return `__builtin_expect` predicts follows its test, ahead of
+/// the frame, and the test branches to the frame path; an unpredicted one
+/// is placed after the body.
+#[test]
+fn a_predicted_early_return_follows_its_test() {
+    const SRC: &str = "void slow(int);\n\
+int hinted(int x) { if (__builtin_expect(x > 0, 1)) return x; slow(x); return 0; }\n\
+int plain(int x) { if (x > 0) return x; slow(x); return 0; }\n";
+    use super::codegen::{function_bytes, function_words};
+    let obj = object_at(SRC, Target::LinuxX64, true);
+    for (name, predicted) in [("hinted", true), ("plain", false)] {
+        let insns = x64_insns(&function_bytes(&obj, name));
+        let ret = insns.iter().position(|i| i.op == 0xC3);
+        let push = insns.iter().position(|i| i.op == 0x55 && i.rex == 0);
+        assert!(insns.first().is_some_and(|i| !i.is_jcc()), "{name}");
+        assert!(
+            insns.get(1).is_some_and(X64Insn::is_jcc),
+            "{name}: a test, then its branch"
+        );
+        assert_eq!(ret < push, predicted, "{name}");
+    }
+    let obj = object_at(SRC, Target::LinuxAarch64, true);
+    for (name, predicted) in [("hinted", true), ("plain", false)] {
+        let words = function_words(&obj, name);
+        let ret = words.iter().position(|&w| w == 0xD65F_03C0);
+        let stp = words.iter().position(|&w| a64_is_frame_record(w));
+        assert!(stp.is_some(), "{name}: {words:08x?}");
+        assert_eq!(ret < stp, predicted, "{name}: {words:08x?}");
     }
 }

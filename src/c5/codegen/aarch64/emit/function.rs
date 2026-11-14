@@ -455,13 +455,24 @@ impl FunctionEmitter<'_, '_> {
         }
     }
 
-    /// The early return after the body, the test pointed at it; `false`
-    /// where the test's conditional branch does not reach it.
+    /// The early return after the body, the test pointed at it, unless it
+    /// follows the test; `false` where the test's conditional branch does
+    /// not reach it.
     fn emit_early_return(&mut self) -> bool {
         let Some(exit) = &self.early_exit else {
             return true;
         };
         let exit_at = self.cx.code.len();
+        let begin = self.snapshot.code;
+        let (site, frame) = self.early_site;
+        if exit.predicted {
+            self.cx.early_returns.push(super::EarlyReturn {
+                begin: begin as u32,
+                frame: (frame - begin) as u32,
+                exit: (exit_at - begin) as u32,
+            });
+            return true;
+        }
         super::ssa::emit_common::record_block_src(
             self.fcx.func,
             exit.exit_block,
@@ -470,11 +481,9 @@ impl FunctionEmitter<'_, '_> {
         );
         let emitted = emit_early_return(self.cx.code, exit, self.fcx.frame.fixed_regs);
         debug_assert!(emitted, "the return fit its temporaries at planning");
-        let (site, frame) = self.early_site;
         if !patch_early_branch(self.cx.code, site, exit_at, self.early_far) {
             return false;
         }
-        let begin = self.snapshot.code;
         self.cx.early_returns.push(super::EarlyReturn {
             begin: begin as u32,
             frame: (frame - begin) as u32,
@@ -702,7 +711,21 @@ impl FunctionEmitter<'_, '_> {
                 self.fcx.frame.fixed_regs,
             );
             debug_assert!(site.is_some(), "the test fit its temporaries at planning");
-            self.early_site = (site.unwrap_or(0), self.cx.code.len());
+            let site = site.unwrap_or(0);
+            if exit.predicted {
+                super::ssa::emit_common::record_block_src(
+                    self.fcx.func,
+                    exit.exit_block,
+                    self.cx.code.len(),
+                    self.cx.ssa_line_rows,
+                );
+                let emitted = emit_early_return(self.cx.code, exit, self.fcx.frame.fixed_regs);
+                debug_assert!(emitted, "the return fit its temporaries at planning");
+                let frame_at = self.cx.code.len();
+                let reached = patch_early_branch(self.cx.code, site, frame_at, false);
+                debug_assert!(reached, "the frame path follows the return");
+            }
+            self.early_site = (site, self.cx.code.len());
             // The record covers the frame path, which starts here.
             self.unwind.clear();
             from = self.cx.code.len();

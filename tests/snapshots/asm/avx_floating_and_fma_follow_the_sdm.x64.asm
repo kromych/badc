@@ -1083,10 +1083,8 @@ Disassembly of section .text:
                	cmpl	$0x20, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	vmovups	-0x14e0(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm0
-               	vmovups	-0x1500(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm1
+               	vmovdqu	-0x14e0(%rbp), %xmm0
+               	vmovdqu	-0x1500(%rbp), %xmm1
                	xorl	%edi, %edi
                	vpermilps	$0x0, %xmm0, %xmm2 # xmm2 = xmm0[0,0,0,0]
                	cvtss2sd	%xmm2, %xmm2
@@ -1224,10 +1222,8 @@ Disassembly of section .text:
                	cmpl	$0x20, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	vmovups	-0x14e0(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm0
-               	vmovups	-0x1500(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm1
+               	vmovdqu	-0x14e0(%rbp), %xmm0
+               	vmovdqu	-0x1500(%rbp), %xmm1
                	movl	$0x1, %edi
                	vpermilps	$0x0, %xmm0, %xmm2 # xmm2 = xmm0[0,0,0,0]
                	cvtss2sd	%xmm2, %xmm2
@@ -1365,10 +1361,8 @@ Disassembly of section .text:
                	cmpl	$0x20, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	vmovups	-0x14e0(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm0
-               	vmovups	-0x1500(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm1
+               	vmovdqu	-0x14e0(%rbp), %xmm0
+               	vmovdqu	-0x1500(%rbp), %xmm1
                	movl	$0x2, %edi
                	vpermilps	$0x0, %xmm0, %xmm2 # xmm2 = xmm0[0,0,0,0]
                	cvtss2sd	%xmm2, %xmm2
@@ -1506,10 +1500,8 @@ Disassembly of section .text:
                	cmpl	$0x20, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	vmovups	-0x14e0(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm0
-               	vmovups	-0x1500(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm1
+               	vmovdqu	-0x14e0(%rbp), %xmm0
+               	vmovdqu	-0x1500(%rbp), %xmm1
                	movl	$0x3, %edi
                	vpermilps	$0x0, %xmm0, %xmm2 # xmm2 = xmm0[0,0,0,0]
                	cvtss2sd	%xmm2, %xmm2
@@ -1647,10 +1639,8 @@ Disassembly of section .text:
                	cmpl	$0x20, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	vmovups	-0x14e0(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm0
-               	vmovups	-0x1500(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm1
+               	vmovdqu	-0x14e0(%rbp), %xmm0
+               	vmovdqu	-0x1500(%rbp), %xmm1
                	movl	$0x4, %edi
                	vpermilps	$0x0, %xmm0, %xmm2 # xmm2 = xmm0[0,0,0,0]
                	cvtss2sd	%xmm2, %xmm2
@@ -1788,10 +1778,8 @@ Disassembly of section .text:
                	cmpl	$0x20, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	vmovups	-0x14e0(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm0
-               	vmovups	-0x1500(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm1
+               	vmovdqu	-0x14e0(%rbp), %xmm0
+               	vmovdqu	-0x1500(%rbp), %xmm1
                	movl	$0x5, %edi
                	vpermilps	$0x0, %xmm0, %xmm2 # xmm2 = xmm0[0,0,0,0]
                	cvtss2sd	%xmm2, %xmm2
@@ -1921,10 +1909,8 @@ Disassembly of section .text:
                	vzeroupper
                	callq	<addr>
                	movq	%rax, <rip> # <addr>
-               	vmovups	-0x14e0(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm0
-               	vmovups	-0x1500(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm1
+               	vmovdqu	-0x14e0(%rbp), %xmm0
+               	vmovdqu	-0x1500(%rbp), %xmm1
                	movl	$0x6, %edi
                	vpermilps	$0x0, %xmm0, %xmm2 # xmm2 = xmm0[0,0,0,0]
                	cvtss2sd	%xmm2, %xmm2
@@ -2042,10 +2028,8 @@ Disassembly of section .text:
                	vzeroupper
                	callq	<addr>
                	movq	%rax, <rip> # <addr>
-               	vmovups	-0x14e0(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm0
-               	vmovups	-0x1500(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm1
+               	vmovdqu	-0x14e0(%rbp), %xmm0
+               	vmovdqu	-0x1500(%rbp), %xmm1
                	movl	$0x7, %edi
                	vpermilps	$0x0, %xmm0, %xmm2 # xmm2 = xmm0[0,0,0,0]
                	cvtss2sd	%xmm2, %xmm2
@@ -2163,10 +2147,8 @@ Disassembly of section .text:
                	vzeroupper
                	callq	<addr>
                	movq	%rax, <rip> # <addr>
-               	vmovups	-0x14e0(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm0
-               	vmovups	-0x1500(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm1
+               	vmovdqu	-0x14e0(%rbp), %xmm0
+               	vmovdqu	-0x1500(%rbp), %xmm1
                	movl	$0x8, %edi
                	vpermilps	$0x0, %xmm0, %xmm2 # xmm2 = xmm0[0,0,0,0]
                	cvtss2sd	%xmm2, %xmm2
@@ -2284,10 +2266,8 @@ Disassembly of section .text:
                	vzeroupper
                	callq	<addr>
                	movq	%rax, <rip> # <addr>
-               	vmovups	-0x14e0(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm0
-               	vmovups	-0x1500(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm1
+               	vmovdqu	-0x14e0(%rbp), %xmm0
+               	vmovdqu	-0x1500(%rbp), %xmm1
                	movl	$0x9, %edi
                	vpermilps	$0x0, %xmm0, %xmm2 # xmm2 = xmm0[0,0,0,0]
                	cvtss2sd	%xmm2, %xmm2
@@ -2405,10 +2385,8 @@ Disassembly of section .text:
                	vzeroupper
                	callq	<addr>
                	movq	%rax, <rip> # <addr>
-               	vmovups	-0x14e0(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm0
-               	vmovups	-0x1500(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm1
+               	vmovdqu	-0x14e0(%rbp), %xmm0
+               	vmovdqu	-0x1500(%rbp), %xmm1
                	movl	$0xa, %edi
                	vpermilps	$0x0, %xmm0, %xmm2 # xmm2 = xmm0[0,0,0,0]
                	cvtss2sd	%xmm2, %xmm2
@@ -2526,10 +2504,8 @@ Disassembly of section .text:
                	vzeroupper
                	callq	<addr>
                	movq	%rax, <rip> # <addr>
-               	vmovups	-0x14e0(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm0
-               	vmovups	-0x1500(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm1
+               	vmovdqu	-0x14e0(%rbp), %xmm0
+               	vmovdqu	-0x1500(%rbp), %xmm1
                	movl	$0xb, %edi
                	vpermilps	$0x0, %xmm0, %xmm2 # xmm2 = xmm0[0,0,0,0]
                	cvtss2sd	%xmm2, %xmm2
@@ -2647,10 +2623,8 @@ Disassembly of section .text:
                	vzeroupper
                	callq	<addr>
                	movq	%rax, <rip> # <addr>
-               	vmovups	-0x14e0(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm0
-               	vmovups	-0x1500(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm1
+               	vmovdqu	-0x14e0(%rbp), %xmm0
+               	vmovdqu	-0x1500(%rbp), %xmm1
                	movl	$0xc, %edi
                	vpermilps	$0x0, %xmm0, %xmm2 # xmm2 = xmm0[0,0,0,0]
                	cvtss2sd	%xmm2, %xmm2
@@ -2768,10 +2742,8 @@ Disassembly of section .text:
                	vzeroupper
                	callq	<addr>
                	movq	%rax, <rip> # <addr>
-               	vmovups	-0x14e0(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm0
-               	vmovups	-0x1500(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm1
+               	vmovdqu	-0x14e0(%rbp), %xmm0
+               	vmovdqu	-0x1500(%rbp), %xmm1
                	movl	$0xd, %edi
                	vpermilps	$0x0, %xmm0, %xmm2 # xmm2 = xmm0[0,0,0,0]
                	cvtss2sd	%xmm2, %xmm2
@@ -2889,10 +2861,8 @@ Disassembly of section .text:
                	vzeroupper
                	callq	<addr>
                	movq	%rax, <rip> # <addr>
-               	vmovups	-0x14e0(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm0
-               	vmovups	-0x1500(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm1
+               	vmovdqu	-0x14e0(%rbp), %xmm0
+               	vmovdqu	-0x1500(%rbp), %xmm1
                	movl	$0xe, %edi
                	vpermilps	$0x0, %xmm0, %xmm2 # xmm2 = xmm0[0,0,0,0]
                	cvtss2sd	%xmm2, %xmm2
@@ -3010,10 +2980,8 @@ Disassembly of section .text:
                	vzeroupper
                	callq	<addr>
                	movq	%rax, <rip> # <addr>
-               	vmovups	-0x14e0(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm0
-               	vmovups	-0x1500(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm1
+               	vmovdqu	-0x14e0(%rbp), %xmm0
+               	vmovdqu	-0x1500(%rbp), %xmm1
                	movl	$0xf, %edi
                	vpermilps	$0x0, %xmm0, %xmm2 # xmm2 = xmm0[0,0,0,0]
                	cvtss2sd	%xmm2, %xmm2
@@ -3131,10 +3099,8 @@ Disassembly of section .text:
                	vzeroupper
                	callq	<addr>
                	movq	%rax, <rip> # <addr>
-               	vmovups	-0x14e0(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm0
-               	vmovups	-0x1500(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm1
+               	vmovdqu	-0x14e0(%rbp), %xmm0
+               	vmovdqu	-0x1500(%rbp), %xmm1
                	movl	$0x10, %edi
                	vpermilps	$0x0, %xmm0, %xmm2 # xmm2 = xmm0[0,0,0,0]
                	cvtss2sd	%xmm2, %xmm2
@@ -3252,10 +3218,8 @@ Disassembly of section .text:
                	vzeroupper
                	callq	<addr>
                	movq	%rax, <rip> # <addr>
-               	vmovups	-0x14e0(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm0
-               	vmovups	-0x1500(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm1
+               	vmovdqu	-0x14e0(%rbp), %xmm0
+               	vmovdqu	-0x1500(%rbp), %xmm1
                	movl	$0x11, %edi
                	vpermilps	$0x0, %xmm0, %xmm2 # xmm2 = xmm0[0,0,0,0]
                	cvtss2sd	%xmm2, %xmm2
@@ -3373,10 +3337,8 @@ Disassembly of section .text:
                	vzeroupper
                	callq	<addr>
                	movq	%rax, <rip> # <addr>
-               	vmovups	-0x14e0(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm0
-               	vmovups	-0x1500(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm1
+               	vmovdqu	-0x14e0(%rbp), %xmm0
+               	vmovdqu	-0x1500(%rbp), %xmm1
                	movl	$0x12, %edi
                	vpermilps	$0x0, %xmm0, %xmm2 # xmm2 = xmm0[0,0,0,0]
                	cvtss2sd	%xmm2, %xmm2
@@ -3494,10 +3456,8 @@ Disassembly of section .text:
                	vzeroupper
                	callq	<addr>
                	movq	%rax, <rip> # <addr>
-               	vmovups	-0x14e0(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm0
-               	vmovups	-0x1500(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm1
+               	vmovdqu	-0x14e0(%rbp), %xmm0
+               	vmovdqu	-0x1500(%rbp), %xmm1
                	movl	$0x13, %edi
                	vpermilps	$0x0, %xmm0, %xmm2 # xmm2 = xmm0[0,0,0,0]
                	cvtss2sd	%xmm2, %xmm2
@@ -3615,10 +3575,8 @@ Disassembly of section .text:
                	vzeroupper
                	callq	<addr>
                	movq	%rax, <rip> # <addr>
-               	vmovups	-0x14e0(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm0
-               	vmovups	-0x1500(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm1
+               	vmovdqu	-0x14e0(%rbp), %xmm0
+               	vmovdqu	-0x1500(%rbp), %xmm1
                	movl	$0x14, %edi
                	vpermilps	$0x0, %xmm0, %xmm2 # xmm2 = xmm0[0,0,0,0]
                	cvtss2sd	%xmm2, %xmm2
@@ -3736,10 +3694,8 @@ Disassembly of section .text:
                	vzeroupper
                	callq	<addr>
                	movq	%rax, <rip> # <addr>
-               	vmovups	-0x14e0(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm0
-               	vmovups	-0x1500(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm1
+               	vmovdqu	-0x14e0(%rbp), %xmm0
+               	vmovdqu	-0x1500(%rbp), %xmm1
                	movl	$0x15, %edi
                	vpermilps	$0x0, %xmm0, %xmm2 # xmm2 = xmm0[0,0,0,0]
                	cvtss2sd	%xmm2, %xmm2
@@ -3857,10 +3813,8 @@ Disassembly of section .text:
                	vzeroupper
                	callq	<addr>
                	movq	%rax, <rip> # <addr>
-               	vmovups	-0x14e0(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm0
-               	vmovups	-0x1500(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm1
+               	vmovdqu	-0x14e0(%rbp), %xmm0
+               	vmovdqu	-0x1500(%rbp), %xmm1
                	movl	$0x16, %edi
                	vpermilps	$0x0, %xmm0, %xmm2 # xmm2 = xmm0[0,0,0,0]
                	cvtss2sd	%xmm2, %xmm2
@@ -3978,10 +3932,8 @@ Disassembly of section .text:
                	vzeroupper
                	callq	<addr>
                	movq	%rax, <rip> # <addr>
-               	vmovups	-0x14e0(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm0
-               	vmovups	-0x1500(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm1
+               	vmovdqu	-0x14e0(%rbp), %xmm0
+               	vmovdqu	-0x1500(%rbp), %xmm1
                	movl	$0x17, %edi
                	vpermilps	$0x0, %xmm0, %xmm2 # xmm2 = xmm0[0,0,0,0]
                	cvtss2sd	%xmm2, %xmm2
@@ -4099,10 +4051,8 @@ Disassembly of section .text:
                	vzeroupper
                	callq	<addr>
                	movq	%rax, <rip> # <addr>
-               	vmovups	-0x14e0(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm0
-               	vmovups	-0x1500(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm1
+               	vmovdqu	-0x14e0(%rbp), %xmm0
+               	vmovdqu	-0x1500(%rbp), %xmm1
                	movl	$0x18, %edi
                	vpermilps	$0x0, %xmm0, %xmm2 # xmm2 = xmm0[0,0,0,0]
                	cvtss2sd	%xmm2, %xmm2
@@ -4220,10 +4170,8 @@ Disassembly of section .text:
                	vzeroupper
                	callq	<addr>
                	movq	%rax, <rip> # <addr>
-               	vmovups	-0x14e0(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm0
-               	vmovups	-0x1500(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm1
+               	vmovdqu	-0x14e0(%rbp), %xmm0
+               	vmovdqu	-0x1500(%rbp), %xmm1
                	movl	$0x19, %edi
                	vpermilps	$0x0, %xmm0, %xmm2 # xmm2 = xmm0[0,0,0,0]
                	cvtss2sd	%xmm2, %xmm2
@@ -4341,10 +4289,8 @@ Disassembly of section .text:
                	vzeroupper
                	callq	<addr>
                	movq	%rax, <rip> # <addr>
-               	vmovups	-0x14e0(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm0
-               	vmovups	-0x1500(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm1
+               	vmovdqu	-0x14e0(%rbp), %xmm0
+               	vmovdqu	-0x1500(%rbp), %xmm1
                	movl	$0x1a, %edi
                	vpermilps	$0x0, %xmm0, %xmm2 # xmm2 = xmm0[0,0,0,0]
                	cvtss2sd	%xmm2, %xmm2
@@ -4462,10 +4408,8 @@ Disassembly of section .text:
                	vzeroupper
                	callq	<addr>
                	movq	%rax, <rip> # <addr>
-               	vmovups	-0x14e0(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm0
-               	vmovups	-0x1500(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm1
+               	vmovdqu	-0x14e0(%rbp), %xmm0
+               	vmovdqu	-0x1500(%rbp), %xmm1
                	movl	$0x1b, %edi
                	vpermilps	$0x0, %xmm0, %xmm2 # xmm2 = xmm0[0,0,0,0]
                	cvtss2sd	%xmm2, %xmm2
@@ -4583,10 +4527,8 @@ Disassembly of section .text:
                	vzeroupper
                	callq	<addr>
                	movq	%rax, <rip> # <addr>
-               	vmovups	-0x14e0(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm0
-               	vmovups	-0x1500(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm1
+               	vmovdqu	-0x14e0(%rbp), %xmm0
+               	vmovdqu	-0x1500(%rbp), %xmm1
                	movl	$0x1c, %edi
                	vpermilps	$0x0, %xmm0, %xmm2 # xmm2 = xmm0[0,0,0,0]
                	cvtss2sd	%xmm2, %xmm2
@@ -4704,10 +4646,8 @@ Disassembly of section .text:
                	vzeroupper
                	callq	<addr>
                	movq	%rax, <rip> # <addr>
-               	vmovups	-0x14e0(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm0
-               	vmovups	-0x1500(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm1
+               	vmovdqu	-0x14e0(%rbp), %xmm0
+               	vmovdqu	-0x1500(%rbp), %xmm1
                	movl	$0x1d, %edi
                	vpermilps	$0x0, %xmm0, %xmm2 # xmm2 = xmm0[0,0,0,0]
                	cvtss2sd	%xmm2, %xmm2
@@ -4825,10 +4765,8 @@ Disassembly of section .text:
                	vzeroupper
                	callq	<addr>
                	movq	%rax, <rip> # <addr>
-               	vmovups	-0x14e0(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm0
-               	vmovups	-0x1500(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm1
+               	vmovdqu	-0x14e0(%rbp), %xmm0
+               	vmovdqu	-0x1500(%rbp), %xmm1
                	movl	$0x1e, %edi
                	vpermilps	$0x0, %xmm0, %xmm2 # xmm2 = xmm0[0,0,0,0]
                	cvtss2sd	%xmm2, %xmm2
@@ -4946,10 +4884,8 @@ Disassembly of section .text:
                	vzeroupper
                	callq	<addr>
                	movq	%rax, <rip> # <addr>
-               	vmovups	-0x14e0(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm0
-               	vmovups	-0x1500(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm1
+               	vmovdqu	-0x14e0(%rbp), %xmm0
+               	vmovdqu	-0x1500(%rbp), %xmm1
                	movl	$0x1f, %edi
                	vpermilps	$0x0, %xmm0, %xmm2 # xmm2 = xmm0[0,0,0,0]
                	cvtss2sd	%xmm2, %xmm2
@@ -5116,8 +5052,7 @@ Disassembly of section .text:
                	vzeroupper
                	callq	<addr>
                	movq	%rax, <rip> # <addr>
-               	vmovups	-0x14e0(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm0
+               	vmovdqu	-0x14e0(%rbp), %xmm0
                	cvtps2pd	%xmm0, %xmm1
                	vpextrd	$0x2, %xmm0, %eax
                	movslq	%eax, %rax
@@ -5375,12 +5310,10 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, <rip> # <addr>
                	movl	$0x9c, %edi
-               	vmovups	-0x14e0(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm0
+               	vmovdqu	-0x14e0(%rbp), %xmm0
                	leaq	0xd00(%rsp), %r9
                	movups	%xmm0, 0xd00(%rsp)
-               	vmovups	-0x1500(%rbp), %ymm14
-               	vmovdqa	%xmm14, %xmm0
+               	vmovdqu	-0x1500(%rbp), %xmm0
                	leaq	0x40(%rsp), %rax
                	movups	%xmm0, 0x40(%rsp)
                	movq	%r9, %r10
@@ -5391,12 +5324,10 @@ Disassembly of section .text:
                	callq	<addr>
                	movups	%xmm0, -0x1510(%rbp)
                	leaq	0xd00(%rsp), %r9
-               	vmovups	-0x14e0(%rbp), %ymm14
-               	vextracti128	$0x1, %ymm14, %xmm0
+               	vmovdqu	-0x14d0(%rbp), %xmm0
                	movups	%xmm0, 0xd00(%rsp)
                	leaq	0x40(%rsp), %rax
-               	vmovups	-0x1500(%rbp), %ymm14
-               	vextracti128	$0x1, %ymm14, %xmm0
+               	vmovdqu	-0x14f0(%rbp), %xmm0
                	movups	%xmm0, 0x40(%rsp)
                	movl	$0x9c, %edi
                	movq	%r9, %r10
@@ -5727,8 +5658,7 @@ Disassembly of section .text:
                	vzeroupper
                	callq	<addr>
                	movq	%rax, <rip> # <addr>
-               	vmovups	-0x14e0(%rbp), %ymm14
-               	vextracti128	$0x1, %ymm14, %xmm0
+               	vmovdqu	-0x14d0(%rbp), %xmm0
                	leaq	0x40(%rsp), %rsi
                	movups	%xmm0, 0x40(%rsp)
                	movq	<rip>, %rdi # <addr>

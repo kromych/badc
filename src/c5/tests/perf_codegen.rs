@@ -3164,6 +3164,32 @@ void add64(v16si *r, const v16si *a, const v16si *b) { *r = *a + *b; }\n";
     m.finish();
 }
 
+/// A 128-bit part of a wide vector spilled across a call loads from the
+/// spill slot at the part's offset, from an extract
+/// (`_mm256_extracti128_si256`) or a vector of the upper lanes. Each
+/// loaded the whole vector into a scratch register and took the part from
+/// it.
+#[test]
+fn a_part_of_a_spilled_vector_loads_from_its_slot() {
+    const SRC: &str = "#include <immintrin.h>\n\
+typedef long long v4l __attribute__((vector_size(32)));\n\
+typedef long long v2l __attribute__((vector_size(16)));\n\
+void g(void);\n\
+__m128i hi(__m256i v) { g(); return _mm256_extracti128_si256(v, 1); }\n\
+v2l part(v4l a) { g(); return (v2l){a[2], a[3]}; }\n";
+    let mut m = Misses::default();
+    for name in ["hi", "part"] {
+        let insns = x64(SRC, name);
+        // `vmovdqu 0x10(...), %xmm0` (VEX 0F 6F) and no `vextracti128`.
+        let part = insns
+            .iter()
+            .any(|i| i.vex && i.op == 0x0F6F && i.disp == 16);
+        let extract = insns.iter().any(|i| i.vex && i.op == 0x3A39);
+        m.expect(part && !extract, || format!("x86-64 {name}: {insns:x?}"));
+    }
+    m.finish();
+}
+
 /// A blend intrinsic is its one instruction: `vpblendvb` and `vblendvps`
 /// with the mask in the trailing register, `vblendpd` with its immediate,
 /// and `ret`. Each took a select per lane.

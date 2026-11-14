@@ -1048,7 +1048,7 @@ Disassembly of section .text:
                	vmovups	-0xb0(%rbp), %ymm0
                	vmovdqa	%xmm0, %xmm14
                	movups	%xmm14, -0xe0(%rbp)
-               	vmovups	-0xd0(%rbp), %ymm14
+               	vmovdqu	-0xd0(%rbp), %xmm14
                	movups	%xmm14, -0xf0(%rbp)
                	vmovups	-0x80(%rbp), %ymm14
                	vpsllvd	%ymm0, %ymm14, %ymm0

@@ -2553,8 +2553,22 @@ fn emit_x86_simd_val_wide(
             encode_masked(code, row.mnem, &[r(a), r(src), r(rd)], false)?;
         }
         Form::Narrow => {
-            let a = vector(code, 0, sa)?;
-            narrow(code, row, imm, a, rd)?;
+            // A part of a spilled vector loads from its slot.
+            if let Some(Place::Spill(slot)) = place(0) {
+                let k = imm.unwrap_or(0) % (row.bytes / row.int_width);
+                let (base, disp) = wide_spill_addr(frame, w, slot);
+                let at = super::asm::Concrete::Mem {
+                    base: base.0,
+                    index: None,
+                    scale: 1,
+                    disp: disp + i32::from(k) * i32::from(row.int_width),
+                    size: crate::c5::ir::AsmRegSize::Quad,
+                };
+                encode_wide(code, "vmovdqu", &[at, wide_reg(row.int_width, rd)])?;
+            } else {
+                let a = vector(code, 0, sa)?;
+                narrow(code, row, imm, a, rd)?;
+            }
             mirror_v128_dst(code, dst, Reg(rd), frame);
             return Ok(());
         }
@@ -2636,6 +2650,23 @@ pub(super) fn emit_vec_extract(
     use crate::c5::ir::AsmRegSize;
     let (sa, sb) = (frame.fp_scratch[0], frame.fp_scratch[1]);
     let w = VecWidth::of_bytes(bytes);
+    // A 128-bit part of a spilled wide vector loads from its slot.
+    if let (LoadKind::V128, Place::Spill(slot), true) = (kind, place_of(alloc, vec), bytes > 16) {
+        let Some(dd) = fp_or_spill_dst(dst, frame) else {
+            return fail("VecExtract: dst not fp reg / spill");
+        };
+        let (base, disp) = wide_spill_addr(frame, w, slot);
+        let at = Concrete::Mem {
+            base: base.0,
+            index: None,
+            scale: 1,
+            disp: disp + i32::from(off & !15),
+            size: AsmRegSize::Quad,
+        };
+        encode_wide(code, "vmovdqu", &[at, wide_reg(16, dd.0)])?;
+        mirror_v128_dst(code, dst, dd, frame);
+        return Ok(());
+    }
     // An 8-byte vector is the low quad of its xmm register.
     let src = match (w, bytes) {
         (_, 8) => materialize_fp(code, place_of(alloc, vec), Reg(sa), frame),

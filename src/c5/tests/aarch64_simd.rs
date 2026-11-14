@@ -1207,6 +1207,31 @@ fn the_structure_loads_and_stores_move_the_instructions_bytes() {
     );
 }
 
+/// The table lookups in two to four registers and in 64-bit tables give
+/// the hardware's bytes for indices in and past the tables: over seeded
+/// lanes the interpreter's results hash to the hardware's. A lookup in two
+/// 16-byte tables is `tbl` in the first and `tbx` in the second at the
+/// index less 16.
+#[cfg(feature = "full")]
+#[test]
+fn the_multi_register_table_lookups_are_one_register_lookups_in_turn() {
+    let src = super::load_fixture("arm_neon_multi_register_table_lookups_on_seeded_lanes.c");
+    let program = super::compile_str_bare_for(&src, crate::Target::LinuxAarch64);
+    assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 0);
+    let words = super::perf_codegen::a64_at(
+        "#include <arm_neon.h>\n\
+         uint8x16_t a(uint8x16x2_t t, uint8x16_t i) { return vqtbl2q_u8(t, i); }\n",
+        "a",
+        true,
+    );
+    let tbl = |w: &u32| w & 0xFFE0_FC00 == 0x4E00_0000;
+    let tbx = |w: &u32| w & 0xFFE0_FC00 == 0x4E00_1000;
+    assert!(
+        words.iter().any(tbl) && words.iter().any(tbx),
+        "{words:08x?}"
+    );
+}
+
 /// `vld1`, `vst1`, `vdup_n` and `vld1_dup` are the load, store and
 /// broadcast of their vector under `-O`, as with gcc 16, with no inline asm
 /// between them and the operations that use them: `ldr q`, `str q`,

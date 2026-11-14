@@ -43,9 +43,11 @@
  * the structure loads and stores vld1_x vst1_x vld2 vld3 vld4 vst2 vst3
  * vst4 with their _dup and _lane forms.
  *
- * Not provided: float16, bfloat16, most scalar lane-indexed forms, the
- * table lookups of more than one register, vrecpx, vcvtx, and the
- * complex-arithmetic forms.
+ * The byte table lookups vqtbl2 to vqtbl4, vqtbx2 to vqtbx4, vtbl1 to
+ * vtbl4 and vtbx1 to vtbx4, as one-register lookups in turn.
+ *
+ * Not provided: float16, bfloat16, most scalar lane-indexed forms, vrecpx,
+ * vcvtx, and the complex-arithmetic forms.
  *
  * The element typedefs match <stdint.h>, repeated so the header serves
  * freestanding units; poly128_t is carried as a 16-byte vector.
@@ -2578,6 +2580,199 @@ __BADC_INTRIN int64x2_t vqdmlal_high_n_s32(int64x2_t __r, int32x4_t __a, int32_t
 __BADC_INTRIN int64x2_t vqdmlsl_n_s32(int64x2_t __r, int32x2_t __a, int32_t __b) { return vqdmlsl_lane_s32(__r, __a, ((int32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
 __BADC_INTRIN int64x2_t vqdmlsl_high_n_s32(int64x2_t __r, int32x4_t __a, int32_t __b) { return vqdmlsl_high_lane_s32(__r, __a, ((int32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
 
+
+/* Byte table lookups in two to four 16-byte tables: a lookup in each
+ * table in turn, the next one taking the index less 16 and keeping the
+ * bytes an earlier one found, as tbx keeps an out-of-range index's byte.
+ * The 64-bit tables of vtbl and vtbx are the 16-byte lookups of their
+ * concatenation, an index past them giving 0 (vtbl) or keeping the
+ * destination byte (vtbx). */
+__BADC_INTRIN uint8x8_t vqtbl2_u8(uint8x16x2_t __t, uint8x8_t __i) {
+    return vqtbx1_u8(vqtbl1_u8(__t.val[0], __i), __t.val[1], vsub_u8(__i, vdup_n_u8(16)));
+}
+__BADC_INTRIN uint8x8_t vqtbx2_u8(uint8x8_t __d, uint8x16x2_t __t, uint8x8_t __i) {
+    return vqtbx1_u8(vqtbx1_u8(__d, __t.val[0], __i), __t.val[1], vsub_u8(__i, vdup_n_u8(16)));
+}
+__BADC_INTRIN uint8x8_t vqtbl3_u8(uint8x16x3_t __t, uint8x8_t __i) {
+    uint8x8_t __r = vqtbl2_u8((uint8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx1_u8(__r, __t.val[2], vsub_u8(__i, vdup_n_u8(32)));
+}
+__BADC_INTRIN uint8x8_t vqtbl4_u8(uint8x16x4_t __t, uint8x8_t __i) {
+    uint8x8_t __r = vqtbl2_u8((uint8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx2_u8(__r, (uint8x16x2_t){{__t.val[2], __t.val[3]}}, vsub_u8(__i, vdup_n_u8(32)));
+}
+__BADC_INTRIN uint8x8_t vqtbx3_u8(uint8x8_t __d, uint8x16x3_t __t, uint8x8_t __i) {
+    uint8x8_t __r = vqtbx2_u8(__d, (uint8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx1_u8(__r, __t.val[2], vsub_u8(__i, vdup_n_u8(32)));
+}
+__BADC_INTRIN uint8x8_t vqtbx4_u8(uint8x8_t __d, uint8x16x4_t __t, uint8x8_t __i) {
+    uint8x8_t __r = vqtbx2_u8(__d, (uint8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx2_u8(__r, (uint8x16x2_t){{__t.val[2], __t.val[3]}}, vsub_u8(__i, vdup_n_u8(32)));
+}
+__BADC_INTRIN uint8x16_t vqtbl2q_u8(uint8x16x2_t __t, uint8x16_t __i) {
+    return vqtbx1q_u8(vqtbl1q_u8(__t.val[0], __i), __t.val[1], vsubq_u8(__i, vdupq_n_u8(16)));
+}
+__BADC_INTRIN uint8x16_t vqtbx2q_u8(uint8x16_t __d, uint8x16x2_t __t, uint8x16_t __i) {
+    return vqtbx1q_u8(vqtbx1q_u8(__d, __t.val[0], __i), __t.val[1], vsubq_u8(__i, vdupq_n_u8(16)));
+}
+__BADC_INTRIN uint8x16_t vqtbl3q_u8(uint8x16x3_t __t, uint8x16_t __i) {
+    uint8x16_t __r = vqtbl2q_u8((uint8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx1q_u8(__r, __t.val[2], vsubq_u8(__i, vdupq_n_u8(32)));
+}
+__BADC_INTRIN uint8x16_t vqtbl4q_u8(uint8x16x4_t __t, uint8x16_t __i) {
+    uint8x16_t __r = vqtbl2q_u8((uint8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx2q_u8(__r, (uint8x16x2_t){{__t.val[2], __t.val[3]}}, vsubq_u8(__i, vdupq_n_u8(32)));
+}
+__BADC_INTRIN uint8x16_t vqtbx3q_u8(uint8x16_t __d, uint8x16x3_t __t, uint8x16_t __i) {
+    uint8x16_t __r = vqtbx2q_u8(__d, (uint8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx1q_u8(__r, __t.val[2], vsubq_u8(__i, vdupq_n_u8(32)));
+}
+__BADC_INTRIN uint8x16_t vqtbx4q_u8(uint8x16_t __d, uint8x16x4_t __t, uint8x16_t __i) {
+    uint8x16_t __r = vqtbx2q_u8(__d, (uint8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx2q_u8(__r, (uint8x16x2_t){{__t.val[2], __t.val[3]}}, vsubq_u8(__i, vdupq_n_u8(32)));
+}
+__BADC_INTRIN uint8x8_t vtbl1_u8(uint8x8_t __a, uint8x8_t __i) { return vqtbl1_u8(vcombine_u8(__a, vdup_n_u8(0)), __i); }
+__BADC_INTRIN uint8x8_t vtbl2_u8(uint8x8x2_t __t, uint8x8_t __i) { return vqtbl1_u8(vcombine_u8(__t.val[0], __t.val[1]), __i); }
+__BADC_INTRIN uint8x8_t vtbl3_u8(uint8x8x3_t __t, uint8x8_t __i) {
+    return vqtbl2_u8((uint8x16x2_t){{vcombine_u8(__t.val[0], __t.val[1]), vcombine_u8(__t.val[2], vdup_n_u8(0))}}, __i);
+}
+__BADC_INTRIN uint8x8_t vtbl4_u8(uint8x8x4_t __t, uint8x8_t __i) {
+    return vqtbl2_u8((uint8x16x2_t){{vcombine_u8(__t.val[0], __t.val[1]), vcombine_u8(__t.val[2], __t.val[3])}}, __i);
+}
+__BADC_INTRIN uint8x8_t vtbx1_u8(uint8x8_t __d, uint8x8_t __a, uint8x8_t __i) {
+    return vbsl_u8(vclt_u8(__i, vdup_n_u8(8)), vtbl1_u8(__a, __i), __d);
+}
+__BADC_INTRIN uint8x8_t vtbx2_u8(uint8x8_t __d, uint8x8x2_t __t, uint8x8_t __i) { return vqtbx1_u8(__d, vcombine_u8(__t.val[0], __t.val[1]), __i); }
+__BADC_INTRIN uint8x8_t vtbx3_u8(uint8x8_t __d, uint8x8x3_t __t, uint8x8_t __i) {
+    return vbsl_u8(vclt_u8(__i, vdup_n_u8(24)), vtbl3_u8(__t, __i), __d);
+}
+__BADC_INTRIN uint8x8_t vtbx4_u8(uint8x8_t __d, uint8x8x4_t __t, uint8x8_t __i) {
+    return vqtbx2_u8(__d, (uint8x16x2_t){{vcombine_u8(__t.val[0], __t.val[1]), vcombine_u8(__t.val[2], __t.val[3])}}, __i);
+}
+__BADC_INTRIN int8x8_t vqtbl2_s8(int8x16x2_t __t, uint8x8_t __i) {
+    return vqtbx1_s8(vqtbl1_s8(__t.val[0], __i), __t.val[1], vsub_u8(__i, vdup_n_u8(16)));
+}
+__BADC_INTRIN int8x8_t vqtbx2_s8(int8x8_t __d, int8x16x2_t __t, uint8x8_t __i) {
+    return vqtbx1_s8(vqtbx1_s8(__d, __t.val[0], __i), __t.val[1], vsub_u8(__i, vdup_n_u8(16)));
+}
+__BADC_INTRIN int8x8_t vqtbl3_s8(int8x16x3_t __t, uint8x8_t __i) {
+    int8x8_t __r = vqtbl2_s8((int8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx1_s8(__r, __t.val[2], vsub_u8(__i, vdup_n_u8(32)));
+}
+__BADC_INTRIN int8x8_t vqtbl4_s8(int8x16x4_t __t, uint8x8_t __i) {
+    int8x8_t __r = vqtbl2_s8((int8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx2_s8(__r, (int8x16x2_t){{__t.val[2], __t.val[3]}}, vsub_u8(__i, vdup_n_u8(32)));
+}
+__BADC_INTRIN int8x8_t vqtbx3_s8(int8x8_t __d, int8x16x3_t __t, uint8x8_t __i) {
+    int8x8_t __r = vqtbx2_s8(__d, (int8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx1_s8(__r, __t.val[2], vsub_u8(__i, vdup_n_u8(32)));
+}
+__BADC_INTRIN int8x8_t vqtbx4_s8(int8x8_t __d, int8x16x4_t __t, uint8x8_t __i) {
+    int8x8_t __r = vqtbx2_s8(__d, (int8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx2_s8(__r, (int8x16x2_t){{__t.val[2], __t.val[3]}}, vsub_u8(__i, vdup_n_u8(32)));
+}
+__BADC_INTRIN int8x16_t vqtbl2q_s8(int8x16x2_t __t, uint8x16_t __i) {
+    return vqtbx1q_s8(vqtbl1q_s8(__t.val[0], __i), __t.val[1], vsubq_u8(__i, vdupq_n_u8(16)));
+}
+__BADC_INTRIN int8x16_t vqtbx2q_s8(int8x16_t __d, int8x16x2_t __t, uint8x16_t __i) {
+    return vqtbx1q_s8(vqtbx1q_s8(__d, __t.val[0], __i), __t.val[1], vsubq_u8(__i, vdupq_n_u8(16)));
+}
+__BADC_INTRIN int8x16_t vqtbl3q_s8(int8x16x3_t __t, uint8x16_t __i) {
+    int8x16_t __r = vqtbl2q_s8((int8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx1q_s8(__r, __t.val[2], vsubq_u8(__i, vdupq_n_u8(32)));
+}
+__BADC_INTRIN int8x16_t vqtbl4q_s8(int8x16x4_t __t, uint8x16_t __i) {
+    int8x16_t __r = vqtbl2q_s8((int8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx2q_s8(__r, (int8x16x2_t){{__t.val[2], __t.val[3]}}, vsubq_u8(__i, vdupq_n_u8(32)));
+}
+__BADC_INTRIN int8x16_t vqtbx3q_s8(int8x16_t __d, int8x16x3_t __t, uint8x16_t __i) {
+    int8x16_t __r = vqtbx2q_s8(__d, (int8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx1q_s8(__r, __t.val[2], vsubq_u8(__i, vdupq_n_u8(32)));
+}
+__BADC_INTRIN int8x16_t vqtbx4q_s8(int8x16_t __d, int8x16x4_t __t, uint8x16_t __i) {
+    int8x16_t __r = vqtbx2q_s8(__d, (int8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx2q_s8(__r, (int8x16x2_t){{__t.val[2], __t.val[3]}}, vsubq_u8(__i, vdupq_n_u8(32)));
+}
+__BADC_INTRIN int8x8_t vtbl1_s8(int8x8_t __a, int8x8_t __i) { return vqtbl1_s8(vcombine_s8(__a, vdup_n_s8(0)), vreinterpret_u8_s8(__i)); }
+__BADC_INTRIN int8x8_t vtbl2_s8(int8x8x2_t __t, int8x8_t __i) { return vqtbl1_s8(vcombine_s8(__t.val[0], __t.val[1]), vreinterpret_u8_s8(__i)); }
+__BADC_INTRIN int8x8_t vtbl3_s8(int8x8x3_t __t, int8x8_t __i) {
+    return vqtbl2_s8((int8x16x2_t){{vcombine_s8(__t.val[0], __t.val[1]), vcombine_s8(__t.val[2], vdup_n_s8(0))}}, vreinterpret_u8_s8(__i));
+}
+__BADC_INTRIN int8x8_t vtbl4_s8(int8x8x4_t __t, int8x8_t __i) {
+    return vqtbl2_s8((int8x16x2_t){{vcombine_s8(__t.val[0], __t.val[1]), vcombine_s8(__t.val[2], __t.val[3])}}, vreinterpret_u8_s8(__i));
+}
+__BADC_INTRIN int8x8_t vtbx1_s8(int8x8_t __d, int8x8_t __a, int8x8_t __i) {
+    return vbsl_s8(vclt_u8(vreinterpret_u8_s8(__i), vdup_n_u8(8)), vtbl1_s8(__a, __i), __d);
+}
+__BADC_INTRIN int8x8_t vtbx2_s8(int8x8_t __d, int8x8x2_t __t, int8x8_t __i) { return vqtbx1_s8(__d, vcombine_s8(__t.val[0], __t.val[1]), vreinterpret_u8_s8(__i)); }
+__BADC_INTRIN int8x8_t vtbx3_s8(int8x8_t __d, int8x8x3_t __t, int8x8_t __i) {
+    return vbsl_s8(vclt_u8(vreinterpret_u8_s8(__i), vdup_n_u8(24)), vtbl3_s8(__t, __i), __d);
+}
+__BADC_INTRIN int8x8_t vtbx4_s8(int8x8_t __d, int8x8x4_t __t, int8x8_t __i) {
+    return vqtbx2_s8(__d, (int8x16x2_t){{vcombine_s8(__t.val[0], __t.val[1]), vcombine_s8(__t.val[2], __t.val[3])}}, vreinterpret_u8_s8(__i));
+}
+__BADC_INTRIN poly8x8_t vqtbl2_p8(poly8x16x2_t __t, uint8x8_t __i) {
+    return vqtbx1_p8(vqtbl1_p8(__t.val[0], __i), __t.val[1], vsub_u8(__i, vdup_n_u8(16)));
+}
+__BADC_INTRIN poly8x8_t vqtbx2_p8(poly8x8_t __d, poly8x16x2_t __t, uint8x8_t __i) {
+    return vqtbx1_p8(vqtbx1_p8(__d, __t.val[0], __i), __t.val[1], vsub_u8(__i, vdup_n_u8(16)));
+}
+__BADC_INTRIN poly8x8_t vqtbl3_p8(poly8x16x3_t __t, uint8x8_t __i) {
+    poly8x8_t __r = vqtbl2_p8((poly8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx1_p8(__r, __t.val[2], vsub_u8(__i, vdup_n_u8(32)));
+}
+__BADC_INTRIN poly8x8_t vqtbl4_p8(poly8x16x4_t __t, uint8x8_t __i) {
+    poly8x8_t __r = vqtbl2_p8((poly8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx2_p8(__r, (poly8x16x2_t){{__t.val[2], __t.val[3]}}, vsub_u8(__i, vdup_n_u8(32)));
+}
+__BADC_INTRIN poly8x8_t vqtbx3_p8(poly8x8_t __d, poly8x16x3_t __t, uint8x8_t __i) {
+    poly8x8_t __r = vqtbx2_p8(__d, (poly8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx1_p8(__r, __t.val[2], vsub_u8(__i, vdup_n_u8(32)));
+}
+__BADC_INTRIN poly8x8_t vqtbx4_p8(poly8x8_t __d, poly8x16x4_t __t, uint8x8_t __i) {
+    poly8x8_t __r = vqtbx2_p8(__d, (poly8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx2_p8(__r, (poly8x16x2_t){{__t.val[2], __t.val[3]}}, vsub_u8(__i, vdup_n_u8(32)));
+}
+__BADC_INTRIN poly8x16_t vqtbl2q_p8(poly8x16x2_t __t, uint8x16_t __i) {
+    return vqtbx1q_p8(vqtbl1q_p8(__t.val[0], __i), __t.val[1], vsubq_u8(__i, vdupq_n_u8(16)));
+}
+__BADC_INTRIN poly8x16_t vqtbx2q_p8(poly8x16_t __d, poly8x16x2_t __t, uint8x16_t __i) {
+    return vqtbx1q_p8(vqtbx1q_p8(__d, __t.val[0], __i), __t.val[1], vsubq_u8(__i, vdupq_n_u8(16)));
+}
+__BADC_INTRIN poly8x16_t vqtbl3q_p8(poly8x16x3_t __t, uint8x16_t __i) {
+    poly8x16_t __r = vqtbl2q_p8((poly8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx1q_p8(__r, __t.val[2], vsubq_u8(__i, vdupq_n_u8(32)));
+}
+__BADC_INTRIN poly8x16_t vqtbl4q_p8(poly8x16x4_t __t, uint8x16_t __i) {
+    poly8x16_t __r = vqtbl2q_p8((poly8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx2q_p8(__r, (poly8x16x2_t){{__t.val[2], __t.val[3]}}, vsubq_u8(__i, vdupq_n_u8(32)));
+}
+__BADC_INTRIN poly8x16_t vqtbx3q_p8(poly8x16_t __d, poly8x16x3_t __t, uint8x16_t __i) {
+    poly8x16_t __r = vqtbx2q_p8(__d, (poly8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx1q_p8(__r, __t.val[2], vsubq_u8(__i, vdupq_n_u8(32)));
+}
+__BADC_INTRIN poly8x16_t vqtbx4q_p8(poly8x16_t __d, poly8x16x4_t __t, uint8x16_t __i) {
+    poly8x16_t __r = vqtbx2q_p8(__d, (poly8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx2q_p8(__r, (poly8x16x2_t){{__t.val[2], __t.val[3]}}, vsubq_u8(__i, vdupq_n_u8(32)));
+}
+__BADC_INTRIN poly8x8_t vtbl1_p8(poly8x8_t __a, uint8x8_t __i) { return vqtbl1_p8(vcombine_p8(__a, vdup_n_p8(0)), __i); }
+__BADC_INTRIN poly8x8_t vtbl2_p8(poly8x8x2_t __t, uint8x8_t __i) { return vqtbl1_p8(vcombine_p8(__t.val[0], __t.val[1]), __i); }
+__BADC_INTRIN poly8x8_t vtbl3_p8(poly8x8x3_t __t, uint8x8_t __i) {
+    return vqtbl2_p8((poly8x16x2_t){{vcombine_p8(__t.val[0], __t.val[1]), vcombine_p8(__t.val[2], vdup_n_p8(0))}}, __i);
+}
+__BADC_INTRIN poly8x8_t vtbl4_p8(poly8x8x4_t __t, uint8x8_t __i) {
+    return vqtbl2_p8((poly8x16x2_t){{vcombine_p8(__t.val[0], __t.val[1]), vcombine_p8(__t.val[2], __t.val[3])}}, __i);
+}
+__BADC_INTRIN poly8x8_t vtbx1_p8(poly8x8_t __d, poly8x8_t __a, uint8x8_t __i) {
+    return vbsl_p8(vclt_u8(__i, vdup_n_u8(8)), vtbl1_p8(__a, __i), __d);
+}
+__BADC_INTRIN poly8x8_t vtbx2_p8(poly8x8_t __d, poly8x8x2_t __t, uint8x8_t __i) { return vqtbx1_p8(__d, vcombine_p8(__t.val[0], __t.val[1]), __i); }
+__BADC_INTRIN poly8x8_t vtbx3_p8(poly8x8_t __d, poly8x8x3_t __t, uint8x8_t __i) {
+    return vbsl_p8(vclt_u8(__i, vdup_n_u8(24)), vtbl3_p8(__t, __i), __d);
+}
+__BADC_INTRIN poly8x8_t vtbx4_p8(poly8x8_t __d, poly8x8x4_t __t, uint8x8_t __i) {
+    return vqtbx2_p8(__d, (poly8x16x2_t){{vcombine_p8(__t.val[0], __t.val[1]), vcombine_p8(__t.val[2], __t.val[3])}}, __i);
+}
 
 /* The magnitude compares (vcage, vcagt; vcale and vcalt swap the
  * operands), the high halves of sums and differences (vaddhn, vraddhn,

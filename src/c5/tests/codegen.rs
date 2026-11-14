@@ -17820,6 +17820,41 @@ fn a64_opt_function_words(src: &str, name: &str) -> alloc::vec::Vec<u32> {
     a64_words(&obj)[(at / 4) as usize..((at + size) / 4) as usize].to_vec()
 }
 
+/// The SVE data-processing forms assemble in inline asm: vectors and
+/// predicates of each element size, merging and zeroing predication,
+/// `movprfx`, the widening dot products, the reductions, the aliases of
+/// `mov`, and the immediates. The words are Apple clang 21.0.0's
+/// (`-march=armv9-a+sve2+f64mm`).
+#[test]
+fn a64_inline_asm_assembles_the_sve_data_processing_forms() {
+    const SRC: &str = "void f(void) { __asm__ volatile(\"\
+        add z0.s, z1.s, z2.s\\n add z3.d, p1/m, z3.d, z4.d\\n sub z5.h, z5.h, #512\\n\
+        mul z6.b, z6.b, #-7\\n mla z16.s, p0/m, z0.s, z5.s\\n movprfx z7.s, p2/z, z8.s\\n\
+        add z7.s, p2/m, z7.s, z9.s\\n movprfx z10, z11\\n add z10.b, p0/m, z10.b, z12.b\\n\
+        sdot z0.d, z1.h, z2.h\\n udot z3.s, z4.b, z5.b\\n uaddv d0, p0, z0.d\\n\
+        saddv d1, p7, z2.b\\n ptrue p0.s\\n ptrue p1.b, vl4\\n whilelt p2.s, x8, x3\\n\
+        whilelo p3.d, w9, w10\\n orr p4.b, p5/z, p6.b, p7.b\\n bics p9.b, p2/z, p11.b, p12.b\\n\
+        mov p4.b, p0.b\\n mov z8.d, z1.d\\n mov z1.d, x11\\n mov z2.s, w11\\n mov z5.s, #7\\n\
+        mov z6.h, #-50\\n mov z9.s, #0x1200\\n fmov z3.d, #0.0\\n index z4.d, #0, #1\\n\
+        index z0.s, w1, #-3\\n incd z16.d\\n uzp1 z4.s, z4.s, z16.s\\n uzp1 z1.q, z2.q, z3.q\\n\
+        sel z0.h, p3, z1.h, z2.h\\n cmphi p1.s, p2/z, z3.s, #100\\n uqincp w13, p10.s\\n\
+        uqincp x13, p10.s\\n bic z3.b, p2/m, z3.b, z7.b\\n fmla z0.s, p1/m, z2.s, z3.s\\n\
+        fadd z1.d, z2.d, z3.d\"); }\n";
+    let words = a64_opt_function_words(SRC, "f");
+    assert_eq!(
+        words[..words.len() - 1],
+        [
+            0x04A20020, 0x04C00483, 0x2561E045, 0x2530DF26, 0x04854010, 0x04902907, 0x04800927,
+            0x0420BD6A, 0x0400018A, 0x44C20020, 0x44850483, 0x04C12000, 0x04003C41, 0x2598E3E0,
+            0x2518E081, 0x25A31502, 0x25EA0D23, 0x258754C4, 0x254C4979, 0x25804004, 0x04613028,
+            0x05E03961, 0x05A03962, 0x25B8C0E5, 0x2578D9C6, 0x25B8E249, 0x25F8C003, 0x04E14004,
+            0x04BD4420, 0x04F0C3F0, 0x05B06884, 0x05A30841, 0x0562CC20, 0x24B90871, 0x25A9894D,
+            0x25A98D4D, 0x041B08E3, 0x65A30440, 0x65C30041,
+        ],
+        "{words:08x?}"
+    );
+}
+
 /// Followed from x0, the byte loads of `from_big` read offsets 1 and 8192.
 #[test]
 fn a64_far_field_load_reads_its_displacement() {

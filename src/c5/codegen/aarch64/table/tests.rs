@@ -2353,6 +2353,50 @@ fn mvn_alias() {
 }
 
 #[test]
+fn sve_forms_check_sizes_predicates_and_tied_registers() {
+    let z = |num, size| Opnd::ZReg {
+        num,
+        size: Some(size),
+    };
+    let p = |num, size| Opnd::PReg {
+        num,
+        size: Some(size),
+    };
+    let pm = |num| Opnd::PRegQ { num, merge: true };
+    let pz = |num| Opnd::PRegQ { num, merge: false };
+    assert_eq!(enc("add", &[z(3, 3), pm(1), z(3, 3), z(4, 3)]), 0x04C00483);
+    // The element sizes of one form agree; a widening form pairs two.
+    assert!(encode("add", &[z(0, 2), z(1, 2), z(2, 3)]).is_err());
+    assert_eq!(enc("sdot", &[z(0, 3), z(1, 1), z(2, 1)]), 0x44C20020);
+    assert!(encode("sdot", &[z(0, 3), z(1, 0), z(2, 0)]).is_err());
+    // A size the form does not have: saddv of doublewords, fadd of bytes.
+    assert!(
+        encode(
+            "saddv",
+            &[
+                Opnd::VReg { num: 0, is_d: true },
+                Opnd::PReg { num: 0, size: None },
+                z(0, 3)
+            ]
+        )
+        .is_err()
+    );
+    assert!(encode("fadd", &[z(1, 0), z(2, 0), z(3, 0)]).is_err());
+    // The governing predicate of a three-bit field is p0 to p7; the merging
+    // form takes no `/z`.
+    assert!(encode("add", &[z(3, 3), pm(8), z(3, 3), z(4, 3)]).is_err());
+    assert!(encode("add", &[z(3, 3), pz(1), z(3, 3), z(4, 3)]).is_err());
+    assert_eq!(enc("movprfx", &[z(7, 2), pz(2), z(8, 2)]), 0x04902907);
+    assert_eq!(enc("movprfx", &[z(7, 2), pm(2), z(8, 2)]), 0x04912907);
+    // The destructive forms name the destination twice.
+    assert!(encode("add", &[z(3, 3), pm(1), z(5, 3), z(4, 3)]).is_err());
+    // A byte element takes no `lsl #8`.
+    assert_eq!(enc("add", &[z(5, 1), z(5, 1), Opnd::Imm(512)]), 0x2560E045);
+    assert!(encode("add", &[z(5, 0), z(5, 0), Opnd::Imm(512)]).is_err());
+    assert_eq!(enc("ptrue", &[p(0, 2)]), 0x2598E3E0);
+}
+
+#[test]
 fn sve_vector_length_and_element_count() {
     // llvm-mc 22.1.8 (-mattr=+sve) words. The pattern defaults to ALL and the
     // multiplier to 1; register 31 is xzr except in addvl / addpl, whose

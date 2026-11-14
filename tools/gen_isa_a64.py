@@ -167,6 +167,54 @@ SVE_SCALAR_ROW = re.compile(
 UNDEFINED_ROW = re.compile(
     r'st(add|clr|eor|set|smax|smin|umax|umin)a[lbh]* ').match
 
+# SVE rows the database spells with the wrong field names or sizes, checked
+# against Apple clang 21.0.0's assembler: the X-register broadcast is
+# doubleword-only, and mla/mls name the addend Zda and the multiplicand Zn.
+for _m in ('dup', 'mov'):
+    DB_FIXES[(f'{_m} Zd.t, Xn|SP', '00000101|11|100000001110|Rn|Zd')] = (
+        f'{_m} Zd.D, Xn|SP', None)
+for _m, _o in (('mla', '010'), ('mls', '011')):
+    DB_FIXES[(f'{_m} Zda.t, Pg/M, Zn.t, Zm.t', f'00000100|sz|0|Zm|{_o}|Pg:3|Za|Zdn')] = (
+        None, f'00000100|sz|0|Zm|{_o}|Pg:3|Zn|Zda')
+
+# Rows a differential sweep against that assembler finds wrong: base words
+# (bic, bics, orr of predicates), a W form spelled as the X one (uqincp,
+# uqdecp), a merging spelling of a zeroing-only form (brkas, brkbs), the
+# element size of the saturating vector counts by halfword and word and the
+# base word of the halfword ones, the unsigned immediates of the unsigned
+# compares and umin, and the sizes of sqdmulh and uaddv.
+DB_FIXES.update({
+    ('bic Zdn.t, Pg/M, Zdn.t, Zm.t', '00000100|sz|011010000|Pg:3|Zm|Zdn'):
+        (None, '00000100|sz|011011000|Pg:3|Zm|Zdn'),
+    ('bics Pd.B, Pg/Z, Pn.B, Pm.B', '00100101|01|10|Pm|01|Pg|0|Pn|1|Pd'):
+        (None, '00100101|01|00|Pm|01|Pg|0|Pn|1|Pd'),
+    ('orr Pd.B, Pg/Z, Pn.B, Pm.B', '00100100|10|00|Pm|01|Pg|0|Pn|0|Pd'):
+        (None, '00100101|10|00|Pm|01|Pg|0|Pn|0|Pd'),
+    ('uqincp Xdn, Pm.t', '00100101|sz|1010011000100|Pm|Rdn'): ('uqincp Wdn, Pm.t', None),
+    ('uqdecp Xdn, Pm.t', '00100101|sz|1010111000100|Pm|Rdn'): ('uqdecp Wdn, Pm.t', None),
+    ('brkas Pd.B, Pg/M, Pn.B', '00100101|01|01000001|Pg|0|Pn|0|Pd'): ('brkas Pd.B, Pg/Z, Pn.B', None),
+    ('brkbs Pd.B, Pg/M, Pn.B', '00100101|11|01000001|Pg|0|Pn|0|Pd'): ('brkbs Pd.B, Pg/Z, Pn.B', None),
+    ('umin Zdn.t, Zdn.t, #immS', '00100101|sz|101011110|immS:8|Zdn'):
+        ('umin Zdn.t, Zdn.t, #imm', '00100101|sz|101011110|imm:8|Zdn'),
+})
+for _m, _lt, _ne in (('cmphs', '0', '0'), ('cmphi', '0', '1'),
+                     ('cmplo', '1', '0'), ('cmpls', '1', '1')):
+    DB_FIXES[(f'{_m} Pd.t, Pg/Z, Zn.t, #immS',
+              f'00100100|sz|1|immS:7|{_lt}|Pg:3|Zn|{_ne}|Pd')] = (
+        f'{_m} Pd.t, Pg/Z, Zn.t, #imm', f'00100100|sz|1|imm:7|{_lt}|Pg:3|Zn|{_ne}|Pd')
+for _stem, _op in (('sqinc', '110000'), ('uqinc', '110001'),
+                   ('sqdec', '110010'), ('uqdec', '110011')):
+    for _t, _e, _sz in (('h', 'H', '01|01'), ('w', 'S', '10|10')):
+        DB_FIXES[(f'{_stem}{_t} Zdn.D, {{#pattern}}, {{mul #imm}}',
+                  f'00000100|{_sz}|imm:4|{_op}|pattern:5|Zdn')] = (
+            f'{_stem}{_t} Zdn.{_e}, {{#pattern}}, {{mul #imm}}',
+            f'00000100|{_sz[:2]}|10|imm:4|{_op}|pattern:5|Zdn')
+# Element-size masks the database gets wrong: (row) -> the mask.
+SIZE_FIXES = {
+    'sqdmulh Zd.t, Zn.t, Zm.t': 'BHSD',
+    'uaddv Dd, Pg, Zn.t': 'BHSD',
+}
+
 # Rows whose written immediate is not the raw field value (addg/subg #imm1 is
 # the field scaled by 16); a raw UImm form would encode them wrongly.
 EXCLUDED_ROWS = {
@@ -229,6 +277,15 @@ BARE = {'Rm': 5, 'Rn': 5, 'Rd': 5, 'Ra': 5, 'Rt': 5, 'Rt2': 5, 'Rs': 5,
         'Rs2': 5, 'Rd2': 5, 'Rdn': 5, 'cond': 4, 'nzcv': 4, 'CRm': 4, 'CRn': 4,
         'sop': 2, 'option': 3}
 
+# The SVE rows' bare tokens: the GP ones plus the Z and P register fields and
+# the two-bit element size.
+SVE_BARE = dict(BARE, sz=2, **{f'Z{r}': 5 for r in ('d', 'n', 'm', 'a', 'da', 'dn', 't', 'k')},
+                **{f'P{r}': 4 for r in ('d', 'n', 'm', 'g', 'dn', 'dm', 't')})
+
+# An SVE register operand: the field name, an element-size suffix, and a
+# governing predicate's qualifier.
+SVE_REG = re.compile(r'([ZP](?:da|dn|dm|[dnmgatk]))(?:\.(ta|tb|t|[BHSDQ]))?(/MZ|/M|/Z)?')
+
 # Aliases that store the inverted written condition (al/nv invalid there).
 COND_INV = {'cset', 'csetm', 'cinc', 'cinv', 'cneg'}
 
@@ -251,28 +308,46 @@ def split_ops(rest):
     return out
 
 
-def parse_op(op):
-    """'10001011|sop:2|0|Rm|...' -> (base, {name:(width,shift)}) or None.
-    A repeated field name (cinc-style Rn twice) is not expressible."""
-    base, fields, pos = 0, {}, 0
+def parse_op(op, sve=False):
+    """'10001011|sop:2|0|Rm|...' -> (base, {name:(width,shift)}, {name:[shift]})
+    or None. A repeated field name (cinc-style Rn twice) is not expressible in
+    the GP rows; an SVE row's repeats (the register an alias writes into two
+    fields, `mov Zd.D, Zn.D` = `orr Zd.D, Zn.D, Zn.D`) land in the third map.
+    An SVE bit group may name one-bit fields inline (`01000M001`)."""
+    base, fields, pos, dups = 0, {}, 0, {}
+    bare = SVE_BARE if sve else BARE
+
+    def field(name, width):
+        nonlocal pos
+        if name in fields:
+            if not sve or fields[name][0] != width:
+                return False
+            dups.setdefault(name, []).append(pos)
+        else:
+            fields[name] = (width, pos)
+        pos += width
+        return True
     for tok in reversed(op.split('|')):
         tok = tok.strip()
         if re.fullmatch(r'[01]+', tok):
             base |= int(tok, 2) << pos
             pos += len(tok)
         elif (m := re.fullmatch(r'(\w+):(\d+)', tok)):
-            if m.group(1) in fields:
+            if not field(m.group(1), int(m.group(2))):
                 return None
-            fields[m.group(1)] = (int(m.group(2)), pos)
-            pos += int(m.group(2))
-        elif tok in BARE:
-            if tok in fields:
+        elif tok in bare:
+            if not field(tok, bare[tok]):
                 return None
-            fields[tok] = (BARE[tok], pos)
-            pos += BARE[tok]
+        elif sve and re.fullmatch(r'[01MX]+', tok):
+            for c in reversed(tok):
+                if c in '01':
+                    base |= int(c) << pos
+                    pos += 1
+                elif not field(c, 1):
+                    return None
         else:
             return None
-    return (base & 0xFFFFFFFF, fields) if pos == 32 else None
+    return (base & 0xFFFFFFFF, fields, dups) if pos == 32 else None
 
 
 # Register operand suffix -> the encoding field it feeds. The bit position is
@@ -282,21 +357,24 @@ REG_FIELD = {'d': 'Rd', 'n': 'Rn', 'm': 'Rm', 'a': 'Ra', 's': 'Rs',
              't': 'Rt', 't2': 'Rt2', 'd2': 'Rd2', 's2': 'Rs2', 'dn': 'Rdn'}
 
 
-def classify(heads, toks, op, im, scaled_wb=False):
+def classify(heads, toks, op, im, scaled_wb=False, meta=None):
     """Map one row's written operands onto the field model.
     -> ('ok', ops, fields, base, sp) or ('residual', reason). `sp` is the
     bitmask of operand slots whose register field reads 31 as the stack
     pointer (the row's `|SP` / `|WSP` marks); 31 is the zero register
-    everywhere else."""
-    if 'mov' in heads:
+    everywhere else. `meta` marks an SVE row and carries its element sizes."""
+    meta = meta or {}
+    sve = meta.get('sve', False)
+    if 'mov' in heads and not (sve and not any('#' in t for t in toks)):
         # mov's row set is an alias family whose member choice depends on the
         # operand values (wide/inverted/bitmask immediate, SP form); selecting
-        # among them is the encoder caller's job.
+        # among them is the encoder caller's job. The SVE register aliases
+        # differ in their operand kinds.
         return ('residual', 'mov alias selection is value-dependent')
-    p = parse_op(op)
+    p = parse_op(op, sve)
     if p is None:
         return ('residual', 'op not field-expressible (repeated or unknown token)')
-    base, fl = p
+    base, fl, dups = p
     consumed, ops, fields = set(), [], []
     logm = re.match(r'(?:LogicalImm|ImmLogical)\((\w+), ([01])\)', im or '')
     widem = re.match(r'ImmWide(?:Inv)?\((\w+), (\w+), ([01])\)', im or '')
@@ -305,9 +383,71 @@ def classify(heads, toks, op, im, scaled_wb=False):
     # lsb/width are value-transformed and stay unexpressible).
     bfmm = re.match(r'ImmBFM\(', im or '')
     i, rd_width, width, sp = 0, None, None, 0
+    t_ops, tb_ops = [], []
     while i < len(toks):
         t = toks[i]
         t0 = t.split('|')[0]
+        if sve and (m := SVE_REG.fullmatch(t)):
+            # A Z or P register: its field, the element size (`.t` the form's
+            # sz, or fixed), and a governing predicate's /M, /Z or /MZ.
+            kind, size, qual = m.group(1)[0], m.group(2), m.group(3)
+            fname = m.group(1)
+            fv = fl.get(fname)
+            if fv is None or fv[0] not in ((5,) if kind == 'Z' else (3, 4)):
+                return ('residual', f'register field {fname} not a register field')
+            if fname in consumed:
+                first = next(re.search(r'op: (\d+)', f).group(1) for f in fields
+                             if f.startswith(('Reg', 'PLow'))
+                             and f.endswith(f'shift: {fv[1]} }}'))
+                fields.append(f'SameReg {{ op: {i}, first: {first} }}')
+            else:
+                consumed.add(fname)
+                reg = 'PLow' if fv[0] == 3 else 'Reg'
+                fields.append(f'{reg} {{ op: {i}, shift: {fv[1]} }}')
+                fields += [f'Reg {{ op: {i}, shift: {d} }}' for d in dups.get(fname, ())]
+            if qual:
+                if size:
+                    return ('residual', 'qualified predicate with an element size')
+                ops.append({'/M': 'PgM', '/Z': 'PgZ', '/MZ': 'PgMZ'}[qual])
+                if qual == '/MZ':
+                    if fl.get('M', (0,))[0] != 1:
+                        return ('residual', '/MZ without an M bit')
+                    consumed.add('M')
+                    fields.append(f'PredMerge {{ op: {i}, shift: {fl["M"][1]} }}')
+            elif size in ('t', 'ta', 'tb'):
+                # A widening form's `.ta` and `.tb` sizes move together.
+                ops.append(kind + 't')
+                (tb_ops if size == 'tb' else t_ops).append(i)
+            elif size:
+                ops.append(f'{kind}s({"BHSDQ".index(size)})')
+            else:
+                ops.append(kind)
+            i += 1
+            continue
+        if sve and (m := re.fullmatch(r'([BHSD])([dnm])', t)):
+            # A scalar SIMD&FP register (the reductions' destination).
+            fname = REG_FIELD[m.group(2)]
+            fv = fl.get(fname)
+            if fv is None or fv[0] != 5 or fname in consumed:
+                return ('residual', f'scalar register field {fname} not a 5-bit field')
+            consumed.add(fname)
+            ops.append(f'Fpr({"BHSD".index(m.group(1))})')
+            fields.append(f'Reg {{ op: {i}, shift: {fv[1]} }}')
+            i += 1
+            continue
+        if sve and (m := re.fullmatch(r'#(\w+)', t)) and i + 1 < len(toks) \
+                and toks[i + 1] == '{lsl #n}':
+            # The SVE 8-bit immediate with an optional `lsl #8`; signed in
+            # dup and cpy, unsigned in the add/sub family.
+            if fl.get(m.group(1)) != (8, 5) or fl.get('n') != (1, 13) or not t_ops:
+                return ('residual', 'SVE imm8 fields not imm8@5 + n1@13')
+            consumed.update((m.group(1), 'n'))
+            ops += ['Imm', 'OptLsl']
+            signed = 'true' if heads[0] in ('dup', 'cpy', 'mov', 'fmov') else 'false'
+            fields.append(f'SveImm8 {{ op: {i}, shift_op: {i + 1}, signed: {signed}, '
+                          f'zop: {t_ops[0]} }}')
+            i += 2
+            continue
         if (m := re.fullmatch(r'([XW])(d2|s2|t2|dn|[dnmast])(\|W?SP)?', t)):
             # A register operand feeds a named 5-bit field; its bit position is
             # read from the encoding, so any operand order is expressible.
@@ -319,7 +459,7 @@ def classify(heads, toks, op, im, scaled_wb=False):
             if fname in consumed:
                 # A second spelling of a register already written (the signed
                 # saturating `Xdn, Wdn` pair) names the same register.
-                first = next(k for k, f in enumerate(fields)
+                first = next(re.search(r'op: (\d+)', f).group(1) for f in fields
                              if f.endswith(f'shift: {fv[1]} }}') and f.startswith('Reg'))
                 fields.append(f'SameReg {{ op: {i}, first: {first} }}')
                 i += 1
@@ -475,7 +615,7 @@ def classify(heads, toks, op, im, scaled_wb=False):
             continue
         # ImmPRF tags prfm's prefetch-op slot, a raw 5-bit code.
         if (m := re.fullmatch(r'#(\w+)', t0)) and (
-                not im or bfmm or im.startswith('ImmPRF')):
+                not im or bfmm or im.startswith('ImmPRF')) and t0 != '#pattern':
             name = m.group(1)
             if name not in fl:
                 return ('residual', f'immediate token {t0} has no matching field')
@@ -484,11 +624,12 @@ def classify(heads, toks, op, im, scaled_wb=False):
             ops.append('Imm')
             # Trailing-S names (immS) are two's-complement signed; the rest
             # are raw unsigned fields.
-            kind = 'SImm' if name.endswith('S') else 'UImm'
+            # An SVE row's `immSa` / `immSb` pair is signed as well.
+            kind = 'SImm' if re.fullmatch(r'\w*S[ab]?', name) else 'UImm'
             fields.append(f'{kind} {{ op: {i}, shift: {pos}, width: {w} }}')
             i += 1
             continue
-        if im.startswith('SvePatternImm') and t in ('{#pattern}', '{mul #imm}'):
+        if (im.startswith('SvePatternImm') or sve) and t in ('{#pattern}', '{mul #imm}'):
             # The SVE element count: an optional predicate-constraint pattern
             # (absent = ALL) and an optional multiplier (absent = 1) behind it.
             name, width, kind, slot = (('pattern', 5, 'SvePattern', 'OptPattern')
@@ -536,6 +677,24 @@ def classify(heads, toks, op, im, scaled_wb=False):
                 continue
             return ('residual', f'group {t} not droppable')
         return ('residual', f'operand token {t}')
+    if 'sz' in fl and sve:
+        # The element size: per sz value, the size of the `.t` (or `.ta`)
+        # operands and of the `.tb` ones, as the row's masks list them.
+        amask = meta.get('ta') if tb_ops else meta.get('t')
+        bmask = meta.get('tb') or '~~~~' if tb_ops else 'BBBB'
+        amask = amask or ('BHSD' if not tb_ops else None)
+        if fl['sz'][0] != 2 or not t_ops or amask is None or (
+                any('.t,' in t + ',' for t in toks) and any('.ta' in t for t in toks)):
+            return ('residual', 'element sizes not an sz field')
+        consumed.add('sz')
+        sizes = ['0xFF' if '~' in (ca, cb) else
+                 f'0x{"BHSDQ".index(cb) << 4 | "BHSDQ".index(ca):02X}'
+                 for ca, cb in zip(amask, bmask)]
+        fields.append(f'SveSize {{ a: 0b{sum(1 << k for k in t_ops):b}, '
+                      f'b: 0b{sum(1 << k for k in tb_ops):b}, shift: {fl["sz"][1]}, '
+                      f'sizes: [{", ".join(sizes)}] }}')
+    elif t_ops or tb_ops:
+        return ('residual', 'a .t operand without an sz field')
     left = set(fl) - consumed - {'n', 'sop'}
     if left:
         return ('residual', 'unmapped fields: ' + ','.join(sorted(left)))
@@ -555,32 +714,47 @@ def expand_wb(inst, op):
                op.replace('!post', post).replace('|W|', f'|{w}|'), True)
 
 
+def expand_width(inst, op):
+    """An SVE `Rn, Rm` row takes both register widths, selected by the `X`
+    bit of its encoding (whilelt and the other while forms); concretize each."""
+    if 'Rn, Rm' not in inst or 'X' not in op.replace('X|', ''):
+        yield inst, op
+        return
+    for w, bit in (('W', '0'), ('X', '1')):
+        yield (inst.replace('Rn, Rm', f'{w}n, {w}m'),
+               '|'.join(re.sub('X', bit, t) if re.fullmatch(r'[01X]+', t) else t
+                        for t in op.split('|')))
+
+
 def load_rows(db):
     rows = []
     for g in json.load(open(db))['instructions']:
         gp = 'GP' in g['category']
-        if not gp and g['category'] != 'SVE':
+        if not gp and not g['category'].startswith('SVE'):
             continue
         for it in g['data']:
             inst, op = it['inst'], it['op']
-            if not gp and not SVE_SCALAR_ROW(inst):
-                continue
+            # The vector-length and element-count rows read the GP model.
+            sve = not gp and not SVE_SCALAR_ROW(inst)
+            meta = {'sve': sve, 't': SIZE_FIXES.get(inst) or it.get('t') or it.get('T'),
+                    'ta': it.get('ta'), 'tb': it.get('tb')}
             if inst in EXCLUDED_ROWS or UNDEFINED_ROW(inst):
                 continue
             fi, fo = DB_FIXES.get((inst, op), (None, None))
-            for einst, eop, scaled_wb in expand_wb(fi or inst, fo or op):
-                rows.append((einst, eop, it.get('imm', ''), scaled_wb))
+            for winst, wop in expand_width(fi or inst, fo or op):
+                for einst, eop, scaled_wb in expand_wb(winst, wop):
+                    rows.append((einst, eop, it.get('imm', ''), scaled_wb, meta))
     return rows
 
 
 def catalog(rows, residuals=None):
     """Classify every row; -> {(mnemonic, ops-tuple): (base, fields, inst, sp)}."""
     forms = {}
-    for inst, op, im, scaled_wb in rows:
+    for inst, op, im, scaled_wb, meta in rows:
         headpart, _, rest = inst.partition(' ')
         toks = tuple(split_ops(rest)) if rest else ()
         heads = headpart.split('|')
-        r = classify(heads, toks, op, im, scaled_wb)
+        r = classify(heads, toks, op, im, scaled_wb, meta)
         if r[0] == 'residual':
             if residuals is not None:
                 sig = ' '.join(t.split('|')[0] if not t.startswith('{') else t
@@ -614,11 +788,10 @@ def main():
         '// @generated by tools/gen_isa_a64.py from an external instruction-set',
         '// database. Do not edit by hand; re-run the generator to update.',
         '//',
-        '// The A64 GP catalog interpreted by `super::table::encode`: every',
-        '// database row whose written-operand signature maps onto the field',
-        '// model, and the SVE rows that read and write general-purpose registers',
-        '// only. Some database rows are corrected and some dropped before',
-        '// parsing (see tools/gen_isa_a64.py DB_FIXES / EXCLUDED_ROWS).',
+        '// The A64 GP and SVE catalog interpreted by `super::table::encode`:',
+        '// every database row whose written-operand signature maps onto the',
+        '// field model. Some database rows are corrected and some dropped',
+        '// before parsing (see tools/gen_isa_a64.py DB_FIXES / EXCLUDED_ROWS).',
         '',
         'use super::table::{A64Op, A64Op::*, Field, Field::*, Form};',
         '',

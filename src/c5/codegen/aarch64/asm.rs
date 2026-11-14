@@ -188,10 +188,12 @@ pub(crate) enum AsmOpndA64 {
     /// An SVE element-count multiplier `mul #imm`, as written.
     SveMul(i64),
     /// An SVE vector register `zN`, with the element-size log2 of a `.b`,
-    /// `.h`, `.s` or `.d` suffix, if one is written.
+    /// `.h`, `.s`, `.d` or `.q` suffix, if one is written.
     ZReg { num: u8, size: Option<u8> },
     /// An SVE predicate register `pN` (0..15), with its element-size suffix.
     PReg { num: u8, size: Option<u8> },
+    /// A governing predicate `pN/m` (`merge`) or `pN/z`.
+    PRegQ { num: u8, merge: bool },
     /// `[base, #imm, mul vl]`: a memory reference whose offset counts vector
     /// or predicate lengths, as the SVE and SME loads and stores scale it.
     MemVl { base: MemBase, off: i64 },
@@ -628,6 +630,7 @@ fn parse_sve_reg(tok: &str, prefix: char, count: u8) -> Option<(u8, Option<u8>)>
         .strip_prefix(prefix)
         .or_else(|| tok.strip_prefix(prefix.to_ascii_uppercase()))?;
     let (digits, size) = match rest.split_once('.') {
+        Some((digits, "q" | "Q")) if prefix == 'z' => (digits, Some(4)),
         Some((digits, letter)) => (digits, Some(element_size(&letter.to_ascii_lowercase())?)),
         None => (rest, None),
     };
@@ -982,12 +985,13 @@ fn shift_amount(rest: &str) -> Option<i64> {
 /// `sqinc`, `sqdec`, `uqinc`, `uqdec`, each by byte, halfword, word or
 /// doubleword.
 fn is_sve_count(mnem: &str) -> bool {
-    ["cnt", "inc", "dec", "sqinc", "sqdec", "uqinc", "uqdec"]
-        .iter()
-        .any(|stem| {
-            mnem.strip_prefix(stem)
-                .is_some_and(|t| matches!(t, "b" | "h" | "w" | "d"))
-        })
+    matches!(mnem, "ptrue" | "ptrues")
+        || ["cnt", "inc", "dec", "sqinc", "sqdec", "uqinc", "uqdec"]
+            .iter()
+            .any(|stem| {
+                mnem.strip_prefix(stem)
+                    .is_some_and(|t| matches!(t, "b" | "h" | "w" | "d"))
+            })
 }
 
 /// The pattern or multiplier operand of an SVE element count, `None` for any
@@ -1313,6 +1317,16 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
     }
     if let Some((num, size)) = parse_sve_reg(tok, 'p', 16) {
         return Ok(AsmOpndA64::PReg { num, size });
+    }
+    if let Some((pred, qual)) = tok.split_once('/')
+        && let Some((num, None)) = parse_sve_reg(pred.trim(), 'p', 16)
+        && let Some(merge) = match qual.trim() {
+            "m" | "M" => Some(true),
+            "z" | "Z" => Some(false),
+            _ => None,
+        }
+    {
+        return Ok(AsmOpndA64::PRegQ { num, merge });
     }
     if let Some(inner) = tok
         .get(..3)
@@ -2623,6 +2637,36 @@ mod tests {
         assert!(parse_operand("[x0, #3, mul vl]!").is_err());
         assert!(parse_operand("za[x12, #0]").is_err());
         assert!(!matches!(parse_operand("p16"), Ok(AsmOpndA64::PReg { .. })));
+        // A governing predicate's qualifier, and the quadword element of Z.
+        assert_eq!(
+            parse_operand("p7/M"),
+            Ok(AsmOpndA64::PRegQ {
+                num: 7,
+                merge: true
+            })
+        );
+        assert_eq!(
+            parse_operand("p0/z"),
+            Ok(AsmOpndA64::PRegQ {
+                num: 0,
+                merge: false
+            })
+        );
+        assert!(!matches!(
+            parse_operand("p0.b/z"),
+            Ok(AsmOpndA64::PRegQ { .. })
+        ));
+        assert_eq!(
+            parse_operand("z1.q"),
+            Ok(AsmOpndA64::ZReg {
+                num: 1,
+                size: Some(4)
+            })
+        );
+        assert!(!matches!(
+            parse_operand("p1.q"),
+            Ok(AsmOpndA64::PReg { .. })
+        ));
     }
 
     #[test]

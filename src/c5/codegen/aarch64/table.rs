@@ -104,6 +104,29 @@ pub(crate) enum Field {
     /// signed saturating `Xdn, Wdn` pair -- which must name the same register
     /// and encodes nothing of its own.
     SameReg { op: u8, first: u8 },
+    /// A governing predicate in the three-bit field at `shift`: p0 to p7.
+    PLow { op: u8, shift: u8 },
+    /// The merging (`/m`) bit of a `/m`-or-`/z` predicate at `op`.
+    PredMerge { op: u8, shift: u8 },
+    /// The SVE element size: the value `k` at `shift` whose `sizes[k]` is
+    /// the size log2 of the operands in bitmask `a`, which agree, plus that
+    /// of the operands in `b` (a widening form's narrow ones) shifted by 4.
+    /// An unallocated value is 0xFF.
+    SveSize {
+        a: u8,
+        b: u8,
+        shift: u8,
+        sizes: [u8; 4],
+    },
+    /// The SVE 8-bit immediate at bit 5 and its `lsl #8` bit at 13. An
+    /// absent shift is taken when the value needs it; a byte element has
+    /// none. `zop` is an operand giving the element size.
+    SveImm8 {
+        op: u8,
+        shift_op: u8,
+        signed: bool,
+        zop: u8,
+    },
 }
 
 /// One catalog entry: a base word and the fields spliced into it.
@@ -152,6 +175,26 @@ pub(crate) enum A64Op {
     OptPattern,
     /// An optional SVE element-count multiplier `mul #imm`.
     OptMul,
+    /// An SVE vector register written without an element size.
+    Z,
+    /// An SVE vector register of the form's element size (`zN.T`).
+    Zt,
+    /// An SVE vector register of a fixed element size log2 (Q = 4).
+    Zs(u8),
+    /// An SVE predicate register written without an element size.
+    P,
+    /// An SVE predicate register of the form's element size (`pN.T`).
+    Pt,
+    /// An SVE predicate register of a fixed element size log2.
+    Ps(u8),
+    /// A merging governing predicate `pN/m`.
+    PgM,
+    /// A zeroing governing predicate `pN/z`.
+    PgZ,
+    /// A governing predicate `pN/m` or `pN/z`.
+    PgMZ,
+    /// A scalar SIMD&FP register of the element size log2 (`bN` .. `dN`).
+    Fpr(u8),
 }
 
 /// A resolved operand handed to [`encode`].
@@ -273,6 +316,11 @@ pub(crate) enum Opnd {
         num: u8,
         size: Option<u8>,
     },
+    /// A governing predicate `pN/m` (`merge`) or `pN/z`.
+    PRegQ {
+        num: u8,
+        merge: bool,
+    },
     /// `[base, #off, mul vl]`: an offset in vector or predicate lengths.
     MemVl {
         base: u8,
@@ -287,7 +335,12 @@ pub(crate) enum Opnd {
 
 fn reg(o: Opnd) -> Result<u8, String> {
     match o {
-        Opnd::Reg { num, .. } => Ok(num),
+        Opnd::Reg { num, .. }
+        | Opnd::ZReg { num, .. }
+        | Opnd::PReg { num, .. }
+        | Opnd::PRegQ { num, .. }
+        | Opnd::VReg { num, .. }
+        | Opnd::VScalar { num, .. } => Ok(num),
         // A memory reference contributes its base register (the Rn field).
         Opnd::Mem { base, .. } | Opnd::MemReg { base, .. } => Ok(base),
         _ => Err(String::from("inline asm: register operand expected")),
@@ -336,6 +389,17 @@ fn op_matches(p: A64Op, o: Opnd) -> bool {
         (A64Op::MemReg, Opnd::MemReg { .. }) => true,
         (A64Op::OptPattern, Opnd::SvePattern(_)) => true,
         (A64Op::OptMul, Opnd::SveMul(_)) => true,
+        (A64Op::Z, Opnd::ZReg { size: None, .. }) => true,
+        (A64Op::Zt, Opnd::ZReg { size: Some(_), .. })
+        | (A64Op::Pt, Opnd::PReg { size: Some(_), .. }) => true,
+        (A64Op::Zs(k), Opnd::ZReg { size: Some(s), .. })
+        | (A64Op::Ps(k), Opnd::PReg { size: Some(s), .. }) => s == k,
+        (A64Op::P, Opnd::PReg { size: None, .. }) => true,
+        (A64Op::PgM, Opnd::PRegQ { merge, .. }) => merge,
+        (A64Op::PgZ, Opnd::PRegQ { merge, .. }) => !merge,
+        (A64Op::PgMZ, Opnd::PRegQ { .. }) => true,
+        (A64Op::Fpr(k), Opnd::VReg { is_d, .. }) => k == 2 + u8::from(is_d),
+        (A64Op::Fpr(k), Opnd::VScalar { size, .. }) => k == size,
         _ => false,
     }
 }
@@ -475,6 +539,22 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     }
     if let Some(word) = encode_sve_state(mnemonic, ops) {
         return word;
+    }
+    // `mov Zd.T, #imm` and `fmov Zd.T, #0.0` are `dup` of the 8-bit
+    // immediate.
+    if matches!(mnemonic, "mov" | "fmov")
+        && let [Opnd::ZReg { .. }, Opnd::Imm(v), ..] = ops
+        && (mnemonic == "mov" || *v == 0)
+    {
+        return encode_catalog("dup", ops);
+    }
+    if ops.iter().any(|o| {
+        matches!(
+            o,
+            Opnd::ZReg { .. } | Opnd::PReg { .. } | Opnd::PRegQ { .. }
+        )
+    }) {
+        return encode_catalog(mnemonic, ops);
     }
     // System-register move: `mrs Xt, <sysreg>` / `msr <sysreg>, Xt`. The
     // register is always 64-bit; the 16-bit `op0:op1:CRn:CRm:op2` field sits at
@@ -3401,6 +3481,7 @@ fn encode_catalog(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
                 .zip(ops.iter())
                 .all(|(&p, &o)| op_matches(p, o))
                 || !mem_offsets_consumed(f, ops)
+                || !sve_sizes_agree(f, ops)
             {
                 continue;
             }
@@ -3797,9 +3878,96 @@ fn pack(f: &Form, ops: &[Opnd]) -> Result<u32, String> {
                     ));
                 }
             }
+            Field::PLow { op, shift } => {
+                let num = reg(ops[op as usize])?;
+                if num > 7 {
+                    return Err(String::from(
+                        "inline asm: the governing predicate must be p0 to p7",
+                    ));
+                }
+                word |= u32::from(num) << shift;
+            }
+            Field::PredMerge { op, shift } => {
+                if let Opnd::PRegQ { merge: true, .. } = ops[op as usize] {
+                    word |= 1 << shift;
+                }
+            }
+            Field::SveSize { a, b, shift, sizes } => {
+                // `sve_sizes_agree` admitted the form.
+                word |= sve_size_code(a, b, sizes, ops).unwrap_or(0) << shift;
+            }
+            Field::SveImm8 {
+                op,
+                shift_op,
+                signed,
+                zop,
+            } => {
+                let v = imm(ops[op as usize])?;
+                let byte = matches!(ops[zop as usize], Opnd::ZReg { size: Some(0), .. });
+                let fits = |v: i64| {
+                    if signed {
+                        (-128..=127).contains(&v)
+                    } else {
+                        (0..=255).contains(&v)
+                    }
+                };
+                let sh = match ops.get(shift_op as usize) {
+                    None => !fits(v) && v & 0xFF == 0 && fits(v >> 8),
+                    Some(Opnd::Lsl(0)) => false,
+                    Some(Opnd::Lsl(8)) => true,
+                    Some(_) => {
+                        return Err(String::from(
+                            "inline asm: the SVE immediate shift must be lsl #0 or #8",
+                        ));
+                    }
+                };
+                let v = if sh && ops.get(shift_op as usize).is_none() {
+                    v >> 8
+                } else {
+                    v
+                };
+                if !fits(v) || (sh && byte) {
+                    return Err(String::from("inline asm: SVE immediate out of range"));
+                }
+                word |= ((v as u32 & 0xFF) << 5) | (u32::from(sh) << 13);
+            }
         }
     }
     Ok(word)
+}
+
+/// The element size of the operands in `mask`, when they all have one and
+/// it is the same.
+fn sve_size(mask: u8, ops: &[Opnd]) -> Option<u8> {
+    let mut size = None;
+    for (_, o) in ops.iter().enumerate().filter(|(i, _)| mask >> i & 1 != 0) {
+        let s = match *o {
+            Opnd::ZReg { size: Some(s), .. } | Opnd::PReg { size: Some(s), .. } => s,
+            _ => return None,
+        };
+        if size.is_some_and(|z| z != s) {
+            return None;
+        }
+        size = Some(s);
+    }
+    size
+}
+
+/// The size field value of an [`Field::SveSize`] for the operands.
+fn sve_size_code(a: u8, b: u8, sizes: [u8; 4], ops: &[Opnd]) -> Option<u32> {
+    let sa = sve_size(a, ops)?;
+    let sb = if b == 0 { 0 } else { sve_size(b, ops)? };
+    let code = sa | sb << 4;
+    sizes.iter().position(|&s| s == code).map(|k| k as u32)
+}
+
+/// A form with an SVE element size admits the operands when their sizes
+/// agree and are among the form's.
+fn sve_sizes_agree(f: &Form, ops: &[Opnd]) -> bool {
+    f.fields.iter().all(|fl| match *fl {
+        Field::SveSize { a, b, sizes, .. } => sve_size_code(a, b, sizes, ops).is_some(),
+        _ => true,
+    })
 }
 
 #[cfg(test)]

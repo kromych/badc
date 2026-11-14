@@ -631,8 +631,7 @@ Disassembly of section .text:
                	movups	%xmm0, (%rsp)
                	xorl	%eax, %eax
                	movss	0x20(%rsp,%rax,4), %xmm0
-               	movss	0x30(%rsp,%rax,4), %xmm1
-               	vaddss	%xmm1, %xmm0, %xmm1
+               	vaddss	0x30(%rsp,%rax,4), %xmm0, %xmm1
                	movss	<rip>, %xmm2
                	vfmsub231ss	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm2) - xmm0
                	movss	%xmm0, -0x10(%rbp,%rax,4)

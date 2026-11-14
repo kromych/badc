@@ -70,8 +70,7 @@ Disassembly of section .text:
                	movq	0x8(%r11), %r10
                	addq	$0x8, 0x8(%r11)
                	movq	%r10, %rcx
-               	movsd	(%rcx), %xmm2
-               	vfmadd213sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm0) + xmm2
+               	vfmadd213sd	(%rcx), %xmm1, %xmm0 # xmm0 = (xmm1 * xmm0) + mem
                	incq	%rax
                	movl	-0xd0(%rbp), %ecx
                	cmpl	%ecx, %eax
@@ -126,8 +125,7 @@ Disassembly of section .text:
                	movq	0x8(%r11), %r10
                	addq	$0x8, 0x8(%r11)
                	movq	%r10, %rcx
-               	movsd	(%rcx), %xmm2
-               	vfmadd213sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm0) + xmm2
+               	vfmadd213sd	(%rcx), %xmm1, %xmm0 # xmm0 = (xmm1 * xmm0) + mem
                	incq	%rax
                	movl	-0xd0(%rbp), %ecx
                	cmpl	%ecx, %eax

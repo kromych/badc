@@ -912,6 +912,12 @@ pub(crate) fn emit_sse_mov_sib(
     }
     emit_byte(code, 0x0F);
     emit_byte(code, if store { 0x11 } else { 0x10 });
+    emit_modrm_sib(code, xmm, (base, index, scale, disp));
+}
+
+/// The ModR/M, SIB and displacement bytes of `[base + index * scale + disp]`
+/// with `reg` in ModR/M.reg. `index` is not rsp.
+fn emit_modrm_sib(code: &mut Vec<u8>, reg: Reg, (base, index, scale, disp): (Reg, Reg, u8, i32)) {
     // mod=00 with an rbp / r13 base names a bare disp32, so that base
     // takes a zero disp8.
     let (mod_, disp8) = if disp == 0 && base.lo() != 5 {
@@ -921,7 +927,7 @@ pub(crate) fn emit_sse_mov_sib(
     } else {
         (0b10, None)
     };
-    emit_byte(code, modrm(mod_, xmm.lo(), 4));
+    emit_byte(code, modrm(mod_, reg.lo(), 4));
     emit_byte(
         code,
         sib(scale.trailing_zeros() as u8, index.lo(), base.lo()),
@@ -930,6 +936,37 @@ pub(crate) fn emit_sse_mov_sib(
         (0b01, Some(d)) => emit_byte(code, d as u8),
         (0b10, _) => emit_i32(code, disp),
         _ => {}
+    }
+}
+
+/// A memory operand `[base + index * scale + disp]`; `index` is not rsp.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Mem {
+    pub base: Reg,
+    pub index: Option<(Reg, u8)>,
+    pub disp: i32,
+}
+
+impl Mem {
+    pub(crate) fn at(base: Reg, disp: i32) -> Self {
+        Self {
+            base,
+            index: None,
+            disp,
+        }
+    }
+
+    fn index_high(self) -> bool {
+        self.index.is_some_and(|(r, _)| r.high())
+    }
+
+    /// The ModR/M byte with `reg` in ModR/M.reg, then the SIB byte and the
+    /// displacement the operand takes.
+    fn emit_modrm(self, code: &mut Vec<u8>, reg: Reg) {
+        match self.index {
+            None => emit_modrm_mem(code, reg, self.base, self.disp),
+            Some((index, scale)) => emit_modrm_sib(code, reg, (self.base, index, scale, self.disp)),
+        }
     }
 }
 
@@ -1207,18 +1244,18 @@ pub(crate) fn emit_vex_fma_mem(
     w64: bool,
     dst: Reg,
     a: Reg,
-    base: Reg,
-    disp: i32,
+    mem: Mem,
 ) {
     let r = if dst.high() { 0u8 } else { 1u8 };
-    let b_bit = if base.high() { 0u8 } else { 1u8 };
+    let x_bit = u8::from(!mem.index_high());
+    let b_bit = if mem.base.high() { 0u8 } else { 1u8 };
     let a_num = ((a.high() as u8) << 3) | a.lo();
     let vvvv = (!a_num) & 0xF;
     emit_byte(code, 0xC4);
-    emit_byte(code, (r << 7) | (1 << 6) | (b_bit << 5) | 0b00010);
+    emit_byte(code, (r << 7) | (x_bit << 6) | (b_bit << 5) | 0b00010);
     emit_byte(code, ((w64 as u8) << 7) | (vvvv << 3) | 0b01);
     emit_byte(code, opcode);
-    emit_modrm_mem(code, dst, base, disp);
+    mem.emit_modrm(code, dst);
 }
 
 fn emit_vex_0f_prefix(code: &mut Vec<u8>, reg: Reg, vvvv: Reg, rm: Reg, pp: u8) {
@@ -1338,12 +1375,23 @@ pub(crate) fn emit_vex_fp_arith_mem(
     is_f32: bool,
     dst: Reg,
     a: Reg,
-    base: Reg,
-    disp: i32,
+    mem: Mem,
 ) {
-    emit_vex_0f_prefix(code, dst, a, base, if is_f32 { 0b10 } else { 0b11 });
+    let pp = if is_f32 { 0b10 } else { 0b11 };
+    if mem.index_high() {
+        // VEX.X, the extended index, is in the three-byte form only.
+        let v = !(((a.high() as u8) << 3) | a.lo()) & 0xF;
+        emit_byte(code, 0xC4);
+        emit_byte(
+            code,
+            (u8::from(!dst.high()) << 7) | (u8::from(!mem.base.high()) << 5) | 0b00001,
+        );
+        emit_byte(code, (v << 3) | pp);
+    } else {
+        emit_vex_0f_prefix(code, dst, a, mem.base, pp);
+    }
     emit_byte(code, opcode);
-    emit_modrm_mem(code, dst, base, disp);
+    mem.emit_modrm(code, dst);
 }
 
 /// `SHLX` / `SHRX` / `SARX`: `dst = src OP count` with the count in any
@@ -3006,8 +3054,36 @@ mod tests {
         // ModR/M addressing byte: vfmadd231sd xmm0, xmm1, 8(%rsp) ->
         // C4 E2 F1 B9 44 24 08.
         assert_eq!(
-            assemble(|c| emit_vex_fma_mem(c, 0xB9, true, Reg(0), Reg(1), Reg::RSP, 8)),
+            assemble(|c| emit_vex_fma_mem(c, 0xB9, true, Reg(0), Reg(1), Mem::at(Reg::RSP, 8))),
             vec![0xC4, 0xE2, 0xF1, 0xB9, 0x44, 0x24, 0x08]
+        );
+        // A scaled index takes a SIB byte and its high bit in VEX.X.
+        let sib = |base, index, scale, disp| Mem {
+            base,
+            index: Some((index, scale)),
+            disp,
+        };
+        assert_eq!(
+            assemble(|c| emit_vex_fma_mem(
+                c,
+                0xB9,
+                true,
+                Reg(0),
+                Reg(1),
+                sib(Reg(6), Reg(0), 8, 0)
+            )),
+            vec![0xC4, 0xE2, 0xF1, 0xB9, 0x04, 0xC6]
+        );
+        assert_eq!(
+            assemble(|c| emit_vex_fma_mem(
+                c,
+                0xB9,
+                true,
+                Reg(9),
+                Reg(1),
+                sib(Reg(5), Reg(11), 8, -8)
+            )),
+            vec![0xC4, 0x22, 0xF1, 0xB9, 0x4C, 0xDD, 0xF8]
         );
     }
 
@@ -3040,12 +3116,64 @@ mod tests {
             vec![0xC4, 0xC1, 0x73, 0x59, 0xC2]
         );
         assert_eq!(
-            assemble(|c| emit_vex_fp_arith_mem(c, 0x58, false, Reg(0), Reg(1), Reg::RSP, 8)),
+            assemble(|c| emit_vex_fp_arith_mem(
+                c,
+                0x58,
+                false,
+                Reg(0),
+                Reg(1),
+                Mem::at(Reg::RSP, 8)
+            )),
             vec![0xC5, 0xF3, 0x58, 0x44, 0x24, 0x08]
         );
         assert_eq!(
-            assemble(|c| emit_vex_fp_arith_mem(c, 0x58, false, Reg(0), Reg(1), Reg(12), 8)),
+            assemble(|c| emit_vex_fp_arith_mem(
+                c,
+                0x58,
+                false,
+                Reg(0),
+                Reg(1),
+                Mem::at(Reg(12), 8)
+            )),
             vec![0xC4, 0xC1, 0x73, 0x58, 0x44, 0x24, 0x08]
+        );
+        let sib = |base, index, scale, disp| Mem {
+            base,
+            index: Some((index, scale)),
+            disp,
+        };
+        assert_eq!(
+            assemble(|c| emit_vex_fp_arith_mem(
+                c,
+                0x58,
+                false,
+                Reg(0),
+                Reg(1),
+                sib(Reg(6), Reg(0), 8, 0)
+            )),
+            vec![0xC5, 0xF3, 0x58, 0x04, 0xC6]
+        );
+        assert_eq!(
+            assemble(|c| emit_vex_fp_arith_mem(
+                c,
+                0x58,
+                false,
+                Reg(0),
+                Reg(1),
+                sib(Reg(6), Reg(9), 8, 0)
+            )),
+            vec![0xC4, 0xA1, 0x73, 0x58, 0x04, 0xCE]
+        );
+        assert_eq!(
+            assemble(|c| emit_vex_fp_arith_mem(
+                c,
+                0x59,
+                true,
+                Reg(8),
+                Reg(2),
+                sib(Reg(13), Reg(9), 4, 4)
+            )),
+            vec![0xC4, 0x01, 0x6A, 0x59, 0x44, 0x8D, 0x04]
         );
     }
 

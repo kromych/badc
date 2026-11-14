@@ -176,6 +176,9 @@ pub(crate) struct Allocation {
     pub stack_load: alloc::collections::BTreeMap<ValueId, (i64, i32, LoadKind)>,
     /// Per value: an `Imm` placed in the FP file ([`fp_constants`]).
     pub fp_const: Vec<bool>,
+    /// x86-64: the floating loads the next instruction reads as its memory
+    /// operand ([`fp_memory_operands`]). Such a load emits nothing.
+    pub fp_mem_operand: alloc::collections::BTreeSet<ValueId>,
     /// Per instruction whose lowering writes registers besides its result,
     /// the mask of those holding a value live across it: the fixed registers
     /// of an x86-64 shift or division ([`x86_implicit_writes`]), a count
@@ -1721,6 +1724,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             imm_store: Vec::new(),
             stack_imm: alloc::collections::BTreeMap::new(),
             stack_load: alloc::collections::BTreeMap::new(),
+            fp_mem_operand: alloc::collections::BTreeSet::new(),
             fp_const,
             implicit_live: Vec::new(),
             hints,
@@ -2642,6 +2646,11 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
 
     let asm_preserve = asm_preserve_masks(func, target, region_base);
     let imm_held = imm_already_held(func, &places, &use_counts, target);
+    let fp_mem_operand = if target.is_x86_64() {
+        fp_memory_operands(func, &use_counts)
+    } else {
+        alloc::collections::BTreeSet::new()
+    };
     Allocation {
         places,
         spill_count,
@@ -2659,6 +2668,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         imm_store,
         stack_imm,
         stack_load,
+        fp_mem_operand,
         fp_const,
         implicit_live,
         hints,
@@ -4745,6 +4755,69 @@ fn stack_arg_immediates(
             _ => None,
         })
         .collect()
+}
+
+/// x86-64: the floating loads, through a pointer or a scaled index, whose
+/// one reader is the next instruction that emits code, a floating add,
+/// subtract, multiply or divide of the load's precision that takes it as
+/// its second operand, or a fused multiply-add. The reader takes the load
+/// as its memory operand and the load emits nothing. The address holds at
+/// the reader: only floating values are defined at the load and at the
+/// reader, and a spilled result is stored after the read.
+fn fp_memory_operands(
+    func: &FunctionSsa,
+    use_counts: &[u32],
+) -> alloc::collections::BTreeSet<ValueId> {
+    let f32 = |v: usize| func.f32_values.get(v).copied().unwrap_or(false);
+    let mut out = alloc::collections::BTreeSet::new();
+    for block in &func.blocks {
+        for v in block.inst_range.start..block.inst_range.end.saturating_sub(1) {
+            let v = v as usize;
+            let kind = match func.insts[v] {
+                Inst::Load {
+                    kind,
+                    volatile: false,
+                    align: 0,
+                    pc_rel: false,
+                    ..
+                } => kind,
+                Inst::LoadIndexed {
+                    kind,
+                    index_ext: super::super::ir::IndexExt::None,
+                    scale: 1 | 2 | 4 | 8,
+                    abs_base: false,
+                    ..
+                } => kind,
+                _ => continue,
+            };
+            let single = match kind {
+                LoadKind::F64 => false,
+                LoadKind::F32 => true,
+                _ => continue,
+            };
+            if single != f32(v) || use_counts.get(v) != Some(&1) {
+                continue;
+            }
+            let Some(r) = (v + 1..block.inst_range.end as usize).find(|&i| {
+                !super::emit_common::is_dead_pure_counts(&func.insts[i], i as ValueId, use_counts)
+            }) else {
+                continue;
+            };
+            let reads = match func.insts[r] {
+                Inst::Binop { op, lhs, rhs } => {
+                    crate::c5::ir::is_fp_arith_op(op) && rhs as usize == v && lhs as usize != v
+                }
+                Inst::Fma { a, b, c, .. } => {
+                    [a, b, c].iter().filter(|&&o| o as usize == v).count() == 1
+                }
+                _ => false,
+            };
+            if reads && f32(r) == single && use_counts.get(r).is_some_and(|&n| n > 0) {
+                out.insert(v as ValueId);
+            }
+        }
+    }
+    out
 }
 
 /// The integer `LoadLocal`s whose one reader is an argument a call in the

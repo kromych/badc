@@ -412,6 +412,7 @@ mod tests {
             stack_imm: alloc::collections::BTreeMap::new(),
             stack_load: alloc::collections::BTreeMap::new(),
             fp_const: vec![false; n],
+            fp_mem_operand: alloc::collections::BTreeSet::new(),
             implicit_live: Vec::new(),
             hints: vec![None; n],
             f32_values: vec![false; n],

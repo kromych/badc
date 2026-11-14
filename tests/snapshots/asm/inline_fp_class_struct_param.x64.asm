@@ -49,8 +49,7 @@ Disassembly of section .text:
                	movq	(%rdi), %rax
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rax, %xmm0
-               	movsd	0x8(%rdi), %xmm1
-               	addsd	%xmm1, %xmm0
+               	vaddsd	0x8(%rdi), %xmm0, %xmm0
                	retq
 
 <use_pair_clobber>:

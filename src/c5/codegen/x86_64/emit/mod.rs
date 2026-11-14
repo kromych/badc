@@ -49,7 +49,7 @@ use super::super::ir::{
 use super::GotFixup;
 use super::Target;
 use super::encode::{
-    Cc, Fixup, PltCallFixup, Reg, emit_add_rsp, emit_addsd, emit_addss, emit_cvtsd2ss,
+    Cc, Fixup, Mem, PltCallFixup, Reg, emit_add_rsp, emit_addsd, emit_addss, emit_cvtsd2ss,
     emit_cvtsi2sd, emit_cvtsi2ss, emit_cvtss2sd, emit_cvttsd2si, emit_cvttss2si, emit_imul_r_mem,
     emit_jcc_rel8, emit_jmp_rel8, emit_lea_r_mem, emit_lock_cmpxchg_mem_r, emit_lock_xadd_mem_r,
     emit_mov_mem_r, emit_mov_r_imm64, emit_mov_r_mem, emit_mov_rr, emit_movapd_xmm_xmm,

@@ -8643,3 +8643,43 @@ __m128 k(__m128 a, __m128 b, __m128 c, __m128 d) {\n\
     assert!(insns.iter().any(frame), "nothing spilled: {insns:x?}");
     assert!(!insns.iter().any(ymm), "{insns:x?}");
 }
+
+/// A floating load whose one reader is the next instruction, an add,
+/// subtract, multiply, divide or fused multiply-add, is that reader's
+/// memory operand, through a pointer and through a scaled index.
+#[test]
+fn x64_a_floating_load_read_once_is_its_readers_memory_operand() {
+    const SRC: &str = "double scale(double a, const double *p) { return a * p[2]; }\n\
+float less(float a, const float *p, long i) { return a - p[i]; }\n\
+double dot(const double *x, const double *y, int n) {\n\
+    double s = 0;\n\
+    for (int i = 0; i < n; i++) s += x[i] * y[i];\n\
+    return s;\n\
+}\n";
+    use super::codegen::function_bytes;
+    let obj = object_at(SRC, Target::LinuxX64, true);
+    // movsd / movss / vmovq into a register: a load of its own.
+    let fp_load = |i: &X64Insn| matches!(i.op, 0x0F10 | 0x0F7E) && !i.reg_form();
+    let mem_op = |i: &X64Insn, ops: &[u16], indexed: bool| {
+        i.vex
+            && ops.contains(&i.op)
+            && !i.reg_form()
+            && i.sib.is_some_and(|s| s >> 3 & 7 != 4) == indexed
+    };
+    for (name, ops, indexed, loads) in [
+        ("scale", &[0x0F59u16][..], false, 0),
+        ("less", &[0x0F5C][..], true, 0),
+        ("dot", &[0x3899, 0x38A9, 0x38B9][..], true, 1),
+    ] {
+        let insns = x64_insns(&function_bytes(&obj, name));
+        assert!(
+            insns.iter().any(|i| mem_op(i, ops, indexed)),
+            "{name}: no memory operand: {insns:x?}"
+        );
+        assert_eq!(
+            insns.iter().filter(|i| fp_load(i)).count(),
+            loads,
+            "{name}: {insns:x?}"
+        );
+    }
+}

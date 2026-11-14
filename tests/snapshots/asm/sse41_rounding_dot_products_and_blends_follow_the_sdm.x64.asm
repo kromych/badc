@@ -1747,8 +1747,7 @@ Disassembly of section .text:
                	leaq	-0x110(%rbp), %rdx
                	movss	-0x110(%rbp,%rax,4), %xmm0
                	leaq	-0x100(%rbp), %rdx
-               	movss	-0x100(%rbp,%rax,4), %xmm1
-               	mulss	%xmm1, %xmm0
+               	vmulss	-0x100(%rbp,%rax,4), %xmm0, %xmm0
                	jmp	<addr>
                	xorps	%xmm0, %xmm0
                	jmp	<addr>
@@ -1810,8 +1809,7 @@ Disassembly of section .text:
                	leaq	-0x110(%rbp), %rdx
                	movss	-0x110(%rbp,%rax,4), %xmm0
                	leaq	-0x100(%rbp), %rdx
-               	movss	-0x100(%rbp,%rax,4), %xmm1
-               	mulss	%xmm1, %xmm0
+               	vmulss	-0x100(%rbp,%rax,4), %xmm0, %xmm0
                	jmp	<addr>
                	xorps	%xmm0, %xmm0
                	jmp	<addr>
@@ -1873,8 +1871,7 @@ Disassembly of section .text:
                	leaq	-0x110(%rbp), %rdx
                	movss	-0x110(%rbp,%rax,4), %xmm0
                	leaq	-0x100(%rbp), %rdx
-               	movss	-0x100(%rbp,%rax,4), %xmm1
-               	mulss	%xmm1, %xmm0
+               	vmulss	-0x100(%rbp,%rax,4), %xmm0, %xmm0
                	jmp	<addr>
                	xorps	%xmm0, %xmm0
                	jmp	<addr>
@@ -1936,8 +1933,7 @@ Disassembly of section .text:
                	leaq	-0x110(%rbp), %rdx
                	movss	-0x110(%rbp,%rax,4), %xmm0
                	leaq	-0x100(%rbp), %rdx
-               	movss	-0x100(%rbp,%rax,4), %xmm1
-               	mulss	%xmm1, %xmm0
+               	vmulss	-0x100(%rbp,%rax,4), %xmm0, %xmm0
                	jmp	<addr>
                	xorps	%xmm0, %xmm0
                	jmp	<addr>
@@ -1999,8 +1995,7 @@ Disassembly of section .text:
                	leaq	-0x110(%rbp), %rdx
                	movss	-0x110(%rbp,%rax,4), %xmm0
                	leaq	-0x100(%rbp), %rdx
-               	movss	-0x100(%rbp,%rax,4), %xmm1
-               	mulss	%xmm1, %xmm0
+               	vmulss	-0x100(%rbp,%rax,4), %xmm0, %xmm0
                	jmp	<addr>
                	xorps	%xmm0, %xmm0
                	jmp	<addr>
@@ -2062,8 +2057,7 @@ Disassembly of section .text:
                	leaq	-0x110(%rbp), %rdx
                	movss	-0x110(%rbp,%rax,4), %xmm0
                	leaq	-0x100(%rbp), %rdx
-               	movss	-0x100(%rbp,%rax,4), %xmm1
-               	mulss	%xmm1, %xmm0
+               	vmulss	-0x100(%rbp,%rax,4), %xmm0, %xmm0
                	jmp	<addr>
                	xorps	%xmm0, %xmm0
                	jmp	<addr>
@@ -2125,8 +2119,7 @@ Disassembly of section .text:
                	leaq	-0x110(%rbp), %rdx
                	movss	-0x110(%rbp,%rax,4), %xmm0
                	leaq	-0x100(%rbp), %rdx
-               	movss	-0x100(%rbp,%rax,4), %xmm1
-               	mulss	%xmm1, %xmm0
+               	vmulss	-0x100(%rbp,%rax,4), %xmm0, %xmm0
                	jmp	<addr>
                	xorps	%xmm0, %xmm0
                	jmp	<addr>
@@ -2188,8 +2181,7 @@ Disassembly of section .text:
                	leaq	-0x110(%rbp), %rdx
                	movss	-0x110(%rbp,%rax,4), %xmm0
                	leaq	-0x100(%rbp), %rdx
-               	movss	-0x100(%rbp,%rax,4), %xmm1
-               	mulss	%xmm1, %xmm0
+               	vmulss	-0x100(%rbp,%rax,4), %xmm0, %xmm0
                	jmp	<addr>
                	xorps	%xmm0, %xmm0
                	jmp	<addr>

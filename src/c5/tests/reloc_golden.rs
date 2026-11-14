@@ -185,8 +185,8 @@ const GOLDEN: &[(&str, &str, u64, usize)] = &[
     (
         "fp_across_struct_call",
         "linux-x64",
-        0x473f3360e7218991,
-        1184,
+        0x9df5467efdfb49a9,
+        1176,
     ),
     (
         "fp_across_struct_call",
@@ -200,7 +200,7 @@ const GOLDEN: &[(&str, &str, u64, usize)] = &[
         0x734e0d68e50925d9,
         1336,
     ),
-    ("fp_across_struct_call", "win-x64", 0x1d2add6da639d16c, 1288),
+    ("fp_across_struct_call", "win-x64", 0xb38311c27fa27aac, 1280),
     (
         "fp_across_struct_call",
         "win-arm64",

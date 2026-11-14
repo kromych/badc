@@ -89,8 +89,7 @@ Disassembly of section .text:
                	movq	0x8(%r11), %r10
                	addq	$0x8, 0x8(%r11)
                	movq	%r10, %rcx
-               	movsd	(%rcx), %xmm1
-               	addsd	%xmm1, %xmm0
+               	vaddsd	(%rcx), %xmm0, %xmm0
                	jmp	<addr>
                	leaq	-0x18(%rbp), %rax
                	leave

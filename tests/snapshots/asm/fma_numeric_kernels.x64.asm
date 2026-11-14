@@ -41,8 +41,7 @@ Disassembly of section .text:
                	movsd	%xmm0, -0x8(%rbp)
                	movsd	-0x8(%rbp), %xmm0
                	movl	$0x3, %eax
-               	vmovq	-0x28(%rbp,%rax,8), %xmm2
-               	vfmadd213sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm0) + xmm2
+               	vfmadd213sd	-0x28(%rbp,%rax,8), %xmm1, %xmm0 # xmm0 = (xmm1 * xmm0) + mem
                	decq	%rax
                	testl	%eax, %eax
                	jge	<addr>
@@ -62,8 +61,7 @@ Disassembly of section .text:
                	retq
                	movsd	-0x8(%rbp), %xmm1
                	movl	$0x3, %eax
-               	vmovq	-0x28(%rbp,%rax,8), %xmm2
-               	vfmadd213sd	%xmm2, %xmm0, %xmm1 # xmm1 = (xmm0 * xmm1) + xmm2
+               	vfmadd213sd	-0x28(%rbp,%rax,8), %xmm0, %xmm1 # xmm1 = (xmm0 * xmm1) + mem
                	decq	%rax
                	testl	%eax, %eax
                	jge	<addr>
@@ -124,17 +122,13 @@ Disassembly of section .text:
                	leaq	-0x90(%rbp), %rcx
                	imulq	$0x18, %rax, %rsi
                	addq	%rsi, %rcx
-               	movsd	(%rcx), %xmm0
-               	movq	%rdx, %xmm15
-               	vfmadd213sd	%xmm15, %xmm2, %xmm0 # xmm0 = (xmm2 * xmm0) + xmm15
-               	movsd	0x8(%rcx), %xmm1
-               	vfmadd231sd	%xmm3, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm3) + xmm0
-               	movsd	0x10(%rcx), %xmm1
-               	vfmadd231sd	%xmm4, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm4) + xmm0
+               	movq	%rdx, %xmm0
+               	vfmadd231sd	(%rcx), %xmm2, %xmm0 # xmm0 = (xmm2 * mem) + xmm0
+               	vfmadd231sd	0x8(%rcx), %xmm3, %xmm0 # xmm0 = (xmm3 * mem) + xmm0
+               	vfmadd231sd	0x10(%rcx), %xmm4, %xmm0 # xmm0 = (xmm4 * mem) + xmm0
                	leaq	-0x90(%rbp), %rcx
                	addq	%rcx, %rsi
-               	movsd	(%rsi), %xmm1
-               	subsd	%xmm1, %xmm0
+               	vsubsd	(%rsi), %xmm0, %xmm0
                	xorps	%xmm1, %xmm1
                	comisd	%xmm0, %xmm1
                	jbe	<addr>
@@ -146,16 +140,13 @@ Disassembly of section .text:
                	jbe	<addr>
                	imulq	$0x18, %rax, %rsi
                	addq	%rsi, %rcx
-               	movsd	(%rcx), %xmm0
-               	vfmadd213sd	%xmm1, %xmm5, %xmm0 # xmm0 = (xmm5 * xmm0) + xmm1
-               	movsd	0x8(%rcx), %xmm1
-               	vfmadd231sd	%xmm6, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm6) + xmm0
-               	movsd	0x10(%rcx), %xmm1
-               	vfmadd231sd	%xmm7, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm7) + xmm0
+               	movapd	%xmm5, %xmm0
+               	vfmadd132sd	(%rcx), %xmm1, %xmm0 # xmm0 = (xmm0 * mem) + xmm1
+               	vfmadd231sd	0x8(%rcx), %xmm6, %xmm0 # xmm0 = (xmm6 * mem) + xmm0
+               	vfmadd231sd	0x10(%rcx), %xmm7, %xmm0 # xmm0 = (xmm7 * mem) + xmm0
                	leaq	-0x90(%rbp), %rcx
                	addq	%rcx, %rsi
-               	movsd	0x8(%rsi), %xmm1
-               	subsd	%xmm1, %xmm0
+               	vsubsd	0x8(%rsi), %xmm0, %xmm0
                	xorps	%xmm1, %xmm1
                	comisd	%xmm0, %xmm1
                	jbe	<addr>
@@ -167,16 +158,13 @@ Disassembly of section .text:
                	jbe	<addr>
                	imulq	$0x18, %rax, %rsi
                	addq	%rsi, %rcx
-               	movsd	(%rcx), %xmm0
-               	vfmadd213sd	%xmm1, %xmm8, %xmm0 # xmm0 = (xmm8 * xmm0) + xmm1
-               	movsd	0x8(%rcx), %xmm1
-               	vfmadd231sd	%xmm9, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm9) + xmm0
-               	movsd	0x10(%rcx), %xmm1
-               	vfmadd231sd	%xmm10, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm10) + xmm0
+               	movapd	%xmm8, %xmm0
+               	vfmadd132sd	(%rcx), %xmm1, %xmm0 # xmm0 = (xmm0 * mem) + xmm1
+               	vfmadd231sd	0x8(%rcx), %xmm9, %xmm0 # xmm0 = (xmm9 * mem) + xmm0
+               	vfmadd231sd	0x10(%rcx), %xmm10, %xmm0 # xmm0 = (xmm10 * mem) + xmm0
                	leaq	-0x90(%rbp), %rcx
                	addq	%rsi, %rcx
-               	movsd	0x10(%rcx), %xmm1
-               	subsd	%xmm1, %xmm0
+               	vsubsd	0x10(%rcx), %xmm0, %xmm0
                	xorps	%xmm1, %xmm1
                	comisd	%xmm0, %xmm1
                	jbe	<addr>

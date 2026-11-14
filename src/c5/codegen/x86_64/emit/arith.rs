@@ -461,8 +461,8 @@ pub(super) fn emit_fma(
     a: u32,
     b: u32,
     c: u32,
-    neg_product: bool,
-    neg_addend: bool,
+    (neg_product, neg_addend): (bool, bool),
+    mem: Option<Mem>,
     alloc: &Allocation,
     frame: Frame,
 ) -> Emit {
@@ -473,7 +473,16 @@ pub(super) fn emit_fma(
         Place::Spill(_) => Reg(frame.fp_scratch[1]),
         _ => return fail("Fma: dst not fp reg / spill"),
     };
-    let ops = [a, b, c].map(|x| place_of(alloc, x));
+    // A load the instruction reads as its memory operand
+    // (`Allocation::fp_mem_operand`) is the r/m operand; its register holds
+    // nothing.
+    let folded = [a, b, c]
+        .iter()
+        .position(|x| alloc.fp_mem_operand.contains(x));
+    let mut ops = [a, b, c].map(|x| place_of(alloc, x));
+    if let Some(k) = folded {
+        ops[k] = Place::None;
+    }
     let in_dd = |k: &usize| ops[*k] == Place::FpReg(dd.0);
     let vvvv_cost = |k: usize| u32::from(!matches!(ops[k], Place::FpReg(_)));
     let rm_cost = |k: usize| u32::from(matches!(ops[k], Place::IntReg(_)));
@@ -500,12 +509,22 @@ pub(super) fn emit_fma(
     } else {
         [2, 0, 1]
     };
-    let Some((_, [acc, vv, rm])) = order
-        .into_iter()
-        .filter(|k| !pinned || in_dd(k))
-        .map(plan)
-        .min_by_key(|p| p.0)
-    else {
+    let chosen = match folded {
+        Some(m) => order
+            .into_iter()
+            .filter(|&k| k != m && (!pinned || in_dd(&k)))
+            .map(|acc| {
+                let vv = 3 - acc - m;
+                (u32::from(!in_dd(&acc)) + vvvv_cost(vv), [acc, vv, m])
+            })
+            .min_by_key(|p| p.0),
+        None => order
+            .into_iter()
+            .filter(|k| !pinned || in_dd(k))
+            .map(plan)
+            .min_by_key(|p| p.0),
+    };
+    let Some((_, [acc, vv, rm])) = chosen else {
         return fail("Fma: no operand order");
     };
     let Some(ra) = materialize_fp(code, ops[acc], dd, frame) else {
@@ -527,13 +546,21 @@ pub(super) fn emit_fma(
         return fail("Fma: vvvv operand not fp reg / spill / int reg");
     };
     let opcode = [0x99u8, 0xA9, 0xB9][form] + (neg_product as u8) * 4 + (neg_addend as u8) * 2;
+    if folded.is_some() {
+        let Some(mem) = mem else {
+            return fail("Fma: folded load without its memory operand");
+        };
+        emit_vex_fma_mem(code, opcode, !is_f32, dd, rv, mem);
+        fp_spill_dst_to_slot(code, dst, dd, frame);
+        return Ok(());
+    }
     match rm_place {
         Place::FpReg(r) => emit_vex_fma(code, opcode, !is_f32, dd, rv, Reg(r)),
         Place::Spill(slot) => {
             let (base, off) = spill_slot_addr(frame, slot);
             match code.holding(base.0, off, SpillWidth::Scalar) {
                 Some(r) => emit_vex_fma(code, opcode, !is_f32, dd, rv, Reg(r)),
-                None => emit_vex_fma_mem(code, opcode, !is_f32, dd, rv, base, off),
+                None => emit_vex_fma_mem(code, opcode, !is_f32, dd, rv, Mem::at(base, off)),
             }
         }
         // A spilled result forms in the second scratch, so an r/m operand
@@ -543,7 +570,7 @@ pub(super) fn emit_fma(
             Place::Spill(slot) => {
                 let (base, off) = spill_slot_addr(frame, slot);
                 emit_mr(code, Mnem::Mov, 8, base, off, Reg(r));
-                emit_vex_fma_mem(code, opcode, !is_f32, dd, rv, base, off);
+                emit_vex_fma_mem(code, opcode, !is_f32, dd, rv, Mem::at(base, off));
             }
             _ => {
                 let rm = Reg(frame.fp_scratch[1]);
@@ -1071,7 +1098,7 @@ fn emit_fp_binop(
             let (base, off) = spill_slot_addr(frame, slot);
             match code.holding(base.0, off, SpillWidth::Scalar) {
                 Some(r) => emit_vex_fp_arith(code, opcode, is_f32, dd, ra, Reg(r)),
-                None => emit_vex_fp_arith_mem(code, opcode, is_f32, dd, ra, base, off),
+                None => emit_vex_fp_arith_mem(code, opcode, is_f32, dd, ra, Mem::at(base, off)),
             }
         }
         Place::IntReg(r) => {
@@ -1081,6 +1108,31 @@ fn emit_fp_binop(
         }
         Place::None => return fail("Fbinop: rhs has no place"),
     }
+    fp_spill_dst_to_slot(code, dst, dd, frame);
+    Ok(())
+}
+
+/// [`emit_fp_binop`] with the second operand in memory: the load the
+/// instruction reads in its place (`Allocation::fp_mem_operand`).
+pub(super) fn emit_fp_binop_mem(
+    code: &mut CodeBuf,
+    op: BinOp,
+    is_f32: bool,
+    dst: Place,
+    lhs_place: Place,
+    mem: Mem,
+    frame: Frame,
+) -> Emit {
+    let Some(opcode) = fp_arith_opcode(op) else {
+        return fail("Fbinop: memory operand of a non-arithmetic op");
+    };
+    let Some(dd) = fp_or_spill_dst(dst, frame) else {
+        return fail("Fbinop: dst not fp reg / spill");
+    };
+    let Some(ra) = materialize_fp(code, lhs_place, Reg(frame.fp_scratch[0]), frame) else {
+        return fail("Fbinop: lhs not fp reg / spill / int reg");
+    };
+    emit_vex_fp_arith_mem(code, opcode, is_f32, dd, ra, mem);
     fp_spill_dst_to_slot(code, dst, dd, frame);
     Ok(())
 }

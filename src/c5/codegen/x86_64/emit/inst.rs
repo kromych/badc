@@ -394,6 +394,13 @@ pub(super) fn emit_inst(
         | Inst::StoreLocal { .. }
         | Inst::LoadIndexed { .. }
         | Inst::StoreIndexed { .. } => emit_mem_inst(code, inst, v, dst, fcx),
+        Inst::Binop { op, lhs, rhs } if alloc.fp_mem_operand.contains(rhs) => {
+            let Some(mem) = folded_load_operand(code, *rhs, fcx) else {
+                return fail("Fbinop: folded load address not int reg / spill");
+            };
+            let lhs = place_of(alloc, *lhs);
+            super::arith::emit_fp_binop_mem(code, *op, alloc.is_f32(v), dst, lhs, mem, frame)
+        }
         Inst::Binop { op, lhs, rhs } => emit_binop(code, *op, v, dst, *lhs, *rhs, alloc, frame),
         Inst::BinopI { op, lhs, rhs_imm } => {
             emit_binop_imm(code, *op, v, dst, *lhs, *rhs_imm, alloc, frame)
@@ -537,18 +544,20 @@ pub(super) fn emit_inst(
             c,
             neg_product,
             neg_addend,
-        } => emit_fma(
-            code,
-            dst,
-            v,
-            *a,
-            *b,
-            *c,
-            *neg_product,
-            *neg_addend,
-            alloc,
-            frame,
-        ),
+        } => {
+            let mem = match [*a, *b, *c]
+                .into_iter()
+                .find(|x| alloc.fp_mem_operand.contains(x))
+            {
+                Some(load) => match folded_load_operand(code, load, fcx) {
+                    Some(mem) => Some(mem),
+                    None => return fail("Fma: folded load address not int reg / spill"),
+                },
+                None => None,
+            };
+            let negate = (*neg_product, *neg_addend);
+            emit_fma(code, dst, v, *a, *b, *c, negate, mem, alloc, frame)
+        }
         Inst::MulAdd {
             a,
             b,
@@ -621,6 +630,8 @@ fn emit_mem_inst(
         return emit_store_of_imm(code, inst, func, alloc, frame, abi);
     }
     match inst {
+        // Read by the next instruction as its memory operand.
+        Inst::Load { .. } | Inst::LoadIndexed { .. } if alloc.fp_mem_operand.contains(&v) => Ok(()),
         Inst::Load {
             addr,
             disp,
@@ -773,6 +784,45 @@ pub(super) fn frame_object_base(
     };
     let (reg, bytes) = super::mem::local_slot_base_disp(off, func, frame, abi);
     Some((reg, i32::try_from(bytes).ok()?))
+}
+
+/// The memory operand of a load its reader takes in its place
+/// (`Allocation::fp_mem_operand`), a spilled base or index loaded into a
+/// scratch register.
+fn folded_load_operand(
+    code: &mut CodeBuf,
+    load: super::super::ir::ValueId,
+    fcx: &FnCtx,
+) -> Option<super::super::encode::Mem> {
+    let FnCtx {
+        func,
+        alloc,
+        frame,
+        abi,
+        ..
+    } = *fcx;
+    match func.insts[load as usize] {
+        Inst::Load { addr, disp, .. } => {
+            let base = materialize_int(code, place_of(alloc, addr), SCRATCH_R10, frame)?;
+            Some(super::super::encode::Mem::at(base, disp))
+        }
+        Inst::LoadIndexed {
+            base, index, scale, ..
+        } => {
+            let (base, index, disp) = super::mem::indexed_operands(
+                code,
+                (place_of(alloc, base), place_of(alloc, index)),
+                frame,
+                frame_object_base(func, base, frame, abi),
+            )?;
+            Some(super::super::encode::Mem {
+                base,
+                index: Some((index, scale)),
+                disp,
+            })
+        }
+        _ => None,
+    }
 }
 
 /// The call instructions.

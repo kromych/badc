@@ -265,8 +265,7 @@ Disassembly of section .text:
                	movq	0x8(%r11), %r10
                	addq	$0x8, 0x8(%r11)
                	movq	%r10, %rax
-               	movsd	(%rax), %xmm2
-               	vfmadd213sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm0) + xmm2
+               	vfmadd213sd	(%rax), %xmm1, %xmm0 # xmm0 = (xmm1 * xmm0) + mem
                	leaq	-0x30(%rbp), %rax
                	leave
                	retq

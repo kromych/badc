@@ -276,8 +276,7 @@ Disassembly of section .text:
                	movq	%rax, (%rcx)
                	movl	$0x40600000, 0x8(%rcx)  # imm = 0x40600000
                	movss	(%rcx), %xmm0
-               	movss	0x8(%rcx), %xmm1
-               	addss	%xmm1, %xmm0
+               	vaddss	0x8(%rcx), %xmm0, %xmm0
                	movss	<rip>, %xmm1
                	ucomiss	%xmm1, %xmm0
                	jp	<addr>

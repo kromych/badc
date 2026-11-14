@@ -229,8 +229,7 @@ Disassembly of section .text:
                	xorps	%xmm0, %xmm0
                	leaq	<rip>, %rcx # <addr>
                	movl	$0x3f804000, (%rcx,%rax,4) # imm = 0x3F804000
-               	movss	(%rcx,%rax,4), %xmm1
-               	addss	%xmm1, %xmm0
+               	vaddss	(%rcx,%rax,4), %xmm0, %xmm0
                	incq	%rax
                	cmpl	$0x10, %eax
                	jl	<addr>
@@ -248,8 +247,7 @@ Disassembly of section .text:
                	xorps	%xmm0, %xmm0
                	leaq	<rip>, %rcx # <addr>
                	movl	$0x3f804000, (%rcx,%rax,4) # imm = 0x3F804000
-               	movss	(%rcx,%rax,4), %xmm1
-               	addss	%xmm1, %xmm0
+               	vaddss	(%rcx,%rax,4), %xmm0, %xmm0
                	incq	%rax
                	cmpl	$0x10, %eax
                	jl	<addr>

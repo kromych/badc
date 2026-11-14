@@ -773,7 +773,7 @@ pub(super) fn emit_load_indexed(
 /// The base and index registers and the displacement of an indexed access:
 /// the frame register and the object's offset for a frame object's address,
 /// else both operands, a spilled one loaded into r10 or r11.
-fn indexed_operands(
+pub(super) fn indexed_operands(
     code: &mut CodeBuf,
     (base, index): (Place, Place),
     frame: Frame,

@@ -211,7 +211,7 @@ fn materialize_v128(code: &mut CodeBuf, place: Place, scratch: Reg, frame: Frame
     }
 }
 
-/// A 256- or 512-bit spill occupies its width's units, addressed at the
+/// A 128-, 256- or 512-bit spill occupies its width's units, addressed at the
 /// lowest.
 fn wide_spill_addr(frame: Frame, w: VecWidth, slot: u32) -> (Reg, i32) {
     spill_slot_addr(frame, slot + w.units() - 1)
@@ -241,34 +241,35 @@ fn zmm_mem(base: Reg, disp: i32) -> super::asm::Concrete {
     }
 }
 
-/// `vmovups` / `vmovdqu64` of a 256- or 512-bit register from `[base + disp]`.
+/// `vmovups` / `vmovdqu64` of a 128-, 256- or 512-bit register from `[base + disp]`.
 fn emit_wide_load(code: &mut Vec<u8>, w: VecWidth, dst: Reg, base: Reg, disp: i32) {
-    if w == VecWidth::V512 {
-        emit_zmm(code, "vmovdqu64", &[zmm_mem(base, disp), zmm(dst)]);
-    } else {
-        emit_vmovups_ymm_mem(code, dst, base, disp);
+    match w {
+        VecWidth::V512 => emit_zmm(code, "vmovdqu64", &[zmm_mem(base, disp), zmm(dst)]),
+        VecWidth::V256 => emit_vmovups_ymm_mem(code, dst, base, disp),
+        _ => super::encode::emit_vmovups_xmm_mem(code, dst, base, disp),
     }
 }
 
-/// `vmovups` / `vmovdqu64` of a 256- or 512-bit register to `[base + disp]`.
+/// `vmovups` / `vmovdqu64` of a 128-, 256- or 512-bit register to
+/// `[base + disp]`, writing that many bytes.
 fn emit_wide_store(code: &mut Vec<u8>, w: VecWidth, base: Reg, disp: i32, src: Reg) {
-    if w == VecWidth::V512 {
-        emit_zmm(code, "vmovdqu64", &[zmm(src), zmm_mem(base, disp)]);
-    } else {
-        emit_vmovups_mem_ymm(code, base, disp, src);
+    match w {
+        VecWidth::V512 => emit_zmm(code, "vmovdqu64", &[zmm(src), zmm_mem(base, disp)]),
+        VecWidth::V256 => emit_vmovups_mem_ymm(code, base, disp, src),
+        _ => super::encode::emit_vmovups_mem_xmm(code, base, disp, src),
     }
 }
 
-/// `vmovaps` / `vmovdqa64` between 256- or 512-bit registers.
+/// `vmovaps` / `vmovdqa64` between 128-, 256- or 512-bit registers.
 fn emit_wide_mov(code: &mut Vec<u8>, w: VecWidth, dst: Reg, src: Reg) {
-    if w == VecWidth::V512 {
-        emit_zmm(code, "vmovdqa64", &[zmm(src), zmm(dst)]);
-    } else {
-        emit_vmovaps_ymm_ymm(code, dst, src);
+    match w {
+        VecWidth::V512 => emit_zmm(code, "vmovdqa64", &[zmm(src), zmm(dst)]),
+        VecWidth::V256 => emit_vmovaps_ymm_ymm(code, dst, src),
+        _ => super::encode::emit_vmovaps_xmm_xmm(code, dst, src),
     }
 }
 
-/// [`materialize_v128`] for a 256- or 512-bit value; `vmovq` clears the
+/// [`materialize_v128`] for a value of any vector width; `vmovq` clears the
 /// bits above 64.
 fn materialize_wide(
     code: &mut CodeBuf,
@@ -346,7 +347,7 @@ fn load_spill_slot(code: &mut CodeBuf, frame: Frame, slot: u32, sp_shift: u32, d
 }
 
 fn wide_spill_width(w: VecWidth) -> SpillWidth {
-    SpillWidth::Vector(if w == VecWidth::V512 { 64 } else { 32 })
+    SpillWidth::Vector(w.units() as u8 * 8)
 }
 
 /// The working register of an int-producing handler: the allocated

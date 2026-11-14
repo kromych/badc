@@ -135,19 +135,19 @@ Disassembly of section .text:
                	movapd	%xmm14, %xmm0
                	movups	-0x10(%rbp), %xmm1
                	movups	-0x20(%rbp), %xmm2
-               	vmovaps	%ymm0, %ymm3
+               	vmovaps	%xmm0, %xmm3
                	vfmadd231ps	%xmm2, %xmm1, %xmm3 # xmm3 = (xmm1 * xmm2) + xmm3
                	movups	%xmm3, (%rsp)
-               	vmovaps	%ymm0, %ymm3
+               	vmovaps	%xmm0, %xmm3
                	vfmsub231ps	%xmm2, %xmm1, %xmm3 # xmm3 = (xmm1 * xmm2) - xmm3
                	movups	%xmm3, 0x10(%rsp)
-               	vmovaps	%ymm0, %ymm3
+               	vmovaps	%xmm0, %xmm3
                	vfnmadd231ps	%xmm2, %xmm1, %xmm3 # xmm3 = -(xmm1 * xmm2) + xmm3
                	movups	%xmm3, 0x20(%rsp)
-               	vmovaps	%ymm0, %ymm3
+               	vmovaps	%xmm0, %xmm3
                	vfnmsub231ps	%xmm2, %xmm1, %xmm3 # xmm3 = -(xmm1 * xmm2) - xmm3
                	movups	%xmm3, 0x30(%rsp)
-               	vmovaps	%ymm0, %ymm3
+               	vmovaps	%xmm0, %xmm3
                	vfmaddsub231ps	%xmm2, %xmm1, %xmm3 # xmm3 = (xmm1 * xmm2) +/- xmm3
                	movups	%xmm3, 0x40(%rsp)
                	vfmsubadd231ps	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm2) -/+ xmm0
@@ -364,9 +364,9 @@ Disassembly of section .text:
                	vmovdqa	%xmm1, %xmm0
                	vmovdqa	%xmm2, %xmm1
                	vmovdqa	%xmm3, %xmm2
-               	vmovaps	%ymm2, %ymm14
+               	vmovaps	%xmm2, %xmm14
                	vfnmadd231pd	%xmm1, %xmm0, %xmm14 # xmm14 = -(xmm0 * xmm1) + xmm14
-               	vmovaps	%ymm14, %ymm0
+               	vmovaps	%xmm14, %xmm0
                	vpermilpd	$0x0, %xmm0, %xmm1 # xmm1 = xmm0[0,0]
                	movq	%xmm1, %rax
                	cmpq	%rdi, %rax

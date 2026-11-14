@@ -8616,3 +8616,30 @@ void fscale(double *a, const double *b, double x, int n) {\n\
         assert!(!ws.iter().any(lsl), "{name}: {ws:08x?}");
     }
 }
+
+/// A 16-byte FMA row takes the VEX lowering the wide rows take, and a result
+/// it spills is stored as 16 bytes: a 32-byte store overwrote the slot
+/// beside it, with another value live there.
+#[test]
+fn x64_a_spilled_16_byte_fma_result_takes_16_bytes() {
+    const SRC: &str = "#include <immintrin.h>\n\
+__m128 k(__m128 a, __m128 b, __m128 c, __m128 d) {\n\
+    __m128 x = _mm_fmadd_ps(a, b, c), y = _mm_fmsub_ps(b, c, d), z = _mm_fnmadd_ps(c, d, a);\n\
+    return _mm_add_ps(_mm_add_ps(x, y), _mm_add_ps(z, a));\n\
+}\n";
+    use super::codegen::function_bytes;
+    let obj = object_with_pool(SRC, Target::LinuxX64, (2, 2));
+    let bytes = function_bytes(&obj, "k");
+    let insns = x64_insns(&bytes);
+    // VEX.L, the 256-bit form: bit 2 of the last VEX prefix byte.
+    let ymm = |i: &X64Insn| {
+        i.vex
+            && match bytes[i.at] {
+                0xC5 => bytes[i.at + 1] & 4 != 0,
+                _ => bytes[i.at + 2] & 4 != 0,
+            }
+    };
+    let frame = |i: &X64Insn| matches!(i.mem_base(), Some(4 | 5)) && !i.reg_form();
+    assert!(insns.iter().any(frame), "nothing spilled: {insns:x?}");
+    assert!(!insns.iter().any(ymm), "{insns:x?}");
+}

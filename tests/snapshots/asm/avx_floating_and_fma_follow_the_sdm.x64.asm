@@ -5131,8 +5131,8 @@ Disassembly of section .text:
                	cmpl	$0x20, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	vmovups	-0x20(%rbp), %ymm15
-               	vmovaps	%ymm6, %ymm0
+               	vmovups	-0x20(%rbp), %xmm15
+               	vmovaps	%xmm6, %xmm0
                	vfmadd231ps	-0x40(%rbp), %xmm15, %xmm0 # xmm0 = (xmm15 * mem) + xmm0
                	movups	%xmm0, (%rsp)
                	movq	<rip>, %rcx # <addr>
@@ -5145,8 +5145,8 @@ Disassembly of section .text:
                	cmpl	$0x10, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	vmovups	-0x20(%rbp), %ymm15
-               	vmovaps	%ymm6, %ymm0
+               	vmovups	-0x20(%rbp), %xmm15
+               	vmovaps	%xmm6, %xmm0
                	vfnmsub231ps	-0x40(%rbp), %xmm15, %xmm0 # xmm0 = -(xmm15 * mem) - xmm0
                	movups	%xmm0, (%rsp)
                	movq	<rip>, %rcx # <addr>
@@ -5356,8 +5356,8 @@ Disassembly of section .text:
                	cmpl	$0x20, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	vmovups	-0x30(%rbp), %ymm15
-               	vmovups	-0x60(%rbp), %ymm0
+               	vmovups	-0x30(%rbp), %xmm15
+               	vmovups	-0x60(%rbp), %xmm0
                	vfmadd231pd	-0x50(%rbp), %xmm15, %xmm0 # xmm0 = (xmm15 * mem) + xmm0
                	movups	%xmm0, (%rsp)
                	movq	<rip>, %rcx # <addr>
@@ -5370,8 +5370,8 @@ Disassembly of section .text:
                	cmpl	$0x10, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	vmovups	-0x30(%rbp), %ymm15
-               	vmovups	-0x60(%rbp), %ymm0
+               	vmovups	-0x30(%rbp), %xmm15
+               	vmovups	-0x60(%rbp), %xmm0
                	vfnmadd231pd	-0x50(%rbp), %xmm15, %xmm0 # xmm0 = -(xmm15 * mem) + xmm0
                	movups	%xmm0, (%rsp)
                	movq	<rip>, %rcx # <addr>

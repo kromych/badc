@@ -1286,6 +1286,13 @@ pub(crate) fn emit_vmovaps_ymm_ymm(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
 }
 
+/// `VMOVAPS xmm, xmm`: `VEX.128.0F 28 /r`.
+pub(crate) fn emit_vmovaps_xmm_xmm(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_vex_0f(code, dst, Reg(0), src, 0, false);
+    emit_byte(code, 0x28);
+    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
+}
+
 /// `VMOVQ xmm, r64`, which clears bits 64..256: `VEX.128.66.0F.W1 6E /r`.
 pub(crate) fn emit_vmovq_xmm_r(code: &mut Vec<u8>, xmm: Reg, src: Reg) {
     emit_byte(code, 0xC4);

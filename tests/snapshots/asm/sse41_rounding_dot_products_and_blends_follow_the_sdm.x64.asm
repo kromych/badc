@@ -3096,8 +3096,8 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	-0x50(%rbp,%rax,4), %ecx
                	jmp	<addr>
-               	vmovups	0x30(%rsp), %ymm14
-               	vmovups	0x10(%rsp), %ymm15
+               	vmovups	0x30(%rsp), %xmm14
+               	vmovups	0x10(%rsp), %xmm15
                	vblendvps	%xmm15, 0x20(%rsp), %xmm14, %xmm0
                	leaq	-0x10(%rbp), %rdi
                	movups	%xmm0, -0x10(%rbp)
@@ -3129,8 +3129,8 @@ Disassembly of section .text:
                	cmpl	%edx, %eax
                	je	<addr>
                	movl	$0x40, %ecx
-               	vmovups	0x30(%rsp), %ymm14
-               	vmovups	0x10(%rsp), %ymm15
+               	vmovups	0x30(%rsp), %xmm14
+               	vmovups	0x10(%rsp), %xmm15
                	vblendvpd	%xmm15, 0x20(%rsp), %xmm14, %xmm0
                	movups	%xmm0, -0x10(%rbp)
                	xorl	%eax, %eax

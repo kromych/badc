@@ -302,6 +302,18 @@ pub enum Intrinsic {
     /// call folds as the builtin. The walker keeps it only under `-O`;
     /// resolved to the argument.
     BuiltinArg = 88,
+    /// The bytes of an SVE vector register, the vector length (`cntb`).
+    /// No arguments.
+    SveVlBytes = 89,
+    /// The bytes of an SVE predicate register, an eighth of the vector
+    /// length (`cntd`). No arguments.
+    SvePlBytes = 90,
+    /// Copy an SVE vector from `args[1]` to `args[0]` through a vector
+    /// register (`ldr z` / `str z`). No result.
+    SveCopyZ = 91,
+    /// Copy an SVE predicate from `args[1]` to `args[0]` through a
+    /// predicate register. No result.
+    SveCopyP = 92,
 }
 
 /// The type operand of [`Intrinsic::VaArg`], one constant packed as
@@ -457,6 +469,10 @@ impl Intrinsic {
             86 => Some(Intrinsic::ObjectSize),
             87 => Some(Intrinsic::SubobjectBound),
             88 => Some(Intrinsic::BuiltinArg),
+            89 => Some(Intrinsic::SveVlBytes),
+            90 => Some(Intrinsic::SvePlBytes),
+            91 => Some(Intrinsic::SveCopyZ),
+            92 => Some(Intrinsic::SveCopyP),
             _ => None,
         }
     }

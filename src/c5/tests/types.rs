@@ -1876,7 +1876,8 @@ fn shufflevector_types_its_result_and_checks_its_indices() {
 /// them over the builtin `__SV*_t` types, which pointers, prototypes and
 /// function pointers take. `sizeof`, `_Alignof`, an array, a member, an
 /// object of static storage duration, `_Atomic` and pointer arithmetic are
-/// errors, as with clang. Off AArch64 the names are ordinary identifiers.
+/// errors, as with clang; an SVE value is passed, returned or computed
+/// nowhere yet. Off AArch64 the names are ordinary identifiers.
 #[test]
 fn the_sve_types_are_sizeless() {
     use crate::{Compiler, Target};
@@ -1938,8 +1939,24 @@ fn the_sve_types_are_sizeless() {
             "parameter `x` has SVE type `__SVInt32_t`",
         ),
         (
-            "void f(svint32_t *p, svint32_t *q) { *p = *q; }",
+            "void h(svint32_t); void f(svint32_t *p) { h(*p); }",
             "a value of SVE type `__SVInt32_t`",
+        ),
+        (
+            "svint32_t h(void); void f(svint32_t *p) { *p = h(); }",
+            "with incomplete return type",
+        ),
+        (
+            "void f(int c, svint32_t *p, svint32_t *q) { svint32_t x = c ? *p : *q; }",
+            "an SVE value of this form",
+        ),
+        (
+            "void f(svint32_t *p, svuint32_t *q) { *p = *q; }",
+            "types differ in the assignment",
+        ),
+        (
+            "void f(svint32_t *q) { goto l; svint32_t x = *q; l: *q = *q; }",
+            "declared with an SVE type",
         ),
     ] {
         let msg = compile(src, Target::LinuxAarch64).unwrap_or_default();

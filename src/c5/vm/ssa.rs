@@ -96,8 +96,14 @@ pub(super) const IMPORT_ADDR_TAG: i64 = 0x2000_0000_0000_0000;
 /// `bytes`. `Inst::ImmData(off)` returns `off` (which lands in
 /// the data region). `Inst::ImmCode` is the only address that
 /// stays tagged because code addresses don't map to bytes.
+/// The SVE vector length a run models unless the VM is given another:
+/// 128 bits, the architecture's least.
+pub(crate) const SVE_DEFAULT_VL_BYTES: usize = 16;
+
 struct Memory {
     bytes: Vec<u8>,
+    /// The SVE vector length in bytes the run models, fixed for the run.
+    sve_vl_bytes: usize,
     data_end: usize,
     /// Bump-pointer next-frame-allocation cursor. Pushed by
     /// `alloc_frame` on call entry; reset to the saved base on
@@ -196,6 +202,7 @@ impl Memory {
         let heap_base = data_end + STACK_BYTES;
         let mut mem = Self {
             bytes,
+            sve_vl_bytes: SVE_DEFAULT_VL_BYTES,
             data_end,
             stack_top: data_end,
             heap_base,
@@ -735,7 +742,7 @@ pub(super) fn run_program_with_args<H: Host>(
         entry_pc,
         host,
         args,
-        false,
+        (false, SVE_DEFAULT_VL_BYTES),
         false,
         &[],
         &[],
@@ -756,7 +763,7 @@ pub(super) fn run_program_with_args_tracked<H: Host>(
     entry_pc: usize,
     host: &mut H,
     args: &[alloc::string::String],
-    track_pointers: bool,
+    (track_pointers, sve_vl_bytes): (bool, usize),
     trace: bool,
     init_pcs: &[usize],
     fini_pcs: &[usize],
@@ -780,6 +787,7 @@ pub(super) fn run_program_with_args_tracked<H: Host>(
         .with_trace(trace);
     let (data_with_argv, argc, argv_addr) = stage_argv(data, args);
     let mut mem = Memory::new(&data_with_argv, stdio, target).with_track_pointers(track_pointers);
+    mem.sve_vl_bytes = sve_vl_bytes;
     // `__attribute__((constructor))` functions run before the entry, in
     // the native `.init_array` order the caller already sorted. An
     // `exit()` from a constructor short-circuits to the exit status.
@@ -4346,6 +4354,32 @@ fn run_intrinsic(
         Intrinsic::AllocaSave => {
             frame.regs[v as usize] = mem.stack_top as i64;
             Ok(())
+        }
+        Intrinsic::SveVlBytes => {
+            frame.regs[v as usize] = mem.sve_vl_bytes as i64;
+            Ok(())
+        }
+        Intrinsic::SvePlBytes => {
+            frame.regs[v as usize] = (mem.sve_vl_bytes / 8) as i64;
+            Ok(())
+        }
+        Intrinsic::SveCopyZ | Intrinsic::SveCopyP => {
+            let n = if intr == Intrinsic::SveCopyZ {
+                mem.sve_vl_bytes
+            } else {
+                mem.sve_vl_bytes / 8
+            };
+            let [dst, src] = args else {
+                return Err(C5Error::Runtime(
+                    "vm_ssa: an SVE copy expects 2 arguments".to_string(),
+                ));
+            };
+            let (dst, src) = (
+                frame.regs[*dst as usize] as usize,
+                frame.regs[*src as usize] as usize,
+            );
+            let bytes = mem.read_bytes(src, n)?.to_vec();
+            mem.write_bytes(dst, &bytes)
         }
         Intrinsic::AllocaRestore => {
             let saved = args

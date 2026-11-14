@@ -27,7 +27,7 @@ pub(super) struct CleanupScope {
 /// statement expression's block, and the `__try` statement part it holds.
 #[derive(Default)]
 pub(super) struct ScopeBarriers {
-    decls: Vec<(String, bool, usize)>,
+    decls: Vec<(String, &'static str, usize)>,
     stmt_expr: bool,
     seh: Option<SehPart>,
 }
@@ -63,6 +63,9 @@ pub(super) struct Jumps {
     switches: Vec<JumpPoint>,
 }
 
+/// The reason a variable-length array's scope admits no jump into it.
+pub(super) const VM_TYPE: &str = "a variably modified type";
+
 impl Compiler {
     pub(super) fn open_cleanup_scope(&mut self, stmt_expr: bool) {
         self.open_barrier_scope(stmt_expr, None);
@@ -88,13 +91,13 @@ impl Compiler {
     }
 
     /// Declaration `sym`, a VLA or cleanup variable, bars jumps into its scope.
-    pub(super) fn note_jump_barrier(&mut self, sym: usize, vla: bool) {
+    pub(super) fn note_jump_barrier(&mut self, sym: usize, what: &'static str) {
         if let Some(s) = self.cleanup_scopes.last() {
             let name = self.symbols[sym].name.clone();
             let line = self.lex.line;
             self.jumps.scopes[s.id as usize]
                 .decls
-                .push((name, vla, line));
+                .push((name, what, line));
         }
     }
 
@@ -189,12 +192,7 @@ impl Compiler {
     }
 
     fn barrier(&self, id: u32, i: u32) -> String {
-        let (name, vla, line) = &self.jumps.scopes[id as usize].decls[i as usize];
-        let what = if *vla {
-            "a variably modified type"
-        } else {
-            "a cleanup function"
-        };
+        let (name, what, line) = &self.jumps.scopes[id as usize].decls[i as usize];
         format!("the scope of `{name}`, declared with {what} at line {line}")
     }
 

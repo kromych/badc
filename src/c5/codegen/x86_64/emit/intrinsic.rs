@@ -719,6 +719,10 @@ pub(super) fn emit_intrinsic(
         I::ConstantP | I::ObjectSize | I::SubobjectBound | I::BuiltinArg => {
             fail("a deferred builtin must be resolved before lowering")
         }
+        // The SVE types exist on AArch64 alone.
+        I::SveVlBytes | I::SvePlBytes | I::SveCopyZ | I::SveCopyP => {
+            fail("an SVE intrinsic reached the x86-64 lowering")
+        }
         I::VaStart if sysv_variadic_callee(func, abi) => {
             emit_va_start_sysv(code, args, func, alloc, frame, abi)
         }
@@ -864,6 +868,7 @@ pub(super) fn intrinsic_keeps_frame(intrinsic: crate::c5::op::Intrinsic, abi: su
         // rbp-relative: the variadic areas, the frame address, the return
         // slot above the saved rbp. A read of rsp observes the same frame,
         // below its record.
+        I::SveVlBytes | I::SvePlBytes | I::SveCopyZ | I::SveCopyP => false,
         I::VaStart
         | I::FrameAddress
         | I::ReturnAddress

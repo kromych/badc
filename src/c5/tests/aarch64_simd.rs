@@ -1506,3 +1506,49 @@ fn an_8_byte_vector_lane_stays_in_its_register() {
         );
     }
 }
+
+/// An automatic object of an SVE type takes the vector length of storage
+/// (an eighth of it for `svbool_t`) from the alloca arena, and assignment
+/// and initialization copy it through a register of its kind. The copy
+/// holds across a call, the value staying in its object, which `&x`
+/// addresses, and a loop allocates it afresh each iteration within one
+/// frame. The interpreter runs it at four vector lengths.
+#[test]
+fn sve_objects_take_the_vector_length_and_copy_whole() {
+    const SRC: &str = include_str!("../../../tests/fixtures/sve/objects_copy_whole.c");
+    for optimize in [false, true] {
+        let options = crate::CompileOptions::default().with_optimize(optimize);
+        let program =
+            crate::Compiler::with_options(String::from(SRC), crate::Target::LinuxAarch64, options)
+                .compile()
+                .expect("compiles");
+        for bits in [128, 256, 512, 2048] {
+            let vm = super::Vm::new(program.clone()).with_sve_vector_bits(bits);
+            assert_eq!(
+                vm.run().expect("runs"),
+                bits as i64 / 128,
+                "{bits} bits, -O {optimize}"
+            );
+        }
+    }
+}
+
+/// The SVE object's storage is the vector length (`cntb`) or the
+/// predicate length (`cntd`) of bytes, and a copy is `ldr` and `str` of a
+/// whole Z or P register.
+#[cfg(feature = "full")]
+#[test]
+fn sve_copies_are_whole_register_loads_and_stores() {
+    const SRC: &str = "#include <arm_sve.h>\n\
+        void copy(svint32_t *dst, svint32_t *src, void (*f)(void)) { svint32_t x = *src; f(); *dst = x; }\n\
+        void copyp(svbool_t *dst, svbool_t *src) { svbool_t p = *src; *dst = p; }\n";
+    let has = |w: &[u32], mask: u32, want: u32| w.iter().filter(|&&x| x & mask == want).count();
+    let z = super::perf_codegen::a64_at(SRC, "copy", true);
+    assert_eq!(has(&z, 0xFFFF_FFE0, 0x0420_E3E0), 1, "cntb: {z:08x?}");
+    assert_eq!(has(&z, 0xFFFF_FC00, 0x8580_4000), 2, "ldr z: {z:08x?}");
+    assert_eq!(has(&z, 0xFFFF_FC00, 0xE580_4000), 2, "str z: {z:08x?}");
+    let p = super::perf_codegen::a64_at(SRC, "copyp", true);
+    assert_eq!(has(&p, 0xFFFF_FFE0, 0x04E0_E3E0), 1, "cntd: {p:08x?}");
+    assert_eq!(has(&p, 0xFFFF_FC1F, 0x8580_000F), 2, "ldr p15: {p:08x?}");
+    assert_eq!(has(&p, 0xFFFF_FC1F, 0xE580_000F), 2, "str p15: {p:08x?}");
+}

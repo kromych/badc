@@ -847,7 +847,7 @@ impl Compiler {
                 let (vla_ty, bound) = self.vla_bound_type(ty, count);
                 self.ast
                     .push_stmt(super::super::ast::Stmt::Expr(bound.store), pos);
-                self.note_jump_barrier(id_idx, true);
+                self.note_jump_barrier(id_idx, super::jumps::VM_TYPE);
                 (ty, td_array) = (vla_ty, 0);
             }
             if td_array != 0 && self.vla_value_slot(ty).is_some() {
@@ -864,7 +864,7 @@ impl Compiler {
                 let pos = self.ast_src_pos();
                 self.ast
                     .push_stmt(super::super::ast::Stmt::Expr(bound.store), pos);
-                self.note_jump_barrier(id_idx, true);
+                self.note_jump_barrier(id_idx, super::jumps::VM_TYPE);
                 (ty, td_array) = (vla_ty, 0);
             }
             if implicit_int {
@@ -1012,7 +1012,7 @@ impl Compiler {
         if let Some(scope) = self.cleanup_scopes.last_mut() {
             scope.vars.push(Cleanup::Var(alloc::boxed::Box::new(cv)));
         }
-        self.note_jump_barrier(var_sym, false);
+        self.note_jump_barrier(var_sym, "a cleanup function");
     }
 
     /// The innermost scope's cleanup variables, latest declared first.

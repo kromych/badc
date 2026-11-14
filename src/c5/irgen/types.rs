@@ -9,6 +9,10 @@ impl<'a> Walker<'a> {
     /// struct id the parser's band scheme gives it. Zero when that id
     /// is out of range.
     pub(super) fn struct_size(&self, ty: i64) -> i64 {
+        debug_assert!(
+            self.sve_copy_kind(ty).is_none(),
+            "an SVE value has no static size"
+        );
         let stripped = strip_unsigned(ty);
         if stripped < STRUCT_BASE {
             return 0;
@@ -18,6 +22,21 @@ impl<'a> Walker<'a> {
             self.structs[id].size as i64
         } else {
             0
+        }
+    }
+
+    /// The intrinsic copying a value of the SVE type `ty`, `None` for any
+    /// other type.
+    pub(super) fn sve_copy_kind(&self, ty: i64) -> Option<crate::c5::op::Intrinsic> {
+        use crate::c5::compiler::SveType;
+        let stripped = strip_unsigned(ty);
+        if stripped < STRUCT_BASE || struct_ptr_depth(ty) != 0 {
+            return None;
+        }
+        let id = ((stripped - STRUCT_BASE) / STRUCT_STRIDE) as usize;
+        match self.structs.get(id)?.sve? {
+            SveType::Predicate => Some(crate::c5::op::Intrinsic::SveCopyP),
+            SveType::Vector { .. } => Some(crate::c5::op::Intrinsic::SveCopyZ),
         }
     }
 

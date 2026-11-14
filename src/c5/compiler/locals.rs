@@ -325,7 +325,7 @@ impl Compiler {
             self.ast
                 .push_stmt(super::super::ast::Stmt::Expr(store), pos);
         }
-        self.note_jump_barrier(idx, true);
+        self.note_jump_barrier(idx, super::jumps::VM_TYPE);
         Ok(())
     }
 
@@ -606,11 +606,12 @@ impl Compiler {
             // complete type by the end of its declarator; an enum used
             // before its definition is incomplete (6.7.2.3p2). A block-scope
             // `extern` has linkage and declares no object, so it is exempt.
-            if self.sve_type_of(ty).is_some() {
+            let sve = self.sve_type_of(ty).is_some();
+            if sve && (is_static || is_extern) {
                 let name = self.symbols[loc_idx].name.clone();
-                return Err(self.sizeless_object_err("object", &name, ty, is_static || is_extern));
+                return Err(self.sizeless_object_err("object", &name, ty, true));
             }
-            if !is_extern && self.incomplete_aggregate_tag(ty).is_some() {
+            if !sve && !is_extern && self.incomplete_aggregate_tag(ty).is_some() {
                 let name = self.symbols[loc_idx].name.clone();
                 return Err(self.compile_err(
                     Code::INVALID_DECLARATION,
@@ -1895,7 +1896,7 @@ impl Compiler {
         s.binding.was_written = true;
         s.binding.address_escaped = true;
         self.func_vla_decls += 1;
-        self.note_jump_barrier(loc_idx, true);
+        self.note_jump_barrier(loc_idx, super::jumps::VM_TYPE);
         // The VLA storage comes from the per-frame alloca arena, so the
         // function reserves the arena and its bookkeeping slot.
         self.uses_alloca_in_current_fn = true;
@@ -1909,6 +1910,69 @@ impl Compiler {
             fill,
             align: 0,
         });
+        Ok(())
+    }
+
+    /// An automatic object of an SVE type: storage of the vector length
+    /// (an eighth of it for a predicate) from the alloca arena, as a
+    /// variable-length array's, its base in a hidden slot. An initializer
+    /// is an SVE value of the same type, assigned after the allocation.
+    fn allocate_sve_local(
+        &mut self,
+        loc_idx: usize,
+        ty: i64,
+        sve: super::SveType,
+    ) -> Result<(), C5Error> {
+        use super::super::ast::Expr;
+        use crate::c5::op::Intrinsic;
+        let ptr_slot = self.reserve_slots(1);
+        let size_slot = self.reserve_slots(1);
+        let kind = match sve {
+            super::SveType::Predicate => Intrinsic::SvePlBytes,
+            super::SveType::Vector { .. } => Intrinsic::SveVlBytes,
+        };
+        let pos = self.ast_src_pos();
+        let size_ty = self.size_t_ty();
+        let dim = self.ast.push_expr(
+            Expr::Intrinsic {
+                kind: kind as i64,
+                args: alloc::vec::Vec::new(),
+                ty: size_ty,
+            },
+            pos,
+        );
+        let s = &mut self.symbols[loc_idx];
+        s.is_vla = true;
+        s.type_ = ty;
+        s.array_size = 0;
+        s.vla_ptr_slot = ptr_slot;
+        s.vla_size_slot = size_slot;
+        s.binding.was_written = true;
+        s.binding.address_escaped = true;
+        self.func_vla_decls += 1;
+        // The storage is allocated where the declaration runs, so no jump
+        // may skip it.
+        self.note_jump_barrier(loc_idx, "an SVE type");
+        self.uses_alloca_in_current_fn = true;
+        self.ast_emit_vla_decl(super::super::ast::Decl::Vla {
+            sym: loc_idx as u32,
+            elem_ty: Ty::Char as i64,
+            elem_size: 1,
+            ptr_slot,
+            size_slot,
+            dim,
+            fill: None,
+            align: 0,
+        });
+        if self.lex.tk != Token::Assign {
+            return Ok(());
+        }
+        self.next()?;
+        let lhs = self.ast_emit_vla_base(ptr_slot, ty);
+        let rhs = self.parse_sve_operand(ty, "initializer")?;
+        let pos = self.ast_src_pos();
+        self.ast_acc = Some(self.ast.push_expr(Expr::Assign { lhs, rhs, ty }, pos));
+        self.ast_emit_expr_stmt();
         Ok(())
     }
 
@@ -2055,6 +2119,9 @@ impl Compiler {
     ) -> Result<(), C5Error> {
         if declared_array_size == super::VLA_ARRAY_SIZE {
             return self.allocate_vla_local(loc_idx, ty, fill);
+        }
+        if let Some(sve) = self.sve_type_of(ty) {
+            return self.allocate_sve_local(loc_idx, ty, sve);
         }
         // C99 6.7.9: an initializer at the declaration site counts
         // as a store from the perspective of the dead-store

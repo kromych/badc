@@ -1427,6 +1427,47 @@ impl Compiler {
         Ok(())
     }
 
+    /// The SVE value of type `ty` an assignment or initializer reads: an
+    /// SVE object, `*p`, or another such assignment. Any other source --
+    /// a call, a conditional, a cast -- is refused until the SVE calling
+    /// convention and the SVE rows land.
+    pub(super) fn parse_sve_operand(
+        &mut self,
+        ty: i64,
+        what: &str,
+    ) -> Result<super::super::ast::ExprId, C5Error> {
+        use super::super::ast::{Expr, UnOp};
+        self.expr_or_void(Token::Assign as i64)?;
+        self.reject_void_value(self.ty)?;
+        if super::types::strip_unsigned(self.ty) != super::types::strip_unsigned(ty) {
+            let (l, r) = (
+                format_type(ty, &self.structs),
+                format_type(self.ty, &self.structs),
+            );
+            return Err(self.compile_err(
+                Code::INCOMPATIBLE_TYPES,
+                format!("types differ in the {what} (lhs={l}, rhs={r})"),
+            ));
+        }
+        let id = self
+            .ast_acc
+            .ok_or_else(|| self.compile_err(Code::SYNTAX, "expression expected"))?;
+        match self.ast.exprs[id as usize] {
+            Expr::VlaBase { .. }
+            | Expr::Assign { .. }
+            | Expr::Unary {
+                op: UnOp::Deref, ..
+            } => Ok(id),
+            // TODO: SVE values from calls and the SVE rows.
+            _ => Err(self.compile_err(
+                Code::INVALID_OPERANDS,
+                format!(
+                    "an SVE value of this form, which badc does not compile yet, in the {what}"
+                ),
+            )),
+        }
+    }
+
     pub(super) fn drop_operand_array_decay(&mut self) {
         self.pending.last_array_decay_size = 0;
         self.pending.last_array_decay_bytes = 0;
@@ -3032,7 +3073,12 @@ impl Compiler {
         if !is_array_var && !is_struct_value && fn_ptr {
             self.pending.indirect_callee_ret_fn_ptr = self.symbols[id_idx].fn_ptr_ret_indirection;
         }
-        if is_vla_var {
+        if is_vla_var && self.sve_type_of(self.ty).is_some() {
+            // An SVE object is its storage's base, as a struct value is its
+            // address.
+            let ptr_slot = self.symbols[id_idx].vla_ptr_slot;
+            self.ast_emit_vla_base(ptr_slot, self.ty);
+        } else if is_vla_var {
             // C99 6.3.2.1p3: a VLA decays to its runtime base pointer, loaded
             // from the hidden slot.
             let ptr_slot = self.symbols[id_idx].vla_ptr_slot;
@@ -4228,6 +4274,21 @@ impl Compiler {
         // pointer's load tag, which the scalar path would rewrite.
         let struct_lhs_ast = self.ast_acc.take();
         self.mark_emit_other();
+        if self.sve_type_of(lhs_ty).is_some() {
+            let rhs = self.parse_sve_operand(lhs_ty, "assignment")?;
+            self.mark_emit_other();
+            self.ty = lhs_ty;
+            let pos = self.ast_src_pos();
+            self.ast_acc = struct_lhs_ast.map(|lhs| {
+                let e = super::super::ast::Expr::Assign {
+                    lhs,
+                    rhs,
+                    ty: lhs_ty,
+                };
+                self.ast.push_expr(e, pos)
+            });
+            return Ok(());
+        }
         self.expr(Token::Assign as i64)?;
         let mut struct_rhs_ast = self.ast_acc;
         if !is_struct_ty(self.ty) || struct_ptr_depth(self.ty) != 0 {

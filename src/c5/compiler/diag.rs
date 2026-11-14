@@ -838,6 +838,16 @@ impl Compiler {
 
     /// C99 6.3.2.1p2: an lvalue of incomplete type has no value to read.
     pub(super) fn reject_incomplete_value(&self, ty: i64) -> Result<(), C5Error> {
+        // An SVE assignment is evaluated for its effect.
+        let assignment = self.ast_acc.is_some_and(|id| {
+            matches!(
+                self.ast.exprs[id as usize],
+                super::super::ast::Expr::Assign { .. }
+            )
+        });
+        if self.sve_type_of(ty).is_some() && assignment {
+            return Ok(());
+        }
         if self.sve_type_of(ty).is_some() {
             // TODO: SVE values, with the scalable frame and the SVE rows.
             let t = super::types::format_type(ty, &self.structs);

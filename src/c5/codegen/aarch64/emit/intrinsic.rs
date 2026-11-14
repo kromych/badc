@@ -41,6 +41,22 @@ pub(super) fn emit_intrinsic(
         }
         I::VaCopy => emit_va_copy_cursor(code, args, alloc, frame, scratch),
         I::Alloca => emit_alloca(code, args, dst, alloc, frame, scratch),
+        I::SveVlBytes | I::SvePlBytes => {
+            let Some(rd) = int_or_spill_scratch(dst, scratch) else {
+                return fail("SVE length: dst not int reg / spill");
+            };
+            // `cntb xd` or `cntd xd`: the vector bytes, or the doublewords,
+            // which are the predicate bytes.
+            let base = if intrinsic == I::SveVlBytes {
+                0x0420_E3E0
+            } else {
+                0x04E0_E3E0
+            };
+            emit(code, base | u32::from(rd.0));
+            store_spilled_int(code, frame, dst, rd);
+            Ok(())
+        }
+        I::SveCopyZ | I::SveCopyP => emit_sve_copy(code, args, alloc, frame, scratch, intrinsic),
         I::AllocaSave => emit_alloca_save(code, dst, frame, scratch),
         I::AllocaRestore => emit_alloca_restore(code, args, alloc, frame, scratch),
         I::SetjmpAArch64 => emit_setjmp(code, args, dst, alloc, frame, scratch),
@@ -177,6 +193,7 @@ pub(super) fn intrinsic_keeps_frame(intrinsic: crate::c5::op::Intrinsic, abi: su
         | I::EstablisherFrame => true,
         // sp moves for the rest of the function, or to another frame.
         I::Alloca | I::AllocaSave | I::AllocaRestore | I::SetjmpAArch64 | I::LongjmpAArch64 => true,
+        I::SveVlBytes | I::SvePlBytes | I::SveCopyZ | I::SveCopyP => false,
         // The AAPCS64 `va_list` forms borrow a register around a push / pop;
         // the cursor forms are loads and stores.
         I::VaArg | I::VaCopy => abi.aarch64_host_variadic(),
@@ -303,6 +320,41 @@ fn emit_alloca(
     emit(code, super::encode::enc_b_cond(super::encode::Cond::Ne, -3));
     emit(code, enc_add_imm(Reg(31), rd, 0));
     store_spilled_int(code, frame, dst, rd);
+    Ok(())
+}
+
+/// Copy an SVE vector or predicate between two addresses through the FP
+/// scratch register's Z view, or p15, which no allocation holds: `ldr` and
+/// `str` of the whole register.
+fn emit_sve_copy(
+    code: &mut CodeBuf,
+    args: &[u32],
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+    kind: crate::c5::op::Intrinsic,
+) -> Emit {
+    let [dst, src] = args else {
+        return fail("SVE copy: expected 2 args");
+    };
+    let Some(s) = materialize_int(code, place_of(alloc, *src), scratch.primary, frame) else {
+        return fail("SVE copy: source not int reg / spill");
+    };
+    let Some(d) = materialize_int(code, place_of(alloc, *dst), scratch.secondary, frame) else {
+        return fail("SVE copy: destination not int reg / spill");
+    };
+    // LDR / STR (vector) and (predicate), offset 0.
+    let (ld, st, t) = if kind == crate::c5::op::Intrinsic::SveCopyZ {
+        (
+            0x8580_4000u32,
+            0xE580_4000u32,
+            u32::from(frame.fp_scratch[0]),
+        )
+    } else {
+        (0x8580_0000, 0xE580_0000, 15)
+    };
+    emit(code, ld | u32::from(s.0) << 5 | t);
+    emit(code, st | u32::from(d.0) << 5 | t);
     Ok(())
 }
 

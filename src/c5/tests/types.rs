@@ -1872,6 +1872,29 @@ fn shufflevector_types_its_result_and_checks_its_indices() {
     }
 }
 
+/// A diagnostic spells the 128-bit integer types as their keywords.
+#[test]
+fn diagnostics_spell_the_128_bit_integers_as_keywords() {
+    use crate::{Compiler, Target};
+    for (src, want) in [
+        (
+            "unsigned __int128 x; void f(void) { x[1] = 0; }",
+            "type `unsigned __int128`, not",
+        ),
+        (
+            "void f(void) { __int128 y = 0; int *q = &y; }",
+            "init=__int128*",
+        ),
+    ] {
+        let msg = Compiler::with_target(src.to_string(), Target::LinuxAarch64)
+            .compile()
+            .err()
+            .map(|e| e.to_string())
+            .unwrap_or_default();
+        assert!(msg.contains(want), "{src}: {msg}");
+    }
+}
+
 /// A `vector_size` type is aligned to its width up to the target's
 /// ceiling: the x86-64 psABI gives a 32-byte vector 32, AAPCS64 keeps a
 /// wider vector on the 16-byte boundary. The member offset, the struct

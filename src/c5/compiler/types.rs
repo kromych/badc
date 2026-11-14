@@ -937,8 +937,14 @@ pub(super) fn format_type(ty: i64, structs: &[super::StructDef]) -> alloc::strin
             .filter(|n| !n.is_empty())
             .map(alloc::string::ToString::to_string)
             .unwrap_or_else(|| format!("@{id}"));
-        let kw = structs.get(id).map_or("struct", |s| s.keyword());
-        return format!("{prefix}{kw} {name}{}", ptr_suffix(ty, depth));
+        let kw = match structs.get(id) {
+            // The 128-bit integer, laid out by the struct machinery.
+            Some(s) if s.name == "__int128" => "",
+            Some(s) => s.keyword(),
+            None => "struct",
+        };
+        let sep = if kw.is_empty() { "" } else { " " };
+        return format!("{prefix}{kw}{sep}{name}{}", ptr_suffix(ty, depth));
     }
     let (base, leaf) = if in_band(bare, Ty::Float as i64) {
         (Ty::Float as i64, "float")

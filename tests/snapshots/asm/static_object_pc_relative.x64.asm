@@ -44,9 +44,8 @@ Disassembly of section .text:
                                                 # <addr>
                	movq	$0x7fffffff, <rip> # imm = 0x7FFFFFFF
                                                 # <addr>
-               	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
-               	movq	%rax, %xmm14
-               	movsd	%xmm14, <rip> # <addr>
+               	movsd	<rip>, %xmm0
+               	movsd	%xmm0, <rip> # <addr>
                	movl	$0x21, <rip> # <addr>
                	movl	$0x4d, <rip> # <addr>
                	retq
@@ -89,20 +88,28 @@ Disassembly of section .text:
 <zero_tests>:
                	xorl	%eax, %eax
                	cmpb	$0x0, <rip> # <addr>
-               	je	<addr>
-               	movl	$0x1, %eax
-               	cmpw	$0x0, <rip> # <addr>
-               	je	<addr>
-               	orq	$0x2, %rax
-               	cmpl	$0x0, <rip> # <addr>
-               	je	<addr>
-               	orq	$0x4, %rax
-               	cmpq	$0x0, <rip> # <addr>
-               	je	<addr>
-               	orq	$0x8, %rax
-               	cmpb	$0x0, <rip> # <addr>
-               	je	<addr>
-               	orq	$0x10, %rax
+               	movl	$0x1, %edx
+               	cmovneq	%rdx, %rax
+               	movswq	<rip>, %rcx # <addr>
+               	movq	%rax, %rdx
+               	orq	$0x2, %rdx
+               	testq	%rcx, %rcx
+               	cmovneq	%rdx, %rax
+               	movslq	<rip>, %rcx # <addr>
+               	movq	%rax, %rdx
+               	orq	$0x4, %rdx
+               	testq	%rcx, %rcx
+               	cmovneq	%rdx, %rax
+               	movq	<rip>, %rcx # <addr>
+               	movq	%rax, %rdx
+               	orq	$0x8, %rdx
+               	testq	%rcx, %rcx
+               	cmovneq	%rdx, %rax
+               	movzbq	<rip>, %rcx # <addr>
+               	movq	%rax, %rdx
+               	orq	$0x10, %rdx
+               	testq	%rcx, %rcx
+               	cmovneq	%rdx, %rax
                	retq
 
 <floats>:
@@ -110,12 +117,10 @@ Disassembly of section .text:
                	cvtsd2ss	%xmm0, %xmm0
                	movss	%xmm0, <rip> # <addr>
                	movsd	<rip>, %xmm0 # <addr>
-               	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
-               	movsd	<rip>, %xmm1 # <addr>
-               	movq	%rax, %xmm15
-               	vfmadd132sd	%xmm15, %xmm1, %xmm0 # xmm0 = (xmm0 * xmm15) + xmm1
+               	movsd	<rip>, %xmm1
+               	movsd	<rip>, %xmm2 # <addr>
+               	vfmadd213sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm0) + xmm2
                	movsd	%xmm0, <rip> # <addr>
-               	movsd	<rip>, %xmm0 # <addr>
                	movss	<rip>, %xmm1 # <addr>
                	cvtss2sd	%xmm1, %xmm1
                	addsd	%xmm1, %xmm0
@@ -189,30 +194,26 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	callq	<addr>
-               	movabsq	$0x4014000000000000, %rax # imm = 0x4014000000000000
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	movsd	<rip>, %xmm1
+               	ucomisd	%xmm1, %xmm0
                	jp	<addr>
                	jne	<addr>
                	movss	<rip>, %xmm0 # <addr>
-               	movl	$0x3fc00000, %eax       # imm = 0x3FC00000
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	movss	<rip>, %xmm1
+               	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x7, %eax
                	popq	%rbp
                	retq
                	callq	<addr>
-               	movabsq	$0x4026000000000000, %rax # imm = 0x4026000000000000
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	movsd	<rip>, %xmm1
+               	ucomisd	%xmm1, %xmm0
                	jp	<addr>
                	jne	<addr>
                	movss	<rip>, %xmm0 # <addr>
-               	movl	$0x40600000, %eax       # imm = 0x40600000
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	movss	<rip>, %xmm1
+               	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x8, %eax

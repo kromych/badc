@@ -289,10 +289,11 @@ fn run_one(func: &mut FunctionSsa, params: &[Range]) {
                 at: At::Before(e.at),
                 inst: Inst::Imm(0),
                 is_f32: false,
+                copy_of: None,
             })
         })
         .collect();
-    let rewrite = (!ins.is_empty()).then(|| tape::insert(func, &ins).0);
+    let rewrite = (!ins.is_empty()).then(|| tape::insert(func, &ins));
     let moved = |v: ValueId| rewrite.as_ref().map_or(v, |rw| rw.remap[v as usize]);
     let mut final_id: Vec<ValueId> = alloc::vec![NO_VALUE; steps.insts.len()];
     let mut slot = 0usize;

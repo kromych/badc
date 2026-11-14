@@ -11,8 +11,8 @@ inputs (or any `-l` / `-L` / `-c` flag) run through the cross-TU
 linker. `.i` is C that is preprocessed already: its line markers
 and pragmas apply and nothing in it is expanded again. `.S` (and
 `.sx`) run through the preprocessor with `__ASSEMBLER__`
-predefined before being assembled; `.s` is assembled verbatim, as
-in gcc's suffix table. `-x <language>` names the language of the
+predefined before being assembled; `.s` is assembled verbatim.
+`-x <language>` names the language of the
 inputs after it instead -- `c`, `cpp-output`, `assembler` or
 `assembler-with-cpp` -- until the next `-x`; `-x none` returns to
 the suffix.
@@ -34,12 +34,17 @@ Output mode -- pick at most one (defaults to a native binary):
                            suppress or dynamic_lookup (also as
                            -Wl,-undefined,<value>) has a Mach-O image
                            look it up at load time.
+  -bundle, -flat_namespace On Mach-O: a library only dlopen loads
+                           (MH_BUNDLE), and an image whose imports
+                           name no library (flat lookup).
+  -bundle_loader <exe>     A bundle binds what <exe> exports to the
+                           main executable.
   --list-symbols           Print built-in keywords / library calls /
                            constants and exit.
-  --list-diagnostics       Print the diagnostic catalogue -- code,
+  --list-diagnostics       Print the diagnostic catalog -- code,
                            name, default level, class, groups -- and
                            exit.
-  --explain <selector>     Print one catalogue row and exit. The
+  --explain <selector>     Print one catalog row and exit. The
                            selector is a diagnostic name, an alias, or
                            a `B` code.
   --dump-headers           Print every bundled header to stdout and
@@ -48,6 +53,10 @@ Output mode -- pick at most one (defaults to a native binary):
   --dump-bindings          Print the library bindings the bundled
                            headers state for --target, one
                            `<soname> <symbol>` per line, and exit.
+  --dump-native-link <obj>...
+                           Merge the relocatable objects and print the
+                           sections and the symbols the merge defines,
+                           then exit.
   --install [<dir>]        Write every embedded header and the runtime
                            source under <dir> (default $BADC_HOME, else
                            ~/.badc), recreating the include/ + lib/
@@ -69,12 +78,23 @@ Output mode -- pick at most one (defaults to a native binary):
   --dump-pp, -E            Run the preprocessor on the input and
                            write the expanded source to `-o`'s path,
                            or to stdout when `-o` is absent or names
-                           `-`. Mirrors gcc / clang `-E`.
+                           `-`.
   -dM                      With -E, print a #define line per macro the
                            unit ends with, predefined ones included.
+  -P                       With -E, write no line markers.
   -fsyntax-only            Check each unit through the front end (an
                            assembler unit through the assembler) and
                            write nothing; -E takes precedence.
+  --dump-prototypes        Print each function, extern object and record
+                           member a unit declares with the type of its
+                           address, and each typedef name with the type
+                           of a pointer to what it names, spelled in C.
+  --dump-enumerators       Print each enumeration constant a unit
+                           declares at file scope with its value.
+  --dump-records           Print the size, alignment and member offsets
+                           of each structure and union a unit defines
+                           with a tag or a typedef name, as laid out
+                           for --target.
 
 Multi-TU knobs:
   -c, --compile-only       Emit a c5 `.o` per source instead of
@@ -102,6 +122,22 @@ Multi-TU knobs:
                            Searched in the -L directories, then in the
                            standard directories under --sysroot; no
                            other directory is read.
+  --whole-archive, --no-whole-archive
+                           Load every member of the archives named
+                           after --whole-archive, up to
+                           --no-whole-archive, whether or not a
+                           reference asks for it.
+  --start-group, --end-group
+                           Search the archives between the two again
+                           until a pass resolves no new reference.
+  -T <script>, --script=<script>
+                           Lay out the image as the GNU ld script
+                           directs. Inputs are objects and archives
+                           (compile sources with -c first). ELF
+                           targets only.
+  --ld <args>              As the first argument: run the GNU ld
+                           surface on the rest, as badc does when named
+                           `ld` / `*-ld`.
   --sysroot=<dir>          The root holding the target's headers and
                            libraries. Its standard include directories
                            are probed after the bundled headers, its
@@ -117,6 +153,15 @@ Multi-TU knobs:
                            symbol addresses) to <file>. ELF output
                            only.
   --print-map              Print the link map to stdout.
+  --out-implib=<file>, --out-implib <file>
+                           Write a PE DLL's import library to <file>,
+                           as link.exe writes one beside the DLL.
+  --delayload=<dll>, --delayload <dll>
+                           Load <dll> on the first call of an import
+                           from it, as link.exe's /DELAYLOAD does.
+  --stack=<reserve>[,<commit>], --stack <reserve>[,<commit>]
+                           Size a PE image's initial thread stack, as
+                           link.exe's /STACK does (default 8 MiB).
   --entry=<sym>            Enter the image at <sym>; overrides
                            `#pragma entrypoint` and `main`.
   -Wl,<arg>[,<arg>...], -Xlinker <arg>
@@ -134,7 +179,7 @@ Multi-TU knobs:
                            `-fno-pic` code. The last one wins; `-c` and
                            `--shared` ignore both. A Mach-O or PE
                            executable is always position-independent.
-  --build-id[=sha1|tree|fast|none], -z <keyword>, -S, -X, ...
+  --build-id[=sha1|tree|fast|none], -z <keyword>, -X, ...
                            GNU ld's image options. Every link takes
                            --build-id (bare, sha1 and tree: a 20-byte
                            SHA-1; fast: lld's 8-byte XXH3), -z
@@ -142,8 +187,8 @@ Multi-TU knobs:
                            [no]pack-relative-relocs, -z [no]execstack,
                            --[no-]warn-execstack,
                            --[no-]warn-rwx-segments, -z now, -z [no]text,
-                           --no-apply-dynamic-relocs, -S /
-                           --strip-debug, -X, --discard-none,
+                           --no-apply-dynamic-relocs, --strip-debug
+                           (ld's -S, as -Wl,-S), -X, --discard-none,
                            --emit-relocs, --no-undefined / -z defs,
                            -Bsymbolic, -Bsymbolic-functions and
                            --fatal-warnings; one without
@@ -167,7 +212,7 @@ Multi-TU knobs:
                            `#pragma subsystem`. Without one a
                            WinMain / wWinMain program is a windows
                            one, as link.exe infers.
-  -mwindows, -mconsole     gcc's --subsystem=windows / console.
+  -mwindows, -mconsole     --subsystem=windows / console.
   --jobs N, -jN            Compile independent `.c` sources
                            concurrently in up to 2*N worker threads
                            (capped at the source count). Output is
@@ -179,16 +224,27 @@ Multi-TU knobs:
 Compile knobs:
   -O, --optimize           Run the SSA optimization passes (mem2reg,
                            inlining, rotate and branch const-fold,
-                           immediate dedup) and predefine `NDEBUG=1`
-                           and `__OPTIMIZE__=1` (override with `-D` /
-                           `-U`). Off by default. The
+                           immediate dedup) and predefine
+                           `__OPTIMIZE__=1` (override with `-D` / `-U`);
+                           `NDEBUG` is left to `-D`. Off by default. The
                            `-O1`/`-O2`/`-O3`/`-Os`/`-Oz`/`-Ofast`/`-Og`
                            forms all select this single level; `-O0`
                            disables it.
+  --inline-cap=N           The largest leaf body, in SSA instructions,
+                           that -O inlines at its call sites (default
+                           64). An `inline` body is measured against a
+                           multiple of it and an always_inline one
+                           against none; 0 leaves only always_inline.
+  --dump-ssa               Print each function's SSA and register
+                           allocation to stderr before lowering.
+  --verify-ssa             Check the SSA rules after each pass and stop
+                           at the first pass that breaks them; a debug
+                           build of badc always checks.
   -g, --debug              Emit DWARF debug info. Off by default;
                            adds ~10-30% to the output size. `-g1`
                            .. `-g3` and `-ggdb[0-3]` select the same
-                           single level of detail.
+                           single level of detail. A PE link also
+                           writes `<image stem>.pdb` beside the image.
   -g0, --no-debug          Skip DWARF emission (the default).
   -gdwarf[-<n>]            Emit DWARF debug info, of version <n>
                            (2 .. 5) when one is named. `-gdwarf32` /
@@ -231,25 +287,33 @@ Compile knobs:
   -iquote path             Add a search path for #include \"...\" only,
                            probed after the including file's directory
                            and before the -I paths. Repeatable.
+  --embed-dir path         Add a directory #embed searches: the only one
+                           for #embed <...>, after the including file's
+                           directory for #embed \"...\". Repeatable.
   -isystem path            Add a directory of system headers, probed
                            after the -I paths and before the bundled
                            headers; its headers are left out of -MM and
                            of the unused-binding warnings. Repeatable.
   -fno-builtin[-<name>]    Treat a call spelled with a library
                            function's own name as an ordinary call the
-                           compiler may not fold, and drop the C99
-                           7.1.4p2 recovery that declares an undeclared
-                           library function by auto-including its
-                           header. The `__builtin_` spellings keep
+                           compiler may not fold, and drop the
+                           recovery that declares an undeclared library
+                           function by auto-including its header. The `__builtin_` spellings keep
                            folding. -fbuiltin restores the default.
+  -flax-vector-conversions[=all|integer|none]
+                           Let two vector types of one size convert
+                           implicitly: any two (all, the bare flag), or
+                           two integer ones; -fno-lax-vector-conversions
+                           is none. The default is none, and all under
+                           --msvc, where every NEON vector is __n128.
   -ffreestanding           Compile for a freestanding implementation:
                            -fno-builtin, and `__STDC_HOSTED__` is 0.
                            -fhosted restores both.
   -nostdinc                Drop the bundled headers and the system
                            directories from the #include search, leaving
                            only -I, -isystem, -iquote and the including
-                           file's own directory, as gcc and clang do. A
-                           name none of those carries is an error, and
+                           file's own directory. A name none of those
+                           carries is an error, and
                            the auto-include retry is off.
                            `-isystem $(badc -print-file-name=include)`
                            restores the compiler's own headers.
@@ -270,9 +334,9 @@ Compile knobs:
   -arch <name>             The Darwin driver's architecture; arm64 for
                            the macOS target, refused elsewhere.
   -H, --show-includes      Print every #include's resolved path to
-                           stderr (gcc -H shape; leading dots mark
-                           nesting depth; missing headers print as
-                           `! <name> (missing)`).
+                           stderr; leading dots mark nesting depth and
+                           a missing header prints as
+                           `! <name> (missing)`.
   -M                       Write a make dependency rule naming the
                            source and every header it opened, and
                            compile nothing. Goes to stdout unless
@@ -295,23 +359,23 @@ Compile knobs:
   -MP                      Add an empty rule for each prerequisite
                            so a deleted header does not stop make.
   -w                       Report no warning at all.
-  -Wall / -Wextra          Enable a group of diagnostics, following
-  -Wpedantic               gcc's split. --list-diagnostics prints the
-                           group each row belongs to. -pedantic is
+  -Wall / -Wextra          Enable a group of diagnostics.
+  -Wpedantic               --list-diagnostics prints the group each
+                           row belongs to. -pedantic is
                            -Wpedantic, -pedantic-errors -Werror=pedantic.
   -W<sel> / -Wno-<sel>     Report or ignore one diagnostic. A selector
                            is its name, an alias, its `B` code, or a
-                           group name. A gcc or clang warning badc does
-                           not implement is taken: turned on, it reports
-                           B7012; any other unknown name is refused,
-                           except in -Wno-<sel>, as in gcc.
+                           group name. A warning name of another
+                           compiler that badc does not implement is
+                           taken: turned on, it reports B7012; any other
+                           unknown name is refused, except in -Wno-<sel>.
   -Werror / -Wno-error     Report every warning as an error, or undo
                            that. The unit still parses whole and fails
-                           at the end of the phase, as gcc does.
+                           at the end of the phase.
   -Werror=<sel>            Report one diagnostic as an error, or put it
   -Wno-error=<sel>         back to a warning.
-  -fpermissive             Report as warnings the diagnostics gcc 14
-                           makes errors by default: int-conversion,
+  -fpermissive             Report as warnings the diagnostics that are
+                           errors by default: int-conversion,
                            incompatible-pointer-types, implicit-int
                            and return-mismatch.
   -Wframe-larger-than=<n>  Report a function whose stack frame exceeds
@@ -330,15 +394,20 @@ Compile knobs:
   -m16 / -m32 / -m64       Code model, x86 targets only. `-m16` and
                            `-m32` preprocess the unit as i386 (`__i386__`
                            defined, `__x86_64__` not, ILP32 widths) and
-                           put its object out as ELFCLASS32 / EM_386, as
-                           gcc's `as --32` does; `.code16` / `.code32`
+                           put its object out as ELFCLASS32 / EM_386;
+                           `.code16` / `.code32`
                            in the source select the encoding. badc
                            generates no i386 machine code, so a `.c`
                            source under either is refused unless -E.
+  -mcmodel=<model>         Code model: small (the default); kernel,
+                           linux-x64 `-c` and `--ar` only, addressing
+                           externals as sign-extended 32-bit absolutes
+                           for an image linked in the top 2 GiB; tiny,
+                           linux-aarch64 only, lowered as small.
   -Wp,-MD,file             The preprocessor spellings of -MD / -MMD,
   -Wp,-MMD,file            which take the output path as an operand.
-                           As in gcc, the rule keeps the
-                           source-derived name; -o does not name it.
+                           The rule keeps the source-derived name; -o
+                           does not name it.
   -q, --quiet              Suppress `info:` chatter on stderr (the
                            per-source `info: compiling <path>`
                            progress line in multi-TU mode and the
@@ -357,24 +426,31 @@ Compile knobs:
                            another module resolves it, the data half
                            of the toolchain's -rdynamic. Pair with
                            --export-all for full coverage.
-  --gnu                    Define the GCC identity macros (__GNUC__,
+  --gnu                    Define the GNU C identity macros (__GNUC__,
                            __VERSION__, __extension__, ...). Off by
                            default: badc implements most but not all of
                            the GNU C surface, so code gating a feature
                            badc lacks (__int128) on __GNUC__ keeps
                            compiling unless this is requested.
-  -std=<dialect>           Language dialect, by gcc's names: sets
+  --msvc                   Windows targets: define the MSVC identity
+                           macros (_MSC_VER, _MSC_FULL_VER, _M_X64 /
+                           _M_ARM64, ...) and leave __STDC__ undefined,
+                           as cl does. Off by default.
+  -std=<dialect>           Language dialect (c99, gnu11, ...): sets
                            __STDC_VERSION__ (C17 by default) and, from
                            c23 on, the bool/true/false keywords. The GNU
                            extensions are available in every dialect.
                            Under --gnu, `gnu*` clears __STRICT_ANSI__ and
-                           `c*` / `iso*` set it, as gcc and clang do;
-                           without the flag --gnu reports strict
-                           conformance.
+                           `c*` / `iso*` set it; without the flag --gnu
+                           reports strict conformance. `c*` / `iso*` before
+                           c23 replace trigraphs.
+  -trigraphs, -ftrigraphs  Replace trigraphs (C17 5.2.1.1) whatever the
+  -fno-trigraphs           dialect, or keep them as written.
   -fgnu89-inline           Use the GNU89 inline linkage model: `extern
                            inline` provides no external definition and a
                            plain `inline` does. The default is C99
-                           6.7.4p6, which is the inverse. Per function,
+                           6.7.4p6, the inverse, from -std=c99 on, and
+                           GNU89 before it. Per function,
                            __attribute__((gnu_inline)) selects GNU89
                            whatever the default is. With --gnu the model
                            is reported as __GNUC_GNU_INLINE__ /
@@ -382,11 +458,17 @@ Compile knobs:
   -fstrict-flex-arrays[=N] Which trailing array members
                            __builtin_object_size treats as unbounded
                            when reached through a pointer: at level 0
-                           (the default, as in gcc) every one, at 1
+                           (the default) every one, at 1
                            those declared [], [0] or [1], at 2 those
                            declared [] or [0], at 3 only []. The bare
                            form selects level 3. A [] member is
                            unbounded at every level.
+  -fconserve-stack         Inline only while the caller's frame stays
+                           within 100 bytes or 400% growth over its own,
+                           in place of 256 bytes and 1000%.
+  -fno-zero-initialized-in-bss
+                           Keep an object initialized to zero in .data;
+                           only one with no initializer goes to .bss.
   -fno-jump-tables         Dispatch every switch through the compare
                            tree, never a jump table, so no switch takes
                            an indirect branch. -fjump-tables restores
@@ -404,7 +486,7 @@ Compile knobs:
                            executable, they bind directly and thread-locals
                            take the executable TLS models. The last one
                            given wins and sets __pic__ / __PIC__ (and
-                           __pie__ / __PIE__) to 1 or 2, as gcc does.
+                           __pie__ / __PIE__) to 1 or 2.
                            An executable's own form is -pie / -no-pie.
   -fno-pic, -fno-pie       Compile the `-c` object for a link that
                            resolves its relocations statically, keeping
@@ -452,6 +534,41 @@ Compile knobs:
                            frame pointers, the AArch64 link register and
                            the code generator's own scratch registers
                            (x16, x17, x19; r10, r11) are refused.
+  -mno-sse, -mgeneral-regs-only
+                           Keep the code off the floating-point and SIMD
+                           registers and drop the __SSE*__ macros. A
+                           float or double copied from memory to memory
+                           moves through a general register; one the
+                           source computes is refused.
+  -mstrict-align, -mno-strict-align
+                           Keep every compiler-generated memory access
+                           naturally aligned for its width, as memory
+                           that faults on an unaligned access needs.
+  -mbranches-within-32B-boundaries
+                           x86-64: start every function at a multiple of
+                           32 bytes and pad with NOPs before a jump or a
+                           fused compare-and-jump that would cross or end
+                           on a 32-byte boundary, which cores with the
+                           update for Intel erratum SKX102 decode
+                           without the uop cache.
+  -mindirect-branch=keep|thunk-extern|thunk-inline
+                           x86-64: route each indirect call and jump
+                           through __x86_indirect_thunk_<reg>, or
+                           through the retpoline sequence at the site.
+  -mfunction-return=keep|thunk-extern
+                           x86-64: return through __x86_return_thunk.
+  -mharden-sls=none|return|indirect-jmp|all
+                           x86-64: put a trap after each `ret` and/or
+                           indirect `jmp`; the kinds are comma-joined.
+  -fcf-protection=none|branch
+                           x86-64: open every function and every
+                           indirect-branch target with endbr64. The
+                           shadow stack (return, full) is refused.
+  -mbranch-protection=none|bti|pac-ret[+leaf]|standard
+                           AArch64, `+`-joined: BTI landing pads, and
+                           pac-ret return-address signing, in leaf
+                           functions too with +leaf; standard is
+                           bti+pac-ret.
   -fstack-protector        Give a stack canary to every function holding
                            a character array of at least --param
                            ssp-buffer-size= bytes (default 8), or calling
@@ -468,16 +585,39 @@ Compile knobs:
   --param ssp-buffer-size=N
                            Least character-array size, in bytes, that
                            -fstack-protector protects a function for.
-  -mcpu=NAME[+ext...]      AArch64 CPU selection. NAME is a part name
-                           (`generic`, `cortex-a53`, `neoverse-n1`,
-                           `apple-m1`, ...); each picks the scheduling
-                           model badc does not differentiate, and an
-                           unknown one is refused.
-                           `+crypto` / `+aes` / `+sha2` (and their `no`
-                           forms) set the __ARM_FEATURE_* macros the way
-                           gcc does, with the crypto encodings always
-                           available to inline asm. Another extension is
-                           refused by name.
+  -mcpu=NAME[+mod...]      AArch64 CPU selection: a part name
+                           (`cortex-a53`, `neoverse-n1`, `apple-m1`,
+                           ...) or `native`, whose extensions predefine
+                           the __ARM_FEATURE_* macros; `+EXT` enables an
+                           extension and those it requires, `+noEXT`
+                           disables it and those requiring it. An
+                           extension whose intrinsics badc lacks (SVE,
+                           SME, BF16, ...) is refused when a modifier
+                           enables it. The instructions stay badc's
+                           baseline.
+  -march=ARCH[+mod...]     AArch64: an architecture (`armv8-a` to
+                           `armv9.6-a`, `armv8-r`) or `native`, with
+                           -mcpu='s modifiers; it overrides -mcpu='s
+                           extensions.
+  -march=CPU               x86 CPU selection: gcc's CPU names and
+                           x86-64-v3/v4 predefine the feature macros of
+                           the extensions below that the CPU has;
+                           `native` reads the host's. x86-64 code
+                           assumes x86-64-v3, so a CPU without it is
+                           refused.
+  -mEXT / -mno-EXT         An x86 extension and those it implies: sse3,
+                           ssse3, sse4.1, sse4.2, popcnt, crc32, avx,
+                           avx2, fma, f16c, aes, pclmul, sha, vaes,
+                           vpclmulqdq, rdrnd, rdseed, bmi, bmi2, lzcnt,
+                           adx, xsave, clflushopt, clwb, prfchw, sahf,
+                           avx512f, avx512bw, avx512dq, avx512vl,
+                           avx512cd, avx512vnni.
+                           `-mno-` also drops the ones implying it, and
+                           is refused for an x86-64-v3 extension the
+                           code generator emits unless -mno-sse keeps
+                           the code off the vector registers. Any other
+                           gcc extension is refused when enabled.
+  -mtune=CPU               Accepted; badc has one scheduling model.
   -mstack-protector-guard=global|tls|sysreg
                            Where the guard value is read from. The
                            default follows the target: %fs:0x28 on
@@ -510,8 +650,8 @@ Compile knobs:
                            default) leaves it as the frame held it.
                            __attribute__((uninitialized)) on an object
                            opts it out. A declaration a `goto` or
-                           `switch` jumps past is not covered, as in
-                           gcc. Diagnostics and the -O promotion of the
+                           `switch` jumps past is not covered.
+                           Diagnostics and the -O promotion of the
                            object are unchanged.
   -fzero-init-padding-bits=standard|unions|all
                            Which automatic initializers zero their
@@ -555,7 +695,12 @@ Compile knobs:
 
 VM-only knobs (require --interp):
   --track-pointers         Allocation tracking + use-after-free guard.
-  --trace                  Per-instruction stdout trace (noisy).
+  --trace                  Print each executed SSA instruction to
+                           stderr: function, block and instruction.
+
+Under --interp and --jit, every argument after the input goes to the
+program; `--` ends badc's arguments, and with no input before it the
+first argument after it is the input.
 
 Mutually exclusive: --interp / --jit / --shared /
 --list-symbols / --dump-headers / --install all pick the output

@@ -460,7 +460,7 @@ long many(long a, long b, long c, long d, long e, long f) {
 "#;
 
 /// The frame addresses `insts` stores to, in order. An aarch64 store
-/// whose address the emit materialised in x16 / x17 names that register;
+/// whose address the emit materialized in x16 / x17 names that register;
 /// the `sub` / `add` that built it from x29 is the instruction before it,
 /// so `staged` resolves the store to the key a direct `stur` produces. A
 /// store relative to sp -- the frame record, the callee-saved area -- is
@@ -708,7 +708,7 @@ fn aarch64_frameless_leaf_keeps_the_entry_rule() {
 /// Privileged-mode inline asm: indirect call sites through a table member
 /// binding the stack pointer (`"+r"` on a register variable), a feature
 /// test through a link-time memory operand beside an immediate, register
-/// outputs into locals, and self-initialised output locals.
+/// outputs into locals, and self-initialized output locals.
 const PRIVILEGED_ASM: &str = r#"
 struct ops_t { void *pad[7]; unsigned long long (*read_msr)(unsigned int); };
 extern struct ops_t ops;
@@ -1000,8 +1000,9 @@ int ksimd(int c) {
 /// The SIMD intrinsic wrappers are `static inline` bodies of one
 /// instruction over a pair of by-value vector parameters and a vector
 /// return. At -O each splices into its caller on the flat path: the
-/// caller holds the instruction and no call, and no wrapper body is
-/// emitted, so the frame report names the unit's own functions only.
+/// caller holds the instruction on its values and no call, and no wrapper
+/// body is emitted: the SSA dump and the frame reports name the unit's own
+/// functions only.
 #[test]
 fn simd_wrappers_inline_at_opt() {
     let dir = tempdir("simd-inline");
@@ -1035,20 +1036,24 @@ fn simd_wrappers_inline_at_opt() {
     assert!(!chain.contains(" Call {"), "chain keeps a call:\n{chain}");
     for op in ["paddd128", "pxor128", "pshufb128", "psubd128"] {
         assert!(
-            chain.contains(&format!("X86Simd {{ op=__builtin_ia32_{op},")),
+            chain.contains(&format!("SimdVal {{ op=__builtin_ia32_{op},")),
             "chain lacks {op}:\n{chain}"
         );
     }
+    let mut dumped: Vec<&str> = stderr
+        .split("; name=")
+        .skip(1)
+        .filter_map(|s| s.lines().next())
+        .collect();
+    dumped.sort_unstable();
+    assert_eq!(dumped, ["chain", "t"], "{stderr}");
     let reports: Vec<&str> = stderr.lines().filter(|l| l.contains("B4005")).collect();
-    assert_eq!(reports.len(), 2, "{reports:?}");
-    for name in ["t", "chain"] {
-        assert!(
-            reports
-                .iter()
-                .any(|l| l.contains(&format!("function `{name}`"))),
-            "{name} has no frame report: {reports:?}"
-        );
-    }
+    assert!(
+        reports
+            .iter()
+            .all(|l| l.contains("function `t`") || l.contains("function `chain`")),
+        "{reports:?}"
+    );
 }
 
 /// Compile `source` at -O for `target` with the SSA dump and a frame report
@@ -1083,8 +1088,8 @@ fn function_dump<'a>(stderr: &'a str, name: &str) -> (&'a str, &'a str) {
 }
 
 /// A function whose vectors are values: no object address and no 16-byte
-/// copy remain, a 128-bit phi carries the loop, an asm statement defines
-/// its output, and the frame holds no locals and no over-aligned region.
+/// copy remain, a 128-bit phi carries the loop, and the frame holds no
+/// locals and no over-aligned region.
 fn assert_vectors_in_registers(body: &str, report: &str) {
     for form in ["LocalAddr(", "Mcpy {"] {
         assert!(!body.contains(form), "{form} remains:\n{body}");
@@ -1094,19 +1099,16 @@ fn assert_vectors_in_registers(body: &str, report: &str) {
             .any(|l| l.contains("Phi {") && l.contains("kind=V128")),
         "no 128-bit phi:\n{body}"
     );
-    assert!(
-        body.lines()
-            .any(|l| l.contains("InlineAsm {") && l.contains("args=[-")),
-        "no asm value output:\n{body}"
-    );
     for region in ["in locals", "over-aligned region"] {
         assert!(!report.contains(region), "{report}");
     }
 }
 
 /// NEON intrinsic chains at -O: the loop's vectors live in SIMD registers,
-/// the two live across the call spill whole, and the wrapper bodies inline
-/// away. A vector whose address reaches a call stays an object.
+/// the two live across the call spill whole, the wrapper bodies inline
+/// away, and the constant broadcast is one constant vector, each lane's
+/// conversion of its constant being one value. A vector whose address
+/// reaches a call stays an object.
 #[test]
 fn neon_vectors_live_in_registers_at_opt() {
     let stderr = dump_opt(
@@ -1139,6 +1141,10 @@ fn neon_vectors_live_in_registers_at_opt() {
     );
     let (body, report) = function_dump(&stderr, "gen");
     assert_vectors_in_registers(body, report);
+    assert!(
+        body.contains("VecConst") && !body.contains("VecInsert"),
+        "the broadcast is lane by lane:\n{body}"
+    );
     assert!(report.contains("in spill slots"), "{report}");
     assert!(
         !stderr.contains("; name=veorq_u8"),
@@ -1192,6 +1198,11 @@ fn x86_64_asm_vector_operands_live_in_registers_at_opt() {
     );
     let (body, report) = function_dump(&stderr, "chain");
     assert_vectors_in_registers(body, report);
+    assert!(
+        body.lines()
+            .any(|l| l.contains("InlineAsm {") && l.contains("args=[-")),
+        "no asm value output:\n{body}"
+    );
     assert!(
         body.lines()
             .any(|l| l.contains("paddb") && !l.contains("args=[-")),

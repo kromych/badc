@@ -60,8 +60,8 @@ fn vla_typedef_runs_under_the_interpreter() {
 
 /// What a variably modified typedef may not declare: an object of static
 /// storage duration or with linkage (C99 6.7.5.2p2) and a member
-/// (6.7.2.1p8), which gcc 16 and clang 22 reject; a jump into its scope
-/// (6.8.6.1p1); and an array of it, which badc does not lay out.
+/// (6.7.2.1p8); a jump into its scope (6.8.6.1p1); and an array of it,
+/// which badc does not lay out.
 #[test]
 fn vla_typedef_constraints_are_diagnosed() {
     for (body, text) in [
@@ -98,7 +98,7 @@ fn vla_typedef_constraints_are_diagnosed() {
 /// A block-scope pointer to a variable-length array (C99 6.7.5.2p2), its
 /// bound taken where the declaration is reached, under the interpreter for
 /// both data models; one with linkage and a jump into its scope are
-/// rejected, as gcc 16 and clang 22 reject them.
+/// rejected.
 #[test]
 fn a_block_scope_pointer_to_a_vla_takes_its_bound_where_declared() {
     for t in [crate::Target::LinuxX64, crate::Target::WindowsAarch64] {
@@ -165,8 +165,8 @@ fn a_parameter_may_point_to_a_vla() {
 
 /// C99 6.5.3.4p2: `sizeof` of a variable-length array is evaluated, so it
 /// is no constant: an array bound of it declares a variable-length array
-/// (`int b[sizeof a]`), and a context that requires a constant rejects it,
-/// as gcc 16 does. The run's values are gcc's.
+/// (`int b[sizeof a]`), and a context that requires a constant rejects it.
+/// The run's values are gcc 16's.
 #[test]
 fn sizeof_of_a_vla_is_not_a_constant() {
     let src = "int f(int n) { char a[n];\n\

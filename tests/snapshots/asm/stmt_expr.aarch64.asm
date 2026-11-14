@@ -15,55 +15,24 @@ Disassembly of section .text:
 
 <bump>:
                	adrp	x0, <page>
-               	ldrsw	x1, [x0, #0x30]
+               	ldrsw	x1, [x0, #0x20]
                	add	x1, x1, #0x1
-               	str	w1, [x0, #0x30]
+               	str	w1, [x0, #0x20]
                	mov	x0, x1
                	ret
 
 <main>:
                	adrp	x0, <page>
-               	str	wzr, [x0, #0x30]
-               	mov	x2, #0x1                // =1
-               	str	w2, [x0, #0x30]
-               	mov	x2, #0x2                // =2
-               	str	w2, [x0, #0x30]
-               	mov	x2, #0x3                // =3
-               	str	w2, [x0, #0x30]
-               	ldrsw	x2, [x0, #0x30]
-               	cmp	w2, #0x3
-               	b.eq	<addr>
-               	mov	x0, #0x3                // =3
-               	ret
-               	str	wzr, [x0, #0x30]
-               	mov	x2, #0x1                // =1
-               	str	w2, [x0, #0x30]
-               	mov	x2, #0x2                // =2
-               	str	w2, [x0, #0x30]
-               	ldrsw	x2, [x0, #0x30]
-               	cmp	w2, #0x2
-               	b.eq	<addr>
-               	mov	x0, #0x4                // =4
-               	ret
-               	str	wzr, [x0, #0x30]
-               	mov	x2, #0x1                // =1
-               	str	w2, [x0, #0x30]
-               	mov	x2, #0x2                // =2
-               	str	w2, [x0, #0x30]
-               	mov	x2, #0x3                // =3
-               	str	w2, [x0, #0x30]
-               	ldrsw	x2, [x0, #0x30]
-               	cmp	w2, #0x3
-               	b.eq	<addr>
-               	mov	x0, #0x5                // =5
-               	ret
-               	str	wzr, [x0, #0x30]
-               	mov	x1, #0x1                // =1
-               	str	w1, [x0, #0x30]
+               	mov	x1, #0x3                // =3
+               	str	w1, [x0, #0x20]
                	mov	x1, #0x2                // =2
-               	str	w1, [x0, #0x30]
+               	str	w1, [x0, #0x20]
+               	mov	x1, #0x3                // =3
+               	str	w1, [x0, #0x20]
+               	mov	x1, #0x2                // =2
+               	str	w1, [x0, #0x20]
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x30]
+               	ldrsw	x0, [x0, #0x20]
                	cmp	w0, #0x2
                	b.eq	<addr>
                	mov	x0, #0x6                // =6

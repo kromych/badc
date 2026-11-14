@@ -67,90 +67,86 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	retq
                	movq	<rip>, %rax # <addr>
-               	leaq	<rip>, %rcx # <addr>
-               	leaq	0x20(%rcx), %rdx
-               	cmpq	%rdx, %rax
+               	leaq	<rip>, %rdx # <addr>
+               	leaq	0x20(%rdx), %rcx
+               	cmpq	%rcx, %rax
                	je	<addr>
                	movl	$0x8, %eax
                	retq
-               	movq	<rip>, %rdx # <addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x40(%rax), %rsi
-               	cmpq	%rsi, %rdx
+               	movq	<rip>, %rax # <addr>
+               	leaq	<rip>, %rcx # <addr>
+               	leaq	0x40(%rcx), %rsi
+               	cmpq	%rsi, %rax
                	je	<addr>
                	movl	$0x9, %eax
                	retq
-               	movq	<rip>, %rdx # <addr>
-               	subq	%rax, %rdx
-               	cmpq	$0x40, %rdx
+               	movq	%rax, %rsi
+               	subq	%rcx, %rsi
+               	cmpq	$0x40, %rsi
                	je	<addr>
                	movl	$0xa, %eax
                	retq
-               	movq	<rip>, %rdx # <addr>
                	movq	<rip>, %rsi # <addr>
-               	cmpq	%rsi, %rdx
+               	cmpq	%rax, %rsi
                	jne	<addr>
-               	movq	<rip>, %rdx # <addr>
                	movq	<rip>, %rsi # <addr>
-               	cmpq	%rsi, %rdx
+               	cmpq	%rax, %rsi
                	je	<addr>
                	movl	$0xb, %eax
                	retq
-               	movq	<rip>, %rsi # <addr>
-               	leaq	<rip>, %rdx # <addr>
-               	subq	%rdx, %rsi
-               	cmpq	$0x10, %rsi
+               	movq	<rip>, %rax # <addr>
+               	leaq	<rip>, %rsi # <addr>
+               	subq	%rsi, %rax
+               	cmpq	$0x10, %rax
                	je	<addr>
                	movl	$0xc, %eax
                	retq
-               	movq	<rip>, %rsi # <addr>
-               	subq	%rcx, %rsi
-               	cmpq	$0x30, %rsi
+               	movq	<rip>, %rax # <addr>
+               	subq	%rdx, %rax
+               	cmpq	$0x30, %rax
                	je	<addr>
                	movl	$0xd, %eax
                	retq
-               	movq	<rip>, %rcx # <addr>
-               	subq	%rax, %rcx
-               	cmpq	$0x1, %rcx
+               	movq	<rip>, %rax # <addr>
+               	movq	%rax, %rdx
+               	subq	%rcx, %rdx
+               	cmpq	$0x1, %rdx
                	je	<addr>
                	movl	$0xe, %eax
                	retq
-               	movq	<rip>, %rax # <addr>
                	movq	<rip>, %rcx # <addr>
-               	cmpq	%rcx, %rax
+               	cmpq	%rax, %rcx
                	je	<addr>
                	movl	$0xf, %eax
                	retq
-               	movq	<rip>, %rax # <addr>
                	movq	<rip>, %rcx # <addr>
-               	cmpq	%rcx, %rax
+               	cmpq	%rax, %rcx
                	je	<addr>
                	movl	$0x10, %eax
                	retq
-               	movq	<rip>, %rax # <addr>
                	movq	<rip>, %rcx # <addr>
-               	cmpq	%rcx, %rax
+               	cmpq	%rax, %rcx
                	je	<addr>
                	movl	$0x11, %eax
                	retq
                	leaq	<rip>, %rax # <addr>
                	movq	<rip>, %rcx # <addr>
-               	movq	%rax, %rsi
-               	subq	%rcx, %rsi
-               	cmpq	$0x1, %rsi
+               	movq	%rax, %rdx
+               	subq	%rcx, %rdx
+               	cmpq	$0x1, %rdx
                	je	<addr>
                	movl	$0x12, %eax
                	retq
                	movq	<rip>, %rcx # <addr>
-               	movq	%rax, %rsi
-               	subq	%rcx, %rsi
-               	cmpq	$0x10, %rsi
+               	movq	%rax, %rdx
+               	subq	%rcx, %rdx
+               	cmpq	$0x10, %rdx
                	je	<addr>
                	movl	$0x13, %eax
                	retq
                	movq	<rip>, %rcx # <addr>
-               	subq	%rcx, %rdx
-               	cmpq	$0x4, %rdx
+               	subq	%rcx, %rsi
+               	cmpq	$0x4, %rsi
                	je	<addr>
                	movl	$0x14, %eax
                	retq

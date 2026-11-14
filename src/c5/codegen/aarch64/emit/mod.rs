@@ -46,6 +46,7 @@ use super::encode::{
     enc_strh_imm, enc_sub_imm, enc_sub_reg, enc_subs_imm, enc_ucvtf_d_x, enc_ucvtf_s_x, enc_udiv,
     load_imm64,
 };
+use super::ssa::code_buf::{CodeBuf, SpillWidth};
 use super::ssa::emit_common::{
     Emit, MAX_UNPROBED_STACK_STEP, PlaceMove, STACK_PROBE_PAGE, STACK_PROBE_UNROLL_MAX,
     Unsupported, build_arg_aggs, param_entry_ext, place_same_loc,
@@ -65,6 +66,7 @@ mod inline_asm;
 mod inst;
 mod intrinsic;
 mod mem;
+mod simd;
 #[cfg(test)]
 mod tests;
 
@@ -77,11 +79,10 @@ use inline_asm::*;
 use inst::*;
 use intrinsic::*;
 use mem::*;
+use simd::*;
 
-pub(crate) use arith::{binop_imm_materializes, compare_fuses};
-pub(crate) use frame::{
-    Frame, asm_site_bound_values, asm_site_write_masks, asm_staged_hints, compute_frame,
-};
+pub(crate) use arith::{binop_imm_materializes, branch_fuses, cmp_imm12, compare_fuses};
+pub(crate) use frame::{Frame, asm_site_bound_values, asm_site_write_masks, asm_staged_hints};
 pub(crate) use function::emit_function;
 pub(super) use inline_asm::a64_align_asm_stream;
 pub(crate) use inline_asm::encode_a64_file_asm_section_code;

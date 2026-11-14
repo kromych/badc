@@ -1,7 +1,7 @@
 //! AArch64 instruction encoder + per-function lowering shell.
 //!
 //! All AArch64 instructions are 32 bits wide and little-endian on every
-//! supported OS, which makes the encoder a flat catalogue of
+//! supported OS, which makes the encoder a flat catalog of
 //! `fn enc_xxx(...) -> u32`. Per-function code generation routes
 //! through [`super::ssa::shadow::produce_ssa_funcs`] +
 //! [`super::ssa::reg_alloc::allocate`] + `super::emit`; this
@@ -28,7 +28,7 @@
 //!   (PLT trampoline placement, x19 reservation, branch placeholder
 //!   patching).
 
-// Encoder catalogue: a few entries (e.g. unused arithmetic forms,
+// Encoder catalog: a few entries (e.g. unused arithmetic forms,
 // MSR/MRS variants we'd reach for if we ever grow scheduling) sit
 // here for completeness and aren't called by the lowering pass.
 // Suppress the dead-code lint for the whole module so adding the
@@ -367,7 +367,7 @@ pub(crate) fn enc_sub_ext_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
 
 /// True when `bytes` fits the two-instruction split of `ADD` / `SUB`
 /// (immediate): a 12-bit value plus a 12-bit value left-shifted by 12.
-/// Past it an offset must be materialised into a register.
+/// Past it an offset must be materialized into a register.
 pub(crate) fn add_sub_imm24_in_range(bytes: u32) -> bool {
     bytes < (1 << 24)
 }
@@ -418,7 +418,7 @@ pub(crate) fn emit_add_sp_imm(code: &mut Vec<u8>, bytes: u32) {
 }
 
 /// Add any 32-bit `bytes` to SP. Past the 24-bit immediate reach the
-/// count is materialised into `scratch` and applied with the
+/// count is materialized into `scratch` and applied with the
 /// extended-register form, so the frame size is bounded by the
 /// frame-offset width rather than by the immediate encoding. Growing sp
 /// needs no probe: it moves back over bytes the frame already reached.
@@ -434,7 +434,6 @@ pub(crate) fn emit_add_sp_imm_scratch(code: &mut Vec<u8>, bytes: u32, scratch: R
 
 // ---- 3-register arithmetic / bitwise (shifted-register form, no shift). ----
 // Each follows the same template: a base opcode | Rm<<16 | Rn<<5 | Rd.
-// Verified against `clang -c -arch arm64` on Apple Silicon.
 
 /// 3-register data-processing word: `base | Rm<<16 | Rn<<5 | Rd`. Any baked
 /// field (e.g. MUL's `Ra = XZR`) is part of `base`.
@@ -578,6 +577,8 @@ pub(crate) enum LogicalOp {
     And = 0,
     Orr = 1,
     Eor = 2,
+    /// Sets the flags; Rd = 31 is XZR, which makes it `tst`.
+    Ands = 3,
 }
 
 /// `<op> Rd, Rn, #value` in the 64-bit form, or in the 32-bit form over the
@@ -711,6 +712,11 @@ pub(crate) fn enc_rorv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
     enc_rrr(0x9AC0_2C00, rd, rn, rm)
 }
 
+/// `RORV <Wd>, <Wn>, <Wm>` -- the 32-bit rotate, the result zero-extended.
+pub(crate) fn enc_rorv_w(rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    enc_rrr(0x1AC0_2C00, rd, rn, rm)
+}
+
 /// `CLZ <Xd>, <Xn>` -- count leading zero bits; 64 for a zero source.
 pub(crate) fn enc_clz(rd: Reg, rn: Reg) -> u32 {
     0xDAC0_1000 | ((rn.0 as u32) << 5) | (rd.0 as u32)
@@ -781,6 +787,15 @@ pub(crate) fn enc_ror_imm(rd: Reg, rn: Reg, shift: u8) -> u32 {
     0x93C0_0000
         | ((rn.0 as u32) << 16)
         | (((shift as u32) & 63) << 10)
+        | ((rn.0 as u32) << 5)
+        | (rd.0 as u32)
+}
+
+/// `ROR <Wd>, <Wn>, #shift` (`EXTR Wd, Wn, Wn, #shift`) -- the 32-bit form.
+pub(crate) fn enc_ror_imm_w(rd: Reg, rn: Reg, shift: u8) -> u32 {
+    0x1380_0000
+        | ((rn.0 as u32) << 16)
+        | (((shift as u32) & 31) << 10)
         | ((rn.0 as u32) << 5)
         | (rd.0 as u32)
 }
@@ -1001,6 +1016,84 @@ pub(crate) fn enc_umov_gen(rd: Reg, vn: u8, esize: u32, index: u32) -> u32 {
     let imm5 = (index << (esize.trailing_zeros() + 1)) | esize;
     let q = u32::from(esize == 8) << 30;
     0x0E00_3C00 | q | (imm5 << 16) | ((vn as u32) << 5) | (rd.0 as u32)
+}
+
+/// `SMOV <Xd>, <Vn>.<T>[index]` -- sign-extend one byte, halfword or word
+/// element of a vector register into a 64-bit general register.
+pub(crate) fn enc_smov_gen(rd: Reg, vn: u8, esize: u32, index: u32) -> u32 {
+    debug_assert!(vn < 32);
+    debug_assert!(esize.is_power_of_two() && esize <= 4);
+    debug_assert!(index * esize < 16);
+    let imm5 = (index << (esize.trailing_zeros() + 1)) | esize;
+    0x4E00_2C00 | (imm5 << 16) | ((vn as u32) << 5) | (rd.0 as u32)
+}
+
+/// `INS <Vd>.<T>[index], <Vn>.<T>[0]` -- copy the low element of `vn` into
+/// one element of `vd`, the others unchanged.
+pub(crate) fn enc_ins_elem(vd: u8, esize: u32, index: u32, vn: u8) -> u32 {
+    enc_ins_elem_from(vd, esize, index, vn, 0)
+}
+
+/// `INS <Vd>.<T>[index], <Vn>.<T>[from]`.
+pub(crate) fn enc_ins_elem_from(vd: u8, esize: u32, index: u32, vn: u8, from: u32) -> u32 {
+    debug_assert!(vd < 32 && vn < 32);
+    debug_assert!(esize.is_power_of_two() && esize <= 8);
+    debug_assert!(index * esize < 16 && from * esize < 16);
+    let imm5 = (index << (esize.trailing_zeros() + 1)) | esize;
+    let imm4 = from << esize.trailing_zeros();
+    0x6E00_0400 | (imm5 << 16) | (imm4 << 11) | ((vn as u32) << 5) | (vd as u32)
+}
+
+/// `LD1 {<Vt>.<T>}[index], [<Xn|SP>]` when `load`, else `ST1`: one
+/// `esize`-byte lane between `vt` and memory.
+pub(crate) fn enc_ld1_st1_lane(load: bool, vt: u8, esize: u32, index: u32, rn: Reg) -> u32 {
+    debug_assert!(vt < 32 && index * esize < 16);
+    // Q:S:size spell the lane index, `size` the low bits for bytes.
+    let (opcode, qss) = match esize {
+        1 => (0, index),
+        2 => (2, index << 1),
+        4 => (4, index << 2),
+        _ => (4, (index << 3) | 1),
+    };
+    0x0D00_0000
+        | ((qss >> 3) << 30)
+        | (u32::from(load) << 22)
+        | (opcode << 13)
+        | (((qss >> 2) & 1) << 12)
+        | ((qss & 3) << 10)
+        | ((rn.0 as u32) << 5)
+        | (vt as u32)
+}
+
+/// `ZIP1 <Vd>.2D, <Vn>.2D, <Vm>.2D` -- the low element of `vn`, then the
+/// low element of `vm`.
+pub(crate) fn enc_zip1_2d(vd: u8, vn: u8, vm: u8) -> u32 {
+    debug_assert!(vd < 32 && vn < 32 && vm < 32);
+    0x4EC0_3800 | ((vm as u32) << 16) | ((vn as u32) << 5) | (vd as u32)
+}
+
+/// `DUP <Vd>.<T>, <R>n` -- every `esize`-byte lane of `vd`, all 16 bytes
+/// when `q`, from general register `rn` (`X` for 8-byte lanes).
+pub(crate) fn enc_dup_gen(vd: u8, esize: u32, q: bool, rn: Reg) -> u32 {
+    debug_assert!(vd < 32 && esize.is_power_of_two() && esize <= 8);
+    0x0E00_0C00 | (u32::from(q) << 30) | (esize << 16) | ((rn.0 as u32) << 5) | (vd as u32)
+}
+
+/// `DUP <Vd>.<T>, <Vn>.<Ts>[0]` -- every `esize`-byte lane of `vd`, all 16
+/// bytes when `q`, from lane 0 of `vn`.
+pub(crate) fn enc_dup_elem(vd: u8, esize: u32, q: bool, vn: u8) -> u32 {
+    debug_assert!(vd < 32 && vn < 32 && esize.is_power_of_two() && esize <= 8);
+    0x0E00_0400 | (u32::from(q) << 30) | (esize << 16) | ((vn as u32) << 5) | (vd as u32)
+}
+
+/// `DUP <V>d, <Vn>.<T>[index]` -- one element of `vn` into scalar
+/// register `vd` (`mov <V>d, <Vn>.<T>[index]`).
+pub(crate) fn enc_dup_elem_scalar(vd: u8, vn: u8, esize: u32, index: u32) -> u32 {
+    debug_assert!(vd < 32 && vn < 32);
+    debug_assert!(esize.is_power_of_two() && esize <= 8);
+    debug_assert!(index * esize < 16);
+    let imm5 = (index << (esize.trailing_zeros() + 1)) | esize;
+    0x5E00_0400 | (imm5 << 16) | ((vn as u32) << 5) | (vd as u32)
 }
 
 /// `FMOV <Sd>, <Sn>` -- copy a single-precision register. Used to
@@ -1228,6 +1321,39 @@ pub(crate) fn enc_str_q_imm(qt: u8, rn: Reg, imm: u32) -> u32 {
 }
 
 /// `MOV <Vd>.16B, <Vn>.16B` (`ORR Vd.16B, Vn.16B, Vn.16B`).
+/// The AdvSIMD three-same instruction for the element-wise `op` over
+/// 128-bit vectors of `lane` elements: `vd = vn op vm`. `None` for an
+/// operation with no single instruction ([`VecLane::binop_in_one_instruction`]).
+pub(crate) fn enc_vec_binop(
+    op: crate::c5::ir::BinOp,
+    lane: crate::c5::ir::VecLane,
+    vd: u8,
+    vn: u8,
+    vm: u32,
+) -> Option<u32> {
+    use crate::c5::ir::{BinOp, VecLane};
+    let size: u32 = match lane {
+        VecLane::I8 | VecLane::F32 => 0,
+        VecLane::I16 | VecLane::F64 => 1,
+        VecLane::I32 => 2,
+        VecLane::I64 => 3,
+    };
+    let base = match (op, lane.is_float()) {
+        (BinOp::Add, false) => 0x4E20_8400 | size << 22,
+        (BinOp::Sub, false) => 0x6E20_8400 | size << 22,
+        (BinOp::Mul, false) if size < 3 => 0x4E20_9C00 | size << 22,
+        (BinOp::And, false) => 0x4E20_1C00,
+        (BinOp::Or, false) => 0x4EA0_1C00,
+        (BinOp::Xor, false) => 0x6E20_1C00,
+        (BinOp::Fadd, true) => 0x4E20_D400 | size << 22,
+        (BinOp::Fsub, true) => 0x4EA0_D400 | size << 22,
+        (BinOp::Fmul, true) => 0x6E20_DC00 | size << 22,
+        (BinOp::Fdiv, true) => 0x6E20_FC00 | size << 22,
+        _ => return None,
+    };
+    Some(base | (vm & 31) << 16 | u32::from(vn & 31) << 5 | u32::from(vd & 31))
+}
+
 pub(crate) fn enc_mov_v16b(vd: u8, vn: u8) -> u32 {
     debug_assert!(vd < 32 && vn < 32);
     0x4EA0_1C00 | ((vn as u32) << 16) | ((vn as u32) << 5) | vd as u32
@@ -1293,9 +1419,21 @@ pub(crate) fn enc_subs_imm_w(rd: Reg, rn: Reg, imm12: u32) -> u32 {
     0x7100_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
 
+/// `ADDS Xd, Xn, #imm12`; `cmn Xn, #imm12` with Xd = XZR.
+pub(crate) fn enc_adds_imm(rd: Reg, rn: Reg, imm12: u32) -> u32 {
+    debug_assert!(imm12 < 4096, "adds imm: {imm12} > 12-bit max");
+    0xB100_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// `ADDS Wd, Wn, #imm12`; `cmn Wn, #imm12` with Wd = WZR.
+pub(crate) fn enc_adds_imm_w(rd: Reg, rn: Reg, imm12: u32) -> u32 {
+    debug_assert!(imm12 < 4096, "adds imm: {imm12} > 12-bit max");
+    0x3100_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
 /// AArch64 condition codes -- the 4-bit field that follows comparisons
 /// and conditional moves. Names match the ARM ARM. The Mi/Ls
-/// variants are the FP-comparison flavour: after `FCMP`, the
+/// variants are the FP-comparison flavor: after `FCMP`, the
 /// `<`/`<=` results live under the unsigned/sign-bit codes
 /// (mi/ls) rather than the signed-arithmetic lt/le, because
 /// FCMP's flag layout differs from SUBS's.
@@ -1370,6 +1508,24 @@ pub(crate) fn enc_csinc(rd: Reg, rn: Reg, rm: Reg, cond: Cond) -> u32 {
         | ((cond as u32) << 12)
         | ((rn.0 as u32) << 5)
         | (rd.0 as u32)
+}
+
+/// `CSEL <Xd>, <Xn>, <Xm>, <cond>`: `Xd = cond ? Xn : Xm`.
+pub(crate) fn enc_csel(rd: Reg, rn: Reg, rm: Reg, cond: Cond) -> u32 {
+    0x9A80_0000
+        | ((rm.0 as u32) << 16)
+        | ((cond as u32) << 12)
+        | ((rn.0 as u32) << 5)
+        | (rd.0 as u32)
+}
+
+/// `FCSEL <Dd|Sd>, <Dn|Sn>, <Dm|Sm>, <cond>`: `d = cond ? n : m`.
+pub(crate) fn enc_fcsel(dd: u8, dn: u8, dm: u8, cond: Cond, single: bool) -> u32 {
+    (if single { 0x1E20_0C00u32 } else { 0x1E60_0C00 })
+        | ((dm as u32) << 16)
+        | ((cond as u32) << 12)
+        | ((dn as u32) << 5)
+        | (dd as u32)
 }
 
 /// `CSET <Xd>, <cond>` = `CSINC Xd, XZR, XZR, invert(cond)`.
@@ -1482,6 +1638,19 @@ pub(crate) const PACIASP: u32 = 0xD503_233F;
 /// be back at its function-entry value.
 pub(crate) const AUTIASP: u32 = 0xD503_23BF;
 
+/// `PACIBSP` / `AUTIBSP` -- `PACIASP` / `AUTIASP` with key B. `HINT #27`
+/// and `HINT #31`.
+pub(crate) const PACIBSP: u32 = 0xD503_237F;
+pub(crate) const AUTIBSP: u32 = 0xD503_23FF;
+
+/// The sign and authenticate instructions of the key `hardening` names.
+pub(crate) fn pac_pair(hardening: crate::c5::codegen::Hardening) -> (u32, u32) {
+    match hardening.pac_b_key {
+        true => (PACIBSP, AUTIBSP),
+        false => (PACIASP, AUTIASP),
+    }
+}
+
 /// `XPACLRI` -- strip the authentication code from x30. `HINT #7`, so it
 /// decodes as a NOP where FEAT_PAuth is absent and leaves an unsigned
 /// pointer unchanged. x30 is the only register the hint form reaches;
@@ -1555,6 +1724,15 @@ impl MemOp {
     pub(crate) fn offset(self, disp: i64) -> Option<MemOff> {
         self.scaled_field(disp)
             .or_else(|| self.unscaled_field(disp))
+    }
+
+    /// The post-indexed form: the access at the base, which then moves by
+    /// `step` in [-256, 255].
+    pub(crate) fn post_indexed(self, step: i64) -> Option<MemOff> {
+        (-256..256).contains(&step).then_some(MemOff {
+            scale: self.scale,
+            field: (((step as u32) & 0x1FF) << 12) | (1 << 10),
+        })
     }
 
     /// The scaled form at byte offset `imm`, refused in every build past it.
@@ -2247,6 +2425,8 @@ struct Aarch64Lower {
     /// The mapping state spans the section: a body ending in data leaves the
     /// padding to the next function's first instruction, as under GNU as.
     text_map_state: Option<super::map_syms::MapClass>,
+    /// Callee entry pc -> return type tag, for the tail-call contract.
+    ret_tags: alloc::collections::BTreeMap<usize, i64>,
 }
 
 impl Aarch64Lower {
@@ -2272,6 +2452,7 @@ impl Aarch64Lower {
             macho_tlv_descriptors: Vec::new(),
             data_sym_offsets,
             text_map_state: None,
+            ret_tags: alloc::collections::BTreeMap::new(),
         }
     }
 }
@@ -2314,9 +2495,19 @@ impl super::ssa::emit_common::LowerTarget for Aarch64Lower {
         });
     }
 
-    fn note_callees(&mut self, _funcs: &[crate::c5::ir::FunctionSsa]) {}
+    fn note_callees(&mut self, funcs: &[crate::c5::ir::FunctionSsa]) {
+        self.ret_tags = (funcs.iter())
+            .filter_map(|f| f.ret_type_tag.map(|tag| (f.ent_pc, tag)))
+            .collect();
+    }
 
-    fn note_extern_callee(&mut self, _sym: &crate::c5::symbol::Symbol) {}
+    /// A declaration without a prototype states no return contract a tail
+    /// call could rely on.
+    fn note_extern_callee(&mut self, sym: &crate::c5::symbol::Symbol) {
+        if sym.prototyped() {
+            self.ret_tags.insert(sym.val as usize, sym.type_);
+        }
+    }
 
     #[cfg(feature = "std")]
     fn dump_unit(
@@ -2396,6 +2587,8 @@ impl super::ssa::emit_common::LowerTarget for Aarch64Lower {
             entry,
             native.fixed_regs,
             native.optimize,
+            native.sibling_calls,
+            &self.ret_tags,
         )
     }
 
@@ -2660,9 +2853,8 @@ fn apply_plt_call_fixups(
 
 /// jmp_buf field offsets for the AArch64 setjmp / longjmp
 /// intrinsics. Lays out 10 callee-saved x-regs, FP (x29), the
-/// resume PC, SP, and 8 callee-saved d-regs. Total 168 bytes;
-/// the `<setjmp.h>` typedef reserves 256 to leave slack for
-/// future additions.
+/// resume PC, SP, and 8 callee-saved d-regs. Total 168 bytes,
+/// within the 192-byte `jmp_buf`, the SDK's `_JUMP_BUFFER`.
 pub(crate) const JB_X19_OFF: u32 = 0;
 pub(crate) const JB_X29_OFF: u32 = 80;
 pub(crate) const JB_PC_OFF: u32 = 88;
@@ -2812,7 +3004,6 @@ mod tests {
 
     #[test]
     fn bit_count_forms() {
-        // The words `clang --target=aarch64-linux-gnu` assembles.
         assert_eq!(enc_clz32(Reg(1), Reg(2)), 0x5AC0_1041);
         assert_eq!(enc_clz(Reg(1), Reg(2)), 0xDAC0_1041);
         assert_eq!(enc_rbit32(Reg(1), Reg(2)), 0x5AC0_0041);
@@ -2863,6 +3054,33 @@ mod tests {
     }
 
     #[test]
+    fn smov_ins_and_dup_vector_elements() {
+        // smov x2, v3.b[5] / x0, v1.h[7] / x9, v4.s[3]
+        assert_eq!(enc_smov_gen(Reg(2), 3, 1, 5), 0x4E0B_2C62);
+        assert_eq!(enc_smov_gen(Reg(0), 1, 2, 7), 0x4E1E_2C20);
+        assert_eq!(enc_smov_gen(Reg(9), 4, 4, 3), 0x4E1C_2C89);
+        // mov v1.s[2], v5.s[0] / v0.d[1], v7.d[0]
+        assert_eq!(enc_ins_elem(1, 4, 2, 5), 0x6E14_04A1);
+        assert_eq!(enc_ins_elem(0, 8, 1, 7), 0x6E18_04E0);
+        // ld1 {v0.b}[15], [x2]; ld1 {v3.h}[6], [x1]; ld1 {v2.d}[1], [x3];
+        // st1 {v0.s}[3], [x0]; st1 {v5.d}[1], [sp]
+        assert_eq!(enc_ld1_st1_lane(true, 0, 1, 15, Reg(2)), 0x4D40_1C40);
+        assert_eq!(enc_ld1_st1_lane(true, 3, 2, 6, Reg(1)), 0x4D40_5023);
+        assert_eq!(enc_ld1_st1_lane(true, 2, 8, 1, Reg(3)), 0x4D40_8462);
+        assert_eq!(enc_ld1_st1_lane(false, 0, 4, 3, Reg(0)), 0x4D00_9000);
+        assert_eq!(enc_ld1_st1_lane(false, 5, 8, 1, Reg(31)), 0x4D00_87E5);
+        // ror w0, w1, #2; rorv w0, w1, w2
+        assert_eq!(enc_ror_imm_w(Reg(0), Reg(1), 2), 0x1381_0820);
+        assert_eq!(enc_rorv_w(Reg(0), Reg(1), Reg(2)), 0x1AC2_2C20);
+        // mov v1.d[1], v2.d[1]; zip1 v3.2d, v4.2d, v5.2d
+        assert_eq!(enc_ins_elem_from(1, 8, 1, 2, 1), 0x6E18_4441);
+        assert_eq!(enc_zip1_2d(3, 4, 5), 0x4EC5_3883);
+        // mov s0, v2.s[3] / d6, v1.d[1]
+        assert_eq!(enc_dup_elem_scalar(0, 2, 4, 3), 0x5E1C_0440);
+        assert_eq!(enc_dup_elem_scalar(6, 1, 8, 1), 0x5E18_0426);
+    }
+
+    #[test]
     fn ret_x30() {
         // ret  ->  0xD65F03C0
         assert_eq!(enc_ret(Reg::X30), 0xD65F_03C0);
@@ -2899,8 +3117,7 @@ mod tests {
         assert_eq!(enc_ldp_post(Reg::X29, Reg::X30, Reg::SP, 16), 0xA8C1_7BFD);
     }
 
-    /// The pair forms at both widths and the post-indexed narrow loads,
-    /// against clang's encodings.
+    /// The pair forms at both widths and the post-indexed narrow loads.
     #[test]
     fn pair_and_post_indexed_unit_forms() {
         let (x1, x2, x3) = (Reg(1), Reg(2), Reg(3));
@@ -2960,7 +3177,7 @@ mod tests {
     }
 
     /// `LDR Xt, [Xn, Xm, LSL #3]` -- Win64 TLS lookup uses this to
-    /// fetch `tls_array[_tls_index]`. Verified against clang.
+    /// fetch `tls_array[_tls_index]`.
     #[test]
     fn ldr_x16_x16_x17_lsl3() {
         // ldr x16, [x16, x17, lsl #3]  ->  0xF8717A10
@@ -2971,7 +3188,7 @@ mod tests {
     }
 
     /// The unscaled register-offset byte forms (`S = 0`) of the scale-1
-    /// indexed accesses. Verified against clang.
+    /// indexed accesses.
     #[test]
     fn byte_register_offset_forms() {
         let lsl = IndexExt::None;
@@ -2985,7 +3202,7 @@ mod tests {
 
     /// The register-offset forms over a word index, every access size with
     /// and without the scaling shift, and the extended-register add of the
-    /// spilled-operand store. Verified against clang.
+    /// spilled-operand store.
     #[test]
     fn word_index_forms() {
         use IndexExt::{Sxtw, Uxtw};
@@ -3014,7 +3231,7 @@ mod tests {
     }
 
     /// The shifted-register forms of the six base words, each shift kind,
-    /// and the widest amount. Verified against clang.
+    /// and the widest amount.
     #[test]
     fn shifted_register_forms() {
         use RegShift::{Asr, Lsl, Lsr};
@@ -3031,7 +3248,7 @@ mod tests {
 
     /// `LDR Wt, [Xn, #imm]` -- 32-bit unsigned-offset load. The
     /// Win64 TLS lookup uses this to read the 4-byte `_tls_index`
-    /// slot. Verified against clang.
+    /// slot.
     #[test]
     fn ldr_w17_x17_4() {
         // ldr w17, [x17, #4]  ->  0xB9400631
@@ -3040,8 +3257,7 @@ mod tests {
 
     /// `LDR Xt, [X18, #0x58]` -- the Win64 TLS lookup pulls
     /// `TEB->ThreadLocalStoragePointer` out of `[x18 + 0x58]`,
-    /// and the encoder needs to handle x18 as a base. Verified
-    /// against clang.
+    /// and the encoder needs to handle x18 as a base.
     #[test]
     fn ldr_x16_x18_0x58() {
         // ldr x16, [x18, #0x58]  ->  0xF9402E50
@@ -3049,17 +3265,14 @@ mod tests {
     }
 
     /// `MRS Xt, TPIDR_EL0` -- Linux/aarch64 TLS lookup reads the
-    /// per-thread pointer system register here. Verified against
-    /// clang.
+    /// per-thread pointer system register here.
     #[test]
     fn mrs_x19_tpidr_el0() {
         // mrs x19, tpidr_el0  ->  0xD53BD053
         assert_eq!(enc_mrs_tpidr_el0(Reg::X19), 0xD53B_D053);
     }
 
-    // Encoder spot checks. Each expected byte string was pasted from
-    // `otool -t -X` on `clang -c -arch arm64` output; if you change
-    // an encoder, run the same trip and update.
+    // Encoder spot checks.
 
     fn r(n: u8) -> Reg {
         Reg(n)
@@ -3093,7 +3306,7 @@ mod tests {
 
     #[test]
     fn sp_restore_past_immediate_reach_uses_register_form() {
-        // Tearing down a frame beyond the 24-bit immediate reach materialises
+        // Tearing down a frame beyond the 24-bit immediate reach materializes
         // the byte count and applies it with the extended-register form rather
         // than truncating or refusing.
         let bytes = 20_000_016u32;
@@ -3497,9 +3710,9 @@ mod tests {
         assert_eq!(enc_ccmp(Reg(11), Reg(13), 0, Cond::Eq), 0xFA4D_0160);
     }
 
-    // Cross-checked against `clang -c` + `otool -t` (aarch64). The plain
-    // LDP / STP forms are the same fixed encodings [`enc_ldp_off`] /
-    // [`enc_stp_off`] produce at a zero offset:
+    // Cross-checked the same way. The plain LDP / STP forms are the same
+    // fixed encodings [`enc_ldp_off`] / [`enc_stp_off`] produce at a zero
+    // offset:
     //   ldxp x1,x2,[x3]=c87f0861  stxp w0,x1,x2,[x3]=c8200861
     //   ldp x1,x2,[x3]=a9400861   stp x1,x2,[x3]=a9000861
     #[test]
@@ -3588,7 +3801,7 @@ mod tests {
             enc_logical_imm(LogicalOp::And, true, Reg(0), Reg(1), 0x1234),
             None
         );
-        // Each form packs the word the assembler catalogue does.
+        // Each form packs the word the assembler catalog does.
         let reg = |num, is64| Opnd::Reg {
             num,
             is64,
@@ -3612,5 +3825,17 @@ mod tests {
                 assert_eq!(got, want, "{mnemonic} {value:#x}");
             }
         }
+    }
+
+    /// Words from LLVM's assembler.
+    #[test]
+    fn csel_and_fcsel() {
+        assert_eq!(enc_csel(Reg(1), Reg(2), Reg(3), Cond::Ne), 0x9A83_1041);
+        assert_eq!(enc_csel(Reg(30), Reg(0), Reg(29), Cond::Lt), 0x9A9D_B01E);
+        assert_eq!(enc_fcsel(1, 2, 3, Cond::Ne, false), 0x1E63_1C41);
+        assert_eq!(enc_fcsel(4, 5, 6, Cond::Gt, true), 0x1E26_CCA4);
+        assert_eq!(enc_csinc(Reg(1), Reg(2), Reg(3), Cond::Ne), 0x9A83_1441);
+        // `cinc x5, x6, lt`.
+        assert_eq!(enc_csinc(Reg(5), Reg(6), Reg(6), Cond::Ge), 0x9A86_A4C5);
     }
 }

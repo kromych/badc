@@ -1,6 +1,6 @@
 // The POSIX clocks, sleeps and reentrant time conversions: on Windows those
 // libc/lib/time_ext.c defines over kernel32, elsewhere the C library's.
-// Every clock reads a normalised time, the realtime clock and gettimeofday
+// Every clock reads a normalized time, the realtime clock and gettimeofday
 // agree with time(), the monotonic clock never goes back and covers a
 // sleep, the process CPU clock advances under work, each clock has a
 // resolution, and a bad clock or interval is EINVAL. libSystem has no

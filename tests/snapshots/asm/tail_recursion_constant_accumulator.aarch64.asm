@@ -56,8 +56,7 @@ Disassembly of section .text:
                	sub	x0, x0, #0x1
                	lsl	x1, x1, #3
                	cbnz	x0, <addr>
-               	mov	x17, #0x3               // =3
-               	mul	x0, x1, x17
+               	add	x0, x1, x1, lsl #1
                	ret
 
 <main>:
@@ -88,8 +87,7 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0xa                // =10
                	bl	<addr>
-               	mov	x17, #-0x41             // =-65
-               	cmp	x0, x17
+               	cmn	x0, #0x41
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp], #0x10

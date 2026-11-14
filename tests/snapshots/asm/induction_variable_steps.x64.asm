@@ -189,19 +189,20 @@ Disassembly of section .text:
 
 <partition>:
                	xorl	%ecx, %ecx
-               	movl	0xfc(%rdi), %edx
+               	movl	0xfc(%rdi), %esi
                	movq	$-0x1, %rax
-               	movl	(%rdi,%rcx,4), %esi
-               	cmpl	%edx, %esi
-               	jge	<addr>
-               	incq	%rax
-               	movl	(%rdi,%rax,4), %esi
-               	movl	(%rdi,%rcx,4), %r8d
-               	movl	%r8d, (%rdi,%rax,4)
-               	movl	%esi, (%rdi,%rcx,4)
+               	jmp	<addr>
                	incq	%rcx
                	cmpl	$0x3f, %ecx
-               	jl	<addr>
+               	jge	<addr>
+               	movl	(%rdi,%rcx,4), %edx
+               	cmpl	%esi, %edx
+               	jge	<addr>
+               	incq	%rax
+               	movl	(%rdi,%rax,4), %r8d
+               	movl	%edx, (%rdi,%rax,4)
+               	movl	%r8d, (%rdi,%rcx,4)
+               	jmp	<addr>
                	incq	%rax
                	movslq	%eax, %rcx
                	movl	(%rdi,%rcx,4), %edx
@@ -214,12 +215,11 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movl	$0xa, %ecx
                	movq	%rax, %rdx
-               	movl	(%rdi,%rax,4), %esi
-               	testb	$0x1, %sil
-               	je	<addr>
-               	decq	%rcx
-               	jmp	<addr>
+               	leaq	-0x1(%rcx), %rsi
                	addq	$0x2, %rcx
+               	movl	(%rdi,%rax,4), %r8d
+               	testb	$0x1, %r8b
+               	cmovneq	%rsi, %rcx
                	movslq	(%rdi,%rcx,4), %rsi
                	addq	%rsi, %rdx
                	incq	%rax
@@ -234,13 +234,12 @@ Disassembly of section .text:
                	movq	%rax, %rdx
                	cmpl	%esi, %eax
                	jge	<addr>
-               	movl	(%rdi,%rax,4), %r8d
-               	cmpl	$0x64, %r8d
-               	jle	<addr>
-               	movq	%rax, %rcx
-               	sarq	%rcx
-               	jmp	<addr>
+               	movq	%rax, %r8
+               	sarq	%r8
                	incq	%rcx
+               	movl	(%rdi,%rax,4), %r9d
+               	cmpl	$0x64, %r9d
+               	cmovgq	%r8, %rcx
                	movslq	%ecx, %r8
                	movslq	(%rdi,%r8,4), %r8
                	addq	%r8, %rdx

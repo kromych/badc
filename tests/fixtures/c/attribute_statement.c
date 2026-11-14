@@ -27,7 +27,7 @@ static int classify(int m) {
 	return r;
 }
 
-static int labelled(int n) {
+static int labeled(int n) {
 	__attribute__((unused)) int spare = 99;
 	if (n)
 		goto out;
@@ -43,7 +43,7 @@ int main(void) {
 	if (classify(3) != 4) return 3;
 	if (classify(4) != 4) return 4;
 	if (classify(5) != 8) return 5;
-	if (labelled(0) != 0) return 6;
-	if (labelled(1) != 99) return 7;
+	if (labeled(0) != 0) return 6;
+	if (labeled(1) != 99) return 7;
 	return 0;
 }

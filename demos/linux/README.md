@@ -442,7 +442,7 @@ except what `$BADC_LD_FALLBACK` names:
   accepted and ignored.
 
 badc's `--version` prints `GNU ld (badc <version>) 2.33.1`, which
-`scripts/ld-version.sh` reads as a BFD-flavour linker at binutils 2.33.1 --
+`scripts/ld-version.sh` reads as a BFD-flavor linker at binutils 2.33.1 --
 the level at which `arch/arm64/Kconfig` enables `ARM64_PTR_AUTH_KERNEL`, and
 deliberately no higher, so nothing gated on a newer linker is claimed.
 `CONFIG_LD_VERSION` records 23301 as a result. On the pinned release that is
@@ -767,7 +767,7 @@ machine happens to draw catch that by luck, so the gate picks the
 displacements instead:
 
 * aarch64 -- the early boot code takes the displacement from
-  `/chosen/kaslr-seed` in the device tree, and `-M virt` honours a tree
+  `/chosen/kaslr-seed` in the device tree, and `-M virt` honors a tree
   passed with `-dtb`. The gate dumps the machine's own tree
   (`-M virt,dumpdtb=`), writes the seed into it (`kaslr.py`, no external
   device-tree tools), and boots against the result. The default plan is the
@@ -882,11 +882,10 @@ same way, at `BdsDxe: No bootable option or device was found`: that is what
 architecture, and `ahci` on aarch64, so those controllers are covered as the
 data bus.
 
-TODO: the badc-built x86_64 bzImage faults in its own EFI stub when the boot
-loader starts it. EDK2's dump identifies the faulting image as that bzImage,
-by the PE entry point it reports. The same kernel boots through the BIOS
-path and a gcc-built kernel boots the same EFI chain, so under UEFI the badc
-kernel reaches userspace only once that is fixed.
+The badc-built x86_64 bzImage boots through its own EFI stub: `auto` takes
+OVMF where it is installed, and the x86_64 lanes in
+[What a distribution configuration compiles today](#what-a-distribution-configuration-compiles-today)
+boot that way.
 
 Naming a tarball is optional. With neither `--tarball` nor `--tarball-url`,
 the pinned release is fetched from the vendor mirror and checked against its
@@ -894,7 +893,7 @@ recorded sha256 -- the same verified path `setup.py` uses -- so the shortest
 useful invocation is:
 
 ```sh
-# packages only: fetch, configure defconfig, build, package
+# packages only: fetch, configure (defconfig without --config), build, package
 python3 demos/linux/packages.py --arch x86_64 \
     --phases config,tree,build,package
 ```
@@ -1560,9 +1559,10 @@ The two are within run-to-run noise of each other, x86_64's badc-linked run
 coming out the faster of the pair. A second matrix dimension would therefore
 buy the link steps at the price of a second full compile per architecture on
 every push. `kernel-packages.yml` carries the contrast instead: it builds the
-same pinned release at the same `make defconfig` with kbuild's default `LD`,
-on both architectures, which is where GNU ld consuming badc's kernel objects
-is gated. A kernel that boots one way and not the other
+same pinned release at each distribution's own configuration (`--config
+vendor`), badc-linked by default and with kbuild's default `LD` on a
+`linker: reference` dispatch, on both architectures, which is where GNU ld
+consuming badc's kernel objects is gated. A kernel that boots one way and not the other
 separates a compiler defect from a linker one.
 
 Each lane publishes two artifacts: the packages (deb or rpm, plus headers,

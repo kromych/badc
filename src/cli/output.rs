@@ -8,8 +8,8 @@ use super::diag::eprint_diagnostic;
 const CODESIGN: &str = "/usr/bin/codesign";
 
 /// Write to standard output for [`out!`] / [`outln!`]. A closed pipe ends
-/// the run with a failure status and no message, as gcc's driver reports a
-/// compiler a closed pipe stopped; any other write error is reported.
+/// the run with a failure status and no message; any other write error is
+/// reported.
 pub(crate) fn write_stdout(args: core::fmt::Arguments) {
     use std::io::Write;
     if let Err(e) = std::io::stdout().lock().write_fmt(args) {
@@ -49,52 +49,52 @@ pub(crate) fn write_output(
     }
 }
 
-/// Post-write hooks for the native image: codesign Mach-O on macOS
-/// hosts so dyld accepts the binary, and surface a per-target
-/// reminder when the produced image's target doesn't match the
-/// running host.
-pub(crate) fn post_write_native(out: &std::path::Path, target: Target) {
-    match target {
-        Target::MacOSAarch64 => {
-            #[cfg(target_os = "macos")]
-            codesign(out);
-            #[cfg(not(target_os = "macos"))]
-            {
-                let _ = out;
-                eprint_diagnostic(
-                    "info: produced a Mach-O on a non-macOS host; copy to macOS \
-                     and `codesign --sign - <path>` before running.",
-                );
-            }
+/// Post-write hooks for the native image: codesign Mach-O on macOS hosts
+/// so dyld accepts the binary, and report B7009 when the image's target is
+/// not the running host. `-q`, `-w` and `-Wno-cross-target-output` drop
+/// the report.
+pub(crate) fn post_write_native(
+    out: &std::path::Path,
+    target: Target,
+    diag: &badc::diag::Config,
+    quiet: bool,
+) {
+    #[cfg(target_os = "macos")]
+    if target == Target::MacOSAarch64 {
+        codesign(out);
+    }
+    let _ = out;
+    let elsewhere = match target {
+        Target::MacOSAarch64 if !cfg!(target_os = "macos") => Some(
+            "a Mach-O on a non-macOS host; copy it to macOS and `codesign --sign - <path>` \
+             before running it",
+        ),
+        Target::LinuxAarch64 if !cfg!(all(target_os = "linux", target_arch = "aarch64")) => {
+            Some("a Linux/aarch64 ELF on a different host; it won't run here")
         }
-        Target::LinuxAarch64 => {
-            let _ = out;
-            #[cfg(not(all(target_os = "linux", target_arch = "aarch64")))]
-            eprint_diagnostic(
-                "info: produced a Linux/aarch64 ELF on a different host. It won't run here",
-            );
+        Target::LinuxX64 if !cfg!(all(target_os = "linux", target_arch = "x86_64")) => {
+            Some("a Linux/x86_64 ELF on a different host; it won't run here")
         }
-        Target::LinuxX64 => {
-            let _ = out;
-            #[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
-            eprint_diagnostic(
-                "info: produced a Linux/x86_64 ELF on a different host. It won't run here",
-            );
+        Target::WindowsX64 if !cfg!(all(target_os = "windows", target_arch = "x86_64")) => {
+            Some("a Windows/x86_64 PE on a different host; it won't run here")
         }
-        Target::WindowsX64 => {
-            let _ = out;
-            #[cfg(not(all(target_os = "windows", target_arch = "x86_64")))]
-            eprint_diagnostic(
-                "info: produced a Windows/x86_64 PE on a different host. It won't run here",
-            );
+        Target::WindowsAarch64 if !cfg!(all(target_os = "windows", target_arch = "aarch64")) => {
+            Some("a Windows/AArch64 PE on a different host; it won't run here")
         }
-        Target::WindowsAarch64 => {
-            let _ = out;
-            #[cfg(not(all(target_os = "windows", target_arch = "aarch64")))]
-            eprint_diagnostic(
-                "info: produced a Windows/AArch64 PE on a different host. It won't run here",
-            );
-        }
+        _ => None,
+    };
+    let Some(what) = elsewhere.filter(|_| !quiet) else {
+        return;
+    };
+    let mut sink = badc::diag::Sink::new(diag.clone(), Default::default());
+    sink.emit(
+        badc::diag::Code::CROSS_TARGET_OUTPUT,
+        None,
+        format!("produced {what}"),
+    );
+    let tty = std::io::IsTerminal::is_terminal(&std::io::stderr());
+    for d in sink.diagnostics() {
+        eprintln!("{}", super::diag::rendered(d, tty));
     }
 }
 

@@ -4,7 +4,7 @@ use crate::c5::ir::{BinOp, StoreKind};
 
 fn func_with(insts: Vec<Inst>, blocks: Vec<Block>) -> FunctionSsa {
     FunctionSsa {
-        inst_src: vec![(0, 0); insts.len()],
+        inst_src: vec![crate::c5::ir::InstSrc::default(); insts.len()],
         f32_values: vec![false; insts.len()],
         insts,
         blocks,
@@ -181,7 +181,7 @@ fn accum_add_long() -> FunctionSsa {
             block(2..5, Terminator::Return(4)),
         ],
     );
-    f.inst_src = vec![(0, 0); f.insts.len()];
+    f.inst_src = vec![crate::c5::ir::InstSrc::default(); f.insts.len()];
     f.f32_values = vec![false; f.insts.len()];
     f
 }
@@ -209,6 +209,18 @@ fn accumulator_add_forms_a_loop_with_acc_phi() {
         "the self-call must be eliminated"
     );
     assert_single_backedge(&f, header);
+}
+
+/// The entry's test moves into the header, and its `__builtin_expect`
+/// prediction with it.
+#[test]
+fn the_entry_tests_prediction_moves_with_it() {
+    let mut f = accum_add_long();
+    f.predicted = vec![Some(crate::c5::ir::Arm::Target)];
+    run(core::slice::from_mut(&mut f));
+    let header = (f.blocks.len() - 1) as BlockId;
+    assert_eq!(f.predicted_arm(0), None);
+    assert_eq!(f.predicted_arm(header), Some(crate::c5::ir::Arm::Target));
 }
 
 #[test]
@@ -252,7 +264,7 @@ fn narrow_return_reextends_the_accumulator() {
         kind: LoadKind::I32,
         nsw: false,
     });
-    f.inst_src.push((0, 0));
+    f.inst_src.push(crate::c5::ir::InstSrc::default());
     f.f32_values.push(false);
     f.blocks[2].inst_range = 2..6;
     f.blocks[2].terminator = Terminator::Return(5);
@@ -297,7 +309,7 @@ fn accum_narrowed_call(param: LoadKind, call: Narrow, sum: Narrow) -> FunctionSs
         rhs: 4,
     });
     f.insts.push(sum.inst(5));
-    f.inst_src = vec![(0, 0); f.insts.len()];
+    f.inst_src = vec![crate::c5::ir::InstSrc::default(); f.insts.len()];
     f.f32_values = vec![false; f.insts.len()];
     f.blocks[2].inst_range = 2..7;
     f.blocks[2].terminator = Terminator::Return(6);
@@ -370,7 +382,7 @@ fn a_base_return_the_narrowing_would_change_keeps_the_recursion() {
         nsw: false,
     });
     f.insts.push(Inst::Imm(1 << 40));
-    f.inst_src = vec![(0, 0); f.insts.len()];
+    f.inst_src = vec![crate::c5::ir::InstSrc::default(); f.insts.len()];
     f.f32_values = vec![false; f.insts.len()];
     f.blocks[1].inst_range = 6..7;
     f.blocks[1].terminator = Terminator::Return(6);
@@ -379,7 +391,7 @@ fn a_base_return_the_narrowing_would_change_keeps_the_recursion() {
     assert!(unchanged(&f));
 }
 
-/// `void f(long n){ if(!n) return; g(); f(n-1); }` modelled as a void
+/// `void f(long n){ if(!n) return; g(); f(n-1); }` modeled as a void
 /// helper whose returns are Imm(0): the last effectful op is the
 /// self-call and the return is a constant.
 fn const_void_tail() -> FunctionSsa {
@@ -423,7 +435,7 @@ fn const_void_tail() -> FunctionSsa {
             block(2..5, Terminator::Return(4)),
         ],
     );
-    f.inst_src = vec![(0, 0); f.insts.len()];
+    f.inst_src = vec![crate::c5::ir::InstSrc::default(); f.insts.len()];
     f.f32_values = vec![false; f.insts.len()];
     f
 }
@@ -553,7 +565,7 @@ fn address_taken_param_is_rejected() {
     // the parameter slot to the recursive block.
     let mut f = accum_add_long();
     f.insts.push(Inst::LocalAddr(2));
-    f.inst_src.push((0, 0));
+    f.inst_src.push(crate::c5::ir::InstSrc::default());
     f.f32_values.push(false);
     f.blocks[2].inst_range = 2..6;
     assert!(unchanged(&f));
@@ -618,7 +630,7 @@ fn pure_value_tail_is_left_to_emit_conversion() {
             block(2..4, Terminator::Return(3)),
         ],
     );
-    f.inst_src = vec![(0, 0); f.insts.len()];
+    f.inst_src = vec![crate::c5::ir::InstSrc::default(); f.insts.len()];
     f.f32_values = vec![false; f.insts.len()];
     assert!(unchanged(&f));
 }
@@ -635,7 +647,7 @@ fn store_local_body_is_rejected() {
         volatile: false,
         nsw: false,
     });
-    f.inst_src.push((0, 0));
+    f.inst_src.push(crate::c5::ir::InstSrc::default());
     f.f32_values.push(false);
     f.blocks[2].inst_range = 2..6;
     assert!(unchanged(&f));

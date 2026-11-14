@@ -138,7 +138,7 @@ mod tests {
         let program = Compiler::with_target(src.into(), Target::LinuxX64)
             .compile()
             .expect("compile");
-        let graph = ReachGraph::new(&program);
+        let graph = ReachGraph::new(&program, Target::LinuxX64);
         let f = program
             .finished_functions
             .iter()
@@ -186,7 +186,7 @@ mod tests {
             let src = crate::c5::tests::with_prelude(&crate::c5::tests::load_fixture(name));
             // A fixture this host rejects has no walk to compare.
             let program = Compiler::with_target(src, target).compile().ok()?;
-            let graph = ReachGraph::new(&program);
+            let graph = ReachGraph::new(&program, target);
             let reachable = reachable_functions(&graph, false);
             let every = program
                 .finished_functions

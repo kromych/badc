@@ -7,7 +7,12 @@
 
 #include <stddef.h>
 
+#ifdef __APPLE__
+struct __tag_iconv_t;
+typedef struct __tag_iconv_t *iconv_t;
+#else
 typedef void *iconv_t;
+#endif
 
 #ifdef __APPLE__
 #pragma dylib(libiconv, "/usr/lib/libiconv.2.dylib")

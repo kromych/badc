@@ -580,15 +580,28 @@
 #define M_E  2.71828182845904523536
 #endif
 
-// C99 7.12.3.1: floating-point category codes returned by fpclassify.
-// The values are an implementation choice; user code compares against
-// the names.
+// C99 7.12.3.1: floating-point category codes returned by fpclassify, the C
+// library's values, which code built against its headers exchanges.
 #ifndef FP_NAN
+#ifdef __APPLE__
+#define FP_NAN 1
+#define FP_INFINITE 2
+#define FP_ZERO 3
+#define FP_NORMAL 4
+#define FP_SUBNORMAL 5
+#elif defined(_WIN32)
+#define FP_NAN 0x0100
+#define FP_NORMAL 0x0400
+#define FP_INFINITE (FP_NAN | FP_NORMAL)
+#define FP_ZERO 0x4000
+#define FP_SUBNORMAL (FP_NORMAL | FP_ZERO)
+#else
 #define FP_NAN 0
 #define FP_INFINITE 1
 #define FP_ZERO 2
 #define FP_SUBNORMAL 3
 #define FP_NORMAL 4
+#endif
 #endif
 
 // C99 7.12.3: the classification macros take any real floating type and
@@ -659,8 +672,12 @@ static inline int isnan(double x) {
 static inline int isinf(double x) {
     return fpclassify(x) == FP_INFINITE;
 }
+// The category codes are unordered: msvcrt's are bit masks.
+static inline int __badc_finite_class(int c) {
+    return c != FP_NAN && c != FP_INFINITE;
+}
 static inline int isfinite(double x) {
-    return fpclassify(x) >= FP_ZERO;
+    return __badc_finite_class(fpclassify(x));
 }
 static inline int isnormal(double x) {
     return fpclassify(x) == FP_NORMAL;
@@ -670,7 +687,7 @@ static inline int isnormal(double x) {
      : sizeof(x) == sizeof(double) ? fpclassify(x) : __badc_fpclassifyl(x))
 #define isnan(x) (fpclassify(x) == FP_NAN)
 #define isinf(x) (fpclassify(x) == FP_INFINITE)
-#define isfinite(x) (fpclassify(x) >= FP_ZERO)
+#define isfinite(x) __badc_finite_class(fpclassify(x))
 #define isnormal(x) (fpclassify(x) == FP_NORMAL)
 #define signbit(x) \
     (sizeof(x) == sizeof(float) ? __badc_signbitf(x) \
@@ -780,7 +797,7 @@ static inline float scalbnf(float x, int n) {
 static inline float scalblnf(float x, long n) {
     return (float) ldexp((double) x, (int) n);
 }
-// C99 7.12.6.4: frexp(x, *exp) splits x into a normalised
+// C99 7.12.6.4: frexp(x, *exp) splits x into a normalized
 // significand in [0.5, 1.0) and an integer exponent.
 double frexp(double x, int *exp);
 // C99 7.12.6.12: modf(x, *iptr) splits x into integer + fractional

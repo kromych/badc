@@ -26,9 +26,7 @@ Disassembly of section .text:
                	int3
 
 <bump>:
-               	movl	(%rdi), %eax
-               	incq	%rax
-               	movl	%eax, (%rdi)
+               	addl	$0x1, (%rdi)
                	retq
 
 <copy_pair>:
@@ -42,7 +40,6 @@ Disassembly of section .text:
                	jge	<addr>
                	movl	$0x0, (%rdi)
                	retq
-               	movl	(%rdi), %eax
                	incq	%rax
                	movl	%eax, (%rdi)
                	retq
@@ -52,8 +49,7 @@ Disassembly of section .text:
                	retq
 
 <pick>:
-               	movslq	%edi, %rdi
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	je	<addr>
                	movl	$0x1, (%rsi)
                	retq
@@ -69,19 +65,13 @@ Disassembly of section .text:
                	retq
 
 <call_last>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	movl	$0x4, (%rdi)
-               	callq	<addr>
-               	popq	%rbp
-               	retq
+               	jmp	<addr>
 
 <count_down>:
                	testl	%edi, %edi
                	je	<addr>
-               	movl	(%rsi), %eax
-               	addq	%rdi, %rax
-               	movl	%eax, (%rsi)
+               	addl	%edi, (%rsi)
                	decq	%rdi
                	testl	%edi, %edi
                	jne	<addr>

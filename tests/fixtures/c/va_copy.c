@@ -1,4 +1,4 @@
-// Locks C99 7.15.1.2 -- `va_copy(dst, src)` initialises `dst`
+// Locks C99 7.15.1.2 -- `va_copy(dst, src)` initializes `dst`
 // to the same position in the variadic list as `src`. With
 // c5's `va_list` defined as a plain cursor, the copy is a
 // pointer assignment that yields an independent walker over

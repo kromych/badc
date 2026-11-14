@@ -31,28 +31,24 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	movl	<rip>, %eax # <addr>
-               	cmpl	$0x14, %eax
+               	movl	<rip>, %ecx # <addr>
+               	cmpl	$0x14, %ecx
                	jne	<addr>
-               	movl	<rip>, %eax # <addr>
-               	cmpl	$0x1e, %eax
+               	movl	<rip>, %edx # <addr>
+               	cmpl	$0x1e, %edx
                	jne	<addr>
-               	movl	<rip>, %eax # <addr>
-               	cmpl	$0x28, %eax
+               	movl	<rip>, %esi # <addr>
+               	cmpl	$0x28, %esi
                	jne	<addr>
-               	movl	<rip>, %eax # <addr>
                	cmpl	$0xa, %eax
                	je	<addr>
                	movl	$0x5, %eax
                	retq
-               	movl	<rip>, %eax # <addr>
-               	cmpl	$0x14, %eax
+               	cmpl	$0x14, %ecx
                	jne	<addr>
-               	movl	<rip>, %eax # <addr>
-               	cmpl	$0x1e, %eax
+               	cmpl	$0x1e, %edx
                	jne	<addr>
-               	movl	<rip>, %eax # <addr>
-               	cmpl	$0x28, %eax
+               	cmpl	$0x28, %esi
                	jne	<addr>
                	xorl	%eax, %eax
                	retq

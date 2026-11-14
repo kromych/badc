@@ -47,9 +47,13 @@ pub(crate) mod erratum;
 #[cfg(feature = "std")]
 pub(crate) mod gnu_property;
 
+mod delay_load;
 mod got_relax;
 #[cfg(feature = "std")]
 mod image;
+#[cfg(feature = "std")]
+mod implib;
+mod import_routes;
 mod import_slots;
 #[cfg(feature = "std")]
 pub(crate) mod kernel32;
@@ -72,6 +76,8 @@ pub(crate) mod object;
 pub(crate) mod on_demand;
 #[cfg(feature = "std")]
 pub(crate) mod relocatable;
+#[cfg(feature = "std")]
+mod section_groups;
 #[cfg(feature = "std")]
 mod synth_build;
 #[cfg(feature = "std")]
@@ -117,11 +123,16 @@ pub use archive::{read_archive_at, read_indexed_archive_at};
 #[allow(unused_imports)]
 pub use coff_object::{
     ImportMember, import_libraries, is_arm64x_native_member, is_coff_import_member, is_coff_object,
-    is_pe_dll, parse_import_member, parse_native_coff, parse_pe_dll, traditional_imports,
+    is_pe_dll, module_definition, parse_import_member, parse_native_coff, parse_pe_dll,
+    traditional_imports,
 };
+#[cfg(feature = "std")]
+pub use delay_load::delay_load_root;
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use image::write_executable_elf64;
+#[cfg(feature = "std")]
+pub use implib::write_import_library;
 pub use ld_driver::{is_ld_invocation, os_error_text, run_ld, script_unreadable};
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
@@ -138,22 +149,27 @@ pub use link::{
     Preemption, SectionContribution, SectionMap, copy_candidates, emit_aarch64_plt, emit_plt_for,
     emit_x86_64_plt, link_native_objects, link_native_objects_with,
     link_native_objects_with_options, link_native_objects_with_shared_libs, link_resolves_symbol,
+    pe_link_supplies_tls_support,
 };
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
-pub use mach_o_object::{is_mach_o_fat, is_mach_o_object, mach_o_fat_slice, parse_native_mach_o};
+pub use mach_o_object::{
+    is_mach_o_fat, is_mach_o_object, mach_o_archive_symbols, mach_o_fat_slice, parse_native_mach_o,
+};
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
-pub use mach_o_shared::{is_mach_o_dylib, is_tbd, parse_mach_o_dylib, parse_tbd};
+pub use mach_o_shared::{
+    is_mach_o_dylib, is_tbd, parse_mach_o_dylib, parse_mach_o_loader, parse_tbd,
+};
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use map::{ArchiveInclusion, render_link_map};
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use object::{
-    NativeMachine, NativeObject, NativeReloc, NativeSymSection, NativeSymbol, SharedLibrary,
-    detect_binary_format, is_elf_object, is_native_object, parse_native_elf, parse_native_object,
-    parse_native_object_for, parse_shared_library,
+    ExportForm, NativeMachine, NativeObject, NativeReloc, NativeSymSection, NativeSymbol,
+    SharedLibrary, detect_binary_format, is_elf_object, is_native_object, parse_native_elf,
+    parse_native_object, parse_native_object_for, parse_shared_library,
 };
 #[cfg(feature = "std")]
 pub use on_demand::OnDemandSources;
@@ -165,7 +181,8 @@ pub use relocatable::{
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use synth_build::{
-    ImageOptions, write_native_image_from_merged, write_native_image_from_merged_ex,
+    ImageOptions, write_native_image_and_pdb, write_native_image_from_merged,
+    write_native_image_from_merged_ex,
 };
 #[cfg(feature = "std")]
 #[allow(unused_imports)]

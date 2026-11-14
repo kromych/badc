@@ -15,9 +15,8 @@ Disassembly of section .text:
 
 <callee>:
                	adrp	x3, <page>
-               	str	x2, [x3, #0x50]
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
+               	str	x2, [x3, #0x40]
+               	add	x0, x0, x0, lsl #1
                	add	x0, x0, x1
                	ret
 
@@ -27,7 +26,6 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	mov	x2, x0
                	sub	x0, x29, #0x10
-               	stp	xzr, xzr, [x0]
                	stur	x1, [x29, #-0x10]
                	mov	x1, #0x7                // =7
                	stur	x1, [x29, #-0x8]

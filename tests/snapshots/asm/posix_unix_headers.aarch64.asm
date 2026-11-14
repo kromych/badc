@@ -32,19 +32,17 @@ Disassembly of section .text:
                	sturb	w0, [x29, #-0x7b]
                	ldurb	w0, [x29, #-0x80]
                	tbz	w0, #0x3, <addr>
-               	ldurb	w0, [x29, #-0x7b]
-               	tbnz	w0, #0x0, <addr>
+               	ldurb	w1, [x29, #-0x7b]
+               	tbnz	w1, #0x0, <addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldurb	w0, [x29, #-0x80]
                	tbz	w0, #0x4, <addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldurb	w0, [x29, #-0x80]
                	and	x0, x0, #0xfffffffffffffff7
                	sturb	w0, [x29, #-0x80]
                	ldurb	w0, [x29, #-0x80]

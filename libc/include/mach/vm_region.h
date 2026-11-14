@@ -1,9 +1,9 @@
-// mach/vm_region.h -- the region-info flavours mach_vm_region reports
+// mach/vm_region.h -- the region-info flavors mach_vm_region reports
 // through. macOS only. Values and field layout match the macOS SDK
 // header of the same name.
 //
-// Only the basic-info flavours are declared. The extended, top and
-// submap flavours describe accounting the kernel exposes to memory
+// Only the basic-info flavors are declared. The extended, top and
+// submap flavors describe accounting the kernel exposes to memory
 // profilers; nothing badc binds returns them.
 
 #pragma once
@@ -46,7 +46,7 @@ typedef struct vm_region_basic_info_64  vm_region_basic_info_data_64_t;
 #define VM_REGION_BASIC_INFO_COUNT_64 \
     ((mach_msg_type_number_t)(sizeof(vm_region_basic_info_data_64_t) / sizeof(int)))
 
-// The legacy flavour: same shape with a 32-bit object offset. Passing it
+// The legacy flavor: same shape with a 32-bit object offset. Passing it
 // to vm_region_64 converts it to VM_REGION_BASIC_INFO_64.
 #define VM_REGION_BASIC_INFO 10
 struct vm_region_basic_info {

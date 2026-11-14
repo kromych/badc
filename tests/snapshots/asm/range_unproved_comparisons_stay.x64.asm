@@ -38,18 +38,17 @@ Disassembly of section .text:
                	movq	<rip>, %rcx # <addr>
                	testb	$-0x1, %cl
                	jne	<addr>
+               	movl	$0x1, %edx
                	testq	%rcx, %rcx
-               	jne	<addr>
-               	movl	$0x1, %ecx
+               	movq	%rdx, %rcx
+               	cmovneq	%rax, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
                	movq	%rcx, %rax
                	leave
                	retq
                	movq	<rip>, %rcx # <addr>
-               	movq	%rcx, %rdx
-               	xorq	$0x2, %rdx
-               	testl	%edx, %edx
+               	cmpl	$0x2, %ecx
                	je	<addr>
                	cmpq	$0x2, %rcx
                	ja	<addr>
@@ -106,8 +105,6 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	jmp	<addr>
                	xorl	%ecx, %ecx
-               	jmp	<addr>
-               	movq	%rax, %rcx
                	jmp	<addr>
                	movq	%rax, %rcx
                	jmp	<addr>

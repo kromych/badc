@@ -39,8 +39,7 @@ Disassembly of section .text:
                	ldr	x1, [x0, #0x20]
                	mov	x0, #0x7                // =7
                	blr	x1
-               	mov	x17, #-0x7              // =-7
-               	cmp	w0, w17
+               	cmn	w0, #0x7
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp], #0x10
@@ -62,8 +61,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	blr	x1
-               	mov	x17, #-0x11             // =-17
-               	cmp	w0, w17
+               	cmn	w0, #0x11
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp], #0x10
@@ -72,17 +70,15 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldr	x1, [x0]
                	ldrb	w1, [x1]
-               	mov	x17, #0x64              // =100
-               	eor	x1, x1, x17
-               	cbz	w1, <addr>
+               	cmp	w1, #0x64
+               	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldr	x0, [x0, #0x18]
                	ldrb	w0, [x0]
-               	mov	x17, #0x6e              // =110
-               	eor	x0, x0, x17
-               	cbz	w0, <addr>
+               	cmp	w0, #0x6e
+               	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	ldp	x29, x30, [sp], #0x10
                	ret

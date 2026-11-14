@@ -30,13 +30,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldursw	x0, [x29, #-0x8]
-               	cmp	w0, #0x7
-               	b.eq	<addr>
-               	mov	x0, #0xe                // =14
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	mov	x0, #0x0                // =0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

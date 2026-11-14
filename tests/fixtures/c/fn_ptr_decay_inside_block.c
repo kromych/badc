@@ -3,7 +3,7 @@
 // same call when `fp` is a function pointer. The c5 parser
 // records the indirection level on a local via
 // `Symbol::fn_ptr_indirection` so the unary-`*` handler can
-// recognise the decay; the lookup at the use site checks
+// recognize the decay; the lookup at the use site checks
 // `Symbol::fn_ptr_indirection` of the named local.
 //
 // The function-body-top path (`parse_function_body_local_decl`)

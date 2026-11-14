@@ -39,10 +39,12 @@ mod redeclaration;
 mod run_compile;
 mod seh;
 mod sizeof_expr;
+pub(crate) use sizeof_expr::object_size_fallback;
 mod stmt;
 mod type_layout;
 mod value_builtin;
 mod vla_bound;
+pub(crate) use diag::Site;
 #[cfg(test)]
 pub(crate) use emit::SCOPE_UNWIND;
 #[cfg(test)]
@@ -57,9 +59,9 @@ pub(crate) use type_layout::{
 pub(crate) mod types;
 
 /// Largest alignment (in bytes) honored on a static object via C11
-/// `_Alignas` / the GCC `aligned` attribute, whether the request comes
+/// `_Alignas` / the GNU C `aligned` attribute, whether the request comes
 /// from the declarator or the object's type. Static objects (file-scope,
-/// block-scope static, and initialised or zero-init alike) are placed at
+/// block-scope static, and initialized or zero-init alike) are placed at
 /// this alignment in `.data` / `.bss`; automatic objects stay capped at
 /// `MAX_FRAME_ALIGN`. 64 KiB is the largest page size in common use and the
 /// granularity a PE image loads at; a Mach-O image keeps less
@@ -158,7 +160,7 @@ pub struct StructDef {
     /// for this: a complete empty `struct {}` and a struct whose only
     /// member is a flexible array both have size 0.
     pub is_complete: bool,
-    /// `true` for the synthesized aggregate that models a GCC vector type
+    /// `true` for the synthesized aggregate that models a GNU C vector type
     /// (`__attribute__((vector_size(N)))`). It has one array field of the
     /// element type; the flag lets the cast and binary-operator paths treat it
     /// as a vector (reinterpret casts, element-wise operators) rather than a
@@ -259,7 +261,7 @@ pub struct AnonBitfield {
 }
 
 impl AnonBitfield {
-    /// The declared type's alignment in GCC's layout: a typedef's, or the size.
+    /// The declared type's alignment outside the MS layout: a typedef's, or the size.
     pub fn declared_align(&self) -> usize {
         if self.type_align > 0 {
             self.type_align as usize
@@ -294,8 +296,8 @@ pub struct Extent {
 }
 
 impl Extent {
-    /// Bytes from the offset to the end. An offset outside the object
-    /// leaves no room, as gcc reports for `&a[N]` and `a - 1`.
+    /// Bytes from the offset to the end. An offset outside the object,
+    /// as `&a[N]` and `a - 1` have, leaves no room.
     pub fn remaining(self) -> i64 {
         if self.offset < 0 {
             return 0;
@@ -338,6 +340,10 @@ pub struct ObjectRef {
     pub records: u32,
     /// Every struct container crossed selected its last member.
     pub at_end: bool,
+    /// For an array element that is itself an array, the extent of the
+    /// array holding it from the element on: the closest subobject of the
+    /// element's address, where the element read as a value is its own.
+    pub element_of: Option<Extent>,
 }
 
 impl ObjectRef {
@@ -350,6 +356,7 @@ impl ObjectRef {
         via_pointer: true,
         records: 0,
         at_end: true,
+        element_of: None,
     };
 
     /// A chain starting at a declared object of `size` bytes, `array`
@@ -364,6 +371,7 @@ impl ObjectRef {
             via_pointer: false,
             records: 0,
             at_end: true,
+            element_of: None,
         }
     }
 
@@ -385,6 +393,7 @@ impl ObjectRef {
             whole: None,
             sub: None,
             array: None,
+            element_of: None,
             ..self
         }
     }
@@ -447,7 +456,7 @@ pub struct StructField {
     /// convention: 1 means the field IS the fn-pointer, 2 means
     /// it's a pointer-to-fn-pointer, etc. The post-load handler
     /// in member access seeds `pending.fn_ptr_chain_depth` from
-    /// this so a following unary `*` recognises the C99 6.3.2.1
+    /// this so a following unary `*` recognizes the C99 6.3.2.1
     /// function-to-pointer no-op decay instead of emitting a
     /// spurious `Li` that loads through code memory.
     pub fn_ptr_indirection: i64,
@@ -482,9 +491,9 @@ pub struct StructField {
     /// Alignment requested for this field by an explicit
     /// `__attribute__((aligned(N)))` / `_Alignas(N)`, or 0 when the
     /// field sits at its type's natural alignment. `packed` drops a
-    /// field's natural alignment but not an explicit request (GCC and
-    /// clang both keep an `aligned(64)` member 64-aligned inside a
-    /// packed struct), so the re-lay path needs the request preserved.
+    /// field's natural alignment but not an explicit request (an
+    /// `aligned(64)` member stays 64-aligned inside a packed struct), so
+    /// the re-lay path needs the request preserved.
     /// The MS layout adds what the field's type requires.
     pub explicit_align: u32,
     /// For a bit-field, the alignment a typedef gives its type, 0 when
@@ -522,6 +531,17 @@ pub struct Preprocessed {
 /// `with_include_paths`, `with_force_includes`, `with_source_label`,
 /// `with_track_includes`) return `self` so the typical CLI shape is
 /// `CompileOptions::default().with_defines(d).with_include_paths(p)`.
+/// Which vector types of one size convert implicitly, as
+/// `-flax-vector-conversions` selects them: none (the default), two
+/// integer vectors (clang's default), or any two (gcc's flag; MSVC, whose
+/// NEON vectors are all one `__n128`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LaxVectors {
+    None,
+    Integer,
+    All,
+}
+
 #[derive(Default, Debug, Clone)]
 pub struct CompileOptions {
     /// `-D name[=body]` predefines installed before the source
@@ -534,10 +554,12 @@ pub struct CompileOptions {
     pub include_paths: Vec<String>,
     /// `-iquote path` -- search paths for `#include "..."` only,
     /// probed after the including file's directory and before the
-    /// `-I` paths (gcc scope).
+    /// `-I` paths.
     pub quote_include_paths: Vec<String>,
+    /// `--embed-dir path` -- the directories `#embed` searches.
+    pub embed_paths: Vec<String>,
     /// `-isystem path` -- system header directories probed after the `-I`
-    /// paths and before the bundled headers (gcc scope).
+    /// paths and before the bundled headers.
     pub isystem_paths: Vec<String>,
     /// System header directories probed only after the bundled headers
     /// (the driver fills them from the declared sysroot). A third-party
@@ -545,7 +567,8 @@ pub struct CompileOptions {
     /// shadowing a standard header.
     pub system_include_paths: Vec<String>,
     /// On-disk copies of the compiler's own header set (the source
-    /// tree's `libc/include`, `$BADC_HOME/include`). A bundled name
+    /// tree's `libc/include` and `libc/compiler/include`,
+    /// `$BADC_HOME/include`). A bundled name
     /// found there replaces the in-binary body.
     pub own_header_roots: Vec<String>,
     /// `-nostdinc` -- the bundled standard headers and the system
@@ -564,15 +587,17 @@ pub struct CompileOptions {
     /// `-fno-builtin`, which `-ffreestanding` implies -- a call spelled
     /// with a library function's own name is an ordinary call, not a
     /// builtin the compiler may fold. The `__builtin_` spellings keep
-    /// folding, as they do under gcc's flag, and the auto-include retry
-    /// declares no library name.
+    /// folding, and the auto-include retry declares no library name.
     pub no_builtin: bool,
     /// `-fno-builtin-<name>` -- the same, for one library name each:
     /// that name neither folds nor is declared by the auto-include retry.
     pub no_builtin_fns: Vec<String>,
+    /// `-flax-vector-conversions[=...]`: which same-size vector types
+    /// convert implicitly; `None` takes the identity's default.
+    pub lax_vectors: Option<LaxVectors>,
     /// `-ffreestanding` -- a freestanding implementation (C99 4p6):
     /// `__STDC_HOSTED__` is 0 (C99 6.10.8) and the auto-include retry,
-    /// whose permission (C99 7.1.4p2) is a hosted one, is off.
+    /// whose headers are hosted ones (C17 4p6), is off.
     pub freestanding: bool,
     /// `-include FILE` -- headers force-included before the source.
     pub force_includes: Vec<String>,
@@ -612,6 +637,9 @@ pub struct CompileOptions {
     /// requirement -- the linker picks the entry once it
     /// merges every TU).
     pub no_entry_point: bool,
+    /// Record each file-scope function declaration's type in
+    /// `Program::prototypes`.
+    pub prototypes: bool,
     /// When true, every non-static function defined in this unit is
     /// exported in addition to any named by `#pragma export`. Set for
     /// `--shared` builds so a runtime `dlopen` consumer can `dlsym` the
@@ -619,7 +647,7 @@ pub struct CompileOptions {
     /// matching the default visibility of a system toolchain's shared
     /// library.
     pub export_all_functions: bool,
-    /// gcc's `-fvisibility=`: the visibility of a definition with external
+    /// `-fvisibility=`: the visibility of a definition with external
     /// linkage that no attribute or `#pragma GCC visibility` states.
     pub default_visibility: Option<crate::c5::program::SymVisibility>,
     /// `--gnu` -- when true the preprocessor defines the GCC identity
@@ -628,6 +656,9 @@ pub struct CompileOptions {
     /// most but not all of the GNU C surface, so it claims `__GNUC__`
     /// only when the caller opts in.
     pub gnu: bool,
+    /// `--msvc`: the MSVC identity predefines in place of `__STDC__`
+    /// ([`Preprocessor::enable_msvc`]); the Windows targets only.
+    pub msvc: bool,
     /// Library functions another input of the link defines. A `#pragma
     /// binding` of one is dropped, so the header declares an ordinary
     /// external function and a call resolves to that definition.
@@ -638,20 +669,19 @@ pub struct CompileOptions {
     pub optimize: bool,
     /// `-Wvla-larger-than=N`, in bytes; see [`vla_bound`].
     pub vla_larger_than: Option<u64>,
-    /// `-fgnu89-inline` -- make [`InlineModel::Gnu89`] the unit's
+    /// `-fgnu89-inline` -- make [`crate::c5::symbol::InlineModel::Gnu89`] the unit's
     /// default inline linkage model instead of C99's, and predefine
     /// `__GNUC_GNU_INLINE__` in place of `__GNUC_STDC_INLINE__`.
     pub gnu89_inline: bool,
     /// `-fstrict-flex-arrays=N` -- which trailing array members
     /// `__builtin_object_size` treats as unbounded through a pointer:
-    /// 0 (the default, as in gcc) every one, 1 those bounded `[]`,
+    /// 0 (the default) every one, 1 those bounded `[]`,
     /// `[0]` or `[1]`, 2 those bounded `[]` or `[0]`, 3 only `[]`.
     pub strict_flex_arrays: u8,
     /// `-std=gnu*` -- the GNU dialect, which suppresses the
-    /// `__STRICT_ANSI__` predefine `--gnu` otherwise installs, as in gcc
-    /// and clang. Off by default: without `-std` badc reports strict
-    /// conformance so a header takes its standard-C path for the GNU
-    /// features badc lacks.
+    /// `__STRICT_ANSI__` predefine `--gnu` otherwise installs. Off by
+    /// default: without `-std` badc reports strict conformance so a header
+    /// takes its standard-C path for the GNU features badc lacks.
     pub gnu_dialect: bool,
     /// Assembler-with-cpp input (a `.S` unit). The preprocessor then
     /// passes a `#` line naming no directive through as text, as GNU
@@ -661,8 +691,8 @@ pub struct CompileOptions {
     /// starting code mode follows it, the way `as --32` starts in
     /// 32-bit mode and `as --64` in 64-bit; a `.code16` / `.code32` /
     /// `.code64` directive overrides it from that point on. The
-    /// preprocessor's data-model predefines follow it as well, as gcc's
-    /// do under `-m16` / `-m32`.
+    /// preprocessor's data-model predefines follow it as well (`-m16` /
+    /// `-m32`).
     pub elf_class: crate::c5::ElfClass,
     /// Mirror of [`crate::NativeOptions::code_model`] (`-mcmodel`).
     /// The preprocessor's `__code_model_*__` predefine follows it.
@@ -671,6 +701,15 @@ pub struct CompileOptions {
     /// every target, which narrows `L"..."` / `L'...'` elements and the
     /// `__SIZEOF_WCHAR_T__` / `__WCHAR_TYPE__` predefines with it.
     pub short_wchar: bool,
+    /// `-mno-sse` / `-mgeneral-regs-only`: the unit keeps off the SIMD
+    /// register file, so the preprocessor drops the SSE feature macros.
+    pub no_fp_regs: bool,
+    /// The x86 extensions `-m<ext>` and `-march=` select: their feature
+    /// macros, and under AVX the 32-byte bare `aligned`.
+    pub x86_features: crate::c5::X86Features,
+    /// The AArch64 extensions `-march=` and `-mcpu=` select, `None` for the
+    /// target's default: their feature macros.
+    pub aarch64_features: Option<crate::c5::Aarch64Features>,
     /// `-fsigned-char` / `-funsigned-char`, which C99 6.2.5p15 leaves to
     /// the implementation. `None` keeps the target ABI's own choice; see
     /// [`Self::plain_char_signed`], the sole resolution of the pair.
@@ -687,6 +726,8 @@ pub struct CompileOptions {
     pub fp_contract: FpContract,
     /// `-std=`; see [`CStd`].
     pub std: CStd,
+    /// Translation phase 1 replaces trigraphs (C17 5.2.1.1).
+    pub trigraphs: bool,
 }
 
 /// The edition of the C standard a unit is compiled to (`-std=`), held as
@@ -702,9 +743,9 @@ impl Default for CStd {
 }
 
 impl CStd {
-    /// The editions gcc's `-std=` names, the GNU dialect included, as
-    /// gcc 16 predefines `__STDC_VERSION__` for them; `None` for a name
-    /// gcc does not take.
+    /// The editions gcc 16's `-std=` names, the GNU dialect included,
+    /// with the `__STDC_VERSION__` it predefines for each; `None` for any
+    /// other name.
     pub fn from_dialect(name: &str) -> Option<Self> {
         let year = match name {
             "iso9899:1990" => "90",
@@ -733,6 +774,25 @@ impl CStd {
     pub fn c23_keywords(self) -> bool {
         self.0.is_some_and(|v| v >= 202311)
     }
+
+    /// C23 6.7.7.4p13: an empty parameter list declares no parameters, as
+    /// `(void)` does, and the identifier list of a K&R definition is gone.
+    pub fn prototypes_only(self) -> bool {
+        self.0.is_some_and(|v| v >= 202311)
+    }
+
+    /// C90 6.3.2.2: a call to an undeclared identifier declares it
+    /// `extern int identifier();`. C99 removed the rule, as it did implicit
+    /// `int` (C90 6.5.2).
+    pub fn pre_c99(self) -> bool {
+        self.0.is_none_or(|v| v < 199901)
+    }
+
+    /// The default inline model: GNU89's before C99, which introduced
+    /// 6.7.4's, unless `-f[no-]gnu89-inline` says otherwise.
+    pub fn gnu89_inline(self) -> bool {
+        self.pre_c99()
+    }
 }
 
 /// `-ffp-contract=`: where a floating product may be contracted with the
@@ -742,7 +802,7 @@ pub enum FpContract {
     /// Nowhere.
     Off,
     /// Within one expression while `#pragma STDC FP_CONTRACT` is on (C99
-    /// 7.12.2), clang's default.
+    /// 7.12.2).
     #[default]
     On,
     /// Wherever the product has no other use, across statements and the
@@ -755,7 +815,7 @@ pub enum FpContract {
 /// -- scalars, aggregates, arrays and variable-length arrays alike. The
 /// store is emitted where the object's storage is established, so a
 /// declaration reached by a jump past it (C99 6.8.6.1 `goto`, 6.8.4.2
-/// `switch`) is not covered, as in gcc. An object carrying
+/// `switch`) is not covered. An object carrying
 /// `__attribute__((uninitialized))` or bound to a register by `asm` opts
 /// out. Diagnostics and the `-O` promotion of the object are unchanged:
 /// the supplied value is an ordinary initializer later stores overwrite.
@@ -772,9 +832,9 @@ pub enum AutoVarInit {
 }
 
 /// The byte `AutoVarInit::Pattern` repeats over the object. gcc 16
-/// stores `0xFE` for every type on both x86-64 and AArch64 (clang uses
-/// a per-type pattern instead); the value is unlikely to be a valid
-/// pointer or a small count and reads back as a negative integer.
+/// stores `0xFE` for every type on both x86-64 and AArch64; the value
+/// is unlikely to be a valid pointer or a small count and reads back as
+/// a negative integer.
 pub const AUTO_VAR_INIT_PATTERN_BYTE: u8 = 0xFE;
 
 impl AutoVarInit {
@@ -790,9 +850,14 @@ impl AutoVarInit {
 }
 
 impl CompileOptions {
-    /// Enable the `--gnu` GCC identity predefines.
+    /// Enable the `--gnu` identity predefines.
     pub fn with_gnu(mut self, gnu: bool) -> Self {
         self.gnu = gnu;
+        self
+    }
+    /// Enable the `--msvc` MSVC identity predefines.
+    pub fn with_msvc(mut self, msvc: bool) -> Self {
+        self.msvc = msvc;
         self
     }
     /// ELF class of the object being produced; the assembler's
@@ -809,6 +874,21 @@ impl CompileOptions {
     /// Narrow `wchar_t` to an unsigned 16-bit type (`-fshort-wchar`).
     pub fn with_short_wchar(mut self, on: bool) -> Self {
         self.short_wchar = on;
+        self
+    }
+
+    pub fn with_no_fp_regs(mut self, on: bool) -> Self {
+        self.no_fp_regs = on;
+        self
+    }
+
+    pub fn with_x86_features(mut self, features: crate::c5::X86Features) -> Self {
+        self.x86_features = features;
+        self
+    }
+
+    pub fn with_aarch64_features(mut self, features: Option<crate::c5::Aarch64Features>) -> Self {
+        self.aarch64_features = features;
         self
     }
     /// Initialize the automatic objects the program leaves
@@ -843,6 +923,10 @@ impl CompileOptions {
         self.no_builtin = on;
         self
     }
+    pub fn with_lax_vectors(mut self, lax: Option<LaxVectors>) -> Self {
+        self.lax_vectors = lax;
+        self
+    }
     /// The same for the named library functions (`-fno-builtin-<name>`).
     pub fn with_no_builtin_fns(mut self, names: Vec<String>) -> Self {
         self.no_builtin_fns = names;
@@ -854,11 +938,10 @@ impl CompileOptions {
         self
     }
 
-    /// Whether the auto-include retry may not declare `name`. C99
-    /// 7.1.4p2's permission to use a library function without a
-    /// declaration is a hosted one, so `-ffreestanding` withdraws it;
-    /// `-fno-builtin` withdraws it for every library name and
-    /// `-fno-builtin-<name>` for that name; under `-nostdinc` and
+    /// Whether the auto-include retry may not declare `name`. The headers
+    /// it splices in are hosted ones (C17 4p6), so `-ffreestanding`
+    /// withdraws it; `-fno-builtin` withdraws it for every library name
+    /// and `-fno-builtin-<name>` for that name; under `-nostdinc` and
     /// `-nostdlibinc` the header the retry would splice in is off the
     /// search, and a preprocessed unit includes nothing. The
     /// undeclared-function error stands instead.
@@ -926,6 +1009,18 @@ impl CompileOptions {
         self.std = std;
         self
     }
+
+    /// The `-W` configuration under the edition's rules.
+    fn diag_config(&self) -> crate::c5::diag::Config {
+        let mut config = self.diag.clone();
+        config.pre_c99(self.std.pre_c99());
+        config
+    }
+    /// Replace trigraphs in translation phase 1.
+    pub fn with_trigraphs(mut self, trigraphs: bool) -> Self {
+        self.trigraphs = trigraphs;
+        self
+    }
     /// Replace the `-D` predefine list.
     pub fn with_defines(mut self, defines: Vec<(String, String)>) -> Self {
         self.defines = defines;
@@ -952,6 +1047,11 @@ impl CompileOptions {
         self
     }
     /// Replace the `-iquote` (quoted-include-only) search-path list.
+    pub fn with_embed_paths(mut self, paths: Vec<String>) -> Self {
+        self.embed_paths = paths;
+        self
+    }
+
     pub fn with_quote_include_paths(mut self, paths: Vec<String>) -> Self {
         self.quote_include_paths = paths;
         self
@@ -1028,6 +1128,11 @@ impl CompileOptions {
         self.no_entry_point = on;
         self
     }
+    /// See [`Self::prototypes`].
+    pub fn with_prototypes(mut self, on: bool) -> Self {
+        self.prototypes = on;
+        self
+    }
     /// See [`Self::link_defined_fns`].
     pub fn with_link_defined_fns(mut self, names: Vec<String>) -> Self {
         self.link_defined_fns = names;
@@ -1081,7 +1186,7 @@ pub(in crate::c5::compiler) struct Pending {
     /// included a `const` qualifier. The declaration path reads it to mark
     /// a plain integer-scalar object `const`-qualified so a later constant
     /// expression can fold its value (C99 6.6 leaves this to the
-    /// implementation; GCC and common practice fold `const int N = ...`).
+    /// implementation; common practice folds `const int N = ...`).
     pub base_is_const: bool,
 
     /// Side channel from `parse_decl_base_type`: the base specifiers
@@ -1422,7 +1527,7 @@ pub(in crate::c5::compiler) struct Pending {
     /// assignment / address-of
     /// callers consult this when they pop or rewrite that
     /// trailing load: if the load is removed before the
-    /// program text is finalised, the symbol's was_read flag
+    /// program text is finalized, the symbol's was_read flag
     /// must be reverted to its prior state -- the load never
     /// ran, but the symbol may still have been read by an
     /// earlier expression. Cleared by `mark_emit_scalar_load`
@@ -1448,11 +1553,11 @@ pub(in crate::c5::compiler) struct Pending {
     /// surrounding assignment / address-of rewrites does not
     /// permanently drop the dead-store entries -- they restore
     /// alongside `was_read`.
-    pub last_loaded_local_prior_pending: Vec<usize>,
+    pub last_loaded_local_prior_pending: Vec<diag::Site>,
 
     /// The latest scalar assignment to a local, with the local and the
     /// `was_read` it marked: an assignment whose value is used reads its
-    /// left operand, as gcc's -Wunused-but-set-variable counts it, and a
+    /// left operand, as `-Wunused-but-set-variable` counts it, and a
     /// context discarding that value restores the flag.
     pub value_assignment: Option<(crate::c5::ast::ExprId, usize, bool)>,
 
@@ -1507,8 +1612,8 @@ pub(in crate::c5::compiler) struct Pending {
     /// `register` without the suffix stays the historical no-op hint.
     pub saw_register_storage: bool,
     /// Set by an `__auto_type` base-type parse: the declaration must
-    /// hold exactly one declarator, so the declarator loop rejects a
-    /// `,` while this is set. Cleared when the declaration ends.
+    /// hold exactly one declarator. The declaration takes it after its
+    /// specifiers, before an initializer can declare anything.
     pub auto_type_single_declarator: bool,
 }
 
@@ -1556,7 +1661,7 @@ pub(super) struct DeclAttrs {
     pub uninitialized: bool,
     pub weak: bool,
     pub selectany: bool,
-    /// `ms_abi` / `sysv_abi`, normalised against the target: `Target` is the
+    /// `ms_abi` / `sysv_abi`, normalized against the target: `Target` is the
     /// target's own, including where the attribute is inert.
     pub call_conv: Option<crate::c5::codegen::CallConv>,
     /// `used`: the definition stays in the object unreferenced.
@@ -1566,6 +1671,8 @@ pub(super) struct DeclAttrs {
     /// choice.
     pub visibility: Option<Option<crate::c5::program::SymVisibility>>,
     pub section: Option<alloc::string::String>,
+    /// `error("message")` (`true`) or `warning("message")`.
+    pub call_diagnostic: Option<(bool, alloc::string::String)>,
     pub patchable_entry: Option<(u32, u32)>,
     pub no_instrument: bool,
     pub no_stack_protector: bool,
@@ -1783,10 +1890,10 @@ impl Default for Pending {
 
 /// Per-function state of one label name, held in `Compiler::labels`.
 pub(super) struct LabelState {
-    /// AST slot shared by the label's references and its labelled
+    /// AST slot shared by the label's references and its labeled
     /// statement, allocated on the first mention either way.
     id: super::ast::LabelId,
-    /// Set once the labelled statement is parsed. A second one for
+    /// Set once the labeled statement is parsed. A second one for
     /// the same name violates C99 6.8.1p3.
     defined: bool,
 }
@@ -1798,7 +1905,7 @@ struct LocalLabelBinding {
     depth: usize,
 }
 
-/// GCC `__label__` bindings for the blocks open in the current
+/// GNU C `__label__` bindings for the blocks open in the current
 /// function, keyed by the name's symbol-table index -- the lexer
 /// interns one entry per spelling, so a name is a `usize` here.
 /// Declaring, resolving and closing a block each cost one map probe
@@ -1843,7 +1950,7 @@ impl LocalLabelScopes {
 
     /// Bind the name at symbol index `idx` in the innermost open block
     /// and return its key. `None` when that block already declares the
-    /// name, which gcc rejects.
+    /// name, which is an error.
     fn declare(&mut self, idx: usize, name: &str) -> Option<String> {
         let depth = self.declared.len();
         if self.innermost(idx).is_some_and(|b| b.depth == depth) {
@@ -1982,6 +2089,8 @@ pub struct Compiler {
     multi_cell_temps: alloc::vec::Vec<(i64, i64)>,
     /// The `multi_cell_temps` holding an array, for `FunctionSsa::array_slots`.
     array_temps: alloc::vec::Vec<i64>,
+    /// The `multi_cell_temps` of a GNU vector type, for `FunctionSsa::vector_objects`.
+    vector_temps: alloc::vec::Vec<i64>,
     /// `(slot_off, align, size_bytes)` for each automatic object in the current
     /// function whose required alignment exceeds 16 (C11 6.7.5). Drained at
     /// function close into `FinishedFunction::over_aligned_slots`. Reset per
@@ -2031,7 +2140,7 @@ pub struct Compiler {
     /// `__builtin_constant_p`, `_Generic`'s controlling expression, the
     /// `?:` arm a constant condition skips and the `&&` / `||` operand a
     /// constant short-circuits, and a speculative parse. A diagnostic about
-    /// the value the operand would compute stays quiet there, as in gcc.
+    /// the value the operand would compute stays quiet there.
     unevaluated: u32,
     /// The integer literals that stand for a folded `__builtin_object_size`,
     /// which C does not count as integer constant expressions.
@@ -2040,7 +2149,7 @@ pub struct Compiler {
     fallthrough_marks: hashbrown::HashSet<super::ast::StmtId>,
     /// The parameter lists declaring no prototype that `-Wstrict-prototypes`
     /// reports: `(id, file, line)`.
-    unprototyped_lists: Vec<(u32, String, usize)>,
+    unprototyped_lists: Vec<(u32, String, diag::Site)>,
     /// The functions a file-scope declaration that is no definition named,
     /// and whether one of those declarations had a prototype.
     file_scope_fn_decls: hashbrown::HashMap<String, bool>,
@@ -2049,7 +2158,7 @@ pub struct Compiler {
     /// (short-circuited `&&` / `||` right sides and not-taken `?:`
     /// arms). C99 6.6p4 forbids a zero divisor in a constant
     /// expression, but an unevaluated operand must not trigger the
-    /// diagnostic (`1 ? 2 : 1/0` is accepted by gcc / clang).
+    /// diagnostic (`1 ? 2 : 1/0` is accepted).
     const_unevaluated: u32,
 
     /// Nesting depth of constant-expression contexts where a reference
@@ -2112,7 +2221,7 @@ pub struct Compiler {
     /// matches function-definition order.
     pub(super) finished_functions: Vec<super::ast::FinishedFunction>,
 
-    /// Synthesised `FunctionSsa` entries for parser-emitted
+    /// Synthesized `FunctionSsa` entries for parser-emitted
     /// helpers that aren't built from source (sys-trampolines).
     /// The codegen reads these directly via `produce_ssa_funcs`.
     pub(super) synthetic_ssa_funcs: Vec<super::ir::FunctionSsa>,
@@ -2177,7 +2286,7 @@ pub struct Compiler {
     /// against `labels` at function end; an unresolved entry is
     /// a compile error.
     unresolved_gotos: Vec<String>,
-    /// GCC `__label__` bindings of the open blocks: an inner
+    /// The `__label__` bindings of the open blocks: an inner
     /// declaration shadows an outer one and two sibling blocks
     /// declaring the same name get distinct keys. Cleared at every
     /// function start.
@@ -2212,7 +2321,7 @@ pub struct Compiler {
 
     /// Diagnostics still formatted as text at their site: the
     /// preprocessor's warnings and the auto-include notes.
-    /// TODO: fold into `sink` when those sites take catalogue rows.
+    /// TODO: fold into `sink` when those sites take catalog rows.
     notes: Vec<String>,
 
     /// File-scope `asm("...")` templates, validated at parse time
@@ -2264,6 +2373,8 @@ pub struct Compiler {
     pp_subsystem: Option<crate::c5::preprocessor::Subsystem>,
     /// `#pragma comment(lib, ...)` names drained from the preprocessor.
     pp_default_libs: Vec<String>,
+    /// `#pragma comment(linker, ...)` strings drained from the preprocessor.
+    pp_linker_directives: Vec<String>,
 
     /// `#pragma intrinsic("name")` map drained from the
     /// preprocessor. Used at declaration time to stamp
@@ -2271,6 +2382,10 @@ pub struct Compiler {
     /// call-site lowering can substitute an `Inst::Intrinsic`
     /// emit for the regular call + stack-cleanup sequence.
     pp_intrinsics: alloc::collections::BTreeMap<String, i64>,
+    /// [`Preprocessor::functions`].
+    pp_functions: alloc::collections::BTreeSet<String>,
+    /// [`Preprocessor::unresolved_intrinsics`].
+    pp_unresolved_intrinsics: Vec<(String, crate::c5::diag::Loc)>,
 
     /// Thread-local data segment. Same shape as `data` but the
     /// codegen lowers accesses with the per-target TLS sequence
@@ -2278,12 +2393,12 @@ pub struct Compiler {
     /// the .tls$ callback chain on Win64). Each `_Thread_local`
     /// global gets `slots_of_type(ty) * 8` bytes here, with
     /// `Symbol::val` holding the byte offset within `tls_data`.
-    /// A `_Thread_local int x = 5;` initialiser fills its slice and
+    /// A `_Thread_local int x = 5;` initializer fills its slice and
     /// raises `tls_init_size` so its bytes go into .tdata; an
     /// uninitialised variable stays zero-filled in .tbss.
     tls_data: Vec<u8>,
     /// Number of bytes at the start of [`Self::tls_data`] that
-    /// are statically initialised by an explicit
+    /// are statically initialized by an explicit
     /// `_Thread_local int x = 5;` initializer. The remainder
     /// (`tls_data.len() - tls_init_size`) is zero-fill. Today
     /// only TLS initializer variants supported by the parser
@@ -2309,7 +2424,7 @@ pub struct Compiler {
     /// writers patch the slot to the real code address at write or
     /// load time. The VM reads the slot directly because c5
     /// function pointers carry the small `CODE_BASE + ent_pc` bias
-    /// and the indirect-call lowering recognises that range.
+    /// and the indirect-call lowering recognizes that range.
     code_relocs: Vec<crate::c5::program::CodeReloc>,
     /// Address-constant initializers of `_Thread_local` objects. Slots are
     /// `tls_data` offsets; see [`program::Program::tls_data_relocs`].
@@ -2337,6 +2452,10 @@ pub struct Compiler {
     /// ent_pc. Empty for executables that don't reach
     /// for the directive.
     pending_exports: Vec<String>,
+    /// The names in `pending_exports` only `__declspec(dllexport)` asked
+    /// for. As with MSVC, the attribute exports the entity from the unit
+    /// that defines it; a unit that only declares it exports nothing.
+    declspec_exports: alloc::collections::BTreeSet<String>,
     /// Functions defined with `__attribute__((constructor))` /
     /// `((destructor))`, accumulated in source order and copied onto
     /// `Program::init_funcs`. Populated at each function-body open
@@ -2346,8 +2465,8 @@ pub struct Compiler {
     /// onto `Program::function_aliases`.
     function_aliases: Vec<crate::c5::program::FunctionAlias>,
     /// Aliases whose target was not yet defined when the declarator was
-    /// parsed. C99 leaves the ordering open and GCC accepts a target defined
-    /// later in the unit, so resolution is retried once the unit is complete.
+    /// parsed. The target may be defined later in the unit, so resolution
+    /// is retried once the unit is complete.
     /// Each entry is the alias symbol, its target name, and whether the
     /// declarator was an object rather than a function.
     pending_aliases: Vec<(usize, String, bool)>,
@@ -2366,6 +2485,10 @@ pub struct Compiler {
     /// so each entry -- the symbol, the tag, and the declarator's line --
     /// is sized once the unit is complete.
     pending_incomplete_objects: Vec<(usize, usize, usize)>,
+    /// File-scope arrays declared `T x[];` that no later declaration has
+    /// sized yet. Their one-element bound (C99 6.9.2p2) is provisional, so
+    /// `__builtin_object_size` does not answer from it.
+    provisional_bounds: alloc::collections::BTreeSet<usize>,
     /// Return type of the function whose body is currently being
     /// parsed (0 outside any function). Used by the `return s`
     /// path to emit a struct-copy through the hidden out-pointer
@@ -2374,6 +2497,8 @@ pub struct Compiler {
     /// its address at param val=2; struct-returning callees treat
     /// declared params as starting at val=3.
     current_func_return_ty: i64,
+    /// The function being defined and its parameters.
+    object_size_scope: Option<(usize, Vec<usize>)>,
 
     /// True while parsing the body of a function whose declared
     /// return type was bare `void` (`Symbol::returns_void`): a bare
@@ -2430,6 +2555,11 @@ pub struct Compiler {
     /// Where the operand the precedence loop is extending begins, so a
     /// diagnostic about a call can spell the callee expression.
     operand_start: usize,
+    /// Where the last expression parsed began.
+    value_start: diag::Site,
+    /// Where the innermost statement being parsed began, the position its
+    /// AST nodes give the diagnostic pragmas.
+    stmt_start: Option<u32>,
     /// The function type the elements of the array being initialized lead
     /// to and their depth, for the conversion check of each element.
     array_elem_fn: Option<(crate::c5::symbol::FnType, i64)>,
@@ -2448,6 +2578,9 @@ pub struct Compiler {
     /// `load_op_for`) can pick the right width without threading the
     /// target through every call site.
     target: Target,
+    /// What a bare `__attribute__((aligned))` resolves to:
+    /// `__BIGGEST_ALIGNMENT__`, 32 under AVX.
+    biggest_align: i64,
 
     /// Side-channel state shared between parser layers -- the
     /// transient flags / decay records / chain-depth counters
@@ -2468,12 +2601,17 @@ pub struct Compiler {
     /// parser's per-store bookkeeping is only worth its cost when it
     /// does.
     warn_dead_store: bool,
+    /// `--msvc` on a Windows target: the unit takes cl's rules where they
+    /// depart from C17's.
+    msvc: bool,
     /// Mirror of [`CompileOptions::no_entry_point`]. Drops the
     /// "must define main / wmain / WinMain / wWinMain" check
     /// in `resolve_entry_and_dllmain_pcs`; `compile()` then
     /// returns a `Program` with `entry_pc = 0` /
     /// `entry_name = None` if no entry symbol exists.
     no_entry_point: bool,
+    /// Mirror of [`CompileOptions::prototypes`].
+    prototypes: bool,
 
     /// Base alignment the `.data` image requires, at least 8. Raised
     /// to 16 when a file-scope object requests `_Alignas(16)`.
@@ -2495,6 +2633,8 @@ pub struct Compiler {
     /// retry would decline the name.
     no_builtin: bool,
     no_builtin_fns: Vec<String>,
+    /// [`CompileOptions::lax_vectors`], or the identity's default.
+    lax_vectors: LaxVectors,
     /// Mirror of [`CompileOptions::optimize`]. Gates the parse-side
     /// transforms that are optimizations rather than lowerings.
     optimize: bool,
@@ -2506,9 +2646,16 @@ pub struct Compiler {
     nostdinc: bool,
     /// Mirror of [`CompileOptions::freestanding`], read where `nostdinc` is.
     freestanding: bool,
+    /// Mirror of [`CompileOptions::x86_features`], which the program carries.
+    x86_features: crate::c5::X86Features,
+    /// Mirror of [`CompileOptions::no_fp_regs`], which the program carries.
+    no_fp_regs: bool,
     /// The `_Atomic` object types the unit forms, for
     /// [`Self::declare_atomic_libcalls`].
     atomic_types_formed: Vec<i64>,
+    /// A generic `__atomic_load` / `__atomic_store` named an object of a
+    /// size no instruction covers.
+    atomic_generic_libcalls: bool,
     /// Mirror of [`CompileOptions::preprocessed`], read where `nostdinc` is.
     preprocessed: bool,
     /// Mirror of [`CompileOptions::wrapv`].
@@ -2569,7 +2716,7 @@ pub struct Compiler {
     pending_block_locals: Vec<crate::c5::program::VariableInfo>,
     /// Stack of block scopes carrying `__attribute__((cleanup(fn)))`
     /// variables, innermost last, in declaration order. A block exit emits
-    /// `fn(&var)` in reverse order (C++-style, matching GCC) on every path
+    /// `fn(&var)` in reverse order (C++-style) on every path
     /// out: fall-through, `return`, `break`, `continue` and `goto`. Entries
     /// are snapshots of the declared binding: the symbol slot is rebound when
     /// an inner scope shadows the name, and an exit emitted inside such a
@@ -2660,11 +2807,11 @@ pub struct Compiler {
     staged_literal_syms: Vec<(i64, usize)>,
 
     /// `(function, spelling, data offset)` of every `__func__` object
-    /// already materialised. C99 6.4.2.2 declares one object per
+    /// already materialized. C99 6.4.2.2 declares one object per
     /// function, so a second reference resolves to the same storage.
     func_name_objects: Vec<(String, String, i64)>,
     /// Per-TU counter for the `__func__.<n>` backing symbols, shared
-    /// across the three spellings as gcc's is.
+    /// across the three spellings.
     next_func_name_id: usize,
 
     /// Symbol indices of block-scope statics' emission records pushed
@@ -2680,11 +2827,10 @@ pub struct Compiler {
     /// re-used: the header that declares `name` (looked up in
     /// `headers::header_declaring`) is appended to
     /// `opts.force_includes` and a fresh `Compiler` runs the source
-    /// from scratch. C99 7.1.4p2 lets standard library functions be
-    /// referenced without a prior declaration; this turns that
-    /// permission into an actually-working build for fixtures that
-    /// rely on it. `None` after the first retry attempt, so the
-    /// recursion bottoms out at one level.
+    /// from scratch. A call needs a prior declaration (C17 6.5.1p2, the
+    /// implicit declaration C90 6.3.2.2 allowed is gone); the retry
+    /// supplies the one a library function's header carries. `None`
+    /// after the first retry attempt, so the recursion stops at one level.
     retry_state: Option<(String, CompileOptions)>,
 
     /// The first pass's recorded preprocessor state, letting a retry
@@ -2709,11 +2855,12 @@ impl Compiler {
         Self::with_options(source, target, CompileOptions::default())
     }
 
-    /// The gcc `-H`-shape include trace. Empty when constructed
+    /// The `-H`-shape include trace. Empty when constructed
     /// without `CompileOptions::with_track_includes(true)`.
     pub fn include_trace(&self) -> Vec<String> {
         self.include_records
             .iter()
+            .filter(|r| r.status != crate::IncludeStatus::Embedded)
             .map(IncludeRecord::trace_line)
             .collect()
     }
@@ -2738,7 +2885,7 @@ impl Compiler {
         &self.notes
     }
 
-    /// Catalogued diagnostics reported so far. Construction reports the
+    /// Cataloged diagnostics reported so far. Construction reports the
     /// ones that come out of the `#pragma` set, before any parse.
     pub fn diagnostics(&self) -> &[crate::c5::diag::Diagnostic] {
         self.sink.diagnostics()
@@ -2784,7 +2931,7 @@ impl Compiler {
         Ok((text, pp.include_records))
     }
 
-    /// The `#define` lines of the macros `source` ends with (gcc's `-dM -E`).
+    /// The `#define` lines of the macros `source` ends with (`-dM -E`).
     pub fn preprocess_macros(
         source: String,
         target: Target,
@@ -2798,8 +2945,8 @@ impl Compiler {
     /// One unit through the preprocessor to its end, for `-E`: the text, the
     /// include records, the closing macro definitions when `macros` asks for
     /// them (`-dM`), and every diagnostic the pass reported. An error among
-    /// those fails the unit after its text is written, as under gcc and
-    /// clang; a hard error stops the pass and carries the ones before it.
+    /// those fails the unit after its text is written; a hard error stops
+    /// the pass and carries the ones before it.
     pub fn preprocess_unit(
         source: String,
         target: Target,
@@ -2865,18 +3012,39 @@ impl Compiler {
         let mut pp = Preprocessor::new(target.id_str(), target, env!("CARGO_PKG_VERSION"));
         // The `-W` family governs this pass's diagnostics too; the
         // pragmas it records then refine them per position.
-        pp.sink.set_config(opts.diag.clone());
-        // `-m16` / `-m32` reach the front end as an ELFCLASS32 object;
-        // gcc preprocesses those units with the i386 predefine set.
+        pp.sink.set_config(opts.diag_config());
+        // `-m16` / `-m32` reach the front end as an ELFCLASS32 object, and
+        // those units take the i386 predefine set.
         // `-mcmodel` moves the `__code_model_*__` name the same way, and
         // `-fshort-wchar` the `wchar_t` pair.
         pp.set_unit_model(opts.elf_class, opts.code_model, opts.short_wchar);
+        if opts.no_fp_regs {
+            pp.drop_simd_macros();
+        }
+        if target.is_x86_64() {
+            pp.set_x86_features(opts.x86_features);
+        }
+        if target.is_aarch64() {
+            let features = opts.aarch64_features.unwrap_or_else(|| {
+                crate::c5::Aarch64Features::default_for(target == Target::MacOSAarch64)
+            });
+            let features = if opts.no_fp_regs {
+                features.without_fp()
+            } else {
+                features
+            };
+            pp.set_aarch64_features(features, opts.short_wchar);
+        }
         pp.set_plain_char_signed(opts.plain_char_signed(target));
         if opts.gnu {
             pp.enable_gnu(opts.gnu89_inline, !opts.gnu_dialect);
         }
+        if opts.msvc && target.is_windows() {
+            pp.enable_msvc(target);
+        }
         pp.set_source_label(&opts.source_label);
         pp.set_std(opts.std);
+        pp.set_trigraphs(opts.trigraphs);
         pp.set_track_includes(opts.track_includes);
         pp.set_keep_pragmas(opts.keep_pragmas);
         pp.set_preprocessed(opts.preprocessed);
@@ -2889,6 +3057,9 @@ impl Compiler {
         }
         for path in &opts.quote_include_paths {
             pp.add_quote_path(path);
+        }
+        for path in &opts.embed_paths {
+            pp.add_embed_path(path);
         }
         for path in &opts.isystem_paths {
             pp.add_isystem_path(path);
@@ -2905,14 +3076,16 @@ impl Compiler {
             pp.set_compiler_include_dir(dir);
         }
         pp.set_no_builtin(opts.no_builtin);
+        for name in &opts.no_builtin_fns {
+            pp.set_no_builtin_name(name);
+        }
         pp.set_hosted(!opts.freestanding);
         for name in &opts.force_includes {
             pp.add_force_include(name);
         }
-        // `-O` predefines, installed before the CLI lists so an explicit
-        // `-D NDEBUG=<v>` overrides the value and `-U NDEBUG` removes it.
+        // `-O` predefines `__OPTIMIZE__` before the CLI lists so `-D` and
+        // `-U` override it. `NDEBUG` is the user's.
         if opts.optimize {
-            pp.define("NDEBUG", "1");
             pp.define("__OPTIMIZE__", "1");
         }
         for (name, body) in &opts.defines {
@@ -3058,7 +3231,10 @@ impl Compiler {
         let pp_entrypoint = pp.entrypoint;
         let pp_subsystem = pp.subsystem;
         let pp_default_libs = pp.default_libs;
+        let pp_linker_directives = pp.linker_directives;
         let pp_intrinsics = pp.intrinsics;
+        let pp_functions = pp.functions;
+        let pp_unresolved_intrinsics = pp.unresolved_intrinsics;
 
         let mut symbols = Vec::new();
         let mut symbol_index = lexer::SymbolIndex::new();
@@ -3075,7 +3251,7 @@ impl Compiler {
         let warn_dead_store = opts.diag.level(crate::c5::diag::Code::DEAD_STORE)
             != crate::c5::diag::Level::Ignore
             || pp_control.may_report(crate::c5::diag::Code::DEAD_STORE);
-        let mut sink = crate::c5::diag::Sink::new(opts.diag.clone(), pp_control);
+        let mut sink = crate::c5::diag::Sink::new(opts.diag_config(), pp_control);
         for d in pp_diagnostics {
             sink.record(d);
         }
@@ -3092,20 +3268,9 @@ impl Compiler {
             );
         }
 
-        // Reserve the first 8 bytes of `.data` so no symbol's
-        // offset is zero. The c5 dialect models pointers as
-        // raw data offsets (no per-segment base in the VM, and
-        // `data_vmaddr` is the base on native targets), so a
-        // global at offset 0 would be indistinguishable from
-        // the integer literal `0` -- which c5 uses for NULL.
-        // Reserving the first 8 bytes pushes every actual
-        // global / string literal to offset >= 8, preserving
-        // the `pointer != 0 <=> non-NULL` invariant that
-        // `int *p = &x; if (p == 0) ...` style code expects.
-        // Native binaries are unaffected (the bytes are just
-        // an unused prefix in `.data`); the VM's address space
-        // gains 8 bytes of reserved padding at offset 0.
-        let data: Vec<u8> = alloc::vec![0u8; 8];
+        // Pointers are data offsets in the interpreter and in constant
+        // folding, so no object may sit at offset 0, the null pointer.
+        let data: Vec<u8> = alloc::vec![0u8; crate::c5::layout::DATA_GUARD];
 
         let lex = {
             let mut l = Lexer::new(preprocessed);
@@ -3131,10 +3296,17 @@ impl Compiler {
             dylibs,
             warned_string_overruns: alloc::collections::BTreeSet::new(),
             operand_start: 0,
+            value_start: diag::Site::default(),
+            stmt_start: None,
             array_elem_fn: None,
             measuring_init: false,
             linked_entities: hashbrown::HashMap::new(),
             target,
+            biggest_align: if target.is_x86_64() {
+                i64::from(opts.x86_features.biggest_alignment())
+            } else {
+                16
+            },
             next_ent_pc: 0,
             data,
             data_object_starts: Vec::new(),
@@ -3148,6 +3320,7 @@ impl Compiler {
             max_loc_offs: 0,
             multi_cell_temps: alloc::vec::Vec::new(),
             array_temps: alloc::vec::Vec::new(),
+            vector_temps: alloc::vec::Vec::new(),
             func_over_aligned: alloc::vec::Vec::new(),
             func_local_addr_taken: false,
             uses_alloca_in_current_fn: false,
@@ -3205,7 +3378,10 @@ impl Compiler {
             pp_entrypoint,
             pp_subsystem,
             pp_default_libs,
+            pp_linker_directives,
             pp_intrinsics,
+            pp_functions,
+            pp_unresolved_intrinsics,
             tls_data: Vec::new(),
             tls_init_size: 0,
             data_relocs: Vec::new(),
@@ -3218,13 +3394,16 @@ impl Compiler {
             pending_label_relocs: Vec::new(),
             in_function_body: false,
             pending_exports,
+            declspec_exports: alloc::collections::BTreeSet::new(),
             init_funcs: Vec::new(),
             function_aliases: Vec::new(),
             pending_aliases: Vec::new(),
             object_aliases: Vec::new(),
             pending_incomplete_objects: Vec::new(),
+            provisional_bounds: alloc::collections::BTreeSet::new(),
             pending_asm_globl: Vec::new(),
             current_func_return_ty: 0,
+            object_size_scope: None,
             current_func_returns_void: false,
             current_func_variadic: false,
             current_func_last_param: None,
@@ -3237,15 +3416,27 @@ impl Compiler {
             pending_store_symbols: Vec::new(),
             warn_dead_store,
             no_entry_point: opts.no_entry_point,
+            prototypes: opts.prototypes,
+            msvc: opts.msvc && target.is_windows(),
             data_align: 8,
             image_align_error: None,
             tls_align: crate::c5::layout::TLS_ALIGN_MIN,
             export_all_functions: opts.export_all_functions,
             default_visibility: opts.default_visibility,
             no_builtin: opts.no_builtin,
+            lax_vectors: opts
+                .lax_vectors
+                .unwrap_or(if opts.msvc && target.is_windows() {
+                    LaxVectors::All
+                } else {
+                    LaxVectors::None
+                }),
             nostdinc: opts.library_headers_withdrawn(),
             freestanding: opts.freestanding,
+            x86_features: opts.x86_features,
+            no_fp_regs: opts.no_fp_regs,
             atomic_types_formed: Vec::new(),
+            atomic_generic_libcalls: false,
             preprocessed: opts.preprocessed,
             auto_var_init: opts.auto_var_init,
             wrapv: opts.wrapv,
@@ -3326,9 +3517,9 @@ impl Compiler {
         };
         // Without `#pragma entrypoint(<name>)`, accept any of
         // `main` / `wmain` / `WinMain` / `wWinMain` in that
-        // priority order.
+        // priority order; the last three are the Windows C runtime's.
         let resolved_idx = lookup_fun(default_name).or_else(|| {
-            if pragma_name.is_some() {
+            if pragma_name.is_some() || !self.target.is_windows() {
                 None
             } else {
                 ["wmain", "WinMain", "wWinMain"]
@@ -3363,13 +3554,210 @@ impl Compiler {
     }
 
     /// Resolve `#pragma export(<name>)` directives against the
-    /// now-finalised symbol table: the functions, and the names of the
+    /// now-finalized symbol table: the functions, and the names of the
     /// objects with external linkage, this unit defines. Anything else
     /// gets a clear diagnostic so a misspelled export doesn't silently
     /// produce a shared object missing the symbol the user expected.
     ///
     /// Drains `self.pending_exports` -- callers should only invoke
     /// once on the way out of `compile()`.
+    /// The file-scope typedef names (C17 6.7.8) with the size and alignment
+    /// of the type each names, an array's included, and the record a
+    /// typedef of a complete structure or union names.
+    fn typedef_layouts(&self) -> Vec<crate::c5::program::TypedefLayout> {
+        let mut out = Vec::new();
+        // A function type has no size (C17 6.5.3.4p1).
+        let named = |s: &&crate::c5::symbol::Symbol| {
+            s.class == Token::Typedef as i64 && !s.is_function_type
+        };
+        for s in self.symbols.iter().filter(named) {
+            let ty = s.type_;
+            let record = (types::is_struct_ty(ty) && types::struct_ptr_depth(ty) == 0)
+                .then(|| types::struct_id_of(ty));
+            if record.is_some_and(|id| {
+                let d = &self.structs[id];
+                !d.is_complete || d.is_vector || d.is_array
+            }) || s.array_size < 0
+            {
+                continue;
+            }
+            let count = match s.array_dims.len() {
+                0 | 1 => s.array_size.max(1),
+                _ => s.array_dims.iter().product(),
+            } as usize;
+            let align = match s.type_align {
+                0 => self.align_of_type(ty),
+                a => a as usize,
+            };
+            let integer = s.array_size == 0 && types::is_integer_scalar_ty(ty);
+            out.push(crate::c5::program::TypedefLayout {
+                name: s.name.clone(),
+                size: self.size_of_type(ty) * count,
+                align,
+                record: record.filter(|_| s.array_size == 0),
+                signed: integer.then(|| !types::is_unsigned_ty(ty) && !types::is_bool_ty(ty)),
+            });
+        }
+        out
+    }
+
+    /// Each file-scope function declaration with a prototype, each object
+    /// declared and not defined, and each named record's member, with the
+    /// type of its address, and each typedef name, spelled in C. A record or enum a typedef names is
+    /// spelled by the first such name, as the tag may be the implementation's
+    /// own or absent where the C library's typedef is the interface, and a
+    /// `va_list` parameter by that name.
+    fn function_prototypes(&self) -> Vec<(String, String)> {
+        // A copy of the registry whose entries to rename carry a placeholder
+        // tag, replaced in the spelling by the typedef name.
+        let mut structs = self.structs.clone();
+        let mut names: Vec<(String, &str)> = Vec::new();
+        let rename = |structs: &mut Vec<StructDef>, id: usize| -> Option<String> {
+            let d = &mut structs[id];
+            if d.name.starts_with("__badc_typedef_") {
+                return None;
+            }
+            let kind = match (d.enum_underlying.is_some(), d.is_union) {
+                (true, _) => "enum",
+                (false, true) => "union",
+                (false, false) => "struct",
+            };
+            d.name = alloc::format!("__badc_typedef_{id}");
+            Some(alloc::format!("{kind} {}", d.name))
+        };
+        for s in self
+            .symbols
+            .iter()
+            .filter(|s| s.class == Token::Typedef as i64)
+        {
+            let ty = s.type_;
+            let id = match types::enum_id_of(ty) {
+                Some(id) => id,
+                None if types::is_struct_ty(ty) => types::struct_id_of(ty),
+                None => continue,
+            };
+            let bare = s.array_size == 0
+                && if types::enum_id_of(ty).is_some() {
+                    types::ptr_depth_of(ty) == 0
+                } else {
+                    types::struct_ptr_depth(ty) == 0
+                };
+            if bare && let Some(spelled) = rename(&mut structs, id) {
+                names.push((spelled, s.name.as_str()));
+            }
+        }
+        let functions = (self.symbols.iter()).filter(|s| {
+            (s.class == Token::Fun as i64 || s.class == Token::Sys as i64)
+                && s.fn_type.params.prototyped
+                && !s.name.is_empty()
+        });
+        let mut out = Vec::new();
+        for s in functions {
+            let mut text =
+                types::fn_type_spelling(types::add_ptr_level(s.type_), &s.fn_type, 1, &structs);
+            for (spelled, name) in &names {
+                text = replace_word(&text, spelled, name);
+            }
+            text = replace_word(&text, "struct __builtin_va_list*", "va_list");
+            out.push((s.name.clone(), text));
+        }
+        // An object declared and not defined, as the type of its address:
+        // `char**` for `char *optarg`, `char* (*)[2]` for `char *tzname[2]`.
+        let objects = (self.symbols.iter()).filter(|s| {
+            s.class == Token::Glo as i64
+                && s.linkage == crate::c5::symbol::Linkage::External
+                && !s.defined_here
+                && !s.is_thread_local
+                && !s.name.is_empty()
+                && !s.fn_type.params.prototyped
+                && s.fn_type.ret.is_none()
+        });
+        for s in objects {
+            let elem = types::format_type(s.type_, &structs);
+            let mut text = match (s.array_size, s.array_dims.len()) {
+                (0, _) => alloc::format!("{elem}*"),
+                (n, _) if n < 0 => alloc::format!("{elem} (*)[]"),
+                (n, 0 | 1) => alloc::format!("{elem} (*)[{n}]"),
+                (_, _) => continue,
+            };
+            for (spelled, name) in &names {
+                text = replace_word(&text, spelled, name);
+            }
+            out.push((s.name.clone(), text));
+        }
+        // A typedef name, as `typedef <name>`, with the type of a pointer to
+        // the type it names: `long*` for `typedef long ssize_t`. One naming
+        // a record or an enumeration is its spelling of that type.
+        for (idx, s) in self.symbols.iter().enumerate() {
+            if s.class != Token::Typedef as i64 || s.name.is_empty() || s.array_dims.len() > 1 {
+                continue;
+            }
+            let ty = s.type_;
+            let tagged = (types::is_struct_ty(ty) && types::struct_ptr_depth(ty) == 0)
+                || (types::enum_id_of(ty).is_some() && types::ptr_depth_of(ty) == 0);
+            let mut text = match (self.symbol_fn(idx), s.array_size) {
+                (Some((f, _)), 0) if s.is_function_type => {
+                    types::fn_type_spelling(ty, &f, 1, &structs)
+                }
+                (Some((f, depth)), 0) => {
+                    types::fn_type_spelling(types::add_ptr_level(ty), &f, depth + 1, &structs)
+                }
+                (Some(_), _) => continue,
+                (None, 0) if tagged => continue,
+                (None, 0) => alloc::format!("{}*", types::format_type(ty, &structs)),
+                (None, n) if n < 0 => continue,
+                (None, n) => alloc::format!("{} (*)[{n}]", types::format_type(ty, &structs)),
+            };
+            for (spelled, name) in &names {
+                text = replace_word(&text, spelled, name);
+            }
+            text = replace_word(&text, "struct __builtin_va_list*", "va_list");
+            out.push((alloc::format!("typedef {}", s.name), text));
+        }
+        // Each member of a named record, as `member <record>.<member>`, with
+        // the type of its address; a bit-field has none.
+        for d in &structs {
+            if !d.is_complete || d.is_vector || d.is_array || d.enum_underlying.is_some() {
+                continue;
+            }
+            let kind = if d.is_union { "union" } else { "struct" };
+            let spelled = alloc::format!("{kind} {}", d.name);
+            let record = match names.iter().find(|(s, _)| *s == spelled) {
+                Some((_, name)) => (*name).to_string(),
+                None if d.name.starts_with("__anon_") => continue,
+                None => spelled,
+            };
+            for f in &d.fields {
+                if f.bit_width > 0 || f.name.is_empty() || f.array_dims.len() > 1 {
+                    continue;
+                }
+                let elem = types::format_type(f.ty, &structs);
+                let mut text = match (f.fn_ptr_indirection, f.array_size) {
+                    (0, 0) => alloc::format!("{elem}*"),
+                    (0, n) if n < 0 => alloc::format!("{elem} (*)[]"),
+                    (0, n) => alloc::format!("{elem} (*)[{n}]"),
+                    (k, 0) => types::fn_type_spelling(
+                        types::add_ptr_level(f.ty),
+                        &f.fn_type,
+                        k + 1,
+                        &structs,
+                    ),
+                    _ => continue,
+                };
+                for (spelled, name) in &names {
+                    text = replace_word(&text, spelled, name);
+                }
+                text = replace_word(&text, "struct __builtin_va_list*", "va_list");
+                // A member of an unnamed record type has no spelling.
+                if text.contains("__anon_") {
+                    continue;
+                }
+                out.push((alloc::format!("member {record}.{}", f.name), text));
+            }
+        }
+        out
+    }
+
     fn resolve_exports(
         &mut self,
     ) -> Result<(Vec<crate::c5::program::ExportedFunction>, Vec<String>), C5Error> {
@@ -3395,6 +3783,10 @@ impl Compiler {
                 objects.push(sym.link_name().into());
                 continue;
             }
+            let defined_fn = sym.class == Token::Fun as i64 && sym.defined_here;
+            if self.declspec_exports.contains(&name) && !defined_fn {
+                continue;
+            }
             if sym.class != Token::Fun as i64 {
                 return Err(self.compile_err(
                     Code::INVALID_PRAGMA,
@@ -3418,8 +3810,7 @@ impl Compiler {
         // avoid duplicate export entries.
         if self.export_all_functions {
             use crate::c5::symbol::Linkage;
-            for idx in 0..self.symbols.len() {
-                let sym = &self.symbols[idx];
+            for sym in &self.symbols {
                 if sym.class != Token::Fun as i64
                     || sym.linkage != Linkage::External
                     || !sym.defined_here
@@ -3465,10 +3856,8 @@ impl Compiler {
     /// the embedded standard headers (per `headers::header_declaring`
     /// + the build-time index in `BINDING_TO_HEADER`), this method
     /// transparently re-runs the compile with the matching header
-    /// force-included. C99 7.1.4p2 lets standard library functions
-    /// be used without a prior declaration; this turns that
-    /// permission into a successful build instead of a friendly
-    /// error. The retry runs only once -- a second-pass failure
+    /// force-included, supplying the declaration a call needs (C17
+    /// 6.5.1p2). The retry runs only once -- a second-pass failure
     /// propagates the original error.
     pub fn compile(mut self) -> Result<Program, C5Error> {
         let retry_state = self.retry_state.take();
@@ -3490,7 +3879,7 @@ impl Compiler {
             let e = match result {
                 Ok(mut prog) => {
                     // Surface each recovery through the same diagnostic
-                    // pipeline the CLI colourises (`info:` -> bold
+                    // pipeline the CLI colourizes (`info:` -> bold
                     // green), oldest first above the retry pass's own
                     // warnings.
                     for info in infos.into_iter().rev() {
@@ -3818,6 +4207,12 @@ impl Compiler {
             .map_err(|e| self.failed(e))?;
         let (exports, exported_objects) = self.resolve_exports().map_err(|e| self.failed(e))?;
         self.lay_out_thread_locals();
+        let typedefs = self.typedef_layouts();
+        let prototypes = if self.prototypes {
+            self.function_prototypes()
+        } else {
+            Vec::new()
+        };
         #[cfg(feature = "codegen_test")]
         if std::env::var("BADC_TIME_PASSES").is_ok() {
             eprintln!(
@@ -3828,6 +4223,7 @@ impl Compiler {
         // `.set name, target` aliases from file-scope asm. The binding follows
         // the unit's `.globl` / `.weak` directives, in either order and from
         // either statement, so the object writer settles it.
+        let strlen_folds = !self.library_name_is_opaque("strlen");
         let mut function_aliases = self.function_aliases;
         for (name, target, addend) in self.asm_sym_sets {
             function_aliases.push(crate::c5::program::FunctionAlias {
@@ -3851,12 +4247,14 @@ impl Compiler {
             image_align_error: self.image_align_error,
             data_ro_len: 0,
             data_relro_len: 0,
+            zero_fill_len: 0,
             data_object_starts: self.data_object_starts,
             const_data_ranges: self.const_data_ranges,
             data_pad_ranges: self.data_pad_ranges,
             data_align_marks: self.data_align_marks,
             entry_pc,
             warnings: self.sink.take(),
+            diag_control: self.sink.control().clone(),
             notes: self.notes,
             tls_data: self.tls_data,
             tls_init_size: self.tls_init_size,
@@ -3890,17 +4288,23 @@ impl Compiler {
             // walk member offsets / bitfield layouts and produce
             // `DW_TAG_structure_type` DIEs. The VM /
             // JIT / interpreter ignore this field.
+            typedefs,
+            prototypes,
             structs: self.structs,
             enums: self.enums,
             // Resolved entry name. Includes the value from a
             // source-level `#pragma entrypoint(<name>)` plus the
-            // CRT-recognised fallbacks (`wmain`, `WinMain`,
+            // CRT-recognized fallbacks (`wmain`, `WinMain`,
             // `wWinMain`) chosen when `main` is absent.
             entry_name: resolved_entry_name,
             entry_pragma: self.pp_entrypoint.clone(),
             default_libs: core::mem::take(&mut self.pp_default_libs),
+            linker_directives: core::mem::take(&mut self.pp_linker_directives),
             auto_includes: Vec::new(),
             freestanding: self.freestanding,
+            x86_features: self.x86_features,
+            no_fp_regs: self.no_fp_regs,
+            strlen_folds,
             subsystem: self.pp_subsystem,
             // Compile output is pre-optimizer; only the explicit
             // `optimize()` step flips this on.
@@ -3955,4 +4359,19 @@ impl crate::c5::layout::DataRemap for RelocatedGlobals {
     fn remap_span(&self, lo: i64, hi: i64) -> Option<(i64, i64)> {
         Some((self.shift(lo), self.shift(lo) + (hi - lo)))
     }
+}
+
+/// `text` with each occurrence of `word` that no identifier character
+/// continues replaced by `with`.
+fn replace_word(text: &str, word: &str, with: &str) -> String {
+    let mut out = String::new();
+    let mut rest = text;
+    while let Some(i) = rest.find(word) {
+        let end = i + word.len();
+        let bounded = !rest[end..].starts_with(|c: char| c == '_' || c.is_ascii_alphanumeric());
+        out += &rest[..i];
+        out += if bounded { with } else { word };
+        rest = &rest[end..];
+    }
+    out + rest
 }

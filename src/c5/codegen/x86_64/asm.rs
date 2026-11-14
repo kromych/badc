@@ -1,4 +1,4 @@
-//! GCC extended inline-asm (x86_64): template parsing and instruction
+//! GNU C extended inline asm (x86_64): template parsing and instruction
 //! encoding.
 //!
 //! [`parse_template`] turns an AT&T template into a sequence of
@@ -444,7 +444,7 @@ pub(crate) enum Mnemonic {
     /// Literal machine bytes, carried in [`AsmInsn::bytes`]. Produced for a
     /// template piece that is a run of hex-byte tokens (`CC; C3; 90`) or a
     /// `.byte` / `.word` / `.long` / `.quad` directive. An escape hatch for
-    /// instructions the mnemonic catalogue does not cover; the bytes are
+    /// instructions the mnemonic catalog does not cover; the bytes are
     /// emitted verbatim.
     RawBytes,
     /// A `.byte`-family data directive whose arguments reference operands
@@ -458,14 +458,14 @@ pub(crate) enum Mnemonic {
     /// in [`AsmInsn::bytes`].
     Skip,
     /// A general-purpose / system mnemonic recognized straight from the
-    /// catalogue, not one of the bespoke forms above. The string is the
-    /// catalogue mnemonic; [`encode`] routes it through the table encoder with
+    /// catalog, not one of the bespoke forms above. The string is the
+    /// catalog mnemonic; [`encode`] routes it through the table encoder with
     /// a generic AT&T-to-Intel operand transpose. This is what lets inline asm
     /// reach every instruction the table encodes without a per-mnemonic arm.
     Table(&'static str),
     /// An AT&T zero/sign-extending move spelling source and destination
     /// widths (`movzbl` = `movzx r32, r/m8`, `movslq` = `movsxd r64,
-    /// r/m32`). `name` is the catalogue's Intel mnemonic; the source width
+    /// r/m32`). `name` is the catalog's Intel mnemonic; the source width
     /// is applied to the r/m operand before the table encode, since AT&T
     /// syntax carries it only in the mnemonic.
     ExtMov {
@@ -982,7 +982,7 @@ const DR_BASE: u8 = 40;
 const SEG_BASE: u8 = 48;
 
 /// The number of an opmask register `kN`. Opmasks are deliberately absent from
-/// [`reg_by_name`]: under a single `%` their spelling collides with GCC's
+/// [`reg_by_name`]: under a single `%` their spelling collides with the
 /// `%k<N>` operand modifier, which selects the 32-bit form of operand N and is
 /// what the spelling means in extended asm. There they reach the encoder
 /// as `%%kN` operands and through the `{%kN}` write-mask decorator; only the
@@ -1190,7 +1190,7 @@ fn string_op(name: &str) -> Option<Mnemonic> {
 pub(crate) fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
     // The flag / general-register stack pushes and the interrupt / far return
     // spell their operand size in the mnemonic and take no operands; the
-    // catalogue is generated for long mode and carries only some of the
+    // catalog is generated for long mode and carries only some of the
     // spellings, so all of them resolve here.
     if let Some(m) = sized_nullary(name) {
         return Some(m);
@@ -1250,7 +1250,7 @@ pub(crate) fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
         "ds" => Mnemonic::Prefix(0x3E),
         "fs" => Mnemonic::Prefix(0x64),
         "gs" => Mnemonic::Prefix(0x65),
-        // Protection-key register write (the read form is catalogued).
+        // Protection-key register write (the read form is cataloged).
         "wrpkru" => Mnemonic::Fixed(&[0x0F, 0x01, 0xEF]),
         "crc32" => Mnemonic::Crc32,
         "fninit" => Mnemonic::Fixed(&[0xDB, 0xE3]),
@@ -1474,12 +1474,15 @@ fn sse2_op(name: &str) -> Option<Mnemonic> {
     #[rustfmt::skip]
     const OPS38: &[(&str, u8, u8)] = &[
         ("pshufb", 0x66, 0x00), ("phaddw", 0x66, 0x01), ("phaddd", 0x66, 0x02),
+        ("phaddsw", 0x66, 0x03), ("pmaddubsw", 0x66, 0x04), ("phsubw", 0x66, 0x05),
+        ("phsubd", 0x66, 0x06), ("phsubsw", 0x66, 0x07),
         ("psignb", 0x66, 0x08), ("psignw", 0x66, 0x09), ("psignd", 0x66, 0x0A),
         ("pmulhrsw", 0x66, 0x0B), ("pblendvb", 0x66, 0x10), ("pabsb", 0x66, 0x1C),
         ("pabsw", 0x66, 0x1D), ("pabsd", 0x66, 0x1E),
         ("pmovsxbw", 0x66, 0x20), ("pmovsxbd", 0x66, 0x21), ("pmovsxbq", 0x66, 0x22),
         ("pmovsxwd", 0x66, 0x23), ("pmovsxwq", 0x66, 0x24), ("pmovsxdq", 0x66, 0x25),
         ("pmuldq", 0x66, 0x28), ("pcmpeqq", 0x66, 0x29), ("packusdw", 0x66, 0x2B),
+        ("pcmpgtq", 0x66, 0x37),
         ("pmovzxbw", 0x66, 0x30), ("pmovzxbd", 0x66, 0x31), ("pmovzxbq", 0x66, 0x32),
         ("pmovzxwd", 0x66, 0x33), ("pmovzxwq", 0x66, 0x34), ("pmovzxdq", 0x66, 0x35),
         ("pminsb", 0x66, 0x38), ("pminsd", 0x66, 0x39), ("pminuw", 0x66, 0x3A),
@@ -1508,7 +1511,11 @@ fn sse2_op(name: &str) -> Option<Mnemonic> {
         ("pmullw", 0x66, 0xD5), ("pmuludq", 0x66, 0xF4), ("pmaddwd", 0x66, 0xF5), ("pmulhw", 0x66, 0xE5),
         ("pcmpeqb", 0x66, 0x74), ("pcmpeqw", 0x66, 0x75), ("pcmpeqd", 0x66, 0x76),
         ("pcmpgtb", 0x66, 0x64), ("pcmpgtw", 0x66, 0x65), ("pcmpgtd", 0x66, 0x66),
-        ("pminub", 0x66, 0xDA), ("pmaxub", 0x66, 0xDE),
+        ("pminub", 0x66, 0xDA), ("pmaxub", 0x66, 0xDE), ("pminsw", 0x66, 0xEA), ("pmaxsw", 0x66, 0xEE),
+        ("pavgb", 0x66, 0xE0), ("pavgw", 0x66, 0xE3), ("pmulhuw", 0x66, 0xE4),
+        ("paddsb", 0x66, 0xEC), ("paddsw", 0x66, 0xED), ("paddusb", 0x66, 0xDC),
+        ("paddusw", 0x66, 0xDD), ("psubsb", 0x66, 0xE8), ("psubsw", 0x66, 0xE9),
+        ("psubusb", 0x66, 0xD8), ("psubusw", 0x66, 0xD9), ("psadbw", 0x66, 0xF6),
         ("packsswb", 0x66, 0x63), ("packssdw", 0x66, 0x6B), ("packuswb", 0x66, 0x67),
         ("punpcklbw", 0x66, 0x60), ("punpcklwd", 0x66, 0x61), ("punpckldq", 0x66, 0x62),
         ("punpckhbw", 0x66, 0x68), ("punpckhwd", 0x66, 0x69), ("punpckhdq", 0x66, 0x6A),
@@ -1530,7 +1537,8 @@ fn sse2_op(name: &str) -> Option<Mnemonic> {
         ("cvtpd2ps", 0x66, 0x5A), ("cvtps2pd", 0, 0x5A),
         ("cvtdq2pd", 0xF3, 0xE6), ("cvtpd2dq", 0xF2, 0xE6), ("cvttpd2dq", 0x66, 0xE6),
         ("addpd", 0x66, 0x58), ("subpd", 0x66, 0x5C), ("mulpd", 0x66, 0x59), ("divpd", 0x66, 0x5E),
-        ("andpd", 0x66, 0x54), ("orpd", 0x66, 0x56), ("xorpd", 0x66, 0x57),
+        ("minpd", 0x66, 0x5D), ("maxpd", 0x66, 0x5F), ("sqrtpd", 0x66, 0x51),
+        ("andpd", 0x66, 0x54), ("andnpd", 0x66, 0x55), ("orpd", 0x66, 0x56), ("xorpd", 0x66, 0x57),
         ("unpcklpd", 0x66, 0x14), ("unpckhpd", 0x66, 0x15),
     ];
     OPS.iter()
@@ -1609,6 +1617,10 @@ fn sse_imm(name: &str) -> Option<Mnemonic> {
         ("pshuflw", 0xF2, 1, 0x70, false, false),
         ("pshufhw", 0xF3, 1, 0x70, false, false),
         ("shufps", 0, 1, 0xC6, false, false), ("shufpd", 0x66, 1, 0xC6, false, false),
+        // The compares by an imm8 predicate (0 eq, 1 lt, 2 le, 3 unord, 4 neq,
+        // 5 nlt, 6 nle, 7 ord), packed or scalar by the prefix.
+        ("cmpps", 0, 1, 0xC2, false, false), ("cmppd", 0x66, 1, 0xC2, false, false),
+        ("cmpss", 0xF3, 1, 0xC2, false, false), ("cmpsd", 0xF2, 1, 0xC2, false, false),
         ("palignr", 0x66, 3, 0x0F, false, false),
         ("pclmulqdq", 0x66, 3, 0x44, false, false),
         // GFNI. The legacy encoding leaves the qword element width implicit.
@@ -1616,6 +1628,8 @@ fn sse_imm(name: &str) -> Option<Mnemonic> {
         ("gf2p8affineinvqb", 0x66, 3, 0xCF, false, false),
         ("blendps", 0x66, 3, 0x0C, false, false), ("blendpd", 0x66, 3, 0x0D, false, false),
         ("pblendw", 0x66, 3, 0x0E, false, false),
+        ("roundps", 0x66, 3, 0x08, false, false), ("roundpd", 0x66, 3, 0x09, false, false),
+        ("roundss", 0x66, 3, 0x0A, false, false), ("roundsd", 0x66, 3, 0x0B, false, false),
         ("aeskeygenassist", 0x66, 3, 0xDF, false, false),
         ("sha1rnds4", 0, 3, 0xCC, false, false),
         ("pinsrb", 0x66, 3, 0x20, false, false), ("pinsrd", 0x66, 3, 0x22, false, false),
@@ -1683,10 +1697,9 @@ fn sse_imm(name: &str) -> Option<Mnemonic> {
 }
 
 /// The vector lengths each VEX form has a member at. The scalar ops are
-/// VEX.LIG, and GNU as and clang accept only their xmm spelling; the
-/// lane-crossing permutes, the 128-bit lane broadcasts and the 128-bit lane
-/// inserts and extracts are defined at 256 bits only. Every other form has
-/// both members.
+/// VEX.LIG and take only their xmm spelling; the lane-crossing permutes,
+/// the 128-bit lane broadcasts and the 128-bit lane inserts and extracts are
+/// defined at 256 bits only. Every other form has both members.
 fn vex_len(name: &str) -> VexLen {
     #[rustfmt::skip]
     const ONE_LENGTH: &[(&str, u16)] = &[
@@ -1909,7 +1922,14 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
         ("vpunpckldq", 1, 0x62), ("vpunpckhdq", 1, 0x6A),
         ("vpunpcklqdq", 1, 0x6C), ("vpunpckhqdq", 1, 0x6D),
         ("vpmullw", 1, 0xD5), ("vpmaddwd", 1, 0xF5), ("vpmulhw", 1, 0xE5),
-        ("vpmuludq", 1, 0xF4),
+        ("vpmuludq", 1, 0xF4), ("vpmulhuw", 1, 0xE4), ("vpsadbw", 1, 0xF6),
+        ("vpunpcklbw", 1, 0x60), ("vpunpcklwd", 1, 0x61),
+        ("vpunpckhbw", 1, 0x68), ("vpunpckhwd", 1, 0x69),
+        ("vpacksswb", 1, 0x63), ("vpackssdw", 1, 0x6B), ("vpackuswb", 1, 0x67),
+        ("vpaddsb", 1, 0xEC), ("vpaddsw", 1, 0xED), ("vpaddusb", 1, 0xDC), ("vpaddusw", 1, 0xDD),
+        ("vpsubsb", 1, 0xE8), ("vpsubsw", 1, 0xE9), ("vpsubusb", 1, 0xD8), ("vpsubusw", 1, 0xD9),
+        ("vpavgb", 1, 0xE0), ("vpavgw", 1, 0xE3),
+        ("vpminub", 1, 0xDA), ("vpmaxub", 1, 0xDE), ("vpminsw", 1, 0xEA), ("vpmaxsw", 1, 0xEE),
         // Scalar single (0xF3) / double (0xF2).
         ("vaddss", 2, 0x58), ("vsubss", 2, 0x5C), ("vmulss", 2, 0x59), ("vdivss", 2, 0x5E),
         ("vaddsd", 3, 0x58), ("vsubsd", 3, 0x5C), ("vmulsd", 3, 0x59), ("vdivsd", 3, 0x5E),
@@ -1936,6 +1956,12 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
         ("vpcmpeqq", false, 0x29), ("vpcmpgtq", false, 0x37), ("vpackusdw", false, 0x2B),
         ("vpminsb", false, 0x38), ("vpminsd", false, 0x39),
         ("vpmaxsb", false, 0x3C), ("vpmaxsd", false, 0x3D),
+        ("vpminuw", false, 0x3A), ("vpminud", false, 0x3B),
+        ("vpmaxuw", false, 0x3E), ("vpmaxud", false, 0x3F),
+        ("vphaddw", false, 0x01), ("vphaddd", false, 0x02), ("vphaddsw", false, 0x03),
+        ("vpmaddubsw", false, 0x04),
+        ("vphsubw", false, 0x05), ("vphsubd", false, 0x06), ("vphsubsw", false, 0x07),
+        ("vpmulhrsw", false, 0x0B),
         ("vaesenc", false, 0xDC), ("vaesenclast", false, 0xDD),
         ("vaesdec", false, 0xDE), ("vaesdeclast", false, 0xDF),
         ("vgf2p8mulb", false, 0xCF),
@@ -1947,6 +1973,12 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
         ("vfnmadd132pd", true, 0x9C), ("vfnmadd213pd", true, 0xAC), ("vfnmadd231pd", true, 0xBC),
         ("vfnmsub132ps", false, 0x9E), ("vfnmsub213ps", false, 0xAE), ("vfnmsub231ps", false, 0xBE),
         ("vfnmsub132pd", true, 0x9E), ("vfnmsub213pd", true, 0xAE), ("vfnmsub231pd", true, 0xBE),
+        ("vfmaddsub132ps", false, 0x96), ("vfmaddsub213ps", false, 0xA6),
+        ("vfmaddsub231ps", false, 0xB6), ("vfmaddsub132pd", true, 0x96),
+        ("vfmaddsub213pd", true, 0xA6), ("vfmaddsub231pd", true, 0xB6),
+        ("vfmsubadd132ps", false, 0x97), ("vfmsubadd213ps", false, 0xA7),
+        ("vfmsubadd231ps", false, 0xB7), ("vfmsubadd132pd", true, 0x97),
+        ("vfmsubadd213pd", true, 0xA7), ("vfmsubadd231pd", true, 0xB7),
     ];
     if let Some(&(_, w, opcode)) = OPS38.iter().find(|(n, _, _)| *n == name) {
         return Some(Mnemonic::Vex {
@@ -1979,6 +2011,8 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
         "vinserti128" => Some((1, 3, false, 0x38, Xmm)),
         "vpclmulqdq" => Some((1, 3, false, 0x44, Vl)),
         "vpblendw" => Some((1, 3, false, 0x0E, Vl)),
+        "vroundss" => Some((1, 3, false, 0x0A, Vl)),
+        "vroundsd" => Some((1, 3, false, 0x0B, Vl)),
         // GFNI: qword elements, so VEX.W is set.
         "vgf2p8affineqb" => Some((1, 3, true, 0xCE, Vl)),
         "vgf2p8affineinvqb" => Some((1, 3, true, 0xCF, Vl)),
@@ -2059,6 +2093,8 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
         "vpshufhw" => Some((2, 1, false, 0x70)),
         "vpermilps" => Some((1, 3, false, 0x04)),
         "vpermilpd" => Some((1, 3, false, 0x05)),
+        "vroundps" => Some((1, 3, false, 0x08)),
+        "vroundpd" => Some((1, 3, false, 0x09)),
         "vpermq" => Some((1, 3, true, 0x00)),
         "vpermpd" => Some((1, 3, true, 0x01)),
         _ => None,
@@ -2304,11 +2340,20 @@ fn movq_mmx(
     Ok(true)
 }
 
-/// The catalogue mnemonic matching `name`, as a `'static` string, or `None`.
+/// The catalog mnemonic matching `name`, as a `'static` string, or `None`.
 /// Lets a mnemonic the table encodes but that has no bespoke [`Mnemonic`]
 /// variant still be parsed and routed through the table.
+/// The VEX form of SSE mnemonic `sse`, its name with a `v` before it, when
+/// the encoder has one.
+pub(crate) fn vex_mnemonic(sse: &str) -> Option<Mnemonic> {
+    let mut name = alloc::string::String::with_capacity(sse.len() + 1);
+    name.push('v');
+    name.push_str(sse);
+    mnemonic_by_name(&name)
+}
+
 fn table_mnemonic(name: &str) -> Option<&'static str> {
-    // The catalogue is sorted by mnemonic; binary-search rather than scan.
+    // The catalog is sorted by mnemonic; binary-search rather than scan.
     let forms = super::isa_x86_table::FORMS;
     let start = forms.partition_point(|f| f.mnemonic < name);
     forms.get(start).map(|f| f.mnemonic).filter(|&m| m == name)
@@ -2339,13 +2384,13 @@ fn split_mnemonic(tok: &str) -> Option<(Mnemonic, Option<AsmRegSize>)> {
 /// A trailing `b`/`w`/`l`/`q` is a suffix only when the token is not a
 /// mnemonic as written (so `shl` stays `shl`, but `bswapl` is
 /// `bswap` + long). A token that is not a bespoke mnemonic but names a
-/// catalogue instruction resolves to [`Mnemonic::Table`].
+/// catalog instruction resolves to [`Mnemonic::Table`].
 fn split_mnemonic_exact(tok: &str) -> Option<(Mnemonic, Option<AsmRegSize>)> {
     if let Some(m) = mnemonic_by_name(tok) {
         return Some((m, None));
     }
     // AT&T reads the size letter on a stack op as a suffix of `push` / `pop`.
-    // The catalogue also carries Intel's own `pushw` spelling (its imm16 row
+    // The catalog also carries Intel's own `pushw` spelling (its imm16 row
     // only), which must not swallow the suffix, so these skip the whole-name
     // match and take the split below.
     let att_suffixed = matches!(tok, "pushw" | "pushl" | "pushq" | "popw" | "popl" | "popq");
@@ -2353,7 +2398,7 @@ fn split_mnemonic_exact(tok: &str) -> Option<(Mnemonic, Option<AsmRegSize>)> {
         return Some((Mnemonic::Table(name), None));
     }
     // Unsuffixed flag push / pop: in 64-bit mode the operand size defaults to
-    // 64-bit, so these name the `q` forms. The catalogue is Intel-syntax and
+    // 64-bit, so these name the `q` forms. The catalog is Intel-syntax and
     // carries only the explicitly sized spellings.
     if let Some(sized) = match tok {
         "pushf" => Some("pushfq"),
@@ -2370,7 +2415,7 @@ fn split_mnemonic_exact(tok: &str) -> Option<(Mnemonic, Option<AsmRegSize>)> {
     } {
         return Some((Mnemonic::Table(table_mnemonic(sized)?), None));
     }
-    // The narrower counter widths of the `E3 rel8` branch. The catalogue row
+    // The narrower counter widths of the `E3 rel8` branch. The catalog row
     // is `jrcxz`; these differ from it only by the address-size prefix, which
     // the encoder selects from the mode, so they carry no row of their own.
     if let Some(name) = match tok {
@@ -2449,7 +2494,7 @@ fn parse_label_ref(tok: &str, labels: &[&str]) -> Option<(u32, bool)> {
 /// named-label intern table (from the definition pre-scan); a bare token
 /// matching an entry is a local-label reference, not a symbol. `file_scope`
 /// selects the basic-asm reading of a single `%`, where `%kN` is an opmask
-/// register rather than GCC's operand modifier.
+/// register rather than the operand modifier.
 fn parse_operand(tok: &str, labels: &[&str], file_scope: bool) -> Result<AsmOpnd, String> {
     // A leading `*` is AT&T's indirect-branch marker (`jmp *%rax`,
     // `call *8(%rbx)`); the operand kind alone selects the encoding.
@@ -2492,8 +2537,8 @@ fn parse_operand(tok: &str, labels: &[&str], file_scope: bool) -> Result<AsmOpnd
     }
     if bytes.first() == Some(&b'%') {
         let body = &tok[1..];
-        // A single `%` before a register name is an explicit register. GCC
-        // uses this in *basic* asm (no operand list); extended asm spells it
+        // A single `%` before a register name is an explicit register, the
+        // *basic* asm (no operand list) spelling; extended asm spells it
         // `%%reg`. Operand references (`%0`, `%w1`) are never register names,
         // so trying the register table first is unambiguous -- except for
         // `%k0`..`%k7`, which extended asm reads as the operand modifier and
@@ -2530,9 +2575,9 @@ fn parse_operand(tok: &str, labels: &[&str], file_scope: bool) -> Result<AsmOpnd
         }
         // `%aN`: operand N rendered as an address reference. The operand holds
         // an address in a general register, so this is the base-only memory
-        // form `(%reg)`. GCC may instead fold a constant displacement or a
-        // symbol into the addressing expression (`64(%rdi)`, `sym(%rip)`);
-        // the register form names the same address.
+        // form `(%reg)`. The address may also print with a constant
+        // displacement or a symbol folded into the addressing expression
+        // (`64(%rdi)`, `sym(%rip)`); the register form names the same address.
         if let Some(digits) = body.strip_prefix('a')
             && !digits.is_empty()
             && digits.bytes().all(|c| c.is_ascii_digit())
@@ -2710,7 +2755,7 @@ fn matching_open_paren(tok: &str) -> Option<usize> {
 
 /// Parse `prefix(inner)`: the `disp(%%reg)` / `disp(%N)` /
 /// `disp(%%base, %%index, scale)` memory forms and the `LABEL(%rip)`
-/// label-address form. `None` for shapes not modelled.
+/// label-address form. `None` for shapes not modeled.
 fn parse_mem_operand(prefix: &str, inner: &str, labels: &[&str]) -> Option<AsmOpnd> {
     let prefix = strip_outer_parens(prefix);
     let inner = inner.trim();
@@ -2942,7 +2987,7 @@ fn parse_align_directive(name: &str, rest: &str) -> Result<AsmSectionItem, Strin
 }
 
 /// Literal machine bytes for a raw-byte template piece, or `None` when the
-/// piece is a mnemonic instruction. Two forms are recognised:
+/// piece is a mnemonic instruction. Two forms are recognized:
 ///
 /// * a run of bare 2-hex-digit tokens (`CC C3 90`), each a byte value, and
 /// * a `.byte` / `.word` / `.long` / `.quad` directive whose comma-separated
@@ -3839,7 +3884,7 @@ fn to_table(
 ) -> Option<(&'static str, Option<u8>, Vec<super::table::Opnd>)> {
     use super::table::Opnd;
     use Mnemonic as M;
-    // A catalogue-passthrough mnemonic carries its own name; arrange the AT&T
+    // A catalog-passthrough mnemonic carries its own name; arrange the AT&T
     // operands into the table's Intel order by arity and route straight through.
     if let M::Table(name) = mnemonic {
         return to_table_generic(name, suffix, ops);
@@ -3925,12 +3970,12 @@ fn to_table(
     Some((name, suffix.map(|s| s.bytes()), tops))
 }
 
-/// Arrange the operands of a catalogue-passthrough mnemonic
+/// Arrange the operands of a catalog-passthrough mnemonic
 /// ([`Mnemonic::Table`]) into the table's Intel order, by arity: no operands
 /// stay empty, a unary form passes its operand, a two-operand form transposes
 /// AT&T `src, dst` to `dst, src`, and a shift / rotate takes its count (CL or an
 /// immediate) after the destination with an omitted count meaning `1`. Operands
-/// naming a register with no catalogue form (MMX / control / debug / segment,
+/// naming a register with no catalog form (MMX / control / debug / segment,
 /// `reg >= MMX_BASE`) return `None`.
 fn to_table_generic(
     name: &'static str,
@@ -3963,7 +4008,7 @@ fn to_table_generic(
         }
         // `imul $imm, %reg` is the three-operand form with the destination
         // repeated as the source; only the two-operand spelling reaches here,
-        // since the catalogue has no immediate row of arity two.
+        // since the catalog has no immediate row of arity two.
         [Concrete::Imm(v), dst] if name == "imul" => {
             alloc::vec![table_opnd(dst), table_opnd(dst), Opnd::Imm(*v)]
         }
@@ -4140,7 +4185,7 @@ pub(crate) fn encode_in(
         return Ok(());
     }
     // An AT&T extending move: the spelled source width lands on the r/m
-    // operand (AT&T first), then the catalogue encodes the Intel form.
+    // operand (AT&T first), then the catalog encodes the Intel form.
     if let Mnemonic::ExtMov { name, src } = mnemonic {
         let mut ops = ops.to_vec();
         if let Some(o) = ops.first_mut() {
@@ -4159,9 +4204,9 @@ pub(crate) fn encode_in(
     // resolved to Intel order first.
     if let Some((name, width, tops)) = to_table(mnemonic, suffix, ops) {
         // The inline-asm path holds the mnemonic as text (a parsed token); map
-        // it to the catalogue enum at this one boundary.
+        // it to the catalog enum at this one boundary.
         let mnem = super::table::Mnem::from_name(name)
-            .ok_or_else(|| format!("inline asm: unknown catalogue mnemonic `{name}`"))?;
+            .ok_or_else(|| format!("inline asm: unknown catalog mnemonic `{name}`"))?;
         code.extend_from_slice(&super::table::encode_in(mode, addr, mnem, width, &tops)?);
         return Ok(());
     }
@@ -4190,7 +4235,7 @@ pub(crate) fn encode_in(
     Ok(())
 }
 
-/// The forms the catalogue does not carry: the double-precision shifts, the
+/// The forms the catalog does not carry: the double-precision shifts, the
 /// port I/O and privileged prefix forms, the MMX and control / debug / segment
 /// register moves, and the interrupt / stack ops.
 fn encode_bespoke(
@@ -5381,6 +5426,21 @@ fn encode_bespoke(
             store,
             len,
         } => {
+            // `vpermilps` / `vpermilpd` by a register of controls: the
+            // three-operand 0F38 form, opcode 0C / 0D.
+            if map == 3
+                && matches!(opcode, 0x04 | 0x05)
+                && !matches!(ops.first(), Some(Concrete::Imm(_)))
+            {
+                let var = Mnemonic::Vex {
+                    pp,
+                    map: 2,
+                    w,
+                    opcode: opcode + 8,
+                    len,
+                };
+                return encode_in(code, mode, addr, var, suffix, ops);
+            }
             // `v-op $imm, %src, %dst`: a 2-operand VEX (VEX.vvvv = 1111) + imm.
             // ModRM.reg holds the AT&T destination, or the source for a lane
             // extract, whose r/m is the destination; the other operand may be a
@@ -5829,7 +5889,7 @@ fn encode_bespoke(
             Err(String::from("inline asm: unsupported mov operands"))
         }
         // The delegated general-purpose / system mnemonics are handled by the
-        // table encoder above; reaching here means the catalogue has no form
+        // table encoder above; reaching here means the catalog has no form
         // matching these operands. A push / pop of a segment register is the
         // one such form with a fixed encoding, so try it before reporting the
         // mnemonic as written.
@@ -5952,7 +6012,7 @@ fn segment_stack_op(
 fn as_reg(op: Concrete) -> Result<(u8, AsmRegSize), String> {
     match op {
         Concrete::Reg { reg, size } => Ok((reg, size)),
-        // A high-byte register reaches only the catalogue path; the bespoke
+        // A high-byte register reaches only the catalog path; the bespoke
         // arms encode forms that cannot name one.
         Concrete::HighReg(_) => Err(String::from(
             "inline asm: high-byte register is not an operand of this instruction",
@@ -6360,7 +6420,7 @@ mod tests {
 
     #[test]
     fn explicit_memory_operands() {
-        // Every addressing shape vs clang: disp0 / disp8 / disp32, negative
+        // Every addressing shape: disp0 / disp8 / disp32, negative
         // displacements, and the rbp/r13 (no mod=00 form) and rsp/r12 (SIB)
         // corners. Expected bytes from `clang --target=x86_64-unknown-linux-gnu`.
         #[rustfmt::skip]
@@ -6884,14 +6944,22 @@ mod tests {
             })
         );
         assert_eq!(sse2_op("not_an_sse_op"), None);
-        // Integer pack / multiply-add / high-multiply / high-unpack forms
-        // (byte-verified against clang: `<66> 0F <op> C1` for src=xmm1,dst=xmm0).
+        // Integer pack / multiply-add / high-multiply / average / min-max /
+        // high-unpack forms (byte-verified against clang and GNU as:
+        // `<66> 0F <op> C1` for src=xmm1,dst=xmm0).
         for (name, op) in [
             ("packsswb", 0x63u8),
             ("packssdw", 0x6B),
             ("packuswb", 0x67),
             ("pmaddwd", 0xF5),
             ("pmulhw", 0xE5),
+            ("pmulhuw", 0xE4),
+            ("pavgb", 0xE0),
+            ("pavgw", 0xE3),
+            ("pminsw", 0xEA),
+            ("pmaxsw", 0xEE),
+            ("pminub", 0xDA),
+            ("pmaxub", 0xDE),
             ("punpckhbw", 0x68),
             ("punpckhwd", 0x69),
         ] {
@@ -6910,7 +6978,7 @@ mod tests {
         }
         // Packed-single float ops: unpck/sqrt (no prefix) and the int<->float
         // convert trio (cvtdq2ps none, cvtps2dq 0x66, cvttps2dq 0xF3). Prefix 0
-        // emits no leading byte. Byte-exact vs clang.
+        // emits no leading byte.
         for (name, prefix, op) in [
             ("unpcklps", 0u8, 0x14u8),
             ("unpckhps", 0, 0x15),
@@ -7309,11 +7377,11 @@ mod tests {
     }
 
     #[test]
-    fn catalogue_passthrough() {
+    fn catalog_passthrough() {
         let q = AsmRegSize::Quad;
         let rax = Concrete::Reg { reg: 0, size: q };
         let rbx = Concrete::Reg { reg: 3, size: q };
-        // A non-bespoke catalogue mnemonic parses to Mnemonic::Table, stripping
+        // A non-bespoke catalog mnemonic parses to Mnemonic::Table, stripping
         // an AT&T size suffix; an unknown token stays unresolved.
         assert_eq!(split_mnemonic("cmp"), Some((Mnemonic::Table("cmp"), None)));
         assert_eq!(
@@ -7396,7 +7464,7 @@ mod tests {
         assert_eq!(asm_bytes(b"popfq"), [0x9D]);
         assert_eq!(asm_bytes(b"pushfw"), [0x66, 0x9C]);
         assert_eq!(asm_bytes(b"popfw"), [0x66, 0x9D]);
-        // `pushw %ax` is `push` at word width; the Intel-syntax catalogue
+        // `pushw %ax` is `push` at word width; the Intel-syntax catalog
         // entry named `pushw` covers only the imm16 row, which still encodes.
         assert_eq!(asm_bytes(b"pushw %%ax"), [0x66, 0x50]);
         assert_eq!(asm_bytes(b"popw %%ax"), [0x66, 0x58]);
@@ -7695,7 +7763,7 @@ mod tests {
         );
         assert_eq!(vex_op("not_a_vex"), None);
         // 2-operand VEX moves (VEX.vvvv = 1111): reg-reg uses load_op, a store
-        // to memory uses store_op. Byte-exact vs clang.
+        // to memory uses store_op.
         let mem = |base: u8| Concrete::Mem {
             base,
             index: None,
@@ -7847,6 +7915,46 @@ mod tests {
         assert_eq!(
             e("vfnmsub132ps", &[xmm(10), xmm(9), xmm(8)]),
             [0xC4, 0x42, 0x31, 0x9E, 0xC2]
+        );
+        // VROUNDPS and its kin: VEX 0F3A 08..0B ib, 2-operand packed and
+        // 3-operand scalar.
+        let i = Concrete::Imm;
+        assert_eq!(
+            e("vroundps", &[i(1), ymm(1), ymm(0)]),
+            [0xC4, 0xE3, 0x7D, 0x08, 0xC1, 0x01]
+        );
+        assert_eq!(
+            e("vroundpd", &[i(12), xmm(9), xmm(8)]),
+            [0xC4, 0x43, 0x79, 0x09, 0xC1, 0x0C]
+        );
+        assert_eq!(
+            e("vroundss", &[i(2), xmm(2), xmm(1), xmm(0)]),
+            [0xC4, 0xE3, 0x71, 0x0A, 0xC2, 0x02]
+        );
+        assert_eq!(
+            e("vroundsd", &[i(4), xmm(10), xmm(9), xmm(8)]),
+            [0xC4, 0x43, 0x31, 0x0B, 0xC2, 0x04]
+        );
+        // vpermilps / vpermilpd by a register of controls: 0F38 0C / 0D.
+        assert_eq!(
+            e("vpermilps", &[xmm(2), xmm(1), xmm(0)]),
+            [0xC4, 0xE2, 0x71, 0x0C, 0xC2]
+        );
+        assert_eq!(
+            e("vpermilpd", &[ymm(2), ymm(1), ymm(0)]),
+            [0xC4, 0xE2, 0x75, 0x0D, 0xC2]
+        );
+        assert_eq!(
+            e("vfmaddsub231ps", &[xmm(2), xmm(1), xmm(0)]),
+            [0xC4, 0xE2, 0x71, 0xB6, 0xC2]
+        );
+        assert_eq!(
+            e("vfmsubadd213pd", &[ymm(2), ymm(1), ymm(0)]),
+            [0xC4, 0xE2, 0xF5, 0xA7, 0xC2]
+        );
+        assert_eq!(
+            e("vfmsubadd231ps", &[ymm(10), ymm(9), ymm(8)]),
+            [0xC4, 0x42, 0x35, 0xB7, 0xC2]
         );
         assert_eq!(
             e("vfmadd231pd", &[mem(8), ymm(1), ymm(0)]),
@@ -9549,7 +9657,7 @@ mod string_and_prefix_tests {
     /// 16 bits whatever the suffix says. The SDM spells that source `r/m16`,
     /// so a `movl` names an operand the row has not, and the suffix rule here
     /// is the one `descriptor_field_spellings_rejected` already applies to the
-    /// neighbouring 16-bit fields.
+    /// neighboring 16-bit fields.
     #[test]
     fn segment_register_move_spellings_rejected() {
         for tmpl in [

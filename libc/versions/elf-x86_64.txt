@@ -88,6 +88,8 @@ bindtextdomain                           GLIBC_2.2.5
 bsearch                                  GLIBC_2.2.5
 btowc                                    GLIBC_2.2.5
 bzero                                    GLIBC_2.2.5
+c16rtomb                                 GLIBC_2.16
+c32rtomb                                 GLIBC_2.16
 calloc                                   GLIBC_2.2.5
 catclose                                 GLIBC_2.2.5
 catgets                                  GLIBC_2.2.5
@@ -101,6 +103,7 @@ chdir                                    GLIBC_2.2.5
 chmod                                    GLIBC_2.2.5
 chown                                    GLIBC_2.2.5
 chroot                                   GLIBC_2.2.5
+clearenv                                 GLIBC_2.2.5
 clearerr                                 GLIBC_2.2.5
 clock                                    GLIBC_2.2.5
 clock_getcpuclockid                      GLIBC_2.17
@@ -117,6 +120,7 @@ closelog                                 GLIBC_2.2.5
 confstr                                  GLIBC_2.2.5
 connect                                  GLIBC_2.2.5
 copy_file_range                          GLIBC_2.27
+creat                                    GLIBC_2.2.5
 ctermid                                  GLIBC_2.2.5
 ctime                                    GLIBC_2.2.5
 ctime_r                                  GLIBC_2.2.5
@@ -348,7 +352,9 @@ isalnum                                  GLIBC_2.2.5
 isalnum_l                                GLIBC_2.3
 isalpha                                  GLIBC_2.2.5
 isalpha_l                                GLIBC_2.3
+isascii                                  GLIBC_2.2.5
 isatty                                   GLIBC_2.2.5
+isblank                                  GLIBC_2.2.5
 isblank_l                                GLIBC_2.3
 iscntrl                                  GLIBC_2.2.5
 iscntrl_l                                GLIBC_2.3
@@ -430,6 +436,8 @@ malloc_trim                              GLIBC_2.2.5
 malloc_usable_size                       GLIBC_2.2.5
 mblen                                    GLIBC_2.2.5
 mbrlen                                   GLIBC_2.2.5
+mbrtoc16                                 GLIBC_2.16
+mbrtoc32                                 GLIBC_2.16
 mbrtowc                                  GLIBC_2.2.5
 mbsinit                                  GLIBC_2.2.5
 mbsrtowcs                                GLIBC_2.2.5
@@ -443,6 +451,7 @@ memcpy                                   GLIBC_2.14
 memfd_create                             GLIBC_2.27
 memmem                                   GLIBC_2.2.5
 memmove                                  GLIBC_2.2.5
+mempcpy                                  GLIBC_2.2.5
 memrchr                                  GLIBC_2.2.5
 memset                                   GLIBC_2.2.5
 mincore                                  GLIBC_2.2.5
@@ -801,6 +810,7 @@ srandom                                  GLIBC_2.2.5
 stat                                     GLIBC_2.33
 statfs                                   GLIBC_2.2.5
 statvfs                                  GLIBC_2.2.5
+statx                                    GLIBC_2.28
 stderr                                   GLIBC_2.2.5
 stdin                                    GLIBC_2.2.5
 stdout                                   GLIBC_2.2.5
@@ -830,9 +840,11 @@ strncat                                  GLIBC_2.2.5
 strncmp                                  GLIBC_2.2.5
 strncpy                                  GLIBC_2.2.5
 strndup                                  GLIBC_2.2.5
+strnlen                                  GLIBC_2.2.5
 strpbrk                                  GLIBC_2.2.5
 strptime                                 GLIBC_2.2.5
 strrchr                                  GLIBC_2.2.5
+strsep                                   GLIBC_2.2.5
 strsignal                                GLIBC_2.2.5
 strspn                                   GLIBC_2.2.5
 strstr                                   GLIBC_2.2.5
@@ -884,9 +896,11 @@ timerfd_create                           GLIBC_2.8
 timerfd_gettime                          GLIBC_2.8
 timerfd_settime                          GLIBC_2.8
 times                                    GLIBC_2.2.5
+timespec_get                             GLIBC_2.16
 timezone                                 GLIBC_2.2.5
 tmpfile                                  GLIBC_2.2.5
 tmpnam                                   GLIBC_2.2.5
+toascii                                  GLIBC_2.2.5
 tolower                                  GLIBC_2.2.5
 tolower_l                                GLIBC_2.3
 toupper                                  GLIBC_2.2.5

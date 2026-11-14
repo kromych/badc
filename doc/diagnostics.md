@@ -9,7 +9,7 @@ unit.c:8: error: bad expression: got `;` (in f) [B2020] [syntax]
 
 A code and a name stay with the diagnostic they were given, and a code is
 never reused. Options and pragmas select a diagnostic by either one. The
-[catalogue](#catalogue) at the end of this page lists every diagnostic.
+[catalog](#catalog) at the end of this page lists every diagnostic.
 
 ## Contents
 
@@ -17,7 +17,7 @@ never reused. Options and pragmas select a diagnostic by either one. The
 * [Options](#options)
 * [Pragmas](#pragmas)
 * [Levels and classes](#levels-and-classes)
-* [Catalogue](#catalogue)
+* [Catalog](#catalog)
 
 ## Selectors
 
@@ -30,26 +30,30 @@ A selector names one diagnostic or one group:
 | alias, including an MSVC warning number | `unused`, `C4101` |
 | group | `all`, `extra`, `pedantic` |
 
-`badc --explain <selector>` prints one row of the catalogue with its aliases.
-`badc --list-diagnostics` prints the whole catalogue.
+`badc --explain <selector>` prints one row of the catalog with its aliases.
+`badc --list-diagnostics` prints the whole catalog.
 
 ## Options
 
 | option | effect |
 |---|---|
-| `-W<sel>` | turn the diagnostic on; one that is an error by default stays an error, as in gcc |
+| `-W<sel>` | turn the diagnostic on; one that is an error by default stays an error |
 | `-Wno-<sel>` | do not report it |
 | `-Werror=<sel>` | report it as an error, and turn it on if it is off |
 | `-Wno-error=<sel>` | report it as a warning again |
 | `-Werror` / `-Wno-error` | report every warning as an error / stop doing so |
 | `-w` | report no warnings |
-| `-Wall`, `-Wextra`, `-Wpedantic` | turn on the group of that name; the groups follow gcc's split |
+| `-Wall`, `-Wextra`, `-Wpedantic` | turn on the group of that name |
 | `-pedantic`, `-pedantic-errors` | `-Wpedantic`, `-Werror=pedantic` |
-| `-fpermissive` | report `int-conversion`, `incompatible-pointer-types`, `implicit-int` and `return-mismatch` as warnings, as gcc 14 does |
+| `-fpermissive` | report `int-conversion`, `incompatible-pointer-types`, `implicit-int` and `return-mismatch` as warnings |
 
-A gcc or clang warning that badc does not implement is accepted. Turning one
-on reports B7012 and has no other effect. Any other unknown name is an error,
-except after `-Wno-`, where gcc also accepts any name.
+A warning name of another compiler that badc does not implement is accepted.
+Turning one on reports B7012 and has no other effect. Any other unknown name is
+an error, except after `-Wno-`, which accepts any name.
+
+A warning at a line of a system header--one found through `-isystem` or a
+system directory, and the compiler's own headers--is not reported, as gcc
+and clang do not report it; a `#warning` there is, and an error always is.
 
 ## Pragmas
 
@@ -58,23 +62,23 @@ These pragmas take effect from their position in the source:
 * `#pragma GCC diagnostic ignored "-W<sel>"`, and the same with `warning` or
   `error`; `#pragma GCC diagnostic push` and `pop`.
 * `#pragma clang diagnostic` in the same forms.
-* MSVC's `#pragma warning(disable: <n>)`, with `error`, `default`, `once` or
+* MSVC's `#pragma warning(disable: <n>)`, with `error`, `default`, `once`, or
   `suppress` in place of `disable`, and `#pragma warning(push)` and `(pop)`.
   The number `<n>` selects the diagnostic whose alias is `C<n>`.
 
-A pragma that names an unknown selector reports B7002, or B7012 for a gcc or
-clang warning badc does not implement, and changes nothing else.
+A pragma that names an unknown selector reports B7002, or B7012 for another
+compiler's warning badc does not implement, and changes nothing else.
 
 ## Levels and classes
 
 The `default` column gives the level with no option or pragma: `error`,
-`warning` or `ignore`. The `class` column says whether that level can change:
+`warning`, or `ignore`. The `class` column says whether that level can change:
 
 | class | behavior |
 |---|---|
 | controllable | options and pragmas set the level |
 | hard | always an error, because compilation cannot continue past it; an option that names it is accepted and has no effect |
-| note | advisory; its level does not change |
+| note | advisory; `-w` and `-Wno-<name>` turn it off, and nothing raises it |
 
 A row marked `(retired)` is no longer reported. Its code stays reserved, and
 an option or pragma that names it is accepted and has no effect.
@@ -82,7 +86,7 @@ an option or pragma that names it is accepted and has no effect.
 Default levels and groups may change between releases. Codes and names do
 not.
 
-## Catalogue
+## Catalog
 
 `scripts/diagnostics_doc.py` generates this table from
 `tests/diagnostics/catalog.txt`. A unit test checks that file against the
@@ -90,16 +94,16 @@ output of `badc --list-diagnostics`.
 
 | code | name | default | class | groups | description |
 |------|------|---------|-------|--------|-------------|
-| B1001 | `unknown-directive` | warning | controllable | default | a `#` line naming no directive badc implements; the line is dropped |
+| B1001 | `unknown-directive (retired)` | warning | controllable | default | a `#` line naming no directive badc implements; the line is dropped |
 | B1002 | `#warnings` | warning | controllable | default | a `#warning` directive reached in an active conditional block |
-| B1003 | `malformed-directive` | warning | controllable | default | a macro-expanded `#include` or `#line` operand that does not reparse |
+| B1003 | `malformed-directive` | warning | controllable | default | a macro-expanded `#line` operand that does not reparse |
 | B1004 | `unknown-pragmas` | warning | controllable | default,all | a `#pragma` badc does not implement; the directive is ignored |
 | B1005 | `pragma-syntax` | warning | controllable | default | a diagnostic pragma badc implements whose operand is malformed |
 | B1006 | `pragma-pop-without-push` | warning | controllable | default | a diagnostic-pragma pop or a `pop_macro` with no matching push |
 | B1007 | `ignored-pragma-intrinsic` | warning | controllable | default | a `#pragma intrinsic` naming a function badc has no intrinsic for; the name stays an ordinary call |
 | B1008 | `date-time` | ignore | controllable | - | a use of `__DATE__` or `__TIME__`, whose expansion changes from one build to the next |
 | B1009 | `undef` | ignore | controllable | - | an identifier that names no macro evaluated in a `#if` or `#elif` expression, where it is 0 |
-| B1010 | `directive` | error | hard | - | a directive whose operand the preprocessor cannot process, a directive preprocessed input does not take, or a conditional directive with no `#if` to match |
+| B1010 | `directive` | error | hard | - | a directive name the preprocessor does not implement, a directive whose operand it cannot process, a directive preprocessed input does not take, or a conditional directive with no `#if` to match |
 | B1011 | `invalid-pragma` | error | hard | - | a pragma badc implements whose operand cannot be applied |
 | B1012 | `invalid-token` | error | hard | - | a character sequence that forms no token: a malformed constant, escape sequence or universal character name |
 | B1013 | `error-directive` | error | hard | - | a `#error` directive reached in an active conditional block |
@@ -110,7 +114,7 @@ output of `badc --list-diagnostics`.
 | B2002 | `unused-parameter` | ignore | controllable | extra | a parameter never used in the function body |
 | B2003 | `unused-but-set-variable` | ignore | controllable | all | a variable that is only ever assigned to |
 | B2004 | `unused-function` | ignore | controllable | all | a function with internal linkage that is defined and never referenced |
-| B2005 | `implicit-function-declaration (retired)` | warning | controllable | default | a function used before a prototype declares it, so its return type is `int` |
+| B2005 | `implicit-function-declaration` | ignore | controllable | all | a call to an undeclared function, which an edition before C99 declares as `extern int f();` (C90 6.3.2.2) |
 | B2006 | `undefined-function` | warning | controllable | default | an initializer names a `static` function this unit declares and never defines |
 | B2007 | `redeclaration-mismatch` | warning | controllable | default | a function redeclaration incompatible under C99 that GNU C accepts: an implicit `int` body for a `void` declaration, an old-style definition matching its prototype only before promotion |
 | B2008 | `attributes` | warning | controllable | default | an attribute the declaration cannot carry, so it is ignored |
@@ -125,7 +129,7 @@ output of `badc --list-diagnostics`.
 | B2017 | `implicit-fallthrough=5` | ignore | controllable | - | a statement completing normally into the `case` or `default` label after it, which no `fallthrough` attribute statement annotates |
 | B2018 | `vla-larger-than` | ignore | controllable | - | under optimization, a variable-length array whose size the size expression does not bound by the `-Wvla-larger-than=` byte count |
 | B2019 | `main` | warning | controllable | default | a hosted unit's file-scope declaration of `main` with `static`, which makes it no program entry point |
-| B2020 | `syntax` | error | hard | - | a token the grammar does not admit at its position; the parser has no resynchronisation point |
+| B2020 | `syntax` | error | hard | - | a token the grammar does not admit at its position; the parser has no resynchronization point |
 | B2021 | `invalid-declaration` | error | hard | - | a declaration a C99 constraint rejects: a redefinition, conflicting types, an incomplete object, a bit-field width or an alignment out of range |
 | B2022 | `undeclared-identifier` | error | hard | - | a name no declaration in scope introduces |
 | B2023 | `static-assert` | error | hard | - | a static assertion whose controlling expression is zero |
@@ -133,8 +137,8 @@ output of `badc --list-diagnostics`.
 | B3001 | `int-conversion` | error | controllable | default | an integer and a pointer exchanged with no cast |
 | B3002 | `incompatible-struct-types` | warning | controllable | default | an aggregate or enumerated type used where a different one is expected |
 | B3003 | `return-type` | ignore | controllable | all | control reaches the end of a value-returning function |
-| B3004 | `too-few-arguments` | warning | controllable | default | a call passing fewer arguments than an old-style definition or a libc binding's prototype declares |
-| B3005 | `too-many-arguments` | warning | controllable | default | a call passing more arguments than an old-style definition or a libc binding's prototype declares |
+| B3004 | `too-few-arguments` | warning | controllable | default | a call passing fewer arguments than an old-style definition declares |
+| B3005 | `too-many-arguments` | warning | controllable | default | a call passing more arguments than an old-style definition declares |
 | B3006 | `long-double-abi (retired)` | warning | controllable | default | a `long double` argument passed in a format this target's ABI does not use |
 | B3007 | `dead-store` | ignore | controllable | - | a value assigned to a local and replaced before any read |
 | B3008 | `switch-outside-range` | warning | controllable | default | a `case` label whose value lies outside the range of the controlling expression's type before promotion |
@@ -167,6 +171,9 @@ output of `badc --list-diagnostics`.
 | B4003 | `inline` | ignore | controllable | - | a function the source declared `inline` that the optimizer left out of line |
 | B4004 | `always-inline` | warning | controllable | default | a function marked `always_inline` or `__forceinline` that the optimizer left out of line |
 | B4005 | `frame-larger-than` | warning | controllable | default | a function whose stack frame exceeds the `-Wframe-larger-than=` bound; saved registers and the frame record count, `alloca` and variable-length arrays do not |
+| B4006 | `general-regs-only` | error | hard | - | a floating-point value in a function compiled under `-mno-sse` or `-mgeneral-regs-only`, which withhold the floating-point and SIMD registers it needs |
+| B4007 | `attribute-error` | error | hard | - | a call left in the emitted code to a function declared with `__attribute__((error("message")))`, which the diagnostic quotes |
+| B4008 | `attribute-warning` | warning | controllable | default | a call left in the emitted code to a function declared with `__attribute__((warning("message")))`, which the diagnostic quotes |
 | B5001 | `asm-syntax` | error | hard | - | an `asm` statement whose operand list, constraints or template does not parse |
 | B5002 | `assembler` | error | hard | - | an instruction or directive the assembler cannot parse or encode for the target |
 | B6001 | `orphan-section` | warning | controllable | default | an input section no script rule names, placed by the linker's own rule |
@@ -177,6 +184,7 @@ output of `badc --list-diagnostics`.
 | B6006 | `local-import` | warning | controllable | default | a reference to the import-address slot `__imp_X` of a symbol `X` the link defines, which resolves to the definition |
 | B6007 | `text-relocation` | warning | controllable | default | a dynamic relocation writes into a read-only segment, which the loader makes writable to apply it (`DT_TEXTREL`) |
 | B6008 | `undefined-lookup` | warning | controllable | default | a reference no input defines, which a Mach-O image looks up in the flat namespace at load time under `-undefined warning` |
+| B6009 | `unused-delay-load` | warning | controllable | default | a `--delayload` DLL from which the link imports nothing |
 | B6010 | `undefined-symbol` | error | hard | - | a reference no input object, archive or shared library defines |
 | B6011 | `duplicate-symbol` | error | hard | - | more than one input defines the same symbol |
 | B6012 | `relocation` | error | hard | - | a relocation the linker cannot apply, or a value its field cannot hold |
@@ -185,7 +193,7 @@ output of `badc --list-diagnostics`.
 | B6015 | `object-format` | error | hard | - | a construct the selected object format cannot express |
 | B6016 | `link` | error | hard | - | a link-time failure with no more specific row |
 | B7001 | `unknown-argument` | error | hard | - | command-line option or operand the driver does not implement |
-| B7002 | `unknown-warning-option` | warning | controllable | default | a diagnostic pragma names a selector that is neither in the catalogue nor a gcc or clang warning |
+| B7002 | `unknown-warning-option` | warning | controllable | default | a diagnostic pragma names a selector that is neither in the catalog nor a gcc or clang warning |
 | B7003 | `unused-command-line-argument` | ignore | controllable | all,extra | an accepted option that selects nothing in the mode the command line picked |
 | B7004 | `no-input-files` | error | hard | - | the command line names nothing to compile, assemble or link |
 | B7005 | `input-unreadable` | error | hard | - | an input file the driver cannot read |

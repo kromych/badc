@@ -17,8 +17,8 @@ builds need. `badc --help` describes the rest.
 ## Install
 
 Each [release](https://github.com/kromych/badc/releases/latest) has an
-archive for Linux x86-64, Linux ARM64, macOS ARM64, Windows x64 and Windows
-ARM64. The archive holds the `badc` binary, `README.md` and `LICENSE`. The
+archive for Linux x86-64, Linux ARM64, macOS ARM64, Windows x64, and Windows
+ARM64. The archive holds the `badc` binary, `README.md`, and `LICENSE`. The
 headers and the C runtime are built into the binary.
 
 With Rust installed, build from a clone or from crates.io:
@@ -29,7 +29,7 @@ cargo install badc --features full       # from crates.io
 ```
 
 The `badc` binary requires the `full` feature. The default feature set builds
-only the library: the compiler, the optimizer, the interpreter and the JIT,
+only the library: the compiler, the optimizer, the interpreter, and the JIT,
 without the object writers and the linker.
 
 ## First run
@@ -103,8 +103,8 @@ info: wrote file hello for target macos-aarch64
 | `--jit` | compiles for the host in memory and calls `main` |
 | `--interp` | runs the program in badc's SSA interpreter |
 
-Two or more inputs, or any of `-c`, `-l` and `-L`, go through badc's linker.
-An input may be a `.c`, `.i`, `.s` or `.S` source, a `.o` object or a `.a`
+Two or more inputs, or any of `-c`, `-l`, and `-L`, go through badc's linker.
+An input may be a `.c`, `.i`, `.s`, or `.S` source, a `.o` object, or a `.a`
 archive. [`--interp` and `--jit`](interpreter.md) describes the two modes
 that run the program.
 
@@ -113,15 +113,17 @@ that run the program.
 | option | effect |
 |---|---|
 | `--target=<target>` | `macos-aarch64`, `linux-aarch64`, `linux-x64`, `windows-x64` or `windows-arm64`; the default is the host |
-| `-O` | run the SSA optimizer and define `NDEBUG` and `__OPTIMIZE__`; `-O1` to `-O3`, `-Os`, `-Oz`, `-Ofast` and `-Og` mean the same, `-O0` turns it off |
+| `-O` | run the SSA optimizer and define `__OPTIMIZE__`, not `NDEBUG`; `-O1` to `-O3`, `-Os`, `-Oz`, `-Ofast` and `-Og` mean the same, `-O0` turns it off |
 | `-g` | write DWARF debug information |
 | `-o <path>` | the output file |
 | `-D NAME[=VALUE]`, `-U NAME` | define or undefine a macro |
-| `-I <dir>`, `-iquote <dir>`, `-isystem <dir>`, `-include <file>` | header search and forced includes, as in gcc |
+| `-I <dir>`, `-iquote <dir>`, `-isystem <dir>`, `-include <file>` | header search and forced includes |
 | `-L <dir>`, `-l <name>` | library search path and library |
-| `-M`, `-MM`, `-MD`, `-MMD`, `-MF`, `-MT`, `-MQ`, `-MP` | make dependency rules, as in gcc; also `-Wp,-MD,<file>` and `-Wp,-MMD,<file>` |
+| `-M`, `-MM`, `-MD`, `-MMD`, `-MF`, `-MT`, `-MQ`, `-MP` | make dependency rules; also `-Wp,-MD,<file>` and `-Wp,-MMD,<file>` |
 | `-H`, `--show-includes` | print the path of every included header to stderr |
-| `--gnu` | define the GCC identity macros (`__GNUC__` and the rest); off by default |
+| `--gnu` | define the GNU C identity macros (`__GNUC__` and the rest); off by default |
+| `--msvc` | Windows targets: define the MSVC identity macros (`_MSC_VER` and the rest) and leave `__STDC__` undefined; off by default |
+| `-flax-vector-conversions[=all\|integer\|none]` | let two vector types of one size convert implicitly: any two, or two integer ones; none by default, all under `--msvc` |
 | `-ffreestanding` | compile for a freestanding implementation: `__STDC_HOSTED__` is 0 and `-fno-builtin` applies |
 | `--freestanding` | link without badc's startup runtime; the program supplies its entry point |
 | `--list-symbols` | print the built-in keywords, library calls and constants |
@@ -129,9 +131,10 @@ that run the program.
 | `--track-pointers`, `--trace` | interpreter options; `--interp` only |
 
 Options may come before or after the inputs. Under `--jit` and `--interp`,
-the arguments after the source go to the program, except arguments badc
-recognizes as its own options: `badc --jit prog.c -v` prints badc's version.
-badc has no `--` separator.
+every argument after the source goes to the program, as for `tcc -run`:
+`badc --jit prog.c -v` passes `-v` to `prog.c`, and a script whose first line
+is `#!/usr/bin/env -S badc --interp` receives its own options. `--` ends
+badc's arguments: `badc --jit -- prog.c -v` does the same.
 
 An option badc does not implement is an error, not a warning. Some build
 settings that other compilers take as options come from `#pragma`s in the
@@ -152,17 +155,17 @@ unit.c:8: error: bad expression: got `;` (in f) [B2020] [syntax]
     return 1 +;
 ```
 
-`-W<name>`, `-Wno-<name>`, `-Werror=<name>` and `-Wno-error=<name>` select a
+`-W<name>`, `-Wno-<name>`, `-Werror=<name>`, and `-Wno-error=<name>` select a
 diagnostic by its name or its code. `-Wall`, `-Wextra`, `-Wpedantic`,
-`-Werror` and `-w` work as in gcc. `#pragma GCC diagnostic`,
-`#pragma clang diagnostic` and MSVC's `#pragma warning(...)` apply from their
+`-Werror`, and `-w` select groups and severities. `#pragma GCC diagnostic`,
+`#pragma clang diagnostic`, and MSVC's `#pragma warning(...)` apply from their
 position in the source. `badc --explain <name>` describes one diagnostic, and
-`badc --list-diagnostics` prints the catalogue that
+`badc --list-diagnostics` prints the catalog that
 [diagnostics](diagnostics.md) also holds.
 
 ## Debugging
 
-`-g` writes DWARF 4, which lldb, gdb and the profilers read:
+`-g` writes DWARF 4, which lldb, gdb, and the profilers read:
 
 ```sh
 badc -g hello.c
@@ -192,8 +195,13 @@ Process 52314 stopped
 (int) a = 123
 ```
 
-On the Windows targets the DWARF sections are in the PE image; badc writes no
-PDB.
+On the Windows targets the DWARF sections are in the PE image, and a `-g` link
+also writes the program database beside it (`hello.exe` gets `hello.pdb`),
+which the image's debug directory names by its absolute path. The PDB holds
+the CodeView types, the procedures with their frame-pointer-relative locals,
+the line tables, and the global and public symbols of every unit the image
+carries DWARF for. `--strip-debug` (`-Wl,-S`) drops both; badc writes no
+assembly, so the driver's own `-S` is refused.
 
 Two options help when badc itself is the suspect:
 

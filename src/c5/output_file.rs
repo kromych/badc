@@ -28,11 +28,28 @@ pub fn write_output_file(path: &Path, bytes: &[u8], executable: bool) -> io::Res
     };
     let res = file.write_all(bytes);
     drop(file);
-    if let Err(e) = res.and_then(|()| std::fs::rename(&tmp, path)) {
+    if let Err(e) = res.and_then(|()| replace(&tmp, path)) {
         let _ = std::fs::remove_file(&tmp);
         return Err(e);
     }
     Ok(())
+}
+
+/// Rename `tmp` over `path`. Windows refuses the rename with
+/// ERROR_ACCESS_DENIED or ERROR_SHARING_VIOLATION while another holder has
+/// the destination open without delete sharing, which can outlast, briefly,
+/// the process an image ran in; the rename is retried for two seconds.
+fn replace(tmp: &Path, path: &Path) -> io::Result<()> {
+    #[cfg(windows)]
+    for _ in 0..200 {
+        match std::fs::rename(tmp, path) {
+            Err(e) if matches!(e.raw_os_error(), Some(5 | 32)) => {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            done => return done,
+        }
+    }
+    std::fs::rename(tmp, path)
 }
 
 /// Create a file next to `path` under a name no other file has.
@@ -121,6 +138,31 @@ mod tests {
         assert_eq!(s, b"old");
         assert_eq!(std::fs::read(&p).unwrap(), b"new");
         drop(held);
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// A destination another handle holds without delete sharing refuses
+    /// the rename until the handle closes; the write waits for it.
+    #[cfg(windows)]
+    #[test]
+    fn a_held_destination_is_replaced_once_released() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let d = scratch("held");
+        let p = d.join("held.exe");
+        std::fs::write(&p, b"old").unwrap();
+        const FILE_SHARE_READ: u32 = 1;
+        let held = std::fs::OpenOptions::new()
+            .read(true)
+            .share_mode(FILE_SHARE_READ)
+            .open(&p)
+            .unwrap();
+        let release = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            drop(held);
+        });
+        write_output_file(&p, b"new", true).unwrap();
+        release.join().unwrap();
+        assert_eq!(std::fs::read(&p).unwrap(), b"new");
         let _ = std::fs::remove_dir_all(&d);
     }
 

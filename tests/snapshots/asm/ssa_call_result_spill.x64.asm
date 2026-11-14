@@ -34,10 +34,8 @@ Disassembly of section .text:
                	retq
 
 <bs1>:
-               	movq	%rdi, %rax
-               	rorq	$0xe, %rax
-               	movq	%rdi, %rcx
-               	rorq	$0x12, %rcx
+               	rorxq	$0xe, %rdi, %rax
+               	rorxq	$0x12, %rdi, %rcx
                	xorq	%rcx, %rax
                	rorq	$0x29, %rdi
                	xorq	%rdi, %rax
@@ -77,13 +75,13 @@ Disassembly of section .text:
                	movq	%rax, %r10
                	movq	0x38(%rsp), %rax
                	addq	%r10, %rax
-               	movq	%rax, %r10
-               	addq	0x58(%rsp), %r10
-               	movq	%r10, 0x58(%rsp)
+               	movq	%rax, %rcx
+               	addq	0x58(%rsp), %rcx
                	movq	<rip>, %rax # <addr>
+               	movq	%rcx, 0x30(%rsp)
                	movq	%r13, %rdi
                	callq	*%rax
-               	movq	0x58(%rsp), %rcx
+               	movq	0x30(%rsp), %rcx
                	movq	0x50(%rsp), %rdx
                	addq	%rcx, %rdx
                	addq	%rcx, %rax

@@ -82,31 +82,6 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movabsq	$0x4004000000000000, %rax # imm = 0x4004000000000000
-               	movabsq	$0x4011000000000000, %rcx # imm = 0x4011000000000000
-               	movabsq	$0x3ff0000000000000, %rdx # imm = 0x3FF0000000000000
-               	movq	%rdx, %xmm14
-               	movq	%rax, %xmm15
-               	vaddsd	%xmm15, %xmm14, %xmm0
-               	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
-               	movq	%rax, %xmm15
-               	addsd	%xmm15, %xmm0
-               	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
-               	movq	%rax, %xmm15
-               	addsd	%xmm15, %xmm0
-               	movq	%rcx, %xmm15
-               	addsd	%xmm15, %xmm0
-               	movabsq	$0x4026800000000000, %rax # imm = 0x4026800000000000
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
-               	jp	<addr>
-               	je	<addr>
-               	movl	$0x2, %eax
-               	leave
-               	retq
-               	movq	$0x29, -0x8(%rbp)
-               	movq	$0x2a, -0x8(%rbp)
                	movl	$0x3, %edi
                	movl	$0xa, %esi
                	movl	$0x14, %edx
@@ -116,8 +91,8 @@ Disassembly of section .text:
                	cmpq	$0x3f, %rax
                	je	<addr>
                	movl	$0x5, %eax
-               	leave
+               	popq	%rbp
                	retq
                	movl	$0x2a, %eax
-               	leave
+               	popq	%rbp
                	retq

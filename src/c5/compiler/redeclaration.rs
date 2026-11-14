@@ -89,12 +89,12 @@ pub(super) enum LinkClaim {
     Prior,
 }
 
-/// What a function definition adds to its type: its line and its GNU forms.
+/// What a function definition adds to its type: its site and its GNU forms.
 pub(super) struct Definition {
     pub(super) ret: Spelled,
     pub(super) ret_fn: FnSig,
     pub(super) conv: Option<CallConv>,
-    pub(super) line: usize,
+    pub(super) at: super::Site,
     pub(super) implicit_int: bool,
     pub(super) extern_inline: bool,
     pub(super) claim: LinkClaim,
@@ -172,7 +172,7 @@ fn compose(prior: DeclaredType, new: DeclaredType) -> DeclaredType {
 impl Compiler {
     /// The convention a declaration of function `idx` naming `named` gives
     /// it, and whether one of its declarations named it: the first's, in any
-    /// scope, as in gcc and clang; a later one naming another is an error.
+    /// scope; a later one naming another is an error.
     pub(super) fn declared_conv(
         &self,
         idx: usize,
@@ -223,7 +223,7 @@ impl Compiler {
         params: Params,
     ) -> Result<(), C5Error> {
         let new = DeclaredType::Function(def.ret, params, def.conv, def.ret_fn);
-        self.fold_linked(idx, new, def.line, (def.implicit_int, false), def.claim)?;
+        self.fold_linked(idx, new, def.at.line, (def.implicit_int, false), def.claim)?;
         // GNU: the implicit `int` keeps the declared return type.
         if def.implicit_int
             && let Some(LinkedEntity {
@@ -235,7 +235,7 @@ impl Compiler {
             self.symbols[idx].type_ = ret.ty;
             self.symbols[idx].incomplete_enum_tag = ret.enum_tag;
         }
-        let at = (def.line, self.intern_source_file());
+        let at = (def.at.line, self.intern_source_file());
         let prior = self
             .linked_entities
             .get_mut(self.symbols[idx].name.as_str())
@@ -244,7 +244,7 @@ impl Compiler {
             Some(((line, file), extern_inline)) if !extern_inline || def.extern_inline => Err(self
                 .compile_err_at(
                     Code::INVALID_DECLARATION,
-                    def.line,
+                    def.at.line,
                     format!(
                         "redefinition of `{}`\n  previous definition: {}:{line}",
                         self.symbols[idx].name, self.source_files[file as usize]
@@ -419,17 +419,16 @@ impl Compiler {
             }
             self.warn_at(
                 Code::REDECLARATION_MISMATCH,
-                line,
+                self.line_site(line),
                 format!(
                     "redeclaration of `{name}` differs from the previous declaration\n  \
                      previous: {was}\n  now:      {now}"
                 ),
             );
         }
-        // C99 6.2.2p7: one identifier with both linkages is undefined, which
-        // gcc and clang reject, after a type conflict as gcc orders them. MSVC
-        // and clang for a windows-msvc triple let a `static` declaration make
-        // an external one internal.
+        // C99 6.2.2p7: one identifier with both linkages is undefined; it is
+        // rejected, a type conflict above being reported first. Under MS
+        // extensions a `static` declaration makes an external one internal.
         let conflict = match claim {
             LinkClaim::Internal if !prior.internal && !self.target.ms_extensions() => {
                 Some(("static", "non-static"))
@@ -463,7 +462,7 @@ impl Compiler {
         (rb, pb): (Spelled, &Params),
     ) -> Verdict {
         // C17 6.7.6.3p5: a function returns the unqualified version of its
-        // declared type, which gcc applies in every mode.
+        // declared type, applied in every language mode.
         let ret = |s: Spelled| unqualified_version_ty(self.spelled_ty(s));
         if !self.tags_agree(ret(ra), ret(rb), false) {
             return Verdict::Conflict;

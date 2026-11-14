@@ -55,9 +55,9 @@ impl C5Error {
         Self::of(Diagnostic::new(code, Level::Error, None, text))
     }
 
-    /// A broken invariant of badc's own. The marker mirrors gcc's and
-    /// clang's, so the reader can tell the failure is badc's to fix and
-    /// worth filing. Anything reachable by valid input belongs to
+    /// A broken invariant of badc's own. The `internal compiler error`
+    /// marker tells the reader the failure is badc's to fix and worth
+    /// filing. Anything reachable by valid input belongs to
     /// [`Self::hard`] instead, so the marker stays a reliable signal.
     pub(crate) fn internal(text: impl AsRef<str>) -> Self {
         Self::hard(
@@ -66,9 +66,6 @@ impl C5Error {
         )
     }
 
-    /// Put the diagnostics the failed phase reported before this error
-    /// ahead of it, so none is lost when the error unwinds past the
-    /// sink holding them.
     /// The error with `f` applied to each of its diagnostics.
     pub(crate) fn map_diagnostics(self, f: impl FnMut(&mut Diagnostic)) -> Self {
         match self {
@@ -80,6 +77,9 @@ impl C5Error {
         }
     }
 
+    /// Put the diagnostics the failed phase reported before this error
+    /// ahead of it, so none is lost when the error unwinds past the
+    /// sink holding them.
     pub(crate) fn after(self, mut earlier: Vec<Diagnostic>) -> Self {
         match self {
             C5Error::Compile(mine) => {
@@ -103,7 +103,9 @@ impl fmt::Display for C5Error {
                 }
                 Ok(())
             }
-            C5Error::Runtime(msg) => write!(f, "error: runtime: {}", msg),
+            C5Error::Runtime(msg) => {
+                write!(f, "error: runtime: {}", crate::c5::mach_o_name::shown(msg))
+            }
         }
     }
 }

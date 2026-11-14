@@ -12,7 +12,7 @@ Fixes #
 
 ## Fix
 
-<!-- The rule the change follows (C99 clause, platform ABI, gcc / clang /
+<!-- The rule the change follows (C17 clause, platform ABI, gcc / clang /
      MSVC / GNU ld / GNU as behavior) and where badc now applies it. -->
 
 ## Regression test

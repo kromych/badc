@@ -201,6 +201,18 @@ pub(crate) fn compute_frame(
     target: Target,
     max_call_scratch: u32,
 ) -> Frame {
+    compute_frame_with_tail_calls(func, alloc, abi, target, max_call_scratch, &[])
+}
+
+/// [`compute_frame`] for a body whose calls at `tail_calls` are tail calls.
+pub(crate) fn compute_frame_with_tail_calls(
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    abi: super::Abi,
+    target: Target,
+    max_call_scratch: u32,
+    tail_calls: &[usize],
+) -> Frame {
     let base = super::ssa::emit_common::compute_frame_base(func, alloc);
     let (declared_locals_bytes, alloc_spill_bytes, saved_gpr_bytes) =
         (base.locals, base.spills, base.saved_gprs);
@@ -276,9 +288,12 @@ pub(crate) fn compute_frame(
         alloc_spill_base: upper_bytes,
         canary_bytes,
         uses_x19,
-        keeps_record: super::ssa::emit_common::body_keeps_frame_record(func, target, |i| {
-            intrinsic_keeps_frame(i, abi)
-        }),
+        keeps_record: super::ssa::emit_common::body_keeps_frame_record(
+            func,
+            target,
+            tail_calls,
+            |i| intrinsic_keeps_frame(i, abi),
+        ),
         fixed_regs,
         fp_scratch: alloc.fp_scratch,
         count_fp: count_fp_register(func, alloc, abi, target),
@@ -458,6 +473,7 @@ pub(super) fn outgoing_bytes(
                             arg_aggs,
                             ret_agg: None,
                             ret_slot_off: 0,
+                            ends_path: false,
                         },
                         variadic_targets.contains(target_pc),
                         *fixed_args,
@@ -485,6 +501,7 @@ pub(super) fn outgoing_bytes(
                                 arg_aggs,
                                 ret_agg: None,
                                 ret_slot_off: 0,
+                                ends_path: false,
                             },
                             imp.is_variadic,
                             imp.fixed_args,
@@ -509,6 +526,7 @@ pub(super) fn outgoing_bytes(
                         arg_aggs,
                         ret_agg: *ret_agg,
                         ret_slot_off: 0,
+                        ends_path: false,
                     };
                     let mut plan = ops.plan(&func.agg_descs, abi, *callee_variadic, *fixed_args);
                     // Mirror `emit_call_indirect`'s register selection: a
@@ -682,8 +700,8 @@ pub(super) fn asm_operand_regs(
 /// registers it writes -- the clobber list (minus x16 / x17 and bit 31)
 /// plus every operand register -- that `preserve` names as holding
 /// something across the block. A `w` operand is a scalar of 1 to 8 bytes
-/// or a 16-byte vector. A `-ffixed-` register holds nothing of the compiler's and is
-/// never saved, as under gcc.
+/// or a 16-byte vector. A `-ffixed-` register holds nothing of the
+/// compiler's and is never saved.
 pub(super) fn asm_save_masks(
     asm: &super::super::ir::AsmBlock,
     op_reg: &[Option<u8>],
@@ -788,12 +806,17 @@ pub(crate) fn asm_binds_directly(
             return false;
         }
         if op.is_output && !addressed {
-            if !op.value || op.is_rw || op.early_clobber {
+            if !op.value || op.early_clobber {
                 return false;
             }
+            // A read-write operand's register is loaded before the template,
+            // so its scratch is one no input shares.
+            let rw = usize::from(op.is_rw);
             match op.constraint {
-                C::Reg if op.width <= 8 => gp_out += 1,
-                C::Fp => fp_out += 1,
+                C::Reg if op.width <= 8 => (gp_out, gp_in) = (gp_out + 1, gp_in + rw),
+                C::Fp if !op.is_rw || op.width <= 8 || op.width == 16 => {
+                    (fp_out, fp_in) = (fp_out + 1, fp_in + rw)
+                }
                 _ => return false,
             }
             continue;
@@ -820,9 +843,7 @@ pub(crate) fn asm_binds_directly(
                     gp_in += 1;
                 }
             }
-            C::Fp if !op.static_arg && (op.width <= 8 || (op.width == 16 && op.value)) => {
-                fp_in += 1
-            }
+            C::Fp if !op.static_arg && (op.width <= 8 || op.width == 16) => fp_in += 1,
             _ => return false,
         }
     }

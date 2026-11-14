@@ -12,9 +12,12 @@
  *
  * Layout: four saved contexts -- slot 0 is `efi_main`, slots 1..3 are the
  * threads. The first tick saves `efi_main` and switches into thread 1; ticks
- * round-robin 1->2->3->1...; after MAX_TICKS the scheduler stops the timer and
- * switches back to slot 0, so `efi_main` resumes, prints the final marker, and
- * halts. The printed markers are deterministic, so demos/kernel/smoke.py can
+ * round-robin 1->2->3->1...; once every thread has printed MIN_TURNS lines (or
+ * after MAX_TICKS, the bound on a starved thread) the scheduler stops the timer
+ * and switches back to slot 0, so `efi_main` resumes, prints the final marker,
+ * and halts. The stop follows the threads' progress, not the tick count: under
+ * TCG the timer follows host time, so on a loaded host the ticks can outrun a
+ * thread that has yet to run an instruction. The printed markers are deterministic, so demos/kernel/smoke.py can
  * assert on them.
  *
  * Build:  badc --target=windows-x64 demos/kernel/preempt.c -o preempt-x64.efi
@@ -43,7 +46,8 @@ typedef void *EFI_HANDLE;
 #define NTHREADS 3
 #define NCTX (NTHREADS + 1) /* slot 0 is efi_main */
 #define STACK_WORDS 1024    /* 8 KiB per thread stack */
-#define MAX_TICKS 24        /* ~8 turns per thread, then stop */
+#define MIN_TURNS 2         /* lines each thread prints before the stop */
+#define MAX_TICKS 2400      /* the stop for a thread that never runs */
 #define SPIN_ITERS 60000u   /* busy-loop iterations between printed lines */
 #define SNAPSHOT_EVERY 16u  /* busy-loop iterations per record copy */
 
@@ -54,7 +58,17 @@ static UINTN g_ctx_sp[NCTX]; /* saved stack pointer per context */
 static int g_cur;            /* running context (0 = efi_main) */
 static _Atomic unsigned g_ticks;
 static _Atomic unsigned g_done;
+static _Atomic unsigned g_turns[NTHREADS]; /* lines each thread printed */
 static UINTN g_stacks[NTHREADS][STACK_WORDS];
+
+static int every_thread_printed(void) {
+    for (int i = 0; i < NTHREADS; i++) {
+        if (atomic_load_explicit(&g_turns[i], memory_order_acquire) < MIN_TURNS) {
+            return 0;
+        }
+    }
+    return 1;
+}
 
 /* The serial port is shared by all threads; the lock keeps each printed line
  * from being split by a context switch mid-write. */
@@ -292,7 +306,7 @@ UINTN schedule(UINTN sp) {
     unsigned ticks = atomic_load_explicit(&g_ticks, memory_order_relaxed) + 1;
     atomic_store_explicit(&g_ticks, ticks, memory_order_release);
     int next;
-    if (ticks >= MAX_TICKS) {
+    if (every_thread_printed() || ticks >= MAX_TICKS) {
         pit_stop();
         atomic_store_explicit(&g_done, 1, memory_order_release);
         next = 0; /* back to efi_main */
@@ -439,7 +453,7 @@ UINTN schedule(UINTN sp) {
     unsigned ticks = atomic_load_explicit(&g_ticks, memory_order_relaxed) + 1;
     atomic_store_explicit(&g_ticks, ticks, memory_order_release);
     int next;
-    if (ticks >= MAX_TICKS) {
+    if (every_thread_printed() || ticks >= MAX_TICKS) {
         mmio_w(GICD + 0x180, 1u << VTIMER_PPI); /* GICD_ICENABLER0: mask PPI 27 */
         atomic_store_explicit(&g_done, 1, memory_order_release);
         next = 0;
@@ -652,6 +666,7 @@ static void thread_main(int id) {
     unsigned turn = 0, mine = 0;
     for (;;) {
         print_line(id, turn++);
+        atomic_store_explicit(&g_turns[id], turn, memory_order_release);
         for (unsigned d = 0; d < SPIN_ITERS; d++) {
             g_inflight[id] = 1;
             SHARED_INCREMENT();
@@ -711,7 +726,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, void *SystemTable) {
     arch_start_scheduler(SystemTable);
 
     /* The first tick saves this context and switches to thread 1; when the
-     * scheduler has run MAX_TICKS it stops the timer and switches back here. */
+     * scheduler stops it stops the timer and switches back here. */
     while (!atomic_load_explicit(&g_done, memory_order_acquire)) {
         halt();
     }

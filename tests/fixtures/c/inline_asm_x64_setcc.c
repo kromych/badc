@@ -1,5 +1,5 @@
 // x86-64 setcc inline asm: materialize a signed comparison into a byte via the
-// condition-code setters reached through the catalogue passthrough (sete, setl,
+// condition-code setters reached through the catalog passthrough (sete, setl,
 // setg). The one-byte output holds exactly the flag. Returns 42 only when the
 // true and false results are both correct. Native x86-64 only.
 

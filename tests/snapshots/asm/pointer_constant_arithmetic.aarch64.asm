@@ -58,10 +58,10 @@ Disassembly of section .text:
                	mov	x0, #0x7                // =7
                	ret
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x58]
+               	ldrsw	x0, [x0, #0x50]
                	cbz	w0, <addr>
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x60]
+               	ldrsw	x0, [x0, #0x54]
                	cbnz	w0, <addr>
                	mov	x0, #0x8                // =8
                	ret

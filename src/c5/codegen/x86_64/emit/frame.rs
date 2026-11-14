@@ -76,6 +76,10 @@ pub(crate) struct Frame {
     /// The FP scratch xmm registers, outside the allocator's banks; see
     /// `RegBanks::fp_scratch`.
     pub fp_scratch: [u8; super::ssa::reg_alloc::FP_SCRATCH_COUNT],
+    /// The body holds 256- or 512-bit values, so a `vzeroupper` precedes
+    /// each call and return: the legacy SSE code on either side would
+    /// otherwise carry the upper halves as a dependency.
+    pub wide_regs: bool,
     /// The regions `frame_bytes` sums.
     pub parts: super::ssa::emit_common::FrameStack,
 }
@@ -98,6 +102,17 @@ pub(crate) fn compute_frame(
     alloc: &Allocation,
     abi: super::Abi,
     target: Target,
+) -> Frame {
+    compute_frame_with_tail_calls(func, alloc, abi, target, &[])
+}
+
+/// [`compute_frame`] for a body whose calls at `tail_calls` are tail calls.
+pub(crate) fn compute_frame_with_tail_calls(
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    abi: super::Abi,
+    target: Target,
+    tail_calls: &[usize],
 ) -> Frame {
     let base = super::ssa::emit_common::compute_frame_base(func, alloc);
     let (declared_locals_bytes, alloc_spill_bytes, saved_gpr_bytes) =
@@ -169,11 +184,24 @@ pub(crate) fn compute_frame(
         frame_bytes,
         alloc_spill_base: upper_bytes,
         canary_bytes,
-        keeps_record: super::ssa::emit_common::body_keeps_frame_record(func, target, |i| {
-            intrinsic_keeps_frame(i, abi)
-        }),
+        keeps_record: super::ssa::emit_common::body_keeps_frame_record(
+            func,
+            target,
+            tail_calls,
+            |i| intrinsic_keeps_frame(i, abi),
+        ),
         fixed_regs,
         fp_scratch: alloc.fp_scratch,
+        wide_regs: alloc
+            .wide
+            .iter()
+            .any(|&w| w >= super::ssa::reg_alloc::VecWidth::V256)
+            || func.insts.iter().any(|i| match i {
+                Inst::Simd { op, .. } | Inst::SimdVal { op, .. } => {
+                    crate::c5::simd::get(*op).bytes >= 32
+                }
+                _ => false,
+            }),
         parts: super::ssa::emit_common::FrameStack {
             record: 0,
             locals: declared_locals_bytes,
@@ -641,10 +669,11 @@ pub(super) struct BoundPlan {
 
 /// Bind each input to its value's register or a scratch it is loaded into,
 /// and each value output to its value's register or a scratch no other
-/// output holds, which a non-`&` output may share with an input (GCC's
-/// operand model). The scratch is [`BOUND_SCRATCH`] less the clobbers, the
-/// `fixed` registers, `live_gp` (the registers of values live across the
-/// statement) and, for an input, every operand's. `None` when it runs out.
+/// output holds, which a non-`&` output may share with an input (the GNU C
+/// extended asm operand model). The scratch is [`BOUND_SCRATCH`] less the
+/// clobbers, the `fixed` registers, `live_gp` (the registers of values live
+/// across the statement) and, for an input, every operand's. `None` when it
+/// runs out.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn plan_bound_operands(
     func: &FunctionSsa,

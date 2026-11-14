@@ -105,8 +105,7 @@ Disassembly of section .text:
                	leaq	-<rip>, %rax # <addr>
                	movq	%rax, -0x8(%rbp)
                	movl	$0x3, %edi
-               	movq	-0x8(%rbp), %rax
-               	callq	*%rax
+               	callq	<addr>
                	cmpl	$0x4, %eax
                	je	<addr>
                	movl	$0x4, %eax

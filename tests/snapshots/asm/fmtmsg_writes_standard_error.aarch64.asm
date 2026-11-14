@@ -13,31 +13,6 @@ Disassembly of section .text:
                	brk	#0x1
                	brk	#0x1
 
-<__c5_lazy_stream>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x1, [x0, #0x10]
-               	cbz	x1, <addr>
-               	ldr	x0, [x0, #0x10]
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x0, #0x0                // =0
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	bl	<addr>
-               	cbz	x0, <addr>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x0, [x0]
-               	str	x0, [x1, #0x10]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0, #0x10]
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-
 <main>:
                	stp	x20, x21, [sp, #-0x150]!
                	stp	x22, x23, [sp, #0x10]
@@ -62,8 +37,9 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>
-               	mov	x0, #0x2                // =2
-               	bl	<addr>
+               	adrp	x0, <page>
+               	ldr	x0, [x0, <lo12>]
+               	ldr	x0, [x0]
                	bl	<addr>
                	mov	x0, #0x2                // =2
                	bl	<addr>
@@ -92,8 +68,9 @@ Disassembly of section .text:
                	mov	x5, x1
                	bl	<addr>
                	mov	x23, x0
-               	mov	x0, #0x2                // =2
-               	bl	<addr>
+               	adrp	x0, <page>
+               	ldr	x0, [x0, <lo12>]
+               	ldr	x0, [x0]
                	bl	<addr>
                	mov	x1, #0x2                // =2
                	mov	x0, x21
@@ -130,11 +107,11 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	bl	<addr>
                	sxtw	x0, w0
-               	cbz	x0, <addr>
-               	mov	x0, #0x4                // =4
+               	mov	x1, #0x4                // =4
+               	mov	x2, #0x0                // =0
+               	cmp	x0, #0x0
+               	csel	x0, x1, x2, ne
                	ldp	x29, x30, [sp, #0x140]
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x150
                	ret
-               	mov	x0, #0x0                // =0
-               	b	<addr>

@@ -23,6 +23,13 @@ enum Operand {
 }
 
 impl Compiler {
+    /// Whether a call of `name` lowers to its intrinsic: `#pragma function`
+    /// makes it a call of the function.
+    pub(super) fn is_call_site_intrinsic(&self, name: &str) -> bool {
+        super::super::preprocessor::builtins::is_ms_intrinsic(name, self.target)
+            && !self.pp_functions.contains(name)
+    }
+
     fn ms_scalar_ty(&self, s: Scalar) -> i64 {
         let unsigned = |t: Ty| t as i64 | UNSIGNED_BIT;
         match s {
@@ -37,6 +44,7 @@ impl Compiler {
             Scalar::LLong => Ty::LongLong as i64,
             Scalar::ULLong => unsigned(Ty::LongLong),
             Scalar::VoidPtr => void_ptr_ty(),
+            Scalar::Void => void_ty(),
         }
     }
 
@@ -223,29 +231,69 @@ impl Compiler {
             }
         }
         self.next()?;
+        self.ms_noop_value();
+        Ok(())
+    }
+
+    /// The value of `__noop`, called or named alone as MSVC accepts it: the
+    /// `int` 0.
+    pub(super) fn ms_noop_value(&mut self) {
         self.mark_emit_other();
         let int = Ty::Int as i64;
         self.ty = int;
         self.ast_acc = Some(self.ast_node(Expr::IntLit { val: 0, ty: int }));
-        Ok(())
     }
 
-    /// `__va_start(&ap, ...)`, the `(` consumed, as clang lowers it: the first
-    /// argument converts to `va_list *` and the node is `__builtin_va_start`'s,
-    /// whose lowering reads the prototype; what follows, the last fixed
-    /// parameter (x64) or its address, size and alignment (arm64), is
-    /// unevaluated. The x64 form's parameter takes `va_start`'s `-Wvarargs`
-    /// checks; clang makes none on the arm64 form.
+    /// Whether the undeclared identifier `name` is `__noop`.
+    pub(super) fn is_bare_noop(&self, name: &str) -> bool {
+        self.is_call_site_intrinsic(name)
+            && ms_intrinsic::lookup(name, self.target).is_some_and(|i| i.op == Op::Noop)
+    }
+
+    /// `__va_start(&ap, ...)`, the `(` consumed: the first argument converts
+    /// to `va_list *` and the node is `__builtin_va_start`'s, whose lowering
+    /// reads the prototype; what follows, the last fixed parameter (x64) or
+    /// its address, size and alignment (arm64), is unevaluated. The x64
+    /// form's parameter takes `va_start`'s `-Wvarargs` checks; the arm64
+    /// form takes none.
     fn parse_ms_va_start(&mut self, name: &str) -> Result<(), C5Error> {
         self.require_variadic_function()?;
         let list_ty = add_ptr_level(add_ptr_level(plain_char_ty(self.lex.char_signed)));
         let list = self.parse_builtin_value(name, 0, list_ty)?;
         let mut rest = alloc::vec::Vec::new();
+        let mut tys = alloc::vec::Vec::new();
         while self.list_separator(')', "argument")? {
-            rest.push((self.lex.line, self.discard_unevaluated_node()?));
+            let at = self.site();
+            let (node, ty) = self.discard_unevaluated_typed()?;
+            rest.push((at, node));
+            tys.push(ty);
         }
-        if let [(line, last)] = rest[..] {
-            self.check_va_start_operand(last, line);
+        if let [(at, last)] = rest[..] {
+            self.check_va_start_operand(last, at);
+        }
+        // arm64's form, `__va_start(&ap, &v, _SLOTSIZEOF(v), __alignof(v), &v)`:
+        // the operands go unevaluated; the second must be the named
+        // argument's address and the third its slot size.
+        if self.target.is_windows() && self.target.is_aarch64() {
+            let wrong = match tys[..] {
+                [] | [_] => Some(alloc::string::String::from(
+                    "takes the named argument's address and slot size",
+                )),
+                [addr, ..] if !super::types::is_pointer_ty(addr) => {
+                    Some(alloc::string::String::from(
+                        "takes the named argument's address as its second operand",
+                    ))
+                }
+                [_, size, ..] if super::types::unqualified_object_ty(size) != self.size_t_ty() => {
+                    Some(alloc::string::String::from(
+                        "takes the slot size as `size_t`, its third operand",
+                    ))
+                }
+                _ => None,
+            };
+            if let Some(what) = wrong {
+                return Err(self.compile_err(Code::INVALID_ARGUMENTS, format!("`{name}` {what}")));
+            }
         }
         self.next()?;
         self.mark_emit_other();

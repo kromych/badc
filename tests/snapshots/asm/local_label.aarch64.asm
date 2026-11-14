@@ -14,9 +14,8 @@ Disassembly of section .text:
                	brk	#0x1
 
 <label_address>:
-               	sxtw	x0, w0
                	adr	x1, <addr>
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	br	x1
                	mov	x0, #0x8                // =8
                	ret

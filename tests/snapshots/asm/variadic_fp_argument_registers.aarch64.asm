@@ -257,7 +257,7 @@ Disassembly of section .text:
                	sxtw	x1, w1
                	scvtf	s3, x1
                	adrp	x16, <page>
-               	ldr	s4, [x16, #0x38]
+               	ldr	s4, [x16, #0x30]
                	fmadd	s0, s0, s4, s3
                	ldr	d3, [x29, #0x60]
                	adrp	x16, <page>
@@ -527,10 +527,10 @@ Disassembly of section .text:
                	mov	x5, #0x6                // =6
                	mov	x6, #0x7                // =7
                	mov	x7, #0x8                // =8
-               	mov	x8, #0x9                // =9
                	fmov	d0, #0.25000000
                	fmov	s1, #2.50000000
-               	str	x8, [sp]
+               	mov	x16, #0x9               // =9
+               	str	x16, [sp]
                	fmov	d17, d1
                	fmov	d1, d0
                	fmov	d0, d17
@@ -540,24 +540,6 @@ Disassembly of section .text:
                	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0xd                // =13
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	fmov	d0, #2.50000000
-               	fmov	d1, #3.50000000
-               	fmov	d2, #10.00000000
-               	fmadd	d0, d0, d2, d1
-               	adrp	x16, <page>
-               	ldr	d1, [x16, #0x30]
-               	fcmp	d0, d1
-               	b.eq	<addr>
-               	mov	x0, #0x6                // =6
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	fcmp	d0, d1
-               	b.eq	<addr>
-               	mov	x0, #0x7                // =7
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -44,7 +44,7 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// True when `ty` is the GCC 128-bit `__int128` as a value, not a
+    /// True when `ty` is the 128-bit `__int128` as a value, not a
     /// pointer to one. It shares the struct machinery, but a cast to or
     /// from a scalar converts the value rather than passing an
     /// address.
@@ -338,7 +338,7 @@ pub(super) fn lvalue_shape_label(expr: &Expr) -> &'static str {
         Expr::VlaSizeof { .. } => "VlaSizeof",
         Expr::StmtExpr { .. } => "StmtExpr",
         Expr::CheckedArith { .. } => "CheckedArith",
-        Expr::X86Simd { .. } => "X86Simd",
+        Expr::Simd { .. } => "Simd",
         Expr::MsIntrinsic { .. } => "MsIntrinsic",
         Expr::MemTransfer { .. } => "MemTransfer",
         Expr::InlineAsm(_) => "InlineAsm",

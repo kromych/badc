@@ -303,9 +303,8 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cmp	x0, #0x3
                	b.ne	<addr>
-               	fmov	s0, #-2.00000000
-               	fmov	s1, #3.00000000
-               	fdiv	s0, s0, s1
+               	adrp	x16, <page>
+               	ldr	s0, [x16]
                	bl	<addr>
                	fmov	s1, #-1.00000000
                	fcmp	s0, s1

@@ -36,51 +36,41 @@ Disassembly of section .text:
                	movl	$0x63, %eax
                	retq
 
-<second_thread_result>:
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	pushq	%r12
+               	subq	$0x28, %rsp
                	pushq	%rbx
+               	movq	%fs:0x0, %rax
+               	addq	$-0x8, %rax
+               	movl	$0x7, (%rax)
                	xorl	%edi, %edi
                	movl	$0x2, %esi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %rbx
                	leaq	<rip>, %rsi
                	movq	%rbx, %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
-               	movq	%rax, %r12
+               	movq	%rax, %r10
+               	movq	%r10, 0x18(%rsp)
                	leaq	<rip>, %rsi
                	movq	%rbx, %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %rbx
                	leaq	-0x10(%rbp), %rdi
                	xorl	%esi, %esi
                	leaq	-<rip>, %rdx # <addr>
+               	movq	0x18(%rsp), %r11
                	movq	%rsi, %rcx
-               	callq	*%r12
+               	callq	*%r11
                	movq	-0x10(%rbp), %rdi
                	leaq	-0x8(%rbp), %rsi
                	callq	*%rbx
                	movq	-0x8(%rbp), %rax
-               	popq	%rbx
-               	popq	%r12
-               	leave
-               	retq
-
-<main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movq	%fs:0x0, %rax
-               	addq	$-0x8, %rax
-               	movl	$0x7, (%rax)
-               	callq	<addr>
                	cmpq	$0x63, %rax
                	je	<addr>
-               	popq	%rbp
+               	popq	%rbx
+               	leave
                	retq
                	movq	%fs:0x0, %rax
                	addq	$-0x8, %rax
@@ -88,8 +78,10 @@ Disassembly of section .text:
                	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0x4, %eax
-               	popq	%rbp
+               	popq	%rbx
+               	leave
                	retq
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%rbx
+               	leave
                	retq

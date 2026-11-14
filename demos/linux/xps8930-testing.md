@@ -259,7 +259,7 @@ runs keeps the variable store from filling.
 
 The stock command line carries `rhgb quiet`, which suppresses exactly the
 messages worth having. Drop both from the badc entry. Leave
-`/etc/default/grub` alone so the stock entries keep their normal behaviour.
+`/etc/default/grub` alone so the stock entries keep their normal behavior.
 
 ## Preparation, in order
 
@@ -400,7 +400,7 @@ a stock boot goes to the collector as well -- which is what lets the route be
 proved before a badc kernel depends on it. After `arm`, systemd pets a
 hardware watchdog with a one-minute timeout on **every** boot, stock kernels
 included. A stock system that wedges hard enough to stop systemd from petting
-it will therefore reset itself rather than sit there. That is the intended behaviour -- it is what makes an unattended
+it will therefore reset itself rather than sit there. That is the intended behavior -- it is what makes an unattended
 badc boot recoverable -- but it applies machine-wide, and it is live from the
 moment `arm` runs, not from the first badc boot.
 

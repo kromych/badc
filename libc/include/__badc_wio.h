@@ -2,9 +2,10 @@
 // <io.h> and <wchar.h> both include, with its prototypes and its
 // _wfinddata64_t; mingw-w64 declares them in both headers too. Each binds to
 // msvcrt.dll, which exports it on both targets. _wfindfirst and
-// _wfindnext are msvcrt.dll's entries over _wfinddata_t: 64-bit times and a
-// 32-bit size. ucrtbase.dll alone exports the 32 / 32i64 / 64i32 find forms
-// and _wsopen_dispatch, which are not declared.
+// _wfindnext are msvcrt.dll's entries over _wfinddata_t, which the UCRT
+// names _wfinddata64i32_t: 64-bit times and a 32-bit size. ucrtbase.dll
+// alone exports the 32 / 32i64 / 64i32 find forms and _wsopen_dispatch,
+// which are not declared.
 
 #pragma once
 
@@ -12,14 +13,15 @@
 
 #include <corecrt.h>
 
-struct _wfinddata_t {
+struct _wfinddata64i32_t {
     unsigned int attrib;
-    long long time_create;
-    long long time_access;
-    long long time_write;
-    unsigned int size;
+    __time64_t time_create;
+    __time64_t time_access;
+    __time64_t time_write;
+    unsigned long size;
     wchar_t name[260];
 };
+#define _wfinddata_t _wfinddata64i32_t
 
 struct _wfinddata64_t {
     unsigned int attrib;
@@ -56,9 +58,9 @@ int _wsopen(const wchar_t *_FileName, int _OpenFlag, int _ShareFlag, ...);
 errno_t _wsopen_s(int *_FileHandle, const wchar_t *_FileName, int _OpenFlag, int _ShareFlag,
                   int _PermissionFlag);
 #pragma binding(msvcrt::_wfindfirst, "_wfindfirst")
-__INTPTR_TYPE__ _wfindfirst(const wchar_t *_FileName, void *_FindData);
+__INTPTR_TYPE__ _wfindfirst(const wchar_t *_FileName, struct _wfinddata64i32_t *_FindData);
 #pragma binding(msvcrt::_wfindnext, "_wfindnext")
-int _wfindnext(__INTPTR_TYPE__ _FindHandle, void *_FindData);
+int _wfindnext(__INTPTR_TYPE__ _FindHandle, struct _wfinddata64i32_t *_FindData);
 #pragma binding(msvcrt::_wfindfirst64, "_wfindfirst64")
 __INTPTR_TYPE__ _wfindfirst64(const wchar_t *_FileName, struct _wfinddata64_t *_FindData);
 #pragma binding(msvcrt::_wfindnext64, "_wfindnext64")

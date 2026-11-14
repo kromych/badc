@@ -476,7 +476,7 @@ pub(crate) fn a64_align_asm_stream(
 
 /// The output tables an inline-asm statement writes.
 struct AsmSink<'a> {
-    code: &'a mut Vec<u8>,
+    code: &'a mut CodeBuf,
     fixups: &'a mut Vec<super::encode::Fixup>,
     data_fixups: &'a mut Vec<DataFixup>,
     pending_func_fixups: &'a mut Vec<(usize, usize)>,
@@ -500,6 +500,8 @@ struct AsmSymbols<'a> {
     extern_data_names: &'a alloc::collections::BTreeMap<u32, alloc::string::String>,
     /// Internal-linkage data object name -> unified data offset.
     data_sym_offsets: &'a alloc::collections::BTreeMap<alloc::string::String, i64>,
+    /// The object format, whose spelling the template's symbols take.
+    format: crate::c5::codegen::BinaryFormat,
 }
 
 /// A statement's operands with their assigned registers: what the
@@ -601,8 +603,7 @@ impl AsmOperands<'_> {
         };
         Ok(match self.asm.operand_class(idx as usize) {
             // `%sN` selects the single view and `%dN` the double; a bare `%N`
-            // is `vN`, as gcc and clang print it, which an instruction takes
-            // only with an arrangement.
+            // is `vN`, which an instruction takes only with an arrangement.
             AsmConstraint::Fp => match is64 {
                 Some(is_d) => Opnd::VReg { num: r, is_d },
                 None => {
@@ -625,6 +626,22 @@ impl AsmOperands<'_> {
                 sp: false,
             },
         })
+    }
+
+    /// A lane index, an `i` operand's constant bounded by the element size.
+    fn lane(&self, lane: super::asm::Lane, size: u8) -> Result<u8, alloc::string::String> {
+        match lane {
+            super::asm::Lane::At(i) => Ok(i),
+            super::asm::Lane::Operand(idx) => match self.const_of(idx) {
+                Some(v) if (0..(16i64 >> size)).contains(&v) => Ok(v as u8),
+                Some(v) => Err(alloc::format!(
+                    "aarch64 inline asm: lane {v} of operand `%{idx}` is out of range"
+                )),
+                None => Err(alloc::format!(
+                    "aarch64 inline asm: the lane `%{idx}` is not a constant"
+                )),
+            },
+        }
     }
 
     /// Resolve one symbolic operand to a table operand; label references
@@ -661,7 +678,7 @@ impl AsmOperands<'_> {
                 Opnd::VecElem {
                     num: r,
                     size,
-                    index,
+                    index: self.lane(index, size)?,
                 }
             }
             AsmOpndA64::RefVecList { idx, size, q } => {
@@ -679,7 +696,7 @@ impl AsmOperands<'_> {
                     first: r,
                     count: 1,
                     size,
-                    index,
+                    index: self.lane(index, size)?,
                 }
             }
             AsmOpndA64::RefQ(idx) => {
@@ -886,19 +903,19 @@ impl AsmRegion {
         self.region_base + ((self.n_cap + self.save_list.len() + k) * 8) as u32
     }
 
-    fn ldr_x(&self, code: &mut Vec<u8>, rt: Reg, off: u32) {
+    fn ldr_x(&self, code: &mut CodeBuf, rt: Reg, off: u32) {
         emit_spill_ldr_x(code, self.frame, rt, off);
     }
 
-    fn str_x(&self, code: &mut Vec<u8>, rt: Reg, off: u32) {
+    fn str_x(&self, code: &mut CodeBuf, rt: Reg, off: u32) {
         emit_spill_str_x_auto(code, self.frame, rt, off);
     }
 
-    fn ldr_d(&self, code: &mut Vec<u8>, dt: u8, off: u32) {
+    fn ldr_d(&self, code: &mut CodeBuf, dt: u8, off: u32) {
         emit_spill_ldr_d_auto(code, self.frame, dt, off);
     }
 
-    fn str_d(&self, code: &mut Vec<u8>, dt: u8, off: u32) {
+    fn str_d(&self, code: &mut CodeBuf, dt: u8, off: u32) {
         emit_spill_str_d_auto(code, self.frame, dt, off);
     }
 
@@ -914,11 +931,11 @@ impl AsmRegion {
         Ok(Reg(16))
     }
 
-    fn ldr_q(&self, code: &mut Vec<u8>, qt: u8, off: u32) {
+    fn ldr_q(&self, code: &mut CodeBuf, qt: u8, off: u32) {
         emit_spill_ldr_q(code, self.frame, qt, off, Reg(16));
     }
 
-    fn str_q(&self, code: &mut Vec<u8>, qt: u8, off: u32) {
+    fn str_q(&self, code: &mut CodeBuf, qt: u8, off: u32) {
         emit_spill_str_q(code, self.frame, qt, off, Reg(16));
     }
 
@@ -994,7 +1011,7 @@ impl AsmRegion {
     /// address.
     fn emit_input_loads(
         &self,
-        code: &mut Vec<u8>,
+        code: &mut CodeBuf,
         ops: &AsmOperands,
     ) -> Result<(), alloc::string::String> {
         use super::super::ir::AsmConstraint;
@@ -1046,7 +1063,7 @@ impl AsmRegion {
     /// Store the register outputs back through their captured addresses
     /// (x16 holds the address; the operand pool is untouched). `Err` for an
     /// output width with no store form.
-    fn emit_outputs(&self, code: &mut Vec<u8>, ops: &AsmOperands) -> Emit {
+    fn emit_outputs(&self, code: &mut CodeBuf, ops: &AsmOperands) -> Emit {
         use super::super::ir::AsmConstraint;
         for (i, op) in ops.asm.operands.iter().enumerate() {
             if !op.is_output
@@ -1072,14 +1089,19 @@ impl AsmRegion {
         // Last, as the store-backs read operand registers: spilled integer
         // outputs first (a bound one may hold x16 / x17), then the copies.
         let mut int_moves: Vec<PlaceMove> = Vec::new();
-        let mut fp_moves: Vec<(Place, Place, bool)> = Vec::new();
+        let mut fp_moves: Vec<(Place, Place, crate::c5::codegen::ssa::reg_alloc::VecWidth)> =
+            Vec::new();
         let mut pending: Vec<(u8, u32)> = Vec::new();
         for &(i, place) in &ops.outs {
             let Some(r) = ops.op_reg[i] else { continue };
             let op = &ops.asm.operands[i];
             match (matches!(op.constraint, AsmConstraint::Fp), place) {
                 (_, Place::None) => {}
-                (true, _) => fp_moves.push((Place::FpReg(r), place, op.width == 16)),
+                (true, _) => fp_moves.push((
+                    Place::FpReg(r),
+                    place,
+                    crate::c5::codegen::ssa::reg_alloc::VecWidth::of_bytes(op.width),
+                )),
                 (false, Place::Spill(slot)) => pending.push((r, slot)),
                 (false, _) => int_moves.push(PlaceMove::copy(Place::IntReg(r), place)),
             }
@@ -1106,7 +1128,7 @@ impl AsmRegion {
             .or_else(fail)
     }
 
-    fn emit_restore(&self, code: &mut Vec<u8>) {
+    fn emit_restore(&self, code: &mut CodeBuf) {
         for (j, &r) in self.save_list.iter().enumerate() {
             self.ldr_x(code, Reg(r), self.save_off(j));
         }
@@ -1119,7 +1141,7 @@ impl AsmRegion {
     /// of the template runs.
     fn emit_exit(
         &self,
-        code: &mut Vec<u8>,
+        code: &mut CodeBuf,
         ops: &AsmOperands,
     ) -> Result<(), alloc::string::String> {
         if self.emit_outputs(code, ops).is_err() {
@@ -1219,6 +1241,8 @@ fn form_static(
 /// How a bound input without a register reaches its scratch.
 enum BoundLoad {
     Vector(Place, u8),
+    /// A 16-byte operand read through its address.
+    VectorAt(Place, Option<i64>, u8),
     Double(Place, u8),
     Int(Place, u8),
     Const(i64, u8),
@@ -1252,7 +1276,9 @@ fn fp_access(load: bool, width: u8, vt: u8) -> u32 {
 /// Bind each input to the register its value occupies, or to a scratch;
 /// each value output to its own register, or to a scratch no other output
 /// holds, which it may share with an input, as a template reads its inputs
-/// before it writes a non-`&` output. The SIMD inputs load first: a q / d
+/// before it writes a non-`&` output. A read-write operand takes its
+/// output's register, loaded with its input, unless an input occupies it,
+/// else a scratch no input shares. The SIMD loads come first: a q / d
 /// reload may form its address in x16.
 fn bind_operands(
     asm: &super::super::ir::AsmBlock,
@@ -1286,6 +1312,49 @@ fn bind_operands(
     };
     let mut op_reg: Vec<Option<u8>> = alloc::vec![None; asm.operands.len()];
     let mut loads: Vec<BoundLoad> = Vec::new();
+    let simd = |i: usize| matches!(asm.operands[i].constraint, C::Fp);
+    let own = |i: usize, place: Place| match (simd(i), place) {
+        (true, Place::FpReg(r)) | (false, Place::IntReg(r)) => Some(r),
+        _ => None,
+    };
+    // The registers the operands read before the template: (operand, bank, reg).
+    let reads: Vec<(usize, bool, u8)> = (asm.operands.iter().zip(args).enumerate())
+        .filter(|(_, (op, a))| op.is_rw || (!op.is_output && !takes_imm(op, **a)))
+        .filter_map(|(j, (_, &a))| own(j, place_of(alloc, a)).map(|r| (j, simd(j), r)))
+        .collect();
+    let mut rw: Vec<(usize, u8)> = Vec::new();
+    for &(i, place) in outs.iter().filter(|&&(i, _)| asm.operands[i].is_rw) {
+        let b = simd(i);
+        let r = match own(i, place) {
+            Some(r)
+                if !reads
+                    .iter()
+                    .any(|&(j, rb, rr)| j != i && rb == b && rr == r) =>
+            {
+                r
+            }
+            _ => take(if b { &mut fp } else { &mut gp })?,
+        };
+        op_reg[i] = Some(r);
+        rw.push((i, r));
+    }
+    let rw_load = |i: usize, r: u8| -> Result<BoundLoad, alloc::string::String> {
+        let place = place_of(alloc, args[i]);
+        Ok(match (simd(i), place) {
+            (true, _) if asm.operands[i].width == 16 => BoundLoad::Vector(place, r),
+            (true, _) => BoundLoad::Double(place, r),
+            (false, Place::IntReg(_) | Place::Spill(_)) => BoundLoad::Int(place, r),
+            (false, _) => BoundLoad::Const(
+                crate::c5::asm::asm_operand_const(func, args[i]).ok_or_else(|| {
+                    alloc::string::String::from("aarch64 inline asm: operand without a value")
+                })?,
+                r,
+            ),
+        })
+    };
+    for &(i, r) in rw.iter().filter(|&&(i, _)| simd(i)) {
+        loads.push(rw_load(i, r)?);
+    }
     let inputs = || {
         asm.operands
             .iter()
@@ -1298,11 +1367,14 @@ fn bind_operands(
     };
     for (i, (op, &a)) in inputs().filter(|(_, (op, _))| matches!(op.constraint, C::Fp)) {
         let place = place_of(alloc, a);
+        let by_address = op.width == 16 && !op.value;
         op_reg[i] = Some(match place {
-            Place::FpReg(r) => r,
+            Place::FpReg(r) if !by_address => r,
             _ => {
                 let s = take(&mut fp)?;
-                loads.push(if op.width == 16 {
+                loads.push(if by_address {
+                    BoundLoad::VectorAt(place, crate::c5::asm::asm_operand_const(func, a), s)
+                } else if op.width == 16 {
                     BoundLoad::Vector(place, s)
                 } else {
                     BoundLoad::Double(place, s)
@@ -1336,17 +1408,21 @@ fn bind_operands(
             }
         });
     }
-    let simd = |i: usize| matches!(asm.operands[i].constraint, C::Fp);
-    let own = |i: usize, place: Place| match (simd(i), place) {
-        (true, Place::FpReg(r)) | (false, Place::IntReg(r)) => Some(r),
-        _ => None,
-    };
+    for &(i, r) in rw.iter().filter(|&&(i, _)| !simd(i)) {
+        loads.push(rw_load(i, r)?);
+    }
     let mut held: [Vec<u8>; 2] = [Vec::new(), Vec::new()];
     for &(i, place) in outs {
         held[usize::from(simd(i))].extend(own(i, place));
     }
-    let mut out_scratch = false;
-    for &(i, place) in outs {
+    for &(i, r) in &rw {
+        held[usize::from(simd(i))].push(r);
+    }
+    let mut out_scratch = rw.iter().any(|&(i, r)| {
+        outs.iter()
+            .any(|&(j, place)| j == i && own(i, place) != Some(r))
+    });
+    for &(i, place) in outs.iter().filter(|&&(i, _)| !asm.operands[i].is_rw) {
         op_reg[i] = Some(match own(i, place) {
             Some(r) => r,
             None => {
@@ -1381,14 +1457,37 @@ fn emit_bound_loads(
         || alloc::string::String::from("aarch64 inline asm: operand not in a loadable place");
     for load in loads {
         match *load {
+            // A value already in another register is copied: the operand
+            // register is written by the template.
             BoundLoad::Vector(place, s) => {
-                materialize_v128(out.code, place, s, frame, Reg(16)).ok_or_else(lost)?;
+                let v = materialize_v128(out.code, place, s, frame, Reg(16)).ok_or_else(lost)?;
+                if v != s {
+                    emit(out.code, super::encode::enc_mov_v16b(s, v));
+                }
+            }
+            BoundLoad::VectorAt(place, c, s) => {
+                let base = match (place, c) {
+                    (Place::IntReg(r), _) => Reg(r),
+                    (Place::Spill(_), _) => {
+                        materialize_int(out.code, place, Reg(16), frame).ok_or_else(lost)?
+                    }
+                    (_, Some(c)) => {
+                        load_imm64(out.code, Reg(16), c as u64);
+                        Reg(16)
+                    }
+                    _ => return Err(lost()),
+                };
+                emit(out.code, super::encode::enc_ldr_q_imm(s, base, 0));
             }
             BoundLoad::Double(place, s) => {
-                materialize_fp(out.code, place, s, frame).ok_or_else(lost)?;
+                let v = materialize_fp(out.code, place, s, frame).ok_or_else(lost)?;
+                if v != s {
+                    emit(out.code, super::encode::enc_fmov_d_d(s, v));
+                }
             }
             BoundLoad::Int(place, s) => {
-                materialize_int(out.code, place, Reg(s), frame).ok_or_else(lost)?;
+                let r = materialize_int(out.code, place, Reg(s), frame).ok_or_else(lost)?;
+                super::encode::emit_mov_reg(out.code, Reg(s), r);
             }
             BoundLoad::Const(c, s) => load_imm64(out.code, Reg(s), c as u64),
             BoundLoad::Static(a, rd, temp) => {
@@ -1831,7 +1930,11 @@ impl<'a> TemplateStream<'a> {
     /// A named label defined in the main stream is a definition of the
     /// unit, as under GNU as: the writers emit a `.text` symbol for it. `.L`
     /// names are assembler-local.
-    fn record_named_labels(&self, out: &mut AsmSink) -> Result<(), alloc::string::String> {
+    fn record_named_labels(
+        &self,
+        out: &mut AsmSink,
+        format: crate::c5::codegen::BinaryFormat,
+    ) -> Result<(), alloc::string::String> {
         for &(num, off) in &self.label_defs {
             let Some(idx) = num.checked_sub(crate::c5::asm::NAMED_LABEL_BASE) else {
                 continue;
@@ -1842,14 +1945,15 @@ impl<'a> TemplateStream<'a> {
             if crate::c5::asm::is_local_label(name) {
                 continue;
             }
+            let symbol = crate::c5::asm::asm_symbol_name(format, name).into_owned();
             // One definition per name across the unit, as in GNU as.
-            if out.asm_text_labels.iter().any(|l| l.name == name) {
+            if out.asm_text_labels.iter().any(|l| l.name == symbol) {
                 return Err(alloc::format!(
                     "inline asm: symbol `{name}` is already defined"
                 ));
             }
             out.asm_text_labels.push(super::AsmTextLabel {
-                name: alloc::string::String::from(name),
+                name: symbol,
                 text_offset: off,
             });
         }
@@ -1874,6 +1978,7 @@ fn encode_sym_branch(
         (BranchKind::B, super::encode::enc_b(0))
     };
     let name = ops.symbol_name(name)?;
+    let name = crate::c5::asm::asm_symbol_name(syms.format, &name).into_owned();
     let native_offset = out.code.len();
     match syms.name2entpc.get(name.as_str()) {
         Some(&ent_pc) => out.fixups.push(Fixup {
@@ -1969,6 +2074,7 @@ fn encode_sym_operand(
             "aarch64 inline asm: operand expression `{expr}` needs a section layout"
         ));
     };
+    let name = crate::c5::asm::asm_symbol_name(syms.format, &name).into_owned();
     let target = match syms.data_sym_offsets.get(name.as_str()) {
         Some(&off) => crate::c5::asm::AsmSectionTarget::Data(off as u64),
         None => crate::c5::asm::AsmSectionTarget::Symbol(name),
@@ -2029,9 +2135,11 @@ fn materialize_sections(
         }
         stream.main_label_off(name).map(LabelLoc::Text)
     };
+    // An operand's symbol enters the section as assembly spells it.
     let operand_sym = |idx: u8| -> Option<(crate::c5::asm::AsmSectionTarget, i64)> {
         crate::c5::asm::asm_operand_data_target(ops.func, *ops.args.get(idx as usize)?, &|vid| {
-            syms.extern_data_names.get(&vid).cloned()
+            let name = syms.extern_data_names.get(&vid)?;
+            Some(crate::c5::asm::asm_symbol_spelling(syms.format, name).into_owned())
         })
     };
     let resolver = crate::c5::asm::AsmOperandResolver {
@@ -2179,7 +2287,7 @@ fn emit_goto_exits(
     Ok(())
 }
 
-/// Lower an `Inst::InlineAsm` (GCC extended asm): assign each register
+/// Lower an `Inst::InlineAsm` (GNU C extended asm): assign each register
 /// operand a register, save the registers the block overwrites, capture
 /// the operand values / addresses, load the inputs, encode the template
 /// through the table encoder, store the outputs back. x16 / x17 are the
@@ -2187,7 +2295,7 @@ fn emit_goto_exits(
 /// for `asm goto`.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_inline_asm_aarch64(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     asm: &super::super::ir::AsmBlock,
     args: &[u32],
     site: super::super::ir::ValueId,
@@ -2198,6 +2306,7 @@ pub(super) fn emit_inline_asm_aarch64(
     name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
     extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     data_sym_offsets: &alloc::collections::BTreeMap<alloc::string::String, i64>,
+    format: crate::c5::codegen::BinaryFormat,
     asm_sections: &mut crate::c5::asm::AsmSectionSink,
     asm_extern_call_sites: &mut Vec<super::UserExternCallSite>,
     asm_sym_fixups: &mut Vec<super::AsmSymFixup>,
@@ -2217,6 +2326,9 @@ pub(super) fn emit_inline_asm_aarch64(
     if crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::A64) {
         return Ok(());
     }
+    // The template's words may hold data, and its labels lie outside the
+    // instruction's own scan.
+    code.note_branch();
     let mut out = AsmSink {
         code,
         fixups,
@@ -2236,6 +2348,7 @@ pub(super) fn emit_inline_asm_aarch64(
         name2entpc,
         extern_data_names,
         data_sym_offsets,
+        format,
     };
     match lower_inline_asm(
         &mut out,
@@ -2348,7 +2461,7 @@ fn lower_inline_asm(
     stream.encode(&insns, &ops, out, syms, goto_row)?;
     stream.settle_expr_fixups(out)?;
     let pending_xsec = stream.patch_label_branches(out, !section_blocks.is_empty())?;
-    stream.record_named_labels(out)?;
+    stream.record_named_labels(out, syms.format)?;
     // The replacement's `.org` length assertion reads the main labels.
     let mut deferred_goto_sites: Vec<(usize, LabelBranch, u8)> = Vec::new();
     let deferred_idx: Option<u32> = if deferred_text.is_empty() {

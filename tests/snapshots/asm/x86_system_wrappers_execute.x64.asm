@@ -58,8 +58,7 @@ Disassembly of section .text:
                	movq	%rcx, %rax
                	movq	%r10, %rcx
                	cpuid
-               	movl	$0x80000001, %r11d      # imm = 0x80000001
-               	cmpl	%r11d, %eax
+               	cmpl	$0x80000001, %eax       # imm = 0x80000001
                	jb	<addr>
                	xorl	%eax, %eax
                	movl	$0x80000001, %ecx       # imm = 0x80000001
@@ -81,11 +80,9 @@ Disassembly of section .text:
                	shlq	$0x20, %rdx
                	orq	%rdx, %rax
                	movl	-0x8(%rbp), %edx
-               	movl	$0xdeadbeef, %r11d      # imm = 0xDEADBEEF
-               	cmpl	%r11d, %edx
+               	cmpl	$0xdeadbeef, %edx       # imm = 0xDEADBEEF
                	je	<addr>
-               	movl	$0xdeadbeef, %r11d      # imm = 0xDEADBEEF
-               	cmpl	%r11d, %ecx
+               	cmpl	$0xdeadbeef, %ecx       # imm = 0xDEADBEEF
                	je	<addr>
                	testq	%rsi, %rsi
                	jne	<addr>

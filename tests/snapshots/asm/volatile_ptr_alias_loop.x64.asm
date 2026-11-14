@@ -41,13 +41,13 @@ Disassembly of section .text:
                	movl	-0x8(%rbp), %ecx
                	cmpl	$0x3, %ecx
                	jl	<addr>
+               	xorl	%ecx, %ecx
+               	movl	$0x2, %edx
                	cmpl	$0x3, %eax
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	movq	%rdx, %rax
+               	cmoveq	%rcx, %rax
                	leave
                	retq
-               	movl	$0x2, %eax
-               	jmp	<addr>
                	movl	$0x1, %eax
                	leave
                	retq

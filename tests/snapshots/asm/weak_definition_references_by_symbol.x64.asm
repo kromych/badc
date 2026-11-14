@@ -15,8 +15,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
+               	subq	$0x10, %rsp
                	movq	(%rip), %rax            # <addr>
 		R_X86_64_REX_GOTPCRELX	wobj-0x4
                	movq	(%rax), %rax
@@ -27,7 +26,6 @@ Disassembly of section .text:
                	cmpq	$0xa, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	popq	%rbx
                	leave
                	retq
                	movq	(%rip), %rax            # <addr>
@@ -36,23 +34,22 @@ Disassembly of section .text:
                	cmpq	$0x2, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbx
                	leave
                	retq
                	movq	(%rip), %rax            # <addr>
 		R_X86_64_PC32	.data+0x24
                	callq	*%rax
-               	movq	%rax, %rbx
+               	movq	%rax, 0x8(%rsp)
                	callq	<addr>
 		R_X86_64_PLT32	wf-0x4
-               	addq	%rbx, %rax
+               	movq	%rax, %r10
+               	movq	0x8(%rsp), %rax
+               	addq	%r10, %rax
                	cmpq	$0xe, %rax
                	je	<addr>
                	movl	$0x3, %eax
-               	popq	%rbx
                	leave
                	retq
                	xorl	%eax, %eax
-               	popq	%rbx
                	leave
                	retq

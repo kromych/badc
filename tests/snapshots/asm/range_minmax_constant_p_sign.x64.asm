@@ -29,52 +29,49 @@ Disassembly of section .text:
                	movl	$0x2710, <rip> # imm = 0x2710
                                                 # <addr>
                	movslq	<rip>, %rax # <addr>
-               	xorl	%edx, %edx
+               	xorl	%ecx, %ecx
                	testl	%eax, %eax
                	jle	<addr>
-               	movl	$0x1000, %ecx           # imm = 0x1000
-               	cmpq	%rcx, %rax
-               	jae	<addr>
-               	movq	%rax, %rcx
-               	addq	%rcx, %rdx
-               	subq	%rcx, %rax
+               	movl	$0x1000, %edx           # imm = 0x1000
+               	cmpq	%rdx, %rax
+               	cmovbq	%rax, %rdx
+               	addq	%rdx, %rcx
+               	subq	%rdx, %rax
                	testl	%eax, %eax
                	jg	<addr>
-               	cmpq	$0x2710, %rdx           # imm = 0x2710
+               	cmpq	$0x2710, %rcx           # imm = 0x2710
                	je	<addr>
                	movl	$0x1, %eax
                	retq
                	movl	$0x1, <rip> # <addr>
                	movslq	<rip>, %rax # <addr>
-               	xorl	%edx, %edx
+               	xorl	%ecx, %ecx
                	testl	%eax, %eax
                	jle	<addr>
-               	movl	$0x1000, %ecx           # imm = 0x1000
-               	cmpq	%rcx, %rax
-               	jae	<addr>
-               	movq	%rax, %rcx
-               	addq	%rcx, %rdx
-               	subq	%rcx, %rax
+               	movl	$0x1000, %edx           # imm = 0x1000
+               	cmpq	%rdx, %rax
+               	cmovbq	%rax, %rdx
+               	addq	%rdx, %rcx
+               	subq	%rdx, %rax
                	testl	%eax, %eax
                	jg	<addr>
-               	cmpq	$0x1, %rdx
+               	cmpq	$0x1, %rcx
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	xorl	%edx, %edx
-               	movl	%edx, <rip> # <addr>
+               	xorl	%ecx, %ecx
+               	movl	%ecx, <rip> # <addr>
                	movslq	<rip>, %rax # <addr>
                	testl	%eax, %eax
                	jle	<addr>
-               	movl	$0x1000, %ecx           # imm = 0x1000
-               	cmpq	%rcx, %rax
-               	jae	<addr>
-               	movq	%rax, %rcx
-               	addq	%rcx, %rdx
-               	subq	%rcx, %rax
+               	movl	$0x1000, %edx           # imm = 0x1000
+               	cmpq	%rdx, %rax
+               	cmovbq	%rax, %rdx
+               	addq	%rdx, %rcx
+               	subq	%rdx, %rax
                	testl	%eax, %eax
                	jg	<addr>
-               	testq	%rdx, %rdx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x3, %eax
                	retq

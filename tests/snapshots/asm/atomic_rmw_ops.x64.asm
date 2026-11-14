@@ -137,16 +137,16 @@ Disassembly of section .text:
                	sete	%dil
                	movzbq	%dil, %rdi
                	testq	%rdi, %rdi
-               	je	<addr>
+               	cmovneq	%rcx, %rax
                	testq	%rdi, %rdi
                	je	<addr>
                	movl	$0x9, %eax
                	leave
                	retq
-               	movq	(%rsi), %rax
-               	cmpq	$0x7, %rax
-               	jne	<addr>
+               	movq	(%rsi), %rcx
                	cmpq	$0x7, %rcx
+               	jne	<addr>
+               	cmpq	$0x7, %rax
                	je	<addr>
                	movl	$0xa, %eax
                	leave
@@ -229,5 +229,3 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	leave
                	retq
-               	movq	%rax, %rcx
-               	jmp	<addr>

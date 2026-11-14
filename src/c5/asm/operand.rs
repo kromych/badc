@@ -69,7 +69,7 @@ fn load_int_kind(kind: LoadKind) -> Option<(u8, bool)> {
         K::I32 => (4, true),
         K::U32 => (4, false),
         K::I64 => (8, true),
-        K::F32 | K::F64 | K::F80 | K::F128 | K::V128 => return None,
+        K::F32 | K::F64 | K::F80 | K::F128 | K::V128 | K::V256 | K::V512 => return None,
     })
 }
 
@@ -80,7 +80,13 @@ fn store_int_width(kind: StoreKind) -> Option<u8> {
         StoreKind::I16 => 2,
         StoreKind::I32 => 4,
         StoreKind::I64 => 8,
-        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => {
+        StoreKind::F32
+        | StoreKind::F64
+        | StoreKind::F80
+        | StoreKind::F128
+        | StoreKind::V128
+        | StoreKind::V256
+        | StoreKind::V512 => {
             return None;
         }
     })
@@ -642,7 +648,16 @@ pub(crate) fn asm_operand_form(func: &FunctionSsa, arg: u32) -> alloc::string::S
                 | Inst::TailExt(_),
             ) => "a call result",
             Some(Inst::Intrinsic { .. }) => "an intrinsic result",
-            Some(Inst::X86Simd { .. }) => "a vector result",
+            Some(
+                Inst::Simd { .. }
+                | Inst::SimdVal { .. }
+                | Inst::VecBinop { .. }
+                | Inst::VecInsert { .. }
+                | Inst::VecSplat { .. }
+                | Inst::VecConst { .. }
+                | Inst::VecExtract { .. }
+                | Inst::Select { .. },
+            ) => "a vector result",
             Some(
                 Inst::AtomicRmw { .. }
                 | Inst::AtomicCas { .. }
@@ -688,7 +703,7 @@ mod tests {
     fn one_block(insts: alloc::vec::Vec<Inst>) -> FunctionSsa {
         let n = insts.len() as u32;
         FunctionSsa {
-            inst_src: alloc::vec![(0, 0); n as usize],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); n as usize],
             f32_values: alloc::vec![false; n as usize],
             blocks: alloc::vec![Block {
                 start_pc: 0,

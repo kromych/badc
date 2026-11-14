@@ -3,7 +3,7 @@
 // are the signed integer type of the operands' element width, -1 in a lane
 // where the relation holds and 0 where it does not. A scalar operand
 // broadcasts (converting to the element type first, so the vector's element
-// decides the flavour); between two integer vectors the compare runs
+// decides the flavor); between two integer vectors the compare runs
 // unsigned when either element type is (the 6.3.1.8 common type). On a NaN
 // lane every ordered compare and `==` are false and `!=` is true.
 // Semantics measured against gcc 16.2 (aarch64).

@@ -16,7 +16,7 @@ use super::super::ir::{Block, BlockId, FunctionSsa, Inst, NO_VALUE, ValueId};
 /// The parts of a [`FunctionSsa`] keyed by value id.
 struct Keyed<'a> {
     insts: &'a mut Vec<Inst>,
-    inst_src: &'a mut Vec<(u32, u32)>,
+    inst_src: &'a mut Vec<crate::c5::ir::InstSrc>,
     f32_values: &'a mut Vec<bool>,
     cmp32: &'a mut Vec<bool>,
     div32: &'a mut Vec<bool>,
@@ -36,6 +36,7 @@ fn keyed(func: &mut FunctionSsa) -> Keyed<'_> {
         ssp: _,
         seh_scopes: _,
         block_seh: _,
+        predicted: _,
         funclet_slots: _,
         n_params: _,
         is_variadic: _,
@@ -80,6 +81,8 @@ fn keyed(func: &mut FunctionSsa) -> Keyed<'_> {
         synthetic_base: _,
         multi_cell_slots: _,
         array_slots: _,
+        vector_objects: _,
+        owned_params: _,
         over_aligned: _,
         frame_align: _,
         realign_region_bytes: _,
@@ -174,6 +177,9 @@ pub(crate) struct Insertion {
     pub inst: Inst,
     /// `FunctionSsa::f32_values` entry for the inserted value.
     pub is_f32: bool,
+    /// The old value the inserted one copies, whose `cmp32` and `div32`
+    /// marks it takes; a materialization has none.
+    pub copy_of: Option<ValueId>,
 }
 
 /// Old-to-new value ids, and the id each insertion received.
@@ -186,7 +192,7 @@ pub(crate) struct Rewrite {
 /// that does not pay for itself can be undone exactly.
 pub(crate) struct Undo {
     insts: Vec<Inst>,
-    inst_src: Vec<(u32, u32)>,
+    inst_src: Vec<crate::c5::ir::InstSrc>,
     f32_values: Vec<bool>,
     cmp32: Vec<bool>,
     div32: Vec<bool>,
@@ -244,7 +250,22 @@ pub(crate) fn sort(ins: &mut Vec<Insertion>, blocks: &[Block], n_old: usize) -> 
 /// relocation tables. An inserted value takes the source position of
 /// the instruction it goes ahead of or after, or of the one after an
 /// empty block.
-pub(crate) fn insert(func: &mut FunctionSsa, ins: &[Insertion]) -> (Rewrite, Undo) {
+pub(crate) fn insert(func: &mut FunctionSsa, ins: &[Insertion]) -> Rewrite {
+    insert_keeping(func, ins, false).0
+}
+
+/// [`insert`], and the [`Undo`] that restores the function as it was.
+pub(crate) fn insert_undoable(func: &mut FunctionSsa, ins: &[Insertion]) -> (Rewrite, Undo) {
+    let (rewrite, undo) = insert_keeping(func, ins, true);
+    (rewrite, undo.expect("kept"))
+}
+
+/// Without `keep_undo` the old instructions move to their new places.
+fn insert_keeping(
+    func: &mut FunctionSsa,
+    ins: &[Insertion],
+    keep_undo: bool,
+) -> (Rewrite, Option<Undo>) {
     let mut k = keyed(func);
     let Keyed {
         insts,
@@ -268,7 +289,7 @@ pub(crate) fn insert(func: &mut FunctionSsa, ins: &[Insertion]) -> (Rewrite, Und
             r.is_empty() && at_boundary(blocks, r.start)
         }
     }));
-    let undo = Undo {
+    let undo = keep_undo.then(|| Undo {
         insts: Vec::new(),
         inst_src: Vec::new(),
         f32_values: Vec::new(),
@@ -279,7 +300,8 @@ pub(crate) fn insert(func: &mut FunctionSsa, ins: &[Insertion]) -> (Rewrite, Und
         extern_imm_code_refs: extern_imm_code_refs.clone(),
         extern_imm_data_refs: extern_imm_data_refs.clone(),
         extern_tls_refs: extern_tls_refs.clone(),
-    };
+    });
+    let mut moved = (!keep_undo).then(|| core::mem::take(*insts).into_iter());
     // Blocks holding no instruction, by the index they sit at; those
     // sharing an index follow each other by id. The tape order is
     // otherwise preserved: instructions covered by no block keep their
@@ -292,10 +314,8 @@ pub(crate) fn insert(func: &mut FunctionSsa, ins: &[Insertion]) -> (Rewrite, Und
         .collect();
     empties.sort_unstable();
     let mut new_insts: Vec<Inst> = Vec::with_capacity(n_old + ins.len());
-    let mut new_src: Vec<(u32, u32)> = Vec::with_capacity(n_old + ins.len());
+    let mut new_src: Vec<crate::c5::ir::InstSrc> = Vec::with_capacity(n_old + ins.len());
     let mut new_f32: Vec<bool> = Vec::with_capacity(n_old + ins.len());
-    // An inserted value is a copy or a materialization, never a
-    // comparison or division, so it carries no narrow-op mark.
     let mut new_cmp: Vec<bool> = Vec::with_capacity(n_old + ins.len());
     let mut new_div: Vec<bool> = Vec::with_capacity(n_old + ins.len());
     let mut remap: Vec<ValueId> = vec![NO_VALUE; n_old];
@@ -310,20 +330,25 @@ pub(crate) fn insert(func: &mut FunctionSsa, ins: &[Insertion]) -> (Rewrite, Und
     let mut cur = 0usize;
     let mut next_empty = 0usize;
     for old in 0..=n_old {
-        let src = inst_src.get(old).copied().unwrap_or((0, 0));
+        let src = inst_src.get(old).copied().unwrap_or_default();
         let mut take = |rank: u8, block: BlockId, new_insts: &mut Vec<Inst>| {
             while cur < ins.len() && order(&ins[cur]) == (old as u32, rank, block) {
                 ids[cur] = new_insts.len() as ValueId;
                 new_insts.push(ins[cur].inst.clone());
                 new_src.push(match ins[cur].at {
                     At::Before(k) | At::After(k) => {
-                        inst_src.get(k as usize).copied().unwrap_or((0, 0))
+                        inst_src.get(k as usize).copied().unwrap_or_default()
                     }
                     At::Empty(_) => src,
                 });
                 new_f32.push(ins[cur].is_f32);
-                new_cmp.push(false);
-                new_div.push(false);
+                let mark = |t: &[bool]| {
+                    ins[cur]
+                        .copy_of
+                        .is_some_and(|v| t.get(v as usize) == Some(&true))
+                };
+                new_cmp.push(mark(cmp32));
+                new_div.push(mark(div32));
                 cur += 1;
             }
         };
@@ -342,7 +367,10 @@ pub(crate) fn insert(func: &mut FunctionSsa, ins: &[Insertion]) -> (Rewrite, Und
             break;
         }
         remap[old] = new_insts.len() as ValueId;
-        new_insts.push(insts[old].clone());
+        new_insts.push(match &mut moved {
+            Some(it) => it.next().expect("one per old index"),
+            None => insts[old].clone(),
+        });
         new_src.push(src);
         new_f32.push(f32_values.get(old).copied().unwrap_or(false));
         new_cmp.push(cmp32.get(old).copied().unwrap_or(false));
@@ -357,14 +385,19 @@ pub(crate) fn insert(func: &mut FunctionSsa, ins: &[Insertion]) -> (Rewrite, Und
             start_at[s as usize]..end_at[e as usize]
         };
     }
-    let undo = Undo {
-        insts: core::mem::replace(*insts, new_insts),
-        inst_src: core::mem::replace(*inst_src, new_src),
-        f32_values: core::mem::replace(*f32_values, new_f32),
-        cmp32: core::mem::replace(*cmp32, new_cmp),
-        div32: core::mem::replace(*div32, new_div),
+    let undo = undo.map(|undo| Undo {
+        insts: core::mem::take(*insts),
+        inst_src: core::mem::take(*inst_src),
+        f32_values: core::mem::take(*f32_values),
+        cmp32: core::mem::take(*cmp32),
+        div32: core::mem::take(*div32),
         ..undo
-    };
+    });
+    **insts = new_insts;
+    **inst_src = new_src;
+    **f32_values = new_f32;
+    **cmp32 = new_cmp;
+    **div32 = new_div;
     // An operand past the old tape names an insertion.
     let mut operands = remap.clone();
     operands.extend_from_slice(&ids);
@@ -511,7 +544,7 @@ mod tests {
     fn func_with(insts: Vec<Inst>, blocks: Vec<Block>) -> FunctionSsa {
         let n = insts.len();
         FunctionSsa {
-            inst_src: vec![(0, 0); n],
+            inst_src: vec![crate::c5::ir::InstSrc::default(); n],
             f32_values: vec![false; n],
             insts,
             blocks,
@@ -548,12 +581,13 @@ mod tests {
         );
         f.f32_values = alloc::vec![false, false];
         f.extern_imm_data_refs = alloc::vec![(0, 7)];
-        let (rw, _undo) = insert(
+        let rw = insert(
             &mut f,
             &[Insertion {
                 at: At::Before(0),
                 inst: Inst::Imm(5),
                 is_f32: true,
+                copy_of: None,
             }],
         );
         assert_eq!(rw.ids, alloc::vec![0]);
@@ -575,12 +609,13 @@ mod tests {
         );
         f.extern_imm_data_refs = alloc::vec![(1, 3)];
         let n_before = f.insts.len();
-        let (_rw, undo) = insert(
+        let (_rw, undo) = insert_undoable(
             &mut f,
             &[Insertion {
                 at: At::Before(1),
                 inst: Inst::Imm(9),
                 is_f32: false,
+                copy_of: None,
             }],
         );
         assert_eq!(f.insts.len(), 3);
@@ -603,18 +638,20 @@ mod tests {
                 block(1..2, Terminator::Return(1)),
             ],
         );
-        let (rw, _undo) = insert(
+        let rw = insert(
             &mut f,
             &[
                 Insertion {
                     at: At::After(0),
                     inst: Inst::Imm(8),
                     is_f32: false,
+                    copy_of: None,
                 },
                 Insertion {
                     at: At::Before(1),
                     inst: Inst::Imm(9),
                     is_f32: false,
+                    copy_of: None,
                 },
             ],
         );
@@ -642,28 +679,32 @@ mod tests {
                 block(2..2, Terminator::Return(NO_VALUE)),
             ],
         );
-        let (rw, _undo) = insert(
+        let rw = insert(
             &mut f,
             &[
                 Insertion {
                     at: At::After(0),
                     inst: Inst::Imm(7),
                     is_f32: false,
+                    copy_of: None,
                 },
                 Insertion {
                     at: At::Empty(1),
                     inst: Inst::Imm(8),
                     is_f32: false,
+                    copy_of: None,
                 },
                 Insertion {
                     at: At::Empty(2),
                     inst: Inst::Imm(9),
                     is_f32: false,
+                    copy_of: None,
                 },
                 Insertion {
                     at: At::Before(1),
                     inst: Inst::Imm(6),
                     is_f32: false,
+                    copy_of: None,
                 },
             ],
         );
@@ -693,6 +734,7 @@ mod tests {
             at,
             inst,
             is_f32: false,
+            copy_of: None,
         };
         let mut ins = alloc::vec![
             put(At::After(1), Inst::Imm(5)),
@@ -703,7 +745,7 @@ mod tests {
         assert_eq!(sort(&mut ins, &f.blocks, 2), alloc::vec![2, 3, 0, 1]);
         assert!(matches!(ins[1].inst, Inst::Binop { lhs: 0, rhs: 2, .. }));
         assert!(matches!(ins[3].inst, Inst::Binop { lhs: 1, rhs: 4, .. }));
-        let (rw, _undo) = insert(&mut f, &ins);
+        let rw = insert(&mut f, &ins);
         assert_eq!(rw.ids, alloc::vec![1, 2, 4, 5]);
         assert_eq!(rw.remap, alloc::vec![0, 3]);
         let ranges: Vec<_> = f.blocks.iter().map(|b| b.inst_range.clone()).collect();
@@ -766,7 +808,11 @@ mod tests {
             ],
         );
         f.blocks[2].exit_acc = 4;
-        f.inst_src = alloc::vec![(10, 0), (11, 0), (12, 0), (13, 0), (14, 0)];
+        let at = |line| crate::c5::ir::InstSrc {
+            line,
+            ..Default::default()
+        };
+        f.inst_src = alloc::vec![at(10), at(11), at(12), at(13), at(14)];
         f.f32_values = alloc::vec![false, true, false, false, false];
         f.cmp32 = alloc::vec![false, false, false, false, true];
         f.extern_imm_data_refs = alloc::vec![(3, 9)];
@@ -786,7 +832,7 @@ mod tests {
         assert_eq!(f.blocks[2].exit_acc, 2);
         assert_eq!(
             f.inst_src,
-            alloc::vec![(10, 0), (13, 0), (14, 0), (11, 0), (12, 0)]
+            alloc::vec![at(10), at(13), at(14), at(11), at(12)]
         );
         assert_eq!(f.f32_values, alloc::vec![false, false, false, true, false]);
         assert_eq!(f.cmp32, alloc::vec![false, false, true, false, false]);
@@ -843,12 +889,13 @@ mod tests {
         assert_eq!(f.blocks[0].inst_range, 0..2);
         assert_eq!(f.blocks[1].inst_range, 2..3);
         assert_eq!(f.blocks[3].inst_range, 3..3);
-        let (rw, _undo) = insert(
+        let rw = insert(
             &mut f,
             &[Insertion {
                 at: At::Empty(3),
                 inst: Inst::Imm(7),
                 is_f32: false,
+                copy_of: None,
             }],
         );
         assert_eq!(rw.ids, alloc::vec![3]);

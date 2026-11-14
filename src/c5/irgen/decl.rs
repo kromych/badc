@@ -23,7 +23,10 @@ impl<'a> Walker<'a> {
                 let slot = *slot_off;
                 let ty = *ty;
                 let init_clone = init.clone();
-                self.emit_local_init(b, slot, ty, &init_clone)
+                let temps = self.call_temps.len();
+                self.emit_local_init(b, slot, ty, &init_clone)?;
+                self.end_call_temps(b, temps);
+                Ok(())
             }
             Decl::Vla {
                 elem_size,
@@ -135,6 +138,38 @@ impl<'a> Walker<'a> {
         } else {
             b.mcpy(dst, src, size, align);
         }
+    }
+
+    /// Whether `elements` store every byte of `[0, size)`. A bit-field, a
+    /// `long double` (whose storage may hold padding past its format) and an
+    /// element of no known width store none for this purpose.
+    fn elements_cover(&self, elements: &[crate::c5::ast::RuntimeInitElement], size: i64) -> bool {
+        let mut spans: alloc::vec::Vec<(i64, i64)> = elements
+            .iter()
+            .filter(|e| e.bitfield.is_none())
+            .filter_map(|e| {
+                let bytes = match e.value {
+                    RuntimeInitValue::Copy { bytes, .. } => bytes,
+                    RuntimeInitValue::Expr(_) if is_long_double_scalar(e.ty) => 0,
+                    // A pointer to a structure shares its band; only a
+                    // structure value takes the structure's size.
+                    RuntimeInitValue::Expr(_) if is_struct_value_ty(e.ty) => self.struct_size(e.ty),
+                    RuntimeInitValue::Expr(_) => {
+                        super::types::type_size_bytes(e.ty, self.target) as i64
+                    }
+                };
+                (bytes > 0).then_some((e.offset, e.offset + bytes))
+            })
+            .collect();
+        spans.sort_unstable();
+        let mut reach = 0;
+        for (start, end) in spans {
+            if start > reach {
+                return false;
+            }
+            reach = reach.max(end);
+        }
+        reach >= size
     }
 
     /// Store `byte` over the first `size` bytes of the local at `slot`,
@@ -266,8 +301,16 @@ impl<'a> Walker<'a> {
                 elements,
             } => {
                 // C99 6.7.8p19 zero prelude (if the parser emitted one),
-                // ahead of the per-element stores.
-                match zero_init {
+                // ahead of the per-element stores; elements storing every
+                // byte leave it nothing to zero.
+                let zero_init = zero_init.filter(|z| {
+                    let size = match *z {
+                        LocalInitPrelude::Template { size_bytes, .. }
+                        | LocalInitPrelude::Fill { size_bytes, .. } => size_bytes,
+                    };
+                    !self.elements_cover(elements, size)
+                });
+                match &zero_init {
                     Some(LocalInitPrelude::Template {
                         src_data_off,
                         size_bytes,

@@ -17,11 +17,16 @@
 //!    and a coalescing hint from the return / parameter / phi /
 //!    call-argument / call-result hint passes.
 //! 5. Color the graph greedily (`color_graph`): for each node forbid
-//!    the registers held by its live neighbours, then take the hinted
+//!    the registers held by its live neighbors, then take the hinted
 //!    register if free, else a free register of the right bank
 //!    (caller-saved first unless the value must survive a call), else
-//!    a fresh spill slot. Pre-coloring of call arguments into the host
-//!    argument registers is left to the per-arch emit pass.
+//!    a fresh spill slot -- or, for a value surviving calls whose
+//!    loop-weighted saves cost less than its spill, a caller-saved
+//!    register each of those calls stores and reloads around itself
+//!    ([`Allocation::call_saves`]), or, for a value lying in a loop, a
+//!    register only values living through the loop hold, saved around it
+//!    ([`super::loop_saves`]). Pre-coloring of call arguments into the
+//!    host argument registers is left to the per-arch emit pass.
 //!
 //! The output is intentionally minimal: each `Place` is either
 //! one of the host's GPRs / FP regs or a stack slot's byte offset
@@ -31,7 +36,7 @@
 
 #![allow(dead_code)]
 
-use alloc::collections::BinaryHeap;
+use alloc::collections::{BTreeMap, BinaryHeap};
 use alloc::vec;
 use alloc::vec::Vec;
 use core::cmp::Reverse;
@@ -118,7 +123,7 @@ pub(crate) struct Allocation {
     /// coalescing hints read it to avoid sending a value that outlives
     /// a call into a caller-saved register the call would clobber.
     pub last_use: Vec<u32>,
-    /// For `BinopI(Shr, X, K)` insts the allocator recognised as
+    /// For `BinopI(Shr, X, K)` insts the allocator recognized as
     /// the upper half of a sign-narrow `Shl K; Shr K` pair (K in
     /// {32, 48, 56}), the original pre-narrow value (the Shl's
     /// lhs). NO_VALUE for any other inst. The emit pass collapses
@@ -134,21 +139,41 @@ pub(crate) struct Allocation {
     pub sxtw_k: Vec<i64>,
     /// True for `Binop` / `BinopI` comparison insts (integer and FP),
     /// and on x86-64 for integer loads ([`zero_testable_load`]),
-    /// that the allocator recognised as the source of a `Bz` / `Bnz`
+    /// that the allocator recognized as the source of a `Bz` / `Bnz`
     /// terminator's cond, with cond consumed only by that terminator
     /// and every instruction between the compare and the block's end
-    /// leaving the host flags untouched. The emit pass skips the
-    /// `cset` / `setcc` materialisation and the terminator emits
-    /// `b.cond` (aarch64) or `j.cond` (x86_64) directly off the flags
-    /// the compare set. The compare's value keeps its place: on
-    /// x86_64 the destination register doubles as the operand-staging
-    /// scratch, so its color stays in the used sets.
+    /// leaving the host flags untouched; also a comparison only selects
+    /// after it in its block read, under the same window. The emit pass
+    /// skips the `cset` / `setcc` materialization and the terminator
+    /// emits `b.cond` (aarch64) or `j.cond` (x86_64), a select `csel` or
+    /// `cmov`, directly off the flags the compare set. The compare's
+    /// value keeps its place: on x86_64 the destination register doubles
+    /// as the operand-staging scratch, so its color stays in the used sets.
     pub branch_fused: Vec<bool>,
-    /// True for a store that writes its value, an `Imm`, from its own
-    /// encoding ([`store_immediate`]). Every reader of that `Imm` is such
-    /// a store, so its use count is zero and it is never materialized;
-    /// the store's own value is unread.
+    /// Per value: a mask in `branch_fused` that selects read, which sets
+    /// the flags with aarch64 `tst` where a branch's mask is its `tbz`.
+    pub mask_tests: Vec<bool>,
+    /// Per value: an aarch64 select one of whose arms is the other plus
+    /// one, which its `csinc` forms; that increment, read by nothing else,
+    /// is never materialized.
+    pub select_inc: Vec<bool>,
+    /// Per value: an `Imm` whose register already holds its constant
+    /// ([`imm_already_held`]), which emits nothing.
+    pub imm_held: Vec<bool>,
+    /// True for a store, or an x86-64 locked read-modify-write, that takes
+    /// its operand, an `Imm`, from its own encoding ([`store_immediate`]).
+    /// Every reader of that `Imm` is such an instruction, so its use count
+    /// is zero and it is never materialized; the instruction's own value
+    /// is unread.
     pub imm_store: Vec<bool>,
+    /// The `Imm` values every reader of which is an integer argument a
+    /// call places on the stack ([`stack_arg_immediates`]), with their
+    /// constants. Such a value takes no place: the call's marshaling sets
+    /// it from its encoding, so it holds no register ahead of the call.
+    pub stack_imm: alloc::collections::BTreeMap<ValueId, i64>,
+    /// The frame loads ([`stack_arg_loads`]) the call's marshaling performs
+    /// itself, as `(slot, disp, kind)`, taking no place as `stack_imm` does.
+    pub stack_load: alloc::collections::BTreeMap<ValueId, (i64, i32, LoadKind)>,
     /// Per value: an `Imm` placed in the FP file ([`fp_constants`]).
     pub fp_const: Vec<bool>,
     /// Per instruction whose lowering writes registers besides its result,
@@ -160,7 +185,7 @@ pub(crate) struct Allocation {
     pub implicit_live: Vec<u32>,
     /// Per-value coalescing hint: the physical register the
     /// allocator should prefer when one is set and free at the
-    /// pick site. The pick-reg path honours the hint only when it
+    /// pick site. The pick-reg path honors the hint only when it
     /// satisfies the live-across-call constraint; unsatisfied
     /// hints are ignored, so a hint never compromises correctness.
     /// `None` for any value with no preference. Populated by the
@@ -194,14 +219,78 @@ pub(crate) struct Allocation {
     /// is dead. Filled on x86-64, the only target whose count
     /// instructions need one; empty entries read as false.
     pub count_nonzero: Vec<bool>,
-    /// Per value: a 128-bit vector ([`wide_values`]).
-    pub wide: Vec<bool>,
+    /// Per value: its vector width ([`wide_values`]).
+    pub wide: Vec<VecWidth>,
     /// Registers an `Inst::InlineAsm` statement must preserve around its
     /// body, as `(gpr_mask, fp_mask)`. The emit saves and restores the
     /// registers a block writes that this names and leaves the rest
     /// alone: they hold nothing at that point. See
     /// [`asm_preserve_masks`].
     pub asm_preserve: (u32, u32),
+    /// Per call, in site order: the caller-saved registers holding values
+    /// live across it, each stored to its slot ahead of the call and
+    /// loaded back after it.
+    pub call_saves: Vec<(ValueId, Vec<CallSave>)>,
+    /// The registers saved around loops.
+    pub loop_saves: LoopSaveCode,
+}
+
+/// The code the saves around loops add at block boundaries
+/// ([`super::loop_saves`]).
+#[derive(Clone, Debug, Default)]
+pub(crate) struct LoopSaveCode {
+    /// Per block: saves stored at its end, ahead of its phi moves.
+    pub stores: Vec<(crate::c5::ir::BlockId, Vec<CallSave>)>,
+    /// Per block: saves loaded at its start.
+    pub loads_at_start: Vec<(crate::c5::ir::BlockId, Vec<CallSave>)>,
+    /// Per block: saves loaded at its end, past its phi moves.
+    pub loads_at_end: Vec<(crate::c5::ir::BlockId, Vec<CallSave>)>,
+}
+
+impl LoopSaveCode {
+    fn of(
+        list: &[(crate::c5::ir::BlockId, Vec<CallSave>)],
+        b: crate::c5::ir::BlockId,
+    ) -> &[CallSave] {
+        list.iter()
+            .find(|(x, _)| *x == b)
+            .map_or(&[][..], |(_, s)| s.as_slice())
+    }
+
+    pub(crate) fn stores_at(&self, b: crate::c5::ir::BlockId) -> &[CallSave] {
+        Self::of(&self.stores, b)
+    }
+
+    pub(crate) fn loads_at_start_of(&self, b: crate::c5::ir::BlockId) -> &[CallSave] {
+        Self::of(&self.loads_at_start, b)
+    }
+
+    pub(crate) fn loads_at_end_of(&self, b: crate::c5::ir::BlockId) -> &[CallSave] {
+        Self::of(&self.loads_at_end, b)
+    }
+
+    /// Whether block `b` holds any of this code.
+    pub(crate) fn touches(&self, b: crate::c5::ir::BlockId) -> bool {
+        !(self.stores_at(b).is_empty()
+            && self.loads_at_start_of(b).is_empty()
+            && self.loads_at_end_of(b).is_empty())
+    }
+
+    fn all(&self) -> impl Iterator<Item = &CallSave> {
+        (self.stores.iter())
+            .chain(&self.loads_at_start)
+            .chain(&self.loads_at_end)
+            .flat_map(|(_, s)| s)
+    }
+}
+
+/// A register a call saves and restores around itself ([`Allocation::call_saves`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct CallSave {
+    pub reg: u8,
+    pub is_fp: bool,
+    pub wide: VecWidth,
+    pub slot: u32,
 }
 
 /// Each value output of the asm statement at `site` with its place;
@@ -249,7 +338,11 @@ impl Allocation {
     }
 
     pub(crate) fn is_wide(&self, v: ValueId) -> bool {
-        self.wide.get(v as usize).copied().unwrap_or(false)
+        self.width(v) != VecWidth::Scalar
+    }
+
+    pub(crate) fn width(&self, v: ValueId) -> VecWidth {
+        self.wide.get(v as usize).copied().unwrap_or_default()
     }
 
     /// Whether `v`, the value of `inst`, lives in the FP file.
@@ -285,6 +378,88 @@ impl Allocation {
     }
 }
 
+/// Whether `inst`'s lowering leaves the host flags intact. On x86_64
+/// every integer ALU op writes them, a zero immediate materializes as
+/// `xor r, r`, and the unsigned FP converts test the sign bit with
+/// flag-setting arithmetic; scalar SSE and the mov / lea / movzx
+/// families do not. On aarch64 only the comparisons reach a
+/// flag-setting form (`subs` / `fcmp`).
+pub(crate) fn flags_survive(inst: &Inst, is_x86: bool) -> bool {
+    match inst {
+        Inst::Imm(k) => !(is_x86 && *k == 0),
+        Inst::Undef
+        | Inst::ExceptionCode
+        | Inst::ParentLocalAddr { .. }
+        | Inst::ImmData(_)
+        | Inst::ImmCode(_)
+        | Inst::ImmExtCode(_)
+        | Inst::BlockAddr(_)
+        | Inst::LocalAddr(_)
+        | Inst::ParamRef { .. }
+        | Inst::Phi { .. }
+        | Inst::Load { .. }
+        | Inst::LoadLocal { .. }
+        | Inst::LoadIndexed { .. }
+        | Inst::Store { .. }
+        | Inst::StoreLocal { .. }
+        | Inst::StoreIndexed { .. }
+        | Inst::Extend { .. }
+        | Inst::Copy { .. }
+        | Inst::Fneg(_)
+        | Inst::Fma { .. } => true,
+        Inst::FpCast { kind, .. } => {
+            !(is_x86 && matches!(kind, FpCastKind::UFpToInt | FpCastKind::UIntToFp))
+        }
+        // x86-64 `neg` sets the flags; the aarch64 `sub Xd,XZR,Xn` it
+        // lowers to does not, nor do MADD, MSUB, SBFM, UBFM and a
+        // shifted-register ADD, SUB, AND, ORR or EOR.
+        Inst::Neg(_)
+        | Inst::BitCount { .. }
+        | Inst::MulAdd { .. }
+        | Inst::ShiftOp { .. }
+        | Inst::BitField { .. } => !is_x86,
+        Inst::Binop { op, .. } | Inst::BinopI { op, .. } => {
+            if is_x86 {
+                crate::c5::ir::is_fp_arith_op(*op)
+            } else {
+                !crate::c5::ir::is_comparison_op(*op)
+            }
+        }
+        Inst::TlsAddr(_)
+        | Inst::SegLoad { .. }
+        | Inst::SegStore { .. }
+        | Inst::Udiv128 { .. }
+        | Inst::Bswap { .. }
+        | Inst::Call { .. }
+        | Inst::CallIndirect { .. }
+        | Inst::CallExt { .. }
+        | Inst::TailExt(_)
+        | Inst::Mzero { .. }
+        | Inst::Mcpy { .. }
+        | Inst::AtomicRmw { .. }
+        | Inst::AtomicCas { .. }
+        | Inst::AtomicCas16 { .. }
+        | Inst::AtomicLoad { .. }
+        | Inst::AtomicStore { .. }
+        | Inst::Intrinsic { .. }
+        | Inst::Simd { .. }
+        | Inst::SimdVal { .. }
+        | Inst::VecBinop { .. }
+        | Inst::VecInsert { .. }
+        | Inst::VecSplat { .. }
+        | Inst::VecConst { .. }
+        | Inst::VecExtract { .. }
+        | Inst::Select { .. }
+        | Inst::InlineAsm { .. }
+        | Inst::AllocaInit(_)
+        | Inst::LifetimeEnd(_)
+        | Inst::ParamPart { .. }
+        | Inst::RetPart { .. }
+        | Inst::AsmOut { .. }
+        | Inst::AggParts { .. } => false,
+    }
+}
+
 /// An integer load whose zero test is a compare of its memory operand:
 /// one access of the load's own width, which a volatile load, one split
 /// under a proven alignment, a segment load and a widening index rule out.
@@ -310,7 +485,13 @@ fn zero_testable_load(inst: &Inst) -> bool {
     };
     !matches!(
         kind,
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128
+        LoadKind::F32
+            | LoadKind::F64
+            | LoadKind::F80
+            | LoadKind::F128
+            | LoadKind::V128
+            | LoadKind::V256
+            | LoadKind::V512
     )
 }
 
@@ -322,6 +503,15 @@ fn zero_testable_load(inst: &Inst) -> bool {
 /// writes the constant's own bits, not a conversion of them to the other
 /// width.
 fn store_immediate(func: &FunctionSsa, inst: &Inst, target: Target) -> Option<ValueId> {
+    if let Inst::AtomicRmw {
+        op, value, width, ..
+    } = *inst
+    {
+        return (target.is_x86_64() && op != AtomicRmwOp::Xchg)
+            .then(|| atomic_immediate(func, value, width))
+            .flatten()
+            .map(|_| value);
+    }
     let (value, kind) = match inst {
         Inst::Store { value, kind, .. }
         | Inst::StoreLocal { value, kind, .. }
@@ -350,16 +540,18 @@ fn store_immediate(func: &FunctionSsa, inst: &Inst, target: Target) -> Option<Va
         StoreKind::F32 => is_f32 && narrow,
         StoreKind::I64 => wide,
         StoreKind::F64 => !is_f32 && wide,
-        StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => false,
+        StoreKind::F80 | StoreKind::F128 | StoreKind::V128 | StoreKind::V256 | StoreKind::V512 => {
+            false
+        }
     };
     fits.then_some(value)
 }
 
 /// Per value: an `Imm` each reader of which takes in an FP register, where
-/// the aarch64 allocation places it. `reads` as for `operands_read`.
+/// the allocation places it. `reads` as for `operands_read`.
 pub(crate) fn fp_constants(func: &FunctionSsa, target: Target, reads: &[bool]) -> Vec<bool> {
     let n = func.insts.len();
-    if !target.is_aarch64() {
+    if !target.is_aarch64() && !target.is_x86_64() {
         return vec![false; n];
     }
     let mut seen = vec![(false, false); n];
@@ -384,7 +576,7 @@ pub(crate) fn fp_constants(func: &FunctionSsa, target: Target, reads: &[bool]) -
     seen.iter().map(|&(fp, int)| fp && !int).collect()
 }
 
-/// `f(v, fp)` per operand `v` of `inst`: `fp` when the aarch64 lowering reads
+/// `f(v, fp)` per operand `v` of `inst`: `fp` when the lowering reads
 /// `v` in an FP register at `v`'s precision. Rebuilt phi incomes are skipped.
 fn operand_files(func: &FunctionSsa, inst: &Inst, f: &mut impl FnMut(ValueId, bool)) {
     let single = |v: ValueId| func.f32_values.get(v as usize).copied().unwrap_or(false);
@@ -421,10 +613,10 @@ fn operand_files(func: &FunctionSsa, inst: &Inst, f: &mut impl FnMut(ValueId, bo
         Inst::FpCast { kind, value } => f(
             *value,
             match kind {
-                FpCastKind::FpToInt | FpCastKind::UFpToInt => true,
+                FpCastKind::FpToInt | FpCastKind::UFpToInt | FpCastKind::FpBits => true,
                 FpCastKind::F32ToF64 => single(*value),
                 FpCastKind::F64ToF32 => !single(*value),
-                FpCastKind::IntToFp | FpCastKind::UIntToFp => false,
+                FpCastKind::IntToFp | FpCastKind::UIntToFp | FpCastKind::BitsFp => false,
             },
         ),
         Inst::Store {
@@ -480,6 +672,12 @@ fn operand_files(func: &FunctionSsa, inst: &Inst, f: &mut impl FnMut(ValueId, bo
                 f(p, fp_mask.has(k));
             }
         }
+        Inst::Select { cond, a, b, kind } => {
+            let fp = matches!(kind, LoadKind::F32 | LoadKind::F64);
+            f(*cond, false);
+            f(*a, fp);
+            f(*b, fp);
+        }
         _ => for_each_operand(inst, |v| f(v, false)),
     }
 }
@@ -506,14 +704,17 @@ const X86_RDX: u8 = 2;
 
 /// A shift or rotate.
 fn is_shift_op(op: BinOp) -> bool {
-    matches!(op, BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror)
+    matches!(
+        op,
+        BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror | BinOp::Ror32
+    )
 }
 
 /// A rotate, whose variable count x86-64 reads in cl: the shifts take
 /// the BMI2 `shlx` / `shrx` / `sarx` forms instead, which read the
 /// count in any register.
 fn is_cl_shift_op(op: BinOp) -> bool {
-    op == BinOp::Ror
+    matches!(op, BinOp::Ror | BinOp::Ror32)
 }
 
 /// The operands x86-64 may write the result of `inst` over, in its two-address
@@ -522,6 +723,20 @@ fn x86_two_address(inst: &Inst) -> [Option<ValueId>; 2] {
     let (op, lhs, rhs) = match *inst {
         Inst::Binop { op, lhs, rhs } => (op, lhs, Ok(rhs)),
         Inst::BinopI { op, lhs, rhs_imm } => (op, lhs, Err(rhs_imm)),
+        // `cmov` overwrites its destination, which may hold either arm:
+        // the lowering inverts the condition for the other.
+        Inst::Select { a, b, kind, .. } if !matches!(kind, LoadKind::F32 | LoadKind::F64) => {
+            return [Some(a), Some(b)];
+        }
+        // A three-source SIMD form accumulates into its first operand.
+        Inst::SimdVal { op, ref args, .. }
+            if matches!(
+                crate::c5::simd::get(op).form,
+                crate::c5::simd::Form::Vvv | crate::c5::simd::Form::VvvI
+            ) =>
+        {
+            return [args.first().copied(), None];
+        }
         _ => return [None; 2],
     };
     let fits = |k: i64| i32::try_from(k).is_ok();
@@ -531,6 +746,7 @@ fn x86_two_address(inst: &Inst) -> [Option<ValueId>; 2] {
         (BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror, Err(k)) if (0..64).contains(&k) => {
             [Some(lhs), None]
         }
+        (BinOp::Ror32, Err(k)) if (0..32).contains(&k) => [Some(lhs), None],
         (BinOp::Or | BinOp::Xor, Err(k)) if fits(k) => [Some(lhs), None],
         (BinOp::And, Err(k)) if fits(k) && k != 0xffff_ffff => [Some(lhs), None],
         (BinOp::Mul, Err(k)) if k > 0 && (k as u64).is_power_of_two() => [Some(lhs), None],
@@ -694,6 +910,104 @@ fn asm_rw_apart(
     }
 }
 
+/// Per value: an `Imm` placed in the register an earlier `Imm` of the same
+/// constant in its block was placed in, with only instructions between
+/// whose lowering writes no register but its result's, none of them that
+/// one: the register still holds the constant. Also a zero only the
+/// inserts of a lane of 4 bytes or more at byte 0 read, as their vector:
+/// their lowering clears the bytes above the lane and reads no zero.
+fn imm_already_held(
+    func: &FunctionSsa,
+    places: &[Place],
+    use_counts: &[u32],
+    target: Target,
+) -> Vec<bool> {
+    let mut held = vec![false; func.insts.len()];
+    let mut base_reads = vec![0u32; func.insts.len()];
+    for (i, inst) in func.insts.iter().enumerate() {
+        if let Inst::VecInsert {
+            vec, off: 0, kind, ..
+        } = *inst
+            && use_counts.get(i).copied().unwrap_or(0) > 0
+            && matches!(
+                kind,
+                StoreKind::I32 | StoreKind::F32 | StoreKind::I64 | StoreKind::F64 | StoreKind::V128
+            )
+            && let Some(n) = base_reads.get_mut(vec as usize)
+        {
+            *n += 1;
+        }
+    }
+    let place = |v: usize| places.get(v).copied().unwrap_or(Place::None);
+    for block in &func.blocks {
+        // The registers known to hold a constant, with it.
+        let mut known: Vec<(u8, i64)> = Vec::new();
+        for v in block.inst_range.clone().map(|v| v as usize) {
+            let inst = &func.insts[v];
+            if use_counts.get(v).copied().unwrap_or(0) == 0 && inst.is_pure() {
+                continue;
+            }
+            if matches!(inst, Inst::Imm(0)) && base_reads[v] > 0 && base_reads[v] == use_counts[v] {
+                held[v] = true;
+                continue;
+            }
+            if let (&Inst::Imm(k), Place::IntReg(r)) = (inst, place(v)) {
+                held[v] = known.contains(&(r, k));
+                known.retain(|e| e.0 != r);
+                known.push((r, k));
+                continue;
+            }
+            let quiet = matches!(
+                inst,
+                Inst::ImmData(_)
+                    | Inst::ImmCode(_)
+                    | Inst::LocalAddr(_)
+                    | Inst::Load { .. }
+                    | Inst::LoadLocal { .. }
+                    | Inst::LoadIndexed { .. }
+                    | Inst::Store { .. }
+                    | Inst::StoreLocal { .. }
+                    | Inst::StoreIndexed { .. }
+                    | Inst::Binop { .. }
+                    | Inst::BinopI { .. }
+                    | Inst::Extend { .. }
+                    | Inst::Copy { .. }
+                    | Inst::Neg(_)
+                    | Inst::Select { .. }
+            ) || inst.is_lifetime_marker();
+            if !quiet {
+                known.clear();
+                continue;
+            }
+            let implicit = if target.is_x86_64() {
+                x86_implicit_writes(inst)
+            } else {
+                0
+            };
+            let written = match place(v) {
+                Place::IntReg(r) => Some(r),
+                _ => None,
+            };
+            known.retain(|&(r, _)| Some(r) != written && u64::from(implicit) >> r & 1 == 0);
+        }
+    }
+    held
+}
+
+/// The immediate an x86-64 locked operation on `width` bytes encodes for
+/// the `Imm` `value`: its low bytes, sign-extended from 32 bits at 8.
+pub(crate) fn atomic_immediate(func: &FunctionSsa, value: ValueId, width: u8) -> Option<i32> {
+    let Some(&Inst::Imm(k)) = func.insts.get(value as usize) else {
+        return None;
+    };
+    match width {
+        1 => Some(k as i8 as i32),
+        2 => Some(k as i16 as i32),
+        4 => Some(k as i32),
+        _ => i32::try_from(k).ok(),
+    }
+}
+
 /// Whether x86-64 lowers a read-modify-write of `op` whose prior contents
 /// are read as a `CMPXCHG` retry: the bitwise operators, which have no
 /// fetching locked form.
@@ -701,7 +1015,7 @@ pub(crate) fn cmpxchg_rmw(op: AtomicRmwOp) -> bool {
     matches!(op, AtomicRmwOp::And | AtomicRmwOp::Or | AtomicRmwOp::Xor)
 }
 
-/// x86-64 register preferences the colorer honours among free caller-saved
+/// x86-64 register preferences the colorer honors among free caller-saved
 /// registers. `apart[root]` keeps the result of a non-commutative `op dst,
 /// rhs` (`sub`, `subsd`, `divsd`, a rotate) off the register of `rhs`, which
 /// the emitter would copy aside first. A rotate reads a register count in
@@ -814,8 +1128,18 @@ fn x86_preferences(
 }
 
 /// Floating-point scratch registers the emit pass needs: two operand
-/// reloads, and a third for the fused multiply-add.
+/// reloads, and on AArch64 a third for the fused multiply-add.
 pub(crate) const FP_SCRATCH_COUNT: usize = 3;
+
+/// The [`FP_SCRATCH_COUNT`] entries `target`'s lowering writes: x86-64
+/// forms a spilled fused multiply-add in the second.
+fn fp_scratch_count(target: Target) -> usize {
+    if target.is_x86_64() {
+        2
+    } else {
+        FP_SCRATCH_COUNT
+    }
+}
 /// `RegBanks::fp_scratch` entry left when `-ffixed-` reserved every
 /// candidate; a function that needs it is refused at the emit.
 pub(crate) const NO_FP_SCRATCH: u8 = u8::MAX;
@@ -849,6 +1173,10 @@ pub(crate) struct RegBanks {
     /// one cannot take the callee bank. False where the convention
     /// preserves the whole register, Win64 xmm6..xmm15 included.
     pub callee_fpr_low64_only: bool,
+    /// What a callee-saved register costs in [`cost_weights`] units: the
+    /// prologue's save and the epilogue's restore, once per call of the
+    /// function. AArch64 saves the registers in pairs, so each costs half.
+    pub open_cost: u64,
 }
 
 impl RegBanks {
@@ -875,6 +1203,7 @@ impl RegBanks {
         let mut callee_fprs = keep(rows.callee_fprs, FixedRegs::has_fpr);
         let mut caller_fprs = keep(rows.caller_fprs, FixedRegs::has_fpr);
         let mut fp_scratch = [NO_FP_SCRATCH; FP_SCRATCH_COUNT];
+        let count = fp_scratch_count(target);
         let mut n = 0usize;
         for r in rows
             .fp_scratch
@@ -882,14 +1211,16 @@ impl RegBanks {
             .copied()
             .filter(|&r| !fixed.has_fpr(r))
         {
-            if n < FP_SCRATCH_COUNT {
+            if n < count {
                 fp_scratch[n] = r;
                 n += 1;
             } else if !fp_callee_saved(target, r) {
                 caller_fprs.push(r);
+            } else if !callee_fprs.contains(&r) {
+                callee_fprs.push(r);
             }
         }
-        while n < FP_SCRATCH_COUNT {
+        while n < count {
             let Some(r) = callee_fprs.pop() else { break };
             fp_scratch[n] = r;
             n += 1;
@@ -901,6 +1232,7 @@ impl RegBanks {
             caller_fprs,
             fp_scratch,
             callee_fpr_low64_only: !target.is_x86_64(),
+            open_cost: if target.is_aarch64() { 1 } else { 2 } * (FREQ_ONE + STATIC_COST),
         }
     }
 }
@@ -1026,6 +1358,107 @@ fn call_forbid_masks(
     out
 }
 
+/// Each call with the values live across it, for the saves around calls;
+/// empty where the function may not save around one: it calls a
+/// returns-twice function, has a `__try` region, or has no frame.
+fn call_crossings(
+    func: &FunctionSsa,
+    liveness: &super::liveness::Liveness,
+    target: Target,
+) -> Vec<(ValueId, Vec<ValueId>)> {
+    if func.has_returns_twice_call || func.has_seh() || func.is_naked {
+        return Vec::new();
+    }
+    let tls = tls_addr_is_call(target, func);
+    liveness.values_live_after(func, &|inst: &Inst| is_call_site(inst, tls))
+}
+
+/// Per phi-class root, the result registers the `RetPart`s of a call it
+/// lives across read: a save around that call is restored into its
+/// register before they are read.
+fn ret_part_crossing_forbid(
+    func: &FunctionSsa,
+    target: Target,
+    crossings: &[(ValueId, Vec<ValueId>)],
+    node_of: &[ValueId],
+) -> Vec<(u64, u64)> {
+    let read = ret_part_reads(func, target);
+    if read.is_empty() {
+        return Vec::new();
+    }
+    let mut out = alloc::vec![(0u64, 0u64); func.insts.len()];
+    for (site, live) in crossings {
+        if let Some(&(gpr, fpr)) = read.get(site) {
+            for &v in live {
+                let entry = &mut out[node_of[v as usize] as usize];
+                entry.0 |= gpr;
+                entry.1 |= fpr;
+            }
+        }
+    }
+    out
+}
+
+/// Per call followed by `RetPart`s, the result registers they read, as
+/// integer and floating-point masks.
+fn ret_part_reads(func: &FunctionSsa, target: Target) -> BTreeMap<ValueId, (u64, u64)> {
+    let tls = tls_addr_is_call(target, func);
+    let mut read: BTreeMap<ValueId, (u64, u64)> = BTreeMap::new();
+    for block in &func.blocks {
+        let mut site = None;
+        for v in block.inst_range.clone() {
+            let inst = &func.insts[v as usize];
+            if is_call_site(inst, tls) {
+                site = Some(v);
+            } else if let (Some(s), Some((fp, reg))) = (site, ret_part_reg(target, inst)) {
+                let entry = read.entry(s).or_default();
+                if fp {
+                    entry.1 |= 1 << reg;
+                } else {
+                    entry.0 |= 1 << reg;
+                }
+            }
+        }
+    }
+    read
+}
+
+/// Per phi-class root, what keeping it in a caller-saved register across
+/// the calls it lives across ([`call_crossings`]) costs: a store and a
+/// load at each, by the call's loop weight, and by its frequency and size
+/// ([`cost_weights`]).
+fn call_save_costs(
+    func: &FunctionSsa,
+    crossings: &[(ValueId, Vec<ValueId>)],
+    node_of: &[ValueId],
+) -> (Vec<u64>, Vec<u64>) {
+    let mut cost = alloc::vec![0u64; func.insts.len()];
+    let mut by_freq = alloc::vec![0u64; func.insts.len()];
+    if crossings.is_empty() {
+        return (cost, by_freq);
+    }
+    let weights = block_weights(func);
+    let freqs = cost_weights(func);
+    let mut block_of = alloc::vec![0usize; func.insts.len()];
+    for (b, block) in func.blocks.iter().enumerate() {
+        for v in block.inst_range.clone() {
+            block_of[v as usize] = b;
+        }
+    }
+    for (site, live) in crossings {
+        let b = block_of[*site as usize];
+        let (w, f) = (weights[b].saturating_mul(2), freqs[b].saturating_mul(2));
+        let mut roots: Vec<ValueId> = live.iter().map(|&v| node_of[v as usize]).collect();
+        roots.sort_unstable();
+        roots.dedup();
+        for r in roots {
+            cost[r as usize] = cost[r as usize].saturating_add(w);
+            by_freq[r as usize] = by_freq[r as usize].saturating_add(f);
+        }
+    }
+    (cost, by_freq)
+}
+
 /// The target's full register banks.
 struct Rows {
     callee_gprs: &'static [u8],
@@ -1088,9 +1521,9 @@ impl Rows {
                 caller_gprs: &[0, 1, 2, 6, 7, 8, 9],
                 callee_fprs: &[],
                 caller_fprs: &[0, 1, 2, 3, 4, 5, 6, 7],
-                // xmm14 / xmm15 / xmm13 are the emit pass's scratch;
-                // xmm8..xmm12 join the caller-saved bank (`RegBanks::new`).
-                fp_scratch: &[14, 15, 13, 8, 9, 10, 11, 12],
+                // xmm14 / xmm15 are the emit pass's scratch; xmm8..xmm13
+                // join the caller-saved bank (`RegBanks::new`).
+                fp_scratch: &[14, 15, 8, 9, 10, 11, 12, 13],
             },
             Target::WindowsX64 => Self {
                 // Win64 callee-saved GPRs: rbx, rsi, rdi, r12, r13, r14,
@@ -1161,10 +1594,10 @@ pub(crate) fn bank_capacity(target: Target, fixed: FixedRegs) -> BankCapacity {
 }
 
 /// Which entries of `RegBanks::fp_scratch` the body can write. The
-/// handlers stage spilled FP destinations and materialised operands
+/// handlers stage spilled FP destinations and materialized operands
 /// through the first, break FP move cycles / build sign masks / narrow
 /// f64->f32 through the second, and the FMA lowering uses the third as
-/// its accumulator slot. Every use of the first two materialises or
+/// its accumulator slot. Every use of the first two materializes or
 /// produces an FP value, so any FP-classed value implies the demand.
 /// A scratch the target's ABI marks callee-saved (the AAPCS64
 /// d8..d15 tail taken under `-ffixed-`, or a Win64 fallback off a
@@ -1172,7 +1605,7 @@ pub(crate) fn bank_capacity(target: Target, fixed: FixedRegs) -> BankCapacity {
 /// a foreign caller holding a live value there across a call into this
 /// code does not see it corrupted. A zero fill or a population count
 /// writes no scratch that owes a save ([`free_fp_register`]).
-pub(crate) fn fp_scratch_demand(func: &FunctionSsa) -> [bool; FP_SCRATCH_COUNT] {
+pub(crate) fn fp_scratch_demand(func: &FunctionSsa, target: Target) -> [bool; FP_SCRATCH_COUNT] {
     // Tail-call forwarders jmp out with no epilogue, so a saved register
     // could never be restored; they touch no FP scratch either.
     if func
@@ -1182,36 +1615,20 @@ pub(crate) fn fp_scratch_demand(func: &FunctionSsa) -> [bool; FP_SCRATCH_COUNT] 
     {
         return [false; FP_SCRATCH_COUNT];
     }
-    let simd = func.insts.iter().any(|i| matches!(i, Inst::X86Simd { .. }));
+    let simd = func.insts.iter().any(|i| matches!(i, Inst::Simd { .. }));
     let fp_work = simd || func.insts.iter().any(produces_fp_result);
     let fma = func.insts.iter().any(|i| matches!(i, Inst::Fma { .. }));
-    [fp_work, fp_work, fma]
-}
-
-/// [`fp_scratch_demand`], the x86-64 third scratch only for a spilled FMA.
-fn fp_scratch_writes(
-    func: &FunctionSsa,
-    places: &[Place],
-    target: Target,
-) -> [bool; FP_SCRATCH_COUNT] {
-    let mut demand = fp_scratch_demand(func);
-    if target.is_x86_64() {
-        demand[2] &= func
-            .insts
-            .iter()
-            .zip(places)
-            .any(|(i, p)| matches!(i, Inst::Fma { .. }) && matches!(p, Place::Spill(_)));
-    }
-    demand
+    [fp_work, fp_work, fma && fp_scratch_count(target) > 2]
 }
 
 /// Why `func` cannot be emitted with `fp_scratch`: an entry it needs
 /// ([`fp_scratch_demand`]) is [`NO_FP_SCRATCH`]. `None` when it can.
 pub(crate) fn fp_scratch_shortfall(
     func: &FunctionSsa,
+    target: Target,
     fp_scratch: [u8; FP_SCRATCH_COUNT],
 ) -> Option<&'static str> {
-    let demand = fp_scratch_demand(func);
+    let demand = fp_scratch_demand(func, target);
     (0..FP_SCRATCH_COUNT)
         .any(|i| demand[i] && fp_scratch[i] == NO_FP_SCRATCH)
         .then_some(
@@ -1266,6 +1683,13 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // operand live and weighs on no spill decision.
     let mut use_counts = compute_use_counts(func);
     drop_unread_incomes(func, &mut use_counts);
+    // Unread, a stack argument's constant is unemitted, and the liveness
+    // reading only emitted values keeps it out of the coloring.
+    let stack_imm = stack_arg_immediates(func, target, &use_counts);
+    let stack_load = stack_arg_loads(func, target, &use_counts);
+    for &v in stack_imm.keys().chain(stack_load.keys()) {
+        use_counts[v as usize] = 0;
+    }
     let reads = operands_read(func, &use_counts);
     let fp_const = fp_constants(func, target, &reads);
     populate_return_hints(func, conv_target, &fp_const, &mut hints);
@@ -1291,7 +1715,12 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             sxtw_source: Vec::new(),
             sxtw_k: Vec::new(),
             branch_fused: Vec::new(),
+            mask_tests: Vec::new(),
+            select_inc: Vec::new(),
+            imm_held: Vec::new(),
             imm_store: Vec::new(),
+            stack_imm: alloc::collections::BTreeMap::new(),
+            stack_load: alloc::collections::BTreeMap::new(),
             fp_const,
             implicit_live: Vec::new(),
             hints,
@@ -1303,6 +1732,8 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             count_nonzero: Vec::new(),
             wide: Vec::new(),
             asm_preserve: (u32::MAX, u32::MAX),
+            call_saves: Vec::new(),
+            loop_saves: LoopSaveCode::default(),
         };
     }
 
@@ -1311,7 +1742,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // allocated member of a class, then routes every other member to
     // the same `Place`. For a function with no phis every class is a
     // singleton and the lookup degenerates to identity, so the path
-    // collapses to today's per-value behaviour. Class-level
+    // collapses to today's per-value behavior. Class-level
     // last-use is the max over all members so a value stays live
     // until every member of its class is dead.
     let liveness = super::emit_common::time_pass("ssa::liveness::Liveness::compute", || {
@@ -1347,7 +1778,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     populate_call_result_hints(func, target, &calls_after_def, &mut hints);
 
     // Build the interference graph over phi-congruence-class roots and
-    // colour it. Two values ever simultaneously live (per CFG
+    // color it. Two values ever simultaneously live (per CFG
     // liveness) get distinct registers; a value with no free register
     // in its bank spills. Unlike a pc-interval linear scan this models
     // a value live across a back-edge passthrough block, whose live
@@ -1378,6 +1809,8 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     let mut asm_live = asm_live_values(func, &liveness, target, fixed);
     let asm_forbid = asm_forbid_masks(func, &asm_live, &node_of);
     let call_forbid = call_forbid_masks(func, &liveness, target, fixed, &node_of);
+    let crossings = call_crossings(func, &liveness, target);
+    let ret_part_forbid = ret_part_crossing_forbid(func, target, &crossings, &node_of);
     let wide = wide_values(func);
     let mut node_cons: Vec<Option<NodeConstraints>> = vec![None; func.insts.len()];
     for (v, inst) in func.insts.iter().enumerate() {
@@ -1388,15 +1821,20 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         let entry = node_cons[root].get_or_insert(NodeConstraints {
             is_fp: false,
             must_callee: false,
+            call_forbid: 0,
+            save_cost: 0,
+            save_freq: 0,
+            spill_freq: 0,
+            def_cost: 0,
             hint: None,
             forbid: 0,
             avoid: 0,
             loop_avoid: 0,
-            wide: false,
+            wide: VecWidth::Scalar,
             follow: [None; 3],
         });
         entry.is_fp = produces_fp_result(inst) || fp_const[v];
-        entry.wide |= wide[v];
+        entry.wide = entry.wide.max(wide[v]);
         entry.must_callee |= calls_after_def[v];
         if entry.hint.is_none() {
             entry.hint = hints[v];
@@ -1404,12 +1842,37 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         entry.forbid |= param_incoming_forbid[v] | call_target_forbid[v];
         entry.avoid |= avoid.get(v).copied().unwrap_or(0);
         entry.loop_avoid |= loop_avoid.get(v).copied().unwrap_or(0);
-        for &(gpr, fpr) in asm_forbid
-            .get(root)
-            .into_iter()
-            .chain(call_forbid.get(root))
-        {
+        if let Some(&(gpr, fpr)) = asm_forbid.get(root) {
             entry.forbid |= u64::from(if entry.is_fp { fpr } else { gpr });
+        }
+        if let Some(&(gpr, fpr)) = ret_part_forbid.get(root) {
+            entry.forbid |= if entry.is_fp { fpr } else { gpr };
+        }
+        if let Some(&(gpr, fpr)) = call_forbid.get(root) {
+            entry.call_forbid |= u64::from(if entry.is_fp { fpr } else { gpr });
+        }
+    }
+    let (save_costs, save_freqs) = call_save_costs(func, &crossings, &node_of);
+    if save_costs.iter().any(|&c| c > 0) {
+        let defs = compute_def_weights(func, &node_of, &use_counts);
+        for (root, c) in node_cons.iter_mut().enumerate() {
+            if let Some(c) = c {
+                c.save_cost = save_costs[root];
+                c.save_freq = save_freqs[root];
+                c.def_cost = defs[root];
+            }
+        }
+    }
+    // What spilling each node costs by block frequency and size, against
+    // opening a callee-saved register for it.
+    {
+        let freqs = cost_weights(func);
+        let uses_by_freq = use_weights(func, &node_of, &liveness, &freqs);
+        let defs_by_freq = def_weights(func, &node_of, &use_counts, &freqs);
+        for (root, c) in node_cons.iter_mut().enumerate() {
+            if let Some(c) = c {
+                c.spill_freq = uses_by_freq[root].saturating_add(defs_by_freq[root]);
+            }
         }
     }
     // A two-address result and an operand dying at it follow each other.
@@ -1434,6 +1897,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     }
     let (max_gpr, max_fpr) = pool_size_limits();
     let spill_weights = compute_spill_weights(func, &node_of, &liveness);
+    let loops = (!func.has_returns_twice_call)
+        .then(|| super::loop_saves::analyze(func, &liveness, &node_of, &block_weights(func)))
+        .flatten();
     let color = |node_cons: &[Option<NodeConstraints>]| {
         color_graph(
             &value_interference,
@@ -1445,9 +1911,62 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             func.has_returns_twice_call,
             &spill_weights,
             &apart,
+            loops.as_ref(),
         )
     };
     let mut coloring = color(&node_cons);
+    // A callee-saved register costs its save and its restore at every
+    // exit past the prologue, unless a call or an asm block saves it
+    // anyway; one whose holders would cost less in spill slots -- a store
+    // at each definition, a load at each use, by loop weight -- is
+    // withheld and the graph colored again. x86-64 only: AArch64 saves
+    // registers in pairs folded into the frame's own setup and teardown.
+    if target.is_x86_64() {
+        let exits = (func.blocks.iter())
+            .filter(|b| matches!(b.terminator, Terminator::Return(_) | Terminator::TailExt(_)))
+            .count() as u64;
+        let early = super::early_exit::early_exit(func, &param_incoming_plan(func, target));
+        let exits = exits - u64::from(early.is_some());
+        let defs = compute_def_weights(func, &node_of, &use_counts);
+        let conv_banks = RegBanks::new(conv_target, fixed);
+        let (call_gpr, call_fpr) = call_saves(func, target, conv_target, fixed);
+        let (asm_gpr, asm_fpr) =
+            asm_callee_saved(func, &asm_live, &conv_banks, target, conv_target);
+        let base = region_base.map_or(0, |r| 1u32 << r);
+        let saved = [call_gpr | asm_gpr | base, call_fpr | asm_fpr].map(u64::from);
+        let mut withheld = [0u64; 2];
+        loop {
+            let mut held = [[0u64; 64]; 2];
+            for (node, c) in node_cons.iter().enumerate() {
+                let Some(c) = c else { continue };
+                let r = match coloring.places[node] {
+                    Place::IntReg(r) if !c.is_fp && banks.callee_gprs.contains(&r) => r,
+                    Place::FpReg(r) if c.is_fp && banks.callee_fprs.contains(&r) => r,
+                    _ => continue,
+                };
+                let cost = spill_weights[node].saturating_add(defs[node]);
+                let h = &mut held[usize::from(c.is_fp)][r as usize];
+                *h = h.saturating_add(cost);
+            }
+            let mut more = false;
+            for (bank, regs) in held.iter().enumerate() {
+                for (r, &cost) in regs.iter().enumerate() {
+                    let free = (saved[bank] >> r) & 1 != 0 || (withheld[bank] >> r) & 1 != 0;
+                    if cost > 0 && cost < exits + 1 && !free {
+                        withheld[bank] |= 1 << r;
+                        more = true;
+                    }
+                }
+            }
+            if !more {
+                break;
+            }
+            for c in node_cons.iter_mut().flatten() {
+                c.forbid |= withheld[usize::from(c.is_fp)];
+            }
+            coloring = color(&node_cons);
+        }
+    }
     // A bound x86-64 statement short of scratch under this coloring reserves
     // its whole need, which any coloring leaves free, and colors again.
     while target.is_x86_64() {
@@ -1481,7 +2000,21 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         coloring = color(&node_cons);
     }
     places = coloring.places;
-    let spill_count = coloring.spill_count;
+    for &v in stack_imm.keys().chain(stack_load.keys()) {
+        places[v as usize] = Place::None;
+    }
+    let mut spill_count = coloring.spill_count;
+    let saves_at = call_save_lists(
+        (&crossings, &node_of),
+        (&coloring.saved, &node_cons, &places),
+        &mut spill_count,
+    );
+    let loop_code = loop_save_code(
+        loops.as_ref(),
+        &coloring.loop_saved,
+        (&node_cons, &places),
+        &mut spill_count,
+    );
     // A copy or an atomic read-modify-write may take any register as a
     // temporary, so its record covers them all; the x86-64 shift and
     // division records cover the registers they write.
@@ -1527,7 +2060,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
                 & super::super::x86_64::emit::bound_scratch_candidates(asm, fixed);
         }
     }
-    // Recognise the c5 sign-narrow shape:
+    // Recognize the c5 sign-narrow shape:
     //   Shl(X, K) ; Shr(_, K)   with K in {32, 48, 56}
     // The shift's rhs may arrive either as a `BinopI` (with the
     // immediate folded into the inst) or as a `Binop` whose `rhs`
@@ -1592,7 +2125,14 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             | Inst::StoreLocal { .. }
             | Inst::StoreIndexed { .. }
             | Inst::SegLoad { .. }
-            | Inst::SegStore { .. } => true,
+            | Inst::SegStore { .. }
+            | Inst::SimdVal { .. }
+            | Inst::VecBinop { .. }
+            | Inst::VecInsert { .. }
+            | Inst::VecSplat { .. }
+            | Inst::VecConst { .. }
+            | Inst::VecExtract { .. }
+            | Inst::Select { .. } => true,
             // AArch64 `madd` / `msub` write only the result; the x86-64
             // lowering may form the product in a multiplicand's register.
             Inst::MulAdd { .. } => !target.is_x86_64(),
@@ -1627,7 +2167,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             | Inst::AtomicLoad { .. }
             | Inst::AtomicStore { .. }
             | Inst::Intrinsic { .. }
-            | Inst::X86Simd { .. }
+            | Inst::Simd { .. }
             | Inst::InlineAsm { .. }
             | Inst::AllocaInit(_)
             | Inst::LifetimeEnd(_)
@@ -1724,12 +2264,39 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             use_counts[c as usize] = 0;
         }
     }
-    // Recognise comparison-feeding-branch sites. The terminator's cond
+    // Likewise the increment an aarch64 select alone reads, of its other arm.
+    let mut select_inc: Vec<bool> = vec![false; func.insts.len()];
+    for (s, inst) in func.insts.iter().enumerate() {
+        let Inst::Select {
+            a,
+            b,
+            kind: LoadKind::I64,
+            ..
+        } = *inst
+        else {
+            continue;
+        };
+        if !target.is_aarch64() || use_counts[s] == 0 {
+            continue;
+        }
+        for (inc, x) in [(a, b), (b, a)] {
+            if use_counts[inc as usize] == 1
+                && matches!(func.insts[inc as usize],
+                    Inst::BinopI { op: BinOp::Add, lhs, rhs_imm: 1 } if lhs == x)
+            {
+                use_counts[inc as usize] = 0;
+                use_counts[x as usize] -= 1;
+                select_inc[s] = true;
+                break;
+            }
+        }
+    }
+    // Recognize comparison-feeding-branch sites. The terminator's cond
     // must be a Binop / BinopI comparison defined in the same block
     // with the terminator as its single consumer, and every following
     // instruction the emit produces code for must leave the host flags
     // untouched, so the branch reads the flags the comparison set. The
-    // emit drops the `cset` / `setcc` materialisation and the
+    // emit drops the `cset` / `setcc` materialization and the
     // terminator branches on the condition directly (`b.cond` / `jcc`,
     // with the per-arch FP forms covering the unordered cases). The
     // phi predecessor moves emitted between the body and the
@@ -1737,83 +2304,10 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // spill load / store / movz / fmov) except the case guarded below.
     let is_compare_op = crate::c5::ir::is_comparison_op;
     let is_x86 = target.is_x86_64();
-    // Whether the inst's lowering writes the host flags. On x86_64
-    // every integer ALU op does, a zero immediate materialises as
-    // `xor r, r`, and the unsigned FP converts test the sign bit with
-    // flag-setting arithmetic; scalar SSE and the mov / lea / movzx
-    // families do not. On aarch64 only the comparisons reach a
-    // flag-setting form (`subs` / `fcmp`).
-    let flags_survive = |inst: &Inst| -> bool {
-        match inst {
-            Inst::Imm(k) => !(is_x86 && *k == 0),
-            Inst::Undef
-            | Inst::ExceptionCode
-            | Inst::ParentLocalAddr { .. }
-            | Inst::ImmData(_)
-            | Inst::ImmCode(_)
-            | Inst::ImmExtCode(_)
-            | Inst::BlockAddr(_)
-            | Inst::LocalAddr(_)
-            | Inst::ParamRef { .. }
-            | Inst::Phi { .. }
-            | Inst::Load { .. }
-            | Inst::LoadLocal { .. }
-            | Inst::LoadIndexed { .. }
-            | Inst::Store { .. }
-            | Inst::StoreLocal { .. }
-            | Inst::StoreIndexed { .. }
-            | Inst::Extend { .. }
-            | Inst::Copy { .. }
-            | Inst::Fneg(_)
-            | Inst::Fma { .. } => true,
-            Inst::FpCast { kind, .. } => {
-                !(is_x86 && matches!(kind, FpCastKind::UFpToInt | FpCastKind::UIntToFp))
-            }
-            // x86-64 `neg` sets the flags; the aarch64 `sub Xd,XZR,Xn` it
-            // lowers to does not, nor do MADD, MSUB, SBFM, UBFM and a
-            // shifted-register ADD, SUB, AND, ORR or EOR.
-            Inst::Neg(_)
-            | Inst::BitCount { .. }
-            | Inst::MulAdd { .. }
-            | Inst::ShiftOp { .. }
-            | Inst::BitField { .. } => !is_x86,
-            Inst::Binop { op, .. } | Inst::BinopI { op, .. } => {
-                if is_x86 {
-                    crate::c5::ir::is_fp_arith_op(*op)
-                } else {
-                    !is_compare_op(*op)
-                }
-            }
-            Inst::TlsAddr(_)
-            | Inst::SegLoad { .. }
-            | Inst::SegStore { .. }
-            | Inst::Udiv128 { .. }
-            | Inst::Bswap { .. }
-            | Inst::Call { .. }
-            | Inst::CallIndirect { .. }
-            | Inst::CallExt { .. }
-            | Inst::TailExt(_)
-            | Inst::Mzero { .. }
-            | Inst::Mcpy { .. }
-            | Inst::AtomicRmw { .. }
-            | Inst::AtomicCas { .. }
-            | Inst::AtomicCas16 { .. }
-            | Inst::AtomicLoad { .. }
-            | Inst::AtomicStore { .. }
-            | Inst::Intrinsic { .. }
-            | Inst::X86Simd { .. }
-            | Inst::InlineAsm { .. }
-            | Inst::AllocaInit(_)
-            | Inst::LifetimeEnd(_)
-            | Inst::ParamPart { .. }
-            | Inst::RetPart { .. }
-            | Inst::AsmOut { .. }
-            | Inst::AggParts { .. } => false,
-        }
-    };
+    let flags_survive = |inst: &Inst| flags_survive(inst, is_x86);
     // Whether the edge `pred -> succ` carries an FP-classed phi income
     // that is the integer constant zero: its predecessor-exit move
-    // re-materialises the bits through the integer scratch, which on
+    // re-materializes the bits through the integer scratch, which on
     // x86_64 is a flag-writing `xor`.
     let fp_zero_phi_income =
         |succ: super::super::ir::BlockId, pred: super::super::ir::BlockId| -> bool {
@@ -1874,7 +2368,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             }
             Some(Inst::Binop { op, .. } | Inst::BinopI { op, .. }) => (
                 is_compare_op(*op)
-                    && (is_x86 || crate::c5::codegen::aarch64::emit::compare_fuses(*op)),
+                    && (is_x86 || crate::c5::codegen::aarch64::emit::branch_fuses(*op)),
                 false,
             ),
             Some(inst) => {
@@ -1919,6 +2413,82 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         }
         branch_fused[cond as usize] = true;
     }
+    // Likewise a comparison, a mask one `test` / `bt` or aarch64 `tst`
+    // holds, or an x86-64 load compared with zero in memory, that only later
+    // selects in its block read.
+    let mut mask_tests: Vec<bool> = vec![false; func.insts.len()];
+    for block in &func.blocks {
+        for c in block.inst_range.clone() {
+            let (fuses, tests) = match func.insts[c as usize] {
+                Inst::BinopI {
+                    op: BinOp::And,
+                    rhs_imm,
+                    ..
+                } if is_x86 => (branch_mask_fuses(rhs_imm, false, true), false),
+                Inst::BinopI {
+                    op: BinOp::And,
+                    rhs_imm,
+                    ..
+                } => {
+                    let tst = crate::c5::codegen::aarch64::encode::encode_logical_imm(
+                        rhs_imm as u64,
+                        true,
+                    );
+                    (tst.is_some(), true)
+                }
+                Inst::Binop { op, .. } | Inst::BinopI { op, .. } => (
+                    is_compare_op(op)
+                        && (is_x86 || crate::c5::codegen::aarch64::emit::compare_fuses(op)),
+                    false,
+                ),
+                ref load if is_x86 && zero_testable_load(load) => (true, false),
+                _ => (false, false),
+            };
+            if !fuses || branch_fused[c as usize] {
+                continue;
+            }
+            // `cmp $0, mem` tests a load at its width, not a quadword's low
+            // word a select tests.
+            let quad = matches!(
+                func.insts[c as usize],
+                Inst::Load {
+                    kind: LoadKind::I64,
+                    ..
+                } | Inst::LoadLocal {
+                    kind: LoadKind::I64,
+                    ..
+                } | Inst::LoadIndexed {
+                    kind: LoadKind::I64,
+                    ..
+                }
+            );
+            let low_word_reader = (c..block.inst_range.end).any(|p| {
+                matches!(func.insts[p as usize], Inst::Select { cond, .. } if cond == c)
+                    && super::super::passes::narrow::is_cmp32(&func.cmp32, p)
+            });
+            if quad && low_word_reader {
+                continue;
+            }
+            let reads = |p: ValueId| matches!(func.insts[p as usize], Inst::Select { cond, .. } if cond == c);
+            let (n, last) = ((c + 1)..block.inst_range.end)
+                .filter(|&p| reads(p))
+                .fold((0, c), |(n, _), p| (n + 1, p));
+            if n == 0 || use_counts.get(c as usize).copied().unwrap_or(0) != n {
+                continue;
+            }
+            let window_ok = ((c + 1)..last).all(|p| {
+                let inst = &func.insts[p as usize];
+                reads(p)
+                    || inst.is_lifetime_marker()
+                    || (inst.is_pure() && use_counts[p as usize] == 0)
+                    || flags_survive(inst)
+            });
+            if window_ok {
+                branch_fused[c as usize] = true;
+                mask_tests[c as usize] = tests;
+            }
+        }
+    }
     // Drop the "value-also-in-acc" propagate slot for stores and copies
     // whose defined value is unread. c5 store ops leave the stored value
     // in the accumulator and a copy yields its destination; if nothing
@@ -1957,7 +2527,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // decision and the Win64 xmm listing below, and phi-predecessor
     // moves write the phi's own place, which is reached through the
     // phi's row (a live phi is never dead-pure; a dead one holds no
-    // place).
+    // place). The spill region likewise ends after the last slot a live
+    // value holds.
+    let mut slots_end = 0u32;
     let mut gpr_used: alloc::collections::BTreeSet<u8> = alloc::collections::BTreeSet::new();
     let mut fp_used: alloc::collections::BTreeSet<u8> = alloc::collections::BTreeSet::new();
     for (v, inst) in func.insts.iter().enumerate() {
@@ -1971,9 +2543,17 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             Place::FpReg(r) => {
                 fp_used.insert(r);
             }
-            _ => {}
+            Place::Spill(s) => {
+                let units = node_cons[node_of[v] as usize].map_or(1, |c| c.wide.units());
+                slots_end = slots_end.max(s + units);
+            }
+            Place::None => {}
         }
     }
+    for save in (saves_at.iter().flat_map(|(_, saves)| saves)).chain(loop_code.all()) {
+        slots_end = slots_end.max(save.slot + save.wide.units());
+    }
+    let spill_count = spill_count.min(slots_end);
     // Only callee-saved registers need prologue / epilogue
     // save and restore. Caller-saved registers are preserved
     // by the caller across the function's call sites (via the
@@ -2010,7 +2590,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // value), so the filter above drops it; a callee-saved scratch the
     // body touches joins the list here so the prologue / epilogue's
     // FP-save loop preserves it, mirroring the r13 GPR handling above.
-    let demand = fp_scratch_writes(func, &places, target);
+    let demand = fp_scratch_demand(func, target);
     for (i, &r) in banks.fp_scratch.iter().enumerate() {
         if demand[i]
             && r != NO_FP_SCRATCH
@@ -2038,14 +2618,30 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     verify_allocation(
         func,
         &places,
-        target,
-        &banks,
+        (target, &banks),
         &liveness,
         &fp_const,
         &use_counts,
+        (
+            &|a: ValueId, b: ValueId| {
+                let Some(info) = loops.as_ref() else {
+                    return false;
+                };
+                let (na, nb) = (node_of[a as usize], node_of[b as usize]);
+                let lies = |x: ValueId, saved: ValueId| {
+                    info.inside[x as usize].is_some_and(|inner| {
+                        (coloring.loop_saved.iter())
+                            .any(|&(l, n)| n == saved && info.encloses(l, inner))
+                    })
+                };
+                lies(na, nb) || lies(nb, na)
+            },
+            &saves_at,
+        ),
     );
 
     let asm_preserve = asm_preserve_masks(func, target, region_base);
+    let imm_held = imm_already_held(func, &places, &use_counts, target);
     Allocation {
         places,
         spill_count,
@@ -2057,7 +2653,12 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         sxtw_source,
         sxtw_k,
         branch_fused,
+        mask_tests,
+        select_inc,
+        imm_held,
         imm_store,
+        stack_imm,
+        stack_load,
         fp_const,
         implicit_live,
         hints,
@@ -2075,7 +2676,110 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         },
         wide,
         asm_preserve,
+        call_saves: saves_at,
+        loop_saves: loop_code,
     }
+}
+
+/// Each call a node the coloring saved crosses, with the caller-saved
+/// registers of those nodes and a slot per node, which the reservation
+/// grows by.
+fn call_save_lists(
+    (crossings, node_of): (&[(ValueId, Vec<ValueId>)], &[ValueId]),
+    (saved, node_cons, places): (&[bool], &[Option<NodeConstraints>], &[Place]),
+    spill_count: &mut u32,
+) -> Vec<(ValueId, Vec<CallSave>)> {
+    if !saved.iter().any(|&s| s) {
+        return Vec::new();
+    }
+    let mut slot = alloc::vec![u32::MAX; saved.len()];
+    for (node, &s) in saved.iter().enumerate() {
+        if s {
+            slot[node] = *spill_count;
+            *spill_count += node_cons[node].map_or(1, |c| c.wide.units());
+        }
+    }
+    let mut out = Vec::new();
+    for (site, live) in crossings {
+        let mut saves: Vec<CallSave> = Vec::new();
+        for &v in live {
+            let root = node_of[v as usize] as usize;
+            if !saved[root] || saves.iter().any(|s| s.slot == slot[root]) {
+                continue;
+            }
+            let (reg, is_fp) = match places[v as usize] {
+                Place::IntReg(r) => (r, false),
+                Place::FpReg(r) => (r, true),
+                _ => continue,
+            };
+            let wide = node_cons[root].map_or(VecWidth::Scalar, |c| c.wide);
+            saves.push(CallSave {
+                reg,
+                is_fp,
+                wide,
+                slot: slot[root],
+            });
+        }
+        if !saves.is_empty() {
+            out.push((*site, saves));
+        }
+    }
+    out.sort_unstable_by_key(|&(site, _)| site);
+    out
+}
+
+/// The stores and loads of the saves around loops the coloring chose, with a
+/// slot per node, which the reservation grows by.
+fn loop_save_code(
+    loops: Option<&super::loop_saves::LoopSaves>,
+    saved: &[(u32, ValueId)],
+    (node_cons, places): (&[Option<NodeConstraints>], &[Place]),
+    spill_count: &mut u32,
+) -> LoopSaveCode {
+    let mut code = LoopSaveCode::default();
+    let Some(info) = loops else {
+        return code;
+    };
+    let mut slots: alloc::collections::BTreeMap<ValueId, u32> = alloc::collections::BTreeMap::new();
+    let at = |list: &mut Vec<(crate::c5::ir::BlockId, Vec<CallSave>)>,
+              b: crate::c5::ir::BlockId,
+              save: CallSave| {
+        match list.iter_mut().find(|(x, _)| *x == b) {
+            Some((_, saves)) if !saves.contains(&save) => saves.push(save),
+            Some(_) => {}
+            None => list.push((b, alloc::vec![save])),
+        }
+    };
+    for &(l, node) in saved {
+        let (reg, is_fp) = match places[node as usize] {
+            Place::IntReg(r) => (r, false),
+            Place::FpReg(r) => (r, true),
+            _ => continue,
+        };
+        let Some(t) = info.through(l, node) else {
+            continue;
+        };
+        let wide = node_cons[node as usize].map_or(VecWidth::Scalar, |c| c.wide);
+        let slot = *slots.entry(node).or_insert_with(|| {
+            let s = *spill_count;
+            *spill_count += wide.units();
+            s
+        });
+        let save = CallSave {
+            reg,
+            is_fp,
+            wide,
+            slot,
+        };
+        at(&mut code.stores, info.loops[l as usize].preheader, save);
+        for &r in &t.reloads {
+            match r {
+                super::loop_saves::Reload::Start(b) => at(&mut code.loads_at_start, b, save),
+                super::loop_saves::Reload::End(b) => at(&mut code.loads_at_end, b, save),
+            }
+        }
+    }
+    code
 }
 
 /// Values live across each `Inst::InlineAsm` site, paired with the
@@ -2338,14 +3042,25 @@ fn asm_preserve_masks(func: &FunctionSsa, target: Target, region_base: Option<u8
 fn verify_allocation(
     func: &FunctionSsa,
     places: &[Place],
-    target: Target,
-    banks: &RegBanks,
+    (target, banks): (Target, &RegBanks),
     liveness: &super::liveness::Liveness,
     fp_const: &[bool],
     use_counts: &[u32],
+    saves: (
+        &dyn Fn(ValueId, ValueId) -> bool,
+        &[(ValueId, Vec<CallSave>)],
+    ),
 ) {
-    if std::env::var("BADC_VERIFY_ALLOC").is_ok() {
-        check_allocation(func, places, target, banks, liveness, fp_const, use_counts);
+    if std::env::var("BADC_VERIFY_ALLOC").is_ok() || ALLOCATION_CHECK.with(|c| c.get()) {
+        check_allocation(
+            func,
+            places,
+            (target, banks),
+            liveness,
+            fp_const,
+            use_counts,
+            saves,
+        );
     }
 }
 
@@ -2366,7 +3081,7 @@ fn verify_allocation(
 ///   value in an FP register, integer value in an integer register or
 ///   slot).
 /// * FP phi class: a phi's register class must match every operand's,
-///   apart from the float constant the phi lowering re-materialises.
+///   apart from the float constant the phi lowering re-materializes.
 /// * Block coverage: no instruction or terminator inside a block reads a
 ///   value covered by no block's `inst_range`.
 /// * Asm outputs: an `AsmOut` follows its statement in its block.
@@ -2376,15 +3091,21 @@ fn verify_allocation(
 /// instructions in `insts` as inert immediates; nothing emits them, so
 /// their place names no register any code writes. The coverage check is
 /// what establishes that per function rather than assuming it.
+/// Two values `shares` names may hold one register while both are live: one
+/// lies in a loop the other's register is saved around. A register a call
+/// saves around itself (`call_saves`) holds a value across it.
 #[cfg(feature = "codegen_test")]
 fn check_allocation(
     func: &FunctionSsa,
     places: &[Place],
-    target: Target,
-    banks: &RegBanks,
+    (target, banks): (Target, &RegBanks),
     liveness: &super::liveness::Liveness,
     fp_const: &[bool],
     use_counts: &[u32],
+    (shares, call_saves): (
+        &dyn Fn(ValueId, ValueId) -> bool,
+        &[(ValueId, Vec<CallSave>)],
+    ),
 ) {
     let first = core::cell::RefCell::new(None::<alloc::string::String>);
     let report = |msg: alloc::string::String| {
@@ -2422,12 +3143,19 @@ fn check_allocation(
         }
         let (gpr, fpr) = call_clobbers(inst, target, target, FixedRegs::NONE);
         let cid = c as ValueId;
+        // A register the call saves and restores around itself.
+        let kept = (call_saves.iter())
+            .find(|(site, _)| *site == cid)
+            .map_or(&[][..], |(_, s)| s.as_slice());
+        let kept = |r: u8, fp: bool| kept.iter().any(|s| s.reg == r && s.is_fp == fp);
         for v in 0..func.insts.len() {
             let vid = v as ValueId;
             if vid == cid || !covered(v) || !liveness.live_after(func, vid, cid) {
                 continue;
             }
             match places.get(v).copied().unwrap_or(Place::None) {
+                Place::IntReg(r) if kept(r, false) => {}
+                Place::FpReg(r) if kept(r, true) => {}
                 Place::IntReg(r) if banks.caller_gprs.contains(&r) || gpr & (1 << r) != 0 => {
                     report(alloc::format!(
                         "cross-call: v{v} in int reg {r}, which the call at v{c} may change, \
@@ -2482,7 +3210,7 @@ fn check_allocation(
             }
             // `result_kind` classes every `Imm` in the integer file, so a
             // float constant reaches an FP phi integer-classed;
-            // `emit_phi_predecessor_moves` re-materialises it into the FP
+            // `emit_phi_predecessor_moves` re-materializes it into the FP
             // destination rather than copying within a file. An
             // indeterminate income takes no move.
             if super::emit_common::phi_income_reads_no_place(func, *kind, src) {
@@ -2517,7 +3245,8 @@ fn check_allocation(
     for (k, vs) in &by_place {
         for i in 0..vs.len() {
             for j in (i + 1)..vs.len() {
-                if liveness.interfere(func, vs[i] as ValueId, vs[j] as ValueId) {
+                let (a, b) = (vs[i] as ValueId, vs[j] as ValueId);
+                if liveness.interfere(func, a, b) && !(k.0 < 2 && shares(a, b)) {
                     report(alloc::format!(
                         "interference: v{} and v{} share place {k:?} yet interfere",
                         vs[i],
@@ -2651,6 +3380,31 @@ fn check_allocation(
             }
         }
     }
+    for (site, saves) in call_saves {
+        let held = match places.get(*site as usize) {
+            Some(&Place::IntReg(r)) => Some((false, r)),
+            Some(&Place::FpReg(r)) => Some((true, r)),
+            _ => None,
+        };
+        if saves.iter().any(|s| Some((s.is_fp, s.reg)) == held) {
+            report(alloc::format!(
+                "call-save-result: call v{site} restores the register its result is placed in"
+            ));
+        }
+    }
+    let reads = ret_part_reads(func, target);
+    for (site, saves) in call_saves {
+        let Some(&(gpr, fpr)) = reads.get(site) else {
+            continue;
+        };
+        for s in saves {
+            if (if s.is_fp { fpr } else { gpr }) >> s.reg & 1 != 0 {
+                report(alloc::format!(
+                    "ret-part-restore: call v{site} restores the result register its RetPart reads"
+                ));
+            }
+        }
+    }
 
     for block in &func.blocks {
         for v in block.inst_range.clone() {
@@ -2681,9 +3435,23 @@ pub(crate) struct NodeConstraints {
     pub is_fp: bool,
     /// The node's live range crosses a call, so a caller-saved
     /// register would be clobbered; it must take a callee-saved
-    /// register or spill.
+    /// register, spill, or be saved around each call it crosses.
     pub must_callee: bool,
-    /// Preferred register, honoured when free and bank-legal.
+    /// The registers the calls the node crosses clobber.
+    pub call_forbid: u64,
+    /// What saving a caller-saved register around those calls costs
+    /// ([`call_save_costs`]), and what spilling costs beyond the uses the
+    /// coloring weighs: the loop-weighted definitions. A zero save cost
+    /// takes no caller-saved register.
+    pub save_cost: u64,
+    /// The save cost by block frequency and size ([`cost_weights`]),
+    /// against opening a callee-saved register, which saves it once per
+    /// call of the function.
+    pub save_freq: u64,
+    /// The spill's uses and definitions by block frequency and size.
+    pub spill_freq: u64,
+    pub def_cost: u64,
+    /// Preferred register, honored when free and bank-legal.
     pub hint: Option<u8>,
     /// Physical registers (in this node's bank) the colorer must not
     /// assign, beyond interference. Bit `r` set forbids register `r`.
@@ -2697,8 +3465,8 @@ pub(crate) struct NodeConstraints {
     /// is live: the emit saves and restores it around that instruction at
     /// every iteration, so a callee-saved register is taken first.
     pub loop_avoid: u64,
-    /// A 128-bit value, whose spill takes two units.
-    pub wide: bool,
+    /// The vector width, whose spill takes two or four units.
+    pub wide: VecWidth,
     /// Nodes whose register, or hint while uncolored, this one prefers next.
     pub follow: [Option<ValueId>; 3],
 }
@@ -2711,6 +3479,34 @@ pub(crate) struct Coloring {
     /// placement; nodes with no constraint stay `Place::None`.
     pub places: Vec<Place>,
     pub spill_count: u32,
+    /// Per node: in a caller-saved register saved around the calls it
+    /// crosses.
+    pub saved: Vec<bool>,
+    /// `(loop, node)`: a node whose register is saved around a loop
+    /// ([`super::loop_saves`]).
+    pub loop_saved: Vec<(u32, ValueId)>,
+}
+
+#[cfg(feature = "codegen_test")]
+thread_local! {
+    /// Per-thread request for the allocation check `BADC_VERIFY_ALLOC`
+    /// enables, set by [`with_allocation_check`].
+    static ALLOCATION_CHECK: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
+}
+
+/// Run `f` with every allocation on this thread checked, as under
+/// `BADC_VERIFY_ALLOC`: a violation panics.
+#[cfg(feature = "codegen_test")]
+pub(crate) fn with_allocation_check<R>(f: impl FnOnce() -> R) -> R {
+    let prior = ALLOCATION_CHECK.with(|c| c.replace(true));
+    struct Restore(bool);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            ALLOCATION_CHECK.with(|c| c.set(self.0));
+        }
+    }
+    let _restore = Restore(prior);
+    f()
 }
 
 #[cfg(feature = "std")]
@@ -2803,7 +3599,7 @@ fn class_members(node_of: &[ValueId]) -> (Vec<u32>, Vec<ValueId>) {
 /// registers its `follow` nodes hold or are hinted to, otherwise a
 /// caller-saved register (to avoid a prologue save) unless it must be
 /// callee-saved -- one outside its `avoid` set and apart from its `apart`
-/// neighbours (their registers, or the hints of those not yet colored) when
+/// neighbors (their registers, or the hints of those not yet colored) when
 /// one is free, else its hint -- otherwise a callee-saved register, and
 /// spills when its bank offers no free register. Because the coldest
 /// remaining node is colored last, it is the one left to spill when a
@@ -2823,9 +3619,15 @@ pub(crate) fn color_graph(
     no_slot_share: bool,
     weights: &[u64],
     apart: &[Vec<ValueId>],
+    loops: Option<&super::loop_saves::LoopSaves>,
 ) -> Coloring {
     let n = node_of.len();
     let mut color: Vec<Place> = vec![Place::None; n];
+    let mut saved: Vec<bool> = vec![false; n];
+    // Callee-saved registers some node holds, by bank: the prologue saves
+    // each once, so another node takes it at no further cost.
+    let mut opened = [0u64; 2];
+    let mut loop_saved: Vec<(u32, ValueId)> = Vec::new();
     let mut spill_count: u32 = 0;
     // Coloring order: highest spill weight first, so the coldest values
     // are the ones left without a register when a bank fills. The id
@@ -2834,16 +3636,16 @@ pub(crate) fn color_graph(
     if !weights.is_empty() {
         order.sort_by(|&a, &b| weights[b].cmp(&weights[a]).then(a.cmp(&b)));
     }
-    // Per-slot "stamp" marking which slots interfering neighbours hold,
+    // Per-slot "stamp" marking which slots interfering neighbors hold,
     // refreshed per node by bumping `stamp` instead of clearing. Slot
     // indices are bounded by `spill_count <= 2n`, so `2n + 2` entries suffice.
     // This keeps the free-slot search O(spill_count) per node rather than
-    // O(spill_count * neighbours): the membership test is an array read,
-    // not a linear scan of the neighbour list.
+    // O(spill_count * neighbors): the membership test is an array read,
+    // not a linear scan of the neighbor list.
     let mut slot_used: Vec<u32> = vec![0u32; 2 * n + 2];
     let mut stamp: u32 = 0;
-    // `interference` is over individual values, so a node's neighbouring
-    // nodes are its members' neighbours mapped through `node_of`. Members
+    // `interference` is over individual values, so a node's neighboring
+    // nodes are its members' neighbors mapped through `node_of`. Members
     // by root, CSR, so the walk is one pass over the node's own rows
     // rather than a second graph built over the roots.
     let (memb_off, memb_val) = class_members(node_of);
@@ -2853,11 +3655,11 @@ pub(crate) fn color_graph(
         };
         stamp += 1;
         let mut forbidden: [bool; 64] = [false; 64];
-        // The hints of interfering neighbours still to be colored: a node
+        // The hints of interfering neighbors still to be colored: a node
         // that cannot take its own hint leaves those registers to them.
         let mut hinted: u64 = 0;
         // A spill slot is 8 bytes shared by both banks (a 128-bit value holds
-        // two), so a slot an interfering neighbour holds is off-limits.
+        // two), so a slot an interfering neighbor holds is off-limits.
         for &m in &memb_val[memb_off[node] as usize..memb_off[node + 1] as usize] {
             for &nb in interference.neighbors(m) {
                 let root = node_of[nb as usize];
@@ -2868,9 +3670,9 @@ pub(crate) fn color_graph(
                     Place::IntReg(r) if !c.is_fp => forbidden[r as usize] = true,
                     Place::FpReg(r) if c.is_fp => forbidden[r as usize] = true,
                     Place::Spill(s) => {
-                        slot_used[s as usize] = stamp;
-                        if constraints[root as usize].is_some_and(|nc| nc.wide) {
-                            slot_used[s as usize + 1] = stamp;
+                        let units = constraints[root as usize].map_or(1, |nc| nc.wide.units());
+                        for u in s..s + units {
+                            slot_used[u as usize] = stamp;
                         }
                     }
                     Place::None => {
@@ -2894,6 +3696,14 @@ pub(crate) fn color_graph(
                 forbidden[r as usize] = true;
             }
         }
+        // What only the calls the node crosses rule out, which a save
+        // around each of them gives back.
+        let unsaved = forbidden;
+        for r in 0..64u8 {
+            if (c.call_forbid >> r) & 1 != 0 {
+                forbidden[r as usize] = true;
+            }
+        }
         // Bank size cap: BADC_MAX_GPR / BADC_MAX_FPR truncate each bank
         // to raise register pressure across the suite. Off (usize::MAX)
         // by default. The first `max` entries of each bank are kept so a
@@ -2906,14 +3716,20 @@ pub(crate) fn color_graph(
         };
         // A callee-saved register of a low64-only convention keeps just
         // its low 64 bits across a call, so a 128-bit value live across
-        // one spills; Win64 saves the whole register and takes it.
-        let callee = if c.wide && c.must_callee && banks.callee_fpr_low64_only {
-            &callee_full[..0]
-        } else {
-            &callee_full[..callee_full.len().min(cap)]
-        };
+        // one spills; Win64 saves the whole xmm register and takes it, but
+        // no convention keeps a ymm register's upper half.
+        let low64 = banks.callee_fpr_low64_only;
+        let callee =
+            if c.must_callee && (c.wide >= VecWidth::V256 || (c.wide == VecWidth::V128 && low64)) {
+                &callee_full[..0]
+            } else {
+                &callee_full[..callee_full.len().min(cap)]
+            };
         let caller = &caller_full[..caller_full.len().min(cap)];
         let free = |r: u8| !forbidden[r as usize];
+        // A callee-saved register another node holds: the prologue saves it
+        // once, so this node takes it at no further cost.
+        let open = |r: &u8| free(*r) && (opened[usize::from(c.is_fp)] >> *r) & 1 != 0;
         let mut avoid = c.avoid | hinted;
         for &o in apart.get(node).map_or(&[][..], Vec::as_slice) {
             match (color[o as usize], constraints[o as usize]) {
@@ -2961,26 +3777,133 @@ pub(crate) fn color_graph(
             .or(hint)
             .or_else(|| {
                 if c.must_callee {
-                    callee.iter().copied().find(|&r| free(r))
+                    // An open callee-saved register, else a new one unless
+                    // saving a caller-saved register around the calls costs
+                    // less than the save and restore it takes per call of
+                    // the function, which the spill fallback weighs.
+                    let saves = c.save_freq > 0
+                        && c.save_freq < banks.open_cost
+                        && c.save_freq < c.spill_freq
+                        && caller.iter().any(|&r| !unsaved[r as usize]);
+                    callee.iter().copied().find(open).or_else(|| {
+                        (!saves && (c.spill_freq == 0 || c.spill_freq >= banks.open_cost))
+                            .then(|| callee.iter().copied().find(|&r| free(r)))
+                            .flatten()
+                    })
                 } else {
+                    caller.iter().copied().find(|&r| free(r)).or_else(|| {
+                        callee.iter().copied().find(open).or_else(|| {
+                            (c.spill_freq == 0 || c.spill_freq >= banks.open_cost)
+                                .then(|| callee.iter().copied().find(|&r| free(r)))
+                                .flatten()
+                        })
+                    })
+                }
+            });
+        // Left to spill, a node crossing calls whose saves cost less than
+        // its spill takes a caller-saved register saved around them.
+        let pick = pick.or_else(|| {
+            let spill_cost = weights
+                .get(node)
+                .copied()
+                .unwrap_or(0)
+                .saturating_add(c.def_cost);
+            let (save, spill) = match c.save_freq {
+                0 => (c.save_cost, spill_cost),
+                f => (f, c.spill_freq),
+            };
+            if save == 0 || save >= spill {
+                return None;
+            }
+            // Its own hint first -- a parameter stays in its argument
+            // register -- then one no neighbor is hinted to, then any.
+            let savable = |r: &u8| caller.contains(r) && !unsaved[*r as usize];
+            let r = (c.hint.filter(savable))
+                .or_else(|| {
                     caller
                         .iter()
                         .copied()
-                        .find(|&r| free(r))
-                        .or_else(|| callee.iter().copied().find(|&r| free(r)))
+                        .find(|&r| savable(&r) && (avoid >> r) & 1 == 0)
+                })
+                .or_else(|| caller.iter().copied().find(savable))?;
+            saved[node] = true;
+            Some(r)
+        });
+        // Left to spill, a node lying in a loop takes a register only values
+        // living through the loop hold, saved around it, when the saves
+        // cost less than its spill.
+        let pick = pick.or_else(|| {
+            let info = loops?;
+            let l = (*info.inside.get(node)?)?;
+            let spill_cost = weights
+                .get(node)
+                .copied()
+                .unwrap_or(0)
+                .saturating_add(c.def_cost);
+            let around = |saves: &[(u32, ValueId)], root: ValueId| {
+                saves.iter().any(|&(o, n)| n == root && info.encloses(o, l))
+            };
+            let mut cost = [0u64; 64];
+            let mut blocked = [false; 64];
+            for (r, b) in blocked.iter_mut().enumerate() {
+                *b = ((c.forbid | c.call_forbid) >> r) & 1 != 0;
+            }
+            let mut holders: Vec<(u8, ValueId)> = Vec::new();
+            for &m in &memb_val[memb_off[node] as usize..memb_off[node + 1] as usize] {
+                for &nb in interference.neighbors(m) {
+                    let root = node_of[nb as usize];
+                    let r = match color[root as usize] {
+                        Place::IntReg(r) if !c.is_fp => r,
+                        Place::FpReg(r) if c.is_fp => r,
+                        _ => continue,
+                    };
+                    if root as usize == node || holders.contains(&(r, root)) {
+                        continue;
+                    }
+                    holders.push((r, root));
+                    // A value saved around calls stores and reloads its
+                    // register at each, also inside the loop.
+                    if saved[root as usize] {
+                        blocked[r as usize] = true;
+                        continue;
+                    }
+                    if around(&loop_saved, root) {
+                        continue;
+                    }
+                    match info.through(l, root) {
+                        Some(t) => cost[r as usize] = cost[r as usize].saturating_add(t.cost),
+                        None => blocked[r as usize] = true,
+                    }
                 }
-            });
+            }
+            let r = (caller.iter().filter(|_| !c.must_callee))
+                .chain(callee)
+                .copied()
+                .filter(|&r| !blocked[r as usize])
+                .min_by_key(|&r| cost[r as usize])
+                .filter(|&r| cost[r as usize] < spill_cost)?;
+            for &(_, root) in holders.iter().filter(|&&(hr, _)| hr == r) {
+                if !around(&loop_saved, root) {
+                    loop_saved.retain(|&(o, n)| !(n == root && info.encloses(l, o)));
+                    loop_saved.push((l, root));
+                }
+            }
+            Some(r)
+        });
+        if let Some(r) = pick.filter(|r| callee.contains(r)) {
+            opened[usize::from(c.is_fp)] |= 1 << r;
+        }
         color[node] = match pick {
             Some(r) if c.is_fp => Place::FpReg(r),
             Some(r) => Place::IntReg(r),
             None => {
                 // Reuse the lowest existing slot held by no interfering
-                // neighbour; allocate a fresh slot only when every one
+                // neighbor; allocate a fresh slot only when every one
                 // collides. Two values share a slot only when no
                 // interference edge joins them -- i.e. they are never
                 // simultaneously live -- so the slot holds at most one
                 // live value at any point. Edges are bidirectional, so a
-                // later-coloured value that interferes excludes this
+                // later-colored value that interferes excludes this
                 // slot, preserving distinct storage for live ranges that
                 // overlap.
                 //
@@ -2991,7 +3914,7 @@ pub(crate) fn color_graph(
                 // and under vfork the child's writes land on the
                 // parent's shared stack -- so every value gets a
                 // dedicated slot.
-                let units = if c.wide { 2 } else { 1 };
+                let units = c.wide.units();
                 let slot_free = |s: u32| {
                     (s..s + units).all(|u| u >= spill_count || slot_used[u as usize] != stamp)
                 };
@@ -3017,6 +3940,8 @@ pub(crate) fn color_graph(
     Coloring {
         places,
         spill_count,
+        saved,
+        loop_saved,
     }
 }
 
@@ -3030,13 +3955,87 @@ const LOOP_WEIGHT: u64 = 10;
 const LOOP_DEPTH_CAP: u32 = 6;
 
 /// Per-block execution-frequency estimate: `LOOP_WEIGHT` raised to the
-/// block's natural-loop nesting depth, capped at `LOOP_DEPTH_CAP`.
+/// block's loop nesting depth, one level less for a block only an arm
+/// predicted against reaches, capped at `LOOP_DEPTH_CAP`.
 /// Shared by the spill-cost ordering and the split's traffic metric so
 /// both rank blocks the same way.
 pub(crate) fn block_weights(func: &FunctionSsa) -> Vec<u64> {
+    let cold = crate::c5::codegen::passes::layout::cold_blocks(func);
     crate::c5::codegen::passes::layout::loop_depths(func)
         .iter()
-        .map(|&d| LOOP_WEIGHT.saturating_pow(d.min(LOOP_DEPTH_CAP)))
+        .zip(cold)
+        .map(|(&d, cold)| {
+            LOOP_WEIGHT.saturating_pow(d.saturating_sub(u32::from(cold)).min(LOOP_DEPTH_CAP))
+        })
+        .collect()
+}
+
+/// The scale of [`block_frequencies`]: the entry block's frequency.
+pub(crate) const FREQ_ONE: u64 = 1 << 8;
+
+/// What an instruction's size costs in [`block_frequencies`] units, beside
+/// its executions: a spill, save or restore added at a site no path runs
+/// often still lengthens the function.
+const STATIC_COST: u64 = FREQ_ONE / 4;
+
+/// Per block, what an instruction placed there costs: its frequency and
+/// its size ([`STATIC_COST`]).
+pub(crate) fn cost_weights(func: &FunctionSsa) -> Vec<u64> {
+    block_frequencies(func)
+        .into_iter()
+        .map(|f| f + STATIC_COST)
+        .collect()
+}
+
+/// Per-block execution-frequency estimate relative to the entry, at
+/// [`FREQ_ONE`]: [`block_weights`] (a factor of `LOOP_WEIGHT` per loop level)
+/// halved for each step up the dominator tree from the block to the entry
+/// at which the block does not post-dominate its immediate dominator -- one
+/// arm of a branch runs on part of the paths through the branch. A block
+/// that reaches no exit is not halved, nor one in the loop of a dominator
+/// that leaves it: the loop's iterations take that arm.
+pub(crate) fn block_frequencies(func: &FunctionSsa) -> Vec<u64> {
+    use super::mem2reg::{EXIT, dominators, post_dominators, successors};
+    use crate::c5::ir::BlockId;
+    let weights = block_weights(func);
+    let depths = crate::c5::codegen::passes::layout::loop_depths(func);
+    let leaves_loop: Vec<bool> = (func.blocks.iter().enumerate())
+        .map(|(b, block)| {
+            successors(
+                &block.terminator,
+                &func.computed_goto_targets,
+                &func.jump_tables,
+            )
+            .iter()
+            .any(|&s| depths[s as usize] < depths[b])
+        })
+        .collect();
+    let idom = dominators(func);
+    let ipdom = post_dominators(func);
+    let post_dominates = |a: BlockId, mut b: BlockId| loop {
+        match ipdom.get(b as usize).copied() {
+            Some(p) if p == a => return true,
+            Some(EXIT) | None => return false,
+            Some(p) if p == BlockId::MAX => return true,
+            Some(p) => b = p,
+        }
+    };
+    (0..func.blocks.len())
+        .map(|b| {
+            let mut halvings = 0u32;
+            let mut x = b as BlockId;
+            while let Some(&d) = idom.get(x as usize) {
+                if d == x || d == BlockId::MAX {
+                    break;
+                }
+                let continues = leaves_loop[d as usize] && depths[x as usize] >= depths[d as usize];
+                if !post_dominates(x, d) && !continues {
+                    halvings += 1;
+                }
+                x = d;
+            }
+            weights[b].saturating_mul(FREQ_ONE) >> halvings.min(8)
+        })
         .collect()
 }
 
@@ -3052,8 +4051,17 @@ fn compute_spill_weights(
     node_of: &[ValueId],
     liveness: &super::liveness::Liveness,
 ) -> Vec<u64> {
+    use_weights(func, node_of, liveness, &block_weights(func))
+}
+
+/// [`compute_spill_weights`] by the per-block weights `block_weight`.
+fn use_weights(
+    func: &FunctionSsa,
+    node_of: &[ValueId],
+    liveness: &super::liveness::Liveness,
+    block_weight: &[u64],
+) -> Vec<u64> {
     let n = func.insts.len();
-    let block_weight = block_weights(func);
     let mut w: Vec<u64> = vec![0u64; n];
     for (b, block) in func.blocks.iter().enumerate() {
         let wb = block_weight[b];
@@ -3082,6 +4090,34 @@ fn compute_spill_weights(
                 bump_term(target)
             }
             _ => {}
+        }
+    }
+    w
+}
+
+/// Loop-depth-weighted count of the emitted definitions per interference
+/// node: what storing its members to a spill slot costs.
+fn compute_def_weights(func: &FunctionSsa, node_of: &[ValueId], use_counts: &[u32]) -> Vec<u64> {
+    def_weights(func, node_of, use_counts, &block_weights(func))
+}
+
+/// [`compute_def_weights`] by the per-block weights `block_weight`.
+fn def_weights(
+    func: &FunctionSsa,
+    node_of: &[ValueId],
+    use_counts: &[u32],
+    block_weight: &[u64],
+) -> Vec<u64> {
+    let mut w: Vec<u64> = vec![0u64; func.insts.len()];
+    for (b, block) in func.blocks.iter().enumerate() {
+        for v in block.inst_range.clone() {
+            let inst = &func.insts[v as usize];
+            if super::emit_common::is_dead_pure_counts(inst, v, use_counts) {
+                continue;
+            }
+            if let Some(&root) = node_of.get(v as usize) {
+                w[root as usize] = w[root as usize].saturating_add(block_weight[b]);
+            }
         }
     }
     w
@@ -3330,23 +4366,85 @@ pub(crate) fn produces_value(inst: &Inst) -> bool {
     !matches!(result_kind(inst), ResultKind::None)
 }
 
-/// Per value: whether it is a 128-bit vector.
-pub(crate) fn wide_values(func: &FunctionSsa) -> Vec<bool> {
-    let mut wide: Vec<bool> = func
+/// The width of an FP-file value: a scalar, or a vector that spills to
+/// two (128-bit) or four (256-bit) units.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum VecWidth {
+    #[default]
+    Scalar,
+    V128,
+    V256,
+    V512,
+}
+
+impl VecWidth {
+    pub(crate) fn of_bytes(bytes: u8) -> Self {
+        match bytes {
+            16 => VecWidth::V128,
+            32 => VecWidth::V256,
+            64 => VecWidth::V512,
+            _ => VecWidth::Scalar,
+        }
+    }
+
+    pub(crate) fn of_load(kind: LoadKind) -> Self {
+        match kind {
+            LoadKind::V128 => VecWidth::V128,
+            LoadKind::V256 => VecWidth::V256,
+            LoadKind::V512 => VecWidth::V512,
+            _ => VecWidth::Scalar,
+        }
+    }
+
+    /// Spill units (8 bytes each) a value of this width takes.
+    pub(crate) fn units(self) -> u32 {
+        match self {
+            VecWidth::Scalar => 1,
+            VecWidth::V128 => 2,
+            VecWidth::V256 => 4,
+            VecWidth::V512 => 8,
+        }
+    }
+}
+
+/// Per value: its vector width.
+pub(crate) fn wide_values(func: &FunctionSsa) -> Vec<VecWidth> {
+    let mut wide: Vec<VecWidth> = func
         .insts
         .iter()
         .map(|inst| match inst {
             Inst::Load { kind, .. }
             | Inst::LoadLocal { kind, .. }
             | Inst::Phi { kind, .. }
-            | Inst::AsmOut { kind, .. } => *kind == LoadKind::V128,
-            Inst::Store { kind, .. } | Inst::StoreLocal { kind, .. } => *kind == StoreKind::V128,
+            | Inst::AsmOut { kind, .. }
+            | Inst::ParamPart { kind, .. }
+            | Inst::RetPart { kind, .. } => VecWidth::of_load(*kind),
+            Inst::Store { kind, .. } | Inst::StoreLocal { kind, .. } => match kind {
+                StoreKind::V128 => VecWidth::V128,
+                StoreKind::V256 => VecWidth::V256,
+                StoreKind::V512 => VecWidth::V512,
+                _ => VecWidth::Scalar,
+            },
             Inst::InlineAsm { asm, .. } => asm
                 .operands
                 .iter()
                 .find(|o| o.value && o.is_output)
-                .is_some_and(|o| o.width == 16),
-            _ => false,
+                .filter(|o| o.width == 16)
+                .map_or(VecWidth::Scalar, |_| VecWidth::V128),
+            Inst::SimdVal { op, .. } => {
+                let row = crate::c5::simd::get(*op);
+                if row.form.returns_vector() {
+                    VecWidth::of_bytes(row.ret_bytes())
+                } else {
+                    VecWidth::Scalar
+                }
+            }
+            Inst::VecBinop { bytes, .. }
+            | Inst::VecInsert { bytes, .. }
+            | Inst::VecSplat { bytes, .. }
+            | Inst::VecConst { bytes, .. } => VecWidth::of_bytes(*bytes),
+            Inst::VecExtract { kind, .. } => VecWidth::of_load(*kind),
+            _ => VecWidth::Scalar,
         })
         .collect();
     // A copy may precede its source on the tape.
@@ -3355,10 +4453,10 @@ pub(crate) fn wide_values(func: &FunctionSsa) -> Vec<bool> {
         changed = false;
         for (v, inst) in func.insts.iter().enumerate() {
             if let Inst::Copy { value, .. } = inst
-                && !wide[v]
-                && wide.get(*value as usize).copied().unwrap_or(false)
+                && let Some(&w) = wide.get(*value as usize)
+                && w > wide[v]
             {
-                wide[v] = true;
+                wide[v] = w;
                 changed = true;
             }
         }
@@ -3386,16 +4484,24 @@ fn result_kind(inst: &Inst) -> ResultKind {
         | ParamPart { kind, .. }
         | RetPart { kind, .. }
         | AsmOut { kind, .. } => match kind {
-            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
-                ResultKind::Fp
-            }
+            LoadKind::F32
+            | LoadKind::F64
+            | LoadKind::F80
+            | LoadKind::F128
+            | LoadKind::V128
+            | LoadKind::V256
+            | LoadKind::V512 => ResultKind::Fp,
             _ => ResultKind::Int,
         },
         AggParts { .. } => ResultKind::None,
         Phi { kind, .. } => match kind {
-            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
-                ResultKind::Fp
-            }
+            LoadKind::F32
+            | LoadKind::F64
+            | LoadKind::F80
+            | LoadKind::F128
+            | LoadKind::V128
+            | LoadKind::V256
+            | LoadKind::V512 => ResultKind::Fp,
             _ => ResultKind::Int,
         },
         Copy { is_fp, .. } => {
@@ -3406,32 +4512,74 @@ fn result_kind(inst: &Inst) -> ResultKind {
             }
         }
         Load { kind, .. } | LoadLocal { kind, .. } | SegLoad { kind, .. } => match kind {
-            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
-                ResultKind::Fp
-            }
+            LoadKind::F32
+            | LoadKind::F64
+            | LoadKind::F80
+            | LoadKind::F128
+            | LoadKind::V128
+            | LoadKind::V256
+            | LoadKind::V512 => ResultKind::Fp,
             _ => ResultKind::Int,
         },
         Store {
             kind:
-                StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128,
+                StoreKind::F32
+                | StoreKind::F64
+                | StoreKind::F80
+                | StoreKind::F128
+                | StoreKind::V128
+                | StoreKind::V256
+                | StoreKind::V512,
             ..
         }
         | StoreLocal {
             kind:
-                StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128,
+                StoreKind::F32
+                | StoreKind::F64
+                | StoreKind::F80
+                | StoreKind::F128
+                | StoreKind::V128
+                | StoreKind::V256
+                | StoreKind::V512,
             ..
         }
         | SegStore {
             kind:
-                StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128,
+                StoreKind::F32
+                | StoreKind::F64
+                | StoreKind::F80
+                | StoreKind::F128
+                | StoreKind::V128
+                | StoreKind::V256
+                | StoreKind::V512,
             ..
         } => ResultKind::Fp,
-        X86Simd { .. } => ResultKind::None,
+        Simd { .. } => ResultKind::None,
+        VecBinop { .. } | VecInsert { .. } | VecSplat { .. } | VecConst { .. } => ResultKind::Fp,
+        VecExtract { kind, .. } => match kind {
+            LoadKind::F32 | LoadKind::F64 | LoadKind::V128 => ResultKind::Fp,
+            _ => ResultKind::Int,
+        },
+        Select { kind, .. } => match kind {
+            LoadKind::F32 | LoadKind::F64 => ResultKind::Fp,
+            _ => ResultKind::Int,
+        },
+        SimdVal { op, .. } => {
+            if crate::c5::simd::get(*op).form.returns_vector() {
+                ResultKind::Fp
+            } else {
+                ResultKind::Int
+            }
+        }
         Store { .. } | StoreLocal { .. } | StoreIndexed { .. } | SegStore { .. } => ResultKind::Int,
         LoadIndexed { kind, .. } => match kind {
-            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
-                ResultKind::Fp
-            }
+            LoadKind::F32
+            | LoadKind::F64
+            | LoadKind::F80
+            | LoadKind::F128
+            | LoadKind::V128
+            | LoadKind::V256
+            | LoadKind::V512 => ResultKind::Fp,
             _ => ResultKind::Int,
         },
         Binop { op, .. } | BinopI { op, .. } => match op {
@@ -3448,11 +4596,12 @@ fn result_kind(inst: &Inst) -> ResultKind {
         Extend { .. } => ResultKind::Int,
         Bswap { .. } | BitCount { .. } => ResultKind::Int,
         FpCast { kind, .. } => match kind {
-            FpCastKind::FpToInt | FpCastKind::UFpToInt => ResultKind::Int,
+            FpCastKind::FpToInt | FpCastKind::UFpToInt | FpCastKind::FpBits => ResultKind::Int,
             FpCastKind::IntToFp
             | FpCastKind::UIntToFp
             | FpCastKind::F32ToF64
-            | FpCastKind::F64ToF32 => ResultKind::Fp,
+            | FpCastKind::F64ToF32
+            | FpCastKind::BitsFp => ResultKind::Fp,
         },
         // C99 6.2.5p10: a call returning a floating-point scalar
         // delivers its value in the FP return register (xmm0 / d0),
@@ -3502,6 +4651,157 @@ fn result_kind(inst: &Inst) -> ResultKind {
     }
 }
 
+/// A call's arguments and their placements. An import's variadic count
+/// is unknown here, so its arguments plan as fixed; the emitter, which
+/// knows it, may place a variadic one differently.
+fn call_plan<'f>(
+    func: &FunctionSsa,
+    inst: &'f Inst,
+    target: Target,
+) -> Option<(
+    &'f [ValueId],
+    &'f crate::c5::ir::FpMask,
+    crate::c5::codegen::CallPlan,
+)> {
+    let (args, fixed, fp_arg_mask, arg_aggs, widths) = match inst {
+        Inst::Call {
+            args,
+            fixed_args,
+            fp_arg_mask,
+            arg_aggs,
+            arg_widths,
+            ..
+        } => (args, *fixed_args, fp_arg_mask, arg_aggs, *arg_widths),
+        Inst::CallIndirect {
+            args,
+            callee_variadic,
+            fixed_args,
+            fp_arg_mask,
+            arg_aggs,
+            arg_widths,
+            ..
+        } => {
+            let fixed = if *callee_variadic {
+                *fixed_args
+            } else {
+                args.len()
+            };
+            (args, fixed, fp_arg_mask, arg_aggs, *arg_widths)
+        }
+        Inst::CallExt {
+            args,
+            fp_arg_mask,
+            arg_aggs,
+            arg_widths,
+            ..
+        } => (args, args.len(), fp_arg_mask, arg_aggs, *arg_widths),
+        _ => return None,
+    };
+    let abi = target.abi_for(inst.call_conv()?);
+    let aggs = super::emit_common::build_arg_aggs(arg_aggs, &func.agg_descs, abi);
+    let plan = crate::c5::codegen::plan_call_args_aggs(
+        args.len(),
+        fixed,
+        fp_arg_mask,
+        abi,
+        &aggs,
+        false,
+        widths,
+    );
+    Some((args, fp_arg_mask, plan))
+}
+
+/// The `Imm` values every reader of which is an integer argument a call
+/// places on the stack, with their constants (`Allocation::stack_imm`).
+fn stack_arg_immediates(
+    func: &FunctionSsa,
+    target: Target,
+    use_counts: &[u32],
+) -> alloc::collections::BTreeMap<ValueId, i64> {
+    let mut readers: alloc::collections::BTreeMap<ValueId, u32> =
+        alloc::collections::BTreeMap::new();
+    for blk in &func.blocks {
+        for pc in blk.inst_range.clone() {
+            let inst = &func.insts[pc as usize];
+            let Some((args, fp, plan)) = call_plan(func, inst, target) else {
+                continue;
+            };
+            for (i, (&v, p)) in args.iter().zip(&plan.placements).enumerate() {
+                if matches!(p, crate::c5::codegen::ArgPlacement::Stack(_))
+                    && !fp.has(i)
+                    && matches!(func.insts.get(v as usize), Some(Inst::Imm(_)))
+                    && !func.f32_values.get(v as usize).copied().unwrap_or(false)
+                {
+                    *readers.entry(v).or_default() += 1;
+                }
+            }
+        }
+    }
+    readers
+        .into_iter()
+        .filter(|&(v, n)| use_counts.get(v as usize) == Some(&n))
+        .filter_map(|(v, _)| match func.insts[v as usize] {
+            Inst::Imm(k) => Some((v, k)),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The integer `LoadLocal`s whose one reader is an argument a call in the
+/// same block places on the stack, with no instruction between the load
+/// and the call that writes memory or ends a lifetime: the slot holds the
+/// loaded bytes at the call, so its marshaling reads them there
+/// (`Allocation::stack_load`). An over-aligned object, whose base may be
+/// sp, stays out.
+fn stack_arg_loads(
+    func: &FunctionSsa,
+    target: Target,
+    use_counts: &[u32],
+) -> alloc::collections::BTreeMap<ValueId, (i64, i32, LoadKind)> {
+    let mut out = alloc::collections::BTreeMap::new();
+    for blk in &func.blocks {
+        for pc in blk.inst_range.clone() {
+            let inst = &func.insts[pc as usize];
+            let Some((args, fp, plan)) = call_plan(func, inst, target) else {
+                continue;
+            };
+            for (i, (&v, p)) in args.iter().zip(&plan.placements).enumerate() {
+                let Some(&Inst::LoadLocal {
+                    off,
+                    disp,
+                    kind,
+                    volatile: false,
+                }) = func.insts.get(v as usize)
+                else {
+                    continue;
+                };
+                if matches!(p, crate::c5::codegen::ArgPlacement::Stack(_))
+                    && !fp.has(i)
+                    && off < 0
+                    && !matches!(
+                        kind,
+                        LoadKind::F32
+                            | LoadKind::F64
+                            | LoadKind::F80
+                            | LoadKind::F128
+                            | LoadKind::V128
+                            | LoadKind::V256
+                            | LoadKind::V512
+                    )
+                    && !func.over_aligned.iter().any(|m| m.slot == off)
+                    && use_counts.get(v as usize) == Some(&1)
+                    && blk.inst_range.contains(&v)
+                    && v < pc
+                    && ((v + 1)..pc).all(|w| func.insts[w as usize].is_pure())
+                {
+                    out.insert(v, (off, disp, kind));
+                }
+            }
+        }
+    }
+    out
+}
+
 /// Populate per-call-argument coalescing hints. The i-th integer or
 /// FP argument value at each `Inst::Call*` is hinted to the matching
 /// host argument register so the allocator parks the value there from
@@ -3535,55 +4835,13 @@ fn populate_call_arg_hints(
         })
         .collect();
     for (pc, inst) in func.insts.iter().enumerate() {
-        // An import's variadic count is unknown here; its arguments plan as fixed.
-        let (args, fixed, fp_arg_mask, arg_aggs, widths) = match inst {
-            Inst::Call {
-                args,
-                fixed_args,
-                fp_arg_mask,
-                arg_aggs,
-                arg_widths,
-                ..
-            } => (args, *fixed_args, fp_arg_mask, arg_aggs, *arg_widths),
-            Inst::CallIndirect {
-                args,
-                callee_variadic,
-                fixed_args,
-                fp_arg_mask,
-                arg_aggs,
-                arg_widths,
-                ..
-            } => {
-                let fixed = if *callee_variadic {
-                    *fixed_args
-                } else {
-                    args.len()
-                };
-                (args, fixed, fp_arg_mask, arg_aggs, *arg_widths)
-            }
-            Inst::CallExt {
-                args,
-                fp_arg_mask,
-                arg_aggs,
-                arg_widths,
-                ..
-            } => (args, args.len(), fp_arg_mask, arg_aggs, *arg_widths),
-            _ => continue,
+        let Some((args, _, plan)) = call_plan(func, inst, target) else {
+            continue;
         };
         let Some(conv) = inst.call_conv() else {
             continue;
         };
         let abi = target.abi_for(conv);
-        let aggs = super::emit_common::build_arg_aggs(arg_aggs, &func.agg_descs, abi);
-        let plan = crate::c5::codegen::plan_call_args_aggs(
-            args.len(),
-            fixed,
-            fp_arg_mask,
-            abi,
-            &aggs,
-            false,
-            widths,
-        );
         // An aggregate address: its first integer slot's register, else a free one.
         let taken = plan
             .placements
@@ -3636,7 +4894,7 @@ fn populate_call_arg_hints(
             // later-parameter guard below keeps the entry hazard out.
             // The override never applies when the register is another
             // parameter's incoming register: that parameter's own home
-            // hint pins it there, so the override would not be honoured
+            // hint pins it there, so the override would not be honored
             // and would displace the parameter's home instead -- the
             // marshal's cycle-breaking swap (`xchg` on x86-64, the
             // scratch on aarch64) is the cheaper route.
@@ -3715,7 +4973,7 @@ fn populate_call_result_hints(
 /// Populate coalescing hints for ABI-fixed registers so the linear
 /// scan lands call arguments directly in their ABI register, captures
 /// a call result in the return register, and keeps a Return-value in
-/// the return register. The pick-reg path honours each hint only when
+/// the return register. The pick-reg path honors each hint only when
 /// the register is free and live-across-call-compatible, so a missed
 /// hint falls back to the default policy.
 fn populate_return_hints(
@@ -3725,7 +4983,7 @@ fn populate_return_hints(
     hints: &mut [Option<u8>],
 ) {
     // Hint the value feeding `Terminator::Return` to the ABI return
-    // register so the exit move drops out. Two cases are honoured:
+    // register so the exit move drops out. Two cases are honored:
     //
     //   * Leaf functions (no call site, `is_call_site`, anywhere).
     //     Empirically safe -- no call can clobber the caller-saved
@@ -3849,7 +5107,10 @@ pub(crate) fn ret_part_reg(target: Target, inst: &Inst) -> Option<(bool, u8)> {
         return None;
     };
     let (ints, fps) = agg_return_regs(target);
-    let fp = matches!(kind, LoadKind::F32 | LoadKind::F64);
+    let fp = matches!(
+        kind,
+        LoadKind::F32 | LoadKind::F64 | LoadKind::V128 | LoadKind::V256 | LoadKind::V512
+    );
     let bank = if fp { fps } else { ints };
     bank.get(*slot as usize).map(|&r| (fp, r))
 }
@@ -4077,7 +5338,7 @@ fn populate_param_ref_hints(func: &FunctionSsa, target: Target, hints: &mut [Opt
     // each parameter in place, so the materialization is a self-update
     // and no ParamRef can land on another's source. The incoming arg
     // registers are caller-saved and free at entry, so the hint is
-    // honoured whenever the parameter is not forced elsewhere (live
+    // honored whenever the parameter is not forced elsewhere (live
     // across a call, or competing for the same register).
     let plan = param_incoming_plan(func, target);
     for (idx, inst) in func.insts.iter().enumerate() {
@@ -4440,6 +5701,7 @@ mod tests {
             caller_fprs: Vec::new(),
             fp_scratch: [NO_FP_SCRATCH; FP_SCRATCH_COUNT],
             callee_fpr_low64_only: true,
+            open_cost: 2 * FREQ_ONE,
         }
     }
 
@@ -4451,19 +5713,34 @@ mod tests {
         Some(NodeConstraints {
             is_fp: false,
             must_callee,
+            call_forbid: 0,
+            save_cost: 0,
+            save_freq: 0,
+            spill_freq: 0,
+            def_cost: 0,
             hint,
             forbid: 0,
             avoid: 0,
             loop_avoid: 0,
-            wide: false,
+            wide: VecWidth::Scalar,
             follow: [None; 3],
         })
     }
 
     fn fp_node(must_callee: bool, wide: bool) -> Option<NodeConstraints> {
+        let wide = if wide {
+            VecWidth::V128
+        } else {
+            VecWidth::Scalar
+        };
         Some(NodeConstraints {
             is_fp: true,
             must_callee,
+            call_forbid: 0,
+            save_cost: 0,
+            save_freq: 0,
+            spill_freq: 0,
+            def_cost: 0,
             hint: None,
             forbid: 0,
             avoid: 0,
@@ -4493,6 +5770,7 @@ mod tests {
             false,
             &[],
             &[],
+            None,
         );
         assert_eq!(
             r.places,
@@ -4521,6 +5799,7 @@ mod tests {
             false,
             &[],
             &[],
+            None,
         );
         assert_eq!(r.places, vec![Place::FpReg(8), Place::Spill(0)]);
     }
@@ -4628,11 +5907,11 @@ mod tests {
                 check_allocation(
                     func,
                     places,
-                    target,
-                    &banks,
+                    (target, &banks),
                     &liveness,
                     &fp_const,
                     &alloc.use_counts,
+                    (&|_, _| false, &alloc.call_saves),
                 )
             }))
         };
@@ -4752,16 +6031,16 @@ mod tests {
     #[test]
     fn sysv_exposes_no_callee_saved_fp_and_win64_the_nonvolatile_xmm() {
         // SysV AMD64 marks no xmm callee-saved; Win64 marks xmm6..xmm15
-        // non-volatile, xmm15 being the FMA accumulator scratch.
+        // non-volatile, and the scratch is the volatile xmm4 / xmm5.
         assert!(
             RegBanks::for_target(Target::LinuxX64)
                 .callee_fprs
                 .is_empty()
         );
         let win = RegBanks::for_target(Target::WindowsX64);
-        assert_eq!(win.callee_fprs, [6, 7, 8, 9, 10, 11, 12, 13, 14]);
+        assert_eq!(win.callee_fprs, [6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
         assert_eq!(win.caller_fprs, [0, 1, 2, 3]);
-        assert_eq!(win.fp_scratch, [4, 5, 15]);
+        assert_eq!(win.fp_scratch, [4, 5, NO_FP_SCRATCH]);
     }
 
     #[test]
@@ -4828,8 +6107,9 @@ int main(void) { return 0; }
 
     #[test]
     fn win64_fp_scratch_is_saved_where_it_is_written() {
-        // xmm15 is saved where an FMA result spills; a reserved volatile
-        // scratch falls back to the callee-saved tail, which is saved.
+        // A spilled FMA result forms in the volatile scratch, which owes
+        // no save; a reserved volatile scratch falls back to the
+        // callee-saved tail, which is saved.
         let fp_src = r#"
 double f(double a, double b, double c, double d, double e, double h) {
     double s = a * b + c * d;
@@ -4866,12 +6146,12 @@ int main(void) { return 0; }
             "a Win64 FP function saves no scratch it leaves alone: {:?}",
             alloc.fp_used
         );
-        assert_eq!(alloc.fp_scratch, [4, 5, 15]);
+        assert_eq!(alloc.fp_scratch, [4, 5, NO_FP_SCRATCH]);
         let alloc = with_pool_size_override(usize::MAX, 1, || allocate(f, Target::WindowsX64));
         assert!(spills_an_fma(&alloc), "{:?}", alloc.places);
         assert!(
-            alloc.fp_used.contains(&15),
-            "a spilled FMA result writes the accumulator: {:?}",
+            !alloc.fp_used.iter().any(|&r| matches!(r, 4 | 5)),
+            "a spilled FMA result owes no save: {:?}",
             alloc.fp_used
         );
         let fixed = FixedRegs {
@@ -4879,7 +6159,7 @@ int main(void) { return 0; }
             ..FixedRegs::NONE
         };
         let alloc = super::allocate(f, Target::WindowsX64, fixed);
-        assert_eq!(alloc.fp_scratch, [15, 14, 13]);
+        assert_eq!(alloc.fp_scratch, [15, 14, NO_FP_SCRATCH]);
         assert!(
             alloc.fp_used.contains(&14) && alloc.fp_used.contains(&15),
             "the fallback scratch xmm14/15 must join the save list: {:?}",
@@ -4925,6 +6205,7 @@ int main(void) { return 0; }
             false,
             &[],
             &[],
+            None,
         );
         assert_eq!(r.spill_count, 0);
         let regs: Vec<Place> = r.places.clone();
@@ -4952,6 +6233,7 @@ int main(void) { return 0; }
             false,
             &[],
             &[],
+            None,
         );
         assert_eq!(
             r.spill_count, 1,
@@ -4991,6 +6273,7 @@ int main(void) { return 0; }
                     false,
                     &[],
                     &[],
+                    None,
                 )
             };
             let callee = banks.callee_gprs.len();
@@ -5033,6 +6316,7 @@ int main(void) { return 0; }
             false,
             &[],
             &[],
+            None,
         );
         assert_eq!(shared.spill_count, 1, "non-interfering spills share");
         assert_eq!(shared.places[4], shared.places[5]);
@@ -5046,6 +6330,7 @@ int main(void) { return 0; }
             true,
             &[],
             &[],
+            None,
         );
         assert_eq!(r.spill_count, 2, "returns-twice: one slot per value");
         assert_eq!(r.places[4], Place::Spill(0));
@@ -5069,12 +6354,48 @@ int main(void) { return 0; }
             false,
             &[],
             &[],
+            None,
         );
         assert!(
             matches!(r.places[0], Place::IntReg(20) | Place::IntReg(21)),
             "call-crossing value must take a callee-saved register, got {:?}",
             r.places[0],
         );
+    }
+
+    /// A call-crossing node left without a callee-saved register takes a
+    /// caller-saved one, saved around its calls, when the saves cost less
+    /// than its spill; otherwise it spills.
+    #[test]
+    fn a_call_crossing_node_saves_a_caller_saved_register_when_cheaper() {
+        let g = Interference::from_edges(3, &[(0, 1), (0, 2), (1, 2)]);
+        let node_of = [0u32, 1, 2];
+        for (save_cost, saved) in [(5, true), (50, false)] {
+            let mut cons = [int_node(true, None); 3];
+            if let Some(c) = cons[2].as_mut() {
+                c.save_cost = save_cost;
+                c.def_cost = 10;
+            }
+            let r = color_graph(
+                &g,
+                &node_of,
+                &cons,
+                &tiny_banks(),
+                usize::MAX,
+                usize::MAX,
+                false,
+                &[30, 20, 10],
+                &[],
+                None,
+            );
+            let want = if saved {
+                matches!(r.places[2], Place::IntReg(0 | 1))
+            } else {
+                matches!(r.places[2], Place::Spill(_))
+            };
+            assert!(want && r.saved[2] == saved, "{save_cost}: {:?}", r.places);
+            assert!(!r.saved[0] && !r.saved[1]);
+        }
     }
 
     #[test]
@@ -5094,6 +6415,7 @@ int main(void) { return 0; }
             false,
             &[],
             &[],
+            None,
         );
         assert!(
             matches!(r.places[0], Place::IntReg(0) | Place::IntReg(1)),
@@ -5103,7 +6425,7 @@ int main(void) { return 0; }
     }
 
     #[test]
-    fn hint_is_honoured_when_free() {
+    fn hint_is_honored_when_free() {
         let g = Interference::from_edges(2, &[(0, 1)]);
         let node_of = [0u32, 1];
         let cons = [int_node(false, Some(21)), int_node(false, None)];
@@ -5117,6 +6439,7 @@ int main(void) { return 0; }
             false,
             &[],
             &[],
+            None,
         );
         assert_eq!(
             r.places[0],
@@ -5143,6 +6466,7 @@ int main(void) { return 0; }
             false,
             &[],
             &[],
+            None,
         );
         assert_eq!(r.places[0], r.places[1], "class members share a register");
         assert_ne!(r.places[0], r.places[2]);
@@ -5170,6 +6494,7 @@ int main(void) { return 0; }
             false,
             &[1, 100, 100],
             &[],
+            None,
         );
         assert_eq!(cold.spill_count, 1);
         assert!(
@@ -5189,6 +6514,7 @@ int main(void) { return 0; }
             false,
             &[100, 1, 1],
             &[],
+            None,
         );
         assert!(
             matches!(hot.places[0], Place::IntReg(_)),
@@ -5226,6 +6552,7 @@ int main(void) { return 0; }
             false,
             &equal,
             &[],
+            None,
         );
         let b = color_graph(
             &g,
@@ -5237,6 +6564,7 @@ int main(void) { return 0; }
             false,
             &equal,
             &[],
+            None,
         );
         assert_eq!(
             a.places, b.places,
@@ -5247,8 +6575,8 @@ int main(void) { return 0; }
             "equal weights spill the highest id, got {:?}",
             a.places[4]
         );
-        for v in 0..4 {
-            assert!(matches!(a.places[v], Place::IntReg(_)));
+        for place in &a.places[..4] {
+            assert!(matches!(place, Place::IntReg(_)));
         }
     }
 
@@ -5402,7 +6730,7 @@ int main(void) { return 0; }
         let n = 5;
         let f = FunctionSsa {
             n_params: 2,
-            inst_src: vec![(0, 0); n],
+            inst_src: vec![crate::c5::ir::InstSrc::default(); n],
             f32_values: vec![false; n],
             insts: vec![
                 Inst::ParamRef {
@@ -5450,8 +6778,9 @@ int main(void) { return 0; }
     /// immediates exhaust the seven-entry x86_64 caller bank; the dead
     /// shift among them colors last (zero weight) and lands on a
     /// callee-saved register that nothing ever writes.
-    #[test]
-    fn dead_pure_color_stays_out_of_used_sets() {
+    /// A constant chain with an unread shift of its first link; returns the
+    /// function and the shift.
+    fn dead_shift_chain() -> (FunctionSsa, ValueId) {
         use crate::c5::ir::Block;
         let mut insts: Vec<Inst> = (0..10).map(Inst::Imm).collect();
         let dead = insts.len() as ValueId;
@@ -5480,6 +6809,79 @@ int main(void) { return 0; }
             }],
             ..Default::default()
         };
+        (f, dead)
+    }
+
+    /// x86-64: a value crossing one call before several returns spills, as a
+    /// store and a load cost less than a push and a pop at every exit; one
+    /// read on every trip of a loop keeps its callee-saved register.
+    #[test]
+    fn a_callee_saved_register_is_kept_only_where_its_save_costs_less_than_spilling() {
+        let src = r#"
+            int g(int);
+            int once(int a, int b) {
+                int k = a * 3;
+                int r = g(b);
+                if (r == 1) return g(11);
+                if (r == 2) return g(12);
+                if (r == 3) return g(13);
+                return r + k;
+            }
+            int looped(int a, int n) {
+                int k = a * 3, s = 0;
+                for (int i = 0; i < n; i++)
+                    s += g(i) * k;
+                if (s == 1) return g(11);
+                return s;
+            }
+            int main(void) { return once(1, 2) + looped(3, 4); }
+        "#;
+        let target = Target::LinuxX64;
+        let opts = crate::CompileOptions::default().with_optimize(true);
+        let program = Compiler::with_options(src.to_string(), target, opts)
+            .compile()
+            .expect("compile");
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, true, true)
+                .expect("produce_ssa_funcs");
+        let alloc_of = |name: &str| {
+            let mut func = funcs.iter().find(|f| f.name == name).expect(name).clone();
+            super::super::mem2reg::run(&mut func);
+            with_pool_size_override(usize::MAX, usize::MAX, || allocate(&func, target))
+        };
+        let once = alloc_of("once");
+        assert!(once.gpr_used.is_empty(), "once saves {:?}", once.gpr_used);
+        assert!(once.spill_count > 0);
+        assert!(!alloc_of("looped").gpr_used.is_empty());
+    }
+
+    #[test]
+    fn a_slot_only_a_dead_value_holds_is_outside_the_spill_region() {
+        let (f, dead) = dead_shift_chain();
+        let alloc = with_pool_size_override(2, 2, || allocate(&f, Target::LinuxX64));
+        let Place::Spill(s) = alloc.places[dead as usize] else {
+            panic!(
+                "the unread shift must spill, got {:?}",
+                alloc.places[dead as usize]
+            );
+        };
+        let live_end = (f.insts.iter().enumerate())
+            .filter(|&(v, inst)| {
+                !super::super::emit_common::is_dead_pure(inst, v as ValueId, &alloc)
+            })
+            .filter_map(|(v, _)| match alloc.places[v] {
+                Place::Spill(s) => Some(s + 1),
+                _ => None,
+            })
+            .max()
+            .unwrap_or(0);
+        assert!(s >= live_end, "the dead value must take the top slot");
+        assert_eq!(alloc.spill_count, live_end);
+    }
+
+    #[test]
+    fn dead_pure_color_stays_out_of_used_sets() {
+        let (f, dead) = dead_shift_chain();
         // Pin uncapped banks so the pressure-matrix env cannot spill
         // the dead value instead of coloring it.
         let alloc =
@@ -5618,8 +7020,15 @@ int main(void) { return 0; }
                 // is unread -- the allocator nulls those out so
                 // the emit pass skips the dst-propagate step --
                 // and a phi nothing reads, whose edge moves are
-                // dropped.
+                // dropped. A constant or a local a stack argument reads in
+                // place takes none either: the call's marshaling reads it.
                 let kind = result_kind(&f.insts[i]);
+                let read_by_call = alloc.stack_imm.contains_key(&(i as u32))
+                    || alloc.stack_load.contains_key(&(i as u32));
+                if read_by_call {
+                    assert_eq!(*p, Place::None, "inst {i} is read by its call");
+                    continue;
+                }
                 let dead_dst = alloc.use_counts.get(i).copied().unwrap_or(0) == 0
                     && matches!(
                         f.insts[i],
@@ -5967,6 +7376,7 @@ int main(void) { return 0; }
         let func = FunctionSsa {
             seh_scopes: Vec::new(),
             block_seh: Vec::new(),
+            predicted: Vec::new(),
             funclet_slots: Vec::new(),
             name: alloc::string::String::new(),
             ent_pc: 0,
@@ -5990,7 +7400,7 @@ int main(void) { return 0; }
             is_weak: false,
             is_internal: false,
             const_params: 0,
-            inst_src: alloc::vec![(0, 0); insts.len()],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             cmp32: Vec::new(),
             div32: Vec::new(),
@@ -6010,6 +7420,8 @@ int main(void) { return 0; }
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
             array_slots: Vec::new(),
+            vector_objects: Vec::new(),
+            owned_params: Vec::new(),
             over_aligned: Default::default(),
             frame_align: 0,
             realign_region_bytes: 0,
@@ -6119,7 +7531,7 @@ int main(void) { return 0; }
         }
         let n = insts.len();
         FunctionSsa {
-            inst_src: alloc::vec![(0, 0); n],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); n],
             f32_values: alloc::vec![false; n],
             cmp32: Vec::new(),
             div32: Vec::new(),
@@ -6215,6 +7627,7 @@ int main(void) { return 0; }
         FunctionSsa {
             seh_scopes: Vec::new(),
             block_seh: Vec::new(),
+            predicted: Vec::new(),
             funclet_slots: Vec::new(),
             name: alloc::string::String::new(),
             ent_pc: 0,
@@ -6238,7 +7651,7 @@ int main(void) { return 0; }
             is_weak: false,
             is_internal: false,
             const_params: 0,
-            inst_src: vec![(0, 0); n],
+            inst_src: vec![crate::c5::ir::InstSrc::default(); n],
             f32_values: vec![false; n],
             cmp32: Vec::new(),
             div32: Vec::new(),
@@ -6258,6 +7671,8 @@ int main(void) { return 0; }
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
             array_slots: Vec::new(),
+            vector_objects: Vec::new(),
+            owned_params: Vec::new(),
             over_aligned: Default::default(),
             frame_align: 0,
             realign_region_bytes: 0,
@@ -6421,9 +7836,9 @@ int main(void) { return 0; }
     }
 
     /// An immediate between the compare and the branch: on aarch64 the
-    /// materialisation (`movz`) leaves the flags alone and the compare
+    /// materialization (`movz`) leaves the flags alone and the compare
     /// fuses; on x86_64 a zero immediate lowers to a flag-writing
-    /// `xor r, r` and the compare must stay materialised.
+    /// `xor r, r` and the compare must stay materialized.
     #[test]
     fn branch_fusion_window_is_target_flag_aware() {
         let build = || {
@@ -6452,7 +7867,7 @@ int main(void) { return 0; }
     }
 
     /// A zero that only a store reads is written from the store's
-    /// encoding on x86_64 and never materialised, so it writes no flags.
+    /// encoding on x86_64 and never materialized, so it writes no flags.
     #[test]
     fn zero_stored_as_an_immediate_leaves_the_flags_alone() {
         let func = branch_func(
@@ -6624,15 +8039,16 @@ int main(void) { return 0; }
             false,
             weights,
             apart,
+            None,
         )
         .places
     }
 
     /// A node without a usable hint takes a free caller-saved register
-    /// apart from its keep-apart neighbours: the register of one already
+    /// apart from its keep-apart neighbors: the register of one already
     /// colored, the hint of one not yet colored.
     #[test]
-    fn keep_apart_steers_a_node_off_its_neighbour() {
+    fn keep_apart_steers_a_node_off_its_neighbor() {
         let g = Interference::from_edges(2, &[]);
         let cons = [int_node(false, None), int_node(false, Some(0))];
         let apart = vec![vec![1], vec![0]];
@@ -7051,6 +8467,89 @@ int main(void) { return 0; }
         }
     }
 
+    /// The parts of a call's result live across a second call and take
+    /// callee-saved registers, which leaves the result registers to the
+    /// values saved around the first call: none is saved in one, which its
+    /// restore would overwrite before the part is read.
+    #[test]
+    fn a_value_saved_around_a_call_stays_off_its_result_registers() {
+        let bin = |op, lhs, rhs| Inst::Binop { op, lhs, rhs };
+        let call = Inst::Call {
+            target_pc: 0,
+            args: Vec::new(),
+            fixed_args: 0,
+            fp_return: false,
+            fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+            low_word_args: 0,
+            arg_widths: crate::c5::ir::ArgWidths::default(),
+            callee_conv: crate::c5::codegen::CallConv::Target,
+            arg_aggs: Vec::new(),
+            ret_agg: None,
+            ret_slot_local: 0,
+        };
+        let part = |slot| Inst::RetPart {
+            slot,
+            kind: LoadKind::I64,
+        };
+        // Stores rank a value: the more it has, the dearer its spill.
+        let stores = |insts: &mut Vec<Inst>, values: &[ValueId], n: i64| {
+            for off in 4..4 + n {
+                for &value in values {
+                    insts.push(Inst::StoreLocal {
+                        off,
+                        disp: 0,
+                        value,
+                        kind: StoreKind::I64,
+                        volatile: false,
+                        nsw: false,
+                    });
+                }
+            }
+        };
+        // v2 lives across the second call too, v3 and v4 across the first.
+        let mut insts = vec![
+            local_i64(2),
+            local_i64(3),
+            bin(BinOp::Sub, 0, 1),
+            bin(BinOp::Xor, 0, 1),
+            bin(BinOp::Add, 0, 1),
+        ];
+        stores(&mut insts, &[2], 12);
+        stores(&mut insts, &[3], 8);
+        stores(&mut insts, &[4], 4);
+        let site = insts.len() as ValueId;
+        insts.extend([call.clone(), part(0), part(1), bin(BinOp::Add, 3, 4), call]);
+        stores(&mut insts, &[site + 1, site + 2], 16);
+        let sum = insts.len() as ValueId;
+        insts.extend([
+            bin(BinOp::Add, site + 1, site + 2),
+            bin(BinOp::Add, sum, site + 3),
+            bin(BinOp::Add, sum + 1, 2),
+        ]);
+        let func = store_func(insts, sum + 2);
+        let mut saved = 0;
+        for (target, results) in [
+            (Target::LinuxAarch64, [0u8, 1]),
+            (Target::LinuxX64, [X86_RAX, X86_RDX]),
+        ] {
+            for cap in 1..5 {
+                let a = with_pool_size_override(cap, usize::MAX, || allocate(&func, target));
+                for (_, saves) in a.call_saves.iter().filter(|(at, _)| *at == site) {
+                    saved += saves.len();
+                    for s in saves {
+                        assert!(
+                            !results.contains(&s.reg),
+                            "{target:?} {cap}: {:?} {:?}",
+                            a.places,
+                            a.call_saves
+                        );
+                    }
+                }
+            }
+        }
+        assert!(saved > 0);
+    }
+
     /// The parts of a return in registers are hinted to their class's
     /// registers on both targets, and a `ParamPart` to its incoming
     /// register, so a function passing a pair straight through moves
@@ -7235,7 +8734,7 @@ int main(void) { return 0; }
         }
     }
 
-    /// A compare with a second consumer keeps its materialisation on
+    /// A compare with a second consumer keeps its materialization on
     /// both targets.
     #[test]
     fn multi_use_compare_stays_materialized() {

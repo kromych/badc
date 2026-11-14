@@ -7,7 +7,7 @@ For every `.c` file under `tests/fixtures/c/`, this writes three files:
   tests/snapshots/asm/<name>.x64.asm        -- linux-x64 disassembly
   tests/snapshots/asm/<name>.aarch64.asm    -- linux-aarch64 disassembly
 
-The asm is normalised through `objdump --disassemble --no-show-raw-insn
+The asm is normalized through `objdump --disassemble --no-show-raw-insn
 --no-addresses` so per-emit byte-offset shifts don't churn the snapshot
 for cosmetic reasons. Cross-arch ELFs are produced via `badc
 --target=linux-{x64,aarch64}` and disassembled with the host objdump
@@ -93,7 +93,7 @@ OBJDUMP_FLAGS = ["--disassemble", "--no-show-raw-insn", "--no-addresses"]
 # unchanged. Each regex below rewrites one form to a stable token so a
 # diff line surfaces only when the actual mnemonic / operand mix
 # changes.
-ASM_NORMALISATION_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
+ASM_NORMALIZATION_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
     # `callq 0x4002dc <.text+0xbc>` and similar: branch / call operand
     # followed by an `<symbol+offset>` annotation. Both halves shift in
     # lock-step on any earlier reflow. Both halves sit on one line: the
@@ -184,8 +184,8 @@ ASM_NORMALISATION_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
 )
 
 
-def normalise_asm(text: str) -> str:
-    for pattern, replacement in ASM_NORMALISATION_RULES:
+def normalize_asm(text: str) -> str:
+    for pattern, replacement in ASM_NORMALIZATION_RULES:
         text = pattern.sub(replacement, text)
     return text
 
@@ -241,7 +241,7 @@ def emit_ssa(badc: Path, src: Path, dst: Path, tmp_bin: Path, root: Path) -> boo
     text = proc.stderr.decode("utf-8", errors="replace")
     text = "\n".join(
         line for line in text.splitlines()
-        if not line.startswith("info: produced a Linux/")
+        if "[B7009]" not in line
     )
     text = text.replace(str(src.relative_to(root)), src.name).replace(str(src), src.name)
     if text and not text.endswith("\n"):
@@ -362,7 +362,7 @@ def emit_asm(badc: Path, src: Path, dst: Path, tmp_bin: Path, target: str, root:
     # snapshot every run because the temp dir name varies. Replace the
     # path with the snapshot's stable name.
     text = text.replace(str(tmp_bin), dst.stem)
-    text = normalise_asm(text)
+    text = normalize_asm(text)
     dst.write_text(text)
     return True
 
@@ -699,9 +699,14 @@ def access_counts(text: str, arch: str) -> tuple[int, int, int, int]:
 # change the number in the commit that spends it. A fixture marked
 # `// snapshot-budget: exempt`, whose functions keep values live across
 # calls by design, takes no part; its own snapshots pin its code.
+#
+# x64 0.536 -> 0.545: splicing callees aligned above 16 removed 25 functions,
+# most of them 256-bit intrinsic bodies with no saves, and their test drivers
+# keep the operands live across the checks they call (0.5338 -> 0.5405);
+# the corpus lost 651 instructions and 346 memory accesses.
 SAVED_PER_FUNCTION: dict[str, float] = {
     "aarch64": 0.292,
-    "x64": 0.536,
+    "x64": 0.545,
 }
 
 BUDGET_EXEMPT_RE = re.compile(r"^//\s*snapshot-budget:\s*exempt\b", re.MULTILINE)
@@ -809,7 +814,7 @@ def self_test() -> int:
     near = "\tleaq\t0x2f(%rip), %rax           # 0x401030 <x>\n"
     far = "\tleaq\t0x12345(%rip), %rax        # 0x413348 <x>\n"
     want = "\tleaq\t<rip>, %rax # <addr>\n"
-    assert normalise_asm(near) == normalise_asm(far) == want, normalise_asm(near)
+    assert normalize_asm(near) == normalize_asm(far) == want, normalize_asm(near)
     runs = [
         ("  400540: 04 04 04 07 07 07 07 07         ........\n",
          "  400560: 04 04 04 07 07 07 07 07         ........\n"),
@@ -817,9 +822,9 @@ def self_test() -> int:
          " 10005b8: b8 fe ff ff  \t.word\t0xfffffeb8\n"),
     ]
     for before, after in runs:
-        got = normalise_asm(before)
-        assert got == normalise_asm(after) and got.startswith("  <addr>: "), got
-    assert normalise_asm("\tmovl\t$0x1, %eax\n") == "\tmovl\t$0x1, %eax\n"
+        got = normalize_asm(before)
+        assert got == normalize_asm(after) and got.startswith("  <addr>: "), got
+    assert normalize_asm("\tmovl\t$0x1, %eax\n") == "\tmovl\t$0x1, %eax\n"
     assert snapshot_arch("f.aarch64.asm") == "aarch64"
     assert snapshot_arch("f.x64.asm") == "x64"
 

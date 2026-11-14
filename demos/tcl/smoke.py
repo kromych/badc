@@ -89,8 +89,8 @@ TIMED = {
     # A 10 ms timer against an idle-time handler.
     "interp.test": ("interp-36.7",),
     # A 5 ms timer against a 720000-byte client write, and a 200 ms one
-    # against a failed asynchronous connect's readable event.
-    "socket.test": ("socket_*-2.13", "socket-14.14"),
+    # against a failed asynchronous connect's writable and readable events.
+    "socket.test": ("socket_*-2.13", "socket-14.2", "socket-14.14"),
 }
 TEST_SETS = ("all", "untimed", "timed")
 
@@ -217,10 +217,59 @@ def kill_group(proc: subprocess.Popen) -> None:
         pass
 
 
+def suite_verdict(out: str) -> tuple[int, int, int, list[tuple[str, str]]]:
+    """(test files sourced, tests passed, tests failed, (file, error) of
+    each test file that exited with errors) of an all.tcl run. A file whose
+    child interpreter dies adds nothing to the `Total` counts: tcltest
+    prints `Test file error:` after its name and lists it at the end."""
+    totals = re.findall(r"Total\s+\d+\s+Passed\s+(\d+)\s+Skipped\s+\d+\s+Failed\s+(\d+)", out)
+    passed = sum(int(p) for p, _ in totals)
+    failed = sum(int(f) for _, f in totals)
+    sourced = re.search(r"^Sourced (\d+) Test Files\.", out, re.MULTILINE)
+    files = int(sourced.group(1)) if sourced else 0
+    errors: dict[str, str] = {}
+    current = ""
+    for line in out.splitlines():
+        if line.endswith(".test") and not line.startswith(" "):
+            current = line
+        elif line.startswith("Test file error: ") and current:
+            errors.setdefault(current, line[len("Test file error: "):])
+    listed = out.split("Test files exiting with errors:", 1)
+    names = [] if len(listed) == 1 else [w for w in listed[1].split() if w.endswith(".test")]
+    return files, passed, failed, [(n, errors.get(n, "")) for n in names]
+
+
+# tcltest 8.6's report of a run with one passing file and one whose first
+# command is `exit 3`.
+SELF_TEST_OUTPUT = """Tests began at Sat Nov 07 03:09:26 PST 2026
+a.test
+b.test
+Test file error: child process exited abnormally
+
+Tests ended at Sat Nov 07 03:09:26 PST 2026
+all.tcl:\tTotal\t1\tPassed\t1\tSkipped\t0\tFailed\t0
+Sourced 2 Test Files.
+
+Test files exiting with errors:  
+
+  b.test
+"""
+
+
+def self_test() -> int:
+    files, passed, failed, errored = suite_verdict(SELF_TEST_OUTPUT)
+    assert (files, passed, failed) == (2, 1, 0), (files, passed, failed)
+    assert errored == [("b.test", "child process exited abnormally")], errored
+    clean = SELF_TEST_OUTPUT.split("Test files exiting", 1)[0].replace(
+        "Test file error: child process exited abnormally\n", "")
+    assert suite_verdict(clean)[3] == [], clean
+    print("tcl smoke self-test: OK")
+    return 0
+
+
 def run_suite(tclsh: Path, tests_set: str, log) -> None:
     tests = SRC / "tests"
     library = SRC / "library"
-    env = dict(os.environ, TCL_LIBRARY=str(library))
     # tcltest puts its scratch files in the working directory under fixed
     # names (tf1, tf2, ...) and deletes them between files, so two runs
     # sharing one delete each other's and report failures belonging to
@@ -233,6 +282,13 @@ def run_suite(tclsh: Path, tests_set: str, log) -> None:
     runs = TCL_DIR / ".cache" / "runs"
     runs.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix=f"{os.getpid()}-", dir=runs))
+    # The suite's temporary files go in the run's own directory, which a
+    # passing run removes: tcltests.tcl's tempdir_alternate creates a
+    # `file tempfile` to find the temporary directory and never deletes it,
+    # with a gcc-built tclsh as with badc's. fCmd.test's `xdev` reads /tmp
+    # itself, not TMPDIR.
+    (work / "tmp").mkdir()
+    env = dict(os.environ, TCL_LIBRARY=str(library), TMPDIR=str(work / "tmp"))
     cmd = [str(tclsh), str(tests / "all.tcl")]
     skip = SKIP + (DARWIN_SKIP if sys.platform == "darwin" else ())
     timed = [t for names in TIMED.values() for t in names]
@@ -264,14 +320,15 @@ def run_suite(tclsh: Path, tests_set: str, log) -> None:
         sys.stderr.write((out or "")[-2000:])
         sys.exit(f"smoke: test suite did not finish in {SUITE_TIMEOUT}s "
                  f"(working directory {work})")
-    # tcltest prints a per-file `Failed N` line and a final aggregate; sum
-    # the per-file counts so a single file's regression is caught even when
-    # the aggregate line is absent.
-    failed = sum(int(m) for m in re.findall(r"Total\s+\d+\s+Passed\s+\d+\s+Skipped\s+\d+\s+Failed\s+(\d+)", out))
-    files = len(re.findall(r"Total\s+\d+\s+Passed", out))
-    passed = sum(int(m) for m in re.findall(r"Total\s+\d+\s+Passed\s+(\d+)", out))
+    files, passed, failed, errored = suite_verdict(out)
     print(f"tcl ({tests_set}): {files} test files run, {passed} passed, "
-          f"{failed} failures (baseline {BASELINE_FAILURES})")
+          f"{failed} failures (baseline {BASELINE_FAILURES}), "
+          f"{len(errored)} test files exiting with errors")
+    if errored:
+        for name, error in errored:
+            print(f"  {name}: {error or 'no error text'}")
+        sys.exit(f"smoke: {len(errored)} test files exited with errors "
+                 f"(working directory {work})")
     if failed > BASELINE_FAILURES:
         # Surface the failing test names for triage.
         for line in out.splitlines():
@@ -297,7 +354,11 @@ def run_suite(tclsh: Path, tests_set: str, log) -> None:
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("-v", "--verbose", action="store_true")
+    p.add_argument("--self-test", action="store_true",
+                   help="check the suite's verdict against recorded tcltest output")
     args = p.parse_args(argv)
+    if args.self_test:
+        return self_test()
 
     if os.name != "posix" or sys.platform.startswith("win"):
         print("tcl smoke skipped (POSIX-only build)")

@@ -569,24 +569,17 @@ Disassembly of section .text:
                	retq
 
 <map_a>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	movl	$0x3, %esi
-               	popq	%rbp
                	jmp	<addr>
 
 <map_b>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	movl	$0x3, %esi
-               	popq	%rbp
                	jmp	<addr>
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
+               	subq	$0x10, %rsp
                	xorl	%ecx, %ecx
                	leaq	<rip>, %rdx # <addr>
                	movq	%rcx, %rax
@@ -602,26 +595,24 @@ Disassembly of section .text:
                	addq	%rsi, %rcx
                	cmpl	$0xb4, %eax
                	jl	<addr>
-               	leaq	0xa(%rcx), %rbx
+               	leaq	0xa(%rcx), %r10
+               	movq	%r10, 0x8(%rsp)
                	movl	$0x7, %edi
                	movl	$0x3, %esi
                	callq	<addr>
-               	cmpq	%rbx, %rax
+               	cmpq	0x8(%rsp), %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	popq	%rbx
                	leave
                	retq
                	movl	$0x7, %edi
                	movl	$0x3, %esi
                	callq	<addr>
-               	cmpq	%rbx, %rax
+               	cmpq	0x8(%rsp), %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbx
                	leave
                	retq
                	xorl	%eax, %eax
-               	popq	%rbx
                	leave
                	retq

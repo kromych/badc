@@ -33,10 +33,9 @@ Disassembly of section .text:
                	ldr	x20, [sp], #0x40
                	ret
                	mov	x1, #0xff               // =255
-               	mov	x2, #0x3                // =3
-               	mov	x0, x20
-               	bl	<addr>
-               	sub	x0, x29, #0x20
+               	mov	x2, #0xffff             // =65535
+               	strh	w2, [x20]
+               	strb	w1, [x20, #0x2]
                	ldrh	w16, [x0]
                	strh	w16, [x20]
                	ldrb	w16, [x0, #0x2]
@@ -48,10 +47,10 @@ Disassembly of section .text:
                	bl	<addr>
                	ldurb	w0, [x29, #-0x10]
                	ldurb	w1, [x29, #-0xe]
-               	eor	x0, x0, #0x1
-               	cbnz	w0, <addr>
-               	eor	x0, x1, #0x3
-               	cbz	w0, <addr>
+               	cmp	w0, #0x1
+               	b.ne	<addr>
+               	cmp	w1, #0x3
+               	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x20, [sp], #0x40

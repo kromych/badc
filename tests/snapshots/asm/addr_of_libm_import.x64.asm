@@ -29,72 +29,60 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movq	<rip>, %rax # <addr>
-               	xorl	%ecx, %ecx
-               	movq	%rcx, %xmm0
+               	xorps	%xmm0, %xmm0
                	callq	*%rax
-               	xorl	%eax, %eax
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	xorps	%xmm1, %xmm1
+               	ucomisd	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
-               	movq	<rip>, %rcx # <addr>
-               	movq	%rax, %xmm0
-               	callq	*%rcx
-               	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	movq	<rip>, %rax # <addr>
+               	movapd	%xmm1, %xmm0
+               	callq	*%rax
+               	movsd	<rip>, %xmm1
+               	ucomisd	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
-               	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
-               	movabsq	$0x4024000000000000, %rcx # imm = 0x4024000000000000
-               	movq	<rip>, %rdx # <addr>
-               	movq	%rax, %xmm0
-               	movq	%rcx, %xmm1
-               	callq	*%rdx
-               	movabsq	$0x4090000000000000, %rax # imm = 0x4090000000000000
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	movsd	<rip>, %xmm0
+               	movsd	<rip>, %xmm1
+               	movq	<rip>, %rax # <addr>
+               	callq	*%rax
+               	movsd	<rip>, %xmm1
+               	ucomisd	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbp
                	retq
                	movq	<rip>, %rax # <addr>
-               	xorl	%ecx, %ecx
-               	movq	%rcx, %xmm0
+               	xorps	%xmm0, %xmm0
                	callq	*%rax
-               	xorl	%eax, %eax
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	xorps	%xmm1, %xmm1
+               	ucomisd	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x4, %eax
                	popq	%rbp
                	retq
-               	movq	<rip>, %rcx # <addr>
-               	movq	%rax, %xmm0
-               	callq	*%rcx
-               	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	movq	<rip>, %rax # <addr>
+               	movapd	%xmm1, %xmm0
+               	callq	*%rax
+               	movsd	<rip>, %xmm1
+               	ucomisd	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x5, %eax
                	popq	%rbp
                	retq
-               	xorl	%eax, %eax
-               	movq	%rax, %xmm0
-               	xorl	%eax, %eax
+               	xorps	%xmm0, %xmm0
                	callq	<addr>
-               	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	movsd	<rip>, %xmm1
+               	ucomisd	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x6, %eax

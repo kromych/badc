@@ -29,8 +29,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldurb	w3, [x29, #-0x48]
-               	eor	x3, x3, #0x1
-               	cbz	w3, <addr>
+               	cmp	w3, #0x1
+               	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
@@ -60,8 +60,8 @@ Disassembly of section .text:
                	cmp	w4, #0x1
                	b.ne	<addr>
                	ldurb	w3, [x29, #-0x40]
-               	eor	x3, x3, #0x2
-               	cbz	w3, <addr>
+               	cmp	w3, #0x2
+               	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10

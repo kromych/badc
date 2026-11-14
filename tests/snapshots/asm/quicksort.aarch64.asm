@@ -22,21 +22,20 @@ Disassembly of section .text:
 
 <partition>:
                	sxtw	x1, w1
-               	ldrsw	x4, [x0, w2, sxtw #2]
+               	ldrsw	x5, [x0, w2, sxtw #2]
                	sub	x3, x1, #0x1
-               	cmp	w1, w2
-               	b.ge	<addr>
-               	ldrsw	x5, [x0, x1, lsl #2]
-               	cmp	w5, w4
-               	b.gt	<addr>
-               	add	x3, x3, #0x1
-               	ldrsw	x5, [x0, x3, lsl #2]
-               	ldrsw	x6, [x0, x1, lsl #2]
-               	str	w6, [x0, x3, lsl #2]
-               	str	w5, [x0, x1, lsl #2]
+               	b	<addr>
                	add	x1, x1, #0x1
                	cmp	w1, w2
-               	b.lt	<addr>
+               	b.ge	<addr>
+               	ldrsw	x4, [x0, x1, lsl #2]
+               	cmp	w4, w5
+               	b.gt	<addr>
+               	add	x3, x3, #0x1
+               	ldrsw	x6, [x0, x3, lsl #2]
+               	str	w4, [x0, x3, lsl #2]
+               	str	w6, [x0, x1, lsl #2]
+               	b	<addr>
                	add	x1, x3, #0x1
                	ldrsw	x3, [x0, w1, sxtw #2]
                	ldrsw	x4, [x0, w2, sxtw #2]
@@ -58,6 +57,8 @@ Disassembly of section .text:
                	ldrsw	x2, [x20, w21, sxtw #2]
                	sub	x3, x0, #0x1
                	mov	x1, x0
+               	b	<addr>
+               	add	x1, x1, #0x1
                	cmp	w1, w21
                	b.ge	<addr>
                	ldrsw	x4, [x20, x1, lsl #2]
@@ -68,9 +69,7 @@ Disassembly of section .text:
                	ldrsw	x5, [x20, x1, lsl #2]
                	str	w5, [x20, x3, lsl #2]
                	str	w4, [x20, x1, lsl #2]
-               	add	x1, x1, #0x1
-               	cmp	w1, w21
-               	b.lt	<addr>
+               	b	<addr>
                	add	x22, x3, #0x1
                	ldrsw	x1, [x20, w22, sxtw #2]
                	ldrsw	x2, [x20, w21, sxtw #2]
@@ -98,14 +97,12 @@ Disassembly of section .text:
                	mov	x20, x0
                	mov	x1, #0x0                // =0
                	mov	x0, #0xc                // =12
-               	str	w0, [x20]
+               	movk	x0, #0x7, lsl #32
                	mov	x2, #0x4                // =4
-               	mov	x0, #0x7                // =7
-               	str	w0, [x20, #0x4]
+               	str	x0, [x20]
                	mov	x0, #0xf                // =15
-               	str	w0, [x20, #0x8]
-               	mov	x0, #0x5                // =5
-               	str	w0, [x20, #0xc]
+               	movk	x0, #0x5, lsl #32
+               	str	x0, [x20, #0x8]
                	mov	x0, #0xa                // =10
                	str	w0, [x20, #0x10]
                	mov	x0, x20

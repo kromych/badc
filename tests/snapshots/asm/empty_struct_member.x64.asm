@@ -31,12 +31,6 @@ Disassembly of section .text:
                	subq	$0x30, %rsp
                	movq	$0x1111, -0x28(%rbp)    # imm = 0x1111
                	movq	$0x2222, -0x20(%rbp)    # imm = 0x2222
-               	movq	-0x28(%rbp), %rax
-               	cmpq	$0x1111, %rax           # imm = 0x1111
-               	jne	<addr>
                	xorl	%eax, %eax
-               	leave
-               	retq
-               	movl	$0x5, %eax
                	leave
                	retq

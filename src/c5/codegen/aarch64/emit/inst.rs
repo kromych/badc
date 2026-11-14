@@ -29,6 +29,9 @@ pub(super) struct FnCtx<'a> {
     pub(super) data_sym_offsets: &'a alloc::collections::BTreeMap<alloc::string::String, i64>,
     /// Per value: an `ImmData` that holds its page alone ([`page_only_data`]).
     pub(super) page_only: &'a [bool],
+    /// Per value: a call after which nothing runs
+    /// (`emit_common::calls_ending_paths`).
+    pub(super) ends_path: &'a [bool],
 }
 
 /// Emit one SSA instruction. An op with no lowering is an `Err`, so the
@@ -82,6 +85,7 @@ pub(super) fn emit_inst(
                 .or_else(|| super::ssa::reg_alloc::ret_part_reg(target, inst));
             emit_incoming(code, inst, v, dst, src, alloc, frame, scratch)
         }
+        Inst::Imm(_) if alloc.imm_held.get(v as usize).copied().unwrap_or(false) => Ok(()),
         Inst::Imm(value) => {
             let Some(rd) = int_or_spill_scratch(dst, scratch) else {
                 return fail("Imm: dst not int reg / spill");
@@ -333,6 +337,7 @@ pub(super) fn emit_inst(
                 arg_aggs,
                 ret_agg: *ret_agg,
                 ret_slot_off: *ret_slot_local,
+                ends_path: fcx.ends_path[v as usize],
             },
             *target_pc,
             *fixed_args,
@@ -361,6 +366,7 @@ pub(super) fn emit_inst(
                 arg_aggs,
                 ret_agg: *ret_agg,
                 ret_slot_off: *ret_slot_local,
+                ends_path: fcx.ends_path[v as usize],
             },
             *binding_idx,
             cx.plt_call_fixups,
@@ -388,6 +394,7 @@ pub(super) fn emit_inst(
                 arg_aggs,
                 ret_agg: *ret_agg,
                 ret_slot_off: *ret_slot_local,
+                ends_path: fcx.ends_path[v as usize],
             },
             *target,
             *callee_variadic,
@@ -465,7 +472,72 @@ pub(super) fn emit_inst(
             emit_intrinsic(code, func, abi, *kind, args, dst, v, alloc, frame, scratch)
         }
         Inst::Neg(value) => emit_neg(code, dst, *value, alloc, frame, scratch),
+        Inst::Select { cond, a, b, kind } => super::arith::emit_select(
+            code,
+            dst,
+            (v, *cond, *a, *b, *kind),
+            func,
+            alloc,
+            frame,
+            scratch,
+        ),
         Inst::Fneg(src) => emit_fneg(code, *src, v, dst, alloc, frame),
+        Inst::Simd { op, imm, args } => {
+            emit_a64_simd(code, (*op, *imm), args, alloc, frame, scratch)
+        }
+        Inst::SimdVal { op, imm, args } => {
+            emit_a64_simd_val(code, (*op, *imm), args, dst, alloc, frame, scratch)
+        }
+        Inst::VecBinop {
+            op,
+            lane,
+            bytes,
+            lhs,
+            rhs,
+        } => emit_vec_binop(
+            code,
+            (*op, *lane, *bytes),
+            (*lhs, *rhs),
+            dst,
+            alloc,
+            frame,
+            scratch,
+        ),
+        Inst::VecExtract {
+            vec,
+            off,
+            kind,
+            bytes,
+        } => emit_vec_extract(
+            code,
+            (*vec, *off, *kind, *bytes),
+            dst,
+            alloc,
+            frame,
+            scratch,
+        ),
+        Inst::VecInsert {
+            vec,
+            value,
+            off,
+            kind,
+            bytes,
+        } => emit_vec_insert(
+            code,
+            (*vec, *value, *off, *kind, *bytes),
+            match func.insts[*vec as usize] {
+                Inst::Undef => Some(true),
+                Inst::Imm(0) => Some(false),
+                _ => None,
+            },
+            (dst, alloc, frame, scratch),
+        ),
+        Inst::VecSplat { value, kind, bytes } => {
+            emit_vec_splat(code, (*value, *kind, *bytes), (dst, alloc, frame, scratch))
+        }
+        Inst::VecConst { imm, kind, bytes } => {
+            emit_vec_const(code, (*imm, *kind, *bytes), (dst, frame, scratch))
+        }
         Inst::Fma {
             a,
             b,
@@ -523,6 +595,7 @@ pub(super) fn emit_inst(
             name2entpc,
             extern_data_names,
             data_sym_offsets,
+            target.binary_format(),
             cx.asm_sections,
             cx.asm_extern_call_sites,
             cx.asm_sym_fixups,
@@ -617,6 +690,23 @@ fn emit_incoming(
     let Some((is_fp, src)) = src else {
         return fail(alloc::format!("{name}: no incoming register"));
     };
+    if *kind == LoadKind::V128 {
+        if !is_fp {
+            return fail(alloc::format!("{name}: vector from an integer register"));
+        }
+        match dst {
+            Place::FpReg(r) => {
+                if r != src {
+                    emit(code, super::encode::enc_mov_v16b(r, src));
+                }
+            }
+            Place::Spill(slot) => {
+                emit_spill_str_q(code, frame, src, v128_spill_off(frame, slot), Reg(16));
+            }
+            _ => return fail(alloc::format!("{name}: vector dst not fp reg / spill")),
+        }
+        return Ok(());
+    }
     if matches!(kind, LoadKind::F32 | LoadKind::F64) {
         if !is_fp {
             return fail(alloc::format!("{name}: FP value from an integer register"));
@@ -654,11 +744,841 @@ fn emit_incoming(
     Ok(())
 }
 
+/// `Inst::VecBinop`: the AdvSIMD instruction on the operands' v registers,
+/// a spilled one reloaded into an FP scratch, the result spilled from one.
+/// An 8-byte vector takes the 64-bit form on the d registers.
+fn emit_vec_binop(
+    code: &mut CodeBuf,
+    (op, lane, bytes): (super::super::ir::BinOp, super::super::ir::VecLane, u8),
+    (lhs, rhs): (super::super::ir::ValueId, super::super::ir::ValueId),
+    dst: Place,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> Emit {
+    let Some(qd) = fp_or_spill_dst(dst, frame) else {
+        return fail("VecBinop: dst not fp reg / spill");
+    };
+    if bytes == 8 {
+        let Some(dn) = materialize_fp(code, place_of(alloc, lhs), frame.fp_scratch[0], frame)
+        else {
+            return fail("VecBinop: lhs not fp reg / spill");
+        };
+        let Some(dm) = materialize_fp(code, place_of(alloc, rhs), frame.fp_scratch[1], frame)
+        else {
+            return fail("VecBinop: rhs not fp reg / spill");
+        };
+        let Some(word) = super::encode::enc_vec_binop(op, lane, qd, dn, u32::from(dm)) else {
+            return fail(alloc::format!(
+                "VecBinop: no instruction for {op:?} on {lane:?}"
+            ));
+        };
+        // The 64-bit form: Q clear.
+        emit(code, word & !0x4000_0000);
+        store_spilled_fp(code, frame, dst, qd);
+        return Ok(());
+    }
+    let Some(qn) = materialize_v128(
+        code,
+        place_of(alloc, lhs),
+        frame.fp_scratch[0],
+        frame,
+        scratch.primary,
+    ) else {
+        return fail("VecBinop: lhs not fp reg / spill");
+    };
+    let Some(qm) = materialize_v128(
+        code,
+        place_of(alloc, rhs),
+        frame.fp_scratch[1],
+        frame,
+        scratch.primary,
+    ) else {
+        return fail("VecBinop: rhs not fp reg / spill");
+    };
+    let Some(word) = super::encode::enc_vec_binop(op, lane, qd, qn, u32::from(qm)) else {
+        return fail(alloc::format!(
+            "VecBinop: no instruction for {op:?} on {lane:?}"
+        ));
+    };
+    emit(code, word);
+    propagate_v128(code, frame, dst, qd, scratch.primary);
+    Ok(())
+}
+
+/// `Inst::VecExtract`: `umov` / `smov` of the lane into an integer register,
+/// extended as `kind` reads it, or `dup` of it into a scalar FP one.
+fn emit_vec_extract(
+    code: &mut CodeBuf,
+    (vec, off, kind, bytes): (super::super::ir::ValueId, u8, LoadKind, u8),
+    dst: Place,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> Emit {
+    use super::encode::{enc_dup_elem_scalar, enc_smov_gen, enc_umov_gen};
+    // An 8-byte vector's lanes are the low ones of its D register's.
+    let place = place_of(alloc, vec);
+    let qn = match bytes {
+        16 => materialize_v128(code, place, frame.fp_scratch[0], frame, scratch.primary),
+        8 => materialize_fp(code, place, frame.fp_scratch[0], frame),
+        _ => return fail("VecExtract: only 8- and 16-byte vectors"),
+    };
+    let Some(qn) = qn else {
+        return fail("VecExtract: vector has no place");
+    };
+    let esize = match kind {
+        LoadKind::F64 | LoadKind::I64 => 8,
+        LoadKind::F32 | LoadKind::I32 | LoadKind::U32 => 4,
+        LoadKind::I16 | LoadKind::U16 => 2,
+        LoadKind::I8 | LoadKind::U8 => 1,
+        _ => return fail("VecExtract: not a lane kind"),
+    };
+    let index = u32::from(off) / esize;
+    if matches!(kind, LoadKind::F32 | LoadKind::F64) {
+        let Some(dd) = fp_or_spill_dst(dst, frame) else {
+            return fail("VecExtract: dst not fp reg / spill");
+        };
+        // A scalar reads only its low bits: the low lane in place is it.
+        if index == 0 && dd == qn && matches!(dst, Place::FpReg(_)) {
+            return Ok(());
+        }
+        emit(code, enc_dup_elem_scalar(dd, qn, esize, index));
+        store_spilled_fp(code, frame, dst, dd);
+        return Ok(());
+    }
+    let Some(rd) = int_or_spill_scratch(dst, scratch) else {
+        return fail("VecExtract: dst not int reg / spill");
+    };
+    let word = match kind {
+        LoadKind::I32 | LoadKind::I16 | LoadKind::I8 => enc_smov_gen(rd, qn, esize, index),
+        _ => enc_umov_gen(rd, qn, esize, index),
+    };
+    emit(code, word);
+    store_spilled_int(code, frame, dst, rd);
+    Ok(())
+}
+
+/// The bytes of a lane of `kind`, for the widths a lane access moves.
+fn lane_bytes(kind: StoreKind) -> Option<u8> {
+    match kind {
+        StoreKind::I8 => Some(1),
+        StoreKind::I16 => Some(2),
+        StoreKind::I32 | StoreKind::F32 => Some(4),
+        StoreKind::I64 | StoreKind::F64 => Some(8),
+        _ => None,
+    }
+}
+
+/// The loads and lane reads each fused into the one lane insert or store
+/// that reads it: a non-volatile access through its address alone, of the
+/// lane's width and naturally aligned, with nothing emitted between the
+/// two, so `ld1` / `st1` of the lane performs both and the address and
+/// vector registers still hold their values there.
+pub(super) fn lane_memory(func: &FunctionSsa, alloc: &Allocation) -> Vec<bool> {
+    let mut fused = alloc::vec![false; func.insts.len()];
+    let single = |v: super::super::ir::ValueId| alloc.use_counts.get(v as usize) == Some(&1);
+    let quiet = |from: super::super::ir::ValueId, to: usize| {
+        (from as usize + 1..to).all(|u| {
+            super::ssa::emit_common::inst_emits_nothing(
+                &func.insts[u],
+                u as super::super::ir::ValueId,
+                alloc,
+            )
+        })
+    };
+    let aligned = |align: u8, w: u8| align == 0 || align >= w;
+    for block in &func.blocks {
+        for v in block.inst_range.clone() {
+            let i = v as usize;
+            let (value, w) = match func.insts[i] {
+                Inst::VecInsert {
+                    vec,
+                    value,
+                    kind,
+                    bytes: 8 | 16,
+                    ..
+                } if !matches!(func.insts[vec as usize], Inst::Imm(0)) => (value, lane_bytes(kind)),
+                Inst::Store {
+                    disp: 0,
+                    value,
+                    kind,
+                    volatile: false,
+                    pc_rel: false,
+                    align,
+                    ..
+                } => (value, lane_bytes(kind).filter(|&w| aligned(align, w))),
+                _ => continue,
+            };
+            let Some(w) = w else { continue };
+            if !block.inst_range.contains(&value)
+                || value >= v
+                || !single(value)
+                || !quiet(value, i)
+            {
+                continue;
+            }
+            let f32_ok = |k: LoadKind| k != LoadKind::F32 || alloc.is_f32(value);
+            fused[value as usize] = match (&func.insts[i], &func.insts[value as usize]) {
+                (
+                    Inst::VecInsert { .. },
+                    &Inst::Load {
+                        disp: 0,
+                        kind,
+                        volatile: false,
+                        pc_rel: false,
+                        align,
+                        ..
+                    },
+                ) => kind.bytes() == w && aligned(align, w) && f32_ok(kind),
+                (
+                    Inst::Store { .. },
+                    &Inst::VecExtract {
+                        kind,
+                        bytes: 8 | 16,
+                        ..
+                    },
+                ) => kind.bytes() == w && f32_ok(kind),
+                _ => false,
+            };
+        }
+    }
+    fused
+}
+
+/// A pointer step and the access through the stepped pointer that one
+/// post-indexed load or store performs.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum PostIndex {
+    /// The step `q = p + k`, which the access performs.
+    Step,
+    /// The access at `[q - k]`, emitted as `[p], #k`.
+    Access(i32),
+}
+
+/// The register a post-indexed access moves data through, and its form:
+/// an integer access with its value in a general register, or a `float` or
+/// `double` load into a floating register.
+fn post_indexed_op(func: &FunctionSsa, alloc: &Allocation, a: usize) -> Option<(MemOp, u8, i32)> {
+    let reg = |v: super::super::ir::ValueId| match place_of(alloc, v) {
+        Place::IntReg(r) if r != 31 => Some((r, false)),
+        Place::FpReg(r) => Some((r, true)),
+        _ => None,
+    };
+    match func.insts[a] {
+        Inst::Load {
+            disp,
+            kind,
+            pc_rel: false,
+            align: 0,
+            ..
+        } => {
+            let (rt, fp) = reg(a as super::super::ir::ValueId)?;
+            let op = match kind {
+                LoadKind::F64 => LDR_D,
+                LoadKind::F32 if alloc.is_f32(a as super::super::ir::ValueId) => LDR_S,
+                k => int_load_op(k)?,
+            };
+            (fp == matches!(kind, LoadKind::F32 | LoadKind::F64)).then_some((op, rt, disp))
+        }
+        Inst::Store {
+            disp,
+            value,
+            kind,
+            pc_rel: false,
+            align: 0,
+            ..
+        } if place_of(alloc, a as super::super::ir::ValueId) == Place::None => {
+            // A stored zero comes out of the zero register; the constant
+            // has no register of its own (`Allocation::imm_store`).
+            let rt = if alloc.imm_store.get(a) == Some(&true) {
+                31
+            } else {
+                let (r, false) = reg(value)? else {
+                    return None;
+                };
+                r
+            };
+            Some((int_store_op(kind)?, rt, disp))
+        }
+        _ => None,
+    }
+}
+
+/// Steps `q = p + k` that keep `p`'s register, each with the access through
+/// `[q - k]` emitted next, which one post-indexed access performs.
+pub(super) fn post_indexed(func: &FunctionSsa, alloc: &Allocation) -> Vec<Option<PostIndex>> {
+    let mut out = alloc::vec![None; func.insts.len()];
+    for block in &func.blocks {
+        for v in block.inst_range.clone() {
+            let (p, k) = match func.insts[v as usize] {
+                Inst::BinopI {
+                    op: BinOp::Add,
+                    lhs,
+                    rhs_imm,
+                } => (lhs, rhs_imm),
+                Inst::BinopI {
+                    op: BinOp::Sub,
+                    lhs,
+                    rhs_imm,
+                } => (lhs, rhs_imm.wrapping_neg()),
+                _ => continue,
+            };
+            let r = place_of(alloc, v);
+            if !(-256..256).contains(&k)
+                || k == 0
+                || !matches!(r, Place::IntReg(x) if x != 31)
+                || place_of(alloc, p) != r
+                || alloc.high_dead(v)
+                || super::ssa::emit_common::inst_emits_nothing(&func.insts[v as usize], v, alloc)
+            {
+                continue;
+            }
+            let next = (v + 1..block.inst_range.end).find(|&u| {
+                !super::ssa::emit_common::inst_emits_nothing(&func.insts[u as usize], u, alloc)
+            });
+            let Some(a) = next else { continue };
+            let addr = match func.insts[a as usize] {
+                Inst::Load { addr, .. } | Inst::Store { addr, .. } => addr,
+                _ => continue,
+            };
+            let Place::IntReg(rn) = r else { continue };
+            if let Some((_, rt, disp)) = post_indexed_op(func, alloc, a as usize)
+                && addr == v
+                && i64::from(disp) == -k
+                && (rt != rn || matches!(place_of(alloc, a), Place::FpReg(_)))
+                && alloc
+                    .call_saves
+                    .binary_search_by_key(&a, |&(site, _)| site)
+                    .is_err()
+            {
+                out[v as usize] = Some(PostIndex::Step);
+                out[a as usize] = Some(PostIndex::Access(k as i32));
+            }
+        }
+    }
+    out
+}
+
+/// The post-indexed access [`post_indexed`] paired with the step ahead of
+/// it; `None` for any other instruction.
+pub(super) fn emit_post_indexed(
+    code: &mut Vec<u8>,
+    v: super::super::ir::ValueId,
+    paired: &[Option<PostIndex>],
+    fcx: &FnCtx,
+) -> Option<Emit> {
+    let Some(PostIndex::Access(k)) = paired.get(v as usize).copied().flatten() else {
+        return None;
+    };
+    let (func, alloc) = (fcx.func, fcx.alloc);
+    let (op, rt, _) = post_indexed_op(func, alloc, v as usize)?;
+    let (Inst::Load { addr, .. } | Inst::Store { addr, .. }) = func.insts[v as usize] else {
+        return None;
+    };
+    let Place::IntReg(rn) = place_of(alloc, addr) else {
+        return Some(fail("post-indexed access: base not in a register"));
+    };
+    let off = op.post_indexed(k.into())?;
+    emit(code, enc_mem(op, rt, Reg(rn), off));
+    Some(Ok(()))
+}
+
+/// An add or subtract of an immediate whose flags the branch ending its
+/// block reads ([`flag_steps`]), and the comparison those flags answer.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum FlagStep {
+    /// `adds` / `subs`, of the low words when `w32`.
+    Sets { w32: bool },
+    /// A comparison the step's flags answer with the condition: no code.
+    Answered(Cond),
+}
+
+/// Steps `y = x + k` whose flags answer the branch ending their block: a
+/// zero test of `y` -- the branch condition itself or a fused `==` / `!=`
+/// with 0 -- reads Z, and `y != -1` of `y = x - 1` reads C, set exactly
+/// when `x != 0`. Nothing is emitted between the step and its comparison,
+/// and nothing after the step sets the flags. A low-word test takes the
+/// 32-bit form, which only a step whose upper half nothing reads may.
+pub(super) fn flag_steps(func: &FunctionSsa, alloc: &Allocation) -> Vec<Option<FlagStep>> {
+    use super::super::ir::ValueId;
+    let mut out = alloc::vec![None; func.insts.len()];
+    let step = |y: ValueId| match func.insts[y as usize] {
+        Inst::BinopI {
+            op: BinOp::Add,
+            lhs,
+            rhs_imm,
+        } => Some((lhs, rhs_imm)),
+        Inst::BinopI {
+            op: BinOp::Sub,
+            lhs,
+            rhs_imm,
+        } => rhs_imm.checked_neg().map(|k| (lhs, k)),
+        _ => None,
+    };
+    let silent =
+        |u: ValueId| super::ssa::emit_common::inst_emits_nothing(&func.insts[u as usize], u, alloc);
+    let in_reg = |v: ValueId| matches!(place_of(alloc, v), Place::IntReg(r) if r != 31);
+    for (b, block) in func.blocks.iter().enumerate().skip(1) {
+        let (Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. }) = block.terminator else {
+            continue;
+        };
+        if !block.inst_range.contains(&cond) {
+            continue;
+        }
+        let (y, answer, w32) = if alloc.branch_fused.get(cond as usize) == Some(&true) {
+            let Inst::BinopI {
+                op: op @ (BinOp::Eq | BinOp::Ne),
+                lhs: y,
+                rhs_imm,
+            } = func.insts[cond as usize]
+            else {
+                continue;
+            };
+            if !block.inst_range.contains(&y) || y >= cond || !(y + 1..cond).all(silent) {
+                continue;
+            }
+            let decrement = step(y).is_some_and(|(_, k)| k == -1);
+            let cc = match (rhs_imm, op) {
+                (0, BinOp::Eq) => Cond::Eq,
+                (0, _) => Cond::Ne,
+                (-1, BinOp::Eq) if decrement => Cond::Lo,
+                (-1, _) if decrement => Cond::Hs,
+                _ => continue,
+            };
+            (y, Some(cc), narrow_cmp(alloc, cond))
+        } else {
+            let keeps = |u: ValueId| {
+                silent(u) || super::ssa::reg_alloc::flags_survive(&func.insts[u as usize], false)
+            };
+            if !(cond + 1..block.inst_range.end).all(keeps) {
+                continue;
+            }
+            let low_word = func.low_word_tests.get(b).copied().unwrap_or(false);
+            (cond, None, low_word)
+        };
+        let Some((x, k)) = step(y) else { continue };
+        if k.unsigned_abs() >= 4096 || !in_reg(y) || !in_reg(x) || (w32 && !alloc.high_dead(y)) {
+            continue;
+        }
+        out[y as usize] = Some(FlagStep::Sets { w32 });
+        if let Some(cc) = answer {
+            out[cond as usize] = Some(FlagStep::Answered(cc));
+        }
+    }
+    out
+}
+
+/// The step or comparison [`flag_steps`] marked; `None` for any other
+/// instruction.
+pub(super) fn emit_flag_step(
+    code: &mut Vec<u8>,
+    v: super::super::ir::ValueId,
+    steps: &[Option<FlagStep>],
+    fcx: &FnCtx,
+) -> Option<Emit> {
+    let (lhs, k) = match (
+        steps.get(v as usize).copied().flatten()?,
+        &fcx.func.insts[v as usize],
+    ) {
+        (FlagStep::Answered(_), _) => return Some(Ok(())),
+        (FlagStep::Sets { .. }, &Inst::BinopI { op, lhs, rhs_imm }) => match op {
+            BinOp::Sub => (lhs, rhs_imm.checked_neg()?),
+            _ => (lhs, rhs_imm),
+        },
+        _ => return None,
+    };
+    let Some(FlagStep::Sets { w32 }) = steps[v as usize] else {
+        return None;
+    };
+    let (Place::IntReg(rd), Place::IntReg(rn)) = (place_of(fcx.alloc, v), place_of(fcx.alloc, lhs))
+    else {
+        return Some(fail("flag step: operand not in a register"));
+    };
+    let (rd, rn, m) = (Reg(rd), Reg(rn), k.unsigned_abs() as u32);
+    emit(
+        code,
+        match (k >= 0, w32) {
+            (true, false) => super::encode::enc_adds_imm(rd, rn, m),
+            (true, true) => super::encode::enc_adds_imm_w(rd, rn, m),
+            (false, false) => enc_subs_imm(rd, rn, m),
+            (false, true) => super::encode::enc_subs_imm_w(rd, rn, m),
+        },
+    );
+    Some(Ok(()))
+}
+
+/// The condition a branch on `cond` takes off a [`flag_steps`] step's
+/// flags: the comparison's answer, or the step's own zero test.
+pub(super) fn flag_step_cond(
+    steps: &[Option<FlagStep>],
+    cond: super::super::ir::ValueId,
+    negate: bool,
+) -> Option<Cond> {
+    let cc = match steps.get(cond as usize).copied().flatten()? {
+        FlagStep::Answered(cc) => cc,
+        FlagStep::Sets { .. } => Cond::Ne,
+    };
+    Some(if negate { cc.flip() } else { cc })
+}
+
+/// `ld1` or `st1` of one lane for a lane insert or store whose value
+/// [`lane_memory`] fused into it; `None` for any other instruction.
+pub(super) fn emit_lane_memory(
+    code: &mut CodeBuf,
+    inst: &Inst,
+    fused: &[bool],
+    dst: Place,
+    fcx: &FnCtx,
+) -> Option<Emit> {
+    let FnCtx {
+        func,
+        alloc,
+        frame,
+        scratch,
+        ..
+    } = *fcx;
+    let is_fused = |v: super::super::ir::ValueId| fused.get(v as usize).copied().unwrap_or(false);
+    let (vec, off, w, bytes, addr, load) = match *inst {
+        Inst::VecInsert {
+            vec,
+            value,
+            off,
+            kind,
+            bytes,
+        } if is_fused(value) => {
+            let Inst::Load { addr, .. } = func.insts[value as usize] else {
+                return None;
+            };
+            (vec, off, lane_bytes(kind)?, bytes, addr, true)
+        }
+        Inst::Store { addr, value, .. } if is_fused(value) => {
+            let Inst::VecExtract {
+                vec,
+                off,
+                kind,
+                bytes,
+            } = func.insts[value as usize]
+            else {
+                return None;
+            };
+            (vec, off, kind.bytes(), bytes, addr, false)
+        }
+        _ => return None,
+    };
+    let Some(rn) = materialize_int(code, place_of(alloc, addr), scratch.primary, frame) else {
+        return Some(fail("lane access: address has no place"));
+    };
+    let qd = match (load, dst) {
+        (true, Place::FpReg(r)) => r,
+        _ => frame.fp_scratch[0],
+    };
+    // A lane loaded over an undefined vector forms in the result's register.
+    let qn = match bytes {
+        _ if load && matches!(func.insts[vec as usize], Inst::Undef) => Some(qd),
+        16 => materialize_v128(code, place_of(alloc, vec), qd, frame, scratch.secondary),
+        _ => materialize_fp(code, place_of(alloc, vec), qd, frame),
+    };
+    let Some(qn) = qn else {
+        return Some(fail("lane access: vector has no place"));
+    };
+    let esize = u32::from(w);
+    let index = u32::from(off) / esize;
+    // Lane 0 is the low bytes a scalar store of the width writes.
+    if !load {
+        use super::encode::{STR_B, STR_D, STR_H, STR_S, enc_ld1_st1_lane, enc_mem};
+        let op = [STR_B, STR_H, STR_S, STR_D][esize.trailing_zeros() as usize];
+        emit(
+            code,
+            match index {
+                0 => enc_mem(op, qn, rn, op.scaled(0)),
+                _ => enc_ld1_st1_lane(false, qn, esize, index, rn),
+            },
+        );
+        return Some(Ok(()));
+    }
+    if qn != qd {
+        emit(code, super::encode::enc_mov_v16b(qd, qn));
+    }
+    emit(
+        code,
+        super::encode::enc_ld1_st1_lane(true, qd, esize, index, rn),
+    );
+    if bytes == 16 {
+        propagate_v128(code, frame, dst, qd, scratch.primary);
+    } else {
+        store_spilled_fp(code, frame, dst, qd);
+    }
+    Some(Ok(()))
+}
+
+/// `Inst::VecInsert`: `ins` of the value into the lane of a copy of the
+/// vector, from a general register or from the low element of an FP one.
+/// `blank` is `Some(undefined)` for a vector of no value or of zero.
+fn emit_vec_insert(
+    code: &mut CodeBuf,
+    (vec, value, off, kind, bytes): (
+        super::super::ir::ValueId,
+        super::super::ir::ValueId,
+        u8,
+        StoreKind,
+        u8,
+    ),
+    blank: Option<bool>,
+    (dst, alloc, frame, scratch): (Place, &Allocation, Frame, &ScratchPool),
+) -> Emit {
+    use super::encode::{enc_ins_elem, enc_ins_gen};
+    if bytes != 16 && bytes != 8 {
+        return fail("VecInsert: only 8- and 16-byte vectors");
+    }
+    // The result at the vector's width: an 8-byte one is its D register,
+    // moved there when it formed in the scratch.
+    let propagate = |code: &mut CodeBuf, qd: u8| {
+        if bytes == 16 {
+            propagate_v128(code, frame, dst, qd, scratch.primary);
+            return;
+        }
+        if let Place::FpReg(r) = dst
+            && r != qd
+        {
+            emit(code, super::encode::enc_fmov_d_d(r, qd));
+        }
+        store_spilled_fp(code, frame, dst, qd);
+    };
+    let esize = match kind {
+        StoreKind::F64 | StoreKind::I64 => 8,
+        StoreKind::F32 | StoreKind::I32 => 4,
+        StoreKind::I16 => 2,
+        StoreKind::I8 => 1,
+        _ => return fail("VecInsert: not a lane kind"),
+    };
+    let index = u32::from(off) / esize;
+    let float = matches!(kind, StoreKind::F32 | StoreKind::F64);
+    // The value first, as the result may take its register.
+    let src = if float {
+        let Some(f) = materialize_fp(code, place_of(alloc, value), frame.fp_scratch[1], frame)
+        else {
+            return fail("VecInsert: value has no place");
+        };
+        f
+    } else {
+        let Some(r) = materialize_int(code, place_of(alloc, value), scratch.primary, frame) else {
+            return fail("VecInsert: value has no place");
+        };
+        r.0
+    };
+    // A 64-bit lane between two registers: `zip1` pairs the low lanes
+    // into any register, and a result over the value keeps its low lane.
+    if float
+        && esize == 8
+        && bytes == 16
+        && let (Place::FpReg(d), Place::FpReg(n)) = (dst, place_of(alloc, vec))
+        && d != n
+    {
+        if off == 8 {
+            emit(code, super::encode::enc_zip1_2d(d, n, src));
+            return Ok(());
+        }
+        if d == src {
+            emit(code, super::encode::enc_ins_elem_from(d, 8, 1, n, 1));
+            return Ok(());
+        }
+    }
+    let qd = match dst {
+        Place::FpReg(r) if !(float && r == src) => r,
+        _ => frame.fp_scratch[0],
+    };
+    // The low lane over a zero or undefined vector: a scalar `fmov` clears
+    // the bits above it, and over an undefined one the value's register
+    // already is the result.
+    if let Some(undefined) = blank
+        && off == 0
+        && esize >= 4
+    {
+        let qd = match dst {
+            Place::FpReg(r) => r,
+            _ => frame.fp_scratch[0],
+        };
+        if !(undefined && float && qd == src) {
+            emit(
+                code,
+                match (float, esize) {
+                    (true, 8) => super::encode::enc_fmov_d_d(qd, src),
+                    (true, _) => super::encode::enc_fmov_s_s(qd, src),
+                    (false, 8) => super::encode::enc_fmov_x_to_d(qd, Reg(src)),
+                    (false, _) => super::encode::enc_fmov_w_to_s(qd, Reg(src)),
+                },
+            );
+        }
+        propagate(code, qd);
+        return Ok(());
+    }
+    // An undefined vector leaves the register as it is.
+    let base = place_of(alloc, vec);
+    if blank != Some(true) && !matches!(base, Place::None) {
+        let qn = match bytes {
+            16 => materialize_v128(code, base, qd, frame, scratch.secondary),
+            _ => materialize_fp(code, base, qd, frame),
+        };
+        let Some(qn) = qn else {
+            return fail("VecInsert: vector has no place");
+        };
+        if qn != qd {
+            emit(code, super::encode::enc_mov_v16b(qd, qn));
+        }
+    }
+    emit(
+        code,
+        if float {
+            enc_ins_elem(qd, esize, index, src)
+        } else {
+            enc_ins_gen(qd, esize, index, Reg(src))
+        },
+    );
+    propagate(code, qd);
+    Ok(())
+}
+
+/// `Inst::VecSplat`: `dup` of a general register, or of an FP register's
+/// low element, into every lane; one 64-bit lane is the value's `fmov`.
+fn emit_vec_splat(
+    code: &mut CodeBuf,
+    (value, kind, bytes): (super::super::ir::ValueId, StoreKind, u8),
+    (dst, alloc, frame, scratch): (Place, &Allocation, Frame, &ScratchPool),
+) -> Emit {
+    use super::encode::{enc_dup_elem, enc_dup_gen, enc_fmov_d_d, enc_fmov_x_to_d};
+    if bytes != 16 && bytes != 8 {
+        return fail("VecSplat: only 8- and 16-byte vectors");
+    }
+    let esize = match kind {
+        StoreKind::F64 | StoreKind::I64 => 8,
+        StoreKind::F32 | StoreKind::I32 => 4,
+        StoreKind::I16 => 2,
+        StoreKind::I8 => 1,
+        _ => return fail("VecSplat: not a lane kind"),
+    };
+    let float = matches!(kind, StoreKind::F32 | StoreKind::F64);
+    let src = if float {
+        materialize_fp(code, place_of(alloc, value), frame.fp_scratch[1], frame)
+    } else {
+        materialize_int(code, place_of(alloc, value), scratch.primary, frame).map(|r| r.0)
+    };
+    let Some(src) = src else {
+        return fail("VecSplat: value has no place");
+    };
+    let qd = match dst {
+        Place::FpReg(r) => r,
+        _ => frame.fp_scratch[0],
+    };
+    let q = bytes == 16;
+    match (float, esize, q) {
+        (true, 8, false) if qd == src => {}
+        (true, 8, false) => emit(code, enc_fmov_d_d(qd, src)),
+        (false, 8, false) => emit(code, enc_fmov_x_to_d(qd, Reg(src))),
+        (true, ..) => emit(code, enc_dup_elem(qd, esize, q, src)),
+        (false, ..) => emit(code, enc_dup_gen(qd, esize, q, Reg(src))),
+    }
+    if q {
+        propagate_v128(code, frame, dst, qd, scratch.primary);
+    } else {
+        store_spilled_fp(code, frame, dst, qd);
+    }
+    Ok(())
+}
+
+/// `Inst::VecConst`: one `movi` or `mvni` where the lanes have the modified
+/// immediate form -- zero, all ones, bytes of either, a byte shifted within
+/// its lane -- else the lane built in a general register and `dup`ed.
+fn emit_vec_const(
+    code: &mut CodeBuf,
+    (imm, kind, bytes): (i64, StoreKind, u8),
+    (dst, frame, scratch): (Place, Frame, &ScratchPool),
+) -> Emit {
+    use super::table::{self, Opnd};
+    if bytes != 16 && bytes != 8 {
+        return fail("VecConst: only 8- and 16-byte vectors");
+    }
+    let esize: u32 = match kind {
+        StoreKind::I64 => 8,
+        StoreKind::I32 => 4,
+        StoreKind::I16 => 2,
+        StoreKind::I8 => 1,
+        _ => return fail("VecConst: not an integer lane kind"),
+    };
+    let (q, bits) = (bytes == 16, 8 * esize);
+    let mask = u64::MAX >> (64 - bits);
+    let lane = imm as u64 & mask;
+    let pattern = (0..64 / bits).fold(0u64, |p, i| p | lane << (i * bits));
+    let qd = match dst {
+        Place::FpReg(r) => r,
+        _ => frame.fp_scratch[0],
+    };
+    let vreg = |size: u32| Opnd::VecReg {
+        num: qd,
+        size: size as u8,
+        q,
+    };
+    let modified = |m: &str, v: u64, shift: u32| {
+        (v >> 8 == 0)
+            .then(|| {
+                table::encode(
+                    m,
+                    &[
+                        vreg(esize.trailing_zeros()),
+                        Opnd::Imm(v as i64),
+                        Opnd::Lsl(shift),
+                    ],
+                )
+            })
+            .and_then(Result::ok)
+    };
+    let bytewise = pattern.to_le_bytes().iter().all(|&b| b == 0 || b == 0xFF);
+    let word = if bytewise {
+        table::encode("movi", &[vreg(3), Opnd::Imm(pattern as i64)]).ok()
+    } else if esize == 1 {
+        table::encode("movi", &[vreg(0), Opnd::Imm(lane as i64)]).ok()
+    } else if esize <= 4 {
+        (0..bits).step_by(8).find_map(|s| {
+            let (v, n) = (lane >> s, !lane & mask);
+            (v << s == lane)
+                .then(|| modified("movi", v, s))
+                .flatten()
+                .or_else(|| {
+                    ((n >> s) << s == n)
+                        .then(|| modified("mvni", n >> s, s))
+                        .flatten()
+                })
+        })
+    } else {
+        None
+    };
+    match word {
+        Some(w) => emit(code, w),
+        None => {
+            super::encode::load_imm64(code, scratch.primary, lane);
+            emit(
+                code,
+                if esize == 8 && !q {
+                    super::encode::enc_fmov_x_to_d(qd, scratch.primary)
+                } else {
+                    super::encode::enc_dup_gen(qd, esize, q, scratch.primary)
+                },
+            );
+        }
+    }
+    if q {
+        propagate_v128(code, frame, dst, qd, scratch.primary);
+    } else {
+        store_spilled_fp(code, frame, dst, qd);
+    }
+    Ok(())
+}
+
 /// `Inst::Fneg`. C99 6.3.1.8: negation of a `float` is single-precision;
 /// the result's f32 marker mirrors the operand's. A spilled result stages
 /// through the second FP scratch, since the source may occupy the first.
 fn emit_fneg(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     src: u32,
     v: super::super::ir::ValueId,
     dst: Place,
@@ -696,7 +1616,7 @@ fn emit_fneg(
 /// register may hold a loop-carried addend, so `dc` is never reused.
 #[allow(clippy::too_many_arguments)]
 fn emit_fma(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     [a, b, c]: [u32; 3],
     neg_product: bool,
     neg_addend: bool,
@@ -740,7 +1660,7 @@ fn emit_fma(
 /// widening or narrowing `fcvt` needs no separate move.
 #[allow(clippy::too_many_arguments)]
 fn emit_fp_cast(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     kind: super::super::ir::FpCastKind,
     value: u32,
     v: super::super::ir::ValueId,
@@ -791,6 +1711,28 @@ fn emit_fp_cast(
             };
             emit(code, enc);
             store_spilled_int(code, frame, dst, rd);
+            Ok(())
+        }
+        FpCastKind::FpBits => {
+            let Some(dn) = materialize_fp(code, src_place, frame.fp_scratch[0], frame) else {
+                return fail("FpCast FpBits: value not fp reg / spill");
+            };
+            let Some(rd) = int_or_spill_scratch(dst, scratch) else {
+                return fail("FpCast FpBits: dst not int reg / spill");
+            };
+            emit(code, super::encode::enc_fmov_d_to_x(rd, dn));
+            store_spilled_int(code, frame, dst, rd);
+            Ok(())
+        }
+        FpCastKind::BitsFp => {
+            let Some(rn) = materialize_int(code, src_place, scratch.primary, frame) else {
+                return fail("FpCast BitsFp: value not int reg / spill");
+            };
+            let Some(dd) = fp_or_spill_dst(dst, frame) else {
+                return fail("FpCast BitsFp: dst not fp reg / spill");
+            };
+            emit(code, super::encode::enc_fmov_x_to_d(dd, rn));
+            store_spilled_fp(code, frame, dst, dd);
             Ok(())
         }
         FpCastKind::F32ToF64 | FpCastKind::F64ToF32 => {

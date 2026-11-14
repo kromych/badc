@@ -52,7 +52,8 @@
 #pragma binding(libc::umount,  "umount")
 #pragma binding(libc::umount2, "umount2")
 // The filesystem-specific `data` argument is opaque; passed by address.
-int mount(char *source, char *target, char *fstype, unsigned long flags, char *data);
-int umount(char *target);
-int umount2(char *target, int flags);
+int mount(const char *source, const char *target, const char *fstype,
+          unsigned long flags, const void *data);
+int umount(const char *target);
+int umount2(const char *target, int flags);
 #endif

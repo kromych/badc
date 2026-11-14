@@ -61,10 +61,16 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
 
-<second_thread_result>:
+<main>:
                	stp	x20, x21, [sp, #-0x30]!
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
+               	mov	x0, #0x0                // =0
+               	bl	<addr>
+               	cbz	w0, <addr>
+               	ldp	x29, x30, [sp, #0x20]
+               	ldp	x20, x21, [sp], #0x30
+               	ret
                	mov	x0, #0x0                // =0
                	mov	x1, #0x2                // =2
                	bl	<addr>
@@ -91,16 +97,4 @@ Disassembly of section .text:
                	ldur	x0, [x29, #-0x8]
                	ldp	x29, x30, [sp, #0x20]
                	ldp	x20, x21, [sp], #0x30
-               	ret
-
-<main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	mov	x0, #0x0                // =0
-               	bl	<addr>
-               	cbz	w0, <addr>
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	bl	<addr>
-               	ldp	x29, x30, [sp], #0x10
                	ret

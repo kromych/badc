@@ -86,17 +86,14 @@ Disassembly of section .text:
                	mov	x4, #0x2c               // =44
                	strb	w4, [x3, #0x63]
                	ldrb	w0, [x0]
-               	mov	x17, #0xb               // =11
-               	eor	x0, x0, x17
-               	cbnz	w0, <addr>
+               	cmp	w0, #0xb
+               	b.ne	<addr>
                	ldrb	w0, [x1, #0x6]
-               	mov	x17, #0x16              // =22
-               	eor	x0, x0, x17
-               	cbnz	w0, <addr>
+               	cmp	w0, #0x16
+               	b.ne	<addr>
                	ldrb	w0, [x2, #0x20]
-               	mov	x17, #0x21              // =33
-               	eor	x0, x0, x17
-               	cbnz	w0, <addr>
+               	cmp	w0, #0x21
+               	b.ne	<addr>
                	mov	x0, #0x0                // =0
                	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10

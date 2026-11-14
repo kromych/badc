@@ -33,7 +33,6 @@ Disassembly of section .text:
                	pushq	%r12
                	pushq	%rbx
                	leaq	<rip>, %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %r13
                	testq	%r13, %r13
@@ -50,19 +49,16 @@ Disassembly of section .text:
                	incq	%r12
                	leaq	0x13(%rax), %rdi
                	leaq	<rip>, %rsi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
+               	movl	$0x1, %ecx
                	testq	%rax, %rax
-               	jne	<addr>
-               	movl	$0x1, %ebx
+               	cmoveq	%rcx, %rbx
                	movq	%r13, %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	testq	%rax, %rax
                	jne	<addr>
                	movq	%r13, %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	cmpl	$0x2, %r12d
                	jle	<addr>

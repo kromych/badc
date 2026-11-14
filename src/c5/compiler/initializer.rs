@@ -24,8 +24,8 @@ use super::Compiler;
 use super::const_expr::ConstVal;
 use super::types::{
     add_ptr_level, is_bool_ty, is_integer_scalar_ty, is_pointer_ty, is_struct_ty,
-    is_struct_value_ty, is_unsigned_ty, is_vector_ty, pointee_ty, strip_unsigned, struct_id_of,
-    struct_ptr_depth, struct_ty_for,
+    is_struct_value_ty, is_unsigned_ty, is_vector_ty, is_void_ty, pointee_ty, strip_unsigned,
+    struct_id_of, struct_ptr_depth, struct_ty_for,
 };
 
 /// A resolved chained array designator `[i][j]...`: `base` and
@@ -194,7 +194,7 @@ pub(super) enum InitElemReloc {
     /// resolved ent_pc and patch both the data bytes and
     /// the matching `Program::code_relocs` entry.
     Code(usize),
-    /// Value is a `&&label` block address (GCC labels as values) in the
+    /// Value is a `&&label` block address (GNU C labels as values) in the
     /// function being parsed; needs a `LabelReloc`. The payload is the
     /// label id, which the walker resolves to a basic block and native
     /// emit to a text offset.
@@ -252,7 +252,7 @@ enum DesignatorStep {
 
 impl DesignatedSubobject {
     /// The steps naming the last sub-object of a range, after which
-    /// initialization resumes (the GNU range extension, as gcc and clang).
+    /// initialization resumes (the GNU C range extension).
     fn last_steps(&self) -> Vec<DesignatorStep> {
         let shift = self.extra * self.stride;
         let mut steps = self.steps.clone();
@@ -378,20 +378,30 @@ fn take_where<T>(
 }
 
 impl Compiler {
-    /// C99 6.2.8 placement alignment of an object with static storage
-    /// duration: the alignment the declaration settled on when it is
-    /// stricter, and otherwise the 8-byte boundary every object wider than
-    /// a single byte takes. `decl_align` already carries the type's own
-    /// requirement and any lowering a variable-level `aligned(N)` applied,
-    /// so it is taken as given rather than widened again here.
-    pub(super) fn data_placement_align(&self, ty: i64, decl_align: usize) -> usize {
-        if decl_align > 8 {
+    /// C11 6.2.8 placement alignment of an object with static storage
+    /// duration, `bytes` long, of `ty` (the element type of an `array`):
+    /// the alignment the declaration settled on, else the type's own. The
+    /// x86-64 psABI 3.1.2 aligns an array variable of 16 bytes or more on
+    /// 16. `decl_align` already carries any lowering a variable-level
+    /// `aligned(N)` applied, so the type's alignment does not override it.
+    pub(super) fn data_placement_align(
+        &self,
+        ty: i64,
+        decl_align: usize,
+        bytes: i64,
+        array: bool,
+    ) -> usize {
+        let own = if decl_align > 0 {
             decl_align
-        } else if self.size_of_type(ty) > 1 {
-            8
+        } else {
+            self.align_of_type(ty)
+        };
+        let abi = if array && bytes >= 16 && self.target.is_x86_64() {
+            16
         } else {
             1
-        }
+        };
+        own.max(abi).max(1)
     }
 
     /// Reserve `bytes` zeroed bytes in `store`, first padding it so the
@@ -434,11 +444,9 @@ impl Compiler {
     }
 
     /// Reserve `bytes` zeroed bytes in `.data` for an unnamed object of
-    /// `ty` -- a compound literal (C99 6.5.2.5p5). It sits on the type's
-    /// boundary, and never below the 8-byte width the static-initializer
-    /// writes use.
+    /// `ty` -- a compound literal (C99 6.5.2.5p5) -- on the type's boundary.
     pub(super) fn reserve_literal_bytes(&mut self, ty: i64, bytes: usize) -> i64 {
-        let align = self.align_of_type(ty).max(8);
+        let align = self.align_of_type(ty).max(1);
         self.note_static_align(align, self.lex.line);
         self.reserve_data_bytes(DataStore::Static, align, bytes)
     }
@@ -516,8 +524,8 @@ impl Compiler {
         Ok(())
     }
 
-    /// Order the thread-local template as gcc does: the objects whose bytes
-    /// or relocations initialize them first, as `.tdata`, then the all-zero
+    /// Order the thread-local template: the objects whose bytes or
+    /// relocations initialize them first, as `.tdata`, then the all-zero
     /// ones, which join the `.tbss` zero fill whatever their declaration
     /// order or initializer. An object's extent runs to the next object's
     /// start and moves to the placement alignment it was reserved on;
@@ -531,7 +539,8 @@ impl Compiler {
         for s in &self.symbols {
             if s.class == Token::Glo as i64 && s.is_thread_local && s.defined_here {
                 let want = (s.data_align.max(0) as usize).max(self.align_of_type(s.type_));
-                let align = self.data_placement_align(s.type_, want);
+                let array = s.array_size > 0;
+                let align = self.data_placement_align(s.type_, want, s.reserved_data_bytes, array);
                 let at = objects.entry(s.val as usize).or_insert(1);
                 *at = (*at).max(align);
             }
@@ -619,9 +628,9 @@ impl Compiler {
     ///   * `Label(id)`   -- `&&label`, stage a pending label reloc the
     ///                      function's walk resolves to a basic block.
     /// Whether an object of type `ty` holds an address constant: a
-    /// pointer, or an integer as wide as one, the `(intptr_t)&x` form gcc
-    /// and clang accept. A narrower integer would need a truncating
-    /// relocation, and a floating object takes no address (C99 6.5.4p4).
+    /// pointer, or an integer as wide as one, the `(intptr_t)&x` form. A
+    /// narrower integer would need a truncating relocation, and a floating
+    /// object takes no address (C99 6.5.4p4).
     pub(super) fn holds_address(&self, ty: i64) -> bool {
         let floating = super::types::is_floating_scalar(ty) || super::types::is_long_double_ty(ty);
         is_pointer_ty(ty)
@@ -783,7 +792,7 @@ impl Compiler {
         }
     }
 
-    /// C99 6.4.2.2 predefined identifier `__func__` (with the GCC
+    /// C99 6.4.2.2 predefined identifier `__func__` (with the GNU C
     /// `__FUNCTION__` / `__PRETTY_FUNCTION__` aliases), valid only inside a
     /// function body. The cursor must be on the identifier token.
     pub(super) fn is_func_name_ident(&self) -> bool {
@@ -795,7 +804,7 @@ impl Compiler {
             )
     }
 
-    /// Materialise the enclosing function's name as the bytes of an implicit
+    /// Materialize the enclosing function's name as the bytes of an implicit
     /// `static const char[]` (C99 6.4.2.2) in the data segment and return the
     /// offset of the first byte. The caller advances past the identifier,
     /// which must be the one `is_func_name_ident` accepted.
@@ -1010,15 +1019,19 @@ impl Compiler {
         }))
     }
 
-    /// Report a string longer than the `bound` elements it initializes, as
-    /// gcc and clang do (C99 6.7.8p2); the fill drops the excess.
+    /// Report a string longer than the `bound` elements it initializes
+    /// (C99 6.7.8p2); the fill drops the excess.
     pub(super) fn warn_string_overrun(&mut self, lit: &StagedStringLiteral, bound: usize) {
         if lit.overruns(bound) && self.warned_string_overruns.insert(lit.pos) {
             let text = format!(
                 "initializer string is too long for an array of {bound} ({} dropped)",
                 lit.chars - bound
             );
-            self.warn_at(Code::EXCESS_INITIALIZERS, lit.line, text);
+            let at = super::Site {
+                line: lit.line,
+                offset: Some(lit.pos as u32),
+            };
+            self.warn_at(Code::EXCESS_INITIALIZERS, at, text);
         }
     }
 
@@ -1457,7 +1470,7 @@ impl Compiler {
         // from there. Track the cursor here so designated and
         // positional entries can interleave per 6.7.8p17.
         let mut cursor: usize = 0;
-        // Set by a GCC range designator `[a ... b] = value` to the
+        // Set by a range designator `[a ... b] = value` to the
         // one-past-the-last scalar index the next value fills.
         let mut desig_range_end: Option<usize> = None;
         // Sub-array levels a chained designator descended (`[i][j] =` is
@@ -1465,7 +1478,7 @@ impl Compiler {
         // level's row rather than this level's.
         let mut desig_depth: usize = 0;
         while self.lex.tk != '}' {
-            // Array designator `[N] = ...`, optionally a GCC range
+            // Array designator `[N] = ...`, optionally a range
             // `[a ... b] = ...`, and optionally chained for a
             // multi-dimensional array (`[i][j] = value`, C99 6.7.8p6).
             // A `.field` step names a member the scalar element does not
@@ -1528,7 +1541,7 @@ impl Compiler {
                 let stride = span.max(written);
                 // A range designator (`[a ... b] = { ... }`) replicates the
                 // sub-array across every covered index; a plain designator or
-                // positional entry writes it once (C99 6.7.8 with the GCC
+                // positional entry writes it once (C99 6.7.8 with the GNU C
                 // range extension over an array of aggregates). A short brace
                 // list zero-pads to `stride` per C99 6.7.8p21.
                 let reps = match desig_range_end.take() {
@@ -2066,17 +2079,17 @@ impl Compiler {
             self.skip_init_element_value()?;
             return Ok(InitLeaf::of(0, InitElemReloc::None, ty));
         }
-        let line = self.lex.line;
-        let fn_checked = self.check_designator_initializer(ty, target_fn, line)?;
+        let at = self.site();
+        let fn_checked = self.check_designator_initializer(ty, target_fn, at)?;
         let leaf = self.parse_constant_init_value()?;
         if !fn_checked {
             let flags = (leaf.is_zero_int(), false);
-            self.check_constant_init_conversion(ty, target_fn, leaf.ty, flags, line)?;
+            self.check_constant_init_conversion(ty, target_fn, leaf.ty, flags, at)?;
         }
         if matches!(leaf.reloc, InitElemReloc::None) {
-            self.check_constant_conversion(leaf.value, leaf.ty, ty, bits, line);
+            self.check_constant_conversion(leaf.value, leaf.ty, ty, bits, at);
             if !self.initializes_as_is(leaf.ty, ty) {
-                self.check_enum_conversion(leaf.enumeration.or(Some(leaf.ty)), ty, bits, line);
+                self.check_enum_conversion(leaf.enumeration.or(Some(leaf.ty)), ty, bits, at);
             }
         }
         Ok(leaf)
@@ -2090,7 +2103,7 @@ impl Compiler {
     pub(super) fn parse_constant_init_value(&mut self) -> Result<InitLeaf, C5Error> {
         // A constant initializer's value position folds block-scope
         // `const` scalar objects (`static int x = h;` inside a function),
-        // as GCC accepts; type dimensions nested in the value (a compound
+        // as C99 6.6p10 permits; type dimensions nested in the value (a compound
         // literal's `[N]`) re-mask the fold (see `const_object_fold`).
         self.const_object_fold += 1;
         let r = self.parse_constant_init_value_inner();
@@ -2266,7 +2279,7 @@ impl Compiler {
             // A static initializer leaf that begins with `&` folds to a
             // constant address (C99 6.6p9): either a relocation-bearing
             // pointer (`&global` / `&func`, equivalent under C99 6.3.2.1p4)
-            // or a byte offset (the C99 7.19 / GCC `offsetof` expansion
+            // or a byte offset (the C99 7.19 `offsetof` expansion
             // `&((T *)0)->field`). The designation grammar in `const_expr`
             // recurses through parentheses and casts, so `&foo`, `&(foo)`,
             // and `&arr[i]` all fold uniformly; a symbol root yields a Code /
@@ -2346,7 +2359,14 @@ impl Compiler {
         // the operator chain past the `)`.
         {
             let inner_snap = self.lex.snapshot();
+            let cp = self.init_checkpoint();
             let leaf = self.parse_constant_init_value()?;
+            // A comma operand: the evaluator folds the comma expression.
+            if self.lex.tk == ',' {
+                self.restore_init_checkpoint(cp);
+                self.restore_lex(snap);
+                return self.parse_constant_init_scalar();
+            }
             if self.lex.tk == ')'
                 && let Some(seed) = leaf.arith()
             {
@@ -2451,6 +2471,15 @@ impl Compiler {
             return Ok(InitLeaf::of(v, reloc, ty));
         }
         self.reject_cast_type(!name.dims.is_empty(), name.is_function)?;
+        // A `void` operand of a comma; see `parse_const_expr_comma_val`.
+        if is_void_ty(cast_ty) {
+            self.restore_lex(snap);
+            self.parse_const_expr_discarded()?;
+            if self.lex.tk != ',' {
+                self.reject_void_value(cast_ty)?;
+            }
+            return Ok(InitLeaf::of(0, InitElemReloc::None, cast_ty));
+        }
         // C99 6.5.2.5 scalar-typed compound literal `(T){ v }`: the
         // brace holds a single value; the result is that value
         // converted to `T`, keeping any relocation it carries.
@@ -2612,7 +2641,7 @@ impl Compiler {
         if class == Token::Glo as i64 {
             // A scalar global names its value, not its address, so the
             // shared evaluator decides it: a const-qualified object
-            // folds as gcc does, the rest is rejected. Only an array
+            // folds, the rest is rejected. Only an array
             // decays here.
             if self.symbols[idx].array_size == 0 && !self.symbols[idx].is_zero_len_array {
                 return self.parse_constant_init_scalar();
@@ -2812,7 +2841,7 @@ impl Compiler {
             } else {
                 // A type dimension: the const-object fold stays masked so
                 // `(int[h]){...}` with a const local `h` is rejected as a
-                // variably sized literal, as gcc rejects it.
+                // variably sized literal.
                 dims.push(self.with_const_object_fold_masked(|c| c.parse_constant_int())?);
                 if self.lex.tk != ']' {
                     return Err(self
@@ -2874,10 +2903,6 @@ impl Compiler {
         // model identifies an object by its start offset, so it must not
         // share one with whatever is placed next.
         if self.data.len() as i64 == off {
-            self.data.push(0);
-        }
-        // Pad the anonymous array's storage up to an 8-byte boundary.
-        while (self.data.len() as i64 - off) % 8 != 0 {
             self.data.push(0);
         }
         let sym_idx = self.intern_compound_literal_symbol(off, elem_ty, (count * elem_size) as i64);
@@ -3505,7 +3530,7 @@ impl Compiler {
     /// Each entry may be positional, `[N] =`, `[lo ... hi] =` (the value
     /// re-parsed per index), a chained `[i][j]... =` naming a deeper
     /// sub-object, or a subscript run ending in a `.field` chain
-    /// (C99 6.7.8p6/p7/p17-p21 with the GCC range extension).
+    /// (C99 6.7.8p6/p7/p17-p21 with the GNU C range extension).
     pub(super) fn collect_struct_array_data(
         &mut self,
         elem_ty: i64,
@@ -3779,6 +3804,22 @@ impl Compiler {
         } else {
             None
         };
+        // A parenthesized type name opens a compound literal only when `{`
+        // follows its `)`; before anything else it is a cast (C99 6.5.4),
+        // which a vector type admits.
+        let mut depth = 1u32;
+        while sid.is_some() && depth > 0 && self.lex.tk != 0 {
+            self.next()?;
+            if self.lex.tk == '(' {
+                depth += 1;
+            } else if self.lex.tk == ')' {
+                depth -= 1;
+            }
+        }
+        if sid.is_some() {
+            self.next()?;
+        }
+        let sid = sid.filter(|_| self.lex.tk == '{');
         self.restore_lex(snap);
         Ok(sid)
     }
@@ -3835,14 +3876,8 @@ impl Compiler {
         if !starts {
             return Ok(false);
         }
-        if self.lex.tk == '(' {
-            let snap = self.lex.snapshot();
-            self.next()?;
-            let type_name = self.lex_is_type_start();
-            self.restore_lex(snap);
-            if type_name {
-                return Ok(false);
-            }
+        if self.lex.tk == '(' && self.peek_element_compound_literal_sid()?.is_some() {
+            return Ok(false);
         }
         let ty = self.peek_expr_type().unwrap_or(0);
         Ok(is_struct_value_ty(ty) && struct_id_of(ty) == sid)
@@ -3867,7 +3902,7 @@ impl Compiler {
                 self.accept(')')?;
             }
         } else if self.lex.tk != '{' && is_vector_ty(&self.structs, struct_ty_for(sid)) {
-            // C99 6.7.8p13 over the GCC vector extension: an element of vector
+            // C99 6.7.8p13 over the GNU C vector extension: an element of vector
             // type takes either a brace list of lanes or one compatible
             // whole-vector expression, which must not elide into the lanes.
             self.emit_array_leaf_runtime(local_val, off, struct_ty_for(sid))?;
@@ -3979,7 +4014,7 @@ impl Compiler {
         Ok(false)
     }
 
-    /// Write a flexible array member's static initializer (a GCC/clang
+    /// Write a flexible array member's static initializer (a GNU C
     /// extension over C99 6.7.2.1p18) at `field_base`, growing
     /// `self.data` to hold the trailing elements. The member's element
     /// type is `elem_ty`. The cursor is positioned at the member's
@@ -4076,8 +4111,8 @@ impl Compiler {
         let mut idx = 0usize;
         let mut count = 0usize;
         while self.lex.tk != '}' {
-            // C99 6.7.8p7 array designator `[index] = value` (GCC also
-            // allows the range form `[lo ... hi]`): set the element the
+            // C99 6.7.8p7 array designator `[index] = value` (or the GNU C
+            // range form `[lo ... hi]`): set the element the
             // value fills; a positional element continues after it.
             let mut range_hi = idx;
             if self.lex.tk == Token::Brak {
@@ -4167,7 +4202,7 @@ impl Compiler {
                      `designated_init`",
                     self.structs[struct_id].name
                 );
-                self.warn_at(Code::DESIGNATED_INIT, self.lex.line, text);
+                self.warn_at(Code::DESIGNATED_INIT, self.site(), text);
             }
             // C99 6.7.8p2, p17: a union holds one object to initialize,
             // so a positional initializer after the list's first item
@@ -4268,20 +4303,25 @@ impl Compiler {
             // mirrors the inner aggregate's field list one-to-one, so the
             // brace initializes an object of that type at the member's
             // offset -- which handles union alternatives, designators and
-            // any nesting depth through the ordinary struct path. Skipped
-            // for a field reached by an explicit `.name` designator: the
-            // brace then belongs to that member's own type.
-            if !designated
-                && self.lex.tk == '{'
-                && let Some(m) = self.anon_member_starting_at(struct_id, field_idx)
-            {
-                let base = (var_offset as usize) + m.offset;
-                self.collect_struct_initializer_t(m.inner, target.rebased(base as i64))?;
+            // any nesting depth through the ordinary struct path. Without
+            // the brace the object takes its members from this list (p20),
+            // and in a union it is the one member initialized (p17).
+            // Skipped for a field reached by an explicit `.name`
+            // designator: the brace then belongs to that member's own type.
+            if !designated && let Some(m) = self.anon_member_starting_at(struct_id, field_idx) {
+                let inner = target.rebased((var_offset as usize + m.offset) as i64);
+                let elided = self.lex.tk != '{';
+                if elided {
+                    self.fill_struct_fields_t(m.inner, inner, false)?;
+                } else {
+                    self.collect_struct_initializer_t(m.inner, inner)?;
+                }
                 pos = m.first as usize + m.count as usize;
                 for _ in 0..close_parens {
                     self.accept(')')?;
                 }
-                if !self.initializer_separator(!braced, pos >= n_fields)? {
+                let complete = (elided && self.structs[struct_id].is_union) || pos >= n_fields;
+                if !self.initializer_separator(!braced, complete)? {
                     break;
                 }
                 continue;
@@ -4290,8 +4330,7 @@ impl Compiler {
             // position marker, not the aggregate's flexible array member.
             // It has no subobject to initialize and shares its offset with
             // the member after it, so its element is consumed and dropped
-            // rather than written (GCC reports the element as excess and
-            // discards it too).
+            // rather than written.
             if field.array_size < 0 && !self.is_flexible_array_member(struct_id, field_idx) {
                 let data_snap = self.data.len();
                 self.skip_init_element_value()?;
@@ -4307,7 +4346,7 @@ impl Compiler {
             }
             // Flexible array member (`T v[]`, array_size == -1) with a
             // static initializer. C99 6.7.2.1p18 forbids initializing a
-            // FAM, but GCC and clang accept it for a top-level object,
+            // FAM, but GNU C accepts it for a top-level object,
             // laying the object out as if the member were a fixed array
             // sized to the initializer. Such an object cannot be nested
             // (6.7.2.1: a FAM-bearing struct is not a member or array
@@ -4696,6 +4735,16 @@ impl Compiler {
             )?;
             return Ok(false);
         }
+        // C99 6.7.8p20: a value that is not of the member's own type (p13),
+        // nor of the enclosing one at an elided first member, fills the
+        // member's fields from the surrounding list.
+        if self.is_traversable_aggregate_ty(field.ty)
+            && !self.next_is_struct_value(struct_id_of(field.ty))?
+            && !(first_elided && self.next_is_struct_value(struct_id)?)
+        {
+            self.emit_struct_runtime_at(local_val, field_base, struct_id_of(field.ty), false)?;
+            return Ok(false);
+        }
         // Scalar / pointer leaf, or a whole-object struct copy.
         self.emit_lea(local_val);
         if field_base > 0 {
@@ -4710,7 +4759,7 @@ impl Compiler {
         if braced_scalar {
             self.next()?;
         }
-        let line = self.lex.line;
+        let at = self.site();
         self.expr(Token::Assign as i64)?;
         if braced_scalar {
             self.accept(',')?;
@@ -4750,7 +4799,7 @@ impl Compiler {
             ));
         }
         let field_fn = self.field_fn_type(field);
-        self.check_initializer_expr_to((field.ty, &field_fn), field.bit_width, line)?;
+        self.check_initializer_expr_to((field.ty, &field_fn), field.bit_width, at)?;
         self.convert_assign_rhs(field.ty);
         let field_ast = self.ast_acc;
         self.ast_assign();
@@ -4839,14 +4888,14 @@ impl Compiler {
                 self.ast_psh();
                 // Assignment precedence: a `,` between entries is the
                 // list delimiter, not a comma operator.
-                let line = self.lex.line;
+                let site = self.site();
                 self.expr(Token::Assign as i64)?;
                 // C99 6.7.9p11: convert as in assignment (integer leaf
                 // of a floating member rounds through IEEE-754).
                 if target_fn.is_some() {
-                    self.check_initializer_expr_to((ty, target_fn), 0, line)?;
+                    self.check_initializer_expr_to((ty, target_fn), 0, site)?;
                 } else {
-                    self.check_initializer_expr(ty, 0, line)?;
+                    self.check_initializer_expr(ty, 0, site)?;
                 }
                 self.convert_assign_rhs(ty);
                 let v = self.ast_acc;
@@ -5023,7 +5072,7 @@ impl Compiler {
         ty: i64,
         target_fn: Option<(crate::c5::symbol::FnType, i64)>,
     ) -> Result<(), C5Error> {
-        let init_line = self.lex.line;
+        let init_at = self.site();
         self.emit_lea(local_val);
         self.ast_psh();
         // C99 6.7.8p11: a scalar initializer is a single expression,
@@ -5048,7 +5097,7 @@ impl Compiler {
         }
         // C99 6.7.8p11: a scalar object's initializer converts as if by
         // assignment; function pointers are compared by their types.
-        self.check_initializer_expr_to((ty, &target_fn), 0, init_line)?;
+        self.check_initializer_expr_to((ty, &target_fn), 0, init_at)?;
         // C99 6.5.16.1p2: the RHS of an assignment is converted
         // to the unqualified LHS type. For a float / double
         // destination with an integer-typed initializer (a
@@ -5087,7 +5136,7 @@ impl Compiler {
             // whatever was in the slot, which would surface on
             // a later 8-byte Li -- but no caller of this helper
             // re-reads via Li, so the wide store is fine and the
-            // existing optimizer recognises Si patterns.
+            // existing optimizer recognizes Si patterns.
             self.ast_assign();
         }
         Ok(())
@@ -5123,7 +5172,7 @@ impl Compiler {
 
     /// True when `self.lex.tk` is `+ / - / * / /` -- the binary
     /// float operators the constant-initializer evaluator
-    /// recognises. Whitespace-only check; doesn't consume.
+    /// recognizes. Whitespace-only check; doesn't consume.
     fn tk_is_float_arith_op(&self) -> bool {
         self.lex.tk == Token::AddOp
             || self.lex.tk == Token::SubOp

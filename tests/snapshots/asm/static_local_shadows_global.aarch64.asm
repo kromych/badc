@@ -15,29 +15,29 @@ Disassembly of section .text:
 
 <main>:
                	adrp	x1, <page>
-               	ldrsw	x0, [x1, #0x18]
+               	ldrsw	x0, [x1, #0xc]
                	cmp	w0, #0x4d2
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
                	adrp	x0, <page>
-               	ldrsw	x2, [x0, #0x20]
+               	ldrsw	x2, [x0, #0x10]
                	add	x3, x2, #0x1
-               	str	w3, [x0, #0x20]
+               	str	w3, [x0, #0x10]
                	mov	x17, #0x11d7            // =4567
                	cmp	w2, w17
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	ldrsw	x2, [x0, #0x20]
+               	mov	x2, x3
                	add	x3, x2, #0x1
-               	str	w3, [x0, #0x20]
+               	str	w3, [x0, #0x10]
                	mov	x17, #0x11d8            // =4568
                	cmp	w2, w17
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	ldrsw	x0, [x1, #0x18]
+               	ldrsw	x0, [x1, #0xc]
                	cmp	w0, #0x4d2
                	b.eq	<addr>
                	mov	x0, #0x4                // =4

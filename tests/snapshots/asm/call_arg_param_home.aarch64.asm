@@ -14,16 +14,10 @@ Disassembly of section .text:
                	brk	#0x1
 
 <take>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	stur	x1, [x29, #-0x8]
                	adrp	x1, <page>
-               	str	w0, [x1, #0x30]
+               	str	w0, [x1, #0x20]
                	adrp	x0, <page>
-               	str	w2, [x0, #0x38]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	w2, [x0, #0x24]
                	ret
 
 <pass>:
@@ -51,11 +45,11 @@ Disassembly of section .text:
                	ldr	w1, [x1]
                	bl	<addr>
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x30]
+               	ldrsw	x0, [x0, #0x20]
                	cmp	w0, #0x1
                	b.ne	<addr>
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x38]
+               	ldrsw	x0, [x0, #0x24]
                	cmp	w0, #0x2
                	b.ne	<addr>
                	mov	x0, #0x0                // =0

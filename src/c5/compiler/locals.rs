@@ -345,12 +345,13 @@ impl Compiler {
         }
     }
 
-    /// Placement alignment of a block-scope static's storage: the
-    /// requirement [`Self::apply_static_local_align`] recorded, floored
-    /// at the boundary every object wider than one byte takes.
-    fn static_local_placement_align(&self, loc_idx: usize, ty: i64) -> usize {
-        let decl_align = self.symbols[loc_idx].data_align.max(0) as usize;
-        self.data_placement_align(ty, decl_align)
+    /// Placement alignment of a block-scope static's `bytes` of storage:
+    /// the requirement [`Self::apply_static_local_align`] recorded.
+    fn static_local_placement_align(&self, loc_idx: usize, ty: i64, bytes: i64) -> usize {
+        let s = &self.symbols[loc_idx];
+        let decl_align = s.data_align.max(0) as usize;
+        let array = s.array_size != 0 || !s.array_dims.is_empty();
+        self.data_placement_align(ty, decl_align, bytes, array)
     }
 
     /// Record an over-aligned automatic object's frame slot so it is placed
@@ -412,6 +413,9 @@ impl Compiler {
             super::types::ssp_classify(&self.structs, ty, 0, false, &|t| self.size_of_type(t));
         if facts.has_array && !self.array_temps.contains(&slot) {
             self.array_temps.push(slot);
+        }
+        if super::types::is_vector_ty(&self.structs, ty) && !self.vector_temps.contains(&slot) {
+            self.vector_temps.push(slot);
         }
     }
 
@@ -490,6 +494,9 @@ impl Compiler {
         let base_is_function_type = self.pending.base_is_function_type;
         let base_fn_type = self.pending.fn_ptr_type.clone();
         let spec_attrs = self.pending.attrs.clone();
+        // An initializer may hold declarations of its own (a statement
+        // expression), so the declaration takes the flag before any.
+        let single_declarator = core::mem::take(&mut self.pending.auto_type_single_declarator);
         while self.lex.tk != ';' {
             self.pending.attrs = spec_attrs.clone();
             self.pending.fn_ptr_indirection = base_fn_ptr_indirection;
@@ -501,11 +508,11 @@ impl Compiler {
                 ty: lbt,
                 enum_tag: base_enum_tag,
             };
-            let declarator_line = self.lex.line;
+            let declarator_at = self.site();
             if let Some(fn_idx) = self.try_parse_block_fn_prototype(base, is_static)? {
                 if implicit_int {
                     let what = super::decl_base::ImplicitInt::Declarator(fn_idx);
-                    self.report_implicit_int(what, declarator_line)?;
+                    self.report_implicit_int(what, declarator_at)?;
                 }
                 self.accept_declarator_separator()?;
                 continue;
@@ -525,7 +532,7 @@ impl Compiler {
             array_size = array_size_vla;
             if implicit_int {
                 let what = super::decl_base::ImplicitInt::Declarator(loc_idx);
-                self.report_implicit_int(what, declarator_line)?;
+                self.report_implicit_int(what, declarator_at)?;
             }
             self.pending.attrs.transparent_union = false;
             // C99 6.7.1p5 + 6.9.1: a declarator of bare function type (a
@@ -684,7 +691,7 @@ impl Compiler {
                 self.register_cleanup_var(loc_idx, fn_sym);
             }
 
-            if self.pending.auto_type_single_declarator && self.lex.tk == ',' {
+            if single_declarator && self.lex.tk == ',' {
                 return Err(self.compile_err(
                     Code::SYNTAX,
                     "`__auto_type` declaration takes a single declarator",
@@ -693,19 +700,19 @@ impl Compiler {
             self.accept_declarator_separator()?;
         }
         self.next()?;
-        self.pending.auto_type_single_declarator = false;
         Ok(())
     }
 
     pub(super) fn set_decl_site(&mut self, idx: usize) {
-        let (line, file, in_user) = (
-            self.lex.line,
+        let (at, file, in_user) = (
+            self.site(),
             self.intern_source_file() as u32,
             self.in_user_source(),
         );
         self.decl_count += 1;
         let b = &mut self.symbols[idx].binding;
-        (b.decl_line, b.decl_file, b.decl_in_user_source) = (line, file, in_user);
+        b.set_decl_site(at);
+        (b.decl_file, b.decl_in_user_source) = (file, in_user);
         b.decl_seq = self.decl_count;
     }
 
@@ -735,7 +742,7 @@ impl Compiler {
             }
             // `weak` / `visibility("hidden")` are not part of the shadow
             // snapshot, so they reach the symbol table past the scope.
-            self.apply_symbol_attributes(d.loc_idx);
+            self.apply_symbol_attributes(d.loc_idx)?;
             self.apply_dllimport(d.loc_idx, Default::default())?;
         } else if d.is_static {
             let internal = super::dllimport::DllImportDecl {
@@ -773,14 +780,26 @@ impl Compiler {
                 // drops below the natural alignment.
                 self.symbols[d.loc_idx].type_align = a.obj_align.max(0);
             }
+            use crate::c5::segment_pragma::SegKind;
+            let initialized = self.lex.tk == Token::Assign;
+            let kind = match initialized {
+                true if object_const => SegKind::Const,
+                true => SegKind::Data,
+                false => SegKind::Bss,
+            };
             self.static_duration_init += 1;
             let r = self.allocate_static_local(d.loc_idx, d.ty, d.array_size);
             self.static_duration_init -= 1;
             r?;
-            self.push_block_static_record(d.loc_idx, d.ty);
+            self.push_block_static_record(d.loc_idx, d.ty, initialized)?;
+            if let Some(record) = self.symbols[d.loc_idx].entity_record
+                && !self.symbols[d.loc_idx].is_thread_local
+            {
+                self.place_by_segment_pragma(record as usize, kind);
+            }
             self.ast_emit_static_local_decl(d.loc_idx as u32);
         } else {
-            // TR 18037 5.1.2 (GCC named address spaces): an object
+            // TR 18037 5.1.2 (GNU C named address spaces): an object
             // in `__seg_gs` / `__seg_fs` needs static storage; a
             // frame slot has no segment.
             if super::types::segment_of_object_ty(d.ty).is_some() {
@@ -1029,7 +1048,7 @@ impl Compiler {
             }
             sym.is_noreturn |= self.pending.attrs.noreturn;
         }
-        self.apply_symbol_attributes(ent);
+        self.apply_symbol_attributes(ent)?;
         self.apply_dllimport(ent, Default::default())?;
         if let Some(label) = label {
             self.set_asm_label(ent, label)?;
@@ -1269,7 +1288,16 @@ impl Compiler {
     /// Function close stamps `owner_ent_pc`; static DCE then treats the
     /// object as a per-instance part of its function. A thread-local's
     /// record carries a TLS offset, which the `.data` passes pass over.
-    pub(super) fn push_block_static_record(&mut self, loc_idx: usize, ty: i64) {
+    pub(super) fn push_block_static_record(
+        &mut self,
+        loc_idx: usize,
+        ty: i64,
+        initialized: bool,
+    ) -> Result<(), C5Error> {
+        // A block-scope `static` has no linkage, so it cannot be weak.
+        if self.pending.attrs.weak {
+            return Err(self.weak_not_public(&self.symbols[loc_idx].name.clone()));
+        }
         let final_array = self.symbols[loc_idx].array_size;
         let fam_tail = self.symbols[loc_idx].fam_init_bytes;
         let zero_len = self.symbols[loc_idx].is_zero_len_array;
@@ -1307,6 +1335,7 @@ impl Compiler {
             linkage: crate::c5::symbol::Linkage::Internal,
             defined_here: true,
             has_initializer: true,
+            implicit_zero: !initialized,
             runtime_initialized: src.runtime_initialized,
             storage_is_const: src.storage_is_const,
             // Declaration shape and debug facts, so an `Expr::Ident`
@@ -1337,8 +1366,9 @@ impl Compiler {
         });
         self.symbols[loc_idx].entity_record = Some(record_idx as u32);
         self.symbol_index.record(hash);
-        self.apply_symbol_attributes(record_idx);
+        self.apply_symbol_attributes(record_idx)?;
         self.pending_block_static_syms.push(record_idx);
+        Ok(())
     }
 
     /// Record a deferred-size block-scope static's parsed element count,
@@ -1368,14 +1398,11 @@ impl Compiler {
         // zero-sized object (empty struct, GNU) still reserves one slot:
         // the data-DCE interval model and the named-section carve
         // identify objects by start offset, so no two may share one.
-        let mut bytes = if array_size > 0 {
-            let total = (self.size_of_type(ty) as i64) * array_size;
-            (((total + 7) / 8) * 8).max(8)
-        } else if array_size == -1 {
+        let mut bytes = if array_size == -1 {
             // Deferred-size array: handled below after parsing init.
             0
         } else {
-            (self.slots_of_type(ty) * 8).max(8)
+            self.object_storage_bytes(ty, array_size)
         };
         // A flexible array member's initialized elements occupy storage
         // past `sizeof`, as at file scope; without the reservation the
@@ -1383,7 +1410,7 @@ impl Compiler {
         let fam_tail = self.flexible_array_init_tail_bytes(ty)?;
         if fam_tail > 0 {
             self.symbols[loc_idx].fam_init_bytes = fam_tail;
-            bytes = ((bytes + fam_tail + 7) / 8) * 8;
+            bytes += fam_tail;
         }
         self.symbols[loc_idx].array_size = array_size.max(0);
         // A `static _Thread_local` local lives in the TLS block (`.tdata` /
@@ -1398,7 +1425,7 @@ impl Compiler {
             } else {
                 DataStore::Static
             };
-            let align = self.static_local_placement_align(loc_idx, ty);
+            let align = self.static_local_placement_align(loc_idx, ty, bytes);
             let off = self.reserve_data_bytes(store, align, bytes as usize);
             self.symbols[loc_idx].val = off;
             if !is_tls || staged {
@@ -1409,7 +1436,8 @@ impl Compiler {
             self.next()?;
             self.parse_static_local_initializer(loc_idx, ty, array_size)?;
             if staged {
-                let align = self.static_local_placement_align(loc_idx, ty);
+                let bytes = self.symbols[loc_idx].reserved_data_bytes;
+                let align = self.static_local_placement_align(loc_idx, ty, bytes);
                 self.move_to_thread_local_storage(loc_idx, align)?;
             }
         }
@@ -1425,7 +1453,7 @@ impl Compiler {
         ty: i64,
         array_size: i64,
     ) -> Result<(), C5Error> {
-        // A `&&label` element (GCC labels as values) is a link-time
+        // A `&&label` element (GNU C labels as values) is a link-time
         // constant: the data image gets a label relocation, as it
         // does for `&func`. Only a genuinely non-constant element
         // alongside one still needs stores at the declaration point.
@@ -1464,7 +1492,7 @@ impl Compiler {
                 // token may append a string literal's bytes, whose
                 // parser-added NUL must land right after them.
                 let reserved = rows * inner_dim * elem_size as i64;
-                let align = self.static_local_placement_align(loc_idx, ty);
+                let align = self.static_local_placement_align(loc_idx, ty, reserved);
                 let off = self.reserve_data_bytes(DataStore::Static, align, reserved as usize);
                 self.symbols[loc_idx].val = off;
                 self.symbols[loc_idx].reserved_data_bytes = reserved;
@@ -1477,18 +1505,14 @@ impl Compiler {
                 {
                     *first = rows;
                 }
-                while !self.data.len().is_multiple_of(8) {
-                    self.data.push(0);
-                }
                 return Ok(());
             }
             let inner_dims = self.inner_dims_of(loc_idx);
             self.pending.init_inner_dims = inner_dims.clone();
             let mut elements = self.collect_array_initializer(ty, self.elem_fn_type(loc_idx))?;
             let final_size = Self::deferred_array_count(&mut elements, &inner_dims);
-            let total_bytes = (self.size_of_type(ty) as i64) * final_size;
-            let aligned = ((total_bytes + 7) / 8) * 8;
-            let align = self.static_local_placement_align(loc_idx, ty);
+            let aligned = (self.size_of_type(ty) as i64) * final_size;
+            let align = self.static_local_placement_align(loc_idx, ty, aligned);
             let off = self.reserve_data_bytes(DataStore::Static, align, aligned as usize);
             self.symbols[loc_idx].val = off;
             self.symbols[loc_idx].reserved_data_bytes = aligned;
@@ -1617,17 +1641,16 @@ impl Compiler {
         } else {
             // Deferred size: count the elements and reserve zeroed storage.
             let (c, _) = self.scan_array_init()?;
-            let align = self.static_local_placement_align(loc_idx, ty);
+            let align = self.static_local_placement_align(loc_idx, ty, c * elem_size);
             let off = self.reserve_data_bytes(DataStore::Static, align, (c * elem_size) as usize);
             self.symbols[loc_idx].val = off;
             self.symbols[loc_idx].array_size = c;
-            while !self.data.len().is_multiple_of(8) {
-                self.data.push(0);
-            }
             // The once-guard below sits past the object's extent.
             self.symbols[loc_idx].reserved_data_bytes = self.data.len() as i64 - off;
             c
         };
+        // The guard is an 8-byte word on its own boundary.
+        self.align_data_to(8);
         let guard_off = self.data.len() as i64 - self.symbols[loc_idx].val;
         for _ in 0..8 {
             self.data.push(0);
@@ -1641,7 +1664,7 @@ impl Compiler {
         let mut assigns: alloc::vec::Vec<super::super::ast::ExprId> = alloc::vec::Vec::new();
         let mut i: i64 = 0;
         while self.lex.tk != '}' {
-            // Optional designator: `[N] = ...` (C99 6.7.8p6) or the GCC
+            // Optional designator: `[N] = ...` (C99 6.7.8p6) or the GNU C
             // range form `[a ... b] = ...`. Sets the write cursor; a
             // range fills every slot in `[a, b]` with the same value.
             let mut range_end = i;
@@ -1671,9 +1694,9 @@ impl Compiler {
                     ),
                 ));
             }
-            let line = self.lex.line;
+            let at = self.site();
             self.expr(Token::Assign as i64)?;
-            self.check_initializer_expr(ty, 0, line)?;
+            self.check_initializer_expr(ty, 0, at)?;
             if let Some(rhs) = self.ast_acc.take() {
                 // Fill `[i, range_end]`. A range reuses the value node;
                 // the walker re-walks it per store, which is safe for the
@@ -2037,7 +2060,7 @@ impl Compiler {
         // bookkeeping.
         if self.lex.tk == Token::Assign {
             self.symbols[loc_idx].binding.was_written = true;
-            self.record_local_store(loc_idx, self.lex.line);
+            self.record_local_store(loc_idx, self.site());
         }
         if declared_array_size == -1 {
             return self.allocate_deferred_size_local(loc_idx, ty, zero_len, fill);
@@ -2173,7 +2196,7 @@ impl Compiler {
         fill: Option<u8>,
     ) -> Result<(), C5Error> {
         if self.lex.tk != Token::Assign {
-            // GCC zero-length array `T x[0]`: a complete type holding no
+            // GNU C zero-length array `T x[0]`: a complete type holding no
             // elements, so `sizeof` is 0. Used by compile-time-assert
             // idioms such as `char ok[-offsetof(type, f)]` and by
             // conditionally-empty buffers whose guards read
@@ -2275,7 +2298,7 @@ impl Compiler {
         // routes through the per-element runtime store path
         // required by C99 6.7.8p13 -- automatic-storage
         // arrays may carry non-constant initializers, with
-        // each element initialised as if by assignment in
+        // each element initialized as if by assignment in
         // declaration order.
         if self.lex.tk == '{' {
             let (scan_count, needs_runtime) = self.scan_array_init()?;
@@ -2313,7 +2336,7 @@ impl Compiler {
             // Constant path: keep matching the legacy flow
             // exactly -- allocate from the parsed element count
             // (mirrors `let final_size = elements.len()` below)
-            // rather than the pre-scanned count, so behaviour is
+            // rather than the pre-scanned count, so behavior is
             // identical to before this fix when no runtime
             // expressions are present.
         }
@@ -2623,9 +2646,9 @@ impl Compiler {
                 return Err(self.compile_err(Code::SYNTAX, "`{` expected in compound literal"));
             }
             self.next()?;
-            let line = self.lex.line;
+            let at = self.site();
             self.expr(Token::Assign as i64)?;
-            self.check_initializer_expr(t, 0, line)?;
+            self.check_initializer_expr(t, 0, at)?;
             self.convert_assign_rhs(t);
             self.pending_local_init_ast = self.ast_acc;
             self.accept(',')?;
@@ -2742,7 +2765,7 @@ impl Compiler {
     }
 
     /// Number of 8-byte stack slots a local declaration consumes,
-    /// honouring an array dimension if present. For non-arrays this
+    /// honoring an array dimension if present. For non-arrays this
     /// is just `slots_of_type(ty)`; for an array of N Ts the
     /// allocation is rounded up to 8-byte alignment so subsequent
     /// stack frame entries stay aligned.
@@ -2925,7 +2948,7 @@ impl Compiler {
                 needs_runtime = true;
                 saw_any = true;
             } else if self.lex.tk == Token::Lan && !scan.ends_operand() {
-                // `&&label` (GCC labels as values). The block address is a
+                // `&&label` (GNU C labels as values). The block address is a
                 // link-time constant, so the element does not force the
                 // runtime path. The binary logical AND shares the
                 // spelling; only an operand can precede that one.
@@ -2957,7 +2980,7 @@ impl Compiler {
     /// Emit per-element store sequences for a local-array
     /// initializer whose elements aren't all compile-time
     /// constants. C99 6.7.8 paragraph 13 specifies that each
-    /// element is initialised as if by assignment in declaration
+    /// element is initialized as if by assignment in declaration
     /// order. Positions the brace list leaves out keep the zero
     /// seed every caller Mcpy's into the slot first (6.7.8p21).
     ///

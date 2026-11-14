@@ -36,11 +36,11 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	xorl	%ecx, %ecx
                	cpuid
+               	xorl	%ecx, %ecx
+               	movl	$0x1, %edx
                	cmpl	%eax, %esi
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	movq	%rdx, %rax
+               	cmoveq	%rcx, %rax
                	popq	%rbx
                	leave
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>

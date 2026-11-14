@@ -44,15 +44,14 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
-               	leaq	-0x18(%rbp), %rdx
-               	movl	$0xc, -0x18(%rbp)
-               	movl	$0x7, -0x14(%rbp)
-               	movl	$0xf, -0x10(%rbp)
-               	movl	$0x5, -0xc(%rbp)
+               	movabsq	$0x70000000c, %rax      # imm = 0x70000000C
+               	movq	%rax, -0x18(%rbp)
+               	movabsq	$0x50000000f, %rax      # imm = 0x50000000F
+               	movq	%rax, -0x10(%rbp)
                	movl	$0xa, -0x8(%rbp)
                	xorl	%eax, %eax
                	movq	%rax, %rcx
-               	movl	(%rdx,%rcx,4), %esi
+               	movl	-0x18(%rbp,%rcx,4), %esi
                	addq	%rsi, %rax
                	incq	%rcx
                	cmpl	$0x4, %ecx

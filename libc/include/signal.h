@@ -28,11 +28,16 @@ typedef void (*sighandler_t)(int);
 #define SIG_IGN  ((void (*)(int))1)
 #define SIG_ERR  ((void (*)(int))-1)
 
-// C99-required signal numbers (7.14). These values match every
-// supported host, including Windows msvcrt.
+// C99-required signal numbers (7.14), the same on every supported host but
+// for msvcrt's SIGABRT, 22 (its 6 is SIGABRT_COMPAT).
 #define SIGINT  2
 #define SIGILL  4
+#ifdef _WIN32
+#define SIGABRT 22
+#define SIGABRT_COMPAT 6
+#else
 #define SIGABRT 6
+#endif
 #define SIGFPE  8
 #define SIGSEGV 11
 #define SIGTERM 15
@@ -250,7 +255,7 @@ struct sigaction {
 #endif
 };
 
-int sigaction(int sig, struct sigaction *act, struct sigaction *oact);
+int sigaction(int sig, const struct sigaction *act, struct sigaction *oact);
 int sigemptyset(sigset_t *set);
 int sigfillset(sigset_t *set);
 int sigaddset(sigset_t *set, int signo);
@@ -278,13 +283,17 @@ int pthread_sigmask(int how, const sigset_t *set, sigset_t *oldset);
 // pair at offset 16, which glibc reaches through its
 // `sigev_notify_function` / `sigev_notify_attributes` macros. On macOS
 // the SDK's 32-byte record, which only the AIO calls take.
+#if defined(__APPLE__) || defined(__linux__)
+// POSIX: <signal.h> defines pthread_attr_t as <sys/types.h> does.
+typedef struct __c5_pthread_attr pthread_attr_t;
+#endif
 #ifdef __APPLE__
 struct sigevent {
     int sigev_notify;
     int sigev_signo;
     union sigval sigev_value;
     void (*sigev_notify_function)(union sigval);
-    struct __c5_pthread_attr *sigev_notify_attributes;
+    pthread_attr_t *sigev_notify_attributes;
 };
 
 #define SIGEV_NONE   0
@@ -298,7 +307,7 @@ struct sigevent {
     int          sigev_signo;                     /* offset  8 */
     int          sigev_notify;                    /* offset 12 */
     void       (*sigev_notify_function)(union sigval); /* offset 16 */
-    void        *sigev_notify_attributes;         /* offset 24 */
+    pthread_attr_t *sigev_notify_attributes;      /* offset 24 */
     unsigned char __pad[64 - 32];
 };
 
@@ -502,6 +511,7 @@ typedef struct sigaltstack {
 } stack_t;
 #define SIGSTKSZ    131072
 #define MINSIGSTKSZ 32768
+#define SS_DISABLE  4
 #else
 typedef struct {
     void  *ss_sp;
@@ -510,9 +520,9 @@ typedef struct {
 } stack_t;
 #define SIGSTKSZ    8192
 #define MINSIGSTKSZ 2048
+#define SS_DISABLE  2
 #endif
 #define SS_ONSTACK 1
-#define SS_DISABLE 2
 int sigaltstack(const stack_t *ss, stack_t *oss);
 #endif
 

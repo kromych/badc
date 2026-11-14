@@ -25,38 +25,47 @@ Disassembly of section .text:
                	int3
                	int3
 
-<main>:
+<switched>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x220, %rsp            # imm = 0x220
-               	movq	$0x5, -0x218(%rbp)
+               	movq	$0x5, -0x208(%rbp)
                	movq	$0xa, -0x210(%rbp)
-               	movq	$0xf, -0x208(%rbp)
-               	movl	$0x1, %eax
-               	movb	%al, -0x200(%rbp)
-               	movq	-0x218(%rbp), %rcx
-               	movq	-0x210(%rbp), %rdx
-               	movq	-0x208(%rbp), %rsi
-               	addq	%rsi, %rdx
-               	addq	%rdx, %rcx
-               	movq	%rcx, -0x218(%rbp)
+               	movq	$0xf, -0x218(%rbp)
+               	movb	$0x1, -0x200(%rbp)
+               	movq	-0x208(%rbp), %rax
                	movq	-0x210(%rbp), %rcx
                	movq	-0x218(%rbp), %rdx
                	addq	%rdx, %rcx
-               	movq	%rcx, -0x210(%rbp)
+               	addq	%rcx, %rax
+               	movq	%rax, -0x208(%rbp)
+               	movq	-0x210(%rbp), %rax
                	movq	-0x208(%rbp), %rcx
-               	movq	-0x210(%rbp), %rdx
-               	addq	%rdx, %rcx
-               	movq	%rcx, -0x208(%rbp)
+               	addq	%rcx, %rax
+               	movq	%rax, -0x210(%rbp)
+               	movq	-0x218(%rbp), %rax
+               	movq	-0x210(%rbp), %rcx
+               	addq	%rcx, %rax
+               	movq	%rax, -0x218(%rbp)
+               	movq	-0x208(%rbp), %rax
+               	movq	-0x210(%rbp), %rcx
+               	addq	%rcx, %rax
                	movq	-0x218(%rbp), %rcx
-               	movq	-0x210(%rbp), %rdx
-               	addq	%rdx, %rcx
-               	movq	-0x208(%rbp), %rdx
-               	addq	%rdx, %rcx
-               	movsbq	-0x200(%rbp), %rdx
-               	addq	%rdx, %rcx
-               	cmpq	$0x7e, %rcx
-               	jne	<addr>
-               	movl	$0x2a, %eax
+               	addq	%rcx, %rax
+               	movsbq	-0x200(%rbp), %rcx
+               	addq	%rcx, %rax
                	leave
+               	retq
+
+<main>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	movl	$0x5, %edi
+               	callq	<addr>
+               	movl	$0x2a, %ecx
+               	movl	$0x1, %edx
+               	cmpq	$0x7e, %rax
+               	cmovneq	%rdx, %rcx
+               	movq	%rcx, %rax
+               	popq	%rbp
                	retq

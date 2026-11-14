@@ -29,7 +29,6 @@ Disassembly of section .text:
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x1, %eax
                	jne	<addr>
-               	movl	<rip>, %eax # <addr>
                	incq	%rax
                	cmpl	$0x2, %eax
                	je	<addr>

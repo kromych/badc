@@ -26,66 +26,52 @@ Disassembly of section .text:
                	int3
 
 <bank_init>:
-               	movl	$0x1, (%rdi)
                	movq	%rsi, 0x20(%rdi)
-               	movl	$0x0, 0x4(%rdi)
+               	movq	$0x1, (%rdi)
                	movq	$0x0, 0x28(%rdi)
-               	movl	$0x1, 0x30(%rdi)
-               	leaq	0x30(%rdi), %rdx
-               	movq	%rsi, 0x20(%rdx)
-               	movl	$0x1, 0x4(%rdx)
-               	movq	$0x0, 0x28(%rdx)
-               	movl	$0x1, 0x60(%rdi)
-               	leaq	0x60(%rdi), %rax
-               	movq	%rsi, 0x20(%rax)
-               	movl	$0x2, 0x4(%rax)
-               	movq	$0x0, 0x28(%rax)
-               	movl	$0x1, 0x90(%rdi)
-               	leaq	0x90(%rdi), %rax
-               	movq	%rsi, 0x20(%rax)
-               	movl	$0x3, 0x4(%rax)
-               	movq	$0x0, 0x28(%rax)
-               	movl	$0x1, 0xc0(%rdi)
-               	leaq	0xc0(%rdi), %rax
-               	movq	%rsi, 0x20(%rax)
-               	movl	$0x4, 0x4(%rax)
-               	movq	$0x0, 0x28(%rax)
-               	movl	$0x1, 0xf0(%rdi)
-               	leaq	0xf0(%rdi), %rcx
-               	movq	%rsi, 0x20(%rcx)
-               	movl	$0x5, 0x4(%rcx)
-               	movq	$0x0, 0x28(%rcx)
-               	movl	$0x1, 0x120(%rdi)
-               	leaq	0x120(%rdi), %rcx
-               	movq	%rsi, 0x20(%rcx)
-               	movl	$0x6, 0x4(%rcx)
-               	movq	$0x0, 0x28(%rcx)
-               	movl	$0x1, 0x150(%rdi)
-               	leaq	0x150(%rdi), %rax
-               	movq	%rsi, 0x20(%rax)
-               	movl	$0x7, 0x4(%rax)
-               	movq	$0x0, 0x28(%rax)
-               	leaq	0x180(%rdi), %rax
-               	movl	$0x2, (%rax)
-               	movq	%rsi, 0x20(%rax)
-               	movl	$0x20, 0x4(%rax)
-               	movq	$0x0, 0x28(%rax)
-               	movq	$0xb00, 0x10(%rax)      # imm = 0xB00
-               	movl	$0x2, 0x30(%rax)
-               	addq	$0x30, %rax
-               	movq	%rsi, 0x20(%rax)
-               	leaq	0x180(%rdi), %rdx
-               	leaq	0x30(%rdx), %rax
-               	movl	$0x21, 0x4(%rax)
-               	movq	$0x0, 0x28(%rax)
-               	movq	$0x1600, 0x10(%rax)     # imm = 0x1600
-               	movl	$0x2, 0x60(%rdx)
-               	leaq	0x180(%rdi), %rax
-               	addq	$0x60, %rax
-               	movq	%rsi, 0x20(%rax)
-               	movl	$0x22, 0x4(%rax)
-               	movq	$0x0, 0x28(%rax)
-               	movq	$0x2100, 0x10(%rax)     # imm = 0x2100
+               	movabsq	$0x100000001, %rcx      # imm = 0x100000001
+               	movq	%rsi, 0x50(%rdi)
+               	movq	%rcx, 0x30(%rdi)
+               	movq	$0x0, 0x58(%rdi)
+               	movabsq	$0x200000001, %rax      # imm = 0x200000001
+               	movq	%rsi, 0x80(%rdi)
+               	movq	%rax, 0x60(%rdi)
+               	movq	$0x0, 0x88(%rdi)
+               	movabsq	$0x300000001, %rcx      # imm = 0x300000001
+               	movq	%rsi, 0xb0(%rdi)
+               	movq	%rcx, 0x90(%rdi)
+               	movq	$0x0, 0xb8(%rdi)
+               	movabsq	$0x400000001, %rcx      # imm = 0x400000001
+               	movq	%rsi, 0xe0(%rdi)
+               	movq	%rcx, 0xc0(%rdi)
+               	movq	$0x0, 0xe8(%rdi)
+               	movabsq	$0x500000001, %rcx      # imm = 0x500000001
+               	movq	%rsi, 0x110(%rdi)
+               	movq	%rcx, 0xf0(%rdi)
+               	movq	$0x0, 0x118(%rdi)
+               	movabsq	$0x600000001, %rax      # imm = 0x600000001
+               	movq	%rsi, 0x140(%rdi)
+               	movq	%rax, 0x120(%rdi)
+               	movq	$0x0, 0x148(%rdi)
+               	movabsq	$0x700000001, %rcx      # imm = 0x700000001
+               	movq	%rsi, 0x170(%rdi)
+               	movq	%rcx, 0x150(%rdi)
+               	movq	$0x0, 0x178(%rdi)
+               	movabsq	$0x2000000002, %rcx     # imm = 0x2000000002
+               	movq	%rsi, 0x1a0(%rdi)
+               	movq	%rcx, 0x180(%rdi)
+               	movq	$0x0, 0x1a8(%rdi)
+               	movq	$0xb00, 0x190(%rdi)     # imm = 0xB00
+               	movabsq	$0x2100000002, %rcx     # imm = 0x2100000002
+               	movq	%rsi, 0x1d0(%rdi)
+               	movq	%rcx, 0x1b0(%rdi)
+               	movq	$0x0, 0x1d8(%rdi)
+               	movq	$0x1600, 0x1c0(%rdi)    # imm = 0x1600
+               	movabsq	$0x2200000002, %rcx     # imm = 0x2200000002
+               	movq	%rsi, 0x200(%rdi)
+               	movq	%rcx, 0x1e0(%rdi)
+               	movq	$0x0, 0x208(%rdi)
+               	movq	$0x2100, 0x1f0(%rdi)    # imm = 0x2100
                	retq
 
 <main>:
@@ -99,8 +85,7 @@ Disassembly of section .text:
                	imulq	$0x30, %rax, %rdx
                	addq	%rdx, %rcx
                	movl	(%rcx), %esi
-               	xorq	$0x1, %rsi
-               	testl	%esi, %esi
+               	cmpl	$0x1, %esi
                	jne	<addr>
                	movq	0x20(%rcx), %rsi
                	leaq	<rip>, %rdi # <addr>
@@ -123,8 +108,7 @@ Disassembly of section .text:
                	imulq	$0x30, %rax, %rdx
                	addq	%rdx, %rsi
                	movl	(%rsi), %edi
-               	xorq	$0x2, %rdi
-               	testl	%edi, %edi
+               	cmpl	$0x2, %edi
                	jne	<addr>
                	movq	0x20(%rsi), %rsi
                	leaq	<rip>, %rdi # <addr>

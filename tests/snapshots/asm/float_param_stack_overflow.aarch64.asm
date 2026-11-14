@@ -53,7 +53,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0x20
                	str	d8, [sp, #0x10]
                	adrp	x0, <page>
-               	ldr	s8, [x0, #0x18]
+               	ldr	s8, [x0, #0xc]
                	str	d8, [sp]
                	str	d8, [sp, #0x8]
                	fmov	d0, d8

@@ -48,7 +48,7 @@ serves the runs as files.
   white-space: pre-wrap; overflow-wrap: break-word; }
 #perf .note { color: #57606a; font-size: 85%; margin: .3rem 0 1rem; }
 /* The site's stylesheet leaves a control at the engine's own defaults, which
-   is a different widget in each browser; these are the site's own colours. */
+   is a different widget in each browser; these are the site's own colors. */
 #perf .pick { display: flex; flex-wrap: wrap; gap: .4rem .5rem;
   align-items: center; margin: 0 0 1.2rem; }
 #perf .pick select, #perf .pick button { font: inherit; font-size: 90%;
@@ -255,7 +255,7 @@ serves the runs as files.
     return m;
   }
 
-  // The bar labelled against the rest of its chart. `badc -O` is the one the
+  // The bar labeled against the rest of its chart. `badc -O` is the one the
   // `vs badc -O` column of `tests/perf/run.py` uses; a chart that has no such
   // row takes its smallest bar instead and says which one it took.
   function reference(rows) {

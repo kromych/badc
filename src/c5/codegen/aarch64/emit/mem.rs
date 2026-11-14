@@ -48,17 +48,17 @@ pub(crate) fn emit_reg_disp(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i64) 
     }
 }
 
-/// Materialise `sp + off` into `dst`.
+/// Materialize `sp + off` into `dst`.
 pub(super) fn emit_sp_plus_off(code: &mut Vec<u8>, dst: Reg, off: u32) {
     emit_reg_disp(code, dst, Reg(31), off.into());
 }
 
-/// Materialise `fp + off` into `dst`.
+/// Materialize `fp + off` into `dst`.
 pub(super) fn emit_fp_plus_off(code: &mut Vec<u8>, dst: Reg, off: u32) {
     emit_reg_disp(code, dst, Reg(29), off.into());
 }
 
-/// Materialise `fp - delta` into `dst`.
+/// Materialize `fp - delta` into `dst`.
 pub(super) fn emit_fp_minus_off(code: &mut Vec<u8>, dst: Reg, delta: u32) {
     emit_reg_disp(code, dst, Reg(29), -i64::from(delta));
 }
@@ -267,7 +267,7 @@ pub(super) fn fp_or_spill_dst(dst: Place, frame: Frame) -> Option<u8> {
 /// path; a `_Thread_local` beyond it is rejected.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_tls_addr(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     frame: Frame,
     offset: i64,
@@ -283,7 +283,7 @@ pub(super) fn emit_tls_addr(
 ) -> Emit {
     let tls_extern_sym = tls_sym.map(|r| r.name.as_str());
     use super::encode::{enc_add_imm_lsl12, enc_blr, enc_ldr_reg_lsl3, enc_mrs_tpidr_el0};
-    // A spilled destination materialises in x16; the sequences read `rd`
+    // A spilled destination materializes in x16; the sequences read `rd`
     // only after their last use of x16, and x17 stays free for the store.
     let rd = match dst {
         Place::IntReg(r) => Reg(r),
@@ -339,8 +339,8 @@ pub(super) fn emit_tls_addr(
             let target = match tls_sym {
                 // A cross-unit `extern _Thread_local` may live in a shared
                 // library, whose block the loader places, so its offset comes
-                // from the GOT (initial-exec, as gcc's code for an executable
-                // reads it); x17 holds the slot's address, then its value.
+                // from the GOT (initial-exec); x17 holds the slot's address,
+                // then its value.
                 Some(r) if !r.defined_here => {
                     emit(code, enc_adrp(Reg(17), 0));
                     emit(code, enc_ldr_imm(Reg(17), Reg(17), 0));
@@ -780,9 +780,13 @@ fn int_load_shape(kind: LoadKind) -> (u32, bool) {
         LoadKind::U16 => (2, false),
         LoadKind::I8 => (1, true),
         LoadKind::U8 => (1, false),
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
-            (0, false)
-        }
+        LoadKind::F32
+        | LoadKind::F64
+        | LoadKind::F80
+        | LoadKind::F128
+        | LoadKind::V128
+        | LoadKind::V256
+        | LoadKind::V512 => (0, false),
     }
 }
 
@@ -1041,7 +1045,7 @@ pub(super) fn local_slot(off: i64, func: &FunctionSsa, frame: Frame) -> FrameLoc
 
 /// The address of local slot `off` into `dst`.
 pub(super) fn emit_local_addr(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     off: i64,
     func: &FunctionSsa,
@@ -1051,7 +1055,7 @@ pub(super) fn emit_local_addr(
 }
 
 /// The address of `loc` into `dst`.
-pub(super) fn emit_frame_addr(code: &mut Vec<u8>, dst: Place, loc: FrameLoc, frame: Frame) -> Emit {
+pub(super) fn emit_frame_addr(code: &mut CodeBuf, dst: Place, loc: FrameLoc, frame: Frame) -> Emit {
     let rd = match dst {
         Place::IntReg(r) => Reg(r),
         Place::Spill(_) => Reg(16),
@@ -1078,23 +1082,52 @@ pub(super) fn int_or_spill_scratch(dst: Place, scratch: &ScratchPool) -> Option<
 
 /// Store an integer result into its spill slot when the allocator placed
 /// the value there; a register place already holds it.
-pub(super) fn store_spilled_int(code: &mut Vec<u8>, frame: Frame, dst: Place, src: Reg) {
+pub(super) fn store_spilled_int(code: &mut CodeBuf, frame: Frame, dst: Place, src: Reg) {
     if let Place::Spill(slot) = dst {
-        emit_spill_str_x_auto(code, frame, src, spill_off(frame, slot));
+        let (start, off) = (code.len(), spill_off(frame, slot));
+        emit_spill_str_x_auto(code, frame, src, off);
+        note_spill_store(code, start, frame, off, src.0, SpillWidth::Int);
     }
 }
 
+/// Record the spill store the bytes from `start` hold. A word of the
+/// branch, exception and system class (bits 28:26 = 101) earlier in the
+/// instruction may be a branch landing after it.
+fn note_spill_store(
+    code: &mut CodeBuf,
+    start: usize,
+    frame: Frame,
+    off: u32,
+    reg: u8,
+    width: SpillWidth,
+) {
+    if code
+        .instruction_words(start)
+        .any(|w| (w >> 26) & 0b111 == 0b101)
+    {
+        code.note_branch();
+    }
+    code.spill_stored(start, frame.dynamic_sp as u8, off as i32, reg, width);
+}
+
+/// The register the bytes end storing spill slot offset `off` from.
+fn spill_held(code: &CodeBuf, frame: Frame, off: u32, width: SpillWidth) -> Option<u8> {
+    code.holding(frame.dynamic_sp as u8, off as i32, width)
+}
+
 /// The floating-point counterpart of [`store_spilled_int`].
-pub(super) fn store_spilled_fp(code: &mut Vec<u8>, frame: Frame, dst: Place, src: u8) {
+pub(super) fn store_spilled_fp(code: &mut CodeBuf, frame: Frame, dst: Place, src: u8) {
     if let Place::Spill(slot) = dst {
-        emit_spill_str_d_auto(code, frame, src, spill_off(frame, slot));
+        let (start, off) = (code.len(), spill_off(frame, slot));
+        emit_spill_str_d_auto(code, frame, src, off);
+        note_spill_store(code, start, frame, off, src, SpillWidth::Scalar);
     }
 }
 
 /// An `IntReg` source is the zero a fill stores; `fmov d, x` clears the upper
 /// half with it.
 pub(super) fn materialize_v128(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     place: Place,
     scratch_q: u8,
     frame: Frame,
@@ -1139,7 +1172,7 @@ fn scratch_other(scratch: &ScratchPool, r: Reg) -> Reg {
     }
 }
 
-fn int_load_op(kind: LoadKind) -> Option<MemOp> {
+pub(super) fn int_load_op(kind: LoadKind) -> Option<MemOp> {
     Some(match kind {
         LoadKind::I64 => LDR_X,
         LoadKind::I32 => LDRSW,
@@ -1148,19 +1181,31 @@ fn int_load_op(kind: LoadKind) -> Option<MemOp> {
         LoadKind::U16 => LDRH,
         LoadKind::I8 => LDRSB,
         LoadKind::U8 => LDRB,
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
+        LoadKind::F32
+        | LoadKind::F64
+        | LoadKind::F80
+        | LoadKind::F128
+        | LoadKind::V128
+        | LoadKind::V256
+        | LoadKind::V512 => {
             return None;
         }
     })
 }
 
-fn int_store_op(kind: StoreKind) -> Option<MemOp> {
+pub(super) fn int_store_op(kind: StoreKind) -> Option<MemOp> {
     Some(match kind {
         StoreKind::I64 => STR_X,
         StoreKind::I32 => STR_W,
         StoreKind::I16 => STRH,
         StoreKind::I8 => STRB,
-        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => {
+        StoreKind::F32
+        | StoreKind::F64
+        | StoreKind::F80
+        | StoreKind::F128
+        | StoreKind::V128
+        | StoreKind::V256
+        | StoreKind::V512 => {
             return None;
         }
     })
@@ -1238,7 +1283,7 @@ fn emit_int_store(
 /// `Inst::Load`; `bound` is the address alignment proven under `-mstrict-align`.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_load(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     addr: u32,
     disp: i32,
@@ -1294,7 +1339,14 @@ pub(super) fn emit_load(
         let Some(qd) = fp_or_spill_dst(dst, frame) else {
             return fail("Load V128: dst not fp reg / spill");
         };
-        emit_mem(code, LDR_Q, qd, rn, disp, t);
+        match bound {
+            Some(a) => {
+                let (base, off) = bound_base(code, rn, disp, 16, 16, a, t);
+                let tmp = scratch_other(scratch, base);
+                emit_agg_load_fp(code, qd, base, off, 16, a, true, tmp);
+            }
+            None => emit_mem(code, LDR_Q, qd, rn, disp, t),
+        }
         propagate_v128(code, frame, dst, qd, scratch.primary);
         return Ok(());
     }
@@ -1391,7 +1443,7 @@ fn binary128_base(code: &mut Vec<u8>, loc: FrameLoc, t: Reg) -> (Reg, i64) {
 /// untagged archive-reload value widens.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_load_local(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     off: i64,
     disp: i32,
@@ -1452,7 +1504,7 @@ pub(super) fn emit_load_local(
 /// when the allocator parked it elsewhere.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_store_local(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     v: super::super::ir::ValueId,
     dst: Place,
     off: i64,
@@ -1532,7 +1584,7 @@ pub(super) fn emit_store_local(
 /// F32 path so a promoted slot round-trips like the address-taken one.
 #[allow(clippy::too_many_arguments)]
 fn emit_store_local_f32(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     loc: FrameLoc,
     value: u32,
@@ -1610,7 +1662,7 @@ fn propagate_fp(code: &mut Vec<u8>, frame: Frame, dst: Place, dn: u8) {
 /// the FP forms; the walker's indexed fold does not produce them.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_load_indexed(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     base: u32,
     (index, ext): (u32, IndexExt),
@@ -1646,7 +1698,13 @@ pub(super) fn emit_load_indexed(
         LoadKind::I32 | LoadKind::U32 => 4,
         LoadKind::I16 | LoadKind::U16 => 2,
         LoadKind::I8 | LoadKind::U8 => 1,
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
+        LoadKind::F32
+        | LoadKind::F64
+        | LoadKind::F80
+        | LoadKind::F128
+        | LoadKind::V128
+        | LoadKind::V256
+        | LoadKind::V512 => {
             unreachable!()
         }
     };
@@ -1661,7 +1719,13 @@ pub(super) fn emit_load_indexed(
         LoadKind::U16 => super::encode::enc_ldrh_reg_lsl1(rd, rn, rm, ext),
         LoadKind::I8 => super::encode::enc_ldrsb_reg(rd, rn, rm, ext),
         LoadKind::U8 => super::encode::enc_ldrb_reg(rd, rn, rm, ext),
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
+        LoadKind::F32
+        | LoadKind::F64
+        | LoadKind::F80
+        | LoadKind::F128
+        | LoadKind::V128
+        | LoadKind::V256
+        | LoadKind::V512 => {
             unreachable!()
         }
     };
@@ -1673,7 +1737,7 @@ pub(super) fn emit_load_indexed(
 /// Lower `Inst::StoreIndexed`: `*(kind*)(base + index * scale) = value`.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_store_indexed(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     v: super::super::ir::ValueId,
     dst: Place,
     base: u32,
@@ -1707,7 +1771,13 @@ pub(super) fn emit_store_indexed(
         StoreKind::I32 => 4,
         StoreKind::I16 => 2,
         StoreKind::I8 => 1,
-        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => {
+        StoreKind::F32
+        | StoreKind::F64
+        | StoreKind::F80
+        | StoreKind::F128
+        | StoreKind::V128
+        | StoreKind::V256
+        | StoreKind::V512 => {
             unreachable!()
         }
     };
@@ -1757,7 +1827,13 @@ pub(super) fn emit_store_indexed(
         (StoreKind::I16, Some(a)) => super::encode::enc_strh_imm(rv, a, 0),
         (StoreKind::I8, Some(a)) => super::encode::enc_strb_imm(rv, a, 0),
         (
-            StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128,
+            StoreKind::F32
+            | StoreKind::F64
+            | StoreKind::F80
+            | StoreKind::F128
+            | StoreKind::V128
+            | StoreKind::V256
+            | StoreKind::V512,
             _,
         ) => unreachable!(),
     };
@@ -1769,7 +1845,7 @@ pub(super) fn emit_store_indexed(
 /// first, so a spilled FP value reloads through x17.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_store(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     v: super::super::ir::ValueId,
     dst: Place,
     addr: u32,
@@ -1792,7 +1868,7 @@ pub(super) fn emit_store(
         emit_int_store(code, op, rs, rn, disp, bound, scratch, frame.fixed_regs)?;
         return propagate_int(code, frame, dst, rs);
     }
-    let fp_value = |code: &mut Vec<u8>, single: bool| {
+    let fp_value = |code: &mut CodeBuf, single: bool| {
         reload_fp(
             code,
             value_place,
@@ -1869,7 +1945,15 @@ pub(super) fn emit_store(
         ) else {
             return fail("Store V128: value not fp reg / spill / int reg");
         };
-        emit_mem(code, STR_Q, qn, rn, disp, scratch_other(scratch, rn));
+        let t = scratch_other(scratch, rn);
+        match bound {
+            Some(a) => {
+                let (base, off) = bound_base(code, rn, disp, 16, 16, a, t);
+                let tmp = scratch_other(scratch, base);
+                emit_agg_store_fp(code, qn, base, off, 16, a, true, tmp);
+            }
+            None => emit_mem(code, STR_Q, qn, rn, disp, t),
+        }
         propagate_v128(code, frame, dst, qn, scratch.secondary);
         return Ok(());
     }
@@ -1933,7 +2017,7 @@ pub(super) fn emit_store(
 /// An integer store's value register. c5's f64 store path writes 8 raw bytes
 /// as `StoreKind::I64`, so an FpReg value bridges through `fmov x, d`.
 fn int_store_value(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     kind: StoreKind,
     place: Place,
     vs: Reg,
@@ -1973,7 +2057,7 @@ fn emit_fp_store(
 /// `scratch`. `sp_shift` is an amount the caller has temporarily moved
 /// sp down by (a borrowed register's push), added to the slot offset.
 pub(super) fn materialize_int(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     place: Place,
     scratch: Reg,
     frame: Frame,
@@ -1982,7 +2066,7 @@ pub(super) fn materialize_int(
 }
 
 pub(super) fn materialize_int_shifted(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     place: Place,
     scratch: Reg,
     frame: Frame,
@@ -1994,7 +2078,11 @@ pub(super) fn materialize_int_shifted(
         // dynamic-sp form is immune to it.
         let shift = if frame.dynamic_sp { 0 } else { sp_shift };
         let sp_off = spill_off(frame, slot) + shift;
-        emit_spill_ldr_x(code, frame, scratch, sp_off);
+        match spill_held(code, frame, sp_off, SpillWidth::Int) {
+            Some(r) if r == scratch.0 => {}
+            Some(r) => emit(code, enc_mov_reg(scratch, Reg(r))),
+            None => emit_spill_ldr_x(code, frame, scratch, sp_off),
+        }
     }
     Some(reg)
 }
@@ -2013,7 +2101,7 @@ pub(super) fn int_operand_reg(place: Place, scratch: Reg) -> Option<Reg> {
 /// the 64-bit slot, an IntReg (a folded constant's bit pattern)
 /// reinterprets through `fmov d, x`.
 pub(super) fn materialize_fp(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     place: Place,
     scratch_d: u8,
     frame: Frame,
@@ -2024,7 +2112,7 @@ pub(super) fn materialize_fp(
 /// [`materialize_fp`] at a site that moved sp down by `sp_shift`. x16 holds
 /// no operand during an FP lowering.
 pub(super) fn materialize_fp_shifted(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     place: Place,
     scratch_d: u8,
     frame: Frame,
@@ -2037,7 +2125,7 @@ pub(super) fn materialize_fp_shifted(
 /// IntReg holds the f32 bit pattern in its low 32 bits and reinterprets
 /// through `fmov s, w`.
 pub(super) fn materialize_fp_f32(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     place: Place,
     scratch_d: u8,
     frame: Frame,
@@ -2047,7 +2135,7 @@ pub(super) fn materialize_fp_f32(
 
 /// The `materialize_fp*` reload; `single` moves an f32 bit pattern.
 fn reload_fp(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     place: Place,
     scratch_d: u8,
     frame: Frame,
@@ -2062,7 +2150,11 @@ fn reload_fp(
             // dynamic-sp form is immune to it.
             let shift = if frame.dynamic_sp { 0 } else { sp_shift };
             let sp_off = spill_off(frame, slot) + shift;
-            emit_spill_ldr_d(code, frame, scratch_d, sp_off, addr_scratch);
+            match spill_held(code, frame, sp_off, SpillWidth::Scalar) {
+                Some(r) if r == scratch_d => {}
+                Some(r) => emit(code, enc_fmov_d_d(scratch_d, r)),
+                None => emit_spill_ldr_d(code, frame, scratch_d, sp_off, addr_scratch),
+            }
             Some(scratch_d)
         }
         Place::IntReg(r) => {
@@ -2080,7 +2172,7 @@ fn reload_fp(
 
 /// `materialize_fp_f32` or `materialize_fp` by the value's f32 marker.
 pub(super) fn materialize_fp_for(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     v: super::super::ir::ValueId,
     place: Place,
     scratch_d: u8,

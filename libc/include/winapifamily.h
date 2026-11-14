@@ -1,8 +1,8 @@
 #pragma once
-// WINAPI_FAMILY partition selection, per the Windows SDK. A build
-// targets one family; WINAPI_FAMILY_PARTITION(p) reports whether
-// partition p belongs to that family's mask. Defaults to the desktop
-// family, which covers the classic Win32 surface.
+// The API families and partitions of the Windows SDK. A build targets one
+// family, the desktop one by default; each WINAPI_PARTITION_* is 1 when the
+// family includes the partition, and a build may define one to enable it.
+// WINAPI_FAMILY_PARTITION(p) is p.
 
 #define WINAPI_FAMILY_PC_APP        2
 #define WINAPI_FAMILY_PHONE_APP     3
@@ -16,34 +16,35 @@
 #define WINAPI_FAMILY WINAPI_FAMILY_DESKTOP_APP
 #endif
 
-#define WINAPI_PARTITION_DESKTOP    0x00000001
-#define WINAPI_PARTITION_APP        0x00000002
-#define WINAPI_PARTITION_PC_APP     0x00000004
-#define WINAPI_PARTITION_PHONE_APP  0x00000008
-#define WINAPI_PARTITION_SYSTEM     0x00000010
-#define WINAPI_PARTITION_GAMES      0x00000020
-#define WINAPI_PARTITION_SERVER     0x00000040
-
-#if WINAPI_FAMILY == WINAPI_FAMILY_DESKTOP_APP
-#define WINAPI_PARTITION_MASK                                                  \
-    (WINAPI_PARTITION_DESKTOP | WINAPI_PARTITION_APP | WINAPI_PARTITION_PC_APP \
-     | WINAPI_PARTITION_PHONE_APP | WINAPI_PARTITION_SYSTEM                    \
-     | WINAPI_PARTITION_SERVER | WINAPI_PARTITION_GAMES)
-#elif WINAPI_FAMILY == WINAPI_FAMILY_PC_APP
-#define WINAPI_PARTITION_MASK (WINAPI_PARTITION_APP | WINAPI_PARTITION_PC_APP)
-#elif WINAPI_FAMILY == WINAPI_FAMILY_PHONE_APP
-#define WINAPI_PARTITION_MASK (WINAPI_PARTITION_APP | WINAPI_PARTITION_PHONE_APP)
-#elif WINAPI_FAMILY == WINAPI_FAMILY_SYSTEM
-#define WINAPI_PARTITION_MASK (WINAPI_PARTITION_SYSTEM)
-#elif WINAPI_FAMILY == WINAPI_FAMILY_SERVER
-#define WINAPI_PARTITION_MASK                                                  \
-    (WINAPI_PARTITION_DESKTOP | WINAPI_PARTITION_SYSTEM | WINAPI_PARTITION_SERVER)
-#elif WINAPI_FAMILY == WINAPI_FAMILY_GAMES
-#define WINAPI_PARTITION_MASK (WINAPI_PARTITION_GAMES)
-#else
+#if WINAPI_FAMILY != WINAPI_FAMILY_DESKTOP_APP && WINAPI_FAMILY != WINAPI_FAMILY_PC_APP       \
+    && WINAPI_FAMILY != WINAPI_FAMILY_PHONE_APP && WINAPI_FAMILY != WINAPI_FAMILY_SYSTEM     \
+    && WINAPI_FAMILY != WINAPI_FAMILY_GAMES && WINAPI_FAMILY != WINAPI_FAMILY_SERVER
 #error "winapifamily.h: unknown WINAPI_FAMILY"
 #endif
 
-#define WINAPI_FAMILY_PARTITION(Partitions) ((WINAPI_PARTITION_MASK & (Partitions)) != 0)
-#define WINAPI_FAMILY_ONE_PARTITION(Set, Partition)                            \
-    ((WINAPI_PARTITION_MASK & (Set)) == (Partition))
+#ifndef WINAPI_PARTITION_DESKTOP
+#define WINAPI_PARTITION_DESKTOP (WINAPI_FAMILY == WINAPI_FAMILY_DESKTOP_APP)
+#endif
+#ifndef WINAPI_PARTITION_APP
+#define WINAPI_PARTITION_APP                                                                     \
+    (WINAPI_FAMILY == WINAPI_FAMILY_DESKTOP_APP || WINAPI_FAMILY == WINAPI_FAMILY_PC_APP         \
+     || WINAPI_FAMILY == WINAPI_FAMILY_PHONE_APP)
+#endif
+#ifndef WINAPI_PARTITION_PC_APP
+#define WINAPI_PARTITION_PC_APP                                                                  \
+    (WINAPI_FAMILY == WINAPI_FAMILY_DESKTOP_APP || WINAPI_FAMILY == WINAPI_FAMILY_PC_APP)
+#endif
+#ifndef WINAPI_PARTITION_PHONE_APP
+#define WINAPI_PARTITION_PHONE_APP (WINAPI_FAMILY == WINAPI_FAMILY_PHONE_APP)
+#endif
+#ifndef WINAPI_PARTITION_GAMES
+#define WINAPI_PARTITION_GAMES                                                                   \
+    (WINAPI_FAMILY == WINAPI_FAMILY_GAMES || WINAPI_FAMILY == WINAPI_FAMILY_DESKTOP_APP)
+#endif
+#ifndef WINAPI_PARTITION_SYSTEM
+#define WINAPI_PARTITION_SYSTEM                                                                  \
+    (WINAPI_FAMILY == WINAPI_FAMILY_SYSTEM || WINAPI_FAMILY == WINAPI_FAMILY_SERVER)
+#endif
+#define WINAPI_PARTITION_PHONE WINAPI_PARTITION_PHONE_APP
+
+#define WINAPI_FAMILY_PARTITION(Partitions) (Partitions)

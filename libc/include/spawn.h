@@ -4,14 +4,18 @@
 
 #if defined(__APPLE__) || defined(__linux__)
 #include <signal.h>
+#include <sys/types.h>
 
-// The attribute and file-action objects are opaque. macOS implements
-// each as a single pointer (8 bytes) the init call fills; Linux stores
-// the state inline (attr ~336 B, file actions ~80 B). An oversized
-// buffer covers both: macOS uses only the leading pointer, Linux uses
-// the whole region.
-typedef struct { unsigned char __opaque[512]; } posix_spawnattr_t;
-typedef struct { unsigned char __opaque[128]; } posix_spawn_file_actions_t;
+// The attribute and file-action objects, opaque to the program, in the C
+// library's size and alignment: a pointer the init call fills on macOS,
+// glibc's inline state on Linux.
+#ifdef __APPLE__
+typedef void *posix_spawnattr_t;
+typedef void *posix_spawn_file_actions_t;
+#else
+typedef union { char __size[336]; long __align; } posix_spawnattr_t;
+typedef union { char __size[80]; long __align; } posix_spawn_file_actions_t;
+#endif
 
 // Attribute flags (the value reaches the host libc, so each target uses
 // its own numbering).
@@ -66,10 +70,10 @@ typedef struct { unsigned char __opaque[128]; } posix_spawn_file_actions_t;
 #pragma binding(libc::posix_spawn_file_actions_addclosefrom_np, "posix_spawn_file_actions_addclosefrom_np")
 #endif
 
-int posix_spawn(int *pid, char *path, const posix_spawn_file_actions_t *fa,
-                const posix_spawnattr_t *attr, char **argv, char **envp);
-int posix_spawnp(int *pid, char *file, const posix_spawn_file_actions_t *fa,
-                 const posix_spawnattr_t *attr, char **argv, char **envp);
+int posix_spawn(int *pid, const char *path, const posix_spawn_file_actions_t *fa,
+                const posix_spawnattr_t *attr, char *const *argv, char *const *envp);
+int posix_spawnp(int *pid, const char *file, const posix_spawn_file_actions_t *fa,
+                 const posix_spawnattr_t *attr, char *const *argv, char *const *envp);
 
 int posix_spawnattr_init(posix_spawnattr_t *attr);
 int posix_spawnattr_destroy(posix_spawnattr_t *attr);
@@ -79,14 +83,15 @@ int posix_spawnattr_setsigmask(posix_spawnattr_t *attr, const sigset_t *mask);
 int posix_spawnattr_setsigdefault(posix_spawnattr_t *attr, const sigset_t *def);
 #ifdef __linux__
 // `struct sched_param` is opaque to c5; pass its address.
-int posix_spawnattr_setschedparam(posix_spawnattr_t *attr, char *param);
+struct sched_param;
+int posix_spawnattr_setschedparam(posix_spawnattr_t *attr, const struct sched_param *param);
 int posix_spawnattr_setschedpolicy(posix_spawnattr_t *attr, int policy);
 #endif
 
 int posix_spawn_file_actions_init(posix_spawn_file_actions_t *fa);
 int posix_spawn_file_actions_destroy(posix_spawn_file_actions_t *fa);
 int posix_spawn_file_actions_addopen(posix_spawn_file_actions_t *fa, int fd,
-                                     char *path, int oflag, int mode);
+                                     const char *path, int oflag, mode_t mode);
 int posix_spawn_file_actions_addclose(posix_spawn_file_actions_t *fa, int fd);
 int posix_spawn_file_actions_adddup2(posix_spawn_file_actions_t *fa, int fd,
                                      int newfd);

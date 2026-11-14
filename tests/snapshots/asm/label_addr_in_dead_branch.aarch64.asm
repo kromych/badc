@@ -14,8 +14,7 @@ Disassembly of section .text:
                	brk	#0x1
 
 <report>:
-               	sxtw	x0, w0
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	neg	x1, x0
                	adr	x2, <addr>
                	adrp	x0, <page>
@@ -43,8 +42,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x1, [x0]
-               	mov	x17, #-0x3              // =-3
-               	cmp	w1, w17
+               	cmn	w1, #0x3
                	b.ne	<addr>
                	ldr	x0, [x0, #0x8]
                	cbnz	x0, <addr>

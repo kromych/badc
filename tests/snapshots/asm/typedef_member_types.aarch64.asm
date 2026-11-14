@@ -34,8 +34,7 @@ Disassembly of section .text:
                	ret
 
 <pick>:
-               	sxtw	x0, w0
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ret
@@ -46,15 +45,6 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	fmov	d0, #3.00000000
-               	fmov	d1, #2.00000000
-               	fmul	d0, d0, d1
-               	fmov	d1, #6.00000000
-               	fcmp	d0, d1
-               	b.eq	<addr>
-               	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	bl	<addr>
                	fmov	d0, #3.00000000
                	blr	x0

@@ -85,6 +85,17 @@ KERNELS = [
         },
     ),
     (
+        # A `__try` scope: the image takes the language handler of its own,
+        # so it still imports nothing, and its `__finally` blocks run.
+        "kernel-seh",
+        "kernel.c",
+        ["-DKERNEL_SEH"],
+        {
+            arch: ["badc kernel: hello", "seh: finally ok", "BADC-KERNEL-OK"]
+            for arch in ("x64", "aarch64")
+        },
+    ),
+    (
         "preempt",
         "preempt.c",
         [],
@@ -222,6 +233,15 @@ def plan(only: str | None = None) -> list[Case]:
     return cases
 
 
+def import_directory(path: Path) -> tuple[int, int]:
+    """A PE32+ image's import directory entry, (RVA, size)."""
+    b = path.read_bytes()
+    pe = int.from_bytes(b[0x3C:0x40], "little")
+    entry = pe + 24 + 112 + 8  # optional header, its data directories, entry 1
+    return (int.from_bytes(b[entry:entry + 4], "little"),
+            int.from_bytes(b[entry + 4:entry + 8], "little"))
+
+
 def main() -> int:
     badc = resolve_badc()
     log(f"badc={badc}")
@@ -243,6 +263,12 @@ def main() -> int:
                 failures += 1
                 continue
             log(f"[{tag}] compiled {efi.name} ({efi.stat().st_size} bytes)")
+            # A UEFI loader resolves no imports.
+            imports = import_directory(efi)
+            if imports != (0, 0):
+                log(f"[{tag}] FAIL: the image has an import directory {imports}")
+                failures += 1
+                continue
             if not case.boots:
                 continue
 
@@ -281,7 +307,10 @@ def main() -> int:
             why = (f"guest exited after {elapsed:.1f}s of a {BOOT_TIMEOUT}s "
                    f"budget" if elapsed < BOOT_TIMEOUT - 5 else
                    f"ran the full {BOOT_TIMEOUT}s")
-            detail = f"{why}; missing {missing}\n--- serial ---\n{text[-2000:]}"
+            # The serial text first, so the verdict is the last line a
+            # truncated tail of this output keeps.
+            log(f"[{tag}] --- serial ---\n{text[-2000:]}")
+            detail = f"{why}; missing {missing}"
             if os.environ.get("BADC_KERNEL_BOOT_OPTIONAL"):
                 # Build is the hard gate; the boot is best-effort until
                 # observed green on a runner, then the flag is dropped.
@@ -313,7 +342,7 @@ def self_test() -> int:
     assert all(c.boots for c in full)
     # The boot count is the gate's budget: a kernel added here costs every
     # Linux lane another emulator start.
-    assert (len(full), sum(c.arch == "x64" for c in full)) == (14, 8), full
+    assert (len(full), sum(c.arch == "x64" for c in full)) == (18, 10), full
     for arch in ("x64", "aarch64"):
         kept = plan(arch)
         assert [c[:-1] for c in kept] == [c[:-1] for c in full]

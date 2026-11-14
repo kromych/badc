@@ -5,7 +5,7 @@ use super::*;
 /// Windows: the TEB `gs:[0x58]` table indexed by `_tls_index`, plus a
 /// final `lea`; the writer fixup patches the `_tls_index` slot.
 pub(super) fn emit_tls_addr(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     offset: i64,
     v: super::super::ir::ValueId,
@@ -70,9 +70,9 @@ pub(super) fn emit_tls_addr(
             code.extend_from_slice(&0u32.to_le_bytes());
             // A cross-unit `extern _Thread_local` (`extern_tls_names`) may live
             // in a shared library, whose block the loader places, so its offset
-            // comes from the GOT (initial-exec, as gcc's code for an executable
-            // reads it): add rd, qword ptr [rip + disp32], REX.W=1, REX.R =
-            // (rd >= 8), opcode 03, ModR/M mod=00 reg=rd.lo rm=101.
+            // comes from the GOT (the initial-exec TLS model): add rd, qword
+            // ptr [rip + disp32], REX.W=1, REX.R = (rd >= 8), opcode 03,
+            // ModR/M mod=00 reg=rd.lo rm=101.
             let by_name = extern_tls_names.get(&v);
             if let Some(r) = by_name.filter(|r| !r.defined_here) {
                 code.push(rex);
@@ -126,7 +126,9 @@ pub(super) fn emit_tls_addr(
             }
             // PE TLS: the TEB at gs:[0x58], its TLS array indexed by `_tls_index`,
             // plus the per-variable offset. r10 holds the TEB pointer and `rd` the
-            // index, which is live across one mov only.
+            // index, which is live across one mov only; a spilled result, whose
+            // register is r10, is formed in r11.
+            let rd = if rd == SCRATCH_R10 { SCRATCH_R11 } else { rd };
             //
             // mov r10, gs:[0x58]           ; TEB
             // mov rd_w, [rip+disp32]       ; _tls_index slot (zero-extends to rd)
@@ -217,7 +219,7 @@ pub(super) fn seg_prefix(seg: AsmSeg) -> Option<u8> {
 /// Width-dispatched integer load `rd = *(kind*)[base + disp]`
 /// (MOV / MOVSXD / MOVSX / MOVZX per C99 6.3.1.3); an `I32` takes `movsxd`
 /// only when `hi`, a reader of its upper half, else the plain 32-bit `mov`.
-fn emit_load_kind_mem(
+pub(super) fn emit_load_kind_mem(
     code: &mut Vec<u8>,
     kind: LoadKind,
     rd: Reg,
@@ -239,7 +241,13 @@ fn emit_load_kind_mem(
         LoadKind::U16 => emit_movzx_r_mem16(code, rd, base, disp),
         LoadKind::I8 => super::encode::emit_movsx_r_mem8(code, rd, base, disp),
         LoadKind::U8 => super::encode::emit_movzx_r_mem8(code, rd, base, disp),
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
+        LoadKind::F32
+        | LoadKind::F64
+        | LoadKind::F80
+        | LoadKind::F128
+        | LoadKind::V128
+        | LoadKind::V256
+        | LoadKind::V512 => {
             unreachable!()
         }
     }
@@ -262,7 +270,13 @@ fn emit_store_kind_mem(
         StoreKind::I32 => super::encode::emit_mov_mem32_r(code, base, disp, src),
         StoreKind::I16 => super::encode::emit_mov_mem16_r(code, base, disp, src),
         StoreKind::I8 => super::encode::emit_mov_mem8_r(code, base, disp, src),
-        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => {
+        StoreKind::F32
+        | StoreKind::F64
+        | StoreKind::F80
+        | StoreKind::F128
+        | StoreKind::V128
+        | StoreKind::V256
+        | StoreKind::V512 => {
             unreachable!()
         }
     }
@@ -270,7 +284,7 @@ fn emit_store_kind_mem(
 
 /// Mirror a just-stored FP value into `dst` (movapd into a distinct
 /// FP register, or a spill store).
-fn mirror_fp_dst(code: &mut Vec<u8>, dst: Place, dn: Reg, frame: Frame) {
+pub(super) fn mirror_fp_dst(code: &mut CodeBuf, dst: Place, dn: Reg, frame: Frame) {
     match dst {
         Place::FpReg(r) if r != dn.0 => emit_movapd_xmm_xmm(code, Reg(r), dn),
         Place::Spill(_) => fp_spill_dst_to_slot(code, dst, dn, frame),
@@ -284,7 +298,7 @@ fn mirror_fp_dst(code: &mut Vec<u8>, dst: Place, dn: Reg, frame: Frame) {
 /// `movsd` covers the 8-byte `double` lvalue.
 #[allow(clippy::too_many_arguments)]
 fn emit_load_fp_mem(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     kind: LoadKind,
     keep_f32: bool,
@@ -299,6 +313,15 @@ fn emit_load_fp_mem(
         return fail(alloc::format!("{site}: dst not fp reg / spill"));
     };
     // `movups` carries no alignment requirement.
+    if matches!(kind, LoadKind::V256 | LoadKind::V512) {
+        let w = VecWidth::of_load(kind);
+        if let Some(p) = seg {
+            code.push(p);
+        }
+        emit_wide_load(code, w, dd, base, disp);
+        mirror_wide_dst(code, w, dst, dd, frame);
+        return Ok(());
+    }
     if matches!(kind, LoadKind::V128) {
         if let Some(p) = seg {
             code.push(p);
@@ -359,7 +382,7 @@ fn emit_load_fp_mem(
 /// The stored value also feeds `dst` (C99 6.5.16p3).
 #[allow(clippy::too_many_arguments)]
 fn emit_store_fp_mem(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     value_place: Place,
     value_is_f32: bool,
@@ -371,6 +394,23 @@ fn emit_store_fp_mem(
     bound: Option<u32>,
     site: &str,
 ) -> Emit {
+    if matches!(kind, StoreKind::V256 | StoreKind::V512) {
+        let w = if kind == StoreKind::V512 {
+            VecWidth::V512
+        } else {
+            VecWidth::V256
+        };
+        let scratch = Reg(frame.fp_scratch[0]);
+        let Some(dn) = materialize_wide(code, w, value_place, scratch, frame) else {
+            return fail(alloc::format!("{site}: value not fp reg / spill / int reg"));
+        };
+        if let Some(p) = seg {
+            code.push(p);
+        }
+        emit_wide_store(code, w, base, disp, dn);
+        mirror_wide_dst(code, w, dst, dn, frame);
+        return Ok(());
+    }
     if matches!(kind, StoreKind::V128) {
         let Some(dn) = materialize_v128(code, value_place, Reg(frame.fp_scratch[0]), frame) else {
             return fail(alloc::format!("{site}: value not fp reg / spill / int reg"));
@@ -390,8 +430,8 @@ fn emit_store_fp_mem(
             return fail(alloc::format!("{site}: binary128 store on x86-64"));
         }
         // `fld m64` widens the f64 exactly; `fstp m80` writes the 10
-        // significant bytes and leaves the object's padding untouched,
-        // as gcc's stores do. The round trip rides the red zone.
+        // significant bytes and leaves the object's padding untouched.
+        // The round trip rides the red zone.
         emit_movsd_mem_xmm(code, Reg::RSP, -8, dn);
         super::encode::emit_fld_m64(code, Reg::RSP, -8);
         if let Some(p) = seg {
@@ -402,7 +442,7 @@ fn emit_store_fp_mem(
         return Ok(());
     }
     // Emit the segment override immediately before the store opcode, past any
-    // value materialisation / narrowing the branches do first.
+    // value materialization / narrowing the branches do first.
     let push_seg = |code: &mut Vec<u8>| {
         if let Some(p) = seg {
             code.push(p);
@@ -468,9 +508,9 @@ pub(super) fn local_slot_base_disp(
 }
 
 /// `Inst::LoadLocal`: the c5 slot offset folds into the load's
-/// displacement with `disp`, so no `LocalAddr` is materialised.
+/// displacement with `disp`, so no `LocalAddr` is materialized.
 pub(super) fn emit_load_local(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     off: i64,
     disp: i32,
@@ -511,7 +551,13 @@ pub(super) fn emit_load_local(
 pub(super) fn is_fp_load(kind: LoadKind) -> bool {
     matches!(
         kind,
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128
+        LoadKind::F32
+            | LoadKind::F64
+            | LoadKind::F80
+            | LoadKind::F128
+            | LoadKind::V128
+            | LoadKind::V256
+            | LoadKind::V512
     )
 }
 
@@ -519,7 +565,13 @@ pub(super) fn is_fp_load(kind: LoadKind) -> bool {
 pub(super) fn is_fp_store(kind: StoreKind) -> bool {
     matches!(
         kind,
-        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128
+        StoreKind::F32
+            | StoreKind::F64
+            | StoreKind::F80
+            | StoreKind::F128
+            | StoreKind::V128
+            | StoreKind::V256
+            | StoreKind::V512
     )
 }
 
@@ -528,7 +580,7 @@ pub(super) fn is_fp_store(kind: StoreKind) -> bool {
 /// stored value in the accumulator, so the destination `Place`
 /// receives a copy after the store lands.
 pub(super) fn emit_store_local(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     _v: super::super::ir::ValueId,
     off: i64,
@@ -588,11 +640,13 @@ pub(super) fn emit_store_local(
 
 /// Lower `Inst::LoadIndexed`: `dst = *(kind*)(base + index * scale)`.
 /// Emitted as a single MOVSXD/MOV/MOVSX/MOVZX with SIB-byte
-/// addressing (`[base + index * scale]`). F32 indexed loads aren't
-/// a shape the walker produces today.
+/// addressing (`[base + index * scale]`), or off the frame register
+/// (`[rbp + index * scale + disp]`) for a frame object's address
+/// `frame_base` resolves. F32 indexed loads aren't a shape the walker
+/// produces today.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_load_indexed(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     base: u32,
     (index, ext): (u32, IndexExt),
@@ -601,7 +655,36 @@ pub(super) fn emit_load_indexed(
     hi: bool,
     alloc: &Allocation,
     frame: Frame,
+    frame_base: Option<(Reg, i32)>,
 ) -> Emit {
+    // A double: `vmovq` into the low lane, the rest of the register clear.
+    if kind == LoadKind::F64 && scale == 8 && ext == IndexExt::None {
+        let Some((rbase, rindex, disp)) = indexed_operands(
+            code,
+            (place_of(alloc, base), place_of(alloc, index)),
+            frame,
+            frame_base,
+        ) else {
+            return fail("LoadIndexed: base / index not int reg / spill");
+        };
+        let Some(dd) = fp_or_spill_dst(dst, frame) else {
+            return fail("LoadIndexed: dst not fp reg / spill");
+        };
+        let at = super::asm::Concrete::Mem {
+            base: rbase.0,
+            index: Some(rindex.0),
+            scale: 8,
+            disp,
+            size: crate::c5::ir::AsmRegSize::Quad,
+        };
+        let xmm = super::asm::Concrete::Reg {
+            reg: super::asm::XMM_BASE + dd.0,
+            size: crate::c5::ir::AsmRegSize::Quad,
+        };
+        super::intrinsic::encode_wide(code, "vmovq", &[at, xmm])?;
+        mirror_fp_dst(code, dst, dd, frame);
+        return Ok(());
+    }
     if is_fp_load(kind) {
         return fail("LoadIndexed: FP not implemented");
     }
@@ -615,44 +698,75 @@ pub(super) fn emit_load_indexed(
         LoadKind::I32 | LoadKind::U32 => 4,
         LoadKind::I16 | LoadKind::U16 => 2,
         LoadKind::I8 | LoadKind::U8 => 1,
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
+        LoadKind::F32
+        | LoadKind::F64
+        | LoadKind::F80
+        | LoadKind::F128
+        | LoadKind::V128
+        | LoadKind::V256
+        | LoadKind::V512 => {
             unreachable!()
         }
     };
     if scale != expected_scale {
         return fail("LoadIndexed: scale doesn't match access width");
     }
-    let base_place = place_of(alloc, base);
-    let index_place = place_of(alloc, index);
-    let Some(regs) = materialize_int_operands_distinct(code, &[base_place, index_place], frame)
-    else {
+    let Some((rbase, rindex, disp)) = indexed_operands(
+        code,
+        (place_of(alloc, base), place_of(alloc, index)),
+        frame,
+        frame_base,
+    ) else {
         return fail("LoadIndexed: base / index not int reg / spill");
     };
-    let (rbase, rindex) = (regs[0], regs[1]);
     let Some(rd) = int_or_spill_dst(dst) else {
         return fail("LoadIndexed: dst not int reg / spill");
     };
-    match kind {
-        LoadKind::I64 => super::encode::emit_mov_r_sib(code, rd, rbase, rindex, scale),
-        LoadKind::I32 if hi => super::encode::emit_movsxd_r_sib(code, rd, rbase, rindex, scale),
-        LoadKind::I32 => super::encode::emit_mov_r32_sib(code, rd, rbase, rindex, scale),
-        LoadKind::U32 => super::encode::emit_mov_r32_sib(code, rd, rbase, rindex, scale),
-        LoadKind::I16 => super::encode::emit_movsx_r_sib16(code, rd, rbase, rindex, scale),
-        LoadKind::U16 => super::encode::emit_movzx_r_sib16(code, rd, rbase, rindex, scale),
-        LoadKind::I8 => super::encode::emit_movsx_r_sib8(code, rd, rbase, rindex, scale),
-        LoadKind::U8 => super::encode::emit_movzx_r_sib8(code, rd, rbase, rindex, scale),
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
+    let (mnem, widths) = match kind {
+        LoadKind::I64 => (Mnem::Mov, (8, 8)),
+        LoadKind::I32 if hi => (Mnem::Movsxd, (8, 4)),
+        LoadKind::I32 | LoadKind::U32 => (Mnem::Mov, (4, 4)),
+        LoadKind::I16 => (Mnem::Movsx, (8, 2)),
+        LoadKind::U16 => (Mnem::Movzx, (8, 2)),
+        LoadKind::I8 => (Mnem::Movsx, (8, 1)),
+        LoadKind::U8 => (Mnem::Movzx, (8, 1)),
+        LoadKind::F32
+        | LoadKind::F64
+        | LoadKind::F80
+        | LoadKind::F128
+        | LoadKind::V128
+        | LoadKind::V256
+        | LoadKind::V512 => {
             unreachable!()
         }
-    }
+    };
+    super::encode::emit_load_sib_disp(code, mnem, widths, rd, (rbase, rindex, scale, disp));
     spill_dst_to_slot(code, dst, rd, frame);
     Ok(())
+}
+
+/// The base and index registers and the displacement of an indexed access:
+/// the frame register and the object's offset for a frame object's address,
+/// else both operands, a spilled one loaded into r10 or r11.
+fn indexed_operands(
+    code: &mut CodeBuf,
+    (base, index): (Place, Place),
+    frame: Frame,
+    frame_base: Option<(Reg, i32)>,
+) -> Option<(Reg, Reg, i32)> {
+    match frame_base {
+        Some((fb, disp)) => Some((fb, materialize_int(code, index, SCRATCH_R10, frame)?, disp)),
+        None => {
+            let regs = materialize_int_operands_distinct(code, &[base, index], frame)?;
+            Some((regs[0], regs[1], 0))
+        }
+    }
 }
 
 /// Lower `Inst::StoreIndexed`: `*(kind*)(base + index * scale) = value`.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_store_indexed(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     base: u32,
     (index, ext): (u32, IndexExt),
@@ -661,6 +775,7 @@ pub(super) fn emit_store_indexed(
     kind: StoreKind,
     alloc: &Allocation,
     frame: Frame,
+    frame_base: Option<(Reg, i32)>,
 ) -> Emit {
     if is_fp_store(kind) {
         return fail("StoreIndexed: FP not implemented");
@@ -673,21 +788,28 @@ pub(super) fn emit_store_indexed(
         StoreKind::I32 => 4,
         StoreKind::I16 => 2,
         StoreKind::I8 => 1,
-        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => {
+        StoreKind::F32
+        | StoreKind::F64
+        | StoreKind::F80
+        | StoreKind::F128
+        | StoreKind::V128
+        | StoreKind::V256
+        | StoreKind::V512 => {
             unreachable!()
         }
     };
     if scale != expected_scale {
         return fail("StoreIndexed: scale doesn't match access width");
     }
-    let base_place = place_of(alloc, base);
-    let index_place = place_of(alloc, index);
     let value_place = place_of(alloc, value);
-    let Some(regs) = materialize_int_operands_distinct(code, &[base_place, index_place], frame)
-    else {
+    let Some((rbase, rindex, disp)) = indexed_operands(
+        code,
+        (place_of(alloc, base), place_of(alloc, index)),
+        frame,
+        frame_base,
+    ) else {
         return fail("StoreIndexed: base / index not int reg / spill");
     };
-    let (rbase, rindex) = (regs[0], regs[1]);
     // When r10 and r11 both hold the spilled base and index, the effective
     // address is precomputed into r10 and r11 receives the value.
     let fp_value = matches!(value_place, Place::FpReg(_)) && matches!(kind, StoreKind::I64);
@@ -702,7 +824,7 @@ pub(super) fn emit_store_indexed(
         let target = match free {
             Some(s) => s,
             None => {
-                super::encode::emit_lea_r_sib(code, SCRATCH_R10, rbase, rindex, scale);
+                super::encode::emit_lea_sib_disp(code, SCRATCH_R10, (rbase, rindex, scale, disp));
                 precomputed_addr = Some(SCRATCH_R10);
                 SCRATCH_R11
             }
@@ -718,7 +840,7 @@ pub(super) fn emit_store_indexed(
                 None => return fail("StoreIndexed: value not int reg / spill"),
             },
             None => {
-                super::encode::emit_lea_r_sib(code, SCRATCH_R10, rbase, rindex, scale);
+                super::encode::emit_lea_sib_disp(code, SCRATCH_R10, (rbase, rindex, scale, disp));
                 precomputed_addr = Some(SCRATCH_R10);
                 match materialize_int(code, value_place, SCRATCH_R11, frame) {
                     Some(r) => r,
@@ -737,19 +859,26 @@ pub(super) fn emit_store_indexed(
             | StoreKind::F64
             | StoreKind::F80
             | StoreKind::F128
-            | StoreKind::V128 => unreachable!(),
+            | StoreKind::V128
+            | StoreKind::V256
+            | StoreKind::V512 => unreachable!(),
         },
-        None => match kind {
-            StoreKind::I64 => super::encode::emit_mov_sib_r(code, rbase, rindex, scale, rv),
-            StoreKind::I32 => super::encode::emit_mov_sib_r32(code, rbase, rindex, scale, rv),
-            StoreKind::I16 => super::encode::emit_mov_sib_r16(code, rbase, rindex, scale, rv),
-            StoreKind::I8 => super::encode::emit_mov_sib_r8(code, rbase, rindex, scale, rv),
-            StoreKind::F32
-            | StoreKind::F64
-            | StoreKind::F80
-            | StoreKind::F128
-            | StoreKind::V128 => unreachable!(),
-        },
+        None => {
+            let width = match kind {
+                StoreKind::I64 => 8,
+                StoreKind::I32 => 4,
+                StoreKind::I16 => 2,
+                StoreKind::I8 => 1,
+                StoreKind::F32
+                | StoreKind::F64
+                | StoreKind::F80
+                | StoreKind::F128
+                | StoreKind::V128
+                | StoreKind::V256
+                | StoreKind::V512 => unreachable!(),
+            };
+            super::encode::emit_store_sib_disp(code, width, (rbase, rindex, scale, disp), rv);
+        }
     }
     // c5 store-op leaves the value in the accumulator.
     mirror_int_dst(code, dst, rv, frame);
@@ -760,7 +889,7 @@ pub(super) fn emit_store_indexed(
 /// (`Allocation::branch_fused`): `cmp $0, mem` at the load's width, which
 /// sets ZF as a test of the extended value would. The terminator branches
 /// on it; no register is written.
-pub(super) fn emit_zero_test_of_load(code: &mut Vec<u8>, inst: &Inst, fcx: &FnCtx) -> Emit {
+pub(super) fn emit_zero_test_of_load(code: &mut CodeBuf, inst: &Inst, fcx: &FnCtx) -> Emit {
     let FnCtx {
         func,
         alloc,
@@ -808,11 +937,13 @@ pub(super) fn emit_zero_test_of_load(code: &mut Vec<u8>, inst: &Inst, fcx: &FnCt
             kind,
             ..
         } => {
-            let places = [place_of(alloc, *base), place_of(alloc, *index)];
-            let Some(regs) = materialize_int_operands_distinct(code, &places, frame) else {
+            let places = (place_of(alloc, *base), place_of(alloc, *index));
+            let frame_base = super::inst::frame_object_base(fcx.func, *base, frame, fcx.abi);
+            let Some((rbase, rindex, disp)) = indexed_operands(code, places, frame, frame_base)
+            else {
                 return fail("LoadIndexed: base / index not int reg / spill");
             };
-            let operand = (regs[0], regs[1], *scale);
+            let operand = (rbase, rindex, *scale, disp);
             super::encode::emit_mi_sib(code, Mnem::Cmp, int_load_shape(*kind).0 as u8, operand, 0);
         }
         _ => return fail("zero test: not a load"),
@@ -835,7 +966,7 @@ fn store_imm_operand(inst: &Inst, func: &FunctionSsa) -> Emit<(u8, i32)> {
         StoreKind::I16 => 2,
         StoreKind::I32 | StoreKind::F32 => 4,
         StoreKind::I64 | StoreKind::F64 => 8,
-        StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => {
+        StoreKind::F80 | StoreKind::F128 | StoreKind::V128 | StoreKind::V256 | StoreKind::V512 => {
             return fail("immediate store: no immediate form at this width");
         }
     };
@@ -854,7 +985,7 @@ fn store_imm_operand(inst: &Inst, func: &FunctionSsa) -> Emit<(u8, i32)> {
 /// of the constant's low bytes at the store's width. The `Imm` was never
 /// materialized, and the store's own value is unread.
 pub(super) fn emit_store_of_imm(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     inst: &Inst,
     func: &FunctionSsa,
     alloc: &Allocation,
@@ -900,12 +1031,13 @@ pub(super) fn emit_store_of_imm(
             if *index_ext != IndexExt::None || *scale != width {
                 return fail("StoreIndexed: index form doesn't match the access");
             }
-            let places = [place_of(alloc, *base), place_of(alloc, *index)];
-            let Some(regs) = materialize_int_operands_distinct(code, &places, frame) else {
+            let places = (place_of(alloc, *base), place_of(alloc, *index));
+            let frame_base = super::inst::frame_object_base(func, *base, frame, abi);
+            let Some((rbase, rindex, disp)) = indexed_operands(code, places, frame, frame_base)
+            else {
                 return fail("StoreIndexed: base / index not int reg / spill");
             };
-            let operand = (regs[0], regs[1], *scale);
-            super::encode::emit_mi_sib(code, Mnem::Mov, width, operand, imm);
+            super::encode::emit_mi_sib(code, Mnem::Mov, width, (rbase, rindex, *scale, disp), imm);
         }
         _ => unreachable!(),
     }
@@ -930,7 +1062,7 @@ fn abs_base_data(func: &FunctionSsa, mut v: u32) -> Option<u32> {
 /// writer's `R_X86_64_32S`. The allocator's fused forms apply as to the
 /// register-based access: a zero test and an immediate store.
 pub(super) fn emit_abs_indexed(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     refs: &mut Vec<super::AbsAddrRef>,
     inst: &Inst,
     v: u32,
@@ -1027,7 +1159,7 @@ pub(super) fn emit_abs_indexed(
 /// `ImmData`, recorded as an [`AddrPart::Disp32`] data fixup. The
 /// allocator's fused forms apply as to the register-based access.
 pub(super) fn emit_pc_rel(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     data_fixups: &mut Vec<DataFixup>,
     inst: &Inst,
     v: u32,
@@ -1129,7 +1261,7 @@ pub(super) fn emit_pc_rel(
 }
 
 pub(super) fn emit_load(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     addr: u32,
     disp: i32,
@@ -1142,7 +1274,7 @@ pub(super) fn emit_load(
     bound: Option<u32>,
 ) -> Emit {
     let addr_place = place_of(alloc, addr);
-    // Spill-tolerant base materialisation: load a spilled address
+    // Spill-tolerant base materialization: load a spilled address
     // into r10 first, write into rd next, then spill rd to its
     // slot if the allocator wants it parked there. Matches the
     // aarch64 module's primary-scratch shape.
@@ -1166,7 +1298,7 @@ pub(super) fn emit_load(
 }
 
 pub(super) fn emit_store(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     _v: super::super::ir::ValueId,
     addr: u32,
@@ -1227,7 +1359,7 @@ pub(super) fn emit_store(
 }
 
 pub(super) fn emit_imm_data(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     offset: i64,
     data_fixups: &mut Vec<DataFixup>,
@@ -1251,7 +1383,7 @@ pub(super) fn emit_imm_data(
 }
 
 pub(super) fn emit_imm_code(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     target_ent_pc: usize,
     pending_func_fixups: &mut Vec<(usize, usize)>,
@@ -1272,7 +1404,7 @@ pub(super) fn emit_imm_code(
 /// reaches) by an `is_addr` PLT-call fixup; the disp32 sits three bytes
 /// in.
 pub(super) fn emit_imm_ext_code(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     binding_idx: i64,
     plt_call_fixups: &mut Vec<PltCallFixup>,
@@ -1477,11 +1609,15 @@ pub(super) fn emit_agg_load_slot_sse(
     strict_align: bool,
     tmp: Reg,
 ) {
-    if class == super::abi_classify::RegClass::Vector {
-        super::encode::emit_movups_xmm_mem(code, dst, base, disp);
-        return;
+    match class {
+        super::abi_classify::RegClass::Vector => {
+            super::encode::emit_movups_xmm_mem(code, dst, base, disp)
+        }
+        super::abi_classify::RegClass::Vector256 => {
+            super::encode::emit_vmovups_ymm_mem(code, dst, base, disp)
+        }
+        _ => emit_agg_load_sse(code, dst, base, disp, width, align, strict_align, tmp),
     }
-    emit_agg_load_sse(code, dst, base, disp, width, align, strict_align, tmp);
 }
 
 /// The partner of [`emit_agg_load_slot_sse`]: store the slot back to
@@ -1493,10 +1629,14 @@ pub(super) fn emit_agg_store_slot_sse(
     disp: i32,
     src: Reg,
 ) {
-    if class == super::abi_classify::RegClass::Vector {
-        super::encode::emit_movups_mem_xmm(code, base, disp, src);
-    } else {
-        emit_movsd_mem_xmm(code, base, disp, src);
+    match class {
+        super::abi_classify::RegClass::Vector => {
+            super::encode::emit_movups_mem_xmm(code, base, disp, src)
+        }
+        super::abi_classify::RegClass::Vector256 => {
+            super::encode::emit_vmovups_mem_ymm(code, base, disp, src)
+        }
+        _ => emit_movsd_mem_xmm(code, base, disp, src),
     }
 }
 
@@ -1530,9 +1670,13 @@ fn int_load_shape(kind: LoadKind) -> (u32, bool) {
         LoadKind::U16 => (2, false),
         LoadKind::I8 => (1, true),
         LoadKind::U8 => (1, false),
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
-            (0, false)
-        }
+        LoadKind::F32
+        | LoadKind::F64
+        | LoadKind::F80
+        | LoadKind::F128
+        | LoadKind::V128
+        | LoadKind::V256
+        | LoadKind::V512 => (0, false),
     }
 }
 
@@ -1543,7 +1687,13 @@ fn int_store_width(kind: StoreKind) -> u32 {
         StoreKind::I32 => 4,
         StoreKind::I16 => 2,
         StoreKind::I8 => 1,
-        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => 0,
+        StoreKind::F32
+        | StoreKind::F64
+        | StoreKind::F80
+        | StoreKind::F128
+        | StoreKind::V128
+        | StoreKind::V256
+        | StoreKind::V512 => 0,
     }
 }
 

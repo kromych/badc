@@ -7,12 +7,14 @@ pub(crate) mod ast_reach;
 pub(crate) mod block_plan;
 pub(crate) mod build;
 pub(crate) mod cfi;
+pub(crate) mod code_buf;
 #[cfg(feature = "std")]
 pub(crate) mod dump;
 pub(crate) mod early_exit;
 pub(crate) mod emit_common;
 pub(crate) mod licm;
 pub(crate) mod liveness;
+pub(crate) mod loop_saves;
 pub(crate) mod mem2reg;
 pub(crate) mod native;
 pub(crate) mod phi_class;

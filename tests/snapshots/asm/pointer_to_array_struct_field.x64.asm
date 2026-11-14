@@ -31,7 +31,6 @@ Disassembly of section .text:
                	pushq	%r12
                	pushq	%rbx
                	movl	$0x40, %edi
-               	xorl	%eax, %eax
                	callq	<addr>
                	testq	%rax, %rax
                	jne	<addr>
@@ -138,7 +137,6 @@ Disassembly of section .text:
                	jl	<addr>
                	movw	$0xffff, (%rax)         # imm = 0xFFFF
                	movq	%rax, %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	leaq	<rip>, %rdi
                	movb	$0x0, %al

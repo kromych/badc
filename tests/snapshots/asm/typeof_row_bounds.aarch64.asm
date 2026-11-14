@@ -17,36 +17,25 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x30
-               	sub	x3, x29, #0x30
+               	sub	x1, x29, #0x30
                	mov	x0, #0x0                // =0
-               	stur	w0, [x29, #-0x30]
-               	mov	x1, #0x1                // =1
-               	stur	w1, [x29, #-0x2c]
-               	mov	x1, #0x2                // =2
-               	stur	w1, [x29, #-0x28]
-               	mov	x1, #0x3                // =3
-               	stur	w1, [x29, #-0x24]
-               	add	x1, x3, #0x10
+               	mov	x2, #0x100000000        // =4294967296
+               	stur	x2, [x29, #-0x30]
+               	mov	x2, #0x2                // =2
+               	movk	x2, #0x3, lsl #32
+               	stur	x2, [x29, #-0x28]
                	mov	x2, #0xa                // =10
-               	str	w2, [x1]
-               	mov	x2, #0xb                // =11
-               	str	w2, [x1, #0x4]
+               	movk	x2, #0xb, lsl #32
+               	stur	x2, [x29, #-0x20]
                	mov	x2, #0xc                // =12
-               	str	w2, [x1, #0x8]
-               	mov	x2, #0xd                // =13
-               	str	w2, [x1, #0xc]
-               	add	x2, x3, #0x20
-               	mov	x4, #0x14               // =20
-               	str	w4, [x2]
-               	mov	x4, #0x15               // =21
-               	str	w4, [x2, #0x4]
-               	mov	x4, #0x16               // =22
-               	str	w4, [x2, #0x8]
-               	mov	x4, #0x17               // =23
-               	str	w4, [x2, #0xc]
-               	ldursw	x2, [x29, #-0x4]
-               	cmp	w2, #0x17
-               	b.ne	<addr>
+               	movk	x2, #0xd, lsl #32
+               	stur	x2, [x29, #-0x18]
+               	mov	x2, #0x14               // =20
+               	movk	x2, #0x15, lsl #32
+               	stur	x2, [x29, #-0x10]
+               	mov	x2, #0x16               // =22
+               	movk	x2, #0x17, lsl #32
+               	stur	x2, [x29, #-0x8]
                	ldursw	x2, [x29, #-0x20]
                	cmp	w2, #0xa
                	b.eq	<addr>
@@ -54,7 +43,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x1, x1, x3
+               	add	x2, x1, #0x10
+               	sub	x1, x2, x1
                	asr	x2, x1, #63
                	add	x1, x1, x2, lsr #62
                	asr	x1, x1, #2

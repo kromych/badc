@@ -33,7 +33,6 @@ Disassembly of section .text:
                	incq	%rax
                	movl	%eax, <rip> # <addr>
                	leaq	<rip>, %rdi # <addr>
-               	xorl	%eax, %eax
                	callq	<addr>
                	ud2
 
@@ -60,13 +59,9 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	<rip>, %rdi # <addr>
-               	xorl	%eax, %eax
                	callq	<addr>
                	testl	%eax, %eax
-               	jne	<addr>
-               	movl	$0x4, %edi
-               	callq	<addr>
-               	ud2
+               	je	<addr>
                	cmpl	$0x4, %eax
                	jne	<addr>
                	movl	<rip>, %eax # <addr>
@@ -77,3 +72,6 @@ Disassembly of section .text:
                	retq
                	movl	$0x2, %eax
                	jmp	<addr>
+               	movl	$0x4, %edi
+               	callq	<addr>
+               	ud2

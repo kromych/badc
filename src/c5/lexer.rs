@@ -14,9 +14,9 @@ use super::token::{Tok, Token, Ty};
 /// `__attribute__((aligned(N)))` asks for.
 const DEFAULT_PACK: usize = usize::MAX;
 
-/// Largest pack value that packs. GCC and clang honor 1, 2, 4, 8 and
-/// 16; a larger request packs nothing, since no natural alignment
-/// exceeds 16, and it must not clamp an explicit `aligned(N)` either.
+/// Largest pack value that packs: 1, 2, 4, 8 and 16 are honored; a
+/// larger request packs nothing, since no natural alignment exceeds 16,
+/// and it must not clamp an explicit `aligned(N)` either.
 const MAX_HONORED_PACK: usize = 16;
 
 /// Clamp a user-supplied pack value. `0` means "default" (matching
@@ -30,9 +30,9 @@ fn clamp_pack(n: usize) -> usize {
     }
 }
 
-/// One parsed `#pragma pack(...)` directive, in the forms gcc, clang and
-/// MSVC share. The lexer scans the directive inline and folds it into
-/// the pack state via [`Lexer::apply_pack_directive`].
+/// One parsed `#pragma pack(...)` directive. The lexer scans the
+/// directive inline and folds it into the pack state via
+/// [`Lexer::apply_pack_directive`].
 #[derive(Debug, Clone)]
 enum PackDirective {
     /// `#pragma pack(N)` -- the value in effect becomes N.
@@ -214,7 +214,7 @@ pub(crate) struct LineMarker {
 /// or a C99 `#line` directive (`line N "file"`). Returns the
 /// marker on a successful match, `None` for any other shape.
 ///
-/// Recognises:
+/// Recognizes:
 ///   * `#line N`               -> `LineMarker { line: N, file: None }`
 ///   * `#line N "file"`        -> `LineMarker { line: N, file: Some("file") }`
 ///   * `# N "file"`            -> same (GNU shape, no `line` keyword)
@@ -339,7 +339,7 @@ pub(crate) fn decode_string_body(body: &[u8]) -> alloc::string::String {
 /// other shape (including malformed-pack and non-pack pragmas)
 /// so the caller can fall back to "skip the line silently".
 ///
-/// Accepts the shapes gcc, clang and MSVC share:
+/// Accepts these shapes:
 ///   * `pragma pack(N)`                 -> [`PackDirective::Set`]
 ///   * `pragma pack()`                  -> [`PackDirective::Reset`]
 ///   * `pragma pack(push[, id][, N])`   -> [`PackDirective::Push`]
@@ -677,6 +677,9 @@ pub(crate) struct Lexer {
     pub(crate) fp_contract: bool,
     /// The state `FP_CONTRACT DEFAULT` sets, from `-ffp-contract`.
     pub(crate) fp_contract_default: bool,
+    /// The sections MSVC's segment pragmas name here. Scanned inline like
+    /// `pack`.
+    pub(crate) segments: crate::c5::segment_pragma::Segments,
 }
 
 /// Side index for `Vec<Symbol>` so identifier lookup stops being O(N).
@@ -688,7 +691,7 @@ pub(crate) struct Lexer {
 ///      stride so the big `Symbol` struct only gets touched on a hash hit.
 ///
 /// Newer entries always land at the head of their bucket, so a chain
-/// walk visits the most-recent declaration first -- same behaviour the
+/// walk visits the most-recent declaration first -- same behavior the
 /// old `.rev()` scan had, which is what shadowing relies on.
 pub(crate) struct SymbolIndex {
     buckets: Vec<u32>,
@@ -713,7 +716,7 @@ impl SymbolIndex {
     /// Find the most recent live symbol whose `(hash, name)` matches.
     /// `token != 0` filters out any defensively-zeroed entries the way
     /// the old linear scan did; in practice no caller zeroes `token`
-    /// today, but the check is cheap and keeps behaviour identical.
+    /// today, but the check is cheap and keeps behavior identical.
     pub fn lookup(&self, symbols: &[Symbol], hash: i64, name: &[u8]) -> Option<usize> {
         self.find(symbols, hash, name, |s| s.token != 0 && !s.detached)
     }
@@ -872,6 +875,7 @@ impl Lexer {
             visibility_stack: vec![None],
             fp_contract: true,
             fp_contract_default: true,
+            segments: Default::default(),
         }
     }
 
@@ -901,7 +905,7 @@ impl Lexer {
     /// Active `#pragma pack(N)` value at the current source
     /// position. `aggregate.rs` clamps each struct field's natural
     /// alignment by this when laying out a struct definition. The
-    /// default 8 matches c5's pre-existing struct-layout behaviour
+    /// default 8 matches c5's pre-existing struct-layout behavior
     /// (no packing); any explicit `#pragma pack(N)` lowers it.
     pub fn current_pack(&self) -> usize {
         self.pack
@@ -920,7 +924,7 @@ impl Lexer {
     /// like other pragmas, because pack is source-position-
     /// dependent in a way the per-translation-unit `dylibs` /
     /// `bindings` accumulator can't capture).
-    /// Tokenise a wide string (`L"..."`, `u"..."`, `U"..."`) or wide
+    /// Tokenize a wide string (`L"..."`, `u"..."`, `U"..."`) or wide
     /// character (`L'...'`) literal. Caller has consumed the prefix;
     /// `self.pos` points at the opening quote. Characters are emitted
     /// into `data` as little-endian values `elem_bytes` wide, one per
@@ -1056,9 +1060,9 @@ impl Lexer {
     /// Encoding prefix shared by the run of adjacent string literals
     /// starting at `at`. C99 6.4.5p4 makes a run mixing unprefixed and
     /// prefixed parts one literal carrying that prefix; two different
-    /// prefixes in one run have no defined result, and GCC and clang
-    /// both reject it. Scans without consuming: the parts are lexed
-    /// afterwards at the width this resolves to.
+    /// prefixes in one run have no defined result and are rejected. Scans
+    /// without consuming: the parts are lexed afterwards at the width this
+    /// resolves to.
     fn survey_string_run(&self, at: usize) -> Result<StrPrefix, C5Error> {
         let mut pos = at;
         let mut line = self.line;
@@ -1463,8 +1467,8 @@ impl Lexer {
                         self.check_escape_range(esc, acc, 1)?;
                         val = acc;
                     }
-                    // Unknown escape -- C says undefined, GCC warns. Pass
-                    // the literal char through so legacy fixtures work.
+                    // Unknown escape -- C says undefined. Pass the literal
+                    // char through so legacy fixtures work.
                     _ => val = esc as i64,
                 }
             }
@@ -1501,8 +1505,8 @@ impl Lexer {
                 }
             }
             PackDirective::Pop(id, n) => {
-                // A pop without a matching push restores nothing; gcc
-                // and MSVC warn and continue.
+                // A pop without a matching push restores nothing, and the
+                // compilation continues.
                 let at = match &id {
                     Some(id) => self
                         .pack_saved
@@ -1559,7 +1563,7 @@ impl Lexer {
 
     /// True if the next non-whitespace byte is the start of an
     /// identifier. Used by the parse_declarator
-    /// nested-paren disambiguator to recognise the redundant-
+    /// nested-paren disambiguator to recognize the redundant-
     /// paren shape `(name[N])` -- the inner declarator is a
     /// regular identifier rather than `*name` or `(*...)`.
     pub fn peek_after_whitespace_starts_ident(&self) -> bool {
@@ -1681,7 +1685,7 @@ impl Lexer {
     /// True if the next non-whitespace byte is the start of a
     /// numeric literal -- digit or a `.` immediately followed by
     /// a digit (the `.5` form). Used by the constant-initializer
-    /// parser to recognise `-LITERAL` (where the next token will
+    /// parser to recognize `-LITERAL` (where the next token will
     /// be Num or FloatNum) without consuming the `-` until it
     /// knows what shape follows. Avoids a snapshot/restore round
     /// trip through the lexer state.
@@ -1866,7 +1870,7 @@ impl Lexer {
             .flatten()
     }
 
-    /// Finalise a numeric constant: a digit/suffix run must not be
+    /// Finalize a numeric constant: a digit/suffix run must not be
     /// immediately followed by an identifier character. `1_000`,
     /// `0x1_0000`, `1.0q` are invalid preprocessing numbers (C99 6.4.8)
     /// and require a diagnostic rather than splitting into a number plus
@@ -1891,7 +1895,7 @@ impl Lexer {
 
     /// The byte span of source line `target` in `file`, recovered by
     /// walking the `#line` markers the preprocessor embedded in the buffer
-    /// so the original (file, line) numbering is honoured. `None` when no
+    /// so the original (file, line) numbering is honored. `None` when no
     /// such line is found.
     fn line_span(&self, file: &str, target: usize) -> Option<(u32, u32)> {
         note_line_lookup();
@@ -2040,7 +2044,7 @@ impl Lexer {
                 //     preprocessor batches). Parse the args and fold
                 //     into the pack state / `visibility_stack`.
                 //   * Any other `#` line -- (shebangs,
-                //     unrecognised pragmas, stray `#`s the
+                //     unrecognized pragmas, stray `#`s the
                 //     preprocessor didn't consume). Skip to EOL.
                 let line_start = self.pos;
                 let mut line_end = line_start;
@@ -2062,6 +2066,8 @@ impl Lexer {
                     self.apply_visibility_directive(dir);
                 } else if let Some(state) = parse_pragma_fp_contract_line(body) {
                     self.fp_contract = state.unwrap_or(self.fp_contract_default);
+                } else if let Ok(line) = core::str::from_utf8(body) {
+                    self.segments.apply_line(line);
                 }
                 self.pos = line_end;
             } else if c.is_ascii_alphabetic()
@@ -2174,7 +2180,7 @@ impl Lexer {
                 {
                     let mark = self.pos;
                     self.pos += 1;
-                    // C23 / GCC extension: `0b`/`0B` prefixes a binary
+                    // C23 / GNU C extension: `0b`/`0B` prefixes a binary
                     // integer literal. Accumulate via wrapping_mul so a
                     // 64-bit pattern (`0b1...64...`) doesn't trip
                     // debug-build overflow detection.
@@ -2280,8 +2286,8 @@ impl Lexer {
                     // overflow rather than panicking under debug
                     // builds. C99 says any integer constant outside
                     // the representable range has implementation-
-                    // defined behavior; clang and gcc both fold to
-                    // the wrapped value at the chosen type's width.
+                    // defined behavior; it folds to the wrapped value
+                    // at the chosen type's width.
                     val = (val as u64)
                         .wrapping_mul(10)
                         .wrapping_add((nc as u8 - b'0') as u64) as i64;
@@ -2656,14 +2662,14 @@ impl Lexer {
                         } else if matches!(c, ' ' | '\t' | '\r' | '\x0B' | '\x0C' | '\0') {
                             // C99 6.4p3 white-space characters separate
                             // tokens and are otherwise ignored. A NUL is
-                            // ignored too, following gcc.
+                            // ignored too.
                             continue;
                         } else if c as u32 == 0xEF
                             && self.src.get(self.pos) == Some(&0xBB)
                             && self.src.get(self.pos + 1) == Some(&0xBF)
                         {
                             // UTF-8 byte-order mark; accepted and
-                            // skipped, following gcc and clang.
+                            // skipped.
                             self.pos += 2;
                             continue;
                         } else {
@@ -2736,12 +2742,11 @@ fn add_keyword(symbols: &mut Vec<Symbol>, index: &mut SymbolIndex, name: &str, t
     index.record(hash);
 }
 
-/// The Microsoft keywords the PE targets take, as clang does for a
-/// windows-msvc triple: `__ptr32` makes the pointer it follows 32 bits
-/// wide; `__ptr64` (a pointer is 64 bits there already), `__w64` (a
-/// portability marker), `__sptr` / `__uptr` (how a 32-bit pointer extends)
-/// and `__unaligned` (an access that may be misaligned, which both PE
-/// targets' loads and stores allow) qualify without effect;
+/// The Microsoft keywords the PE targets take: `__ptr32` makes the pointer
+/// it follows 32 bits wide; `__ptr64` (a pointer is 64 bits there already),
+/// `__w64` (a portability marker), `__sptr` / `__uptr` (how a 32-bit
+/// pointer extends) and `__unaligned` (an access that may be misaligned,
+/// which both PE targets' loads and stores allow) qualify without effect;
 /// `__builtin_alignof` is `_Alignof`; and `__try`, `__except`, `__finally`
 /// and `__leave` are the structured exception handling statements, which
 /// clang leaves identifiers off a windows-msvc triple.
@@ -2816,7 +2821,7 @@ const KEYWORDS: &[(&str, Token)] = &[
     ("__declspec", Token::Attribute),
     // MSVC inline spellings. `__inline` / `_inline` are hints (the C99
     // keyword); `__forceinline` is a mandatory request tracked distinctly so
-    // the inliner can diagnose a request it cannot honour.
+    // the inliner can diagnose a request it cannot honor.
     ("__forceinline", Token::ForceInline),
     ("__inline", Token::Inline),
     ("_inline", Token::Inline),
@@ -2839,7 +2844,7 @@ const KEYWORDS: &[(&str, Token)] = &[
     ("float", Token::Float),
     ("double", Token::Double),
     ("_Thread_local", Token::ThreadLocal),
-    // GCC / clang spelling of the C11 thread-local storage class,
+    // GNU C spelling of the C11 thread-local storage class,
     // equivalent to `_Thread_local` for storage-duration purposes.
     ("__thread", Token::ThreadLocal),
     ("extern", Token::Extern),
@@ -2872,7 +2877,7 @@ const KEYWORDS: &[(&str, Token)] = &[
     ("__restrict", Token::TypeQual),
     ("__restrict__", Token::TypeQual),
     // x86 named-address-space qualifiers: an access through such a type
-    // rides a `%gs:` / `%fs:` segment override (GCC named address spaces).
+    // rides a `%gs:` / `%fs:` segment override (GNU C named address spaces).
     ("__seg_gs", Token::TypeQual),
     ("__seg_fs", Token::TypeQual),
     // MSVC calling-convention decorations. Each badc target has a
@@ -2914,7 +2919,7 @@ const KEYWORDS: &[(&str, Token)] = &[
     // C11 _Noreturn (6.7.4): the function never returns to its
     // caller. Recorded on the function symbol so the reachability
     // analysis treats a call to it as not reaching its continuation.
-    // `noreturn` is the <stdnoreturn.h> macro spelling, recognised
+    // `noreturn` is the <stdnoreturn.h> macro spelling, recognized
     // under the same token so source using the keyword without the
     // header still parses.
     ("asm", Token::Asm),
@@ -3134,7 +3139,7 @@ mod tests {
 
     /// Lex a single source-text string through `Lexer::next` and
     /// return the bytes the lexer pushed into `data`. Used to pin
-    /// the escape-sequence behaviour of string literals.
+    /// the escape-sequence behavior of string literals.
     fn lex_string_literal(src: &str) -> Vec<u8> {
         lex_string_literal_w(src, 4)
     }
@@ -3317,11 +3322,10 @@ mod tests {
 
     #[test]
     fn multi_character_constant_narrows_to_int() {
-        // C99 6.4.4.4p10 gives every character constant type `int`, so
-        // the packed bytes wrap into that width rather than widening the
-        // constant. Each byte is masked on the way in, so the values do
-        // not depend on the target's plain-char signedness. gcc-16 and
-        // clang produce the same numbers.
+        // C99 6.4.4.4p10 gives every character constant type `int`, so the
+        // packed bytes wrap into that width rather than widening the
+        // constant. Each byte is masked on the way in, so the values do not
+        // depend on the target's plain-char signedness; they are gcc 16's.
         assert_eq!(lex_char_literal(r#"'ab'"#), 24930);
         assert_eq!(lex_char_literal(r#"'abc'"#), 6382179);
         assert_eq!(lex_char_literal(r#"'abcd'"#), 1633837924);
@@ -3372,8 +3376,7 @@ mod tests {
 
     #[test]
     fn unknown_escape_passes_through_the_letter() {
-        // Matches GCC's implementation-defined behaviour for unknown
-        // escapes: emit the literal char.
+        // An unknown escape emits the literal char.
         assert_eq!(lex_string_literal(r#""\q""#), vec![b'q']);
     }
 
@@ -3467,9 +3470,9 @@ mod tests {
 
     #[test]
     fn string_run_rejects_two_encoding_prefixes() {
-        // C99 6.4.5p5 leaves the mixed case undefined; GCC and clang both
-        // reject it. Every ordered pair of two different prefixes, plus a
-        // run of three where the unprefixed part sits between them.
+        // C99 6.4.5p5 leaves the mixed case undefined, and it is rejected.
+        // Every ordered pair of two different prefixes, plus a run of three
+        // where the unprefixed part sits between them.
         for src in [
             r#"char *s = L"a" u"b";"#,
             r#"char *s = L"a" U"b";"#,
@@ -3539,8 +3542,7 @@ mod tests {
     #[test]
     fn utf8_prefix_joins_a_narrow_run_and_bars_a_wider_one() {
         // C11 6.4.5p5: `u8` pairs with itself and with an unprefixed
-        // part; every other pairing has no defined result and both GCC
-        // and clang reject it.
+        // part; every other pairing has no defined result and is rejected.
         for src in [
             r#"char *s = u8"a" u8"b";"#,
             r#"char *s = u8"a" "b";"#,
@@ -3621,7 +3623,7 @@ mod tests {
     fn narrow_character_constant_packs_a_universal_character_name() {
         // C99 6.4.4.4p10: the UTF-8 bytes of a code point above U+007F
         // pack as a multi-character constant, first byte most
-        // significant. GCC agrees; clang rejects the form outright.
+        // significant; the values are gcc's.
         assert_eq!(lex_char_literal(r#"'\u00E9'"#), 0xC3A9);
         assert_eq!(lex_char_literal(r#"'\u0024'"#), 0x24);
     }
@@ -3658,7 +3660,7 @@ mod tests {
     }
 
     #[test]
-    fn wide_string_literal_honours_escapes() {
+    fn wide_string_literal_honors_escapes() {
         // `\n` -> 0x0A, `\\` -> 0x5C, `\x41` -> 0x41.
         assert_eq!(
             lex_string_literal(r#"L"\n\\""#),

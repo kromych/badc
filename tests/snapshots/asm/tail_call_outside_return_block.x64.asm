@@ -26,15 +26,12 @@ Disassembly of section .text:
                	int3
 
 <make>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	movl	<rip>, %eax # <addr>
                	incq	%rax
                	movl	%eax, <rip> # <addr>
                	cmpl	$0x3e8, %r8d            # imm = 0x3E8
                	jle	<addr>
                	decq	%r8
-               	popq	%rbp
                	jmp	<addr>
                	cmpl	$0x40001, %edi          # imm = 0x40001
                	jne	<addr>
@@ -47,10 +44,8 @@ Disassembly of section .text:
                	cmpl	$0x3, %r8d
                	je	<addr>
                	xorl	%eax, %eax
-               	popq	%rbp
                	retq
                	leaq	<rip>, %rax # <addr>
-               	popq	%rbp
                	retq
 
 <wrap>:

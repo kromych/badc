@@ -1,0 +1,372 @@
+
+x86_vaes_and_vpclmulqdq_act_per_lane.x64:	file format elf64-x86-64
+
+Disassembly of section .text:
+
+<.text>:
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$<entry_off>, %esi
+               	callq	<addr>
+               	ud2
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+
+<lanes>:
+               	vmovdqa	%xmm0, %xmm3
+               	vpcmpeqb	%xmm1, %xmm3, %xmm1
+               	pmovmskb	%xmm1, %eax
+               	cmpl	$0xffff, %eax           # imm = 0xFFFF
+               	sete	%cl
+               	movzbq	%cl, %rcx
+               	xorl	%eax, %eax
+               	testq	%rcx, %rcx
+               	je	<addr>
+               	vextracti128	$0x1, %ymm0, %xmm0
+               	vpcmpeqb	%xmm2, %xmm0, %xmm0
+               	pmovmskb	%xmm0, %eax
+               	cmpl	$0xffff, %eax           # imm = 0xFFFF
+               	sete	%al
+               	movzbq	%al, %rax
+               	vzeroupper
+               	retq
+
+<main>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x80, %rsp
+               	subq	$0x40, %rsp
+               	andq	$-0x20, %rsp
+               	leaq	<rip>, %rax
+               	movups	(%rax), %xmm14
+               	movups	%xmm14, -0x10(%rbp)
+               	leaq	<rip>, %rax
+               	movups	(%rax), %xmm14
+               	movups	%xmm14, -0x20(%rbp)
+               	leaq	<rip>, %rax
+               	movups	(%rax), %xmm14
+               	movups	%xmm14, -0x30(%rbp)
+               	leaq	<rip>, %rax
+               	movups	(%rax), %xmm14
+               	movups	%xmm14, -0x40(%rbp)
+               	movups	-0x10(%rbp), %xmm2
+               	vmovdqa	%xmm2, %xmm0
+               	movups	-0x20(%rbp), %xmm3
+               	vinserti128	$0x1, %xmm3, %ymm0, %ymm0
+               	movups	-0x30(%rbp), %xmm4
+               	vmovdqa	%xmm4, %xmm1
+               	movups	-0x40(%rbp), %xmm5
+               	vinserti128	$0x1, %xmm5, %ymm1, %ymm1
+               	vmovdqa	%xmm0, %xmm6
+               	vmovdqa	%xmm1, %xmm7
+               	vaesenc	%xmm7, %xmm6, %xmm6
+               	vextracti128	$0x1, %ymm0, %xmm7
+               	vextracti128	$0x1, %ymm1, %xmm8
+               	vaesenc	%xmm8, %xmm7, %xmm7
+               	vmovq	%xmm6, %rax
+               	vmovq	%rax, %xmm8
+               	vpextrq	$0x1, %xmm6, %rax
+               	movapd	%xmm8, %xmm6
+               	vpinsrq	$0x1, %rax, %xmm6, %xmm6
+               	vmovq	%xmm7, %rax
+               	vmovq	%rax, %xmm8
+               	vpextrq	$0x1, %xmm7, %rax
+               	movapd	%xmm8, %xmm7
+               	vpinsrq	$0x1, %rax, %xmm7, %xmm7
+               	vinserti128	$0x1, %xmm7, %ymm6, %ymm6
+               	leaq	(%rsp), %r9
+               	vmovups	%ymm6, (%rsp)
+               	leaq	0x20(%rsp), %rax
+               	vaesenc	%xmm4, %xmm2, %xmm2
+               	movups	%xmm2, 0x20(%rsp)
+               	leaq	0x30(%rsp), %rcx
+               	vaesenc	%xmm5, %xmm3, %xmm2
+               	movups	%xmm2, 0x30(%rsp)
+               	vmovups	%ymm0, -0x60(%rbp)
+               	vmovups	%ymm1, -0x80(%rbp)
+               	movq	%r9, %r10
+               	vmovups	(%r10), %ymm0
+               	movq	%rax, %r10
+               	movups	(%r10), %xmm1
+               	movq	%rcx, %r10
+               	movups	(%r10), %xmm2
+               	callq	<addr>
+               	vmovups	-0x60(%rbp), %ymm0
+               	vmovups	-0x80(%rbp), %ymm1
+               	testl	%eax, %eax
+               	jne	<addr>
+               	movl	$0x1, %eax
+               	vzeroupper
+               	leave
+               	retq
+               	vmovdqa	%xmm0, %xmm2
+               	vmovdqa	%xmm1, %xmm3
+               	vaesenclast	%xmm3, %xmm2, %xmm2
+               	vextracti128	$0x1, %ymm0, %xmm3
+               	vextracti128	$0x1, %ymm1, %xmm4
+               	vaesenclast	%xmm4, %xmm3, %xmm3
+               	vmovq	%xmm2, %rax
+               	vmovq	%rax, %xmm4
+               	vpextrq	$0x1, %xmm2, %rax
+               	movapd	%xmm4, %xmm2
+               	vpinsrq	$0x1, %rax, %xmm2, %xmm2
+               	vmovq	%xmm3, %rax
+               	vmovq	%rax, %xmm4
+               	vpextrq	$0x1, %xmm3, %rax
+               	movapd	%xmm4, %xmm3
+               	vpinsrq	$0x1, %rax, %xmm3, %xmm3
+               	vinserti128	$0x1, %xmm3, %ymm2, %ymm2
+               	leaq	(%rsp), %r9
+               	vmovups	%ymm2, (%rsp)
+               	leaq	0x20(%rsp), %rax
+               	movups	-0x10(%rbp), %xmm14
+               	movups	-0x30(%rbp), %xmm15
+               	vaesenclast	%xmm15, %xmm14, %xmm2
+               	movups	%xmm2, 0x20(%rsp)
+               	leaq	0x30(%rsp), %rcx
+               	movups	-0x20(%rbp), %xmm14
+               	movups	-0x40(%rbp), %xmm15
+               	vaesenclast	%xmm15, %xmm14, %xmm2
+               	movups	%xmm2, 0x30(%rsp)
+               	vmovups	%ymm0, -0x60(%rbp)
+               	vmovups	%ymm1, -0x80(%rbp)
+               	movq	%r9, %r10
+               	vmovups	(%r10), %ymm0
+               	movq	%rax, %r10
+               	movups	(%r10), %xmm1
+               	movq	%rcx, %r10
+               	movups	(%r10), %xmm2
+               	callq	<addr>
+               	vmovups	-0x60(%rbp), %ymm0
+               	vmovups	-0x80(%rbp), %ymm1
+               	testl	%eax, %eax
+               	jne	<addr>
+               	movl	$0x2, %eax
+               	vzeroupper
+               	leave
+               	retq
+               	vmovdqa	%xmm0, %xmm2
+               	vmovdqa	%xmm1, %xmm3
+               	vaesdec	%xmm3, %xmm2, %xmm2
+               	vextracti128	$0x1, %ymm0, %xmm3
+               	vextracti128	$0x1, %ymm1, %xmm4
+               	vaesdec	%xmm4, %xmm3, %xmm3
+               	vmovq	%xmm2, %rax
+               	vmovq	%rax, %xmm4
+               	vpextrq	$0x1, %xmm2, %rax
+               	movapd	%xmm4, %xmm2
+               	vpinsrq	$0x1, %rax, %xmm2, %xmm2
+               	vmovq	%xmm3, %rax
+               	vmovq	%rax, %xmm4
+               	vpextrq	$0x1, %xmm3, %rax
+               	movapd	%xmm4, %xmm3
+               	vpinsrq	$0x1, %rax, %xmm3, %xmm3
+               	vinserti128	$0x1, %xmm3, %ymm2, %ymm2
+               	leaq	(%rsp), %r9
+               	vmovups	%ymm2, (%rsp)
+               	leaq	0x20(%rsp), %rax
+               	movups	-0x10(%rbp), %xmm14
+               	movups	-0x30(%rbp), %xmm15
+               	vaesdec	%xmm15, %xmm14, %xmm2
+               	movups	%xmm2, 0x20(%rsp)
+               	leaq	0x30(%rsp), %rcx
+               	movups	-0x20(%rbp), %xmm14
+               	movups	-0x40(%rbp), %xmm15
+               	vaesdec	%xmm15, %xmm14, %xmm2
+               	movups	%xmm2, 0x30(%rsp)
+               	vmovups	%ymm0, -0x60(%rbp)
+               	vmovups	%ymm1, -0x80(%rbp)
+               	movq	%r9, %r10
+               	vmovups	(%r10), %ymm0
+               	movq	%rax, %r10
+               	movups	(%r10), %xmm1
+               	movq	%rcx, %r10
+               	movups	(%r10), %xmm2
+               	callq	<addr>
+               	vmovups	-0x60(%rbp), %ymm0
+               	vmovups	-0x80(%rbp), %ymm1
+               	testl	%eax, %eax
+               	jne	<addr>
+               	movl	$0x3, %eax
+               	vzeroupper
+               	leave
+               	retq
+               	vmovdqa	%xmm0, %xmm2
+               	vmovdqa	%xmm1, %xmm3
+               	vaesdeclast	%xmm3, %xmm2, %xmm2
+               	vextracti128	$0x1, %ymm0, %xmm3
+               	vextracti128	$0x1, %ymm1, %xmm4
+               	vaesdeclast	%xmm4, %xmm3, %xmm3
+               	vmovq	%xmm2, %rax
+               	vmovq	%rax, %xmm4
+               	vpextrq	$0x1, %xmm2, %rax
+               	movapd	%xmm4, %xmm2
+               	vpinsrq	$0x1, %rax, %xmm2, %xmm2
+               	vmovq	%xmm3, %rax
+               	vmovq	%rax, %xmm4
+               	vpextrq	$0x1, %xmm3, %rax
+               	movapd	%xmm4, %xmm3
+               	vpinsrq	$0x1, %rax, %xmm3, %xmm3
+               	vinserti128	$0x1, %xmm3, %ymm2, %ymm2
+               	leaq	(%rsp), %r9
+               	vmovups	%ymm2, (%rsp)
+               	leaq	0x20(%rsp), %rax
+               	movups	-0x10(%rbp), %xmm14
+               	movups	-0x30(%rbp), %xmm15
+               	vaesdeclast	%xmm15, %xmm14, %xmm2
+               	movups	%xmm2, 0x20(%rsp)
+               	leaq	0x30(%rsp), %rcx
+               	movups	-0x20(%rbp), %xmm14
+               	movups	-0x40(%rbp), %xmm15
+               	vaesdeclast	%xmm15, %xmm14, %xmm2
+               	movups	%xmm2, 0x30(%rsp)
+               	vmovups	%ymm0, -0x60(%rbp)
+               	vmovups	%ymm1, -0x80(%rbp)
+               	movq	%r9, %r10
+               	vmovups	(%r10), %ymm0
+               	movq	%rax, %r10
+               	movups	(%r10), %xmm1
+               	movq	%rcx, %r10
+               	movups	(%r10), %xmm2
+               	callq	<addr>
+               	vmovups	-0x60(%rbp), %ymm0
+               	vmovups	-0x80(%rbp), %ymm1
+               	testl	%eax, %eax
+               	jne	<addr>
+               	movl	$0x4, %eax
+               	vzeroupper
+               	leave
+               	retq
+               	vmovdqa	%xmm0, %xmm2
+               	vmovdqa	%xmm1, %xmm3
+               	vpclmulqdq	$0x0, %xmm3, %xmm2, %xmm2
+               	vextracti128	$0x1, %ymm0, %xmm3
+               	vextracti128	$0x1, %ymm1, %xmm4
+               	vpclmulqdq	$0x0, %xmm4, %xmm3, %xmm3
+               	vmovq	%xmm2, %rax
+               	vmovq	%rax, %xmm4
+               	vpextrq	$0x1, %xmm2, %rax
+               	movapd	%xmm4, %xmm2
+               	vpinsrq	$0x1, %rax, %xmm2, %xmm2
+               	vmovq	%xmm3, %rax
+               	vmovq	%rax, %xmm4
+               	vpextrq	$0x1, %xmm3, %rax
+               	movapd	%xmm4, %xmm3
+               	vpinsrq	$0x1, %rax, %xmm3, %xmm3
+               	vinserti128	$0x1, %xmm3, %ymm2, %ymm2
+               	leaq	(%rsp), %r9
+               	vmovups	%ymm2, (%rsp)
+               	leaq	0x20(%rsp), %rax
+               	movups	-0x10(%rbp), %xmm14
+               	movups	-0x30(%rbp), %xmm15
+               	vpclmulqdq	$0x0, %xmm15, %xmm14, %xmm2
+               	movups	%xmm2, 0x20(%rsp)
+               	leaq	0x30(%rsp), %rcx
+               	movups	-0x20(%rbp), %xmm14
+               	movups	-0x40(%rbp), %xmm15
+               	vpclmulqdq	$0x0, %xmm15, %xmm14, %xmm2
+               	movups	%xmm2, 0x30(%rsp)
+               	vmovups	%ymm0, -0x60(%rbp)
+               	vmovups	%ymm1, -0x80(%rbp)
+               	movq	%r9, %r10
+               	vmovups	(%r10), %ymm0
+               	movq	%rax, %r10
+               	movups	(%r10), %xmm1
+               	movq	%rcx, %r10
+               	movups	(%r10), %xmm2
+               	callq	<addr>
+               	vmovups	-0x60(%rbp), %ymm0
+               	vmovups	-0x80(%rbp), %ymm1
+               	testl	%eax, %eax
+               	jne	<addr>
+               	movl	$0x5, %eax
+               	vzeroupper
+               	leave
+               	retq
+               	vmovdqa	%xmm0, %xmm2
+               	vmovdqa	%xmm1, %xmm3
+               	vpclmulqdq	$0x11, %xmm3, %xmm2, %xmm2
+               	vextracti128	$0x1, %ymm0, %xmm3
+               	vextracti128	$0x1, %ymm1, %xmm4
+               	vpclmulqdq	$0x11, %xmm4, %xmm3, %xmm3
+               	vmovq	%xmm2, %rax
+               	vmovq	%rax, %xmm4
+               	vpextrq	$0x1, %xmm2, %rax
+               	movapd	%xmm4, %xmm2
+               	vpinsrq	$0x1, %rax, %xmm2, %xmm2
+               	vmovq	%xmm3, %rax
+               	vmovq	%rax, %xmm4
+               	vpextrq	$0x1, %xmm3, %rax
+               	movapd	%xmm4, %xmm3
+               	vpinsrq	$0x1, %rax, %xmm3, %xmm3
+               	vinserti128	$0x1, %xmm3, %ymm2, %ymm2
+               	leaq	(%rsp), %r9
+               	vmovups	%ymm2, (%rsp)
+               	leaq	0x20(%rsp), %rax
+               	movups	-0x10(%rbp), %xmm14
+               	movups	-0x30(%rbp), %xmm15
+               	vpclmulqdq	$0x11, %xmm15, %xmm14, %xmm2
+               	movups	%xmm2, 0x20(%rsp)
+               	leaq	0x30(%rsp), %rcx
+               	movups	-0x20(%rbp), %xmm14
+               	movups	-0x40(%rbp), %xmm15
+               	vpclmulqdq	$0x11, %xmm15, %xmm14, %xmm2
+               	movups	%xmm2, 0x30(%rsp)
+               	vmovups	%ymm0, -0x60(%rbp)
+               	vmovups	%ymm1, -0x80(%rbp)
+               	movq	%r9, %r10
+               	vmovups	(%r10), %ymm0
+               	movq	%rax, %r10
+               	movups	(%r10), %xmm1
+               	movq	%rcx, %r10
+               	movups	(%r10), %xmm2
+               	callq	<addr>
+               	vmovups	-0x60(%rbp), %ymm0
+               	vmovups	-0x80(%rbp), %ymm1
+               	testl	%eax, %eax
+               	jne	<addr>
+               	movl	$0x6, %eax
+               	vzeroupper
+               	leave
+               	retq
+               	leaq	<rip>, %rax
+               	movups	(%rax), %xmm3
+               	vmovdqa	%xmm0, %xmm2
+               	vmovdqa	%xmm1, %xmm4
+               	vaesenc	%xmm4, %xmm2, %xmm2
+               	vextracti128	$0x1, %ymm0, %xmm0
+               	vextracti128	$0x1, %ymm1, %xmm1
+               	vaesenc	%xmm1, %xmm0, %xmm0
+               	vmovq	%xmm2, %rax
+               	vmovq	%rax, %xmm1
+               	vpextrq	$0x1, %xmm2, %rax
+               	vpinsrq	$0x1, %rax, %xmm1, %xmm1
+               	vmovq	%xmm0, %rax
+               	vmovq	%rax, %xmm2
+               	vpextrq	$0x1, %xmm0, %rax
+               	movapd	%xmm2, %xmm0
+               	vpinsrq	$0x1, %rax, %xmm0, %xmm0
+               	vinserti128	$0x1, %xmm0, %ymm1, %ymm0
+               	vpcmpeqb	%xmm3, %xmm0, %xmm0
+               	pmovmskb	%xmm0, %eax
+               	xorl	%ecx, %ecx
+               	movl	$0x7, %edx
+               	cmpl	$0xffff, %eax           # imm = 0xFFFF
+               	cmovneq	%rdx, %rcx
+               	movq	%rcx, %rax
+               	vzeroupper
+               	leave
+               	retq

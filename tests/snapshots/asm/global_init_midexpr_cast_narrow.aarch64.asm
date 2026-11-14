@@ -21,48 +21,46 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x30]
+               	ldrsw	x0, [x0, #0x20]
                	cmp	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x38]
-               	mov	x17, #-0x1              // =-1
-               	cmp	w0, w17
+               	ldrsw	x0, [x0, #0x24]
+               	cmn	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	ldr	w0, [x0, #0x40]
-               	eor	x0, x0, #0x1
-               	cbz	w0, <addr>
+               	ldr	w0, [x0, #0x28]
+               	cmp	w0, #0x1
+               	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x48]
+               	ldrsw	x0, [x0, #0x2c]
                	cmp	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x50]
+               	ldrsw	x0, [x0, #0x30]
                	cmp	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	ldr	x1, [x0, #0x20]
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	cmp	x1, x2
+               	ldr	x0, [x0, <lo12>]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	cmp	x0, x1
                	b.ne	<addr>
-               	ldr	x0, [x0, #0x20]
                	ldrsw	x0, [x0]
                	cmp	w0, #0x63
                	b.eq	<addr>

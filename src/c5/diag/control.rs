@@ -56,6 +56,10 @@ pub struct Config {
     per_code_errors: BTreeMap<u16, bool>,
     /// `-fpermissive`.
     permissive: bool,
+    /// `-Wall`.
+    all: bool,
+    /// An edition before C99; see [`Self::pre_c99`].
+    pre_c99: bool,
 }
 
 /// The rows gcc 14's `-fpermissive` lowers from their error default to
@@ -68,7 +72,7 @@ const PERMISSIVE: [Code; 4] = [
 ];
 
 impl Config {
-    /// The empty configuration: every row at its catalogue default.
+    /// The empty configuration: every row at its catalog default.
     /// `const` so an options struct carrying one has a `const`
     /// constructor.
     pub const fn new() -> Self {
@@ -78,13 +82,22 @@ impl Config {
             errors: false,
             per_code_errors: BTreeMap::new(),
             permissive: false,
+            all: false,
+            pre_c99: false,
         }
+    }
+
+    /// The edition is one before C99, where an implicit `int` is valid
+    /// (C90 6.5.2): only `-Wall` or the row's own selector reports it.
+    pub fn pre_c99(&mut self, on: bool) {
+        self.pre_c99 = on;
     }
 
     /// `-W<sel>` / `-Wno-<sel>`. A selector naming an uncontrollable or
     /// a retired row changes nothing.
     pub fn set_level(&mut self, code: Code, level: Level) {
-        if is_settable(code) {
+        let note_off = code.class() == Class::Note && level == Level::Ignore;
+        if is_settable(code) || note_off {
             self.levels.insert(code.value(), level);
         }
     }
@@ -97,6 +110,7 @@ impl Config {
     /// `-Wall` / `-Wextra` / `-Wpedantic`: every row in the group that
     /// is below `Warning` is raised to it.
     pub fn enable_group(&mut self, group: Groups) {
+        self.all |= group.contains(Groups::ALL);
         for row in rows().filter(|r| r.groups.contains(group)) {
             if is_settable(row.code) && self.stated_level(row.code) < Level::Warning {
                 self.levels.insert(row.code.value(), Level::Warning);
@@ -123,6 +137,14 @@ impl Config {
 
     /// The level before any pragma applies.
     pub fn level(&self, code: Code) -> Level {
+        if code.class() == Class::Note && code.status() == Status::Live {
+            let off = self.inhibit || self.levels.get(&code.value()) == Some(&Level::Ignore);
+            return if off {
+                Level::Ignore
+            } else {
+                code.default_level()
+            };
+        }
         if !is_settable(code) {
             return match code.status() {
                 Status::Retired => Level::Ignore,
@@ -153,15 +175,22 @@ impl Config {
 
     /// The level the options stated, before `-w` and `-Werror`.
     fn stated_level(&self, code: Code) -> Level {
-        self.levels
-            .get(&code.value())
-            .copied()
-            .unwrap_or_else(|| code.default_level())
+        match self.levels.get(&code.value()) {
+            Some(&level) => level,
+            None if self.pre_c99 && code == Code::IMPLICIT_INT => {
+                if self.all {
+                    Level::Warning
+                } else {
+                    Level::Ignore
+                }
+            }
+            None => code.default_level(),
+        }
     }
 }
 
 /// Whether an option or a pragma may move this row's level. A hard or
-/// a retired row keeps its catalogue level whatever the source asks.
+/// a retired row keeps its catalog level whatever the source asks.
 fn is_settable(code: Code) -> bool {
     code.class() == Class::Controllable && code.status() == Status::Live
 }

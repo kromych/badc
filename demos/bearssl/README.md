@@ -15,9 +15,9 @@ vendor-deps mirror -- see `setup.py`.
 ## Smoke scenarios
 
 `smoke.py` builds the focused BearSSL set + a
-hand-written driver through badc in four flavours (amalgamation
+hand-written driver through badc in four flavors (amalgamation
 + separate-TU compile, each at `-O` and no-`-O`), plus an
-archive flavour, and runs each binary. Four scenarios:
+archive flavor, and runs each binary. Four scenarios:
 
 | Scenario              | What it asserts                                                                                              |
 |-----------------------|--------------------------------------------------------------------------------------------------------------|

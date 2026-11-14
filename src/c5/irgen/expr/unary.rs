@@ -16,7 +16,7 @@ impl<'a> Walker<'a> {
         child: ExprId,
         ty: i64,
     ) -> Result<ValueId, WalkError> {
-        // GCC vector extension: `-v` / `~v` are element-wise.
+        // GNU C vector extension: `-v` / `~v` are element-wise.
         if matches!(op, UnOp::Neg | UnOp::BitNot) && is_vector_ty(self.structs, ty) {
             return self.walk_vector_unary(b, op, child, ty);
         }
@@ -130,20 +130,21 @@ impl<'a> Walker<'a> {
         // `_Bool` tests it (6.3.1.2).
         if self.is_int128_value_ty(src_ty) && !is_struct_ty(to_ty) {
             let v = self.flatten_copy_operand(b, child, v)?;
+            let align = self.int128_align(child);
             if is_floating_scalar(to_ty) {
-                let pair = self.int128_load(b, v);
+                let pair = Self::int128_load_at(b, v, false, align);
                 let signed = (src_ty & UNSIGNED_BIT) == 0;
                 return Ok(self.int128_to_fp(b, pair, signed, is_float_ty(to_ty)));
             }
             if is_bool_scalar(to_ty) {
-                let pair = self.int128_load(b, v);
+                let pair = Self::int128_load_at(b, v, false, align);
                 return Ok(Self::int128_to_bool(b, pair));
             }
             let low_ty = Ty::LongLong as i64 | UNSIGNED_BIT;
-            let low = b.load(v, load_kind_for(low_ty, self.target));
+            let low = b.load_at(v, load_kind_for(low_ty, self.target), false, align);
             return Ok(self.convert_scalar_value(b, low, low_ty, to_ty));
         }
-        // The reverse: a scalar cast to a 128-bit type materialises a
+        // The reverse: a scalar cast to a 128-bit type materializes a
         // 16-byte object, whose address is the value.
         if !is_struct_ty(src_ty) && self.is_int128_value_ty(to_ty) {
             let slot = b.alloc_synthetic_struct(16, 8);

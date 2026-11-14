@@ -2,8 +2,8 @@
 """End-to-end smoke for badc against the TweetNaCl 20140427 source.
 
 Builds tweetnacl.c + a hand-written driver through badc in the
-same four flavours the other demos use (amalg / TU x -O / no-O)
-plus the archive flavour, and runs each binary. Returns 0 on
+same four flavors the other demos use (amalg / TU x -O / no-O)
+plus the archive flavor, and runs each binary. Returns 0 on
 success, non-zero with a diagnostic on failure.
 
 TweetNaCl is the auditable NaCl implementation: Salsa20, Poly1305,

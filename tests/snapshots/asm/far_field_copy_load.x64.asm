@@ -54,8 +54,8 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	leaq	<rip>, %rdi # <addr>
-               	movb	$0x9, <rip> # <addr>
-               	movb	$0x2, <rip> # <addr>
+               	movw	$0x209, <rip> # imm = 0x209
+                                                # <addr>
                	movb	$0x3, <rip> # <addr>
                	movb	$0x5, <rip> # <addr>
                	movb	$0x7, <rip> # <addr>

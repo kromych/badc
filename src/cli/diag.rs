@@ -12,7 +12,7 @@ pub(crate) fn eprint_diagnostic(msg: impl core::fmt::Display) {
 }
 
 /// Add ANSI color around the severity word (`warning:`, `error:`,
-/// `info:` / `note:`) inside a diagnostic line. Accepts either the gcc
+/// `info:` / `note:`) inside a diagnostic line. Accepts either the GNU
 /// shape `<file>:<line>: warning: <msg>` or any line whose severity
 /// word is followed by a colon and a space; the rest stays untouched.
 /// Falls through unchanged when stderr isn't a TTY so build logs stay
@@ -55,7 +55,7 @@ pub(crate) fn colorize_diagnostic(line: &str, is_tty: bool) -> std::borrow::Cow<
     std::borrow::Cow::Borrowed(line)
 }
 
-/// One diagnostic as this driver prints it: its own colour when stderr
+/// One diagnostic as this driver prints it: its own color when stderr
 /// is a terminal, keyed on the level rather than on a scan of the text.
 pub(crate) fn rendered(diagnostic: &badc::diag::Diagnostic, tty: bool) -> String {
     let mut out = String::new();
@@ -64,8 +64,8 @@ pub(crate) fn rendered(diagnostic: &badc::diag::Diagnostic, tty: bool) -> String
 }
 
 /// A failed phase's error as this driver prints it: one line per
-/// diagnostic it carries, each coloured by its own level, every line
-/// under `prefix`. A runtime fault has one line, coloured by its text.
+/// diagnostic it carries, each colored by its own level, every line
+/// under `prefix`. A runtime fault has one line, colored by its text.
 pub(crate) fn error_lines(prefix: &str, e: &badc::C5Error, tty: bool) -> Vec<String> {
     match e {
         badc::C5Error::Compile(diagnostics) => diagnostics
@@ -86,7 +86,7 @@ pub(crate) fn eprint_error(prefix: &str, e: &badc::C5Error) {
 
 /// Print a unit's diagnostics and report whether it may go on. A
 /// warning raised to an error does not unwind at its site: the unit
-/// parses whole and fails here, at the phase boundary, as gcc does.
+/// parses whole and fails here, at the phase boundary.
 pub(crate) fn report_unit_diagnostics(
     log: &mut TuLog,
     tty: bool,
@@ -98,9 +98,9 @@ pub(crate) fn report_unit_diagnostics(
     report_diagnostics(log, tty, &program.warnings)
 }
 
-/// Print a phase's catalogued diagnostics and report whether the unit may
+/// Print a phase's cataloged diagnostics and report whether the unit may
 /// go on: one at the error level fails it here, at the phase boundary, and
-/// one a warning raised says so, as gcc's `-Werror` note does.
+/// one a warning raised adds the `warnings treated as errors` note.
 pub(crate) fn report_diagnostics(
     log: &mut TuLog,
     tty: bool,

@@ -256,7 +256,7 @@ fn sockaddr_storage_is_pointer_aligned_on_linux() {
         ty: "struct sockaddr_storage",
         size: 128,
         align: 8,
-        members: &[("ss_family", 0), ("ss_pad", 2)],
+        members: &[("ss_family", 0), ("__ss_padding", 2), ("__ss_align", 120)],
     }));
 }
 
@@ -852,6 +852,36 @@ fn a_mismatched_layout_is_rejected() {
 /// `DWORD` is `unsigned long`, the string pointers are const-correct, and
 /// under `STRICT` each handle points at a struct of its own. The PE image
 /// records take winnt.h's packing.
+/// MSVC's name for XCR0's `_xgetbv` index.
+#[test]
+fn immintrin_h_names_the_xcr0_index() {
+    for target in [Target::LinuxX64, Target::WindowsX64] {
+        check_values(
+            target,
+            &["immintrin.h"],
+            &[("_XCR_XFEATURE_ENABLED_MASK", 0)],
+        );
+    }
+}
+
+/// winnt.h's reasons a DLL entry point or a TLS callback is called for.
+#[test]
+fn windows_h_names_the_dll_entry_reasons() {
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        check_values(
+            target,
+            &["windows.h"],
+            &[
+                ("DLL_PROCESS_DETACH".to_string(), 0),
+                ("DLL_PROCESS_ATTACH".to_string(), 1),
+                ("DLL_THREAD_ATTACH".to_string(), 2),
+                ("DLL_THREAD_DETACH".to_string(), 3),
+                ("DLL_PROCESS_VERIFIER".to_string(), 4),
+            ],
+        );
+    }
+}
+
 #[test]
 fn windows_h_spells_the_sdk_types() {
     const H: &[&str] = &["windows.h"];
@@ -1038,6 +1068,21 @@ fn windows_h_leaves_the_dpi_enums_to_shellscalingapi_h() {
     let src = "#include <windows.h>\n\
                typedef enum MONITOR_DPI_TYPE { MDT_EFFECTIVE_DPI = 0 } MONITOR_DPI_TYPE;\n\
                int dpi(MONITOR_DPI_TYPE t) { return t == MDT_EFFECTIVE_DPI; }\n";
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        if let Err(err) = compile(src, target) {
+            panic!("{}: {err}", target.id_str());
+        }
+    }
+}
+
+/// winnt.h's spin-wait hint, `YieldProcessor()`, is `_mm_pause` on x64 and
+/// `__yield` on arm64, and `NtCurrentTeb()` reads gs:0x30 and x18, as the
+/// SDK defines them.
+#[test]
+fn windows_h_defines_yield_processor_and_nt_current_teb() {
+    let src = "#include <windows.h>\n#include <fibersapi.h>\n\
+               void spin(volatile long *f) { while (!*f) YieldProcessor(); }\n\
+               void *teb(void) { return NtCurrentTeb(); }\n";
     for target in [Target::WindowsX64, Target::WindowsAarch64] {
         if let Err(err) = compile(src, target) {
             panic!("{}: {err}", target.id_str());
@@ -1410,5 +1455,31 @@ fn msvc_compat_defines_ms_extensions() {
     let off = "#include <msvc_compat.h>\n#if defined(_MSC_EXTENSIONS)\n#error on\n#endif\n";
     for target in [Target::LinuxX64, Target::MacOSAarch64] {
         compile(off, target).unwrap_or_else(|e| panic!("{target:?}: {e}"));
+    }
+}
+
+/// `RAND_MAX`, `clock_t` and `CLOCKS_PER_SEC` are the C library's: msvcrt's
+/// 15-bit `rand` and 32-bit millisecond `clock` on Windows, glibc's and
+/// Darwin's 31-bit `rand` and microsecond `clock` elsewhere, Darwin's
+/// `clock_t` unsigned.
+#[test]
+fn rand_and_clock_constants_are_the_c_librarys() {
+    for (target, rand_max, clock_bytes, per_sec, unsigned) in [
+        (Target::LinuxX64, 0x7FFF_FFFF, 8, 1_000_000, 0),
+        (Target::LinuxAarch64, 0x7FFF_FFFF, 8, 1_000_000, 0),
+        (Target::MacOSAarch64, 0x7FFF_FFFF, 8, 1_000_000, 1),
+        (Target::WindowsX64, 0x7FFF, 4, 1000, 0),
+        (Target::WindowsAarch64, 0x7FFF, 4, 1000, 0),
+    ] {
+        let src = alloc::format!(
+            "#include <stdlib.h>\n#include <time.h>\n\
+             _Static_assert(RAND_MAX == {rand_max}, \"RAND_MAX\");\n\
+             _Static_assert(sizeof(clock_t) == {clock_bytes}, \"clock_t\");\n\
+             _Static_assert(CLOCKS_PER_SEC == {per_sec}, \"CLOCKS_PER_SEC\");\n\
+             _Static_assert(((clock_t)-1 > 0) == {unsigned}, \"signedness\");\n"
+        );
+        if let Err(err) = compile(&src, target) {
+            panic!("{}: {err}", target.id_str());
+        }
     }
 }

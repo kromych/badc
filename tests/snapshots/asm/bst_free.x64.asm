@@ -38,48 +38,44 @@ Disassembly of section .text:
                	movq	0x10(%rbx), %rdi
                	callq	<addr>
                	movq	%rbx, %rdi
-               	xorl	%eax, %eax
-               	callq	<addr>
                	popq	%rbx
                	leave
-               	retq
+               	jmp	<addr>
                	retq
 
 <insert>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	pushq	%r12
-               	pushq	%rbx
-               	movq	%rdi, %rbx
-               	movq	%rsi, %r12
-               	testq	%rbx, %rbx
+               	subq	$0x10, %rsp
+               	testq	%rdi, %rdi
                	jne	<addr>
                	movl	$0x18, %edi
-               	xorl	%eax, %eax
+               	movq	%rsi, (%rsp)
                	callq	<addr>
-               	movq	%r12, (%rax)
+               	movq	(%rsp), %rsi
+               	movq	%rsi, (%rax)
                	movq	$0x0, 0x8(%rax)
                	movq	$0x0, 0x10(%rax)
-               	popq	%rbx
-               	popq	%r12
-               	popq	%rbp
+               	leave
                	retq
-               	movq	(%rbx), %rax
-               	cmpq	%rax, %r12
+               	movq	(%rdi), %rax
+               	cmpq	%rax, %rsi
                	jge	<addr>
-               	movq	0x8(%rbx), %rdi
-               	movq	%r12, %rsi
+               	movq	0x8(%rdi), %rax
+               	movq	%rdi, 0x8(%rsp)
+               	movq	%rax, %rdi
                	callq	<addr>
-               	movq	%rax, 0x8(%rbx)
-               	movq	%rbx, %rax
-               	popq	%rbx
-               	popq	%r12
-               	popq	%rbp
+               	movq	0x8(%rsp), %rdi
+               	movq	%rax, 0x8(%rdi)
+               	movq	%rdi, %rax
+               	leave
                	retq
-               	movq	0x10(%rbx), %rdi
-               	movq	%r12, %rsi
+               	movq	0x10(%rdi), %rax
+               	movq	%rdi, 0x8(%rsp)
+               	movq	%rax, %rdi
                	callq	<addr>
-               	movq	%rax, 0x10(%rbx)
+               	movq	0x8(%rsp), %rdi
+               	movq	%rax, 0x10(%rdi)
                	jmp	<addr>
 
 <main>:

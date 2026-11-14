@@ -17,7 +17,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
                	adrp	x1, <page>
-               	ldr	w1, [x1, #0x20]
+               	ldr	w1, [x1, #0x18]
                	fmov	d0, x0
                	fmov	x2, d0
                	fmov	s1, w1

@@ -46,9 +46,6 @@ Disassembly of section .text:
                	movl	<rip>, %ecx # <addr>
                	cmpl	$0x6, %ecx
                	jne	<addr>
-               	movl	<rip>, %ecx # <addr>
-               	cmpl	$0x8, %ecx
-               	jne	<addr>
                	leaq	0x10(%rax), %rcx
                	subq	%rax, %rcx
                	movq	%rcx, %rax

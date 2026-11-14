@@ -41,6 +41,7 @@ impl<'a> Walker<'a> {
         b.store_local(slot, short_val, kind_s);
         let rhs_blk = b.new_block();
         let after_blk = b.new_block();
+        b.expect(self.expected_truth(lhs));
         match op {
             // `a && b`: skip rhs when lhs == 0.
             ShortCircuitOp::Lan => b.branch_zero(lhs_t, after_blk, rhs_blk),
@@ -208,7 +209,7 @@ impl<'a> Walker<'a> {
         rhs: ExprId,
         ty: i64,
     ) -> Result<ValueId, WalkError> {
-        // A vector-typed node is element-wise (GCC vector extension),
+        // A vector-typed node is element-wise (GNU C vector extension),
         // and a 128-bit operand makes the node 128-bit whatever type it
         // carries: a comparison's result is `int`, and the parser spells
         // the unary operators as a binop against a literal.
@@ -232,7 +233,7 @@ impl<'a> Walker<'a> {
             return Ok(v);
         }
         // C99 6.6: a constant expression evaluates at translation time.
-        // The parser leaves the synthesised pointer-arithmetic scaling
+        // The parser leaves the synthesized pointer-arithmetic scaling
         // unfolded (`arr[K]` lowers to `arr + (K * sizeof(*arr))`).
         if imm_safe_binop(op)
             && let Expr::IntLit { val: lv_imm, .. } = *self.ast.expr(lhs)

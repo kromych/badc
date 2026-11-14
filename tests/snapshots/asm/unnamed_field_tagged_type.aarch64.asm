@@ -22,14 +22,12 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x48]
                	mov	x1, #0x3                // =3
                	stur	w1, [x29, #-0x40]
-               	mov	x2, #0x61               // =97
-               	sturb	w2, [x29, #-0x38]
-               	sturb	wzr, [x29, #-0x37]
+               	mov	x1, #0x61               // =97
+               	sturh	w1, [x29, #-0x38]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldrb	w2, [x0]
                	cbz	x2, <addr>
-               	ldrb	w2, [x0]
                	ldrb	w3, [x1]
                	cmp	w2, w3
                	b.ne	<addr>
@@ -58,7 +56,6 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldrb	w2, [x0]
                	cbz	x2, <addr>
-               	ldrb	w2, [x0]
                	ldrb	w3, [x1]
                	cmp	w2, w3
                	b.ne	<addr>
@@ -80,7 +77,6 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldrb	w2, [x0]
                	cbz	x2, <addr>
-               	ldrb	w2, [x0]
                	ldrb	w3, [x1]
                	cmp	w2, w3
                	b.ne	<addr>
@@ -110,7 +106,6 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldrb	w2, [x0]
                	cbz	x2, <addr>
-               	ldrb	w2, [x0]
                	ldrb	w3, [x1]
                	cmp	w2, w3
                	b.ne	<addr>
@@ -140,7 +135,6 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldrb	w2, [x0]
                	cbz	x2, <addr>
-               	ldrb	w2, [x0]
                	ldrb	w3, [x1]
                	cmp	w2, w3
                	b.ne	<addr>
@@ -183,7 +177,6 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldrb	w2, [x0]
                	cbz	x2, <addr>
-               	ldrb	w2, [x0]
                	ldrb	w3, [x1]
                	cmp	w2, w3
                	b.ne	<addr>
@@ -205,7 +198,6 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldrb	w2, [x0]
                	cbz	x2, <addr>
-               	ldrb	w2, [x0]
                	ldrb	w3, [x1]
                	cmp	w2, w3
                	b.ne	<addr>
@@ -227,7 +219,6 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldrb	w2, [x0]
                	cbz	x2, <addr>
-               	ldrb	w2, [x0]
                	ldrb	w3, [x1]
                	cmp	w2, w3
                	b.ne	<addr>

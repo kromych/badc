@@ -34,13 +34,13 @@ struct iovec {
 ssize_t readv(int fd, const struct iovec *iov, int iovcnt);
 ssize_t writev(int fd, const struct iovec *iov, int iovcnt);
 // Positioned vectored I/O (POSIX): like readv/writev at `offset`.
-ssize_t preadv(int fd, const struct iovec *iov, int iovcnt, long offset);
-ssize_t pwritev(int fd, const struct iovec *iov, int iovcnt, long offset);
+ssize_t preadv(int fd, const struct iovec *iov, int iovcnt, off_t offset);
+ssize_t pwritev(int fd, const struct iovec *iov, int iovcnt, off_t offset);
 #endif
 #ifdef __linux__
 // Positioned vectored I/O with a flags word (Linux).
-ssize_t preadv2(int fd, const struct iovec *iov, int iovcnt, long offset, int flags);
-ssize_t pwritev2(int fd, const struct iovec *iov, int iovcnt, long offset, int flags);
+ssize_t preadv2(int fd, const struct iovec *iov, int iovcnt, off_t offset, int flags);
+ssize_t pwritev2(int fd, const struct iovec *iov, int iovcnt, off_t offset, int flags);
 // Cross-address-space vectored I/O (Linux). The iovec counts and the
 // flags word are `unsigned long` in glibc's declaration, not `int`.
 ssize_t process_vm_readv(pid_t pid, const struct iovec *lvec,

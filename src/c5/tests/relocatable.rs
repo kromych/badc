@@ -33,7 +33,7 @@ fn compile_obj(src: &str, name: &str) -> EtRel {
 #[test]
 fn a_relocated_thread_local_slot_holds_zero_like_a_data_slot() {
     // The addend is in the relocation for `.rela.tdata` as for `.rela.data`,
-    // and the slot either patches holds zero, as clang and gcc write it.
+    // and the slot either patches holds zero.
     let src = "int g[4]; _Thread_local int *x = &g[2]; int *y = &g[2];";
     for target in [Target::LinuxX64, Target::LinuxAarch64] {
         let obj = parse_et_rel(&compile_bytes(src, target), "t.o").expect("parse");
@@ -332,7 +332,7 @@ fn an_internal_linkage_data_alias_names_its_target() {
         ("tbl_alias", "tbl", STB_LOCAL),
         ("glob_alias", "glob", STB_LOCAL),
         ("tbl_ext", "tbl", STB_GLOBAL),
-        // Declared `int`, the symbol still spans `glob`, as gcc sizes it.
+        // Declared `int`, the symbol still spans `glob`.
         ("glob_first", "glob", STB_GLOBAL),
     ] {
         let (al, tg) = (sym(alias), sym(target));
@@ -376,7 +376,12 @@ fn a_thread_local_aggregate_initializer_fills_the_thread_local_template() {
     assert_eq!(&words[8..10], &[9, 10], "the block-scope array");
     assert_eq!(tdata.relocs.len(), 1, "ts.p");
     assert_eq!(tdata.relocs[0].offset, 24);
-    assert_eq!(sec(".data").bytes.len(), 16, "the null guard and g alone");
+    // The NULL guard, padding to `g`'s boundary, and `g`.
+    assert_eq!(
+        sec(".data").bytes.len(),
+        4 + 8,
+        "the null guard and g alone"
+    );
 }
 
 #[test]
@@ -447,8 +452,8 @@ fn a_tentative_definition_takes_the_storage_of_its_completed_type() {
 fn a_zero_length_object_ends_the_objects_of_its_own_section() {
     // A GNU zero-length array is an object of size zero. It sits in the
     // section its type and initializer give it, after the objects defined
-    // there before it, as gcc and clang place it -- not at the start of
-    // the next section's first object.
+    // there before it -- not at the start of the next section's first
+    // object.
     let src = "const long ro_a[2] = {1, 2};\n\
                const long ro_z[0] = {};\n\
                long rw_a[2] = {3, 4};\n\
@@ -466,6 +471,48 @@ fn a_zero_length_object_ends_the_objects_of_its_own_section() {
         assert_eq!(sym("ro_z").value, sym("ro_a").value + 16, "{target:?}");
         assert_eq!(section("rw_z"), ".bss", "{target:?}");
         assert_ne!(sym("rw_z").value, sym("bss_a").value, "{target:?}");
+    }
+}
+
+#[test]
+fn an_object_initialized_to_zero_stays_in_data_under_no_zero_initialized_in_bss() {
+    // gcc `-fno-zero-initialized-in-bss`: an object whose initializer is
+    // all zeros goes to `.data`, one with no initializer to `.bss`, a
+    // block-scope `static` alike.
+    let src = "int a;\nint b = 0;\nstatic int c = 0;\nstatic int d;\nint e[4] = {0};\n\
+               int *f(void) { static int h = 0; static int k; c++; d++; h++; k++; return &h; }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_options(
+            src.to_string(),
+            target,
+            CompileOptions {
+                no_entry_point: true,
+                ..Default::default()
+            },
+        )
+        .compile()
+        .expect("compile");
+        let sections = |zero_init_in_bss: bool| {
+            let opts = NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                zero_init_in_bss,
+                ..Default::default()
+            };
+            let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+            let o = parse_et_rel(&bytes, "z.o").expect("parse");
+            ["a", "b", "c", "d", "e", "h.0", "k.1"].map(|n| {
+                match o.symbols.iter().find(|s| s.name == n).expect(n).sec {
+                    EtSymRef::Section(i) => o.sections[i].name.clone(),
+                    _ => panic!("{n} is not defined in a section"),
+                }
+            })
+        };
+        assert_eq!(sections(true), [".bss"; 7], "{target:?}");
+        assert_eq!(
+            sections(false),
+            [".bss", ".data", ".data", ".bss", ".data", ".data", ".bss"],
+            "{target:?}"
+        );
     }
 }
 
@@ -500,10 +547,10 @@ fn a_unit_without_functions_places_its_objects_as_any_unit_does() {
 fn a_pic_unit_names_its_interposable_definitions() {
     // System V gABI, symbol visibility: `-fPIC` code reaches the functions
     // and objects of default visibility it defines through their symbols,
-    // as clang -fPIC does, so the link decides whether another component
-    // preempts them -- a call by PLT relocation, an address and a read
-    // through the GOT, an initializer against the symbol. A `static` and a
-    // hidden definition stay direct.
+    // so the link decides whether another component preempts them -- a
+    // call by PLT relocation, an address and a read through the GOT, an
+    // initializer against the symbol. A `static` and a hidden definition
+    // stay direct.
     let src = "int g = 1;\nint *pg = &g;\nint f(void) { return 1; }\nint (*pf)(void) = f;\n\
                static int s(void) { return 3; }\n\
                __attribute__((visibility(\"hidden\"))) int h(void) { return 4; }\n\
@@ -574,8 +621,8 @@ fn a_block_scope_extern_thread_local_is_referenced_as_one() {
 
 #[test]
 fn a_called_function_whose_address_is_taken_has_one_undefined_entry() {
-    // The call and the address-of reach one undefined symbol, as gcc and
-    // clang write it; the symbol table holds no second entry of the name.
+    // The call and the address-of reach one undefined symbol; the symbol
+    // table holds no second entry of the name.
     let src = "int f(void);\nint g(void) { return f ? f() : 7; }\n";
     for target in [Target::LinuxX64, Target::LinuxAarch64] {
         let a = parse_et_rel(&compile_bytes(src, target), "f.o").expect("parse");
@@ -603,8 +650,7 @@ fn a_called_function_whose_address_is_taken_has_one_undefined_entry() {
 #[test]
 fn pragma_weak_binds_a_declared_reference_weak() {
     // `#pragma weak` binds a reference weak whether it stands before or
-    // after the declaration, a C-library function's included, as gcc and
-    // clang bind it.
+    // after the declaration, a C-library function's included.
     let src = "#pragma weak atoi\n#include <stdlib.h>\n\
                int f(void);\n#pragma weak f\nextern int o;\n#pragma weak o\n\
                long g(void) { return atoi(\"1\") + (f ? f() : 0) + (&o ? o : 0); }\n";
@@ -620,8 +666,8 @@ fn pragma_weak_binds_a_declared_reference_weak() {
 
 #[test]
 fn an_always_inline_call_is_inlined_without_optimization() {
-    // gcc and clang inline an `always_inline` function at -O0: no call to
-    // it and no body of it remain.
+    // An `always_inline` function inlines at -O0: no call to it and no
+    // body of it remain.
     let src = "static inline __attribute__((always_inline)) int h(int x) { return x + 1; }\n\
                int k(int x) { return h(x); }\n";
     for target in [Target::LinuxX64, Target::LinuxAarch64] {
@@ -667,10 +713,10 @@ fn locals_kept_per_object() {
 
 #[test]
 fn unreferenced_section_static_drops_its_whole_cascade() {
-    // A section attribute selects placement, not retention (gcc parity),
-    // so an unreferenced section-attributed static drops and the sweep
-    // cascades: the static function only its initializer named goes with
-    // it, and with that function goes its reference to a symbol this unit
+    // A section attribute selects placement, not retention, so an
+    // unreferenced section-attributed static drops and the sweep cascades:
+    // the static function only its initializer named goes with it, and
+    // with that function goes its reference to a symbol this unit
     // never defines: a table entry declared with a section and without
     // `used`. `used`, an ordinary reference, and a name spelled in an asm
     // template each still pin their definition.
@@ -1495,10 +1541,9 @@ fn emit_relocs_survive_into_final_elf() {
 }
 
 /// Every relocatable ELF object carries the producer identification
-/// in `.comment`, shaped as gcc and clang shape theirs: one
-/// NUL-terminated line, SHF_MERGE | SHF_STRINGS with a byte entsize,
-/// so a linker folds the identical line from many badc objects into
-/// one copy in the linked image.
+/// in `.comment`: one NUL-terminated line, SHF_MERGE | SHF_STRINGS with
+/// a byte entsize, so a linker folds the identical line from many badc
+/// objects into one copy in the linked image.
 #[test]
 fn comment_section_is_a_mergeable_single_line_identification() {
     use crate::c5::linker::object::{Elf64Ehdr, Elf64Shdr, read_struct};
@@ -2055,10 +2100,9 @@ fn compile_pie_optimized(src: &str, target: Target) -> EtRel {
 /// C99 6.7.3p5: a `const` pointer object with static storage duration
 /// holds its initializer's address for the whole execution, so at `-O`
 /// a load from it is the address constant itself and no pointer object,
-/// and no absolute relocation, reaches the object -- the form gcc's
-/// `-fpie` objects take, and the one a consumer that forbids absolute
-/// relocations outside the debug sections requires. An object whose
-/// address escapes stays, with its relocation.
+/// and no absolute relocation, reaches the object -- the form a
+/// consumer that forbids absolute relocations outside the debug sections
+/// requires. An object whose address escapes stays, with its relocation.
 #[test]
 fn const_pointer_objects_fold_to_their_address_in_a_pie_object() {
     use crate::c5::object::elf_reloc_types as rt;
@@ -2191,4 +2235,69 @@ fn a_relocatable_link_renders_gnu_ld_map_rows() {
 
     assert!(map.contains("LOAD a.o"), "inputs are listed:\n{map}");
     assert!(map.contains("OUTPUT(out.o "), "output is named:\n{map}");
+}
+
+/// C11 6.2.8: a file-scope object sits on its own type's boundary and
+/// spans its own size, and a negative initializer leaves the bytes past
+/// its object zero. The x86-64 psABI 3.1.2 puts an array variable of 16
+/// bytes or more on 16. The sections hold nothing else: `.data` the
+/// one-byte NULL guard and the initialized objects, `.bss` the rest, as
+/// gcc lays them out; the `const` object moved to `.rodata` leaves no gap.
+#[test]
+fn file_scope_objects_take_their_own_size_and_boundary() {
+    let src = "char c1 = -1; char c2; short s1; int i1; int i2; static int i3; int *p;\n\
+               const int k = 3; char t1 = -1; int arr[4] = {-1}; short s2 = -1;\n\
+               int use(void) { return c1 + c2 + s1 + i1 + i2 + i3 + (p != 0) + t1 + arr[0] + s2 + k; }\n";
+    let objects = [
+        ("c1", 1, 1),
+        ("c2", 1, 1),
+        ("s1", 2, 2),
+        ("i1", 4, 4),
+        ("i2", 4, 4),
+        ("i3", 4, 4),
+        ("p", 8, 8),
+        ("t1", 1, 1),
+        ("arr", 16, 4),
+        ("s2", 2, 2),
+    ];
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let obj = parse_et_rel(&compile_bytes(src, target), "t.o").expect("parse");
+        let data = obj
+            .sections
+            .iter()
+            .position(|s| s.name == ".data")
+            .expect(".data");
+        let mut written = alloc::vec![false; obj.sections[data].bytes.len()];
+        for (name, size, align) in objects {
+            let s = obj.symbols.iter().find(|s| s.name == name).expect(name);
+            let align = if name == "arr" && target == Target::LinuxX64 {
+                16
+            } else {
+                align
+            };
+            assert_eq!(s.size, size, "{target:?}: sizeof {name}");
+            assert_eq!(s.value % align, 0, "{target:?}: {name} at {}", s.value);
+            if matches!(s.sec, EtSymRef::Section(i) if i == data) {
+                let at = s.value as usize;
+                written[at..at + size as usize].fill(true);
+            }
+        }
+        let bytes = &obj.sections[data].bytes;
+        // guard, c1, t1, arr (on 16 or 4), s2.
+        let data_len = if target == Target::LinuxX64 { 34 } else { 22 };
+        assert_eq!(bytes.len(), data_len, "{target:?}: .data {bytes:02x?}");
+        let bss = obj
+            .sections
+            .iter()
+            .find(|s| s.name == ".bss")
+            .expect(".bss");
+        assert_eq!(bss.nobits_size, 24, "{target:?}: .bss");
+        let stray: Vec<usize> = (0..bytes.len())
+            .filter(|&i| !written[i] && bytes[i] != 0)
+            .collect();
+        assert!(
+            stray.is_empty(),
+            "{target:?}: nonzero padding at {stray:?}: {bytes:02x?}"
+        );
+    }
 }

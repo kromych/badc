@@ -1,24 +1,42 @@
-//! Whole-object vector slots as values. A two-cell object accessed only
-//! whole -- 16-byte copies and zero fills, `V128` loads and stores, 16-byte
-//! SIMD asm operands -- becomes `V128` slot accesses for mem2reg to promote,
-//! provided something reads it and it meets a SIMD operand or a vector ABI
-//! piece directly or through whole copies. A one-cell object an 8-byte SIMD
-//! operand meets becomes `F64` accesses the same way ([`cell_slots`]). An
-//! asm output keeps its address for `asm_outputs`, which makes it a value
-//! stored to the slot.
+//! Whole-object vector slots as values. A two-cell object accessed whole --
+//! 16-byte copies and zero fills, `V128` loads and stores, 16-byte SIMD asm
+//! operands -- or by lane at an offset aligned to the lane's width becomes
+//! `V128` slot accesses for mem2reg to promote, each lane access a
+//! `VecExtract` or `VecInsert` of the slot's vector; a four- or eight-cell
+//! one met by `V256` or `V512` accesses becomes one the same way at its
+//! width, provided something reads it and it meets a SIMD operand or a
+//! vector ABI piece directly or through whole copies. A one-cell object an
+//! 8-byte SIMD operand -- of an asm or a SIMD instruction -- meets becomes
+//! `F64` accesses the same way
+//! ([`cell_slots`]). An asm output keeps its address for `asm_outputs`,
+//! which makes it a value stored to the slot.
 
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 
-use super::super::abi_classify::ScalarKind;
 use super::super::ir::{
-    AsmBlock, AsmConstraint, AsmSeg, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator,
-    ValueId,
+    AsmBlock, AsmConstraint, AsmSeg, BinOp, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind,
+    Terminator, ValueId,
 };
 use super::tape::{At, Insertion, insert};
 
 /// One rewritten access, by its tape index before the rewrite.
 enum Edit {
+    /// A lane read: the slot's vector loaded and the lane extracted.
+    LaneLoad {
+        at: ValueId,
+        base: i64,
+        byte: u8,
+        kind: LoadKind,
+    },
+    /// A lane write: the slot's vector loaded, the lane inserted, the
+    /// vector stored back.
+    LaneStore {
+        at: ValueId,
+        base: i64,
+        byte: u8,
+        kind: StoreKind,
+    },
     Addr {
         at: ValueId,
     },
@@ -30,10 +48,13 @@ enum Edit {
         at: ValueId,
         off: i64,
     },
+    /// A whole copy; `align` is the copy's, which the access to the side
+    /// in memory keeps (zero when it is the vector's own).
     Copy {
         at: ValueId,
         src: Side,
         dst: Side,
+        align: u8,
     },
     Zero {
         at: ValueId,
@@ -51,38 +72,592 @@ enum Side {
     Addr(ValueId),
 }
 
-/// The whole-object access kinds of a rewritten slot.
+/// The whole-object access kinds of a rewritten slot and its size in
+/// 8-byte cells.
 #[derive(Clone, Copy)]
 struct Whole {
     load: LoadKind,
     store: StoreKind,
+    cells: i64,
 }
 
 const QUAD: Whole = Whole {
     load: LoadKind::V128,
     store: StoreKind::V128,
+    cells: 2,
 };
+
+/// The AVX and AVX-512 widths; only code built for them accesses a slot
+/// at these kinds, which selects it.
+const WIDE: [Whole; 2] = [
+    Whole {
+        load: LoadKind::V256,
+        store: StoreKind::V256,
+        cells: 4,
+    },
+    Whole {
+        load: LoadKind::V512,
+        store: StoreKind::V512,
+        cells: 8,
+    },
+];
 
 const DOUBLE: Whole = Whole {
     load: LoadKind::F64,
     store: StoreKind::F64,
+    cells: 1,
 };
 
+/// The byte width of a scalar lane access of `kind`, `None` for the wide and
+/// long-double kinds.
+fn lane_load_bytes(kind: LoadKind) -> Option<u8> {
+    match kind {
+        LoadKind::F32 => Some(4),
+        LoadKind::F64 => Some(8),
+        k => k.int_bytes(),
+    }
+}
+
+fn lane_store_bytes(kind: StoreKind) -> Option<u8> {
+    match kind {
+        StoreKind::I8 => Some(1),
+        StoreKind::I16 => Some(2),
+        StoreKind::I32 | StoreKind::F32 => Some(4),
+        StoreKind::I64 | StoreKind::F64 => Some(8),
+        _ => None,
+    }
+}
+
+/// The low half of a 16-byte vector `inst` completes: `inst` inserts the
+/// high 8 bytes over a low 8-byte insert nothing else reads, so the vector
+/// under that low insert is overwritten everywhere.
+pub(crate) fn pair_low(func: &FunctionSsa, uses: &[u32], inst: &Inst) -> Option<ValueId> {
+    let half = |kind: StoreKind| matches!(kind, StoreKind::F64 | StoreKind::I64);
+    let &Inst::VecInsert {
+        vec: low,
+        off: 8,
+        kind,
+        bytes: 16,
+        ..
+    } = inst
+    else {
+        return None;
+    };
+    let low = through_copy(func, uses, low);
+    match func.insts.get(low as usize)? {
+        &Inst::VecInsert {
+            off: 0,
+            kind: k,
+            bytes: 16,
+            ..
+        } if half(kind) && half(k) && uses.get(low as usize) == Some(&1) => Some(low),
+        _ => None,
+    }
+}
+
+/// The value a register copy `v` that nothing else reads takes, else `v`.
+fn through_copy(func: &FunctionSsa, uses: &[u32], v: ValueId) -> ValueId {
+    match func.insts.get(v as usize) {
+        Some(&Inst::Copy { value, .. }) if uses.get(v as usize) == Some(&1) => value,
+        _ => v,
+    }
+}
+
+/// The bottom of a run of lane or 128-bit part inserts that `inst` tops and
+/// that writes every byte of its vector, each insert below `inst` read by
+/// the next alone: the vector under that bottom insert is overwritten
+/// everywhere.
+pub(crate) fn covered_bottom(func: &FunctionSsa, uses: &[u32], inst: &Inst) -> Option<ValueId> {
+    let &Inst::VecInsert {
+        vec,
+        off,
+        kind,
+        bytes,
+        ..
+    } = inst
+    else {
+        return None;
+    };
+    let full = match bytes {
+        64 => u64::MAX,
+        n if n < 64 => (1u64 << n) - 1,
+        _ => return None,
+    };
+    let width = |kind| match kind {
+        StoreKind::V128 => Some(16),
+        k => lane_store_bytes(k),
+    };
+    let lanes = |off: u8, kind| width(kind).map(|n| ((1u64 << n) - 1) << off);
+    let mut covered = lanes(off, kind)?;
+    let mut below = through_copy(func, uses, vec);
+    loop {
+        let &Inst::VecInsert {
+            vec,
+            off,
+            kind,
+            bytes: b,
+            ..
+        } = func.insts.get(below as usize)?
+        else {
+            return None;
+        };
+        if b != bytes || uses.get(below as usize) != Some(&1) {
+            return None;
+        }
+        covered |= lanes(off, kind)?;
+        if covered == full {
+            return Some(below);
+        }
+        below = through_copy(func, uses, vec);
+    }
+}
+
+/// Rewrite the eligible slots of `func`; returns them.
 pub(crate) fn run(func: &mut FunctionSsa) -> BTreeSet<i64> {
     if !applies(func) {
         return BTreeSet::new();
     }
-    let mut slots = eligible(func, false);
-    if !slots.is_empty() {
-        rewrite(func, &slots, QUAD);
+    let mut slots = BTreeSet::new();
+    for w in [QUAD].into_iter().chain(WIDE) {
+        let s = eligible(func, false, w);
+        if !s.is_empty() {
+            rewrite(func, &s, w);
+            slots.extend(s);
+        }
     }
-    let cells = cell_slots(func);
+    let (cells, int_reads) = cell_slots(func);
     if !cells.is_empty() {
-        retype_cells(func, &cells);
+        retype_cells(func, &cells, &int_reads);
         rewrite(func, &cells, DOUBLE);
         slots.extend(cells);
     }
     slots
+}
+
+/// Each lane write into a vector wider than 16 bytes as a write into its
+/// 128-bit part: the part read out (a `V128` `VecExtract`), the lane
+/// inserted into it and the part inserted back. constfold then reads each
+/// part through the writes before it, so lane writes into one part chain
+/// on that part alone and the vector takes the part once. A lane read
+/// above the low part reads the part, which reads of its other lanes share.
+pub(crate) fn split_wide_lanes(func: &mut FunctionSsa) {
+    split_wide_reads(func);
+    let sites: Vec<ValueId> = func
+        .blocks
+        .iter()
+        .flat_map(|b| b.inst_range.clone())
+        .filter(|&v| {
+            matches!(func.insts[v as usize], Inst::VecInsert { bytes, kind, .. }
+                if bytes > 16 && kind != StoreKind::V128)
+        })
+        .collect();
+    if sites.is_empty() {
+        return;
+    }
+    let mut ins: Vec<Insertion> = Vec::with_capacity(2 * sites.len());
+    for &v in &sites {
+        let Inst::VecInsert {
+            vec, off, bytes, ..
+        } = func.insts[v as usize]
+        else {
+            continue;
+        };
+        let part = off & !15;
+        let mut put = |at: At, inst: Inst| {
+            ins.push(Insertion {
+                at,
+                inst,
+                is_f32: false,
+                copy_of: None,
+            })
+        };
+        put(
+            At::Before(v),
+            Inst::VecExtract {
+                vec,
+                off: part,
+                kind: LoadKind::V128,
+                bytes,
+            },
+        );
+        put(
+            At::After(v),
+            Inst::VecInsert {
+                vec,
+                value: v,
+                off: part,
+                kind: StoreKind::V128,
+                bytes,
+            },
+        );
+    }
+    let rw = insert(func, &ins);
+    // A reader of a split write reads the vector with the part back in.
+    let mut whole: BTreeMap<ValueId, ValueId> = BTreeMap::new();
+    for (k, &v) in sites.iter().enumerate() {
+        let n = rw.remap[v as usize];
+        if let Inst::VecInsert {
+            vec, off, bytes, ..
+        } = &mut func.insts[n as usize]
+        {
+            *vec = rw.ids[2 * k];
+            *off &= 15;
+            *bytes = 16;
+        }
+        whole.insert(n, rw.ids[2 * k + 1]);
+    }
+    let back: BTreeSet<ValueId> = whole.values().copied().collect();
+    let to = |v: &mut ValueId| {
+        if let Some(&w) = whole.get(v) {
+            *v = w;
+        }
+    };
+    for (i, inst) in func.insts.iter_mut().enumerate() {
+        match inst {
+            // The part goes back into the vector the write read.
+            Inst::VecInsert { vec, .. } if back.contains(&(i as ValueId)) => to(vec),
+            _ => inst.for_each_operand_mut(to),
+        }
+    }
+    for b in func.blocks.iter_mut() {
+        b.terminator.for_each_operand_mut(to);
+        if b.exit_acc != NO_VALUE {
+            to(&mut b.exit_acc);
+        }
+    }
+}
+
+/// Whether `a` and `b` are one value: the same id, or the same constant,
+/// copy, extension or immediate operation of one value, as each element of
+/// a compound literal converts its initializer anew; `depth` bounds the
+/// operands compared.
+fn same_value(func: &FunctionSsa, a: ValueId, b: ValueId, depth: u32) -> bool {
+    let same = |x: &ValueId, y: &ValueId| depth > 0 && same_value(func, *x, *y, depth - 1);
+    a == b
+        || match (&func.insts[a as usize], &func.insts[b as usize]) {
+            (Inst::Imm(x), Inst::Imm(y)) => x == y,
+            (Inst::Copy { value: x, is_fp: f }, Inst::Copy { value: y, is_fp: g }) => {
+                same(x, y) && f == g
+            }
+            (
+                Inst::Extend {
+                    value: x,
+                    kind: k,
+                    nsw: n,
+                },
+                Inst::Extend {
+                    value: y,
+                    kind: l,
+                    nsw: m,
+                },
+            ) => same(x, y) && k == l && n == m,
+            (
+                Inst::BinopI {
+                    op: o,
+                    lhs: x,
+                    rhs_imm: i,
+                },
+                Inst::BinopI {
+                    op: p,
+                    lhs: y,
+                    rhs_imm: j,
+                },
+            ) => o == p && same(x, y) && i == j,
+            _ => false,
+        }
+}
+
+fn kind_is_int(kind: StoreKind) -> bool {
+    matches!(
+        kind,
+        StoreKind::I8 | StoreKind::I16 | StoreKind::I32 | StoreKind::I64
+    )
+}
+
+/// Each chain of lane inserts writing one value into every lane of a vector
+/// of at most `max` bytes, as one [`Inst::VecSplat`]; an insert of the
+/// chain nothing else reads becomes `Undef`.
+pub(crate) fn form_splats(func: &mut FunctionSsa, max: u8) {
+    let mut uses = alloc::vec![0u32; func.insts.len()];
+    let mut count = |a: ValueId| {
+        if let Some(u) = uses.get_mut(a as usize) {
+            *u += 1;
+        }
+    };
+    func.insts
+        .iter()
+        .for_each(|inst| inst.for_each_operand(&mut count));
+    for b in &func.blocks {
+        b.terminator.for_each_operand(&mut count);
+        if b.exit_acc != NO_VALUE {
+            count(b.exit_acc);
+        }
+    }
+    for i in 0..func.insts.len() {
+        let Inst::VecInsert {
+            value, kind, bytes, ..
+        } = func.insts[i]
+        else {
+            continue;
+        };
+        let Some(width) = lane_store_bytes(kind).filter(|&w| w <= bytes && bytes <= max) else {
+            continue;
+        };
+        let lanes = u32::from(bytes / width);
+        let all = u64::MAX >> (64 - lanes);
+        let (mut seen, mut at) = (0u64, i as ValueId);
+        for _ in 0..2 * lanes {
+            match func.insts[at as usize] {
+                Inst::VecInsert {
+                    vec,
+                    value: v,
+                    off,
+                    kind: k,
+                    bytes: b,
+                } if k == kind && b == bytes && same_value(func, v, value, 3) => {
+                    seen |= 1 << (off / width);
+                    at = vec;
+                }
+                _ => break,
+            }
+            if seen == all {
+                let Inst::VecInsert { mut vec, .. } = func.insts[i] else {
+                    break;
+                };
+                // A constant's splat needs no register for the constant.
+                func.insts[i] = match func.insts[value as usize] {
+                    Inst::Imm(imm) if kind_is_int(kind) => Inst::VecConst { imm, kind, bytes },
+                    _ => Inst::VecSplat { value, kind, bytes },
+                };
+                while let Some(u) = uses.get_mut(vec as usize) {
+                    *u -= 1;
+                    let Inst::VecInsert { vec: next, .. } = func.insts[vec as usize] else {
+                        break;
+                    };
+                    if *u != 0 {
+                        break;
+                    }
+                    func.insts[vec as usize] = Inst::Undef;
+                    vec = next;
+                }
+                break;
+            }
+        }
+    }
+}
+
+/// Each chain of lane inserts writing every lane of a vector with the lane
+/// of one wider source vector at a common shift, as that source's part at
+/// the shift: its 128-bit part of a 32- or 64-byte one, or its 8-byte part
+/// of a 16-byte one. An insert of the chain nothing else reads becomes
+/// `Undef`.
+pub(crate) fn form_parts(func: &mut FunctionSsa) {
+    let mut uses = alloc::vec![0u32; func.insts.len()];
+    let mut count = |a: ValueId| {
+        if let Some(u) = uses.get_mut(a as usize) {
+            *u += 1;
+        }
+    };
+    func.insts
+        .iter()
+        .for_each(|inst| inst.for_each_operand(&mut count));
+    for b in &func.blocks {
+        b.terminator.for_each_operand(&mut count);
+        if b.exit_acc != NO_VALUE {
+            count(b.exit_acc);
+        }
+    }
+    // The source vector, its width and the shift of the lane `value` reads,
+    // for a lane extract of `width` bytes at `off` in the inserted vector.
+    let lane =
+        |func: &FunctionSsa, value: ValueId, off: u8, width: u8| match func.insts[value as usize] {
+            Inst::VecExtract {
+                vec,
+                off: at,
+                kind,
+                bytes,
+            } if lane_load_bytes(kind) == Some(width) && at >= off => Some((vec, bytes, at - off)),
+            _ => None,
+        };
+    for i in 0..func.insts.len() {
+        let Inst::VecInsert {
+            value,
+            off,
+            kind,
+            bytes,
+            ..
+        } = func.insts[i]
+        else {
+            continue;
+        };
+        let Some(width) = lane_store_bytes(kind).filter(|&w| w <= bytes) else {
+            continue;
+        };
+        let Some(source) = lane(func, value, off, width) else {
+            continue;
+        };
+        let lanes = u32::from(bytes / width);
+        let all = u64::MAX >> (64 - lanes);
+        let (mut seen, mut at) = (0u64, i as ValueId);
+        for _ in 0..lanes {
+            match func.insts[at as usize] {
+                Inst::VecInsert {
+                    vec,
+                    value: v,
+                    off,
+                    kind: k,
+                    bytes: b,
+                } if k == kind && b == bytes && lane(func, v, off, width) == Some(source) => {
+                    seen |= 1 << (off / width);
+                    at = vec;
+                }
+                _ => break,
+            }
+        }
+        if seen != all {
+            continue;
+        }
+        let (src, src_bytes, shift) = source;
+        let part = match (bytes, src_bytes) {
+            (16, 32 | 64) if shift % 16 == 0 => Inst::VecExtract {
+                vec: src,
+                off: shift,
+                kind: LoadKind::V128,
+                bytes: src_bytes,
+            },
+            (8, 16) if shift % 8 == 0 => Inst::VecExtract {
+                vec: src,
+                off: shift,
+                kind: LoadKind::F64,
+                bytes: 16,
+            },
+            _ => continue,
+        };
+        let Inst::VecInsert { mut vec, .. } = func.insts[i] else {
+            continue;
+        };
+        func.insts[i] = part;
+        if let Some(u) = uses.get_mut(src as usize) {
+            *u += 1;
+        }
+        while let Some(u) = uses.get_mut(vec as usize) {
+            *u -= 1;
+            let Inst::VecInsert { vec: next, .. } = func.insts[vec as usize] else {
+                break;
+            };
+            if *u != 0 {
+                break;
+            }
+            func.insts[vec as usize] = Inst::Undef;
+            vec = next;
+        }
+    }
+}
+
+/// The reads half of [`split_wide_lanes`].
+fn split_wide_reads(func: &mut FunctionSsa) {
+    let sites: Vec<ValueId> = func
+        .blocks
+        .iter()
+        .flat_map(|b| b.inst_range.clone())
+        .filter(|&v| {
+            matches!(func.insts[v as usize], Inst::VecExtract { bytes, kind, off, .. }
+                if bytes > 16 && kind != LoadKind::V128 && off >= 16)
+        })
+        .collect();
+    if sites.is_empty() {
+        return;
+    }
+    let ins: Vec<Insertion> = sites
+        .iter()
+        .filter_map(|&v| match func.insts[v as usize] {
+            Inst::VecExtract {
+                vec, off, bytes, ..
+            } => Some(Insertion {
+                at: At::Before(v),
+                inst: Inst::VecExtract {
+                    vec,
+                    off: off & !15,
+                    kind: LoadKind::V128,
+                    bytes,
+                },
+                is_f32: false,
+                copy_of: None,
+            }),
+            _ => None,
+        })
+        .collect();
+    let rw = insert(func, &ins);
+    for (k, &v) in sites.iter().enumerate() {
+        if let Inst::VecExtract {
+            vec, off, bytes, ..
+        } = &mut func.insts[rw.remap[v as usize] as usize]
+        {
+            *vec = rw.ids[k];
+            *off &= 15;
+            *bytes = 16;
+        }
+    }
+}
+
+/// A 64-bit integer lane that a load reads only for one insert into a
+/// 16-byte vector, loaded as the bits of a double: the load fills an FP
+/// register, which the insert takes as it is, with no trip through a
+/// general one (x86-64 `vmovq` into the low lane over a vector of no value,
+/// `vunpcklpd` pairing it with the high one).
+pub(crate) fn fp_lane_loads(func: &mut FunctionSsa) {
+    let uses = super::reg_alloc::compute_use_counts(func);
+    let lane_load = |inst: &Inst| {
+        matches!(
+            inst,
+            Inst::Load {
+                kind: LoadKind::I64,
+                volatile: false,
+                ..
+            } | Inst::LoadLocal {
+                kind: LoadKind::I64,
+                volatile: false,
+                ..
+            } | Inst::LoadIndexed {
+                kind: LoadKind::I64,
+                index_ext: super::super::ir::IndexExt::None,
+                scale: 8,
+                abs_base: false,
+                ..
+            }
+        )
+    };
+    let sites: Vec<(usize, ValueId)> = (func.insts.iter().enumerate())
+        .filter_map(|(v, inst)| match *inst {
+            Inst::VecInsert {
+                vec,
+                value,
+                off,
+                kind: StoreKind::I64,
+                bytes: 16,
+            } if uses[v] > 0
+                && uses[value as usize] == 1
+                && lane_load(&func.insts[value as usize])
+                && (off == 8 || matches!(func.insts[vec as usize], Inst::Undef | Inst::Imm(0))) =>
+            {
+                Some((v, value))
+            }
+            _ => None,
+        })
+        .collect();
+    for (v, value) in sites {
+        if let Inst::VecInsert { kind, .. } = &mut func.insts[v] {
+            *kind = StoreKind::F64;
+        }
+        match &mut func.insts[value as usize] {
+            Inst::Load { kind, .. }
+            | Inst::LoadLocal { kind, .. }
+            | Inst::LoadIndexed { kind, .. } => {
+                *kind = LoadKind::F64;
+            }
+            _ => {}
+        }
+    }
 }
 
 pub(crate) fn applies(func: &FunctionSsa) -> bool {
@@ -90,9 +665,13 @@ pub(crate) fn applies(func: &FunctionSsa) -> bool {
 }
 
 /// [`run`]'s slots once `callee` is spliced: its aggregate parameters are
-/// ordinary objects there, and a 16-byte vector return is read back whole.
+/// ordinary objects there, and a vector return is read back whole.
 pub(crate) fn spliced_slots(callee: &FunctionSsa) -> BTreeSet<i64> {
-    eligible(callee, true)
+    let mut slots = BTreeSet::new();
+    for w in [QUAD].into_iter().chain(WIDE) {
+        slots.extend(eligible(callee, true, w));
+    }
+    slots
 }
 
 fn slot_load(off: i64, w: Whole) -> Inst {
@@ -115,12 +694,22 @@ fn slot_store(off: i64, value: ValueId, w: Whole) -> Inst {
     }
 }
 
-/// With `spliced`, see [`spliced_slots`].
-fn eligible(func: &FunctionSsa, spliced: bool) -> BTreeSet<i64> {
+/// The slots of `w`'s size accessed whole at its kinds or by lane. With
+/// `spliced`, see [`spliced_slots`].
+fn eligible(func: &FunctionSsa, spliced: bool, w: Whole) -> BTreeSet<i64> {
+    let bytes = w.cells * 8;
+    // A lane access of slot `b` at cell `off` and byte `disp`, of `n` bytes.
+    let lane = |b: i64, off: i64, disp: i64, n: Option<u8>, volatile: bool| {
+        let at = (off - b) * 8 + disp;
+        n.is_some_and(|n| {
+            let n = i64::from(n);
+            !volatile && at >= 0 && at % n == 0 && at + n <= bytes
+        })
+    };
     let mut slots: BTreeSet<i64> = func
         .multi_cell_slots
         .iter()
-        .filter(|&&(_, cells)| cells == 2)
+        .filter(|&&(_, cells)| cells == w.cells)
         .map(|&(base, _)| base)
         .collect();
     let params = func.param_local_slots.iter().filter(|_| !spliced);
@@ -155,9 +744,15 @@ fn eligible(func: &FunctionSsa, spliced: bool) -> BTreeSet<i64> {
         .filter(|b| matches!(b.terminator, Terminator::AsmGoto { .. }) && !b.inst_range.is_empty())
         .map(|b| b.inst_range.end - 1)
         .collect();
-    let covering = |off: i64| [off, off - 1].into_iter().filter(|b| slots.contains(b));
+    let covering = |off: i64| {
+        (0..w.cells)
+            .map(move |k| off - k)
+            .filter(|b| slots.contains(b))
+    };
     let mut reject: BTreeSet<i64> = BTreeSet::new();
     let mut addr: BTreeMap<ValueId, i64> = BTreeMap::new();
+    // A slot's address plus a constant byte offset inside it.
+    let mut derived: BTreeMap<ValueId, (i64, i64)> = BTreeMap::new();
     let (mut reads, mut simd) = (BTreeSet::new(), BTreeSet::new());
     let mut copies: Vec<(i64, i64)> = Vec::new();
     for (v, inst) in func.insts.iter().enumerate() {
@@ -171,17 +766,32 @@ fn eligible(func: &FunctionSsa, spliced: bool) -> BTreeSet<i64> {
                     }
                 }
             }
+            Inst::BinopI {
+                op: BinOp::Add,
+                lhs,
+                rhs_imm,
+            } if covered[v] && (0..bytes).contains(&rhs_imm) => {
+                if let Some(&b) = addr.get(&lhs) {
+                    derived.insert(v as ValueId, (b, rhs_imm));
+                }
+            }
             Inst::LoadLocal {
                 off,
                 disp,
                 kind,
                 volatile,
             } => {
-                let whole = disp == 0 && kind == LoadKind::V128 && !volatile;
-                reject.extend(covering(off).filter(|&b| b != off || !whole));
-                if whole && slots.contains(&off) {
-                    reads.insert(off);
-                    simd.insert(off);
+                let whole = disp == 0 && kind == w.load && !volatile;
+                let n = lane_load_bytes(kind);
+                for b in covering(off) {
+                    if b == off && whole {
+                        reads.insert(off);
+                        simd.insert(off);
+                    } else if lane(b, off, i64::from(disp), n, volatile) {
+                        reads.insert(b);
+                    } else {
+                        reject.insert(b);
+                    }
                 }
             }
             Inst::StoreLocal {
@@ -191,10 +801,14 @@ fn eligible(func: &FunctionSsa, spliced: bool) -> BTreeSet<i64> {
                 volatile,
                 ..
             } => {
-                let whole = disp == 0 && kind == StoreKind::V128 && !volatile;
-                reject.extend(covering(off).filter(|&b| b != off || !whole));
-                if whole && slots.contains(&off) {
-                    simd.insert(off);
+                let whole = disp == 0 && kind == w.store && !volatile;
+                let n = lane_store_bytes(kind);
+                for b in covering(off) {
+                    if b == off && whole {
+                        simd.insert(off);
+                    } else if used[v] || !lane(b, off, i64::from(disp), n, volatile) {
+                        reject.insert(b);
+                    }
                 }
             }
             Inst::AllocaInit(off)
@@ -215,20 +829,22 @@ fn eligible(func: &FunctionSsa, spliced: bool) -> BTreeSet<i64> {
     }
     for (v, inst) in func.insts.iter().enumerate() {
         let check = |a: ValueId, ok: bool, reject: &mut BTreeSet<i64>| {
-            if let Some(&b) = addr.get(&a)
+            if let Some(b) = addr.get(&a).or(derived.get(&a).map(|(b, _)| b))
                 && !(ok && covered[v])
             {
-                reject.insert(b);
+                reject.insert(*b);
             }
         };
+        // The slot and byte offset an address operand names.
+        let at = |a: ValueId| {
+            addr.get(&a)
+                .map(|&b| (b, 0))
+                .or_else(|| derived.get(&a).copied())
+        };
         match inst {
-            Inst::Mcpy {
-                dst,
-                src,
-                size,
-                align,
-            } => {
-                let ok = *size == 16 && *align >= 16 && !used[v];
+            // The copy's alignment carries to the access that replaces it.
+            Inst::Mcpy { dst, src, size, .. } => {
+                let ok = *size == bytes && !used[v];
                 check(*dst, ok, &mut reject);
                 check(*src, ok, &mut reject);
                 if let Some(&s) = addr.get(src) {
@@ -238,7 +854,7 @@ fn eligible(func: &FunctionSsa, spliced: bool) -> BTreeSet<i64> {
                     }
                 }
             }
-            Inst::Mzero { dst, size, .. } => check(*dst, *size == 16 && !used[v], &mut reject),
+            Inst::Mzero { dst, size, .. } => check(*dst, *size == bytes && !used[v], &mut reject),
             Inst::Load {
                 addr: a,
                 disp,
@@ -246,11 +862,23 @@ fn eligible(func: &FunctionSsa, spliced: bool) -> BTreeSet<i64> {
                 volatile,
                 ..
             } => {
-                let ok = *disp == 0 && *kind == LoadKind::V128 && !*volatile;
+                let whole = addr.contains_key(a) && *disp == 0 && *kind == w.load && !*volatile;
+                let ok = whole
+                    || at(*a).is_some_and(|(b, k)| {
+                        lane(
+                            b,
+                            b,
+                            k + i64::from(*disp),
+                            lane_load_bytes(*kind),
+                            *volatile,
+                        )
+                    });
                 check(*a, ok, &mut reject);
-                if let Some(&b) = addr.get(a) {
+                if let Some((b, _)) = at(*a) {
                     reads.insert(b);
-                    simd.insert(b);
+                    if whole {
+                        simd.insert(b);
+                    }
                 }
             }
             Inst::Store {
@@ -261,10 +889,17 @@ fn eligible(func: &FunctionSsa, spliced: bool) -> BTreeSet<i64> {
                 volatile,
                 ..
             } => {
-                let ok = *disp == 0 && *kind == StoreKind::V128 && !*volatile && a != value;
+                let whole = addr.contains_key(a) && *disp == 0 && *kind == w.store && !*volatile;
+                let ok = a != value
+                    && (whole
+                        || !used[v]
+                            && at(*a).is_some_and(|(b, k)| {
+                                let n = lane_store_bytes(*kind);
+                                lane(b, b, k + i64::from(*disp), n, *volatile)
+                            }));
                 check(*a, ok, &mut reject);
                 check(*value, false, &mut reject);
-                if let Some(&b) = addr.get(a) {
+                if whole && let Some(&b) = addr.get(a) {
                     simd.insert(b);
                 }
             }
@@ -275,6 +910,7 @@ fn eligible(func: &FunctionSsa, spliced: bool) -> BTreeSet<i64> {
                     let ok = op.is_some_and(|o| {
                         matches!(o.constraint, AsmConstraint::Fp)
                             && o.width == 16
+                            && bytes == 16
                             && !o.value
                             && (!o.is_output || !goto)
                     });
@@ -287,14 +923,23 @@ fn eligible(func: &FunctionSsa, spliced: bool) -> BTreeSet<i64> {
                     }
                 }
             }
+            _ if derived.contains_key(&(v as ValueId)) => {}
             _ => inst.for_each_operand(|a| check(a, false, &mut reject)),
         }
     }
-    let vector_return = spliced
-        && func.ret_agg.is_some_and(|i| {
-            let d = &func.agg_descs[i as usize];
-            d.size == 16 && d.fields.len() == 1 && matches!(d.fields[0].kind, ScalarKind::Vector)
-        });
+    let is_vector = |i: u32| {
+        let d = &func.agg_descs[i as usize];
+        d.vector && d.size as i64 == bytes
+    };
+    let vector_return = spliced && func.ret_agg.is_some_and(is_vector);
+    // Spliced, a vector parameter's object is filled whole from the argument.
+    if spliced {
+        for (agg, &slot) in func.param_aggs.iter().zip(&func.param_local_slots) {
+            if slot != 0 && agg.is_some_and(is_vector) {
+                simd.insert(slot);
+            }
+        }
+    }
     for b in &func.blocks {
         let read_back = vector_return && matches!(b.terminator, Terminator::Return(_));
         b.terminator.for_each_operand(|a| {
@@ -307,6 +952,10 @@ fn eligible(func: &FunctionSsa, spliced: bool) -> BTreeSet<i64> {
                 }
             }
         });
+    }
+    // An object of a 16-byte vector type is a vector whatever reads it.
+    if w.cells == 2 {
+        simd.extend(func.vector_objects.iter().copied());
     }
     slots.retain(|s| !reject.contains(s) && reads.contains(s) && addr.values().any(|b| b == s));
     let mut vector: BTreeSet<i64> = simd.intersection(&slots).copied().collect();
@@ -327,6 +976,84 @@ fn eligible(func: &FunctionSsa, spliced: bool) -> BTreeSet<i64> {
     vector
 }
 
+/// The lane stores that each begin a run of lane stores to one slot, in one
+/// block with no other access to the slot between, writing every byte of
+/// it: nothing reads the vector under the first.
+fn blank_runs(
+    func: &FunctionSsa,
+    edits: &[Edit],
+    w: Whole,
+    holding: impl Fn(i64) -> Option<i64>,
+) -> BTreeSet<ValueId> {
+    let bytes = w.cells * 8;
+    let full = if bytes >= 64 {
+        u64::MAX
+    } else {
+        (1u64 << bytes) - 1
+    };
+    let mut touched: BTreeMap<ValueId, Vec<i64>> = BTreeMap::new();
+    let mut stores: BTreeMap<ValueId, (i64, u64)> = BTreeMap::new();
+    for e in edits {
+        let (at, offs) = match e {
+            Edit::LaneStore {
+                at,
+                base,
+                byte,
+                kind,
+            } => {
+                if let Some(n) = lane_store_bytes(*kind) {
+                    let lanes = ((1u64 << n) - 1) << byte;
+                    stores.insert(*at, (*base, lanes));
+                    continue;
+                }
+                (*at, alloc::vec![*base])
+            }
+            Edit::LaneLoad { at, base, .. } => (*at, alloc::vec![*base]),
+            Edit::Load { at, off } | Edit::Store { at, off } | Edit::Zero { at, off } => {
+                (*at, alloc::vec![*off])
+            }
+            Edit::Copy { at, src, dst, .. } => (
+                *at,
+                [src, dst]
+                    .into_iter()
+                    .filter_map(|s| match s {
+                        Side::Slot(off) => Some(*off),
+                        Side::Addr(_) => None,
+                    })
+                    .collect(),
+            ),
+            Edit::Asm { at, inputs } => (*at, inputs.iter().map(|&(_, off)| off).collect()),
+            Edit::Addr { .. } => continue,
+        };
+        touched.entry(at).or_default().extend(offs);
+    }
+    let mut blank = BTreeSet::new();
+    for block in &func.blocks {
+        let mut runs: BTreeMap<i64, (ValueId, u64)> = BTreeMap::new();
+        for v in block.inst_range.clone() {
+            if let Some(&(base, lanes)) = stores.get(&v) {
+                let run = runs.entry(base).or_insert((v, 0));
+                run.1 |= lanes;
+                if run.1 == full {
+                    blank.insert(run.0);
+                    runs.remove(&base);
+                }
+                continue;
+            }
+            if let Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } =
+                func.insts[v as usize]
+                && let Some(base) = holding(off)
+            {
+                runs.remove(&base);
+            }
+            for off in touched.get(&v).into_iter().flatten() {
+                runs.remove(off);
+            }
+        }
+    }
+    blank
+}
+
 fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>, w: Whole) {
     let addr: BTreeMap<ValueId, i64> = func
         .insts
@@ -338,6 +1065,26 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>, w: Whole) {
         })
         .collect();
     let slot_of = |a: ValueId| addr.get(&a).copied();
+    // A slot's address plus a constant byte offset inside it.
+    let derived: BTreeMap<ValueId, (i64, i64)> = func
+        .insts
+        .iter()
+        .enumerate()
+        .filter_map(|(v, inst)| match *inst {
+            Inst::BinopI {
+                op: BinOp::Add,
+                lhs,
+                rhs_imm,
+            } => slot_of(lhs).map(|b| (v as ValueId, (b, rhs_imm))),
+            _ => None,
+        })
+        .collect();
+    let lane_of = |a: ValueId, disp: i32| {
+        let (b, k) = slot_of(a)
+            .map(|b| (b, 0))
+            .or_else(|| derived.get(&a).copied())?;
+        Some((b, (k + i64::from(disp)) as u8))
+    };
     let side = |slot: Option<i64>, a: ValueId| slot.map_or(Side::Addr(a), Side::Slot);
     let out_addrs: BTreeSet<ValueId> = func
         .insts
@@ -354,6 +1101,7 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>, w: Whole) {
                 .map(|(_, &a)| a)
         })
         .collect();
+    let slot_holding = |off: i64| (0..w.cells).map(|k| off - k).find(|b| slots.contains(b));
     let mut edits: Vec<Edit> = Vec::new();
     for (v, inst) in func.insts.iter().enumerate() {
         let at = v as ValueId;
@@ -361,23 +1109,83 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>, w: Whole) {
             Inst::LocalAddr(_) if addr.contains_key(&at) && !out_addrs.contains(&at) => {
                 edits.push(Edit::Addr { at })
             }
-            Inst::Load { addr: a, .. } => {
-                if let Some(off) = slot_of(*a) {
+            Inst::Load {
+                addr: a,
+                disp,
+                kind,
+                ..
+            } => {
+                if let Some(off) = slot_of(*a)
+                    && *disp == 0
+                    && *kind == w.load
+                {
                     edits.push(Edit::Load { at, off });
+                } else if let Some((base, byte)) = lane_of(*a, *disp) {
+                    edits.push(Edit::LaneLoad {
+                        at,
+                        base,
+                        byte,
+                        kind: *kind,
+                    });
                 }
             }
-            Inst::Store { addr: a, .. } => {
-                if let Some(off) = slot_of(*a) {
+            Inst::Store {
+                addr: a,
+                disp,
+                kind,
+                ..
+            } => {
+                if let Some(off) = slot_of(*a)
+                    && *disp == 0
+                    && *kind == w.store
+                {
                     edits.push(Edit::Store { at, off });
+                } else if let Some((base, byte)) = lane_of(*a, *disp) {
+                    edits.push(Edit::LaneStore {
+                        at,
+                        base,
+                        byte,
+                        kind: *kind,
+                    });
                 }
             }
-            Inst::Mcpy { dst, src, .. } => {
+            // A lane access of a slot by cell and byte offset.
+            &Inst::LoadLocal {
+                off, disp, kind, ..
+            } if slot_holding(off).is_some_and(|b| b != off || disp != 0 || kind != w.load) => {
+                let base = slot_holding(off).unwrap_or(off);
+                edits.push(Edit::LaneLoad {
+                    at,
+                    base,
+                    byte: ((off - base) * 8 + i64::from(disp)) as u8,
+                    kind,
+                });
+            }
+            &Inst::StoreLocal {
+                off, disp, kind, ..
+            } if slot_holding(off).is_some_and(|b| b != off || disp != 0 || kind != w.store) => {
+                let base = slot_holding(off).unwrap_or(off);
+                edits.push(Edit::LaneStore {
+                    at,
+                    base,
+                    byte: ((off - base) * 8 + i64::from(disp)) as u8,
+                    kind,
+                });
+            }
+            Inst::Mcpy {
+                dst, src, align, ..
+            } => {
                 let (d, s) = (slot_of(*dst), slot_of(*src));
                 if d.is_some() || s.is_some() {
                     edits.push(Edit::Copy {
                         at,
                         src: side(s, *src),
                         dst: side(d, *dst),
+                        align: if *align >= w.cells as u32 * 8 {
+                            0
+                        } else {
+                            *align as u8
+                        },
                     });
                 }
             }
@@ -400,6 +1208,7 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>, w: Whole) {
             _ => {}
         }
     }
+    let blank = blank_runs(func, &edits, w, slot_holding);
     let mut ins: Vec<Insertion> = Vec::new();
     for e in &edits {
         let mut put = |at: ValueId, inst: Inst| {
@@ -407,10 +1216,28 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>, w: Whole) {
                 at: At::Before(at),
                 inst,
                 is_f32: false,
+                copy_of: None,
             })
         };
         match e {
-            Edit::Copy { at, src, .. } => put(
+            Edit::LaneLoad { at, base, .. } => put(*at, slot_load(*base, w)),
+            Edit::LaneStore { at, base, .. } => {
+                put(
+                    *at,
+                    if blank.contains(at) {
+                        Inst::Undef
+                    } else {
+                        slot_load(*base, w)
+                    },
+                );
+                ins.push(Insertion {
+                    at: At::After(*at),
+                    inst: slot_store(*base, *at, w),
+                    is_f32: false,
+                    copy_of: None,
+                });
+            }
+            Edit::Copy { at, src, align, .. } => put(
                 *at,
                 match *src {
                     Side::Slot(off) => slot_load(off, w),
@@ -419,7 +1246,7 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>, w: Whole) {
                         disp: 0,
                         kind: w.load,
                         volatile: false,
-                        align: 0,
+                        align: *align,
                         pc_rel: false,
                     },
                 },
@@ -433,7 +1260,7 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>, w: Whole) {
             _ => {}
         }
     }
-    let (rw, _) = insert(func, &ins);
+    let rw = insert(func, &ins);
     let mut next = 0usize;
     let mut take = || {
         next += 1;
@@ -441,8 +1268,35 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>, w: Whole) {
     };
     // A block accumulator naming a rewritten instruction loses that value.
     let mut gone: BTreeSet<ValueId> = BTreeSet::new();
+    let bytes = (w.cells * 8) as u8;
     for e in &edits {
         match e {
+            Edit::LaneLoad { at, byte, kind, .. } => {
+                let vec = take();
+                func.insts[rw.remap[*at as usize] as usize] = Inst::VecExtract {
+                    vec,
+                    off: *byte,
+                    kind: *kind,
+                    bytes,
+                };
+            }
+            Edit::LaneStore { at, byte, kind, .. } => {
+                let vec = take();
+                take();
+                let n = rw.remap[*at as usize];
+                let value = match func.insts[n as usize] {
+                    Inst::Store { value, .. } | Inst::StoreLocal { value, .. } => value,
+                    _ => continue,
+                };
+                func.insts[n as usize] = Inst::VecInsert {
+                    vec,
+                    value,
+                    off: *byte,
+                    kind: *kind,
+                    bytes,
+                };
+                gone.insert(n);
+            }
             Edit::Addr { at } => {
                 let n = rw.remap[*at as usize];
                 func.insts[n as usize] = Inst::Imm(0);
@@ -457,7 +1311,7 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>, w: Whole) {
                     func.insts[n] = slot_store(*off, value, w);
                 }
             }
-            Edit::Copy { at, dst, .. } => {
+            Edit::Copy { at, dst, align, .. } => {
                 let load = take();
                 let n = rw.remap[*at as usize];
                 func.insts[n as usize] = match *dst {
@@ -468,7 +1322,7 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>, w: Whole) {
                         value: load,
                         kind: w.store,
                         volatile: false,
-                        align: 0,
+                        align: *align,
                         pc_rel: false,
                     },
                 };
@@ -573,13 +1427,23 @@ fn slot_write(func: &FunctionSsa, inst: &Inst) -> Option<(i64, ValueId, StoreKin
     }
 }
 
-/// One-cell objects an 8-byte SIMD operand reads or writes: accessed only
-/// whole, every value read from one going to such an operand, into another
+/// One-cell objects an 8-byte SIMD operand reads or writes: accessed whole
+/// or by lane, every value read whole from one going to such an operand, into another
 /// such object or to memory, every value written to one a constant or read
 /// from such an object or memory. `F64` accesses carry their bits in the
 /// SIMD file. Objects joined by a value take part together, when one of
 /// them meets an operand.
-fn cell_slots(func: &FunctionSsa) -> BTreeSet<i64> {
+/// Whether an access of `n` bytes at byte `at` is a lane of a one-cell
+/// object: narrower than it, inside its 8 bytes, at an offset its width
+/// divides.
+fn cell_lane(at: i64, n: Option<u8>) -> bool {
+    n.is_some_and(|n| {
+        let n = i64::from(n);
+        n < 8 && at >= 0 && at % n == 0 && at + n <= 8
+    })
+}
+
+fn cell_slots(func: &FunctionSsa) -> (BTreeSet<i64>, BTreeSet<ValueId>) {
     let n = func.insts.len();
     let mut by: Vec<Vec<ValueId>> = alloc::vec![Vec::new(); n];
     for (v, inst) in func.insts.iter().enumerate() {
@@ -608,7 +1472,35 @@ fn cell_slots(func: &FunctionSsa) -> BTreeSet<i64> {
         .filter(|b| matches!(b.terminator, Terminator::AsmGoto { .. }) && !b.inst_range.is_empty())
         .map(|b| b.inst_range.end - 1)
         .collect();
+    // A lane load or store through address `a` at byte `k` of the object.
+    let lane_access = |u: ValueId, a: ValueId, k: i64| match func.insts[u as usize] {
+        Inst::Load {
+            addr,
+            disp,
+            kind,
+            volatile: false,
+            ..
+        } => addr == a && cell_lane(k + i64::from(disp), lane_load_bytes(kind)),
+        Inst::Store {
+            addr,
+            disp,
+            value,
+            kind,
+            volatile: false,
+            ..
+        } => addr == a && value != a && cell_lane(k + i64::from(disp), lane_store_bytes(kind)),
+        _ => false,
+    };
     let addr_use = |u: ValueId, a: ValueId| match &func.insts[u as usize] {
+        _ if lane_access(u, a, 0) => true,
+        // The object's address plus a constant, used only by lane accesses.
+        &Inst::BinopI {
+            op: BinOp::Add,
+            lhs,
+            rhs_imm,
+        } if lhs == a && (0..8).contains(&rhs_imm) => {
+            !ends[u as usize] && by[u as usize].iter().all(|&x| lane_access(x, u, rhs_imm))
+        }
         Inst::InlineAsm { asm, args } => {
             !goto_asm.contains(&u)
                 && args
@@ -617,11 +1509,8 @@ fn cell_slots(func: &FunctionSsa) -> BTreeSet<i64> {
                     .all(|(i, &x)| x != a || simd8_output(asm, i))
         }
         Inst::Mcpy {
-            dst,
-            src,
-            size: 8,
-            align,
-        } => *align >= 8 && (*dst == a) != (*src == a) && unread(u),
+            dst, src, size: 8, ..
+        } => (*dst == a) != (*src == a) && unread(u),
         Inst::Mzero { dst, size: 8, .. } => *dst == a && unread(u),
         inst => match (slot_read(func, inst), slot_write(func, inst)) {
             (Some((_, kind)), _) => matches!(kind, LoadKind::I64 | LoadKind::F64),
@@ -650,7 +1539,9 @@ fn cell_slots(func: &FunctionSsa) -> BTreeSet<i64> {
                 volatile,
             } => (
                 off,
-                disp == 0 && !volatile && matches!(kind, LoadKind::I64 | LoadKind::F64),
+                !volatile
+                    && (disp == 0 && matches!(kind, LoadKind::I64 | LoadKind::F64)
+                        || cell_lane(i64::from(disp), lane_load_bytes(kind))),
             ),
             Inst::StoreLocal {
                 off,
@@ -660,7 +1551,9 @@ fn cell_slots(func: &FunctionSsa) -> BTreeSet<i64> {
                 ..
             } => (
                 off,
-                disp == 0 && !volatile && matches!(kind, StoreKind::I64 | StoreKind::F64),
+                !volatile
+                    && (disp == 0 && matches!(kind, StoreKind::I64 | StoreKind::F64)
+                        || cell_lane(i64::from(disp), lane_store_bytes(kind))),
             ),
             Inst::AllocaInit(off)
             | Inst::Call {
@@ -689,6 +1582,86 @@ fn cell_slots(func: &FunctionSsa) -> BTreeSet<i64> {
     }
     reject.extend(func.param_local_slots.iter().copied());
     reject.insert(func.indirect_result_slot);
+    // An object read or written by lane holds an 8-byte vector only when it
+    // is also read or written whole as one (`F64`).
+    let mut whole_f64: BTreeSet<i64> = BTreeSet::new();
+    let mut lanes: BTreeSet<i64> = BTreeSet::new();
+    for inst in &func.insts {
+        match *inst {
+            Inst::LoadLocal {
+                off,
+                disp: 0,
+                kind: LoadKind::F64,
+                ..
+            }
+            | Inst::StoreLocal {
+                off,
+                disp: 0,
+                kind: StoreKind::F64,
+                ..
+            } => {
+                whole_f64.insert(off);
+            }
+            Inst::LoadLocal {
+                off, disp, kind, ..
+            } if cell_lane(i64::from(disp), lane_load_bytes(kind)) => {
+                lanes.insert(off);
+            }
+            Inst::StoreLocal {
+                off, disp, kind, ..
+            } if cell_lane(i64::from(disp), lane_store_bytes(kind)) => {
+                lanes.insert(off);
+            }
+            ref inst => match (slot_read(func, inst), slot_write(func, inst)) {
+                (Some((off, LoadKind::F64)), _) | (_, Some((off, _, StoreKind::F64))) => {
+                    whole_f64.insert(off);
+                }
+                _ => {}
+            },
+        }
+    }
+    // An 8-byte SIMD asm operand reads or writes the object whole too.
+    for inst in &func.insts {
+        if let Inst::InlineAsm { asm, args } = inst {
+            for (i, &a) in args.iter().enumerate() {
+                if (simd8_output(asm, i) || simd8_input(asm, i))
+                    && let Some(Inst::LocalAddr(off)) = func.insts.get(a as usize)
+                {
+                    whole_f64.insert(*off);
+                }
+            }
+        }
+    }
+    // A whole copy of a vector object's bits into another makes that one a
+    // vector too.
+    loop {
+        let before = whole_f64.len();
+        for inst in &func.insts {
+            if let Some((dst, value, StoreKind::I64)) = slot_write(func, inst)
+                && let Some((src, LoadKind::I64)) = slot_read(func, &func.insts[value as usize])
+                && whole_f64.contains(&src)
+            {
+                whole_f64.insert(dst);
+            }
+        }
+        if whole_f64.len() == before {
+            break;
+        }
+    }
+    // Lane accesses through an address are counted by the uses above; an
+    // object with one and no whole `F64` access is not a vector.
+    for (v, inst) in func.insts.iter().enumerate() {
+        if let Inst::LocalAddr(off) = *inst
+            && by[v].iter().any(|&u| {
+                lane_access(u, v as ValueId, 0) || matches!(func.insts[u as usize], Inst::BinopI { op: BinOp::Add, lhs, .. } if lhs == v as ValueId)
+            })
+        {
+            lanes.insert(off);
+        }
+    }
+    // An object of an 8-byte vector type holds one whatever accesses it.
+    whole_f64.extend(func.vector_objects.iter().copied());
+    reject.extend(lanes.difference(&whole_f64).copied());
     slots.retain(|s| !reject.contains(s));
     // A read whose kind turns: every reader takes the bits in the SIMD file.
     let load_use = |u: ValueId, v: ValueId, slots: &BTreeSet<i64>| match &func.insts[u as usize] {
@@ -739,9 +1712,11 @@ fn cell_slots(func: &FunctionSsa) -> BTreeSet<i64> {
         let mut drop: Vec<i64> = Vec::new();
         for (v, inst) in func.insts.iter().enumerate() {
             let v = v as ValueId;
+            // A vector object's 64-bit integer read is its lane's.
             if let Some((off, LoadKind::I64)) = slot_read(func, inst)
                 && slots.contains(&off)
                 && !bits(v, &slots)
+                && !whole_f64.contains(&off)
             {
                 drop.push(off);
             }
@@ -802,6 +1777,28 @@ fn cell_slots(func: &FunctionSsa) -> BTreeSet<i64> {
         if !slots.contains(&off) {
             continue;
         }
+        // A vector part of the call boundary meets the object it passes
+        // through: a parameter or result part stored there, or a read of
+        // it that a return carries out.
+        let part = match &func.insts[value as usize] {
+            Inst::ParamPart { kind, .. } | Inst::RetPart { kind, .. } => *kind == LoadKind::F64,
+            // An 8-byte result of a SIMD instruction stored there.
+            Inst::VecBinop { bytes: 8, .. } => true,
+            Inst::SimdVal { op, .. } => crate::c5::simd::get(*op).ret_bytes() == 8,
+            Inst::InlineAsm { asm, .. } => asm.operands.iter().any(|o| {
+                o.value && o.is_output && o.width == 8 && o.constraint == AsmConstraint::Fp
+            }),
+            // An argument part, or a SIMD instruction's 8-byte operand.
+            _ => by[value as usize].iter().any(|&u| {
+                matches!(
+                    func.insts[u as usize],
+                    Inst::AggParts { .. } | Inst::SimdVal { .. } | Inst::VecBinop { bytes: 8, .. }
+                )
+            }),
+        };
+        if part {
+            touched.push(off);
+        }
         match carrier.get(&value) {
             Some(&s) => join(&mut parent, s, off),
             None => {
@@ -809,18 +1806,30 @@ fn cell_slots(func: &FunctionSsa) -> BTreeSet<i64> {
             }
         }
     }
+    touched.extend(func.vector_objects.iter().filter(|s| slots.contains(s)));
     let met: BTreeSet<i64> = touched.iter().map(|&s| root(&parent, s)).collect();
     slots.retain(|&s| met.contains(&root(&parent, s)));
-    slots
+    // The 64-bit integer reads that stay integers: lane reads of a vector.
+    let int_reads = (func.insts.iter().enumerate())
+        .filter_map(|(v, inst)| match slot_read(func, inst) {
+            Some((off, LoadKind::I64)) if slots.contains(&off) && !bits(v as ValueId, &slots) => {
+                Some(v as ValueId)
+            }
+            _ => None,
+        })
+        .collect();
+    (slots, int_reads)
 }
 
-/// The `I64` accesses of `slots`, the memory reads stored into them and
-/// the memory writes of what they hold, as `F64`.
-fn retype_cells(func: &mut FunctionSsa, slots: &BTreeSet<i64>) {
+/// The whole `I64` accesses of `slots`, the memory reads stored into them
+/// and the memory writes of what they hold, as `F64`; `int_reads` stay
+/// integer reads, which `rewrite` makes lane reads.
+fn retype_cells(func: &mut FunctionSsa, slots: &BTreeSet<i64>, int_reads: &BTreeSet<ValueId>) {
     let mut bits: BTreeSet<ValueId> = BTreeSet::new();
     for (v, inst) in func.insts.iter().enumerate() {
         if let Some((off, LoadKind::I64)) = slot_read(func, inst)
             && slots.contains(&off)
+            && !int_reads.contains(&(v as ValueId))
         {
             bits.insert(v as ValueId);
         }
@@ -844,7 +1853,9 @@ fn retype_cells(func: &mut FunctionSsa, slots: &BTreeSet<i64>) {
             {
                 *kind = LoadKind::F64
             }
-            Inst::StoreLocal { off, kind, .. } if slots.contains(off) => *kind = StoreKind::F64,
+            Inst::StoreLocal {
+                off, disp: 0, kind, ..
+            } if slots.contains(off) && *kind == StoreKind::I64 => *kind = StoreKind::F64,
             Inst::Store { value, kind, .. } if bits.contains(value) => *kind = StoreKind::F64,
             _ => {}
         }

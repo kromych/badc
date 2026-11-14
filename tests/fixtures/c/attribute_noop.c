@@ -49,7 +49,7 @@ int main(void) {
     // The struct still parses and lays out its two ints; the c5
     // dialect ignores the alignment request, so sizeof is the
     // natural 8 bytes (two `int` fields). The stub's job is to
-    // avoid corrupting the layout, not to honour the alignment.
+    // avoid corrupting the layout, not to honor the alignment.
     if (sizeof(struct aligned16) < 8) return 13;
     return 0;
 }

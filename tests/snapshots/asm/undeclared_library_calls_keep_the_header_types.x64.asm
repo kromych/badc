@@ -31,27 +31,23 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	leaq	<rip>, %rdi
                	xorl	%esi, %esi
-               	xorl	%eax, %eax
                	callq	<addr>
-               	movsd	%xmm0, 0x8(%rsp)
                	leaq	<rip>, %rdi
-               	movsd	0x8(%rsp), %xmm0
+               	movsd	%xmm0, 0x8(%rsp)
                	movb	$0x1, %al
                	callq	<addr>
-               	movabsq	$0x3ff8000000000000, %rcx # imm = 0x3FF8000000000000
-               	movsd	0x8(%rsp), %xmm14
-               	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	jp	<addr>
-               	jne	<addr>
+               	movsd	0x8(%rsp), %xmm0
+               	movsd	<rip>, %xmm1
                	xorl	%ecx, %ecx
+               	movl	$0x1, %edx
+               	ucomisd	%xmm1, %xmm0
+               	cmovneq	%rdx, %rcx
+               	cmovpq	%rdx, %rcx
+               	xorl	%edx, %edx
+               	movl	$0x2, %esi
                	cmpl	$0x5, %eax
-               	jne	<addr>
-               	xorl	%eax, %eax
-               	orq	%rcx, %rax
+               	cmovneq	%rsi, %rdx
+               	orq	%rdx, %rcx
+               	movq	%rcx, %rax
                	leave
                	retq
-               	movl	$0x2, %eax
-               	jmp	<addr>
-               	movl	$0x1, %ecx
-               	jmp	<addr>

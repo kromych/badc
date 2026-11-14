@@ -44,18 +44,16 @@ Disassembly of section .text:
                	mov	x3, #0x5                // =5
                	mov	x5, #0x9                // =9
                	stur	wzr, [x29, #-0x48]
-               	ldur	x6, [x29, #-0x50]
                	sub	x1, x29, #0x48
                	add	x2, x2, #0x10
                	add	x4, x4, #0x10
-               	blr	x6
+               	bl	<addr>
                	ldursw	x1, [x29, #-0x48]
                	add	x0, x0, x1
+               	mov	x1, #0x0                // =0
+               	mov	x2, #0x1                // =1
                	cmp	x0, #0xc0d
-               	b.ne	<addr>
-               	mov	x0, #0x0                // =0
+               	csel	x0, x1, x2, eq
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x1                // =1
-               	b	<addr>

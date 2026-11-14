@@ -100,8 +100,7 @@ Disassembly of section .text:
                	cmpl	$0x7, %eax
                	jne	<addr>
                	movl	<rip>, %eax # <addr>
-               	xorq	$0x2, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x2, %eax
                	jne	<addr>
                	cmpl	$0x0, <rip> # <addr>
                	je	<addr>

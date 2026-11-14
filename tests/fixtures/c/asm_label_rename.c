@@ -4,49 +4,55 @@
  * matches -- so the rename composes with the storage classes and attributes
  * without changing what the C code means. */
 
-int renamed_fn(void) __asm__("badc_real_fn");
+#if defined(__APPLE__)
+#define CSYM(name) "_" name
+#else
+#define CSYM(name) name
+#endif
+
+int renamed_fn(void) __asm__(CSYM("badc_real_fn"));
 int renamed_fn(void) { return 11; }
 
-static int renamed_static(void) __asm__("badc_real_static");
+static int renamed_static(void) __asm__(CSYM("badc_real_static"));
 static int renamed_static(void) { return 22; }
 
-int renamed_weak(void) __asm__("badc_real_weak") __attribute__((weak));
+int renamed_weak(void) __asm__(CSYM("badc_real_weak")) __attribute__((weak));
 int renamed_weak(void) { return 33; }
 
-int renamed_hidden(void) __asm__("badc_real_hidden")
+int renamed_hidden(void) __asm__(CSYM("badc_real_hidden"))
     __attribute__((visibility("hidden")));
 int renamed_hidden(void) { return 55; }
 
-int renamed_sect(void) __asm__("badc_real_sect")
+int renamed_sect(void) __asm__(CSYM("badc_real_sect"))
     __attribute__((section(".text.badc_rename")));
 int renamed_sect(void) { return 88; }
 
-int renamed_obj __asm__("badc_real_obj") = 44;
-int renamed_arr[3] __asm__("badc_real_arr") = { 1, 2, 3 };
-int renamed_bss __asm__("badc_real_bss");
+int renamed_obj __asm__(CSYM("badc_real_obj")) = 44;
+int renamed_arr[3] __asm__(CSYM("badc_real_arr")) = { 1, 2, 3 };
+int renamed_bss __asm__(CSYM("badc_real_bss"));
 
-/* An `alias` names the target's assembler symbol, so it takes the label
- * rather than the identifier. */
+/* An `alias` names the target's assembler name -- the label without the C
+ * prefix Mach-O spells, as gcc matches it -- rather than the identifier. */
 int alias_fn(void) __attribute__((alias("badc_real_fn")));
 
 /* A static initializer against a renamed object. */
-int *renamed_ptr __asm__("badc_real_ptr") = &renamed_obj;
+int *renamed_ptr __asm__(CSYM("badc_real_ptr")) = &renamed_obj;
 
 /* Repeating the same label is an ordinary redeclaration. */
-int renamed_fn(void) __asm__("badc_real_fn");
+int renamed_fn(void) __asm__(CSYM("badc_real_fn"));
 
 /* A rename on a declaration that follows the definition still renames the
  * symbol the unit emits: the label belongs to the entity, not to one
  * declaration of it. */
 static int late_named(void) { return 77; }
-static int late_named(void) __asm__("badc_real_late");
+static int late_named(void) __asm__(CSYM("badc_real_late"));
 
 static int block_scope(void)
 {
     /* Static storage duration at block scope carries a label too. */
-    static int q __asm__("badc_real_blk_q") = 66;
+    static int q __asm__(CSYM("badc_real_blk_q")) = 66;
     /* So does a block-scope prototype of an external function. */
-    int renamed_fn(void) __asm__("badc_real_fn");
+    int renamed_fn(void) __asm__(CSYM("badc_real_fn"));
     return q + renamed_fn();
 }
 

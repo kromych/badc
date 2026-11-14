@@ -41,17 +41,15 @@ Disassembly of section .text:
                	movq	%rdi, %r14
                	movq	%rsi, %r12
                	xorl	%ebx, %ebx
-               	leaq	-0x100(%rbp), %r13
                	leaq	(%r12,%rbx), %rdi
                	callq	<addr>
-               	movl	%eax, (%r13,%rbx,4)
+               	movl	%eax, -0x100(%rbp,%rbx,4)
                	incq	%rbx
                	cmpl	$0x40, %ebx
                	jl	<addr>
                	xorl	%eax, %eax
                	movq	%rax, %rbx
-               	leaq	-0x100(%rbp), %rcx
-               	movl	(%rcx,%rax,4), %ecx
+               	movl	-0x100(%rbp,%rax,4), %ecx
                	addq	%rcx, %rbx
                	incq	%rax
                	cmpl	$0x40, %eax

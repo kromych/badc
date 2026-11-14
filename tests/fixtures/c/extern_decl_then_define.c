@@ -37,7 +37,7 @@ const unsigned int IV_B[8] = {
 // `sym.val`; code emitted in the same TU that references
 // `&v` (e.g. another function's body) bakes that offset in.
 // The defining `T v = { ... }` MUST therefore reuse that
-// storage so the baked-in references read the initialised
+// storage so the baked-in references read the initialized
 // bytes -- a fresh allocation would leave the original offset
 // pointing at zeros.
 typedef struct vtbl { unsigned int desc; void *init; } vtbl;
@@ -54,7 +54,7 @@ int main(void) {
 
     // `peek_via_extern` was parsed before the defining `V` was
     // seen, so its body references the extern's offset. The
-    // initialised bytes must land at the same offset.
+    // initialized bytes must land at the same offset.
     if (peek_via_extern() != &V)            return 6;
     if (peek_via_extern()->desc != 0xA5A5A5A5u) return 7;
     if (peek_via_extern()->init != (void *)0xDEADBEEFu) return 8;

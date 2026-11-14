@@ -26,7 +26,7 @@ pub(crate) enum ScalarKind {
     F80,
     /// IEEE binary128 `long double` (AAPCS64 ELF).
     F128,
-    /// A GCC `vector_size` value. Both ABIs classify a vector by its
+    /// A GNU C `vector_size` value. Both ABIs classify a vector by its
     /// whole width rather than by its lanes, so the flattening stops at
     /// the vector and the leaf's size is the vector's own.
     Vector,
@@ -131,6 +131,11 @@ pub(crate) enum RegClass {
     /// Short Vector (6.4.2) both occupy one register across their full
     /// width, so the slot is 16 bytes wide rather than 8.
     Vector,
+    /// A whole 32-byte vector register: System V SSE followed by three
+    /// SSEUP eightbytes, a ymm register once AVX is enabled (psABI 3.2.3),
+    /// which the x86-64 baseline always is. A named argument and a result
+    /// only; an unnamed argument goes in memory.
+    Vector256,
     /// The top of the x87 register stack, `st(0)`: System V AMD64 3.2.3
     /// returns an X87 + X87UP pair there, a sole `long double`. No argument
     /// takes it.
@@ -145,6 +150,7 @@ impl RegClass {
     pub(crate) fn width(self) -> u32 {
         match self {
             RegClass::Vector | RegClass::X87 => 16,
+            RegClass::Vector256 => 32,
             _ => 8,
         }
     }
@@ -229,7 +235,7 @@ pub(crate) fn is_narrow_vector(desc: &AggDesc) -> bool {
     desc.vector && desc.size < 8
 }
 
-/// `(element, lane)` byte widths of a narrow vector clang returns with its
+/// `(element, lane)` byte widths of a narrow vector returned with its
 /// elements widened to equal lanes of d0: one of integer elements, more
 /// than one. Any other narrow vector returns as its bytes in the low bytes
 /// of v0.
@@ -256,7 +262,7 @@ pub(crate) fn classify_aggregate(desc: &AggDesc, abi: Abi, is_return: bool) -> A
         if abi.position_indexed_args {
             classify_win64(desc.size, is_return)
         } else {
-            classify_sysv(desc.size, &desc.fields, is_return)
+            classify_sysv(desc, is_return)
         }
     } else {
         // AAPCS64: Linux / macOS aarch64 and Windows aarch64, which
@@ -288,7 +294,8 @@ fn classify_win64(size: u32, is_return: bool) -> AggClass {
 /// x87 value X87UP. SSE followed by SSEUP is one vector register, X87
 /// followed by X87UP the x87 register stack's top, which only a return
 /// value takes, and an eightbyte left NO_CLASS takes no register.
-fn classify_sysv(size: u32, fields: &[FlatField], is_return: bool) -> AggClass {
+fn classify_sysv(desc: &AggDesc, is_return: bool) -> AggClass {
+    let (size, fields) = (desc.size, desc.fields.as_slice());
     let memory = if is_return {
         AggClass::ReturnIndirect
     } else {
@@ -296,6 +303,9 @@ fn classify_sysv(size: u32, fields: &[FlatField], is_return: bool) -> AggClass {
     };
     if size == 0 {
         return AggClass::Regs(alloc::vec::Vec::new());
+    }
+    if desc.vector && size == 32 {
+        return AggClass::Regs(alloc::vec![RegClass::Vector256]);
     }
     if size > 16
         || fields
@@ -472,8 +482,7 @@ pub(crate) fn register_parts(
     let AggClass::Regs(classes) = classify_aggregate(desc, abi, is_return) else {
         return None;
     };
-    if classes.is_empty() || classes.contains(&RegClass::Vector) || classes.contains(&RegClass::X87)
-    {
+    if classes.is_empty() || classes.contains(&RegClass::X87) {
         return None;
     }
     let (size, fields) = (desc.size, &desc.fields);
@@ -481,10 +490,10 @@ pub(crate) fn register_parts(
         Some(hfa) if abi.arch != Arch::X86_64 => hfa
             .members()
             .into_iter()
-            .map(|(off, msize)| (off, msize, RegClass::Sse))
+            .map(|(off, msize)| (off, msize, hfa.reg_class()))
             .collect(),
         _ => register_slots(&classes)
-            .map(|(class, off)| (off, (size - off).min(8), class))
+            .map(|(class, off)| (off, (size - off).min(class.width()), class))
             .collect(),
     };
     Some(
@@ -956,8 +965,8 @@ mod tests {
         // The flattening keeps a vector whole exactly where a calling
         // convention has a rule for it. Below 64 bits neither does, so a
         // 4-byte vector reaches the classifier as its lanes and takes a
-        // general-purpose register, where gcc places it; above 128 bits
-        // neither does either, and the size rules send it to memory.
+        // general-purpose register; above 128 bits neither does either, and
+        // the size rules send it to memory.
         assert!(is_abi_vector_width(16));
         assert!(is_abi_vector_width(8));
         assert!(!is_abi_vector_width(4));
@@ -974,9 +983,8 @@ mod tests {
     #[test]
     fn sysv_single_fp_vector_is_memory_class() {
         // `float` / `double` with a `vector_size` of its own width, bare or
-        // beside a `float`: System V MEMORY, as gcc places it. AAPCS64 keeps
-        // the 4-byte one a composite in a general-purpose register, and
-        // Win64 goes by size.
+        // beside a `float`: System V MEMORY. AAPCS64 keeps the 4-byte one a
+        // composite in a general-purpose register, and Win64 goes by size.
         let single = |kind, size| FlatField {
             single_fp_vector: true,
             ..ff(0, size, kind)
@@ -1005,9 +1013,9 @@ mod tests {
     #[test]
     fn aapcs64_narrow_vectors_return_in_a_simd_register() {
         // A bare vector narrower than 8 bytes passes as a 32-bit integer and
-        // returns in v0, as clang places it: a `float` or a single element as
-        // its bytes in the low bytes, several integer elements widened to
-        // equal lanes of d0. A struct holding one keeps the general registers.
+        // returns in v0: a `float` or a single element as its bytes in the
+        // low bytes, several integer elements widened to equal lanes of d0.
+        // A struct holding one keeps the general registers.
         let lane = FlatField {
             single_fp_vector: true,
             ..ff(0, 4, ScalarKind::F32)
@@ -1062,12 +1070,24 @@ mod tests {
     }
 
     #[test]
-    fn vector_wider_than_a_register_goes_to_memory() {
-        // 32 bytes exceeds the register on both, so the lanes reach the
-        // size rules: System V sends the value to memory (the psABI's ymm
-        // form needs AVX), AAPCS64 passes the composite by reference.
+    fn a_32_byte_vector_is_one_ymm_register_on_system_v() {
+        // System V passes and returns a 32-byte vector whole in a ymm
+        // register under AVX, which the x86-64 baseline has; a structure of
+        // the same bytes stays MEMORY. AAPCS64 has no such register and
+        // passes the composite by reference.
         let lanes: alloc::vec::Vec<FlatField> =
             (0..32).map(|i| ff(i, 1, ScalarKind::Int)).collect();
+        let vector = AggDesc {
+            vector: true,
+            ..desc(32, &lanes)
+        };
+        for is_return in [false, true] {
+            assert_eq!(
+                classify_aggregate(&vector, sysv(), is_return),
+                AggClass::Regs(alloc::vec![RegClass::Vector256])
+            );
+        }
+        assert_eq!(classify_aggregate(&vector, aapcs(), false), AggClass::ByRef);
         assert_eq!(
             classify_aggregate(&desc(32, &lanes), sysv(), false),
             AggClass::ByStack
@@ -1087,8 +1107,8 @@ mod tests {
     #[test]
     fn a_vector_member_makes_its_eightbyte_sse() {
         // System V classes the eightbyte a 64-bit vector occupies SSE and
-        // the one holding the trailing `int` INTEGER, in either order --
-        // gcc delivers `struct { u8x8 v; int i; }` in xmm0 and rdi.
+        // the one holding the trailing `int` INTEGER, in either order:
+        // `struct { u8x8 v; int i; }` passes in xmm0 and rdi.
         let f = [ff(0, 8, ScalarKind::Vector), ff(8, 4, ScalarKind::Int)];
         assert_eq!(
             classify_aggregate(&desc(16, &f), sysv(), false),
@@ -1292,8 +1312,11 @@ mod tests {
             let parts = register_parts(&desc(8, &two_ints), abi, false).expect("one register");
             assert_eq!((parts.len(), parts[0].fields.len()), (1, 2));
         }
-        assert!(
-            register_parts(&desc(16, &[ff(0, 16, ScalarKind::Vector)]), sysv(), false).is_none()
+        let vector = register_parts(&desc(16, &[ff(0, 16, ScalarKind::Vector)]), sysv(), false)
+            .expect("one vector register");
+        assert_eq!(
+            (vector.len(), vector[0].class, vector[0].width),
+            (1, RegClass::Vector, 16)
         );
         let big = [
             ff(0, 8, ScalarKind::Int),

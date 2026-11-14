@@ -1,7 +1,7 @@
 // corecrt.h -- the C runtime's shared types, as mingw-w64's corecrt.h
-// declares them: errno_t, rsize_t, the 32- and 64-bit time types the
-// _*32 / _*64 functions take, and the _locale_t handle the *_l functions
-// take.
+// declares them: errno_t, rsize_t, intptr_t and uintptr_t, the 32- and
+// 64-bit time types the _*32 / _*64 functions take, and the _locale_t
+// handle the *_l functions take.
 
 #pragma once
 
@@ -18,6 +18,11 @@ typedef int errno_t;
 #define _RSIZE_T_DEFINED
 typedef size_t rsize_t;
 #endif
+
+// The pointer-sized integers, which the UCRT's corecrt.h takes from
+// vcruntime.h, so <stdlib.h> and the other CRT headers declare them.
+typedef __INTPTR_TYPE__ intptr_t;
+typedef __UINTPTR_TYPE__ uintptr_t;
 
 typedef long __time32_t;
 typedef long long __time64_t;

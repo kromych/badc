@@ -24,7 +24,6 @@ Disassembly of section .text:
                	sturb	w0, [x29, #-0x8]
                	ldurb	w0, [x29, #-0x8]
                	cbnz	w0, <addr>
-               	ldurb	w0, [x29, #-0x8]
                	cbnz	w0, <addr>
                	mov	x20, #0x0               // =0
                	adrp	x0, <page>

@@ -1,4 +1,4 @@
-/* AArch64 inline asm load/store addressing modes through the table catalogue:
+/* AArch64 inline asm load/store addressing modes through the table catalog:
  * the unscaled-simm9 fallback an offset outside the scaled uimm12 form takes
  * (as the assembler selects), pre-/post-index writeback including the subword
  * forms, register pairs with a negative scaled offset, and a sign-extending

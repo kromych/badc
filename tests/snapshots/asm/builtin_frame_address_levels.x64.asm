@@ -102,23 +102,20 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	popq	%rbp
                	retq
-               	movq	<rip>, %rax # <addr>
                	movq	<rip>, %rcx # <addr>
-               	cmpq	%rcx, %rax
+               	movq	<rip>, %rdx # <addr>
+               	cmpq	%rdx, %rcx
                	je	<addr>
                	movl	$0x5, %eax
                	popq	%rbp
                	retq
-               	movq	<rip>, %rax # <addr>
-               	movq	<rip>, %rcx # <addr>
-               	cmpq	%rcx, %rax
+               	movq	<rip>, %rsi # <addr>
+               	movq	<rip>, %rdx # <addr>
+               	cmpq	%rdx, %rsi
+               	je	<addr>
+               	cmpq	%rax, %rdx
                	je	<addr>
                	movq	<rip>, %rax # <addr>
-               	movq	<rip>, %rcx # <addr>
-               	cmpq	%rcx, %rax
-               	je	<addr>
-               	movq	<rip>, %rax # <addr>
-               	movq	<rip>, %rcx # <addr>
                	cmpq	%rcx, %rax
                	jne	<addr>
                	movl	$0x6, %eax

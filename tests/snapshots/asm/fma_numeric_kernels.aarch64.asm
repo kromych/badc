@@ -40,12 +40,12 @@ Disassembly of section .text:
                	ldr	d1, [x16]
                	fsub	d1, d0, d1
                	movi	d0, #0000000000000000
-               	fcmp	d1, d0
+               	fcmpe	d1, d0
                	b.pl	<addr>
                	fneg	d1, d1
                	adrp	x16, <page>
                	ldr	d2, [x16, #0x8]
-               	fcmp	d1, d2
+               	fcmpe	d1, d2
                	b.mi	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x90
@@ -61,290 +61,134 @@ Disassembly of section .text:
                	cmp	w0, #0x0
                	b.ge	<addr>
                	fmov	d0, #1.00000000
-               	fsub	d0, d1, d0
-               	mov	x1, #0x0                // =0
-               	fmov	d17, x1
-               	fcmp	d0, d17
+               	fsub	d1, d1, d0
+               	mov	x4, #0x0                // =0
+               	fmov	d17, x4
+               	fcmpe	d1, d17
                	b.pl	<addr>
-               	fneg	d0, d0
+               	fneg	d1, d1
                	adrp	x16, <page>
-               	ldr	d1, [x16, #0x8]
-               	fcmp	d0, d1
+               	ldr	d2, [x16, #0x8]
+               	fcmpe	d1, d2
                	b.mi	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x4, #0x3                // =3
-               	mov	x5, #0x18               // =24
-               	mov	x0, #0x0                // =0
+               	mov	x8, #0x18               // =24
+               	mov	x1, #0x0                // =0
+               	mul	x2, x4, x8
+               	add	x5, x4, x4, lsl #1
+               	mov	x0, x1
                	sub	x3, x29, #0x90
-               	mul	x2, x1, x5
                	add	x6, x3, x2
                	lsl	x3, x0, #3
                	add	x6, x6, x3
-               	mul	x7, x1, x4
-               	add	x7, x7, x0
+               	add	x7, x5, x0
                	add	x7, x7, #0x1
                	sxtw	x7, w7
-               	scvtf	d0, x7
-               	str	d0, [x6]
+               	scvtf	d1, x7
+               	str	d1, [x6]
                	sub	x6, x29, #0x48
-               	add	x2, x6, x2
-               	add	x2, x2, x3
-               	cmp	w1, w0
-               	b.ne	<addr>
-               	fmov	d0, #1.00000000
-               	b	<addr>
-               	movi	d0, #0000000000000000
-               	str	d0, [x2]
+               	add	x6, x6, x2
+               	add	x3, x6, x3
+               	cmp	w4, w0
+               	fmov	d17, x1
+               	fcsel	d1, d0, d17, eq
+               	str	d1, [x3]
                	add	x0, x0, #0x1
                	cmp	w0, #0x3
                	b.lt	<addr>
-               	add	x1, x1, #0x1
-               	cmp	w1, #0x3
+               	add	x4, x4, #0x1
+               	cmp	w4, #0x3
                	b.lt	<addr>
                	mov	x2, #0x0                // =0
                	mov	x3, #0x18               // =24
                	adrp	x16, <page>
                	ldr	d1, [x16, #0x8]
+               	ldur	d3, [x29, #-0x48]
+               	ldur	d4, [x29, #-0x30]
+               	ldur	d5, [x29, #-0x18]
+               	ldur	d6, [x29, #-0x40]
+               	ldur	d7, [x29, #-0x28]
+               	ldur	d19, [x29, #-0x10]
+               	ldur	d20, [x29, #-0x38]
+               	ldur	d21, [x29, #-0x20]
+               	ldur	d22, [x29, #-0x8]
                	mov	x1, x2
                	sub	x0, x29, #0x90
-               	sub	x4, x29, #0x48
-               	mul	x5, x1, x3
-               	add	x0, x0, x5
+               	mul	x4, x1, x3
+               	add	x0, x0, x4
                	ldr	d0, [x0]
-               	ldur	d2, [x29, #-0x48]
                	fmov	d18, x2
-               	fmadd	d0, d0, d2, d18
-               	ldr	d2, [x0, #0x8]
-               	add	x6, x4, #0x18
-               	ldr	d3, [x6]
-               	fmadd	d0, d2, d3, d0
-               	ldr	d2, [x0, #0x10]
-               	add	x4, x4, #0x30
-               	ldr	d3, [x4]
-               	fmadd	d0, d2, d3, d0
-               	ldr	d2, [x0]
-               	fsub	d0, d0, d2
+               	fmadd	d2, d0, d3, d18
+               	ldr	d23, [x0, #0x8]
+               	fmadd	d2, d23, d4, d2
+               	ldr	d23, [x0, #0x10]
+               	fmadd	d2, d23, d5, d2
+               	fsub	d0, d2, d0
                	fmov	d17, x2
-               	fcmp	d0, d17
+               	fcmpe	d0, d17
                	b.pl	<addr>
                	fneg	d0, d0
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.pl	<addr>
                	ldr	d0, [x0]
-               	ldur	d2, [x29, #-0x40]
                	fmov	d18, x2
-               	fmadd	d0, d0, d2, d18
+               	fmadd	d0, d0, d6, d18
                	ldr	d2, [x0, #0x8]
-               	ldr	d3, [x6, #0x8]
-               	fmadd	d0, d2, d3, d0
+               	fmadd	d0, d2, d7, d0
                	ldr	d2, [x0, #0x10]
-               	ldr	d3, [x4, #0x8]
-               	fmadd	d0, d2, d3, d0
+               	fmadd	d0, d2, d19, d0
                	sub	x0, x29, #0x90
-               	add	x4, x0, x5
+               	add	x4, x0, x4
                	ldr	d2, [x4, #0x8]
                	fsub	d0, d0, d2
                	movi	d2, #0000000000000000
-               	fcmp	d0, d2
+               	fcmpe	d0, d2
                	b.pl	<addr>
                	fneg	d0, d0
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.pl	<addr>
-               	sub	x4, x29, #0x48
-               	mul	x5, x1, x3
-               	add	x0, x0, x5
+               	mul	x4, x1, x3
+               	add	x0, x0, x4
                	ldr	d0, [x0]
-               	ldur	d3, [x29, #-0x38]
-               	fmadd	d0, d0, d3, d2
-               	ldr	d3, [x0, #0x8]
-               	add	x5, x4, #0x18
-               	ldr	d4, [x5, #0x10]
-               	fmadd	d3, d3, d4, d0
+               	fmadd	d0, d0, d20, d2
+               	ldr	d23, [x0, #0x8]
+               	fmadd	d23, d23, d21, d0
                	ldr	d0, [x0, #0x10]
-               	add	x0, x4, #0x30
-               	ldr	d4, [x0, #0x10]
-               	fmadd	d3, d0, d4, d3
-               	fsub	d0, d3, d0
-               	fcmp	d0, d2
+               	fmadd	d23, d0, d22, d23
+               	fsub	d0, d23, d0
+               	fcmpe	d0, d2
                	b.pl	<addr>
                	fneg	d0, d0
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.pl	<addr>
                	add	x1, x1, #0x1
                	cmp	w1, #0x3
                	b.lt	<addr>
-               	sub	x0, x29, #0x90
-               	movi	d1, #0000000000000000
+               	mov	x0, #0x0                // =0
                	ldur	d0, [x29, #-0x78]
-               	ldur	d2, [x29, #-0x80]
-               	fmadd	d2, d0, d2, d1
-               	add	x1, x0, #0x18
-               	ldr	d3, [x1, #0x8]
-               	ldr	d0, [x1, #0x10]
-               	fmadd	d2, d3, d0, d2
-               	add	x0, x0, #0x30
-               	ldr	d3, [x0, #0x10]
-               	fmadd	d0, d0, d3, d2
+               	ldur	d1, [x29, #-0x80]
+               	fmov	d18, x0
+               	fmadd	d1, d0, d1, d18
+               	ldur	d2, [x29, #-0x70]
+               	ldur	d0, [x29, #-0x68]
+               	fmadd	d1, d2, d0, d1
+               	ldur	d2, [x29, #-0x50]
+               	fmadd	d0, d0, d2, d1
                	mov	x16, #0x4058000000000000 // =4636455816377925632
-               	fmov	d2, x16
-               	fsub	d0, d0, d2
-               	fcmp	d0, d1
+               	fmov	d1, x16
+               	fsub	d0, d0, d1
+               	fmov	d17, x0
+               	fcmpe	d0, d17
                	b.pl	<addr>
                	fneg	d0, d0
                	adrp	x16, <page>
                	ldr	d1, [x16, #0x8]
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.mi	<addr>
                	mov	x0, #0x4                // =4
-               	add	sp, sp, #0x90
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	fmov	d3, #1.00000000
-               	fmov	d0, #16.00000000
-               	fdiv	d0, d3, d0
-               	fmov	d1, #0.50000000
-               	fmul	d1, d0, d1
-               	fmadd	d5, d1, d3, d3
-               	fmadd	d6, d1, d5, d3
-               	fmadd	d7, d0, d6, d3
-               	fmov	d2, #6.00000000
-               	fdiv	d4, d0, d2
-               	fmov	d2, #2.00000000
-               	fmadd	d5, d2, d5, d3
-               	fmadd	d5, d2, d6, d5
-               	fadd	d5, d5, d7
-               	fmadd	d3, d4, d5, d3
-               	fmadd	d5, d1, d3, d3
-               	fmadd	d6, d1, d5, d3
-               	fmadd	d7, d0, d6, d3
-               	fmadd	d5, d2, d5, d3
-               	fmadd	d5, d2, d6, d5
-               	fadd	d5, d5, d7
-               	fmadd	d3, d4, d5, d3
-               	fmadd	d5, d1, d3, d3
-               	fmadd	d6, d1, d5, d3
-               	fmadd	d7, d0, d6, d3
-               	fmadd	d5, d2, d5, d3
-               	fmadd	d5, d2, d6, d5
-               	fadd	d5, d5, d7
-               	fmadd	d3, d4, d5, d3
-               	fmadd	d5, d1, d3, d3
-               	fmadd	d6, d1, d5, d3
-               	fmadd	d7, d0, d6, d3
-               	fmadd	d5, d2, d5, d3
-               	fmadd	d5, d2, d6, d5
-               	fadd	d5, d5, d7
-               	fmadd	d3, d4, d5, d3
-               	fmadd	d5, d1, d3, d3
-               	fmadd	d6, d1, d5, d3
-               	fmadd	d7, d0, d6, d3
-               	fmadd	d5, d2, d5, d3
-               	fmadd	d5, d2, d6, d5
-               	fadd	d5, d5, d7
-               	fmadd	d3, d4, d5, d3
-               	fmadd	d5, d1, d3, d3
-               	fmadd	d6, d1, d5, d3
-               	fmadd	d7, d0, d6, d3
-               	fmadd	d5, d2, d5, d3
-               	fmadd	d5, d2, d6, d5
-               	fadd	d5, d5, d7
-               	fmadd	d3, d4, d5, d3
-               	fmadd	d5, d1, d3, d3
-               	fmadd	d6, d1, d5, d3
-               	fmadd	d7, d0, d6, d3
-               	fmadd	d5, d2, d5, d3
-               	fmadd	d2, d2, d6, d5
-               	fadd	d2, d2, d7
-               	fmadd	d2, d4, d2, d3
-               	fmadd	d4, d1, d2, d2
-               	fmadd	d5, d1, d4, d2
-               	fmadd	d6, d0, d5, d2
-               	fmov	d1, #6.00000000
-               	fdiv	d3, d0, d1
-               	fmov	d1, #2.00000000
-               	fmadd	d4, d1, d4, d2
-               	fmadd	d4, d1, d5, d4
-               	fadd	d4, d4, d6
-               	fmadd	d4, d3, d4, d2
-               	fmov	d2, #0.50000000
-               	fmul	d2, d0, d2
-               	fmadd	d5, d2, d4, d4
-               	fmadd	d6, d2, d5, d4
-               	fmadd	d7, d0, d6, d4
-               	fmadd	d5, d1, d5, d4
-               	fmadd	d5, d1, d6, d5
-               	fadd	d5, d5, d7
-               	fmadd	d4, d3, d5, d4
-               	fmadd	d5, d2, d4, d4
-               	fmadd	d6, d2, d5, d4
-               	fmadd	d7, d0, d6, d4
-               	fmadd	d5, d1, d5, d4
-               	fmadd	d5, d1, d6, d5
-               	fadd	d5, d5, d7
-               	fmadd	d4, d3, d5, d4
-               	fmadd	d5, d2, d4, d4
-               	fmadd	d6, d2, d5, d4
-               	fmadd	d7, d0, d6, d4
-               	fmadd	d5, d1, d5, d4
-               	fmadd	d5, d1, d6, d5
-               	fadd	d5, d5, d7
-               	fmadd	d4, d3, d5, d4
-               	fmadd	d5, d2, d4, d4
-               	fmadd	d6, d2, d5, d4
-               	fmadd	d7, d0, d6, d4
-               	fmadd	d5, d1, d5, d4
-               	fmadd	d5, d1, d6, d5
-               	fadd	d5, d5, d7
-               	fmadd	d4, d3, d5, d4
-               	fmadd	d5, d2, d4, d4
-               	fmadd	d6, d2, d5, d4
-               	fmadd	d7, d0, d6, d4
-               	fmadd	d5, d1, d5, d4
-               	fmadd	d5, d1, d6, d5
-               	fadd	d5, d5, d7
-               	fmadd	d4, d3, d5, d4
-               	fmadd	d5, d2, d4, d4
-               	fmadd	d6, d2, d5, d4
-               	fmadd	d7, d0, d6, d4
-               	fmadd	d5, d1, d5, d4
-               	fmadd	d5, d1, d6, d5
-               	fadd	d5, d5, d7
-               	fmadd	d4, d3, d5, d4
-               	fmadd	d5, d2, d4, d4
-               	fmadd	d2, d2, d5, d4
-               	fmadd	d6, d0, d2, d4
-               	fmadd	d5, d1, d5, d4
-               	fmadd	d1, d1, d2, d5
-               	fadd	d1, d1, d6
-               	fmadd	d1, d3, d1, d4
-               	fmov	d2, #0.50000000
-               	fmul	d2, d0, d2
-               	fmadd	d3, d2, d1, d1
-               	fmadd	d2, d2, d3, d1
-               	fmadd	d4, d0, d2, d1
-               	fmov	d5, #6.00000000
-               	fdiv	d5, d0, d5
-               	fmov	d0, #2.00000000
-               	fmadd	d3, d0, d3, d1
-               	fmadd	d0, d0, d2, d3
-               	fadd	d0, d0, d4
-               	fmadd	d0, d5, d0, d1
-               	adrp	x16, <page>
-               	ldr	d1, [x16, #0x10]
-               	fsub	d0, d0, d1
-               	mov	x0, #0x0                // =0
-               	fmov	d17, x0
-               	fcmp	d0, d17
-               	b.pl	<addr>
-               	fneg	d0, d0
-               	adrp	x16, <page>
-               	ldr	d1, [x16, #0x18]
-               	fcmp	d0, d1
-               	b.le	<addr>
-               	mov	x0, #0x5                // =5
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret

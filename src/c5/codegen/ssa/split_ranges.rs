@@ -38,7 +38,7 @@
 use alloc::vec;
 use alloc::vec::Vec;
 
-use super::super::ir::{FunctionSsa, Inst, NO_VALUE, Terminator, ValueId};
+use super::super::ir::{BlockId, FunctionSsa, Inst, NO_VALUE, Terminator, ValueId};
 use super::reg_alloc::{Allocation, Place};
 use super::tape::{At, Insertion, Undo};
 use super::{FixedRegs, Target};
@@ -99,7 +99,7 @@ fn plan(func: &FunctionSsa, alloc: &Allocation) -> Vec<Run> {
         return out;
     }
     let preds = super::mem2reg::predecessors(func);
-    // Blocks in tape order, so a chain link is a neighbouring pair.
+    // Blocks in tape order, so a chain link is a neighboring pair.
     let mut order: Vec<usize> = (0..func.blocks.len()).collect();
     order.sort_unstable_by_key(|&b| func.blocks[b].inst_range.start);
     // Per value, the run it was last seen in plus that run's first and
@@ -210,10 +210,11 @@ fn apply(func: &mut FunctionSsa, runs: &[Run]) -> Undo {
                     .get(r.src as usize)
                     .copied()
                     .unwrap_or(false),
+                copy_of: None,
             }
         })
         .collect();
-    let (rewrite, undo) = super::tape::insert(func, &ins);
+    let (rewrite, undo) = super::tape::insert_undoable(func, &ins);
     let mut copy_id: Vec<ValueId> = vec![NO_VALUE; runs.len()];
     for (pos, &k) in order.iter().enumerate() {
         copy_id[k as usize] = rewrite.ids[pos];
@@ -279,6 +280,13 @@ pub(super) fn spill_traffic(func: &FunctionSsa, alloc: &Allocation) -> u64 {
                 total = total.saturating_add(wb);
             }
         });
+        // The stores and loads of the registers saved around loops.
+        let saves = &alloc.loop_saves;
+        let b = b as BlockId;
+        let moved = saves.stores_at(b).len()
+            + saves.loads_at_start_of(b).len()
+            + saves.loads_at_end_of(b).len();
+        total = total.saturating_add(wb.saturating_mul(moved as u64));
     }
     total
 }
@@ -327,7 +335,7 @@ mod tests {
     fn func_with(insts: Vec<Inst>, blocks: Vec<Block>) -> FunctionSsa {
         let n = insts.len();
         FunctionSsa {
-            inst_src: vec![(0, 0); n],
+            inst_src: vec![crate::c5::ir::InstSrc::default(); n],
             f32_values: vec![false; n],
             insts,
             blocks,
@@ -397,15 +405,22 @@ mod tests {
             sxtw_source: vec![NO_VALUE; n],
             sxtw_k: vec![0; n],
             branch_fused: vec![false; n],
+            mask_tests: vec![false; n],
+            select_inc: vec![false; n],
+            imm_held: vec![false; n],
             imm_store: vec![false; n],
+            stack_imm: alloc::collections::BTreeMap::new(),
+            stack_load: alloc::collections::BTreeMap::new(),
             fp_const: vec![false; n],
             implicit_live: Vec::new(),
             hints: vec![None; n],
             f32_values: vec![false; n],
             high_observed: Vec::new(),
             high_clear: Vec::new(),
-            wide: vec![false; n],
+            wide: vec![crate::c5::codegen::ssa::reg_alloc::VecWidth::Scalar; n],
             asm_preserve: (u32::MAX, u32::MAX),
+            call_saves: Vec::new(),
+            loop_saves: Default::default(),
         }
     }
 
@@ -642,7 +657,7 @@ mod tests {
         assert_eq!(spill_traffic(&f, &alt), 2, "def plus the copy");
     }
     /// A copy between a comparison and the branch it feeds writes no
-    /// host flags, so the fusion the allocator recognised survives one
+    /// host flags, so the fusion the allocator recognized survives one
     /// landing in that window.
     #[test]
     fn a_copy_in_the_branch_window_keeps_the_fusion() {

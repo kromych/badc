@@ -28,15 +28,13 @@ Disassembly of section .text:
 <main>:
                	movsbq	<rip>, %rax # <addr>
                	andq	$0xff, %rax
-               	xorq	$0xc3, %rax
-               	testl	%eax, %eax
+               	cmpl	$0xc3, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	retq
                	movsbq	<rip>, %rax # <addr>
                	andq	$0xff, %rax
-               	xorq	$0xa1, %rax
-               	testl	%eax, %eax
+               	cmpl	$0xa1, %eax
                	je	<addr>
                	movl	$0x4, %eax
                	retq

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fetch the NASM 2.16.03 release tarball from the badc vendor-deps mirror.
+"""Fetch the NASM 3.02 release tarball from the badc vendor-deps mirror.
 
 After this runs, ``demos/nasm/src/`` holds the upstream NASM source
 distribution -- the C sources, the pre-generated x86 instruction tables
@@ -30,10 +30,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "vendor_deps"))
 import _fetch  # noqa: E402
 
-VERSION = "2.16.03"
+VERSION = "3.02"
 
-# sha256 of the upstream www.nasm.us release tarball nasm-2.16.03.tar.xz.
-SRC_UPSTREAM_SHA = "1412a1c760bbd05db026b6c0d1657affd6631cd0a63cddb6f73cc6d4aa616148"
+# sha256 of the upstream www.nasm.us release tarball nasm-3.02.tar.xz.
+SRC_UPSTREAM_SHA = "87336eba53b4acfe917424ab5d500d2b0054d9f5148d35c2273ccf2cfb712f0d"
 SRC_ASSET = f"nasm-{VERSION}-{SRC_UPSTREAM_SHA[:8]}.tar.xz"
 SRC_SHA256 = SRC_UPSTREAM_SHA
 RELEASE_TAG = "vendor-deps-v1"

@@ -111,7 +111,7 @@ enum PureKey {
     Imm(i64),
     /// `Inst::Imm` holding an f32 bit pattern, tagged f32. Kept apart
     /// from [`PureKey::Imm`]: the f32 mark changes the value's
-    /// materialisation, so an integer imm with an equal payload must
+    /// materialization, so an integer imm with an equal payload must
     /// not unify with it.
     ImmF32(i64),
     ImmData(i64),
@@ -163,6 +163,8 @@ pub(crate) struct SsaBuilder {
     current: Option<BlockId>,
     /// The `__try` region blocks created now lie in.
     seh_current: Option<u32>,
+    /// The truth predicted for the next conditional branch's condition.
+    expected: Option<bool>,
     /// In a filter funclet, the frame of the function it filters for.
     parent_frame: Option<ParentFrame>,
     /// Per-block CSE cache for `load_local` / `store_local`. The
@@ -210,7 +212,7 @@ pub(crate) struct SsaBuilder {
     /// can recover a per-statement line table for walker-produced
     /// SSA. `(0, 0)` means "no source information"; the DWARF
     /// builder skips those rows.
-    cur_src: (u32, u32),
+    cur_src: crate::c5::ir::InstSrc,
 }
 
 impl SsaBuilder {
@@ -228,6 +230,7 @@ impl SsaBuilder {
             is_variadic,
             seh_scopes: Vec::new(),
             block_seh: Vec::new(),
+            predicted: Vec::new(),
             funclet_slots: Vec::new(),
             is_inline: false,
             is_always_inline: false,
@@ -267,9 +270,11 @@ impl SsaBuilder {
             computed_goto_targets: Vec::new(),
             label_data_relocs: Vec::new(),
             jump_tables: Vec::new(),
-            synthetic_base: 0,
+            synthetic_base: -1,
             multi_cell_slots: Vec::new(),
             array_slots: Vec::new(),
+            vector_objects: Vec::new(),
+            owned_params: Vec::new(),
             over_aligned: Vec::new(),
             frame_align: 0,
             realign_region_bytes: 0,
@@ -281,6 +286,7 @@ impl SsaBuilder {
             func,
             current: None,
             seh_current: None,
+            expected: None,
             parent_frame: None,
             local_cache: Vec::new(),
             pure_cache: hashbrown::HashMap::new(),
@@ -289,7 +295,7 @@ impl SsaBuilder {
             block_terminators: Vec::new(),
             block_exit_accs: Vec::new(),
             last_def: NO_VALUE,
-            cur_src: (0, 0),
+            cur_src: Default::default(),
             split_modulo: false,
             defer_divmod: false,
         };
@@ -513,6 +519,11 @@ impl SsaBuilder {
         }
     }
 
+    /// Record a parameter whose entry copy [`crate::c5::ir::OwnedParam`] describes.
+    pub(crate) fn add_owned_param(&mut self, p: crate::c5::ir::OwnedParam) {
+        self.func.owned_params.push(p);
+    }
+
     /// Record a declared array based at `slot`.
     pub(crate) fn add_array_slot(&mut self, slot: i64) {
         if let Some(slot) = self.own_slot(slot) {
@@ -561,6 +572,7 @@ impl SsaBuilder {
     pub(crate) fn new_block(&mut self) -> BlockId {
         let id = self.block_starts.len() as BlockId;
         self.func.block_seh.push(self.seh_current);
+        self.func.predicted.push(None);
         self.block_starts.push(self.func.insts.len() as u32);
         self.block_ends.push(self.func.insts.len() as u32);
         self.block_terminators.push(None);
@@ -714,6 +726,15 @@ impl SsaBuilder {
     /// frame slot `ret_slot_local`.
     pub(crate) fn set_call_ret_agg(&mut self, v: ValueId, ret_agg: u32, ret_slot_local: i64) {
         let ret_slot_local = self.call_result_slot(ret_slot_local);
+        // A vector result's temporary is an object of the vector type.
+        let vector = self
+            .func
+            .agg_descs
+            .get(ret_agg as usize)
+            .is_some_and(|d| d.vector);
+        if vector && !self.func.vector_objects.contains(&ret_slot_local) {
+            self.func.vector_objects.push(ret_slot_local);
+        }
         if let Inst::Call {
             ret_agg: ra,
             ret_slot_local: rs,
@@ -800,11 +821,11 @@ impl SsaBuilder {
             .unwrap_or(false)
     }
 
-    /// Set the `(line, file_idx)` source position stamped on every
-    /// subsequent [`Self::push`] until the next call. Used by the
-    /// walker to drive per-statement DWARF rows.
-    pub(crate) fn set_src(&mut self, line: u32, file_idx: u32) {
-        self.cur_src = (line, file_idx);
+    /// Set the source position stamped on every subsequent [`Self::push`]
+    /// until the next call. Used by the walker to drive per-statement
+    /// DWARF rows and to place the lowering's diagnostics.
+    pub(crate) fn set_src(&mut self, src: crate::c5::ir::InstSrc) {
+        self.cur_src = src;
     }
 
     /// `Inst::Imm`. In-block CSE: a prior `imm(v)` returns the
@@ -867,7 +888,7 @@ impl SsaBuilder {
     }
 
     /// `Inst::BlockAddr` -- the code address of a basic block in
-    /// this function (GCC `&&label`). Records `block` as a computed-
+    /// this function (GNU C `&&label`). Records `block` as a computed-
     /// goto successor so the CFG treats every `goto *` as branching
     /// to it. Not CSE'd: distinct `&&label` sites must stay separate
     /// defs so the allocator keeps each live as needed.
@@ -879,7 +900,7 @@ impl SsaBuilder {
     }
 
     /// Bind a static-initializer data slot to `block`'s code address
-    /// (GCC `&&label` in a static initializer). The block joins the
+    /// (`&&label` in a static initializer). The block joins the
     /// computed-goto target set: its address escapes into memory, so
     /// every `goto *` may reach it and the block must stay live.
     pub(crate) fn label_data_block(&mut self, data_offset: u64, block: BlockId) {
@@ -892,7 +913,7 @@ impl SsaBuilder {
     }
 
     /// Close the current block with `Terminator::GotoIndirect`
-    /// (GCC `goto *expr`); `target` holds the destination code
+    /// (`goto *expr`); `target` holds the destination code
     /// address.
     pub(crate) fn goto_indirect(&mut self, target: ValueId) {
         self.close(Terminator::GotoIndirect { target }, target);
@@ -930,7 +951,7 @@ impl SsaBuilder {
     /// per-arch emit short-circuits and writes nothing for the
     /// zero case. The walker emits one per function so the
     /// codegen's per-function state (`current_alloca_top`)
-    /// initialises consistently across SSA producers.
+    /// initializes consistently across SSA producers.
     pub(crate) fn alloca_init(&mut self, slot: i64) -> ValueId {
         self.push(Inst::AllocaInit(slot))
     }
@@ -1373,7 +1394,7 @@ impl SsaBuilder {
     ///     `(x ^ K1) ^ K2  ->  x ^ (K1^K2)`
     ///   The folds use `wrapping_add` / `wrapping_sub` to mirror
     ///   the SSA value model (a 64-bit bit pattern; per-type
-    ///   narrowing happens at materialisation). The original
+    ///   narrowing happens at materialization). The original
     ///   `lhs` BinopI may become dead and the existing DCE pass
     ///   skips it.
     pub(crate) fn binop_imm(&mut self, op: BinOp, lhs: ValueId, rhs_imm: i64) -> ValueId {
@@ -1922,11 +1943,26 @@ impl SsaBuilder {
     /// to pick the right lowering. Conservative: invalidate the
     /// CSE cache -- setjmp / longjmp move control across the
     /// block, va_start / va_arg may write through caller buffers.
-    /// `Inst::X86Simd` -- one x86 SIMD instruction. Writes through the
+    /// `Inst::Simd` -- one x86 SIMD instruction. Writes through the
     /// destination address in `args[0]`, so the local caches are cleared.
-    pub(crate) fn x86_simd(&mut self, op: u32, imm: Option<u8>, args: Vec<ValueId>) -> ValueId {
+    pub(crate) fn vec_binop(
+        &mut self,
+        (op, lane, bytes): (BinOp, crate::c5::ir::VecLane, u8),
+        lhs: ValueId,
+        rhs: ValueId,
+    ) -> ValueId {
+        self.push(Inst::VecBinop {
+            op,
+            lane,
+            bytes,
+            lhs,
+            rhs,
+        })
+    }
+
+    pub(crate) fn simd(&mut self, op: u32, imm: Option<u8>, args: Vec<ValueId>) -> ValueId {
         self.local_cache.clear();
-        self.push(Inst::X86Simd { op, imm, args })
+        self.push(Inst::Simd { op, imm, args })
     }
 
     pub(crate) fn intrinsic(&mut self, kind: i64, args: Vec<ValueId>) -> ValueId {
@@ -1938,7 +1974,7 @@ impl SsaBuilder {
         id
     }
 
-    /// `Inst::InlineAsm` -- GCC extended asm with operands. The block
+    /// `Inst::InlineAsm` -- GNU C extended asm with operands. The block
     /// carries the template and constraints; `args` is parallel to its
     /// operands (an output's destination address, an input's value).
     /// Conservative like a call: clear the CSE cache, since the asm may
@@ -1953,7 +1989,7 @@ impl SsaBuilder {
         self.push(Inst::InlineAsm { asm, args })
     }
 
-    /// GCC `asm goto`: push the `Inst::InlineAsm` as the block's last
+    /// `asm goto`: push the `Inst::InlineAsm` as the block's last
     /// instruction and close the block with `Terminator::AsmGoto`.
     /// `targets[0]` is the fall-through block; entries 1.. are the
     /// label targets in label-list order.
@@ -2042,6 +2078,7 @@ impl SsaBuilder {
     /// value tested; control transfers to `target` when zero, else
     /// falls through to `fall_through`.
     pub(crate) fn branch_zero(&mut self, cond: ValueId, target: BlockId, fall_through: BlockId) {
+        self.predict(false);
         self.close(
             Terminator::Bz {
                 cond,
@@ -2054,6 +2091,7 @@ impl SsaBuilder {
 
     /// Close the current block with `Terminator::Bnz`.
     pub(crate) fn branch_nonzero(&mut self, cond: ValueId, target: BlockId, fall_through: BlockId) {
+        self.predict(true);
         self.close(
             Terminator::Bnz {
                 cond,
@@ -2114,7 +2152,22 @@ impl SsaBuilder {
         }
     }
 
+    /// The truth `__builtin_expect` predicts for the condition of the
+    /// conditional branch closing the current block.
+    pub(crate) fn expect(&mut self, truthy: Option<bool>) {
+        self.expected = truthy;
+    }
+
+    fn predict(&mut self, nonzero: bool) {
+        if let (Some(truthy), Some(b)) = (self.expected, self.current)
+            && let Some(arm) = self.func.predicted.get_mut(b as usize)
+        {
+            *arm = Some(crate::c5::ir::Arm::taken(nonzero, truthy));
+        }
+    }
+
     fn close(&mut self, term: Terminator, exit_acc: ValueId) {
+        self.expected = None;
         let id = self
             .current
             .expect("SsaBuilder: close called with no active block");
@@ -2130,7 +2183,7 @@ impl SsaBuilder {
         self.last_def = NO_VALUE;
     }
 
-    /// Finalise the builder and return the populated [`FunctionSsa`].
+    /// Finalize the builder and return the populated [`FunctionSsa`].
     /// Panics if any block was opened but not terminated.
     ///
     /// Block ranges come from the `block_starts` / `block_ends`
@@ -2197,6 +2250,7 @@ pub(crate) fn fold_int_binop_imm(op: BinOp, k1: i64, k2: i64) -> Option<i64> {
     match op {
         BinOp::Mulh | BinOp::Mulhu => None,
         BinOp::Ror if !(0..64).contains(&k2) => None,
+        BinOp::Ror32 if !(0..32).contains(&k2) => None,
         _ => crate::c5::vm::eval::fold_binop(op, k1, k2),
     }
 }

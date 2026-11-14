@@ -219,6 +219,38 @@ impl BlockPlan {
                 reached[h as usize] = indirect[h as usize];
             }
         }
+        // A conditional that runs into neither arm branches to the one behind
+        // it, a loop's back edge -- the nearer of two, its innermost loop's --
+        // and jumps to the other.
+        for p in (0..n).filter(|&p| !self.skipped[p] && self.repeat[p] == NO_BLOCK) {
+            let (Terminator::Bz {
+                target,
+                fall_through,
+                ..
+            }
+            | Terminator::Bnz {
+                target,
+                fall_through,
+                ..
+            }) = func.blocks[p].terminator
+            else {
+                continue;
+            };
+            let (t, f, into) = (
+                self.resolve(target),
+                self.resolve(fall_through),
+                self.runs_into(p),
+            );
+            let behind = |x: BlockId| (x as usize) <= p;
+            let prefer_f = match (behind(f), behind(t)) {
+                (true, false) => true,
+                (true, true) => f > t,
+                _ => false,
+            };
+            if t != f && into != t && into != f && prefer_f {
+                self.flip[p] = true;
+            }
+        }
         let decided: BTreeSet<BlockId> = (0..n)
             .filter(|&p| self.decided[p] != NO_BLOCK)
             .map(|p| self.repeat[p])
@@ -459,7 +491,8 @@ fn forwards_to(func: &FunctionSsa, alloc: &Allocation, b: BlockId) -> Option<Blo
         .inst_range
         .clone()
         .all(|v| emits_nothing(&func.insts[v as usize], v, alloc));
-    (t != b && silent && edge_moves(func, alloc, b, t).is_empty()).then_some(t)
+    (t != b && silent && edge_moves(func, alloc, b, t).is_empty() && !alloc.loop_saves.touches(b))
+        .then_some(t)
 }
 
 /// The arms of `h` when a second copy of it may run: a bounded run of
@@ -515,13 +548,15 @@ fn repeatable_arms(
         }
     }
     let quiet = |s: BlockId| edge_moves(func, alloc, h, s).is_empty();
-    (quiet(target) && quiet(fall_through)).then_some((target, fall_through))
+    (quiet(target) && quiet(fall_through) && !alloc.loop_saves.touches(h))
+        .then_some((target, fall_through))
 }
 
 /// `h` is only an indirect branch whose edges move nothing.
 fn repeatable_indirect(func: &FunctionSsa, alloc: &Allocation, h: BlockId) -> bool {
     let block = &func.blocks[h as usize];
     matches!(block.terminator, Terminator::GotoIndirect { .. })
+        && !alloc.loop_saves.touches(h)
         && block
             .inst_range
             .clone()
@@ -572,7 +607,7 @@ mod tests {
     fn func_with(insts: Vec<Inst>, blocks: Vec<Block>) -> FunctionSsa {
         let n = insts.len();
         FunctionSsa {
-            inst_src: alloc::vec![(0, 0); n],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); n],
             f32_values: alloc::vec![false; n],
             insts,
             blocks,
@@ -606,15 +641,22 @@ mod tests {
             sxtw_source: alloc::vec![NO_VALUE; n],
             sxtw_k: alloc::vec![0; n],
             branch_fused: alloc::vec![false; n],
+            mask_tests: alloc::vec![false; n],
+            select_inc: alloc::vec![false; n],
+            imm_held: alloc::vec![false; n],
             imm_store: alloc::vec![false; n],
+            stack_imm: alloc::collections::BTreeMap::new(),
+            stack_load: alloc::collections::BTreeMap::new(),
             fp_const: alloc::vec![false; n],
             implicit_live: alloc::vec::Vec::new(),
             hints: alloc::vec![None; n],
             f32_values: alloc::vec![false; n],
             high_observed: Vec::new(),
             high_clear: Vec::new(),
-            wide: alloc::vec![false; n],
+            wide: alloc::vec![crate::c5::codegen::ssa::reg_alloc::VecWidth::Scalar; n],
             asm_preserve: (u32::MAX, u32::MAX),
+            call_saves: Vec::new(),
+            loop_saves: Default::default(),
         }
     }
 
@@ -954,7 +996,7 @@ mod tests {
         // The returning label takes a phi of the target from another place.
         let at = f.insts.len() as u32;
         f.insts.push(phi(&[(1, 2)], LoadKind::I64));
-        f.inst_src.push((0, 0));
+        f.inst_src.push(crate::c5::ir::InstSrc::default());
         f.f32_values.push(false);
         f.blocks[3] = block(at..at + 1, Terminator::Return(at));
         let a = alloc_with(a.places.iter().copied().chain([Place::IntReg(9)]).collect());
@@ -1019,7 +1061,7 @@ mod tests {
         // The exit block takes a phi fed by the test block from another place.
         let at = f.insts.len() as u32;
         f.insts.push(phi(&[(2, 0)], LoadKind::I64));
-        f.inst_src.push((0, 0));
+        f.inst_src.push(crate::c5::ir::InstSrc::default());
         f.f32_values.push(false);
         f.blocks[3] = block(at..at + 1, Terminator::Return(at));
         a = alloc_with(a.places.iter().copied().chain([Place::IntReg(9)]).collect());

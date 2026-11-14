@@ -1,6 +1,7 @@
 // Process scheduling (POSIX.1).
 
 #pragma once
+#include <sys/types.h>
 
 #if defined(__APPLE__) || defined(__linux__)
 // Scheduling parameters. POSIX requires only `sched_priority`, which is all
@@ -8,7 +9,7 @@
 struct sched_param {
     int sched_priority;
 #ifdef __APPLE__
-    unsigned char __opaque[4];
+    char __opaque[4];
 #endif
 };
 
@@ -71,12 +72,10 @@ int sched_setscheduler(int pid, int policy, const struct sched_param *param);
 int sched_getscheduler(int pid);
 int sched_setparam(int pid, const struct sched_param *param);
 int sched_getparam(int pid, struct sched_param *param);
-int sched_rr_get_interval(int pid, char *interval);
+struct timespec;
+int sched_rr_get_interval(pid_t pid, struct timespec *interval);
 #endif
 #ifdef __linux__
-// CPU affinity (Linux; `cpu_set_t` is opaque to c5, passed by address).
-int sched_setaffinity(int pid, unsigned long cpusetsize, char *mask);
-int sched_getaffinity(int pid, unsigned long cpusetsize, char *mask);
 // Namespace control (Linux).
 int setns(int fd, int nstype);
 int unshare(int flags);
@@ -113,6 +112,10 @@ int clone(int (*fn)(void *), void *stack, int flags, void *arg, ...);
 typedef struct {
     unsigned long __bits[CPU_SETSIZE / (8 * sizeof(unsigned long))];
 } cpu_set_t;
+#ifdef __linux__
+int sched_setaffinity(pid_t pid, size_t cpusetsize, const cpu_set_t *mask);
+int sched_getaffinity(pid_t pid, size_t cpusetsize, cpu_set_t *mask);
+#endif
 
 #define CPU_ALLOC_SIZE(count) \
     ((((count) + __NCPUBITS - 1) / __NCPUBITS) * sizeof(unsigned long))

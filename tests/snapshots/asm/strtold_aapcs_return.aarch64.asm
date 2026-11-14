@@ -705,9 +705,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldurb	w0, [x29, #-0x20]
-               	mov	x17, #0x34              // =52
-               	eor	x0, x0, x17
-               	cbz	w0, <addr>
+               	cmp	w0, #0x34
+               	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10

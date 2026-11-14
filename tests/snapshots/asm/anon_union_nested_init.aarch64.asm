@@ -56,24 +56,17 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x50
                	ret
                	sub	x0, x29, #0x28
-               	str	xzr, [x0]
-               	mov	x1, #0x9                // =9
-               	sturb	w1, [x29, #-0x28]
-               	mov	x1, #0x8                // =8
-               	sturb	w1, [x29, #-0x27]
-               	mov	x1, #0x7                // =7
-               	sturb	w1, [x29, #-0x26]
-               	mov	x1, #0x6                // =6
-               	sturb	w1, [x29, #-0x25]
+               	mov	x1, #0x809              // =2057
+               	movk	x1, #0x607, lsl #16
+               	stur	w1, [x29, #-0x28]
                	stur	w20, [x29, #-0x24]
                	bl	<addr>
                	ldrb	w1, [x0]
-               	mov	x17, #0x9               // =9
-               	eor	x1, x1, x17
-               	cbnz	w1, <addr>
+               	cmp	w1, #0x9
+               	b.ne	<addr>
                	ldrb	w1, [x0, #0x3]
-               	eor	x1, x1, #0x6
-               	cbnz	w1, <addr>
+               	cmp	w1, #0x6
+               	b.ne	<addr>
                	ldrsw	x0, [x0, #0x4]
                	cmp	w0, w20
                	b.eq	<addr>

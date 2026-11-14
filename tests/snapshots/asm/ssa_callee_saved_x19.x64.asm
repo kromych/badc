@@ -37,7 +37,6 @@ Disassembly of section .text:
                	leaq	-<rip>, %rdi # <addr>
                	xorl	%esi, %esi
                	movq	%rsi, %rdx
-               	xorl	%eax, %eax
                	callq	<addr>
                	xorl	%eax, %eax
                	popq	%rbp

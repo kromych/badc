@@ -33,20 +33,17 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
+               	movsd	<rip>, %xmm1
                	movsd	-0x8(%rbp), %xmm0
-               	movabsq	$0x4000000000000000, %rcx # imm = 0x4000000000000000
-               	movq	%rax, %xmm14
-               	movq	%rcx, %xmm15
-               	vfmadd132sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm0 * xmm15) + xmm14
-               	cvttsd2si	%xmm0, %rax
+               	movsd	<rip>, %xmm2
+               	vfmadd231sd	%xmm2, %xmm0, %xmm1 # xmm1 = (xmm0 * xmm2) + xmm1
+               	cvttsd2si	%xmm1, %rax
                	addq	$0x2, %rax
                	cmpq	$0xe, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
-               	movsd	-0x8(%rbp), %xmm0
                	cvttsd2si	%xmm0, %rax
                	addq	$0x18, %rax
                	cmpq	$0x1c, %rax

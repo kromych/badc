@@ -58,7 +58,7 @@ pub(crate) fn compile_function_to_bytes(
     match target {
         Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
             use super::aarch64::{Fixup, PltCallFixup};
-            let mut code: Vec<u8> = Vec::new();
+            let mut code = super::code_buf::CodeBuf::default();
             let mut fixups: Vec<Fixup> = Vec::new();
             let mut plt_call_fixups: Vec<PltCallFixup> = Vec::new();
             let mut data_fixups: Vec<super::DataFixup> = Vec::new();
@@ -140,6 +140,8 @@ pub(crate) fn compile_function_to_bytes(
                     super::super::FunctionEntry::default(),
                     super::super::FixedRegs::NONE,
                     false,
+                    true,
+                    &alloc::collections::BTreeMap::new(),
                 )
             };
             if ok.is_err() {
@@ -162,11 +164,11 @@ pub(crate) fn compile_function_to_bytes(
                     "ssa_native: function produces {outer} cross-function fixup(s); only self-contained functions are supported",
                 ));
             }
-            Ok(code)
+            Ok(code.into_bytes())
         }
         Target::LinuxX64 | Target::WindowsX64 => {
             use super::x86_64::{Fixup, PltCallFixup};
-            let mut code: Vec<u8> = Vec::new();
+            let mut code = super::code_buf::CodeBuf::default();
             let mut fixups: Vec<Fixup> = Vec::new();
             let mut plt_call_fixups: Vec<PltCallFixup> = Vec::new();
             let mut got_fixups: Vec<super::GotFixup> = Vec::new();
@@ -260,6 +262,7 @@ pub(crate) fn compile_function_to_bytes(
                     super::super::FixedRegs::NONE,
                     false,
                     true,
+                    false,
                 )
             };
             if ok.is_err() {
@@ -282,7 +285,7 @@ pub(crate) fn compile_function_to_bytes(
                     "ssa_native: function produces {outer} cross-function fixup(s); only self-contained functions are supported",
                 ));
             }
-            Ok(code)
+            Ok(code.into_bytes())
         }
     }
 }

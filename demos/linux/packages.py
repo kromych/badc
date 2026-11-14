@@ -463,7 +463,7 @@ def clear_foreign_files(text: str) -> str:
 # module can only load into the kernel that produced it. A distribution
 # ships its modules alongside their kernel and does not need either; here
 # the two can come from different compilers, and a module built by one
-# loaded into a kernel built by another is undefined behaviour that
+# loaded into a kernel built by another is undefined behavior that
 # presents as a fault far from its cause.
 #
 # MODVERSIONS makes the loader compare a CRC of every exported symbol's
@@ -982,10 +982,33 @@ def assert_module_producer(tree: Path, failures: list[str]) -> dict:
     return {"sampled": checked, "not_badc": bad}
 
 
-def assert_manifest(args, failures: list[str]) -> dict:
+# Units the kernel compiles to see the compiler diagnose them: test_fortify.sh
+# expects each unsafe call to fail the compile with its fortify error (or, for
+# a compiler that defers it to the link, to leave the checking symbol
+# undefined) and writes its verdict as the first line of the unit's .log.
+DIAG_TEST_DIR = "lib/test_fortify/"
+
+
+def diag_test_verdicts(tree: Path) -> dict[str, bool]:
+    """Each diagnostic test unit, by source, and whether its log says the
+    expected diagnostic was seen."""
+    out = {}
+    for log_file in sorted((tree / DIAG_TEST_DIR).glob("*-*.log")):
+        first = log_file.read_text(errors="replace").partition("\n")[0]
+        out[f"{DIAG_TEST_DIR}{log_file.stem}.c"] = first.startswith("ok:")
+    return out
+
+
+def assert_manifest(args, failures: list[str], tree: Path) -> dict:
     units = read_manifest(args.manifest)
+    verdicts = diag_test_verdicts(tree)
+    units["fail"] = [u for u in units["fail"] if u.split("\t")[0] not in verdicts]
+    missed = [unit for unit, ok in verdicts.items() if not ok]
     log(f"units: badc={len(units['badc'])} fallback={len(units['fallback'])} "
-        f"fail={len(units['fail'])}")
+        f"fail={len(units['fail'])} diagnostic-tests={len(verdicts)}")
+    if missed:
+        failures.append(f"diagnostic tests the compile did not diagnose: "
+                        f"{len(missed)} ({', '.join(missed[:5])})")
     if units["fail"]:
         named = ", ".join(u.split("\t")[0] for u in units["fail"][:5])
         failures.append(
@@ -996,7 +1019,7 @@ def assert_manifest(args, failures: list[str]) -> dict:
     if len(units["badc"]) < args.expect_units:
         failures.append(f"units compiled: {len(units['badc'])}, expected at "
                         f"least {args.expect_units}")
-    return {k: len(v) for k, v in units.items()}
+    return {**{k: len(v) for k, v in units.items()}, "diag_tests": len(verdicts)}
 
 
 def assert_link_manifest(args, failures: list[str]) -> dict:
@@ -1210,7 +1233,7 @@ def find_firmware(arch: str, exists=None) -> tuple[str, str | None] | None:
 def resolve_firmware(arch: str, choice: str, found) -> tuple[str, str]:
     """The firmware `--vm-firmware choice` resolves to -- "uefi" or "bios" --
     and the reason to log when the run did not get what it asked for.
-    Raises ValueError when the choice cannot be honoured on this host."""
+    Raises ValueError when the choice cannot be honored on this host."""
     efi_only = arch != "x86_64"
     if choice == "bios":
         if efi_only:
@@ -2680,6 +2703,33 @@ def run_guest_script(args, vm: Target, failures: list[str]) -> dict:
     return out
 
 
+# Seconds systemd waits for a device before failing its unit, on the badc
+# kernel's command line under tcg: an emulated boot reaches udev's coldplug
+# a minute or more after KVM does, past systemd's default of 90 s.
+TCG_DEVICE_TIMEOUT = 600
+
+
+def tcg_device_timeout_command(distro: str, index: int | None) -> str:
+    """The root command that gives the badc kernel's boot entry
+    TCG_DEVICE_TIMEOUT: grubby on Fedora's BLS entry at `index`, a grub
+    drop-in and update-grub on Debian. grubby is given the index because
+    the path it matches carries its boot prefix: a cloud image with /boot
+    on the root filesystem names the kernel /boot/boot/vmlinuz-<release>."""
+    arg = f"systemd.default_device_timeout_sec={TCG_DEVICE_TIMEOUT}"
+    if distro == "fedora":
+        return f"grubby --update-kernel={index} --args={arg}"
+    line = f'GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT {arg}"'
+    script = (f"mkdir -p /etc/default/grub.d && printf '%s\\n' {shlex.quote(line)} "
+              f"> /etc/default/grub.d/99-badc-tcg.cfg && update-grub")
+    return f"sh -c {shlex.quote(script)}"
+
+
+def stock_boot_failure(image: str, accel: str, reason: str) -> str:
+    """A failure of the stock image's own boot, which leaves the package
+    unbooted: the run measured the machine, not badc."""
+    return f"not measured: the stock image {image} did not boot under {accel}: {reason}"
+
+
 def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
     image = ensure_image(args, arch)
     accel = resolve_accel(args, arch)
@@ -2718,7 +2768,10 @@ def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
                     "installed": [{"name": p.name, "sha256": sha256_of(p)}
                                   for p in packages]}
     try:
-        boot_id = vm.wait_ssh(args.vm_timeout)
+        try:
+            boot_id = vm.wait_ssh(args.vm_timeout)
+        except TargetError as e:
+            raise TargetError(stock_boot_failure(image.name, accel, str(e))) from e
         log("stock system up; capturing baseline")
         # Turn on core capture on the stock system; the sysctl.d / limits.d /
         # systemd drop-in make it persist into the badc kernel's boot.
@@ -2769,12 +2822,23 @@ def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
                             f"{result['install_tail'][-300:]}")
             return result
 
+        index = None
+        if arch["distro"] == "fedora":
+            entries = grubby_entries(vm.ssh("grubby --info=ALL", sudo=True).stdout)
+            index = grubby_index(entries, args.release)
+            if index is None:
+                failures.append(f"no boot entry loads vmlinuz-{args.release} "
+                                f"after the install ({len(entries)} entries)")
+                return result
+        if accel == "tcg":
+            vm.ssh(tcg_device_timeout_command(arch["distro"], index),
+                   sudo=True, check=True)
+            result["device_timeout"] = TCG_DEVICE_TIMEOUT
         # Make the new kernel the default entry. Debian's update-grub sorts
         # by version, which is asserted rather than assumed; Fedora's BLS
         # default is set explicitly.
         if arch["distro"] == "fedora":
-            r = vm.ssh(f"grubby --set-default /boot/vmlinuz-{args.release}",
-                       sudo=True)
+            r = vm.ssh(f"grubby --set-default-index={index}", sudo=True)
             # Without grubby the BLS default is the highest version, which
             # the post-reboot uname assertion checks either way.
             result["boot_select"] = ("grubby --set-default" if r.returncode == 0
@@ -3496,9 +3560,23 @@ def _self_test() -> int:
     assert exercise.severe_lines(boot.splitlines(), pat) == []
     assert exercise.severe_lines(boot.splitlines()) == boot.splitlines()[1:]
 
+    import tempfile
+
+    # A fortify test passes on the "ok:" verdict test_fortify.sh writes.
+    with tempfile.TemporaryDirectory() as d:
+        logs = Path(d) / DIAG_TEST_DIR
+        logs.mkdir(parents=True)
+        (logs / "write_overflow-memcpy.log").write_text(
+            "ok: unsafe memcpy() usage correctly detected\nerror: ...\n")
+        (logs / "read_overflow-memchr.log").write_text(
+            "warning: unsafe memchr() usage lacked '__read_overflow' warning\n")
+        assert diag_test_verdicts(Path(d)) == {
+            "lib/test_fortify/read_overflow-memchr.c": False,
+            "lib/test_fortify/write_overflow-memcpy.c": True,
+        }
+
     # The tree directory comes from the archive, not from the asset name:
     # a mirrored tarball's name carries a digest prefix the directory lacks.
-    import tempfile
     with tempfile.TemporaryDirectory() as d:
         d = Path(d)
         (d / "linux-7.1.10").mkdir()
@@ -3697,6 +3775,18 @@ def _self_test() -> int:
                         "Entering emergency mode.\r\n")[0] == "panic"
 
     _self_test_wait()
+    fedora = tcg_device_timeout_command("fedora", 1)
+    assert fedora == ("grubby --update-kernel=1 "
+                      f"--args=systemd.default_device_timeout_sec={TCG_DEVICE_TIMEOUT}"), fedora
+    # Fedora 44's cloud image keeps /boot on the root filesystem.
+    rooted = grubby_entries('index=0\nkernel="/boot/boot/vmlinuz-6.19.10-300.fc44.x86_64"\n'
+                            'index=1\nkernel="/boot/boot/vmlinuz-7.2.9"\n')
+    assert grubby_index(rooted, "7.2.9") == 1
+    debian = shlex.split(tcg_device_timeout_command("ubuntu", None))
+    assert debian[:2] == ["sh", "-c"], debian
+    assert debian[2].endswith("/etc/default/grub.d/99-badc-tcg.cfg && update-grub"), debian
+    assert f"device_timeout_sec={TCG_DEVICE_TIMEOUT}" in debian[2], debian
+    assert stock_boot_failure("f.qcow2", "tcg", "timed out").startswith("not measured: ")
 
     exercise.self_test()
     print("linux packages: self-test ok", flush=True)
@@ -4106,7 +4196,7 @@ def main() -> int:
         report["packages"] = [{"name": p.name, "bytes": p.stat().st_size,
                                "sha256": sha256_of(p)} for p in packages]
     if {"build", "package"} & phases:
-        report["units"] = assert_manifest(args, failures)
+        report["units"] = assert_manifest(args, failures, tree)
         if args.linker == "badc":
             report["links"] = assert_link_manifest(args, failures)
         counts, lines = diags.summary(args.warn_log)

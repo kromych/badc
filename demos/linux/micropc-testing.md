@@ -134,7 +134,7 @@ Each piece earns its place:
 - **`console=ttyS1` last.** Every `console=` receives kernel messages,
   but the final one becomes `/dev/console` for init, which is what makes
   the serial line interactive rather than a log tap.
-- **`earlycon`** attaches before the console driver initialises. This is
+- **`earlycon`** attaches before the console driver initializes. This is
   the argument that matters most here: several defects this milestone
   chased presented as a kernel that printed *nothing at all*, and
   `earlycon` is what turns that into a diagnosis. It is confirmed
@@ -253,7 +253,7 @@ sudo -u gdm dbus-run-session -- gsettings set \
 ```
 
 Masking the targets is the layer that actually holds: whatever asks -- greeter,
-logind idle, the power button -- the request fails rather than being honoured.
+logind idle, the power button -- the request fails rather than being honored.
 `systemctl suspend` now answers `Call to Suspend failed: Access denied`. The lid
 settings matter separately, because the machine is a clamshell that will sit
 closed on a bench; without them, closing it ends the run.

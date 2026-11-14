@@ -14,7 +14,7 @@ use alloc::vec::Vec;
 
 use super::constfold_branch::edge_truth;
 use crate::c5::codegen::ssa::mem2reg::predecessors;
-use crate::c5::codegen::ssa::reg_alloc::{produces_fp_result, wide_values};
+use crate::c5::codegen::ssa::reg_alloc::{VecWidth, produces_fp_result, wide_values};
 use crate::c5::codegen::ssa::tape;
 use crate::c5::ir::{BlockId, FunctionSsa, Inst, NO_VALUE, Terminator, ValueId};
 
@@ -37,7 +37,7 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
 /// the value: `constfold_branch` decides a test of the phi from that edge.
 fn forward_phis(func: &mut FunctionSsa, preds: &[Vec<BlockId>]) -> bool {
     let mut to: Vec<(ValueId, ValueId)> = Vec::new();
-    let mut wide: Option<Vec<bool>> = None;
+    let mut wide: Option<Vec<VecWidth>> = None;
     for (b, block) in func.blocks.iter().enumerate().skip(1) {
         let [p] = preds[b][..] else {
             continue;
@@ -101,7 +101,7 @@ fn forward_phis(func: &mut FunctionSsa, preds: &[Vec<BlockId>]) -> bool {
 /// file, and for a float the same scalar and vector width.
 pub(crate) fn reads_alike(
     func: &FunctionSsa,
-    wide: &mut Option<Vec<bool>>,
+    wide: &mut Option<Vec<VecWidth>>,
     phi: ValueId,
     v: ValueId,
 ) -> bool {
@@ -183,6 +183,11 @@ fn merge(func: &mut FunctionSsa, preds: &[Vec<BlockId>]) -> bool {
         let (head, last) = (chain[0] as usize, chain[chain.len() - 1] as usize);
         func.blocks[head].terminator = func.blocks[last].terminator;
         func.blocks[head].exit_acc = func.blocks[last].exit_acc;
+        if let Some(&arm) = func.predicted.get(last)
+            && let Some(slot) = func.predicted.get_mut(head)
+        {
+            *slot = arm;
+        }
         for &b in &chain[1..] {
             func.blocks[b as usize].terminator = Terminator::Unreachable;
             func.blocks[b as usize].exit_acc = NO_VALUE;
@@ -212,7 +217,7 @@ mod tests {
 
     fn fresh(insts: Vec<Inst>, blocks: Vec<Block>) -> FunctionSsa {
         FunctionSsa {
-            inst_src: vec![(0, 0); insts.len()],
+            inst_src: vec![crate::c5::ir::InstSrc::default(); insts.len()],
             f32_values: vec![false; insts.len()],
             insts,
             blocks,

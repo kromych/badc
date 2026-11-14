@@ -35,7 +35,7 @@ enum FpCmpNanFix {
 /// needed after the `setcc`. Returns `None` for any non-FP-compare
 /// op.
 fn fp_compare_cc(op: BinOp) -> Option<(Cc, FpCmpNanFix)> {
-    Some(match op {
+    Some(match crate::c5::ir::fp_relation(op) {
         BinOp::Feq => (Cc::E, FpCmpNanFix::AndNotP),
         BinOp::Fne => (Cc::Ne, FpCmpNanFix::OrP),
         // `Flt` / `Fle` compare the swapped operands (`fp_compare_swaps_operands`).
@@ -78,8 +78,129 @@ pub(super) fn int_cmp_cc(op: BinOp) -> Option<Cc> {
     })
 }
 
+/// `Inst::Select`: `cmov` on the flags of the condition the allocator
+/// fused into the select, read as a branch on it would be, or on `test
+/// cond, cond`. A floating compare's `==` and `!=` add `cmovp`. A floating
+/// select moves the bits through r10 / r11; `mov` and `movq` keep the flags.
+pub(super) fn emit_select(
+    code: &mut CodeBuf,
+    dst: Place,
+    (v, cond, a, b, kind): (u32, u32, u32, u32, LoadKind),
+    func: &super::super::ir::FunctionSsa,
+    alloc: &Allocation,
+    frame: Frame,
+) -> Emit {
+    use super::encode::{emit_cmovcc_rr, emit_movq_r_xmm, emit_movq_xmm_r};
+    use super::inst::{FusedBranch, fused_branch_cc, invert_cc};
+    let fused = alloc
+        .branch_fused
+        .get(cond as usize)
+        .copied()
+        .unwrap_or(false);
+    let shape = if fused {
+        let Some(shape) = fused_branch_cc(func, alloc, cond, false) else {
+            return fail("Select: fused condition has no condition code");
+        };
+        shape
+    } else {
+        let Some(rc) = materialize_int(code, place_of(alloc, cond), SCRATCH_R10, frame) else {
+            return fail("Select: condition not int reg / spill");
+        };
+        let width = if super::super::passes::narrow::is_cmp32(&func.cmp32, v) {
+            4
+        } else {
+            8
+        };
+        emit_rr(code, Mnem::Test, width, rc, rc);
+        FusedBranch::Jcc(Cc::Ne)
+    };
+    // `a` when `cc` holds, or PF is set under `parity`; else `b`.
+    let (cc, parity, a_first) = match shape {
+        FusedBranch::Jcc(cc) => (cc, false, true),
+        FusedBranch::JpOr(cc) => (cc, true, true),
+        FusedBranch::JnpAnd(cc) => {
+            let Some(inv) = invert_cc(cc) else {
+                return fail("Select: condition has no inverse");
+            };
+            (inv, true, false)
+        }
+    };
+    if matches!(kind, LoadKind::F32 | LoadKind::F64) {
+        let fp = frame.fp_scratch[0];
+        for (src, r) in [(a, SCRATCH_R10), (b, SCRATCH_R11)] {
+            let Some(x) = materialize_fp(code, place_of(alloc, src), Reg(fp), frame) else {
+                return fail("Select: arm not fp reg / spill");
+            };
+            emit_movq_r_xmm(code, r, x);
+        }
+        let (t, x) = if a_first {
+            (SCRATCH_R11, SCRATCH_R10)
+        } else {
+            (SCRATCH_R10, SCRATCH_R11)
+        };
+        cmov_pick(code, cc, parity, t, x);
+        let Some(xd) = fp_or_spill_dst(dst, frame) else {
+            return fail("Select: dst not fp reg / spill");
+        };
+        emit_movq_xmm_r(code, xd, t);
+        fp_spill_dst_to_slot(code, dst, xd, frame);
+        return Ok(());
+    }
+    let Some(ra) = materialize_int(code, place_of(alloc, a), SCRATCH_R10, frame) else {
+        return fail("Select: arm not int reg / spill");
+    };
+    let Some(rb) = materialize_int(code, place_of(alloc, b), SCRATCH_R11, frame) else {
+        return fail("Select: arm not int reg / spill");
+    };
+    let Some(rd) = int_or_spill_dst(dst) else {
+        return fail("Select: dst not int reg / spill");
+    };
+    let (x, y) = if a_first { (ra, rb) } else { (rb, ra) };
+    if rd != x {
+        if rd != y {
+            emit_mov_rr(code, rd, y);
+        }
+        cmov_pick(code, cc, parity, rd, x);
+    } else {
+        // `rd` holds `x` and takes `y` when neither `cc` nor, under
+        // `parity`, PF holds: a scratch copy of `y` takes `x` on PF first.
+        let Some(inv) = invert_cc(cc) else {
+            return fail("Select: condition has no inverse");
+        };
+        let y = if parity {
+            let t = if y == SCRATCH_R10 || y == SCRATCH_R11 {
+                y
+            } else {
+                let t = if x == SCRATCH_R10 {
+                    SCRATCH_R11
+                } else {
+                    SCRATCH_R10
+                };
+                emit_mov_rr(code, t, y);
+                t
+            };
+            emit_cmovcc_rr(code, Cc::P, t, x);
+            t
+        } else {
+            y
+        };
+        emit_cmovcc_rr(code, inv, rd, y);
+    }
+    spill_dst_to_slot(code, dst, rd, frame);
+    Ok(())
+}
+
+/// `t = x` when `cc` holds, or when PF is set under `parity`.
+fn cmov_pick(code: &mut Vec<u8>, cc: Cc, parity: bool, t: Reg, x: Reg) {
+    use super::encode::emit_cmovcc_rr;
+    emit_cmovcc_rr(code, cc, t, x);
+    if parity {
+        emit_cmovcc_rr(code, Cc::P, t, x);
+    }
+}
+
 /// After a flags-setting compare: `true` when a fused branch consumes
-/// the flags directly and the boolean materialisation is elided, else
+/// the flags directly and the boolean materialization is elided, else
 /// `setcc` + `movzx` the result into `rd`.
 fn finish_int_cmp(
     code: &mut Vec<u8>,
@@ -99,7 +220,7 @@ fn finish_int_cmp(
 /// `Inst::Extend { value, kind }` -- sign-extend the low bytes of a
 /// GPR value to 64 bits via `MOVSX` / `MOVSXD`.
 pub(super) fn emit_extend(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     v: super::super::ir::ValueId,
     value: u32,
@@ -139,7 +260,7 @@ pub(super) fn emit_sign_extend(code: &mut Vec<u8>, rd: Reg, rn: Reg, kind: LoadK
 /// instruction's own place. Bit-exact in both banks, so a
 /// single-precision operand keeps its pattern.
 pub(super) fn emit_copy(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     value: u32,
     is_fp: bool,
@@ -147,6 +268,23 @@ pub(super) fn emit_copy(
     frame: Frame,
 ) -> Emit {
     let src_place = place_of(alloc, value);
+    if src_place == dst {
+        return Ok(());
+    }
+    let w = alloc.width(value);
+    if is_fp && w >= VecWidth::V256 {
+        let Some(dd) = fp_or_spill_dst(dst, frame) else {
+            return fail("Copy: dst not fp reg / spill");
+        };
+        let Some(dn) = materialize_wide(code, w, src_place, dd, frame) else {
+            return fail("Copy: value not fp reg / spill / int reg");
+        };
+        if dn.0 != dd.0 {
+            emit_wide_mov(code, w, dd, dn);
+        }
+        mirror_wide_dst(code, w, dst, dd, frame);
+        return Ok(());
+    }
     if is_fp && alloc.is_wide(value) {
         let Some(dd) = fp_or_spill_dst(dst, frame) else {
             return fail("Copy: dst not fp reg / spill");
@@ -189,7 +327,7 @@ pub(super) fn emit_copy(
 /// `Inst::Neg { value }` -- `negq dst`, after moving the operand into
 /// `dst` when it is not already there.
 pub(super) fn emit_neg(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     value: u32,
     alloc: &Allocation,
@@ -215,7 +353,7 @@ pub(super) fn emit_neg(
 /// low dword, zero-extends). 16-bit: `movzx` clears the upper bits the
 /// rotate would keep, then `rol dst16, 8` swaps the two low bytes.
 pub(super) fn emit_bswap(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     value: u32,
     width: u8,
@@ -256,7 +394,7 @@ pub(super) fn emit_bswap(
 /// `bits - 1 - i`. `nonzero` states that the operand cannot be zero, which
 /// leaves the guard's constant and `cmovz` dead.
 pub(super) fn emit_bit_count(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     op: BitCountOp,
     value: u32,
@@ -317,7 +455,7 @@ pub(super) fn emit_bit_count(
 /// `Inst::Fma`: `dst = (neg_product ? -(a*b) : a*b) + (neg_addend ? -c : c)`
 /// with one rounding (C99 6.5p8 / FP_CONTRACT), on the FMA3 baseline.
 pub(super) fn emit_fma(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     v: super::super::ir::ValueId,
     a: u32,
@@ -332,7 +470,7 @@ pub(super) fn emit_fma(
     // The form with the fewest moves: into `dd`, into an xmm for vvvv, out of a gpr for r/m.
     let dd = match dst {
         Place::FpReg(r) => Reg(r),
-        Place::Spill(_) => Reg(frame.fp_scratch[2]),
+        Place::Spill(_) => Reg(frame.fp_scratch[1]),
         _ => return fail("Fma: dst not fp reg / spill"),
     };
     let ops = [a, b, c].map(|x| place_of(alloc, x));
@@ -393,13 +531,26 @@ pub(super) fn emit_fma(
         Place::FpReg(r) => emit_vex_fma(code, opcode, !is_f32, dd, rv, Reg(r)),
         Place::Spill(slot) => {
             let (base, off) = spill_slot_addr(frame, slot);
-            emit_vex_fma_mem(code, opcode, !is_f32, dd, rv, base, off);
+            match code.holding(base.0, off, SpillWidth::Scalar) {
+                Some(r) => emit_vex_fma(code, opcode, !is_f32, dd, rv, Reg(r)),
+                None => emit_vex_fma_mem(code, opcode, !is_f32, dd, rv, base, off),
+            }
         }
-        Place::IntReg(r) => {
-            let rm = Reg(frame.fp_scratch[1]);
-            emit_movq_xmm_r(code, rm, Reg(r));
-            emit_vex_fma(code, opcode, !is_f32, dd, rv, rm);
-        }
+        // A spilled result forms in the second scratch, so an r/m operand
+        // a general register holds goes through the result's own slot,
+        // which no operand reads any more.
+        Place::IntReg(r) => match dst {
+            Place::Spill(slot) => {
+                let (base, off) = spill_slot_addr(frame, slot);
+                emit_mr(code, Mnem::Mov, 8, base, off, Reg(r));
+                emit_vex_fma_mem(code, opcode, !is_f32, dd, rv, base, off);
+            }
+            _ => {
+                let rm = Reg(frame.fp_scratch[1]);
+                emit_movq_xmm_r(code, rm, Reg(r));
+                emit_vex_fma(code, opcode, !is_f32, dd, rv, rm);
+            }
+        },
         Place::None => return fail("Fma: r/m operand has no place"),
     }
     fp_spill_dst_to_slot(code, dst, dd, frame);
@@ -413,7 +564,7 @@ pub(super) fn emit_fma(
 /// reader, else in `SCRATCH_R11`.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_mul_add(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     v: super::super::ir::ValueId,
     a: u32,
@@ -495,7 +646,7 @@ pub(super) fn emit_mul_add(
 /// `1 << 31` for a single held in the low dword (C99 6.3.1.8), through a
 /// mask built in the second FP scratch.
 pub(super) fn emit_fneg(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     v: super::super::ir::ValueId,
     value: u32,
@@ -530,7 +681,7 @@ pub(super) fn emit_fneg(
 /// `fabs` as an AND with the inverted sign mask (C99 7.12.7) built as in
 /// `emit_fneg`.
 pub(super) fn emit_fp_unary(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     v: super::super::ir::ValueId,
     value: u32,
@@ -549,6 +700,10 @@ pub(super) fn emit_fp_unary(
     };
     let is_f32 = alloc.is_f32(v);
     match kind {
+        // The SSE scalar forms merge into the destination's other lanes and
+        // so read it; apart from the source, the VEX forms take those lanes
+        // from the source instead, with no wait on the destination's writer.
+        I::Sqrt | I::Sqrtf if dd != dn => emit_vex_fp_arith(code, 0x51, is_f32, dd, dn, dn),
         I::Sqrt | I::Sqrtf => {
             if is_f32 {
                 emit_sqrtss(code, dd, dn);
@@ -575,7 +730,9 @@ pub(super) fn emit_fp_unary(
                 I::Ceil | I::Ceilf => 0x0A,
                 _ => 0x0B,
             };
-            if is_f32 {
+            if dd != dn {
+                super::encode::emit_vex_round(code, is_f32, dd, dn, dn, imm);
+            } else if is_f32 {
                 emit_roundss(code, dd, dn, imm);
             } else {
                 emit_roundsd(code, dd, dn, imm);
@@ -592,7 +749,7 @@ pub(super) fn emit_fp_unary(
 /// For `FpToInt`, `CVTTSD2SI` rounds-to-zero an xmm into a 64-bit
 /// signed int.
 pub(super) fn emit_fp_cast(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     v: super::super::ir::ValueId,
     kind: FpCastKind,
@@ -734,7 +891,33 @@ pub(super) fn emit_fp_cast(
             let Some(dd) = fp_or_spill_dst(dst, frame) else {
                 return fail("FpCast F32ToF64: dst not fp reg / spill");
             };
-            emit_cvtss2sd(code, dd, dn);
+            if dd != dn {
+                emit_vex_fp_arith(code, 0x5A, true, dd, dn, dn);
+            } else {
+                emit_cvtss2sd(code, dd, dn);
+            }
+            fp_spill_dst_to_slot(code, dst, dd, frame);
+            Ok(())
+        }
+        FpCastKind::FpBits => {
+            let Some(dn) = materialize_fp(code, src_place, Reg(frame.fp_scratch[0]), frame) else {
+                return fail("FpCast FpBits: value not fp reg / spill / int reg");
+            };
+            let Some(rd) = int_or_spill_dst(dst) else {
+                return fail("FpCast FpBits: dst not int reg / spill");
+            };
+            emit_movq_r_xmm(code, rd, dn);
+            spill_dst_to_slot(code, dst, rd, frame);
+            Ok(())
+        }
+        FpCastKind::BitsFp => {
+            let Some(rn) = materialize_int(code, src_place, SCRATCH_R10, frame) else {
+                return fail("FpCast BitsFp: value not int reg / spill");
+            };
+            let Some(dd) = fp_or_spill_dst(dst, frame) else {
+                return fail("FpCast BitsFp: dst not fp reg / spill");
+            };
+            emit_movq_xmm_r(code, dd, rn);
             fp_spill_dst_to_slot(code, dst, dd, frame);
             Ok(())
         }
@@ -745,7 +928,11 @@ pub(super) fn emit_fp_cast(
             let Some(dd) = fp_or_spill_dst(dst, frame) else {
                 return fail("FpCast F64ToF32: dst not fp reg / spill");
             };
-            emit_cvtsd2ss(code, dd, dn);
+            if dd != dn {
+                emit_vex_fp_arith(code, 0x5A, false, dd, dn, dn);
+            } else {
+                emit_cvtsd2ss(code, dd, dn);
+            }
             fp_spill_dst_to_slot(code, dst, dd, frame);
             Ok(())
         }
@@ -771,9 +958,14 @@ fn shift_mnem(op: BinOp) -> Mnem {
         BinOp::Shl => Mnem::Shl,
         BinOp::Shr => Mnem::Sar,
         BinOp::Shru => Mnem::Shr,
-        BinOp::Ror => Mnem::Ror,
+        BinOp::Ror | BinOp::Ror32 => Mnem::Ror,
         _ => unreachable!("shift_mnem: non-shift op {op:?}"),
     }
+}
+
+/// The operand size of a shift or rotate: 4 for the 32-bit rotate.
+fn shift_size(op: BinOp) -> u8 {
+    if op == BinOp::Ror32 { 4 } else { 8 }
 }
 
 /// Stage the lhs into the destination of a two-operand op.
@@ -785,7 +977,7 @@ fn stage_lhs(code: &mut Vec<u8>, rd: Reg, rn: Reg) {
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_binop(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     op: BinOp,
     v: super::super::ir::ValueId,
     dst: Place,
@@ -847,7 +1039,7 @@ pub(super) fn emit_binop(
 
 /// Scalar FP arithmetic in xmm: the VEX row, or in place the SSE row where no longer.
 fn emit_fp_binop(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     opcode: u8,
     is_f32: bool,
     dst: Place,
@@ -877,7 +1069,10 @@ fn emit_fp_binop(
         Place::FpReg(r) => emit_vex_fp_arith(code, opcode, is_f32, dd, ra, Reg(r)),
         Place::Spill(slot) => {
             let (base, off) = spill_slot_addr(frame, slot);
-            emit_vex_fp_arith_mem(code, opcode, is_f32, dd, ra, base, off);
+            match code.holding(base.0, off, SpillWidth::Scalar) {
+                Some(r) => emit_vex_fp_arith(code, opcode, is_f32, dd, ra, Reg(r)),
+                None => emit_vex_fp_arith_mem(code, opcode, is_f32, dd, ra, base, off),
+            }
         }
         Place::IntReg(r) => {
             let rb = Reg(frame.fp_scratch[1]);
@@ -890,14 +1085,14 @@ fn emit_fp_binop(
     Ok(())
 }
 
-/// FP comparison: `ucomisd` / `ucomiss` sets ZF / CF / PF, PF=1 signalling
+/// FP comparison: `ucomisd` / `ucomiss` sets ZF / CF / PF, PF=1 signaling
 /// an unordered (NaN) compare. C99 6.5.9p3 requires `==` to yield 0 on NaN
 /// and `!=` to yield 1, so the cc-only `setcc` takes an explicit
 /// AND-with-`setnp` / OR-with-`setp` fixup. A fused branch reads the flags
 /// instead.
 #[allow(clippy::too_many_arguments)]
 fn emit_fp_compare(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     op: BinOp,
     v: super::super::ir::ValueId,
     dst: Place,
@@ -922,11 +1117,14 @@ fn emit_fp_compare(
     } else {
         (dn, dm)
     };
-    // The compare width follows the operands' precision (C99 6.3.1.8).
-    if alloc.is_f32(lhs) || alloc.is_f32(rhs) {
-        emit_ucomiss(code, dn, dm);
-    } else {
-        emit_ucomisd(code, dn, dm);
+    // The compare width follows the operands' precision (C99 6.3.1.8); a
+    // relational operator signals on any NaN: `comisd` (C99 F.3).
+    let f32 = alloc.is_f32(lhs) || alloc.is_f32(rhs);
+    match (f32, crate::c5::ir::fp_compare_signals(op)) {
+        (true, false) => emit_ucomiss(code, dn, dm),
+        (false, false) => emit_ucomisd(code, dn, dm),
+        (true, true) => super::encode::emit_comiss(code, dn, dm),
+        (false, true) => super::encode::emit_comisd(code, dn, dm),
     }
     if fused {
         return Ok(());
@@ -965,7 +1163,7 @@ fn emit_fp_compare(
 /// takes the register path.
 #[allow(clippy::too_many_arguments)]
 fn emit_binop_spilled_rhs(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     op: BinOp,
     v: super::super::ir::ValueId,
     dst: Place,
@@ -1013,7 +1211,7 @@ fn emit_binop_spilled_rhs(
 /// The two-operand integer path: stage lhs into rd, then `OP rd, rm`.
 #[allow(clippy::too_many_arguments)]
 fn emit_int_binop(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     op: BinOp,
     v: super::super::ir::ValueId,
     dst: Place,
@@ -1026,9 +1224,12 @@ fn emit_int_binop(
     // The rhs scratch carries a spilled shift count, or preserves a register
     // rhs that aliases rd. It must not be rcx for a shift: a rotate
     // moves the count into cl while preserving a live rcx with a push / pop,
-    // which a count materialised into rcx here would defeat; r11 is always
+    // which a count materialized into rcx here would defeat; r11 is always
     // safe.
-    let is_shift = matches!(op, BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror);
+    let is_shift = matches!(
+        op,
+        BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror | BinOp::Ror32
+    );
     let rhs_scratch = if is_shift {
         if rd.0 == SCRATCH_R10.0 {
             SCRATCH_R11
@@ -1182,11 +1383,11 @@ fn implicit_holds_live(
 /// in rax and the remainder in rdx; one-operand IMUL / MUL write the
 /// 128-bit product to rdx:rax. A value live in rax / rdx across the
 /// operation is preserved with push / pop; the transient misalignment is
-/// harmless since no call intervenes. `rn` is the materialised lhs;
+/// harmless since no call intervenes. `rn` is the materialized lhs;
 /// `rhs_place` routes into r10.
 #[allow(clippy::too_many_arguments)]
 fn emit_binop_rdx_rax(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     op: BinOp,
     v: super::super::ir::ValueId,
     dst: Place,
@@ -1292,7 +1493,7 @@ fn emit_binop_rdx_rax(
 /// keeps within rax; values live in rax / rdx across it are saved.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_udiv128(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     v: super::super::ir::ValueId,
     dst: Place,
     hi: super::super::ir::ValueId,
@@ -1323,7 +1524,7 @@ pub(super) fn emit_udiv128(
     if preserve_rdx {
         emit_push_r(code, Reg::RDX);
     }
-    let load = |code: &mut Vec<u8>, to: Reg, from: Place| match from {
+    let load = |code: &mut CodeBuf, to: Reg, from: Place| match from {
         Place::IntReg(r) => {
             emit_mov_rr(code, to, Reg(r));
             true
@@ -1384,7 +1585,7 @@ enum ShiftCount {
 /// count (C99 6.5.7p3) does too.
 #[allow(clippy::too_many_arguments)]
 fn emit_shift_by_count_reg(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     op: BinOp,
     v: super::super::ir::ValueId,
     dst: Place,
@@ -1410,7 +1611,9 @@ fn emit_shift_by_count_reg(
         ShiftCount::Reg(r) => Some(r),
         ShiftCount::Imm(_) => None,
     };
-    let do_shift = |code: &mut Vec<u8>, target: Reg| emit_shift_cl(code, shift_mnem(op), 8, target);
+    let do_shift = |code: &mut CodeBuf, target: Reg| {
+        emit_shift_cl(code, shift_mnem(op), shift_size(op), target)
+    };
     if rd.0 == Reg::RCX.0 {
         // Stage the value in a scratch disjoint from rcx and the count
         // register; r11 is reserved outside both allocator banks and
@@ -1448,7 +1651,7 @@ fn emit_shift_by_count_reg(
     Ok(())
 }
 
-/// Whether `Inst::BinopI { op, rhs_imm: imm }` materialises the immediate
+/// Whether `Inst::BinopI { op, rhs_imm: imm }` materializes the immediate
 /// into a register, so the loop-invariant hoist can lift it into a
 /// preheader; false when it rides the instruction's own field. Mirrors
 /// the arm order in `emit_binop_imm`.
@@ -1457,7 +1660,7 @@ pub(crate) fn binop_imm_materializes(op: BinOp, imm: i64) -> bool {
     match op {
         // imm8 form in range, and the cl path for a count C99 6.5.7p3
         // leaves undefined; neither materializes the immediate.
-        BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror => false,
+        BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror | BinOp::Ror32 => false,
         BinOp::Mod | BinOp::Modu => false,
         BinOp::Mul => !(fits_i32 || (imm > 0 && (imm as u64).is_power_of_two())),
         BinOp::Add | BinOp::Sub | BinOp::Or | BinOp::Xor => !fits_i32,
@@ -1470,7 +1673,7 @@ pub(crate) fn binop_imm_materializes(op: BinOp, imm: i64) -> bool {
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_binop_imm(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     op: BinOp,
     v: super::super::ir::ValueId,
     dst: Place,
@@ -1483,6 +1686,21 @@ pub(super) fn emit_binop_imm(
         return fail("BinopI: dst not int reg / spill");
     };
     let lhs_place = place_of(alloc, lhs);
+    // A slot both the operand and the result live in is updated in place,
+    // unless a register still holds what was just stored there.
+    if let (Place::Spill(slot), true) = (dst, dst == lhs_place)
+        && let (base, disp) = spill_slot_addr(frame, slot)
+        && code.holding(base.0, disp, SpillWidth::Int).is_none()
+        && let Ok(imm) = i32::try_from(rhs_imm)
+        && matches!(
+            op,
+            BinOp::Add | BinOp::Sub | BinOp::And | BinOp::Or | BinOp::Xor
+        )
+        && !(op == BinOp::And && alloc.branch_fused.get(v as usize).copied().unwrap_or(false))
+    {
+        super::encode::emit_mi(code, alu_mnem(op).unwrap(), 8, base, disp, imm);
+        return Ok(());
+    }
     let Some(rn) = int_operand_into_rd(code, lhs_place, rd, frame) else {
         return fail("BinopI: lhs not int reg / spill");
     };
@@ -1557,9 +1775,24 @@ pub(super) fn emit_binop_imm(
             super::encode::emit_imul_r_r_imm32(code, rd, rn, rhs_imm as i32);
             true
         }
-        BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror if shift_amount.is_some() => {
+        // A rotate into another register is one `rorx` (BMI2, x86-64-v3).
+        BinOp::Ror | BinOp::Ror32 if rd.0 != rn.0 && shift_amount.is_some() => {
+            let w64 = op == BinOp::Ror;
+            let count = shift_amount.unwrap() & if w64 { 63 } else { 31 };
+            super::encode::emit_rorx(code, w64, rd, rn, count);
+            true
+        }
+        BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror | BinOp::Ror32
+            if shift_amount.is_some() =>
+        {
             stage_lhs(code, rd, rn);
-            emit_shift_ri(code, shift_mnem(op), 8, rd, shift_amount.unwrap());
+            emit_shift_ri(
+                code,
+                shift_mnem(op),
+                shift_size(op),
+                rd,
+                shift_amount.unwrap(),
+            );
             true
         }
         BinOp::Add if rd.0 != rn.0 && imm_fits_i32 => {
@@ -1593,9 +1826,10 @@ pub(super) fn emit_binop_imm(
         return Ok(());
     }
     // A compare against an i32: `cmp rn, imm32`, or against 0 the shorter
-    // `test rn, rn`, whose ZF / SF / CF / OF match.
+    // `test rn, rn`, whose ZF / SF / CF / OF match. A 32-bit compare reads
+    // the immediate's low word alone.
     if let Some(cc) = int_cmp_cc(op)
-        && imm_fits_i32
+        && (imm_fits_i32 || cmp_width(alloc, v) == 4)
     {
         let w = cmp_width(alloc, v);
         if rhs_imm == 0 {
@@ -1610,7 +1844,7 @@ pub(super) fn emit_binop_imm(
         return Ok(());
     }
     // A commutative op with `rd != rn` folds the staging mov into the
-    // materialisation: `mov rd, imm; OP rd, rn`.
+    // materialization: `mov rd, imm; OP rd, rn`.
     let commutative = matches!(
         op,
         BinOp::Add | BinOp::Mul | BinOp::And | BinOp::Or | BinOp::Xor
@@ -1624,7 +1858,10 @@ pub(super) fn emit_binop_imm(
     // A shift by a count outside 0..63 (C99 6.5.7p3 leaves it undefined)
     // routes through cl like the register-shift path, so the emit stays
     // well-formed.
-    if matches!(op, BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror) {
+    if matches!(
+        op,
+        BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror | BinOp::Ror32
+    ) {
         return emit_shift_by_count_reg(
             code,
             op,
@@ -1637,7 +1874,7 @@ pub(super) fn emit_binop_imm(
             frame,
         );
     }
-    // The immediate materialises into r11, which sits outside both
+    // The immediate materializes into r11, which sits outside both
     // allocator banks (`RegBanks::for_target`) and so never aliases `rd` or
     // `rn` and is free under any register pressure.
     let scratch = SCRATCH_R11;
@@ -1657,4 +1894,351 @@ pub(super) fn emit_binop_imm(
     }
     spill_dst_to_slot(code, dst, rd, frame);
     Ok(())
+}
+
+/// An add or subtract of an immediate whose flags the branch ending its
+/// block reads ([`flag_steps`]), and the comparison those flags answer.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum FlagStep {
+    /// `add` / `sub`, of the low doublewords when `w32`.
+    Sets { w32: bool },
+    /// A comparison the step's flags answer with the condition: no code.
+    Answered(Cc),
+}
+
+/// Steps `y = x + k` whose flags answer the branch ending their block: a
+/// zero test of `y` -- the branch condition itself or a fused `==` / `!=`
+/// with 0 -- reads ZF, and `y != -1` of `y = x - 1` reads CF, clear
+/// exactly when `x != 0`. Nothing is emitted between the step and its
+/// comparison, and nothing after the step sets the flags. A low-word test
+/// takes the 32-bit form, which only a step whose upper half nothing reads
+/// may.
+pub(super) fn flag_steps(func: &FunctionSsa, alloc: &Allocation) -> Vec<Option<FlagStep>> {
+    use super::super::ir::ValueId;
+    let mut out = alloc::vec![None; func.insts.len()];
+    let step = |y: ValueId| match func.insts[y as usize] {
+        Inst::BinopI {
+            op: BinOp::Add,
+            lhs,
+            rhs_imm,
+        } => Some((lhs, rhs_imm)),
+        Inst::BinopI {
+            op: BinOp::Sub,
+            lhs,
+            rhs_imm,
+        } => rhs_imm.checked_neg().map(|k| (lhs, k)),
+        _ => None,
+    };
+    let silent =
+        |u: ValueId| super::ssa::emit_common::inst_emits_nothing(&func.insts[u as usize], u, alloc);
+    let in_reg = |v: ValueId| matches!(place_of(alloc, v), Place::IntReg(_));
+    for (b, block) in func.blocks.iter().enumerate().skip(1) {
+        let (Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. }) = block.terminator else {
+            continue;
+        };
+        if !block.inst_range.contains(&cond) {
+            continue;
+        }
+        let (y, answer, w32) = if alloc.branch_fused.get(cond as usize) == Some(&true) {
+            let Inst::BinopI {
+                op: op @ (BinOp::Eq | BinOp::Ne),
+                lhs: y,
+                rhs_imm,
+            } = func.insts[cond as usize]
+            else {
+                continue;
+            };
+            if !block.inst_range.contains(&y) || y >= cond || !(y + 1..cond).all(silent) {
+                continue;
+            }
+            let decrement = step(y).is_some_and(|(_, k)| k == -1);
+            let cc = match (rhs_imm, op) {
+                (0, BinOp::Eq) => Cc::E,
+                (0, _) => Cc::Ne,
+                (-1, BinOp::Eq) if decrement => Cc::B,
+                (-1, _) if decrement => Cc::Ae,
+                _ => continue,
+            };
+            (y, Some(cc), cmp_width(alloc, cond) == 4)
+        } else {
+            let keeps = |u: ValueId| {
+                silent(u) || super::ssa::reg_alloc::flags_survive(&func.insts[u as usize], true)
+            };
+            if !(cond + 1..block.inst_range.end).all(keeps) {
+                continue;
+            }
+            let low_word = func.low_word_tests.get(b).copied().unwrap_or(false);
+            (cond, None, low_word)
+        };
+        let Some((x, k)) = step(y) else { continue };
+        if i32::try_from(k).is_err()
+            || k == i64::from(i32::MIN)
+            || !in_reg(y)
+            || !in_reg(x)
+            || (w32 && !alloc.high_dead(y))
+        {
+            continue;
+        }
+        out[y as usize] = Some(FlagStep::Sets { w32 });
+        if let Some(cc) = answer {
+            out[cond as usize] = Some(FlagStep::Answered(cc));
+        }
+    }
+    out
+}
+
+/// The step or comparison [`flag_steps`] marked; `None` for any other
+/// instruction.
+pub(super) fn emit_flag_step(
+    code: &mut Vec<u8>,
+    v: super::super::ir::ValueId,
+    steps: &[Option<FlagStep>],
+    fcx: &FnCtx,
+) -> Option<Emit> {
+    let w32 = match steps.get(v as usize).copied().flatten()? {
+        FlagStep::Answered(_) => return Some(Ok(())),
+        FlagStep::Sets { w32 } => w32,
+    };
+    let Inst::BinopI { op, lhs, rhs_imm } = fcx.func.insts[v as usize] else {
+        return None;
+    };
+    let k = if op == BinOp::Sub {
+        rhs_imm.checked_neg()?
+    } else {
+        rhs_imm
+    };
+    let (Place::IntReg(rd), Place::IntReg(rn)) = (place_of(fcx.alloc, v), place_of(fcx.alloc, lhs))
+    else {
+        return Some(fail("flag step: operand not in a register"));
+    };
+    let (rd, rn) = (Reg(rd), Reg(rn));
+    stage_lhs(code, rd, rn);
+    let (mnem, m) = if k >= 0 {
+        (Mnem::Add, k)
+    } else {
+        (Mnem::Sub, -k)
+    };
+    super::encode::emit_ri(code, mnem, if w32 { 4 } else { 8 }, rd, m as i32);
+    Some(Ok(()))
+}
+
+/// The condition a branch on `cond` takes off a [`flag_steps`] step's
+/// flags: the comparison's answer, or the step's own zero test.
+pub(super) fn flag_step_cc(
+    steps: &[Option<FlagStep>],
+    cond: super::super::ir::ValueId,
+    negate: bool,
+) -> Option<Cc> {
+    let cc = match steps.get(cond as usize).copied().flatten()? {
+        FlagStep::Answered(cc) => cc,
+        FlagStep::Sets { .. } => Cc::Ne,
+    };
+    Some(if negate { cc.flip() } else { cc })
+}
+
+/// A load, an operation on it and the store of the result to the same
+/// bytes, performed by one memory-destination instruction
+/// ([`memory_destinations`]).
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum MemDest {
+    /// The load or the operation: no code of its own.
+    Folded,
+    /// The store: `op [base + disp], imm` or `op [base + disp], reg`.
+    Writes {
+        mnem: Mnem,
+        width: u8,
+        imm: Option<i32>,
+        reg: u8,
+    },
+}
+
+/// The bytes a plain store writes or a plain load reads: through a pointer
+/// value, or in a frame slot.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Location {
+    Ptr(super::super::ir::ValueId, i32),
+    Slot(i64, i32),
+}
+
+fn stored_at(inst: &Inst) -> Option<(Location, super::super::ir::ValueId, StoreKind)> {
+    match *inst {
+        Inst::Store {
+            addr,
+            disp,
+            value,
+            kind,
+            volatile: false,
+            align: 0,
+            pc_rel: false,
+        } => Some((Location::Ptr(addr, disp), value, kind)),
+        Inst::StoreLocal {
+            off,
+            disp,
+            value,
+            kind,
+            volatile: false,
+            ..
+        } => Some((Location::Slot(off, disp), value, kind)),
+        _ => None,
+    }
+}
+
+fn loaded_at(inst: &Inst) -> Option<(Location, LoadKind)> {
+    match *inst {
+        Inst::Load {
+            addr,
+            disp,
+            kind,
+            volatile: false,
+            pc_rel: false,
+            align: 0,
+        } => Some((Location::Ptr(addr, disp), kind)),
+        Inst::LoadLocal {
+            off,
+            disp,
+            kind,
+            volatile: false,
+        } => Some((Location::Slot(off, disp), kind)),
+        _ => None,
+    }
+}
+
+/// Stores of `op(load, src)` to the bytes the load read, at the store's
+/// width, where `op` is an addition, subtraction or bitwise operation, whose
+/// low bytes the operands' low bytes alone decide: the load and the
+/// operation each read only by the next, nothing emitted between them, and
+/// no flags another instruction set read past the store. The bytes are a
+/// pointer's, held in a register, or a frame slot's.
+pub(super) fn memory_destinations(
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    steps: &[Option<FlagStep>],
+) -> Vec<Option<MemDest>> {
+    use super::super::ir::ValueId;
+    let mut out = alloc::vec![None; func.insts.len()];
+    let silent =
+        |u: ValueId| super::ssa::emit_common::inst_emits_nothing(&func.insts[u as usize], u, alloc);
+    let single = |v: ValueId| alloc.use_counts.get(v as usize) == Some(&1);
+    let in_reg = |v: ValueId| match place_of(alloc, v) {
+        Place::IntReg(r) => Some(r),
+        _ => None,
+    };
+    let sets_flags = |u: ValueId| {
+        alloc.branch_fused.get(u as usize) == Some(&true)
+            || steps.get(u as usize).copied().flatten().is_some()
+    };
+    for block in &func.blocks {
+        let range = block.inst_range.clone();
+        for s in range.clone() {
+            let Some((at, o, kind)) = stored_at(&func.insts[s as usize]) else {
+                continue;
+            };
+            let width: u8 = match kind {
+                StoreKind::I8 => 1,
+                StoreKind::I16 => 2,
+                StoreKind::I32 => 4,
+                StoreKind::I64 => 8,
+                _ => continue,
+            };
+            let addressable = match at {
+                Location::Ptr(addr, _) => in_reg(addr).is_some(),
+                Location::Slot(..) => true,
+            };
+            if place_of(alloc, s) != Place::None
+                || !range.contains(&o)
+                || o >= s
+                || !single(o)
+                || !(o + 1..s).all(silent)
+                || (range.start..s).any(sets_flags)
+                || !addressable
+            {
+                continue;
+            }
+            let loaded = |l: ValueId| {
+                loaded_at(&func.insts[l as usize])
+                    .is_some_and(|(a, kind)| a == at && kind.bytes() == width)
+            };
+            // The immediate's low bytes at the store's width, which alone
+            // decide the stored bytes.
+            let narrow = |k: i64| match width {
+                1 => Some(i32::from(k as i8)),
+                2 => Some(i32::from(k as i16)),
+                4 => Some(k as i32),
+                _ => i32::try_from(k).ok(),
+            };
+            let (op, l, imm, reg) = match func.insts[o as usize] {
+                Inst::BinopI { op, lhs, rhs_imm } => match narrow(rhs_imm) {
+                    Some(k) => (op, lhs, Some(k), 0),
+                    None => continue,
+                },
+                Inst::Binop { op, lhs, rhs } if lhs != rhs && loaded(lhs) => match in_reg(rhs) {
+                    Some(r) => (op, lhs, None, r),
+                    None => continue,
+                },
+                Inst::Binop { op, lhs, rhs }
+                    if lhs != rhs
+                        && loaded(rhs)
+                        && matches!(op, BinOp::Add | BinOp::And | BinOp::Or | BinOp::Xor) =>
+                {
+                    match in_reg(lhs) {
+                        Some(r) => (op, rhs, None, r),
+                        None => continue,
+                    }
+                }
+                _ => continue,
+            };
+            let Some(mnem) = alu_mnem(op).filter(|&m| m != Mnem::Imul) else {
+                continue;
+            };
+            if !range.contains(&l) || l >= o || !single(l) || !loaded(l) || !(l + 1..o).all(silent)
+            {
+                continue;
+            }
+            out[l as usize] = Some(MemDest::Folded);
+            out[o as usize] = Some(MemDest::Folded);
+            out[s as usize] = Some(MemDest::Writes {
+                mnem,
+                width,
+                imm,
+                reg,
+            });
+        }
+    }
+    out
+}
+
+/// The instruction [`memory_destinations`] marked; `None` for any other.
+pub(super) fn emit_memory_destination(
+    code: &mut Vec<u8>,
+    v: super::super::ir::ValueId,
+    marks: &[Option<MemDest>],
+    fcx: &FnCtx,
+) -> Option<Emit> {
+    let (mnem, width, imm, reg) = match marks.get(v as usize).copied().flatten()? {
+        MemDest::Folded => return Some(Ok(())),
+        MemDest::Writes {
+            mnem,
+            width,
+            imm,
+            reg,
+        } => (mnem, width, imm, reg),
+    };
+    let (base, disp) = match stored_at(&fcx.func.insts[v as usize])?.0 {
+        Location::Ptr(addr, disp) => match place_of(fcx.alloc, addr) {
+            Place::IntReg(base) => (Reg(base), disp),
+            _ => return Some(fail("memory destination: address not in a register")),
+        },
+        Location::Slot(off, disp) => {
+            let (base, bytes) = super::mem::local_slot_base_disp(off, fcx.func, fcx.frame, fcx.abi);
+            match i32::try_from(bytes + i64::from(disp)) {
+                Ok(disp) => (base, disp),
+                Err(_) => return Some(fail("memory destination: slot offset past disp32")),
+            }
+        }
+    };
+    match imm {
+        Some(k) => super::encode::emit_mi(code, mnem, width, base, disp, k),
+        None => super::encode::emit_mr(code, mnem, width, base, disp, Reg(reg)),
+    }
+    Some(Ok(()))
 }

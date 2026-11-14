@@ -89,7 +89,7 @@ impl Compiler {
         // no new boundary. Static DCE needs the boundary to drop a dead
         // literal instead of gluing it to its neighbors.
         if self.lex.tk == '"' && prev_tk != '"' {
-            self.data_object_starts.push(self.lex.ival);
+            self.note_literal_start();
             // A literal's storage is immutable (C99 6.4.5p6), so record
             // its byte range for the const-data load fold. Gated on the
             // bytes being freshly appended: a snapshot restore re-lexes
@@ -130,7 +130,17 @@ impl Compiler {
     pub(super) fn restore_lex(&mut self, snap: crate::c5::lexer::LexerSnapshot) {
         self.lex.restore(snap);
         if self.lex.tk == '"' {
-            self.data_object_starts.push(self.lex.ival);
+            self.note_literal_start();
+        }
+    }
+
+    /// Record the current string literal as a data object, with its
+    /// element boundary when the elements are wider than a byte.
+    fn note_literal_start(&mut self) {
+        self.data_object_starts.push(self.lex.ival);
+        if self.lex.str_is_wide && self.lex.str_elem_bytes > 1 {
+            self.data_align_marks
+                .push((self.lex.ival, self.lex.str_elem_bytes as i64));
         }
     }
 
@@ -199,7 +209,7 @@ impl Compiler {
             sym.is_string_literal = false;
         }
         // The retired `__func__` storage is gone, so a later reference
-        // must materialise it again rather than resolve to the offset.
+        // must materialize it again rather than resolve to the offset.
         examined += pop_tail_past(&mut self.func_name_objects, |&(.., o)| o >= end);
         super::initializer::note_init_bookkeeping(examined, recorded, 0);
         debug_assert!(self.data_object_starts.iter().all(|&s| s < end));
@@ -419,15 +429,15 @@ impl Compiler {
         self.emit_imm(data_offset);
     }
 
-    /// Pad `self.data` to `align` bytes -- the `_Alignas(16)` /
-    /// `aligned(16)` placement for a file-scope object.
+    /// Pad `self.data` to `align` bytes for the object placed next, and
+    /// record the boundary so a repack keeps it.
     pub(super) fn align_data_to(&mut self, align: usize) {
         let start = self.data.len();
-        while !self.data.len().is_multiple_of(align.max(8)) {
+        while !self.data.len().is_multiple_of(align.max(1)) {
             self.data.push(0);
         }
         self.record_data_pad(start);
-        if align > 8 {
+        if align > 1 {
             self.data_align_marks
                 .push((self.data.len() as i64, align as i64));
         }
@@ -636,8 +646,8 @@ impl Compiler {
     }
 
     /// Reduce the just-parsed va_* intrinsic operand to the address of
-    /// the `va_list` storage it names (the GCC builtins take the
-    /// `va_list` by reference). The record-form `va_list` (System V
+    /// the `va_list` storage it names (the builtins take the `va_list`
+    /// by reference). The record-form `va_list` (System V
     /// x86_64 / AAPCS64) reaches here already decayed to the record
     /// address; the cursor-form lvalue (a plain pointer object) drops
     /// its trailing load; anything else (an explicit `&ap`) already
@@ -1192,6 +1202,7 @@ impl Compiler {
             // not yet collected at this point).
             multi_cell_slots: alloc::vec::Vec::new(),
             array_slots: alloc::vec::Vec::new(),
+            vector_objects: alloc::vec::Vec::new(),
             over_aligned_slots: alloc::vec::Vec::new(),
             ssp: crate::c5::ir::SspFacts::default(),
             label_data_slots: core::mem::take(&mut self.pending_label_relocs),
@@ -1212,6 +1223,7 @@ impl Compiler {
         SrcPos {
             line: self.lex.line as u32,
             file,
+            offset: (self.stmt_start).unwrap_or(self.lex.tok_start() as u32),
         }
     }
 
@@ -1223,6 +1235,45 @@ impl Compiler {
         let id = self.ast.push_expr(Expr::IntLit { val, ty }, pos);
         self.ast_acc = Some(id);
         id
+    }
+
+    /// Wrap `arg` as the first argument of a call spelled as the builtin.
+    pub(super) fn ast_wrap_builtin_arg(&mut self, arg: ExprId) {
+        let pos = self.ast_src_pos();
+        let kind = crate::c5::op::Intrinsic::BuiltinArg as i64;
+        let ty = self.ty;
+        let node = (self.ast).push_expr(
+            Expr::Intrinsic {
+                kind,
+                args: alloc::vec![arg],
+                ty,
+            },
+            pos,
+        );
+        self.ast_acc = Some(node);
+    }
+
+    /// Wrap `arg` as a pointer with `bytes` left in its subobject.
+    pub(super) fn ast_wrap_subobject_bound(&mut self, arg: ExprId, bytes: i64) {
+        let pos = self.ast_src_pos();
+        let n = self.ast.push_expr(
+            Expr::IntLit {
+                val: bytes,
+                ty: Ty::Long as i64,
+            },
+            pos,
+        );
+        let kind = crate::c5::op::Intrinsic::SubobjectBound as i64;
+        let ty = self.ty;
+        let node = self.ast.push_expr(
+            Expr::Intrinsic {
+                kind,
+                args: alloc::vec![arg, n],
+                ty,
+            },
+            pos,
+        );
+        self.ast_acc = Some(node);
     }
 
     /// Push a floating-point-literal expression. The lexer already
@@ -1622,7 +1673,7 @@ impl Compiler {
     /// Push an `Expr::Call` and set it as the new accumulator.
     /// Called by the function-call parser site after the per-arg
     /// temp store + reverse push + call dispatch lands. `callee`
-    /// is the callee's AST expression (synthesised here for
+    /// is the callee's AST expression (synthesized here for
     /// direct calls via `ast.push_expr(Ident { ... })`; the
     /// indirect-call path passes the already-built function-
     /// pointer ExprId). `args` holds each declared argument's
@@ -1659,7 +1710,7 @@ impl Compiler {
         self.ast_acc = Some(id);
     }
 
-    /// Synthesise an `Expr::Ident` for a direct-call callee. The
+    /// Synthesize an `Expr::Ident` for a direct-call callee. The
     /// parser's call site looks up `id_idx` (a symbol-table index
     /// for a `Token::Fun` / `Token::Sys` symbol); the AST needs
     /// a matching Ident node so [`Self::ast_emit_call`] can fill
@@ -1734,7 +1785,7 @@ impl Compiler {
     /// outer `Stmt::Compound` that would re-list the
     /// already-referenced sub-stmts and cause the walker to
     /// double-visit them. For empty statements (`;`) the helper
-    /// synthesises an empty `Stmt::Compound` so the caller has a
+    /// synthesizes an empty `Stmt::Compound` so the caller has a
     /// valid id to bind.
     pub(super) fn ast_wrap_stmts_since(&mut self, before: usize) -> super::super::ast::StmtId {
         let after = self.ast.stmts.len();
@@ -1873,7 +1924,7 @@ impl Compiler {
             .push_stmt(super::super::ast::Stmt::Goto(label), pos)
     }
 
-    /// Push a `Stmt::GotoIndirect` (GCC `goto *expr;`).
+    /// Push a `Stmt::GotoIndirect` (`goto *expr;`).
     pub(super) fn ast_emit_goto_indirect(
         &mut self,
         target: super::super::ast::ExprId,
@@ -1955,13 +2006,13 @@ impl Compiler {
         id
     }
 
-    /// Whether `name`'s labelled statement has been parsed. False for
+    /// Whether `name`'s labeled statement has been parsed. False for
     /// a name so far only mentioned by a forward reference.
     pub(super) fn label_is_defined(&self, name: &str) -> bool {
         self.labels.get(name).is_some_and(|st| st.defined)
     }
 
-    /// Bind `name` to its labelled statement, returning the AST slot.
+    /// Bind `name` to its labeled statement, returning the AST slot.
     /// The caller rejects a redefinition through `label_is_defined`.
     pub(super) fn define_label(&mut self, name: &str) -> super::super::ast::LabelId {
         let id = self.ast_label_by_name(name);
@@ -1971,10 +2022,10 @@ impl Compiler {
         id
     }
 
-    /// Consume `&& identifier` (GCC labels as values) and intern the
+    /// Consume `&& identifier` (GNU C labels as values) and intern the
     /// label. The current token must be `&&`. The label may be defined
     /// later in the function, so a forward reference is recorded for the
-    /// function-end check gcc and clang also apply.
+    /// function-end check.
     pub(super) fn parse_label_addr_operand(
         &mut self,
     ) -> Result<super::super::ast::LabelId, C5Error> {
@@ -1998,7 +2049,7 @@ impl Compiler {
     /// source spelled out a value and `None` for a bare
     /// `return;` in a void function; the caller picks the shape.
     /// The Stmt's id is returned in case a future parent
-    /// (a labelled stmt, a surrounding compound block) wants to
+    /// (a labeled stmt, a surrounding compound block) wants to
     /// chain it.
     pub(super) fn ast_emit_return(
         &mut self,
@@ -2036,10 +2087,10 @@ impl Compiler {
         let pos = self.ast_src_pos();
         // C99 6.5.8p6 / 6.5.9p3: a relational or equality operator yields
         // `int` whatever the operands are. The parser still holds an
-        // operand type here (it retags after the emit, since the flavour
+        // operand type here (it retags after the emit, since the flavor
         // pick reads both operand types), so stamp the result type here
         // rather than leaving consumers to infer it from the operands.
-        // The GCC vector extension is the exception: a vector comparison
+        // The GNU C vector extension is the exception: a vector comparison
         // yields a vector, and its arm sets `self.ty` to it before this.
         let ty = if crate::c5::ir::is_comparison_op(op)
             && !super::types::is_vector_ty(&self.structs, self.ty)
@@ -2059,8 +2110,8 @@ impl Compiler {
     /// C99 6.5p8, 7.12.2: while `FP_CONTRACT` is on, a product that is an
     /// operand of an add or subtract `op` may be contracted with it; the
     /// pass does so where nothing else reads the product and it has the
-    /// add's precision. A GCC vector node keeps its nominal opcode, and
-    /// the lanes of a floating one contract as scalars do.
+    /// add's precision. A vector node keeps its nominal opcode, and the
+    /// lanes of a floating one contract as scalars do.
     fn mark_contractible(&mut self, op: super::super::ir::BinOp, operand: ExprId) {
         use super::super::ir::BinOp;
         use super::types::{is_floating_scalar, is_vector_ty, struct_id_of};
@@ -2155,7 +2206,7 @@ impl Compiler {
         // different chain (a nested assignment's value pushed
         // for an enclosing operator, a constant literal pushed
         // by a side-effect computation, ...). Drop the build
-        // rather than synthesise a non-C99 shape the walker
+        // rather than synthesize a non-C99 shape the walker
         // would reject downstream.
         if !matches!(
             self.ast.expr(lhs),

@@ -20,13 +20,11 @@ Disassembly of section .text:
                	cmp	w1, #0x5
                	b.ne	<addr>
                	ldr	w1, [x0, #0x4]
-               	mov	x17, #0x68              // =104
-               	eor	x1, x1, x17
-               	cbnz	w1, <addr>
+               	cmp	w1, #0x68
+               	b.ne	<addr>
                	ldr	w1, [x0, #0x8]
-               	mov	x17, #0x69              // =105
-               	eor	x1, x1, x17
-               	cbnz	w1, <addr>
+               	cmp	w1, #0x69
+               	b.ne	<addr>
                	ldr	w1, [x0, #0xc]
                	cbnz	w1, <addr>
                	ldr	w0, [x0, #0x10]

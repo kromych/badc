@@ -92,7 +92,7 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	mov	x1, #0xb                // =11
-               	str	x1, [x0, #0x18]
+               	str	x1, [x0, #0x10]
                	bl	<addr>
                	cmp	x0, #0xb
                	b.eq	<addr>

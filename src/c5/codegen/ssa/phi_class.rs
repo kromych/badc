@@ -13,7 +13,7 @@
 //! merge only when no member of one class interferes with any member of
 //! the other. The interference test is the value-liveness query in
 //! [`super::liveness`]. An operand whose class cannot merge keeps
-//! its own location, and the per-arch emit materialises it with a real
+//! its own location, and the per-arch emit materializes it with a real
 //! move on the phi's predecessor edge.
 //!
 //! Output is consumed by `ssa_alloc::allocate`, which indexes its
@@ -166,6 +166,7 @@ mod tests {
         FunctionSsa {
             seh_scopes: Vec::new(),
             block_seh: Vec::new(),
+            predicted: Vec::new(),
             funclet_slots: Vec::new(),
             name: String::new(),
             ent_pc: 0,
@@ -189,7 +190,7 @@ mod tests {
             is_weak: false,
             is_internal: false,
             const_params: 0,
-            inst_src: alloc::vec![(0, 0); insts.len()],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             cmp32: Vec::new(),
             div32: Vec::new(),
@@ -209,6 +210,8 @@ mod tests {
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
             array_slots: Vec::new(),
+            vector_objects: Vec::new(),
+            owned_params: Vec::new(),
             over_aligned: Default::default(),
             frame_align: 0,
             realign_region_bytes: 0,

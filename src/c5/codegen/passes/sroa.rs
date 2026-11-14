@@ -37,6 +37,11 @@
 //! write defined included, through its destination; an object holding an
 //! array, or of more cells than the usable GPR file, keeps its block copies.
 //!
+//! An aggregate passed by value is read whole by the call's ABI transfer.
+//! The call reads a copy made just ahead of it in a temporary of its own,
+//! so the object reaches it only through a copy out; an object left whole
+//! passes itself again and the temporary goes.
+//!
 //! A fixed argument of a same-unit call is admitted on what the callee
 //! does with it ([`param_footprints`]): the object stays where it is,
 //! keeping its storage and its base address for the callee to read, and
@@ -51,7 +56,7 @@
 //! expressions. A slot the emit or the callee ABI writes without an
 //! instruction operand -- a by-value aggregate parameter's prologue
 //! copy, the indirect-result address, an alloca base, the caller-side
-//! temporary an aggregate return materialises into -- has no store in
+//! temporary an aggregate return materializes into -- has no store in
 //! the tape to redirect, and a slot a direct `LoadLocal` / `StoreLocal`
 //! names is read or written under a second name that the redirect would
 //! not follow. Both are excluded up front. An over-aligned object (C11
@@ -70,6 +75,7 @@ use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 
 use crate::c5::codegen::ssa::reg_alloc::for_each_operand;
+use crate::c5::codegen::ssa::tape::{self, At, Insertion};
 use crate::c5::ir::{BinOp, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId};
 
 /// Byte ranges, relative to the object a pointer parameter points at,
@@ -258,7 +264,7 @@ pub(crate) fn param_footprints(funcs: &[FunctionSsa]) -> FootprintMap {
             }
         }
         // Returning the pointer hands the object to the caller; a
-        // terminator reading it is not modelled either.
+        // terminator reading it is not modeled either.
         for block in &func.blocks {
             let mut term = block.terminator;
             term.for_each_operand_mut(|v| {
@@ -362,6 +368,7 @@ pub(crate) fn run(func: &mut FunctionSsa, budget: Budget, footprints: &Footprint
     //
     // A batch whose fields mem2reg leaves in fresh slots take no fewer cells
     // than their object had is redone with those fields kept in the object.
+    let temps = copy_arguments(func);
     let mut fully: Vec<i64> = Vec::new();
     let mut settled: BTreeSet<i64> = BTreeSet::new();
     let mut retained: BTreeMap<i64, BTreeSet<(i64, i64)>> = BTreeMap::new();
@@ -418,7 +425,160 @@ pub(crate) fn run(func: &mut FunctionSsa, budget: Budget, footprints: &Footprint
             }
         }
     }
+    uncopy_arguments(func, &temps);
     fully
+}
+
+/// Give each by-value aggregate argument naming a candidate object a copy
+/// in a call-site temporary the call reads instead. The object then
+/// reaches the call only through a copy out, which a split decomposes into
+/// field stores; [`uncopy_arguments`] drops the copies of objects left
+/// whole. Returns the temporaries.
+fn copy_arguments(func: &mut FunctionSsa) -> BTreeSet<i64> {
+    let mut temps = BTreeSet::new();
+    let Some(cells_of) = candidate_objects(func) else {
+        return temps;
+    };
+    if (func.insts.iter()).any(|i| matches!(i, Inst::ParentLocalAddr { .. })) {
+        return temps;
+    }
+    // Objects something other than a call's by-value transfer reads: a load
+    // or a copy out. One only written and passed gains nothing from a split,
+    // whose copy into the temporary would replace the one the call makes.
+    let base_of = |mut v: ValueId| {
+        for _ in 0..16 {
+            match func.insts.get(v as usize)? {
+                Inst::LocalAddr(obj) => return Some(*obj),
+                Inst::BinopI {
+                    op: BinOp::Add | BinOp::Sub,
+                    lhs,
+                    ..
+                } => v = *lhs,
+                _ => return None,
+            }
+        }
+        None
+    };
+    let mut read: BTreeSet<i64> = BTreeSet::new();
+    for inst in &func.insts {
+        let addr = match inst {
+            Inst::Load { addr, .. } => *addr,
+            Inst::Mcpy { src, .. } => *src,
+            _ => continue,
+        };
+        if let Some(obj) = base_of(addr) {
+            read.insert(obj);
+        }
+    }
+    // (call, argument, object address, size, align)
+    let mut sites: Vec<(usize, usize, ValueId, i64, i64)> = Vec::new();
+    for (i, inst) in func.insts.iter().enumerate() {
+        let (Inst::Call { args, arg_aggs, .. }
+        | Inst::CallIndirect { args, arg_aggs, .. }
+        | Inst::CallExt { args, arg_aggs, .. }) = inst
+        else {
+            continue;
+        };
+        for (j, agg) in arg_aggs.iter().enumerate() {
+            let (Some(d), Some(&a)) = (agg, args.get(j)) else {
+                continue;
+            };
+            let Some(Inst::LocalAddr(obj)) = func.insts.get(a as usize) else {
+                continue;
+            };
+            let desc = &func.agg_descs[*d as usize];
+            let (size, align) = (i64::from(desc.size), i64::from(desc.align));
+            if cells_of
+                .get(obj)
+                .is_some_and(|&c| size > 0 && size <= c * 8)
+                && align <= 8
+                && read.contains(obj)
+            {
+                sites.push((i, j, a, size, align));
+            }
+        }
+    }
+    if sites.is_empty() {
+        return temps;
+    }
+    let base = func.insts.len() as ValueId;
+    let mut ins: Vec<Insertion> = Vec::new();
+    for &(i, _, a, size, align) in &sites {
+        let cells = (size + 7) / 8;
+        func.locals += cells;
+        let t = -func.locals;
+        func.multi_cell_slots.push((t, cells));
+        temps.insert(t);
+        let at = At::Before(i as ValueId);
+        let addr = base + ins.len() as ValueId;
+        for inst in [
+            Inst::LocalAddr(t),
+            Inst::Mcpy {
+                dst: addr,
+                src: a,
+                size,
+                align: align as u32,
+            },
+        ] {
+            ins.push(Insertion {
+                at,
+                inst,
+                is_f32: false,
+                copy_of: None,
+            });
+        }
+    }
+    let pos = tape::sort(&mut ins, &func.blocks, base as usize);
+    let rewrite = tape::insert(func, &ins);
+    for (k, &(i, j, ..)) in sites.iter().enumerate() {
+        let addr = rewrite.ids[pos[2 * k]];
+        if let Inst::Call { args, .. }
+        | Inst::CallIndirect { args, .. }
+        | Inst::CallExt { args, .. } = &mut func.insts[rewrite.remap[i] as usize]
+        {
+            args[j] = addr;
+        }
+    }
+    temps
+}
+
+/// Undo [`copy_arguments`] where the object stayed whole: its copy into a
+/// temporary is still a block copy, and the call reads the object again.
+fn uncopy_arguments(func: &mut FunctionSsa, temps: &BTreeSet<i64>) {
+    if temps.is_empty() {
+        return;
+    }
+    let mut back: BTreeMap<ValueId, ValueId> = BTreeMap::new();
+    let mut unused: BTreeSet<i64> = BTreeSet::new();
+    for i in 0..func.insts.len() {
+        if let Inst::Mcpy { dst, src, .. } = func.insts[i]
+            && let Some(&Inst::LocalAddr(t)) = func.insts.get(dst as usize)
+            && temps.contains(&t)
+        {
+            back.insert(dst, src);
+            unused.insert(t);
+            func.insts[i] = Inst::Imm(0);
+        }
+    }
+    func.multi_cell_slots.retain(|(t, _)| !unused.contains(t));
+    if back.is_empty() {
+        return;
+    }
+    for inst in &mut func.insts {
+        if let Inst::Call { args, .. }
+        | Inst::CallIndirect { args, .. }
+        | Inst::CallExt { args, .. } = inst
+        {
+            for a in args.iter_mut() {
+                if let Some(&src) = back.get(a) {
+                    *a = src;
+                }
+            }
+        }
+    }
+    for &dst in back.keys() {
+        func.insts[dst as usize] = Inst::Imm(0);
+    }
 }
 
 /// Fields in fresh slots mem2reg did not lift, by object, where they are no
@@ -548,7 +708,7 @@ struct FieldUse {
 }
 
 /// Rewrite every splittable object's accesses to per-field slots,
-/// decompose its block initializer, and neutralise the dead
+/// decompose its block initializer, and neutralize the dead
 /// base-address instructions. Returns one [`Split`] per object actually
 /// split. `budget` is the target's usable GPR file: a round admits
 /// objects greedily under it, largest register demand first, so the
@@ -843,7 +1003,7 @@ fn split_objects(
     // A store of an immediate spanning more than one of the object's
     // fields is object-granularity initialization written as a store
     // rather than a copy -- what an aggregate's zero fill emits per cell
-    // -- and is decomposed like one. It is recognised by strictly
+    // -- and is decomposed like one. It is recognized by strictly
     // containing another access's byte range, so a store that is itself
     // a field keeps its own width and stays a plain access.
     let mut ranges_of: BTreeMap<i64, BTreeSet<(i64, i64)>> = BTreeMap::new();
@@ -910,16 +1070,44 @@ fn split_objects(
             use_.stores += 1;
         }
     }
-    for (base, fields) in &fields_of {
-        let mut end = 0i64;
-        for &(off, width) in fields.keys() {
-            if off < end {
-                declined.insert(*base);
-                break;
+    // An access inside a wider field of its object folds into it; the
+    // field then moves as an integer of its width (`canonical`).
+    let mut canonical: BTreeMap<i64, BTreeSet<(i64, i64)>> = BTreeMap::new();
+    for (base, fields) in fields_of.iter_mut() {
+        match fold_contained(fields) {
+            Some(folded) if folded.is_empty() => {}
+            Some(folded) => {
+                canonical.insert(*base, folded);
             }
-            end = off + width;
+            None => {
+                declined.insert(*base);
+            }
         }
     }
+    // A folded field takes its other accesses as conversions: a `float`
+    // has no bit move, and the conversion a store becomes is not the value
+    // its id names. A call's view of the object is not converted.
+    for a in &accesses {
+        let Some(folded) = canonical.get(&a.base) else {
+            continue;
+        };
+        let Some(&(foff, fw)) = folded
+            .iter()
+            .find(|&&(o, w)| o <= a.off && a.off + a.width <= o + w)
+        else {
+            continue;
+        };
+        let (fp32, fp64) = match &func.insts[a.id as usize] {
+            Inst::Load { kind, .. } => (*kind == LoadKind::F32, *kind == LoadKind::F64),
+            Inst::Store { kind, .. } => (*kind == StoreKind::F32, *kind == StoreKind::F64),
+            _ => (false, false),
+        };
+        let converted_store = a.store && ((a.off, a.width) != (foff, fw) || fp64);
+        if fp32 || (fp64 && fw != 8) || (converted_store && consumed[a.id as usize]) {
+            declined.insert(a.base);
+        }
+    }
+
     // A copy out reads every field in its span, `gap_fields` included, and
     // must decompose as a block initializer does.
     for c in copies.iter().filter(|c| !c.nop) {
@@ -982,6 +1170,7 @@ fn split_objects(
             address_live.insert(*base);
         }
     }
+    declined.extend(canonical.keys().filter(|b| address_live.contains(b)));
     // A field a call can write stays in the object's storage: the callee
     // writes those bytes and a promoted copy would go stale. The rest
     // leave, and the object keeps its storage for the callee to read.
@@ -1150,9 +1339,8 @@ fn split_objects(
             init.id,
             Expansion {
                 keep: address_live.contains(&init.base),
-                mirror: None,
                 copies,
-                outs: Vec::new(),
+                ..Expansion::default()
             },
         );
     }
@@ -1196,6 +1384,22 @@ fn split_objects(
         if demoted.contains(&a.id) {
             continue;
         }
+        if let Some(&(foff, fw)) = canonical.get(&a.base).and_then(|folded| {
+            folded
+                .iter()
+                .find(|&&(o, w)| o <= a.off && a.off + a.width <= o + w)
+        }) && let Some(&slot) = assigned.get(&(foff, fw))
+        {
+            let seq = canonical_access(&func.insts[a.id as usize], slot, a.off - foff, fw);
+            expand.insert(
+                a.id,
+                Expansion {
+                    seq,
+                    ..Expansion::default()
+                },
+            );
+            continue;
+        }
         let Some(&slot) = assigned.get(&(a.off, a.width)) else {
             continue;
         };
@@ -1211,8 +1415,7 @@ fn split_objects(
                         Expansion {
                             keep: true,
                             mirror: Some((slot, kind)),
-                            copies: Vec::new(),
-                            outs: Vec::new(),
+                            ..Expansion::default()
                         },
                     );
                 } else {
@@ -1235,7 +1438,7 @@ fn split_objects(
             };
         }
     }
-    // Neutralise the now-dead base-address expressions of every fully
+    // Neutralize the now-dead base-address expressions of every fully
     // split object: every consumer was a rewritten access or another
     // address expression, so the value has no live use. An object a call
     // still reaches keeps them. Before the expansion below, which
@@ -1276,6 +1479,138 @@ fn split_objects(
         })
         .collect();
     Round { splits, more }
+}
+
+/// Fold each field lying inside a wider one of 1, 2, 4 or 8 bytes into it,
+/// returning the fields that took another; `None` when two overlap
+/// otherwise.
+fn fold_contained(fields: &mut BTreeMap<(i64, i64), FieldUse>) -> Option<BTreeSet<(i64, i64)>> {
+    let mut keys: Vec<(i64, i64)> = fields.keys().copied().collect();
+    keys.sort_by_key(|&(off, width)| (off, core::cmp::Reverse(width)));
+    let mut outer: Option<(i64, i64)> = None;
+    let mut folded = BTreeSet::new();
+    for k in keys {
+        match outer {
+            Some(o) if k.0 + k.1 <= o.0 + o.1 => {
+                if !matches!(o.1, 1 | 2 | 4 | 8) {
+                    return None;
+                }
+                let u = fields.remove(&k)?;
+                let into = fields.get_mut(&o)?;
+                into.fp |= u.fp;
+                into.int |= u.int;
+                into.loads += u.loads;
+                into.stores += u.stores;
+                folded.insert(o);
+            }
+            Some(o) if k.0 < o.0 + o.1 => return None,
+            _ => outer = Some(k),
+        }
+    }
+    Some(folded)
+}
+
+/// The instructions an access `d` bytes into a folded field of `width`
+/// bytes at `slot` becomes: the field read or written as an integer of its
+/// width, a narrower read taken from its bytes, a `double` moved as its
+/// bits, and a narrower store merged into the field.
+fn canonical_access(inst: &Inst, slot: i64, d: i64, width: i64) -> Vec<Inst> {
+    let (load, store) = copy_kinds(width, false);
+    let read = Inst::LoadLocal {
+        off: slot,
+        disp: 0,
+        kind: load,
+        volatile: false,
+    };
+    let write = |value: ValueId| Inst::StoreLocal {
+        off: slot,
+        disp: 0,
+        value,
+        kind: store,
+        volatile: false,
+        nsw: false,
+    };
+    let bits = 8 * d;
+    let at = |k: usize| SEQ + k as ValueId;
+    match *inst {
+        Inst::Load { kind, .. } => {
+            let mut seq = alloc::vec![read];
+            if kind == LoadKind::F64 {
+                seq.push(Inst::FpCast {
+                    kind: crate::c5::ir::FpCastKind::BitsFp,
+                    value: at(0),
+                });
+                return seq;
+            }
+            if bits > 0 {
+                seq.push(Inst::BinopI {
+                    op: BinOp::Shru,
+                    lhs: at(0),
+                    rhs_imm: bits,
+                });
+            }
+            let from = at(seq.len() - 1);
+            let w = load_width(kind);
+            match kind {
+                LoadKind::I8 | LoadKind::I16 | LoadKind::I32 => seq.push(Inst::Extend {
+                    value: from,
+                    kind,
+                    nsw: false,
+                }),
+                _ if w + d < width => seq.push(Inst::BinopI {
+                    op: BinOp::And,
+                    lhs: from,
+                    rhs_imm: (1i64 << (8 * w)) - 1,
+                }),
+                _ => {}
+            }
+            seq
+        }
+        Inst::Store { value, kind, .. } => {
+            let w = store_width(kind);
+            if kind == StoreKind::F64 {
+                return alloc::vec![
+                    Inst::FpCast {
+                        kind: crate::c5::ir::FpCastKind::FpBits,
+                        value,
+                    },
+                    write(at(0)),
+                ];
+            }
+            if w == width {
+                return alloc::vec![write(value)];
+            }
+            let mask = (1i64 << (8 * w)) - 1;
+            let mut seq = alloc::vec![
+                read,
+                Inst::BinopI {
+                    op: BinOp::And,
+                    lhs: at(0),
+                    rhs_imm: !(mask << bits),
+                },
+                Inst::BinopI {
+                    op: BinOp::And,
+                    lhs: value,
+                    rhs_imm: mask,
+                },
+            ];
+            if bits > 0 {
+                seq.push(Inst::BinopI {
+                    op: BinOp::Shl,
+                    lhs: at(2),
+                    rhs_imm: bits,
+                });
+            }
+            seq.push(Inst::Binop {
+                op: BinOp::Or,
+                lhs: at(1),
+                rhs: at(seq.len() - 1),
+            });
+            seq.push(write(at(seq.len() - 1)));
+            seq
+        }
+        _ => unreachable!("a field access"),
+    }
 }
 
 /// Fields for the bytes a copy out reads that a block write defines and no
@@ -1422,7 +1757,13 @@ struct Expansion {
     mirror: Option<(i64, StoreKind)>,
     copies: Vec<CopyField>,
     outs: Vec<CopyField>,
+    /// The instructions an access becomes, the last taking its id; an
+    /// operand at or past [`SEQ`] names the sequence's own earlier value.
+    seq: Vec<Inst>,
 }
+
+/// The first operand id naming a value of an [`Expansion::seq`].
+const SEQ: ValueId = ValueId::MAX - 64;
 
 /// Replace each write named in `expand` with what it expands to,
 /// renumbering the tape around the insertions.
@@ -1450,13 +1791,29 @@ fn expand_writes(func: &mut FunctionSsa, splits: &BTreeMap<u32, Expansion>) {
     };
 
     let mut new_insts: Vec<Inst> = Vec::with_capacity(total);
-    let mut new_src: Vec<(u32, u32)> = Vec::with_capacity(total);
+    let mut new_src: Vec<crate::c5::ir::InstSrc> = Vec::with_capacity(total);
     let mut new_f32: Vec<bool> = Vec::with_capacity(total);
     for (bi, range) in old_ranges.iter().enumerate() {
         let start = new_insts.len() as u32;
         for old in range.start..range.end {
-            let loc = func.inst_src.get(old as usize).copied().unwrap_or((0, 0));
+            let loc = func.inst_src.get(old as usize).copied().unwrap_or_default();
             match splits.get(&old) {
+                Some(e) if !e.seq.is_empty() => {
+                    let first = new_insts.len() as ValueId;
+                    for inst in &e.seq {
+                        let mut inst = inst.clone();
+                        inst.for_each_operand_mut(|v| {
+                            *v = if *v >= SEQ && *v != NO_VALUE {
+                                first + (*v - SEQ)
+                            } else {
+                                remap(*v)
+                            };
+                        });
+                        new_insts.push(inst);
+                        new_src.push(loc);
+                        new_f32.push(false);
+                    }
+                }
                 Some(e) => {
                     let (src, dst) = match func.insts[old as usize] {
                         Inst::Mcpy { src, dst, .. } => (remap(src), remap(dst)),
@@ -1576,6 +1933,7 @@ fn expand_writes(func: &mut FunctionSsa, splits: &BTreeMap<u32, Expansion>) {
 /// Instruction count an old tape position expands to.
 fn group_len(splits: &BTreeMap<u32, Expansion>, old: u32) -> u32 {
     match splits.get(&old) {
+        Some(e) if !e.seq.is_empty() => e.seq.len() as u32,
         Some(e) => {
             let moves = 2 * (e.copies.len() + e.outs.len());
             (u32::from(e.keep) + u32::from(e.mirror.is_some()) + moves as u32).max(1)
@@ -1616,6 +1974,8 @@ fn load_width(kind: LoadKind) -> i64 {
         LoadKind::I32 | LoadKind::U32 | LoadKind::F32 => 4,
         LoadKind::I64 | LoadKind::F64 => 8,
         LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => 16,
+        LoadKind::V256 => 32,
+        LoadKind::V512 => 64,
     }
 }
 
@@ -1626,6 +1986,8 @@ fn store_width(kind: StoreKind) -> i64 {
         StoreKind::I32 | StoreKind::F32 => 4,
         StoreKind::I64 | StoreKind::F64 => 8,
         StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => 16,
+        StoreKind::V256 => 32,
+        StoreKind::V512 => 64,
     }
 }
 
@@ -1746,7 +2108,7 @@ mod tests {
     fn func(insts: Vec<Inst>, term: Terminator, multi_cell: Vec<(i64, i64)>) -> FunctionSsa {
         let n = insts.len() as u32;
         FunctionSsa {
-            inst_src: alloc::vec![(0, 0); insts.len()],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             insts,
             blocks: alloc::vec![Block {
@@ -1759,6 +2121,60 @@ mod tests {
             locals: 4,
             ..FunctionSsa::default()
         }
+    }
+
+    /// A 16-byte object of two integer eightbytes passed by value to an
+    /// external call, after `extra`.
+    fn passed_object(extra: Vec<Inst>) -> FunctionSsa {
+        let mut insts = alloc::vec![
+            Inst::LocalAddr(-2),
+            Inst::Imm(7),
+            store(0, 1),
+            Inst::Store {
+                addr: 0,
+                disp: 8,
+                value: 1,
+                kind: StoreKind::I64,
+                volatile: false,
+                align: 0,
+                pc_rel: false,
+            },
+        ];
+        insts.extend(extra);
+        insts.push(Inst::CallExt {
+            binding_idx: 0,
+            args: alloc::vec![0],
+            fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+            low_word_args: 0,
+            arg_widths: crate::c5::ir::ArgWidths::default(),
+            fp_return: false,
+            arg_aggs: alloc::vec![Some(0)],
+            ret_agg: None,
+            ret_slot_local: 0,
+        });
+        let mut f = func(insts, Terminator::Return(NO_VALUE), alloc::vec![(-2, 2)]);
+        f.agg_descs = alloc::vec![crate::c5::ir::AggDesc {
+            size: 16,
+            align: 8,
+            member_align: 8,
+            fields: Vec::new(),
+            homogeneous: None,
+            vector: false,
+        }];
+        f
+    }
+
+    /// An object only written and passed by value takes no argument copy:
+    /// the copy would move the bytes the call's transfer moves. A call
+    /// taking thousands of call results compiled for minutes under the
+    /// two-register caps while sroa split them a few per round. An object
+    /// also read is copied.
+    #[test]
+    fn only_an_object_read_besides_its_call_takes_an_argument_copy() {
+        let mut f = passed_object(Vec::new());
+        assert!(copy_arguments(&mut f).is_empty());
+        let mut f = passed_object(alloc::vec![load(0)]);
+        assert_eq!(copy_arguments(&mut f).len(), 1);
     }
 
     fn store(addr: ValueId, value: ValueId) -> Inst {
@@ -1829,12 +2245,12 @@ mod tests {
                     ..
                 }
             )),
-            "promoted stores are neutralised"
+            "promoted stores are neutralized"
         );
     }
 
     #[test]
-    fn dead_local_addr_neutralised() {
+    fn dead_local_addr_neutralized() {
         let mut f = two_elem_array();
         let split = split_objects(&mut f, 64);
         assert_eq!(split.len(), 1);
@@ -1875,11 +2291,11 @@ mod tests {
                 ..
             }
         ));
-        // Base-address instructions (LocalAddr + Add) neutralised.
+        // Base-address instructions (LocalAddr + Add) neutralized.
         for id in [1usize, 4, 5, 7, 9, 10] {
             assert!(
                 matches!(f.insts[id], Inst::Imm(0)),
-                "address expr v{id} must be neutralised, got {:?}",
+                "address expr v{id} must be neutralized, got {:?}",
                 f.insts[id]
             );
         }
@@ -2109,9 +2525,9 @@ mod tests {
     fn own_cell_left_in_the_frame_keeps_its_split() {
         let insts = alloc::vec![
             Inst::LocalAddr(-2),      // v0
-            pun(0, 0, LoadKind::F64), // v1
+            pun(0, 0, LoadKind::F32), // v1
             Inst::Imm(3),             // v2
-            store(0, 2),              // v3
+            store32(0, 0, 2),         // v3
         ];
         let mut f = func(insts, Terminator::Return(1), alloc::vec![(-2, 1)]);
         let promoted = run(&mut f, 64);
@@ -2139,7 +2555,7 @@ mod tests {
 
     /// `Block::exit_acc` naming an address into the object is a liveness
     /// pin, not a use of the address, so it must not decline the split;
-    /// the neutralised expression still defines a value there.
+    /// the neutralized expression still defines a value there.
     #[test]
     fn base_address_as_exit_acc_still_splits() {
         let mut f = two_elem_array();
@@ -2389,11 +2805,11 @@ mod tests {
         );
     }
 
-    /// An access that overlaps another at a second width and carries a
-    /// value no narrower store can reproduce leaves the object in
-    /// memory: the field decomposition is not a partition.
+    /// A narrower access inside a field reads the field's low bytes: the
+    /// 4-byte load of an 8-byte store's bytes is the sign extension of the
+    /// field's value.
     #[test]
-    fn overlapping_widths_not_split() {
+    fn a_narrower_access_inside_a_field_reads_its_bytes() {
         let insts = alloc::vec![
             Inst::ParamRef {
                 idx: 0,
@@ -2412,6 +2828,54 @@ mod tests {
             }, // v4 4-byte load at 0
         ];
         let mut f = func(insts, Terminator::Return(4), alloc::vec![(-2, 1)]);
+        let split = split_objects(&mut f, 64);
+        assert_eq!(split.len(), 1, "{:?}", f.insts);
+        let Terminator::Return(r) = f.blocks[0].terminator else {
+            panic!("{:?}", f.insts)
+        };
+        let Inst::Extend {
+            value,
+            kind: LoadKind::I32,
+            ..
+        } = f.insts[r as usize]
+        else {
+            panic!("{:?}", f.insts)
+        };
+        assert!(
+            matches!(
+                f.insts[value as usize],
+                Inst::LoadLocal {
+                    kind: LoadKind::I64,
+                    ..
+                }
+            ),
+            "{:?}",
+            f.insts
+        );
+    }
+
+    /// An access reaching past the field it starts in leaves the object in
+    /// memory: the fields do not partition it.
+    #[test]
+    fn overlapping_widths_not_split() {
+        let insts = alloc::vec![
+            Inst::ParamRef {
+                idx: 0,
+                kind: LoadKind::I64
+            }, // v0
+            Inst::LocalAddr(-2), // v1
+            store(1, 0),         // v2 8-byte store at 0
+            Inst::LocalAddr(-2), // v3
+            Inst::Load {
+                addr: 3,
+                disp: 6,
+                kind: LoadKind::I32,
+                volatile: false,
+                align: 0,
+                pc_rel: false
+            }, // v4 4-byte load at 6
+        ];
+        let mut f = func(insts, Terminator::Return(4), alloc::vec![(-2, 2)]);
         let before = alloc::format!("{:?}", f.insts);
         let split = split_objects(&mut f, 64);
         assert!(split.is_empty(), "overlapping widths must not split");
@@ -2770,7 +3234,7 @@ mod tests {
         );
     }
 
-    /// A copy between two spans of one object is not modelled.
+    /// A copy between two spans of one object is not modeled.
     #[test]
     fn copy_within_one_object_not_split() {
         let insts = alloc::vec![
@@ -3082,7 +3546,7 @@ mod tests {
         assert!(split[0].slots.is_empty(), "with no field to move");
         assert!(
             matches!(f.insts[0], Inst::Imm(0)) && matches!(f.insts[1], Inst::Imm(0)),
-            "its address expressions are neutralised: {:?}",
+            "its address expressions are neutralized: {:?}",
             f.insts
         );
     }
@@ -3165,7 +3629,7 @@ mod tests {
         assert!(split[0].slots.is_empty(), "with no field to move");
         assert!(
             f.insts[..4].iter().all(|i| matches!(i, Inst::Imm(0))),
-            "its loads and address expressions are neutralised: {:?}",
+            "its loads and address expressions are neutralized: {:?}",
             f.insts
         );
     }
@@ -3192,7 +3656,7 @@ mod tests {
             [0, 2, 3]
                 .iter()
                 .all(|&i| matches!(f.insts[i], Inst::Imm(0))),
-            "its address, its copy and its load are neutralised: {:?}",
+            "its address, its copy and its load are neutralized: {:?}",
             f.insts
         );
     }
@@ -3267,7 +3731,7 @@ mod tests {
     }
 
     /// The caller-side temporary a callee's aggregate return
-    /// materialises into is filled through the host ABI, named only by
+    /// materializes into is filled through the host ABI, named only by
     /// the call's `ret_slot_local`. Redirecting its member loads to
     /// field slots would leave them reading storage nothing wrote.
     #[test]
@@ -3406,7 +3870,7 @@ mod tests {
         FunctionSsa {
             ent_pc,
             n_params: 1,
-            inst_src: alloc::vec![(0, 0); insts.len()],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             insts,
             blocks: alloc::vec![Block {

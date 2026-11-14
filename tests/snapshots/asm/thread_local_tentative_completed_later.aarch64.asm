@@ -16,7 +16,7 @@ Disassembly of section .text:
 <tv_early>:
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
-               	add	x0, x0, #0x30
+               	add	x0, x0, #0x20
                	ret
 
 <main>:
@@ -24,7 +24,7 @@ Disassembly of section .text:
                	mov	x29, sp
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
-               	add	x0, x0, #0x30
+               	add	x0, x0, #0x20
                	ldr	x1, [x0]
                	cbnz	x1, <addr>
                	ldr	x1, [x0, #0x8]
@@ -33,7 +33,7 @@ Disassembly of section .text:
                	cbnz	x1, <addr>
                	mrs	x1, TPIDR_EL0
                	add	x1, x1, #0x0, lsl #12   // =0x0
-               	add	x1, x1, #0x50
+               	add	x1, x1, #0x40
                	ldr	x1, [x1, #0x8]
                	cbz	x1, <addr>
                	mov	x0, #0x1                // =1
@@ -58,7 +58,7 @@ Disassembly of section .text:
                	bl	<addr>
                	mrs	x1, TPIDR_EL0
                	add	x1, x1, #0x0, lsl #12   // =0x0
-               	add	x1, x1, #0x30
+               	add	x1, x1, #0x20
                	cmp	x0, x1
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
@@ -66,15 +66,15 @@ Disassembly of section .text:
                	ret
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
-               	add	x0, x0, #0x50
+               	add	x0, x0, #0x40
                	mov	x1, #0x4                // =4
                	str	x1, [x0, #0x8]
                	mrs	x2, TPIDR_EL0
                	add	x2, x2, #0x0, lsl #12   // =0x0
-               	add	x2, x2, #0x18
+               	add	x2, x2, #0x14
                	mrs	x3, TPIDR_EL0
                	add	x3, x3, #0x0, lsl #12   // =0x0
-               	add	x3, x3, #0x28
+               	add	x3, x3, #0x16
                	mov	x1, #0x5                // =5
                	strb	w1, [x3]
                	strb	w1, [x2]

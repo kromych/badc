@@ -43,9 +43,10 @@ Disassembly of section .text:
                	retq
                	leaq	-0x8(%rbp), %rcx
                	subq	%rcx, %rax
+               	movq	%rax, %rcx
+               	negq	%rcx
                	testq	%rax, %rax
-               	jge	<addr>
-               	negq	%rax
+               	cmovlq	%rcx, %rax
                	cmpq	$0x100000, %rax         # imm = 0x100000
                	jle	<addr>
                	movl	$0x3, %eax

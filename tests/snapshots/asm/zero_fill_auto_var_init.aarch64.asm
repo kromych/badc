@@ -89,8 +89,7 @@ Disassembly of section .text:
                	movk	x2, #0xf83, lsl #48
                	umulh	x2, x0, x2
                	lsr	x2, x2, #1
-               	mov	x17, #0x21              // =33
-               	mul	x2, x2, x17
+               	add	x2, x2, x2, lsl #5
                	sub	x2, x0, x2
                	str	x0, [x1, x2, lsl #3]
                	ldr	x0, [sp, #0x8]
@@ -193,6 +192,12 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	bl	<addr>
                	mov	x20, x0
+               	mov	x0, #0x3                // =3
+               	bl	<addr>
+               	add	x20, x20, x0
+               	mov	x0, #0x3                // =3
+               	bl	<addr>
+               	add	x20, x20, x0
                	mov	x0, #0x64               // =100
                	mov	x1, #0x3                // =3
                	bl	<addr>

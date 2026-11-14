@@ -353,9 +353,54 @@ fn fmt_inst(inst: &Inst) -> String {
         } => format!(
             "AtomicStore {{ addr=v{addr}, value=v{value}, width={width}, order={order:?} }}"
         ),
-        X86Simd { op, imm, args } => format!(
-            "X86Simd {{ op={}, imm={imm:?}, args=[{}] }}",
-            crate::c5::x86_simd::get(*op).name,
+        Simd { op, imm, args } => format!(
+            "Simd {{ op={}, imm={imm:?}, args=[{}] }}",
+            crate::c5::simd::get(*op).name,
+            fmt_value_list(args),
+        ),
+        VecBinop {
+            op,
+            lane,
+            bytes,
+            lhs,
+            rhs,
+        } => format!(
+            "VecBinop {{ op={op:?}, lane={lane:?}, bytes={bytes}, lhs=v{lhs}, rhs=v{rhs} }}"
+        ),
+        VecInsert {
+            vec,
+            value,
+            off,
+            kind,
+            bytes,
+        } => format!(
+            "VecInsert {{ vec=v{vec}, value=v{value}, off={off}, kind={}, bytes={bytes} }}",
+            fmt_store_kind(*kind)
+        ),
+        VecSplat { value, kind, bytes } => format!(
+            "VecSplat {{ value=v{value}, kind={}, bytes={bytes} }}",
+            fmt_store_kind(*kind)
+        ),
+        VecConst { imm, kind, bytes } => format!(
+            "VecConst {{ imm={imm}, kind={}, bytes={bytes} }}",
+            fmt_store_kind(*kind)
+        ),
+        VecExtract {
+            vec,
+            off,
+            kind,
+            bytes,
+        } => format!(
+            "VecExtract {{ vec=v{vec}, off={off}, kind={}, bytes={bytes} }}",
+            fmt_load_kind(*kind)
+        ),
+        Select { cond, a, b, kind } => format!(
+            "Select {{ cond=v{cond}, a=v{a}, b=v{b}, kind={} }}",
+            fmt_load_kind(*kind)
+        ),
+        SimdVal { op, imm, args } => format!(
+            "SimdVal {{ op={}, imm={imm:?}, args=[{}] }}",
+            crate::c5::simd::get(*op).name,
             fmt_value_list(args),
         ),
         Intrinsic { kind, args } => format!(
@@ -518,6 +563,8 @@ fn fmt_load_kind(k: LoadKind) -> &'static str {
         LoadKind::F80 => "F80",
         LoadKind::F128 => "F128",
         LoadKind::V128 => "V128",
+        LoadKind::V256 => "V256",
+        LoadKind::V512 => "V512",
     }
 }
 
@@ -532,6 +579,8 @@ fn fmt_store_kind(k: StoreKind) -> &'static str {
         StoreKind::F80 => "F80",
         StoreKind::F128 => "F128",
         StoreKind::V128 => "V128",
+        StoreKind::V256 => "V256",
+        StoreKind::V512 => "V512",
     }
 }
 
@@ -554,6 +603,7 @@ fn fmt_binop(op: BinOp) -> &'static str {
         BinOp::Shr => "shr",
         BinOp::Shru => "shru",
         BinOp::Ror => "ror",
+        BinOp::Ror32 => "ror32",
         BinOp::Add => "add",
         BinOp::Sub => "sub",
         BinOp::Mul => "mul",
@@ -574,6 +624,10 @@ fn fmt_binop(op: BinOp) -> &'static str {
         BinOp::Fgt => "fgt",
         BinOp::Fle => "fle",
         BinOp::Fge => "fge",
+        BinOp::FltQuiet => "flt.quiet",
+        BinOp::FgtQuiet => "fgt.quiet",
+        BinOp::FleQuiet => "fle.quiet",
+        BinOp::FgeQuiet => "fge.quiet",
         BinOp::Fone => "fone",
         BinOp::Funo => "funo",
     }
@@ -587,6 +641,8 @@ fn fmt_fp_cast(k: FpCastKind) -> &'static str {
         FpCastKind::UIntToFp => "UIntToFp",
         FpCastKind::F32ToF64 => "F32ToF64",
         FpCastKind::F64ToF32 => "F64ToF32",
+        FpCastKind::FpBits => "FpBits",
+        FpCastKind::BitsFp => "BitsFp",
     }
 }
 
@@ -595,18 +651,12 @@ fn _block_check(_b: BlockId) {}
 
 /// True when SSA-dump output is requested through the CLI flag
 /// (`NativeOptions::dump_ssa`). Under the `codegen_test` feature the
-/// `BADC_DUMP_SSA` environment variable is also honoured; a production
+/// `BADC_DUMP_SSA` environment variable is also honored; a production
 /// build relies solely on the flag and never reads the environment.
 pub(crate) fn enabled(options: &super::NativeOptions) -> bool {
-    if options.dump_ssa {
-        return true;
-    }
     #[cfg(feature = "codegen_test")]
-    {
-        std::env::var("BADC_DUMP_SSA").is_ok()
-    }
+    let env = std::env::var("BADC_DUMP_SSA").is_ok();
     #[cfg(not(feature = "codegen_test"))]
-    {
-        false
-    }
+    let env = false;
+    options.dump_ssa || env
 }

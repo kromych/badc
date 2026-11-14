@@ -2,7 +2,7 @@
 // callee receives its named and variadic arguments in the standard
 // argument-register banks (integer rdi.. + FP xmm0..) and the
 // callee prologue spills a register save area (System V AMD64 ABI
-// 3.5.7). `va_start` initialises the `__va_list_tag` offsets and
+// 3.5.7). `va_start` initializes the `__va_list_tag` offsets and
 // pointers; `va_arg` walks the gp area, fp area, then the overflow
 // area, selecting the area by the argument's type (the typed
 // `va_arg(ap, T)` descriptor). The caller passes the XMM-argument

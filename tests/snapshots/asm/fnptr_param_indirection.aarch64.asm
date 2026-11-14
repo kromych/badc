@@ -24,45 +24,27 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	stur	xzr, [x29, #-0x8]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	stur	x0, [x29, #-0x8]
                	mov	x0, #0xa                // =10
-               	ldur	x1, [x29, #-0x8]
-               	blr	x1
+               	bl	<addr>
                	cmp	w0, #0xb
                	b.eq	<addr>
                	mov	x0, #0xc                // =12
-               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	stur	x0, [x29, #-0x8]
                	mov	x0, #0xa                // =10
                	bl	<addr>
                	cmp	w0, #0x14
                	b.eq	<addr>
                	mov	x0, #0xe                // =14
-               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	stur	xzr, [x29, #-0x8]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	stur	x0, [x29, #-0x8]
                	mov	x0, #0x3                // =3
-               	ldur	x1, [x29, #-0x8]
-               	blr	x1
+               	bl	<addr>
                	cmp	w0, #0x4
                	b.eq	<addr>
                	mov	x0, #0xf                // =15
-               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

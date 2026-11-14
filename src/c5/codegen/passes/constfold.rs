@@ -1,5 +1,5 @@
 //! Post-inline constant folding. The inliner substitutes call-site
-//! immediates into callee bodies and materialises callee-narrows
+//! immediates into callee bodies and materializes callee-narrows
 //! extends on them (`splice_param_ref`), leaving `Extend(Imm)` /
 //! `Binop(Imm, Imm)` / `BinopI(Imm, k)` chains no earlier stage
 //! re-folds. Folding them lets the downstream matchers (`rotate`'s
@@ -12,13 +12,16 @@
 //!   * `Binop { int op, Imm, Imm }` -> `Imm`;
 //!   * `Binop { rhs = Imm }` -> `BinopI` for [`binopi_safe`] ops when
 //!     the immediate encodes without a per-use scratch
-//!     materialisation or the `Imm` def has no other use;
+//!     materialization or the `Imm` def has no other use;
 //!   * `Binop { lhs = Imm }` -> the rhs-imm form via commutation or
 //!     compare mirroring, then the rule above;
 //!   * `Fneg { Imm }` -> `Imm` with the sign bit flipped;
 //!   * `Neg { Imm }` -> the negated `Imm`, and `x * -1` / `0 - x` ->
 //!     `Neg { x }`, which takes one instruction where the multiply
-//!     takes three and needs no constant register.
+//!     takes three and needs no constant register;
+//!   * a `VecExtract` of a lane a `VecInsert` wrote -> the inserted value
+//!     read back as the extract's kind, past the inserts of other lanes,
+//!     and of a zero vector -> `Imm(0)` ([`fold_lane_reads`]).
 //!
 //! Save for that sign flip, only a plain integer `Inst::Imm` whose
 //! `f32_values` flag is clear participates: `ImmData` / `ImmCode` /
@@ -33,9 +36,10 @@
 //! in-place, so `inst_src` / `f32_values` stay parallel. Operand
 //! `Imm`s made dead are reaped by the emit's use-count DCE.
 
-use crate::c5::codegen::ssa::reg_alloc::for_each_operand;
+use crate::c5::codegen::ssa::reg_alloc::{for_each_operand, produces_fp_result};
 use crate::c5::ir::{
-    BinOp, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator, ValueId, is_comparison_op,
+    BinOp, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId,
+    is_comparison_op,
 };
 use crate::c5::vm::eval;
 use alloc::collections::{BTreeMap, BTreeSet};
@@ -56,12 +60,474 @@ const MAX_ROUNDS: usize = 4;
 
 pub(crate) fn run_one(func: &mut FunctionSsa) {
     for _ in 0..MAX_ROUNDS {
-        let folded = fold_round(func);
+        let folded = fold_round(func) | fold_constant_lanes(func);
+        let lanes = fold_lane_reads(func);
         let forwarded = forward_identities(func);
-        if !folded && !forwarded {
-            return;
+        if !folded && !lanes && !forwarded {
+            break;
         }
     }
+    // After the rounds, which fold a round trip of a constant whole and
+    // the lane reads of a constant vector's inserts.
+    fold_constant_halves(func);
+    compared_truncations(func);
+}
+
+/// `(float)(int)x` that only comparisons read is `trunc(x)`: the two are
+/// equal wherever the conversion to an integer is defined (C17 6.3.1.4p1)
+/// but in the sign of a zero, which a comparison does not see, and the
+/// truncation takes no integer round trip.
+fn compared_truncations(func: &mut FunctionSsa) {
+    let n = func.insts.len();
+    let (mut read, mut compared) = (vec![false; n], vec![true; n]);
+    for inst in &func.insts {
+        let compare =
+            matches!(inst, Inst::Binop { op, .. } if crate::c5::ir::is_fp_comparison_op(*op));
+        inst.for_each_operand(|v| {
+            if let Some(r) = read.get_mut(v as usize) {
+                *r = true;
+                compared[v as usize] &= compare;
+            }
+        });
+    }
+    for b in &func.blocks {
+        b.terminator.for_each_operand(|v| {
+            if let Some(c) = compared.get_mut(v as usize) {
+                *c = false;
+            }
+        });
+    }
+    let f32 =
+        |func: &FunctionSsa, v: ValueId| func.f32_values.get(v as usize).copied().unwrap_or(false);
+    for i in 0..n {
+        let Inst::FpCast {
+            kind: FpCastKind::IntToFp,
+            value,
+        } = func.insts[i]
+        else {
+            continue;
+        };
+        let int = match func.insts[value as usize] {
+            Inst::Extend {
+                value,
+                kind: LoadKind::I32,
+                ..
+            } => value,
+            _ => value,
+        };
+        if let Inst::FpCast {
+            kind: FpCastKind::FpToInt,
+            value: x,
+        } = func.insts[int as usize]
+            && read[i]
+            && compared[i]
+            && f32(func, x) == f32(func, i as ValueId)
+        {
+            let kind = match f32(func, x) {
+                true => crate::c5::op::Intrinsic::Truncf,
+                false => crate::c5::op::Intrinsic::Trunc,
+            };
+            func.insts[i] = Inst::Intrinsic {
+                kind: kind as i64,
+                args: alloc::vec![x],
+            };
+        }
+    }
+}
+
+/// A constant written into a lane of an 8-byte vector that is itself a
+/// constant -- zero, undefined, or a `VecConst` -- is the constant with that
+/// lane replaced: the vector's one 64-bit lane, which the targets build
+/// in a general register and move over whole.
+fn fold_constant_lanes(func: &mut FunctionSsa) -> bool {
+    let mut changed = false;
+    for i in 0..func.insts.len() {
+        let Inst::VecInsert {
+            vec,
+            value,
+            off,
+            kind,
+            bytes: 8,
+        } = func.insts[i]
+        else {
+            continue;
+        };
+        let w = u32::from(store_width(kind));
+        if !matches!(
+            kind,
+            StoreKind::I8 | StoreKind::I16 | StoreKind::I32 | StoreKind::I64
+        ) || u32::from(off) + w > 8
+        {
+            continue;
+        }
+        let Some(&Inst::Imm(x)) = func.insts.get(value as usize) else {
+            continue;
+        };
+        let base = match func.insts.get(vec as usize) {
+            Some(Inst::Imm(0) | Inst::Undef) => 0u64,
+            Some(&Inst::VecConst {
+                imm,
+                kind: k,
+                bytes: 8,
+            }) => {
+                let bits = 8 * u32::from(store_width(k));
+                let lane = imm as u64 & (u64::MAX >> (64 - bits));
+                (0..64 / bits).fold(0, |p, j| p | lane << (j * bits))
+            }
+            _ => continue,
+        };
+        let mask = (u64::MAX >> (64 - 8 * w)) << (8 * u32::from(off));
+        let merged = (base & !mask) | ((x as u64) << (8 * u32::from(off)) & mask);
+        func.insts[i] = Inst::VecConst {
+            imm: merged as i64,
+            kind: StoreKind::I64,
+            bytes: 8,
+        };
+        changed = true;
+    }
+    changed
+}
+
+/// A chain of three or more integer constants inserted into a 16-byte
+/// constant vector, each insert read by the next alone, is its two 64-bit
+/// halves: the second insert from the end becomes the low half in both
+/// lanes, the one after it the high half as an 8-byte constant, and the
+/// last inserts that over the low one. Equal halves are one splat.
+fn fold_constant_halves(func: &mut FunctionSsa) -> bool {
+    let mut uses = vec![0u32; func.insts.len()];
+    for inst in &func.insts {
+        inst.for_each_operand(|v| {
+            if let Some(u) = uses.get_mut(v as usize) {
+                *u += 1;
+            }
+        });
+    }
+    for b in &func.blocks {
+        b.terminator.for_each_operand(|v| {
+            if let Some(u) = uses.get_mut(v as usize) {
+                *u += 1;
+            }
+        });
+    }
+    // The insert at `i` of an integer constant into a 16-byte vector: its
+    // vector and the lane written, as a mask and the bits.
+    let lane = |func: &FunctionSsa, i: ValueId| -> Option<(ValueId, u128, u128)> {
+        let Inst::VecInsert {
+            vec,
+            value,
+            off,
+            kind,
+            bytes: 16,
+        } = func.insts[i as usize]
+        else {
+            return None;
+        };
+        if !matches!(
+            kind,
+            StoreKind::I8 | StoreKind::I16 | StoreKind::I32 | StoreKind::I64
+        ) {
+            return None;
+        }
+        let w = u32::from(store_width(kind));
+        let Some(&Inst::Imm(x)) = func.insts.get(value as usize) else {
+            return None;
+        };
+        let at = 8 * u32::from(off);
+        let mask = (u128::MAX >> (128 - 8 * w)) << at;
+        Some((vec, mask, (u128::from(x as u64) << at) & mask))
+    };
+    // A chain is folded from its end: an insert another one writes over is
+    // inside a chain.
+    let mut inner = vec![false; func.insts.len()];
+    for i in 0..func.insts.len() {
+        if let Some((vec, ..)) = lane(func, i as ValueId)
+            && let Some(x) = inner.get_mut(vec as usize)
+        {
+            *x = true;
+        }
+    }
+    let mut changed = false;
+    for last in 0..func.insts.len() {
+        if uses[last] == 0 || inner[last] {
+            continue;
+        }
+        let mut chain = Vec::new();
+        let (mut at, mut known, mut bits) = (last as ValueId, 0u128, 0u128);
+        let base = loop {
+            let Some((vec, mask, x)) = lane(func, at) else {
+                break None;
+            };
+            if !chain.is_empty() && uses[at as usize] != 1 {
+                break None;
+            }
+            chain.push(at);
+            // A lane written later wins over one written before it.
+            bits |= x & !known;
+            known |= mask;
+            match func.insts[vec as usize] {
+                Inst::Imm(0) | Inst::Undef => break Some(0u128),
+                Inst::VecConst {
+                    imm,
+                    kind,
+                    bytes: 16,
+                } => {
+                    let w = 8 * u32::from(store_width(kind));
+                    let l = u128::from(imm as u64) & (u128::MAX >> (128 - w));
+                    break Some((0..128 / w).fold(0, |p, j| p | l << (j * w)));
+                }
+                _ => at = vec,
+            }
+        };
+        let Some(base) = base else { continue };
+        if chain.len() < 3 {
+            continue;
+        }
+        let v = (base & !known) | bits;
+        let (lo, hi) = (v as u64 as i64, (v >> 64) as u64 as i64);
+        let (pair_lo, pair_hi) = (chain[2], chain[1]);
+        if lo == hi {
+            func.insts[last] = Inst::VecConst {
+                imm: lo,
+                kind: StoreKind::I64,
+                bytes: 16,
+            };
+        } else {
+            func.insts[pair_lo as usize] = Inst::VecConst {
+                imm: lo,
+                kind: StoreKind::I64,
+                bytes: 16,
+            };
+            func.insts[pair_hi as usize] = Inst::VecConst {
+                imm: hi,
+                kind: StoreKind::I64,
+                bytes: 8,
+            };
+            func.insts[last] = Inst::VecInsert {
+                vec: pair_lo,
+                value: pair_hi,
+                off: 8,
+                kind: StoreKind::F64,
+                bytes: 16,
+            };
+        }
+        changed = true;
+    }
+    changed
+}
+
+/// Bytes a lane insert of `kind` writes.
+fn store_width(kind: StoreKind) -> u8 {
+    match kind {
+        StoreKind::I8 => 1,
+        StoreKind::I16 => 2,
+        StoreKind::I32 | StoreKind::F32 => 4,
+        StoreKind::V128 => 16,
+        StoreKind::V256 => 32,
+        StoreKind::V512 => 64,
+        _ => 8,
+    }
+}
+
+/// Inserts `fold_lane_reads` looks through for the lane it reads.
+const LANE_DEPTH: u32 = 64;
+
+/// A 16-byte vector built as its low 8 bytes inserted into zero and its
+/// high 8 bytes inserted over that, when the zero and the low insert have
+/// no other reader: every byte is written, so the zero is undefined and the
+/// low insert needs no clearing of the bytes above its lane.
+fn blank_under_pairs(func: &mut FunctionSsa) -> bool {
+    let mut uses = vec![0u32; func.insts.len()];
+    let mut count = |v: ValueId| {
+        if let Some(u) = uses.get_mut(v as usize) {
+            *u += 1;
+        }
+    };
+    func.insts
+        .iter()
+        .for_each(|inst| inst.for_each_operand(&mut count));
+    func.blocks
+        .iter()
+        .for_each(|b| b.terminator.for_each_operand(&mut count));
+    let mut changed = false;
+    for i in 0..func.insts.len() {
+        let low = crate::c5::codegen::ssa::vector_slots::pair_low(func, &uses, &func.insts[i]);
+        if let Some(low) = low
+            && let Inst::VecInsert { vec: zero, .. } = func.insts[low as usize]
+            && uses[zero as usize] == 1
+            && matches!(func.insts[zero as usize], Inst::Imm(0))
+        {
+            func.insts[zero as usize] = Inst::Undef;
+            changed = true;
+        }
+    }
+    changed
+}
+
+/// Rewrite each `VecExtract` whose lane the vector's inserts determine:
+/// the value an insert of the same lane and width wrote, read back as the
+/// extract's kind reads it from memory (a sign or zero extension of its low
+/// bytes, or the value itself), looking past inserts of disjoint lanes; a
+/// lane inside a 128-bit part written whole, that lane of the part; a lane
+/// of a zero vector, zero, and of an undefined one, undefined. A lane
+/// insert over an insert of the same
+/// lane takes that insert's vector. Returns whether anything was rewritten.
+fn fold_lane_reads(func: &mut FunctionSsa) -> bool {
+    let mut changed = blank_under_pairs(func);
+    // A lane written over the same lane of an insert writes over that
+    // insert's vector.
+    for i in 0..func.insts.len() {
+        let Inst::VecInsert { vec, off, kind, .. } = func.insts[i] else {
+            continue;
+        };
+        if let Inst::VecInsert {
+            vec: base,
+            off: at,
+            kind: under,
+            ..
+        } = func.insts[vec as usize]
+            && at == off
+            && store_width(under) == store_width(kind)
+            && let Inst::VecInsert { vec, .. } = &mut func.insts[i]
+        {
+            *vec = base;
+            changed = true;
+        }
+    }
+    for i in 0..func.insts.len() {
+        let Inst::VecExtract {
+            mut vec, off, kind, ..
+        } = func.insts[i]
+        else {
+            continue;
+        };
+        let read = vec;
+        let width = match kind {
+            LoadKind::F32 => 4,
+            LoadKind::F64 => 8,
+            LoadKind::V128 => 16,
+            k => match k.int_bytes() {
+                Some(n) => n,
+                None => continue,
+            },
+        };
+        let mut found = None;
+        for _ in 0..LANE_DEPTH {
+            match func.insts[vec as usize] {
+                Inst::VecInsert {
+                    vec: base,
+                    value,
+                    off: at,
+                    kind: stored,
+                    ..
+                } => {
+                    let n = store_width(stored);
+                    if at == off && n == width {
+                        found = Some((value, stored));
+                        break;
+                    }
+                    if at + n <= off || off + width <= at {
+                        vec = base;
+                        continue;
+                    }
+                    // A lane of a part written whole is that lane of the part.
+                    if stored == StoreKind::V128 && at <= off && off + width <= at + 16 {
+                        func.insts[i] = Inst::VecExtract {
+                            vec: value,
+                            off: off - at,
+                            kind,
+                            bytes: 16,
+                        };
+                        changed = true;
+                    }
+                    break;
+                }
+                // Every lane of a splat is its value.
+                Inst::VecSplat {
+                    value,
+                    kind: stored,
+                    ..
+                } => {
+                    if store_width(stored) == width {
+                        found = Some((value, stored));
+                    }
+                    break;
+                }
+                // And of a constant splat, its lane's bytes at the offset
+                // the read takes within the lane.
+                Inst::VecConst {
+                    imm, kind: stored, ..
+                } => {
+                    let size = store_width(stored);
+                    let at = off % size;
+                    if at + width > size {
+                        break;
+                    }
+                    let lane = (imm as u64) >> (8 * u32::from(at));
+                    let read = match kind {
+                        LoadKind::I8 => Some(lane as i8 as i64),
+                        LoadKind::U8 => Some(lane as u8 as i64),
+                        LoadKind::I16 => Some(lane as i16 as i64),
+                        LoadKind::U16 => Some(lane as u16 as i64),
+                        LoadKind::I32 => Some(lane as i32 as i64),
+                        LoadKind::U32 => Some(lane as u32 as i64),
+                        LoadKind::I64 => Some(imm),
+                        _ => None,
+                    };
+                    if let Some(k) = read {
+                        func.insts[i] = Inst::Imm(k);
+                        changed = true;
+                    }
+                    break;
+                }
+                Inst::Imm(0) if !matches!(kind, LoadKind::F32 | LoadKind::F64) => {
+                    func.insts[i] = Inst::Imm(0);
+                    changed = true;
+                    break;
+                }
+                // A lane of an undefined vector is undefined.
+                Inst::Undef => {
+                    func.insts[i] = Inst::Undef;
+                    changed = true;
+                    break;
+                }
+                Inst::Copy { value, .. } => vec = value,
+                _ => break,
+            }
+        }
+        // Past inserts of other lanes the read takes the vector it reached,
+        // which a fold of that vector's lanes then sees.
+        let Some((value, stored)) = found else {
+            if vec != read
+                && let Inst::VecExtract { vec: v, .. } = &mut func.insts[i]
+            {
+                *v = vec;
+                changed = true;
+            }
+            continue;
+        };
+        let float = matches!(stored, StoreKind::F32 | StoreKind::F64);
+        func.insts[i] = match kind {
+            LoadKind::F32 | LoadKind::F64 if float => Inst::Copy { value, is_fp: true },
+            LoadKind::V128 if stored == StoreKind::V128 => Inst::Copy { value, is_fp: true },
+            LoadKind::I64 if !float => Inst::Copy {
+                value,
+                is_fp: false,
+            },
+            LoadKind::I32 | LoadKind::I16 | LoadKind::I8 if !float => Inst::Extend {
+                value,
+                kind,
+                nsw: false,
+            },
+            LoadKind::U32 | LoadKind::U16 | LoadKind::U8 if !float => Inst::BinopI {
+                op: BinOp::And,
+                lhs: value,
+                rhs_imm: (1i64 << (8 * width)) - 1,
+            },
+            _ => continue,
+        };
+        changed = true;
+    }
+    changed
 }
 
 /// Producer depth `is_bool_value` chases through phis and extends.
@@ -97,11 +563,23 @@ fn is_bool_value(func: &FunctionSsa, v: ValueId, depth: u32) -> bool {
 /// The operand an instruction reproduces bit for bit, if any: `x != 0`
 /// over a provably 0/1 `x` (`is_bool_value`) -- the short-circuit lowering
 /// re-normalizes an `&&` / `||` operand a comparison or `!` already
-/// normalized -- an integer operation by its identity constant, and
-/// `x & x` / `x | x`.
+/// normalized -- an integer operation by its identity constant, `x & x` /
+/// `x | x`, and a copy between general registers.
 fn forwarded_operand(func: &FunctionSsa, idx: usize) -> Option<ValueId> {
     if matches!(func.f32_values.get(idx), Some(true)) {
         return None;
+    }
+    if let Inst::Copy {
+        value,
+        is_fp: false,
+    } = func.insts[idx]
+        && !matches!(func.f32_values.get(value as usize), Some(true))
+        && func
+            .insts
+            .get(value as usize)
+            .is_some_and(|i| !produces_fp_result(i))
+    {
+        return Some(value);
     }
     if let Inst::Binop {
         op: BinOp::And | BinOp::Or,
@@ -148,14 +626,71 @@ fn double_negate_operand(func: &FunctionSsa, idx: usize) -> Option<ValueId> {
     }
 }
 
-/// Redirect every consumer of an instruction [`forwarded_operand`]
-/// answers to that operand, leaving the instruction dead. The operand
-/// dominates each redirected use, since it dominates the instruction.
+/// The arm a select yields when that does not depend on its condition's
+/// value at run time: the condition is a constant, or both arms are one
+/// value.
+fn select_arm(func: &FunctionSsa, idx: usize) -> Option<ValueId> {
+    let Inst::Select { cond, a, b, .. } = func.insts[idx] else {
+        return None;
+    };
+    if a == b {
+        return Some(a);
+    }
+    match func.insts.get(cond as usize) {
+        Some(Inst::Imm(k)) => Some(if *k != 0 { a } else { b }),
+        _ => None,
+    }
+}
+
+/// Redirect every consumer of an instruction [`forwarded_operand`],
+/// [`double_negate_operand`] or [`select_arm`] answers to that operand,
+/// leaving the instruction dead. The operand dominates each redirected
+/// use, since it dominates the instruction.
 /// Returns whether any operand actually changed.
+/// The operand a whole-vector operation with a zero or all-ones operand
+/// equals: `a + 0`, `a - 0`, `a | 0`, `a ^ 0` and `a & ~0` are `a`; `a & 0`
+/// is the zero and `a | ~0` the all-ones constant. A zero is the zero fill
+/// a promoted vector takes (`Imm(0)`) or a constant splat of zero.
+fn vector_identity(func: &FunctionSsa, i: usize) -> Option<ValueId> {
+    let Inst::VecBinop { op, lhs, rhs, .. } = func.insts[i] else {
+        return None;
+    };
+    let splat = |v: ValueId| match func.insts.get(v as usize) {
+        Some(Inst::Imm(0)) => Some(0u64),
+        Some(&Inst::VecConst { imm, kind, .. }) => {
+            let bits = 8 * u32::from(store_width(kind));
+            let mask = u64::MAX >> (64 - bits);
+            match imm as u64 & mask {
+                0 => Some(0),
+                m if m == mask => Some(u64::MAX),
+                _ => None,
+            }
+        }
+        _ => None,
+    };
+    let constant = |v: ValueId| matches!(func.insts.get(v as usize), Some(Inst::VecConst { .. }));
+    match (op, splat(lhs), splat(rhs)) {
+        (BinOp::Add | BinOp::Or | BinOp::Xor, _, Some(0)) | (BinOp::Sub, _, Some(0)) => Some(lhs),
+        (BinOp::Add | BinOp::Or | BinOp::Xor, Some(0), _) => Some(rhs),
+        (BinOp::And, _, Some(u64::MAX)) => Some(lhs),
+        (BinOp::And, Some(u64::MAX), _) => Some(rhs),
+        (BinOp::And, _, Some(0)) if constant(rhs) => Some(rhs),
+        (BinOp::And, Some(0), _) if constant(lhs) => Some(lhs),
+        (BinOp::Or, _, Some(u64::MAX)) => Some(rhs),
+        (BinOp::Or, Some(u64::MAX), _) => Some(lhs),
+        _ => None,
+    }
+}
+
 fn forward_identities(func: &mut FunctionSsa) -> bool {
     let n = func.insts.len();
     let redirect: Vec<Option<ValueId>> = (0..n)
-        .map(|i| forwarded_operand(func, i).or_else(|| double_negate_operand(func, i)))
+        .map(|i| {
+            forwarded_operand(func, i)
+                .or_else(|| double_negate_operand(func, i))
+                .or_else(|| select_arm(func, i))
+                .or_else(|| vector_identity(func, i))
+        })
         .collect();
     let any = redirect.iter().any(Option::is_some);
     if !any {
@@ -211,10 +746,45 @@ fn forward_identities(func: &mut FunctionSsa) -> bool {
 /// emitted compare or division does, since its operands may have lost the
 /// extensions the mark made redundant.
 fn fold_binop_of(func: &FunctionSsa, v: ValueId, op: BinOp, l: i64, r: i64) -> Option<i64> {
+    if crate::c5::ir::is_fp_comparison_op(op) {
+        return fold_fp_compare(func, v, op, l, r);
+    }
     if super::narrow::is_narrow_div(func, v) {
         return super::narrow::fold_div32(op, l, r);
     }
     super::narrow::fold_at_width(op, l, r, super::narrow::is_cmp32(&func.cmp32, v))
+}
+
+/// A floating comparison `v` of the constants `l` and `r`, at the
+/// operands' precision: with neither a NaN it raises no exception (IEEE
+/// 754 5.11), so its result is fixed.
+fn fold_fp_compare(func: &FunctionSsa, v: ValueId, op: BinOp, l: i64, r: i64) -> Option<i64> {
+    let Inst::Binop { lhs, .. } = *func.insts.get(v as usize)? else {
+        return None;
+    };
+    let single = func.f32_values.get(lhs as usize).copied().unwrap_or(false);
+    let value = |bits: i64| {
+        if single {
+            f64::from(f32::from_bits(bits as u32))
+        } else {
+            f64::from_bits(bits as u64)
+        }
+    };
+    let (a, b) = (value(l), value(r));
+    if a.is_nan() || b.is_nan() {
+        return None;
+    }
+    let holds = match crate::c5::ir::fp_relation(op) {
+        BinOp::Feq => a == b,
+        BinOp::Fne | BinOp::Fone => a != b,
+        BinOp::Flt => a < b,
+        BinOp::Fgt => a > b,
+        BinOp::Fle => a <= b,
+        BinOp::Fge => a >= b,
+        BinOp::Funo => false,
+        _ => return None,
+    };
+    Some(i64::from(holds))
 }
 
 /// Node budget for one per-incoming evaluation. A shared operand is
@@ -401,8 +971,7 @@ pub(crate) fn fold_selects(func: &mut FunctionSsa) -> bool {
 /// the referent must be defined in this unit and not weak. An undefined
 /// symbol may bind to address zero (a weak reference by ELF rule, any
 /// extern under a model that places objects at absolute addresses), and
-/// a weak definition is preemptible, so both stay out -- the behavior
-/// GCC keeps under `-fno-delete-null-pointer-checks`.
+/// a weak definition is preemptible, so both stay out.
 pub(crate) struct AddrFacts {
     /// Parser-symbol indices with a non-weak definition in this unit.
     nonnull_syms: BTreeSet<u32>,
@@ -564,17 +1133,35 @@ pub(crate) fn fold_addr_compares(func: &mut FunctionSsa, facts: &AddrFacts) -> b
     changed
 }
 
-/// Resolve every remaining deferred `__builtin_constant_p` to 0. Called
-/// once the branch-fold fixed point stalls: no later pass discovers new
-/// constants, so an operand still not an immediate never becomes one.
+/// Resolve every remaining deferred `__builtin_constant_p` to 0 and
+/// `__builtin_object_size` to its type's fallback. Called once the
+/// branch-fold fixed point stalls: no later pass discovers new constants or
+/// objects, so an operand not resolved by now never is.
 pub(crate) fn resolve_constant_p(func: &mut FunctionSsa) -> bool {
-    let kind_id = crate::c5::op::Intrinsic::ConstantP as i64;
+    use crate::c5::op::Intrinsic;
     let mut changed = false;
-    for inst in &mut func.insts {
-        if matches!(inst, Inst::Intrinsic { kind, .. } if *kind == kind_id) {
-            *inst = Inst::Imm(0);
-            changed = true;
-        }
+    for i in 0..func.insts.len() {
+        let answer = match &func.insts[i] {
+            Inst::Intrinsic { kind, .. } if *kind == Intrinsic::ConstantP as i64 => Inst::Imm(0),
+            Inst::Intrinsic { kind, args } if *kind == Intrinsic::ObjectSize as i64 => {
+                let ty = args.get(1).and_then(|&t| imm_of(func, t)).unwrap_or(0);
+                Inst::Imm(crate::c5::compiler::object_size_fallback(ty))
+            }
+            // A subobject bound no query is left to read is its pointer, and
+            // a builtin's argument no fold took is the argument.
+            Inst::Intrinsic { kind, args }
+                if *kind == Intrinsic::SubobjectBound as i64
+                    || *kind == Intrinsic::BuiltinArg as i64 =>
+            {
+                Inst::Copy {
+                    value: args[0],
+                    is_fp: false,
+                }
+            }
+            _ => continue,
+        };
+        func.insts[i] = answer;
+        changed = true;
     }
     changed
 }
@@ -597,6 +1184,7 @@ fn binopi_safe(op: BinOp) -> bool {
             | BinOp::Shr
             | BinOp::Shru
             | BinOp::Ror
+            | BinOp::Ror32
             | BinOp::Eq
             | BinOp::Ne
             | BinOp::Lt
@@ -611,17 +1199,18 @@ fn binopi_safe(op: BinOp) -> bool {
 }
 
 /// Whether `op` with immediate `imm` encodes in both per-arch
-/// emitters without a per-use scratch materialisation of the
+/// emitters without a per-use scratch materialization of the
 /// immediate. Derived from the two `emit_binop_imm` peephole sets:
 /// shifts embed a 6-bit count, add/sub take imm12 (aarch64) / imm32
 /// (x86_64), compares cmp-imm12 / cmp-imm32, mul lowers to a
 /// shift-by-log2; `And 0xffffffff` and `Xor -1` have dedicated
 /// single-instruction forms. Anything else loads the immediate into
 /// a scratch register at every use, so rewriting a shared immediate
-/// operand would duplicate its materialisation.
+/// operand would duplicate its materialization.
 fn imm_encodes_free(op: BinOp, imm: i64) -> bool {
     match op {
         BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror => (0..64).contains(&imm),
+        BinOp::Ror32 => (0..32).contains(&imm),
         BinOp::Add | BinOp::Sub => imm.unsigned_abs() < 4096,
         BinOp::Mul => imm > 0 && (imm as u64).is_power_of_two(),
         BinOp::And => imm == 0xffff_ffff,
@@ -675,6 +1264,16 @@ pub(crate) fn mirror(op: BinOp) -> Option<BinOp> {
 /// address-bearing immediates resolve to `None`.
 fn imm_of(func: &FunctionSsa, v: ValueId) -> Option<i64> {
     imm_through_phis(&func.insts, &func.f32_values, v)
+}
+
+/// The constant operand `v` of `op`: a floating comparison reads one of
+/// either precision, which [`fold_fp_compare`] tells apart.
+fn operand_imm(func: &FunctionSsa, op: BinOp, v: ValueId) -> Option<i64> {
+    if crate::c5::ir::is_fp_comparison_op(op) {
+        imm_through_phis(&func.insts, &[], v)
+    } else {
+        imm_of(func, v)
+    }
 }
 
 /// Recursion budget for the multi-incoming phi merge. Each level
@@ -820,6 +1419,7 @@ fn eval_fp_cast(kind: FpCastKind, k: i64, src_f32: bool, dst_f32: bool) -> Optio
     Some(match kind {
         FpCastKind::F32ToF64 if src_f32 && !dst_f32 => double(real()?),
         FpCastKind::F64ToF32 if !src_f32 && dst_f32 => float(real()? as f32),
+        FpCastKind::FpBits | FpCastKind::BitsFp if !src_f32 && !dst_f32 => k,
         FpCastKind::IntToFp if !src_f32 && dst_f32 => float(k as f32),
         FpCastKind::IntToFp if !src_f32 => double(k as f64),
         FpCastKind::UIntToFp if !src_f32 && dst_f32 => float(k as u64 as f32),
@@ -833,11 +1433,43 @@ fn eval_fp_cast(kind: FpCastKind, k: i64, src_f32: bool, dst_f32: bool) -> Optio
     })
 }
 
+/// The bits an arithmetic operation on the constants `l` and `r` gives
+/// (C99 6.5.5, 6.5.6), rounded once to nearest as the default floating
+/// environment does; `f32` says the operands and the result are `float`s.
+/// A NaN operand or result keeps its runtime operation, whose NaN the
+/// target's unit chooses.
+fn eval_fp_binop(op: BinOp, l: i64, r: i64, f32: bool) -> Option<i64> {
+    fn arith<T>(op: BinOp, a: T, b: T) -> Option<T>
+    where
+        T: core::ops::Add<Output = T>
+            + core::ops::Sub<Output = T>
+            + core::ops::Mul<Output = T>
+            + core::ops::Div<Output = T>,
+    {
+        Some(match op {
+            BinOp::Fadd => a + b,
+            BinOp::Fsub => a - b,
+            BinOp::Fmul | BinOp::FmulContractible => a * b,
+            BinOp::Fdiv => a / b,
+            _ => return None,
+        })
+    }
+    if f32 {
+        let (a, b) = (f32::from_bits(l as u32), f32::from_bits(r as u32));
+        let x = arith(op, a, b)?;
+        (!a.is_nan() && !b.is_nan() && !x.is_nan()).then(|| i64::from(x.to_bits()))
+    } else {
+        let (a, b) = (f64::from_bits(l as u64), f64::from_bits(r as u64));
+        let x = arith(op, a, b)?;
+        (!a.is_nan() && !b.is_nan() && !x.is_nan()).then(|| x.to_bits() as i64)
+    }
+}
+
 fn fold_round(func: &mut FunctionSsa) -> bool {
     let uses = count_uses(func);
     // A shared immediate operand only moves into the instruction when
-    // the encoding is materialisation-free; a sole use may always
-    // move (the per-use materialisation replaces the def's).
+    // the encoding is materialization-free; a sole use may always
+    // move (the per-use materialization replaces the def's).
     let to_imm_form = |op: BinOp, value_id: ValueId, imm: i64| -> bool {
         binopi_safe(op)
             && (imm_encodes_free(op, imm) || uses.get(value_id as usize).copied().unwrap_or(0) == 1)
@@ -858,6 +1490,17 @@ fn fold_round(func: &mut FunctionSsa) -> bool {
         if let Inst::FpCast { kind, value } = func.insts[idx]
             && let Some(&Inst::Imm(k)) = func.insts.get(value as usize)
             && let Some(folded) = eval_fp_cast(kind, k, f32(value as usize), f32(idx))
+        {
+            func.insts[idx] = Inst::Imm(folded);
+            changed = true;
+            continue;
+        }
+        if let Inst::Binop { op, lhs, rhs } = func.insts[idx]
+            && let Some(&Inst::Imm(l)) = func.insts.get(lhs as usize)
+            && let Some(&Inst::Imm(r)) = func.insts.get(rhs as usize)
+            && f32(lhs as usize) == f32(idx)
+            && f32(rhs as usize) == f32(idx)
+            && let Some(folded) = eval_fp_binop(op, l, r, f32(idx))
         {
             func.insts[idx] = Inst::Imm(folded);
             changed = true;
@@ -1039,29 +1682,34 @@ fn fold_round(func: &mut FunctionSsa) -> bool {
             Inst::Binop { op, lhs, rhs } if lhs == rhs && same_operand_compare(*op).is_some() => {
                 same_operand_compare(*op).map(Inst::Imm)
             }
-            Inst::Binop { op, lhs, rhs } => match (imm_of(func, *lhs), imm_of(func, *rhs)) {
-                (Some(l), Some(r)) => fold_binop_of(func, idx as ValueId, *op, l, r).map(Inst::Imm),
-                (None, Some(r)) if to_imm_form(*op, *rhs, r) => Some(Inst::BinopI {
-                    op: *op,
-                    lhs: *lhs,
-                    rhs_imm: r,
-                }),
-                (Some(l), None) => {
-                    mirror(*op)
-                        .filter(|m| to_imm_form(*m, *lhs, l))
-                        .map(|m| Inst::BinopI {
-                            op: m,
-                            lhs: *rhs,
-                            rhs_imm: l,
-                        })
+            Inst::Binop { op, lhs, rhs } => {
+                match (operand_imm(func, *op, *lhs), operand_imm(func, *op, *rhs)) {
+                    (Some(l), Some(r)) => {
+                        fold_binop_of(func, idx as ValueId, *op, l, r).map(Inst::Imm)
+                    }
+                    (None, Some(r)) if to_imm_form(*op, *rhs, r) => Some(Inst::BinopI {
+                        op: *op,
+                        lhs: *lhs,
+                        rhs_imm: r,
+                    }),
+                    (Some(l), None) => {
+                        mirror(*op)
+                            .filter(|m| to_imm_form(*m, *lhs, l))
+                            .map(|m| Inst::BinopI {
+                                op: m,
+                                lhs: *rhs,
+                                rhs_imm: l,
+                            })
+                    }
+                    _ => None,
                 }
-                _ => None,
-            },
+            }
             // Deferred `__builtin_constant_p`: the operand folded to an
             // integer immediate, so the answer is 1. `imm_of` refuses
             // address-bearing immediates, which are not constants here.
+            // The address-and-width form of a load folds on const data.
             Inst::Intrinsic { kind, args }
-                if *kind == crate::c5::op::Intrinsic::ConstantP as i64 =>
+                if *kind == crate::c5::op::Intrinsic::ConstantP as i64 && args.len() == 1 =>
             {
                 args.first()
                     .and_then(|&a| imm_of(func, a))
@@ -1089,6 +1737,7 @@ mod tests {
         FunctionSsa {
             seh_scopes: Vec::new(),
             block_seh: Vec::new(),
+            predicted: Vec::new(),
             funclet_slots: Vec::new(),
             name: alloc::string::String::new(),
             ent_pc: 0,
@@ -1115,7 +1764,7 @@ mod tests {
             is_weak: false,
             is_internal: false,
             const_params: 0,
-            inst_src: vec![(0, 0); n],
+            inst_src: vec![crate::c5::ir::InstSrc::default(); n],
             f32_values: vec![false; n],
             cmp32: Vec::new(),
             div32: Vec::new(),
@@ -1135,6 +1784,8 @@ mod tests {
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
             array_slots: Vec::new(),
+            vector_objects: Vec::new(),
+            owned_params: Vec::new(),
             over_aligned: Default::default(),
             frame_align: 0,
             realign_region_bytes: 0,
@@ -1439,6 +2090,10 @@ mod tests {
             BinOp::Fgt,
             BinOp::Fle,
             BinOp::Fge,
+            BinOp::FltQuiet,
+            BinOp::FgtQuiet,
+            BinOp::FleQuiet,
+            BinOp::FgeQuiet,
             BinOp::Fone,
             BinOp::Funo,
         ] {
@@ -1568,9 +2223,9 @@ mod tests {
 
     #[test]
     fn shared_wide_imm_keeps_register_form() {
-        // A scratch-materialised immediate (Xor with a wide constant)
+        // A scratch-materialized immediate (Xor with a wide constant)
         // shared by two ops must stay a register operand: rewriting
-        // both would duplicate the constant materialisation per use.
+        // both would duplicate the constant materialization per use.
         let mut f = fresh(vec![
             Inst::LocalAddr(0),
             Inst::Imm(0x0123_4567_89ab_cdef),

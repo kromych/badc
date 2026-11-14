@@ -113,7 +113,7 @@ pub(crate) enum Token {
     /// 'sizeof' keyword
     Sizeof,
     /// '_Alignof' keyword (C11 6.5.3.4), and its `__alignof__` /
-    /// `__alignof` GCC spellings.
+    /// `__alignof` GNU C spellings.
     Alignof,
     /// 'while' keyword
     While,
@@ -278,7 +278,7 @@ pub(crate) enum Token {
     /// Function specifier (`register`, `auto`, `_Noreturn`,
     /// `noreturn`). Consumed as a no-op anywhere a storage class
     /// may appear. `auto` is the C default, `register` is a
-    /// historical hint, `_Noreturn` is a hint to optimisers about
+    /// historical hint, `_Noreturn` is a hint to optimizers about
     /// non-returning calls.
     FuncSpec,
     /// `inline` / `__inline` / `__inline__` (C99 6.7.4). Tracked
@@ -289,8 +289,8 @@ pub(crate) enum Token {
     /// `__forceinline` (MSVC) -- a mandatory inline request, the
     /// keyword equivalent of `__attribute__((always_inline))`. Parses
     /// as an inline specifier (bypasses the body-size cap) but is
-    /// tracked distinctly so the inliner can warn when it cannot honour
-    /// the request, matching the MSVC / gcc diagnostic.
+    /// tracked distinctly so the inliner can warn when it cannot honor
+    /// the request, matching the MSVC diagnostic.
     ForceInline,
     /// `_Noreturn` / `noreturn` (C11 6.7.4). Tracked distinctly so
     /// the parser can flag the function symbol; the reachability
@@ -302,7 +302,7 @@ pub(crate) enum Token {
     /// `_Atomic` immediately followed by `(`: the type specifier of C11
     /// 6.7.2.4. The qualifier of 6.7.3 lexes as [`Token::TypeQual`].
     Atomic,
-    /// `asm` / `__asm__` / `__asm` (GCC inline assembly statement).
+    /// `asm` / `__asm__` / `__asm` (GNU C inline assembly statement).
     /// c5 supports the operand-free forms: an empty template (a
     /// compiler barrier, no instruction) and a single known
     /// operand-free hint instruction (`pause` / `yield`). Operand
@@ -357,13 +357,13 @@ pub(crate) enum Token {
     /// spelling off the keyword symbol. Added at the end of the enum so
     /// the operator variants keep their precedence-ordinal values.
     Typeof,
-    /// A declaration decorator -- GCC `__attribute__` / `__attribute` or
+    /// A declaration decorator -- GNU C `__attribute__` / `__attribute` or
     /// MSVC `__declspec`. Consumed by `skip_attribute_specifiers`, which
     /// parses the parenthesised payload, acts on the `packed` attribute
     /// (aggregate layout), and ignores the rest. Added at the end so the
     /// operator ordinals are unchanged.
     Attribute,
-    /// GCC `__extension__` -- a no-op annotation that prefixes an
+    /// GNU C `__extension__` -- a no-op annotation that prefixes an
     /// expression or declaration to suppress a GNU-extension diagnostic.
     /// The lexer skips it, so it never reaches the parser. Added at the
     /// end so the operator ordinals are unchanged.
@@ -373,21 +373,21 @@ pub(crate) enum Token {
     /// expression. Added at the end so the operator ordinals are
     /// unchanged.
     Generic,
-    /// GCC `__builtin_types_compatible_p ( type-name , type-name )`: a
+    /// GNU C `__builtin_types_compatible_p ( type-name , type-name )`: a
     /// primary expression yielding the integer constant 1 when the two
     /// type names are compatible (top-level qualifiers ignored), else 0.
     /// Added at the end so the operator ordinals are unchanged.
     BuiltinTypesCompatible,
-    /// GCC `__builtin_offsetof ( type-name , member-designator )`: a primary
+    /// GNU C `__builtin_offsetof ( type-name , member-designator )`: a primary
     /// expression yielding the byte offset of the member as an integer
     /// constant. The standard `offsetof` macro may expand to it.
     BuiltinOffsetof,
-    /// GCC `__auto_type`: a type specifier that takes the declared
+    /// GNU C `__auto_type`: a type specifier that takes the declared
     /// variable's type from its initializer, as if spelled
     /// `typeof(initializer)`. Added at the end so the operator
     /// ordinals are unchanged.
     AutoType,
-    /// GCC `__label__ name, ...;`: a declaration at the start of a block
+    /// GNU C `__label__ name, ...;`: a declaration at the start of a block
     /// giving each name a label scoped to that block rather than to the
     /// whole function. Added at the end so the operator ordinals are
     /// unchanged.
@@ -586,7 +586,7 @@ pub(crate) enum Ty {
     LongLong = 500,
     /// C99 `_Bool` (6.2.5p2): a 1-byte unsigned integer type that
     /// holds only 0 or 1. Distinct from `unsigned char` so the
-    /// conversion sites can apply the 6.3.1.2 normalisation
+    /// conversion sites can apply the 6.3.1.2 normalization
     /// (any nonzero scalar becomes 1) that a plain `unsigned char`
     /// store must not. Sits in its own band [600, 700); the same
     /// +2-per-`*` scheme applies, so `_Bool*` = 602, `_Bool**` =

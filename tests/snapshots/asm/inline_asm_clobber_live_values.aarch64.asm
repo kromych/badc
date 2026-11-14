@@ -64,11 +64,9 @@ Disassembly of section .text:
                	stp	x24, x25, [sp, #0x20]
                	stp	x29, x30, [sp, #0x30]
                	add	x29, sp, #0x30
-               	sxtw	x1, w1
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #1
                	add	x8, x0, #0x1
-               	cbz	x1, <addr>
+               	cbz	w1, <addr>
                	mov	x0, xzr
                	mov	x1, xzr
                	mov	x2, xzr
@@ -117,8 +115,7 @@ Disassembly of section .text:
 
 <jumped>:
                	sxtw	x11, w1
-               	mov	x17, #0x5               // =5
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #2
                	add	x8, x0, #0x3
                	cbz	w11, <addr>
                	mov	x0, xzr

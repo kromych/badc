@@ -245,6 +245,8 @@ pub struct SharedLibrary {
     pub export_symbols: alloc::collections::BTreeMap<String, String>,
     /// The ordinal a PE import library imports a name by (`IMPORT_OBJECT_ORDINAL`).
     pub export_ordinals: alloc::collections::BTreeMap<String, u16>,
+    /// A PE name import's hint, as the import library states it.
+    pub export_hints: alloc::collections::BTreeMap<String, u16>,
     /// The default symbol version of each export the library versions,
     /// read from the same bytes as the export set. The image records it
     /// as the import's version requirement, so the loader binds the
@@ -265,6 +267,10 @@ pub struct SharedLibrary {
     /// -- carries no version data of its own, so the link must not read
     /// the absence of a version as the library stating none.
     pub from_image: bool,
+    /// Whether this is the executable a bundle loads into
+    /// (`-bundle_loader`): an import it supplies binds to the main
+    /// executable, which the image names in no load command.
+    pub main_executable: bool,
 }
 
 /// Read a shared object's SONAME and exported dynamic symbols from its
@@ -284,7 +290,9 @@ pub fn parse_shared_library(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
         export_symbols: alloc::collections::BTreeMap::new(),
         export_versions: crate::c5::object::so_versions::parse_export_versions(bytes),
         from_image: true,
+        main_executable: false,
         export_ordinals: Default::default(),
+        export_hints: Default::default(),
         references: image.references,
         protected_exports: image.protected_exports,
     })
@@ -859,7 +867,7 @@ pub enum NativeSymSection {
     /// into a single `.bss`-resident slot with the largest size
     /// and strictest alignment.
     Common,
-    /// `_Thread_local` storage in `.tdata` (initialised) or
+    /// `_Thread_local` storage in `.tdata` (initialized) or
     /// `.tbss` (zero-init). The merged image needs a PT_TLS
     /// segment and TPOFF / TLSGD relocs at call sites; the
     /// native linker fails fast on Tls references until that
@@ -967,20 +975,35 @@ pub struct NativeReloc {
     pub addend: i64,
 }
 
-/// One `.init_array` / `.fini_array` entry parsed from an ET_REL
-/// object: a constructor / destructor pointer resolved to a `.text`
-/// offset within this unit. The linker adds the unit's text base to
-/// place it in the merged image and orders entries by priority.
-#[derive(Debug, Clone, Copy)]
+/// The startup table a constructor-table section's entries join.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InitTable {
+    /// `.init_array[.NNNNN]` / `.ctors`: lower priority first, `None` last.
+    Init(Option<u32>),
+    /// `.fini_array[.NNNNN]` / `.dtors`, run in reverse.
+    Fini(Option<u32>),
+    /// The C runtime's `.CRT$X<t><suffix>`, holding `<t><suffix>`: every
+    /// unit's entries are ordered by it, as link.exe orders a grouped
+    /// section's contributions, and each table runs forward.
+    Crt(String),
+}
+
+/// One constructor-table entry parsed from an object: the function it
+/// runs, which the linker places in the merged image, ordering entries by
+/// their table.
+#[derive(Debug, Clone)]
 pub struct NativeInitFunc {
-    /// `true` for a `.fini_array` (destructor) entry.
-    pub is_destructor: bool,
-    /// Priority from the `.init_array.NNNNN` section-name suffix;
-    /// `None` for the bare `.init_array`. Lower runs earlier.
-    pub priority: Option<u32>,
-    /// Byte offset of the target function within this unit's merged
-    /// `.text`.
-    pub unit_text_offset: u64,
+    pub table: InitTable,
+    pub target: InitTarget,
+}
+
+/// The function a constructor-table entry runs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InitTarget {
+    /// A byte offset within this unit's merged `.text`.
+    Text(u64),
+    /// A function another unit defines, which the link resolves by name.
+    Named(String),
 }
 
 /// Target of a TLS access fixup (`NT_BADC_ELF_TPOFF`). The linker
@@ -1014,6 +1037,18 @@ pub struct InputSection {
     /// away from the offset its family blob gave it.
     pub align: u64,
 }
+
+/// link.exe's `/EXPORT:name=target`: `name` exports `target`, a definition
+/// of the image or, when it holds a dot, the forwarder `dll.export`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExportAlias {
+    pub name: String,
+    pub target: String,
+    /// `,DATA`: the import library takes `name` as a data import.
+    pub data: bool,
+}
+
+pub use crate::c5::codegen::ExportForm;
 
 /// Result of parsing one native ELF ET_REL object.
 #[derive(Debug, Clone)]
@@ -1063,7 +1098,7 @@ pub struct NativeObject {
     /// aligns this object's base in the merged `.bss` to it.
     pub bss_align: usize,
     /// Concatenated bytes from every `.tdata*` section
-    /// (initialised TLS storage). Empty for objects without
+    /// (initialized TLS storage). Empty for objects without
     /// `_Thread_local` data.
     pub tls_data: Vec<u8>,
     /// Sum of every `.tbss*` section's size (zero-init TLS).
@@ -1091,7 +1126,7 @@ pub struct NativeObject {
     /// `.init_array` / `.fini_array` entries, each a constructor /
     /// destructor pointer resolved to this unit's `.text` offset. The
     /// linker collects these across units, orders them by priority, and
-    /// materialises the merged init/fini arrays the startup runtime
+    /// materializes the merged init/fini arrays the startup runtime
     /// walks. Empty for objects declaring no such functions.
     pub init_funcs: Vec<NativeInitFunc>,
     /// Dylib load paths the writer copied out of the unit's
@@ -1116,6 +1151,10 @@ pub struct NativeObject {
     /// table when emitting a shared library; the linker takes the
     /// union across units.
     pub exports: Vec<String>,
+    /// `/EXPORT:name=target` from `.drectve` or `#pragma comment(linker)`.
+    pub export_aliases: Vec<ExportAlias>,
+    /// `/INCLUDE:` names, which a PE image must define.
+    pub includes: Vec<String>,
     /// Win64 `_tls_index` fixup offsets (`NT_BADC_TLS_INDEX`), each a
     /// byte offset into this object's `.text`. The PE writer patches
     /// each with the `_tls_index` slot address. Empty on non-Windows
@@ -1123,7 +1162,7 @@ pub struct NativeObject {
     pub tls_index_fixups: Vec<usize>,
     /// Mach-O TLV descriptor offsets (`NT_BADC_MACHO_TLV_DESC`), one
     /// `offset_in_block` per `_Thread_local` variable. The Mach-O
-    /// writer materialises a `__thread_vars` descriptor for each.
+    /// writer materializes a `__thread_vars` descriptor for each.
     pub macho_tlv_descriptors: Vec<u64>,
     /// Mach-O TLV fixups (`NT_BADC_MACHO_TLV_FIXUP`), each
     /// `(adrp_offset, descriptor_index)`: a `.text` byte offset and
@@ -1167,7 +1206,7 @@ pub struct NativeObject {
     /// Names this unit defines `STB_GNU_UNIQUE`: the link resolves them as
     /// global definitions and states the binding in its symbol tables.
     pub unique: Vec<String>,
-    /// Names this unit materialises the address of through an undefined
+    /// Names this unit materializes the address of through an undefined
     /// symbol (`NT_BADC_EXTERN_DATA`) -- extern data, and an extern
     /// function whose address is taken, which shares that lowering.
     /// Undefined references are all typed `STT_NOTYPE`, so the linker
@@ -1178,10 +1217,23 @@ pub struct NativeObject {
     /// `(name, alternate)`: an undefined `name` resolves to `alternate`, from
     /// a COFF weak external or a `/alternatename:` directive.
     pub alternate_names: Vec<(String, String)>,
+    /// The names of the alternates that are COFF weak externals of the
+    /// alias kind (`IMAGE_WEAK_EXTERN_SEARCH_ALIAS`): link.exe pulls an
+    /// archive member carrying one for its name, as it does a definition.
+    pub weak_aliases: Vec<String>,
     /// COFF COMDAT groups; one group per key keeps its definitions.
     pub comdats: Vec<Comdat>,
     /// A COFF object's `/DEFAULTLIB:` libraries, searched after the inputs.
     pub default_libs: Vec<String>,
+    /// A COFF object's `/FAILIFMISMATCH:key=value` pairs: every input of a
+    /// link that names a key gives it one value.
+    pub mismatch_keys: Vec<(String, String)>,
+    /// A COFF object's `/merge:from=to` options.
+    pub section_merges: Vec<(String, String)>,
+    /// A cvtres object's resources, as compiled resource file records.
+    pub resources: Vec<u8>,
+    /// The `/EXPORT:` options naming an ordinal, `NONAME` or `PRIVATE`.
+    pub export_forms: Vec<ExportForm>,
     /// Standard DWARF 4 sections the `-c` writer emits.
     /// Address-bearing slots inside are placeholders paired with
     /// entries in `debug_info_relocs` / `debug_line_relocs`; the
@@ -1211,6 +1263,74 @@ pub struct NativeObject {
     pub eh_frame: Option<EhFrameInput>,
     /// A COFF object's `.pdata` entries, which replace the writer's.
     pub pe_unwind: Vec<PeUnwindEntry>,
+}
+
+impl NativeObject {
+    /// An object of no content for `machine`, which a caller fills in.
+    pub fn empty(machine: NativeMachine) -> NativeObject {
+        NativeObject {
+            unique: Default::default(),
+            source: String::new(),
+            sections: Vec::new(),
+            discarded: Vec::new(),
+            exec_stack: false,
+            text_align: 16,
+            rodata: Vec::new(),
+            rodata_align: 8,
+            relro: Vec::new(),
+            relro_align: 1,
+            relro_relocs: Vec::new(),
+            machine,
+            text: Vec::new(),
+            data: Vec::new(),
+            data_align: 1,
+            bss_size: 0,
+            bss_align: 1,
+            tls_data: Vec::new(),
+            tls_relocs: Vec::new(),
+            tls_bss_size: 0,
+            tls_align: 1,
+            symbols: Vec::new(),
+            text_relocs: Vec::new(),
+            data_relocs: Vec::new(),
+            init_funcs: Vec::new(),
+            dylibs: Vec::new(),
+            import_dylib_map: Vec::new(),
+            exports: Vec::new(),
+            tls_index_fixups: Vec::new(),
+            macho_tlv_descriptors: Vec::new(),
+            macho_tlv_fixups: Vec::new(),
+            tls_symbols: Vec::new(),
+            macho_tlv_descriptor_syms: Vec::new(),
+            elf_tpoff_fixups: Vec::new(),
+            copy_relocs: Vec::new(),
+            prologue_ends: Vec::new(),
+            early_returns: Vec::new(),
+            seh_rows: Vec::new(),
+            unwind: Vec::new(),
+            extern_data_names: Vec::new(),
+            alternate_names: Vec::new(),
+            weak_aliases: Vec::new(),
+            export_aliases: Vec::new(),
+            includes: Vec::new(),
+            comdats: Vec::new(),
+            default_libs: Vec::new(),
+            mismatch_keys: Vec::new(),
+            section_merges: Vec::new(),
+            resources: Vec::new(),
+            export_forms: Vec::new(),
+            debug_info: Vec::new(),
+            debug_abbrev: Vec::new(),
+            debug_line: Vec::new(),
+            debug_str: Vec::new(),
+            debug_info_relocs: Vec::new(),
+            debug_line_relocs: Vec::new(),
+            debug_other: Vec::new(),
+            compact_unwind: Vec::new(),
+            eh_frame: None,
+            pe_unwind: Vec::new(),
+        }
+    }
 }
 
 /// A `.pdata` `RUNTIME_FUNCTION` (PE/COFF specification 5.5); `end` is x86-64's.
@@ -1373,10 +1493,26 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         decode_symbols(bytes, &shdrs, symtab_sh_i, &blobs, &roles, &record_of)?;
     let relocs = decode_relocs(bytes, &shdrs, &roles.rela_sections, &shndx_map)?;
     let init_funcs = decode_init_arrays(bytes, &shdrs, &roles.init_array_sections, &symbols)?;
-    let note = match roles.badc_note {
+    let mut note = match roles.badc_note {
         Some(i) => BadcNote::parse(section_slice(bytes, &shdrs[i])?)?,
         None => BadcNote::default(),
     };
+    note.place_code_rows(&sections);
+    // A function's steps keyed by its symbol start at its definition.
+    for (name, steps) in core::mem::take(&mut note.symbol_unwind) {
+        let at = (symbols.iter())
+            .find(|s| s.name == name && s.section == NativeSymSection::Text)
+            .map(|s| s.value);
+        match at {
+            Some(at) => note.unwind.push((at, steps)),
+            None => {
+                return Err(C5Error::hard(
+                    Code::MALFORMED_INPUT,
+                    format!("unwind steps for `{name}`, which the object defines in no code"),
+                ));
+            }
+        }
+    }
     let mut default_libs = Vec::new();
     for &i in &roles.deplibs {
         default_libs.extend(nul_separated(section_slice(bytes, &shdrs[i])?));
@@ -1390,6 +1526,12 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         &sections,
         &record_of,
     )?;
+    let mut directives = super::coff_object::Directives::default();
+    for text in &note.linker_directives {
+        super::coff_object::parse_directives(text, &mut directives)?;
+    }
+    let mut symbols = symbols;
+    symbols.extend(directives.include_symbols());
 
     Ok(NativeObject {
         source: String::new(),
@@ -1418,7 +1560,9 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         init_funcs,
         dylibs: note.dylibs,
         import_dylib_map: note.import_dylib_map,
-        exports: note.exports,
+        exports: note.exports.into_iter().chain(directives.exports).collect(),
+        export_aliases: directives.export_aliases,
+        includes: directives.includes,
         tls_index_fixups: note.tls_index_fixups,
         macho_tlv_descriptors: note.macho_tlv_descriptors,
         tls_symbols: note.tls_symbols,
@@ -1432,9 +1576,17 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         unwind: note.unwind,
         unique,
         extern_data_names: note.extern_data_names,
-        alternate_names: Vec::new(),
+        alternate_names: directives.alternate_names,
+        weak_aliases: Vec::new(),
         comdats,
-        default_libs,
+        default_libs: default_libs
+            .into_iter()
+            .chain(directives.default_libs)
+            .collect(),
+        mismatch_keys: directives.mismatch_keys,
+        section_merges: directives.section_merges,
+        resources: Vec::new(),
+        export_forms: directives.export_forms,
         debug_info: debug.info,
         debug_abbrev: debug.abbrev,
         debug_line: debug.line,
@@ -1553,8 +1705,8 @@ fn read_elf_headers(bytes: &[u8]) -> Result<(NativeMachine, Vec<Elf64Shdr>, &[u8
 
 /// What each section header contributes, decided by name and flags.
 /// The family lists hold section indices in placement order: a section
-/// [`grouped_by_name`] sorts to the end of its family, as an
-/// [`is_init_fini`] one does in the text family, so the blob splits into a
+/// [`grouped_by_name`] sorts to the end of its family, behind the
+/// [`is_init_fini`] ones in the text family, so the blob splits into a
 /// prefix the linker appends whole and a suffix it regroups by name across
 /// units.
 struct SectionRoles {
@@ -1581,8 +1733,8 @@ struct SectionRoles {
     rela_debug_line: Option<usize>,
     /// Every other `.debug_*` section, in section order.
     debug_other: Vec<usize>,
-    /// `.init_array*` / `.fini_array*`: (shndx, is_dtor, priority).
-    init_array_sections: Vec<(usize, bool, Option<u32>)>,
+    /// The constructor-table sections and the table each feeds.
+    init_array_sections: Vec<(usize, InitTable)>,
     /// Dropped content, for the link map's "Discarded input sections"
     /// report.
     discarded: Vec<(String, u64)>,
@@ -1659,8 +1811,13 @@ fn classify_sections(shdrs: &[Elf64Shdr], shstrtab_bytes: &[u8]) -> Result<Secti
             roles.debug_other.push(i);
             continue;
         }
-        if let Some((is_dtor, priority)) = parse_init_array_section_name(name) {
-            roles.init_array_sections.push((i, is_dtor, priority));
+        // A constructor table is read for the entries the link runs, and its
+        // bytes join the relocated read-only data, where its names and the
+        // references into it resolve.
+        if let Some(table) = parse_init_array_section_name(name) {
+            roles.init_array_sections.push((i, table));
+            section_family[i] = SectionFamily::RelRo;
+            roles.relro.push(i);
             continue;
         }
         let family = if sh.sh_type == SHT_RELA {
@@ -1721,8 +1878,8 @@ fn classify_sections(shdrs: &[Elf64Shdr], shstrtab_bytes: &[u8]) -> Result<Secti
     }
     roles.text.sort_by_key(|&i| {
         strtab_str(shstrtab_bytes, shdrs[i].sh_name as usize)
-            .map(is_init_fini)
-            .unwrap_or(false)
+            .map(|n| (grouped_by_name(n), is_init_fini(n)))
+            .unwrap_or_default()
     });
     Ok(roles)
 }
@@ -2188,12 +2345,13 @@ fn decode_relocs(
 fn decode_init_arrays(
     bytes: &[u8],
     shdrs: &[Elf64Shdr],
-    init_array_sections: &[(usize, bool, Option<u32>)],
+    init_array_sections: &[(usize, InitTable)],
     symbols: &[NativeSymbol],
 ) -> Result<Vec<NativeInitFunc>, C5Error> {
     let mut init_funcs: Vec<NativeInitFunc> = Vec::new();
-    for &(shndx, is_destructor, priority) in init_array_sections {
-        let mut entries: Vec<(u64, u64)> = Vec::new(); // (slot_offset, text_offset)
+    for (shndx, table) in init_array_sections {
+        let shndx = *shndx;
+        let mut entries: Vec<(u64, InitTarget)> = Vec::new();
         for rela_sh in shdrs
             .iter()
             .filter(|s| s.sh_type == SHT_RELA && s.sh_info as usize == shndx)
@@ -2222,22 +2380,29 @@ fn decode_init_arrays(
                         ),
                     )
                 })?;
-                if !matches!(sym.section, NativeSymSection::Text) {
-                    return Err(link_err(
-                        Code::MALFORMED_INPUT,
-                        MODULE,
-                        "init/fini array entry must reference a defined function (.text symbol)",
-                    ));
-                }
-                entries.push((rela.r_offset, (sym.value as i64 + rela.r_addend) as u64));
+                let target = match sym.section {
+                    NativeSymSection::Text => {
+                        InitTarget::Text((sym.value as i64 + rela.r_addend) as u64)
+                    }
+                    NativeSymSection::Undef if !sym.name.is_empty() && rela.r_addend == 0 => {
+                        InitTarget::Named(sym.name.clone())
+                    }
+                    _ => {
+                        return Err(link_err(
+                            Code::MALFORMED_INPUT,
+                            MODULE,
+                            "init/fini array entry must name a function",
+                        ));
+                    }
+                };
+                entries.push((rela.r_offset, target));
             }
         }
         entries.sort_by_key(|&(slot, _)| slot);
-        for (_, text_off) in entries {
+        for (_, target) in entries {
             init_funcs.push(NativeInitFunc {
-                is_destructor,
-                priority,
-                unit_text_offset: text_off,
+                table: table.clone(),
+                target,
             });
         }
     }
@@ -2266,6 +2431,10 @@ fn decode_init_arrays(
 ///   type=13 NT_BADC_EARLY_RETURN -- (u64 entry_offset, u64
 ///                                  frame_offset, u64 return_offset)
 ///                                  `.text` triples.
+///   type=18 NT_BADC_TEXT_CARVE   -- (u64 lo, u64 hi, u64 base, NUL
+///                                  name) per code range in a named
+///                                  section; types 11 to 16 give code
+///                                  offsets ahead of that carve.
 ///   type=16 NT_BADC_UNWIND       -- (u64 entry_offset, unwind steps
 ///                                  record) per function.
 /// Records under namesz != "badc\0" are skipped silently so future
@@ -2286,7 +2455,48 @@ struct BadcNote {
     early_returns: Vec<(u64, u64, u64)>,
     seh_rows: Vec<SehRowAt<u64>>,
     unwind: Vec<(u64, crate::c5::codegen::UnwindSteps)>,
+    text_carve: Vec<(u64, u64, u64, String)>,
+    /// Unwind steps keyed by the function symbol they describe.
+    symbol_unwind: Vec<(String, crate::c5::codegen::UnwindSteps)>,
     extern_data_names: Vec<String>,
+    /// `#pragma comment(linker, ...)` strings, link.exe's `.drectve` options.
+    linker_directives: Vec<String>,
+}
+
+impl BadcNote {
+    /// Rebase the code offsets of the rows onto the unit's text blob, where
+    /// `sections` placed `.text` and each carved section. An exclusive end
+    /// is placed by its last byte.
+    fn place_code_rows(&mut self, sections: &[InputSection]) {
+        let base = |name: &str| {
+            (sections.iter())
+                .find(|s| s.family == SectionFamily::Text && s.name == name)
+                .map_or(0, |s| s.offset)
+        };
+        let carve: Vec<(u64, u64, u64)> = (self.text_carve.iter())
+            .map(|(lo, hi, at, name)| (*lo, *hi, base(name) + at))
+            .collect();
+        let text = base(".text");
+        let place = |off: u64| match carve.iter().find(|r| (r.0..r.1).contains(&off)) {
+            Some(&(lo, _, at)) => at + (off - lo),
+            None => text + off,
+        };
+        let end = |off: u64| place(off.saturating_sub(1)) + u64::from(off > 0);
+        for (entry, post) in &mut self.prologue_ends {
+            (*entry, *post) = (place(*entry), place(*post));
+        }
+        for row in &mut self.early_returns {
+            *row = (place(row.0), place(row.1), place(row.2));
+        }
+        for (at, target, handler) in &mut self.seh_rows {
+            *at = [place(at[0]), place(at[1]), end(at[2])];
+            *target = target.map(place);
+            *handler = handler.map(place);
+        }
+        for (entry, _) in &mut self.unwind {
+            *entry = place(*entry);
+        }
+    }
 }
 
 /// A `__try` scope-table row: the function's, the range's begin and end
@@ -2475,6 +2685,33 @@ impl BadcNote {
                     let handler = (ntype == 15).then(|| word(c + 32)).and_then(some);
                     self.seh_rows.push((at, some(word(c + 24)), handler));
                     c += size;
+                }
+            }
+            17 => self.linker_directives.extend(nul_separated(desc)),
+            19 => {
+                let mut c = cur;
+                while let Some(n) = body[c..desc_end].iter().position(|&b| b == 0) {
+                    let name = String::from_utf8_lossy(&body[c..c + n]).into_owned();
+                    let Some((steps, len)) =
+                        crate::c5::codegen::UnwindSteps::decode(&body[c + n + 1..desc_end])
+                    else {
+                        break;
+                    };
+                    self.symbol_unwind.push((name, steps));
+                    c += n + 1 + len;
+                }
+            }
+            18 => {
+                let word = |at: usize| u64::from_le_bytes(body[at..at + 8].try_into().unwrap());
+                let mut c = cur;
+                while c + 24 < desc_end {
+                    let Some(n) = body[c + 24..desc_end].iter().position(|&b| b == 0) else {
+                        break;
+                    };
+                    let name = String::from_utf8_lossy(&body[c + 24..c + 24 + n]).into_owned();
+                    self.text_carve
+                        .push((word(c), word(c + 8), word(c + 16), name));
+                    c += 24 + n + 1;
                 }
             }
             16 => {
@@ -2711,8 +2948,8 @@ impl ShndxMap {
 
 /// Classification used to fold each section into the merged
 /// text / rodata / relro / data / bss / tls blob. `Text` covers
-/// `.text` and any `.text.<name>` clang/gcc `-ffunction-sections`
-/// emits; `RoData` covers reloc-free `.rodata*` and any other
+/// `.text` and any `.text.<name>` `-ffunction-sections` emits;
+/// `RoData` covers reloc-free `.rodata*` and any other
 /// allocatable non-writable non-executable payload; `RelRo` covers
 /// `.data.rel.ro*` and any read-only section a relocation targets --
 /// content the loader writes and the image then maps read-only under
@@ -2732,49 +2969,59 @@ pub enum SectionFamily {
     /// Deliberately not merged: the section carries no image payload
     /// (`.symtab`, `.strtab`, `.comment`, `.group`, DWARF, `SHT_RELA`)
     /// or is an allocatable note the merged image does not reproduce.
-    /// Distinct from an unrecognised allocatable section, which is an
+    /// Distinct from an unrecognized allocatable section, which is an
     /// error rather than a silent drop.
     Discard,
 }
 
-/// Recognise `.init_array` / `.fini_array` (and their
-/// `.<name>.NNNNN` priority variants) section names, returning
-/// `(is_destructor, priority)`. Returns `None` for any other name,
-/// including the `.rela.*` companions. A non-numeric or out-of-range
-/// suffix is treated as the bare (unprioritized) form.
-fn parse_init_array_section_name(name: &str) -> Option<(bool, Option<u32>)> {
-    let (is_dtor, rest) = if let Some(r) = name.strip_prefix(".init_array") {
-        (false, r)
-    } else {
-        let r = name.strip_prefix(".fini_array")?;
-        (true, r)
-    };
-    if rest.is_empty() {
-        return Some((is_dtor, None));
+/// The table of an `.init_array` / `.fini_array` section, its
+/// `.NNNNN` priority variants and the C runtime's tables. `None` for any
+/// other name, including the `.rela.*` companions. A non-numeric or
+/// out-of-range suffix is treated as the bare (unprioritized) form.
+fn parse_init_array_section_name(name: &str) -> Option<InitTable> {
+    if let Some(table) = crt_init_table(name) {
+        return Some(table);
     }
-    // A `.NNNNN` priority suffix; anything else (e.g. `.init_arrayX`
-    // would already have failed the prefix, but guard the dotted form).
+    let (table, rest): (fn(Option<u32>) -> InitTable, _) =
+        if let Some(r) = name.strip_prefix(".init_array") {
+            (InitTable::Init, r)
+        } else {
+            (InitTable::Fini, name.strip_prefix(".fini_array")?)
+        };
+    if rest.is_empty() {
+        return Some(table(None));
+    }
     let digits = rest.strip_prefix('.')?;
     match digits.parse::<u32>() {
-        Ok(p) if p <= 65535 => Some((is_dtor, Some(p))),
-        _ => Some((is_dtor, None)),
+        Ok(p) if p <= 65535 => Some(table(Some(p))),
+        _ => Some(table(None)),
     }
 }
 
-/// bfd's test for a section name a `__start_` / `__stop_` pair can be
-/// spliced onto: every byte alphanumeric or `_`, so no standard family
-/// name qualifies -- each carries a `.`.
-pub fn is_c_identifier(name: &str) -> bool {
-    !name.is_empty() && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+/// The C runtime's tables the image calls: its C initializers
+/// (`.CRT$XI*`), constructors (`.CRT$XC*`), pre-terminators (`.CRT$XP*`),
+/// terminators (`.CRT$XT*`) and TLS callbacks (`.CRT$XL*`).
+pub(crate) fn crt_init_table(name: &str) -> Option<InitTable> {
+    let rest = name.strip_prefix(".CRT$X")?;
+    matches!(rest.as_bytes().first()?, b'I' | b'C' | b'P' | b'T' | b'L')
+        .then(|| InitTable::Crt(rest.to_string()))
 }
+
+pub(crate) use crate::c5::ident::is_c_identifier;
 
 pub(crate) use crate::c5::object::eh_frame::EH_FRAME;
 
 /// Whether the merge gathers every unit's contribution to `name` into one
 /// output section: a C-identifier name, which `__start_` / `__stop_` bound,
-/// and the unwind table.
+/// a COFF grouped section of one, and the unwind table.
 pub fn grouped_by_name(name: &str) -> bool {
-    is_c_identifier(name) || name == EH_FRAME
+    is_c_identifier(name) || name == EH_FRAME || coff_group_base(name).is_some()
+}
+
+/// The C-identifier `base` of a COFF grouped section name `base$suffix`.
+pub fn coff_group_base(name: &str) -> Option<&str> {
+    let (base, _) = name.split_once('$')?;
+    is_c_identifier(base).then_some(base)
 }
 
 /// `.init` / `.fini`: the gABI's process initialization and termination
@@ -2916,7 +3163,7 @@ mod tests {
     /// trampoline emission, so every BL placeholder reaching an
     /// external import stays at imm26 = 0 and the matching
     /// `R_AARCH64_CALL26` reloc carries the import name. The
-    /// system linker (or our own native linker) materialises the
+    /// system linker (or our own native linker) materializes the
     /// PLT pool when producing the final image.
     #[test]
     fn relocatable_leaves_bl_placeholders_raw_on_aarch64() {
@@ -3492,7 +3739,7 @@ mod tests {
             (".rodata", SHT_PROGBITS, A, SectionFamily::RoData),
             (".rodata.cst16", SHT_PROGBITS, A, SectionFamily::RoData),
             (".data", SHT_PROGBITS, A | W, SectionFamily::Data),
-            // Initialised-then-readonly tables: writable for the
+            // Initialized-then-readonly tables: writable for the
             // loader, re-protected under PT_GNU_RELRO.
             (".data.rel.ro", SHT_PROGBITS, A | W, SectionFamily::RelRo),
             (
@@ -3541,7 +3788,7 @@ mod tests {
         assert!(classify_section(".tls.odd", SHT_PROGBITS, A | 0x400, false).is_err());
     }
 
-    /// Clang/gcc `-ffunction-sections` shape: two `.text.<fn>`
+    /// The `-ffunction-sections` shape: two `.text.<fn>`
     /// sections, no unqualified `.text`. Each function symbol
     /// (STT_FUNC) names its own section index; the parser
     /// concatenates the section bytes in section-index order
@@ -3601,9 +3848,8 @@ mod tests {
         assert_eq!(r.addend, -4);
     }
 
-    /// Clang under `-fcommon` (the pre-clang-11 default and gcc's
-    /// default for C without `-fno-common`) emits uninitialised
-    /// global definitions (`int uninit;`) as STB_GLOBAL with
+    /// Under `-fcommon` an uninitialized global definition
+    /// (`int uninit;`) is emitted as STB_GLOBAL with
     /// `st_shndx = SHN_COMMON`: per ELF, `st_size` is the
     /// symbol's byte size and `st_value` is the requested
     /// alignment. The parser surfaces these as `Common` so the
@@ -3633,9 +3879,9 @@ mod tests {
         assert_eq!(s.value, 4, "alignment from st_value");
     }
 
-    /// `_Thread_local` storage: clang emits initialised TLS
-    /// variables into `.tdata` and zero-init ones into `.tbss`,
-    /// with STT_TLS symbols pointing at those sections. The
+    /// `_Thread_local` storage: initialized TLS variables are in
+    /// `.tdata` and zero-init ones in `.tbss`, with STT_TLS
+    /// symbols pointing at those sections. The
     /// parser concatenates `.tdata*` bytes into `tls_data`,
     /// counts the `.tbss*` extent past them into `tls_bss_size`,
     /// and surfaces symbols as `Tls` with the value rebased by the
@@ -3679,7 +3925,7 @@ mod tests {
         );
     }
 
-    /// Clang/gcc `-fdata-sections` shape: per-variable `.data.<var>`
+    /// The `-fdata-sections` shape: per-variable `.data.<var>`
     /// + `.bss.<var>` subsections, no unqualified `.data` / `.bss`.
     /// Each subsection's STT_OBJECT symbol points at its own
     /// section index; the parser concatenates the bytes (or

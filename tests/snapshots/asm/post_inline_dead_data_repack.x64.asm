@@ -44,11 +44,9 @@ Disassembly of section .text:
                	movl	$0x6, %eax
                	popq	%rbp
                	retq
-               	movq	$0x19, <rip> # <addr>
+               	movl	$0x19, %r8d
+               	movq	%r8, <rip> # <addr>
                	cmpq	$0x0, <rip> # <addr>
-               	jne	<addr>
-               	movq	<rip>, %rcx # <addr>
-               	cmpq	$0x19, %rcx
                	jne	<addr>
                	cmpq	$0x0, <rip> # <addr>
                	je	<addr>
@@ -64,7 +62,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	movl	$0x28, %esi
                	movq	<rip>, %rcx # <addr>
-               	movq	<rip>, %r8 # <addr>
                	movb	$0x0, %al
                	callq	<addr>
                	xorl	%eax, %eax

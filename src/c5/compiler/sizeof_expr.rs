@@ -1,5 +1,5 @@
 //! `sizeof` and `_Alignof` operands (C99 6.5.3.4), shared by the
-//! runtime and constant-expression parsers, and the GCC builtins that
+//! runtime and constant-expression parsers, and the GNU C builtins that
 //! read an operand unevaluated: `__builtin_object_size`,
 //! `__builtin_choose_expr`, `__builtin_has_attribute`,
 //! `__builtin_constant_p`.
@@ -202,7 +202,7 @@ impl Compiler {
         Ok(total)
     }
 
-    /// GCC `__builtin_object_size(ptr, type)`, `type` in 0..=3: a
+    /// `__builtin_object_size(ptr, type)`, `type` in 0..=3: a
     /// `size_t` constant, the pointer operand unevaluated like a
     /// `sizeof` operand. Bit 0 of `type` selects the closest
     /// surrounding subobject over the whole enclosing object, bit 1 the
@@ -211,6 +211,33 @@ impl Compiler {
     /// forms (2 and 3) 0. The designator is resolved at parse time, so
     /// an answer that is known is exact and the two estimates coincide;
     /// the minimum bit then only picks the fallback.
+    /// Flag the current function's parameter `id` points into.
+    pub(super) fn note_object_size_param(&mut self, mut id: super::super::ast::ExprId) {
+        use super::super::ast::Expr;
+        let Some((func, params)) = &self.object_size_scope else {
+            return;
+        };
+        loop {
+            match self.ast.expr(id) {
+                Expr::Cast { child, .. } => id = *child,
+                Expr::Binary {
+                    op: super::super::ir::BinOp::Add | super::super::ir::BinOp::Sub,
+                    lhs,
+                    ..
+                } => id = *lhs,
+                Expr::Ident { sym, .. } => {
+                    if let Some(pos) = params.iter().position(|&p| p == *sym as usize)
+                        && pos < 32
+                    {
+                        self.symbols[*func].object_size_params |= 1 << pos;
+                    }
+                    return;
+                }
+                _ => return,
+            }
+        }
+    }
+
     pub(super) fn parse_object_size_builtin(&mut self) -> Result<(), C5Error> {
         // The call dispatch consumed `__builtin_object_size (`.
         let saved_ty = self.ty;
@@ -224,6 +251,7 @@ impl Compiler {
         self.pending.object_size_operands -= 1;
         let designated = self.pending.object_ref.take();
         parsed?;
+        let operand = self.ast_acc.take();
         self.next_ent_pc = saved_text_len;
         self.clear_recent_emits();
         self.code_reloc_sym_idx.truncate(saved_reloc);
@@ -254,20 +282,48 @@ impl Compiler {
         let extent = designated
             .filter(|r| r.addr)
             .and_then(|r| if kind & 1 == 1 { r.sub } else { r.whole });
+        self.ty = self.size_t_ty();
+        // A pointer value designating no object here may reach one once
+        // inlining substitutes the caller's argument.
+        if extent.is_none()
+            && let Some(id) = operand.filter(|&id| self.constant_p_operand_defers(id))
+        {
+            if kind & 1 == 1 {
+                self.note_object_size_param(id);
+            }
+            let pos = self.ast_src_pos();
+            let ty = self.ty;
+            let type_lit = self.ast.push_expr(
+                super::super::ast::Expr::IntLit {
+                    val: kind,
+                    ty: Ty::Int as i64,
+                },
+                pos,
+            );
+            let node = self.ast.push_expr(
+                super::super::ast::Expr::Intrinsic {
+                    kind: crate::c5::op::Intrinsic::ObjectSize as i64,
+                    args: alloc::vec![id, type_lit],
+                    ty,
+                },
+                pos,
+            );
+            self.ast_acc = Some(node);
+            self.mark_emit_other();
+            return Ok(());
+        }
         let v = match extent {
             Some(e) => e.remaining(),
-            None if kind & 2 == 0 => -1,
-            None => 0,
+            None => object_size_fallback(kind),
         };
         self.emit_imm(v);
-        self.ty = self.size_t_ty();
         self.ast_emit_int_lit(v, self.ty);
         self.folded_builtin_lits.extend(self.ast_acc);
         Ok(())
     }
 
     /// The object member `idx` of aggregate `sid` designates, reached
-    /// from `base`. gcc's closest surrounding subobject is the member
+    /// from `base`. The closest surrounding subobject is the member
     /// itself, except where it has no bound the object can be held to:
     /// a member with no declared bound (C99 6.7.2.1p16) has no extent
     /// of its own and answers the object holding it, and a trailing
@@ -286,6 +342,7 @@ impl Compiler {
             via_pointer: base.via_pointer,
             records,
             at_end,
+            element_of: None,
         };
         if field.bit_width > 0 {
             // A bitfield has no address, and `offset` names its storage
@@ -353,7 +410,7 @@ impl Compiler {
         self.type_ends_in_flex_array(f.ty)
     }
 
-    /// One subscript of a tracked object. gcc's closest surrounding
+    /// One subscript of a tracked object. The closest surrounding
     /// subobject of an array element is the array indexed, so the
     /// subobject narrows to it and both offsets move by the index; a
     /// row keeps its stride for the next subscript. A member with no
@@ -373,10 +430,23 @@ impl Compiler {
         let Some(k) = index else {
             return base.offset_unknown();
         };
+        // An element that is itself an array, a row, is its own closest
+        // subobject; a scalar element's is the array holding it.
         match base.array {
             Some(bytes) => ObjectRef {
                 whole: base.whole.map(|e| e.advanced(k * stride)),
-                sub: Some(Extent {
+                sub: Some(if decays {
+                    Extent {
+                        size: stride,
+                        offset: 0,
+                    }
+                } else {
+                    Extent {
+                        size: bytes,
+                        offset: k * stride,
+                    }
+                }),
+                element_of: decays.then_some(Extent {
                     size: bytes,
                     offset: k * stride,
                 }),
@@ -386,6 +456,7 @@ impl Compiler {
             },
             None => ObjectRef {
                 addr: decays,
+                element_of: None,
                 ..base.advanced(k * stride)
             },
         }
@@ -470,7 +541,7 @@ impl Compiler {
         admitted && records <= 1 && at_end
     }
 
-    /// GCC `__builtin_choose_expr(const, e1, e2)`: the chosen operand
+    /// `__builtin_choose_expr(const, e1, e2)`: the chosen operand
     /// IS the expression -- its exact type carries through (no `?:`
     /// arithmetic conversions) and the other operand is parsed but not
     /// evaluated. The condition must fold to an integer constant.
@@ -531,7 +602,7 @@ impl Compiler {
         Ok(())
     }
 
-    /// GCC `__builtin_has_attribute(operand, attribute)`: an `int`
+    /// `__builtin_has_attribute(operand, attribute)`: an `int`
     /// constant. badc does not model the queried attributes on objects or
     /// types, so under its own semantics no operand carries one -- the
     /// answer is 0. Both operands are consumed unevaluated.
@@ -549,7 +620,7 @@ impl Compiler {
         Ok(())
     }
 
-    /// GCC `__builtin_constant_p(x)`: an `int`, 1 when the unevaluated
+    /// `__builtin_constant_p(x)`: an `int`, 1 when the unevaluated
     /// operand folds to a constant value. A parse-time constant answers
     /// 1, which no later phase revises. A non-constant operand can still
     /// become one after inlining and constant propagation, so where
@@ -590,8 +661,7 @@ impl Compiler {
             }
             _ => {
                 // The parsed operand is dropped unreferenced: its side
-                // effects are never walked, matching GCC's unevaluated
-                // operand.
+                // effects are never walked.
                 self.emit_imm(0);
                 self.ast_emit_int_lit(0, self.ty);
             }
@@ -603,12 +673,15 @@ impl Compiler {
     /// the SSA folds. Deferring lowers the operand so the inliner's
     /// argument substitution can reach it, which is sound only when that
     /// lowering neither has side effects nor traps: scalar locals and
-    /// parameters qualify; calls, pointer loads, volatile and
+    /// parameters qualify, and a load through such a pointer, which lowers
+    /// to its address without the read; calls, volatile and
     /// address-space-qualified accesses, and division do not.
     fn constant_p_operand_defers(&self, id: super::super::ast::ExprId) -> bool {
         use super::super::ast::{Expr, UnOp};
         use super::super::ir::BinOp;
         use super::types::{is_struct_value_ty, is_volatile_ty, segment_of_ty};
+        let plain_load =
+            |ty| !is_volatile_ty(ty) && segment_of_ty(ty).is_none() && !is_struct_value_ty(ty);
         match self.ast.expr(id) {
             Expr::IntLit { .. } | Expr::FloatLit { .. } | Expr::Sizeof(_) => true,
             Expr::Ident {
@@ -635,6 +708,16 @@ impl Compiler {
                 child,
                 ..
             } => self.constant_p_operand_defers(*child),
+            Expr::Unary {
+                op: UnOp::Deref,
+                child,
+                ty,
+            } => plain_load(*ty) && self.constant_p_operand_defers(*child),
+            Expr::Index { array, idx, ty } => {
+                plain_load(*ty)
+                    && self.constant_p_operand_defers(*array)
+                    && self.constant_p_operand_defers(*idx)
+            }
             Expr::Binary { op, lhs, rhs, .. } => {
                 !matches!(op, BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu)
                     && self.constant_p_operand_defers(*lhs)
@@ -660,7 +743,7 @@ impl Compiler {
         }
     }
 
-    /// C11 6.5.3.4 `_Alignof ( type-name )`, and GCC's `__alignof__` on an
+    /// C11 6.5.3.4 `_Alignof ( type-name )`, and GNU C `__alignof__` on an
     /// expression (both spellings share the token). An array's alignment
     /// is its element's (C11 6.2.8); a pointer's is the pointer's.
     pub(super) fn alignof_operand_bytes(&mut self) -> Result<i64, C5Error> {
@@ -875,4 +958,10 @@ impl Compiler {
         self.mark_unevaluated_use(idx);
         Ok(Some(align))
     }
+}
+
+/// `__builtin_object_size`'s answer where the size is not known: the
+/// maximum forms (types 0 and 1) `(size_t)-1`, the minimum forms 0.
+pub(crate) fn object_size_fallback(kind: i64) -> i64 {
+    if kind & 2 == 0 { -1 } else { 0 }
 }

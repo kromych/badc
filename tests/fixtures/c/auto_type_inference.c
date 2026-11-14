@@ -1,6 +1,8 @@
 /* GNU `__auto_type`: the declared variable takes its initializer's
    type. Sizes, signedness, floating arithmetic, and array-to-pointer
-   decay pin the inference; the file-scope form uses the same path. */
+   decay pin the inference; the file-scope form uses the same path. A
+   statement-expression initializer may declare several objects in one
+   declaration: the single-declarator rule is the outer declaration's. */
 int garr[3] = {1, 2, 3};
 __auto_type gi = 40 + 2;
 
@@ -46,6 +48,13 @@ int main(void) {
     }
     if (gi != 42) {
         return 9;
+    }
+    __auto_type sum = ({
+        int a = 20, b = 22;
+        a + b;
+    });
+    if (sum != 42) {
+        return 11;
     }
     return i - 7;
 }

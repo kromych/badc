@@ -14,12 +14,13 @@ Disassembly of section .text:
                	brk	#0x1
 
 <test>:
-               	sxtw	x0, w0
-               	cbz	x0, <addr>
-               	add	x0, x1, #0x1
+               	sxtw	x1, w1
+               	sxtw	x2, w2
+               	add	x1, x1, #0x1
+               	sub	x2, x2, #0x1
+               	cmp	w0, #0x0
+               	csel	x0, x1, x2, ne
                	ret
-               	sub	x0, x2, #0x1
-               	b	<addr>
 
 <main>:
                	mov	x0, #0x1e               // =30

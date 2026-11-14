@@ -46,21 +46,20 @@ Disassembly of section .text:
                	ldrsw	x1, [x0, #0x60]
                	cmp	w1, #0x7
                	b.ne	<addr>
-               	ldrsw	x1, [x0, #0x50]
-               	cbz	w1, <addr>
+               	ldrsw	x2, [x0, #0x50]
+               	cbz	w2, <addr>
                	mov	x0, #0x6                // =6
                	ret
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldrsw	x2, [x1, #0x24]
-               	ldrsw	x3, [x0, #0x24]
-               	cmp	w2, w3
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	ldrsw	x3, [x2, #0x24]
+               	ldrsw	x0, [x0, #0x24]
+               	cmp	w3, w0
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	ret
-               	ldrsw	x1, [x1, #0x60]
-               	ldrsw	x0, [x0, #0x60]
-               	cmp	w1, w0
+               	ldrsw	x0, [x2, #0x60]
+               	cmp	w0, w1
                	b.eq	<addr>
                	mov	x0, #0x8                // =8
                	ret

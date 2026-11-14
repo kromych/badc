@@ -25,7 +25,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x18]
+               	ldrsw	x0, [x0, #0xc]
                	cmp	w0, #0x63
                	b.eq	<addr>
                	mov	x0, #0x1                // =1

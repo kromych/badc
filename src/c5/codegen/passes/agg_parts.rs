@@ -16,13 +16,13 @@
 //! the fields and drops the padding stores nothing reads, and a function
 //! whose parameter and result stay in registers keeps no frame.
 //!
-//! A field moves as a load or store of its own width, so the pass takes an
-//! aggregate only when its fields tile its registers that way: integer
-//! fields of 1, 2, 4 or 8 bytes in an integer register, shifted into
-//! place, and one `float` or `double` filling a floating-point register.
-//! A union, a `float` beside an integer in one register, two `float`s in
-//! one SSE eightbyte and a vector keep the prologue and epilogue
-//! transfers. A parameter object whose address escapes, or that a member
+//! A field moves as a load or store of its own width where the fields tile
+//! a register that way: integer fields of 1, 2, 4 or 8 bytes in an integer
+//! register, shifted into place, one `float` or `double` filling a
+//! floating-point register, and a vector filling one whole, a 16-byte one
+//! as a 128-bit value. Any other integer register -- a union's members, a
+//! `float` beside an integer -- moves as its bytes; two `float`s in one SSE
+//! eightbyte keep the prologue and epilogue transfers. A parameter object whose address escapes, or that a member
 //! access reaches at a variable offset, stays in memory whatever the
 //! stores look like, so its registers are stored whole, as the prologue
 //! stored them.
@@ -62,29 +62,45 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], target: Target) {
     }
 }
 
-/// Whether every part moves as loads and stores of its fields' own widths.
+/// Whether an integer part's fields tile it at their own widths: integer
+/// fields of 1, 2, 4 or 8 bytes, none overlapping another.
+fn tiles(p: &RegPart) -> bool {
+    let fields = sorted_fields(p);
+    fields
+        .iter()
+        .all(|f| f.kind == ScalarKind::Int && matches!(f.size, 1 | 2 | 4 | 8))
+        && fields
+            .windows(2)
+            .all(|w| w[0].offset + w[0].size <= w[1].offset)
+}
+
+/// Whether every part moves in the tape: an integer part whose fields tile
+/// it as loads and stores of their widths, any other integer part -- a
+/// union's members, a `float` beside an integer -- as its bytes, and a
+/// floating-point or vector part filled by one field.
 fn tape_carries(parts: &[RegPart], n_fields: usize) -> bool {
     let covered: usize = parts.iter().map(|p| p.fields.len()).sum();
     if covered != n_fields {
         return false;
     }
     parts.iter().all(|p| match p.class {
-        RegClass::Integer => {
-            let fields = sorted_fields(p);
-            fields
-                .iter()
-                .all(|f| f.kind == ScalarKind::Int && matches!(f.size, 1 | 2 | 4 | 8))
-                && fields
-                    .windows(2)
-                    .all(|w| w[0].offset + w[0].size <= w[1].offset)
-        }
+        RegClass::Integer => true,
         RegClass::Sse => matches!(
             p.fields.as_slice(),
             [f] if f.offset == p.offset
                 && f.size == p.width
-                && matches!((f.kind, f.size), (ScalarKind::F64, 8) | (ScalarKind::F32, 4))
+                && matches!(
+                    (f.kind, f.size),
+                    (ScalarKind::F64 | ScalarKind::Vector, 8) | (ScalarKind::F32, 4)
+                )
         ),
-        RegClass::Vector | RegClass::X87 | RegClass::NoClass => false,
+        RegClass::Vector => matches!(
+            p.fields.as_slice(),
+            [f] if f.offset == p.offset && f.size == 16 && f.kind == ScalarKind::Vector
+        ),
+        // A 32-byte vector moves whole whatever its lanes.
+        RegClass::Vector256 => p.offset == 0 && p.width == 32,
+        RegClass::X87 | RegClass::NoClass => false,
     })
 }
 
@@ -94,10 +110,14 @@ fn sorted_fields(p: &RegPart) -> Vec<crate::c5::codegen::abi_classify::FlatField
     fields
 }
 
-/// The bank and precision a part's value takes.
+/// The bank and precision a part's value takes: an 8-byte vector moves as
+/// the 64 bits of a `double`, a 16- or 32-byte one as a whole vector
+/// register.
 fn part_kind(p: &RegPart) -> LoadKind {
     match (p.class, p.width) {
         (RegClass::Integer, _) => LoadKind::I64,
+        (RegClass::Vector, _) => LoadKind::V128,
+        (RegClass::Vector256, _) => LoadKind::V256,
         (_, 4) => LoadKind::F32,
         _ => LoadKind::F64,
     }
@@ -141,7 +161,12 @@ struct Plan {
 
 impl Plan {
     fn push(&mut self, at: At, inst: Inst, is_f32: bool) -> ValueId {
-        self.ins.push(Insertion { at, inst, is_f32 });
+        self.ins.push(Insertion {
+            at,
+            inst,
+            is_f32,
+            copy_of: None,
+        });
         self.base + (self.ins.len() - 1) as ValueId
     }
 }
@@ -217,7 +242,9 @@ fn scatter(
     split: bool,
 ) {
     let mut pieces: Vec<(u32, u32, StoreKind)> = Vec::new();
-    if p.class == RegClass::Integer && !split {
+    if p.class == RegClass::Vector256 {
+        pieces.push((p.offset, p.width, StoreKind::V256));
+    } else if p.class == RegClass::Integer && !(split && tiles(p)) {
         gap_stores(&mut pieces, p.offset, p.offset + p.width);
     } else {
         let mut pos = p.offset;
@@ -225,6 +252,7 @@ fn scatter(
             gap_stores(&mut pieces, pos, f.offset);
             let kind = match (p.class, f.size) {
                 (RegClass::Integer, size) => store_kind(size),
+                (RegClass::Vector, _) => StoreKind::V128,
                 (_, 4) => StoreKind::F32,
                 _ => StoreKind::F64,
             };
@@ -297,16 +325,29 @@ fn gather(plan: &mut Plan, at: At, addr: ValueId, p: &RegPart, desc: &AggDesc) -
             is_f32,
         )
     };
+    if p.class == RegClass::Vector256 {
+        return load(plan, p.offset, p.width, LoadKind::V256, false);
+    }
     if p.class != RegClass::Integer {
         let f = p.fields[0];
-        let single = f.size == 4;
-        let kind = if single { LoadKind::F32 } else { LoadKind::F64 };
-        return load(plan, f.offset, f.size, kind, single);
+        let kind = part_kind(p);
+        return load(plan, f.offset, f.size, kind, kind == LoadKind::F32);
     }
+    // A part its fields do not tile is read as its bytes.
+    let pieces: Vec<(u32, u32)> = if tiles(p) {
+        sorted_fields(p)
+            .iter()
+            .map(|f| (f.offset, f.size))
+            .collect()
+    } else {
+        let mut bytes = Vec::new();
+        gap_stores(&mut bytes, p.offset, p.offset + p.width);
+        bytes.iter().map(|&(off, size, _)| (off, size)).collect()
+    };
     let mut acc = None;
-    for f in sorted_fields(p) {
-        let l = load(plan, f.offset, f.size, load_kind(f.size), false);
-        let bits = 8 * (f.offset - p.offset);
+    for (off, size) in pieces {
+        let l = load(plan, off, size, load_kind(size), false);
+        let bits = 8 * (off - p.offset);
         let v = if bits == 0 {
             l
         } else {
@@ -454,7 +495,7 @@ fn run_one(func: &mut FunctionSsa, target: Target) {
     }
     let Plan { mut ins, base } = plan;
     let pos = tape::sort(&mut ins, &func.blocks, base as usize);
-    let (rewrite, _undo) = tape::insert(func, &ins);
+    let rewrite = tape::insert(func, &ins);
     for (b, bundle) in bundles {
         let id = rewrite.ids[pos[(bundle - base) as usize]];
         func.blocks[b].terminator = Terminator::Return(id);
@@ -629,6 +670,60 @@ mod tests {
                 );
             }
             assert_eq!(f.param_local_slots[0], 0, "{t}");
+        }
+    }
+
+    /// A 16-byte vector parameter arrives as one 128-bit part stored whole,
+    /// and a vector result leaves as one 128-bit part: System V passes it
+    /// in one xmm register (SSE + SSEUP), AAPCS64 in one q register (6.4.2).
+    /// An 8-byte AArch64 vector moves as the 64 bits of a d register.
+    #[test]
+    fn vector_transfers_move_as_whole_registers() {
+        const SRC: &str = "typedef int v4i __attribute__((vector_size(16))); \
+            typedef short v4s __attribute__((vector_size(8))); \
+            v4i twice(v4i a) { return a + a; } \
+            v4s neg(v4s a) { return -a; }";
+        let cases = [
+            (Target::LinuxX64, "twice", LoadKind::V128, StoreKind::V128),
+            (
+                Target::LinuxAarch64,
+                "twice",
+                LoadKind::V128,
+                StoreKind::V128,
+            ),
+            (Target::LinuxAarch64, "neg", LoadKind::F64, StoreKind::F64),
+        ];
+        for (target, name, load, store) in cases {
+            let mut f = walked(SRC, name, target);
+            run(core::slice::from_mut(&mut f), target);
+            let t = text(&f);
+            let part = f
+                .insts
+                .iter()
+                .position(|i| matches!(i, Inst::ParamPart { .. }))
+                .unwrap_or_else(|| panic!("{target:?} {name}: no part: {t}"));
+            assert!(
+                matches!(f.insts[part], Inst::ParamPart { idx: 0, part: 0, kind } if kind == load),
+                "{target:?} {name}: {t}"
+            );
+            assert!(
+                f.insts.iter().any(|i| matches!(*i,
+                    Inst::StoreLocal { value, kind, .. } | Inst::Store { value, kind, disp: 0, .. }
+                        if value as usize == part && kind == store)),
+                "{target:?} {name}: the part is not stored whole: {t}"
+            );
+            let Terminator::Return(r) = f.blocks.last().expect("a block").terminator else {
+                panic!("{target:?} {name}: {t}")
+            };
+            let Inst::AggParts { parts, fp_mask, .. } = &f.insts[r as usize] else {
+                panic!("{target:?} {name}: {t}")
+            };
+            assert_eq!(parts.len(), 1, "{t}");
+            assert!(fp_mask.has(0), "{t}");
+            assert!(
+                matches!(f.insts[parts[0] as usize], Inst::Load { kind, .. } if kind == load),
+                "{target:?} {name}: {t}"
+            );
         }
     }
 
@@ -822,17 +917,48 @@ mod tests {
         }
     }
 
-    /// A union, and two `float`s in one SSE eightbyte, keep the prologue
-    /// and epilogue transfers; an HFA of two `double`s takes two
-    /// floating-point parts on AAPCS64 and two SSE parts on System V.
+    /// A union moves as its register's bytes: one 8-byte store of the part
+    /// and one 8-byte load for the return. Two `float`s in one SSE
+    /// eightbyte keep the prologue and epilogue transfers; an HFA of two
+    /// `double`s takes two floating-point parts on AAPCS64 and two SSE
+    /// parts on System V.
     #[test]
     fn admission_follows_the_field_tiling() {
         const UNION: &str = "union U { long a; double d; }; union U id(union U u) { return u; }";
         for target in [Target::LinuxAarch64, Target::LinuxX64] {
             let mut f = walked(UNION, "id", target);
-            let before = text(&f);
             run(core::slice::from_mut(&mut f), target);
-            assert_eq!(before, text(&f), "{target:?}");
+            let t = text(&f);
+            let parts = f.insts.iter().filter(|i| {
+                matches!(
+                    i,
+                    Inst::ParamPart {
+                        kind: LoadKind::I64,
+                        ..
+                    }
+                )
+            });
+            assert_eq!(parts.count(), 1, "{target:?}: {t}");
+            let whole = f.insts.iter().any(|i| {
+                matches!(
+                    i,
+                    Inst::StoreLocal {
+                        kind: StoreKind::I64,
+                        ..
+                    } | Inst::Store {
+                        kind: StoreKind::I64,
+                        ..
+                    }
+                )
+            });
+            assert!(whole, "{target:?}: {t}");
+            let Terminator::Return(r) = f.blocks[0].terminator else {
+                panic!("{t}")
+            };
+            assert!(
+                matches!(f.insts[r as usize], Inst::AggParts { .. }),
+                "{target:?}: {t}"
+            );
         }
         const FLOATS: &str = "struct F { float x, y; }; struct F id(struct F u) { return u; }";
         let mut f = walked(FLOATS, "id", Target::LinuxX64);
@@ -876,7 +1002,7 @@ mod tests {
 
     /// A call returning in registers: its parts are read right after it,
     /// in part order and per bank, stored into its result temporary, and
-    /// the call names no slot. A union keeps the call's own store.
+    /// the call names no slot. A union's part is read as its bytes.
     #[test]
     fn call_results_are_read_as_parts() {
         const SRC: &str = "struct P { long a, b; }; struct P makep(long);\n\
@@ -922,10 +1048,14 @@ mod tests {
                 .count();
             assert!(stores >= 2, "{target:?}: {t}");
             let mut f = walked(SRC, "un", target);
-            let before = slot_of(&f);
             run(core::slice::from_mut(&mut f), target);
-            assert_eq!(slot_of(&f), before, "{target:?}: {}", text(&f));
-            assert!(parts_after_call(&f).is_empty(), "{target:?}");
+            assert_eq!(slot_of(&f), Some(0), "{target:?}: {}", text(&f));
+            assert_eq!(
+                parts_after_call(&f),
+                [(0, LoadKind::I64)],
+                "{target:?}: {}",
+                text(&f)
+            );
         }
         // System V: the double in xmm0, the long in rax, each slot 0 of its bank.
         let mut f = walked(SRC, "mixed", Target::LinuxX64);

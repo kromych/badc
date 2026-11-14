@@ -42,8 +42,7 @@ Disassembly of section .text:
                	cmpq	$0x1111, %rdx           # imm = 0x1111
                	jne	<addr>
                	movl	<rip>, %edx # <addr>
-               	xorq	$0x4, %rdx
-               	testl	%edx, %edx
+               	cmpl	$0x4, %edx
                	je	<addr>
                	movl	$0x2, %eax
                	retq
@@ -51,8 +50,7 @@ Disassembly of section .text:
                	cmpq	$0x2222, %rdx           # imm = 0x2222
                	jne	<addr>
                	movl	<rip>, %edx # <addr>
-               	xorq	$0x6, %rdx
-               	testl	%edx, %edx
+               	cmpl	$0x6, %edx
                	je	<addr>
                	movl	$0x3, %eax
                	retq
@@ -67,16 +65,14 @@ Disassembly of section .text:
                	cmpq	$0x1111, %rcx           # imm = 0x1111
                	jne	<addr>
                	movl	<rip>, %ecx # <addr>
-               	xorq	$0x4, %rcx
-               	testl	%ecx, %ecx
+               	cmpl	$0x4, %ecx
                	je	<addr>
                	retq
                	movq	<rip>, %rax # <addr>
                	cmpq	$0x2222, %rax           # imm = 0x2222
                	jne	<addr>
                	movl	<rip>, %eax # <addr>
-               	xorq	$0x6, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x6, %eax
                	je	<addr>
                	movl	$0x5, %eax
                	retq

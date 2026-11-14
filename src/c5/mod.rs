@@ -1,11 +1,14 @@
+mod aarch64_isa;
+mod aarch64_simd;
 mod asm;
 mod ast;
+mod attr;
 mod codegen;
 mod compiler;
 mod depfile;
 pub mod diag;
 mod error;
-mod headers;
+pub(crate) mod headers;
 mod host;
 mod ident;
 mod ir;
@@ -14,6 +17,7 @@ mod layout;
 mod lexer;
 #[cfg(feature = "full")]
 mod linker;
+mod mach_o_name;
 mod ms_intrinsic;
 mod object;
 mod op;
@@ -23,10 +27,13 @@ mod preprocessor;
 mod program;
 #[cfg(feature = "full")]
 mod runtime;
+mod segment_pragma;
+mod simd;
 mod softfp;
 mod symbol;
 mod token;
 mod vm;
+mod x86_isa;
 mod x86_simd;
 
 #[cfg(test)]
@@ -37,32 +44,38 @@ mod tests;
 // resolve through the inner module path) -- they are still part of the
 // intended public API.
 pub use object::elf_class::ElfClass;
+#[cfg(feature = "native-emit")]
+pub use object::pe_rsrc::is_res as is_resource_file;
 pub use object::{DWARF_FORMAT_BITS, DWARF_VERSION};
 #[allow(unused_imports)]
 #[cfg(feature = "native-emit")]
 pub use object::{
-    NativeEmit, emit_native, emit_native_reporting, emit_native_with_options,
+    NativeEmit, NativeImage, emit_native, emit_native_reporting, emit_native_with_options,
     emit_native_with_options_owned,
 };
 pub use {
+    aarch64_isa::{Aarch64ExtError, Aarch64Features},
     codegen::{
         BinaryFormat, BuildId, CodeModel, DEFAULT_SSP_BUFFER_SIZE, ElfImageOptions, ExecForm,
-        FixedReg, FixedRegs, GuardSeg, GuardSymbol, Hardening, IndirectBranch, NativeOptions,
-        OutputKind, PatchableEntry, Profiling, SYSV_TLS_GUARD_OFFSET, StackGuard, StackProtect,
-        StackProtector, Target, fixed_register, jit_run, jit_run_with_options, stack_guard_sysreg,
+        FixedReg, FixedRegs, GuardSeg, GuardSymbol, Hardening, IndirectBranch, MachOImageOptions,
+        NativeOptions, OutputKind, PatchableEntry, Profiling, SYSV_TLS_GUARD_OFFSET, StackGuard,
+        StackProtect, StackProtector, Target, fixed_register, jit_run, jit_run_with_options,
+        stack_guard_sysreg,
     },
     compiler::{
         AUTO_VAR_INIT_PATTERN_BYTE, AutoVarInit, CStd, CompileOptions, Compiler, FpContract,
-        Preprocessed, StructDef, StructField,
+        LaxVectors, Preprocessed, StructDef, StructField,
     },
     depfile::{escape as dep_escape, prerequisites as dep_prerequisites, render as dep_render},
     error::C5Error,
     headers::{TargetSet, embedded_headers},
     host::{Host, Overwrite},
     lexer::{PredefinedKind, PredefinedSymbol, predefined_symbols},
+    mach_o_name::name as mach_o_symbol_name,
     preprocessor::{IncludeOrigin, IncludeRecord, IncludeStatus},
     program::{AutoInclude, Program, SymVisibility, VariableInfo},
     vm::{Trace, Vm},
+    x86_isa::{X86ExtOption, X86Features},
 };
 
 #[cfg(feature = "std")]
@@ -75,21 +88,23 @@ pub use codegen::jit_run_with_sources;
 #[cfg(all(feature = "full", feature = "std"))]
 #[allow(unused_imports)]
 pub use linker::{
-    ArchiveInclusion, DataImportSlots, ImageOptions, LdsEmit, LdsObject, LdsOptions, LdsResult,
-    LinkOptions, LinkerScript, MergedNative, MergedSymbol, NativeMachine, NativeObject,
+    ArchiveInclusion, DataImportSlots, ExportForm, ImageOptions, LdsEmit, LdsObject, LdsOptions,
+    LdsResult, LinkOptions, LinkerScript, MergedNative, MergedSymbol, NativeMachine, NativeObject,
     NativeReloc, NativeSymSection, NativeSymbol, OnDemandSources, OrphanHandling,
     PendingImportReloc, PltTrampoline, Preemption, SectionContribution, SectionMap, SharedLibrary,
-    TargetCLibrary, ZKeyword, ZKeywords, ZSupport, copy_candidates, detect_binary_format,
-    emit_aarch64_plt, emit_plt_for, emit_x86_64_plt, import_libraries, is_arm64x_native_member,
-    is_coff_import_member, is_coff_object, is_elf_object, is_mach_o_dylib, is_mach_o_fat,
-    is_mach_o_object, is_native_object, is_pe_dll, is_tbd, library_bindings, link_native_objects,
-    link_native_objects_with, link_native_objects_with_options,
-    link_native_objects_with_shared_libs, link_resolves_symbol, link_with_script, mach_o_fat_slice,
-    parse_import_member, parse_lds_object, parse_linker_script, parse_mach_o_dylib,
+    TargetCLibrary, ZKeyword, ZKeywords, ZSupport, copy_candidates, delay_load_root,
+    detect_binary_format, emit_aarch64_plt, emit_plt_for, emit_x86_64_plt, import_libraries,
+    is_arm64x_native_member, is_coff_import_member, is_coff_object, is_elf_object, is_mach_o_dylib,
+    is_mach_o_fat, is_mach_o_object, is_native_object, is_pe_dll, is_tbd, library_bindings,
+    link_native_objects, link_native_objects_with, link_native_objects_with_options,
+    link_native_objects_with_shared_libs, link_resolves_symbol, link_with_script,
+    mach_o_archive_symbols, mach_o_fat_slice, module_definition, parse_import_member,
+    parse_lds_object, parse_linker_script, parse_mach_o_dylib, parse_mach_o_loader,
     parse_native_elf, parse_native_mach_o, parse_native_object, parse_native_object_for,
-    parse_pe_dll, parse_shared_library, parse_tbd, parse_z_keyword, render_link_map,
-    resolve_exec_stack, traditional_imports, write_executable_elf64,
-    write_native_image_from_merged, write_native_image_from_merged_ex,
+    parse_pe_dll, parse_shared_library, parse_tbd, parse_z_keyword, pe_link_supplies_tls_support,
+    render_link_map, resolve_exec_stack, traditional_imports, write_executable_elf64,
+    write_import_library, write_native_image_and_pdb, write_native_image_from_merged,
+    write_native_image_from_merged_ex,
 };
 #[cfg(feature = "full")]
 #[allow(unused_imports)]
@@ -106,7 +121,7 @@ pub use linker::{read_archive_at, read_indexed_archive_at};
 #[cfg(feature = "full")]
 pub use preprocessor::{Binding, DylibSpec, Subsystem};
 #[cfg(feature = "full")]
-pub use runtime::{embedded_compiler_rt, embedded_libc, embedded_runtime};
+pub use runtime::{embedded_compiler_rt, embedded_libc, embedded_runtime, embedded_source_label};
 #[cfg(feature = "full")]
 pub use symbol::Linkage;
 

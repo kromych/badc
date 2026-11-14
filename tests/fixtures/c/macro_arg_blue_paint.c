@@ -16,7 +16,7 @@
 struct Section { int data; };
 struct State   { struct Section *symtab_section; };
 
-// Initialise before defining the accessor macro -- once the
+// Initialize before defining the accessor macro -- once the
 // macro is in scope, the bare field name expands to the
 // `s1->...` form, so direct field assignment would not parse.
 static void init(struct State *st, struct Section *sec) {

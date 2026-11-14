@@ -44,18 +44,18 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	leave
                	retq
-               	xorl	%ecx, %ecx
-               	movq	%rcx, %rax
+               	xorl	%eax, %eax
+               	movq	%rax, %rcx
+               	leaq	0x1(%rcx), %rdi
                	cmpq	%rsi, %rdx
-               	jne	<addr>
-               	incq	%rax
+               	cmoveq	%rdi, %rcx
+               	leaq	0x1(%rcx), %rdi
                	cmpq	%rsi, %rdx
-               	jne	<addr>
+               	cmoveq	%rdi, %rcx
                	incq	%rax
-               	incq	%rcx
-               	cmpl	$0x4, %ecx
+               	cmpl	$0x4, %eax
                	jl	<addr>
-               	testl	%eax, %eax
+               	testl	%ecx, %ecx
                	je	<addr>
                	movl	$0x2, %eax
                	leave

@@ -1,7 +1,7 @@
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=chk_to_fp
-fn ent_pc=3 n_params=7 variadic=false locals=3
-  spill_count=1 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
+fn ent_pc=3 n_params=7 variadic=false locals=2
+  spill_count=2 gpr_used=[3, 12, 13, 14] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7
@@ -10,7 +10,7 @@ fn ent_pc=3 n_params=7 variadic=false locals=3
     v4   Imm(0)                                           -> x0
     v5   ParamRef(2, kind=I64)                            -> x3
     v6   Imm(0)                                           -> x0
-    v7   ParamRef(3, kind=I64)                            -> x12
+    v7   ParamRef(3, kind=I64)                            -> [spill 0]
     v8   Imm(0)                                           -> x0
     v9   ParamRef(4, kind=I64)                            -> x8
     v10  Imm(0)                                           -> x0
@@ -26,9 +26,9 @@ fn ent_pc=3 n_params=7 variadic=false locals=3
     v20  Load { addr=v16, disp=0, kind=I64, volatile pc_rel } -> x1
     v21  LocalAddr(-2)                                    -> x2
     v22  StoreLocal { off=-2, value=v19, kind=I64 }       -> -
-    v23  Imm(0)                                           -> x6
+    v23  Imm(0)                                           -> x2
     v24  BinopI { op=add, lhs=v21, rhs_imm=8 }            -> x2
-    v25  StoreLocal { off=-2, disp=8, value=v23, kind=I64 } -> -
+    v25  Imm(0)                                           -> x2
     v26  LoadLocal { off=-2, kind=I64 }                   -> x2
     v27  Imm(0)                                           -> x2
     v28  Imm(0)                                           -> x2
@@ -36,7 +36,7 @@ fn ent_pc=3 n_params=7 variadic=false locals=3
     v30  Imm(0)                                           -> x2
     v31  Imm(0)                                           -> x2
     v32  Imm(0)                                           -> x2
-    v33  Binop { op=or, lhs=v23, rhs=v20 }                -> x1
+    v33  BinopI { op=or, lhs=v20, rhs_imm=0 }             -> x2
     v34  Imm(0)                                           -> x2
     v35  Imm(0)                                           -> x2
     v36  Imm(0)                                           -> x2
@@ -56,27 +56,27 @@ fn ent_pc=3 n_params=7 variadic=false locals=3
     v50  BinopI { op=shru, lhs=v19, rhs_imm=32 }          -> x6
     v51  BinopI { op=ne, lhs=v50, rhs_imm=0 }             -> x6
     v52  BinopI { op=shl, lhs=v51, rhs_imm=5 }            -> x6
-    v53  BinopI { op=add, lhs=v52, rhs_imm=1 }            -> x13
+    v53  BinopI { op=add, lhs=v52, rhs_imm=1 }            -> x12
     v54  Binop { op=shru, lhs=v19, rhs=v52 }              -> x6
     v55  BinopI { op=shru, lhs=v54, rhs_imm=16 }          -> x7
     v56  BinopI { op=ne, lhs=v55, rhs_imm=0 }             -> x7
     v57  BinopI { op=shl, lhs=v56, rhs_imm=4 }            -> x7
-    v58  Binop { op=add, lhs=v53, rhs=v57 }               -> x13
+    v58  Binop { op=add, lhs=v53, rhs=v57 }               -> x12
     v59  Binop { op=shru, lhs=v54, rhs=v57 }              -> x6
     v60  BinopI { op=shru, lhs=v59, rhs_imm=8 }           -> x7
     v61  BinopI { op=ne, lhs=v60, rhs_imm=0 }             -> x7
     v62  BinopI { op=shl, lhs=v61, rhs_imm=3 }            -> x7
-    v63  Binop { op=add, lhs=v58, rhs=v62 }               -> x13
+    v63  Binop { op=add, lhs=v58, rhs=v62 }               -> x12
     v64  Binop { op=shru, lhs=v59, rhs=v62 }              -> x6
     v65  BinopI { op=shru, lhs=v64, rhs_imm=4 }           -> x7
     v66  BinopI { op=ne, lhs=v65, rhs_imm=0 }             -> x7
     v67  BinopI { op=shl, lhs=v66, rhs_imm=2 }            -> x7
-    v68  Binop { op=add, lhs=v63, rhs=v67 }               -> x13
+    v68  Binop { op=add, lhs=v63, rhs=v67 }               -> x12
     v69  Binop { op=shru, lhs=v64, rhs=v67 }              -> x6
     v70  BinopI { op=shru, lhs=v69, rhs_imm=2 }           -> x7
     v71  BinopI { op=ne, lhs=v70, rhs_imm=0 }             -> x7
     v72  BinopI { op=shl, lhs=v71, rhs_imm=1 }            -> x7
-    v73  Binop { op=add, lhs=v68, rhs=v72 }               -> x13
+    v73  Binop { op=add, lhs=v68, rhs=v72 }               -> x12
     v74  Binop { op=shru, lhs=v69, rhs=v72 }              -> x6
     v75  BinopI { op=shru, lhs=v74, rhs_imm=1 }           -> x6
     v76  BinopI { op=ne, lhs=v75, rhs_imm=0 }             -> x6
@@ -90,19 +90,19 @@ fn ent_pc=3 n_params=7 variadic=false locals=3
     v84  Binop { op=shru, lhs=v83, rhs=v82 }              -> x2
     v85  BinopI { op=ne, lhs=v79, rhs_imm=0 }             -> x7
     v86  Binop { op=mul, lhs=v84, rhs=v85 }               -> x2
-    v87  Binop { op=and, lhs=v33, rhs=v86 }               -> x2
-    v88  BinopI { op=ne, lhs=v87, rhs_imm=0 }             -> x13
+    v87  Binop { op=and, lhs=v20, rhs=v86 }               -> x2
+    v88  BinopI { op=ne, lhs=v87, rhs_imm=0 }             -> x12
     v89  BinopI { op=and, lhs=v79, rhs_imm=127 }          -> x2
     v90  BinopI { op=and, lhs=v79, rhs_imm=63 }           -> x7
-    v91  Imm(63)                                          -> x14
-    v92  Binop { op=sub, lhs=v91, rhs=v90 }               -> x14
+    v91  Imm(63)                                          -> x13
+    v92  Binop { op=sub, lhs=v91, rhs=v90 }               -> x13
     v93  BinopI { op=shru, lhs=v89, rhs_imm=6 }           -> x2
     v94  Neg(v93)                                         -> x2
-    v95  BinopI { op=xor, lhs=v94, rhs_imm=-1 }           -> x15
-    v96  Binop { op=shru, lhs=v19, rhs=v90 }              -> [spill 0]
+    v95  BinopI { op=xor, lhs=v94, rhs_imm=-1 }           -> x14
+    v96  Binop { op=shru, lhs=v19, rhs=v90 }              -> [spill 1]
     v97  Binop { op=shl, lhs=v19, rhs=v92 }               -> x0
     v98  BinopI { op=shl, lhs=v97, rhs_imm=1 }            -> x0
-    v99  Binop { op=shru, lhs=v33, rhs=v90 }              -> x1
+    v99  Binop { op=shru, lhs=v20, rhs=v90 }              -> x1
     v100 Binop { op=or, lhs=v99, rhs=v98 }                -> x0
     v101 Binop { op=and, lhs=v100, rhs=v95 }              -> x0
     v102 Binop { op=and, lhs=v96, rhs=v94 }               -> x2
@@ -116,13 +116,13 @@ fn ent_pc=3 n_params=7 variadic=false locals=3
     v110 BinopI { op=shl, lhs=v109, rhs_imm=52 }          -> x0
     v111 BinopI { op=or, lhs=v110, rhs_imm=0 }            -> x1
     v112 Imm(0)                                           -> x1
-    v113 StoreLocal { off=-3, value=v110, kind=I64 }      -> -
-    v114 LoadLocal { off=-3, kind=F64 }                   -> d1
+    v113 Imm(0)                                           -> x1
+    v114 FpCast { kind=BitsFp, value=v110 }               -> d1
     v115 Binop { op=fmul, lhs=v108, rhs=v114 }            -> d0
     v116 Imm(0)                                           -> x0
-    v117 StoreLocal { off=-1, value=v115, kind=F64 }      -> -
+    v117 Imm(0)                                           -> x0
     v118 Imm(0)                                           -> x0
-    v119 LoadLocal { off=-1, kind=I64 }                   -> x0
+    v119 FpCast { kind=FpBits, value=v115 }               -> x0
     v120 LifetimeEnd(-1)                                  -> -
     v121 Imm(0)                                           -> x1
     v122 Binop { op=ne, lhs=v119, rhs=v5 }                -> x0
@@ -138,9 +138,9 @@ fn ent_pc=3 n_params=7 variadic=false locals=3
     v128 Load { addr=v127, disp=0, kind=I64, volatile pc_rel } -> x7
     v129 LocalAddr(-2)                                    -> x1
     v130 StoreLocal { off=-2, value=v126, kind=I64 }      -> -
-    v131 Imm(0)                                           -> x2
+    v131 Imm(0)                                           -> x1
     v132 BinopI { op=add, lhs=v129, rhs_imm=8 }           -> x1
-    v133 StoreLocal { off=-2, disp=8, value=v131, kind=I64 } -> -
+    v133 Imm(0)                                           -> x1
     v134 LoadLocal { off=-2, kind=I64 }                   -> x1
     v135 Imm(0)                                           -> x1
     v136 Imm(0)                                           -> x1
@@ -148,7 +148,7 @@ fn ent_pc=3 n_params=7 variadic=false locals=3
     v138 Imm(0)                                           -> x1
     v139 Imm(0)                                           -> x1
     v140 Imm(0)                                           -> x1
-    v141 Binop { op=or, lhs=v131, rhs=v128 }              -> x7
+    v141 BinopI { op=or, lhs=v128, rhs_imm=0 }            -> x1
     v142 Imm(0)                                           -> x1
     v143 Imm(0)                                           -> x1
     v144 Imm(0)                                           -> x1
@@ -202,19 +202,19 @@ fn ent_pc=3 n_params=7 variadic=false locals=3
     v192 Binop { op=shru, lhs=v191, rhs=v190 }            -> x1
     v193 BinopI { op=ne, lhs=v187, rhs_imm=0 }            -> x6
     v194 Binop { op=mul, lhs=v192, rhs=v193 }             -> x1
-    v195 Binop { op=and, lhs=v141, rhs=v194 }             -> x1
+    v195 Binop { op=and, lhs=v128, rhs=v194 }             -> x1
     v196 BinopI { op=ne, lhs=v195, rhs_imm=0 }            -> x3
     v197 BinopI { op=and, lhs=v187, rhs_imm=127 }         -> x1
     v198 BinopI { op=and, lhs=v187, rhs_imm=63 }          -> x6
-    v199 Imm(63)                                          -> x13
-    v200 Binop { op=sub, lhs=v199, rhs=v198 }             -> x13
+    v199 Imm(63)                                          -> x12
+    v200 Binop { op=sub, lhs=v199, rhs=v198 }             -> x12
     v201 BinopI { op=shru, lhs=v197, rhs_imm=6 }          -> x1
     v202 Neg(v201)                                        -> x1
-    v203 BinopI { op=xor, lhs=v202, rhs_imm=-1 }          -> x14
-    v204 Binop { op=shru, lhs=v126, rhs=v198 }            -> x15
+    v203 BinopI { op=xor, lhs=v202, rhs_imm=-1 }          -> x13
+    v204 Binop { op=shru, lhs=v126, rhs=v198 }            -> x14
     v205 Binop { op=shl, lhs=v126, rhs=v200 }             -> x0
     v206 BinopI { op=shl, lhs=v205, rhs_imm=1 }           -> x0
-    v207 Binop { op=shru, lhs=v141, rhs=v198 }            -> x6
+    v207 Binop { op=shru, lhs=v128, rhs=v198 }            -> x6
     v208 Binop { op=or, lhs=v207, rhs=v206 }              -> x0
     v209 Binop { op=and, lhs=v208, rhs=v203 }             -> x0
     v210 Binop { op=and, lhs=v204, rhs=v202 }             -> x1
@@ -229,8 +229,8 @@ fn ent_pc=3 n_params=7 variadic=false locals=3
     v219 BinopI { op=shl, lhs=v218, rhs_imm=52 }          -> x0
     v220 BinopI { op=or, lhs=v219, rhs_imm=0 }            -> x1
     v221 Imm(0)                                           -> x1
-    v222 StoreLocal { off=-3, value=v219, kind=I64 }      -> -
-    v223 LoadLocal { off=-3, kind=F64 }                   -> d1
+    v222 Imm(0)                                           -> x1
+    v223 FpCast { kind=BitsFp, value=v219 }               -> d1
     v224 Binop { op=fmul, lhs=v217, rhs=v223 }            -> d0
     v225 FpCast { kind=F64ToF32, value=v224 }             -> d0 [f32]
     v226 LocalAddr(-2)                                    -> x0
@@ -256,16 +256,16 @@ fn ent_pc=3 n_params=7 variadic=false locals=3
     v242 LocalAddr(-2)                                    -> x0
     v243 StoreLocal { off=-2, value=v239, kind=I64 }      -> -
     v244 Imm(0)                                           -> x0
-    v245 BinopI { op=add, lhs=v226, rhs_imm=8 }           -> x6
-    v246 StoreLocal { off=-2, disp=8, value=v244, kind=I64 } -> -
-    v247 LoadLocal { off=-2, kind=I64 }                   -> x6
-    v248 Imm(0)                                           -> x6
-    v249 Imm(0)                                           -> x6
-    v250 Imm(0)                                           -> x6
-    v251 Imm(0)                                           -> x6
-    v252 Imm(0)                                           -> x6
-    v253 Imm(0)                                           -> x6
-    v254 Binop { op=or, lhs=v244, rhs=v241 }              -> x2
+    v245 BinopI { op=add, lhs=v226, rhs_imm=8 }           -> x0
+    v246 Imm(0)                                           -> x0
+    v247 LoadLocal { off=-2, kind=I64 }                   -> x0
+    v248 Imm(0)                                           -> x0
+    v249 Imm(0)                                           -> x0
+    v250 Imm(0)                                           -> x0
+    v251 Imm(0)                                           -> x0
+    v252 Imm(0)                                           -> x0
+    v253 Imm(0)                                           -> x0
+    v254 BinopI { op=or, lhs=v241, rhs_imm=0 }            -> x0
     v255 Imm(0)                                           -> x0
     v256 Imm(0)                                           -> x0
     v257 Imm(0)                                           -> x0
@@ -280,7 +280,7 @@ fn ent_pc=3 n_params=7 variadic=false locals=3
     v266 Imm(0)                                           -> x0
     v267 Imm(0)                                           -> x0
     v268 BinopI { op=shr, lhs=v239, rhs_imm=63 }          -> x0
-    v269 Binop { op=xor, lhs=v254, rhs=v268 }             -> x2
+    v269 Binop { op=xor, lhs=v241, rhs=v268 }             -> x2
     v270 Binop { op=xor, lhs=v239, rhs=v268 }             -> x1
     v271 Binop { op=ult, lhs=v269, rhs=v268 }             -> x7
     v272 Binop { op=sub, lhs=v269, rhs=v268 }             -> x6
@@ -336,7 +336,7 @@ fn ent_pc=3 n_params=7 variadic=false locals=3
     v322 Imm(0)                                           -> x14
     v323 Neg(v321)                                        -> x7
     v324 BinopI { op=xor, lhs=v323, rhs_imm=-1 }          -> x14
-    v325 Binop { op=shru, lhs=v274, rhs=v318 }            -> x15
+    v325 Binop { op=shru, lhs=v274, rhs=v318 }            -> [spill 0]
     v326 Binop { op=shl, lhs=v274, rhs=v320 }             -> x1
     v327 BinopI { op=shl, lhs=v326, rhs_imm=1 }           -> x1
     v328 Binop { op=shru, lhs=v272, rhs=v318 }            -> x2
@@ -353,13 +353,13 @@ fn ent_pc=3 n_params=7 variadic=false locals=3
     v339 BinopI { op=shl, lhs=v338, rhs_imm=52 }          -> x0
     v340 Binop { op=or, lhs=v339, rhs=v275 }              -> x0
     v341 Imm(0)                                           -> x1
-    v342 StoreLocal { off=-3, value=v340, kind=I64 }      -> -
-    v343 LoadLocal { off=-3, kind=F64 }                   -> d1
+    v342 Imm(0)                                           -> x1
+    v343 FpCast { kind=BitsFp, value=v340 }               -> d1
     v344 Binop { op=fmul, lhs=v337, rhs=v343 }            -> d0
     v345 Imm(0)                                           -> x0
-    v346 StoreLocal { off=-1, value=v344, kind=F64 }      -> -
+    v346 Imm(0)                                           -> x0
     v347 Imm(0)                                           -> x0
-    v348 LoadLocal { off=-1, kind=I64 }                   -> x0
+    v348 FpCast { kind=FpBits, value=v344 }               -> x0
     v349 LifetimeEnd(-1)                                  -> -
     v350 Imm(0)                                           -> x1
     v351 Binop { op=ne, lhs=v348, rhs=v9 }                -> x0
@@ -378,16 +378,16 @@ fn ent_pc=3 n_params=7 variadic=false locals=3
     v360 LocalAddr(-2)                                    -> x0
     v361 StoreLocal { off=-2, value=v357, kind=I64 }      -> -
     v362 Imm(0)                                           -> x0
-    v363 BinopI { op=add, lhs=v360, rhs_imm=8 }           -> x6
-    v364 StoreLocal { off=-2, disp=8, value=v362, kind=I64 } -> -
-    v365 LoadLocal { off=-2, kind=I64 }                   -> x6
-    v366 Imm(0)                                           -> x6
-    v367 Imm(0)                                           -> x6
-    v368 Imm(0)                                           -> x6
-    v369 Imm(0)                                           -> x6
-    v370 Imm(0)                                           -> x6
-    v371 Imm(0)                                           -> x6
-    v372 Binop { op=or, lhs=v362, rhs=v359 }              -> x2
+    v363 BinopI { op=add, lhs=v360, rhs_imm=8 }           -> x0
+    v364 Imm(0)                                           -> x0
+    v365 LoadLocal { off=-2, kind=I64 }                   -> x0
+    v366 Imm(0)                                           -> x0
+    v367 Imm(0)                                           -> x0
+    v368 Imm(0)                                           -> x0
+    v369 Imm(0)                                           -> x0
+    v370 Imm(0)                                           -> x0
+    v371 Imm(0)                                           -> x0
+    v372 BinopI { op=or, lhs=v359, rhs_imm=0 }            -> x0
     v373 Imm(0)                                           -> x0
     v374 Imm(0)                                           -> x0
     v375 Imm(0)                                           -> x0
@@ -402,7 +402,7 @@ fn ent_pc=3 n_params=7 variadic=false locals=3
     v384 Imm(0)                                           -> x0
     v385 Imm(0)                                           -> x0
     v386 BinopI { op=shr, lhs=v357, rhs_imm=63 }          -> x0
-    v387 Binop { op=xor, lhs=v372, rhs=v386 }             -> x2
+    v387 Binop { op=xor, lhs=v359, rhs=v386 }             -> x2
     v388 Binop { op=xor, lhs=v357, rhs=v386 }             -> x1
     v389 Binop { op=ult, lhs=v387, rhs=v386 }             -> x7
     v390 Binop { op=sub, lhs=v387, rhs=v386 }             -> x6
@@ -476,8 +476,8 @@ fn ent_pc=3 n_params=7 variadic=false locals=3
     v458 BinopI { op=shl, lhs=v457, rhs_imm=52 }          -> x0
     v459 Binop { op=or, lhs=v458, rhs=v393 }              -> x0
     v460 Imm(0)                                           -> x1
-    v461 StoreLocal { off=-3, value=v459, kind=I64 }      -> -
-    v462 LoadLocal { off=-3, kind=F64 }                   -> d1
+    v461 Imm(0)                                           -> x1
+    v462 FpCast { kind=BitsFp, value=v459 }               -> d1
     v463 Binop { op=fmul, lhs=v456, rhs=v462 }            -> d0
     v464 FpCast { kind=F64ToF32, value=v463 }             -> d0 [f32]
     v465 LocalAddr(-2)                                    -> x0
@@ -500,17 +500,17 @@ fn ent_pc=3 n_params=7 variadic=false locals=3
     terminator Return(v477)   (exit_acc=v477)
 ; --- SSA dump (ok=true) ent_pc=4 ---
 ; name=chk_from_fp
-fn ent_pc=4 n_params=4 variadic=false locals=1
-  spill_count=4 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
+fn ent_pc=4 n_params=4 variadic=false locals=0
+  spill_count=8 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=F64)                            -> d0
     v2   Imm(0)                                           -> x0
-    v3   ParamRef(1, kind=I64)                            -> x3
+    v3   ParamRef(1, kind=I64)                            -> [spill 0]
     v4   Imm(0)                                           -> x0
-    v5   ParamRef(2, kind=I64)                            -> x12
+    v5   ParamRef(2, kind=I64)                            -> [spill 1]
     v6   Imm(0)                                           -> x0
-    v7   ParamRef(3, kind=I32)                            -> x13
+    v7   ParamRef(3, kind=I32)                            -> [spill 2]
     v8   Imm(0)                                           -> x0
     v9   ImmData(32)                                      -> x0
     v10  Imm(0)                                           -> x0
@@ -519,9 +519,9 @@ fn ent_pc=4 n_params=4 variadic=false locals=1
     v13  Load { addr=v9, disp=0, kind=F64, volatile pc_rel } -> d0
     v14  Imm(0)                                           -> x0
     v15  Imm(0)                                           -> x0
-    v16  StoreLocal { off=-1, value=v13, kind=F64 }       -> -
-    v17  LoadLocal { off=-1, kind=I64 }                   -> x1
-    v18  BinopI { op=shr, lhs=v17, rhs_imm=63 }           -> [spill 0]
+    v16  Imm(0)                                           -> x0
+    v17  FpCast { kind=FpBits, value=v13 }                -> x1
+    v18  BinopI { op=shr, lhs=v17, rhs_imm=63 }           -> [spill 5]
     v19  BinopI { op=and, lhs=v17, rhs_imm=9223372036854775807 } -> x0
     v20  BinopI { op=shru, lhs=v19, rhs_imm=52 }          -> x0
     v21  BinopI { op=sub, lhs=v20, rhs_imm=1023 }         -> x7
@@ -534,23 +534,23 @@ fn ent_pc=4 n_params=4 variadic=false locals=1
     v28  Imm(0)                                           -> x0
     v29  BinopI { op=and, lhs=v27, rhs_imm=127 }          -> x6
     v30  BinopI { op=and, lhs=v27, rhs_imm=63 }           -> x2
-    v31  Imm(63)                                          -> x14
-    v32  Binop { op=sub, lhs=v31, rhs=v30 }               -> x14
+    v31  Imm(63)                                          -> x8
+    v32  Binop { op=sub, lhs=v31, rhs=v30 }               -> [spill 3]
     v33  BinopI { op=shru, lhs=v29, rhs_imm=6 }           -> x6
     v34  Neg(v33)                                         -> x6
     v35  BinopI { op=xor, lhs=v34, rhs_imm=-1 }           -> x8
-    v36  Binop { op=shl, lhs=v23, rhs=v30 }               -> x15
-    v37  Binop { op=shru, lhs=v23, rhs=v32 }              -> [spill 1]
-    v38  BinopI { op=shru, lhs=v37, rhs_imm=1 }           -> [spill 1]
-    v39  Binop { op=shl, lhs=v28, rhs=v30 }               -> [spill 2]
-    v40  Binop { op=or, lhs=v39, rhs=v38 }                -> [spill 1]
-    v41  Binop { op=and, lhs=v36, rhs=v35 }               -> [spill 2]
-    v42  Imm(0)                                           -> [spill 3]
-    v43  Binop { op=or, lhs=v41, rhs=v42 }                -> [spill 3]
-    v44  Binop { op=and, lhs=v40, rhs=v35 }               -> [spill 1]
-    v45  Binop { op=and, lhs=v36, rhs=v34 }               -> x15
-    v46  Binop { op=or, lhs=v44, rhs=v45 }                -> [spill 1]
-    v47  Binop { op=shru, lhs=v28, rhs=v30 }              -> x15
+    v36  Binop { op=shl, lhs=v23, rhs=v30 }               -> [spill 4]
+    v37  Binop { op=shru, lhs=v23, rhs=v32 }              -> [spill 6]
+    v38  BinopI { op=shru, lhs=v37, rhs_imm=1 }           -> [spill 6]
+    v39  Binop { op=shl, lhs=v28, rhs=v30 }               -> [spill 7]
+    v40  Binop { op=or, lhs=v39, rhs=v38 }                -> [spill 6]
+    v41  Binop { op=and, lhs=v36, rhs=v35 }               -> [spill 7]
+    v42  Imm(0)                                           -> [spill 8]
+    v43  Binop { op=or, lhs=v41, rhs=v42 }                -> [spill 8]
+    v44  Binop { op=and, lhs=v40, rhs=v35 }               -> [spill 6]
+    v45  Binop { op=and, lhs=v36, rhs=v34 }               -> [spill 4]
+    v46  Binop { op=or, lhs=v44, rhs=v45 }                -> [spill 6]
+    v47  Binop { op=shru, lhs=v28, rhs=v30 }              -> [spill 4]
     v48  Binop { op=shl, lhs=v28, rhs=v32 }               -> x0
     v49  BinopI { op=shl, lhs=v48, rhs_imm=1 }            -> x0
     v50  Binop { op=shru, lhs=v23, rhs=v30 }              -> x2
@@ -622,12 +622,12 @@ fn ent_pc=4 n_params=4 variadic=false locals=1
     v110 Load { addr=v109, disp=0, kind=F64, volatile pc_rel } -> d0
     v111 Imm(0)                                           -> x0
     v112 Imm(0)                                           -> x0
-    v113 StoreLocal { off=-1, value=v110, kind=F64 }      -> -
-    v114 LoadLocal { off=-1, kind=I64 }                   -> x2
+    v113 Imm(0)                                           -> x0
+    v114 FpCast { kind=FpBits, value=v110 }               -> x2
     v115 BinopI { op=shr, lhs=v114, rhs_imm=63 }          -> x1
     v116 BinopI { op=and, lhs=v114, rhs_imm=9223372036854775807 } -> x6
     v117 BinopI { op=shru, lhs=v116, rhs_imm=52 }         -> x6
-    v118 BinopI { op=sub, lhs=v117, rhs_imm=1023 }        -> x14
+    v118 BinopI { op=sub, lhs=v117, rhs_imm=1023 }        -> [spill 3]
     v119 BinopI { op=and, lhs=v114, rhs_imm=4503599627370495 } -> x0
     v120 BinopI { op=or, lhs=v119, rhs_imm=4503599627370496 } -> x0
     v121 BinopI { op=sub, lhs=v117, rhs_imm=1075 }        -> x6
@@ -637,23 +637,23 @@ fn ent_pc=4 n_params=4 variadic=false locals=1
     v125 Imm(0)                                           -> x6
     v126 BinopI { op=and, lhs=v124, rhs_imm=127 }         -> x7
     v127 BinopI { op=and, lhs=v124, rhs_imm=63 }          -> x8
-    v128 Imm(63)                                          -> x15
-    v129 Binop { op=sub, lhs=v128, rhs=v127 }             -> x15
+    v128 Imm(63)                                          -> x9
+    v129 Binop { op=sub, lhs=v128, rhs=v127 }             -> [spill 4]
     v130 BinopI { op=shru, lhs=v126, rhs_imm=6 }          -> x7
     v131 Neg(v130)                                        -> x7
     v132 BinopI { op=xor, lhs=v131, rhs_imm=-1 }          -> x9
-    v133 Binop { op=shl, lhs=v120, rhs=v127 }             -> [spill 0]
-    v134 Binop { op=shru, lhs=v120, rhs=v129 }            -> [spill 1]
-    v135 BinopI { op=shru, lhs=v134, rhs_imm=1 }          -> [spill 1]
-    v136 Binop { op=shl, lhs=v125, rhs=v127 }             -> [spill 2]
-    v137 Binop { op=or, lhs=v136, rhs=v135 }              -> [spill 1]
-    v138 Binop { op=and, lhs=v133, rhs=v132 }             -> [spill 2]
-    v139 Imm(0)                                           -> [spill 3]
-    v140 Binop { op=or, lhs=v138, rhs=v139 }              -> [spill 3]
-    v141 Binop { op=and, lhs=v137, rhs=v132 }             -> [spill 1]
-    v142 Binop { op=and, lhs=v133, rhs=v131 }             -> [spill 0]
-    v143 Binop { op=or, lhs=v141, rhs=v142 }              -> [spill 1]
-    v144 Binop { op=shru, lhs=v125, rhs=v127 }            -> [spill 0]
+    v133 Binop { op=shl, lhs=v120, rhs=v127 }             -> [spill 5]
+    v134 Binop { op=shru, lhs=v120, rhs=v129 }            -> [spill 6]
+    v135 BinopI { op=shru, lhs=v134, rhs_imm=1 }          -> [spill 6]
+    v136 Binop { op=shl, lhs=v125, rhs=v127 }             -> [spill 7]
+    v137 Binop { op=or, lhs=v136, rhs=v135 }              -> [spill 6]
+    v138 Binop { op=and, lhs=v133, rhs=v132 }             -> [spill 7]
+    v139 Imm(0)                                           -> [spill 8]
+    v140 Binop { op=or, lhs=v138, rhs=v139 }              -> [spill 8]
+    v141 Binop { op=and, lhs=v137, rhs=v132 }             -> [spill 6]
+    v142 Binop { op=and, lhs=v133, rhs=v131 }             -> [spill 5]
+    v143 Binop { op=or, lhs=v141, rhs=v142 }              -> [spill 6]
+    v144 Binop { op=shru, lhs=v125, rhs=v127 }            -> [spill 5]
     v145 Binop { op=shl, lhs=v125, rhs=v129 }             -> x6
     v146 BinopI { op=shl, lhs=v145, rhs_imm=1 }           -> x6
     v147 Binop { op=shru, lhs=v120, rhs=v127 }            -> x0
@@ -735,17 +735,17 @@ fn ent_pc=4 n_params=4 variadic=false locals=1
     terminator Return(v214)   (exit_acc=v214)
 ; --- SSA dump (ok=true) ent_pc=5 ---
 ; name=chk_from_fp_neg
-fn ent_pc=5 n_params=4 variadic=false locals=1
-  spill_count=4 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
+fn ent_pc=5 n_params=4 variadic=false locals=0
+  spill_count=5 gpr_used=[3, 12, 13] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=F64)                            -> d0
     v2   Imm(0)                                           -> x0
-    v3   ParamRef(1, kind=I64)                            -> x14
+    v3   ParamRef(1, kind=I64)                            -> [spill 0]
     v4   Imm(0)                                           -> x0
-    v5   ParamRef(2, kind=I64)                            -> x15
+    v5   ParamRef(2, kind=I64)                            -> [spill 1]
     v6   Imm(0)                                           -> x0
-    v7   ParamRef(3, kind=I32)                            -> [spill 0]
+    v7   ParamRef(3, kind=I32)                            -> [spill 2]
     v8   Imm(0)                                           -> x0
     v9   ImmData(32)                                      -> x0
     v10  Imm(0)                                           -> x0
@@ -754,8 +754,8 @@ fn ent_pc=5 n_params=4 variadic=false locals=1
     v13  Load { addr=v9, disp=0, kind=F64, volatile pc_rel } -> d0
     v14  Imm(0)                                           -> x0
     v15  Imm(0)                                           -> x0
-    v16  StoreLocal { off=-1, value=v13, kind=F64 }       -> -
-    v17  LoadLocal { off=-1, kind=I64 }                   -> x2
+    v16  Imm(0)                                           -> x0
+    v17  FpCast { kind=FpBits, value=v13 }                -> x2
     v18  BinopI { op=shr, lhs=v17, rhs_imm=63 }           -> x1
     v19  BinopI { op=and, lhs=v17, rhs_imm=9223372036854775807 } -> x8
     v20  BinopI { op=shru, lhs=v19, rhs_imm=52 }          -> x8
@@ -775,16 +775,16 @@ fn ent_pc=5 n_params=4 variadic=false locals=1
     v34  Neg(v33)                                         -> x7
     v35  BinopI { op=xor, lhs=v34, rhs_imm=-1 }           -> x9
     v36  Binop { op=shl, lhs=v23, rhs=v30 }               -> x13
-    v37  Binop { op=shru, lhs=v23, rhs=v32 }              -> [spill 1]
-    v38  BinopI { op=shru, lhs=v37, rhs_imm=1 }           -> [spill 1]
-    v39  Binop { op=shl, lhs=v28, rhs=v30 }               -> [spill 2]
-    v40  Binop { op=or, lhs=v39, rhs=v38 }                -> [spill 1]
-    v41  Binop { op=and, lhs=v36, rhs=v35 }               -> [spill 2]
-    v42  Imm(0)                                           -> [spill 3]
-    v43  Binop { op=or, lhs=v41, rhs=v42 }                -> [spill 3]
-    v44  Binop { op=and, lhs=v40, rhs=v35 }               -> [spill 1]
+    v37  Binop { op=shru, lhs=v23, rhs=v32 }              -> [spill 3]
+    v38  BinopI { op=shru, lhs=v37, rhs_imm=1 }           -> [spill 3]
+    v39  Binop { op=shl, lhs=v28, rhs=v30 }               -> [spill 4]
+    v40  Binop { op=or, lhs=v39, rhs=v38 }                -> [spill 3]
+    v41  Binop { op=and, lhs=v36, rhs=v35 }               -> [spill 4]
+    v42  Imm(0)                                           -> [spill 5]
+    v43  Binop { op=or, lhs=v41, rhs=v42 }                -> [spill 5]
+    v44  Binop { op=and, lhs=v40, rhs=v35 }               -> [spill 3]
     v45  Binop { op=and, lhs=v36, rhs=v34 }               -> x13
-    v46  Binop { op=or, lhs=v44, rhs=v45 }                -> [spill 1]
+    v46  Binop { op=or, lhs=v44, rhs=v45 }                -> [spill 3]
     v47  Binop { op=shru, lhs=v28, rhs=v30 }              -> x13
     v48  Binop { op=shl, lhs=v28, rhs=v32 }               -> x6
     v49  BinopI { op=shl, lhs=v48, rhs_imm=1 }            -> x6
@@ -863,12 +863,12 @@ fn ent_pc=5 n_params=4 variadic=false locals=1
     terminator Return(v114)   (exit_acc=v114)
 ; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=main
-fn ent_pc=6 n_params=0 variadic=false locals=3
-  spill_count=1 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
+fn ent_pc=6 n_params=0 variadic=false locals=0
+  spill_count=5 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x7
-    v2   Imm(1)                                           -> x0
+    v2   Imm(1)                                           -> -
     v3   Call { target_pc=3, args=[v1, v1, v1, v1, v1, v1, v2], fixed_args=7, fp_return=false, fp_arg_mask=0x0 } -> x0
     v4   Extend { value=v3, kind=I32 }                    -> x1
     v5   Imm(0)                                           -> x1
@@ -882,7 +882,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v9   Imm(1)                                           -> x6
     v10  Imm(4607182418800017408)                         -> x2
     v11  Imm(1065353216)                                  -> x1
-    v12  Imm(5)                                           -> x0
+    v12  Imm(5)                                           -> -
     v13  Call { target_pc=3, args=[v8, v9, v10, v11, v10, v11, v12], fixed_args=7, fp_return=false, fp_arg_mask=0x0 } -> x0
     v14  Extend { value=v13, kind=I32 }                   -> x1
     v15  Imm(0)                                           -> x1
@@ -896,7 +896,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v19  Imm(5)                                           -> x6
     v20  Imm(4617315517961601024)                         -> x2
     v21  Imm(1084227584)                                  -> x1
-    v22  Imm(9)                                           -> x0
+    v22  Imm(9)                                           -> -
     v23  Call { target_pc=3, args=[v18, v19, v20, v21, v20, v21, v22], fixed_args=7, fp_return=false, fp_arg_mask=0x0 } -> x0
     v24  Extend { value=v23, kind=I32 }                   -> x1
     v25  Imm(0)                                           -> x1
@@ -910,7 +910,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v29  Imm(9007199254740992)                            -> x6
     v30  Imm(4845873199050653696)                         -> x2
     v31  Imm(1509949440)                                  -> x1
-    v32  Imm(13)                                          -> x0
+    v32  Imm(13)                                          -> -
     v33  Call { target_pc=3, args=[v28, v29, v30, v31, v30, v31, v32], fixed_args=7, fp_return=false, fp_arg_mask=0x0 } -> x0
     v34  Extend { value=v33, kind=I32 }                   -> x1
     v35  Imm(0)                                           -> x1
@@ -925,7 +925,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v40  Imm(9007199254740993)                            -> x6
     v41  Imm(4845873199050653696)                         -> x2
     v42  Imm(1509949440)                                  -> x1
-    v43  Imm(17)                                          -> x0
+    v43  Imm(17)                                          -> -
     v44  Call { target_pc=3, args=[v38, v40, v41, v42, v41, v42, v43], fixed_args=7, fp_return=false, fp_arg_mask=0x0 } -> x0
     v45  Extend { value=v44, kind=I32 }                   -> x1
     v46  Imm(0)                                           -> x1
@@ -940,7 +940,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v51  Imm(9007199254740995)                            -> x6
     v52  Imm(4845873199050653698)                         -> x2
     v53  Imm(1509949440)                                  -> x1
-    v54  Imm(21)                                          -> x0
+    v54  Imm(21)                                          -> -
     v55  Call { target_pc=3, args=[v49, v51, v52, v53, v52, v53, v54], fixed_args=7, fp_return=false, fp_arg_mask=0x0 } -> x0
     v56  Extend { value=v55, kind=I32 }                   -> x1
     v57  Imm(0)                                           -> x1
@@ -954,7 +954,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v61  Imm(-1)                                          -> x6
     v62  Imm(4895412794951729152)                         -> x2
     v63  Imm(1602224128)                                  -> x1
-    v64  Imm(25)                                          -> x0
+    v64  Imm(25)                                          -> -
     v65  Call { target_pc=3, args=[v60, v61, v62, v63, v62, v63, v64], fixed_args=7, fp_return=false, fp_arg_mask=0x0 } -> x0
     v66  Extend { value=v65, kind=I32 }                   -> x1
     v67  Imm(0)                                           -> x1
@@ -968,7 +968,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v71  Imm(-9223372036854775808)                        -> x6
     v72  Imm(4890909195324358656)                         -> x2
     v73  Imm(1593835520)                                  -> x1
-    v74  Imm(29)                                          -> x0
+    v74  Imm(29)                                          -> -
     v75  Call { target_pc=3, args=[v70, v71, v72, v73, v72, v73, v74], fixed_args=7, fp_return=false, fp_arg_mask=0x0 } -> x0
     v76  Extend { value=v75, kind=I32 }                   -> x1
     v77  Imm(0)                                           -> x1
@@ -982,7 +982,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v81  Imm(0)                                           -> x6
     v82  Imm(4895412794951729152)                         -> x2
     v83  Imm(1602224128)                                  -> x1
-    v84  Imm(33)                                          -> x0
+    v84  Imm(33)                                          -> -
     v85  Call { target_pc=3, args=[v80, v81, v82, v83, v82, v83, v84], fixed_args=7, fp_return=false, fp_arg_mask=0x0 } -> x0
     v86  Extend { value=v85, kind=I32 }                   -> x1
     v87  Imm(0)                                           -> x1
@@ -996,7 +996,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v91  Imm(0)                                           -> x6
     v92  Imm(4905545894113312768)                         -> x2
     v93  Imm(1621098496)                                  -> x1
-    v94  Imm(37)                                          -> x0
+    v94  Imm(37)                                          -> -
     v95  Call { target_pc=3, args=[v90, v91, v92, v93, v92, v93, v94], fixed_args=7, fp_return=false, fp_arg_mask=0x0 } -> x0
     v96  Extend { value=v95, kind=I32 }                   -> x1
     v97  Imm(0)                                           -> x1
@@ -1010,7 +1010,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v101 Imm(1)                                           -> x6
     v102 Imm(5111585577065512960)                         -> x2
     v103 Imm(2004877312)                                  -> x1
-    v104 Imm(41)                                          -> x0
+    v104 Imm(41)                                          -> -
     v105 Call { target_pc=3, args=[v100, v101, v102, v103, v102, v103, v104], fixed_args=7, fp_return=false, fp_arg_mask=0x0 } -> x0
     v106 Extend { value=v105, kind=I32 }                  -> x1
     v107 Imm(0)                                           -> x1
@@ -1025,7 +1025,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v112 Imm(1)                                           -> x6
     v113 Imm(5111585577065512976)                         -> x2
     v114 Imm(2004877312)                                  -> x1
-    v115 Imm(45)                                          -> x0
+    v115 Imm(45)                                          -> -
     v116 Call { target_pc=3, args=[v111, v112, v113, v114, v113, v114, v115], fixed_args=7, fp_return=false, fp_arg_mask=0x0 } -> x0
     v117 Extend { value=v116, kind=I32 }                  -> x1
     v118 Imm(0)                                           -> x1
@@ -1040,7 +1040,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v123 Imm(2139095040)                                  -> x1
     v124 Imm(-4616189618054758400)                        -> x8
     v125 Imm(3212836864)                                  -> x9
-    v126 Imm(49)                                          -> x0
+    v126 Imm(49)                                          -> -
     v127 Call { target_pc=3, args=[v121, v121, v122, v123, v124, v125, v126], fixed_args=7, fp_return=false, fp_arg_mask=0x0 } -> x0
     v128 Extend { value=v127, kind=I32 }                  -> x1
     v129 Imm(0)                                           -> x1
@@ -1056,7 +1056,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v135 Imm(2130706432)                                  -> x1
     v136 Imm(-4044232465378705408)                        -> x8
     v137 Imm(4278190080)                                  -> x9
-    v138 Imm(53)                                          -> x0
+    v138 Imm(53)                                          -> -
     v139 Call { target_pc=3, args=[v132, v133, v134, v135, v136, v137, v138], fixed_args=7, fp_return=false, fp_arg_mask=0x0 } -> x0
     v140 Extend { value=v139, kind=I32 }                  -> x1
     v141 Imm(0)                                           -> x1
@@ -1070,7 +1070,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v145 Imm(-1)                                          -> x6
     v146 Imm(5179139571476070400)                         -> x2
     v147 Imm(2130706432)                                  -> x1
-    v148 Imm(57)                                          -> x0
+    v148 Imm(57)                                          -> -
     v149 Call { target_pc=3, args=[v144, v145, v146, v147, v146, v147, v148], fixed_args=7, fp_return=false, fp_arg_mask=0x0 } -> x0
     v150 Extend { value=v149, kind=I32 }                  -> x1
     v151 Imm(0)                                           -> x1
@@ -1084,7 +1084,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v155 Imm(-8603657889541918977)                        -> x6
     v156 Imm(5129919054136829560)                         -> x2
     v157 Imm(2039026074)                                  -> x1
-    v158 Imm(61)                                          -> x0
+    v158 Imm(61)                                          -> -
     v159 Call { target_pc=3, args=[v154, v155, v156, v157, v156, v157, v158], fixed_args=7, fp_return=false, fp_arg_mask=0x0 } -> x0
     v160 Extend { value=v159, kind=I32 }                  -> x1
     v161 Imm(0)                                           -> x1
@@ -1105,7 +1105,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v170 Extend { value=v167, kind=I32 }                  -> x1
     terminator Return(v166)   (exit_acc=v166)
   block 34  start_pc=0
-    v171 Imm(4616187366254944715)                         -> x0
+    v171 Imm(4616187366254944715)                         -> d0
     v172 Imm(0)                                           -> x7
     v173 Imm(3)                                           -> x6
     v174 Imm(67)                                          -> x2
@@ -1118,7 +1118,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v179 Extend { value=v176, kind=I32 }                  -> x1
     terminator Return(v175)   (exit_acc=v175)
   block 36  start_pc=0
-    v180 Imm(4602678819172646912)                         -> x0
+    v180 Imm(4602678819172646912)                         -> d0
     v181 Imm(0)                                           -> x7
     v182 Imm(69)                                          -> x2
     v183 Call { target_pc=4, args=[v180, v181, v181, v182], fixed_args=4, fp_return=false, fp_arg_mask=0x1 } -> x0
@@ -1131,7 +1131,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     terminator Return(v183)   (exit_acc=v183)
   block 38  start_pc=0
     v188 Imm(4602678819172646912)                         -> x0
-    v189 Imm(-4620693217682128896)                        -> x0
+    v189 Imm(-4620693217682128896)                        -> d0
     v190 Imm(0)                                           -> x7
     v191 Imm(71)                                          -> x2
     v192 Call { target_pc=4, args=[v189, v190, v190, v191], fixed_args=4, fp_return=false, fp_arg_mask=0x1 } -> x0
@@ -1144,7 +1144,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     terminator Return(v192)   (exit_acc=v192)
   block 40  start_pc=0
     v197 Imm(4616187366254944715)                         -> x0
-    v198 Imm(-4607184670599831093)                        -> x0
+    v198 Imm(-4607184670599831093)                        -> d0
     v199 Imm(-1)                                          -> x7
     v200 Imm(-3)                                          -> x6
     v201 Imm(73)                                          -> x2
@@ -1157,7 +1157,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v206 Extend { value=v203, kind=I32 }                  -> x1
     terminator Return(v202)   (exit_acc=v202)
   block 42  start_pc=0
-    v207 Imm(4893729814446988160)                         -> x0
+    v207 Imm(4893729814446988160)                         -> d0
     v208 Imm(0)                                           -> x7
     v209 Imm(-3446744073709551616)                        -> x6
     v210 Imm(75)                                          -> x2
@@ -1170,7 +1170,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v215 Extend { value=v212, kind=I32 }                  -> x1
     terminator Return(v211)   (exit_acc=v211)
   block 44  start_pc=0
-    v216 Imm(4895412794951729152)                         -> x0
+    v216 Imm(4895412794951729152)                         -> d0
     v217 Imm(1)                                           -> x7
     v218 Imm(0)                                           -> x6
     v219 Imm(77)                                          -> x2
@@ -1183,7 +1183,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v224 Extend { value=v221, kind=I32 }                  -> x1
     terminator Return(v220)   (exit_acc=v220)
   block 46  start_pc=0
-    v225 Imm(5026017184145473536)                         -> x0
+    v225 Imm(5026017184145473536)                         -> d0
     v226 Imm(536870912)                                   -> x7
     v227 Imm(0)                                           -> x6
     v228 Imm(79)                                          -> x2
@@ -1197,7 +1197,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     terminator Return(v229)   (exit_acc=v229)
   block 48  start_pc=0
     v234 Imm(5179139571476070400)                         -> x0
-    v235 Imm(-4044232465378705408)                        -> x0
+    v235 Imm(-4044232465378705408)                        -> d0
     v236 Imm(-9223372036854775808)                        -> x7
     v237 Imm(0)                                           -> x6
     v238 Imm(81)                                          -> x2
@@ -1211,15 +1211,15 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     terminator Return(v239)   (exit_acc=v239)
   block 50  start_pc=0
     v244 ImmData(40)                                      -> x0
-    v245 Imm(1075838976)                                  -> x0 [f32]
+    v245 Imm(1075838976)                                  -> d0 [f32]
     v246 Store { addr=v244, disp=0, value=v245, kind=F32, volatile pc_rel } -> -
     v247 Load { addr=v244, disp=0, kind=F32, volatile pc_rel } -> d0 [f32]
     v248 Imm(0)                                           -> x0
     v249 FpCast { kind=F32ToF64, value=v247 }             -> d0
     v250 Imm(0)                                           -> x0
-    v251 StoreLocal { off=-1, value=v249, kind=F64 }      -> -
-    v252 LoadLocal { off=-1, kind=I64 }                   -> x0
-    v253 BinopI { op=shr, lhs=v252, rhs_imm=63 }          -> x3
+    v251 Imm(0)                                           -> x0
+    v252 FpCast { kind=FpBits, value=v249 }               -> x0
+    v253 BinopI { op=shr, lhs=v252, rhs_imm=63 }          -> [spill 0]
     v254 BinopI { op=and, lhs=v252, rhs_imm=9223372036854775807 } -> x1
     v255 BinopI { op=shru, lhs=v254, rhs_imm=52 }         -> x1
     v256 BinopI { op=sub, lhs=v255, rhs_imm=1023 }        -> x2
@@ -1233,22 +1233,22 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v264 BinopI { op=and, lhs=v262, rhs_imm=127 }         -> x8
     v265 BinopI { op=and, lhs=v262, rhs_imm=63 }          -> x1
     v266 Imm(63)                                          -> x9
-    v267 Binop { op=sub, lhs=v266, rhs=v265 }             -> x12
+    v267 Binop { op=sub, lhs=v266, rhs=v265 }             -> [spill 1]
     v268 BinopI { op=shru, lhs=v264, rhs_imm=6 }          -> x8
     v269 Neg(v268)                                        -> x8
     v270 BinopI { op=xor, lhs=v269, rhs_imm=-1 }          -> x9
-    v271 Binop { op=shl, lhs=v258, rhs=v265 }             -> x13
-    v272 Binop { op=shru, lhs=v258, rhs=v267 }            -> x14
-    v273 BinopI { op=shru, lhs=v272, rhs_imm=1 }          -> x14
-    v274 Binop { op=shl, lhs=v263, rhs=v265 }             -> x14
-    v275 Binop { op=or, lhs=v274, rhs=v273 }              -> x14
-    v276 Binop { op=and, lhs=v271, rhs=v270 }             -> x13
-    v277 Imm(0)                                           -> x14
-    v278 Binop { op=or, lhs=v276, rhs=v277 }              -> x14
-    v279 Binop { op=and, lhs=v275, rhs=v270 }             -> x14
-    v280 Binop { op=and, lhs=v271, rhs=v269 }             -> x14
-    v281 Binop { op=or, lhs=v279, rhs=v280 }              -> x14
-    v282 Binop { op=shru, lhs=v263, rhs=v265 }            -> x14
+    v271 Binop { op=shl, lhs=v258, rhs=v265 }             -> [spill 2]
+    v272 Binop { op=shru, lhs=v258, rhs=v267 }            -> x3
+    v273 BinopI { op=shru, lhs=v272, rhs_imm=1 }          -> x3
+    v274 Binop { op=shl, lhs=v263, rhs=v265 }             -> x3
+    v275 Binop { op=or, lhs=v274, rhs=v273 }              -> x3
+    v276 Binop { op=and, lhs=v271, rhs=v270 }             -> [spill 2]
+    v277 Imm(0)                                           -> x3
+    v278 Binop { op=or, lhs=v276, rhs=v277 }              -> x3
+    v279 Binop { op=and, lhs=v275, rhs=v270 }             -> x3
+    v280 Binop { op=and, lhs=v271, rhs=v269 }             -> x3
+    v281 Binop { op=or, lhs=v279, rhs=v280 }              -> x3
+    v282 Binop { op=shru, lhs=v263, rhs=v265 }            -> [spill 3]
     v283 Binop { op=shl, lhs=v263, rhs=v267 }             -> x7
     v284 BinopI { op=shl, lhs=v283, rhs_imm=1 }           -> x7
     v285 Binop { op=shru, lhs=v258, rhs=v265 }            -> x1
@@ -1278,7 +1278,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v309 Binop { op=or, lhs=v307, rhs=v304 }              -> x0
     v310 Binop { op=and, lhs=v302, rhs=v306 }             -> x1
     v311 Binop { op=or, lhs=v310, rhs=v304 }              -> x1
-    v312 BinopI { op=xor, lhs=v253, rhs_imm=-1 }          -> x3
+    v312 BinopI { op=xor, lhs=v253, rhs_imm=-1 }          -> x1
     v313 Binop { op=and, lhs=v309, rhs=v312 }             -> x0
     v314 Binop { op=and, lhs=v311, rhs=v312 }             -> x1
     v315 Imm(0)                                           -> x1
@@ -1294,9 +1294,9 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v323 Imm(0)                                           -> x0
     v324 FpCast { kind=F32ToF64, value=v322 }             -> d0
     v325 Imm(0)                                           -> x0
-    v326 StoreLocal { off=-1, value=v324, kind=F64 }      -> -
-    v327 LoadLocal { off=-1, kind=I64 }                   -> x0
-    v328 BinopI { op=shr, lhs=v327, rhs_imm=63 }          -> x3
+    v326 Imm(0)                                           -> x0
+    v327 FpCast { kind=FpBits, value=v324 }               -> x0
+    v328 BinopI { op=shr, lhs=v327, rhs_imm=63 }          -> [spill 0]
     v329 BinopI { op=and, lhs=v327, rhs_imm=9223372036854775807 } -> x1
     v330 BinopI { op=shru, lhs=v329, rhs_imm=52 }         -> x1
     v331 BinopI { op=sub, lhs=v330, rhs_imm=1023 }        -> x2
@@ -1310,18 +1310,18 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v339 BinopI { op=and, lhs=v337, rhs_imm=127 }         -> x8
     v340 BinopI { op=and, lhs=v337, rhs_imm=63 }          -> x1
     v341 Imm(63)                                          -> x9
-    v342 Binop { op=sub, lhs=v341, rhs=v340 }             -> x12
+    v342 Binop { op=sub, lhs=v341, rhs=v340 }             -> [spill 1]
     v343 BinopI { op=shru, lhs=v339, rhs_imm=6 }          -> x8
     v344 Neg(v343)                                        -> x8
     v345 BinopI { op=xor, lhs=v344, rhs_imm=-1 }          -> x9
-    v346 Binop { op=shl, lhs=v333, rhs=v340 }             -> x13
+    v346 Binop { op=shl, lhs=v333, rhs=v340 }             -> [spill 2]
     v347 Binop { op=shru, lhs=v333, rhs=v342 }            -> x6
     v348 BinopI { op=shru, lhs=v347, rhs_imm=1 }          -> x6
-    v349 Binop { op=shl, lhs=v338, rhs=v340 }             -> x12
+    v349 Binop { op=shl, lhs=v338, rhs=v340 }             -> [spill 1]
     v350 Binop { op=or, lhs=v349, rhs=v348 }              -> x6
-    v351 Binop { op=and, lhs=v346, rhs=v345 }             -> x12
-    v352 Imm(0)                                           -> x12
-    v353 Binop { op=or, lhs=v351, rhs=v352 }              -> x12
+    v351 Binop { op=and, lhs=v346, rhs=v345 }             -> x3
+    v352 Imm(0)                                           -> x3
+    v353 Binop { op=or, lhs=v351, rhs=v352 }              -> x3
     v354 Binop { op=and, lhs=v350, rhs=v345 }             -> x6
     v355 Binop { op=and, lhs=v346, rhs=v344 }             -> x8
     v356 Binop { op=or, lhs=v354, rhs=v355 }              -> x6
@@ -1355,8 +1355,8 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v384 Binop { op=or, lhs=v382, rhs=v379 }              -> x6
     v385 Binop { op=and, lhs=v377, rhs=v381 }             -> x1
     v386 Binop { op=or, lhs=v385, rhs=v379 }              -> x0
-    v387 BinopI { op=xor, lhs=v328, rhs_imm=-1 }          -> x3
-    v388 Binop { op=and, lhs=v384, rhs=v387 }             -> x1
+    v387 BinopI { op=xor, lhs=v328, rhs_imm=-1 }          -> x1
+    v388 Binop { op=and, lhs=v384, rhs=v387 }             -> x2
     v389 Binop { op=and, lhs=v386, rhs=v387 }             -> x0
     v390 Imm(0)                                           -> x1
     v391 Imm(0)                                           -> x1
@@ -1380,14 +1380,14 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
   block 53  start_pc=0
     v406 ImmData(40)                                      -> x0
     v407 Imm(1080033280)                                  -> x0 [f32]
-    v408 Imm(3227516928)                                  -> x0 [f32]
+    v408 Imm(3227516928)                                  -> d0 [f32]
     v409 Store { addr=v406, disp=0, value=v408, kind=F32, volatile pc_rel } -> -
     v410 Load { addr=v406, disp=0, kind=F32, volatile pc_rel } -> d0 [f32]
     v411 Imm(0)                                           -> x0
     v412 FpCast { kind=F32ToF64, value=v410 }             -> d0
     v413 Imm(0)                                           -> x0
-    v414 StoreLocal { off=-1, value=v412, kind=F64 }      -> -
-    v415 LoadLocal { off=-1, kind=I64 }                   -> x0
+    v414 Imm(0)                                           -> x0
+    v415 FpCast { kind=FpBits, value=v412 }               -> x0
     v416 BinopI { op=shr, lhs=v415, rhs_imm=63 }          -> x2
     v417 BinopI { op=and, lhs=v415, rhs_imm=9223372036854775807 } -> x1
     v418 BinopI { op=shru, lhs=v417, rhs_imm=52 }         -> x1
@@ -1401,23 +1401,23 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v426 Imm(0)                                           -> x8
     v427 BinopI { op=and, lhs=v425, rhs_imm=127 }         -> x9
     v428 BinopI { op=and, lhs=v425, rhs_imm=63 }          -> x1
-    v429 Imm(63)                                          -> x3
-    v430 Binop { op=sub, lhs=v429, rhs=v428 }             -> x12
+    v429 Imm(63)                                          -> [spill 0]
+    v430 Binop { op=sub, lhs=v429, rhs=v428 }             -> [spill 1]
     v431 BinopI { op=shru, lhs=v427, rhs_imm=6 }          -> x9
     v432 Neg(v431)                                        -> x9
-    v433 BinopI { op=xor, lhs=v432, rhs_imm=-1 }          -> x3
-    v434 Binop { op=shl, lhs=v421, rhs=v428 }             -> x13
-    v435 Binop { op=shru, lhs=v421, rhs=v430 }            -> x14
-    v436 BinopI { op=shru, lhs=v435, rhs_imm=1 }          -> x14
-    v437 Binop { op=shl, lhs=v426, rhs=v428 }             -> x14
-    v438 Binop { op=or, lhs=v437, rhs=v436 }              -> x14
-    v439 Binop { op=and, lhs=v434, rhs=v433 }             -> x13
-    v440 Imm(0)                                           -> x14
-    v441 Binop { op=or, lhs=v439, rhs=v440 }              -> x14
-    v442 Binop { op=and, lhs=v438, rhs=v433 }             -> x14
-    v443 Binop { op=and, lhs=v434, rhs=v432 }             -> x14
-    v444 Binop { op=or, lhs=v442, rhs=v443 }              -> x14
-    v445 Binop { op=shru, lhs=v426, rhs=v428 }            -> x14
+    v433 BinopI { op=xor, lhs=v432, rhs_imm=-1 }          -> [spill 0]
+    v434 Binop { op=shl, lhs=v421, rhs=v428 }             -> [spill 2]
+    v435 Binop { op=shru, lhs=v421, rhs=v430 }            -> x3
+    v436 BinopI { op=shru, lhs=v435, rhs_imm=1 }          -> x3
+    v437 Binop { op=shl, lhs=v426, rhs=v428 }             -> x3
+    v438 Binop { op=or, lhs=v437, rhs=v436 }              -> x3
+    v439 Binop { op=and, lhs=v434, rhs=v433 }             -> [spill 2]
+    v440 Imm(0)                                           -> x3
+    v441 Binop { op=or, lhs=v439, rhs=v440 }              -> x3
+    v442 Binop { op=and, lhs=v438, rhs=v433 }             -> x3
+    v443 Binop { op=and, lhs=v434, rhs=v432 }             -> x3
+    v444 Binop { op=or, lhs=v442, rhs=v443 }              -> x3
+    v445 Binop { op=shru, lhs=v426, rhs=v428 }            -> [spill 3]
     v446 Binop { op=shl, lhs=v426, rhs=v430 }             -> x8
     v447 BinopI { op=shl, lhs=v446, rhs_imm=1 }           -> x8
     v448 Binop { op=shru, lhs=v421, rhs=v428 }            -> x1
@@ -1471,12 +1471,12 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v494 Imm(0)                                           -> x0
     v495 FpCast { kind=F32ToF64, value=v493 }             -> d0
     v496 Imm(0)                                           -> x0
-    v497 StoreLocal { off=-1, value=v495, kind=F64 }      -> -
-    v498 LoadLocal { off=-1, kind=I64 }                   -> x1
+    v497 Imm(0)                                           -> x0
+    v498 FpCast { kind=FpBits, value=v495 }               -> x1
     v499 BinopI { op=shr, lhs=v498, rhs_imm=63 }          -> x0
     v500 BinopI { op=and, lhs=v498, rhs_imm=9223372036854775807 } -> x2
     v501 BinopI { op=shru, lhs=v500, rhs_imm=52 }         -> x2
-    v502 BinopI { op=sub, lhs=v501, rhs_imm=1023 }        -> x3
+    v502 BinopI { op=sub, lhs=v501, rhs_imm=1023 }        -> [spill 0]
     v503 BinopI { op=and, lhs=v498, rhs_imm=4503599627370495 } -> x1
     v504 BinopI { op=or, lhs=v503, rhs_imm=4503599627370496 } -> x7
     v505 BinopI { op=sub, lhs=v501, rhs_imm=1075 }        -> x2
@@ -1486,23 +1486,23 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v509 Imm(0)                                           -> x8
     v510 BinopI { op=and, lhs=v508, rhs_imm=127 }         -> x6
     v511 BinopI { op=and, lhs=v508, rhs_imm=63 }          -> x2
-    v512 Imm(63)                                          -> x12
-    v513 Binop { op=sub, lhs=v512, rhs=v511 }             -> x12
+    v512 Imm(63)                                          -> x9
+    v513 Binop { op=sub, lhs=v512, rhs=v511 }             -> [spill 1]
     v514 BinopI { op=shru, lhs=v510, rhs_imm=6 }          -> x6
     v515 Neg(v514)                                        -> x9
     v516 BinopI { op=xor, lhs=v515, rhs_imm=-1 }          -> x6
-    v517 Binop { op=shl, lhs=v504, rhs=v511 }             -> x13
-    v518 Binop { op=shru, lhs=v504, rhs=v513 }            -> x14
-    v519 BinopI { op=shru, lhs=v518, rhs_imm=1 }          -> x14
-    v520 Binop { op=shl, lhs=v509, rhs=v511 }             -> x15
-    v521 Binop { op=or, lhs=v520, rhs=v519 }              -> x14
-    v522 Binop { op=and, lhs=v517, rhs=v516 }             -> x15
-    v523 Imm(0)                                           -> [spill 0]
-    v524 Binop { op=or, lhs=v522, rhs=v523 }              -> [spill 0]
-    v525 Binop { op=and, lhs=v521, rhs=v516 }             -> x14
-    v526 Binop { op=and, lhs=v517, rhs=v515 }             -> x13
-    v527 Binop { op=or, lhs=v525, rhs=v526 }              -> x14
-    v528 Binop { op=shru, lhs=v509, rhs=v511 }            -> x13
+    v517 Binop { op=shl, lhs=v504, rhs=v511 }             -> [spill 2]
+    v518 Binop { op=shru, lhs=v504, rhs=v513 }            -> [spill 3]
+    v519 BinopI { op=shru, lhs=v518, rhs_imm=1 }          -> [spill 3]
+    v520 Binop { op=shl, lhs=v509, rhs=v511 }             -> [spill 4]
+    v521 Binop { op=or, lhs=v520, rhs=v519 }              -> [spill 3]
+    v522 Binop { op=and, lhs=v517, rhs=v516 }             -> [spill 4]
+    v523 Imm(0)                                           -> x3
+    v524 Binop { op=or, lhs=v522, rhs=v523 }              -> x3
+    v525 Binop { op=and, lhs=v521, rhs=v516 }             -> [spill 3]
+    v526 Binop { op=and, lhs=v517, rhs=v515 }             -> [spill 2]
+    v527 Binop { op=or, lhs=v525, rhs=v526 }              -> [spill 3]
+    v528 Binop { op=shru, lhs=v509, rhs=v511 }            -> [spill 2]
     v529 Binop { op=shl, lhs=v509, rhs=v513 }             -> x8
     v530 BinopI { op=shl, lhs=v529, rhs_imm=1 }           -> x8
     v531 Binop { op=shru, lhs=v504, rhs=v511 }            -> x2
@@ -1513,19 +1513,19 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v536 Binop { op=and, lhs=v528, rhs=v516 }             -> x6
     v537 Binop { op=or, lhs=v536, rhs=v523 }              -> x2
     v538 BinopI { op=xor, lhs=v506, rhs_imm=-1 }          -> x2
-    v539 Binop { op=and, lhs=v522, rhs=v538 }             -> x15
+    v539 Binop { op=and, lhs=v522, rhs=v538 }             -> x7
     v540 Binop { op=and, lhs=v535, rhs=v506 }             -> x9
-    v541 Binop { op=or, lhs=v539, rhs=v540 }              -> x9
+    v541 Binop { op=or, lhs=v539, rhs=v540 }              -> x7
     v542 Binop { op=and, lhs=v527, rhs=v538 }             -> x2
     v543 Binop { op=and, lhs=v536, rhs=v506 }             -> x1
     v544 Binop { op=or, lhs=v542, rhs=v543 }              -> x2
     v545 BinopI { op=shr, lhs=v502, rhs_imm=63 }          -> x1
     v546 BinopI { op=xor, lhs=v545, rhs_imm=-1 }          -> x1
-    v547 Binop { op=and, lhs=v541, rhs=v546 }             -> x9
+    v547 Binop { op=and, lhs=v541, rhs=v546 }             -> x7
     v548 Binop { op=and, lhs=v544, rhs=v546 }             -> x2
     v549 BinopI { op=ge, lhs=v502, rhs_imm=128 }          -> x1
     v550 Neg(v549)                                        -> x1
-    v551 Binop { op=xor, lhs=v547, rhs=v499 }             -> x9
+    v551 Binop { op=xor, lhs=v547, rhs=v499 }             -> x7
     v552 Binop { op=xor, lhs=v548, rhs=v499 }             -> x2
     v553 Binop { op=ult, lhs=v551, rhs=v499 }             -> x6
     v554 Binop { op=sub, lhs=v551, rhs=v499 }             -> x7
@@ -1637,21 +1637,21 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v656 BinopI { op=ne, lhs=v650, rhs_imm=0 }            -> x9
     v657 Binop { op=mul, lhs=v655, rhs=v656 }             -> x6
     v658 Binop { op=and, lhs=v591, rhs=v657 }             -> x6
-    v659 BinopI { op=ne, lhs=v658, rhs_imm=0 }            -> x12
-    v660 BinopI { op=and, lhs=v650, rhs_imm=127 }         -> x3
+    v659 BinopI { op=ne, lhs=v658, rhs_imm=0 }            -> [spill 1]
+    v660 BinopI { op=and, lhs=v650, rhs_imm=127 }         -> [spill 0]
     v661 BinopI { op=and, lhs=v650, rhs_imm=63 }          -> x6
     v662 Imm(63)                                          -> x9
-    v663 Binop { op=sub, lhs=v662, rhs=v661 }             -> x13
-    v664 BinopI { op=shru, lhs=v660, rhs_imm=6 }          -> x3
-    v665 Neg(v664)                                        -> x3
-    v666 BinopI { op=xor, lhs=v665, rhs_imm=-1 }          -> x14
-    v667 Binop { op=shru, lhs=v590, rhs=v661 }            -> x15
+    v663 Binop { op=sub, lhs=v662, rhs=v661 }             -> [spill 2]
+    v664 BinopI { op=shru, lhs=v660, rhs_imm=6 }          -> [spill 0]
+    v665 Neg(v664)                                        -> [spill 0]
+    v666 BinopI { op=xor, lhs=v665, rhs_imm=-1 }          -> [spill 3]
+    v667 Binop { op=shru, lhs=v590, rhs=v661 }            -> [spill 4]
     v668 Binop { op=shl, lhs=v590, rhs=v663 }             -> x0
     v669 BinopI { op=shl, lhs=v668, rhs_imm=1 }           -> x0
     v670 Binop { op=shru, lhs=v591, rhs=v661 }            -> x6
     v671 Binop { op=or, lhs=v670, rhs=v669 }              -> x0
     v672 Binop { op=and, lhs=v671, rhs=v666 }             -> x0
-    v673 Binop { op=and, lhs=v667, rhs=v665 }             -> x3
+    v673 Binop { op=and, lhs=v667, rhs=v665 }             -> x6
     v674 Binop { op=or, lhs=v672, rhs=v673 }              -> x0
     v675 Binop { op=and, lhs=v667, rhs=v666 }             -> x6
     v676 Imm(0)                                           -> x6
@@ -1662,14 +1662,14 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v681 BinopI { op=shl, lhs=v680, rhs_imm=52 }          -> x0
     v682 Binop { op=or, lhs=v681, rhs=v585 }              -> x1
     v683 Imm(0)                                           -> x1
-    v684 StoreLocal { off=-1, value=v681, kind=I64 }      -> -
-    v685 LoadLocal { off=-1, kind=F64 }                   -> d1
+    v684 Imm(0)                                           -> x1
+    v685 FpCast { kind=BitsFp, value=v681 }               -> d1
     v686 Binop { op=fmul, lhs=v679, rhs=v685 }            -> d0
     v687 Imm(0)                                           -> x0
     v688 Imm(0)                                           -> x0
-    v689 StoreLocal { off=-1, value=v686, kind=F64 }      -> -
-    v690 LoadLocal { off=-1, kind=I64 }                   -> x0
-    v691 BinopI { op=shr, lhs=v690, rhs_imm=63 }          -> x12
+    v689 Imm(0)                                           -> x0
+    v690 FpCast { kind=FpBits, value=v686 }               -> x0
+    v691 BinopI { op=shr, lhs=v690, rhs_imm=63 }          -> [spill 1]
     v692 BinopI { op=and, lhs=v690, rhs_imm=9223372036854775807 } -> x1
     v693 BinopI { op=shru, lhs=v692, rhs_imm=52 }         -> x1
     v694 BinopI { op=sub, lhs=v693, rhs_imm=1023 }        -> x6
@@ -1679,24 +1679,24 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v698 BinopI { op=shr, lhs=v697, rhs_imm=63 }          -> x0
     v699 Binop { op=xor, lhs=v697, rhs=v698 }             -> x1
     v700 Binop { op=sub, lhs=v699, rhs=v698 }             -> x1
-    v701 BinopI { op=and, lhs=v700, rhs_imm=127 }         -> x3
+    v701 BinopI { op=and, lhs=v700, rhs_imm=127 }         -> [spill 0]
     v702 BinopI { op=and, lhs=v700, rhs_imm=63 }          -> x1
-    v703 Binop { op=sub, lhs=v662, rhs=v702 }             -> x13
-    v704 BinopI { op=shru, lhs=v701, rhs_imm=6 }          -> x3
+    v703 Binop { op=sub, lhs=v662, rhs=v702 }             -> [spill 2]
+    v704 BinopI { op=shru, lhs=v701, rhs_imm=6 }          -> x9
     v705 Neg(v704)                                        -> x9
-    v706 BinopI { op=xor, lhs=v705, rhs_imm=-1 }          -> x3
-    v707 Binop { op=shl, lhs=v696, rhs=v702 }             -> x14
-    v708 Binop { op=shru, lhs=v696, rhs=v703 }            -> x15
-    v709 BinopI { op=shru, lhs=v708, rhs_imm=1 }          -> x15
-    v710 Binop { op=shl, lhs=v585, rhs=v702 }             -> x15
-    v711 Binop { op=or, lhs=v710, rhs=v709 }              -> x15
-    v712 Binop { op=and, lhs=v707, rhs=v706 }             -> x14
-    v713 Imm(0)                                           -> x15
-    v714 Binop { op=or, lhs=v712, rhs=v713 }              -> x15
-    v715 Binop { op=and, lhs=v711, rhs=v706 }             -> x15
-    v716 Binop { op=and, lhs=v707, rhs=v705 }             -> x15
-    v717 Binop { op=or, lhs=v715, rhs=v716 }              -> x15
-    v718 Binop { op=shru, lhs=v585, rhs=v702 }            -> x15
+    v706 BinopI { op=xor, lhs=v705, rhs_imm=-1 }          -> [spill 0]
+    v707 Binop { op=shl, lhs=v696, rhs=v702 }             -> [spill 3]
+    v708 Binop { op=shru, lhs=v696, rhs=v703 }            -> x3
+    v709 BinopI { op=shru, lhs=v708, rhs_imm=1 }          -> x3
+    v710 Binop { op=shl, lhs=v585, rhs=v702 }             -> x3
+    v711 Binop { op=or, lhs=v710, rhs=v709 }              -> x3
+    v712 Binop { op=and, lhs=v707, rhs=v706 }             -> [spill 3]
+    v713 Imm(0)                                           -> x3
+    v714 Binop { op=or, lhs=v712, rhs=v713 }              -> x3
+    v715 Binop { op=and, lhs=v711, rhs=v706 }             -> x3
+    v716 Binop { op=and, lhs=v707, rhs=v705 }             -> x3
+    v717 Binop { op=or, lhs=v715, rhs=v716 }              -> x3
+    v718 Binop { op=shru, lhs=v585, rhs=v702 }            -> [spill 4]
     v719 Binop { op=shl, lhs=v585, rhs=v703 }             -> x2
     v720 BinopI { op=shl, lhs=v719, rhs_imm=1 }           -> x2
     v721 Binop { op=shru, lhs=v696, rhs=v702 }            -> x1
@@ -1725,7 +1725,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v744 Binop { op=or, lhs=v742, rhs=v743 }              -> x0
     v745 Binop { op=and, lhs=v738, rhs=v741 }             -> x1
     v746 Binop { op=or, lhs=v745, rhs=v743 }              -> x1
-    v747 BinopI { op=xor, lhs=v691, rhs_imm=-1 }          -> x12
+    v747 BinopI { op=xor, lhs=v691, rhs_imm=-1 }          -> x1
     v748 Binop { op=and, lhs=v744, rhs=v747 }             -> x0
     v749 Binop { op=and, lhs=v746, rhs=v747 }             -> x1
     v750 Imm(0)                                           -> x1
@@ -1814,21 +1814,21 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v829 BinopI { op=ne, lhs=v823, rhs_imm=0 }            -> x9
     v830 Binop { op=mul, lhs=v828, rhs=v829 }             -> x6
     v831 Binop { op=and, lhs=v764, rhs=v830 }             -> x6
-    v832 BinopI { op=ne, lhs=v831, rhs_imm=0 }            -> x12
-    v833 BinopI { op=and, lhs=v823, rhs_imm=127 }         -> x3
+    v832 BinopI { op=ne, lhs=v831, rhs_imm=0 }            -> [spill 1]
+    v833 BinopI { op=and, lhs=v823, rhs_imm=127 }         -> [spill 0]
     v834 BinopI { op=and, lhs=v823, rhs_imm=63 }          -> x6
     v835 Imm(63)                                          -> x9
-    v836 Binop { op=sub, lhs=v835, rhs=v834 }             -> x13
-    v837 BinopI { op=shru, lhs=v833, rhs_imm=6 }          -> x3
-    v838 Neg(v837)                                        -> x3
-    v839 BinopI { op=xor, lhs=v838, rhs_imm=-1 }          -> x14
-    v840 Binop { op=shru, lhs=v763, rhs=v834 }            -> x15
+    v836 Binop { op=sub, lhs=v835, rhs=v834 }             -> [spill 2]
+    v837 BinopI { op=shru, lhs=v833, rhs_imm=6 }          -> [spill 0]
+    v838 Neg(v837)                                        -> [spill 0]
+    v839 BinopI { op=xor, lhs=v838, rhs_imm=-1 }          -> [spill 3]
+    v840 Binop { op=shru, lhs=v763, rhs=v834 }            -> [spill 4]
     v841 Binop { op=shl, lhs=v763, rhs=v836 }             -> x0
     v842 BinopI { op=shl, lhs=v841, rhs_imm=1 }           -> x0
     v843 Binop { op=shru, lhs=v764, rhs=v834 }            -> x6
     v844 Binop { op=or, lhs=v843, rhs=v842 }              -> x0
     v845 Binop { op=and, lhs=v844, rhs=v839 }             -> x0
-    v846 Binop { op=and, lhs=v840, rhs=v838 }             -> x3
+    v846 Binop { op=and, lhs=v840, rhs=v838 }             -> x6
     v847 Binop { op=or, lhs=v845, rhs=v846 }              -> x0
     v848 Binop { op=and, lhs=v840, rhs=v839 }             -> x6
     v849 Imm(0)                                           -> x6
@@ -1839,14 +1839,14 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v854 BinopI { op=shl, lhs=v853, rhs_imm=52 }          -> x0
     v855 Binop { op=or, lhs=v854, rhs=v761 }              -> x1
     v856 Imm(0)                                           -> x1
-    v857 StoreLocal { off=-1, value=v854, kind=I64 }      -> -
-    v858 LoadLocal { off=-1, kind=F64 }                   -> d1
+    v857 Imm(0)                                           -> x1
+    v858 FpCast { kind=BitsFp, value=v854 }               -> d1
     v859 Binop { op=fmul, lhs=v852, rhs=v858 }            -> d0
     v860 Imm(0)                                           -> x0
     v861 Imm(0)                                           -> x0
-    v862 StoreLocal { off=-1, value=v859, kind=F64 }      -> -
-    v863 LoadLocal { off=-1, kind=I64 }                   -> x0
-    v864 BinopI { op=shr, lhs=v863, rhs_imm=63 }          -> x12
+    v862 Imm(0)                                           -> x0
+    v863 FpCast { kind=FpBits, value=v859 }               -> x0
+    v864 BinopI { op=shr, lhs=v863, rhs_imm=63 }          -> [spill 1]
     v865 BinopI { op=and, lhs=v863, rhs_imm=9223372036854775807 } -> x1
     v866 BinopI { op=shru, lhs=v865, rhs_imm=52 }         -> x1
     v867 BinopI { op=sub, lhs=v866, rhs_imm=1023 }        -> x6
@@ -1856,20 +1856,20 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v871 BinopI { op=shr, lhs=v870, rhs_imm=63 }          -> x0
     v872 Binop { op=xor, lhs=v870, rhs=v871 }             -> x1
     v873 Binop { op=sub, lhs=v872, rhs=v871 }             -> x1
-    v874 BinopI { op=and, lhs=v873, rhs_imm=127 }         -> x3
+    v874 BinopI { op=and, lhs=v873, rhs_imm=127 }         -> [spill 0]
     v875 BinopI { op=and, lhs=v873, rhs_imm=63 }          -> x1
-    v876 Binop { op=sub, lhs=v835, rhs=v875 }             -> x13
-    v877 BinopI { op=shru, lhs=v874, rhs_imm=6 }          -> x3
+    v876 Binop { op=sub, lhs=v835, rhs=v875 }             -> [spill 2]
+    v877 BinopI { op=shru, lhs=v874, rhs_imm=6 }          -> x9
     v878 Neg(v877)                                        -> x9
-    v879 BinopI { op=xor, lhs=v878, rhs_imm=-1 }          -> x3
-    v880 Binop { op=shl, lhs=v869, rhs=v875 }             -> x14
+    v879 BinopI { op=xor, lhs=v878, rhs_imm=-1 }          -> [spill 0]
+    v880 Binop { op=shl, lhs=v869, rhs=v875 }             -> [spill 3]
     v881 Binop { op=shru, lhs=v869, rhs=v876 }            -> x7
     v882 BinopI { op=shru, lhs=v881, rhs_imm=1 }          -> x7
-    v883 Binop { op=shl, lhs=v761, rhs=v875 }             -> x13
+    v883 Binop { op=shl, lhs=v761, rhs=v875 }             -> [spill 2]
     v884 Binop { op=or, lhs=v883, rhs=v882 }              -> x7
-    v885 Binop { op=and, lhs=v880, rhs=v879 }             -> x13
-    v886 Imm(0)                                           -> x13
-    v887 Binop { op=or, lhs=v885, rhs=v886 }              -> x13
+    v885 Binop { op=and, lhs=v880, rhs=v879 }             -> x3
+    v886 Imm(0)                                           -> x3
+    v887 Binop { op=or, lhs=v885, rhs=v886 }              -> x3
     v888 Binop { op=and, lhs=v884, rhs=v879 }             -> x7
     v889 Binop { op=and, lhs=v880, rhs=v878 }             -> x9
     v890 Binop { op=or, lhs=v888, rhs=v889 }              -> x7
@@ -1902,8 +1902,8 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v917 Binop { op=or, lhs=v915, rhs=v916 }              -> x6
     v918 Binop { op=and, lhs=v911, rhs=v914 }             -> x1
     v919 Binop { op=or, lhs=v918, rhs=v916 }              -> x0
-    v920 BinopI { op=xor, lhs=v864, rhs_imm=-1 }          -> x12
-    v921 Binop { op=and, lhs=v917, rhs=v920 }             -> x1
+    v920 BinopI { op=xor, lhs=v864, rhs_imm=-1 }          -> x1
+    v921 Binop { op=and, lhs=v917, rhs=v920 }             -> x2
     v922 Binop { op=and, lhs=v919, rhs=v920 }             -> x0
     v923 Imm(0)                                           -> x1
     v924 Imm(0)                                           -> x1
@@ -1928,7 +1928,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v939 Imm(3)                                           -> x0
     v940 Store { addr=v938, disp=0, value=v939, kind=I64, volatile pc_rel } -> -
     v941 ImmData(32)                                      -> x0
-    v942 Imm(4609434218613702656)                         -> x0
+    v942 Imm(4609434218613702656)                         -> d0
     v943 Store { addr=v941, disp=0, value=v942, kind=F64, volatile pc_rel } -> -
     v944 Load { addr=v935, disp=0, kind=I64, volatile pc_rel } -> x0
     v945 Load { addr=v938, disp=0, kind=I64, volatile pc_rel } -> x6
@@ -2006,8 +2006,8 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v1017 Binop { op=sub, lhs=v1016, rhs=v1015 }           -> x9
     v1018 BinopI { op=shru, lhs=v1014, rhs_imm=6 }         -> x7
     v1019 Neg(v1018)                                       -> x7
-    v1020 BinopI { op=xor, lhs=v1019, rhs_imm=-1 }         -> x3
-    v1021 Binop { op=shru, lhs=v944, rhs=v1015 }           -> x12
+    v1020 BinopI { op=xor, lhs=v1019, rhs_imm=-1 }         -> [spill 0]
+    v1021 Binop { op=shru, lhs=v944, rhs=v1015 }           -> [spill 1]
     v1022 Binop { op=shl, lhs=v944, rhs=v1017 }            -> x0
     v1023 BinopI { op=shl, lhs=v1022, rhs_imm=1 }          -> x0
     v1024 Binop { op=shru, lhs=v945, rhs=v1015 }           -> x2
@@ -2024,17 +2024,17 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v1035 BinopI { op=shl, lhs=v1034, rhs_imm=52 }         -> x0
     v1036 BinopI { op=or, lhs=v1035, rhs_imm=0 }           -> x1
     v1037 Imm(0)                                           -> x1
-    v1038 StoreLocal { off=-1, value=v1035, kind=I64 }     -> -
-    v1039 LoadLocal { off=-1, kind=F64 }                   -> d1
+    v1038 Imm(0)                                           -> x1
+    v1039 FpCast { kind=BitsFp, value=v1035 }              -> d1
     v1040 Binop { op=fmul, lhs=v1033, rhs=v1039 }          -> d0
     v1041 ImmData(32)                                      -> x0
     v1042 Load { addr=v1041, disp=0, kind=F64, volatile pc_rel } -> d1
     v1043 Binop { op=fadd, lhs=v1040, rhs=v1042 }          -> d0
     v1044 Imm(0)                                           -> x0
-    v1045 StoreLocal { off=-1, value=v1043, kind=F64 }     -> -
+    v1045 Imm(0)                                           -> x0
     v1046 Imm(0)                                           -> x0
-    v1047 LoadLocal { off=-1, kind=I64 }                   -> x0
-    v1048 LifetimeEnd(-1)                                  -> -
+    v1047 FpCast { kind=FpBits, value=v1043 }              -> x0
+    v1048 LifetimeEnd(0)                                   -> -
     v1049 BinopI { op=ne, lhs=v1047, rhs_imm=4616752568008179712 } -> x0
     terminator Bz { cond=v1049, target=b62, fall=b61 }   (exit_acc=v1049)
   block 61  start_pc=0
@@ -2122,13 +2122,13 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v1129 BinopI { op=ne, lhs=v1128, rhs_imm=0 }           -> x9
     v1130 BinopI { op=and, lhs=v1120, rhs_imm=127 }        -> x7
     v1131 BinopI { op=and, lhs=v1120, rhs_imm=63 }         -> x2
-    v1132 Imm(63)                                          -> x3
-    v1133 Binop { op=sub, lhs=v1132, rhs=v1131 }           -> x3
+    v1132 Imm(63)                                          -> [spill 0]
+    v1133 Binop { op=sub, lhs=v1132, rhs=v1131 }           -> [spill 0]
     v1134 BinopI { op=shru, lhs=v1130, rhs_imm=6 }         -> x7
-    v1135 Imm(0)                                           -> x12
+    v1135 Imm(0)                                           -> x3
     v1136 Neg(v1134)                                       -> x7
-    v1137 BinopI { op=xor, lhs=v1136, rhs_imm=-1 }         -> x12
-    v1138 Binop { op=shru, lhs=v1087, rhs=v1131 }          -> x13
+    v1137 BinopI { op=xor, lhs=v1136, rhs_imm=-1 }         -> [spill 1]
+    v1138 Binop { op=shru, lhs=v1087, rhs=v1131 }          -> [spill 2]
     v1139 Binop { op=shl, lhs=v1087, rhs=v1133 }           -> x1
     v1140 BinopI { op=shl, lhs=v1139, rhs_imm=1 }          -> x1
     v1141 Binop { op=shru, lhs=v1085, rhs=v1131 }          -> x2
@@ -2145,17 +2145,17 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v1152 BinopI { op=shl, lhs=v1151, rhs_imm=52 }         -> x0
     v1153 Binop { op=or, lhs=v1152, rhs=v1088 }            -> x0
     v1154 Imm(0)                                           -> x1
-    v1155 StoreLocal { off=-3, value=v1153, kind=I64 }     -> -
-    v1156 LoadLocal { off=-3, kind=F64 }                   -> d1
+    v1155 Imm(0)                                           -> x1
+    v1156 FpCast { kind=BitsFp, value=v1153 }              -> d1
     v1157 Binop { op=fmul, lhs=v1150, rhs=v1156 }          -> d0
     v1158 ImmData(32)                                      -> x0
     v1159 Load { addr=v1158, disp=0, kind=F64, volatile pc_rel } -> d1
     v1160 Binop { op=fmul, lhs=v1157, rhs=v1159 }          -> d0
     v1161 Imm(0)                                           -> x0
-    v1162 StoreLocal { off=-1, value=v1160, kind=F64 }     -> -
+    v1162 Imm(0)                                           -> x0
     v1163 Imm(0)                                           -> x0
-    v1164 LoadLocal { off=-1, kind=I64 }                   -> x0
-    v1165 LifetimeEnd(-1)                                  -> -
+    v1164 FpCast { kind=FpBits, value=v1160 }              -> x0
+    v1165 LifetimeEnd(0)                                   -> -
     v1166 BinopI { op=ne, lhs=v1164, rhs_imm=4616752568008179712 } -> x0
     terminator Bz { cond=v1166, target=b64, fall=b63 }   (exit_acc=v1166)
   block 63  start_pc=0
@@ -2177,7 +2177,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=__c5_fini_trampoline
-fn ent_pc=2 n_params=1 variadic=false locals=2
+fn ent_pc=2 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -2198,16 +2198,6 @@ fn ent_pc=2 n_params=1 variadic=false locals=2
     terminator Bz { cond=v7, target=b3, fall=b1 }   (exit_acc=v7)
   block 3  start_pc=0
     terminator Return
-; --- SSA dump (ok=true) ent_pc=3 ---
-; name=__c5_register_fini
-fn ent_pc=3 n_params=0 variadic=false locals=0
-  spill_count=0 gpr_used=[] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    v1   ImmCode(ent_pc=2)                                -> x7
-    v2   Imm(0)                                           -> x6
-    v3   CallExt { binding_idx=1, args=[v1, v2, v2], fp_arg_mask=0x0 } -> x0
-    terminator Return
 ; --- SSA dump (ok=true) ent_pc=4 ---
 ; name=__c5_run_init_array
 fn ent_pc=4 n_params=0 variadic=false locals=0
@@ -2219,26 +2209,28 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v3   Binop { op=ne, lhs=v1, rhs=v2 }                  -> x0
     terminator Bz { cond=v3, target=b2, fall=b1 }   (exit_acc=v3)
   block 1  start_pc=0
-    v4   Call { target_pc=3, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
-    terminator Jmp(b2)   (exit_acc=v4)
+    v4   ImmCode(ent_pc=2)                                -> x7
+    v5   Imm(0)                                           -> x6
+    v6   CallExt { binding_idx=1, args=[v4, v5, v5], fp_arg_mask=0x0 } -> x0
+    terminator Jmp(b2)
   block 2  start_pc=0
-    v5   ImmData(0)                                       -> x3
-    v6   Imm(0)                                           -> x0
-    terminator Jmp(b4)   (exit_acc=v5)
-  block 3  start_pc=0
-    v11  Imm(0)                                           -> x0
-    v12  Load { addr=v7, disp=0, kind=I64 }               -> x0
-    v13  CallIndirect { target=v12, args=[], callee_variadic=false, fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v14  Imm(0)                                           -> x0
-    v15  BinopI { op=add, lhs=v7, rhs_imm=8 }             -> x3
-    v16  Imm(0)                                           -> x0
-    terminator Jmp(b4)   (exit_acc=v15)
-  block 4  start_pc=0
-    v7   Phi { incoming=[b2:v5, b3:v15], kind=I64 }       -> x3
+    v7   ImmData(0)                                       -> x3
     v8   Imm(0)                                           -> x0
-    v9   ImmData(0)                                       -> x0
-    v10  Binop { op=ne, lhs=v7, rhs=v9 }                  -> x0
-    terminator Bz { cond=v10, target=b5, fall=b3 }   (exit_acc=v10)
+    terminator Jmp(b4)   (exit_acc=v7)
+  block 3  start_pc=0
+    v13  Imm(0)                                           -> x0
+    v14  Load { addr=v9, disp=0, kind=I64 }               -> x0
+    v15  CallIndirect { target=v14, args=[], callee_variadic=false, fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Imm(0)                                           -> x0
+    v17  BinopI { op=add, lhs=v9, rhs_imm=8 }             -> x3
+    v18  Imm(0)                                           -> x0
+    terminator Jmp(b4)   (exit_acc=v17)
+  block 4  start_pc=0
+    v9   Phi { incoming=[b2:v7, b3:v17], kind=I64 }       -> x3
+    v10  Imm(0)                                           -> x0
+    v11  ImmData(0)                                       -> x0
+    v12  Binop { op=ne, lhs=v9, rhs=v11 }                 -> x0
+    terminator Bz { cond=v12, target=b5, fall=b3 }   (exit_acc=v12)
   block 5  start_pc=0
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=5 ---
@@ -2274,25 +2266,28 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     v25  Binop { op=ne, lhs=v23, rhs=v24 }                -> x0
     terminator Bz { cond=v25, target=b2, fall=b1 }   (exit_acc=v25)
   block 1  start_pc=0
-    v31  Call { target_pc=3, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
-    terminator Jmp(b2)   (exit_acc=v31)
+    v32  ImmCode(ent_pc=2)                                -> x7
+    v33  Imm(0)                                           -> x6
+    v34  CallExt { binding_idx=1, args=[v32, v33, v33], fp_arg_mask=0x0 } -> x0
+    terminator Jmp(b2)
   block 2  start_pc=0
-    v32  ImmData(0)                                       -> x3
-    terminator Jmp(b4)   (exit_acc=v32)
+    v35  ImmData(0)                                       -> x3
+    terminator Jmp(b4)   (exit_acc=v35)
   block 3  start_pc=0
-    v36  Load { addr=v33, disp=0, kind=I64 }              -> x0
-    v37  CallIndirect { target=v36, args=[], callee_variadic=false, fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v38  BinopI { op=add, lhs=v33, rhs_imm=8 }            -> x3
-    terminator Jmp(b4)   (exit_acc=v38)
+    v39  Load { addr=v36, disp=0, kind=I64 }              -> x0
+    v40  CallIndirect { target=v39, args=[], callee_variadic=false, fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v41  BinopI { op=add, lhs=v36, rhs_imm=8 }            -> x3
+    terminator Jmp(b4)   (exit_acc=v41)
   block 4  start_pc=0
-    v33  Phi { incoming=[b2:v32, b3:v38], kind=I64 }      -> x3
-    v34  ImmData(0)                                       -> x0
-    v35  Binop { op=ne, lhs=v33, rhs=v34 }                -> x0
-    terminator Bz { cond=v35, target=b5, fall=b3 }   (exit_acc=v35)
+    v36  Phi { incoming=[b2:v35, b3:v41], kind=I64 }      -> x3
+    v37  ImmData(0)                                       -> x0
+    v38  Binop { op=ne, lhs=v36, rhs=v37 }                -> x0
+    terminator Bz { cond=v38, target=b5, fall=b3 }   (exit_acc=v38)
   block 5  start_pc=0
     v26  Imm(0)                                           -> x0
     v27  Imm(0)                                           -> x0
     v28  Call { target_pc=7, args=[v11, v14], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x7
     v29  Extend { value=v28, kind=I32 }                   -> x0
-    v30  Call { target_pc=0, args=[v28], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v30  Extend { value=v28, kind=I32 }                   -> x0
+    v31  CallExt { binding_idx=0, args=[v28], fp_arg_mask=0x0 } -> x0
     terminator Return

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fetch the raylib 6.0 source distribution for the badc demo.
+"""Fetch the raylib 6.2 source distribution for the badc demo.
 
 After this runs, ``demos/raylib/src/`` holds the raylib C sources
 (modules, the bundled RGFW + glad single-headers, raylib.h) ready for
@@ -28,9 +28,9 @@ REPO_ROOT = RAYLIB_DIR.parents[1]
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "vendor_deps"))
 import _fetch  # noqa: E402
 
-VERSION = "6.0"
-# sha256 of the GitHub archive of refs/tags/6.0 (tag commit dbc56a87).
-UPSTREAM_SHA = "2b3ee1e2120c7a0796b33062c7e9a694dd8a8caa56a96319ac8c8ecf54a90d0b"
+VERSION = "6.2"
+# sha256 of the GitHub archive of refs/tags/6.2 (tag commit 02566453).
+UPSTREAM_SHA = "df7a13129b1bec9e73a6962efff170beba310ee6eab8f94cd000b7316b4db5ee"
 ASSET = f"raylib-{VERSION}-{UPSTREAM_SHA[:8]}.tar.gz"
 SHA256 = UPSTREAM_SHA
 RELEASE_TAG = "vendor-deps-v1"

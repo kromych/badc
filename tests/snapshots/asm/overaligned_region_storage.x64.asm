@@ -86,9 +86,8 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x218, %rsp            # imm = 0x218
                	pushq	%rbx
-               	movslq	%edi, %rdi
                	movq	%rsi, %rbx
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	je	<addr>
                	leaq	-0x210(%rbp), %rdi
                	movl	$0x210, %esi            # imm = 0x210
@@ -120,9 +119,8 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x218, %rsp            # imm = 0x218
                	pushq	%rbx
-               	movslq	%edi, %rdi
                	movq	%rsi, %rbx
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	je	<addr>
                	leaq	-0x210(%rbp), %rdi
                	movl	$0x210, %esi            # imm = 0x210
@@ -393,10 +391,8 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	-0x10(%rbp), %rdi
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rdi)
                	movl	<rip>, %eax # <addr>
+               	leaq	-0x10(%rbp), %rdi
                	movq	%rax, -0x10(%rbp)
                	movl	<rip>, %eax # <addr>
                	movq	%rax, -0x8(%rbp)

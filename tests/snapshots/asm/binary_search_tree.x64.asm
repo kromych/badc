@@ -28,62 +28,54 @@ Disassembly of section .text:
 <insert>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	pushq	%r12
-               	pushq	%rbx
-               	movq	%rdi, %rbx
-               	movq	%rsi, %r12
-               	testq	%rbx, %rbx
+               	subq	$0x10, %rsp
+               	testq	%rdi, %rdi
                	jne	<addr>
                	movl	$0x18, %edi
-               	xorl	%eax, %eax
+               	movq	%rsi, (%rsp)
                	callq	<addr>
-               	movq	%r12, (%rax)
+               	movq	(%rsp), %rsi
+               	movq	%rsi, (%rax)
                	movq	$0x0, 0x8(%rax)
                	movq	$0x0, 0x10(%rax)
-               	popq	%rbx
-               	popq	%r12
-               	popq	%rbp
-               	retq
-               	movq	(%rbx), %rax
-               	cmpq	%rax, %r12
-               	jge	<addr>
-               	movq	0x8(%rbx), %rdi
-               	movq	%r12, %rsi
-               	callq	<addr>
-               	movq	%rax, 0x8(%rbx)
-               	movq	%rbx, %rax
-               	popq	%rbx
-               	popq	%r12
-               	popq	%rbp
-               	retq
-               	movq	0x10(%rbx), %rdi
-               	movq	%r12, %rsi
-               	callq	<addr>
-               	movq	%rax, 0x10(%rbx)
-               	jmp	<addr>
-
-<search>:
-               	testq	%rdi, %rdi
-               	je	<addr>
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movq	(%rdi), %rax
-               	cmpq	%rsi, %rax
-               	jne	<addr>
-               	movl	$0x1, %eax
-               	popq	%rbp
+               	leave
                	retq
                	movq	(%rdi), %rax
                	cmpq	%rax, %rsi
                	jge	<addr>
-               	movq	0x8(%rdi), %rdi
-               	popq	%rbp
+               	movq	0x8(%rdi), %rax
+               	movq	%rdi, 0x8(%rsp)
+               	movq	%rax, %rdi
+               	callq	<addr>
+               	movq	0x8(%rsp), %rdi
+               	movq	%rax, 0x8(%rdi)
+               	movq	%rdi, %rax
+               	leave
+               	retq
+               	movq	0x10(%rdi), %rax
+               	movq	%rdi, 0x8(%rsp)
+               	movq	%rax, %rdi
+               	callq	<addr>
+               	movq	0x8(%rsp), %rdi
+               	movq	%rax, 0x10(%rdi)
                	jmp	<addr>
-               	movq	0x10(%rdi), %rdi
-               	popq	%rbp
-               	jmp	<addr>
+
+<search>:
+               	testq	%rdi, %rdi
+               	jne	<addr>
                	xorl	%eax, %eax
                	retq
+               	movq	(%rdi), %rax
+               	cmpq	%rsi, %rax
+               	jne	<addr>
+               	movl	$0x1, %eax
+               	retq
+               	cmpq	%rax, %rsi
+               	jge	<addr>
+               	movq	0x8(%rdi), %rdi
+               	jmp	<addr>
+               	movq	0x10(%rdi), %rdi
+               	jmp	<addr>
 
 <main>:
                	pushq	%rbp

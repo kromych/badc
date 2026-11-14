@@ -105,7 +105,10 @@ pub struct ImageOptions {
     pub strip_debug: bool,
     /// `-X`: no assembler temporary (`.L*`) among the local symbols.
     pub discard_temporaries: bool,
+    /// `--stack reserve[,commit]`: a PE image's initial thread stack.
+    pub pe_stack: Option<(u64, u64)>,
     pub elf: ElfImageOptions,
+    pub mach_o: crate::c5::codegen::MachOImageOptions,
 }
 
 /// As [`write_native_image_from_merged`], shaped by `opts`.
@@ -133,6 +136,37 @@ pub fn write_native_image_from_merged_ex(
     write_native_image(&program, &build, target)
 }
 
+/// As [`write_native_image_from_merged_ex`]; a PE image whose
+/// `pdb_path` is given names that program database in its debug
+/// directory and comes with it, and carries `resources` in `.rsrc`.
+#[allow(clippy::too_many_arguments)]
+pub fn write_native_image_and_pdb(
+    merged: &MergedNative,
+    plt: &[PltTrampoline],
+    entry_name: &str,
+    subsystem: Option<crate::c5::preprocessor::Subsystem>,
+    output_kind: OutputKind,
+    target: Target,
+    shared_lib_name: Option<&str>,
+    opts: &ImageOptions,
+    pdb_path: Option<&str>,
+    resources: &[Vec<u8>],
+) -> Result<crate::c5::object::NativeImage, C5Error> {
+    let (program, mut build) = synth_program_and_build(
+        merged,
+        plt,
+        entry_name,
+        subsystem,
+        output_kind,
+        target,
+        shared_lib_name,
+        opts,
+    )?;
+    build.pdb_path = pdb_path.map(alloc::string::String::from);
+    build.resources = resources.iter().chain(&merged.resources).cloned().collect();
+    crate::c5::object::write_native_image_and_pdb(&program, &build, target)
+}
+
 #[allow(clippy::too_many_arguments)]
 fn synth_program_and_build(
     merged: &MergedNative,
@@ -154,6 +188,14 @@ fn synth_program_and_build(
         resolve_entry_offset(merged, entry_name)?
     };
     let imports = synth_imports(merged, target)?;
+    let import_hints = (imports.imports.iter())
+        .filter_map(|i| {
+            Some((
+                i.real_symbol.clone(),
+                *merged.import_hints.get(&i.local_name)?,
+            ))
+        })
+        .collect();
     // Slots the PLT pass left unresolved for the loader to bind.
     let data_import_binds = merged.data_import_refs.clone();
     let tls_data_import_binds = merged.tls_data_import_refs.clone();
@@ -248,6 +290,9 @@ fn synth_program_and_build(
     };
     let build = Build {
         diagnostics: Vec::new(),
+        seh_handler: (merged.defined.get(super::link::LANGUAGE_HANDLER))
+            .filter(|s| matches!(s.section, NativeSymSection::Text))
+            .map(|s| s.value as usize),
         seh_rows: (merged.seh_rows.iter())
             .map(
                 |&([func, begin, end], target, handler)| crate::c5::codegen::SehRow {
@@ -261,6 +306,10 @@ fn synth_program_and_build(
             .collect(),
         emitted_relocs,
         named_sections: merged.named_sections.clone(),
+        named_code_sections: merged.named_code_sections.clone(),
+        export_forms: merged.export_forms.clone(),
+        import_hints,
+        asm_unwind: Vec::new(),
         compact_unwind: merged.compact_unwind.clone(),
         eh_frame: merged.eh_frame.clone(),
         data_import_binds,
@@ -280,6 +329,10 @@ fn synth_program_and_build(
         text_data_ranges: Vec::new(),
         copy_relocs,
         dynamic_exports,
+        forwarded_exports: (merged.export_aliases.iter())
+            .filter(|a| a.target.contains('.'))
+            .map(|a| (a.name.clone(), a.target.clone()))
+            .collect(),
         protected_exports: (merged.defined.iter())
             .filter(|(_, sym)| sym.visibility == super::object::STV_PROTECTED)
             .map(|(name, _)| name.clone())
@@ -359,6 +412,9 @@ fn synth_program_and_build(
         tls_index_slot: (merged.defined.get(super::link::TLS_INDEX))
             .filter(|d| d.section == NativeSymSection::Bss)
             .map(|d| merged.data.len() as u64 + d.value),
+        delay_import_table: (merged.defined.get(super::delay_load::TABLE))
+            .filter(|d| d.section == NativeSymSection::Data)
+            .map(|d| (d.value, d.size)),
         tls_index_fixups: merged
             .tls_index_fixups
             .iter()
@@ -407,12 +463,16 @@ fn synth_program_and_build(
         } else {
             None
         },
-        dllmain_pc: None,
+        dllmain_pc: dll_entry(merged, output_kind, target),
         // Empty merged blobs mean no input unit carried DWARF; the
         // writers then skip the section emit entirely instead of
         // dumping zero-length placeholders.
         debug_info: !opts.strip_debug && !merged.debug_info.is_empty(),
         merged_dwarf: synth_merged_dwarf(merged).filter(|_| !opts.strip_debug),
+        pdb_path: None,
+        resources: Vec::new(),
+        stack_size: opts.pe_stack,
+        mach_o: opts.mach_o,
         plt_trampoline_offsets,
     };
 
@@ -444,12 +504,14 @@ fn synth_program(
         image_align_error: None,
         data_ro_len: 0,
         data_relro_len: 0,
+        zero_fill_len: 0,
         data_object_starts: Vec::new(),
         const_data_ranges: Vec::new(),
         data_pad_ranges: Vec::new(),
         data_align_marks: Vec::new(),
         entry_pc: 0,
         warnings: Vec::new(),
+        diag_control: Default::default(),
         notes: Vec::new(),
         tls_data: merged.tls_data.clone(),
         tls_init_size: merged.tls_init_size,
@@ -473,12 +535,18 @@ fn synth_program(
         source_path: String::new(),
         variables: Vec::new(),
         structs: Vec::new(),
+        typedefs: Vec::new(),
+        prototypes: Vec::new(),
         enums: Vec::new(),
         entry_name: Some(entry_name.to_string()),
         entry_pragma: None,
         default_libs: Vec::new(),
+        linker_directives: Vec::new(),
         auto_includes: Vec::new(),
         freestanding: false,
+        x86_features: crate::c5::X86Features::NONE,
+        no_fp_regs: false,
+        strlen_folds: false,
         subsystem,
         finished_functions: Vec::new(),
         symbols: Vec::new(),
@@ -527,8 +595,16 @@ fn function_table(merged: &MergedNative, pc_to_native: Vec<usize>) -> FunctionTa
         prologue_native: alloc::collections::BTreeMap::new(),
         pc_to_native,
     };
+    // The `__start_` / `__stop_` bounds the link gives a code section mark
+    // no function.
+    let bound = |name: &str, sym: &super::link::MergedSymbol| {
+        let bare = (name.strip_prefix("__start_")).or_else(|| name.strip_prefix("__stop_"));
+        sym.kind == super::object::STT_NOTYPE
+            && sym.size == 0
+            && bare.is_some_and(|b| merged.named_code_sections.iter().any(|n| n.name == b))
+    };
     for (name, sym) in &merged.defined {
-        if !matches!(sym.section, NativeSymSection::Text) || name.is_empty() {
+        if !matches!(sym.section, NativeSymSection::Text) || name.is_empty() || bound(name, sym) {
             continue;
         }
         table.note(merged, name, sym.value as usize);
@@ -564,12 +640,18 @@ fn recorded_unwind<'m>(
     let foreign =
         |b: u32| (merged.pe_unwind.iter()).any(|r| (r.begin..r.end).contains(&(b as u64)));
     let text_len = merged.text.len() as u32;
+    // A function also ends with its named code section, or ahead of the first.
+    let section_ends: Vec<u32> = (merged.named_code_sections.iter())
+        .flat_map(|n| [n.offset as u32, (n.offset + n.size) as u32])
+        .collect();
     let mut out = Vec::new();
     for (i, &begin) in begins.iter().enumerate() {
         if begin >= text_len || foreign(begin) {
             continue;
         }
-        let end = begins.get(i + 1).copied().unwrap_or(text_len);
+        let end = (section_ends.iter().copied().filter(|&e| e > begin))
+            .chain(begins.get(i + 1).copied())
+            .fold(text_len, u32::min);
         let steps = merged.unwind.get(&u64::from(begin));
         if steps.is_none() && required && functions.prologue_native.contains_key(&(begin as usize))
         {
@@ -732,24 +814,33 @@ fn synth_dynamic_exports(
     if !export_funcs
         && !export_data_globals
         && named.is_empty()
+        && merged.export_aliases.is_empty()
         && (!elf_exec || merged.shared_names.is_empty())
     {
         return Vec::new();
     }
-    merged
+    // `/EXPORT:name=target` exports the object `target` as `name`.
+    let aliases = (merged.export_aliases.iter()).filter_map(|a| {
+        let sym = merged.defined.get(&a.target)?;
+        (sym.section != NativeSymSection::Text).then_some((&a.name, sym))
+    });
+    let named_or_all = merged
         .defined
         .iter()
         .chain(&merged.tls_defined)
-        .filter_map(|(name, sym)| {
+        .filter(|(name, sym)| {
             let named_object =
                 sym.section != NativeSymSection::Text && named.contains(name.as_str());
-            let exported = exports_definition(sym, named_object, export_funcs, export_data_globals)
-                || linked(name) && exports_definition(sym, true, false, true);
+            exports_definition(sym, named_object, export_funcs, export_data_globals)
+                || linked(name) && exports_definition(sym, true, false, true)
+        });
+    named_or_all
+        .chain(aliases)
+        .filter_map(|(name, sym)| {
             // An ELF symbol of a thread-local is its offset in the TLS
             // template; the other formats publish none.
             let tls_format = target.binary_format() == crate::c5::codegen::BinaryFormat::Elf;
-            if name.is_empty() || !exported || (sym.section == NativeSymSection::Tls && !tls_format)
-            {
+            if name.is_empty() || (sym.section == NativeSymSection::Tls && !tls_format) {
                 return None;
             }
             // A `.bss` definition rides the same data-byte offset
@@ -875,6 +966,7 @@ fn synth_data_pcrel(merged: &MergedNative) -> Vec<crate::c5::codegen::DataPcRelR
                 target_in_data,
                 width: r.width,
                 image_relative: r.image_relative,
+                branch26: r.branch26,
             }
         })
         .collect()
@@ -952,6 +1044,15 @@ fn check_target_machine(target: Target, machine: NativeMachine) -> Result<(), C5
     Ok(())
 }
 
+/// A PE DLL an input defines `DllMain` for enters there, as the single-unit
+/// writer has it; without one it takes the writer's stub.
+fn dll_entry(merged: &MergedNative, output_kind: OutputKind, target: Target) -> Option<usize> {
+    let dll = output_kind == OutputKind::SharedLibrary
+        && target.binary_format() == crate::c5::codegen::BinaryFormat::Pe;
+    let sym = merged.defined.get("DllMain").filter(|_| dll)?;
+    matches!(sym.section, NativeSymSection::Text).then_some(sym.value as usize)
+}
+
 fn resolve_entry_offset(merged: &MergedNative, entry_name: &str) -> Result<usize, C5Error> {
     let sym = merged.defined.get(entry_name).ok_or_else(|| {
         internal_err(
@@ -988,9 +1089,11 @@ fn synth_imports(merged: &MergedNative, target: Target) -> Result<ResolvedImport
         merged
             .dylibs
             .iter()
-            .map(|path| ResolvedDylib {
+            .enumerate()
+            .map(|(i, path)| ResolvedDylib {
                 name: dylib_name_from_path(path),
                 path: path.clone(),
+                main_executable: merged.main_executable == Some(i as u32),
             })
             .collect()
     };
@@ -1050,7 +1153,7 @@ fn synth_imports(merged: &MergedNative, target: Target) -> Result<ResolvedImport
             } else if let Some(symbol) = merged.import_symbols.get(name) {
                 symbol.clone()
             } else if flat_lookup && target == Target::MacOSAarch64 {
-                alloc::format!("_{name}")
+                crate::c5::mach_o_name::spelling(name).into_owned()
             } else {
                 name.clone()
             },
@@ -1066,6 +1169,7 @@ fn synth_imports(merged: &MergedNative, target: Target) -> Result<ResolvedImport
                 ImportKind::Function
             },
             is_variadic: false,
+            prototyped: false,
             fixed_args: 0,
             return_type_tag: None,
             param_types: Vec::new(),
@@ -1771,6 +1875,18 @@ fn synth_exports(
             });
         }
     }
+    // `/EXPORT:name=target` exports the function `target` as `name`.
+    for a in &merged.export_aliases {
+        if let Some(sym) = merged.defined.get(&a.target)
+            && sym.section == NativeSymSection::Text
+            && seen.insert(a.name.clone())
+        {
+            exports.push(ExportedFunction {
+                name: a.name.clone(),
+                ent_pc: sym.value as usize,
+            });
+        }
+    }
     // `--export-all` on a shared library exports every global text
     // function, including those linked from pre-built objects (which carry
     // no per-symbol `#pragma export` flag). Executables ignore this list.
@@ -1836,6 +1952,9 @@ mod tests {
         MergedNative {
             applied_text_relocs: Vec::new(),
             named_sections: Vec::new(),
+            named_code_sections: Vec::new(),
+            export_forms: Vec::new(),
+            resources: Vec::new(),
             text_align: 16,
             // aarch64: `mov w0, #42; ret`.
             text: alloc::vec![0x40, 0x05, 0x80, 0x52, 0xc0, 0x03, 0x5f, 0xd6],
@@ -1858,10 +1977,12 @@ mod tests {
             import_dylib_map: alloc::collections::BTreeMap::new(),
             import_symbols: alloc::collections::BTreeMap::new(),
             import_ordinals: alloc::collections::BTreeMap::new(),
+            import_hints: Default::default(),
             import_versions: Default::default(),
             flat_imports: alloc::collections::BTreeSet::new(),
             weak_imports: alloc::collections::BTreeSet::new(),
             exports: alloc::vec![],
+            export_aliases: alloc::vec![],
             shared_names: Default::default(),
             tls_index_fixups: alloc::vec![],
             macho_tlv_descriptors: alloc::vec![],
@@ -1878,6 +1999,7 @@ mod tests {
             static_tls: false,
             tls_defined: Default::default(),
             dylibs: alloc::vec![],
+            main_executable: None,
             debug_info: alloc::vec![],
             debug_abbrev: alloc::vec![],
             debug_line: alloc::vec![],
@@ -1970,11 +2092,14 @@ mod tests {
         // on Mach-O, gains the leading underscore the loader matches
         // against the host's exported name. ELF keeps the name verbatim.
         let mut merged = tiny_aarch64_main();
-        merged.imports = alloc::vec!["ext_to_index".to_string()];
+        merged.imports = alloc::vec!["ext_to_index".to_string(), "\u{1}raw_ext".to_string()];
         merged.flat_imports.insert("ext_to_index".to_string());
+        merged.flat_imports.insert("\u{1}raw_ext".to_string());
         let mac = synth_imports(&merged, Target::MacOSAarch64).expect("synth");
         assert!(mac.imports[0].flat_lookup, "must be flat-lookup on macOS");
         assert_eq!(mac.imports[0].real_symbol, "_ext_to_index");
+        // A raw name is the symbol as written.
+        assert_eq!(mac.imports[1].real_symbol, "raw_ext");
         let elf = synth_imports(&merged, Target::LinuxAarch64).expect("synth");
         assert!(elf.imports[0].flat_lookup, "must be flat-lookup on ELF");
         assert_eq!(elf.imports[0].real_symbol, "ext_to_index");

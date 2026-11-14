@@ -17,8 +17,8 @@ use super::options::SourceKind;
 /// stack stays at what the compile touches.
 pub(crate) const DRIVER_STACK_SIZE: usize = 64 * 1024 * 1024;
 
-/// The `-D` list one translation unit preprocesses under. gcc predefines
-/// `__ASSEMBLER__` for a `.S`, and a header shared with assembly gates its
+/// The `-D` list one translation unit preprocesses under. A `.S` has
+/// `__ASSEMBLER__` predefined, and a header shared with assembly gates its
 /// C-only content on it. It goes ahead of the command-line list so
 /// `-U__ASSEMBLER__` and an explicit `-D__ASSEMBLER__=<v>` both still win.
 pub(crate) fn tu_defines(kind: SourceKind, defines: &[(String, String)]) -> Vec<(String, String)> {
@@ -99,6 +99,8 @@ pub(crate) struct NativeTu {
     pub(crate) entry: Option<String>,
     pub(crate) subsystem: Option<badc::Subsystem>,
     pub(crate) auto_includes: Vec<badc::AutoInclude>,
+    /// `--dump-ssa` text, printed once the link keeps this compile.
+    pub(crate) ssa_dump: String,
 }
 
 /// Compile `units` and return each payload in unit order. `compile`
@@ -241,6 +243,8 @@ pub(crate) fn tu_compile_options(
         .with_export_all_functions(cfg.export_all)
         .with_no_entry_point(true)
         .with_elf_class(cfg.reloc_opts.elf_class)
+        .with_no_fp_regs(cfg.reloc_opts.no_fp_regs)
+        .with_x86_features(cfg.reloc_opts.x86_features)
         .with_code_model(cfg.reloc_opts.code_model);
     if let Some(r) = recompile {
         opts.force_includes.extend(r.auto_headers.iter().cloned());
@@ -251,8 +255,8 @@ pub(crate) fn tu_compile_options(
 
 /// Assemble one `.s` / `.S` source to a `Program` the object writers consume,
 /// writing its dependency rule on the way. `.S` runs through the preprocessor
-/// first, as gcc's driver does, and the assembler follows its line markers
-/// back to the original lines; `.s` is taken verbatim.
+/// first, and the assembler follows its line markers back to the original
+/// lines; `.s` is taken verbatim.
 pub(crate) fn assemble_tu(
     src_path: &str,
     cfg: &CompileCfg,
@@ -369,6 +373,7 @@ pub(crate) fn compile_native_tu(
                         entry,
                         subsystem,
                         auto_includes,
+                        ssa_dump: emit.ssa_dump,
                     }),
                 ),
                 Err(e) => {
@@ -409,6 +414,7 @@ pub(crate) fn compile_object_tu(src_path: &str, cfg: &CompileCfg) -> (TuLog, Res
     match badc::emit_native_reporting(program, cfg.target, cfg.reloc_opts.clone(), None) {
         Ok(emit) => {
             log_codegen_diagnostics(&emit, cfg, &mut log);
+            eprint!("{}", emit.ssa_dump);
             (log, Ok(emit.image))
         }
         Err(e) => {

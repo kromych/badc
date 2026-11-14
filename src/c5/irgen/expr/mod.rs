@@ -139,7 +139,7 @@ impl<'a> Walker<'a> {
                 let _ = self.walk_expr_rvalue(b, *lhs)?;
                 self.walk_expr_rvalue(b, *rhs)
             }
-            // GCC statement expression `({ ... })`: emit the block for
+            // GNU C statement expression `({ ... })`: emit the block for
             // its side effects; the value is that of the last
             // expression-statement the source wrote.
             Expr::StmtExpr {
@@ -148,7 +148,7 @@ impl<'a> Walker<'a> {
                 let (block, value_item) = (*block, *value_item);
                 self.walk_stmt_expr(b, block, value_item)
             }
-            // GCC `__builtin_mem*` with a constant byte count.
+            // `__builtin_mem*` with a constant byte count.
             Expr::MemTransfer {
                 op,
                 dst,
@@ -160,7 +160,7 @@ impl<'a> Walker<'a> {
                 let (op, dst, src, size, align) = (*op, *dst, *src, *size, *align);
                 self.walk_mem_transfer(b, op, dst, src, size, align)
             }
-            // GCC `__builtin_{add,sub,mul}_overflow(a, b, dst)`.
+            // `__builtin_{add,sub,mul}_overflow(a, b, dst)`.
             Expr::CheckedArith {
                 op,
                 a,
@@ -172,10 +172,10 @@ impl<'a> Walker<'a> {
                 let (op, a, rhs, dst, elem_ty) = (*op, *a, *rhs, *dst, *elem_ty);
                 self.walk_checked_arith(b, op, a, rhs, dst, elem_ty)
             }
-            Expr::X86Simd { op, args, imm, .. } => {
+            Expr::Simd { op, args, imm, .. } => {
                 let (op, imm) = (*op, *imm);
                 let args = args.clone();
-                self.walk_x86_simd(b, op, &args, imm)
+                self.walk_simd(b, op, &args, imm)
             }
             // A short-circuit in value position: the result is used, so
             // normalize it to 0/1.
@@ -184,7 +184,7 @@ impl<'a> Walker<'a> {
             Expr::MsIntrinsic { .. } => self.walk_ms_intrinsic(b, id),
             Expr::InlineAsm(idx) => self.walk_inline_asm(b, *idx),
             Expr::LabelAddr(label) => {
-                // GCC `&&label`: materialize the address of the label's
+                // GNU C `&&label`: materialize the address of the label's
                 // block as a code pointer. block_addr records the block
                 // as a computed-goto successor.
                 let blk = self.block_for_label(b, *label);
@@ -357,6 +357,16 @@ impl<'a> Walker<'a> {
                 if *kind == Intrinsic::ConstantP as i64 && !self.optimize =>
             {
                 Some(0)
+            }
+            Expr::Intrinsic { kind, args, .. }
+                if *kind == Intrinsic::ObjectSize as i64 && !self.optimize =>
+            {
+                match self.ast.expr(args[1]) {
+                    Expr::IntLit { val, .. } => {
+                        Some(crate::c5::compiler::object_size_fallback(*val))
+                    }
+                    _ => None,
+                }
             }
             _ => None,
         }

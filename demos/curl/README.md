@@ -1,36 +1,47 @@
 # curl
 
-badc compiles the [curl](https://curl.se) 8.11.1 library from source and
+badc compiles the [curl](https://curl.se) 8.23.0 library from source and
 builds it three ways -- a static archive, a shared library, and an executable
-that links against each -- plus a fourth flavour that links a badc-compiled
+that links against each -- plus a fourth flavor that links a badc-compiled
 client against the platform's **installed** libcurl to prove the frontend
 matches the OS ABI.
 
 The vendored library is trimmed to no external dependencies: HTTP, `file://`,
 and the WebSocket / URL / multi / easy APIs, with the threaded resolver and
-IPv6 on. HTTPS is provided by [BearSSL](../bearssl) when the TLS lane is built
-(`USE_BEARSSL`); the system-libcurl flavour gets HTTPS from the OS's own TLS
+IPv6 on. HTTPS is provided by [Mbed TLS](https://github.com/Mbed-TLS/mbedtls)
+3.6, compiled by badc in its default configuration less what
+`mbedtls_user_config.h` turns off, when the TLS lane is built
+(`USE_MBEDTLS`); the system-libcurl flavor gets HTTPS from the OS's own TLS
 backend. The other protocols (FTP, SMTP, LDAP, ...) are compiled out via the
 `CURL_DISABLE_*` set.
 
 ## Layout
 
-`setup.py` fetches the pinned tarball from the vendor-deps mirror and drops
-curl's `lib/` tree in `src/` and the public headers in `include/curl/`.
-Committed alongside:
+`setup.py` fetches the pinned tarballs from the vendor-deps mirror and drops
+curl's `lib/` tree in `src/`, the public headers in `include/curl/`, and Mbed
+TLS's `library/` and `include/` trees in `mbedtls/`. Committed alongside:
 
 * `curl_config.h` -- the hand-written build configuration (curl normally
   generates this from configure/CMake). Describes exactly the POSIX surface
-  badc ships on macOS and Linux; Windows uses curl's own `lib/config-win32.h`.
+  badc ships on macOS and Linux, and takes `curl_config_win32.h` on Windows.
+* `curl_config_win32.h` -- the values curl's CMake build takes for mingw-w64
+  (`CMake/win32-cache.cmake`); curl's own `lib/config-win32.h` serves MSVC
+  2010-2013 only.
+* `_mingw.h`, `afunix.h` -- stand-ins for the mingw-w64 headers curl includes
+  under `__MINGW32__`, which the smoke defines on Windows so `curl/system.h`
+  takes its LLP64 branch.
 * `curl_client.c` -- the driver: version / feature reporting, the URL API,
   escape round-tripping, the string list, a `file://` transfer, and -- when a
   base URL is passed -- an `http(s)://` fetch used by the loopback test.
 * `curl_syslink.h` -- `#pragma dylib` / `#pragma binding` bindings for the
-  system-libcurl flavour.
+  system-libcurl flavor.
+* `mbedtls_user_config.h` -- Mbed TLS's `MBEDTLS_USER_CONFIG_FILE`: turns
+  off the Armv8-A AES module, whose source requires GCC 6 or later once
+  `__ARM_NEON` is defined, while badc claims GNU C 4.3.
 
-## Build flavours
+## Build flavors
 
-The smoke builds every flavour at `-O0` and `-O`:
+The smoke builds every flavor at `-O0` and `-O`:
 
 * **static** -- `badc --ar` bundles the objects into `libcurl.a`; the driver
   links it with `-L/-l`.
@@ -50,4 +61,7 @@ python3 demos/curl/smoke.py
 
 Each built driver runs the offline scenarios plus a `file://` transfer and an
 `http://` transfer against a loopback HTTP server the harness starts on
-`127.0.0.1` -- no external network, so it is deterministic under CI.
+`127.0.0.1` -- no external network, so it is deterministic under CI. The TLS
+lane fetches over `https://` from the same server behind a throwaway
+self-signed certificate made with `openssl` (on Windows the one Git for
+Windows installs), on every target.

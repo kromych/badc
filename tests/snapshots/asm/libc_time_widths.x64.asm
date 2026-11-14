@@ -28,47 +28,39 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x18, %rsp
-               	pushq	%rbx
+               	subq	$0x20, %rsp
                	movabsq	$0x12a05f200, %rdi      # imm = 0x12A05F200
                	movl	$0x3b9aca00, %esi       # imm = 0x3B9ACA00
-               	xorl	%eax, %eax
                	callq	<addr>
-               	movabsq	$0x41edcd6500000000, %rax # imm = 0x41EDCD6500000000
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	movsd	<rip>, %xmm1
+               	ucomisd	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x1, %eax
-               	popq	%rbx
                	leave
                	retq
                	xorl	%edi, %edi
-               	xorl	%eax, %eax
                	callq	<addr>
-               	movq	%rax, %rbx
+               	movq	%rax, %rcx
                	movq	$0x0, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rdi
-               	xorl	%eax, %eax
+               	movq	%rcx, 0x8(%rsp)
                	callq	<addr>
-               	cmpq	$0x63b0cd00, %rbx       # imm = 0x63B0CD00
+               	movq	0x8(%rsp), %rcx
+               	cmpq	$0x63b0cd00, %rcx       # imm = 0x63B0CD00
                	jge	<addr>
                	movl	$0x2, %eax
-               	popq	%rbx
                	leave
                	retq
                	movq	-0x8(%rbp), %rax
-               	cmpq	%rbx, %rax
+               	cmpq	%rcx, %rax
                	jl	<addr>
-               	movq	-0x8(%rbp), %rax
-               	subq	%rbx, %rax
+               	subq	%rcx, %rax
                	cmpq	$0x5, %rax
                	jle	<addr>
                	movl	$0x3, %eax
-               	popq	%rbx
                	leave
                	retq
                	xorl	%eax, %eax
-               	popq	%rbx
                	leave
                	retq

@@ -34,10 +34,9 @@ Disassembly of section .text:
                	movq	$0x0, (%rsp)
                	subq	$0x330, %rsp            # imm = 0x330
                	xorl	%eax, %eax
-               	leaq	-0x2330(%rbp), %rcx
                	movq	%rax, %rdx
                	andq	$0x7f, %rdx
-               	movb	%dl, (%rcx,%rax)
+               	movb	%dl, -0x2330(%rbp,%rax)
                	incq	%rax
                	cmpl	$0x2328, %eax           # imm = 0x2328
                	jl	<addr>
@@ -64,7 +63,4 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	popq	%rbp
                	jmp	<addr>

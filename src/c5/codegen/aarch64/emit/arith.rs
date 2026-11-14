@@ -7,7 +7,7 @@ const BRK_DIVIDE_BY_ZERO: u32 = 0xD43E_0080;
 /// `Inst::Extend { value, kind }` -- sign-extend the low bytes of a
 /// GPR value to 64 bits via the `SXTB` / `SXTH` / `SXTW` aliases.
 pub(super) fn emit_extend(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     v: super::super::ir::ValueId,
     value: u32,
@@ -53,7 +53,7 @@ pub(super) fn emit_sign_extend(code: &mut Vec<u8>, rd: Reg, rn: Reg, kind: LoadK
 /// `Inst::Copy`: move `value` into this instruction's place, bit-exact
 /// in both banks.
 pub(super) fn emit_copy(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     value: u32,
     is_fp: bool,
@@ -62,6 +62,9 @@ pub(super) fn emit_copy(
     scratch: &ScratchPool,
 ) -> Emit {
     let src_place = place_of(alloc, value);
+    if src_place == dst {
+        return Ok(());
+    }
     // A reload lands in the destination itself.
     if is_fp && alloc.is_wide(value) {
         let Some(qd) = fp_or_spill_dst(dst, frame) else {
@@ -117,7 +120,7 @@ pub(super) fn emit_copy(
 
 /// `Inst::Neg`: `neg Xd, Xn` (the `sub Xd, XZR, Xn` alias).
 pub(super) fn emit_neg(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     value: u32,
     alloc: &Allocation,
@@ -136,11 +139,103 @@ pub(super) fn emit_neg(
     Ok(())
 }
 
+/// `Inst::Select`: `csel` / `fcsel` on a fused comparison's flags or on
+/// `cmp cond, #0`, read before the arms take the scratch registers; `cinc`
+/// for an arm the other plus one (`Allocation::select_inc`).
+#[allow(clippy::too_many_arguments)]
+pub(super) fn emit_select(
+    code: &mut CodeBuf,
+    dst: Place,
+    (v, cond, a, b, kind): (u32, u32, u32, u32, LoadKind),
+    func: &super::super::ir::FunctionSsa,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> Emit {
+    use super::encode::{Cond, enc_csel, enc_fcsel, enc_subs_imm};
+    let fused = |t: &[bool]| t.get(cond as usize).copied().unwrap_or(false);
+    let cc = match super::function::fused_branch_cond(func, alloc, cond, false) {
+        Some(cc) => cc,
+        None if fused(&alloc.mask_tests) => Cond::Ne,
+        None if fused(&alloc.branch_fused) => {
+            return fail("Select: fused condition has no condition code");
+        }
+        None => {
+            let Some(rc) = materialize_int(code, place_of(alloc, cond), scratch.primary, frame)
+            else {
+                return fail("Select: condition not int reg / spill");
+            };
+            if super::super::passes::narrow::is_cmp32(&func.cmp32, v) {
+                emit(code, super::encode::enc_subs_imm_w(Reg::SP, rc, 0));
+            } else {
+                emit(code, enc_subs_imm(Reg::SP, rc, 0));
+            }
+            Cond::Ne
+        }
+    };
+    if matches!(kind, LoadKind::F32 | LoadKind::F64) {
+        let mut regs = [0u8; 2];
+        for (k, src) in [a, b].into_iter().enumerate() {
+            let Some(d) = materialize_fp_for(
+                code,
+                src,
+                place_of(alloc, src),
+                frame.fp_scratch[k],
+                frame,
+                alloc,
+            ) else {
+                return fail("Select: arm not fp reg / spill");
+            };
+            regs[k] = d;
+        }
+        let dd = match dst {
+            Place::FpReg(r) => r,
+            Place::Spill(_) => frame.fp_scratch[2],
+            _ => return fail("Select: dst not fp reg / spill"),
+        };
+        emit(
+            code,
+            enc_fcsel(dd, regs[0], regs[1], cc, kind == LoadKind::F32),
+        );
+        store_spilled_fp(code, frame, dst, dd);
+        return Ok(());
+    }
+    if alloc.select_inc.get(v as usize).copied().unwrap_or(false) {
+        use super::encode::enc_csinc;
+        // `cinc`: the arm that is not the increment, plus one when the
+        // increment is chosen.
+        let inc_is_a = matches!(func.insts[a as usize],
+            Inst::BinopI { op: BinOp::Add, lhs, rhs_imm: 1 } if lhs == b);
+        let (x, keep) = if inc_is_a { (b, cc.flip()) } else { (a, cc) };
+        let Some(rx) = materialize_int(code, place_of(alloc, x), scratch.primary, frame) else {
+            return fail("Select: arm not int reg / spill");
+        };
+        let Some(rd) = int_or_spill_scratch(dst, scratch) else {
+            return fail("Select: dst not int reg / spill");
+        };
+        emit(code, enc_csinc(rd, rx, rx, keep));
+        store_spilled_int(code, frame, dst, rd);
+        return Ok(());
+    }
+    let Some(ra) = materialize_int(code, place_of(alloc, a), scratch.primary, frame) else {
+        return fail("Select: arm not int reg / spill");
+    };
+    let Some(rb) = materialize_int(code, place_of(alloc, b), scratch.secondary, frame) else {
+        return fail("Select: arm not int reg / spill");
+    };
+    let Some(rd) = int_or_spill_scratch(dst, scratch) else {
+        return fail("Select: dst not int reg / spill");
+    };
+    emit(code, enc_csel(rd, ra, rb, cc));
+    store_spilled_int(code, frame, dst, rd);
+    Ok(())
+}
+
 /// `Inst::Bswap`: reverse the low `width` bytes, zero-extended: `rev Xd`,
 /// `rev Wd` (zero-extending), or `rev Wd` then `lsr Wd, #16`, which
 /// drops the reversed upper halfword.
 pub(super) fn emit_bswap(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     value: u32,
     width: u8,
@@ -176,7 +271,7 @@ pub(super) fn emit_bswap(
 /// count; `cnt` + `addv` through [`Frame::count_fp`] for the set bits, or
 /// the general-register reduction when there is none.
 pub(super) fn emit_bit_count(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     op: BitCountOp,
     value: u32,
@@ -263,7 +358,7 @@ fn emit_popcount_gpr(code: &mut Vec<u8>, rd: Reg, rn: Reg, t: Reg, is64: bool) {
 /// `mul` / `sub` pair the contraction replaced.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_mul_add(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     a: u32,
     b: u32,
@@ -303,7 +398,7 @@ pub(super) fn emit_mul_add(
         emit(code, word);
     } else {
         let mut reloads = [scratch.primary, scratch.secondary, rd].into_iter();
-        let mut operand = |code: &mut Vec<u8>, p: Place| -> Option<Reg> {
+        let mut operand = |code: &mut CodeBuf, p: Place| -> Option<Reg> {
             match p {
                 Place::IntReg(r) => Some(Reg(r)),
                 Place::Spill(_) => materialize_int(code, p, reloads.next()?, frame),
@@ -333,7 +428,7 @@ pub(super) fn emit_mul_add(
 /// `Inst::BitField`: one SBFX / UBFX; a spilled operand reloads into a scratch.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_bit_field(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     value: u32,
     lsb: u8,
@@ -379,7 +474,7 @@ pub(super) fn shifted_reg_form(op: BinOp, shift: BinOp) -> Option<(u32, super::e
 /// sources before writing `rd`; a spilled operand reloads into a scratch.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_shift_op(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     op: BinOp,
     lhs: u32,
@@ -412,7 +507,7 @@ pub(super) fn emit_shift_op(
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_binop(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     op: BinOp,
     v: super::super::ir::ValueId,
     dst: Place,
@@ -425,7 +520,7 @@ pub(super) fn emit_binop(
     let lhs_place = place_of(alloc, lhs);
     let rhs_place = place_of(alloc, rhs);
     // FP arithmetic and comparison: operands in d-registers, spills
-    // reloaded into the FP scratches; no integer materialisation runs here.
+    // reloaded into the FP scratches; no integer materialization runs here.
     if fp_arith_enc(op).is_some() {
         // C99 6.3.1.8: the encoder follows the result's precision.
         let is_f32 = alloc.is_f32(v);
@@ -481,11 +576,14 @@ pub(super) fn emit_binop(
             Place::Spill(_) => scratch.primary,
             _ => return fail("Fcmp: dst not int reg / spill"),
         };
-        if is_f32 {
-            emit(code, enc_fcmp_s(dn, dm));
-        } else {
-            emit(code, enc_fcmp_d(dn, dm));
-        }
+        // A relational operator signals on any NaN: `fcmpe` (C99 F.3).
+        let word = match (is_f32, crate::c5::ir::fp_compare_signals(op)) {
+            (true, false) => enc_fcmp_s(dn, dm),
+            (false, false) => enc_fcmp_d(dn, dm),
+            (true, true) => enc_fcmp_s(dn, dm) | FCMPE,
+            (false, true) => enc_fcmp_d(dn, dm) | FCMPE,
+        };
+        emit(code, word);
         // A fused branch consumes the flags; the value is dead.
         if alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {
             return Ok(());
@@ -661,6 +759,7 @@ pub(super) fn int_binop_word(op: BinOp, rd: Reg, rn: Reg, rm: Reg) -> Option<u32
         BinOp::Shr => enc_asrv(rd, rn, rm),
         BinOp::Shru => enc_lsrv(rd, rn, rm),
         BinOp::Ror => super::encode::enc_rorv(rd, rn, rm),
+        BinOp::Ror32 => super::encode::enc_rorv_w(rd, rn, rm),
         _ => return None,
     })
 }
@@ -676,10 +775,13 @@ fn fp_arith_enc(op: BinOp) -> Option<fn(u8, u8, u8) -> u32> {
     })
 }
 
+/// The bit that turns `fcmp` into the signaling `fcmpe`.
+const FCMPE: u32 = 1 << 4;
+
 /// The condition of an FP comparison's `fcmp` + `cset`, `None`
 /// otherwise. `Fone` has none: `less or greater` spans two conditions.
 pub(super) fn fp_compare_cond(op: BinOp) -> Option<Cond> {
-    Some(match op {
+    Some(match crate::c5::ir::fp_relation(op) {
         BinOp::Feq => Cond::Eq,
         BinOp::Fne => Cond::Ne,
         BinOp::Flt => Cond::Mi,
@@ -695,6 +797,22 @@ pub(super) fn fp_compare_cond(op: BinOp) -> Option<Cond> {
 /// allocator may fuse it with the branch.
 pub(crate) fn compare_fuses(op: BinOp) -> bool {
     compare_cond(op).or_else(|| fp_compare_cond(op)).is_some()
+}
+
+/// Whether a comparison's flags decide a branch: one `b.cond`, or for
+/// `Fone` two ([`fp_compare_cond_pair`]).
+pub(crate) fn branch_fuses(op: BinOp) -> bool {
+    compare_fuses(op) || fp_compare_cond_pair(op, false).is_some()
+}
+
+/// The two conditions either of which takes a branch on `Fone` after
+/// `fcmp`, `less` (N) or `greater`; `negate`d, `equal` or unordered (V).
+pub(super) fn fp_compare_cond_pair(op: BinOp, negate: bool) -> Option<(Cond, Cond)> {
+    (crate::c5::ir::fp_relation(op) == BinOp::Fone).then_some(if negate {
+        (Cond::Eq, Cond::Vs)
+    } else {
+        (Cond::Mi, Cond::Gt)
+    })
 }
 
 /// The condition of an integer comparison's `cmp` + `cset`.
@@ -715,8 +833,15 @@ pub(super) fn compare_cond(op: BinOp) -> Option<Cond> {
 }
 
 /// Unsigned 12-bit immediate field of `cmp Xn, #imm`, when `imm` fits.
-pub(super) fn cmp_imm12(imm: i64) -> Option<u32> {
+pub(crate) fn cmp_imm12(imm: i64) -> Option<u32> {
     u32::try_from(imm).ok().filter(|v| *v < (1u32 << 12))
+}
+
+/// The magnitude of a `cmp Xn, #imm` that `cmn Xn, #magnitude` performs:
+/// both set the flags of `Xn - imm`, for `imm` in -4095..=-1.
+pub(crate) fn cmn_imm12(imm: i64) -> Option<u32> {
+    let m = u32::try_from(imm.checked_neg()?).ok()?;
+    (1..1 << 12).contains(&m).then_some(m)
 }
 
 /// The single-instruction encoding of `rd = rn op imm` when one exists:
@@ -760,7 +885,17 @@ pub(super) fn binop_imm_peephole(
         BinOp::Shr => shift_amount.map(|s| super::encode::enc_asr_imm(rd, rn, s)),
         BinOp::Shru => shift_amount.map(|s| super::encode::enc_lsr_imm(rd, rn, s)),
         BinOp::Ror => shift_amount.map(|s| super::encode::enc_ror_imm(rd, rn, s)),
-        BinOp::Mul => pow2_shift.map(|s| super::encode::enc_lsl_imm(rd, rn, s)),
+        BinOp::Ror32 => shift_amount
+            .filter(|&s| s < 32)
+            .map(|s| super::encode::enc_ror_imm_w(rd, rn, s)),
+        // `x * (2^k + 1)` is `x + (x << k)`.
+        BinOp::Mul => pow2_shift
+            .map(|s| super::encode::enc_lsl_imm(rd, rn, s))
+            .or_else(|| {
+                let k = (imm > 2 && (imm_u64 - 1).is_power_of_two())
+                    .then(|| (imm_u64 - 1).trailing_zeros())?;
+                Some(super::encode::enc_add_reg_lsl(rd, rn, rn, k))
+            }),
         BinOp::Add => imm12
             .map(|v| enc_add_imm(rd, rn, v))
             .or_else(|| imm12_neg.map(|v| enc_sub_imm(rd, rn, v)))
@@ -813,12 +948,12 @@ pub(crate) fn binop_imm_materializes(op: BinOp, imm: i64, high_dead: bool) -> bo
     if binop_imm_peephole(op, imm, high_dead, Reg(0), Reg(0)).is_some() {
         return false;
     }
-    !(compare_cond(op).is_some() && cmp_imm12(imm).is_some())
+    !(compare_cond(op).is_some() && (cmp_imm12(imm).is_some() || cmn_imm12(imm).is_some()))
 }
 
 /// Whether comparison `v` reads its operands at 32 bits
 /// (`passes::narrow`).
-fn narrow_cmp(alloc: &Allocation, v: super::super::ir::ValueId) -> bool {
+pub(super) fn narrow_cmp(alloc: &Allocation, v: super::super::ir::ValueId) -> bool {
     crate::c5::codegen::passes::narrow::is_cmp32(&alloc.cmp32, v)
 }
 
@@ -838,7 +973,7 @@ fn cmp_reg_word(alloc: &Allocation, v: super::super::ir::ValueId, rn: Reg, rm: R
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_binop_imm(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     op: BinOp,
     v: super::super::ir::ValueId,
     dst: Place,
@@ -848,8 +983,21 @@ pub(super) fn emit_binop_imm(
     frame: Frame,
     scratch: &ScratchPool,
 ) -> Emit {
-    // A one-bit mask the branch alone reads is the branch's `tbz` / `tbnz`.
+    // A one-bit mask the branch alone reads is the branch's `tbz` / `tbnz`;
+    // one selects read sets the flags with `tst`.
     if op == BinOp::And && alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {
+        if alloc.mask_tests.get(v as usize).copied().unwrap_or(false) {
+            use super::encode::{LogicalOp, enc_logical_imm};
+            let Some(rn) = materialize_int(code, place_of(alloc, lhs), scratch.primary, frame)
+            else {
+                return fail("BinopI tst: lhs not int reg / spill");
+            };
+            let Some(w) = enc_logical_imm(LogicalOp::Ands, true, Reg(31), rn, rhs_imm as u64)
+            else {
+                return fail("BinopI tst: mask not a bitmask immediate");
+            };
+            emit(code, w);
+        }
         return Ok(());
     }
     let Some(rd) = int_or_spill_scratch(dst, scratch) else {
@@ -890,18 +1038,23 @@ pub(super) fn emit_binop_imm(
         store_spilled_int(code, frame, dst, rd);
         return Ok(());
     }
-    // `cmp Xn, #imm12` covers 0..4095.
+    // `cmp Xn, #imm12` covers 0..4095, `cmn Xn, #imm12` -4095..-1.
+    let narrow_compare = narrow_cmp(alloc, v);
+    let imm_compare = cmp_imm12(rhs_imm)
+        .map(|k| match narrow_compare {
+            true => super::encode::enc_subs_imm_w(Reg::SP, rn, k),
+            false => enc_subs_imm(Reg::SP, rn, k),
+        })
+        .or_else(|| {
+            cmn_imm12(rhs_imm).map(|k| match narrow_compare {
+                true => super::encode::enc_adds_imm_w(Reg::SP, rn, k),
+                false => super::encode::enc_adds_imm(Reg::SP, rn, k),
+            })
+        });
     if compare_cond(op).is_some()
-        && let Some(imm) = cmp_imm12(rhs_imm)
+        && let Some(word) = imm_compare
     {
-        emit(
-            code,
-            if narrow_cmp(alloc, v) {
-                super::encode::enc_subs_imm_w(Reg::SP, rn, imm)
-            } else {
-                enc_subs_imm(Reg::SP, rn, imm)
-            },
-        );
+        emit(code, word);
         if alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {
             return Ok(());
         }

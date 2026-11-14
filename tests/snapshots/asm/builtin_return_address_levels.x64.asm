@@ -142,16 +142,14 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	popq	%rbp
                	retq
+               	movq	<rip>, %rcx # <addr>
                	movq	<rip>, %rax # <addr>
+               	cmpq	%rax, %rcx
+               	je	<addr>
                	movq	<rip>, %rcx # <addr>
                	cmpq	%rcx, %rax
                	je	<addr>
                	movq	<rip>, %rax # <addr>
-               	movq	<rip>, %rcx # <addr>
-               	cmpq	%rcx, %rax
-               	je	<addr>
-               	movq	<rip>, %rax # <addr>
-               	movq	<rip>, %rcx # <addr>
                	cmpq	%rcx, %rax
                	jne	<addr>
                	movl	$0x8, %eax

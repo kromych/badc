@@ -97,8 +97,8 @@ pub(crate) fn compile_objects(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
 }
 
 /// `-fsyntax-only`: each source through the preprocessor and the front end,
-/// or through the assembler, as gcc runs it, with their diagnostics; no
-/// output is written and the status is the units'.
+/// or through the assembler, with their diagnostics; no output is written
+/// and the status is the units'.
 pub(crate) fn check_syntax(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
     let sources = &inputs.sources;
     if sources.is_empty() {
@@ -122,6 +122,134 @@ pub(crate) fn check_syntax(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
         let res = translate_tu(src, None, &cfg, &mut log).map(drop);
         (log, res)
     });
+}
+
+/// `--dump-records`: each C source through the front end, then one
+/// `struct|union <tag> <size> <align>` line per complete tagged record, in
+/// definition order, and `typedef <name> <size> <align>` per file-scope
+/// typedef naming a record, each followed by `  <member> <offset>` for each named member,
+/// or `  <member> <offset> <bit offset> <width>` for a bit-field, the offset
+/// being its storage unit's.
+pub(crate) fn dump_records(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
+    let sources = &inputs.sources;
+    if sources.is_empty() {
+        eprint_diagnostic("badc: error: --dump-records requires at least one source input");
+        std::process::exit(1);
+    }
+    let stdin_src = stdin.for_sources(sources);
+    let reloc_opts =
+        cli.codegen
+            .relocatable_options(cli.front.optimize, pic_link_default(cli), &cli.front.diag);
+    let cfg = CompileCfg::new(cli, reloc_opts, sources, stdin_src.as_deref());
+    let workers = worker_count(cli.jobs, sources.len());
+    let dumps = compile_units(sources, workers, |_, src| {
+        let mut log = TuLog::default();
+        let res = translate_tu(src, None, &cfg, &mut log).map(|p| record_layouts(&p));
+        (log, res)
+    });
+    for dump in dumps {
+        outln!("{dump}");
+    }
+}
+
+/// Each C source through the front end, then one `<name>\t<text>` line per
+/// entry `entries` takes from its program.
+fn dump_units(
+    cli: &Cli,
+    inputs: &Inputs,
+    stdin: &StdinSource,
+    flag: &str,
+    entries: fn(&badc::Program) -> Vec<(String, String)>,
+) {
+    let sources = &inputs.sources;
+    if sources.is_empty() {
+        eprint_diagnostic(format!(
+            "badc: error: {flag} requires at least one source input"
+        ));
+        std::process::exit(1);
+    }
+    let stdin_src = stdin.for_sources(sources);
+    let reloc_opts =
+        cli.codegen
+            .relocatable_options(cli.front.optimize, pic_link_default(cli), &cli.front.diag);
+    let cfg = CompileCfg::new(cli, reloc_opts, sources, stdin_src.as_deref());
+    let workers = worker_count(cli.jobs, sources.len());
+    let dumps = compile_units(sources, workers, |_, src| {
+        let mut log = TuLog::default();
+        let res = translate_tu(src, None, &cfg, &mut log).map(|p| {
+            (entries(&p).iter())
+                .map(|(name, text)| format!("{name}\t{text}\n"))
+                .collect::<String>()
+        });
+        (log, res)
+    });
+    for dump in dumps {
+        outln!("{dump}");
+    }
+}
+
+/// `--dump-prototypes`: one `<name>\t<type>` line per function and extern
+/// object each source declares, the type that of its address.
+pub(crate) fn dump_prototypes(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
+    dump_units(cli, inputs, stdin, "--dump-prototypes", |p| {
+        p.prototypes.clone()
+    });
+}
+
+/// `--dump-enumerators`: one `<name>\t<value>` line per enumeration
+/// constant each source declares at file scope.
+pub(crate) fn dump_enumerators(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
+    dump_units(cli, inputs, stdin, "--dump-enumerators", |p| {
+        (p.enumerators())
+            .map(|(name, value)| (name.to_string(), value.to_string()))
+            .collect()
+    });
+}
+
+fn record_layouts(program: &badc::Program) -> String {
+    use core::fmt::Write;
+    let mut out = String::new();
+    let tagged = (program.structs.iter())
+        .filter(|s| s.is_complete && !s.is_anonymous && !s.is_vector && !s.is_array)
+        .map(|s| {
+            (
+                if s.is_union { "union" } else { "struct" },
+                s.name.as_str(),
+                s,
+            )
+        });
+    for s in tagged {
+        let (kind, name, s) = s;
+        let _ = writeln!(out, "{kind} {name} {} {}", s.size, s.align);
+        write_members(&mut out, s);
+    }
+    for t in &program.typedefs {
+        let sign = match t.signed {
+            Some(true) => " signed",
+            Some(false) => " unsigned",
+            None => "",
+        };
+        let _ = writeln!(out, "typedef {} {} {}{sign}", t.name, t.size, t.align);
+        if let Some(id) = t.record {
+            write_members(&mut out, &program.structs[id]);
+        }
+    }
+    out
+}
+
+fn write_members(out: &mut String, s: &badc::StructDef) {
+    use core::fmt::Write;
+    for f in &s.fields {
+        if f.bit_width > 0 {
+            let _ = writeln!(
+                out,
+                "  {} {} {} {}",
+                f.name, f.offset, f.bit_offset, f.bit_width
+            );
+        } else {
+            let _ = writeln!(out, "  {} {}", f.name, f.offset);
+        }
+    }
 }
 
 /// `--ar` mode: bundle each `.c` input (compiled to a native
@@ -161,8 +289,7 @@ pub(crate) fn build_archive(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
     // `--export-all` widens an image's dynamic symbol table; a
     // relocatable object exports what its source declares.
     cfg.export_all = false;
-    // `--ar` bundles objects; gcc has no dependency-output analogue for
-    // archive assembly.
+    // `--ar` bundles objects; archive assembly has no dependency output.
     cfg.deps = None;
     cfg.dep_output = None;
     let mut members: Vec<badc::ArchiveMember> = Vec::with_capacity(total_inputs);
@@ -238,8 +365,7 @@ pub(crate) fn build_archive(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
 /// The default is that it is: this toolchain's own linker is the usual
 /// consumer and its default executable is `ET_DYN`, so a `const` object
 /// carrying a relocation cannot ride the read-only prefix and would
-/// otherwise cost its whole `.rodata` that placement. gcc reaches the
-/// same layout wherever it is configured default-PIE.
+/// otherwise cost its whole `.rodata` that placement.
 ///
 /// Two inputs state the opposite -- a link that resolves the relocation
 /// statically -- and keep such storage in `.rodata`: an explicit

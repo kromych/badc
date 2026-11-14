@@ -153,6 +153,7 @@ pub(crate) fn run(func: &mut FunctionSsa) {
                 at: At::Before(e.at),
                 inst,
                 is_f32,
+                copy_of: None,
             })
         };
         for o in e.outs.iter().filter(|o| o.rw) {
@@ -190,7 +191,7 @@ pub(crate) fn run(func: &mut FunctionSsa) {
             put(&mut ins, store(o, NO_VALUE), false);
         }
     }
-    let (rw, _) = insert(func, &ins);
+    let rw = insert(func, &ins);
     let mut next = 0usize;
     let mut take = || {
         next += 1;
@@ -253,7 +254,7 @@ mod tests {
     fn func_with(insts: Vec<Inst>, blocks: Vec<Block>) -> FunctionSsa {
         let n = insts.len();
         FunctionSsa {
-            inst_src: vec![(0, 0); n],
+            inst_src: vec![crate::c5::ir::InstSrc::default(); n],
             f32_values: vec![false; n],
             insts,
             blocks,

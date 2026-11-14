@@ -94,7 +94,7 @@ fn field_of(func: &FunctionSsa, counts: &[u32], idx: usize) -> Option<Field> {
     (folded > 0).then_some(field)
 }
 
-/// Walk every function, folding each recognised extract into one node.
+/// Walk every function, folding each recognized extract into one node.
 pub(crate) fn run(funcs: &mut [FunctionSsa]) {
     for func in funcs.iter_mut() {
         let counts = compute_use_counts(func);

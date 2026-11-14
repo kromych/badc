@@ -30,7 +30,6 @@ Disassembly of section .text:
                	b.ge	<addr>
                	str	wzr, [x0]
                	ret
-               	ldrsw	x1, [x0]
                	add	x1, x1, #0x1
                	str	w1, [x0]
                	ret
@@ -41,8 +40,7 @@ Disassembly of section .text:
                	ret
 
 <pick>:
-               	sxtw	x0, w0
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x1                // =1
                	str	w0, [x1]
                	ret
@@ -61,13 +59,9 @@ Disassembly of section .text:
                	ret
 
 <call_last>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
                	mov	x1, #0x4                // =4
                	str	w1, [x0]
-               	bl	<addr>
-               	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
 
 <count_down>:
                	cbz	w0, <addr>

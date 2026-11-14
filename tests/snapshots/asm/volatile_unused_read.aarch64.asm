@@ -18,11 +18,11 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	adrp	x0, <page>
-               	ldrsw	x1, [x0, #0x18]
+               	ldrsw	x1, [x0, #0xc]
                	mov	x1, #0x7                // =7
                	stur	w1, [x29, #-0x8]
                	ldursw	x1, [x29, #-0x8]
-               	ldrsw	x0, [x0, #0x18]
+               	ldrsw	x0, [x0, #0xc]
                	cmp	w0, #0x5
                	b.ne	<addr>
                	ldursw	x0, [x29, #-0x8]

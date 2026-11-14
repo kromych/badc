@@ -23,7 +23,7 @@ Disassembly of section .text:
                	ret
                	mrs	x1, TPIDR_EL0
                	add	x1, x1, #0x0, lsl #12   // =0x0
-               	add	x1, x1, #0x18
+               	add	x1, x1, #0x14
                	ldrsw	x2, [x1]
                	cbz	w2, <addr>
                	mov	x0, #0x2                // =2
@@ -32,19 +32,12 @@ Disassembly of section .text:
                	str	w2, [x0]
                	mov	x2, #0x2a               // =42
                	str	w2, [x1]
-               	ldrsw	x2, [x0]
-               	cmp	w2, #0x7
+               	ldrsw	x1, [x0]
+               	cmp	w1, #0x7
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	ldrsw	x2, [x1]
-               	cmp	w2, #0x2a
-               	b.eq	<addr>
-               	mov	x0, #0x4                // =4
-               	ret
-               	ldrsw	x2, [x0]
-               	ldrsw	x1, [x1]
-               	add	x1, x2, x1
+               	add	x1, x1, #0x2a
                	str	w1, [x0]
                	mov	x0, x1
                	cmp	w0, #0x31

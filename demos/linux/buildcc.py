@@ -69,7 +69,6 @@ BADC_TIMEOUT (seconds per badc run, default 300).
 
 from __future__ import annotations
 
-import hashlib
 import io
 import json
 import os
@@ -143,6 +142,11 @@ FORWARD_EXACT = {
     # dispatch is an indirect branch, which those configurations forbid
     # unthunked and require a landing pad at.
     "-fno-jump-tables", "-fjump-tables",
+    # The top-level Makefile adds this: the inliner's stack-growth bounds
+    # tighten to gcc's values under it.
+    "-fconserve-stack",
+    # The purgatory units keep an object initialized to zero in .data.
+    "-fno-zero-initialized-in-bss",
     # Early-boot units that run with the MMU off are built with this: memory
     # is Device-typed there and an unaligned access raises an alignment
     # fault. badc caps every compiler-generated access at the alignment its
@@ -152,7 +156,7 @@ FORWARD_EXACT = {
     # a linked kernel object must do: the kernel runs with it trapped (no
     # CR4.OSFXSR on x86_64, CPACR_EL1.FPEN on aarch64) and callers do not
     # maintain the System V `al` convention.
-    "-mno-sse", "-mgeneral-regs-only",
+    "-mgeneral-regs-only",
     # ftrace's x86_64 form (CONFIG_FUNCTION_TRACER with
     # CONFIG_FTRACE_MCOUNT_USE_CC): `call __fentry__` at every function
     # entry and the `__mcount_loc` table ftrace patches from. Withheld, no
@@ -234,7 +238,7 @@ FORWARD_PREFIX = (
     # extension list and refuses one it does not implement.
     "-mcpu=",
     # A reserved register. badc keeps it out of its allocator and its own
-    # scratch picks, and refuses a name it cannot honour (the stack and frame
+    # scratch picks, and refuses a name it cannot honor (the stack and frame
     # pointers, its scratch registers), so the unit fails rather than
     # compiling with the register in use. x18, the shadow-call-stack
     # register, is outside badc's aarch64 pool on every target already.
@@ -243,6 +247,10 @@ FORWARD_PREFIX = (
     # against. Withheld, the kernel's guard against a frame that threatens
     # its stack never fires; a frame that did reached real hardware.
     "-Wframe-larger-than=",
+    # The ELF visibility of each external definition no attribute or pragma
+    # states; a hidden one does not bind outside its own link. badc
+    # validates the value.
+    "-fvisibility=",
     *HARDENING_PREFIX,
 )
 
@@ -264,12 +272,6 @@ UNSUPPORTED_PREFIX = (
     # asks for -- array bounds and shift-exponent among them -- are absent
     # from a unit built here, and the handlers in lib/ubsan.c stay uncalled.
     "-fsanitize=", "-fsanitize-trap=",
-    # Both have an observable effect badc does not reproduce, so neither
-    # can be ignored: the first moves a zero-initialized definition out of
-    # .bss into .data, and the second lowers a definition's ELF visibility
-    # so it does not bind outside its own link.
-    "-fno-zero-initialized-in-bss",
-    "-fvisibility=",
     # Clears the call-clobbered registers a function used before it returns
     # (CONFIG_ZERO_CALL_USED_REGS). badc emits no such epilogue.
     # TODO: implement the register-clearing epilogue and forward the flag.
@@ -305,7 +307,7 @@ IGNORE_EXACT = {
     # Passes badc does not have: it runs no global common subexpression
     # elimination, invents no store, and turns no return-of-call into a
     # branch -- an aarch64 `return g(x)` emits BL, not B.
-    "-fno-gcse", "-fno-allow-store-data-races", "-fconserve-stack",
+    "-fno-gcse", "-fno-allow-store-data-races",
     "-foptimize-sibling-calls", "-fno-optimize-sibling-calls",
     # Debug-info detail. badc emits one DWARF form per construct, so these
     # change nothing outside the .debug_* sections.
@@ -332,11 +334,9 @@ IGNORE_EXACT = {
     # Instruction-scheduling hints. badc schedules to its own model and
     # exposes no knob either names, so both ask for what a unit gets.
     "-fsched-pressure", "-fno-schedule-insns", "-fno-schedule-insns2",
-    # The positive spelling of the SSE baseline. badc's x86-64 backend
-    # emits SSE and SSE2 unconditionally -- they are the psABI baseline --
-    # so a unit re-enabling them for FPU code gets what it already had.
-    # The negative spellings are ignored above for the same reason.
-    "-msse", "-msse2", "-mhard-float",
+    # x87 for floating point, which badc's x86-64 backend never uses; the
+    # kernel's FPU units pass it beside -msse.
+    "-mhard-float",
 }
 
 IGNORE_PREFIX = (
@@ -381,23 +381,25 @@ def warning_option(a: str) -> bool:
     return a.startswith("-W") and not a.startswith(("-Wa,", "-Wl,", "-Wp,"))
 
 
-def badc_accepts(badc: str, flag: str, cache_dir: str | None = None) -> bool:
+def badc_accepts(badc: str, flag: str, cache: str | None = None) -> bool:
     """Whether badc takes the diagnostic option `flag`: kbuild's
     `cc-option` question, an empty unit compiled under `-Werror`. badc
     refuses a selector no diagnostic, alias or group answers, and reports
     one naming a gcc or clang warning it does not implement (B7012),
     which `-Werror` makes an error, so neither is forwarded. The answers
-    are kept in a file per badc binary, so a build asks once per
-    spelling."""
+    are kept in one file, `cache` or $BADC_WFLAGS_CACHE (which verify.py
+    places in the build's work directory), so a build asks once per
+    spelling; a file written for another badc binary is replaced."""
     path = shutil.which(badc) or badc
     st = os.stat(path)
     key = f"{os.path.realpath(path)}:{st.st_mtime_ns}:{st.st_size}:werror"
-    cache = os.path.join(cache_dir or tempfile.gettempdir(),
-                         f"badc-wflags-{hashlib.sha1(key.encode()).hexdigest()[:16]}.json")
+    cache = (cache or os.environ.get("BADC_WFLAGS_CACHE")
+             or os.path.join(tempfile.gettempdir(), f"badc-wflags-{os.getuid()}.json"))
     try:
         with open(cache) as f:
-            known = json.load(f)
-    except (OSError, ValueError):
+            stored = json.load(f)
+        known = stored["answers"] if stored.get("badc") == key else {}
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
         known = {}
     if flag not in known:
         r = subprocess.run([path, "-Werror", flag, "-c", "-x", "c", os.devnull,
@@ -405,9 +407,9 @@ def badc_accepts(badc: str, flag: str, cache_dir: str | None = None) -> bool:
         known[flag] = r.returncode == 0
         # Another unit may write the file meanwhile; each answer is
         # recomputed at worst, and a reader never sees a partial file.
-        fd, tmp = tempfile.mkstemp(dir=os.path.dirname(cache))
+        fd, tmp = tempfile.mkstemp(dir=os.path.dirname(cache) or ".")
         with os.fdopen(fd, "w") as f:
-            json.dump(known, f)
+            json.dump({"badc": key, "answers": known}, f)
         os.replace(tmp, cache)
     return bool(known[flag])
 
@@ -442,6 +444,9 @@ def rewrite(argv: list[str], accepts=lambda _flag: False) -> Rewritten:
     unknown: list[str] = []
     opt: str | None = None
     debug = False
+    # gcc takes the last of -mno-sse / -msse / -msse2: an FPU unit's
+    # CC_FLAGS_FPU after the global -mno-sse gives it the SSE registers.
+    sse_off = False
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -458,6 +463,9 @@ def rewrite(argv: list[str], accepts=lambda _flag: False) -> Rewritten:
             i += 2
         elif a.startswith("-O"):
             opt = a  # last one wins, as with gcc
+            i += 1
+        elif a in ("-mno-sse", "-msse", "-msse2"):
+            sse_off = a == "-mno-sse"
             i += 1
         elif a == "-g0":
             debug = False
@@ -484,6 +492,8 @@ def rewrite(argv: list[str], accepts=lambda _flag: False) -> Rewritten:
         else:
             unknown.append(a)
             i += 1
+    if sse_off:
+        out.append("-mno-sse")
     if opt is not None and opt != "-O0":
         out.append("-O")
     if debug:
@@ -697,6 +707,12 @@ def _self_test() -> int:
     # `unknown`, which fails the unit rather than compiling under a
     # configuration the build did not ask for; one badc has no equivalent
     # for is `dropped`, which is reported per unit.
+    # The last of -mno-sse / -msse / -msse2 decides, as with gcc.
+    assert rewrite(["-mno-sse", "-mno-sse2"]).argv == ["-mno-sse"]
+    assert rewrite(["-mno-sse", "-mno-sse2", "-msse", "-msse2", "-mhard-float"]).argv == []
+    assert rewrite(["-msse", "-mno-sse"]).argv == ["-mno-sse"]
+    for flag in ("-fconserve-stack", "-fno-zero-initialized-in-bss"):
+        assert rewrite([flag]).argv == [flag], flag
     assert rewrite(["-fno-such-flag"]).unknown == ["-fno-such-flag"]
     assert rewrite(["-Wp,-fno-such-flag"]).unknown == ["-Wp,-fno-such-flag"]
     assert rewrite(["-nostdinc"]).argv == ["-nostdinc"]
@@ -750,7 +766,7 @@ def _self_test() -> int:
     # because its opposite is: only the spelling that holds is listed.
     for flag in ("-mbig-endian", "-mabi=ilp32"):
         assert rewrite([flag]).unknown == [flag], flag
-    # Every reserved register reaches badc, which honours it or fails the
+    # Every reserved register reaches badc, which honors it or fails the
     # unit; the shim no longer decides which spellings it can drop.
     for flag in ("-ffixed-x18", "-ffixed-x9", "-ffixed-q16", "-ffixed-r12"):
         assert rewrite([flag]) == Rewritten([flag], [], []), flag
@@ -772,18 +788,27 @@ def _self_test() -> int:
                  "-Werror=return-type", "-Wl,-r"], takes)
     assert r == Rewritten(["-Wall", "-Wno-pointer-sign", "-Wa,-x",
                            "-Werror=return-type"], [], []), r
-    # badc answers once per spelling, through a file a build's units share.
+    # badc answers once per spelling, through one file a build's units
+    # share, which another badc binary's answers replace.
     if os.name == "posix":
         with tempfile.TemporaryDirectory() as d:
             fake, calls = os.path.join(d, "badc"), os.path.join(d, "calls")
+            cache = os.path.join(d, "wflags.json")
             with open(fake, "w") as f:
                 f.write(f"#!/bin/sh\necho \"$2\" >> '{calls}'\n[ \"$2\" = -Wall ]\n")
             os.chmod(fake, 0o755)
             for _ in range(2):
-                assert badc_accepts(fake, "-Wall", d) is True
-                assert badc_accepts(fake, "-Wbogus", d) is False
+                assert badc_accepts(fake, "-Wall", cache) is True
+                assert badc_accepts(fake, "-Wbogus", cache) is False
             with open(calls) as f:
                 assert f.read() == "-Wall\n-Wbogus\n"
+            os.utime(fake, ns=(1, 1))
+            assert badc_accepts(fake, "-Wall", cache) is True
+            with open(calls) as f:
+                assert f.read() == "-Wall\n-Wbogus\n-Wall\n"
+            with open(cache) as f:
+                assert set(json.load(f)["answers"]) == {"-Wall"}
+            assert sorted(os.listdir(d)) == ["badc", "calls", "wflags.json"]
 
     # Success-path diagnostics: tagged with the unit when a log is
     # configured, left to the caller to forward when none is.

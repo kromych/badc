@@ -1,7 +1,7 @@
 // C99 6.6: the conversion of an integer constant to a floating type is
 // itself a constant. The builder folds `(float)K` / `(double)K` to the
 // converted floating constant, so no runtime int-to-FP conversion is
-// materialised. Runtime checks pin the values; the SSA snapshot pins
+// materialized. Runtime checks pin the values; the SSA snapshot pins
 // the folded `Imm [f32]` / `Imm` constants (no `FpCast`, no `scvtf`).
 
 static float use_f(float x) { return x; }

@@ -134,11 +134,11 @@ impl Compiler {
         undeclared.dedup();
         for sym_idx in undeclared {
             let name = self.symbols[sym_idx].name.clone();
-            let line = self.symbols[sym_idx].binding.decl_line;
+            let at = self.symbols[sym_idx].binding.decl_site();
             let suggestion = self.include_hint(&name);
             self.warn_at(
                 Code::UNDEFINED_FUNCTION,
-                line,
+                at,
                 alloc::format!(
                     "`{name}` is declared `static` and used as a function in an initializer, but this unit does not define it{suggestion}"
                 ),
@@ -197,7 +197,7 @@ impl Compiler {
 
     /// Emit the body of every requested Sys trampoline. Called
     /// after every real function body has been parsed so the
-    /// synthesised SSA lands after the user code without
+    /// synthesized SSA lands after the user code without
     /// splitting a caller mid-build. Each trampoline is the
     /// shortest possible "re-push args, CallExt, return" sequence:
     ///
@@ -288,7 +288,6 @@ impl Compiler {
                     .any(|&p| is_float_ty(p) || is_double_ty(p));
             if is_variadic || touches_fp {
                 let mut sb = SsaBuilder::new(ent_pc, 0, false);
-                sb.set_locals(0);
                 sb.set_name(alloc::format!("__c5_sys_{}", self.symbols[sys_idx].name));
                 sb.alloca_init(0);
                 sb.tail_ext(binding_idx);
@@ -304,7 +303,7 @@ impl Compiler {
             // Forwarded arg count (variadic bindings took the tail
             // jump above).
             let nargs_ssa = fixed_nargs;
-            // The synthesised trampoline's own signature is a
+            // The synthesized trampoline's own signature is a
             // fixed-arg host-ABI function: callers reach it via
             // function pointer through `(sys_ptr)open`, which the
             // SysV / AAPCS / win64 ABIs deliver in the integer
@@ -318,7 +317,6 @@ impl Compiler {
             // the trampoline's flag to `false` leaves the libc-
             // side `al = xmm_count` setup intact.
             let mut sb = SsaBuilder::new(ent_pc, nargs_ssa, false);
-            sb.set_locals(0);
             // Synthetic trampoline body forwarding to the libc
             // binding `self.symbols[sys_idx].name`; tag the
             // FunctionSsa with a deterministic name so the symbol

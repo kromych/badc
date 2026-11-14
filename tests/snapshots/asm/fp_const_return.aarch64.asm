@@ -48,46 +48,17 @@ Disassembly of section .text:
                	cmp	w0, #0x2
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
-               	fmov	d16, x0
-               	fmov	d17, x0
-               	fcmp	d16, d17
-               	b.eq	<addr>
-               	mov	x0, #0x1                // =1
-               	add	sp, sp, #0x50
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	add	x0, x0, #0x1
                	cmp	w0, #0x2
                	b.lt	<addr>
-               	fmov	d0, #1.00000000
-               	fcmp	d0, d0
-               	b.eq	<addr>
-               	mov	x0, #0x2                // =2
-               	add	sp, sp, #0x50
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	mov	x0, #0x0                // =0
                	add	x0, x0, #0x1
                	cmp	w0, #0x2
                	b.lt	<addr>
-               	fmov	d0, #0.50000000
-               	fcmp	d0, d0
-               	b.eq	<addr>
-               	mov	x0, #0x3                // =3
-               	add	sp, sp, #0x50
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	mov	x0, #0x0                // =0
                	add	x0, x0, #0x1
                	cmp	w0, #0x2
                	b.lt	<addr>
-               	fmov	d0, #0.25000000
-               	fcmp	d0, d0
-               	b.eq	<addr>
-               	mov	x0, #0x4                // =4
-               	add	sp, sp, #0x50
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	mov	x0, #0x0                // =0
                	add	x0, x0, #0x1
                	cmp	w0, #0x2

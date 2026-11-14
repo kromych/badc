@@ -10,6 +10,8 @@
 // getservbyname, gethostbyname and the AI_PASSIVE / NI_MAXHOST /
 // NI_NUMERICHOST / NI_NUMERICSERV constants come from <netdb.h>.
 #include <netdb.h>
+// The IPv6 address predicates (ws2tcpip.h, ws2ipdef.h).
+#include <__badc_in6.h>
 
 // Presentation-form buffer lengths including the terminating NUL
 // (ws2ipdef.h).
@@ -23,7 +25,7 @@
 #define EAI_FAIL      11003
 #define EAI_FAMILY    10047
 #define EAI_MEMORY    8
-#define EAI_NODATA    11001
+#define EAI_NODATA    11004
 #define EAI_NONAME    11001
 #define EAI_SERVICE   10109
 #define EAI_SOCKTYPE  10044
@@ -44,19 +46,14 @@
 
 // Multicast-filter WSAIoctl codes (ws2ipdef.h, reached through
 // ws2tcpip.h). Their presence signals a recent enough SDK.
-#define SIO_GET_MULTICAST_FILTER  _WSAIOR(IOC_WS2, 14)
-#define SIO_SET_MULTICAST_FILTER  _WSAIOW(IOC_WS2, 13)
+#define SIO_GET_MULTICAST_FILTER  _IOW('t', 124 | IOC_IN, unsigned long)
+#define SIO_SET_MULTICAST_FILTER  _IOW('t', 125, unsigned long)
 
-// IPv4 / IPv6 string-conversion helpers (ws2tcpip.h). inet_ntop and
-// inet_pton are ws2_32 exports on the targeted Windows version;
-// inet_ntoa / inet_addr predate them. The in_addr / sockaddr types are
-// already defined by <winsock2.h>, so they are not redeclared here.
+// IPv4 / IPv6 string-conversion helpers (ws2tcpip.h), ws2_32 exports on
+// the targeted Windows version; <winsock2.h> declares the inet_ntoa and
+// inet_addr they succeed, and the address types.
 #pragma binding(ws2_32::inet_ntop, "inet_ntop")
 #pragma binding(ws2_32::inet_pton, "inet_pton")
-#pragma binding(ws2_32::inet_ntoa, "inet_ntoa")
-#pragma binding(ws2_32::inet_addr, "inet_addr")
 const char *inet_ntop(int af, const void *src, char *dst, size_t size);
 int inet_pton(int af, const char *src, void *dst);
-char *inet_ntoa(struct in_addr in);
-unsigned int inet_addr(const char *cp);
 #endif

@@ -412,7 +412,111 @@ fn pragma_operators_scope_a_parser_diagnostic_within_their_line() {
     }
 }
 
-/// The MSVC spelling reaches the same rows through the catalogue's
+/// Diagnostic pragmas inside an expression govern the conversion of the
+/// value between them, as clang resolves a call argument's and a return
+/// value's: a conversion reports at its value's position, not at the token
+/// after it. The same conversions outside the macro report.
+#[test]
+fn pragma_operators_scope_the_conversion_of_a_value_within_an_expression() {
+    let src = "#define QUIET(s) _Pragma(\"GCC diagnostic push\") \
+               _Pragma(\"GCC diagnostic ignored \\\"-Wint-conversion\\\"\") s \
+               _Pragma(\"GCC diagnostic pop\")\n\
+               void f(char *p);\n\
+               char *g(long v) { f(QUIET(v)); char *p = QUIET(v); p = QUIET(v); return QUIET(v); }\n\
+               char *h(long v) { f(v); return v; }\n\
+               #define NARROW(s) _Pragma(\"GCC diagnostic push\") \
+               _Pragma(\"GCC diagnostic ignored \\\"-Wconstant-conversion\\\"\") s \
+               _Pragma(\"GCC diagnostic pop\")\n\
+               void k(signed char c);\n\
+               void m(void) { k(NARROW(300)); }\n\
+               int main(void) { return 0; }\n";
+    let p = super::compile_str_bare_with_diags(src, &["int-conversion", "constant-conversion"]);
+    let got: alloc::vec::Vec<(u32, alloc::string::String)> = p
+        .warnings
+        .iter()
+        .map(|d| (d.loc.as_ref().map_or(0, |l| l.line), d.to_string()))
+        .collect();
+    assert_eq!(got.len(), 2, "{got:?}");
+    assert!(
+        got.iter().all(|(line, _)| *line == 4)
+            && got[0].1.contains("argument 1")
+            && got[1].1.contains("return"),
+        "{got:?}"
+    );
+}
+
+/// Diagnostic pragmas around a construct inside a macro govern the reports
+/// about it, which resolve at the construct rather than at its line's start
+/// or the token after it: a cast, and an unused local, an unused function
+/// and an unprototyped declaration reported when their scope ends. clang
+/// reports the same four of the eight.
+#[test]
+fn pragma_operators_scope_the_construct_a_diagnostic_reports() {
+    let src = "#define QUIET(w, s) _Pragma(\"GCC diagnostic push\") _Pragma(w) s \
+               _Pragma(\"GCC diagnostic pop\")\n\
+               #define NO_CFT \"GCC diagnostic ignored \\\"-Wcast-function-type\\\"\"\n\
+               #define NO_UV \"GCC diagnostic ignored \\\"-Wunused-variable\\\"\"\n\
+               #define NO_UF \"GCC diagnostic ignored \\\"-Wunused-function\\\"\"\n\
+               #define NO_SP \"GCC diagnostic ignored \\\"-Wstrict-prototypes\\\"\"\n\
+               typedef void (*one)(int);\n\
+               long g(long a, long b);\n\
+               one quiet_cast(void) { return QUIET(NO_CFT, (one)g); }\n\
+               one loud_cast(void) { return (one)g; }\n\
+               void quiet_local(void) { QUIET(NO_UV, int u;)\n}\n\
+               void loud_local(void) { int v;\n}\n\
+               QUIET(NO_UF, static void quiet_fn(void) {})\n\
+               static void loud_fn(void) {}\n\
+               QUIET(NO_SP, void quiet_old();)\n\
+               void loud_old();\n\
+               int main(void) { return 0; }\n";
+    let rows = [
+        "cast-function-type",
+        "unused-variable",
+        "unused-function",
+        "strict-prototypes",
+    ];
+    let p = super::compile_str_bare_with_diags(src, &rows);
+    let mut got: alloc::vec::Vec<u32> = (p.warnings.iter())
+        .map(|d| d.loc.as_ref().map_or(0, |l| l.line))
+        .collect();
+    got.sort_unstable();
+    assert_eq!(got, [9, 12, 15, 17], "{:?}", p.warnings);
+}
+
+/// The fall-through check walks the AST once the switch is parsed. A
+/// statement's report resolves the pragmas at its first token, so pragma
+/// lines and a `_Pragma` macro around the statement govern it, as in gcc,
+/// and ignoring the option by its own name ignores badc's level 5 row.
+#[test]
+fn pragmas_around_a_statement_govern_its_fall_through() {
+    let src = "#define QUIET(s) _Pragma(\"GCC diagnostic push\") \
+               _Pragma(\"GCC diagnostic ignored \\\"-Wimplicit-fallthrough\\\"\") s \
+               _Pragma(\"GCC diagnostic pop\")\n\
+               int f(int c, int x) {\n\
+                   switch (c) {\n\
+                   case 1:\n\
+                       x++;\n\
+                   case 2:\n\
+               #pragma GCC diagnostic push\n\
+               #pragma GCC diagnostic ignored \"-Wimplicit-fallthrough\"\n\
+                       x += 2;\n\
+               #pragma GCC diagnostic pop\n\
+                   case 3:\n\
+                       QUIET(x += 3;)\n\
+                   case 4:\n\
+                       x += 4;\n\
+                   }\n\
+                   return x;\n\
+               }\n\
+               int main(void) { return 0; }\n";
+    let p = super::compile_str_bare_with_diags(src, &["implicit-fallthrough=5"]);
+    let lines: alloc::vec::Vec<u32> = (p.warnings.iter())
+        .map(|d| d.loc.as_ref().map_or(0, |l| l.line))
+        .collect();
+    assert_eq!(lines, [5], "{:?}", p.warnings);
+}
+
+/// The MSVC spelling reaches the same rows through the catalog's
 /// number aliases: 4101 is `unused-variable`, 4505 `unused-function`.
 #[test]
 fn the_msvc_pragma_reaches_a_parser_diagnostic() {
@@ -797,7 +901,7 @@ fn pointer_to_array_of_unspecified_bound_keeps_the_bound_open() {
 /// type-mismatch warnings above.
 #[test]
 fn warn_unused_variable_parameter_function() {
-    // The unused-* rows sit under -Wall / -Wextra, as they do in gcc.
+    // The unused-* rows sit under -Wall / -Wextra.
     let p = super::compile_fixture_with_diags("warn_unused_symbols.c", &["all", "extra"]);
     let names_warned: alloc::vec::Vec<&str> = p
         .warnings
@@ -897,11 +1001,11 @@ fn the_unused_attribute_silences_its_declarator_wherever_written() {
     assert_eq!(warned, ["g1", "g2", "lone", "u", "w"], "{:?}", p.warnings);
 }
 
-/// An assignment whose value is used reads its left operand, as gcc's
-/// -Wunused-but-set-variable counts it: a loop or `if` condition testing
-/// it (`(entry = next(&id)) != 0`) and a chained assignment do; an
-/// expression statement, a comma's operands in one and a `for` clause
-/// discard it. The verdicts are gcc 16's.
+/// An assignment whose value is used reads its left operand, as
+/// -Wunused-but-set-variable counts it: a loop or `if` condition testing it
+/// (`(entry = next(&id)) != 0`) and a chained assignment do; an expression
+/// statement, a comma's operands in one and a `for` clause discard it. The
+/// verdicts are gcc 16's.
 #[test]
 fn an_assignment_whose_value_is_used_reads_its_left_operand() {
     let src = "void *next(int *id);\n\
@@ -976,8 +1080,8 @@ fn a_binding_starts_with_no_uses() {
     );
 }
 
-/// A name referenced only where nothing is evaluated is used and read, as gcc
-/// counts it (C99 6.5.3.4p2, 6.6p3); a name mentioned nowhere stays unused.
+/// A name referenced only where nothing is evaluated is used and read (C99
+/// 6.5.3.4p2, 6.6p3); a name mentioned nowhere stays unused.
 #[test]
 fn a_name_in_an_unevaluated_operand_is_used() {
     let src = "struct s { long a; char ctx[]; };\n\
@@ -1264,9 +1368,9 @@ fn return_with_value_in_void_function_is_an_error() {
 
 #[test]
 fn return_of_a_void_expression_stays_accepted() {
-    // The void-typed operand is the established exception: gcc and clang
-    // accept `return f();` and `return (void)x;` in a void function
-    // outside -pedantic-errors, and real code relies on it.
+    // The void-typed operand is the established exception: `return f();`
+    // and `return (void)x;` in a void function are accepted outside
+    // -pedantic-errors, and real code relies on it.
     let p = compile_str(
         "void g(void) {}\n\
          void f(void) { return g(); }\n\
@@ -1288,8 +1392,8 @@ fn return_of_a_void_expression_stays_accepted() {
 fn void_returning_callees_are_typed_void() {
     // The 6.8.6.4p1 check keys off the operand's type, so anything the
     // standard declares `void` must carry the void tag: otherwise
-    // `return free(p);` -- valid C that gcc and clang accept -- would be
-    // rejected. Covers the intrinsics and the bundled declarations.
+    // `return free(p);` -- the exception above -- would be rejected. Covers
+    // the intrinsics and the bundled declarations.
     let p = compile_str(
         "void a(void *p) { return free(p); }\n\
          void b(void) { return abort(); }\n\
@@ -1416,7 +1520,7 @@ fn well_typed_aggregates_are_untouched_by_the_constraint_check() {
 
 #[test]
 fn transparent_union_parameter_accepts_member_typed_arguments() {
-    // GCC `transparent_union` (verified against gcc 16): a union
+    // GNU C `transparent_union` (verified against gcc 16): a union
     // parameter honoring the attribute takes an argument compatible
     // with any member -- a null pointer constant and the union itself
     // included -- with no diagnostic.
@@ -1727,7 +1831,7 @@ fn long_double_layout_follows_the_target_abi() {
 /// ceiling: the x86-64 psABI gives a 32-byte vector 32, AAPCS64 keeps a
 /// wider vector on the 16-byte boundary. The member offset, the struct
 /// size and alignment, the array stride and the padded width of a
-/// non-power-of-two vector follow, as gcc and clang lay them out.
+/// non-power-of-two vector follow.
 #[test]
 fn vector_type_alignment_follows_the_target_abi() {
     use super::Vm;
@@ -2020,12 +2124,12 @@ fn packed_bitfields_start_at_the_next_bit() {
     layout_rows_hold("", &ms, &[Target::WindowsX64, Target::WindowsAarch64]);
 }
 
-/// An aggregate with no storage has MSVC's size on the PE targets: 4, or
-/// its alignment where an explicit one of at least 4 applies, never its
-/// natural alignment; a member of such a type takes that storage. The
-/// SysV targets keep GCC's 0 and give the member none. The rows are clang
-/// 18's layouts for both windows-msvc triples and for x86_64-linux-gnu
-/// and aarch64-linux-gnu, which agree on every SysV row.
+/// An aggregate with no storage has MSVC's size on the PE targets: 4, or its
+/// alignment where an explicit one of at least 4 applies, never its natural
+/// alignment; a member of such a type takes that storage. The SysV targets
+/// keep the GNU C size 0 and give the member none. The rows are clang 18's
+/// layouts for both windows-msvc triples and for x86_64-linux-gnu and
+/// aarch64-linux-gnu, which agree on every SysV row.
 #[test]
 fn aggregates_without_storage_take_msvc_sizes_on_pe_targets() {
     use crate::Target;
@@ -2053,14 +2157,14 @@ fn aggregates_without_storage_take_msvc_sizes_on_pe_targets() {
     layout_rows_hold("", SYSV, &[Target::LinuxX64, Target::LinuxAarch64]);
 }
 
-/// The MS layout lowers only a member's natural alignment for `#pragma
-/// pack` and `packed`: an alignment the member or its type asks for, by
+/// The MS layout lowers only a member's natural alignment for `#pragma pack`
+/// and `packed`: an alignment the member or its type asks for, by
 /// `__declspec(align)` or `aligned`, stands, and it raises the aggregate. A
 /// typedef's own alignment neither lowers the member below its type's nor
-/// yields to the pack value. GCC's rule, which the other targets keep, packs
-/// the requested alignment too. The rows are clang 21's record layouts for
-/// both windows-msvc triples and for x86_64-linux-gnu, the latter only where
-/// the two rules part.
+/// yields to the pack value. The GNU C rule, which the other targets keep,
+/// packs the requested alignment too. The rows are clang 21's record layouts
+/// for both windows-msvc triples and for x86_64-linux-gnu, the latter only
+/// where the two rules part.
 #[test]
 fn explicit_alignment_survives_packing_in_the_ms_layout() {
     use crate::Target;
@@ -2219,9 +2323,9 @@ fn enums_take_the_types_gcc_gives_on_every_target() {
 
 /// C23 6.7.2.3 (tag compatibility): from `-std=c23` a structure, union or
 /// enumeration redefined in its scope with compatible content declares the
-/// same type, and before C23 any redefinition is an error, as gcc 16 gates
-/// it (its default gnu23 included). The accepted and rejected cases are
-/// gcc's: a member of an untagged type each definition spells anew, other
+/// same type, and before C23 any redefinition is an error. The gating, the
+/// default gnu23 included, and the accepted and rejected cases are gcc
+/// 16's: a member of an untagged type each definition spells anew, other
 /// member types, bit-field widths, alignment, `packed`, union member order
 /// and enumerator values make the definitions differ.
 #[test]
@@ -2264,8 +2368,7 @@ fn a_compatible_tag_redefinition_is_taken_from_c23() {
 }
 
 /// On the PE targets an enum named before its definition is complete with
-/// `int`'s layout, as MSVC and clang's Microsoft compatibility mode (the
-/// windows-msvc default) complete it, so it may type a member; the
+/// `int`'s layout, as MSVC completes it, so it may type a member; the
 /// definition then completes it as on the other targets. clang 22 accepts
 /// the unit for both windows-msvc triples, where it returns 0, and rejects
 /// it elsewhere, as badc does. A definition needing another size after
@@ -2310,8 +2413,18 @@ fn an_enum_named_before_its_definition_is_int_sized_on_the_pe_targets() {
         int main(void) { return sizeof *pw != 8; }\n";
     const NEVER: &str = "enum U u;\nstruct S { enum U m; int k; };\n\
         int main(void) { enum U l; return (int)(sizeof u + sizeof l + sizeof(struct S)) - 16; }\n";
+    // A member of an enum never defined in the unit reads and writes as
+    // `int`; a use before the definition does too, and the definition
+    // then gives the declarations its own type.
+    const UNDEFINED_USE: &str = "typedef enum _E E;\nstruct S { E v; };\n\
+        int main(void) { struct S s; unsigned long u; s.v = 0; u = s.v;\n\
+          return (int)u + (int)sizeof(s) - 4; }\n";
+    const USE_BEFORE: &str = "typedef enum _F F;\nstruct T { F v; };\nF get(struct T *t);\n\
+        int early(struct T *t) { t->v = 2; return t->v + 1; }\n\
+        enum _F { F_A, F_B, F_C };\nF get(struct T *t) { return t->v; }\n\
+        int main(void) { struct T t; return early(&t) - 3 + get(&t) - F_C; }\n";
     for t in [Target::WindowsX64, Target::WindowsAarch64] {
-        for src in [SRC, POINTER, NEVER] {
+        for src in [SRC, POINTER, NEVER, UNDEFINED_USE, USE_BEFORE] {
             let program = Compiler::with_target(src.to_string(), t)
                 .compile()
                 .unwrap_or_else(|e| panic!("{t:?}: {e}"));
@@ -2337,7 +2450,7 @@ fn an_enum_named_before_its_definition_is_int_sized_on_the_pe_targets() {
 /// them for both windows-msvc triples (which accept the unit): `__ptr64`,
 /// `__w64`, `__sptr` and `__uptr` leave the type as it is, an `__unaligned`
 /// access reads and writes misaligned data, and `__builtin_alignof` is
-/// `_Alignof`. The other targets do not take them, as gcc and clang do not.
+/// `_Alignof`. The other targets do not take them.
 #[test]
 fn microsoft_declarator_modifiers_on_the_pe_targets() {
     use crate::{Compiler, Target};
@@ -2483,10 +2596,10 @@ fn va_list_is_a_char_pointer_where_the_abi_makes_it_a_cursor() {
 }
 
 /// Once its list ends, every constant of an enumeration with a value outside
-/// `int` has the enumerated type (C23 6.7.2.2, gcc's `finish_enum` in every
-/// mode), so `U0 - 1` is unsigned and `_Generic` selects `enum U`; inside the
-/// list a constant has its value's type. The other constants stay `int`. gcc
-/// 16.2.1 (`-std=gnu99`) and clang 22 accept the unit, and both report the
+/// `int` has the enumerated type (C23 6.7.2.2, applied in every mode), so
+/// `U0 - 1` is unsigned and `_Generic` selects `enum U`; inside the list a
+/// constant has its value's type. The other constants stay `int`. gcc 16.2.1
+/// (`-std=gnu99`) and clang 22 accept the unit, and both report the
 /// `-Wenum-conversion` of lines 6 and 7 alone.
 #[test]
 fn constants_of_an_enum_wider_than_int_have_the_enumerated_type() {
@@ -2788,8 +2901,8 @@ fn bitfield_attributes_follow_the_width_and_place_the_field() {
 }
 
 /// A bit-field takes its declared type's alignment, a typedef's included,
-/// raised or lowered in GCC's layout and raised in the MS one. The rows are
-/// gcc 16's for Linux, Apple clang 21's for macOS, and on the PE targets
+/// raised or lowered in the GNU C layout and raised in the MS one. The rows
+/// are gcc 16's for Linux, Apple clang 21's for macOS, and on the PE targets
 /// cl.exe's on both boxes where it takes the spelling, else clang 21's.
 #[test]
 fn a_bitfield_takes_its_declared_types_alignment() {
@@ -3119,7 +3232,7 @@ fn a_warning_reported_before_a_hard_error_rides_with_it() {
         .iter()
         .map(|d| (d.code, d.level))
         .collect();
-    let unknown_pragma = Code::from_selector("unknown-pragmas").expect("catalogued");
+    let unknown_pragma = Code::from_selector("unknown-pragmas").expect("cataloged");
     assert_eq!(
         reported,
         [
@@ -3138,7 +3251,7 @@ fn a_warning_reported_before_a_hard_error_rides_with_it() {
 
 /// A `return` that does not fit the function's return type is rejected
 /// by C23 6.8.6.4 and every current toolchain; the row is an error the
-/// user can lower, as gcc 14's `-Wreturn-mismatch` is. Lowered, a value
+/// user can lower (`-Wreturn-mismatch`). Lowered, a value
 /// returned from a `void` function is evaluated and discarded, and a
 /// bare `return` leaves the value indeterminate, as C99 6.9.1p12 does
 /// for a closing brace.
@@ -3182,9 +3295,9 @@ fn a_return_mismatch_is_an_error_the_user_can_lower() {
 /// C99 6.5.16.1p1 admits an integer for a pointer, or a pointer for an
 /// integer, only as a null pointer constant or a `_Bool` target. Each other
 /// exchange -- an argument, an assignment, a static and an automatic
-/// initializer, a return, in both directions -- is an error by default, as
-/// gcc 14's and clang 15's `-Wint-conversion` is; `-Wno-error=` and
-/// `-fpermissive` lower it and the unit runs, an ignored row reports none.
+/// initializer, a return, in both directions -- is an error by default under
+/// `-Wint-conversion`; `-Wno-error=` and `-fpermissive` lower it and the
+/// unit runs, an ignored row reports none.
 #[test]
 fn int_conversion_is_an_error_the_user_can_lower() {
     use super::Vm;
@@ -3244,10 +3357,10 @@ fn int_conversion_is_an_error_the_user_can_lower() {
 
 /// C99 6.5.16.1p1, 6.7.5.3p15: a pointer to a function converts as if by
 /// assignment -- assigned, initialized at any storage duration or returned
-/// -- only to a pointer to a compatible function type, which gcc 14 and
-/// clang reject as an error the user can lower. A null pointer constant,
-/// `void *`, a cast, a type without a prototype beside one whose parameters
-/// survive promotion, and a libc binding's approximated type pass.
+/// -- only to a pointer to a compatible function type; any other is an error
+/// the user can lower. A null pointer constant, `void *`, a cast, a type
+/// without a prototype beside one whose parameters survive promotion, and a
+/// libc binding's approximated type pass.
 #[test]
 fn an_incompatible_function_pointer_conversion_is_rejected() {
     use crate::c5::diag::{Code, Config, Level};
@@ -3380,7 +3493,7 @@ fn an_incompatible_function_pointer_conversion_is_rejected() {
     }
 }
 
-/// gcc and clang take the calling convention as part of a function type:
+/// The calling convention is part of a function type:
 /// a pointer to a function on one converts to a pointer to one on another
 /// only by a cast, and `__builtin_types_compatible_p` and `_Generic` tell
 /// the two apart. Naming the target's own convention changes no type.
@@ -3885,10 +3998,10 @@ fn typeof_a_dereferenced_function_pointer_names_the_function_type() {
 #[test]
 fn a_pointer_initializer_folded_from_a_cast_is_not_read_as_an_integer() {
     // C99 6.3.2.3p5 leaves the integer-to-pointer conversion
-    // implementation-defined and 6.6p10 lets an implementation accept
-    // other forms of constant expression; gcc and clang take a cast
-    // integer as a static pointer initializer. The check must see the
-    // initializer's own type, not one synthesized from the folded value.
+    // implementation-defined and 6.6p10 lets an implementation accept other
+    // forms of constant expression; a cast integer is taken as a static
+    // pointer initializer. The check must see the initializer's own type,
+    // not one synthesized from the folded value.
     let p = compile_str(
         "struct epitems_head { int x; };\n\
          static struct epitems_head *unactive = (void *) -1L;\n\
@@ -3963,8 +4076,7 @@ fn a_pointer_against_a_scalar_reports_the_same_row_whatever_the_pointee() {
 #[test]
 fn a_pointer_against_a_floating_value_is_an_error() {
     // C99 6.5.4p4: no conversion relates a pointer and a floating type, so
-    // C99 6.5.16.1p1 admits neither as the other's operand, as gcc and
-    // clang reject it.
+    // C99 6.5.16.1p1 admits neither as the other's operand.
     for (what, src) in [
         ("initializer", "static int *g = 2.5;"),
         ("assignment", "void f(double d) { int *p; p = d; (void)p; }"),
@@ -3986,7 +4098,7 @@ fn the_signedness_marker_is_not_part_of_an_aggregate_identity() {
     // `__int128` is modeled as an aggregate, so the signed and unsigned
     // spellings of a pointer to it differ only in the marker: pointers to
     // integer types that differ in signedness, which convert with a
-    // pointer-sign warning as clang gives, not as two aggregates.
+    // pointer-sign warning, not as two aggregates.
     let p = compile_str(
         "typedef unsigned __int128 u128;\n\
          static u128 swap128(volatile u128 *p, u128 v) { u128 o = *p; *p = v; return o; }\n\
@@ -5250,7 +5362,7 @@ fn volatile_at_a_pointer_level_is_part_of_the_type() {
 fn an_enumerated_type_is_a_type_of_its_own() {
     // C99 6.7.2.2p4: each enumerated type is compatible with the integer
     // type its definition chose -- `unsigned int` for non-negative values,
-    // as gcc chooses on every target -- and with no other enumerated type,
+    // on every target -- and with no other enumerated type,
     // an untagged one and one a block-scope tag declares included;
     // arithmetic takes the integer type.
     use crate::{Compiler, Target};
@@ -5473,11 +5585,11 @@ fn a_block_scope_object_of_an_unsized_array_typedef_is_an_array() {
 }
 
 /// A GNU zero-length array typedef keeps its zero bound under every
-/// derivation: a pointer to it, a pointer to an array of it, an array of
-/// it and a variable-length array of it all have zero-size elements, as in
-/// gcc and clang. A pointer to a zero-size element, an empty structure's
-/// included, steps by zero bytes, and an array of arrays has one type
-/// however it was spelled (`&zs` is a `Z (*)[4]`).
+/// derivation: a pointer to it, a pointer to an array of it, an array of it
+/// and a variable-length array of it all have zero-size elements. A pointer
+/// to a zero-size element, an empty structure's included, steps by zero
+/// bytes, and an array of arrays has one type however it was spelled (`&zs`
+/// is a `Z (*)[4]`).
 #[test]
 fn a_zero_length_array_typedef_keeps_its_bound_under_derivations() {
     use super::Vm;
@@ -5587,8 +5699,8 @@ fn an_old_style_parameter_declaration_adjusts_as_a_prototype_does() {
 /// type, as in gcc: `float *f(void) __attribute__((vector_size(16)))`
 /// returns a pointer to a 16-byte vector, at file scope and in a
 /// block-scope prototype alike, and the attribute does not carry over to the
-/// declarations that follow it. A trailing `mode` is an error there, as in
-/// gcc: a function type has no machine mode to take.
+/// declarations that follow it. A trailing `mode` is an error there: a
+/// function type has no machine mode to take.
 #[test]
 fn a_type_attribute_trailing_a_function_declarator_types_its_return() {
     use super::Vm;
@@ -5627,11 +5739,11 @@ fn a_type_attribute_trailing_a_function_declarator_types_its_return() {
     assert_eq!(Vm::new(program).run().unwrap(), 0, "{src}");
 }
 
-/// C99 6.7.2p2 requires a type specifier in every declaration and type
-/// name. Specifiers that give none take `int`, as under C89, and B2011
+/// C99 6.7.2p2 requires a type specifier in every declaration and type name.
+/// Specifiers that give none take `int`, as under C89, and B2011
 /// implicit-int reports each declarator in gcc's words: an error by default,
-/// as gcc 14 and clang make it, a warning under `-Wno-error=implicit-int` or
-/// the matching pragma, and nothing under `-Wno-implicit-int`.
+/// a warning under `-Wno-error=implicit-int` or the matching pragma, and
+/// nothing under `-Wno-implicit-int`.
 #[test]
 fn a_declaration_without_a_type_specifier_takes_int_and_reports_it() {
     use super::Vm;
@@ -5977,12 +6089,11 @@ fn func_name_points_to_const_char() {
 /// C99 6.5.16.1p1: a pointer converts as if by assignment to a pointer to a
 /// compatible type, and between any object pointer and a pointer to `void`;
 /// a `char *` is no `void *`. Any other pair of pointers is B3029
-/// incompatible-pointer-types, an error by default as in gcc 14 and a
-/// warning under `-Wno-error=incompatible-pointer-types`, in an initializer,
-/// an assignment, an argument and a return alike. Pointers to integer types
-/// that differ only in signedness warn under B3032 pointer-sign, and pointed-to
-/// types that differ only in nested qualifiers under B3011, as clang does by
-/// default.
+/// incompatible-pointer-types, an error by default and a warning under
+/// `-Wno-error=incompatible-pointer-types`, in an initializer, an
+/// assignment, an argument and a return alike. Pointers to integer types
+/// that differ only in signedness warn under B3032 pointer-sign, and
+/// pointed-to types that differ only in nested qualifiers under B3011.
 #[test]
 fn an_incompatible_object_pointer_conversion_is_an_error() {
     use crate::diag::{Code, Config, Level};
@@ -6092,13 +6203,13 @@ fn an_incompatible_object_pointer_conversion_is_an_error() {
 }
 
 /// A pointer to a function is no pointer to its return type. It converts to
-/// and from `void *` (C99 J.5.7) with no qualifier check, as gcc and clang
-/// give it; a return type's qualifiers do not take part in compatibility
-/// (C17 6.7.6.3p5), as in gcc; against any other object pointer it is
-/// incompatible (B3029). A parameter that leads to a function is compared
-/// by its function type, at a call and inside another function type, and
-/// every diagnostic prints the declarators. Only a pointer to a function
-/// pointer, an object pointer, can discard a qualifier of what it points to.
+/// and from `void *` (C99 J.5.7) with no qualifier check; a return type's
+/// qualifiers do not take part in compatibility (C17 6.7.6.3p5); against any
+/// other object pointer it is incompatible (B3029). A parameter that leads
+/// to a function is compared by its function type, at a call and inside
+/// another function type, and every diagnostic prints the declarators. Only
+/// a pointer to a function pointer, an object pointer, can discard a
+/// qualifier of what it points to.
 #[test]
 fn a_pointer_to_a_function_converts_as_one() {
     use crate::diag::{Code, Config, Level};
@@ -6333,9 +6444,9 @@ fn a_brace_initializer_compares_function_pointer_leaves() {
 }
 
 /// C99 6.5.16.1p1 lets a pointer gain qualifiers only on the type it points
-/// to; a qualifier difference further down (`T **` as `const T **`) makes the
-/// pointed-to types incompatible (6.7.3p9). As clang gives it, that alone is
-/// B3011 incompatible-pointer-types-discards-qualifiers, a warning on every
+/// to; a qualifier difference further down (`T **` as `const T **`) makes
+/// the pointed-to types incompatible (6.7.3p9). That alone is B3011
+/// incompatible-pointer-types-discards-qualifiers, a warning on every
 /// target, in either direction and at any depth. A qualifier the pointed-to
 /// type loses stays B3031, a gained one is silent, and any other mismatch is
 /// still the B3029 error. A `wchar_t *` passed by address to a `PCWSTR *`
@@ -6390,8 +6501,8 @@ fn a_nested_qualifier_difference_between_pointer_targets_warns() {
     for target in [Target::WindowsX64, Target::WindowsAarch64] {
         assert_eq!(codes(shape, target), [(6, nested)], "{}", target.id_str());
     }
-    // clang's group name reaches both rows, as in clang; gcc's name only the
-    // top-level discard.
+    // clang's group name reaches both rows; gcc's name only the top-level
+    // discard.
     let pragma = |p: &str| format!("#pragma {p}\n{src}");
     let ignored = codes(
         &pragma(r#"clang diagnostic ignored "-Wincompatible-pointer-types-discards-qualifiers""#),
@@ -6421,7 +6532,7 @@ fn a_nested_qualifier_difference_between_pointer_targets_warns() {
 /// assignment operator, and the operand of `++` and `--`, is a modifiable
 /// lvalue, which an object of const-qualified type is not, nor a structure
 /// or union with a const member at any depth (6.3.2.1p1). Each form is
-/// B3033 modifiable-lvalue, an error as gcc and clang give it: a const
+/// B3033 modifiable-lvalue, an error: a const
 /// object, a const pointer, a target through a pointer to const, a const
 /// member, a member of a const object, a bit-field of either, and a whole
 /// aggregate with a const member.
@@ -6571,8 +6682,8 @@ fn a_pointer_to_an_array_of_pointers_keeps_each_qualifier_at_its_level() {
 /// implicitly -- in an initializer, an assignment, an argument or a
 /// return, to an object or a bit-field -- B3010 constant-conversion warns,
 /// as gcc's -Woverflow and clang's -Wconstant-conversion do by default. A
-/// value that fits the width at the other signedness keeps its bits, as in
-/// gcc (`unsigned g = -1;`, `char c = 255;`); an explicit cast states the
+/// value that fits the width at the other signedness keeps its bits
+/// (`unsigned g = -1;`, `char c = 255;`); an explicit cast states the
 /// conversion; `_Bool` takes any value. The lines and values below are the
 /// ones gcc 16.2.1 reports on both Linux targets.
 #[test]
@@ -6650,8 +6761,7 @@ fn an_implicit_conversion_that_changes_a_constant_warns() {
     assert!(program.warnings.is_empty(), "{:?}", program.warnings);
     // An operand that is not evaluated converts nothing (C99 6.5.3.4p2,
     // 6.5.13p4, 6.5.14p4, 6.5.15p4), and a folded `__builtin_object_size`
-    // is no integer constant expression: only lines 13, 16 and 17 warn, as
-    // in gcc.
+    // is no integer constant expression: only lines 13, 16 and 17 warn.
     let src = "unsigned int u32(unsigned int n);\n\
                void use(char *p);\n\
                void sink(long v);\n\
@@ -6737,4 +6847,148 @@ fn the_address_of_a_register_object_is_an_error() {
     for body in &accepted {
         compile(body).unwrap_or_else(|e| panic!("{body}\n{e}"));
     }
+}
+
+/// `-flax-vector-conversions`: two vector types of one size convert
+/// implicitly, any two under `all` (the bare flag, and `--msvc`, whose NEON
+/// vectors are all one `__n128`) and two integer ones under `integer`; by
+/// default neither. The conversion keeps the bits.
+#[test]
+fn lax_vector_conversions_admit_vectors_of_one_size() {
+    use crate::{CompileOptions, Compiler, LaxVectors, Target};
+    const INT: &str = "typedef int v4si __attribute__((vector_size(16)));\n\
+        typedef long long v2di __attribute__((vector_size(16)));\n\
+        typedef float v4sf __attribute__((vector_size(16)));\n\
+        v2di widen(v4si v) { return v; }\n\
+        void store(v2di *p, v4si v) { *p = v; }\n";
+    const FLOAT: &str = "v4sf as_float(v4si v) { return v; }\n";
+    let compiles = |src: &str, lax: Option<LaxVectors>, msvc: bool| {
+        let opts = CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_lax_vectors(lax)
+            .with_msvc(msvc);
+        Compiler::with_options(src.to_string(), Target::WindowsAarch64, opts)
+            .compile()
+            .is_ok()
+    };
+    let both = alloc::format!("{INT}{FLOAT}");
+    assert!(!compiles(INT, None, false));
+    assert!(compiles(INT, Some(LaxVectors::Integer), false));
+    assert!(!compiles(&both, Some(LaxVectors::Integer), false));
+    assert!(compiles(&both, Some(LaxVectors::All), false));
+    assert!(compiles(&both, None, true));
+    assert!(!compiles(INT, Some(LaxVectors::None), true));
+    let run = alloc::format!(
+        "{INT}int main(void) {{ v4si a = {{1, 2, 3, 4}}; v2di b = widen(a); \
+         return b[0] == 0x200000001LL && b[1] == 0x400000003LL ? 0 : 1; }}\n"
+    );
+    let opts = CompileOptions::default().with_lax_vectors(Some(LaxVectors::Integer));
+    let program = Compiler::with_options(run, Target::LinuxX64, opts)
+        .compile()
+        .expect("compiles");
+    assert_eq!(super::Vm::new(program).run().expect("run"), 0);
+}
+
+/// A bare `__attribute__((aligned))` takes `__BIGGEST_ALIGNMENT__`: 16 on
+/// the x86-64 baseline and 32 under AVX (`-mavx`).
+#[test]
+fn bare_aligned_follows_the_biggest_alignment() {
+    use super::Vm;
+    use crate::{CompileOptions, Compiler, Target, X86Features};
+    let src = "struct s { char c __attribute__((aligned)); };\n\
+               _Static_assert(_Alignof(struct s) == __BIGGEST_ALIGNMENT__, \"\");\n\
+               int main(void) { return _Alignof(struct s); }";
+    let run = |ext: Option<&str>| -> i64 {
+        let mut f = X86Features::NONE;
+        if let Some(ext) = ext {
+            f.enable(ext);
+        }
+        let opts = CompileOptions::default().with_x86_features(f);
+        let program = Compiler::with_options(src.to_string(), Target::LinuxX64, opts)
+            .compile()
+            .unwrap();
+        Vm::new(program).run().unwrap()
+    };
+    assert_eq!(run(None), 16);
+    assert_eq!(run(Some("sse4.2")), 16);
+    assert_eq!(run(Some("avx")), 32);
+}
+
+/// The ACLE macros by target and extension set: ARMv8-A's off macOS and
+/// the Apple M1's on it, a 2-byte `wchar_t` and no AAPCS64 macro on
+/// Windows, `__ARM_NEON` with the Advanced SIMD set, and
+/// `-mgeneral-regs-only` dropping the floating-point and SIMD ones.
+#[test]
+fn aarch64_targets_predefine_the_acle_macros() {
+    use crate::{Aarch64Features, CompileOptions, Compiler, Target};
+    let compiles = |target: Target, opts: CompileOptions, checks: &str| {
+        let src = format!("{checks}\nint main(void) {{ return 0; }}\n");
+        Compiler::with_options(src, target, opts)
+            .compile()
+            .map_err(|e| format!("{target:?}: {e:?}"))
+            .unwrap();
+    };
+    let common = "_Static_assert(__ARM_ARCH == 8 && __ARM_ARCH_PROFILE == 'A', \"\");\n\
+                  _Static_assert(__ARM_64BIT_STATE && __ARM_FP == 14, \"\");\n\
+                  _Static_assert(__ARM_NEON == 1, \"\");\n";
+    compiles(
+        Target::LinuxAarch64,
+        CompileOptions::default(),
+        &format!(
+            "{common}_Static_assert(__ARM_SIZEOF_WCHAR_T == 4 && __ARM_PCS_AAPCS64, \"\");\n\
+             #ifdef __ARM_FEATURE_CRC32\n#error CRC32\n#endif"
+        ),
+    );
+    compiles(
+        Target::MacOSAarch64,
+        CompileOptions::default(),
+        &format!("{common}_Static_assert(__ARM_FEATURE_CRC32 && __ARM_FEATURE_SHA3, \"\");"),
+    );
+    compiles(
+        Target::WindowsAarch64,
+        CompileOptions::default(),
+        &format!(
+            "{common}_Static_assert(__ARM_SIZEOF_WCHAR_T == 2, \"\");\n\
+             #ifdef __ARM_PCS_AAPCS64\n#error PCS\n#endif"
+        ),
+    );
+    let mut v81 = Aarch64Features::for_arch("armv8.1-a").unwrap();
+    v81.apply("crypto").unwrap();
+    compiles(
+        Target::LinuxAarch64,
+        CompileOptions::default().with_aarch64_features(Some(v81)),
+        "_Static_assert(__ARM_FEATURE_ATOMICS && __ARM_FEATURE_CRYPTO, \"\");",
+    );
+    compiles(
+        Target::LinuxAarch64,
+        CompileOptions::default().with_no_fp_regs(true),
+        "#if defined __ARM_FP || defined __ARM_FEATURE_FMA || defined __ARM_NEON\n#error FP\n#endif",
+    );
+    // The Advanced SIMD extensions whose intrinsics <arm_neon.h> carries
+    // predefine their macros, and code keyed on them takes those paths.
+    let keyed = "#include <arm_neon.h>\n\
+        #if !defined __ARM_FEATURE_DOTPROD || !defined __ARM_FEATURE_QRDMX \\\n\
+            || !defined __ARM_FEATURE_FRINT || !defined __ARM_FEATURE_NUMERIC_MAXMIN\n\
+        #error keyed\n#endif\n\
+        uint32x4_t d(uint32x4_t r, uint8x16_t a, uint8x16_t b) { return vdotq_u32(r, a, b); }\n\
+        int16x4_t q(int16x4_t r, int16x4_t a, int16x4_t b) { return vqrdmlah_s16(r, a, b); }\n\
+        float32x4_t f(float32x4_t a) { return vrnd32xq_f32(a); }\n\
+        float64x2_t m(float64x2_t a, float64x2_t b) { return vmaxnmq_f64(a, b); }";
+    compiles(Target::MacOSAarch64, CompileOptions::default(), keyed);
+    compiles(
+        Target::LinuxAarch64,
+        CompileOptions::default(),
+        "#if !defined __ARM_FEATURE_NUMERIC_MAXMIN || defined __ARM_FEATURE_DOTPROD\n#error v8\n#endif",
+    );
+    let v86 = Aarch64Features::for_arch("armv8.6-a").unwrap();
+    compiles(
+        Target::LinuxAarch64,
+        CompileOptions::default().with_aarch64_features(Some(v86)),
+        "_Static_assert(__ARM_FEATURE_MATMUL_INT8 && __ARM_FEATURE_DOTPROD, \"\");",
+    );
+    compiles(
+        Target::LinuxX64,
+        CompileOptions::default(),
+        "#ifdef __ARM_ARCH\n#error ARM\n#endif",
+    );
 }

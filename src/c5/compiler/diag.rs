@@ -1,7 +1,7 @@
 //! Diagnostic helpers (warnings, errors, type-mismatch checks).
 //!
-//! Centralises the gcc / clang-shape `<file>:<line>: <kind>: <msg>`
-//! formatting plus the lax type-compatibility predicate that
+//! Centralizes the `<file>:<line>: <kind>: <msg>` formatting plus the
+//! lax type-compatibility predicate that
 //! [`Compiler::type_warning`] uses to decide whether a mixed
 //! pointer / integer / struct assignment is worth surfacing.
 //!
@@ -27,6 +27,22 @@ use super::types::{
 /// [`Compiler::type_warning_with_flags`]. `no_conversion` marks the
 /// mismatches C99 defines no conversion for: those are constraint
 /// violations the call site rejects, the rest stay warnings.
+/// Where a diagnostic reports: a line of the lexer's file and, when the
+/// parser recorded it, the unit offset of the construct's first token, at
+/// which the diagnostic pragmas resolve (C99 6.10.9); else they resolve at
+/// the line's start.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Site {
+    pub line: usize,
+    pub offset: Option<u32>,
+}
+
+impl Site {
+    pub(crate) fn line(line: usize) -> Self {
+        Site { line, offset: None }
+    }
+}
+
 #[derive(Clone, Copy)]
 pub(super) struct TypeMismatch {
     pub code: Code,
@@ -173,10 +189,9 @@ impl Compiler {
     /// C99 6.9.1p12: reaching the closing brace of a value-returning
     /// function without executing a `return value;` leaves the value
     /// indeterminate -- undefined behavior if the caller uses it, but
-    /// not a constraint violation. gcc and clang diagnose it with a
-    /// warning, not an error, and the codegen synthesizes a `return 0`
-    /// for the fall-through, so this is a warning too. `main` is exempt
-    /// (5.1.2.2.3 supplies a default 0).
+    /// not a constraint violation, and the codegen synthesizes a
+    /// `return 0` for the fall-through, so this is a warning, not an
+    /// error. `main` is exempt (5.1.2.2.3 supplies a default 0).
     ///
     /// The analysis reports a fall-through only when control certainly
     /// reaches the end, and only with the noreturn information available
@@ -200,11 +215,10 @@ impl Compiler {
             return;
         };
         if self.stmt_may_fall_through(body) {
-            let line = self.lex.line;
             let name = self.current_function_name.clone();
             self.warn_at(
                 Code::RETURN_TYPE,
-                line,
+                self.site(),
                 alloc::format!(
                     "control reaches end of non-void function `{name}` \
                      without returning a value"
@@ -279,7 +293,7 @@ impl Compiler {
                 !infinite || self.stmt_has_loop_break(*body)
             }
             // Switch / Labeled / Case / Default: control flow not
-            // modelled precisely. Treat as not falling through so the
+            // modeled precisely. Treat as not falling through so the
             // diagnostic never fires on a function that uses them.
             _ => false,
         }
@@ -304,7 +318,7 @@ impl Compiler {
     }
 
     /// The truth value of the controlling expression `e` when its known
-    /// operands decide it, as gcc and clang fold it for -Wreturn-type
+    /// operands decide it, as the -Wreturn-type flow analysis folds it
     /// ([`Fold::Flow`]).
     fn expr_truth(&self, e: ExprId) -> Option<bool> {
         if let Some(v) = self.const_int(e, Fold::Flow) {
@@ -525,34 +539,55 @@ impl Compiler {
         }
     }
 
-    /// Report `code` at `line`. The sink resolves the level from the
+    /// Report `code` at `at`. The sink resolves the level from the
     /// command line and the pragmas in effect at that position and
     /// drops the diagnostic when it is ignored; what survives lands on
     /// `Program.warnings`. Raising one to an error does not unwind --
     /// the driver fails the unit at the phase boundary. A row nothing
     /// raises above `Ignore` returns without locating its site.
-    pub(super) fn warn_at(&mut self, code: Code, line: usize, message: alloc::string::String) {
-        if !self.sink.may_emit(code) {
+    pub(super) fn warn_at(&mut self, code: Code, at: Site, message: alloc::string::String) {
+        if !self.sink.may_emit(code) || self.suppressed_in(code, &self.lex.file) {
             return;
         }
-        let (loc, source) = self.locate(&self.lex.file, line);
+        let (loc, source) = self.locate(&self.lex.file, at);
         self.sink.emit_with_source(code, Some(loc), message, source);
     }
 
-    /// [`Self::warn_at`] for `line` of `file`, a declaration the lexer has
-    /// since left.
+    /// [`Self::warn_at`] in `file`, a declaration the lexer has since left.
     pub(super) fn warn_at_file(
         &mut self,
         code: Code,
         file: &str,
-        line: usize,
+        at: Site,
         message: alloc::string::String,
     ) {
-        if !self.sink.may_emit(code) {
+        if !self.sink.may_emit(code) || self.suppressed_in(code, file) {
             return;
         }
-        let (loc, source) = self.locate(file, line);
+        let (loc, source) = self.locate(file, at);
         self.sink.emit_with_source(code, Some(loc), message, source);
+    }
+
+    /// The current token's site.
+    pub(super) fn site(&self) -> Site {
+        Site {
+            line: self.lex.line,
+            offset: Some(self.lex.tok_start() as u32),
+        }
+    }
+
+    /// The site of `line`: the current token's on the lexer's line.
+    pub(super) fn line_site(&self, line: usize) -> Site {
+        match line == self.lex.line {
+            true => self.site(),
+            false => Site::line(line),
+        }
+    }
+
+    /// A warning at a system header's line, which is suppressed.
+    fn suppressed_in(&self, code: Code, file: &str) -> bool {
+        code.default_level() == crate::c5::diag::Level::Warning
+            && self.system_headers.contains(file)
     }
 
     /// Report a constraint violation the parser recovers from: an
@@ -562,28 +597,25 @@ impl Compiler {
     pub(super) fn report_at(
         &mut self,
         code: Code,
-        line: usize,
+        at: Site,
         message: alloc::string::String,
     ) -> Result<(), C5Error> {
-        let (loc, source) = self.locate(&self.lex.file, line);
+        let (loc, source) = self.locate(&self.lex.file, at);
         self.sink
             .report_with_source(code, Some(loc), message, source)
     }
 
-    /// The position `line` of `file` reports at -- with the unit offset
-    /// the diagnostic pragmas resolve on -- and the source text it echoes.
-    fn locate(&self, file: &str, line: usize) -> (Loc, Option<alloc::string::String>) {
-        (self.loc_at(file, line), self.echo_of(file, line))
+    /// The position `at` in `file` reports at -- with the unit offset the
+    /// diagnostic pragmas resolve on -- and the source text it echoes.
+    fn locate(&self, file: &str, at: Site) -> (Loc, Option<alloc::string::String>) {
+        (self.loc_of(file, at), self.echo_of(file, at.line))
     }
 
-    fn loc_at(&self, file: &str, line: usize) -> Loc {
-        // On the lexer's own line the diagnostic resolves at its token, so a
-        // `_Pragma` earlier on that line governs it (C99 6.10.9).
-        let here =
-            (file == self.lex.file && line == self.lex.line).then(|| self.lex.tok_start() as u32);
-        match here.or_else(|| self.lex.line_offset(file, line)) {
-            Some(offset) => Loc::in_unit(alloc::string::String::from(file), line as u32, offset),
-            None => Loc::new(alloc::string::String::from(file), line as u32),
+    fn loc_of(&self, file: &str, at: Site) -> Loc {
+        let file_s = alloc::string::String::from(file);
+        match at.offset.or_else(|| self.lex.line_offset(file, at.line)) {
+            Some(offset) => Loc::in_unit(file_s, at.line as u32, offset),
+            None => Loc::new(file_s, at.line as u32),
         }
     }
 
@@ -607,14 +639,13 @@ impl Compiler {
     /// Whether the lexer's current file is the unit's own: the primary
     /// source or a header its directory, `-iquote` or `-I` supplied. Sets
     /// `Binding::decl_in_user_source`, so the unused-binding diagnostics
-    /// report declarations there and skip the bundled and system headers,
-    /// as gcc and clang skip system headers.
+    /// report declarations there and skip the bundled and system headers.
     pub(super) fn in_user_source(&self) -> bool {
         !self.system_headers.contains(&self.lex.file)
     }
 
     /// Record that the parser just emitted a store to local
-    /// symbol `idx`. The push appends `line` to the symbol's
+    /// symbol `idx`. The push appends `at` to the symbol's
     /// `pending_stores` list and registers the symbol index in
     /// the function-level `pending_store_symbols` set when it
     /// wasn't already present. If the symbol already had pending
@@ -641,7 +672,7 @@ impl Compiler {
         }
     }
 
-    pub(super) fn record_local_store(&mut self, idx: usize, line: usize) {
+    pub(super) fn record_local_store(&mut self, idx: usize, at: Site) {
         if !self.warn_dead_store
             || !self.symbols[idx].binding.decl_in_user_source
             || self.symbols[idx].binding.address_escaped
@@ -659,7 +690,7 @@ impl Compiler {
                 alloc::format!("dead store: value assigned to `{name}` is never read"),
             );
         }
-        self.symbols[idx].binding.pending_stores.push(line);
+        self.symbols[idx].binding.pending_stores.push(at);
         if was_empty && !self.pending_store_symbols.contains(&idx) {
             self.pending_store_symbols.push(idx);
         }
@@ -723,10 +754,10 @@ impl Compiler {
             return;
         }
         let name = sym.name.clone();
-        for line in core::mem::take(&mut self.symbols[idx].binding.pending_stores) {
+        for at in core::mem::take(&mut self.symbols[idx].binding.pending_stores) {
             self.warn_at(
                 Code::DEAD_STORE,
-                line,
+                at,
                 alloc::format!("dead store: value assigned to `{name}` is never read"),
             );
         }
@@ -778,7 +809,7 @@ impl Compiler {
         let diagnostic = super::super::diag::Diagnostic::new(
             code,
             super::super::diag::Level::Error,
-            Some(self.loc_at(&self.lex.file, line)),
+            Some(self.loc_of(&self.lex.file, self.line_site(line))),
             message,
         )
         .with_pending_echo();
@@ -930,8 +961,16 @@ impl Compiler {
         declared: i64,
         actual: i64,
         actual_is_zero_literal: bool,
+        lax: super::LaxVectors,
     ) -> Option<TypeMismatch> {
-        Self::type_warning_with_flags(structs, declared, actual, actual_is_zero_literal, false)
+        Self::type_warning_with_flags(
+            structs,
+            declared,
+            actual,
+            actual_is_zero_literal,
+            false,
+            lax,
+        )
     }
 
     /// Like [`Self::type_warning`] but with an extra `actual_is_untyped_call`
@@ -946,9 +985,10 @@ impl Compiler {
         actual: i64,
         actual_is_zero_literal: bool,
         actual_is_untyped_call: bool,
+        lax: super::LaxVectors,
     ) -> Option<TypeMismatch> {
         let zero = actual_is_zero_literal;
-        Self::type_mismatch(structs, declared, actual, zero, actual_is_untyped_call)
+        Self::type_mismatch(structs, declared, actual, zero, actual_is_untyped_call, lax)
             .or_else(|| Self::discarded_qualifiers(structs, declared, actual))
     }
 
@@ -976,6 +1016,7 @@ impl Compiler {
         actual: i64,
         actual_is_zero_literal: bool,
         actual_is_untyped_call: bool,
+        lax: super::LaxVectors,
     ) -> Option<TypeMismatch> {
         if is_pointer_ty(declared) && is_pointer_ty(actual) {
             return Self::pointer_mismatch(structs, declared, actual);
@@ -1004,7 +1045,7 @@ impl Compiler {
             return None;
         }
 
-        // The GCC 128-bit integer against an integer or pointer is a
+        // The 128-bit integer against an integer or pointer is a
         // value conversion (C99 6.3.1.3), not a struct mismatch.
         let is_int128 = |ty: i64| {
             is_struct_value_ty(ty)
@@ -1074,6 +1115,9 @@ impl Compiler {
                 && !is_array_agg(actual)
                 && !def_of(declared).is_some_and(|s| s.is_union);
             let is_vector = |ty: i64| def_of(ty).is_some_and(|s| s.is_vector);
+            if Self::lax_vector_pair(structs, declared, actual, lax) {
+                return None;
+            }
             let reason = if is_vector(declared) || is_vector(actual) {
                 "incompatible types"
             } else {
@@ -1090,11 +1134,33 @@ impl Compiler {
         None
     }
 
+    /// Two vector types of one size that `lax` lets convert implicitly.
+    pub(super) fn lax_vector_pair(
+        structs: &[super::StructDef],
+        declared: i64,
+        actual: i64,
+        lax: super::LaxVectors,
+    ) -> bool {
+        let vector = |ty: i64| {
+            let def = structs
+                .get(super::types::struct_id_of(ty))
+                .filter(|s| s.is_vector)?;
+            let integer = !super::types::is_floating_scalar(def.fields.first()?.ty);
+            Some((def.size, integer))
+        };
+        match (vector(declared), vector(actual), lax) {
+            (_, _, super::LaxVectors::None) => false,
+            (Some((a, x)), Some((b, y)), super::LaxVectors::Integer) => a == b && x && y,
+            (Some((a, _)), Some((b, _)), super::LaxVectors::All) => a == b,
+            _ => false,
+        }
+    }
+
     /// C99 6.5.16.1p1 between two pointers: the types they point to are
     /// compatible, or one side points to `void`. Pointers to integer types
     /// that differ only in signedness convert with a `pointer-sign`
     /// warning; any other pair is an incompatible conversion, an error by
-    /// default as in gcc 14. The pointed-to types' own qualifiers are
+    /// default. The pointed-to types' own qualifiers are
     /// [`Self::discarded_qualifiers`]' to check.
     fn pointer_mismatch(
         structs: &[super::StructDef],
@@ -1114,7 +1180,7 @@ impl Compiler {
         }
         // The key drops the qualifiers of the pointer and of what it points
         // to; ones further down are part of the pointed-to type's identity
-        // (C99 6.7.3p9), and a difference there alone warns, as in clang.
+        // (C99 6.7.3p9), and a difference there alone warns.
         let nested = super::types::CONST_LVL_MASK | super::types::VOL_LVL_MASK;
         if pointees_compatible(structs, d & !nested, a & !nested) {
             return TypeMismatch::warn(
@@ -1131,20 +1197,31 @@ impl Compiler {
         )
     }
 
-    /// Report the conversion mismatch `m` at `line`: a row whose default
-    /// is `Error` through [`Self::report_at`], stopping here unless the
-    /// user lowered it, any other as a warning.
+    /// Report the conversion mismatch `m` of the value just parsed: a row
+    /// whose default is `Error` through [`Self::report_at`], stopping here
+    /// unless the user lowered it, any other as a warning.
     pub(super) fn report_mismatch(
         &mut self,
         m: &TypeMismatch,
-        line: usize,
+        at: Site,
         text: alloc::string::String,
     ) -> Result<(), C5Error> {
+        let at = self.value_site(at);
         if m.code.default_level() == super::super::diag::Level::Error {
-            return self.report_at(m.code, line, text);
+            return self.report_at(m.code, at, text);
         }
-        self.warn_at(m.code, line, text);
+        self.warn_at(m.code, at, text);
         Ok(())
+    }
+
+    /// Where the conversion of the value just parsed reports when its
+    /// target is at `at`: the value's own position when it begins on that
+    /// line, so a `_Pragma` around it in a macro argument governs the report.
+    pub(super) fn value_site(&self, at: Site) -> Site {
+        match self.value_start.line == at.line {
+            true => self.value_start,
+            false => at,
+        }
     }
 
     /// C99 6.7.8p11: an initializer converts to its object's type as if by
@@ -1157,10 +1234,12 @@ impl Compiler {
         declared: (i64, &Option<(crate::c5::symbol::FnType, i64)>),
         actual: (i64, &Option<(crate::c5::symbol::FnType, i64)>),
         (zero, untyped): (bool, bool),
-        line: usize,
+        at: Site,
     ) -> Result<(), C5Error> {
         let structs = &self.structs;
-        let Some(m) = Self::type_warning_with_flags(structs, declared.0, actual.0, zero, untyped)
+        let lax = self.lax_vectors;
+        let Some(m) =
+            Self::type_warning_with_flags(structs, declared.0, actual.0, zero, untyped, lax)
         else {
             return Ok(());
         };
@@ -1168,9 +1247,9 @@ impl Compiler {
         let got = self.typed_text(actual.0, actual.1);
         let text = alloc::format!("{} in initializer (declared={want}, init={got})", m.reason);
         if m.no_conversion {
-            return Err(self.compile_err_at(Code::INVALID_INITIALIZER, line, text));
+            return Err(self.compile_err_at(Code::INVALID_INITIALIZER, at.line, text));
         }
-        self.report_mismatch(&m, line, text)
+        self.report_mismatch(&m, at, text)
     }
 
     /// [`Self::check_initializer_conversion`] for the expression just parsed,
@@ -1179,15 +1258,15 @@ impl Compiler {
         &mut self,
         declared: i64,
         bits: u32,
-        line: usize,
+        at: Site,
     ) -> Result<(), C5Error> {
         let flags = (
             self.value_is_null_pointer_constant(),
             self.last_emit_was_indirect_call(),
         );
         let actual_fn = self.value_fn_type(self.ast_acc);
-        self.check_initializer_conversion((declared, &None), (self.ty, &actual_fn), flags, line)?;
-        self.check_init_conversion_of(self.ast_acc, declared, bits, line);
+        self.check_initializer_conversion((declared, &None), (self.ty, &actual_fn), flags, at)?;
+        self.check_init_conversion_of(self.ast_acc, declared, bits, at);
         Ok(())
     }
 
@@ -1198,20 +1277,20 @@ impl Compiler {
         &mut self,
         declared: (i64, &Option<(crate::c5::symbol::FnType, i64)>),
         bits: u32,
-        line: usize,
+        at: Site,
     ) -> Result<(), C5Error> {
         let actual_fn = self.value_fn_type(self.ast_acc);
         let actual = (self.ty, &actual_fn);
         let what = ("initializer", "declared", "init");
-        if self.check_function_conversion(declared, actual, true, line, what)? {
+        if self.check_function_conversion(declared, actual, true, at, what)? {
             return Ok(());
         }
         let flags = (
             self.value_is_null_pointer_constant(),
             self.last_emit_was_indirect_call(),
         );
-        self.check_initializer_conversion(declared, actual, flags, line)?;
-        self.check_init_conversion_of(self.ast_acc, declared.0, bits, line);
+        self.check_initializer_conversion(declared, actual, flags, at)?;
+        self.check_init_conversion_of(self.ast_acc, declared.0, bits, at);
         Ok(())
     }
 
@@ -1295,7 +1374,7 @@ impl Compiler {
     }
 
     /// A reference to `idx` that no evaluation follows (C99 6.5.3.4p2, 6.6p3):
-    /// used and read, as gcc counts a reference it parses without evaluating.
+    /// used and read.
     pub(super) fn mark_unevaluated_use(&mut self, idx: usize) {
         let binding = &mut self.symbols[idx].binding;
         binding.was_referenced = true;
@@ -1319,43 +1398,36 @@ impl Compiler {
         e: Option<ExprId>,
         to: i64,
         bits: u32,
-        line: usize,
+        at: Site,
     ) {
-        self.check_conversion_of(e, to, bits, line, false);
+        self.check_conversion_of(e, to, bits, at, false);
     }
 
     /// [`Self::check_value_conversion_of`] for an initializer.
-    fn check_init_conversion_of(&mut self, e: Option<ExprId>, to: i64, bits: u32, line: usize) {
-        self.check_conversion_of(e, to, bits, line, true);
+    fn check_init_conversion_of(&mut self, e: Option<ExprId>, to: i64, bits: u32, at: Site) {
+        self.check_conversion_of(e, to, bits, at, true);
     }
 
-    fn check_conversion_of(
-        &mut self,
-        e: Option<ExprId>,
-        to: i64,
-        bits: u32,
-        line: usize,
-        init: bool,
-    ) {
+    fn check_conversion_of(&mut self, e: Option<ExprId>, to: i64, bits: u32, at: Site, init: bool) {
         let Some(e) = e else {
             return;
         };
         if let Some((value, from)) = self.ast_const_value(e) {
-            self.check_constant_conversion(value, from, to, bits, line);
+            self.check_constant_conversion(value, from, to, bits, at);
         }
         let as_is = init
             && self
                 .init_value_ty(e)
                 .is_some_and(|t| self.initializes_as_is(t, to));
         if !as_is {
-            self.check_enum_conversion(self.expr_enum(e), to, bits, line);
+            self.check_enum_conversion(self.expr_enum(e), to, bits, at);
         }
     }
 
     /// Warns when the integer constant `value` of type `from` changes value
     /// in its implicit conversion to the integer type `to`, a bit-field of
-    /// `bits` bits when that is not zero. As in gcc, a value that fits the
-    /// width at the other signedness keeps its bits and is no change
+    /// `bits` bits when that is not zero. A value that fits the width at
+    /// the other signedness keeps its bits and is no change
     /// (`unsigned u = -1;`, `char c = 255;`); `_Bool` takes any value.
     pub(super) fn check_constant_conversion(
         &mut self,
@@ -1363,7 +1435,7 @@ impl Compiler {
         from: i64,
         to: i64,
         bits: u32,
-        line: usize,
+        at: Site,
     ) {
         if self.unevaluated > 0
             || !super::types::is_integer_scalar_ty(to)
@@ -1395,7 +1467,7 @@ impl Compiler {
         };
         self.warn_at(
             Code::CONSTANT_CONVERSION,
-            line,
+            self.value_site(at),
             alloc::format!(
                 "implicit conversion from `{from_s}` to {target} changes value from {value} to {now}"
             ),
@@ -1428,8 +1500,15 @@ impl Compiler {
             .find(|f| {
                 f.array_size == 0
                     && f.bit_width == 0
-                    && Self::type_mismatch(structs, f.ty, actual, actual_is_zero_literal, false)
-                        .is_none()
+                    && Self::type_mismatch(
+                        structs,
+                        f.ty,
+                        actual,
+                        actual_is_zero_literal,
+                        false,
+                        super::LaxVectors::None,
+                    )
+                    .is_none()
             })
             .map(|f| f.ty)
     }

@@ -2866,7 +2866,7 @@ impl<'a> ElfImageWriter<'a> {
             tail.rela_data_off = post_dwarf_off;
             post_dwarf_off
         };
-        // The producer fingerprint in gcc's ident form, past the loaded
+        // The producer fingerprint in the `.ident` form, past the loaded
         // image so `.text` stays instruction-pure.
         tail.comment = super::provenance_comment();
         tail.comment_off = post_rela_off;
@@ -4004,7 +4004,7 @@ impl<'a> ElfImageWriter<'a> {
     }
 
     /// The non-loaded tail: the five `.debug_*` sections under `-g`
-    /// (`.debug_frame` carries the CFI an unwinder reads through optimised
+    /// (`.debug_frame` carries the CFI an unwinder reads through optimized
     /// frames), the `--emit-relocs` tables against the static symtab's
     /// section symbols, `.comment`, the static symbol table (`sh_info` one
     /// past the last LOCAL, which is every entry), and `.shstrtab` last.
@@ -4426,7 +4426,7 @@ impl<'a> ElfImageWriter<'a> {
                 code,
                 stub_len + fx.code_offset as u64,
                 jt_vmaddr + fx.rodata_offset,
-                AddrPart::Whole,
+                fx.part,
                 "table fixup",
             )?;
         }
@@ -4487,6 +4487,7 @@ mod tests {
                 ordinal: None,
                 kind: crate::c5::codegen::ImportKind::Function,
                 is_variadic: false,
+                prototyped: false,
                 fixed_args: 1,
                 return_type_tag: None,
                 param_types: Vec::new(),
@@ -4494,6 +4495,7 @@ mod tests {
             dylibs: vec![ResolvedDylib {
                 name: "libc".into(),
                 path: "libc.so.6".into(),
+                main_executable: false,
             }],
         };
         build.abi = super::super::Target::LinuxAarch64.abi();
@@ -4807,6 +4809,7 @@ mod tests {
         build.init_fini_arrays = crate::c5::codegen::InitFiniArrays {
             init: Some((0, 8)),
             fini: Some((8, 8)),
+            ..Default::default()
         };
         let bytes = write(&tiny_program(), &build, Machine::Aarch64).unwrap();
         let dyn_ = dynamic_entries(&bytes);
@@ -5610,7 +5613,7 @@ mod tests {
             build.tls_data.len() as u64,
             "PT_TLS p_memsz must equal .tdata + .tbss size"
         );
-        assert_eq!(p_memsz, 16, "two int TLS vars => 16 bytes per thread");
+        assert_eq!(p_memsz, 8, "two int TLS vars => 8 bytes per thread");
         // Two ints: the image's alignment is the 8-byte placement boundary.
         assert_eq!(p_align, 8);
         // The TLS image must lie inside an rw PT_LOAD so the loader can
@@ -5668,7 +5671,7 @@ mod tests {
             build.tls_data.len() as u64,
             "PT_TLS p_memsz must equal .tdata + .tbss size"
         );
-        assert_eq!(p_memsz, 8, "single int TLS var => 8 bytes per thread");
+        assert_eq!(p_memsz, 4, "single int TLS var => 4 bytes per thread");
     }
 
     /// `PT_TLS` takes the widest alignment among the thread-locals and
@@ -5693,13 +5696,13 @@ mod tests {
             let build =
                 super::super::lower_for(&program, target, super::super::NativeOptions::default())
                     .expect("lower");
-            assert_eq!((build.tls_data.len(), build.tls_align), (72, 32));
+            assert_eq!((build.tls_data.len(), build.tls_align), (65, 32));
             let bytes = write(&tiny_program(), &build, machine).expect("write ELF");
             let phdr_off = find_phdr(&bytes, PT_TLS).expect("expected PT_TLS phdr");
             let p_vaddr = read_u64(&bytes, phdr_off + 16);
             let p_memsz = read_u64(&bytes, phdr_off + 40);
             let p_align = read_u64(&bytes, phdr_off + 48);
-            assert_eq!((p_memsz, p_align), (72, 32), "{machine:?}");
+            assert_eq!((p_memsz, p_align), (65, 32), "{machine:?}");
             assert_eq!(
                 p_vaddr % 32,
                 0,
@@ -5716,7 +5719,7 @@ mod tests {
                     Machine::X86_64 => assert_eq!(
                         word(at) as i32 as i64,
                         *off as i64 - 96,
-                        "x86_64: tp - roundup(72, 32) + offset"
+                        "x86_64: tp - roundup(65, 32) + offset"
                     ),
                     Machine::Aarch64 => assert_eq!(
                         (((word(at) >> 10) & 0xFFF) << 12) + ((word(at + 4) >> 10) & 0xFFF),

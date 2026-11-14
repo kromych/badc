@@ -7,23 +7,29 @@
 
 #include <stdio.h>
 
+#if defined(__APPLE__)
+#define CSYM(name) "_" name
+#else
+#define CSYM(name) name
+#endif
+
 extern const unsigned int asm_ro_word[];
 extern unsigned int asm_rw_word[];
 extern const unsigned int asm_x_word[];
 
 asm(".pushsection .rodata.asmplace,\"a\"\n"
     ".balign 8\n"
-    "asm_ro_word:\n"
+    CSYM("asm_ro_word") ":\n"
     ".long 0x11112222\n"
     ".popsection\n"
     ".pushsection .data.asmplace,\"aw\"\n"
     ".balign 8\n"
-    "asm_rw_word:\n"
+    CSYM("asm_rw_word") ":\n"
     ".long 0x33334444\n"
     ".popsection\n"
     ".pushsection .text.asmplace,\"ax\"\n"
     ".balign 8\n"
-    "asm_x_word:\n"
+    CSYM("asm_x_word") ":\n"
     ".long 0x55556666\n"
     ".popsection\n");
 

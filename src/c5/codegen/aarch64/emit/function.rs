@@ -123,11 +123,22 @@ struct FunctionEmitter<'a, 'b> {
     early_far: bool,
     /// The test's branch to patch, and where the frame path starts.
     early_site: (usize, usize),
+    /// Per block, the call it ends in as a tail call, and the one of the
+    /// block being emitted.
+    tail_calls: Vec<Option<super::TailCall<'a>>>,
+    tail_call: Option<super::TailCall<'a>>,
     snapshot: EmitSnapshot,
     /// Which blocks are emitted and where each branch lands.
     plan: super::ssa::block_plan::BlockPlan,
     /// `ParamRef` values the entry parallel copy already placed.
     prebatched: Vec<bool>,
+    /// Loads and lane reads a lane insert or store performs ([`lane_memory`]).
+    lane_mem: Vec<bool>,
+    /// Pointer steps and the accesses performing them ([`post_indexed`]).
+    post_index: Vec<Option<PostIndex>>,
+    /// Steps whose flags a branch reads, and the comparisons they answer
+    /// ([`flag_steps`]).
+    flag_steps: Vec<Option<FlagStep>>,
     block_offsets: Vec<usize>,
     branch_fixups: Vec<BranchFixup>,
     /// Per block: its conditional branch does not reach its target and
@@ -196,12 +207,16 @@ pub(crate) fn emit_function(
     fixed_regs: super::FixedRegs,
     // `-O`: the block plan may repeat a small test in place of a jump to it.
     repeat_tests: bool,
+    sibling_calls: bool,
+    ret_tags: &alloc::collections::BTreeMap<usize, i64>,
 ) -> Emit {
     let abi = {
         let mut a = target.abi();
+        a.sibling_calls = sibling_calls;
         a.no_fp_regs = no_fp_regs;
         a.strict_align = strict_align;
         a.hardening = hardening;
+        a.hardening.pac_b_key = target.is_windows();
         a.stack_protect = stack_protect;
         a.fixed_regs = fixed_regs;
         a
@@ -210,8 +225,31 @@ pub(crate) fn emit_function(
         return fail(super::ssa::emit_common::frame_too_large_msg(bytes));
     }
     let max_call_scratch = outgoing_bytes(func, alloc, abi, variadic_targets, imports);
-    let frame = compute_frame(func, alloc, abi, target, max_call_scratch);
-    if let Some(why) = super::ssa::reg_alloc::fp_scratch_shortfall(func, frame.fp_scratch)
+    // The frame and the emission read one decision on each block's tail call.
+    let tail_calls: Vec<Option<super::TailCall<'_>>> = (func.blocks.iter())
+        .map(|b| {
+            super::detect_tail_call(
+                func,
+                alloc,
+                b,
+                abi,
+                variadic_targets,
+                ret_tags,
+                imports,
+                target,
+            )
+        })
+        .collect();
+    let tail_pcs: Vec<usize> = tail_calls.iter().flatten().map(|t| t.pc).collect();
+    let frame = super::frame::compute_frame_with_tail_calls(
+        func,
+        alloc,
+        abi,
+        target,
+        max_call_scratch,
+        &tail_pcs,
+    );
+    if let Some(why) = super::ssa::reg_alloc::fp_scratch_shortfall(func, target, frame.fp_scratch)
         .or_else(|| super::ssa::emit_common::naked_refusal(func, alloc, target))
     {
         return fail(why);
@@ -263,7 +301,7 @@ pub(crate) fn emit_function(
     // A full leaf builds no frame to leave ahead of; the evaluation may need
     // more temporaries than it has.
     let early_exit = if repeat_tests && !is_full_leaf(frame, alloc) {
-        super::ssa::early_exit::early_exit(func, alloc, &param_plan).filter(|exit| {
+        super::ssa::early_exit::early_exit(func, &param_plan).filter(|exit| {
             emit_early_test(&mut Vec::new(), exit, false, frame.fixed_regs).is_some()
                 && emit_early_return(&mut Vec::new(), exit, frame.fixed_regs)
         })
@@ -296,6 +334,7 @@ pub(crate) fn emit_function(
         text_map_state: *text_map_state,
     };
     let page_only = super::mem::page_only_data(func, alloc, extern_data_names);
+    let ends_path = super::ssa::emit_common::calls_ending_paths(func);
     let mut em = FunctionEmitter {
         cx,
         fixups,
@@ -321,15 +360,21 @@ pub(crate) fn emit_function(
             name2entpc,
             data_sym_offsets,
             page_only: &page_only,
+            ends_path: &ends_path,
         },
         abs_jump_tables,
         entry,
         early_exit,
         early_far: false,
         early_site: (0, 0),
+        tail_calls,
+        tail_call: None,
         snapshot,
         plan,
         prebatched: Vec::new(),
+        lane_mem: lane_memory(func, alloc),
+        post_index: post_indexed(func, alloc),
+        flag_steps: flag_steps(func, alloc),
         block_offsets: alloc::vec![0; func.blocks.len()],
         branch_fixups: Vec::new(),
         far_cond: alloc::vec![false; func.blocks.len()],
@@ -410,13 +455,24 @@ impl FunctionEmitter<'_, '_> {
         }
     }
 
-    /// The early return after the body, the test pointed at it; `false`
-    /// where the test's conditional branch does not reach it.
+    /// The early return after the body, the test pointed at it, unless it
+    /// follows the test; `false` where the test's conditional branch does
+    /// not reach it.
     fn emit_early_return(&mut self) -> bool {
         let Some(exit) = &self.early_exit else {
             return true;
         };
         let exit_at = self.cx.code.len();
+        let begin = self.snapshot.code;
+        let (site, frame) = self.early_site;
+        if exit.predicted {
+            self.cx.early_returns.push(super::EarlyReturn {
+                begin: begin as u32,
+                frame: (frame - begin) as u32,
+                exit: (exit_at - begin) as u32,
+            });
+            return true;
+        }
         super::ssa::emit_common::record_block_src(
             self.fcx.func,
             exit.exit_block,
@@ -425,11 +481,9 @@ impl FunctionEmitter<'_, '_> {
         );
         let emitted = emit_early_return(self.cx.code, exit, self.fcx.frame.fixed_regs);
         debug_assert!(emitted, "the return fit its temporaries at planning");
-        let (site, frame) = self.early_site;
         if !patch_early_branch(self.cx.code, site, exit_at, self.early_far) {
             return false;
         }
-        let begin = self.snapshot.code;
         self.cx.early_returns.push(super::EarlyReturn {
             begin: begin as u32,
             frame: (frame - begin) as u32,
@@ -558,7 +612,7 @@ impl FunctionEmitter<'_, '_> {
         Ok(())
     }
 
-    /// GCC computed goto: `br` through the address `Inst::BlockAddr`
+    /// GNU C computed goto: `br` through the address `Inst::BlockAddr`
     /// materialized.
     fn emit_goto_indirect(&mut self, target: super::super::ir::ValueId) -> Emit {
         let FnCtx {
@@ -638,7 +692,7 @@ impl FunctionEmitter<'_, '_> {
         }
         let mut from = self.snapshot.code;
         // The `-fpatchable-function-entry` NOPs follow the landing pad and
-        // precede the rest of the entry, as gcc orders them.
+        // precede the rest of the entry.
         for _ in 0..self.entry.nops_after {
             emit(self.cx.code, super::encode::NOP);
             self.unwind.push(S::Nop);
@@ -657,7 +711,21 @@ impl FunctionEmitter<'_, '_> {
                 self.fcx.frame.fixed_regs,
             );
             debug_assert!(site.is_some(), "the test fit its temporaries at planning");
-            self.early_site = (site.unwrap_or(0), self.cx.code.len());
+            let site = site.unwrap_or(0);
+            if exit.predicted {
+                super::ssa::emit_common::record_block_src(
+                    self.fcx.func,
+                    exit.exit_block,
+                    self.cx.code.len(),
+                    self.cx.ssa_line_rows,
+                );
+                let emitted = emit_early_return(self.cx.code, exit, self.fcx.frame.fixed_regs);
+                debug_assert!(emitted, "the return fit its temporaries at planning");
+                let frame_at = self.cx.code.len();
+                let reached = patch_early_branch(self.cx.code, site, frame_at, false);
+                debug_assert!(reached, "the frame path follows the return");
+            }
+            self.early_site = (site, self.cx.code.len());
             // The record covers the frame path, which starts here.
             self.unwind.clear();
             from = self.cx.code.len();
@@ -665,7 +733,7 @@ impl FunctionEmitter<'_, '_> {
         let mut described = None;
         if !func.is_naked {
             if signs {
-                emit(self.cx.code, super::encode::PACIASP);
+                emit(self.cx.code, super::encode::pac_pair(abi.hardening).0);
                 self.unwind.push(S::PacSignLr);
                 described = Some(self.cx.code.len());
             }
@@ -767,7 +835,8 @@ impl FunctionEmitter<'_, '_> {
             param_plan,
             ..
         } = self.fcx;
-        let mut fp_moves: Vec<(Place, Place, bool)> = Vec::new();
+        let mut fp_moves: Vec<(Place, Place, crate::c5::codegen::ssa::reg_alloc::VecWidth)> =
+            Vec::new();
         let mut fp_vids: Vec<usize> = Vec::new();
         let mut fp_homes: Vec<Place> = Vec::new();
         for vid in super::ssa::emit_common::entry_read_run(func, &alloc.use_counts) {
@@ -775,7 +844,7 @@ impl FunctionEmitter<'_, '_> {
             let (Inst::ParamRef { kind, .. } | Inst::ParamPart { kind, .. }) = inst else {
                 continue;
             };
-            if !matches!(kind, LoadKind::F32 | LoadKind::F64) {
+            if !matches!(kind, LoadKind::F32 | LoadKind::F64 | LoadKind::V128) {
                 continue;
             }
             if super::ssa::emit_common::is_dead_pure(inst, vid as super::super::ir::ValueId, alloc)
@@ -789,7 +858,11 @@ impl FunctionEmitter<'_, '_> {
             let Some((true, src)) = super::ssa::reg_alloc::incoming_reg(param_plan, inst) else {
                 continue;
             };
-            fp_moves.push((Place::FpReg(src), dst, false));
+            fp_moves.push((
+                Place::FpReg(src),
+                dst,
+                crate::c5::codegen::ssa::reg_alloc::VecWidth::of_load(*kind),
+            ));
             fp_vids.push(vid);
             fp_homes.push(dst);
         }
@@ -842,6 +915,7 @@ impl FunctionEmitter<'_, '_> {
                 self.align_stream();
             }
             self.block_offsets[block_idx] = self.cx.code.len();
+            self.cx.code.begin_block();
             if func.has_seh() {
                 self.seh_placed
                     .push((block_idx as BlockId, self.cx.code.len()));
@@ -863,6 +937,12 @@ impl FunctionEmitter<'_, '_> {
             if bti {
                 emit(self.cx.code, super::encode::BTI_J);
             }
+            self.tail_call = self.tail_calls[block_idx];
+            let saves = &alloc.loop_saves;
+            let b = block_idx as BlockId;
+            for s in saves.loads_at_start_of(b) {
+                call_save(self.cx.code, frame, s, false);
+            }
             for v in block.inst_range.clone() {
                 if self.plan.lowers(block_idx, v) {
                     self.emit_block_inst(block, v)?;
@@ -872,6 +952,11 @@ impl FunctionEmitter<'_, '_> {
             // a naked function's synthetic return, which emits nothing.
             if !(func.is_naked && matches!(block.terminator, Terminator::Return(_))) {
                 self.align_stream();
+            }
+            // A loop's saves go ahead of the moves into its header's phis,
+            // which may take the saved registers.
+            for s in saves.stores_at(b) {
+                call_save(self.cx.code, frame, s, true);
             }
             if let Err(e) = emit_phi_predecessor_moves(
                 self.cx.code,
@@ -883,6 +968,9 @@ impl FunctionEmitter<'_, '_> {
                 &mut self.fp_literals,
             ) {
                 return self.rollback(e);
+            }
+            for s in saves.loads_at_end_of(b) {
+                call_save(self.cx.code, frame, s, false);
             }
             self.emit_terminator(block_idx, block)?;
         }
@@ -944,10 +1032,18 @@ impl FunctionEmitter<'_, '_> {
         let FnCtx { func, alloc, .. } = self.fcx;
         let inst = &func.insts[v as usize];
         let place = place_of(alloc, v);
+        self.cx.code.begin_instruction();
         if super::ssa::emit_common::inst_emits_nothing(inst, v, alloc) {
             return Ok(());
         }
-        if self.prebatched[v as usize] {
+        // The terminator lowers the tail call.
+        if self.tail_call.is_some_and(|t| t.pc == v as usize) {
+            return Ok(());
+        }
+        if self.prebatched[v as usize]
+            || self.lane_mem[v as usize]
+            || self.post_index[v as usize] == Some(PostIndex::Step)
+        {
             return Ok(());
         }
         // An inline-asm block takes the mapping state itself.
@@ -965,7 +1061,9 @@ impl FunctionEmitter<'_, '_> {
         if let Inst::BlockAddr(tb) = inst {
             return self.emit_block_addr(v, place, *tb);
         }
-        if let (Inst::Imm(bits), Place::FpReg(d)) = (inst, place) {
+        if let (Inst::Imm(bits), Place::FpReg(d)) = (inst, place)
+            && !alloc.imm_held.get(v as usize).copied().unwrap_or(false)
+        {
             let (x, single) = (self.fcx.scratch.primary, alloc.is_f32(v));
             let literals = &mut self.fp_literals;
             emit_fp_imm(self.cx.code, d, *bits as u64, single, x, literals);
@@ -977,20 +1075,31 @@ impl FunctionEmitter<'_, '_> {
             return self.emit_asm_goto(asm, args, v, table);
         }
         let data_fixups_pre_inst = self.cx.data_fixups.len();
-        let lowered = emit_inst(
-            self.cx,
-            inst,
-            v,
-            place,
-            &self.fcx,
-            self.fixups,
-            self.macho_tlv_fixups,
-            self.macho_tlv_descriptors,
-            &mut self.deferred_regions,
-            self.text_map_state,
-            self.asm_text_labels,
-            self.asm_section_text_refs,
-        );
+        let saves = (alloc.call_saves)
+            .binary_search_by_key(&v, |&(site, _)| site)
+            .map_or(&[][..], |i| alloc.call_saves[i].1.as_slice());
+        for s in saves {
+            call_save(self.cx.code, self.fcx.frame, s, true);
+        }
+        let fused = emit_lane_memory(self.cx.code, inst, &self.lane_mem, place, &self.fcx)
+            .or_else(|| emit_post_indexed(self.cx.code, v, &self.post_index, &self.fcx))
+            .or_else(|| emit_flag_step(self.cx.code, v, &self.flag_steps, &self.fcx));
+        let lowered = fused.unwrap_or_else(|| {
+            emit_inst(
+                self.cx,
+                inst,
+                v,
+                place,
+                &self.fcx,
+                self.fixups,
+                self.macho_tlv_fixups,
+                self.macho_tlv_descriptors,
+                &mut self.deferred_regions,
+                self.text_map_state,
+                self.asm_text_labels,
+                self.asm_section_text_refs,
+            )
+        });
         if let Err(e) = lowered {
             #[cfg(feature = "codegen_test")]
             if std::env::var("BADC_DUMP_SSA").is_ok() {
@@ -1000,6 +1109,9 @@ impl FunctionEmitter<'_, '_> {
                 );
             }
             return self.rollback(e);
+        }
+        for s in saves {
+            call_save(self.cx.code, self.fcx.frame, s, false);
         }
         // An `Inst::ImmData` naming a cross-TU object replaces its unit-local
         // `.data` fixup with a named reference, so the ET_REL writer emits an
@@ -1021,7 +1133,7 @@ impl FunctionEmitter<'_, '_> {
         Ok(())
     }
 
-    /// GCC `&&label`: an `ADR rd, .` placeholder, patched against the block's
+    /// GNU C `&&label`: an `ADR rd, .` placeholder, patched against the block's
     /// final offset by [`Self::patch_block_addrs`].
     fn emit_block_addr(
         &mut self,
@@ -1057,6 +1169,7 @@ impl FunctionEmitter<'_, '_> {
             name2entpc,
             extern_data_names,
             data_sym_offsets,
+            target,
             ..
         } = self.fcx;
         let lowered = emit_inline_asm_aarch64(
@@ -1071,6 +1184,7 @@ impl FunctionEmitter<'_, '_> {
             name2entpc,
             extern_data_names,
             data_sym_offsets,
+            target.binary_format(),
             self.cx.asm_sections,
             self.cx.asm_extern_call_sites,
             self.cx.asm_sym_fixups,
@@ -1111,6 +1225,18 @@ impl FunctionEmitter<'_, '_> {
         match block.terminator {
             // A naked function's inline-asm body provides its own return.
             Terminator::Return(_) if func.is_naked => {}
+            Terminator::Return(_) if self.tail_call.is_some() => {
+                let tail = self.tail_call.take().expect("tail call");
+                return emit_tail_call(
+                    self.cx.code,
+                    tail,
+                    &self.fcx,
+                    self.fixups,
+                    self.cx.plt_call_fixups,
+                    self.cx.asm_extern_call_sites,
+                    self.cx.user_extern_data_refs,
+                );
+            }
             Terminator::Return(v) => {
                 let mut steps = Vec::new();
                 let windows = self.fcx.target == Target::WindowsAarch64;
@@ -1185,7 +1311,11 @@ impl FunctionEmitter<'_, '_> {
             // Sealed after a noreturn call (C11 6.7.4p8): a trap, so a
             // mis-marked returning call faults rather than falling into the
             // next block.
-            Terminator::Unreachable => emit(self.cx.code, 0xD420_0020), // brk #1
+            Terminator::Unreachable => {
+                if !super::ssa::emit_common::block_ends_in_trap(func, block) {
+                    emit(self.cx.code, 0xD420_0020); // brk #1
+                }
+            }
         }
         Ok(())
     }
@@ -1222,8 +1352,15 @@ impl FunctionEmitter<'_, '_> {
                     negate,
                 } => (taken, other, negate),
             };
-        if let Some(bcc) = fused_branch_cond(func, alloc, cond, negate) {
+        if let Some(bcc) = flag_step_cond(&self.flag_steps, cond, negate)
+            .or_else(|| fused_branch_cond(func, alloc, cond, negate))
+        {
             self.emit_cond(block_idx, target, LocalBranchKind::Bcc(bcc));
+            return self.branch_unless_next(block_idx, fall_through);
+        }
+        if let Some((first, second)) = fused_branch_cond_pair(func, alloc, cond, negate) {
+            self.emit_cond(block_idx, target, LocalBranchKind::Bcc(first));
+            self.emit_cond(block_idx, target, LocalBranchKind::Bcc(second));
             return self.branch_unless_next(block_idx, fall_through);
         }
         if let Some((value, bit)) = fused_bit_test(func, alloc, cond) {
@@ -1483,6 +1620,7 @@ impl FunctionEmitter<'_, '_> {
             rodata.addr_fixups.push(super::RodataAddrFixup {
                 code_offset: addr_site,
                 rodata_offset: base,
+                part: crate::c5::codegen::AddrPart::Whole,
             });
             for (i, &t) in func.jump_tables[table as usize].iter().enumerate() {
                 let slot_offset = base + (i * width) as u64;
@@ -1584,7 +1722,7 @@ pub(super) fn emit_stack_alloc(code: &mut Vec<u8>, bytes: u32, scratch: Option<R
 /// Emit the function prologue, with the unwind step of each instruction up to
 /// where fp is set, which is where it returns; `None` for a full leaf.
 fn emit_prologue(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     func: &FunctionSsa,
     alloc: &Allocation,
     frame: Frame,
@@ -1714,7 +1852,7 @@ fn emit_param_homes(code: &mut Vec<u8>, func: &FunctionSsa, alloc: &Allocation, 
 /// and before anything clobbers x0..x7 / d0..d7. The body reads the
 /// aggregate from that local; its 16-byte argument cell stays unused.
 fn emit_struct_param_scatter(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     func: &FunctionSsa,
     abi: super::Abi,
     frame: Frame,
@@ -2140,7 +2278,7 @@ fn emit_frame_and_saves(
 /// `Cond::flip` is an exact NZCV complement, so an inverted FP branch is
 /// taken on the unordered state exactly when C99 6.5.8p6 / 6.5.9p3
 /// require the negated comparison to hold.
-fn fused_branch_cond(
+pub(super) fn fused_branch_cond(
     func: &super::super::ir::FunctionSsa,
     alloc: &Allocation,
     cond: super::super::ir::ValueId,
@@ -2160,6 +2298,30 @@ fn fused_branch_cond(
     };
     let positive = compare_cond(op).or_else(|| fp_compare_cond(op))?;
     Some(if negate { positive.flip() } else { positive })
+}
+
+/// The two `B.cond` conditions, either of which takes the branch, for a
+/// branch-fused comparison no single condition decides.
+fn fused_branch_cond_pair(
+    func: &super::super::ir::FunctionSsa,
+    alloc: &Allocation,
+    cond: super::super::ir::ValueId,
+    negate: bool,
+) -> Option<(super::encode::Cond, super::encode::Cond)> {
+    if !alloc
+        .branch_fused
+        .get(cond as usize)
+        .copied()
+        .unwrap_or(false)
+    {
+        return None;
+    }
+    match func.insts.get(cond as usize)? {
+        Inst::Binop { op, .. } | Inst::BinopI { op, .. } => {
+            super::arith::fp_compare_cond_pair(*op, negate)
+        }
+        _ => None,
+    }
 }
 
 /// The value and bit a branch-fused one-bit mask tests (`tbz` / `tbnz`).
@@ -2216,7 +2378,7 @@ fn push_sp_from_fp(
 /// step.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_return(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     value: u32,
     alloc: &Allocation,
     frame: Frame,
@@ -2225,24 +2387,51 @@ pub(super) fn emit_return(
     abi: super::Abi,
     extern_sites: &mut Vec<super::UserExternCallSite>,
     extern_data_refs: &mut Vec<super::UserExternDataRef>,
-    mut uw: Option<&mut Vec<super::A64Step>>,
+    uw: Option<&mut Vec<super::A64Step>>,
 ) -> Emit<usize> {
-    use super::A64Step as S;
     if let Some(ai) = func.ret_agg {
         emit_aggregate_return(code, value, ai, alloc, frame, scratch, func, abi)?;
     } else if value != super::super::ir::NO_VALUE {
         emit_scalar_return(code, value, alloc, frame, scratch, func);
     }
+    let start = emit_frame_exit(
+        code,
+        alloc,
+        frame,
+        func,
+        abi,
+        extern_sites,
+        extern_data_refs,
+        uw,
+    );
+    emit(code, enc_ret(Reg(30)));
+    Ok(start)
+}
+
+/// The epilogue up to the return: the canary check, the restores, the frame
+/// teardown and the return-address authentication. The offset where the
+/// part the unwind steps describe starts.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn emit_frame_exit(
+    code: &mut Vec<u8>,
+    alloc: &Allocation,
+    frame: Frame,
+    func: &FunctionSsa,
+    abi: super::Abi,
+    extern_sites: &mut Vec<super::UserExternCallSite>,
+    extern_data_refs: &mut Vec<super::UserExternDataRef>,
+    mut uw: Option<&mut Vec<super::A64Step>>,
+) -> usize {
+    use super::A64Step as S;
     let signs = signs_return_address(func, frame, alloc, abi);
     // A full leaf saved nothing, and moved no sp its signing read.
     if is_full_leaf(frame, alloc) {
         let start = code.len();
         if signs {
-            emit(code, super::encode::AUTIASP);
+            emit(code, super::encode::pac_pair(abi.hardening).1);
             push_steps(&mut uw, &[S::PacSignLr]);
         }
-        emit(code, enc_ret(Reg(30)));
-        return Ok(start);
+        return start;
     }
     emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
     let start = code.len();
@@ -2297,11 +2486,10 @@ pub(super) fn emit_return(
     }
     // sp holds the value `paciasp` signed against.
     if signs {
-        emit(code, super::encode::AUTIASP);
+        emit(code, super::encode::pac_pair(abi.hardening).1);
         push_steps(&mut uw, &[S::PacSignLr]);
     }
-    emit(code, enc_ret(Reg(30)));
-    Ok(start)
+    start
 }
 
 /// A return in registers: each part moves into its class's register
@@ -2318,7 +2506,8 @@ fn emit_parts_return(
 ) -> Emit {
     let regs = super::ssa::reg_alloc::agg_part_regs(fp_mask, parts.len(), (&[0, 1], &[0, 1, 2, 3]));
     let mut int_moves: Vec<PlaceMove> = Vec::new();
-    let mut fp_moves: Vec<(Place, Place, bool)> = Vec::new();
+    let mut fp_moves: Vec<(Place, Place, crate::c5::codegen::ssa::reg_alloc::VecWidth)> =
+        Vec::new();
     let mut cross: Vec<(u8, Reg)> = Vec::new();
     for (&p, &(is_fp, r)) in parts.iter().zip(&regs) {
         let src = place_of(alloc, p);
@@ -2327,7 +2516,7 @@ fn emit_parts_return(
                 int_moves.push(PlaceMove::copy(src, Place::IntReg(r)));
             }
             (true, Place::FpReg(_) | Place::Spill(_)) => {
-                fp_moves.push((src, Place::FpReg(r), false))
+                fp_moves.push((src, Place::FpReg(r), alloc.width(p)))
             }
             (true, Place::IntReg(s)) => cross.push((r, Reg(s))),
             _ => return fail("AggParts: part not in a register or spill slot of its bank"),
@@ -2361,7 +2550,7 @@ fn emit_parts_return(
 /// pointer is returned in x0.
 #[allow(clippy::too_many_arguments)]
 fn emit_aggregate_return(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     value: u32,
     ai: u32,
     alloc: &Allocation,
@@ -2448,7 +2637,7 @@ fn emit_aggregate_return(
 /// the 8-byte forms preserve), decided by the producing instruction even
 /// when the value is spilled or integer-materialized; x0 otherwise.
 fn emit_scalar_return(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     value: u32,
     alloc: &Allocation,
     frame: Frame,
@@ -2479,5 +2668,23 @@ fn emit_scalar_return(
         && src.0 != 0
     {
         emit_mov_reg(code, Reg(0), src);
+    }
+}
+
+/// Store a register a call clobbers to its slot ahead of the call, or load
+/// it back after ([`super::ssa::reg_alloc::Allocation::call_saves`]).
+fn call_save(code: &mut Vec<u8>, frame: Frame, s: &super::ssa::reg_alloc::CallSave, store: bool) {
+    use super::ssa::reg_alloc::VecWidth;
+    // A scalar save takes one slot, which may be the frame's last: only a
+    // 128-bit save has the slot below it.
+    let off = || spill_off(frame, s.slot);
+    let q = || v128_spill_off(frame, s.slot);
+    match (s.is_fp, s.wide, store) {
+        (false, _, true) => emit_spill_str_x_auto(code, frame, Reg(s.reg), off()),
+        (false, _, false) => emit_spill_ldr_x(code, frame, Reg(s.reg), off()),
+        (true, VecWidth::Scalar, true) => emit_spill_str_d_auto(code, frame, s.reg, off()),
+        (true, VecWidth::Scalar, false) => emit_spill_ldr_d_auto(code, frame, s.reg, off()),
+        (true, _, true) => emit_spill_str_q(code, frame, s.reg, q(), Reg(16)),
+        (true, _, false) => emit_spill_ldr_q(code, frame, s.reg, q(), Reg(16)),
     }
 }

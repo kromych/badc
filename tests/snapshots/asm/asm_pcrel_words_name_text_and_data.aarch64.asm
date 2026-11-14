@@ -43,12 +43,11 @@ Disassembly of section .text:
                	ret
                	ldrsw	x0, [x1]
                	add	x0, x0, #0x3
+               	mov	x1, #0x0                // =0
+               	mov	x2, #0x9                // =9
                	cmp	w0, #0x7
-               	b.ne	<addr>
-               	mov	x0, #0x0                // =0
+               	csel	x0, x1, x2, eq
                	ret
-               	mov	x0, #0x9                // =9
-               	b	<addr>
                	add	x3, x0, #0x4
                	ldrsw	x4, [x0, #0x4]
                	add	x3, x3, x4
@@ -97,14 +96,13 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, #0x0                // =0
                	b	<addr>
-               	udf	#0x0
 
 <text_tbl>:
-  <addr>: b8 fe ff ff  	.word	0xfffffeb8
-  <addr>: 5c 0a 01 00  	.word	0x00010a5c
+  <addr>: c0 fe ff ff  	.word	0xfffffec0
+  <addr>: 78 0a 01 00  	.word	0x00010a78
   <addr>: 10 00 00 00  	.word	0x00000010
   <addr>: 00 00 00 00  	.word	0x00000000
-  <addr>: 50 0a 01 00  	.word	0x00010a50
+  <addr>: 6c 0a 01 00  	.word	0x00010a6c
   <addr>: 00 00 00 00  	.word	0x00000000
 
 <text_end>:

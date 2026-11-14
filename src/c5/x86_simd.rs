@@ -2,138 +2,13 @@
 //! builtin the bundled x86 intrinsic headers call. A row names the
 //! instruction to emit, the operand shape the parser checks and the walker
 //! lowers, the result type the parser gives the call, and the value
-//! semantics the interpreter evaluates, so the four consumers cannot drift
-//! apart. The vector operands are the
-//! `vector_size(16)` types, which live in memory: the lowering loads each
-//! into an xmm scratch, runs the instruction, and stores the result back.
+//! semantics the interpreter evaluates ([`super::simd`]), so the consumers
+//! cannot drift apart. The walker's form reads the 128-bit operands
+//! through their addresses and writes the result through the destination's;
+//! under `-O` they are values in xmm registers.
 
-use super::token::Ty;
-
-/// Operand and result shape. `Shift` takes an immediate count when the
-/// operand is a constant expression and the low quad of a register
-/// otherwise; the byte-granular shift has the immediate form only.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(crate) enum Form {
-    /// `v128 = op(v128, v128)`.
-    Vv,
-    /// `v128 = op(v128, v128, imm8)`.
-    VvI,
-    /// `v128 = op(v128, imm8)`.
-    VI,
-    /// `v128 = op(v128)`.
-    V,
-    /// `v128 = op(v128, int)`.
-    Shift,
-    /// `v128 = *p`, unaligned.
-    Load,
-    /// `*p = v128`, unaligned.
-    Store,
-    /// `int = lane imm8 of v128`.
-    Extract,
-    /// `v128 = v128 with lane imm8 replaced by an int operand`.
-    Insert,
-    /// `int = the sign bits of the byte lanes of v128`.
-    MoveMask,
-    /// `int = carry`, the random value stored through the pointer operand.
-    RdRand,
-}
-
-/// Result type, as the builtin's prototype declares it: one of the headers'
-/// `vector_size(16)` typedefs, `int`, or `void` for the store.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(crate) enum Ret {
-    V16qi,
-    V8hi,
-    V4si,
-    V2di,
-    V2df,
-    Int,
-    Void,
-}
-
-impl Ret {
-    /// Lane type of a vector result; `None` for a scalar or void one.
-    pub(crate) fn lane_ty(self) -> Option<Ty> {
-        match self {
-            Ret::V16qi => Some(Ty::Char),
-            Ret::V8hi => Some(Ty::Short),
-            Ret::V4si => Some(Ty::Int),
-            Ret::V2di => Some(Ty::LongLong),
-            Ret::V2df => Some(Ty::Double),
-            Ret::Int | Ret::Void => None,
-        }
-    }
-}
-
-/// Value semantics, evaluated by the interpreter. Lane widths are in bytes.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(crate) enum Sem {
-    Add(u8),
-    Sub(u8),
-    /// Low half of the lane-wise product.
-    MulLo(u8),
-    /// High half of the lane-wise signed product.
-    MulHi(u8),
-    /// Signed products of adjacent word pairs, summed into doublewords.
-    MulAddWords,
-    And,
-    AndNot,
-    Or,
-    Xor,
-    CmpEq(u8),
-    /// Signed lane comparison.
-    CmpGt(u8),
-    Shl(u8),
-    Shr(u8),
-    /// Arithmetic (sign-propagating) right shift.
-    Sar(u8),
-    /// Left shift of the whole register by a byte count.
-    ShlBytes,
-    /// Right shift of the whole register by a byte count.
-    ShrBytes,
-    /// Saturating pack of signed lanes into signed lanes of half the width,
-    /// the first operand's lanes first.
-    PackSigned(u8),
-    /// Saturating pack of signed lanes into unsigned lanes of half the width.
-    PackUnsigned(u8),
-    /// Interleave the lanes of the low half of each operand.
-    UnpackLo(u8),
-    /// Interleave the lanes of the high half of each operand.
-    UnpackHi(u8),
-    /// Doubleword shuffle by an immediate selector.
-    ShufD,
-    /// Word shuffle of the high / low quad, the other quad copied.
-    ShufHi,
-    ShufLo,
-    /// Byte shuffle by a vector index, a set index bit 7 zeroing the byte.
-    ShufB,
-    /// Double-precision element select from two sources.
-    ShufPd,
-    /// Carry-less multiply of the selected quads.
-    ClMul,
-    AesEnc,
-    AesEncLast,
-    AesDec,
-    AesDecLast,
-    AesImc,
-    AesKeygen,
-    /// Data movement: the form carries the direction.
-    Move,
-    /// Hardware random number generator.
-    Rand,
-}
-
-pub(crate) struct SimdOp {
-    pub name: &'static str,
-    /// Instruction mnemonic, resolved through the x86 assembler's tables.
-    pub mnem: &'static str,
-    pub form: Form,
-    pub ret: Ret,
-    pub sem: Sem,
-    /// Width in bytes of the integer operand or result of the forms that
-    /// have one (`Extract`, `Insert`, `Shift`, `RdRand`); 0 otherwise.
-    pub int_width: u8,
-}
+use super::simd::{Addend, Cvt, FOp};
+pub(crate) use super::simd::{Form, Ret, Sem, SimdOp};
 
 const fn op(
     name: &'static str,
@@ -150,6 +25,63 @@ const fn op(
         ret,
         sem,
         int_width,
+        bytes: 16,
+    }
+}
+
+/// An AVX2 form over 32-byte vectors: the VEX instruction on ymm registers.
+/// One that does not cross the 128-bit lanes is its 128-bit row's
+/// operation on each half.
+const fn op256(
+    name: &'static str,
+    mnem: &'static str,
+    form: Form,
+    ret: Ret,
+    sem: Sem,
+    int_width: u8,
+) -> SimdOp {
+    SimdOp {
+        name,
+        mnem,
+        form,
+        ret,
+        sem,
+        int_width,
+        bytes: 32,
+    }
+}
+
+/// An AVX-512 form over 64-byte vectors: the EVEX instruction on zmm
+/// registers, an in-lane one its 128-bit row's operation on each quarter.
+const fn op512(
+    name: &'static str,
+    mnem: &'static str,
+    form: Form,
+    ret: Ret,
+    sem: Sem,
+    int_width: u8,
+) -> SimdOp {
+    SimdOp {
+        name,
+        mnem,
+        form,
+        ret,
+        sem,
+        int_width,
+        bytes: 64,
+    }
+}
+
+/// An MMX form of a two-operand row: gcc's builtin over 8-byte vectors.
+const fn op64(name: &'static str, mnem: &'static str, ret: Ret, sem: Sem) -> SimdOp {
+    SimdOp {
+        name,
+        mnem,
+        form: Form::Vv,
+        ret,
+        sem,
+        int_width: 0,
+        bytes: 8,
     }
 }
 
@@ -166,7 +98,8 @@ pub(crate) const OPS: &[SimdOp] = &[
     op("__builtin_ia32_psubd128", "psubd", Form::Vv, Ret::V4si, Sem::Sub(4), 0),
     op("__builtin_ia32_psubq128", "psubq", Form::Vv, Ret::V2di, Sem::Sub(8), 0),
     op("__builtin_ia32_pmullw128", "pmullw", Form::Vv, Ret::V8hi, Sem::MulLo(2), 0),
-    op("__builtin_ia32_pmulhw128", "pmulhw", Form::Vv, Ret::V8hi, Sem::MulHi(2), 0),
+    op("__builtin_ia32_pmulhw128", "pmulhw", Form::Vv, Ret::V8hi, Sem::MulHi(2, true), 0),
+    op("__builtin_ia32_pmulhuw128", "pmulhuw", Form::Vv, Ret::V8hi, Sem::MulHi(2, false), 0),
     op("__builtin_ia32_pmaddwd128", "pmaddwd", Form::Vv, Ret::V4si, Sem::MulAddWords, 0),
     op("__builtin_ia32_pand128", "pand", Form::Vv, Ret::V2di, Sem::And, 0),
     op("__builtin_ia32_pandn128", "pandn", Form::Vv, Ret::V2di, Sem::AndNot, 0),
@@ -178,6 +111,28 @@ pub(crate) const OPS: &[SimdOp] = &[
     op("__builtin_ia32_pcmpgtb128", "pcmpgtb", Form::Vv, Ret::V16qi, Sem::CmpGt(1), 0),
     op("__builtin_ia32_pcmpgtw128", "pcmpgtw", Form::Vv, Ret::V8hi, Sem::CmpGt(2), 0),
     op("__builtin_ia32_pcmpgtd128", "pcmpgtd", Form::Vv, Ret::V4si, Sem::CmpGt(4), 0),
+    // SSE2 saturating arithmetic and the sum of absolute differences.
+    op("__builtin_ia32_paddsb128", "paddsb", Form::Vv, Ret::V16qi, Sem::AddSat(1, true), 0),
+    op("__builtin_ia32_paddsw128", "paddsw", Form::Vv, Ret::V8hi, Sem::AddSat(2, true), 0),
+    op("__builtin_ia32_paddusb128", "paddusb", Form::Vv, Ret::V16qi, Sem::AddSat(1, false), 0),
+    op("__builtin_ia32_paddusw128", "paddusw", Form::Vv, Ret::V8hi, Sem::AddSat(2, false), 0),
+    op("__builtin_ia32_psubsb128", "psubsb", Form::Vv, Ret::V16qi, Sem::SubSat(1, true), 0),
+    op("__builtin_ia32_psubsw128", "psubsw", Form::Vv, Ret::V8hi, Sem::SubSat(2, true), 0),
+    op("__builtin_ia32_psubusb128", "psubusb", Form::Vv, Ret::V16qi, Sem::SubSat(1, false), 0),
+    op("__builtin_ia32_psubusw128", "psubusw", Form::Vv, Ret::V8hi, Sem::SubSat(2, false), 0),
+    op("__builtin_ia32_psadbw128", "psadbw", Form::Vv, Ret::V2di, Sem::SadBytes, 0),
+    // SSE2 averages, minimums and maximums.
+    op("__builtin_ia32_pavgb128", "pavgb", Form::Vv, Ret::V16qi, Sem::Avg(1), 0),
+    op("__builtin_ia32_pavgw128", "pavgw", Form::Vv, Ret::V8hi, Sem::Avg(2), 0),
+    op("__builtin_ia32_pminsw128", "pminsw", Form::Vv, Ret::V8hi, Sem::Min(2, true), 0),
+    op("__builtin_ia32_pmaxsw128", "pmaxsw", Form::Vv, Ret::V8hi, Sem::Max(2, true), 0),
+    op("__builtin_ia32_pminub128", "pminub", Form::Vv, Ret::V16qi, Sem::Min(1, false), 0),
+    op("__builtin_ia32_pmaxub128", "pmaxub", Form::Vv, Ret::V16qi, Sem::Max(1, false), 0),
+    // SSE logic on single-precision lanes.
+    op("__builtin_ia32_andps", "andps", Form::Vv, Ret::V4sf, Sem::And, 0),
+    op("__builtin_ia32_andnps", "andnps", Form::Vv, Ret::V4sf, Sem::AndNot, 0),
+    op("__builtin_ia32_orps", "orps", Form::Vv, Ret::V4sf, Sem::Or, 0),
+    op("__builtin_ia32_xorps", "xorps", Form::Vv, Ret::V4sf, Sem::Xor, 0),
     // SSE2 pack and interleave.
     op("__builtin_ia32_packsswb128", "packsswb", Form::Vv, Ret::V16qi, Sem::PackSigned(2), 0),
     op("__builtin_ia32_packssdw128", "packssdw", Form::Vv, Ret::V8hi, Sem::PackSigned(4), 0),
@@ -191,7 +146,7 @@ pub(crate) const OPS: &[SimdOp] = &[
     op("__builtin_ia32_punpckhdq128", "punpckhdq", Form::Vv, Ret::V4si, Sem::UnpackHi(4), 0),
     op("__builtin_ia32_punpckhqdq128", "punpckhqdq", Form::Vv, Ret::V2di, Sem::UnpackHi(8), 0),
     // SSE2 shifts. The `i` forms take a count in bits; the byte-granular
-    // pair counts bits too and the header divides by 8, as gcc's does.
+    // pair counts bits too and the header divides by 8.
     op("__builtin_ia32_psllwi128", "psllw", Form::Shift, Ret::V8hi, Sem::Shl(2), 4),
     op("__builtin_ia32_pslldi128", "pslld", Form::Shift, Ret::V4si, Sem::Shl(4), 4),
     op("__builtin_ia32_psllqi128", "psllq", Form::Shift, Ret::V2di, Sem::Shl(8), 4),
@@ -215,10 +170,57 @@ pub(crate) const OPS: &[SimdOp] = &[
     op("__builtin_ia32_storedqu", "movdqu", Form::Store, Ret::Void, Sem::Move, 0),
     // SSSE3.
     op("__builtin_ia32_pshufb128", "pshufb", Form::Vv, Ret::V16qi, Sem::ShufB, 0),
-    // SSE4.1.
+    op("__builtin_ia32_pmaddubsw128", "pmaddubsw", Form::Vv, Ret::V8hi, Sem::MulAddBytes, 0),
+    op("__builtin_ia32_pabsb128", "pabsb", Form::V, Ret::V16qi, Sem::Abs(1), 0),
+    op("__builtin_ia32_pabsw128", "pabsw", Form::V, Ret::V8hi, Sem::Abs(2), 0),
+    op("__builtin_ia32_pabsd128", "pabsd", Form::V, Ret::V4si, Sem::Abs(4), 0),
+    op("__builtin_ia32_psignb128", "psignb", Form::Vv, Ret::V16qi, Sem::Sign(1), 0),
+    op("__builtin_ia32_psignw128", "psignw", Form::Vv, Ret::V8hi, Sem::Sign(2), 0),
+    op("__builtin_ia32_psignd128", "psignd", Form::Vv, Ret::V4si, Sem::Sign(4), 0),
+    op("__builtin_ia32_phaddw128", "phaddw", Form::Vv, Ret::V8hi, Sem::HAdd(2, false), 0),
+    op("__builtin_ia32_phaddd128", "phaddd", Form::Vv, Ret::V4si, Sem::HAdd(4, false), 0),
+    op("__builtin_ia32_phaddsw128", "phaddsw", Form::Vv, Ret::V8hi, Sem::HAdd(2, true), 0),
+    op("__builtin_ia32_phsubw128", "phsubw", Form::Vv, Ret::V8hi, Sem::HSub(2, false), 0),
+    op("__builtin_ia32_phsubd128", "phsubd", Form::Vv, Ret::V4si, Sem::HSub(4, false), 0),
+    op("__builtin_ia32_phsubsw128", "phsubsw", Form::Vv, Ret::V8hi, Sem::HSub(2, true), 0),
+    op("__builtin_ia32_pmulhrsw128", "pmulhrsw", Form::Vv, Ret::V8hi, Sem::MulHrs, 0),
+    // PALIGNR's builtin counts bits.
+    op("__builtin_ia32_palignr128", "palignr", Form::VvI, Ret::V2di, Sem::AlignR, 0),
+    // SSE4.1, and SSE4.2's PCMPGTQ.
     op("__builtin_ia32_pcmpeqq", "pcmpeqq", Form::Vv, Ret::V2di, Sem::CmpEq(8), 0),
+    op("__builtin_ia32_pcmpgtq", "pcmpgtq", Form::Vv, Ret::V2di, Sem::CmpGt(8), 0),
+    op("__builtin_ia32_vec_ext_v16qi", "pextrb", Form::Extract, Ret::Int, Sem::Move, 1),
+    op("__builtin_ia32_vec_set_v16qi", "pinsrb", Form::Insert, Ret::V16qi, Sem::Move, 1),
     op("__builtin_ia32_vec_ext_v4si", "pextrd", Form::Extract, Ret::Int, Sem::Move, 4),
     op("__builtin_ia32_vec_set_v4si", "pinsrd", Form::Insert, Ret::V4si, Sem::Move, 4),
+    op("__builtin_ia32_vec_ext_v2di", "pextrq", Form::Extract, Ret::Int64, Sem::Move, 8),
+    op("__builtin_ia32_vec_set_v2di", "pinsrq", Form::Insert, Ret::V2di, Sem::Move, 8),
+    op("__builtin_ia32_pminsb128", "pminsb", Form::Vv, Ret::V16qi, Sem::Min(1, true), 0),
+    op("__builtin_ia32_pmaxsb128", "pmaxsb", Form::Vv, Ret::V16qi, Sem::Max(1, true), 0),
+    op("__builtin_ia32_pminuw128", "pminuw", Form::Vv, Ret::V8hi, Sem::Min(2, false), 0),
+    op("__builtin_ia32_pmaxuw128", "pmaxuw", Form::Vv, Ret::V8hi, Sem::Max(2, false), 0),
+    op("__builtin_ia32_pminsd128", "pminsd", Form::Vv, Ret::V4si, Sem::Min(4, true), 0),
+    op("__builtin_ia32_pmaxsd128", "pmaxsd", Form::Vv, Ret::V4si, Sem::Max(4, true), 0),
+    op("__builtin_ia32_pminud128", "pminud", Form::Vv, Ret::V4si, Sem::Min(4, false), 0),
+    op("__builtin_ia32_pmaxud128", "pmaxud", Form::Vv, Ret::V4si, Sem::Max(4, false), 0),
+    op("__builtin_ia32_pmulld128", "pmulld", Form::Vv, Ret::V4si, Sem::MulLo(4), 0),
+    op("__builtin_ia32_pmuldq128", "pmuldq", Form::Vv, Ret::V2di, Sem::MulEven(true), 0),
+    op("__builtin_ia32_packusdw128", "packusdw", Form::Vv, Ret::V8hi, Sem::PackUnsigned(4), 0),
+    op("__builtin_ia32_pmovsxbw128", "pmovsxbw", Form::V, Ret::V8hi, Sem::Extend(1, 2, true, false), 0),
+    op("__builtin_ia32_pmovsxbd128", "pmovsxbd", Form::V, Ret::V4si, Sem::Extend(1, 4, true, false), 0),
+    op("__builtin_ia32_pmovsxbq128", "pmovsxbq", Form::V, Ret::V2di, Sem::Extend(1, 8, true, false), 0),
+    op("__builtin_ia32_pmovsxwd128", "pmovsxwd", Form::V, Ret::V4si, Sem::Extend(2, 4, true, false), 0),
+    op("__builtin_ia32_pmovsxwq128", "pmovsxwq", Form::V, Ret::V2di, Sem::Extend(2, 8, true, false), 0),
+    op("__builtin_ia32_pmovsxdq128", "pmovsxdq", Form::V, Ret::V2di, Sem::Extend(4, 8, true, false), 0),
+    op("__builtin_ia32_pmovzxbw128", "pmovzxbw", Form::V, Ret::V8hi, Sem::Extend(1, 2, false, false), 0),
+    op("__builtin_ia32_pmovzxbd128", "pmovzxbd", Form::V, Ret::V4si, Sem::Extend(1, 4, false, false), 0),
+    op("__builtin_ia32_pmovzxbq128", "pmovzxbq", Form::V, Ret::V2di, Sem::Extend(1, 8, false, false), 0),
+    op("__builtin_ia32_pmovzxwd128", "pmovzxwd", Form::V, Ret::V4si, Sem::Extend(2, 4, false, false), 0),
+    op("__builtin_ia32_pmovzxwq128", "pmovzxwq", Form::V, Ret::V2di, Sem::Extend(2, 8, false, false), 0),
+    op("__builtin_ia32_pmovzxdq128", "pmovzxdq", Form::V, Ret::V2di, Sem::Extend(4, 8, false, false), 0),
+    op("__builtin_ia32_pblendw128", "pblendw", Form::VvI, Ret::V8hi, Sem::Blend(2), 0),
+    op("__builtin_ia32_blendps", "blendps", Form::VvI, Ret::V4sf, Sem::Blend(4), 0),
+    op("__builtin_ia32_blendpd", "blendpd", Form::VvI, Ret::V2df, Sem::Blend(8), 0),
     // AES-NI.
     op("__builtin_ia32_aesenc128", "aesenc", Form::Vv, Ret::V2di, Sem::AesEnc, 0),
     op("__builtin_ia32_aesenclast128", "aesenclast", Form::Vv, Ret::V2di, Sem::AesEncLast, 0),
@@ -228,469 +230,396 @@ pub(crate) const OPS: &[SimdOp] = &[
     op("__builtin_ia32_aeskeygenassist128", "aeskeygenassist", Form::VI, Ret::V2di, Sem::AesKeygen, 0),
     // PCLMUL.
     op("__builtin_ia32_pclmulqdq128", "pclmulqdq", Form::VvI, Ret::V2di, Sem::ClMul, 0),
-    // RDRAND.
+    // SSE and SSE2 floating-point arithmetic, compares and conversions.
+    op("__builtin_ia32_addps", "addps", Form::Vv, Ret::V4sf, Sem::Float(FOp::Add, 4, false), 0),
+    op("__builtin_ia32_subps", "subps", Form::Vv, Ret::V4sf, Sem::Float(FOp::Sub, 4, false), 0),
+    op("__builtin_ia32_mulps", "mulps", Form::Vv, Ret::V4sf, Sem::Float(FOp::Mul, 4, false), 0),
+    op("__builtin_ia32_divps", "divps", Form::Vv, Ret::V4sf, Sem::Float(FOp::Div, 4, false), 0),
+    op("__builtin_ia32_minps", "minps", Form::Vv, Ret::V4sf, Sem::Float(FOp::Min, 4, false), 0),
+    op("__builtin_ia32_maxps", "maxps", Form::Vv, Ret::V4sf, Sem::Float(FOp::Max, 4, false), 0),
+    op("__builtin_ia32_sqrtps", "sqrtps", Form::V, Ret::V4sf, Sem::Float(FOp::Sqrt, 4, false), 0),
+    op("__builtin_ia32_addss", "addss", Form::Vv, Ret::V4sf, Sem::Float(FOp::Add, 4, true), 0),
+    op("__builtin_ia32_subss", "subss", Form::Vv, Ret::V4sf, Sem::Float(FOp::Sub, 4, true), 0),
+    op("__builtin_ia32_mulss", "mulss", Form::Vv, Ret::V4sf, Sem::Float(FOp::Mul, 4, true), 0),
+    op("__builtin_ia32_divss", "divss", Form::Vv, Ret::V4sf, Sem::Float(FOp::Div, 4, true), 0),
+    op("__builtin_ia32_minss", "minss", Form::Vv, Ret::V4sf, Sem::Float(FOp::Min, 4, true), 0),
+    op("__builtin_ia32_maxss", "maxss", Form::Vv, Ret::V4sf, Sem::Float(FOp::Max, 4, true), 0),
+    op("__builtin_ia32_sqrtss", "sqrtss", Form::V, Ret::V4sf, Sem::Float(FOp::Sqrt, 4, true), 0),
+    op("__builtin_ia32_addpd", "addpd", Form::Vv, Ret::V2df, Sem::Float(FOp::Add, 8, false), 0),
+    op("__builtin_ia32_subpd", "subpd", Form::Vv, Ret::V2df, Sem::Float(FOp::Sub, 8, false), 0),
+    op("__builtin_ia32_mulpd", "mulpd", Form::Vv, Ret::V2df, Sem::Float(FOp::Mul, 8, false), 0),
+    op("__builtin_ia32_divpd", "divpd", Form::Vv, Ret::V2df, Sem::Float(FOp::Div, 8, false), 0),
+    op("__builtin_ia32_minpd", "minpd", Form::Vv, Ret::V2df, Sem::Float(FOp::Min, 8, false), 0),
+    op("__builtin_ia32_maxpd", "maxpd", Form::Vv, Ret::V2df, Sem::Float(FOp::Max, 8, false), 0),
+    op("__builtin_ia32_sqrtpd", "sqrtpd", Form::V, Ret::V2df, Sem::Float(FOp::Sqrt, 8, false), 0),
+    op("__builtin_ia32_addsd", "addsd", Form::Vv, Ret::V2df, Sem::Float(FOp::Add, 8, true), 0),
+    op("__builtin_ia32_subsd", "subsd", Form::Vv, Ret::V2df, Sem::Float(FOp::Sub, 8, true), 0),
+    op("__builtin_ia32_mulsd", "mulsd", Form::Vv, Ret::V2df, Sem::Float(FOp::Mul, 8, true), 0),
+    op("__builtin_ia32_divsd", "divsd", Form::Vv, Ret::V2df, Sem::Float(FOp::Div, 8, true), 0),
+    op("__builtin_ia32_minsd", "minsd", Form::Vv, Ret::V2df, Sem::Float(FOp::Min, 8, true), 0),
+    op("__builtin_ia32_maxsd", "maxsd", Form::Vv, Ret::V2df, Sem::Float(FOp::Max, 8, true), 0),
+    op("__builtin_ia32_sqrtsd", "sqrtsd", Form::V, Ret::V2df, Sem::Float(FOp::Sqrt, 8, true), 0),
+    op("__builtin_ia32_cmpps", "cmpps", Form::VvI, Ret::V4sf, Sem::FloatCmp(4, false), 0),
+    op("__builtin_ia32_cmpss", "cmpss", Form::VvI, Ret::V4sf, Sem::FloatCmp(4, true), 0),
+    op("__builtin_ia32_cmppd", "cmppd", Form::VvI, Ret::V2df, Sem::FloatCmp(8, false), 0),
+    op("__builtin_ia32_cmpsd", "cmpsd", Form::VvI, Ret::V2df, Sem::FloatCmp(8, true), 0),
+    op("__builtin_ia32_roundps", "roundps", Form::VI, Ret::V4sf, Sem::RoundImm(4, false), 0),
+    op("__builtin_ia32_roundpd", "roundpd", Form::VI, Ret::V2df, Sem::RoundImm(8, false), 0),
+    op("__builtin_ia32_roundss", "roundss", Form::VvI, Ret::V4sf, Sem::RoundImm(4, true), 0),
+    op("__builtin_ia32_roundsd", "roundsd", Form::VvI, Ret::V2df, Sem::RoundImm(8, true), 0),
+    op("__builtin_ia32_cvtdq2ps", "cvtdq2ps", Form::V, Ret::V4sf, Sem::Convert(Cvt::IntToSingle), 0),
+    op("__builtin_ia32_cvtps2dq", "cvtps2dq", Form::V, Ret::V4si, Sem::Convert(Cvt::SingleToInt { truncate: false }), 0),
+    op("__builtin_ia32_cvttps2dq", "cvttps2dq", Form::V, Ret::V4si, Sem::Convert(Cvt::SingleToInt { truncate: true }), 0),
+    // AVX-512F with VL: the unsigned doubleword conversions.
+    op("__builtin_ia32_cvtudq2ps128", "vcvtudq2ps", Form::V, Ret::V4sf, Sem::Convert(Cvt::UIntToSingle), 0),
+    op("__builtin_ia32_cvtps2udq128", "vcvtps2udq", Form::V, Ret::V4si, Sem::Convert(Cvt::SingleToUInt { truncate: false }), 0),
+    op("__builtin_ia32_cvttps2udq128", "vcvttps2udq", Form::V, Ret::V4si, Sem::Convert(Cvt::SingleToUInt { truncate: true }), 0),
+    op("__builtin_ia32_cvtdq2pd", "cvtdq2pd", Form::V, Ret::V2df, Sem::Convert(Cvt::IntToDouble), 0),
+    op("__builtin_ia32_cvtpd2dq", "cvtpd2dq", Form::V, Ret::V4si, Sem::Convert(Cvt::DoubleToInt { truncate: false }), 0),
+    op("__builtin_ia32_cvttpd2dq", "cvttpd2dq", Form::V, Ret::V4si, Sem::Convert(Cvt::DoubleToInt { truncate: true }), 0),
+    op("__builtin_ia32_cvtps2pd", "cvtps2pd", Form::V, Ret::V2df, Sem::Convert(Cvt::SingleToDouble), 0),
+    op("__builtin_ia32_cvtpd2ps", "cvtpd2ps", Form::V, Ret::V4sf, Sem::Convert(Cvt::DoubleToSingle), 0),
+    op("__builtin_ia32_pmuludq128", "pmuludq", Form::Vv, Ret::V2di, Sem::MulEven(false), 0),
+    op("__builtin_ia32_cvtss2si", "cvtss2si", Form::ToInt, Ret::Int, Sem::ToInt(4, false), 4),
+    op("__builtin_ia32_cvttss2si", "cvttss2si", Form::ToInt, Ret::Int, Sem::ToInt(4, true), 4),
+    op("__builtin_ia32_cvtsd2si", "cvtsd2si", Form::ToInt, Ret::Int, Sem::ToInt(8, false), 4),
+    op("__builtin_ia32_cvttsd2si", "cvttsd2si", Form::ToInt, Ret::Int, Sem::ToInt(8, true), 4),
+    op("__builtin_ia32_cvtss2si64", "cvtss2si", Form::ToInt, Ret::Int64, Sem::ToInt(4, false), 8),
+    op("__builtin_ia32_cvttss2si64", "cvttss2si", Form::ToInt, Ret::Int64, Sem::ToInt(4, true), 8),
+    op("__builtin_ia32_cvtsd2si64", "cvtsd2si", Form::ToInt, Ret::Int64, Sem::ToInt(8, false), 8),
+    op("__builtin_ia32_cvttsd2si64", "cvttsd2si", Form::ToInt, Ret::Int64, Sem::ToInt(8, true), 8),
+    // RDRAND and RDSEED.
     op("__builtin_ia32_rdrand16_step", "rdrand", Form::RdRand, Ret::Int, Sem::Rand, 2),
     op("__builtin_ia32_rdrand32_step", "rdrand", Form::RdRand, Ret::Int, Sem::Rand, 4),
     op("__builtin_ia32_rdrand64_step", "rdrand", Form::RdRand, Ret::Int, Sem::Rand, 8),
+    op("__builtin_ia32_rdseed16_step", "rdseed", Form::RdRand, Ret::Int, Sem::Rand, 2),
+    op("__builtin_ia32_rdseed32_step", "rdseed", Form::RdRand, Ret::Int, Sem::Rand, 4),
+    op("__builtin_ia32_rdseed64_step", "rdseed", Form::RdRand, Ret::Int, Sem::Rand, 8),
+    // The AVX2 forms over 32-byte vectors, the cross-lane permutations last.
+    op256("__builtin_ia32_pmullw256", "vpmullw", Form::Vv, Ret::V16hi, Sem::MulLo(2), 0),
+    op256("__builtin_ia32_pmulld256", "vpmulld", Form::Vv, Ret::V8si, Sem::MulLo(4), 0),
+    op256("__builtin_ia32_pmulhw256", "vpmulhw", Form::Vv, Ret::V16hi, Sem::MulHi(2, true), 0),
+    op256("__builtin_ia32_pmulhuw256", "vpmulhuw", Form::Vv, Ret::V16hi, Sem::MulHi(2, false), 0),
+    op256("__builtin_ia32_pmuldq256", "vpmuldq", Form::Vv, Ret::V4di, Sem::MulEven(true), 0),
+    op256("__builtin_ia32_pmuludq256", "vpmuludq", Form::Vv, Ret::V4di, Sem::MulEven(false), 0),
+    op256("__builtin_ia32_pmulhrsw256", "vpmulhrsw", Form::Vv, Ret::V16hi, Sem::MulHrs, 0),
+    op256("__builtin_ia32_pmaddwd256", "vpmaddwd", Form::Vv, Ret::V8si, Sem::MulAddWords, 0),
+    op256("__builtin_ia32_pmaddubsw256", "vpmaddubsw", Form::Vv, Ret::V16hi, Sem::MulAddBytes, 0),
+    op256("__builtin_ia32_psadbw256", "vpsadbw", Form::Vv, Ret::V4di, Sem::SadBytes, 0),
+    op256("__builtin_ia32_andnotsi256", "vpandn", Form::Vv, Ret::V4di, Sem::AndNot, 0),
+    op256("__builtin_ia32_pcmpeqb256", "vpcmpeqb", Form::Vv, Ret::V32qi, Sem::CmpEq(1), 0),
+    op256("__builtin_ia32_pcmpeqw256", "vpcmpeqw", Form::Vv, Ret::V16hi, Sem::CmpEq(2), 0),
+    op256("__builtin_ia32_pcmpeqd256", "vpcmpeqd", Form::Vv, Ret::V8si, Sem::CmpEq(4), 0),
+    op256("__builtin_ia32_pcmpeqq256", "vpcmpeqq", Form::Vv, Ret::V4di, Sem::CmpEq(8), 0),
+    op256("__builtin_ia32_pcmpgtb256", "vpcmpgtb", Form::Vv, Ret::V32qi, Sem::CmpGt(1), 0),
+    op256("__builtin_ia32_pcmpgtw256", "vpcmpgtw", Form::Vv, Ret::V16hi, Sem::CmpGt(2), 0),
+    op256("__builtin_ia32_pcmpgtd256", "vpcmpgtd", Form::Vv, Ret::V8si, Sem::CmpGt(4), 0),
+    op256("__builtin_ia32_pcmpgtq256", "vpcmpgtq", Form::Vv, Ret::V4di, Sem::CmpGt(8), 0),
+    op256("__builtin_ia32_paddsb256", "vpaddsb", Form::Vv, Ret::V32qi, Sem::AddSat(1, true), 0),
+    op256("__builtin_ia32_paddsw256", "vpaddsw", Form::Vv, Ret::V16hi, Sem::AddSat(2, true), 0),
+    op256("__builtin_ia32_paddusb256", "vpaddusb", Form::Vv, Ret::V32qi, Sem::AddSat(1, false), 0),
+    op256("__builtin_ia32_paddusw256", "vpaddusw", Form::Vv, Ret::V16hi, Sem::AddSat(2, false), 0),
+    op256("__builtin_ia32_psubsb256", "vpsubsb", Form::Vv, Ret::V32qi, Sem::SubSat(1, true), 0),
+    op256("__builtin_ia32_psubsw256", "vpsubsw", Form::Vv, Ret::V16hi, Sem::SubSat(2, true), 0),
+    op256("__builtin_ia32_psubusb256", "vpsubusb", Form::Vv, Ret::V32qi, Sem::SubSat(1, false), 0),
+    op256("__builtin_ia32_psubusw256", "vpsubusw", Form::Vv, Ret::V16hi, Sem::SubSat(2, false), 0),
+    op256("__builtin_ia32_pavgb256", "vpavgb", Form::Vv, Ret::V32qi, Sem::Avg(1), 0),
+    op256("__builtin_ia32_pavgw256", "vpavgw", Form::Vv, Ret::V16hi, Sem::Avg(2), 0),
+    op256("__builtin_ia32_pminsb256", "vpminsb", Form::Vv, Ret::V32qi, Sem::Min(1, true), 0),
+    op256("__builtin_ia32_pminsw256", "vpminsw", Form::Vv, Ret::V16hi, Sem::Min(2, true), 0),
+    op256("__builtin_ia32_pminsd256", "vpminsd", Form::Vv, Ret::V8si, Sem::Min(4, true), 0),
+    op256("__builtin_ia32_pminub256", "vpminub", Form::Vv, Ret::V32qi, Sem::Min(1, false), 0),
+    op256("__builtin_ia32_pminuw256", "vpminuw", Form::Vv, Ret::V16hi, Sem::Min(2, false), 0),
+    op256("__builtin_ia32_pminud256", "vpminud", Form::Vv, Ret::V8si, Sem::Min(4, false), 0),
+    op256("__builtin_ia32_pmaxsb256", "vpmaxsb", Form::Vv, Ret::V32qi, Sem::Max(1, true), 0),
+    op256("__builtin_ia32_pmaxsw256", "vpmaxsw", Form::Vv, Ret::V16hi, Sem::Max(2, true), 0),
+    op256("__builtin_ia32_pmaxsd256", "vpmaxsd", Form::Vv, Ret::V8si, Sem::Max(4, true), 0),
+    op256("__builtin_ia32_pmaxub256", "vpmaxub", Form::Vv, Ret::V32qi, Sem::Max(1, false), 0),
+    op256("__builtin_ia32_pmaxuw256", "vpmaxuw", Form::Vv, Ret::V16hi, Sem::Max(2, false), 0),
+    op256("__builtin_ia32_pmaxud256", "vpmaxud", Form::Vv, Ret::V8si, Sem::Max(4, false), 0),
+    op256("__builtin_ia32_packsswb256", "vpacksswb", Form::Vv, Ret::V32qi, Sem::PackSigned(2), 0),
+    op256("__builtin_ia32_packssdw256", "vpackssdw", Form::Vv, Ret::V16hi, Sem::PackSigned(4), 0),
+    op256("__builtin_ia32_packuswb256", "vpackuswb", Form::Vv, Ret::V32qi, Sem::PackUnsigned(2), 0),
+    op256("__builtin_ia32_packusdw256", "vpackusdw", Form::Vv, Ret::V16hi, Sem::PackUnsigned(4), 0),
+    op256("__builtin_ia32_punpcklbw256", "vpunpcklbw", Form::Vv, Ret::V32qi, Sem::UnpackLo(1), 0),
+    op256("__builtin_ia32_punpcklwd256", "vpunpcklwd", Form::Vv, Ret::V16hi, Sem::UnpackLo(2), 0),
+    op256("__builtin_ia32_punpckldq256", "vpunpckldq", Form::Vv, Ret::V8si, Sem::UnpackLo(4), 0),
+    op256("__builtin_ia32_punpcklqdq256", "vpunpcklqdq", Form::Vv, Ret::V4di, Sem::UnpackLo(8), 0),
+    op256("__builtin_ia32_punpckhbw256", "vpunpckhbw", Form::Vv, Ret::V32qi, Sem::UnpackHi(1), 0),
+    op256("__builtin_ia32_punpckhwd256", "vpunpckhwd", Form::Vv, Ret::V16hi, Sem::UnpackHi(2), 0),
+    op256("__builtin_ia32_punpckhdq256", "vpunpckhdq", Form::Vv, Ret::V8si, Sem::UnpackHi(4), 0),
+    op256("__builtin_ia32_punpckhqdq256", "vpunpckhqdq", Form::Vv, Ret::V4di, Sem::UnpackHi(8), 0),
+    op256("__builtin_ia32_pshufb256", "vpshufb", Form::Vv, Ret::V32qi, Sem::ShufB, 0),
+    op256("__builtin_ia32_psignb256", "vpsignb", Form::Vv, Ret::V32qi, Sem::Sign(1), 0),
+    op256("__builtin_ia32_psignw256", "vpsignw", Form::Vv, Ret::V16hi, Sem::Sign(2), 0),
+    op256("__builtin_ia32_psignd256", "vpsignd", Form::Vv, Ret::V8si, Sem::Sign(4), 0),
+    op256("__builtin_ia32_phaddw256", "vphaddw", Form::Vv, Ret::V16hi, Sem::HAdd(2, false), 0),
+    op256("__builtin_ia32_phaddd256", "vphaddd", Form::Vv, Ret::V8si, Sem::HAdd(4, false), 0),
+    op256("__builtin_ia32_phaddsw256", "vphaddsw", Form::Vv, Ret::V16hi, Sem::HAdd(2, true), 0),
+    op256("__builtin_ia32_phsubw256", "vphsubw", Form::Vv, Ret::V16hi, Sem::HSub(2, false), 0),
+    op256("__builtin_ia32_phsubd256", "vphsubd", Form::Vv, Ret::V8si, Sem::HSub(4, false), 0),
+    op256("__builtin_ia32_phsubsw256", "vphsubsw", Form::Vv, Ret::V16hi, Sem::HSub(2, true), 0),
+    op256("__builtin_ia32_palignr256", "vpalignr", Form::VvI, Ret::V4di, Sem::AlignR, 0),
+    op256("__builtin_ia32_pblendw256", "vpblendw", Form::VvI, Ret::V16hi, Sem::Blend(2), 0),
+    op256("__builtin_ia32_pshufd256", "vpshufd", Form::VI, Ret::V8si, Sem::ShufD, 0),
+    op256("__builtin_ia32_pshufhw256", "vpshufhw", Form::VI, Ret::V16hi, Sem::ShufHi, 0),
+    op256("__builtin_ia32_pshuflw256", "vpshuflw", Form::VI, Ret::V16hi, Sem::ShufLo, 0),
+    op256("__builtin_ia32_psllwi256", "vpsllw", Form::Shift, Ret::V16hi, Sem::Shl(2), 4),
+    op256("__builtin_ia32_pslldi256", "vpslld", Form::Shift, Ret::V8si, Sem::Shl(4), 4),
+    op256("__builtin_ia32_psllqi256", "vpsllq", Form::Shift, Ret::V4di, Sem::Shl(8), 4),
+    op256("__builtin_ia32_psrlwi256", "vpsrlw", Form::Shift, Ret::V16hi, Sem::Shr(2), 4),
+    op256("__builtin_ia32_psrldi256", "vpsrld", Form::Shift, Ret::V8si, Sem::Shr(4), 4),
+    op256("__builtin_ia32_psrlqi256", "vpsrlq", Form::Shift, Ret::V4di, Sem::Shr(8), 4),
+    op256("__builtin_ia32_psrawi256", "vpsraw", Form::Shift, Ret::V16hi, Sem::Sar(2), 4),
+    op256("__builtin_ia32_psradi256", "vpsrad", Form::Shift, Ret::V8si, Sem::Sar(4), 4),
+    op256("__builtin_ia32_pslldqi256", "vpslldq", Form::Shift, Ret::V4di, Sem::ShlBytes, 4),
+    op256("__builtin_ia32_psrldqi256", "vpsrldq", Form::Shift, Ret::V4di, Sem::ShrBytes, 4),
+    op256("__builtin_ia32_pabsb256", "vpabsb", Form::V, Ret::V32qi, Sem::Abs(1), 0),
+    op256("__builtin_ia32_pabsw256", "vpabsw", Form::V, Ret::V16hi, Sem::Abs(2), 0),
+    op256("__builtin_ia32_pabsd256", "vpabsd", Form::V, Ret::V8si, Sem::Abs(4), 0),
+    op256("__builtin_ia32_pmovmskb256", "vpmovmskb", Form::MoveMask, Ret::Int, Sem::Move, 4),
+    op256("__builtin_ia32_loaddqu256", "vmovdqu", Form::Load, Ret::V32qi, Sem::Move, 0),
+    op256("__builtin_ia32_storedqu256", "vmovdqu", Form::Store, Ret::Void, Sem::Move, 0),
+    op256("__builtin_ia32_permdi256", "vpermq", Form::VI, Ret::V4di, Sem::Perm4x64, 0),
+    op256("__builtin_ia32_permvarsi256", "vpermd", Form::Vv, Ret::V8si, Sem::PermVar32, 0),
+    op256("__builtin_ia32_permti256", "vperm2i128", Form::VvI, Ret::V4di, Sem::Perm2x128, 0),
+    // The VEX compares on each half, with their 32 predicates.
+    op256("__builtin_ia32_cmpps256", "vcmpps", Form::VvI, Ret::V8sf, Sem::FloatCmp(4, false), 0),
+    op256("__builtin_ia32_cmppd256", "vcmppd", Form::VvI, Ret::V4df, Sem::FloatCmp(8, false), 0),
+    // The 128-bit halves; a cast's upper half is zero.
+    op256("__builtin_ia32_extract128i256", "vextracti128", Form::Narrow, Ret::V2di, Sem::Move, 16),
+    op256("__builtin_ia32_insert128i256", "vinserti128", Form::Widen, Ret::V4di, Sem::Move, 16),
+    op256("__builtin_ia32_si256_si", "vmovdqa", Form::Zext, Ret::V8si, Sem::Move, 16),
+    // The AVX-512 forms over 64-byte vectors: AVX512F and AVX512BW in-lane,
+    // the permutations, VPCLMULQDQ, AVX512-VNNI and the ternary logic.
+    op512("__builtin_ia32_pmullw512", "vpmullw", Form::Vv, Ret::V32hi, Sem::MulLo(2), 0),
+    op512("__builtin_ia32_pmulld512", "vpmulld", Form::Vv, Ret::V16si, Sem::MulLo(4), 0),
+    op512("__builtin_ia32_pmulhw512", "vpmulhw", Form::Vv, Ret::V32hi, Sem::MulHi(2, true), 0),
+    op512("__builtin_ia32_pmulhuw512", "vpmulhuw", Form::Vv, Ret::V32hi, Sem::MulHi(2, false), 0),
+    op512("__builtin_ia32_pmuldq512", "vpmuldq", Form::Vv, Ret::V8di, Sem::MulEven(true), 0),
+    op512("__builtin_ia32_pmuludq512", "vpmuludq", Form::Vv, Ret::V8di, Sem::MulEven(false), 0),
+    op512("__builtin_ia32_pmulhrsw512", "vpmulhrsw", Form::Vv, Ret::V32hi, Sem::MulHrs, 0),
+    op512("__builtin_ia32_pmaddwd512", "vpmaddwd", Form::Vv, Ret::V16si, Sem::MulAddWords, 0),
+    op512("__builtin_ia32_pmaddubsw512", "vpmaddubsw", Form::Vv, Ret::V32hi, Sem::MulAddBytes, 0),
+    op512("__builtin_ia32_psadbw512", "vpsadbw", Form::Vv, Ret::V8di, Sem::SadBytes, 0),
+    op512("__builtin_ia32_andnotsi512", "vpandnq", Form::Vv, Ret::V8di, Sem::AndNot, 0),
+    op512("__builtin_ia32_paddsb512", "vpaddsb", Form::Vv, Ret::V64qi, Sem::AddSat(1, true), 0),
+    op512("__builtin_ia32_paddsw512", "vpaddsw", Form::Vv, Ret::V32hi, Sem::AddSat(2, true), 0),
+    op512("__builtin_ia32_paddusb512", "vpaddusb", Form::Vv, Ret::V64qi, Sem::AddSat(1, false), 0),
+    op512("__builtin_ia32_paddusw512", "vpaddusw", Form::Vv, Ret::V32hi, Sem::AddSat(2, false), 0),
+    op512("__builtin_ia32_psubsb512", "vpsubsb", Form::Vv, Ret::V64qi, Sem::SubSat(1, true), 0),
+    op512("__builtin_ia32_psubsw512", "vpsubsw", Form::Vv, Ret::V32hi, Sem::SubSat(2, true), 0),
+    op512("__builtin_ia32_psubusb512", "vpsubusb", Form::Vv, Ret::V64qi, Sem::SubSat(1, false), 0),
+    op512("__builtin_ia32_psubusw512", "vpsubusw", Form::Vv, Ret::V32hi, Sem::SubSat(2, false), 0),
+    op512("__builtin_ia32_pavgb512", "vpavgb", Form::Vv, Ret::V64qi, Sem::Avg(1), 0),
+    op512("__builtin_ia32_pavgw512", "vpavgw", Form::Vv, Ret::V32hi, Sem::Avg(2), 0),
+    op512("__builtin_ia32_pminsb512", "vpminsb", Form::Vv, Ret::V64qi, Sem::Min(1, true), 0),
+    op512("__builtin_ia32_pminsw512", "vpminsw", Form::Vv, Ret::V32hi, Sem::Min(2, true), 0),
+    op512("__builtin_ia32_pminsd512", "vpminsd", Form::Vv, Ret::V16si, Sem::Min(4, true), 0),
+    op512("__builtin_ia32_pminub512", "vpminub", Form::Vv, Ret::V64qi, Sem::Min(1, false), 0),
+    op512("__builtin_ia32_pminuw512", "vpminuw", Form::Vv, Ret::V32hi, Sem::Min(2, false), 0),
+    op512("__builtin_ia32_pminud512", "vpminud", Form::Vv, Ret::V16si, Sem::Min(4, false), 0),
+    op512("__builtin_ia32_pmaxsb512", "vpmaxsb", Form::Vv, Ret::V64qi, Sem::Max(1, true), 0),
+    op512("__builtin_ia32_pmaxsw512", "vpmaxsw", Form::Vv, Ret::V32hi, Sem::Max(2, true), 0),
+    op512("__builtin_ia32_pmaxsd512", "vpmaxsd", Form::Vv, Ret::V16si, Sem::Max(4, true), 0),
+    op512("__builtin_ia32_pmaxub512", "vpmaxub", Form::Vv, Ret::V64qi, Sem::Max(1, false), 0),
+    op512("__builtin_ia32_pmaxuw512", "vpmaxuw", Form::Vv, Ret::V32hi, Sem::Max(2, false), 0),
+    op512("__builtin_ia32_pmaxud512", "vpmaxud", Form::Vv, Ret::V16si, Sem::Max(4, false), 0),
+    op512("__builtin_ia32_packsswb512", "vpacksswb", Form::Vv, Ret::V64qi, Sem::PackSigned(2), 0),
+    op512("__builtin_ia32_packssdw512", "vpackssdw", Form::Vv, Ret::V32hi, Sem::PackSigned(4), 0),
+    op512("__builtin_ia32_packuswb512", "vpackuswb", Form::Vv, Ret::V64qi, Sem::PackUnsigned(2), 0),
+    op512("__builtin_ia32_packusdw512", "vpackusdw", Form::Vv, Ret::V32hi, Sem::PackUnsigned(4), 0),
+    op512("__builtin_ia32_punpcklbw512", "vpunpcklbw", Form::Vv, Ret::V64qi, Sem::UnpackLo(1), 0),
+    op512("__builtin_ia32_punpcklwd512", "vpunpcklwd", Form::Vv, Ret::V32hi, Sem::UnpackLo(2), 0),
+    op512("__builtin_ia32_punpckldq512", "vpunpckldq", Form::Vv, Ret::V16si, Sem::UnpackLo(4), 0),
+    op512("__builtin_ia32_punpcklqdq512", "vpunpcklqdq", Form::Vv, Ret::V8di, Sem::UnpackLo(8), 0),
+    op512("__builtin_ia32_punpckhbw512", "vpunpckhbw", Form::Vv, Ret::V64qi, Sem::UnpackHi(1), 0),
+    op512("__builtin_ia32_punpckhwd512", "vpunpckhwd", Form::Vv, Ret::V32hi, Sem::UnpackHi(2), 0),
+    op512("__builtin_ia32_punpckhdq512", "vpunpckhdq", Form::Vv, Ret::V16si, Sem::UnpackHi(4), 0),
+    op512("__builtin_ia32_punpckhqdq512", "vpunpckhqdq", Form::Vv, Ret::V8di, Sem::UnpackHi(8), 0),
+    op512("__builtin_ia32_pshufb512", "vpshufb", Form::Vv, Ret::V64qi, Sem::ShufB, 0),
+    op512("__builtin_ia32_palignr512", "vpalignr", Form::VvI, Ret::V8di, Sem::AlignR, 0),
+    op512("__builtin_ia32_pshufd512", "vpshufd", Form::VI, Ret::V16si, Sem::ShufD, 0),
+    op512("__builtin_ia32_pshufhw512", "vpshufhw", Form::VI, Ret::V32hi, Sem::ShufHi, 0),
+    op512("__builtin_ia32_pshuflw512", "vpshuflw", Form::VI, Ret::V32hi, Sem::ShufLo, 0),
+    op512("__builtin_ia32_psllwi512", "vpsllw", Form::Shift, Ret::V32hi, Sem::Shl(2), 4),
+    op512("__builtin_ia32_pslldi512", "vpslld", Form::Shift, Ret::V16si, Sem::Shl(4), 4),
+    op512("__builtin_ia32_psllqi512", "vpsllq", Form::Shift, Ret::V8di, Sem::Shl(8), 4),
+    op512("__builtin_ia32_psrlwi512", "vpsrlw", Form::Shift, Ret::V32hi, Sem::Shr(2), 4),
+    op512("__builtin_ia32_psrldi512", "vpsrld", Form::Shift, Ret::V16si, Sem::Shr(4), 4),
+    op512("__builtin_ia32_psrlqi512", "vpsrlq", Form::Shift, Ret::V8di, Sem::Shr(8), 4),
+    op512("__builtin_ia32_psrawi512", "vpsraw", Form::Shift, Ret::V32hi, Sem::Sar(2), 4),
+    op512("__builtin_ia32_psradi512", "vpsrad", Form::Shift, Ret::V16si, Sem::Sar(4), 4),
+    op512("__builtin_ia32_pslldqi512", "vpslldq", Form::Shift, Ret::V8di, Sem::ShlBytes, 4),
+    op512("__builtin_ia32_psrldqi512", "vpsrldq", Form::Shift, Ret::V8di, Sem::ShrBytes, 4),
+    op512("__builtin_ia32_pabsb512", "vpabsb", Form::V, Ret::V64qi, Sem::Abs(1), 0),
+    op512("__builtin_ia32_pabsw512", "vpabsw", Form::V, Ret::V32hi, Sem::Abs(2), 0),
+    op512("__builtin_ia32_pabsd512", "vpabsd", Form::V, Ret::V16si, Sem::Abs(4), 0),
+    op512("__builtin_ia32_pmovmskb512", "vpmovb2m", Form::MoveMask, Ret::Int64, Sem::Move, 8),
+    op512("__builtin_ia32_loaddqu512", "vmovdqu64", Form::Load, Ret::V64qi, Sem::Move, 0),
+    op512("__builtin_ia32_storedqu512", "vmovdqu64", Form::Store, Ret::Void, Sem::Move, 0),
+    op512("__builtin_ia32_pclmulqdq512", "vpclmulqdq", Form::VvI, Ret::V8di, Sem::ClMul, 0),
+    op512("__builtin_ia32_permdi512", "vpermq", Form::VI, Ret::V8di, Sem::Perm4x64, 0),
+    op512("__builtin_ia32_permvarsi512", "vpermd", Form::Vv, Ret::V16si, Sem::PermVar32, 0),
+    op512("__builtin_ia32_shuf_i64x2", "vshufi64x2", Form::VvI, Ret::V8di, Sem::ShufLanes128, 0),
+    op512("__builtin_ia32_vpdpbusd512", "vpdpbusd", Form::Vvv, Ret::V16si, Sem::DotBytes(false), 0),
+    op512("__builtin_ia32_vpdpbusds512", "vpdpbusds", Form::Vvv, Ret::V16si, Sem::DotBytes(true), 0),
+    op512("__builtin_ia32_vpdpwssd512", "vpdpwssd", Form::Vvv, Ret::V16si, Sem::DotWords(false), 0),
+    op512("__builtin_ia32_vpdpwssds512", "vpdpwssds", Form::Vvv, Ret::V16si, Sem::DotWords(true), 0),
+    op512("__builtin_ia32_pternlogq512", "vpternlogq", Form::VvvI, Ret::V8di, Sem::TernLog, 0),
+    // AVX512VNNI with AVX512VL on ymm.
+    op256("__builtin_ia32_vpdpbusd256", "vpdpbusd", Form::Vvv, Ret::V8si, Sem::DotBytes(false), 0),
+    op256("__builtin_ia32_vpdpbusds256", "vpdpbusds", Form::Vvv, Ret::V8si, Sem::DotBytes(true), 0),
+    op256("__builtin_ia32_vpdpwssd256", "vpdpwssd", Form::Vvv, Ret::V8si, Sem::DotWords(false), 0),
+    op256("__builtin_ia32_vpdpwssds256", "vpdpwssds", Form::Vvv, Ret::V8si, Sem::DotWords(true), 0),
+    // The blends by the sign of each mask lane, the mask last, VEX only;
+    // and the AVX blends by an immediate bit per lane.
+    op("__builtin_ia32_pblendvb128", "vpblendvb", Form::Vvv, Ret::V16qi, Sem::BlendVar(1), 0),
+    op("__builtin_ia32_blendvps", "vblendvps", Form::Vvv, Ret::V4sf, Sem::BlendVar(4), 0),
+    op("__builtin_ia32_blendvpd", "vblendvpd", Form::Vvv, Ret::V2df, Sem::BlendVar(8), 0),
+    op256("__builtin_ia32_pblendvb256", "vpblendvb", Form::Vvv, Ret::V32qi, Sem::BlendVar(1), 0),
+    op256("__builtin_ia32_blendvps256", "vblendvps", Form::Vvv, Ret::V8sf, Sem::BlendVar(4), 0),
+    op256("__builtin_ia32_blendvpd256", "vblendvpd", Form::Vvv, Ret::V4df, Sem::BlendVar(8), 0),
+    op256("__builtin_ia32_blendps256", "vblendps", Form::VvI, Ret::V8sf, Sem::Blend(4), 0),
+    op256("__builtin_ia32_roundps256", "vroundps", Form::VI, Ret::V8sf, Sem::RoundImm(4, false), 0),
+    op256("__builtin_ia32_roundpd256", "vroundpd", Form::VI, Ret::V4df, Sem::RoundImm(8, false), 0),
+    op256("__builtin_ia32_blendpd256", "vblendpd", Form::VvI, Ret::V4df, Sem::Blend(8), 0),
+    // The AVX permutes within each 128-bit part by a register of controls.
+    op("__builtin_ia32_vpermilvarps", "permilps", Form::Vv, Ret::V4sf, Sem::PermilVar(4), 0),
+    op("__builtin_ia32_vpermilvarpd", "permilpd", Form::Vv, Ret::V2df, Sem::PermilVar(8), 0),
+    op256("__builtin_ia32_vpermilvarps256", "vpermilps", Form::Vv, Ret::V8sf, Sem::PermilVar(4), 0),
+    op256("__builtin_ia32_vpermilvarpd256", "vpermilpd", Form::Vv, Ret::V4df, Sem::PermilVar(8), 0),
+    // The AVX2 shifts by a count in each lane.
+    op("__builtin_ia32_psllv4si", "psllvd", Form::Vv, Ret::V4si, Sem::ShlVar(4), 0),
+    op256("__builtin_ia32_psllv8si", "vpsllvd", Form::Vv, Ret::V8si, Sem::ShlVar(4), 0),
+    op("__builtin_ia32_psllv2di", "psllvq", Form::Vv, Ret::V2di, Sem::ShlVar(8), 0),
+    op256("__builtin_ia32_psllv4di", "vpsllvq", Form::Vv, Ret::V4di, Sem::ShlVar(8), 0),
+    op("__builtin_ia32_psrlv4si", "psrlvd", Form::Vv, Ret::V4si, Sem::ShrVar(4), 0),
+    op256("__builtin_ia32_psrlv8si", "vpsrlvd", Form::Vv, Ret::V8si, Sem::ShrVar(4), 0),
+    op("__builtin_ia32_psrlv2di", "psrlvq", Form::Vv, Ret::V2di, Sem::ShrVar(8), 0),
+    op256("__builtin_ia32_psrlv4di", "vpsrlvq", Form::Vv, Ret::V4di, Sem::ShrVar(8), 0),
+    op("__builtin_ia32_psrav4si", "psravd", Form::Vv, Ret::V4si, Sem::SarVar(4), 0),
+    op256("__builtin_ia32_psrav8si", "vpsravd", Form::Vv, Ret::V8si, Sem::SarVar(4), 0),
+    // The FMA forms in the 231 encoding, the accumulator first: the product
+    // of the other two, negated by the `n` forms, plus or minus it.
+    op("__builtin_ia32_vfmadd231ps", "vfmadd231ps", Form::Vvv, Ret::V4sf, Sem::FloatFma(4, false, Addend::Plus), 0),
+    op256("__builtin_ia32_vfmadd231ps256", "vfmadd231ps", Form::Vvv, Ret::V8sf, Sem::FloatFma(4, false, Addend::Plus), 0),
+    op("__builtin_ia32_vfmadd231pd", "vfmadd231pd", Form::Vvv, Ret::V2df, Sem::FloatFma(8, false, Addend::Plus), 0),
+    op256("__builtin_ia32_vfmadd231pd256", "vfmadd231pd", Form::Vvv, Ret::V4df, Sem::FloatFma(8, false, Addend::Plus), 0),
+    op("__builtin_ia32_vfmsub231ps", "vfmsub231ps", Form::Vvv, Ret::V4sf, Sem::FloatFma(4, false, Addend::Minus), 0),
+    op256("__builtin_ia32_vfmsub231ps256", "vfmsub231ps", Form::Vvv, Ret::V8sf, Sem::FloatFma(4, false, Addend::Minus), 0),
+    op("__builtin_ia32_vfmsub231pd", "vfmsub231pd", Form::Vvv, Ret::V2df, Sem::FloatFma(8, false, Addend::Minus), 0),
+    op256("__builtin_ia32_vfmsub231pd256", "vfmsub231pd", Form::Vvv, Ret::V4df, Sem::FloatFma(8, false, Addend::Minus), 0),
+    op("__builtin_ia32_vfnmadd231ps", "vfnmadd231ps", Form::Vvv, Ret::V4sf, Sem::FloatFma(4, true, Addend::Plus), 0),
+    op256("__builtin_ia32_vfnmadd231ps256", "vfnmadd231ps", Form::Vvv, Ret::V8sf, Sem::FloatFma(4, true, Addend::Plus), 0),
+    op("__builtin_ia32_vfnmadd231pd", "vfnmadd231pd", Form::Vvv, Ret::V2df, Sem::FloatFma(8, true, Addend::Plus), 0),
+    op256("__builtin_ia32_vfnmadd231pd256", "vfnmadd231pd", Form::Vvv, Ret::V4df, Sem::FloatFma(8, true, Addend::Plus), 0),
+    op("__builtin_ia32_vfnmsub231ps", "vfnmsub231ps", Form::Vvv, Ret::V4sf, Sem::FloatFma(4, true, Addend::Minus), 0),
+    op256("__builtin_ia32_vfnmsub231ps256", "vfnmsub231ps", Form::Vvv, Ret::V8sf, Sem::FloatFma(4, true, Addend::Minus), 0),
+    op("__builtin_ia32_vfnmsub231pd", "vfnmsub231pd", Form::Vvv, Ret::V2df, Sem::FloatFma(8, true, Addend::Minus), 0),
+    op256("__builtin_ia32_vfnmsub231pd256", "vfnmsub231pd", Form::Vvv, Ret::V4df, Sem::FloatFma(8, true, Addend::Minus), 0),
+    op("__builtin_ia32_vfmaddsub231ps", "vfmaddsub231ps", Form::Vvv, Ret::V4sf, Sem::FloatFma(4, false, Addend::MinusEven), 0),
+    op256("__builtin_ia32_vfmaddsub231ps256", "vfmaddsub231ps", Form::Vvv, Ret::V8sf, Sem::FloatFma(4, false, Addend::MinusEven), 0),
+    op("__builtin_ia32_vfmaddsub231pd", "vfmaddsub231pd", Form::Vvv, Ret::V2df, Sem::FloatFma(8, false, Addend::MinusEven), 0),
+    op256("__builtin_ia32_vfmaddsub231pd256", "vfmaddsub231pd", Form::Vvv, Ret::V4df, Sem::FloatFma(8, false, Addend::MinusEven), 0),
+    op("__builtin_ia32_vfmsubadd231ps", "vfmsubadd231ps", Form::Vvv, Ret::V4sf, Sem::FloatFma(4, false, Addend::MinusOdd), 0),
+    op256("__builtin_ia32_vfmsubadd231ps256", "vfmsubadd231ps", Form::Vvv, Ret::V8sf, Sem::FloatFma(4, false, Addend::MinusOdd), 0),
+    op("__builtin_ia32_vfmsubadd231pd", "vfmsubadd231pd", Form::Vvv, Ret::V2df, Sem::FloatFma(8, false, Addend::MinusOdd), 0),
+    op256("__builtin_ia32_vfmsubadd231pd256", "vfmsubadd231pd", Form::Vvv, Ret::V4df, Sem::FloatFma(8, false, Addend::MinusOdd), 0),
+    // The AVX-512 opmask forms: compares into a mask, blends and the masked
+    // transfers, the mask an integer the lowering moves into k1; the
+    // transfers at each vector length (AVX512VL), by lane width.
+    SimdOp { name: "__builtin_ia32_cmpb512_mask", mnem: "vpcmpb", form: Form::CmpMask, ret: Ret::Int64, sem: Sem::CmpPred(1, true), int_width: 8, bytes: 64 },
+    SimdOp { name: "__builtin_ia32_ucmpb512_mask", mnem: "vpcmpub", form: Form::CmpMask, ret: Ret::Int64, sem: Sem::CmpPred(1, false), int_width: 8, bytes: 64 },
+    SimdOp { name: "__builtin_ia32_blendmb_512", mnem: "vpblendmb", form: Form::MaskBlend, ret: Ret::V64qi, sem: Sem::Move, int_width: 1, bytes: 64 },
+    // The compares and blends at 256 and 128 bits (AVX512VL).
+    SimdOp { name: "__builtin_ia32_cmpb256_mask", mnem: "vpcmpb", form: Form::CmpMask, ret: Ret::Int64, sem: Sem::CmpPred(1, true), int_width: 8, bytes: 32 },
+    SimdOp { name: "__builtin_ia32_ucmpb256_mask", mnem: "vpcmpub", form: Form::CmpMask, ret: Ret::Int64, sem: Sem::CmpPred(1, false), int_width: 8, bytes: 32 },
+    SimdOp { name: "__builtin_ia32_blendmb_256", mnem: "vpblendmb", form: Form::MaskBlend, ret: Ret::V32qi, sem: Sem::Move, int_width: 1, bytes: 32 },
+    SimdOp { name: "__builtin_ia32_cmpb128_mask", mnem: "vpcmpb", form: Form::CmpMask, ret: Ret::Int64, sem: Sem::CmpPred(1, true), int_width: 8, bytes: 16 },
+    SimdOp { name: "__builtin_ia32_ucmpb128_mask", mnem: "vpcmpub", form: Form::CmpMask, ret: Ret::Int64, sem: Sem::CmpPred(1, false), int_width: 8, bytes: 16 },
+    SimdOp { name: "__builtin_ia32_blendmb_128", mnem: "vpblendmb", form: Form::MaskBlend, ret: Ret::V16qi, sem: Sem::Move, int_width: 1, bytes: 16 },
+    SimdOp { name: "__builtin_ia32_cmpw256_mask", mnem: "vpcmpw", form: Form::CmpMask, ret: Ret::Int64, sem: Sem::CmpPred(2, true), int_width: 8, bytes: 32 },
+    SimdOp { name: "__builtin_ia32_ucmpw256_mask", mnem: "vpcmpuw", form: Form::CmpMask, ret: Ret::Int64, sem: Sem::CmpPred(2, false), int_width: 8, bytes: 32 },
+    SimdOp { name: "__builtin_ia32_blendmw_256", mnem: "vpblendmw", form: Form::MaskBlend, ret: Ret::V16hi, sem: Sem::Move, int_width: 2, bytes: 32 },
+    SimdOp { name: "__builtin_ia32_cmpw128_mask", mnem: "vpcmpw", form: Form::CmpMask, ret: Ret::Int64, sem: Sem::CmpPred(2, true), int_width: 8, bytes: 16 },
+    SimdOp { name: "__builtin_ia32_ucmpw128_mask", mnem: "vpcmpuw", form: Form::CmpMask, ret: Ret::Int64, sem: Sem::CmpPred(2, false), int_width: 8, bytes: 16 },
+    SimdOp { name: "__builtin_ia32_blendmw_128", mnem: "vpblendmw", form: Form::MaskBlend, ret: Ret::V8hi, sem: Sem::Move, int_width: 2, bytes: 16 },
+    SimdOp { name: "__builtin_ia32_cmpd256_mask", mnem: "vpcmpd", form: Form::CmpMask, ret: Ret::Int64, sem: Sem::CmpPred(4, true), int_width: 8, bytes: 32 },
+    SimdOp { name: "__builtin_ia32_ucmpd256_mask", mnem: "vpcmpud", form: Form::CmpMask, ret: Ret::Int64, sem: Sem::CmpPred(4, false), int_width: 8, bytes: 32 },
+    SimdOp { name: "__builtin_ia32_blendmd_256", mnem: "vpblendmd", form: Form::MaskBlend, ret: Ret::V8si, sem: Sem::Move, int_width: 4, bytes: 32 },
+    SimdOp { name: "__builtin_ia32_cmpd128_mask", mnem: "vpcmpd", form: Form::CmpMask, ret: Ret::Int64, sem: Sem::CmpPred(4, true), int_width: 8, bytes: 16 },
+    SimdOp { name: "__builtin_ia32_ucmpd128_mask", mnem: "vpcmpud", form: Form::CmpMask, ret: Ret::Int64, sem: Sem::CmpPred(4, false), int_width: 8, bytes: 16 },
+    SimdOp { name: "__builtin_ia32_blendmd_128", mnem: "vpblendmd", form: Form::MaskBlend, ret: Ret::V4si, sem: Sem::Move, int_width: 4, bytes: 16 },
+    SimdOp { name: "__builtin_ia32_cmpq256_mask", mnem: "vpcmpq", form: Form::CmpMask, ret: Ret::Int64, sem: Sem::CmpPred(8, true), int_width: 8, bytes: 32 },
+    SimdOp { name: "__builtin_ia32_ucmpq256_mask", mnem: "vpcmpuq", form: Form::CmpMask, ret: Ret::Int64, sem: Sem::CmpPred(8, false), int_width: 8, bytes: 32 },
+    SimdOp { name: "__builtin_ia32_blendmq_256", mnem: "vpblendmq", form: Form::MaskBlend, ret: Ret::V4di, sem: Sem::Move, int_width: 8, bytes: 32 },
+    SimdOp { name: "__builtin_ia32_cmpq128_mask", mnem: "vpcmpq", form: Form::CmpMask, ret: Ret::Int64, sem: Sem::CmpPred(8, true), int_width: 8, bytes: 16 },
+    SimdOp { name: "__builtin_ia32_ucmpq128_mask", mnem: "vpcmpuq", form: Form::CmpMask, ret: Ret::Int64, sem: Sem::CmpPred(8, false), int_width: 8, bytes: 16 },
+    SimdOp { name: "__builtin_ia32_blendmq_128", mnem: "vpblendmq", form: Form::MaskBlend, ret: Ret::V2di, sem: Sem::Move, int_width: 8, bytes: 16 },
+    SimdOp { name: "__builtin_ia32_loaddquqi512_mask", mnem: "vmovdqu8", form: Form::MaskLoad, ret: Ret::V64qi, sem: Sem::Move, int_width: 1, bytes: 64 },
+    SimdOp { name: "__builtin_ia32_storedquqi512_mask", mnem: "vmovdqu8", form: Form::MaskStore, ret: Ret::Void, sem: Sem::Move, int_width: 1, bytes: 64 },
+    SimdOp { name: "__builtin_ia32_loaddquqi256_mask", mnem: "vmovdqu8", form: Form::MaskLoad, ret: Ret::V32qi, sem: Sem::Move, int_width: 1, bytes: 32 },
+    SimdOp { name: "__builtin_ia32_storedquqi256_mask", mnem: "vmovdqu8", form: Form::MaskStore, ret: Ret::Void, sem: Sem::Move, int_width: 1, bytes: 32 },
+    SimdOp { name: "__builtin_ia32_loaddquqi128_mask", mnem: "vmovdqu8", form: Form::MaskLoad, ret: Ret::V16qi, sem: Sem::Move, int_width: 1, bytes: 16 },
+    SimdOp { name: "__builtin_ia32_storedquqi128_mask", mnem: "vmovdqu8", form: Form::MaskStore, ret: Ret::Void, sem: Sem::Move, int_width: 1, bytes: 16 },
+    SimdOp { name: "__builtin_ia32_cmpw512_mask", mnem: "vpcmpw", form: Form::CmpMask, ret: Ret::Int64, sem: Sem::CmpPred(2, true), int_width: 8, bytes: 64 },
+    SimdOp { name: "__builtin_ia32_ucmpw512_mask", mnem: "vpcmpuw", form: Form::CmpMask, ret: Ret::Int64, sem: Sem::CmpPred(2, false), int_width: 8, bytes: 64 },
+    SimdOp { name: "__builtin_ia32_blendmw_512", mnem: "vpblendmw", form: Form::MaskBlend, ret: Ret::V32hi, sem: Sem::Move, int_width: 2, bytes: 64 },
+    SimdOp { name: "__builtin_ia32_loaddquhi512_mask", mnem: "vmovdqu16", form: Form::MaskLoad, ret: Ret::V32hi, sem: Sem::Move, int_width: 2, bytes: 64 },
+    SimdOp { name: "__builtin_ia32_storedquhi512_mask", mnem: "vmovdqu16", form: Form::MaskStore, ret: Ret::Void, sem: Sem::Move, int_width: 2, bytes: 64 },
+    SimdOp { name: "__builtin_ia32_loaddquhi256_mask", mnem: "vmovdqu16", form: Form::MaskLoad, ret: Ret::V16hi, sem: Sem::Move, int_width: 2, bytes: 32 },
+    SimdOp { name: "__builtin_ia32_storedquhi256_mask", mnem: "vmovdqu16", form: Form::MaskStore, ret: Ret::Void, sem: Sem::Move, int_width: 2, bytes: 32 },
+    SimdOp { name: "__builtin_ia32_loaddquhi128_mask", mnem: "vmovdqu16", form: Form::MaskLoad, ret: Ret::V8hi, sem: Sem::Move, int_width: 2, bytes: 16 },
+    SimdOp { name: "__builtin_ia32_storedquhi128_mask", mnem: "vmovdqu16", form: Form::MaskStore, ret: Ret::Void, sem: Sem::Move, int_width: 2, bytes: 16 },
+    SimdOp { name: "__builtin_ia32_cmpd512_mask", mnem: "vpcmpd", form: Form::CmpMask, ret: Ret::Int64, sem: Sem::CmpPred(4, true), int_width: 8, bytes: 64 },
+    SimdOp { name: "__builtin_ia32_ucmpd512_mask", mnem: "vpcmpud", form: Form::CmpMask, ret: Ret::Int64, sem: Sem::CmpPred(4, false), int_width: 8, bytes: 64 },
+    SimdOp { name: "__builtin_ia32_blendmd_512", mnem: "vpblendmd", form: Form::MaskBlend, ret: Ret::V16si, sem: Sem::Move, int_width: 4, bytes: 64 },
+    SimdOp { name: "__builtin_ia32_loaddqusi512_mask", mnem: "vmovdqu32", form: Form::MaskLoad, ret: Ret::V16si, sem: Sem::Move, int_width: 4, bytes: 64 },
+    SimdOp { name: "__builtin_ia32_storedqusi512_mask", mnem: "vmovdqu32", form: Form::MaskStore, ret: Ret::Void, sem: Sem::Move, int_width: 4, bytes: 64 },
+    SimdOp { name: "__builtin_ia32_loaddqusi256_mask", mnem: "vmovdqu32", form: Form::MaskLoad, ret: Ret::V8si, sem: Sem::Move, int_width: 4, bytes: 32 },
+    SimdOp { name: "__builtin_ia32_storedqusi256_mask", mnem: "vmovdqu32", form: Form::MaskStore, ret: Ret::Void, sem: Sem::Move, int_width: 4, bytes: 32 },
+    SimdOp { name: "__builtin_ia32_loaddqusi128_mask", mnem: "vmovdqu32", form: Form::MaskLoad, ret: Ret::V4si, sem: Sem::Move, int_width: 4, bytes: 16 },
+    SimdOp { name: "__builtin_ia32_storedqusi128_mask", mnem: "vmovdqu32", form: Form::MaskStore, ret: Ret::Void, sem: Sem::Move, int_width: 4, bytes: 16 },
+    SimdOp { name: "__builtin_ia32_cmpq512_mask", mnem: "vpcmpq", form: Form::CmpMask, ret: Ret::Int64, sem: Sem::CmpPred(8, true), int_width: 8, bytes: 64 },
+    SimdOp { name: "__builtin_ia32_ucmpq512_mask", mnem: "vpcmpuq", form: Form::CmpMask, ret: Ret::Int64, sem: Sem::CmpPred(8, false), int_width: 8, bytes: 64 },
+    SimdOp { name: "__builtin_ia32_blendmq_512", mnem: "vpblendmq", form: Form::MaskBlend, ret: Ret::V8di, sem: Sem::Move, int_width: 8, bytes: 64 },
+    SimdOp { name: "__builtin_ia32_loaddqudi512_mask", mnem: "vmovdqu64", form: Form::MaskLoad, ret: Ret::V8di, sem: Sem::Move, int_width: 8, bytes: 64 },
+    SimdOp { name: "__builtin_ia32_storedqudi512_mask", mnem: "vmovdqu64", form: Form::MaskStore, ret: Ret::Void, sem: Sem::Move, int_width: 8, bytes: 64 },
+    SimdOp { name: "__builtin_ia32_loaddqudi256_mask", mnem: "vmovdqu64", form: Form::MaskLoad, ret: Ret::V4di, sem: Sem::Move, int_width: 8, bytes: 32 },
+    SimdOp { name: "__builtin_ia32_storedqudi256_mask", mnem: "vmovdqu64", form: Form::MaskStore, ret: Ret::Void, sem: Sem::Move, int_width: 8, bytes: 32 },
+    SimdOp { name: "__builtin_ia32_loaddqudi128_mask", mnem: "vmovdqu64", form: Form::MaskLoad, ret: Ret::V2di, sem: Sem::Move, int_width: 8, bytes: 16 },
+    SimdOp { name: "__builtin_ia32_storedqudi128_mask", mnem: "vmovdqu64", form: Form::MaskStore, ret: Ret::Void, sem: Sem::Move, int_width: 8, bytes: 16 },
+    // The MMX forms over 8-byte vectors.
+    op64("__builtin_ia32_paddsb", "paddsb", Ret::V8qi, Sem::AddSat(1, true)),
+    op64("__builtin_ia32_paddsw", "paddsw", Ret::V4hi, Sem::AddSat(2, true)),
+    op64("__builtin_ia32_paddusb", "paddusb", Ret::V8qi, Sem::AddSat(1, false)),
+    op64("__builtin_ia32_paddusw", "paddusw", Ret::V4hi, Sem::AddSat(2, false)),
+    op64("__builtin_ia32_psubsb", "psubsb", Ret::V8qi, Sem::SubSat(1, true)),
+    op64("__builtin_ia32_psubsw", "psubsw", Ret::V4hi, Sem::SubSat(2, true)),
+    op64("__builtin_ia32_psubusb", "psubusb", Ret::V8qi, Sem::SubSat(1, false)),
+    op64("__builtin_ia32_psubusw", "psubusw", Ret::V4hi, Sem::SubSat(2, false)),
+    op64("__builtin_ia32_pmullw", "pmullw", Ret::V4hi, Sem::MulLo(2)),
+    op64("__builtin_ia32_pmulhw", "pmulhw", Ret::V4hi, Sem::MulHi(2, true)),
+    op64("__builtin_ia32_pmulhuw", "pmulhuw", Ret::V4hi, Sem::MulHi(2, false)),
+    op64("__builtin_ia32_pmaddwd", "pmaddwd", Ret::V2si, Sem::MulAddWords),
+    op64("__builtin_ia32_pmuludq", "pmuludq", Ret::V1di, Sem::MulEven(false)),
+    op64("__builtin_ia32_pcmpeqb", "pcmpeqb", Ret::V8qi, Sem::CmpEq(1)),
+    op64("__builtin_ia32_pcmpeqw", "pcmpeqw", Ret::V4hi, Sem::CmpEq(2)),
+    op64("__builtin_ia32_pcmpeqd", "pcmpeqd", Ret::V2si, Sem::CmpEq(4)),
+    op64("__builtin_ia32_pcmpgtb", "pcmpgtb", Ret::V8qi, Sem::CmpGt(1)),
+    op64("__builtin_ia32_pcmpgtw", "pcmpgtw", Ret::V4hi, Sem::CmpGt(2)),
+    op64("__builtin_ia32_pcmpgtd", "pcmpgtd", Ret::V2si, Sem::CmpGt(4)),
+    op64("__builtin_ia32_psadbw", "psadbw", Ret::V1di, Sem::SadBytes),
+    op64("__builtin_ia32_pavgb", "pavgb", Ret::V8qi, Sem::Avg(1)),
+    op64("__builtin_ia32_pavgw", "pavgw", Ret::V4hi, Sem::Avg(2)),
+    op64("__builtin_ia32_pminsw", "pminsw", Ret::V4hi, Sem::Min(2, true)),
+    op64("__builtin_ia32_pmaxsw", "pmaxsw", Ret::V4hi, Sem::Max(2, true)),
+    op64("__builtin_ia32_pminub", "pminub", Ret::V8qi, Sem::Min(1, false)),
+    op64("__builtin_ia32_pmaxub", "pmaxub", Ret::V8qi, Sem::Max(1, false)),
 ];
 
 /// The table index of `name`, or `None` when it is not a SIMD builtin.
 pub(crate) fn lookup(name: &str) -> Option<u32> {
     OPS.iter().position(|o| o.name == name).map(|i| i as u32)
-}
-
-pub(crate) fn get(index: u32) -> &'static SimdOp {
-    &OPS[index as usize]
-}
-
-impl SimdOp {
-    /// The stores the instruction performs, as `(operand index, bytes)`:
-    /// the result through the destination address -- 16 bytes for a
-    /// vector, 4 for an `int` -- and for `RdRand` the random value through
-    /// the pointer operand as well. The store form has no destination of
-    /// its own; its 16 bytes go through the pointer operand, its first.
-    pub(crate) fn stores(&self) -> impl Iterator<Item = (usize, u8)> {
-        let width = if self.form.returns_vector() || self.form == Form::Store {
-            16
-        } else {
-            4
-        };
-        let pointer = (self.form == Form::RdRand).then_some((1, self.int_width));
-        core::iter::once((0, width)).chain(pointer)
-    }
-}
-
-impl Form {
-    /// Number of source operands the builtin call takes.
-    pub(crate) fn arity(self) -> usize {
-        match self {
-            Form::V | Form::Load | Form::MoveMask | Form::RdRand => 1,
-            Form::Vv | Form::VI | Form::Shift | Form::Store | Form::Extract => 2,
-            Form::VvI | Form::Insert => 3,
-        }
-    }
-
-    /// Whether the last operand must be an integer constant expression that
-    /// the instruction encodes as `imm8`.
-    pub(crate) fn takes_imm(self) -> bool {
-        matches!(self, Form::VvI | Form::VI | Form::Extract | Form::Insert)
-    }
-
-    /// Whether the result is a 128-bit vector rather than an `int`.
-    pub(crate) fn returns_vector(self) -> bool {
-        matches!(
-            self,
-            Form::Vv | Form::VvI | Form::VI | Form::V | Form::Shift | Form::Load | Form::Insert
-        )
-    }
-}
-
-// Value semantics over the 16-byte little-endian operand images.
-
-fn lane(v: &[u8; 16], width: u8, i: usize) -> u64 {
-    let off = i * width as usize;
-    let mut x = 0u64;
-    for k in 0..width as usize {
-        x |= (v[off + k] as u64) << (8 * k);
-    }
-    x
-}
-
-fn set_lane(v: &mut [u8; 16], width: u8, i: usize, x: u64) {
-    let off = i * width as usize;
-    for k in 0..width as usize {
-        v[off + k] = (x >> (8 * k)) as u8;
-    }
-}
-
-fn mask(width: u8) -> u64 {
-    if width >= 8 {
-        u64::MAX
-    } else {
-        (1u64 << (8 * width as u32)) - 1
-    }
-}
-
-/// Lane `i`, sign-extended from its width.
-fn slane(v: &[u8; 16], width: u8, i: usize) -> i64 {
-    let bits = 8 * width as u32;
-    let x = lane(v, width, i);
-    if bits >= 64 {
-        x as i64
-    } else {
-        (x << (64 - bits)) as i64 >> (64 - bits)
-    }
-}
-
-/// AES S-box (FIPS-197 figure 7).
-#[rustfmt::skip]
-const SBOX: [u8; 256] = [
-    0x63,0x7c,0x77,0x7b,0xf2,0x6b,0x6f,0xc5,0x30,0x01,0x67,0x2b,0xfe,0xd7,0xab,0x76,
-    0xca,0x82,0xc9,0x7d,0xfa,0x59,0x47,0xf0,0xad,0xd4,0xa2,0xaf,0x9c,0xa4,0x72,0xc0,
-    0xb7,0xfd,0x93,0x26,0x36,0x3f,0xf7,0xcc,0x34,0xa5,0xe5,0xf1,0x71,0xd8,0x31,0x15,
-    0x04,0xc7,0x23,0xc3,0x18,0x96,0x05,0x9a,0x07,0x12,0x80,0xe2,0xeb,0x27,0xb2,0x75,
-    0x09,0x83,0x2c,0x1a,0x1b,0x6e,0x5a,0xa0,0x52,0x3b,0xd6,0xb3,0x29,0xe3,0x2f,0x84,
-    0x53,0xd1,0x00,0xed,0x20,0xfc,0xb1,0x5b,0x6a,0xcb,0xbe,0x39,0x4a,0x4c,0x58,0xcf,
-    0xd0,0xef,0xaa,0xfb,0x43,0x4d,0x33,0x85,0x45,0xf9,0x02,0x7f,0x50,0x3c,0x9f,0xa8,
-    0x51,0xa3,0x40,0x8f,0x92,0x9d,0x38,0xf5,0xbc,0xb6,0xda,0x21,0x10,0xff,0xf3,0xd2,
-    0xcd,0x0c,0x13,0xec,0x5f,0x97,0x44,0x17,0xc4,0xa7,0x7e,0x3d,0x64,0x5d,0x19,0x73,
-    0x60,0x81,0x4f,0xdc,0x22,0x2a,0x90,0x88,0x46,0xee,0xb8,0x14,0xde,0x5e,0x0b,0xdb,
-    0xe0,0x32,0x3a,0x0a,0x49,0x06,0x24,0x5c,0xc2,0xd3,0xac,0x62,0x91,0x95,0xe4,0x79,
-    0xe7,0xc8,0x37,0x6d,0x8d,0xd5,0x4e,0xa9,0x6c,0x56,0xf4,0xea,0x65,0x7a,0xae,0x08,
-    0xba,0x78,0x25,0x2e,0x1c,0xa6,0xb4,0xc6,0xe8,0xdd,0x74,0x1f,0x4b,0xbd,0x8b,0x8a,
-    0x70,0x3e,0xb5,0x66,0x48,0x03,0xf6,0x0e,0x61,0x35,0x57,0xb9,0x86,0xc1,0x1d,0x9e,
-    0xe1,0xf8,0x98,0x11,0x69,0xd9,0x8e,0x94,0x9b,0x1e,0x87,0xe9,0xce,0x55,0x28,0xdf,
-    0x8c,0xa1,0x89,0x0d,0xbf,0xe6,0x42,0x68,0x41,0x99,0x2d,0x0f,0xb0,0x54,0xbb,0x16,
-];
-
-const fn inverse_sbox() -> [u8; 256] {
-    let mut t = [0u8; 256];
-    let mut i = 0;
-    while i < 256 {
-        t[SBOX[i] as usize] = i as u8;
-        i += 1;
-    }
-    t
-}
-
-const INV_SBOX: [u8; 256] = inverse_sbox();
-
-/// Multiply in GF(2^8) modulo the AES polynomial x^8 + x^4 + x^3 + x + 1.
-fn gmul(mut a: u8, mut b: u8) -> u8 {
-    let mut r = 0u8;
-    while b != 0 {
-        if b & 1 != 0 {
-            r ^= a;
-        }
-        let hi = a & 0x80;
-        a <<= 1;
-        if hi != 0 {
-            a ^= 0x1b;
-        }
-        b >>= 1;
-    }
-    r
-}
-
-/// The AES state is column-major: byte `4*c + r` is row `r` of column `c`.
-fn shift_rows(s: &[u8; 16]) -> [u8; 16] {
-    let mut o = [0u8; 16];
-    for c in 0..4 {
-        for r in 0..4 {
-            o[4 * c + r] = s[4 * ((c + r) % 4) + r];
-        }
-    }
-    o
-}
-
-fn inv_shift_rows(s: &[u8; 16]) -> [u8; 16] {
-    let mut o = [0u8; 16];
-    for c in 0..4 {
-        for r in 0..4 {
-            o[4 * ((c + r) % 4) + r] = s[4 * c + r];
-        }
-    }
-    o
-}
-
-fn sub_bytes(s: &[u8; 16]) -> [u8; 16] {
-    let mut o = [0u8; 16];
-    for i in 0..16 {
-        o[i] = SBOX[s[i] as usize];
-    }
-    o
-}
-
-fn inv_sub_bytes(s: &[u8; 16]) -> [u8; 16] {
-    let mut o = [0u8; 16];
-    for i in 0..16 {
-        o[i] = INV_SBOX[s[i] as usize];
-    }
-    o
-}
-
-fn mix_columns(s: &[u8; 16], m: [[u8; 4]; 4]) -> [u8; 16] {
-    let mut o = [0u8; 16];
-    for c in 0..4 {
-        for r in 0..4 {
-            let mut acc = 0u8;
-            for k in 0..4 {
-                acc ^= gmul(m[r][k], s[4 * c + k]);
-            }
-            o[4 * c + r] = acc;
-        }
-    }
-    o
-}
-
-const MIX: [[u8; 4]; 4] = [[2, 3, 1, 1], [1, 2, 3, 1], [1, 1, 2, 3], [3, 1, 1, 2]];
-
-const INV_MIX: [[u8; 4]; 4] = [
-    [14, 11, 13, 9],
-    [9, 14, 11, 13],
-    [13, 9, 14, 11],
-    [11, 13, 9, 14],
-];
-
-fn xor16(a: &[u8; 16], b: &[u8; 16]) -> [u8; 16] {
-    let mut o = [0u8; 16];
-    for i in 0..16 {
-        o[i] = a[i] ^ b[i];
-    }
-    o
-}
-
-fn rot_word(x: u32) -> u32 {
-    x.rotate_right(8)
-}
-
-fn sub_word(x: u32) -> u32 {
-    let b = x.to_le_bytes();
-    u32::from_le_bytes([
-        SBOX[b[0] as usize],
-        SBOX[b[1] as usize],
-        SBOX[b[2] as usize],
-        SBOX[b[3] as usize],
-    ])
-}
-
-/// Carry-less multiply of two 64-bit operands into 128 bits.
-fn clmul(a: u64, b: u64) -> (u64, u64) {
-    let mut lo = 0u64;
-    let mut hi = 0u64;
-    for i in 0..64 {
-        if (b >> i) & 1 != 0 {
-            lo ^= a << i;
-            if i > 0 {
-                hi ^= a >> (64 - i);
-            }
-        }
-    }
-    (lo, hi)
-}
-
-/// Evaluate one 128-bit-result builtin. `imm` is the encoded immediate (0
-/// for the forms that take none) and `count` the shift count in the units
-/// the instruction takes: bits for the lane shifts, bytes for the
-/// whole-register pair.
-pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) -> [u8; 16] {
-    let mut o = [0u8; 16];
-    match sem {
-        Sem::Add(w) => {
-            for i in 0..16 / w as usize {
-                let x = lane(a, w, i).wrapping_add(lane(b, w, i)) & mask(w);
-                set_lane(&mut o, w, i, x);
-            }
-        }
-        Sem::Sub(w) => {
-            for i in 0..16 / w as usize {
-                let x = lane(a, w, i).wrapping_sub(lane(b, w, i)) & mask(w);
-                set_lane(&mut o, w, i, x);
-            }
-        }
-        Sem::MulLo(w) => {
-            for i in 0..16 / w as usize {
-                let x = lane(a, w, i).wrapping_mul(lane(b, w, i)) & mask(w);
-                set_lane(&mut o, w, i, x);
-            }
-        }
-        Sem::MulHi(w) => {
-            for i in 0..16 / w as usize {
-                let x = (slane(a, w, i) * slane(b, w, i)) >> (8 * w as u32);
-                set_lane(&mut o, w, i, x as u64 & mask(w));
-            }
-        }
-        Sem::MulAddWords => {
-            for i in 0..4 {
-                let lo = slane(a, 2, 2 * i) * slane(b, 2, 2 * i);
-                let hi = slane(a, 2, 2 * i + 1) * slane(b, 2, 2 * i + 1);
-                set_lane(&mut o, 4, i, (lo + hi) as u64 & mask(4));
-            }
-        }
-        Sem::And => {
-            for i in 0..16 {
-                o[i] = a[i] & b[i];
-            }
-        }
-        Sem::AndNot => {
-            for i in 0..16 {
-                o[i] = !a[i] & b[i];
-            }
-        }
-        Sem::Or => {
-            for i in 0..16 {
-                o[i] = a[i] | b[i];
-            }
-        }
-        Sem::Xor => o = xor16(a, b),
-        Sem::CmpEq(w) => {
-            for i in 0..16 / w as usize {
-                let eq = lane(a, w, i) == lane(b, w, i);
-                set_lane(&mut o, w, i, if eq { mask(w) } else { 0 });
-            }
-        }
-        Sem::CmpGt(w) => {
-            for i in 0..16 / w as usize {
-                let gt = slane(a, w, i) > slane(b, w, i);
-                set_lane(&mut o, w, i, if gt { mask(w) } else { 0 });
-            }
-        }
-        Sem::Shl(w) => {
-            for i in 0..16 / w as usize {
-                let x = if count >= 8 * w as u64 {
-                    0
-                } else {
-                    (lane(a, w, i) << count) & mask(w)
-                };
-                set_lane(&mut o, w, i, x);
-            }
-        }
-        Sem::Shr(w) => {
-            for i in 0..16 / w as usize {
-                let x = if count >= 8 * w as u64 {
-                    0
-                } else {
-                    lane(a, w, i) >> count
-                };
-                set_lane(&mut o, w, i, x);
-            }
-        }
-        Sem::Sar(w) => {
-            let n = count.min(8 * w as u64 - 1) as u32;
-            for i in 0..16 / w as usize {
-                let x = (slane(a, w, i) >> n) as u64 & mask(w);
-                set_lane(&mut o, w, i, x);
-            }
-        }
-        Sem::ShlBytes => {
-            let n = (count as usize).min(16);
-            o[n..].copy_from_slice(&a[..16 - n]);
-        }
-        Sem::ShrBytes => {
-            let n = (count as usize).min(16);
-            o[..16 - n].copy_from_slice(&a[n..]);
-        }
-        Sem::PackSigned(w) | Sem::PackUnsigned(w) => {
-            let half = w / 2;
-            let bits = 8 * half as u32;
-            let (lo, hi) = if matches!(sem, Sem::PackSigned(_)) {
-                (-(1i64 << (bits - 1)), (1i64 << (bits - 1)) - 1)
-            } else {
-                (0, (1i64 << bits) - 1)
-            };
-            let lanes = 16 / w as usize;
-            for i in 0..lanes {
-                let x = slane(a, w, i).clamp(lo, hi);
-                set_lane(&mut o, half, i, x as u64 & mask(half));
-                let y = slane(b, w, i).clamp(lo, hi);
-                set_lane(&mut o, half, lanes + i, y as u64 & mask(half));
-            }
-        }
-        Sem::UnpackLo(w) | Sem::UnpackHi(w) => {
-            let lanes = 16 / w as usize;
-            let base = if matches!(sem, Sem::UnpackHi(_)) {
-                lanes / 2
-            } else {
-                0
-            };
-            for i in 0..lanes / 2 {
-                set_lane(&mut o, w, 2 * i, lane(a, w, base + i));
-                set_lane(&mut o, w, 2 * i + 1, lane(b, w, base + i));
-            }
-        }
-        Sem::ShufD => {
-            for i in 0..4 {
-                let sel = ((imm >> (2 * i)) & 3) as usize;
-                set_lane(&mut o, 4, i, lane(a, 4, sel));
-            }
-        }
-        Sem::ShufHi => {
-            for i in 0..4 {
-                set_lane(&mut o, 2, i, lane(a, 2, i));
-            }
-            for i in 0..4 {
-                let sel = ((imm >> (2 * i)) & 3) as usize;
-                set_lane(&mut o, 2, 4 + i, lane(a, 2, 4 + sel));
-            }
-        }
-        Sem::ShufLo => {
-            for i in 0..4 {
-                let sel = ((imm >> (2 * i)) & 3) as usize;
-                set_lane(&mut o, 2, i, lane(a, 2, sel));
-            }
-            for i in 4..8 {
-                set_lane(&mut o, 2, i, lane(a, 2, i));
-            }
-        }
-        Sem::ShufB => {
-            for i in 0..16 {
-                o[i] = if b[i] & 0x80 != 0 {
-                    0
-                } else {
-                    a[(b[i] & 0x0f) as usize]
-                };
-            }
-        }
-        Sem::ShufPd => {
-            set_lane(&mut o, 8, 0, lane(a, 8, (imm & 1) as usize));
-            set_lane(&mut o, 8, 1, lane(b, 8, ((imm >> 1) & 1) as usize));
-        }
-        Sem::ClMul => {
-            let x = lane(a, 8, ((imm & 1) != 0) as usize);
-            let y = lane(b, 8, ((imm & 0x10) != 0) as usize);
-            let (lo, hi) = clmul(x, y);
-            set_lane(&mut o, 8, 0, lo);
-            set_lane(&mut o, 8, 1, hi);
-        }
-        Sem::AesEnc => {
-            let s = mix_columns(&sub_bytes(&shift_rows(a)), MIX);
-            o = xor16(&s, b);
-        }
-        Sem::AesEncLast => {
-            let s = sub_bytes(&shift_rows(a));
-            o = xor16(&s, b);
-        }
-        Sem::AesDec => {
-            let s = mix_columns(&inv_sub_bytes(&inv_shift_rows(a)), INV_MIX);
-            o = xor16(&s, b);
-        }
-        Sem::AesDecLast => {
-            let s = inv_sub_bytes(&inv_shift_rows(a));
-            o = xor16(&s, b);
-        }
-        Sem::AesImc => o = mix_columns(a, INV_MIX),
-        Sem::AesKeygen => {
-            let x1 = lane(a, 4, 1) as u32;
-            let x3 = lane(a, 4, 3) as u32;
-            set_lane(&mut o, 4, 0, sub_word(x1) as u64);
-            set_lane(&mut o, 4, 1, (rot_word(sub_word(x1)) ^ imm as u32) as u64);
-            set_lane(&mut o, 4, 2, sub_word(x3) as u64);
-            set_lane(&mut o, 4, 3, (rot_word(sub_word(x3)) ^ imm as u32) as u64);
-        }
-        Sem::Move | Sem::Rand => o = *a,
-    }
-    o
-}
-
-/// `Form::Extract`: the selected lane, zero-extended.
-pub(crate) fn eval_extract(a: &[u8; 16], width: u8, imm: u8) -> u64 {
-    let lanes = 16 / width as usize;
-    lane(a, width, imm as usize % lanes)
-}
-
-/// `Form::MoveMask`: the sign bit of each byte lane, lane `i` at bit `i`.
-pub(crate) fn eval_movemask(a: &[u8; 16]) -> u64 {
-    let mut m = 0u64;
-    for (i, &byte) in a.iter().enumerate() {
-        m |= ((byte >> 7) as u64) << i;
-    }
-    m
-}
-
-/// `Form::Insert`: `a` with the selected lane replaced.
-pub(crate) fn eval_insert(a: &[u8; 16], width: u8, imm: u8, value: u64) -> [u8; 16] {
-    let lanes = 16 / width as usize;
-    let mut o = *a;
-    set_lane(&mut o, width, imm as usize % lanes, value & mask(width));
-    o
 }

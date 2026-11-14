@@ -39,7 +39,7 @@ impl<'a> Walker<'a> {
         // that address would read every value as true. Test the value:
         // it is non-zero when either half is.
         if self.expr_is_int128_value(cond) {
-            let (lo, hi) = self.int128_load(b, val);
+            let (lo, hi) = Self::int128_load_at(b, val, false, self.int128_align(cond));
             return b.binop(BinOp::Or, lo, hi);
         }
         val
@@ -59,6 +59,49 @@ impl<'a> Walker<'a> {
         }
         let v = self.walk_expr_rvalue(b, cond)?;
         Ok(self.cond_truthy(b, v, cond))
+    }
+
+    /// The truth `__builtin_expect` predicts for `e` as a controlling
+    /// expression: through casts, `!`, a comparison with zero, a comma's
+    /// value, and `&&` / `||` where one operand decides the result.
+    pub(in super::super) fn expected_truth(&self, e: ExprId) -> Option<bool> {
+        if let Some(&t) = self.ast.expected.get(&e) {
+            return Some(t);
+        }
+        let zero = |x: ExprId| self.const_fold_int(x) == Some(0);
+        match *self.ast.expr(e) {
+            Expr::Cast { child, .. } => self.expected_truth(child),
+            Expr::Unary {
+                op: UnOp::LogNot,
+                child,
+                ..
+            } => self.expected_truth(child).map(|t| !t),
+            Expr::Binary {
+                op: op @ (BinOp::Ne | BinOp::Eq),
+                lhs,
+                rhs,
+                ..
+            } => {
+                let side = if zero(rhs) {
+                    lhs
+                } else if zero(lhs) {
+                    rhs
+                } else {
+                    return None;
+                };
+                self.expected_truth(side).map(|t| t == (op == BinOp::Ne))
+            }
+            Expr::Comma { rhs, .. } => self.expected_truth(rhs),
+            Expr::ShortCircuit { op, lhs, rhs, .. } => {
+                let decides = op == ShortCircuitOp::Lor;
+                match (self.expected_truth(lhs), self.expected_truth(rhs)) {
+                    (Some(t), _) | (_, Some(t)) if t == decides => Some(decides),
+                    (Some(_), Some(_)) => Some(!decides),
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
     }
 
     /// C99 6.5.15 conditional operator, and the GNU `a ?: b` form.
@@ -96,6 +139,7 @@ impl<'a> Walker<'a> {
         let then_blk = b.new_block();
         let else_blk = b.new_block();
         let after_blk = b.new_block();
+        b.expect(self.expected_truth(cond));
         b.branch_zero(cond_v, else_blk, then_blk);
         // C99 6.5.15p5: void arms have no value to merge, so each is walked
         // for its effects; the result is a placeholder nothing valid reads.

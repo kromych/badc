@@ -1,4 +1,4 @@
-//! The catalogue: one row per diagnostic, and the accessors generated
+//! The catalog: one row per diagnostic, and the accessors generated
 //! from it.
 //!
 //! Canonical names reuse gcc's and clang's spellings wherever the
@@ -7,15 +7,14 @@
 //! compilers' identifiers as selectors: gcc and clang names where they
 //! differ, and MSVC numbers spelled with their letter prefix (`C4101`,
 //! `D9002`), which `#pragma warning(...)` spells bare. A spelling several
-//! rows carry selects all of them, as a clang diagnostic group spans
-//! several diagnostics. Only the canonical name and the `B` code are ever
-//! printed.
+//! rows carry selects all of them, as a diagnostic group does. Only the
+//! canonical name and the `B` code are ever printed.
 
 use alloc::format;
 
 use super::code::{Class, Code, Groups, Level, Status};
 
-/// One catalogue entry. The code and the name are the published
+/// One catalog entry. The code and the name are the published
 /// contract and never change; the default level and the groups may.
 #[derive(Clone, Copy, Debug)]
 pub struct Row {
@@ -54,14 +53,14 @@ macro_rules! catalog {
 // raises.
 catalog! {
     1001, "unknown-directive", [], Warning, Controllable,
-        [DEFAULT], Live,
+        [DEFAULT], Retired,
         "a `#` line naming no directive badc implements; the line is dropped";
     1002, "#warnings", ["cpp"], Warning, Controllable,
         [DEFAULT], Live,
         "a `#warning` directive reached in an active conditional block";
     1003, "malformed-directive", [], Warning, Controllable,
         [DEFAULT], Live,
-        "a macro-expanded `#include` or `#line` operand that does not reparse";
+        "a macro-expanded `#line` operand that does not reparse";
     1004, "unknown-pragmas", ["C4068"], Warning, Controllable,
         [DEFAULT, ALL], Live,
         "a `#pragma` badc does not implement; the directive is ignored";
@@ -82,7 +81,7 @@ catalog! {
         "an identifier that names no macro evaluated in a `#if` or `#elif` expression, where it is 0";
     1010, "directive", [], Error, Hard,
         [], Live,
-        "a directive whose operand the preprocessor cannot process, a directive preprocessed input does not take, or a conditional directive with no `#if` to match";
+        "a directive name the preprocessor does not implement, a directive whose operand it cannot process, a directive preprocessed input does not take, or a conditional directive with no `#if` to match";
     1011, "invalid-pragma", [], Error, Hard,
         [], Live,
         "a pragma badc implements whose operand cannot be applied";
@@ -113,9 +112,9 @@ catalog! {
     2004, "unused-function", ["C4505", "unused"], Ignore, Controllable,
         [ALL], Live,
         "a function with internal linkage that is defined and never referenced";
-    2005, "implicit-function-declaration", ["C4013"], Warning, Controllable,
-        [DEFAULT], Retired,
-        "a function used before a prototype declares it, so its return type is `int`";
+    2005, "implicit-function-declaration", ["C4013"], Ignore, Controllable,
+        [ALL], Live,
+        "a call to an undeclared function, which an edition before C99 declares as `extern int f();` (C90 6.3.2.2)";
     2006, "undefined-function", [], Warning, Controllable,
         [DEFAULT], Live,
         "an initializer names a `static` function this unit declares and never defines";
@@ -160,7 +159,7 @@ catalog! {
         "a hosted unit's file-scope declaration of `main` with `static`, which makes it no program entry point";
     2020, "syntax", [], Error, Hard,
         [], Live,
-        "a token the grammar does not admit at its position; the parser has no resynchronisation point";
+        "a token the grammar does not admit at its position; the parser has no resynchronization point";
     2021, "invalid-declaration", [], Error, Hard,
         [], Live,
         "a declaration a C99 constraint rejects: a redefinition, conflicting types, an incomplete object, a bit-field width or an alignment out of range";
@@ -184,10 +183,10 @@ catalog! {
         "control reaches the end of a value-returning function";
     3004, "too-few-arguments", [], Warning, Controllable,
         [DEFAULT], Live,
-        "a call passing fewer arguments than an old-style definition or a libc binding's prototype declares";
+        "a call passing fewer arguments than an old-style definition declares";
     3005, "too-many-arguments", [], Warning, Controllable,
         [DEFAULT], Live,
-        "a call passing more arguments than an old-style definition or a libc binding's prototype declares";
+        "a call passing more arguments than an old-style definition declares";
     3006, "long-double-abi", ["psabi"], Warning, Controllable,
         [DEFAULT], Retired,
         "a `long double` argument passed in a format this target's ABI does not use";
@@ -284,6 +283,15 @@ catalog! {
     4005, "frame-larger-than", ["frame-larger-than="], Warning, Controllable,
         [DEFAULT], Live,
         "a function whose stack frame exceeds the `-Wframe-larger-than=` bound; saved registers and the frame record count, `alloca` and variable-length arrays do not";
+    4006, "general-regs-only", [], Error, Hard,
+        [], Live,
+        "a floating-point value in a function compiled under `-mno-sse` or `-mgeneral-regs-only`, which withhold the floating-point and SIMD registers it needs";
+    4007, "attribute-error", [], Error, Hard,
+        [], Live,
+        "a call left in the emitted code to a function declared with `__attribute__((error(\"message\")))`, which the diagnostic quotes";
+    4008, "attribute-warning", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a call left in the emitted code to a function declared with `__attribute__((warning(\"message\")))`, which the diagnostic quotes";
     5001, "asm-syntax", [], Error, Hard,
         [], Live,
         "an `asm` statement whose operand list, constraints or template does not parse";
@@ -314,6 +322,9 @@ catalog! {
     6008, "undefined-lookup", [], Warning, Controllable,
         [DEFAULT], Live,
         "a reference no input defines, which a Mach-O image looks up in the flat namespace at load time under `-undefined warning`";
+    6009, "unused-delay-load", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a `--delayload` DLL from which the link imports nothing";
     6010, "undefined-symbol", [], Error, Hard,
         [], Live,
         "a reference no input object, archive or shared library defines";
@@ -340,7 +351,7 @@ catalog! {
         "command-line option or operand the driver does not implement";
     7002, "unknown-warning-option", ["pragmas"], Warning, Controllable,
         [DEFAULT], Live,
-        "a diagnostic pragma names a selector that is neither in the catalogue nor a gcc or clang warning";
+        "a diagnostic pragma names a selector that is neither in the catalog nor a gcc or clang warning";
     7003, "unused-command-line-argument", [], Ignore, Controllable,
         [ALL, EXTRA], Live,
         "an accepted option that selects nothing in the mode the command line picked";
@@ -389,6 +400,7 @@ impl Code {
     pub const LOCAL_IMPORT: Code = Code::new(6006);
     pub const TEXT_RELOCATION: Code = Code::new(6007);
     pub const UNDEFINED_LOOKUP: Code = Code::new(6008);
+    pub const UNUSED_DELAY_LOAD: Code = Code::new(6009);
     pub const UNDEFINED_SYMBOL: Code = Code::new(6010);
     pub const DUPLICATE_SYMBOL: Code = Code::new(6011);
     pub const RELOCATION: Code = Code::new(6012);
@@ -399,12 +411,12 @@ impl Code {
     pub const INTERNAL: Code = Code::new(9001);
 }
 
-/// Every row, in catalogue order.
+/// Every row, in catalog order.
 pub fn rows() -> impl Iterator<Item = &'static Row> {
     ROWS.iter()
 }
 
-/// The accessors the catalogue generates. `Code` is constructible only
+/// The accessors the catalog generates. `Code` is constructible only
 /// from a row, so every lookup here resolves; the fallbacks keep the
 /// accessors total without a panic path.
 impl Code {
@@ -440,7 +452,7 @@ impl Code {
         self.status() == Status::Retired
     }
 
-    /// The spelling `sel` as the catalogue holds it, when more than one row
+    /// The spelling `sel` as the catalog holds it, when more than one row
     /// answers to it by name or alias.
     pub fn shared_spelling(sel: &str) -> Option<&'static str> {
         let mut carriers = ROWS.iter().filter_map(|r| {
@@ -465,6 +477,17 @@ impl Code {
         ROWS.iter()
             .find(|r| r.name == sel)
             .or_else(|| ROWS.iter().find(|r| r.aliases.contains(&sel)))
+            .map(|r| r.code)
+    }
+
+    /// The row a leveled gcc option implements, named by the option's own
+    /// name `base` or any of its levels `base=N`, for a row spelled
+    /// `base=M`. The levels are one option, so ignoring any of them
+    /// ignores the row.
+    pub fn leveled_row(name: &str) -> Option<Code> {
+        let base = name.split_once('=').map_or(name, |(b, _)| b);
+        ROWS.iter()
+            .find(|r| r.name.split_once('=').is_some_and(|(b, _)| b == base))
             .map(|r| r.code)
     }
 
@@ -516,6 +539,7 @@ impl Code {
     pub const ENUM_CONVERSION: Code = Code::new(3017);
     pub const BUILTIN_ARGUMENT_RANGE: Code = Code::new(3014);
     pub const LINK_PRAGMA_IGNORED: Code = Code::new(7008);
+    pub const CROSS_TARGET_OUTPUT: Code = Code::new(7009);
     pub const FREESTANDING_IMPORT: Code = Code::new(7010);
     pub const DWARF_OUTPUT: Code = Code::new(7011);
     pub const UNIMPLEMENTED_WARNING_OPTION: Code = Code::new(7012);
@@ -550,6 +574,9 @@ impl Code {
     pub const INLINE: Code = Code::new(4003);
     pub const ALWAYS_INLINE: Code = Code::new(4004);
     pub const FRAME_LARGER_THAN: Code = Code::new(4005);
+    pub const GENERAL_REGS_ONLY: Code = Code::new(4006);
+    pub const ATTRIBUTE_ERROR: Code = Code::new(4007);
+    pub const ATTRIBUTE_WARNING: Code = Code::new(4008);
     pub const ASM_SYNTAX: Code = Code::new(5001);
     pub const ASSEMBLER: Code = Code::new(5002);
 }

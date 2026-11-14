@@ -54,8 +54,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	cmp	x1, #0x2
                	b.ne	<addr>
-               	mov	x17, #-0x7              // =-7
-               	cmp	w2, w17
+               	cmn	w2, #0x7
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x40

@@ -19,73 +19,65 @@ Disassembly of section .text:
                	add	x29, sp, #0x10
                	adrp	x0, <page>
                	mov	x1, #-0x1               // =-1
-               	str	w1, [x0, #0x40]
-               	str	w1, [x0, #0x40]
-               	str	w1, [x0, #0x40]
-               	str	w1, [x0, #0x40]
-               	str	w1, [x0, #0x40]
-               	str	w1, [x0, #0x40]
-               	str	w1, [x0, #0x40]
-               	str	w1, [x0, #0x40]
+               	str	w1, [x0, #0x28]
                	mov	x0, #-0x1               // =-1
                	adrp	x1, <page>
-               	ldrsw	x1, [x1, #0x18]
+               	ldrsw	x1, [x1, #0xc]
                	udiv	w17, w0, w1
                	msub	w20, w17, w1, w0
                	adrp	x0, <page>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	adrp	x2, <page>
-               	ldrsw	x3, [x2, #0x38]
+               	ldrsw	x3, [x2, #0x24]
                	and	x3, x3, #0x4
                	and	x3, x20, x3
                	ldrsw	x3, [x1, x3, lsl #2]
-               	str	w3, [x0, #0x30]
-               	ldrsw	x3, [x2, #0x38]
+               	str	w3, [x0, #0x20]
+               	ldrsw	x3, [x2, #0x24]
                	and	x3, x3, #0x4
                	and	x3, x20, x3
                	ldrsw	x3, [x1, x3, lsl #2]
-               	str	w3, [x0, #0x30]
-               	ldrsw	x3, [x2, #0x38]
+               	str	w3, [x0, #0x20]
+               	ldrsw	x3, [x2, #0x24]
                	and	x3, x3, #0x4
                	and	x3, x20, x3
                	ldrsw	x3, [x1, x3, lsl #2]
-               	str	w3, [x0, #0x30]
-               	ldrsw	x3, [x2, #0x38]
+               	str	w3, [x0, #0x20]
+               	ldrsw	x3, [x2, #0x24]
                	and	x3, x3, #0x4
                	and	x3, x20, x3
                	ldrsw	x3, [x1, x3, lsl #2]
-               	str	w3, [x0, #0x30]
-               	ldrsw	x3, [x2, #0x38]
+               	str	w3, [x0, #0x20]
+               	ldrsw	x3, [x2, #0x24]
                	and	x3, x3, #0x4
                	and	x3, x20, x3
                	ldrsw	x3, [x1, x3, lsl #2]
-               	str	w3, [x0, #0x30]
-               	ldrsw	x2, [x2, #0x38]
+               	str	w3, [x0, #0x20]
+               	ldrsw	x2, [x2, #0x24]
                	and	x2, x2, #0x4
                	and	x2, x20, x2
                	ldrsw	x2, [x1, x2, lsl #2]
-               	str	w2, [x0, #0x30]
+               	str	w2, [x0, #0x20]
                	adrp	x2, <page>
-               	ldrsw	x3, [x2, #0x38]
+               	ldrsw	x3, [x2, #0x24]
                	and	x3, x3, #0x4
                	and	x3, x20, x3
                	ldrsw	x1, [x1, x3, lsl #2]
-               	str	w1, [x0, #0x30]
+               	str	w1, [x0, #0x20]
                	adrp	x0, <page>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	ldrsw	x2, [x2, #0x38]
+               	ldrsw	x2, [x2, #0x24]
                	and	x2, x2, #0x4
                	and	x2, x20, x2
                	ldrsw	x1, [x1, x2, lsl #2]
-               	str	w1, [x0, #0x30]
+               	str	w1, [x0, #0x20]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x1, x20
                	bl	<addr>
-               	eor	x0, x20, #0x3
-               	cmp	w0, #0x0
+               	cmp	w20, #0x3
                	cset	x0, ne
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20

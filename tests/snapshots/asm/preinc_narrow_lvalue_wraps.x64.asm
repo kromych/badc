@@ -31,12 +31,11 @@ Disassembly of section .text:
                	subq	$0x18, %rsp
                	pushq	%rbx
                	movb	$-0x1, -0x8(%rbp)
+               	addb	$0x1, -0x8(%rbp)
                	movzbq	-0x8(%rbp), %rax
-               	incq	%rax
-               	movb	%al, -0x8(%rbp)
-               	cmpb	$0x0, -0x8(%rbp)
+               	testl	%eax, %eax
                	jne	<addr>
-               	cmpb	$0x0, -0x8(%rbp)
+               	testl	%eax, %eax
                	jne	<addr>
                	xorl	%ebx, %ebx
                	leaq	<rip>, %rdi

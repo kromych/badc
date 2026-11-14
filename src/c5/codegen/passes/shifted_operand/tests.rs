@@ -88,7 +88,7 @@ fn a_power_of_two_multiplier_folds_as_a_left_shift() {
     assert_eq!(fused(&func), Some((BinOp::Add, 0, 1, BinOp::Shl, 3)));
 }
 
-/// A shift with a second reader is still materialised, an amount outside
+/// A shift with a second reader is still materialized, an amount outside
 /// 1..=63 has no encoding, and a multiplier that is not a power of two is
 /// not a shift.
 #[test]

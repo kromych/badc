@@ -133,8 +133,8 @@ fn overaligned_automatic_at_16_stays_on_the_static_frame() {
     // 16 is met at a static frame offset: the frame base is 16-aligned and
     // every frame region a 16-byte multiple, so no realigning prologue is
     // emitted (`and rsp, -16` is 48 83 E4 F0; `and sp, x16, #-16` is the
-    // word 0x927CEE1F). gcc and clang place a 16-aligned automatic the same
-    // way on both targets, relying on the ABI's sp-at-call alignment.
+    // word 0x927CEE1F). Both targets rely on the ABI's sp-at-call
+    // alignment for it.
     use crate::c5::Target;
     let src = overaligned_source_at(16);
     let x64 = overaligned_text(&src, Target::LinuxX64);
@@ -754,7 +754,7 @@ int main(void) { write_db7(read_db7()); return 0; }
 fn inline_asm_lar_lsl_r32_from_r16_source_encode_0f02_0f03() {
     // `lar`/`lsl` read a 16-bit selector into a 32-bit destination. A source
     // cast to 16 bits (`lar %[ss], %[ar]` with `[ss] "rm" ((unsigned short)x)`)
-    // is a 16-bit register or `m16`, and the catalogue's `r16,r/m16` and
+    // is a 16-bit register or `m16`, and the catalog's `r16,r/m16` and
     // `r32,r/m32` forms both miss. GNU as encodes `lar %bx,%eax` as
     // `0F 02 C3` (no `66` prefix, the 32-bit destination sets the operand
     // size); `lsl` is `0F 03 /r`.
@@ -1103,7 +1103,7 @@ fn parenthesized_bitfield_lvalue_post_inc_and_compound_assign() {
 
 #[test]
 fn seg_qualified_direct_access_rides_a_segment_prefix() {
-    // A direct read / write through a `__seg_gs` / `__seg_fs` pointer (GCC
+    // A direct read / write through a `__seg_gs` / `__seg_fs` pointer (GNU C
     // named address spaces, the x86 percpu pattern) lowers to a plain load /
     // store carrying a segment-override prefix: `%gs:` is 0x65, `%fs:` is
     // 0x64. gcc -O2 emits `65 48 8b ..` (gs read) / `64 48 8b ..` (fs read) /
@@ -1316,10 +1316,7 @@ fn cross_tu_thread_local_resolves_by_symbol() {
         .find(|(n, _, _)| n == "other")
         .map(|(_, off, _)| *off)
         .expect("definer exports `other` as a TLS symbol");
-    assert_eq!(
-        off_other, 8,
-        "`other` follows the 8-byte-aligned `counter` slot"
-    );
+    assert_eq!(off_other, 4, "`other` follows the 4-byte `counter`");
 
     // Accessor: references `other` but defines no TLS storage.
     let acc = unit(
@@ -1342,8 +1339,8 @@ fn cross_tu_thread_local_resolves_by_symbol() {
     // offset (4): the definer is the only TLS contributor, base 0.
     let merged = link_native_objects(&[def, acc]).expect("link resolves cross-unit TLS");
     assert!(
-        merged.macho_tlv_descriptors.contains(&8),
-        "the accessor's `other` descriptor must resolve to offset 8, got {:?}",
+        merged.macho_tlv_descriptors.contains(&4),
+        "the accessor's `other` descriptor must resolve to offset 4, got {:?}",
         merged.macho_tlv_descriptors,
     );
 }
@@ -1393,7 +1390,7 @@ fn cross_tu_thread_local_resolves_by_symbol_windows_aarch64() {
         .find(|(n, _, _)| n == "other")
         .map(|(_, off, _)| *off)
         .expect("definer exports `other` as a TLS symbol");
-    assert_eq!(off_other, 8, "`other` follows the 8-byte-aligned `counter`");
+    assert_eq!(off_other, 4, "`other` follows the 4-byte `counter`");
 
     let acc = unit(
         "#include <stdlib.h>\n\
@@ -1570,7 +1567,7 @@ fn extern_data_address_in_struct_initializer_resolves_cross_tu() {
 #[test]
 fn file_scope_asm_globl_gives_external_linkage() {
     // `asm(".globl name");` at file scope binds the named symbol
-    // STB_GLOBAL, as gcc and clang do: a `static` function so named
+    // STB_GLOBAL: a `static` function so named
     // leaves the unit's local-function list and becomes a definition the
     // merge resolves by name.
     use crate::c5::compiler::CompileOptions;
@@ -1955,9 +1952,9 @@ fn a_static_function_called_once_is_spliced_past_the_size_cap() {
 #[test]
 fn dead_static_data_with_extern_relocs_drops_reloc_and_undef() {
     // A static pointer table holding extern-symbol addresses, itself
-    // unreferenced, and a dead static->static pointer chain. gcc -O
-    // drops the objects, their relocation slots, and the undefined
-    // reference; a relocation slot must not root its own object, or an
+    // unreferenced, and a dead static->static pointer chain. The objects,
+    // their relocation slots, and the undefined reference drop; a
+    // relocation slot must not root its own object, or an
     // isolated link consuming the object fails on the undefined name.
     use crate::c5::Target;
     use crate::c5::linker::{NativeSymSection, parse_native_elf};
@@ -2023,7 +2020,7 @@ fn a_variadic_callee_that_ignores_its_tail_is_inlined_away() {
 
 #[test]
 fn noinline_binds_to_the_function_its_declaration_names() {
-    // gcc binds `__attribute__((noinline))` to the function the
+    // `__attribute__((noinline))` binds to the function the
     // declaration names: a prototype carrying it holds the later
     // definition out of line, and the next declaration in the file is
     // unaffected.
@@ -2050,8 +2047,8 @@ fn noinline_binds_to_the_function_its_declaration_names() {
 fn a_definition_and_the_declarations_in_its_body_keep_their_own_noinline() {
     // A definition's `noinline` names that function, not one its body
     // declares (`fnt inner;`); a `noinline` on a declaration in the body
-    // names `far_fn`, not the enclosing `wrapper`. gcc inlines and drops
-    // both `inner` and `wrapper`.
+    // names `far_fn`, not the enclosing `wrapper`. Both `inner` and
+    // `wrapper` are inlined and dropped.
     use crate::c5::Target;
     let src = "\
         static int inner(int x);\n\
@@ -2078,9 +2075,8 @@ fn a_definition_and_the_declarations_in_its_body_keep_their_own_noinline() {
 fn an_attribute_after_a_declarator_binds_to_it_alone() {
     // GNU attribute syntax: an attribute among the declaration specifiers
     // applies to every declarator, one after a declarator to that
-    // declarator. gcc and clang bind `wv` weak and `hv` hidden, leave
-    // `helper2` and `helper3` global and default, and bind `w1` and `w2`
-    // weak.
+    // declarator: `wv` binds weak and `hv` hidden, `helper2` and `helper3`
+    // stay global and default, and `w1` and `w2` bind weak.
     use crate::c5::Target;
     use crate::c5::linker::parse_native_elf;
     let src = "\
@@ -2107,7 +2103,7 @@ fn an_attribute_after_a_declarator_binds_to_it_alone() {
 #[test]
 fn a_block_scope_prototype_takes_the_attributes_a_file_scope_one_does() {
     // A block-scope function declaration names the entity a file-scope one
-    // would (C99 6.2.2p4), and gcc and clang give it the same attributes:
+    // would (C99 6.2.2p4) and takes the same attributes:
     // `weak`, leading a later declarator of the list too, an asm label
     // followed by an attribute, the hidden extent of a `#pragma GCC
     // visibility`, and `constructor`.
@@ -2148,7 +2144,7 @@ fn a_block_scope_prototype_takes_the_attributes_a_file_scope_one_does() {
 fn a_block_scope_extern_object_keeps_its_attributes_past_its_scope() {
     // A block-scope `extern` object names the entity a file-scope one would
     // (C99 6.2.2p4), and its `weak` and `visibility` reach its symbol after
-    // the scope ends, as gcc and clang give it; a later declarator of the
+    // the scope ends; a later declarator of the
     // declaration takes no trailing attribute of an earlier one. A local of
     // the same name around the block keeps its own binding.
     use crate::c5::Target;
@@ -2188,7 +2184,7 @@ fn a_block_scope_function_outlives_a_file_scope_binding_without_linkage() {
     // a function with external linkage, which the binding hides but does not
     // replace, in either order. Each call, address, static initializer and
     // cleanup relocates against the undefined function, weak and renamed as
-    // its attributes say, as with gcc and clang.
+    // its attributes say.
     use crate::c5::Target;
     use crate::c5::linker::{NativeSymSection, parse_native_elf};
     // (source, symbol, STB_*, a `.data` relocation rather than a `.text` one)
@@ -2318,7 +2314,7 @@ fn a_block_scope_extern_objects_address_initializes_a_static() {
     // of an object a block-scope `extern` declares is the named object's,
     // which another unit defines: the slot relocates against the symbol, in a
     // brace list (in `.data.rel.ro` for a `const` table) and with an offset
-    // too, as with gcc and clang.
+    // too.
     use crate::c5::Target;
     use crate::c5::linker::{NativeSymSection, parse_native_elf};
     // (source, addend of the data relocation against `cell`)
@@ -2368,7 +2364,7 @@ fn dead_static_fnptr_table_drops_table_and_callee() {
     // A static function referenced only from a static, itself
     // unreferenced, function-pointer table: the table's relocation is
     // not a root, so the table, the callee, and the callee's extern
-    // reference all drop (gcc -O parity).
+    // reference all drop.
     use crate::c5::Target;
     use crate::c5::linker::{NativeSymSection, parse_native_elf};
     let src = "\
@@ -2545,8 +2541,8 @@ fn noinline_holds_a_body_out_of_line() {
 fn used_retains_a_static_and_a_named_section_does_not() {
     // `__attribute__((used))` asks for an otherwise unreferenced
     // internal definition to be emitted; a section attribute only says
-    // where a definition that is emitted goes. gcc parity, and the same
-    // rule for data and functions: a section protocol that needs its
+    // where a definition that is emitted goes. The same rule holds for
+    // data and functions: a section protocol that needs its
     // entry at link time spells `used` (`__attribute__((used,
     // section(...)))` tables), and one that does not gets dropped.
     let src = "\
@@ -2662,7 +2658,7 @@ fn block_static_struct_array_extent_matches_reservation() {
     // `count * sizeof(elem)` bytes, which is not a multiple of 8 here.
     // The emission record must claim that extent and no more: an
     // extent rounded past the reservation runs the `.rodata` carve
-    // into the neighbouring object or into the padding the packed
+    // into the neighboring object or into the padding the packed
     // layout records ahead of the aligned global.
     let src = "\
         struct pair { char c[3]; };\n\
@@ -2685,7 +2681,7 @@ fn block_static_struct_array_extent_matches_reservation() {
         );
         assert!(
             bytes.windows(18).any(|w| w == b"carve stays intact"),
-            "the neighbouring carved object must keep its bytes"
+            "the neighboring carved object must keep its bytes"
         );
         assert!(
             bytes.windows(4).any(|w| w == 0x11223344u32.to_le_bytes()),
@@ -2797,7 +2793,7 @@ fn zero_sized_static_keeps_a_distinct_start() {
 
 #[test]
 fn underscore_prefixed_static_drops_after_inline() {
-    // gcc parity: a leading underscore does not retain a static. The
+    // A leading underscore does not retain a static. The
     // helper's only call is inlined at -O, after which the post-inline
     // DCE rerun must drop the out-of-line body.
     let src = "\
@@ -4387,7 +4383,7 @@ fn asm_lsl_encodes_32bit_destination_form() {
 #[test]
 fn thread_local_storage_round_trips_through_et_rel() {
     // `_Thread_local` storage now rides the native ET_REL object:
-    // elf_reloc emits `.tdata` (initialised slice) + `.tbss`
+    // elf_reloc emits `.tdata` (initialized slice) + `.tbss`
     // (zero-fill remainder), and `parse_native_elf` concatenates
     // them back into `tls_data` / `tls_bss_size`. Verifies the
     // bytes survive the write -> parse round-trip; the link-time
@@ -4421,11 +4417,11 @@ fn thread_local_storage_round_trips_through_et_rel() {
         program.tls_data.len(),
         "round-tripped TLS size (tdata + tbss) must match the source's tls_data",
     );
-    // `counter = 7` is a 4-byte initialised int; its little-endian
+    // `counter = 7` is a 4-byte initialized int; its little-endian
     // image leads the `.tdata` bytes.
     assert!(
         obj.tls_data.starts_with(&7i32.to_le_bytes()),
-        "initialised TLS byte image must round-trip; got {:?}",
+        "initialized TLS byte image must round-trip; got {:?}",
         obj.tls_data,
     );
 }
@@ -4495,7 +4491,7 @@ fn thread_local_storage_links_into_pt_tls_executable() {
     );
     assert!(
         merged.tls_data.starts_with(&7i32.to_le_bytes()),
-        "initialised TLS image must survive the merge"
+        "initialized TLS image must survive the merge"
     );
     let plt = emit_x86_64_plt(&mut merged, crate::DataImportSlots::Stub).expect("plt");
     let exe = write_native_image_from_merged(
@@ -4530,7 +4526,7 @@ fn thread_local_storage_links_into_pt_tls_executable() {
     let (p_filesz, p_memsz) = pt_tls.expect("executable must carry a PT_TLS segment");
     assert_eq!(
         p_filesz, program.tls_init_size as u64,
-        "PT_TLS p_filesz must equal the initialised TLS image size"
+        "PT_TLS p_filesz must equal the initialized TLS image size"
     );
     assert_eq!(
         p_memsz,
@@ -4622,7 +4618,9 @@ fn an_extern_thread_local_is_read_from_a_got_slot_unless_the_link_defines_it() {
             export_symbols: Default::default(),
             export_versions: Default::default(),
             from_image: true,
+            main_executable: false,
             export_ordinals: Default::default(),
+            export_hints: Default::default(),
             references: Default::default(),
             protected_exports: Default::default(),
         };
@@ -4755,14 +4753,14 @@ fn thread_local_blocks_merge_on_their_alignment() {
                 main_obj.tls_data.len() + main_obj.tls_bss_size,
                 main_obj.tls_align
             ),
-            (24, 16)
+            (17, 16)
         );
         assert_eq!(
             (
                 other_obj.tls_data.len() + other_obj.tls_bss_size,
                 other_obj.tls_align
             ),
-            (80, 32)
+            (66, 32)
         );
         let mut merged = link_native_objects(&[main_obj, other_obj]).expect("link");
         assert_eq!(
@@ -4771,8 +4769,8 @@ fn thread_local_blocks_merge_on_their_alignment() {
         );
         assert_eq!(
             merged.tls_data.len(),
-            112,
-            "{target:?}: the second block starts at 32, not 24"
+            98,
+            "{target:?}: the second block starts at 32, not 17"
         );
         let other_base = merged
             .section_map
@@ -4815,10 +4813,7 @@ fn thread_local_blocks_merge_on_their_alignment() {
             p_align, 32,
             "{target:?}: PT_TLS p_align is the widest object alignment"
         );
-        assert_eq!(
-            p_memsz, 112,
-            "{target:?}: PT_TLS p_memsz covers both blocks"
-        );
+        assert_eq!(p_memsz, 98, "{target:?}: PT_TLS p_memsz covers both blocks");
         assert_eq!(
             p_vaddr % 32,
             0,
@@ -4903,7 +4898,7 @@ fn macho_tlv_descriptors_round_trip_through_et_rel() {
     // `.note.badc` NT_BADC_MACHO_TLV_DESC / NT_BADC_MACHO_TLV_FIXUP
     // records. parse_native_elf recovers them and link_native_objects
     // rebases the fixups into the merged `.text`, so the Mach-O writer
-    // materialises the `__thread_vars` descriptors.
+    // materializes the `__thread_vars` descriptors.
     use crate::c5::linker::{link_native_objects, parse_native_elf};
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let program = Compiler::with_options(
@@ -5484,8 +5479,8 @@ fn link_defined_bounds_are_hidden_or_protected() {
     }
 }
 
-/// A dllimport reference reads the import-address slot `__imp_X`, as MSVC,
-/// mingw-w64 gcc and clang emit it: a call goes through the loaded address,
+/// A dllimport reference reads the import-address slot `__imp_X`, the PE
+/// import convention: a call goes through the loaded address,
 /// and a static initializer names the thunk. The PE link keeps the slot at
 /// those sites, and resolves the slot of a name it defines to the definition,
 /// with a warning.
@@ -5711,7 +5706,9 @@ fn an_import_only_addressed_keeps_its_function_type() {
             export_symbols: Default::default(),
             export_versions: Default::default(),
             from_image: true,
+            main_executable: false,
             export_ordinals: Default::default(),
+            export_hints: Default::default(),
             references: Default::default(),
             protected_exports: Default::default(),
         };
@@ -6108,8 +6105,8 @@ fn macho_executable_exports_globals_through_dyld_info_trie() {
 }
 
 /// An address-constant `_Thread_local` initializer round-trips through
-/// ET_REL as a `.rela.tdata` absolute-64 relocation (the shape gcc
-/// emits) and the linker resolves it against the merged `.data`.
+/// ET_REL as a `.rela.tdata` absolute-64 relocation and the linker
+/// resolves it against the merged `.data`.
 #[test]
 fn thread_local_address_initializer_survives_the_object_round_trip() {
     use crate::c5::linker::{link_native_objects, parse_native_elf};
@@ -6187,8 +6184,8 @@ fn a_local_exec_thread_local_access_is_refused_in_a_shared_object() {
 }
 
 /// `-fPIC` code reaches its own thread-locals through the module's TLS
-/// descriptor and another unit's through the variable's, as gcc's descriptor
-/// dialect does; a shared link gives each descriptor a GOT entry.
+/// descriptor and another unit's through the variable's; a shared link
+/// gives each descriptor a GOT entry.
 #[test]
 fn pic_thread_locals_take_descriptors_and_a_shared_link_their_got_entries() {
     use crate::c5::codegen::{TlsGotEntry, TlsGotKind, TlsGotTarget};
@@ -6904,7 +6901,7 @@ fn inline_linkage_follows_c99_6_7_4p7() {
 
 #[test]
 fn cpuid_xgetbv_asm_emit_for_x86_64() {
-    // The GCC `cpuid` / `xgetbv` inline-asm forms (a common CPU feature
+    // The `cpuid` / `xgetbv` inline-asm forms (a common CPU feature
     // probe) lower to dedicated intrinsics on x86_64: the `cpuid` (0F A2)
     // and `xgetbv` (0F 01 D0) opcodes appear, and rbx, which `cpuid`
     // writes and System V makes callee-saved, is pushed by the prologue
@@ -7051,8 +7048,8 @@ fn cpuid_partial_outputs_with_clobbers_x86_64() {
 #[test]
 fn cpuid_uncovered_implicit_output_accepted() {
     // An implicit output register that is neither an output operand nor a
-    // clobber is the user's contract violation, not a parse error: GCC
-    // accepts the statement, so the generic extended-asm path does too.
+    // clobber is the user's contract violation, not a parse error, so the
+    // generic extended-asm path accepts the statement.
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let program = Compiler::new(
         "static unsigned leaf_max(void) {\n\
@@ -7486,8 +7483,15 @@ fn minimal_native_object(
         unwind: alloc::vec::Vec::new(),
         extern_data_names: alloc::vec::Vec::new(),
         alternate_names: alloc::vec::Vec::new(),
+        weak_aliases: alloc::vec::Vec::new(),
+        export_aliases: alloc::vec::Vec::new(),
+        includes: alloc::vec::Vec::new(),
         comdats: alloc::vec::Vec::new(),
         default_libs: alloc::vec::Vec::new(),
+        mismatch_keys: alloc::vec::Vec::new(),
+        section_merges: alloc::vec::Vec::new(),
+        resources: Vec::new(),
+        export_forms: Vec::new(),
         debug_info: alloc::vec::Vec::new(),
         debug_abbrev: alloc::vec::Vec::new(),
         debug_line: alloc::vec::Vec::new(),
@@ -7679,7 +7683,9 @@ fn weak_undef_binds_against_a_shared_library_export() {
         export_symbols: Default::default(),
         export_versions: Default::default(),
         from_image: true,
+        main_executable: false,
         export_ordinals: Default::default(),
+        export_hints: Default::default(),
         references: Default::default(),
         protected_exports: Default::default(),
     };
@@ -7804,8 +7810,15 @@ fn aarch64_data_ref_object_ex(
         unwind: alloc::vec::Vec::new(),
         extern_data_names: alloc::vec::Vec::new(),
         alternate_names: alloc::vec::Vec::new(),
+        weak_aliases: alloc::vec::Vec::new(),
+        export_aliases: alloc::vec::Vec::new(),
+        includes: alloc::vec::Vec::new(),
         comdats: alloc::vec::Vec::new(),
         default_libs: alloc::vec::Vec::new(),
+        mismatch_keys: alloc::vec::Vec::new(),
+        section_merges: alloc::vec::Vec::new(),
+        resources: Vec::new(),
+        export_forms: Vec::new(),
         symbols: alloc::vec![NativeSymbol {
             name: String::new(),
             section: NativeSymSection::Undef,
@@ -7906,7 +7919,7 @@ fn aarch64_lo12_relocations_all_reach_the_same_target() {
     // `R_AARCH64_LDST<n>_ABS_LO12_NC` writes bits [11:log2(n)] into
     // the matching load/store imm12, which the instruction scales back
     // by its access size. Every form therefore addresses the same
-    // byte. A relocation matched under a neighbouring type's arm is
+    // byte. A relocation matched under a neighboring type's arm is
     // left unpatched or scaled by the wrong size, and this comparison
     // catches both.
     use crate::c5::linker::{
@@ -8072,8 +8085,15 @@ fn blank_aarch64_object() -> crate::c5::linker::NativeObject {
         unwind: alloc::vec::Vec::new(),
         extern_data_names: alloc::vec::Vec::new(),
         alternate_names: alloc::vec::Vec::new(),
+        weak_aliases: alloc::vec::Vec::new(),
+        export_aliases: alloc::vec::Vec::new(),
+        includes: alloc::vec::Vec::new(),
         comdats: alloc::vec::Vec::new(),
         default_libs: alloc::vec::Vec::new(),
+        mismatch_keys: alloc::vec::Vec::new(),
+        section_merges: alloc::vec::Vec::new(),
+        resources: Vec::new(),
+        export_forms: Vec::new(),
         symbols: alloc::vec::Vec::new(),
         text_relocs: alloc::vec::Vec::new(),
         data_relocs: alloc::vec::Vec::new(),
@@ -8211,7 +8231,7 @@ fn aarch64_absolute_text_relocations_take_the_image_base() {
     // `.word gdata` / `.xword gdata` inside `.text`: GNU ld resolves
     // both against the symbol's runtime address. The value depends on
     // the load address, so the merge pass parks them and the ET_EXEC
-    // writer materialises them.
+    // writer materializes them.
     use crate::c5::linker::object::{NativeReloc, NativeSymbol};
     use crate::c5::linker::{NativeMachine, NativeSymSection};
     use crate::c5::linker::{link_native_objects, write_executable_elf64};
@@ -8699,7 +8719,12 @@ fn alignas_places_objects_at_requested_alignment() {
         __attribute__((aligned(16))) unsigned char pool2[8];\n\
         int use_all(void) { return pool[0] + skew[0] + pool2[0]; }\n";
     let obj = compile(aligned_unit);
-    assert_eq!(obj.data_align, 16, "unit must claim 16-byte data alignment");
+    // The zero-filled pools are `.bss`; the data family claims their boundary.
+    assert_eq!(
+        obj.data_align.max(obj.bss_align),
+        16,
+        "unit must claim 16-byte data alignment"
+    );
     for name in ["pool", "pool2"] {
         let sym = obj
             .symbols
@@ -8809,7 +8834,8 @@ fn variable_aligned_sets_where_alignas_only_raises() {
             ..Default::default()
         };
         let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
-        parse_native_elf(&bytes).expect("parse ET_REL").data_align
+        let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+        obj.data_align.max(obj.bss_align)
     };
     let cell = "struct __attribute__((aligned(64))) cell { char c[64]; };\n";
     assert_eq!(
@@ -8855,7 +8881,7 @@ fn variable_aligned_sets_where_alignas_only_raises() {
         );
     }
     // Automatic storage takes the set alignment too: a type aligned past
-    // what a frame can realise is placeable once the variable lowers it.
+    // what a frame can realize is placeable once the variable lowers it.
     let wide = "struct __attribute__((aligned(8192))) page { char c[8192]; };\n";
     assert!(
         unit(&format!(
@@ -9084,16 +9110,32 @@ fn init_array_round_trips_through_object() {
         };
         let bytes = emit_native_with_options(&program, target, opts).expect("emit");
         let obj = parse_native_elf(&bytes).expect("parse ET_REL");
-        let ctors: alloc::vec::Vec<_> =
-            obj.init_funcs.iter().filter(|f| !f.is_destructor).collect();
-        let dtors: alloc::vec::Vec<_> = obj.init_funcs.iter().filter(|f| f.is_destructor).collect();
+        use crate::c5::linker::object::{InitTable, InitTarget};
+        let ctors: alloc::vec::Vec<_> = (obj.init_funcs.iter())
+            .filter(|f| matches!(f.table, InitTable::Init(_)))
+            .collect();
+        let dtors: alloc::vec::Vec<_> = (obj.init_funcs.iter())
+            .filter(|f| matches!(f.table, InitTable::Fini(_)))
+            .collect();
         assert_eq!(ctors.len(), 1, "{target:?}: one constructor");
         assert_eq!(dtors.len(), 1, "{target:?}: one destructor");
-        assert!(ctors[0].priority.is_none(), "{target:?}: bare ctor");
-        assert_eq!(dtors[0].priority, Some(101), "{target:?}: dtor priority");
+        assert_eq!(
+            ctors[0].table,
+            InitTable::Init(None),
+            "{target:?}: bare ctor"
+        );
+        assert_eq!(
+            dtors[0].table,
+            InitTable::Fini(Some(101)),
+            "{target:?}: dtor priority"
+        );
         // Each entry resolves to a real function body inside `.text`.
-        assert!((ctors[0].unit_text_offset as usize) < obj.text.len());
-        assert!((dtors[0].unit_text_offset as usize) < obj.text.len());
+        for f in [ctors[0], dtors[0]] {
+            let InitTarget::Text(at) = f.target else {
+                panic!("{target:?}: {f:?}");
+            };
+            assert!((at as usize) < obj.text.len());
+        }
     }
 }
 
@@ -9382,13 +9424,13 @@ fn divmod_constant_branch_drops_its_dead_callee() {
 
 #[test]
 fn constant_p_inline_param_folds_assert_call_at_o() {
-    // GCC defers a non-constant `__builtin_constant_p` under `-O` until
+    // A non-constant `__builtin_constant_p` defers under `-O` until
     // after inlining and constant propagation. The build-time-assert
     // idiom `if (!__builtin_constant_p(p) || (p & M)) undefined_fn();`
     // inside an always-inline helper called with a literal must fold
     // away entirely at `-O` so the undefined reference never reaches
     // the object; without `-O` the early conservative 0 keeps the
-    // reference (gcc -O0 fails that link too).
+    // reference.
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let program = Compiler::new(alloc::format!(
         "{TEST_PRELUDE}\
@@ -9432,8 +9474,7 @@ fn constant_p_inline_param_folds_assert_call_at_o() {
             "{target:?}: the constant_p-false runtime arm is dead at -O"
         );
     }
-    // Without -O the early conservative 0 keeps the references, as gcc
-    // -O0 does.
+    // Without -O the early conservative 0 keeps the references.
     let opts = NativeOptions {
         output_kind: OutputKind::Relocatable,
         ..Default::default()
@@ -9456,7 +9497,7 @@ fn later_address_escape_folds_assert_call_at_o() {
     // gcc 16 -O2 folds the const and the call-free shapes and keeps the
     // extern-call one (its escape analysis is flow-insensitive); the
     // ordering argument does not depend on the callee, so all three
-    // fold here. Without -O the reference stays, as with gcc -O0.
+    // fold here. Without -O the reference stays.
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let shapes = [
         (
@@ -9504,11 +9545,12 @@ fn later_address_escape_folds_assert_call_at_o() {
             output_kind: OutputKind::Relocatable,
             ..Default::default()
         };
-        let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit -O0");
-        let has = |name: &[u8]| bytes.windows(name.len()).any(|w| w == name);
+        let err = emit_native_with_options(&program, Target::LinuxX64, opts)
+            .expect_err("without -O the call stays")
+            .to_string();
         assert!(
-            has(b"compiletime_assert_33"),
-            "{shape}: without -O the reference stays, as with gcc -O0"
+            err.contains("call to `compiletime_assert_33` declared with attribute error"),
+            "{shape}: without -O the call stays and is diagnosed, as with gcc -O0: {err}"
         );
     }
 }
@@ -9535,7 +9577,7 @@ fn const_array_copy_member_folds_assert_calls_at_o() {
          extern void ct_size_1(void) __attribute__((__noreturn__, __error__(\"s1\")));\n\
          extern void ct_order_2(void) __attribute__((__noreturn__, __error__(\"o2\")));\n\
          extern void ct_size_2(void) __attribute__((__noreturn__, __error__(\"s2\")));\n\
-         extern void ct_kept_mut(void) __attribute__((__error__(\"m\")));\n\
+         extern void ct_kept_mut(void) __attribute__((__warning__(\"m\")));\n\
          int check(void) {{\n\
              int r = 0;\n\
              ({{ struct pf __f = fields[0];\n\
@@ -9596,17 +9638,22 @@ fn const_array_copy_member_folds_assert_calls_at_o() {
             "{target:?}: a copy from a mutable array must keep its call"
         );
     }
-    // Without -O the template fold does not run, as gcc -O0 keeps the
-    // references.
+    // Without -O the template fold does not run, so the guarded calls stay
+    // and are diagnosed.
     let opts = NativeOptions {
         output_kind: OutputKind::Relocatable,
         ..Default::default()
     };
-    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit -O0");
-    let has = |name: &[u8]| bytes.windows(name.len()).any(|w| w == name);
+    let err = emit_native_with_options(&program, Target::LinuxX64, opts)
+        .expect_err("without -O the calls stay")
+        .to_string();
     assert!(
-        has(b"ct_order_0") && has(b"ct_size_2") && has(b"ct_kept_mut"),
-        "without -O the guards keep their references"
+        ["ct_order_0", "ct_size_2"]
+            .iter()
+            .all(|f| err.contains(&alloc::format!(
+                "call to `{f}` declared with attribute error"
+            ))),
+        "without -O the guards keep their calls: {err}"
     );
 }
 
@@ -9681,7 +9728,7 @@ fn minmax_signedness_check_folds_for_signed_operands_at_o() {
     // nonzero whatever the probes resolve to, so the guard folds at -O
     // once the resolved zeros forward through the staging slot. With
     // one unsigned 64-bit operand the classes are disjoint and the
-    // call must survive, as gcc keeps it.
+    // call must survive.
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let check = |x: &str, y: &str, err: &str| {
         alloc::format!(
@@ -9740,9 +9787,7 @@ fn interprocedural_param_range_folds_out_of_line_sign_assert() {
     // true only if the compiler can decide `(long long)p >= 0` at
     // translation time. `keeps` is too large to inline, so nothing
     // inside it bounds `p`; every call site widens an unsigned 32-bit
-    // value, which bounds the parameter on entry. gcc closes the same
-    // shape with interprocedural range propagation at -O2 and keeps the
-    // reference at -O0.
+    // value, which bounds the parameter on entry.
     //
     // The negative halves must keep theirs: `mixed` is reached with a
     // signed argument, `escaped`'s address leaves the unit, and `ext`
@@ -9809,7 +9854,7 @@ fn interprocedural_param_range_folds_out_of_line_sign_assert() {
             );
         }
     }
-    // Without -O there is no interprocedural fact, as with gcc -O0.
+    // Without -O there is no interprocedural fact.
     let opts = NativeOptions {
         output_kind: OutputKind::Relocatable,
         ..Default::default()
@@ -10182,7 +10227,7 @@ fn named_section_alignment_and_size_data_only_unit() {
     // explicit `aligned(N)`, a natural aggregate alignment, or an
     // aligned typedef -- its sh_size is exactly the members' span, and
     // `.data` holds only the default-placement objects (the NULL guard
-    // slot plus `in_data`'s slot), not a shadow of the moved ones.
+    // slot plus `in_data`'s four bytes), not a shadow of the moved ones.
     // Sizes and alignments match `gcc -c` on the same source.
     let bytes = emit_reloc_for(
         "__attribute__((section(\".d.ro\"), aligned(4096))) char raw[8192];\n\
@@ -10198,10 +10243,10 @@ fn named_section_alignment_and_size_data_only_unit() {
     assert_eq!(sections[".d.c64"], (4, 64));
     assert_eq!(sections[".d.nat"], (16, 16));
     assert_eq!(sections[".d.page"], (4096, 4096));
-    assert_eq!(sections[".data"], (16, 8), "no ghost bytes in .data");
+    assert_eq!(sections[".data"], (8, 8), "no ghost bytes in .data");
     assert_eq!(sections[".bss"].0, 0);
     assert_eq!(syms["raw"].1, 0);
-    assert_eq!(syms["in_data"].1, 8);
+    assert_eq!(syms["in_data"].1, 4);
 }
 
 #[test]
@@ -10406,8 +10451,8 @@ fn bss_family_named_section_nobits_in_data_only_unit() {
 #[test]
 #[cfg(feature = "native-emit")]
 fn nonzero_initializer_in_bss_family_section_is_rejected() {
-    // gcc parity: a non-zero initializer or a relocated pointer slot
-    // cannot land in a `.bss`-family named section.
+    // A non-zero initializer or a relocated pointer slot cannot land in
+    // a `.bss`-family named section.
     use crate::c5::compiler::CompileOptions;
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     for src in [
@@ -10441,8 +10486,8 @@ fn nonzero_initializer_in_bss_family_section_is_rejected() {
 #[cfg(feature = "native-emit")]
 fn extern_declared_alignment_carries_to_definition() {
     // The alignment attribute may sit on a prior extern declaration;
-    // the plain definition keeps the strictest request (gcc parity:
-    // `.bss` sh_addralign 4096, `f` on a 4096 boundary, st_size 4096).
+    // the plain definition keeps the strictest request (`.bss`
+    // sh_addralign 4096, `f` on a 4096 boundary, st_size 4096).
     let bytes = emit_reloc_for(
         "extern unsigned long f[512] __attribute__((aligned(4096)));\n\
          unsigned long f[512];\n\
@@ -10741,7 +10786,8 @@ fn file_scope_asm_weak_and_set_emit_weak_symbols() {
         asm(\".weak optional_hook\");\n\
         int main(void) { return 0; }\n";
     for target in [Target::LinuxX64, Target::LinuxAarch64] {
-        let program = Compiler::new(String::from(src)).compile().expect("compile");
+        let program =
+            (Compiler::with_target(String::from(src), target).compile()).expect("compile");
         let opts = NativeOptions {
             output_kind: OutputKind::Relocatable,
             ..Default::default()
@@ -11093,9 +11139,8 @@ fn asm_section_const_local_folds_with_alloca_present() {
     // constant must fold at -O even when the function also uses a VLA
     // (dynamic sp). The alloca once disabled mem2reg for the whole
     // function, leaving the local in a frame slot the section-data
-    // emit could not read (`non-constant section data value`). gcc
-    // const-propagates it regardless; badc must match. `flags` is
-    // `(1<<0)|((1<<3)|((9)<<8))` == 2313.
+    // emit could not read (`non-constant section data value`). `flags`
+    // is `(1<<0)|((1<<3)|((9)<<8))` == 2313.
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let src = "\
         int probe(int *p, int n) {\n\
@@ -13344,9 +13389,9 @@ fn aarch64_framed_asm_goto_branch_and_section_field_share_the_trampoline() {
 #[test]
 fn x64_asm_m_operand_on_a_global_is_rip_relative() {
     // `call *%[op]` on a file-scope object encodes `FF 15 disp32` with a
-    // PC-relative relocation, gcc's form and the one an indirect-call patcher
-    // recognises. gcc's addend is the field's offset in the object less the
-    // 4-byte end skew.
+    // PC-relative relocation, the form an indirect-call patcher recognizes.
+    // The addend is the field's offset in the object less the 4-byte end
+    // skew.
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let src = "\
         struct ops { long pad; void (*fn)(void); };\n\
@@ -14669,7 +14714,7 @@ fn weak_extern_data_ref_is_got_pair_aarch64() {
     // A weak symbol this unit does not define may resolve to zero, which
     // the page-relative pair cannot encode, so its address goes through
     // the GOT (`ADR_GOT_PAGE` + `LD64_GOT_LO12_NC`) and the lo12 site is
-    // the `ldr`, not an `add`. Same forms gcc emits for the shape.
+    // the `ldr`, not an `add`.
     use crate::c5::Target;
     let (obj, relocs) = relocs_against(WEAK_EXTERN_DATA_SRC, Target::LinuxAarch64, "weak_var");
     assert!(!relocs.is_empty(), "&weak_var must reloc `weak_var`");
@@ -14694,8 +14739,8 @@ fn weak_extern_data_ref_is_got_pair_aarch64() {
 }
 
 /// A position-independent aarch64 ELF object reaches a name that may bind
-/// elsewhere through its GOT slot, the AAELF64 pair gcc -fPIC emits and GNU
-/// ld requires in a shared object; a position-dependent one, and a Mach-O
+/// elsewhere through its GOT slot, the AAELF64 pair GNU ld requires in a
+/// shared object; a position-dependent one, and a Mach-O
 /// target's, keep the page pair badc's link reads from its note.
 #[test]
 fn a_pic_aarch64_elf_object_reaches_external_data_through_the_got() {
@@ -14880,7 +14925,7 @@ fn two_tu_extern_data_links_through_own_linker() {
     }
 }
 
-/// A unit that materialises an imported function's address names it in
+/// A unit that materializes an imported function's address names it in
 /// `NT_BADC_EXTERN_DATA` -- that lowering is the extern-data one, and
 /// no relocation kind separates the two on aarch64. The note names the
 /// symbol and the link reads one set over every unit, so a sibling
@@ -14944,7 +14989,9 @@ fn imported_function_called_and_address_taken_links_through_own_linker() {
             export_symbols: alloc::collections::BTreeMap::new(),
             export_versions: alloc::collections::BTreeMap::new(),
             from_image: true,
+            main_executable: false,
             export_ordinals: Default::default(),
+            export_hints: Default::default(),
             references: Default::default(),
             protected_exports: Default::default(),
         };
@@ -15113,8 +15160,7 @@ fn an_initializer_naming_an_undefined_function_in_a_single_tu_image_is_diagnosed
 /// A call to a function defined `__attribute__((weak))` in the same TU
 /// must go through a relocation, not a baked local displacement, and
 /// the linker must resolve that relocation against the strong sibling
-/// definition rather than this unit's own copy (ELF STB_WEAK). Matches
-/// gcc, which emits `R_X86_64_PLT32` for this shape.
+/// definition rather than this unit's own copy (ELF STB_WEAK).
 #[test]
 fn call_to_weak_definition_resolves_to_the_strong_sibling() {
     use crate::c5::linker::{link_native_objects, parse_native_elf};
@@ -15649,8 +15695,7 @@ fn inline_asm_substituted_branch_target_resolves_a_local_definition() {
 
 /// An operand reference only spells part of a symbol name when it
 /// prints bare. x86 prints an unmodified `%N` as `$N`, which cannot,
-/// so it is diagnosed; AArch64 prints it bare and accepts it. Both
-/// follow what gcc and clang emit for the same template.
+/// so it is diagnosed; AArch64 prints it bare and accepts it.
 #[cfg(feature = "native-emit")]
 #[test]
 fn inline_asm_branch_target_requires_a_bare_operand_reference() {
@@ -15883,7 +15928,7 @@ fn sectioned_callee_stays_out_of_line_across_sections() {
     // Placement is a contract consumers read: a check of which sections
     // reference which may admit a reference only from a named section, so
     // splicing a sectioned helper into a .text caller moves the reference
-    // out of that section. gcc keeps a sectioned callee out of line unless
+    // out of that section. A sectioned callee stays out of line unless
     // the caller is placed the same; a callee without a section inlines
     // anywhere.
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
@@ -15953,10 +15998,10 @@ int main(void) { return 0; }
 #[test]
 fn const_scalar_chain_initializer_folds_to_values() {
     // A static initializer reading a const-qualified scalar takes its
-    // value (GNU practice; gcc folds the chain), not its address: the
-    // etnaviv module's buffer-size chain got an 8-byte ABS64-relocated
-    // slot over a 4-byte u32, overlapping the next object. The address
-    // form still requires `&` or an array's decay.
+    // value (GNU C practice), not its address: a chain of such sizes got
+    // an 8-byte ABS64-relocated slot over a 4-byte u32, overlapping the
+    // next object. The address form still requires `&` or an array's
+    // decay.
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let src = r#"typedef unsigned u32;
 static const u32 image_data_size = 64 * 6;
@@ -16345,7 +16390,7 @@ fn x86_percpu_seg_a_operand_uses_a_direct_pcrel_reloc() {
         );
         addends.push(direct.addend);
     }
-    // gcc's addend is the folded field offset less the 4-byte PC32 end skew:
+    // The addend is the folded field offset less the 4-byte PC32 end skew:
     // `cur` (offset 0) -> -4, `nxt` (offset 8) -> +4.
     addends.sort_unstable();
     assert_eq!(addends, [-4, 4], "PC32 addend must be field offset - 4");
@@ -16472,7 +16517,7 @@ fn x86_small_model_extern_addresses_keep_the_relaxable_got_load() {
 #[test]
 fn x86_rip_relative_lea_with_a_literal_displacement_has_no_reloc() {
     // `lea disp(%%rip), %reg` with a literal displacement: a self-relative
-    // address (`rip + disp`) the CPU forms at run time. gcc encodes it as
+    // address (`rip + disp`) the CPU forms at run time, encoded as
     // `<REX.W> 8d <modrm=..000.101> <disp32>` (mod=00 rm=101) carrying the
     // literal displacement and NO relocation.
     // Emitting a relocation here, or a wrong disp32, is a silent miscompile.
@@ -17739,7 +17784,7 @@ fn mapping_symbols(bytes: &[u8]) -> alloc::vec::Vec<(String, u64, String)> {
 
 /// The system linkers read a missing `.note.GNU-stack` as a request for an
 /// executable stack. A compiled unit's object carries an empty, unflagged
-/// one, as gcc's does, and keeps an `"x"` its file-scope asm asks for; an
+/// one, and keeps an `"x"` its file-scope asm asks for; an
 /// assembled unit carries only the note its source names, as GNU as does.
 #[test]
 fn a_compiled_object_states_a_non_executable_stack() {
@@ -17860,8 +17905,8 @@ fn mergeable_sections_carry_their_alignment_entsize_and_own_labels() {
     // section symbol's addend as an offset into the merge table -- a
     // local label in such a section keeps its own symbol instead of
     // reducing to `section + addend`, which the pc-relative -4 would
-    // turn into an offset no entry covers. gas and clang both do this;
-    // a plain section still takes the reduction. Read off binutils 2.46.
+    // turn into an offset no entry covers. gas does this; a plain
+    // section still takes the reduction. Read off binutils 2.46.
     use crate::c5::Target;
     let src = "\
         .section .rodata.cst16.k1, \"aM\", @progbits, 16\n\
@@ -18672,8 +18717,8 @@ fn aarch64_compiled_objects_mark_their_code_and_data() {
     // A compiled unit: `.text` is code throughout, so it carries `$x` at 0
     // and nothing else, and each non-empty allocatable data section opens
     // with `$d` and stays data. A switch jump table is read-only data, so
-    // it lands in `.rodata` and leaves no `$d` run in code; gcc -O2 places
-    // it the same way. A data run embedded in code is marked where it does
+    // it lands in `.rodata` and leaves no `$d` run in code. A data run
+    // embedded in code is marked where it does
     // occur -- an inline-asm `.byte` run, covered above.
     use crate::c5::Target;
     let mut src = String::from("int g(int x){switch(x){");

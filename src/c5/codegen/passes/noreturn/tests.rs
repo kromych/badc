@@ -31,7 +31,7 @@ fn func(ent_pc: usize, insts: Vec<Inst>, blocks: Vec<Block>) -> FunctionSsa {
     FunctionSsa {
         name: alloc::format!("f{ent_pc}"),
         ent_pc,
-        inst_src: vec![(0, 0); insts.len()],
+        inst_src: vec![crate::c5::ir::InstSrc::default(); insts.len()],
         f32_values: vec![false; insts.len()],
         insts,
         blocks,
@@ -115,6 +115,20 @@ fn a_library_binding_that_does_not_return_ends_its_block() {
     let mut funcs = vec![f];
     seal_all(&mut funcs, known(&[], &[], &[7]), false);
     assert!(sealed(&funcs[0]));
+}
+
+#[test]
+fn a_trap_inside_an_expression_ends_its_block() {
+    // `return (x, __builtin_trap(), 0) + 1;`: the trap is an operand of
+    // `,`, not a statement the walker seals, and the rest is unreachable.
+    let mut f = returns_call_plus_one(10, 0);
+    f.insts[0] = Inst::Intrinsic {
+        kind: crate::c5::op::Intrinsic::Trap as i64,
+        args: Vec::new(),
+    };
+    let mut funcs = vec![f];
+    seal_all(&mut funcs, known(&[], &[], &[]), false);
+    assert!(sealed(&funcs[0]), "{:?}", funcs[0].blocks);
 }
 
 #[test]

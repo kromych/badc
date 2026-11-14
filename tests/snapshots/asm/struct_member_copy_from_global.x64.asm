@@ -28,14 +28,13 @@ Disassembly of section .text:
 <new_client>:
                	movl	<rip>, %eax # <addr>
                	movl	$0x9, <rip> # <addr>
+               	movl	$0x1, %ecx
+               	movq	$-0x64, %rdx
                	cmpl	$-0x1, %eax
-               	jl	<addr>
-               	movl	$0x1, %eax
-               	incq	%rax
+               	cmovlq	%rdx, %rcx
+               	leaq	0x1(%rcx), %rax
                	incq	%rax
                	retq
-               	movq	$-0x64, %rax
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp

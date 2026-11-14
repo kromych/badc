@@ -18,13 +18,12 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x20
                	stur	wzr, [x29, #-0x18]
-               	stur	wzr, [x29, #-0x10]
+               	mov	x1, #0x3344             // =13124
                	stur	wzr, [x29, #-0x8]
                	mov	x0, #0x3344             // =13124
                	movk	x0, #0x1122, lsl #16
                	stur	w0, [x29, #-0x18]
-               	mov	x0, #0x3344             // =13124
-               	sturh	w0, [x29, #-0x10]
+               	stur	w1, [x29, #-0x10]
                	mov	x0, #0x44               // =68
                	sturb	w0, [x29, #-0x8]
                	ldur	w0, [x29, #-0x18]

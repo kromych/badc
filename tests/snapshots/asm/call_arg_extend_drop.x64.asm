@@ -51,15 +51,13 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movl	$0x14, %edi
                	callq	<addr>
                	cmpl	$0x1a6d, %eax           # imm = 0x1A6D
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	popq	%rbp
                	retq
-               	movl	$0xfffffff9, -0x8(%rbp) # imm = 0xFFFFFFF9
                	xorl	%eax, %eax
-               	leave
+               	popq	%rbp
                	retq

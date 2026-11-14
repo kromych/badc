@@ -30,53 +30,50 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	add	x1, x0, #0x8
-               	ldrb	w2, [x1]
-               	ldrb	w3, [x1, #0x1]
-               	add	x2, x2, x3
-               	ldrb	w3, [x1, #0x2]
-               	add	x2, x2, x3
-               	ldrb	w1, [x1, #0x3]
-               	add	x1, x2, x1
+               	ldrb	w1, [x0, #0x8]
+               	ldrb	w2, [x0, #0x9]
+               	add	x1, x1, x2
+               	ldrb	w2, [x0, #0xa]
+               	add	x1, x1, x2
+               	ldrb	w2, [x0, #0xb]
+               	add	x1, x1, x2
                	cmp	w1, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	add	x1, x0, #0x10
-               	ldrb	w2, [x1]
-               	ldrb	w3, [x1, #0x1]
-               	add	x2, x2, x3
-               	ldrb	w3, [x1, #0x2]
-               	add	x2, x2, x3
-               	ldrb	w1, [x1, #0x3]
-               	add	x1, x2, x1
+               	ldrb	w1, [x0, #0x10]
+               	ldrb	w2, [x0, #0x11]
+               	add	x1, x1, x2
+               	ldrb	w2, [x0, #0x12]
+               	add	x1, x1, x2
+               	ldrb	w2, [x0, #0x13]
+               	add	x1, x1, x2
                	cmp	w1, #0x4a
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrb	w1, [x0]
-               	eor	x1, x1, #0x1
-               	cbz	w1, <addr>
+               	cmp	w1, #0x1
+               	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldrb	w1, [x0, #0xb]
-               	eor	x1, x1, #0xc
-               	cbz	w1, <addr>
+               	ldrb	w2, [x0, #0xb]
+               	cmp	w2, #0xc
+               	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldrb	w1, [x0, #0x17]
-               	eor	x1, x1, #0x18
-               	cbz	w1, <addr>
+               	ldrb	w2, [x0, #0x17]
+               	cmp	w2, #0x18
+               	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldrb	w1, [x0, #0xc]
-               	ldrb	w2, [x0]
-               	sub	x1, x1, x2
+               	ldrb	w2, [x0, #0xc]
+               	sub	x1, x2, x1
                	cmp	w1, #0xc
                	b.eq	<addr>
                	mov	x0, #0x7                // =7

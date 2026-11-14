@@ -506,8 +506,9 @@ fn lookup<'a>(code: &'a [(String, Vec<u8>)], name: &'a str) -> (&'a str, &'a [u8
 }
 
 /// Does `code` carry a `LOCK`-prefixed read-modify-write against memory:
-/// `XADD` (`0F C0` / `C1`), `CMPXCHG` (`0F B0` / `B1`), or `AND` / `OR`
-/// / `XOR` (`20` / `21`, `08` / `09`, `30` / `31`)?
+/// `XADD` (`0F C0` / `C1`), `CMPXCHG` (`0F B0` / `B1`), or `ADD` / `SUB`
+/// / `AND` / `OR` / `XOR`, of a register (`00` / `01`, `28` / `29`, `20` /
+/// `21`, `08` / `09`, `30` / `31`) or an immediate (`80`, `81`, `83`)?
 fn has_lock_rmw(code: &[u8]) -> bool {
     x64_insns(code).iter().any(|i| {
         let locked = code[i.at..]
@@ -518,7 +519,23 @@ fn has_lock_rmw(code: &[u8]) -> bool {
             && !i.reg_form()
             && matches!(
                 i.op,
-                0x0FB0 | 0x0FB1 | 0x0FC0 | 0x0FC1 | 0x20 | 0x21 | 0x08 | 0x09 | 0x30 | 0x31
+                0x0FB0
+                    | 0x0FB1
+                    | 0x0FC0
+                    | 0x0FC1
+                    | 0x00
+                    | 0x01
+                    | 0x28
+                    | 0x29
+                    | 0x20
+                    | 0x21
+                    | 0x08
+                    | 0x09
+                    | 0x30
+                    | 0x31
+                    | 0x80
+                    | 0x81
+                    | 0x83
             )
     })
 }
@@ -1326,8 +1343,8 @@ fn automatic_lock_words_start_clear() {
     );
 }
 
-/// C11 6.2.7 (as gcc and clang), 6.7.2.1p5, 6.7.3p3, and 6.5.2.3p5, whose
-/// member access clang refuses.
+/// C11 6.2.7, 6.7.2.1p5, 6.7.3p3, and 6.5.2.3p5, whose undefined member
+/// access is refused.
 #[test]
 fn atomic_constraints_are_diagnosed() {
     let member = "accessing a member of an atomic structure or union";
@@ -1385,4 +1402,47 @@ fn atomic_operators_yield_their_values_under_the_interpreter() {
                }\n";
     let program = Compiler::new(String::from(src)).compile().expect("compile");
     assert_eq!(crate::c5::Vm::new(program).run().expect("run"), 0);
+}
+
+/// gcc's generic `__atomic_load` and `__atomic_store` on an object of a
+/// size no instruction covers call the runtime's generic functions with
+/// the size and the order; Windows, whose runtime has none, refuses them.
+#[test]
+fn generic_load_and_store_of_an_odd_size_call_the_runtime() {
+    use crate::c5::ir::Inst;
+    let src = "struct s3 { char c[3]; } x, y;\n\
+        void f(void) { __atomic_load(&x, &y, 2); __atomic_store(&x, &y, 3); }\n\
+        int main(void) { f(); return 0; }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64, Target::MacOSAarch64] {
+        let program = Compiler::with_target(src.into(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        let f = funcs.iter().find(|f| f.name == "f").expect("f");
+        let imm = |v: u32| match f.insts[v as usize] {
+            Inst::Imm(n) => Some(n),
+            _ => None,
+        };
+        let calls: Vec<(Option<i64>, Option<i64>)> = (f.insts.iter())
+            .filter_map(|i| match i {
+                Inst::Call { args, .. } if args.len() == 4 => Some((imm(args[0]), imm(args[3]))),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            calls,
+            [(Some(3), Some(2)), (Some(3), Some(3))],
+            "{target:?}"
+        );
+    }
+    let err = Compiler::with_target(src.into(), Target::WindowsX64)
+        .compile()
+        .and_then(|p| {
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&p, Target::WindowsX64, false, true)
+                .map(|_| ())
+                .map_err(|e| crate::c5::C5Error::Runtime(alloc::format!("{e:?}")))
+        });
+    assert!(err.is_err(), "Windows has no generic atomic runtime");
 }

@@ -14,19 +14,16 @@ Disassembly of section .text:
                	brk	#0x1
 
 <mix>:
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #1
                	add	x0, x0, #0x1
                	ret
 
 <join_masked>:
                	mov	x1, #0x0                // =0
+               	and	x2, x0, #0xff
                	cmp	w0, #0x80
-               	b.hs	<addr>
-               	and	x1, x0, #0xff
-               	mov	x17, #0x2a              // =42
-               	eor	x0, x1, x17
-               	cmp	w0, #0x0
+               	csel	x0, x2, x1, lo
+               	cmp	w0, #0x2a
                	cset	x0, ne
                	ret
 
@@ -86,27 +83,26 @@ Disassembly of section .text:
 
 <join_u16>:
                	mov	x1, #0x7                // =7
+               	and	x2, x0, #0xffff
                	cmp	w0, #0x3e8
-               	b.le	<addr>
-               	and	x1, x0, #0xffff
-               	add	x0, x1, #0x1
+               	csel	x0, x2, x1, gt
+               	add	x0, x0, #0x1
                	ret
 
 <join_unmasked>:
-               	mov	x2, x1
-               	mov	x1, #0x0                // =0
+               	sxtw	x1, w1
+               	mov	x2, #0x0                // =0
                	cmp	w0, #0x0
-               	b.le	<addr>
-               	mov	x1, x2
-               	and	x0, x1, #0xff
+               	csel	x0, x1, x2, gt
+               	and	x0, x0, #0xff
                	ret
 
 <join_byte_as_signed>:
                	mov	x1, #0x0                // =0
+               	and	x2, x0, #0xff
                	cmp	w0, #0x0
-               	b.le	<addr>
-               	and	x1, x0, #0xff
-               	sxtb	x0, w1
+               	csel	x0, x2, x1, gt
+               	sxtb	x0, w0
                	ret
 
 <main>:
@@ -168,8 +164,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	x0, #0x2b               // =43
                	bl	<addr>
-               	mov	x17, #-0x7f             // =-127
-               	cmp	w0, w17
+               	cmn	w0, #0x7f
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
                	bl	<addr>
@@ -221,16 +216,14 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	x0, #0x80               // =128
                	bl	<addr>
-               	mov	x17, #-0x80             // =-128
-               	cmp	w0, w17
+               	cmn	w0, #0x80
                	b.eq	<addr>
                	mov	x0, #0x9                // =9
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x1ff              // =511
                	bl	<addr>
-               	mov	x17, #-0x1              // =-1
-               	cmp	w0, w17
+               	cmn	w0, #0x1
                	b.ne	<addr>
                	mov	x0, #-0x5               // =-5
                	bl	<addr>

@@ -1949,15 +1949,19 @@ pub(crate) fn materialize_asm_sections(
                         offset: sec.bytes.len() as u32,
                         op: op.clone(),
                     }),
-                    // `.reloc`: the offset is section-relative and independent of
-                    // the location counter, and no field is deposited.
+                    // `.reloc`: the offset is section-relative, or from the
+                    // location counter, and no field is deposited.
                     AsmSectionItem::Reloc {
                         offset,
+                        from_here,
                         rtype,
                         target,
                         addend,
                     } => sec.relocs.push(AsmSectionReloc {
-                        offset: *offset,
+                        offset: match from_here {
+                            true => (sec.bytes.len() as u32).wrapping_add(*offset),
+                            false => *offset,
+                        },
                         width: 0,
                         kind: AsmRelocKind::Explicit(*rtype),
                         pcrel: false,

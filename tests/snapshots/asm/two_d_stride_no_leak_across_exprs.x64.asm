@@ -36,28 +36,24 @@ Disassembly of section .text:
                	addq	%rdx, %rcx
                	xorps	%xmm0, %xmm0
                	cvtsi2ss	%rax, %xmm0
-               	movl	$0x3e800000, %edx       # imm = 0x3E800000
-               	movq	%rdx, %xmm15
-               	mulss	%xmm15, %xmm0
+               	movss	<rip>, %xmm1
+               	mulss	%xmm1, %xmm0
                	movss	%xmm0, (%rcx)
                	incq	%rax
                	cmpl	$0x40, %eax
                	jl	<addr>
                	movss	-0xe0(%rbp), %xmm0
-               	movl	$0x40000000, %eax       # imm = 0x40000000
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	movss	<rip>, %xmm1
+               	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax
                	leave
                	retq
-               	movl	$0x42c60000, %eax       # imm = 0x42C60000
-               	movq	%rax, %xmm14
-               	movss	%xmm14, -0x100(%rbp)
-               	movss	-0x100(%rbp), %xmm0
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	movss	<rip>, %xmm0
+               	movss	%xmm0, -0x100(%rbp)
+               	movss	-0x100(%rbp), %xmm1
+               	ucomiss	%xmm0, %xmm1
                	jp	<addr>
                	je	<addr>
                	movl	$0x3, %eax

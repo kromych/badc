@@ -31,25 +31,23 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movl	$0x0, -0x10(%rbp)
                	movl	$0x5, -0x8(%rbp)
-               	movslq	-0x8(%rbp), %rcx
-               	testq	%rcx, %rcx
+               	movslq	-0x8(%rbp), %rax
+               	testq	%rax, %rax
                	je	<addr>
-               	cmpl	$0x5, %ecx
+               	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
-               	movslq	-0x10(%rbp), %rcx
-               	testq	%rcx, %rcx
+               	movslq	-0x10(%rbp), %rax
+               	testq	%rax, %rax
                	je	<addr>
-               	cmpl	$0x63, %ecx
+               	cmpl	$0x63, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	leave
                	retq
-               	movl	$0x0, <rip> # <addr>
                	movl	$0x1, <rip> # <addr>
-               	movl	$0x0, <rip> # <addr>
                	movl	$0x1, <rip> # <addr>
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x1, %eax
@@ -100,9 +98,9 @@ Disassembly of section .text:
                	leave
                	retq
                	movslq	-0x8(%rbp), %rax
+               	movl	$0x63, %ecx
                	testq	%rax, %rax
-               	jne	<addr>
-               	movl	$0x63, %eax
+               	cmoveq	%rcx, %rax
                	jmp	<addr>
                	movslq	-0x10(%rbp), %rax
                	testq	%rax, %rax

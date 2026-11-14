@@ -105,7 +105,8 @@ def host_cc() -> str:
 def stage_badc_python(rundir: Path) -> Path:
     """Build CPython with badc and stage it beside its stdlib in `rundir`
     (executed from a temp dir; the hosted macOS runner refuses to exec
-    binaries from the workspace). Returns the interpreter path."""
+    binaries from the workspace), with the empty pybuilddir.txt that makes
+    getpath take the directory for a build tree. Returns the interpreter path."""
     log("building CPython with badc for the table generator")
     subprocess.run([sys.executable, str(PYDEMO / "setup.py")], check=True)
     subprocess.run(
@@ -124,6 +125,7 @@ def stage_badc_python(rundir: Path) -> Path:
     shutil.copy2(pybin, exe)
     os.chmod(exe, 0o755)
     (rundir / "Lib").symlink_to(pysrc / "Lib")
+    (rundir / "pybuilddir.txt").write_text("")
     return exe
 
 
@@ -240,12 +242,12 @@ def build_with_badc(badc: Path, target: str, sources: list[str], workdir: Path) 
 
 
 def make_python_wrapper(badc_python: Path, rundir: Path) -> Path:
-    """A wrapper so gen_x86_insn.py runs the badc-built interpreter with its
-    stdlib on PYTHONHOME."""
+    """A wrapper so gen_x86_insn.py runs the badc-built interpreter, which
+    finds its stdlib as in a build tree (see `stage_badc_python`)."""
     wrapper = rundir / "python-badc"
     wrapper.write_text(
         "#!/bin/sh\n"
-        f'export PYTHONHOME="{rundir}" PYTHONPATH="{rundir}/Lib"\n'
+        "unset PYTHONHOME PYTHONPATH\n"
         f'exec "{badc_python}" "$@"\n'
     )
     wrapper.chmod(0o755)

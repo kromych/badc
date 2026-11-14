@@ -18,34 +18,31 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x20
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x30]
+               	ldrsw	x0, [x0, #0x20]
                	stur	w0, [x29, #-0x18]
                	sub	x2, x29, #0x18
                	sub	x3, x29, #0x8
                	adrp	x1, <page>
                	cmp	x3, x2
                	cset	x0, eq
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
-               	strb	w0, [x1, #0x38]
+               	add	x0, x0, x0, lsl #1
+               	strb	w0, [x1, #0x24]
                	sxtb	x0, w0
                	cbz	w0, <addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x0                // =0
-               	mov	x0, x1
+               	mov	x0, #0x0                // =0
+               	mov	x1, x0
                	cmp	x2, x3
-               	b.ne	<addr>
-               	add	x0, x0, #0x1
+               	cinc	x1, x1, eq
                	cmp	x2, x3
-               	b.ne	<addr>
+               	cinc	x1, x1, eq
                	add	x0, x0, #0x1
-               	add	x1, x1, #0x1
-               	cmp	w1, #0x4
+               	cmp	w0, #0x4
                	b.lt	<addr>
-               	cbz	w0, <addr>
+               	cbz	w1, <addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

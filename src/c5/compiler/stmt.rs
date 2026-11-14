@@ -12,7 +12,7 @@
 //!     `parse_local_decl`) which save shadowed bindings
 //!     into a per-block vector and restore them on exit.
 //!   * `consume(byte, msg)` -- the canonical single-byte-token
-//!     consumer with a labelled error on mismatch. Used from
+//!     consumer with a labeled error on mismatch. Used from
 //!     every statement-shape parser plus a handful of expression
 //!     paths in expr().
 //!
@@ -596,7 +596,7 @@ impl Compiler {
     /// Breaks inside the body decrement the break depth at switch
     /// exit through [`Self::close_loop_breaks`].
     pub(super) fn parse_switch_stmt(&mut self) -> Result<(), C5Error> {
-        let line = self.lex.line;
+        let at = self.site();
         self.next()?;
         self.open_statement_scope();
         self.consume(b'(', "open paren expected")?;
@@ -640,7 +640,7 @@ impl Compiler {
             if outside || (has_default && low == Some(0) && high == Some(1)) {
                 self.warn_at(
                     Code::SWITCH_BOOL,
-                    line,
+                    at,
                     "switch condition has boolean value".into(),
                 );
             }
@@ -652,7 +652,7 @@ impl Compiler {
         Ok(())
     }
 
-    /// Whether a controlling expression has a boolean value, as gcc's
+    /// Whether a controlling expression has a boolean value, as
     /// -Wswitch-bool reads one: of type `_Bool`, or a comparison, `!`, `&&`
     /// or `||`, through a comma's right operand. A cast to another integer
     /// type marks a deliberate integer.
@@ -679,11 +679,10 @@ impl Compiler {
     /// The values a `case` label covers, converted to the promoted type of
     /// the controlling expression (C99 6.8.4.2p5) and recorded against the
     /// switch's other labels, which 6.8.4.2p3 keeps distinct. `None` for an
-    /// empty GNU range, which is dropped with a warning as gcc and clang
-    /// drop it.
+    /// empty GNU range, which is dropped with a warning.
     fn case_label_range(
         &mut self,
-        line: usize,
+        at: super::Site,
         lo: ConstVal,
         hi: Option<ConstVal>,
     ) -> Result<Option<(i128, i128)>, C5Error> {
@@ -703,7 +702,7 @@ impl Compiler {
         // The controlling expression takes only the values of its own type.
         // A label outside them never matches, or its conversion to the
         // promoted type discarded value bits; a conversion that reinterprets
-        // the sign at the same width is not diagnosed, as in gcc.
+        // the sign at the same width is not diagnosed.
         let own = unqualified_version_ty(operand_ty);
         let (bytes, own_unsigned) = (self.size_of_type(own), is_unsigned_ty(own));
         let is_bool = strip_unsigned(own) == Ty::Bool as i64;
@@ -728,7 +727,7 @@ impl Compiler {
             let t = format_type(own, &self.structs);
             self.warn_at(
                 Code::SWITCH_OUTSIDE_RANGE,
-                line,
+                at,
                 format!("{label} is not within the range of `{t}`, the type of the controlling expression"),
             );
         }
@@ -750,7 +749,7 @@ impl Compiler {
         if less(b, a) {
             self.warn_at(
                 Code::EMPTY_CASE_RANGE,
-                line,
+                at,
                 format!(
                     "case range `{} ... {}` is empty; the label is dropped",
                     spell(a),
@@ -824,7 +823,7 @@ impl Compiler {
                 self.pending.fn_ptr_type,
                 self.pending.base_is_function_type,
             ) = base_fn.clone();
-            let declarator_line = self.lex.line;
+            let declarator_at = self.site();
             // C99 6.7.7p3: a variably modified typedef's size expression is
             // evaluated when the declaration is reached; the type keeps the
             // byte count that evaluation stores.
@@ -870,7 +869,7 @@ impl Compiler {
             }
             if implicit_int {
                 let what = super::decl_base::ImplicitInt::Declarator(id_idx);
-                self.report_implicit_int(what, declarator_line)?;
+                self.report_implicit_int(what, declarator_at)?;
             }
             let declarator_transparent = core::mem::take(&mut self.pending.attrs.transparent_union);
             let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
@@ -1074,7 +1073,7 @@ impl Compiler {
 
     /// Emit the cleanup calls for the scopes at index `from` and above
     /// (innermost scope cleaned first; each scope's variables in reverse
-    /// declaration order, C++-style, matching GCC). Used before a
+    /// declaration order, C++-style). Used before a
     /// `return` (`from == 0`), `break`, or `continue`.
     pub(super) fn emit_cleanups_above(&mut self, from: usize) {
         let mut pending: alloc::vec::Vec<Cleanup> = alloc::vec::Vec::new();
@@ -1275,7 +1274,7 @@ impl Compiler {
     /// symbols for the duration of the block and are restored on
     /// exit.
     /// Parse `__label__ name, ... ;` and bind each name in the block
-    /// whose scope is currently innermost. GCC requires the declaration
+    /// whose scope is currently innermost. GNU C requires the declaration
     /// to lead its block, before any other declaration or statement;
     /// the callers enforce that by only dispatching here while no other
     /// item has been parsed.
@@ -1326,7 +1325,7 @@ impl Compiler {
         // shadow same-named tags in any enclosing scope and go out of
         // scope when the block exits.
         self.tag_scopes.push();
-        // GCC local labels declared by this block; see
+        // GNU C local labels declared by this block; see
         // `Compiler::resolve_label_name`.
         self.local_label_scopes.open();
         self.block_scopes.push(Vec::new());
@@ -1480,7 +1479,7 @@ impl Compiler {
                 continue;
             }
             let name = sym.name.clone();
-            let line = sym.binding.decl_line;
+            let at = sym.binding.decl_site();
             // `was_referenced` is true when the parser emitted any
             // expression mention (assignment LHS, increment, ...).
             // Without it the only "write" possible is the
@@ -1498,7 +1497,7 @@ impl Compiler {
                     alloc::format!("unused variable `{name}`"),
                 )
             };
-            self.warn_at(code, line, msg);
+            self.warn_at(code, at, msg);
         }
 
         self.emit_scope_dead_stores(&block_symbols);
@@ -1520,7 +1519,7 @@ impl Compiler {
         Ok((block_id, value_item))
     }
 
-    /// Parse the body of a GCC statement expression `({ ... })`. On
+    /// Parse the body of a GNU C statement expression `({ ... })`. On
     /// entry the leading `(` has been consumed and the lexer is at
     /// `{`; `parse_block_stmt` handles the C99 6.2.1 block scope.
     /// The value and its type come from the last expression-statement
@@ -1675,29 +1674,24 @@ impl Compiler {
         Ok((template, tstart, is_volatile, is_goto))
     }
 
-    /// Parse a GCC inline-asm statement. c5 supports the operand-free
+    /// Parse a GNU C inline-asm statement. c5 supports the operand-free
     /// forms: an empty template (a compiler barrier, no instruction
     /// emitted) and a single known operand-free hint instruction
     /// (`pause` / `yield`, lowered to the target spin-loop hint).
     /// Operand constraints and other instructions are rejected.
     fn parse_asm_stmt(&mut self) -> Result<(), C5Error> {
-        let line = self.lex.line;
-        let (mut template, tstart, is_volatile, is_goto) = self.parse_asm_head()?;
-        if self.target.binary_format() == crate::c5::codegen::BinaryFormat::MachO
-            && let Ok(text) = core::str::from_utf8(&template)
-        {
-            template = crate::c5::asm::mach_o_symbol_names(text).into_bytes();
-        }
+        let at = self.site();
+        let (template, tstart, is_volatile, is_goto) = self.parse_asm_head()?;
         // `asm goto` takes the general extended-asm path directly: the
         // operand-free template shortcuts below have no label grammar.
         if is_goto {
             self.truncate_data(tstart);
-            return self.parse_extended_asm(template, is_volatile, true, line);
+            return self.parse_extended_asm(template, is_volatile, true, at);
         }
         // A naked function's templates are assembled as written.
         if self.current_func_attrs.is_naked {
             self.truncate_data(tstart);
-            return self.parse_extended_asm(template, is_volatile, false, line);
+            return self.parse_extended_asm(template, is_volatile, false, at);
         }
         // The x87 FPU control-word forms carry exactly one memory operand.
         // Detect them from the template before the operand-rejection loop.
@@ -1784,8 +1778,8 @@ impl Compiler {
                 return self.parse_aarch64_barrier_asm(kind);
             }
             // AArch64 128-bit atomic RMW: the `ldaxp`/`stlxp` exclusive-pair
-            // retry loop GCC/clang inline asm uses for `Int128` atomics (no
-            // native 128-bit CAS through gcc 10). All four shapes share the
+            // retry loop inline asm uses for `Int128` atomics (no native
+            // 128-bit CAS through gcc 10). All four shapes share the
             // load / store / retry skeleton; the inner op selects the kind.
             if tmpl_ws.starts_with("0:ldaxp%[oldl],%[oldh],%[mem]")
                 && tmpl_ws.contains("stlxp%w[tmp],")
@@ -1854,7 +1848,7 @@ impl Compiler {
         // the `rep; nop` byte encoding of PAUSE on x86; normalize away the
         // whitespace and `;` so every spelling maps to the relax hint. It
         // carries no operand (only an optional `"memory"` clobber), so it
-        // is recognised before the general operand parser.
+        // is recognized before the general operand parser.
         let compact: alloc::string::String = tmpl_lc
             .chars()
             .filter(|c| !c.is_whitespace() && *c != ';')
@@ -1877,12 +1871,12 @@ impl Compiler {
             let _ = self.ast_emit_expr_stmt();
             return Ok(());
         }
-        // General GCC extended asm: parse the `: outputs : inputs :
+        // General GNU C extended asm: parse the `: outputs : inputs :
         // clobbers` operand lists into an `AsmBlock`. The template bytes
         // are dropped from the data section; the parsed block references
         // its operand expressions by AST id.
         self.truncate_data(tstart);
-        self.parse_extended_asm(template, is_volatile, false, line)
+        self.parse_extended_asm(template, is_volatile, false, at)
     }
 
     /// Consume the `: outputs : inputs : clobbers` region and the
@@ -1904,7 +1898,7 @@ impl Compiler {
     }
 
     /// An asm statement's operand names and `asm goto` labels share one
-    /// namespace, as in gcc and clang, so a repeat is an error.
+    /// namespace, so a repeat is an error.
     fn duplicate_asm_operand_name(&self, name: &str) -> C5Error {
         self.compile_err(
             Code::ASM_SYNTAX,
@@ -1912,7 +1906,7 @@ impl Compiler {
         )
     }
 
-    /// Parse the operand lists of a GCC extended-asm statement into an
+    /// Parse the operand lists of a GNU C extended-asm statement into an
     /// [`ast::AsmBlockAst`] and emit an [`ast::Expr::InlineAsm`] (or an
     /// [`ast::Stmt::AsmGoto`] for `asm goto`). The grammar is
     /// `: outputs : inputs : clobbers`, plus `: labels` for `asm goto`;
@@ -1921,13 +1915,13 @@ impl Compiler {
     /// clobber is a bare string; a label is an identifier naming a C
     /// label of the enclosing function. On entry the template is
     /// consumed and the cursor is at the first `:` (or `)` when there
-    /// is no operand list); `line` is the statement's first.
+    /// is no operand list); `at` is the statement's first token.
     fn parse_extended_asm(
         &mut self,
         template: alloc::vec::Vec<u8>,
         volatile: bool,
         is_goto: bool,
-        line: usize,
+        at: super::Site,
     ) -> Result<(), C5Error> {
         use super::super::ast::{AsmBlockAst, Expr};
         use super::super::ir::{AsmBlock, AsmConstraint, AsmOperand, AsmSeg};
@@ -1995,7 +1989,7 @@ impl Compiler {
                 label_names.push(name);
                 continue;
             }
-            // GCC named operand: `[name]` before the constraint string.
+            // A named operand: `[name]` before the constraint string.
             // The name is addressable in the template as `%[name]`.
             let mut op_name: Option<alloc::string::String> = None;
             if self.lex.tk == Token::Brak && section <= 2 {
@@ -2144,7 +2138,7 @@ impl Compiler {
             // `float` / `double` in the low lane, as the SysV ABI passes one;
             // a matching input takes the class of the output it names.
             // An AArch64 `w` operand is a scalar of up to 8 bytes, floating
-            // or integer, or an 8- or 16-byte vector, as gcc takes it.
+            // or integer, or an 8- or 16-byte vector.
             let scalar_fp = matches!(class, AsmConstraint::Fp)
                 && !self.target.is_aarch64()
                 && super::types::is_floating_scalar(self.ty);
@@ -2212,6 +2206,10 @@ impl Compiler {
             }
             let stores_back = is_output && !is_bound;
             let is_rw = is_rw && !is_bound;
+            if stores_back {
+                // The asm writes the operand (C17 6.5.16p2).
+                self.require_modifiable(self.ty, "inline asm output")?;
+            }
             if (is_output || matches!(constraint, AsmConstraint::Mem | AsmConstraint::MemBase))
                 && !is_bound
             {
@@ -2232,7 +2230,7 @@ impl Compiler {
                 }
             };
             // A range-restricted immediate constraint admits only an integer
-            // constant within its range (GCC machine constraints). The
+            // constant within its range. The
             // constraint resolved to a pure immediate, so there is no
             // register alternative to fall back on: a non-constant or
             // out-of-range operand cannot be satisfied. The letters and their
@@ -2405,11 +2403,11 @@ impl Compiler {
             clobber_memory,
             volatile,
         };
-        // gcc (-Wdeprecated) and clang (-Winline-asm) warn on a declared sp change.
+        // A declared stack-pointer change is a warning, not an error.
         if clobbers_sp || sp_outputs.iter().any(|&i| block.names_operand(i)) {
             let text = "the stack pointer is listed as clobbered or written through an \
                 output; GNU C requires it to hold the same value after an `asm` statement";
-            self.warn_at(Code::INLINE_ASM, line, text.into());
+            self.warn_at(Code::INLINE_ASM, at, text.into());
         }
         let idx = self.ast.asm_blocks.len() as u32;
         let cleanups = alloc::vec![alloc::vec::Vec::new(); label_ids.len()];
@@ -2443,7 +2441,7 @@ impl Compiler {
     }
 
     /// Canonicalize `asm goto` label references: `%l[name]` and `%lN`
-    /// (GCC numbers labels after all operands) both become `%lK` with
+    /// (GNU C numbers labels after all operands) both become `%lK` with
     /// `K` the label-list index, so the per-arch template parsers need
     /// no operand-count context. Unknown names and out-of-range
     /// numbers are rejected here, where the source position is known.
@@ -2516,8 +2514,8 @@ impl Compiler {
         Ok(out)
     }
 
-    /// Parse an asm operand's expression (an incomplete object type admitted, as
-    /// gcc does); whether an array lvalue decayed to its address (C99 6.3.2.1p3).
+    /// Parse an asm operand's expression (an incomplete object type admitted);
+    /// whether an array lvalue decayed to its address (C99 6.3.2.1p3).
     fn parse_asm_operand_expr(&mut self) -> Result<bool, C5Error> {
         let saved_bytes = core::mem::take(&mut self.pending.last_array_decay_bytes);
         let saved_dims = core::mem::take(&mut self.pending.last_array_decay_dims);
@@ -2623,7 +2621,7 @@ impl Compiler {
         Ok(out)
     }
 
-    /// Classify a GCC operand constraint string into an
+    /// Classify an asm operand constraint string into an
     /// [`ir::AsmConstraint`] and whether it is a read-write (`+`)
     /// output. `is_output` selects the output vs input grammar;
     /// `n_outputs` is the count of outputs already parsed, so a digit
@@ -2641,7 +2639,7 @@ impl Compiler {
     /// The architectural register an asm operand binds to when the
     /// operand is exactly one identifier naming a storage-less
     /// `register T v asm("reg")` variable -- the stack or frame
-    /// pointer. GCC guarantees such an operand is that register.
+    /// pointer. GNU C guarantees such an operand is that register.
     ///
     /// On entry the operand's `(` is consumed. The lexer is left where
     /// it was: the operand is parsed normally afterwards, and only the
@@ -2712,7 +2710,7 @@ impl Compiler {
         ('O', 0, 127, "0..127"),
     ];
 
-    /// The values GCC's x86 `L` constraint admits: the and-masks that turn
+    /// The values the x86 `L` constraint admits: the and-masks that turn
     /// a masking `and` into a zero-extending move.
     const X86_IMM_L_VALUES: [i64; 3] = [0xFF, 0xFFFF, 0xFFFF_FFFF];
 
@@ -2756,7 +2754,7 @@ impl Compiler {
     }
 
     /// The AArch64 range-restricted immediate letter `body` selects, if any
-    /// (GCC machine constraints I, J, K, L, M, N). Only meaningful once the
+    /// (I, J, K, L, M, N). Only meaningful once the
     /// constraint has resolved to a pure immediate: a register or memory
     /// alternative alongside the letter (`"rI"`) lets the operand be loaded,
     /// which lifts the restriction. A multi-letter `U` / `D` / `v` class
@@ -2848,7 +2846,7 @@ impl Compiler {
             let cc = super::super::codegen::x86_64::asm::flag_cond_code(cond)?;
             return Some((AsmConstraint::Flags(cc), is_rw));
         }
-        // No other `@` form is modelled; without this the letters after it
+        // No other `@` form is modeled; without this the letters after it
         // would be read as ordinary class letters.
         if body.contains('@') {
             return None;
@@ -2872,7 +2870,7 @@ impl Compiler {
         }
         // x86 `A`. On i386 this names the `edx:eax` pair; on x86-64 it is the
         // `a` or `d` register (a value wider than a register has no pair form
-        // here and is rejected at the operand). GCC and clang both allocate
+        // here and is rejected at the operand). GCC and clang allocate
         // `rax` for it, which `Fixed(0)` spells.
         if is_x86 && body == "A" {
             return Some((AsmConstraint::Fixed(0), is_rw));
@@ -2924,7 +2922,7 @@ impl Compiler {
         }
         // A general-register alternative subsumes any specific-register or
         // FP letter alongside it: `"rax"` is the multi-alternative r|a|x,
-        // not a register name, and GCC may satisfy it with any GP register.
+        // not a register name, and any GP register may satisfy it.
         let has_general = body.contains(['r', 'q', 'g']);
         let has_reg = has_general || body.contains('m');
         // A specific-register letter (possibly combined with `i` as in
@@ -3175,7 +3173,7 @@ impl Compiler {
 
     /// Parse the operand lists of the AArch64 128-bit atomic inline asm --
     /// the `ldaxp`/`stlxp` RMW shapes and the `ldp`/`stp`, `ldxp`/`stxp`
-    /// load / store shapes. GCC named operands (`[name] "constraint"(expr)`)
+    /// load / store shapes. Named operands (`[name] "constraint"(expr)`)
     /// are mapped by name and section, not position, since the layout
     /// differs across shapes: `mem`'s memory operand yields the object
     /// pointer; a register operand in the output section is a result lvalue
@@ -3209,7 +3207,7 @@ impl Compiler {
                 self.next()?;
                 continue;
             }
-            // GCC named operand: `[name]` precedes the constraint. Classify
+            // A named operand: `[name]` precedes the constraint. Classify
             // by the identifier spelling before advancing past it.
             let mut role = Role::Reg;
             if self.lex.tk == Token::Brak {
@@ -3457,7 +3455,10 @@ impl Compiler {
 
     pub(super) fn stmt(&mut self) -> Result<(), C5Error> {
         let decays = self.register_decays.len();
-        self.with_nesting("statement", |c| c.stmt_inner())?;
+        let outer = self.stmt_start.replace(self.lex.tok_start() as u32);
+        let r = self.with_nesting("statement", |c| c.stmt_inner());
+        self.stmt_start = outer;
+        r?;
         self.check_register_decays(decays)
     }
 
@@ -3649,14 +3650,15 @@ impl Compiler {
         } else if self.lex.tk == Token::Switch {
             self.parse_switch_stmt()?;
         } else if self.lex.tk == Token::Case {
-            let line = self.lex.line;
+            let at = self.site();
             self.next()?;
             // Case label is a constant expression: integer literal,
             // negated literal, parenthesised literal, enum / `#define`d
             // constant. The C99 grammar allows the full conditional-
             // expression chain (`a ? b : c`), so we go in at the top.
             // Block-scope `const` scalar objects fold to their recorded
-            // initializer values here, as GCC (GNU mode, at -O) accepts.
+            // initializer values here, another form of constant expression
+            // C99 6.6p10 lets an implementation accept.
             let lo = self.parse_constant_folding_const_objects()?;
             // GNU case range `case lo ... hi:` (C extension): the label
             // covers every value in [lo, hi].
@@ -3667,8 +3669,8 @@ impl Compiler {
                 None
             };
             self.consume(b':', "expected colon after case")?;
-            self.check_switch_label(line)?;
-            let range = self.case_label_range(line, lo, hi)?;
+            self.check_switch_label(at.line)?;
+            let range = self.case_label_range(at, lo, hi)?;
             let body_before = self.ast_stmts_snapshot();
             // C23 6.8.1: a label may precede a declaration. badc parses
             // block-local declarations in the enclosing block loop, where
@@ -3735,7 +3737,7 @@ impl Compiler {
             let line = self.lex.line;
             self.next()?;
             if self.lex.tk == Token::MulOp {
-                // GCC computed goto: `goto *expr;` branches to the
+                // GNU C computed goto: `goto *expr;` branches to the
                 // label address that `expr` evaluates to.
                 self.next()?; // consume '*'
                 self.parse_full_expr()?;
@@ -3795,7 +3797,7 @@ impl Compiler {
             self.ast_emit_continue();
             self.coalesce_exit_since(start);
         } else if self.lex.tk == Token::Return {
-            let line = self.lex.line;
+            let at = self.site();
             self.check_seh_exit("`return`", None)?;
             self.next()?;
             let ret_ty = self.current_func_return_ty;
@@ -3807,18 +3809,17 @@ impl Compiler {
                     self.parse_full_expr_or_void()?;
                     // C99 6.8.6.4p1: a return statement with an expression
                     // shall not appear in a function whose return type is
-                    // void. A void-typed operand is the established
-                    // exception -- gcc and clang accept `return f();` and
-                    // `return (void)x;` outside -pedantic-errors -- and is
-                    // evaluated for its side effects with no value
-                    // returned.
+                    // void. A void-typed operand (`return f();`,
+                    // `return (void)x;`) is the established exception
+                    // outside -pedantic-errors and is evaluated for its
+                    // side effects with no value returned.
                     if !is_void_ty(self.ty) {
                         // Lowered, the value is evaluated and discarded
                         // like a void-typed operand.
                         let got = super::types::format_type(self.ty, &self.structs);
                         self.report_at(
                             Code::RETURN_MISMATCH,
-                            line,
+                            at,
                             format!(
                                 "`return` with a value of type `{got}` in a function \
                                  returning `void`"
@@ -3840,7 +3841,7 @@ impl Compiler {
                     self.mark_emit_other();
                     self.ast_psh();
                     self.expr(Token::Assign as i64)?;
-                    // The GCC 128-bit integer shares the aggregate carrier but
+                    // The 128-bit integer shares the aggregate carrier but
                     // is an integer type: C99 6.8.6.4p3 converts the operand as
                     // if by assignment, so a scalar widens into it the way the
                     // assignment and argument paths already widen one.
@@ -3859,7 +3860,8 @@ impl Compiler {
                     // if by assignment. Diagnose a return of an
                     // incompatible struct type, matching the assignment
                     // path.
-                    if let Some(m) = Self::type_warning(&self.structs, ret_ty, self.ty, false)
+                    let lax = self.lax_vectors;
+                    if let Some(m) = Self::type_warning(&self.structs, ret_ty, self.ty, false, lax)
                         .filter(|_| !int128_from_scalar)
                     {
                         let want = super::types::format_type(ret_ty, &self.structs);
@@ -3867,9 +3869,13 @@ impl Compiler {
                         let text =
                             format!("{} in return (declared={want}, returned={got})", m.reason);
                         if m.no_conversion {
-                            return Err(self.compile_err_at(Code::INCOMPATIBLE_TYPES, line, text));
+                            return Err(self.compile_err_at(
+                                Code::INCOMPATIBLE_TYPES,
+                                at.line,
+                                text,
+                            ));
                         }
-                        self.report_mismatch(&m, line, text)?;
+                        self.report_mismatch(&m, at, text)?;
                     }
                     self.mark_emit_other();
                     // Mirror the rhs expression into the walker's
@@ -3893,13 +3899,14 @@ impl Compiler {
                     let value_fn = self.value_fn_type(self.ast_acc);
                     let what = ("return", "declared", "returned");
                     let (from, to) = ((self.ty, &value_fn), (ret_ty, &ret_fn));
-                    if !self.check_function_conversion(to, from, true, line, what)?
+                    if !self.check_function_conversion(to, from, true, at, what)?
                         && let Some(m) = Self::type_warning_with_flags(
                             &self.structs,
                             ret_ty,
                             self.ty,
                             rhs_is_zero,
                             rhs_is_untyped,
+                            self.lax_vectors,
                         )
                     {
                         let want = self.typed_text(ret_ty, &ret_fn);
@@ -3907,11 +3914,15 @@ impl Compiler {
                         let text =
                             format!("{} in return (declared={want}, returned={got})", m.reason);
                         if m.no_conversion {
-                            return Err(self.compile_err_at(Code::INCOMPATIBLE_TYPES, line, text));
+                            return Err(self.compile_err_at(
+                                Code::INCOMPATIBLE_TYPES,
+                                at.line,
+                                text,
+                            ));
                         }
-                        self.report_mismatch(&m, line, text)?;
+                        self.report_mismatch(&m, at, text)?;
                     }
-                    self.check_value_conversion_of(self.ast_acc, ret_ty, 0, line);
+                    self.check_value_conversion_of(self.ast_acc, ret_ty, 0, at);
                     // Reuse `convert_assign_rhs` so an `int`-typed
                     // `return` from a `double`-returning function lifts
                     // through the int-to-float cast rather than landing
@@ -3922,13 +3933,13 @@ impl Compiler {
             } else if !returns_void {
                 // Bare `return;` in a function returning non-void.
                 // C99 leaves the returned value indeterminate (6.9.1p12
-                // -- undefined behaviour if the caller uses it); C23
+                // -- undefined behavior if the caller uses it); C23
                 // 6.8.6.4 and every current toolchain reject it. Lowered,
                 // the return carries no value, as reaching the closing
                 // brace does.
                 self.report_at(
                     Code::RETURN_MISMATCH,
-                    line,
+                    at,
                     "`return` with no value in a function returning non-void".into(),
                 )?;
             }
@@ -4060,7 +4071,7 @@ impl Compiler {
         Ok(start)
     }
 
-    /// Consume a single-byte token, returning a labelled compile error otherwise.
+    /// Consume a single-byte token, returning a labeled compile error otherwise.
     pub(super) fn consume(&mut self, expected: u8, msg: &str) -> Result<(), C5Error> {
         if self.lex.tk == expected {
             self.next()?;

@@ -72,7 +72,7 @@ pub(crate) enum Inst {
     /// unchanged so an FP-returning import stays correct.
     ImmExtCode(i64),
     /// Address of a basic block within the current function, as a
-    /// code pointer (GCC labels-as-values, `&&label`). The per-arch
+    /// code pointer (GNU C labels as values, `&&label`). The per-arch
     /// lowering materializes the block's native address with a
     /// PC-relative placeholder resolved against `pc_to_native` once
     /// the block offsets are final. The value is only stored, loaded,
@@ -325,7 +325,7 @@ pub(crate) enum Inst {
     /// needs one extra instruction to zero the upper bits.
     Bswap { value: ValueId, width: u8 },
     /// Count the bits of the low `width` bytes of `value` that `op` names
-    /// (`__builtin_clz` / `ctz` / `popcount`, GCC's builtins; C99 has no
+    /// (`__builtin_clz` / `ctz` / `popcount`, GNU C builtins; C99 has no
     /// operator). `width` is 4 or 8; operand bits above `width * 8` do not
     /// affect the result. A leading or trailing count of 0 is `width * 8`,
     /// so the result is in `0..=width * 8`, zero-extended to 64 bits.
@@ -398,7 +398,7 @@ pub(crate) enum Inst {
         /// `agg_descs[i]` by value; `None` for scalar / void.
         ret_agg: Option<u32>,
         /// Negative frame slot of the caller-allocated result
-        /// temporary an aggregate return materialises into: through the
+        /// temporary an aggregate return materializes into: through the
         /// host ABI when `ret_agg` is set, else through the c5
         /// out-pointer the call passes as `args[0]`. A frame slot rather
         /// than a `ValueId` so it survives value renumbering. `0` for a
@@ -579,12 +579,83 @@ pub(crate) enum Inst {
     /// continue with the sources: an address for a 128-bit operand, the
     /// value itself for a pointer or integer one. Defines no SSA value --
     /// the result is written through the destination address.
-    X86Simd {
+    Simd {
         op: u32,
         imm: Option<u8>,
         args: Vec<ValueId>,
     },
-    /// GCC extended inline asm with operands (`asm(template : outputs :
+    /// The GNU vector extension's element-wise `op` over two vectors of
+    /// `bytes` bytes, 16 held as `V128` values and 8 as the `F64` bits of a
+    /// floating-point register, `lane` naming the element type: the integer
+    /// `Add`, `Sub`, `Mul`, `And`, `Or` and `Xor`, wrapping, and the
+    /// floating `Fadd`, `Fsub`, `Fmul` and `Fdiv`. Defines the result in
+    /// the operands' form. The walker emits one only where
+    /// [`VecLane::binop_in_one_instruction`] holds for the target.
+    VecBinop {
+        op: BinOp,
+        lane: VecLane,
+        bytes: u8,
+        lhs: ValueId,
+        rhs: ValueId,
+    },
+    /// The vector value `vec` of `bytes` bytes with the lane at byte `off`
+    /// replaced by `value` stored as `kind` (an integer or `F32` / `F64`
+    /// kind, or `V128` for a 128-bit part of a wider vector; `off` a
+    /// multiple of its width); `vec` an `Undef` leaves the other lanes
+    /// unspecified. `vector_slots` makes a lane store into a promoted
+    /// vector object one.
+    VecInsert {
+        vec: ValueId,
+        value: ValueId,
+        off: u8,
+        kind: StoreKind,
+        bytes: u8,
+    },
+    /// The `bytes`-byte vector with every lane `value` stored as `kind`
+    /// (an integer kind, `F32` or `F64`): `dup`, `vpbroadcast*`.
+    /// `vector_slots` makes one of inserts of one value into every lane.
+    VecSplat {
+        value: ValueId,
+        kind: StoreKind,
+        bytes: u8,
+    },
+    /// The `bytes`-byte vector with every lane `imm` stored as the integer
+    /// `kind`: a splat of a constant, which needs no general register --
+    /// `pxor` / `movi #0` for zero, `pcmpeqd` / `movi` of 0xff bytes for
+    /// all ones.
+    VecConst {
+        imm: i64,
+        kind: StoreKind,
+        bytes: u8,
+    },
+    /// `a` when `cond` is nonzero, else `b`, both computed, of an integer
+    /// kind, `F32` or `F64`: `csel`, `fcsel` or `cmov`.
+    Select {
+        cond: ValueId,
+        a: ValueId,
+        b: ValueId,
+        kind: LoadKind,
+    },
+    /// The lane at byte `off` of the vector value `vec` of `bytes` bytes,
+    /// read as `kind` would read it from memory; `V128` reads a 128-bit
+    /// part of a wider vector.
+    VecExtract {
+        vec: ValueId,
+        off: u8,
+        kind: LoadKind,
+        bytes: u8,
+    },
+    /// [`Inst::Simd`] on values, as `passes::simd_values` rewrites
+    /// it under `-O`: `args` are the sources, a 128-bit operand as a `V128`
+    /// value and an integer one as itself, and the instruction defines its
+    /// result, a `V128` value for a row returning a vector and an integer
+    /// otherwise. Never a load, a store or `rdrand`.
+    SimdVal {
+        op: u32,
+        imm: Option<u8>,
+        args: Vec<ValueId>,
+    },
+    /// GNU C extended inline asm with operands (`asm(template : outputs :
     /// inputs : clobbers)`). `asm` carries the template, per-operand
     /// constraints, and clobbers; `args` is parallel to `asm.operands`
     /// and holds each operand's SSA value -- the destination address for
@@ -658,7 +729,7 @@ pub(crate) enum Inst {
         fp_mask: FpMask,
     },
     /// SSA phi: at a join block where a promoted slot has more
-    /// than one reaching definition, mem2reg synthesises one of
+    /// than one reaching definition, mem2reg synthesizes one of
     /// these per slot to merge the predecessors' incoming
     /// values. `incoming` records one `(predecessor_block,
     /// reaching_value)` pair per predecessor in the same order
@@ -732,6 +803,45 @@ impl Inst {
                 | Inst::ParamPart { .. }
                 | Inst::RetPart { .. }
                 | Inst::AsmOut { .. }
+                | Inst::SimdVal { .. }
+                | Inst::VecBinop { .. }
+                | Inst::VecInsert { .. }
+                | Inst::VecSplat { .. }
+                | Inst::VecConst { .. }
+                | Inst::VecExtract { .. }
+                | Inst::Select { .. }
+        )
+    }
+
+    /// Whether the inst may write memory, or transfer control to code that
+    /// can, so a load of any address may read something else after it.
+    /// An atomic load is an ordering point after which another thread's
+    /// writes may be visible (C11 5.1.2.4); the end of an object's
+    /// lifetime ends what a load of it may read; an x86 SIMD instruction
+    /// in its memory form writes its result through an address.
+    pub(crate) fn may_write_memory(&self) -> bool {
+        matches!(
+            self,
+            Inst::Store { .. }
+                | Inst::StoreLocal { .. }
+                | Inst::StoreIndexed { .. }
+                | Inst::SegStore { .. }
+                | Inst::Call { .. }
+                | Inst::CallIndirect { .. }
+                | Inst::CallExt { .. }
+                | Inst::TailExt(_)
+                | Inst::Mcpy { .. }
+                | Inst::Mzero { .. }
+                | Inst::AtomicRmw { .. }
+                | Inst::AtomicCas { .. }
+                | Inst::AtomicCas16 { .. }
+                | Inst::AtomicLoad { .. }
+                | Inst::AtomicStore { .. }
+                | Inst::Intrinsic { .. }
+                | Inst::Simd { .. }
+                | Inst::InlineAsm { .. }
+                | Inst::AllocaInit(_)
+                | Inst::LifetimeEnd(_)
         )
     }
 
@@ -802,7 +912,14 @@ impl Inst {
             Inst::AtomicLoad { .. } => "AtomicLoad",
             Inst::AtomicStore { .. } => "AtomicStore",
             Inst::Intrinsic { .. } => "Intrinsic",
-            Inst::X86Simd { .. } => "X86Simd",
+            Inst::Simd { .. } => "Simd",
+            Inst::SimdVal { .. } => "SimdVal",
+            Inst::VecBinop { .. } => "VecBinop",
+            Inst::VecInsert { .. } => "VecInsert",
+            Inst::VecSplat { .. } => "VecSplat",
+            Inst::VecConst { .. } => "VecConst",
+            Inst::VecExtract { .. } => "VecExtract",
+            Inst::Select { .. } => "Select",
             Inst::InlineAsm { .. } => "InlineAsm",
             Inst::AllocaInit(_) => "AllocaInit",
             Inst::LifetimeEnd(_) => "LifetimeEnd",
@@ -864,9 +981,24 @@ impl Inst {
                 f(*index);
                 f(*value);
             }
-            Inst::Binop { lhs, rhs, .. } | Inst::ShiftOp { lhs, rhs, .. } => {
+            Inst::Binop { lhs, rhs, .. }
+            | Inst::ShiftOp { lhs, rhs, .. }
+            | Inst::VecBinop { lhs, rhs, .. }
+            | Inst::VecInsert {
+                vec: lhs,
+                value: rhs,
+                ..
+            } => {
                 f(*lhs);
                 f(*rhs);
+            }
+            Inst::VecExtract { vec, .. } => f(*vec),
+            Inst::VecSplat { value, .. } => f(*value),
+            Inst::VecConst { .. } => {}
+            Inst::Select { cond, a, b, .. } => {
+                f(*cond);
+                f(*a);
+                f(*b);
             }
             Inst::BinopI { lhs, .. } | Inst::BitField { value: lhs, .. } => f(*lhs),
             Inst::Neg(v) | Inst::Fneg(v) | Inst::ParentLocalAddr { establisher: v, .. } => f(*v),
@@ -887,7 +1019,8 @@ impl Inst {
             Inst::Call { args, .. }
             | Inst::CallExt { args, .. }
             | Inst::Intrinsic { args, .. }
-            | Inst::X86Simd { args, .. } => {
+            | Inst::Simd { args, .. }
+            | Inst::SimdVal { args, .. } => {
                 for &a in args {
                     f(a);
                 }
@@ -985,9 +1118,24 @@ impl Inst {
                 f(index);
                 f(value);
             }
-            Inst::Binop { lhs, rhs, .. } | Inst::ShiftOp { lhs, rhs, .. } => {
+            Inst::Binop { lhs, rhs, .. }
+            | Inst::ShiftOp { lhs, rhs, .. }
+            | Inst::VecBinop { lhs, rhs, .. }
+            | Inst::VecInsert {
+                vec: lhs,
+                value: rhs,
+                ..
+            } => {
                 f(lhs);
                 f(rhs);
+            }
+            Inst::VecExtract { vec, .. } => f(vec),
+            Inst::VecSplat { value, .. } => f(value),
+            Inst::VecConst { .. } => {}
+            Inst::Select { cond, a, b, .. } => {
+                f(cond);
+                f(a);
+                f(b);
             }
             Inst::BinopI { lhs, .. } | Inst::BitField { value: lhs, .. } => f(lhs),
             Inst::Neg(v) | Inst::Fneg(v) | Inst::ParentLocalAddr { establisher: v, .. } => f(v),
@@ -1008,7 +1156,8 @@ impl Inst {
             Inst::Call { args, .. }
             | Inst::CallExt { args, .. }
             | Inst::Intrinsic { args, .. }
-            | Inst::X86Simd { args, .. } => {
+            | Inst::Simd { args, .. }
+            | Inst::SimdVal { args, .. } => {
                 for a in args {
                     f(a);
                 }
@@ -1059,6 +1208,68 @@ impl Inst {
     }
 }
 
+/// The element type of a 16-byte vector operation: its width and whether it
+/// is a floating type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum VecLane {
+    I8,
+    I16,
+    I32,
+    I64,
+    F32,
+    F64,
+}
+
+impl VecLane {
+    pub(crate) fn bytes(self) -> u8 {
+        match self {
+            VecLane::I8 => 1,
+            VecLane::I16 => 2,
+            VecLane::I32 | VecLane::F32 => 4,
+            VecLane::I64 | VecLane::F64 => 8,
+        }
+    }
+
+    pub(crate) fn is_float(self) -> bool {
+        matches!(self, VecLane::F32 | VecLane::F64)
+    }
+
+    /// Whether the target has one instruction for the element-wise `op` on
+    /// vectors of `bytes` bytes: SSE2 has no 8-, 32- or 64-bit integer
+    /// multiply, AdvSIMD no 64-bit one, and a 32-byte vector is one ymm
+    /// register on x86-64, whose baseline has AVX2; `x86` holds the unit's
+    /// extensions beyond it. An 8-byte vector of one element is
+    /// a scalar, a bitwise operation on an 8-byte one a single integer
+    /// instruction, and on x86-64 an 8-byte one fills the low half of an xmm
+    /// register, whose floating upper lanes the instruction would compute
+    /// too, raising their exceptions.
+    pub(crate) fn binop_in_one_instruction(
+        self,
+        op: BinOp,
+        x86: Option<crate::c5::X86Features>,
+        bytes: u8,
+    ) -> bool {
+        let bitwise = matches!(op, BinOp::And | BinOp::Or | BinOp::Xor);
+        if bytes == 8 && (self.bytes() == 8 || bitwise || x86.is_some() && self.is_float()) {
+            return false;
+        }
+        // x86-64 code assumes x86-64-v3, whose AVX2 has every ymm form; the
+        // zmm ones are AVX-512's, which a unit enables.
+        let zmm = |f: crate::c5::X86Features| f.avx512f() && (self.bytes() >= 4 || f.avx512bw());
+        if bytes == 32 && x86.is_none() || bytes == 64 && !x86.is_some_and(zmm) || bytes > 64 {
+            return false;
+        }
+        let x86 = x86.is_some();
+        match op {
+            BinOp::Add | BinOp::Sub | BinOp::And | BinOp::Or | BinOp::Xor => !self.is_float(),
+            BinOp::Mul if x86 => self == VecLane::I16,
+            BinOp::Mul => matches!(self, VecLane::I8 | VecLane::I16 | VecLane::I32),
+            BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::Fdiv => self.is_float(),
+            _ => false,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum LoadKind {
     /// 8-byte signed integer.
@@ -1089,9 +1300,28 @@ pub(crate) enum LoadKind {
     F128,
     /// 16 bytes read whole into a SIMD register: a 128-bit vector value.
     V128,
+    /// 32 bytes read whole into a ymm register: a 256-bit vector value,
+    /// which exists only on x86-64 under AVX.
+    V256,
+    /// 64 bytes read whole into a zmm register, under AVX-512F.
+    V512,
 }
 
 impl LoadKind {
+    /// Bytes the access reads; an `F80` reads its 10 bytes from a 16-byte
+    /// object.
+    pub(crate) fn bytes(self) -> u8 {
+        match self {
+            LoadKind::I8 | LoadKind::U8 => 1,
+            LoadKind::I16 | LoadKind::U16 => 2,
+            LoadKind::I32 | LoadKind::U32 | LoadKind::F32 => 4,
+            LoadKind::I64 | LoadKind::F64 => 8,
+            LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => 16,
+            LoadKind::V256 => 32,
+            LoadKind::V512 => 64,
+        }
+    }
+
     /// Bytes an integer kind reads; `None` for the floating and vector
     /// kinds.
     pub(crate) fn int_bytes(self) -> Option<u8> {
@@ -1100,7 +1330,13 @@ impl LoadKind {
             LoadKind::I32 | LoadKind::U32 => Some(4),
             LoadKind::I16 | LoadKind::U16 => Some(2),
             LoadKind::I8 | LoadKind::U8 => Some(1),
-            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => None,
+            LoadKind::F32
+            | LoadKind::F64
+            | LoadKind::F80
+            | LoadKind::F128
+            | LoadKind::V128
+            | LoadKind::V256
+            | LoadKind::V512 => None,
         }
     }
 }
@@ -1134,12 +1370,32 @@ pub(crate) enum StoreKind {
     F64,
     /// f64 widened exactly to the x87 80-bit format and stored as 10
     /// bytes; the 6 padding bytes of the 16-byte object are left
-    /// untouched, as gcc's stores do.
+    /// untouched.
     F80,
     /// f64 widened exactly to IEEE binary128 and stored as 16 bytes.
     F128,
     /// See [`LoadKind::V128`].
     V128,
+    /// See [`LoadKind::V256`].
+    V256,
+    /// See [`LoadKind::V512`].
+    V512,
+}
+
+impl StoreKind {
+    /// Bytes the access writes; an `F80` writes 10 of its object's 16.
+    pub(crate) fn bytes(self) -> u8 {
+        match self {
+            StoreKind::I8 => 1,
+            StoreKind::I16 => 2,
+            StoreKind::I32 | StoreKind::F32 => 4,
+            StoreKind::I64 | StoreKind::F64 => 8,
+            StoreKind::F80 => 10,
+            StoreKind::F128 | StoreKind::V128 => 16,
+            StoreKind::V256 => 32,
+            StoreKind::V512 => 64,
+        }
+    }
 }
 
 /// Integer / FP binary opcode. The planner's choice between
@@ -1168,6 +1424,9 @@ pub(crate) enum BinOp {
     /// shift / OR shape to this opcode so x86_64's `ror` and
     /// aarch64's `ror` lower to a single instruction.
     Ror,
+    /// `Ror` of the low 32 bits, the result zero-extended: the rotate of a
+    /// 32-bit unsigned value, in the 32-bit forms.
+    Ror32,
     Add,
     Sub,
     Mul,
@@ -1192,10 +1451,19 @@ pub(crate) enum BinOp {
     Fdiv,
     Feq,
     Fne,
+    /// The relational operators on floating operands (C99 6.5.8): an
+    /// unordered operand raises invalid, as IEC 60559's signaling
+    /// predicates do (F.3).
     Flt,
     Fgt,
     Fle,
     Fge,
+    /// The quiet `isless`, `isgreater`, `islessequal` and `isgreaterequal`
+    /// (C99 7.12.14.1-4): the relations above without the exception.
+    FltQuiet,
+    FgtQuiet,
+    FleQuiet,
+    FgeQuiet,
     /// Ordered and unequal, the quiet `islessgreater` (C99 7.12.14.5).
     Fone,
     /// Unordered, the quiet `isunordered` (C99 7.12.14.6).
@@ -1237,9 +1505,30 @@ pub(crate) fn is_fp_comparison_op(op: BinOp) -> bool {
             | BinOp::Fgt
             | BinOp::Fle
             | BinOp::Fge
+            | BinOp::FltQuiet
+            | BinOp::FgtQuiet
+            | BinOp::FleQuiet
+            | BinOp::FgeQuiet
             | BinOp::Fone
             | BinOp::Funo
     )
+}
+
+/// The relation a floating compare tests: a quiet relational form maps to
+/// its signaling one, from which it differs only in the exception.
+pub(crate) fn fp_relation(op: BinOp) -> BinOp {
+    match op {
+        BinOp::FltQuiet => BinOp::Flt,
+        BinOp::FgtQuiet => BinOp::Fgt,
+        BinOp::FleQuiet => BinOp::Fle,
+        BinOp::FgeQuiet => BinOp::Fge,
+        op => op,
+    }
+}
+
+/// Whether a floating compare raises invalid for a quiet NaN operand too.
+pub(crate) fn fp_compare_signals(op: BinOp) -> bool {
+    matches!(op, BinOp::Flt | BinOp::Fgt | BinOp::Fle | BinOp::Fge)
 }
 
 /// Floating-point arithmetic or comparison.
@@ -1329,6 +1618,7 @@ pub(crate) fn eval_int_binop(op: BinOp, lhs: i64, rhs: i64) -> Result<i64, DivBy
         BinOp::Mulh
         | BinOp::Mulhu
         | BinOp::Ror
+        | BinOp::Ror32
         | BinOp::Fadd
         | BinOp::Fsub
         | BinOp::Fmul
@@ -1340,6 +1630,10 @@ pub(crate) fn eval_int_binop(op: BinOp, lhs: i64, rhs: i64) -> Result<i64, DivBy
         | BinOp::Fgt
         | BinOp::Fle
         | BinOp::Fge
+        | BinOp::FltQuiet
+        | BinOp::FgtQuiet
+        | BinOp::FleQuiet
+        | BinOp::FgeQuiet
         | BinOp::Fone
         | BinOp::Funo => unreachable!("eval_int_binop reached on {op:?}"),
     };
@@ -1437,7 +1731,7 @@ impl MemOrder {
     /// order `self` and failure order `failure`: it acquires when either
     /// does and releases when the success order does (C11 7.17.7.4p2).
     /// A failure order the standard excludes, release or acq_rel, makes
-    /// both seq_cst, as gcc does.
+    /// both seq_cst.
     pub(crate) fn with_failure(self, failure: MemOrder) -> Self {
         if matches!(failure, MemOrder::Release | MemOrder::AcqRel)
             || self == MemOrder::SeqCst
@@ -1450,6 +1744,17 @@ impl MemOrder {
             (true, false) => MemOrder::Acquire,
             (false, true) => MemOrder::Release,
             (true, true) => MemOrder::AcqRel,
+        }
+    }
+
+    /// The `memory_order` constant naming the order.
+    pub(crate) fn to_c11(self) -> i64 {
+        match self {
+            MemOrder::Relaxed => 0,
+            MemOrder::Acquire => 2,
+            MemOrder::Release => 3,
+            MemOrder::AcqRel => 4,
+            MemOrder::SeqCst => 5,
         }
     }
 
@@ -1514,10 +1819,15 @@ pub(crate) enum FpCastKind {
     /// explicit `(float)d` cast and an assignment / return converting
     /// a `double` value to a `float` object.
     F64ToF32,
+    /// The 64 bits of a double as an integer, bit for bit: a `double`
+    /// stored and read back as a 64-bit integer.
+    FpBits,
+    /// A 64-bit integer's bits as a double, bit for bit.
+    BitsFp,
 }
 
 /// Register-name size for an inline-asm template `%`-reference, from a
-/// GCC operand-size modifier (`%b`/`%w`/`%k`/`%q` -> byte/word/long/quad
+/// GNU C operand-size modifier (`%b`/`%w`/`%k`/`%q` -> byte/word/long/quad
 /// sub-register name). Absent modifier defaults to the operand's width.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum AsmRegSize {
@@ -1546,7 +1856,7 @@ impl AsmRegSize {
     }
 }
 
-/// Constraint on one GCC extended-asm operand (x86_64 register classes).
+/// Constraint on one extended-asm operand (x86_64 register classes).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum AsmConstraint {
     /// Any allocatable general register (`r`, or the register arm of
@@ -1605,7 +1915,7 @@ pub(crate) enum AsmSeg {
     Fs,
 }
 
-/// One operand of a GCC extended-asm statement.
+/// One operand of an extended-asm statement.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct AsmOperand {
     pub constraint: AsmConstraint,
@@ -1640,7 +1950,7 @@ pub(crate) struct AsmOperand {
     pub fp_limit: u8,
 }
 
-/// A parsed GCC extended-asm statement (`asm(template : outputs :
+/// A parsed GNU C extended-asm statement (`asm(template : outputs :
 /// inputs : clobbers)`). The template's `%N` / `%<size>N` references
 /// are substituted with the operands' assigned registers at emit time.
 #[derive(Debug, Clone)]
@@ -1937,7 +2247,7 @@ pub(crate) enum Terminator {
     /// Tail-jump to a libc symbol. The trampoline shape doesn't
     /// return through here.
     TailExt(i64),
-    /// Indirect branch to a code address held in `target` (GCC
+    /// Indirect branch to a code address held in `target` (GNU C
     /// computed goto, `goto *expr`). The set of possible successor
     /// blocks is the function's `computed_goto_targets` (every block
     /// whose address is taken via `&&label`); the CFG treats this as
@@ -1950,7 +2260,7 @@ pub(crate) enum Terminator {
     /// The target list lives in [`FunctionSsa::jump_tables`]
     /// because `Terminator` is `Copy`.
     JumpTable { idx: ValueId, table: u32 },
-    /// GCC `asm goto`: the block's last instruction is an
+    /// GNU C `asm goto`: the block's last instruction is an
     /// `Inst::InlineAsm` whose template may branch to any listed C
     /// label. `jump_tables[table][0]` is the fall-through successor;
     /// entries 1.. are the label targets in label-list order (a
@@ -2196,8 +2506,8 @@ pub(crate) struct AggDesc {
     pub vector: bool,
 }
 
-/// A static-initializer data slot holding the address of a labelled
-/// code location in this function (GCC `&&label`). The label's address
+/// A static-initializer data slot holding the address of a labeled
+/// code location in this function (GNU C `&&label`). The label's address
 /// is a link-time constant, so the slot is filled by a relocation
 /// rather than by stores at the declaration point.
 #[derive(Debug, Clone, Copy)]
@@ -2206,6 +2516,46 @@ pub(crate) struct LabelDataReloc {
     pub data_offset: u64,
     /// Block whose code address the slot receives.
     pub block: BlockId,
+}
+
+/// An instruction's source position: its statement's line, the index of
+/// its file in `Program::source_files`, and the unit offset the diagnostic
+/// pragmas resolve at.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct InstSrc {
+    pub line: u32,
+    pub file: u32,
+    pub offset: u32,
+}
+
+/// A parameter object at the address argument cell `cell` holds, copied on
+/// entry into the `cells` frame slots from `base`; `align` is its
+/// [`Inst::Load`] alignment.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct OwnedParam {
+    pub base: i64,
+    pub cells: i64,
+    pub cell: i64,
+    pub align: u8,
+}
+
+/// An arm of a conditional branch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Arm {
+    Target,
+    FallThrough,
+}
+
+impl Arm {
+    /// The arm a `Bz` (`nonzero` false) or `Bnz` takes when its condition
+    /// is `truthy`.
+    pub(crate) fn taken(nonzero: bool, truthy: bool) -> Arm {
+        if nonzero == truthy {
+            Arm::Target
+        } else {
+            Arm::FallThrough
+        }
+    }
 }
 
 /// Per-function SSA program. Consumed by the allocator and the
@@ -2236,20 +2586,18 @@ pub(crate) struct FunctionSsa {
     /// `__inline` / `__inline__` function specifier (C99 6.7.4) or
     /// `__attribute__((always_inline))`. The inliner measures these
     /// against a multiple of the `--inline-cap=N` body-size gate rather
-    /// than against the gate itself, matching the gcc / clang policy of
-    /// a higher single-function limit for a marked body and a lower
-    /// automatic one for a size-driven candidate.
+    /// than against the gate itself: a marked body has a higher limit
+    /// than a size-driven candidate.
     pub is_inline: bool,
     /// True if the function carried a *mandatory* inline request --
     /// `__attribute__((always_inline))` or MSVC `__forceinline` -- as
     /// opposed to the plain `inline` hint. Implies `is_inline`. No size
-    /// or frame budget applies to it, matching gcc and clang, which
-    /// report a diagnostic rather than silently declining. gcc's is an
-    /// error because its inliner admits nearly any callee shape; badc's
-    /// candidate filter is narrower, so an unhonoured request is a
-    /// warning -- an error would reject conforming programs over a
-    /// coverage gap. A plain `inline` that stays out of line is silent
-    /// (it is only a hint).
+    /// or frame budget applies to it, and an unhonored request is
+    /// diagnosed rather than silently declined. gcc makes that an error
+    /// because its inliner admits nearly any callee shape; badc's
+    /// candidate filter is narrower, so it is a warning -- an error would
+    /// reject conforming programs over a coverage gap. A plain `inline`
+    /// that stays out of line is silent (it is only a hint).
     pub is_always_inline: bool,
     /// True if the function carried `__attribute__((noinline))`. gcc's
     /// documented way to hold a body out of line, and what its
@@ -2292,7 +2640,7 @@ pub(crate) struct FunctionSsa {
     /// for the default text section. Placement is a contract consumers
     /// read (a linker script places by it, a reference check keys on it),
     /// so a body with one is only spliced into a caller placed
-    /// identically, as gcc does.
+    /// identically.
     pub section: Option<alloc::string::String>,
     /// `__attribute__((patchable_function_entry(N, M)))`: the NOP area
     /// this function takes in place of the option's.
@@ -2310,14 +2658,11 @@ pub(crate) struct FunctionSsa {
     /// by [`ValueId`]. Each [`Block::inst_range`] is a contiguous
     /// slice of this list.
     pub insts: Vec<Inst>,
-    /// Source position per `Inst`, parallel to `insts`. `(line,
-    /// file_idx)` -- file_idx is an index into
-    /// `Program::source_files`. `(0, 0)` means "no source
-    /// information"; the DWARF line table skips those rows. Filled
-    /// in by the walker as it lowers AST nodes; empty for SSA
-    /// produced outside the walker (sys-trampolines, archive
-    /// reloads).
-    pub inst_src: Vec<(u32, u32)>,
+    /// Source position per `Inst`, parallel to `insts`. Line 0 means "no
+    /// source information"; the DWARF line table skips those rows. Filled
+    /// in by the walker as it lowers AST nodes; empty for SSA produced
+    /// outside the walker (sys-trampolines, archive reloads).
+    pub inst_src: Vec<InstSrc>,
     /// Basic blocks in source / execution order. Block 0 is the
     /// entry block.
     pub blocks: Vec<Block>,
@@ -2357,7 +2702,8 @@ pub(crate) struct FunctionSsa {
     pub f32_values: Vec<bool>,
     /// Per-value table, parallel to `insts`: the instruction is an
     /// integer comparison whose operands are read at 32 bits
-    /// (`super::codegen::passes::narrow`). Set once, after every pass
+    /// (`super::codegen::passes::narrow`), or a select that tests the low
+    /// 32 bits of its condition. Set once, after every pass
     /// that adds, removes or rewrites instructions; a shorter table is
     /// read as all-false, which is the 64-bit form.
     pub cmp32: Vec<bool>,
@@ -2429,7 +2775,7 @@ pub(crate) struct FunctionSsa {
     pub indirect_result_slot: i64,
     /// Successor blocks of every `Terminator::GotoIndirect` in this
     /// function: each block whose address is taken via `&&label`
-    /// (GCC computed goto). The CFG, liveness, and the allocator
+    /// (GNU C computed goto). The CFG, liveness, and the allocator
     /// treat an indirect branch as a branch to all of these. Empty
     /// for functions with no computed goto.
     pub computed_goto_targets: Vec<BlockId>,
@@ -2455,7 +2801,7 @@ pub(crate) struct FunctionSsa {
     /// `ssa_slot_coalesce` confines itself to the synthetic range when
     /// debug info is emitted (preserving per-local `DW_OP_fbreg`
     /// locations); without debug info it coalesces the declared range
-    /// too. 0 for SSA built outside the walker, which disables coalescing.
+    /// too. -1 for SSA built outside the walker, which disables coalescing.
     pub synthetic_base: i64,
     /// `(base_offset, cells)` for each slot group -- a declared aggregate of
     /// any cell count / a multi-cell scalar (seeded from the parser) or a
@@ -2475,6 +2821,13 @@ pub(crate) struct FunctionSsa {
     /// array reaches the canary before it reaches another object. Empty for
     /// a function that holds none.
     pub array_slots: Vec<i64>,
+    /// Base slot of each automatic object of a GNU vector type, which
+    /// `vector_slots` takes as a vector whether or not a SIMD operand
+    /// meets it.
+    pub vector_objects: Vec<i64>,
+    /// Aggregate parameters the caller passes as the address of a copy the
+    /// callee owns, copied into their slot groups on entry.
+    pub owned_params: Vec<OwnedParam>,
     /// Automatic objects whose required alignment exceeds the 8-byte frame
     /// slot (C11 6.7.5 `_Alignas` / GNU `aligned`, or a type whose natural
     /// alignment is 16). The prologue reserves a `frame_align`-aligned
@@ -2521,6 +2874,9 @@ pub(crate) struct FunctionSsa {
     /// Per block, the innermost region its code lies in; empty when
     /// `seh_scopes` is, and a block past its end lies in none.
     pub block_seh: Vec<Option<u32>>,
+    /// Per block, the arm of its `Bz` / `Bnz` its controlling expression's
+    /// `__builtin_expect` predicts; read through [`Self::predicted_arm`].
+    pub predicted: Vec<Option<Arm>>,
     /// The slots the function's filter funclets reach, by the index of an
     /// [`Inst::ParentLocalAddr`]: they stay in the frame for the whole body.
     pub funclet_slots: Vec<i64>,
@@ -2595,6 +2951,39 @@ impl FunctionSsa {
     }
 
     /// The innermost `__try` region block `b` lies in.
+    /// The arm block `b`'s conditional branch is predicted to take: the one
+    /// `__builtin_expect` names, else the one of two whose block does not
+    /// end the program's path (a noreturn call or `__builtin_unreachable`).
+    pub(crate) fn predicted_arm(&self, b: BlockId) -> Option<Arm> {
+        let (Terminator::Bz {
+            target,
+            fall_through,
+            ..
+        }
+        | Terminator::Bnz {
+            target,
+            fall_through,
+            ..
+        }) = self.blocks.get(b as usize)?.terminator
+        else {
+            return None;
+        };
+        if let Some(arm) = self.predicted.get(b as usize).copied().flatten() {
+            return Some(arm);
+        }
+        let ends = |t: BlockId| {
+            matches!(
+                self.blocks.get(t as usize).map(|b| b.terminator),
+                Some(Terminator::Unreachable)
+            )
+        };
+        match (ends(target), ends(fall_through)) {
+            (true, false) => Some(Arm::FallThrough),
+            (false, true) => Some(Arm::Target),
+            _ => None,
+        }
+    }
+
     pub(crate) fn seh_scope_of(&self, b: BlockId) -> Option<u32> {
         self.block_seh.get(b as usize).copied().flatten()
     }
@@ -2717,7 +3106,7 @@ pub(crate) fn sp_asm_reachers(funcs: &[FunctionSsa]) -> alloc::collections::BTre
 /// the setjmp family (C99 7.13.1.1) plus vfork(2). Matched on the
 /// c5-side symbol name; `__c5_msvcrt_setjmp` is the target of the
 /// Windows `setjmp` macro (libc/include/setjmp.h). The AArch64 inline
-/// setjmp an in-process image takes is an intrinsic, recognised
+/// setjmp an in-process image takes is an intrinsic, recognized
 /// structurally by `codegen::ssa::reg_alloc::is_setjmp_barrier`.
 pub(crate) fn returns_twice_fn_name(name: &str) -> bool {
     matches!(
@@ -2781,7 +3170,14 @@ impl crate::c5::layout::DataOffsets for Inst {
             | Inst::AtomicLoad { .. }
             | Inst::AtomicStore { .. }
             | Inst::Intrinsic { .. }
-            | Inst::X86Simd { .. }
+            | Inst::Simd { .. }
+            | Inst::SimdVal { .. }
+            | Inst::VecBinop { .. }
+            | Inst::VecInsert { .. }
+            | Inst::VecSplat { .. }
+            | Inst::VecConst { .. }
+            | Inst::VecExtract { .. }
+            | Inst::Select { .. }
             | Inst::InlineAsm { .. }
             | Inst::AllocaInit { .. }
             | Inst::LifetimeEnd { .. }
@@ -2805,6 +3201,7 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
             ssp: _,
             seh_scopes: _,
             block_seh: _,
+            predicted: _,
             funclet_slots: _,
             n_params: _,
             is_variadic: _,
@@ -2849,6 +3246,8 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
             synthetic_base: _,
             multi_cell_slots: _,
             array_slots: _,
+            vector_objects: _,
+            owned_params: _,
             over_aligned: _,
             frame_align: _,
             realign_region_bytes: _,

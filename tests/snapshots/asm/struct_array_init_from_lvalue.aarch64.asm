@@ -17,21 +17,17 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x30
-               	mov	x1, #0x3                // =3
                	mov	x0, #0x0                // =0
-               	mov	x2, #0x8                // =8
+               	mov	x1, #0x8                // =8
                	sub	x3, x29, #0x30
-               	stur	x2, [x29, #-0x30]
-               	stur	w1, [x29, #-0x28]
-               	stur	w0, [x29, #-0x24]
+               	stur	x1, [x29, #-0x30]
+               	mov	x1, #0x3                // =3
+               	stur	x1, [x29, #-0x28]
+               	mov	x1, #0x2                // =2
                	sub	x2, x29, #0x20
-               	stp	xzr, xzr, [x2]
-               	stp	xzr, xzr, [x2, #0x10]
+               	stur	x1, [x29, #-0x20]
                	mov	x1, #0x1                // =1
-               	mov	x4, #0x2                // =2
-               	stur	x4, [x29, #-0x20]
-               	stur	w1, [x29, #-0x18]
-               	stur	w0, [x29, #-0x14]
+               	stur	x1, [x29, #-0x18]
                	add	x1, x2, #0x10
                	ldp	x16, x17, [x3]
                	stp	x16, x17, [x1]

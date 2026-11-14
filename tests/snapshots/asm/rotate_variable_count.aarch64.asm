@@ -37,6 +37,10 @@ Disassembly of section .text:
                	ldursw	x4, [x29, #-0x10]
                	mov	x0, #0x0                // =0
                	mov	x1, x0
+               	b	<addr>
+               	add	x0, x0, #0x1
+               	cmp	w0, #0x40
+               	b.ge	<addr>
                	lsl	x5, x2, x0
                	and	x5, x3, x5
                	cbz	x5, <addr>
@@ -44,9 +48,7 @@ Disassembly of section .text:
                	and	x5, x5, #0x3f
                	lsl	x5, x2, x5
                	orr	x1, x1, x5
-               	add	x0, x0, #0x1
-               	cmp	w0, #0x40
-               	b.lt	<addr>
+               	b	<addr>
                	cmp	x7, x1
                	b.ne	<addr>
                	ldursw	x0, [x29, #-0x10]
@@ -69,6 +71,10 @@ Disassembly of section .text:
                	orr	x5, x0, x1, lsl #57
                	mov	x0, #0x0                // =0
                	mov	x1, x0
+               	b	<addr>
+               	add	x0, x0, #0x1
+               	cmp	w0, #0x40
+               	b.ge	<addr>
                	mov	x2, #0x1                // =1
                	lsl	x4, x2, x0
                	and	x4, x3, x4
@@ -77,9 +83,7 @@ Disassembly of section .text:
                	and	x4, x4, #0x3f
                	lsl	x2, x2, x4
                	orr	x1, x1, x2
-               	add	x0, x0, #0x1
-               	cmp	w0, #0x40
-               	b.lt	<addr>
+               	b	<addr>
                	cmp	x5, x1
                	b.eq	<addr>
                	mov	x0, #0x2                // =2

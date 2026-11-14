@@ -78,53 +78,43 @@ Disassembly of section .text:
                	leaq	(%rcx,%rcx,4), %r8
                	imulq	$0x7, %rsi, %r9
                	cmpl	%ecx, %edx
-               	jge	<addr>
-               	movq	%rdi, -0x20(%rbp)
+               	movq	%r8, %r10
+               	cmovlq	%rdi, %r10
+               	movq	%r10, -0x20(%rbp)
                	cmpl	%esi, %ecx
-               	jge	<addr>
-               	movq	%r8, -0x28(%rbp)
+               	movq	%r9, %r10
+               	cmovlq	%r8, %r10
+               	movq	%r10, -0x28(%rbp)
                	cmpl	%edx, %esi
-               	jge	<addr>
-               	movq	%r9, -0x30(%rbp)
+               	movq	%rdi, %r10
+               	cmovlq	%r9, %r10
+               	movq	%r10, -0x30(%rbp)
                	leaq	(%r15,%rbx), %r10
                	movq	%r10, -0x38(%rbp)
-               	movq	-0x38(%rbp), %r10
                	addq	%r12, %r10
                	movq	%r10, -0x38(%rbp)
-               	movq	-0x38(%rbp), %r10
                	addq	%r13, %r10
                	movq	%r10, -0x38(%rbp)
-               	movq	-0x38(%rbp), %r10
                	addq	%r14, %r10
                	movq	%r10, -0x38(%rbp)
-               	movq	-0x38(%rbp), %r10
                	addq	-0x18(%rbp), %r10
                	movq	%r10, -0x38(%rbp)
-               	movq	-0x38(%rbp), %r10
                	addq	%rdx, %r10
                	movq	%r10, -0x38(%rbp)
-               	movq	-0x38(%rbp), %r10
                	addq	%rcx, %r10
                	movq	%r10, -0x38(%rbp)
-               	movq	-0x38(%rbp), %r10
                	addq	%rsi, %r10
                	movq	%r10, -0x38(%rbp)
-               	movq	-0x38(%rbp), %r10
                	addq	%rdi, %r10
                	movq	%r10, -0x38(%rbp)
-               	movq	-0x38(%rbp), %r10
                	addq	%r8, %r10
                	movq	%r10, -0x38(%rbp)
-               	movq	-0x38(%rbp), %r10
                	addq	%r9, %r10
                	movq	%r10, -0x38(%rbp)
-               	movq	-0x38(%rbp), %r10
                	addq	-0x20(%rbp), %r10
                	movq	%r10, -0x20(%rbp)
-               	movq	-0x20(%rbp), %r10
                	addq	-0x28(%rbp), %r10
                	movq	%r10, -0x20(%rbp)
-               	movq	-0x20(%rbp), %r10
                	addq	-0x30(%rbp), %r10
                	movq	%r10, -0x20(%rbp)
                	cmpl	%ebx, %r15d
@@ -192,10 +182,4 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x1, %eax
-               	jmp	<addr>
-               	movq	%rdi, -0x30(%rbp)
-               	jmp	<addr>
-               	movq	%r9, -0x28(%rbp)
-               	jmp	<addr>
-               	movq	%r8, -0x20(%rbp)
                	jmp	<addr>

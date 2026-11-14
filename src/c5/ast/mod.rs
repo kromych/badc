@@ -55,6 +55,19 @@ pub(crate) struct SrcPos {
     pub line: u32,
     /// Index into the translation unit's source-file table.
     pub file: u16,
+    /// Unit offset of the first token of the statement the node belongs
+    /// to, where the diagnostic pragmas governing its reports resolve.
+    pub offset: u32,
+}
+
+impl SrcPos {
+    pub(crate) fn inst_src(self) -> crate::c5::ir::InstSrc {
+        crate::c5::ir::InstSrc {
+            line: self.line,
+            file: u32::from(self.file),
+            offset: self.offset,
+        }
+    }
 }
 
 /// Short-circuit logical operator. C99 6.5.13 / 6.5.14:
@@ -91,9 +104,8 @@ pub(crate) enum UnOp {
     Renormalize { nsw: bool },
 }
 
-/// Memory transfer the compiler expands inline, from a GCC
-/// `__builtin_mem*` call whose byte count is an integer constant
-/// expression.
+/// Memory transfer the compiler expands inline, from a `__builtin_mem*`
+/// call whose byte count is an integer constant expression.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum MemTransferOp {
     /// C99 7.21.2.1 `memcpy` -- the objects may not overlap.
@@ -169,6 +181,13 @@ pub(crate) enum AtomicKind {
     FetchAnd,
     FetchOr,
     FetchXor,
+    /// MSVC's `_InterlockedNand` / `_InterlockedMax` / `_InterlockedMin`
+    /// families: store `~(*p & v)`, the greater or the lesser of `*p` and
+    /// `v` (compared as the object's type is signed or not), and yield the
+    /// prior `*p`.
+    FetchNand,
+    FetchMax,
+    FetchMin,
     /// `atomic_compare_exchange_strong(p, expected, desired)` --
     /// if `*p == *expected`, store `desired` and yield 1; otherwise
     /// store `*p` into `*expected` and yield 0.
@@ -182,17 +201,17 @@ pub(crate) enum AtomicKind {
     AndFetch,
     OrFetch,
     XorFetch,
-    /// GCC `__sync_val_compare_and_swap(p, old, new)` -- if `*p == old`
+    /// `__sync_val_compare_and_swap(p, old, new)` -- if `*p == old`
     /// store `new`; yield the prior `*p` in either case. `args` are
     /// `[p, old, new]` (`old`/`new` are by value, not pointers).
     SyncCasVal,
-    /// GCC `__sync_bool_compare_and_swap(p, old, new)` -- as `SyncCasVal`
+    /// `__sync_bool_compare_and_swap(p, old, new)` -- as `SyncCasVal`
     /// but yield 1 on a swap, 0 otherwise.
     SyncCasBool,
     /// GCC generic `__atomic_load(p, ret, memorder)` -- atomically load
     /// `*p` and write it through `ret`. `args` are `[p, ret]`; no value.
     LoadInto,
-    /// GCC generic `__atomic_store(p, val, memorder)` -- atomically store
+    /// Generic `__atomic_store(p, val, memorder)` -- atomically store
     /// `*val` into `*p`. `args` are `[p, val]`; no value.
     StoreFrom,
     /// `atomic_init(p, v)` (C17 7.17.2.2), clang's `__c11_atomic_init`: the
@@ -306,7 +325,7 @@ pub(crate) enum Expr {
     /// decrement go through [`Expr::PreInc`] / [`Expr::PostInc`]
     /// instead.
     Unary { op: UnOp, child: ExprId, ty: i64 },
-    /// `&&label` -- GCC labels-as-values. The address of a local
+    /// `&&label` -- GNU C labels-as-values. The address of a local
     /// label as a `void *`, consumed by `Stmt::GotoIndirect`.
     LabelAddr(LabelId),
     /// `lhs op rhs`. C99 6.5 operator-by-operator semantics; `op`
@@ -440,7 +459,7 @@ pub(crate) enum Expr {
         args: Vec<ExprId>,
         ty: i64,
     },
-    /// GCC extended inline asm with operands. The payload is an index
+    /// GNU C extended inline asm with operands. The payload is an index
     /// into [`Ast::asm_blocks`]; the descriptor there holds the
     /// template, per-operand constraints, clobbers, and the operand
     /// expressions. As a statement it yields no value (`void`); the
@@ -493,7 +512,7 @@ pub(crate) enum Expr {
     /// `Decl::Vla` stored into `size_slot` (C99 6.5.3.4p2: for a VLA
     /// the operand is evaluated and the result is a runtime value).
     VlaSizeof { size_slot: i64 },
-    /// GCC statement expression `({ ... })` (Annex J.5 common
+    /// GNU C statement expression `({ ... })` (Annex J.5 common
     /// extension). `block` is the enclosed compound statement (or,
     /// for a single-item block, the bare statement `ast_wrap_block_items`
     /// yields). `value_item` indexes the block item the value and type
@@ -527,13 +546,13 @@ pub(crate) enum Expr {
     /// source order, with a constant immediate or shift count already
     /// removed and folded into `imm`. `ty` is the result type -- a 16-byte
     /// vector or `int`.
-    X86Simd {
+    Simd {
         op: u32,
         args: Vec<ExprId>,
         imm: Option<u8>,
         ty: i64,
     },
-    /// GCC `__builtin_memcpy` / `__builtin_memmove` / `__builtin_memset`
+    /// `__builtin_memcpy` / `__builtin_memmove` / `__builtin_memset`
     /// with an integer-constant-expression byte count. `src` is the
     /// source address for the copies and the fill byte for the set.
     /// `align` is the alignment both endpoints satisfy by virtue of
@@ -613,7 +632,7 @@ pub(crate) enum Stmt {
     Return(Option<ExprId>),
     /// `goto label;` (C99 6.8.6.1).
     Goto(LabelId),
-    /// `goto *expr;` -- GCC computed goto. `target` evaluates to a
+    /// `goto *expr;` -- GNU C computed goto. `target` evaluates to a
     /// label address produced by `Expr::LabelAddr`.
     GotoIndirect(ExprId),
     /// `label: body` (C99 6.8.1) -- the goto target.
@@ -624,7 +643,7 @@ pub(crate) enum Stmt {
         text: alloc::string::String,
         clobbers: alloc::string::String,
     },
-    /// GCC `asm goto`: extended asm whose template may branch to the
+    /// GNU C `asm goto`: extended asm whose template may branch to the
     /// C labels listed in `asm_blocks[idx].labels`. A statement (not
     /// an expression) because it ends the current basic block;
     /// control either falls through or jumps to a listed label.
@@ -723,7 +742,7 @@ pub(crate) struct RuntimeInitElement {
 }
 
 /// Initializer shape on a `Decl::Local`. C99 6.7.8 admits four
-/// flavours the AST distinguishes:
+/// flavors the AST distinguishes:
 /// * `None` -- no initializer; C99 6.7.8p10 leaves the value
 ///   indeterminate.
 /// * `Scalar(ExprId)` -- a single initializer expression for an
@@ -912,6 +931,8 @@ pub(crate) struct FinishedFunction {
     /// storage above the other locals. Empty when the function declares
     /// no such object.
     pub array_slots: alloc::vec::Vec<i64>,
+    /// Base slots of the objects of a GNU vector type, for `FunctionSsa::vector_objects`.
+    pub vector_objects: alloc::vec::Vec<i64>,
     /// `(slot_off, align, size_bytes)` for each automatic object whose required
     /// alignment exceeds the 8-byte frame slot (C11 6.7.5 `_Alignas` / GNU
     /// `aligned`, or a type naturally aligned to 16). The walker packs these
@@ -936,7 +957,7 @@ pub(crate) struct FinishedFunction {
 
 /// Per-function AST. One instance lives on the active function in
 /// [`super::compiler::Compiler`]; dropped at function exit.
-/// A GCC extended-asm statement as parsed, before the walker evaluates
+/// An extended-asm statement as parsed, before the walker evaluates
 /// its operands. `block` carries the template, constraints, and
 /// clobbers; `operand_exprs` is parallel to `block.operands` and holds
 /// each operand's parenthesised expression (an lvalue for an output, an
@@ -972,7 +993,7 @@ pub(crate) struct Ast {
     /// The labels whose address is taken, a computed `goto`'s targets.
     pub label_addrs: Vec<LabelId>,
     /// Forward-fixup table for `goto`. `goto_targets[id as usize]`
-    /// is `Some(StmtId)` once the matching labelled statement is
+    /// is `Some(StmtId)` once the matching labeled statement is
     /// seen; `None` while the label is still pending.
     pub goto_targets: Vec<Option<StmtId>>,
     /// The function type of a call's callee expression, keyed by its
@@ -981,6 +1002,9 @@ pub(crate) struct Ast {
     /// convention the walker places them by. Absent where the callee's
     /// type carries no function type.
     pub callee_types: alloc::collections::BTreeMap<ExprId, crate::c5::symbol::FnType>,
+    /// The truth `__builtin_expect` predicts for its value, keyed by the
+    /// node the call became.
+    pub expected: alloc::collections::BTreeMap<ExprId, bool>,
     /// `Expr::Ident` nodes that reference a block-scope `extern` which
     /// shadows an enclosing bound name (a local, parameter, or enum
     /// constant). The shadowed binding is restored at block exit, so the
@@ -1049,7 +1073,7 @@ macro_rules! visit_data_offsets {
                 | Expr::VlaSizeof { .. }
                 | Expr::StmtExpr { .. }
                 | Expr::CheckedArith { .. }
-                | Expr::X86Simd { .. }
+                | Expr::Simd { .. }
                 | Expr::MsIntrinsic { .. }
                 | Expr::MemTransfer { .. } => {}
             }
@@ -1369,7 +1393,7 @@ macro_rules! plain_ty_expr {
             | Expr::VlaBase { ty: $t, .. }
             | Expr::StmtExpr { ty: $t, .. }
             | Expr::CheckedArith { ty: $t, .. }
-            | Expr::X86Simd { ty: $t, .. }
+            | Expr::Simd { ty: $t, .. }
             | Expr::MsIntrinsic { ty: $t, .. }
             | Expr::MemTransfer { ty: $t, .. }
     };
@@ -1436,6 +1460,7 @@ impl crate::c5::layout::DataOffsets for FinishedFunction {
             alloca_top_slot: _,
             multi_cell_slots: _,
             array_slots: _,
+            vector_objects: _,
             over_aligned_slots: _,
             ssp: _,
             label_data_slots,
@@ -1465,7 +1490,11 @@ mod tests {
     #[test]
     fn return_a_plus_one() {
         let mut ast = Ast::new();
-        let src = SrcPos { line: 7, file: 0 };
+        let src = SrcPos {
+            line: 7,
+            file: 0,
+            offset: 0,
+        };
         let a = ast.push_expr(
             Expr::Ident {
                 sym: 42,
@@ -1512,7 +1541,11 @@ mod tests {
         let l1 = ast.alloc_label();
         let l2 = ast.alloc_label();
         assert_eq!(ast.goto_targets, alloc::vec![None, None]);
-        let src = SrcPos { line: 1, file: 0 };
+        let src = SrcPos {
+            line: 1,
+            file: 0,
+            offset: 0,
+        };
         let body1 = ast.push_stmt(Stmt::Break, src);
         ast.resolve_label(l1, body1);
         assert_eq!(ast.goto_targets[l1 as usize], Some(body1));

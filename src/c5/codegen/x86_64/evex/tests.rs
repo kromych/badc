@@ -3,7 +3,7 @@
 //! Every expected byte string is what GNU as 2.46.1 emits for the AT&T text on
 //! the left, taken from `objdump -d` of an assembled object. The `disp8*N`
 //! cases carry, per tuple type, a displacement that compresses, the largest and
-//! smallest that do, and the neighbours that must fall back to disp32: a wrong
+//! smallest that do, and the neighbors that must fall back to disp32: a wrong
 //! scale factor encodes cleanly and addresses the wrong memory, so the boundary
 //! is where it shows.
 
@@ -701,6 +701,61 @@ fn disp8_compressed_displacement() {
 /// The extended register file: xmm/ymm16..31 and zmm0..31 reach ModRM.reg
 /// through `R'`, ModRM.rm through `X` in the register-direct form, and
 /// EVEX.vvvv through `V'`.
+/// AVX-512F's unsigned doubleword conversions, which have no VEX form, at
+/// each length, from memory, broadcast and under a zeroing mask; the bytes
+/// are clang's.
+#[test]
+fn unsigned_doubleword_conversions() {
+    gas(
+        "vcvtps2udq %xmm1, %xmm0",
+        &[0x62, 0xF1, 0x7C, 0x08, 0x79, 0xC1],
+    );
+    gas(
+        "vcvtps2udq %ymm9, %ymm17",
+        &[0x62, 0xC1, 0x7C, 0x28, 0x79, 0xC9],
+    );
+    gas(
+        "vcvtps2udq %zmm2, %zmm3",
+        &[0x62, 0xF1, 0x7C, 0x48, 0x79, 0xDA],
+    );
+    gas(
+        "vcvtps2udq 32(%rcx), %zmm7",
+        &[0x62, 0xF1, 0x7C, 0x48, 0x79, 0xB9, 0x20, 0x00, 0x00, 0x00],
+    );
+    gas(
+        "vcvtps2udq 4(%rcx){1to16}, %zmm7",
+        &[0x62, 0xF1, 0x7C, 0x58, 0x79, 0x79, 0x01],
+    );
+    gas(
+        "vcvtps2udq %xmm1, %xmm0{%k1}{z}",
+        &[0x62, 0xF1, 0x7C, 0x89, 0x79, 0xC1],
+    );
+    gas(
+        "vcvttps2udq %xmm1, %xmm0",
+        &[0x62, 0xF1, 0x7C, 0x08, 0x78, 0xC1],
+    );
+    gas(
+        "vcvttps2udq %ymm3, %ymm4",
+        &[0x62, 0xF1, 0x7C, 0x28, 0x78, 0xE3],
+    );
+    gas(
+        "vcvttps2udq 16(%rax), %xmm5",
+        &[0x62, 0xF1, 0x7C, 0x08, 0x78, 0x68, 0x01],
+    );
+    gas(
+        "vcvtudq2ps %xmm1, %xmm0",
+        &[0x62, 0xF1, 0x7F, 0x08, 0x7A, 0xC1],
+    );
+    gas(
+        "vcvtudq2ps %zmm30, %zmm1",
+        &[0x62, 0x91, 0x7F, 0x48, 0x7A, 0xCE],
+    );
+    gas(
+        "vcvtudq2ps 64(%rdx), %ymm2",
+        &[0x62, 0xF1, 0x7F, 0x28, 0x7A, 0x52, 0x02],
+    );
+}
+
 #[test]
 fn extended_registers() {
     gas(
@@ -1813,7 +1868,7 @@ mod differential {
     }
 
     /// The displacements worth encoding for a scale of `n`: zero, one step,
-    /// the extremes a signed byte holds, and the neighbours that must fall
+    /// the extremes a signed byte holds, and the neighbors that must fall
     /// back to disp32.
     fn disps(n: i32) -> Vec<i32> {
         alloc::vec![0, n, 127 * n, 128 * n, -128 * n, -129 * n, n + 1]
@@ -2035,5 +2090,451 @@ mod differential {
             "only {} of {total} spellings survived assembly; the sweep is not covering the table",
             pairs.len()
         );
+    }
+}
+
+/// The VEX forms of the SSE integer instructions -- saturating, averaging,
+/// min/max, multiply-high, horizontal, interleave and pack -- at 128 and
+/// 256 bits, byte-exact against GNU as.
+#[test]
+fn vex_integer_forms_match_gas() {
+    let cases: &[(&str, &[u8])] = &[
+        (
+            "vpmulhuw %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0xE4, 0xC2],
+        ),
+        ("vpmulhuw %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0xE4, 0xC2]),
+        (
+            "vpsadbw %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0xF6, 0xC2],
+        ),
+        ("vpsadbw %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0xF6, 0xC2]),
+        (
+            "vpunpcklbw %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0x60, 0xC2],
+        ),
+        ("vpunpcklbw %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0x60, 0xC2]),
+        (
+            "vpunpcklwd %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0x61, 0xC2],
+        ),
+        ("vpunpcklwd %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0x61, 0xC2]),
+        (
+            "vpunpckhbw %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0x68, 0xC2],
+        ),
+        ("vpunpckhbw %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0x68, 0xC2]),
+        (
+            "vpunpckhwd %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0x69, 0xC2],
+        ),
+        ("vpunpckhwd %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0x69, 0xC2]),
+        (
+            "vpacksswb %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0x63, 0xC2],
+        ),
+        ("vpacksswb %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0x63, 0xC2]),
+        (
+            "vpackssdw %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0x6B, 0xC2],
+        ),
+        ("vpackssdw %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0x6B, 0xC2]),
+        (
+            "vpackuswb %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0x67, 0xC2],
+        ),
+        ("vpackuswb %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0x67, 0xC2]),
+        (
+            "vpaddsb %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0xEC, 0xC2],
+        ),
+        ("vpaddsb %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0xEC, 0xC2]),
+        (
+            "vpaddsw %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0xED, 0xC2],
+        ),
+        ("vpaddsw %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0xED, 0xC2]),
+        (
+            "vpaddusb %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0xDC, 0xC2],
+        ),
+        ("vpaddusb %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0xDC, 0xC2]),
+        (
+            "vpaddusw %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0xDD, 0xC2],
+        ),
+        ("vpaddusw %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0xDD, 0xC2]),
+        (
+            "vpsubsb %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0xE8, 0xC2],
+        ),
+        ("vpsubsb %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0xE8, 0xC2]),
+        (
+            "vpsubsw %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0xE9, 0xC2],
+        ),
+        ("vpsubsw %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0xE9, 0xC2]),
+        (
+            "vpsubusb %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0xD8, 0xC2],
+        ),
+        ("vpsubusb %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0xD8, 0xC2]),
+        (
+            "vpsubusw %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0xD9, 0xC2],
+        ),
+        ("vpsubusw %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0xD9, 0xC2]),
+        ("vpavgb %ymm10,%ymm9,%ymm8", &[0xC4, 0x41, 0x35, 0xE0, 0xC2]),
+        ("vpavgb %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0xE0, 0xC2]),
+        ("vpavgw %ymm10,%ymm9,%ymm8", &[0xC4, 0x41, 0x35, 0xE3, 0xC2]),
+        ("vpavgw %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0xE3, 0xC2]),
+        (
+            "vpminub %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0xDA, 0xC2],
+        ),
+        ("vpminub %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0xDA, 0xC2]),
+        (
+            "vpmaxub %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0xDE, 0xC2],
+        ),
+        ("vpmaxub %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0xDE, 0xC2]),
+        (
+            "vpminsw %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0xEA, 0xC2],
+        ),
+        ("vpminsw %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0xEA, 0xC2]),
+        (
+            "vpmaxsw %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0xEE, 0xC2],
+        ),
+        ("vpmaxsw %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0xEE, 0xC2]),
+        (
+            "vpminuw %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x42, 0x35, 0x3A, 0xC2],
+        ),
+        ("vpminuw %xmm2,%xmm1,%xmm0", &[0xC4, 0xE2, 0x71, 0x3A, 0xC2]),
+        (
+            "vpminud %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x42, 0x35, 0x3B, 0xC2],
+        ),
+        ("vpminud %xmm2,%xmm1,%xmm0", &[0xC4, 0xE2, 0x71, 0x3B, 0xC2]),
+        (
+            "vpmaxuw %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x42, 0x35, 0x3E, 0xC2],
+        ),
+        ("vpmaxuw %xmm2,%xmm1,%xmm0", &[0xC4, 0xE2, 0x71, 0x3E, 0xC2]),
+        (
+            "vpmaxud %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x42, 0x35, 0x3F, 0xC2],
+        ),
+        ("vpmaxud %xmm2,%xmm1,%xmm0", &[0xC4, 0xE2, 0x71, 0x3F, 0xC2]),
+        (
+            "vphaddw %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x42, 0x35, 0x01, 0xC2],
+        ),
+        ("vphaddw %xmm2,%xmm1,%xmm0", &[0xC4, 0xE2, 0x71, 0x01, 0xC2]),
+        (
+            "vphaddd %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x42, 0x35, 0x02, 0xC2],
+        ),
+        ("vphaddd %xmm2,%xmm1,%xmm0", &[0xC4, 0xE2, 0x71, 0x02, 0xC2]),
+        (
+            "vphaddsw %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x42, 0x35, 0x03, 0xC2],
+        ),
+        (
+            "vphaddsw %xmm2,%xmm1,%xmm0",
+            &[0xC4, 0xE2, 0x71, 0x03, 0xC2],
+        ),
+        (
+            "vpmaddubsw %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x42, 0x35, 0x04, 0xC2],
+        ),
+        (
+            "vpmaddubsw %xmm2,%xmm1,%xmm0",
+            &[0xC4, 0xE2, 0x71, 0x04, 0xC2],
+        ),
+        (
+            "vphsubw %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x42, 0x35, 0x05, 0xC2],
+        ),
+        ("vphsubw %xmm2,%xmm1,%xmm0", &[0xC4, 0xE2, 0x71, 0x05, 0xC2]),
+        (
+            "vphsubd %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x42, 0x35, 0x06, 0xC2],
+        ),
+        ("vphsubd %xmm2,%xmm1,%xmm0", &[0xC4, 0xE2, 0x71, 0x06, 0xC2]),
+        (
+            "vphsubsw %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x42, 0x35, 0x07, 0xC2],
+        ),
+        (
+            "vphsubsw %xmm2,%xmm1,%xmm0",
+            &[0xC4, 0xE2, 0x71, 0x07, 0xC2],
+        ),
+        (
+            "vpmulhrsw %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x42, 0x35, 0x0B, 0xC2],
+        ),
+        (
+            "vpmulhrsw %xmm2,%xmm1,%xmm0",
+            &[0xC4, 0xE2, 0x71, 0x0B, 0xC2],
+        ),
+    ];
+    for &(text, bytes) in cases {
+        gas(text, bytes);
+    }
+}
+
+/// The AVX512BW byte and word arithmetic, the AVX512F unsigned and dword
+/// forms of it, AVX512CD's counts, AVX512-VNNI's dot products and the FMA
+/// family at 512 bits, a masked and zeroing memory form and a broadcast
+/// one included: each as GNU as 2.46.1 encodes it.
+#[test]
+fn avx512_integer_vnni_cd_and_fma_forms() {
+    let forms: &[(&str, &[u8])] = &[
+        (
+            "vpaddsb %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF1, 0x6D, 0x48, 0xEC, 0xD9],
+        ),
+        (
+            "vpaddsw %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF1, 0x6D, 0x48, 0xED, 0xD9],
+        ),
+        (
+            "vpaddusb %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF1, 0x6D, 0x48, 0xDC, 0xD9],
+        ),
+        (
+            "vpaddusw %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF1, 0x6D, 0x48, 0xDD, 0xD9],
+        ),
+        (
+            "vpsubsb %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF1, 0x6D, 0x48, 0xE8, 0xD9],
+        ),
+        (
+            "vpsubsw %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF1, 0x6D, 0x48, 0xE9, 0xD9],
+        ),
+        (
+            "vpsubusb %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF1, 0x6D, 0x48, 0xD8, 0xD9],
+        ),
+        (
+            "vpsubusw %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF1, 0x6D, 0x48, 0xD9, 0xD9],
+        ),
+        (
+            "vpmulhw %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF1, 0x6D, 0x48, 0xE5, 0xD9],
+        ),
+        (
+            "vpmulhuw %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF1, 0x6D, 0x48, 0xE4, 0xD9],
+        ),
+        (
+            "vpmulhrsw %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF2, 0x6D, 0x48, 0x0B, 0xD9],
+        ),
+        (
+            "vpmaddubsw %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF2, 0x6D, 0x48, 0x04, 0xD9],
+        ),
+        (
+            "vpsadbw %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF1, 0x6D, 0x48, 0xF6, 0xD9],
+        ),
+        (
+            "vpavgb %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF1, 0x6D, 0x48, 0xE0, 0xD9],
+        ),
+        (
+            "vpavgw %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF1, 0x6D, 0x48, 0xE3, 0xD9],
+        ),
+        (
+            "vpminsb %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF2, 0x6D, 0x48, 0x38, 0xD9],
+        ),
+        (
+            "vpmaxsb %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF2, 0x6D, 0x48, 0x3C, 0xD9],
+        ),
+        (
+            "vpminsw %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF1, 0x6D, 0x48, 0xEA, 0xD9],
+        ),
+        (
+            "vpmaxsw %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF1, 0x6D, 0x48, 0xEE, 0xD9],
+        ),
+        (
+            "vpminub %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF1, 0x6D, 0x48, 0xDA, 0xD9],
+        ),
+        (
+            "vpmaxub %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF1, 0x6D, 0x48, 0xDE, 0xD9],
+        ),
+        (
+            "vpminuw %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF2, 0x6D, 0x48, 0x3A, 0xD9],
+        ),
+        (
+            "vpmaxuw %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF2, 0x6D, 0x48, 0x3E, 0xD9],
+        ),
+        (
+            "vpminud %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF2, 0x6D, 0x48, 0x3B, 0xD9],
+        ),
+        (
+            "vpminuq %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF2, 0xED, 0x48, 0x3B, 0xD9],
+        ),
+        (
+            "vpmaxud %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF2, 0x6D, 0x48, 0x3F, 0xD9],
+        ),
+        (
+            "vpmaxuq %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF2, 0xED, 0x48, 0x3F, 0xD9],
+        ),
+        (
+            "vpacksswb %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF1, 0x6D, 0x48, 0x63, 0xD9],
+        ),
+        (
+            "vpackuswb %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF1, 0x6D, 0x48, 0x67, 0xD9],
+        ),
+        (
+            "vpackssdw %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF1, 0x6D, 0x48, 0x6B, 0xD9],
+        ),
+        (
+            "vpackusdw %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF2, 0x6D, 0x48, 0x2B, 0xD9],
+        ),
+        (
+            "vpunpcklbw %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF1, 0x6D, 0x48, 0x60, 0xD9],
+        ),
+        (
+            "vpunpcklwd %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF1, 0x6D, 0x48, 0x61, 0xD9],
+        ),
+        (
+            "vpunpckhbw %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF1, 0x6D, 0x48, 0x68, 0xD9],
+        ),
+        (
+            "vpunpckhwd %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF1, 0x6D, 0x48, 0x69, 0xD9],
+        ),
+        (
+            "vpsllvw %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF2, 0xED, 0x48, 0x12, 0xD9],
+        ),
+        (
+            "vpsrlvw %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF2, 0xED, 0x48, 0x10, 0xD9],
+        ),
+        (
+            "vpsravw %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF2, 0xED, 0x48, 0x11, 0xD9],
+        ),
+        (
+            "vpermw %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF2, 0xED, 0x48, 0x8D, 0xD9],
+        ),
+        (
+            "vpermi2w %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF2, 0xED, 0x48, 0x75, 0xD9],
+        ),
+        (
+            "vpermt2w %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF2, 0xED, 0x48, 0x7D, 0xD9],
+        ),
+        (
+            "vpdpbusd %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF2, 0x6D, 0x48, 0x50, 0xD9],
+        ),
+        (
+            "vpdpbusds %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF2, 0x6D, 0x48, 0x51, 0xD9],
+        ),
+        (
+            "vpdpwssd %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF2, 0x6D, 0x48, 0x52, 0xD9],
+        ),
+        (
+            "vpdpwssds %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF2, 0x6D, 0x48, 0x53, 0xD9],
+        ),
+        (
+            "vfmadd132ps %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF2, 0x6D, 0x48, 0x98, 0xD9],
+        ),
+        (
+            "vfmadd213pd %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF2, 0xED, 0x48, 0xA8, 0xD9],
+        ),
+        (
+            "vfmadd231ps %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF2, 0x6D, 0x48, 0xB8, 0xD9],
+        ),
+        (
+            "vfmsub231pd %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF2, 0xED, 0x48, 0xBA, 0xD9],
+        ),
+        (
+            "vfnmadd213ps %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF2, 0x6D, 0x48, 0xAC, 0xD9],
+        ),
+        (
+            "vfnmsub132pd %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF2, 0xED, 0x48, 0x9E, 0xD9],
+        ),
+        (
+            "vpshufhw $0x1b,%zmm1,%zmm3",
+            &[0x62, 0xF1, 0x7E, 0x48, 0x70, 0xD9, 0x1B],
+        ),
+        (
+            "vpshuflw $0x1b,%zmm1,%zmm3",
+            &[0x62, 0xF1, 0x7F, 0x48, 0x70, 0xD9, 0x1B],
+        ),
+        ("vpabsb %zmm1,%zmm3", &[0x62, 0xF2, 0x7D, 0x48, 0x1C, 0xD9]),
+        ("vpabsw %zmm1,%zmm3", &[0x62, 0xF2, 0x7D, 0x48, 0x1D, 0xD9]),
+        ("vpabsd %zmm1,%zmm3", &[0x62, 0xF2, 0x7D, 0x48, 0x1E, 0xD9]),
+        ("vpabsq %zmm1,%zmm3", &[0x62, 0xF2, 0xFD, 0x48, 0x1F, 0xD9]),
+        (
+            "vplzcntd %zmm1,%zmm3",
+            &[0x62, 0xF2, 0x7D, 0x48, 0x44, 0xD9],
+        ),
+        (
+            "vplzcntq %zmm1,%zmm3",
+            &[0x62, 0xF2, 0xFD, 0x48, 0x44, 0xD9],
+        ),
+        (
+            "vpconflictd %zmm1,%zmm3",
+            &[0x62, 0xF2, 0x7D, 0x48, 0xC4, 0xD9],
+        ),
+        (
+            "vpconflictq %zmm1,%zmm3",
+            &[0x62, 0xF2, 0xFD, 0x48, 0xC4, 0xD9],
+        ),
+        (
+            "vpaddusb 64(%rdi),%zmm2,%zmm3{%k1}{z}",
+            &[0x62, 0xF1, 0x6D, 0xC9, 0xDC, 0x5F, 0x01],
+        ),
+        (
+            "vpdpbusd (%rdi){1to16},%zmm2,%zmm3",
+            &[0x62, 0xF2, 0x6D, 0x58, 0x50, 0x1F],
+        ),
+    ];
+    for &(text, bytes) in forms {
+        gas(text, bytes);
     }
 }

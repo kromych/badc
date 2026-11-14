@@ -1,8 +1,8 @@
 //! The intrinsics lowered at the call site, whatever declares them: the MSVC
-//! ones on the PE targets, as MSVC and clang for a windows-msvc triple do,
-//! and gcc's and clang's x86 system-instruction builtins on every x86-64
-//! target. Each is a name's signature, which the parser converts to, and the
-//! operation it performs.
+//! ones on the PE targets, the `__builtin_ia32_*` x86 system-instruction
+//! builtins on every x86-64 target, and the ACLE's system and CRC32
+//! intrinsics on every AArch64 target. Each is a name's signature, which the
+//! parser converts to, and the operation it performs.
 
 use alloc::vec::Vec;
 
@@ -24,6 +24,8 @@ pub(crate) enum Scalar {
     LLong,
     ULLong,
     VoidPtr,
+    /// A pointer parameter's pointee only.
+    Void,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -157,14 +159,47 @@ pub(crate) enum Op {
     Rdtsc,
     /// `rdtscp`: the counter, and IA32_TSC_AUX stored through the pointer.
     Rdtscp,
-    /// XCR[ecx] from `xgetbv`, edx:eax as one value.
-    Xgetbv,
+    /// The edx:eax `rdmsr`, `rdpmc` or `xgetbv` leaves for the register in ecx.
+    ReadPair(&'static str),
+    /// `wrmsr` or `xsetbv`: the second argument as edx:eax to the register in ecx.
+    WritePair(&'static str),
+    /// A template taking the arguments as `%0` on, 64-bit registers.
+    Asm(&'static str),
+    /// A template leaving its value in `%0`, the arguments `%1` on, all of
+    /// the width.
+    AsmValue {
+        template: &'static str,
+        width: u8,
+    },
+    /// Debug register `n`, the constant first argument, read or written.
+    ReadDr,
+    WriteDr,
+    /// `invpcid` of the type and the descriptor's address.
+    Invpcid,
+    /// A VMX instruction, its arguments `%2` on: 0 on success, 1 when it
+    /// fails with a VM-instruction error (ZF), 2 when it fails without (CF).
+    VmxStatus(&'static str),
+    /// An SVM instruction of the address in rax.
+    RaxInsn(&'static str),
+    /// `in` or `out` of the width at the port in dx.
+    PortIn {
+        width: u8,
+    },
+    PortOut {
+        width: u8,
+    },
+    /// `rep ins` or `rep outs` of `(port, buffer, count)` elements.
+    PortString {
+        width: u8,
+        out: bool,
+    },
     /// RFLAGS, through `pushfq` and `popq`.
     ReadEflags,
     /// RFLAGS from the operand, through `pushq` and `popfq`.
     WriteEflags,
-    /// `dmb`, `dsb` or `isb` with the constant option.
-    Barrier(&'static str),
+    /// An instruction of the constant immediate: `dmb`, `dsb` or `isb` of
+    /// the option, `brk` of the comment.
+    InsnImm(&'static str),
     /// `rep stos` of `(destination, value, count)` elements of the width.
     RepStos {
         width: u8,
@@ -255,6 +290,14 @@ const fn scan(reverse: bool, width: u8) -> Op {
     Op::BitScan { reverse, width }
 }
 
+const fn cr(template: &'static str) -> Op {
+    Op::AsmValue { template, width: 8 }
+}
+
+const fn ports(width: u8, out: bool) -> Op {
+    Op::PortString { width, out }
+}
+
 const fn crc(width: u8, castagnoli: bool) -> Op {
     Op::Crc32 { width, castagnoli }
 }
@@ -324,12 +367,67 @@ const FIXED: &[Row] = &[
     ("__rdtscp", X64, Op::Rdtscp, Some(ULLong), &[p(UInt)]),
     ("__readeflags", X64, Op::ReadEflags, Some(ULLong), &[]),
     ("__writeeflags", X64, Op::WriteEflags, None, &[V(ULLong)]),
-    ("_xgetbv", X64, Op::Xgetbv, Some(ULLong), &[V(UInt)]),
+    ("_xgetbv", X64, Op::ReadPair("xgetbv"), Some(ULLong), &[V(UInt)]),
+    ("_xsetbv", X64, Op::WritePair("xsetbv"), None, &[V(UInt), V(ULLong)]),
+    ("__readmsr", X64, Op::ReadPair("rdmsr"), Some(ULLong), &[V(ULong)]),
+    ("__writemsr", X64, Op::WritePair("wrmsr"), None, &[V(ULong), V(ULLong)]),
+    ("__readpmc", X64, Op::ReadPair("rdpmc"), Some(ULLong), &[V(ULong)]),
+    ("__readcr0", X64, cr("movq %%cr0, %0"), Some(ULLong), &[]),
+    ("__readcr2", X64, cr("movq %%cr2, %0"), Some(ULLong), &[]),
+    ("__readcr3", X64, cr("movq %%cr3, %0"), Some(ULLong), &[]),
+    ("__readcr4", X64, cr("movq %%cr4, %0"), Some(ULLong), &[]),
+    ("__readcr8", X64, cr("movq %%cr8, %0"), Some(ULLong), &[]),
+    ("__writecr0", X64, Op::Asm("movq %0, %%cr0"), None, &[V(ULLong)]),
+    ("__writecr3", X64, Op::Asm("movq %0, %%cr3"), None, &[V(ULLong)]),
+    ("__writecr4", X64, Op::Asm("movq %0, %%cr4"), None, &[V(ULLong)]),
+    ("__writecr8", X64, Op::Asm("movq %0, %%cr8"), None, &[V(ULLong)]),
+    ("__readdr", X64, Op::ReadDr, Some(ULLong), &[K(7)]),
+    ("__writedr", X64, Op::WriteDr, None, &[K(7), V(ULLong)]),
+    ("__lidt", X64, Op::Asm("lidt (%0)"), None, &[V(VoidPtr)]),
+    ("__sidt", X64, Op::Asm("sidt (%0)"), None, &[V(VoidPtr)]),
+    ("_lgdt", X64, Op::Asm("lgdt (%0)"), None, &[V(VoidPtr)]),
+    ("_sgdt", X64, Op::Asm("sgdt (%0)"), None, &[V(VoidPtr)]),
+    ("__invlpg", X64, Op::Asm("invlpg (%0)"), None, &[V(VoidPtr)]),
+    ("_invpcid", X64, Op::Invpcid, None, &[V(UInt), V(VoidPtr)]),
+    ("__segmentlimit", X64, Op::AsmValue { template: "lsll %1, %0", width: 4 }, Some(ULong), &[V(ULong)]),
+    ("__wbinvd", X64, Op::Insn("wbinvd"), None, &[]),
+    ("_disable", X64, Op::Insn("cli"), None, &[]),
+    ("_enable", X64, Op::Insn("sti"), None, &[]),
+    ("__vmx_on", X64, Op::VmxStatus("vmxon (%2)"), Some(UChar), &[p(ULLong)]),
+    ("__vmx_off", X64, Op::Insn("vmxoff"), None, &[]),
+    ("__vmx_vmclear", X64, Op::VmxStatus("vmclear (%2)"), Some(UChar), &[p(ULLong)]),
+    ("__vmx_vmptrld", X64, Op::VmxStatus("vmptrld (%2)"), Some(UChar), &[p(ULLong)]),
+    ("__vmx_vmptrst", X64, Op::Asm("vmptrst (%0)"), None, &[p(ULLong)]),
+    ("__vmx_vmlaunch", X64, Op::VmxStatus("vmlaunch"), Some(UChar), &[]),
+    ("__vmx_vmresume", X64, Op::VmxStatus("vmresume"), Some(UChar), &[]),
+    ("__vmx_vmread", X64, Op::VmxStatus("vmread %2, (%3)"), Some(UChar), &[V(ULLong), p(ULLong)]),
+    ("__vmx_vmwrite", X64, Op::VmxStatus("vmwrite %3, %2"), Some(UChar), &[V(ULLong), V(ULLong)]),
+    ("__svm_clgi", X64, Op::Insn("clgi"), None, &[]),
+    ("__svm_stgi", X64, Op::Insn("stgi"), None, &[]),
+    ("__svm_vmload", X64, Op::RaxInsn("vmload %%rax"), None, &[V(ULLong)]),
+    ("__svm_vmsave", X64, Op::RaxInsn("vmsave %%rax"), None, &[V(ULLong)]),
+    ("__svm_vmrun", X64, Op::RaxInsn("vmrun %%rax"), None, &[V(ULLong)]),
+    ("__inbyte", X64, Op::PortIn { width: 1 }, Some(UChar), &[V(UShort)]),
+    ("__inword", X64, Op::PortIn { width: 2 }, Some(UShort), &[V(UShort)]),
+    ("__indword", X64, Op::PortIn { width: 4 }, Some(ULong), &[V(UShort)]),
+    ("__outbyte", X64, Op::PortOut { width: 1 }, None, &[V(UShort), V(UChar)]),
+    ("__outword", X64, Op::PortOut { width: 2 }, None, &[V(UShort), V(UShort)]),
+    ("__outdword", X64, Op::PortOut { width: 4 }, None, &[V(UShort), V(ULong)]),
+    ("__inbytestring", X64, ports(1, false), None, &[V(UShort), p(UChar), V(ULong)]),
+    ("__inwordstring", X64, ports(2, false), None, &[V(UShort), p(UShort), V(ULong)]),
+    ("__indwordstring", X64, ports(4, false), None, &[V(UShort), p(ULong), V(ULong)]),
+    ("__outbytestring", X64, ports(1, true), None, &[V(UShort), p(UChar), V(ULong)]),
+    ("__outwordstring", X64, ports(2, true), None, &[V(UShort), p(UShort), V(ULong)]),
+    ("__outdwordstring", X64, ports(4, true), None, &[V(UShort), p(ULong), V(ULong)]),
     ("__halt", X64, Op::Insn("hlt"), None, &[]),
+    ("__int2c", X64, Op::Insn("int $0x2c"), None, &[]),
+    ("_m_prefetchw", X64, Op::Asm("prefetchw (%0)"), None, &[pcv(Void)]),
     ("_mm_pause", X64, Op::Pause, None, &[]),
     ("_mm_lfence", X64, Op::Insn("lfence"), None, &[]),
     ("_mm_mfence", X64, Op::Insn("mfence"), None, &[]),
     ("_mm_sfence", X64, Op::Insn("sfence"), None, &[]),
+    // A full barrier, the `lock or` cl emits for it.
+    ("__faststorefence", X64, Op::Insn("lock orl $0, (%rsp)"), None, &[]),
     ("__lzcnt16", X64, bits(LZ, 2), Some(UShort), &[V(UShort)]),
     ("__lzcnt", X64, bits(LZ, 4), Some(UInt), &[V(UInt)]),
     ("__lzcnt64", X64, bits(LZ, 8), Some(ULLong), &[V(ULLong)]),
@@ -353,14 +451,7 @@ const FIXED: &[Row] = &[
     ("__movsw", X64, Op::RepMovs { width: 2 }, None, &[p(UShort), pc(UShort), V(ULLong)]),
     ("__movsd", X64, Op::RepMovs { width: 4 }, None, &[p(ULong), pc(ULong), V(ULLong)]),
     ("__movsq", X64, Op::RepMovs { width: 8 }, None, &[p(ULLong), pc(ULLong), V(ULLong)]),
-    ("__yield", Arm64, Op::Pause, None, &[]),
-    ("__wfe", Arm64, Op::Insn("wfe"), None, &[]),
-    ("__wfi", Arm64, Op::Insn("wfi"), None, &[]),
-    ("__sev", Arm64, Op::Insn("sev"), None, &[]),
-    ("__sevl", Arm64, Op::Insn("sevl"), None, &[]),
-    ("__dmb", Arm64, Op::Barrier("dmb"), None, &[K(15)]),
-    ("__dsb", Arm64, Op::Barrier("dsb"), None, &[K(15)]),
-    ("__isb", Arm64, Op::Barrier("isb"), None, &[K(15)]),
+    ("__break", Arm64, Op::InsnImm("brk"), None, &[K(0xffff)]),
     ("_CountLeadingZeros", Arm64, bits(LZ, 4), Some(UInt), &[V(ULong)]),
     ("_CountLeadingZeros64", Arm64, bits(LZ, 8), Some(UInt), &[V(ULLong)]),
     ("_CountTrailingZeros", Arm64, bits(TZ, 4), Some(UInt), &[V(ULong)]),
@@ -390,17 +481,33 @@ const FIXED: &[Row] = &[
     ("__getReg", Arm64, Op::GetReg, Some(ULLong), &[K(31)]),
     ("_ReadStatusReg", Arm64, Op::ReadStatusReg, Some(LLong), &[K(0x7fff)]),
     ("_WriteStatusReg", Arm64, Op::WriteStatusReg, None, &[K(0x7fff), V(LLong)]),
-    ("__crc32b", Arm64, crc(1, false), Some(UInt), &[V(UInt), V(UInt)]),
-    ("__crc32h", Arm64, crc(2, false), Some(UInt), &[V(UInt), V(UInt)]),
-    ("__crc32w", Arm64, crc(4, false), Some(UInt), &[V(UInt), V(UInt)]),
-    ("__crc32d", Arm64, crc(8, false), Some(UInt), &[V(UInt), V(ULLong)]),
-    ("__crc32cb", Arm64, crc(1, true), Some(UInt), &[V(UInt), V(UInt)]),
-    ("__crc32ch", Arm64, crc(2, true), Some(UInt), &[V(UInt), V(UInt)]),
-    ("__crc32cw", Arm64, crc(4, true), Some(UInt), &[V(UInt), V(UInt)]),
-    ("__crc32cd", Arm64, crc(8, true), Some(UInt), &[V(UInt), V(ULLong)]),
 ];
 
-/// gcc's and clang's builtins of these names, with gcc's prototypes.
+/// The Arm C Language Extensions' barrier, hint and CRC32 intrinsics, on
+/// every AArch64 target: `<arm_acle.h>` declares them, and on the PE
+/// targets `<intrin.h>` with MSVC's prototypes.
+#[rustfmt::skip]
+const ACLE_A64: &[(&str, Op, Option<Scalar>, &[Param])] = &[
+    ("__yield", Op::Pause, None, &[]),
+    ("__wfe", Op::Insn("wfe"), None, &[]),
+    ("__wfi", Op::Insn("wfi"), None, &[]),
+    ("__sev", Op::Insn("sev"), None, &[]),
+    ("__sevl", Op::Insn("sevl"), None, &[]),
+    ("__dmb", Op::InsnImm("dmb"), None, &[K(15)]),
+    ("__dsb", Op::InsnImm("dsb"), None, &[K(15)]),
+    ("__isb", Op::InsnImm("isb"), None, &[K(15)]),
+    ("__nop", Op::Insn("nop"), None, &[]),
+    ("__crc32b", crc(1, false), Some(UInt), &[V(UInt), V(UInt)]),
+    ("__crc32h", crc(2, false), Some(UInt), &[V(UInt), V(UInt)]),
+    ("__crc32w", crc(4, false), Some(UInt), &[V(UInt), V(UInt)]),
+    ("__crc32d", crc(8, false), Some(UInt), &[V(UInt), V(ULLong)]),
+    ("__crc32cb", crc(1, true), Some(UInt), &[V(UInt), V(UInt)]),
+    ("__crc32ch", crc(2, true), Some(UInt), &[V(UInt), V(UInt)]),
+    ("__crc32cw", crc(4, true), Some(UInt), &[V(UInt), V(UInt)]),
+    ("__crc32cd", crc(8, true), Some(UInt), &[V(UInt), V(ULLong)]),
+];
+
+/// The builtins of these names, with gcc's prototypes.
 #[rustfmt::skip]
 const GNU_X64: &[(&str, Op, Option<Scalar>, &[Param])] = &[
     ("__builtin_ia32_sfence", Op::Insn("sfence"), None, &[]),
@@ -409,7 +516,7 @@ const GNU_X64: &[(&str, Op, Option<Scalar>, &[Param])] = &[
     ("__builtin_ia32_pause", Op::Pause, None, &[]),
     ("__builtin_ia32_rdtsc", Op::Rdtsc, Some(ULLong), &[]),
     ("__builtin_ia32_rdtscp", Op::Rdtscp, Some(ULLong), &[p(UInt)]),
-    ("__builtin_ia32_xgetbv", Op::Xgetbv, Some(ULLong), &[V(UInt)]),
+    ("__builtin_ia32_xgetbv", Op::ReadPair("xgetbv"), Some(ULLong), &[V(UInt)]),
     ("__builtin_ia32_readeflags_u64", Op::ReadEflags, Some(ULLong), &[]),
     ("__builtin_ia32_writeeflags_u64", Op::WriteEflags, None, &[V(ULLong)]),
 ];
@@ -418,6 +525,15 @@ const GNU_X64: &[(&str, Op, Option<Scalar>, &[Param])] = &[
 pub(crate) fn lookup(name: &str, target: Target) -> Option<Intrinsic> {
     if target.is_x86_64()
         && let Some(&(_, op, ret, params)) = GNU_X64.iter().find(|r| r.0 == name)
+    {
+        return Some(Intrinsic {
+            op,
+            ret,
+            params: params.to_vec(),
+        });
+    }
+    if target.is_aarch64()
+        && let Some(&(_, op, ret, params)) = ACLE_A64.iter().find(|r| r.0 == name)
     {
         return Some(Intrinsic {
             op,
@@ -461,6 +577,24 @@ fn order_suffix(rest: &str, arm64: bool, np: bool) -> Option<MemOrder> {
 /// for `char`, `short` or `__int64` in place of `long`, and an order.
 fn interlocked(name: &str, arm64: bool) -> Option<Intrinsic> {
     use AtomicKind::*;
+    // `_interlockedadd[64]`: the sum, as `_InterlockedAdd` yields it, on
+    // both targets (measured with cl on x64).
+    if let Some(width) = name.strip_prefix("_interlockedadd") {
+        let ty = match width {
+            "" => Long,
+            "64" => LLong,
+            _ => return None,
+        };
+        return Some(Intrinsic {
+            op: Op::Atomic {
+                kind: AddFetch,
+                order: MemOrder::SeqCst,
+                one: false,
+            },
+            ret: Some(ty),
+            params: alloc::vec![pv(ty), V(ty)],
+        });
+    }
     let rest = name.strip_prefix("_Interlocked")?;
     if let Some(order) = rest.strip_prefix("CompareExchange128") {
         let order = order_suffix(order, arm64, true)?;
@@ -471,32 +605,38 @@ fn interlocked(name: &str, arm64: bool) -> Option<Intrinsic> {
             params,
         });
     }
-    // Longest first: each base is a prefix of none listed before it.
-    const BASES: &[(&str, AtomicKind, bool)] = &[
-        ("CompareExchangePointer", SyncCasVal, true),
-        ("CompareExchange", SyncCasVal, false),
-        ("ExchangePointer", Exchange, true),
-        ("ExchangeAdd", FetchAdd, false),
-        ("Exchange", Exchange, false),
-        ("Increment", AddFetch, false),
-        ("Decrement", SubFetch, false),
-        ("And", FetchAnd, false),
-        ("Xor", FetchXor, false),
-        ("Add", AddFetch, false),
-        ("Or", FetchOr, false),
+    // Longest first: each base is a prefix of none listed before it. The
+    // unsigned bases take the unsigned type of each width.
+    const BASES: &[(&str, AtomicKind, bool, bool)] = &[
+        ("CompareExchangePointer", SyncCasVal, true, false),
+        ("CompareExchange", SyncCasVal, false, false),
+        ("ExchangePointer", Exchange, true, false),
+        ("ExchangeAdd", FetchAdd, false, false),
+        ("Exchange", Exchange, false, false),
+        ("Increment", AddFetch, false, false),
+        ("Decrement", SubFetch, false, false),
+        ("Nand", FetchNand, false, false),
+        ("UMax", FetchMax, false, true),
+        ("UMin", FetchMin, false, true),
+        ("Max", FetchMax, false, false),
+        ("Min", FetchMin, false, false),
+        ("And", FetchAnd, false, false),
+        ("Xor", FetchXor, false, false),
+        ("Add", AddFetch, false, false),
+        ("Or", FetchOr, false, false),
     ];
-    let &(base, kind, pointer) = BASES.iter().find(|b| rest.starts_with(b.0))?;
+    let &(base, kind, pointer, unsigned) = BASES.iter().find(|b| rest.starts_with(b.0))?;
     let rest = &rest[base.len()..];
     let (ty, rest) = if pointer {
         (VoidPtr, rest)
     } else if let Some(r) = rest.strip_prefix("64") {
-        (LLong, r)
+        (if unsigned { ULLong } else { LLong }, r)
     } else if let Some(r) = rest.strip_prefix("16") {
-        (Short, r)
+        (if unsigned { UShort } else { Short }, r)
     } else if let Some(r) = rest.strip_prefix('8') {
-        (Char, r)
+        (if unsigned { UChar } else { Char }, r)
     } else {
-        (Long, rest)
+        (if unsigned { ULong } else { Long }, rest)
     };
     let one = matches!(base, "Increment" | "Decrement");
     let widths_ok = match base {

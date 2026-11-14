@@ -26,12 +26,7 @@ Disassembly of section .text:
                	int3
 
 <by_asm>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movslq	%edi, %rdi
-               	movl	$0x0, -0x8(%rbp)
-               	movl	$0x0, -0x8(%rbp)
                	cmpl	$0x1, %edi
                	je	<addr>
                	cmpl	$0x2, %edi
@@ -69,7 +64,6 @@ Disassembly of section .text:
                	movb	$0x7c, (%rax,%rcx)
                	movslq	<rip>, %rcx # <addr>
                	movb	$0x0, (%rax,%rcx)
-               	leave
                	retq
                	leaq	<rip>, %rax # <addr>
                	movslq	<rip>, %rcx # <addr>
@@ -196,16 +190,15 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1f, %eax
                	cmpl	$0x1, %eax
-               	sete	%al
-               	movzbq	%al, %rax
-               	movl	<rip>, %ecx # <addr>
-               	incq	%rcx
-               	movl	%ecx, <rip> # <addr>
-               	testl	%eax, %eax
+               	sete	%cl
+               	movzbq	%cl, %rcx
+               	movl	<rip>, %eax # <addr>
+               	incq	%rax
+               	movl	%eax, <rip> # <addr>
+               	testl	%ecx, %ecx
                	jne	<addr>
                	cmpl	$0x0, <rip> # <addr>
                	jne	<addr>
-               	movl	<rip>, %eax # <addr>
                	movl	%eax, <rip> # <addr>
                	xorl	%eax, %eax
                	xorl	%r10d, %r10d
@@ -213,16 +206,15 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1e, %eax
                	cmpl	$0x1e, %eax
-               	sete	%al
-               	movzbq	%al, %rax
-               	movl	<rip>, %ecx # <addr>
-               	incq	%rcx
-               	movl	%ecx, <rip> # <addr>
-               	testl	%eax, %eax
+               	sete	%cl
+               	movzbq	%cl, %rcx
+               	movl	<rip>, %eax # <addr>
+               	incq	%rax
+               	movl	%eax, <rip> # <addr>
+               	testl	%ecx, %ecx
                	jne	<addr>
                	cmpl	$0x0, <rip> # <addr>
                	jne	<addr>
-               	movl	<rip>, %eax # <addr>
                	movl	%eax, <rip> # <addr>
                	movl	<rip>, %eax # <addr>
                	popq	%rbx

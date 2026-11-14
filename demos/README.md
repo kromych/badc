@@ -4,7 +4,7 @@ End-to-end programs that exercise badc on something more substantial
 than a fixture. Build with the c5 dialect badc supports today
 (structs / unions / bitfields / enums, arrays of structs, function
 pointers, varargs, `_Thread_local`); see [`../doc/std-conformance.md`](../doc/std-conformance.md)
-for the divergences from C99.
+for the divergences from C17.
 
 Each demo runs on **macOS** (aarch64), **Linux** (x86_64 and aarch64),
 and **Windows** (x86_64 and aarch64). The platform-specific bits
@@ -12,7 +12,7 @@ sit behind a handful of `#ifdef`s; the libc / Winsock / pthread /
 Win32 thread bindings come from the shipped `<sys/socket.h>`,
 `<sys/select.h>`, `<pthread.h>`, and `<windows.h>` headers.
 
-## Build flavours
+## Build flavors
 
 The multi-source library demos (miniz, kissfft, bzip2, tweetnacl,
 monocypher, bearssl) each build their smoke harness three different
@@ -228,7 +228,7 @@ since runners have no display server. See
 
 ## raylib/
 
-badc compiles raylib 6.0 (RGFW desktop backend) from source and
+badc compiles raylib 6.2 (RGFW desktop backend) from source and
 links a small game (Lode Runner) into a standalone binary. The
 pure game-logic self-test runs through badc on any host; the full
 standalone build links on macOS, Linux and Windows and renders a
@@ -247,19 +247,19 @@ at both -O and noO, runs it, and pins each scenario's stdout: `sprintf`,
 
 ## curl/
 
-badc compiles the curl 8.11.1 library (HTTP + `file://` + WebSocket,
+badc compiles the curl 8.23.0 library (HTTP + `file://` + WebSocket,
 threaded resolver, IPv6, no external dependencies) and builds it as a
 static archive, a shared library, and an executable linked against
-each, plus a flavour that binds a badc-compiled client to the
+each, plus a flavor that binds a badc-compiled client to the
 platform's installed libcurl to check the frontend matches the OS ABI.
-HTTPS is provided by badc-compiled BearSSL (`USE_BEARSSL`); the smoke
+HTTPS is provided by badc-compiled Mbed TLS (`USE_MBEDTLS`); the smoke
 drives HTTP / HTTPS / `file://` transfers against a hermetic loopback
 server, so it needs no external network. See
 [`curl/README.md`](./curl/README.md).
 
 ## nasm/
 
-Builds the NASM 2.16.03 assembler (84 translation units) with badc and
+Builds the NASM 3.02 assembler (92 translation units) with badc and
 runs NASM's own `travis/nasm-t.py` golden suite against it: each fixture
 is assembled with the produced `nasm` and its object bytes, listings, and
 diagnostics are compared to committed goldens, so a codegen defect surfaces

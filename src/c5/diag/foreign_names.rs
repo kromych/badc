@@ -106,7 +106,7 @@ pub(super) static NAMES: &[(&str, u8)] = &[
     ("arc-retain-cycles", CLANG),
     ("arc-unsafe-retained-assign", CLANG),
     ("argument-outside-range", CLANG),
-    ("argument-undefined-behaviour", CLANG),
+    ("argument-undefined-behavior", CLANG),
     ("arith-conversion", GCC),
     ("arm-interrupt-save-fp-no-vfp-unit", CLANG),
     ("arm-interrupt-vfp-clobber", CLANG),

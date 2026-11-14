@@ -26,9 +26,8 @@ Disassembly of section .text:
                	int3
 
 <scale2>:
-               	movl	$0x40000000, %eax       # imm = 0x40000000
-               	movq	%rax, %xmm15
-               	mulss	%xmm15, %xmm0
+               	movss	<rip>, %xmm1
+               	mulss	%xmm1, %xmm0
                	retq
 
 <negf>:
@@ -44,106 +43,75 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movl	$0x40400000, %eax       # imm = 0x40400000
-               	movq	%rax, %xmm0
+               	movss	<rip>, %xmm0
                	callq	<addr>
-               	movl	$0x40c00000, %eax       # imm = 0x40C00000
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	movss	<rip>, %xmm1
+               	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
-               	movl	$0x40400000, %eax       # imm = 0x40400000
-               	movq	%rax, %xmm0
+               	movss	<rip>, %xmm0
                	callq	<addr>
-               	movl	$0xc0400000, %eax       # imm = 0xC0400000
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	movss	<rip>, %xmm1
+               	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
-               	movl	$0x40800000, %eax       # imm = 0x40800000
-               	movq	%rax, %xmm0
+               	movss	<rip>, %xmm0
                	callq	<addr>
-               	movl	$0x41000000, %eax       # imm = 0x41000000
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	movss	<rip>, %xmm1
+               	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbp
                	retq
-               	movl	$0x3fc00000, %eax       # imm = 0x3FC00000
-               	movl	$0x40000000, %ecx       # imm = 0x40000000
-               	movq	%rax, %xmm0
-               	movq	%rcx, %xmm1
+               	movss	<rip>, %xmm0
+               	movss	<rip>, %xmm1
                	callq	<addr>
-               	movl	$0x40600000, %eax       # imm = 0x40600000
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	movss	<rip>, %xmm1
+               	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x4, %eax
                	popq	%rbp
                	retq
-               	movl	$0x40a00000, %eax       # imm = 0x40A00000
-               	movl	$0x40000000, %ecx       # imm = 0x40000000
-               	movq	%rax, %xmm14
-               	movq	%rcx, %xmm15
-               	vmulss	%xmm15, %xmm14, %xmm0
-               	movl	$0x41200000, %eax       # imm = 0x41200000
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
-               	jp	<addr>
-               	je	<addr>
-               	movl	$0x5, %eax
-               	popq	%rbp
-               	retq
-               	movl	$0x40e00000, %eax       # imm = 0x40E00000
-               	movq	%rax, %xmm0
+               	movss	<rip>, %xmm0
                	callq	<addr>
-               	movl	$0x41600000, %eax       # imm = 0x41600000
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	movss	<rip>, %xmm1
+               	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x6, %eax
                	popq	%rbp
                	retq
-               	movl	$0x40400000, %eax       # imm = 0x40400000
-               	movq	%rax, %xmm0
+               	movss	<rip>, %xmm0
                	callq	<addr>
-               	movl	$0x40c00000, %eax       # imm = 0x40C00000
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	movss	<rip>, %xmm1
+               	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x7, %eax
                	popq	%rbp
                	retq
-               	movl	$0x40400000, %eax       # imm = 0x40400000
-               	movq	%rax, %xmm0
+               	movss	<rip>, %xmm0
                	callq	<addr>
-               	movl	$0x40c00000, %eax       # imm = 0x40C00000
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	movss	<rip>, %xmm1
+               	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x8, %eax
                	popq	%rbp
                	retq
-               	movl	$0x3fc00000, %eax       # imm = 0x3FC00000
-               	movl	$0x40000000, %ecx       # imm = 0x40000000
-               	movq	%rax, %xmm0
-               	movq	%rcx, %xmm1
+               	movss	<rip>, %xmm0
+               	movss	<rip>, %xmm1
                	callq	<addr>
-               	movl	$0x40600000, %eax       # imm = 0x40600000
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	movss	<rip>, %xmm1
+               	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x9, %eax

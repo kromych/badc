@@ -5,7 +5,7 @@
 //! `-ffp-contract=fast` takes any `Fmul` as well. The pass only runs at
 //! `-O`.
 //!
-//! Recognised shapes, where `m = Binop(FmulContractible, a, b)` is used
+//! Recognized shapes, where `m = Binop(FmulContractible, a, b)` is used
 //! by exactly the add/sub being rewritten (so the separately-rounded
 //! product is not observable elsewhere):
 //!
@@ -87,7 +87,7 @@ fn use_counts(func: &FunctionSsa) -> Vec<u32> {
     counts
 }
 
-/// Recognise a contractible add/sub at `idx`. Returns the replacement
+/// Recognize a contractible add/sub at `idx`. Returns the replacement
 /// `Inst::Fma` on a match.
 fn match_fma(func: &FunctionSsa, counts: &[u32], idx: usize, fast: bool) -> Option<Inst> {
     let want_f32 = is_f32(func, idx as ValueId);
@@ -166,7 +166,7 @@ fn match_fma(func: &FunctionSsa, counts: &[u32], idx: usize, fast: bool) -> Opti
     }
 }
 
-/// Walk every function, contracting recognised multiply-add chains;
+/// Walk every function, contracting recognized multiply-add chains;
 /// `fast` is `-ffp-contract=fast`.
 pub(crate) fn run(funcs: &mut [FunctionSsa], fast: bool) {
     for func in funcs.iter_mut() {

@@ -1,13 +1,13 @@
 //! Phi-aware block liveness and SSA value interference.
 //!
 //! Liveness is the standard backward dataflow over the control-flow
-//! graph, with phi semantics modelled on the edges: a phi operand is
+//! graph, with phi semantics modeled on the edges: a phi operand is
 //! a use at the end of the corresponding predecessor (live-out of that
 //! predecessor), and every phi result of a block is a definition at
 //! that block's head -- one program point shared by all of them, since
 //! one parallel copy per edge writes them together. This is the
 //! lazy-copy view of out-of-SSA: the predecessor-exit move that
-//! materialises a phi operand executes on the edge, so the operand is
+//! materializes a phi operand executes on the edge, so the operand is
 //! live up to that edge and the result from the join onward.
 //!
 //! The interference query answers whether two SSA values are live at
@@ -70,6 +70,61 @@ fn rows_by_elem<T: Copy + Default>(nelems: usize, pairs: &[(u32, T)]) -> (Vec<u3
         cur[e as usize] += 1;
     }
     (off, dat)
+}
+
+/// A use at its block's end: a terminator, or a phi income on an edge out.
+pub(crate) const AT_END: u32 = u32::MAX;
+
+/// Per value, its uses as (block, instruction) or (block, [`AT_END`]).
+pub(crate) type ValueUses = alloc::collections::BTreeMap<ValueId, Vec<(BlockId, u32)>>;
+
+/// The uses of each value in `of` ([`ValueUses`]), and the block holding
+/// each instruction. `Block::exit_acc` reads none.
+pub(crate) fn uses_of(
+    func: &FunctionSsa,
+    of: &alloc::collections::BTreeSet<ValueId>,
+) -> (ValueUses, Vec<BlockId>) {
+    let mut def_block = vec![BlockId::MAX; func.insts.len()];
+    let mut uses = ValueUses::new();
+    let mut note = |v: ValueId, at: (BlockId, u32)| {
+        if of.contains(&v) {
+            uses.entry(v).or_default().push(at);
+        }
+    };
+    for (b, block) in func.blocks.iter().enumerate() {
+        let b = b as BlockId;
+        for i in block.inst_range.clone() {
+            def_block[i as usize] = b;
+            match &func.insts[i as usize] {
+                Inst::Phi { incoming, .. } => {
+                    for &(pred, v) in incoming {
+                        note(v, (pred, AT_END));
+                    }
+                }
+                inst => inst.for_each_operand(|v| note(v, (b, i))),
+            }
+        }
+        block.terminator.for_each_operand(|v| note(v, (b, AT_END)));
+    }
+    (uses, def_block)
+}
+
+/// Per block, whether a value defined in `def` with `uses` ([`uses_of`]) is
+/// live into it.
+pub(crate) fn value_live_in(
+    preds: &[Vec<BlockId>],
+    def: BlockId,
+    uses: &[(BlockId, u32)],
+) -> Vec<bool> {
+    let mut live = vec![false; preds.len()];
+    let mut work: Vec<BlockId> = uses.iter().map(|&(b, _)| b).collect();
+    while let Some(b) = work.pop() {
+        if b == def || core::mem::replace(&mut live[b as usize], true) {
+            continue;
+        }
+        work.extend_from_slice(&preds[b as usize]);
+    }
+    live
 }
 
 /// Least fixed point of the backward liveness equations
@@ -215,6 +270,16 @@ fn reads_at(reads: &[bool], idx: ValueId) -> bool {
     reads.get(idx as usize).copied().unwrap_or(true)
 }
 
+/// `inst`'s operands that are emitted values: one whose instruction emits
+/// nothing (`reads` clear for it) holds no place, so it keeps nothing live.
+fn for_each_read_operand(inst: &Inst, reads: &[bool], mut f: impl FnMut(ValueId)) {
+    super::reg_alloc::for_each_operand(inst, |op| {
+        if reads_at(reads, op) {
+            f(op);
+        }
+    });
+}
+
 /// A phi income whose edge move reads no place, which keeps nothing live.
 fn reads_no_place(func: &FunctionSsa, kind: LoadKind, v: ValueId) -> bool {
     super::emit_common::phi_income_reads_no_place(func, kind, v)
@@ -254,7 +319,7 @@ impl BlockLiveness {
                 if !reads_at(reads, idx) {
                     continue;
                 }
-                super::reg_alloc::for_each_operand(&func.insts[idx as usize], |v| {
+                for_each_read_operand(&func.insts[idx as usize], reads, |v| {
                     if v != NO_VALUE && (v < start || v >= end) && (v as usize) < n {
                         crossing[v as usize] = true;
                     }
@@ -363,7 +428,7 @@ impl BlockLiveness {
                     continue;
                 }
                 if reads_at(reads, idx) {
-                    super::reg_alloc::for_each_operand(&func.insts[idx as usize], &mut mark);
+                    for_each_read_operand(&func.insts[idx as usize], reads, &mut mark);
                 }
             }
             Self::for_each_exit_use(blk, &mut mark);
@@ -473,7 +538,7 @@ impl BlockLiveness {
                 if matches!(func.insts[idx as usize], Inst::Phi { .. }) || !reads_at(reads, idx) {
                     continue;
                 }
-                super::reg_alloc::for_each_operand(&func.insts[idx as usize], &mut mark);
+                for_each_read_operand(&func.insts[idx as usize], reads, &mut mark);
             }
             Self::for_each_exit_use(blk, &mut mark);
         }
@@ -512,6 +577,28 @@ impl BlockLiveness {
                 LiveSets::Sparse(s) => s.out_row(b).binary_search(&r).is_ok(),
             },
             _ => false,
+        }
+    }
+
+    /// Every value live on entry to `b`, in ascending value order.
+    pub(crate) fn for_each_live_in(&self, b: BlockId, mut f: impl FnMut(ValueId)) {
+        match &self.live {
+            LiveSets::Dense { words, live_in, .. } => {
+                let base = b as usize * words;
+                for w in 0..*words {
+                    let mut bits = live_in[base + w];
+                    while bits != 0 {
+                        let r = w * 64 + bits.trailing_zeros() as usize;
+                        f(self.universe[r]);
+                        bits &= bits - 1;
+                    }
+                }
+            }
+            LiveSets::Sparse(s) => {
+                for &r in s.in_row(b) {
+                    f(self.universe[r as usize]);
+                }
+            }
         }
     }
 
@@ -588,7 +675,7 @@ impl Liveness {
                 if matches!(func.insts[idx as usize], Inst::Phi { .. }) || !reads_at(&reads, idx) {
                     continue;
                 }
-                super::reg_alloc::for_each_operand(&func.insts[idx as usize], |op| {
+                for_each_read_operand(&func.insts[idx as usize], &reads, |op| {
                     if (op as usize) < n && last_use_pos[op as usize] < idx {
                         last_use_pos[op as usize] = idx;
                     }
@@ -722,7 +809,7 @@ impl Liveness {
                 continue;
             }
             let mut found = false;
-            super::reg_alloc::for_each_operand(&func.insts[idx as usize], |op| {
+            for_each_read_operand(&func.insts[idx as usize], &self.reads, |op| {
                 if op == x {
                     found = true;
                 }
@@ -822,7 +909,7 @@ impl Liveness {
                     live.remove(idx, node_of);
                 }
                 if !matches!(inst, Inst::Phi { .. }) && self.reads(idx) {
-                    super::reg_alloc::for_each_operand(inst, |op| {
+                    for_each_read_operand(inst, &self.reads, |op| {
                         if op != NO_VALUE && (op as usize) < n {
                             live.insert(op, node_of);
                         }
@@ -912,7 +999,7 @@ impl Liveness {
                     live.for_each(|v| out[v as usize] = true);
                 }
                 if !matches!(inst, Inst::Phi { .. }) && self.reads(idx) {
-                    super::reg_alloc::for_each_operand(inst, |op| {
+                    for_each_read_operand(inst, &self.reads, |op| {
                         if op != NO_VALUE && (op as usize) < n {
                             live.set::<TRACK>(op);
                         }
@@ -967,7 +1054,7 @@ impl Liveness {
                     out.push((idx, vals));
                 }
                 if !matches!(inst, Inst::Phi { .. }) && self.reads(idx) {
-                    super::reg_alloc::for_each_operand(inst, |op| {
+                    for_each_read_operand(inst, &self.reads, |op| {
                         if op != NO_VALUE && (op as usize) < n {
                             live.insert(op);
                         }
@@ -1015,7 +1102,7 @@ impl SparseValueSet {
     /// enumeration costs the occupied words instead of the set's whole
     /// width. It earns its per-insertion bookkeeping only once that
     /// width is large: over a narrow set the full-width memset and scan
-    /// are contiguous and vectorised, and cost less.
+    /// are contiguous and vectorized, and cost less.
     fn new(n: usize, track: bool) -> Self {
         let words = n.div_ceil(64).max(1);
         SparseValueSet {
@@ -1179,7 +1266,7 @@ pub(crate) struct Interference {
 impl Interference {
     /// Nodes that interfere with `node`, each listed once. The row order
     /// is the order the sweep emitted the edges; both consumers (the
-    /// coalescer's membership test and the colourer's neighbour-colour
+    /// coalescer's membership test and the colourer's neighbor-color
     /// scan) read a row as a set.
     pub(crate) fn neighbors(&self, node: ValueId) -> &[ValueId] {
         let (a, b) = (
@@ -1267,6 +1354,7 @@ mod tests {
         FunctionSsa {
             seh_scopes: Vec::new(),
             block_seh: Vec::new(),
+            predicted: Vec::new(),
             funclet_slots: Vec::new(),
             name: String::new(),
             ent_pc: 0,
@@ -1290,7 +1378,7 @@ mod tests {
             is_weak: false,
             is_internal: false,
             const_params: 0,
-            inst_src: alloc::vec![(0, 0); insts.len()],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             cmp32: Vec::new(),
             div32: Vec::new(),
@@ -1310,6 +1398,8 @@ mod tests {
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
             array_slots: Vec::new(),
+            vector_objects: Vec::new(),
+            owned_params: Vec::new(),
             over_aligned: Default::default(),
             frame_align: 0,
             realign_region_bytes: 0,
@@ -1995,7 +2085,7 @@ mod tests {
         assert!(g.neighbors(4).contains(&5));
     }
 
-    /// Every row is the neighbour set, each entry once and both
+    /// Every row is the neighbor set, each entry once and both
     /// directions present, whatever order and multiplicity the sweep
     /// emitted the pairs in. The CSR build sizes the rows off the raw
     /// pair count, so a repeated edge would otherwise show up twice.

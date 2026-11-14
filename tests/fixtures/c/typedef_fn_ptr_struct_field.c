@@ -2,7 +2,7 @@
 // when the typedef name is used as a struct field's base type.
 // `typedef RET (*fn_t)(args); struct { fn_t cb; }` must record
 // `fn_ptr_indirection = 1` on the field so a later
-// `(*s.cb)(args)` is recognised as the C99 6.3.2.1p4 decay
+// `(*s.cb)(args)` is recognized as the C99 6.3.2.1p4 decay
 // no-op.
 //
 // A function-pointer typedef used as a struct field is exactly this

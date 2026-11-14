@@ -66,8 +66,7 @@ Disassembly of section .text:
                	movq	<rip>, %rax # <addr>
                	addq	$0x10, %rax
                	movl	%gs:(%rax), %eax
-               	movl	$0xddeeff00, %r11d      # imm = 0xDDEEFF00
-               	cmpl	%r11d, %eax
+               	cmpl	$0xddeeff00, %eax       # imm = 0xDDEEFF00
                	je	<addr>
                	movl	$0x5, %eax
                	retq

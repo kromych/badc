@@ -1,4 +1,4 @@
-/* A `_Thread_local` function pointer initialised with a function declared
+/* A `_Thread_local` function pointer initialized with a function declared
  * before the object and defined after it holds that definition's address
  * (C11 6.7.9p4: an address constant), as a static-storage pointer does:
  * scalar and aggregate initializers, internal and external linkage, and a

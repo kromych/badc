@@ -289,7 +289,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_honours_page_offsets_and_the_intervening_slot() {
+    fn scan_honors_page_offsets_and_the_intervening_slot() {
         let seq = [ADRP_X0, LDR_X1_X2, LDR_X3_X0_8, RET];
         // At 0xff8 and 0xffc the sequence matches; off the boundary it
         // does not.

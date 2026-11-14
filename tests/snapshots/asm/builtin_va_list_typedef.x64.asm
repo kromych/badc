@@ -242,19 +242,18 @@ Disassembly of section .text:
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
-               	movabsq	$0x4004000000000000, %rcx # imm = 0x4004000000000000
-               	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	movsd	<rip>, %xmm1
+               	ucomisd	%xmm1, %xmm0
                	sete	%cl
                	movzbq	%cl, %rcx
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rcx
-               	testq	%rcx, %rcx
-               	je	<addr>
                	cmpl	$0x7, %edx
-               	sete	%al
-               	movzbq	%al, %rax
+               	sete	%dl
+               	movzbq	%dl, %rdx
+               	testq	%rcx, %rcx
+               	cmovneq	%rdx, %rax
                	leave
                	retq
                	movq	%rax, %rcx
@@ -398,9 +397,8 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rsi
-               	movabsq	$0x4004000000000000, %rax # imm = 0x4004000000000000
+               	movsd	<rip>, %xmm0
                	movl	$0x7, %edx
-               	movq	%rax, %xmm0
                	movb	$0x1, %al
                	callq	<addr>
                	testl	%eax, %eax

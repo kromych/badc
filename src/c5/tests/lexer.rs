@@ -273,6 +273,7 @@ fn binding_names_seed_their_binding_slot_when_dylibs_provided() {
         path: "libc.so.6".into(),
         bindings: vec![Binding {
             is_variadic: false,
+            prototyped: false,
             fixed_args: 1,
             return_type_tag: None,
             param_types: Vec::new(),
@@ -301,7 +302,7 @@ fn binding_names_seed_their_binding_slot_when_dylibs_provided() {
 }
 
 #[test]
-fn line_text_by_number_honours_line_markers() {
+fn line_text_by_number_honors_line_markers() {
     // The diagnostic echo resolves (file, line) through the `#line`
     // markers the preprocessor embeds; the first occurrence of a
     // (file, line) pair wins when an include re-enters a file. The

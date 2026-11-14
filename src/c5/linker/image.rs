@@ -97,9 +97,9 @@ const ELF64_DYN_SIZE: u64 = 16;
 const ELF_HEADER_SIZE: u16 = 64;
 const PROGRAM_HEADER_SIZE: u16 = 56;
 
-/// Standard Linux executable load base. `ld -no-pie` plants
+/// Standard Linux executable load base. `ld -no-pie` places
 /// the program here by default; matching it keeps `objdump -d`
-/// addresses recognisable next to a `gcc -static` reference.
+/// addresses comparable with a statically linked reference.
 const BASE_ADDR: u64 = 0x400000;
 const PAGE_SIZE: u64 = 0x1000;
 
@@ -374,6 +374,20 @@ fn patch_data_pcrel_relocs(
             super::link::MergedTarget::Text(off) => text_vaddr.wrapping_add(off as u64),
         };
         let value = target as i64 - (data_vaddr + r.slot_offset) as i64;
+        if r.branch26 {
+            let word = u32::from_le_bytes(data[slot..slot + 4].try_into().unwrap());
+            let word = crate::c5::codegen::aarch64::patch::branch26_word(word, value).ok_or_else(
+                || {
+                    link_err(
+                        Code::RELOCATION,
+                        MODULE,
+                        &format!("a branch at data slot 0x{slot:x} cannot reach 0x{target:x}"),
+                    )
+                },
+            )?;
+            data[slot..slot + 4].copy_from_slice(&word.to_le_bytes());
+            continue;
+        }
         if width == 8 {
             data[slot..slot + 8].copy_from_slice(&value.to_le_bytes());
             continue;
@@ -1346,6 +1360,9 @@ mod tests {
         MergedNative {
             applied_text_relocs: Vec::new(),
             named_sections: Vec::new(),
+            named_code_sections: Vec::new(),
+            export_forms: Vec::new(),
+            resources: Vec::new(),
             text_align: 16,
             // x86_64: `mov eax, 42; ret` -- minimal main body.
             text: alloc::vec![0xb8, 0x2a, 0x00, 0x00, 0x00, 0xc3],
@@ -1366,13 +1383,16 @@ mod tests {
             data_import_rva_refs: alloc::vec![],
             machine: NativeMachine::X86_64,
             dylibs: alloc::vec![],
+            main_executable: None,
             import_dylib_map: alloc::collections::BTreeMap::new(),
             import_symbols: alloc::collections::BTreeMap::new(),
             import_ordinals: alloc::collections::BTreeMap::new(),
+            import_hints: Default::default(),
             import_versions: Default::default(),
             flat_imports: alloc::collections::BTreeSet::new(),
             weak_imports: alloc::collections::BTreeSet::new(),
             exports: alloc::vec![],
+            export_aliases: alloc::vec![],
             shared_names: Default::default(),
             tls_index_fixups: alloc::vec![],
             macho_tlv_descriptors: alloc::vec![],
@@ -1465,7 +1485,7 @@ mod tests {
         // memory (not `pop rdi`, which shifts rsp by 8) keeps rsp
         // 16-aligned for the upcoming `call`. The byte sequence
         // below is the contract the linker stub must continue to
-        // honour; the syscall-tail variant is exercised by passing
+        // honor; the syscall-tail variant is exercised by passing
         // `None` for `exit_text_offset`.
         let stub = x86_64_start_stub(0, 0x100, Some(0x200));
         // xor ebp, ebp

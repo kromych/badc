@@ -239,9 +239,12 @@ pub(crate) enum AsmSectionItem {
     /// unit's whole stream.
     Cfi(cfi::CfiOp),
     /// `.reloc offset, TYPE, sym + addend`: a relocation of a named ELF type
-    /// at a section-relative offset, deposited without a field of its own.
+    /// at a section-relative offset, or at `.` plus a constant, deposited
+    /// without a field of its own.
     Reloc {
         offset: u32,
+        /// The offset is from the location counter, not the section's start.
+        from_here: bool,
         rtype: u32,
         target: alloc::string::String,
         addend: i64,

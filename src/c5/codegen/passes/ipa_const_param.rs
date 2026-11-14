@@ -1,5 +1,5 @@
 //! Propagate what the call sites agree about an argument into the
-//! parameter it initialises: the constant it is, and the range it lies
+//! parameter it initializes: the constant it is, and the range it lies
 //! in.
 //!
 //! C99 6.9.1p10: the arguments of a call are the initial values of the
@@ -19,8 +19,7 @@
 //! Runs after unrolling and before inlining: a callee a splice absorbs
 //! gets the same constant by argument substitution, so what this
 //! reaches is the bodies that stay out of line -- where a guard written
-//! on the parameter would otherwise keep the call it guards. gcc covers
-//! the same shapes with interprocedural constant propagation.
+//! on the parameter would otherwise keep the call it guards.
 //!
 //! A rewritten `ParamRef` leaves the parameter's incoming register with
 //! no reader; `FunctionSsa::const_params` records that so the prologue
@@ -61,7 +60,13 @@ fn narrow_to_kind(k: i64, kind: LoadKind) -> Option<i64> {
         LoadKind::U16 => Some(k as u16 as i64),
         LoadKind::I8 => Some(k as i8 as i64),
         LoadKind::U8 => Some(k as u8 as i64),
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => None,
+        LoadKind::F32
+        | LoadKind::F64
+        | LoadKind::F80
+        | LoadKind::F128
+        | LoadKind::V128
+        | LoadKind::V256
+        | LoadKind::V512 => None,
     }
 }
 
@@ -120,14 +125,15 @@ fn identifier_runs<'a>(texts: &[&'a [u8]]) -> hashbrown::HashSet<&'a [u8]> {
 }
 
 /// Entry PCs whose function can be reached other than through the
-/// `Inst::Call` sites in `funcs`: a body materialises the address, a
+/// `Inst::Call` sites in `funcs`: a body materializes the address, a
 /// static or `_Thread_local` initializer holds it, an alias gives it a
 /// second name, an asm template names it, or a scope table names it for
 /// the language handler. Any of those admits a call the pass cannot see
-/// the arguments of.
+/// the arguments of. Assembly names a function as `target` spells it.
 pub(crate) fn escaping_functions(
     funcs: &[FunctionSsa],
     program: &crate::c5::program::Program,
+    target: crate::c5::codegen::Target,
 ) -> BTreeSet<usize> {
     let mut out: BTreeSet<usize> = (program.code_relocs.iter())
         .chain(&program.tls_code_relocs)
@@ -160,8 +166,10 @@ pub(crate) fn escaping_functions(
     // re-scanning every template once per function.
     let runs = identifier_runs(&asm_texts);
     let asm_bytes: usize = asm_texts.iter().map(|t| t.len()).sum();
+    let format = target.binary_format();
     for f in funcs {
-        let name = f.name.as_bytes();
+        let spelled = crate::c5::asm::asm_symbol_spelling(format, &f.name);
+        let name = spelled.as_bytes();
         if name.is_empty() {
             continue;
         }

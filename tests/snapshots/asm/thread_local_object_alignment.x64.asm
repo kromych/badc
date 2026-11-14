@@ -49,9 +49,8 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0xe, %eax
                	retq
-               	movabsq	$0x4004000000000000, %rsi # imm = 0x4004000000000000
-               	movq	%rsi, %xmm14
-               	movsd	%xmm14, (%rcx)
+               	movsd	<rip>, %xmm0
+               	movsd	%xmm0, (%rcx)
                	movq	$0x1, (%rdx)
                	movq	$0x2, 0x8(%rdx)
                	movq	$0x3, 0x10(%rax)
@@ -59,15 +58,14 @@ Disassembly of section .text:
                	movq	%fs:0x0, %rax
                	addq	$-0x100, %rax
                	movb	$0x1, (%rax)
+               	movq	%fs:0x0, %rsi
+               	addq	$-0xf0, %rsi
+               	movb	$0x2, (%rsi)
                	movq	%fs:0x0, %rdi
-               	addq	$-0xf0, %rdi
-               	movb	$0x2, (%rdi)
-               	movq	%fs:0x0, %r8
-               	addq	$-0xd0, %r8
-               	movb	$0x3, (%r8)
-               	movsd	(%rcx), %xmm0
-               	movq	%rsi, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	addq	$-0xd0, %rdi
+               	movb	$0x3, (%rdi)
+               	movsd	(%rcx), %xmm1
+               	ucomisd	%xmm0, %xmm1
                	jp	<addr>
                	je	<addr>
                	movl	$0xf, %eax
@@ -79,8 +77,8 @@ Disassembly of section .text:
                	addq	%rcx, %rdx
                	movq	%fs:0x0, %rcx
                	addq	$-0xc0, %rcx
-               	movq	0x10(%rcx), %rsi
-               	addq	%rsi, %rdx
+               	movq	0x10(%rcx), %r8
+               	addq	%r8, %rdx
                	movq	0x18(%rcx), %rcx
                	addq	%rdx, %rcx
                	cmpq	$0xa, %rcx
@@ -88,9 +86,9 @@ Disassembly of section .text:
                	movl	$0x10, %eax
                	retq
                	movsbq	(%rax), %rax
-               	movsbq	(%rdi), %rcx
+               	movsbq	(%rsi), %rcx
                	addq	%rcx, %rax
-               	movsbq	(%r8), %rcx
+               	movsbq	(%rdi), %rcx
                	addq	%rcx, %rax
                	cmpl	$0x6, %eax
                	je	<addr>
@@ -124,9 +122,8 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x4, %eax
                	retq
-               	movabsq	$0x3ff8000000000000, %rdi # imm = 0x3FF8000000000000
-               	movq	%rdi, %xmm14
-               	movsd	%xmm14, (%rcx)
+               	movsd	<rip>, %xmm0
+               	movsd	%xmm0, (%rcx)
                	movq	$0x3, (%rax)
                	movq	$0x4, 0x8(%rax)
                	movq	$0x5, (%rsi)
@@ -142,12 +139,11 @@ Disassembly of section .text:
                	movq	%fs:0x0, %rsi
                	addq	$-0x70, %rsi
                	movb	$0x3, (%rsi)
-               	movq	%fs:0x0, %r8
-               	addq	$-0x60, %r8
-               	movb	$0x4, (%r8)
-               	movsd	(%rcx), %xmm0
-               	movq	%rdi, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	movq	%fs:0x0, %rdi
+               	addq	$-0x60, %rdi
+               	movb	$0x4, (%rdi)
+               	movsd	(%rcx), %xmm1
+               	ucomisd	%xmm0, %xmm1
                	jp	<addr>
                	jne	<addr>
                	movq	%fs:0x0, %rcx
@@ -159,15 +155,15 @@ Disassembly of section .text:
                	retq
                	movq	%fs:0x0, %rcx
                	addq	$-0x80, %rcx
-               	movq	(%rcx), %rdi
+               	movq	(%rcx), %r8
                	movq	0x8(%rcx), %rcx
-               	addq	%rcx, %rdi
+               	addq	%rcx, %r8
                	movq	%fs:0x0, %rcx
                	addq	$-0x50, %rcx
                	movq	(%rcx), %r9
-               	addq	%r9, %rdi
+               	addq	%r9, %r8
                	movq	0x8(%rcx), %rcx
-               	addq	%rdi, %rcx
+               	addq	%r8, %rcx
                	cmpq	$0x14, %rcx
                	je	<addr>
                	retq
@@ -178,7 +174,7 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	movsbq	(%rsi), %rcx
                	addq	%rcx, %rax
-               	movsbq	(%r8), %rcx
+               	movsbq	(%rdi), %rcx
                	addq	%rcx, %rax
                	cmpl	$0xa, %eax
                	je	<addr>

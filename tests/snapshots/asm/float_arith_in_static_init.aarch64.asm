@@ -39,12 +39,11 @@ Disassembly of section .text:
                	ldr	d0, [x0]
                	adrp	x16, <addr>
                	ldr	d1, [x16, #0x20]
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.mi	<addr>
-               	ldr	d0, [x0]
                	adrp	x16, <addr>
                	ldr	d1, [x16, #0x28]
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.le	<addr>
                	mov	x0, #0x4                // =4
                	ret

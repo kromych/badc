@@ -90,9 +90,17 @@ pub(crate) enum ConstValue {
 /// address each receives, and the data image itself.
 pub(crate) struct ConstData<'a> {
     intervals: Vec<(i64, i64)>,
+    /// Every object this unit defines in the data image, `[start, end)`
+    /// ascending: the objects `__builtin_object_size` measures.
+    objects: Vec<(i64, i64)>,
     /// Ascending by offset. `None` marks a slot whose value has no IR
     /// form: a `&&label`, an unresolvable symbol.
     relocs: Vec<(i64, Option<AddrConst>)>,
+    /// The C library `strlen`: its binding and its extern entry.
+    strlen: (Option<i64>, Option<usize>),
+    /// The unit lets a `strlen` call fold; `-fno-builtin` folds only the
+    /// builtin spelling's.
+    strlen_folds: bool,
     data: &'a [u8],
 }
 
@@ -189,11 +197,62 @@ impl<'a> ConstData<'a> {
                 .map(|(off, _)| (off as i64, None)),
         );
         relocs.sort_unstable_by_key(|&(off, _)| off);
+        let mut objects: Vec<(i64, i64)> = (program.symbols.iter())
+            .filter(|s| {
+                s.class == Token::Glo as i64
+                    && s.defined_here
+                    && !s.is_weak
+                    && !s.is_thread_local
+                    && s.data_byte_size > 0
+            })
+            .map(|s| (s.val, s.val + s.data_byte_size))
+            .chain(program.const_data_ranges.iter().copied())
+            .collect();
+        objects.sort_unstable();
+        let strlen = (
+            (program.symbols.iter())
+                .find(|s| s.name == "strlen" && s.class == Token::Sys as i64)
+                .map(|s| s.val),
+            (program.extern_function_imports.iter())
+                .find(|(_, name)| name == "strlen")
+                .map(|&(pc, _)| pc),
+        );
         ConstData {
             intervals,
+            objects,
             relocs,
+            strlen,
+            strlen_folds: program.strlen_folds,
             data: &program.data,
         }
+    }
+
+    /// The bytes from data offset `off` to the end of the object holding
+    /// it, `None` outside every object this unit defines.
+    fn remaining(&self, off: i64) -> Option<i64> {
+        let i = self.objects.partition_point(|&(start, _)| start <= off);
+        let (start, end) = *self.objects.get(i.checked_sub(1)?)?;
+        (start..=end).contains(&off).then_some(end - off)
+    }
+
+    /// The length of the string at data offset `off` when it and its NUL
+    /// lie in one const interval and overlap no relocation slot.
+    fn string_len(&self, off: i64) -> Option<i64> {
+        let &(_, hi) = (self.intervals.iter()).find(|&&(lo, hi)| lo <= off && off < hi)?;
+        let image = self.data.len() as i64;
+        let len = match self.data.get(off as usize..hi.min(image) as usize) {
+            _ if off >= image => 0,
+            Some(bytes) => match bytes.iter().position(|&b| b == 0) {
+                Some(n) => n as i64,
+                None if hi > image => image - off,
+                None => return None,
+            },
+            None => return None,
+        };
+        let i = self.relocs.partition_point(|&(r, _)| r + 8 <= off);
+        (self.relocs.get(i))
+            .is_none_or(|&(r, _)| r > off + len)
+            .then_some(len)
     }
 
     /// The value of `[off, off + width)` when the whole read sits inside
@@ -261,7 +320,13 @@ fn int_width(kind: LoadKind) -> Option<i64> {
         LoadKind::I16 | LoadKind::U16 => Some(2),
         LoadKind::I32 | LoadKind::U32 => Some(4),
         LoadKind::I64 => Some(8),
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => None,
+        LoadKind::F32
+        | LoadKind::F64
+        | LoadKind::F80
+        | LoadKind::F128
+        | LoadKind::V128
+        | LoadKind::V256
+        | LoadKind::V512 => None,
     }
 }
 
@@ -287,11 +352,12 @@ fn apply(func: &mut FunctionSsa, folds: &mut [(ValueId, Folded)]) -> bool {
                 at: At::Before(at),
                 inst: a.base(),
                 is_f32: false,
+                copy_of: None,
             }),
             _ => None,
         })
         .collect();
-    let rewrite = (!ins.is_empty()).then(|| tape::insert(func, &ins).0);
+    let rewrite = (!ins.is_empty()).then(|| tape::insert(func, &ins));
     let mut bases = rewrite
         .as_ref()
         .map_or(&[][..], |r| r.ids.as_slice())
@@ -354,36 +420,213 @@ fn data_addr(func: &FunctionSsa, ext: &BTreeSet<u32>, mut v: ValueId, mut off: i
                 off = off.wrapping_sub(*rhs_imm);
                 v = *lhs;
             }
+            Inst::Intrinsic { kind, args } if is_wrapper(*kind) => v = args[0],
             _ => return None,
         }
     }
     None
 }
 
-/// Fold non-volatile integer loads from const, initialized data into the
-/// initializer's value (C99 6.7.3: a const object's stored value cannot
+const SUBOBJECT_BOUND: i64 = crate::c5::op::Intrinsic::SubobjectBound as i64;
+const BUILTIN_ARG: i64 = crate::c5::op::Intrinsic::BuiltinArg as i64;
+
+/// A marker the walk sees through to the pointer it wraps.
+fn is_wrapper(kind: i64) -> bool {
+    kind == SUBOBJECT_BOUND || kind == BUILTIN_ARG
+}
+
+/// Whether a library call on `arg` folds: the unit lets the library name
+/// fold, or the call was spelled as the builtin.
+fn folds_as_builtin(func: &FunctionSsa, arg: ValueId, library_folds: bool) -> bool {
+    library_folds
+        || matches!(func.insts.get(arg as usize), Some(Inst::Intrinsic { kind, .. }) if *kind == BUILTIN_ARG)
+}
+
+/// The bytes left in the subobject `v` points into by its call-site bound:
+/// none past its end, unknown ahead of its start.
+fn subobject_left(func: &FunctionSsa, v: ValueId, depth: u32) -> Option<i64> {
+    match func.insts.get(v as usize)? {
+        Inst::Intrinsic { kind, args } if *kind == SUBOBJECT_BOUND => {
+            match func.insts.get(*args.get(1)? as usize)? {
+                Inst::Imm(n) => Some(*n),
+                _ => None,
+            }
+        }
+        Inst::Copy {
+            value,
+            is_fp: false,
+        } if depth > 0 => subobject_left(func, *value, depth - 1),
+        Inst::BinopI { op, lhs, rhs_imm } if depth > 0 => {
+            let step = match op {
+                BinOp::Add => *rhs_imm,
+                BinOp::Sub => rhs_imm.checked_neg()?,
+                _ => return None,
+            };
+            let left = subobject_left(func, *lhs, depth - 1)?;
+            (step >= 0).then(|| (left - step).max(0))
+        }
+        _ => None,
+    }
+}
+
+/// The data offset `v` addresses: an `ImmData` plus constants.
+fn data_offset(func: &FunctionSsa, v: ValueId, depth: u32) -> Option<i64> {
+    match func.insts.get(v as usize)? {
+        Inst::ImmData(off) => Some(*off),
+        Inst::Copy {
+            value,
+            is_fp: false,
+        } if depth > 0 => data_offset(func, *value, depth - 1),
+        Inst::Intrinsic { kind, args } if is_wrapper(*kind) && depth > 0 => {
+            data_offset(func, args[0], depth - 1)
+        }
+        Inst::BinopI { op, lhs, rhs_imm } if depth > 0 => {
+            let base = data_offset(func, *lhs, depth - 1)?;
+            match op {
+                BinOp::Add => base.checked_add(*rhs_imm),
+                BinOp::Sub => base.checked_sub(*rhs_imm),
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+/// Fold each deferred `__builtin_object_size` whose pointer is a defined
+/// object's address plus a constant: the bytes that remain past it. Only
+/// the whole object is known here: an upper bound for the closest
+/// subobject, so type 3, the subobject's minimum, keeps its fallback.
+/// A library `strlen` of a constant string folds to its length, and a
+/// deferred `__builtin_constant_p` of a load to 1 when the read is
+/// const data.
+pub(crate) fn fold_data_queries(func: &mut FunctionSsa, cd: &ConstData<'_>) -> bool {
+    use crate::c5::op::Intrinsic as I;
+    let (size, constant_p) = (I::ObjectSize as i64, I::ConstantP as i64);
+    let mut changed = false;
+    for i in 0..func.insts.len() {
+        let folded = match &func.insts[i] {
+            Inst::Intrinsic { kind, args } if *kind == constant_p && args.len() == 2 => {
+                let width = match func.insts[args[1] as usize] {
+                    Inst::Imm(w) => w,
+                    _ => continue,
+                };
+                data_offset(func, args[0], 8)
+                    .and_then(|o| cd.read(o, width))
+                    .and_then(|v| matches!(v, ConstValue::Bytes(_)).then_some(1))
+            }
+            Inst::Intrinsic { kind, args } if *kind == size && args.len() == 2 => {
+                let p = args[0];
+                let whole = || data_offset(func, p, 8).and_then(|o| cd.remaining(o));
+                match func.insts[args[1] as usize] {
+                    Inst::Imm(0 | 2) => whole(),
+                    Inst::Imm(1) => match (subobject_left(func, p, 8), whole()) {
+                        (Some(sub), Some(all)) => Some(sub.min(all)),
+                        (sub, all) => sub.or(all),
+                    },
+                    Inst::Imm(3) => subobject_left(func, p, 8),
+                    _ => None,
+                }
+            }
+            Inst::CallExt {
+                binding_idx, args, ..
+            } if Some(*binding_idx) == cd.strlen.0
+                && args.len() == 1
+                && folds_as_builtin(func, args[0], cd.strlen_folds) =>
+            {
+                data_offset(func, args[0], 8).and_then(|o| cd.string_len(o))
+            }
+            Inst::Call {
+                target_pc, args, ..
+            } if Some(*target_pc) == cd.strlen.1
+                && args.len() == 1
+                && folds_as_builtin(func, args[0], cd.strlen_folds) =>
+            {
+                data_offset(func, args[0], 8).and_then(|o| cd.string_len(o))
+            }
+            _ => None,
+        };
+        if let Some(n) = folded {
+            func.insts[i] = Inst::Imm(n);
+            changed = true;
+        }
+    }
+    changed
+}
+
+/// Fold non-volatile integer loads from const, initialized data, and lanes
+/// of vectors loaded from it, into the initializer's value (C99 6.7.3: a const object's stored value cannot
 /// be modified, so the image is the object's value for the whole
 /// execution). Returns true when any load folded. Runs inside the branch
 /// fold's fixed point so a load whose address becomes constant only
 /// after a phi collapses still folds.
+/// `0` or `-1` when the `bytes` of const data at `off` are all zero or all
+/// one bits.
+fn uniform_fill(cd: &ConstData<'_>, off: i64, bytes: i64) -> Option<i64> {
+    let mut fill = None;
+    for k in (0..bytes).step_by(8) {
+        let ConstValue::Bytes(b) = cd.read(off + k, 8)? else {
+            return None;
+        };
+        let word = i64::from_le_bytes(b);
+        if (word != 0 && word != -1) || fill.is_some_and(|f| f != word) {
+            return None;
+        }
+        fill = Some(word);
+    }
+    fill
+}
+
 pub(crate) fn fold_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) -> bool {
     let ext = extern_imm_data(func);
+    let mut changed_vectors = false;
     let mut folds: Vec<(ValueId, Folded)> = Vec::new();
     for i in func.blocks.iter().flat_map(|b| b.inst_range.clone()) {
-        let Inst::Load {
-            addr,
-            disp,
-            kind,
-            volatile: false,
-            ..
-        } = func.insts[i as usize]
-        else {
-            continue;
+        let (addr, disp, kind) = match func.insts[i as usize] {
+            // A whole vector of zero or all-one bytes is a constant splat,
+            // which the targets form without the load.
+            Inst::Load {
+                addr,
+                disp,
+                kind: kind @ (LoadKind::V128 | LoadKind::V256),
+                volatile: false,
+                ..
+            } => {
+                let bytes: u8 = if kind == LoadKind::V128 { 16 } else { 32 };
+                if let Some(off) = data_addr(func, &ext, addr, i64::from(disp))
+                    && let Some(fill) = uniform_fill(cd, off, i64::from(bytes))
+                {
+                    func.insts[i as usize] = Inst::VecConst {
+                        imm: fill,
+                        kind: crate::c5::ir::StoreKind::I64,
+                        bytes,
+                    };
+                    changed_vectors = true;
+                }
+                continue;
+            }
+            Inst::Load {
+                addr,
+                disp,
+                kind,
+                volatile: false,
+                ..
+            } => (addr, i64::from(disp), kind),
+            // A lane of a vector loaded whole reads the same bytes.
+            Inst::VecExtract { vec, off, kind, .. } => match func.insts[vec as usize] {
+                Inst::Load {
+                    addr,
+                    disp,
+                    volatile: false,
+                    ..
+                } => (addr, i64::from(disp) + i64::from(off), kind),
+                _ => continue,
+            },
+            _ => continue,
         };
         let Some(width) = int_width(kind) else {
             continue;
         };
-        let Some(off) = data_addr(func, &ext, addr, disp as i64) else {
+        let Some(off) = data_addr(func, &ext, addr, disp) else {
             continue;
         };
         let Some(value) = cd.read(off, width) else {
@@ -391,7 +634,7 @@ pub(crate) fn fold_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) -> bool {
         };
         folds.push((i, Folded::of(value, kind)));
     }
-    apply(func, &mut folds)
+    apply(func, &mut folds) | changed_vectors
 }
 
 /// Resolve `v` to a frame byte coordinate: `LocalAddr(slot)` addresses
@@ -431,6 +674,8 @@ fn store_width(kind: crate::c5::ir::StoreKind) -> i64 {
         StoreKind::I32 | StoreKind::F32 => 4,
         StoreKind::I64 | StoreKind::F64 => 8,
         StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => 16,
+        StoreKind::V256 => 32,
+        StoreKind::V512 => 64,
     }
 }
 
@@ -489,6 +734,31 @@ fn meet(a: &State, b: &State) -> State {
 /// Walk block `b` from `state`: tracked writes update the state, and
 /// with `fold` set, each load the state resolves rewrites to the
 /// initializer's value. Returns whether any load folded.
+/// The data offset `value` is a whole `w`-byte load from: the bytes a store
+/// of it writes, as a copy of them would.
+fn loaded_from(func: &FunctionSsa, ext: &BTreeSet<u32>, value: ValueId, w: i64) -> Option<i64> {
+    let Inst::Load {
+        addr,
+        disp,
+        kind,
+        volatile: false,
+        ..
+    } = func.insts.get(value as usize)?
+    else {
+        return None;
+    };
+    let width = match kind {
+        LoadKind::V128 => 16,
+        LoadKind::V256 => 32,
+        LoadKind::F64 => 8,
+        LoadKind::F32 => 4,
+        k => int_width(*k)?,
+    };
+    (width == w)
+        .then(|| data_addr(func, ext, *addr, i64::from(*disp)))
+        .flatten()
+}
+
 fn walk_block(
     func: &mut FunctionSsa,
     cd: &ConstData<'_>,
@@ -522,11 +792,18 @@ fn walk_block(
         match &func.insts[idx] {
             Inst::Mcpy { dst, src, size, .. } => {
                 let size = *size;
+                // A copy of a frame range one fill covers carries that fill.
+                let carried = frame_addr(func, *src, 0).and_then(|s| {
+                    let (&lo, &(hi, fill)) = state.range(..=s).next_back()?;
+                    (s + size <= hi).then(|| fill.advanced(s - lo))
+                });
                 match frame_addr(func, *dst, 0) {
                     Some(lo) => {
                         kill(state, lo, lo + size);
                         if let Some(s) = data_addr(func, ext, *src, 0) {
                             state.insert(lo, (lo + size, Filled::Template(s)));
+                        } else if let Some(fill) = carried {
+                            state.insert(lo, (lo + size, fill));
                         }
                     }
                     None => state.clear(),
@@ -551,6 +828,9 @@ fn walk_block(
                     !*volatile && matches!(func.insts.get(*value as usize), Some(Inst::Imm(0))),
                     store_width(*kind),
                 );
+                let loaded = (!*volatile)
+                    .then(|| loaded_from(func, ext, *value, w))
+                    .flatten();
                 match frame_addr(func, *addr, *disp as i64) {
                     Some(a) => {
                         kill(state, a, a + w);
@@ -558,6 +838,8 @@ fn walk_block(
                         // template writes the same bytes the copy did.
                         if zero {
                             state.insert(a, (a + w, Filled::Zero));
+                        } else if let Some(s) = loaded {
+                            state.insert(a, (a + w, Filled::Template(s)));
                         }
                     }
                     None => state.clear(),
@@ -576,6 +858,11 @@ fn walk_block(
                 kill(state, a, a + w);
                 if !*volatile && matches!(func.insts.get(*value as usize), Some(Inst::Imm(0))) {
                     state.insert(a, (a + w, Filled::Zero));
+                } else if let Some(s) = (!*volatile)
+                    .then(|| loaded_from(func, ext, *value, w))
+                    .flatten()
+                {
+                    state.insert(a, (a + w, Filled::Template(s)));
                 }
             }
             Inst::Load {
@@ -664,6 +951,12 @@ fn walk_block(
             | Inst::FpCast { .. }
             | Inst::ParamRef { .. }
             | Inst::LifetimeEnd(_)
+            | Inst::VecBinop { .. }
+            | Inst::VecInsert { .. }
+            | Inst::VecSplat { .. }
+            | Inst::VecConst { .. }
+            | Inst::VecExtract { .. }
+            | Inst::SimdVal { .. }
             | Inst::Phi { .. } => {}
             // Calls, atomics, asm, indexed / segment stores,
             // intrinsics, alloca bookkeeping: may write memory the

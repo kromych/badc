@@ -3,7 +3,7 @@
 badc compiles every C translation unit of a Linux 7.2.9 `defconfig` kernel on
 x86_64 and aarch64, links the kernel, and the result boots. The harness is
 [`demos/linux/`](../demos/linux/). Its [README](../demos/linux/README.md)
-documents every script, flag and pin, and records the measurements this page
+documents every script, flag, and pin, and records the measurements this page
 does not repeat.
 
 ## Contents
@@ -26,7 +26,7 @@ does not repeat.
 ## What holds today
 
 The pre-push gate (`scripts/validate_local_boxes.py`) and CI's `kernel` job
-build, link and boot `defconfig` on both architectures with
+build, link, and boot `defconfig` on both architectures with
 `demos/linux/verify.py`. The gate's log at d5a973207 reads:
 
 | | x86_64 | aarch64 |
@@ -55,7 +55,7 @@ initramfs `/init` prints a marker, then mounts procfs and sysfs and checks the
 contents of a fixed set of files. It reads each in 64-byte requests and once
 more from a non-zero offset, which catches a seq_file that replays records
 instead of continuing. It then resolves `clock_gettime` in the vDSO the way a
-loader does, through `PT_DYNAMIC`, the hash tables and the symbol versions,
+loader does, through `PT_DYNAMIC`, the hash tables, and the symbol versions,
 and calls it. Only when every check passes does it print the second marker.
 
 Each boot's `Linux version` banner, the text `/proc/version` serves, must name
@@ -83,7 +83,7 @@ is then the hypervisor. Its initramfs carries:
 `/proc/cpuinfo` lists and whether `/dev/kvm` opened, and runs the emulator on
 the same image under the kernel's own KVM. The guest's console arrives between
 bracket lines on the outer one, and both boots are held to the marker checks.
-The step is skipped, not passed, where the host, the emulator or the CPU model
+The step is skipped, not passed, where the host, the emulator, or the CPU model
 offers no nesting; the aarch64 validation host's KVM offers none. x86_64
 `defconfig` builds no KVM, so with `--nested-kvm` the build makes it as
 modules.
@@ -93,7 +93,7 @@ modules.
 The aarch64 gate boots at displacements it chooses. It writes a KASLR seed
 into the machine's own device tree and boots against the result: three fixed
 seeds and one drawn per run. x86_64 derives its displacement from RDRAND, the
-TSC and the i8254 counter, so nothing there can be pinned, and those boots run
+TSC, and the i8254 counter, so nothing there can be pinned, and those boots run
 at the displacement the machine draws. A displacement probe runs first, and the
 gate fails if a randomizing configuration produced no displaced boot.
 
@@ -119,14 +119,14 @@ The i386 links read ELF32 `EM_386` objects, whose `SHT_REL` relocations keep
 the addend in the field being relocated. The reader takes each implicit addend
 from the input bytes at the field's width, so one relocation engine covers both
 formats. The writer emits the ELF32 records: `Elf32_Ehdr`/`Phdr`/`Shdr`,
-16-byte `Elf32_Sym`, 8-byte `.dynamic` entries and 32-bit `.gnu.hash` Bloom
+16-byte `Elf32_Sym`, 8-byte `.dynamic` entries, and 32-bit `.gnu.hash` Bloom
 words. `--emit-relocs` writes the target's own format, so `realmode.elf`
 carries the `.rel.<section>` tables `arch/x86/tools/relocs` reads.
 
 The vDSOs are shared objects, so badc writes the metadata a loader searches:
-`.dynsym` / `.dynstr`, `.hash` and `.gnu.hash` per `--hash-style`,
+`.dynsym` / `.dynstr`, `.hash`, and `.gnu.hash` per `--hash-style`,
 `.gnu.version` / `.gnu.version_d` for the version the symbols are exported
-under, a `.dynamic` with `DT_SONAME`, the table addresses and the relocation
+under, a `.dynamic` with `DT_SONAME`, the table addresses, and the relocation
 tags, and `PT_DYNAMIC`. A link with no `-T` runs under a built-in default
 script per output kind, as GNU ld falls back on its internal one.
 `scripts/tools-support-relr.sh` is such a link.
@@ -161,7 +161,7 @@ clean dmesg, and disk and network I/O, against a baseline taken from the
 image's stock kernel in the same userspace.
 
 The system disk and the NIC use the models the run selects: the paravirtual
-pair by default, or an emulated NVMe, AHCI or SCSI controller and an e1000e or
+pair by default, or an emulated NVMe, AHCI, or SCSI controller and an e1000e or
 rtl8139-class NIC. The run fails unless the booted kernel drives the root disk
 and the NIC with those models' drivers. The guest boots under EFI firmware
 where the host has it, OVMF on x86_64 `q35` and AAVMF on aarch64 `virt`.
@@ -178,7 +178,7 @@ link badc's.
 ### Real hardware
 
 `packages.py --phases hw` runs the same install, one-shot boot selection,
-boot, probes and exercise stage on a physical machine instead of a guest. The
+boot, probes, and exercise stage on a physical machine instead of a guest. The
 run reaches the machine over ssh and reads its console from a serial port on
 the host, byte for byte, so the same scanners judge both. The drivers that
 must bind come from the machine's own baseline rather than from an emulated
@@ -223,7 +223,7 @@ kernel therefore drives the rest. Its cheap part runs on every boot:
 `--exercise` adds the two expensive steps, loading every module one by one and
 the filesystem matrix. `--no-exercise-gate` drops the stage.
 
-The socket step binds, listens and reads back, because `socket()` succeeding
+The socket step binds, listens, and reads back, because `socket()` succeeding
 is not enough. A kernel whose `bind(AF_VSOCK, ...)` always failed passed every
 passive check on a distribution whose init does not use that family.
 
@@ -235,17 +235,17 @@ configuration keeps `CONFIG_CRYPTO_SELFTESTS`, the registration self-tests and
 a `tcrypt` mode sweep run as well.
 
 The module step loads every built module once and classifies the outcome.
-Absent hardware is counted apart from a fault, a hang, a missing symbol or an
+Absent hardware is counted apart from a fault, a hang, a missing symbol, or an
 oops taint bit.
 
 The filesystem step builds filesystems on loop devices over sparse files, at
 512- and 4096-byte logical block sizes, and runs parallel write, churn,
-tree-copy and `O_DIRECT` jobs on them. File contents are then checked against
+tree-copy, and `O_DIRECT` jobs on them. File contents are then checked against
 digests computed from a seed held in tmpfs, after dropping the caches and
 remounting, and each instance ends with its own check-only fsck. The matrix
-includes checksum-heavy configurations: btrfs with crc32c, xxhash, sha256 and
+includes checksum-heavy configurations: btrfs with crc32c, xxhash, sha256, and
 blake2, btrfs with zstd compression, ext4 and xfs with metadata checksums,
-LUKS2 dm-crypt and md raid1. They route file data through the kernel's crypto
+LUKS2 dm-crypt, and md raid1. They route file data through the kernel's crypto
 and compression code, where a miscompile shows up as corrupted data rather
 than as a dmesg line.
 
@@ -256,7 +256,7 @@ the VM running the badc kernel, badc builds the kernel again. Everything the
 build needs is staged before the reboot, so it runs with no network. The phase
 measures the kernel, not the compiler:
 
-- the kernel log window between `/dev/kmsg` markers, taint, OOM records and
+- the kernel log window between `/dev/kmsg` markers, taint, OOM records, and
   core dumps;
 - the in-guest unit outcomes against the host build's, for the units both
   reached;
@@ -267,7 +267,7 @@ It is off by default; `--selfhost-scope` sizes it.
 ## What is not badc's
 
 The shim sends only kernel compiles to badc. Configuration probes
-(`cc-option` and the like), `-E`, `-S` and the host tools under `scripts/`
+(`cc-option` and the like), `-E`, `-S`, and the host tools under `scripts/`
 and `tools/` go to the reference compiler, so the configuration and the object
 population match the gcc build the corpus was captured from.
 
@@ -343,7 +343,7 @@ compiler, so a replayed measurement can reflect badc instead.
 CI runs `verify.py` on every pull request and every push to `master`, for both
 architectures, under the emulator the qemu job compiled and linked with badc.
 `.github/workflows/kernel-packages.yml` runs the packaging and install path on
-demand and on a pull request labelled `kernel-packages`. It is off the push
+demand and on a pull request labeled `kernel-packages`. It is off the push
 path because a distribution configuration is a full kernel and GitHub-hosted
 runners expose no `/dev/kvm`, so the VM runs under TCG. It has no schedule:
 the corpus is pinned, and a repeat run repeats the previous run's work.

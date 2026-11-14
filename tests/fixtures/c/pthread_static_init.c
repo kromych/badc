@@ -1,5 +1,5 @@
 // Darwin's libpthread checks a signature word at offset 0 of a mutex
-// and condition variable. A statically initialised object must carry
+// and condition variable. A statically initialized object must carry
 // the magic the system headers seed (PTHREAD_MUTEX_INITIALIZER /
 // PTHREAD_COND_INITIALIZER); an all-zero object is rejected by
 // pthread_mutex_lock / pthread_cond_wait with EINVAL. glibc takes an

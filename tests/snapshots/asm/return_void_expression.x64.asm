@@ -28,12 +28,11 @@ Disassembly of section .text:
 <main>:
                	movl	<rip>, %eax # <addr>
                	incq	%rax
-               	movl	%eax, <rip> # <addr>
                	incq	%rax
                	movl	%eax, <rip> # <addr>
+               	xorl	%ecx, %ecx
+               	movl	$0x1, %edx
                	cmpl	$0x2, %eax
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	movq	%rdx, %rax
+               	cmoveq	%rcx, %rax
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>

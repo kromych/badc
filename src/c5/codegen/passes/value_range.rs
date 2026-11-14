@@ -27,7 +27,7 @@
 //! [`super::simplify_branches`] consume.
 //!
 //! Ranges are keyed by expression rather than by value id, so a
-//! re-materialised operand -- the same extension of the same value
+//! re-materialized operand -- the same extension of the same value
 //! emitted in two blocks -- reads the fact recorded for the other. The
 //! key covers only pure arithmetic; a load or a call is opaque, so
 //! nothing is carried across a write to memory. A store is the one
@@ -200,7 +200,7 @@ fn cmp_code(op: BinOp, narrow: bool) -> u32 {
 
 /// Canonical id per value, and the first instruction of each key: the
 /// first instruction computing the same pure expression. Address chains
-/// re-materialised per block (`LocalAddr` + constant offset, the same
+/// re-materialized per block (`LocalAddr` + constant offset, the same
 /// field read twice) collapse onto one identity, which is what lets a
 /// branch fact recorded for one read reach the other.
 struct Numbering {
@@ -233,7 +233,7 @@ fn value_numbers(func: &FunctionSsa) -> Numbering {
         // A 32-bit compare or division is another function of its operands.
         let narrow = super::narrow::is_cmp32(&func.cmp32, i as ValueId)
             || super::narrow::is_narrow_div(func, i as ValueId);
-        // Address-materialisation immediates (`ImmData`, `ImmCode`,
+        // Address-materialization immediates (`ImmData`, `ImmCode`,
         // `ImmExtCode`, `TlsAddr`) stay on their own ids: their operand
         // is a placeholder a per-instruction fixup resolves, so equal
         // operands can name different symbols.
@@ -336,7 +336,13 @@ fn load_kinds_of_store(kind: StoreKind) -> &'static [LoadKind] {
         StoreKind::I16 => &[LoadKind::I16, LoadKind::U16],
         StoreKind::I32 => &[LoadKind::I32, LoadKind::U32],
         StoreKind::I64 => &[LoadKind::I64],
-        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => &[],
+        StoreKind::F32
+        | StoreKind::F64
+        | StoreKind::F80
+        | StoreKind::F128
+        | StoreKind::V128
+        | StoreKind::V256
+        | StoreKind::V512 => &[],
     }
 }
 
@@ -409,35 +415,6 @@ fn stored_facts(
         .collect()
 }
 
-/// Whether an instruction may write memory (or transfer control to code
-/// that can), ending the validity of every load-keyed fact. Volatile
-/// loads read strictly per the abstract machine but write nothing; an
-/// atomic load is an ordering point after which another thread's
-/// writes may be visible (C11 5.1.2.4), so it ends the facts too.
-fn writes_memory(inst: &Inst) -> bool {
-    matches!(
-        inst,
-        Inst::Store { .. }
-            | Inst::StoreLocal { .. }
-            | Inst::StoreIndexed { .. }
-            | Inst::SegStore { .. }
-            | Inst::Call { .. }
-            | Inst::CallIndirect { .. }
-            | Inst::CallExt { .. }
-            | Inst::TailExt(_)
-            | Inst::Mcpy { .. }
-            | Inst::Mzero { .. }
-            | Inst::AtomicRmw { .. }
-            | Inst::AtomicCas { .. }
-            | Inst::AtomicCas16 { .. }
-            | Inst::AtomicLoad { .. }
-            | Inst::AtomicStore { .. }
-            | Inst::Intrinsic { .. }
-            | Inst::InlineAsm { .. }
-            | Inst::AllocaInit(_)
-    )
-}
-
 fn load_kind_code(k: LoadKind) -> u32 {
     match k {
         LoadKind::I64 => 0,
@@ -452,6 +429,8 @@ fn load_kind_code(k: LoadKind) -> u32 {
         LoadKind::F80 => 9,
         LoadKind::F128 => 10,
         LoadKind::V128 => 11,
+        LoadKind::V256 => 12,
+        LoadKind::V512 => 13,
     }
 }
 
@@ -523,7 +502,13 @@ pub(crate) fn extend_range(kind: LoadKind) -> Option<Range> {
             lo: i32::MIN as i128,
             hi: i32::MAX as i128,
         },
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
+        LoadKind::F32
+        | LoadKind::F64
+        | LoadKind::F80
+        | LoadKind::F128
+        | LoadKind::V128
+        | LoadKind::V256
+        | LoadKind::V512 => {
             return None;
         }
     })
@@ -753,12 +738,15 @@ fn is_low_mask(k: i64) -> bool {
     k > 0 && k & k.wrapping_add(1) == 0
 }
 
-/// Bounds a bitwise `or` / `xor` of two non-negative ranges: the result
+/// Bounds a bitwise `or` / `xor`. Of two non-negative ranges, the result
 /// has no bit set above the highest either operand can hold, and `or` is
-/// at least each operand.
+/// at least each operand. Otherwise both lie in `-(m + 1) ..= m` for some
+/// `m = 2^n - 1`, so both are sign-extended from bit `n`, and so is the
+/// result.
 fn bitwise(a: Range, b: Range, or: bool) -> Range {
     if !(a.non_negative() && b.non_negative()) {
-        return UNIVERSE;
+        let m = low_mask_above(a.hi.max(b.hi).max(-a.lo - 1).max(-b.lo - 1));
+        return Range { lo: -m - 1, hi: m };
     }
     Range {
         lo: if or { a.lo.max(b.lo) } else { 0 },
@@ -979,6 +967,9 @@ fn eval(inst: &Inst, params: &[Range], mut range_of: impl FnMut(ValueId) -> Rang
                     },
                 }
             }
+            // A mask clearing bits of a non-negative value keeps it in
+            // `0 ..= value`.
+            BinOp::And => binop(BinOp::And, range_of(*lhs), Range::exact(*rhs_imm)),
             BinOp::Add => arith(range_of(*lhs), Range::exact(*rhs_imm), false),
             BinOp::Sub => arith(range_of(*lhs), Range::exact(*rhs_imm), true),
             BinOp::Or | BinOp::Xor => bitwise(
@@ -1563,7 +1554,13 @@ impl Rules<'_> {
             Inst::Phi {
                 kind: LoadKind::F32 | LoadKind::F64,
                 ..
+            }
+            | Inst::Select {
+                kind: LoadKind::F32 | LoadKind::F64,
+                ..
             } => Some(UNIVERSE),
+            // A select is one of its arms: their hull.
+            Inst::Select { a, b: other, .. } => Some(seen(b, *a)?.hull(seen(b, *other)?)),
             // An incoming value is read at the end of its predecessor,
             // under that block's bounds and the edge's own condition.
             Inst::Phi { incoming, .. } => incoming
@@ -2003,7 +2000,7 @@ pub(crate) fn run_one(func: &mut FunctionSsa, params: &[Range]) -> bool {
         let range = func.blocks[b as usize].inst_range.clone();
         for pc in range.start..range.end {
             let inst = &func.insts[pc as usize];
-            if writes_memory(inst) {
+            if Inst::may_write_memory(inst) {
                 // What a store puts in memory bounds a later read of
                 // the same location. Read the value's range before the
                 // wipe -- it may itself rest on a load fact -- and
@@ -2169,7 +2166,7 @@ mod tests {
         let n = insts.len();
         FunctionSsa {
             n_params,
-            inst_src: vec![(0, 0); n],
+            inst_src: vec![crate::c5::ir::InstSrc::default(); n],
             f32_values: vec![false; n],
             insts,
             blocks: vec![Block {
@@ -2219,7 +2216,7 @@ mod tests {
     }
 
     /// A dominating unsigned guard on a loaded field bounds what a
-    /// re-materialised load of the same field produces (a macro that
+    /// re-materialized load of the same field produces (a macro that
     /// expands its argument twice reads the field once for the guard and
     /// once for the value), and a store in between ends the fact.
     #[test]
@@ -2285,7 +2282,7 @@ mod tests {
                 exit_acc: 0,
             };
             FunctionSsa {
-                inst_src: vec![(0, 0); n as usize],
+                inst_src: vec![crate::c5::ir::InstSrc::default(); n as usize],
                 f32_values: vec![false; n as usize],
                 insts,
                 blocks: vec![
@@ -2437,7 +2434,7 @@ mod tests {
             exit_acc: 0,
         };
         let mut f = FunctionSsa {
-            inst_src: vec![(0, 0); n as usize],
+            inst_src: vec![crate::c5::ir::InstSrc::default(); n as usize],
             f32_values: vec![false; n as usize],
             insts,
             blocks: vec![
@@ -2518,7 +2515,7 @@ mod tests {
             exit_acc: 0,
         };
         let mut f = FunctionSsa {
-            inst_src: vec![(0, 0); 5],
+            inst_src: vec![crate::c5::ir::InstSrc::default(); 5],
             f32_values: vec![false; 5],
             insts,
             blocks: vec![
@@ -2585,7 +2582,7 @@ mod tests {
             exit_acc: 0,
         };
         let mut f = FunctionSsa {
-            inst_src: vec![(0, 0); 5],
+            inst_src: vec![crate::c5::ir::InstSrc::default(); 5],
             f32_values: vec![false; 5],
             insts,
             blocks: vec![
@@ -2635,7 +2632,7 @@ mod tests {
             exit_acc: 0,
         };
         let f = FunctionSsa {
-            inst_src: vec![(0, 0); 4],
+            inst_src: vec![crate::c5::ir::InstSrc::default(); 4],
             f32_values: vec![false; 4],
             insts,
             blocks: vec![block(0..1), block(1..4)],
@@ -2697,7 +2694,7 @@ mod tests {
         };
         let f = FunctionSsa {
             n_params: 1,
-            inst_src: vec![(0, 0); 5],
+            inst_src: vec![crate::c5::ir::InstSrc::default(); 5],
             f32_values: vec![false; 5],
             insts,
             blocks: vec![block(0..1), block(1..5)],
@@ -2752,7 +2749,7 @@ mod tests {
         };
         let mut f = FunctionSsa {
             n_params: 1,
-            inst_src: vec![(0, 0); 7],
+            inst_src: vec![crate::c5::ir::InstSrc::default(); 7],
             f32_values: vec![false; 7],
             insts,
             blocks: vec![
@@ -2917,7 +2914,7 @@ mod tests {
         cmp32[4] = raw;
         FunctionSsa {
             n_params: 2,
-            inst_src: vec![(0, 0); insts.len()],
+            inst_src: vec![crate::c5::ir::InstSrc::default(); insts.len()],
             f32_values: vec![false; insts.len()],
             cmp32,
             div32: Vec::new(),
@@ -3075,7 +3072,7 @@ mod tests {
         };
         let f = FunctionSsa {
             n_params: 2,
-            inst_src: vec![(0, 0); 6],
+            inst_src: vec![crate::c5::ir::InstSrc::default(); 6],
             f32_values: vec![false; 6],
             insts,
             blocks: vec![
@@ -3151,7 +3148,7 @@ mod tests {
             };
             FunctionSsa {
                 n_params: 2,
-                inst_src: vec![(0, 0); 8],
+                inst_src: vec![crate::c5::ir::InstSrc::default(); 8],
                 f32_values: vec![false; 8],
                 insts,
                 blocks: vec![
@@ -3210,6 +3207,16 @@ mod tests {
         assert!(!run_one(&mut f, &[]));
     }
 
+    /// Operands sign-extended from one bit combine into a value
+    /// sign-extended from it.
+    #[test]
+    fn bitwise_of_signed_ranges_stays_sign_extended() {
+        let r = |lo: i128, hi: i128| Range { lo, hi };
+        assert_eq!(bitwise(r(-128, 5), r(-3, 100), false), r(-128, 127));
+        assert_eq!(bitwise(r(-1, 0), r(0, 1), true), r(-2, 1));
+        assert!(bitwise(r(i64::MIN as i128, 0), r(0, 1), false).is_universe());
+    }
+
     /// Bitwise and shift bounds. Each is checked through a comparison
     /// the bounds settle and one they must leave open.
     #[test]
@@ -3256,8 +3263,18 @@ mod tests {
             ),
             Some(1)
         );
+        // A mask clearing bits keeps a non-negative value at most itself,
+        // whatever the mask's sign bit.
+        let and = |k| Inst::BinopI {
+            op: BinOp::And,
+            lhs: 0,
+            rhs_imm: k,
+        };
+        assert_eq!(decides(and(!0xf0), BinOp::Le, 255), Some(1));
+        assert_eq!(decides(and(!0xf0), BinOp::Ge, 0), Some(1));
+        assert_eq!(decides(and(!0xf0), BinOp::Le, 100), None);
         // Shifts move both endpoints; a shift left out of the register
-        // is not modelled and settles nothing.
+        // is not modeled and settles nothing.
         let shl = |k| Inst::BinopI {
             op: BinOp::Shl,
             lhs: 0,
@@ -3391,7 +3408,7 @@ mod tests {
             };
             FunctionSsa {
                 n_params: 1,
-                inst_src: vec![(0, 0); 5],
+                inst_src: vec![crate::c5::ir::InstSrc::default(); 5],
                 f32_values: vec![false; 5],
                 insts,
                 blocks: vec![
@@ -3458,7 +3475,7 @@ mod tests {
         };
         let mut f = FunctionSsa {
             n_params: 1,
-            inst_src: vec![(0, 0); 3],
+            inst_src: vec![crate::c5::ir::InstSrc::default(); 3],
             f32_values: vec![false; 3],
             insts,
             blocks: vec![

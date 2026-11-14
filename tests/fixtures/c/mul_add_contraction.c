@@ -67,7 +67,7 @@ static const struct ullcase ULL_CASES[] = {
 };
 
 // INT_MIN / -1 and LLONG_MIN / -1 are absent: the quotient is not
-// representable and the behaviour is undefined (C99 6.5.5p6).
+// representable and the behavior is undefined (C99 6.5.5p6).
 static const struct dmcase DM_CASES[] = {
     {17, 5, 5}, {-17, 5, -5}, {INT_MIN, 3, -715827884},
     {INT_MAX, 7, 306783379}, {-99, -10, 0}, {100, 7, 16},
@@ -128,7 +128,7 @@ static unsigned long long sub_product_ull(unsigned long long a, unsigned long lo
     return c - a * b;
 }
 
-// The product reaches two readers, so it is materialised on its own;
+// The product reaches two readers, so it is materialized on its own;
 // both readers must still see it.
 static int product_read_twice(int a, int b, int c) {
     int p = a * b;

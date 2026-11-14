@@ -2,7 +2,7 @@ use super::*;
 
 /// `Inst::Intrinsic` lowering, operands from the allocator's `Place`s.
 pub(super) fn emit_intrinsic(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     func: &FunctionSsa,
     abi: super::Abi,
     kind: i64,
@@ -20,7 +20,9 @@ pub(super) fn emit_intrinsic(
     match intrinsic {
         // Resolved to an `Imm` before lowering; reaching here is a
         // pass-ordering bug.
-        I::ConstantP => fail("Intrinsic::ConstantP must be resolved before lowering"),
+        I::ConstantP | I::ObjectSize | I::SubobjectBound | I::BuiltinArg => {
+            fail("a deferred builtin must be resolved before lowering")
+        }
         I::VaStart if aarch64_host_variadic_callee(func, abi) => {
             emit_va_start_aapcs64(code, func, abi, args, alloc, frame, scratch)
         }
@@ -84,13 +86,13 @@ pub(super) fn emit_intrinsic(
         | I::X86Lldt
         | I::X86Clflush => fail("descriptor-table intrinsic is x86-only"),
         I::Divq128 => fail("divq intrinsic is x86-64 only"),
-        // `dsb ish`: data synchronisation barrier over the inner shareable
+        // `dsb ish`: data synchronization barrier over the inner shareable
         // domain.
         I::AArch64DsbIsh => {
             emit(code, 0xD503_3B9Fu32);
             Ok(())
         }
-        // `isb`: instruction synchronisation barrier.
+        // `isb`: instruction synchronization barrier.
         I::AArch64Isb => {
             emit(code, 0xD503_3FDFu32);
             Ok(())
@@ -213,6 +215,9 @@ pub(super) fn intrinsic_keeps_frame(intrinsic: crate::c5::op::Intrinsic, abi: su
         | I::Truncf => false,
         // No lowering on this target; `emit_intrinsic` refuses them.
         I::ConstantP
+        | I::ObjectSize
+        | I::SubobjectBound
+        | I::BuiltinArg
         | I::Fma
         | I::Fmaf
         | I::Clz
@@ -252,7 +257,7 @@ pub(super) fn intrinsic_keeps_frame(intrinsic: crate::c5::op::Intrinsic, abi: su
 /// the epilogue's `sub sp, fp, #frame_bytes`, or earlier by an
 /// `AllocaRestore` closing a VLA scope (C99 6.2.4p2).
 fn emit_alloca(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     args: &[u32],
     dst: Place,
     alloc: &Allocation,
@@ -302,7 +307,7 @@ fn emit_alloca(
 }
 
 /// Snapshot sp for a VLA block (C99 6.2.4p2).
-fn emit_alloca_save(code: &mut Vec<u8>, dst: Place, frame: Frame, scratch: &ScratchPool) -> Emit {
+fn emit_alloca_save(code: &mut CodeBuf, dst: Place, frame: Frame, scratch: &ScratchPool) -> Emit {
     if !frame.dynamic_sp {
         return fail("AllocaSave: AllocaInit didn't run for this function");
     }
@@ -317,7 +322,7 @@ fn emit_alloca_save(code: &mut Vec<u8>, dst: Place, frame: Frame, scratch: &Scra
 /// Restore the saved sp on VLA block exit, reclaiming the block's VLA
 /// storage (per iteration for a loop body).
 fn emit_alloca_restore(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     args: &[u32],
     alloc: &Allocation,
     frame: Frame,
@@ -341,7 +346,7 @@ fn emit_alloca_restore(
 /// `jmp_buf`. The inline expansion mirrors the pool path: 25 AArch64 words
 /// that save x19-x28, x29, the resume PC, sp, and d8-d15 into [env].
 fn emit_setjmp(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     args: &[u32],
     dst: Place,
     alloc: &Allocation,
@@ -375,7 +380,7 @@ fn emit_setjmp(
 /// set, materializes x19 = (val != 0) ? val : 1 per C99 7.13.2.1p2, and
 /// branches to the saved PC.
 fn emit_longjmp(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     args: &[u32],
     alloc: &Allocation,
     frame: Frame,
@@ -422,7 +427,7 @@ fn emit_longjmp(
 /// `dc cvau, Xt` / `ic ivau, Xt`: clean the data cache / invalidate the
 /// instruction cache to the point of unification for the address in Xt.
 fn emit_cache_op(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     intrinsic: crate::c5::op::Intrinsic,
     args: &[u32],
     alloc: &Allocation,
@@ -447,7 +452,7 @@ fn emit_cache_op(
 /// `mrs Xt, ctr_el0` reads the cache type register; store it to the output
 /// operand's address (arg 0).
 fn emit_read_cache_type(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     args: &[u32],
     alloc: &Allocation,
     frame: Frame,
@@ -472,7 +477,7 @@ fn emit_read_cache_type(
 /// The unary floating-point builtins: one instruction in the result's
 /// precision, a spilled result staged through the second FP scratch.
 fn emit_unary_fp(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     intrinsic: crate::c5::op::Intrinsic,
     args: &[u32],
     dst: Place,
@@ -524,7 +529,7 @@ fn emit_unary_fp(
 /// `rd = base` for the frame pointer or the stack pointer, through the
 /// scratch when the destination spilled.
 fn emit_frame_register(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     frame: Frame,
     base: Reg,
@@ -547,10 +552,9 @@ fn emit_frame_register(
 /// pac-ret the slot holds a signed pointer; `XPACLRI` strips x30 and no
 /// other register, so the value stages there (the epilogue reloads x30,
 /// since the intrinsic keeps the function off the full-leaf path). The
-/// hint is unconditional, as gcc and clang emit it: a NOP without
-/// FEAT_PAuth.
+/// hint is unconditional: a NOP without FEAT_PAuth.
 fn emit_return_address(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     args: &[u32],
     dst: Place,
     alloc: &Allocation,
@@ -589,7 +593,7 @@ fn emit_return_address(
 /// scratch to an end in the secondary, then writes the tail.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_mzero(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst_val: u32,
     size: i64,
     align: u32,
@@ -690,7 +694,7 @@ const COPY_TEMPS: [u8; 18] = [16, 17, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 
 /// nothing after the copy, or a spill's reload, serves as its own cursor.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_mcpy(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     v: super::super::ir::ValueId,
     dst_place: Place,
     dst_val: u32,
@@ -851,7 +855,7 @@ fn finish_atomic(
 /// result lands in `dst`'s register or x16.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_atomic_load(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     addr: super::super::ir::ValueId,
     width: u8,
@@ -886,7 +890,7 @@ pub(super) fn emit_atomic_load(
 /// operands ride their own registers or x16 / x17.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_atomic_store(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     addr: super::super::ir::ValueId,
     value: super::super::ir::ValueId,
     width: u8,
@@ -924,7 +928,7 @@ pub(super) fn emit_atomic_store(
 /// does not.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_atomic_rmw(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     v: super::super::ir::ValueId,
     dst: Place,
     op: super::super::ir::AtomicRmwOp,
@@ -989,7 +993,7 @@ pub(super) fn emit_atomic_rmw(
 /// object and overwrites with the prior contents.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_atomic_cas(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     v: super::super::ir::ValueId,
     dst: Place,
     addr: super::super::ir::ValueId,
@@ -1040,7 +1044,7 @@ pub(super) fn emit_atomic_cas(
 /// over the comparand's object. The value is whether it matched.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_atomic_cas16(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     addr: super::super::ir::ValueId,
     expected: super::super::ir::ValueId,
@@ -1131,11 +1135,11 @@ fn atomic128_restore_working(code: &mut Vec<u8>, w: &Work) {
     );
 }
 
-/// Materialise an operand into `target`, reading the saved copy when the
+/// Materialize an operand into `target`, reading the saved copy when the
 /// allocator placed it in a working register that an earlier operand move
 /// may already have clobbered.
 fn atomic128_operand_into(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     value: super::super::ir::ValueId,
     target: Reg,
     work: &Work,
@@ -1166,7 +1170,7 @@ fn atomic128_operand_into(
 /// `CmpXchg` and `(newl, newh)` otherwise; the prior value is written
 /// back through `&oldl` / `&oldh` and there is no register result.
 fn emit_atomic128(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     kind: super::super::op::Intrinsic,
     args: &[u32],
     alloc: &Allocation,
@@ -1236,9 +1240,9 @@ fn emit_atomic128(
 }
 
 /// Store `src` (a loaded old half) through the output address operand
-/// `addr_val`, materialised into `addr_tmp`.
+/// `addr_val`, materialized into `addr_tmp`.
 fn atomic128_writeback(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     addr_val: super::super::ir::ValueId,
     src: Reg,
     work: &Work,
@@ -1259,7 +1263,7 @@ fn atomic128_writeback(
 /// written back through `&l` / `&h`) and `[ptr, l, h]` for the stores;
 /// no register result.
 fn emit_atomic128_ldst(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     kind: super::super::op::Intrinsic,
     args: &[u32],
     alloc: &Allocation,
@@ -1289,7 +1293,7 @@ fn emit_atomic128_ldst(
             let back = ((loop_start as i64) - (code.len() as i64)) / 4;
             emit(code, enc_cbnz(status, back as i32));
         }
-        // Plain STP: materialise the two halves and store the pair.
+        // Plain STP: materialize the two halves and store the pair.
         I::Atomic128Store => {
             if !atomic128_operand_into(code, args[1], vl, &w, frame, alloc)
                 || !atomic128_operand_into(code, args[2], vh, &w, frame, alloc)
@@ -1328,7 +1332,7 @@ fn emit_atomic128_ldst(
 /// `LDXP` / `BIC` / `ORR` / `STXP` retry loop. `args` is
 /// `[ptr, vl, vh, ml, mh]`; no register result.
 fn emit_atomic128_store_insert(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     args: &[u32],
     alloc: &Allocation,
     frame: Frame,

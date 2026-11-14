@@ -26,8 +26,7 @@ Disassembly of section .text:
                	mov	x17, #0x140             // =320
                	orr	x1, x1, x17
                	str	w1, [x0, #0x80c]
-               	add	x1, x0, #0x800
-               	ldr	w1, [x1, #0x8]
+               	ldr	w1, [x0, #0x808]
                	asr	x1, x1, #6
                	cmp	w1, #0x9
                	b.eq	<addr>

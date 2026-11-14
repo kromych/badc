@@ -3,8 +3,12 @@
 #pragma once
 
 #if defined(__APPLE__) || defined(__linux__)
-// `rlim_t` is a 64-bit unsigned count on both supported hosts.
+// The limit count: the SDK's __uint64_t, glibc's unsigned long.
+#ifdef __APPLE__
 typedef unsigned long long rlim_t;
+#else
+typedef unsigned long rlim_t;
+#endif
 
 // A soft (current) and hard (ceiling) limit pair. The struct is
 // marshalled to the host libc, so the member order matches it.
@@ -13,7 +17,11 @@ struct rlimit {
     rlim_t rlim_max;
 };
 
+#ifdef __APPLE__
+#define RLIM_INFINITY (((unsigned long long)1 << 63) - 1)
+#else
 #define RLIM_INFINITY (~0ULL)
+#endif
 
 // Limit identifiers. The numbering past STACK/CORE diverges between
 // macOS and Linux because the value reaches the host libc.

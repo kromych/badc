@@ -30,18 +30,19 @@ Disassembly of section .text:
                	jge	<addr>
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
+               	subq	$0x10, %rsp
                	movslq	%esi, %rsi
                	movzbq	(%rdi,%rsi), %rax
                	movq	%rsi, %rcx
                	shlq	$0x3, %rcx
                	movslq	%ecx, %rcx
-               	shlxq	%rcx, %rax, %rbx
+               	shlxq	%rcx, %rax, %r10
+               	movq	%r10, 0x8(%rsp)
                	incq	%rsi
                	callq	<addr>
-               	orq	%rbx, %rax
-               	popq	%rbx
+               	movq	%rax, %r10
+               	movq	0x8(%rsp), %rax
+               	orq	%r10, %rax
                	leave
                	retq
                	xorl	%eax, %eax
@@ -65,10 +66,7 @@ Disassembly of section .text:
                	retq
 
 <load_alias>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	xorl	%esi, %esi
-               	popq	%rbp
                	jmp	<addr>
 
 <main>:
@@ -76,14 +74,10 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	leaq	-0x8(%rbp), %rdi
-               	movb	$0x0, -0x8(%rbp)
-               	movb	$0x10, -0x7(%rbp)
-               	movb	$-0x41, -0x6(%rbp)
-               	movb	$-0x2, -0x5(%rbp)
+               	movl	$0xfebf1000, -0x8(%rbp) # imm = 0xFEBF1000
                	xorl	%esi, %esi
                	callq	<addr>
-               	movl	$0xfebf1000, %r11d      # imm = 0xFEBF1000
-               	cmpl	%r11d, %eax
+               	cmpl	$0xfebf1000, %eax       # imm = 0xFEBF1000
                	je	<addr>
                	movl	$0x1, %eax
                	leave

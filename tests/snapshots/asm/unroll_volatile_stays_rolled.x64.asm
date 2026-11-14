@@ -34,16 +34,13 @@ Disassembly of section .text:
                	cmpl	$0x4, %eax
                	jl	<addr>
                	movq	<rip>, %rcx # <addr>
-               	cmpq	$0x4, %rcx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	xorl	%ecx, %ecx
-               	testq	%rdx, %rdx
-               	je	<addr>
+               	xorl	%edx, %edx
                	cmpl	$0x4, %eax
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	testl	%ecx, %ecx
+               	sete	%al
+               	movzbq	%al, %rax
+               	cmpq	$0x4, %rcx
+               	cmovneq	%rdx, %rax
+               	testl	%eax, %eax
                	sete	%al
                	movzbq	%al, %rax
                	retq

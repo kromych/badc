@@ -30,12 +30,10 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0xb0, %rsp
                	xorl	%eax, %eax
-               	leaq	-0xa8(%rbp), %rcx
-               	movl	$0xdeadbeef, (%rcx,%rax,4) # imm = 0xDEADBEEF
+               	movl	$0xdeadbeef, -0xa8(%rbp,%rax,4) # imm = 0xDEADBEEF
                	incq	%rax
                	cmpl	$0x28, %eax
                	jl	<addr>
-               	leaq	-0xa8(%rbp), %rsi
                	movl	-0xa8(%rbp), %eax
                	movl	-0xc(%rbp), %ecx
                	addq	%rcx, %rax
@@ -52,13 +50,13 @@ Disassembly of section .text:
                	movl	$0x0, 0x60(%rdx)
                	xorl	%eax, %eax
                	movq	%rax, %rcx
-               	movl	(%rdx,%rax,4), %edi
+               	movl	-0x70(%rbp,%rax,4), %edi
                	addq	%rdi, %rcx
                	incq	%rax
                	cmpl	$0x19, %eax
                	jl	<addr>
                	xorl	%eax, %eax
-               	movl	$0x12345678, (%rsi,%rax,4) # imm = 0x12345678
+               	movl	$0x12345678, -0xa8(%rbp,%rax,4) # imm = 0x12345678
                	incq	%rax
                	cmpl	$0x28, %eax
                	jl	<addr>
@@ -78,7 +76,7 @@ Disassembly of section .text:
                	movl	$0x0, 0x60(%rsi)
                	xorl	%eax, %eax
                	movq	%rax, %rdx
-               	movl	(%rsi,%rax,4), %edi
+               	movl	-0x70(%rbp,%rax,4), %edi
                	addq	%rdi, %rdx
                	incq	%rax
                	cmpl	$0x19, %eax

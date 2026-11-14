@@ -23,6 +23,7 @@ pub(crate) fn walk_function(
     jump_tables: bool,
     named_refs: super::NamedRefs,
     freestanding: bool,
+    (x86, no_fp_regs): (crate::c5::X86Features, bool),
 ) -> Result<(FunctionSsa, alloc::vec::Vec<FunctionSsa>), WalkError> {
     let ast = &fun.ast;
     let mut b = SsaBuilder::new(fun.ent_pc, fun.n_params, fun.is_variadic);
@@ -45,9 +46,7 @@ pub(crate) fn walk_function(
     } else {
         fun.n_locals
     };
-    if effective_locals != 0 {
-        b.set_locals(effective_locals);
-    }
+    b.set_locals(effective_locals);
     // A non-zero `alloca_top_slot` marks the function dynamic-sp for the
     // codegen: spill slots move to fp-based addressing and the epilogue
     // re-establishes sp.
@@ -75,6 +74,7 @@ pub(crate) fn walk_function(
         label_blocks: alloc::vec![None; ast.goto_targets.len()],
         cleanup_exits: alloc::collections::BTreeMap::new(),
         switch_dispatch: alloc::vec::Vec::new(),
+        call_temps: alloc::vec::Vec::new(),
         returns_struct: fun.returns_struct,
         return_struct_size: fun.return_struct_size,
         ret_in_regs: ret.in_regs,
@@ -87,6 +87,8 @@ pub(crate) fn walk_function(
         jump_tables,
         named_refs,
         freestanding,
+        x86,
+        no_fp_regs,
     };
     if !fun.is_naked {
         ctx.release_param_lock_words(&mut b);
@@ -196,6 +198,11 @@ struct ParamEntry<'a> {
     plan: CallPlan,
     /// The target whose scalar widths the parameter homes take.
     target: Target,
+    /// The definition's convention, which decides what passes by reference.
+    conv: CallConv,
+    /// No `__try` statement, whose funclets would read a parameter in
+    /// this frame.
+    no_seh: bool,
 }
 
 impl<'a> ParamEntry<'a> {
@@ -287,6 +294,9 @@ impl<'a> ParamEntry<'a> {
             aggs,
             plan,
             target,
+            conv: fun.conv,
+            no_seh: !(fun.ast.stmts.iter())
+                .any(|s| matches!(s, crate::c5::ast::Stmt::SehTry { .. })),
         }
     }
 
@@ -313,13 +323,24 @@ impl<'a> ParamEntry<'a> {
         }
         for i in 0..self.param_tys.len() {
             let pty = self.param_tys[i];
+            if is_struct_value_ty(pty) {
+                // The register of one passed by address holds the address
+                // `emit_entry_copies` reads.
+                if self.aggs.get(self.shift + i).copied().flatten().is_none()
+                    && matches!(
+                        self.plan.placements.get(self.shift + i),
+                        Some(ArgPlacement::IntReg(_))
+                    )
+                {
+                    let pr = b.param_ref((self.shift + i) as u32, LoadKind::I64);
+                    b.store_local((i as i64) + self.arg_slot_base, pr, StoreKind::I64);
+                }
+                continue;
+            }
             if self.param_local_slots[i] < 0 {
                 continue;
             }
             let stripped = strip_unsigned(pty);
-            if is_struct_value_ty(pty) {
-                continue;
-            }
             // A `double` keeps its positive cell and takes an FP
             // `ParamRef`. The parser repointed a `float` to a negative
             // narrow-storage local, skipped above, which
@@ -387,6 +408,26 @@ impl<'a> ParamEntry<'a> {
                 }
                 let size = self.structs[id].size as i64;
                 let align = self.structs[id].align.max(1) as u32;
+                // The caller's copy is the callee's to read and write
+                // (AAPCS64 B.4, Microsoft x64), which `owned_params` may use
+                // in place of this one.
+                if self.no_seh
+                    && !is_volatile_ty(pty)
+                    && crate::c5::compiler::passes_by_reference(
+                        self.structs,
+                        self.target,
+                        self.conv,
+                        pty,
+                        false,
+                    )
+                {
+                    b.add_owned_param(crate::c5::ir::OwnedParam {
+                        base: local_slot,
+                        cells: (size + 7) / 8,
+                        cell: arg_slot,
+                        align: if align < 8 { align as u8 } else { 0 },
+                    });
+                }
                 let dst = b.local_addr(local_slot);
                 let src = b.load_local(arg_slot, LoadKind::I64);
                 if is_volatile_ty(pty) {

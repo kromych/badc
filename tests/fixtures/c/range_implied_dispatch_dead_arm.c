@@ -8,7 +8,7 @@
 //     merges around the loop, so deciding the arm needs the merged
 //     bounds and the rewriting of the condition back onto the value.
 //   * `masked_switch` -- the operand is masked, so its value set is
-//     {0, 1}; both are labelled and the default is unreachable.
+//     {0, 1}; both are labeled and the default is unreachable.
 //   * `repeated_condition` -- the guarded body recomputes the guard's
 //     own comparison, which the guard already answered.
 //

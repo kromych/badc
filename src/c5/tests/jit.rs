@@ -5,9 +5,10 @@
 //! function pointer, instead of an ELF on disk + exec.
 //!
 //! Gated to the OS / arch combinations where `jit_run` is
-//! implemented: Linux (aarch64 + x86_64) and macOS arm64. The
-//! `host_target()` helper inside `jit.rs` picks the right backend
-//! at runtime, so the test body is platform-agnostic.
+//! implemented: Linux (aarch64 + x86_64), macOS arm64 and Windows
+//! (x86_64 + arm64). The `host_target()` helper inside `jit.rs` picks
+//! the right backend at runtime, so the test body is platform-agnostic;
+//! the parity tests take the host's fixture table ([`PARITY`]).
 //!
 //! Output from the JIT'd program (printf, etc.) goes to the test
 //! process's stdout. Tests assert only on the exit code, so the
@@ -19,15 +20,259 @@
         any(target_arch = "aarch64", target_arch = "x86_64")
     ),
     all(target_os = "macos", target_arch = "aarch64"),
+    all(
+        target_os = "windows",
+        any(target_arch = "aarch64", target_arch = "x86_64")
+    ),
 ))]
 
-use super::fixture_tables::{BADC_FIXTURES, JIT_FIXTURES, JIT_UNSUPPORTED_FIXTURES};
+use super::fixture_tables::{BADC_FIXTURES, JIT_UNSUPPORTED_FIXTURES};
+
 use crate::{Compiler, NativeOptions, jit_run, jit_run_with_options};
+
+/// The fixtures with their exit codes the host runs: the POSIX table, or
+/// on Windows the PE table less [`WINDOWS_GAPS`].
+#[cfg(not(windows))]
+const PARITY: &[(&str, i32)] = super::fixture_tables::JIT_FIXTURES;
+#[cfg(all(windows, target_arch = "x86_64"))]
+const PARITY: &[(&str, i32)] = super::fixture_tables::NATIVE_PE_X64_FIXTURES;
+#[cfg(all(windows, target_arch = "aarch64"))]
+const PARITY: &[(&str, i32)] = super::fixture_tables::NATIVE_PE_ARM64_FIXTURES;
+
+/// The PE fixtures the JIT does not run, with the reason.
+#[cfg(windows)]
+const WINDOWS_GAPS: &[(&str, &str)] = &[
+    ("winmain_command_line.c", WINMAIN),
+    ("wwinmain_command_line.c", WINMAIN),
+    ("constructor_table_entry_names_its_slot.c", TLS),
+    ("msvc_decl_decorators.c", TLS),
+    ("thread_local_address_init.c", TLS),
+    ("thread_local_aggregate_initializers.c", TLS),
+    ("thread_local_basic.c", TLS),
+    ("thread_local_block_static_shadow.c", TLS),
+    ("thread_local_fn_pointer_defined_later.c", TLS),
+    ("thread_local_gnu.c", TLS),
+    ("thread_local_image_alignment.c", TLS),
+    ("thread_local_initializer.c", TLS),
+    ("thread_local_library_function_slot.c", TLS),
+    ("thread_local_object_alignment.c", TLS),
+    ("thread_local_reads_a_code_slot.c", TLS),
+    ("thread_local_slot_escapes_a_function.c", TLS),
+    ("thread_local_tentative_array.c", TLS),
+    ("thread_local_tentative_completed_later.c", TLS),
+    ("thread_local_zero_images.c", TLS),
+    ("tls_callbacks_run.c", TLS),
+    ("weak_thread_local_definition_by_symbol.c", TLS),
+    ("seh_except_constant_filter.c", SEH),
+    ("seh_except_filter.c", SEH),
+    ("seh_finally.c", SEH),
+    ("seh_nested_funclets.c", SEH),
+    ("seh_in_named_code_section.c", SEH),
+    ("unwind_from_epilogue.c", UNWIND),
+    ("unwind_restores_callee_saved.c", UNWIND),
+    ("windows_unwind_api_walks_to_the_caller.c", UNWIND),
+    ("inline_asm_section_label.c", ASM_SECTION),
+    ("pthread_lifecycle.c", THREADS),
+    ("pthread_once_keys.c", THREADS),
+    ("seh_context_record.c", PROCESS_WIDE),
+];
+#[cfg(windows)]
+const WINMAIN: &str = "the run calls its entry as `main(argc, argv)`";
+#[cfg(windows)]
+const TLS: &str = "the JIT runs no thread-local storage";
+#[cfg(windows)]
+const SEH: &str = "structured exception handling is not implemented under the JIT";
+#[cfg(windows)]
+const UNWIND: &str = "the JIT registers no function table for its code (RtlAddFunctionTable)";
+#[cfg(windows)]
+const ASM_SECTION: &str = "an asm section's data reference needs a load-time relocation";
+#[cfg(windows)]
+const PROCESS_WIDE: &str = "a vectored handler is the process's, so it sees the exceptions \
+    of the programs that run beside it";
+#[cfg(windows)]
+const THREADS: &str = "the JIT unmaps a program once its main returns, while a detached \
+    thread may still run its code, and runs main on a thread whose exit runs the \
+    destructors main's keys leave set";
+#[cfg(not(windows))]
+const WINDOWS_GAPS: &[(&str, &str)] = &[];
+
+fn parity() -> Vec<(&'static str, i32)> {
+    (PARITY.iter())
+        .filter(|(name, _)| !WINDOWS_GAPS.iter().any(|(gap, _)| gap == name))
+        .filter(|(name, _)| runs_without_linker(name))
+        .copied()
+        .collect()
+}
+
+/// The fixtures calling a name that only the embedded C library defines on
+/// the host. The JIT joins that library through the linker, which is built
+/// only under `full`.
+#[cfg(all(target_os = "macos", not(feature = "full")))]
+const EMBEDDED_LIBC_FIXTURES: &[&str] = &[
+    "string_gnu_ext.c",
+    "copy_file_range_posix.c",
+    "c17_library_interfaces.c",
+];
+#[cfg(not(all(target_os = "macos", not(feature = "full"))))]
+const EMBEDDED_LIBC_FIXTURES: &[&str] = &[];
+
+/// Whether the JIT of this build can run fixture `name`.
+pub(super) fn runs_without_linker(name: &str) -> bool {
+    !EMBEDDED_LIBC_FIXTURES.contains(&name)
+}
+
+/// The locale (C17 7.11.1.1), the working directory, the signal actions and,
+/// on macOS, where `sigprocmask` applies to the process, the signal mask are
+/// the program's, and the programs the JIT runs share one process: a program
+/// that sets any of them runs with no other beside it. So does one that starts
+/// a process, which inherits the inheritable handles of every program open
+/// then; on Windows a file a child holds open cannot be removed.
+static C_LIBRARY_STATE: std::sync::RwLock<()> = std::sync::RwLock::new(());
+
+/// The sources running now. A fixture names its files by process, and the
+/// parity runs share the process, so one source runs once at a time.
+static RUNNING: std::sync::Mutex<Vec<u64>> = std::sync::Mutex::new(Vec::new());
+static FINISHED: std::sync::Condvar = std::sync::Condvar::new();
+
+/// A source's turn, given back when its run ends, a panicking one too.
+struct Turn(u64);
+
+impl Turn {
+    fn take(src: &str) -> Turn {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        src.hash(&mut h);
+        let key = h.finish();
+        let mut running = RUNNING.lock().unwrap_or_else(|e| e.into_inner());
+        while running.contains(&key) {
+            running = FINISHED.wait(running).unwrap_or_else(|e| e.into_inner());
+        }
+        running.push(key);
+        Turn(key)
+    }
+}
+
+impl Drop for Turn {
+    fn drop(&mut self) {
+        let mut running = RUNNING.lock().unwrap_or_else(|e| e.into_inner());
+        running.retain(|&k| k != self.0);
+        FINISHED.notify_all();
+    }
+}
+
+fn beside_others<R>(src: &str, run: impl FnOnce() -> R) -> R {
+    let _turn = Turn::take(src);
+    if [
+        "setlocale(",
+        "chdir(",
+        "SetCurrentDirectory",
+        "sigprocmask(",
+        "sigaction(",
+        "signal(",
+        "popen(",
+        "system(",
+        "_spawn",
+        "posix_spawn",
+        "CreateProcess",
+        "fork(",
+    ]
+    .iter()
+    .any(|call| src.contains(call))
+    {
+        let _alone = C_LIBRARY_STATE.write().unwrap_or_else(|e| e.into_inner());
+        run()
+    } else {
+        let _shared = C_LIBRARY_STATE.read().unwrap_or_else(|e| e.into_inner());
+        run()
+    }
+}
 
 /// Compile `src` and run it through the JIT with `args` as argv.
 /// Panics on compile or JIT-load failure -- the call sites here
 /// expect both phases to succeed.
 fn jit_exit(src: &str, args: &[&str]) -> i32 {
+    if in_own_process(src) {
+        return beside_others(src, || jit_exit_in_child(src, args, false));
+    }
+    beside_others(src, || jit_exit_held(src, args))
+}
+
+/// On Windows every child a test thread creates inherits each inheritable
+/// handle open in the process, and the C runtime opens files inheritable
+/// without delete sharing: a file a program in this process just closed
+/// can still be open in such a child, which makes deleting or renaming it
+/// fail. A program that does either runs in a process of its own.
+fn in_own_process(src: &str) -> bool {
+    cfg!(windows)
+        && ["remove(", "unlink(", "rmdir(", "rename("]
+            .iter()
+            .any(|call| src.contains(call))
+}
+
+const CHILD_SRC: &str = "BADC_JIT_CHILD_SRC";
+const CHILD_ARGS: &str = "BADC_JIT_CHILD_ARGS";
+const CHILD_OPTIMIZE: &str = "BADC_JIT_CHILD_OPTIMIZE";
+const CHILD_RAN: &str = "jit child ran";
+
+/// The exit status of `src` run by the JIT in a child test process.
+fn jit_exit_in_child(src: &str, args: &[&str], optimize: bool) -> i32 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    (src, optimize).hash(&mut h);
+    let dir = std::env::temp_dir().join(format!(
+        "badc-jit-child-{}-{:x}",
+        std::process::id(),
+        h.finish()
+    ));
+    std::fs::create_dir_all(&dir).expect("child directory");
+    let path = dir.join("program.c");
+    std::fs::write(&path, src).expect("write the program");
+    let mut cmd = std::process::Command::new(std::env::current_exe().expect("test binary"));
+    cmd.args(["c5::tests::jit::jit_exit_child", "--exact", "--ignored"])
+        .args(["--test-threads=1", "--nocapture"])
+        .env(CHILD_SRC, &path)
+        .env(CHILD_ARGS, args.join("\u{1f}"));
+    if optimize {
+        cmd.env(CHILD_OPTIMIZE, "1");
+    }
+    let out = cmd.output().expect("spawn the child");
+    let _ = std::fs::remove_dir_all(&dir);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains(CHILD_RAN),
+        "the child ran no program: {stdout}{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    out.status.code().expect("the child exited")
+}
+
+/// The child half of [`jit_exit_in_child`].
+#[test]
+#[ignore = "runs as the child of jit_exit_in_child"]
+fn jit_exit_child() {
+    let Some(path) = std::env::var_os(CHILD_SRC) else {
+        return;
+    };
+    let src = std::fs::read_to_string(path).expect("read the program");
+    let args = std::env::var(CHILD_ARGS).unwrap_or_default();
+    let argv: Vec<String> = args.split('\u{1f}').map(String::from).collect();
+    let program = Compiler::new(super::with_prelude(&src))
+        .compile()
+        .expect("compile failed");
+    let code = if std::env::var_os(CHILD_OPTIMIZE).is_some() {
+        let opts = NativeOptions::new().with_optimize();
+        jit_run_with_options(&program, &argv, opts, &mut |_| {})
+    } else {
+        jit_run(&program, &argv)
+    }
+    .expect("jit_run failed");
+    println!("{CHILD_RAN}");
+    std::process::exit(code);
+}
+
+/// [`jit_exit`] for a program the caller runs under its own hold on
+/// [`C_LIBRARY_STATE`].
+fn jit_exit_held(src: &str, args: &[&str]) -> i32 {
     let program = Compiler::new(super::with_prelude(src))
         .compile()
         .expect("compile failed");
@@ -39,12 +284,18 @@ fn jit_exit(src: &str, args: &[&str]) -> i32 {
 /// `--optimize` / `-O` triggers from the CLI). Used to guard parity
 /// between the default and optimized lowerings.
 fn jit_exit_native_optimized(src: &str, args: &[&str]) -> i32 {
+    if in_own_process(src) {
+        return beside_others(src, || jit_exit_in_child(src, args, true));
+    }
     let program = Compiler::new(super::with_prelude(src))
         .compile()
         .expect("compile failed");
     let argv: Vec<String> = args.iter().map(|s| s.to_string()).collect();
     let opts = NativeOptions::new().with_optimize();
-    jit_run_with_options(&program, &argv, opts, &mut |_| {}).expect("jit_run_with_options failed")
+    beside_others(src, || {
+        jit_run_with_options(&program, &argv, opts, &mut |_| {})
+    })
+    .expect("jit_run_with_options failed")
 }
 
 // ---- Smoke tests, same shapes as src/c5/tests/native_elf.rs but
@@ -94,25 +345,30 @@ fn exit_returns_to_the_runner() {
 
 /// A program's end leaves the C library's streams alone: they belong to the
 /// process, which every program it runs shares. One program blocked reading
-/// a stream holds that stream's lock while another one ends.
+/// a stream holds that stream's lock while another one ends. POSIX-only:
+/// the program opens the pipe by its descriptor with `fdopen`.
+#[cfg(unix)]
 #[test]
 fn a_program_ends_while_another_holds_a_stream() {
     use std::io::Write;
     use std::os::fd::{IntoRawFd, OwnedFd};
     let (reader, mut writer) = std::io::pipe().expect("pipe");
     let fd = OwnedFd::from(reader).into_raw_fd();
+    // One hold for both programs: a writer queued behind the blocked reader
+    // would hold up a second shared request until the reader ends.
+    let _shared = C_LIBRARY_STATE.read().unwrap_or_else(|e| e.into_inner());
     let blocked = std::thread::spawn(move || {
         let reads = "#include <stdio.h>\n#include <stdlib.h>\n\
             int main(int argc, char **argv) {\n\
               char line[16]; FILE *f = fdopen(atoi(argv[1]), \"r\");\n\
               if (!f || !fgets(line, sizeof line, f)) return 1;\n\
               fclose(f); return line[0] == 'g' ? 0 : 2; }";
-        jit_exit(reads, &["jit-reads", &fd.to_string()])
+        jit_exit_held(reads, &["jit-reads", &fd.to_string()])
     });
     std::thread::sleep(std::time::Duration::from_millis(500));
     let (done, ended) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
-        let _ = done.send(jit_exit("int main(void) { return 7; }", &["jit-ends"]));
+        let _ = done.send(jit_exit_held("int main(void) { return 7; }", &["jit-ends"]));
     });
     let status = ended.recv_timeout(std::time::Duration::from_secs(20));
     writer.write_all(b"go\n").expect("write the line");
@@ -188,8 +444,15 @@ fn a_slot_naming_what_the_unit_does_not_define_binds_to_it() {
 #[test]
 fn an_initializer_naming_an_asm_definition_binds_to_it() {
     let src = r#"
-__asm__(".section .rodata\n.globl ro_t, ro_t_end\n.p2align 3\nro_t: .quad 1, 2\nro_t_end:\n"
-        ".data\n.globl rw_t, rw_t_end\n.p2align 3\nrw_t: .quad 3, 4\nrw_t_end:\n.text\n");
+#if defined(__APPLE__)
+#define CSYM(name) "_" name
+#else
+#define CSYM(name) name
+#endif
+__asm__(".section .rodata\n.globl " CSYM("ro_t") ", " CSYM("ro_t_end") "\n.p2align 3\n"
+        CSYM("ro_t") ": .quad 1, 2\n" CSYM("ro_t_end") ":\n"
+        ".data\n.globl " CSYM("rw_t") ", " CSYM("rw_t_end") "\n.p2align 3\n"
+        CSYM("rw_t") ": .quad 3, 4\n" CSYM("rw_t_end") ":\n.text\n");
 extern const long long ro_t[], ro_t_end[];
 extern long long rw_t[], rw_t_end[];
 const long long *const ptrs[] = {ro_t, ro_t_end - 1, rw_t, rw_t_end - 1};
@@ -211,8 +474,43 @@ int main(void) {
     );
 }
 
+/// A program's exception handlers end with its run: the vectored handlers it
+/// leaves registered are removed and the top-level filter it replaced is
+/// restored as its code is freed, so an exception the process raises later
+/// reaches none of them.
+#[cfg(windows)]
+#[test]
+fn a_programs_exception_handlers_end_with_its_run() {
+    unsafe extern "system" {
+        fn SetUnhandledExceptionFilter(filter: usize) -> usize;
+    }
+    let filter = || unsafe {
+        let current = SetUnhandledExceptionFilter(0);
+        SetUnhandledExceptionFilter(current);
+        current
+    };
+    let src = "#include <windows.h>\n\
+        #pragma binding(kernel32::AddVectoredContinueHandler, \"AddVectoredContinueHandler\")\n\
+        PVOID AddVectoredContinueHandler(ULONG, PVECTORED_EXCEPTION_HANDLER);\n\
+        static LONG WINAPI pass(EXCEPTION_POINTERS *e) { return EXCEPTION_CONTINUE_SEARCH; }\n\
+        int main(void) {\n\
+            if (!AddVectoredExceptionHandler(1, pass)) return 1;\n\
+            if (!AddVectoredContinueHandler(1, pass)) return 2;\n\
+            SetUnhandledExceptionFilter(pass);\n\
+            return 0;\n\
+        }\n";
+    let before = filter();
+    assert_eq!(jit_exit(src, &["jit-handlers"]), 0);
+    assert_eq!(filter(), before, "the program's filter outlived its run");
+    // A panic raises an exception, which the process's vectored handlers see.
+    let caught = std::panic::catch_unwind(|| panic!("after the run"));
+    assert!(caught.is_err());
+}
+
 /// Inline asm reaches an imported object through its GOT slot, which stands
-/// in for its address alone; a load or store in place is refused.
+/// in for its address alone; a load or store in place is refused. POSIX-only:
+/// the object is `<unistd.h>`'s `optind`.
+#[cfg(unix)]
 #[test]
 fn asm_reaches_an_imported_object_through_its_slot() {
     let src = super::asm_library_object_source(1);
@@ -254,7 +552,7 @@ fn external_int_return_is_sign_extended() {
     // C99 6.3.1.1 + AAPCS64: a callee returning `int` leaves only the low
     // 32 bits defined; the caller must extend the result before using it
     // at 64-bit width. c5 keeps accumulator values extended to 64 bits and
-    // its own callees honour that, but an external (defined-elsewhere)
+    // its own callees honor that, but an external (defined-elsewhere)
     // callee compiled by another toolchain need not, so a narrow return
     // used at 64 bits must be extended at the call site. libc `atoi`
     // (resolved via dlsym) returns -1 for "-1"; the `== -1` compare is a
@@ -323,7 +621,7 @@ fn always_inline_callee_passing_an_aggregate_by_value_is_spliced() {
     // A body that hands a structure to another function by value is
     // still inlinable: the argument address is one more value operand
     // and the callee's aggregate layout re-interns into the caller. The
-    // request here is mandatory, and honouring it is what folds the
+    // request here is mandatory, and honoring it is what folds the
     // per-site guards on the constant `sr` -- the undefined `bug` would
     // otherwise fail the JIT load.
     //
@@ -911,7 +1209,7 @@ fn dead_phi_exit_move_does_not_clobber_return_under_phi_promote() {
         int main() {
             char *r = getline_like(0, "abcdefghij");
             if (r == 0) return 1;
-            if (((long)r) < 4096) return 2;
+            if (((unsigned long long)r) < 4096) return 2;
             if (r[0] != 'a') return 3;
             if (r[9] != 'j') return 4;
             return 0;
@@ -959,7 +1257,7 @@ fn spill_slot_beyond_imm12_reach() {
     // The encoders only `debug_assert` the bound, so in release the
     // scaled imm12 overflowed into the opcode's load/store bit and a
     // spill store silently became a load (and vice versa), leaving the
-    // slot uninitialised. The SP-relative spill helpers now materialise
+    // slot uninitialised. The SP-relative spill helpers now materialize
     // the base into a scratch register for out-of-reach offsets.
     //
     // With the integer bank capped to one register, every local spills,
@@ -1183,15 +1481,15 @@ fn register_asm_variable_pinned_to_staging_scratch_neighbor() {
     // Run under a 2-register cap so the operands spill and the staging
     // exercises the scratch path.
     let src = r#"
-        static long rt(long a, long b) {
+        static long long rt(long long a, long long b) {
         #if defined(__aarch64__)
-            register long v asm("r0") = a;
+            register long long v asm("r0") = a;
             __asm__ volatile("add %0, %0, %1" : "+r"(v) : "r"(b));
         #elif defined(__x86_64__)
-            register long v asm("r11") = a;
+            register long long v asm("r11") = a;
             __asm__ volatile("addq %1, %0" : "+r"(v) : "r"(b) : "cc");
         #else
-            long v = a + b;
+            long long v = a + b;
         #endif
             return v;
         }
@@ -1352,7 +1650,7 @@ fn variadic_va_list_survives_spilled_operands_under_pressure() {
 
 #[test]
 fn paramref_pointer_arg_survives_shared_register_packing() {
-    // A `ParamRef` materialises its parameter from the incoming host
+    // A `ParamRef` materializes its parameter from the incoming host
     // argument register. When the allocator packs several
     // sequentially-live parameters into one register -- each consumed
     // by an intervening store before the next is produced -- the
@@ -1374,7 +1672,7 @@ fn paramref_pointer_arg_survives_shared_register_packing() {
     // register pressure that drives the allocator to pack the three
     // stored parameters into the second integer register (rcx) instead
     // of leaving them in distinct registers. Without it the allocator
-    // colours them apart and the entry parallel-copy batch -- which is
+    // colors them apart and the entry parallel-copy batch -- which is
     // always correct -- handles the placement, hiding the per-inst bug.
     let src = r#"
         static int g[8];
@@ -1449,7 +1747,7 @@ fn division_with_call_result_divisor_and_spilled_dst_under_pressure() {
 fn multiply_by_immediate_with_spilled_result_under_pressure() {
     // `BinopI { op: Mul }` by a non-power-of-two constant. The x86_64
     // lowering must not depend on a free caller-saved scratch to
-    // materialise the immediate: with the bank capped to one register
+    // materialize the immediate: with the bank capped to one register
     // the product spills and no scratch is free, so the three-operand
     // `imul rd, rn, imm32` form is required. The earlier scratch path
     // bailed the whole function out of the implemented subset here.
@@ -1512,7 +1810,7 @@ fn long_lived_base_pointer_survives_shift_count_and_store_scratch() {
     // A base pointer kept live across many indexed loads while the body
     // also runs 64-bit rotations and stores under register pressure. On
     // x86_64 a shift reads its count from cl (rcx). When the destination
-    // is a spill the shift's spilled count was materialised straight into
+    // is a spill the shift's spilled count was materialized straight into
     // rcx through the rhs scratch -- before the shift arm's push / pop
     // could preserve a long-lived SSA value the allocator had parked in
     // rcx -- so the base pointer was overwritten by a shift count and the
@@ -1564,9 +1862,9 @@ fn long_lived_base_pointer_survives_shift_count_and_store_scratch() {
     );
 }
 
-/// `always_inline` is a mandatory request -- gcc and clang report a
-/// diagnostic when they cannot honour one rather than declining -- so the
-/// inliner's size and frame budgets do not apply to it, and the splice
+/// `always_inline` is a mandatory request -- one that cannot be honored is
+/// diagnosed rather than declined -- so the inliner's size and frame
+/// budgets do not apply to it, and the splice
 /// relocates the callee's own slots into the caller's frame. Every
 /// relocated slot must still address correctly past the single-instruction
 /// and scaled-immediate reaches. The index comes from the parameter so the
@@ -1716,7 +2014,7 @@ fn fp_store_f32_preserves_live_numerator() {
             int k;
             for (k = 0; k < 2; ++k) {
                 // The `1` is an int divided by a float: the dividend is an
-                // IntToFp cast (scvtf) materialised once and reused for both
+                // IntToFp cast (scvtf) materialized once and reused for both
                 // stores. The first store's narrow must not clobber it.
                 a[k] = 1 / (t[k] * 2.0f);
                 b[k] = 1 / (t[k] * 4.0f);
@@ -1778,9 +2076,9 @@ fn fp_load_into_spill_preserves_live_operand_under_pressure() {
 
 #[test]
 fn mcpy_src_scratch_preserves_live_pointer_under_pressure() {
-    // A zero-initialised local aggregate (`swc s = {0}`) lowers to an
+    // A zero-initialized local aggregate (`swc s = {0}`) lowers to an
     // `Inst::Mcpy` from a zero-filled `ImmData` blob. On x86_64 the Mcpy
-    // emit materialises its destination base into SCRATCH_R10 and, when
+    // emit materializes its destination base into SCRATCH_R10 and, when
     // the destination spilled (so its base already occupies r10), needs a
     // second scratch for the source base. rcx is in the LinuxX64
     // `caller_gprs` pool, so under raised register pressure the allocator
@@ -2000,9 +2298,28 @@ fn unsupported_fixtures_are_refused() {
     );
 }
 
+/// The C runtime's `.CRT$X*` tables run under the JIT as in an image: the
+/// C initializers, then the constructors, each in section-name order.
+#[test]
+fn crt_tables_run_in_section_name_order() {
+    let src = "#pragma section(\".CRT$XCU\", read)\n\
+               #pragma section(\".CRT$XIU\", read)\n\
+               #pragma section(\".CRT$XCA\", read)\n\
+               static int order;\n\
+               static void c(void) { order = order * 10 + 2; }\n\
+               static void c0(void) { order = order * 10 + 3; }\n\
+               static int i(void) { order = order * 10 + 1; return 0; }\n\
+               __declspec(allocate(\".CRT$XCU\")) void (*pc)(void) = c;\n\
+               __declspec(allocate(\".CRT$XIU\")) int (*pi)(void) = i;\n\
+               __declspec(allocate(\".CRT$XCA\")) void (*pc0)(void) = c0;\n\
+               int main(void) { return order == 132 ? 0 : 1; }\n";
+    assert_eq!(jit_exit(src, &["crt"]), 0);
+}
+
 #[test]
 fn fixture_parity() {
-    let failures = super::parity_failures(JIT_FIXTURES, |name, expected| {
+    let table = parity();
+    let failures = super::parity_failures(&table, |name, expected| {
         let got = jit_fixture(name);
         (got != *expected).then(|| format!("{name}: expected {expected}, got {got}"))
     });
@@ -2010,7 +2327,7 @@ fn fixture_parity() {
         failures.is_empty(),
         "{} of {} JIT fixtures regressed:\n  {}",
         failures.len(),
-        JIT_FIXTURES.len(),
+        table.len(),
         failures.join("\n  ")
     );
 }
@@ -2027,7 +2344,8 @@ fn fixture_parity_native_optimized() {
     path.push("tests");
     path.push("fixtures");
     path.push("c");
-    let failures = super::parity_failures(JIT_FIXTURES, |name, expected| {
+    let table = parity();
+    let failures = super::parity_failures(&table, |name, expected| {
         let mut p = path.clone();
         p.push(name);
         let src =
@@ -2040,7 +2358,7 @@ fn fixture_parity_native_optimized() {
         failures.is_empty(),
         "{} of {} JIT fixtures regressed under the native optimizer:\n  {}",
         failures.len(),
-        JIT_FIXTURES.len(),
+        table.len(),
         failures.join("\n  ")
     );
 }
@@ -2204,15 +2522,21 @@ fn asm_template_leading_token_is_not_a_reference() {
     // A statement's leading token is a label, mnemonic or directive, so it
     // does not reference a same-named static; a name in operand position
     // does. `8:` covers the mnemonic that leads its statement behind a label.
+    // The operand spells the static as the host's assembly does.
     use crate::Target;
     use crate::c5::codegen::ssa::shadow::produce_ssa_funcs;
-    let src = "static int nop(int x){return x+1;}\n\
-               static int target(int x){return x+2;}\n\
-               void user(void){__asm__ __volatile__(\"nop\\n8: nop\\ncall target\\n\");}\n\
-               int main(void){user();return 0;}";
-    let program = Compiler::new(src.to_string())
-        .compile()
-        .expect("compile failed");
+    let callee = if cfg!(target_vendor = "apple") {
+        "_target"
+    } else {
+        "target"
+    };
+    let src = format!(
+        "static int nop(int x){{return x+1;}}\n\
+         static int target(int x){{return x+2;}}\n\
+         void user(void){{__asm__ __volatile__(\"nop\\n8: nop\\ncall {callee}\\n\");}}\n\
+         int main(void){{user();return 0;}}"
+    );
+    let program = Compiler::new(src).compile().expect("compile failed");
     let funcs =
         produce_ssa_funcs(&program, Target::host(), false, true).expect("produce_ssa_funcs");
     let names: Vec<&str> = funcs.iter().map(|f| f.name.as_str()).collect();
@@ -2382,7 +2706,7 @@ fn atexit_handlers_run_on_libc_exit() {
              if (f) {{ fputs(\"ran\", f); fclose(f); }}\n\
          }}\n\
          int main(void) {{ atexit(h); exit(42); }}\n",
-        marker.display()
+        marker.display().to_string().replace('\\', "/")
     );
     let program = Compiler::new(src).compile().expect("compile");
     assert_eq!(
@@ -2401,18 +2725,19 @@ fn atexit_handlers_run_on_libc_exit() {
 /// array decay yields.
 #[test]
 fn addr_constant_cast_to_integer_slot() {
-    let src = "static int obj;\n\
+    let src = "typedef __UINTPTR_TYPE__ uptr;\n\
+               static int obj;\n\
                static int arr[4];\n\
                static int callee(void) { return 7; }\n\
-               unsigned long p_obj = (unsigned long)&obj;\n\
-               unsigned long p_arr = (unsigned long)arr;\n\
-               unsigned long p_elt = (unsigned long)&arr[2];\n\
-               unsigned long p_fn = (unsigned long)callee;\n\
+               uptr p_obj = (uptr)&obj;\n\
+               uptr p_arr = (uptr)arr;\n\
+               uptr p_elt = (uptr)&arr[2];\n\
+               uptr p_fn = (uptr)callee;\n\
                int main(void) {\n\
-                   if (p_obj != (unsigned long)&obj) return 1;\n\
-                   if (p_arr != (unsigned long)arr) return 2;\n\
-                   if (p_elt != (unsigned long)&arr[2]) return 3;\n\
-                   if (p_fn != (unsigned long)callee) return 4;\n\
+                   if (p_obj != (uptr)&obj) return 1;\n\
+                   if (p_arr != (uptr)arr) return 2;\n\
+                   if (p_elt != (uptr)&arr[2]) return 3;\n\
+                   if (p_fn != (uptr)callee) return 4;\n\
                    return 0;\n\
                }\n";
     assert_eq!(jit_exit(src, &["jit-addr-const"]), 0);
@@ -2425,7 +2750,7 @@ fn addr_constant_cast_to_integer_slot() {
 /// array element, and cast to a pointer-width integer.
 #[test]
 fn addr_of_string_literal_static_init() {
-    let src = "typedef unsigned long uptr;\n\
+    let src = "typedef __UINTPTR_TYPE__ uptr;\n\
                struct e { int a; uptr d; };\n\
                static struct e t = { 5, (0 ? 0 : (uptr)&\"example\") };\n\
                static const char *arr[] = { &\"abc\"[1], \"xy\" };\n\
@@ -2501,13 +2826,12 @@ fn struct_array_member_compound_literal_elements() {
     assert_eq!(jit_exit(src, &["jit-cl-array-member"]), 0);
 }
 
-/// GCC evaluates a non-constant `__builtin_constant_p` operand late
-/// under `-O`: after inlining and constant propagation a parameter fed
-/// a literal answers 1, while a runtime value still answers 0. Without
-/// `-O` the early conservative 0 stands (gcc -O0 parity). Locks the
-/// deferred `Intrinsic::ConstantP` resolution through the whole
-/// pipeline: walker -> inliner substitution -> constant fold -> the
-/// branch-fold fixed point's resolve-to-0.
+/// Under `-O` a non-constant `__builtin_constant_p` operand is evaluated
+/// late: after inlining and constant propagation a parameter fed a literal
+/// answers 1, while a runtime value still answers 0. Without `-O` the
+/// early conservative 0 stands. Locks the deferred `Intrinsic::ConstantP`
+/// resolution through the whole pipeline: walker -> inliner substitution
+/// -> constant fold -> the branch-fold fixed point's resolve-to-0.
 #[test]
 fn constant_p_defers_to_post_inline_fold() {
     let src = "static inline int is_const(int x) { return __builtin_constant_p(x); }\n\
@@ -2559,4 +2883,16 @@ fn staged_indirect_call_target_reaches_its_callee() {
             "optimize {optimize}: the staged call returned {exit}"
         );
     }
+}
+
+/// An address constant below its object -- `buf - 1` for one-based
+/// indexing, which compilers accept as a relocation -- names a target
+/// before the data image's start when the object sits near it; the
+/// relocation wraps as the image writers apply it.
+#[test]
+fn an_address_constant_below_its_object_relocates() {
+    let src = "static char buf[4] = \"abc\";\n\
+               static char *one_based = buf - 4096;\n\
+               int main(void) { return one_based + 4097 == buf + 1 ? 0 : 1; }\n";
+    assert_eq!(jit_exit(src, &[]), 0);
 }

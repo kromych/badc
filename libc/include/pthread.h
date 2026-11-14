@@ -265,16 +265,13 @@
 #define PTHREAD_SCOPE_SYSTEM    0x10
 #endif
 
-// Opaque storage for the POSIX thread types. The libc reads the real
-// platform layout through a passed pointer; c5 only needs each object to
-// occupy the exact platform size and alignment, because these types are
-// embedded in larger structs whose field offsets a separately-compiled
-// module reads back. An over-wide object
-// shifts every later field. The leading word carries 8-byte alignment;
-// macOS additionally uses it for the signature the static initialisers
-// seed (its libpthread rejects a zero-signature statically-allocated
-// object from pthread_mutex_lock / pthread_cond_wait with EINVAL). Sizes
-// per `bits/pthreadtypes-arch.h` (Linux) and `<sys/_pthread/*>` (macOS).
+// Storage for the POSIX thread types in the C library's size and alignment:
+// the library reads its own layout through a pointer, and these objects are
+// embedded in structures whose later members a separately compiled module
+// reads. On macOS the leading word is the signature the static initializers
+// seed (libpthread rejects a zero-signature static object with EINVAL);
+// glibc's are unions of the byte image and an aligning member. Sizes per
+// `bits/pthreadtypes-arch.h` (Linux) and `<sys/_pthread/*>` (macOS).
 #if defined(__APPLE__)
 struct __c5_pthread_mutex { long __sig; char __opaque[56]; };     // 64
 struct __c5_pthread_cond { long __sig; char __opaque[40]; };      // 48
@@ -283,11 +280,12 @@ struct __c5_pthread_condattr { long __sig; char __opaque[8]; };   // 16
 struct __c5_pthread_attr { long __sig; char __opaque[56]; };      // 64
 struct __c5_pthread_once { long __sig; char __opaque[8]; };       // 16
 #elif defined(__aarch64__) && defined(__linux__)
-struct __c5_pthread_mutex { long __align; char __size[40]; };     // 48
-struct __c5_pthread_cond { long __align; char __size[40]; };      // 48
-struct __c5_pthread_mutexattr { long __size; };                   // 8
-struct __c5_pthread_condattr { long __size; };                    // 8
-struct __c5_pthread_attr { long __align; char __size[56]; };      // 64
+// glibc's unions of the byte image and its aligning member.
+struct __c5_pthread_mutex { union { char __size[48]; long __align; }; };
+struct __c5_pthread_cond { union { char __size[48]; long long __align; }; };
+struct __c5_pthread_mutexattr { union { char __size[8]; int __align; }; };
+struct __c5_pthread_condattr { union { char __size[8]; int __align; }; };
+struct __c5_pthread_attr { union { char __size[64]; long __align; }; };
 #elif defined(_WIN32)
 // A slim reader/writer lock with the owner and depth a recursive or
 // error-checking mutex keeps, and a condition variable with its clock. The
@@ -299,11 +297,11 @@ struct __c5_pthread_attr {
     unsigned __state; void *__stack; size_t __stacksize; struct sched_param __param;
 };
 #else // Linux x86_64
-struct __c5_pthread_mutex { long __align; char __size[32]; };     // 40
-struct __c5_pthread_cond { long __align; char __size[40]; };      // 48
-struct __c5_pthread_mutexattr { int __size; };                    // 4
-struct __c5_pthread_condattr { int __size; };                     // 4
-struct __c5_pthread_attr { long __align; char __size[48]; };      // 56
+struct __c5_pthread_mutex { union { char __size[40]; long __align; }; };
+struct __c5_pthread_cond { union { char __size[48]; long long __align; }; };
+struct __c5_pthread_mutexattr { union { char __size[4]; int __align; }; };
+struct __c5_pthread_condattr { union { char __size[4]; int __align; }; };
+struct __c5_pthread_attr { union { char __size[56]; long __align; }; };
 #endif
 typedef struct __c5_pthread_mutex pthread_mutex_t;
 typedef struct __c5_pthread_cond pthread_cond_t;
@@ -323,13 +321,13 @@ typedef struct __c5_pthread_attr pthread_attr_t;
 struct __c5_pthread_rwlock { long __sig; char __opaque[192]; };     // 200
 struct __c5_pthread_rwlockattr { long __sig; char __opaque[16]; };  // 24
 #elif defined(__linux__)
-struct __c5_pthread_rwlock { long __align; char __size[48]; };      // 56
-struct __c5_pthread_rwlockattr { long __size; };                    // 8
-struct __c5_pthread_barrier { long __align; char __size[24]; };     // 32
+struct __c5_pthread_rwlock { union { char __size[56]; long __align; }; };
+struct __c5_pthread_rwlockattr { union { char __size[8]; long __align; }; };
+struct __c5_pthread_barrier { union { char __size[32]; long __align; }; };
 #ifdef __aarch64__
-struct __c5_pthread_barrierattr { int __align; char __size[4]; };   // 8
+struct __c5_pthread_barrierattr { union { char __size[8]; int __align; }; };
 #else
-struct __c5_pthread_barrierattr { int __size; };                    // 4
+struct __c5_pthread_barrierattr { union { char __size[4]; int __align; }; };
 #endif
 typedef volatile int pthread_spinlock_t;
 typedef struct __c5_pthread_barrier pthread_barrier_t;
@@ -340,9 +338,8 @@ typedef struct __c5_pthread_rwlock pthread_rwlock_t;
 typedef struct __c5_pthread_rwlockattr pthread_rwlockattr_t;
 #endif
 
-// Static-storage initialisers. macOS seeds the signature word; Linux
-// takes an all-zero object. Both forms match the leading-word + buffer
-// shape above.
+// Static-storage initializers. macOS seeds the signature word; Linux
+// takes an all-zero object.
 #if defined(__APPLE__)
 #define PTHREAD_MUTEX_INITIALIZER { 0x32AAABA7, {0} }
 #define PTHREAD_COND_INITIALIZER  { 0x3CB0B1BB, {0} }
@@ -357,10 +354,10 @@ typedef struct __c5_pthread_rwlockattr pthread_rwlockattr_t;
 #define PTHREAD_COND_INITIALIZER             { 0, CLOCK_REALTIME }
 #define PTHREAD_ONCE_INIT                    0
 #else
-#define PTHREAD_MUTEX_INITIALIZER { 0, {0} }
-#define PTHREAD_COND_INITIALIZER  { 0, {0} }
+#define PTHREAD_MUTEX_INITIALIZER  { 0 }
+#define PTHREAD_COND_INITIALIZER   { 0 }
 #define PTHREAD_ONCE_INIT          0
-#define PTHREAD_RWLOCK_INITIALIZER { 0, {0} }
+#define PTHREAD_RWLOCK_INITIALIZER { 0 }
 #endif
 
 // The thread handle is the platform's type, which POSIX leaves open:

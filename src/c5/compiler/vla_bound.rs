@@ -43,7 +43,7 @@ impl Compiler {
             _ => "may be too large",
         };
         let msg = alloc::format!("argument to variable-length array {text}");
-        self.warn_at(Code::VLA_LARGER_THAN, self.lex.line, msg);
+        self.warn_at(Code::VLA_LARGER_THAN, self.site(), msg);
     }
 
     /// The values of the integer type `ty`.

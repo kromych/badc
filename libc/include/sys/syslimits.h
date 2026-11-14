@@ -10,8 +10,13 @@
 
 #include <limits.h>
 
+// The SDK raises ARG_MAX to 1 MiB for a unit with a deployment target.
 #ifndef ARG_MAX
-#define ARG_MAX 262144
+#ifdef __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__
+#define ARG_MAX (1024 * 1024)
+#else
+#define ARG_MAX (256 * 1024)
+#endif
 #endif
 #ifndef CHILD_MAX
 #define CHILD_MAX 266

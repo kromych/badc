@@ -202,7 +202,7 @@ def pick(jobs: list[dict]) -> list[dict]:
 
 
 def log_lines(text: str) -> list[tuple[str, str]]:
-    """The log as (timestamp, body) pairs, with the runner's colouring
+    """The log as (timestamp, body) pairs, with the runner's coloring
     removed and lines the runner did not stamp dropped."""
     out: list[tuple[str, str]] = []
     for raw in text.splitlines():
@@ -394,7 +394,7 @@ def self_test() -> int:
     assert part["cpython"] is None, part["cpython"]
     assert parse_log("2026-01-01T00:00:00.0Z nothing here") is None
 
-    # The runner colours what it echoes; a heading or a row can carry it.
+    # The runner colors what it echoes; a heading or a row can carry it.
     ansi = parse_log("\ufeff2026-01-01T00:00:00.0Z ## perf comparison\n"
                      "2026-01-01T00:00:01.0Z \x1b[36;1m### a.c\x1b[0m\n"
                      f"2026-01-01T00:00:02.0Z {TABLE_HEAD}\n"

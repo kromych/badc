@@ -28,46 +28,36 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
-               	movabsq	$0x4000000000000000, %rcx # imm = 0x4000000000000000
-               	movq	%rax, %xmm0
-               	movq	%rcx, %xmm1
-               	xorl	%eax, %eax
+               	movsd	<rip>, %xmm0
+               	movsd	<rip>, %xmm1
                	callq	<addr>
-               	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm0, %xmm15
+               	movsd	<rip>, %xmm1
+               	comisd	%xmm0, %xmm1
                	jb	<addr>
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
-               	xorl	%ecx, %ecx
-               	movq	%rax, %xmm0
-               	movq	%rcx, %xmm1
-               	xorl	%eax, %eax
+               	xorps	%xmm0, %xmm0
+               	movapd	%xmm1, %xmm15
+               	movapd	%xmm0, %xmm1
+               	movapd	%xmm15, %xmm0
                	callq	<addr>
-               	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	movsd	<rip>, %xmm1
+               	comisd	%xmm1, %xmm0
                	jb	<addr>
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
-               	movq	%rax, %xmm0
-               	movq	%rax, %xmm1
-               	xorl	%eax, %eax
+               	movapd	%xmm1, %xmm0
                	callq	<addr>
-               	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	movsd	<rip>, %xmm1
+               	ucomisd	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbp
                	retq
-               	movabsq	$0x4020000000000000, %rax # imm = 0x4020000000000000
-               	movq	%rax, %xmm0
-               	xorl	%eax, %eax
+               	movsd	<rip>, %xmm0
                	callq	<addr>
                	movslq	%eax, %rax
                	cmpq	$0x3, %rax
@@ -75,9 +65,7 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	popq	%rbp
                	retq
-               	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
-               	movq	%rax, %xmm0
-               	xorl	%eax, %eax
+               	movsd	<rip>, %xmm0
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -85,9 +73,7 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	popq	%rbp
                	retq
-               	movabsq	$0x3fd0000000000000, %rax # imm = 0x3FD0000000000000
-               	movq	%rax, %xmm0
-               	xorl	%eax, %eax
+               	movsd	<rip>, %xmm0
                	callq	<addr>
                	movslq	%eax, %rax
                	cmpq	$-0x2, %rax
@@ -95,22 +81,16 @@ Disassembly of section .text:
                	movl	$0x6, %eax
                	popq	%rbp
                	retq
-               	movl	$0x3f800000, %eax       # imm = 0x3F800000
-               	movl	$0x40000000, %ecx       # imm = 0x40000000
-               	movq	%rax, %xmm0
-               	movq	%rcx, %xmm1
-               	xorl	%eax, %eax
+               	movss	<rip>, %xmm0
+               	movss	<rip>, %xmm1
                	callq	<addr>
-               	movl	$0x3f800000, %eax       # imm = 0x3F800000
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm0, %xmm15
+               	movss	<rip>, %xmm1
+               	comiss	%xmm0, %xmm1
                	jb	<addr>
                	movl	$0x7, %eax
                	popq	%rbp
                	retq
-               	movl	$0x41800000, %eax       # imm = 0x41800000
-               	movq	%rax, %xmm0
-               	xorl	%eax, %eax
+               	movss	<rip>, %xmm0
                	callq	<addr>
                	movslq	%eax, %rax
                	cmpq	$0x4, %rax

@@ -62,24 +62,7 @@ jobs:
       # checked here too -- they build a command line and a stdin script, and
       # whether the token stays out of the former is decidable without a box.
       - name: script harness self-tests
-        run: |
-          python3 demos/linux/kaslr.py
-          python3 demos/linux/initramfs.py --self-test
-          python3 demos/linux/verify.py --self-test
-          python3 demos/linux/packages.py --self-test
-          python3 demos/linux/layout.py --self-test
-          python3 demos/linux/exercise.py --self-test
-          python3 demos/linux/hwprep.py --self-test
-          python3 demos/edk2/qemu_efi.py --self-test
-          python3 demos/kernel/smoke.py --self-test
-          python3 scripts/snapshots.py --self-test
-          python3 scripts/validate_local_boxes.py --self-test
-          python3 scripts/cargo_test.py --self-test
-          python3 tests/perf/run.py --self-test
-          python3 scripts/perf_publish.py --self-test
-          python3 scripts/perf_backfill.py --self-test
-          python3 scripts/csmith_fuzz.py --self-test
-          python3 scripts/c_reduce.py --self-test
+        run: python3 scripts/harness_self_tests.py
       # Sources and docs are ASCII-only. Smart quotes / em dashes /
       # arrows tend to sneak in via copy-paste and rendered editor
       # autocorrect; keep them out at the gate. A fixture that exercises
@@ -153,8 +136,10 @@ jobs:
     # windows-latest takes about 22 minutes and windows-11-arm 18 (measured at
     # 11d3ec96e); the Linux and macOS lanes finish well inside that. Process
     # spawning dominates the per-fixture runs on Windows. The cap is a hang
-    # backstop, so it sits above the slowest lane, not at it.
-    timeout-minutes: 30
+    # backstop, so it sits above the slowest lane, not at it. Runners vary:
+    # on the run for 00dd3a0ba every lane took 1.35-1.6x its previous time,
+    # rustc's own build included, and windows-latest passed 30 minutes.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -221,28 +206,28 @@ jobs:
         #
         # Each runner exercises the native-codegen path that targets
         # its own host:
-        #  * macos-latest        -> src/c4/tests/native.rs (Mach-O,
-        #    `/usr/bin/codesign`) + src/c4/tests/jit.rs (in-process
+        #  * macos-latest        -> src/c5/tests/native.rs (Mach-O,
+        #    `/usr/bin/codesign`) + src/c5/tests/jit.rs (in-process
         #    JIT via MAP_JIT + pthread_jit_write_protect_np). The
-        #    PE-via-WINE tests in src/c4/tests/native_pe_x64.rs
+        #    PE-via-WINE tests in src/c5/tests/native_pe_x64.rs
         #    compile here too but skip at runtime when WINE isn't
         #    installed (it isn't on the macos-latest image).
-        #  * ubuntu-24.04-arm    -> src/c4/tests/native_elf.rs
+        #  * ubuntu-24.04-arm    -> src/c5/tests/native_elf.rs
         #    (Linux/aarch64 ELF, host kernel exec) +
-        #    src/c4/tests/jit.rs (mprotect-based JIT) +
-        #    src/c4/tests/native_pe_arm64.rs through wine 10's
+        #    src/c5/tests/jit.rs (mprotect-based JIT) +
+        #    src/c5/tests/native_pe_arm64.rs through wine 10's
         #    aarch64-windows DLL set (installed in the step above).
-        #  * ubuntu-latest       -> src/c4/tests/native_elf_x64.rs
+        #  * ubuntu-latest       -> src/c5/tests/native_elf_x64.rs
         #    (Linux/x86_64 ELF, host kernel exec) +
-        #    src/c4/tests/jit.rs (mprotect-based JIT) +
-        #    src/c4/tests/native_pe_x64.rs through wine's
+        #    src/c5/tests/jit.rs (mprotect-based JIT) +
+        #    src/c5/tests/native_pe_x64.rs through wine's
         #    x86_64-windows DLL set (installed in the step above)
         #    as a cross-check against the windows-latest runner.
-        #  * windows-latest      -> src/c4/tests/native_pe_x64.rs
+        #  * windows-latest      -> src/c5/tests/native_pe_x64.rs
         #    (Windows/x86_64 PE, host kernel exec). Runs the
-        #    produced .exe directly; no JIT lane on Windows because
-        #    the in-process JIT loader hasn't been ported.
-        #  * windows-11-arm      -> src/c4/tests/native_pe_arm64.rs
+        #    produced .exe directly. TODO: src/c5/tests/jit.rs is
+        #    compiled out on Windows, though jit_run supports it.
+        #  * windows-11-arm      -> src/c5/tests/native_pe_arm64.rs
         #    (Windows/AArch64 PE, host kernel exec). Same shape as
         #    the windows-latest lane but for the AArch64 backend.
         # The backend test modules are cfg-gated to their
@@ -395,7 +380,7 @@ jobs:
         # integer + bit-twiddle deflate code. Compresses + uncompresses
         # a known buffer at both -O and noO and checks CRC32 / Adler32
         # against RFC 1950 / 3309 reference values. Runs three build
-        # flavours (single-source amalgamation, separate-compilation
+        # flavors (single-source amalgamation, separate-compilation
         # `-c` + link, and `--ar` archive + `-l`) at both -O levels
         # to exercise the linker pipeline end-to-end.
         run: python demos/miniz/smoke.py
@@ -406,7 +391,7 @@ jobs:
         # FFT at both -O and noO. Catches FP libm boundary
         # regressions (xmm0 / d0 return value, FP arg masks
         # through the optimizer, ...). Runs the same three build
-        # flavours as miniz so the multi-TU FP paths get exercised.
+        # flavors as miniz so the multi-TU FP paths get exercised.
         run: python demos/kissfft/smoke.py
       - name: bzip2 smoke (amalg + TU + archive)
         # Third non-trivial demo. Integer + bit-twiddle heavy:
@@ -414,7 +399,7 @@ jobs:
         # coding through a 128-bit bitstream packer. Compresses +
         # decompresses a 600-byte buffer at blockSize 1 and 9 at
         # both -O and noO. Different code shape from miniz's
-        # deflate. Runs the same three build flavours so the
+        # deflate. Runs the same three build flavors so the
         # bzip2 library bundles correctly through `--ar`.
         run: python demos/bzip2/smoke.py
       - name: tweetnacl smoke (amalg + TU + archive)
@@ -424,7 +409,7 @@ jobs:
         # asserts a SHA-512 known-answer, an RFC 8032 Ed25519
         # vector (deterministic signature byte-for-byte), and
         # secretbox / box / sign round trips. Runs the same
-        # three build flavours so the multi-TU + archive paths
+        # three build flavors so the multi-TU + archive paths
         # get exercised across `-O` and no-`-O`.
         run: python demos/tweetnacl/smoke.py
       - name: monocypher smoke (amalg + TU + archive)
@@ -433,7 +418,7 @@ jobs:
         # SHA-512 + RFC 8032 Ed25519. Five scenarios:
         # SHA-512(`abc`), BLAKE2b(`abc`), RFC 8032 Ed25519
         # vector 1 (sign + verify), AEAD round trip, X25519
-        # Diffie-Hellman. Same build flavour matrix as the
+        # Diffie-Hellman. Same build flavor matrix as the
         # other library demos.
         run: python demos/monocypher/smoke.py
 
@@ -474,14 +459,12 @@ jobs:
         # DRBGs, the TLS PRF, ChaCha20 and Poly1305. Slow
         # AES / DES KAT loops are tracked under TODO.
         run: python demos/bearssl/smoke.py
-      - name: curl smoke (static + shared + system + BearSSL HTTPS)
+      - name: curl smoke (static + shared + system + Mbed TLS HTTPS)
         # Compiles the whole libcurl source tree (HTTP + file + ws)
         # and builds it as a static archive, a shared library, and an
-        # exe linked against each, plus a flavour bound to the system
-        # libcurl. HTTPS uses badc-compiled BearSSL. Transfers run
-        # against a hermetic loopback server. The Windows build is
-        # skipped for now (config-win32 surface pending), so the step
-        # is a no-op there.
+        # exe linked against each, plus a flavor bound to the system
+        # libcurl. HTTPS uses badc-compiled Mbed TLS. Transfers run
+        # against a hermetic loopback server.
         run: python demos/curl/smoke.py
       - name: raylib standalone build + cdb load gate (Windows)
         # Build the vendored raylib + Lode Runner game standalone, then run
@@ -720,7 +703,7 @@ jobs:
         # trip through stage1's own linker. `KNOWN_DRIFT` is
         # empty on every lane; a non-empty set indicates a real
         # regression. Exit code 2 (env_unsuitable) only fires on
-        # hosts the harness doesn't recognise -- none of the
+        # hosts the harness doesn't recognize -- none of the
         # five CI runners hit that path, so the gate is hard.
         run: python demos/tinycc/self_host.py
       - name: upload tinycc stage1 binary (Windows lanes only)
@@ -1585,7 +1568,7 @@ jobs:
 
   nasm:
     needs: build
-    # Build NASM 2.16.03 with badc (no make) and run NASM's own golden test
+    # Build NASM 3.02 with badc (no make) and run NASM's own golden test
     # suite against it -- a self-validating oracle (each case compares the
     # assembled output to a committed golden), so no reference build is needed.
     # setup.py fetches the release (which ships the generated instruction
@@ -1702,7 +1685,8 @@ jobs:
     # linker (PE32+ EFI application, no GenFw) for X64 and AArch64. badc
     # cross-compiles both EFI images from every host, so the build runs on all
     # five runners. The OVMF/QEMU boot is a distinct dimension: it runs on the
-    # Linux lanes (where QEMU + OVMF/AAVMF come from apt); the macOS / Windows
+    # Linux lanes (QEMU from apt, the firmware from the ovmf lanes, so a runner
+    # image's own firmware never decides a boot); the macOS / Windows
     # lanes have no easy QEMU, so smoke.py auto-skips the boot there and stands
     # on the build + PE-format checks.
     name: edk2 (${{ matrix.label }})
@@ -1742,13 +1726,13 @@ jobs:
         if: matrix.qemu
         run: ./scripts/apt_resilient_install.sh qemu-system-x86 qemu-system-arm
       - name: fetch the ovmf-lane firmware (x86_64 UEFI app boot)
-        if: matrix.label == 'ubuntu-x64'
+        if: matrix.qemu
         uses: actions/download-artifact@v4
         with:
           name: ovmf-x64
           path: ${{ runner.temp }}/ovmf
       - name: fetch the ovmf-lane firmware (aarch64 UEFI app boot)
-        if: matrix.label == 'ubuntu-arm64'
+        if: matrix.qemu
         uses: actions/download-artifact@v4
         with:
           name: aavmf-arm64
@@ -1770,20 +1754,20 @@ jobs:
         # a real UEFI payload to serial. The build is the hard gate; the boot is
         # best-effort until observed green, then gated.
         env:
-          OVMF_CODE: ${{ matrix.label == 'ubuntu-x64' && format('{0}/ovmf/OVMF_CODE.fd', runner.temp) || '' }}
-          OVMF_VARS: ${{ matrix.label == 'ubuntu-x64' && format('{0}/ovmf/OVMF_VARS.fd', runner.temp) || '' }}
-          AAVMF_CODE: ${{ matrix.label == 'ubuntu-arm64' && format('{0}/aavmf/QEMU_EFI-pflash.raw', runner.temp) || '' }}
-          AAVMF_VARS: ${{ matrix.label == 'ubuntu-arm64' && format('{0}/aavmf/QEMU_VARS-pflash.raw', runner.temp) || '' }}
+          OVMF_CODE: ${{ matrix.qemu && format('{0}/ovmf/OVMF_CODE.fd', runner.temp) || '' }}
+          OVMF_VARS: ${{ matrix.qemu && format('{0}/ovmf/OVMF_VARS.fd', runner.temp) || '' }}
+          AAVMF_CODE: ${{ matrix.qemu && format('{0}/aavmf/QEMU_EFI-pflash.raw', runner.temp) || '' }}
+          AAVMF_VARS: ${{ matrix.qemu && format('{0}/aavmf/QEMU_VARS-pflash.raw', runner.temp) || '' }}
           BADC_EDK2_BOOT_OPTIONAL: "1"
         run: python demos/edk2/smoke.py
       - name: kernel smoke (badc-compiled UEFI kernel exercising inline asm; boot where QEMU is present)
         # Same firmware as the edk2 lane; the kernel boots under UEFI and its
         # inline asm (cpuid / bswap / mrs / raw bytes) runs to serial.
         env:
-          OVMF_CODE: ${{ matrix.label == 'ubuntu-x64' && format('{0}/ovmf/OVMF_CODE.fd', runner.temp) || '' }}
-          OVMF_VARS: ${{ matrix.label == 'ubuntu-x64' && format('{0}/ovmf/OVMF_VARS.fd', runner.temp) || '' }}
-          AAVMF_CODE: ${{ matrix.label == 'ubuntu-arm64' && format('{0}/aavmf/QEMU_EFI-pflash.raw', runner.temp) || '' }}
-          AAVMF_VARS: ${{ matrix.label == 'ubuntu-arm64' && format('{0}/aavmf/QEMU_VARS-pflash.raw', runner.temp) || '' }}
+          OVMF_CODE: ${{ matrix.qemu && format('{0}/ovmf/OVMF_CODE.fd', runner.temp) || '' }}
+          OVMF_VARS: ${{ matrix.qemu && format('{0}/ovmf/OVMF_VARS.fd', runner.temp) || '' }}
+          AAVMF_CODE: ${{ matrix.qemu && format('{0}/aavmf/QEMU_EFI-pflash.raw', runner.temp) || '' }}
+          AAVMF_VARS: ${{ matrix.qemu && format('{0}/aavmf/QEMU_VARS-pflash.raw', runner.temp) || '' }}
         run: python demos/kernel/smoke.py
 
   firmware-x64:
@@ -2009,15 +1993,15 @@ jobs:
     # tree's `LD`, so the kernel's own link-vmlinux.sh drives badc for the
     # kallsyms passes, the `-r` merges and the final vmlinux, and that image
     # boots under the emulator the qemu lane linked with badc's own linker.
-    # badc-built end to end: the compiler (this repo, built by the build job for this runner), the kernel
-    # image and the link that produced it, and the emulator it runs on. Not
-    # badc-built: the reference compiler still assembles the .S units and
-    # builds kbuild's host tools, and GNU ld still takes the links ldshim.py
-    # routes to it -- x86's 16/32-bit boot and vDSO links, which need the i386
-    # target. The 64-bit vDSOs are badc's, dynamic metadata and symbol
-    # versions included, and so is kbuild's scriptless linker probe.
-    # `verify.py` names what was left to GNU ld one by one and fails on
-    # a link leaving badc for any other reason. The boot uses the emulator's
+    # badc-built end to end: the compiler (this repo, built by the build job
+    # for this runner), the kernel image, every link that produced it -- the
+    # -r merges, the vmlinux passes, the vDSOs with their dynamic metadata and
+    # symbol versions, x86's 16/32-bit boot links and kbuild's scriptless
+    # linker probe (ldshim.py) -- and the emulator it runs on. Not badc-built:
+    # kbuild's host tools, which the reference compiler builds, and the .S
+    # units badc's assembler does not take yet, which buildcc.py gives gas.
+    # `verify.py` reports the assembly split and fails on a link left to GNU
+    # ld. The boot uses the emulator's
     # -kernel loader rather than badc-built firmware; booting through
     # OVMF/AAVMF is the qemu lane's dimension.
     #

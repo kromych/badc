@@ -39,7 +39,7 @@ EXE_SUFFIX = ".exe" if WIN else ""
 
 # Build defines:
 #   * BZ_NO_STDIO drops the FILE-based API (BZ2_bzReadOpen /
-#     BZ2_bzWriteOpen) which pulls `<sys/stat.h>` flavours c5
+#     BZ2_bzWriteOpen) which pulls `<sys/stat.h>` flavors c5
 #     doesn't ship; we only need the buffer-to-buffer entry
 #     points, which don't touch stdio.
 BUILD_DEFINES = (
@@ -179,7 +179,7 @@ def main() -> int:
             print("smoke FAIL: build (-O) failed", file=sys.stderr)
             return 1
 
-        # Separate-compilation flavour: each .c through `-c`
+        # Separate-compilation flavor: each .c through `-c`
         # to its own .o, link the eight pieces. Same source
         # bodies, no amalgamation step.
         tu_noopt = work / f"bzip2_smoke.tu{EXE_SUFFIX}"
@@ -217,7 +217,7 @@ def main() -> int:
             print("smoke FAIL: TU build (-O) failed", file=sys.stderr)
             return 1
 
-        # Archive flavour: bundle the seven library sources
+        # Archive flavor: bundle the seven library sources
         # into libbzip2.a, then link smoke_main.c against it
         # through -l bzip2. Pull-in must surface every member
         # referenced from the driver.

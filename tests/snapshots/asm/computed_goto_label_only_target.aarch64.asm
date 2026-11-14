@@ -30,9 +30,8 @@ Disassembly of section .text:
                	ret
 
 <selected>:
-               	sxtw	x1, w1
                	adr	x0, <addr>
-               	cbz	x1, <addr>
+               	cbz	w1, <addr>
                	br	x0
                	mov	x0, #0x19               // =25
                	ret

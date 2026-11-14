@@ -57,10 +57,18 @@ sem_t *sem_open(const char *name, int oflag, mode_t mode, unsigned int value);
 int sem_close(sem_t *sem);
 int sem_unlink(const char *name);
 #else
-// On Linux, sem_t is 32 bytes (8-byte aligned) on x86_64 and aarch64; the
-// leading word keeps the alignment and the buffer covers the rest.
+// The SDK's sem_t is an int; glibc's is 32 bytes, 8-byte aligned, on x86_64
+// and aarch64.
+#ifdef __APPLE__
+typedef int sem_t;
+#else
+#ifdef __x86_64__
 struct __c5_sem { long __align; char __opaque[24]; };
+#else
+struct __c5_sem { long long __align; char __opaque[24]; };
+#endif
 typedef struct __c5_sem sem_t;
+#endif
 
 // sem_open returns SEM_FAILED on error: NULL on Linux, (sem_t*)-1 on macOS.
 #ifdef __APPLE__
@@ -74,8 +82,8 @@ int sem_destroy(sem_t *sem);
 int sem_wait(sem_t *sem);
 int sem_trywait(sem_t *sem);
 #ifdef __linux__
-int sem_timedwait(sem_t *sem, struct timespec *abs_timeout);
-int sem_clockwait(sem_t *sem, int clock, struct timespec *abs_timeout);
+int sem_timedwait(sem_t *sem, const struct timespec *abs_timeout);
+int sem_clockwait(sem_t *sem, clockid_t clock, const struct timespec *abs_timeout);
 #endif
 int sem_post(sem_t *sem);
 int sem_getvalue(sem_t *sem, int *sval);

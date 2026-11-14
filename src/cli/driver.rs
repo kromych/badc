@@ -6,11 +6,13 @@ use super::diag::eprint_diagnostic;
 use super::dump::{dump_bundled_headers, dump_native_link, print_predefined_symbols};
 use super::inputs::{Inputs, StdinSource};
 use super::native_link::link_image;
-use super::objects::{build_archive, check_syntax, compile_objects};
+use super::objects::{
+    build_archive, check_syntax, compile_objects, dump_enumerators, dump_prototypes, dump_records,
+};
 use super::options::Mode;
 use super::paths::{
     compiler_include_dir, declared_home, declared_sysroot, install_dir, install_embedded,
-    print_file_name, sysroot_include_paths,
+    print_file_name, sdk_version, sysroot_include_paths,
 };
 use super::preprocess::{dump_dependencies, preprocess};
 use super::script_link::run_script_link;
@@ -144,11 +146,14 @@ fn install(dir: Option<PathBuf>, quiet: bool) {
 fn resolve_search_paths(cli: &mut Cli) {
     cli.badc_home = declared_home(cli.badc_home.as_deref());
     if let Some(home) = &cli.badc_home {
-        let include = home.join("include");
-        if include.is_dir() {
-            cli.front
-                .own_header_roots
-                .push(include.to_string_lossy().into_owned());
+        // An installed tree holds every header in `include`; a source
+        // tree's `libc` keeps the compiler's own in `compiler/include`.
+        for include in [home.join("include"), home.join("compiler").join("include")] {
+            if include.is_dir() {
+                cli.front
+                    .own_header_roots
+                    .push(include.to_string_lossy().into_owned());
+            }
         }
         let lib = home.join("lib");
         if lib.is_dir() {
@@ -161,6 +166,9 @@ fn resolve_search_paths(cli: &mut Cli) {
     cli.front.compiler_include_dir =
         compiler_include_dir().map(|d| d.to_string_lossy().into_owned());
     cli.sysroot = declared_sysroot(cli.sysroot.as_deref(), cli.target);
+    if cli.target.binary_format() == badc::BinaryFormat::MachO {
+        cli.link.mach_o.sdk = cli.sysroot.as_deref().and_then(sdk_version);
+    }
     cli.front.system_include_paths = match &cli.sysroot {
         Some(root) => sysroot_include_paths(cli.target, root),
         None => Vec::new(),
@@ -218,6 +226,15 @@ fn dispatch(cli: Cli) {
             ));
             std::process::exit(1);
         }
+        let format = cli.target.binary_format();
+        if format != badc::BinaryFormat::Elf {
+            eprint_diagnostic(format!(
+                "badc: error: -T/--script links write ELF images; {} takes {}",
+                cli.target.id_str(),
+                format.name()
+            ));
+            std::process::exit(1);
+        }
         if !inputs.sources.is_empty() {
             eprint_diagnostic(
                 "badc: error: -T/--script links take .o/.a inputs; compile sources with -c first",
@@ -251,12 +268,12 @@ fn dispatch(cli: Cli) {
     // only the assembler, whose encoder already follows `.code16` /
     // `.code32`. A C source under either is refused by name rather
     // than compiled as x86-64 into an EM_386 container. The
-    // preprocess-only modes are exempt from both restrictions, as they
-    // are in gcc: they emit no code, and their output is a function of
-    // the predefine set the flag selects.
+    // preprocess-only modes are exempt from both restrictions: they emit
+    // no code, and their output is a function of the predefine set the
+    // flag selects.
     if let Some(flag) = &cli.codegen.code_mode_flag {
-        // The flags name an x86 code model. gcc's AArch64 driver has no
-        // `-m32`, and badc has no AArch32 encoder or predefine set.
+        // The flags name an x86 code model. AArch64 has no `-m32`, and
+        // badc has no AArch32 encoder or predefine set.
         if !cli.target.is_x86_64() {
             eprint_diagnostic(format!(
                 "badc: error: `{flag}` selects an x86 code model; target is `{}`",
@@ -329,7 +346,16 @@ fn dispatch(cli: Cli) {
     {
         return dump_dependencies(&cli, &inputs, &stdin, d);
     }
-    // `-E` takes precedence, as in gcc; any other output is not written.
+    // `-E` takes precedence; any other output is not written.
+    if cli.dump_records && cli.mode != Mode::DumpPp {
+        return dump_records(&cli, &inputs, &stdin);
+    }
+    if cli.dump_prototypes && cli.mode != Mode::DumpPp {
+        return dump_prototypes(&cli, &inputs, &stdin);
+    }
+    if cli.dump_enumerators && cli.mode != Mode::DumpPp {
+        return dump_enumerators(&cli, &inputs, &stdin);
+    }
     if cli.syntax_only && cli.mode != Mode::DumpPp {
         return check_syntax(&cli, &inputs, &stdin);
     }

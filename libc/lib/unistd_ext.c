@@ -10,7 +10,7 @@
 //
 // A cross-device copy is copied rather than refused with EXDEV: glibc's
 // fallback copies, and current kernels copy across file systems too, so
-// EXDEV would be a behaviour only this emulation has.
+// EXDEV would be a behavior only this emulation has.
 //
 // On Windows the file also defines sleep, usleep, ftruncate and truncate,
 // which mingw-w64's <unistd.h> declares and libmingwex defines: the sleeps

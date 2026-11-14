@@ -159,6 +159,7 @@ pub(crate) fn walk_program(
                 interposable: program.interposable_refs,
             },
             program.freestanding,
+            (program.x86_features, program.no_fp_regs),
         )
         .map_err(|e| {
             // A deliberate rejection is an ordinary diagnostic; the
@@ -206,6 +207,7 @@ pub(crate) fn walk_program(
         // walker recorded. Slot coalescing reserves every interior cell.
         func.multi_cell_slots.extend_from_slice(&f.multi_cell_slots);
         func.array_slots.extend_from_slice(&f.array_slots);
+        func.vector_objects.extend_from_slice(&f.vector_objects);
         // `n_params` on FinishedFunction is the parser's
         // declared count. The codegen prologue spills the
         // matching host-arg regs into slots [2, 2+n). Use the
@@ -356,7 +358,12 @@ pub(crate) fn produce_ssa_funcs(
     optimize: bool,
     jump_tables: bool,
 ) -> Result<Vec<FunctionSsa>, C5Error> {
-    produce_ssa_funcs_on(&ReachGraph::new(program), target, optimize, jump_tables)
+    produce_ssa_funcs_on(
+        &ReachGraph::new(program, target),
+        target,
+        optimize,
+        jump_tables,
+    )
 }
 
 /// [`produce_ssa_funcs`] over the graph a lowering builds once.
@@ -593,9 +600,11 @@ pub(crate) fn data_object_starts(program: &Program) -> Vec<i64> {
 }
 
 /// Function and data reachability of a unit (C99 6.2.2: an unreferenced internal
-/// definition is dropped, as by gcc -O); a pass adds each function's own edges.
+/// definition is dropped); a pass adds each function's own edges.
 pub(crate) struct ReachGraph<'p> {
     pub(crate) program: &'p Program,
+    /// The object format whose spelling asm templates name symbols in.
+    asm_format: crate::c5::codegen::BinaryFormat,
     data_len: i64,
     starts: Vec<i64>,
     /// Assembler names of the defined objects and of every function.
@@ -610,13 +619,14 @@ pub(crate) struct ReachGraph<'p> {
 impl<'p> ReachGraph<'p> {
     /// It holds no body's own edges, so one serves a lowering before and after
     /// the -O pipeline, which adds and renames no function.
-    pub(crate) fn new(program: &'p Program) -> Self {
+    pub(crate) fn new(program: &'p Program, target: Target) -> Self {
         use crate::c5::symbol::Linkage;
         use crate::c5::token::Token;
         let starts = data_object_starts(program);
         let n = starts.len();
         let mut graph = ReachGraph {
             program,
+            asm_format: target.binary_format(),
             data_len: program.data.len() as i64,
             starts,
             named: alloc::collections::BTreeMap::new(),
@@ -640,7 +650,7 @@ impl<'p> ReachGraph<'p> {
                     graph.symbol_objects.push((i, s.owner_ent_pc));
                 }
             }
-            // A section attribute selects placement and keeps nothing (gcc).
+            // A section attribute selects placement and keeps nothing.
             if s.class == Token::Fun as i64 && (keeps || s.is_alias) {
                 graph.symbol_funcs.push(s.val as usize);
             }
@@ -702,7 +712,7 @@ impl<'p> ReachGraph<'p> {
     }
 
     pub(crate) fn asm_names(&self, text: &[u8], work: &mut Vec<Node>) {
-        push_asm_names(text, &self.named, work);
+        push_asm_names(text, &self.named, self.asm_format, work);
     }
 
     /// The roots, and the block-scope statics a symbol keeps by owner: an
@@ -764,8 +774,9 @@ impl<'p> ReachGraph<'p> {
         for r in &program.tls_code_relocs {
             work.push(Node::Func(r.target_ent_pc as usize));
         }
-        // A name in a file-scope `asm()` keeps nothing: the assembler resolves
-        // it, as for gcc, which parses no template; `used` keeps a definition.
+        // A name in a file-scope `asm()` keeps nothing: the template is not
+        // scanned for names and the assembler resolves them; `used` keeps a
+        // definition.
         if assume_data_live {
             work.extend((0..self.starts.len()).map(Node::Data));
         }
@@ -888,6 +899,7 @@ pub(crate) fn compute_live_sets(
 fn push_asm_names(
     text: &[u8],
     named: &alloc::collections::BTreeMap<&str, Node>,
+    format: crate::c5::codegen::BinaryFormat,
     work: &mut alloc::vec::Vec<Node>,
 ) {
     let is_ident = |b: u8| b.is_ascii_alphanumeric() || b == b'_' || b == b'.' || b == b'$';
@@ -928,7 +940,7 @@ fn push_asm_names(
             continue;
         }
         if let Ok(tok) = core::str::from_utf8(&text[s..i])
-            && let Some(node) = named.get(tok)
+            && let Some(node) = named.get(&*crate::c5::asm::asm_symbol_name(format, tok))
         {
             work.push(*node);
         }
@@ -1126,7 +1138,7 @@ pub(crate) fn compact_program_data(
     // form reaches the same set either way.
     // `[nested]`: inside `object::compact_program_data`, so the pass report
     // lists it without adding it to a phase total twice.
-    let graph = ReachGraph::new(program);
+    let graph = ReachGraph::new(program, target);
     let funcs =
         super::emit_common::time_pass("object::compact_program_data ssa build [nested]", || {
             produce_ssa_funcs_on(&graph, target, optimize, true)
@@ -1134,8 +1146,18 @@ pub(crate) fn compact_program_data(
     let live_func_pcs: alloc::collections::BTreeSet<usize> =
         funcs.iter().map(|f| f.ent_pc).collect();
     let sets = compute_live_sets(&funcs, &Default::default(), &graph, false, None);
-    let (out, bss_size, _map) =
-        apply_data_liveness(program.clone(), &sets, &live_func_pcs, segregate, None);
+    let (out, bss_size, _map) = apply_data_liveness(
+        program.clone(),
+        &sets,
+        &live_func_pcs,
+        if segregate {
+            ZeroFill::All
+        } else {
+            ZeroFill::Off
+        },
+        true,
+        None,
+    );
     Ok(Compaction {
         program: out,
         bss_size,
@@ -1166,11 +1188,23 @@ fn all_zero(bytes: &[u8]) -> bool {
 /// `.data` offset the IR holds -- are carried back through that map and
 /// forward through this one here, so no consumer is left on a stale
 /// layout.
+/// Which wholly-zero objects take zero-fill storage (`.bss`).
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ZeroFill {
+    /// None: every object is file-backed.
+    Off,
+    /// Those no initializer names (gcc `-fno-zero-initialized-in-bss`).
+    Uninitialized,
+    /// Every one.
+    All,
+}
+
 pub(crate) fn apply_data_liveness(
     mut out: Program,
     sets: &LiveSets,
     live_func_pcs: &alloc::collections::BTreeSet<usize>,
-    segregate: bool,
+    zero_fill: ZeroFill,
+    image: bool,
     ssa: Option<(&mut [FunctionSsa], &DataMap)>,
 ) -> (Program, i64, DataMap) {
     let data_len = out.data.len() as i64;
@@ -1217,13 +1251,17 @@ pub(crate) fn apply_data_liveness(
     let obj_ends: Vec<i64> = (0..n)
         .map(|i| {
             let next = if i + 1 < n { starts[i + 1] } else { data_len };
-            let floor = if i == 0 { next.min(8) } else { starts[i] };
+            let floor = if i == 0 {
+                next.min(crate::c5::layout::DATA_GUARD as i64)
+            } else {
+                starts[i]
+            };
             pad_lo_by_hi.get(&next).map_or(next, |&lo| lo.max(floor))
         })
         .collect();
     let obj_end = |i: usize| -> i64 { obj_ends[i] };
     // A relocation writes a (generally non-zero) value into its slot at
-    // link/write time, so the slot's object is initialised data even when
+    // link/write time, so the slot's object is initialized data even when
     // its bytes are zero in `program.data` (a function-pointer slot, or a
     // pointer whose stored placeholder is its target offset). Such objects
     // stay file-backed: the writer patches the slot in the file image.
@@ -1279,19 +1317,62 @@ pub(crate) fn apply_data_liveness(
     // whose bytes are all zero is uninitialised data: it carries no file
     // bytes and moves to the `.bss` region past the file image, which the
     // loader zero-fills. A partly-non-zero object keeps its interior zeros
-    // in the file -- only wholly-zero objects can move.
-    // Segregation is on by default; with it off (`segregate == false`,
-    // the `BADC_NO_BSS_SEGREGATE` opt-out or a target whose writer does
-    // not support it), every live object (zero or not) is packed into the
-    // file image as before and `bss_size` stays 0. The caller sets it.
+    // in the file -- only wholly-zero objects can move, and under
+    // `ZeroFill::Uninitialized` only those no initializer names. With
+    // `ZeroFill::Off` (the `BADC_NO_BSS_SEGREGATE` opt-out or a target
+    // whose writer does not support it), every live object (zero or not)
+    // is packed into the file image and `bss_size` stays 0. The caller
+    // sets it.
     //
     // This predicate is the only place the question is decided. The
     // layout it produces records the answer as a position -- everything
     // at or past the file image is zero-fill -- and the object writer
     // reads it back through that watershed rather than re-deriving it.
+    // In an image the objects of a C-identifier section stay together and
+    // file-backed, so `__start_` / `__stop_` bound them as a link bounds the
+    // section it groups.
+    // Each moves as its own bytes at its own alignment, as the relocatable
+    // writer carves it into its section.
+    let mut group: Vec<Option<alloc::string::String>> = alloc::vec![None; n];
+    let (mut obj_len, mut align): (Vec<i64>, Vec<i64>) = (0..n)
+        .map(|i| (obj_end(i) - starts[i], obj_align[i]))
+        .unzip();
+    if image {
+        use crate::c5::token::Token;
+        for sym in &out.symbols {
+            let name = sym.section_name.as_deref();
+            if sym.class == Token::Glo as i64
+                && sym.defined_here
+                && !sym.is_thread_local
+                && (0..data_len).contains(&sym.val)
+                && let Some(name) = name.filter(|n| crate::c5::ident::is_c_identifier(n))
+                && let Some(size) = crate::c5::layout::data_object_extent(sym)
+            {
+                let i = interval_of(sym.val);
+                group[i] = Some(name.into());
+                obj_len[i] = obj_len[i].min(size.copy as i64);
+                align[i] = sym.data_align.max(1);
+            }
+        }
+    }
+    let mut initialized = alloc::vec![false; n];
+    if zero_fill == ZeroFill::Uninitialized {
+        for sym in &out.symbols {
+            if sym.class == crate::c5::token::Token::Glo as i64
+                && sym.defined_here
+                && sym.has_initializer
+                && !sym.implicit_zero
+                && (0..data_len).contains(&sym.val)
+            {
+                initialized[interval_of(sym.val)] = true;
+            }
+        }
+    }
     let bss: Vec<bool> = (0..n)
         .map(|i| {
-            segregate
+            zero_fill != ZeroFill::Off
+                && !initialized[i]
+                && group[i].is_none()
                 && i != 0
                 && live[i]
                 && !has_reloc_slot[i]
@@ -1312,12 +1393,12 @@ pub(crate) fn apply_data_liveness(
     // (`Program::data_relro_len`), which the writers re-protect before
     // the entry point runs. Object 0 must stay at offset 0 (see above),
     // so it leads the first non-empty region, and a region exists at all
-    // only when object 0's bytes past the 8-byte NULL guard are recorded
+    // only when object 0's bytes past the NULL guard are recorded
     // alignment padding -- content glued onto it has no recorded start
     // and must stay writable.
     let guard_immutable = !has_reloc_slot[0] && {
         let end = obj_end(0);
-        let mut covered = end.min(8);
+        let mut covered = end.min(crate::c5::layout::DATA_GUARD as i64);
         for &(lo, hi) in &out.data_pad_ranges {
             if lo <= covered && hi > covered {
                 covered = hi;
@@ -1355,6 +1436,24 @@ pub(crate) fn apply_data_liveness(
         }
     };
 
+    // A section takes the region the most writable of its objects needs, and
+    // its objects follow the others in name order.
+    let mut group_region: alloc::collections::BTreeMap<&str, u8> = Default::default();
+    for i in (0..n).filter(|&i| live[i]) {
+        if let Some(g) = group[i].as_deref() {
+            let r = group_region.entry(g).or_insert(REGION_RO);
+            *r = (*r).max(region_of(i));
+        }
+    }
+    let region_of = |i: usize| {
+        group[i]
+            .as_deref()
+            .map_or(region_of(i), |g| group_region[g])
+    };
+    let mut order: Vec<usize> = (0..n).filter(|&i| group[i].is_none()).collect();
+    for g in group_region.keys() {
+        order.extend((0..n).filter(|&i| group[i].as_deref() == Some(g)));
+    }
     // The packed layout invalidates the parse-recorded padding ranges;
     // rebuild them from the gaps this pass itself creates.
     let mut new_pad_ranges: Vec<(i64, i64)> = Vec::new();
@@ -1363,11 +1462,13 @@ pub(crate) fn apply_data_liveness(
     let mut data_ro_len: i64 = 0;
     let mut data_relro_len: i64 = 0;
     for pass in [REGION_RO, REGION_RELRO, REGION_RW] {
-        for i in 0..n {
+        let mut ends_group = false;
+        for &i in &order {
             if !live[i] || is_bss(i) || region_of(i) != pass {
                 continue;
             }
-            let a = obj_align[i];
+            ends_group = group[i].is_some();
+            let a = align[i];
             let want = starts[i].rem_euclid(a);
             let pad_start = new_data.len() as i64;
             while (new_data.len() as i64).rem_euclid(a) != want {
@@ -1377,12 +1478,18 @@ pub(crate) fn apply_data_liveness(
                 new_pad_ranges.push((pad_start, new_data.len() as i64));
             }
             new_base[i] = new_data.len() as i64;
-            new_data.extend_from_slice(&out.data[starts[i] as usize..obj_end(i) as usize]);
+            let at = starts[i] as usize;
+            new_data.extend_from_slice(&out.data[at..at + obj_len[i] as usize]);
         }
         // Each region ends on an `img_align` boundary so the next one's
-        // packed residues hold at any aligned placement of it.
+        // packed residues hold at any aligned placement of it. A section
+        // ending the region keeps a byte past it, so its `__stop_` is not the
+        // next region's first byte, which the writers place on another page.
         if pass != REGION_RW && !new_data.is_empty() {
             let pad_start = new_data.len() as i64;
+            if ends_group {
+                new_data.push(0);
+            }
             while (new_data.len() as i64).rem_euclid(img_align) != 0 {
                 new_data.push(0);
             }
@@ -1441,7 +1548,7 @@ pub(crate) fn apply_data_liveness(
     // immediates, padding spans, alignment marks, object starts -- is
     // rewritten through it by `Program::remap_data_offsets`, whose
     // implementations destructure their types exhaustively.
-    let obj_lens: Vec<i64> = (0..n).map(|i| obj_end(i) - starts[i]).collect();
+    let obj_lens = obj_len;
     let map_to = PackedData {
         starts,
         new_base: &new_base,
@@ -1485,6 +1592,7 @@ pub(crate) fn apply_data_liveness(
             crate::c5::layout::DataOffsets::remap_data_offsets(f, &through);
         }
     }
+    out.zero_fill_len = bss_size as usize;
     (out, bss_size, DataMap::new(starts, &new_base, &obj_lens))
 }
 
@@ -1887,6 +1995,29 @@ mod tests {
                 );
             }
         }
+    }
+
+    // An `extern` declaration's fallback slot is an object of its own: when
+    // the declaration binds to library data nothing references the slot, and
+    // the image drops it rather than gluing it onto the object ahead of it.
+    #[test]
+    fn an_unreferenced_extern_slot_leaves_the_image() {
+        let target = Target::LinuxX64;
+        let src = "#pragma dylib(lib, \"libx.so\")\n\
+                   #pragma binding(data lib::e1, \"e1\")\n\
+                   #pragma binding(data lib::e2, \"e2\")\n\
+                   extern long e1;\nextern char *e2[4];\nlong a8 = 1;\n\
+                   int main(void) { return (int)a8; }\n";
+        let program = Compiler::with_target(src.to_string(), target)
+            .compile()
+            .expect("compile");
+        let c = compact_program_data(&program, target, true, false).expect("compact");
+        let a8 = data_syms(&c.program)
+            .iter()
+            .find(|(n, ..)| *n == "a8")
+            .map(|s| s.1);
+        assert_eq!(a8, Some(8), "the first object follows the NULL guard");
+        assert_eq!(c.program.data.len(), 16);
     }
 
     // The packed offsets themselves, for a unit whose objects span three

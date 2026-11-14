@@ -1,4 +1,4 @@
-/* An aggregate returned by value materialises into a caller-side frame
+/* An aggregate returned by value materializes into a caller-side frame
  * temporary that the callee fills through the host ABI: no store in the
  * caller's instruction tape names that slot. Reading the temporary
  * member by member is the shape `passes::sroa` must decline -- lifting

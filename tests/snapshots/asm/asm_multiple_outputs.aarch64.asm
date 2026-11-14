@@ -142,8 +142,7 @@ Disassembly of section .text:
                	add	x1, x1, x22
                	add	x1, x1, x23
                	add	x1, x1, x24
-               	mov	x17, #0x3               // =3
-               	mul	x2, x20, x17
+               	add	x2, x20, x20, lsl #1
                	add	x1, x1, x2
                	add	x1, x1, x21
                	add	x0, x1, x0
@@ -178,9 +177,8 @@ Disassembly of section .text:
                	ret
                	mov	x0, x21
                	bl	<addr>
-               	mov	x17, #0x4d2             // =1234
-               	eor	x0, x0, x17
-               	cbz	w0, <addr>
+               	cmp	w0, #0x4d2
+               	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x30]
                	ldp	x22, x23, [sp, #0x10]

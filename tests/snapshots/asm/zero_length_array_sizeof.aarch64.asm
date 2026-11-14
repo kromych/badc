@@ -52,27 +52,23 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldurb	w1, [x29, #-0x10]
-               	mov	x17, #0x42              // =66
-               	eor	x1, x1, x17
-               	cbnz	w1, <addr>
+               	cmp	w1, #0x42
+               	b.ne	<addr>
                	ldurb	w1, [x29, #-0xf]
-               	mov	x17, #0x41              // =65
-               	eor	x1, x1, x17
-               	cbnz	w1, <addr>
+               	cmp	w1, #0x41
+               	b.ne	<addr>
                	ldurb	w1, [x29, #-0xe]
-               	mov	x17, #0x44              // =68
-               	eor	x1, x1, x17
-               	cbnz	w1, <addr>
+               	cmp	w1, #0x44
+               	b.ne	<addr>
                	ldurb	w1, [x29, #-0xd]
-               	mov	x17, #0x43              // =67
-               	eor	x1, x1, x17
-               	cbz	w1, <addr>
+               	cmp	w1, #0x43
+               	b.eq	<addr>
                	mov	x0, #0xa                // =10
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	eor	x0, x0, #0x4
-               	cbz	w0, <addr>
+               	cmp	w0, #0x4
+               	b.eq	<addr>
                	mov	x0, #0xb                // =11
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

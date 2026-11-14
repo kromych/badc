@@ -43,11 +43,8 @@
 #define LC_MAX      LC_TIME
 #endif
 
-// `struct lconv` layout is implementation-defined (C99 7.11.2.1).
-// Only `decimal_point` is portably read across hosts; the rest are
-// rarely-used currency-formatting fields. Pad the trailing area
-// generously so the host libc can write its own larger struct
-// without overflowing this typedef.
+// `struct lconv` members are C17 7.11.2.1's; their order is the C library's,
+// since localeconv() returns the library's own object.
 #ifdef _WIN32
 // MSVC layout: the wide (_W_*) currency strings sit between the narrow
 // pointers and the trailing int_* sign/precedence chars. localeconv()
@@ -79,12 +76,6 @@ struct lconv {
     unsigned short *_W_mon_thousands_sep;
     unsigned short *_W_positive_sign;
     unsigned short *_W_negative_sign;
-    char int_p_cs_precedes;
-    char int_n_cs_precedes;
-    char int_p_sep_by_space;
-    char int_n_sep_by_space;
-    char int_p_sign_posn;
-    char int_n_sign_posn;
 };
 #else
 struct lconv {
@@ -106,13 +97,19 @@ struct lconv {
     char n_sep_by_space;
     char p_sign_posn;
     char n_sign_posn;
+#ifdef __APPLE__
     char int_p_cs_precedes;
     char int_n_cs_precedes;
     char int_p_sep_by_space;
     char int_n_sep_by_space;
+#else
+    char int_p_cs_precedes;
+    char int_p_sep_by_space;
+    char int_n_cs_precedes;
+    char int_n_sep_by_space;
+#endif
     char int_p_sign_posn;
     char int_n_sign_posn;
-    unsigned char __pad[64];
 };
 #endif
 
@@ -200,6 +197,11 @@ typedef struct __locale_struct *locale_t;
 #define LC_GLOBAL_LOCALE ((locale_t)-1L)
 locale_t newlocale(int category_mask, const char *locale, locale_t base);
 locale_t duplocale(locale_t locobj);
+// The SDK's returns an int, 0 on success.
+#ifdef __APPLE__
+int freelocale(locale_t locobj);
+#else
 void freelocale(locale_t locobj);
+#endif
 locale_t uselocale(locale_t newloc);
 #endif

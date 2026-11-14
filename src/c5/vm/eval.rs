@@ -65,6 +65,7 @@ pub(crate) fn apply_binop(op: BinOp, lhs: i64, rhs: i64) -> Result<i64, EvalTrap
         BinOp::Mulh => (((lhs as i128) * (rhs as i128)) >> 64) as i64,
         BinOp::Mulhu => (((lhs as u64 as u128) * (rhs as u64 as u128)) >> 64) as i64,
         BinOp::Ror => (lhs as u64).rotate_right(rhs as u32 & 63) as i64,
+        BinOp::Ror32 => i64::from((lhs as u32).rotate_right(rhs as u32 & 31)),
         BinOp::Fadd => (f64::from_bits(lhs as u64) + f64::from_bits(rhs as u64)).to_bits() as i64,
         BinOp::Fsub => (f64::from_bits(lhs as u64) - f64::from_bits(rhs as u64)).to_bits() as i64,
         BinOp::Fmul | BinOp::FmulContractible => {
@@ -73,10 +74,18 @@ pub(crate) fn apply_binop(op: BinOp, lhs: i64, rhs: i64) -> Result<i64, EvalTrap
         BinOp::Fdiv => (f64::from_bits(lhs as u64) / f64::from_bits(rhs as u64)).to_bits() as i64,
         BinOp::Feq => (f64::from_bits(lhs as u64) == f64::from_bits(rhs as u64)) as i64,
         BinOp::Fne => (f64::from_bits(lhs as u64) != f64::from_bits(rhs as u64)) as i64,
-        BinOp::Flt => (f64::from_bits(lhs as u64) < f64::from_bits(rhs as u64)) as i64,
-        BinOp::Fgt => (f64::from_bits(lhs as u64) > f64::from_bits(rhs as u64)) as i64,
-        BinOp::Fle => (f64::from_bits(lhs as u64) <= f64::from_bits(rhs as u64)) as i64,
-        BinOp::Fge => (f64::from_bits(lhs as u64) >= f64::from_bits(rhs as u64)) as i64,
+        BinOp::Flt | BinOp::FltQuiet => {
+            (f64::from_bits(lhs as u64) < f64::from_bits(rhs as u64)) as i64
+        }
+        BinOp::Fgt | BinOp::FgtQuiet => {
+            (f64::from_bits(lhs as u64) > f64::from_bits(rhs as u64)) as i64
+        }
+        BinOp::Fle | BinOp::FleQuiet => {
+            (f64::from_bits(lhs as u64) <= f64::from_bits(rhs as u64)) as i64
+        }
+        BinOp::Fge | BinOp::FgeQuiet => {
+            (f64::from_bits(lhs as u64) >= f64::from_bits(rhs as u64)) as i64
+        }
         BinOp::Fone | BinOp::Funo => {
             let order = f64::from_bits(lhs as u64).partial_cmp(&f64::from_bits(rhs as u64));
             match op {
@@ -238,6 +247,12 @@ mod tests {
         assert_eq!(apply_binop(BinOp::Shl, 1, 65), Ok(2));
         // A rotate is not a C operator; every count is defined for it.
         assert_eq!(fold_binop(BinOp::Ror, 1, 65), Some(i64::MIN));
+        // The 32-bit rotate reads the low word and zero-extends.
+        assert_eq!(
+            fold_binop(BinOp::Ror32, 0x1_0000_0001, 1),
+            Some(0x8000_0000)
+        );
+        assert_eq!(fold_binop(BinOp::Ror32, -1, 33), Some(0xffff_ffff));
     }
 
     #[test]

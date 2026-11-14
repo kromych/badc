@@ -14,59 +14,40 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	mov	x0, #0x0                // =0
+               	mov	x2, #0x0                // =0
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	mov	x3, #0x20               // =32
+               	mov	x1, #0x8080             // =32896
+               	movk	x1, #0x8000, lsl #16
+               	mov	x4, #0x8000             // =32768
+               	str	w1, [x0]
+               	strh	w4, [x0, #0x4]
+               	mov	x1, #-0x7fffffff80000000 // =-9223372034707292160
+               	str	x1, [x0, #0x8]
+               	mov	x1, #-0x1               // =-1
+               	str	x1, [x0, #0x10]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	mov	x2, #0x20               // =32
-               	strb	w2, [x1, #0x1]
-               	mov	x3, #0x80               // =128
-               	mov	x4, #-0x80              // =-128
-               	strb	w4, [x1]
-               	strb	w3, [x1, #0x1]
-               	mov	x3, #0x8000             // =32768
-               	mov	x4, #-0x8000            // =-32768
-               	strh	w4, [x1, #0x2]
-               	strh	w3, [x1, #0x4]
-               	mov	x3, #0x80000000         // =2147483648
-               	mov	x4, #-0x80000000        // =-2147483648
-               	str	w4, [x1, #0x8]
-               	str	w3, [x1, #0xc]
-               	mov	x3, #-0x1               // =-1
-               	str	x3, [x1, #0x10]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	mov	x3, #0x1                // =1
-               	strb	w3, [x1]
-               	mov	x3, #0x2                // =2
-               	strb	w3, [x1, #0x1]
-               	mov	x3, #0x3                // =3
-               	strb	w3, [x1]
-               	adrp	x3, <page>
-               	str	x1, [x3, #0x58]
-               	mov	x4, #0x4                // =4
-               	strb	w4, [x1]
-               	mov	x5, #0x9                // =9
-               	strb	w5, [x1]
-               	strb	w4, [x1]
-               	strb	w5, [x1, #0x1]
-               	mov	x4, #0x5                // =5
-               	strb	w4, [x1]
-               	ldr	x3, [x3, #0x58]
+               	str	x0, [x1, #0x40]
+               	mov	x4, #0x905              // =2309
+               	strh	w4, [x0]
+               	ldr	x1, [x1, #0x40]
                	mov	x4, #0x7                // =7
-               	strb	w4, [x3]
-               	adrp	x3, <page>
-               	ldrsw	x4, [x3, #0x60]
+               	strb	w4, [x1]
+               	adrp	x1, <page>
+               	ldrsw	x4, [x1, #0x48]
                	add	x4, x4, #0x1
-               	str	w4, [x3, #0x60]
-               	ldrb	w1, [x1]
-               	cmp	w1, #0x7
-               	b.eq	<addr>
-               	mov	x0, x2
+               	str	w4, [x1, #0x48]
+               	ldrb	w0, [x0]
+               	cmp	w0, #0x7
+               	csel	x0, x3, x2, ne
                	adrp	x1, <page>
                	mov	x2, #0x6                // =6
-               	strb	w2, [x1, #0x50]
-               	ldrb	w1, [x1, #0x50]
+               	strb	w2, [x1, #0x3a]
+               	ldrb	w1, [x1, #0x3a]
+               	orr	x2, x0, #0x40
                	cmp	w1, #0x6
-               	b.eq	<addr>
-               	orr	x0, x0, #0x40
+               	csel	x0, x2, x0, ne
                	ret

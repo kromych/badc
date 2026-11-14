@@ -23,19 +23,21 @@ typedef BTH_ADDR *PBTH_ADDR;
 #define SOL_SCO     0x0101
 
 // SOL_RFCOMM option names (ws2bth.h).
-#define SO_BTH_ENCRYPT  0x00000001
+#define SO_BTH_ENCRYPT  0x00000002
 #define SO_BTH_AUTHENTICATE 0x80000001
 #define SO_BTH_MTU      0x80000007
 #define SO_BTH_MTU_MAX  0x80000008
 #define SO_BTH_MTU_MIN  0x8000000a
 
-// SOCKADDR_BTH (ws2bth.h): AF_BTH socket address. Packed to 1 by the
-// pshpack1.h / poppack.h pair the consumer wraps it in.
+// SOCKADDR_BTH (ws2bth.h): AF_BTH socket address, packed to 1 as the SDK
+// header packs it.
+#pragma pack(push, 1)
 typedef struct _SOCKADDR_BTH {
     USHORT    addressFamily;
     BTH_ADDR  btAddr;
     GUID      serviceClassId;
     ULONG     port;
 } SOCKADDR_BTH;
+#pragma pack(pop)
 typedef struct _SOCKADDR_BTH *PSOCKADDR_BTH;
 #endif

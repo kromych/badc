@@ -142,11 +142,9 @@ Disassembly of section .text:
                	mul	x2, x0, x1
                	sub	x3, x0, x1
                	madd	x4, x2, x3, x4
-               	mov	x17, #0x3               // =3
-               	mul	x5, x0, x17
+               	add	x5, x0, x0, lsl #1
                	mul	x6, x5, x1
-               	mov	x17, #0x5               // =5
-               	mul	x6, x6, x17
+               	add	x6, x6, x6, lsl #2
                	add	x7, x4, x6
                	add	x4, x0, x1
                	sub	x6, x1, x0
@@ -154,8 +152,7 @@ Disassembly of section .text:
                	mov	x17, #0x7               // =7
                	mul	x7, x0, x17
                	mul	x9, x7, x1
-               	mov	x17, #0x9               // =9
-               	mul	x9, x9, x17
+               	add	x9, x9, x9, lsl #3
                	add	x9, x8, x9
                	add	x8, x1, #0x1
                	add	x10, x1, #0x2
@@ -170,43 +167,35 @@ Disassembly of section .text:
                	add	x11, x0, #0x8
                	madd	x8, x10, x11, x8
                	madd	x8, x2, x6, x8
-               	mov	x17, #0x3               // =3
-               	mul	x6, x1, x17
+               	add	x6, x1, x1, lsl #1
                	mul	x10, x6, x0
-               	mov	x17, #0x5               // =5
-               	mul	x10, x10, x17
+               	add	x10, x10, x10, lsl #2
                	add	x8, x8, x10
                	madd	x10, x4, x3, x8
                	mov	x17, #0x7               // =7
                	mul	x8, x1, x17
                	mul	x11, x8, x0
-               	mov	x17, #0x9               // =9
-               	mul	x11, x11, x17
+               	add	x11, x11, x11, lsl #3
                	add	x10, x10, x11
                	add	x9, x9, x10
                	add	x9, x9, x0, lsl #1
                	add	x5, x9, x5, lsl #1
-               	mov	x17, #0x5               // =5
-               	mul	x9, x0, x17
-               	mov	x17, #0x3               // =3
-               	mul	x9, x9, x17
+               	add	x9, x0, x0, lsl #2
+               	add	x9, x9, x9, lsl #1
                	add	x5, x5, x9
                	add	x5, x5, x7, lsl #2
                	lsl	x7, x1, #1
-               	mov	x17, #0x5               // =5
-               	mul	x7, x7, x17
+               	add	x7, x7, x7, lsl #2
                	add	x5, x5, x7
                	mov	x17, #0x6               // =6
                	mul	x6, x6, x17
                	add	x5, x5, x6
-               	mov	x17, #0x5               // =5
-               	mul	x1, x1, x17
+               	add	x1, x1, x1, lsl #2
                	mov	x17, #0x7               // =7
                	mul	x1, x1, x17
                	add	x1, x5, x1
                	add	x1, x1, x8, lsl #3
-               	mov	x17, #0x9               // =9
-               	mul	x4, x4, x17
+               	add	x4, x4, x4, lsl #3
                	add	x1, x1, x4
                	mov	x17, #0xa               // =10
                	mul	x3, x3, x17

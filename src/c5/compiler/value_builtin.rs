@@ -1,4 +1,4 @@
-//! The GCC builtins whose value the call forms from its operands, with
+//! The builtins whose value the call forms from its operands, with
 //! gcc's signatures. A call lowers to the conversions and operators
 //! computing the value, and folds in a constant expression.
 
@@ -43,7 +43,7 @@ pub(super) enum ValueBuiltin {
     /// quiet (`ucomis*`, `fcmp`): a quiet NaN raises no invalid exception.
     Compare(BinOp),
     /// `T (T)` over `int`, `long`, `long long` and, for `None`, `intmax_t`:
-    /// the magnitude, the most negative value wrapping as gcc's does.
+    /// the magnitude, the most negative value wrapping.
     Abs(Option<Ty>),
     /// `T (T)` over a real floating type: the operand with its sign clear.
     FAbs(i64),
@@ -66,10 +66,10 @@ impl ValueBuiltin {
             "__builtin_isascii" => Self::IsAscii,
             "__builtin_toascii" => Self::ToAscii,
             "__builtin_extract_return_addr" | "__builtin_frob_return_addr" => Self::ReturnAddr,
-            "__builtin_isgreater" => Self::Compare(BinOp::Fgt),
-            "__builtin_isgreaterequal" => Self::Compare(BinOp::Fge),
-            "__builtin_isless" => Self::Compare(BinOp::Flt),
-            "__builtin_islessequal" => Self::Compare(BinOp::Fle),
+            "__builtin_isgreater" => Self::Compare(BinOp::FgtQuiet),
+            "__builtin_isgreaterequal" => Self::Compare(BinOp::FgeQuiet),
+            "__builtin_isless" => Self::Compare(BinOp::FltQuiet),
+            "__builtin_islessequal" => Self::Compare(BinOp::FleQuiet),
             "__builtin_islessgreater" => Self::Compare(BinOp::Fone),
             "__builtin_isunordered" => Self::Compare(BinOp::Funo),
             "__builtin_abs" => Self::Abs(Some(Ty::Int)),
@@ -99,7 +99,7 @@ enum Arg {
     Constant,
 }
 
-/// The binary64 pattern of the quiet NaN of `ty` with the payload gcc reads
+/// The binary64 pattern of the quiet NaN of `ty` with the payload read
 /// from `spelling`: past white space and a sign, a decimal, octal or hex
 /// number in the significand's low bits. `None` for a spelling gcc leaves
 /// to the library. A `float` payload sits where binary32 narrowing keeps it.
@@ -206,22 +206,22 @@ impl Compiler {
         Ok(args)
     }
 
-    /// An integer constant operand; outside `0..=max` it warns and is 0, as in gcc.
+    /// An integer constant operand; outside `0..=max` it warns and is 0.
     fn builtin_constant(&mut self, name: &str, pos: usize, max: i64) -> Result<i64, C5Error> {
-        let line = self.lex.line;
+        let at = self.site();
         let Ok(v) = self.parse_constant_int() else {
             let text = format!(
                 "argument {} of `{name}` is not an integer constant expression",
                 pos + 1
             );
-            return Err(self.compile_err_at(Code::INVALID_ARGUMENTS, line, text));
+            return Err(self.compile_err_at(Code::INVALID_ARGUMENTS, at.line, text));
         };
         if !(0..=max).contains(&v) {
             let text = format!(
                 "argument {} of `{name}` is {v}, not 0 to {max}; using 0",
                 pos + 1
             );
-            self.warn_at(Code::BUILTIN_ARGUMENT_RANGE, line, text);
+            self.warn_at(Code::BUILTIN_ARGUMENT_RANGE, at, text);
             return Ok(0);
         }
         Ok(v)
@@ -272,7 +272,11 @@ impl Compiler {
             (ValueBuiltin::Expect, &[Arg::Value(exp), Arg::Value(c)]) => {
                 // C99 6.5.2.2p10 leaves the order of the arguments unspecified.
                 let long = Ty::Long as i64;
-                (self.ast_after(c, exp, long), long)
+                let node = self.ast_after(c, exp, long);
+                if let Some(k) = self.expr_const_int(c) {
+                    self.ast.expected.insert(node, k != 0);
+                }
+                (node, long)
             }
             (ValueBuiltin::Prefetch, &[Arg::Value(addr), ..]) => {
                 let void = void_ty();
@@ -375,24 +379,26 @@ impl Compiler {
         pos: usize,
         want: i64,
     ) -> Result<ExprId, C5Error> {
-        let line = self.lex.line;
+        let at = self.site();
         self.expr(Token::Assign as i64)?;
         self.reject_void_value(self.ty)?;
-        self.convert_builtin_value(name, pos, want, line)
+        self.convert_builtin_value(name, pos, want, at)
     }
 
-    /// The operand just parsed, at `pos` of `name` from `line`, converted
+    /// The operand just parsed, at `pos` of `name` from `at`, converted
     /// as [`Self::parse_builtin_value`] converts it.
     pub(super) fn convert_builtin_value(
         &mut self,
         name: &str,
         pos: usize,
         want: i64,
-        line: usize,
+        at: super::Site,
     ) -> Result<ExprId, C5Error> {
         let zero = self.value_is_null_pointer_constant();
         let untyped = self.last_emit_was_indirect_call();
-        if let Some(m) = Self::type_warning_with_flags(&self.structs, want, self.ty, zero, untyped)
+        let lax = self.lax_vectors;
+        if let Some(m) =
+            Self::type_warning_with_flags(&self.structs, want, self.ty, zero, untyped, lax)
         {
             let text = format!(
                 "{} in argument {} of `{name}` (param={}, arg={})",
@@ -402,15 +408,15 @@ impl Compiler {
                 self.typed_text(self.ty, &None),
             );
             if m.no_conversion {
-                return Err(self.compile_err_at(Code::INCOMPATIBLE_TYPES, line, text));
+                return Err(self.compile_err_at(Code::INCOMPATIBLE_TYPES, at.line, text));
             }
-            self.report_mismatch(&m, line, text)?;
+            self.report_mismatch(&m, at, text)?;
         }
-        self.check_value_conversion_of(self.ast_acc, want, 0, line);
+        self.check_value_conversion_of(self.ast_acc, want, 0, at);
         self.convert_assign_rhs(want);
         let Some(value) = self.ast_acc.take() else {
             let text = format!("argument {} of `{name}` has no value", pos + 1);
-            return Err(self.compile_err_at(Code::INVALID_ARGUMENTS, line, text));
+            return Err(self.compile_err_at(Code::INVALID_ARGUMENTS, at.line, text));
         };
         let converted = super::super::ast::expr_ty(self.ast.expr(value)) == Some(want);
         Ok(if converted {
@@ -592,7 +598,7 @@ impl Compiler {
 
     /// The common real floating type of a comparison builtin's operands,
     /// after the usual arithmetic conversions (C99 6.3.1.8). Both must be
-    /// arithmetic and one floating, as gcc and clang require.
+    /// arithmetic and one floating.
     fn relation_common_ty(&self, name: &str, a: i64, b: i64) -> Result<i64, C5Error> {
         use super::types::{is_floating_scalar, is_integer_scalar_ty};
         let arithmetic = |t: i64| is_floating_scalar(t) || is_integer_scalar_ty(t);

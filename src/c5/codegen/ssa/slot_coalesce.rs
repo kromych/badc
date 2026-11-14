@@ -38,9 +38,9 @@
 //! (`FunctionSsa::array_slots`, an array or an aggregate with an array
 //! member at any depth) is placed above all other storage, the canary
 //! being above that again. A linear overflow of any array then reaches the
-//! canary before it reaches another object, which is the protection gcc's
-//! frame sorting gives. An address-taken scalar is ordinary storage here:
-//! what the order guards it against is the overflow, not the address.
+//! canary before it reaches another object. An address-taken scalar is
+//! ordinary storage here: what the order guards it against is the overflow,
+//! not the address.
 //!
 //! The pass always coalesces the whole movable frame (declared locals
 //! included) so the emitted machine code is independent of whether debug
@@ -91,7 +91,7 @@ pub(crate) fn run(
 }
 
 /// One block of the compacted frame, in the order the blocks are placed.
-/// A group and a single keep storage of their own; a colour is one block
+/// A group and a single keep storage of their own; a color is one block
 /// its live-disjoint members share.
 #[derive(Clone, Copy)]
 enum Unit {
@@ -162,6 +162,10 @@ fn resolve(
     };
     let r = match &insts[vi] {
         Inst::LocalAddr(s) if movable(*s) => Ref::Ptr(*s, Some(0)),
+        Inst::Copy {
+            value,
+            is_fp: false,
+        } => resolve(insts, *value, movable, state, memo, escaped),
         Inst::BinopI {
             op: op @ (BinOp::Add | BinOp::Sub),
             lhs,
@@ -247,12 +251,12 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
     // names is not, so such a function still drops its unreferenced slots and
     // renumbers the survivors one-to-one below.
     let dedicated = f.has_returns_twice_call || f.has_sp_asm();
-    // `synthetic_base > 0` marks a walker-built function with declared
-    // locals; hand-built SSA (sys-trampolines, CRT entry) carries 0 and is
-    // left alone -- its slot model is not the walker's.
+    // A non-negative `synthetic_base` marks a walker-built function, one
+    // with no declared locals included; hand-built SSA (sys-trampolines)
+    // carries -1 and is left alone -- its slot model is not the walker's.
     let synth_base = f.synthetic_base;
     let total = f.locals;
-    if synth_base <= 0 || total <= 0 {
+    if synth_base < 0 || total <= 0 {
         return BTreeMap::new();
     }
     // The whole movable frame is coalesced; a slot at offset 0 is not movable.
@@ -370,8 +374,9 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
         for (i, inst) in f.insts.iter().enumerate().filter(|(i, _)| in_block[*i]) {
             let pc = i as u32;
             match inst {
-                // Address arithmetic already consumed by `resolve`.
-                Inst::BinopI {
+                // Address arithmetic and copies already consumed by `resolve`.
+                Inst::Copy { is_fp: false, .. }
+                | Inst::BinopI {
                     op: BinOp::Add | BinOp::Sub,
                     ..
                 }
@@ -929,9 +934,9 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
         }
     }
 
-    // Greedy colouring: interfering slots get distinct colours. Each
-    // row is walked over its set bits, and the colours its already-
-    // coloured neighbours hold are marked in a stamp array refreshed by
+    // Greedy coloring: interfering slots get distinct colors. Each
+    // row is walked over its set bits, and the colors its already-
+    // colored neighbors hold are marked in a stamp array refreshed by
     // bumping the stamp, so the search costs the row's degree rather
     // than the candidate count times a set insertion.
     let mut color = alloc::vec![usize::MAX; n];
@@ -1164,11 +1169,35 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
                 first_escape.entry(sg).or_insert(pc);
             }
         }
+        // The events that start a scoped group's instance: its first after
+        // its end marker, or in a block it enters dead, when that event
+        // writes or takes the address. Before one, the group holds nothing
+        // a later read can see. A read or escape there is of the instance
+        // that ended: a `Return` reads the returned object past its marker.
+        let mut fresh: BTreeSet<(u32, usize)> = BTreeSet::new();
+        let mut ended: BTreeMap<usize, bool> = BTreeMap::new();
+        for &(pc, sg, kind) in evs {
+            let bit = 1u64 << (sg % 64);
+            if scoped_mask[sg / 64] & bit == 0 {
+                continue;
+            }
+            let after_end = *ended
+                .entry(sg)
+                .or_insert(dead_in[b * gwords + sg / 64] & bit != 0);
+            if after_end && kind & (END | READ | ESCAPE) == 0 {
+                fresh.insert((pc, sg));
+            }
+            ended.insert(sg, kind & END != 0);
+        }
         let escaped_before = |sg: usize, pc: u32| {
             x_in[b * gwords + sg / 64] & (1u64 << (sg % 64)) != 0
                 || first_escape.get(&sg).is_some_and(|&ep| ep < pc)
         };
-        let mut live = r_out[b * gwords..(b + 1) * gwords].to_vec();
+        // A scoped group dead at the exit has no value a later read can
+        // see: past its end marker a read is of a new instance (C17 6.2.4p6).
+        let mut live: Vec<u64> = (0..gwords)
+            .map(|w| r_out[b * gwords + w] & !(scoped_mask[w] & dead_out(&dead_in, b, w)))
+            .collect();
         // A scoped group is busy at the block's exit unless dead there, once
         // escaped on a path here or with an escape ahead.
         for w in 0..gwords {
@@ -1222,10 +1251,13 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
                 {
                     live[sg / 64] |= 1u64 << (sg % 64);
                 }
+                if fresh.contains(&(pc, sg)) {
+                    live[sg / 64] &= !(1u64 << (sg % 64));
+                }
             }
         }
     }
-    // Colour the shareable groups, widest first, so a colour's width is
+    // Color the shareable groups, widest first, so a color's width is
     // fixed by its first member and later members always fit.
     let mut order: Vec<usize> = (0..nsg).collect();
     let width = |sg: usize| {
@@ -1237,7 +1269,7 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
     let mut g_color_used = alloc::vec![0u32; nsg + 1];
     let mut g_ncolors = 0usize;
     let mut g_color_width: Vec<i64> = Vec::new();
-    // Region members and frame storage take separate colours.
+    // Region members and frame storage take separate colors.
     let mut g_color_region: Vec<bool> = Vec::new();
     for (i, &sg) in order.iter().enumerate() {
         let stamp = i as u32 + 1;
@@ -1268,8 +1300,8 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
     // floor: reserved groups first (each a contiguous block, order
     // preserved so the base stays the lowest address and interior pointer
     // arithmetic still lands), then reserved singles, then one block per
-    // group colour with every member packed against its high end, then one
-    // slot per scalar colour. Slots at or below the floor and the
+    // group color with every member packed against its high end, then one
+    // slot per scalar color. Slots at or below the floor and the
     // parameter slots (positive offsets) are not in the map and keep their
     // offset.
     // In compact mode a reserved group no live instruction or
@@ -1334,7 +1366,7 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
     let mut reordered = false;
     if protected {
         // An array is an aggregate, so its base always forms a group; the
-        // single and scalar-colour cases below cost nothing and keep the
+        // single and scalar-color cases below cost nothing and keep the
         // classification total.
         let mut group_holds = alloc::vec![false; ng];
         let mut single_holds: BTreeSet<i64> = BTreeSet::new();
@@ -1395,8 +1427,8 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
             }
         }
     }
-    // Cells of a colour's shared block map to the members' original
-    // offsets; whether any is exclusive is decided per colour below.
+    // Cells of a color's shared block map to the members' original
+    // offsets; whether any is exclusive is decided per color below.
     let mut shared_group_cells: BTreeSet<i64> = BTreeSet::new();
     let mut g_members = alloc::vec![0usize; g_ncolors];
     for sg in 0..nsg {
@@ -1492,7 +1524,7 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
         }
     }
     // Lay the region out again over the members that survive. The members
-    // of one colour share a block, as disjoint lifetimes share frame storage;
+    // of one color share a block, as disjoint lifetimes share frame storage;
     // a movable member absent from `new_off` was dropped and frees its bytes.
     let mut blocks: Vec<Vec<RegionMember>> = Vec::new();
     let mut color_block: BTreeMap<usize, usize> = BTreeMap::new();
@@ -1528,11 +1560,19 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
         super::super::ir::place_region(blocks)
     };
     // The array-holding objects follow their storage. A base the compact
-    // repack dropped goes with it; a base that shares a colour's block
+    // repack dropped goes with it; a base that shares a color's block
     // keeps naming the cell it was given, which is inside that block.
     f.array_slots
         .retain(|&s| !movable(s) || new_off.contains_key(&s));
     for s in &mut f.array_slots {
+        if let Some(&nn) = new_off.get(s) {
+            *s = nn;
+        }
+    }
+    // So do the objects of a vector type.
+    f.vector_objects
+        .retain(|&s| !movable(s) || new_off.contains_key(&s));
+    for s in &mut f.vector_objects {
         if let Some(&nn) = new_off.get(s) {
             *s = nn;
         }
@@ -1544,7 +1584,7 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
     // offset that backs exactly one original slot holds that slot's value
     // for its whole scope, so the location is rewritten to the new offset
     // (exclusive). Storage shared by disjoint lifetimes -- a multi-member
-    // scalar colour, or any cell of a multi-member group colour -- has no
+    // scalar color, or any cell of a multi-member group color -- has no
     // single stable location, so the slot's location is dropped (shared).
     let mut reverse_count: BTreeMap<i64, usize> = BTreeMap::new();
     for &new in new_off.values() {
@@ -1575,6 +1615,8 @@ fn load_width(kind: crate::c5::ir::LoadKind) -> i64 {
         I32 | U32 | F32 => 4,
         I64 | F64 => 8,
         F80 | F128 | V128 => 16,
+        V256 => 32,
+        V512 => 64,
     }
 }
 
@@ -1586,6 +1628,8 @@ fn store_width(kind: crate::c5::ir::StoreKind) -> i64 {
         I32 | F32 => 4,
         I64 | F64 => 8,
         F80 | F128 | V128 => 16,
+        V256 => 32,
+        V512 => 64,
     }
 }
 #[cfg(all(test, feature = "std"))]
@@ -1598,7 +1642,7 @@ mod tests {
         FunctionSsa {
             locals,
             synthetic_base: 1,
-            inst_src: alloc::vec![(0, 0); n as usize],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); n as usize],
             f32_values: alloc::vec![false; n as usize],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -2049,6 +2093,48 @@ mod tests {
         assert_ne!(a, b);
     }
 
+    /// A copy of an address names the same object: an access through it
+    /// is bounded, and the object still shares.
+    #[test]
+    fn an_address_copy_is_followed_not_escaped() {
+        let store = |addr: ValueId| Inst::Store {
+            addr,
+            disp: 0,
+            value: 0,
+            kind: StoreKind::I64,
+            volatile: false,
+            align: 0,
+            pc_rel: false,
+        };
+        let load = |addr: ValueId| Inst::Load {
+            addr,
+            disp: 0,
+            kind: LoadKind::I64,
+            volatile: false,
+            align: 0,
+            pc_rel: false,
+        };
+        let insts = alloc::vec![
+            Inst::Imm(7),
+            Inst::LocalAddr(-8),
+            Inst::Copy {
+                value: 1,
+                is_fp: false,
+            },
+            store(2),
+            load(2),
+            Inst::LocalAddr(-4),
+            store(5),
+            load(5),
+        ];
+        let mut f = one_block(insts, 7, 8);
+        f.multi_cell_slots = alloc::vec![(-8, 4), (-4, 4)];
+        coalesce(&mut f, true, false);
+        assert_eq!(f.locals, 4, "disjoint objects share one block");
+        assert!(matches!(f.insts[1], Inst::LocalAddr(-4)));
+        assert!(matches!(f.insts[5], Inst::LocalAddr(-4)));
+    }
+
     /// A by-value aggregate call argument is a bounded access, so the
     /// object still shares; a plain pointer argument escapes it and pins
     /// dedicated storage for the whole function.
@@ -2207,7 +2293,7 @@ mod tests {
     }
 
     /// A pointer stored to memory escapes its object, and groups of
-    /// different sizes pack against their colour's high end so interior
+    /// different sizes pack against their color's high end so interior
     /// offsets keep their meaning.
     #[test]
     fn stored_pointer_escapes_and_sizes_pack() {
@@ -2290,7 +2376,7 @@ mod tests {
         assert!(matches!(f.insts[0], Inst::LocalAddr(-4)));
         assert!(
             matches!(f.insts[3], Inst::LocalAddr(-2)),
-            "the 2-cell group packs against the colour's high end"
+            "the 2-cell group packs against the color's high end"
         );
     }
 
@@ -2305,7 +2391,7 @@ mod tests {
         FunctionSsa {
             locals,
             synthetic_base: 1,
-            inst_src: alloc::vec![(0, 0); n],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); n],
             f32_values: alloc::vec![false; n],
             blocks: blocks
                 .into_iter()

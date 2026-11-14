@@ -28,10 +28,8 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0xd0, %rsp
-               	pushq	%r12
+               	subq	$0xe8, %rsp
                	pushq	%rbx
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %rdx
                	leaq	-0xd0(%rbp), %rdi
@@ -39,45 +37,39 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	leaq	-0xd0(%rbp), %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	leaq	-0xd0(%rbp), %rdi
                	movl	$0xc2, %esi
                	movl	$0x180, %edx            # imm = 0x180
-               	xorl	%eax, %eax
                	callq	<addr>
-               	movq	%rax, %r12
-               	testl	%r12d, %r12d
+               	movq	%rax, %rcx
+               	testl	%ecx, %ecx
                	jge	<addr>
                	movl	$0x1, %eax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	leaq	-0x90(%rbp), %rsi
-               	movq	%r12, %rdi
-               	xorl	%eax, %eax
+               	movq	%rcx, 0x18(%rsp)
+               	movq	%rcx, %rdi
                	callq	<addr>
                	movslq	%eax, %rax
+               	movq	0x18(%rsp), %rcx
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %ebx
-               	movq	%r12, %rdi
-               	xorl	%eax, %eax
+               	movq	%rcx, %rdi
                	callq	<addr>
                	leaq	-0xd0(%rbp), %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rbx, %rax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	-0x78(%rbp), %eax
                	andq	$0x1ff, %rax            # imm = 0x1FF
-               	cmpl	$0x180, %eax            # imm = 0x180
-               	je	<addr>
                	movl	$0x3, %ebx
-               	jmp	<addr>
-               	xorl	%ebx, %ebx
+               	xorl	%edx, %edx
+               	cmpl	$0x180, %eax            # imm = 0x180
+               	cmoveq	%rdx, %rbx
                	jmp	<addr>

@@ -42,16 +42,14 @@ Disassembly of section .text:
                	retq
 
 <keeps_values>:
-               	movslq	%edi, %rdi
                	movl	$0x1, %eax
-               	testq	%rdi, %rdi
-               	je	<addr>
-               	movl	$0x2, %eax
+               	movl	$0x2, %ecx
+               	testl	%edi, %edi
+               	cmovneq	%rcx, %rax
                	retq
 
 <keeps_store>:
-               	movslq	%edi, %rdi
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	je	<addr>
                	movl	$0x1, (%rsi)
                	xorl	%eax, %eax

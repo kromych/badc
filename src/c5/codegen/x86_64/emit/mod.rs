@@ -61,11 +61,12 @@ use super::encode::{
     emit_vex_fma_mem, emit_vex_fp_arith, emit_vex_fp_arith_mem, emit_xchg_mem_r, emit_xchg_rr,
     emit_xorpd, emit_xorps,
 };
+use super::ssa::code_buf::{CodeBuf, SpillWidth};
 use super::ssa::emit_common::{
     Emit, MAX_UNPROBED_STACK_STEP, PlaceMove, STACK_PROBE_PAGE, STACK_PROBE_UNROLL_MAX,
     Unsupported, build_arg_aggs, c5_slot_to_fp_offset, param_entry_ext, place_same_loc,
 };
-use super::ssa::reg_alloc::{Allocation, Place};
+use super::ssa::reg_alloc::{Allocation, Place, VecWidth};
 use super::table::Mnem;
 use super::{AddrPart, DataFixup};
 
@@ -79,7 +80,7 @@ use early_exit::*;
 use frame::*;
 pub(crate) use frame::{
     Frame, asm_binds_directly, asm_bound_scratch_suffices, asm_site_bound_values,
-    asm_site_write_masks, asm_staged_hints, bound_scratch_candidates, compute_frame,
+    asm_site_write_masks, asm_staged_hints, bound_scratch_candidates,
 };
 pub(crate) use function::emit_function;
 use function::*;
@@ -143,12 +144,12 @@ fn fp_or_spill_dst(dst: Place, frame: Frame) -> Option<Reg> {
 /// An FP value's `Place` in an xmm register: `FpReg` in place, `Spill`
 /// loaded into `scratch`, `IntReg` reinterpreted through `movq xmm, gpr`
 /// (the constant folder places f64 constants as `Imm` bit patterns).
-fn materialize_fp(code: &mut Vec<u8>, place: Place, scratch: Reg, frame: Frame) -> Option<Reg> {
+fn materialize_fp(code: &mut CodeBuf, place: Place, scratch: Reg, frame: Frame) -> Option<Reg> {
     materialize_fp_shifted(code, place, scratch, frame, 0)
 }
 
 fn materialize_fp_shifted(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     place: Place,
     scratch: Reg,
     frame: Frame,
@@ -158,7 +159,11 @@ fn materialize_fp_shifted(
         Place::FpReg(r) => Some(Reg(r)),
         Place::Spill(slot) => {
             let (sb, sp_off) = spill_slot_addr_shifted(frame, slot, sp_shift);
-            emit_movsd_xmm_mem(code, scratch, sb, sp_off);
+            match code.holding(sb.0, sp_off, SpillWidth::Scalar) {
+                Some(r) if r == scratch.0 => {}
+                Some(r) => emit_movapd_xmm_xmm(code, scratch, Reg(r)),
+                None => emit_movsd_xmm_mem(code, scratch, sb, sp_off),
+            }
             Some(scratch)
         }
         Place::IntReg(r) => {
@@ -171,10 +176,12 @@ fn materialize_fp_shifted(
 
 /// If `dst` is `Place::Spill`, store `src` (an xmm reg) into the
 /// matching spill slot. No-op for FpReg / IntReg / None.
-fn fp_spill_dst_to_slot(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Frame) {
+fn fp_spill_dst_to_slot(code: &mut CodeBuf, dst: Place, src: Reg, frame: Frame) {
     if let Place::Spill(slot) = dst {
         let (sb, sp_off) = spill_slot_addr(frame, slot);
+        let start = code.len();
         emit_movsd_mem_xmm(code, sb, sp_off, src);
+        code.spill_stored(start, sb.0, sp_off, src.0, SpillWidth::Scalar);
     }
 }
 
@@ -184,12 +191,16 @@ fn v128_spill_addr(frame: Frame, slot: u32) -> (Reg, i32) {
 }
 
 /// An `IntReg` source is the zero a fill stores; `movq` clears the upper half.
-fn materialize_v128(code: &mut Vec<u8>, place: Place, scratch: Reg, frame: Frame) -> Option<Reg> {
+fn materialize_v128(code: &mut CodeBuf, place: Place, scratch: Reg, frame: Frame) -> Option<Reg> {
     match place {
         Place::FpReg(r) => Some(Reg(r)),
         Place::Spill(slot) => {
             let (sb, off) = v128_spill_addr(frame, slot);
-            emit_movups_xmm_mem(code, scratch, sb, off);
+            match code.holding(sb.0, off, SpillWidth::Vector(16)) {
+                Some(r) if r == scratch.0 => {}
+                Some(r) => emit_movapd_xmm_xmm(code, scratch, Reg(r)),
+                None => emit_movups_xmm_mem(code, scratch, sb, off),
+            }
             Some(scratch)
         }
         Place::IntReg(r) => {
@@ -200,12 +211,112 @@ fn materialize_v128(code: &mut Vec<u8>, place: Place, scratch: Reg, frame: Frame
     }
 }
 
-fn mirror_v128_dst(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Frame) {
+/// A 256- or 512-bit spill occupies its width's units, addressed at the
+/// lowest.
+fn wide_spill_addr(frame: Frame, w: VecWidth, slot: u32) -> (Reg, i32) {
+    spill_slot_addr(frame, slot + w.units() - 1)
+}
+
+/// A zmm transfer through the assembler's EVEX tables, which scale an
+/// 8-bit displacement by the operand size as EVEX does.
+fn emit_zmm(code: &mut Vec<u8>, mnem: &'static str, ops: &[super::asm::Concrete]) {
+    let m = super::asm::mnemonic_by_name(mnem).unwrap_or(super::asm::Mnemonic::Table(mnem));
+    super::asm::encode(code, 8, m, None, ops).expect("EVEX zmm transfer");
+}
+
+fn zmm(n: Reg) -> super::asm::Concrete {
+    super::asm::Concrete::Reg {
+        reg: super::asm::ZMM_BASE + n.0,
+        size: crate::c5::ir::AsmRegSize::Quad,
+    }
+}
+
+fn zmm_mem(base: Reg, disp: i32) -> super::asm::Concrete {
+    super::asm::Concrete::Mem {
+        base: base.0,
+        index: None,
+        scale: 1,
+        disp,
+        size: crate::c5::ir::AsmRegSize::Quad,
+    }
+}
+
+/// `vmovups` / `vmovdqu64` of a 256- or 512-bit register from `[base + disp]`.
+fn emit_wide_load(code: &mut Vec<u8>, w: VecWidth, dst: Reg, base: Reg, disp: i32) {
+    if w == VecWidth::V512 {
+        emit_zmm(code, "vmovdqu64", &[zmm_mem(base, disp), zmm(dst)]);
+    } else {
+        emit_vmovups_ymm_mem(code, dst, base, disp);
+    }
+}
+
+/// `vmovups` / `vmovdqu64` of a 256- or 512-bit register to `[base + disp]`.
+fn emit_wide_store(code: &mut Vec<u8>, w: VecWidth, base: Reg, disp: i32, src: Reg) {
+    if w == VecWidth::V512 {
+        emit_zmm(code, "vmovdqu64", &[zmm(src), zmm_mem(base, disp)]);
+    } else {
+        emit_vmovups_mem_ymm(code, base, disp, src);
+    }
+}
+
+/// `vmovaps` / `vmovdqa64` between 256- or 512-bit registers.
+fn emit_wide_mov(code: &mut Vec<u8>, w: VecWidth, dst: Reg, src: Reg) {
+    if w == VecWidth::V512 {
+        emit_zmm(code, "vmovdqa64", &[zmm(src), zmm(dst)]);
+    } else {
+        emit_vmovaps_ymm_ymm(code, dst, src);
+    }
+}
+
+/// [`materialize_v128`] for a 256- or 512-bit value; `vmovq` clears the
+/// bits above 64.
+fn materialize_wide(
+    code: &mut CodeBuf,
+    w: VecWidth,
+    place: Place,
+    scratch: Reg,
+    frame: Frame,
+) -> Option<Reg> {
+    match place {
+        Place::FpReg(r) => Some(Reg(r)),
+        Place::Spill(slot) => {
+            let (sb, off) = wide_spill_addr(frame, w, slot);
+            match code.holding(sb.0, off, wide_spill_width(w)) {
+                Some(r) if r == scratch.0 => {}
+                Some(r) => emit_wide_mov(code, w, scratch, Reg(r)),
+                None => emit_wide_load(code, w, scratch, sb, off),
+            }
+            Some(scratch)
+        }
+        Place::IntReg(r) => {
+            emit_vmovq_xmm_r(code, scratch, Reg(r));
+            Some(scratch)
+        }
+        Place::None => None,
+    }
+}
+
+fn mirror_wide_dst(code: &mut CodeBuf, w: VecWidth, dst: Place, src: Reg, frame: Frame) {
+    match dst {
+        Place::FpReg(r) if r != src.0 => emit_wide_mov(code, w, Reg(r), src),
+        Place::Spill(slot) => {
+            let (sb, off) = wide_spill_addr(frame, w, slot);
+            let start = code.len();
+            emit_wide_store(code, w, sb, off, src);
+            code.spill_stored(start, sb.0, off, src.0, wide_spill_width(w));
+        }
+        _ => {}
+    }
+}
+
+fn mirror_v128_dst(code: &mut CodeBuf, dst: Place, src: Reg, frame: Frame) {
     match dst {
         Place::FpReg(r) if r != src.0 => emit_movapd_xmm_xmm(code, Reg(r), src),
         Place::Spill(slot) => {
             let (sb, off) = v128_spill_addr(frame, slot);
+            let start = code.len();
             emit_movups_mem_xmm(code, sb, off, src);
+            code.spill_stored(start, sb.0, off, src.0, SpillWidth::Vector(16));
         }
         _ => {}
     }
@@ -214,16 +325,28 @@ fn mirror_v128_dst(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Frame) {
 /// Read an integer operand's place into a register, borrowing `rd`
 /// as the load target for a spilled operand (the caller writes `rd`
 /// afterwards anyway). `None` for an FP / absent place.
-fn int_operand_into_rd(code: &mut Vec<u8>, place: Place, rd: Reg, frame: Frame) -> Option<Reg> {
+fn int_operand_into_rd(code: &mut CodeBuf, place: Place, rd: Reg, frame: Frame) -> Option<Reg> {
     match place {
         Place::IntReg(r) => Some(Reg(r)),
-        Place::Spill(slot) => {
-            let (sb, off) = spill_slot_addr(frame, slot);
-            emit_mov_r_mem(code, rd, sb, off);
-            Some(rd)
-        }
+        Place::Spill(slot) => Some(load_spill_slot(code, frame, slot, 0, rd)),
         _ => None,
     }
+}
+
+/// Integer spill slot `slot` in `dst`: a move from the register the code
+/// just stored it from, else a load.
+fn load_spill_slot(code: &mut CodeBuf, frame: Frame, slot: u32, sp_shift: u32, dst: Reg) -> Reg {
+    let (sb, off) = spill_slot_addr_shifted(frame, slot, sp_shift);
+    match code.holding(sb.0, off, SpillWidth::Int) {
+        Some(r) if r == dst.0 => {}
+        Some(r) => emit_mov_rr(code, dst, Reg(r)),
+        None => emit_mov_r_mem(code, dst, sb, off),
+    }
+    dst
+}
+
+fn wide_spill_width(w: VecWidth) -> SpillWidth {
+    SpillWidth::Vector(if w == VecWidth::V512 { 64 } else { 32 })
 }
 
 /// The working register of an int-producing handler: the allocated
@@ -262,16 +385,18 @@ fn spill_slot_addr_shifted(frame: Frame, slot: u32, sp_shift: u32) -> (Reg, i32)
 /// If `dst` is a `Spill` place, write the just-produced value in
 /// `src` into the spill slot. No-op for register places (the
 /// caller already wrote into the allocator's chosen reg).
-fn spill_dst_to_slot(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Frame) {
+fn spill_dst_to_slot(code: &mut CodeBuf, dst: Place, src: Reg, frame: Frame) {
     if let Place::Spill(slot) = dst {
         let (sb, sp_off) = spill_slot_addr(frame, slot);
+        let start = code.len();
         emit_mov_mem_r(code, sb, sp_off, src);
+        code.spill_stored(start, sb.0, sp_off, src.0, SpillWidth::Int);
     }
 }
 
 /// A value's `Place` in a register: `IntReg` in place, `Spill` loaded into
 /// `scratch`; `None` for the other kinds.
-fn materialize_int(code: &mut Vec<u8>, place: Place, scratch: Reg, frame: Frame) -> Option<Reg> {
+fn materialize_int(code: &mut CodeBuf, place: Place, scratch: Reg, frame: Frame) -> Option<Reg> {
     materialize_int_shifted(code, place, scratch, frame, 0)
 }
 
@@ -279,7 +404,7 @@ fn materialize_int(code: &mut Vec<u8>, place: Place, scratch: Reg, frame: Frame)
 /// operand stays, a spilled one loads into whichever of r10 / r11 holds no
 /// other operand. `None` when an operand is neither.
 fn materialize_int_operands_distinct(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     places: &[Place],
     frame: Frame,
 ) -> Option<alloc::vec::Vec<Reg>> {
@@ -315,7 +440,7 @@ fn materialize_int_operands_distinct(
 /// [`materialize_int`] for a caller that pushed rsp down by `sp_shift`
 /// bytes since the prologue.
 fn materialize_int_shifted(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     place: Place,
     scratch: Reg,
     frame: Frame,
@@ -323,11 +448,7 @@ fn materialize_int_shifted(
 ) -> Option<Reg> {
     match place {
         Place::IntReg(r) => Some(Reg(r)),
-        Place::Spill(slot) => {
-            let (sb, sp_off) = spill_slot_addr_shifted(frame, slot, sp_shift);
-            emit_mov_r_mem(code, scratch, sb, sp_off);
-            Some(scratch)
-        }
+        Place::Spill(slot) => Some(load_spill_slot(code, frame, slot, sp_shift, scratch)),
         Place::FpReg(r) => {
             // Reinterpret the xmm-resident f64 as its 8-byte bit
             // pattern via `movq scratch, xmm[r]`. Used at c5-internal
@@ -372,6 +493,9 @@ struct FnCtx<'a> {
     /// Function name -> entry PC, for resolving an inline-asm `call`/`jmp` to a
     /// bare symbol into a relocation.
     name2entpc: &'a alloc::collections::BTreeMap<alloc::string::String, usize>,
+    /// Per value: a call after which nothing runs
+    /// (`emit_common::calls_ending_paths`).
+    ends_path: &'a [bool],
 }
 
 /// The output buffers a function's lowering appends to: the bundle shared

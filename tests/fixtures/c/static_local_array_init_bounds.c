@@ -2,7 +2,7 @@
 // storage reserved for the declared bound. The reservation is sized from
 // the bound, so a list longer than it is rejected rather than written past
 // the object (the diagnostics are locked in `tests::parser`); the legal
-// shapes below fill the object and leave the neighbouring statics intact.
+// shapes below fill the object and leave the neighboring statics intact.
 //
 // The wide rows also cover C99 6.7.8p15: the element width must match the
 // literal's, and a bounded array that outruns the literal zero-fills.

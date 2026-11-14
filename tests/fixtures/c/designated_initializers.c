@@ -3,7 +3,7 @@
  * Pre-existing: `.field = X` for struct fields.
  *
  * Newly working: `[N] = X` for array elements, including
- * partial initialisation (gaps zero-filled) and re-ordering.
+ * partial initialization (gaps zero-filled) and re-ordering.
  *
  * Both shapes interleave with positional entries -- after a
  * designated entry, the cursor continues from the position

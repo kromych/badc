@@ -29,7 +29,7 @@ Disassembly of section .text:
                	mov	x0, #0x2                // =2
                	ret
                	adrp	x0, <page>
-               	ldr	d0, [x0, #0x28]
+               	ldr	d0, [x0, #0x20]
                	fmov	d1, #1.00000000
                	fcmp	d0, d1
                	b.eq	<addr>
@@ -37,22 +37,19 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ret
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x40]
-               	mov	x17, #-0x1              // =-1
-               	cmp	w0, w17
+               	ldrsw	x0, [x0, #0x38]
+               	cmn	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	ret
@@ -102,7 +99,7 @@ Disassembly of section .text:
                	mov	x0, #0xf                // =15
                	ret
                	adrp	x0, <page>
-               	ldr	d1, [x0, #0x90]
+               	ldr	d1, [x0, #0x88]
                	mov	x16, #0x4170000000000000 // =4715268809856909312
                	fmov	d0, x16
                	fcmp	d1, d0
@@ -110,19 +107,19 @@ Disassembly of section .text:
                	mov	x0, #0x10               // =16
                	ret
                	adrp	x0, <page>
-               	ldr	d1, [x0, #0x98]
+               	ldr	d1, [x0, #0x90]
                	fcmp	d1, d0
                	b.eq	<addr>
                	mov	x0, #0x11               // =17
                	ret
                	adrp	x0, <page>
-               	ldr	d1, [x0, #0xa0]
+               	ldr	d1, [x0, #0x98]
                	fcmp	d1, d0
                	b.eq	<addr>
                	mov	x0, #0x12               // =18
                	ret
                	adrp	x0, <page>
-               	ldr	d0, [x0, #0xa8]
+               	ldr	d0, [x0, #0xa0]
                	adrp	x16, <page>
                	ldr	d1, [x16]
                	fcmp	d0, d1
@@ -130,7 +127,7 @@ Disassembly of section .text:
                	mov	x0, #0x13               // =19
                	ret
                	adrp	x0, <page>
-               	ldrb	w0, [x0, #0xb0]
+               	ldrb	w0, [x0, #0xa8]
                	cmp	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x15               // =21
@@ -142,7 +139,7 @@ Disassembly of section .text:
                	mov	x0, #0x16               // =22
                	ret
                	adrp	x0, <page>
-               	ldr	d0, [x0, #0xc0]
+               	ldr	d0, [x0, #0xb8]
                	adrp	x16, <page>
                	ldr	d1, [x16, #0x8]
                	fcmp	d0, d1

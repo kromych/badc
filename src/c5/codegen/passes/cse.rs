@@ -18,7 +18,7 @@
 //! fits the callee-saved bank (where a range spanning a call must go),
 //! and no block of the region nests deeper in a loop than the duplicate.
 //! The headroom widens as the duplicate gets cheaper to recompute, and
-//! is widest for the operand-free values, which rematerialise anywhere.
+//! is widest for the operand-free values, which rematerialize anywhere.
 //!
 //! A region holding a call is taken only from inside a loop. The
 //! callee-saved register such a range needs is saved by the prologue and
@@ -81,6 +81,10 @@ enum Key {
     ShiftOp(BinOp, ValueId, ValueId, BinOp, u8),
     BitField(ValueId, u8, u8, bool),
     Udiv128(ValueId, ValueId, ValueId),
+    // A splat by its lane width and vector width: of a value, or of a
+    // constant's lane bits.
+    VecSplat(ValueId, u8, u8),
+    VecConst(u64, u8, u8),
 }
 
 pub(crate) fn run(funcs: &mut [FunctionSsa], caps: BankCapacity) {
@@ -545,6 +549,17 @@ impl Gate<'_> {
 
 /// `sym` is the cross-unit symbol an address value binds to, `u32::MAX`
 /// for none.
+/// Bytes a lane of a splat of `kind` holds.
+fn lane_bytes(kind: crate::c5::ir::StoreKind) -> u8 {
+    use crate::c5::ir::StoreKind;
+    match kind {
+        StoreKind::I8 => 1,
+        StoreKind::I16 => 2,
+        StoreKind::I32 | StoreKind::F32 => 4,
+        _ => 8,
+    }
+}
+
 fn key_of(
     inst: &Inst,
     vn: &[ValueId],
@@ -590,6 +605,14 @@ fn key_of(
         Inst::Bswap { value, width } => Some(Key::Bswap(r(*value), *width, is_f32)),
         Inst::BitCount { op, value, width } => Some(Key::BitCount(*op, r(*value), *width, is_f32)),
         Inst::Neg(v) => Some(Key::Neg(r(*v))),
+        Inst::VecSplat { value, kind, bytes } => {
+            Some(Key::VecSplat(r(*value), lane_bytes(*kind), *bytes))
+        }
+        Inst::VecConst { imm, kind, bytes } => {
+            let width = lane_bytes(*kind);
+            let lane = *imm as u64 & (u64::MAX >> (64 - 8 * u32::from(width)));
+            Some(Key::VecConst(lane, width, *bytes))
+        }
         Inst::Fneg(v) => Some(Key::Fneg(r(*v), is_f32)),
         Inst::FpCast { kind, value } => Some(Key::FpCast(*kind, r(*value), is_f32)),
         Inst::Fma {
@@ -839,6 +862,7 @@ mod tests {
         FunctionSsa {
             seh_scopes: Vec::new(),
             block_seh: Vec::new(),
+            predicted: Vec::new(),
             funclet_slots: Vec::new(),
             name: alloc::string::String::new(),
             ent_pc: 0,
@@ -862,7 +886,7 @@ mod tests {
             is_weak: false,
             is_internal: false,
             const_params: 0,
-            inst_src: alloc::vec![(0, 0); insts.len()],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             cmp32: alloc::vec![false; insts.len()],
             div32: alloc::vec![false; insts.len()],
@@ -882,6 +906,8 @@ mod tests {
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
             array_slots: Vec::new(),
+            vector_objects: Vec::new(),
+            owned_params: Vec::new(),
             over_aligned: Default::default(),
             frame_align: 0,
             realign_region_bytes: 0,
@@ -1052,7 +1078,7 @@ mod tests {
     }
 
     /// A comparison whose only consumer is its block's branch fuses into
-    /// that branch; a second use would force it to materialise, so it is
+    /// that branch; a second use would force it to materialize, so it is
     /// neither leader nor duplicate.
     #[test]
     fn branch_fused_comparison_is_not_numbered() {
@@ -1243,11 +1269,11 @@ mod tests {
         );
     }
 
-    /// An address rematerialises in one or two instructions, so a merge
+    /// An address rematerializes in one or two instructions, so a merge
     /// that holds it across a straight-line call is declined like any
     /// other.
     #[test]
-    fn address_across_a_call_outside_a_loop_is_rematerialised() {
+    fn address_across_a_call_outside_a_loop_is_rematerialized() {
         let mut f = dup_across_call();
         f.insts[2] = Inst::ImmData(8);
         f.insts[4] = Inst::ImmData(8);

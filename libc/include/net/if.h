@@ -75,6 +75,9 @@ struct ifreq {
 #define SIOCGIFHWADDR  0x8927
 #define SIOCGIFINDEX   0x8933
 #define SIOCGIFTXQLEN  0x8942
+// Bases of the per-protocol and per-device private ioctl ranges.
+#define SIOCPROTOPRIVATE 0x89E0
+#define SIOCDEVPRIVATE   0x89F0
 #endif
 
 #ifdef __APPLE__

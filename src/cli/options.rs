@@ -30,19 +30,18 @@ pub(crate) enum Mode {
     /// prefers those on-disk copies over the embedded ones.
     Install,
     /// `--dump-pp` -- run the preprocessor on the input and
-    /// print the expanded source to stdout. Mirrors gcc / clang
-    /// `-E` for inspecting macro expansion and include
-    /// resolution.
+    /// print the expanded source to stdout, for inspecting macro
+    /// expansion and include resolution.
     DumpPp,
     /// `--ar` -- bundle every input (compiled `.c` plus any
     /// `.o`) into a single `.a` archive named by `-o`. No
     /// linking; the archive is meant to be passed back as
     /// input to a future link.
     BuildArchive,
-    /// `--list-diagnostics` -- print the diagnostic catalogue and
+    /// `--list-diagnostics` -- print the diagnostic catalog and
     /// exit. Takes no source file.
     ListDiagnostics,
-    /// `--explain <selector>` -- print one catalogue row and exit.
+    /// `--explain <selector>` -- print one catalog row and exit.
     /// The selector is a name, an alias, or a `B` code.
     Explain,
     /// `--dump-native-link` -- parse a list of native ELF
@@ -84,10 +83,9 @@ impl Mode {
     }
 }
 
-/// The language a positional input's suffix selects, following gcc's
-/// suffix table. `.i` is C that needs no preprocessing; `.S` and `.sx`
-/// are assembler with the preprocessor run first; `.s` is assembler
-/// taken verbatim.
+/// The language a positional input's suffix selects. `.i` is C that
+/// needs no preprocessing; `.S` and `.sx` are assembler with the
+/// preprocessor run first; `.s` is assembler taken verbatim.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SourceKind {
     C { preprocessed: bool },

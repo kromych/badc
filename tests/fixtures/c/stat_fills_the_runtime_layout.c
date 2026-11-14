@@ -35,9 +35,14 @@ int main(void) {
         return 4;
     fwrite("abc", 1, 3, f);
     fclose(f);
-    if (stat(name, &st) || !S_ISREG(st.st_mode) || st.st_size != 3 ||
-        st.st_mtime <= 0)
+    if (stat(name, &st))
         rc = 5;
+    else if (!S_ISREG(st.st_mode))
+        rc = 14;
+    else if (st.st_size != 3)
+        rc = 15;
+    else if (st.st_mtime <= 0)
+        rc = 16;
     else if (_stat(name, &sb) || sb.st_size != 3 ||
              (sb.st_mode & _S_IFMT) != _S_IFREG)
         rc = 6;

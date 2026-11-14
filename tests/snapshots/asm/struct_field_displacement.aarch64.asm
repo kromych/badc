@@ -22,18 +22,8 @@ Disassembly of section .text:
                	ldur	x0, [x29, #-0x8]
                	mov	x1, #0x1                // =1
                	str	w1, [x0]
-               	mov	x1, #0x16               // =22
-               	str	w1, [x0, #0x4]
-               	mov	x1, #0x14d              // =333
-               	str	x1, [x0, #0x8]
                	mov	x1, #0x2c               // =44
                	strh	w1, [x0, #0x10]
-               	mov	x1, #0x5                // =5
-               	strb	w1, [x0, #0x12]
-               	mov	x1, #0x63               // =99
-               	str	w1, [x0, #0x4]
-               	mov	x1, #0x309              // =777
-               	str	x1, [x0, #0x8]
                	mov	x1, #0x64               // =100
                	str	w1, [x0, #0x4]
                	mov	x1, #0x313              // =787

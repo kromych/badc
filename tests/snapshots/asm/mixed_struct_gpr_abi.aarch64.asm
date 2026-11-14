@@ -22,11 +22,11 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
-               	fmov	d0, #3.00000000
-               	ldur	d1, [x29, #-0x8]
+               	fmov	d1, #3.00000000
+               	ldur	d0, [x29, #-0x8]
                	fmov	d2, #2.00000000
-               	fmadd	d0, d1, d2, d0
-               	fcvtzs	x0, d0
+               	fmadd	d1, d0, d2, d1
+               	fcvtzs	x0, d1
                	add	x0, x0, #0x2
                	cmp	x0, #0xe
                	b.eq	<addr>
@@ -34,7 +34,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldur	d0, [x29, #-0x8]
                	fcvtzs	x0, d0
                	add	x0, x0, #0x18
                	cmp	x0, #0x1c

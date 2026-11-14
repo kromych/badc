@@ -96,8 +96,8 @@ struct _libc_fpstate {
     unsigned short     swd;
     unsigned short     ftw;
     unsigned short     fop;
-    unsigned long long rip;
-    unsigned long long rdp;
+    unsigned long rip;
+    unsigned long rdp;
     unsigned int       mxcsr;
     unsigned int       mxcr_mask;
     struct _libc_fpxreg _st[8];

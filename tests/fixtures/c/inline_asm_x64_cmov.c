@@ -1,5 +1,5 @@
 // x86-64 cmovcc inline asm: branchless conditional select reached through the
-// catalogue passthrough. max_asm/min_asm exercise cmovl and cmovg on both the
+// catalog passthrough. max_asm/min_asm exercise cmovl and cmovg on both the
 // taken and not-taken paths. Returns 42. Native x86-64 only.
 
 static long max_asm(long a, long b) {

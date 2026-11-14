@@ -13,8 +13,7 @@ Pipeline:
     are compiled, linked against the archive, and run. Each test is
     assert-based and must exit 0.
 
-Both -O0 and -O are exercised (with -UNDEBUG at -O so the predefined
-NDEBUG does not strip the tests' asserts). On x86-64 context switching
+Both -O0 and -O are exercised; the tests' asserts stay at -O. On x86-64 context switching
 runs upstream's native asm mill_setjmp_/mill_longjmp_; elsewhere it
 runs sigsetjmp/siglongjmp (MILL_ARCH_FALLBACK). Both use the
 one-instruction inline-asm stack-pointer move; see setup.py for why
@@ -76,7 +75,7 @@ def base_flags() -> list[str]:
 
 def build_and_run(badc: str, out: Path, optimize: bool) -> bool:
     label = "-O" if optimize else "-O0"
-    opt = ["-O", "-UNDEBUG"] if optimize else []
+    opt = ["-O"] if optimize else []
     flags = opt + base_flags()
 
     lib = out / "libmill.a"

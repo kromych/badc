@@ -15,7 +15,7 @@ use super::code::{Class, Code, Level};
 use super::message::{Diagnostic, Loc};
 
 /// The word a diagnostic line carries, and the attribute it takes on a
-/// terminal. Colour keys on the level and the class, never on the text.
+/// terminal. Color keys on the level and the class, never on the text.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Severity {
     Error,
@@ -24,7 +24,7 @@ pub enum Severity {
     Note,
 }
 
-/// Ends the coloured run.
+/// Ends the colored run.
 pub const RESET: &str = "\x1b[0m";
 
 impl Severity {
@@ -85,8 +85,7 @@ impl Diagnostic {
             Class::Controllable => write!(out, " [-W{}]", self.code.name())?,
             Class::Hard | Class::Note => write!(out, " [{}]", self.code.name())?,
         }
-        // The echoed line follows the brackets, where gcc puts the
-        // source it points at.
+        // The echoed source line follows the brackets.
         if let Some(source) = &self.source_line {
             out.write_char('\n')?;
             out.write_str(source)?;
@@ -115,6 +114,7 @@ fn render_line(
     if let Some(loc) = loc {
         write!(out, "{}:{}: ", loc.file, loc.line)?;
     }
+    let text = crate::c5::mach_o_name::shown(text);
     if color {
         write!(
             out,
@@ -133,7 +133,7 @@ const W_CLASS: usize = 13;
 const W_GROUPS: usize = 18;
 const W_STATUS: usize = 8;
 
-/// The whole catalogue, one row per line. This is what
+/// The whole catalog, one row per line. This is what
 /// `--list-diagnostics` prints and what `tests/diagnostics/catalog.txt`
 /// pins, so a change to the contract is a visible diff.
 pub fn list_catalog(out: &mut impl fmt::Write) -> fmt::Result {

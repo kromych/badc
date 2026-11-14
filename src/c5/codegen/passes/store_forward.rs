@@ -14,10 +14,10 @@
 //!   v = Load { addr=p, kind=I64 }        # -> uses of v become uses of s
 //! ```
 //!
-//! The pass is intra-block: the forwarding table resets at every block
-//! boundary, so a forward only fires when the store and the load sit in
-//! one straight-line run. Cross-block forwarding needs dominance and
-//! per-path availability and is left out.
+//! The tables run over an extended basic block: a block that one
+//! predecessor alone reaches starts from that block's tables at its end,
+//! and any other block starts empty. A merge would need per-path
+//! availability and is left out.
 //!
 //! Aliasing is tracked conservatively. Two locations are known distinct
 //! only when they share the same address value and their byte ranges do
@@ -37,10 +37,15 @@
 //!   - A signed sub-width load (`I8`/`I16`/`I32`) of a same-width store
 //!     becomes `Extend { value=s, kind }`; `narrow_store` writes the low
 //!     bytes and the load sign-extends them, which `Extend` reproduces.
-//!   - Unsigned sub-width loads and the floating kinds are not forwarded:
-//!     `Inst::Extend` does not zero-extend the unsigned widths (it
-//!     assumes a clean upper half), so reusing the stored value there
-//!     would be unsound.
+//!   - An `F64` load of an `F64` store from a floating register reuses the
+//!     stored value; an `F64` load of an 8-byte integer store, or an `I64`
+//!     load of such an `F64` store, becomes the bit-for-bit `FpCast`
+//!     (`BitsFp`, `FpBits`).
+//!   - Unsigned sub-width loads and `F32` loads are not forwarded:
+//!     `Inst::Extend` does not zero-extend the unsigned widths (it assumes
+//!     a clean upper half), and an `F32` load widens.
+//!   - A whole vector load of a store of the same vector kind reuses the
+//!     stored register, unless the stored value is an immediate.
 //! A load forwards from an earlier load only when the load kinds match
 //! exactly, so the extension already applied is the one wanted.
 //!
@@ -53,14 +58,16 @@
 //! `Mcpy`, or atomic can write it; its entries survive those
 //! instructions and die at an overlapping `StoreLocal`, at a
 //! call (a reload after the call is cheaper than keeping the value live
-//! across it), or at the block boundary. An address-exposed slot
+//! across it), or where control merges. An address-exposed slot
 //! (`LocalAddr` taken, e.g. by an asm output) still forwards, under a
 //! stricter discipline: any instruction that can write memory through a
 //! pointer also kills its entries. A volatile access neither forwards
 //! nor seeds on either discipline.
 
 use crate::c5::codegen::ssa::mem2reg::address_free_slots;
-use crate::c5::ir::{FunctionSsa, IndexExt, Inst, LoadKind, NO_VALUE, StoreKind, ValueId};
+use crate::c5::ir::{
+    FpCastKind, FunctionSsa, IndexExt, Inst, LoadKind, NO_VALUE, StoreKind, ValueId,
+};
 use alloc::collections::BTreeSet;
 use alloc::vec::Vec;
 
@@ -72,6 +79,8 @@ fn load_width(kind: LoadKind) -> u8 {
         LoadKind::I16 | LoadKind::U16 => 2,
         LoadKind::I8 | LoadKind::U8 => 1,
         LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => 16,
+        LoadKind::V256 => 32,
+        LoadKind::V512 => 64,
     }
 }
 
@@ -83,6 +92,8 @@ fn store_width(kind: StoreKind) -> u8 {
         StoreKind::I16 => 2,
         StoreKind::I8 => 1,
         StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => 16,
+        StoreKind::V256 => 32,
+        StoreKind::V512 => 64,
     }
 }
 
@@ -96,6 +107,48 @@ fn is_int_store(kind: StoreKind) -> bool {
     )
 }
 
+/// The origin an entry seeded by a store of `kind` carries: an integer
+/// store's value describes the loads [`reuse`] lists (`Some(None)`); a
+/// whole vector's or a double's FP register holds the bytes a load of that
+/// kind reads back; `None` for a store that seeds nothing.
+fn store_origin(func: &FunctionSsa, kind: StoreKind, value: ValueId) -> Option<Option<LoadKind>> {
+    let Some(inst) = func.insts.get(value as usize) else {
+        return is_int_store(kind).then_some(None);
+    };
+    let fp = crate::c5::codegen::ssa::reg_alloc::produces_fp_result(inst);
+    // A single-precision value is not the double a load reads back.
+    let single = func
+        .f32_values
+        .get(value as usize)
+        .copied()
+        .unwrap_or(false);
+    let double = fp && !single && !matches!(inst, Inst::Imm(_));
+    let vector = match kind {
+        // An integer store of an FP register's value writes its bits: an
+        // 8-byte one those of the double, a narrower one serves no load.
+        StoreKind::I64 | StoreKind::I32 | StoreKind::I16 | StoreKind::I8 if !fp => {
+            return Some(None);
+        }
+        StoreKind::V128 => LoadKind::V128,
+        StoreKind::V256 => LoadKind::V256,
+        StoreKind::V512 => LoadKind::V512,
+        // A double from an FP register reads back the same 64 bits.
+        StoreKind::F64 | StoreKind::I64 => LoadKind::F64,
+        _ => return None,
+    };
+    double.then_some(Some(vector))
+}
+
+/// Whether a load of `kind` reads a lane of a `bytes`-byte vector the
+/// targets extract: an integer or floating scalar, or a 16-byte half.
+fn lane_kind(kind: LoadKind, bytes: u8) -> bool {
+    match kind {
+        LoadKind::V128 => bytes == 32,
+        LoadKind::F80 | LoadKind::F128 | LoadKind::V256 | LoadKind::V512 => false,
+        _ => true,
+    }
+}
+
 /// Maximum instruction distance between the store or first load and the
 /// consuming load for forwarding to fire. Forwarding removes a reload
 /// but keeps the value live across this span; past a bound the extended
@@ -107,15 +160,27 @@ fn is_int_store(kind: StoreKind) -> bool {
 const MAX_FORWARD_DISTANCE: u32 = 16;
 
 /// Distance between two instruction indices in emitted instructions:
-/// the bound above is about the live range the forward extends, and a
-/// lifetime marker adds none. Returns a closure over a prefix count so
+/// the bound above is about the live range the forward extends, and
+/// neither a lifetime marker nor a pure value nothing reads adds any. Returns a closure over a prefix count so
 /// each query is O(1).
 fn emitted_span(func: &FunctionSsa) -> impl Fn(u32, usize) -> u32 + use<> {
+    let mut used = alloc::vec![false; func.insts.len()];
+    let mut mark = |v: ValueId| {
+        if let Some(u) = used.get_mut(v as usize) {
+            *u = true;
+        }
+    };
+    func.insts
+        .iter()
+        .for_each(|inst| inst.for_each_operand(&mut mark));
+    func.blocks
+        .iter()
+        .for_each(|b| b.terminator.for_each_operand(&mut mark));
     let mut prefix: Vec<u32> = Vec::with_capacity(func.insts.len() + 1);
     let mut n = 0u32;
-    for inst in &func.insts {
+    for (inst, used) in func.insts.iter().zip(used) {
         prefix.push(n);
-        n += u32::from(!inst.is_lifetime_marker());
+        n += u32::from(!inst.is_lifetime_marker() && (used || !inst.is_pure()));
     }
     prefix.push(n);
     move |from: u32, to: usize| {
@@ -127,7 +192,7 @@ fn emitted_span(func: &FunctionSsa) -> impl Fn(u32, usize) -> u32 + use<> {
     }
 }
 
-/// A known-available memory value within the current block.
+/// A known-available memory value within the current extended block.
 #[derive(Clone, Copy)]
 struct Entry {
     addr: ValueId,
@@ -145,7 +210,7 @@ struct Entry {
     load_kind: Option<LoadKind>,
 }
 
-/// A known-available frame-slot value within the current block: the
+/// A known-available frame-slot value within the current extended block: the
 /// `width` bytes at `disp` past slot `off`'s base, which may reach the next cell.
 #[derive(Clone, Copy)]
 struct SlotEntry {
@@ -171,12 +236,14 @@ struct IndexedEntry {
     load_kind: Option<LoadKind>,
 }
 
-/// How a load takes a location's available value: as it stands, or
-/// sign-extended from the load's width.
+/// How a load takes a location's available value: as it stands,
+/// sign-extended from the load's width, or its 64 bits moved to the other
+/// register file.
 #[derive(Clone, Copy)]
 enum Reuse {
     Direct,
     Extended,
+    Bits(FpCastKind),
 }
 
 /// The reuse open to a load of `kind` from an entry of origin `origin`
@@ -186,8 +253,10 @@ fn reuse(origin: Option<LoadKind>, kind: LoadKind) -> Option<Reuse> {
         None => match kind {
             LoadKind::I64 => Some(Reuse::Direct),
             LoadKind::I8 | LoadKind::I16 | LoadKind::I32 => Some(Reuse::Extended),
+            LoadKind::F64 => Some(Reuse::Bits(FpCastKind::BitsFp)),
             _ => None,
         },
+        Some(LoadKind::F64) if kind == LoadKind::I64 => Some(Reuse::Bits(FpCastKind::FpBits)),
         Some(k) => (k == kind).then_some(Reuse::Direct),
     }
 }
@@ -264,7 +333,47 @@ fn take(
             ));
             false
         }
+        Some(Reuse::Bits(kind)) => {
+            rewrites.push((i, Inst::FpCast { kind, value }));
+            false
+        }
         None => false,
+    }
+}
+
+/// An 8-byte store of a bit-for-bit `FpCast` writes the same bytes from
+/// the cast's operand, in that operand's register file.
+fn store_bits_directly(func: &mut FunctionSsa) {
+    for i in 0..func.insts.len() {
+        let (Inst::Store { value, kind, .. }
+        | Inst::StoreLocal { value, kind, .. }
+        | Inst::StoreIndexed { value, kind, .. }) = &func.insts[i]
+        else {
+            continue;
+        };
+        let retyped = match (*kind, &func.insts[*value as usize]) {
+            (
+                StoreKind::I64,
+                &Inst::FpCast {
+                    kind: FpCastKind::FpBits,
+                    value,
+                },
+            ) => (StoreKind::F64, value),
+            (
+                StoreKind::F64,
+                &Inst::FpCast {
+                    kind: FpCastKind::BitsFp,
+                    value,
+                },
+            ) => (StoreKind::I64, value),
+            _ => continue,
+        };
+        if let Inst::Store { value, kind, .. }
+        | Inst::StoreLocal { value, kind, .. }
+        | Inst::StoreIndexed { value, kind, .. } = &mut func.insts[i]
+        {
+            (*kind, *value) = retyped;
+        }
     }
 }
 
@@ -290,14 +399,112 @@ fn run_one(func: &mut FunctionSsa) {
     let exposed = exposed_slots(func, &slots);
     let span = emitted_span(func);
 
-    for block in &func.blocks {
-        let mut table: Vec<Entry> = Vec::new();
-        let mut indexed: Vec<IndexedEntry> = Vec::new();
-        let mut slot_table: Vec<SlotEntry> = Vec::new();
-        for idx in block.inst_range.clone() {
+    // A block one predecessor alone reaches starts from what that block
+    // ended with: the predecessor dominates it, and no other path enters.
+    let preds = crate::c5::codegen::ssa::mem2reg::predecessors(func);
+    type Tables = (Vec<Entry>, Vec<IndexedEntry>, Vec<SlotEntry>, Vec<Copied>);
+    let mut exits: Vec<Option<Tables>> = alloc::vec![None; func.blocks.len()];
+    for b in 0..func.blocks.len() {
+        let range = func.blocks[b].inst_range.clone();
+        let (mut table, mut indexed, mut slot_table, mut copies) = match preds[b].as_slice() {
+            [p] if *p as usize != b => exits[*p as usize].clone().unwrap_or_default(),
+            _ => Default::default(),
+        };
+        for idx in range {
             let i = idx as usize;
             if i >= func.insts.len() {
                 break;
+            }
+            // A copy of a copy reads the first source; the load then
+            // forwards from what that source holds.
+            for _ in 0..copies.len() {
+                let Some(load) = copy_source(func, &copies, i) else {
+                    break;
+                };
+                func.insts[i] = load;
+                any = true;
+            }
+            // A copy whose source bytes one store wrote whole -- through
+            // the source address, or into the frame slot it names -- stores
+            // that value at the destination. The copy's value, the
+            // destination address, is the destination's.
+            let whole = |kind: StoreKind, src_idx: u32| {
+                kind != StoreKind::F80 && span(src_idx, i) <= MAX_FORWARD_DISTANCE
+            };
+            if let Inst::Mcpy {
+                dst,
+                src,
+                size,
+                align,
+            } = func.insts[i]
+                && let Some((value, kind)) = table
+                    .iter()
+                    .find_map(|e| {
+                        let Inst::Store {
+                            addr, value, kind, ..
+                        } = func.insts[e.src_idx as usize]
+                        else {
+                            return None;
+                        };
+                        (e.addr == src
+                            && addr == src
+                            && e.disp == 0
+                            && value == e.value
+                            && i64::from(store_width(kind)) == size
+                            && whole(kind, e.src_idx))
+                        .then_some((value, kind))
+                    })
+                    .or_else(|| {
+                        let at = slot_bytes(func, src, 0)?;
+                        slot_table.iter().find_map(|e| {
+                            let Inst::StoreLocal { value, kind, .. } =
+                                func.insts[e.src_idx as usize]
+                            else {
+                                return None;
+                            };
+                            (e.off * 8 + i64::from(e.disp) == at
+                                && value == e.value
+                                && i64::from(store_width(kind)) == size
+                                && whole(kind, e.src_idx))
+                            .then_some((value, kind))
+                        })
+                    })
+            {
+                func.insts[i] = Inst::Store {
+                    addr: dst,
+                    disp: 0,
+                    value,
+                    kind,
+                    volatile: false,
+                    align: if i64::from(align) >= size {
+                        0
+                    } else {
+                        align as u8
+                    },
+                    pc_rel: false,
+                };
+                redirect[i] = Some(dst);
+                any = true;
+            }
+            if writes_memory(&func.insts[i]) {
+                copies.clear();
+            }
+            if let Inst::Mcpy {
+                dst,
+                src,
+                size,
+                align,
+            } = func.insts[i]
+                && let (base, at) = base_disp(func, dst, 0)
+                && let Some(&Inst::LocalAddr(off)) = func.insts.get(base as usize)
+            {
+                copies.push(Copied {
+                    off,
+                    at,
+                    size,
+                    src,
+                    align,
+                });
             }
             match &func.insts[i] {
                 // A volatile load must perform its own memory access
@@ -326,20 +533,16 @@ fn run_one(func: &mut FunctionSsa) {
                     if let Some(e) = hit {
                         any |= take(&mut redirect, &mut rewrites, i, e.value, e.load_kind, kind);
                     }
-                    // Record this load so a later identical one forwards.
-                    // The value a future load should reuse is the stored
-                    // value when this load redirected to it, otherwise
-                    // this load's own id.
-                    if !table
-                        .iter()
-                        .any(|e| e.addr == addr && e.disp == disp && e.width == w)
-                    {
-                        let value = redirect[i].unwrap_or(i as ValueId);
+                    // Record this load so a later identical one forwards:
+                    // one that did not forward stands in for an entry too
+                    // far to serve; one that did leaves the entry it reused.
+                    if redirect[i].is_none() {
+                        table.retain(|e| !(e.addr == addr && e.disp == disp && e.width == w));
                         table.push(Entry {
                             addr,
                             disp,
                             width: w,
-                            value,
+                            value: i as ValueId,
                             src_idx: idx,
                             load_kind: Some(kind),
                         });
@@ -372,14 +575,14 @@ fn run_one(func: &mut FunctionSsa) {
                     // A volatile store invalidates like any store but
                     // seeds no forward: a later load of the location
                     // must read memory (C99 6.7.3p6).
-                    if is_int_store(kind) && !volatile {
+                    if let Some(origin) = store_origin(func, kind, value).filter(|_| !volatile) {
                         table.push(Entry {
                             addr,
                             disp,
                             width: w,
                             value,
                             src_idx: idx,
-                            load_kind: None,
+                            load_kind: origin,
                         });
                     }
                 }
@@ -409,8 +612,74 @@ fn run_one(func: &mut FunctionSsa) {
                                 && span(e.src_idx, i) <= MAX_FORWARD_DISTANCE
                         })
                         .copied();
+                    // A lane of a vector the slot holds whole is that lane
+                    // of the vector's register.
+                    let lane = |e: &SlotEntry| {
+                        let at = disp - e.disp;
+                        e.off == off
+                            && matches!(e.load_kind, Some(LoadKind::V128 | LoadKind::V256))
+                            && lane_kind(kind, e.width)
+                            && at >= 0
+                            && at + i32::from(w) <= i32::from(e.width)
+                            && at % i32::from(w) == 0
+                            && span(e.src_idx, i) <= MAX_FORWARD_DISTANCE
+                    };
+                    // Two doubles the slot holds side by side are a 16-byte
+                    // vector: the high one inserted over the low one's
+                    // register.
+                    let half = |at: i32| {
+                        slot_table
+                            .iter()
+                            .rev()
+                            .find(|e| {
+                                e.off == off
+                                    && e.disp == at
+                                    && e.width == 8
+                                    && e.load_kind == Some(LoadKind::F64)
+                                    && span(e.src_idx, i) <= MAX_FORWARD_DISTANCE
+                            })
+                            .copied()
+                    };
+                    let pair = (kind == LoadKind::V128)
+                        .then(|| half(disp).zip(half(disp + 8)))
+                        .flatten();
                     if let Some(e) = hit {
-                        any |= take(&mut redirect, &mut rewrites, i, e.value, e.load_kind, kind);
+                        let direct =
+                            take(&mut redirect, &mut rewrites, i, e.value, e.load_kind, kind);
+                        any |= direct;
+                        // A load rewritten to an extension or a cast serves the
+                        // next load of its kind.
+                        if !direct {
+                            slot_table.push(SlotEntry {
+                                off,
+                                disp,
+                                width: w,
+                                value: i as ValueId,
+                                src_idx: idx,
+                                load_kind: Some(kind),
+                            });
+                        }
+                    } else if let Some((lo, hi)) = pair {
+                        rewrites.push((
+                            i,
+                            Inst::VecInsert {
+                                vec: lo.value,
+                                value: hi.value,
+                                off: 8,
+                                kind: StoreKind::F64,
+                                bytes: 16,
+                            },
+                        ));
+                    } else if let Some(e) = slot_table.iter().rev().find(|e| lane(e)).copied() {
+                        rewrites.push((
+                            i,
+                            Inst::VecExtract {
+                                vec: e.value,
+                                off: (disp - e.disp) as u8,
+                                kind,
+                                bytes: e.width,
+                            },
+                        ));
                     } else {
                         slot_table.retain(|e| !(same(e) && e.load_kind == Some(kind)));
                         slot_table.push(SlotEntry {
@@ -445,9 +714,8 @@ fn run_one(func: &mut FunctionSsa) {
                     let w = store_width(kind);
                     slot_table
                         .retain(|e| !overlaps64(e.off * 8 + i64::from(e.disp), e.width, at, w));
-                    if (slots.contains(&off) || exposed.contains(&off))
-                        && is_int_store(kind)
-                        && !volatile
+                    if let Some(origin) = store_origin(func, kind, value)
+                        .filter(|_| (slots.contains(&off) || exposed.contains(&off)) && !volatile)
                     {
                         slot_table.push(SlotEntry {
                             off,
@@ -455,7 +723,7 @@ fn run_one(func: &mut FunctionSsa) {
                             width: store_width(kind),
                             value,
                             src_idx: idx,
-                            load_kind: None,
+                            load_kind: origin,
                         });
                     }
                 }
@@ -478,6 +746,13 @@ fn run_one(func: &mut FunctionSsa) {
                 | Inst::TlsAddr(_)
                 | Inst::LifetimeEnd(_)
                 | Inst::Binop { .. }
+                | Inst::SimdVal { .. }
+                | Inst::VecBinop { .. }
+                | Inst::VecInsert { .. }
+                | Inst::VecSplat { .. }
+                | Inst::VecConst { .. }
+                | Inst::VecExtract { .. }
+                | Inst::Select { .. }
                 | Inst::BinopI { .. }
                 | Inst::Neg(_)
                 | Inst::Fneg(_)
@@ -520,14 +795,15 @@ fn run_one(func: &mut FunctionSsa) {
                     if let Some(e) = hit {
                         any |= take(&mut redirect, &mut rewrites, i, e.value, e.load_kind, kind);
                     }
-                    if !indexed.iter().any(same) {
+                    if redirect[i].is_none() {
+                        indexed.retain(|e| !same(e));
                         indexed.push(IndexedEntry {
                             base,
                             index,
                             index_ext: ext,
                             scale,
                             width: w,
-                            value: redirect[i].unwrap_or(i as ValueId),
+                            value: i as ValueId,
                             src_idx: idx,
                             load_kind: Some(kind),
                         });
@@ -547,7 +823,7 @@ fn run_one(func: &mut FunctionSsa) {
                     table.clear();
                     indexed.clear();
                     slot_table.retain(|e| !exposed.contains(&e.off));
-                    if is_int_store(*kind) {
+                    if let Some(origin) = store_origin(func, *kind, *value) {
                         indexed.push(IndexedEntry {
                             base: *base,
                             index: *index,
@@ -556,10 +832,13 @@ fn run_one(func: &mut FunctionSsa) {
                             width: store_width(*kind),
                             value: *value,
                             src_idx: idx,
-                            load_kind: None,
+                            load_kind: origin,
                         });
                     }
                 }
+                // A zero alloca slot marks a function with no alloca: it
+                // writes nothing.
+                Inst::AllocaInit(0) => {}
                 // Anything that can write through a pointer the pass
                 // does not track clears the pointer tables. Forwardable
                 // slot entries survive (no address value); exposed slot
@@ -585,7 +864,7 @@ fn run_one(func: &mut FunctionSsa) {
                 | Inst::CallIndirect { .. }
                 | Inst::CallExt { .. }
                 | Inst::Intrinsic { .. }
-                | Inst::X86Simd { .. }
+                | Inst::Simd { .. }
                 | Inst::InlineAsm { .. }
                 | Inst::TailExt(_) => {
                     table.clear();
@@ -594,10 +873,12 @@ fn run_one(func: &mut FunctionSsa) {
                 }
             }
         }
+        exits[b] = Some((table, indexed, slot_table, copies));
     }
     for (idx, inst) in rewrites {
         func.insts[idx] = inst;
     }
+    store_bits_directly(func);
     if !any {
         return;
     }
@@ -645,7 +926,13 @@ fn const_for_load(bits: i64, kind: LoadKind) -> Option<i64> {
         LoadKind::U16 => Some(bits as u16 as i64),
         LoadKind::I8 => Some(bits as i8 as i64),
         LoadKind::U8 => Some(bits as u8 as i64),
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => None,
+        LoadKind::F32
+        | LoadKind::F64
+        | LoadKind::F80
+        | LoadKind::F128
+        | LoadKind::V128
+        | LoadKind::V256
+        | LoadKind::V512 => None,
     }
 }
 
@@ -702,6 +989,196 @@ fn slot_bytes(func: &FunctionSsa, addr: ValueId, disp: i32) -> Option<i64> {
     }
 }
 
+/// `size` bytes of frame object `off` from byte `at` on, copied from `src`
+/// at the copy's alignment `align`, while nothing has written memory since:
+/// a load of the range reads the source.
+#[derive(Clone, Copy, Debug)]
+struct Copied {
+    off: i64,
+    at: i64,
+    size: i64,
+    src: ValueId,
+    align: u32,
+}
+
+/// The frame load of the copy source a frame load `i` within one of
+/// `copies` becomes, when the source is a frame object: the same bytes of
+/// it, at an alignment the copy proves at that offset. A source behind a
+/// pointer would keep the pointer live to the load.
+fn copy_source(func: &FunctionSsa, copies: &[Copied], i: usize) -> Option<Inst> {
+    let Inst::LoadLocal {
+        off,
+        disp,
+        kind,
+        volatile: false,
+    } = func.insts[i]
+    else {
+        return None;
+    };
+    let (at, w) = (i64::from(disp), i64::from(load_width(kind)));
+    let c = copies
+        .iter()
+        .rev()
+        .find(|c| c.off == off && at >= c.at && at + w <= c.at + c.size)?;
+    let delta = at - c.at;
+    let proven = match delta {
+        0 => c.align,
+        d => c.align.min(1 << d.trailing_zeros()),
+    };
+    let (s, sat) = base_disp(func, c.src, i32::try_from(delta).ok()?);
+    match func.insts.get(s as usize)? {
+        &Inst::LocalAddr(off) if i64::from(proven) >= w => Some(Inst::LoadLocal {
+            off,
+            disp: i32::try_from(sat).ok()?,
+            kind,
+            volatile: false,
+        }),
+        _ => None,
+    }
+}
+
+/// Whether `inst` may change memory: any store, fill, copy, call, atomic,
+/// asm statement, alloca, lifetime end or SIMD instruction with a memory
+/// destination.
+fn writes_memory(inst: &Inst) -> bool {
+    !matches!(
+        inst,
+        Inst::Load { .. }
+            | Inst::LoadLocal { .. }
+            | Inst::LoadIndexed { .. }
+            | Inst::SegLoad { .. }
+            | Inst::Imm(_)
+            | Inst::Undef
+            | Inst::ImmData(_)
+            | Inst::ImmCode(_)
+            | Inst::ImmExtCode(_)
+            | Inst::BlockAddr(_)
+            | Inst::LocalAddr(_)
+            | Inst::TlsAddr(_)
+            | Inst::AllocaInit(0)
+            | Inst::Binop { .. }
+            | Inst::BinopI { .. }
+            | Inst::Neg(_)
+            | Inst::Fneg(_)
+            | Inst::Fma { .. }
+            | Inst::MulAdd { .. }
+            | Inst::ShiftOp { .. }
+            | Inst::BitField { .. }
+            | Inst::Extend { .. }
+            | Inst::Bswap { .. }
+            | Inst::BitCount { .. }
+            | Inst::Copy { .. }
+            | Inst::FpCast { .. }
+            | Inst::ParamRef { .. }
+            | Inst::ParamPart { .. }
+            | Inst::SimdVal { .. }
+            | Inst::VecBinop { .. }
+            | Inst::VecInsert { .. }
+            | Inst::VecSplat { .. }
+            | Inst::VecConst { .. }
+            | Inst::VecExtract { .. }
+            | Inst::Select { .. }
+            | Inst::Phi { .. }
+    )
+}
+
+/// Drop each store or zero fill a later one in its block overwrites, with
+/// no access between that may read the bytes: nothing reads what it
+/// writes. Two writes through one base ([`base_disp`]) compare by their
+/// byte ranges. A load through that base keeps the stores whose bytes it
+/// reads; any other read of memory -- a load through another base or of a
+/// slot, a call, an asm statement, a copy, a volatile or atomic access --
+/// keeps every earlier store, and a store between, which only writes,
+/// keeps none. A store whose value something reads through its id stays.
+/// A function with a `__try` region, whose handlers may read memory a
+/// fault between the stores leaves, keeps its stores.
+pub(crate) fn drop_overwritten_stores(func: &mut FunctionSsa) {
+    if func.has_seh() {
+        return;
+    }
+    let mut uses = crate::c5::codegen::ssa::reg_alloc::compute_use_counts(func);
+    for b in &func.blocks {
+        if let Some(u) = uses.get_mut(b.exit_acc as usize) {
+            *u += 1;
+        }
+    }
+    let reads = |inst: &Inst| {
+        matches!(
+            inst,
+            Inst::Load { .. }
+                | Inst::LoadLocal { .. }
+                | Inst::LoadIndexed { .. }
+                | Inst::SegLoad { .. }
+        )
+    };
+    let mut dead = Vec::new();
+    for block in &func.blocks {
+        // The byte ranges the block's later stores write, by base.
+        let mut written: Vec<(ValueId, i64, i64)> = Vec::new();
+        for i in block.inst_range.clone().rev() {
+            let (addr, disp, w, used) = match func.insts[i as usize] {
+                Inst::Store {
+                    addr,
+                    disp,
+                    kind,
+                    volatile: false,
+                    pc_rel: false,
+                    ..
+                } => (
+                    addr,
+                    disp,
+                    i64::from(store_width(kind)),
+                    uses[i as usize] > 0,
+                ),
+                Inst::Mzero { dst, size, .. } => (dst, 0, size, false),
+                _ => (NO_VALUE, 0, 0, false),
+            };
+            if addr != NO_VALUE {
+                let (base, at) = base_disp(func, addr, disp);
+                if written
+                    .iter()
+                    .any(|&(b, a, aw)| b == base && a <= at && at + w <= a + aw)
+                {
+                    if !used {
+                        dead.push(i);
+                    }
+                } else {
+                    written.push((base, at, w));
+                }
+                continue;
+            }
+            match func.insts[i as usize] {
+                Inst::Store {
+                    volatile: false, ..
+                }
+                | Inst::StoreLocal {
+                    volatile: false, ..
+                } => {}
+                Inst::Load {
+                    addr,
+                    disp,
+                    kind,
+                    volatile: false,
+                    pc_rel: false,
+                    ..
+                } if uses[i as usize] > 0 => {
+                    let (base, at) = base_disp(func, addr, disp);
+                    let w = i64::from(load_width(kind));
+                    written.retain(|&(b, a, aw)| b == base && !(a < at + w && at < a + aw));
+                }
+                // A plain load nothing reads is not emitted.
+                ref inst
+                    if !writes_memory(inst)
+                        && (!reads(inst) || (uses[i as usize] == 0 && inst.is_pure())) => {}
+                _ => written.clear(),
+            }
+        }
+    }
+    for i in dead {
+        func.insts[i as usize] = Inst::Imm(0);
+    }
+}
+
 /// A location the block prefix has written a known constant to.
 #[derive(Clone, Copy, PartialEq)]
 struct ConstEntry {
@@ -741,7 +1218,7 @@ fn stored_const(
 ///
 /// This is the memory half of constant propagation: the value a load
 /// yields is decided by the store that last wrote the location, so a
-/// location the function itself initialised with a constant makes the
+/// location the function itself initialized with a constant makes the
 /// load a constant (C99 6.5p2 -- the store and the load are separated
 /// by a sequence point and nothing between them writes the object).
 /// It runs inside the [`super::simplify_branches`] fixed point beside
@@ -882,6 +1359,13 @@ pub(crate) fn fold_const_loads(func: &mut FunctionSsa) -> bool {
                 | Inst::TlsAddr(_)
                 | Inst::LifetimeEnd(_)
                 | Inst::Binop { .. }
+                | Inst::SimdVal { .. }
+                | Inst::VecBinop { .. }
+                | Inst::VecInsert { .. }
+                | Inst::VecSplat { .. }
+                | Inst::VecConst { .. }
+                | Inst::VecExtract { .. }
+                | Inst::Select { .. }
                 | Inst::BinopI { .. }
                 | Inst::Neg(_)
                 | Inst::Fneg(_)
@@ -901,6 +1385,7 @@ pub(crate) fn fold_const_loads(func: &mut FunctionSsa) -> bool {
                 | Inst::AsmOut { .. }
                 | Inst::AggParts { .. }
                 | Inst::Phi { .. } => {}
+                Inst::AllocaInit(0) => {}
                 Inst::StoreIndexed { .. }
                 | Inst::Mcpy { .. }
                 | Inst::Mzero { .. }
@@ -922,7 +1407,7 @@ pub(crate) fn fold_const_loads(func: &mut FunctionSsa) -> bool {
                 | Inst::CallIndirect { .. }
                 | Inst::CallExt { .. }
                 | Inst::Intrinsic { .. }
-                | Inst::X86Simd { .. }
+                | Inst::Simd { .. }
                 | Inst::InlineAsm { .. }
                 | Inst::TailExt(_) => {
                     table.clear();
@@ -945,7 +1430,9 @@ pub(crate) fn fold_const_loads(func: &mut FunctionSsa) -> bool {
 #[cfg(test)]
 mod tests {
     use super::run_one;
-    use crate::c5::ir::{Block, FunctionSsa, IndexExt, Inst, LoadKind, StoreKind, Terminator};
+    use crate::c5::ir::{
+        Block, FpCastKind, FunctionSsa, IndexExt, Inst, LoadKind, StoreKind, Terminator,
+    };
     use alloc::vec::Vec;
 
     fn fresh(insts: Vec<Inst>, term: Terminator, exit_acc: u32) -> FunctionSsa {
@@ -953,6 +1440,7 @@ mod tests {
         FunctionSsa {
             seh_scopes: Vec::new(),
             block_seh: Vec::new(),
+            predicted: Vec::new(),
             funclet_slots: Vec::new(),
             name: alloc::string::String::new(),
             ent_pc: 0,
@@ -976,7 +1464,7 @@ mod tests {
             is_weak: false,
             is_internal: false,
             const_params: 0,
-            inst_src: alloc::vec![(0, 0); n],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); n],
             f32_values: alloc::vec![false; n],
             cmp32: Vec::new(),
             div32: Vec::new(),
@@ -996,6 +1484,8 @@ mod tests {
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
             array_slots: Vec::new(),
+            vector_objects: Vec::new(),
+            owned_params: Vec::new(),
             over_aligned: Default::default(),
             frame_align: 0,
             realign_region_bytes: 0,
@@ -1350,6 +1840,223 @@ mod tests {
     /// A block copy between the store and the load clears the table: the
     /// copy can write through the destination pointer, so the reload is
     /// not forwarded.
+    /// A store through `p` (v0) a later store to the same bytes overwrites
+    /// goes, unless something between may read them: a load through
+    /// another base `q` (v1), a volatile load, a reader of the store's own
+    /// value; a narrower later store covers only part of it.
+    #[test]
+    fn a_store_overwritten_before_any_read_goes() {
+        use crate::c5::ir::NO_VALUE;
+        let store = |disp, value, kind| Inst::Store {
+            addr: 0,
+            disp,
+            value,
+            kind,
+            volatile: false,
+            align: 0,
+            pc_rel: false,
+        };
+        let load = |addr, disp, volatile| Inst::Load {
+            addr,
+            disp,
+            kind: LoadKind::I64,
+            volatile,
+            align: 0,
+            pc_rel: false,
+        };
+        // Whether the first store (v4) survives `between` and a store of
+        // `last` at displacement `at`; the function returns `ret`.
+        let survives = |between: Option<Inst>, at: i32, last: StoreKind, ret: u32| {
+            let mut insts = alloc::vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64
+                },
+                Inst::ParamRef {
+                    idx: 1,
+                    kind: LoadKind::I64
+                },
+                Inst::Imm(1),
+                Inst::Imm(2),
+                store(0, 2, StoreKind::I64),
+            ];
+            insts.extend(between);
+            insts.push(store(at, 3, last));
+            let mut f = fresh(insts, Terminator::Return(ret), NO_VALUE);
+            super::drop_overwritten_stores(&mut f);
+            matches!(f.insts[4], Inst::Store { .. })
+        };
+        assert!(!survives(None, 0, StoreKind::I64, NO_VALUE));
+        assert!(!survives(Some(load(0, 8, false)), 0, StoreKind::I64, 5));
+        assert!(survives(Some(load(1, 0, false)), 0, StoreKind::I64, 5));
+        assert!(survives(Some(load(0, 0, false)), 0, StoreKind::I64, 5));
+        assert!(survives(
+            Some(load(0, 8, true)),
+            0,
+            StoreKind::I64,
+            NO_VALUE
+        ));
+        assert!(!survives(
+            Some(load(1, 0, false)),
+            0,
+            StoreKind::I64,
+            NO_VALUE
+        ));
+        assert!(survives(None, 4, StoreKind::I32, NO_VALUE));
+        assert!(survives(None, 0, StoreKind::I64, 4));
+    }
+
+    /// A zero fill a later store covers goes, as does a store a later zero
+    /// fill covers; a fill the store covers only in part stays.
+    #[test]
+    fn a_zero_fill_is_a_store_to_overwrite() {
+        use crate::c5::ir::NO_VALUE;
+        let store = |kind| Inst::Store {
+            addr: 0,
+            disp: 0,
+            value: 1,
+            kind,
+            volatile: false,
+            align: 0,
+            pc_rel: false,
+        };
+        let zero = |size| Inst::Mzero {
+            dst: 0,
+            size,
+            align: 8,
+        };
+        let params = || {
+            alloc::vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64
+                },
+                Inst::ParamRef {
+                    idx: 1,
+                    kind: LoadKind::I64
+                },
+            ]
+        };
+        let first_goes = |first: Inst, last: Inst| {
+            let mut insts = params();
+            insts.extend([first, last]);
+            let mut f = fresh(insts, Terminator::Return(NO_VALUE), NO_VALUE);
+            super::drop_overwritten_stores(&mut f);
+            matches!(f.insts[2], Inst::Imm(0))
+        };
+        assert!(first_goes(zero(8), store(StoreKind::I64)));
+        assert!(!first_goes(zero(16), store(StoreKind::I64)));
+        assert!(first_goes(store(StoreKind::I32), zero(8)));
+    }
+
+    /// A copy of the bytes one store just wrote whole stores that value at
+    /// the destination, and its value is the destination address; a copy
+    /// wider than the store stays.
+    #[test]
+    fn a_copy_of_a_stored_word_stores_the_word() {
+        let copy_of = |size| {
+            let mut f = fresh(
+                alloc::vec![
+                    Inst::ParamRef {
+                        idx: 0,
+                        kind: LoadKind::I64
+                    },
+                    Inst::ParamRef {
+                        idx: 1,
+                        kind: LoadKind::I64
+                    },
+                    Inst::Store {
+                        addr: 0,
+                        disp: 0,
+                        value: 1,
+                        kind: StoreKind::I32,
+                        volatile: false,
+                        align: 0,
+                        pc_rel: false,
+                    },
+                    Inst::Mcpy {
+                        dst: 1,
+                        src: 0,
+                        size,
+                        align: 1,
+                    },
+                ],
+                Terminator::Return(3),
+                3,
+            );
+            run_one(&mut f);
+            f
+        };
+        let f = copy_of(4);
+        assert!(matches!(
+            f.insts[3],
+            Inst::Store {
+                addr: 1,
+                disp: 0,
+                value: 1,
+                kind: StoreKind::I32,
+                align: 1,
+                ..
+            }
+        ));
+        assert!(matches!(f.blocks[0].terminator, Terminator::Return(1)));
+        assert!(matches!(copy_of(8).insts[3], Inst::Mcpy { .. }));
+    }
+
+    /// A copy of a frame slot a `StoreLocal` just wrote whole into another
+    /// slot stores the value there, and a later read of the first slot
+    /// still forwards: the copy wrote only the destination.
+    #[test]
+    fn a_copy_of_a_stored_slot_stores_the_value() {
+        let mut f = fresh(
+            alloc::vec![
+                Inst::LocalAddr(-3),
+                Inst::ParamRef {
+                    idx: 1,
+                    kind: LoadKind::I64
+                },
+                Inst::StoreLocal {
+                    off: -1,
+                    disp: 0,
+                    value: 1,
+                    kind: StoreKind::I64,
+                    volatile: false,
+                    nsw: false,
+                },
+                Inst::LocalAddr(-1),
+                Inst::Mcpy {
+                    dst: 0,
+                    src: 3,
+                    size: 8,
+                    align: 8,
+                },
+                Inst::LoadLocal {
+                    off: -1,
+                    disp: 0,
+                    kind: LoadKind::I64,
+                    volatile: false,
+                },
+            ],
+            Terminator::Return(5),
+            5,
+        );
+        run_one(&mut f);
+        assert!(
+            matches!(
+                f.insts[4],
+                Inst::Store {
+                    addr: 0,
+                    value: 1,
+                    kind: StoreKind::I64,
+                    ..
+                }
+            ),
+            "{:?}",
+            f.insts[4]
+        );
+        assert!(matches!(f.blocks[0].terminator, Terminator::Return(1)));
+    }
+
     #[test]
     fn clobber_between_store_and_load_blocks_forward() {
         let mut f = fresh(
@@ -1583,6 +2290,217 @@ mod tests {
             matches!(f.blocks[0].terminator, Terminator::Return(0)),
             "the slot reload should redirect to the stored value v0",
         );
+    }
+
+    /// A whole vector stored to a slot and reloaded as the same vector kind
+    /// is the stored register's value; an immediate vector, a pattern in a
+    /// general register, still reads memory.
+    #[test]
+    fn a_vector_slot_reload_redirects_to_the_stored_vector() {
+        for (value, forwards) in [
+            (
+                Inst::ParamPart {
+                    idx: 0,
+                    part: 0,
+                    kind: LoadKind::V128,
+                },
+                true,
+            ),
+            (Inst::Imm(0), false),
+        ] {
+            let mut f = fresh(
+                alloc::vec![
+                    value,
+                    Inst::StoreLocal {
+                        disp: 0,
+                        off: -2,
+                        value: 0,
+                        kind: StoreKind::V128,
+                        volatile: false,
+                        nsw: false,
+                    },
+                    Inst::LoadLocal {
+                        disp: 0,
+                        off: -2,
+                        kind: LoadKind::V128,
+                        volatile: false,
+                    },
+                ],
+                Terminator::Return(2),
+                2,
+            );
+            run_one(&mut f);
+            let redirected = matches!(f.blocks[0].terminator, Terminator::Return(0));
+            assert_eq!(redirected, forwards, "{:?}", f.insts[0]);
+        }
+    }
+
+    /// The forward distance counts the instructions the emit performs: a
+    /// run of constants nothing reads leaves the reload in reach, the same
+    /// run of live arithmetic does not.
+    #[test]
+    fn unread_constants_add_no_forward_distance() {
+        for (live, forwards) in [(false, true), (true, false)] {
+            let mut insts = alloc::vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64
+                },
+                Inst::StoreLocal {
+                    disp: 0,
+                    off: -1,
+                    value: 0,
+                    kind: StoreKind::I64,
+                    volatile: false,
+                    nsw: false,
+                },
+            ];
+            for k in 0..20 {
+                insts.push(if live {
+                    Inst::BinopI {
+                        op: crate::c5::ir::BinOp::Add,
+                        lhs: if k == 0 {
+                            0
+                        } else {
+                            insts.len() as ValueId - 1
+                        },
+                        rhs_imm: 1,
+                    }
+                } else {
+                    Inst::Imm(0)
+                });
+            }
+            let chain = insts.len() as ValueId - 1;
+            insts.push(Inst::LoadLocal {
+                disp: 0,
+                off: -1,
+                kind: LoadKind::I64,
+                volatile: false,
+            });
+            let load = chain + 1;
+            insts.push(Inst::Binop {
+                op: crate::c5::ir::BinOp::Add,
+                lhs: chain,
+                rhs: load,
+            });
+            let n = insts.len() as ValueId - 1;
+            let mut f = fresh(insts, Terminator::Return(n), n);
+            run_one(&mut f);
+            let forwarded = matches!(f.insts[n as usize], Inst::Binop { rhs: 0, .. });
+            assert_eq!(forwarded, forwards, "live arithmetic in between: {live}");
+        }
+    }
+
+    /// A frame load of bytes a block copy filled from a frame object reads
+    /// that object at the same offset. A source behind a pointer, or a
+    /// store after the copy, keeps the frame load.
+    #[test]
+    fn a_load_of_copied_bytes_reads_the_copy_source() {
+        for (src, stored, want) in [
+            (
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64,
+                },
+                false,
+                Inst::LoadLocal {
+                    off: -2,
+                    disp: 8,
+                    kind: LoadKind::I64,
+                    volatile: false,
+                },
+            ),
+            (
+                Inst::LocalAddr(-6),
+                false,
+                Inst::LoadLocal {
+                    off: -6,
+                    disp: 8,
+                    kind: LoadKind::I64,
+                    volatile: false,
+                },
+            ),
+            (
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64,
+                },
+                true,
+                Inst::LoadLocal {
+                    off: -2,
+                    disp: 8,
+                    kind: LoadKind::I64,
+                    volatile: false,
+                },
+            ),
+        ] {
+            let mut f = fresh(
+                alloc::vec![
+                    src,
+                    Inst::LocalAddr(-2),
+                    Inst::Mcpy {
+                        dst: 1,
+                        src: 0,
+                        size: 16,
+                        align: 8,
+                    },
+                    if stored {
+                        Inst::StoreLocal {
+                            disp: 0,
+                            off: -4,
+                            value: 0,
+                            kind: StoreKind::I64,
+                            volatile: false,
+                            nsw: false,
+                        }
+                    } else {
+                        Inst::Imm(0)
+                    },
+                    Inst::LoadLocal {
+                        off: -2,
+                        disp: 8,
+                        kind: LoadKind::I64,
+                        volatile: false,
+                    },
+                ],
+                Terminator::Return(4),
+                4,
+            );
+            run_one(&mut f);
+            assert_eq!(format!("{:?}", f.insts[4]), format!("{want:?}"));
+        }
+    }
+
+    /// Each frame object has its own number, whatever its size: a copy into
+    /// the 16-byte object -2 leaves a load of object -1 reading that object.
+    #[test]
+    fn a_copy_into_one_object_leaves_the_next_one_alone() {
+        let load = Inst::LoadLocal {
+            off: -1,
+            disp: 0,
+            kind: LoadKind::I64,
+            volatile: false,
+        };
+        let mut f = fresh(
+            alloc::vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64,
+                },
+                Inst::LocalAddr(-2),
+                Inst::Mcpy {
+                    dst: 1,
+                    src: 0,
+                    size: 16,
+                    align: 8,
+                },
+                load.clone(),
+            ],
+            Terminator::Return(3),
+            3,
+        );
+        run_one(&mut f);
+        assert_eq!(format!("{:?}", f.insts[3]), format!("{load:?}"));
     }
 
     /// A call between the slot store and the reload blocks the forward:
@@ -2134,10 +3052,274 @@ mod tests {
         assert!(matches!(f.blocks[0].terminator, Terminator::Return(4)));
     }
 
+    use crate::c5::ir::{BinOp, NO_VALUE, ValueId};
+
+    fn load_of(addr: ValueId) -> Inst {
+        Inst::Load {
+            addr,
+            disp: 0,
+            kind: LoadKind::I64,
+            volatile: false,
+            align: 0,
+            pc_rel: false,
+        }
+    }
+
+    /// `insts` over two blocks split at `split`, the first jumping to the
+    /// second, which returns `ret`.
+    fn two_blocks(insts: Vec<Inst>, split: u32, ret: ValueId) -> FunctionSsa {
+        let n = insts.len() as u32;
+        let mut f = fresh(insts, Terminator::Return(ret), ret);
+        let block = |r: core::ops::Range<u32>, terminator| crate::c5::ir::Block {
+            start_pc: 0,
+            inst_range: r,
+            terminator,
+            exit_acc: NO_VALUE,
+        };
+        f.blocks = alloc::vec![
+            block(0..split, Terminator::Jmp(1)),
+            block(split..n, Terminator::Return(ret)),
+        ];
+        f
+    }
+
+    /// A block its one predecessor alone reaches reuses a load that block
+    /// made.
+    #[test]
+    fn a_load_forwards_into_a_block_one_predecessor_reaches() {
+        let param = Inst::ParamRef {
+            idx: 0,
+            kind: LoadKind::I64,
+        };
+        let add = Inst::Binop {
+            op: BinOp::Add,
+            lhs: 1,
+            rhs: 2,
+        };
+        let mut f = two_blocks(alloc::vec![param, load_of(0), load_of(0), add], 2, 3);
+        run_one(&mut f);
+        assert!(
+            matches!(f.insts[3], Inst::Binop { lhs: 1, rhs: 1, .. }),
+            "{:?}",
+            f.insts[3]
+        );
+    }
+
+    /// An entry too far to serve gives way to the next load of its
+    /// location, which the load after it then reuses.
+    #[test]
+    fn a_load_stands_in_for_an_entry_too_far_to_serve() {
+        let param = Inst::ParamRef {
+            idx: 0,
+            kind: LoadKind::I64,
+        };
+        let mut insts = alloc::vec![param, load_of(0)];
+        insts.extend(live_filler(2));
+        let near = insts.len() as ValueId;
+        insts.extend([load_of(0), load_of(0)]);
+        insts.push(Inst::Binop {
+            op: BinOp::Sub,
+            lhs: near,
+            rhs: near + 1,
+        });
+        let ret = near + 2;
+        let mut f = two_blocks(insts, 2, ret);
+        run_one(&mut f);
+        assert!(
+            matches!(f.insts[ret as usize], Inst::Binop { lhs, rhs, .. } if lhs == near && rhs == near),
+            "{:?}",
+            f.insts[ret as usize]
+        );
+    }
+
+    /// Arithmetic from the parameter `v0`, starting at value `start`, that
+    /// the emit performs past the forward bound: each step reads the one
+    /// before it.
+    fn live_filler(start: ValueId) -> Vec<Inst> {
+        (0..super::MAX_FORWARD_DISTANCE + 2)
+            .map(|k| Inst::BinopI {
+                op: BinOp::Add,
+                lhs: if k == 0 { 0 } else { start + k - 1 },
+                rhs_imm: 1,
+            })
+            .collect()
+    }
+
     #[test]
     fn indexed_forward_is_bounded_by_distance() {
-        let filler = alloc::vec![Inst::Imm(0); super::MAX_FORWARD_DISTANCE as usize + 1];
+        let filler = live_filler(4);
         let (v, _) = indexed_reload(load_indexed(0, 1, 1, LoadKind::I8), filler, LoadKind::I8);
         assert_ne!(v, 3, "a reuse past the bound reloads");
+    }
+
+    /// A double stored from a floating register and read back as a 64-bit
+    /// integer, or the reverse, is the bit-for-bit cast of the stored
+    /// value, and an 8-byte store of that cast stores its operand.
+    #[test]
+    fn a_load_of_the_other_register_file_moves_the_bits() {
+        for (param, stored, loaded, cast) in [
+            (
+                LoadKind::F64,
+                StoreKind::F64,
+                LoadKind::I64,
+                FpCastKind::FpBits,
+            ),
+            (
+                LoadKind::I64,
+                StoreKind::I64,
+                LoadKind::F64,
+                FpCastKind::BitsFp,
+            ),
+        ] {
+            let store = |off, value, kind| Inst::StoreLocal {
+                off,
+                disp: 0,
+                value,
+                kind,
+                volatile: false,
+                nsw: false,
+            };
+            let restored = if stored == StoreKind::F64 {
+                StoreKind::I64
+            } else {
+                StoreKind::F64
+            };
+            let mut f = fresh(
+                alloc::vec![
+                    Inst::ParamRef {
+                        idx: 0,
+                        kind: param
+                    },
+                    store(-2, 0, stored),
+                    Inst::LoadLocal {
+                        off: -2,
+                        disp: 0,
+                        kind: loaded,
+                        volatile: false,
+                    },
+                    store(-3, 2, restored),
+                ],
+                Terminator::Return(2),
+                4,
+            );
+            run_one(&mut f);
+            assert!(
+                matches!(f.insts[2], Inst::FpCast { kind, value: 0 } if kind == cast),
+                "{cast:?}: {:?}",
+                f.insts[2]
+            );
+            assert!(
+                matches!(f.insts[3], Inst::StoreLocal { value: 0, kind, .. } if kind == stored),
+                "{cast:?}: {:?}",
+                f.insts[3]
+            );
+        }
+    }
+
+    /// An integer store of a double held in an FP register writes the
+    /// double's bits: an 8-byte reload of either kind reads them, and a
+    /// narrower one reads memory.
+    #[test]
+    fn an_integer_store_of_a_double_is_the_double() {
+        for (stored, loaded, want) in [
+            (StoreKind::I64, LoadKind::I64, Some(FpCastKind::FpBits)),
+            (StoreKind::I64, LoadKind::F64, None),
+            (StoreKind::I32, LoadKind::I32, None),
+        ] {
+            let mut f = fresh(
+                alloc::vec![
+                    Inst::ParamRef {
+                        idx: 0,
+                        kind: LoadKind::F64
+                    },
+                    Inst::StoreLocal {
+                        off: -2,
+                        disp: 0,
+                        value: 0,
+                        kind: stored,
+                        volatile: false,
+                        nsw: false,
+                    },
+                    Inst::LoadLocal {
+                        off: -2,
+                        disp: 0,
+                        kind: loaded,
+                        volatile: false,
+                    },
+                ],
+                Terminator::Return(2),
+                2,
+            );
+            run_one(&mut f);
+            let ret = match f.blocks[0].terminator {
+                Terminator::Return(r) => r,
+                _ => unreachable!(),
+            };
+            match want {
+                Some(cast) => assert!(
+                    ret == 2
+                        && matches!(f.insts[2], Inst::FpCast { kind, value: 0 } if kind == cast),
+                    "{stored:?} -> {loaded:?}: {:?}",
+                    f.insts[2]
+                ),
+                None if stored == StoreKind::I32 => assert!(
+                    ret == 2 && matches!(f.insts[2], Inst::LoadLocal { .. }),
+                    "{stored:?} -> {loaded:?}: {:?}",
+                    f.insts[2]
+                ),
+                None => assert_eq!(ret, 0, "{stored:?} -> {loaded:?} reuses the double"),
+            }
+        }
+    }
+
+    /// A reload rewritten to the cast or the extension of the stored value
+    /// serves the next reload of its kind.
+    #[test]
+    fn a_rewritten_reload_serves_the_next_one() {
+        for (param, stored, loaded) in [
+            (LoadKind::F64, StoreKind::F64, LoadKind::I64),
+            (LoadKind::I64, StoreKind::I32, LoadKind::I32),
+        ] {
+            let load = Inst::LoadLocal {
+                off: -2,
+                disp: 0,
+                kind: loaded,
+                volatile: false,
+            };
+            let mut f = fresh(
+                alloc::vec![
+                    Inst::ParamRef {
+                        idx: 0,
+                        kind: param
+                    },
+                    Inst::StoreLocal {
+                        off: -2,
+                        disp: 0,
+                        value: 0,
+                        kind: stored,
+                        volatile: false,
+                        nsw: false,
+                    },
+                    load.clone(),
+                    load,
+                ],
+                Terminator::Return(3),
+                3,
+            );
+            run_one(&mut f);
+            assert!(
+                matches!(
+                    f.insts[2],
+                    Inst::FpCast { value: 0, .. } | Inst::Extend { value: 0, .. }
+                ),
+                "{loaded:?}: {:?}",
+                f.insts[2]
+            );
+            assert!(
+                matches!(f.blocks[0].terminator, Terminator::Return(2)),
+                "{loaded:?}: {:?}",
+                f.blocks[0].terminator
+            );
+        }
     }
 }

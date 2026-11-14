@@ -17,7 +17,9 @@
 #   aarch64-w64-mingw32 where it differs from x86_64-w64-mingw32's
 #
 # name	macos-aarch64	linux-aarch64	linux-x64	windows-x64	windows-arm64
+arm_acle.h	y	y	-	-	y
 arm_neon.h	y	y	-	-	y
+arm64_neon.h	-	-	-	-	-
 x86intrin.h	f	-	y	y	f
 immintrin.h	f	-	y	y	f
 mmintrin.h	f	-	y	y	f
@@ -26,6 +28,7 @@ emmintrin.h	f	-	y	y	f
 pmmintrin.h	f	-	y	y	f
 tmmintrin.h	f	-	y	y	f
 smmintrin.h	f	-	y	y	f
+nmmintrin.h	f	-	y	y	f
 wmmintrin.h	f	-	y	y	f
 mm_malloc.h	y	-	y	y	y
 stdalign.h	y	y	y	y	y
@@ -59,6 +62,7 @@ sys/endian.h	y	-	-	-	-
 machine/endian.h	y	-	-	-	-
 assert.h	y	y	y	y	y
 time.h	y	y	y	y	y
+uchar.h	-	y	y	y	y
 utime.h	y	y	y	y	y
 sys/utime.h	-	-	-	y	y
 netdb.h	y	y	y	-	-
@@ -137,6 +141,7 @@ sys/mman.h	y	y	y	-	-
 sys/random.h	y	y	y	-	-
 sys/syscall.h	y	y	y	-	-
 asm/unistd.h	-	y	y	-	-
+asm/types.h	-	y	y	-	-
 linux/unistd.h	-	y	y	-	-
 libintl.h	-	y	y	o	o
 elf.h	-	y	y	-	-
@@ -218,15 +223,19 @@ __badc_timeval.h	-	-	-	-	-
 __badc_wstring.h	-	-	-	-	-
 __badc_wstdlib.h	-	-	-	-	-
 __badc_wstdio.h	-	-	-	-	-
+__badc_ucrt_stdio.h	-	-	-	-	-
 __badc_wio.h	-	-	-	-	-
 __badc_wdirect.h	-	-	-	-	-
 __badc_wprocess.h	-	-	-	-	-
 __badc_wtime.h	-	-	-	-	-
 __badc_wconio.h	-	-	-	-	-
 __badc_wctype.h	-	-	-	-	-
+__badc_in6.h	-	-	-	-	-
 winioctl.h	-	-	-	p	p
 pathcch.h	-	-	-	y	y
 psapi.h	-	-	-	p	p
+delayimp.h	-	-	-	p	p
+fibersapi.h	-	-	-	y	y
 versionhelpers.h	-	-	-	p	p
 crtdbg.h	-	-	-	y	y
 aclapi.h	-	-	-	y	y
@@ -276,5 +285,16 @@ linux/hdreg.h	-	y	y	-	-
 linux/fd.h	-	y	y	-	-
 linux/can.h	-	y	y	-	-
 linux/can/raw.h	-	y	y	-	-
+linux/can/j1939.h	-	y	y	-	-
+netpacket/packet.h	-	y	y	-	-
+linux/if_alg.h	-	y	y	-	-
+linux/netlink.h	-	y	y	-	-
+linux/tipc.h	-	y	y	-	-
+linux/qrtr.h	-	y	y	-	-
+linux/netfilter.h	-	y	y	-	-
+linux/netfilter_ipv4.h	-	y	y	-	-
+linux/can/bcm.h	-	y	y	-	-
+linux/can/isotp.h	-	y	y	-	-
+linux/prctl.h	-	y	y	-	-
 msvc_compat.h	-	-	-	-	-
 memory.h	y	y	y	y	y

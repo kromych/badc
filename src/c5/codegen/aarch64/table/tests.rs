@@ -2,7 +2,7 @@
 //!
 //! Golden cases run everywhere and lock exact words, including the
 //! logical-immediate encoder and the rows the design spike found miscoded in
-//! the source database. The differential sweep cross-checks the catalogue
+//! the source database. The differential sweep cross-checks the catalog
 //! against the native assembler; it is gated on `BADC_FUZZ_ASM=1` plus `clang`
 //! and `objdump`, so a bare `cargo test` skips it.
 
@@ -309,7 +309,7 @@ fn load_store_register_offset() {
 #[test]
 fn load_store_writeback() {
     // Pre-index `[Xn, #off]!` and post-index `[Xn], #off` are distinct
-    // catalogue shapes taking an unscaled simm9, across every access size.
+    // catalog shapes taking an unscaled simm9, across every access size.
     // Words match the assembler.
     let pre = |base: u8, off: i64| Opnd::Mem {
         base,
@@ -355,7 +355,7 @@ fn sys_op_dc_ic_tlbi() {
     assert_eq!(enc("tlbi", &[Opnd::SysOp(0xD508_8700)]), 0xD508_871F); // tlbi vmalle1
     assert_eq!(enc("tlbi", &[Opnd::SysOp(0xD508_8720), x(3)]), 0xD508_8723); // tlbi vae1, x3
     assert_eq!(enc("ic", &[Opnd::SysOp(0xD508_7100)]), 0xD508_711F); // ic ialluis
-    // `at`/`sys` share the same path; base words verified against clang.
+    // `at`/`sys` share the same path.
     assert_eq!(enc("at", &[Opnd::SysOp(0xD508_7800), x(0)]), 0xD508_7800); // at s1e1r, x0
     assert_eq!(enc("sys", &[Opnd::SysOp(0xD50B_7A20), x(0)]), 0xD50B_7A20); // sys #3,c7,c10,#1,x0
     assert_eq!(enc("sys", &[Opnd::SysOp(0xD50B_7E20)]), 0xD50B_7E3F); // sys #3,c7,c14,#1 (xzr)
@@ -394,7 +394,7 @@ fn bitfield_aliases() {
     assert_eq!(enc("sbfiz", &[x(0), x(1), i(4), i(8)]), 0x937C_1C20);
     assert_eq!(enc("bfi", &[x(0), x(1), i(4), i(8)]), 0xB37C_1C20);
     assert_eq!(enc("ubfx", &[w(0), w(1), i(4), i(8)]), 0x5304_2C20); // 32-bit
-    // The base ubfm goes through the catalogue with raw immr/imms.
+    // The base ubfm goes through the catalog with raw immr/imms.
     assert_eq!(enc("ubfm", &[x(0), x(1), i(4), i(11)]), 0xD344_2C20);
     // A field running past the register width is rejected.
     assert!(encode("ubfx", &[w(0), w(1), i(28), i(8)]).is_err());
@@ -810,7 +810,7 @@ fn simd_vector() {
     assert_eq!(b("bic"), 0x4E62_1C20);
     assert_eq!(b("orn"), 0x4EE2_1C20);
     // Mismatched arrangements and a non-byte logical op are rejected; GP `add`
-    // and `bic` (register operands) still reach the catalogue.
+    // and `bic` (register operands) still reach the catalog.
     assert!(encode("add", &[v(0, 2, true), v(1, 0, true), v(2, 2, true)]).is_err());
     assert!(encode("and", &[v(0, 2, true), v(1, 2, true), v(2, 2, true)]).is_err());
     assert_eq!(enc("add", &[x(0), x(1), x(2)]), 0x8B02_0020);
@@ -910,14 +910,525 @@ fn fp_vector() {
     assert_eq!(enc("fadd", &[d(0), d(1), d(2)]), 0x1E62_2820);
 }
 
-/// Scalar SIMD `add`/`sub` on d registers, as clang's assembler encodes them;
-/// the register fields hold the operands alone.
+/// The halving, rounding-halving, shift-by-register, absolute-difference
+/// accumulate and pairwise max/min three-same ops, as clang's assembler
+/// encodes them; the halving ops and the pairwise forms have no 64-bit
+/// lanes.
 #[test]
-fn scalar_simd_add_sub() {
+fn vector_three_same_integer_families() {
+    let v = |n: u8, size: u8, q: bool| Opnd::VecReg { num: n, size, q };
+    assert_eq!(
+        enc("shadd", &[v(1, 0, false), v(2, 0, false), v(3, 0, false)]),
+        0x0E23_0441
+    );
+    assert_eq!(
+        enc("uhadd", &[v(1, 2, true), v(2, 2, true), v(3, 2, true)]),
+        0x6EA3_0441
+    );
+    assert_eq!(
+        enc("srhadd", &[v(1, 1, true), v(2, 1, true), v(3, 1, true)]),
+        0x4E63_1441
+    );
+    assert_eq!(
+        enc("urhadd", &[v(1, 0, true), v(2, 0, true), v(3, 0, true)]),
+        0x6E23_1441
+    );
+    assert_eq!(
+        enc("shsub", &[v(1, 2, false), v(2, 2, false), v(3, 2, false)]),
+        0x0EA3_2441
+    );
+    assert_eq!(
+        enc("uhsub", &[v(1, 1, false), v(2, 1, false), v(3, 1, false)]),
+        0x2E63_2441
+    );
+    assert_eq!(
+        enc("sshl", &[v(1, 3, true), v(2, 3, true), v(3, 3, true)]),
+        0x4EE3_4441
+    );
+    assert_eq!(
+        enc("ushl", &[v(1, 0, false), v(2, 0, false), v(3, 0, false)]),
+        0x2E23_4441
+    );
+    assert_eq!(
+        enc("sqshl", &[v(1, 2, true), v(2, 2, true), v(3, 2, true)]),
+        0x4EA3_4C41
+    );
+    assert_eq!(
+        enc("uqshl", &[v(1, 1, true), v(2, 1, true), v(3, 1, true)]),
+        0x6E63_4C41
+    );
+    assert_eq!(
+        enc("srshl", &[v(1, 0, true), v(2, 0, true), v(3, 0, true)]),
+        0x4E23_5441
+    );
+    assert_eq!(
+        enc("urshl", &[v(1, 3, true), v(2, 3, true), v(3, 3, true)]),
+        0x6EE3_5441
+    );
+    assert_eq!(
+        enc("saba", &[v(1, 1, true), v(2, 1, true), v(3, 1, true)]),
+        0x4E63_7C41
+    );
+    assert_eq!(
+        enc("uaba", &[v(1, 2, false), v(2, 2, false), v(3, 2, false)]),
+        0x2EA3_7C41
+    );
+    assert_eq!(
+        enc("smaxp", &[v(1, 0, false), v(2, 0, false), v(3, 0, false)]),
+        0x0E23_A441
+    );
+    assert_eq!(
+        enc("umaxp", &[v(1, 2, true), v(2, 2, true), v(3, 2, true)]),
+        0x6EA3_A441
+    );
+    assert_eq!(
+        enc("sminp", &[v(1, 1, false), v(2, 1, false), v(3, 1, false)]),
+        0x0E63_AC41
+    );
+    assert_eq!(
+        enc("uminp", &[v(1, 2, false), v(2, 2, false), v(3, 2, false)]),
+        0x2EA3_AC41
+    );
+    assert!(encode("shadd", &[v(1, 3, true), v(2, 3, true), v(3, 3, true)]).is_err());
+    assert!(encode("smaxp", &[v(1, 3, true), v(2, 3, true), v(3, 3, true)]).is_err());
+}
+
+/// The scalar three-same forms over d (and s for the saturating ops), as
+/// clang's assembler encodes them; the compares and shifts have no s form.
+#[test]
+fn scalar_three_same() {
     let d = |n: u8| Opnd::VReg { num: n, is_d: true };
+    let s = |n: u8| Opnd::VReg {
+        num: n,
+        is_d: false,
+    };
+    assert_eq!(enc("cmeq", &[d(1), d(2), d(3)]), 0x7EE3_8C41);
+    assert_eq!(enc("cmtst", &[d(1), d(2), d(3)]), 0x5EE3_8C41);
+    assert_eq!(enc("cmgt", &[d(1), d(2), d(3)]), 0x5EE3_3441);
+    assert_eq!(enc("cmge", &[d(1), d(2), d(3)]), 0x5EE3_3C41);
+    assert_eq!(enc("cmhi", &[d(1), d(2), d(3)]), 0x7EE3_3441);
+    assert_eq!(enc("cmhs", &[d(1), d(2), d(3)]), 0x7EE3_3C41);
+    assert_eq!(enc("sqadd", &[d(1), d(2), d(3)]), 0x5EE3_0C41);
+    assert_eq!(enc("uqadd", &[d(1), d(2), d(3)]), 0x7EE3_0C41);
+    assert_eq!(enc("sqsub", &[d(1), d(2), d(3)]), 0x5EE3_2C41);
+    assert_eq!(enc("uqsub", &[d(1), d(2), d(3)]), 0x7EE3_2C41);
+    assert_eq!(enc("sqadd", &[s(1), s(2), s(3)]), 0x5EA3_0C41);
+    assert_eq!(enc("sshl", &[d(1), d(2), d(3)]), 0x5EE3_4441);
+    assert_eq!(enc("ushl", &[d(1), d(2), d(3)]), 0x7EE3_4441);
+    assert_eq!(enc("srshl", &[d(1), d(2), d(3)]), 0x5EE3_5441);
+    assert_eq!(enc("urshl", &[d(1), d(2), d(3)]), 0x7EE3_5441);
+    assert_eq!(enc("sqshl", &[d(1), d(2), d(3)]), 0x5EE3_4C41);
+    assert_eq!(enc("uqshl", &[d(1), d(2), d(3)]), 0x7EE3_4C41);
     assert_eq!(enc("add", &[d(0), d(1), d(2)]), 0x5EE2_8420);
     assert_eq!(enc("sub", &[d(0), d(1), d(2)]), 0x7EE2_8420);
     assert_eq!(enc("add", &[d(7), d(7), d(16)]), 0x5EF0_84E7);
+    assert!(encode("add", &[s(1), s(2), s(3)]).is_err());
+    assert!(encode("cmeq", &[s(1), s(2), s(3)]).is_err());
+    assert!(encode("mul", &[d(1), d(2), d(3)]).is_err());
+}
+
+/// The leading-bit counts, the saturating sign ops and the FP estimates,
+/// vector and scalar, as clang's assembler encodes them.
+#[test]
+fn vector_one_source_counts_and_estimates() {
+    let v = |n: u8, size: u8, q: bool| Opnd::VecReg { num: n, size, q };
+    let d = |n: u8| Opnd::VReg { num: n, is_d: true };
+    let s = |n: u8| Opnd::VReg {
+        num: n,
+        is_d: false,
+    };
+    assert_eq!(enc("clz", &[v(1, 2, true), v(2, 2, true)]), 0x6EA0_4841);
+    assert_eq!(enc("cls", &[v(1, 0, false), v(2, 0, false)]), 0x0E20_4841);
+    assert_eq!(enc("sqabs", &[v(1, 3, true), v(2, 3, true)]), 0x4EE0_7841);
+    assert_eq!(enc("sqneg", &[v(1, 1, true), v(2, 1, true)]), 0x6E60_7841);
+    assert_eq!(enc("frecpe", &[v(1, 2, true), v(2, 2, true)]), 0x4EA1_D841);
+    assert_eq!(enc("frecpe", &[v(1, 3, true), v(2, 3, true)]), 0x4EE1_D841);
+    assert_eq!(
+        enc("frsqrte", &[v(1, 2, false), v(2, 2, false)]),
+        0x2EA1_D841
+    );
+    assert_eq!(enc("abs", &[d(1), d(2)]), 0x5EE0_B841);
+    assert_eq!(enc("neg", &[d(1), d(2)]), 0x7EE0_B841);
+    assert_eq!(enc("sqabs", &[d(1), d(2)]), 0x5EE0_7841);
+    assert_eq!(enc("sqneg", &[d(1), d(2)]), 0x7EE0_7841);
+    assert_eq!(enc("frecpe", &[d(1), d(2)]), 0x5EE1_D841);
+    assert_eq!(enc("urecpe", &[v(1, 2, true), v(2, 2, true)]), 0x4EA1_C841);
+    assert_eq!(
+        enc("shll", &[v(1, 1, true), v(2, 0, false), Opnd::Imm(8)]),
+        0x2E21_3841
+    );
+    assert_eq!(
+        enc("shll2", &[v(1, 2, true), v(2, 1, true), Opnd::Imm(16)]),
+        0x6E61_3841
+    );
+    assert_eq!(
+        enc("shll", &[v(1, 3, true), v(2, 2, false), Opnd::Imm(32)]),
+        0x2EA1_3841
+    );
+    assert!(encode("shll", &[v(1, 1, true), v(2, 0, false), Opnd::Imm(7)]).is_err());
+    assert_eq!(
+        enc("sadalp", &[v(1, 1, false), v(2, 0, false)]),
+        0x0E20_6841
+    );
+    assert_eq!(enc("uadalp", &[v(1, 3, true), v(2, 2, true)]), 0x6EA0_6841);
+    assert_eq!(
+        enc("sqshlu", &[v(1, 0, true), v(2, 0, true), Opnd::Imm(3)]),
+        0x6F0B_6441
+    );
+    assert_eq!(enc("sqshlu", &[d(1), d(2), Opnd::Imm(5)]), 0x7F45_6441);
+    let v3 = |op: &str, s: u8, q: bool| enc(op, &[v(1, s, q), v(2, s, q), v(3, s, q)]);
+    assert_eq!(v3("fmaxnm", 2, true), 0x4E23_C441);
+    assert_eq!(v3("fminnm", 3, true), 0x4EE3_C441);
+    assert_eq!(v3("fmaxp", 2, false), 0x2E23_F441);
+    assert_eq!(v3("fminp", 2, true), 0x6EA3_F441);
+    assert_eq!(v3("fmaxnmp", 3, true), 0x6E63_C441);
+    assert_eq!(v3("fminnmp", 2, true), 0x6EA3_C441);
+    assert_eq!(v3("fmulx", 2, true), 0x4E23_DC41);
+    let e = |num: u8, size: u8, index: u8| Opnd::VecElem { num, size, index };
+    assert_eq!(
+        enc("sdot", &[v(1, 2, true), v(2, 0, true), v(3, 0, true)]),
+        0x4E83_9441
+    );
+    assert_eq!(
+        enc("udot", &[v(1, 2, false), v(2, 0, false), v(3, 0, false)]),
+        0x2E83_9441
+    );
+    assert_eq!(
+        enc("sdot", &[v(1, 2, true), v(2, 0, true), e(19, 2, 3)]),
+        0x4FB3_E841
+    );
+    assert_eq!(
+        enc("udot", &[v(1, 2, false), v(2, 0, false), e(3, 2, 1)]),
+        0x2FA3_E041
+    );
+    assert_eq!(
+        enc("usdot", &[v(1, 2, true), v(2, 0, true), v(3, 0, true)]),
+        0x4E83_9C41
+    );
+    assert_eq!(
+        enc("usdot", &[v(1, 2, false), v(2, 0, false), e(3, 2, 2)]),
+        0x0F83_F841
+    );
+    assert_eq!(
+        enc("sudot", &[v(1, 2, true), v(2, 0, true), e(19, 2, 1)]),
+        0x4F33_F041
+    );
+    assert_eq!(
+        enc("smmla", &[v(1, 2, true), v(2, 0, true), v(3, 0, true)]),
+        0x4E83_A441
+    );
+    assert_eq!(
+        enc("ummla", &[v(1, 2, true), v(2, 0, true), v(3, 0, true)]),
+        0x6E83_A441
+    );
+    assert_eq!(
+        enc("usmmla", &[v(1, 2, true), v(2, 0, true), v(3, 0, true)]),
+        0x4E83_AC41
+    );
+    assert!(encode("sudot", &[v(1, 2, true), v(2, 0, true), v(3, 0, true)]).is_err());
+    assert_eq!(
+        enc("mul", &[v(1, 1, false), v(2, 1, false), e(3, 1, 5)]),
+        0x0F53_8841
+    );
+    assert_eq!(
+        enc("mla", &[v(1, 2, true), v(2, 2, true), e(19, 2, 3)]),
+        0x6FB3_0841
+    );
+    assert_eq!(
+        enc("mls", &[v(1, 1, true), v(2, 1, true), e(15, 1, 7)]),
+        0x6F7F_4841
+    );
+    assert_eq!(
+        enc("sqdmulh", &[v(1, 2, true), v(2, 2, true), e(20, 2, 1)]),
+        0x4FB4_C041
+    );
+    assert_eq!(
+        enc("sqrdmulh", &[v(1, 1, true), v(2, 1, true), e(3, 1, 2)]),
+        0x4F63_D041
+    );
+    assert_eq!(
+        enc("sqrdmlah", &[v(1, 1, false), v(2, 1, false), e(3, 1, 6)]),
+        0x2F63_D841
+    );
+    assert_eq!(
+        enc("sqrdmlsh", &[v(1, 2, true), v(2, 2, true), e(17, 2, 2)]),
+        0x6F91_F841
+    );
+    assert_eq!(
+        enc("fmul", &[v(1, 2, true), v(2, 2, true), e(18, 2, 3)]),
+        0x4FB2_9841
+    );
+    assert_eq!(
+        enc("fmul", &[v(1, 3, true), v(2, 3, true), e(18, 3, 1)]),
+        0x4FD2_9841
+    );
+    assert_eq!(enc("fmul", &[d(1), d(2), e(18, 3, 1)]), 0x5FD2_9841);
+    assert_eq!(
+        enc("fmla", &[v(1, 2, false), v(2, 2, false), e(3, 2, 1)]),
+        0x0FA3_1041
+    );
+    assert_eq!(
+        enc("fmls", &[v(1, 3, true), v(2, 3, true), e(31, 3, 0)]),
+        0x4FDF_5041
+    );
+    assert_eq!(
+        enc("fmulx", &[v(1, 2, true), v(2, 2, true), e(3, 2, 2)]),
+        0x6F83_9841
+    );
+    assert_eq!(enc("fmla", &[d(1), d(2), e(3, 3, 1)]), 0x5FC3_1841);
+    assert_eq!(enc("fmulx", &[d(1), d(2), e(19, 3, 0)]), 0x7FD3_9041);
+    assert_eq!(
+        enc("sqdmull", &[v(1, 2, true), v(2, 1, false), e(3, 1, 7)]),
+        0x0F73_B841
+    );
+    assert_eq!(
+        enc("sqdmlal2", &[v(1, 3, true), v(2, 2, true), e(21, 2, 3)]),
+        0x4FB5_3841
+    );
+    assert_eq!(
+        enc("sqdmlsl", &[v(1, 2, true), v(2, 1, false), e(3, 1, 1)]),
+        0x0F53_7041
+    );
+    assert!(encode("mul", &[v(1, 1, true), v(2, 1, true), e(16, 1, 0)]).is_err());
+    assert_eq!(v3("sqdmulh", 1, true), 0x4E63_B441);
+    assert_eq!(v3("sqrdmulh", 2, false), 0x2EA3_B441);
+    assert_eq!(v3("sqrdmlah", 1, false), 0x2E43_8441);
+    assert_eq!(v3("sqrdmlsh", 2, true), 0x6E83_8C41);
+    assert_eq!(
+        enc("sqdmull", &[v(1, 2, true), v(2, 1, false), v(3, 1, false)]),
+        0x0E63_D041
+    );
+    assert_eq!(
+        enc("sqdmull2", &[v(1, 3, true), v(2, 2, true), v(3, 2, true)]),
+        0x4EA3_D041
+    );
+    assert_eq!(
+        enc("sqdmlal", &[v(1, 3, true), v(2, 2, false), v(3, 2, false)]),
+        0x0EA3_9041
+    );
+    assert_eq!(
+        enc("sqdmlsl2", &[v(1, 2, true), v(2, 1, true), v(3, 1, true)]),
+        0x4E63_B041
+    );
+    assert_eq!(enc("fmulx", &[d(1), d(2), d(3)]), 0x5E63_DC41);
+    assert_eq!(enc("fabd", &[d(1), d(2), d(3)]), 0x7EE3_D441);
+    assert_eq!(enc("fabd", &[s(1), s(2), s(3)]), 0x7EA3_D441);
+    assert_eq!(enc("fmaxnm", &[d(1), d(2), d(3)]), 0x1E63_6841);
+    assert_eq!(enc("fminnm", &[d(1), d(2), d(3)]), 0x1E63_7841);
+    assert_eq!(enc("fmaxv", &[s(1), v(2, 2, true)]), 0x6E30_F841);
+    assert_eq!(enc("fminv", &[s(1), v(2, 2, true)]), 0x6EB0_F841);
+    assert_eq!(enc("fmaxnmv", &[s(1), v(2, 2, true)]), 0x6E30_C841);
+    assert_eq!(enc("fminnmv", &[s(1), v(2, 2, true)]), 0x6EB0_C841);
+    let i = Opnd::Imm;
+    assert_eq!(
+        enc("scvtf", &[v(1, 2, true), v(2, 2, true), i(3)]),
+        0x4F3D_E441
+    );
+    assert_eq!(
+        enc("ucvtf", &[v(1, 3, true), v(2, 3, true), i(64)]),
+        0x6F40_E441
+    );
+    assert_eq!(
+        enc("fcvtzs", &[v(1, 2, false), v(2, 2, false), i(1)]),
+        0x0F3F_FC41
+    );
+    assert_eq!(
+        enc("fcvtzu", &[v(1, 2, true), v(2, 2, true), i(32)]),
+        0x6F20_FC41
+    );
+    assert_eq!(enc("scvtf", &[d(1), d(2), i(5)]), 0x5F7B_E441);
+    assert_eq!(enc("fcvtzu", &[d(1), d(2), i(7)]), 0x7F79_FC41);
+    assert_eq!(enc("fcvtns", &[v(1, 2, true), v(2, 2, true)]), 0x4E21_A841);
+    assert_eq!(enc("fcvtnu", &[v(1, 3, true), v(2, 3, true)]), 0x6E61_A841);
+    assert_eq!(
+        enc("fcvtms", &[v(1, 2, false), v(2, 2, false)]),
+        0x0E21_B841
+    );
+    assert_eq!(enc("fcvtps", &[v(1, 3, true), v(2, 3, true)]), 0x4EE1_A841);
+    assert_eq!(enc("fcvtau", &[v(1, 3, true), v(2, 3, true)]), 0x6E61_C841);
+    assert_eq!(enc("fcvtns", &[d(1), d(2)]), 0x5E61_A841);
+    assert_eq!(enc("fcvtzs", &[d(1), d(2)]), 0x5EE1_B841);
+    assert_eq!(enc("ucvtf", &[d(1), d(2)]), 0x7E61_D841);
+    assert!(encode("fcvtns", &[v(1, 2, true), v(2, 2, true), i(3)]).is_err());
+    assert_eq!(v3("facge", 2, true), 0x6E23_EC41);
+    assert_eq!(v3("facgt", 3, true), 0x6EE3_EC41);
+    assert_eq!(enc("facge", &[d(1), d(2), d(3)]), 0x7E63_EC41);
+    assert_eq!(enc("facgt", &[s(1), s(2), s(3)]), 0x7EA3_EC41);
+    assert_eq!(
+        enc("addhn", &[v(1, 0, false), v(2, 1, true), v(3, 1, true)]),
+        0x0E23_4041
+    );
+    assert_eq!(
+        enc("raddhn", &[v(1, 1, false), v(2, 2, true), v(3, 2, true)]),
+        0x2E63_4041
+    );
+    assert_eq!(
+        enc("subhn", &[v(1, 2, false), v(2, 3, true), v(3, 3, true)]),
+        0x0EA3_6041
+    );
+    assert_eq!(
+        enc("rsubhn", &[v(1, 0, false), v(2, 1, true), v(3, 1, true)]),
+        0x2E23_6041
+    );
+    assert_eq!(enc("suqadd", &[v(1, 0, true), v(2, 0, true)]), 0x4E20_3841);
+    assert_eq!(enc("usqadd", &[v(1, 2, true), v(2, 2, true)]), 0x6EA0_3841);
+    assert_eq!(enc("suqadd", &[d(1), d(2)]), 0x5EE0_3841);
+    assert_eq!(enc("usqadd", &[d(1), d(2)]), 0x7EE0_3841);
+    assert_eq!(enc("frecpx", &[s(1), s(2)]), 0x5EA1_F841);
+    assert_eq!(enc("frecpx", &[d(1), d(2)]), 0x5EE1_F841);
+    assert_eq!(enc("fcvtxn", &[v(1, 2, false), v(2, 3, true)]), 0x2E61_6841);
+    assert_eq!(enc("fcvtxn2", &[v(1, 2, true), v(2, 3, true)]), 0x6E61_6841);
+    assert_eq!(v3("sqrshl", 0, false), 0x0E23_5C41);
+    assert_eq!(v3("uqrshl", 3, true), 0x6EE3_5C41);
+    assert_eq!(enc("sqrshl", &[d(1), d(2), d(3)]), 0x5EE3_5C41);
+    let z = Opnd::Imm(0);
+    assert_eq!(enc("cmeq", &[v(1, 2, true), v(2, 2, true), z]), 0x4EA0_9841);
+    assert_eq!(
+        enc("cmge", &[v(1, 0, false), v(2, 0, false), z]),
+        0x2E20_8841
+    );
+    assert_eq!(enc("cmgt", &[v(1, 3, true), v(2, 3, true), z]), 0x4EE0_8841);
+    assert_eq!(enc("cmle", &[v(1, 1, true), v(2, 1, true), z]), 0x6E60_9841);
+    assert_eq!(enc("cmlt", &[v(1, 0, true), v(2, 0, true), z]), 0x4E20_A841);
+    assert_eq!(enc("cmlt", &[d(1), d(2), z]), 0x5EE0_A841);
+    assert_eq!(
+        enc("fcmge", &[v(1, 3, true), v(2, 3, true), z]),
+        0x6EE0_C841
+    );
+    assert_eq!(
+        enc("fcmgt", &[v(1, 2, false), v(2, 2, false), z]),
+        0x0EA0_C841
+    );
+    assert_eq!(
+        enc("fcmle", &[v(1, 2, true), v(2, 2, true), z]),
+        0x6EA0_D841
+    );
+    assert_eq!(enc("fcmeq", &[d(1), d(2), z]), 0x5EE0_D841);
+    assert_eq!(enc("fcmlt", &[s(1), s(2), z]), 0x5EA0_E841);
+    assert!(encode("cmeq", &[s(1), s(2), z]).is_err());
+    assert_eq!(
+        enc("ursqrte", &[v(1, 2, false), v(2, 2, false)]),
+        0x2EA1_C841
+    );
+    assert_eq!(enc("frsqrte", &[d(1), d(2)]), 0x7EE1_D841);
+    assert_eq!(enc("frecpe", &[s(1), s(2)]), 0x5EA1_D841);
+    assert!(encode("clz", &[v(1, 3, true), v(2, 3, true)]).is_err());
+    assert!(encode("abs", &[s(1), s(2)]).is_err());
+    assert!(encode("frecpe", &[v(1, 1, true), v(2, 1, true)]).is_err());
+}
+
+/// The Newton-Raphson steps frecps/frsqrts, vector and scalar.
+#[test]
+fn fp_reciprocal_steps() {
+    let v = |n: u8, size: u8, q: bool| Opnd::VecReg { num: n, size, q };
+    let d = |n: u8| Opnd::VReg { num: n, is_d: true };
+    let s = |n: u8| Opnd::VReg {
+        num: n,
+        is_d: false,
+    };
+    assert_eq!(
+        enc("frecps", &[v(1, 2, true), v(2, 2, true), v(3, 2, true)]),
+        0x4E23_FC41
+    );
+    assert_eq!(
+        enc("frsqrts", &[v(1, 3, true), v(2, 3, true), v(3, 3, true)]),
+        0x4EE3_FC41
+    );
+    assert_eq!(enc("frecps", &[d(1), d(2), d(3)]), 0x5E63_FC41);
+    assert_eq!(enc("frsqrts", &[s(1), s(2), s(3)]), 0x5EA3_FC41);
+}
+
+/// The accumulating, rounding and saturating shifts by immediate, vector and
+/// d scalar, and the scalar shift-and-insert, as clang's assembler encodes
+/// them.
+#[test]
+fn vector_and_scalar_shift_immediate_families() {
+    let v = |n: u8, size: u8, q: bool| Opnd::VecReg { num: n, size, q };
+    let d = |n: u8| Opnd::VReg { num: n, is_d: true };
+    assert_eq!(
+        enc("ssra", &[v(1, 0, false), v(2, 0, false), Opnd::Imm(3)]),
+        0x0F0D_1441
+    );
+    assert_eq!(
+        enc("usra", &[v(1, 3, true), v(2, 3, true), Opnd::Imm(64)]),
+        0x6F40_1441
+    );
+    assert_eq!(
+        enc("srshr", &[v(1, 1, false), v(2, 1, false), Opnd::Imm(16)]),
+        0x0F10_2441
+    );
+    assert_eq!(
+        enc("urshr", &[v(1, 2, true), v(2, 2, true), Opnd::Imm(1)]),
+        0x6F3F_2441
+    );
+    assert_eq!(
+        enc("srsra", &[v(1, 0, true), v(2, 0, true), Opnd::Imm(8)]),
+        0x4F08_3441
+    );
+    assert_eq!(
+        enc("ursra", &[v(1, 2, false), v(2, 2, false), Opnd::Imm(5)]),
+        0x2F3B_3441
+    );
+    assert_eq!(
+        enc("sqshl", &[v(1, 1, true), v(2, 1, true), Opnd::Imm(15)]),
+        0x4F1F_7441
+    );
+    assert_eq!(
+        enc("uqshl", &[v(1, 0, false), v(2, 0, false), Opnd::Imm(0)]),
+        0x2F08_7441
+    );
+    assert_eq!(enc("ssra", &[d(1), d(2), Opnd::Imm(3)]), 0x5F7D_1441);
+    assert_eq!(enc("usra", &[d(1), d(2), Opnd::Imm(64)]), 0x7F40_1441);
+    assert_eq!(enc("srshr", &[d(1), d(2), Opnd::Imm(1)]), 0x5F7F_2441);
+    assert_eq!(enc("urshr", &[d(1), d(2), Opnd::Imm(33)]), 0x7F5F_2441);
+    assert_eq!(enc("srsra", &[d(1), d(2), Opnd::Imm(7)]), 0x5F79_3441);
+    assert_eq!(enc("ursra", &[d(1), d(2), Opnd::Imm(2)]), 0x7F7E_3441);
+    assert_eq!(enc("sqshl", &[d(1), d(2), Opnd::Imm(63)]), 0x5F7F_7441);
+    assert_eq!(enc("uqshl", &[d(1), d(2), Opnd::Imm(0)]), 0x7F40_7441);
+    assert_eq!(enc("sli", &[d(1), d(2), Opnd::Imm(3)]), 0x7F43_5441);
+    assert_eq!(enc("sri", &[d(1), d(2), Opnd::Imm(64)]), 0x7F40_4441);
+    assert!(encode("ssra", &[v(1, 0, false), v(2, 0, false), Opnd::Imm(0)]).is_err());
+    assert!(encode("sqshl", &[v(1, 0, false), v(2, 0, false), Opnd::Imm(8)]).is_err());
+    assert!(encode("sri", &[d(1), d(2), Opnd::Imm(0)]).is_err());
+    assert!(encode("sli", &[d(1), d(2), Opnd::Imm(64)]).is_err());
+}
+
+/// The pairwise scalar sum, the long pairwise adds and the wide add and
+/// subtract, as clang's assembler encodes them.
+#[test]
+fn pairwise_long_and_wide() {
+    let v = |n: u8, size: u8, q: bool| Opnd::VecReg { num: n, size, q };
+    let d = |n: u8| Opnd::VReg { num: n, is_d: true };
+    assert_eq!(enc("addp", &[d(1), v(2, 3, true)]), 0x5EF1_B841);
+    assert_eq!(
+        enc("saddlp", &[v(1, 1, false), v(2, 0, false)]),
+        0x0E20_2841
+    );
+    assert_eq!(enc("uaddlp", &[v(1, 2, true), v(2, 1, true)]), 0x6E60_2841);
+    assert_eq!(
+        enc("saddlp", &[v(1, 3, false), v(2, 2, false)]),
+        0x0EA0_2841
+    );
+    assert_eq!(enc("uaddlp", &[v(1, 3, true), v(2, 2, true)]), 0x6EA0_2841);
+    assert_eq!(
+        enc("saddw", &[v(1, 1, true), v(2, 1, true), v(3, 0, false)]),
+        0x0E23_1041
+    );
+    assert_eq!(
+        enc("uaddw2", &[v(1, 2, true), v(2, 2, true), v(3, 1, true)]),
+        0x6E63_1041
+    );
+    assert_eq!(
+        enc("ssubw", &[v(1, 3, true), v(2, 3, true), v(3, 2, false)]),
+        0x0EA3_3041
+    );
+    assert_eq!(
+        enc("usubw2", &[v(1, 1, true), v(2, 1, true), v(3, 0, true)]),
+        0x6E23_3041
+    );
+    assert!(encode("saddlp", &[v(1, 1, false), v(2, 0, true)]).is_err());
+    assert!(encode("saddw", &[v(1, 1, true), v(2, 1, true), v(3, 0, true)]).is_err());
+    assert!(encode("saddw2", &[v(1, 1, true), v(2, 1, true), v(3, 0, false)]).is_err());
 }
 
 /// The lane conversions, the words clang's assembler gives `v1, v2`.
@@ -2034,8 +2545,8 @@ fn add_sub_immediate_picks_the_shift() {
 }
 
 #[test]
-fn catalogue_is_sorted() {
-    // encode() binary-searches the catalogue by mnemonic; the generator emits it
+fn catalog_is_sorted() {
+    // encode() binary-searches the catalog by mnemonic; the generator emits it
     // sorted. Lock the invariant.
     let forms = super::super::isa_a64_table::FORMS;
     assert!(
@@ -2188,10 +2699,10 @@ fn corrected_database_rows_encode_true_bits() {
     // corrections are recorded in tools/gen_isa_a64.py DB_FIXES.)
 }
 
-/// The signature classifier catalogues every GP row the field model expresses;
+/// The signature classifier catalogs every GP row the field model expresses;
 /// lock one word per newly covered class (all verified against the assembler).
 #[test]
-fn classified_catalogue_growth() {
+fn classified_catalog_growth() {
     assert_eq!(enc("adc", &[x(1), x(2), x(3)]), 0x9A030041); // carry arithmetic
     assert_eq!(enc("smull", &[x(1), w(2), w(3)]), 0x9B237C41); // mixed-width multiply
     assert_eq!(enc("umaddl", &[x(1), w(2), w(3), x(4)]), 0x9BA31041);
@@ -2701,7 +3212,7 @@ mod differential {
         std::eprintln!("sysop tables: {checked} verified, {skipped} unknown to the assembler");
     }
 
-    /// Sweep the catalogue itself: synthesize operands for every form from its
+    /// Sweep the catalog itself: synthesize operands for every form from its
     /// operand pattern and require the encoded word to equal the assembler's.
     /// Register numbers avoid 31, so no zr/sp alias re-canonicalization can
     /// shift the assembler's word choice. `bad` (encoded, disagrees) and `gap`
@@ -2971,9 +3482,9 @@ mod differential {
             let names: Vec<&str> = skipped.into_iter().collect();
             std::eprintln!("  skipped (assembler rejects): {}", names.join(" "));
         }
-        assert_eq!(bad, 0, "A64 catalogue words disagree with the assembler");
+        assert_eq!(bad, 0, "A64 catalog words disagree with the assembler");
         assert_eq!(sp_bad, 0, "sp operands disagree with the assembler");
-        assert_eq!(gap, 0, "synthesized catalogue operands failed to encode");
+        assert_eq!(gap, 0, "synthesized catalog operands failed to encode");
     }
 
     /// Cross-check the logical-immediate encoder against the assembler for
@@ -3013,4 +3524,81 @@ mod differential {
             "logical-immediate encoding disagrees with the assembler"
         );
     }
+}
+
+/// The SHA3, SM3 and SM4 forms and `fjcvtzs`, each word as LLVM's
+/// assembler encodes it.
+#[test]
+fn sha3_sm3_sm4_and_jscvt_forms() {
+    let v = |num: u8, size: u8| Opnd::VecReg { num, size, q: true };
+    let s = |n| v(n, 2);
+    assert_eq!(
+        enc("bcax", &[v(1, 0), v(2, 0), v(3, 0), v(4, 0)]),
+        0xCE23_1041
+    );
+    assert_eq!(enc("rax1", &[v(1, 3), v(2, 3), v(3, 3)]), 0xCE63_8C41);
+    assert_eq!(
+        enc("xar", &[v(1, 3), v(2, 3), v(3, 3), Opnd::Imm(63)]),
+        0xCE83_FC41
+    );
+    assert!(encode("xar", &[v(1, 3), v(2, 3), v(3, 3), Opnd::Imm(64)]).is_err());
+    assert_eq!(enc("sm3ss1", &[s(1), s(2), s(3), s(4)]), 0xCE43_1041);
+    let lane = |index| Opnd::VecElem {
+        num: 3,
+        size: 2,
+        index,
+    };
+    for (m, index, word) in [
+        ("sm3tt1a", 3, 0xCE43_B041),
+        ("sm3tt1b", 1, 0xCE43_9441),
+        ("sm3tt2a", 2, 0xCE43_A841),
+        ("sm3tt2b", 0, 0xCE43_8C41),
+    ] {
+        assert_eq!(enc(m, &[s(1), s(2), lane(index)]), word, "{m}");
+    }
+    assert_eq!(enc("sm3partw1", &[s(1), s(2), s(3)]), 0xCE63_C041);
+    assert_eq!(enc("sm3partw2", &[s(1), s(2), s(3)]), 0xCE63_C441);
+    assert_eq!(enc("sm4e", &[s(1), s(2)]), 0xCEC0_8441);
+    assert_eq!(enc("sm4ekey", &[s(1), s(2), s(3)]), 0xCE63_C841);
+    assert!(encode("sm4e", &[v(1, 3), v(2, 3)]).is_err());
+    assert_eq!(
+        enc("fjcvtzs", &[w(3), Opnd::VReg { num: 5, is_d: true }]),
+        0x1E7E_00A3
+    );
+}
+
+/// The FP roundings, scalar and vector, each word as LLVM's assembler
+/// encodes it.
+#[test]
+fn frint_forms() {
+    let d = |num| Opnd::VReg { num, is_d: true };
+    let s = |num| Opnd::VReg { num, is_d: false };
+    let v = |num: u8, size: u8, q: bool| Opnd::VecReg { num, size, q };
+    assert_eq!(enc("frintn", &[d(0), d(1)]), 0x1E64_4020);
+    assert_eq!(enc("frint32z", &[s(0), s(1)]), 0x1E28_4020);
+    assert_eq!(enc("frint64x", &[d(2), d(3)]), 0x1E69_C062);
+    for (m, word) in [
+        ("frintn", 0x4E21_8820),
+        ("frintp", 0x4EA1_8820),
+        ("frintm", 0x4E21_9820),
+        ("frintz", 0x4EA1_9820),
+        ("frinta", 0x6E21_8820),
+        ("frintx", 0x6E21_9820),
+        ("frinti", 0x6EA1_9820),
+        ("frint32z", 0x4E21_E820),
+        ("frint32x", 0x6E21_E820),
+        ("frint64z", 0x4E21_F820),
+    ] {
+        assert_eq!(enc(m, &[v(0, 2, true), v(1, 2, true)]), word, "{m}");
+    }
+    assert_eq!(enc("frintn", &[v(0, 3, true), v(1, 3, true)]), 0x4E61_8820);
+    assert_eq!(
+        enc("frintn", &[v(0, 2, false), v(1, 2, false)]),
+        0x0E21_8820
+    );
+    assert_eq!(
+        enc("frint64x", &[v(0, 3, true), v(1, 3, true)]),
+        0x6E61_F820
+    );
+    assert!(encode("frintn", &[v(0, 3, false), v(1, 3, false)]).is_err());
 }

@@ -14,8 +14,8 @@ and Fedora 44 kernel configurations. The packages install into stock Debian 13,
 Ubuntu 26.04 and Fedora 44 images and boot to systemd multi-user with modules
 loading on demand; `/proc/version` names badc. At the 7.1.10 pin, the four
 packages (`{rpm, deb}` x `{x86_64, aarch64}`) took 101929 C units, 467
-assembly units and 59424 links, all of them badc's: nothing fell back to
-another compiler, assembler or linker.
+assembly units, and 59424 links, all of them badc's: nothing fell back to
+another compiler, assembler, or linker.
 
 `badc -c foo.S -o foo.o` assembles, and the kernel build uses it for every
 assembly unit, the real-mode boot code included. Under `-m16` and `-m32` the
@@ -26,7 +26,7 @@ dynamic metadata and symbol versions of all three vDSOs.
 
 ## Target five platforms from any host
 
-badc writes Mach-O, ELF and PE32+ directly:
+badc writes Mach-O, ELF, and PE32+ directly:
 
 | system | architectures | images |
 |---|---|---|
@@ -41,7 +41,7 @@ M1's ARMv8.4-A ([baseline](./native-compilation.md#instruction-set-baseline)).
 ## Ship as one binary
 
 The headers and the C runtime are built into the binary; `--install` writes
-them to disk for editing. badc needs no `ld`, `lld` or `link.exe`, and its
+them to disk for editing. badc needs no `ld`, `lld`, or `link.exe`, and its
 linker can stand in for `LD=` in an existing build. It assembles `.s` and `.S`
 files and inline `asm`.
 
@@ -49,16 +49,17 @@ files and inline `asm`.
 
 Every build goes through SSA and a graph-coloring register allocator, and
 `-O` adds the SSA optimization passes. The code `-O` produces runs faster
-than `clang -O0`'s. CI measures badc against tcc, ccc, clang and gcc on Linux
+than `clang -O0`'s. CI measures badc against tcc, ccc, clang, and gcc on Linux
 and against MSVC on Windows for every pull request and every push to
 `master`; the results are at
 [badc.dev/performance](https://badc.dev/performance/).
 
 ## Emit debug info
 
-`-g` writes DWARF version 4 for lldb, gdb, rr and profilers, so breakpoints,
-watchpoints and structure layouts work. On Windows targets the DWARF is in
-the PE image; badc writes no PDB. The `-g<level>`, `-ggdb`, `-gdwarf` and
+`-g` writes DWARF version 4 for lldb, gdb, rr, and profilers, so breakpoints,
+watchpoints, and structure layouts work. On Windows targets the DWARF is in
+the PE image, and a `-g` link writes the PDB beside it, named by the image's
+debug directory. The `-g<level>`, `-ggdb`, `-gdwarf`, and
 `-gdwarf-<n>` spellings are accepted. A request badc cannot meet, such as
 DWARF 5 or `-gdwarf64`, reports B7011 `dwarf-output`, and the compile
 continues with DWARF 4.

@@ -1,7 +1,7 @@
 /// Compiler-builtin intrinsic discriminant. Each lowering target
 /// dispatches on this value to emit the per-arch sequence.
 /// Keep the discriminants stable -- the `.o` SSA-body wire
-/// format serialises `Inst::Intrinsic { kind, .. }` verbatim, so
+/// format serializes `Inst::Intrinsic { kind, .. }` verbatim, so
 /// an archive built with an older c5 would mis-decode the
 /// operand if these reshuffle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,7 +36,7 @@ pub enum Intrinsic {
     LongjmpAArch64 = 3,
     /// `__builtin_va_start(ap, last)`. Args reach the op as
     /// (`&ap` on the c5 eval stack, `&last` in accumulator).
-    /// The expansion initialises `*ap` to point at the variadic
+    /// The expansion initializes `*ap` to point at the variadic
     /// region for the enclosing function. On AAPCS64 / SysV with
     /// the host variadic ABI this fills a struct (`__gr_top`,
     /// `__vr_top`, `__gr_offs`, `__vr_offs`, `__stack`); on
@@ -183,16 +183,15 @@ pub enum Intrinsic {
     AArch64DsbIsh = 54,
     AArch64Isb = 55,
     /// `__builtin_ffs(x)` / `__builtin_ffsll(x)` -- one plus the index of
-    /// the least-significant set bit, or 0 when `x` is 0 (POSIX `ffs`, GCC
+    /// the least-significant set bit, or 0 when `x` is 0 (POSIX `ffs`, GNU C
     /// builtin). The result is `int`. Lowered in the walker as
     /// `(ctz(x) + 1) & ((ctz(x) >> log2(w)) - 1)`: ctz is the bit width `w`
     /// only for 0, and the mask clears that case.
     Ffs = 56,
     Ffsll = 57,
     /// 128-bit atomic read-modify-write via the AArch64 `ldaxp`/`stlxp`
-    /// exclusive-pair retry loop (the shape GCC/clang inline asm emits for
-    /// `Int128` atomics, since aarch64 has no native 128-bit CAS through
-    /// gcc 10). Each takes a pointer to the 128-bit object, the addresses
+    /// exclusive-pair retry loop (ARMv8.0 has no 128-bit compare-and-swap).
+    /// Each takes a pointer to the 128-bit object, the addresses
     /// of the two 64-bit halves of the prior value (written back), and the
     /// operand halves as inputs: `CmpXchg` compares against `cmp{l,h}` and
     /// stores `new{l,h}` on a match; `Xchg` stores unconditionally;
@@ -229,7 +228,7 @@ pub enum Intrinsic {
     /// `asm("fxsave %0" : "=m"(buf))` -- save the x87/SSE state to the
     /// 512-byte memory operand. The op takes the operand's address;
     /// codegen emits `fxsave m` (0F AE /0, x86_64 only). A no-op in the
-    /// interpreter (no modelled FPU/SSE state).
+    /// interpreter (no modeled FPU/SSE state).
     X86FxSave = 68,
     /// `asm("fxrstor %0" : : "m"(buf))` -- restore the x87/SSE state from
     /// the 512-byte memory operand. Codegen emits `fxrstor m` (0F AE /1,
@@ -249,7 +248,7 @@ pub enum Intrinsic {
     X86Clflush = 76,
     /// `asm("lldtw %0" : : "g"(Ldtr))` -- load the LDTR from the 16-bit
     /// operand (0F 00 /2). The op takes the operand's address; the
-    /// interpreter treats it as a no-op (no modelled LDTR).
+    /// interpreter treats it as a no-op (no modeled LDTR).
     X86Lldt = 77,
     /// Read of a `register T name asm("rsp"/"sp")` variable -- the
     /// current stack pointer, as a `void *`-shaped value. No arguments.
@@ -287,6 +286,22 @@ pub enum Intrinsic {
     /// x86_64, the sp at entry on AArch64 -- which `setjmp` stores as the
     /// frame an unwinding `longjmp` stops at. No arguments.
     EstablisherFrame = 85,
+    /// Deferred `__builtin_object_size(p, type)` whose pointer did not
+    /// designate an object at parse time. `args` are the pointer and the
+    /// type as an immediate. Folded to the bytes remaining once the pointer
+    /// reaches a defined object at a constant offset; the branch-fold fixed
+    /// point answers the type's fallback for every survivor. Produced only
+    /// under `-O`, so no emitter or the interpreter ever sees one.
+    ObjectSize = 86,
+    /// Its first argument, a pointer with the constant second argument's
+    /// bytes left in its subobject, which a deferred [`Self::ObjectSize`] of
+    /// types 1 and 3 answers. Only under `-O`; resolved to the pointer.
+    SubobjectBound = 87,
+    /// Its argument, the first of a call through a library function's
+    /// `__builtin_` spelling that `-fno-builtin` leaves a plain call, so the
+    /// call folds as the builtin. The walker keeps it only under `-O`;
+    /// resolved to the argument.
+    BuiltinArg = 88,
 }
 
 /// The type operand of [`Intrinsic::VaArg`], one constant packed as
@@ -439,6 +454,9 @@ impl Intrinsic {
             83 => Some(Intrinsic::PlatformRegister),
             84 => Some(Intrinsic::FuncletFrame),
             85 => Some(Intrinsic::EstablisherFrame),
+            86 => Some(Intrinsic::ObjectSize),
+            87 => Some(Intrinsic::SubobjectBound),
+            88 => Some(Intrinsic::BuiltinArg),
             _ => None,
         }
     }

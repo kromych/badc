@@ -15,27 +15,26 @@ Disassembly of section .text:
 
 <main>:
                	mov	x2, #0x0                // =0
-               	mov	x5, #0x3                // =3
-               	mov	x6, #0x5556             // =21846
-               	movk	x6, #0x5555, lsl #16
+               	mov	x5, #0x5556             // =21846
+               	movk	x5, #0x5555, lsl #16
                	mov	x0, x2
                	mov	x1, #0x0                // =0
+               	b	<addr>
+               	add	x1, x1, #0x1
                	cmp	w1, w2
                	b.ge	<addr>
                	add	x3, x2, x1
                	sxtw	x3, w3
-               	mul	x4, x3, x6
+               	mul	x4, x3, x5
                	asr	x4, x4, #32
                	add	x4, x4, x4, lsr #63
-               	mul	x4, x4, x5
+               	add	x4, x4, x4, lsl #1
                	sub	x3, x3, x4
                	cbz	w3, <addr>
                	cmp	w1, #0x4
                	b.eq	<addr>
                	add	x0, x0, x1
-               	add	x1, x1, #0x1
-               	cmp	w1, w2
-               	b.lt	<addr>
+               	b	<addr>
                	add	x0, x0, x2
                	add	x2, x2, #0x1
                	cmp	w2, #0x6

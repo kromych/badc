@@ -98,8 +98,8 @@ Disassembly of section .text:
                	mov	x0, #0xa                // =10
                	ret
                	ldrb	w0, [x3, #0xfff]
-               	eor	x0, x0, #0x3
-               	cbz	w0, <addr>
+               	cmp	w0, #0x3
+               	b.eq	<addr>
                	mov	x0, #0xb                // =11
                	ret
                	ldrb	w0, [x7, #0x9]
@@ -116,7 +116,7 @@ Disassembly of section .text:
                	mov	x0, #0xd                // =13
                	ret
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x8]
+               	ldrsw	x0, [x0, #0x4]
                	cmp	w0, #0x5
                	b.eq	<addr>
                	mov	x0, #0xe                // =14

@@ -408,11 +408,9 @@ struct SubprogVar {
     name_off: u32,
     is_parameter: bool,
     type_tag: i64,
-    fp_byte_offset: i64,
-    /// True when mem2reg promoted this slot to a register; the frame slot
-    /// no longer holds the value, so the DIE gets an empty location rather
-    /// than a stale `DW_OP_fbreg`.
-    promoted: bool,
+    /// `None` where no frame slot holds the value; the DIE then gets an
+    /// empty location rather than a stale `DW_OP_fbreg`.
+    fp_byte_offset: Option<i64>,
     decl_line: u32,
     array_size: u32,
     decl_file: u32,
@@ -474,7 +472,56 @@ fn paciasp_offset(build: &Build, low_pc: usize, frame: Option<u32>) -> Option<u3
             at += 4;
         }
     }
-    (word(at) == Some(encode::PACIASP)).then(|| (at - low_pc) as u32)
+    (word(at).is_some_and(|w| w == encode::PACIASP || w == encode::PACIBSP))
+        .then(|| (at - low_pc) as u32)
+}
+
+/// The frame-base-relative byte offset of the variable the front end placed
+/// on `fp_slot` of the function at `ent_pc`, or `None` where no frame slot
+/// holds its value: mem2reg promoted it, slot coalescing gave it shared
+/// storage, or it is an over-aligned automatic past a realignment.
+pub(super) fn frame_offset(build: &Build, ent_pc: usize, fp_slot: i64) -> Option<i64> {
+    let eff = (build.coalesced_slot_remap.get(&ent_pc))
+        .and_then(|m| m.get(&fp_slot))
+        .copied()
+        .unwrap_or(fp_slot);
+    let promoted = build.promoted_local_slots.get(&ent_pc);
+    if promoted.is_some_and(|slots| slots.contains(&fp_slot)) {
+        return None;
+    }
+    // TODO: one past a realignment has no frame-base offset; its location
+    // needs a stack-pointer-relative description.
+    if let Some(&region) = (build.region_frame_offsets.get(&ent_pc)).and_then(|m| m.get(&eff)) {
+        return region;
+    }
+    if eff >= 2 {
+        // A parameter sits where the backend homed it; the 16-byte cell
+        // above the frame record is the layout of a function with no record.
+        let homes = build.param_frame_offsets.get(&ent_pc);
+        return Some(
+            homes
+                .and_then(|h| h.get((eff - 2) as usize).copied())
+                .unwrap_or((eff - 1) * 16),
+        );
+    }
+    // A protected frame reserves its canary region at the top of the
+    // locals, so every local slot sits that much lower.
+    let local_shift = build.local_shift_bytes.get(&ent_pc).copied().unwrap_or(0);
+    Some(eff * 8 - i64::from(local_shift))
+}
+
+/// `DW_AT_location` as `DW_FORM_exprloc`: `DW_OP_fbreg` at `offset`, or
+/// the empty expression where the frame holds no value.
+pub(super) fn write_fbreg_location(body: &mut Vec<u8>, offset: Option<i64>) {
+    let Some(offset) = offset else {
+        write_uleb128(body, 0);
+        return;
+    };
+    let mut loc: Vec<u8> = Vec::with_capacity(8);
+    loc.push(DW_OP_FBREG);
+    write_sleb128(&mut loc, offset);
+    write_uleb128(body, loc.len() as u64);
+    body.extend_from_slice(&loc);
 }
 
 /// One-past-the-last byte of user code in `build.text`.
@@ -650,60 +697,18 @@ fn collect_subprograms(
         // close, indexed by the Ent's ent_pc so a simple equality check
         // groups them.
         let function_bc_pc = ent_pc as u64;
-        let local_shift = build.local_shift_bytes.get(&ent_pc).copied().unwrap_or(0) as i64;
-        let param_homes = build.param_frame_offsets.get(&ent_pc);
         let variables = program
             .variables
             .iter()
             .filter(|v| v.function_bc_pc == function_bc_pc)
-            .map(|v| {
-                // Slot coalescing may have moved this local onto a new
-                // exclusive frame offset; use it so the location is not
-                // stale.
-                let eff = build
-                    .coalesced_slot_remap
-                    .get(&ent_pc)
-                    .and_then(|m| m.get(&v.fp_slot))
-                    .copied()
-                    .unwrap_or(v.fp_slot);
-                // An over-aligned automatic lives in the region, not at a slot.
-                // TODO: one past a realignment has no frame-base offset; its
-                // location needs a stack-pointer-relative description.
-                let region = build
-                    .region_frame_offsets
-                    .get(&ent_pc)
-                    .and_then(|m| m.get(&eff))
-                    .copied();
-                SubprogVar {
-                    name_off: strs.intern(&v.name),
-                    is_parameter: v.is_parameter,
-                    type_tag: v.type_tag,
-                    // A parameter (slot >= 2) sits where the backend homed
-                    // it; the 16-byte cell above the frame record is the
-                    // layout of a function with no record. A local uses
-                    // the 8-byte slot stride.
-                    fp_byte_offset: if let Some(Some(off)) = region {
-                        off
-                    } else if eff >= 2 {
-                        param_homes
-                            .and_then(|h| h.get((eff - 2) as usize).copied())
-                            .unwrap_or((eff - 1) * 16)
-                    } else {
-                        // A protected frame reserves its canary region at
-                        // the top of the locals, so every local slot sits
-                        // that much lower; parameter cells are above the
-                        // frame base and keep their offsets.
-                        eff * 8 - local_shift
-                    },
-                    promoted: region == Some(None)
-                        || build
-                            .promoted_local_slots
-                            .get(&ent_pc)
-                            .is_some_and(|slots| slots.contains(&v.fp_slot)),
-                    decl_line: v.decl_line,
-                    array_size: v.array_size,
-                    decl_file: v.decl_file,
-                }
+            .map(|v| SubprogVar {
+                name_off: strs.intern(&v.name),
+                is_parameter: v.is_parameter,
+                type_tag: v.type_tag,
+                fp_byte_offset: frame_offset(build, ent_pc, v.fp_slot),
+                decl_line: v.decl_line,
+                array_size: v.array_size,
+                decl_file: v.decl_file,
             })
             .collect();
 
@@ -716,7 +721,9 @@ fn collect_subprograms(
             frame_rules: (build.func_prologue_native.contains_key(&ent_pc))
                 .then(|| FrameRules::of(build, CfiArch::of(target), ent_pc, lo)),
             ra_signed_at: paciasp_offset(build, lo, early.map(|e| e.frame)),
-            early_return: early.map(|e| e.exit),
+            // A predicted return follows the test, ahead of the frame, and
+            // leaves no code after the body to take the entry's rules.
+            early_return: early.map(|e| e.exit).filter(|&x| (x as usize) < hi - lo),
             variables,
             external: !internal_pcs.contains(&ent_pc),
             prototyped: !unprototyped_pcs.contains(&ent_pc),
@@ -1641,15 +1648,7 @@ impl InfoUnit<'_> {
                     elem_off
                 };
                 body.extend_from_slice(&type_off.to_le_bytes());
-                if v.promoted {
-                    write_uleb128(body, 0);
-                } else {
-                    let mut loc: Vec<u8> = Vec::with_capacity(8);
-                    loc.push(DW_OP_FBREG);
-                    write_sleb128(&mut loc, v.fp_byte_offset);
-                    write_uleb128(body, loc.len() as u64);
-                    body.extend_from_slice(&loc);
-                }
+                write_fbreg_location(body, v.fp_byte_offset);
                 write_uleb128(body, v.decl_file as u64 + 1);
                 write_uleb128(body, v.decl_line as u64);
             }
@@ -1863,7 +1862,7 @@ fn emit_type_die(
     }
 }
 
-/// Coarse arch flavour the CFI emitter dispatches on.
+/// Coarse arch flavor the CFI emitter dispatches on.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum CfiArch {
     Aarch64,
@@ -2223,7 +2222,7 @@ fn build_debug_frame(
     }
 
     // Emit one FDE covering the ELF `_start` stub. Mark the return- address
-    // column as `DW_CFA_undefined` so the unwinder recognises the bottom of
+    // column as `DW_CFA_undefined` so the unwinder recognizes the bottom of
     // the stack and stops with a clean "Backtrace stopped: at top of stack"
     // instead of reading garbage.
     if let Some((start, end)) = start_stub {
@@ -2990,6 +2989,49 @@ mod tests {
         assert_eq!(&displaced[2..], &plain[1..], "same rules follow");
     }
 
+    /// A predicted early return follows its test, ahead of the signed frame
+    /// path, and no row after the body restates the entry's rules.
+    #[test]
+    fn debug_frame_takes_a_predicted_early_return_ahead_of_the_frame() {
+        use crate::c5::codegen::aarch64::encode;
+        let src = "long fib(int n) { if (__builtin_expect(n < 2, 1)) return n;\n\
+                   return fib(n - 1) + fib(n - 2); }\n\
+                   int main(int argc, char **argv) { (void)argv; return (int)fib(argc); }\n";
+        let program = crate::Compiler::new(crate::c5::tests::with_prelude(src))
+            .compile()
+            .expect("compile");
+        let options = crate::NativeOptions {
+            optimize: true,
+            debug_info: true,
+            hardening: crate::Hardening {
+                pac_ret: true,
+                ..crate::Hardening::NONE
+            },
+            ..Default::default()
+        };
+        let build =
+            crate::c5::codegen::lower_for(&program, Target::LinuxAarch64, options).expect("lower");
+        let word = |at: usize| u32::from_le_bytes(build.text[at..at + 4].try_into().unwrap());
+        let subs = collect_subprograms(
+            &program,
+            &build,
+            Target::LinuxAarch64,
+            0,
+            &mut StrTable::new(),
+        );
+        let early = build.early_returns[0];
+        let fib = subs
+            .iter()
+            .find(|s| s.low_pc as usize == early.begin as usize)
+            .expect("fib returns ahead of its frame");
+        let (lo, frame) = (fib.low_pc as usize, early.frame as usize);
+        assert_eq!(early.exit as u64, fib.high_pc - fib.low_pc);
+        assert_eq!(fib.early_return, None);
+        assert_eq!(word(lo + frame - 4), encode::enc_ret(encode::Reg(30)));
+        assert_eq!(word(lo + frame), encode::PACIASP);
+        assert_eq!(fib.ra_signed_at, Some(frame as u32));
+    }
+
     /// The frame path signs x30 at the `PACIASP` past the entry's test, where
     /// the FDE flips the return-address state; the early return after the
     /// body states the entry's rules again, the return address unsigned.
@@ -3095,6 +3137,7 @@ mod tests {
                     ordinal: None,
                     kind: crate::c5::codegen::ImportKind::Function,
                     is_variadic: false,
+                    prototyped: false,
                     fixed_args: 1,
                     return_type_tag: None,
                     param_types: alloc::vec![1], // int
@@ -3109,6 +3152,7 @@ mod tests {
                     ordinal: None,
                     kind: crate::c5::codegen::ImportKind::Function,
                     is_variadic: false,
+                    prototyped: false,
                     fixed_args: 1,
                     return_type_tag: None,
                     param_types: alloc::vec![1],

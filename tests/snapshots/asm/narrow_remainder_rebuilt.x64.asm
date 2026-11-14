@@ -34,18 +34,6 @@ Disassembly of section .text:
                                                 # <addr>
                	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
                                                 # <addr>
-               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
-                                                # <addr>
-               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
-                                                # <addr>
-               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
-                                                # <addr>
-               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
-                                                # <addr>
-               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
-                                                # <addr>
-               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
-                                                # <addr>
                	movl	<rip>, %ecx # <addr>
                	movl	<rip>, %esi # <addr>
                	movl	%ecx, %eax
@@ -100,8 +88,7 @@ Disassembly of section .text:
                	movq	%rbx, %rsi
                	movb	$0x0, %al
                	callq	<addr>
-               	xorq	$0x3, %rbx
-               	testl	%ebx, %ebx
+               	cmpl	$0x3, %ebx
                	setne	%al
                	movzbq	%al, %rax
                	popq	%rbx

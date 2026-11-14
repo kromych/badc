@@ -88,7 +88,7 @@ struct UNICODE_STRING {
 
 /* DRIVER_OBJECT prefix up to `DriverUnload`. The remaining
  * header fields (major function dispatch table, fast I/O
- * dispatch, etc.) are zero-initialised by the kernel; that is
+ * dispatch, etc.) are zero-initialized by the kernel; that is
  * correct for a driver with no devices. The field offsets in
  * the kernel's `_DRIVER_OBJECT` are stable across Windows
  * versions. */

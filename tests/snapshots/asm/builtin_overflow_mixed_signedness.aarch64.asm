@@ -34,14 +34,6 @@ Disassembly of section .text:
                	mov	x3, #0x7fffffffffffffff // =9223372036854775807
                	stur	x3, [x29, #-0x8]
                	stur	x1, [x29, #-0x8]
-               	ldur	x0, [x29, #-0x8]
-               	mov	x17, #-0x8000000000000000 // =-9223372036854775808
-               	cmp	x0, x17
-               	b.eq	<addr>
-               	mov	x0, #0xf                // =15
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	stur	x2, [x29, #-0x8]
                	stur	x2, [x29, #-0x8]
                	mov	x0, #0x8                // =8
@@ -49,24 +41,8 @@ Disassembly of section .text:
                	mov	x0, #-0x8               // =-8
                	stur	x0, [x29, #-0x8]
                	stur	x1, [x29, #-0x8]
-               	ldur	x0, [x29, #-0x8]
-               	mov	x17, #-0x8000000000000000 // =-9223372036854775808
-               	cmp	x0, x17
-               	b.eq	<addr>
-               	mov	x0, #0x18               // =24
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	mov	x0, #0x7ffffffffffffffe // =9223372036854775806
                	stur	x0, [x29, #-0x8]
-               	ldur	x0, [x29, #-0x8]
-               	mov	x17, #0x7ffffffffffffffe // =9223372036854775806
-               	cmp	x0, x17
-               	b.eq	<addr>
-               	mov	x0, #0x19               // =25
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	stur	x1, [x29, #-0x8]
                	mov	x0, #0x0                // =0
                	stur	x0, [x29, #-0x8]

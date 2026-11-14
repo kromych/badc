@@ -2,7 +2,7 @@
 //!
 //! Used during declarator parsing where the value has to be known
 //! before any IR-building emit: array dimensions (`int xs[N]`),
-//! bitfield widths (`int x: N`), `enum E { K = N }` initialisers,
+//! bitfield widths (`int x: N`), `enum E { K = N }` initializers,
 //! `_Static_assert` operands, and the rvalues of static / global
 //! integer initializers. Supports the C99 constant-expression
 //! grammar -- literals (integer + floating), identifiers bound to
@@ -16,12 +16,11 @@
 //! so a floating literal can flow through the chain (e.g.
 //! `int xs[(int)(1.5 * 2.0)];`). C99 6.6 strictly admits a
 //! floating constant only as the *immediate* operand of a cast
-//! in an integer constant expression; gcc / clang accept the
-//! wider "any arithmetic constant expression" shape as an
-//! extension (gcc warns under `-Wpedantic`). The three public
-//! entry points coerce the result back to `i64` so every
-//! existing caller -- which always wants an integer -- sees
-//! the same shape it did before.
+//! in an integer constant expression; the wider "any arithmetic
+//! constant expression" shape is accepted as an extension
+//! (6.6p10). The three public entry points coerce the result
+//! back to `i64` so every existing caller -- which always wants
+//! an integer -- sees the same shape it did before.
 //!
 //! Lives next to `compiler/mod.rs` rather than inside it because
 //! the constant-expression grammar is self-contained and was the
@@ -39,8 +38,8 @@ use super::enum_conversion::{common_enum, original_enum};
 use super::types::{
     LONG_DOUBLE_BIT, UNSIGNED_BIT, add_ptr_level, integer_promote, is_floating_scalar,
     is_floating_ty, is_long_double_ty, is_pointer_ty, is_struct_ty, is_struct_value_ty,
-    is_unsigned_ty, narrow_const_int, pointee_ty, strip_unsigned, struct_id_of, struct_ptr_depth,
-    unqualified_version_ty,
+    is_unsigned_ty, is_void_ty, narrow_const_int, pointee_ty, strip_unsigned, struct_id_of,
+    struct_ptr_depth, unqualified_version_ty, void_ty,
 };
 
 /// Compile-time arithmetic value of a constant expression. Integer
@@ -64,7 +63,7 @@ pub(super) enum ConstVal {
     Int {
         val: i128,
         ty: i64,
-        /// An enumeration constant's enumeration (gcc's original type).
+        /// An enumeration constant's enumeration, for the enum-conversion checks.
         enumeration: Option<i64>,
     },
     /// A value of `float`, `double` or `long double`, held rounded to it.
@@ -112,7 +111,7 @@ pub(super) enum ConstRoot {
     Data(usize),
     /// Code symbol index: a function or libc-bound stub.
     Code(usize),
-    /// A `&&label` block address (GCC labels as values) in the function
+    /// A `&&label` block address (GNU C labels as values) in the function
     /// being parsed. Its code location is fixed only once block layout
     /// is final, so the initializer emits a relocation against it.
     Label(super::super::ast::LabelId),
@@ -214,6 +213,11 @@ enum ConstBinOp {
 }
 
 impl ConstVal {
+    /// The operand of a cast to `void`.
+    fn is_void(&self) -> bool {
+        matches!(self, ConstVal::Int { ty, .. } if is_void_ty(*ty))
+    }
+
     /// An `int`-typed value: comparison and logical results, and
     /// the other places C99 mandates `int`.
     fn int(v: i64) -> ConstVal {
@@ -428,7 +432,7 @@ impl Compiler {
         // displacement. That is a meaningful value for a data or function
         // symbol, whose relocation the consumer still carries, but a label
         // address has no integer value at all -- only `goto *` gives it
-        // meaning (GCC leaves anything else undefined). Reject rather than
+        // meaning (the extension defines no other use). Reject rather than
         // fold it to its displacement.
         if [l, r]
             .iter()
@@ -609,8 +613,8 @@ impl Compiler {
                     enumeration: None,
                 }),
                 // A byte pointer less one with no symbol: the difference
-                // is the relocated address less that integer, as gcc folds
-                // `(char *)"s" - (char *)0`.
+                // is the relocated address less that integer, so
+                // `(char *)"s" - (char *)0` folds to the address.
                 (Some(a), Some(b))
                     if a.root.is_symbolic()
                         && !a.root.is_label()
@@ -647,9 +651,9 @@ impl Compiler {
 
     /// As [`Self::parse_constant_int`], with references to block-scope
     /// `const` scalar objects folding to their recorded initializer
-    /// values. Entry point for the value contexts GCC folds them in:
-    /// case labels (including GNU ranges), `static_assert`, and
-    /// initializer designator indices.
+    /// values. Entry point for the value contexts that fold them as an
+    /// extension (6.6p10): case labels (including GNU ranges),
+    /// `static_assert`, and initializer designator indices.
     pub(super) fn parse_constant_int_folding_const_objects(&mut self) -> Result<i64, C5Error> {
         Ok(self.parse_constant_folding_const_objects()?.as_int())
     }
@@ -666,7 +670,7 @@ impl Compiler {
     /// Run `rule` with the const-object fold masked: a type dimension
     /// (array declarator, compound-literal or type-name `[N]`) never
     /// folds a block-scope `const` object even inside a folding value
-    /// context, so `int a[h]` stays variably sized (gcc parity).
+    /// context, so `int a[h]` stays variably sized.
     pub(super) fn with_const_object_fold_masked<T>(
         &mut self,
         rule: impl FnOnce(&mut Self) -> T,
@@ -929,13 +933,13 @@ impl Compiler {
     /// Evaluate a `__builtin_constant_p(x)` operand: 1 when `x` folds to
     /// a constant value, else 0. On entry the opening `(` is consumed and
     /// the current token is the operand's first; on return the closing
-    /// `)` is consumed. The operand is unevaluated (GCC does not emit
-    /// it): the fold is discarded, the lexer is repositioned past the
-    /// operand, and a fold error reports 0 rather than propagating.
-    /// A symbol-relative address is fixed only at link time and a
-    /// compound literal denotes an object (C99 6.5.2.5p4), so neither is
-    /// a constant value; gcc and clang answer 0 for both, but 1 for the
-    /// address of a string literal, cast or not, and 0 for one inside it.
+    /// `)` is consumed. The operand is unevaluated: the fold is
+    /// discarded, the lexer is repositioned past the operand, and a fold
+    /// error reports 0 rather than propagating. A symbol-relative address
+    /// is fixed only at link time and a compound literal denotes an object
+    /// (C99 6.5.2.5p4), so neither is a constant value and both answer 0;
+    /// the address of a string literal, cast or not, answers 1, and an
+    /// address inside one 0.
     pub(super) fn eval_constant_p_operand(&mut self) -> Result<i64, C5Error> {
         let snap = self.lex.snapshot();
         let saved = (
@@ -973,7 +977,7 @@ impl Compiler {
     /// / `bswap64`. Returns `None` without consuming input for anything else;
     /// a non-constant argument propagates as a non-constant expression, so an
     /// array declarator treats the dimension as a VLA. The result matches the
-    /// walker's runtime lowering and GCC: the argument is truncated to the
+    /// walker's runtime lowering: the argument is truncated to the
     /// operand width, `clz` / `ctz` at zero yield the bit width, `ffs(0)` is
     /// 0, and `bswap` reverses the bytes and carries the fixed-width unsigned
     /// result type (`uint16_t` / `uint32_t` / `uint64_t`).
@@ -1075,8 +1079,8 @@ impl Compiler {
             ));
         }
         self.next()?;
-        // GCC (GNU mode, at -O) folds block-scope `const` scalar objects
-        // in the controlling expression.
+        // As an extension (6.6p10), block-scope `const` scalar objects
+        // fold in the controlling expression.
         self.const_object_fold += 1;
         let value = self.parse_const_expr_cond_val();
         self.const_object_fold -= 1;
@@ -1144,7 +1148,7 @@ impl Compiler {
     /// expression chain. Both arms are parsed (their tokens must be
     /// consumed) but only the selected one is evaluated, so a non-constant
     /// operand or a zero divisor in the not-taken arm does not diagnose
-    /// (C99 6.6p3), matching clang/gcc. The middle operand is a full
+    /// (C99 6.6p3). The middle operand is a full
     /// expression and the `:` arm a conditional-expression, so nested
     /// `?:` (`a ? b ? c : d : e`, `a ? b : c ? d : e`) parses correctly.
     pub(super) fn parse_const_expr_cond_val(&mut self) -> Result<ConstVal, C5Error> {
@@ -1161,6 +1165,22 @@ impl Compiler {
         &mut self,
         seed: ConstVal,
     ) -> Result<ConstVal, C5Error> {
+        let v = self.parse_const_expr_chain_from(seed)?;
+        if v.is_void() {
+            self.reject_void_value(void_ty())?;
+        }
+        Ok(v)
+    }
+
+    /// A constant comma operand whose value is discarded.
+    pub(super) fn parse_const_expr_discarded(&mut self) -> Result<(), C5Error> {
+        let seed = self.parse_const_expr_unary_val()?;
+        self.parse_const_expr_chain_from(seed).map(drop)
+    }
+
+    /// [`Self::parse_const_expr_cond_from`] that passes a `(void)` operand
+    /// through, for the comma operator to discard.
+    fn parse_const_expr_chain_from(&mut self, seed: ConstVal) -> Result<ConstVal, C5Error> {
         let cond = self.parse_const_expr_or_from(seed)?;
         if self.lex.tk == Token::Cond {
             self.next()?;
@@ -1238,20 +1258,20 @@ impl Compiler {
         }
     }
 
-    /// A parenthesized constant expression, which may hold a comma operator
-    /// only where it is not evaluated (C99 6.6p3); its value is the right
-    /// operand's.
+    /// A parenthesized constant expression; its value is the right
+    /// operand's. C99 6.6p3 keeps an evaluated comma out of a constant
+    /// expression; under 6.6p10, one whose operands are constant folds,
+    /// and its discarded operands may be cast to `void`.
     fn parse_const_expr_comma_val(&mut self) -> Result<ConstVal, C5Error> {
-        let mut v = self.parse_const_expr_cond_val()?;
+        let seed = self.parse_const_expr_unary_val()?;
+        let mut v = self.parse_const_expr_chain_from(seed)?;
         while self.lex.tk == ',' {
-            if self.const_unevaluated == 0 {
-                return Err(self.compile_err(
-                    Code::CONSTANT_EXPRESSION,
-                    "a comma operator is evaluated in this constant expression",
-                ));
-            }
             self.next()?;
-            v = self.parse_const_expr_cond_val()?;
+            let seed = self.parse_const_expr_unary_val()?;
+            v = self.parse_const_expr_chain_from(seed)?;
+        }
+        if v.is_void() {
+            self.reject_void_value(void_ty())?;
         }
         Ok(v)
     }
@@ -1592,7 +1612,7 @@ impl Compiler {
             return Ok(self.const_unary_promoted(!v.as_i128(), v.int_ty()));
         }
         if self.lex.tk == Token::Lan && self.in_function_body() {
-            // GCC labels as values: `&&label` is the address of a code
+            // Labels as values: `&&label` is the address of a code
             // location in the function being parsed -- a link-time
             // constant, the same shape as `&func`, so a static
             // initializer consuming it emits a relocation rather than
@@ -1668,7 +1688,7 @@ impl Compiler {
             return Ok(v);
         }
         if self.lex.tk == Token::BuiltinTypesCompatible {
-            // GCC `__builtin_types_compatible_p(T1, T2)` is an integer
+            // `__builtin_types_compatible_p(T1, T2)` is an integer
             // constant expression (0 or 1).
             self.next()?;
             let v = self.parse_types_compatible_p()?;
@@ -1677,7 +1697,7 @@ impl Compiler {
         if self.lex.tk == Token::Id
             && self.symbols[self.lex.curr_id_idx].name == "__builtin_choose_expr"
         {
-            // GCC `__builtin_choose_expr(const, e1, e2)`: a constant
+            // `__builtin_choose_expr(const, e1, e2)`: a constant
             // expression when the chosen operand is one; the unchosen
             // operand is skipped and need not be constant.
             self.next()?;
@@ -1721,7 +1741,7 @@ impl Compiler {
         if self.lex.tk == Token::Id
             && self.symbols[self.lex.curr_id_idx].name == "__builtin_constant_p"
         {
-            // GCC `__builtin_constant_p(x)` is an integer constant
+            // `__builtin_constant_p(x)` is an integer constant
             // expression (0 or 1): 1 when the unevaluated operand folds
             // to a constant. Usable here so a compile-time min/max idiom
             // -- `__builtin_choose_expr(__builtin_constant_p(a) &&
@@ -1739,7 +1759,7 @@ impl Compiler {
         if self.lex.tk == Token::Id
             && self.symbols[self.lex.curr_id_idx].name == "__builtin_has_attribute"
         {
-            // GCC `__builtin_has_attribute(operand, attribute)` is an
+            // `__builtin_has_attribute(operand, attribute)` is an
             // integer constant expression. badc does not model the queried
             // attributes on objects or types, so under its own semantics no
             // operand carries one -- the answer is 0. Both operands are
@@ -1764,7 +1784,7 @@ impl Compiler {
         if let Some(v) = self.try_fold_value_builtin()? {
             return Ok(v);
         }
-        // GCC bit / byte builtins (`__builtin_clz` / `ctz` / `popcount` /
+        // The bit / byte builtins (`__builtin_clz` / `ctz` / `popcount` /
         // `clrsb` / `parity` / `ffs` and their `l` / `ll` forms, plus
         // `bswap16` / `bswap32` / `bswap64`) fold when the argument is a
         // constant expression, so an `ilog2`-style array bound, a
@@ -1784,7 +1804,7 @@ impl Compiler {
             });
         }
         if self.lex.tk == Token::BuiltinOffsetof {
-            // GCC `__builtin_offsetof(T, member)` is an integer constant
+            // `__builtin_offsetof(T, member)` is an integer constant
             // expression (the member's byte offset).
             self.next()?;
             // A constant context: a runtime array subscript is rejected
@@ -1843,9 +1863,9 @@ impl Compiler {
     }
 
     /// Fold `*(p + n)`, the value of `p[n]` or `n[p]` (C99 6.5.2.1p2): a
-    /// constant where `p` points into a string literal, as clang folds it,
-    /// or into an array compound literal, and the read has the literal's
-    /// element type. Any other read is not a constant.
+    /// constant where `p` points into a string literal or into an array
+    /// compound literal, and the read has the literal's element type. Any
+    /// other read is not a constant.
     fn read_const_pointee(&mut self, p: ConstVal, n: ConstVal) -> Result<ConstVal, C5Error> {
         let (a, n) = match (p, n) {
             (ConstVal::Addr(a), n) | (n, ConstVal::Addr(a)) if n.addr().is_none() => {
@@ -1883,15 +1903,15 @@ impl Compiler {
 
     /// Whether `-fno-builtin` / `-ffreestanding` / `-fno-builtin-<name>`
     /// bars this spelling from folding. The flags apply to the library
-    /// name only; gcc keeps the `__builtin_` prefixed form folding under
+    /// name only; the `__builtin_` prefixed form keeps folding under
     /// them.
     pub(super) fn library_name_is_opaque(&self, name: &str) -> bool {
         !name.starts_with("__builtin_")
             && (self.no_builtin || self.no_builtin_fns.iter().any(|n| n == name))
     }
 
-    /// Fold `strlen` / `__builtin_strlen` of a string literal, which gcc
-    /// and clang admit in an integer constant expression. The count stops
+    /// Fold `strlen` / `__builtin_strlen` of a string literal, admitted
+    /// in an integer constant expression (6.6p10). The count stops
     /// at the first NUL, as the library function does, so a literal with an
     /// embedded NUL is distinguishable from `sizeof` minus one -- which is
     /// what the construct is normally used to assert.
@@ -1949,9 +1969,9 @@ impl Compiler {
         }))
     }
 
-    /// Fold `strcmp` / `strncmp` / `memcmp` of two string literals, which
-    /// gcc folds at every optimization level and admits in an integer
-    /// constant expression. Any other argument shape, a wide literal, or a
+    /// Fold `strcmp` / `strncmp` / `memcmp` of two string literals, at
+    /// every optimization level and in an integer constant expression
+    /// (6.6p10). Any other argument shape, a wide literal, or a
     /// name bound to something other than a function declines with the
     /// token stream untouched.
     pub(super) fn try_fold_string_compare_builtin(&mut self) -> Result<Option<i64>, C5Error> {
@@ -2620,7 +2640,7 @@ impl Compiler {
                     self.array_desig_ty(elem, &dims, count)
                 };
                 // A libc-bound name has no code address of its own; its
-                // relocation target is the synthesised trampoline.
+                // relocation target is the synthesized trampoline.
                 if class == Token::Sys as i64 {
                     idx = self.ensure_sys_trampoline_sym(idx);
                 }
@@ -2785,7 +2805,7 @@ impl Compiler {
     /// Fold a read of a scalar sub-object of a `const` object with static
     /// storage duration, reached by a `[i]` / `.field` chain from its name
     /// (`tab[i].addr` over `static const struct { ... } tab[]`), or of a
-    /// `const` pointer object, as GCC and Clang do under C99 6.6p10: the
+    /// `const` pointer object, under C99 6.6p10: the
     /// initializer has already written the value into the object's `.data`
     /// bytes. The cursor is on the name. `None`, with the cursor restored,
     /// for any other shape: no chain to a non-pointer, a chain ending at an
@@ -3094,7 +3114,19 @@ impl Compiler {
                 }
                 self.reject_cast_type(!name.dims.is_empty(), name.is_function)?;
                 self.next()?;
-                self.reject_void_value(target_ty)?;
+                // A `void` operand has a value only to discard, as a comma
+                // operand (C99 6.5.17p2).
+                if is_void_ty(target_ty) {
+                    self.parse_const_expr_unary_val()?;
+                    if self.lex.tk != ',' {
+                        self.reject_void_value(target_ty)?;
+                    }
+                    return Ok(ConstVal::Int {
+                        val: 0,
+                        ty: target_ty,
+                        enumeration: None,
+                    });
+                }
                 // C99 6.5.2.5 scalar-typed compound literal `(T){ v }`: the
                 // brace holds a single value; the result is that value
                 // converted to `T` through the cast fold below.
@@ -3104,11 +3136,11 @@ impl Compiler {
                     self.next()?;
                 }
                 let v = if braced_scalar {
-                    let line = self.lex.line;
+                    let at = self.site();
                     let inner = self.parse_const_expr_cond_val()?;
                     // The value initializes the literal (C99 6.5.2.5p6).
                     if let ConstVal::Int { val, ty, .. } = inner {
-                        self.check_constant_conversion(val, ty, target_ty, 0, line);
+                        self.check_constant_conversion(val, ty, target_ty, 0, at);
                     }
                     self.accept(',')?;
                     if self.lex.tk != '}' {
@@ -3215,11 +3247,10 @@ impl Compiler {
             // Floating literal -- the lexer staged the f64 bit
             // pattern in `ival`. C99 6.6 lets a floating constant
             // appear as the immediate operand of a cast in an
-            // integer constant expression; clang/gcc widen this to
-            // accept floats anywhere in a constant arithmetic
-            // expression and truncate at the integer boundary. We
-            // match the lenient interpretation: surface the f64 and
-            // let the chain decide whether it survives.
+            // integer constant expression; under 6.6p10 a float is
+            // accepted anywhere in a constant arithmetic expression
+            // and truncated at the integer boundary: surface the f64
+            // and let the chain decide whether it survives.
             return self.const_float_literal();
         }
         if self.lex.tk == Token::Id && self.symbols[self.lex.curr_id_idx].class == Token::Num as i64
@@ -3238,8 +3269,8 @@ impl Compiler {
                 .with_enumeration(enumeration));
         }
         // A block-scope `const` scalar arithmetic object with a recorded
-        // constant initializer folds to that value in the contexts GCC
-        // folds it (case labels, `static_assert`; see `const_object_fold`).
+        // constant initializer folds to that value in the folding
+        // contexts (case labels, `static_assert`; see `const_object_fold`).
         if self.const_object_fold > 0 && self.lex.tk == Token::Id {
             let idx = self.lex.curr_id_idx;
             let sym = &self.symbols[idx];
@@ -3260,8 +3291,8 @@ impl Compiler {
                 });
             }
         }
-        // C99 6.6 leaves it implementation-defined, but GCC and common
-        // practice fold a `const`-qualified integer object with static
+        // C99 6.6p10 leaves it implementation-defined; existing practice
+        // folds a `const`-qualified integer object with static
         // storage: its initializer has already written the value into the
         // object's `.data` slot, so read it back and treat it as a
         // constant (`static const int N = 8; char buf[N * 2 + 1];`).
@@ -3315,7 +3346,7 @@ impl Compiler {
                     self.restore_lex(snap);
                 } else {
                     // A libc-bound name has no code address of its own; its
-                    // relocation target is the synthesised trampoline.
+                    // relocation target is the synthesized trampoline.
                     let idx = if class == Token::Sys as i64 {
                         self.ensure_sys_trampoline_sym(idx)
                     } else {
@@ -3396,8 +3427,8 @@ impl Compiler {
 /// an unstaged NUL at `offset + length`. `n` bounds the comparison (`None`
 /// for `strcmp`) and `stop_at_nul` ends it at a shared NUL, which `memcmp`
 /// does not do. The result is the sign of the first differing byte pair
-/// compared as `unsigned char`; C99 7.21.4 fixes only the sign, and gcc
-/// likewise normalizes to -1 / 0 / 1. `None` declines a count that reads
+/// compared as `unsigned char`; C99 7.21.4 fixes only the sign, which
+/// the fold normalizes to -1 / 0 / 1. `None` declines a count that reads
 /// past either literal's object.
 fn compare_literal_bytes(
     data: &[u8],

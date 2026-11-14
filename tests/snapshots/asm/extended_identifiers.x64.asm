@@ -35,25 +35,24 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	movl	<rip>, %eax # <addr>
                	cmpl	$0x3, %eax
                	jne	<addr>
-               	movl	<rip>, %eax # <addr>
                	cmpl	$0x3, %eax
                	je	<addr>
                	movl	$0x5, %eax
                	retq
                	leaq	<rip>, %rax # <addr>
                	leaq	<rip>, %rcx # <addr>
-               	cmpb	$0x0, (%rax)
-               	je	<addr>
                	movsbq	(%rax), %rdx
+               	testq	%rdx, %rdx
+               	je	<addr>
                	movsbq	(%rcx), %rsi
                	cmpl	%esi, %edx
                	jne	<addr>
                	incq	%rax
                	incq	%rcx
-               	cmpb	$0x0, (%rax)
+               	movsbq	(%rax), %rdx
+               	testq	%rdx, %rdx
                	jne	<addr>
                	movsbq	(%rax), %rax
                	movsbq	(%rcx), %rcx

@@ -45,8 +45,7 @@ Disassembly of section .text:
                	mov	x0, #-0x1               // =-1
                	ret
                	add	x0, x3, x6, lsl #1
-               	mov	x17, #0x3               // =3
-               	mul	x1, x1, x17
+               	add	x1, x1, x1, lsl #1
                	add	x0, x0, x1
                	add	x0, x0, x13, lsl #2
                	ret
@@ -64,11 +63,10 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	mov	x1, x20
                	bl	<addr>
-               	cmp	w20, #0xbf
-               	b.ne	<addr>
                	mov	x0, #0x0                // =0
+               	mov	x1, #0x1                // =1
+               	cmp	w20, #0xbf
+               	csel	x0, x0, x1, eq
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x20, [sp], #0x30
                	ret
-               	mov	x0, #0x1                // =1
-               	b	<addr>

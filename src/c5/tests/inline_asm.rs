@@ -5,10 +5,9 @@
 use crate::c5::ir::AsmConstraint;
 
 /// A `call` to a numeric local label of the same x86_64 asm block is the
-/// rel32 near call to it, backward and forward, as GNU as and clang
-/// assemble it: `E8 F5 FF FF FF` back over `movl $7, %eax; ret`, and
-/// `E8 02 00 00 00` forward over a two-byte `jmp`. The fixture runs it in
-/// the x86_64 tables.
+/// rel32 near call to it, backward and forward: `E8 F5 FF FF FF` back over
+/// `movl $7, %eax; ret`, and `E8 02 00 00 00` forward over a two-byte
+/// `jmp`. The fixture runs it in the x86_64 tables.
 #[cfg(feature = "native-emit")]
 #[test]
 fn a_call_to_a_local_label_is_a_rel32_near_call() {
@@ -488,7 +487,7 @@ fn aarch64_qo_operand_stores_through_a_base_register() {
 fn x86_seg_qualified_memory_operand_rides_a_segment_prefix() {
     use crate::{NativeOptions, Target};
     // A `__seg_gs` / `__seg_fs`-qualified `"+m"` operand emits a segment
-    // override on the accessing instruction (GCC named address spaces): the
+    // override on the accessing instruction (GNU C named address spaces): the
     // `incq %[v]` reaches `%gs:`/`%fs:`-relative memory. gcc encodes the read
     // path `65 48 ff ..` (gs) / `64 48 ff ..` (fs); the prefix is the only
     // delta from the unqualified operand. An `incq` through memory is
@@ -740,10 +739,10 @@ fn x86_unencodable_c_memory_operand_is_diagnosed() {
 #[test]
 fn x86_p_names_a_memory_operand_reference_and_c_is_refused() {
     use crate::{NativeOptions, Target};
-    // `%P` on an `m` operand prints its reference, as gcc and clang do, in
-    // the function body and in a pushed section, where a replacement
-    // sequence may put `prefetchw %P1`; `%c` there is refused by both.
-    // A relocatable object keeps the pushed section's bytes.
+    // `%P` on an `m` operand prints its reference in the function body and
+    // in a pushed section, where a replacement sequence may put
+    // `prefetchw %P1`; `%c` there is refused. A relocatable object keeps
+    // the pushed section's bytes.
     let emit = |body: &str| {
         let src = alloc::format!(
             "void f(const char *x, unsigned *s, unsigned v) {{ {body} }} \
@@ -793,7 +792,7 @@ fn x86_range_immediate_constraints_are_immediates() {
         );
     }
     // x86 leaves `P` undefined within the machine-dependent `I`..`P`
-    // band, so it stays unrecognized (GCC and clang both reject it).
+    // band, so it stays unrecognized.
     assert_eq!(inp("P").map(|(k, _)| k), None);
     // A register alternative alongside the letter lifts the value
     // restriction: a constant outside the range is loaded into the
@@ -906,8 +905,7 @@ fn x86_immediate_constraint_operand_encodes_as_an_immediate() {
 #[test]
 fn x86_immediate_constraint_out_of_range_is_diagnosed() {
     // An out-of-range literal has no register alternative to fall back
-    // on, so it cannot be satisfied; GCC reports "impossible constraint"
-    // and clang "value out of range for constraint".
+    // on, so it cannot be satisfied.
     let err = |body: &str| -> alloc::string::String {
         let src =
             alloc::format!("void f(int n){{ (void)n; {body} }} int main(void){{ return 0; }}");
@@ -984,11 +982,11 @@ fn has_encoding(bytes: &[u8], want: &[u8], modrm: Option<(usize, u8)>) -> bool {
 #[cfg(feature = "native-emit")]
 #[test]
 fn x86_size_suffix_modifier_prints_the_operand_width() {
-    // `%zN` prints the AT&T size suffix of operand N into the mnemonic,
-    // as GCC does: `b` / `w` / `l` / `q` for a 1 / 2 / 4 / 8-byte operand,
-    // a memory operand taking the width of the object it names. Byte
-    // sequences from `llvm-mc -show-encoding`; the register / base field
-    // is allocation-dependent.
+    // `%zN` prints the AT&T size suffix of operand N into the mnemonic:
+    // `b` / `w` / `l` / `q` for a 1 / 2 / 4 / 8-byte operand, a memory
+    // operand taking the width of the object it names. Byte sequences
+    // from `llvm-mc -show-encoding`; the register / base field is
+    // allocation-dependent.
     let emit = |ty: &str, body: &str| -> alloc::vec::Vec<u8> {
         let src = alloc::format!(
             "{ty} f({ty} v, {ty} *p) {{ {body} return v + *p; }} int main(void) {{ return 0; }}"
@@ -1125,10 +1123,10 @@ fn x86_bound_operands_past_the_reserved_scratch_emit() {
 #[test]
 fn x86_register_or_immediate_operand_takes_a_constant_as_the_immediate() {
     // A constant under a constraint with an immediate arm prints as the
-    // immediate, as GCC prints it; a value the arm does not admit -- a
-    // non-constant, or a constant outside a range letter -- takes the
-    // register. `rm` has no immediate arm and keeps the register for a
-    // constant. Byte sequences from `llvm-mc -show-encoding`.
+    // immediate; a value the arm does not admit -- a non-constant, or a
+    // constant outside a range letter -- takes the register. `rm` has
+    // no immediate arm and keeps the register for a constant. Byte
+    // sequences from `llvm-mc -show-encoding`.
     let emit = |body: &str| -> alloc::vec::Vec<u8> {
         let src =
             alloc::format!("long f(long v) {{ {body} return v; }} int main(void) {{ return 0; }}");
@@ -1361,9 +1359,8 @@ fn aarch64_immediate_constraint_out_of_range_is_diagnosed() {
 #[test]
 fn aarch64_brk_immediate_operand_encodes_as_an_immediate() {
     use crate::{NativeOptions, Target};
-    // The kgdb breakpoint site `asm("brk %0" :: "I"(imm))`: the `I` operand
-    // reaches `brk` as an immediate, encoding `brk #0x401` (0xD4208020),
-    // byte-identical to clang.
+    // A breakpoint site `asm("brk %0" :: "I"(imm))`: the `I` operand
+    // reaches `brk` as an immediate, encoding `brk #0x401` (0xD4208020).
     let src = "void f(void){ __asm__ (\"brk %0\" :: \"I\"(0x401)); } \
         int main(void){ return 0; }";
     let program = crate::Compiler::with_options(
@@ -1385,11 +1382,11 @@ fn aarch64_brk_immediate_operand_encodes_as_an_immediate() {
     assert!(found, "expected `brk #0x401` (0xD4208020)");
 }
 
-/// The AArch64 `w` class as gcc and clang have it: `<arm_neon.h>`'s float
-/// broadcasts are one `dup` from the scalar's `s` or `d` view; `x` and `y`
-/// operands take v0-v15 and v0-v7; a bare `%N` of a `w` operand names `vN`,
-/// which no scalar instruction takes; and a `w` operand is a scalar of up
-/// to 8 bytes or an 8- or 16-byte vector.
+/// The AArch64 `w` constraint class: a float broadcast's `dup` reads a
+/// scalar `w` input in its `s` or `d` view; `x` and `y` operands take
+/// v0-v15 and v0-v7; a bare `%N` of a `w` operand names `vN`, which no
+/// scalar instruction takes; and a `w` operand is a scalar of up to 8 bytes
+/// or an 8- or 16-byte vector.
 #[cfg(feature = "native-emit")]
 #[test]
 fn aarch64_w_operands_take_gccs_widths_views_and_classes() {
@@ -1405,9 +1402,12 @@ fn aarch64_w_operands_take_gccs_widths_views_and_classes() {
         w.iter().map(|w| u32::from_le_bytes(*w)).collect()
     };
     let dup = "#include <arm_neon.h>\n\
-               float32x4_t q(float x) { return vdupq_n_f32(x); }\n\
-               float32x2_t d(float x) { return vdup_n_f32(x); }\n\
-               float64x2_t q2(double x) { return vdupq_n_f64(x); }\n\
+               float32x4_t q(float x) { float32x4_t r;\n\
+               __asm__(\"dup %0.4s, %1.s[0]\" : \"=w\"(r) : \"w\"(x)); return r; }\n\
+               float32x2_t d(float x) { float32x2_t r;\n\
+               __asm__(\"dup %0.2s, %1.s[0]\" : \"=w\"(r) : \"w\"(x)); return r; }\n\
+               float64x2_t q2(double x) { float64x2_t r;\n\
+               __asm__(\"dup %0.2d, %1.d[0]\" : \"=w\"(r) : \"w\"(x)); return r; }\n\
                int main(void) { return 0; }\n";
     let xy = "#include <arm_neon.h>\n\
               float f(float a, float b) { float r;\n\
@@ -1456,8 +1456,8 @@ fn aarch64_bare_immediate_operand_encodes_like_gcc() {
     use crate::{NativeOptions, Target};
     // GAS makes the `#` optional on an immediate: a trap written
     // `brk 0x800` and a semihosting call written `hlt 0xf000` carry no
-    // `#`. They must encode identically to the `#`-prefixed form
-    // gcc emits: brk #0x800 -> 0xD4210000, hlt #0xf000 -> 0xD45E0000.
+    // `#`. They must encode identically to the `#`-prefixed form:
+    // brk #0x800 -> 0xD4210000, hlt #0xf000 -> 0xD45E0000.
     let src = "void f(void){ __asm__ volatile(\"brk 0x800\"); \
         __asm__ volatile(\"hlt 0xf000\"); } int main(void){ return 0; }";
     let program = crate::Compiler::with_options(
@@ -1482,14 +1482,45 @@ fn aarch64_bare_immediate_operand_encodes_like_gcc() {
     assert!(has(0xD45E_0000), "expected `hlt 0xf000` (0xD45E0000)");
 }
 
+/// `#%N` is GAS's optional `#` before an `i` operand's constant:
+/// `ushr v1.8h, v2.8h, #3` is 0x6F1D0441 and `ext v1.16b, v2.16b, v3.16b,
+/// #4` is 0x6E032041.
+#[cfg(feature = "native-emit")]
+#[test]
+fn aarch64_hash_before_an_immediate_operand_encodes_its_value() {
+    use crate::{NativeOptions, Target};
+    let src = "void f(void){ __asm__ volatile(\"ushr v1.8h, v2.8h, #%0\" :: \"i\"(3)); \
+        __asm__ volatile(\"ext v1.16b, v2.16b, v3.16b, #%c0\" :: \"i\"(2 * sizeof(short))); } \
+        int main(void){ return 0; }";
+    let program = crate::Compiler::with_target(src.to_string(), Target::LinuxAarch64)
+        .compile()
+        .expect("compile");
+    let bytes = crate::c5::object::emit_native_single_tu_for_test(
+        &program,
+        Target::LinuxAarch64,
+        NativeOptions::default(),
+    )
+    .expect("emit");
+    let has = |word: u32| {
+        bytes
+            .windows(4)
+            .any(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]) == word)
+    };
+    assert!(has(0x6F1D_0441), "expected `ushr v1.8h, v2.8h, #3`");
+    assert!(
+        has(0x6E03_2041),
+        "expected `ext v1.16b, v2.16b, v3.16b, #4`"
+    );
+}
+
 #[test]
 #[cfg(feature = "native-emit")]
 fn fixed_register_input_output_pair_is_accepted() {
     use crate::{NativeOptions, Target};
     // An input and an output pinned to the same register are a tied
     // pair: the register carries the input value in and the output
-    // value out (both gcc and clang accept this; it is how call-style
-    // instructions with fixed argument registers are wrapped).
+    // value out (it is how call-style instructions with fixed argument
+    // registers are wrapped).
     let emit = |src: &str, target: Target| {
         let program = crate::Compiler::with_options(
             src.to_string(),
@@ -1523,8 +1554,8 @@ fn fixed_register_input_output_pair_is_accepted() {
 
 #[test]
 fn two_inputs_on_one_fixed_register_are_accepted() {
-    // Two inputs pinned to one register both read it; gcc and clang
-    // accept the form (only the same-value use is meaningful).
+    // Two inputs pinned to one register both read it; the form is
+    // accepted (only the same-value use is meaningful).
     for (target, body) in [
         (
             crate::Target::LinuxAarch64,
@@ -1813,7 +1844,7 @@ fn x86_64_riprel_const_operand_takes_any_address_constant() {
         .expect("local `obj` symbol")
         .value as i64;
     // The `leaq` sites carry a `%c` operand each; every other row in
-    // `.text` belongs to the operand's own value materialisation.
+    // `.text` belongs to the operand's own value materialization.
     let rows: alloc::vec::Vec<(u32, alloc::string::String, i64)> = o.sections[text_idx]
         .relocs
         .iter()
@@ -2140,9 +2171,9 @@ fn file_scope_size_reaches_a_label_of_an_earlier_statement() {
 
 #[test]
 fn two_outputs_on_one_fixed_register_are_rejected() {
-    // Two outputs cannot both leave a value in one register; gcc
-    // rejects the register-variable form ("invalid hard register usage
-    // between output operands") and the class-letter form alike.
+    // Two outputs cannot both leave a value in one register; the
+    // register-variable form and the class-letter form are rejected
+    // alike.
     let err = |src: &str, target: crate::Target| -> alloc::string::String {
         crate::Compiler::with_options(src.to_string(), target, crate::CompileOptions::default())
             .compile()
@@ -2481,8 +2512,8 @@ fn reloc_target_name(o: &crate::c5::linker::relocatable::EtRel, sym: u32) -> all
 fn aarch64_template_symbol_branches_type_bl_call26_and_b_jump26() {
     use crate::c5::object::elf_reloc_types::{R_AARCH64_CALL26, R_AARCH64_JUMP26};
     // GNU as types the imm26 field by the instruction: `bl` takes CALL26,
-    // a plain `b` JUMP26. gcc 14 on this unit emits the same pair, and the
-    // branch to the template's own named label resolves without a reloc.
+    // a plain `b` JUMP26. The branch to the template's own named label
+    // resolves without a reloc.
     let src = "extern void helper(void);\nextern void other(void);\n\
                void probe(void) { __asm__ volatile(\
                \"bl helper\\n\\tb other\\n\\tb past\\npast:\\n\\tnop\" ::: \"x30\"); }\n";
@@ -3832,8 +3863,8 @@ fn a_naked_function_refuses_what_needs_a_frame() {
 #[cfg(feature = "native-emit")]
 #[test]
 fn a_naked_function_s_statements_are_emitted_or_refused() {
-    // As gcc, a statement needing no storage is emitted; one that calls, needs
-    // an automatic object or reads a parameter no prologue homes is refused.
+    // A statement needing no storage is emitted; one that calls, needs an
+    // automatic object or reads a parameter no prologue homes is refused.
     let naked = |body: &str| {
         alloc::format!("int g; void h(void);\n__attribute__((naked)) void f(int a) {{ {body} }}\n")
     };
@@ -4059,14 +4090,14 @@ fn clobber_masks(src: &str, target: crate::Target) -> Result<(u32, u32), String>
     Ok(masks.expect("an asm statement"))
 }
 
-/// A clobber name resolves to the registers it is part of, as gcc and clang
-/// both read it: the x86 high bytes to rax, rcx, rdx and rbx, a `ymm` or
-/// `zmm` name to its XMM register, an SVE `z` name to its SIMD register,
-/// `fp`, `lr` and gcc's `rN` to x registers, after one `%` or `#`. A decimal
-/// number names gcc's register of that number and clang's, which differ
-/// past x86-64's eighth and AArch64's 31st. Names of registers the allocator
-/// never assigns clobber nothing; a name both refuse is refused, and so is
-/// one only one of them takes that badc never accepted.
+/// A clobber name resolves to the registers it is part of: the x86 high
+/// bytes to rax, rcx, rdx and rbx, a `ymm` or `zmm` name to its XMM
+/// register, an SVE `z` name to its SIMD register, `fp`, `lr` and gcc's `rN`
+/// to x registers, after one `%` or `#`. A decimal number names gcc's
+/// register of that number and clang's, which differ past x86-64's eighth
+/// and AArch64's 31st. Names of registers the allocator never assigns
+/// clobber nothing; a name both refuse is refused, and so is one only one of
+/// them takes that badc never accepted.
 #[test]
 fn clobber_names_resolve_to_their_registers() {
     use crate::Target::{LinuxAarch64, LinuxX64};
@@ -4236,17 +4267,23 @@ fn a_declared_stack_pointer_clobber_moves_sp_and_the_frame_follows() {
         );
         for (optimize, tail) in [(true, "use(p);"), (false, ""), (true, "")] {
             let pushes = text("pushq $0x77", name, crate::Target::LinuxX64, optimize, tail);
+            // `leave` restores rsp from the frame, then a return or the jump
+            // of a tail call.
+            let jumps =
+                pushes.len() > 6 && pushes[pushes.len() - 6..pushes.len() - 4] == [0xC9, 0xE9];
             assert!(
-                pushes.ends_with(&LEAVE_RET),
+                pushes.ends_with(&LEAVE_RET) || jumps,
                 "{name} {tail:?}: the return: {pushes:02x?}"
             );
         }
     }
     let sets_sp = |w: u32| w & 0xFFFF_FC1F == 0x9100_001F;
+    // The `bl`, or the `b` a tail call ends the function with.
     let call_at = |w: &[u32]| {
         w.iter()
             .position(|&w| w & 0xFC00_0000 == 0x9400_0000)
-            .expect("bl")
+            .or_else(|| w.iter().rposition(|&w| w & 0xFC00_0000 == 0x1400_0000))
+            .expect("bl or b")
     };
     // `31` is sp to both compilers, `63` and the octal `077` clang's sp.
     for name in ["sp", "#wsp", "31", "63", "077"] {
@@ -4260,19 +4297,17 @@ fn a_declared_stack_pointer_clobber_moves_sp_and_the_frame_follows() {
             words.collect::<alloc::vec::Vec<u32>>()
         };
         let moves = words("mov sp, %0", false, "use(p);");
+        // A tail call's epilogue restores sp from x29 ahead of its `b`.
         assert_eq!(
             moves[..call_at(&moves)]
                 .iter()
-                .filter(|&&w| sets_sp(w))
+                .filter(|&&w| sets_sp(w) && w != MOV_SP_X29)
                 .count(),
             1,
             "{name}: only the template writes sp ahead of the call: {moves:08x?}"
         );
         let nop = words("nop", true, "use(p);");
-        assert!(
-            nop[call_at(&nop)..].contains(&MOV_SP_X29),
-            "{name}: the return: {nop:08x?}"
-        );
+        assert!(nop.contains(&MOV_SP_X29), "{name}: the return: {nop:08x?}");
         for optimize in [false, true] {
             let leaf = words("sub sp, sp, #16", optimize, "");
             assert!(

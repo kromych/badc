@@ -6,9 +6,10 @@
 //   libc/lib/scanf_ext.c's.
 // - _getws comes from ucrtbase.dll on arm64, whose msvcrt.dll lacks it.
 // _swprintf and _vswprintf are msvcrt.dll's forms without a count. The
-// UCRT's stdio entry points (__stdio_common_*), its _nolock forms and
-// _getws_s are ucrtbase.dll's alone and are not declared, nor are the
-// forms the UCRT defines inline with no export behind them.
+// UCRT's stdio entry points (__stdio_common_*) are <__badc_ucrt_stdio.h>'s;
+// its _nolock forms and _getws_s are ucrtbase.dll's alone and are not
+// declared, nor are the forms the UCRT defines inline with no export
+// behind them.
 
 #pragma once
 

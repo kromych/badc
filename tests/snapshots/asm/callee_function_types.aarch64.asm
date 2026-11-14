@@ -104,145 +104,107 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x2e0
-               	str	d8, [sp]
-               	stp	x20, x21, [sp, #0x10]
+               	str	x20, [sp, #-0x50]!
+               	stp	x29, x30, [sp, #0x40]
+               	add	x29, sp, #0x40
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	stur	x0, [x29, #-0x8]
                	fmov	d0, #3.00000000
                	bl	<addr>
                	fmov	d1, #6.00000000
+               	mov	x0, #0x1                // =1
+               	mov	x1, #0x0                // =0
                	fcmp	d0, d1
-               	b.eq	<addr>
-               	mov	x20, #0x1               // =1
-               	fmov	d0, #3.00000000
-               	fmov	d2, #2.00000000
-               	fmul	d2, d0, d2
-               	fcmp	d2, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x2
-               	ldur	x0, [x29, #-0x8]
-               	blr	x0
-               	fmov	d1, #6.00000000
-               	fcmp	d0, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x4
+               	csel	x20, x0, x1, ne
                	ldur	x0, [x29, #-0x8]
                	fmov	d0, #3.00000000
                	blr	x0
                	fmov	d1, #6.00000000
+               	orr	x0, x20, #0x4
                	fcmp	d0, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x8
+               	csel	x20, x0, x20, ne
+               	ldur	x0, [x29, #-0x8]
                	fmov	d0, #3.00000000
-               	fmov	d2, #2.00000000
-               	fmul	d2, d0, d2
-               	fcmp	d2, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x10
+               	blr	x0
+               	fmov	d1, #6.00000000
+               	orr	x0, x20, #0x8
+               	fcmp	d0, d1
+               	csel	x20, x0, x20, ne
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0, #0x8]
+               	fmov	d0, #3.00000000
                	blr	x0
                	fmov	d1, #1.50000000
+               	orr	x0, x20, #0x20
                	fcmp	d0, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x20
+               	csel	x20, x0, x20, ne
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
                	fmov	d0, #3.00000000
                	blr	x0
                	fmov	d1, #6.00000000
+               	orr	x0, x20, #0x40
                	fcmp	d0, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x40
+               	csel	x20, x0, x20, ne
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
                	fmov	d0, #3.00000000
                	blr	x0
                	fmov	d1, #6.00000000
+               	orr	x0, x20, #0x80
                	fcmp	d0, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x80
+               	csel	x20, x0, x20, ne
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0, #0x10]
                	fmov	d0, #3.00000000
                	blr	x0
                	fmov	d1, #1.50000000
+               	orr	x0, x20, #0x100
                	fcmp	d0, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x100
+               	csel	x20, x0, x20, ne
                	ldur	x0, [x29, #-0x8]
                	fmov	d0, #3.00000000
                	blr	x0
                	fmov	d1, #6.00000000
+               	orr	x0, x20, #0x200
                	fcmp	d0, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x200
+               	csel	x20, x0, x20, ne
                	ldur	x0, [x29, #-0x8]
                	fmov	d0, #3.00000000
                	blr	x0
                	fmov	d1, #6.00000000
+               	orr	x0, x20, #0x400
                	fcmp	d0, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x400
-               	fmov	d0, #3.00000000
-               	fmov	d2, #2.00000000
-               	fmul	d2, d0, d2
-               	fcmp	d2, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x800
-               	fcmp	d2, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x1000
+               	csel	x20, x0, x20, ne
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
+               	fmov	d0, #3.00000000
                	blr	x0
                	fmov	d1, #6.00000000
+               	orr	x0, x20, #0x2000
                	fcmp	d0, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x2000
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	stur	x0, [x29, #-0x8]
-               	fmov	d0, #3.00000000
-               	fmov	d2, #2.00000000
-               	fdiv	d3, d0, d2
-               	fmov	d4, #1.50000000
-               	fcmp	d3, d4
-               	b.eq	<addr>
-               	orr	x20, x20, #0x4000
-               	cbz	w20, <addr>
+               	csel	x0, x0, x20, ne
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	stur	x1, [x29, #-0x8]
+               	cbz	w0, <addr>
                	mov	x0, #0x1                // =1
-               	ldp	x20, x21, [sp, #0x10]
-               	ldr	d8, [sp]
-               	add	sp, sp, #0x2e0
-               	ldp	x29, x30, [sp], #0x10
+               	ldp	x29, x30, [sp, #0x40]
+               	ldr	x20, [sp], #0x50
                	ret
-               	mov	x20, #0x0               // =0
-               	fmul	d0, d0, d2
-               	fcmp	d0, d1
-               	b.eq	<addr>
-               	mov	x20, #0x1               // =1
-               	fcmp	d0, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x2
-               	fcmp	d0, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x4
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
                	blr	x0
                	fmov	d0, #3.00000000
                	blr	x0
                	fmov	d1, #6.00000000
+               	mov	x0, #0x8                // =8
+               	mov	x1, #0x0                // =0
                	fcmp	d0, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x8
+               	csel	x20, x0, x1, ne
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0, #0x8]
@@ -250,175 +212,105 @@ Disassembly of section .text:
                	fmov	d0, #3.00000000
                	blr	x0
                	fmov	d1, #6.00000000
+               	orr	x0, x20, #0x10
                	fcmp	d0, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x10
-               	fmov	d0, #3.00000000
-               	fmov	d2, #2.00000000
-               	fmul	d0, d0, d2
-               	fcmp	d0, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x20
-               	fcmp	d0, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x40
-               	fcmp	d0, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x80
-               	fcmp	d0, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x100
-               	fcmp	d0, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x200
-               	fcmp	d0, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x400
-               	fmov	d1, #6.00000000
-               	fcmp	d0, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x800
+               	csel	x20, x0, x20, ne
                	mov	x0, #0x3                // =3
                	mov	x1, #0x1                // =1
                	mov	x2, #0x2                // =2
                	mov	x3, x0
                	bl	<addr>
+               	orr	x1, x20, #0x1000
                	cmp	x0, #0x6
-               	b.eq	<addr>
-               	orr	x20, x20, #0x1000
-               	fmov	d1, #1.50000000
-               	fmov	d0, #2.00000000
-               	fmul	d2, d1, d0
-               	fmov	d1, #3.00000000
-               	fcmp	d2, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x2000
-               	fmul	d0, d1, d0
-               	fmov	d1, #6.00000000
-               	fcmp	d0, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x4000
-               	fcmp	d0, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x8000
-               	fcmp	d0, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x10000
-               	fcmp	d0, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x20000
-               	cbz	w20, <addr>
+               	csel	x0, x1, x20, ne
+               	cbz	w0, <addr>
                	mov	x0, #0x2                // =2
-               	ldp	x20, x21, [sp, #0x10]
-               	ldr	d8, [sp]
-               	add	sp, sp, #0x2e0
-               	ldp	x29, x30, [sp], #0x10
+               	ldp	x29, x30, [sp, #0x40]
+               	ldr	x20, [sp], #0x50
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x20, #0x0               // =0
-               	fcmp	d0, d1
-               	b.eq	<addr>
-               	mov	x20, #0x1               // =1
-               	fcmp	d0, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x2
-               	fcmp	d0, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x4
-               	fmov	d2, #3.00000000
-               	fmov	d0, #2.00000000
-               	fmul	d0, d2, d0
-               	fmov	d1, #6.00000000
-               	fcmp	d0, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x8
-               	fcmp	d0, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x10
-               	fcmp	d0, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x20
-               	fcmp	d0, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x40
                	sub	x0, x0, #0x1
                	add	x0, x0, #0x1
-               	fmov	d0, d2
+               	fmov	d0, #3.00000000
                	blr	x0
                	fmov	d1, #6.00000000
+               	mov	x0, #0x80               // =128
+               	mov	x1, #0x0                // =0
                	fcmp	d0, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x80
+               	csel	x20, x0, x1, ne
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	sub	x0, x0, #0x1
                	add	x0, x0, #0x1
-               	add	x21, x0, #0x1
+               	add	x16, x0, #0x1
+               	str	x16, [sp, #0x18]
                	fmov	d0, #3.00000000
                	blr	x0
                	fmov	d1, #6.00000000
+               	orr	x0, x20, #0x100
                	fcmp	d0, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x100
-               	sub	x0, x21, #0x1
+               	csel	x20, x0, x20, ne
+               	ldr	x16, [sp, #0x18]
+               	sub	x0, x16, #0x1
                	fmov	d0, #3.00000000
                	blr	x0
                	fmov	d1, #6.00000000
+               	orr	x0, x20, #0x200
                	fcmp	d0, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x200
-               	cbz	w20, <addr>
+               	csel	x0, x0, x20, ne
+               	cbz	w0, <addr>
                	mov	x0, #0x3                // =3
-               	ldp	x20, x21, [sp, #0x10]
-               	ldr	d8, [sp]
-               	add	sp, sp, #0x2e0
-               	ldp	x29, x30, [sp], #0x10
+               	ldp	x29, x30, [sp, #0x40]
+               	ldr	x20, [sp], #0x50
                	ret
                	fmov	d0, #3.00000000
                	bl	<addr>
                	fmov	d1, #6.00000000
+               	mov	x0, #0x1                // =1
+               	mov	x1, #0x0                // =0
                	fcmp	d0, d1
-               	b.eq	<addr>
-               	mov	x20, #0x1               // =1
+               	csel	x20, x0, x1, ne
                	fmov	d0, #3.00000000
                	bl	<addr>
                	fmov	d1, #6.00000000
+               	orr	x0, x20, #0x2
                	fcmp	d0, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x2
+               	csel	x20, x0, x20, ne
                	fmov	d0, #3.00000000
                	bl	<addr>
                	fmov	d1, #6.00000000
+               	orr	x0, x20, #0x4
                	fcmp	d0, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x4
+               	csel	x20, x0, x20, ne
                	fmov	d0, #3.00000000
                	bl	<addr>
                	fmov	d1, #6.00000000
+               	orr	x0, x20, #0x8
                	fcmp	d0, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x8
+               	csel	x20, x0, x20, ne
                	fmov	d0, #3.00000000
                	bl	<addr>
-               	fmov	d8, d0
+               	str	d0, [sp, #0x18]
                	fmov	d0, #3.00000000
                	bl	<addr>
-               	fadd	d0, d8, d0
+               	ldr	d16, [sp, #0x18]
+               	fadd	d0, d16, d0
                	fmov	d1, #12.00000000
+               	orr	x0, x20, #0x10
                	fcmp	d0, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x10
+               	csel	x20, x0, x20, ne
                	fmov	d0, #3.00000000
                	bl	<addr>
-               	fmov	d8, d0
+               	str	d0, [sp, #0x18]
                	fmov	d0, #3.00000000
                	bl	<addr>
-               	fadd	d0, d8, d0
+               	ldr	d16, [sp, #0x18]
+               	fadd	d0, d16, d0
                	fmov	d1, #12.00000000
+               	orr	x0, x20, #0x20
                	fcmp	d0, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x20
+               	csel	x20, x0, x20, ne
                	fmov	d0, #3.00000000
                	bl	<addr>
                	fmov	d1, #6.00000000
@@ -443,18 +335,10 @@ Disassembly of section .text:
                	orr	x20, x20, #0x80
                	cbz	w20, <addr>
                	mov	x0, #0x4                // =4
-               	ldp	x20, x21, [sp, #0x10]
-               	ldr	d8, [sp]
-               	add	sp, sp, #0x2e0
-               	ldp	x29, x30, [sp], #0x10
+               	ldp	x29, x30, [sp, #0x40]
+               	ldr	x20, [sp], #0x50
                	ret
                	mov	x0, #0x0                // =0
-               	ldp	x20, x21, [sp, #0x10]
-               	ldr	d8, [sp]
-               	add	sp, sp, #0x2e0
-               	ldp	x29, x30, [sp], #0x10
+               	ldp	x29, x30, [sp, #0x40]
+               	ldr	x20, [sp], #0x50
                	ret
-               	mov	x20, #0x0               // =0
-               	b	<addr>
-               	mov	x20, #0x0               // =0
-               	b	<addr>

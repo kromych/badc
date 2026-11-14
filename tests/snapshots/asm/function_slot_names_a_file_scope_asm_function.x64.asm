@@ -30,15 +30,13 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	movq	<rip>, %rax # <addr>
                	callq	*%rax
+               	xorl	%ecx, %ecx
+               	movl	$0x1, %edx
                	cmpl	$0x5, %eax
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	cmovneq	%rdx, %rcx
+               	movq	%rcx, %rax
                	popq	%rbp
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>
-               	addb	%al, (%rax)
-               	addb	%bh, 0x5(%rax)
 
 <fsa_fn>:
                	movl	$0x5, %eax

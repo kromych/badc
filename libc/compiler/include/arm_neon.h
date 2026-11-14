@@ -1,0 +1,3240 @@
+/* AArch64 Advanced SIMD (NEON) intrinsics of the Arm C Language Extensions:
+ * a call of the compiler's row of the instruction the ACLE maps each to
+ * (`__builtin_neon_<insn>_<arrangement>`), which the optimizer and the
+ * interpreter evaluate; an inline-asm wrapper over the instruction, vector
+ * operands in the `w` class, where no row exists yet; or short C over the
+ * vector extension for lane accesses and compositions. A family is
+ * instantiated over the rows of the element types it is defined on. Forms
+ * with a lane or immediate operand are macros: the operand is a
+ * range-checked integer constant expression that reaches the template as
+ * an `i` operand.
+ *
+ * Types: [u]int{8,16,32,64}, poly{8,16,64} and float{32,64} vectors of 64
+ * and 128 bits, poly128_t, and the structures of two to four of them. On
+ * every element type the ACLE defines them for: vld1/vst1
+ * and their _dup and _lane forms, vdup_n, vmov_n, vdup_lane[q], vget_low,
+ * vget_high, vcombine, vget_lane, vset_lane, vreinterpret between any two
+ * types of one width, vzip/vuzp/vtrn and their 1/2 halves, vext, vrev16/32/
+ * 64, vbsl. Integer: vadd vsub vmul vmla vmls vaba vabd vneg vabs vqneg
+ * vqabs vqadd vqsub vhadd vrhadd vhsub vmax vmin vpadd vpmax vpmin vpaddl,
+ * vand vorr veor vbic vorn vmvn vtst vcnt vclz vcls, vceq vcge vcgt vcle
+ * vclt, vshl/vrshl/vqshl by register, vshl_n vqshl_n vshr_n vrshr_n vsra_n
+ * vrsra_n vsli_n vsri_n vshrn_n vrshrn_n vqshrn_n vqrshrn_n vqshrun_n
+ * vqrshrun_n with their _high forms, vqshlu_n vshll_n, vpadal, vmovl vmovn vqmovn vqmovun vaddl
+ * vsubl vaddw vsubw vmull vmlal vmlsl vabdl vabal with their _high forms, vaddv vaddlv
+ * vmaxv vminv, the doubling multiplies vqdmulh vqrdmulh vqdmull vqdmlal
+ * vqdmlsl vqrdmlah vqrdmlsh with their _high and scalar forms. Floating: vadd vsub vmul vdiv vmax vmin vabs vneg vsqrt vfma
+ * vfms vrecpe vrecps vrsqrte vrsqrts vabd vmaxnm vminnm vmulx with their
+ * scalar forms, the pairwise vpadd vpmax vpmin vpmaxnm vpminnm and the
+ * across-lane vaddv vmaxv vminv vmaxnmv vminnmv, the roundings vrnd vrndn
+ * vrnda vrndm vrndp vrndx vrndi vrnd32z vrnd32x vrnd64z vrnd64x, the
+ * compares, those against zero (vceqz ... vcltz, integer too, with their
+ * scalar forms), and the conversions to and from the integers of one
+ * width (vcvt, vcvtn, vcvtm, vcvtp, vcvta, and vcvt_n to and from fixed
+ * point, with their scalar forms) and between single and double. Also vrecpe_u32, vrsqrte_u32, vmul_p8, vqtbl1q_u8, vqtbx1q_u8, the FEAT_AES rounds,
+ * vmull_p8, vmull_high_p8, vmull_p64, vmull_high_p64, the SHA-1, SHA-256, SHA-512, SHA3, SM3 and
+ * SM4 intrinsics.
+ *
+ * Also vcage vcagt vcale vcalt, vaddhn vraddhn vsubhn vrsubhn, vuqadd
+ * vsqadd, vrbit, vcopy_lane, the float vmla and vmls, the lane-indexed
+ * and _n forms, and the dot and int8 matrix products.
+ *
+ * The structure types of two to four vectors of every element type, and
+ * the structure loads and stores vld1_x vst1_x vld2 vld3 vld4 vst2 vst3
+ * vst4 with their _dup and _lane forms.
+ *
+ * The byte table lookups vqtbl2 to vqtbl4, vqtbx2 to vqtbx4, vtbl1 to
+ * vtbl4 and vtbx1 to vtbx4, as one-register lookups in turn.
+ *
+ * Also vadd on the polynomial types, vcreate, vcls on the unsigned types,
+ * vqrshl, vcvtx and vrecpx.
+ *
+ * The scalar forms of the operations above, lane 0 of the vector ones.
+ *
+ * The base set is complete and __ARM_NEON is predefined. Not provided:
+ * float16 and bfloat16, which need the __fp16 and __bf16 types, the
+ * complex-arithmetic forms (FEAT_FCMA) and the FEAT_LRCPC3 lane loads and
+ * stores.
+ *
+ * The element typedefs match <stdint.h>, repeated so the header serves
+ * freestanding units; poly128_t is carried as a 16-byte vector.
+ */
+#ifndef BADC_ARM_NEON_H
+#define BADC_ARM_NEON_H
+#ifndef __BADC_INTRIN
+/* An intrinsic is inlined at every optimization level, as a call to it would
+ * pass and copy its vectors around one instruction. */
+#define __BADC_INTRIN static __inline__ __attribute__((__always_inline__))
+#endif
+
+#ifndef __aarch64__
+#error "arm_neon.h requires an AArch64 target"
+#endif
+
+/* A unit may define `__attribute__` away, as code written for compilers
+** without it does; the declarations below need it. */
+#pragma push_macro("__attribute__")
+#undef __attribute__
+
+typedef signed char int8_t;
+typedef short int16_t;
+typedef int int32_t;
+typedef __INT64_TYPE__ int64_t;
+typedef unsigned char uint8_t;
+typedef unsigned short uint16_t;
+typedef unsigned int uint32_t;
+typedef __UINT64_TYPE__ uint64_t;
+typedef unsigned char poly8_t;
+typedef unsigned short poly16_t;
+typedef __UINT64_TYPE__ poly64_t;
+typedef float float32_t;
+typedef double float64_t;
+
+typedef signed char int8x8_t __attribute__((vector_size(8)));
+typedef short int16x4_t __attribute__((vector_size(8)));
+typedef int int32x2_t __attribute__((vector_size(8)));
+typedef int64_t int64x1_t __attribute__((vector_size(8)));
+typedef unsigned char uint8x8_t __attribute__((vector_size(8)));
+typedef unsigned short uint16x4_t __attribute__((vector_size(8)));
+typedef unsigned int uint32x2_t __attribute__((vector_size(8)));
+typedef uint64_t uint64x1_t __attribute__((vector_size(8)));
+typedef poly8_t poly8x8_t __attribute__((vector_size(8)));
+typedef poly16_t poly16x4_t __attribute__((vector_size(8)));
+typedef poly64_t poly64x1_t __attribute__((vector_size(8)));
+typedef float float32x2_t __attribute__((vector_size(8)));
+typedef double float64x1_t __attribute__((vector_size(8)));
+
+typedef signed char int8x16_t __attribute__((vector_size(16)));
+typedef short int16x8_t __attribute__((vector_size(16)));
+typedef int int32x4_t __attribute__((vector_size(16)));
+typedef int64_t int64x2_t __attribute__((vector_size(16)));
+typedef unsigned char uint8x16_t __attribute__((vector_size(16)));
+typedef unsigned short uint16x8_t __attribute__((vector_size(16)));
+typedef unsigned int uint32x4_t __attribute__((vector_size(16)));
+typedef uint64_t uint64x2_t __attribute__((vector_size(16)));
+typedef poly8_t poly8x16_t __attribute__((vector_size(16)));
+typedef poly16_t poly16x8_t __attribute__((vector_size(16)));
+typedef poly64_t poly64x2_t __attribute__((vector_size(16)));
+typedef float float32x4_t __attribute__((vector_size(16)));
+typedef double float64x2_t __attribute__((vector_size(16)));
+typedef poly64_t poly128_t __attribute__((vector_size(16)));
+
+
+/* Operand n of a template in arrangement 4s, and `insn` over operands 0,
+ * 1 and 2 in it: the SM3 and SM4 forms, which have no rows. */
+#define __BADC_NEON_V_4s(n) "%" #n ".4s"
+#define __BADC_NEON_I3(insn, A, B, C)                                     \
+    insn " " __BADC_NEON_V_##A(0) ", " __BADC_NEON_V_##B(1) ", " __BADC_NEON_V_##C(2)
+/* The signed or unsigned choice by kind; a polynomial lane is unsigned,
+ * and a floating one takes the first, as a lane permute does. */
+#define __BADC_NEON_PICK(k, s, u) __BADC_NEON_PICK_##k(s, u)
+#define __BADC_NEON_PICK_s(s, u) s
+#define __BADC_NEON_PICK_u(s, u) u
+#define __BADC_NEON_PICK_p(s, u) u
+#define __BADC_NEON_PICK_f(s, u) s
+/* The compiler's row of the instruction a builtin stem names, in
+ * arrangement A; its result is read as the vector R. B2R swaps the
+ * operands. */
+#define __BADC_NEON_B(stem, A) __BADC_NEON_B_(stem, A)
+#define __BADC_NEON_B_(stem, A) stem##_##A
+#define __BADC_NEON_B2(name, R, T, U, k, si, ui, A)                       \
+    __BADC_INTRIN R name(T __a, U __b) {                                  \
+        return (R)__BADC_NEON_B(__BADC_NEON_PICK(k, si, ui), A)(__a, __b); \
+    }
+#define __BADC_NEON_B2R(name, R, T, U, k, si, ui, A)                      \
+    __BADC_INTRIN R name(T __a, U __b) {                                  \
+        return (R)__BADC_NEON_B(__BADC_NEON_PICK(k, si, ui), A)(__b, __a); \
+    }
+#define __BADC_NEON_B1(name, R, T, k, si, ui, A)                          \
+    __BADC_INTRIN R name(T __a) {                                         \
+        return (R)__BADC_NEON_B(__BADC_NEON_PICK(k, si, ui), A)(__a);     \
+    }
+/* The accumulator __a is the first operand and the result; B3T's other
+ * operands are of types T and U. */
+#define __BADC_NEON_B3(name, R, k, si, ui, A) __BADC_NEON_B3T(name, R, R, R, k, si, ui, A)
+#define __BADC_NEON_B3T(name, R, T, U, k, si, ui, A)                      \
+    __BADC_INTRIN R name(R __a, T __b, U __c) {                           \
+        return (R)__BADC_NEON_B(__BADC_NEON_PICK(k, si, ui), A)(__a, __b, __c); \
+    }
+
+/* One instruction into R; FN3 accumulates into __a. */
+#define __BADC_NEON_FN2(name, R, T, U, tmpl)                              \
+    __BADC_INTRIN R name(T __a, U __b) {                                  \
+        R __r;                                                            \
+        __asm__(tmpl : "=w"(__r) : "w"(__a), "w"(__b));                   \
+        return __r;                                                       \
+    }
+#define __BADC_NEON_FN3(name, R, T, U, tmpl)                              \
+    __BADC_INTRIN R name(R __a, T __b, U __c) {                           \
+        __asm__(tmpl : "+w"(__a) : "w"(__b), "w"(__c));                   \
+        return __a;                                                       \
+    }
+
+/* One row per element type: suffix, kind (s, u, p, f), element, the 64- and
+ * 128-bit vectors and their arrangements, and the unsigned and the signed
+ * vectors of the same lanes. A family takes its own arguments, then a row. */
+#define __BADC_NEON_R_s8(F, ...) F(__VA_ARGS__, s8, s, int8_t, int8x8_t, int8x16_t, 8b, 16b, \
+    uint8x8_t, uint8x16_t, int8x8_t, int8x16_t)
+#define __BADC_NEON_R_u8(F, ...) F(__VA_ARGS__, u8, u, uint8_t, uint8x8_t, uint8x16_t, 8b, 16b, \
+    uint8x8_t, uint8x16_t, int8x8_t, int8x16_t)
+#define __BADC_NEON_R_p8(F, ...) F(__VA_ARGS__, p8, p, poly8_t, poly8x8_t, poly8x16_t, 8b, 16b, \
+    uint8x8_t, uint8x16_t, int8x8_t, int8x16_t)
+#define __BADC_NEON_R_s16(F, ...) F(__VA_ARGS__, s16, s, int16_t, int16x4_t, int16x8_t, 4h, 8h, \
+    uint16x4_t, uint16x8_t, int16x4_t, int16x8_t)
+#define __BADC_NEON_R_u16(F, ...) F(__VA_ARGS__, u16, u, uint16_t, uint16x4_t, uint16x8_t, 4h, \
+    8h, uint16x4_t, uint16x8_t, int16x4_t, int16x8_t)
+#define __BADC_NEON_R_p16(F, ...) F(__VA_ARGS__, p16, p, poly16_t, poly16x4_t, poly16x8_t, 4h, \
+    8h, uint16x4_t, uint16x8_t, int16x4_t, int16x8_t)
+#define __BADC_NEON_R_s32(F, ...) F(__VA_ARGS__, s32, s, int32_t, int32x2_t, int32x4_t, 2s, 4s, \
+    uint32x2_t, uint32x4_t, int32x2_t, int32x4_t)
+#define __BADC_NEON_R_u32(F, ...) F(__VA_ARGS__, u32, u, uint32_t, uint32x2_t, uint32x4_t, 2s, \
+    4s, uint32x2_t, uint32x4_t, int32x2_t, int32x4_t)
+#define __BADC_NEON_R_f32(F, ...) F(__VA_ARGS__, f32, f, float32_t, float32x2_t, float32x4_t, \
+    2s, 4s, uint32x2_t, uint32x4_t, int32x2_t, int32x4_t)
+#define __BADC_NEON_R_s64(F, ...) F(__VA_ARGS__, s64, s, int64_t, int64x1_t, int64x2_t, d, 2d, \
+    uint64x1_t, uint64x2_t, int64x1_t, int64x2_t)
+#define __BADC_NEON_R_u64(F, ...) F(__VA_ARGS__, u64, u, uint64_t, uint64x1_t, uint64x2_t, d, \
+    2d, uint64x1_t, uint64x2_t, int64x1_t, int64x2_t)
+#define __BADC_NEON_R_p64(F, ...) F(__VA_ARGS__, p64, p, poly64_t, poly64x1_t, poly64x2_t, d, \
+    2d, uint64x1_t, uint64x2_t, int64x1_t, int64x2_t)
+#define __BADC_NEON_R_f64(F, ...) F(__VA_ARGS__, f64, f, float64_t, float64x1_t, float64x2_t, \
+    d, 2d, uint64x1_t, uint64x2_t, int64x1_t, int64x2_t)
+
+#define __BADC_NEON_I8(F, ...) __BADC_NEON_R_s8(F, __VA_ARGS__) __BADC_NEON_R_u8(F, __VA_ARGS__)
+#define __BADC_NEON_I16(F, ...) __BADC_NEON_R_s16(F, __VA_ARGS__) __BADC_NEON_R_u16(F, __VA_ARGS__)
+#define __BADC_NEON_I32(F, ...) __BADC_NEON_R_s32(F, __VA_ARGS__) __BADC_NEON_R_u32(F, __VA_ARGS__)
+#define __BADC_NEON_I64(F, ...) __BADC_NEON_R_s64(F, __VA_ARGS__) __BADC_NEON_R_u64(F, __VA_ARGS__)
+#define __BADC_NEON_INT_8_32(F, ...)                                      \
+    __BADC_NEON_I8(F, __VA_ARGS__) __BADC_NEON_I16(F, __VA_ARGS__) __BADC_NEON_I32(F, __VA_ARGS__)
+#define __BADC_NEON_INT(F, ...) __BADC_NEON_INT_8_32(F, __VA_ARGS__) __BADC_NEON_I64(F, __VA_ARGS__)
+#define __BADC_NEON_SINT_8_32(F, ...)                                     \
+    __BADC_NEON_R_s8(F, __VA_ARGS__) __BADC_NEON_R_s16(F, __VA_ARGS__)    \
+    __BADC_NEON_R_s32(F, __VA_ARGS__)
+#define __BADC_NEON_SINT(F, ...)                                          \
+    __BADC_NEON_SINT_8_32(F, __VA_ARGS__) __BADC_NEON_R_s64(F, __VA_ARGS__)
+#define __BADC_NEON_E8(F, ...) __BADC_NEON_I8(F, __VA_ARGS__) __BADC_NEON_R_p8(F, __VA_ARGS__)
+#define __BADC_NEON_E16(F, ...) __BADC_NEON_I16(F, __VA_ARGS__) __BADC_NEON_R_p16(F, __VA_ARGS__)
+#define __BADC_NEON_E32(F, ...) __BADC_NEON_I32(F, __VA_ARGS__) __BADC_NEON_R_f32(F, __VA_ARGS__)
+#define __BADC_NEON_E64(F, ...)                                           \
+    __BADC_NEON_I64(F, __VA_ARGS__) __BADC_NEON_R_p64(F, __VA_ARGS__)     \
+    __BADC_NEON_R_f64(F, __VA_ARGS__)
+/* The rows whose 64-bit vector has more than one lane, and all of them. */
+#define __BADC_NEON_LANES(F, ...)                                         \
+    __BADC_NEON_E8(F, __VA_ARGS__) __BADC_NEON_E16(F, __VA_ARGS__) __BADC_NEON_E32(F, __VA_ARGS__)
+#define __BADC_NEON_ALL(F, ...) __BADC_NEON_LANES(F, __VA_ARGS__) __BADC_NEON_E64(F, __VA_ARGS__)
+
+/* Broadcasts: the value in every lane, as a compound literal of as many
+ * elements as the arrangement has lanes. */
+#define __BADC_NEON_N_d(x) x
+#define __BADC_NEON_N_2d(x) x, x
+#define __BADC_NEON_N_2s(x) x, x
+#define __BADC_NEON_N_4s(x) x, x, x, x
+#define __BADC_NEON_N_4h(x) x, x, x, x
+#define __BADC_NEON_N_8h(x) __BADC_NEON_N_4h(x), __BADC_NEON_N_4h(x)
+#define __BADC_NEON_N_8b(x) __BADC_NEON_N_4h(x), __BADC_NEON_N_4h(x)
+#define __BADC_NEON_N_16b(x) __BADC_NEON_N_8b(x), __BADC_NEON_N_8b(x)
+#define __BADC_NEON_F_DUP(_, sfx, k, E, D, Q, AD, AQ, ...)                \
+    __BADC_INTRIN D vdup_n_##sfx(E __x) { return (D){__BADC_NEON_N_##AD(__x)}; } \
+    __BADC_INTRIN Q vdupq_n_##sfx(E __x) { return (Q){__BADC_NEON_N_##AQ(__x)}; } \
+    __BADC_INTRIN D vmov_n_##sfx(E __x) { return vdup_n_##sfx(__x); }     \
+    __BADC_INTRIN Q vmovq_n_##sfx(E __x) { return vdupq_n_##sfx(__x); }
+__BADC_NEON_ALL(__BADC_NEON_F_DUP, _)
+
+/* Loads and stores: the vector's bytes at any address, and one element in
+ * every lane. */
+#define __BADC_NEON_F_MEM(_, sfx, k, E, D, Q, ...)                        \
+    __BADC_INTRIN D vld1_##sfx(const E *__p) {                            \
+        D __r;                                                            \
+        __builtin_memcpy(&__r, __p, sizeof __r);                          \
+        return __r;                                                       \
+    }                                                                     \
+    __BADC_INTRIN Q vld1q_##sfx(const E *__p) {                           \
+        Q __r;                                                            \
+        __builtin_memcpy(&__r, __p, sizeof __r);                          \
+        return __r;                                                       \
+    }                                                                     \
+    __BADC_INTRIN void vst1_##sfx(E *__p, D __v) { __builtin_memcpy(__p, &__v, sizeof __v); } \
+    __BADC_INTRIN void vst1q_##sfx(E *__p, Q __v) { __builtin_memcpy(__p, &__v, sizeof __v); } \
+    __BADC_INTRIN D vld1_dup_##sfx(const E *__p) { return vdup_n_##sfx(*__p); } \
+    __BADC_INTRIN Q vld1q_dup_##sfx(const E *__p) { return vdupq_n_##sfx(*__p); }
+__BADC_NEON_ALL(__BADC_NEON_F_MEM, _)
+
+/* Halves and the concatenation of two, as the 64-bit lanes of the
+ * 128-bit vector. */
+#define __BADC_NEON_F_HALF(_, sfx, k, E, D, Q, ...)                       \
+    __BADC_INTRIN D vget_low_##sfx(Q __a) {                               \
+        return (D)(float64x1_t){((float64x2_t)__a)[0]};                   \
+    }                                                                     \
+    __BADC_INTRIN D vget_high_##sfx(Q __a) {                              \
+        return (D)(float64x1_t){((float64x2_t)__a)[1]};                   \
+    }                                                                     \
+    __BADC_INTRIN Q vcombine_##sfx(D __a, D __b) {                        \
+        return (Q)(float64x2_t){((float64x1_t)__a)[0], ((float64x1_t)__b)[0]}; \
+    }
+__BADC_NEON_ALL(__BADC_NEON_F_HALF, _)
+
+/* Reinterpretations: casts between vector types of one width. AFTER_x
+ * names the rows after x in ALL's order, so each pair is spelled once. */
+#define __BADC_NEON_F_CAST(a, A, AQ, b, k, E, B, BQ, ...)                 \
+    __BADC_INTRIN A vreinterpret_##a##_##b(B __x) { return (A)__x; }      \
+    __BADC_INTRIN B vreinterpret_##b##_##a(A __x) { return (B)__x; }      \
+    __BADC_INTRIN AQ vreinterpretq_##a##_##b(BQ __x) { return (AQ)__x; }  \
+    __BADC_INTRIN BQ vreinterpretq_##b##_##a(AQ __x) { return (BQ)__x; }
+#define __BADC_NEON_F_CASTS(_, a, k, E, A, AQ, ...)                       \
+    __BADC_NEON_AFTER_##a(__BADC_NEON_F_CAST, a, A, AQ)                   \
+    __BADC_INTRIN poly128_t vreinterpretq_p128_##a(AQ __x) { return (poly128_t)__x; } \
+    __BADC_INTRIN AQ vreinterpretq_##a##_p128(poly128_t __x) { return (AQ)__x; }
+#define __BADC_NEON_AFTER_s8(F, ...)                                      \
+    __BADC_NEON_R_u8(F, __VA_ARGS__) __BADC_NEON_AFTER_u8(F, __VA_ARGS__)
+#define __BADC_NEON_AFTER_u8(F, ...)                                      \
+    __BADC_NEON_R_p8(F, __VA_ARGS__) __BADC_NEON_AFTER_p8(F, __VA_ARGS__)
+#define __BADC_NEON_AFTER_p8(F, ...)                                      \
+    __BADC_NEON_R_s16(F, __VA_ARGS__) __BADC_NEON_AFTER_s16(F, __VA_ARGS__)
+#define __BADC_NEON_AFTER_s16(F, ...)                                     \
+    __BADC_NEON_R_u16(F, __VA_ARGS__) __BADC_NEON_AFTER_u16(F, __VA_ARGS__)
+#define __BADC_NEON_AFTER_u16(F, ...)                                     \
+    __BADC_NEON_R_p16(F, __VA_ARGS__) __BADC_NEON_AFTER_p16(F, __VA_ARGS__)
+#define __BADC_NEON_AFTER_p16(F, ...)                                     \
+    __BADC_NEON_R_s32(F, __VA_ARGS__) __BADC_NEON_AFTER_s32(F, __VA_ARGS__)
+#define __BADC_NEON_AFTER_s32(F, ...)                                     \
+    __BADC_NEON_R_u32(F, __VA_ARGS__) __BADC_NEON_AFTER_u32(F, __VA_ARGS__)
+#define __BADC_NEON_AFTER_u32(F, ...)                                     \
+    __BADC_NEON_R_f32(F, __VA_ARGS__) __BADC_NEON_AFTER_f32(F, __VA_ARGS__)
+#define __BADC_NEON_AFTER_f32(F, ...)                                     \
+    __BADC_NEON_R_s64(F, __VA_ARGS__) __BADC_NEON_AFTER_s64(F, __VA_ARGS__)
+#define __BADC_NEON_AFTER_s64(F, ...)                                     \
+    __BADC_NEON_R_u64(F, __VA_ARGS__) __BADC_NEON_AFTER_u64(F, __VA_ARGS__)
+#define __BADC_NEON_AFTER_u64(F, ...)                                     \
+    __BADC_NEON_R_p64(F, __VA_ARGS__) __BADC_NEON_AFTER_p64(F, __VA_ARGS__)
+#define __BADC_NEON_AFTER_p64(F, ...) __BADC_NEON_R_f64(F, __VA_ARGS__)
+#define __BADC_NEON_AFTER_f64(F, ...)
+__BADC_NEON_ALL(__BADC_NEON_F_CASTS, _)
+
+/* Permutes (none of a single lane); the pairs return both halves. */
+#define __BADC_NEON_F_PERM(op, si, sfx, k, E, D, Q, AD, AQ, ...)          \
+    __BADC_NEON_B2(op##_##sfx, D, D, D, k, si, si, AD)                    \
+    __BADC_NEON_B2(op##q_##sfx, Q, Q, Q, k, si, si, AQ)
+#define __BADC_NEON_F_PERMQ(op, si, sfx, k, E, D, Q, AD, AQ, ...)         \
+    __BADC_NEON_B2(op##q_##sfx, Q, Q, Q, k, si, si, AQ)
+#define __BADC_NEON_PERMS(op, si)                                         \
+    __BADC_NEON_LANES(__BADC_NEON_F_PERM, op, si)                         \
+    __BADC_NEON_E64(__BADC_NEON_F_PERMQ, op, si)
+__BADC_NEON_PERMS(vzip1, __builtin_neon_zip1)
+__BADC_NEON_PERMS(vzip2, __builtin_neon_zip2)
+__BADC_NEON_PERMS(vuzp1, __builtin_neon_uzp1)
+__BADC_NEON_PERMS(vuzp2, __builtin_neon_uzp2)
+__BADC_NEON_PERMS(vtrn1, __builtin_neon_trn1)
+__BADC_NEON_PERMS(vtrn2, __builtin_neon_trn2)
+#define __BADC_NEON_PAIR(op, sfx, DN, QN)                                 \
+    __BADC_INTRIN DN##x2_t op##_##sfx(DN##_t __a, DN##_t __b) {           \
+        return (DN##x2_t){{op##1_##sfx(__a, __b), op##2_##sfx(__a, __b)}}; \
+    }                                                                     \
+    __BADC_INTRIN QN##x2_t op##q_##sfx(QN##_t __a, QN##_t __b) {          \
+        return (QN##x2_t){{op##1q_##sfx(__a, __b), op##2q_##sfx(__a, __b)}}; \
+    }
+#define __BADC_NEON_PAIRS(sfx, DN, QN)                                    \
+    typedef struct DN##x2_t {                                             \
+        DN##_t val[2];                                                    \
+    } DN##x2_t;                                                           \
+    typedef struct QN##x2_t {                                             \
+        QN##_t val[2];                                                    \
+    } QN##x2_t;                                                           \
+    __BADC_NEON_PAIR(vzip, sfx, DN, QN)                                   \
+    __BADC_NEON_PAIR(vuzp, sfx, DN, QN)                                   \
+    __BADC_NEON_PAIR(vtrn, sfx, DN, QN)
+__BADC_NEON_PAIRS(s8, int8x8, int8x16)
+__BADC_NEON_PAIRS(u8, uint8x8, uint8x16)
+__BADC_NEON_PAIRS(p8, poly8x8, poly8x16)
+__BADC_NEON_PAIRS(s16, int16x4, int16x8)
+__BADC_NEON_PAIRS(u16, uint16x4, uint16x8)
+__BADC_NEON_PAIRS(p16, poly16x4, poly16x8)
+__BADC_NEON_PAIRS(s32, int32x2, int32x4)
+__BADC_NEON_PAIRS(u32, uint32x2, uint32x4)
+__BADC_NEON_PAIRS(f32, float32x2, float32x4)
+
+/* Element reversal within each 16-, 32- or 64-bit group. */
+#define __BADC_NEON_F_UN(op, si, ui, sfx, k, E, D, Q, AD, AQ, ...)        \
+    __BADC_NEON_B1(op##_##sfx, D, D, k, si, ui, AD)                       \
+    __BADC_NEON_B1(op##q_##sfx, Q, Q, k, si, ui, AQ)
+#define __BADC_NEON_F_UNX(op, stem, sfx, k, E, D, Q, AD, AQ, ...)         \
+    __BADC_NEON_B1(op##_##sfx, D, D, s, stem, stem, AD)                   \
+    __BADC_NEON_B1(op##q_##sfx, Q, Q, s, stem, stem, AQ)
+__BADC_NEON_E8(__BADC_NEON_F_UNX, vrev16, __builtin_neon_rev16)
+__BADC_NEON_E8(__BADC_NEON_F_UNX, vrev32, __builtin_neon_rev32)
+__BADC_NEON_E16(__BADC_NEON_F_UNX, vrev32, __builtin_neon_rev32)
+__BADC_NEON_LANES(__BADC_NEON_F_UNX, vrev64, __builtin_neon_rev64)
+
+/* Bitwise select: the mask's set bits take the first operand's. */
+#define __BADC_NEON_BSL(name, M, T, A)                                    \
+    __BADC_INTRIN T name(M __m, T __a, T __b) {                           \
+        return (T)__builtin_neon_bsl_##A(__m, __a, __b);                  \
+    }
+#define __BADC_NEON_F_BSL(_, sfx, k, E, D, Q, AD, AQ, UD, UQ, ...)        \
+    __BADC_NEON_BSL(vbsl_##sfx, UD, D, 8b)                                \
+    __BADC_NEON_BSL(vbslq_##sfx, UQ, Q, 16b)
+__BADC_NEON_ALL(__BADC_NEON_F_BSL, _)
+
+/* Lane-wise integer operations; a 64-bit lane takes the d scalar form. */
+#define __BADC_NEON_F_BIN(op, si, ui, sfx, k, E, D, Q, AD, AQ, ...)       \
+    __BADC_NEON_B2(op##_##sfx, D, D, D, k, si, ui, AD)                    \
+    __BADC_NEON_B2(op##q_##sfx, Q, Q, Q, k, si, ui, AQ)
+#define __BADC_NEON_F_BINQ(op, si, ui, sfx, k, E, D, Q, AD, AQ, ...)      \
+    __BADC_NEON_B2(op##q_##sfx, Q, Q, Q, k, si, ui, AQ)
+#define __BADC_NEON_F_ACC(op, si, ui, sfx, k, E, D, Q, AD, AQ, ...)       \
+    __BADC_NEON_B3(op##_##sfx, D, k, si, ui, AD)                          \
+    __BADC_NEON_B3(op##q_##sfx, Q, k, si, ui, AQ)
+__BADC_NEON_INT(__BADC_NEON_F_BIN, vadd, __builtin_neon_add, __builtin_neon_add)
+__BADC_NEON_INT(__BADC_NEON_F_BIN, vsub, __builtin_neon_sub, __builtin_neon_sub)
+__BADC_NEON_INT(__BADC_NEON_F_BIN, vqadd, __builtin_neon_sqadd, __builtin_neon_uqadd)
+__BADC_NEON_INT(__BADC_NEON_F_BIN, vqsub, __builtin_neon_sqsub, __builtin_neon_uqsub)
+__BADC_NEON_INT_8_32(__BADC_NEON_F_BIN, vmul, __builtin_neon_mul, __builtin_neon_mul)
+__BADC_NEON_INT_8_32(__BADC_NEON_F_BIN, vhadd, __builtin_neon_shadd, __builtin_neon_uhadd)
+__BADC_NEON_INT_8_32(__BADC_NEON_F_BIN, vrhadd, __builtin_neon_srhadd, __builtin_neon_urhadd)
+__BADC_NEON_INT_8_32(__BADC_NEON_F_BIN, vhsub, __builtin_neon_shsub, __builtin_neon_uhsub)
+__BADC_NEON_INT_8_32(__BADC_NEON_F_BIN, vabd, __builtin_neon_sabd, __builtin_neon_uabd)
+__BADC_NEON_INT_8_32(__BADC_NEON_F_BIN, vmax, __builtin_neon_smax, __builtin_neon_umax)
+__BADC_NEON_INT_8_32(__BADC_NEON_F_BIN, vmin, __builtin_neon_smin, __builtin_neon_umin)
+__BADC_NEON_INT_8_32(__BADC_NEON_F_BIN, vpadd, __builtin_neon_addp, __builtin_neon_addp)
+__BADC_NEON_I64(__BADC_NEON_F_BINQ, vpadd, __builtin_neon_addp, __builtin_neon_addp)
+__BADC_NEON_INT_8_32(__BADC_NEON_F_BIN, vpmax, __builtin_neon_smaxp, __builtin_neon_umaxp)
+__BADC_NEON_INT_8_32(__BADC_NEON_F_BIN, vpmin, __builtin_neon_sminp, __builtin_neon_uminp)
+__BADC_NEON_INT_8_32(__BADC_NEON_F_ACC, vmla, __builtin_neon_mla, __builtin_neon_mla)
+__BADC_NEON_INT_8_32(__BADC_NEON_F_ACC, vmls, __builtin_neon_mls, __builtin_neon_mls)
+__BADC_NEON_INT_8_32(__BADC_NEON_F_ACC, vaba, __builtin_neon_saba, __builtin_neon_uaba)
+__BADC_NEON_SINT(__BADC_NEON_F_UN, vneg, __builtin_neon_neg, __builtin_neon_neg)
+__BADC_NEON_SINT(__BADC_NEON_F_UN, vabs, __builtin_neon_abs, __builtin_neon_abs)
+__BADC_NEON_SINT(__BADC_NEON_F_UN, vqneg, __builtin_neon_sqneg, __builtin_neon_sqneg)
+__BADC_NEON_SINT(__BADC_NEON_F_UN, vqabs, __builtin_neon_sqabs, __builtin_neon_sqabs)
+__BADC_NEON_INT_8_32(__BADC_NEON_F_UN, vclz, __builtin_neon_clz, __builtin_neon_clz)
+__BADC_NEON_SINT_8_32(__BADC_NEON_F_UN, vcls, __builtin_neon_cls, __builtin_neon_cls)
+__BADC_INTRIN poly8x8_t vmul_p8(poly8x8_t __a, poly8x8_t __b) {
+    return (poly8x8_t)__builtin_neon_pmul_8b(__a, __b);
+}
+__BADC_INTRIN poly8x16_t vmulq_p8(poly8x16_t __a, poly8x16_t __b) {
+    return (poly8x16_t)__builtin_neon_pmul_16b(__a, __b);
+}
+
+/* Bitwise operations over the bytes of any integer vector. */
+#define __BADC_NEON_F_LOGIC(op, stem, sfx, k, E, D, Q, ...)               \
+    __BADC_NEON_B2(op##_##sfx, D, D, D, s, stem, stem, 8b)                \
+    __BADC_NEON_B2(op##q_##sfx, Q, Q, Q, s, stem, stem, 16b)
+#define __BADC_NEON_F_LOGIC1(op, stem, sfx, k, E, D, Q, ...)              \
+    __BADC_NEON_B1(op##_##sfx, D, D, s, stem, stem, 8b)                   \
+    __BADC_NEON_B1(op##q_##sfx, Q, Q, s, stem, stem, 16b)
+__BADC_NEON_INT(__BADC_NEON_F_LOGIC, vand, __builtin_neon_and)
+__BADC_NEON_INT(__BADC_NEON_F_LOGIC, vorr, __builtin_neon_orr)
+__BADC_NEON_INT(__BADC_NEON_F_LOGIC, veor, __builtin_neon_eor)
+__BADC_NEON_INT(__BADC_NEON_F_LOGIC, vbic, __builtin_neon_bic)
+__BADC_NEON_INT(__BADC_NEON_F_LOGIC, vorn, __builtin_neon_orn)
+__BADC_NEON_INT_8_32(__BADC_NEON_F_LOGIC1, vmvn, __builtin_neon_mvn)
+__BADC_NEON_R_p8(__BADC_NEON_F_LOGIC1, vmvn, __builtin_neon_mvn)
+__BADC_NEON_E8(__BADC_NEON_F_LOGIC1, vcnt, __builtin_neon_cnt)
+
+/* All-ones lanes where the relation holds; vcle and vclt swap the operands
+ * of vcge and vcgt. vshl, vrshl and vqshl shift by a signed lane count. */
+#define __BADC_NEON_F_CMP(op, si, ui, sfx, k, E, D, Q, AD, AQ, UD, UQ, ...) \
+    __BADC_NEON_B2(op##_##sfx, UD, D, D, k, si, ui, AD)                   \
+    __BADC_NEON_B2(op##q_##sfx, UQ, Q, Q, k, si, ui, AQ)
+#define __BADC_NEON_F_CMPR(op, si, ui, sfx, k, E, D, Q, AD, AQ, UD, UQ, ...) \
+    __BADC_NEON_B2R(op##_##sfx, UD, D, D, k, si, ui, AD)                  \
+    __BADC_NEON_B2R(op##q_##sfx, UQ, Q, Q, k, si, ui, AQ)
+#define __BADC_NEON_F_SHL(op, si, ui, sfx, k, E, D, Q, AD, AQ, UD, UQ, SD, SQ) \
+    __BADC_NEON_B2(op##_##sfx, D, D, SD, k, si, ui, AD)                   \
+    __BADC_NEON_B2(op##q_##sfx, Q, Q, SQ, k, si, ui, AQ)
+__BADC_NEON_INT(__BADC_NEON_F_CMP, vceq, __builtin_neon_cmeq, __builtin_neon_cmeq)
+__BADC_NEON_R_p8(__BADC_NEON_F_CMP, vceq, __builtin_neon_cmeq, __builtin_neon_cmeq)
+__BADC_NEON_R_p64(__BADC_NEON_F_CMP, vceq, __builtin_neon_cmeq, __builtin_neon_cmeq)
+__BADC_NEON_INT(__BADC_NEON_F_CMP, vcge, __builtin_neon_cmge, __builtin_neon_cmhs)
+__BADC_NEON_INT(__BADC_NEON_F_CMP, vcgt, __builtin_neon_cmgt, __builtin_neon_cmhi)
+__BADC_NEON_INT(__BADC_NEON_F_CMPR, vcle, __builtin_neon_cmge, __builtin_neon_cmhs)
+__BADC_NEON_INT(__BADC_NEON_F_CMPR, vclt, __builtin_neon_cmgt, __builtin_neon_cmhi)
+__BADC_NEON_INT(__BADC_NEON_F_CMP, vtst, __builtin_neon_cmtst, __builtin_neon_cmtst)
+__BADC_NEON_R_p8(__BADC_NEON_F_CMP, vtst, __builtin_neon_cmtst, __builtin_neon_cmtst)
+__BADC_NEON_INT(__BADC_NEON_F_SHL, vshl, __builtin_neon_sshl, __builtin_neon_ushl)
+__BADC_NEON_INT(__BADC_NEON_F_SHL, vrshl, __builtin_neon_srshl, __builtin_neon_urshl)
+__BADC_NEON_INT(__BADC_NEON_F_SHL, vqshl, __builtin_neon_sqshl, __builtin_neon_uqshl)
+
+/* Rows of a narrow type and its double: suffixes, kind, narrow and wide
+ * vectors, their arrangements, and the unsigned narrow vectors. */
+#define __BADC_NEON_W_s8(F, ...) F(__VA_ARGS__, s8, s16, s, int8x8_t, int8x16_t, int16x4_t, \
+    int16x8_t, 8b, 16b, 4h, 8h, uint8x8_t, uint8x16_t)
+#define __BADC_NEON_W_u8(F, ...) F(__VA_ARGS__, u8, u16, u, uint8x8_t, uint8x16_t, uint16x4_t, \
+    uint16x8_t, 8b, 16b, 4h, 8h, uint8x8_t, uint8x16_t)
+#define __BADC_NEON_W_s16(F, ...) F(__VA_ARGS__, s16, s32, s, int16x4_t, int16x8_t, int32x2_t, \
+    int32x4_t, 4h, 8h, 2s, 4s, uint16x4_t, uint16x8_t)
+#define __BADC_NEON_W_u16(F, ...) F(__VA_ARGS__, u16, u32, u, uint16x4_t, uint16x8_t, \
+    uint32x2_t, uint32x4_t, 4h, 8h, 2s, 4s, uint16x4_t, uint16x8_t)
+#define __BADC_NEON_W_s32(F, ...) F(__VA_ARGS__, s32, s64, s, int32x2_t, int32x4_t, int64x1_t, \
+    int64x2_t, 2s, 4s, 1d, 2d, uint32x2_t, uint32x4_t)
+#define __BADC_NEON_W_u32(F, ...) F(__VA_ARGS__, u32, u64, u, uint32x2_t, uint32x4_t, \
+    uint64x1_t, uint64x2_t, 2s, 4s, 1d, 2d, uint32x2_t, uint32x4_t)
+#define __BADC_NEON_SWIDE(F, ...)                                         \
+    __BADC_NEON_W_s8(F, __VA_ARGS__) __BADC_NEON_W_s16(F, __VA_ARGS__)    \
+    __BADC_NEON_W_s32(F, __VA_ARGS__)
+#define __BADC_NEON_WIDE(F, ...)                                          \
+    __BADC_NEON_SWIDE(F, __VA_ARGS__) __BADC_NEON_W_u8(F, __VA_ARGS__)    \
+    __BADC_NEON_W_u16(F, __VA_ARGS__) __BADC_NEON_W_u32(F, __VA_ARGS__)
+
+/* Widening and narrowing. The _high forms read the upper half of a 128-bit
+ * source, or place a narrowed result above the 64-bit first operand. */
+/* A row is named by its narrow arrangement, or by the wide source one when
+ * it narrows; the _high form's stem ends in 2. */
+#define __BADC_NEON_F_LONG(op, si, ui, n, w, k, ND, NQ, WD, WQ, NA, NAQ, WAD, WAQ, ...) \
+    __BADC_NEON_B2(op##_##n, WQ, ND, ND, k, si, ui, NA)                   \
+    __BADC_NEON_B2(op##_high_##n, WQ, NQ, NQ, k, si##2, ui##2, NAQ)
+#define __BADC_NEON_F_LONGACC(op, si, ui, n, w, k, ND, NQ, WD, WQ, NA, NAQ, WAD, WAQ, ...) \
+    __BADC_NEON_B3T(op##_##n, WQ, ND, ND, k, si, ui, NA)                  \
+    __BADC_NEON_B3T(op##_high_##n, WQ, NQ, NQ, k, si##2, ui##2, NAQ)
+#define __BADC_NEON_F_WIDEN(op, si, ui, n, w, k, ND, NQ, WD, WQ, NA, NAQ, WAD, WAQ, ...) \
+    __BADC_NEON_B2(op##_##n, WQ, WQ, ND, k, si, ui, NA)                   \
+    __BADC_NEON_B2(op##_high_##n, WQ, WQ, NQ, k, si##2, ui##2, NAQ)
+#define __BADC_NEON_F_MOVL(_, n, w, k, ND, NQ, WD, WQ, NA, NAQ, WAD, WAQ, ...) \
+    __BADC_NEON_B1(vmovl_##n, WQ, ND, k, __builtin_neon_sxtl, __builtin_neon_uxtl, NA) \
+    __BADC_NEON_B1(vmovl_high_##n, WQ, NQ, k, __builtin_neon_sxtl2, __builtin_neon_uxtl2, NAQ) \
+    __BADC_NEON_B1(vpaddl_##n, WD, ND, k, __builtin_neon_saddlp, __builtin_neon_uaddlp, NA) \
+    __BADC_NEON_B1(vpaddlq_##n, WQ, NQ, k, __builtin_neon_saddlp, __builtin_neon_uaddlp, NAQ)
+#define __BADC_NEON_F_MOVN(op, si, ui, n, w, k, ND, NQ, WD, WQ, NA, NAQ, WAD, WAQ, UND, UNQ) \
+    __BADC_NEON_B1(op##_##w, ND, WQ, k, si, ui, WAQ)                      \
+    __BADC_INTRIN NQ op##_high_##w(ND __r, WQ __a) {                      \
+        return (NQ)vcombine_u64((uint64x1_t)__r, (uint64x1_t)op##_##w(__a)); \
+    }
+#define __BADC_NEON_F_QMOVUN(_, n, w, k, ND, NQ, WD, WQ, NA, NAQ, WAD, WAQ, UND, UNQ) \
+    __BADC_NEON_B1(vqmovun_##w, UND, WQ, s, __builtin_neon_sqxtun, __builtin_neon_sqxtun, WAQ) \
+    __BADC_INTRIN UNQ vqmovun_high_##w(UND __r, WQ __a) {                 \
+        return (UNQ)vcombine_u64((uint64x1_t)__r, (uint64x1_t)vqmovun_##w(__a)); \
+    }
+__BADC_NEON_WIDE(__BADC_NEON_F_LONG, vaddl, __builtin_neon_saddl, __builtin_neon_uaddl)
+__BADC_NEON_WIDE(__BADC_NEON_F_LONG, vsubl, __builtin_neon_ssubl, __builtin_neon_usubl)
+__BADC_NEON_WIDE(__BADC_NEON_F_LONG, vmull, __builtin_neon_smull, __builtin_neon_umull)
+__BADC_NEON_WIDE(__BADC_NEON_F_LONG, vabdl, __builtin_neon_sabdl, __builtin_neon_uabdl)
+__BADC_NEON_WIDE(__BADC_NEON_F_LONGACC, vmlal, __builtin_neon_smlal, __builtin_neon_umlal)
+__BADC_NEON_WIDE(__BADC_NEON_F_LONGACC, vmlsl, __builtin_neon_smlsl, __builtin_neon_umlsl)
+__BADC_NEON_WIDE(__BADC_NEON_F_LONGACC, vabal, __builtin_neon_sabal, __builtin_neon_uabal)
+__BADC_NEON_WIDE(__BADC_NEON_F_WIDEN, vaddw, __builtin_neon_saddw, __builtin_neon_uaddw)
+__BADC_NEON_WIDE(__BADC_NEON_F_WIDEN, vsubw, __builtin_neon_ssubw, __builtin_neon_usubw)
+__BADC_NEON_WIDE(__BADC_NEON_F_MOVL, _)
+/* vpadal: the accumulator plus the pairwise long sums of the second
+ * operand. */
+#define __BADC_NEON_F_PADAL(_, n, w, k, ND, NQ, WD, WQ, NA, NAQ, ...)     \
+    __BADC_NEON_B2(vpadal_##n, WD, WD, ND, k, __builtin_neon_sadalp, __builtin_neon_uadalp, NA) \
+    __BADC_NEON_B2(vpadalq_##n, WQ, WQ, NQ, k, __builtin_neon_sadalp, __builtin_neon_uadalp, NAQ)
+__BADC_NEON_WIDE(__BADC_NEON_F_PADAL, _)
+__BADC_NEON_WIDE(__BADC_NEON_F_MOVN, vmovn, __builtin_neon_xtn, __builtin_neon_xtn)
+__BADC_NEON_WIDE(__BADC_NEON_F_MOVN, vqmovn, __builtin_neon_sqxtn, __builtin_neon_uqxtn)
+__BADC_NEON_SWIDE(__BADC_NEON_F_QMOVUN, _)
+
+/* The doubling multiplies, signed and saturating: the high half of twice
+ * the product (vqdmulh), rounded (vqrdmulh); twice the product into lanes
+ * twice as wide (vqdmull), added to or taken from an accumulator
+ * (vqdmlal, vqdmlsl); and the accumulating rounded high halves of
+ * FEAT_RDM (vqrdmlah, vqrdmlsh). The scalar forms are lane 0 of the
+ * vector ones. */
+__BADC_NEON_B2(vqdmulh_s16, int16x4_t, int16x4_t, int16x4_t, s, __builtin_neon_sqdmulh, _, 4h)
+__BADC_NEON_B2(vqdmulhq_s16, int16x8_t, int16x8_t, int16x8_t, s, __builtin_neon_sqdmulh, _, 8h)
+__BADC_INTRIN int16_t vqdmulhh_s16(int16_t __a, int16_t __b) { return vqdmulh_s16((int16x4_t){__a}, (int16x4_t){__b})[0]; }
+__BADC_NEON_B2(vqdmulh_s32, int32x2_t, int32x2_t, int32x2_t, s, __builtin_neon_sqdmulh, _, 2s)
+__BADC_NEON_B2(vqdmulhq_s32, int32x4_t, int32x4_t, int32x4_t, s, __builtin_neon_sqdmulh, _, 4s)
+__BADC_INTRIN int32_t vqdmulhs_s32(int32_t __a, int32_t __b) { return vqdmulh_s32((int32x2_t){__a}, (int32x2_t){__b})[0]; }
+__BADC_NEON_B2(vqrdmulh_s16, int16x4_t, int16x4_t, int16x4_t, s, __builtin_neon_sqrdmulh, _, 4h)
+__BADC_NEON_B2(vqrdmulhq_s16, int16x8_t, int16x8_t, int16x8_t, s, __builtin_neon_sqrdmulh, _, 8h)
+__BADC_INTRIN int16_t vqrdmulhh_s16(int16_t __a, int16_t __b) { return vqrdmulh_s16((int16x4_t){__a}, (int16x4_t){__b})[0]; }
+__BADC_NEON_B2(vqrdmulh_s32, int32x2_t, int32x2_t, int32x2_t, s, __builtin_neon_sqrdmulh, _, 2s)
+__BADC_NEON_B2(vqrdmulhq_s32, int32x4_t, int32x4_t, int32x4_t, s, __builtin_neon_sqrdmulh, _, 4s)
+__BADC_INTRIN int32_t vqrdmulhs_s32(int32_t __a, int32_t __b) { return vqrdmulh_s32((int32x2_t){__a}, (int32x2_t){__b})[0]; }
+__BADC_NEON_B3(vqrdmlah_s16, int16x4_t, s, __builtin_neon_sqrdmlah, _, 4h)
+__BADC_NEON_B3(vqrdmlahq_s16, int16x8_t, s, __builtin_neon_sqrdmlah, _, 8h)
+__BADC_INTRIN int16_t vqrdmlahh_s16(int16_t __a, int16_t __b, int16_t __c) { return vqrdmlah_s16((int16x4_t){__a}, (int16x4_t){__b}, (int16x4_t){__c})[0]; }
+__BADC_NEON_B3(vqrdmlah_s32, int32x2_t, s, __builtin_neon_sqrdmlah, _, 2s)
+__BADC_NEON_B3(vqrdmlahq_s32, int32x4_t, s, __builtin_neon_sqrdmlah, _, 4s)
+__BADC_INTRIN int32_t vqrdmlahs_s32(int32_t __a, int32_t __b, int32_t __c) { return vqrdmlah_s32((int32x2_t){__a}, (int32x2_t){__b}, (int32x2_t){__c})[0]; }
+__BADC_NEON_B3(vqrdmlsh_s16, int16x4_t, s, __builtin_neon_sqrdmlsh, _, 4h)
+__BADC_NEON_B3(vqrdmlshq_s16, int16x8_t, s, __builtin_neon_sqrdmlsh, _, 8h)
+__BADC_INTRIN int16_t vqrdmlshh_s16(int16_t __a, int16_t __b, int16_t __c) { return vqrdmlsh_s16((int16x4_t){__a}, (int16x4_t){__b}, (int16x4_t){__c})[0]; }
+__BADC_NEON_B3(vqrdmlsh_s32, int32x2_t, s, __builtin_neon_sqrdmlsh, _, 2s)
+__BADC_NEON_B3(vqrdmlshq_s32, int32x4_t, s, __builtin_neon_sqrdmlsh, _, 4s)
+__BADC_INTRIN int32_t vqrdmlshs_s32(int32_t __a, int32_t __b, int32_t __c) { return vqrdmlsh_s32((int32x2_t){__a}, (int32x2_t){__b}, (int32x2_t){__c})[0]; }
+__BADC_NEON_B2(vqdmull_s16, int32x4_t, int16x4_t, int16x4_t, s, __builtin_neon_sqdmull, _, 4h)
+__BADC_NEON_B2(vqdmull_high_s16, int32x4_t, int16x8_t, int16x8_t, s, __builtin_neon_sqdmull2, _, 8h)
+__BADC_INTRIN int32_t vqdmullh_s16(int16_t __a, int16_t __b) { return vqdmull_s16((int16x4_t){__a}, (int16x4_t){__b})[0]; }
+__BADC_NEON_B3T(vqdmlal_s16, int32x4_t, int16x4_t, int16x4_t, s, __builtin_neon_sqdmlal, _, 4h)
+__BADC_NEON_B3T(vqdmlal_high_s16, int32x4_t, int16x8_t, int16x8_t, s, __builtin_neon_sqdmlal2, _, 8h)
+__BADC_INTRIN int32_t vqdmlalh_s16(int32_t __a, int16_t __b, int16_t __c) { return vqdmlal_s16((int32x4_t){__a}, (int16x4_t){__b}, (int16x4_t){__c})[0]; }
+__BADC_NEON_B3T(vqdmlsl_s16, int32x4_t, int16x4_t, int16x4_t, s, __builtin_neon_sqdmlsl, _, 4h)
+__BADC_NEON_B3T(vqdmlsl_high_s16, int32x4_t, int16x8_t, int16x8_t, s, __builtin_neon_sqdmlsl2, _, 8h)
+__BADC_INTRIN int32_t vqdmlslh_s16(int32_t __a, int16_t __b, int16_t __c) { return vqdmlsl_s16((int32x4_t){__a}, (int16x4_t){__b}, (int16x4_t){__c})[0]; }
+__BADC_NEON_B2(vqdmull_s32, int64x2_t, int32x2_t, int32x2_t, s, __builtin_neon_sqdmull, _, 2s)
+__BADC_NEON_B2(vqdmull_high_s32, int64x2_t, int32x4_t, int32x4_t, s, __builtin_neon_sqdmull2, _, 4s)
+__BADC_INTRIN int64_t vqdmulls_s32(int32_t __a, int32_t __b) { return vqdmull_s32((int32x2_t){__a}, (int32x2_t){__b})[0]; }
+__BADC_NEON_B3T(vqdmlal_s32, int64x2_t, int32x2_t, int32x2_t, s, __builtin_neon_sqdmlal, _, 2s)
+__BADC_NEON_B3T(vqdmlal_high_s32, int64x2_t, int32x4_t, int32x4_t, s, __builtin_neon_sqdmlal2, _, 4s)
+__BADC_INTRIN int64_t vqdmlals_s32(int64_t __a, int32_t __b, int32_t __c) { return vqdmlal_s32((int64x2_t){__a}, (int32x2_t){__b}, (int32x2_t){__c})[0]; }
+__BADC_NEON_B3T(vqdmlsl_s32, int64x2_t, int32x2_t, int32x2_t, s, __builtin_neon_sqdmlsl, _, 2s)
+__BADC_NEON_B3T(vqdmlsl_high_s32, int64x2_t, int32x4_t, int32x4_t, s, __builtin_neon_sqdmlsl2, _, 4s)
+__BADC_INTRIN int64_t vqdmlsls_s32(int64_t __a, int32_t __b, int32_t __c) { return vqdmlsl_s32((int64x2_t){__a}, (int32x2_t){__b}, (int32x2_t){__c})[0]; }
+
+/* Across lanes: lane 0 of the reduction's row. A 2-lane 32-bit or 64-bit
+ * vector takes the pairwise form of the vector with itself. */
+#define __BADC_NEON_RED(name, R, T, stem, A)                              \
+    __BADC_INTRIN R name(T __a) { return (R)__BADC_NEON_B(stem, A)(__a)[0]; }
+#define __BADC_NEON_RED2(name, R, T, stem, A)                             \
+    __BADC_INTRIN R name(T __a) { return (R)__BADC_NEON_B(stem, A)(__a, __a)[0]; }
+#define __BADC_NEON_F_ACROSS(op, si, ui, sfx, k, E, D, Q, AD, AQ, ...)    \
+    __BADC_NEON_RED(op##_##sfx, E, D, __BADC_NEON_PICK(k, si, ui), AD)    \
+    __BADC_NEON_RED(op##q_##sfx, E, Q, __BADC_NEON_PICK(k, si, ui), AQ)
+#define __BADC_NEON_F_ACROSS2(op, si, ui, sp, up, sfx, k, E, D, Q, ...)   \
+    __BADC_NEON_RED2(op##_##sfx, E, D, __BADC_NEON_PICK(k, sp, up), 2s)   \
+    __BADC_NEON_RED(op##q_##sfx, E, Q, __BADC_NEON_PICK(k, si, ui), 4s)
+#define __BADC_NEON_F_ADDLV(ws, wu, sfx, k, E, D, Q, AD, AQ, ...)         \
+    __BADC_NEON_RED(vaddlv_##sfx, __BADC_NEON_PICK(k, ws, wu), D,         \
+                    __BADC_NEON_PICK(k, __builtin_neon_saddlv, __builtin_neon_uaddlv), AD) \
+    __BADC_NEON_RED(vaddlvq_##sfx, __BADC_NEON_PICK(k, ws, wu), Q,        \
+                    __BADC_NEON_PICK(k, __builtin_neon_saddlv, __builtin_neon_uaddlv), AQ)
+#define __BADC_NEON_F_ADDLV2(_, sfx, k, E, D, Q, ...)                     \
+    __BADC_NEON_RED(vaddlv_##sfx, __BADC_NEON_PICK(k, int64_t, uint64_t), D, \
+                    __BADC_NEON_PICK(k, __builtin_neon_saddlp, __builtin_neon_uaddlp), 2s) \
+    __BADC_NEON_RED(vaddlvq_##sfx, __BADC_NEON_PICK(k, int64_t, uint64_t), Q, \
+                    __BADC_NEON_PICK(k, __builtin_neon_saddlv, __builtin_neon_uaddlv), 4s)
+__BADC_NEON_I8(__BADC_NEON_F_ACROSS, vaddv, __builtin_neon_addv, __builtin_neon_addv)
+__BADC_NEON_I16(__BADC_NEON_F_ACROSS, vaddv, __builtin_neon_addv, __builtin_neon_addv)
+__BADC_NEON_I32(__BADC_NEON_F_ACROSS2, vaddv, __builtin_neon_addv, __builtin_neon_addv,
+                __builtin_neon_addp, __builtin_neon_addp)
+__BADC_NEON_RED2(vaddvq_s64, int64_t, int64x2_t, __builtin_neon_addp, 2d)
+__BADC_NEON_RED2(vaddvq_u64, uint64_t, uint64x2_t, __builtin_neon_addp, 2d)
+__BADC_NEON_I8(__BADC_NEON_F_ACROSS, vmaxv, __builtin_neon_smaxv, __builtin_neon_umaxv)
+__BADC_NEON_I16(__BADC_NEON_F_ACROSS, vmaxv, __builtin_neon_smaxv, __builtin_neon_umaxv)
+__BADC_NEON_I32(__BADC_NEON_F_ACROSS2, vmaxv, __builtin_neon_smaxv, __builtin_neon_umaxv,
+                __builtin_neon_smaxp, __builtin_neon_umaxp)
+__BADC_NEON_I8(__BADC_NEON_F_ACROSS, vminv, __builtin_neon_sminv, __builtin_neon_uminv)
+__BADC_NEON_I16(__BADC_NEON_F_ACROSS, vminv, __builtin_neon_sminv, __builtin_neon_uminv)
+__BADC_NEON_I32(__BADC_NEON_F_ACROSS2, vminv, __builtin_neon_sminv, __builtin_neon_uminv,
+                __builtin_neon_sminp, __builtin_neon_uminp)
+__BADC_NEON_I8(__BADC_NEON_F_ADDLV, int16_t, uint16_t)
+__BADC_NEON_I16(__BADC_NEON_F_ADDLV, int32_t, uint32_t)
+__BADC_NEON_I32(__BADC_NEON_F_ADDLV2, _)
+
+/* Lane reads and writes, lane loads and stores, and the lane broadcasts,
+ * as subscripts of the vector extension. */
+#define __BADC_NEON_LANE(__n, __lanes)                                    \
+    _Static_assert((__n) >= 0 && (__n) < (int)(__lanes), "lane index out of range")
+#define __BADC_NEON_NLANES(__v) (sizeof(__v) / sizeof((__v)[0]))
+#define __BADC_NEON_GET(T, __v, __n) __extension__({                      \
+    __BADC_NEON_LANE(__n, __BADC_NEON_NLANES((T){0}));                    \
+    ((T)(__v))[__n];                                                      \
+})
+#define __BADC_NEON_SET(T, __x, __v, __n) __extension__({                 \
+    T __lv = (__v);                                                       \
+    __BADC_NEON_LANE(__n, __BADC_NEON_NLANES(__lv));                      \
+    __lv[__n] = (__x);                                                    \
+    __lv;                                                                 \
+})
+#define __BADC_NEON_LD1L(T, __p, __v, __n) __extension__({                \
+    T __lv = (__v);                                                       \
+    const __typeof__(__lv[0]) *__lp = (__p);                              \
+    __BADC_NEON_LANE(__n, __BADC_NEON_NLANES(__lv));                      \
+    __lv[__n] = *__lp;                                                    \
+    __lv;                                                                 \
+})
+#define __BADC_NEON_ST1L(T, __p, __v, __n) __extension__({                \
+    T __lv = (__v);                                                       \
+    __typeof__(__lv[0]) *__lp = (__p);                                    \
+    __BADC_NEON_LANE(__n, __BADC_NEON_NLANES(__lv));                      \
+    *__lp = __lv[__n];                                                    \
+})
+/* Lane __n of the vector T, D or Q by S, in every lane of R, arrangement A. */
+#define __BADC_NEON_DUPL(R, T, A, S, __v, __n) __extension__({            \
+    T __lv = (__v);                                                       \
+    __BADC_NEON_LANE(__n, __BADC_NEON_NLANES(__lv));                      \
+    (R)__builtin_neon_dup_##A##_##S(__lv, __n);                           \
+})
+#define __BADC_NEON_DUPL1(R, T, __v, __n) __extension__({                 \
+    T __lv = (__v);                                                       \
+    __BADC_NEON_LANE(__n, __BADC_NEON_NLANES(__lv));                      \
+    (R)__lv;                                                              \
+})
+/* Lane __n of the 128-bit vector T of 64-bit lanes, as the 64-bit R. */
+#define __BADC_NEON_DUPLQ1(R, T, __v, __n) __extension__({                \
+    T __lv = (__v);                                                       \
+    __BADC_NEON_LANE(__n, __BADC_NEON_NLANES(__lv));                      \
+    (R)(float64x1_t){((float64x2_t)__lv)[__n]};                           \
+})
+/* The window of the concatenation __b:__a starting at lane __n. */
+#define __BADC_NEON_EXT(T, A, __a, __b, __n) __extension__({              \
+    T __ea = (__a), __eb = (__b);                                         \
+    __BADC_NEON_LANE(__n, __BADC_NEON_NLANES(__ea));                      \
+    (T)__builtin_neon_ext_##A(__ea, __eb, (__n) * sizeof __ea[0]);        \
+})
+
+#define vget_lane_s8(__v, __n) __BADC_NEON_GET(int8x8_t, __v, __n)
+#define vgetq_lane_s8(__v, __n) __BADC_NEON_GET(int8x16_t, __v, __n)
+#define vset_lane_s8(__x, __v, __n) __BADC_NEON_SET(int8x8_t, __x, __v, __n)
+#define vsetq_lane_s8(__x, __v, __n) __BADC_NEON_SET(int8x16_t, __x, __v, __n)
+#define vld1_lane_s8(__p, __v, __n) __BADC_NEON_LD1L(int8x8_t, __p, __v, __n)
+#define vld1q_lane_s8(__p, __v, __n) __BADC_NEON_LD1L(int8x16_t, __p, __v, __n)
+#define vst1_lane_s8(__p, __v, __n) __BADC_NEON_ST1L(int8x8_t, __p, __v, __n)
+#define vst1q_lane_s8(__p, __v, __n) __BADC_NEON_ST1L(int8x16_t, __p, __v, __n)
+#define vdup_lane_s8(__v, __n) __BADC_NEON_DUPL(int8x8_t, int8x8_t, 8b, d, __v, __n)
+#define vdupq_lane_s8(__v, __n) __BADC_NEON_DUPL(int8x16_t, int8x8_t, 16b, d, __v, __n)
+#define vdup_laneq_s8(__v, __n) __BADC_NEON_DUPL(int8x8_t, int8x16_t, 8b, q, __v, __n)
+#define vdupq_laneq_s8(__v, __n) __BADC_NEON_DUPL(int8x16_t, int8x16_t, 16b, q, __v, __n)
+#define vext_s8(__a, __b, __n) __BADC_NEON_EXT(int8x8_t, 8b, __a, __b, __n)
+#define vextq_s8(__a, __b, __n) __BADC_NEON_EXT(int8x16_t, 16b, __a, __b, __n)
+
+#define vget_lane_u8(__v, __n) __BADC_NEON_GET(uint8x8_t, __v, __n)
+#define vgetq_lane_u8(__v, __n) __BADC_NEON_GET(uint8x16_t, __v, __n)
+#define vset_lane_u8(__x, __v, __n) __BADC_NEON_SET(uint8x8_t, __x, __v, __n)
+#define vsetq_lane_u8(__x, __v, __n) __BADC_NEON_SET(uint8x16_t, __x, __v, __n)
+#define vld1_lane_u8(__p, __v, __n) __BADC_NEON_LD1L(uint8x8_t, __p, __v, __n)
+#define vld1q_lane_u8(__p, __v, __n) __BADC_NEON_LD1L(uint8x16_t, __p, __v, __n)
+#define vst1_lane_u8(__p, __v, __n) __BADC_NEON_ST1L(uint8x8_t, __p, __v, __n)
+#define vst1q_lane_u8(__p, __v, __n) __BADC_NEON_ST1L(uint8x16_t, __p, __v, __n)
+#define vdup_lane_u8(__v, __n) __BADC_NEON_DUPL(uint8x8_t, uint8x8_t, 8b, d, __v, __n)
+#define vdupq_lane_u8(__v, __n) __BADC_NEON_DUPL(uint8x16_t, uint8x8_t, 16b, d, __v, __n)
+#define vdup_laneq_u8(__v, __n) __BADC_NEON_DUPL(uint8x8_t, uint8x16_t, 8b, q, __v, __n)
+#define vdupq_laneq_u8(__v, __n) __BADC_NEON_DUPL(uint8x16_t, uint8x16_t, 16b, q, __v, __n)
+#define vext_u8(__a, __b, __n) __BADC_NEON_EXT(uint8x8_t, 8b, __a, __b, __n)
+#define vextq_u8(__a, __b, __n) __BADC_NEON_EXT(uint8x16_t, 16b, __a, __b, __n)
+
+#define vget_lane_p8(__v, __n) __BADC_NEON_GET(poly8x8_t, __v, __n)
+#define vgetq_lane_p8(__v, __n) __BADC_NEON_GET(poly8x16_t, __v, __n)
+#define vset_lane_p8(__x, __v, __n) __BADC_NEON_SET(poly8x8_t, __x, __v, __n)
+#define vsetq_lane_p8(__x, __v, __n) __BADC_NEON_SET(poly8x16_t, __x, __v, __n)
+#define vld1_lane_p8(__p, __v, __n) __BADC_NEON_LD1L(poly8x8_t, __p, __v, __n)
+#define vld1q_lane_p8(__p, __v, __n) __BADC_NEON_LD1L(poly8x16_t, __p, __v, __n)
+#define vst1_lane_p8(__p, __v, __n) __BADC_NEON_ST1L(poly8x8_t, __p, __v, __n)
+#define vst1q_lane_p8(__p, __v, __n) __BADC_NEON_ST1L(poly8x16_t, __p, __v, __n)
+#define vdup_lane_p8(__v, __n) __BADC_NEON_DUPL(poly8x8_t, poly8x8_t, 8b, d, __v, __n)
+#define vdupq_lane_p8(__v, __n) __BADC_NEON_DUPL(poly8x16_t, poly8x8_t, 16b, d, __v, __n)
+#define vdup_laneq_p8(__v, __n) __BADC_NEON_DUPL(poly8x8_t, poly8x16_t, 8b, q, __v, __n)
+#define vdupq_laneq_p8(__v, __n) __BADC_NEON_DUPL(poly8x16_t, poly8x16_t, 16b, q, __v, __n)
+#define vext_p8(__a, __b, __n) __BADC_NEON_EXT(poly8x8_t, 8b, __a, __b, __n)
+#define vextq_p8(__a, __b, __n) __BADC_NEON_EXT(poly8x16_t, 16b, __a, __b, __n)
+
+#define vget_lane_s16(__v, __n) __BADC_NEON_GET(int16x4_t, __v, __n)
+#define vgetq_lane_s16(__v, __n) __BADC_NEON_GET(int16x8_t, __v, __n)
+#define vset_lane_s16(__x, __v, __n) __BADC_NEON_SET(int16x4_t, __x, __v, __n)
+#define vsetq_lane_s16(__x, __v, __n) __BADC_NEON_SET(int16x8_t, __x, __v, __n)
+#define vld1_lane_s16(__p, __v, __n) __BADC_NEON_LD1L(int16x4_t, __p, __v, __n)
+#define vld1q_lane_s16(__p, __v, __n) __BADC_NEON_LD1L(int16x8_t, __p, __v, __n)
+#define vst1_lane_s16(__p, __v, __n) __BADC_NEON_ST1L(int16x4_t, __p, __v, __n)
+#define vst1q_lane_s16(__p, __v, __n) __BADC_NEON_ST1L(int16x8_t, __p, __v, __n)
+#define vdup_lane_s16(__v, __n) __BADC_NEON_DUPL(int16x4_t, int16x4_t, 4h, d, __v, __n)
+#define vdupq_lane_s16(__v, __n) __BADC_NEON_DUPL(int16x8_t, int16x4_t, 8h, d, __v, __n)
+#define vdup_laneq_s16(__v, __n) __BADC_NEON_DUPL(int16x4_t, int16x8_t, 4h, q, __v, __n)
+#define vdupq_laneq_s16(__v, __n) __BADC_NEON_DUPL(int16x8_t, int16x8_t, 8h, q, __v, __n)
+#define vext_s16(__a, __b, __n) __BADC_NEON_EXT(int16x4_t, 8b, __a, __b, __n)
+#define vextq_s16(__a, __b, __n) __BADC_NEON_EXT(int16x8_t, 16b, __a, __b, __n)
+
+#define vget_lane_u16(__v, __n) __BADC_NEON_GET(uint16x4_t, __v, __n)
+#define vgetq_lane_u16(__v, __n) __BADC_NEON_GET(uint16x8_t, __v, __n)
+#define vset_lane_u16(__x, __v, __n) __BADC_NEON_SET(uint16x4_t, __x, __v, __n)
+#define vsetq_lane_u16(__x, __v, __n) __BADC_NEON_SET(uint16x8_t, __x, __v, __n)
+#define vld1_lane_u16(__p, __v, __n) __BADC_NEON_LD1L(uint16x4_t, __p, __v, __n)
+#define vld1q_lane_u16(__p, __v, __n) __BADC_NEON_LD1L(uint16x8_t, __p, __v, __n)
+#define vst1_lane_u16(__p, __v, __n) __BADC_NEON_ST1L(uint16x4_t, __p, __v, __n)
+#define vst1q_lane_u16(__p, __v, __n) __BADC_NEON_ST1L(uint16x8_t, __p, __v, __n)
+#define vdup_lane_u16(__v, __n) __BADC_NEON_DUPL(uint16x4_t, uint16x4_t, 4h, d, __v, __n)
+#define vdupq_lane_u16(__v, __n) __BADC_NEON_DUPL(uint16x8_t, uint16x4_t, 8h, d, __v, __n)
+#define vdup_laneq_u16(__v, __n) __BADC_NEON_DUPL(uint16x4_t, uint16x8_t, 4h, q, __v, __n)
+#define vdupq_laneq_u16(__v, __n) __BADC_NEON_DUPL(uint16x8_t, uint16x8_t, 8h, q, __v, __n)
+#define vext_u16(__a, __b, __n) __BADC_NEON_EXT(uint16x4_t, 8b, __a, __b, __n)
+#define vextq_u16(__a, __b, __n) __BADC_NEON_EXT(uint16x8_t, 16b, __a, __b, __n)
+
+#define vget_lane_p16(__v, __n) __BADC_NEON_GET(poly16x4_t, __v, __n)
+#define vgetq_lane_p16(__v, __n) __BADC_NEON_GET(poly16x8_t, __v, __n)
+#define vset_lane_p16(__x, __v, __n) __BADC_NEON_SET(poly16x4_t, __x, __v, __n)
+#define vsetq_lane_p16(__x, __v, __n) __BADC_NEON_SET(poly16x8_t, __x, __v, __n)
+#define vld1_lane_p16(__p, __v, __n) __BADC_NEON_LD1L(poly16x4_t, __p, __v, __n)
+#define vld1q_lane_p16(__p, __v, __n) __BADC_NEON_LD1L(poly16x8_t, __p, __v, __n)
+#define vst1_lane_p16(__p, __v, __n) __BADC_NEON_ST1L(poly16x4_t, __p, __v, __n)
+#define vst1q_lane_p16(__p, __v, __n) __BADC_NEON_ST1L(poly16x8_t, __p, __v, __n)
+#define vdup_lane_p16(__v, __n) __BADC_NEON_DUPL(poly16x4_t, poly16x4_t, 4h, d, __v, __n)
+#define vdupq_lane_p16(__v, __n) __BADC_NEON_DUPL(poly16x8_t, poly16x4_t, 8h, d, __v, __n)
+#define vdup_laneq_p16(__v, __n) __BADC_NEON_DUPL(poly16x4_t, poly16x8_t, 4h, q, __v, __n)
+#define vdupq_laneq_p16(__v, __n) __BADC_NEON_DUPL(poly16x8_t, poly16x8_t, 8h, q, __v, __n)
+#define vext_p16(__a, __b, __n) __BADC_NEON_EXT(poly16x4_t, 8b, __a, __b, __n)
+#define vextq_p16(__a, __b, __n) __BADC_NEON_EXT(poly16x8_t, 16b, __a, __b, __n)
+
+#define vget_lane_s32(__v, __n) __BADC_NEON_GET(int32x2_t, __v, __n)
+#define vgetq_lane_s32(__v, __n) __BADC_NEON_GET(int32x4_t, __v, __n)
+#define vset_lane_s32(__x, __v, __n) __BADC_NEON_SET(int32x2_t, __x, __v, __n)
+#define vsetq_lane_s32(__x, __v, __n) __BADC_NEON_SET(int32x4_t, __x, __v, __n)
+#define vld1_lane_s32(__p, __v, __n) __BADC_NEON_LD1L(int32x2_t, __p, __v, __n)
+#define vld1q_lane_s32(__p, __v, __n) __BADC_NEON_LD1L(int32x4_t, __p, __v, __n)
+#define vst1_lane_s32(__p, __v, __n) __BADC_NEON_ST1L(int32x2_t, __p, __v, __n)
+#define vst1q_lane_s32(__p, __v, __n) __BADC_NEON_ST1L(int32x4_t, __p, __v, __n)
+#define vdup_lane_s32(__v, __n) __BADC_NEON_DUPL(int32x2_t, int32x2_t, 2s, d, __v, __n)
+#define vdupq_lane_s32(__v, __n) __BADC_NEON_DUPL(int32x4_t, int32x2_t, 4s, d, __v, __n)
+#define vdup_laneq_s32(__v, __n) __BADC_NEON_DUPL(int32x2_t, int32x4_t, 2s, q, __v, __n)
+#define vdupq_laneq_s32(__v, __n) __BADC_NEON_DUPL(int32x4_t, int32x4_t, 4s, q, __v, __n)
+#define vext_s32(__a, __b, __n) __BADC_NEON_EXT(int32x2_t, 8b, __a, __b, __n)
+#define vextq_s32(__a, __b, __n) __BADC_NEON_EXT(int32x4_t, 16b, __a, __b, __n)
+
+#define vget_lane_u32(__v, __n) __BADC_NEON_GET(uint32x2_t, __v, __n)
+#define vgetq_lane_u32(__v, __n) __BADC_NEON_GET(uint32x4_t, __v, __n)
+#define vset_lane_u32(__x, __v, __n) __BADC_NEON_SET(uint32x2_t, __x, __v, __n)
+#define vsetq_lane_u32(__x, __v, __n) __BADC_NEON_SET(uint32x4_t, __x, __v, __n)
+#define vld1_lane_u32(__p, __v, __n) __BADC_NEON_LD1L(uint32x2_t, __p, __v, __n)
+#define vld1q_lane_u32(__p, __v, __n) __BADC_NEON_LD1L(uint32x4_t, __p, __v, __n)
+#define vst1_lane_u32(__p, __v, __n) __BADC_NEON_ST1L(uint32x2_t, __p, __v, __n)
+#define vst1q_lane_u32(__p, __v, __n) __BADC_NEON_ST1L(uint32x4_t, __p, __v, __n)
+#define vdup_lane_u32(__v, __n) __BADC_NEON_DUPL(uint32x2_t, uint32x2_t, 2s, d, __v, __n)
+#define vdupq_lane_u32(__v, __n) __BADC_NEON_DUPL(uint32x4_t, uint32x2_t, 4s, d, __v, __n)
+#define vdup_laneq_u32(__v, __n) __BADC_NEON_DUPL(uint32x2_t, uint32x4_t, 2s, q, __v, __n)
+#define vdupq_laneq_u32(__v, __n) __BADC_NEON_DUPL(uint32x4_t, uint32x4_t, 4s, q, __v, __n)
+#define vext_u32(__a, __b, __n) __BADC_NEON_EXT(uint32x2_t, 8b, __a, __b, __n)
+#define vextq_u32(__a, __b, __n) __BADC_NEON_EXT(uint32x4_t, 16b, __a, __b, __n)
+
+#define vget_lane_f32(__v, __n) __BADC_NEON_GET(float32x2_t, __v, __n)
+#define vgetq_lane_f32(__v, __n) __BADC_NEON_GET(float32x4_t, __v, __n)
+#define vset_lane_f32(__x, __v, __n) __BADC_NEON_SET(float32x2_t, __x, __v, __n)
+#define vsetq_lane_f32(__x, __v, __n) __BADC_NEON_SET(float32x4_t, __x, __v, __n)
+#define vld1_lane_f32(__p, __v, __n) __BADC_NEON_LD1L(float32x2_t, __p, __v, __n)
+#define vld1q_lane_f32(__p, __v, __n) __BADC_NEON_LD1L(float32x4_t, __p, __v, __n)
+#define vst1_lane_f32(__p, __v, __n) __BADC_NEON_ST1L(float32x2_t, __p, __v, __n)
+#define vst1q_lane_f32(__p, __v, __n) __BADC_NEON_ST1L(float32x4_t, __p, __v, __n)
+#define vdup_lane_f32(__v, __n) __BADC_NEON_DUPL(float32x2_t, float32x2_t, 2s, d, __v, __n)
+#define vdupq_lane_f32(__v, __n) __BADC_NEON_DUPL(float32x4_t, float32x2_t, 4s, d, __v, __n)
+#define vdup_laneq_f32(__v, __n) __BADC_NEON_DUPL(float32x2_t, float32x4_t, 2s, q, __v, __n)
+#define vdupq_laneq_f32(__v, __n) __BADC_NEON_DUPL(float32x4_t, float32x4_t, 4s, q, __v, __n)
+#define vext_f32(__a, __b, __n) __BADC_NEON_EXT(float32x2_t, 8b, __a, __b, __n)
+#define vextq_f32(__a, __b, __n) __BADC_NEON_EXT(float32x4_t, 16b, __a, __b, __n)
+
+#define vget_lane_s64(__v, __n) __BADC_NEON_GET(int64x1_t, __v, __n)
+#define vgetq_lane_s64(__v, __n) __BADC_NEON_GET(int64x2_t, __v, __n)
+#define vset_lane_s64(__x, __v, __n) __BADC_NEON_SET(int64x1_t, __x, __v, __n)
+#define vsetq_lane_s64(__x, __v, __n) __BADC_NEON_SET(int64x2_t, __x, __v, __n)
+#define vld1_lane_s64(__p, __v, __n) __BADC_NEON_LD1L(int64x1_t, __p, __v, __n)
+#define vld1q_lane_s64(__p, __v, __n) __BADC_NEON_LD1L(int64x2_t, __p, __v, __n)
+#define vst1_lane_s64(__p, __v, __n) __BADC_NEON_ST1L(int64x1_t, __p, __v, __n)
+#define vst1q_lane_s64(__p, __v, __n) __BADC_NEON_ST1L(int64x2_t, __p, __v, __n)
+#define vdup_lane_s64(__v, __n) __BADC_NEON_DUPL1(int64x1_t, int64x1_t, __v, __n)
+#define vdupq_lane_s64(__v, __n) __BADC_NEON_DUPL(int64x2_t, int64x1_t, 2d, d, __v, __n)
+#define vdup_laneq_s64(__v, __n) __BADC_NEON_DUPLQ1(int64x1_t, int64x2_t, __v, __n)
+#define vdupq_laneq_s64(__v, __n) __BADC_NEON_DUPL(int64x2_t, int64x2_t, 2d, q, __v, __n)
+#define vext_s64(__a, __b, __n) __BADC_NEON_EXT(int64x1_t, 8b, __a, __b, __n)
+#define vextq_s64(__a, __b, __n) __BADC_NEON_EXT(int64x2_t, 16b, __a, __b, __n)
+
+#define vget_lane_u64(__v, __n) __BADC_NEON_GET(uint64x1_t, __v, __n)
+#define vgetq_lane_u64(__v, __n) __BADC_NEON_GET(uint64x2_t, __v, __n)
+#define vset_lane_u64(__x, __v, __n) __BADC_NEON_SET(uint64x1_t, __x, __v, __n)
+#define vsetq_lane_u64(__x, __v, __n) __BADC_NEON_SET(uint64x2_t, __x, __v, __n)
+#define vld1_lane_u64(__p, __v, __n) __BADC_NEON_LD1L(uint64x1_t, __p, __v, __n)
+#define vld1q_lane_u64(__p, __v, __n) __BADC_NEON_LD1L(uint64x2_t, __p, __v, __n)
+#define vst1_lane_u64(__p, __v, __n) __BADC_NEON_ST1L(uint64x1_t, __p, __v, __n)
+#define vst1q_lane_u64(__p, __v, __n) __BADC_NEON_ST1L(uint64x2_t, __p, __v, __n)
+#define vdup_lane_u64(__v, __n) __BADC_NEON_DUPL1(uint64x1_t, uint64x1_t, __v, __n)
+#define vdupq_lane_u64(__v, __n) __BADC_NEON_DUPL(uint64x2_t, uint64x1_t, 2d, d, __v, __n)
+#define vdup_laneq_u64(__v, __n) __BADC_NEON_DUPLQ1(uint64x1_t, uint64x2_t, __v, __n)
+#define vdupq_laneq_u64(__v, __n) __BADC_NEON_DUPL(uint64x2_t, uint64x2_t, 2d, q, __v, __n)
+#define vext_u64(__a, __b, __n) __BADC_NEON_EXT(uint64x1_t, 8b, __a, __b, __n)
+#define vextq_u64(__a, __b, __n) __BADC_NEON_EXT(uint64x2_t, 16b, __a, __b, __n)
+
+#define vget_lane_p64(__v, __n) __BADC_NEON_GET(poly64x1_t, __v, __n)
+#define vgetq_lane_p64(__v, __n) __BADC_NEON_GET(poly64x2_t, __v, __n)
+#define vset_lane_p64(__x, __v, __n) __BADC_NEON_SET(poly64x1_t, __x, __v, __n)
+#define vsetq_lane_p64(__x, __v, __n) __BADC_NEON_SET(poly64x2_t, __x, __v, __n)
+#define vld1_lane_p64(__p, __v, __n) __BADC_NEON_LD1L(poly64x1_t, __p, __v, __n)
+#define vld1q_lane_p64(__p, __v, __n) __BADC_NEON_LD1L(poly64x2_t, __p, __v, __n)
+#define vst1_lane_p64(__p, __v, __n) __BADC_NEON_ST1L(poly64x1_t, __p, __v, __n)
+#define vst1q_lane_p64(__p, __v, __n) __BADC_NEON_ST1L(poly64x2_t, __p, __v, __n)
+#define vdup_lane_p64(__v, __n) __BADC_NEON_DUPL1(poly64x1_t, poly64x1_t, __v, __n)
+#define vdupq_lane_p64(__v, __n) __BADC_NEON_DUPL(poly64x2_t, poly64x1_t, 2d, d, __v, __n)
+#define vdup_laneq_p64(__v, __n) __BADC_NEON_DUPLQ1(poly64x1_t, poly64x2_t, __v, __n)
+#define vdupq_laneq_p64(__v, __n) __BADC_NEON_DUPL(poly64x2_t, poly64x2_t, 2d, q, __v, __n)
+#define vext_p64(__a, __b, __n) __BADC_NEON_EXT(poly64x1_t, 8b, __a, __b, __n)
+#define vextq_p64(__a, __b, __n) __BADC_NEON_EXT(poly64x2_t, 16b, __a, __b, __n)
+
+#define vget_lane_f64(__v, __n) __BADC_NEON_GET(float64x1_t, __v, __n)
+#define vgetq_lane_f64(__v, __n) __BADC_NEON_GET(float64x2_t, __v, __n)
+#define vset_lane_f64(__x, __v, __n) __BADC_NEON_SET(float64x1_t, __x, __v, __n)
+#define vsetq_lane_f64(__x, __v, __n) __BADC_NEON_SET(float64x2_t, __x, __v, __n)
+#define vld1_lane_f64(__p, __v, __n) __BADC_NEON_LD1L(float64x1_t, __p, __v, __n)
+#define vld1q_lane_f64(__p, __v, __n) __BADC_NEON_LD1L(float64x2_t, __p, __v, __n)
+#define vst1_lane_f64(__p, __v, __n) __BADC_NEON_ST1L(float64x1_t, __p, __v, __n)
+#define vst1q_lane_f64(__p, __v, __n) __BADC_NEON_ST1L(float64x2_t, __p, __v, __n)
+#define vdup_lane_f64(__v, __n) __BADC_NEON_DUPL1(float64x1_t, float64x1_t, __v, __n)
+#define vdupq_lane_f64(__v, __n) __BADC_NEON_DUPL(float64x2_t, float64x1_t, 2d, d, __v, __n)
+#define vdup_laneq_f64(__v, __n) __BADC_NEON_DUPLQ1(float64x1_t, float64x2_t, __v, __n)
+#define vdupq_laneq_f64(__v, __n) __BADC_NEON_DUPL(float64x2_t, float64x2_t, 2d, q, __v, __n)
+#define vext_f64(__a, __b, __n) __BADC_NEON_EXT(float64x1_t, 8b, __a, __b, __n)
+#define vextq_f64(__a, __b, __n) __BADC_NEON_EXT(float64x2_t, 16b, __a, __b, __n)
+
+/* Shifts by an immediate in [r, bits - 1 + r]: r is 0 for the left shifts,
+ * 1 for the right ones. SHA accumulates into or inserts into __a; SHN
+ * narrows. */
+#define __BADC_NEON_SHIFT_RANGE(__n, r, __e)                              \
+    _Static_assert((__n) >= (r) && (__n) < 8 * (int)sizeof(__e) + (r), "shift count out of range")
+#define __BADC_NEON_SHB(T, stem, A, r, __a, __n) __extension__({          \
+    T __sa = (__a);                                                       \
+    __BADC_NEON_SHIFT_RANGE(__n, r, __sa[0]);                             \
+    (T)__BADC_NEON_B(stem, A)(__sa, __n);                                 \
+})
+#define __BADC_NEON_SHA(T, stem, A, r, __a, __b, __n) __extension__({     \
+    T __sa = (__a), __sb = (__b);                                         \
+    __BADC_NEON_SHIFT_RANGE(__n, r, __sa[0]);                             \
+    (T)__BADC_NEON_B(stem, A)(__sa, __sb, __n);                           \
+})
+#define __BADC_NEON_SHN(R, T, stem, RA, TA, __a, __n) __extension__({     \
+    T __sa = (__a);                                                       \
+    R __sr;                                                               \
+    __BADC_NEON_SHIFT_RANGE(__n, 1, __sr[0]);                             \
+    (R)__BADC_NEON_B(stem, TA)(__sa, __n);                                \
+})
+
+#define vshl_n_s8(__a, __n) __BADC_NEON_SHB(int8x8_t, __builtin_neon_shl, 8b, 0, __a, __n)
+#define vshlq_n_s8(__a, __n) __BADC_NEON_SHB(int8x16_t, __builtin_neon_shl, 16b, 0, __a, __n)
+#define vqshl_n_s8(__a, __n) __BADC_NEON_SHB(int8x8_t, __builtin_neon_sqshl_n, 8b, 0, __a, __n)
+#define vqshlq_n_s8(__a, __n) __BADC_NEON_SHB(int8x16_t, __builtin_neon_sqshl_n, 16b, 0, __a, __n)
+#define vshr_n_s8(__a, __n) __BADC_NEON_SHB(int8x8_t, __builtin_neon_sshr, 8b, 1, __a, __n)
+#define vshrq_n_s8(__a, __n) __BADC_NEON_SHB(int8x16_t, __builtin_neon_sshr, 16b, 1, __a, __n)
+#define vrshr_n_s8(__a, __n) __BADC_NEON_SHB(int8x8_t, __builtin_neon_srshr, 8b, 1, __a, __n)
+#define vrshrq_n_s8(__a, __n) __BADC_NEON_SHB(int8x16_t, __builtin_neon_srshr, 16b, 1, __a, __n)
+#define vsra_n_s8(__a, __b, __n) __BADC_NEON_SHA(int8x8_t, __builtin_neon_ssra, 8b, 1, __a, __b, __n)
+#define vsraq_n_s8(__a, __b, __n) __BADC_NEON_SHA(int8x16_t, __builtin_neon_ssra, 16b, 1, __a, __b, __n)
+#define vrsra_n_s8(__a, __b, __n) __BADC_NEON_SHA(int8x8_t, __builtin_neon_srsra, 8b, 1, __a, __b, __n)
+#define vrsraq_n_s8(__a, __b, __n) __BADC_NEON_SHA(int8x16_t, __builtin_neon_srsra, 16b, 1, __a, __b, __n)
+
+#define vshl_n_u8(__a, __n) __BADC_NEON_SHB(uint8x8_t, __builtin_neon_shl, 8b, 0, __a, __n)
+#define vshlq_n_u8(__a, __n) __BADC_NEON_SHB(uint8x16_t, __builtin_neon_shl, 16b, 0, __a, __n)
+#define vqshl_n_u8(__a, __n) __BADC_NEON_SHB(uint8x8_t, __builtin_neon_uqshl_n, 8b, 0, __a, __n)
+#define vqshlq_n_u8(__a, __n) __BADC_NEON_SHB(uint8x16_t, __builtin_neon_uqshl_n, 16b, 0, __a, __n)
+#define vshr_n_u8(__a, __n) __BADC_NEON_SHB(uint8x8_t, __builtin_neon_ushr, 8b, 1, __a, __n)
+#define vshrq_n_u8(__a, __n) __BADC_NEON_SHB(uint8x16_t, __builtin_neon_ushr, 16b, 1, __a, __n)
+#define vrshr_n_u8(__a, __n) __BADC_NEON_SHB(uint8x8_t, __builtin_neon_urshr, 8b, 1, __a, __n)
+#define vrshrq_n_u8(__a, __n) __BADC_NEON_SHB(uint8x16_t, __builtin_neon_urshr, 16b, 1, __a, __n)
+#define vsra_n_u8(__a, __b, __n) __BADC_NEON_SHA(uint8x8_t, __builtin_neon_usra, 8b, 1, __a, __b, __n)
+#define vsraq_n_u8(__a, __b, __n) __BADC_NEON_SHA(uint8x16_t, __builtin_neon_usra, 16b, 1, __a, __b, __n)
+#define vrsra_n_u8(__a, __b, __n) __BADC_NEON_SHA(uint8x8_t, __builtin_neon_ursra, 8b, 1, __a, __b, __n)
+#define vrsraq_n_u8(__a, __b, __n) __BADC_NEON_SHA(uint8x16_t, __builtin_neon_ursra, 16b, 1, __a, __b, __n)
+
+#define vshl_n_s16(__a, __n) __BADC_NEON_SHB(int16x4_t, __builtin_neon_shl, 4h, 0, __a, __n)
+#define vshlq_n_s16(__a, __n) __BADC_NEON_SHB(int16x8_t, __builtin_neon_shl, 8h, 0, __a, __n)
+#define vqshl_n_s16(__a, __n) __BADC_NEON_SHB(int16x4_t, __builtin_neon_sqshl_n, 4h, 0, __a, __n)
+#define vqshlq_n_s16(__a, __n) __BADC_NEON_SHB(int16x8_t, __builtin_neon_sqshl_n, 8h, 0, __a, __n)
+#define vshr_n_s16(__a, __n) __BADC_NEON_SHB(int16x4_t, __builtin_neon_sshr, 4h, 1, __a, __n)
+#define vshrq_n_s16(__a, __n) __BADC_NEON_SHB(int16x8_t, __builtin_neon_sshr, 8h, 1, __a, __n)
+#define vrshr_n_s16(__a, __n) __BADC_NEON_SHB(int16x4_t, __builtin_neon_srshr, 4h, 1, __a, __n)
+#define vrshrq_n_s16(__a, __n) __BADC_NEON_SHB(int16x8_t, __builtin_neon_srshr, 8h, 1, __a, __n)
+#define vsra_n_s16(__a, __b, __n) __BADC_NEON_SHA(int16x4_t, __builtin_neon_ssra, 4h, 1, __a, __b, __n)
+#define vsraq_n_s16(__a, __b, __n) __BADC_NEON_SHA(int16x8_t, __builtin_neon_ssra, 8h, 1, __a, __b, __n)
+#define vrsra_n_s16(__a, __b, __n) __BADC_NEON_SHA(int16x4_t, __builtin_neon_srsra, 4h, 1, __a, __b, __n)
+#define vrsraq_n_s16(__a, __b, __n) __BADC_NEON_SHA(int16x8_t, __builtin_neon_srsra, 8h, 1, __a, __b, __n)
+
+#define vshl_n_u16(__a, __n) __BADC_NEON_SHB(uint16x4_t, __builtin_neon_shl, 4h, 0, __a, __n)
+#define vshlq_n_u16(__a, __n) __BADC_NEON_SHB(uint16x8_t, __builtin_neon_shl, 8h, 0, __a, __n)
+#define vqshl_n_u16(__a, __n) __BADC_NEON_SHB(uint16x4_t, __builtin_neon_uqshl_n, 4h, 0, __a, __n)
+#define vqshlq_n_u16(__a, __n) __BADC_NEON_SHB(uint16x8_t, __builtin_neon_uqshl_n, 8h, 0, __a, __n)
+#define vshr_n_u16(__a, __n) __BADC_NEON_SHB(uint16x4_t, __builtin_neon_ushr, 4h, 1, __a, __n)
+#define vshrq_n_u16(__a, __n) __BADC_NEON_SHB(uint16x8_t, __builtin_neon_ushr, 8h, 1, __a, __n)
+#define vrshr_n_u16(__a, __n) __BADC_NEON_SHB(uint16x4_t, __builtin_neon_urshr, 4h, 1, __a, __n)
+#define vrshrq_n_u16(__a, __n) __BADC_NEON_SHB(uint16x8_t, __builtin_neon_urshr, 8h, 1, __a, __n)
+#define vsra_n_u16(__a, __b, __n) __BADC_NEON_SHA(uint16x4_t, __builtin_neon_usra, 4h, 1, __a, __b, __n)
+#define vsraq_n_u16(__a, __b, __n) __BADC_NEON_SHA(uint16x8_t, __builtin_neon_usra, 8h, 1, __a, __b, __n)
+#define vrsra_n_u16(__a, __b, __n) __BADC_NEON_SHA(uint16x4_t, __builtin_neon_ursra, 4h, 1, __a, __b, __n)
+#define vrsraq_n_u16(__a, __b, __n) __BADC_NEON_SHA(uint16x8_t, __builtin_neon_ursra, 8h, 1, __a, __b, __n)
+
+#define vshl_n_s32(__a, __n) __BADC_NEON_SHB(int32x2_t, __builtin_neon_shl, 2s, 0, __a, __n)
+#define vshlq_n_s32(__a, __n) __BADC_NEON_SHB(int32x4_t, __builtin_neon_shl, 4s, 0, __a, __n)
+#define vqshl_n_s32(__a, __n) __BADC_NEON_SHB(int32x2_t, __builtin_neon_sqshl_n, 2s, 0, __a, __n)
+#define vqshlq_n_s32(__a, __n) __BADC_NEON_SHB(int32x4_t, __builtin_neon_sqshl_n, 4s, 0, __a, __n)
+#define vshr_n_s32(__a, __n) __BADC_NEON_SHB(int32x2_t, __builtin_neon_sshr, 2s, 1, __a, __n)
+#define vshrq_n_s32(__a, __n) __BADC_NEON_SHB(int32x4_t, __builtin_neon_sshr, 4s, 1, __a, __n)
+#define vrshr_n_s32(__a, __n) __BADC_NEON_SHB(int32x2_t, __builtin_neon_srshr, 2s, 1, __a, __n)
+#define vrshrq_n_s32(__a, __n) __BADC_NEON_SHB(int32x4_t, __builtin_neon_srshr, 4s, 1, __a, __n)
+#define vsra_n_s32(__a, __b, __n) __BADC_NEON_SHA(int32x2_t, __builtin_neon_ssra, 2s, 1, __a, __b, __n)
+#define vsraq_n_s32(__a, __b, __n) __BADC_NEON_SHA(int32x4_t, __builtin_neon_ssra, 4s, 1, __a, __b, __n)
+#define vrsra_n_s32(__a, __b, __n) __BADC_NEON_SHA(int32x2_t, __builtin_neon_srsra, 2s, 1, __a, __b, __n)
+#define vrsraq_n_s32(__a, __b, __n) __BADC_NEON_SHA(int32x4_t, __builtin_neon_srsra, 4s, 1, __a, __b, __n)
+
+#define vshl_n_u32(__a, __n) __BADC_NEON_SHB(uint32x2_t, __builtin_neon_shl, 2s, 0, __a, __n)
+#define vshlq_n_u32(__a, __n) __BADC_NEON_SHB(uint32x4_t, __builtin_neon_shl, 4s, 0, __a, __n)
+#define vqshl_n_u32(__a, __n) __BADC_NEON_SHB(uint32x2_t, __builtin_neon_uqshl_n, 2s, 0, __a, __n)
+#define vqshlq_n_u32(__a, __n) __BADC_NEON_SHB(uint32x4_t, __builtin_neon_uqshl_n, 4s, 0, __a, __n)
+#define vshr_n_u32(__a, __n) __BADC_NEON_SHB(uint32x2_t, __builtin_neon_ushr, 2s, 1, __a, __n)
+#define vshrq_n_u32(__a, __n) __BADC_NEON_SHB(uint32x4_t, __builtin_neon_ushr, 4s, 1, __a, __n)
+#define vrshr_n_u32(__a, __n) __BADC_NEON_SHB(uint32x2_t, __builtin_neon_urshr, 2s, 1, __a, __n)
+#define vrshrq_n_u32(__a, __n) __BADC_NEON_SHB(uint32x4_t, __builtin_neon_urshr, 4s, 1, __a, __n)
+#define vsra_n_u32(__a, __b, __n) __BADC_NEON_SHA(uint32x2_t, __builtin_neon_usra, 2s, 1, __a, __b, __n)
+#define vsraq_n_u32(__a, __b, __n) __BADC_NEON_SHA(uint32x4_t, __builtin_neon_usra, 4s, 1, __a, __b, __n)
+#define vrsra_n_u32(__a, __b, __n) __BADC_NEON_SHA(uint32x2_t, __builtin_neon_ursra, 2s, 1, __a, __b, __n)
+#define vrsraq_n_u32(__a, __b, __n) __BADC_NEON_SHA(uint32x4_t, __builtin_neon_ursra, 4s, 1, __a, __b, __n)
+
+#define vshl_n_s64(__a, __n) __BADC_NEON_SHB(int64x1_t, __builtin_neon_shl, d, 0, __a, __n)
+#define vshlq_n_s64(__a, __n) __BADC_NEON_SHB(int64x2_t, __builtin_neon_shl, 2d, 0, __a, __n)
+#define vqshl_n_s64(__a, __n) __BADC_NEON_SHB(int64x1_t, __builtin_neon_sqshl_n, d, 0, __a, __n)
+#define vqshlq_n_s64(__a, __n) __BADC_NEON_SHB(int64x2_t, __builtin_neon_sqshl_n, 2d, 0, __a, __n)
+#define vshr_n_s64(__a, __n) __BADC_NEON_SHB(int64x1_t, __builtin_neon_sshr, d, 1, __a, __n)
+#define vshrq_n_s64(__a, __n) __BADC_NEON_SHB(int64x2_t, __builtin_neon_sshr, 2d, 1, __a, __n)
+#define vrshr_n_s64(__a, __n) __BADC_NEON_SHB(int64x1_t, __builtin_neon_srshr, d, 1, __a, __n)
+#define vrshrq_n_s64(__a, __n) __BADC_NEON_SHB(int64x2_t, __builtin_neon_srshr, 2d, 1, __a, __n)
+#define vsra_n_s64(__a, __b, __n) __BADC_NEON_SHA(int64x1_t, __builtin_neon_ssra, d, 1, __a, __b, __n)
+#define vsraq_n_s64(__a, __b, __n) __BADC_NEON_SHA(int64x2_t, __builtin_neon_ssra, 2d, 1, __a, __b, __n)
+#define vrsra_n_s64(__a, __b, __n) __BADC_NEON_SHA(int64x1_t, __builtin_neon_srsra, d, 1, __a, __b, __n)
+#define vrsraq_n_s64(__a, __b, __n) __BADC_NEON_SHA(int64x2_t, __builtin_neon_srsra, 2d, 1, __a, __b, __n)
+
+#define vshl_n_u64(__a, __n) __BADC_NEON_SHB(uint64x1_t, __builtin_neon_shl, d, 0, __a, __n)
+#define vshlq_n_u64(__a, __n) __BADC_NEON_SHB(uint64x2_t, __builtin_neon_shl, 2d, 0, __a, __n)
+#define vqshl_n_u64(__a, __n) __BADC_NEON_SHB(uint64x1_t, __builtin_neon_uqshl_n, d, 0, __a, __n)
+#define vqshlq_n_u64(__a, __n) __BADC_NEON_SHB(uint64x2_t, __builtin_neon_uqshl_n, 2d, 0, __a, __n)
+#define vshr_n_u64(__a, __n) __BADC_NEON_SHB(uint64x1_t, __builtin_neon_ushr, d, 1, __a, __n)
+#define vshrq_n_u64(__a, __n) __BADC_NEON_SHB(uint64x2_t, __builtin_neon_ushr, 2d, 1, __a, __n)
+#define vrshr_n_u64(__a, __n) __BADC_NEON_SHB(uint64x1_t, __builtin_neon_urshr, d, 1, __a, __n)
+#define vrshrq_n_u64(__a, __n) __BADC_NEON_SHB(uint64x2_t, __builtin_neon_urshr, 2d, 1, __a, __n)
+#define vsra_n_u64(__a, __b, __n) __BADC_NEON_SHA(uint64x1_t, __builtin_neon_usra, d, 1, __a, __b, __n)
+#define vsraq_n_u64(__a, __b, __n) __BADC_NEON_SHA(uint64x2_t, __builtin_neon_usra, 2d, 1, __a, __b, __n)
+#define vrsra_n_u64(__a, __b, __n) __BADC_NEON_SHA(uint64x1_t, __builtin_neon_ursra, d, 1, __a, __b, __n)
+#define vrsraq_n_u64(__a, __b, __n) __BADC_NEON_SHA(uint64x2_t, __builtin_neon_ursra, 2d, 1, __a, __b, __n)
+
+#define vsli_n_s8(__a, __b, __n) __BADC_NEON_SHA(int8x8_t, __builtin_neon_sli, 8b, 0, __a, __b, __n)
+#define vsliq_n_s8(__a, __b, __n) __BADC_NEON_SHA(int8x16_t, __builtin_neon_sli, 16b, 0, __a, __b, __n)
+#define vsri_n_s8(__a, __b, __n) __BADC_NEON_SHA(int8x8_t, __builtin_neon_sri, 8b, 1, __a, __b, __n)
+#define vsriq_n_s8(__a, __b, __n) __BADC_NEON_SHA(int8x16_t, __builtin_neon_sri, 16b, 1, __a, __b, __n)
+
+#define vsli_n_u8(__a, __b, __n) __BADC_NEON_SHA(uint8x8_t, __builtin_neon_sli, 8b, 0, __a, __b, __n)
+#define vsliq_n_u8(__a, __b, __n) __BADC_NEON_SHA(uint8x16_t, __builtin_neon_sli, 16b, 0, __a, __b, __n)
+#define vsri_n_u8(__a, __b, __n) __BADC_NEON_SHA(uint8x8_t, __builtin_neon_sri, 8b, 1, __a, __b, __n)
+#define vsriq_n_u8(__a, __b, __n) __BADC_NEON_SHA(uint8x16_t, __builtin_neon_sri, 16b, 1, __a, __b, __n)
+
+#define vsli_n_p8(__a, __b, __n) __BADC_NEON_SHA(poly8x8_t, __builtin_neon_sli, 8b, 0, __a, __b, __n)
+#define vsliq_n_p8(__a, __b, __n) __BADC_NEON_SHA(poly8x16_t, __builtin_neon_sli, 16b, 0, __a, __b, __n)
+#define vsri_n_p8(__a, __b, __n) __BADC_NEON_SHA(poly8x8_t, __builtin_neon_sri, 8b, 1, __a, __b, __n)
+#define vsriq_n_p8(__a, __b, __n) __BADC_NEON_SHA(poly8x16_t, __builtin_neon_sri, 16b, 1, __a, __b, __n)
+
+#define vsli_n_s16(__a, __b, __n) __BADC_NEON_SHA(int16x4_t, __builtin_neon_sli, 4h, 0, __a, __b, __n)
+#define vsliq_n_s16(__a, __b, __n) __BADC_NEON_SHA(int16x8_t, __builtin_neon_sli, 8h, 0, __a, __b, __n)
+#define vsri_n_s16(__a, __b, __n) __BADC_NEON_SHA(int16x4_t, __builtin_neon_sri, 4h, 1, __a, __b, __n)
+#define vsriq_n_s16(__a, __b, __n) __BADC_NEON_SHA(int16x8_t, __builtin_neon_sri, 8h, 1, __a, __b, __n)
+
+#define vsli_n_u16(__a, __b, __n) __BADC_NEON_SHA(uint16x4_t, __builtin_neon_sli, 4h, 0, __a, __b, __n)
+#define vsliq_n_u16(__a, __b, __n) __BADC_NEON_SHA(uint16x8_t, __builtin_neon_sli, 8h, 0, __a, __b, __n)
+#define vsri_n_u16(__a, __b, __n) __BADC_NEON_SHA(uint16x4_t, __builtin_neon_sri, 4h, 1, __a, __b, __n)
+#define vsriq_n_u16(__a, __b, __n) __BADC_NEON_SHA(uint16x8_t, __builtin_neon_sri, 8h, 1, __a, __b, __n)
+
+#define vsli_n_p16(__a, __b, __n) __BADC_NEON_SHA(poly16x4_t, __builtin_neon_sli, 4h, 0, __a, __b, __n)
+#define vsliq_n_p16(__a, __b, __n) __BADC_NEON_SHA(poly16x8_t, __builtin_neon_sli, 8h, 0, __a, __b, __n)
+#define vsri_n_p16(__a, __b, __n) __BADC_NEON_SHA(poly16x4_t, __builtin_neon_sri, 4h, 1, __a, __b, __n)
+#define vsriq_n_p16(__a, __b, __n) __BADC_NEON_SHA(poly16x8_t, __builtin_neon_sri, 8h, 1, __a, __b, __n)
+
+#define vsli_n_s32(__a, __b, __n) __BADC_NEON_SHA(int32x2_t, __builtin_neon_sli, 2s, 0, __a, __b, __n)
+#define vsliq_n_s32(__a, __b, __n) __BADC_NEON_SHA(int32x4_t, __builtin_neon_sli, 4s, 0, __a, __b, __n)
+#define vsri_n_s32(__a, __b, __n) __BADC_NEON_SHA(int32x2_t, __builtin_neon_sri, 2s, 1, __a, __b, __n)
+#define vsriq_n_s32(__a, __b, __n) __BADC_NEON_SHA(int32x4_t, __builtin_neon_sri, 4s, 1, __a, __b, __n)
+
+#define vsli_n_u32(__a, __b, __n) __BADC_NEON_SHA(uint32x2_t, __builtin_neon_sli, 2s, 0, __a, __b, __n)
+#define vsliq_n_u32(__a, __b, __n) __BADC_NEON_SHA(uint32x4_t, __builtin_neon_sli, 4s, 0, __a, __b, __n)
+#define vsri_n_u32(__a, __b, __n) __BADC_NEON_SHA(uint32x2_t, __builtin_neon_sri, 2s, 1, __a, __b, __n)
+#define vsriq_n_u32(__a, __b, __n) __BADC_NEON_SHA(uint32x4_t, __builtin_neon_sri, 4s, 1, __a, __b, __n)
+
+#define vsli_n_s64(__a, __b, __n) __BADC_NEON_SHA(int64x1_t, __builtin_neon_sli, d, 0, __a, __b, __n)
+#define vsliq_n_s64(__a, __b, __n) __BADC_NEON_SHA(int64x2_t, __builtin_neon_sli, 2d, 0, __a, __b, __n)
+#define vsri_n_s64(__a, __b, __n) __BADC_NEON_SHA(int64x1_t, __builtin_neon_sri, d, 1, __a, __b, __n)
+#define vsriq_n_s64(__a, __b, __n) __BADC_NEON_SHA(int64x2_t, __builtin_neon_sri, 2d, 1, __a, __b, __n)
+
+#define vsli_n_u64(__a, __b, __n) __BADC_NEON_SHA(uint64x1_t, __builtin_neon_sli, d, 0, __a, __b, __n)
+#define vsliq_n_u64(__a, __b, __n) __BADC_NEON_SHA(uint64x2_t, __builtin_neon_sli, 2d, 0, __a, __b, __n)
+#define vsri_n_u64(__a, __b, __n) __BADC_NEON_SHA(uint64x1_t, __builtin_neon_sri, d, 1, __a, __b, __n)
+#define vsriq_n_u64(__a, __b, __n) __BADC_NEON_SHA(uint64x2_t, __builtin_neon_sri, 2d, 1, __a, __b, __n)
+
+#define vsli_n_p64(__a, __b, __n) __BADC_NEON_SHA(poly64x1_t, __builtin_neon_sli, d, 0, __a, __b, __n)
+#define vsliq_n_p64(__a, __b, __n) __BADC_NEON_SHA(poly64x2_t, __builtin_neon_sli, 2d, 0, __a, __b, __n)
+#define vsri_n_p64(__a, __b, __n) __BADC_NEON_SHA(poly64x1_t, __builtin_neon_sri, d, 1, __a, __b, __n)
+#define vsriq_n_p64(__a, __b, __n) __BADC_NEON_SHA(poly64x2_t, __builtin_neon_sri, 2d, 1, __a, __b, __n)
+
+#define vshrn_n_s16(__a, __n) __BADC_NEON_SHN(int8x8_t, int16x8_t, __builtin_neon_shrn, 8b, 8h, __a, __n)
+#define vrshrn_n_s16(__a, __n) __BADC_NEON_SHN(int8x8_t, int16x8_t, __builtin_neon_rshrn, 8b, 8h, __a, __n)
+#define vshrn_n_u16(__a, __n) __BADC_NEON_SHN(uint8x8_t, uint16x8_t, __builtin_neon_shrn, 8b, 8h, __a, __n)
+#define vrshrn_n_u16(__a, __n) __BADC_NEON_SHN(uint8x8_t, uint16x8_t, __builtin_neon_rshrn, 8b, 8h, __a, __n)
+#define vshrn_n_s32(__a, __n) __BADC_NEON_SHN(int16x4_t, int32x4_t, __builtin_neon_shrn, 4h, 4s, __a, __n)
+#define vrshrn_n_s32(__a, __n) __BADC_NEON_SHN(int16x4_t, int32x4_t, __builtin_neon_rshrn, 4h, 4s, __a, __n)
+#define vshrn_n_u32(__a, __n) __BADC_NEON_SHN(uint16x4_t, uint32x4_t, __builtin_neon_shrn, 4h, 4s, __a, __n)
+#define vrshrn_n_u32(__a, __n) __BADC_NEON_SHN(uint16x4_t, uint32x4_t, __builtin_neon_rshrn, 4h, 4s, __a, __n)
+#define vshrn_n_s64(__a, __n) __BADC_NEON_SHN(int32x2_t, int64x2_t, __builtin_neon_shrn, 2s, 2d, __a, __n)
+#define vrshrn_n_s64(__a, __n) __BADC_NEON_SHN(int32x2_t, int64x2_t, __builtin_neon_rshrn, 2s, 2d, __a, __n)
+#define vshrn_n_u64(__a, __n) __BADC_NEON_SHN(uint32x2_t, uint64x2_t, __builtin_neon_shrn, 2s, 2d, __a, __n)
+#define vrshrn_n_u64(__a, __n) __BADC_NEON_SHN(uint32x2_t, uint64x2_t, __builtin_neon_rshrn, 2s, 2d, __a, __n)
+
+/* The saturating narrowing shifts: the wide lanes shifted right by an
+ * immediate in [1, narrow bits], rounding in the vqr forms, saturated to
+ * the narrow type (vqshrun: signed to unsigned). The _high forms place the
+ * result above the first operand. */
+#define vqshrn_n_s16(__a, __n) __BADC_NEON_SHN(int8x8_t, int16x8_t, __builtin_neon_sqshrn, 8b, 8h, __a, __n)
+#define vqshrn_n_s32(__a, __n) __BADC_NEON_SHN(int16x4_t, int32x4_t, __builtin_neon_sqshrn, 4h, 4s, __a, __n)
+#define vqshrn_n_s64(__a, __n) __BADC_NEON_SHN(int32x2_t, int64x2_t, __builtin_neon_sqshrn, 2s, 2d, __a, __n)
+#define vqshrn_n_u16(__a, __n) __BADC_NEON_SHN(uint8x8_t, uint16x8_t, __builtin_neon_uqshrn, 8b, 8h, __a, __n)
+#define vqshrn_n_u32(__a, __n) __BADC_NEON_SHN(uint16x4_t, uint32x4_t, __builtin_neon_uqshrn, 4h, 4s, __a, __n)
+#define vqshrn_n_u64(__a, __n) __BADC_NEON_SHN(uint32x2_t, uint64x2_t, __builtin_neon_uqshrn, 2s, 2d, __a, __n)
+#define vqrshrn_n_s16(__a, __n) __BADC_NEON_SHN(int8x8_t, int16x8_t, __builtin_neon_sqrshrn, 8b, 8h, __a, __n)
+#define vqrshrn_n_s32(__a, __n) __BADC_NEON_SHN(int16x4_t, int32x4_t, __builtin_neon_sqrshrn, 4h, 4s, __a, __n)
+#define vqrshrn_n_s64(__a, __n) __BADC_NEON_SHN(int32x2_t, int64x2_t, __builtin_neon_sqrshrn, 2s, 2d, __a, __n)
+#define vqrshrn_n_u16(__a, __n) __BADC_NEON_SHN(uint8x8_t, uint16x8_t, __builtin_neon_uqrshrn, 8b, 8h, __a, __n)
+#define vqrshrn_n_u32(__a, __n) __BADC_NEON_SHN(uint16x4_t, uint32x4_t, __builtin_neon_uqrshrn, 4h, 4s, __a, __n)
+#define vqrshrn_n_u64(__a, __n) __BADC_NEON_SHN(uint32x2_t, uint64x2_t, __builtin_neon_uqrshrn, 2s, 2d, __a, __n)
+#define vqshrun_n_s16(__a, __n) __BADC_NEON_SHN(uint8x8_t, int16x8_t, __builtin_neon_sqshrun, 8b, 8h, __a, __n)
+#define vqshrun_n_s32(__a, __n) __BADC_NEON_SHN(uint16x4_t, int32x4_t, __builtin_neon_sqshrun, 4h, 4s, __a, __n)
+#define vqshrun_n_s64(__a, __n) __BADC_NEON_SHN(uint32x2_t, int64x2_t, __builtin_neon_sqshrun, 2s, 2d, __a, __n)
+#define vqrshrun_n_s16(__a, __n) __BADC_NEON_SHN(uint8x8_t, int16x8_t, __builtin_neon_sqrshrun, 8b, 8h, __a, __n)
+#define vqrshrun_n_s32(__a, __n) __BADC_NEON_SHN(uint16x4_t, int32x4_t, __builtin_neon_sqrshrun, 4h, 4s, __a, __n)
+#define vqrshrun_n_s64(__a, __n) __BADC_NEON_SHN(uint32x2_t, int64x2_t, __builtin_neon_sqrshrun, 2s, 2d, __a, __n)
+#define vshrn_high_n_s16(__r, __a, __n) vcombine_s8((__r), vshrn_n_s16(__a, __n))
+#define vshrn_high_n_s32(__r, __a, __n) vcombine_s16((__r), vshrn_n_s32(__a, __n))
+#define vshrn_high_n_s64(__r, __a, __n) vcombine_s32((__r), vshrn_n_s64(__a, __n))
+#define vshrn_high_n_u16(__r, __a, __n) vcombine_u8((__r), vshrn_n_u16(__a, __n))
+#define vshrn_high_n_u32(__r, __a, __n) vcombine_u16((__r), vshrn_n_u32(__a, __n))
+#define vshrn_high_n_u64(__r, __a, __n) vcombine_u32((__r), vshrn_n_u64(__a, __n))
+#define vrshrn_high_n_s16(__r, __a, __n) vcombine_s8((__r), vrshrn_n_s16(__a, __n))
+#define vrshrn_high_n_s32(__r, __a, __n) vcombine_s16((__r), vrshrn_n_s32(__a, __n))
+#define vrshrn_high_n_s64(__r, __a, __n) vcombine_s32((__r), vrshrn_n_s64(__a, __n))
+#define vrshrn_high_n_u16(__r, __a, __n) vcombine_u8((__r), vrshrn_n_u16(__a, __n))
+#define vrshrn_high_n_u32(__r, __a, __n) vcombine_u16((__r), vrshrn_n_u32(__a, __n))
+#define vrshrn_high_n_u64(__r, __a, __n) vcombine_u32((__r), vrshrn_n_u64(__a, __n))
+#define vqshrn_high_n_s16(__r, __a, __n) vcombine_s8((__r), vqshrn_n_s16(__a, __n))
+#define vqshrn_high_n_s32(__r, __a, __n) vcombine_s16((__r), vqshrn_n_s32(__a, __n))
+#define vqshrn_high_n_s64(__r, __a, __n) vcombine_s32((__r), vqshrn_n_s64(__a, __n))
+#define vqshrn_high_n_u16(__r, __a, __n) vcombine_u8((__r), vqshrn_n_u16(__a, __n))
+#define vqshrn_high_n_u32(__r, __a, __n) vcombine_u16((__r), vqshrn_n_u32(__a, __n))
+#define vqshrn_high_n_u64(__r, __a, __n) vcombine_u32((__r), vqshrn_n_u64(__a, __n))
+#define vqrshrn_high_n_s16(__r, __a, __n) vcombine_s8((__r), vqrshrn_n_s16(__a, __n))
+#define vqrshrn_high_n_s32(__r, __a, __n) vcombine_s16((__r), vqrshrn_n_s32(__a, __n))
+#define vqrshrn_high_n_s64(__r, __a, __n) vcombine_s32((__r), vqrshrn_n_s64(__a, __n))
+#define vqrshrn_high_n_u16(__r, __a, __n) vcombine_u8((__r), vqrshrn_n_u16(__a, __n))
+#define vqrshrn_high_n_u32(__r, __a, __n) vcombine_u16((__r), vqrshrn_n_u32(__a, __n))
+#define vqrshrn_high_n_u64(__r, __a, __n) vcombine_u32((__r), vqrshrn_n_u64(__a, __n))
+#define vqshrun_high_n_s16(__r, __a, __n) vcombine_u8((__r), vqshrun_n_s16(__a, __n))
+#define vqshrun_high_n_s32(__r, __a, __n) vcombine_u16((__r), vqshrun_n_s32(__a, __n))
+#define vqshrun_high_n_s64(__r, __a, __n) vcombine_u32((__r), vqshrun_n_s64(__a, __n))
+#define vqrshrun_high_n_s16(__r, __a, __n) vcombine_u8((__r), vqrshrun_n_s16(__a, __n))
+#define vqrshrun_high_n_s32(__r, __a, __n) vcombine_u16((__r), vqrshrun_n_s32(__a, __n))
+#define vqrshrun_high_n_s64(__r, __a, __n) vcombine_u32((__r), vqrshrun_n_s64(__a, __n))
+
+/* vqshlu_n: signed lanes shifted left by an immediate in [0, bits - 1],
+ * saturating to the unsigned range. */
+#define __BADC_NEON_SHU(R, T, A, __a, __n) __extension__({                \
+    T __sa = (__a);                                                       \
+    __BADC_NEON_SHIFT_RANGE(__n, 0, __sa[0]);                             \
+    (R)__builtin_neon_sqshlu_##A(__sa, __n);                              \
+})
+#define vqshlu_n_s8(__a, __n) __BADC_NEON_SHU(uint8x8_t, int8x8_t, 8b, __a, __n)
+#define vqshluq_n_s8(__a, __n) __BADC_NEON_SHU(uint8x16_t, int8x16_t, 16b, __a, __n)
+#define vqshlu_n_s16(__a, __n) __BADC_NEON_SHU(uint16x4_t, int16x4_t, 4h, __a, __n)
+#define vqshluq_n_s16(__a, __n) __BADC_NEON_SHU(uint16x8_t, int16x8_t, 8h, __a, __n)
+#define vqshlu_n_s32(__a, __n) __BADC_NEON_SHU(uint32x2_t, int32x2_t, 2s, __a, __n)
+#define vqshluq_n_s32(__a, __n) __BADC_NEON_SHU(uint32x4_t, int32x4_t, 4s, __a, __n)
+#define vqshlu_n_s64(__a, __n) __BADC_NEON_SHU(uint64x1_t, int64x1_t, d, __a, __n)
+#define vqshluq_n_s64(__a, __n) __BADC_NEON_SHU(uint64x2_t, int64x2_t, 2d, __a, __n)
+
+/* vshll_n: lanes lengthened and shifted left by an immediate in [0, bits];
+ * a shift by the lane width is `shll`, the others `sshll` / `ushll`, and
+ * the _high forms read the upper half. */
+#define __BADC_NEON_SHLL(R, T, sstem, lstem, A, __a, __n) __extension__({  \
+    T __sa = (__a);                                                       \
+    _Static_assert((__n) >= 0 && (__n) <= 8 * (int)sizeof(__sa[0]), "shift count out of range"); \
+    (__n) == 8 * (int)sizeof(__sa[0])                                     \
+        ? (R)__BADC_NEON_B(lstem, A)(__sa, 8 * (int)sizeof(__sa[0]))      \
+        : (R)__BADC_NEON_B(sstem, A)(__sa, (__n) % (8 * (int)sizeof(__sa[0]))); \
+})
+#define vshll_n_s8(__a, __n) \
+    __BADC_NEON_SHLL(int16x8_t, int8x8_t, __builtin_neon_sshll, __builtin_neon_shll, 8b, __a, __n)
+#define vshll_n_u8(__a, __n) \
+    __BADC_NEON_SHLL(uint16x8_t, uint8x8_t, __builtin_neon_ushll, __builtin_neon_shll, 8b, __a, __n)
+#define vshll_n_s16(__a, __n) \
+    __BADC_NEON_SHLL(int32x4_t, int16x4_t, __builtin_neon_sshll, __builtin_neon_shll, 4h, __a, __n)
+#define vshll_n_u16(__a, __n) \
+    __BADC_NEON_SHLL(uint32x4_t, uint16x4_t, __builtin_neon_ushll, __builtin_neon_shll, 4h, __a, __n)
+#define vshll_n_s32(__a, __n) \
+    __BADC_NEON_SHLL(int64x2_t, int32x2_t, __builtin_neon_sshll, __builtin_neon_shll, 2s, __a, __n)
+#define vshll_n_u32(__a, __n) \
+    __BADC_NEON_SHLL(uint64x2_t, uint32x2_t, __builtin_neon_ushll, __builtin_neon_shll, 2s, __a, __n)
+#define vshll_high_n_s8(__a, __n) \
+    __BADC_NEON_SHLL(int16x8_t, int8x16_t, __builtin_neon_sshll2, __builtin_neon_shll2, 16b, __a, __n)
+#define vshll_high_n_u8(__a, __n) \
+    __BADC_NEON_SHLL(uint16x8_t, uint8x16_t, __builtin_neon_ushll2, __builtin_neon_shll2, 16b, __a, __n)
+#define vshll_high_n_s16(__a, __n) \
+    __BADC_NEON_SHLL(int32x4_t, int16x8_t, __builtin_neon_sshll2, __builtin_neon_shll2, 8h, __a, __n)
+#define vshll_high_n_u16(__a, __n) \
+    __BADC_NEON_SHLL(uint32x4_t, uint16x8_t, __builtin_neon_ushll2, __builtin_neon_shll2, 8h, __a, __n)
+#define vshll_high_n_s32(__a, __n) \
+    __BADC_NEON_SHLL(int64x2_t, int32x4_t, __builtin_neon_sshll2, __builtin_neon_shll2, 4s, __a, __n)
+#define vshll_high_n_u32(__a, __n) \
+    __BADC_NEON_SHLL(uint64x2_t, uint32x4_t, __builtin_neon_ushll2, __builtin_neon_shll2, 4s, __a, __n)
+
+/* Byte table lookups in one 16-byte table: an out-of-range index gives 0
+ * (vqtbl1), or keeps the destination byte (vqtbx1). */
+#define __BADC_NEON_TBL(sfx, D, Q)                                        \
+    __BADC_INTRIN D##_t vqtbl1_##sfx(Q##_t __t, uint8x8_t __idx) {        \
+        return (D##_t)__builtin_neon_tbl_8b(__t, __idx);                  \
+    }                                                                     \
+    __BADC_INTRIN Q##_t vqtbl1q_##sfx(Q##_t __t, uint8x16_t __idx) {      \
+        return (Q##_t)__builtin_neon_tbl_16b(__t, __idx);                 \
+    }                                                                     \
+    __BADC_INTRIN D##_t vqtbx1_##sfx(D##_t __d, Q##_t __t, uint8x8_t __idx) { \
+        return (D##_t)__builtin_neon_tbx_8b(__d, __t, __idx);             \
+    }                                                                     \
+    __BADC_INTRIN Q##_t vqtbx1q_##sfx(Q##_t __d, Q##_t __t, uint8x16_t __idx) { \
+        return (Q##_t)__builtin_neon_tbx_16b(__d, __t, __idx);            \
+    }
+__BADC_NEON_TBL(u8, uint8x8, uint8x16)
+__BADC_NEON_TBL(s8, int8x8, int8x16)
+__BADC_NEON_TBL(p8, poly8x8, poly8x16)
+
+/* AES single rounds (FEAT_AES): AddRoundKey + SubBytes + ShiftRows (aese /
+ * aesd) and the [inverse] MixColumns (aesmc / aesimc). */
+__BADC_INTRIN uint8x16_t vaeseq_u8(uint8x16_t __d, uint8x16_t __k) {
+    return (uint8x16_t)__builtin_neon_aese_16b(__d, __k);
+}
+__BADC_INTRIN uint8x16_t vaesdq_u8(uint8x16_t __d, uint8x16_t __k) {
+    return (uint8x16_t)__builtin_neon_aesd_16b(__d, __k);
+}
+__BADC_INTRIN uint8x16_t vaesmcq_u8(uint8x16_t __d) {
+    return (uint8x16_t)__builtin_neon_aesmc_16b(__d);
+}
+__BADC_INTRIN uint8x16_t vaesimcq_u8(uint8x16_t __d) {
+    return (uint8x16_t)__builtin_neon_aesimc_16b(__d);
+}
+
+/* Carry-less (polynomial) products, each lane twice as wide: 8x8->16 on
+ * the bytes, and 64x64->128 (FEAT_PMULL); the _high forms take the upper
+ * half of each source. */
+__BADC_INTRIN poly16x8_t vmull_p8(poly8x8_t __a, poly8x8_t __b) {
+    return (poly16x8_t)__builtin_neon_pmull_8b(__a, __b);
+}
+__BADC_INTRIN poly16x8_t vmull_high_p8(poly8x16_t __a, poly8x16_t __b) {
+    return (poly16x8_t)__builtin_neon_pmull2_16b(__a, __b);
+}
+__BADC_INTRIN poly128_t vmull_p64(poly64_t __a, poly64_t __b) {
+    return (poly128_t)__builtin_neon_pmull_1d((poly64x1_t){__a}, (poly64x1_t){__b});
+}
+__BADC_INTRIN poly128_t vmull_high_p64(poly64x2_t __a, poly64x2_t __b) {
+    return (poly128_t)__builtin_neon_pmull2_2d(__a, __b);
+}
+
+/* SHA-1 and SHA-256 (FEAT_SHA1, FEAT_SHA256): the hash updates take the
+ * running state as a q register, SHA-1's e as an s register; the schedule
+ * updates accumulate into their first operand. */
+#define __BADC_NEON_SHA1H(name, insn)                                       \
+    __BADC_INTRIN uint32x4_t name(uint32x4_t __abcd, uint32_t __e, uint32x4_t __wk) { \
+        return (uint32x4_t)__builtin_neon_##insn##_4s(__abcd, (uint32x4_t){__e}, __wk); \
+    }
+__BADC_NEON_SHA1H(vsha1cq_u32, sha1c)
+__BADC_NEON_SHA1H(vsha1pq_u32, sha1p)
+__BADC_NEON_SHA1H(vsha1mq_u32, sha1m)
+/* sha1h is the rotation of e left by 30, which a general register does. */
+__BADC_INTRIN uint32_t vsha1h_u32(uint32_t __e) { return __e << 30 | __e >> 2; }
+__BADC_INTRIN uint32x4_t vsha1su0q_u32(uint32x4_t __a, uint32x4_t __b, uint32x4_t __c) {
+    return (uint32x4_t)__builtin_neon_sha1su0_4s(__a, __b, __c);
+}
+__BADC_INTRIN uint32x4_t vsha1su1q_u32(uint32x4_t __a, uint32x4_t __b) {
+    return (uint32x4_t)__builtin_neon_sha1su1_4s(__a, __b);
+}
+__BADC_INTRIN uint32x4_t vsha256hq_u32(uint32x4_t __abcd, uint32x4_t __efgh, uint32x4_t __wk) {
+    return (uint32x4_t)__builtin_neon_sha256h_4s(__abcd, __efgh, __wk);
+}
+__BADC_INTRIN uint32x4_t vsha256h2q_u32(uint32x4_t __efgh, uint32x4_t __abcd, uint32x4_t __wk) {
+    return (uint32x4_t)__builtin_neon_sha256h2_4s(__efgh, __abcd, __wk);
+}
+__BADC_INTRIN uint32x4_t vsha256su0q_u32(uint32x4_t __a, uint32x4_t __b) {
+    return (uint32x4_t)__builtin_neon_sha256su0_4s(__a, __b);
+}
+__BADC_INTRIN uint32x4_t vsha256su1q_u32(uint32x4_t __a, uint32x4_t __b, uint32x4_t __c) {
+    return (uint32x4_t)__builtin_neon_sha256su1_4s(__a, __b, __c);
+}
+
+/* SHA-512 and SHA3 (FEAT_SHA512, FEAT_SHA3): the hash and schedule
+ * updates, the three-way xor `eor3`, `bcax` (a ^ (b & ~c)), `rax1`
+ * (a ^ rol(b, 1)) and `xar` (ror(a ^ b, imm)). */
+__BADC_INTRIN uint64x2_t vsha512hq_u64(uint64x2_t __a, uint64x2_t __b, uint64x2_t __c) {
+    return (uint64x2_t)__builtin_neon_sha512h_2d(__a, __b, __c);
+}
+__BADC_INTRIN uint64x2_t vsha512h2q_u64(uint64x2_t __a, uint64x2_t __b, uint64x2_t __c) {
+    return (uint64x2_t)__builtin_neon_sha512h2_2d(__a, __b, __c);
+}
+__BADC_INTRIN uint64x2_t vsha512su0q_u64(uint64x2_t __a, uint64x2_t __b) {
+    return (uint64x2_t)__builtin_neon_sha512su0_2d(__a, __b);
+}
+__BADC_INTRIN uint64x2_t vsha512su1q_u64(uint64x2_t __a, uint64x2_t __b, uint64x2_t __c) {
+    return (uint64x2_t)__builtin_neon_sha512su1_2d(__a, __b, __c);
+}
+#define __BADC_NEON_XOR3(name, T, insn)                                     \
+    __BADC_INTRIN T name(T __a, T __b, T __c) {                             \
+        return (T)__builtin_neon_##insn##_16b(__a, __b, __c);               \
+    }
+__BADC_NEON_XOR3(veor3q_u8, uint8x16_t, eor3)
+__BADC_NEON_XOR3(vbcaxq_u8, uint8x16_t, bcax)
+__BADC_NEON_XOR3(veor3q_u16, uint16x8_t, eor3)
+__BADC_NEON_XOR3(vbcaxq_u16, uint16x8_t, bcax)
+__BADC_NEON_XOR3(veor3q_u32, uint32x4_t, eor3)
+__BADC_NEON_XOR3(vbcaxq_u32, uint32x4_t, bcax)
+__BADC_NEON_XOR3(veor3q_u64, uint64x2_t, eor3)
+__BADC_NEON_XOR3(vbcaxq_u64, uint64x2_t, bcax)
+__BADC_NEON_XOR3(veor3q_s8, int8x16_t, eor3)
+__BADC_NEON_XOR3(vbcaxq_s8, int8x16_t, bcax)
+__BADC_NEON_XOR3(veor3q_s16, int16x8_t, eor3)
+__BADC_NEON_XOR3(vbcaxq_s16, int16x8_t, bcax)
+__BADC_NEON_XOR3(veor3q_s32, int32x4_t, eor3)
+__BADC_NEON_XOR3(vbcaxq_s32, int32x4_t, bcax)
+__BADC_NEON_XOR3(veor3q_s64, int64x2_t, eor3)
+__BADC_NEON_XOR3(vbcaxq_s64, int64x2_t, bcax)
+__BADC_INTRIN uint64x2_t vrax1q_u64(uint64x2_t __a, uint64x2_t __b) {
+    return (uint64x2_t)__builtin_neon_rax1_2d(__a, __b);
+}
+#define vxarq_u64(__a, __b, __n) __extension__({                            \
+    uint64x2_t __xa = (__a), __xb = (__b);                                  \
+    _Static_assert((__n) >= 0 && (__n) < 64, "rotate count out of range"); \
+    (uint64x2_t)__builtin_neon_xar_2d(__xa, __xb, __n);                     \
+})
+
+/* SM3 and SM4 (FEAT_SM3, FEAT_SM4). */
+__BADC_INTRIN uint32x4_t vsm3ss1q_u32(uint32x4_t __a, uint32x4_t __b, uint32x4_t __c) {
+    uint32x4_t __r;
+    __asm__("sm3ss1 %0.4s, %1.4s, %2.4s, %3.4s"
+            : "=w"(__r) : "w"(__a), "w"(__b), "w"(__c));
+    return __r;
+}
+#define __BADC_NEON_SM3TT(insn, __a, __b, __c, __n) __extension__({         \
+    uint32x4_t __ta = (__a), __tb = (__b), __tc = (__c);                    \
+    __BADC_NEON_LANE(__n, 4);                                               \
+    __asm__(insn " %0.4s, %1.4s, %2.s[%3]"                                  \
+            : "+w"(__ta) : "w"(__tb), "w"(__tc), "i"(__n));                 \
+    __ta;                                                                   \
+})
+#define vsm3tt1aq_u32(__a, __b, __c, __n) __BADC_NEON_SM3TT("sm3tt1a", __a, __b, __c, __n)
+#define vsm3tt1bq_u32(__a, __b, __c, __n) __BADC_NEON_SM3TT("sm3tt1b", __a, __b, __c, __n)
+#define vsm3tt2aq_u32(__a, __b, __c, __n) __BADC_NEON_SM3TT("sm3tt2a", __a, __b, __c, __n)
+#define vsm3tt2bq_u32(__a, __b, __c, __n) __BADC_NEON_SM3TT("sm3tt2b", __a, __b, __c, __n)
+__BADC_NEON_FN3(vsm3partw1q_u32, uint32x4_t, uint32x4_t, uint32x4_t,
+                __BADC_NEON_I3("sm3partw1", 4s, 4s, 4s))
+__BADC_NEON_FN3(vsm3partw2q_u32, uint32x4_t, uint32x4_t, uint32x4_t,
+                __BADC_NEON_I3("sm3partw2", 4s, 4s, 4s))
+__BADC_INTRIN uint32x4_t vsm4eq_u32(uint32x4_t __a, uint32x4_t __b) {
+    __asm__("sm4e %0.4s, %1.4s" : "+w"(__a) : "w"(__b));
+    return __a;
+}
+__BADC_NEON_FN2(vsm4ekeyq_u32, uint32x4_t, uint32x4_t, uint32x4_t,
+                __BADC_NEON_I3("sm4ekey", 4s, 4s, 4s))
+
+/* Floating vectors. The float64x1_t arithmetic is the scalar d-register
+ * instruction; its compares and integer conversions are C on the one lane.
+ * ARITH2 and ARITH1 call the rows of `stem`. */
+#define __BADC_NEON_ARITH2(op, stem)                                      \
+    __BADC_NEON_B2(op##_f32, float32x2_t, float32x2_t, float32x2_t, s, stem, stem, 2s) \
+    __BADC_NEON_B2(op##q_f32, float32x4_t, float32x4_t, float32x4_t, s, stem, stem, 4s) \
+    __BADC_NEON_B2(op##q_f64, float64x2_t, float64x2_t, float64x2_t, s, stem, stem, 2d) \
+    __BADC_NEON_B2(op##_f64, float64x1_t, float64x1_t, float64x1_t, s, stem, stem, d)
+#define __BADC_NEON_ARITH1(op, stem)                                      \
+    __BADC_NEON_B1(op##_f32, float32x2_t, float32x2_t, s, stem, stem, 2s) \
+    __BADC_NEON_B1(op##q_f32, float32x4_t, float32x4_t, s, stem, stem, 4s) \
+    __BADC_NEON_B1(op##q_f64, float64x2_t, float64x2_t, s, stem, stem, 2d) \
+    __BADC_NEON_B1(op##_f64, float64x1_t, float64x1_t, s, stem, stem, d)
+/* A compare, operands in B's order; C on the one lane of float64x1_t. */
+#define __BADC_NEON_CMP(op, B, stem, rel)                                 \
+    B(op##_f32, uint32x2_t, float32x2_t, float32x2_t, s, stem, stem, 2s)  \
+    B(op##q_f32, uint32x4_t, float32x4_t, float32x4_t, s, stem, stem, 4s) \
+    B(op##q_f64, uint64x2_t, float64x2_t, float64x2_t, s, stem, stem, 2d) \
+    __BADC_INTRIN uint64x1_t op##_f64(float64x1_t __a, float64x1_t __b) { \
+        return (uint64x1_t){-(uint64_t)(__a[0] rel __b[0])};              \
+    }
+
+__BADC_NEON_ARITH2(vadd, __builtin_neon_fadd)
+__BADC_NEON_ARITH2(vsub, __builtin_neon_fsub)
+__BADC_NEON_ARITH2(vmul, __builtin_neon_fmul)
+__BADC_NEON_ARITH2(vdiv, __builtin_neon_fdiv)
+__BADC_NEON_ARITH2(vmax, __builtin_neon_fmax)
+__BADC_NEON_ARITH2(vmin, __builtin_neon_fmin)
+__BADC_NEON_ARITH1(vabs, __builtin_neon_fabs)
+__BADC_NEON_ARITH1(vneg, __builtin_neon_fneg)
+__BADC_NEON_ARITH1(vsqrt, __builtin_neon_fsqrt)
+
+/* The reciprocal and reciprocal square root estimates, and their
+ * Newton-Raphson steps: vrecps is 2 - a * b, vrsqrts (3 - a * b) / 2. The
+ * scalar forms are lane 0 of the vector ones; the u32 estimates read each
+ * lane as a fraction below 1. */
+__BADC_NEON_ARITH1(vrecpe, __builtin_neon_frecpe)
+__BADC_NEON_ARITH1(vrsqrte, __builtin_neon_frsqrte)
+__BADC_NEON_ARITH2(vrecps, __builtin_neon_frecps)
+__BADC_NEON_ARITH2(vrsqrts, __builtin_neon_frsqrts)
+#define __BADC_NEON_EST_SCALAR(op)                                        \
+    __BADC_INTRIN float32_t op##s_f32(float32_t __a) { return op##_f32((float32x2_t){__a})[0]; } \
+    __BADC_INTRIN float64_t op##d_f64(float64_t __a) { return op##_f64((float64x1_t){__a})[0]; }
+#define __BADC_NEON_STEP_SCALAR(op)                                       \
+    __BADC_INTRIN float32_t op##s_f32(float32_t __a, float32_t __b) {     \
+        return op##_f32((float32x2_t){__a}, (float32x2_t){__b})[0];       \
+    }                                                                     \
+    __BADC_INTRIN float64_t op##d_f64(float64_t __a, float64_t __b) {     \
+        return op##_f64((float64x1_t){__a}, (float64x1_t){__b})[0];       \
+    }
+__BADC_NEON_EST_SCALAR(vrecpe)
+__BADC_NEON_EST_SCALAR(vrsqrte)
+__BADC_NEON_STEP_SCALAR(vrecps)
+__BADC_NEON_STEP_SCALAR(vrsqrts)
+
+/* The floating absolute difference |a - b|, fmaxnm and fminnm (a lone
+ * quiet NaN loses), and fmulx (infinity times zero is 2); the scalar forms
+ * are lane 0 of the vector ones. */
+__BADC_NEON_ARITH2(vabd, __builtin_neon_fabd)
+__BADC_NEON_ARITH2(vmaxnm, __builtin_neon_fmaxnm)
+__BADC_NEON_ARITH2(vminnm, __builtin_neon_fminnm)
+__BADC_NEON_ARITH2(vmulx, __builtin_neon_fmulx)
+__BADC_NEON_STEP_SCALAR(vabd)
+__BADC_NEON_STEP_SCALAR(vmulx)
+
+/* Rounding to an integral value: toward zero (vrnd), to nearest with ties
+ * to even (vrndn) or away (vrnda), toward -infinity (vrndm) or +infinity
+ * (vrndp), and in the current direction raising inexact (vrndx) or not
+ * (vrndi). vrnd32 and vrnd64 round toward zero (z) or in the current
+ * direction (x) to a value an integer of that width holds, its minimum
+ * for a NaN, an infinity or a value out of range. */
+__BADC_NEON_ARITH1(vrnd, __builtin_neon_frintz)
+__BADC_NEON_ARITH1(vrndn, __builtin_neon_frintn)
+__BADC_NEON_ARITH1(vrnda, __builtin_neon_frinta)
+__BADC_NEON_ARITH1(vrndm, __builtin_neon_frintm)
+__BADC_NEON_ARITH1(vrndp, __builtin_neon_frintp)
+__BADC_NEON_ARITH1(vrndx, __builtin_neon_frintx)
+__BADC_NEON_ARITH1(vrndi, __builtin_neon_frinti)
+__BADC_NEON_ARITH1(vrnd32z, __builtin_neon_frint32z)
+__BADC_NEON_ARITH1(vrnd32x, __builtin_neon_frint32x)
+__BADC_NEON_ARITH1(vrnd64z, __builtin_neon_frint64z)
+__BADC_NEON_ARITH1(vrnd64x, __builtin_neon_frint64x)
+__BADC_INTRIN float32_t vrndns_f32(float32_t __a) { return vrndn_f32((float32x2_t){__a})[0]; }
+
+/* Pairwise: the pairs of the first operand, then of the second. A scalar
+ * pairwise or across-lane form is lane 0 of the pairwise one of the vector
+ * with itself; vaddvq_f32 adds the pairs' sums, and vmaxvq_f32 and its
+ * kin are one reduction. */
+#define __BADC_NEON_FPAIR(op, stem, d64)                                  \
+    __BADC_NEON_B2(op##_f32, float32x2_t, float32x2_t, float32x2_t, s, stem, stem, 2s) \
+    __BADC_NEON_B2(op##q_f32, float32x4_t, float32x4_t, float32x4_t, s, stem, stem, 4s) \
+    __BADC_NEON_B2(op##q_f64, float64x2_t, float64x2_t, float64x2_t, s, stem, stem, 2d) \
+    __BADC_INTRIN float32_t op##s_f32(float32x2_t __a) { return op##_f32(__a, __a)[0]; } \
+    __BADC_INTRIN float64_t d64(float64x2_t __a) { return op##q_f64(__a, __a)[0]; }
+__BADC_NEON_FPAIR(vpadd, __builtin_neon_faddp, vpaddd_f64)
+__BADC_NEON_FPAIR(vpmax, __builtin_neon_fmaxp, vpmaxqd_f64)
+__BADC_NEON_FPAIR(vpmin, __builtin_neon_fminp, vpminqd_f64)
+__BADC_NEON_FPAIR(vpmaxnm, __builtin_neon_fmaxnmp, vpmaxnmqd_f64)
+__BADC_NEON_FPAIR(vpminnm, __builtin_neon_fminnmp, vpminnmqd_f64)
+#define __BADC_NEON_FACROSS(op, pair, stem)                               \
+    __BADC_INTRIN float32_t op##_f32(float32x2_t __a) { return pair##_f32(__a, __a)[0]; } \
+    __BADC_INTRIN float32_t op##q_f32(float32x4_t __a) { return __builtin_neon_##stem##_4s(__a)[0]; } \
+    __BADC_INTRIN float64_t op##q_f64(float64x2_t __a) { return pair##q_f64(__a, __a)[0]; }
+__BADC_NEON_FACROSS(vmaxv, vpmax, fmaxv)
+__BADC_NEON_FACROSS(vminv, vpmin, fminv)
+__BADC_NEON_FACROSS(vmaxnmv, vpmaxnm, fmaxnmv)
+__BADC_NEON_FACROSS(vminnmv, vpminnm, fminnmv)
+__BADC_INTRIN float32_t vaddv_f32(float32x2_t __a) { return vpadds_f32(__a); }
+__BADC_INTRIN float32_t vaddvq_f32(float32x4_t __a) {
+    return vpadds_f32(vget_low_f32(vpaddq_f32(__a, __a)));
+}
+__BADC_INTRIN float64_t vaddvq_f64(float64x2_t __a) { return vpaddd_f64(__a); }
+__BADC_NEON_B1(vrecpe_u32, uint32x2_t, uint32x2_t, s, __builtin_neon_urecpe, _, 2s)
+__BADC_NEON_B1(vrecpeq_u32, uint32x4_t, uint32x4_t, s, __builtin_neon_urecpe, _, 4s)
+__BADC_NEON_B1(vrsqrte_u32, uint32x2_t, uint32x2_t, s, __builtin_neon_ursqrte, _, 2s)
+__BADC_NEON_B1(vrsqrteq_u32, uint32x4_t, uint32x4_t, s, __builtin_neon_ursqrte, _, 4s)
+
+/* vfma: a + b * c, vfms: a - b * c, each rounded once. */
+#define __BADC_NEON_FUSED(op, stem)                                       \
+    __BADC_NEON_B3(op##_f32, float32x2_t, s, stem, stem, 2s)              \
+    __BADC_NEON_B3(op##q_f32, float32x4_t, s, stem, stem, 4s)             \
+    __BADC_NEON_B3(op##q_f64, float64x2_t, s, stem, stem, 2d)
+__BADC_NEON_FUSED(vfma, __builtin_neon_fmla)
+__BADC_NEON_FUSED(vfms, __builtin_neon_fmls)
+__BADC_INTRIN float64x1_t vfma_f64(float64x1_t __a, float64x1_t __b, float64x1_t __c) {
+    return (float64x1_t){__builtin_fma(__b[0], __c[0], __a[0])};
+}
+__BADC_INTRIN float64x1_t vfms_f64(float64x1_t __a, float64x1_t __b, float64x1_t __c) {
+    return (float64x1_t){__builtin_fma(-__b[0], __c[0], __a[0])};
+}
+
+__BADC_NEON_CMP(vceq, __BADC_NEON_B2, __builtin_neon_fcmeq, ==)
+__BADC_NEON_CMP(vcge, __BADC_NEON_B2, __builtin_neon_fcmge, >=)
+__BADC_NEON_CMP(vcgt, __BADC_NEON_B2, __builtin_neon_fcmgt, >)
+__BADC_NEON_CMP(vcle, __BADC_NEON_B2R, __builtin_neon_fcmge, <=)
+__BADC_NEON_CMP(vclt, __BADC_NEON_B2R, __builtin_neon_fcmgt, <)
+
+/* Compares against zero: all-ones lanes where the relation to 0 holds.
+ * The scalar forms are lane 0 of the vector ones. */
+#define __BADC_NEON_F_CMPZ(op, stem, sfx, k, E, D, Q, AD, AQ, UD, UQ, ...) \
+    __BADC_NEON_B1(op##_##sfx, UD, D, s, stem, stem, AD)                  \
+    __BADC_NEON_B1(op##q_##sfx, UQ, Q, s, stem, stem, AQ)
+#define __BADC_NEON_CMPZ(op, istem, fstem)                                \
+    __BADC_NEON_SINT(__BADC_NEON_F_CMPZ, op, istem)                       \
+    __BADC_NEON_R_f32(__BADC_NEON_F_CMPZ, op, fstem)                      \
+    __BADC_NEON_R_f64(__BADC_NEON_F_CMPZ, op, fstem)                      \
+    __BADC_INTRIN uint64_t op##d_s64(int64_t __a) { return op##_s64((int64x1_t){__a})[0]; } \
+    __BADC_INTRIN uint32_t op##s_f32(float32_t __a) { return op##_f32((float32x2_t){__a})[0]; } \
+    __BADC_INTRIN uint64_t op##d_f64(float64_t __a) { return op##_f64((float64x1_t){__a})[0]; }
+__BADC_NEON_CMPZ(vceqz, __builtin_neon_cmeqz, __builtin_neon_fcmeqz)
+__BADC_NEON_CMPZ(vcgez, __builtin_neon_cmgez, __builtin_neon_fcmgez)
+__BADC_NEON_CMPZ(vcgtz, __builtin_neon_cmgtz, __builtin_neon_fcmgtz)
+__BADC_NEON_CMPZ(vclez, __builtin_neon_cmlez, __builtin_neon_fcmlez)
+__BADC_NEON_CMPZ(vcltz, __builtin_neon_cmltz, __builtin_neon_fcmltz)
+#define __BADC_NEON_F_CMPZU(_, sfx, k, E, D, Q, AD, AQ, UD, UQ, ...)      \
+    __BADC_NEON_F_CMPZ(vceqz, __builtin_neon_cmeqz, sfx, k, E, D, Q, AD, AQ, UD, UQ)
+__BADC_NEON_R_u8(__BADC_NEON_F_CMPZU, _)
+__BADC_NEON_R_u16(__BADC_NEON_F_CMPZU, _)
+__BADC_NEON_R_u32(__BADC_NEON_F_CMPZU, _)
+__BADC_NEON_R_u64(__BADC_NEON_F_CMPZU, _)
+__BADC_NEON_R_p8(__BADC_NEON_F_CMPZU, _)
+__BADC_NEON_R_p64(__BADC_NEON_F_CMPZU, _)
+__BADC_INTRIN uint64_t vceqzd_u64(uint64_t __a) { return vceqz_u64((uint64x1_t){__a})[0]; }
+
+/* Integer <-> floating lanes of one width; to integer truncates toward
+ * zero and saturates. */
+#define __BADC_NEON_CVT(name, R, T, insn, A)                               \
+    __BADC_INTRIN R name(T __a) { return (R)__builtin_neon_##insn##_##A(__a); }
+__BADC_NEON_CVT(vcvt_f32_s32, float32x2_t, int32x2_t, scvtf, 2s)
+__BADC_NEON_CVT(vcvtq_f32_s32, float32x4_t, int32x4_t, scvtf, 4s)
+__BADC_NEON_CVT(vcvt_f32_u32, float32x2_t, uint32x2_t, ucvtf, 2s)
+__BADC_NEON_CVT(vcvtq_f32_u32, float32x4_t, uint32x4_t, ucvtf, 4s)
+__BADC_NEON_CVT(vcvtq_f64_s64, float64x2_t, int64x2_t, scvtf, 2d)
+__BADC_NEON_CVT(vcvtq_f64_u64, float64x2_t, uint64x2_t, ucvtf, 2d)
+__BADC_NEON_CVT(vcvt_s32_f32, int32x2_t, float32x2_t, fcvtzs, 2s)
+__BADC_NEON_CVT(vcvtq_s32_f32, int32x4_t, float32x4_t, fcvtzs, 4s)
+__BADC_NEON_CVT(vcvt_u32_f32, uint32x2_t, float32x2_t, fcvtzu, 2s)
+__BADC_NEON_CVT(vcvtq_u32_f32, uint32x4_t, float32x4_t, fcvtzu, 4s)
+__BADC_NEON_CVT(vcvtq_s64_f64, int64x2_t, float64x2_t, fcvtzs, 2d)
+__BADC_NEON_CVT(vcvtq_u64_f64, uint64x2_t, float64x2_t, fcvtzu, 2d)
+/* The 64-bit one-lane truncating conversions are C, which converts on
+ * AArch64 as the instructions do. */
+__BADC_INTRIN float64x1_t vcvt_f64_s64(int64x1_t __a) { return (float64x1_t){(float64_t)__a[0]}; }
+__BADC_INTRIN float64x1_t vcvt_f64_u64(uint64x1_t __a) { return (float64x1_t){(float64_t)__a[0]}; }
+__BADC_INTRIN int64x1_t vcvt_s64_f64(float64x1_t __a) { return (int64x1_t){(int64_t)__a[0]}; }
+__BADC_INTRIN uint64x1_t vcvt_u64_f64(float64x1_t __a) { return (uint64x1_t){(uint64_t)__a[0]}; }
+
+/* Conversions to integers rounding to nearest with ties to even (vcvtn)
+ * or away (vcvta), toward -infinity (vcvtm) or +infinity (vcvtp),
+ * saturating; to and from fixed point with an immediate count of fraction
+ * bits in [1, lane bits] (vcvt_n), toward zero to an integer. The scalar
+ * forms are lane 0 of the vector ones. */
+__BADC_NEON_CVT(vcvtn_s32_f32, int32x2_t, float32x2_t, fcvtns, 2s)
+__BADC_NEON_CVT(vcvtnq_s32_f32, int32x4_t, float32x4_t, fcvtns, 4s)
+__BADC_NEON_CVT(vcvtn_u32_f32, uint32x2_t, float32x2_t, fcvtnu, 2s)
+__BADC_NEON_CVT(vcvtnq_u32_f32, uint32x4_t, float32x4_t, fcvtnu, 4s)
+__BADC_NEON_CVT(vcvtnq_s64_f64, int64x2_t, float64x2_t, fcvtns, 2d)
+__BADC_NEON_CVT(vcvtnq_u64_f64, uint64x2_t, float64x2_t, fcvtnu, 2d)
+__BADC_NEON_CVT(vcvtn_s64_f64, int64x1_t, float64x1_t, fcvtns, d)
+__BADC_NEON_CVT(vcvtn_u64_f64, uint64x1_t, float64x1_t, fcvtnu, d)
+__BADC_NEON_CVT(vcvtm_s32_f32, int32x2_t, float32x2_t, fcvtms, 2s)
+__BADC_NEON_CVT(vcvtmq_s32_f32, int32x4_t, float32x4_t, fcvtms, 4s)
+__BADC_NEON_CVT(vcvtm_u32_f32, uint32x2_t, float32x2_t, fcvtmu, 2s)
+__BADC_NEON_CVT(vcvtmq_u32_f32, uint32x4_t, float32x4_t, fcvtmu, 4s)
+__BADC_NEON_CVT(vcvtmq_s64_f64, int64x2_t, float64x2_t, fcvtms, 2d)
+__BADC_NEON_CVT(vcvtmq_u64_f64, uint64x2_t, float64x2_t, fcvtmu, 2d)
+__BADC_NEON_CVT(vcvtm_s64_f64, int64x1_t, float64x1_t, fcvtms, d)
+__BADC_NEON_CVT(vcvtm_u64_f64, uint64x1_t, float64x1_t, fcvtmu, d)
+__BADC_NEON_CVT(vcvtp_s32_f32, int32x2_t, float32x2_t, fcvtps, 2s)
+__BADC_NEON_CVT(vcvtpq_s32_f32, int32x4_t, float32x4_t, fcvtps, 4s)
+__BADC_NEON_CVT(vcvtp_u32_f32, uint32x2_t, float32x2_t, fcvtpu, 2s)
+__BADC_NEON_CVT(vcvtpq_u32_f32, uint32x4_t, float32x4_t, fcvtpu, 4s)
+__BADC_NEON_CVT(vcvtpq_s64_f64, int64x2_t, float64x2_t, fcvtps, 2d)
+__BADC_NEON_CVT(vcvtpq_u64_f64, uint64x2_t, float64x2_t, fcvtpu, 2d)
+__BADC_NEON_CVT(vcvtp_s64_f64, int64x1_t, float64x1_t, fcvtps, d)
+__BADC_NEON_CVT(vcvtp_u64_f64, uint64x1_t, float64x1_t, fcvtpu, d)
+__BADC_NEON_CVT(vcvta_s32_f32, int32x2_t, float32x2_t, fcvtas, 2s)
+__BADC_NEON_CVT(vcvtaq_s32_f32, int32x4_t, float32x4_t, fcvtas, 4s)
+__BADC_NEON_CVT(vcvta_u32_f32, uint32x2_t, float32x2_t, fcvtau, 2s)
+__BADC_NEON_CVT(vcvtaq_u32_f32, uint32x4_t, float32x4_t, fcvtau, 4s)
+__BADC_NEON_CVT(vcvtaq_s64_f64, int64x2_t, float64x2_t, fcvtas, 2d)
+__BADC_NEON_CVT(vcvtaq_u64_f64, uint64x2_t, float64x2_t, fcvtau, 2d)
+__BADC_NEON_CVT(vcvta_s64_f64, int64x1_t, float64x1_t, fcvtas, d)
+__BADC_NEON_CVT(vcvta_u64_f64, uint64x1_t, float64x1_t, fcvtau, d)
+__BADC_INTRIN int32_t vcvts_s32_f32(float32_t __a) { return vcvt_s32_f32((float32x2_t){__a})[0]; }
+__BADC_INTRIN uint32_t vcvts_u32_f32(float32_t __a) { return vcvt_u32_f32((float32x2_t){__a})[0]; }
+__BADC_INTRIN int64_t vcvtd_s64_f64(float64_t __a) { return (int64_t)__a; }
+__BADC_INTRIN uint64_t vcvtd_u64_f64(float64_t __a) { return (uint64_t)__a; }
+__BADC_INTRIN int32_t vcvtns_s32_f32(float32_t __a) { return vcvtn_s32_f32((float32x2_t){__a})[0]; }
+__BADC_INTRIN uint32_t vcvtns_u32_f32(float32_t __a) { return vcvtn_u32_f32((float32x2_t){__a})[0]; }
+__BADC_INTRIN int64_t vcvtnd_s64_f64(float64_t __a) { return vcvtn_s64_f64((float64x1_t){__a})[0]; }
+__BADC_INTRIN uint64_t vcvtnd_u64_f64(float64_t __a) { return vcvtn_u64_f64((float64x1_t){__a})[0]; }
+__BADC_INTRIN int32_t vcvtms_s32_f32(float32_t __a) { return vcvtm_s32_f32((float32x2_t){__a})[0]; }
+__BADC_INTRIN uint32_t vcvtms_u32_f32(float32_t __a) { return vcvtm_u32_f32((float32x2_t){__a})[0]; }
+__BADC_INTRIN int64_t vcvtmd_s64_f64(float64_t __a) { return vcvtm_s64_f64((float64x1_t){__a})[0]; }
+__BADC_INTRIN uint64_t vcvtmd_u64_f64(float64_t __a) { return vcvtm_u64_f64((float64x1_t){__a})[0]; }
+__BADC_INTRIN int32_t vcvtps_s32_f32(float32_t __a) { return vcvtp_s32_f32((float32x2_t){__a})[0]; }
+__BADC_INTRIN uint32_t vcvtps_u32_f32(float32_t __a) { return vcvtp_u32_f32((float32x2_t){__a})[0]; }
+__BADC_INTRIN int64_t vcvtpd_s64_f64(float64_t __a) { return vcvtp_s64_f64((float64x1_t){__a})[0]; }
+__BADC_INTRIN uint64_t vcvtpd_u64_f64(float64_t __a) { return vcvtp_u64_f64((float64x1_t){__a})[0]; }
+__BADC_INTRIN int32_t vcvtas_s32_f32(float32_t __a) { return vcvta_s32_f32((float32x2_t){__a})[0]; }
+__BADC_INTRIN uint32_t vcvtas_u32_f32(float32_t __a) { return vcvta_u32_f32((float32x2_t){__a})[0]; }
+__BADC_INTRIN int64_t vcvtad_s64_f64(float64_t __a) { return vcvta_s64_f64((float64x1_t){__a})[0]; }
+__BADC_INTRIN uint64_t vcvtad_u64_f64(float64_t __a) { return vcvta_u64_f64((float64x1_t){__a})[0]; }
+__BADC_INTRIN float32_t vcvts_f32_s32(int32_t __a) { return (float32_t)__a; }
+__BADC_INTRIN float32_t vcvts_f32_u32(uint32_t __a) { return (float32_t)__a; }
+__BADC_INTRIN float64_t vcvtd_f64_s64(int64_t __a) { return (float64_t)__a; }
+__BADC_INTRIN float64_t vcvtd_f64_u64(uint64_t __a) { return (float64_t)__a; }
+#define __BADC_NEON_CVTN(R, T, insn, A, bits, __a, __n) __extension__({      \
+    T __ca = (__a);                                                       \
+    _Static_assert((__n) >= 1 && (__n) <= (bits), "fraction bits out of range"); \
+    (R)__builtin_neon_##insn##_n_##A(__ca, __n);                          \
+})
+#define vcvt_n_f32_s32(__a, __n) __BADC_NEON_CVTN(float32x2_t, int32x2_t, scvtf, 2s, 32, __a, __n)
+#define vcvtq_n_f32_s32(__a, __n) __BADC_NEON_CVTN(float32x4_t, int32x4_t, scvtf, 4s, 32, __a, __n)
+#define vcvt_n_f32_u32(__a, __n) __BADC_NEON_CVTN(float32x2_t, uint32x2_t, ucvtf, 2s, 32, __a, __n)
+#define vcvtq_n_f32_u32(__a, __n) __BADC_NEON_CVTN(float32x4_t, uint32x4_t, ucvtf, 4s, 32, __a, __n)
+#define vcvt_n_f64_s64(__a, __n) __BADC_NEON_CVTN(float64x1_t, int64x1_t, scvtf, d, 64, __a, __n)
+#define vcvtq_n_f64_s64(__a, __n) __BADC_NEON_CVTN(float64x2_t, int64x2_t, scvtf, 2d, 64, __a, __n)
+#define vcvt_n_f64_u64(__a, __n) __BADC_NEON_CVTN(float64x1_t, uint64x1_t, ucvtf, d, 64, __a, __n)
+#define vcvtq_n_f64_u64(__a, __n) __BADC_NEON_CVTN(float64x2_t, uint64x2_t, ucvtf, 2d, 64, __a, __n)
+#define vcvt_n_s32_f32(__a, __n) __BADC_NEON_CVTN(int32x2_t, float32x2_t, fcvtzs, 2s, 32, __a, __n)
+#define vcvtq_n_s32_f32(__a, __n) __BADC_NEON_CVTN(int32x4_t, float32x4_t, fcvtzs, 4s, 32, __a, __n)
+#define vcvt_n_u32_f32(__a, __n) __BADC_NEON_CVTN(uint32x2_t, float32x2_t, fcvtzu, 2s, 32, __a, __n)
+#define vcvtq_n_u32_f32(__a, __n) __BADC_NEON_CVTN(uint32x4_t, float32x4_t, fcvtzu, 4s, 32, __a, __n)
+#define vcvt_n_s64_f64(__a, __n) __BADC_NEON_CVTN(int64x1_t, float64x1_t, fcvtzs, d, 64, __a, __n)
+#define vcvtq_n_s64_f64(__a, __n) __BADC_NEON_CVTN(int64x2_t, float64x2_t, fcvtzs, 2d, 64, __a, __n)
+#define vcvt_n_u64_f64(__a, __n) __BADC_NEON_CVTN(uint64x1_t, float64x1_t, fcvtzu, d, 64, __a, __n)
+#define vcvtq_n_u64_f64(__a, __n) __BADC_NEON_CVTN(uint64x2_t, float64x2_t, fcvtzu, 2d, 64, __a, __n)
+#define vcvts_n_f32_s32(__a, __n) (vcvt_n_f32_s32((int32x2_t){(int32_t)(__a)}, __n)[0])
+#define vcvts_n_f32_u32(__a, __n) (vcvt_n_f32_u32((uint32x2_t){(uint32_t)(__a)}, __n)[0])
+#define vcvtd_n_f64_s64(__a, __n) (vcvt_n_f64_s64((int64x1_t){(int64_t)(__a)}, __n)[0])
+#define vcvtd_n_f64_u64(__a, __n) (vcvt_n_f64_u64((uint64x1_t){(uint64_t)(__a)}, __n)[0])
+#define vcvts_n_s32_f32(__a, __n) (vcvt_n_s32_f32((float32x2_t){(float32_t)(__a)}, __n)[0])
+#define vcvts_n_u32_f32(__a, __n) (vcvt_n_u32_f32((float32x2_t){(float32_t)(__a)}, __n)[0])
+#define vcvtd_n_s64_f64(__a, __n) (vcvt_n_s64_f64((float64x1_t){(float64_t)(__a)}, __n)[0])
+#define vcvtd_n_u64_f64(__a, __n) (vcvt_n_u64_f64((float64x1_t){(float64_t)(__a)}, __n)[0])
+
+/* Single <-> double: the lower lanes, or with _high the upper ones. */
+__BADC_INTRIN float64x2_t vcvt_f64_f32(float32x2_t __a) {
+    return (float64x2_t)__builtin_neon_fcvtl_2s(__a);
+}
+__BADC_INTRIN float64x2_t vcvt_high_f64_f32(float32x4_t __a) {
+    return (float64x2_t)__builtin_neon_fcvtl2_4s(__a);
+}
+__BADC_INTRIN float32x2_t vcvt_f32_f64(float64x2_t __a) {
+    return (float32x2_t)__builtin_neon_fcvtn_2d(__a);
+}
+__BADC_INTRIN float32x4_t vcvt_high_f32_f64(float32x2_t __lo, float64x2_t __a) {
+    return vcombine_f32(__lo, vcvt_f32_f64(__a));
+}
+
+/* Structure loads and stores over the types of two to four vectors:
+ * vld1_x and vst1_x move consecutive vectors; vld2 to vld4 deinterleave
+ * the elements of that many vectors and vst2 to vst4 interleave them;
+ * _dup loads one structure into every lane, _lane one lane of each
+ * vector. */
+#define __BADC_NEON_STRUCT(T, n) typedef struct T##x##n##_t { T##_t val[n]; } T##x##n##_t;
+#define __BADC_NEON_LD1X(name, T, E, M)                                   \
+    __BADC_INTRIN T name(const E *__p) {                                  \
+        T __r;                                                            \
+        __builtin_memcpy(&__r, __p, sizeof __r);                          \
+        return __r;                                                       \
+    }
+#define __BADC_NEON_ST1X(name, T, E, M)                                   \
+    __BADC_INTRIN void name(E *__p, T __v) { __builtin_memcpy(__p, &__v, sizeof __v); }
+#define __BADC_NEON_LDN(name, T, E, M, N)                                 \
+    __BADC_INTRIN T name(const E *__p) {                                  \
+        T __r;                                                            \
+        for (int __i = 0; __i < (N); __i++)                               \
+            for (int __k = 0; __k < (M); __k++)                           \
+                __r.val[__k][__i] = __p[(M) * __i + __k];                 \
+        return __r;                                                       \
+    }
+#define __BADC_NEON_STN(name, T, E, M, N)                                 \
+    __BADC_INTRIN void name(E *__p, T __v) {                              \
+        for (int __i = 0; __i < (N); __i++)                               \
+            for (int __k = 0; __k < (M); __k++)                           \
+                __p[(M) * __i + __k] = __v.val[__k][__i];                 \
+    }
+/* Two and four vectors deinterleave by the even and odd lanes of pairs,
+ * twice for four, and interleave by the zips; `s` is the q-prefixed
+ * suffix of the vector intrinsics. */
+#define __BADC_NEON_LD2P(name, T, E, V, N, s)                             \
+    __BADC_INTRIN T name(const E *__p) {                                  \
+        V __a = vld1##s(__p), __b = vld1##s(__p + (N));                   \
+        return (T){{vuzp1##s(__a, __b), vuzp2##s(__a, __b)}};             \
+    }
+#define __BADC_NEON_LD4P(name, T, E, V, N, s)                             \
+    __BADC_INTRIN T name(const E *__p) {                                  \
+        V __a = vld1##s(__p), __b = vld1##s(__p + (N));                   \
+        V __c = vld1##s(__p + 2 * (N)), __d = vld1##s(__p + 3 * (N));     \
+        V __x = vuzp1##s(__a, __b), __y = vuzp2##s(__a, __b);             \
+        V __z = vuzp1##s(__c, __d), __w = vuzp2##s(__c, __d);             \
+        return (T){{vuzp1##s(__x, __z), vuzp1##s(__y, __w), vuzp2##s(__x, __z), vuzp2##s(__y, __w)}}; \
+    }
+#define __BADC_NEON_ST2P(name, T, E, V, N, s)                             \
+    __BADC_INTRIN void name(E *__p, T __v) {                              \
+        vst1##s(__p, vzip1##s(__v.val[0], __v.val[1]));                   \
+        vst1##s(__p + (N), vzip2##s(__v.val[0], __v.val[1]));             \
+    }
+#define __BADC_NEON_ST4P(name, T, E, V, N, s)                             \
+    __BADC_INTRIN void name(E *__p, T __v) {                              \
+        V __x = vzip1##s(__v.val[0], __v.val[2]), __y = vzip2##s(__v.val[0], __v.val[2]); \
+        V __z = vzip1##s(__v.val[1], __v.val[3]), __w = vzip2##s(__v.val[1], __v.val[3]); \
+        vst1##s(__p, vzip1##s(__x, __z));                                 \
+        vst1##s(__p + (N), vzip2##s(__x, __z));                           \
+        vst1##s(__p + 2 * (N), vzip1##s(__y, __w));                       \
+        vst1##s(__p + 3 * (N), vzip2##s(__y, __w));                       \
+    }
+#define __BADC_NEON_LDDUP(name, T, E, M, N)                               \
+    __BADC_INTRIN T name(const E *__p) {                                  \
+        T __r;                                                            \
+        for (int __k = 0; __k < (M); __k++)                               \
+            for (int __i = 0; __i < (N); __i++)                           \
+                __r.val[__k][__i] = __p[__k];                             \
+        return __r;                                                       \
+    }
+#define __BADC_NEON_LDNL(T, M, __p, __v, __n) __extension__({              \
+    T __lv = (__v);                                                       \
+    const __typeof__(__lv.val[0][0]) *__lp = (__p);                       \
+    __BADC_NEON_LANE(__n, __BADC_NEON_NLANES(__lv.val[0]));               \
+    for (int __k = 0; __k < (M); __k++)                                   \
+        __lv.val[__k][__n] = __lp[__k];                                   \
+    __lv;                                                                 \
+})
+#define __BADC_NEON_STNL(T, M, __p, __v, __n) __extension__({              \
+    T __lv = (__v);                                                       \
+    __typeof__(__lv.val[0][0]) *__lp = (__p);                             \
+    __BADC_NEON_LANE(__n, __BADC_NEON_NLANES(__lv.val[0]));               \
+    for (int __k = 0; __k < (M); __k++)                                   \
+        __lp[__k] = __lv.val[__k][__n];                                   \
+})
+__BADC_NEON_STRUCT(int8x8, 3)
+__BADC_NEON_STRUCT(int8x8, 4)
+__BADC_NEON_STRUCT(int8x16, 3)
+__BADC_NEON_STRUCT(int8x16, 4)
+__BADC_NEON_STRUCT(uint8x8, 3)
+__BADC_NEON_STRUCT(uint8x8, 4)
+__BADC_NEON_STRUCT(uint8x16, 3)
+__BADC_NEON_STRUCT(uint8x16, 4)
+__BADC_NEON_STRUCT(poly8x8, 3)
+__BADC_NEON_STRUCT(poly8x8, 4)
+__BADC_NEON_STRUCT(poly8x16, 3)
+__BADC_NEON_STRUCT(poly8x16, 4)
+__BADC_NEON_STRUCT(int16x4, 3)
+__BADC_NEON_STRUCT(int16x4, 4)
+__BADC_NEON_STRUCT(int16x8, 3)
+__BADC_NEON_STRUCT(int16x8, 4)
+__BADC_NEON_STRUCT(uint16x4, 3)
+__BADC_NEON_STRUCT(uint16x4, 4)
+__BADC_NEON_STRUCT(uint16x8, 3)
+__BADC_NEON_STRUCT(uint16x8, 4)
+__BADC_NEON_STRUCT(poly16x4, 3)
+__BADC_NEON_STRUCT(poly16x4, 4)
+__BADC_NEON_STRUCT(poly16x8, 3)
+__BADC_NEON_STRUCT(poly16x8, 4)
+__BADC_NEON_STRUCT(int32x2, 3)
+__BADC_NEON_STRUCT(int32x2, 4)
+__BADC_NEON_STRUCT(int32x4, 3)
+__BADC_NEON_STRUCT(int32x4, 4)
+__BADC_NEON_STRUCT(uint32x2, 3)
+__BADC_NEON_STRUCT(uint32x2, 4)
+__BADC_NEON_STRUCT(uint32x4, 3)
+__BADC_NEON_STRUCT(uint32x4, 4)
+__BADC_NEON_STRUCT(float32x2, 3)
+__BADC_NEON_STRUCT(float32x2, 4)
+__BADC_NEON_STRUCT(float32x4, 3)
+__BADC_NEON_STRUCT(float32x4, 4)
+__BADC_NEON_STRUCT(int64x1, 2)
+__BADC_NEON_STRUCT(int64x1, 3)
+__BADC_NEON_STRUCT(int64x1, 4)
+__BADC_NEON_STRUCT(int64x2, 2)
+__BADC_NEON_STRUCT(int64x2, 3)
+__BADC_NEON_STRUCT(int64x2, 4)
+__BADC_NEON_STRUCT(uint64x1, 2)
+__BADC_NEON_STRUCT(uint64x1, 3)
+__BADC_NEON_STRUCT(uint64x1, 4)
+__BADC_NEON_STRUCT(uint64x2, 2)
+__BADC_NEON_STRUCT(uint64x2, 3)
+__BADC_NEON_STRUCT(uint64x2, 4)
+__BADC_NEON_STRUCT(poly64x1, 2)
+__BADC_NEON_STRUCT(poly64x1, 3)
+__BADC_NEON_STRUCT(poly64x1, 4)
+__BADC_NEON_STRUCT(poly64x2, 2)
+__BADC_NEON_STRUCT(poly64x2, 3)
+__BADC_NEON_STRUCT(poly64x2, 4)
+__BADC_NEON_STRUCT(float64x1, 2)
+__BADC_NEON_STRUCT(float64x1, 3)
+__BADC_NEON_STRUCT(float64x1, 4)
+__BADC_NEON_STRUCT(float64x2, 2)
+__BADC_NEON_STRUCT(float64x2, 3)
+__BADC_NEON_STRUCT(float64x2, 4)
+__BADC_NEON_LD1X(vld1_s8_x2, int8x8x2_t, int8_t, 2)
+__BADC_NEON_ST1X(vst1_s8_x2, int8x8x2_t, int8_t, 2)
+__BADC_NEON_LD2P(vld2_s8, int8x8x2_t, int8_t, int8x8_t, 8, _s8)
+__BADC_NEON_ST2P(vst2_s8, int8x8x2_t, int8_t, int8x8_t, 8, _s8)
+__BADC_NEON_LDDUP(vld2_dup_s8, int8x8x2_t, int8_t, 2, 8)
+#define vld2_lane_s8(__p, __v, __n) __BADC_NEON_LDNL(int8x8x2_t, 2, __p, __v, __n)
+#define vst2_lane_s8(__p, __v, __n) __BADC_NEON_STNL(int8x8x2_t, 2, __p, __v, __n)
+__BADC_NEON_LD1X(vld1_s8_x3, int8x8x3_t, int8_t, 3)
+__BADC_NEON_ST1X(vst1_s8_x3, int8x8x3_t, int8_t, 3)
+__BADC_NEON_LDN(vld3_s8, int8x8x3_t, int8_t, 3, 8)
+__BADC_NEON_STN(vst3_s8, int8x8x3_t, int8_t, 3, 8)
+__BADC_NEON_LDDUP(vld3_dup_s8, int8x8x3_t, int8_t, 3, 8)
+#define vld3_lane_s8(__p, __v, __n) __BADC_NEON_LDNL(int8x8x3_t, 3, __p, __v, __n)
+#define vst3_lane_s8(__p, __v, __n) __BADC_NEON_STNL(int8x8x3_t, 3, __p, __v, __n)
+__BADC_NEON_LD1X(vld1_s8_x4, int8x8x4_t, int8_t, 4)
+__BADC_NEON_ST1X(vst1_s8_x4, int8x8x4_t, int8_t, 4)
+__BADC_NEON_LD4P(vld4_s8, int8x8x4_t, int8_t, int8x8_t, 8, _s8)
+__BADC_NEON_ST4P(vst4_s8, int8x8x4_t, int8_t, int8x8_t, 8, _s8)
+__BADC_NEON_LDDUP(vld4_dup_s8, int8x8x4_t, int8_t, 4, 8)
+#define vld4_lane_s8(__p, __v, __n) __BADC_NEON_LDNL(int8x8x4_t, 4, __p, __v, __n)
+#define vst4_lane_s8(__p, __v, __n) __BADC_NEON_STNL(int8x8x4_t, 4, __p, __v, __n)
+__BADC_NEON_LD1X(vld1q_s8_x2, int8x16x2_t, int8_t, 2)
+__BADC_NEON_ST1X(vst1q_s8_x2, int8x16x2_t, int8_t, 2)
+__BADC_NEON_LD2P(vld2q_s8, int8x16x2_t, int8_t, int8x16_t, 16, q_s8)
+__BADC_NEON_ST2P(vst2q_s8, int8x16x2_t, int8_t, int8x16_t, 16, q_s8)
+__BADC_NEON_LDDUP(vld2q_dup_s8, int8x16x2_t, int8_t, 2, 16)
+#define vld2q_lane_s8(__p, __v, __n) __BADC_NEON_LDNL(int8x16x2_t, 2, __p, __v, __n)
+#define vst2q_lane_s8(__p, __v, __n) __BADC_NEON_STNL(int8x16x2_t, 2, __p, __v, __n)
+__BADC_NEON_LD1X(vld1q_s8_x3, int8x16x3_t, int8_t, 3)
+__BADC_NEON_ST1X(vst1q_s8_x3, int8x16x3_t, int8_t, 3)
+__BADC_NEON_LDN(vld3q_s8, int8x16x3_t, int8_t, 3, 16)
+__BADC_NEON_STN(vst3q_s8, int8x16x3_t, int8_t, 3, 16)
+__BADC_NEON_LDDUP(vld3q_dup_s8, int8x16x3_t, int8_t, 3, 16)
+#define vld3q_lane_s8(__p, __v, __n) __BADC_NEON_LDNL(int8x16x3_t, 3, __p, __v, __n)
+#define vst3q_lane_s8(__p, __v, __n) __BADC_NEON_STNL(int8x16x3_t, 3, __p, __v, __n)
+__BADC_NEON_LD1X(vld1q_s8_x4, int8x16x4_t, int8_t, 4)
+__BADC_NEON_ST1X(vst1q_s8_x4, int8x16x4_t, int8_t, 4)
+__BADC_NEON_LD4P(vld4q_s8, int8x16x4_t, int8_t, int8x16_t, 16, q_s8)
+__BADC_NEON_ST4P(vst4q_s8, int8x16x4_t, int8_t, int8x16_t, 16, q_s8)
+__BADC_NEON_LDDUP(vld4q_dup_s8, int8x16x4_t, int8_t, 4, 16)
+#define vld4q_lane_s8(__p, __v, __n) __BADC_NEON_LDNL(int8x16x4_t, 4, __p, __v, __n)
+#define vst4q_lane_s8(__p, __v, __n) __BADC_NEON_STNL(int8x16x4_t, 4, __p, __v, __n)
+__BADC_NEON_LD1X(vld1_u8_x2, uint8x8x2_t, uint8_t, 2)
+__BADC_NEON_ST1X(vst1_u8_x2, uint8x8x2_t, uint8_t, 2)
+__BADC_NEON_LD2P(vld2_u8, uint8x8x2_t, uint8_t, uint8x8_t, 8, _u8)
+__BADC_NEON_ST2P(vst2_u8, uint8x8x2_t, uint8_t, uint8x8_t, 8, _u8)
+__BADC_NEON_LDDUP(vld2_dup_u8, uint8x8x2_t, uint8_t, 2, 8)
+#define vld2_lane_u8(__p, __v, __n) __BADC_NEON_LDNL(uint8x8x2_t, 2, __p, __v, __n)
+#define vst2_lane_u8(__p, __v, __n) __BADC_NEON_STNL(uint8x8x2_t, 2, __p, __v, __n)
+__BADC_NEON_LD1X(vld1_u8_x3, uint8x8x3_t, uint8_t, 3)
+__BADC_NEON_ST1X(vst1_u8_x3, uint8x8x3_t, uint8_t, 3)
+__BADC_NEON_LDN(vld3_u8, uint8x8x3_t, uint8_t, 3, 8)
+__BADC_NEON_STN(vst3_u8, uint8x8x3_t, uint8_t, 3, 8)
+__BADC_NEON_LDDUP(vld3_dup_u8, uint8x8x3_t, uint8_t, 3, 8)
+#define vld3_lane_u8(__p, __v, __n) __BADC_NEON_LDNL(uint8x8x3_t, 3, __p, __v, __n)
+#define vst3_lane_u8(__p, __v, __n) __BADC_NEON_STNL(uint8x8x3_t, 3, __p, __v, __n)
+__BADC_NEON_LD1X(vld1_u8_x4, uint8x8x4_t, uint8_t, 4)
+__BADC_NEON_ST1X(vst1_u8_x4, uint8x8x4_t, uint8_t, 4)
+__BADC_NEON_LD4P(vld4_u8, uint8x8x4_t, uint8_t, uint8x8_t, 8, _u8)
+__BADC_NEON_ST4P(vst4_u8, uint8x8x4_t, uint8_t, uint8x8_t, 8, _u8)
+__BADC_NEON_LDDUP(vld4_dup_u8, uint8x8x4_t, uint8_t, 4, 8)
+#define vld4_lane_u8(__p, __v, __n) __BADC_NEON_LDNL(uint8x8x4_t, 4, __p, __v, __n)
+#define vst4_lane_u8(__p, __v, __n) __BADC_NEON_STNL(uint8x8x4_t, 4, __p, __v, __n)
+__BADC_NEON_LD1X(vld1q_u8_x2, uint8x16x2_t, uint8_t, 2)
+__BADC_NEON_ST1X(vst1q_u8_x2, uint8x16x2_t, uint8_t, 2)
+__BADC_NEON_LD2P(vld2q_u8, uint8x16x2_t, uint8_t, uint8x16_t, 16, q_u8)
+__BADC_NEON_ST2P(vst2q_u8, uint8x16x2_t, uint8_t, uint8x16_t, 16, q_u8)
+__BADC_NEON_LDDUP(vld2q_dup_u8, uint8x16x2_t, uint8_t, 2, 16)
+#define vld2q_lane_u8(__p, __v, __n) __BADC_NEON_LDNL(uint8x16x2_t, 2, __p, __v, __n)
+#define vst2q_lane_u8(__p, __v, __n) __BADC_NEON_STNL(uint8x16x2_t, 2, __p, __v, __n)
+__BADC_NEON_LD1X(vld1q_u8_x3, uint8x16x3_t, uint8_t, 3)
+__BADC_NEON_ST1X(vst1q_u8_x3, uint8x16x3_t, uint8_t, 3)
+__BADC_NEON_LDN(vld3q_u8, uint8x16x3_t, uint8_t, 3, 16)
+__BADC_NEON_STN(vst3q_u8, uint8x16x3_t, uint8_t, 3, 16)
+__BADC_NEON_LDDUP(vld3q_dup_u8, uint8x16x3_t, uint8_t, 3, 16)
+#define vld3q_lane_u8(__p, __v, __n) __BADC_NEON_LDNL(uint8x16x3_t, 3, __p, __v, __n)
+#define vst3q_lane_u8(__p, __v, __n) __BADC_NEON_STNL(uint8x16x3_t, 3, __p, __v, __n)
+__BADC_NEON_LD1X(vld1q_u8_x4, uint8x16x4_t, uint8_t, 4)
+__BADC_NEON_ST1X(vst1q_u8_x4, uint8x16x4_t, uint8_t, 4)
+__BADC_NEON_LD4P(vld4q_u8, uint8x16x4_t, uint8_t, uint8x16_t, 16, q_u8)
+__BADC_NEON_ST4P(vst4q_u8, uint8x16x4_t, uint8_t, uint8x16_t, 16, q_u8)
+__BADC_NEON_LDDUP(vld4q_dup_u8, uint8x16x4_t, uint8_t, 4, 16)
+#define vld4q_lane_u8(__p, __v, __n) __BADC_NEON_LDNL(uint8x16x4_t, 4, __p, __v, __n)
+#define vst4q_lane_u8(__p, __v, __n) __BADC_NEON_STNL(uint8x16x4_t, 4, __p, __v, __n)
+__BADC_NEON_LD1X(vld1_p8_x2, poly8x8x2_t, poly8_t, 2)
+__BADC_NEON_ST1X(vst1_p8_x2, poly8x8x2_t, poly8_t, 2)
+__BADC_NEON_LD2P(vld2_p8, poly8x8x2_t, poly8_t, poly8x8_t, 8, _p8)
+__BADC_NEON_ST2P(vst2_p8, poly8x8x2_t, poly8_t, poly8x8_t, 8, _p8)
+__BADC_NEON_LDDUP(vld2_dup_p8, poly8x8x2_t, poly8_t, 2, 8)
+#define vld2_lane_p8(__p, __v, __n) __BADC_NEON_LDNL(poly8x8x2_t, 2, __p, __v, __n)
+#define vst2_lane_p8(__p, __v, __n) __BADC_NEON_STNL(poly8x8x2_t, 2, __p, __v, __n)
+__BADC_NEON_LD1X(vld1_p8_x3, poly8x8x3_t, poly8_t, 3)
+__BADC_NEON_ST1X(vst1_p8_x3, poly8x8x3_t, poly8_t, 3)
+__BADC_NEON_LDN(vld3_p8, poly8x8x3_t, poly8_t, 3, 8)
+__BADC_NEON_STN(vst3_p8, poly8x8x3_t, poly8_t, 3, 8)
+__BADC_NEON_LDDUP(vld3_dup_p8, poly8x8x3_t, poly8_t, 3, 8)
+#define vld3_lane_p8(__p, __v, __n) __BADC_NEON_LDNL(poly8x8x3_t, 3, __p, __v, __n)
+#define vst3_lane_p8(__p, __v, __n) __BADC_NEON_STNL(poly8x8x3_t, 3, __p, __v, __n)
+__BADC_NEON_LD1X(vld1_p8_x4, poly8x8x4_t, poly8_t, 4)
+__BADC_NEON_ST1X(vst1_p8_x4, poly8x8x4_t, poly8_t, 4)
+__BADC_NEON_LD4P(vld4_p8, poly8x8x4_t, poly8_t, poly8x8_t, 8, _p8)
+__BADC_NEON_ST4P(vst4_p8, poly8x8x4_t, poly8_t, poly8x8_t, 8, _p8)
+__BADC_NEON_LDDUP(vld4_dup_p8, poly8x8x4_t, poly8_t, 4, 8)
+#define vld4_lane_p8(__p, __v, __n) __BADC_NEON_LDNL(poly8x8x4_t, 4, __p, __v, __n)
+#define vst4_lane_p8(__p, __v, __n) __BADC_NEON_STNL(poly8x8x4_t, 4, __p, __v, __n)
+__BADC_NEON_LD1X(vld1q_p8_x2, poly8x16x2_t, poly8_t, 2)
+__BADC_NEON_ST1X(vst1q_p8_x2, poly8x16x2_t, poly8_t, 2)
+__BADC_NEON_LD2P(vld2q_p8, poly8x16x2_t, poly8_t, poly8x16_t, 16, q_p8)
+__BADC_NEON_ST2P(vst2q_p8, poly8x16x2_t, poly8_t, poly8x16_t, 16, q_p8)
+__BADC_NEON_LDDUP(vld2q_dup_p8, poly8x16x2_t, poly8_t, 2, 16)
+#define vld2q_lane_p8(__p, __v, __n) __BADC_NEON_LDNL(poly8x16x2_t, 2, __p, __v, __n)
+#define vst2q_lane_p8(__p, __v, __n) __BADC_NEON_STNL(poly8x16x2_t, 2, __p, __v, __n)
+__BADC_NEON_LD1X(vld1q_p8_x3, poly8x16x3_t, poly8_t, 3)
+__BADC_NEON_ST1X(vst1q_p8_x3, poly8x16x3_t, poly8_t, 3)
+__BADC_NEON_LDN(vld3q_p8, poly8x16x3_t, poly8_t, 3, 16)
+__BADC_NEON_STN(vst3q_p8, poly8x16x3_t, poly8_t, 3, 16)
+__BADC_NEON_LDDUP(vld3q_dup_p8, poly8x16x3_t, poly8_t, 3, 16)
+#define vld3q_lane_p8(__p, __v, __n) __BADC_NEON_LDNL(poly8x16x3_t, 3, __p, __v, __n)
+#define vst3q_lane_p8(__p, __v, __n) __BADC_NEON_STNL(poly8x16x3_t, 3, __p, __v, __n)
+__BADC_NEON_LD1X(vld1q_p8_x4, poly8x16x4_t, poly8_t, 4)
+__BADC_NEON_ST1X(vst1q_p8_x4, poly8x16x4_t, poly8_t, 4)
+__BADC_NEON_LD4P(vld4q_p8, poly8x16x4_t, poly8_t, poly8x16_t, 16, q_p8)
+__BADC_NEON_ST4P(vst4q_p8, poly8x16x4_t, poly8_t, poly8x16_t, 16, q_p8)
+__BADC_NEON_LDDUP(vld4q_dup_p8, poly8x16x4_t, poly8_t, 4, 16)
+#define vld4q_lane_p8(__p, __v, __n) __BADC_NEON_LDNL(poly8x16x4_t, 4, __p, __v, __n)
+#define vst4q_lane_p8(__p, __v, __n) __BADC_NEON_STNL(poly8x16x4_t, 4, __p, __v, __n)
+__BADC_NEON_LD1X(vld1_s16_x2, int16x4x2_t, int16_t, 2)
+__BADC_NEON_ST1X(vst1_s16_x2, int16x4x2_t, int16_t, 2)
+__BADC_NEON_LD2P(vld2_s16, int16x4x2_t, int16_t, int16x4_t, 4, _s16)
+__BADC_NEON_ST2P(vst2_s16, int16x4x2_t, int16_t, int16x4_t, 4, _s16)
+__BADC_NEON_LDDUP(vld2_dup_s16, int16x4x2_t, int16_t, 2, 4)
+#define vld2_lane_s16(__p, __v, __n) __BADC_NEON_LDNL(int16x4x2_t, 2, __p, __v, __n)
+#define vst2_lane_s16(__p, __v, __n) __BADC_NEON_STNL(int16x4x2_t, 2, __p, __v, __n)
+__BADC_NEON_LD1X(vld1_s16_x3, int16x4x3_t, int16_t, 3)
+__BADC_NEON_ST1X(vst1_s16_x3, int16x4x3_t, int16_t, 3)
+__BADC_NEON_LDN(vld3_s16, int16x4x3_t, int16_t, 3, 4)
+__BADC_NEON_STN(vst3_s16, int16x4x3_t, int16_t, 3, 4)
+__BADC_NEON_LDDUP(vld3_dup_s16, int16x4x3_t, int16_t, 3, 4)
+#define vld3_lane_s16(__p, __v, __n) __BADC_NEON_LDNL(int16x4x3_t, 3, __p, __v, __n)
+#define vst3_lane_s16(__p, __v, __n) __BADC_NEON_STNL(int16x4x3_t, 3, __p, __v, __n)
+__BADC_NEON_LD1X(vld1_s16_x4, int16x4x4_t, int16_t, 4)
+__BADC_NEON_ST1X(vst1_s16_x4, int16x4x4_t, int16_t, 4)
+__BADC_NEON_LD4P(vld4_s16, int16x4x4_t, int16_t, int16x4_t, 4, _s16)
+__BADC_NEON_ST4P(vst4_s16, int16x4x4_t, int16_t, int16x4_t, 4, _s16)
+__BADC_NEON_LDDUP(vld4_dup_s16, int16x4x4_t, int16_t, 4, 4)
+#define vld4_lane_s16(__p, __v, __n) __BADC_NEON_LDNL(int16x4x4_t, 4, __p, __v, __n)
+#define vst4_lane_s16(__p, __v, __n) __BADC_NEON_STNL(int16x4x4_t, 4, __p, __v, __n)
+__BADC_NEON_LD1X(vld1q_s16_x2, int16x8x2_t, int16_t, 2)
+__BADC_NEON_ST1X(vst1q_s16_x2, int16x8x2_t, int16_t, 2)
+__BADC_NEON_LD2P(vld2q_s16, int16x8x2_t, int16_t, int16x8_t, 8, q_s16)
+__BADC_NEON_ST2P(vst2q_s16, int16x8x2_t, int16_t, int16x8_t, 8, q_s16)
+__BADC_NEON_LDDUP(vld2q_dup_s16, int16x8x2_t, int16_t, 2, 8)
+#define vld2q_lane_s16(__p, __v, __n) __BADC_NEON_LDNL(int16x8x2_t, 2, __p, __v, __n)
+#define vst2q_lane_s16(__p, __v, __n) __BADC_NEON_STNL(int16x8x2_t, 2, __p, __v, __n)
+__BADC_NEON_LD1X(vld1q_s16_x3, int16x8x3_t, int16_t, 3)
+__BADC_NEON_ST1X(vst1q_s16_x3, int16x8x3_t, int16_t, 3)
+__BADC_NEON_LDN(vld3q_s16, int16x8x3_t, int16_t, 3, 8)
+__BADC_NEON_STN(vst3q_s16, int16x8x3_t, int16_t, 3, 8)
+__BADC_NEON_LDDUP(vld3q_dup_s16, int16x8x3_t, int16_t, 3, 8)
+#define vld3q_lane_s16(__p, __v, __n) __BADC_NEON_LDNL(int16x8x3_t, 3, __p, __v, __n)
+#define vst3q_lane_s16(__p, __v, __n) __BADC_NEON_STNL(int16x8x3_t, 3, __p, __v, __n)
+__BADC_NEON_LD1X(vld1q_s16_x4, int16x8x4_t, int16_t, 4)
+__BADC_NEON_ST1X(vst1q_s16_x4, int16x8x4_t, int16_t, 4)
+__BADC_NEON_LD4P(vld4q_s16, int16x8x4_t, int16_t, int16x8_t, 8, q_s16)
+__BADC_NEON_ST4P(vst4q_s16, int16x8x4_t, int16_t, int16x8_t, 8, q_s16)
+__BADC_NEON_LDDUP(vld4q_dup_s16, int16x8x4_t, int16_t, 4, 8)
+#define vld4q_lane_s16(__p, __v, __n) __BADC_NEON_LDNL(int16x8x4_t, 4, __p, __v, __n)
+#define vst4q_lane_s16(__p, __v, __n) __BADC_NEON_STNL(int16x8x4_t, 4, __p, __v, __n)
+__BADC_NEON_LD1X(vld1_u16_x2, uint16x4x2_t, uint16_t, 2)
+__BADC_NEON_ST1X(vst1_u16_x2, uint16x4x2_t, uint16_t, 2)
+__BADC_NEON_LD2P(vld2_u16, uint16x4x2_t, uint16_t, uint16x4_t, 4, _u16)
+__BADC_NEON_ST2P(vst2_u16, uint16x4x2_t, uint16_t, uint16x4_t, 4, _u16)
+__BADC_NEON_LDDUP(vld2_dup_u16, uint16x4x2_t, uint16_t, 2, 4)
+#define vld2_lane_u16(__p, __v, __n) __BADC_NEON_LDNL(uint16x4x2_t, 2, __p, __v, __n)
+#define vst2_lane_u16(__p, __v, __n) __BADC_NEON_STNL(uint16x4x2_t, 2, __p, __v, __n)
+__BADC_NEON_LD1X(vld1_u16_x3, uint16x4x3_t, uint16_t, 3)
+__BADC_NEON_ST1X(vst1_u16_x3, uint16x4x3_t, uint16_t, 3)
+__BADC_NEON_LDN(vld3_u16, uint16x4x3_t, uint16_t, 3, 4)
+__BADC_NEON_STN(vst3_u16, uint16x4x3_t, uint16_t, 3, 4)
+__BADC_NEON_LDDUP(vld3_dup_u16, uint16x4x3_t, uint16_t, 3, 4)
+#define vld3_lane_u16(__p, __v, __n) __BADC_NEON_LDNL(uint16x4x3_t, 3, __p, __v, __n)
+#define vst3_lane_u16(__p, __v, __n) __BADC_NEON_STNL(uint16x4x3_t, 3, __p, __v, __n)
+__BADC_NEON_LD1X(vld1_u16_x4, uint16x4x4_t, uint16_t, 4)
+__BADC_NEON_ST1X(vst1_u16_x4, uint16x4x4_t, uint16_t, 4)
+__BADC_NEON_LD4P(vld4_u16, uint16x4x4_t, uint16_t, uint16x4_t, 4, _u16)
+__BADC_NEON_ST4P(vst4_u16, uint16x4x4_t, uint16_t, uint16x4_t, 4, _u16)
+__BADC_NEON_LDDUP(vld4_dup_u16, uint16x4x4_t, uint16_t, 4, 4)
+#define vld4_lane_u16(__p, __v, __n) __BADC_NEON_LDNL(uint16x4x4_t, 4, __p, __v, __n)
+#define vst4_lane_u16(__p, __v, __n) __BADC_NEON_STNL(uint16x4x4_t, 4, __p, __v, __n)
+__BADC_NEON_LD1X(vld1q_u16_x2, uint16x8x2_t, uint16_t, 2)
+__BADC_NEON_ST1X(vst1q_u16_x2, uint16x8x2_t, uint16_t, 2)
+__BADC_NEON_LD2P(vld2q_u16, uint16x8x2_t, uint16_t, uint16x8_t, 8, q_u16)
+__BADC_NEON_ST2P(vst2q_u16, uint16x8x2_t, uint16_t, uint16x8_t, 8, q_u16)
+__BADC_NEON_LDDUP(vld2q_dup_u16, uint16x8x2_t, uint16_t, 2, 8)
+#define vld2q_lane_u16(__p, __v, __n) __BADC_NEON_LDNL(uint16x8x2_t, 2, __p, __v, __n)
+#define vst2q_lane_u16(__p, __v, __n) __BADC_NEON_STNL(uint16x8x2_t, 2, __p, __v, __n)
+__BADC_NEON_LD1X(vld1q_u16_x3, uint16x8x3_t, uint16_t, 3)
+__BADC_NEON_ST1X(vst1q_u16_x3, uint16x8x3_t, uint16_t, 3)
+__BADC_NEON_LDN(vld3q_u16, uint16x8x3_t, uint16_t, 3, 8)
+__BADC_NEON_STN(vst3q_u16, uint16x8x3_t, uint16_t, 3, 8)
+__BADC_NEON_LDDUP(vld3q_dup_u16, uint16x8x3_t, uint16_t, 3, 8)
+#define vld3q_lane_u16(__p, __v, __n) __BADC_NEON_LDNL(uint16x8x3_t, 3, __p, __v, __n)
+#define vst3q_lane_u16(__p, __v, __n) __BADC_NEON_STNL(uint16x8x3_t, 3, __p, __v, __n)
+__BADC_NEON_LD1X(vld1q_u16_x4, uint16x8x4_t, uint16_t, 4)
+__BADC_NEON_ST1X(vst1q_u16_x4, uint16x8x4_t, uint16_t, 4)
+__BADC_NEON_LD4P(vld4q_u16, uint16x8x4_t, uint16_t, uint16x8_t, 8, q_u16)
+__BADC_NEON_ST4P(vst4q_u16, uint16x8x4_t, uint16_t, uint16x8_t, 8, q_u16)
+__BADC_NEON_LDDUP(vld4q_dup_u16, uint16x8x4_t, uint16_t, 4, 8)
+#define vld4q_lane_u16(__p, __v, __n) __BADC_NEON_LDNL(uint16x8x4_t, 4, __p, __v, __n)
+#define vst4q_lane_u16(__p, __v, __n) __BADC_NEON_STNL(uint16x8x4_t, 4, __p, __v, __n)
+__BADC_NEON_LD1X(vld1_p16_x2, poly16x4x2_t, poly16_t, 2)
+__BADC_NEON_ST1X(vst1_p16_x2, poly16x4x2_t, poly16_t, 2)
+__BADC_NEON_LD2P(vld2_p16, poly16x4x2_t, poly16_t, poly16x4_t, 4, _p16)
+__BADC_NEON_ST2P(vst2_p16, poly16x4x2_t, poly16_t, poly16x4_t, 4, _p16)
+__BADC_NEON_LDDUP(vld2_dup_p16, poly16x4x2_t, poly16_t, 2, 4)
+#define vld2_lane_p16(__p, __v, __n) __BADC_NEON_LDNL(poly16x4x2_t, 2, __p, __v, __n)
+#define vst2_lane_p16(__p, __v, __n) __BADC_NEON_STNL(poly16x4x2_t, 2, __p, __v, __n)
+__BADC_NEON_LD1X(vld1_p16_x3, poly16x4x3_t, poly16_t, 3)
+__BADC_NEON_ST1X(vst1_p16_x3, poly16x4x3_t, poly16_t, 3)
+__BADC_NEON_LDN(vld3_p16, poly16x4x3_t, poly16_t, 3, 4)
+__BADC_NEON_STN(vst3_p16, poly16x4x3_t, poly16_t, 3, 4)
+__BADC_NEON_LDDUP(vld3_dup_p16, poly16x4x3_t, poly16_t, 3, 4)
+#define vld3_lane_p16(__p, __v, __n) __BADC_NEON_LDNL(poly16x4x3_t, 3, __p, __v, __n)
+#define vst3_lane_p16(__p, __v, __n) __BADC_NEON_STNL(poly16x4x3_t, 3, __p, __v, __n)
+__BADC_NEON_LD1X(vld1_p16_x4, poly16x4x4_t, poly16_t, 4)
+__BADC_NEON_ST1X(vst1_p16_x4, poly16x4x4_t, poly16_t, 4)
+__BADC_NEON_LD4P(vld4_p16, poly16x4x4_t, poly16_t, poly16x4_t, 4, _p16)
+__BADC_NEON_ST4P(vst4_p16, poly16x4x4_t, poly16_t, poly16x4_t, 4, _p16)
+__BADC_NEON_LDDUP(vld4_dup_p16, poly16x4x4_t, poly16_t, 4, 4)
+#define vld4_lane_p16(__p, __v, __n) __BADC_NEON_LDNL(poly16x4x4_t, 4, __p, __v, __n)
+#define vst4_lane_p16(__p, __v, __n) __BADC_NEON_STNL(poly16x4x4_t, 4, __p, __v, __n)
+__BADC_NEON_LD1X(vld1q_p16_x2, poly16x8x2_t, poly16_t, 2)
+__BADC_NEON_ST1X(vst1q_p16_x2, poly16x8x2_t, poly16_t, 2)
+__BADC_NEON_LD2P(vld2q_p16, poly16x8x2_t, poly16_t, poly16x8_t, 8, q_p16)
+__BADC_NEON_ST2P(vst2q_p16, poly16x8x2_t, poly16_t, poly16x8_t, 8, q_p16)
+__BADC_NEON_LDDUP(vld2q_dup_p16, poly16x8x2_t, poly16_t, 2, 8)
+#define vld2q_lane_p16(__p, __v, __n) __BADC_NEON_LDNL(poly16x8x2_t, 2, __p, __v, __n)
+#define vst2q_lane_p16(__p, __v, __n) __BADC_NEON_STNL(poly16x8x2_t, 2, __p, __v, __n)
+__BADC_NEON_LD1X(vld1q_p16_x3, poly16x8x3_t, poly16_t, 3)
+__BADC_NEON_ST1X(vst1q_p16_x3, poly16x8x3_t, poly16_t, 3)
+__BADC_NEON_LDN(vld3q_p16, poly16x8x3_t, poly16_t, 3, 8)
+__BADC_NEON_STN(vst3q_p16, poly16x8x3_t, poly16_t, 3, 8)
+__BADC_NEON_LDDUP(vld3q_dup_p16, poly16x8x3_t, poly16_t, 3, 8)
+#define vld3q_lane_p16(__p, __v, __n) __BADC_NEON_LDNL(poly16x8x3_t, 3, __p, __v, __n)
+#define vst3q_lane_p16(__p, __v, __n) __BADC_NEON_STNL(poly16x8x3_t, 3, __p, __v, __n)
+__BADC_NEON_LD1X(vld1q_p16_x4, poly16x8x4_t, poly16_t, 4)
+__BADC_NEON_ST1X(vst1q_p16_x4, poly16x8x4_t, poly16_t, 4)
+__BADC_NEON_LD4P(vld4q_p16, poly16x8x4_t, poly16_t, poly16x8_t, 8, q_p16)
+__BADC_NEON_ST4P(vst4q_p16, poly16x8x4_t, poly16_t, poly16x8_t, 8, q_p16)
+__BADC_NEON_LDDUP(vld4q_dup_p16, poly16x8x4_t, poly16_t, 4, 8)
+#define vld4q_lane_p16(__p, __v, __n) __BADC_NEON_LDNL(poly16x8x4_t, 4, __p, __v, __n)
+#define vst4q_lane_p16(__p, __v, __n) __BADC_NEON_STNL(poly16x8x4_t, 4, __p, __v, __n)
+__BADC_NEON_LD1X(vld1_s32_x2, int32x2x2_t, int32_t, 2)
+__BADC_NEON_ST1X(vst1_s32_x2, int32x2x2_t, int32_t, 2)
+__BADC_NEON_LD2P(vld2_s32, int32x2x2_t, int32_t, int32x2_t, 2, _s32)
+__BADC_NEON_ST2P(vst2_s32, int32x2x2_t, int32_t, int32x2_t, 2, _s32)
+__BADC_NEON_LDDUP(vld2_dup_s32, int32x2x2_t, int32_t, 2, 2)
+#define vld2_lane_s32(__p, __v, __n) __BADC_NEON_LDNL(int32x2x2_t, 2, __p, __v, __n)
+#define vst2_lane_s32(__p, __v, __n) __BADC_NEON_STNL(int32x2x2_t, 2, __p, __v, __n)
+__BADC_NEON_LD1X(vld1_s32_x3, int32x2x3_t, int32_t, 3)
+__BADC_NEON_ST1X(vst1_s32_x3, int32x2x3_t, int32_t, 3)
+__BADC_NEON_LDN(vld3_s32, int32x2x3_t, int32_t, 3, 2)
+__BADC_NEON_STN(vst3_s32, int32x2x3_t, int32_t, 3, 2)
+__BADC_NEON_LDDUP(vld3_dup_s32, int32x2x3_t, int32_t, 3, 2)
+#define vld3_lane_s32(__p, __v, __n) __BADC_NEON_LDNL(int32x2x3_t, 3, __p, __v, __n)
+#define vst3_lane_s32(__p, __v, __n) __BADC_NEON_STNL(int32x2x3_t, 3, __p, __v, __n)
+__BADC_NEON_LD1X(vld1_s32_x4, int32x2x4_t, int32_t, 4)
+__BADC_NEON_ST1X(vst1_s32_x4, int32x2x4_t, int32_t, 4)
+__BADC_NEON_LD4P(vld4_s32, int32x2x4_t, int32_t, int32x2_t, 2, _s32)
+__BADC_NEON_ST4P(vst4_s32, int32x2x4_t, int32_t, int32x2_t, 2, _s32)
+__BADC_NEON_LDDUP(vld4_dup_s32, int32x2x4_t, int32_t, 4, 2)
+#define vld4_lane_s32(__p, __v, __n) __BADC_NEON_LDNL(int32x2x4_t, 4, __p, __v, __n)
+#define vst4_lane_s32(__p, __v, __n) __BADC_NEON_STNL(int32x2x4_t, 4, __p, __v, __n)
+__BADC_NEON_LD1X(vld1q_s32_x2, int32x4x2_t, int32_t, 2)
+__BADC_NEON_ST1X(vst1q_s32_x2, int32x4x2_t, int32_t, 2)
+__BADC_NEON_LD2P(vld2q_s32, int32x4x2_t, int32_t, int32x4_t, 4, q_s32)
+__BADC_NEON_ST2P(vst2q_s32, int32x4x2_t, int32_t, int32x4_t, 4, q_s32)
+__BADC_NEON_LDDUP(vld2q_dup_s32, int32x4x2_t, int32_t, 2, 4)
+#define vld2q_lane_s32(__p, __v, __n) __BADC_NEON_LDNL(int32x4x2_t, 2, __p, __v, __n)
+#define vst2q_lane_s32(__p, __v, __n) __BADC_NEON_STNL(int32x4x2_t, 2, __p, __v, __n)
+__BADC_NEON_LD1X(vld1q_s32_x3, int32x4x3_t, int32_t, 3)
+__BADC_NEON_ST1X(vst1q_s32_x3, int32x4x3_t, int32_t, 3)
+__BADC_NEON_LDN(vld3q_s32, int32x4x3_t, int32_t, 3, 4)
+__BADC_NEON_STN(vst3q_s32, int32x4x3_t, int32_t, 3, 4)
+__BADC_NEON_LDDUP(vld3q_dup_s32, int32x4x3_t, int32_t, 3, 4)
+#define vld3q_lane_s32(__p, __v, __n) __BADC_NEON_LDNL(int32x4x3_t, 3, __p, __v, __n)
+#define vst3q_lane_s32(__p, __v, __n) __BADC_NEON_STNL(int32x4x3_t, 3, __p, __v, __n)
+__BADC_NEON_LD1X(vld1q_s32_x4, int32x4x4_t, int32_t, 4)
+__BADC_NEON_ST1X(vst1q_s32_x4, int32x4x4_t, int32_t, 4)
+__BADC_NEON_LD4P(vld4q_s32, int32x4x4_t, int32_t, int32x4_t, 4, q_s32)
+__BADC_NEON_ST4P(vst4q_s32, int32x4x4_t, int32_t, int32x4_t, 4, q_s32)
+__BADC_NEON_LDDUP(vld4q_dup_s32, int32x4x4_t, int32_t, 4, 4)
+#define vld4q_lane_s32(__p, __v, __n) __BADC_NEON_LDNL(int32x4x4_t, 4, __p, __v, __n)
+#define vst4q_lane_s32(__p, __v, __n) __BADC_NEON_STNL(int32x4x4_t, 4, __p, __v, __n)
+__BADC_NEON_LD1X(vld1_u32_x2, uint32x2x2_t, uint32_t, 2)
+__BADC_NEON_ST1X(vst1_u32_x2, uint32x2x2_t, uint32_t, 2)
+__BADC_NEON_LD2P(vld2_u32, uint32x2x2_t, uint32_t, uint32x2_t, 2, _u32)
+__BADC_NEON_ST2P(vst2_u32, uint32x2x2_t, uint32_t, uint32x2_t, 2, _u32)
+__BADC_NEON_LDDUP(vld2_dup_u32, uint32x2x2_t, uint32_t, 2, 2)
+#define vld2_lane_u32(__p, __v, __n) __BADC_NEON_LDNL(uint32x2x2_t, 2, __p, __v, __n)
+#define vst2_lane_u32(__p, __v, __n) __BADC_NEON_STNL(uint32x2x2_t, 2, __p, __v, __n)
+__BADC_NEON_LD1X(vld1_u32_x3, uint32x2x3_t, uint32_t, 3)
+__BADC_NEON_ST1X(vst1_u32_x3, uint32x2x3_t, uint32_t, 3)
+__BADC_NEON_LDN(vld3_u32, uint32x2x3_t, uint32_t, 3, 2)
+__BADC_NEON_STN(vst3_u32, uint32x2x3_t, uint32_t, 3, 2)
+__BADC_NEON_LDDUP(vld3_dup_u32, uint32x2x3_t, uint32_t, 3, 2)
+#define vld3_lane_u32(__p, __v, __n) __BADC_NEON_LDNL(uint32x2x3_t, 3, __p, __v, __n)
+#define vst3_lane_u32(__p, __v, __n) __BADC_NEON_STNL(uint32x2x3_t, 3, __p, __v, __n)
+__BADC_NEON_LD1X(vld1_u32_x4, uint32x2x4_t, uint32_t, 4)
+__BADC_NEON_ST1X(vst1_u32_x4, uint32x2x4_t, uint32_t, 4)
+__BADC_NEON_LD4P(vld4_u32, uint32x2x4_t, uint32_t, uint32x2_t, 2, _u32)
+__BADC_NEON_ST4P(vst4_u32, uint32x2x4_t, uint32_t, uint32x2_t, 2, _u32)
+__BADC_NEON_LDDUP(vld4_dup_u32, uint32x2x4_t, uint32_t, 4, 2)
+#define vld4_lane_u32(__p, __v, __n) __BADC_NEON_LDNL(uint32x2x4_t, 4, __p, __v, __n)
+#define vst4_lane_u32(__p, __v, __n) __BADC_NEON_STNL(uint32x2x4_t, 4, __p, __v, __n)
+__BADC_NEON_LD1X(vld1q_u32_x2, uint32x4x2_t, uint32_t, 2)
+__BADC_NEON_ST1X(vst1q_u32_x2, uint32x4x2_t, uint32_t, 2)
+__BADC_NEON_LD2P(vld2q_u32, uint32x4x2_t, uint32_t, uint32x4_t, 4, q_u32)
+__BADC_NEON_ST2P(vst2q_u32, uint32x4x2_t, uint32_t, uint32x4_t, 4, q_u32)
+__BADC_NEON_LDDUP(vld2q_dup_u32, uint32x4x2_t, uint32_t, 2, 4)
+#define vld2q_lane_u32(__p, __v, __n) __BADC_NEON_LDNL(uint32x4x2_t, 2, __p, __v, __n)
+#define vst2q_lane_u32(__p, __v, __n) __BADC_NEON_STNL(uint32x4x2_t, 2, __p, __v, __n)
+__BADC_NEON_LD1X(vld1q_u32_x3, uint32x4x3_t, uint32_t, 3)
+__BADC_NEON_ST1X(vst1q_u32_x3, uint32x4x3_t, uint32_t, 3)
+__BADC_NEON_LDN(vld3q_u32, uint32x4x3_t, uint32_t, 3, 4)
+__BADC_NEON_STN(vst3q_u32, uint32x4x3_t, uint32_t, 3, 4)
+__BADC_NEON_LDDUP(vld3q_dup_u32, uint32x4x3_t, uint32_t, 3, 4)
+#define vld3q_lane_u32(__p, __v, __n) __BADC_NEON_LDNL(uint32x4x3_t, 3, __p, __v, __n)
+#define vst3q_lane_u32(__p, __v, __n) __BADC_NEON_STNL(uint32x4x3_t, 3, __p, __v, __n)
+__BADC_NEON_LD1X(vld1q_u32_x4, uint32x4x4_t, uint32_t, 4)
+__BADC_NEON_ST1X(vst1q_u32_x4, uint32x4x4_t, uint32_t, 4)
+__BADC_NEON_LD4P(vld4q_u32, uint32x4x4_t, uint32_t, uint32x4_t, 4, q_u32)
+__BADC_NEON_ST4P(vst4q_u32, uint32x4x4_t, uint32_t, uint32x4_t, 4, q_u32)
+__BADC_NEON_LDDUP(vld4q_dup_u32, uint32x4x4_t, uint32_t, 4, 4)
+#define vld4q_lane_u32(__p, __v, __n) __BADC_NEON_LDNL(uint32x4x4_t, 4, __p, __v, __n)
+#define vst4q_lane_u32(__p, __v, __n) __BADC_NEON_STNL(uint32x4x4_t, 4, __p, __v, __n)
+__BADC_NEON_LD1X(vld1_f32_x2, float32x2x2_t, float32_t, 2)
+__BADC_NEON_ST1X(vst1_f32_x2, float32x2x2_t, float32_t, 2)
+__BADC_NEON_LD2P(vld2_f32, float32x2x2_t, float32_t, float32x2_t, 2, _f32)
+__BADC_NEON_ST2P(vst2_f32, float32x2x2_t, float32_t, float32x2_t, 2, _f32)
+__BADC_NEON_LDDUP(vld2_dup_f32, float32x2x2_t, float32_t, 2, 2)
+#define vld2_lane_f32(__p, __v, __n) __BADC_NEON_LDNL(float32x2x2_t, 2, __p, __v, __n)
+#define vst2_lane_f32(__p, __v, __n) __BADC_NEON_STNL(float32x2x2_t, 2, __p, __v, __n)
+__BADC_NEON_LD1X(vld1_f32_x3, float32x2x3_t, float32_t, 3)
+__BADC_NEON_ST1X(vst1_f32_x3, float32x2x3_t, float32_t, 3)
+__BADC_NEON_LDN(vld3_f32, float32x2x3_t, float32_t, 3, 2)
+__BADC_NEON_STN(vst3_f32, float32x2x3_t, float32_t, 3, 2)
+__BADC_NEON_LDDUP(vld3_dup_f32, float32x2x3_t, float32_t, 3, 2)
+#define vld3_lane_f32(__p, __v, __n) __BADC_NEON_LDNL(float32x2x3_t, 3, __p, __v, __n)
+#define vst3_lane_f32(__p, __v, __n) __BADC_NEON_STNL(float32x2x3_t, 3, __p, __v, __n)
+__BADC_NEON_LD1X(vld1_f32_x4, float32x2x4_t, float32_t, 4)
+__BADC_NEON_ST1X(vst1_f32_x4, float32x2x4_t, float32_t, 4)
+__BADC_NEON_LD4P(vld4_f32, float32x2x4_t, float32_t, float32x2_t, 2, _f32)
+__BADC_NEON_ST4P(vst4_f32, float32x2x4_t, float32_t, float32x2_t, 2, _f32)
+__BADC_NEON_LDDUP(vld4_dup_f32, float32x2x4_t, float32_t, 4, 2)
+#define vld4_lane_f32(__p, __v, __n) __BADC_NEON_LDNL(float32x2x4_t, 4, __p, __v, __n)
+#define vst4_lane_f32(__p, __v, __n) __BADC_NEON_STNL(float32x2x4_t, 4, __p, __v, __n)
+__BADC_NEON_LD1X(vld1q_f32_x2, float32x4x2_t, float32_t, 2)
+__BADC_NEON_ST1X(vst1q_f32_x2, float32x4x2_t, float32_t, 2)
+__BADC_NEON_LD2P(vld2q_f32, float32x4x2_t, float32_t, float32x4_t, 4, q_f32)
+__BADC_NEON_ST2P(vst2q_f32, float32x4x2_t, float32_t, float32x4_t, 4, q_f32)
+__BADC_NEON_LDDUP(vld2q_dup_f32, float32x4x2_t, float32_t, 2, 4)
+#define vld2q_lane_f32(__p, __v, __n) __BADC_NEON_LDNL(float32x4x2_t, 2, __p, __v, __n)
+#define vst2q_lane_f32(__p, __v, __n) __BADC_NEON_STNL(float32x4x2_t, 2, __p, __v, __n)
+__BADC_NEON_LD1X(vld1q_f32_x3, float32x4x3_t, float32_t, 3)
+__BADC_NEON_ST1X(vst1q_f32_x3, float32x4x3_t, float32_t, 3)
+__BADC_NEON_LDN(vld3q_f32, float32x4x3_t, float32_t, 3, 4)
+__BADC_NEON_STN(vst3q_f32, float32x4x3_t, float32_t, 3, 4)
+__BADC_NEON_LDDUP(vld3q_dup_f32, float32x4x3_t, float32_t, 3, 4)
+#define vld3q_lane_f32(__p, __v, __n) __BADC_NEON_LDNL(float32x4x3_t, 3, __p, __v, __n)
+#define vst3q_lane_f32(__p, __v, __n) __BADC_NEON_STNL(float32x4x3_t, 3, __p, __v, __n)
+__BADC_NEON_LD1X(vld1q_f32_x4, float32x4x4_t, float32_t, 4)
+__BADC_NEON_ST1X(vst1q_f32_x4, float32x4x4_t, float32_t, 4)
+__BADC_NEON_LD4P(vld4q_f32, float32x4x4_t, float32_t, float32x4_t, 4, q_f32)
+__BADC_NEON_ST4P(vst4q_f32, float32x4x4_t, float32_t, float32x4_t, 4, q_f32)
+__BADC_NEON_LDDUP(vld4q_dup_f32, float32x4x4_t, float32_t, 4, 4)
+#define vld4q_lane_f32(__p, __v, __n) __BADC_NEON_LDNL(float32x4x4_t, 4, __p, __v, __n)
+#define vst4q_lane_f32(__p, __v, __n) __BADC_NEON_STNL(float32x4x4_t, 4, __p, __v, __n)
+__BADC_NEON_LD1X(vld1_s64_x2, int64x1x2_t, int64_t, 2)
+__BADC_NEON_ST1X(vst1_s64_x2, int64x1x2_t, int64_t, 2)
+__BADC_NEON_LDN(vld2_s64, int64x1x2_t, int64_t, 2, 1)
+__BADC_NEON_STN(vst2_s64, int64x1x2_t, int64_t, 2, 1)
+__BADC_NEON_LDDUP(vld2_dup_s64, int64x1x2_t, int64_t, 2, 1)
+#define vld2_lane_s64(__p, __v, __n) __BADC_NEON_LDNL(int64x1x2_t, 2, __p, __v, __n)
+#define vst2_lane_s64(__p, __v, __n) __BADC_NEON_STNL(int64x1x2_t, 2, __p, __v, __n)
+__BADC_NEON_LD1X(vld1_s64_x3, int64x1x3_t, int64_t, 3)
+__BADC_NEON_ST1X(vst1_s64_x3, int64x1x3_t, int64_t, 3)
+__BADC_NEON_LDN(vld3_s64, int64x1x3_t, int64_t, 3, 1)
+__BADC_NEON_STN(vst3_s64, int64x1x3_t, int64_t, 3, 1)
+__BADC_NEON_LDDUP(vld3_dup_s64, int64x1x3_t, int64_t, 3, 1)
+#define vld3_lane_s64(__p, __v, __n) __BADC_NEON_LDNL(int64x1x3_t, 3, __p, __v, __n)
+#define vst3_lane_s64(__p, __v, __n) __BADC_NEON_STNL(int64x1x3_t, 3, __p, __v, __n)
+__BADC_NEON_LD1X(vld1_s64_x4, int64x1x4_t, int64_t, 4)
+__BADC_NEON_ST1X(vst1_s64_x4, int64x1x4_t, int64_t, 4)
+__BADC_NEON_LDN(vld4_s64, int64x1x4_t, int64_t, 4, 1)
+__BADC_NEON_STN(vst4_s64, int64x1x4_t, int64_t, 4, 1)
+__BADC_NEON_LDDUP(vld4_dup_s64, int64x1x4_t, int64_t, 4, 1)
+#define vld4_lane_s64(__p, __v, __n) __BADC_NEON_LDNL(int64x1x4_t, 4, __p, __v, __n)
+#define vst4_lane_s64(__p, __v, __n) __BADC_NEON_STNL(int64x1x4_t, 4, __p, __v, __n)
+__BADC_NEON_LD1X(vld1q_s64_x2, int64x2x2_t, int64_t, 2)
+__BADC_NEON_ST1X(vst1q_s64_x2, int64x2x2_t, int64_t, 2)
+__BADC_NEON_LD2P(vld2q_s64, int64x2x2_t, int64_t, int64x2_t, 2, q_s64)
+__BADC_NEON_ST2P(vst2q_s64, int64x2x2_t, int64_t, int64x2_t, 2, q_s64)
+__BADC_NEON_LDDUP(vld2q_dup_s64, int64x2x2_t, int64_t, 2, 2)
+#define vld2q_lane_s64(__p, __v, __n) __BADC_NEON_LDNL(int64x2x2_t, 2, __p, __v, __n)
+#define vst2q_lane_s64(__p, __v, __n) __BADC_NEON_STNL(int64x2x2_t, 2, __p, __v, __n)
+__BADC_NEON_LD1X(vld1q_s64_x3, int64x2x3_t, int64_t, 3)
+__BADC_NEON_ST1X(vst1q_s64_x3, int64x2x3_t, int64_t, 3)
+__BADC_NEON_LDN(vld3q_s64, int64x2x3_t, int64_t, 3, 2)
+__BADC_NEON_STN(vst3q_s64, int64x2x3_t, int64_t, 3, 2)
+__BADC_NEON_LDDUP(vld3q_dup_s64, int64x2x3_t, int64_t, 3, 2)
+#define vld3q_lane_s64(__p, __v, __n) __BADC_NEON_LDNL(int64x2x3_t, 3, __p, __v, __n)
+#define vst3q_lane_s64(__p, __v, __n) __BADC_NEON_STNL(int64x2x3_t, 3, __p, __v, __n)
+__BADC_NEON_LD1X(vld1q_s64_x4, int64x2x4_t, int64_t, 4)
+__BADC_NEON_ST1X(vst1q_s64_x4, int64x2x4_t, int64_t, 4)
+__BADC_NEON_LD4P(vld4q_s64, int64x2x4_t, int64_t, int64x2_t, 2, q_s64)
+__BADC_NEON_ST4P(vst4q_s64, int64x2x4_t, int64_t, int64x2_t, 2, q_s64)
+__BADC_NEON_LDDUP(vld4q_dup_s64, int64x2x4_t, int64_t, 4, 2)
+#define vld4q_lane_s64(__p, __v, __n) __BADC_NEON_LDNL(int64x2x4_t, 4, __p, __v, __n)
+#define vst4q_lane_s64(__p, __v, __n) __BADC_NEON_STNL(int64x2x4_t, 4, __p, __v, __n)
+__BADC_NEON_LD1X(vld1_u64_x2, uint64x1x2_t, uint64_t, 2)
+__BADC_NEON_ST1X(vst1_u64_x2, uint64x1x2_t, uint64_t, 2)
+__BADC_NEON_LDN(vld2_u64, uint64x1x2_t, uint64_t, 2, 1)
+__BADC_NEON_STN(vst2_u64, uint64x1x2_t, uint64_t, 2, 1)
+__BADC_NEON_LDDUP(vld2_dup_u64, uint64x1x2_t, uint64_t, 2, 1)
+#define vld2_lane_u64(__p, __v, __n) __BADC_NEON_LDNL(uint64x1x2_t, 2, __p, __v, __n)
+#define vst2_lane_u64(__p, __v, __n) __BADC_NEON_STNL(uint64x1x2_t, 2, __p, __v, __n)
+__BADC_NEON_LD1X(vld1_u64_x3, uint64x1x3_t, uint64_t, 3)
+__BADC_NEON_ST1X(vst1_u64_x3, uint64x1x3_t, uint64_t, 3)
+__BADC_NEON_LDN(vld3_u64, uint64x1x3_t, uint64_t, 3, 1)
+__BADC_NEON_STN(vst3_u64, uint64x1x3_t, uint64_t, 3, 1)
+__BADC_NEON_LDDUP(vld3_dup_u64, uint64x1x3_t, uint64_t, 3, 1)
+#define vld3_lane_u64(__p, __v, __n) __BADC_NEON_LDNL(uint64x1x3_t, 3, __p, __v, __n)
+#define vst3_lane_u64(__p, __v, __n) __BADC_NEON_STNL(uint64x1x3_t, 3, __p, __v, __n)
+__BADC_NEON_LD1X(vld1_u64_x4, uint64x1x4_t, uint64_t, 4)
+__BADC_NEON_ST1X(vst1_u64_x4, uint64x1x4_t, uint64_t, 4)
+__BADC_NEON_LDN(vld4_u64, uint64x1x4_t, uint64_t, 4, 1)
+__BADC_NEON_STN(vst4_u64, uint64x1x4_t, uint64_t, 4, 1)
+__BADC_NEON_LDDUP(vld4_dup_u64, uint64x1x4_t, uint64_t, 4, 1)
+#define vld4_lane_u64(__p, __v, __n) __BADC_NEON_LDNL(uint64x1x4_t, 4, __p, __v, __n)
+#define vst4_lane_u64(__p, __v, __n) __BADC_NEON_STNL(uint64x1x4_t, 4, __p, __v, __n)
+__BADC_NEON_LD1X(vld1q_u64_x2, uint64x2x2_t, uint64_t, 2)
+__BADC_NEON_ST1X(vst1q_u64_x2, uint64x2x2_t, uint64_t, 2)
+__BADC_NEON_LD2P(vld2q_u64, uint64x2x2_t, uint64_t, uint64x2_t, 2, q_u64)
+__BADC_NEON_ST2P(vst2q_u64, uint64x2x2_t, uint64_t, uint64x2_t, 2, q_u64)
+__BADC_NEON_LDDUP(vld2q_dup_u64, uint64x2x2_t, uint64_t, 2, 2)
+#define vld2q_lane_u64(__p, __v, __n) __BADC_NEON_LDNL(uint64x2x2_t, 2, __p, __v, __n)
+#define vst2q_lane_u64(__p, __v, __n) __BADC_NEON_STNL(uint64x2x2_t, 2, __p, __v, __n)
+__BADC_NEON_LD1X(vld1q_u64_x3, uint64x2x3_t, uint64_t, 3)
+__BADC_NEON_ST1X(vst1q_u64_x3, uint64x2x3_t, uint64_t, 3)
+__BADC_NEON_LDN(vld3q_u64, uint64x2x3_t, uint64_t, 3, 2)
+__BADC_NEON_STN(vst3q_u64, uint64x2x3_t, uint64_t, 3, 2)
+__BADC_NEON_LDDUP(vld3q_dup_u64, uint64x2x3_t, uint64_t, 3, 2)
+#define vld3q_lane_u64(__p, __v, __n) __BADC_NEON_LDNL(uint64x2x3_t, 3, __p, __v, __n)
+#define vst3q_lane_u64(__p, __v, __n) __BADC_NEON_STNL(uint64x2x3_t, 3, __p, __v, __n)
+__BADC_NEON_LD1X(vld1q_u64_x4, uint64x2x4_t, uint64_t, 4)
+__BADC_NEON_ST1X(vst1q_u64_x4, uint64x2x4_t, uint64_t, 4)
+__BADC_NEON_LD4P(vld4q_u64, uint64x2x4_t, uint64_t, uint64x2_t, 2, q_u64)
+__BADC_NEON_ST4P(vst4q_u64, uint64x2x4_t, uint64_t, uint64x2_t, 2, q_u64)
+__BADC_NEON_LDDUP(vld4q_dup_u64, uint64x2x4_t, uint64_t, 4, 2)
+#define vld4q_lane_u64(__p, __v, __n) __BADC_NEON_LDNL(uint64x2x4_t, 4, __p, __v, __n)
+#define vst4q_lane_u64(__p, __v, __n) __BADC_NEON_STNL(uint64x2x4_t, 4, __p, __v, __n)
+__BADC_NEON_LD1X(vld1_p64_x2, poly64x1x2_t, poly64_t, 2)
+__BADC_NEON_ST1X(vst1_p64_x2, poly64x1x2_t, poly64_t, 2)
+__BADC_NEON_LDN(vld2_p64, poly64x1x2_t, poly64_t, 2, 1)
+__BADC_NEON_STN(vst2_p64, poly64x1x2_t, poly64_t, 2, 1)
+__BADC_NEON_LDDUP(vld2_dup_p64, poly64x1x2_t, poly64_t, 2, 1)
+#define vld2_lane_p64(__p, __v, __n) __BADC_NEON_LDNL(poly64x1x2_t, 2, __p, __v, __n)
+#define vst2_lane_p64(__p, __v, __n) __BADC_NEON_STNL(poly64x1x2_t, 2, __p, __v, __n)
+__BADC_NEON_LD1X(vld1_p64_x3, poly64x1x3_t, poly64_t, 3)
+__BADC_NEON_ST1X(vst1_p64_x3, poly64x1x3_t, poly64_t, 3)
+__BADC_NEON_LDN(vld3_p64, poly64x1x3_t, poly64_t, 3, 1)
+__BADC_NEON_STN(vst3_p64, poly64x1x3_t, poly64_t, 3, 1)
+__BADC_NEON_LDDUP(vld3_dup_p64, poly64x1x3_t, poly64_t, 3, 1)
+#define vld3_lane_p64(__p, __v, __n) __BADC_NEON_LDNL(poly64x1x3_t, 3, __p, __v, __n)
+#define vst3_lane_p64(__p, __v, __n) __BADC_NEON_STNL(poly64x1x3_t, 3, __p, __v, __n)
+__BADC_NEON_LD1X(vld1_p64_x4, poly64x1x4_t, poly64_t, 4)
+__BADC_NEON_ST1X(vst1_p64_x4, poly64x1x4_t, poly64_t, 4)
+__BADC_NEON_LDN(vld4_p64, poly64x1x4_t, poly64_t, 4, 1)
+__BADC_NEON_STN(vst4_p64, poly64x1x4_t, poly64_t, 4, 1)
+__BADC_NEON_LDDUP(vld4_dup_p64, poly64x1x4_t, poly64_t, 4, 1)
+#define vld4_lane_p64(__p, __v, __n) __BADC_NEON_LDNL(poly64x1x4_t, 4, __p, __v, __n)
+#define vst4_lane_p64(__p, __v, __n) __BADC_NEON_STNL(poly64x1x4_t, 4, __p, __v, __n)
+__BADC_NEON_LD1X(vld1q_p64_x2, poly64x2x2_t, poly64_t, 2)
+__BADC_NEON_ST1X(vst1q_p64_x2, poly64x2x2_t, poly64_t, 2)
+__BADC_NEON_LD2P(vld2q_p64, poly64x2x2_t, poly64_t, poly64x2_t, 2, q_p64)
+__BADC_NEON_ST2P(vst2q_p64, poly64x2x2_t, poly64_t, poly64x2_t, 2, q_p64)
+__BADC_NEON_LDDUP(vld2q_dup_p64, poly64x2x2_t, poly64_t, 2, 2)
+#define vld2q_lane_p64(__p, __v, __n) __BADC_NEON_LDNL(poly64x2x2_t, 2, __p, __v, __n)
+#define vst2q_lane_p64(__p, __v, __n) __BADC_NEON_STNL(poly64x2x2_t, 2, __p, __v, __n)
+__BADC_NEON_LD1X(vld1q_p64_x3, poly64x2x3_t, poly64_t, 3)
+__BADC_NEON_ST1X(vst1q_p64_x3, poly64x2x3_t, poly64_t, 3)
+__BADC_NEON_LDN(vld3q_p64, poly64x2x3_t, poly64_t, 3, 2)
+__BADC_NEON_STN(vst3q_p64, poly64x2x3_t, poly64_t, 3, 2)
+__BADC_NEON_LDDUP(vld3q_dup_p64, poly64x2x3_t, poly64_t, 3, 2)
+#define vld3q_lane_p64(__p, __v, __n) __BADC_NEON_LDNL(poly64x2x3_t, 3, __p, __v, __n)
+#define vst3q_lane_p64(__p, __v, __n) __BADC_NEON_STNL(poly64x2x3_t, 3, __p, __v, __n)
+__BADC_NEON_LD1X(vld1q_p64_x4, poly64x2x4_t, poly64_t, 4)
+__BADC_NEON_ST1X(vst1q_p64_x4, poly64x2x4_t, poly64_t, 4)
+__BADC_NEON_LD4P(vld4q_p64, poly64x2x4_t, poly64_t, poly64x2_t, 2, q_p64)
+__BADC_NEON_ST4P(vst4q_p64, poly64x2x4_t, poly64_t, poly64x2_t, 2, q_p64)
+__BADC_NEON_LDDUP(vld4q_dup_p64, poly64x2x4_t, poly64_t, 4, 2)
+#define vld4q_lane_p64(__p, __v, __n) __BADC_NEON_LDNL(poly64x2x4_t, 4, __p, __v, __n)
+#define vst4q_lane_p64(__p, __v, __n) __BADC_NEON_STNL(poly64x2x4_t, 4, __p, __v, __n)
+__BADC_NEON_LD1X(vld1_f64_x2, float64x1x2_t, float64_t, 2)
+__BADC_NEON_ST1X(vst1_f64_x2, float64x1x2_t, float64_t, 2)
+__BADC_NEON_LDN(vld2_f64, float64x1x2_t, float64_t, 2, 1)
+__BADC_NEON_STN(vst2_f64, float64x1x2_t, float64_t, 2, 1)
+__BADC_NEON_LDDUP(vld2_dup_f64, float64x1x2_t, float64_t, 2, 1)
+#define vld2_lane_f64(__p, __v, __n) __BADC_NEON_LDNL(float64x1x2_t, 2, __p, __v, __n)
+#define vst2_lane_f64(__p, __v, __n) __BADC_NEON_STNL(float64x1x2_t, 2, __p, __v, __n)
+__BADC_NEON_LD1X(vld1_f64_x3, float64x1x3_t, float64_t, 3)
+__BADC_NEON_ST1X(vst1_f64_x3, float64x1x3_t, float64_t, 3)
+__BADC_NEON_LDN(vld3_f64, float64x1x3_t, float64_t, 3, 1)
+__BADC_NEON_STN(vst3_f64, float64x1x3_t, float64_t, 3, 1)
+__BADC_NEON_LDDUP(vld3_dup_f64, float64x1x3_t, float64_t, 3, 1)
+#define vld3_lane_f64(__p, __v, __n) __BADC_NEON_LDNL(float64x1x3_t, 3, __p, __v, __n)
+#define vst3_lane_f64(__p, __v, __n) __BADC_NEON_STNL(float64x1x3_t, 3, __p, __v, __n)
+__BADC_NEON_LD1X(vld1_f64_x4, float64x1x4_t, float64_t, 4)
+__BADC_NEON_ST1X(vst1_f64_x4, float64x1x4_t, float64_t, 4)
+__BADC_NEON_LDN(vld4_f64, float64x1x4_t, float64_t, 4, 1)
+__BADC_NEON_STN(vst4_f64, float64x1x4_t, float64_t, 4, 1)
+__BADC_NEON_LDDUP(vld4_dup_f64, float64x1x4_t, float64_t, 4, 1)
+#define vld4_lane_f64(__p, __v, __n) __BADC_NEON_LDNL(float64x1x4_t, 4, __p, __v, __n)
+#define vst4_lane_f64(__p, __v, __n) __BADC_NEON_STNL(float64x1x4_t, 4, __p, __v, __n)
+__BADC_NEON_LD1X(vld1q_f64_x2, float64x2x2_t, float64_t, 2)
+__BADC_NEON_ST1X(vst1q_f64_x2, float64x2x2_t, float64_t, 2)
+__BADC_NEON_LD2P(vld2q_f64, float64x2x2_t, float64_t, float64x2_t, 2, q_f64)
+__BADC_NEON_ST2P(vst2q_f64, float64x2x2_t, float64_t, float64x2_t, 2, q_f64)
+__BADC_NEON_LDDUP(vld2q_dup_f64, float64x2x2_t, float64_t, 2, 2)
+#define vld2q_lane_f64(__p, __v, __n) __BADC_NEON_LDNL(float64x2x2_t, 2, __p, __v, __n)
+#define vst2q_lane_f64(__p, __v, __n) __BADC_NEON_STNL(float64x2x2_t, 2, __p, __v, __n)
+__BADC_NEON_LD1X(vld1q_f64_x3, float64x2x3_t, float64_t, 3)
+__BADC_NEON_ST1X(vst1q_f64_x3, float64x2x3_t, float64_t, 3)
+__BADC_NEON_LDN(vld3q_f64, float64x2x3_t, float64_t, 3, 2)
+__BADC_NEON_STN(vst3q_f64, float64x2x3_t, float64_t, 3, 2)
+__BADC_NEON_LDDUP(vld3q_dup_f64, float64x2x3_t, float64_t, 3, 2)
+#define vld3q_lane_f64(__p, __v, __n) __BADC_NEON_LDNL(float64x2x3_t, 3, __p, __v, __n)
+#define vst3q_lane_f64(__p, __v, __n) __BADC_NEON_STNL(float64x2x3_t, 3, __p, __v, __n)
+__BADC_NEON_LD1X(vld1q_f64_x4, float64x2x4_t, float64_t, 4)
+__BADC_NEON_ST1X(vst1q_f64_x4, float64x2x4_t, float64_t, 4)
+__BADC_NEON_LD4P(vld4q_f64, float64x2x4_t, float64_t, float64x2_t, 2, q_f64)
+__BADC_NEON_ST4P(vst4q_f64, float64x2x4_t, float64_t, float64x2_t, 2, q_f64)
+__BADC_NEON_LDDUP(vld4q_dup_f64, float64x2x4_t, float64_t, 4, 2)
+#define vld4q_lane_f64(__p, __v, __n) __BADC_NEON_LDNL(float64x2x4_t, 4, __p, __v, __n)
+#define vst4q_lane_f64(__p, __v, __n) __BADC_NEON_STNL(float64x2x4_t, 4, __p, __v, __n)
+
+
+/* The lane-indexed forms: each lane combined with lane __n, a constant in
+ * the range of the vector it comes from, of the last operand (_lane from a
+ * 64-bit vector, _laneq from a 128-bit one); the _n forms take a scalar as
+ * that lane. vmla and vmls on floats multiply and add in two roundings,
+ * vfma and vfms in one. */
+#define __BADC_NEON_ELEM2(R, T, V, stem, __a, __v, __n) __extension__({     \
+    T __ea = (__a);                                                       \
+    V __ev = (__v);                                                       \
+    __BADC_NEON_LANE(__n, __BADC_NEON_NLANES(__ev));                      \
+    (R)stem(__ea, __ev, __n);                                             \
+})
+#define __BADC_NEON_ELEM3(R, A, T, V, stem, __r, __a, __v, __n) __extension__({ \
+    A __er = (__r);                                                       \
+    T __ea = (__a);                                                       \
+    V __ev = (__v);                                                       \
+    __BADC_NEON_LANE(__n, __BADC_NEON_NLANES(__ev));                      \
+    (R)stem(__er, __ea, __ev, __n);                                       \
+})
+#define vmul_lane_s16(__a, __v, __n) __BADC_NEON_ELEM2(int16x4_t, int16x4_t, int16x4_t, __builtin_neon_mul_lane_4h, __a, __v, __n)
+#define vmulq_lane_s16(__a, __v, __n) __BADC_NEON_ELEM2(int16x8_t, int16x8_t, int16x4_t, __builtin_neon_mul_lane_8h, __a, __v, __n)
+#define vmul_laneq_s16(__a, __v, __n) __BADC_NEON_ELEM2(int16x4_t, int16x4_t, int16x8_t, __builtin_neon_mul_laneq_4h, __a, __v, __n)
+#define vmulq_laneq_s16(__a, __v, __n) __BADC_NEON_ELEM2(int16x8_t, int16x8_t, int16x8_t, __builtin_neon_mul_laneq_8h, __a, __v, __n)
+#define vmla_lane_s16(__r, __a, __v, __n) __BADC_NEON_ELEM3(int16x4_t, int16x4_t, int16x4_t, int16x4_t, __builtin_neon_mla_lane_4h, __r, __a, __v, __n)
+#define vmlaq_lane_s16(__r, __a, __v, __n) __BADC_NEON_ELEM3(int16x8_t, int16x8_t, int16x8_t, int16x4_t, __builtin_neon_mla_lane_8h, __r, __a, __v, __n)
+#define vmla_laneq_s16(__r, __a, __v, __n) __BADC_NEON_ELEM3(int16x4_t, int16x4_t, int16x4_t, int16x8_t, __builtin_neon_mla_laneq_4h, __r, __a, __v, __n)
+#define vmlaq_laneq_s16(__r, __a, __v, __n) __BADC_NEON_ELEM3(int16x8_t, int16x8_t, int16x8_t, int16x8_t, __builtin_neon_mla_laneq_8h, __r, __a, __v, __n)
+#define vmls_lane_s16(__r, __a, __v, __n) __BADC_NEON_ELEM3(int16x4_t, int16x4_t, int16x4_t, int16x4_t, __builtin_neon_mls_lane_4h, __r, __a, __v, __n)
+#define vmlsq_lane_s16(__r, __a, __v, __n) __BADC_NEON_ELEM3(int16x8_t, int16x8_t, int16x8_t, int16x4_t, __builtin_neon_mls_lane_8h, __r, __a, __v, __n)
+#define vmls_laneq_s16(__r, __a, __v, __n) __BADC_NEON_ELEM3(int16x4_t, int16x4_t, int16x4_t, int16x8_t, __builtin_neon_mls_laneq_4h, __r, __a, __v, __n)
+#define vmlsq_laneq_s16(__r, __a, __v, __n) __BADC_NEON_ELEM3(int16x8_t, int16x8_t, int16x8_t, int16x8_t, __builtin_neon_mls_laneq_8h, __r, __a, __v, __n)
+#define vmul_lane_s32(__a, __v, __n) __BADC_NEON_ELEM2(int32x2_t, int32x2_t, int32x2_t, __builtin_neon_mul_lane_2s, __a, __v, __n)
+#define vmulq_lane_s32(__a, __v, __n) __BADC_NEON_ELEM2(int32x4_t, int32x4_t, int32x2_t, __builtin_neon_mul_lane_4s, __a, __v, __n)
+#define vmul_laneq_s32(__a, __v, __n) __BADC_NEON_ELEM2(int32x2_t, int32x2_t, int32x4_t, __builtin_neon_mul_laneq_2s, __a, __v, __n)
+#define vmulq_laneq_s32(__a, __v, __n) __BADC_NEON_ELEM2(int32x4_t, int32x4_t, int32x4_t, __builtin_neon_mul_laneq_4s, __a, __v, __n)
+#define vmla_lane_s32(__r, __a, __v, __n) __BADC_NEON_ELEM3(int32x2_t, int32x2_t, int32x2_t, int32x2_t, __builtin_neon_mla_lane_2s, __r, __a, __v, __n)
+#define vmlaq_lane_s32(__r, __a, __v, __n) __BADC_NEON_ELEM3(int32x4_t, int32x4_t, int32x4_t, int32x2_t, __builtin_neon_mla_lane_4s, __r, __a, __v, __n)
+#define vmla_laneq_s32(__r, __a, __v, __n) __BADC_NEON_ELEM3(int32x2_t, int32x2_t, int32x2_t, int32x4_t, __builtin_neon_mla_laneq_2s, __r, __a, __v, __n)
+#define vmlaq_laneq_s32(__r, __a, __v, __n) __BADC_NEON_ELEM3(int32x4_t, int32x4_t, int32x4_t, int32x4_t, __builtin_neon_mla_laneq_4s, __r, __a, __v, __n)
+#define vmls_lane_s32(__r, __a, __v, __n) __BADC_NEON_ELEM3(int32x2_t, int32x2_t, int32x2_t, int32x2_t, __builtin_neon_mls_lane_2s, __r, __a, __v, __n)
+#define vmlsq_lane_s32(__r, __a, __v, __n) __BADC_NEON_ELEM3(int32x4_t, int32x4_t, int32x4_t, int32x2_t, __builtin_neon_mls_lane_4s, __r, __a, __v, __n)
+#define vmls_laneq_s32(__r, __a, __v, __n) __BADC_NEON_ELEM3(int32x2_t, int32x2_t, int32x2_t, int32x4_t, __builtin_neon_mls_laneq_2s, __r, __a, __v, __n)
+#define vmlsq_laneq_s32(__r, __a, __v, __n) __BADC_NEON_ELEM3(int32x4_t, int32x4_t, int32x4_t, int32x4_t, __builtin_neon_mls_laneq_4s, __r, __a, __v, __n)
+#define vmul_lane_u16(__a, __v, __n) __BADC_NEON_ELEM2(uint16x4_t, uint16x4_t, uint16x4_t, __builtin_neon_mul_lane_4h, __a, __v, __n)
+#define vmulq_lane_u16(__a, __v, __n) __BADC_NEON_ELEM2(uint16x8_t, uint16x8_t, uint16x4_t, __builtin_neon_mul_lane_8h, __a, __v, __n)
+#define vmul_laneq_u16(__a, __v, __n) __BADC_NEON_ELEM2(uint16x4_t, uint16x4_t, uint16x8_t, __builtin_neon_mul_laneq_4h, __a, __v, __n)
+#define vmulq_laneq_u16(__a, __v, __n) __BADC_NEON_ELEM2(uint16x8_t, uint16x8_t, uint16x8_t, __builtin_neon_mul_laneq_8h, __a, __v, __n)
+#define vmla_lane_u16(__r, __a, __v, __n) __BADC_NEON_ELEM3(uint16x4_t, uint16x4_t, uint16x4_t, uint16x4_t, __builtin_neon_mla_lane_4h, __r, __a, __v, __n)
+#define vmlaq_lane_u16(__r, __a, __v, __n) __BADC_NEON_ELEM3(uint16x8_t, uint16x8_t, uint16x8_t, uint16x4_t, __builtin_neon_mla_lane_8h, __r, __a, __v, __n)
+#define vmla_laneq_u16(__r, __a, __v, __n) __BADC_NEON_ELEM3(uint16x4_t, uint16x4_t, uint16x4_t, uint16x8_t, __builtin_neon_mla_laneq_4h, __r, __a, __v, __n)
+#define vmlaq_laneq_u16(__r, __a, __v, __n) __BADC_NEON_ELEM3(uint16x8_t, uint16x8_t, uint16x8_t, uint16x8_t, __builtin_neon_mla_laneq_8h, __r, __a, __v, __n)
+#define vmls_lane_u16(__r, __a, __v, __n) __BADC_NEON_ELEM3(uint16x4_t, uint16x4_t, uint16x4_t, uint16x4_t, __builtin_neon_mls_lane_4h, __r, __a, __v, __n)
+#define vmlsq_lane_u16(__r, __a, __v, __n) __BADC_NEON_ELEM3(uint16x8_t, uint16x8_t, uint16x8_t, uint16x4_t, __builtin_neon_mls_lane_8h, __r, __a, __v, __n)
+#define vmls_laneq_u16(__r, __a, __v, __n) __BADC_NEON_ELEM3(uint16x4_t, uint16x4_t, uint16x4_t, uint16x8_t, __builtin_neon_mls_laneq_4h, __r, __a, __v, __n)
+#define vmlsq_laneq_u16(__r, __a, __v, __n) __BADC_NEON_ELEM3(uint16x8_t, uint16x8_t, uint16x8_t, uint16x8_t, __builtin_neon_mls_laneq_8h, __r, __a, __v, __n)
+#define vmul_lane_u32(__a, __v, __n) __BADC_NEON_ELEM2(uint32x2_t, uint32x2_t, uint32x2_t, __builtin_neon_mul_lane_2s, __a, __v, __n)
+#define vmulq_lane_u32(__a, __v, __n) __BADC_NEON_ELEM2(uint32x4_t, uint32x4_t, uint32x2_t, __builtin_neon_mul_lane_4s, __a, __v, __n)
+#define vmul_laneq_u32(__a, __v, __n) __BADC_NEON_ELEM2(uint32x2_t, uint32x2_t, uint32x4_t, __builtin_neon_mul_laneq_2s, __a, __v, __n)
+#define vmulq_laneq_u32(__a, __v, __n) __BADC_NEON_ELEM2(uint32x4_t, uint32x4_t, uint32x4_t, __builtin_neon_mul_laneq_4s, __a, __v, __n)
+#define vmla_lane_u32(__r, __a, __v, __n) __BADC_NEON_ELEM3(uint32x2_t, uint32x2_t, uint32x2_t, uint32x2_t, __builtin_neon_mla_lane_2s, __r, __a, __v, __n)
+#define vmlaq_lane_u32(__r, __a, __v, __n) __BADC_NEON_ELEM3(uint32x4_t, uint32x4_t, uint32x4_t, uint32x2_t, __builtin_neon_mla_lane_4s, __r, __a, __v, __n)
+#define vmla_laneq_u32(__r, __a, __v, __n) __BADC_NEON_ELEM3(uint32x2_t, uint32x2_t, uint32x2_t, uint32x4_t, __builtin_neon_mla_laneq_2s, __r, __a, __v, __n)
+#define vmlaq_laneq_u32(__r, __a, __v, __n) __BADC_NEON_ELEM3(uint32x4_t, uint32x4_t, uint32x4_t, uint32x4_t, __builtin_neon_mla_laneq_4s, __r, __a, __v, __n)
+#define vmls_lane_u32(__r, __a, __v, __n) __BADC_NEON_ELEM3(uint32x2_t, uint32x2_t, uint32x2_t, uint32x2_t, __builtin_neon_mls_lane_2s, __r, __a, __v, __n)
+#define vmlsq_lane_u32(__r, __a, __v, __n) __BADC_NEON_ELEM3(uint32x4_t, uint32x4_t, uint32x4_t, uint32x2_t, __builtin_neon_mls_lane_4s, __r, __a, __v, __n)
+#define vmls_laneq_u32(__r, __a, __v, __n) __BADC_NEON_ELEM3(uint32x2_t, uint32x2_t, uint32x2_t, uint32x4_t, __builtin_neon_mls_laneq_2s, __r, __a, __v, __n)
+#define vmlsq_laneq_u32(__r, __a, __v, __n) __BADC_NEON_ELEM3(uint32x4_t, uint32x4_t, uint32x4_t, uint32x4_t, __builtin_neon_mls_laneq_4s, __r, __a, __v, __n)
+#define vqdmulh_lane_s16(__a, __v, __n) __BADC_NEON_ELEM2(int16x4_t, int16x4_t, int16x4_t, __builtin_neon_sqdmulh_lane_4h, __a, __v, __n)
+#define vqdmulhq_lane_s16(__a, __v, __n) __BADC_NEON_ELEM2(int16x8_t, int16x8_t, int16x4_t, __builtin_neon_sqdmulh_lane_8h, __a, __v, __n)
+#define vqdmulh_laneq_s16(__a, __v, __n) __BADC_NEON_ELEM2(int16x4_t, int16x4_t, int16x8_t, __builtin_neon_sqdmulh_laneq_4h, __a, __v, __n)
+#define vqdmulhq_laneq_s16(__a, __v, __n) __BADC_NEON_ELEM2(int16x8_t, int16x8_t, int16x8_t, __builtin_neon_sqdmulh_laneq_8h, __a, __v, __n)
+#define vqrdmulh_lane_s16(__a, __v, __n) __BADC_NEON_ELEM2(int16x4_t, int16x4_t, int16x4_t, __builtin_neon_sqrdmulh_lane_4h, __a, __v, __n)
+#define vqrdmulhq_lane_s16(__a, __v, __n) __BADC_NEON_ELEM2(int16x8_t, int16x8_t, int16x4_t, __builtin_neon_sqrdmulh_lane_8h, __a, __v, __n)
+#define vqrdmulh_laneq_s16(__a, __v, __n) __BADC_NEON_ELEM2(int16x4_t, int16x4_t, int16x8_t, __builtin_neon_sqrdmulh_laneq_4h, __a, __v, __n)
+#define vqrdmulhq_laneq_s16(__a, __v, __n) __BADC_NEON_ELEM2(int16x8_t, int16x8_t, int16x8_t, __builtin_neon_sqrdmulh_laneq_8h, __a, __v, __n)
+#define vqrdmlah_lane_s16(__r, __a, __v, __n) __BADC_NEON_ELEM3(int16x4_t, int16x4_t, int16x4_t, int16x4_t, __builtin_neon_sqrdmlah_lane_4h, __r, __a, __v, __n)
+#define vqrdmlahq_lane_s16(__r, __a, __v, __n) __BADC_NEON_ELEM3(int16x8_t, int16x8_t, int16x8_t, int16x4_t, __builtin_neon_sqrdmlah_lane_8h, __r, __a, __v, __n)
+#define vqrdmlah_laneq_s16(__r, __a, __v, __n) __BADC_NEON_ELEM3(int16x4_t, int16x4_t, int16x4_t, int16x8_t, __builtin_neon_sqrdmlah_laneq_4h, __r, __a, __v, __n)
+#define vqrdmlahq_laneq_s16(__r, __a, __v, __n) __BADC_NEON_ELEM3(int16x8_t, int16x8_t, int16x8_t, int16x8_t, __builtin_neon_sqrdmlah_laneq_8h, __r, __a, __v, __n)
+#define vqrdmlsh_lane_s16(__r, __a, __v, __n) __BADC_NEON_ELEM3(int16x4_t, int16x4_t, int16x4_t, int16x4_t, __builtin_neon_sqrdmlsh_lane_4h, __r, __a, __v, __n)
+#define vqrdmlshq_lane_s16(__r, __a, __v, __n) __BADC_NEON_ELEM3(int16x8_t, int16x8_t, int16x8_t, int16x4_t, __builtin_neon_sqrdmlsh_lane_8h, __r, __a, __v, __n)
+#define vqrdmlsh_laneq_s16(__r, __a, __v, __n) __BADC_NEON_ELEM3(int16x4_t, int16x4_t, int16x4_t, int16x8_t, __builtin_neon_sqrdmlsh_laneq_4h, __r, __a, __v, __n)
+#define vqrdmlshq_laneq_s16(__r, __a, __v, __n) __BADC_NEON_ELEM3(int16x8_t, int16x8_t, int16x8_t, int16x8_t, __builtin_neon_sqrdmlsh_laneq_8h, __r, __a, __v, __n)
+#define vqdmulh_lane_s32(__a, __v, __n) __BADC_NEON_ELEM2(int32x2_t, int32x2_t, int32x2_t, __builtin_neon_sqdmulh_lane_2s, __a, __v, __n)
+#define vqdmulhq_lane_s32(__a, __v, __n) __BADC_NEON_ELEM2(int32x4_t, int32x4_t, int32x2_t, __builtin_neon_sqdmulh_lane_4s, __a, __v, __n)
+#define vqdmulh_laneq_s32(__a, __v, __n) __BADC_NEON_ELEM2(int32x2_t, int32x2_t, int32x4_t, __builtin_neon_sqdmulh_laneq_2s, __a, __v, __n)
+#define vqdmulhq_laneq_s32(__a, __v, __n) __BADC_NEON_ELEM2(int32x4_t, int32x4_t, int32x4_t, __builtin_neon_sqdmulh_laneq_4s, __a, __v, __n)
+#define vqrdmulh_lane_s32(__a, __v, __n) __BADC_NEON_ELEM2(int32x2_t, int32x2_t, int32x2_t, __builtin_neon_sqrdmulh_lane_2s, __a, __v, __n)
+#define vqrdmulhq_lane_s32(__a, __v, __n) __BADC_NEON_ELEM2(int32x4_t, int32x4_t, int32x2_t, __builtin_neon_sqrdmulh_lane_4s, __a, __v, __n)
+#define vqrdmulh_laneq_s32(__a, __v, __n) __BADC_NEON_ELEM2(int32x2_t, int32x2_t, int32x4_t, __builtin_neon_sqrdmulh_laneq_2s, __a, __v, __n)
+#define vqrdmulhq_laneq_s32(__a, __v, __n) __BADC_NEON_ELEM2(int32x4_t, int32x4_t, int32x4_t, __builtin_neon_sqrdmulh_laneq_4s, __a, __v, __n)
+#define vqrdmlah_lane_s32(__r, __a, __v, __n) __BADC_NEON_ELEM3(int32x2_t, int32x2_t, int32x2_t, int32x2_t, __builtin_neon_sqrdmlah_lane_2s, __r, __a, __v, __n)
+#define vqrdmlahq_lane_s32(__r, __a, __v, __n) __BADC_NEON_ELEM3(int32x4_t, int32x4_t, int32x4_t, int32x2_t, __builtin_neon_sqrdmlah_lane_4s, __r, __a, __v, __n)
+#define vqrdmlah_laneq_s32(__r, __a, __v, __n) __BADC_NEON_ELEM3(int32x2_t, int32x2_t, int32x2_t, int32x4_t, __builtin_neon_sqrdmlah_laneq_2s, __r, __a, __v, __n)
+#define vqrdmlahq_laneq_s32(__r, __a, __v, __n) __BADC_NEON_ELEM3(int32x4_t, int32x4_t, int32x4_t, int32x4_t, __builtin_neon_sqrdmlah_laneq_4s, __r, __a, __v, __n)
+#define vqrdmlsh_lane_s32(__r, __a, __v, __n) __BADC_NEON_ELEM3(int32x2_t, int32x2_t, int32x2_t, int32x2_t, __builtin_neon_sqrdmlsh_lane_2s, __r, __a, __v, __n)
+#define vqrdmlshq_lane_s32(__r, __a, __v, __n) __BADC_NEON_ELEM3(int32x4_t, int32x4_t, int32x4_t, int32x2_t, __builtin_neon_sqrdmlsh_lane_4s, __r, __a, __v, __n)
+#define vqrdmlsh_laneq_s32(__r, __a, __v, __n) __BADC_NEON_ELEM3(int32x2_t, int32x2_t, int32x2_t, int32x4_t, __builtin_neon_sqrdmlsh_laneq_2s, __r, __a, __v, __n)
+#define vqrdmlshq_laneq_s32(__r, __a, __v, __n) __BADC_NEON_ELEM3(int32x4_t, int32x4_t, int32x4_t, int32x4_t, __builtin_neon_sqrdmlsh_laneq_4s, __r, __a, __v, __n)
+#define vmul_lane_f32(__a, __v, __n) __BADC_NEON_ELEM2(float32x2_t, float32x2_t, float32x2_t, __builtin_neon_fmul_lane_2s, __a, __v, __n)
+#define vmulq_lane_f32(__a, __v, __n) __BADC_NEON_ELEM2(float32x4_t, float32x4_t, float32x2_t, __builtin_neon_fmul_lane_4s, __a, __v, __n)
+#define vmul_laneq_f32(__a, __v, __n) __BADC_NEON_ELEM2(float32x2_t, float32x2_t, float32x4_t, __builtin_neon_fmul_laneq_2s, __a, __v, __n)
+#define vmulq_laneq_f32(__a, __v, __n) __BADC_NEON_ELEM2(float32x4_t, float32x4_t, float32x4_t, __builtin_neon_fmul_laneq_4s, __a, __v, __n)
+#define vmulx_lane_f32(__a, __v, __n) __BADC_NEON_ELEM2(float32x2_t, float32x2_t, float32x2_t, __builtin_neon_fmulx_lane_2s, __a, __v, __n)
+#define vmulxq_lane_f32(__a, __v, __n) __BADC_NEON_ELEM2(float32x4_t, float32x4_t, float32x2_t, __builtin_neon_fmulx_lane_4s, __a, __v, __n)
+#define vmulx_laneq_f32(__a, __v, __n) __BADC_NEON_ELEM2(float32x2_t, float32x2_t, float32x4_t, __builtin_neon_fmulx_laneq_2s, __a, __v, __n)
+#define vmulxq_laneq_f32(__a, __v, __n) __BADC_NEON_ELEM2(float32x4_t, float32x4_t, float32x4_t, __builtin_neon_fmulx_laneq_4s, __a, __v, __n)
+#define vfma_lane_f32(__r, __a, __v, __n) __BADC_NEON_ELEM3(float32x2_t, float32x2_t, float32x2_t, float32x2_t, __builtin_neon_fmla_lane_2s, __r, __a, __v, __n)
+#define vfmaq_lane_f32(__r, __a, __v, __n) __BADC_NEON_ELEM3(float32x4_t, float32x4_t, float32x4_t, float32x2_t, __builtin_neon_fmla_lane_4s, __r, __a, __v, __n)
+#define vfma_laneq_f32(__r, __a, __v, __n) __BADC_NEON_ELEM3(float32x2_t, float32x2_t, float32x2_t, float32x4_t, __builtin_neon_fmla_laneq_2s, __r, __a, __v, __n)
+#define vfmaq_laneq_f32(__r, __a, __v, __n) __BADC_NEON_ELEM3(float32x4_t, float32x4_t, float32x4_t, float32x4_t, __builtin_neon_fmla_laneq_4s, __r, __a, __v, __n)
+#define vfms_lane_f32(__r, __a, __v, __n) __BADC_NEON_ELEM3(float32x2_t, float32x2_t, float32x2_t, float32x2_t, __builtin_neon_fmls_lane_2s, __r, __a, __v, __n)
+#define vfmsq_lane_f32(__r, __a, __v, __n) __BADC_NEON_ELEM3(float32x4_t, float32x4_t, float32x4_t, float32x2_t, __builtin_neon_fmls_lane_4s, __r, __a, __v, __n)
+#define vfms_laneq_f32(__r, __a, __v, __n) __BADC_NEON_ELEM3(float32x2_t, float32x2_t, float32x2_t, float32x4_t, __builtin_neon_fmls_laneq_2s, __r, __a, __v, __n)
+#define vfmsq_laneq_f32(__r, __a, __v, __n) __BADC_NEON_ELEM3(float32x4_t, float32x4_t, float32x4_t, float32x4_t, __builtin_neon_fmls_laneq_4s, __r, __a, __v, __n)
+#define vmul_lane_f64(__a, __v, __n) __BADC_NEON_ELEM2(float64x1_t, float64x1_t, float64x1_t, __builtin_neon_fmul_lane_d, __a, __v, __n)
+#define vmulq_lane_f64(__a, __v, __n) __BADC_NEON_ELEM2(float64x2_t, float64x2_t, float64x1_t, __builtin_neon_fmul_lane_2d, __a, __v, __n)
+#define vmul_laneq_f64(__a, __v, __n) __BADC_NEON_ELEM2(float64x1_t, float64x1_t, float64x2_t, __builtin_neon_fmul_laneq_d, __a, __v, __n)
+#define vmulq_laneq_f64(__a, __v, __n) __BADC_NEON_ELEM2(float64x2_t, float64x2_t, float64x2_t, __builtin_neon_fmul_laneq_2d, __a, __v, __n)
+#define vmulx_lane_f64(__a, __v, __n) __BADC_NEON_ELEM2(float64x1_t, float64x1_t, float64x1_t, __builtin_neon_fmulx_lane_d, __a, __v, __n)
+#define vmulxq_lane_f64(__a, __v, __n) __BADC_NEON_ELEM2(float64x2_t, float64x2_t, float64x1_t, __builtin_neon_fmulx_lane_2d, __a, __v, __n)
+#define vmulx_laneq_f64(__a, __v, __n) __BADC_NEON_ELEM2(float64x1_t, float64x1_t, float64x2_t, __builtin_neon_fmulx_laneq_d, __a, __v, __n)
+#define vmulxq_laneq_f64(__a, __v, __n) __BADC_NEON_ELEM2(float64x2_t, float64x2_t, float64x2_t, __builtin_neon_fmulx_laneq_2d, __a, __v, __n)
+#define vfma_lane_f64(__r, __a, __v, __n) __BADC_NEON_ELEM3(float64x1_t, float64x1_t, float64x1_t, float64x1_t, __builtin_neon_fmla_lane_d, __r, __a, __v, __n)
+#define vfmaq_lane_f64(__r, __a, __v, __n) __BADC_NEON_ELEM3(float64x2_t, float64x2_t, float64x2_t, float64x1_t, __builtin_neon_fmla_lane_2d, __r, __a, __v, __n)
+#define vfma_laneq_f64(__r, __a, __v, __n) __BADC_NEON_ELEM3(float64x1_t, float64x1_t, float64x1_t, float64x2_t, __builtin_neon_fmla_laneq_d, __r, __a, __v, __n)
+#define vfmaq_laneq_f64(__r, __a, __v, __n) __BADC_NEON_ELEM3(float64x2_t, float64x2_t, float64x2_t, float64x2_t, __builtin_neon_fmla_laneq_2d, __r, __a, __v, __n)
+#define vfms_lane_f64(__r, __a, __v, __n) __BADC_NEON_ELEM3(float64x1_t, float64x1_t, float64x1_t, float64x1_t, __builtin_neon_fmls_lane_d, __r, __a, __v, __n)
+#define vfmsq_lane_f64(__r, __a, __v, __n) __BADC_NEON_ELEM3(float64x2_t, float64x2_t, float64x2_t, float64x1_t, __builtin_neon_fmls_lane_2d, __r, __a, __v, __n)
+#define vfms_laneq_f64(__r, __a, __v, __n) __BADC_NEON_ELEM3(float64x1_t, float64x1_t, float64x1_t, float64x2_t, __builtin_neon_fmls_laneq_d, __r, __a, __v, __n)
+#define vfmsq_laneq_f64(__r, __a, __v, __n) __BADC_NEON_ELEM3(float64x2_t, float64x2_t, float64x2_t, float64x2_t, __builtin_neon_fmls_laneq_2d, __r, __a, __v, __n)
+#define vmla_lane_f32(__r, __a, __v, __n) vadd_f32((__r), vmul_lane_f32(__a, __v, __n))
+#define vmlaq_lane_f32(__r, __a, __v, __n) vaddq_f32((__r), vmulq_lane_f32(__a, __v, __n))
+#define vmla_laneq_f32(__r, __a, __v, __n) vadd_f32((__r), vmul_laneq_f32(__a, __v, __n))
+#define vmlaq_laneq_f32(__r, __a, __v, __n) vaddq_f32((__r), vmulq_laneq_f32(__a, __v, __n))
+#define vmls_lane_f32(__r, __a, __v, __n) vsub_f32((__r), vmul_lane_f32(__a, __v, __n))
+#define vmlsq_lane_f32(__r, __a, __v, __n) vsubq_f32((__r), vmulq_lane_f32(__a, __v, __n))
+#define vmls_laneq_f32(__r, __a, __v, __n) vsub_f32((__r), vmul_laneq_f32(__a, __v, __n))
+#define vmlsq_laneq_f32(__r, __a, __v, __n) vsubq_f32((__r), vmulq_laneq_f32(__a, __v, __n))
+#define vmull_lane_s16(__a, __v, __n) __BADC_NEON_ELEM2(int32x4_t, int16x4_t, int16x4_t, __builtin_neon_smull_lane_4h, __a, __v, __n)
+#define vmull_laneq_s16(__a, __v, __n) __BADC_NEON_ELEM2(int32x4_t, int16x4_t, int16x8_t, __builtin_neon_smull_laneq_4h, __a, __v, __n)
+#define vmull_high_lane_s16(__a, __v, __n) __BADC_NEON_ELEM2(int32x4_t, int16x8_t, int16x4_t, __builtin_neon_smull2_lane_8h, __a, __v, __n)
+#define vmull_high_laneq_s16(__a, __v, __n) __BADC_NEON_ELEM2(int32x4_t, int16x8_t, int16x8_t, __builtin_neon_smull2_laneq_8h, __a, __v, __n)
+#define vmlal_lane_s16(__r, __a, __v, __n) __BADC_NEON_ELEM3(int32x4_t, int32x4_t, int16x4_t, int16x4_t, __builtin_neon_smlal_lane_4h, __r, __a, __v, __n)
+#define vmlal_laneq_s16(__r, __a, __v, __n) __BADC_NEON_ELEM3(int32x4_t, int32x4_t, int16x4_t, int16x8_t, __builtin_neon_smlal_laneq_4h, __r, __a, __v, __n)
+#define vmlal_high_lane_s16(__r, __a, __v, __n) __BADC_NEON_ELEM3(int32x4_t, int32x4_t, int16x8_t, int16x4_t, __builtin_neon_smlal2_lane_8h, __r, __a, __v, __n)
+#define vmlal_high_laneq_s16(__r, __a, __v, __n) __BADC_NEON_ELEM3(int32x4_t, int32x4_t, int16x8_t, int16x8_t, __builtin_neon_smlal2_laneq_8h, __r, __a, __v, __n)
+#define vmlsl_lane_s16(__r, __a, __v, __n) __BADC_NEON_ELEM3(int32x4_t, int32x4_t, int16x4_t, int16x4_t, __builtin_neon_smlsl_lane_4h, __r, __a, __v, __n)
+#define vmlsl_laneq_s16(__r, __a, __v, __n) __BADC_NEON_ELEM3(int32x4_t, int32x4_t, int16x4_t, int16x8_t, __builtin_neon_smlsl_laneq_4h, __r, __a, __v, __n)
+#define vmlsl_high_lane_s16(__r, __a, __v, __n) __BADC_NEON_ELEM3(int32x4_t, int32x4_t, int16x8_t, int16x4_t, __builtin_neon_smlsl2_lane_8h, __r, __a, __v, __n)
+#define vmlsl_high_laneq_s16(__r, __a, __v, __n) __BADC_NEON_ELEM3(int32x4_t, int32x4_t, int16x8_t, int16x8_t, __builtin_neon_smlsl2_laneq_8h, __r, __a, __v, __n)
+#define vmull_lane_s32(__a, __v, __n) __BADC_NEON_ELEM2(int64x2_t, int32x2_t, int32x2_t, __builtin_neon_smull_lane_2s, __a, __v, __n)
+#define vmull_laneq_s32(__a, __v, __n) __BADC_NEON_ELEM2(int64x2_t, int32x2_t, int32x4_t, __builtin_neon_smull_laneq_2s, __a, __v, __n)
+#define vmull_high_lane_s32(__a, __v, __n) __BADC_NEON_ELEM2(int64x2_t, int32x4_t, int32x2_t, __builtin_neon_smull2_lane_4s, __a, __v, __n)
+#define vmull_high_laneq_s32(__a, __v, __n) __BADC_NEON_ELEM2(int64x2_t, int32x4_t, int32x4_t, __builtin_neon_smull2_laneq_4s, __a, __v, __n)
+#define vmlal_lane_s32(__r, __a, __v, __n) __BADC_NEON_ELEM3(int64x2_t, int64x2_t, int32x2_t, int32x2_t, __builtin_neon_smlal_lane_2s, __r, __a, __v, __n)
+#define vmlal_laneq_s32(__r, __a, __v, __n) __BADC_NEON_ELEM3(int64x2_t, int64x2_t, int32x2_t, int32x4_t, __builtin_neon_smlal_laneq_2s, __r, __a, __v, __n)
+#define vmlal_high_lane_s32(__r, __a, __v, __n) __BADC_NEON_ELEM3(int64x2_t, int64x2_t, int32x4_t, int32x2_t, __builtin_neon_smlal2_lane_4s, __r, __a, __v, __n)
+#define vmlal_high_laneq_s32(__r, __a, __v, __n) __BADC_NEON_ELEM3(int64x2_t, int64x2_t, int32x4_t, int32x4_t, __builtin_neon_smlal2_laneq_4s, __r, __a, __v, __n)
+#define vmlsl_lane_s32(__r, __a, __v, __n) __BADC_NEON_ELEM3(int64x2_t, int64x2_t, int32x2_t, int32x2_t, __builtin_neon_smlsl_lane_2s, __r, __a, __v, __n)
+#define vmlsl_laneq_s32(__r, __a, __v, __n) __BADC_NEON_ELEM3(int64x2_t, int64x2_t, int32x2_t, int32x4_t, __builtin_neon_smlsl_laneq_2s, __r, __a, __v, __n)
+#define vmlsl_high_lane_s32(__r, __a, __v, __n) __BADC_NEON_ELEM3(int64x2_t, int64x2_t, int32x4_t, int32x2_t, __builtin_neon_smlsl2_lane_4s, __r, __a, __v, __n)
+#define vmlsl_high_laneq_s32(__r, __a, __v, __n) __BADC_NEON_ELEM3(int64x2_t, int64x2_t, int32x4_t, int32x4_t, __builtin_neon_smlsl2_laneq_4s, __r, __a, __v, __n)
+#define vmull_lane_u16(__a, __v, __n) __BADC_NEON_ELEM2(uint32x4_t, uint16x4_t, uint16x4_t, __builtin_neon_umull_lane_4h, __a, __v, __n)
+#define vmull_laneq_u16(__a, __v, __n) __BADC_NEON_ELEM2(uint32x4_t, uint16x4_t, uint16x8_t, __builtin_neon_umull_laneq_4h, __a, __v, __n)
+#define vmull_high_lane_u16(__a, __v, __n) __BADC_NEON_ELEM2(uint32x4_t, uint16x8_t, uint16x4_t, __builtin_neon_umull2_lane_8h, __a, __v, __n)
+#define vmull_high_laneq_u16(__a, __v, __n) __BADC_NEON_ELEM2(uint32x4_t, uint16x8_t, uint16x8_t, __builtin_neon_umull2_laneq_8h, __a, __v, __n)
+#define vmlal_lane_u16(__r, __a, __v, __n) __BADC_NEON_ELEM3(uint32x4_t, uint32x4_t, uint16x4_t, uint16x4_t, __builtin_neon_umlal_lane_4h, __r, __a, __v, __n)
+#define vmlal_laneq_u16(__r, __a, __v, __n) __BADC_NEON_ELEM3(uint32x4_t, uint32x4_t, uint16x4_t, uint16x8_t, __builtin_neon_umlal_laneq_4h, __r, __a, __v, __n)
+#define vmlal_high_lane_u16(__r, __a, __v, __n) __BADC_NEON_ELEM3(uint32x4_t, uint32x4_t, uint16x8_t, uint16x4_t, __builtin_neon_umlal2_lane_8h, __r, __a, __v, __n)
+#define vmlal_high_laneq_u16(__r, __a, __v, __n) __BADC_NEON_ELEM3(uint32x4_t, uint32x4_t, uint16x8_t, uint16x8_t, __builtin_neon_umlal2_laneq_8h, __r, __a, __v, __n)
+#define vmlsl_lane_u16(__r, __a, __v, __n) __BADC_NEON_ELEM3(uint32x4_t, uint32x4_t, uint16x4_t, uint16x4_t, __builtin_neon_umlsl_lane_4h, __r, __a, __v, __n)
+#define vmlsl_laneq_u16(__r, __a, __v, __n) __BADC_NEON_ELEM3(uint32x4_t, uint32x4_t, uint16x4_t, uint16x8_t, __builtin_neon_umlsl_laneq_4h, __r, __a, __v, __n)
+#define vmlsl_high_lane_u16(__r, __a, __v, __n) __BADC_NEON_ELEM3(uint32x4_t, uint32x4_t, uint16x8_t, uint16x4_t, __builtin_neon_umlsl2_lane_8h, __r, __a, __v, __n)
+#define vmlsl_high_laneq_u16(__r, __a, __v, __n) __BADC_NEON_ELEM3(uint32x4_t, uint32x4_t, uint16x8_t, uint16x8_t, __builtin_neon_umlsl2_laneq_8h, __r, __a, __v, __n)
+#define vmull_lane_u32(__a, __v, __n) __BADC_NEON_ELEM2(uint64x2_t, uint32x2_t, uint32x2_t, __builtin_neon_umull_lane_2s, __a, __v, __n)
+#define vmull_laneq_u32(__a, __v, __n) __BADC_NEON_ELEM2(uint64x2_t, uint32x2_t, uint32x4_t, __builtin_neon_umull_laneq_2s, __a, __v, __n)
+#define vmull_high_lane_u32(__a, __v, __n) __BADC_NEON_ELEM2(uint64x2_t, uint32x4_t, uint32x2_t, __builtin_neon_umull2_lane_4s, __a, __v, __n)
+#define vmull_high_laneq_u32(__a, __v, __n) __BADC_NEON_ELEM2(uint64x2_t, uint32x4_t, uint32x4_t, __builtin_neon_umull2_laneq_4s, __a, __v, __n)
+#define vmlal_lane_u32(__r, __a, __v, __n) __BADC_NEON_ELEM3(uint64x2_t, uint64x2_t, uint32x2_t, uint32x2_t, __builtin_neon_umlal_lane_2s, __r, __a, __v, __n)
+#define vmlal_laneq_u32(__r, __a, __v, __n) __BADC_NEON_ELEM3(uint64x2_t, uint64x2_t, uint32x2_t, uint32x4_t, __builtin_neon_umlal_laneq_2s, __r, __a, __v, __n)
+#define vmlal_high_lane_u32(__r, __a, __v, __n) __BADC_NEON_ELEM3(uint64x2_t, uint64x2_t, uint32x4_t, uint32x2_t, __builtin_neon_umlal2_lane_4s, __r, __a, __v, __n)
+#define vmlal_high_laneq_u32(__r, __a, __v, __n) __BADC_NEON_ELEM3(uint64x2_t, uint64x2_t, uint32x4_t, uint32x4_t, __builtin_neon_umlal2_laneq_4s, __r, __a, __v, __n)
+#define vmlsl_lane_u32(__r, __a, __v, __n) __BADC_NEON_ELEM3(uint64x2_t, uint64x2_t, uint32x2_t, uint32x2_t, __builtin_neon_umlsl_lane_2s, __r, __a, __v, __n)
+#define vmlsl_laneq_u32(__r, __a, __v, __n) __BADC_NEON_ELEM3(uint64x2_t, uint64x2_t, uint32x2_t, uint32x4_t, __builtin_neon_umlsl_laneq_2s, __r, __a, __v, __n)
+#define vmlsl_high_lane_u32(__r, __a, __v, __n) __BADC_NEON_ELEM3(uint64x2_t, uint64x2_t, uint32x4_t, uint32x2_t, __builtin_neon_umlsl2_lane_4s, __r, __a, __v, __n)
+#define vmlsl_high_laneq_u32(__r, __a, __v, __n) __BADC_NEON_ELEM3(uint64x2_t, uint64x2_t, uint32x4_t, uint32x4_t, __builtin_neon_umlsl2_laneq_4s, __r, __a, __v, __n)
+#define vqdmull_lane_s16(__a, __v, __n) __BADC_NEON_ELEM2(int32x4_t, int16x4_t, int16x4_t, __builtin_neon_sqdmull_lane_4h, __a, __v, __n)
+#define vqdmull_laneq_s16(__a, __v, __n) __BADC_NEON_ELEM2(int32x4_t, int16x4_t, int16x8_t, __builtin_neon_sqdmull_laneq_4h, __a, __v, __n)
+#define vqdmull_high_lane_s16(__a, __v, __n) __BADC_NEON_ELEM2(int32x4_t, int16x8_t, int16x4_t, __builtin_neon_sqdmull2_lane_8h, __a, __v, __n)
+#define vqdmull_high_laneq_s16(__a, __v, __n) __BADC_NEON_ELEM2(int32x4_t, int16x8_t, int16x8_t, __builtin_neon_sqdmull2_laneq_8h, __a, __v, __n)
+#define vqdmlal_lane_s16(__r, __a, __v, __n) __BADC_NEON_ELEM3(int32x4_t, int32x4_t, int16x4_t, int16x4_t, __builtin_neon_sqdmlal_lane_4h, __r, __a, __v, __n)
+#define vqdmlal_laneq_s16(__r, __a, __v, __n) __BADC_NEON_ELEM3(int32x4_t, int32x4_t, int16x4_t, int16x8_t, __builtin_neon_sqdmlal_laneq_4h, __r, __a, __v, __n)
+#define vqdmlal_high_lane_s16(__r, __a, __v, __n) __BADC_NEON_ELEM3(int32x4_t, int32x4_t, int16x8_t, int16x4_t, __builtin_neon_sqdmlal2_lane_8h, __r, __a, __v, __n)
+#define vqdmlal_high_laneq_s16(__r, __a, __v, __n) __BADC_NEON_ELEM3(int32x4_t, int32x4_t, int16x8_t, int16x8_t, __builtin_neon_sqdmlal2_laneq_8h, __r, __a, __v, __n)
+#define vqdmlsl_lane_s16(__r, __a, __v, __n) __BADC_NEON_ELEM3(int32x4_t, int32x4_t, int16x4_t, int16x4_t, __builtin_neon_sqdmlsl_lane_4h, __r, __a, __v, __n)
+#define vqdmlsl_laneq_s16(__r, __a, __v, __n) __BADC_NEON_ELEM3(int32x4_t, int32x4_t, int16x4_t, int16x8_t, __builtin_neon_sqdmlsl_laneq_4h, __r, __a, __v, __n)
+#define vqdmlsl_high_lane_s16(__r, __a, __v, __n) __BADC_NEON_ELEM3(int32x4_t, int32x4_t, int16x8_t, int16x4_t, __builtin_neon_sqdmlsl2_lane_8h, __r, __a, __v, __n)
+#define vqdmlsl_high_laneq_s16(__r, __a, __v, __n) __BADC_NEON_ELEM3(int32x4_t, int32x4_t, int16x8_t, int16x8_t, __builtin_neon_sqdmlsl2_laneq_8h, __r, __a, __v, __n)
+#define vqdmull_lane_s32(__a, __v, __n) __BADC_NEON_ELEM2(int64x2_t, int32x2_t, int32x2_t, __builtin_neon_sqdmull_lane_2s, __a, __v, __n)
+#define vqdmull_laneq_s32(__a, __v, __n) __BADC_NEON_ELEM2(int64x2_t, int32x2_t, int32x4_t, __builtin_neon_sqdmull_laneq_2s, __a, __v, __n)
+#define vqdmull_high_lane_s32(__a, __v, __n) __BADC_NEON_ELEM2(int64x2_t, int32x4_t, int32x2_t, __builtin_neon_sqdmull2_lane_4s, __a, __v, __n)
+#define vqdmull_high_laneq_s32(__a, __v, __n) __BADC_NEON_ELEM2(int64x2_t, int32x4_t, int32x4_t, __builtin_neon_sqdmull2_laneq_4s, __a, __v, __n)
+#define vqdmlal_lane_s32(__r, __a, __v, __n) __BADC_NEON_ELEM3(int64x2_t, int64x2_t, int32x2_t, int32x2_t, __builtin_neon_sqdmlal_lane_2s, __r, __a, __v, __n)
+#define vqdmlal_laneq_s32(__r, __a, __v, __n) __BADC_NEON_ELEM3(int64x2_t, int64x2_t, int32x2_t, int32x4_t, __builtin_neon_sqdmlal_laneq_2s, __r, __a, __v, __n)
+#define vqdmlal_high_lane_s32(__r, __a, __v, __n) __BADC_NEON_ELEM3(int64x2_t, int64x2_t, int32x4_t, int32x2_t, __builtin_neon_sqdmlal2_lane_4s, __r, __a, __v, __n)
+#define vqdmlal_high_laneq_s32(__r, __a, __v, __n) __BADC_NEON_ELEM3(int64x2_t, int64x2_t, int32x4_t, int32x4_t, __builtin_neon_sqdmlal2_laneq_4s, __r, __a, __v, __n)
+#define vqdmlsl_lane_s32(__r, __a, __v, __n) __BADC_NEON_ELEM3(int64x2_t, int64x2_t, int32x2_t, int32x2_t, __builtin_neon_sqdmlsl_lane_2s, __r, __a, __v, __n)
+#define vqdmlsl_laneq_s32(__r, __a, __v, __n) __BADC_NEON_ELEM3(int64x2_t, int64x2_t, int32x2_t, int32x4_t, __builtin_neon_sqdmlsl_laneq_2s, __r, __a, __v, __n)
+#define vqdmlsl_high_lane_s32(__r, __a, __v, __n) __BADC_NEON_ELEM3(int64x2_t, int64x2_t, int32x4_t, int32x2_t, __builtin_neon_sqdmlsl2_lane_4s, __r, __a, __v, __n)
+#define vqdmlsl_high_laneq_s32(__r, __a, __v, __n) __BADC_NEON_ELEM3(int64x2_t, int64x2_t, int32x4_t, int32x4_t, __builtin_neon_sqdmlsl2_laneq_4s, __r, __a, __v, __n)
+__BADC_INTRIN int16x4_t vmul_n_s16(int16x4_t __a, int16_t __b) { return vmul_lane_s16(__a, ((int16x4_t){__BADC_NEON_N_4h(__b)}), 0); }
+__BADC_INTRIN int16x8_t vmulq_n_s16(int16x8_t __a, int16_t __b) { return vmulq_lane_s16(__a, ((int16x4_t){__BADC_NEON_N_4h(__b)}), 0); }
+__BADC_INTRIN int16x4_t vmla_n_s16(int16x4_t __r, int16x4_t __a, int16_t __b) { return vmla_lane_s16(__r, __a, ((int16x4_t){__BADC_NEON_N_4h(__b)}), 0); }
+__BADC_INTRIN int16x8_t vmlaq_n_s16(int16x8_t __r, int16x8_t __a, int16_t __b) { return vmlaq_lane_s16(__r, __a, ((int16x4_t){__BADC_NEON_N_4h(__b)}), 0); }
+__BADC_INTRIN int16x4_t vmls_n_s16(int16x4_t __r, int16x4_t __a, int16_t __b) { return vmls_lane_s16(__r, __a, ((int16x4_t){__BADC_NEON_N_4h(__b)}), 0); }
+__BADC_INTRIN int16x8_t vmlsq_n_s16(int16x8_t __r, int16x8_t __a, int16_t __b) { return vmlsq_lane_s16(__r, __a, ((int16x4_t){__BADC_NEON_N_4h(__b)}), 0); }
+__BADC_INTRIN int32x2_t vmul_n_s32(int32x2_t __a, int32_t __b) { return vmul_lane_s32(__a, ((int32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN int32x4_t vmulq_n_s32(int32x4_t __a, int32_t __b) { return vmulq_lane_s32(__a, ((int32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN int32x2_t vmla_n_s32(int32x2_t __r, int32x2_t __a, int32_t __b) { return vmla_lane_s32(__r, __a, ((int32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN int32x4_t vmlaq_n_s32(int32x4_t __r, int32x4_t __a, int32_t __b) { return vmlaq_lane_s32(__r, __a, ((int32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN int32x2_t vmls_n_s32(int32x2_t __r, int32x2_t __a, int32_t __b) { return vmls_lane_s32(__r, __a, ((int32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN int32x4_t vmlsq_n_s32(int32x4_t __r, int32x4_t __a, int32_t __b) { return vmlsq_lane_s32(__r, __a, ((int32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN uint16x4_t vmul_n_u16(uint16x4_t __a, uint16_t __b) { return vmul_lane_u16(__a, ((uint16x4_t){__BADC_NEON_N_4h(__b)}), 0); }
+__BADC_INTRIN uint16x8_t vmulq_n_u16(uint16x8_t __a, uint16_t __b) { return vmulq_lane_u16(__a, ((uint16x4_t){__BADC_NEON_N_4h(__b)}), 0); }
+__BADC_INTRIN uint16x4_t vmla_n_u16(uint16x4_t __r, uint16x4_t __a, uint16_t __b) { return vmla_lane_u16(__r, __a, ((uint16x4_t){__BADC_NEON_N_4h(__b)}), 0); }
+__BADC_INTRIN uint16x8_t vmlaq_n_u16(uint16x8_t __r, uint16x8_t __a, uint16_t __b) { return vmlaq_lane_u16(__r, __a, ((uint16x4_t){__BADC_NEON_N_4h(__b)}), 0); }
+__BADC_INTRIN uint16x4_t vmls_n_u16(uint16x4_t __r, uint16x4_t __a, uint16_t __b) { return vmls_lane_u16(__r, __a, ((uint16x4_t){__BADC_NEON_N_4h(__b)}), 0); }
+__BADC_INTRIN uint16x8_t vmlsq_n_u16(uint16x8_t __r, uint16x8_t __a, uint16_t __b) { return vmlsq_lane_u16(__r, __a, ((uint16x4_t){__BADC_NEON_N_4h(__b)}), 0); }
+__BADC_INTRIN uint32x2_t vmul_n_u32(uint32x2_t __a, uint32_t __b) { return vmul_lane_u32(__a, ((uint32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN uint32x4_t vmulq_n_u32(uint32x4_t __a, uint32_t __b) { return vmulq_lane_u32(__a, ((uint32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN uint32x2_t vmla_n_u32(uint32x2_t __r, uint32x2_t __a, uint32_t __b) { return vmla_lane_u32(__r, __a, ((uint32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN uint32x4_t vmlaq_n_u32(uint32x4_t __r, uint32x4_t __a, uint32_t __b) { return vmlaq_lane_u32(__r, __a, ((uint32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN uint32x2_t vmls_n_u32(uint32x2_t __r, uint32x2_t __a, uint32_t __b) { return vmls_lane_u32(__r, __a, ((uint32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN uint32x4_t vmlsq_n_u32(uint32x4_t __r, uint32x4_t __a, uint32_t __b) { return vmlsq_lane_u32(__r, __a, ((uint32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN float32x2_t vmul_n_f32(float32x2_t __a, float32_t __b) { return vmul_lane_f32(__a, ((float32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN float32x4_t vmulq_n_f32(float32x4_t __a, float32_t __b) { return vmulq_lane_f32(__a, ((float32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN float32x2_t vmla_n_f32(float32x2_t __r, float32x2_t __a, float32_t __b) { return vmla_lane_f32(__r, __a, ((float32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN float32x4_t vmlaq_n_f32(float32x4_t __r, float32x4_t __a, float32_t __b) { return vmlaq_lane_f32(__r, __a, ((float32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN float32x2_t vmls_n_f32(float32x2_t __r, float32x2_t __a, float32_t __b) { return vmls_lane_f32(__r, __a, ((float32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN float32x4_t vmlsq_n_f32(float32x4_t __r, float32x4_t __a, float32_t __b) { return vmlsq_lane_f32(__r, __a, ((float32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN float64x1_t vmul_n_f64(float64x1_t __a, float64_t __b) { return vmul_lane_f64(__a, ((float64x1_t){__BADC_NEON_N_d(__b)}), 0); }
+__BADC_INTRIN float64x2_t vmulq_n_f64(float64x2_t __a, float64_t __b) { return vmulq_lane_f64(__a, ((float64x1_t){__BADC_NEON_N_d(__b)}), 0); }
+__BADC_INTRIN float32x2_t vfma_n_f32(float32x2_t __r, float32x2_t __a, float32_t __b) { return vfma_lane_f32(__r, __a, ((float32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN float32x4_t vfmaq_n_f32(float32x4_t __r, float32x4_t __a, float32_t __b) { return vfmaq_lane_f32(__r, __a, ((float32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN float32x2_t vfms_n_f32(float32x2_t __r, float32x2_t __a, float32_t __b) { return vfms_lane_f32(__r, __a, ((float32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN float32x4_t vfmsq_n_f32(float32x4_t __r, float32x4_t __a, float32_t __b) { return vfmsq_lane_f32(__r, __a, ((float32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN float64x1_t vfma_n_f64(float64x1_t __r, float64x1_t __a, float64_t __b) { return vfma_lane_f64(__r, __a, ((float64x1_t){__BADC_NEON_N_d(__b)}), 0); }
+__BADC_INTRIN float64x2_t vfmaq_n_f64(float64x2_t __r, float64x2_t __a, float64_t __b) { return vfmaq_lane_f64(__r, __a, ((float64x1_t){__BADC_NEON_N_d(__b)}), 0); }
+__BADC_INTRIN float64x1_t vfms_n_f64(float64x1_t __r, float64x1_t __a, float64_t __b) { return vfms_lane_f64(__r, __a, ((float64x1_t){__BADC_NEON_N_d(__b)}), 0); }
+__BADC_INTRIN float64x2_t vfmsq_n_f64(float64x2_t __r, float64x2_t __a, float64_t __b) { return vfmsq_lane_f64(__r, __a, ((float64x1_t){__BADC_NEON_N_d(__b)}), 0); }
+__BADC_INTRIN int32x4_t vmull_n_s16(int16x4_t __a, int16_t __b) { return vmull_lane_s16(__a, ((int16x4_t){__BADC_NEON_N_4h(__b)}), 0); }
+__BADC_INTRIN int32x4_t vmull_high_n_s16(int16x8_t __a, int16_t __b) { return vmull_high_lane_s16(__a, ((int16x4_t){__BADC_NEON_N_4h(__b)}), 0); }
+__BADC_INTRIN int32x4_t vmlal_n_s16(int32x4_t __r, int16x4_t __a, int16_t __b) { return vmlal_lane_s16(__r, __a, ((int16x4_t){__BADC_NEON_N_4h(__b)}), 0); }
+__BADC_INTRIN int32x4_t vmlal_high_n_s16(int32x4_t __r, int16x8_t __a, int16_t __b) { return vmlal_high_lane_s16(__r, __a, ((int16x4_t){__BADC_NEON_N_4h(__b)}), 0); }
+__BADC_INTRIN int32x4_t vmlsl_n_s16(int32x4_t __r, int16x4_t __a, int16_t __b) { return vmlsl_lane_s16(__r, __a, ((int16x4_t){__BADC_NEON_N_4h(__b)}), 0); }
+__BADC_INTRIN int32x4_t vmlsl_high_n_s16(int32x4_t __r, int16x8_t __a, int16_t __b) { return vmlsl_high_lane_s16(__r, __a, ((int16x4_t){__BADC_NEON_N_4h(__b)}), 0); }
+__BADC_INTRIN int64x2_t vmull_n_s32(int32x2_t __a, int32_t __b) { return vmull_lane_s32(__a, ((int32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN int64x2_t vmull_high_n_s32(int32x4_t __a, int32_t __b) { return vmull_high_lane_s32(__a, ((int32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN int64x2_t vmlal_n_s32(int64x2_t __r, int32x2_t __a, int32_t __b) { return vmlal_lane_s32(__r, __a, ((int32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN int64x2_t vmlal_high_n_s32(int64x2_t __r, int32x4_t __a, int32_t __b) { return vmlal_high_lane_s32(__r, __a, ((int32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN int64x2_t vmlsl_n_s32(int64x2_t __r, int32x2_t __a, int32_t __b) { return vmlsl_lane_s32(__r, __a, ((int32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN int64x2_t vmlsl_high_n_s32(int64x2_t __r, int32x4_t __a, int32_t __b) { return vmlsl_high_lane_s32(__r, __a, ((int32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN uint32x4_t vmull_n_u16(uint16x4_t __a, uint16_t __b) { return vmull_lane_u16(__a, ((uint16x4_t){__BADC_NEON_N_4h(__b)}), 0); }
+__BADC_INTRIN uint32x4_t vmull_high_n_u16(uint16x8_t __a, uint16_t __b) { return vmull_high_lane_u16(__a, ((uint16x4_t){__BADC_NEON_N_4h(__b)}), 0); }
+__BADC_INTRIN uint32x4_t vmlal_n_u16(uint32x4_t __r, uint16x4_t __a, uint16_t __b) { return vmlal_lane_u16(__r, __a, ((uint16x4_t){__BADC_NEON_N_4h(__b)}), 0); }
+__BADC_INTRIN uint32x4_t vmlal_high_n_u16(uint32x4_t __r, uint16x8_t __a, uint16_t __b) { return vmlal_high_lane_u16(__r, __a, ((uint16x4_t){__BADC_NEON_N_4h(__b)}), 0); }
+__BADC_INTRIN uint32x4_t vmlsl_n_u16(uint32x4_t __r, uint16x4_t __a, uint16_t __b) { return vmlsl_lane_u16(__r, __a, ((uint16x4_t){__BADC_NEON_N_4h(__b)}), 0); }
+__BADC_INTRIN uint32x4_t vmlsl_high_n_u16(uint32x4_t __r, uint16x8_t __a, uint16_t __b) { return vmlsl_high_lane_u16(__r, __a, ((uint16x4_t){__BADC_NEON_N_4h(__b)}), 0); }
+__BADC_INTRIN uint64x2_t vmull_n_u32(uint32x2_t __a, uint32_t __b) { return vmull_lane_u32(__a, ((uint32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN uint64x2_t vmull_high_n_u32(uint32x4_t __a, uint32_t __b) { return vmull_high_lane_u32(__a, ((uint32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN uint64x2_t vmlal_n_u32(uint64x2_t __r, uint32x2_t __a, uint32_t __b) { return vmlal_lane_u32(__r, __a, ((uint32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN uint64x2_t vmlal_high_n_u32(uint64x2_t __r, uint32x4_t __a, uint32_t __b) { return vmlal_high_lane_u32(__r, __a, ((uint32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN uint64x2_t vmlsl_n_u32(uint64x2_t __r, uint32x2_t __a, uint32_t __b) { return vmlsl_lane_u32(__r, __a, ((uint32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN uint64x2_t vmlsl_high_n_u32(uint64x2_t __r, uint32x4_t __a, uint32_t __b) { return vmlsl_high_lane_u32(__r, __a, ((uint32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN int16x4_t vqdmulh_n_s16(int16x4_t __a, int16_t __b) { return vqdmulh_lane_s16(__a, ((int16x4_t){__BADC_NEON_N_4h(__b)}), 0); }
+__BADC_INTRIN int16x8_t vqdmulhq_n_s16(int16x8_t __a, int16_t __b) { return vqdmulhq_lane_s16(__a, ((int16x4_t){__BADC_NEON_N_4h(__b)}), 0); }
+__BADC_INTRIN int16x4_t vqrdmulh_n_s16(int16x4_t __a, int16_t __b) { return vqrdmulh_lane_s16(__a, ((int16x4_t){__BADC_NEON_N_4h(__b)}), 0); }
+__BADC_INTRIN int16x8_t vqrdmulhq_n_s16(int16x8_t __a, int16_t __b) { return vqrdmulhq_lane_s16(__a, ((int16x4_t){__BADC_NEON_N_4h(__b)}), 0); }
+__BADC_INTRIN int32x4_t vqdmull_n_s16(int16x4_t __a, int16_t __b) { return vqdmull_lane_s16(__a, ((int16x4_t){__BADC_NEON_N_4h(__b)}), 0); }
+__BADC_INTRIN int32x4_t vqdmull_high_n_s16(int16x8_t __a, int16_t __b) { return vqdmull_high_lane_s16(__a, ((int16x4_t){__BADC_NEON_N_4h(__b)}), 0); }
+__BADC_INTRIN int32x4_t vqdmlal_n_s16(int32x4_t __r, int16x4_t __a, int16_t __b) { return vqdmlal_lane_s16(__r, __a, ((int16x4_t){__BADC_NEON_N_4h(__b)}), 0); }
+__BADC_INTRIN int32x4_t vqdmlal_high_n_s16(int32x4_t __r, int16x8_t __a, int16_t __b) { return vqdmlal_high_lane_s16(__r, __a, ((int16x4_t){__BADC_NEON_N_4h(__b)}), 0); }
+__BADC_INTRIN int32x4_t vqdmlsl_n_s16(int32x4_t __r, int16x4_t __a, int16_t __b) { return vqdmlsl_lane_s16(__r, __a, ((int16x4_t){__BADC_NEON_N_4h(__b)}), 0); }
+__BADC_INTRIN int32x4_t vqdmlsl_high_n_s16(int32x4_t __r, int16x8_t __a, int16_t __b) { return vqdmlsl_high_lane_s16(__r, __a, ((int16x4_t){__BADC_NEON_N_4h(__b)}), 0); }
+__BADC_INTRIN int32x2_t vqdmulh_n_s32(int32x2_t __a, int32_t __b) { return vqdmulh_lane_s32(__a, ((int32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN int32x4_t vqdmulhq_n_s32(int32x4_t __a, int32_t __b) { return vqdmulhq_lane_s32(__a, ((int32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN int32x2_t vqrdmulh_n_s32(int32x2_t __a, int32_t __b) { return vqrdmulh_lane_s32(__a, ((int32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN int32x4_t vqrdmulhq_n_s32(int32x4_t __a, int32_t __b) { return vqrdmulhq_lane_s32(__a, ((int32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN int64x2_t vqdmull_n_s32(int32x2_t __a, int32_t __b) { return vqdmull_lane_s32(__a, ((int32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN int64x2_t vqdmull_high_n_s32(int32x4_t __a, int32_t __b) { return vqdmull_high_lane_s32(__a, ((int32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN int64x2_t vqdmlal_n_s32(int64x2_t __r, int32x2_t __a, int32_t __b) { return vqdmlal_lane_s32(__r, __a, ((int32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN int64x2_t vqdmlal_high_n_s32(int64x2_t __r, int32x4_t __a, int32_t __b) { return vqdmlal_high_lane_s32(__r, __a, ((int32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN int64x2_t vqdmlsl_n_s32(int64x2_t __r, int32x2_t __a, int32_t __b) { return vqdmlsl_lane_s32(__r, __a, ((int32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+__BADC_INTRIN int64x2_t vqdmlsl_high_n_s32(int64x2_t __r, int32x4_t __a, int32_t __b) { return vqdmlsl_high_lane_s32(__r, __a, ((int32x2_t){__BADC_NEON_N_2s(__b)}), 0); }
+
+
+/* Byte table lookups in two to four 16-byte tables: a lookup in each
+ * table in turn, the next one taking the index less 16 and keeping the
+ * bytes an earlier one found, as tbx keeps an out-of-range index's byte.
+ * The 64-bit tables of vtbl and vtbx are the 16-byte lookups of their
+ * concatenation, an index past them giving 0 (vtbl) or keeping the
+ * destination byte (vtbx). */
+__BADC_INTRIN uint8x8_t vqtbl2_u8(uint8x16x2_t __t, uint8x8_t __i) {
+    return vqtbx1_u8(vqtbl1_u8(__t.val[0], __i), __t.val[1], vsub_u8(__i, vdup_n_u8(16)));
+}
+__BADC_INTRIN uint8x8_t vqtbx2_u8(uint8x8_t __d, uint8x16x2_t __t, uint8x8_t __i) {
+    return vqtbx1_u8(vqtbx1_u8(__d, __t.val[0], __i), __t.val[1], vsub_u8(__i, vdup_n_u8(16)));
+}
+__BADC_INTRIN uint8x8_t vqtbl3_u8(uint8x16x3_t __t, uint8x8_t __i) {
+    uint8x8_t __r = vqtbl2_u8((uint8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx1_u8(__r, __t.val[2], vsub_u8(__i, vdup_n_u8(32)));
+}
+__BADC_INTRIN uint8x8_t vqtbl4_u8(uint8x16x4_t __t, uint8x8_t __i) {
+    uint8x8_t __r = vqtbl2_u8((uint8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx2_u8(__r, (uint8x16x2_t){{__t.val[2], __t.val[3]}}, vsub_u8(__i, vdup_n_u8(32)));
+}
+__BADC_INTRIN uint8x8_t vqtbx3_u8(uint8x8_t __d, uint8x16x3_t __t, uint8x8_t __i) {
+    uint8x8_t __r = vqtbx2_u8(__d, (uint8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx1_u8(__r, __t.val[2], vsub_u8(__i, vdup_n_u8(32)));
+}
+__BADC_INTRIN uint8x8_t vqtbx4_u8(uint8x8_t __d, uint8x16x4_t __t, uint8x8_t __i) {
+    uint8x8_t __r = vqtbx2_u8(__d, (uint8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx2_u8(__r, (uint8x16x2_t){{__t.val[2], __t.val[3]}}, vsub_u8(__i, vdup_n_u8(32)));
+}
+__BADC_INTRIN uint8x16_t vqtbl2q_u8(uint8x16x2_t __t, uint8x16_t __i) {
+    return vqtbx1q_u8(vqtbl1q_u8(__t.val[0], __i), __t.val[1], vsubq_u8(__i, vdupq_n_u8(16)));
+}
+__BADC_INTRIN uint8x16_t vqtbx2q_u8(uint8x16_t __d, uint8x16x2_t __t, uint8x16_t __i) {
+    return vqtbx1q_u8(vqtbx1q_u8(__d, __t.val[0], __i), __t.val[1], vsubq_u8(__i, vdupq_n_u8(16)));
+}
+__BADC_INTRIN uint8x16_t vqtbl3q_u8(uint8x16x3_t __t, uint8x16_t __i) {
+    uint8x16_t __r = vqtbl2q_u8((uint8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx1q_u8(__r, __t.val[2], vsubq_u8(__i, vdupq_n_u8(32)));
+}
+__BADC_INTRIN uint8x16_t vqtbl4q_u8(uint8x16x4_t __t, uint8x16_t __i) {
+    uint8x16_t __r = vqtbl2q_u8((uint8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx2q_u8(__r, (uint8x16x2_t){{__t.val[2], __t.val[3]}}, vsubq_u8(__i, vdupq_n_u8(32)));
+}
+__BADC_INTRIN uint8x16_t vqtbx3q_u8(uint8x16_t __d, uint8x16x3_t __t, uint8x16_t __i) {
+    uint8x16_t __r = vqtbx2q_u8(__d, (uint8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx1q_u8(__r, __t.val[2], vsubq_u8(__i, vdupq_n_u8(32)));
+}
+__BADC_INTRIN uint8x16_t vqtbx4q_u8(uint8x16_t __d, uint8x16x4_t __t, uint8x16_t __i) {
+    uint8x16_t __r = vqtbx2q_u8(__d, (uint8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx2q_u8(__r, (uint8x16x2_t){{__t.val[2], __t.val[3]}}, vsubq_u8(__i, vdupq_n_u8(32)));
+}
+__BADC_INTRIN uint8x8_t vtbl1_u8(uint8x8_t __a, uint8x8_t __i) { return vqtbl1_u8(vcombine_u8(__a, vdup_n_u8(0)), __i); }
+__BADC_INTRIN uint8x8_t vtbl2_u8(uint8x8x2_t __t, uint8x8_t __i) { return vqtbl1_u8(vcombine_u8(__t.val[0], __t.val[1]), __i); }
+__BADC_INTRIN uint8x8_t vtbl3_u8(uint8x8x3_t __t, uint8x8_t __i) {
+    return vqtbl2_u8((uint8x16x2_t){{vcombine_u8(__t.val[0], __t.val[1]), vcombine_u8(__t.val[2], vdup_n_u8(0))}}, __i);
+}
+__BADC_INTRIN uint8x8_t vtbl4_u8(uint8x8x4_t __t, uint8x8_t __i) {
+    return vqtbl2_u8((uint8x16x2_t){{vcombine_u8(__t.val[0], __t.val[1]), vcombine_u8(__t.val[2], __t.val[3])}}, __i);
+}
+__BADC_INTRIN uint8x8_t vtbx1_u8(uint8x8_t __d, uint8x8_t __a, uint8x8_t __i) {
+    return vbsl_u8(vclt_u8(__i, vdup_n_u8(8)), vtbl1_u8(__a, __i), __d);
+}
+__BADC_INTRIN uint8x8_t vtbx2_u8(uint8x8_t __d, uint8x8x2_t __t, uint8x8_t __i) { return vqtbx1_u8(__d, vcombine_u8(__t.val[0], __t.val[1]), __i); }
+__BADC_INTRIN uint8x8_t vtbx3_u8(uint8x8_t __d, uint8x8x3_t __t, uint8x8_t __i) {
+    return vbsl_u8(vclt_u8(__i, vdup_n_u8(24)), vtbl3_u8(__t, __i), __d);
+}
+__BADC_INTRIN uint8x8_t vtbx4_u8(uint8x8_t __d, uint8x8x4_t __t, uint8x8_t __i) {
+    return vqtbx2_u8(__d, (uint8x16x2_t){{vcombine_u8(__t.val[0], __t.val[1]), vcombine_u8(__t.val[2], __t.val[3])}}, __i);
+}
+__BADC_INTRIN int8x8_t vqtbl2_s8(int8x16x2_t __t, uint8x8_t __i) {
+    return vqtbx1_s8(vqtbl1_s8(__t.val[0], __i), __t.val[1], vsub_u8(__i, vdup_n_u8(16)));
+}
+__BADC_INTRIN int8x8_t vqtbx2_s8(int8x8_t __d, int8x16x2_t __t, uint8x8_t __i) {
+    return vqtbx1_s8(vqtbx1_s8(__d, __t.val[0], __i), __t.val[1], vsub_u8(__i, vdup_n_u8(16)));
+}
+__BADC_INTRIN int8x8_t vqtbl3_s8(int8x16x3_t __t, uint8x8_t __i) {
+    int8x8_t __r = vqtbl2_s8((int8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx1_s8(__r, __t.val[2], vsub_u8(__i, vdup_n_u8(32)));
+}
+__BADC_INTRIN int8x8_t vqtbl4_s8(int8x16x4_t __t, uint8x8_t __i) {
+    int8x8_t __r = vqtbl2_s8((int8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx2_s8(__r, (int8x16x2_t){{__t.val[2], __t.val[3]}}, vsub_u8(__i, vdup_n_u8(32)));
+}
+__BADC_INTRIN int8x8_t vqtbx3_s8(int8x8_t __d, int8x16x3_t __t, uint8x8_t __i) {
+    int8x8_t __r = vqtbx2_s8(__d, (int8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx1_s8(__r, __t.val[2], vsub_u8(__i, vdup_n_u8(32)));
+}
+__BADC_INTRIN int8x8_t vqtbx4_s8(int8x8_t __d, int8x16x4_t __t, uint8x8_t __i) {
+    int8x8_t __r = vqtbx2_s8(__d, (int8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx2_s8(__r, (int8x16x2_t){{__t.val[2], __t.val[3]}}, vsub_u8(__i, vdup_n_u8(32)));
+}
+__BADC_INTRIN int8x16_t vqtbl2q_s8(int8x16x2_t __t, uint8x16_t __i) {
+    return vqtbx1q_s8(vqtbl1q_s8(__t.val[0], __i), __t.val[1], vsubq_u8(__i, vdupq_n_u8(16)));
+}
+__BADC_INTRIN int8x16_t vqtbx2q_s8(int8x16_t __d, int8x16x2_t __t, uint8x16_t __i) {
+    return vqtbx1q_s8(vqtbx1q_s8(__d, __t.val[0], __i), __t.val[1], vsubq_u8(__i, vdupq_n_u8(16)));
+}
+__BADC_INTRIN int8x16_t vqtbl3q_s8(int8x16x3_t __t, uint8x16_t __i) {
+    int8x16_t __r = vqtbl2q_s8((int8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx1q_s8(__r, __t.val[2], vsubq_u8(__i, vdupq_n_u8(32)));
+}
+__BADC_INTRIN int8x16_t vqtbl4q_s8(int8x16x4_t __t, uint8x16_t __i) {
+    int8x16_t __r = vqtbl2q_s8((int8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx2q_s8(__r, (int8x16x2_t){{__t.val[2], __t.val[3]}}, vsubq_u8(__i, vdupq_n_u8(32)));
+}
+__BADC_INTRIN int8x16_t vqtbx3q_s8(int8x16_t __d, int8x16x3_t __t, uint8x16_t __i) {
+    int8x16_t __r = vqtbx2q_s8(__d, (int8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx1q_s8(__r, __t.val[2], vsubq_u8(__i, vdupq_n_u8(32)));
+}
+__BADC_INTRIN int8x16_t vqtbx4q_s8(int8x16_t __d, int8x16x4_t __t, uint8x16_t __i) {
+    int8x16_t __r = vqtbx2q_s8(__d, (int8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx2q_s8(__r, (int8x16x2_t){{__t.val[2], __t.val[3]}}, vsubq_u8(__i, vdupq_n_u8(32)));
+}
+__BADC_INTRIN int8x8_t vtbl1_s8(int8x8_t __a, int8x8_t __i) { return vqtbl1_s8(vcombine_s8(__a, vdup_n_s8(0)), vreinterpret_u8_s8(__i)); }
+__BADC_INTRIN int8x8_t vtbl2_s8(int8x8x2_t __t, int8x8_t __i) { return vqtbl1_s8(vcombine_s8(__t.val[0], __t.val[1]), vreinterpret_u8_s8(__i)); }
+__BADC_INTRIN int8x8_t vtbl3_s8(int8x8x3_t __t, int8x8_t __i) {
+    return vqtbl2_s8((int8x16x2_t){{vcombine_s8(__t.val[0], __t.val[1]), vcombine_s8(__t.val[2], vdup_n_s8(0))}}, vreinterpret_u8_s8(__i));
+}
+__BADC_INTRIN int8x8_t vtbl4_s8(int8x8x4_t __t, int8x8_t __i) {
+    return vqtbl2_s8((int8x16x2_t){{vcombine_s8(__t.val[0], __t.val[1]), vcombine_s8(__t.val[2], __t.val[3])}}, vreinterpret_u8_s8(__i));
+}
+__BADC_INTRIN int8x8_t vtbx1_s8(int8x8_t __d, int8x8_t __a, int8x8_t __i) {
+    return vbsl_s8(vclt_u8(vreinterpret_u8_s8(__i), vdup_n_u8(8)), vtbl1_s8(__a, __i), __d);
+}
+__BADC_INTRIN int8x8_t vtbx2_s8(int8x8_t __d, int8x8x2_t __t, int8x8_t __i) { return vqtbx1_s8(__d, vcombine_s8(__t.val[0], __t.val[1]), vreinterpret_u8_s8(__i)); }
+__BADC_INTRIN int8x8_t vtbx3_s8(int8x8_t __d, int8x8x3_t __t, int8x8_t __i) {
+    return vbsl_s8(vclt_u8(vreinterpret_u8_s8(__i), vdup_n_u8(24)), vtbl3_s8(__t, __i), __d);
+}
+__BADC_INTRIN int8x8_t vtbx4_s8(int8x8_t __d, int8x8x4_t __t, int8x8_t __i) {
+    return vqtbx2_s8(__d, (int8x16x2_t){{vcombine_s8(__t.val[0], __t.val[1]), vcombine_s8(__t.val[2], __t.val[3])}}, vreinterpret_u8_s8(__i));
+}
+__BADC_INTRIN poly8x8_t vqtbl2_p8(poly8x16x2_t __t, uint8x8_t __i) {
+    return vqtbx1_p8(vqtbl1_p8(__t.val[0], __i), __t.val[1], vsub_u8(__i, vdup_n_u8(16)));
+}
+__BADC_INTRIN poly8x8_t vqtbx2_p8(poly8x8_t __d, poly8x16x2_t __t, uint8x8_t __i) {
+    return vqtbx1_p8(vqtbx1_p8(__d, __t.val[0], __i), __t.val[1], vsub_u8(__i, vdup_n_u8(16)));
+}
+__BADC_INTRIN poly8x8_t vqtbl3_p8(poly8x16x3_t __t, uint8x8_t __i) {
+    poly8x8_t __r = vqtbl2_p8((poly8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx1_p8(__r, __t.val[2], vsub_u8(__i, vdup_n_u8(32)));
+}
+__BADC_INTRIN poly8x8_t vqtbl4_p8(poly8x16x4_t __t, uint8x8_t __i) {
+    poly8x8_t __r = vqtbl2_p8((poly8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx2_p8(__r, (poly8x16x2_t){{__t.val[2], __t.val[3]}}, vsub_u8(__i, vdup_n_u8(32)));
+}
+__BADC_INTRIN poly8x8_t vqtbx3_p8(poly8x8_t __d, poly8x16x3_t __t, uint8x8_t __i) {
+    poly8x8_t __r = vqtbx2_p8(__d, (poly8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx1_p8(__r, __t.val[2], vsub_u8(__i, vdup_n_u8(32)));
+}
+__BADC_INTRIN poly8x8_t vqtbx4_p8(poly8x8_t __d, poly8x16x4_t __t, uint8x8_t __i) {
+    poly8x8_t __r = vqtbx2_p8(__d, (poly8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx2_p8(__r, (poly8x16x2_t){{__t.val[2], __t.val[3]}}, vsub_u8(__i, vdup_n_u8(32)));
+}
+__BADC_INTRIN poly8x16_t vqtbl2q_p8(poly8x16x2_t __t, uint8x16_t __i) {
+    return vqtbx1q_p8(vqtbl1q_p8(__t.val[0], __i), __t.val[1], vsubq_u8(__i, vdupq_n_u8(16)));
+}
+__BADC_INTRIN poly8x16_t vqtbx2q_p8(poly8x16_t __d, poly8x16x2_t __t, uint8x16_t __i) {
+    return vqtbx1q_p8(vqtbx1q_p8(__d, __t.val[0], __i), __t.val[1], vsubq_u8(__i, vdupq_n_u8(16)));
+}
+__BADC_INTRIN poly8x16_t vqtbl3q_p8(poly8x16x3_t __t, uint8x16_t __i) {
+    poly8x16_t __r = vqtbl2q_p8((poly8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx1q_p8(__r, __t.val[2], vsubq_u8(__i, vdupq_n_u8(32)));
+}
+__BADC_INTRIN poly8x16_t vqtbl4q_p8(poly8x16x4_t __t, uint8x16_t __i) {
+    poly8x16_t __r = vqtbl2q_p8((poly8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx2q_p8(__r, (poly8x16x2_t){{__t.val[2], __t.val[3]}}, vsubq_u8(__i, vdupq_n_u8(32)));
+}
+__BADC_INTRIN poly8x16_t vqtbx3q_p8(poly8x16_t __d, poly8x16x3_t __t, uint8x16_t __i) {
+    poly8x16_t __r = vqtbx2q_p8(__d, (poly8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx1q_p8(__r, __t.val[2], vsubq_u8(__i, vdupq_n_u8(32)));
+}
+__BADC_INTRIN poly8x16_t vqtbx4q_p8(poly8x16_t __d, poly8x16x4_t __t, uint8x16_t __i) {
+    poly8x16_t __r = vqtbx2q_p8(__d, (poly8x16x2_t){{__t.val[0], __t.val[1]}}, __i);
+    return vqtbx2q_p8(__r, (poly8x16x2_t){{__t.val[2], __t.val[3]}}, vsubq_u8(__i, vdupq_n_u8(32)));
+}
+__BADC_INTRIN poly8x8_t vtbl1_p8(poly8x8_t __a, uint8x8_t __i) { return vqtbl1_p8(vcombine_p8(__a, vdup_n_p8(0)), __i); }
+__BADC_INTRIN poly8x8_t vtbl2_p8(poly8x8x2_t __t, uint8x8_t __i) { return vqtbl1_p8(vcombine_p8(__t.val[0], __t.val[1]), __i); }
+__BADC_INTRIN poly8x8_t vtbl3_p8(poly8x8x3_t __t, uint8x8_t __i) {
+    return vqtbl2_p8((poly8x16x2_t){{vcombine_p8(__t.val[0], __t.val[1]), vcombine_p8(__t.val[2], vdup_n_p8(0))}}, __i);
+}
+__BADC_INTRIN poly8x8_t vtbl4_p8(poly8x8x4_t __t, uint8x8_t __i) {
+    return vqtbl2_p8((poly8x16x2_t){{vcombine_p8(__t.val[0], __t.val[1]), vcombine_p8(__t.val[2], __t.val[3])}}, __i);
+}
+__BADC_INTRIN poly8x8_t vtbx1_p8(poly8x8_t __d, poly8x8_t __a, uint8x8_t __i) {
+    return vbsl_p8(vclt_u8(__i, vdup_n_u8(8)), vtbl1_p8(__a, __i), __d);
+}
+__BADC_INTRIN poly8x8_t vtbx2_p8(poly8x8_t __d, poly8x8x2_t __t, uint8x8_t __i) { return vqtbx1_p8(__d, vcombine_p8(__t.val[0], __t.val[1]), __i); }
+__BADC_INTRIN poly8x8_t vtbx3_p8(poly8x8_t __d, poly8x8x3_t __t, uint8x8_t __i) {
+    return vbsl_p8(vclt_u8(__i, vdup_n_u8(24)), vtbl3_p8(__t, __i), __d);
+}
+__BADC_INTRIN poly8x8_t vtbx4_p8(poly8x8_t __d, poly8x8x4_t __t, uint8x8_t __i) {
+    return vqtbx2_p8(__d, (poly8x16x2_t){{vcombine_p8(__t.val[0], __t.val[1]), vcombine_p8(__t.val[2], __t.val[3])}}, __i);
+}
+
+/* The magnitude compares (vcage, vcagt; vcale and vcalt swap the
+ * operands), the high halves of sums and differences (vaddhn, vraddhn,
+ * vsubhn, vrsubhn, with their _high forms), the saturating accumulates of
+ * the other signedness (vuqadd, vsqadd), the byte bit reversal (vrbit),
+ * the float multiply-accumulates in two roundings (vmla, vmls), and the
+ * lane copies (vcopy_lane). The scalar forms are lane 0 of the vector
+ * ones. */
+__BADC_NEON_B2(vcage_f32, uint32x2_t, float32x2_t, float32x2_t, s, __builtin_neon_facge, _, 2s)
+__BADC_NEON_B2(vcageq_f32, uint32x4_t, float32x4_t, float32x4_t, s, __builtin_neon_facge, _, 4s)
+__BADC_NEON_B2(vcage_f64, uint64x1_t, float64x1_t, float64x1_t, s, __builtin_neon_facge, _, d)
+__BADC_NEON_B2(vcageq_f64, uint64x2_t, float64x2_t, float64x2_t, s, __builtin_neon_facge, _, 2d)
+__BADC_INTRIN uint32_t vcages_f32(float32_t __a, float32_t __b) { return vcage_f32((float32x2_t){__a}, (float32x2_t){__b})[0]; }
+__BADC_INTRIN uint64_t vcaged_f64(float64_t __a, float64_t __b) { return vcage_f64((float64x1_t){__a}, (float64x1_t){__b})[0]; }
+__BADC_NEON_B2(vcagt_f32, uint32x2_t, float32x2_t, float32x2_t, s, __builtin_neon_facgt, _, 2s)
+__BADC_NEON_B2(vcagtq_f32, uint32x4_t, float32x4_t, float32x4_t, s, __builtin_neon_facgt, _, 4s)
+__BADC_NEON_B2(vcagt_f64, uint64x1_t, float64x1_t, float64x1_t, s, __builtin_neon_facgt, _, d)
+__BADC_NEON_B2(vcagtq_f64, uint64x2_t, float64x2_t, float64x2_t, s, __builtin_neon_facgt, _, 2d)
+__BADC_INTRIN uint32_t vcagts_f32(float32_t __a, float32_t __b) { return vcagt_f32((float32x2_t){__a}, (float32x2_t){__b})[0]; }
+__BADC_INTRIN uint64_t vcagtd_f64(float64_t __a, float64_t __b) { return vcagt_f64((float64x1_t){__a}, (float64x1_t){__b})[0]; }
+__BADC_NEON_B2R(vcale_f32, uint32x2_t, float32x2_t, float32x2_t, s, __builtin_neon_facge, _, 2s)
+__BADC_NEON_B2R(vcaleq_f32, uint32x4_t, float32x4_t, float32x4_t, s, __builtin_neon_facge, _, 4s)
+__BADC_NEON_B2R(vcale_f64, uint64x1_t, float64x1_t, float64x1_t, s, __builtin_neon_facge, _, d)
+__BADC_NEON_B2R(vcaleq_f64, uint64x2_t, float64x2_t, float64x2_t, s, __builtin_neon_facge, _, 2d)
+__BADC_INTRIN uint32_t vcales_f32(float32_t __a, float32_t __b) { return vcale_f32((float32x2_t){__a}, (float32x2_t){__b})[0]; }
+__BADC_INTRIN uint64_t vcaled_f64(float64_t __a, float64_t __b) { return vcale_f64((float64x1_t){__a}, (float64x1_t){__b})[0]; }
+__BADC_NEON_B2R(vcalt_f32, uint32x2_t, float32x2_t, float32x2_t, s, __builtin_neon_facgt, _, 2s)
+__BADC_NEON_B2R(vcaltq_f32, uint32x4_t, float32x4_t, float32x4_t, s, __builtin_neon_facgt, _, 4s)
+__BADC_NEON_B2R(vcalt_f64, uint64x1_t, float64x1_t, float64x1_t, s, __builtin_neon_facgt, _, d)
+__BADC_NEON_B2R(vcaltq_f64, uint64x2_t, float64x2_t, float64x2_t, s, __builtin_neon_facgt, _, 2d)
+__BADC_INTRIN uint32_t vcalts_f32(float32_t __a, float32_t __b) { return vcalt_f32((float32x2_t){__a}, (float32x2_t){__b})[0]; }
+__BADC_INTRIN uint64_t vcaltd_f64(float64_t __a, float64_t __b) { return vcalt_f64((float64x1_t){__a}, (float64x1_t){__b})[0]; }
+__BADC_NEON_B2(vaddhn_s16, int8x8_t, int16x8_t, int16x8_t, s, __builtin_neon_addhn, _, 8h)
+__BADC_INTRIN int8x16_t vaddhn_high_s16(int8x8_t __r, int16x8_t __a, int16x8_t __b) { return vcombine_s8(__r, vaddhn_s16(__a, __b)); }
+__BADC_NEON_B2(vaddhn_s32, int16x4_t, int32x4_t, int32x4_t, s, __builtin_neon_addhn, _, 4s)
+__BADC_INTRIN int16x8_t vaddhn_high_s32(int16x4_t __r, int32x4_t __a, int32x4_t __b) { return vcombine_s16(__r, vaddhn_s32(__a, __b)); }
+__BADC_NEON_B2(vaddhn_s64, int32x2_t, int64x2_t, int64x2_t, s, __builtin_neon_addhn, _, 2d)
+__BADC_INTRIN int32x4_t vaddhn_high_s64(int32x2_t __r, int64x2_t __a, int64x2_t __b) { return vcombine_s32(__r, vaddhn_s64(__a, __b)); }
+__BADC_NEON_B2(vaddhn_u16, uint8x8_t, uint16x8_t, uint16x8_t, s, __builtin_neon_addhn, _, 8h)
+__BADC_INTRIN uint8x16_t vaddhn_high_u16(uint8x8_t __r, uint16x8_t __a, uint16x8_t __b) { return vcombine_u8(__r, vaddhn_u16(__a, __b)); }
+__BADC_NEON_B2(vaddhn_u32, uint16x4_t, uint32x4_t, uint32x4_t, s, __builtin_neon_addhn, _, 4s)
+__BADC_INTRIN uint16x8_t vaddhn_high_u32(uint16x4_t __r, uint32x4_t __a, uint32x4_t __b) { return vcombine_u16(__r, vaddhn_u32(__a, __b)); }
+__BADC_NEON_B2(vaddhn_u64, uint32x2_t, uint64x2_t, uint64x2_t, s, __builtin_neon_addhn, _, 2d)
+__BADC_INTRIN uint32x4_t vaddhn_high_u64(uint32x2_t __r, uint64x2_t __a, uint64x2_t __b) { return vcombine_u32(__r, vaddhn_u64(__a, __b)); }
+__BADC_NEON_B2(vraddhn_s16, int8x8_t, int16x8_t, int16x8_t, s, __builtin_neon_raddhn, _, 8h)
+__BADC_INTRIN int8x16_t vraddhn_high_s16(int8x8_t __r, int16x8_t __a, int16x8_t __b) { return vcombine_s8(__r, vraddhn_s16(__a, __b)); }
+__BADC_NEON_B2(vraddhn_s32, int16x4_t, int32x4_t, int32x4_t, s, __builtin_neon_raddhn, _, 4s)
+__BADC_INTRIN int16x8_t vraddhn_high_s32(int16x4_t __r, int32x4_t __a, int32x4_t __b) { return vcombine_s16(__r, vraddhn_s32(__a, __b)); }
+__BADC_NEON_B2(vraddhn_s64, int32x2_t, int64x2_t, int64x2_t, s, __builtin_neon_raddhn, _, 2d)
+__BADC_INTRIN int32x4_t vraddhn_high_s64(int32x2_t __r, int64x2_t __a, int64x2_t __b) { return vcombine_s32(__r, vraddhn_s64(__a, __b)); }
+__BADC_NEON_B2(vraddhn_u16, uint8x8_t, uint16x8_t, uint16x8_t, s, __builtin_neon_raddhn, _, 8h)
+__BADC_INTRIN uint8x16_t vraddhn_high_u16(uint8x8_t __r, uint16x8_t __a, uint16x8_t __b) { return vcombine_u8(__r, vraddhn_u16(__a, __b)); }
+__BADC_NEON_B2(vraddhn_u32, uint16x4_t, uint32x4_t, uint32x4_t, s, __builtin_neon_raddhn, _, 4s)
+__BADC_INTRIN uint16x8_t vraddhn_high_u32(uint16x4_t __r, uint32x4_t __a, uint32x4_t __b) { return vcombine_u16(__r, vraddhn_u32(__a, __b)); }
+__BADC_NEON_B2(vraddhn_u64, uint32x2_t, uint64x2_t, uint64x2_t, s, __builtin_neon_raddhn, _, 2d)
+__BADC_INTRIN uint32x4_t vraddhn_high_u64(uint32x2_t __r, uint64x2_t __a, uint64x2_t __b) { return vcombine_u32(__r, vraddhn_u64(__a, __b)); }
+__BADC_NEON_B2(vsubhn_s16, int8x8_t, int16x8_t, int16x8_t, s, __builtin_neon_subhn, _, 8h)
+__BADC_INTRIN int8x16_t vsubhn_high_s16(int8x8_t __r, int16x8_t __a, int16x8_t __b) { return vcombine_s8(__r, vsubhn_s16(__a, __b)); }
+__BADC_NEON_B2(vsubhn_s32, int16x4_t, int32x4_t, int32x4_t, s, __builtin_neon_subhn, _, 4s)
+__BADC_INTRIN int16x8_t vsubhn_high_s32(int16x4_t __r, int32x4_t __a, int32x4_t __b) { return vcombine_s16(__r, vsubhn_s32(__a, __b)); }
+__BADC_NEON_B2(vsubhn_s64, int32x2_t, int64x2_t, int64x2_t, s, __builtin_neon_subhn, _, 2d)
+__BADC_INTRIN int32x4_t vsubhn_high_s64(int32x2_t __r, int64x2_t __a, int64x2_t __b) { return vcombine_s32(__r, vsubhn_s64(__a, __b)); }
+__BADC_NEON_B2(vsubhn_u16, uint8x8_t, uint16x8_t, uint16x8_t, s, __builtin_neon_subhn, _, 8h)
+__BADC_INTRIN uint8x16_t vsubhn_high_u16(uint8x8_t __r, uint16x8_t __a, uint16x8_t __b) { return vcombine_u8(__r, vsubhn_u16(__a, __b)); }
+__BADC_NEON_B2(vsubhn_u32, uint16x4_t, uint32x4_t, uint32x4_t, s, __builtin_neon_subhn, _, 4s)
+__BADC_INTRIN uint16x8_t vsubhn_high_u32(uint16x4_t __r, uint32x4_t __a, uint32x4_t __b) { return vcombine_u16(__r, vsubhn_u32(__a, __b)); }
+__BADC_NEON_B2(vsubhn_u64, uint32x2_t, uint64x2_t, uint64x2_t, s, __builtin_neon_subhn, _, 2d)
+__BADC_INTRIN uint32x4_t vsubhn_high_u64(uint32x2_t __r, uint64x2_t __a, uint64x2_t __b) { return vcombine_u32(__r, vsubhn_u64(__a, __b)); }
+__BADC_NEON_B2(vrsubhn_s16, int8x8_t, int16x8_t, int16x8_t, s, __builtin_neon_rsubhn, _, 8h)
+__BADC_INTRIN int8x16_t vrsubhn_high_s16(int8x8_t __r, int16x8_t __a, int16x8_t __b) { return vcombine_s8(__r, vrsubhn_s16(__a, __b)); }
+__BADC_NEON_B2(vrsubhn_s32, int16x4_t, int32x4_t, int32x4_t, s, __builtin_neon_rsubhn, _, 4s)
+__BADC_INTRIN int16x8_t vrsubhn_high_s32(int16x4_t __r, int32x4_t __a, int32x4_t __b) { return vcombine_s16(__r, vrsubhn_s32(__a, __b)); }
+__BADC_NEON_B2(vrsubhn_s64, int32x2_t, int64x2_t, int64x2_t, s, __builtin_neon_rsubhn, _, 2d)
+__BADC_INTRIN int32x4_t vrsubhn_high_s64(int32x2_t __r, int64x2_t __a, int64x2_t __b) { return vcombine_s32(__r, vrsubhn_s64(__a, __b)); }
+__BADC_NEON_B2(vrsubhn_u16, uint8x8_t, uint16x8_t, uint16x8_t, s, __builtin_neon_rsubhn, _, 8h)
+__BADC_INTRIN uint8x16_t vrsubhn_high_u16(uint8x8_t __r, uint16x8_t __a, uint16x8_t __b) { return vcombine_u8(__r, vrsubhn_u16(__a, __b)); }
+__BADC_NEON_B2(vrsubhn_u32, uint16x4_t, uint32x4_t, uint32x4_t, s, __builtin_neon_rsubhn, _, 4s)
+__BADC_INTRIN uint16x8_t vrsubhn_high_u32(uint16x4_t __r, uint32x4_t __a, uint32x4_t __b) { return vcombine_u16(__r, vrsubhn_u32(__a, __b)); }
+__BADC_NEON_B2(vrsubhn_u64, uint32x2_t, uint64x2_t, uint64x2_t, s, __builtin_neon_rsubhn, _, 2d)
+__BADC_INTRIN uint32x4_t vrsubhn_high_u64(uint32x2_t __r, uint64x2_t __a, uint64x2_t __b) { return vcombine_u32(__r, vrsubhn_u64(__a, __b)); }
+__BADC_NEON_B2(vuqadd_s8, int8x8_t, int8x8_t, uint8x8_t, s, __builtin_neon_suqadd, _, 8b)
+__BADC_NEON_B2(vuqaddq_s8, int8x16_t, int8x16_t, uint8x16_t, s, __builtin_neon_suqadd, _, 16b)
+__BADC_NEON_B2(vsqadd_u8, uint8x8_t, uint8x8_t, int8x8_t, s, __builtin_neon_usqadd, _, 8b)
+__BADC_NEON_B2(vsqaddq_u8, uint8x16_t, uint8x16_t, int8x16_t, s, __builtin_neon_usqadd, _, 16b)
+__BADC_INTRIN int8_t vuqaddb_s8(int8_t __a, uint8_t __b) { return vuqadd_s8((int8x8_t){__a}, (uint8x8_t){__b})[0]; }
+__BADC_INTRIN uint8_t vsqaddb_u8(uint8_t __a, int8_t __b) { return vsqadd_u8((uint8x8_t){__a}, (int8x8_t){__b})[0]; }
+__BADC_NEON_B2(vuqadd_s16, int16x4_t, int16x4_t, uint16x4_t, s, __builtin_neon_suqadd, _, 4h)
+__BADC_NEON_B2(vuqaddq_s16, int16x8_t, int16x8_t, uint16x8_t, s, __builtin_neon_suqadd, _, 8h)
+__BADC_NEON_B2(vsqadd_u16, uint16x4_t, uint16x4_t, int16x4_t, s, __builtin_neon_usqadd, _, 4h)
+__BADC_NEON_B2(vsqaddq_u16, uint16x8_t, uint16x8_t, int16x8_t, s, __builtin_neon_usqadd, _, 8h)
+__BADC_INTRIN int16_t vuqaddh_s16(int16_t __a, uint16_t __b) { return vuqadd_s16((int16x4_t){__a}, (uint16x4_t){__b})[0]; }
+__BADC_INTRIN uint16_t vsqaddh_u16(uint16_t __a, int16_t __b) { return vsqadd_u16((uint16x4_t){__a}, (int16x4_t){__b})[0]; }
+__BADC_NEON_B2(vuqadd_s32, int32x2_t, int32x2_t, uint32x2_t, s, __builtin_neon_suqadd, _, 2s)
+__BADC_NEON_B2(vuqaddq_s32, int32x4_t, int32x4_t, uint32x4_t, s, __builtin_neon_suqadd, _, 4s)
+__BADC_NEON_B2(vsqadd_u32, uint32x2_t, uint32x2_t, int32x2_t, s, __builtin_neon_usqadd, _, 2s)
+__BADC_NEON_B2(vsqaddq_u32, uint32x4_t, uint32x4_t, int32x4_t, s, __builtin_neon_usqadd, _, 4s)
+__BADC_INTRIN int32_t vuqadds_s32(int32_t __a, uint32_t __b) { return vuqadd_s32((int32x2_t){__a}, (uint32x2_t){__b})[0]; }
+__BADC_INTRIN uint32_t vsqadds_u32(uint32_t __a, int32_t __b) { return vsqadd_u32((uint32x2_t){__a}, (int32x2_t){__b})[0]; }
+__BADC_NEON_B2(vuqadd_s64, int64x1_t, int64x1_t, uint64x1_t, s, __builtin_neon_suqadd, _, d)
+__BADC_NEON_B2(vuqaddq_s64, int64x2_t, int64x2_t, uint64x2_t, s, __builtin_neon_suqadd, _, 2d)
+__BADC_NEON_B2(vsqadd_u64, uint64x1_t, uint64x1_t, int64x1_t, s, __builtin_neon_usqadd, _, d)
+__BADC_NEON_B2(vsqaddq_u64, uint64x2_t, uint64x2_t, int64x2_t, s, __builtin_neon_usqadd, _, 2d)
+__BADC_INTRIN int64_t vuqaddd_s64(int64_t __a, uint64_t __b) { return vuqadd_s64((int64x1_t){__a}, (uint64x1_t){__b})[0]; }
+__BADC_INTRIN uint64_t vsqaddd_u64(uint64_t __a, int64_t __b) { return vsqadd_u64((uint64x1_t){__a}, (int64x1_t){__b})[0]; }
+__BADC_NEON_B1(vrbit_s8, int8x8_t, int8x8_t, s, __builtin_neon_rbit, _, 8b)
+__BADC_NEON_B1(vrbitq_s8, int8x16_t, int8x16_t, s, __builtin_neon_rbit, _, 16b)
+__BADC_NEON_B1(vrbit_u8, uint8x8_t, uint8x8_t, s, __builtin_neon_rbit, _, 8b)
+__BADC_NEON_B1(vrbitq_u8, uint8x16_t, uint8x16_t, s, __builtin_neon_rbit, _, 16b)
+__BADC_NEON_B1(vrbit_p8, poly8x8_t, poly8x8_t, s, __builtin_neon_rbit, _, 8b)
+__BADC_NEON_B1(vrbitq_p8, poly8x16_t, poly8x16_t, s, __builtin_neon_rbit, _, 16b)
+__BADC_INTRIN float32x2_t vmla_f32(float32x2_t __a, float32x2_t __b, float32x2_t __c) { return vadd_f32(__a, vmul_f32(__b, __c)); }
+__BADC_INTRIN float32x4_t vmlaq_f32(float32x4_t __a, float32x4_t __b, float32x4_t __c) { return vaddq_f32(__a, vmulq_f32(__b, __c)); }
+__BADC_INTRIN float32x2_t vmls_f32(float32x2_t __a, float32x2_t __b, float32x2_t __c) { return vsub_f32(__a, vmul_f32(__b, __c)); }
+__BADC_INTRIN float32x4_t vmlsq_f32(float32x4_t __a, float32x4_t __b, float32x4_t __c) { return vsubq_f32(__a, vmulq_f32(__b, __c)); }
+__BADC_INTRIN float64x1_t vmla_f64(float64x1_t __a, float64x1_t __b, float64x1_t __c) { return vadd_f64(__a, vmul_f64(__b, __c)); }
+__BADC_INTRIN float64x2_t vmlaq_f64(float64x2_t __a, float64x2_t __b, float64x2_t __c) { return vaddq_f64(__a, vmulq_f64(__b, __c)); }
+__BADC_INTRIN float64x1_t vmls_f64(float64x1_t __a, float64x1_t __b, float64x1_t __c) { return vsub_f64(__a, vmul_f64(__b, __c)); }
+__BADC_INTRIN float64x2_t vmlsq_f64(float64x2_t __a, float64x2_t __b, float64x2_t __c) { return vsubq_f64(__a, vmulq_f64(__b, __c)); }
+#define vcopy_lane_s8(__a, __l1, __b, __l2) vset_lane_s8(vget_lane_s8(__b, __l2), __a, __l1)
+#define vcopy_laneq_s8(__a, __l1, __b, __l2) vset_lane_s8(vgetq_lane_s8(__b, __l2), __a, __l1)
+#define vcopyq_lane_s8(__a, __l1, __b, __l2) vsetq_lane_s8(vget_lane_s8(__b, __l2), __a, __l1)
+#define vcopyq_laneq_s8(__a, __l1, __b, __l2) vsetq_lane_s8(vgetq_lane_s8(__b, __l2), __a, __l1)
+#define vcopy_lane_s16(__a, __l1, __b, __l2) vset_lane_s16(vget_lane_s16(__b, __l2), __a, __l1)
+#define vcopy_laneq_s16(__a, __l1, __b, __l2) vset_lane_s16(vgetq_lane_s16(__b, __l2), __a, __l1)
+#define vcopyq_lane_s16(__a, __l1, __b, __l2) vsetq_lane_s16(vget_lane_s16(__b, __l2), __a, __l1)
+#define vcopyq_laneq_s16(__a, __l1, __b, __l2) vsetq_lane_s16(vgetq_lane_s16(__b, __l2), __a, __l1)
+#define vcopy_lane_s32(__a, __l1, __b, __l2) vset_lane_s32(vget_lane_s32(__b, __l2), __a, __l1)
+#define vcopy_laneq_s32(__a, __l1, __b, __l2) vset_lane_s32(vgetq_lane_s32(__b, __l2), __a, __l1)
+#define vcopyq_lane_s32(__a, __l1, __b, __l2) vsetq_lane_s32(vget_lane_s32(__b, __l2), __a, __l1)
+#define vcopyq_laneq_s32(__a, __l1, __b, __l2) vsetq_lane_s32(vgetq_lane_s32(__b, __l2), __a, __l1)
+#define vcopy_lane_s64(__a, __l1, __b, __l2) vset_lane_s64(vget_lane_s64(__b, __l2), __a, __l1)
+#define vcopy_laneq_s64(__a, __l1, __b, __l2) vset_lane_s64(vgetq_lane_s64(__b, __l2), __a, __l1)
+#define vcopyq_lane_s64(__a, __l1, __b, __l2) vsetq_lane_s64(vget_lane_s64(__b, __l2), __a, __l1)
+#define vcopyq_laneq_s64(__a, __l1, __b, __l2) vsetq_lane_s64(vgetq_lane_s64(__b, __l2), __a, __l1)
+#define vcopy_lane_u8(__a, __l1, __b, __l2) vset_lane_u8(vget_lane_u8(__b, __l2), __a, __l1)
+#define vcopy_laneq_u8(__a, __l1, __b, __l2) vset_lane_u8(vgetq_lane_u8(__b, __l2), __a, __l1)
+#define vcopyq_lane_u8(__a, __l1, __b, __l2) vsetq_lane_u8(vget_lane_u8(__b, __l2), __a, __l1)
+#define vcopyq_laneq_u8(__a, __l1, __b, __l2) vsetq_lane_u8(vgetq_lane_u8(__b, __l2), __a, __l1)
+#define vcopy_lane_u16(__a, __l1, __b, __l2) vset_lane_u16(vget_lane_u16(__b, __l2), __a, __l1)
+#define vcopy_laneq_u16(__a, __l1, __b, __l2) vset_lane_u16(vgetq_lane_u16(__b, __l2), __a, __l1)
+#define vcopyq_lane_u16(__a, __l1, __b, __l2) vsetq_lane_u16(vget_lane_u16(__b, __l2), __a, __l1)
+#define vcopyq_laneq_u16(__a, __l1, __b, __l2) vsetq_lane_u16(vgetq_lane_u16(__b, __l2), __a, __l1)
+#define vcopy_lane_u32(__a, __l1, __b, __l2) vset_lane_u32(vget_lane_u32(__b, __l2), __a, __l1)
+#define vcopy_laneq_u32(__a, __l1, __b, __l2) vset_lane_u32(vgetq_lane_u32(__b, __l2), __a, __l1)
+#define vcopyq_lane_u32(__a, __l1, __b, __l2) vsetq_lane_u32(vget_lane_u32(__b, __l2), __a, __l1)
+#define vcopyq_laneq_u32(__a, __l1, __b, __l2) vsetq_lane_u32(vgetq_lane_u32(__b, __l2), __a, __l1)
+#define vcopy_lane_u64(__a, __l1, __b, __l2) vset_lane_u64(vget_lane_u64(__b, __l2), __a, __l1)
+#define vcopy_laneq_u64(__a, __l1, __b, __l2) vset_lane_u64(vgetq_lane_u64(__b, __l2), __a, __l1)
+#define vcopyq_lane_u64(__a, __l1, __b, __l2) vsetq_lane_u64(vget_lane_u64(__b, __l2), __a, __l1)
+#define vcopyq_laneq_u64(__a, __l1, __b, __l2) vsetq_lane_u64(vgetq_lane_u64(__b, __l2), __a, __l1)
+#define vcopy_lane_p8(__a, __l1, __b, __l2) vset_lane_p8(vget_lane_p8(__b, __l2), __a, __l1)
+#define vcopy_laneq_p8(__a, __l1, __b, __l2) vset_lane_p8(vgetq_lane_p8(__b, __l2), __a, __l1)
+#define vcopyq_lane_p8(__a, __l1, __b, __l2) vsetq_lane_p8(vget_lane_p8(__b, __l2), __a, __l1)
+#define vcopyq_laneq_p8(__a, __l1, __b, __l2) vsetq_lane_p8(vgetq_lane_p8(__b, __l2), __a, __l1)
+#define vcopy_lane_p16(__a, __l1, __b, __l2) vset_lane_p16(vget_lane_p16(__b, __l2), __a, __l1)
+#define vcopy_laneq_p16(__a, __l1, __b, __l2) vset_lane_p16(vgetq_lane_p16(__b, __l2), __a, __l1)
+#define vcopyq_lane_p16(__a, __l1, __b, __l2) vsetq_lane_p16(vget_lane_p16(__b, __l2), __a, __l1)
+#define vcopyq_laneq_p16(__a, __l1, __b, __l2) vsetq_lane_p16(vgetq_lane_p16(__b, __l2), __a, __l1)
+#define vcopy_lane_p64(__a, __l1, __b, __l2) vset_lane_p64(vget_lane_p64(__b, __l2), __a, __l1)
+#define vcopy_laneq_p64(__a, __l1, __b, __l2) vset_lane_p64(vgetq_lane_p64(__b, __l2), __a, __l1)
+#define vcopyq_lane_p64(__a, __l1, __b, __l2) vsetq_lane_p64(vget_lane_p64(__b, __l2), __a, __l1)
+#define vcopyq_laneq_p64(__a, __l1, __b, __l2) vsetq_lane_p64(vgetq_lane_p64(__b, __l2), __a, __l1)
+#define vcopy_lane_f32(__a, __l1, __b, __l2) vset_lane_f32(vget_lane_f32(__b, __l2), __a, __l1)
+#define vcopy_laneq_f32(__a, __l1, __b, __l2) vset_lane_f32(vgetq_lane_f32(__b, __l2), __a, __l1)
+#define vcopyq_lane_f32(__a, __l1, __b, __l2) vsetq_lane_f32(vget_lane_f32(__b, __l2), __a, __l1)
+#define vcopyq_laneq_f32(__a, __l1, __b, __l2) vsetq_lane_f32(vgetq_lane_f32(__b, __l2), __a, __l1)
+#define vcopy_lane_f64(__a, __l1, __b, __l2) vset_lane_f64(vget_lane_f64(__b, __l2), __a, __l1)
+#define vcopy_laneq_f64(__a, __l1, __b, __l2) vset_lane_f64(vgetq_lane_f64(__b, __l2), __a, __l1)
+#define vcopyq_lane_f64(__a, __l1, __b, __l2) vsetq_lane_f64(vget_lane_f64(__b, __l2), __a, __l1)
+#define vcopyq_laneq_f64(__a, __l1, __b, __l2) vsetq_lane_f64(vgetq_lane_f64(__b, __l2), __a, __l1)
+
+/* The polynomial additions (exclusive or), vcreate (a vector of the bits
+ * of a uint64_t), vcls on the unsigned types, the polynomial vtst, the
+ * saturating rounding shifts by register (vqrshl), the conversions of
+ * doubles to floats rounding to odd (vcvtx) and the reciprocal exponent
+ * (vrecpx). */
+__BADC_INTRIN poly8x8_t vadd_p8(poly8x8_t __a, poly8x8_t __b) { return (poly8x8_t)__builtin_neon_eor_8b(__a, __b); }
+__BADC_INTRIN poly8x16_t vaddq_p8(poly8x16_t __a, poly8x16_t __b) { return (poly8x16_t)__builtin_neon_eor_16b(__a, __b); }
+__BADC_INTRIN poly16x4_t vadd_p16(poly16x4_t __a, poly16x4_t __b) { return (poly16x4_t)__builtin_neon_eor_8b(__a, __b); }
+__BADC_INTRIN poly16x8_t vaddq_p16(poly16x8_t __a, poly16x8_t __b) { return (poly16x8_t)__builtin_neon_eor_16b(__a, __b); }
+__BADC_INTRIN poly64x1_t vadd_p64(poly64x1_t __a, poly64x1_t __b) { return (poly64x1_t)__builtin_neon_eor_8b(__a, __b); }
+__BADC_INTRIN poly64x2_t vaddq_p64(poly64x2_t __a, poly64x2_t __b) { return (poly64x2_t)__builtin_neon_eor_16b(__a, __b); }
+__BADC_INTRIN int8x8_t vcreate_s8(uint64_t __a) { return (int8x8_t)(uint64x1_t){__a}; }
+__BADC_INTRIN int16x4_t vcreate_s16(uint64_t __a) { return (int16x4_t)(uint64x1_t){__a}; }
+__BADC_INTRIN int32x2_t vcreate_s32(uint64_t __a) { return (int32x2_t)(uint64x1_t){__a}; }
+__BADC_INTRIN int64x1_t vcreate_s64(uint64_t __a) { return (int64x1_t)(uint64x1_t){__a}; }
+__BADC_INTRIN uint8x8_t vcreate_u8(uint64_t __a) { return (uint8x8_t)(uint64x1_t){__a}; }
+__BADC_INTRIN uint16x4_t vcreate_u16(uint64_t __a) { return (uint16x4_t)(uint64x1_t){__a}; }
+__BADC_INTRIN uint32x2_t vcreate_u32(uint64_t __a) { return (uint32x2_t)(uint64x1_t){__a}; }
+__BADC_INTRIN uint64x1_t vcreate_u64(uint64_t __a) { return (uint64x1_t)(uint64x1_t){__a}; }
+__BADC_INTRIN poly8x8_t vcreate_p8(uint64_t __a) { return (poly8x8_t)(uint64x1_t){__a}; }
+__BADC_INTRIN poly16x4_t vcreate_p16(uint64_t __a) { return (poly16x4_t)(uint64x1_t){__a}; }
+__BADC_INTRIN poly64x1_t vcreate_p64(uint64_t __a) { return (poly64x1_t)(uint64x1_t){__a}; }
+__BADC_INTRIN float32x2_t vcreate_f32(uint64_t __a) { return (float32x2_t)(uint64x1_t){__a}; }
+__BADC_INTRIN float64x1_t vcreate_f64(uint64_t __a) { return (float64x1_t)(uint64x1_t){__a}; }
+__BADC_INTRIN int8x8_t vcls_u8(uint8x8_t __a) { return (int8x8_t)__builtin_neon_cls_8b(__a); }
+__BADC_INTRIN int8x16_t vclsq_u8(uint8x16_t __a) { return (int8x16_t)__builtin_neon_cls_16b(__a); }
+__BADC_INTRIN int16x4_t vcls_u16(uint16x4_t __a) { return (int16x4_t)__builtin_neon_cls_4h(__a); }
+__BADC_INTRIN int16x8_t vclsq_u16(uint16x8_t __a) { return (int16x8_t)__builtin_neon_cls_8h(__a); }
+__BADC_INTRIN int32x2_t vcls_u32(uint32x2_t __a) { return (int32x2_t)__builtin_neon_cls_2s(__a); }
+__BADC_INTRIN int32x4_t vclsq_u32(uint32x4_t __a) { return (int32x4_t)__builtin_neon_cls_4s(__a); }
+__BADC_NEON_R_p16(__BADC_NEON_F_CMP, vtst, __builtin_neon_cmtst, __builtin_neon_cmtst)
+__BADC_NEON_R_p64(__BADC_NEON_F_CMP, vtst, __builtin_neon_cmtst, __builtin_neon_cmtst)
+__BADC_NEON_INT(__BADC_NEON_F_SHL, vqrshl, __builtin_neon_sqrshl, __builtin_neon_uqrshl)
+__BADC_INTRIN float32x2_t vcvtx_f32_f64(float64x2_t __a) { return (float32x2_t)__builtin_neon_fcvtxn_2d(__a); }
+__BADC_INTRIN float32x4_t vcvtx_high_f32_f64(float32x2_t __r, float64x2_t __a) { return vcombine_f32(__r, vcvtx_f32_f64(__a)); }
+__BADC_INTRIN float32_t vcvtxd_f32_f64(float64_t __a) { return vcvtx_f32_f64((float64x2_t){__a})[0]; }
+__BADC_INTRIN float32_t vrecpxs_f32(float32_t __a) { return __builtin_neon_frecpx_2s((float32x2_t){__a})[0]; }
+__BADC_INTRIN float64_t vrecpxd_f64(float64_t __a) { return __builtin_neon_frecpx_d((float64x1_t){__a})[0]; }
+
+/* The 128-bit polynomial: its sum is the exclusive or, and it loads and
+ * stores whole. */
+__BADC_INTRIN poly128_t vaddq_p128(poly128_t __a, poly128_t __b) { return __a ^ __b; }
+__BADC_INTRIN poly128_t vldrq_p128(const poly128_t *__p) { return *__p; }
+__BADC_INTRIN void vstrq_p128(poly128_t *__p, poly128_t __v) { *__p = __v; }
+
+/* The scalar forms: lane 0 of the vector forms over a vector holding the
+ * operands in lane 0; an _n or _lane form is a macro over its vector
+ * macro. */
+__BADC_INTRIN int8_t vqabsb_s8(int8_t __a) { return vqabs_s8((int8x8_t){__a})[0]; }
+__BADC_INTRIN int8_t vqnegb_s8(int8_t __a) { return vqneg_s8((int8x8_t){__a})[0]; }
+__BADC_INTRIN int8_t vqaddb_s8(int8_t __a, int8_t __b) { return vqadd_s8((int8x8_t){__a}, (int8x8_t){__b})[0]; }
+__BADC_INTRIN uint8_t vqaddb_u8(uint8_t __a, uint8_t __b) { return vqadd_u8((uint8x8_t){__a}, (uint8x8_t){__b})[0]; }
+__BADC_INTRIN int8_t vqsubb_s8(int8_t __a, int8_t __b) { return vqsub_s8((int8x8_t){__a}, (int8x8_t){__b})[0]; }
+__BADC_INTRIN uint8_t vqsubb_u8(uint8_t __a, uint8_t __b) { return vqsub_u8((uint8x8_t){__a}, (uint8x8_t){__b})[0]; }
+__BADC_INTRIN int8_t vqshlb_s8(int8_t __a, int8_t __b) { return vqshl_s8((int8x8_t){__a}, (int8x8_t){__b})[0]; }
+__BADC_INTRIN uint8_t vqshlb_u8(uint8_t __a, int8_t __b) { return vqshl_u8((uint8x8_t){__a}, (int8x8_t){__b})[0]; }
+__BADC_INTRIN int8_t vqrshlb_s8(int8_t __a, int8_t __b) { return vqrshl_s8((int8x8_t){__a}, (int8x8_t){__b})[0]; }
+__BADC_INTRIN uint8_t vqrshlb_u8(uint8_t __a, int8_t __b) { return vqrshl_u8((uint8x8_t){__a}, (int8x8_t){__b})[0]; }
+#define vqshlb_n_s8(__a, __n) (vqshl_n_s8((int8x8_t){__a}, __n)[0])
+#define vqshlb_n_u8(__a, __n) (vqshl_n_u8((uint8x8_t){__a}, __n)[0])
+#define vqshlub_n_s8(__a, __n) (vqshlu_n_s8((int8x8_t){__a}, __n)[0])
+__BADC_INTRIN int16_t vqabsh_s16(int16_t __a) { return vqabs_s16((int16x4_t){__a})[0]; }
+__BADC_INTRIN int16_t vqnegh_s16(int16_t __a) { return vqneg_s16((int16x4_t){__a})[0]; }
+__BADC_INTRIN int16_t vqaddh_s16(int16_t __a, int16_t __b) { return vqadd_s16((int16x4_t){__a}, (int16x4_t){__b})[0]; }
+__BADC_INTRIN uint16_t vqaddh_u16(uint16_t __a, uint16_t __b) { return vqadd_u16((uint16x4_t){__a}, (uint16x4_t){__b})[0]; }
+__BADC_INTRIN int16_t vqsubh_s16(int16_t __a, int16_t __b) { return vqsub_s16((int16x4_t){__a}, (int16x4_t){__b})[0]; }
+__BADC_INTRIN uint16_t vqsubh_u16(uint16_t __a, uint16_t __b) { return vqsub_u16((uint16x4_t){__a}, (uint16x4_t){__b})[0]; }
+__BADC_INTRIN int16_t vqshlh_s16(int16_t __a, int16_t __b) { return vqshl_s16((int16x4_t){__a}, (int16x4_t){__b})[0]; }
+__BADC_INTRIN uint16_t vqshlh_u16(uint16_t __a, int16_t __b) { return vqshl_u16((uint16x4_t){__a}, (int16x4_t){__b})[0]; }
+__BADC_INTRIN int16_t vqrshlh_s16(int16_t __a, int16_t __b) { return vqrshl_s16((int16x4_t){__a}, (int16x4_t){__b})[0]; }
+__BADC_INTRIN uint16_t vqrshlh_u16(uint16_t __a, int16_t __b) { return vqrshl_u16((uint16x4_t){__a}, (int16x4_t){__b})[0]; }
+#define vqshlh_n_s16(__a, __n) (vqshl_n_s16((int16x4_t){__a}, __n)[0])
+#define vqshlh_n_u16(__a, __n) (vqshl_n_u16((uint16x4_t){__a}, __n)[0])
+#define vqshluh_n_s16(__a, __n) (vqshlu_n_s16((int16x4_t){__a}, __n)[0])
+__BADC_INTRIN int32_t vqabss_s32(int32_t __a) { return vqabs_s32((int32x2_t){__a})[0]; }
+__BADC_INTRIN int32_t vqnegs_s32(int32_t __a) { return vqneg_s32((int32x2_t){__a})[0]; }
+__BADC_INTRIN int32_t vqadds_s32(int32_t __a, int32_t __b) { return vqadd_s32((int32x2_t){__a}, (int32x2_t){__b})[0]; }
+__BADC_INTRIN uint32_t vqadds_u32(uint32_t __a, uint32_t __b) { return vqadd_u32((uint32x2_t){__a}, (uint32x2_t){__b})[0]; }
+__BADC_INTRIN int32_t vqsubs_s32(int32_t __a, int32_t __b) { return vqsub_s32((int32x2_t){__a}, (int32x2_t){__b})[0]; }
+__BADC_INTRIN uint32_t vqsubs_u32(uint32_t __a, uint32_t __b) { return vqsub_u32((uint32x2_t){__a}, (uint32x2_t){__b})[0]; }
+__BADC_INTRIN int32_t vqshls_s32(int32_t __a, int32_t __b) { return vqshl_s32((int32x2_t){__a}, (int32x2_t){__b})[0]; }
+__BADC_INTRIN uint32_t vqshls_u32(uint32_t __a, int32_t __b) { return vqshl_u32((uint32x2_t){__a}, (int32x2_t){__b})[0]; }
+__BADC_INTRIN int32_t vqrshls_s32(int32_t __a, int32_t __b) { return vqrshl_s32((int32x2_t){__a}, (int32x2_t){__b})[0]; }
+__BADC_INTRIN uint32_t vqrshls_u32(uint32_t __a, int32_t __b) { return vqrshl_u32((uint32x2_t){__a}, (int32x2_t){__b})[0]; }
+#define vqshls_n_s32(__a, __n) (vqshl_n_s32((int32x2_t){__a}, __n)[0])
+#define vqshls_n_u32(__a, __n) (vqshl_n_u32((uint32x2_t){__a}, __n)[0])
+#define vqshlus_n_s32(__a, __n) (vqshlu_n_s32((int32x2_t){__a}, __n)[0])
+__BADC_INTRIN int64_t vqabsd_s64(int64_t __a) { return vqabs_s64((int64x1_t){__a})[0]; }
+__BADC_INTRIN int64_t vqnegd_s64(int64_t __a) { return vqneg_s64((int64x1_t){__a})[0]; }
+__BADC_INTRIN int64_t vqaddd_s64(int64_t __a, int64_t __b) { return vqadd_s64((int64x1_t){__a}, (int64x1_t){__b})[0]; }
+__BADC_INTRIN uint64_t vqaddd_u64(uint64_t __a, uint64_t __b) { return vqadd_u64((uint64x1_t){__a}, (uint64x1_t){__b})[0]; }
+__BADC_INTRIN int64_t vqsubd_s64(int64_t __a, int64_t __b) { return vqsub_s64((int64x1_t){__a}, (int64x1_t){__b})[0]; }
+__BADC_INTRIN uint64_t vqsubd_u64(uint64_t __a, uint64_t __b) { return vqsub_u64((uint64x1_t){__a}, (uint64x1_t){__b})[0]; }
+__BADC_INTRIN int64_t vqshld_s64(int64_t __a, int64_t __b) { return vqshl_s64((int64x1_t){__a}, (int64x1_t){__b})[0]; }
+__BADC_INTRIN uint64_t vqshld_u64(uint64_t __a, int64_t __b) { return vqshl_u64((uint64x1_t){__a}, (int64x1_t){__b})[0]; }
+__BADC_INTRIN int64_t vqrshld_s64(int64_t __a, int64_t __b) { return vqrshl_s64((int64x1_t){__a}, (int64x1_t){__b})[0]; }
+__BADC_INTRIN uint64_t vqrshld_u64(uint64_t __a, int64_t __b) { return vqrshl_u64((uint64x1_t){__a}, (int64x1_t){__b})[0]; }
+#define vqshld_n_s64(__a, __n) (vqshl_n_s64((int64x1_t){__a}, __n)[0])
+#define vqshld_n_u64(__a, __n) (vqshl_n_u64((uint64x1_t){__a}, __n)[0])
+#define vqshlud_n_s64(__a, __n) (vqshlu_n_s64((int64x1_t){__a}, __n)[0])
+__BADC_INTRIN int8_t vqmovnh_s16(int16_t __a) { return vqmovn_s16((int16x8_t){__a})[0]; }
+#define vqshrnh_n_s16(__a, __n) (vqshrn_n_s16((int16x8_t){__a}, __n)[0])
+#define vqrshrnh_n_s16(__a, __n) (vqrshrn_n_s16((int16x8_t){__a}, __n)[0])
+__BADC_INTRIN uint8_t vqmovnh_u16(uint16_t __a) { return vqmovn_u16((uint16x8_t){__a})[0]; }
+#define vqshrnh_n_u16(__a, __n) (vqshrn_n_u16((uint16x8_t){__a}, __n)[0])
+#define vqrshrnh_n_u16(__a, __n) (vqrshrn_n_u16((uint16x8_t){__a}, __n)[0])
+__BADC_INTRIN uint8_t vqmovunh_s16(int16_t __a) { return vqmovun_s16((int16x8_t){__a})[0]; }
+#define vqshrunh_n_s16(__a, __n) (vqshrun_n_s16((int16x8_t){__a}, __n)[0])
+#define vqrshrunh_n_s16(__a, __n) (vqrshrun_n_s16((int16x8_t){__a}, __n)[0])
+__BADC_INTRIN int16_t vqmovns_s32(int32_t __a) { return vqmovn_s32((int32x4_t){__a})[0]; }
+#define vqshrns_n_s32(__a, __n) (vqshrn_n_s32((int32x4_t){__a}, __n)[0])
+#define vqrshrns_n_s32(__a, __n) (vqrshrn_n_s32((int32x4_t){__a}, __n)[0])
+__BADC_INTRIN uint16_t vqmovns_u32(uint32_t __a) { return vqmovn_u32((uint32x4_t){__a})[0]; }
+#define vqshrns_n_u32(__a, __n) (vqshrn_n_u32((uint32x4_t){__a}, __n)[0])
+#define vqrshrns_n_u32(__a, __n) (vqrshrn_n_u32((uint32x4_t){__a}, __n)[0])
+__BADC_INTRIN uint16_t vqmovuns_s32(int32_t __a) { return vqmovun_s32((int32x4_t){__a})[0]; }
+#define vqshruns_n_s32(__a, __n) (vqshrun_n_s32((int32x4_t){__a}, __n)[0])
+#define vqrshruns_n_s32(__a, __n) (vqrshrun_n_s32((int32x4_t){__a}, __n)[0])
+__BADC_INTRIN int32_t vqmovnd_s64(int64_t __a) { return vqmovn_s64((int64x2_t){__a})[0]; }
+#define vqshrnd_n_s64(__a, __n) (vqshrn_n_s64((int64x2_t){__a}, __n)[0])
+#define vqrshrnd_n_s64(__a, __n) (vqrshrn_n_s64((int64x2_t){__a}, __n)[0])
+__BADC_INTRIN uint32_t vqmovnd_u64(uint64_t __a) { return vqmovn_u64((uint64x2_t){__a})[0]; }
+#define vqshrnd_n_u64(__a, __n) (vqshrn_n_u64((uint64x2_t){__a}, __n)[0])
+#define vqrshrnd_n_u64(__a, __n) (vqrshrn_n_u64((uint64x2_t){__a}, __n)[0])
+__BADC_INTRIN uint32_t vqmovund_s64(int64_t __a) { return vqmovun_s64((int64x2_t){__a})[0]; }
+#define vqshrund_n_s64(__a, __n) (vqshrun_n_s64((int64x2_t){__a}, __n)[0])
+#define vqrshrund_n_s64(__a, __n) (vqrshrun_n_s64((int64x2_t){__a}, __n)[0])
+__BADC_INTRIN int64_t vabsd_s64(int64_t __a) { return vabs_s64((int64x1_t){__a})[0]; }
+__BADC_INTRIN int64_t vnegd_s64(int64_t __a) { return vneg_s64((int64x1_t){__a})[0]; }
+__BADC_INTRIN int64_t vaddd_s64(int64_t __a, int64_t __b) { return vadd_s64((int64x1_t){__a}, (int64x1_t){__b})[0]; }
+__BADC_INTRIN int64_t vsubd_s64(int64_t __a, int64_t __b) { return vsub_s64((int64x1_t){__a}, (int64x1_t){__b})[0]; }
+__BADC_INTRIN uint64_t vceqd_s64(int64_t __a, int64_t __b) { return vceq_s64((int64x1_t){__a}, (int64x1_t){__b})[0]; }
+__BADC_INTRIN uint64_t vcged_s64(int64_t __a, int64_t __b) { return vcge_s64((int64x1_t){__a}, (int64x1_t){__b})[0]; }
+__BADC_INTRIN uint64_t vcgtd_s64(int64_t __a, int64_t __b) { return vcgt_s64((int64x1_t){__a}, (int64x1_t){__b})[0]; }
+__BADC_INTRIN uint64_t vcled_s64(int64_t __a, int64_t __b) { return vcle_s64((int64x1_t){__a}, (int64x1_t){__b})[0]; }
+__BADC_INTRIN uint64_t vcltd_s64(int64_t __a, int64_t __b) { return vclt_s64((int64x1_t){__a}, (int64x1_t){__b})[0]; }
+__BADC_INTRIN uint64_t vtstd_s64(int64_t __a, int64_t __b) { return vtst_s64((int64x1_t){__a}, (int64x1_t){__b})[0]; }
+__BADC_INTRIN int64_t vpaddd_s64(int64x2_t __a) { return vaddvq_s64(__a); }
+__BADC_INTRIN int64_t vrshld_s64(int64_t __a, int64_t __b) { return vrshl_s64((int64x1_t){__a}, (int64x1_t){__b})[0]; }
+__BADC_INTRIN int64_t vshld_s64(int64_t __a, int64_t __b) { return vshl_s64((int64x1_t){__a}, (int64x1_t){__b})[0]; }
+#define vshld_n_s64(__a, __n) (vshl_n_s64((int64x1_t){__a}, __n)[0])
+#define vshrd_n_s64(__a, __n) (vshr_n_s64((int64x1_t){__a}, __n)[0])
+#define vrshrd_n_s64(__a, __n) (vrshr_n_s64((int64x1_t){__a}, __n)[0])
+#define vsrad_n_s64(__a, __b, __n) (vsra_n_s64((int64x1_t){__a}, (int64x1_t){__b}, __n)[0])
+#define vrsrad_n_s64(__a, __b, __n) (vrsra_n_s64((int64x1_t){__a}, (int64x1_t){__b}, __n)[0])
+#define vslid_n_s64(__a, __b, __n) (vsli_n_s64((int64x1_t){__a}, (int64x1_t){__b}, __n)[0])
+#define vsrid_n_s64(__a, __b, __n) (vsri_n_s64((int64x1_t){__a}, (int64x1_t){__b}, __n)[0])
+__BADC_INTRIN uint64_t vaddd_u64(uint64_t __a, uint64_t __b) { return vadd_u64((uint64x1_t){__a}, (uint64x1_t){__b})[0]; }
+__BADC_INTRIN uint64_t vsubd_u64(uint64_t __a, uint64_t __b) { return vsub_u64((uint64x1_t){__a}, (uint64x1_t){__b})[0]; }
+__BADC_INTRIN uint64_t vceqd_u64(uint64_t __a, uint64_t __b) { return vceq_u64((uint64x1_t){__a}, (uint64x1_t){__b})[0]; }
+__BADC_INTRIN uint64_t vcged_u64(uint64_t __a, uint64_t __b) { return vcge_u64((uint64x1_t){__a}, (uint64x1_t){__b})[0]; }
+__BADC_INTRIN uint64_t vcgtd_u64(uint64_t __a, uint64_t __b) { return vcgt_u64((uint64x1_t){__a}, (uint64x1_t){__b})[0]; }
+__BADC_INTRIN uint64_t vcled_u64(uint64_t __a, uint64_t __b) { return vcle_u64((uint64x1_t){__a}, (uint64x1_t){__b})[0]; }
+__BADC_INTRIN uint64_t vcltd_u64(uint64_t __a, uint64_t __b) { return vclt_u64((uint64x1_t){__a}, (uint64x1_t){__b})[0]; }
+__BADC_INTRIN uint64_t vtstd_u64(uint64_t __a, uint64_t __b) { return vtst_u64((uint64x1_t){__a}, (uint64x1_t){__b})[0]; }
+__BADC_INTRIN uint64_t vpaddd_u64(uint64x2_t __a) { return vaddvq_u64(__a); }
+__BADC_INTRIN uint64_t vrshld_u64(uint64_t __a, int64_t __b) { return vrshl_u64((uint64x1_t){__a}, (int64x1_t){__b})[0]; }
+__BADC_INTRIN uint64_t vshld_u64(uint64_t __a, int64_t __b) { return vshl_u64((uint64x1_t){__a}, (int64x1_t){__b})[0]; }
+#define vshld_n_u64(__a, __n) (vshl_n_u64((uint64x1_t){__a}, __n)[0])
+#define vshrd_n_u64(__a, __n) (vshr_n_u64((uint64x1_t){__a}, __n)[0])
+#define vrshrd_n_u64(__a, __n) (vrshr_n_u64((uint64x1_t){__a}, __n)[0])
+#define vsrad_n_u64(__a, __b, __n) (vsra_n_u64((uint64x1_t){__a}, (uint64x1_t){__b}, __n)[0])
+#define vrsrad_n_u64(__a, __b, __n) (vrsra_n_u64((uint64x1_t){__a}, (uint64x1_t){__b}, __n)[0])
+#define vslid_n_u64(__a, __b, __n) (vsli_n_u64((uint64x1_t){__a}, (uint64x1_t){__b}, __n)[0])
+#define vsrid_n_u64(__a, __b, __n) (vsri_n_u64((uint64x1_t){__a}, (uint64x1_t){__b}, __n)[0])
+__BADC_INTRIN uint64_t vceqd_f64(float64_t __a, float64_t __b) { return vceq_f64((float64x1_t){__a}, (float64x1_t){__b})[0]; }
+__BADC_INTRIN uint32_t vceqs_f32(float32_t __a, float32_t __b) { return vceq_f32((float32x2_t){__a}, (float32x2_t){__b})[0]; }
+__BADC_INTRIN uint64_t vcged_f64(float64_t __a, float64_t __b) { return vcge_f64((float64x1_t){__a}, (float64x1_t){__b})[0]; }
+__BADC_INTRIN uint32_t vcges_f32(float32_t __a, float32_t __b) { return vcge_f32((float32x2_t){__a}, (float32x2_t){__b})[0]; }
+__BADC_INTRIN uint64_t vcgtd_f64(float64_t __a, float64_t __b) { return vcgt_f64((float64x1_t){__a}, (float64x1_t){__b})[0]; }
+__BADC_INTRIN uint32_t vcgts_f32(float32_t __a, float32_t __b) { return vcgt_f32((float32x2_t){__a}, (float32x2_t){__b})[0]; }
+__BADC_INTRIN uint64_t vcled_f64(float64_t __a, float64_t __b) { return vcle_f64((float64x1_t){__a}, (float64x1_t){__b})[0]; }
+__BADC_INTRIN uint32_t vcles_f32(float32_t __a, float32_t __b) { return vcle_f32((float32x2_t){__a}, (float32x2_t){__b})[0]; }
+__BADC_INTRIN uint64_t vcltd_f64(float64_t __a, float64_t __b) { return vclt_f64((float64x1_t){__a}, (float64x1_t){__b})[0]; }
+__BADC_INTRIN uint32_t vclts_f32(float32_t __a, float32_t __b) { return vclt_f32((float32x2_t){__a}, (float32x2_t){__b})[0]; }
+#define vdupb_lane_s8(__v, __n) vget_lane_s8(__v, __n)
+#define vdupb_laneq_s8(__v, __n) vgetq_lane_s8(__v, __n)
+#define vdupb_lane_u8(__v, __n) vget_lane_u8(__v, __n)
+#define vdupb_laneq_u8(__v, __n) vgetq_lane_u8(__v, __n)
+#define vdupb_lane_p8(__v, __n) vget_lane_p8(__v, __n)
+#define vdupb_laneq_p8(__v, __n) vgetq_lane_p8(__v, __n)
+#define vduph_lane_s16(__v, __n) vget_lane_s16(__v, __n)
+#define vduph_laneq_s16(__v, __n) vgetq_lane_s16(__v, __n)
+#define vduph_lane_u16(__v, __n) vget_lane_u16(__v, __n)
+#define vduph_laneq_u16(__v, __n) vgetq_lane_u16(__v, __n)
+#define vduph_lane_p16(__v, __n) vget_lane_p16(__v, __n)
+#define vduph_laneq_p16(__v, __n) vgetq_lane_p16(__v, __n)
+#define vdups_lane_s32(__v, __n) vget_lane_s32(__v, __n)
+#define vdups_laneq_s32(__v, __n) vgetq_lane_s32(__v, __n)
+#define vdups_lane_u32(__v, __n) vget_lane_u32(__v, __n)
+#define vdups_laneq_u32(__v, __n) vgetq_lane_u32(__v, __n)
+#define vdups_lane_f32(__v, __n) vget_lane_f32(__v, __n)
+#define vdups_laneq_f32(__v, __n) vgetq_lane_f32(__v, __n)
+#define vdupd_lane_s64(__v, __n) vget_lane_s64(__v, __n)
+#define vdupd_laneq_s64(__v, __n) vgetq_lane_s64(__v, __n)
+#define vdupd_lane_u64(__v, __n) vget_lane_u64(__v, __n)
+#define vdupd_laneq_u64(__v, __n) vgetq_lane_u64(__v, __n)
+#define vdupd_lane_f64(__v, __n) vget_lane_f64(__v, __n)
+#define vdupd_laneq_f64(__v, __n) vgetq_lane_f64(__v, __n)
+#define vfmas_lane_f32(__a, __b, __v, __n) (vfma_lane_f32((float32x2_t){__a}, (float32x2_t){__b}, __v, __n)[0])
+#define vfmas_laneq_f32(__a, __b, __v, __n) (vfma_laneq_f32((float32x2_t){__a}, (float32x2_t){__b}, __v, __n)[0])
+#define vfmss_lane_f32(__a, __b, __v, __n) (vfms_lane_f32((float32x2_t){__a}, (float32x2_t){__b}, __v, __n)[0])
+#define vfmss_laneq_f32(__a, __b, __v, __n) (vfms_laneq_f32((float32x2_t){__a}, (float32x2_t){__b}, __v, __n)[0])
+#define vmuls_lane_f32(__a, __v, __n) (vmul_lane_f32((float32x2_t){__a}, __v, __n)[0])
+#define vmuls_laneq_f32(__a, __v, __n) (vmul_laneq_f32((float32x2_t){__a}, __v, __n)[0])
+#define vmulxs_lane_f32(__a, __v, __n) (vmulx_lane_f32((float32x2_t){__a}, __v, __n)[0])
+#define vmulxs_laneq_f32(__a, __v, __n) (vmulx_laneq_f32((float32x2_t){__a}, __v, __n)[0])
+#define vfmad_lane_f64(__a, __b, __v, __n) (vfma_lane_f64((float64x1_t){__a}, (float64x1_t){__b}, __v, __n)[0])
+#define vfmad_laneq_f64(__a, __b, __v, __n) (vfma_laneq_f64((float64x1_t){__a}, (float64x1_t){__b}, __v, __n)[0])
+#define vfmsd_lane_f64(__a, __b, __v, __n) (vfms_lane_f64((float64x1_t){__a}, (float64x1_t){__b}, __v, __n)[0])
+#define vfmsd_laneq_f64(__a, __b, __v, __n) (vfms_laneq_f64((float64x1_t){__a}, (float64x1_t){__b}, __v, __n)[0])
+#define vmuld_lane_f64(__a, __v, __n) (vmul_lane_f64((float64x1_t){__a}, __v, __n)[0])
+#define vmuld_laneq_f64(__a, __v, __n) (vmul_laneq_f64((float64x1_t){__a}, __v, __n)[0])
+#define vmulxd_lane_f64(__a, __v, __n) (vmulx_lane_f64((float64x1_t){__a}, __v, __n)[0])
+#define vmulxd_laneq_f64(__a, __v, __n) (vmulx_laneq_f64((float64x1_t){__a}, __v, __n)[0])
+#define vqdmulhh_lane_s16(__a, __v, __n) (vqdmulh_lane_s16((int16x4_t){__a}, __v, __n)[0])
+#define vqdmulhh_laneq_s16(__a, __v, __n) (vqdmulh_laneq_s16((int16x4_t){__a}, __v, __n)[0])
+#define vqrdmulhh_lane_s16(__a, __v, __n) (vqrdmulh_lane_s16((int16x4_t){__a}, __v, __n)[0])
+#define vqrdmulhh_laneq_s16(__a, __v, __n) (vqrdmulh_laneq_s16((int16x4_t){__a}, __v, __n)[0])
+#define vqdmullh_lane_s16(__a, __v, __n) (vqdmull_lane_s16((int16x4_t){__a}, __v, __n)[0])
+#define vqdmullh_laneq_s16(__a, __v, __n) (vqdmull_laneq_s16((int16x4_t){__a}, __v, __n)[0])
+#define vqdmlalh_lane_s16(__a, __b, __v, __n) (vqdmlal_lane_s16((int32x4_t){__a}, (int16x4_t){__b}, __v, __n)[0])
+#define vqdmlalh_laneq_s16(__a, __b, __v, __n) (vqdmlal_laneq_s16((int32x4_t){__a}, (int16x4_t){__b}, __v, __n)[0])
+#define vqdmlslh_lane_s16(__a, __b, __v, __n) (vqdmlsl_lane_s16((int32x4_t){__a}, (int16x4_t){__b}, __v, __n)[0])
+#define vqdmlslh_laneq_s16(__a, __b, __v, __n) (vqdmlsl_laneq_s16((int32x4_t){__a}, (int16x4_t){__b}, __v, __n)[0])
+#define vqdmulhs_lane_s32(__a, __v, __n) (vqdmulh_lane_s32((int32x2_t){__a}, __v, __n)[0])
+#define vqdmulhs_laneq_s32(__a, __v, __n) (vqdmulh_laneq_s32((int32x2_t){__a}, __v, __n)[0])
+#define vqrdmulhs_lane_s32(__a, __v, __n) (vqrdmulh_lane_s32((int32x2_t){__a}, __v, __n)[0])
+#define vqrdmulhs_laneq_s32(__a, __v, __n) (vqrdmulh_laneq_s32((int32x2_t){__a}, __v, __n)[0])
+#define vqdmulls_lane_s32(__a, __v, __n) (vqdmull_lane_s32((int32x2_t){__a}, __v, __n)[0])
+#define vqdmulls_laneq_s32(__a, __v, __n) (vqdmull_laneq_s32((int32x2_t){__a}, __v, __n)[0])
+#define vqdmlals_lane_s32(__a, __b, __v, __n) (vqdmlal_lane_s32((int64x2_t){__a}, (int32x2_t){__b}, __v, __n)[0])
+#define vqdmlals_laneq_s32(__a, __b, __v, __n) (vqdmlal_laneq_s32((int64x2_t){__a}, (int32x2_t){__b}, __v, __n)[0])
+#define vqdmlsls_lane_s32(__a, __b, __v, __n) (vqdmlsl_lane_s32((int64x2_t){__a}, (int32x2_t){__b}, __v, __n)[0])
+#define vqdmlsls_laneq_s32(__a, __b, __v, __n) (vqdmlsl_laneq_s32((int64x2_t){__a}, (int32x2_t){__b}, __v, __n)[0])
+
+/* The scalar FEAT_RDM forms by lane: lane 0 of the vector ones. */
+#define vqrdmlahh_lane_s16(__a, __b, __v, __n) (vqrdmlah_lane_s16((int16x4_t){__a}, (int16x4_t){__b}, __v, __n)[0])
+#define vqrdmlahh_laneq_s16(__a, __b, __v, __n) (vqrdmlah_laneq_s16((int16x4_t){__a}, (int16x4_t){__b}, __v, __n)[0])
+#define vqrdmlahs_lane_s32(__a, __b, __v, __n) (vqrdmlah_lane_s32((int32x2_t){__a}, (int32x2_t){__b}, __v, __n)[0])
+#define vqrdmlahs_laneq_s32(__a, __b, __v, __n) (vqrdmlah_laneq_s32((int32x2_t){__a}, (int32x2_t){__b}, __v, __n)[0])
+#define vqrdmlshh_lane_s16(__a, __b, __v, __n) (vqrdmlsh_lane_s16((int16x4_t){__a}, (int16x4_t){__b}, __v, __n)[0])
+#define vqrdmlshh_laneq_s16(__a, __b, __v, __n) (vqrdmlsh_laneq_s16((int16x4_t){__a}, (int16x4_t){__b}, __v, __n)[0])
+#define vqrdmlshs_lane_s32(__a, __b, __v, __n) (vqrdmlsh_lane_s32((int32x2_t){__a}, (int32x2_t){__b}, __v, __n)[0])
+#define vqrdmlshs_laneq_s32(__a, __b, __v, __n) (vqrdmlsh_laneq_s32((int32x2_t){__a}, (int32x2_t){__b}, __v, __n)[0])
+
+/* The dot products (FEAT_DotProd): each 32-bit lane of the accumulator
+ * plus the four products of the bytes in it, signed or unsigned, or by a
+ * 4-byte group __n of the last operand; FEAT_I8MM's mixed-sign forms
+ * (vusdot: unsigned by signed, vsudot: signed by an unsigned group) and
+ * the 2x8 by 8x2 matrix products into a 2x2 accumulator (vmmlaq). */
+#define __BADC_NEON_DOTL(R, T, V, stem, __r, __a, __v, __n) __extension__({ \
+    R __dr = (__r);                                                       \
+    T __da = (__a);                                                       \
+    V __dv = (__v);                                                       \
+    __BADC_NEON_LANE(__n, sizeof(__dv) / 4);                              \
+    (R)stem(__dr, __da, __dv, __n);                                       \
+})
+__BADC_NEON_B3T(vdot_u32, uint32x2_t, uint8x8_t, uint8x8_t, s, __builtin_neon_udot, _, 2s)
+__BADC_NEON_B3T(vdotq_u32, uint32x4_t, uint8x16_t, uint8x16_t, s, __builtin_neon_udot, _, 4s)
+#define vdot_lane_u32(__r, __a, __v, __n) __BADC_NEON_DOTL(uint32x2_t, uint8x8_t, uint8x8_t, __builtin_neon_udot_lane_2s, __r, __a, __v, __n)
+#define vdot_laneq_u32(__r, __a, __v, __n) __BADC_NEON_DOTL(uint32x2_t, uint8x8_t, uint8x16_t, __builtin_neon_udot_laneq_2s, __r, __a, __v, __n)
+#define vdotq_lane_u32(__r, __a, __v, __n) __BADC_NEON_DOTL(uint32x4_t, uint8x16_t, uint8x8_t, __builtin_neon_udot_lane_4s, __r, __a, __v, __n)
+#define vdotq_laneq_u32(__r, __a, __v, __n) __BADC_NEON_DOTL(uint32x4_t, uint8x16_t, uint8x16_t, __builtin_neon_udot_laneq_4s, __r, __a, __v, __n)
+__BADC_NEON_B3T(vdot_s32, int32x2_t, int8x8_t, int8x8_t, s, __builtin_neon_sdot, _, 2s)
+__BADC_NEON_B3T(vdotq_s32, int32x4_t, int8x16_t, int8x16_t, s, __builtin_neon_sdot, _, 4s)
+#define vdot_lane_s32(__r, __a, __v, __n) __BADC_NEON_DOTL(int32x2_t, int8x8_t, int8x8_t, __builtin_neon_sdot_lane_2s, __r, __a, __v, __n)
+#define vdot_laneq_s32(__r, __a, __v, __n) __BADC_NEON_DOTL(int32x2_t, int8x8_t, int8x16_t, __builtin_neon_sdot_laneq_2s, __r, __a, __v, __n)
+#define vdotq_lane_s32(__r, __a, __v, __n) __BADC_NEON_DOTL(int32x4_t, int8x16_t, int8x8_t, __builtin_neon_sdot_lane_4s, __r, __a, __v, __n)
+#define vdotq_laneq_s32(__r, __a, __v, __n) __BADC_NEON_DOTL(int32x4_t, int8x16_t, int8x16_t, __builtin_neon_sdot_laneq_4s, __r, __a, __v, __n)
+__BADC_NEON_B3T(vusdot_s32, int32x2_t, uint8x8_t, int8x8_t, s, __builtin_neon_usdot, _, 2s)
+__BADC_NEON_B3T(vusdotq_s32, int32x4_t, uint8x16_t, int8x16_t, s, __builtin_neon_usdot, _, 4s)
+#define vusdot_lane_s32(__r, __a, __v, __n) __BADC_NEON_DOTL(int32x2_t, uint8x8_t, int8x8_t, __builtin_neon_usdot_lane_2s, __r, __a, __v, __n)
+#define vusdot_laneq_s32(__r, __a, __v, __n) __BADC_NEON_DOTL(int32x2_t, uint8x8_t, int8x16_t, __builtin_neon_usdot_laneq_2s, __r, __a, __v, __n)
+#define vusdotq_lane_s32(__r, __a, __v, __n) __BADC_NEON_DOTL(int32x4_t, uint8x16_t, int8x8_t, __builtin_neon_usdot_lane_4s, __r, __a, __v, __n)
+#define vusdotq_laneq_s32(__r, __a, __v, __n) __BADC_NEON_DOTL(int32x4_t, uint8x16_t, int8x16_t, __builtin_neon_usdot_laneq_4s, __r, __a, __v, __n)
+#define vsudot_lane_s32(__r, __a, __v, __n) __BADC_NEON_DOTL(int32x2_t, int8x8_t, uint8x8_t, __builtin_neon_sudot_lane_2s, __r, __a, __v, __n)
+#define vsudot_laneq_s32(__r, __a, __v, __n) __BADC_NEON_DOTL(int32x2_t, int8x8_t, uint8x16_t, __builtin_neon_sudot_laneq_2s, __r, __a, __v, __n)
+#define vsudotq_lane_s32(__r, __a, __v, __n) __BADC_NEON_DOTL(int32x4_t, int8x16_t, uint8x8_t, __builtin_neon_sudot_lane_4s, __r, __a, __v, __n)
+#define vsudotq_laneq_s32(__r, __a, __v, __n) __BADC_NEON_DOTL(int32x4_t, int8x16_t, uint8x16_t, __builtin_neon_sudot_laneq_4s, __r, __a, __v, __n)
+__BADC_NEON_B3T(vmmlaq_s32, int32x4_t, int8x16_t, int8x16_t, s, __builtin_neon_smmla, _, 4s)
+__BADC_NEON_B3T(vmmlaq_u32, uint32x4_t, uint8x16_t, uint8x16_t, s, __builtin_neon_ummla, _, 4s)
+__BADC_NEON_B3T(vusmmlaq_s32, int32x4_t, uint8x16_t, int8x16_t, s, __builtin_neon_usmmla, _, 4s)
+
+#pragma pop_macro("__attribute__")
+
+#endif /* BADC_ARM_NEON_H */

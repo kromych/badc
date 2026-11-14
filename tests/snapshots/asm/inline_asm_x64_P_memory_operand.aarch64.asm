@@ -22,12 +22,11 @@ Disassembly of section .text:
                	ldur	w0, [x29, #-0x8]
                	mov	x1, #0x7                // =7
                	stur	w1, [x29, #-0x8]
-               	mov	x17, #0x5               // =5
-               	eor	x0, x0, x17
-               	cbnz	w0, <addr>
+               	cmp	w0, #0x5
+               	b.ne	<addr>
                	ldur	w0, [x29, #-0x8]
-               	eor	x0, x0, #0x7
-               	cbz	w0, <addr>
+               	cmp	w0, #0x7
+               	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

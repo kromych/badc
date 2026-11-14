@@ -6,9 +6,9 @@
 //! `Terminator::Jmp` to whichever successor that selects. An
 //! `Inst::Imm` decides directly; a phi decides when every predecessor
 //! agrees, counting the edge a short-circuit operand arrives on (see
-//! `truthy`), which needs no constant to be materialised.
+//! `truthy`), which needs no constant to be materialized.
 //!
-//! The per-arch emit otherwise materialises the constant condition
+//! The per-arch emit otherwise materializes the constant condition
 //! into a register and emits a conditional branch; when the
 //! parallel-copy phi-moves emitted at the predecessor exit happen
 //! to target the same register the condition occupies, the
@@ -358,8 +358,271 @@ pub(crate) fn strip_zero_test_conds(func: &mut FunctionSsa) -> bool {
             };
             changed = true;
         }
+        // A zero test of a 32-bit parameter reads its low word, which holds
+        // the converted value whatever the register's upper half holds.
+        if let Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } =
+            func.blocks[bidx].terminator
+            && narrow_param(func, cond)
+        {
+            if func.low_word_tests.len() < func.blocks.len() {
+                func.low_word_tests.resize(func.blocks.len(), false);
+            }
+            changed |= !func.low_word_tests[bidx];
+            func.low_word_tests[bidx] = true;
+        }
+    }
+    // A select tests its condition as a branch does: through a zero test
+    // or a 32-bit extension it alone reads, at the last link's width, and
+    // a 32-bit parameter in its low word.
+    for v in 0..func.insts.len() {
+        let Inst::Select { cond: first, .. } = func.insts[v] else {
+            continue;
+        };
+        let (mut cond, mut swap, mut low) = (first, false, false);
+        for _ in 0..func.insts.len() {
+            let link = if uses[cond as usize] == 1 {
+                zero_test(func, cond).or_else(|| low_word_of(func, &uses, cond))
+            } else {
+                None
+            };
+            let Some((lhs, negate, low_word)) = link else {
+                break;
+            };
+            // The zero test of an exclusive-or compares its operands.
+            if matches!(
+                func.insts[lhs as usize],
+                Inst::Binop { op: BinOp::Xor, .. } | Inst::BinopI { op: BinOp::Xor, .. }
+            ) {
+                break;
+            }
+            uses[lhs as usize] += 1;
+            uses[cond as usize] -= 1;
+            if func.insts[cond as usize].is_pure() {
+                for_each_operand(&func.insts[cond as usize], |op| {
+                    uses[op as usize] = uses[op as usize].saturating_sub(1);
+                });
+            }
+            (cond, swap, low) = (lhs, swap != negate, low_word);
+        }
+        low |= narrow_param(func, cond);
+        if cond == first && !low {
+            continue;
+        }
+        if let Inst::Select { cond: c, a, b, .. } = &mut func.insts[v] {
+            *c = cond;
+            if swap {
+                core::mem::swap(a, b);
+            }
+        }
+        if func.cmp32.len() < func.insts.len() {
+            func.cmp32.resize(func.insts.len(), false);
+        }
+        func.cmp32[v] = low;
+        changed = true;
     }
     changed
+}
+
+/// A 32-bit integer parameter, whose low word holds its value.
+fn narrow_param(func: &FunctionSsa, v: crate::c5::ir::ValueId) -> bool {
+    matches!(
+        func.insts.get(v as usize),
+        Some(Inst::ParamRef {
+            kind: crate::c5::ir::LoadKind::I32 | crate::c5::ir::LoadKind::U32,
+            ..
+        })
+    )
+}
+
+/// A branch on the low word of `x ^ y` that it alone reads tests whether
+/// `x` and `y` differ in that word: the exclusive-or becomes the 32-bit
+/// `x != y` it computes, which the emit fuses with the branch (`cmp w0,
+/// #imm` / `cmpl $imm`) as it does a compare the source spelled. A
+/// mixed-signedness `==` at 32 bits reaches the branch in this shape.
+/// Taken where the fused form is no longer: the instructions between the
+/// exclusive-or and the branch keep the flags, and on AArch64 an
+/// immediate `cmp` encodes or `eor` cannot encode either.
+///
+/// A comparison of such an exclusive-or with zero, at either width, is
+/// the same comparison of its operands.
+///
+/// Runs after [`strip_zero_test_conds`], which leaves the low-word test.
+pub(crate) fn low_word_xor_to_compare(func: &mut FunctionSsa, is_x86: bool) -> bool {
+    use crate::c5::codegen::ssa::reg_alloc::{compute_use_counts, flags_survive};
+    use crate::c5::ir::BinOp;
+    let uses = compute_use_counts(func);
+    let mut changed = false;
+    for v in 0..func.insts.len() {
+        let (op, x) = match func.insts[v] {
+            Inst::BinopI {
+                op: op @ (BinOp::Eq | BinOp::Ne),
+                lhs,
+                rhs_imm: 0,
+            } => (op, lhs),
+            _ => continue,
+        };
+        if uses.get(x as usize) != Some(&1) {
+            continue;
+        }
+        func.insts[v] = match func.insts[x as usize] {
+            Inst::Binop {
+                op: BinOp::Xor,
+                lhs,
+                rhs,
+            } => Inst::Binop { op, lhs, rhs },
+            Inst::BinopI {
+                op: BinOp::Xor,
+                lhs,
+                rhs_imm,
+            } => Inst::BinopI { op, lhs, rhs_imm },
+            _ => continue,
+        };
+        changed = true;
+    }
+    for bidx in 0..func.blocks.len() {
+        let block = &func.blocks[bidx];
+        let (Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. }) = block.terminator else {
+            continue;
+        };
+        if func.low_word_tests.get(bidx) != Some(&true)
+            || uses.get(cond as usize) != Some(&1)
+            || !block.inst_range.contains(&cond)
+        {
+            continue;
+        }
+        let shorter = match func.insts[cond as usize] {
+            Inst::Binop { op: BinOp::Xor, .. } => true,
+            Inst::BinopI {
+                op: BinOp::Xor,
+                rhs_imm,
+                ..
+            } => {
+                is_x86
+                    || crate::c5::codegen::aarch64::emit::cmp_imm12(rhs_imm).is_some()
+                    || crate::c5::codegen::aarch64::encode::encode_logical_imm(rhs_imm as u64, true)
+                        .is_none()
+            }
+            _ => false,
+        };
+        let window = ((cond + 1)..block.inst_range.end).all(|p| {
+            let inst = &func.insts[p as usize];
+            inst.is_lifetime_marker()
+                || (inst.is_pure() && uses[p as usize] == 0)
+                || flags_survive(inst, is_x86)
+        });
+        if !shorter || !window {
+            continue;
+        }
+        if let Inst::Binop { op, .. } | Inst::BinopI { op, .. } = &mut func.insts[cond as usize] {
+            *op = BinOp::Ne;
+        }
+        if func.cmp32.len() <= cond as usize {
+            func.cmp32.resize(func.insts.len(), false);
+        }
+        func.cmp32[cond as usize] = true;
+        func.low_word_tests[bidx] = false;
+        changed = true;
+    }
+    changed
+}
+
+/// A branch on a counter `x` whose block computes its decrement `y = x - 1`
+/// tests `y != -1` instead, the same test, when nothing else reads `x` past
+/// `y` and `x` is not live out of the block. `x` then ends at `y`, so the
+/// two share a register, and the decrement can set the flags the branch
+/// reads. Runs after [`strip_zero_test_conds`]: a low-word test compares
+/// the low words.
+pub(crate) fn test_decrements(func: &mut FunctionSsa) {
+    use crate::c5::codegen::ssa::liveness::{self, AT_END};
+    use crate::c5::codegen::ssa::mem2reg::{predecessors, successors};
+    use crate::c5::codegen::ssa::reg_alloc::compute_use_counts;
+    use crate::c5::codegen::ssa::tape::{self, At, Insertion};
+    use crate::c5::ir::{BinOp, NO_VALUE, ValueId};
+    let live = compute_use_counts(func);
+    let mut cand: alloc::vec::Vec<(BlockId, ValueId, ValueId)> = alloc::vec::Vec::new();
+    for (b, block) in func.blocks.iter().enumerate() {
+        let (Terminator::Bz { cond: x, .. } | Terminator::Bnz { cond: x, .. }) = block.terminator
+        else {
+            continue;
+        };
+        let decrement = |i: &Inst| {
+            matches!(*i, Inst::BinopI { op: BinOp::Add, lhs, rhs_imm: -1 }
+                | Inst::BinopI { op: BinOp::Sub, lhs, rhs_imm: 1 } if lhs == x)
+        };
+        let y = (block.inst_range.clone())
+            .find(|&i| live[i as usize] > 0 && decrement(&func.insts[i as usize]));
+        if let Some(y) = y
+            && x != NO_VALUE
+        {
+            cand.push((b as BlockId, x, y));
+        }
+    }
+    if cand.is_empty() {
+        return;
+    }
+    let of = cand.iter().map(|c| c.1).collect();
+    let (uses, def_block) = liveness::uses_of(func, &of);
+    let preds = predecessors(func);
+    let mut ins: alloc::vec::Vec<Insertion> = alloc::vec::Vec::new();
+    let mut tests: alloc::vec::Vec<(BlockId, bool)> = alloc::vec::Vec::new();
+    for (b, x, y) in cand {
+        let us = &uses[&x];
+        let past_y = us.iter().filter(|&&(ub, at)| ub == b && at > y).count();
+        let ends = us
+            .iter()
+            .filter(|&&(ub, at)| ub == b && at == AT_END)
+            .count();
+        if past_y != 1 || ends != 1 {
+            continue;
+        }
+        let block = &func.blocks[b as usize];
+        let succs = successors(
+            &block.terminator,
+            &func.computed_goto_targets,
+            &func.jump_tables,
+        );
+        let into = liveness::value_live_in(&preds, def_block[x as usize], us);
+        if succs.iter().any(|&s| into[s as usize]) {
+            continue;
+        }
+        ins.push(Insertion {
+            at: At::After(block.inst_range.end - 1),
+            inst: Inst::BinopI {
+                op: BinOp::Ne,
+                lhs: y,
+                rhs_imm: -1,
+            },
+            is_f32: false,
+            copy_of: None,
+        });
+        let low_word = func
+            .low_word_tests
+            .get(b as usize)
+            .copied()
+            .unwrap_or(false);
+        tests.push((b, low_word));
+    }
+    if ins.is_empty() {
+        return;
+    }
+    let n = func.insts.len();
+    let pos = tape::sort(&mut ins, &func.blocks, n);
+    let rewrite = tape::insert(func, &ins);
+    for (j, &(b, low_word)) in tests.iter().enumerate() {
+        let c = rewrite.ids[pos[j]];
+        if let Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } =
+            &mut func.blocks[b as usize].terminator
+        {
+            *cond = c;
+        }
+        if low_word {
+            if func.cmp32.len() <= c as usize {
+                func.cmp32.resize(func.insts.len(), false);
+            }
+            func.cmp32[c as usize] = true;
+            func.low_word_tests[b as usize] = false;
+        }
+    }
 }
 
 /// Resolve `v` to a constant: an `Inst::Imm`, or one reached through
@@ -479,6 +742,7 @@ mod tests {
         FunctionSsa {
             seh_scopes: Vec::new(),
             block_seh: Vec::new(),
+            predicted: Vec::new(),
             funclet_slots: Vec::new(),
             name: alloc::string::String::new(),
             ent_pc: 0,
@@ -502,7 +766,7 @@ mod tests {
             is_weak: false,
             is_internal: false,
             const_params: 0,
-            inst_src: alloc::vec![(0, 0); insts.len()],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             cmp32: Vec::new(),
             div32: Vec::new(),
@@ -522,6 +786,8 @@ mod tests {
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
             array_slots: Vec::new(),
+            vector_objects: Vec::new(),
+            owned_params: Vec::new(),
             over_aligned: Default::default(),
             frame_align: 0,
             realign_region_bytes: 0,

@@ -50,26 +50,18 @@ Disassembly of section .text:
                	ret
 
 <load_alias>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
                	mov	x1, #0x0                // =0
-               	bl	<addr>
-               	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x2, #0xfe               // =254
                	sub	x0, x29, #0x8
                	mov	x1, #0x0                // =0
-               	sturb	w1, [x29, #-0x8]
-               	mov	x3, #0x10               // =16
-               	sturb	w3, [x29, #-0x7]
-               	mov	x3, #0xbf               // =191
-               	sturb	w3, [x29, #-0x6]
-               	sturb	w2, [x29, #-0x5]
+               	mov	x2, #0x1000             // =4096
+               	movk	x2, #0xfebf, lsl #16
+               	stur	w2, [x29, #-0x8]
                	bl	<addr>
                	mov	x17, #0x1000            // =4096
                	movk	x17, #0xfebf, lsl #16

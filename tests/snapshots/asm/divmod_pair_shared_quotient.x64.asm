@@ -28,8 +28,7 @@ Disassembly of section .text:
 <check_uint>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
+               	subq	$0x10, %rsp
                	movq	%rdx, %r9
                	movl	%edi, %eax
                	xorl	%edx, %edx
@@ -38,7 +37,6 @@ Disassembly of section .text:
                	cmpl	%r9d, %r8d
                	je	<addr>
                	movl	$0x1, %eax
-               	popq	%rbx
                	leave
                	retq
                	movq	%r8, %rax
@@ -48,7 +46,6 @@ Disassembly of section .text:
                	cmpl	%ecx, %edx
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbx
                	leave
                	retq
                	addq	%r8, %rdx
@@ -56,7 +53,6 @@ Disassembly of section .text:
                	cmpl	%ecx, %edx
                	je	<addr>
                	movl	$0x3, %eax
-               	popq	%rbx
                	leave
                	retq
                	movq	%rdi, %rdx
@@ -65,7 +61,6 @@ Disassembly of section .text:
                	cmpl	%ecx, %eax
                	je	<addr>
                	movl	$0x4, %eax
-               	popq	%rbx
                	leave
                	retq
                	imulq	%r8, %rsi
@@ -75,11 +70,9 @@ Disassembly of section .text:
                	cmpl	%edi, %eax
                	je	<addr>
                	movl	$0x5, %eax
-               	popq	%rbx
                	leave
                	retq
                	xorl	%eax, %eax
-               	popq	%rbx
                	leave
                	retq
 

@@ -97,24 +97,18 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movl	$0x3dcccccd, -0x8(%rbp) # imm = 0x3DCCCCCD
                	movl	$0x5, %edi
-               	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000
-               	movabsq	$0x4004000000000000, %rcx # imm = 0x4004000000000000
-               	movabsq	$0x4008000000000000, %rdx # imm = 0x4008000000000000
-               	movabsq	$-0x3fe4000000000000, %rsi # imm = 0xC01C000000000000
-               	movabsq	$0x43f0000000000000, %r8 # imm = 0x43F0000000000000
-               	movq	%rax, %xmm0
-               	movq	%rcx, %xmm1
-               	movq	%rdx, %xmm2
-               	movq	%rsi, %xmm3
-               	movq	%r8, %xmm4
+               	movsd	<rip>, %xmm0 # <addr>
+               	movsd	<rip>, %xmm1 # <addr>
+               	movsd	<rip>, %xmm2 # <addr>
+               	movsd	<rip>, %xmm3 # <addr>
+               	movsd	<rip>, %xmm4 # <addr>
                	movb	$0x5, %al
                	callq	<addr>
                	movss	-0x8(%rbp), %xmm0
-               	movl	$0x3dcccccd, %ecx       # imm = 0x3DCCCCCD
-               	movq	%rcx, %xmm14
-               	ucomiss	%xmm0, %xmm14
-               	jp	<addr>
-               	je	<addr>
-               	incq	%rax
+               	leaq	0x1(%rax), %rcx
+               	movss	<rip>, %xmm1 # <addr>
+               	ucomiss	%xmm0, %xmm1
+               	cmovneq	%rcx, %rax
+               	cmovpq	%rcx, %rax
                	leave
                	retq

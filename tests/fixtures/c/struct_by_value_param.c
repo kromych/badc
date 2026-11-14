@@ -1,8 +1,7 @@
-// Struct passed by value to a function. The c5 calling convention
-// pushes the struct's *address* to the c5 stack at the call site;
-// the callee's prologue copies the struct out of the caller's
-// temp into a stack-allocated local of its own, so writes the
-// callee makes don't leak back to the caller's copy.
+// Struct passed by value to a function (C17 6.5.2.2p4): the callee
+// receives a copy, passed as the platform ABI passes an aggregate of
+// its size, so writes the callee makes don't reach the caller's
+// object.
 
 struct Pair { int a; int b; };
 

@@ -15,7 +15,9 @@
 //! is not found, as with the system compilers, so `__has_include` and
 //! `#include` probes select the target's own interfaces.
 //!
-//! Adding a header: drop the file under `libc/include/`, add an entry to
+//! Adding a header: drop the file under `libc/include/` (a header the
+//! compiler provides rather than the C library, as `COMPILER_HEADERS` lists
+//! them, under `libc/compiler/include/`), add an entry to
 //! [`EMBEDDED_HEADERS`], document the symbols it binds at the top of the
 //! file, and measure its targets with `scripts/measure_header_targets.py`.
 
@@ -97,6 +99,11 @@ pub(super) fn withheld(name: &str, target: Target) -> bool {
 #[cfg(test)]
 pub(super) const BEYOND_REFERENCE: &[(&str, TargetSet, &str)] = &[
     (
+        "arm64_neon.h",
+        TargetSet::of(Target::WindowsAarch64),
+        "MSVC's NEON header, which its <intrin.h> includes as badc's includes <arm_neon.h>",
+    ),
+    (
         "msvc_compat.h",
         ALL,
         "badc's own; a no-op off Windows, so one `-include msvc_compat.h` serves every target",
@@ -105,6 +112,11 @@ pub(super) const BEYOND_REFERENCE: &[(&str, TargetSet, &str)] = &[
         "dlfcn.h",
         WINDOWS,
         "libc/lib/dlfcn_ext.c defines dlopen, dlsym, dlclose and dlerror over kernel32",
+    ),
+    (
+        "uchar.h",
+        MACOS,
+        "libc/lib/uchar_ext.c defines mbrtoc16, c16rtomb, mbrtoc32 and c32rtomb over mbrtowc / wcrtomb",
     ),
     (
         "fnmatch.h",
@@ -122,11 +134,14 @@ pub(super) const BEYOND_REFERENCE: &[(&str, TargetSet, &str)] = &[
 /// encoders. Another compiler's copy is written against that compiler's
 /// builtins and can never compile here, so where a search directory
 /// carries one (a foreign toolchain's `-print-file-name=include` on the
-/// command line) the name binds badc's copy at that position. Each is
-/// served on the architecture whose instructions it wraps, as gcc installs
-/// it.
+/// command line, or MSVC's include directory for `<intrin.h>`) the name
+/// binds badc's copy at that position. Each is served on the architecture
+/// whose instructions it wraps.
 pub(super) const INTRINSIC_HEADERS: &[&str] = &[
+    "arm_acle.h",
     "arm_neon.h",
+    "arm64_neon.h",
+    "intrin.h",
     "x86intrin.h",
     "immintrin.h",
     "mmintrin.h",
@@ -135,16 +150,15 @@ pub(super) const INTRINSIC_HEADERS: &[&str] = &[
     "pmmintrin.h",
     "tmmintrin.h",
     "smmintrin.h",
+    "nmmintrin.h",
     "wmmintrin.h",
 ];
 
-/// The rest of the headers gcc and clang both install in the compiler's
-/// own include directory rather than with the C library: C99 4p6's
-/// freestanding set, C11's `<stdalign.h>`, `<stdnoreturn.h>` and
-/// `<stdatomic.h>`, `<mm_malloc.h>`, `<cpuid.h>`, and `<intrin.h>`, which
-/// MSVC and clang keep with the compiler. clang also keeps `<tgmath.h>` and
-/// `<inttypes.h>` there and gcc leaves them to glibc; badc's are built on
-/// its `<math.h>` and `<stdlib.h>` and stay with the library.
+/// The rest of the headers that live in the compiler's own include
+/// directory rather than with the C library: C99 4p6's freestanding set,
+/// C11's `<stdalign.h>`, `<stdnoreturn.h>` and `<stdatomic.h>`,
+/// `<mm_malloc.h>` and `<cpuid.h>`. badc's `<tgmath.h>` and `<inttypes.h>`
+/// are built on its `<math.h>` and `<stdlib.h>` and stay with the library.
 const COMPILER_HEADERS: &[&str] = &[
     "float.h",
     "iso646.h",
@@ -158,12 +172,19 @@ const COMPILER_HEADERS: &[&str] = &[
     "stdnoreturn.h",
     "mm_malloc.h",
     "cpuid.h",
-    "intrin.h",
 ];
 
 /// Whether `name` is an intrinsic header ([`INTRINSIC_HEADERS`]).
-pub(super) fn intrinsic_header(name: &str) -> bool {
+pub(crate) fn intrinsic_header(name: &str) -> bool {
     INTRINSIC_HEADERS.contains(&name)
+}
+
+/// Whether badc's copy of `name` takes the place of one a search directory
+/// carries: an intrinsic header's, except an `<intrin.h>` in a `-I`
+/// directory, which a project ships of its own over badc's builtins; MSVC's
+/// sits in its toolset's directory, a system one.
+pub(super) fn replaces_found_copy(name: &str, user_dir: bool) -> bool {
+    intrinsic_header(name) && !(user_dir && name == "intrin.h")
 }
 
 /// Whether `name` is one of the compiler's own headers rather than the C
@@ -182,10 +203,14 @@ pub fn embedded_headers() -> &'static [(&'static str, TargetSet, &'static str)] 
 }
 
 /// A registry entry: the name, the targets it is served on and the body
-/// of `libc/include/<file>`, `<file>` being the name unless given.
+/// of `libc/include/<file>`, `<file>` being the name unless given, or of
+/// `libc/compiler/include/<name>` for one of the compiler's own headers.
 macro_rules! header {
     ($name:literal, $targets:expr) => {
         header!($name => $name, $targets)
+    };
+    ($name:literal, $targets:expr, compiler) => {
+        ($name, $targets, include_str!(concat!("../../libc/compiler/include/", $name)))
     };
     ($name:literal => $file:literal, $targets:expr) => {
         ($name, $targets, include_str!(concat!("../../libc/include/", $file)))
@@ -195,26 +220,34 @@ macro_rules! header {
 /// Every header the registry knows about, with the targets it is served
 /// on.
 pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
-    header!("arm_neon.h", AARCH64),
-    header!("x86intrin.h", X86_64),
-    header!("immintrin.h", X86_64),
-    header!("mmintrin.h", X86_64),
-    header!("xmmintrin.h", X86_64),
-    header!("emmintrin.h", X86_64),
-    header!("pmmintrin.h", X86_64),
-    header!("tmmintrin.h", X86_64),
-    header!("smmintrin.h", X86_64),
-    header!("wmmintrin.h", X86_64),
+    header!("arm_acle.h", AARCH64, compiler),
+    header!("arm_neon.h", AARCH64, compiler),
+    header!(
+        "arm64_neon.h",
+        TargetSet::of(Target::WindowsAarch64),
+        compiler
+    ),
+    header!("x86intrin.h", X86_64, compiler),
+    header!("immintrin.h", X86_64, compiler),
+    header!("mmintrin.h", X86_64, compiler),
+    header!("xmmintrin.h", X86_64, compiler),
+    header!("emmintrin.h", X86_64, compiler),
+    header!("pmmintrin.h", X86_64, compiler),
+    header!("tmmintrin.h", X86_64, compiler),
+    header!("smmintrin.h", X86_64, compiler),
+    header!("nmmintrin.h", X86_64, compiler),
+    header!("wmmintrin.h", X86_64, compiler),
     header!(
         "mm_malloc.h",
-        MACOS.or(TargetSet::of(Target::LinuxX64)).or(WINDOWS)
+        MACOS.or(TargetSet::of(Target::LinuxX64)).or(WINDOWS),
+        compiler
     ),
-    header!("stdalign.h", ALL),
-    header!("stddef.h", ALL),
-    header!("stdint.h", ALL),
+    header!("stdalign.h", ALL, compiler),
+    header!("stddef.h", ALL, compiler),
+    header!("stdint.h", ALL, compiler),
     header!("inttypes.h", ALL),
     header!("setjmp.h", ALL),
-    header!("limits.h", ALL),
+    header!("limits.h", ALL, compiler),
     header!("string.h", ALL),
     header!("sched.h", ALL),
     header!("spawn.h", POSIX),
@@ -222,15 +255,15 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
     header!("stdlib.h", ALL),
     header!("alloca.h", POSIX),
     header!("malloc.h", LINUX.or(WINDOWS)),
-    header!("stdarg.h", ALL),
-    header!("stdbool.h", ALL),
-    header!("iso646.h", ALL),
-    header!("stdnoreturn.h", ALL),
-    header!("stdatomic.h", ALL),
+    header!("stdarg.h", ALL, compiler),
+    header!("stdbool.h", ALL, compiler),
+    header!("iso646.h", ALL, compiler),
+    header!("stdnoreturn.h", ALL, compiler),
+    header!("stdatomic.h", ALL, compiler),
     header!("ctype.h", ALL),
     header!("math.h", ALL),
     header!("tgmath.h", ALL),
-    header!("float.h", ALL),
+    header!("float.h", ALL, compiler),
     header!("locale.h", ALL),
     header!("signal.h", ALL),
     header!("errno.h", ALL),
@@ -240,6 +273,7 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
     header!("machine/endian.h", MACOS),
     header!("assert.h", ALL),
     header!("time.h", ALL),
+    header!("uchar.h", ALL),
     header!("utime.h", ALL),
     header!("sys/utime.h", WINDOWS),
     header!("netdb.h", POSIX),
@@ -318,6 +352,7 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
     header!("sys/random.h", POSIX),
     header!("sys/syscall.h", POSIX),
     header!("asm/unistd.h", LINUX),
+    header!("asm/types.h", LINUX),
     header!("linux/unistd.h", LINUX),
     header!("libintl.h", LINUX),
     header!("elf.h", LINUX),
@@ -380,7 +415,7 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
     header!("fenv.h", ALL),
     header!("io.h", WINDOWS),
     header!("direct.h", WINDOWS),
-    header!("intrin.h", WINDOWS),
+    header!("intrin.h", WINDOWS, compiler),
     header!("bcrypt.h", WINDOWS),
     header!("TargetConditionals.h", MACOS),
     header!("AvailabilityMacros.h", MACOS),
@@ -399,15 +434,19 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
     header!("__badc_wstring.h", INTERNAL),
     header!("__badc_wstdlib.h", INTERNAL),
     header!("__badc_wstdio.h", INTERNAL),
+    header!("__badc_ucrt_stdio.h", INTERNAL),
     header!("__badc_wio.h", INTERNAL),
     header!("__badc_wdirect.h", INTERNAL),
     header!("__badc_wprocess.h", INTERNAL),
     header!("__badc_wtime.h", INTERNAL),
     header!("__badc_wconio.h", INTERNAL),
     header!("__badc_wctype.h", INTERNAL),
+    header!("__badc_in6.h", INTERNAL),
     header!("winioctl.h", WINDOWS),
     header!("pathcch.h", WINDOWS),
     header!("psapi.h", WINDOWS),
+    header!("delayimp.h", WINDOWS),
+    header!("fibersapi.h", WINDOWS),
     header!("versionhelpers.h", WINDOWS),
     header!("crtdbg.h", WINDOWS),
     header!("aclapi.h", WINDOWS),
@@ -421,7 +460,7 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
     header!("mbctype.h", WINDOWS),
     header!("winapifamily.h", WINDOWS),
     header!("sdkddkver.h", WINDOWS),
-    header!("cpuid.h", X86_64),
+    header!("cpuid.h", X86_64, compiler),
     header!("winerror.h", WINDOWS),
     header!("process.h", WINDOWS),
     header!("conio.h", WINDOWS),
@@ -442,13 +481,6 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
     header!("winternl.h", WINDOWS),
     header!("excpt.h", WINDOWS),
     header!("wchar.h", ALL),
-    // Opt-in MSVC-shape predefines: no `#pragma binding`
-    // here, just `#define _MSC_VER 1900`, `#define __int64 long
-    // long`, the `__declspec(x)` family of empty-decorator
-    // macros, etc. Build drivers that need to compile MSVC-
-    // shaped C against the Windows backend opt in via
-    // `badc -include msvc_compat.h ...`. Internally guarded by
-    // `#ifdef _WIN32` so the same command line stays valid on
     header!("scsi/sg.h", LINUX),
     header!("linux/magic.h", LINUX),
     header!("linux/falloc.h", LINUX),
@@ -464,6 +496,19 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
     header!("linux/fd.h", LINUX),
     header!("linux/can.h", LINUX),
     header!("linux/can/raw.h", LINUX),
+    header!("linux/can/j1939.h", LINUX),
+    header!("netpacket/packet.h", LINUX),
+    header!("linux/if_alg.h", LINUX),
+    header!("linux/netlink.h", LINUX),
+    header!("linux/tipc.h", LINUX),
+    header!("linux/qrtr.h", LINUX),
+    header!("linux/netfilter.h", LINUX),
+    header!("linux/netfilter_ipv4.h", LINUX),
+    header!("linux/can/bcm.h", LINUX),
+    header!("linux/can/isotp.h", LINUX),
+    header!("linux/prctl.h", LINUX),
+    // The MinGW identity and the decorator no-ops a unit opts into with
+    // `-include msvc_compat.h`; it is empty off Windows.
     header!("msvc_compat.h", ALL),
     // Legacy alias: <memory.h> predates POSIX's consolidation of
     // mem*/str* under <string.h>. The binding index leaves it out, so
@@ -472,8 +517,8 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
 ];
 
 // Build-time-generated `&[(name, headers)]` sorted by name. Produced
-// by `build.rs`'s `emit_binding_to_header_index`, which walks
-// `libc/include/*.h` once per build and harvests every
+// by `build.rs`'s `emit_binding_to_header_index`, which walks the
+// bundled headers once per build and harvests every
 // `#pragma binding(<dylib>::<name>, ...)` local symbol plus every
 // file-scope function-prototype identifier. Each name's headers are
 // in priority-then-lexicographic scan order.
@@ -491,7 +536,22 @@ fn first_declaring(
     target: Target,
     mut declares: impl FnMut(&'static str) -> bool,
 ) -> Option<&'static str> {
-    (headers_declaring(name).iter().copied()).find(|&h| !withheld(h, target) && declares(h))
+    let own = headers_declaring(name);
+    let mut serves = |h: &'static str| !withheld(h, target) && declares(h);
+    // A declaring header the target withholds may reach it through one it
+    // serves: Windows has no <alloca.h>, and its <malloc.h> declares alloca.
+    own.iter()
+        .copied()
+        .find(|&h| serves(h))
+        .or_else(|| (own.iter().flat_map(|&h| header_includers(h)).copied()).find(|&h| serves(h)))
+}
+
+/// The bundled headers that `#include <header>`.
+fn header_includers(header: &str) -> &'static [&'static str] {
+    HEADER_INCLUDERS
+        .binary_search_by_key(&header, |&(n, _)| n)
+        .ok()
+        .map_or(&[], |i| HEADER_INCLUDERS[i].1)
 }
 
 /// The macros, bindings and file-scope functions and objects of
@@ -609,6 +669,25 @@ mod tests {
         }
     }
 
+    /// The compiler's own headers are the files of `libc/compiler/include`,
+    /// and no other file is kept there.
+    #[test]
+    fn the_compiler_headers_are_the_compiler_include_directory() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("libc/compiler/include");
+        let mut on_disk: alloc::vec::Vec<String> = std::fs::read_dir(&dir)
+            .expect("libc/compiler/include")
+            .map(|e| e.expect("entry").file_name().to_string_lossy().into_owned())
+            .collect();
+        on_disk.sort();
+        let mut listed: alloc::vec::Vec<String> = INTRINSIC_HEADERS
+            .iter()
+            .chain(COMPILER_HEADERS)
+            .map(|n| String::from(*n))
+            .collect();
+        listed.sort();
+        assert_eq!(on_disk, listed);
+    }
+
     #[test]
     fn header_declaring_finds_printf_in_stdio() {
         assert_eq!(
@@ -634,6 +713,22 @@ mod tests {
     }
 
     /// A `__badc_*.h` block's names count for the headers that include it.
+    /// A name whose declaring header a target withholds resolves through a
+    /// served header that includes it: Windows ships no <alloca.h>, and its
+    /// <malloc.h> declares `alloca` and `_alloca`.
+    #[test]
+    fn header_declaring_falls_back_to_a_served_includer() {
+        for t in [Target::WindowsX64, Target::WindowsAarch64] {
+            assert_eq!(header_declaring("alloca", t), Some("malloc.h"), "{t:?}");
+            assert_eq!(header_declaring("_alloca", t), Some("malloc.h"), "{t:?}");
+        }
+        assert_eq!(
+            header_declaring("alloca", Target::LinuxX64),
+            Some("alloca.h")
+        );
+        assert_eq!(header_declaring("_alloca", Target::LinuxX64), None);
+    }
+
     #[test]
     fn header_declaring_credits_a_block_to_its_includers() {
         assert_eq!(headers_declaring("_wcsrev"), ["string.h", "wchar.h"]);
@@ -889,6 +984,70 @@ mod tests {
         assert!(failures.is_empty(), "{}", failures.join("\n"));
     }
 
+    /// The Windows SDK's sal.h, concurrencysal.h, specstrings.h and
+    /// driverspecs.h define these names as object-like macros, and under
+    /// `--msvc` they precede the compiler's headers (winnt.h includes
+    /// `<intrin.h>`), so no compiler header may use one as an identifier.
+    #[test]
+    fn compiler_headers_compile_after_the_sdk_annotation_macros() {
+        use crate::{CompileOptions, Compiler, Target};
+        const SAL: &str = "\
+            __allocator __analysis_noreturn __bound __callback __checkReturn __deref \
+            __deref_in __deref_in_opt __deref_in_opt_out __deref_inout __deref_inout_nz \
+            __deref_inout_nz_opt __deref_inout_opt __deref_inout_z __deref_inout_z_opt \
+            __deref_nonvolatile __deref_opt_in __deref_opt_in_opt __deref_opt_inout \
+            __deref_opt_inout_nz __deref_opt_inout_nz_opt __deref_opt_inout_opt \
+            __deref_opt_inout_z __deref_opt_inout_z_opt __deref_opt_out __deref_opt_out_nz_opt \
+            __deref_opt_out_opt __deref_opt_out_z __deref_opt_out_z_opt __deref_out \
+            __deref_out_bound __deref_out_nz __deref_out_nz_opt __deref_out_opt __deref_out_z \
+            __deref_out_z_opt __deref_volatile __drv_IoGetDmaAdapter __drv_KMDF __drv_NDIS \
+            __drv_WDM __drv_acquiresCancelSpinLock __drv_acquiresCriticalRegion \
+            __drv_acquiresPriorityRegion __drv_aliasesMem __drv_constant \
+            __drv_dispatchType_other __drv_floatRestored __drv_floatSaved __drv_floatUsed \
+            __drv_inTry __drv_interlocked __drv_isCancelIRQL __drv_isObjectPointer \
+            __drv_mustHoldCancelSpinLock __drv_mustHoldCriticalRegion \
+            __drv_mustHoldPriorityRegion __drv_neverHoldCancelSpinLock \
+            __drv_neverHoldCriticalRegion __drv_neverHoldPriorityRegion __drv_nonConstant \
+            __drv_notInTry __drv_notPointer __drv_raisesIRQL __drv_releasesCancelSpinLock \
+            __drv_releasesCriticalRegion __drv_releasesPriorityRegion __drv_restoresIRQL \
+            __drv_sameIRQL __drv_savesIRQL __drv_typeBitset __drv_typeCond __drv_typeConst \
+            __drv_typeExpr __drv_useCancelIRQL __encoded_array __encoded_pointer __exceptthat \
+            __fallthrough __field_encoded_array __field_encoded_pointer __field_nullterminated \
+            __format_string __gdi_entry __in __in_bound __in_nz __in_nz_opt __in_opt __in_z \
+            __in_z_opt __inner_allocator __inner_exceptthat __inout __inout_nz __inout_nz_opt \
+            __inout_opt __inout_z __inout_z_opt __interlocked __internal_kernel_driver \
+            __kernel_code __kernel_driver __kernel_entry __maybenull __maybevalid \
+            __no_competing_thread __nonvolatile __nothrow __notnull __notvalid __null \
+            __nullnullterminated __nullterminated __out __out_bound __out_nz __out_nz_opt \
+            __out_opt __out_z __out_z_opt __override __possibly_notnullterminated __post \
+            __post_deref_except_maybenull __post_except_maybenull __post_invalid \
+            __post_nullnullterminated __pre __pre_deref_except_maybenull \
+            __pre_except_maybenull __prefast_operator_new_null __prefast_operator_new_throws \
+            __readonly __refparam __requires_no_locks_held __reserved __rpc_entry \
+            __specstrings __useHeader __user_code __user_driver __valid __valueUndefined \
+            __volatile";
+        let sal: alloc::string::String = SAL
+            .split_whitespace()
+            .map(|n| alloc::format!("#define {n}\n"))
+            .collect();
+        let mut failures = alloc::vec::Vec::new();
+        for target in Target::ALL.into_iter().filter(|t| t.is_windows()) {
+            for &(name, targets, _) in embedded_headers() {
+                if !compiler_header(name) || !targets.contains(target) {
+                    continue;
+                }
+                let src = alloc::format!("{sal}#include <{name}>\n");
+                let opts = CompileOptions::default()
+                    .with_no_entry_point(true)
+                    .with_msvc(true);
+                if let Err(e) = Compiler::with_options(src, target, opts).compile() {
+                    failures.push(alloc::format!("{} <{name}>: {e}", target.id_str()));
+                }
+            }
+        }
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
+
     /// The C99 library functions a target lacked a declaration for are
     /// declared on every target with the standard type (C99 7.12, 7.19.6.14).
     #[test]
@@ -1017,26 +1176,21 @@ mod tests {
                 names.extend(shadow);
             }
             names.extend(c99);
-            src.push_str("void calls(void) {\n");
-            for name in &names {
-                src.push_str(&alloc::format!("    (void){name}(0);\n"));
-            }
-            src.push_str("}\n");
-            let opts = CompileOptions::default().with_no_entry_point(true);
-            let program = Compiler::with_options(src.clone(), target, opts)
+            let opts = || CompileOptions::default().with_no_entry_point(true);
+            Compiler::with_options(src.clone(), target, opts())
                 .compile()
                 .unwrap_or_else(|e| panic!("{}: {e}\n{src}", target.id_str()));
-            let warnings: alloc::vec::Vec<_> =
-                program.warnings.iter().map(|w| w.to_string()).collect();
+            // A call with an argument too many violates C99 6.5.2.2p2 only
+            // against a prototype, and the error ends the compile.
             for name in &names {
-                let text = alloc::format!(
-                    "too many arguments to `{name}` (expected 0, got at least 1) [B3005]"
-                );
-                assert!(
-                    warnings.iter().any(|w| w.contains(&text)),
-                    "{}: {name}: {warnings:?}",
-                    target.id_str()
-                );
+                let unit = alloc::format!("{src}void calls(void) {{ (void){name}(0); }}\n");
+                let err = Compiler::with_options(unit, target, opts())
+                    .compile()
+                    .expect_err(name)
+                    .to_string();
+                let text =
+                    alloc::format!("too many arguments to `{name}` (expected 0, got at least 1)");
+                assert!(err.contains(&text), "{}: {name}: {err}", target.id_str());
             }
         }
     }
@@ -1160,7 +1314,7 @@ mod tests {
     }
 
     /// The Windows CRT block declares its entry points with the SDK's
-    /// prototypes -- a call with one argument too many is diagnosed against
+    /// prototypes -- a call with one argument too many is an error against
     /// the declared count -- and msvcrt's `__argc`, `__argv` and `__wargv`
     /// as the objects they are, which a reference reads through the import.
     #[test]
@@ -1194,27 +1348,23 @@ mod tests {
                    && _Generic(&__wargv, wchar_t ***: 1, default: 0), \"data exports\");\n\
                  void calls(void) {\n",
             );
-            for (name, n) in FNS {
-                let args = alloc::vec!["0"; n + 1].join(", ");
-                src.push_str(&alloc::format!("    (void){name}({args});\n"));
-            }
             src.push_str("}\n");
-            let opts = CompileOptions::default().with_no_entry_point(true);
-            let program = Compiler::with_options(src.clone(), target, opts)
+            let opts = || CompileOptions::default().with_no_entry_point(true);
+            Compiler::with_options(src.clone(), target, opts())
                 .compile()
                 .unwrap_or_else(|e| panic!("{}: {e}\n{src}", target.id_str()));
-            let warnings: alloc::vec::Vec<_> =
-                program.warnings.iter().map(|w| w.to_string()).collect();
             for (name, n) in FNS {
+                let args = alloc::vec!["0"; n + 1].join(", ");
+                let unit = alloc::format!("{src}void more(void) {{ (void){name}({args}); }}\n");
+                let err = Compiler::with_options(unit, target, opts())
+                    .compile()
+                    .expect_err(name)
+                    .to_string();
                 let text = alloc::format!(
                     "too many arguments to `{name}` (expected {n}, got at least {})",
                     n + 1
                 );
-                assert!(
-                    warnings.iter().any(|w| w.contains(&text)),
-                    "{}: {name}: {warnings:?}",
-                    target.id_str()
-                );
+                assert!(err.contains(&text), "{}: {name}: {err}", target.id_str());
             }
         }
     }

@@ -235,6 +235,7 @@ impl<'a> Walker<'a> {
             label_blocks: alloc::vec![None; self.ast.goto_targets.len()],
             cleanup_exits: alloc::collections::BTreeMap::new(),
             switch_dispatch: alloc::vec::Vec::new(),
+            call_temps: alloc::vec::Vec::new(),
             returns_struct: false,
             return_struct_size: 0,
             ret_in_regs: false,
@@ -247,6 +248,8 @@ impl<'a> Walker<'a> {
             jump_tables: self.jump_tables,
             named_refs: self.named_refs,
             freestanding: self.freestanding,
+            x86: self.x86,
+            no_fp_regs: self.no_fp_regs,
         };
         match body {
             FuncletBody::Filter(e) => {

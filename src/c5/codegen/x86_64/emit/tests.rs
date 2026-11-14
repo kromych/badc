@@ -507,12 +507,12 @@ mod mul_add_tests {
         alloc.last_use[b as usize] = v + 1;
         alloc.spill_count = alloc.spill_count.max(4);
         let frame = compute_frame(&func, &alloc, target.abi(), target);
-        let mut code = Vec::new();
+        let mut code = CodeBuf::default();
         assert!(
             emit_mul_add(&mut code, dst, v, a, b, c, neg_product, &alloc, frame).is_ok(),
             "emit_mul_add bailed",
         );
-        code
+        code.into_bytes()
     }
 
     /// `c + a*b` with the addend outside the destination multiplies
@@ -657,12 +657,12 @@ mod fma_tests {
         alloc.places[v as usize] = dst;
         alloc.spill_count = alloc.spill_count.max(4);
         let frame = compute_frame(&func, &alloc, target.abi(), target);
-        let mut code = Vec::new();
+        let mut code = CodeBuf::default();
         assert!(
             emit_fma(&mut code, dst, v, a, b, c, false, false, &alloc, frame).is_ok(),
             "emit_fma bailed"
         );
-        (code, frame)
+        (code.into_bytes(), frame)
     }
 
     /// `a` dying in a register, `b` and `c` spilled: one spill loads into the
@@ -698,7 +698,7 @@ mod fma_tests {
         emit_movq_xmm_r(&mut want, s0, Reg(1));
         let (base, a_off) = spill_slot_addr(frame, 0);
         emit_vex_fma_mem(&mut want, 0xB9, true, Reg(0), s0, base, a_off);
-        assert_eq!(code, want, "movq b, then vfmadd231sd [a]");
+        assert_eq!(*code, want, "movq b, then vfmadd231sd [a]");
     }
 
     /// An operand in the destination's register is the overwritten one.
@@ -714,7 +714,7 @@ mod fma_tests {
         emit_movq_xmm_r(&mut want, s0, Reg(1));
         let (base, c_off) = spill_slot_addr(frame, 1);
         emit_vex_fma_mem(&mut want, 0xA9, true, Reg(0), s0, base, c_off);
-        assert_eq!(code, want, "movq b, then vfmadd213sd [c]");
+        assert_eq!(*code, want, "movq b, then vfmadd213sd [c]");
     }
 }
 
@@ -722,7 +722,6 @@ mod fma_tests {
 mod indexed_tests {
     use super::*;
     use crate::c5::ir::Inst;
-    use alloc::vec::Vec;
 
     /// The function of `src` that holds an indexed access after the
     /// index fold, that access, and the function's allocation with room
@@ -787,18 +786,20 @@ mod indexed_tests {
             alloc.places[base as usize] = Place::IntReg(Reg::RDI.0);
             alloc.places[index as usize] = Place::IntReg(Reg::RSI.0);
             let frame = compute_frame(&func, &alloc, target.abi(), target);
-            let mut code = Vec::new();
+            let mut code = CodeBuf::default();
             let dst = Place::IntReg(Reg::RAX.0);
             let lsl = (index, IndexExt::None);
-            emit_load_indexed(&mut code, dst, base, lsl, scale, kind, true, &alloc, frame)
-                .expect("emit_load_indexed");
-            assert_eq!(code, want, "{src}");
+            emit_load_indexed(
+                &mut code, dst, base, lsl, scale, kind, true, &alloc, frame, None,
+            )
+            .expect("emit_load_indexed");
+            assert_eq!(*code, want, "{src}");
             // No SIB form widens its index: a marked access is refused.
             for ext in [IndexExt::Sxtw, IndexExt::Uxtw] {
                 let marked = (index, ext);
                 assert!(
                     emit_load_indexed(
-                        &mut code, dst, base, marked, scale, kind, true, &alloc, frame
+                        &mut code, dst, base, marked, scale, kind, true, &alloc, frame, None
                     )
                     .is_err()
                 );
@@ -824,7 +825,7 @@ mod indexed_tests {
             alloc.places[index as usize] = places[1];
             alloc.places[value as usize] = places[2];
             let frame = compute_frame(&func, &alloc, target.abi(), target);
-            let mut code = Vec::new();
+            let mut code = CodeBuf::default();
             emit_store_indexed(
                 &mut code,
                 Place::None,
@@ -835,8 +836,9 @@ mod indexed_tests {
                 kind,
                 &alloc,
                 frame,
+                None,
             )
-            .map(|()| code)
+            .map(|()| code.into_bytes())
         };
         let mut store =
             |places: [Place; 3]| store_as(places, IndexExt::None).expect("emit_store_indexed");
@@ -896,6 +898,68 @@ mod two_address_tests {
         panic!("no {op:?} in {src}")
     }
 
+    /// A value and the immediate update of it that share a spill slot are
+    /// one `add qword [slot], imm`; in two slots the update loads, adds and
+    /// stores.
+    #[test]
+    fn an_update_in_its_own_slot_is_one_instruction() {
+        let target = Target::LinuxX64;
+        let program = crate::Compiler::with_target(
+            "long f(long a){ return a + 3; } int main(void){ return 0; }".to_string(),
+            target,
+        )
+        .compile()
+        .expect("compile");
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        let (func, v) = (funcs.into_iter())
+            .find_map(|f| {
+                let at = f.insts.iter().position(|i| {
+                    matches!(
+                        i,
+                        Inst::BinopI {
+                            op: BinOp::Add,
+                            rhs_imm: 3,
+                            ..
+                        }
+                    )
+                })?;
+                Some((f, at as u32))
+            })
+            .expect("the addition");
+        let Inst::BinopI { lhs, .. } = func.insts[v as usize] else {
+            unreachable!()
+        };
+        let emit = |lhs_at: u32, dst_at: u32| {
+            let mut alloc = super::super::ssa::reg_alloc::allocate(
+                &func,
+                target,
+                crate::c5::codegen::FixedRegs::NONE,
+            );
+            alloc.spill_count = alloc.spill_count.max(2);
+            alloc.places[lhs as usize] = Place::Spill(lhs_at);
+            alloc.places[v as usize] = Place::Spill(dst_at);
+            let frame = compute_frame(&func, &alloc, target.abi(), target);
+            let mut code = CodeBuf::default();
+            let dst = Place::Spill(dst_at);
+            emit_binop_imm(&mut code, BinOp::Add, v, dst, lhs, 3, &alloc, frame).expect("emit");
+            code.into_bytes()
+        };
+        let same = emit(0, 0);
+        // REX.W 83 /0 with a memory operand, imm8 3, and nothing else.
+        assert!(
+            same.len() <= 8
+                && same[..2] == [0x48, 0x83]
+                && same[2] >> 6 != 3
+                && (same[2] >> 3) & 7 == 0
+                && same.last() == Some(&3),
+            "{same:02x?}"
+        );
+        let apart = emit(1, 0);
+        assert!(apart.len() > same.len() + 4, "{apart:02x?}");
+    }
+
     /// A difference placed in its subtrahend's register negates it in
     /// place and adds the minuend: `neg rax; add rax, rsi`. When the
     /// minuend is in the same register or spilled, the subtrahend
@@ -912,10 +976,10 @@ mod two_address_tests {
             alloc.places[lhs as usize] = lhs_at;
             alloc.places[rhs as usize] = rhs_at;
             let frame = compute_frame(&func, &alloc, target.abi(), target);
-            let mut code = Vec::new();
+            let mut code = CodeBuf::default();
             let dst = reg(Reg::RAX);
             emit_binop(&mut code, BinOp::Sub, v, dst, lhs, rhs, &alloc, frame).expect("emit_binop");
-            code
+            code.into_bytes()
         };
         let two = "long f(long a, long b){ return a - b; }";
         assert_eq!(
@@ -951,10 +1015,10 @@ mod two_address_tests {
         alloc.places[rhs as usize] = reg(Reg::RSI);
         let emit = |alloc: &Allocation, dst: Reg| {
             let frame = compute_frame(&func, alloc, target.abi(), target);
-            let mut code = Vec::new();
+            let mut code = CodeBuf::default();
             emit_binop(&mut code, BinOp::Shl, v, reg(dst), lhs, rhs, alloc, frame)
                 .expect("emit_binop");
-            code
+            code.into_bytes()
         };
         // shlx rax, rdi, rsi: the count rides rsi, so nothing stages
         // into cl or saves rcx whatever holds it.
@@ -995,7 +1059,7 @@ mod two_address_tests {
         alloc.places[rhs as usize] = reg(Reg::RSI);
         let emit = |alloc: &Allocation| {
             let frame = compute_frame(&func, alloc, target.abi(), target);
-            let mut code = Vec::new();
+            let mut code = CodeBuf::default();
             emit_binop(
                 &mut code,
                 BinOp::Ror,
@@ -1007,7 +1071,7 @@ mod two_address_tests {
                 frame,
             )
             .expect("emit_binop");
-            code
+            code.into_bytes()
         };
         // mov rax, rdi; [push rcx;] mov rcx, rsi; ror rax, cl; [pop rcx]
         let bare = [0x48, 0x89, 0xF8, 0x48, 0x89, 0xF1, 0x48, 0xD3, 0xC8];
@@ -1022,6 +1086,12 @@ mod two_address_tests {
 
     /// The function of `src` holding a copy, the copy's id and the allocation.
     fn copy_of(src: &str) -> (FunctionSsa, u32, Allocation) {
+        inst_of(src, |i| matches!(i, Inst::Mcpy { .. }))
+    }
+
+    /// The function of `src` holding an instruction `is` accepts, that
+    /// instruction's id and an allocation of the function.
+    fn inst_of(src: &str, is: fn(&Inst) -> bool) -> (FunctionSsa, u32, Allocation) {
         let target = Target::LinuxX64;
         let program = crate::Compiler::with_target(
             alloc::format!("{src} int main(void){{ return 0; }}"),
@@ -1032,12 +1102,11 @@ mod two_address_tests {
         let funcs =
             crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
                 .expect("ssa");
-        let is_copy = |i: &Inst| matches!(i, Inst::Mcpy { .. });
         let func = funcs
             .into_iter()
-            .find(|f| f.insts.iter().any(is_copy))
-            .expect("a function with a copy");
-        let v = func.insts.iter().position(is_copy).expect("the copy") as u32;
+            .find(|f| f.insts.iter().any(is))
+            .expect("a function with the instruction");
+        let v = func.insts.iter().position(is).expect("the instruction") as u32;
         let mut alloc = super::super::ssa::reg_alloc::allocate(
             &func,
             target,
@@ -1045,6 +1114,73 @@ mod two_address_tests {
         );
         alloc.spill_count = alloc.spill_count.max(2);
         (func, v, alloc)
+    }
+
+    /// In a body holding 256-bit values a copy moves 32-byte units through
+    /// the ymm and a 16-byte rest through its xmm, all VEX-encoded: a
+    /// legacy SSE access between 256-bit ones carries their upper halves.
+    /// Encodings are clang's.
+    #[test]
+    fn a_wide_body_copies_with_vex_moves() {
+        let target = Target::LinuxX64;
+        let (func, v, mut alloc) = copy_of(
+            "typedef struct { long v[6]; } Value; void copy(Value *d, const Value *s) { *d = *s; }",
+        );
+        let Inst::Mcpy { dst, src, .. } = func.insts[v as usize] else {
+            panic!("{:?}", func.insts[v as usize])
+        };
+        alloc.places[dst as usize] = Place::IntReg(Reg::RDI.0);
+        alloc.places[src as usize] = Place::IntReg(Reg::RSI.0);
+        let mut frame = compute_frame(&func, &alloc, target.abi(), target);
+        frame.wide_regs = true;
+        let mut code = CodeBuf::default();
+        emit_mcpy(
+            &mut code,
+            v,
+            Place::None,
+            dst,
+            src,
+            48,
+            8,
+            Some(14),
+            false,
+            &alloc,
+            frame,
+            target.abi(),
+        )
+        .expect("emit_mcpy");
+        let want = [
+            0xc5, 0x7c, 0x10, 0x36, // vmovups (%rsi), %ymm14
+            0xc5, 0x7c, 0x11, 0x37, // vmovups %ymm14, (%rdi)
+            0xc5, 0x78, 0x10, 0x76, 0x20, // vmovups 0x20(%rsi), %xmm14
+            0xc5, 0x78, 0x11, 0x77, 0x20, // vmovups %xmm14, 0x20(%rdi)
+        ];
+        assert_eq!(*code, want, "{code:02x?}");
+    }
+
+    /// In a body holding 256-bit values a zero fill clears the ymm and
+    /// stores it as a copy moves, VEX-encoded. Encodings are clang's.
+    #[test]
+    fn a_wide_body_zero_fills_with_vex_moves() {
+        let target = Target::LinuxX64;
+        let (func, v, mut alloc) = inst_of(
+            "typedef struct { long v[6]; } Value; void zero(Value *d) { *d = (Value){0}; }",
+            |i| matches!(i, Inst::Mzero { .. }),
+        );
+        let Inst::Mzero { dst, .. } = func.insts[v as usize] else {
+            panic!("{:?}", func.insts[v as usize])
+        };
+        alloc.places[dst as usize] = Place::IntReg(Reg::RDI.0);
+        let mut frame = compute_frame(&func, &alloc, target.abi(), target);
+        frame.wide_regs = true;
+        let mut code = CodeBuf::default();
+        emit_mzero(&mut code, dst, 48, 8, Some(14), false, &alloc, frame).expect("emit_mzero");
+        let want = [
+            0xc4, 0x41, 0x0c, 0x57, 0xf6, // vxorps %ymm14, %ymm14, %ymm14
+            0xc5, 0x7c, 0x11, 0x37, // vmovups %ymm14, (%rdi)
+            0xc5, 0x78, 0x11, 0x77, 0x20, // vmovups %xmm14, 0x20(%rdi)
+        ];
+        assert_eq!(*code, want, "{code:02x?}");
     }
 
     /// A copy moves 16 bytes through the xmm the zero fill uses and takes
@@ -1065,7 +1201,7 @@ mod two_address_tests {
         let reg = |r: Reg| Place::IntReg(r.0);
         let emit = |alloc: &Allocation, xmm: Option<u8>| {
             let frame = compute_frame(&func, alloc, target.abi(), target);
-            let mut code = Vec::new();
+            let mut code = CodeBuf::default();
             emit_mcpy(
                 &mut code,
                 v,
@@ -1081,7 +1217,7 @@ mod two_address_tests {
                 target.abi(),
             )
             .expect("emit_mcpy");
-            code
+            code.into_bytes()
         };
         alloc.implicit_live = alloc::vec![0; func.insts.len()];
         alloc.places[dst as usize] = reg(Reg::RDI);
@@ -1115,6 +1251,51 @@ mod two_address_tests {
         );
     }
 
+    /// A copy into the place its source holds emits nothing, a spill slot
+    /// included.
+    #[test]
+    fn a_copy_into_its_source_s_place_emits_nothing() {
+        let target = Target::LinuxX64;
+        let (func, v, mut alloc) = binop_of("long f(long a, long b) { return a + b; }", BinOp::Add);
+        for place in [Place::Spill(0), Place::IntReg(Reg::RBX.0)] {
+            alloc.places[v as usize] = place;
+            let frame = compute_frame(&func, &alloc, target.abi(), target);
+            let mut code = CodeBuf::default();
+            super::super::arith::emit_copy(&mut code, place, v, false, &alloc, frame)
+                .expect("copy");
+            assert!(code.is_empty(), "{place:?}: {code:02x?}");
+        }
+    }
+
+    /// A spilled Windows x64 TLS address is formed in r11: r10 holds the TLS
+    /// array the index selects from, so the index cannot load into it.
+    #[test]
+    fn a_spilled_windows_tls_address_keeps_the_index_off_r10() {
+        let target = Target::WindowsX64;
+        let (func, v, mut alloc) = binop_of("long f(long a, long b) { return a + b; }", BinOp::Add);
+        alloc.places[v as usize] = Place::Spill(0);
+        let frame = compute_frame(&func, &alloc, target.abi(), target);
+        let mut code = CodeBuf::default();
+        super::super::mem::emit_tls_addr(
+            &mut code,
+            Place::Spill(0),
+            0x20,
+            v,
+            (target, false),
+            &mut Vec::new(),
+            &mut Vec::new(),
+            &Default::default(),
+            0,
+            frame,
+        )
+        .expect("TlsAddr");
+        // `mov r10, gs:[0x58]` is 9 bytes; then the index load, REX.R
+        // selecting r8..r15.
+        let (rex, modrm) = (code[9], code[11]);
+        let index = ((modrm >> 3) & 7) | ((rex & 4) << 1);
+        assert_ne!(index, 10, "{code:02x?}");
+    }
+
     /// A division saves rax / rdx exactly for the values the allocation
     /// records live in them across it, never over its own result; without
     /// a record, any value placed there counts. Encodings are clang's.
@@ -1141,9 +1322,9 @@ mod two_address_tests {
                 panic!("{:?}", func.insts[v as usize])
             };
             let frame = compute_frame(func, alloc, target.abi(), target);
-            let mut code = Vec::new();
+            let mut code = CodeBuf::default();
             emit_binop(&mut code, op, v, reg(dst), lhs, rhs, alloc, frame).expect("emit_binop");
-            code
+            code.into_bytes()
         };
         let (rax, rdx) = (1u32 << Reg::RAX.0, 1u32 << Reg::RDX.0);
         // mov rax, rdi; cqo; idiv rsi
@@ -1254,10 +1435,10 @@ mod two_address_tests {
             alloc.places[lo as usize] = reg(l);
             alloc.places[divisor as usize] = reg(d);
             let frame = compute_frame(&func, &alloc, target.abi(), target);
-            let mut code = Vec::new();
+            let mut code = CodeBuf::default();
             emit_udiv128(&mut code, v, reg(Reg::R8), hi, lo, divisor, &alloc, frame)
                 .expect("emit_udiv128");
-            code
+            code.into_bytes()
         };
         let div_rcx: &[u8] = &[0x48, 0xF7, 0xF1];
         let div_r11: &[u8] = &[0x49, 0xF7, 0xF3];
@@ -1351,10 +1532,10 @@ mod imm_store_tests {
 
     fn emit(func: &FunctionSsa, v: u32, alloc: &Allocation, abi: Abi) -> Vec<u8> {
         let frame = compute_frame(func, alloc, abi, Target::LinuxX64);
-        let mut code = Vec::new();
+        let mut code = CodeBuf::default();
         emit_store_of_imm(&mut code, &func.insts[v as usize], func, alloc, frame, abi)
             .expect("emit_store_of_imm");
-        code
+        code.into_bytes()
     }
 
     /// Spilled operands reload into r10 and r11, which the immediate
@@ -1422,30 +1603,51 @@ mod relax_branches_tests {
     fn near_forward_branch_shortens() {
         // Single jmp at offset 0 to a block 100 bytes ahead: short rel
         // = 100 - 2 = 98, within i8.
-        let short = relax_branches(&[(0, 5, 1, false)], &[0, 100]);
+        let short = relax_branches(&[(0, 5, 1, false)], &[0, 100], &[]);
         assert_eq!(short, vec![true]);
     }
 
     #[test]
     fn far_forward_branch_stays_long() {
         // Target 200 bytes ahead: short rel = 198, out of i8 range.
-        let short = relax_branches(&[(0, 5, 1, false)], &[0, 200]);
+        let short = relax_branches(&[(0, 5, 1, false)], &[0, 200], &[]);
         assert_eq!(short, vec![false]);
     }
 
     #[test]
     fn backward_branch_shortens() {
         // jmp at offset 50 back to offset 0: short rel = 0 - 52 = -52.
-        let short = relax_branches(&[(50, 5, 0, false)], &[0, 50]);
+        let short = relax_branches(&[(50, 5, 0, false)], &[0, 50], &[]);
         assert_eq!(short, vec![true]);
+    }
+
+    #[test]
+    fn a_backward_branch_counts_the_padding_ahead_of_its_own_group() {
+        // A jmp that opens its own group at offset 120, back to offset 0:
+        // short rel -122 fits, but up to 10 bytes of padding ahead of the
+        // jmp move it to -132.
+        assert_eq!(
+            relax_branches(&[(120, 5, 0, false)], &[0, 200], &[]),
+            vec![true]
+        );
+        assert_eq!(
+            relax_branches(&[(120, 5, 0, false)], &[0, 200], &[(120, 10)]),
+            vec![false]
+        );
     }
 
     #[test]
     fn forward_boundary_127_shortens_128_does_not() {
         // Short instr ends at offset 2; target 129 -> rel 127 (fits),
         // target 130 -> rel 128 (does not).
-        assert_eq!(relax_branches(&[(0, 5, 1, false)], &[0, 129]), vec![true]);
-        assert_eq!(relax_branches(&[(0, 5, 1, false)], &[0, 130]), vec![false]);
+        assert_eq!(
+            relax_branches(&[(0, 5, 1, false)], &[0, 129], &[]),
+            vec![true]
+        );
+        assert_eq!(
+            relax_branches(&[(0, 5, 1, false)], &[0, 130], &[]),
+            vec![false]
+        );
     }
 
     #[test]
@@ -1455,10 +1657,10 @@ mod relax_branches_tests {
         // bytes before branch0's target. branch0's short rel then
         // becomes 132 - 3 - 2 = 127 -> fits. A single all-long pass
         // (rel 130) would have missed branch0.
-        let short = relax_branches(&[(0, 5, 2, false), (5, 5, 1, false)], &[0, 10, 132]);
+        let short = relax_branches(&[(0, 5, 2, false), (5, 5, 1, false)], &[0, 10, 132], &[]);
         assert_eq!(short, vec![true, true]);
         // One more byte of distance defeats the cascade for branch0.
-        let short = relax_branches(&[(0, 5, 2, false), (5, 5, 1, false)], &[0, 10, 133]);
+        let short = relax_branches(&[(0, 5, 2, false), (5, 5, 1, false)], &[0, 10, 133], &[]);
         assert_eq!(short, vec![false, true]);
     }
 
@@ -1466,10 +1668,10 @@ mod relax_branches_tests {
     fn pinned_branch_keeps_the_long_form() {
         // An inline-asm template branch is emitted before relaxation runs, so
         // it stays long however close its target is.
-        let short = relax_branches(&[(0, 5, 1, true)], &[0, 10]);
+        let short = relax_branches(&[(0, 5, 1, true)], &[0, 10], &[]);
         assert_eq!(short, vec![false]);
         // Its bytes still count for the branches around it.
-        let short = relax_branches(&[(0, 5, 1, true), (5, 5, 2, false)], &[0, 10, 20]);
+        let short = relax_branches(&[(0, 5, 1, true), (5, 5, 2, false)], &[0, 10, 20], &[]);
         assert_eq!(short, vec![false, true]);
     }
 
@@ -1483,6 +1685,7 @@ mod relax_branches_tests {
         let short = relax_branches(
             &[(0, 6, 3, false), (8, 6, 1, false), (16, 6, 2, false)],
             &[0, 4, 8, 140],
+            &[],
         );
         assert!(short[1]);
         assert!(short[2]);
@@ -1491,6 +1694,7 @@ mod relax_branches_tests {
         let short = relax_branches(
             &[(0, 6, 3, false), (8, 6, 1, false), (16, 6, 2, false)],
             &[0, 4, 8, 134],
+            &[],
         );
         assert!(short[0]);
     }
@@ -1841,10 +2045,10 @@ mod code_mode_tests {
         );
     }
 
-    /// A width class the instruction catalogue spells out member by member
+    /// A width class the instruction catalog spells out member by member
     /// still takes the operand-size prefix. `and`'s ModRM immediate group is
     /// written `r/m16, imm16` / `r/m32, imm32` / `r/m64, imms32` rather than
-    /// `rv/mv, immv`, and `lea` reaches the catalogue without its 16-bit
+    /// `rv/mv, immv`, and `lea` reaches the catalog without its 16-bit
     /// destination row at all; a 32-bit member of either under `.code16` is
     /// what the x86 real-mode trampoline runs. A group with no 16-bit member
     /// is the `y` class, which REX.W alone selects and `66` does not reach.
@@ -2244,12 +2448,11 @@ mod code_mode_tests {
     }
 
     /// Undefined-opcode and descriptor-table forms. A 64-bit `lsl` / `lar`
-    /// destination takes the SDM's
-    /// `REX.W + 0F 02 /r` / `REX.W + 0F 03 /r` row, as clang emits; GNU as
-    /// encodes it as the 32-bit form instead (`0f 03 c0`, `45 0f 03 ec`,
-    /// `0f 03 03`, `0f 02 c0` for the four below), which zero-extends to the
-    /// same value. `ud2a` / `ud2b` are its spellings of `ud2` / `ud1`, and
-    /// both `ud0` and `ud1` have an operandless form.
+    /// destination takes the SDM's `REX.W + 0F 02 /r` / `REX.W + 0F 03 /r`
+    /// row; GNU as encodes it as the 32-bit form instead (`0f 03 c0`,
+    /// `45 0f 03 ec`, `0f 03 03`, `0f 02 c0` for the four below), which
+    /// zero-extends to the same value. `ud2a` / `ud2b` are its spellings of
+    /// `ud2` / `ud1`, and both `ud0` and `ud1` have an operandless form.
     #[test]
     fn undefined_opcode_and_descriptor_forms() {
         for (src, want) in [
@@ -2744,7 +2947,7 @@ mod code_mode_tests {
                 (2, 2, false, at(".Lc5_asmsec_0_3"), 0),
                 (5, 2, false, at(".Lc5_asmsec_0_3"), 0),
                 (9, 2, false, at(".Lc5_asmsec_0_3"), 0),
-                // A 32-bit address size takes the zero-extended flavour.
+                // A 32-bit address size takes the zero-extended flavor.
                 (15, 4, false, at(".Lc5_asmsec_0_2"), 0),
                 (33, 4, true, at(".Lc5_asmsec_0_1"), 0),
             ]
@@ -2923,7 +3126,7 @@ mod code_mode_tests {
     }
 
     /// A scaled index addresses memory in the hand-written SSE / VEX shapes as
-    /// it does in the catalogue: the SIB byte with REX.X / VEX.X carrying the
+    /// it does in the catalog: the SIB byte with REX.X / VEX.X carrying the
     /// index's high bit. Bytes measured with GNU as 2.46.1.
     #[test]
     fn scaled_index_memory_operands_match_gnu_as() {
@@ -3146,8 +3349,8 @@ mod code_mode_tests {
     /// one, `0F 22` / `0F 23` write one, over a single register row per mode
     /// -- `r64` in 64-bit mode, `r32` in the other two -- and no memory row.
     /// The width is the row's rather than the mode's, so `.code16` takes no
-    /// `66`. Bytes measured with GNU as 2.46.1 and clang 22, which agree here
-    /// in all three modes.
+    /// `66`. Bytes measured with GNU as 2.46.1 and clang 22 in all three
+    /// modes.
     #[test]
     fn control_debug_register_move_operand_widths() {
         #[rustfmt::skip]

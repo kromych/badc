@@ -144,7 +144,7 @@ pub(crate) fn resolve_asm_symbol_target(
 }
 
 /// Expand every `%z<N>` reference to the operand-size suffix of operand N,
-/// the letter GCC prints into a mnemonic (`shr%z1` on a 32-bit operand is
+/// the letter printed into a mnemonic (`shr%z1` on a 32-bit operand is
 /// `shrl`). `suffix_of` yields the suffix for an operand's width, `None`
 /// when the width has no suffix. Returns `None` when the template carries
 /// no such reference.
@@ -230,7 +230,7 @@ pub(crate) fn reset_asm_instance() {
 }
 
 /// Expand the `%=` template escape: every occurrence in one template gets the
-/// same number, unique per expansion (GCC gives each asm instance its own).
+/// same number, unique per expansion, so each asm instance has its own.
 /// `%%` is the literal-percent escape, so its trailing `%` never starts a
 /// `%=`. Returns `None` when the template has no `%=` (the common case).
 pub(crate) fn expand_template_uniq(text: &str) -> Option<alloc::string::String> {

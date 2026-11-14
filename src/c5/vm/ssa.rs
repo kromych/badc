@@ -21,6 +21,14 @@ use super::eval::{self, round_if_f32};
 use super::fenv::{BINARY32, BINARY64, Format, FpEnv, Round};
 
 mod asm_a64;
+mod locale;
+mod printf;
+mod scan;
+mod sort;
+mod stream;
+mod string;
+mod strtox;
+mod system;
 
 /// `Inst::ImmCode` results are tagged with this bit set so
 /// `Inst::CallIndirect` can distinguish a function pointer from
@@ -123,14 +131,23 @@ struct Memory {
     /// `run_program_with_args_tracked` (or the
     /// `Vm::with_pointer_tracking` constructor).
     track_pointers: bool,
-    /// Base of the stdio block ([`STDIO_ERRNO`]), the first heap
-    /// allocation.
+    /// Base of the stdio block ([`STDIO_ERRNO`]) in the data image.
     stdio: usize,
     /// The interpreted target, whose `long` and `long double` formats and
     /// libc conventions the library shims follow.
     target: crate::c5::codegen::Target,
     /// The program's floating-point environment.
     fp: FpEnv,
+    /// Where `strtok` resumes, 0 before its first call.
+    strtok_next: usize,
+    /// The open streams by the address of their `FILE` object.
+    streams: alloc::collections::BTreeMap<usize, stream::Stream>,
+    /// The "C" locale's strings and `struct lconv`, 0 before first use.
+    locale: usize,
+    /// The generator `rand` draws from.
+    rand: system::Rand,
+    /// The `strerror` messages installed so far, by error number.
+    messages: alloc::collections::BTreeMap<i32, usize>,
 }
 
 /// Metadata for one heap allocation. The SSA-VM never reuses
@@ -164,7 +181,8 @@ impl AccessKind {
 }
 
 impl Memory {
-    fn new(data: &[u8], target: crate::c5::codegen::Target) -> Self {
+    /// `data` holds the stdio block's [`STDIO_BYTES`] at `stdio`.
+    fn new(data: &[u8], stdio: usize, target: crate::c5::codegen::Target) -> Self {
         // Reserve a fixed 256 KiB stack region + 256 KiB heap.
         // C99 doesn't pin either limit; this sizing fits every
         // cargo fixture today.
@@ -189,17 +207,30 @@ impl Memory {
             stdio: 0,
             target,
             fp: FpEnv::new(target),
+            strtok_next: 0,
+            streams: alloc::collections::BTreeMap::new(),
+            locale: 0,
+            rand: system::Rand::new(Libc::of(target)),
+            messages: alloc::collections::BTreeMap::new(),
         };
-        // Allocated up front, inside the reserved heap, so `errno` stays
-        // reachable after the heap is exhausted.
-        let base = mem.heap_alloc((STDIO_ERRNO + 8) as u64);
+        let base = stdio;
         for i in 0..3 {
             let file = (base + i * STDIO_FILE_BYTES) as u64;
             let slot = base + STDIO_SLOTS + i * 8;
             mem.bytes[slot..slot + 8].copy_from_slice(&file.to_le_bytes());
+            mem.streams
+                .insert(file as usize, stream::Stream::new(i as i64));
         }
         mem.stdio = base;
         mem
+    }
+
+    /// Memory over `data` with a stdio block appended.
+    #[cfg(test)]
+    fn with_stdio(data: &[u8], target: crate::c5::codegen::Target) -> Self {
+        let mut data = data.to_vec();
+        let stdio = reserve_stdio(&mut data);
+        Self::new(&data, stdio, target)
     }
 
     /// The stdio block.
@@ -207,10 +238,21 @@ impl Memory {
         self.stdio
     }
 
+    /// The `FILE *` standard stream `i` (0, 1, 2) names: a program may
+    /// assign another stream to it.
+    fn std_stream(&self, i: usize) -> i64 {
+        let at = self.stdio + STDIO_SLOTS + i * 8;
+        i64::from_le_bytes(self.bytes[at..at + 8].try_into().unwrap())
+    }
+
     /// Store `ENOMEM` in `errno`, as a failed allocation function does.
     fn set_enomem(&mut self) {
+        self.set_errno(ENOMEM);
+    }
+
+    fn set_errno(&mut self, value: i32) {
         let at = self.stdio + STDIO_ERRNO;
-        self.bytes[at..at + 4].copy_from_slice(&ENOMEM.to_le_bytes());
+        self.bytes[at..at + 4].copy_from_slice(&value.to_le_bytes());
     }
 
     fn with_track_pointers(mut self, on: bool) -> Self {
@@ -230,7 +272,7 @@ impl Memory {
     }
 
     /// Validate a `[addr, addr+len)` access. C99 doesn't pin
-    /// dangling-pointer behaviour, but mistaken accesses get
+    /// dangling-pointer behavior, but mistaken accesses get
     /// surfaced here when `track_pointers` is on. Reads / writes
     /// into a freed allocation, past an allocation's end, or
     /// against a never-allocated heap byte each surface as a
@@ -474,6 +516,8 @@ struct Program<'a> {
     tls_base: usize,
     /// The inline asm templates are AArch64's, not x86-64's.
     aarch64: bool,
+    /// `--trace`: each executed instruction is printed to stderr.
+    trace: bool,
 }
 
 impl<'a> Program<'a> {
@@ -489,6 +533,7 @@ impl<'a> Program<'a> {
             binding_names: &[],
             tls_base: 0,
             aarch64: target.is_aarch64(),
+            trace: false,
         }
     }
 
@@ -499,6 +544,11 @@ impl<'a> Program<'a> {
 
     fn with_tls_base(mut self, tls_base: usize) -> Self {
         self.tls_base = tls_base;
+        self
+    }
+
+    fn with_trace(mut self, on: bool) -> Self {
+        self.trace = on;
         self
     }
 
@@ -556,9 +606,36 @@ struct Frame<'a> {
     /// `func.over_aligned` places its object at `realign_base + region_off`.
     realign_base: usize,
     block_idx: usize,
+    /// The 128-, 256- and 512-bit values (`V128` / `V256` / `V512` loads,
+    /// `Inst::VecBinop`), by `ValueId`, in the low bytes; their `regs`
+    /// entries stay 0.
+    vregs: alloc::collections::BTreeMap<ValueId, [u8; 64]>,
 }
 
 impl Frame<'_> {
+    fn vbytes(&self, v: ValueId) -> Result<[u8; 64], C5Error> {
+        self.vregs
+            .get(&v)
+            .copied()
+            .ok_or_else(|| C5Error::Runtime(format!("vm_ssa: v{v} is not a vector value")))
+    }
+
+    fn v128(&self, v: ValueId) -> Result<[u8; 16], C5Error> {
+        Ok(self.vbytes(v)?[..16].try_into().unwrap())
+    }
+
+    /// Value `v`, the low `bytes.len()` bytes of the register.
+    fn set_vbytes(&mut self, v: ValueId, bytes: &[u8]) {
+        let mut b = [0u8; 64];
+        b[..bytes.len()].copy_from_slice(bytes);
+        self.regs[v as usize] = 0;
+        self.vregs.insert(v, b);
+    }
+
+    fn set_v128(&mut self, v: ValueId, bytes: [u8; 16]) {
+        self.set_vbytes(v, &bytes);
+    }
+
     /// The link a call at instruction `call` of this frame hands `callee`.
     fn link_to(&self, callee: usize, call: ValueId) -> CallLink {
         let block = &self.func.blocks[self.block_idx];
@@ -648,14 +725,17 @@ pub(super) fn run_program_with_args<H: Host>(
     args: &[alloc::string::String],
     target: crate::c5::codegen::Target,
 ) -> Result<i64, C5Error> {
+    let mut data = data.to_vec();
+    let stdio = reserve_stdio(&mut data);
     run_program_with_args_tracked(
         funcs,
-        data,
+        (&data, stdio),
         binding_names,
         tls_base,
         entry_pc,
         host,
         args,
+        false,
         false,
         &[],
         &[],
@@ -664,19 +744,20 @@ pub(super) fn run_program_with_args<H: Host>(
 }
 
 /// Same as [`run_program_with_args`] with an explicit
-/// `track_pointers` flag. `super::Vm::with_pointer_tracking`
-/// forwards through here so opted-in tests get the watchful
-/// load / store / Mcpy checks.
+/// `track_pointers` flag, which `super::Vm::with_pointer_tracking`
+/// forwards for the watchful load / store / Mcpy checks, and the
+/// `trace` flag `super::Vm::with_trace` forwards.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn run_program_with_args_tracked<H: Host>(
     funcs: &[FunctionSsa],
-    data: &[u8],
+    (data, stdio): (&[u8], usize),
     binding_names: &[alloc::string::String],
     tls_base: usize,
     entry_pc: usize,
     host: &mut H,
     args: &[alloc::string::String],
     track_pointers: bool,
+    trace: bool,
     init_pcs: &[usize],
     fini_pcs: &[usize],
     target: crate::c5::codegen::Target,
@@ -695,9 +776,10 @@ pub(super) fn run_program_with_args_tracked<H: Host>(
     }
     let prog = Program::new(funcs, target)
         .with_bindings(binding_names)
-        .with_tls_base(tls_base);
+        .with_tls_base(tls_base)
+        .with_trace(trace);
     let (data_with_argv, argc, argv_addr) = stage_argv(data, args);
-    let mut mem = Memory::new(&data_with_argv, target).with_track_pointers(track_pointers);
+    let mut mem = Memory::new(&data_with_argv, stdio, target).with_track_pointers(track_pointers);
     // `__attribute__((constructor))` functions run before the entry, in
     // the native `.init_array` order the caller already sorted. An
     // `exit()` from a constructor short-circuits to the exit status.
@@ -900,6 +982,7 @@ fn run_func<H: Host>(
         locals,
         realign_base,
         block_idx: 0,
+        vregs: alloc::collections::BTreeMap::new(),
     };
     for (i, &v) in args.iter().enumerate() {
         // Host-ABI register-passed aggregate parameter. The callee body
@@ -934,6 +1017,11 @@ fn run_func<H: Host>(
         let block = &frame.func.blocks[frame.block_idx];
         let mut step_err: Option<C5Error> = None;
         for v in block.inst_range.clone() {
+            #[cfg(feature = "std")]
+            if prog.trace {
+                let inst = &frame.func.insts[v as usize];
+                std::eprintln!("{} b{} v{v} {inst:?}", frame.func.name, frame.block_idx);
+            }
             if let Err(e) = run_inst(prog, mem, host, &mut frame, v) {
                 step_err = Some(e);
                 break;
@@ -982,7 +1070,7 @@ fn run_func<H: Host>(
                 frame.block_idx = target as usize;
             }
             Terminator::GotoIndirect { target } => {
-                // GCC's labels as values: the operand must be the address
+                // GNU C labels as values: the operand must be the address
                 // of a label in this function; any other jump is undefined
                 // and stops the run.
                 let raw = frame.regs[target as usize];
@@ -1034,7 +1122,7 @@ fn run_func<H: Host>(
     result
 }
 
-/// Materialise a call's result. For a host-ABI aggregate return,
+/// Materialize a call's result. For a host-ABI aggregate return,
 /// `ret` is the callee's struct address (in its just-released frame,
 /// bytes intact); copy the aggregate into the caller's result temp at
 /// `ret_slot` and yield the temp's address. A scalar return passes
@@ -1057,6 +1145,70 @@ fn finish_agg_return(
     })?;
     mem.copy_within(dst, ret as usize, size)?;
     Ok(dst as i64)
+}
+
+/// A call of the interpreter's C library function `name`. A result the
+/// caller takes as an object (`ret_agg`), a `long double` wider than
+/// `double`, is returned as the object's address.
+struct LibraryCall<'a> {
+    name: &'a str,
+    ret_agg: Option<u32>,
+    ret_slot_local: i64,
+}
+
+/// Run `call` with the values of `args`, made at instruction `v` of
+/// `frame`. The sorting and searching functions call the program's
+/// comparison function back from there.
+fn call_library<H: Host>(
+    prog: &Program<'_>,
+    mem: &mut Memory,
+    host: &mut H,
+    frame: &Frame<'_>,
+    v: ValueId,
+    call: LibraryCall<'_>,
+    args: &[ValueId],
+) -> Result<i64, C5Error> {
+    let arg_vals: Vec<i64> = args.iter().map(|&a| frame.regs[a as usize]).collect();
+    let mut compare = |mem: &mut Memory, f: i64, operands: &[i64]| -> Result<i64, C5Error> {
+        if f & IMPORT_ADDR_TAG != 0 {
+            let name = prog.binding_name(f & !IMPORT_ADDR_TAG)?;
+            return dispatch_callext(name, operands, mem, host);
+        }
+        let link = frame.link_to(function_at(prog, f)?, v);
+        run_func(prog, mem, host, link, operands, &[])
+    };
+    let ret = match sort::call(call.name, &arg_vals, mem, &mut compare) {
+        Some(r) => r?,
+        None => dispatch_callext(call.name, &arg_vals, mem, host)?,
+    };
+    finish_agg_return(frame, mem, call.ret_agg, call.ret_slot_local, ret)
+}
+
+/// The function a function pointer value `raw` designates, by its index:
+/// `Inst::ImmCode` tags it with `CODE_ADDR_TAG`, a static initializer's
+/// slot with the `CODE_BASE` bias. A label or a return address is no
+/// function.
+fn function_at(prog: &Program<'_>, raw: i64) -> Result<usize, C5Error> {
+    let position = CODE_ADDR_TAG | CODE_POSITION_TAG;
+    let target_pc = if raw & position == position {
+        return Err(C5Error::Runtime(format!(
+            "vm_ssa: CallIndirect: target 0x{raw:016x} is a label or return address, \
+             not a function",
+        )));
+    } else if raw & CODE_ADDR_MASK != 0 {
+        (raw & !CODE_ADDR_MASK) as usize
+    } else if (raw as usize) >= super::super::CODE_BASE {
+        (raw as usize) - super::super::CODE_BASE
+    } else {
+        return Err(C5Error::Runtime(format!(
+            "vm_ssa: CallIndirect: target raw=0x{raw:016x} is not a code pointer",
+        )));
+    };
+    prog.lookup(target_pc).ok_or_else(|| {
+        C5Error::Runtime(format!(
+            "vm_ssa: CallIndirect: no function at ent_pc {target_pc}",
+        ))
+    })
 }
 
 /// Build the callee's flat argument list. A variadic by-value
@@ -1094,7 +1246,7 @@ fn collect_call_args(
             continue;
         }
         if matches!(frame.func.f32_values.get(a as usize), Some(true)) {
-            out.push((f64::from_bits(val as u64) as f32).to_bits() as i64);
+            out.push(i64::from(super::fenv::reg_to_f32(val as u64)));
             continue;
         }
         out.push(val);
@@ -1113,12 +1265,12 @@ fn run_inst<H: Host>(
     let name = match inst {
         Inst::Imm(k) => {
             // An f32-marked imm carries the f32 bit pattern (the shape
-            // the native emit materialises); the interpreter's register
+            // the native emit materializes); the interpreter's register
             // convention keeps every f32 value as the f64 pattern of
             // its single-precision value, so widen at the definition.
             frame.regs[v as usize] = if matches!(frame.func.f32_values.get(v as usize), Some(true))
             {
-                (f32::from_bits(*k as u32) as f64).to_bits() as i64
+                super::fenv::f32_to_reg(*k as u32) as i64
             } else {
                 *k
             };
@@ -1141,7 +1293,7 @@ fn run_inst<H: Host>(
         }
         Inst::ImmCode(target_pc) => {
             // Code pointers don't map to bytes; tag with
-            // `CODE_ADDR_TAG` so `CallIndirect` recognises them.
+            // `CODE_ADDR_TAG` so `CallIndirect` recognizes them.
             frame.regs[v as usize] = CODE_ADDR_TAG | (*target_pc as i64);
             return Ok(());
         }
@@ -1154,7 +1306,7 @@ fn run_inst<H: Host>(
             return Ok(());
         }
         Inst::BlockAddr(b) => {
-            // Label address (GCC `&&label`): the code position at the
+            // Label address (GNU C `&&label`): the code position at the
             // start of the label's block, which GotoIndirect decodes.
             frame.regs[v as usize] = code_position(frame.func_idx, *b as usize, 0);
             return Ok(());
@@ -1189,6 +1341,11 @@ fn run_inst<H: Host>(
                 )));
             }
             mem.check_data_access(a as usize, load_width(*kind), AccessKind::Read)?;
+            if matches!(kind, LoadKind::V128 | LoadKind::V256 | LoadKind::V512) {
+                let bytes = mem.read_bytes(a as usize, load_width(*kind))?;
+                frame.set_vbytes(v, bytes);
+                return Ok(());
+            }
             frame.regs[v as usize] = load_from_memory(mem, a as usize, *kind)?;
             return Ok(());
         }
@@ -1210,6 +1367,11 @@ fn run_inst<H: Host>(
                 )));
             }
             mem.check_data_access(a as usize, store_width(*kind), AccessKind::Write)?;
+            if matches!(kind, StoreKind::V128 | StoreKind::V256 | StoreKind::V512) {
+                let bytes = frame.vbytes(*value)?;
+                mem.write_bytes(a as usize, &bytes[..store_width(*kind)])?;
+                return Ok(());
+            }
             let stored = narrow_store(frame.regs[*value as usize], *kind);
             store_to_memory(mem, a as usize, stored, *kind)?;
             // c5 Store leaves the stored value in the accumulator;
@@ -1501,6 +1663,17 @@ fn run_inst<H: Host>(
             frame.regs[v as usize] = frame.regs[*value as usize];
             return Ok(());
         }
+        Inst::Select { cond, a, b, .. } => {
+            let c = frame.regs[*cond as usize];
+            let low_word = matches!(frame.func.cmp32.get(v as usize), Some(true));
+            let pick = if (if low_word { c as u32 as i64 } else { c }) != 0 {
+                a
+            } else {
+                b
+            };
+            frame.regs[v as usize] = frame.regs[*pick as usize];
+            return Ok(());
+        }
         Inst::FpCast { kind, value } => {
             let raw = frame.regs[*value as usize];
             let f = format_of(frame, v);
@@ -1510,8 +1683,9 @@ fn run_inst<H: Host>(
                 FpCastKind::UFpToInt => fp.float_to_int(raw as u64, false),
                 FpCastKind::IntToFp => fp.int_to_float(i128::from(raw), f) as i64,
                 FpCastKind::UIntToFp => fp.int_to_float(i128::from(raw as u64), f) as i64,
-                FpCastKind::F32ToF64 => raw,
+                FpCastKind::F32ToF64 => fp.widen(raw as u64) as i64,
                 FpCastKind::F64ToF32 => fp.narrow(raw as u64) as i64,
+                FpCastKind::FpBits | FpCastKind::BitsFp => raw,
             };
             return Ok(());
         }
@@ -1548,42 +1722,17 @@ fn run_inst<H: Host>(
             // binding index under `IMPORT_ADDR_TAG`; dispatch it the
             // same way `Inst::CallExt` resolves a libc binding.
             if raw & IMPORT_ADDR_TAG != 0 {
-                let binding_idx = raw & !IMPORT_ADDR_TAG;
-                let name = prog.binding_name(binding_idx)?;
-                let mut arg_vals: Vec<i64> = Vec::with_capacity(args.len());
-                for &a in args {
-                    arg_vals.push(frame.regs[a as usize]);
-                }
-                let ret = dispatch_callext(name, &arg_vals, mem, host)?;
-                frame.regs[v as usize] = ret;
+                let name = prog.binding_name(raw & !IMPORT_ADDR_TAG)?;
+                let (agg, slot) = (*ret_agg, *ret_slot_local);
+                let call = LibraryCall {
+                    name,
+                    ret_agg: agg,
+                    ret_slot_local: slot,
+                };
+                frame.regs[v as usize] = call_library(prog, mem, host, frame, v, call, args)?;
                 return Ok(());
             }
-            // Code pointers may be tagged two ways: SSA-VM bit 62
-            // (set by `Inst::ImmCode`) or the `CODE_BASE`-biased
-            // form `with_host` writes when it patches the data
-            // segment's `CodeReloc` entries so static initialisers
-            // can carry function pointers without an SSA-aware
-            // fix-up.
-            let position = CODE_ADDR_TAG | CODE_POSITION_TAG;
-            let target_pc = if raw & position == position {
-                return Err(C5Error::Runtime(format!(
-                    "vm_ssa: CallIndirect: target 0x{raw:016x} is a label or return address, \
-                     not a function",
-                )));
-            } else if raw & CODE_ADDR_MASK != 0 {
-                (raw & !CODE_ADDR_MASK) as usize
-            } else if (raw as usize) >= super::super::CODE_BASE {
-                (raw as usize) - super::super::CODE_BASE
-            } else {
-                return Err(C5Error::Runtime(format!(
-                    "vm_ssa: CallIndirect: target raw=0x{raw:016x} is not a code pointer",
-                )));
-            };
-            let callee = prog.lookup(target_pc).ok_or_else(|| {
-                C5Error::Runtime(format!(
-                    "vm_ssa: CallIndirect: no function at ent_pc {target_pc}",
-                ))
-            })?;
+            let callee = function_at(prog, raw)?;
             let arg_vals = collect_call_args(frame, mem, args, arg_aggs, *fixed_args)?;
             let link = frame.link_to(callee, v);
             let ret = run_func(prog, mem, host, link, &arg_vals, arg_aggs)?;
@@ -1591,15 +1740,18 @@ fn run_inst<H: Host>(
             return Ok(());
         }
         Inst::CallExt {
-            binding_idx, args, ..
+            binding_idx,
+            args,
+            ret_agg,
+            ret_slot_local,
+            ..
         } => {
-            let name = prog.binding_name(*binding_idx)?;
-            let mut arg_vals: Vec<i64> = Vec::with_capacity(args.len());
-            for &a in args {
-                arg_vals.push(frame.regs[a as usize]);
-            }
-            let ret = dispatch_callext(name, &arg_vals, mem, host)?;
-            frame.regs[v as usize] = ret;
+            let call = LibraryCall {
+                name: prog.binding_name(*binding_idx)?,
+                ret_agg: *ret_agg,
+                ret_slot_local: *ret_slot_local,
+            };
+            frame.regs[v as usize] = call_library(prog, mem, host, frame, v, call, args)?;
             return Ok(());
         }
         Inst::TailExt(_) => "TailExt",
@@ -1607,8 +1759,44 @@ fn run_inst<H: Host>(
             run_intrinsic(mem, frame, v, *kind, args)?;
             return Ok(());
         }
-        Inst::X86Simd { op, imm, args } => {
+        Inst::Simd { op, imm, args } => {
             run_x86_simd(mem, frame, *op, *imm, args)?;
+            return Ok(());
+        }
+        // The -O rewrites producing these never reach the VM.
+        Inst::SimdVal { .. } => "SimdVal",
+        Inst::VecInsert { .. } => "VecInsert",
+        Inst::VecSplat { .. } => "VecSplat",
+        Inst::VecConst { .. } => "VecConst",
+        Inst::VecExtract { .. } => "VecExtract",
+        Inst::VecBinop {
+            op,
+            lane,
+            bytes,
+            lhs,
+            rhs,
+        } => {
+            if *bytes == 8 {
+                // The 8-byte operands are the bits of their registers.
+                let wide = |x: i64| {
+                    let mut b = [0u8; 16];
+                    b[..8].copy_from_slice(&x.to_le_bytes());
+                    b
+                };
+                let (a, c) = (frame.regs[*lhs as usize], frame.regs[*rhs as usize]);
+                let r = vec_binop(*op, *lane, wide(a), wide(c));
+                frame.regs[v as usize] = i64::from_le_bytes(r[..8].try_into().unwrap());
+            } else {
+                // A wider operation is the 128-bit one on each 16 bytes.
+                let (a, c) = (frame.vbytes(*lhs)?, frame.vbytes(*rhs)?);
+                let n = usize::from(*bytes);
+                let mut r = [0u8; 64];
+                for h in (0..n).step_by(16) {
+                    let part = |x: &[u8; 64]| -> [u8; 16] { x[h..h + 16].try_into().unwrap() };
+                    r[h..h + 16].copy_from_slice(&vec_binop(*op, *lane, part(&a), part(&c)));
+                }
+                frame.set_vbytes(v, &r[..n]);
+            }
             return Ok(());
         }
         Inst::InlineAsm { asm, args } => {
@@ -1678,10 +1866,26 @@ fn run_inst<H: Host>(
 
 /// The stdio block: a record per standard stream, as far apart as the bundled
 /// `<stdio.h>` steps from `__iob_func()` on Windows, then the `FILE *` object
-/// each stream's data symbol names, then the `errno` cell.
+/// each stream's data symbol names, then the `errno` cell, then the object a
+/// library function returning a `long double` wider than `double` fills.
 const STDIO_FILE_BYTES: usize = 48;
 const STDIO_SLOTS: usize = 3 * STDIO_FILE_BYTES;
 const STDIO_ERRNO: usize = STDIO_SLOTS + 3 * 8;
+const STDIO_RETURN: usize = STDIO_ERRNO + 8;
+const STDIO_BYTES: usize = STDIO_RETURN + 16;
+
+/// Append a stdio block to the data image `data`; its offset.
+pub(super) fn reserve_stdio(data: &mut Vec<u8>) -> usize {
+    let at = data.len().next_multiple_of(16);
+    data.resize(at + STDIO_BYTES, 0);
+    at
+}
+
+/// The `FILE *` object of the standard stream a data symbol names, in the
+/// stdio block at `stdio`: the cell `dlsym` gives for the name as well.
+pub(super) fn std_stream_object(stdio: usize, sym: &str) -> Option<usize> {
+    std_stream_index(sym).map(|i| stdio + STDIO_SLOTS + i * 8)
+}
 /// `ENOMEM` as the bundled `<errno.h>` numbers it on every target.
 const ENOMEM: i32 = 12;
 
@@ -1694,16 +1898,20 @@ fn std_stream_index(sym: &str) -> Option<usize> {
     }
 }
 
-/// The descriptor of the standard stream argument `idx` of `name` names.
-fn stdio_fd(name: &str, args: &[i64], idx: usize, mem: &Memory) -> Result<i64, C5Error> {
+/// The descriptor of the stream that standard stream `i` names.
+fn std_stream_fd(name: &str, i: usize, mem: &Memory) -> Result<i64, C5Error> {
+    stream_fd(name, &[mem.std_stream(i)], 0, mem)
+}
+
+/// The descriptor of the open stream argument `idx` of `name` names.
+fn stream_fd(name: &str, args: &[i64], idx: usize, mem: &Memory) -> Result<i64, C5Error> {
     let stream = args.get(idx).copied().unwrap_or(0);
-    let off = (stream as usize).wrapping_sub(mem.stdio);
-    if mem.stdio != 0 && off < STDIO_SLOTS && off.is_multiple_of(STDIO_FILE_BYTES) {
-        return Ok((off / STDIO_FILE_BYTES) as i64);
+    match mem.streams.get(&(stream as usize)) {
+        Some(s) => Ok(s.fd),
+        None => Err(C5Error::Runtime(format!(
+            "vm_ssa: {name}: 0x{stream:x} is not an open stream"
+        ))),
     }
-    Err(C5Error::Runtime(format!(
-        "vm_ssa: {name}: 0x{stream:x} is not a standard stream"
-    )))
 }
 
 fn cstring_arg(name: &str, args: &[i64], idx: usize, mem: &Memory) -> Result<Vec<u8>, C5Error> {
@@ -1719,43 +1927,56 @@ fn cstring_arg(name: &str, args: &[i64], idx: usize, mem: &Memory) -> Result<Vec
 /// unit declares but neither defines nor binds runs that definition, as a
 /// native link takes the one its C library offers.
 pub(super) fn interp_supplies(name: &str) -> bool {
-    matches!(
-        name,
-        "exit"
-            | "memcpy"
-            | "memmove"
-            | "memset"
-            | "memcmp"
-            | "write"
-            | "read"
-            | "close"
-            | "malloc"
-            | "calloc"
-            | "realloc"
-            | "free"
-            | "printf"
-            | "__iob_func"
-            | "errno_location"
-            | "fprintf"
-            | "fputs"
-            | "puts"
-            | "fputc"
-            | "putc"
-            | "fwrite"
-            | "fflush"
-            | "fileno"
-            | "putchar"
-            | "open"
-            | "getenv"
-            | "setenv"
-            | "_putenv_s"
-            | "dlopen"
-            | "dlsym"
-            | "dlclose"
-            | "dlerror"
-            | "feraiseexcept"
-            | "feupdateenv"
-    )
+    strtox::NAMES.contains(&name)
+        || string::NAMES.contains(&name)
+        || printf::NAMES.contains(&name)
+        || scan::NAMES.contains(&name)
+        || locale::NAMES.contains(&name)
+        || stream::NAMES.contains(&name)
+        || sort::NAMES.contains(&name)
+        || system::NAMES.contains(&name)
+        || matches!(
+            name,
+            "exit"
+                | "memcpy"
+                | "memmove"
+                | "memset"
+                | "memcmp"
+                | "write"
+                | "read"
+                | "pread"
+                | "pwrite"
+                | "lseek"
+                | "lseek64"
+                | "_lseek"
+                | "_lseeki64"
+                | "copy_file_range"
+                | "close"
+                | "malloc"
+                | "calloc"
+                | "realloc"
+                | "free"
+                | "__iob_func"
+                | "errno_location"
+                | "fputs"
+                | "puts"
+                | "fputc"
+                | "putc"
+                | "fwrite"
+                | "fflush"
+                | "fileno"
+                | "putchar"
+                | "open"
+                | "getenv"
+                | "setenv"
+                | "_putenv_s"
+                | "dlopen"
+                | "dlsym"
+                | "dlclose"
+                | "dlerror"
+                | "feraiseexcept"
+                | "feupdateenv"
+        )
 }
 
 /// The `<fenv.h>` functions and the `<math.h>` functions that round in
@@ -1867,6 +2088,27 @@ fn dispatch_callext<H: Host>(
     host: &mut H,
 ) -> Result<i64, C5Error> {
     if let Some(r) = fenv_call(name, args, mem) {
+        return r;
+    }
+    if let Some(r) = strtox::call(name, args, mem) {
+        return r;
+    }
+    if let Some(r) = string::call(name, args, mem) {
+        return r;
+    }
+    if let Some(r) = scan::call(name, args, mem, host) {
+        return r;
+    }
+    if let Some(r) = system::call(name, args, mem, host) {
+        return r;
+    }
+    if let Some(r) = stream::call(name, args, mem, host) {
+        return r;
+    }
+    if let Some(r) = locale::call(name, args, mem) {
+        return r;
+    }
+    if let Some(r) = printf::call(name, args, mem, host) {
         return r;
     }
     match name {
@@ -1983,6 +2225,94 @@ fn dispatch_callext<H: Host>(
             mem.write_bytes(buf_addr as usize, &buf[..actual])?;
             Ok(read_bytes)
         }
+        // `pread` / `pwrite` (POSIX): the transfer at `offset`, the
+        // descriptor's own position left where it was; a descriptor that
+        // cannot seek fails with ESPIPE.
+        "pread" | "pwrite" => {
+            if args.len() < 4 {
+                return Err(C5Error::Runtime(format!("vm_ssa: {name} expects 4 args")));
+            }
+            let (fd, buf_addr, offset) = (args[0], args[1] as usize, args[3]);
+            let n = libc_size(name, Some(args[2]))?;
+            let here = host.seek(fd, 0, 1);
+            if here < 0 || host.seek(fd, offset, 0) < 0 {
+                mem.set_errno(29);
+                return Ok(-1);
+            }
+            let done = if name == "pread" {
+                let n = n.min(mem.bytes.len().saturating_sub(buf_addr));
+                let mut buf = alloc::vec![0u8; n];
+                let got = host.read(fd, &mut buf);
+                if got > 0 {
+                    mem.write_bytes(buf_addr, &buf[..(got as usize).min(n)])?;
+                }
+                got
+            } else {
+                let owned = mem.read_bytes(buf_addr, n)?.to_vec();
+                host.write(fd, &owned)
+            };
+            host.seek(fd, here, 0);
+            Ok(done)
+        }
+        // `lseek` and its Windows and large-file spellings: the new position,
+        // or -1 with ESPIPE for a descriptor that cannot seek. `_lseek`
+        // takes and returns a 32-bit `long`.
+        "lseek" | "lseek64" | "_lseek" | "_lseeki64" => {
+            if args.len() < 3 {
+                return Err(C5Error::Runtime(format!("vm_ssa: {name} expects 3 args")));
+            }
+            let offset = match name {
+                "_lseek" => args[1] as i32 as i64,
+                _ => args[1],
+            };
+            let at = host.seek(args[0], offset, args[2] as i32);
+            if at < 0 {
+                mem.set_errno(29);
+            }
+            Ok(at)
+        }
+        // Linux `copy_file_range`: up to `len` bytes from `fd_in` to
+        // `fd_out`. A null offset pointer names the descriptor's own
+        // position, which the copy advances; a non-null one names the
+        // start, leaves the descriptor alone and advances by the count.
+        "copy_file_range" => {
+            if args.len() < 6 {
+                return Err(C5Error::Runtime(
+                    "vm_ssa: copy_file_range expects 6 args".into(),
+                ));
+            }
+            let (fd_in, off_in, fd_out, off_out) = (args[0], args[1], args[2], args[3]);
+            let len = libc_size(name, Some(args[4]))?;
+            let mut moved = Vec::new();
+            for (fd, ptr) in [(fd_in, off_in), (fd_out, off_out)] {
+                let here = host.seek(fd, 0, 1);
+                let start = match ptr {
+                    0 => here,
+                    p => load_from_memory(mem, p as usize, LoadKind::I64)?,
+                };
+                if here < 0 || host.seek(fd, start, 0) < 0 {
+                    mem.set_errno(29);
+                    return Ok(-1);
+                }
+                moved.push((fd, ptr, here, start));
+            }
+            let mut buf = alloc::vec![0u8; len];
+            let got = host.read(fd_in, &mut buf);
+            let done = if got > 0 {
+                host.write(fd_out, &buf[..got as usize])
+            } else {
+                got
+            };
+            for &(fd, ptr, here, start) in &moved {
+                if ptr != 0 {
+                    host.seek(fd, here, 0);
+                    if done > 0 {
+                        store_to_memory(mem, ptr as usize, start + done, StoreKind::I64)?;
+                    }
+                }
+            }
+            Ok(done)
+        }
         // `int close(int fd)` -- pure host bridge.
         "close" => {
             let fd = args.first().copied().unwrap_or(-1);
@@ -2058,59 +2388,42 @@ fn dispatch_callext<H: Host>(
             }
             Ok(0)
         }
-        // `int printf(const char *fmt, ...)` -- formats the
-        // variadic tail in `args[1..]` per C99 7.19.6.1 and
-        // writes the bytes to stdout via the host. Returns the
-        // number of bytes transmitted (7.19.6.3p3).
-        "printf" => {
-            let fmt = cstring_arg(name, args, 0, mem)?;
-            let out = format_printf(&fmt, &args[1..], mem)?;
-            let _ = host.write(1, &out);
-            Ok(out.len() as i64)
-        }
         // The bundled headers reach a stream through its data symbol (`dlsym`
         // below) or `__iob_func()`, and `errno` through `errno_location()`.
         "__iob_func" => Ok(mem.stdio() as i64),
         "errno_location" => Ok((mem.stdio() + STDIO_ERRNO) as i64),
-        "fprintf" => {
-            let fd = stdio_fd(name, args, 0, mem)?;
-            let fmt = cstring_arg(name, args, 1, mem)?;
-            let out = format_printf(&fmt, args.get(2..).unwrap_or_default(), mem)?;
-            let _ = host.write(fd, &out);
-            Ok(out.len() as i64)
-        }
         "fputs" => {
-            let fd = stdio_fd(name, args, 1, mem)?;
+            let fd = stream_fd(name, args, 1, mem)?;
             let _ = host.write(fd, &cstring_arg(name, args, 0, mem)?);
             Ok(0)
         }
         "puts" => {
             let mut line = cstring_arg(name, args, 0, mem)?;
             line.push(b'\n');
-            let _ = host.write(1, &line);
+            let _ = host.write(std_stream_fd(name, 1, mem)?, &line);
             Ok(0)
         }
         "fputc" | "putc" => {
-            let fd = stdio_fd(name, args, 1, mem)?;
+            let fd = stream_fd(name, args, 1, mem)?;
             let byte = args.first().copied().unwrap_or(-1) as u8;
             let _ = host.write(fd, &[byte]);
             Ok(i64::from(byte))
         }
         "fwrite" => {
-            let fd = stdio_fd(name, args, 3, mem)?;
+            let fd = stream_fd(name, args, 3, mem)?;
             let (buf, size, n) = libc_three_arg(name, args)?;
             let bytes = mem.read_bytes(buf, size.saturating_mul(n))?.to_vec();
             let _ = host.write(fd, &bytes);
             Ok(if size == 0 { 0 } else { n as i64 })
         }
         "fflush" => Ok(0),
-        "fileno" => stdio_fd(name, args, 0, mem),
+        "fileno" => stream_fd(name, args, 0, mem),
         // `int putchar(int c)` -- write one byte to stdout, returns
         // the byte (or EOF on error; we return the byte unconditionally).
         "putchar" => {
             let c = args.first().copied().unwrap_or(-1);
             let byte = c as u8;
-            let _ = host.write(1, &[byte]);
+            let _ = host.write(std_stream_fd(name, 1, mem)?, &[byte]);
             Ok(c)
         }
         // `int open(const char *path, int flags)` -- routes through
@@ -2150,8 +2463,8 @@ fn dispatch_callext<H: Host>(
             })
         }
         // `int setenv(const char *name, const char *value, int overwrite)`.
-        // C99 doesn't standardise setenv; this matches POSIX.
-        // The `int overwrite` is normalised through the `Overwrite`
+        // C99 doesn't standardize setenv; this matches POSIX.
+        // The `int overwrite` is normalized through the `Overwrite`
         // enum at the trait boundary.
         "setenv" => {
             if args.len() < 3 {
@@ -2235,8 +2548,8 @@ fn dispatch_callext<H: Host>(
                 )));
             }
             let sym = read_cstring(mem, name_addr as usize)?;
-            if let Some(i) = std_stream_index(&sym) {
-                return Ok((mem.stdio() + STDIO_SLOTS + i * 8) as i64);
+            if let Some(at) = std_stream_object(mem.stdio(), &sym) {
+                return Ok(at as i64);
             }
             Ok(host.dlsym(handle, &sym))
         }
@@ -2315,26 +2628,77 @@ struct PrintfSpec {
     conv: u8,
 }
 
+/// The variable arguments of a formatting function: the call's own values,
+/// or the eightbyte slots a `va_list` cursor points at, where a `long
+/// double` wider than `double` occupies two holding its image.
+enum Varargs<'a> {
+    Values(&'a [i64], usize),
+    List(usize),
+}
+
+impl<'a> Varargs<'a> {
+    fn values(args: &'a [i64]) -> Self {
+        Varargs::Values(args, 0)
+    }
+
+    /// The arguments a `va_list` argument `ap` holds: on the Linux targets
+    /// `va_list` is an array, passed as its address, whose first eightbyte
+    /// the interpreter keeps the cursor in; elsewhere it is the cursor.
+    fn list(mem: &Memory, ap: i64) -> Result<Self, C5Error> {
+        let cursor =
+            if mem.target.is_windows() || mem.target == crate::c5::codegen::Target::MacOSAarch64 {
+                ap
+            } else {
+                load_from_memory(mem, ap as usize, LoadKind::I64)?
+            };
+        Ok(Varargs::List(cursor as usize))
+    }
+
+    fn next(&mut self, mem: &Memory) -> Result<i64, C5Error> {
+        match self {
+            Varargs::Values(args, i) => {
+                let v = args.get(*i).copied().ok_or_else(|| {
+                    C5Error::Runtime(format!(
+                        "vm_ssa: the format wants argument #{} but only {} were passed",
+                        *i + 1,
+                        args.len(),
+                    ))
+                })?;
+                *i += 1;
+                Ok(v)
+            }
+            Varargs::List(at) => {
+                let v = load_from_memory(mem, *at, LoadKind::I64)?;
+                *at += 8;
+                Ok(v)
+            }
+        }
+    }
+
+    /// A floating argument: binary64 bits, or under `L` where `long double`
+    /// is wider, the address of its image.
+    fn next_float(&mut self, mem: &Memory, long_double: bool) -> Result<i64, C5Error> {
+        let wide =
+            long_double && mem.target.long_double() != crate::c5::codegen::LongDoubleKind::F64;
+        match self {
+            Varargs::List(at) if wide => {
+                *at += 16;
+                Ok(*at as i64 - 16)
+            }
+            _ => self.next(mem),
+        }
+    }
+}
+
 /// printf formatter (C99 7.19.6.1). Parses the full spec grammar
 /// -- flags, width (incl. `*`), precision (incl. `.*`), length
 /// modifiers -- and pulls arguments from `args` as each
 /// conversion requires. Returns the raw output bytes for the
-/// caller to hand to `host.write`. An unrecognised conversion
+/// caller to hand to `host.write`. An unrecognized conversion
 /// emits its spec text verbatim without consuming an argument
 /// (undefined per 7.19.6.1p9).
-fn format_printf(fmt: &[u8], args: &[i64], mem: &mut Memory) -> Result<Vec<u8>, C5Error> {
+fn format_printf(fmt: &[u8], mut args: Varargs<'_>, mem: &mut Memory) -> Result<Vec<u8>, C5Error> {
     let mut out: Vec<u8> = Vec::new();
-    let mut arg_idx = 0usize;
-    let next_arg = |arg_idx: &mut usize| -> Result<i64, C5Error> {
-        let val = args.get(*arg_idx).copied().ok_or_else(|| {
-            C5Error::Runtime(format!(
-                "vm_ssa: printf: format wants arg #{arg_idx} but only {} supplied",
-                args.len(),
-            ))
-        })?;
-        *arg_idx += 1;
-        Ok(val)
-    };
     let mut i = 0usize;
     while i < fmt.len() {
         let c = fmt[i];
@@ -2371,7 +2735,7 @@ fn format_printf(fmt: &[u8], args: &[i64], mem: &mut Memory) -> Result<Vec<u8>, 
             i += 1;
             // A negative `*` width means `-` flag plus the
             // absolute value (7.19.6.1p5).
-            let w = next_arg(&mut arg_idx)? as i32;
+            let w = args.next(mem)? as i32;
             s.width = Some(w.unsigned_abs() as usize);
             s.minus |= w < 0;
         } else {
@@ -2385,7 +2749,7 @@ fn format_printf(fmt: &[u8], args: &[i64], mem: &mut Memory) -> Result<Vec<u8>, 
             if fmt.get(i) == Some(&b'*') {
                 i += 1;
                 // A negative `*` precision reads as omitted (p5).
-                let p = next_arg(&mut arg_idx)? as i32;
+                let p = args.next(mem)? as i32;
                 s.precision = (p >= 0).then_some(p as usize);
             } else {
                 s.precision = Some(0);
@@ -2435,7 +2799,7 @@ fn format_printf(fmt: &[u8], args: &[i64], mem: &mut Memory) -> Result<Vec<u8>, 
         match conv {
             b'%' => out.push(b'%'),
             b'd' | b'i' => {
-                let raw = next_arg(&mut arg_idx)?;
+                let raw = args.next(mem)?;
                 let v = match s.len {
                     ArgLen::Char => raw as i8 as i64,
                     ArgLen::Short => raw as i16 as i64,
@@ -2455,7 +2819,7 @@ fn format_printf(fmt: &[u8], args: &[i64], mem: &mut Memory) -> Result<Vec<u8>, 
                 push_int(&mut out, &s, sign, &digits, v == 0);
             }
             b'u' | b'o' | b'x' | b'X' => {
-                let raw = next_arg(&mut arg_idx)?;
+                let raw = args.next(mem)?;
                 let v = match s.len {
                     ArgLen::Char => raw as u8 as u64,
                     ArgLen::Short => raw as u16 as u64,
@@ -2479,11 +2843,11 @@ fn format_printf(fmt: &[u8], args: &[i64], mem: &mut Memory) -> Result<Vec<u8>, 
                 push_int(&mut out, &s, prefix, &digits, v == 0);
             }
             b'c' => {
-                let v = next_arg(&mut arg_idx)?;
+                let v = args.next(mem)?;
                 push_padded(&mut out, &s, &[v as u8]);
             }
             b's' => {
-                let val = next_arg(&mut arg_idx)?;
+                let val = args.next(mem)?;
                 if val < 0 {
                     return Err(C5Error::Runtime(format!(
                         "vm_ssa: printf %s: bad ptr 0x{val:x}",
@@ -2496,13 +2860,24 @@ fn format_printf(fmt: &[u8], args: &[i64], mem: &mut Memory) -> Result<Vec<u8>, 
                 push_padded(&mut out, &s, &bytes);
             }
             b'p' => {
-                let v = next_arg(&mut arg_idx)? as u64;
-                push_padded(&mut out, &s, format!("0x{v:x}").as_bytes());
+                // The text is implementation-defined (7.19.6.1p8): glibc
+                // writes a null pointer as `(nil)`, the UCRT every pointer
+                // as 16 upper-case digits.
+                let v = args.next(mem)? as u64;
+                let text = match Libc::of(mem.target) {
+                    Libc::Glibc if v == 0 => "(nil)".into(),
+                    Libc::Ucrt => format!("{v:016X}"),
+                    _ => format!("0x{v:x}"),
+                };
+                push_padded(&mut out, &s, text.as_bytes());
             }
             b'f' | b'F' | b'e' | b'E' | b'g' | b'G' | b'a' | b'A' => {
-                let raw = next_arg(&mut arg_idx)?;
+                let raw = args.next_float(mem, s.long_double)?;
                 let (v, hex) = float_arg(mem, raw, s.long_double)?;
-                let sign = if v.is_sign_negative() && !v.is_nan() {
+                let libc = Libc::of(mem.target);
+                let sign = if v.is_nan() {
+                    nan_sign(v, &s, libc)
+                } else if v.is_sign_negative() {
                     "-"
                 } else if s.plus {
                     "+"
@@ -2512,9 +2887,10 @@ fn format_printf(fmt: &[u8], args: &[i64], mem: &mut Memory) -> Result<Vec<u8>, 
                     ""
                 };
                 let (prefix, body) = match hex {
+                    _ if v.is_nan() => (sign.into(), nan_body(v, conv, libc)),
                     Some(h) if matches!(conv, b'a' | b'A') => {
                         let radix = if conv == b'A' { "0X" } else { "0x" };
-                        let style = HexStyle::of(mem.target);
+                        let style = Libc::of(mem.target);
                         let neg = v.is_sign_negative();
                         let body = format_hex(h, &s, style, mem.fp.round, neg);
                         (format!("{sign}{radix}"), body)
@@ -2527,7 +2903,7 @@ fn format_printf(fmt: &[u8], args: &[i64], mem: &mut Memory) -> Result<Vec<u8>, 
             }
             b'n' => {
                 // Store the byte count written so far (7.19.6.1p8).
-                let addr = next_arg(&mut arg_idx)?;
+                let addr = args.next(mem)?;
                 if addr < 0 {
                     return Err(C5Error::Runtime(format!(
                         "vm_ssa: printf %n: bad ptr 0x{addr:x}",
@@ -2600,6 +2976,36 @@ fn push_int(out: &mut Vec<u8>, s: &PrintfSpec, prefix: &str, digits: &str, is_ze
     out.extend_from_slice(digits.as_bytes());
     if s.minus {
         out.resize(out.len() + pad, b' ');
+    }
+}
+
+/// The sign a NaN takes (7.19.6.1p8 "[-]nan") from the target's C library:
+/// glibc and the UCRT write the sign bit and honor `+` and space; Apple's
+/// writes none of the three.
+fn nan_sign(v: f64, s: &PrintfSpec, libc: Libc) -> &'static str {
+    match libc {
+        Libc::Apple => "",
+        _ if v.is_sign_negative() => "-",
+        _ if s.plus => "+",
+        _ if s.space => " ",
+        _ => "",
+    }
+}
+
+/// A NaN's text after its sign: `nan`, and in the UCRT's form `nan(ind)` for
+/// the x86 default NaN (sign bit, quiet bit, no payload) and `nan(snan)` for
+/// a signaling one; upper-case under an upper-case conversion.
+fn nan_body(v: f64, conv: u8, libc: Libc) -> alloc::string::String {
+    let bits = v.to_bits();
+    let text = match libc {
+        Libc::Ucrt if bits == 0xFFF8_0000_0000_0000 => "nan(ind)",
+        Libc::Ucrt if bits & (1 << 51) == 0 => "nan(snan)",
+        _ => "nan",
+    };
+    if conv.is_ascii_uppercase() {
+        text.to_ascii_uppercase()
+    } else {
+        text.into()
     }
 }
 
@@ -2824,9 +3230,10 @@ fn ieee_digits(bits: u128, mant: u32, ebits: u32) -> (u128, i32) {
     }
 }
 
-/// The target libc's choices C99 7.19.6.1p8 leaves open for `%a`.
+/// The target's C library, for the choices C99 leaves open. For `%a`
+/// (7.19.6.1p8), each variant's note.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum HexStyle {
+enum Libc {
     /// Subnormals as `0x0.` at the minimum exponent, trailing zeros
     /// dropped, a halfway tail rounded to even.
     Glibc,
@@ -2838,13 +3245,13 @@ enum HexStyle {
     Ucrt,
 }
 
-impl HexStyle {
+impl Libc {
     fn of(target: crate::c5::codegen::Target) -> Self {
         use crate::c5::codegen::Target;
         match target {
-            Target::LinuxX64 | Target::LinuxAarch64 => HexStyle::Glibc,
-            Target::MacOSAarch64 => HexStyle::Apple,
-            Target::WindowsX64 | Target::WindowsAarch64 => HexStyle::Ucrt,
+            Target::LinuxX64 | Target::LinuxAarch64 => Libc::Glibc,
+            Target::MacOSAarch64 => Libc::Apple,
+            Target::WindowsX64 | Target::WindowsAarch64 => Libc::Ucrt,
         }
     }
 
@@ -2853,7 +3260,7 @@ impl HexStyle {
     /// direction `r`.
     fn rounds_up(self, r: Round, neg: bool, kept: u128, rem: u128, shift: u32) -> bool {
         let d1 = rem >> (shift - 4);
-        let dropped = if self == HexStyle::Apple {
+        let dropped = if self == Libc::Apple {
             d1 != 0
         } else {
             rem != 0
@@ -2862,7 +3269,7 @@ impl HexStyle {
             Round::Up => !neg && dropped,
             Round::Down => neg && dropped,
             Round::Zero => false,
-            Round::Nearest if self == HexStyle::Apple => {
+            Round::Nearest if self == Libc::Apple => {
                 let d2 = if shift >= 8 {
                     (rem >> (shift - 8)) & 0xf
                 } else {
@@ -2883,7 +3290,7 @@ impl HexStyle {
 fn format_hex(
     h: HexForm,
     s: &PrintfSpec,
-    style: HexStyle,
+    style: Libc,
     round: Round,
     neg: bool,
 ) -> alloc::string::String {
@@ -2892,7 +3299,7 @@ fn format_hex(
         width,
         mut exp,
     } = h;
-    if style == HexStyle::Apple && sig != 0 {
+    if style == Libc::Apple && sig != 0 {
         while sig >> (4 * width) == 0 {
             sig <<= 1;
             exp -= 1;
@@ -2900,7 +3307,7 @@ fn format_hex(
     }
     let frac = sig & ((1 << (4 * width)) - 1);
     let p = s.precision.unwrap_or(match style {
-        HexStyle::Ucrt => width as usize,
+        Libc::Ucrt => width as usize,
         _ => (width - frac.trailing_zeros().min(4 * width) / 4) as usize,
     });
     let keep = width.min(p as u32);
@@ -2998,7 +3405,7 @@ fn libc_size(name: &str, raw: Option<i64>) -> Result<usize, C5Error> {
 /// * `VaCopy(&dst, &src)` -- `*dst = *src`.
 /// * AArch64 setjmp / longjmp intrinsics return "not implemented";
 ///   they only land in JIT / AOT output.
-/// Evaluate a GCC extended-asm statement (`Inst::InlineAsm`) in the
+/// Evaluate a GNU C extended-asm statement (`Inst::InlineAsm`) in the
 /// interpreter. The template is parsed into instructions and executed
 /// against a 16-entry model register file seeded from the operand
 /// values; the results are stored through the output addresses, a value
@@ -3030,6 +3437,16 @@ fn run_inline_asm(
     .map_err(C5Error::Runtime)?;
     let insns =
         parse_template(sized.as_deref().unwrap_or(text).as_bytes()).map_err(C5Error::Runtime)?;
+    // A cache line write-back or prefetch leaves the interpreter's memory as
+    // it is, whatever its operand.
+    let insns: alloc::vec::Vec<_> = (insns.into_iter())
+        .filter(|i| {
+            !matches!(
+                i.mnemonic,
+                Mnemonic::Table("clflushopt" | "clwb" | "prefetchw" | "prefetchwt1")
+            )
+        })
+        .collect();
     // An `asm goto` label branch transfers control between blocks,
     // which this per-instruction evaluator cannot model.
     if insns.iter().any(|i| {
@@ -3081,7 +3498,7 @@ fn run_inline_asm(
     )
     .map_err(C5Error::Runtime)?;
     // The interpreter models only the 16 GPRs; an `x` (xmm) operand carries a
-    // 128-bit SSE value that has no modelled slot. Such asm also uses SSE
+    // 128-bit SSE value that has no modeled slot. Such asm also uses SSE
     // instructions, refused below -- reject the operand up front with a clear
     // message rather than mis-model it as a GPR.
     if asm
@@ -3111,7 +3528,7 @@ fn run_inline_asm(
     for (i, op) in asm.operands.iter().enumerate() {
         let Some(r) = op_reg[i] else { continue };
         // A bound operand is the stack or frame pointer itself: seed the
-        // modelled slot with the proxy `StackPointer` / `FrameAddress` read,
+        // modeled slot with the proxy `StackPointer` / `FrameAddress` read,
         // and never treat it as a destination address.
         if let crate::c5::ir::AsmConstraint::Bound(b) = op.constraint {
             let rsp = crate::c5::codegen::x86_64::asm::reg_by_name("rsp").map(|(n, _)| n);
@@ -3134,7 +3551,7 @@ fn run_inline_asm(
     let value_of = |o: &AsmOpnd, xregs: &[i64; 16]| -> (i64, AsmRegSize) {
         match *o {
             AsmOpnd::Imm(v) => (v, AsmRegSize::Long),
-            // Only the 16 GPRs are modelled; MMX / control / debug / segment
+            // Only the 16 GPRs are modeled; MMX / control / debug / segment
             // registers (marked with register numbers >= 16) read as zero.
             AsmOpnd::Reg { reg, size } if (reg as usize) < 16 => (xregs[reg as usize], size),
             AsmOpnd::Reg { size, .. } => (0, size),
@@ -3176,7 +3593,7 @@ fn run_inline_asm(
     let dst_reg = |o: &AsmOpnd| -> Option<usize> {
         match *o {
             // A write into an unmodelled register (MMX / control / debug /
-            // segment, marked >= 16) has no modelled slot: no-op.
+            // segment, marked >= 16) has no modeled slot: no-op.
             AsmOpnd::Reg { reg, .. } => (reg < 16).then_some(reg as usize),
             AsmOpnd::Ref { idx, .. } => op_reg[idx as usize].map(|r| r as usize),
             // A high-byte write updates bits 8..16 of its GPR, which the
@@ -3206,16 +3623,44 @@ fn run_inline_asm(
         match insn.mnemonic {
             // Literal machine bytes, emit-time data directives, `.skip`
             // padding, and `.align` padding are opaque to the register model,
-            // like the privileged / port ops below: no modelled effect under
+            // like the privileged / port ops below: no modeled effect under
             // the VM.
             Mnemonic::RawBytes | Mnemonic::Data(_) | Mnemonic::Skip => {}
             // The interpreter is not a CPU emulator: a mnemonic reached through
-            // the catalogue is refused rather than modelled. Such inline asm is
+            // the catalog is refused rather than modeled. Such inline asm is
             // an ahead-of-time / JIT construct, executed natively there.
+            // The interpreter is single-threaded: a fence orders nothing.
+            Mnemonic::Table("mfence" | "lfence" | "sfence") => {}
             Mnemonic::Table(name) | Mnemonic::ExtMov { name, .. } => {
                 return Err(C5Error::Runtime(alloc::format!(
                     "inline asm: `{name}` is not supported under --interp"
                 )));
+            }
+            // `stmxcsr` / `ldmxcsr` of a memory operand, whose register in the
+            // model holds the stored value or, for an input, the address.
+            Mnemonic::MemExt0F {
+                opcode: 0xAE,
+                ext: ext @ (2 | 3),
+                ..
+            } => {
+                let AsmOpnd::Ref { idx, .. } = ops[0] else {
+                    return Err(C5Error::Runtime(alloc::string::String::from(
+                        "inline asm: MXCSR access needs a memory operand under --interp",
+                    )));
+                };
+                let Some(r) = op_reg[idx as usize] else {
+                    continue;
+                };
+                if ext == 3 {
+                    xregs[r as usize] = mem.fp.mxcsr() as i64;
+                } else {
+                    let v = load_from_memory(mem, xregs[r as usize] as usize, LoadKind::U32)?;
+                    if let Err(what) = mem.fp.set_mxcsr(v as u32) {
+                        return Err(C5Error::Runtime(alloc::format!(
+                            "inline asm: MXCSR {v:#x} {what}, which the interpreter does not model"
+                        )));
+                    }
+                }
             }
             Mnemonic::Sse2Rr { .. }
             | Mnemonic::SseMov { .. }
@@ -3240,17 +3685,18 @@ fn run_inline_asm(
             | Mnemonic::Evex(_)
             | Mnemonic::VexGpr { .. } => {
                 // The interpreter has no XMM register file; SSE inline asm is a
-                // native / JIT construct, refused here rather than mis-modelled.
+                // native / JIT construct, refused here rather than mis-modeled.
                 return Err(C5Error::Runtime(alloc::string::String::from(
                     "inline asm: SSE register ops are not supported under --interp",
                 )));
             }
             Mnemonic::Crc32 => {
-                // No CRC unit in the interpreter, and the polynomial is the
-                // instruction's own; refused rather than mis-modelled.
-                return Err(C5Error::Runtime(alloc::string::String::from(
-                    "inline asm: `crc32` is not supported under --interp",
-                )));
+                let (data, size) = value_of(&ops[0], &xregs);
+                let (acc, _) = value_of(&ops[1], &xregs);
+                let bytes = insn.suffix.unwrap_or(size).bytes() as u32;
+                if let Some(r) = dst_reg(&ops[1]) {
+                    xregs[r] = i64::from(crc32(acc as u32, data as u64, bytes, true));
+                }
             }
             Mnemonic::Nop | Mnemonic::Rdtsc | Mnemonic::Rdtscp => {
                 // No host clock: the timestamp read produces zero in the
@@ -3298,7 +3744,7 @@ fn run_inline_asm(
                 // on the VM's register model (a debugger is not attached).
             }
             Mnemonic::Movd => {
-                // No modelled MMX register file. A read into a GPR (the AT&T
+                // No modeled MMX register file. A read into a GPR (the AT&T
                 // destination is a GPR: reg < 16) yields zero; a write into an
                 // MMX register is a no-op.
                 if let Some(r) = dst_reg(&ops[1])
@@ -3475,6 +3921,20 @@ fn merge_width(prev: i64, res: i64, w: crate::c5::ir::AsmRegSize) -> i64 {
 }
 
 /// Byte-reverse the low `w` bytes of `v` (BSWAP).
+/// The reflected CRC-32 of `data`'s low `bytes`, accumulated onto `acc` with
+/// no inversion, as the CRC32 instructions compute it: the IEEE polynomial,
+/// or Castagnoli's (x86 CRC32, AArch64 CRC32C*).
+pub(super) fn crc32(mut acc: u32, data: u64, bytes: u32, castagnoli: bool) -> u32 {
+    let poly = if castagnoli { 0x82F6_3B78 } else { 0xEDB8_8320 };
+    for k in 0..bytes {
+        acc ^= u32::from((data >> (8 * k)) as u8);
+        for _ in 0..8 {
+            acc = (acc >> 1) ^ (poly & (acc & 1).wrapping_neg());
+        }
+    }
+    acc
+}
+
 fn byte_swap(v: i64, w: crate::c5::ir::AsmRegSize) -> i64 {
     match w.bytes() {
         8 => v.swap_bytes(),
@@ -3560,14 +4020,23 @@ fn run_x86_simd(
     imm: Option<u8>,
     args: &[ValueId],
 ) -> Result<(), C5Error> {
-    use crate::c5::x86_simd::{self, Form};
-    let row = x86_simd::get(op);
+    use crate::c5::simd::{self, Form};
+    let row = simd::get(op);
+    if row.bytes >= 32 || row.form.is_opmask() {
+        return run_x86_simd_wide(mem, frame, row, imm, args);
+    }
     let reg = |i: usize| frame.regs[args[i] as usize] as usize;
-    let read = |mem: &Memory, addr: usize| -> Result<[u8; 16], C5Error> {
+    // An MMX form reads and writes the low `row.bytes` of each image; a
+    // widening or narrowing one its operands' and its result's widths.
+    let n = usize::from(row.bytes);
+    let read_n = |mem: &Memory, addr: usize, n: usize| -> Result<[u8; 16], C5Error> {
         let mut v = [0u8; 16];
-        v.copy_from_slice(mem.read_bytes(addr, 16)?);
+        v[..n].copy_from_slice(mem.read_bytes(addr, n)?);
         Ok(v)
     };
+    let read = |mem: &Memory, addr: usize| read_n(mem, addr, n);
+    let arg = |mem: &Memory, k: usize| read_n(mem, reg(k + 1), usize::from(row.arg_bytes(k)));
+    let ret_n = usize::from(row.ret_bytes()).max(1);
     // The destination plus the sources, less what the node carries as an
     // immediate: the folded `imm8` and a constant shift count.
     let want = if row.form == Form::Store {
@@ -3585,15 +4054,52 @@ fn run_x86_simd(
     }
     let imm8 = imm.unwrap_or(0);
     match row.form {
+        Form::Vvv | Form::VvvI
+            if row.bytes <= 16 && (row.form == Form::Vvv || row.base_sem() != row.sem) =>
+        {
+            let (acc, a, b) = (arg(mem, 0)?, arg(mem, 1)?, arg(mem, 2)?);
+            let (sem, b, _) = simd::by_element(row.sem, &b, imm8);
+            let out = simd::eval_float_acc(&mut mem.fp, sem, (&acc, &a, &b), n)
+                .or_else(|| simd::eval_acc(sem, &acc, &a, &b));
+            let Some(out) = out else {
+                return Err(C5Error::Runtime(format!(
+                    "vm_ssa: {} has no 16-byte form",
+                    row.name
+                )));
+            };
+            mem.write_bytes(reg(0), &out[..ret_n])?;
+        }
+        Form::Vvv
+        | Form::VvvI
+        | Form::CmpMask
+        | Form::MaskBlend
+        | Form::MaskLoad
+        | Form::MaskStore
+        | Form::Narrow
+        | Form::Widen
+        | Form::Zext => {
+            return Err(C5Error::Runtime(format!(
+                "vm_ssa: {} has no 16-byte form",
+                row.name
+            )));
+        }
         Form::Vv | Form::VvI => {
-            let (a, b) = (read(mem, reg(1))?, read(mem, reg(2))?);
-            let out = x86_simd::eval(row.sem, &a, &b, imm8, 0);
-            mem.write_bytes(reg(0), &out)?;
+            let (a, b) = (arg(mem, 0)?, arg(mem, 1)?);
+            let (sem, b, imm8) = simd::by_element(row.sem, &b, imm8);
+            let out = simd::eval_float_in(&mut mem.fp, sem, &a, &b, imm8, n).unwrap_or_else(|| {
+                if n == 8 && ret_n == 8 {
+                    simd::eval64(sem, &a, &b, imm8, 0)
+                } else {
+                    simd::eval(sem, &a, &b, imm8, 0)
+                }
+            });
+            mem.write_bytes(reg(0), &out[..ret_n])?;
         }
         Form::V | Form::VI => {
-            let a = read(mem, reg(1))?;
-            let out = x86_simd::eval(row.sem, &a, &[0u8; 16], imm8, 0);
-            mem.write_bytes(reg(0), &out)?;
+            let a = arg(mem, 0)?;
+            let out = simd::eval_float_in(&mut mem.fp, row.sem, &a, &[0u8; 16], imm8, n)
+                .unwrap_or_else(|| simd::eval(row.sem, &a, &[0u8; 16], imm8, 0));
+            mem.write_bytes(reg(0), &out[..ret_n])?;
         }
         Form::Shift => {
             let a = read(mem, reg(1))?;
@@ -3603,8 +4109,8 @@ fn run_x86_simd(
                 Some(n) => n as u64,
                 None => frame.regs[args[2] as usize] as u64,
             };
-            let out = x86_simd::eval(row.sem, &a, &[0u8; 16], 0, count);
-            mem.write_bytes(reg(0), &out)?;
+            let out = simd::eval(row.sem, &a, &[0u8; 16], 0, count);
+            mem.write_bytes(reg(0), &out[..ret_n])?;
         }
         Form::Load => {
             let a = read(mem, reg(1))?;
@@ -3614,20 +4120,26 @@ fn run_x86_simd(
             let a = read(mem, reg(1))?;
             mem.write_bytes(reg(0), &a)?;
         }
+        Form::ToInt => {
+            let a = read(mem, reg(1))?;
+            let bits = 8 * u32::from(row.int_width);
+            let x = simd::eval_to_int(&mut mem.fp, row.sem, &a, bits).unwrap_or(0);
+            mem.write_bytes(reg(0), &x.to_le_bytes()[..row.int_width as usize])?;
+        }
         Form::Extract => {
             let a = read(mem, reg(1))?;
-            let x = x86_simd::eval_extract(&a, row.int_width, imm8);
+            let x = simd::eval_extract(&a, row.int_width, imm8);
             mem.write_bytes(reg(0), &(x as i64).to_le_bytes())?;
         }
         Form::MoveMask => {
             let a = read(mem, reg(1))?;
-            let x = x86_simd::eval_movemask(&a);
+            let x = simd::eval_movemask(&a);
             mem.write_bytes(reg(0), &(x as i64).to_le_bytes())?;
         }
         Form::Insert => {
             let a = read(mem, reg(1))?;
             let x = frame.regs[args[2] as usize] as u64;
-            let out = x86_simd::eval_insert(&a, row.int_width, imm8, x);
+            let out = simd::eval_insert(&a, row.int_width, imm8, x);
             mem.write_bytes(reg(0), &out)?;
         }
         Form::RdRand => {
@@ -3640,6 +4152,161 @@ fn run_x86_simd(
         }
     }
     Ok(())
+}
+
+/// [`run_x86_simd`] for an AVX2 or AVX-512 form over 32- or 64-byte vectors
+/// ([`crate::c5::simd::eval_wide`]).
+fn run_x86_simd_wide(
+    mem: &mut Memory,
+    frame: &mut Frame<'_>,
+    row: &crate::c5::x86_simd::SimdOp,
+    imm: Option<u8>,
+    args: &[ValueId],
+) -> Result<(), C5Error> {
+    use crate::c5::simd::{self, Form};
+    let n = usize::from(row.bytes);
+    let operand = |i: usize| -> Result<usize, C5Error> {
+        args.get(i)
+            .map(|&a| frame.regs[a as usize] as usize)
+            .ok_or_else(|| C5Error::Runtime(format!("vm_ssa: {} lacks operand {i}", row.name)))
+    };
+    let read = |mem: &Memory, addr: usize| -> Result<[u8; 64], C5Error> {
+        let mut v = [0u8; 64];
+        v[..n].copy_from_slice(mem.read_bytes(addr, n)?);
+        Ok(v)
+    };
+    let (imm8, zero) = (imm.unwrap_or(0), [0u8; 64]);
+    let eval = |a: &[u8; 64], b: &[u8; 64], c: &[u8; 64], count: u64| {
+        simd::eval_wide(row.sem, (a, b, c), imm8, count, n)
+    };
+    let out = match row.form {
+        Form::Vv | Form::VvI => {
+            let (a, b) = (read(mem, operand(1)?)?, read(mem, operand(2)?)?);
+            // A floating-point row runs on each 16-byte part in the
+            // interpreter's floating-point environment.
+            let mut out = [0u8; 64];
+            let mut float = true;
+            for k in (0..n).step_by(16) {
+                let part = |v: &[u8; 64]| -> [u8; 16] { v[k..k + 16].try_into().unwrap() };
+                match simd::eval_float(&mut mem.fp, row.sem, &part(&a), &part(&b), imm8) {
+                    Some(o) => out[k..k + 16].copy_from_slice(&o),
+                    None => float = false,
+                }
+            }
+            if float { out } else { eval(&a, &b, &zero, 0) }
+        }
+        Form::Vvv | Form::VvvI => {
+            let (a, b, c) = (
+                read(mem, operand(1)?)?,
+                read(mem, operand(2)?)?,
+                read(mem, operand(3)?)?,
+            );
+            let mut out = [0u8; 64];
+            let mut float = true;
+            for k in (0..n).step_by(16) {
+                let part = |v: &[u8; 64]| -> [u8; 16] { v[k..k + 16].try_into().unwrap() };
+                let abc = (&part(&a), &part(&b), &part(&c));
+                match simd::eval_float_acc(&mut mem.fp, row.sem, abc, 16) {
+                    Some(o) => out[k..k + 16].copy_from_slice(&o),
+                    None => float = false,
+                }
+            }
+            if float { out } else { eval(&a, &b, &c, 0) }
+        }
+        Form::V | Form::VI => {
+            let a = read(mem, operand(1)?)?;
+            let mut out = [0u8; 64];
+            let mut float = true;
+            for k in (0..n).step_by(16) {
+                let part: [u8; 16] = a[k..k + 16].try_into().unwrap();
+                match simd::eval_float(&mut mem.fp, row.sem, &part, &[0; 16], imm8) {
+                    Some(o) => out[k..k + 16].copy_from_slice(&o),
+                    None => float = false,
+                }
+            }
+            if float {
+                out
+            } else {
+                eval(&a, &zero, &zero, 0)
+            }
+        }
+        Form::Shift => {
+            let count = match imm {
+                Some(n) => u64::from(n),
+                None => frame.regs[args[2] as usize] as u64,
+            };
+            eval(&read(mem, operand(1)?)?, &zero, &zero, count)
+        }
+        Form::Load | Form::Store => read(mem, operand(1)?)?,
+        Form::Narrow => {
+            let (a, p) = (read(mem, operand(1)?)?, usize::from(row.int_width));
+            let k = usize::from(imm8) % (n / p);
+            return mem.write_bytes(operand(0)?, &a[k * p..k * p + p]);
+        }
+        Form::Widen => {
+            let (mut out, p) = (read(mem, operand(1)?)?, usize::from(row.int_width));
+            let k = usize::from(imm8) % (n / p);
+            out[k * p..k * p + p].copy_from_slice(mem.read_bytes(operand(2)?, p)?);
+            out
+        }
+        Form::Zext => {
+            let (mut out, p) = ([0u8; 64], usize::from(row.int_width));
+            out[..p].copy_from_slice(mem.read_bytes(operand(1)?, p)?);
+            out
+        }
+        Form::CmpMask => {
+            let (a, b) = (read(mem, operand(1)?)?, read(mem, operand(2)?)?);
+            let m = simd::eval_cmp_mask(row.sem, &a, &b, imm8, n);
+            mem.write_bytes(operand(0)?, &(m as i64).to_le_bytes())?;
+            return Ok(());
+        }
+        Form::MaskBlend => {
+            let (mut out, m, a) = (
+                read(mem, operand(1)?)?,
+                operand(2)? as u64,
+                read(mem, operand(3)?)?,
+            );
+            let w = usize::from(row.int_width);
+            for i in (0..n / w).filter(|&i| m >> i & 1 != 0) {
+                out[i * w..i * w + w].copy_from_slice(&a[i * w..i * w + w]);
+            }
+            out
+        }
+        // Only the selected lanes are read or written, as the instruction
+        // suppresses faults in the others.
+        Form::MaskLoad => {
+            let (m, p, w) = (operand(1)? as u64, operand(2)?, usize::from(row.int_width));
+            let mut out = [0u8; 64];
+            for i in (0..n / w).filter(|&i| m >> i & 1 != 0) {
+                out[i * w..i * w + w].copy_from_slice(mem.read_bytes(p + i * w, w)?);
+            }
+            out
+        }
+        Form::MaskStore => {
+            let (p, m, v) = (operand(0)?, operand(1)? as u64, read(mem, operand(2)?)?);
+            let w = usize::from(row.int_width);
+            for i in (0..n / w).filter(|&i| m >> i & 1 != 0) {
+                mem.write_bytes(p + i * w, &v[i * w..i * w + w])?;
+            }
+            return Ok(());
+        }
+        Form::MoveMask => {
+            let a = read(mem, operand(1)?)?;
+            let mut m = 0u64;
+            for k in (0..n).step_by(16) {
+                m |= simd::eval_movemask(a[k..k + 16].try_into().unwrap()) << k;
+            }
+            mem.write_bytes(operand(0)?, &(m as i64).to_le_bytes())?;
+            return Ok(());
+        }
+        _ => {
+            return Err(C5Error::Runtime(format!(
+                "vm_ssa: {} has no {n}-byte form",
+                row.name
+            )));
+        }
+    };
+    mem.write_bytes(operand(0)?, &out[..n])
 }
 
 fn run_intrinsic(
@@ -3736,8 +4403,11 @@ fn run_intrinsic(
         ))),
         // The walker answers 0 on the unoptimized SSA the interpreter
         // runs; the node exists only inside the `-O` pass pipeline.
-        Intrinsic::ConstantP => Err(C5Error::Runtime(
-            "vm_ssa: Intrinsic::ConstantP is resolved before execution".to_string(),
+        Intrinsic::ConstantP
+        | Intrinsic::ObjectSize
+        | Intrinsic::SubobjectBound
+        | Intrinsic::BuiltinArg => Err(C5Error::Runtime(
+            "vm_ssa: a deferred builtin is resolved before execution".to_string(),
         )),
         Intrinsic::Sqrt | Intrinsic::Sqrtf => {
             let x = frame.regs[args[0] as usize] as u64;
@@ -3792,24 +4462,37 @@ fn run_intrinsic(
         | Intrinsic::AtomicReleaseFence
         | Intrinsic::AtomicSignalFence => Ok(()),
         Intrinsic::X87StoreControlWord => {
-            // The interpreter evaluates floats with host doubles, so it
-            // has no x87 control word to read; store the architectural
-            // default so a caller that round-trips it sees a sane value.
             let addr = frame.regs[args[0] as usize] as usize;
-            store_to_memory(mem, addr, 0x037f, StoreKind::I16)
+            store_to_memory(mem, addr, i64::from(mem.fp.x87_control()), StoreKind::I16)
         }
         Intrinsic::X87LoadControlWord => {
-            // Setting the control word has no effect on host-double
-            // arithmetic.
-            Ok(())
+            let addr = frame.regs[args[0] as usize] as usize;
+            let fcw = load_from_memory(mem, addr, LoadKind::U16)? as u32;
+            mem.fp.set_x87_control(fcw).map_err(|what| {
+                C5Error::Runtime(alloc::format!(
+                    "fldcw: the {what}, which the interpreter does not model"
+                ))
+            })
         }
-        Intrinsic::X86FxSave | Intrinsic::X86FxRestore => {
-            // No modelled x87/SSE register file to save or restore; the
-            // interpreter evaluates floats with host doubles.
-            Ok(())
+        // The control and status state the environment models; the register
+        // area holds zeros, as no x87 or XMM register outlives a statement.
+        Intrinsic::X86FxSave => {
+            let addr = frame.regs[args[0] as usize] as usize;
+            let mut area = [0u8; 512];
+            area[..32].copy_from_slice(&mem.fp.fxsave_header());
+            mem.write_bytes(addr, &area)
+        }
+        Intrinsic::X86FxRestore => {
+            let addr = frame.regs[args[0] as usize] as usize;
+            let header = mem.read_bytes(addr, 32)?.to_vec();
+            mem.fp.fxrstor_header(&header).map_err(|what| {
+                C5Error::Runtime(alloc::format!(
+                    "fxrstor: the {what}, which the interpreter does not model"
+                ))
+            })
         }
         Intrinsic::X86Sgdt | Intrinsic::X86Sidt | Intrinsic::X86Sldt | Intrinsic::X86Str => {
-            // Store forms: no modelled descriptor tables. Zero the operand so
+            // Store forms: no modeled descriptor tables. Zero the operand so
             // a caller reads a defined result. sgdt/sidt write a 10-byte
             // pseudo-descriptor (2-byte limit + 8-byte base); sldt/str write a
             // 2-byte selector.
@@ -3975,7 +4658,7 @@ fn run_intrinsic(
         // The OS's value in x18 (the Windows TEB) has no interpreter
         // counterpart.
         Intrinsic::PlatformRegister => Err(C5Error::Runtime(
-            "vm_ssa: the platform register x18 is not modelled under --interp".to_string(),
+            "vm_ssa: the platform register x18 is not modeled under --interp".to_string(),
         )),
         Intrinsic::ReturnAddress => {
             // The return slot of a frame record: this frame's without an
@@ -4019,12 +4702,66 @@ fn run_intrinsic(
 /// Sign / zero extension follows C99 6.3.1.3 per the LoadKind's
 /// signedness. Bounds errors trip a runtime error so a stray
 /// pointer doesn't read uninitialised state.
+/// `Inst::VecBinop` over the little-endian lane images of its operands:
+/// integer lanes wrap, floating ones round as the scalar operation does.
+fn vec_binop(
+    op: crate::c5::ir::BinOp,
+    lane: crate::c5::ir::VecLane,
+    a: [u8; 16],
+    b: [u8; 16],
+) -> [u8; 16] {
+    use crate::c5::ir::{BinOp, VecLane};
+    let w = lane.bytes() as usize;
+    let mut out = [0u8; 16];
+    for i in (0..16).step_by(w) {
+        let mut x = [0u8; 8];
+        let mut y = [0u8; 8];
+        x[..w].copy_from_slice(&a[i..i + w]);
+        y[..w].copy_from_slice(&b[i..i + w]);
+        let (x, y) = (u64::from_le_bytes(x), u64::from_le_bytes(y));
+        let r = match (lane, op) {
+            (VecLane::F32, _) => {
+                let (p, q) = (f32::from_bits(x as u32), f32::from_bits(y as u32));
+                u64::from(
+                    match op {
+                        BinOp::Fadd => p + q,
+                        BinOp::Fsub => p - q,
+                        BinOp::Fmul => p * q,
+                        _ => p / q,
+                    }
+                    .to_bits(),
+                )
+            }
+            (VecLane::F64, _) => {
+                let (p, q) = (f64::from_bits(x), f64::from_bits(y));
+                match op {
+                    BinOp::Fadd => p + q,
+                    BinOp::Fsub => p - q,
+                    BinOp::Fmul => p * q,
+                    _ => p / q,
+                }
+                .to_bits()
+            }
+            (_, BinOp::Add) => x.wrapping_add(y),
+            (_, BinOp::Sub) => x.wrapping_sub(y),
+            (_, BinOp::Mul) => x.wrapping_mul(y),
+            (_, BinOp::And) => x & y,
+            (_, BinOp::Or) => x | y,
+            _ => x ^ y,
+        };
+        out[i..i + w].copy_from_slice(&r.to_le_bytes()[..w]);
+    }
+    out
+}
+
 fn load_width(kind: LoadKind) -> usize {
     match kind {
         // The x87 read covers the 10 significant bytes; the binary128
         // read covers all 16.
         LoadKind::F80 => 10,
         LoadKind::F128 | LoadKind::V128 => 16,
+        LoadKind::V256 => 32,
+        LoadKind::V512 => 64,
         LoadKind::I64 | LoadKind::F64 => 8,
         LoadKind::I32 | LoadKind::U32 | LoadKind::F32 => 4,
         LoadKind::I16 | LoadKind::U16 => 2,
@@ -4034,10 +4771,12 @@ fn load_width(kind: LoadKind) -> usize {
 
 fn store_width(kind: StoreKind) -> usize {
     match kind {
-        // The x87 store writes 10 bytes and leaves the 6 padding
-        // bytes untouched, as gcc's FSTP does; binary128 writes 16.
+        // The x87 store (`fstp` m80) writes 10 bytes and leaves the 6
+        // padding bytes untouched; binary128 writes 16.
         StoreKind::F80 => 10,
         StoreKind::F128 | StoreKind::V128 => 16,
+        StoreKind::V256 => 32,
+        StoreKind::V512 => 64,
         StoreKind::I64 | StoreKind::F64 => 8,
         StoreKind::I32 | StoreKind::F32 => 4,
         StoreKind::I16 => 2,
@@ -4057,8 +4796,7 @@ fn load_from_memory(mem: &Memory, addr: usize, kind: LoadKind) -> Result<i64, C5
         // accumulator carries f64 bit patterns, so the load
         // expands the in-memory f32 to f64 and returns its bits.
         LoadKind::F32 => {
-            let bits = u32::from_le_bytes(slice.try_into().unwrap());
-            (f32::from_bits(bits) as f64).to_bits() as i64
+            super::fenv::f32_to_reg(u32::from_le_bytes(slice.try_into().unwrap())) as i64
         }
         // `double` is already 8 bytes; the c5 accumulator carries
         // f64 bit patterns, so the load returns the raw 64-bit value.
@@ -4080,10 +4818,8 @@ fn load_from_memory(mem: &Memory, addr: usize, kind: LoadKind) -> Result<i64, C5
         LoadKind::I8 => slice[0] as i8 as i64,
         LoadKind::U8 => slice[0] as i64,
         // The -O vector promotion producing this kind never reaches the VM.
-        LoadKind::V128 => {
-            return Err(C5Error::Runtime(
-                "128-bit vector load in the interpreter".into(),
-            ));
+        LoadKind::V128 | LoadKind::V256 | LoadKind::V512 => {
+            return Err(C5Error::Runtime("vector load in the interpreter".into()));
         }
     };
     Ok(val)
@@ -4108,7 +4844,7 @@ fn store_to_memory(
         // accumulator carries f64 bit patterns, so the store
         // collapses to f32 before writing the 4 bytes.
         StoreKind::F32 => {
-            let f = f64::from_bits(value as u64) as f32;
+            let f = super::fenv::reg_to_f32(value as u64);
             mem.write_bytes(addr, &f.to_le_bytes())
         }
         // `double` is 8 bytes; write the raw f64 bit pattern.
@@ -4128,9 +4864,9 @@ fn store_to_memory(
             b[8..].copy_from_slice(&hi.to_le_bytes());
             mem.write_bytes(addr, &b)
         }
-        StoreKind::V128 => Err(C5Error::Runtime(
-            "128-bit vector store in the interpreter".into(),
-        )),
+        StoreKind::V128 | StoreKind::V256 | StoreKind::V512 => {
+            Err(C5Error::Runtime("vector store in the interpreter".into()))
+        }
     }
 }
 
@@ -4180,9 +4916,13 @@ fn narrow_store(value: i64, kind: StoreKind) -> i64 {
         StoreKind::I32 => (value as i32) as i64,
         StoreKind::I16 => (value as i16) as i64,
         StoreKind::I8 => (value as i8) as i64,
-        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => {
-            value
-        }
+        StoreKind::F32
+        | StoreKind::F64
+        | StoreKind::F80
+        | StoreKind::F128
+        | StoreKind::V128
+        | StoreKind::V256
+        | StoreKind::V512 => value,
     }
 }
 
@@ -4198,7 +4938,9 @@ fn binop(fp: &mut FpEnv, op: BinOp, lhs: i64, rhs: i64, f: Format) -> Result<i64
         BinOp::Fmul | BinOp::FmulContractible => fp.mul(a, b, f),
         BinOp::Fdiv => fp.div(a, b, f),
         _ => {
-            if super::super::ir::is_fp_op(op) {
+            if super::super::ir::fp_compare_signals(op) {
+                fp.compare_signaling(a, b);
+            } else if super::super::ir::is_fp_op(op) {
                 fp.compare_operands(a, b);
             }
             return eval::apply_binop(op, lhs, rhs)
@@ -4227,21 +4969,21 @@ mod tests {
         // 0xC3 0xA9 (the UTF-8 encoding of U+00E9) must reach stdout as
         // those two raw bytes, not the 4-byte Latin-1 -> UTF-8 re-encoding
         // the old path produced.
-        let mut mem = Memory::new(b"\xC3\xA9\x00", crate::c5::codegen::Target::LinuxX64);
-        let out = format_printf(b"%s", &[0], &mut mem).expect("format");
+        let mut mem = Memory::with_stdio(b"\xC3\xA9\x00", crate::c5::codegen::Target::LinuxX64);
+        let out = format_printf(b"%s", Varargs::values(&[0]), &mut mem).expect("format");
         assert_eq!(out, alloc::vec![0xC3u8, 0xA9]);
     }
 
     #[test]
     fn printf_char_preserves_high_byte() {
-        let mut mem = Memory::new(b"\x00", crate::c5::codegen::Target::LinuxX64);
-        let out = format_printf(b"%c", &[0x80], &mut mem).expect("format");
+        let mut mem = Memory::with_stdio(b"\x00", crate::c5::codegen::Target::LinuxX64);
+        let out = format_printf(b"%c", Varargs::values(&[0x80]), &mut mem).expect("format");
         assert_eq!(out, alloc::vec![0x80u8]);
     }
 
     fn fmt1(fmt: &[u8], args: &[i64]) -> alloc::string::String {
-        let mut mem = Memory::new(b"abcdef\x00", crate::c5::codegen::Target::LinuxX64);
-        let out = format_printf(fmt, args, &mut mem).expect("format");
+        let mut mem = Memory::with_stdio(b"abcdef\x00", crate::c5::codegen::Target::LinuxX64);
+        let out = format_printf(fmt, Varargs::values(args), &mut mem).expect("format");
         alloc::string::String::from_utf8(out).expect("utf8")
     }
 
@@ -4302,9 +5044,34 @@ mod tests {
     }
 
     fn fmt_on(target: crate::c5::codegen::Target, data: &[u8], fmt: &[u8], args: &[i64]) -> String {
-        let mut mem = Memory::new(data, target);
-        let out = format_printf(fmt, args, &mut mem).expect("format");
+        let mut mem = Memory::with_stdio(data, target);
+        let out = format_printf(fmt, Varargs::values(args), &mut mem).expect("format");
         String::from_utf8(out).expect("utf8")
+    }
+
+    /// C99 7.19.6.1p8 "[-]nan" as each target's C library writes it: glibc
+    /// the sign bit with `+` and space honored, Apple's libc neither sign nor
+    /// flag, the UCRT the sign bit and `nan(ind)` / `nan(snan)` for the x86
+    /// default and a signaling NaN.
+    #[test]
+    fn printf_nan_follows_the_target_library() {
+        use crate::c5::codegen::Target::{LinuxX64, MacOSAarch64, WindowsX64};
+        let (pos, neg, ind) = (
+            0x7FF8_0000_0000_0001_u64,
+            0xFFF8_0000_0000_0001_u64,
+            0xFFF8_u64 << 48,
+        );
+        let snan = 0x7FF0_0000_0000_0001_u64;
+        let on = |t, f: &[u8], bits: u64| fmt_on(t, &[], f, &[bits as i64]);
+        assert_eq!(on(LinuxX64, b"%f|", neg), "-nan|");
+        assert_eq!(on(LinuxX64, b"%+F|", pos), "+NAN|");
+        assert_eq!(on(LinuxX64, b"% e|", pos), " nan|");
+        assert_eq!(on(MacOSAarch64, b"%f|", neg), "nan|");
+        assert_eq!(on(MacOSAarch64, b"%+f|", pos), "nan|");
+        assert_eq!(on(WindowsX64, b"%f|", ind), "-nan(ind)|");
+        assert_eq!(on(WindowsX64, b"%E|", ind), "-NAN(IND)|");
+        assert_eq!(on(WindowsX64, b"%g|", neg), "-nan|");
+        assert_eq!(on(WindowsX64, b"%+f|", snan), "+nan(snan)|");
     }
 
     #[test]
@@ -4360,8 +5127,8 @@ mod tests {
     #[test]
     fn printf_percent_n_stores_count() {
         // C99 7.19.6.1p8: %n stores the bytes written so far.
-        let mut mem = Memory::new(&[0u8; 16], crate::c5::codegen::Target::LinuxX64);
-        let out = format_printf(b"abc%nd", &[8], &mut mem).expect("format");
+        let mut mem = Memory::with_stdio(&[0u8; 16], crate::c5::codegen::Target::LinuxX64);
+        let out = format_printf(b"abc%nd", Varargs::values(&[8]), &mut mem).expect("format");
         assert_eq!(out, b"abcd".to_vec());
         assert_eq!(load_from_memory(&mem, 8, LoadKind::I32).unwrap(), 3);
     }
@@ -4429,7 +5196,7 @@ mod tests {
     fn frame_allocation_is_bounded_by_the_stack_region() {
         // A frame past `heap_base` would zero live heap
         // allocations; exhaustion must be a hard error instead.
-        let mut mem = Memory::new(&[], crate::c5::codegen::Target::LinuxX64);
+        let mut mem = Memory::with_stdio(&[], crate::c5::codegen::Target::LinuxX64);
         let heap = mem.heap_alloc(16);
         mem.bytes[heap] = 7;
         let stack_bytes = mem.heap_base - mem.stack_base;
@@ -4496,7 +5263,7 @@ mod tests {
         expect_runtime_err(
             "#include <stdio.h>\n\
              int main(void) { char b[48]; return fputs(\"x\", (FILE *)b); }",
-            "is not a standard stream",
+            "is not an open stream",
         );
     }
 
@@ -4513,7 +5280,7 @@ mod tests {
 
     #[test]
     fn every_function_the_interpreter_supplies_has_a_definition() {
-        let mut mem = Memory::new(&[0u8; 64], crate::c5::codegen::Target::LinuxX64);
+        let mut mem = Memory::with_stdio(&[0u8; 64], crate::c5::codegen::Target::LinuxX64);
         let names = [
             "exit",
             "memcpy",
@@ -4522,6 +5289,13 @@ mod tests {
             "memcmp",
             "write",
             "read",
+            "pread",
+            "pwrite",
+            "lseek",
+            "lseek64",
+            "_lseek",
+            "_lseeki64",
+            "copy_file_range",
             "close",
             "malloc",
             "free",
@@ -4546,7 +5320,14 @@ mod tests {
             "dlclose",
             "dlerror",
         ];
-        for name in names {
+        let libraries = (strtox::NAMES.iter())
+            .chain(string::NAMES)
+            .chain(printf::NAMES)
+            .chain(scan::NAMES)
+            .chain(locale::NAMES)
+            .chain(stream::NAMES)
+            .chain(system::NAMES);
+        for name in names.into_iter().chain(libraries.copied()) {
             assert!(interp_supplies(name), "{name}");
             if let Err(C5Error::Runtime(m)) =
                 dispatch_callext(name, &[0; 4], &mut mem, &mut NullHost)
@@ -4554,7 +5335,8 @@ mod tests {
                 assert!(!m.contains("is not implemented"), "{name}: {m}");
             }
         }
-        assert!(!interp_supplies("snprintf"));
+        assert!(sort::NAMES.iter().all(|name| interp_supplies(name)));
+        assert!(!interp_supplies("system"));
     }
 
     #[test]
@@ -4836,15 +5618,11 @@ mod tests {
 
     #[test]
     fn callext_unimplemented_returns_runtime_error() {
-        // `strlen` isn't in the SSA-VM dispatch yet; the
-        // unimplemented arm surfaces a runtime error pointing
-        // at the next port target. Programs that don't touch
-        // libc keep running.
+        // A library call the interpreter has no definition of stops the
+        // program with a runtime error naming it.
         use crate::Compiler;
         let program = Compiler::new(
-            "#include <string.h>\nstatic const char *s = \"hi\";\n\
-             int main(void) { return strlen(s); }"
-                .to_string(),
+            "#include <stdlib.h>\nint main(void) { return system(\"true\"); }".to_string(),
         )
         .compile()
         .expect("compile fixture");
@@ -4869,13 +5647,12 @@ mod tests {
             &mut host,
             super::super::super::Target::MacOSAarch64,
         )
-        .expect_err("strlen should land in the unimplemented arm");
+        .expect_err("system should land in the unimplemented arm");
         match err {
             crate::C5Error::Runtime(msg) => {
                 assert!(
-                    msg.contains("library call `strlen` is not implemented")
-                        || msg.contains("library call `_strlen` is not implemented"),
-                    "expected strlen in the error, got: {msg}",
+                    msg.contains("library call `system` is not implemented"),
+                    "expected system in the error, got: {msg}",
                 );
             }
             other => panic!("expected Runtime, got {other:?}"),

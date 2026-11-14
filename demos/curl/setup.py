@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Fetch the curl 8.11.1 source distribution for the badc demo.
+"""Fetch the curl 8.23.0 and Mbed TLS 3.6.7 source distributions for the
+badc demo.
 
 After this runs, ``demos/curl/src/`` holds curl's ``lib/`` tree (the
-library sources compiled by badc) and ``demos/curl/include/curl/``
-holds the public API headers. The hand-written ``curl_config.h`` and
-the driver/binding sources live beside this script and are not
-touched.
+library sources compiled by badc), ``demos/curl/include/curl/`` holds
+the public API headers, and ``demos/curl/mbedtls/`` holds Mbed TLS's
+``library/`` and ``include/`` trees, the TLS backend of the HTTPS lane.
+The hand-written configuration headers and the driver/binding sources
+live beside this script and are not touched.
 
-Pulls the pinned tarball from the ``kromych/badc`` vendor-deps mirror,
-verified against its sha256. Idempotent: safe to call from CI before
+Pulls the pinned tarballs from the ``kromych/badc`` vendor-deps mirror,
+verified against their sha256. Idempotent: safe to call from CI before
 each smoke run; ``-v`` prints every step.
 """
 
@@ -23,41 +25,44 @@ from pathlib import Path
 CURL_DIR = Path(__file__).resolve().parent
 SRC_DIR = CURL_DIR / "src"
 INC_DIR = CURL_DIR / "include" / "curl"
+MBEDTLS_DIR = CURL_DIR / "mbedtls"
 CACHE_DIR = CURL_DIR / ".cache"
 
 REPO_ROOT = CURL_DIR.parents[1]
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "vendor_deps"))
 import _fetch  # noqa: E402
 
-VERSION = "8.11.1"
-UPSTREAM_SHA = "a889ac9dbba3644271bd9d1302b5c22a088893719b72be3487bc3d401e5c4e80"  # tarball sha256
-ASSET = f"curl-{VERSION}-{UPSTREAM_SHA[:8]}.tar.gz"
 RELEASE_TAG = "vendor-deps-v1"
+
+VERSION = "8.23.0"
+UPSTREAM_SHA = "e3de77cfa6367083c776a26647fc9f633b538c06c3baa73d931a252ac8f72b49"  # tarball sha256
+ASSET = f"curl-{VERSION}-{UPSTREAM_SHA[:8]}.tar.gz"
 SHA256 = UPSTREAM_SHA
 
-PREFIX = f"curl-{VERSION}/"
+# Mbed TLS 3.6 (LTS): the release archive builds without a configure step.
+MBEDTLS_VERSION = "3.6.7"
+MBEDTLS_UPSTREAM_SHA = "a7e8bcbec0e6f761b4af24f25677626b35f762f68eef79c08677a363212d11f6"
+MBEDTLS_ASSET = f"mbedtls-{MBEDTLS_VERSION}-{MBEDTLS_UPSTREAM_SHA[:8]}.tar.bz2"
 
 
-def _extract(tar_path: Path, log) -> None:
-    for d in (SRC_DIR, INC_DIR):
+def _extract(tar_path: Path, routes: dict[str, Path], log) -> None:
+    """Extract the members under each `routes` prefix into its directory,
+    replacing the directory."""
+    for d in routes.values():
         if d.exists():
             shutil.rmtree(d)
-    SRC_DIR.mkdir(parents=True)
-    INC_DIR.mkdir(parents=True)
-    lib_prefix = f"{PREFIX}lib/"
-    inc_prefix = f"{PREFIX}include/curl/"
-    with tarfile.open(tar_path, "r:gz") as tf:
+        d.mkdir(parents=True)
+    with tarfile.open(tar_path) as tf:
         for member in tf.getmembers():
-            if member.name.startswith(lib_prefix):
-                rel = member.name[len(lib_prefix):]
-                dest = SRC_DIR / rel
-            elif member.name.startswith(inc_prefix) and member.name.endswith(".h"):
-                rel = member.name[len(inc_prefix):]
-                dest = INC_DIR / rel
+            for prefix, root in routes.items():
+                if member.name.startswith(prefix):
+                    rel = member.name[len(prefix):]
+                    break
             else:
                 continue
             if not rel:
                 continue
+            dest = root / rel
             if member.isdir():
                 dest.mkdir(parents=True, exist_ok=True)
                 continue
@@ -67,7 +72,7 @@ def _extract(tar_path: Path, log) -> None:
             dest.parent.mkdir(parents=True, exist_ok=True)
             with src as inp, dest.open("wb") as out:
                 shutil.copyfileobj(inp, out)
-    log(f"extracted curl {VERSION} lib -> {SRC_DIR}, headers -> {INC_DIR}")
+    log(f"extracted {tar_path.name} -> {', '.join(str(d) for d in routes.values())}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -82,7 +87,14 @@ def main(argv: list[str] | None = None) -> int:
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     tar_path = CACHE_DIR / ASSET
     _fetch.fetch_and_verify(RELEASE_TAG, ASSET, tar_path, SHA256, log)
-    _extract(tar_path, log)
+    _extract(tar_path, {f"curl-{VERSION}/lib/": SRC_DIR,
+                        f"curl-{VERSION}/include/curl/": INC_DIR}, log)
+
+    tls_path = CACHE_DIR / MBEDTLS_ASSET
+    _fetch.fetch_and_verify(RELEASE_TAG, MBEDTLS_ASSET, tls_path, MBEDTLS_UPSTREAM_SHA, log)
+    prefix = f"mbedtls-{MBEDTLS_VERSION}/"
+    _extract(tls_path, {f"{prefix}library/": MBEDTLS_DIR / "library",
+                        f"{prefix}include/": MBEDTLS_DIR / "include"}, log)
     return 0
 
 

@@ -2,8 +2,8 @@
 """Shrink a C source while a command keeps failing the same way.
 
 `cvise` and `creduce` do this better and should be used where they are
-installed; Homebrew carries neither under those names, and a filed csmith case
-is several hundred lines that nobody reads unreduced. This is the small version
+installed (Homebrew carries `creduce` and `csmith`); a filed csmith case is
+several hundred lines that nobody reads unreduced. This is the small version
 of the same idea: delete a brace-balanced region, keep the deletion when the
 command still fails the way it did at the start, repeat until nothing more can
 go. On the case that opened this harness it took 3939 lines to 46 in four
@@ -24,7 +24,7 @@ failure is what is wanted, not one that keeps the program meaningful. Check
 what comes out before filing it.
 
 That matters most when the failure is a wrong answer rather than a crash.
-Deleting a `return` or an initialiser gives the program undefined behaviour,
+Deleting a `return` or an initializer gives the program undefined behavior,
 and two compilers are then free to disagree about it, so the reduction happily
 walks to a case that proves nothing. Make the test reject such a candidate --
 build the reference with `-Werror=return-type -Werror=uninitialized` and treat

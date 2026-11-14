@@ -7,6 +7,18 @@ use super::diag::{colorize_diagnostic, eprint_diagnostic, eprint_error, rendered
 use super::inputs::{Inputs, StdinSource};
 use super::options::Mode;
 
+/// `__BADC_JIT__` / `__BADC_INTERP__`, defined to 1 for every unit the run
+/// compiles; ahead of the `-D` list, so `-D` and `-U` override it.
+fn with_run_macro(cli: &Cli, opts: badc::CompileOptions) -> badc::CompileOptions {
+    let name = match cli.mode {
+        Mode::Jit => "__BADC_JIT__",
+        _ => "__BADC_INTERP__",
+    };
+    let mut defines = vec![(name.to_string(), "1".to_string())];
+    defines.extend(opts.defines.iter().cloned());
+    opts.with_defines(defines)
+}
+
 /// `--jit` / `--interp` run one translation unit in-process: the first
 /// `.c` is the unit and must define `main`; both join the on-demand
 /// sources to it. Either exits with the program's status.
@@ -38,9 +50,7 @@ pub(crate) fn run_in_process(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) ->
             }
         }
     };
-    let copts = cli
-        .front
-        .compile_options(&src_path)
+    let copts = with_run_macro(cli, cli.front.compile_options(&src_path))
         .with_track_includes(cli.front.show_includes);
     let compiler = Compiler::with_options(contents, cli.target, copts);
     if cli.front.show_includes {
@@ -91,7 +101,10 @@ pub(crate) fn run_in_process(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) ->
         let mut report = |d: &badc::diag::Diagnostic| {
             eprintln!("{}", rendered(d, stderr_is_tty));
         };
-        let front = super::native_link::embedded_compile_options(cli, "on-demand.c");
+        let front = with_run_macro(
+            cli,
+            super::native_link::embedded_compile_options(cli, "on-demand.c"),
+        );
         let sources = OnDemandSources::new(badc::Target::host(), front);
         match jit_run_with_sources(&program, &c_args, jit_opts, &sources, &mut report) {
             Ok(code) => std::process::exit(code),
@@ -101,7 +114,10 @@ pub(crate) fn run_in_process(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) ->
             }
         }
     }
-    let front = super::native_link::embedded_compile_options(cli, "on-demand.c");
+    let front = with_run_macro(
+        cli,
+        super::native_link::embedded_compile_options(cli, "on-demand.c"),
+    );
     let sources = OnDemandSources::new(program.target, front);
     let mut vm = Vm::with_sources(program, badc::StdHost::default(), &sources).with_args(c_args);
     if cli.track_pointers {

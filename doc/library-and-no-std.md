@@ -26,7 +26,7 @@ A failed `compile` returns `C5Error::Compile`, which holds the diagnostics of
 the phase that failed in the order they were reported, ending with the error
 that stopped it. `C5Error::diagnostics()` returns them. A successful compile
 leaves its warnings in `Program::warnings`. A `Diagnostic` displays as the
-driver prints it, and its `code` names a row of the catalogue that
+driver prints it, and its `code` names a row of the catalog that
 `badc --list-diagnostics` prints.
 
 ## Features
@@ -47,7 +47,7 @@ cargo build --no-default-features --lib
 ```
 
 Without `std` there is no `StdHost` and no image writer, and `jit_run`
-returns an error. The lexer, preprocessor, compiler, optimizer and
+returns an error. The lexer, preprocessor, compiler, optimizer, and
 interpreter run on `alloc`. A caller
 supplies its own `Host` implementation and creates the interpreter with
 `Vm::with_host(program, host)`.

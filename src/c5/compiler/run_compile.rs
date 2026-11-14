@@ -13,7 +13,6 @@ use alloc::vec::Vec;
 use super::super::diag::Code;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
-use super::Compiler;
 use super::decl_base;
 use super::initializer::DataStore;
 use super::redeclaration::{DeclaredType, Definition, LinkClaim, Params, Spelled};
@@ -21,6 +20,7 @@ use super::types::{
     is_pointer_ty, is_struct_ty, is_struct_value_ty, is_void_ty, strip_unsigned, struct_id_of,
     struct_ptr_depth,
 };
+use super::{Compiler, Site};
 
 /// The declaration specifiers a file-scope declarator list shares: the base
 /// type and its spelling, the storage classes, and the carriers a typedef
@@ -52,7 +52,7 @@ struct DeclaratorBinding {
     ty: i64,
     array_size: i64,
     prior_array_size: i64,
-    signature_line: usize,
+    signature_at: Site,
     declarator_is_bare_void: bool,
     fn_ptr_indirection: i64,
     fn_ptr_ret_indirection: i64,
@@ -263,14 +263,14 @@ impl Compiler {
             crate::c5::asm::AsmComments::X86
         };
         let crate::c5::asm::AsmPrepared {
-            text: mut prepared,
+            text: prepared,
             origin,
             mut errors,
         } = crate::c5::asm::prepare_file_asm_text(text, comments);
-        if self.target.binary_format() == crate::c5::codegen::BinaryFormat::MachO {
-            prepared = crate::c5::asm::mach_o_symbol_names(&prepared);
-        }
         let text = prepared.as_str();
+        // The unit-level names below leave the assembler for the C symbols.
+        let format = self.target.binary_format();
+        let sym = |n: &str| crate::c5::asm::asm_symbol_name(format, n).into_owned();
         // Errors at lines of the prepared text.
         let mut later = Vec::new();
         // The stream outside pushed sections is either linkage directives only
@@ -283,7 +283,7 @@ impl Compiler {
         let mut blocks = match crate::c5::asm::extract_asm_sections(text, aarch64) {
             Ok(Some(ex)) if globl_shortcut && ex.is_linkage_only() => {
                 for name in ex.globl_names() {
-                    self.pending_asm_globl.push(name.into());
+                    self.pending_asm_globl.push(sym(name));
                 }
                 ex.blocks
             }
@@ -309,19 +309,22 @@ impl Compiler {
                     // is an object-level alias emitted at the target's
                     // definition.
                     AsmSectionItem::Weak(name) => {
-                        if !self.asm_weak_names.contains(name) {
-                            self.asm_weak_names.push(name.clone());
+                        let name = sym(name);
+                        if !self.asm_weak_names.contains(&name) {
+                            self.asm_weak_names.push(name);
                         }
                     }
                     AsmSectionItem::Global(name) => {
-                        if !self.asm_global_names.contains(name) {
-                            self.asm_global_names.push(name.clone());
+                        let name = sym(name);
+                        if !self.asm_global_names.contains(&name) {
+                            self.asm_global_names.push(name);
                         }
                     }
                     AsmSectionItem::Visibility { name, vis } => {
-                        match self.asm_visibility.iter_mut().find(|(n, _)| n == name) {
+                        let name = sym(name);
+                        match self.asm_visibility.iter_mut().find(|(n, _)| *n == name) {
                             Some(e) => e.1 = *vis,
-                            None => self.asm_visibility.push((name.clone(), *vis)),
+                            None => self.asm_visibility.push((name, *vis)),
                         }
                     }
                     AsmSectionItem::File(name) => {
@@ -331,7 +334,7 @@ impl Compiler {
                         self.asm_idents.push(s.clone());
                     }
                     AsmSectionItem::SymSet { name, target } => {
-                        Self::set_alias(&mut self.asm_sym_sets, name, target, 0);
+                        Self::set_alias(&mut self.asm_sym_sets, &sym(name), &sym(target), 0);
                     }
                     // `.set name, sym + k` names the same alias at an offset.
                     // A target this unit's layout places defines the name as
@@ -339,7 +342,8 @@ impl Compiler {
                     // writer drops the alias record there.
                     AsmSectionItem::SetExpr { name, expr } => {
                         if let Some((target, addend)) = crate::c5::asm::asm_sym_offset_expr(expr) {
-                            Self::set_alias(&mut self.asm_sym_sets, name, target, addend);
+                            let (name, target) = (sym(name), sym(target));
+                            Self::set_alias(&mut self.asm_sym_sets, &name, &target, addend);
                         }
                     }
                     _ => {}
@@ -438,15 +442,42 @@ impl Compiler {
         self.resolve_file_scope_asm_weak();
         self.reject_section_type_conflicts()?;
         self.warn_unused_static_functions();
+        self.report_unresolved_intrinsic_pragmas();
         Ok(())
+    }
+
+    /// MSVC's C4163 for a `#pragma intrinsic` name that is neither a builtin
+    /// nor a function one of badc's intrinsic headers declared in the unit.
+    fn report_unresolved_intrinsic_pragmas(&mut self) {
+        for (name, loc) in core::mem::take(&mut self.pp_unresolved_intrinsics) {
+            let found = crate::c5::lexer::find_symbol(&self.symbols, &self.symbol_index, &name);
+            let from_header = found.is_some_and(|i| {
+                let s = &self.symbols[i];
+                let file = self.source_files.get(s.binding.decl_file as usize);
+                s.class == Token::Fun as i64
+                    && file.is_some_and(|f| {
+                        crate::c5::headers::intrinsic_header(f) && self.system_headers.contains(f)
+                    })
+            });
+            if !from_header {
+                let text = format!(
+                    "`#pragma intrinsic({name})` names no builtin badc provides -- ignored"
+                );
+                self.sink.emit(
+                    crate::c5::preprocessor::IGNORED_PRAGMA_INTRINSIC,
+                    Some(loc),
+                    text,
+                );
+            }
+        }
     }
 
     /// GNU `section`: a named section holds code, writable data or read-only
     /// data, by the first definition placed in it; a later definition of
-    /// another kind is "a section type conflict", as gcc reports it, so no
-    /// section of C definitions is both writable and executable. A `const`
-    /// object a relocation writes is read-only to gcc only without `-fPIC`,
-    /// which this unit does not know, so it conflicts with code alone.
+    /// another kind is a section type conflict, so no section of C
+    /// definitions is both writable and executable. A `const` object a
+    /// relocation writes is read-only only without `-fPIC`, which this unit
+    /// does not know, so it conflicts with code alone.
     fn reject_section_type_conflicts(&self) -> Result<(), C5Error> {
         const CODE: u8 = 0;
         const READ_ONLY: u8 = 1;
@@ -537,9 +568,10 @@ impl Compiler {
             base_fn_type: self.pending.fn_ptr_type.clone(),
             spec_attrs: self.pending.attrs.clone(),
         };
+        let single_declarator = core::mem::take(&mut self.pending.auto_type_single_declarator);
         let mut declarator_count = 0usize;
         while self.lex.tk != ';' && self.lex.tk != '}' {
-            if self.pending.auto_type_single_declarator && declarator_count > 0 {
+            if single_declarator && declarator_count > 0 {
                 return Err(self.compile_err(
                     Code::SYNTAX,
                     "`__auto_type` declaration takes a single declarator",
@@ -573,7 +605,7 @@ impl Compiler {
         // The declarator's own line -- the name and its parameter
         // list -- for diagnostics that would otherwise point at the
         // function body's opening brace parsed further below.
-        let signature_line = self.lex.line;
+        let signature_at = self.site();
         let (id_idx, mut ty, mut array_size, mut zero_len_array) = self.parse_declarator(bt)?;
         // A list the declarator consumed (`T (*f(args))(...)`) may name a
         // parameter like `f`; the rest of the declarator describes `f`.
@@ -591,7 +623,7 @@ impl Compiler {
             && (is_typedef || (self.lex.tk != '(' && self.pending.fn_params.is_none()))
         {
             let what = decl_base::ImplicitInt::Declarator(id_idx);
-            self.report_implicit_int(what, signature_line)?;
+            self.report_implicit_int(what, signature_at)?;
         }
         // `register T name asm("reg")` at file scope is a GNU global
         // register variable; any other `asm(...)` suffix is the
@@ -611,7 +643,8 @@ impl Compiler {
             self.pending.attrs.dllexport = false;
             let name = self.symbols[id_idx].name.clone();
             if !self.pending_exports.contains(&name) {
-                self.pending_exports.push(name);
+                self.pending_exports.push(name.clone());
+                self.declspec_exports.insert(name);
             }
         }
         // A declarator may carry a trailing attribute before the
@@ -664,6 +697,7 @@ impl Compiler {
         self.ty = ty;
         let prior_array_size = self.symbols[id_idx].array_size;
         self.symbols[id_idx].array_size = array_size;
+        self.provisional_bounds.remove(&id_idx);
         // A zero-length array (`T x[0]`, or an alias of one) is a
         // complete type of size 0; the `-1` count it shares with
         // the deferred `T x[]` form cannot tell them apart.
@@ -728,7 +762,7 @@ impl Compiler {
             ty,
             array_size,
             prior_array_size,
-            signature_line,
+            signature_at,
             declarator_is_bare_void,
             fn_ptr_indirection,
             fn_ptr_ret_indirection,
@@ -774,7 +808,9 @@ impl Compiler {
         decl_fn: Option<crate::c5::symbol::FnType>,
     ) -> Result<(), C5Error> {
         let &FileScopeDecl {
-            base_type_align, ..
+            base_type_align,
+            base_spelling,
+            ..
         } = decl;
         let &DeclaratorBinding {
             id_idx,
@@ -784,6 +820,7 @@ impl Compiler {
             bare_function_type,
             declarator_transparent,
             declarator_is_bare_void,
+            prior_array_size,
             ..
         } = b;
 
@@ -834,7 +871,11 @@ impl Compiler {
                 ),
             ));
         }
-        if prior_class == Token::Typedef as i64 && prior_type != typedef_ty {
+        // C17 6.7p3: a redefinition names the same type, an array's length
+        // included.
+        if prior_class == Token::Typedef as i64
+            && (prior_type != typedef_ty || prior_array_size != self.symbols[id_idx].array_size)
+        {
             return Err(self.compile_err(
                 Code::INVALID_DECLARATION,
                 format!(
@@ -846,6 +887,9 @@ impl Compiler {
         self.symbols[id_idx].class = Token::Typedef as i64;
         self.symbols[id_idx].type_ = typedef_ty;
         self.symbols[id_idx].val = 0;
+        // The alias's own qualifiers and the typedef it is spelled through
+        // (`typedef const char *str_t`), for the debug-info type.
+        self.symbols[id_idx].binding.decl_spelling = self.decl_spelling(base_spelling);
         // `typedef union {...} T __attribute__((transparent_union))`:
         // a declarator-position attribute binds to the aliased union.
         if declarator_transparent && super::types::is_struct_value_ty(typedef_ty) {
@@ -999,7 +1043,8 @@ impl Compiler {
         if !was_sys {
             self.record_function_declaration(id_idx, static_seen, extern_seen);
         }
-        let declarator_line = self.lex.line;
+        let declarator_at = self.site();
+        let declarator_line = declarator_at.line;
         let mut params = if let Some(pp) = preconsumed_params {
             pp
         } else {
@@ -1021,7 +1066,7 @@ impl Compiler {
             self.parse_declarator_asm_label(id_idx)?;
             self.skip_attribute_specifiers()?;
         }
-        // A type attribute among them applies to the return type, as in gcc
+        // A type attribute among them applies to the return type
         // (`float *f(void) __attribute__((vector_size(16)))` returns a pointer
         // to a vector); the name's type was recorded before they were read.
         let declarator_ty = ty;
@@ -1040,7 +1085,7 @@ impl Compiler {
             } else {
                 decl_base::ImplicitInt::Declarator(id_idx)
             };
-            self.report_implicit_int(what, b.signature_line)?;
+            self.report_implicit_int(what, b.signature_at)?;
         }
         let keeps_prior_list = params.form == super::function::ParamForm::Empty
             && !is_defining_declarator
@@ -1071,7 +1116,7 @@ impl Compiler {
         // `weak` / `used` / `section("name")` collected for
         // this declarator (leading or trailing) mark the
         // symbol; the object writers read them off it.
-        self.apply_symbol_attributes(id_idx);
+        self.apply_symbol_attributes(id_idx)?;
         let dll = super::dllimport::DllImportDecl {
             definition: is_defining_declarator,
             inline: self.pending.attrs.saw_inline_specifier,
@@ -1129,11 +1174,11 @@ impl Compiler {
         }
         if was_sys {
             // A body for a name a bundled header binds to the C library:
-            // the program's function replaces the import for this unit, as
-            // under gcc / clang. The walker lowers every call by the
-            // symbol's class once the unit is parsed, so the calls before
-            // this definition reach it too. TODO: a definition in another
-            // unit still links against the import.
+            // the program's function replaces the import for this unit. The
+            // walker lowers every call by the symbol's class once the unit is
+            // parsed, so the calls before this definition reach it too.
+            // TODO: a definition in another unit still links against the
+            // import.
             self.record_function_declaration(id_idx, static_seen, extern_seen);
         }
         let gnu89 = self.symbols[id_idx].is_gnu_inline
@@ -1149,7 +1194,7 @@ impl Compiler {
                 .clone()
                 .map(|(r, d)| (*r, d)),
             conv: named,
-            line: declarator_line,
+            at: declarator_at,
             implicit_int,
             extern_inline: gnu89 && extern_seen && self.pending.attrs.saw_inline_specifier,
             claim: if static_seen {
@@ -1166,7 +1211,7 @@ impl Compiler {
     /// 6.7.4p6-p7 and GNU89), and the linkage that census implies so far.
     fn record_function_declaration(&mut self, id_idx: usize, static_seen: bool, extern_seen: bool) {
         // C99 5.1.2.2.1: a hosted program's startup calls an external
-        // `main`. clang's `-Wmain` flags each `static` declaration of one.
+        // `main`. `-Wmain` flags each `static` declaration of one.
         if static_seen
             && !self.freestanding
             && self.symbols[id_idx].name == "main"
@@ -1174,11 +1219,12 @@ impl Compiler {
         {
             let text =
                 String::from("`main` is declared `static`, so the program startup cannot call it");
-            self.warn_at(Code::MAIN, self.lex.line, text);
+            self.warn_at(Code::MAIN, self.site(), text);
         }
         self.symbols[id_idx].class = Token::Fun as i64;
         if self.symbols[id_idx].binding.decl_line == 0 {
-            self.symbols[id_idx].binding.decl_line = self.lex.line;
+            let at = self.site();
+            self.symbols[id_idx].binding.set_decl_site(at);
             self.symbols[id_idx].binding.decl_in_user_source = self.in_user_source();
         }
         // Census one file-scope declaration of this name for
@@ -1232,6 +1278,8 @@ impl Compiler {
             for binding in spec.bindings.iter_mut() {
                 if binding.local_name == name {
                     binding.is_variadic = variadic;
+                    binding.prototyped =
+                        matches!(params.form, super::function::ParamForm::Prototype);
                     binding.fixed_args = fixed;
                     binding.return_type_tag = Some(ret_ty);
                     // Per-param types for the
@@ -1314,7 +1362,7 @@ impl Compiler {
     /// definition, neither `inline` nor `main`, that no file-scope
     /// declaration with a prototype / at all preceded. A block-scope
     /// declaration is not visible there and counts for neither.
-    fn report_missing_declaration(&mut self, id_idx: usize, line: usize) {
+    fn report_missing_declaration(&mut self, id_idx: usize, at: Site) {
         let s = &self.symbols[id_idx];
         if s.saw_static_decl
             || s.saw_plain_inline_decl
@@ -1328,11 +1376,11 @@ impl Compiler {
         let declared = self.file_scope_fn_decls.get(&name).copied();
         if declared != Some(true) {
             let text = format!("no previous prototype for `{name}`");
-            self.warn_at(Code::MISSING_PROTOTYPES, line, text);
+            self.warn_at(Code::MISSING_PROTOTYPES, at, text);
         }
         if declared.is_none() {
             let text = format!("no previous declaration for `{name}`");
-            self.warn_at(Code::MISSING_DECLARATIONS, line, text);
+            self.warn_at(Code::MISSING_DECLARATIONS, at, text);
         }
     }
 
@@ -1347,16 +1395,26 @@ impl Compiler {
         // The parameter declarations and the body declare with their own
         // attributes (C99 6.9.1p6).
         self.current_func_attrs = core::mem::take(&mut self.pending.attrs);
+        // cl's C2169: the calls lower to the intrinsic, never to this body. A
+        // system header's definition is the implementation's (C17 7.1.3).
+        let name = &self.symbols[id_idx].name;
+        if self.is_call_site_intrinsic(name) && self.in_user_source() {
+            let text = format!(
+                "`{name}` is an intrinsic, which cannot be defined; \
+                 `#pragma function({name})` makes it a function"
+            );
+            return Err(self.compile_err_at(Code::INVALID_DECLARATION, def.at.line, text));
+        }
         // The definition's position replaces the first declaration's, so a
         // report about the function points at its body.
-        self.symbols[id_idx].binding.decl_line = def.line;
+        self.symbols[id_idx].binding.set_decl_site(def.at);
         self.symbols[id_idx].binding.decl_file = self.intern_source_file() as u32;
         self.symbols[id_idx].binding.decl_in_user_source = self.in_user_source();
         // C99 6.9.1p5: a definition names every parameter it declares.
         if params.indices.len() != params.types.len() {
             return Err(self.compile_err_at(
                 Code::INVALID_DECLARATION,
-                def.line,
+                def.at.line,
                 "parameter name omitted in a function definition",
             ));
         }
@@ -1370,11 +1428,11 @@ impl Compiler {
             self.unpark_param(id_idx);
         }
         self.open_param_list_scope();
-        let kr = self.parse_kr_parameter_declarations(&mut params, def.line);
+        let kr = self.parse_kr_parameter_declarations(&mut params, def.at);
         let enumerators = self.close_param_list_scope();
         kr?;
         params.enumerators.extend(enumerators);
-        self.check_complete_parameters(&params, def.line)?;
+        self.check_complete_parameters(&params, def.at.line)?;
         self.park_self_named_param(id_idx, &params);
         // C99 6.9.1p3: a definition returns void or a complete object type.
         let ret = self.symbols[id_idx].type_;
@@ -1383,7 +1441,7 @@ impl Compiler {
             let name = &self.symbols[id_idx].name;
             return Err(self.compile_err_at(
                 Code::INVALID_DECLARATION,
-                def.line,
+                def.at.line,
                 format!("incomplete result type `{ty}` in the definition of `{name}`"),
             ));
         }
@@ -1397,9 +1455,9 @@ impl Compiler {
         self.claim_unprototyped_list(&params);
         if !prototyped && self.in_user_source() {
             let text = alloc::string::String::from("function declaration is not a prototype");
-            self.warn_at(Code::STRICT_PROTOTYPES, def.line, text);
+            self.warn_at(Code::STRICT_PROTOTYPES, def.at, text);
         }
-        self.report_missing_declaration(id_idx, def.line);
+        self.report_missing_declaration(id_idx, def.at);
         self.symbols[id_idx].unprototyped_def = !prototyped;
         self.symbols[id_idx].fn_type.params.prototyped = prototyped;
         self.define_linked_function(id_idx, def, Params::of(&params, true))?;
@@ -1434,7 +1492,10 @@ impl Compiler {
             .indices
             .last()
             .map(|&idx| (idx, self.symbols[idx].val, params.last_register));
-        self.parse_function_body_items(&params)?;
+        self.object_size_scope = Some((id_idx, params.indices.clone()));
+        let body = self.parse_function_body_items(&params);
+        self.object_size_scope = None;
+        body?;
         self.lex.fp_contract = fp_contract;
         self.tag_scopes.pop();
         self.finish_function_body(ent_pc, &params, arrival)?;
@@ -1481,7 +1542,7 @@ impl Compiler {
     fn parse_kr_parameter_declarations(
         &mut self,
         params: &mut super::function::ParsedParams,
-        line: usize,
+        at: Site,
     ) -> Result<(), C5Error> {
         let mut declared = alloc::vec![false; params.indices.len()];
         // C99 6.9.1: an old-style (K&R) definition lists the
@@ -1538,11 +1599,11 @@ impl Compiler {
                     self.pending.base_is_function_type,
                 ) = base_fn.clone();
                 self.pending.param_decl_context = true;
-                let decl_line = self.lex.line;
+                let decl_at = self.site();
                 let (decl_idx, mut decl_ty, decl_arr, _) = self.parse_declarator(base)?;
                 if implicit_int {
                     let what = decl_base::ImplicitInt::Declarator(decl_idx);
-                    self.report_implicit_int(what, decl_line)?;
+                    self.report_implicit_int(what, decl_at)?;
                 }
                 let carriers = self.take_param_fn_ptr_carriers()?;
                 let (fn_ptr_indirection, fn_ptr_ret_indirection, _) = carriers;
@@ -1594,7 +1655,7 @@ impl Compiler {
             for (pos, &idx) in params.indices.iter().enumerate() {
                 if !declared[pos] {
                     let what = decl_base::ImplicitInt::UndeclaredParameter(idx);
-                    self.report_implicit_int(what, line)?;
+                    self.report_implicit_int(what, at)?;
                 }
             }
         }
@@ -1712,6 +1773,7 @@ impl Compiler {
         self.max_loc_offs = 0;
         self.multi_cell_temps.clear();
         self.array_temps.clear();
+        self.vector_temps.clear();
         self.func_over_aligned.clear();
         self.labels.clear();
         self.jumps = super::jumps::Jumps::default();
@@ -1726,6 +1788,7 @@ impl Compiler {
         let ent_pc = self.next_ent_pc;
         self.symbols[id_idx].val = ent_pc as i64;
         self.symbols[id_idx].defined_here = true;
+        self.place_by_segment_pragma(id_idx, crate::c5::segment_pragma::SegKind::Code);
         if !self.current_func_attrs.saw_inline_specifier {
             self.symbols[id_idx].saw_noninline_def = true;
         }
@@ -1856,7 +1919,7 @@ impl Compiler {
         // `__attribute__((cleanup))` variables; cleaned on
         // fall-through (below) and on every `return`.
         self.open_cleanup_scope(false);
-        // GCC local labels declared by the body's top-level
+        // GNU C local labels declared by the body's top-level
         // block; see `Compiler::resolve_label_name`.
         self.local_label_scopes.open();
         let mut at_block_start = true;
@@ -2144,8 +2207,15 @@ impl Compiler {
         // per-object `has_array`, kept per slot rather than folded into
         // the function's facts.
         let mut array_slots: Vec<i64> = Vec::new();
+        let mut vector_objects: Vec<i64> = core::mem::take(&mut self.vector_temps);
         for v in &self.variables[vars_start..] {
             if v.fp_slot < 0 {
+                if v.array_size == 0
+                    && super::types::is_vector_ty(&self.structs, v.type_tag)
+                    && !vector_objects.contains(&v.fp_slot)
+                {
+                    vector_objects.push(v.fp_slot);
+                }
                 let cells = self.local_storage_slots(v.type_tag, v.array_size as i64);
                 let aggregate = is_struct_value_ty(v.type_tag) || v.array_size > 0;
                 if cells > 1 || (cells == 1 && aggregate) {
@@ -2177,6 +2247,7 @@ impl Compiler {
         if let Some(ff) = self.finished_functions.last_mut() {
             ff.multi_cell_slots = multi_cell;
             ff.array_slots = array_slots;
+            ff.vector_objects = vector_objects;
             ff.over_aligned_slots = over_aligned;
             ff.ssp = ssp;
         }
@@ -2196,7 +2267,7 @@ impl Compiler {
             Parameter,
             ValueSet,
         }
-        let mut unused: Vec<(u32, usize, String, UnusedKind)> = Vec::new();
+        let mut unused: Vec<(u32, Site, String, UnusedKind)> = Vec::new();
         for &bi in bound {
             let i = bi as usize;
             let sym = &self.symbols[i];
@@ -2229,10 +2300,10 @@ impl Compiler {
                 UnusedKind::Variable
             };
             let b = &sym.binding;
-            unused.push((b.decl_seq, b.decl_line, sym.name.clone(), kind));
+            unused.push((b.decl_seq, b.decl_site(), sym.name.clone(), kind));
         }
         unused.sort_by_key(|u| u.0);
-        for (_, line, name, kind) in unused {
+        for (_, at, name, kind) in unused {
             let (code, msg) = match kind {
                 UnusedKind::Variable => (
                     Code::UNUSED_VARIABLE,
@@ -2247,7 +2318,7 @@ impl Compiler {
                     alloc::format!("variable `{name}` set but never used"),
                 ),
             };
-            self.warn_at(code, line, msg);
+            self.warn_at(code, at, msg);
         }
         // Drain dead-store entries for this function's
         // locals via the shared helper -- a store that
@@ -2286,9 +2357,10 @@ impl Compiler {
             ty,
             array_size,
             prior_array_size,
-            signature_line,
+            signature_at,
             ..
         } = b;
+        let signature_line = signature_at.line;
 
         let zero_len = array_size < 0 && self.symbols[id_idx].is_zero_len_array;
         let bounds = self.declared_bounds(id_idx, array_size, zero_len);
@@ -2310,7 +2382,7 @@ impl Compiler {
             thread_local,
             claim,
         )?;
-        self.record_object_declaration(id_idx, static_seen, thread_local, was_tentative_glo);
+        self.record_object_declaration(id_idx, static_seen, thread_local, was_tentative_glo)?;
         let dll = super::dllimport::DllImportDecl {
             definition: self.lex.tk == Token::Assign,
             inline: false,
@@ -2321,6 +2393,15 @@ impl Compiler {
             return Ok(());
         }
         let defines = !extern_seen || self.lex.tk == Token::Assign;
+        if defines && !thread_local {
+            use crate::c5::segment_pragma::SegKind;
+            let kind = match self.lex.tk == Token::Assign {
+                true if super::types::is_const_object_ty(ty) => SegKind::Const,
+                true => SegKind::Data,
+                false => SegKind::Bss,
+            };
+            self.place_by_segment_pragma(id_idx, kind);
+        }
         let decl_align =
             self.object_alignment(id_idx, ty, base_type_align, thread_local, defines)?;
         let was_extern_only_decl = !defines && array_size != -1;
@@ -2357,9 +2438,12 @@ impl Compiler {
             self.symbols[id_idx].is_extern_decl = false;
             // C99 6.9.2: a tentative definition's type may be completed
             // further on in the unit -- a tag defined later, or an enum
-            // used before its definition -- so its storage is sized, and
-            // an aggregate left incomplete rejected, once the unit is parsed.
-            if let Some(tag) = self.incomplete_aggregate_tag(ty) {
+            // used before its definition, which the Microsoft targets type
+            // `int` until then -- so its storage is sized, and an aggregate
+            // left incomplete rejected, once the unit is parsed.
+            let forward_enum = super::types::enum_id_of(ty)
+                .filter(|&id| !super::types::is_pointer_ty(ty) && self.is_ms_forward_enum(id));
+            if let Some(tag) = self.incomplete_aggregate_tag(ty).or(forward_enum) {
                 self.pending_incomplete_objects
                     .push((id_idx, tag, signature_line));
             }
@@ -2397,6 +2481,28 @@ impl Compiler {
         }
     }
 
+    /// The section MSVC's segment pragmas give a definition that names none of
+    /// its own: `alloc_text`'s or `code_seg`'s for a function, `const_seg`,
+    /// `data_seg` or `bss_seg`'s for an object.
+    pub(super) fn place_by_segment_pragma(
+        &mut self,
+        id_idx: usize,
+        kind: crate::c5::segment_pragma::SegKind,
+    ) {
+        use crate::c5::segment_pragma::SegKind;
+        if self.symbols[id_idx].section_name.is_some() {
+            return;
+        }
+        let segments = &self.lex.segments;
+        let section = match kind {
+            SegKind::Code => {
+                (segments.alloc_text(&self.symbols[id_idx].name)).or_else(|| segments.section(kind))
+            }
+            _ => segments.section(kind),
+        };
+        self.symbols[id_idx].section_name = section.map(alloc::string::String::from);
+    }
+
     /// C99 6.2.2: record the object, its source position and its linkage.
     /// `static` is sticky once any declaration of the name carries it.
     fn record_object_declaration(
@@ -2405,12 +2511,13 @@ impl Compiler {
         static_seen: bool,
         thread_local: bool,
         was_tentative_glo: bool,
-    ) {
+    ) -> Result<(), C5Error> {
         self.symbols[id_idx].class = Token::Glo as i64;
         // First declaration wins the source position, as it does
         // for functions; it feeds DW_AT_decl_file / decl_line.
         if self.symbols[id_idx].binding.decl_line == 0 {
-            self.symbols[id_idx].binding.decl_line = self.lex.line;
+            let at = self.site();
+            self.symbols[id_idx].binding.set_decl_site(at);
             self.symbols[id_idx].binding.decl_file = self.intern_source_file() as u32;
             self.symbols[id_idx].binding.decl_in_user_source = self.in_user_source();
         }
@@ -2429,7 +2536,8 @@ impl Compiler {
         } else if self.symbols[id_idx].linkage != crate::c5::symbol::Linkage::Internal {
             self.symbols[id_idx].linkage = crate::c5::symbol::Linkage::External;
         }
-        self.apply_symbol_attributes(id_idx);
+        self.apply_symbol_attributes(id_idx)?;
+        Ok(())
     }
 
     /// `alias("target")` on an object declarator: the name is a second
@@ -2472,10 +2580,7 @@ impl Compiler {
         // C99 6.9.2p2: a later no-initializer declaration redeclares the
         // alias-defined object. The alias owns no storage, so reserving any
         // for it would break the binding.
-        if self.symbols[id_idx].is_alias && self.lex.tk != Token::Assign {
-            return Ok(true);
-        }
-        Ok(false)
+        Ok(self.symbols[id_idx].is_alias && self.lex.tk != Token::Assign)
     }
 
     /// C11 6.7.5: the object is placed at the strictest alignment its
@@ -2557,7 +2662,7 @@ impl Compiler {
             req_align.max(self.align_of_type(ty) as i64)
         };
         self.symbols[id_idx].type_align = self.symbols[id_idx].type_align.max(obj_align);
-        let decl_align = want_align.max(8);
+        let decl_align = want_align.max(1);
         if decl_align > 8 && defines {
             if thread_local {
                 self.check_thread_local_align(want_align, self.lex.line)?;
@@ -2650,7 +2755,8 @@ impl Compiler {
         }
         if thread_local {
             let obj_align = self.symbols[id_idx].data_align.max(1) as usize;
-            let align = self.data_placement_align(ty, decl_align.max(obj_align));
+            let bytes = self.symbols[id_idx].reserved_data_bytes;
+            let align = self.data_placement_align(ty, decl_align.max(obj_align), bytes, true);
             self.move_to_thread_local_storage(id_idx, align)?;
         }
         Ok(())
@@ -2687,8 +2793,7 @@ impl Compiler {
                 self.symbols[id_idx].array_dims[0] = final_size / inner_product;
             }
         }
-        let total_bytes = (self.size_of_type(ty) as i64) * final_size;
-        let aligned = ((total_bytes + 7) / 8) * 8;
+        let aligned = (self.size_of_type(ty) as i64) * final_size;
         // C99 6.9.2: a prior tentative definition already
         // reserved storage; reuse it so references emitted
         // before this definition observe the initialized object,
@@ -2703,7 +2808,8 @@ impl Compiler {
         {
             self.symbols[id_idx].val
         } else {
-            let align = self.data_placement_align(ty, decl_align.max(obj_align as usize));
+            let want = decl_align.max(obj_align as usize);
+            let align = self.data_placement_align(ty, want, aligned, true);
             let fresh = self.reserve_data_bytes(DataStore::Static, align, aligned as usize);
             self.note_global_relocated(id_idx, was_tentative_glo, fresh);
             self.symbols[id_idx].reserved_data_bytes = aligned;
@@ -2760,12 +2866,14 @@ impl Compiler {
         let count = if zero_len { 0 } else { 1 };
         self.symbols[id_idx].array_size = count;
         self.symbols[id_idx].is_zero_len_array = zero_len;
+        if !zero_len {
+            self.provisional_bounds.insert(id_idx);
+        }
         if let Some(first) = self.symbols[id_idx].array_dims.first_mut() {
             *first = count;
         }
-        let elem = self.size_of_type(ty) as i64;
-        let aligned = (((elem + 7) / 8) * 8).max(8);
-        let align = self.data_placement_align(ty, decl_align);
+        let aligned = (self.size_of_type(ty) as i64).max(1);
+        let align = self.data_placement_align(ty, decl_align, aligned, true);
         let store = if thread_local {
             DataStore::ThreadLocal
         } else {
@@ -2822,7 +2930,8 @@ impl Compiler {
         {
             self.symbols[id_idx].val
         } else {
-            self.align_data_to(decl_align.max(obj_align as usize));
+            let want = decl_align.max(obj_align as usize);
+            self.align_data_to(self.data_placement_align(ty, want, needed, true));
             let fresh = self.data.len() as i64;
             self.note_global_relocated(id_idx, was_tentative_glo, fresh);
             self.symbols[id_idx].reserved_data_bytes = needed;
@@ -2850,26 +2959,17 @@ impl Compiler {
         // scalar encoding would otherwise lose it).
         self.symbols[id_idx].is_zero_len_array = total == 0;
         self.reserve_zero_length_array_slot(id_idx);
-        // Pad data to 8-byte alignment so the next
-        // global doesn't land on an odd offset.
-        while !self.data.len().is_multiple_of(8) {
-            self.data.push(0);
-        }
         self.symbols[id_idx].has_initializer = true;
         self.symbols[id_idx].defined_here = true;
         Ok(())
     }
 
-    /// Bytes a file-scope object of `ty` (`array_size` elements when
-    /// positive) reserves: whole 8-byte slots, and one slot for a zero-sized
-    /// object (an empty struct, GNU) so no two objects share a start offset.
-    fn object_storage_bytes(&self, ty: i64, array_size: i64) -> i64 {
-        if array_size > 0 {
-            let total = (self.size_of_type(ty) as i64) * array_size;
-            (((total + 7) / 8) * 8).max(8)
-        } else {
-            (self.slots_of_type(ty) * 8).max(8)
-        }
+    /// Bytes a static-storage object of `ty` (`array_size` elements when
+    /// positive) reserves: its size, and one byte for a zero-sized object
+    /// (an empty struct, GNU) so no two objects share a start offset.
+    pub(super) fn object_storage_bytes(&self, ty: i64, array_size: i64) -> i64 {
+        let elem = self.size_of_type(ty) as i64;
+        (elem * array_size.max(1)).max(1)
     }
 
     /// An object of known size: reserve or reuse its storage, then take the
@@ -2896,7 +2996,7 @@ impl Compiler {
         let fam_tail = self.flexible_array_init_tail_bytes(ty)?;
         if fam_tail > 0 {
             self.symbols[id_idx].fam_init_bytes = fam_tail;
-            bytes = ((bytes + fam_tail + 7) / 8) * 8;
+            bytes += fam_tail;
         }
         // C99 6.9.2: `extern T x;` is no tentative definition. Storage is still
         // reserved so the single-unit compile can write through the name; a
@@ -2927,7 +3027,8 @@ impl Compiler {
         // would add a phantom per-unit copy (one TLS block
         // per object), breaking the shared-state semantics
         // and the multi-object link.
-        let align = self.data_placement_align(ty, decl_align.max(obj_align as usize));
+        let want = decl_align.max(obj_align as usize);
+        let align = self.data_placement_align(ty, want, bytes, array_size > 0);
         // Nor does an `extern` object aligned past the image's limit; it binds to a definition.
         let extern_tls_ref = was_extern_only_decl
             && (thread_local
@@ -2945,6 +3046,11 @@ impl Compiler {
             off
         } else {
             let off = self.reserve_data_bytes(DataStore::Static, align, bytes as usize);
+            // The fallback slot of an `extern` declaration is an object of its
+            // own, which the image drops when the declaration binds elsewhere.
+            if was_extern_only_decl && !self.symbols[id_idx].defined_here {
+                self.data_object_starts.push(off);
+            }
             self.note_global_relocated(id_idx, reuse_eligible, off);
             let prior = (
                 self.symbols[id_idx].val,
@@ -2998,7 +3104,7 @@ impl Compiler {
             slot
         };
         self.next()?;
-        // C99 6.5.2.5: `static T g = (T){ ... }` initialises the aggregate from a
+        // C99 6.5.2.5: `static T g = (T){ ... }` initializes the aggregate from a
         // compound literal of its own type; dropping the redundant cast leaves the
         // brace list below. A scalar object keeps it -- `T *p = (T[]){ ... }` and
         // `int x = (int){ v }` are the constant evaluator's, which needs the type.
@@ -3089,7 +3195,7 @@ impl Compiler {
     fn complete_tentative_definitions(&mut self) -> Result<(), C5Error> {
         for (id_idx, sid, line) in core::mem::take(&mut self.pending_incomplete_objects) {
             let tag = &self.structs[sid];
-            if !tag.is_complete && tag.enum_underlying.is_none() {
+            if !tag.is_complete && tag.enum_underlying.is_none() && !self.is_ms_forward_enum(sid) {
                 let name = self.symbols[id_idx].name.clone();
                 return Err(self.compile_err_at(
                     Code::INVALID_DECLARATION,
@@ -3116,7 +3222,7 @@ impl Compiler {
         let (ty, thread_local) = (s.type_, s.is_thread_local);
         let bytes = self.object_storage_bytes(ty, s.array_size);
         let want = (s.data_align.max(1) as usize).max(self.align_of_type(ty));
-        let align = self.data_placement_align(ty, want);
+        let align = self.data_placement_align(ty, want, bytes, s.array_size > 0);
         let s = &mut self.symbols[id_idx];
         s.data_align = want as i64;
         if bytes <= s.reserved_data_bytes && s.val % align as i64 == 0 {
@@ -3273,8 +3379,8 @@ impl Compiler {
         None
     }
 
-    /// gcc's `-fvisibility=` for each external definition whose visibility no
-    /// attribute or pragma states; declarations keep default, as in gcc.
+    /// `-fvisibility=` for each external definition whose visibility no
+    /// attribute or pragma states; declarations keep default.
     fn apply_default_visibility(&mut self) {
         use crate::c5::symbol::Linkage;
         let Some(vis) = self.default_visibility else {
@@ -3315,7 +3421,7 @@ impl Compiler {
     /// runs only under `-O` and declines a body its candidate filter
     /// rejects, so the copy is what keeps those calls resolvable.
     ///
-    /// That licence covers calls, not the address. The name keeps
+    /// That license covers calls, not the address. The name keeps
     /// external linkage, so C99 6.2.2p2 requires `&f` to denote one
     /// function program-wide. The body is therefore emitted under
     /// `Symbol::inline_body_name`, a name no C identifier can spell, and
@@ -3323,11 +3429,10 @@ impl Compiler {
     /// address site relocates against. A unit that only calls the
     /// function needs no such reference and links as before.
     ///
-    /// With the Microsoft extensions neither model applies, as for MSVC and
-    /// clang's `*-windows-msvc` in C: an inline function of external
-    /// linkage, unless `gnu_inline`, is emitted by each unit that references
-    /// it as an `IMAGE_COMDAT_SELECT_ANY` definition, kept unreferenced only
-    /// when a declaration says `extern`.
+    /// With the Microsoft extensions neither model applies, as for MSVC in C:
+    /// an inline function of external linkage, unless `gnu_inline`, is
+    /// emitted by each unit that references it as an `IMAGE_COMDAT_SELECT_ANY`
+    /// definition, kept unreferenced only when a declaration says `extern`.
     fn resolve_inline_linkage(&mut self) {
         use crate::c5::symbol::{Linkage, inline_definition};
         let model = self.inline_model;
@@ -3376,25 +3481,24 @@ impl Compiler {
     /// code. External-linkage functions cannot be flagged here --
     /// another TU may call them through the link-unit symbol
     /// table; the linker is responsible for the cross-TU
-    /// reachability check. Names starting with `_` are suppressed
-    /// (gcc / clang `-Wunused-function` convention). A `static` `main`
-    /// is no program entry, so it is reported like any other, as gcc
-    /// and clang report it.
+    /// reachability check. Names starting with `_` are suppressed. A
+    /// `static` `main` is no program entry, so it is reported like any
+    /// other.
     fn warn_unused_static_functions(&mut self) {
         use crate::c5::symbol::Linkage;
         // A `__attribute__((constructor))` / `((destructor))` function
         // has no in-source call site but runs at startup / exit, so it is
-        // not unused (matching gcc / clang, which never warn on it).
+        // not unused.
         let init_names: alloc::collections::BTreeSet<&str> =
             self.init_funcs.iter().map(|f| f.name.as_str()).collect();
-        let mut unused: Vec<(u32, usize, String)> = Vec::new();
+        let mut unused: Vec<(u32, Site, String)> = Vec::new();
         for sym in self.symbols.iter() {
             if sym.class != Token::Fun as i64
                 || !sym.defined_here
                 || sym.linkage != Linkage::Internal
                 // An inline definition is internal but externally
-                // declared; another unit may still call the name. gcc
-                // reports no `inline` function, which headers define
+                // declared; another unit may still call the name. No
+                // `inline` function is reported: headers define them
                 // for their includers to call or not.
                 || sym.is_inline_definition
                 || sym.saw_plain_inline_decl
@@ -3409,13 +3513,13 @@ impl Compiler {
                 continue;
             }
             let b = &sym.binding;
-            unused.push((b.decl_file, b.decl_line, sym.name.clone()));
+            unused.push((b.decl_file, b.decl_site(), sym.name.clone()));
         }
         // The unit is parsed, so each report names its declaration's file.
-        for (file, line, name) in unused {
+        for (file, at, name) in unused {
             let file = self.source_files[file as usize].clone();
             let msg = alloc::format!("unused function `{name}`");
-            self.warn_at_file(Code::UNUSED_FUNCTION, &file, line, msg);
+            self.warn_at_file(Code::UNUSED_FUNCTION, &file, at, msg);
         }
     }
 
@@ -3425,8 +3529,24 @@ impl Compiler {
     /// file-scope-object paths; the object writers and the body-open
     /// `InitFunc` registration read the fields off the symbol, so an
     /// attribute written on a prototype reaches the later definition.
-    pub(super) fn apply_symbol_attributes(&mut self, id_idx: usize) {
+    pub(super) fn weak_not_public(&self, name: &str) -> C5Error {
+        let text = format!("weak declaration of `{name}` must be public");
+        self.compile_err(Code::INVALID_DECLARATION, text)
+    }
+
+    pub(super) fn apply_symbol_attributes(&mut self, id_idx: usize) -> Result<(), C5Error> {
         if self.pending.attrs.weak {
+            // A weak name is one the link may bind elsewhere, so it has
+            // external linkage: not a function declared `static`, nor an
+            // object with internal linkage.
+            let s = &self.symbols[id_idx];
+            let internal = match s.class == Token::Fun as i64 {
+                true => s.saw_static_decl,
+                false => s.linkage == crate::c5::symbol::Linkage::Internal,
+            };
+            if internal {
+                return Err(self.weak_not_public(&s.name.clone()));
+            }
             self.symbols[id_idx].is_weak = true;
         }
         // Settled once the unit ends: only an object this unit defines is.
@@ -3471,6 +3591,9 @@ impl Compiler {
         if let Some(sec) = self.pending.attrs.section.take() {
             self.symbols[id_idx].section_name = Some(sec);
         }
+        if let Some(d) = self.pending.attrs.call_diagnostic.take() {
+            self.symbols[id_idx].call_diagnostic = Some(d);
+        }
         if let Some(area) = self.pending.attrs.patchable_entry.take() {
             self.symbols[id_idx].patchable_function_entry = Some(area);
         }
@@ -3483,6 +3606,7 @@ impl Compiler {
         if self.pending.attrs.is_noinline {
             self.symbols[id_idx].is_noinline = true;
         }
+        Ok(())
     }
 }
 

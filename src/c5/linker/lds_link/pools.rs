@@ -18,7 +18,7 @@ type PoolMemberMaps = HashMap<usize, (Vec<u64>, Vec<u64>)>;
 
 /// Whether `shtype` is one `.eh_frame` arrives with on `machine`:
 /// SHT_PROGBITS everywhere, and the psABI's SHT_X86_64_UNWIND on
-/// x86-64, which gcc and clang both emit.
+/// x86-64.
 fn eh_frame_shtype(machine: u16, shtype: u32) -> bool {
     shtype == SHT_PROGBITS || (machine == EM_X86_64 && shtype == SHT_X86_64_UNWIND)
 }
@@ -199,7 +199,7 @@ impl<'a> LdsLinker<'a> {
         if strings && !entries.is_empty() {
             // bfd merge_strings: sort by reversed content (lengths
             // without the terminator) and merge each entry into an
-            // alignment-compatible neighbour it is a suffix of.
+            // alignment-compatible neighbor it is a suffix of.
             let content_len = |e: &Entry| e.bytes.len() - es;
             let uniform = entries[1..]
                 .iter()

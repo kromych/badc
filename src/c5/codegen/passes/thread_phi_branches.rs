@@ -29,7 +29,7 @@ use super::constfold::imm_through_phis;
 use super::constfold_branch::{block_index, edge_truth};
 use super::merge_blocks::reads_alike;
 use super::unroll::{bind_phis, eval_value};
-use crate::c5::codegen::ssa::mem2reg::{predecessors, successors};
+use crate::c5::codegen::ssa::mem2reg::predecessors;
 use crate::c5::codegen::ssa::repair;
 use crate::c5::ir::{BinOp, BlockId, FunctionSsa, Inst, LoadKind, Terminator, ValueId};
 
@@ -55,11 +55,18 @@ struct Site {
 /// whether any edge moved; the caller prunes a merge left without
 /// predecessors.
 pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
-    let block_of = block_index(func);
+    let mut block_of = block_index(func);
+    let mut readers = repair::Readers::of_function(func);
     let mut preds = predecessors(func);
+    let mut succs = successor_lists(&preds);
     let mut changed = false;
-    for b in 0..func.blocks.len() {
+    // Each rethread renumbers the values; the scan then resumes at its
+    // block rather than restarting, bounded by the block count.
+    let mut rethreads = func.blocks.len();
+    let mut b = 0;
+    'blocks: while b < func.blocks.len() {
         let Some(site) = site_of(func, &block_of, &preds, b as BlockId) else {
+            b += 1;
             continue;
         };
         let decided: Vec<(BlockId, BlockId)> = preds[site.head as usize]
@@ -70,56 +77,71 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
             })
             .collect();
         if decided.is_empty() || !chain_is_pure(func, &site) {
+            b += 1;
             continue;
         }
-        let escaping = escaping_phis(func, &block_of, &site);
+        let escaping = escaping_phis(func, &block_of, &readers, &site);
         let contained = escaping.as_ref().is_some_and(BTreeSet::is_empty);
         for (p, succ) in decided {
             if contained {
-                if thread(func, &block_of, &site, p, succ) {
-                    preds[site.head as usize].retain(|&q| q != p);
-                    preds[succ as usize].push(p);
+                if thread(func, &block_of, &mut readers, &site, p, succ) {
+                    move_edge(&mut preds, &mut succs, p, site.head, succ);
                     changed = true;
                 }
                 continue;
             }
+            let live = live_after(func, &succs, p, site.head, succ);
             // The line dies: the next round reads the function the prune left.
-            if let Some(to) = dying_line(func, &block_of, &site, p, succ)
-                && thread(func, &block_of, &site, p, succ)
+            if !live[site.head as usize]
+                && let Some(to) = dying_line(func, &block_of, &site, p, succ, &live)
+                && thread(func, &block_of, &mut readers, &site, p, succ)
             {
                 forward(func, &to);
                 return true;
             }
+            let placed = func.insts.len();
             if let Some(phis) = &escaping
-                && rethread(func, &block_of, &preds, &site, (p, succ), phis)
+                && rethread(
+                    func,
+                    (&block_of, &mut readers),
+                    (&mut preds, &mut succs),
+                    &live,
+                    &site,
+                    (p, succ),
+                    phis,
+                )
             {
-                return true;
+                rethreads -= 1;
+                if rethreads == 0 {
+                    return true;
+                }
+                // Only a repair that places phis moves values.
+                if func.insts.len() != placed {
+                    block_of = block_index(func);
+                }
+                changed = true;
+                continue 'blocks;
             }
         }
+        b += 1;
     }
     changed
 }
 
 /// Move `p`'s edge to `succ` when head phis are read past the chain: each
 /// read then takes the phi or its incoming from `p`, whichever reaches it.
+/// `preds` follows the edge when it moves.
 fn rethread(
     func: &mut FunctionSsa,
-    block_of: &[BlockId],
-    preds: &[Vec<BlockId>],
+    (block_of, readers): (&[BlockId], &mut repair::Readers),
+    (preds, succs): (&mut [Vec<BlockId>], &mut [Vec<BlockId>]),
+    live: &[bool],
     site: &Site,
     (p, succ): (BlockId, BlockId),
     phis: &BTreeSet<ValueId>,
 ) -> bool {
     // A second edge from `p` would give `succ`'s phis two values from it.
     if preds[succ as usize].contains(&p) {
-        return false;
-    }
-    let mut after = preds.to_vec();
-    after[site.head as usize].retain(|&q| q != p);
-    after[succ as usize].push(p);
-    // An edge into a cycle through the head would enter the loop past its
-    // header.
-    if reaches(&after, succ, site.head) {
         return false;
     }
     let mut items = Vec::new();
@@ -140,14 +162,69 @@ fn rethread(
             edges: alloc::vec![(p, succ, v)],
         });
     }
-    let Some(plans) = repair::plan(func, &after, &items) else {
+    let head_preds = preds[site.head as usize].clone();
+    move_edge(preds, succs, p, site.head, succ);
+    // An edge into a cycle through the head would enter the loop past its
+    // header.
+    let plans = (!reaches(preds, succ, site.head))
+        .then(|| repair::plan(func, (preds, live), (readers, block_of), &items))
+        .flatten();
+    let Some(plans) = plans.filter(|_| thread(func, block_of, readers, site, p, succ)) else {
+        move_edge(preds, succs, p, succ, site.head);
+        preds[site.head as usize] = head_preds;
         return false;
     };
-    if !thread(func, block_of, site, p, succ) {
-        return false;
-    }
-    repair::apply(func, &items, &plans);
+    repair::apply(func, &items, &plans, readers);
     true
+}
+
+/// The successor lists the predecessor lists `preds` imply.
+fn successor_lists(preds: &[Vec<BlockId>]) -> Vec<Vec<BlockId>> {
+    let mut succs: Vec<Vec<BlockId>> = alloc::vec![Vec::new(); preds.len()];
+    for (b, ps) in preds.iter().enumerate() {
+        for &q in ps {
+            succs[q as usize].push(b as BlockId);
+        }
+    }
+    succs
+}
+
+/// Point `p`'s edges into `from` at `to`, in both lists.
+fn move_edge(
+    preds: &mut [Vec<BlockId>],
+    succs: &mut [Vec<BlockId>],
+    p: BlockId,
+    from: BlockId,
+    to: BlockId,
+) {
+    preds[from as usize].retain(|&q| q != p);
+    preds[to as usize].push(p);
+    for s in succs[p as usize].iter_mut().filter(|s| **s == from) {
+        *s = to;
+    }
+}
+
+/// The blocks reachable once `p`'s edges into `head` lead to `succ`.
+fn live_after(
+    func: &FunctionSsa,
+    succs: &[Vec<BlockId>],
+    p: BlockId,
+    head: BlockId,
+    succ: BlockId,
+) -> Vec<bool> {
+    let mut live = alloc::vec![false; succs.len()];
+    let mut stack: Vec<BlockId> = alloc::vec![0];
+    stack.extend(&func.computed_goto_targets);
+    stack.extend(func.seh_scopes.iter().filter_map(|s| s.target));
+    while let Some(b) = stack.pop() {
+        if core::mem::replace(&mut live[b as usize], true) {
+            continue;
+        }
+        for &s in &succs[b as usize] {
+            stack.push(if b == p && s == head { succ } else { s });
+        }
+    }
+    live
 }
 
 /// Whether `from` reaches `to` over the predecessor lists `preds`.
@@ -296,12 +373,11 @@ fn phi_condition(func: &FunctionSsa, cond: ValueId) -> Option<(ValueId, bool)> {
 fn escaping_phis(
     func: &FunctionSsa,
     block_of: &[BlockId],
+    readers: &repair::Readers,
     site: &Site,
 ) -> Option<BTreeSet<ValueId>> {
-    let defined: BTreeSet<ValueId> = site
-        .chain
-        .iter()
-        .flat_map(|&c| func.blocks[c as usize].inst_range.clone())
+    let ranges: Vec<core::ops::Range<ValueId>> = (site.chain.iter())
+        .map(|&c| func.blocks[c as usize].inst_range.clone())
         .collect();
     let in_chain = |b: BlockId| site.chain.contains(&b);
     let head_phi = |v: ValueId| {
@@ -309,48 +385,53 @@ fn escaping_phis(
             && matches!(func.insts.get(v as usize), Some(Inst::Phi { .. }))
     };
     let mut phis = BTreeSet::new();
-    let mut read = |v: ValueId| {
-        if !defined.contains(&v) {
-            true
-        } else if head_phi(v) {
-            phis.insert(v);
-            true
-        } else {
-            false
-        }
-    };
-    for (i, inst) in func.insts.iter().enumerate() {
-        let b = block_of[i];
-        if b == BlockId::MAX {
-            continue;
-        }
-        let mut stays = true;
-        if let Inst::Phi { incoming, .. } = inst {
-            // Read at the end of the predecessor, the chain's own phis
-            // from a latch included.
-            let patched = b == site.zero || b == site.nonzero;
-            for &(pred, v) in incoming {
-                if pred == site.branch && patched {
-                    stays &= !defined.contains(&v) || head_phi(v);
-                } else if !in_chain(pred) {
-                    stays &= read(v);
+    // Each reader of a chain value outside the chain.
+    for v in ranges.iter().flat_map(Clone::clone) {
+        for &reader in readers.of(v) {
+            let outside = match reader {
+                repair::Reader::End(b) if in_chain(b) => false,
+                repair::Reader::End(b) => {
+                    let block = &func.blocks[b as usize];
+                    let mut reads = block.exit_acc == v;
+                    block.terminator.for_each_operand(|w| reads |= w == v);
+                    reads
                 }
+                repair::Reader::Inst(i) => {
+                    let b = block_of[i as usize];
+                    match &func.insts[i as usize] {
+                        _ if b == BlockId::MAX => false,
+                        // Read at the end of the predecessor, the chain's own
+                        // phis from a latch included.
+                        Inst::Phi { incoming, .. } => {
+                            let patched = b == site.zero || b == site.nonzero;
+                            let mut outside = false;
+                            for &(pred, w) in incoming.iter().filter(|&&(_, w)| w == v) {
+                                if pred == site.branch && patched {
+                                    if !head_phi(w) {
+                                        return None;
+                                    }
+                                } else if !in_chain(pred) {
+                                    outside = true;
+                                }
+                            }
+                            outside
+                        }
+                        _ if in_chain(b) => false,
+                        inst => {
+                            let mut reads = false;
+                            inst.for_each_operand(|w| reads |= w == v);
+                            reads
+                        }
+                    }
+                }
+            };
+            if !outside {
+                continue;
             }
-        } else if !in_chain(b) {
-            inst.for_each_operand(|v| stays &= read(v));
-        }
-        if !stays {
-            return None;
-        }
-    }
-    for (b, block) in func.blocks.iter().enumerate() {
-        if in_chain(b as BlockId) {
-            continue;
-        }
-        let mut stays = read(block.exit_acc);
-        block.terminator.for_each_operand(|v| stays &= read(v));
-        if !stays {
-            return None;
+            if !head_phi(v) {
+                return None;
+            }
+            phis.insert(v);
         }
     }
     Some(phis)
@@ -401,23 +482,8 @@ fn dying_line(
     site: &Site,
     p: BlockId,
     succ: BlockId,
+    live: &[bool],
 ) -> Option<Vec<(ValueId, ValueId)>> {
-    let mut live = alloc::vec![false; func.blocks.len()];
-    let mut stack: Vec<BlockId> = alloc::vec![0];
-    stack.extend(&func.computed_goto_targets);
-    stack.extend(func.seh_scopes.iter().filter_map(|s| s.target));
-    while let Some(b) = stack.pop() {
-        if core::mem::replace(&mut live[b as usize], true) {
-            continue;
-        }
-        let term = &func.blocks[b as usize].terminator;
-        for s in successors(term, &func.computed_goto_targets, &func.jump_tables) {
-            stack.push(if b == p && s == site.head { succ } else { s });
-        }
-    }
-    if live[site.head as usize] {
-        return None;
-    }
     let mut to = Vec::new();
     for v in func.blocks[site.head as usize].inst_range.clone() {
         let Inst::Phi { incoming, .. } = &func.insts[v as usize] else {
@@ -484,6 +550,7 @@ fn forward(func: &mut FunctionSsa, to: &[(ValueId, ValueId)]) {
 fn thread(
     func: &mut FunctionSsa,
     block_of: &[BlockId],
+    readers: &mut repair::Readers,
     site: &Site,
     p: BlockId,
     succ: BlockId,
@@ -543,6 +610,7 @@ fn thread(
     for (phi, v) in pushes {
         if let Inst::Phi { incoming, .. } = &mut func.insts[phi as usize] {
             incoming.push((p, v));
+            readers.add(v, repair::Reader::Inst(phi));
         }
     }
     for i in func.blocks[site.head as usize].inst_range.clone() {
@@ -561,7 +629,7 @@ mod tests {
 
     fn fresh(insts: Vec<Inst>, blocks: Vec<Block>) -> FunctionSsa {
         FunctionSsa {
-            inst_src: vec![(0, 0); insts.len()],
+            inst_src: vec![crate::c5::ir::InstSrc::default(); insts.len()],
             f32_values: vec![false; insts.len()],
             insts,
             blocks,
@@ -704,10 +772,39 @@ mod tests {
             rhs_imm: 1,
         };
         // b1's 0 selects b5, which reads nothing of the chain; b6, the
-        // reader, is still reached only through it.
+        // reader, is still reached through it. The same scan then sends b3
+        // to b6, the line dies, and the reader takes b3's 1.
         assert!(run_one(&mut f));
         assert_eq!(f.blocks[1].terminator, Terminator::Jmp(5));
-        assert!(matches!(f.insts[6], Inst::BinopI { lhs: 2, .. }));
+        assert_eq!(f.blocks[3].terminator, Terminator::Jmp(6));
+        assert!(matches!(f.insts[6], Inst::BinopI { lhs: 3, .. }));
+    }
+
+    /// A rethread whose repair only renames reads places no phi, so every
+    /// instruction keeps its id and every block its range.
+    #[test]
+    fn a_rename_only_repair_moves_no_instruction() {
+        let mut f = inlined_check(Inst::BinopI {
+            op: BinOp::Ne,
+            lhs: 2,
+            rhs_imm: 0,
+        });
+        f.insts[6] = Inst::BinopI {
+            op: BinOp::Add,
+            lhs: 2,
+            rhs_imm: 1,
+        };
+        let ranges: Vec<_> = f.blocks.iter().map(|b| b.inst_range.clone()).collect();
+        let len = f.insts.len();
+        assert!(run_one(&mut f));
+        assert_eq!(f.insts.len(), len);
+        assert!(
+            f.blocks
+                .iter()
+                .zip(&ranges)
+                .all(|(b, r)| b.inst_range == *r)
+        );
+        assert!(matches!(f.insts[6], Inst::BinopI { lhs: 3, .. }));
     }
 
     /// `for (done = 0; !done; done = 1) len = f(len);` then `return len`:
@@ -747,15 +844,29 @@ mod tests {
         )
     }
 
+    /// The reader index lists each instruction and block end reading a
+    /// value, phis' incomings included.
+    #[test]
+    fn the_reader_index_lists_every_read() {
+        use repair::Reader::{End, Inst as Reads};
+        let f = run_once();
+        let readers = repair::Readers::of_function(&f);
+        assert_eq!(readers.of(3), &[Reads(6), End(3)]);
+        assert_eq!(readers.of(2), &[End(1)]);
+        assert_eq!(readers.of(5), &[Reads(2)]);
+        assert!(readers.of(4).is_empty());
+    }
+
     #[test]
     fn a_latch_that_decides_the_exit_leaves_the_loop() {
         let mut f = run_once();
         assert!(run_one(&mut f));
-        // The latch leaves for b3; the entry's decided edge into the body
-        // stays, since it would enter the loop past its header.
+        // The latch leaves for b3. The entry's decided edge into the body
+        // then leaves the header without a way in, and the line dies.
         assert_eq!(f.blocks[2].terminator, Terminator::Jmp(3));
-        assert_eq!(f.blocks[0].terminator, Terminator::Jmp(1));
-        // b3 merges `len` from the header and the latch's next value.
+        assert_eq!(f.blocks[0].terminator, Terminator::Jmp(2));
+        // b3 merges the latch's next value and the dead header's `len`,
+        // which reads the entry's; the prune drops the header's.
         let Terminator::Return(r) = f.blocks[3].terminator else {
             panic!("b3 returns");
         };
@@ -763,13 +874,74 @@ mod tests {
         let Inst::Phi { incoming, .. } = &f.insts[r as usize] else {
             panic!("b3 returns a phi");
         };
-        let len = f.blocks[1].inst_range.start + 1;
         let next = f.blocks[2].inst_range.end - 1;
         assert!(matches!(
             f.insts[next as usize],
-            Inst::BinopI { op: BinOp::Add, .. }
+            Inst::BinopI {
+                op: BinOp::Add,
+                lhs: 1,
+                ..
+            }
         ));
-        assert_eq!(incoming, &vec![(1, len), (2, next)]);
+        assert!(matches!(f.insts[1], Inst::ParamRef { .. }));
+        assert_eq!(incoming, &vec![(1, 1), (2, next)]);
+    }
+
+    /// Two loops in sequence whose latches set `done` and whose entries
+    /// take it from a parameter, the second taking the first's `len`: one
+    /// scan moves both latches, resuming after each rethread.
+    #[test]
+    fn one_scan_rethreads_each_site_in_turn() {
+        let add = |lhs| Inst::BinopI {
+            op: BinOp::Add,
+            lhs,
+            rhs_imm: 7,
+        };
+        let param = |idx| Inst::ParamRef {
+            idx,
+            kind: LoadKind::I64,
+        };
+        let mut f = fresh(
+            vec![
+                param(1),
+                param(0),
+                phi(vec![(0, 0), (2, 4)]),
+                phi(vec![(0, 1), (2, 5)]),
+                Inst::Imm(1),
+                add(3),
+                param(2),
+                phi(vec![(3, 6), (5, 9)]),
+                phi(vec![(3, 3), (5, 10)]),
+                Inst::Imm(1),
+                add(8),
+            ],
+            vec![
+                block(0..2, Terminator::Jmp(1)),
+                block(
+                    2..4,
+                    Terminator::Bnz {
+                        cond: 2,
+                        target: 3,
+                        fall_through: 2,
+                    },
+                ),
+                block(4..6, Terminator::Jmp(1)),
+                block(6..7, Terminator::Jmp(4)),
+                block(
+                    7..9,
+                    Terminator::Bnz {
+                        cond: 7,
+                        target: 6,
+                        fall_through: 5,
+                    },
+                ),
+                block(9..11, Terminator::Jmp(4)),
+                block(11..11, Terminator::Return(8)),
+            ],
+        );
+        assert!(run_one(&mut f));
+        assert_eq!(f.blocks[2].terminator, Terminator::Jmp(3));
+        assert_eq!(f.blocks[5].terminator, Terminator::Jmp(6));
     }
 
     #[test]
@@ -976,7 +1148,7 @@ mod tests {
             fall_through: 1,
         };
         f.insts.push(Inst::Imm(0));
-        f.inst_src.push((0, 0));
+        f.inst_src.push(crate::c5::ir::InstSrc::default());
         f.f32_values.push(false);
         f.blocks.push(block(5..6, Terminator::Jmp(1)));
         f.insts[2] = phi(vec![(0, 0), (2, 4), (4, 1)]);

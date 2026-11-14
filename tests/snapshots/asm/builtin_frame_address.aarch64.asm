@@ -32,9 +32,9 @@ Disassembly of section .text:
                	ret
                	sub	x1, x29, #0x8
                	sub	x0, x0, x1
+               	neg	x1, x0
                	cmp	x0, #0x0
-               	b.ge	<addr>
-               	neg	x0, x0
+               	csel	x0, x1, x0, lt
                	mov	x17, #0x100000          // =1048576
                	cmp	x0, x17
                	b.le	<addr>

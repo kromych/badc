@@ -64,29 +64,26 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x8                // =8
                	ret
-               	adrp	x2, <page>
-               	ldr	x4, [x2, #0x98]
+               	adrp	x0, <page>
+               	ldr	x2, [x0, #0x90]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	add	x5, x0, #0x40
-               	cmp	x4, x5
+               	add	x4, x0, #0x40
+               	cmp	x2, x4
                	b.eq	<addr>
                	mov	x0, #0x9                // =9
                	ret
-               	ldr	x4, [x2, #0x98]
-               	sub	x4, x4, x0
+               	sub	x4, x2, x0
                	cmp	x4, #0x40
                	b.eq	<addr>
                	mov	x0, #0xa                // =10
                	ret
                	adrp	x4, <page>
                	ldr	x4, [x4, <lo12>]
-               	ldr	x5, [x2, #0x98]
-               	cmp	x4, x5
+               	cmp	x4, x2
                	b.ne	<addr>
                	adrp	x4, <page>
                	ldr	x4, [x4, <lo12>]
-               	ldr	x2, [x2, #0x98]
                	cmp	x4, x2
                	b.eq	<addr>
                	mov	x0, #0xb                // =11
@@ -108,29 +105,26 @@ Disassembly of section .text:
                	mov	x0, #0xd                // =13
                	ret
                	adrp	x2, <page>
-               	ldr	x5, [x2, #0xc0]
-               	sub	x5, x5, x0
+               	ldr	x2, [x2, <lo12>]
+               	sub	x5, x2, x0
                	cmp	x5, #0x1
                	b.eq	<addr>
                	mov	x0, #0xe                // =14
                	ret
                	adrp	x5, <page>
                	ldr	x5, [x5, <lo12>]
-               	ldr	x6, [x2, #0xc0]
-               	cmp	x5, x6
+               	cmp	x5, x2
                	b.eq	<addr>
                	mov	x0, #0xf                // =15
                	ret
                	adrp	x5, <page>
                	ldr	x5, [x5, <lo12>]
-               	ldr	x6, [x2, #0xc0]
-               	cmp	x5, x6
+               	cmp	x5, x2
                	b.eq	<addr>
                	mov	x0, #0x10               // =16
                	ret
                	adrp	x5, <page>
                	ldr	x5, [x5, <lo12>]
-               	ldr	x2, [x2, #0xc0]
                	cmp	x5, x2
                	b.eq	<addr>
                	mov	x0, #0x11               // =17

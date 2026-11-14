@@ -24,6 +24,9 @@
 #pragma binding(libc::isupper,  "_isupper")
 #pragma binding(libc::tolower,  "_tolower")
 #pragma binding(libc::toupper,  "_toupper")
+#pragma binding(libc::isblank,  "_isblank")
+#pragma binding(libc::isascii,  "_isascii")
+#pragma binding(libc::toascii,  "_toascii")
 #endif
 
 #ifdef __linux__
@@ -41,6 +44,9 @@
 #pragma binding(libc::isupper,  "isupper")
 #pragma binding(libc::tolower,  "tolower")
 #pragma binding(libc::toupper,  "toupper")
+#pragma binding(libc::isblank,  "isblank")
+#pragma binding(libc::isascii,  "isascii")
+#pragma binding(libc::toascii,  "toascii")
 #endif
 
 #ifdef _WIN32
@@ -58,6 +64,10 @@
 #pragma binding(msvcrt::isupper,  "isupper")
 #pragma binding(msvcrt::tolower,  "tolower")
 #pragma binding(msvcrt::toupper,  "toupper")
+// msvcrt exports the XSI pair under reserved names and has no `isblank`;
+// `ctype_ext.c` supplies it.
+#pragma binding(msvcrt::isascii,  "__isascii")
+#pragma binding(msvcrt::toascii,  "__toascii")
 #pragma binding(msvcrt::_isctype,   "_isctype")
 #pragma binding(msvcrt::_isctype_l, "_isctype_l")
 #include <corecrt.h>
@@ -76,8 +86,6 @@ int _isctype(int c, int type);
 int _isctype_l(int c, int type, _locale_t locale);
 #endif
 
-// isascii: the C macro form; no libc symbol.
-#define isascii(c) (((unsigned)(c)) < 128)
 int isspace(int c);
 int isdigit(int c);
 int isalpha(int c);
@@ -91,16 +99,14 @@ int islower(int c);
 int isupper(int c);
 int tolower(int c);
 int toupper(int c);
-// C99 7.4.1.3: blank is space or horizontal tab in the C locale.
-static inline int isblank(int c) {
-    return c == 0x20 || c == 0x09;
-}
-
-// XSI (SVID / X/Open): reduce a value to 7-bit ASCII. A pure computation,
-// so provided inline rather than bound to a libc symbol.
-static inline int toascii(int c) {
-    return c & 0x7f;
-}
+// C99 7.4.1.3.
+int isblank(int c);
+// XSI: whether `c` is a 7-bit value, and `c` reduced to one. Each macro
+// evaluates its argument once, as C17 7.1.4 requires of a macro form.
+int isascii(int c);
+int toascii(int c);
+#define isascii(c) (((unsigned)(c)) < 128)
+#define toascii(c) ((int)((unsigned)(c) & 0x7f))
 
 #if defined(__APPLE__) || defined(__linux__)
 // POSIX.1-2008 classification and case mapping in a given locale.

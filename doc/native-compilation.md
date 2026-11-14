@@ -1,7 +1,7 @@
 # Native compilation
 
 badc compiles and links for five targets from any host. It carries its own
-assembler and linker, so a build needs no `ld`, `lld` or `link.exe`. This page
+assembler and linker, so a build needs no `ld`, `lld`, or `link.exe`. This page
 covers the targets, object and image formats, the linker, the bundled headers
 and their library bindings, the instruction-set baseline, optimization, and the
 code-generation options for kernel and firmware builds.
@@ -10,7 +10,7 @@ code-generation options for kernel and firmware builds.
 
 - [Targets](#targets)
 - [Instruction-set baseline](#instruction-set-baseline)
-- [Objects, archives and libraries](#objects-archives-and-libraries)
+- [Objects, archives, and libraries](#objects-archives-and-libraries)
 - [Linking](#linking)
   - [Undefined and weak references](#undefined-and-weak-references)
   - [Unwind tables](#unwind-tables)
@@ -46,7 +46,7 @@ source under either flag is refused unless the command is `-E`.
 
 Executables are position-independent: an ELF executable is `ET_DYN` (PIE), and
 Mach-O and PE images always are. On Linux, `-no-pie` links the executable at
-its link address (`ET_EXEC`), as gcc's `-no-pie` does:
+its link address (`ET_EXEC`):
 
 - The startup runtime and the dynamic tables stay.
 - Data pointers are final at link time, with no `R_*_RELATIVE` entries.
@@ -71,33 +71,62 @@ An EFI image is a PE image with an EFI subsystem; see
 
 ## Instruction-set baseline
 
-On x86_64 badc assumes x86-64-v3: AVX, AVX2, FMA3, BMI1, BMI2, LZCNT, MOVBE and
-F16C on top of SSE4.2 and POPCNT, as in Intel Haswell, AMD Zen and later. On
+On x86_64 badc assumes x86-64-v3: AVX, AVX2, FMA3, BMI1, BMI2, LZCNT, MOVBE, and
+F16C on top of SSE4.2 and POPCNT, as in Intel Haswell, AMD Zen, and later. On
 AArch64 it assumes what the Apple M1 implements, less Apple's own extensions:
-ARMv8.4-A with FP16, DotProd, FHM, AES, PMULL, SHA3 and SHA512, plus FRINTTS,
-FlagM2, SB and SSBS from ARMv8.5-A, without BTI, BF16 or I8MM. The emitted
+ARMv8.4-A with FP16, DotProd, FHM, AES, PMULL, SHA3, and SHA512, plus FRINTTS,
+FlagM2, SB, and SSBS from ARMv8.5-A, without BTI, BF16, or I8MM. The emitted
 code may use any instruction of the set at any optimization level. A processor
 that lacks one is not a target.
 
 `-mno-sse` and `-mgeneral-regs-only` take the floating-point and vector
 registers out of the set ([Hardening and code-model
-knobs](#hardening-and-code-model-knobs)). Nothing else narrows it. The driver
-refuses `-march=` and `-mtune=`.
+knobs](#hardening-and-code-model-knobs)). Nothing else narrows it: the driver
+refuses an x86 `-march=` CPU without x86-64-v3, and `-mno-<ext>` for an
+extension of x86-64-v3 the code generator emits, except a vector extension
+under `-mno-sse`. `-mtune=` is accepted and changes nothing.
+
+On x86-64 the 32-byte GNU vectors are values in the ymm registers, and a
+function holding one executes `vzeroupper` before each call and return that
+passes no such vector in a register. On System V a named 32-byte vector
+argument or result travels in a ymm register, counted with the xmm argument
+registers, as gcc passes it under AVX; an unnamed one goes in memory.
 
 Feature macros:
 
-- x86-64 predefines the x86-64 base set that gcc and clang predefine for every
-  x86-64 target: `__MMX__`, `__SSE__`, `__SSE2__`, `__SSE_MATH__`,
-  `__SSE2_MATH__` and `__FXSR__`. None of the x86-64-v3 macros (`__AVX2__`,
-  `__FMA__`, ...) is predefined. `-mno-sse` and `-mgeneral-regs-only` leave the
-  set unchanged.
-- AArch64 predefines no feature macro, `__ARM_NEON` included. `-mcpu=`'s
-  `+aes`, `+sha2` and `+crypto` modifiers define `__ARM_FEATURE_AES`,
-  `__ARM_FEATURE_SHA2` and `__ARM_FEATURE_CRYPTO`.
+- x86-64 predefines the x86-64 base set: `__MMX__`, `__SSE__`, `__SSE2__`, `__SSE_MATH__`,
+  `__SSE2_MATH__`, and `__FXSR__`. The x86-64-v3 macros (`__AVX2__`, `__FMA__`,
+  ...) are predefined only for the extensions `-march=` and `-m<ext>` select,
+  combined as gcc combines them; under AVX `__BIGGEST_ALIGNMENT__`, which a bare
+  `aligned` attribute takes, is 32. `-m<ext>` takes the extensions whose
+  intrinsics the headers carry, from SSE3 to AVX2, FMA, F16C, the AES, SHA,
+  VAES and carry-less multiply instructions, RDRAND, RDSEED, BMI, and
+  AVX-512F, BW, DQ, VL, CD, and VNNI, and refuses any other. Under AVX-512F
+  `__BIGGEST_ALIGNMENT__` is 64 and the 64-byte GNU vectors are values in
+  the zmm registers. `-mno-sse` and `-mgeneral-regs-only` leave the set
+  unchanged.
+- AArch64 predefines the Arm C Language Extensions macros of an extension
+  set: by default the Apple M1's on macOS and ARMv8-A's elsewhere, or what
+  `-march=<arch>` or else `-mcpu=<cpu>` selects (`native` reads the host's),
+  with `+<ext>` / `+no<ext>` modifiers; an extension brings those it
+  requires. A macro is predefined only where badc carries what it promises:
+  `__ARM_FP`, `__ARM_FEATURE_FMA`, `__ARM_NEON` (`<arm_neon.h>` carries the
+  Advanced SIMD set; its 16-bit floating types need `__fp16`, which badc
+  lacks), the CRC32, LSE atomics, RCPC, JSCVT, pointer authentication, BTI,
+  RNG, AES, SHA-2, SHA3, SHA-512, SM3, and SM4 ones, the Advanced SIMD
+  maxnum, rounding doubling multiply (QRDMX), dot product, FRINT, and int8
+  matrix multiply (MATMUL_INT8) ones, and the platform's (`__ARM_ARCH`,
+  `__ARM_SIZEOF_WCHAR_T`, ...). The macros of the extensions whose
+  intrinsics the headers lack -- SVE, SME, FP16, BF16, complex arithmetic,
+  and others -- are withheld, and a modifier enabling one of those
+  extensions is refused.
+  `-mgeneral-regs-only` drops the floating-point and SIMD extensions.
+  `<arm_acle.h>` carries the barrier, hint, data-processing, CRC32, JSCVT,
+  FRINTTS, RNG, and special-register intrinsics.
 
-## Objects, archives and libraries
+## Objects, archives, and libraries
 
-One `badc` invocation can mix `.c` and assembly sources, objects and archives:
+One `badc` invocation can mix `.c` and assembly sources, objects, and archives:
 
 ```sh
 badc -c foo.c bar.c               # writes foo.o and bar.o
@@ -117,6 +146,58 @@ GOT, so the object links into a PIE the system toolchain builds.
 The linker also reads ELF objects from other compilers, Mach-O `MH_OBJECT`
 files, PE/COFF objects and import libraries, ar archives, and shared libraries
 (`.so`, `.dylib`, `.tbd`, `.dll`). Archives are ar(5) with a SysV symbol index.
+A PE link sizes the initial thread's stack under `--stack <reserve>[,<commit>]`,
+link.exe's `/STACK` (default 8 MiB reserved, one page committed).
+A PE DLL link writes the DLL's import library under `--out-implib=<file>`,
+as link.exe writes one beside a DLL: an archive of short import members, a
+data export's naming only its `__imp_` slot.
+A COFF weak external or `/alternatename:` resolves a name nothing defines to its
+alternate, a definition or a DLL import; an archive member holding a weak
+external of the alias kind is pulled for its name, as link.exe pulls the
+members of MSVC's oldnames.lib.
+In a PE link a section `base$suffix` of a C-identifier `base` joins the image
+section `base`, every unit's contributions together and ordered by suffix, as
+the PE/COFF grouped-section rule orders them. `/merge:from=to` in an object's
+directives moves `from` into `to`; one into `.text`, `.rdata`, or `.data` keeps
+that section's protection, so contents of another kind are refused.
+A compiled resource file (`.res`, as rc.exe writes it) among a PE link's inputs
+becomes the image's `.rsrc` section: the resource directory by type, name, and
+language, which the loader reads for the manifest, the version, and the strings.
+A cvtres object's resources (`.rsrc$01` / `.rsrc$02`) join them.
+Each export of a PE image and each `/INCLUDE:` name names a definition in the
+link or an import, as link.exe requires; a forwarder (`name=dll.export`) names
+another DLL's.
+The C runtime's tables, `.CRT$XI*` and `.CRT$XC*` (initializers and
+constructors) and `.CRT$XP*` and `.CRT$XT*` (pre-terminators and terminators),
+run in section-name order across units, as link.exe orders a grouped section,
+each table forward: ahead of the `.init_array` constructors at startup and
+after the destructors at exit, as the image's and `--jit`'s startup call them.
+A table's bytes also join the read-only data, so a name an entry defines (the
+pointer a unit keeps with `/INCLUDE:`) reads the function the entry holds. An
+entry here or in `.init_array` may name a function another unit defines.
+`.CRT$XL*` entries are TLS callbacks: the image's TLS directory lists them, and
+it is emitted for them, for thread-local data, or for a unit naming
+`_tls_used`, which the link defines at it. The link supplies `_tls_index` and
+`_tls_used` itself, so a library member defining them, the MSVC runtime's
+`tlssup.obj`, is not pulled for them.
+On Windows x86-64, `__isa_available` and `__isa_enabled`, which code built for
+the MSVC runtime reads, come from badc's compiler runtime when a unit names
+them: the highest level of `<isa_availability.h>` the processor and the OS
+support, and a bit per level from SSE2 up, set before the C initializers run.
+On Windows arm64 the compiler runtime defines MSVC's `_Interlocked*` functions
+out of line (each width and ordering variant), which a cl object calls where cl
+does not expand the intrinsic.
+A module-definition file (`.def`) among a PE link's inputs gives the image its
+`EXPORTS`, as link.exe's `/DEF:` does: an export under another name, at an
+`@ordinal`, `NONAME`, `DATA`, or `PRIVATE` (kept out of `--out-implib`'s
+library), and `LIBRARY` names the DLL in its export directory. An export
+without an ordinal takes the lowest free one in name order, as link.exe
+assigns them; `/EXPORT:` options in `.drectve` take the same forms.
+`--delayload=<dll>`, link.exe's `/DELAYLOAD`, binds the imports from `<dll>`
+through its delay-load descriptor (data directory 13) instead of the import
+table: the first call of each loads the DLL and resolves the import through
+`__delayLoadHelper2`, which `delayimp.lib` or badc's C library supplies, with
+`<delayimp.h>`'s notify and failure hooks. A data import cannot be delay-loaded.
 Named `ar` or `*-ar`, or run as `badc --ar <key>`, badc is a POSIX `ar`; named
 `ranlib` it indexes archives.
 
@@ -135,7 +216,11 @@ same image on every host. The sysroot's include directories supply the headers
 the bundled set lacks (`<zlib.h>`). They are searched after the bundled
 headers, so a standard header keeps the bundled copy. For a Mach-O target
 `$SDKROOT` is the default sysroot, as for Apple's tools; `--sysroot=` with no
-directory withdraws it.
+directory withdraws it. A Mach-O image records the macOS 11.0 deployment target
+and, in `LC_BUILD_VERSION`, the SDK version the sysroot's `SDKSettings.json`
+names, or 26.0 when no sysroot names one. libSystem selects its
+linked-on-or-after behaviors, the small-block allocator among them, by that SDK
+version.
 
 Linkage follows C99 6.2.2. A file-scope `static` is internal; any other
 file-scope declaration is external. `extern T x;` with no definition in the
@@ -156,7 +241,7 @@ linker scripts (`-T` / `--script`, with `.o` and `.a` inputs only),
 export control (`--export-all`, `--export-data`). `--help` lists the image
 options. A link option badc does not implement is refused by name.
 
-Invoked as `ld`, `ld.badc` or `<prefix>-ld`, or as `badc --ld`, badc takes GNU
+Invoked as `ld`, `ld.badc`, or `<prefix>-ld`, or as `badc --ld`, badc takes GNU
 ld's command line with its own flag table. That is how it serves as `LD=` in
 an existing build, including [the Linux kernel's](linux-kernel.md). Its
 `--version` prints `GNU ld (badc <version>) 2.33.1`.
@@ -164,8 +249,8 @@ an existing build, including [the Linux kernel's](linux-kernel.md). Its
 As in GNU ld, an input whose `.note.GNU-stack` is executable makes the stack
 executable, with a warning (`-Wexecstack`), unless `-z noexecstack` is given.
 
-Inputs enter the link in command-line order, after the startup runtime, where
-gcc puts `crt1.o`. Constructors of one priority run in that order, and the
+Inputs enter the link in command-line order, after the startup runtime.
+Constructors of one priority run in that order, and the
 first of two weak definitions wins. An ELF link takes archives as GNU ld does:
 
 - an archive resolves the references made before it, rescanning itself until
@@ -186,13 +271,20 @@ Each image format follows its own system linker:
 | Mach-O | error       | error, as ld64's default `-undefined error` | error |
 | PE     | error       | error: a PE import must name its DLL | 0 |
 
-On Mach-O, `-undefined dynamic_lookup`, `suppress` or `warning` (also as
+On Mach-O, `-undefined dynamic_lookup`, `suppress`, or `warning` (also as
 `-Wl,-undefined,<value>`) turns such a reference into a flat-namespace lookup
 at load time, in an executable or a dylib. `warning` also reports each one
 (`-Wundefined-lookup`). An ELF or PE link refuses `-undefined`. A Mach-O import
 that only weak references reach binds as a weak import: its address is 0 when
 the loaded dylib lacks the name. `__attribute__((weak_import))` is `weak` on
-Mach-O and ignored elsewhere, as gcc ignores it.
+Mach-O and ignored elsewhere.
+
+`-bundle` (also `-Wl,-bundle`) links a Mach-O library only `dlopen` loads,
+an `MH_BUNDLE` image with no install name; its undefined references follow
+`-undefined` as a dylib's do. `-flat_namespace` gives every import of the
+image a flat lookup and clears `MH_TWOLEVEL`. `-bundle_loader <exe>` reads
+the executable's export trie as a library's: a reference it satisfies binds to
+the main executable, which no load command names.
 
 ### Unwind tables
 
@@ -213,7 +305,7 @@ Mach-O and ignored elsewhere, as gcc ignores it.
 
 badc compiles C17 by default, with part of C23 and much of the GNU C extension
 set. [`std-conformance.md`](std-conformance.md) lists the
-rejected constructs, the divergent behavior and badc's own extensions.
+rejected constructs, the divergent behavior, and badc's own extensions.
 
 Target macros:
 
@@ -226,10 +318,12 @@ Target macros:
 | `_WIN32`, `_WIN64`, `__BADC_WINDOWS__`     | Windows targets                   |
 | `__APPLE__`                                | macOS                             |
 | `__linux__`, `__ELF__`                     | Linux                             |
+| `__USER_LABEL_PREFIX__`                    | every target: `_` on macOS, empty elsewhere, a C identifier's assembler prefix |
+| `__BADC_JIT__`, `__BADC_INTERP__`          | 1 for every unit `--jit` / `--interp` runs |
 
-The C99 and C11 macros are defined as well (`__STDC__`, `__STDC_VERSION__`,
+The C17 macros are defined as well (`__STDC__`, `__STDC_VERSION__`,
 `__SIZEOF_*__`, `__BYTE_ORDER__`, the `__ATOMIC_*` orders), and under `--gnu`
-the GCC identity macros. `std-conformance.md` lists them all.
+the GNU C identity macros. `std-conformance.md` lists them all.
 
 `__DATE__` and `__TIME__` give the time of translation in UTC, one instant for
 every unit of an invocation. `SOURCE_DATE_EPOCH` fixes it, so a build that
@@ -240,9 +334,11 @@ expands either writes the same bytes on every run.
 constant expression in `#if`, and badc admits a string in no other operand
 position.
 
-The MSVC and MinGW compatibility macros and keywords (`_MSC_VER`,
-`__MINGW32__`, `__int64`, `__declspec`, ...) are in
-`libc/include/msvc_compat.h`. A unit opts in with `-include msvc_compat.h`.
+On the Windows targets `--msvc` defines the MSVC identity macros (`_MSC_VER`
+and the rest) and leaves `__STDC__` undefined, as cl does. The MinGW
+compatibility macros and keywords (`__MINGW32__`, `__int64`, `__declspec`, ...)
+are in `libc/include/msvc_compat.h`. A unit opts in with
+`-include msvc_compat.h`.
 
 ## Headers and bindings
 
@@ -286,10 +382,38 @@ headers bind it to `ucrtbase.dll` (much of `<math.h>`, for example), or
 through `ucrtbase.dll`. A definition in `libc/lib/` joins the link as an
 archive member would.
 
+A program built against the Windows SDK's UCRT headers links the UCRT itself
+(`ucrt.lib`, or `ucrtbase.dll` named on the command line). When the link's
+libraries supply the UCRT's startup interface, the startup runtime calls it as
+the VC startup code does: `_set_app_type`, the argument vector and the
+environment in the entry's character width, `_crt_atexit` for the destructors
+and for the program's `atexit`, and the UCRT's `exit`; msvcrt.dll is not
+loaded beside it.
+
+An object compiled against the UCRT's headers by another toolchain calls the
+UCRT's own entry points: the inline formatters and scanners call
+`__stdio_common_*`, and the standard streams are `__acrt_iob_func`'s. The
+bundled `<stdio.h>` binds these to `ucrtbase.dll`, and a reference without a
+binding resolves to the library its name is bound to, `msvcrt.dll` or
+`ucrtbase.dll`, so such an object links without `ucrt.lib`.
+
+A cl object's `/DEFAULTLIB:` naming one of the MSVC C runtime's libraries
+(`libcmt`, `msvcrt`, `libvcruntime`, `ucrt`, and their debug forms) is not
+followed, since the image's C runtime is `msvcrt.dll`. A cl C++ object that
+needs the MSVC runtime's C++ support (operator `new` and `delete`, the frame
+handlers, `type_info`) names its libraries on the link line:
+`-llibvcruntime -llibcmt -lucrt`, from MSVC's and the SDK's library
+directories, which `-l` searches on `-L` and on `LIB`. `tlssup.obj` is not
+pulled from them, since the link supplies the TLS index and directory itself.
+The MSVC runtime's startup does not run; a link naming `libvcruntime` instead
+has badc's startup call `__vcrt_initialize` before the C initializers and
+`__vcrt_uninitialize` at exit, as the VC startup code does, so a C++ `throw`
+through `__CxxFrameHandler4` finds the per-thread state it reads.
+
 A bundled header declares the names mingw-w64's header of the same name
 declares. A name mingw-w64 leaves undeclared stays undeclared, so a program's
 own Windows fallback for it compiles under badc as under mingw-w64. `setenv`
-is one such name, as are `fork`, `getuid` and the other POSIX process, user and
+is one such name, as are `fork`, `getuid`, and the other POSIX process, user, and
 terminal calls. A POSIX header mingw-w64 does not ship (`<termios.h>`,
 `<sys/mman.h>`, `<pwd.h>`, ...) is not found. Two tests hold this:
 `windows_header_declarations_resolve_at_link` walks every bundled header for
@@ -325,9 +449,9 @@ a bare `badc <file>`:
 `--entry=<sym>` overrides it.
 
 Unknown pragmas and unknown directives warn and are ignored. An `#include`
-that neither the search path nor the bundled headers resolve is an error, as in
-gcc and clang. `-H` (`--show-includes`) prints each resolved include on stderr
-in gcc's `-H` format.
+that neither the search path nor the bundled headers resolve is an error. `-H`
+(`--show-includes`) prints each resolved include on stderr, one leading dot per
+nesting level.
 
 ### Windows subsystems and default libraries
 
@@ -346,7 +470,7 @@ any case and with `-` for `_`:
 | `efi_runtime_driver`      | 12 | EFI runtime driver |
 | `efi_rom`                 | 13 | EFI ROM image |
 
-`-mwindows` and `-mconsole` are gcc's spellings of `windows` and `console`.
+`-mwindows` and `-mconsole` select `windows` and `console`.
 A non-PE target ignores the pragma, so the same source builds for every OS.
 
 A `console` or `windows` image links `kernel32.dll` by default, as link.exe
@@ -356,12 +480,12 @@ exports is imported from `kernel32.dll`, even when the source declares it
 itself with no header or binding. Only referenced names are imported. The
 check reads kernel32's export lists for x64 and arm64, measured from Windows
 11's system images (`src/c5/linker/kernel32.exports`). A native or EFI image
-takes none. user32, advapi32 and shell32, which the MinGW driver also passes
+takes none. user32, advapi32, and shell32, which the MinGW driver also passes
 and link.exe does not, are not default libraries.
 
 ### Which headers a target has
 
-A bundled header is served on the targets whose C library, SDK or compiler
+A bundled header is served on the targets whose C library, SDK, or compiler
 ships it, as `libc/header-targets.txt` records. `<sys/epoll.h>` is not found
 for macOS, and `__has_include(<windows.h>)` is 0 for Linux, as with the system
 compilers. The tree `--install` writes holds every target's headers and
@@ -431,8 +555,9 @@ scalar replacement of aggregates, inlining, constant folding and propagation,
 branch simplification, loop rotation, unrolling of constant-trip loops,
 common-subexpression elimination, store-to-load forwarding, division by
 constants, tail-call and tail-recursion elimination, and block layout. It
-predefines `NDEBUG=1` and `__OPTIMIZE__=1`. `-O1`, `-O2`, `-O3`, `-Os`, `-Oz`,
-`-Ofast` and `-Og` select the same single level; `-O0` turns it off.
+predefines `__OPTIMIZE__=1` and leaves `NDEBUG`, which removes `assert`, to
+`-D`. `-O1`, `-O2`, `-O3`, `-Os`, `-Oz`, `-Ofast`, and `-Og` select the same
+single level; `-O0` turns it off.
 
 Under `-O`, `a*b+c` becomes one fused multiply-add on both architectures, an
 instruction of the [baseline](#instruction-set-baseline). `-ffp-contract=`
@@ -480,7 +605,7 @@ architectural spelling names the register (`x9` / `w9`, `q16` / `v16` / `d16`
 / `s16`, `rax` / `eax` / `ax` / `al`, `r8` / `r8d` / `r8w` / `r8b`, `xmm5`).
 
 - The ABI still passes arguments and results through a reserved register.
-- An inline-asm operand, clobber or `register` variable may still name it.
+- An inline-asm operand, clobber, or `register` variable may still name it.
 - The code generator's own scratch choices avoid it.
 - Refused: the stack and frame pointers, the AArch64 link register, and the
   scratch registers the code generator needs (x16, x17, x19; r10, r11).
@@ -496,21 +621,20 @@ architectural spelling names the register (`x9` / `w9`, `q16` / `v16` / `d16`
 | `-fstack-protector-all` | every function |
 | `-fno-stack-protector` | none; the default |
 
-The rule is gcc's, read off the declared automatic objects. The canary takes
+The rule reads the declared automatic objects. The canary takes
 the frame's topmost slot, between the locals and the saved return address. The
 prologue stores the guard there. Every return path, a tail call's included,
 reloads it, compares, and calls `__stack_chk_fail` on a mismatch.
 
 `-mstack-protector-guard=global|tls|sysreg` says where the guard comes from,
-with `-mstack-protector-guard-reg=`, `-mstack-protector-guard-offset=` and
+with `-mstack-protector-guard-reg=`, `-mstack-protector-guard-offset=`, and
 `-mstack-protector-guard-symbol=` as operands:
 
 - The default is `%fs:0x28` on Linux/x86-64 and the C library's
   `__stack_chk_guard` object elsewhere.
-- Under `-mcmodel=kernel` the segment defaults to `%gs`, as in gcc and clang,
-  for the default and for a `tls` guard that names no register.
-- `tls` (x86-64) reads the guard at a segment-relative offset or symbol. As in
-  gcc, naming a register, an offset or a symbol without the form selects it.
+- Under `-mcmodel=kernel` the segment defaults to `%gs` for the default and for a `tls` guard that names no register.
+- `tls` (x86-64) reads the guard at a segment-relative offset or symbol. Naming
+  a register, an offset, or a symbol without the form selects it.
 - `sysreg` (AArch64) reads it at an offset above a system register, such as
   `-mstack-protector-guard-reg=sp_el0 -mstack-protector-guard-offset=N`.
 
@@ -521,18 +645,18 @@ Windows targets, whose C library exports neither symbol.
 ### Automatic variable initialization
 
 `-ftrivial-auto-var-init=uninitialized|zero|pattern` initializes every
-automatic object declared without an initializer: scalars, aggregates, arrays
+automatic object declared without an initializer: scalars, aggregates, arrays,
 and variable-length arrays. The front end supplies the value as an ordinary
 initializer where the storage is established, so every output mode carries it
 and `-O` treats it as any other store.
 
-- `pattern` stores the byte `0xFE`, as gcc does.
+- `pattern` stores the byte `0xFE`.
 - A scalar that fits a register takes the value as a constant of its type.
   Anything wider is filled byte-wise, unrolled within the inline bound and as
   a loop past it. A variable-length array's loop follows its allocation.
 - `__attribute__((uninitialized))` opts an object out, as does binding it to a
   register with `asm`.
-- A declaration that a `goto` or `switch` jumps past is not covered, as in gcc.
+- A declaration that a `goto` or `switch` jumps past is not covered.
 
 `-fzero-init-padding-bits=standard|unions|all` takes every value and changes
 nothing. An automatic aggregate initializer already zero-fills the whole
@@ -545,19 +669,21 @@ unions alike.
 bytes. The frame is what the prologue reserves below the return address,
 saved registers and frame record included; `alloca` and variable-length arrays
 are not counted. The report breaks the size down: locals, spill slots, saved
-registers, inline-asm scratch, an over-aligned region, the canary and the
+registers, inline-asm scratch, an over-aligned region, the canary, and the
 frame record. The diagnostic is `frame-larger-than`, so `-Werror=` makes it
-fatal and `-Wno-` silences it. `n` takes gcc's size suffixes (`kB`, `KiB`,
-`MB`, `MiB`, ...). Without the option no bound applies, as in gcc and clang.
+fatal and `-Wno-` silences it. `n` takes the size suffixes `kB`, `KiB`, `MB`,
+`MiB`, ... Without the option no bound applies.
 
 ### AArch64 branch protection
 
 `pac-ret` signs the return address of every function that stores the link
 register: `paciasp` before the prologue, and `autiasp` after the last teardown
 instruction of each epilogue, where sp, the signing modifier, again holds its
-value at entry. A leaf with no frame stores no link register and is left alone
+value at entry. On the Windows targets the key is B, `pacibsp` and `autibsp`,
+as MSVC signs and as the unwind code `pac_sign_lr` describes the instruction.
+A leaf with no frame stores no link register and is left alone
 unless `+leaf` is given. `bti` puts a `BTI` landing pad at each function entry
-and indirect-branch target. `standard` is `bti+pac-ret`. A signed function starts with `paciasp`, which is
+and indirect-branch target. `standard` is `bti+pac-ret`. A signed function starts with its signing instruction, which is
 itself a landing pad for the branches that reach a function entry, so it takes
 no separate `BTI C`.
 

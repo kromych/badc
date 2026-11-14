@@ -96,7 +96,7 @@ int main(void) {
                        0x4014000000000000ULL, 0x40a00000U, 9)))
         return r;
 
-    /* 2^53 is the last integer with a neighbour in `double`; 2^53+1 is
+    /* 2^53 is the last integer with a neighbor in `double`; 2^53+1 is
        a tie and rounds to even, back down to 2^53, while 2^53+3 rounds
        up to 2^53+4. */
     if ((r = chk_to_fp(0, 1ULL << 53, 0x4340000000000000ULL, 0x5a000000U,
@@ -126,7 +126,7 @@ int main(void) {
         return r;
 
     /* A 113-bit odd value: everything below bit 60 is discarded, so
-       only the sticky bit carries it. Its neighbour differs one bit up
+       only the sticky bit carries it. Its neighbor differs one bit up
        in the high half and must land one ulp away. */
     if ((r = chk_to_fp(1ULL << 48, 1, 0x46f0000000000000ULL, 0x77800000U,
                        0x46f0000000000000ULL, 0x77800000U, 41)))

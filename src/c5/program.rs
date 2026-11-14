@@ -90,8 +90,8 @@ pub enum SymVisibility {
 }
 
 impl SymVisibility {
-    /// GCC's `visibility` operand: `None` for an unknown one, `Some(None)`
-    /// for `default`.
+    /// The `visibility` attribute's operand: `None` for an unknown one,
+    /// `Some(None)` for `default`.
     pub fn from_gcc_name(name: &str) -> Option<Option<Self>> {
         Some(match name {
             "default" => None,
@@ -165,7 +165,7 @@ pub struct DataReloc {
 /// `static const VTable v = { .xClose = my_close };`. The VM
 /// reads the data slot directly because its function pointers
 /// carry the small `CODE_BASE + ent_pc` bias and the indirect-
-/// call lowering recognises that range. Native writers replace
+/// call lowering recognizes that range. Native writers replace
 /// the slot's
 /// contents at write time (ELF) or via a dynamic relocation
 /// (Mach-O rebase, PE `.reloc DIR64`).
@@ -183,7 +183,7 @@ pub struct CodeReloc {
 }
 
 /// An undeclared library function the auto-include retry declared by
-/// force-including the standard header that declares it (C99 7.1.4p2).
+/// force-including the standard header that declares it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AutoInclude {
     pub name: String,
@@ -192,10 +192,22 @@ pub struct AutoInclude {
     pub bound: bool,
 }
 
+/// A file-scope typedef name, the size and alignment of the type it names,
+/// the index in `Program::structs` of the record it names, if any, and
+/// whether an integer type it names is signed.
+#[derive(Debug, Clone)]
+pub struct TypedefLayout {
+    pub name: String,
+    pub size: usize,
+    pub align: usize,
+    pub record: Option<usize>,
+    pub signed: Option<bool>,
+}
+
 /// Compiled program ready for the VM.
 ///
 /// `data` is the static data segment (string literals plus zero-
-/// initialised globals), `entry_pc` is an integer identifier for
+/// initialized globals), `entry_pc` is an integer identifier for
 /// the program's entry function (codegen and the VM look it up
 /// against `FunctionSsa::ent_pc`), and `warnings` carries any
 /// non-fatal diagnostics the compiler emitted (type mismatches,
@@ -262,6 +274,10 @@ pub struct Program {
     /// [`Self::data_ro_len`] when the layout produced no such object,
     /// and is reset with it by any repack.
     pub data_relro_len: usize,
+    /// Bytes of zero-filled storage past `data` that the data compaction
+    /// moved out of the file image: data offsets `[data.len(), data.len() +
+    /// zero_fill_len)` name them. Zero until that pass runs.
+    pub zero_fill_len: usize,
     /// Start offsets of anonymous data objects (string literals and the
     /// implicit `__func__` arrays of C99 6.4.2.2) within `data`. Named
     /// globals already carry their offset in `symbols[..].val`; these are
@@ -291,23 +307,26 @@ pub struct Program {
     /// at scope exit).
     pub data_align_marks: Vec<(i64, i64)>,
     pub entry_pc: usize,
-    /// Every catalogued diagnostic the front end reported, with the
+    /// Every cataloged diagnostic the front end reported, with the
     /// level it resolved to. `Diagnostic` prints itself, so a caller
     /// that only dumps them needs to know nothing more.
     pub warnings: Vec<super::diag::Diagnostic>,
+    /// The unit's diagnostic pragmas, which govern the lowering's reports
+    /// at the positions its instructions carry.
+    pub diag_control: super::diag::Control,
     /// The auto-include notes, `info:` lines the driver prints ahead
     /// of `warnings`.
     pub notes: Vec<String>,
-    /// Initialised + zero-init thread-local data. Layout matches
+    /// Initialized + zero-init thread-local data. Layout matches
     /// the way `data` does for ordinary globals: a flat byte array
     /// indexed by `Inst::TlsAddr`'s operand. The image writers copy
-    /// this into `.tdata` (initialised slice = `tls_data[..tls_init_size]`)
+    /// this into `.tdata` (initialized slice = `tls_data[..tls_init_size]`)
     /// and `.tbss` (zero-fill remainder = `tls_data[tls_init_size..]`).
-    /// A `_Thread_local int x = 5;` initialiser raises
+    /// A `_Thread_local int x = 5;` initializer raises
     /// `tls_init_size` so its bytes land in `.tdata`; an
     /// uninitialised variable keeps its slice zero and in `.tbss`.
     pub tls_data: Vec<u8>,
-    /// Number of bytes of `tls_data` that are statically initialised
+    /// Number of bytes of `tls_data` that are statically initialized
     /// (i.e., emitted into `.tdata`). The remainder
     /// (`tls_data.len() - tls_init_size` bytes) is zero-init and
     /// goes into `.tbss`. Invariant: `tls_init_size <= tls_data.len()`.
@@ -468,6 +487,13 @@ pub struct Program {
     /// `DW_TAG_union_type` DIEs. The VM / JIT / interpreter
     /// ignore this field.
     pub structs: Vec<crate::c5::compiler::StructDef>,
+    /// The file-scope typedef names and the layouts of the types they name.
+    pub typedefs: Vec<TypedefLayout>,
+    /// Each file-scope function, extern object, and named record's member
+    /// with the type of its address, and each typedef name with the type of
+    /// a pointer to what it names, spelled in C; recorded under
+    /// `CompileOptions::prototypes`.
+    pub prototypes: Vec<(String, String)>,
     /// Captured enum definitions. Sourced from
     /// `Compiler::enums` at `compile()`; the DWARF emitter walks
     /// this to produce DW_TAG_enumeration_type + DW_TAG_enumerator
@@ -479,7 +505,7 @@ pub struct Program {
     /// when present, otherwise whichever of `main` / `wmain` /
     /// `WinMain` / `wWinMain` the source defines. `None` for
     /// entry-less images (DLL with exports). The PE writer
-    /// reads this to pick the stub flavour (`wmain` swaps
+    /// reads this to pick the stub flavor (`wmain` swaps
     /// `__getmainargs` for `__wgetmainargs`); other writers
     /// ignore it.
     pub entry_name: Option<String>,
@@ -491,6 +517,8 @@ pub struct Program {
     pub entry_pragma: Option<String>,
     /// `#pragma comment(lib, ...)` names, carried in an object's `.deplibs`.
     pub default_libs: Vec<String>,
+    /// `#pragma comment(linker, ...)` strings, carried in the badc note.
+    pub linker_directives: Vec<String>,
     /// What the auto-include retry of [`crate::c5::Compiler::compile`]
     /// declared, in the order it force-included the headers. A re-compile
     /// of the unit force-includes the same headers.
@@ -498,6 +526,14 @@ pub struct Program {
     /// `-ffreestanding`: an `_Atomic` object takes the freestanding layout
     /// ([`crate::c5::compiler::types::atomic_layout`]).
     pub(crate) freestanding: bool,
+    /// The x86 extensions the unit targets (`-m<ext>`, `-march=`), which
+    /// decide the vector widths its operations lower at.
+    pub(crate) x86_features: crate::c5::X86Features,
+    /// `-mno-sse` / `-mgeneral-regs-only`: no operation lowers to the
+    /// vector registers.
+    pub(crate) no_fp_regs: bool,
+    /// `-fno-builtin` leaves a call to the C library `strlen` foldable.
+    pub(crate) strlen_folds: bool,
     /// Source-declared Windows subsystem. Set by
     /// `#pragma subsystem(<kind>)`; `None` falls back to the
     /// PE writer's default (`Console`). Read only by the PE
@@ -517,7 +553,7 @@ pub struct Program {
     /// `Decl::Local` width selection) off this slice. Empty for
     /// `Program` shapes built outside the parser pipeline.
     pub(crate) symbols: alloc::vec::Vec<crate::c5::symbol::Symbol>,
-    /// Synthesised `FunctionSsa` entries the parser produces
+    /// Synthesized `FunctionSsa` entries the parser produces
     /// outside the AST walker (sys-trampolines + the synthetic
     /// CRT entry). The codegen reads these directly through
     /// `produce_ssa_funcs`.
@@ -558,6 +594,13 @@ pub struct Program {
 }
 
 impl Program {
+    /// Each file-scope enumeration constant and its value.
+    pub fn enumerators(&self) -> impl Iterator<Item = (&str, i64)> {
+        (self.symbols.iter())
+            .filter(|s| s.class == crate::c5::token::Token::Num as i64 && !s.name.is_empty())
+            .map(|s| (s.name.as_str(), s.val))
+    }
+
     /// The link names the unit declares or defines weak.
     pub(crate) fn weak_link_names(&self) -> alloc::collections::BTreeSet<&str> {
         (self.symbols.iter())
@@ -788,12 +831,14 @@ impl DataOffsets for Program {
             image_align_error: _,
             data_ro_len,
             data_relro_len,
+            zero_fill_len,
             data_object_starts,
             const_data_ranges,
             data_pad_ranges,
             data_align_marks,
             entry_pc: _,
             warnings: _,
+            diag_control: _,
             notes: _,
             tls_data: _,      // separate image
             tls_init_size: _, // extent of `tls_data`
@@ -817,12 +862,18 @@ impl DataOffsets for Program {
             source_path: _,
             variables: _, // frame-relative slots
             structs: _,
+            typedefs: _,
+            prototypes: _,
             enums: _,
             entry_name: _,
             entry_pragma: _,
             default_libs: _,
+            linker_directives: _,
             auto_includes: _,
             freestanding: _,
+            x86_features: _,
+            no_fp_regs: _,
+            strlen_folds: _,
             subsystem: _,
             finished_functions,
             symbols,
@@ -836,6 +887,7 @@ impl DataOffsets for Program {
         // re-establishes them for the layout it emitted.
         *data_ro_len = 0;
         *data_relro_len = 0;
+        *zero_fill_len = 0;
         data_object_starts.retain_mut(|s| match r.remap(*s, *s) {
             Some(_) if !r.in_data(*s) => false,
             Some(new) => {
@@ -932,12 +984,14 @@ mod data_offset_tests {
             asm_idents: Vec::new(),
             data_ro_len: 0,
             data_relro_len: 0,
+            zero_fill_len: 0,
             data_object_starts: Vec::new(),
             const_data_ranges: Vec::new(),
             data_pad_ranges: Vec::new(),
             data_align_marks: Vec::new(),
             entry_pc: 0,
             warnings: Vec::new(),
+            diag_control: Default::default(),
             notes: Vec::new(),
             tls_data: Vec::new(),
             tls_init_size: 0,
@@ -961,12 +1015,18 @@ mod data_offset_tests {
             source_path: String::new(),
             variables: Vec::new(),
             structs: Vec::new(),
+            typedefs: Vec::new(),
+            prototypes: Vec::new(),
             enums: Vec::new(),
             entry_name: None,
             entry_pragma: None,
             default_libs: Vec::new(),
+            linker_directives: Vec::new(),
             auto_includes: Vec::new(),
             freestanding: false,
+            x86_features: crate::c5::X86Features::NONE,
+            no_fp_regs: false,
+            strlen_folds: false,
             data_align: 8,
             image_align_error: None,
             subsystem: None,

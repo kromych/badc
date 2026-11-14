@@ -17,7 +17,7 @@ impl<'a> Walker<'a> {
     /// would otherwise emit dead code.
     pub(super) fn walk_stmt(&mut self, b: &mut SsaBuilder, id: StmtId) -> Result<bool, WalkError> {
         let src = self.ast.stmt_src[id as usize];
-        b.set_src(src.line, src.file as u32);
+        b.set_src(src.inst_src());
         match self.ast.stmt(id) {
             Stmt::SehTry {
                 body,
@@ -47,7 +47,9 @@ impl<'a> Walker<'a> {
                     b.unreachable();
                     return Ok(true);
                 }
+                let temps = self.call_temps.len();
                 let _ = self.walk_expr_rvalue(b, e)?;
+                self.end_call_temps(b, temps);
                 // A direct call to a `noreturn` function ends the block
                 // (C11 6.7.4p8), as a non-returning intrinsic does. The seal
                 // is `Unreachable`, not a return, so `if (x) noreturn_fn();
@@ -108,7 +110,7 @@ impl<'a> Walker<'a> {
                 Ok(true)
             }
             Stmt::AsmGoto(idx) => {
-                // GCC `asm goto`. Target 0 is the fall-through
+                // GNU C `asm goto`. Target 0 is the fall-through
                 // successor; the label blocks follow in label-list
                 // order. An edge leaving a scope goes through the exit
                 // block a `goto` to the label from here takes.
@@ -494,7 +496,7 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// Lower a GCC statement expression `({ ... })`. The items walk as
+    /// Lower a GNU C statement expression `({ ... })`. The items walk as
     /// `Stmt::Compound` does, but the value of the final
     /// expression-statement is the construct's value; a non-expression
     /// tail makes it void, lowered as an immediate 0. A label wrapping
@@ -693,6 +695,16 @@ impl<'a> Walker<'a> {
         self.scopes[depth.min(self.scopes.len())..]
             .iter()
             .any(|s| !s.ends.is_empty() || s.vla_save.is_some())
+    }
+
+    /// End the result temporaries of the calls walked since `mark`, whose
+    /// full expression the walk has just completed (C17 6.2.4p8).
+    pub(super) fn end_call_temps(&mut self, b: &mut SsaBuilder, mark: usize) {
+        for slot in self.call_temps.drain(mark..) {
+            if b.is_block_open() {
+                b.lifetime_end(slot);
+            }
+        }
     }
 
     /// Leave the scopes above `depth`: end their lifetimes and, unless
@@ -989,6 +1001,7 @@ impl<'a> Walker<'a> {
             }
         }
         let cond_v = self.walk_cond_value(b, cond)?;
+        b.expect(self.expected_truth(cond));
         let then_blk = b.new_block();
         let after_blk = b.new_block();
         let else_blk = if else_s.is_some() {
@@ -1059,6 +1072,7 @@ impl<'a> Walker<'a> {
         b.switch_to(header);
         self.stamp_expr(b, cond);
         let cond_v = self.walk_cond_value(b, cond)?;
+        b.expect(self.expected_truth(cond));
         b.branch_zero(cond_v, after, body_blk);
         self.walk_loop_body(b, body_blk, body, header, after)?;
         b.switch_to(after);
@@ -1069,7 +1083,7 @@ impl<'a> Walker<'a> {
     /// step are walked apart from the statement that holds them.
     fn stamp_expr(&self, b: &mut SsaBuilder, e: ExprId) {
         if let Some(src) = self.ast.expr_src.get(e as usize) {
-            b.set_src(src.line, src.file as u32);
+            b.set_src(src.inst_src());
         }
     }
 
@@ -1088,6 +1102,7 @@ impl<'a> Walker<'a> {
         b.switch_to(cond_blk);
         self.stamp_expr(b, cond);
         let cond_v = self.walk_cond_value(b, cond)?;
+        b.expect(self.expected_truth(cond));
         b.branch_nonzero(cond_v, body_blk, after);
         b.switch_to(after);
         Ok(false)
@@ -1126,6 +1141,7 @@ impl<'a> Walker<'a> {
             }
             None => b.imm(1),
         };
+        b.expect(cond.and_then(|c| self.expected_truth(c)));
         b.branch_zero(cond_v, after, body_blk);
         // C99 6.8.5.3 fixes the evaluation order (cond, body, post)
         // but leaves the layout open. Post is walked before the body so
@@ -1182,7 +1198,7 @@ impl<'a> Walker<'a> {
             (BinOp::Ge, BinOp::Le)
         };
         if self.expr_is_int128_value(disc) {
-            let d = self.int128_load(b, disc_val);
+            let d = Self::int128_load_at(b, disc_val, false, self.int128_align(disc));
             self.emit_switch_dispatch_128(b, d, &labels, ge_op, le_op, deflt);
         } else {
             // A range case is dispatched by an explicit `lo <= disc <= hi`

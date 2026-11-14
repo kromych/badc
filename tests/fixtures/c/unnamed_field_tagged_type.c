@@ -1,7 +1,7 @@
 // Unnamed members whose type specifier carries a tag: the extension
 // gcc spells `-fms-extensions` and MSVC accepts by default. C11
 // 6.7.2.1p13 promotes the members of an unnamed struct/union with no
-// tag; this generalises the same promotion to a tagged type used with
+// tag; this generalizes the same promotion to a tagged type used with
 // no declarator, so the members of the named type are reachable through
 // the enclosing aggregate. Layout, brace initialization and designated
 // initialization follow the untagged case exactly.

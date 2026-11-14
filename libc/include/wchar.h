@@ -9,9 +9,9 @@
 // and as a 16-bit unit anywhere under `-fshort-wchar`.
 #include <stddef.h>
 
-// `wint_t` holds any `wchar_t` value plus `WEOF` (C99 7.24.1): `int` on
-// the Unix targets, and on Windows the C runtime's `unsigned short`, whose
-// WEOF is 0xFFFF.
+// `wint_t` holds any `wchar_t` value plus `WEOF` (C99 7.24.1): glibc's
+// `unsigned int`, Apple's `int`, and on Windows the C runtime's
+// `unsigned short`, whose WEOF is 0xFFFF.
 typedef __WINT_TYPE__ wint_t;
 #ifdef _WIN32
 #define WEOF ((wint_t)0xFFFF)
@@ -19,10 +19,26 @@ typedef __WINT_TYPE__ wint_t;
 #define WEOF ((wint_t)-1)
 #endif
 
-// Conversion state for the restartable multibyte functions (C99
-// 7.24.1). The contents are opaque; the host libc reads only the bytes
-// it wrote, so an oversized zeroed buffer is safe across libcs.
-typedef struct { unsigned char __opaque[128]; } mbstate_t;
+// Conversion state for the restartable multibyte functions (C17 7.29.1), in
+// the C library's layout, since the library reads and writes it.
+#if defined(__APPLE__)
+typedef union { char __mbstate8[128]; long long _mbstateL; } mbstate_t;
+#elif defined(__linux__)
+typedef struct {
+    int __count;
+    union { unsigned int __wch; char __wchb[4]; } __value;
+} mbstate_t;
+#else
+// msvcrt keeps an int at the start; the rest holds the <uchar.h> conversion
+// state libc/lib/uchar_ext.c carries between calls, which msvcrt lacks.
+typedef struct { int __state; unsigned char __opaque[124]; } mbstate_t;
+#endif
+
+// C17 7.29.1p2, as <stdint.h> defines them.
+#ifndef WCHAR_MIN
+#define WCHAR_MIN __WCHAR_MIN__
+#define WCHAR_MAX __WCHAR_MAX__
+#endif
 
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
@@ -156,11 +172,14 @@ typedef struct { unsigned char __opaque[128]; } mbstate_t;
 #pragma binding(libc::vwscanf,   "__isoc99_vwscanf")
 #endif
 
-// <stdio.h>'s FILE; the prototypes below need only its tag.
+// <stdio.h>'s FILE, which glibc's <wchar.h> also defines.
 struct __c5_FILE;
+typedef struct __c5_FILE FILE;
 
 #ifdef _WIN32
-// The UCRT's corecrt_w*.h sets, which its <wchar.h> includes.
+// The UCRT's corecrt_w*.h sets, which its <wchar.h> includes, and the
+// <errno.h> its corecrt_memcpy_s.h includes.
+#include <errno.h>
 #include <__badc_wstring.h>
 #include <__badc_wstdlib.h>
 #include <__badc_wstdio.h>

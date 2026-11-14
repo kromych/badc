@@ -125,6 +125,18 @@ __asm__(".text\n"
 
 #endif // _WIN32 && __aarch64__
 
+#if defined(_WIN32) && defined(__BADC_EFI__)
+
+// The language handler a `__try` scope table names. A UEFI image runs under
+// no exception dispatcher that calls it, and imports nothing; it continues
+// the search (ExceptionContinueSearch).
+int __C_specific_handler(void *record, void *frame, void *context, void *dispatch) {
+    (void)record, (void)frame, (void)context, (void)dispatch;
+    return 1;
+}
+
+#endif // _WIN32 && __BADC_EFI__
+
 #ifdef __linux__
 
 // The shared-library entry points behind the libc_nonshared.a wrappers, bound

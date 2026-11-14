@@ -1076,6 +1076,23 @@ fn vector_one_source_counts_and_estimates() {
         0x6F0B_6441
     );
     assert_eq!(enc("sqshlu", &[d(1), d(2), Opnd::Imm(5)]), 0x7F45_6441);
+    let v3 = |op: &str, s: u8, q: bool| enc(op, &[v(1, s, q), v(2, s, q), v(3, s, q)]);
+    assert_eq!(v3("fmaxnm", 2, true), 0x4E23_C441);
+    assert_eq!(v3("fminnm", 3, true), 0x4EE3_C441);
+    assert_eq!(v3("fmaxp", 2, false), 0x2E23_F441);
+    assert_eq!(v3("fminp", 2, true), 0x6EA3_F441);
+    assert_eq!(v3("fmaxnmp", 3, true), 0x6E63_C441);
+    assert_eq!(v3("fminnmp", 2, true), 0x6EA3_C441);
+    assert_eq!(v3("fmulx", 2, true), 0x4E23_DC41);
+    assert_eq!(enc("fmulx", &[d(1), d(2), d(3)]), 0x5E63_DC41);
+    assert_eq!(enc("fabd", &[d(1), d(2), d(3)]), 0x7EE3_D441);
+    assert_eq!(enc("fabd", &[s(1), s(2), s(3)]), 0x7EA3_D441);
+    assert_eq!(enc("fmaxnm", &[d(1), d(2), d(3)]), 0x1E63_6841);
+    assert_eq!(enc("fminnm", &[d(1), d(2), d(3)]), 0x1E63_7841);
+    assert_eq!(enc("fmaxv", &[s(1), v(2, 2, true)]), 0x6E30_F841);
+    assert_eq!(enc("fminv", &[s(1), v(2, 2, true)]), 0x6EB0_F841);
+    assert_eq!(enc("fmaxnmv", &[s(1), v(2, 2, true)]), 0x6E30_C841);
+    assert_eq!(enc("fminnmv", &[s(1), v(2, 2, true)]), 0x6EB0_C841);
     let z = Opnd::Imm(0);
     assert_eq!(enc("cmeq", &[v(1, 2, true), v(2, 2, true), z]), 0x4EA0_9841);
     assert_eq!(

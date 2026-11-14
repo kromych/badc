@@ -36,6 +36,9 @@ macro_rules! sem {
     (Float, $w:expr, [$op:ident]) => {
         Sem::Float(FOp::$op, $w, false)
     };
+    ($s:ident, $w:expr, [$op:ident]) => {
+        Sem::$s(FOp::$op, $w)
+    };
     ($s:ident, $w:expr, ()) => {
         Sem::$s($w)
     };
@@ -312,6 +315,19 @@ pub(crate) const OPS: &[SimdOp] = table! {
     "fsqrt" V Float [Sqrt]: f2s f4s fd f2d;
     "fabs" V FAbs (): f2s f4s fd f2d;
     "fneg" V FNeg (): f2s f4s fd f2d;
+    "fabd" Vv Float [AbsDiff]: f2s f4s fd f2d;
+    "fmaxnm" Vv Float [MaxNum]: f2s f4s fd f2d;
+    "fminnm" Vv Float [MinNum]: f2s f4s fd f2d;
+    "fmulx" Vv Float [MulX]: f2s f4s fd f2d;
+    "faddp" Vv FloatPair [Add]: f2s f4s f2d;
+    "fmaxp" Vv FloatPair [MaxNan]: f2s f4s f2d;
+    "fminp" Vv FloatPair [MinNan]: f2s f4s f2d;
+    "fmaxnmp" Vv FloatPair [MaxNum]: f2s f4s f2d;
+    "fminnmp" Vv FloatPair [MinNum]: f2s f4s f2d;
+    "fmaxv" V FloatAcross [MaxNan]: f4s;
+    "fminv" V FloatAcross [MinNan]: f4s;
+    "fmaxnmv" V FloatAcross [MaxNum]: f4s;
+    "fminnmv" V FloatAcross [MinNum]: f4s;
     "fcmeq" Vv FloatRel (0): f2s f4s f2d;
     "fcmge" Vv FloatRel (13): f2s f4s f2d;
     "fcmgt" Vv FloatRel (14): f2s f4s f2d;

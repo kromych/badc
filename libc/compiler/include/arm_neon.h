@@ -23,7 +23,9 @@
  * vqrshrun_n with their _high forms, vqshlu_n vshll_n, vpadal, vmovl vmovn vqmovn vqmovun vaddl
  * vsubl vaddw vsubw vmull vmlal vmlsl vabdl vabal with their _high forms, vaddv vaddlv
  * vmaxv vminv. Floating: vadd vsub vmul vdiv vmax vmin vabs vneg vsqrt vfma
- * vfms vrecpe vrecps vrsqrte vrsqrts with their scalar forms, the
+ * vfms vrecpe vrecps vrsqrte vrsqrts vabd vmaxnm vminnm vmulx with their
+ * scalar forms, the pairwise vpadd vpmax vpmin vpmaxnm vpminnm and the
+ * across-lane vaddv vmaxv vminv vmaxnmv vminnmv, the
  * compares, those against zero (vceqz ... vcltz, integer too, with their
  * scalar forms), and the conversions to
  * and from the integers of one width (truncating) and between single and
@@ -33,8 +35,7 @@
  *
  * Not provided: float16, bfloat16, the lane-indexed and by-scalar forms,
  * the doubling multiplies, the other structure
- * loads, stores and table lookups, the floating pairwise, across-lane,
- * absolute-difference, rounding and maxnum forms, the fixed-point and
+ * loads, stores and table lookups, the floating rounding forms, the fixed-point and
  * rounding-mode conversions and the dot products.
  *
  * The element typedefs match <stdint.h>, repeated so the header serves
@@ -1300,6 +1301,45 @@ __BADC_NEON_EST_SCALAR(vrecpe)
 __BADC_NEON_EST_SCALAR(vrsqrte)
 __BADC_NEON_STEP_SCALAR(vrecps)
 __BADC_NEON_STEP_SCALAR(vrsqrts)
+
+/* The floating absolute difference |a - b|, fmaxnm and fminnm (a lone
+ * quiet NaN loses), and fmulx (infinity times zero is 2); the scalar forms
+ * are lane 0 of the vector ones. */
+__BADC_NEON_ARITH2(vabd, __builtin_neon_fabd)
+__BADC_NEON_ARITH2(vmaxnm, __builtin_neon_fmaxnm)
+__BADC_NEON_ARITH2(vminnm, __builtin_neon_fminnm)
+__BADC_NEON_ARITH2(vmulx, __builtin_neon_fmulx)
+__BADC_NEON_STEP_SCALAR(vabd)
+__BADC_NEON_STEP_SCALAR(vmulx)
+
+/* Pairwise: the pairs of the first operand, then of the second. A scalar
+ * pairwise or across-lane form is lane 0 of the pairwise one of the vector
+ * with itself; vaddvq_f32 adds the pairs' sums, and vmaxvq_f32 and its
+ * kin are one reduction. */
+#define __BADC_NEON_FPAIR(op, stem, d64)                                  \
+    __BADC_NEON_B2(op##_f32, float32x2_t, float32x2_t, float32x2_t, s, stem, stem, 2s) \
+    __BADC_NEON_B2(op##q_f32, float32x4_t, float32x4_t, float32x4_t, s, stem, stem, 4s) \
+    __BADC_NEON_B2(op##q_f64, float64x2_t, float64x2_t, float64x2_t, s, stem, stem, 2d) \
+    __BADC_INTRIN float32_t op##s_f32(float32x2_t __a) { return op##_f32(__a, __a)[0]; } \
+    __BADC_INTRIN float64_t d64(float64x2_t __a) { return op##q_f64(__a, __a)[0]; }
+__BADC_NEON_FPAIR(vpadd, __builtin_neon_faddp, vpaddd_f64)
+__BADC_NEON_FPAIR(vpmax, __builtin_neon_fmaxp, vpmaxqd_f64)
+__BADC_NEON_FPAIR(vpmin, __builtin_neon_fminp, vpminqd_f64)
+__BADC_NEON_FPAIR(vpmaxnm, __builtin_neon_fmaxnmp, vpmaxnmqd_f64)
+__BADC_NEON_FPAIR(vpminnm, __builtin_neon_fminnmp, vpminnmqd_f64)
+#define __BADC_NEON_FACROSS(op, pair, stem)                               \
+    __BADC_INTRIN float32_t op##_f32(float32x2_t __a) { return pair##_f32(__a, __a)[0]; } \
+    __BADC_INTRIN float32_t op##q_f32(float32x4_t __a) { return __builtin_neon_##stem##_4s(__a)[0]; } \
+    __BADC_INTRIN float64_t op##q_f64(float64x2_t __a) { return pair##q_f64(__a, __a)[0]; }
+__BADC_NEON_FACROSS(vmaxv, vpmax, fmaxv)
+__BADC_NEON_FACROSS(vminv, vpmin, fminv)
+__BADC_NEON_FACROSS(vmaxnmv, vpmaxnm, fmaxnmv)
+__BADC_NEON_FACROSS(vminnmv, vpminnm, fminnmv)
+__BADC_INTRIN float32_t vaddv_f32(float32x2_t __a) { return vpadds_f32(__a); }
+__BADC_INTRIN float32_t vaddvq_f32(float32x4_t __a) {
+    return vpadds_f32(vget_low_f32(vpaddq_f32(__a, __a)));
+}
+__BADC_INTRIN float64_t vaddvq_f64(float64x2_t __a) { return vpaddd_f64(__a); }
 __BADC_NEON_B1(vrecpe_u32, uint32x2_t, uint32x2_t, s, __builtin_neon_urecpe, _, 2s)
 __BADC_NEON_B1(vrecpeq_u32, uint32x4_t, uint32x4_t, s, __builtin_neon_urecpe, _, 4s)
 __BADC_NEON_B1(vrsqrte_u32, uint32x2_t, uint32x2_t, s, __builtin_neon_ursqrte, _, 2s)

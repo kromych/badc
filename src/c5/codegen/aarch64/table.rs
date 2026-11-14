@@ -677,7 +677,7 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             )),
         };
     }
-    // Scalar FP two-source: `<fadd|fsub|fmul|fdiv|fmax|fmin|fnmul> Dd|Sd, ...`,
+    // Scalar FP two-source: `<fadd|fsub|fmul|fdiv|fmax|fmin|fmaxnm|fminnm|fnmul> Dd|Sd, ...`,
     // one width. `type` bit 22 selects double; the opcode sits at bit 12. The
     // same mnemonics on vector (VecReg) operands fall through to the SIMD arm.
     if let Some(opc) = match mnemonic {
@@ -687,6 +687,8 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         "fsub" => Some(3),
         "fmax" => Some(4),
         "fmin" => Some(5),
+        "fmaxnm" => Some(6),
+        "fminnm" => Some(7),
         "fnmul" => Some(8),
         _ => None,
     } && let [
@@ -1412,6 +1414,13 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         "faddp" => Some(0x2E20_D400),
         "frecps" => Some(0x0E20_FC00),
         "frsqrts" => Some(0x0EA0_FC00),
+        "fmaxnm" => Some(0x0E20_C400),
+        "fminnm" => Some(0x0EA0_C400),
+        "fmaxp" => Some(0x2E20_F400),
+        "fminp" => Some(0x2EA0_F400),
+        "fmaxnmp" => Some(0x2E20_C400),
+        "fminnmp" => Some(0x2EA0_C400),
+        "fmulx" => Some(0x0E20_DC00),
         _ => None,
     } && let [
         Opnd::VecReg { num: rd, size, q },
@@ -1441,11 +1450,13 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | ((rn as u32) << 5)
             | (rd as u32));
     }
-    // The Newton-Raphson steps also have a scalar form over the s or d view
-    // (bits 30 and 28 set, sz at 22).
+    // The Newton-Raphson steps, fmulx and fabd also have a scalar form over
+    // the s or d view (bits 30 and 28 set, sz at 22).
     if let Some(base) = match mnemonic {
         "frecps" => Some(0x5E20_FC00u32),
         "frsqrts" => Some(0x5EA0_FC00),
+        "fmulx" => Some(0x5E20_DC00),
+        "fabd" => Some(0x7EA0_D400),
         _ => None,
     } && let [
         Opnd::VReg { num: rd, is_d },
@@ -1953,6 +1964,27 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         ] = *ops
     {
         return Ok(0x5EF1_B800 | ((rn as u32) << 5) | (rd as u32));
+    }
+    // SIMD FP across-lane reduction `<fmaxv|fminv|fmaxnmv|fminnmv> Sd, Vn.4s`.
+    if let Some(base) = match mnemonic {
+        "fmaxv" => Some(0x6E30_F800u32),
+        "fminv" => Some(0x6EB0_F800),
+        "fmaxnmv" => Some(0x6E30_C800),
+        "fminnmv" => Some(0x6EB0_C800),
+        _ => None,
+    } && let [
+        Opnd::VReg {
+            num: rd,
+            is_d: false,
+        },
+        Opnd::VecReg {
+            num: rn,
+            size: 2,
+            q: true,
+        },
+    ] = *ops
+    {
+        return Ok(base | (u32::from(rn) << 5) | u32::from(rd));
     }
     // SIMD long pairwise add `<saddlp|uaddlp> Vd.<Ta>, Vn.<Tb>`: each pair of
     // adjacent elements summed into one of twice the width, so the

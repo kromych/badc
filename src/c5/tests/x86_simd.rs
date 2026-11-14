@@ -1736,7 +1736,9 @@ fn floating_rows_compute_in_the_environment() {
         | Sem::Convert(_)
         | Sem::ToInt(..)
         | Sem::Estimate(..)
-        | Sem::Step(..) => true,
+        | Sem::Step(..)
+        | Sem::FloatPair(..)
+        | Sem::FloatAcross(..) => true,
         Sem::Add(_)
         | Sem::Sub(_)
         | Sem::MulLo(_)

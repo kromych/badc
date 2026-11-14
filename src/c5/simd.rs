@@ -508,6 +508,12 @@ pub(crate) enum Sem {
     /// `2 - a * b`, or `(3 - a * b) / 2` when `true`; infinity times zero
     /// gives 2 or 1.5 (`frecps`, `frsqrts`).
     Step(u8, bool),
+    /// The floating operation of each adjacent lane pair, the first
+    /// operand's pairs low (`faddp`, `fmaxnmp`).
+    FloatPair(FOp, u8),
+    /// The floating operation across the lanes, as halves combined, into
+    /// lane 0, the rest zero (`fmaxv`, `fminnmv`).
+    FloatAcross(FOp, u8),
     /// The estimate of each 32-bit lane as an unsigned fraction below 1,
     /// all ones for an operand under 1/2, or 1/4 when `true` (`urecpe`,
     /// `ursqrte`).
@@ -589,7 +595,10 @@ impl Sem {
 /// A floating-point lane operation. MIN and MAX give the second operand
 /// unless the first is strictly less (greater), a NaN or two zeros included.
 /// MAXNAN and MINNAN propagate a NaN operand as arithmetic does and order
-/// -0 below +0 (`fmax`, `fmin`).
+/// -0 below +0 (`fmax`, `fmin`); MAXNUM and MINNUM take the other operand
+/// for a lone quiet NaN (`fmaxnm`, `fminnm`). ABSDIFF is `|a - b|`, a NaN's
+/// sign cleared too (`fabd`), and MULX a product with infinity times zero 2
+/// (`fmulx`).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum FOp {
     Add,
@@ -601,6 +610,10 @@ pub(crate) enum FOp {
     Sqrt,
     MaxNan,
     MinNan,
+    MaxNum,
+    MinNum,
+    AbsDiff,
+    MulX,
 }
 
 /// The round function of a SHA-1 hash update.
@@ -819,11 +832,13 @@ impl SimdOp {
     pub(crate) fn arrangement(&self, i: usize) -> (u8, u8) {
         let lane = self.ret.lane_bytes();
         // A reduction writes the scalar view of its lane width.
-        if i == 0
-            && let Sem::Across(op, w, ..) = self.sem
-        {
-            let rw = if op == AcrossOp::AddLong { 2 * w } else { w };
-            return (rw, rw);
+        match self.sem {
+            Sem::Across(op, w, ..) if i == 0 => {
+                let rw = if op == AcrossOp::AddLong { 2 * w } else { w };
+                return (rw, rw);
+            }
+            Sem::FloatAcross(_, w) if i == 0 => return (w, w),
+            _ => {}
         }
         if i == 0 {
             return (lane, self.ret_bytes());
@@ -1888,7 +1903,7 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
         Sem::Eor3 | Sem::Bcax | Sem::Sha256Hash(_) | Sem::Sha256Su1 => {}
         Sem::Sha1Hash(_) | Sem::Sha1Su0 | Sem::Sha512Hash(_) | Sem::Sha512Su1 => {}
         Sem::FloatRel(..) | Sem::FloatFma(..) | Sem::LongAcc(..) => {}
-        Sem::Estimate(..) | Sem::Step(..) => {}
+        Sem::Estimate(..) | Sem::Step(..) | Sem::FloatPair(..) | Sem::FloatAcross(..) => {}
         Sem::Perm4x64
         | Sem::PermVar32
         | Sem::Perm2x128
@@ -2325,6 +2340,47 @@ pub(crate) fn eval_float(
     eval_float_in(env, sem, a, b, imm, 16)
 }
 
+/// One floating lane of `op` over the `double` bit patterns `x` and `y` in
+/// `env`, for an operation that does not select an operand's bits (all but
+/// MIN and MAX).
+fn float_lane(env: &mut impl FloatEnv, op: FOp, x: u64, y: u64, single: bool) -> u64 {
+    use core::cmp::Ordering::{Equal, Greater};
+    let quiet = |v: u64| is_nan(v) && v & 1 << 51 != 0;
+    let (inf, zero) = (
+        |v: u64| v << 1 == 0xFFE0_0000_0000_0000,
+        |v: u64| v << 1 == 0,
+    );
+    match op {
+        FOp::MaxNum | FOp::MinNum => {
+            let (max, nan) = match op {
+                FOp::MaxNum => (FOp::MaxNan, 0xFFF0_0000_0000_0000),
+                _ => (FOp::MinNan, 0x7FF0_0000_0000_0000),
+            };
+            let (x, y) = match (quiet(x), quiet(y)) {
+                (true, false) => (nan, y),
+                (false, true) => (x, nan),
+                _ => (x, y),
+            };
+            float_lane(env, max, x, y, single)
+        }
+        // A NaN operand propagates as an addition's would.
+        FOp::MaxNan | FOp::MinNan if is_nan(x) || is_nan(y) => env.arith(FOp::Add, x, y, single),
+        FOp::MaxNan | FOp::MinNan => {
+            let max = op == FOp::MaxNan;
+            let first = match env.compare(x, y, false) {
+                Some(Equal) => (x >> 63 == 0) == max,
+                c => (c == Some(Greater)) == max,
+            };
+            if first { x } else { y }
+        }
+        FOp::AbsDiff => env.arith(FOp::Sub, x, y, single) & !(1 << 63),
+        FOp::MulX if inf(x) && zero(y) || zero(x) && inf(y) => 2f64.to_bits() | (x ^ y) & 1 << 63,
+        FOp::MulX => env.arith(FOp::Mul, x, y, single),
+        FOp::Sqrt => env.arith(op, x, 0, single),
+        _ => env.arith(op, x, y, single),
+    }
+}
+
 /// Whether a lane's `double` bit pattern is a NaN.
 fn is_nan(x: u64) -> bool {
     x & 0x7FF0_0000_0000_0000 == 0x7FF0_0000_0000_0000 && x & 0x000F_FFFF_FFFF_FFFF != 0
@@ -2358,22 +2414,39 @@ pub(crate) fn eval_float_in(
                         let first = c == Some(if op == FOp::Min { Less } else { Greater });
                         set_lane(&mut o, w, i, lane(if first { a } else { b }, w, i));
                     }
-                    // A NaN operand propagates as an addition's would.
-                    FOp::MaxNan | FOp::MinNan if is_nan(x) || is_nan(y) => {
-                        set_flane(&mut o, w, i, env.arith(FOp::Add, x, y, w == 4));
-                    }
-                    FOp::MaxNan | FOp::MinNan => {
-                        let max = op == FOp::MaxNan;
-                        let first = match env.compare(x, y, false) {
-                            Some(Equal) => (x >> 63 == 0) == max,
-                            c => (c == Some(Greater)) == max,
-                        };
-                        set_lane(&mut o, w, i, lane(if first { a } else { b }, w, i));
-                    }
-                    FOp::Sqrt => set_flane(&mut o, w, i, env.arith(op, x, 0, w == 4)),
-                    _ => set_flane(&mut o, w, i, env.arith(op, x, y, w == 4)),
+                    _ => set_flane(&mut o, w, i, float_lane(env, op, x, y, w == 4)),
                 }
             }
+        }
+        // The pairs of the first operand's lanes, then of the second's.
+        Sem::FloatPair(op, w) => {
+            let half = lanes(w, false) / 2;
+            o = [0; 16];
+            for i in 0..2 * half {
+                let (src, j) = if i < half {
+                    (a, 2 * i)
+                } else {
+                    (b, 2 * (i - half))
+                };
+                let x = float_lane(env, op, flane(src, w, j), flane(src, w, j + 1), w == 4);
+                set_flane(&mut o, w, i, x);
+            }
+        }
+        // The Arm ARM's Reduce: each half reduced, then the two combined.
+        Sem::FloatAcross(op, w) => {
+            let mut n = lanes(w, false);
+            let mut v = [0u64; 4];
+            for (i, x) in v.iter_mut().enumerate().take(n) {
+                *x = flane(a, w, i);
+            }
+            while n > 1 {
+                n /= 2;
+                for k in 0..n {
+                    v[k] = float_lane(env, op, v[2 * k], v[2 * k + 1], w == 4);
+                }
+            }
+            o = [0; 16];
+            set_flane(&mut o, w, 0, v[0]);
         }
         // The 32 predicates of the VEX form, 0 to 7 those of the SSE one:
         // the relation in bits 3:0, bit 4 flipping whether a quiet NaN

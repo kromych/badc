@@ -942,8 +942,16 @@ impl crate::c5::simd::FloatEnv for FpEnv {
             FOp::Mul => self.mul(a, b, f),
             FOp::Div => self.div(a, b, f),
             FOp::Sqrt => self.sqrt(a, f),
-            // The row selects an operand by `compare`.
-            FOp::Min | FOp::Max | FOp::MaxNan | FOp::MinNan => a,
+            // The row selects an operand by `compare`, or computes the
+            // operation from the others.
+            FOp::Min
+            | FOp::Max
+            | FOp::MaxNan
+            | FOp::MinNan
+            | FOp::MaxNum
+            | FOp::MinNum
+            | FOp::AbsDiff
+            | FOp::MulX => a,
         }
     }
 

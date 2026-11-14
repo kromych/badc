@@ -931,6 +931,38 @@ fn the_saturating_narrowing_shifts_are_rows() {
     }
 }
 
+/// The floating absolute difference, maxnum, minnum and mulx forms, the
+/// pairwise forms and the reductions are rows: over seeded lanes with
+/// NaNs, zeros and infinities the interpreter's results hash to the
+/// hardware's, and each is one instruction under -O, `vaddvq_f32` two.
+#[cfg(feature = "full")]
+#[test]
+fn the_float_pairwise_and_maxnum_forms_are_rows() {
+    let src = super::load_fixture("arm_neon_float_pairwise_and_maxnum_on_seeded_lanes.c");
+    let program = super::compile_str_bare_for(&src, crate::Target::LinuxAarch64);
+    assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 0);
+    const OPS: &str = "#include <arm_neon.h>\n\
+        float32x4_t a(float32x4_t x, float32x4_t y) { return vabdq_f32(x, y); }\n\
+        float64x1_t b(float64x1_t x, float64x1_t y) { return vmaxnm_f64(x, y); }\n\
+        float32x2_t c(float32x2_t x, float32x2_t y) { return vpmaxnm_f32(x, y); }\n\
+        float32_t d(float32x4_t x) { return vminnmvq_f32(x); }\n\
+        float64_t f(float64x2_t x) { return vmaxvq_f64(x); }\n\
+        float64x2_t g(float64x2_t x, float64x2_t y) { return vmulxq_f64(x, y); }\n\
+        float32_t e(float32x4_t x) { return vaddvq_f32(x); }\n";
+    for (name, want) in [
+        ("a", &[0x6EA1_D400u32][..]),
+        ("b", &[0x1E61_6800]),
+        ("c", &[0x2E21_C400]),
+        ("d", &[0x6EB0_C800]),
+        ("f", &[0x6E60_F400]),
+        ("g", &[0x4E61_DC00]),
+        ("e", &[0x6E20_D400, 0x2E20_D400]),
+    ] {
+        let words = super::perf_codegen::a64_at(OPS, name, true);
+        assert_eq!(words[..words.len() - 1], *want, "{name}: {words:08x?}");
+    }
+}
+
 /// `vld1`, `vst1`, `vdup_n` and `vld1_dup` are the load, store and
 /// broadcast of their vector under `-O`, as with gcc 16, with no inline asm
 /// between them and the operations that use them: `ldr q`, `str q`,

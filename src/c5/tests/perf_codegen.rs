@@ -8716,3 +8716,28 @@ int cmp(double a, double b) { return a + 2.0 < b * 2.0 && a > 2.0; }\n";
         }
     }
 }
+
+/// A fused multiply-add writes its result over an operand dying at it, the
+/// VEX forms taking any of the three: no register copy precedes one.
+#[test]
+fn x64_a_fused_multiply_add_result_takes_a_dying_operands_register() {
+    const SRC: &str = "double k(double a, double b, double c, double d) {\n\
+    double t = a * b + c;\n\
+    double u = t * d - 2.5;\n\
+    return u * u + t;\n\
+}\n";
+    use super::codegen::function_bytes;
+    let obj = object_at(SRC, Target::LinuxX64, true);
+    let insns = x64_insns(&function_bytes(&obj, "k"));
+    // movaps / movapd / movsd between xmm registers.
+    let copy = |i: &X64Insn| matches!(i.op, 0x0F28 | 0x0F10) && i.reg_form();
+    assert!(!insns.iter().any(copy), "{insns:x?}");
+    assert_eq!(
+        insns
+            .iter()
+            .filter(|i| matches!(i.op, 0x3899..=0x38BF))
+            .count(),
+        3,
+        "{insns:x?}"
+    );
+}

@@ -91,9 +91,9 @@ Disassembly of section .text:
                	imulq	$0xa, %rcx, %rcx
                	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rcx, %xmm1
-               	vfmadd132sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm0 * mem) + xmm1
-               	movsd	-0x30(%rbp), %xmm1
-               	addsd	%xmm1, %xmm0
+               	vfmadd231sd	<rip>, %xmm0, %xmm1 # xmm1 = (xmm0 * mem) + xmm1
+               	movsd	-0x30(%rbp), %xmm0
+               	vaddsd	%xmm0, %xmm1, %xmm0
                	incq	%rax
                	movl	-0xf0(%rbp), %ecx
                	cmpl	%ecx, %eax

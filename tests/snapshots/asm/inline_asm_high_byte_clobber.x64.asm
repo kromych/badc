@@ -135,13 +135,13 @@ Disassembly of section .text:
                	xorps	%xmm3, %xmm3
                	xorps	%xmm4, %xmm4
                	xorps	%xmm5, %xmm5
-               	movapd	%xmm7, %xmm0
+               	vfmadd231sd	<rip>, %xmm7, %xmm6 # xmm6 = (xmm7 * mem) + xmm6
+               	vfmadd231sd	<rip>, %xmm8, %xmm6 # xmm6 = (xmm8 * mem) + xmm6
+               	vfmadd231sd	<rip>, %xmm9, %xmm6 # xmm6 = (xmm9 * mem) + xmm6
+               	vfmadd231sd	<rip>, %xmm10, %xmm6 # xmm6 = (xmm10 * mem) + xmm6
+               	vfmadd231sd	<rip>, %xmm11, %xmm6 # xmm6 = (xmm11 * mem) + xmm6
+               	movapd	%xmm12, %xmm0
                	vfmadd132sd	<rip>, %xmm6, %xmm0 # xmm0 = (xmm0 * mem) + xmm6
-               	vfmadd231sd	<rip>, %xmm8, %xmm0 # xmm0 = (xmm8 * mem) + xmm0
-               	vfmadd231sd	<rip>, %xmm9, %xmm0 # xmm0 = (xmm9 * mem) + xmm0
-               	vfmadd231sd	<rip>, %xmm10, %xmm0 # xmm0 = (xmm10 * mem) + xmm0
-               	vfmadd231sd	<rip>, %xmm11, %xmm0 # xmm0 = (xmm11 * mem) + xmm0
-               	vfmadd231sd	<rip>, %xmm12, %xmm0 # xmm0 = (xmm12 * mem) + xmm0
                	vfmadd231sd	<rip>, %xmm13, %xmm0 # xmm0 = (xmm13 * mem) + xmm0
                	retq
 

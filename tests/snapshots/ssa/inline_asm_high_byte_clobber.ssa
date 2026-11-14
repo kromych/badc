@@ -166,30 +166,30 @@ fn ent_pc=3 n_params=2 variadic=false locals=0
     v31  Imm(4611686018427387904)                         -> d0
     v32  Imm(0)                                           -> x0
     v33  Binop { op=fmul.c, lhs=v31, rhs=v11 }            -> d0
-    v34  Fma { a=v31, b=v11, c=v7, neg_product=false, neg_addend=false } -> d0
+    v34  Fma { a=v31, b=v11, c=v7, neg_product=false, neg_addend=false } -> d6
     v35  Imm(3)                                           -> x0
-    v36  Imm(4613937818241073152)                         -> d1
+    v36  Imm(4613937818241073152)                         -> d0
     v37  Imm(0)                                           -> x0
-    v38  Binop { op=fmul.c, lhs=v36, rhs=v13 }            -> d1
-    v39  Fma { a=v36, b=v13, c=v34, neg_product=false, neg_addend=false } -> d0
+    v38  Binop { op=fmul.c, lhs=v36, rhs=v13 }            -> d0
+    v39  Fma { a=v36, b=v13, c=v34, neg_product=false, neg_addend=false } -> d6
     v40  Imm(4)                                           -> x0
-    v41  Imm(4616189618054758400)                         -> d1
+    v41  Imm(4616189618054758400)                         -> d0
     v42  Imm(0)                                           -> x0
-    v43  Binop { op=fmul.c, lhs=v41, rhs=v15 }            -> d1
-    v44  Fma { a=v41, b=v15, c=v39, neg_product=false, neg_addend=false } -> d0
+    v43  Binop { op=fmul.c, lhs=v41, rhs=v15 }            -> d0
+    v44  Fma { a=v41, b=v15, c=v39, neg_product=false, neg_addend=false } -> d6
     v45  Imm(5)                                           -> x0
-    v46  Imm(4617315517961601024)                         -> d1
+    v46  Imm(4617315517961601024)                         -> d0
     v47  Imm(0)                                           -> x0
-    v48  Binop { op=fmul.c, lhs=v46, rhs=v17 }            -> d1
-    v49  Fma { a=v46, b=v17, c=v44, neg_product=false, neg_addend=false } -> d0
+    v48  Binop { op=fmul.c, lhs=v46, rhs=v17 }            -> d0
+    v49  Fma { a=v46, b=v17, c=v44, neg_product=false, neg_addend=false } -> d6
     v50  Imm(6)                                           -> x0
-    v51  Imm(4618441417868443648)                         -> d1
+    v51  Imm(4618441417868443648)                         -> d0
     v52  Imm(0)                                           -> x0
-    v53  Binop { op=fmul.c, lhs=v51, rhs=v19 }            -> d1
-    v54  Fma { a=v51, b=v19, c=v49, neg_product=false, neg_addend=false } -> d0
+    v53  Binop { op=fmul.c, lhs=v51, rhs=v19 }            -> d0
+    v54  Fma { a=v51, b=v19, c=v49, neg_product=false, neg_addend=false } -> d6
     v55  Imm(7)                                           -> x0
     v56  Imm(0)                                           -> x0
-    v57  Binop { op=fmul.c, lhs=v24, rhs=v22 }            -> d1
+    v57  Binop { op=fmul.c, lhs=v24, rhs=v22 }            -> d0
     v58  Fma { a=v24, b=v22, c=v54, neg_product=false, neg_addend=false } -> d0
     v59  Imm(8)                                           -> x0
     v60  Imm(4620693217682128896)                         -> d1

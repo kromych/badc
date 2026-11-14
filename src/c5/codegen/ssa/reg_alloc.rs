@@ -722,14 +722,14 @@ fn is_cl_shift_op(op: BinOp) -> bool {
 
 /// The operands x86-64 may write the result of `inst` over, in its two-address
 /// forms; an `add` takes `lea`, a shift by a register BMI2's `shlx` family.
-fn x86_two_address(inst: &Inst) -> [Option<ValueId>; 2] {
+fn x86_two_address(inst: &Inst) -> [Option<ValueId>; 3] {
     let (op, lhs, rhs) = match *inst {
         Inst::Binop { op, lhs, rhs } => (op, lhs, Ok(rhs)),
         Inst::BinopI { op, lhs, rhs_imm } => (op, lhs, Err(rhs_imm)),
         // `cmov` overwrites its destination, which may hold either arm:
         // the lowering inverts the condition for the other.
         Inst::Select { a, b, kind, .. } if !matches!(kind, LoadKind::F32 | LoadKind::F64) => {
-            return [Some(a), Some(b)];
+            return [Some(a), Some(b), None];
         }
         // A three-source SIMD form accumulates into its first operand.
         Inst::SimdVal { op, ref args, .. }
@@ -738,22 +738,24 @@ fn x86_two_address(inst: &Inst) -> [Option<ValueId>; 2] {
                 crate::c5::simd::Form::Vvv | crate::c5::simd::Form::VvvI
             ) =>
         {
-            return [args.first().copied(), None];
+            return [args.first().copied(), None, None];
         }
-        _ => return [None; 2],
+        // The 132, 213 and 231 forms write any of the three operands.
+        Inst::Fma { a, b, c, .. } => return [Some(c), Some(a), Some(b)],
+        _ => return [None; 3],
     };
     let fits = |k: i64| i32::try_from(k).is_ok();
     match (op, rhs) {
-        (BinOp::And | BinOp::Or | BinOp::Xor | BinOp::Mul, Ok(r)) => [Some(lhs), Some(r)],
-        (BinOp::Sub, Ok(_)) => [Some(lhs), None],
+        (BinOp::And | BinOp::Or | BinOp::Xor | BinOp::Mul, Ok(r)) => [Some(lhs), Some(r), None],
+        (BinOp::Sub, Ok(_)) => [Some(lhs), None, None],
         (BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror, Err(k)) if (0..64).contains(&k) => {
-            [Some(lhs), None]
+            [Some(lhs), None, None]
         }
-        (BinOp::Ror32, Err(k)) if (0..32).contains(&k) => [Some(lhs), None],
-        (BinOp::Or | BinOp::Xor, Err(k)) if fits(k) => [Some(lhs), None],
-        (BinOp::And, Err(k)) if fits(k) && k != 0xffff_ffff => [Some(lhs), None],
-        (BinOp::Mul, Err(k)) if k > 0 && (k as u64).is_power_of_two() => [Some(lhs), None],
-        _ => [None; 2],
+        (BinOp::Ror32, Err(k)) if (0..32).contains(&k) => [Some(lhs), None, None],
+        (BinOp::Or | BinOp::Xor, Err(k)) if fits(k) => [Some(lhs), None, None],
+        (BinOp::And, Err(k)) if fits(k) && k != 0xffff_ffff => [Some(lhs), None, None],
+        (BinOp::Mul, Err(k)) if k > 0 && (k as u64).is_power_of_two() => [Some(lhs), None, None],
+        _ => [None; 3],
     }
 }
 
@@ -1845,7 +1847,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             avoid: 0,
             loop_avoid: 0,
             wide: VecWidth::Scalar,
-            follow: [None; 3],
+            follow: [None; 4],
         });
         entry.is_fp = produces_fp_result(inst) || fp_const[v];
         entry.wide = entry.wide.max(wide[v]);
@@ -1889,12 +1891,14 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             }
         }
     }
-    // A two-address result and an operand dying at it follow each other.
+    // A two-address result and an operand dying at it follow each other;
+    // an unread operand, a constant read off its literal, holds no register.
     if target.is_x86_64() {
         for (v, inst) in func.insts.iter().enumerate() {
             for (k, operand) in x86_two_address(inst).into_iter().enumerate() {
-                let Some(o) = operand.filter(|&o| last_use.get(o as usize) == Some(&(v as u32)))
-                else {
+                let Some(o) = operand.filter(|&o| {
+                    last_use.get(o as usize) == Some(&(v as u32)) && use_counts[o as usize] > 0
+                }) else {
                     continue;
                 };
                 let (a, b) = (node_of[v], node_of[o as usize]);
@@ -3488,7 +3492,7 @@ pub(crate) struct NodeConstraints {
     /// The vector width, whose spill takes two or four units.
     pub wide: VecWidth,
     /// Nodes whose register, or hint while uncolored, this one prefers next.
-    pub follow: [Option<ValueId>; 3],
+    pub follow: [Option<ValueId>; 4],
 }
 
 /// Result of coloring the interference graph. Which of the colored
@@ -5879,7 +5883,7 @@ mod tests {
             avoid: 0,
             loop_avoid: 0,
             wide: VecWidth::Scalar,
-            follow: [None; 3],
+            follow: [None; 4],
         })
     }
 
@@ -5902,7 +5906,7 @@ mod tests {
             avoid: 0,
             loop_avoid: 0,
             wide,
-            follow: [None; 3],
+            follow: [None; 4],
         })
     }
 

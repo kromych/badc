@@ -3654,6 +3654,17 @@ fn stack_protector_canary_holds_and_catches_a_smashed_frame() {
         None,
         "a smashed frame must reach __stack_chk_fail, which does not return"
     );
+    // The handler aborts; a handler that reached itself instead ran out of
+    // stack or never returned.
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        assert_eq!(smashed.status.signal(), Some(6), "__stack_chk_fail aborts");
+        assert!(
+            String::from_utf8_lossy(&smashed.stderr).contains("stack smashing detected"),
+            "__stack_chk_fail reports the smashed frame"
+        );
+    }
 }
 
 /// `-fpatchable-function-entry=2,1` on the host, with `-pg -mfentry

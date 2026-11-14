@@ -45,35 +45,25 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rax # <addr>
-               	incq	%rax
+               	leaq	0x1(%rax), %rcx
                	movl	$0x11223344, -0x8(%rbp) # imm = 0x11223344
-               	leaq	-0x8(%rbp), %rcx
-               	movl	(%rcx), %r10d
-               	movl	%r10d, (%rax)
+               	movl	$0x11223344, (%rcx)     # imm = 0x11223344
                	leaq	<rip>, %rax # <addr>
-               	addq	$0x8, %rax
+               	leaq	0x8(%rax), %rcx
                	movl	$0x11223345, -0x8(%rbp) # imm = 0x11223345
-               	leaq	-0x8(%rbp), %rcx
-               	movl	(%rcx), %r10d
-               	movl	%r10d, (%rax)
+               	movl	$0x11223345, (%rcx)     # imm = 0x11223345
                	leaq	<rip>, %rax # <addr>
-               	addq	$0xf, %rax
+               	leaq	0xf(%rax), %rcx
                	movl	$0x11223346, -0x8(%rbp) # imm = 0x11223346
-               	leaq	-0x8(%rbp), %rcx
-               	movl	(%rcx), %r10d
-               	movl	%r10d, (%rax)
+               	movl	$0x11223346, (%rcx)     # imm = 0x11223346
                	leaq	<rip>, %rax # <addr>
-               	addq	$0x16, %rax
+               	leaq	0x16(%rax), %rcx
                	movl	$0x11223347, -0x8(%rbp) # imm = 0x11223347
-               	leaq	-0x8(%rbp), %rcx
-               	movl	(%rcx), %r10d
-               	movl	%r10d, (%rax)
+               	movl	$0x11223347, (%rcx)     # imm = 0x11223347
                	leaq	<rip>, %rax # <addr>
-               	addq	$0x1d, %rax
+               	leaq	0x1d(%rax), %rcx
                	movl	$0x11223348, -0x8(%rbp) # imm = 0x11223348
-               	leaq	-0x8(%rbp), %rcx
-               	movl	(%rcx), %r10d
-               	movl	%r10d, (%rax)
+               	movl	$0x11223348, (%rcx)     # imm = 0x11223348
                	leaq	<rip>, %rax # <addr>
                	incq	%rax
                	leaq	-0x8(%rbp), %rcx

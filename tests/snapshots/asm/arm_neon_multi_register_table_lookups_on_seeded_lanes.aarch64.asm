@@ -484,51 +484,43 @@ Disassembly of section .text:
                	tbx	v0.16b, { v4.16b }, v2.16b
                	str	q0, [sp, #0x120]
                	ldr	d0, [sp, #0x10]
-               	sub	x0, x29, #0x60
                	stur	d0, [x29, #-0x60]
-               	ldr	d0, [sp, #0x28]
-               	stur	d0, [x29, #-0x58]
-               	ldr	d0, [sp, #0x30]
-               	stur	d0, [x29, #-0x50]
-               	ldr	d0, [sp, #0x48]
-               	stur	d0, [x29, #-0x48]
-               	sub	x2, x29, #0x120
-               	ldr	x16, [x0]
-               	str	x16, [x2]
-               	add	x3, x0, #0x8
-               	add	x1, x2, #0x8
-               	ldr	x16, [x3]
-               	str	x16, [x1]
-               	sub	x1, x29, #0xf0
-               	ldr	x16, [x0]
-               	str	x16, [x1]
-               	add	x4, x1, #0x8
-               	ldr	x16, [x3]
-               	str	x16, [x4]
-               	add	x0, x0, #0x10
-               	add	x3, x1, #0x10
-               	ldr	x16, [x0]
-               	str	x16, [x3]
+               	ldr	d2, [sp, #0x28]
+               	stur	d2, [x29, #-0x58]
+               	ldr	d4, [sp, #0x30]
+               	stur	d4, [x29, #-0x50]
+               	ldr	d5, [sp, #0x48]
+               	stur	d5, [x29, #-0x48]
+               	sub	x1, x29, #0x120
+               	str	d0, [x1]
+               	add	x0, x1, #0x8
+               	str	d2, [x0]
+               	sub	x0, x29, #0xf0
+               	str	d0, [x0]
+               	add	x2, x0, #0x8
+               	str	d2, [x2]
+               	add	x2, x0, #0x10
+               	str	d4, [x2]
                	ldur	d2, [x29, #-0x60]
                	movi	d0, #0000000000000000
                	mov	v2.d[1], v0.d[0]
                	tbl	v2.8b, { v2.16b }, v1.8b
-               	mov	x0, v2.d[0]
-               	str	x0, [sp, #0x530]
-               	sub	x0, x29, #0x110
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x0]
+               	mov	x2, v2.d[0]
+               	str	x2, [sp, #0x530]
+               	sub	x2, x29, #0x110
+               	ldp	x16, x17, [x1]
+               	stp	x16, x17, [x2]
                	ldr	d2, [sp, #0x580]
                	ldr	d4, [sp, #0x588]
                	mov	v2.d[1], v4.d[0]
                	tbl	v2.8b, { v2.16b }, v1.8b
-               	mov	x0, v2.d[0]
-               	str	x0, [sp, #0x538]
-               	sub	x0, x29, #0xc0
-               	ldp	x16, x17, [x1]
-               	stp	x16, x17, [x0]
-               	ldr	x16, [x1, #0x10]
-               	str	x16, [x0, #0x10]
+               	mov	x1, v2.d[0]
+               	str	x1, [sp, #0x538]
+               	sub	x1, x29, #0xc0
+               	ldp	x16, x17, [x0]
+               	stp	x16, x17, [x1]
+               	ldr	x16, [x0, #0x10]
+               	str	x16, [x1, #0x10]
                	ldur	d2, [x29, #-0xf0]
                	ldur	d4, [x29, #-0xe8]
                	mov	v2.d[1], v4.d[0]

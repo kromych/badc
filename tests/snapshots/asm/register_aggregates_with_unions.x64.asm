@@ -260,10 +260,8 @@ Disassembly of section .text:
                	movq	(%rdi), %rdi
                	callq	<addr>
                	movq	%rax, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rax
                	leaq	-0x48(%rbp), %rcx
-               	movq	(%rax), %r10
-               	movq	%r10, (%rcx)
+               	movq	%rax, (%rcx)
                	movss	-0x48(%rbp), %xmm0
                	movss	<rip>, %xmm1
                	ucomiss	%xmm1, %xmm0

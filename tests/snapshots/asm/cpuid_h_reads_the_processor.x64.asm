@@ -60,24 +60,18 @@ Disassembly of section .text:
                	movl	%ebx, -0x38(%rbp)
                	movl	%ecx, -0x30(%rbp)
                	movl	%edx, -0x8(%rbp)
-               	leaq	-0x20(%rbp), %rcx
-               	leaq	-0x38(%rbp), %rax
-               	movl	(%rax), %r10d
-               	movl	%r10d, (%rcx)
-               	leaq	0x4(%rcx), %rax
-               	leaq	-0x8(%rbp), %rdx
-               	movl	(%rdx), %r10d
-               	movl	%r10d, (%rax)
-               	leaq	0x8(%rcx), %rax
-               	leaq	-0x30(%rbp), %rdx
-               	movl	(%rdx), %r10d
-               	movl	%r10d, (%rax)
+               	leaq	-0x20(%rbp), %rdi
+               	movl	%ebx, (%rdi)
+               	leaq	0x4(%rdi), %rax
+               	movl	%edx, (%rax)
+               	leaq	0x8(%rdi), %rax
+               	movl	%ecx, (%rax)
                	movb	%sil, -0x14(%rbp)
-               	movsbq	-0x20(%rbp,%rsi), %rdx
-               	cmpl	$0x20, %edx
+               	movsbq	-0x20(%rbp,%rsi), %rcx
+               	cmpl	$0x20, %ecx
                	jl	<addr>
-               	movsbq	-0x20(%rbp,%rsi), %rdx
-               	cmpl	$0x7e, %edx
+               	movsbq	-0x20(%rbp,%rsi), %rcx
+               	cmpl	$0x7e, %ecx
                	jg	<addr>
                	incq	%rsi
                	cmpl	$0xc, %esi

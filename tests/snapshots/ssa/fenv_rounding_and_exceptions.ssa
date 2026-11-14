@@ -3402,9 +3402,9 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     v2021 Imm(0)                                           -> x0
     v2022 Imm(9218868437227405313)                         -> x0
     v2023 StoreLocal { off=-11, value=v2022, kind=I64 }    -> -
-    v2024 LocalAddr(-1)                                    -> x0
-    v2025 LocalAddr(-11)                                   -> x1
-    v2026 Mcpy { dst=v2024, src=v2025, size=8, align=1 }   -> -
+    v2024 LocalAddr(-1)                                    -> x1
+    v2025 LocalAddr(-11)                                   -> x2
+    v2026 Store { addr=v2024, disp=0, value=v2022, kind=I64, align=1 } -> -
     v2027 LoadLocal { off=-1, kind=F64, volatile }         -> d0
     v2028 ImmData(624)                                     -> x0
     v2029 Load { addr=v2028, disp=0, kind=F64, volatile pc_rel } -> d1

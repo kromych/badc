@@ -424,31 +424,51 @@ fn run_one(func: &mut FunctionSsa) {
                 func.insts[i] = load;
                 any = true;
             }
-            // A copy whose source bytes one store wrote whole stores that
-            // value at the destination. The copy's value, the destination
-            // address, is the destination's.
+            // A copy whose source bytes one store wrote whole -- through
+            // the source address, or into the frame slot it names -- stores
+            // that value at the destination. The copy's value, the
+            // destination address, is the destination's.
+            let whole = |kind: StoreKind, src_idx: u32| {
+                kind != StoreKind::F80 && span(src_idx, i) <= MAX_FORWARD_DISTANCE
+            };
             if let Inst::Mcpy {
                 dst,
                 src,
                 size,
                 align,
             } = func.insts[i]
-                && let Some((value, kind)) = table.iter().find_map(|e| {
-                    let Inst::Store {
-                        addr, value, kind, ..
-                    } = func.insts[e.src_idx as usize]
-                    else {
-                        return None;
-                    };
-                    (e.addr == src
-                        && addr == src
-                        && e.disp == 0
-                        && value == e.value
-                        && kind != StoreKind::F80
-                        && i64::from(store_width(kind)) == size
-                        && span(e.src_idx, i) <= MAX_FORWARD_DISTANCE)
+                && let Some((value, kind)) = table
+                    .iter()
+                    .find_map(|e| {
+                        let Inst::Store {
+                            addr, value, kind, ..
+                        } = func.insts[e.src_idx as usize]
+                        else {
+                            return None;
+                        };
+                        (e.addr == src
+                            && addr == src
+                            && e.disp == 0
+                            && value == e.value
+                            && i64::from(store_width(kind)) == size
+                            && whole(kind, e.src_idx))
                         .then_some((value, kind))
-                })
+                    })
+                    .or_else(|| {
+                        let at = slot_bytes(func, src, 0)?;
+                        slot_table.iter().find_map(|e| {
+                            let Inst::StoreLocal { value, kind, .. } =
+                                func.insts[e.src_idx as usize]
+                            else {
+                                return None;
+                            };
+                            (e.off * 8 + i64::from(e.disp) == at
+                                && value == e.value
+                                && i64::from(store_width(kind)) == size
+                                && whole(kind, e.src_idx))
+                            .then_some((value, kind))
+                        })
+                    })
             {
                 func.insts[i] = Inst::Store {
                     addr: dst,
@@ -1981,6 +2001,60 @@ mod tests {
         ));
         assert!(matches!(f.blocks[0].terminator, Terminator::Return(1)));
         assert!(matches!(copy_of(8).insts[3], Inst::Mcpy { .. }));
+    }
+
+    /// A copy of a frame slot a `StoreLocal` just wrote whole into another
+    /// slot stores the value there, and a later read of the first slot
+    /// still forwards: the copy wrote only the destination.
+    #[test]
+    fn a_copy_of_a_stored_slot_stores_the_value() {
+        let mut f = fresh(
+            alloc::vec![
+                Inst::LocalAddr(-3),
+                Inst::ParamRef {
+                    idx: 1,
+                    kind: LoadKind::I64
+                },
+                Inst::StoreLocal {
+                    off: -1,
+                    disp: 0,
+                    value: 1,
+                    kind: StoreKind::I64,
+                    volatile: false,
+                    nsw: false,
+                },
+                Inst::LocalAddr(-1),
+                Inst::Mcpy {
+                    dst: 0,
+                    src: 3,
+                    size: 8,
+                    align: 8,
+                },
+                Inst::LoadLocal {
+                    off: -1,
+                    disp: 0,
+                    kind: LoadKind::I64,
+                    volatile: false,
+                },
+            ],
+            Terminator::Return(5),
+            5,
+        );
+        run_one(&mut f);
+        assert!(
+            matches!(
+                f.insts[4],
+                Inst::Store {
+                    addr: 0,
+                    value: 1,
+                    kind: StoreKind::I64,
+                    ..
+                }
+            ),
+            "{:?}",
+            f.insts[4]
+        );
+        assert!(matches!(f.blocks[0].terminator, Terminator::Return(1)));
     }
 
     #[test]

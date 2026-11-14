@@ -1851,9 +1851,9 @@ fn ent_pc=39 n_params=0 variadic=false locals=15
     v617 Call { target_pc=10, args=[v614], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v618 RetPart(0, kind=I64)                             -> x0
     v619 StoreLocal { off=-1, value=v618, kind=I64 }      -> -
-    v620 LocalAddr(-1)                                    -> x0
+    v620 LocalAddr(-1)                                    -> x1
     v621 LocalAddr(-13)                                   -> x1
-    v622 Mcpy { dst=v621, src=v620, size=8, align=4 }     -> -
+    v622 Store { addr=v621, disp=0, value=v618, kind=I64, align=4 } -> -
     v623 LifetimeEnd(-1)                                  -> -
     v624 LocalAddr(-13)                                   -> x0
     v625 LoadLocal { off=-13, kind=F32 }                  -> d0 [f32]

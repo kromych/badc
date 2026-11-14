@@ -35,11 +35,9 @@ Disassembly of section .text:
                	movabsq	$0x555555540000000, %r11 # imm = 0x555555540000000
                	orq	%r11, %rax
                	movq	%rax, <rip> # <addr>
-               	leaq	-0x8(%rbp), %rcx
                	movq	%rax, -0x8(%rbp)
-               	movq	<rip>, %rax # <addr>
-               	movq	(%rcx), %r10
-               	movq	%r10, (%rax)
+               	movq	<rip>, %rcx # <addr>
+               	movq	%rax, (%rcx)
                	movq	<rip>, %rax # <addr>
                	sarq	$0x1d, %rax
                	andq	$0x3fffffff, %rax       # imm = 0x3FFFFFFF

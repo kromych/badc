@@ -257,10 +257,8 @@ Disassembly of section .text:
                	ldr	x0, [x0]
                	bl	<addr>
                	stur	x0, [x29, #-0x8]
-               	sub	x0, x29, #0x8
                	sub	x1, x29, #0x48
-               	ldr	x16, [x0]
-               	str	x16, [x1]
+               	str	x0, [x1]
                	ldur	s0, [x29, #-0x48]
                	fmov	s1, #9.00000000
                	fcmp	s0, s1

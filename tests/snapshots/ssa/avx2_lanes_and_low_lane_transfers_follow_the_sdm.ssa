@@ -1033,40 +1033,40 @@ fn ent_pc=1346 n_params=1 variadic=false locals=4
     v219 Imm(0)                                           -> x1
     v220 VecExtract { vec=v216, off=0, kind=I64, bytes=16 } -> x1
     v221 StoreLocal { off=-4, value=v220, kind=I64 }      -> -
-    v222 LocalAddr(-4)                                    -> x1
-    v223 Mcpy { dst=v212, src=v222, size=8, align=1 }     -> -
+    v222 LocalAddr(-4)                                    -> x6
+    v223 Store { addr=v212, disp=0, value=v220, kind=I64, align=1 } -> -
     v224 LifetimeEnd(-4)                                  -> -
     v225 LifetimeEnd(0)                                   -> -
-    v226 LocalAddr(-3)                                    -> x2
+    v226 LocalAddr(-3)                                    -> x1
     v227 BinopI { op=add, lhs=v156, rhs_imm=11 }          -> x2
-    v228 LocalAddr(-54)                                   -> x6
-    v229 Imm(16)                                          -> x6
-    v230 BinopI { op=add, lhs=v213, rhs_imm=16 }          -> x6
-    v231 Imm(0)                                           -> x6
+    v228 LocalAddr(-54)                                   -> x1
+    v229 Imm(16)                                          -> x1
+    v230 BinopI { op=add, lhs=v213, rhs_imm=16 }          -> x1
+    v231 Imm(0)                                           -> x1
     v232 LoadLocal { off=-54, disp=16, kind=V128 }        -> d0
-    v233 Imm(0)                                           -> x6
-    v234 Imm(0)                                           -> x6
-    v235 Imm(0)                                           -> x6
-    v236 VecExtract { vec=v232, off=0, kind=I32, bytes=16 } -> x6
+    v233 Imm(0)                                           -> x1
+    v234 Imm(0)                                           -> x1
+    v235 Imm(0)                                           -> x1
+    v236 VecExtract { vec=v232, off=0, kind=I32, bytes=16 } -> x1
     v237 StoreLocal { off=-4, value=v236, kind=I32 }      -> -
     v238 LocalAddr(-4)                                    -> x6
-    v239 Mcpy { dst=v227, src=v222, size=4, align=1 }     -> -
+    v239 Store { addr=v227, disp=0, value=v236, kind=I32, align=1 } -> -
     v240 LifetimeEnd(-4)                                  -> -
     v241 LifetimeEnd(0)                                   -> -
     v242 LocalAddr(-3)                                    -> x1
-    v243 BinopI { op=add, lhs=v156, rhs_imm=17 }          -> x0
-    v244 LocalAddr(-54)                                   -> x1
-    v245 Imm(32)                                          -> x1
-    v246 BinopI { op=add, lhs=v213, rhs_imm=32 }          -> x1
-    v247 Imm(0)                                           -> x1
+    v243 BinopI { op=add, lhs=v156, rhs_imm=17 }          -> x1
+    v244 LocalAddr(-54)                                   -> x0
+    v245 Imm(32)                                          -> x0
+    v246 BinopI { op=add, lhs=v213, rhs_imm=32 }          -> x0
+    v247 Imm(0)                                           -> x0
     v248 LoadLocal { off=-54, disp=32, kind=V128 }        -> d0
-    v249 Imm(0)                                           -> x1
-    v250 Imm(0)                                           -> x1
-    v251 Imm(0)                                           -> x1
-    v252 VecExtract { vec=v248, off=0, kind=I16, bytes=16 } -> x1
+    v249 Imm(0)                                           -> x0
+    v250 Imm(0)                                           -> x0
+    v251 Imm(0)                                           -> x0
+    v252 VecExtract { vec=v248, off=0, kind=I16, bytes=16 } -> x0
     v253 StoreLocal { off=-4, value=v252, kind=I16 }      -> -
-    v254 LocalAddr(-4)                                    -> x1
-    v255 Mcpy { dst=v243, src=v254, size=2, align=1 }     -> -
+    v254 LocalAddr(-4)                                    -> x2
+    v255 Store { addr=v243, disp=0, value=v252, kind=I16, align=1 } -> -
     v256 LifetimeEnd(-4)                                  -> -
     v257 LifetimeEnd(0)                                   -> -
     v258 LocalAddr(-3)                                    -> x0

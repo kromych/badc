@@ -709,10 +709,8 @@ Disassembly of section .text:
                	mov	x0, x21
                	bl	<addr>
                	stur	x0, [x29, #-0x8]
-               	sub	x0, x29, #0x8
                	sub	x1, x29, #0x18
-               	ldr	x16, [x0]
-               	str	x16, [x1]
+               	str	x0, [x1]
                	ldur	s0, [x29, #-0x18]
                	scvtf	s1, x20
                	fcmp	s0, s1

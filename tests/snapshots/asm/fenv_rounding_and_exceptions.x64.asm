@@ -2127,10 +2127,8 @@ Disassembly of section .text:
                	callq	<addr>
                	movabsq	$0x7ff0000000000001, %rax # imm = 0x7FF0000000000001
                	movq	%rax, -0x58(%rbp)
-               	leaq	-0x8(%rbp), %rax
-               	leaq	-0x58(%rbp), %rcx
-               	movq	(%rcx), %r10
-               	movq	%r10, (%rax)
+               	leaq	-0x8(%rbp), %rcx
+               	movq	%rax, (%rcx)
                	movsd	-0x8(%rbp), %xmm0
                	movsd	<rip>, %xmm1 # <addr>
                	addsd	%xmm1, %xmm0

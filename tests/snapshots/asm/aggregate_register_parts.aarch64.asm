@@ -772,23 +772,23 @@ Disassembly of section .text:
                	ldr	x0, [x0]
                	bl	<addr>
                	stur	x0, [x29, #-0x20]
-               	sub	x0, x29, #0x20
-               	sub	x1, x29, #0x78
-               	ldr	x16, [x0]
-               	str	x16, [x1]
+               	sub	x1, x29, #0x20
+               	sub	x2, x29, #0x78
+               	str	x0, [x2]
                	ldur	s0, [x29, #-0x78]
                	fmov	s1, #1.50000000
                	fcmp	s0, s1
                	b.ne	<addr>
-               	ldursw	x1, [x29, #-0x74]
-               	cmp	w1, #0x9
+               	ldursw	x0, [x29, #-0x74]
+               	cmp	w0, #0x9
                	b.eq	<addr>
                	mov	x0, #0xb                // =11
                	add	sp, sp, #0xe0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x29               // =41
-               	stur	x1, [x29, #-0x20]
+               	mov	x0, #0x29               // =41
+               	stur	x0, [x29, #-0x20]
+               	mov	x0, x1
                	ldr	x0, [x0]
                	bl	<addr>
                	stur	x0, [x29, #-0x20]

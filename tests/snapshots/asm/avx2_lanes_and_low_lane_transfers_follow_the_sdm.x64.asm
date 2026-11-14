@@ -318,24 +318,19 @@ Disassembly of section .text:
                	movups	-0x50(%rbp), %xmm0
                	vmovq	%xmm0, %rcx
                	movq	%rcx, -0x20(%rbp)
-               	leaq	-0x20(%rbp), %rcx
-               	movq	(%rcx), %r10
-               	movq	%r10, (%rdx)
+               	movq	%rcx, (%rdx)
                	leaq	0xb(%rax), %rdx
                	movups	-0x40(%rbp), %xmm0
-               	vmovd	%xmm0, %esi
-               	movslq	%esi, %rsi
-               	movl	%esi, -0x20(%rbp)
-               	movl	(%rcx), %r10d
-               	movl	%r10d, (%rdx)
-               	addq	$0x11, %rax
+               	vmovd	%xmm0, %ecx
+               	movslq	%ecx, %rcx
+               	movl	%ecx, -0x20(%rbp)
+               	movl	%ecx, (%rdx)
+               	leaq	0x11(%rax), %rcx
                	movups	-0x30(%rbp), %xmm0
-               	vpextrw	$0x0, %xmm0, %ecx
-               	movswq	%cx, %rcx
-               	movw	%cx, -0x20(%rbp)
-               	leaq	-0x20(%rbp), %rcx
-               	movzwq	(%rcx), %r10
-               	movw	%r10w, (%rax)
+               	vpextrw	$0x0, %xmm0, %eax
+               	movswq	%ax, %rax
+               	movw	%ax, -0x20(%rbp)
+               	movw	%ax, (%rcx)
                	leaq	-0x18(%rbp), %rax
                	leaq	0x1(%rax), %rdi
                	leaq	0x1(%r14), %rsi

@@ -544,9 +544,9 @@ fn ent_pc=7 n_params=0 variadic=false locals=13
     v199 Call { target_pc=3, args=[v157], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v200 RetPart(0, kind=I64)                             -> x0
     v201 StoreLocal { off=-1, value=v200, kind=I64 }      -> -
-    v202 LocalAddr(-1)                                    -> x0
+    v202 LocalAddr(-1)                                    -> x1
     v203 LocalAddr(-9)                                    -> x1
-    v204 Mcpy { dst=v203, src=v202, size=8, align=4 }     -> -
+    v204 Store { addr=v203, disp=0, value=v200, kind=I64, align=4 } -> -
     v205 LifetimeEnd(-1)                                  -> -
     v206 LocalAddr(-9)                                    -> x0
     v207 LoadLocal { off=-9, kind=F32 }                   -> d0 [f32]

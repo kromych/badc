@@ -395,10 +395,8 @@ Disassembly of section .text:
                	movl	$0x8, %edi
                	callq	<addr>
                	movl	%eax, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rax
                	leaq	-0x20(%rbp), %rcx
-               	movl	(%rax), %r10d
-               	movl	%r10d, (%rcx)
+               	movl	%eax, (%rcx)
                	movsbq	-0x20(%rbp), %rax
                	cmpl	$0x8, %eax
                	jne	<addr>

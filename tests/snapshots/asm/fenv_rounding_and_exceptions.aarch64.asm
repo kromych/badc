@@ -2256,10 +2256,8 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	movk	x0, #0x7ff0, lsl #48
                	stur	x0, [x29, #-0x58]
-               	sub	x0, x29, #0x8
-               	sub	x1, x29, #0x58
-               	ldr	x16, [x1]
-               	str	x16, [x0]
+               	sub	x1, x29, #0x8
+               	str	x0, [x1]
                	ldur	d0, [x29, #-0x8]
                	adrp	x0, <page>
                	ldr	d1, [x0, #0x20]

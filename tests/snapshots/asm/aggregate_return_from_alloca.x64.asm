@@ -508,10 +508,8 @@ Disassembly of section .text:
                	movq	%r12, %rdi
                	callq	<addr>
                	movq	%rax, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rax
                	leaq	-0x18(%rbp), %rcx
-               	movq	(%rax), %r10
-               	movq	%r10, (%rcx)
+               	movq	%rax, (%rcx)
                	movss	-0x18(%rbp), %xmm0
                	xorps	%xmm1, %xmm1
                	cvtsi2ss	%rbx, %xmm1

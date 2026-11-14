@@ -158,17 +158,14 @@ Disassembly of section .text:
                	ldr	d0, [sp, #0x40f0]
                	ldr	d1, [sp, #0x40f8]
                	zip1	v0.8b, v0.8b, v1.8b
-               	sub	x0, x29, #0x128
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x20]
-               	add	x1, x20, #0x8
+               	str	d0, [x20]
+               	add	x0, x20, #0x8
                	ldr	d0, [sp, #0x44c0]
                	ldr	d1, [sp, #0x44c8]
                	zip2	v0.8b, v0.8b, v1.8b
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x1]
+               	str	d0, [x0]
                	add	x1, x20, #0x10
                	sub	x2, x29, #0x1, lsl #12  // =0x1000
                	sub	x2, x2, #0x430
@@ -558,25 +555,20 @@ Disassembly of section .text:
                	zip1	v4.8b, v2.8b, v3.8b
                	zip2	v2.8b, v2.8b, v3.8b
                	zip1	v3.8b, v0.8b, v4.8b
-               	sub	x0, x29, #0x128
                	str	d3, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x6]
-               	add	x1, x6, #0x8
+               	str	d3, [x6]
+               	add	x0, x6, #0x8
                	zip2	v0.8b, v0.8b, v4.8b
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x1]
-               	add	x1, x6, #0x10
+               	str	d0, [x0]
+               	add	x0, x6, #0x10
                	zip1	v0.8b, v1.8b, v2.8b
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x1]
-               	add	x1, x6, #0x18
+               	str	d0, [x0]
+               	add	x0, x6, #0x18
                	zip2	v0.8b, v1.8b, v2.8b
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x1]
+               	str	d0, [x0]
                	add	x1, x6, #0x20
                	sub	x2, x29, #0x980
                	sub	x0, x29, #0x140
@@ -1376,17 +1368,14 @@ Disassembly of section .text:
                	ldr	d0, [sp, #0x4150]
                	ldr	d1, [sp, #0x4158]
                	zip1	v0.8b, v0.8b, v1.8b
-               	sub	x0, x29, #0x128
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x5]
-               	add	x1, x5, #0x8
+               	str	d0, [x5]
+               	add	x0, x5, #0x8
                	ldr	d0, [sp, #0x44d0]
                	ldr	d1, [sp, #0x44d8]
                	zip2	v0.8b, v0.8b, v1.8b
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x1]
+               	str	d0, [x0]
                	add	x1, x5, #0x10
                	sub	x2, x29, #0x1, lsl #12  // =0x1000
                	sub	x2, x2, #0x3d0
@@ -1775,25 +1764,20 @@ Disassembly of section .text:
                	zip1	v4.8b, v2.8b, v3.8b
                	zip2	v2.8b, v2.8b, v3.8b
                	zip1	v3.8b, v0.8b, v4.8b
-               	sub	x0, x29, #0x128
                	str	d3, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x6]
-               	add	x1, x6, #0x8
+               	str	d3, [x6]
+               	add	x0, x6, #0x8
                	zip2	v0.8b, v0.8b, v4.8b
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x1]
-               	add	x1, x6, #0x10
+               	str	d0, [x0]
+               	add	x0, x6, #0x10
                	zip1	v0.8b, v1.8b, v2.8b
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x1]
-               	add	x1, x6, #0x18
+               	str	d0, [x0]
+               	add	x0, x6, #0x18
                	zip2	v0.8b, v1.8b, v2.8b
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x1]
+               	str	d0, [x0]
                	add	x1, x6, #0x20
                	sub	x2, x29, #0x8c0
                	sub	x0, x29, #0x140
@@ -2593,17 +2577,14 @@ Disassembly of section .text:
                	ldr	d0, [sp, #0x41b0]
                	ldr	d1, [sp, #0x41b8]
                	zip1	v0.8b, v0.8b, v1.8b
-               	sub	x0, x29, #0x128
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x5]
-               	add	x1, x5, #0x8
+               	str	d0, [x5]
+               	add	x0, x5, #0x8
                	ldr	d0, [sp, #0x44e0]
                	ldr	d1, [sp, #0x44e8]
                	zip2	v0.8b, v0.8b, v1.8b
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x1]
+               	str	d0, [x0]
                	add	x1, x5, #0x10
                	sub	x2, x29, #0x1, lsl #12  // =0x1000
                	sub	x2, x2, #0x370
@@ -2992,25 +2973,20 @@ Disassembly of section .text:
                	zip1	v4.8b, v2.8b, v3.8b
                	zip2	v2.8b, v2.8b, v3.8b
                	zip1	v3.8b, v0.8b, v4.8b
-               	sub	x0, x29, #0x128
                	str	d3, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x6]
-               	add	x1, x6, #0x8
+               	str	d3, [x6]
+               	add	x0, x6, #0x8
                	zip2	v0.8b, v0.8b, v4.8b
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x1]
-               	add	x1, x6, #0x10
+               	str	d0, [x0]
+               	add	x0, x6, #0x10
                	zip1	v0.8b, v1.8b, v2.8b
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x1]
-               	add	x1, x6, #0x18
+               	str	d0, [x0]
+               	add	x0, x6, #0x18
                	zip2	v0.8b, v1.8b, v2.8b
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x1]
+               	str	d0, [x0]
                	add	x1, x6, #0x20
                	sub	x2, x29, #0x800
                	sub	x0, x29, #0x140
@@ -3801,17 +3777,14 @@ Disassembly of section .text:
                	ldr	d0, [sp, #0x4210]
                	ldr	d1, [sp, #0x4218]
                	zip1	v0.4h, v0.4h, v1.4h
-               	sub	x0, x29, #0x128
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x5]
-               	add	x1, x5, #0x8
+               	str	d0, [x5]
+               	add	x0, x5, #0x8
                	ldr	d0, [sp, #0x44f0]
                	ldr	d1, [sp, #0x44f8]
                	zip2	v0.4h, v0.4h, v1.4h
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x1]
+               	str	d0, [x0]
                	add	x1, x5, #0x10
                	sub	x2, x29, #0x1, lsl #12  // =0x1000
                	sub	x2, x2, #0x310
@@ -4248,25 +4221,20 @@ Disassembly of section .text:
                	zip1	v4.4h, v2.4h, v3.4h
                	zip2	v2.4h, v2.4h, v3.4h
                	zip1	v3.4h, v0.4h, v4.4h
-               	sub	x0, x29, #0x128
                	str	d3, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x5]
-               	add	x1, x5, #0x8
+               	str	d3, [x5]
+               	add	x0, x5, #0x8
                	zip2	v0.4h, v0.4h, v4.4h
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x1]
-               	add	x1, x5, #0x10
+               	str	d0, [x0]
+               	add	x0, x5, #0x10
                	zip1	v0.4h, v1.4h, v2.4h
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x1]
-               	add	x1, x5, #0x18
+               	str	d0, [x0]
+               	add	x0, x5, #0x18
                	zip2	v0.4h, v1.4h, v2.4h
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x1]
+               	str	d0, [x0]
                	add	x1, x5, #0x20
                	sub	x2, x29, #0x740
                	sub	x0, x29, #0x140
@@ -4975,17 +4943,14 @@ Disassembly of section .text:
                	ldr	d0, [sp, #0x4250]
                	ldr	d1, [sp, #0x4258]
                	zip1	v0.4h, v0.4h, v1.4h
-               	sub	x0, x29, #0x128
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x20]
-               	add	x1, x20, #0x8
+               	str	d0, [x20]
+               	add	x0, x20, #0x8
                	ldr	d0, [sp, #0x4500]
                	ldr	d1, [sp, #0x4508]
                	zip2	v0.4h, v0.4h, v1.4h
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x1]
+               	str	d0, [x0]
                	add	x1, x20, #0x10
                	sub	x2, x29, #0x1, lsl #12  // =0x1000
                	sub	x2, x2, #0x2d0
@@ -5359,25 +5324,20 @@ Disassembly of section .text:
                	zip1	v4.4h, v2.4h, v3.4h
                	zip2	v2.4h, v2.4h, v3.4h
                	zip1	v3.4h, v0.4h, v4.4h
-               	sub	x0, x29, #0x128
                	str	d3, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x20]
-               	add	x1, x20, #0x8
+               	str	d3, [x20]
+               	add	x0, x20, #0x8
                	zip2	v0.4h, v0.4h, v4.4h
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x1]
-               	add	x1, x20, #0x10
+               	str	d0, [x0]
+               	add	x0, x20, #0x10
                	zip1	v0.4h, v1.4h, v2.4h
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x1]
-               	add	x1, x20, #0x18
+               	str	d0, [x0]
+               	add	x0, x20, #0x18
                	zip2	v0.4h, v1.4h, v2.4h
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x1]
+               	str	d0, [x0]
                	add	x1, x20, #0x20
                	sub	x2, x29, #0x6c0
                	sub	x0, x29, #0x140
@@ -6044,17 +6004,14 @@ Disassembly of section .text:
                	ldr	d0, [sp, #0x4290]
                	ldr	d1, [sp, #0x4298]
                	zip1	v0.4h, v0.4h, v1.4h
-               	sub	x0, x29, #0x128
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x20]
-               	add	x1, x20, #0x8
+               	str	d0, [x20]
+               	add	x0, x20, #0x8
                	ldr	d0, [sp, #0x4510]
                	ldr	d1, [sp, #0x4518]
                	zip2	v0.4h, v0.4h, v1.4h
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x1]
+               	str	d0, [x0]
                	add	x1, x20, #0x10
                	sub	x2, x29, #0x1, lsl #12  // =0x1000
                	sub	x2, x2, #0x290
@@ -6428,25 +6385,20 @@ Disassembly of section .text:
                	zip1	v4.4h, v2.4h, v3.4h
                	zip2	v2.4h, v2.4h, v3.4h
                	zip1	v3.4h, v0.4h, v4.4h
-               	sub	x0, x29, #0x128
                	str	d3, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x20]
-               	add	x1, x20, #0x8
+               	str	d3, [x20]
+               	add	x0, x20, #0x8
                	zip2	v0.4h, v0.4h, v4.4h
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x1]
-               	add	x1, x20, #0x10
+               	str	d0, [x0]
+               	add	x0, x20, #0x10
                	zip1	v0.4h, v1.4h, v2.4h
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x1]
-               	add	x1, x20, #0x18
+               	str	d0, [x0]
+               	add	x0, x20, #0x18
                	zip2	v0.4h, v1.4h, v2.4h
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x1]
+               	str	d0, [x0]
                	add	x1, x20, #0x20
                	sub	x2, x29, #0x640
                	sub	x0, x29, #0x140
@@ -7098,17 +7050,14 @@ Disassembly of section .text:
                	ldr	d0, [sp, #0x42d0]
                	ldr	d1, [sp, #0x42d8]
                	zip1	v0.2s, v0.2s, v1.2s
-               	sub	x0, x29, #0x128
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x20]
-               	add	x1, x20, #0x8
+               	str	d0, [x20]
+               	add	x0, x20, #0x8
                	ldr	d0, [sp, #0x4520]
                	ldr	d1, [sp, #0x4528]
                	zip2	v0.2s, v0.2s, v1.2s
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x1]
+               	str	d0, [x0]
                	add	x1, x20, #0x10
                	sub	x2, x29, #0x1, lsl #12  // =0x1000
                	sub	x2, x2, #0x250
@@ -7399,25 +7348,20 @@ Disassembly of section .text:
                	zip1	v4.2s, v2.2s, v3.2s
                	zip2	v2.2s, v2.2s, v3.2s
                	zip1	v3.2s, v0.2s, v4.2s
-               	sub	x0, x29, #0x128
                	str	d3, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x20]
-               	add	x1, x20, #0x8
+               	str	d3, [x20]
+               	add	x0, x20, #0x8
                	zip2	v0.2s, v0.2s, v4.2s
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x1]
-               	add	x1, x20, #0x10
+               	str	d0, [x0]
+               	add	x0, x20, #0x10
                	zip1	v0.2s, v1.2s, v2.2s
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x1]
-               	add	x1, x20, #0x18
+               	str	d0, [x0]
+               	add	x0, x20, #0x18
                	zip2	v0.2s, v1.2s, v2.2s
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x1]
+               	str	d0, [x0]
                	add	x1, x20, #0x20
                	sub	x2, x29, #0x5c0
                	sub	x0, x29, #0x140
@@ -8005,17 +7949,14 @@ Disassembly of section .text:
                	ldr	d0, [sp, #0x4310]
                	ldr	d1, [sp, #0x4318]
                	zip1	v0.2s, v0.2s, v1.2s
-               	sub	x0, x29, #0x128
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x20]
-               	add	x1, x20, #0x8
+               	str	d0, [x20]
+               	add	x0, x20, #0x8
                	ldr	d0, [sp, #0x4530]
                	ldr	d1, [sp, #0x4538]
                	zip2	v0.2s, v0.2s, v1.2s
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x1]
+               	str	d0, [x0]
                	add	x1, x20, #0x10
                	sub	x2, x29, #0x1, lsl #12  // =0x1000
                	sub	x2, x2, #0x210
@@ -8306,25 +8247,20 @@ Disassembly of section .text:
                	zip1	v4.2s, v2.2s, v3.2s
                	zip2	v2.2s, v2.2s, v3.2s
                	zip1	v3.2s, v0.2s, v4.2s
-               	sub	x0, x29, #0x128
                	str	d3, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x20]
-               	add	x1, x20, #0x8
+               	str	d3, [x20]
+               	add	x0, x20, #0x8
                	zip2	v0.2s, v0.2s, v4.2s
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x1]
-               	add	x1, x20, #0x10
+               	str	d0, [x0]
+               	add	x0, x20, #0x10
                	zip1	v0.2s, v1.2s, v2.2s
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x1]
-               	add	x1, x20, #0x18
+               	str	d0, [x0]
+               	add	x0, x20, #0x18
                	zip2	v0.2s, v1.2s, v2.2s
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x1]
+               	str	d0, [x0]
                	add	x1, x20, #0x20
                	sub	x2, x29, #0x540
                	sub	x0, x29, #0x140
@@ -8913,17 +8849,14 @@ Disassembly of section .text:
                	ldr	d0, [sp, #0x4350]
                	ldr	d1, [sp, #0x4358]
                	zip1	v0.2s, v0.2s, v1.2s
-               	sub	x0, x29, #0x128
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x20]
-               	add	x1, x20, #0x8
+               	str	d0, [x20]
+               	add	x0, x20, #0x8
                	ldr	d0, [sp, #0x4540]
                	ldr	d1, [sp, #0x4548]
                	zip2	v0.2s, v0.2s, v1.2s
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x1]
+               	str	d0, [x0]
                	add	x1, x20, #0x10
                	sub	x2, x29, #0x1, lsl #12  // =0x1000
                	sub	x2, x2, #0x1d0
@@ -9218,25 +9151,20 @@ Disassembly of section .text:
                	zip1	v4.2s, v2.2s, v3.2s
                	zip2	v2.2s, v2.2s, v3.2s
                	zip1	v3.2s, v0.2s, v4.2s
-               	sub	x0, x29, #0x128
                	str	d3, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x20]
-               	add	x1, x20, #0x8
+               	str	d3, [x20]
+               	add	x0, x20, #0x8
                	zip2	v0.2s, v0.2s, v4.2s
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x1]
-               	add	x1, x20, #0x10
+               	str	d0, [x0]
+               	add	x0, x20, #0x10
                	zip1	v0.2s, v1.2s, v2.2s
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x1]
-               	add	x1, x20, #0x18
+               	str	d0, [x0]
+               	add	x0, x20, #0x18
                	zip2	v0.2s, v1.2s, v2.2s
                	str	d0, [sp, #0x53e8]
-               	ldr	x16, [x0]
-               	str	x16, [x1]
+               	str	d0, [x0]
                	add	x1, x20, #0x20
                	sub	x2, x29, #0x4c0
                	sub	x0, x29, #0x140

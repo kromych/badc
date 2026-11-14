@@ -690,6 +690,24 @@ fn the_avx_compares_are_rows_at_every_predicate() {
     assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 0);
 }
 
+/// AVX's permutes by a register of controls are rows the interpreter runs:
+/// each lane from its own 128-bit part, by bits 1:0 of a dword control and
+/// bit 1 of a qword one, the other control bits ignored.
+#[test]
+fn the_variable_permutes_are_rows_the_interpreter_runs() {
+    let src = "#include <immintrin.h>\n\
+        int main(void) {\n\
+            __m256 a = _mm256_setr_ps(0, 1, 2, 3, 4, 5, 6, 7);\n\
+            __m256 r = _mm256_permutevar_ps(a, _mm256_setr_epi32(3, 2, 5, -4, 0, 7, 1, 2));\n\
+            if (r[0] != 3 || r[1] != 2 || r[2] != 1 || r[3] != 0) return 1;\n\
+            if (r[4] != 4 || r[5] != 7 || r[6] != 5 || r[7] != 6) return 2;\n\
+            __m128d d = _mm_permutevar_pd(_mm_setr_pd(10, 20), _mm_set_epi64x(1, 2));\n\
+            return d[0] == 20 && d[1] == 10 ? 0 : 3;\n\
+        }\n";
+    let program = super::compile_str_bare_for(src, crate::Target::LinuxX64);
+    assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 0);
+}
+
 /// `<pmmintrin.h>` and the `<mmintrin.h>` it reaches give each MMX and SSE3
 /// operation the result the SDM defines for its instruction, saturation,
 /// out-of-range shift counts and the pair-sum wrap included, as the
@@ -1935,6 +1953,7 @@ fn floating_rows_compute_in_the_environment() {
         | Sem::Extend(..)
         | Sem::Blend(_)
         | Sem::BlendVar(_)
+        | Sem::PermilVar(_)
         | Sem::AddSat(..)
         | Sem::SubSat(..)
         | Sem::SadBytes

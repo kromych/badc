@@ -340,6 +340,11 @@ pub(crate) enum Sem {
     /// Lane `i` of the second operand where immediate bit `i` is set; past
     /// eight lanes the bits repeat (`vpblendw` on each 128-bit lane).
     Blend(u8),
+    /// Each lane of the width taken from the lane of the first operand's
+    /// 128-bit part that the same lane of the second selects, by its bits
+    /// 1:0 for a 4-byte lane and its bit 1 for an 8-byte one
+    /// (`vpermilps`, `vpermilpd` by a register).
+    PermilVar(u8),
     /// Each lane, or lane 0 of the second operand over the first when
     /// `true`, rounded to an integral value in the direction imm8[1:0]
     /// names (to nearest even, down, up, toward zero), or MXCSR's when
@@ -1600,6 +1605,15 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
                     _ => 0,
                 };
                 set_lane(&mut o, w, i, x);
+            }
+        }
+        Sem::PermilVar(w) => {
+            for i in 0..16 / w as usize {
+                let k = match w {
+                    4 => lane(b, 4, i) & 3,
+                    _ => lane(b, 8, i) >> 1 & 1,
+                };
+                set_lane(&mut o, w, i, lane(a, w, k as usize));
             }
         }
         Sem::ShlBytes => {

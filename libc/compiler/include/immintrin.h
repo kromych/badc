@@ -1106,32 +1106,22 @@ __BADC_INTRIN __m256d _mm256_broadcastsd_pd(__m128d __X) {
 /* VPERMILPS / VPERMILPD by a vector: each lane picks within its 128-bit
 ** lane, PS by the selector's low two bits, PD by its bit 1. VPERMPD and
 ** VPERMPS pick across the whole register. */
-static inline __m128 _mm_permutevar_ps(__m128 __A, __m128i __C) {
-    __v4si __a = (__v4si)__A, __c = (__v4si)__C, __r;
-    for (int __i = 0; __i < 4; __i++)
-        __r[__i] = __a[__c[__i] & 3];
-    return (__m128)__r;
+/* VPERMILPS / VPERMILPD by a register: each lane from its own 128-bit part,
+** by bits 1:0 of a dword control and bit 1 of a qword one. */
+__BADC_INTRIN __m128 _mm_permutevar_ps(__m128 __A, __m128i __C) {
+    return (__m128)__builtin_ia32_vpermilvarps((__v4sf)__A, (__v4si)__C);
 }
 
-static inline __m256 _mm256_permutevar_ps(__m256 __A, __m256i __C) {
-    __v8si __a = (__v8si)__A, __c = (__v8si)__C, __r;
-    for (int __i = 0; __i < 8; __i++)
-        __r[__i] = __a[(__i & 4) | (__c[__i] & 3)];
-    return (__m256)__r;
+__BADC_INTRIN __m256 _mm256_permutevar_ps(__m256 __A, __m256i __C) {
+    return (__m256)__builtin_ia32_vpermilvarps256((__v8sf)__A, (__v8si)__C);
 }
 
-static inline __m128d _mm_permutevar_pd(__m128d __A, __m128i __C) {
-    __v2di __a = (__v2di)__A, __c = (__v2di)__C, __r;
-    for (int __i = 0; __i < 2; __i++)
-        __r[__i] = __a[__c[__i] >> 1 & 1];
-    return (__m128d)__r;
+__BADC_INTRIN __m128d _mm_permutevar_pd(__m128d __A, __m128i __C) {
+    return (__m128d)__builtin_ia32_vpermilvarpd((__v2df)__A, (__v2di)__C);
 }
 
-static inline __m256d _mm256_permutevar_pd(__m256d __A, __m256i __C) {
-    __v4di __a = (__v4di)__A, __c = (__v4di)__C, __r;
-    for (int __i = 0; __i < 4; __i++)
-        __r[__i] = __a[(__i & 2) | (__c[__i] >> 1 & 1)];
-    return (__m256d)__r;
+__BADC_INTRIN __m256d _mm256_permutevar_pd(__m256d __A, __m256i __C) {
+    return (__m256d)__builtin_ia32_vpermilvarpd256((__v4df)__A, (__v4di)__C);
 }
 
 #define _mm256_permute4x64_pd(A, M) ((__m256d)_mm256_permute4x64_epi64((__m256i)(A), M))

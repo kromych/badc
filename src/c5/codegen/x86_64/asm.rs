@@ -5426,6 +5426,21 @@ fn encode_bespoke(
             store,
             len,
         } => {
+            // `vpermilps` / `vpermilpd` by a register of controls: the
+            // three-operand 0F38 form, opcode 0C / 0D.
+            if map == 3
+                && matches!(opcode, 0x04 | 0x05)
+                && !matches!(ops.first(), Some(Concrete::Imm(_)))
+            {
+                let var = Mnemonic::Vex {
+                    pp,
+                    map: 2,
+                    w,
+                    opcode: opcode + 8,
+                    len,
+                };
+                return encode_in(code, mode, addr, var, suffix, ops);
+            }
             // `v-op $imm, %src, %dst`: a 2-operand VEX (VEX.vvvv = 1111) + imm.
             // ModRM.reg holds the AT&T destination, or the source for a lane
             // extract, whose r/m is the destination; the other operand may be a
@@ -7919,6 +7934,15 @@ mod tests {
         assert_eq!(
             e("vroundsd", &[i(4), xmm(10), xmm(9), xmm(8)]),
             [0xC4, 0x43, 0x31, 0x0B, 0xC2, 0x04]
+        );
+        // vpermilps / vpermilpd by a register of controls: 0F38 0C / 0D.
+        assert_eq!(
+            e("vpermilps", &[xmm(2), xmm(1), xmm(0)]),
+            [0xC4, 0xE2, 0x71, 0x0C, 0xC2]
+        );
+        assert_eq!(
+            e("vpermilpd", &[ymm(2), ymm(1), ymm(0)]),
+            [0xC4, 0xE2, 0x75, 0x0D, 0xC2]
         );
         assert_eq!(
             e("vfmaddsub231ps", &[xmm(2), xmm(1), xmm(0)]),

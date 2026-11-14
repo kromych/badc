@@ -484,6 +484,11 @@ pub(crate) const OPS: &[SimdOp] = &[
     op256("__builtin_ia32_roundps256", "vroundps", Form::VI, Ret::V8sf, Sem::RoundImm(4, false), 0),
     op256("__builtin_ia32_roundpd256", "vroundpd", Form::VI, Ret::V4df, Sem::RoundImm(8, false), 0),
     op256("__builtin_ia32_blendpd256", "vblendpd", Form::VvI, Ret::V4df, Sem::Blend(8), 0),
+    // The AVX permutes within each 128-bit part by a register of controls.
+    op("__builtin_ia32_vpermilvarps", "permilps", Form::Vv, Ret::V4sf, Sem::PermilVar(4), 0),
+    op("__builtin_ia32_vpermilvarpd", "permilpd", Form::Vv, Ret::V2df, Sem::PermilVar(8), 0),
+    op256("__builtin_ia32_vpermilvarps256", "vpermilps", Form::Vv, Ret::V8sf, Sem::PermilVar(4), 0),
+    op256("__builtin_ia32_vpermilvarpd256", "vpermilpd", Form::Vv, Ret::V4df, Sem::PermilVar(8), 0),
     // The AVX2 shifts by a count in each lane.
     op("__builtin_ia32_psllv4si", "psllvd", Form::Vv, Ret::V4si, Sem::ShlVar(4), 0),
     op256("__builtin_ia32_psllv8si", "vpsllvd", Form::Vv, Ret::V8si, Sem::ShlVar(4), 0),

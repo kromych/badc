@@ -3190,6 +3190,25 @@ v2l part(v4l a) { g(); return (v2l){a[2], a[3]}; }\n";
     m.finish();
 }
 
+/// A permute by a register of controls is its one instruction: `vpermilps`
+/// and `vpermilpd` in their three-operand 0F38 form, and `ret`. Each was a
+/// lane read per lane.
+#[test]
+fn a_permute_by_a_register_is_one_instruction() {
+    const SRC: &str = "#include <immintrin.h>\n\
+__m256 ps(__m256 a, __m256i c) { return _mm256_permutevar_ps(a, c); }\n\
+__m128d pd(__m128d a, __m128i c) { return _mm_permutevar_pd(a, c); }\n";
+    let mut m = Misses::default();
+    for (name, op) in [("ps", 0x380Cu16), ("pd", 0x380D)] {
+        let insns = x64(SRC, name);
+        m.expect(
+            insns.len() == 2 && insns[0].vex && insns[0].op == op,
+            || format!("x86-64 {name}: {insns:x?}"),
+        );
+    }
+    m.finish();
+}
+
 /// A rounding intrinsic is its one instruction: `roundps` for
 /// `_mm_floor_ps`, `vroundpd` on ymm for `_mm256_round_pd` and the
 /// three-operand `vroundsd` for `_mm_ceil_sd`, and `ret`. Each was a C

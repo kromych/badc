@@ -671,9 +671,25 @@ pub(crate) enum Cvt {
     Int64ToDouble {
         signed: bool,
     },
-    /// Every float lane of the width to an integer of that width, toward
-    /// zero, saturating, a NaN to zero: AArch64's `fcvtzs` / `fcvtzu`.
+    /// Every float lane of the width to an integer of that width, rounded
+    /// in the direction, saturating, a NaN to zero: AArch64's `fcvtzs`,
+    /// `fcvtns`, `fcvtau` and their kin.
     ToIntSat {
+        w: u8,
+        signed: bool,
+        to: RoundTo,
+    },
+    /// Every integer lane of the width as a fixed-point value with the
+    /// immediate's fraction bits, to a float of that width rounded once
+    /// (`scvtf`, `ucvtf` #fbits).
+    FixedToFloat {
+        w: u8,
+        signed: bool,
+    },
+    /// Every float lane of the width to a fixed-point integer with the
+    /// immediate's fraction bits, toward zero, saturating (`fcvtzs`,
+    /// `fcvtzu` #fbits).
+    ToFixedSat {
         w: u8,
         signed: bool,
     },
@@ -2165,11 +2181,15 @@ fn int64_to_double(env: &mut impl FloatEnv, n: u64, signed: bool) -> u64 {
     env.arith(FOp::Add, half, half, false)
 }
 
-/// A `double` bit pattern to a `bits`-wide integer toward zero in `env`,
-/// saturating to the range and a NaN to zero, as AArch64 converts; the
-/// environment raises invalid for both.
-fn saturate_to_int(env: &mut impl FloatEnv, a: u64, bits: u32, signed: bool) -> u64 {
-    let x = f64::from_bits(a);
+/// A `double` bit pattern to a `bits`-wide integer in `env`, rounded in
+/// direction `to`, saturating to the range and a NaN to zero, as AArch64
+/// converts: invalid for both, else inexact for a changed value.
+fn saturate_to_int(env: &mut impl FloatEnv, a: u64, bits: u32, signed: bool, to: RoundTo) -> u64 {
+    let r = match to {
+        RoundTo::Zero => a,
+        _ => env.round_to_integral(a, to, false),
+    };
+    let x = f64::from_bits(r);
     let half = (1u64 << (bits - 1)) as f64;
     let (low, high) = match signed {
         true => (-half, half),
@@ -2177,7 +2197,8 @@ fn saturate_to_int(env: &mut impl FloatEnv, a: u64, bits: u32, signed: bool) -> 
     };
     // Truncation keeps what lies above `low - 1`; a NaN fails every bound.
     if !(x < high && (x > low - 1.0 || x == low)) {
-        env.to_int(a, true, 32, true);
+        // The environment's conversion of a NaN raises invalid.
+        env.to_int(0x7FF8_0000_0000_0000, true, 32, true);
         return match () {
             _ if x.is_nan() => 0,
             _ if x > 0.0 && signed => (1 << (bits - 1)) - 1,
@@ -2186,11 +2207,14 @@ fn saturate_to_int(env: &mut impl FloatEnv, a: u64, bits: u32, signed: bool) -> 
             _ => 0,
         };
     }
+    if r != a {
+        env.round_to_integral(a, to, true);
+    }
     if !signed && bits == 64 && x >= half {
-        let d = env.arith(FOp::Sub, a, half.to_bits(), false);
+        let d = env.arith(FOp::Sub, r, half.to_bits(), false);
         return env.to_int(d, true, 64, true) as u64 | 1 << 63;
     }
-    env.to_int(a, true, if signed { bits } else { 64 }, true) as u64
+    env.to_int(r, true, if signed { bits } else { 64 }, true) as u64
 }
 
 /// The Arm ARM's RecipEstimate: the reciprocal of `a / 512`, `a` in
@@ -2582,8 +2606,25 @@ pub(crate) fn eval_float_in(
                     let x = int64_to_double(env, lane(a, 8, i), signed);
                     set_flane(&mut o, 8, i, x);
                 }),
-                Cvt::ToIntSat { w, signed } => (0..16 / w as usize).for_each(|i| {
-                    let x = saturate_to_int(env, flane(a, w, i), 8 * u32::from(w), signed);
+                Cvt::ToIntSat { w, signed, to } => (0..16 / w as usize).for_each(|i| {
+                    let x = saturate_to_int(env, flane(a, w, i), 8 * u32::from(w), signed, to);
+                    set_lane(&mut o, w, i, x & mask(w));
+                }),
+                // Scaling by a power of two is exact for these values, so
+                // the conversion rounds once.
+                Cvt::FixedToFloat { w, signed } => (0..16 / w as usize).for_each(|i| {
+                    let v = match (w, signed) {
+                        (4, true) => env.integer_to_float(slane(a, 4, i), true),
+                        (4, false) => env.integer_to_float(lane(a, 4, i) as i64, true),
+                        _ => int64_to_double(env, lane(a, 8, i), signed),
+                    };
+                    let scale = f64::from_bits((1023 - u64::from(imm)) << 52);
+                    set_flane(&mut o, w, i, (f64::from_bits(v) * scale).to_bits());
+                }),
+                Cvt::ToFixedSat { w, signed } => (0..16 / w as usize).for_each(|i| {
+                    let scale = f64::from_bits((1023 + u64::from(imm)) << 52);
+                    let x = (f64::from_bits(flane(a, w, i)) * scale).to_bits();
+                    let x = saturate_to_int(env, x, 8 * u32::from(w), signed, RoundTo::Zero);
                     set_lane(&mut o, w, i, x & mask(w));
                 }),
             }

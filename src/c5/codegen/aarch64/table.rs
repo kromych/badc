@@ -755,30 +755,60 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             _ => Err(String::from("inline asm: bad fcmp/fcmpe operands")),
         };
     }
-    // SIMD conversions `Vd.T, Vn.T` (T = 2s/4s/2d) between integer and FP
-    // lanes of one width; sz (bit 22) selects double.
-    if let Some(base) = match mnemonic {
-        "scvtf" => Some(0x0E21_D800u32),
-        "ucvtf" => Some(0x2E21_D800),
-        "fcvtzs" => Some(0x0EA1_B800),
-        "fcvtzu" => Some(0x2EA1_B800),
+    // SIMD conversions between integer and FP lanes of one width: the vector
+    // `Vd.T, Vn.T` (T = 2s/4s/2d) and the scalar `Rd, Rn` over the s or d
+    // view (bits 30 and 28 set); sz (bit 22) selects double. A `#fbits`
+    // operand makes the fixed-point form, whose immh:immb is 2 * esize -
+    // fbits.
+    if let Some((base, fixed)) = match mnemonic {
+        "scvtf" => Some((0x0E21_D800u32, Some(0x0F00_E400u32))),
+        "ucvtf" => Some((0x2E21_D800, Some(0x2F00_E400))),
+        "fcvtzs" => Some((0x0EA1_B800, Some(0x0F00_FC00))),
+        "fcvtzu" => Some((0x2EA1_B800, Some(0x2F00_FC00))),
+        "fcvtns" => Some((0x0E21_A800, None)),
+        "fcvtnu" => Some((0x2E21_A800, None)),
+        "fcvtms" => Some((0x0E21_B800, None)),
+        "fcvtmu" => Some((0x2E21_B800, None)),
+        "fcvtps" => Some((0x0EA1_A800, None)),
+        "fcvtpu" => Some((0x2EA1_A800, None)),
+        "fcvtas" => Some((0x0E21_C800, None)),
+        "fcvtau" => Some((0x2E21_C800, None)),
         _ => None,
-    } && let [
-        Opnd::VecReg { num: rd, size, q },
-        Opnd::VecReg {
-            num: rn,
-            size: s1,
-            q: q1,
-        },
-    ] = *ops
-    {
-        if size != s1 || q != q1 || size < 2 || (size == 3 && !q) {
+    } && let Some((rd, rn, size, q, fbits)) = match *ops {
+        [
+            Opnd::VecReg { num: rd, size, q },
+            Opnd::VecReg {
+                num: rn,
+                size: s1,
+                q: q1,
+            },
+            ref rest @ ..,
+        ] if size == s1 && q == q1 => Some((rd, rn, size, Some(q), rest.first().copied())),
+        [
+            Opnd::VReg { num: rd, is_d },
+            Opnd::VReg { num: rn, is_d: d1 },
+            ref rest @ ..,
+        ] if is_d == d1 => Some((rd, rn, 2 + u8::from(is_d), None, rest.first().copied())),
+        _ => None,
+    } {
+        if size < 2 || (size == 3 && q == Some(false)) {
             return Err(String::from(
                 "inline asm: vector conversions take 2s/4s/2d on both sides",
             ));
         }
-        let sz = if size == 3 { 0x40_0000u32 } else { 0 };
-        return Ok(base | (u32::from(q) << 30) | sz | ((rn as u32) << 5) | (rd as u32));
+        let form = match q {
+            Some(q) => u32::from(q) << 30,
+            None => 0x5000_0000,
+        };
+        let esize = 8i64 << size;
+        let word = match (fbits, fixed) {
+            (None, _) => base | if size == 3 { 0x40_0000 } else { 0 },
+            (Some(Opnd::Imm(f)), Some(fixed)) if (1..=esize).contains(&f) => {
+                fixed | ((2 * esize - f) as u32) << 16
+            }
+            _ => return Err(format!("inline asm: bad `{mnemonic}` fraction bits")),
+        };
+        return Ok(word | form | (u32::from(rn) << 5) | u32::from(rd));
     }
     // SIMD single <-> double: `fcvtl{2} Vd.2d, Vn.2s|4s` widens the lower (upper)
     // half, `fcvtn{2} Vd.2s|4s, Vn.2d` narrows into it.

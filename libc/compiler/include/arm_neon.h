@@ -28,16 +28,15 @@
  * across-lane vaddv vmaxv vminv vmaxnmv vminnmv, the roundings vrnd vrndn
  * vrnda vrndm vrndp vrndx vrndi vrnd32z vrnd32x vrnd64z vrnd64x, the
  * compares, those against zero (vceqz ... vcltz, integer too, with their
- * scalar forms), and the conversions to
- * and from the integers of one width (truncating) and between single and
- * double. Also vrecpe_u32, vrsqrte_u32, vmul_p8, vqtbl1q_u8, vqtbx1q_u8, the FEAT_AES rounds,
+ * scalar forms), and the conversions to and from the integers of one
+ * width (vcvt, vcvtn, vcvtm, vcvtp, vcvta, and vcvt_n to and from fixed
+ * point, with their scalar forms) and between single and double. Also vrecpe_u32, vrsqrte_u32, vmul_p8, vqtbl1q_u8, vqtbx1q_u8, the FEAT_AES rounds,
  * vmull_p8, vmull_high_p8, vmull_p64, vmull_high_p64, the SHA-1, SHA-256, SHA-512, SHA3, SM3 and
  * SM4 intrinsics, vld2q_u16 and vld4q_u8.
  *
  * Not provided: float16, bfloat16, the lane-indexed and by-scalar forms,
  * the doubling multiplies, the other structure
- * loads, stores and table lookups, the fixed-point and
- * rounding-mode conversions and the dot products.
+ * loads, stores and table lookups and the dot products.
  *
  * The element typedefs match <stdint.h>, repeated so the header serves
  * freestanding units; poly128_t is carried as a 16-byte vector.
@@ -1428,10 +1427,103 @@ __BADC_NEON_CVT(vcvt_u32_f32, uint32x2_t, float32x2_t, fcvtzu, 2s)
 __BADC_NEON_CVT(vcvtq_u32_f32, uint32x4_t, float32x4_t, fcvtzu, 4s)
 __BADC_NEON_CVT(vcvtq_s64_f64, int64x2_t, float64x2_t, fcvtzs, 2d)
 __BADC_NEON_CVT(vcvtq_u64_f64, uint64x2_t, float64x2_t, fcvtzu, 2d)
+/* The 64-bit one-lane truncating conversions are C, which converts on
+ * AArch64 as the instructions do. */
 __BADC_INTRIN float64x1_t vcvt_f64_s64(int64x1_t __a) { return (float64x1_t){(float64_t)__a[0]}; }
 __BADC_INTRIN float64x1_t vcvt_f64_u64(uint64x1_t __a) { return (float64x1_t){(float64_t)__a[0]}; }
 __BADC_INTRIN int64x1_t vcvt_s64_f64(float64x1_t __a) { return (int64x1_t){(int64_t)__a[0]}; }
 __BADC_INTRIN uint64x1_t vcvt_u64_f64(float64x1_t __a) { return (uint64x1_t){(uint64_t)__a[0]}; }
+
+/* Conversions to integers rounding to nearest with ties to even (vcvtn)
+ * or away (vcvta), toward -infinity (vcvtm) or +infinity (vcvtp),
+ * saturating; to and from fixed point with an immediate count of fraction
+ * bits in [1, lane bits] (vcvt_n), toward zero to an integer. The scalar
+ * forms are lane 0 of the vector ones. */
+__BADC_NEON_CVT(vcvtn_s32_f32, int32x2_t, float32x2_t, fcvtns, 2s)
+__BADC_NEON_CVT(vcvtnq_s32_f32, int32x4_t, float32x4_t, fcvtns, 4s)
+__BADC_NEON_CVT(vcvtn_u32_f32, uint32x2_t, float32x2_t, fcvtnu, 2s)
+__BADC_NEON_CVT(vcvtnq_u32_f32, uint32x4_t, float32x4_t, fcvtnu, 4s)
+__BADC_NEON_CVT(vcvtnq_s64_f64, int64x2_t, float64x2_t, fcvtns, 2d)
+__BADC_NEON_CVT(vcvtnq_u64_f64, uint64x2_t, float64x2_t, fcvtnu, 2d)
+__BADC_NEON_CVT(vcvtn_s64_f64, int64x1_t, float64x1_t, fcvtns, d)
+__BADC_NEON_CVT(vcvtn_u64_f64, uint64x1_t, float64x1_t, fcvtnu, d)
+__BADC_NEON_CVT(vcvtm_s32_f32, int32x2_t, float32x2_t, fcvtms, 2s)
+__BADC_NEON_CVT(vcvtmq_s32_f32, int32x4_t, float32x4_t, fcvtms, 4s)
+__BADC_NEON_CVT(vcvtm_u32_f32, uint32x2_t, float32x2_t, fcvtmu, 2s)
+__BADC_NEON_CVT(vcvtmq_u32_f32, uint32x4_t, float32x4_t, fcvtmu, 4s)
+__BADC_NEON_CVT(vcvtmq_s64_f64, int64x2_t, float64x2_t, fcvtms, 2d)
+__BADC_NEON_CVT(vcvtmq_u64_f64, uint64x2_t, float64x2_t, fcvtmu, 2d)
+__BADC_NEON_CVT(vcvtm_s64_f64, int64x1_t, float64x1_t, fcvtms, d)
+__BADC_NEON_CVT(vcvtm_u64_f64, uint64x1_t, float64x1_t, fcvtmu, d)
+__BADC_NEON_CVT(vcvtp_s32_f32, int32x2_t, float32x2_t, fcvtps, 2s)
+__BADC_NEON_CVT(vcvtpq_s32_f32, int32x4_t, float32x4_t, fcvtps, 4s)
+__BADC_NEON_CVT(vcvtp_u32_f32, uint32x2_t, float32x2_t, fcvtpu, 2s)
+__BADC_NEON_CVT(vcvtpq_u32_f32, uint32x4_t, float32x4_t, fcvtpu, 4s)
+__BADC_NEON_CVT(vcvtpq_s64_f64, int64x2_t, float64x2_t, fcvtps, 2d)
+__BADC_NEON_CVT(vcvtpq_u64_f64, uint64x2_t, float64x2_t, fcvtpu, 2d)
+__BADC_NEON_CVT(vcvtp_s64_f64, int64x1_t, float64x1_t, fcvtps, d)
+__BADC_NEON_CVT(vcvtp_u64_f64, uint64x1_t, float64x1_t, fcvtpu, d)
+__BADC_NEON_CVT(vcvta_s32_f32, int32x2_t, float32x2_t, fcvtas, 2s)
+__BADC_NEON_CVT(vcvtaq_s32_f32, int32x4_t, float32x4_t, fcvtas, 4s)
+__BADC_NEON_CVT(vcvta_u32_f32, uint32x2_t, float32x2_t, fcvtau, 2s)
+__BADC_NEON_CVT(vcvtaq_u32_f32, uint32x4_t, float32x4_t, fcvtau, 4s)
+__BADC_NEON_CVT(vcvtaq_s64_f64, int64x2_t, float64x2_t, fcvtas, 2d)
+__BADC_NEON_CVT(vcvtaq_u64_f64, uint64x2_t, float64x2_t, fcvtau, 2d)
+__BADC_NEON_CVT(vcvta_s64_f64, int64x1_t, float64x1_t, fcvtas, d)
+__BADC_NEON_CVT(vcvta_u64_f64, uint64x1_t, float64x1_t, fcvtau, d)
+__BADC_INTRIN int32_t vcvts_s32_f32(float32_t __a) { return vcvt_s32_f32((float32x2_t){__a})[0]; }
+__BADC_INTRIN uint32_t vcvts_u32_f32(float32_t __a) { return vcvt_u32_f32((float32x2_t){__a})[0]; }
+__BADC_INTRIN int64_t vcvtd_s64_f64(float64_t __a) { return (int64_t)__a; }
+__BADC_INTRIN uint64_t vcvtd_u64_f64(float64_t __a) { return (uint64_t)__a; }
+__BADC_INTRIN int32_t vcvtns_s32_f32(float32_t __a) { return vcvtn_s32_f32((float32x2_t){__a})[0]; }
+__BADC_INTRIN uint32_t vcvtns_u32_f32(float32_t __a) { return vcvtn_u32_f32((float32x2_t){__a})[0]; }
+__BADC_INTRIN int64_t vcvtnd_s64_f64(float64_t __a) { return vcvtn_s64_f64((float64x1_t){__a})[0]; }
+__BADC_INTRIN uint64_t vcvtnd_u64_f64(float64_t __a) { return vcvtn_u64_f64((float64x1_t){__a})[0]; }
+__BADC_INTRIN int32_t vcvtms_s32_f32(float32_t __a) { return vcvtm_s32_f32((float32x2_t){__a})[0]; }
+__BADC_INTRIN uint32_t vcvtms_u32_f32(float32_t __a) { return vcvtm_u32_f32((float32x2_t){__a})[0]; }
+__BADC_INTRIN int64_t vcvtmd_s64_f64(float64_t __a) { return vcvtm_s64_f64((float64x1_t){__a})[0]; }
+__BADC_INTRIN uint64_t vcvtmd_u64_f64(float64_t __a) { return vcvtm_u64_f64((float64x1_t){__a})[0]; }
+__BADC_INTRIN int32_t vcvtps_s32_f32(float32_t __a) { return vcvtp_s32_f32((float32x2_t){__a})[0]; }
+__BADC_INTRIN uint32_t vcvtps_u32_f32(float32_t __a) { return vcvtp_u32_f32((float32x2_t){__a})[0]; }
+__BADC_INTRIN int64_t vcvtpd_s64_f64(float64_t __a) { return vcvtp_s64_f64((float64x1_t){__a})[0]; }
+__BADC_INTRIN uint64_t vcvtpd_u64_f64(float64_t __a) { return vcvtp_u64_f64((float64x1_t){__a})[0]; }
+__BADC_INTRIN int32_t vcvtas_s32_f32(float32_t __a) { return vcvta_s32_f32((float32x2_t){__a})[0]; }
+__BADC_INTRIN uint32_t vcvtas_u32_f32(float32_t __a) { return vcvta_u32_f32((float32x2_t){__a})[0]; }
+__BADC_INTRIN int64_t vcvtad_s64_f64(float64_t __a) { return vcvta_s64_f64((float64x1_t){__a})[0]; }
+__BADC_INTRIN uint64_t vcvtad_u64_f64(float64_t __a) { return vcvta_u64_f64((float64x1_t){__a})[0]; }
+__BADC_INTRIN float32_t vcvts_f32_s32(int32_t __a) { return (float32_t)__a; }
+__BADC_INTRIN float32_t vcvts_f32_u32(uint32_t __a) { return (float32_t)__a; }
+__BADC_INTRIN float64_t vcvtd_f64_s64(int64_t __a) { return (float64_t)__a; }
+__BADC_INTRIN float64_t vcvtd_f64_u64(uint64_t __a) { return (float64_t)__a; }
+#define __BADC_NEON_CVTN(R, T, insn, A, bits, __a, __n) __extension__({      \
+    T __ca = (__a);                                                       \
+    _Static_assert((__n) >= 1 && (__n) <= (bits), "fraction bits out of range"); \
+    (R)__builtin_neon_##insn##_n_##A(__ca, __n);                          \
+})
+#define vcvt_n_f32_s32(__a, __n) __BADC_NEON_CVTN(float32x2_t, int32x2_t, scvtf, 2s, 32, __a, __n)
+#define vcvtq_n_f32_s32(__a, __n) __BADC_NEON_CVTN(float32x4_t, int32x4_t, scvtf, 4s, 32, __a, __n)
+#define vcvt_n_f32_u32(__a, __n) __BADC_NEON_CVTN(float32x2_t, uint32x2_t, ucvtf, 2s, 32, __a, __n)
+#define vcvtq_n_f32_u32(__a, __n) __BADC_NEON_CVTN(float32x4_t, uint32x4_t, ucvtf, 4s, 32, __a, __n)
+#define vcvt_n_f64_s64(__a, __n) __BADC_NEON_CVTN(float64x1_t, int64x1_t, scvtf, d, 64, __a, __n)
+#define vcvtq_n_f64_s64(__a, __n) __BADC_NEON_CVTN(float64x2_t, int64x2_t, scvtf, 2d, 64, __a, __n)
+#define vcvt_n_f64_u64(__a, __n) __BADC_NEON_CVTN(float64x1_t, uint64x1_t, ucvtf, d, 64, __a, __n)
+#define vcvtq_n_f64_u64(__a, __n) __BADC_NEON_CVTN(float64x2_t, uint64x2_t, ucvtf, 2d, 64, __a, __n)
+#define vcvt_n_s32_f32(__a, __n) __BADC_NEON_CVTN(int32x2_t, float32x2_t, fcvtzs, 2s, 32, __a, __n)
+#define vcvtq_n_s32_f32(__a, __n) __BADC_NEON_CVTN(int32x4_t, float32x4_t, fcvtzs, 4s, 32, __a, __n)
+#define vcvt_n_u32_f32(__a, __n) __BADC_NEON_CVTN(uint32x2_t, float32x2_t, fcvtzu, 2s, 32, __a, __n)
+#define vcvtq_n_u32_f32(__a, __n) __BADC_NEON_CVTN(uint32x4_t, float32x4_t, fcvtzu, 4s, 32, __a, __n)
+#define vcvt_n_s64_f64(__a, __n) __BADC_NEON_CVTN(int64x1_t, float64x1_t, fcvtzs, d, 64, __a, __n)
+#define vcvtq_n_s64_f64(__a, __n) __BADC_NEON_CVTN(int64x2_t, float64x2_t, fcvtzs, 2d, 64, __a, __n)
+#define vcvt_n_u64_f64(__a, __n) __BADC_NEON_CVTN(uint64x1_t, float64x1_t, fcvtzu, d, 64, __a, __n)
+#define vcvtq_n_u64_f64(__a, __n) __BADC_NEON_CVTN(uint64x2_t, float64x2_t, fcvtzu, 2d, 64, __a, __n)
+#define vcvts_n_f32_s32(__a, __n) (vcvt_n_f32_s32((int32x2_t){(int32_t)(__a)}, __n)[0])
+#define vcvts_n_f32_u32(__a, __n) (vcvt_n_f32_u32((uint32x2_t){(uint32_t)(__a)}, __n)[0])
+#define vcvtd_n_f64_s64(__a, __n) (vcvt_n_f64_s64((int64x1_t){(int64_t)(__a)}, __n)[0])
+#define vcvtd_n_f64_u64(__a, __n) (vcvt_n_f64_u64((uint64x1_t){(uint64_t)(__a)}, __n)[0])
+#define vcvts_n_s32_f32(__a, __n) (vcvt_n_s32_f32((float32x2_t){(float32_t)(__a)}, __n)[0])
+#define vcvts_n_u32_f32(__a, __n) (vcvt_n_u32_f32((float32x2_t){(float32_t)(__a)}, __n)[0])
+#define vcvtd_n_s64_f64(__a, __n) (vcvt_n_s64_f64((float64x1_t){(float64_t)(__a)}, __n)[0])
+#define vcvtd_n_u64_f64(__a, __n) (vcvt_n_u64_f64((float64x1_t){(float64_t)(__a)}, __n)[0])
 
 /* Single <-> double: the lower lanes, or with _high the upper ones. */
 __BADC_INTRIN float64x2_t vcvt_f64_f32(float32x2_t __a) {

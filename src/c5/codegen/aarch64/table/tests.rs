@@ -1093,6 +1093,37 @@ fn vector_one_source_counts_and_estimates() {
     assert_eq!(enc("fminv", &[s(1), v(2, 2, true)]), 0x6EB0_F841);
     assert_eq!(enc("fmaxnmv", &[s(1), v(2, 2, true)]), 0x6E30_C841);
     assert_eq!(enc("fminnmv", &[s(1), v(2, 2, true)]), 0x6EB0_C841);
+    let i = Opnd::Imm;
+    assert_eq!(
+        enc("scvtf", &[v(1, 2, true), v(2, 2, true), i(3)]),
+        0x4F3D_E441
+    );
+    assert_eq!(
+        enc("ucvtf", &[v(1, 3, true), v(2, 3, true), i(64)]),
+        0x6F40_E441
+    );
+    assert_eq!(
+        enc("fcvtzs", &[v(1, 2, false), v(2, 2, false), i(1)]),
+        0x0F3F_FC41
+    );
+    assert_eq!(
+        enc("fcvtzu", &[v(1, 2, true), v(2, 2, true), i(32)]),
+        0x6F20_FC41
+    );
+    assert_eq!(enc("scvtf", &[d(1), d(2), i(5)]), 0x5F7B_E441);
+    assert_eq!(enc("fcvtzu", &[d(1), d(2), i(7)]), 0x7F79_FC41);
+    assert_eq!(enc("fcvtns", &[v(1, 2, true), v(2, 2, true)]), 0x4E21_A841);
+    assert_eq!(enc("fcvtnu", &[v(1, 3, true), v(2, 3, true)]), 0x6E61_A841);
+    assert_eq!(
+        enc("fcvtms", &[v(1, 2, false), v(2, 2, false)]),
+        0x0E21_B841
+    );
+    assert_eq!(enc("fcvtps", &[v(1, 3, true), v(2, 3, true)]), 0x4EE1_A841);
+    assert_eq!(enc("fcvtau", &[v(1, 3, true), v(2, 3, true)]), 0x6E61_C841);
+    assert_eq!(enc("fcvtns", &[d(1), d(2)]), 0x5E61_A841);
+    assert_eq!(enc("fcvtzs", &[d(1), d(2)]), 0x5EE1_B841);
+    assert_eq!(enc("ucvtf", &[d(1), d(2)]), 0x7E61_D841);
+    assert!(encode("fcvtns", &[v(1, 2, true), v(2, 2, true), i(3)]).is_err());
     let z = Opnd::Imm(0);
     assert_eq!(enc("cmeq", &[v(1, 2, true), v(2, 2, true), z]), 0x4EA0_9841);
     assert_eq!(

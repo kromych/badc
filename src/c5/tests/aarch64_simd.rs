@@ -991,6 +991,36 @@ fn the_roundings_are_rows() {
     }
 }
 
+/// The conversions in each rounding direction and to and from fixed point
+/// are rows: over seeded lanes the interpreter's results and flags hash
+/// to the hardware's, and each is one instruction under -O, a float64x1_t
+/// the scalar d-register form.
+#[cfg(feature = "full")]
+#[test]
+fn the_rounding_and_fixed_point_conversions_are_rows() {
+    let src = super::load_fixture("arm_neon_conversions_on_seeded_lanes.c");
+    let program = super::compile_str_bare_for(&src, crate::Target::LinuxAarch64);
+    assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 0);
+    const OPS: &str = "#include <arm_neon.h>\n\
+        int32x4_t a(float32x4_t x) { return vcvtnq_s32_f32(x); }\n\
+        uint64x1_t b(float64x1_t x) { return vcvtp_u64_f64(x); }\n\
+        float32x4_t c(int32x4_t x) { return vcvtq_n_f32_s32(x, 16); }\n\
+        uint64x2_t d(float64x2_t x) { return vcvtq_n_u64_f64(x, 3); }\n\
+        int64x1_t e(float64x1_t x) { return vcvta_s64_f64(x); }\n\
+        float64x1_t f(uint64x1_t x) { return vcvt_n_f64_u64(x, 64); }\n";
+    for (name, want) in [
+        ("a", 0x4E21_A800u32),
+        ("b", 0x7EE1_A800),
+        ("c", 0x4F30_E400),
+        ("d", 0x6F7D_FC00),
+        ("e", 0x5E61_C800),
+        ("f", 0x7F40_E400),
+    ] {
+        let words = super::perf_codegen::a64_at(OPS, name, true);
+        assert_eq!(words, [want, 0xD65F_03C0], "{name}: {words:08x?}");
+    }
+}
+
 /// `vld1`, `vst1`, `vdup_n` and `vld1_dup` are the load, store and
 /// broadcast of their vector under `-O`, as with gcc 16, with no inline asm
 /// between them and the operations that use them: `ldr q`, `str q`,

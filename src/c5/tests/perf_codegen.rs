@@ -8476,3 +8476,29 @@ float n(double x) { return (float)x * (float)(x * 3.0); }\n";
         assert!(!insns.iter().any(merging), "{name}: {insns:x?}");
     }
 }
+
+/// A big-endian 64-bit value assembled from its bytes, with the `int`
+/// shifts of the usual idiom and the two halves summed, is one load and a
+/// byte reversal.
+#[test]
+fn a_big_endian_word_built_from_bytes_is_one_load() {
+    const SRC: &str = "unsigned long long be64(const unsigned char *p) {\n\
+    unsigned long long x = ((unsigned)p[0] << 24) | (p[1] << 16) | (p[2] << 8) | p[3];\n\
+    unsigned y = ((unsigned)p[4] << 24) | (p[5] << 16) | (p[6] << 8) | p[7];\n\
+    return (x << 32) + y;\n\
+}\n";
+    let insns = x64(SRC, "be64");
+    // `movq (%rdi), %rax; bswapq %rax; retq`.
+    assert_eq!(insns.len(), 3, "{insns:x?}");
+    assert!(
+        insns.iter().any(|i| (0x0FC8..=0x0FCF).contains(&i.op)),
+        "{insns:x?}"
+    );
+    let ws = a64(SRC, "be64");
+    // `ldr x0, [x0]; rev x0, x0; ret`.
+    assert_eq!(ws.len(), 3, "{ws:08x?}");
+    assert!(
+        ws.iter().any(|&w| w & 0xFFFF_FC00 == 0xDAC0_0C00),
+        "{ws:08x?}"
+    );
+}

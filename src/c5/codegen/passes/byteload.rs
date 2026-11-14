@@ -1,9 +1,9 @@
 //! Merge a byte-at-a-time memory idiom into one wide access.
 //!
-//! Load side: an OR of `unsigned char` loads at consecutive addresses,
-//! written as a tree (`b0 | b1 << 8 | ...`) or as a Horner chain
-//! (`((b << 8 | b) << 8 | b) ...`), becomes one wide `Load` at the
-//! lowest address. Store side: a run of `Store { I8 }` of `src >> 8k`
+//! Load side: an OR -- or a sum, the parts' bytes being disjoint -- of
+//! `unsigned char` loads at consecutive addresses, written as a tree
+//! (`b0 | b1 << 8 | ...`) or as a Horner chain (`((b << 8 | b) << 8 |
+//! b) ...`), becomes one wide `Load` at the lowest address. Store side: a run of `Store { I8 }` of `src >> 8k`
 //! at consecutive addresses becomes one wide `Store` of `src`. An
 //! assembly whose byte order is the reverse of the target's takes a
 //! `Bswap` of the merged width on top -- the shape big-endian container
@@ -16,7 +16,8 @@
 //! range (C99 5.1.2.3p2: with none of those the byte accesses and the
 //! wide access have the same observable effect). A mask or a widening
 //! on the path is looked through only where it leaves every byte the
-//! parts contribute intact. The merged access proves only the byte
+//! parts contribute intact, a sign extension where they lie below its
+//! sign bit. The merged access proves only the byte
 //! alignment its parts had, so the pass declines under
 //! `-mstrict-align`, where the lowering may not widen past a proven
 //! bound.
@@ -65,6 +66,17 @@ fn zext_mask(kind: LoadKind) -> Option<u64> {
         LoadKind::U8 => Some(0xff),
         LoadKind::U16 => Some(0xffff),
         LoadKind::U32 => Some(0xffff_ffff),
+        _ => None,
+    }
+}
+
+/// Bits a signed widening keeps: those below the sign bit, which, with
+/// every byte under it there, is clear and widens to zeros.
+fn sext_mask(kind: LoadKind) -> Option<u64> {
+    match kind {
+        LoadKind::I8 => Some(0x7f),
+        LoadKind::I16 => Some(0x7fff),
+        LoadKind::I32 => Some(0x7fff_ffff),
         _ => None,
     }
 }
@@ -224,8 +236,10 @@ impl Assembly<'_> {
             return false;
         }
         match self.func.insts.get(node as usize) {
+            // The parts occupy disjoint bytes (`offsets_tile`), so a sum of
+            // them carries nothing and is their OR.
             Some(Inst::Binop {
-                op: BinOp::Or,
+                op: BinOp::Or | BinOp::Add,
                 lhs,
                 rhs,
             }) => {
@@ -260,7 +274,7 @@ impl Assembly<'_> {
                 let (lhs, keep) = (*lhs, *rhs_imm as u64);
                 self.clear(node, lhs, keep, shift, depth)
             }
-            Some(Inst::Extend { value, kind, .. }) => match zext_mask(*kind) {
+            Some(Inst::Extend { value, kind, .. }) => match zext_mask(*kind).or(sext_mask(*kind)) {
                 Some(keep) => {
                     let value = *value;
                     self.clear(node, value, keep, shift, depth)
@@ -366,7 +380,7 @@ fn match_load(
 ) -> Option<LoadMerge> {
     let (lhs, rhs) = match func.insts.get(root as usize)? {
         Inst::Binop {
-            op: BinOp::Or,
+            op: BinOp::Or | BinOp::Add,
             lhs,
             rhs,
         } => (*lhs, *rhs),
@@ -952,6 +966,73 @@ mod tests {
             "expected the reversal over a wide load, got {:?}",
             f.insts[value as usize]
         );
+    }
+
+    /// `p[0]<<56 + p[1]<<48 + ... + p[7]`: the parts' bytes are disjoint,
+    /// so their sum is their OR -- a wide load plus a byte reversal.
+    #[test]
+    fn be_sum_tree_becomes_load_plus_bswap() {
+        let add = |lhs, rhs| Inst::Binop {
+            op: BinOp::Add,
+            lhs,
+            rhs,
+        };
+        let mut insts = alloc::vec![param(0)];
+        let mut acc = None;
+        for k in 0..8 {
+            insts.push(u8_load(0, k));
+            let mut part = (insts.len() - 1) as ValueId;
+            if k < 7 {
+                insts.push(shl(part, 56 - 8 * k as i64));
+                part = (insts.len() - 1) as ValueId;
+            }
+            acc = Some(match acc {
+                None => part,
+                Some(a) => {
+                    insts.push(add(a, part));
+                    (insts.len() - 1) as ValueId
+                }
+            });
+        }
+        let root = acc.unwrap();
+        let mut f = fresh(insts, Terminator::Return(root));
+        run_one(&mut f, true);
+        let Inst::Bswap { value, width: 8 } = f.insts[root as usize] else {
+            panic!(
+                "expected an 8-byte reversal, got {:?}",
+                f.insts[root as usize]
+            );
+        };
+        assert!(matches!(
+            f.insts[value as usize],
+            Inst::Load {
+                addr: 0,
+                disp: 0,
+                kind: LoadKind::I64,
+                ..
+            }
+        ));
+    }
+
+    /// `p[0] + p[1]`: both bytes at the bottom, so the sum carries and is
+    /// not a wide load.
+    #[test]
+    fn a_sum_of_overlapping_bytes_is_not_merged() {
+        let mut f = fresh(
+            alloc::vec![
+                param(0),
+                u8_load(0, 0),
+                u8_load(0, 1),
+                Inst::Binop {
+                    op: BinOp::Add,
+                    lhs: 1,
+                    rhs: 2,
+                },
+            ],
+            Terminator::Return(3),
+        );
+        run_one(&mut f, true);
+        assert!(matches!(f.insts[3], Inst::Binop { op: BinOp::Add, .. }));
     }
 
     /// The same big-endian assembly on a big-endian target is already

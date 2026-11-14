@@ -127,6 +127,41 @@ pub(crate) enum Field {
         signed: bool,
         zop: u8,
     },
+    /// An SVE shift by an immediate: `tsz:imm3`, the low five bits at `lo`
+    /// and the high two at `hi`, from the element size of operand `zop`
+    /// and the shift, `2 * esize - shift` right and `esize + shift` left.
+    SveShiftImm {
+        op: u8,
+        zop: u8,
+        left: bool,
+        lo: u8,
+        hi: u8,
+    },
+    /// The 13-bit logical immediate at bit 5 of a value replicated across
+    /// the element size of operand `zop`, complemented first for `bic`.
+    SveLogicalImm { op: u8, zop: u8, invert: bool },
+    /// One bit at `shift` choosing the constant `one` over `zero`, as VFP
+    /// imm8 codes; 0xFF is 0.0.
+    SveFpPair {
+        op: u8,
+        shift: u8,
+        zero: u8,
+        one: u8,
+    },
+    /// A VFP imm8 constant at `shift`.
+    VfpImm8 { op: u8, shift: u8 },
+    /// An unsigned immediate split in two: its low `lo_w` bits at `lo` and
+    /// the next `hi_w` at `hi`.
+    SplitImm {
+        op: u8,
+        lo: u8,
+        lo_w: u8,
+        hi: u8,
+        hi_w: u8,
+    },
+    /// The operands in bitmask `a` agree on an element size of the
+    /// `sizes` bitmask, which the form's immediate encodes.
+    SveSizeAgree { a: u8, sizes: u8 },
     /// The base at bit 5 and the signed 4-bit offset in vector lengths at
     /// `shift` of an [`A64Op::MemVl`] operand.
     SveMemVl { op: u8, shift: u8 },
@@ -203,6 +238,12 @@ pub(crate) enum A64Op {
     Fpr(u8),
     /// A list of one SVE vector register of the element size log2.
     ZList(u8),
+    /// A floating-point immediate: an imm8 VFP constant or `#0.0`.
+    FImm,
+    /// An imm8 VFP constant.
+    FImm8,
+    /// `#0.0`.
+    Zero,
     /// `[Xn|SP{, #imm, mul vl}]`: a base and an offset in vector lengths.
     MemVl,
 }
@@ -420,6 +461,8 @@ fn op_matches(p: A64Op, o: Opnd) -> bool {
         (A64Op::Fpr(k), Opnd::VReg { is_d, .. }) => k == 2 + u8::from(is_d),
         (A64Op::Fpr(k), Opnd::VScalar { size, .. }) => k == size,
         (A64Op::ZList(k), Opnd::ZList { count: 1, size, .. }) => size == k,
+        (A64Op::FImm, Opnd::FpImm(_) | Opnd::Imm(0)) | (A64Op::FImm8, Opnd::FpImm(_)) => true,
+        (A64Op::Zero, Opnd::Imm(0)) => true,
         (
             A64Op::MemVl,
             Opnd::MemVl { .. }
@@ -567,13 +610,12 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     if let Some(word) = encode_sve_state(mnemonic, ops) {
         return word;
     }
-    // `mov Zd.T, #imm` and `fmov Zd.T, #0.0` are `dup` of the 8-bit
-    // immediate.
-    if matches!(mnemonic, "mov" | "fmov")
-        && let [Opnd::ZReg { .. }, Opnd::Imm(v), ..] = ops
-        && (mnemonic == "mov" || *v == 0)
+    // `mov Zd.T, #imm` is `dup` of an 8-bit immediate, else `dupm` of a
+    // logical one.
+    if mnemonic == "mov"
+        && let [Opnd::ZReg { .. }, Opnd::Imm(_), ..] = ops
     {
-        return encode_catalog("dup", ops);
+        return encode_catalog("dup", ops).or_else(|e| encode_catalog("dupm", ops).map_err(|_| e));
     }
     if ops.iter().any(|o| {
         matches!(
@@ -3923,6 +3965,92 @@ fn pack(f: &Form, ops: &[Opnd]) -> Result<u32, String> {
                 // `sve_sizes_agree` admitted the form.
                 word |= sve_size_code(a, b, sizes, ops).unwrap_or(0) << shift;
             }
+            Field::SveShiftImm {
+                op,
+                zop,
+                left,
+                lo,
+                hi,
+            } => {
+                let esize = 8i64 << sve_size(1 << zop, ops).unwrap_or(0);
+                let shift = imm(ops[op as usize])?;
+                let range = if left { 0..esize } else { 1..esize + 1 };
+                if !range.contains(&shift) {
+                    return Err(format!(
+                        "inline asm: the shift must be {} to {}",
+                        range.start,
+                        range.end - 1
+                    ));
+                }
+                let v = if left {
+                    esize + shift
+                } else {
+                    2 * esize - shift
+                } as u32;
+                word |= (v & 31) << lo | (v >> 5) << hi;
+            }
+            Field::SveLogicalImm { op, zop, invert } => {
+                let bits = 8u32 << sve_size(1 << zop, ops).unwrap_or(0);
+                let v = imm(ops[op as usize])?;
+                let fits = bits == 64 || matches!(v >> bits, 0 | -1);
+                let mut rep = if bits == 64 {
+                    v as u64
+                } else {
+                    v as u64 & ((1 << bits) - 1)
+                };
+                let mut width = bits;
+                while width < 64 {
+                    rep |= rep << width;
+                    width *= 2;
+                }
+                let enc = encode_logical_imm(if invert { !rep } else { rep }, true)
+                    .filter(|_| fits)
+                    .ok_or_else(|| String::from("inline asm: not a logical immediate"))?;
+                word |= enc << 5;
+            }
+            Field::SveFpPair {
+                op,
+                shift,
+                zero,
+                one,
+            } => {
+                let code = match ops[op as usize] {
+                    Opnd::FpImm(c) => c,
+                    _ => 0xFF,
+                };
+                if code != zero && code != one {
+                    return Err(String::from(
+                        "inline asm: the floating-point immediate is not one of the form's two",
+                    ));
+                }
+                word |= u32::from(code == one) << shift;
+            }
+            Field::VfpImm8 { op, shift } => {
+                let Opnd::FpImm(code) = ops[op as usize] else {
+                    return Err(String::from(
+                        "inline asm: an 8-bit floating-point constant expected",
+                    ));
+                };
+                word |= u32::from(code) << shift;
+            }
+            Field::SveSizeAgree { .. } => {}
+            Field::SplitImm {
+                op,
+                lo,
+                lo_w,
+                hi,
+                hi_w,
+            } => {
+                let v = imm(ops[op as usize])?;
+                if !(0..1 << (lo_w + hi_w)).contains(&v) {
+                    return Err(format!(
+                        "inline asm: immediate out of range 0 to {}",
+                        (1 << (lo_w + hi_w)) - 1
+                    ));
+                }
+                let v = v as u32;
+                word |= (v & ((1 << lo_w) - 1)) << lo | (v >> lo_w) << hi;
+            }
             Field::SveMemVl { op, shift } => {
                 let (base, off) = match ops[op as usize] {
                     Opnd::MemVl { base, off } => (base, off),
@@ -4023,6 +4151,7 @@ fn sve_size_code(a: u8, b: u8, sizes: [u8; 4], ops: &[Opnd]) -> Option<u32> {
 fn sve_sizes_agree(f: &Form, ops: &[Opnd]) -> bool {
     f.fields.iter().all(|fl| match *fl {
         Field::SveSize { a, b, sizes, .. } => sve_size_code(a, b, sizes, ops).is_some(),
+        Field::SveSizeAgree { a, sizes } => sve_size(a, ops).is_some_and(|s| sizes >> s & 1 != 0),
         _ => true,
     })
 }

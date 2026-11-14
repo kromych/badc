@@ -309,6 +309,17 @@ BARE = {'Rm': 5, 'Rn': 5, 'Rd': 5, 'Ra': 5, 'Rt': 5, 'Rt2': 5, 'Rs': 5,
 SVE_BARE = dict(BARE, sz=2, **{f'Z{r}': 5 for r in ('d', 'n', 'm', 'a', 'da', 'dn', 't', 'k')},
                 **{f'P{r}': 4 for r in ('d', 'n', 'm', 'g', 'dn', 'dm', 't')})
 
+# The SVE shifts by an immediate that move left; the rest move right.
+SVE_LEFT_SHIFTS = {'lsl', 'sqshl', 'uqshl', 'sqshlu', 'sli'}
+
+# The constant pairs an SVE one-bit floating-point immediate chooses between,
+# as VFP imm8 codes (0.5 = 0x60, 1.0 = 0x70, 2.0 = 0x00); 0xFF is 0.0.
+SVE_FP_PAIRS = {
+    'FpHalfOrOneImm(immF)': (0x60, 0x70),
+    'FpHalfOrTwoImm(immF)': (0x60, 0x00),
+    'FpZeroOrOneImm(immF)': (0xFF, 0x70),
+}
+
 # An SVE register operand: the field name, an element-size suffix, and a
 # governing predicate's qualifier.
 SVE_REG = re.compile(r'([ZP](?:da|dn|dm|[dnmgatk]))(?:\.(ta|tb|t|[BHSDQ]))?(/MZ|/M|/Z)?')
@@ -347,9 +358,9 @@ def parse_op(op, sve=False):
     def field(name, width):
         nonlocal pos
         if name in fields:
-            if not sve or fields[name][0] != width:
+            if not sve:
                 return False
-            dups.setdefault(name, []).append(pos)
+            dups.setdefault(name, []).append((width, pos))
         else:
             fields[name] = (width, pos)
         pos += width
@@ -411,6 +422,8 @@ def classify(heads, toks, op, im, scaled_wb=False, meta=None):
     bfmm = re.match(r'ImmBFM\(', im or '')
     i, rd_width, width, sp = 0, None, None, 0
     t_ops, tb_ops = [], []
+    # The element size an immediate encodes, for a row without an sz field.
+    size_in_imm = False
     while i < len(toks):
         t = toks[i]
         t0 = t.split('|')[0]
@@ -431,7 +444,9 @@ def classify(heads, toks, op, im, scaled_wb=False, meta=None):
                 consumed.add(fname)
                 reg = 'PLow' if fv[0] == 3 else 'Reg'
                 fields.append(f'{reg} {{ op: {i}, shift: {fv[1]} }}')
-                fields += [f'Reg {{ op: {i}, shift: {d} }}' for d in dups.get(fname, ())]
+                if any(w != fv[0] for w, _ in dups.get(fname, ())):
+                    return ('residual', f'register field {fname} split')
+                fields += [f'Reg {{ op: {i}, shift: {d} }}' for _, d in dups.get(fname, ())]
             if qual:
                 if size:
                     return ('residual', 'qualified predicate with an element size')
@@ -460,6 +475,53 @@ def classify(heads, toks, op, im, scaled_wb=False, meta=None):
             consumed.add(fname)
             ops.append(f'Fpr({"BHSD".index(m.group(1))})')
             fields.append(f'Reg {{ op: {i}, shift: {fv[1]} }}')
+            i += 1
+            continue
+        if sve and t == '#imm' and im.startswith('SveShiftImm7') and t_ops:
+            # tsz:imm3, the high two bits apart: the element size and the
+            # shift, `2 * esize - shift` right, `esize + shift` left.
+            if fl.get('imm', (0,))[0] != 5 or [w for w, _ in dups.get('imm', ())] != [2]:
+                return ('residual', 'shift immediate not imm5 + imm2')
+            consumed.add('imm')
+            ops.append('Imm')
+            left = 'true' if heads[0] in SVE_LEFT_SHIFTS else 'false'
+            fields.append(f'SveShiftImm {{ op: {i}, zop: {t_ops[0]}, left: {left}, '
+                          f'lo: {fl["imm"][1]}, hi: {dups["imm"][0][1]} }}')
+            size_in_imm = True
+            i += 1
+            continue
+        if sve and t == '#imm' and im.startswith(('SveLogicalImm', 'SveDupmImm')) and t_ops:
+            # N:immr:imms of the value replicated across the element size.
+            if fl.get('imm') != (13, 5):
+                return ('residual', 'logical immediate not imm13@5')
+            consumed.add('imm')
+            ops.append('Imm')
+            invert = 'true' if im.startswith('SveLogicalImm(imm, 1') else 'false'
+            fields.append(f'SveLogicalImm {{ op: {i}, zop: {t_ops[0]}, invert: {invert} }}')
+            size_in_imm = True
+            i += 1
+            continue
+        if sve and t == '#immF' and im in SVE_FP_PAIRS:
+            # One bit choosing between two constants.
+            if fl.get('imm', (0,))[0] != 1:
+                return ('residual', 'floating-point pair not a one-bit field')
+            consumed.add('imm')
+            ops.append('FImm')
+            zero, one = SVE_FP_PAIRS[im]
+            fields.append(f'SveFpPair {{ op: {i}, shift: {fl["imm"][1]}, '
+                          f'zero: 0x{zero:02X}, one: 0x{one:02X} }}')
+            i += 1
+            continue
+        if sve and t == '#immVFP' and im.startswith('VecVFPImm'):
+            if fl.get('imm') != (8, 5):
+                return ('residual', 'VFP immediate not imm8@5')
+            consumed.add('imm')
+            ops.append('FImm8')
+            fields.append(f'VfpImm8 {{ op: {i}, shift: 5 }}')
+            i += 1
+            continue
+        if sve and t == '#zero':
+            ops.append('Zero')
             i += 1
             continue
         if sve and (m := re.fullmatch(r'#(\w+)', t)) and i + 1 < len(toks) \
@@ -653,7 +715,14 @@ def classify(heads, toks, op, im, scaled_wb=False, meta=None):
             # are raw unsigned fields.
             # An SVE row's `immSa` / `immSb` pair is signed as well.
             kind = 'SImm' if re.fullmatch(r'\w*S[ab]?', name) else 'UImm'
-            fields.append(f'{kind} {{ op: {i}, shift: {pos}, width: {w} }}')
+            if name in dups:
+                # A field split in two: the part nearer bit 0 is the low one.
+                if kind == 'SImm' or len(dups[name]) != 1:
+                    return ('residual', f'split immediate {t0}')
+                hw, hpos = dups[name][0]
+                fields.append(f'SplitImm {{ op: {i}, lo: {pos}, lo_w: {w}, hi: {hpos}, hi_w: {hw} }}')
+            else:
+                fields.append(f'{kind} {{ op: {i}, shift: {pos}, width: {w} }}')
             i += 1
             continue
         if (im.startswith('SvePatternImm') or sve) and t in ('{#pattern}', '{mul #imm}'):
@@ -720,6 +789,11 @@ def classify(heads, toks, op, im, scaled_wb=False, meta=None):
         fields.append(f'SveSize {{ a: 0b{sum(1 << k for k in t_ops):b}, '
                       f'b: 0b{sum(1 << k for k in tb_ops):b}, shift: {fl["sz"][1]}, '
                       f'sizes: [{", ".join(sizes)}] }}')
+    elif size_in_imm and not tb_ops:
+        # The immediate encodes the size: the `.t` operands agree on it.
+        mask = meta.get('t') or 'BHSD'
+        fields.append(f'SveSizeAgree {{ a: 0b{sum(1 << k for k in t_ops):b}, '
+                      f'sizes: 0b{sum(1 << k for k, c in enumerate(mask) if c != "~"):04b} }}')
     elif t_ops or tb_ops:
         return ('residual', 'a .t operand without an sz field')
     left = set(fl) - consumed - {'n', 'sop'}

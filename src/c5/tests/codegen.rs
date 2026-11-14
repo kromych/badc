@@ -17905,6 +17905,65 @@ fn a64_inline_asm_assembles_the_sve_contiguous_loads_and_stores() {
     }
 }
 
+/// The SVE shifts by an immediate, the logical immediates with their
+/// `mov` alias, the floating-point immediates and `ext`'s split byte
+/// offset assemble in inline asm to Apple clang 21.0.0's words; the
+/// out-of-range ones are refused.
+#[test]
+fn a64_inline_asm_assembles_the_sve_immediate_forms() {
+    const SRC: &str = "void f(void) { __asm__ volatile(\"\
+        asr z0.b, z1.b, #8\\n lsr z2.h, z3.h, #1\\n lsl z4.s, z5.s, #31\\n\
+        lsl z6.d, p1/m, z6.d, #63\\n asr z7.d, p2/m, z7.d, #64\\n asrd z8.s, p3/m, z8.s, #3\\n\
+        and z6.b, z6.b, #0x3c\\n orr z9.h, z9.h, #0xff00\\n\
+        eor z10.d, z10.d, #0x5555555555555555\\n bic z7.s, z7.s, #0xff\\n\
+        dupm z11.s, #0xfffffff0\\n mov z1.s, #0xff00\\n mov z3.h, #-1\\n\
+        fadd z12.s, p1/m, z12.s, #0.5\\n fsub z13.h, p2/m, z13.h, #1.0\\n\
+        fmul z14.d, p3/m, z14.d, #2.0\\n fmax z15.s, p4/m, z15.s, #0.0\\n\
+        fminnm z16.d, p5/m, z16.d, #1.0\\n fdup z17.s, #-2.0\\n fmov z18.d, #1.5\\n\
+        fcpy z19.h, p6/m, #0.25\\n fmov z20.s, p7/m, #0.0\\n fcmeq p1.s, p2/z, z21.s, #0.0\\n\
+        fcmlt p3.d, p4/z, z22.d, #0.0\\n ext z0.b, z0.b, z1.b, #200\"); }\n";
+    let words = a64_opt_function_words(SRC, "f");
+    assert_eq!(
+        words[..words.len() - 1],
+        [
+            0x04289020, 0x043F9462, 0x047F9CA4, 0x04C387E6, 0x04808807, 0x04448FA8, 0x05803666,
+            0x050044E9, 0x0540078A, 0x0580C2E7, 0x05C0E36B, 0x05C0C0E1, 0x2578DFE3, 0x6598840C,
+            0x6559882D, 0x65DA8C2E, 0x659E900F, 0x65DD9430, 0x25B9D011, 0x25F9CF12, 0x0556CA13,
+            0x05974014, 0x65922AA1, 0x65D132C3, 0x05390020,
+        ],
+        "{words:08x?}"
+    );
+    let assembles = |insn: &str| {
+        use crate::{CompileOptions, NativeOptions, OutputKind, Target};
+        let src = alloc::format!("void f(void) {{ __asm__ volatile(\"{insn}\"); }}\n");
+        let options = CompileOptions::default().with_no_entry_point(true);
+        crate::Compiler::with_options(src, Target::LinuxAarch64, options)
+            .compile()
+            .is_ok_and(|p| {
+                let opts = NativeOptions {
+                    output_kind: OutputKind::Relocatable,
+                    ..NativeOptions::new().with_optimize()
+                };
+                crate::emit_native_with_options(&p, Target::LinuxAarch64, opts).is_ok()
+            })
+    };
+    assert!(assembles("lsl z0.b, z0.b, #7"));
+    for bad in [
+        "lsl z0.b, z0.b, #8",
+        "lsr z0.b, z0.b, #9",
+        "lsr z0.s, z0.s, #0",
+        "and z0.b, z0.b, #0x100",
+        "and z0.s, z0.s, #0x12345",
+        "fadd z0.s, p0/m, z0.s, #2.0",
+        "fmax z0.s, p0/m, z0.s, #0.5",
+        "fmov z0.b, #0.0",
+        "fdup z0.s, #0.1",
+        "ext z0.b, z0.b, z1.b, #256",
+    ] {
+        assert!(!assembles(bad), "{bad}");
+    }
+}
+
 /// Followed from x0, the byte loads of `from_big` read offsets 1 and 8192.
 #[test]
 fn a64_far_field_load_reads_its_displacement() {

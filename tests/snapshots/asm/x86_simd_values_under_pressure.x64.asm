@@ -28,7 +28,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x440, %rsp            # imm = 0x440
+               	subq	$0x430, %rsp            # imm = 0x430
                	xorl	%eax, %eax
                	movl	$0x9e3779b9, %ecx       # imm = 0x9E3779B9
                	leaq	-0x280(%rbp), %rsi
@@ -59,7 +59,7 @@ Disassembly of section .text:
                	incq	%rdi
                	imulq	%rcx, %rdi
                	movl	%edi, 0xc(%rsi)
-               	leaq	-0x440(%rbp), %rdi
+               	leaq	-0x430(%rbp), %rdi
                	addq	%rdi, %rdx
                	movups	(%rsi), %xmm0
                	movups	%xmm0, (%rdx)
@@ -67,33 +67,32 @@ Disassembly of section .text:
                	cmpl	$0x14, %eax
                	jl	<addr>
                	xorl	%eax, %eax
-               	movups	-0x440(%rbp), %xmm14
-               	movups	%xmm14, 0x170(%rsp)
                	movups	-0x430(%rbp), %xmm14
-               	movups	%xmm14, 0x180(%rsp)
+               	movups	%xmm14, 0x170(%rsp)
                	movups	-0x420(%rbp), %xmm14
-               	movups	%xmm14, 0x190(%rsp)
+               	movups	%xmm14, 0x180(%rsp)
                	movups	-0x410(%rbp), %xmm14
-               	movups	%xmm14, 0x1a0(%rsp)
+               	movups	%xmm14, 0x190(%rsp)
                	movups	-0x400(%rbp), %xmm14
-               	movups	%xmm14, 0x1b0(%rsp)
-               	movups	-0x3f0(%rbp), %xmm14
-               	movups	%xmm14, 0x150(%rsp)
+               	movups	%xmm14, 0x1a0(%rsp)
+               	movups	-0x3f0(%rbp), %xmm13
                	movups	-0x3e0(%rbp), %xmm14
+               	movups	%xmm14, 0x150(%rsp)
+               	movups	-0x3d0(%rbp), %xmm14
                	movups	%xmm14, 0x160(%rsp)
-               	movups	-0x3d0(%rbp), %xmm12
-               	movups	-0x3c0(%rbp), %xmm11
-               	movups	-0x3b0(%rbp), %xmm10
-               	movups	-0x3a0(%rbp), %xmm9
-               	movups	-0x390(%rbp), %xmm8
-               	movups	-0x380(%rbp), %xmm7
-               	movups	-0x370(%rbp), %xmm6
-               	movups	-0x360(%rbp), %xmm5
-               	movups	-0x350(%rbp), %xmm1
-               	movups	-0x340(%rbp), %xmm4
-               	movups	-0x330(%rbp), %xmm3
-               	movups	-0x320(%rbp), %xmm2
-               	movups	-0x310(%rbp), %xmm0
+               	movups	-0x3c0(%rbp), %xmm12
+               	movups	-0x3b0(%rbp), %xmm11
+               	movups	-0x3a0(%rbp), %xmm10
+               	movups	-0x390(%rbp), %xmm9
+               	movups	-0x380(%rbp), %xmm8
+               	movups	-0x370(%rbp), %xmm7
+               	movups	-0x360(%rbp), %xmm6
+               	movups	-0x350(%rbp), %xmm5
+               	movups	-0x340(%rbp), %xmm1
+               	movups	-0x330(%rbp), %xmm4
+               	movups	-0x320(%rbp), %xmm3
+               	movups	-0x310(%rbp), %xmm2
+               	movups	-0x300(%rbp), %xmm0
                	movups	0x170(%rsp), %xmm14
                	vpaddd	%xmm0, %xmm14, %xmm14
                	movups	%xmm14, 0x170(%rsp)
@@ -115,13 +114,10 @@ Disassembly of section .text:
                	movups	0x140(%rsp), %xmm15
                	vpor	%xmm15, %xmm14, %xmm14
                	movups	%xmm14, 0x1a0(%rsp)
-               	movups	0x1b0(%rsp), %xmm14
                	movups	0x1a0(%rsp), %xmm15
-               	vpand	%xmm15, %xmm14, %xmm14
-               	movups	%xmm14, 0x1b0(%rsp)
-               	movups	0x1b0(%rsp), %xmm14
+               	vpand	%xmm15, %xmm13, %xmm13
                	movups	0x150(%rsp), %xmm15
-               	vpaddd	%xmm15, %xmm14, %xmm14
+               	vpaddd	%xmm15, %xmm13, %xmm14
                	movups	%xmm14, 0x150(%rsp)
                	movl	$0x3, %ecx
                	vmovd	%ecx, %xmm14
@@ -447,33 +443,32 @@ Disassembly of section .text:
                	cmpl	$0x4, %r8d
                	jl	<addr>
                	movups	0x170(%rsp), %xmm14
-               	movups	%xmm14, -0x440(%rbp)
-               	movups	0x180(%rsp), %xmm14
                	movups	%xmm14, -0x430(%rbp)
-               	movups	0x190(%rsp), %xmm14
+               	movups	0x180(%rsp), %xmm14
                	movups	%xmm14, -0x420(%rbp)
-               	movups	0x1a0(%rsp), %xmm14
+               	movups	0x190(%rsp), %xmm14
                	movups	%xmm14, -0x410(%rbp)
-               	movups	0x1b0(%rsp), %xmm14
+               	movups	0x1a0(%rsp), %xmm14
                	movups	%xmm14, -0x400(%rbp)
+               	movups	%xmm13, -0x3f0(%rbp)
                	movups	0x150(%rsp), %xmm14
-               	movups	%xmm14, -0x3f0(%rbp)
-               	movups	0x160(%rsp), %xmm14
                	movups	%xmm14, -0x3e0(%rbp)
-               	movups	%xmm12, -0x3d0(%rbp)
-               	movups	%xmm11, -0x3c0(%rbp)
-               	movups	%xmm10, -0x3b0(%rbp)
-               	movups	%xmm9, -0x3a0(%rbp)
-               	movups	%xmm8, -0x390(%rbp)
-               	movups	%xmm7, -0x380(%rbp)
-               	movups	%xmm6, -0x370(%rbp)
-               	movups	%xmm5, -0x360(%rbp)
-               	movups	%xmm1, -0x350(%rbp)
-               	leaq	-0x440(%rbp), %r9
-               	movups	%xmm4, -0x340(%rbp)
-               	movups	%xmm3, -0x330(%rbp)
-               	movups	%xmm2, -0x320(%rbp)
-               	movups	%xmm0, -0x310(%rbp)
+               	movups	0x160(%rsp), %xmm14
+               	movups	%xmm14, -0x3d0(%rbp)
+               	movups	%xmm12, -0x3c0(%rbp)
+               	movups	%xmm11, -0x3b0(%rbp)
+               	movups	%xmm10, -0x3a0(%rbp)
+               	movups	%xmm9, -0x390(%rbp)
+               	movups	%xmm8, -0x380(%rbp)
+               	movups	%xmm7, -0x370(%rbp)
+               	movups	%xmm6, -0x360(%rbp)
+               	movups	%xmm5, -0x350(%rbp)
+               	movups	%xmm1, -0x340(%rbp)
+               	leaq	-0x430(%rbp), %r9
+               	movups	%xmm4, -0x330(%rbp)
+               	movups	%xmm3, -0x320(%rbp)
+               	movups	%xmm2, -0x310(%rbp)
+               	movups	%xmm0, -0x300(%rbp)
                	xorl	%r8d, %r8d
                	xorl	%eax, %eax
                	movq	%r8, %rcx

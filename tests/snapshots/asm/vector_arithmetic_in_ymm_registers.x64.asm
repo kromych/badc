@@ -458,13 +458,12 @@ Disassembly of section .text:
                	jl	<addr>
                	xorl	%ebx, %ebx
                	vmovups	0x1c0(%rsp), %ymm14
-               	vmovups	%ymm14, -0x2c0(%rbp)
-               	vmovups	0x1e0(%rsp), %ymm14
                	vmovups	%ymm14, -0x2a0(%rbp)
-               	vmovups	0x200(%rsp), %ymm14
+               	vmovups	0x1e0(%rsp), %ymm14
                	vmovups	%ymm14, -0x280(%rbp)
-               	vmovups	0x220(%rsp), %ymm14
+               	vmovups	0x200(%rsp), %ymm14
                	vmovups	%ymm14, -0x260(%rbp)
+               	vmovups	0x220(%rsp), %ymm13
                	vmovups	0x240(%rsp), %ymm12
                	vmovups	0x260(%rsp), %ymm11
                	vmovups	0x280(%rsp), %ymm10
@@ -479,57 +478,56 @@ Disassembly of section .text:
                	vmovups	0x3a0(%rsp), %ymm1
                	vmovups	0x3c0(%rsp), %ymm0
                	vmovups	0x3e0(%rsp), %ymm14
-               	vmovups	%ymm14, -0x2e8(%rbp)
+               	vmovups	%ymm14, -0x2c8(%rbp)
                	vmovups	0xa0(%rsp), %ymm14
-               	vmovups	%ymm14, -0x308(%rbp)
-               	vmovups	-0x2c0(%rbp), %ymm14
-               	vmovups	-0x308(%rbp), %ymm15
-               	vpaddd	%ymm15, %ymm14, %ymm14
-               	vmovups	%ymm14, -0x2c0(%rbp)
+               	vmovups	%ymm14, -0x2e8(%rbp)
                	vmovups	-0x2a0(%rbp), %ymm14
-               	vmovups	-0x2c0(%rbp), %ymm15
-               	vpxor	%ymm15, %ymm14, %ymm14
+               	vmovups	-0x2e8(%rbp), %ymm15
+               	vpaddd	%ymm15, %ymm14, %ymm14
                	vmovups	%ymm14, -0x2a0(%rbp)
                	vmovups	-0x280(%rbp), %ymm14
                	vmovups	-0x2a0(%rbp), %ymm15
-               	vpaddd	%ymm15, %ymm14, %ymm14
+               	vpxor	%ymm15, %ymm14, %ymm14
                	vmovups	%ymm14, -0x280(%rbp)
                	vmovups	-0x260(%rbp), %ymm14
                	vmovups	-0x280(%rbp), %ymm15
-               	vpsubd	%ymm15, %ymm14, %ymm14
+               	vpaddd	%ymm15, %ymm14, %ymm14
                	vmovups	%ymm14, -0x260(%rbp)
                	vmovaps	%ymm14, %ymm15
-               	vpaddd	%ymm15, %ymm12, %ymm12
+               	vpsubd	%ymm15, %ymm13, %ymm13
+               	vpaddd	%ymm13, %ymm12, %ymm12
                	vpxor	%ymm12, %ymm11, %ymm11
-               	vmovups	%ymm0, -0x328(%rbp)
-               	vmovups	%ymm1, -0x348(%rbp)
-               	vmovups	%ymm2, -0x368(%rbp)
-               	vmovups	%ymm3, -0x388(%rbp)
-               	vmovups	%ymm4, -0x3a8(%rbp)
-               	vmovups	%ymm5, -0x3c8(%rbp)
-               	vmovups	%ymm6, -0x3e8(%rbp)
-               	vmovups	%ymm7, -0x408(%rbp)
-               	vmovups	%ymm8, -0x428(%rbp)
-               	vmovups	%ymm9, -0x448(%rbp)
-               	vmovups	%ymm10, -0x468(%rbp)
-               	vmovups	%ymm12, -0x4a8(%rbp)
-               	vmovups	%ymm11, -0x488(%rbp)
+               	vmovups	%ymm0, -0x308(%rbp)
+               	vmovups	%ymm1, -0x328(%rbp)
+               	vmovups	%ymm2, -0x348(%rbp)
+               	vmovups	%ymm3, -0x368(%rbp)
+               	vmovups	%ymm4, -0x388(%rbp)
+               	vmovups	%ymm5, -0x3a8(%rbp)
+               	vmovups	%ymm6, -0x3c8(%rbp)
+               	vmovups	%ymm7, -0x3e8(%rbp)
+               	vmovups	%ymm8, -0x408(%rbp)
+               	vmovups	%ymm9, -0x428(%rbp)
+               	vmovups	%ymm10, -0x448(%rbp)
+               	vmovups	%ymm13, -0x4a8(%rbp)
+               	vmovups	%ymm12, -0x488(%rbp)
+               	vmovups	%ymm11, -0x468(%rbp)
                	movq	%rbx, %rdi
                	vzeroupper
                	callq	<addr>
-               	vmovups	-0x328(%rbp), %ymm0
-               	vmovups	-0x348(%rbp), %ymm1
-               	vmovups	-0x368(%rbp), %ymm2
-               	vmovups	-0x388(%rbp), %ymm3
-               	vmovups	-0x3a8(%rbp), %ymm4
-               	vmovups	-0x3c8(%rbp), %ymm5
-               	vmovups	-0x3e8(%rbp), %ymm6
-               	vmovups	-0x408(%rbp), %ymm7
-               	vmovups	-0x428(%rbp), %ymm8
-               	vmovups	-0x448(%rbp), %ymm9
-               	vmovups	-0x468(%rbp), %ymm10
-               	vmovups	-0x4a8(%rbp), %ymm12
-               	vmovups	-0x488(%rbp), %ymm11
+               	vmovups	-0x308(%rbp), %ymm0
+               	vmovups	-0x328(%rbp), %ymm1
+               	vmovups	-0x348(%rbp), %ymm2
+               	vmovups	-0x368(%rbp), %ymm3
+               	vmovups	-0x388(%rbp), %ymm4
+               	vmovups	-0x3a8(%rbp), %ymm5
+               	vmovups	-0x3c8(%rbp), %ymm6
+               	vmovups	-0x3e8(%rbp), %ymm7
+               	vmovups	-0x408(%rbp), %ymm8
+               	vmovups	-0x428(%rbp), %ymm9
+               	vmovups	-0x448(%rbp), %ymm10
+               	vmovups	-0x4a8(%rbp), %ymm13
+               	vmovups	-0x488(%rbp), %ymm12
+               	vmovups	-0x468(%rbp), %ymm11
                	vpaddd	%ymm11, %ymm10, %ymm10
                	vpsubd	%ymm10, %ymm9, %ymm9
                	vpaddd	%ymm9, %ymm8, %ymm8
@@ -541,9 +539,9 @@ Disassembly of section .text:
                	vpaddd	%ymm3, %ymm2, %ymm2
                	vpsubd	%ymm2, %ymm1, %ymm1
                	vpaddd	%ymm1, %ymm0, %ymm0
-               	vmovups	-0x2e8(%rbp), %ymm14
+               	vmovups	-0x2c8(%rbp), %ymm14
                	vpxor	%ymm0, %ymm14, %ymm14
-               	vmovups	%ymm14, -0x2e8(%rbp)
+               	vmovups	%ymm14, -0x2c8(%rbp)
                	incq	%rbx
                	cmpl	$0xa, %ebx
                	jl	<addr>
@@ -586,7 +584,7 @@ Disassembly of section .text:
                	cmpl	$0x12, %eax
                	jl	<addr>
                	xorl	%r10d, %r10d
-               	movq	%r10, -0x2c8(%rbp)
+               	movq	%r10, -0x2a8(%rbp)
                	xorl	%edx, %edx
                	leaq	-0x240(%rbp), %r9
                	movl	-0x240(%rbp,%rdx,4), %eax
@@ -625,18 +623,17 @@ Disassembly of section .text:
                	incq	%rdx
                	cmpl	$0x8, %edx
                	jl	<addr>
-               	addq	$0x1, -0x2c8(%rbp)
-               	movq	-0x2c8(%rbp), %rax
+               	addq	$0x1, -0x2a8(%rbp)
+               	movq	-0x2a8(%rbp), %rax
                	cmpl	$0xa, %eax
                	jl	<addr>
-               	vmovups	-0x2c0(%rbp), %ymm14
-               	vmovups	%ymm14, 0x1c0(%rsp)
                	vmovups	-0x2a0(%rbp), %ymm14
-               	vmovups	%ymm14, 0x1e0(%rsp)
+               	vmovups	%ymm14, 0x1c0(%rsp)
                	vmovups	-0x280(%rbp), %ymm14
-               	vmovups	%ymm14, 0x200(%rsp)
+               	vmovups	%ymm14, 0x1e0(%rsp)
                	vmovups	-0x260(%rbp), %ymm14
-               	vmovups	%ymm14, 0x220(%rsp)
+               	vmovups	%ymm14, 0x200(%rsp)
+               	vmovups	%ymm13, 0x220(%rsp)
                	vmovups	%ymm12, 0x240(%rsp)
                	vmovups	%ymm11, 0x260(%rsp)
                	vmovups	%ymm10, 0x280(%rsp)
@@ -651,7 +648,7 @@ Disassembly of section .text:
                	vmovups	%ymm1, 0x3a0(%rsp)
                	leaq	0x1c0(%rsp), %rdi
                	vmovups	%ymm0, 0x3c0(%rsp)
-               	vmovups	-0x2e8(%rbp), %ymm14
+               	vmovups	-0x2c8(%rbp), %ymm14
                	vmovups	%ymm14, 0x3e0(%rsp)
                	xorl	%eax, %eax
                	movq	%rax, %rcx

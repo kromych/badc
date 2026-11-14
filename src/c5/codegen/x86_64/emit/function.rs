@@ -259,7 +259,7 @@ pub(crate) fn emit_function(
         .collect();
     let tail_pcs: Vec<usize> = tail_calls.iter().flatten().map(|t| t.pc).collect();
     let frame = super::frame::compute_frame_with_tail_calls(func, alloc, abi, target, &tail_pcs);
-    if let Some(why) = super::ssa::reg_alloc::fp_scratch_shortfall(func, frame.fp_scratch)
+    if let Some(why) = super::ssa::reg_alloc::fp_scratch_shortfall(func, target, frame.fp_scratch)
         .or_else(|| super::ssa::emit_common::naked_refusal(func, alloc, target))
     {
         return fail(why);

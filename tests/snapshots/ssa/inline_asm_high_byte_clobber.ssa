@@ -130,7 +130,7 @@ fn ent_pc=2 n_params=2 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=vectors
 fn ent_pc=3 n_params=2 variadic=false locals=0
-  spill_count=2 gpr_used=[] fp_used=[]
+  spill_count=1 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=F64)                            -> d0
@@ -154,10 +154,10 @@ fn ent_pc=3 n_params=2 variadic=false locals=0
     v19  Binop { op=fdiv, lhs=v1, rhs=v3 }                -> d12
     v20  Imm(0)                                           -> x0
     v21  Imm(4614500768194494464)                         -> d2
-    v22  Binop { op=fmul, lhs=v1, rhs=v21 }               -> [spill 0]
+    v22  Binop { op=fmul, lhs=v1, rhs=v21 }               -> d13
     v23  Imm(0)                                           -> x0
     v24  Imm(4619567317775286272)                         -> d6
-    v25  Binop { op=fmul, lhs=v3, rhs=v24 }               -> [spill 1]
+    v25  Binop { op=fmul, lhs=v3, rhs=v24 }               -> [spill 0]
     v26  Imm(0)                                           -> x0
     v27  InlineAsm { template="xorps %%xmm0, %%xmm0\n\txorps %%xmm1, %%xmm1\n\txorps %%xmm2, %%xmm2\n\txorps %%xmm3, %%xmm3", ops=0, args=[] } -> -
     v28  InlineAsm { template="xorps %%xmm4, %%xmm4\n\txorps %%xmm5, %%xmm5", ops=0, args=[] } -> -

@@ -3380,7 +3380,7 @@ fn ent_pc=442 n_params=0 variadic=false locals=6
     v3089 Imm(6)                                           -> x1
     v3090 Extend { value=v11, kind=I16 }                   -> x1
     v3091 Imm(0)                                           -> x1
-    v3092 VecInsert { vec=v2514, value=v2526, off=6, kind=I16, bytes=8 } -> d2
+    v3092 VecInsert { vec=v2514, value=v2526, off=6, kind=I16, bytes=8 } -> d3
     v3093 Imm(0)                                           -> x1
     v3094 Imm(0)                                           -> x1
     v3095 LifetimeEnd(0)                                   -> -
@@ -3412,7 +3412,7 @@ fn ent_pc=442 n_params=0 variadic=false locals=6
     v3302 Imm(3)                                           -> x1
     v3303 Imm(0)                                           -> x1
     v3304 Imm(0)                                           -> x1
-    v3305 FpCast { kind=BitsFp, value=v9 }                 -> d2
+    v3305 FpCast { kind=BitsFp, value=v9 }                 -> d3
     v3306 Imm(0)                                           -> x1
     v3307 Extend { value=v11, kind=I32 }                   -> x1
     v3308 Imm(3)                                           -> x1
@@ -3426,7 +3426,7 @@ fn ent_pc=442 n_params=0 variadic=false locals=6
     v3316 Imm(6)                                           -> x1
     v3317 Extend { value=v11, kind=I16 }                   -> x1
     v3318 Imm(0)                                           -> x1
-    v3319 VecInsert { vec=v3305, value=v2526, off=6, kind=I16, bytes=8 } -> d3
+    v3319 VecInsert { vec=v2514, value=v2526, off=6, kind=I16, bytes=8 } -> d2
     v3320 Imm(0)                                           -> x1
     v3321 Imm(0)                                           -> x1
     v3322 LifetimeEnd(0)                                   -> -
@@ -3443,7 +3443,7 @@ fn ent_pc=442 n_params=0 variadic=false locals=6
     v3333 Imm(3)                                           -> x2
     v3334 Imm(0)                                           -> x2
     v3335 Imm(0)                                           -> x2
-    v3336 FpCast { kind=BitsFp, value=v9 }                 -> d3
+    v3336 FpCast { kind=BitsFp, value=v9 }                 -> d2
     v3337 Imm(0)                                           -> x2
     v3338 Extend { value=v11, kind=I32 }                   -> x2
     v3339 Imm(3)                                           -> x2
@@ -3457,7 +3457,7 @@ fn ent_pc=442 n_params=0 variadic=false locals=6
     v3347 Imm(6)                                           -> x2
     v3348 Extend { value=v11, kind=I16 }                   -> x2
     v3349 Imm(0)                                           -> x2
-    v3350 VecInsert { vec=v3305, value=v2526, off=6, kind=I16, bytes=8 } -> d2
+    v3350 VecInsert { vec=v3336, value=v2526, off=6, kind=I16, bytes=8 } -> d2
     v3351 Imm(0)                                           -> x0
     v3352 Imm(0)                                           -> x0
     v3353 LifetimeEnd(0)                                   -> -

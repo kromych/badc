@@ -895,8 +895,9 @@ Disassembly of section .text:
                	andq	$0xffff, %rdx           # imm = 0xFFFF
                	cmpl	%ecx, %edx
                	jne	<addr>
-               	vpinsrw	$0x3, %eax, %xmm2, %xmm2
-               	vmovq	%xmm2, %rcx
+               	movapd	%xmm2, %xmm3
+               	vpinsrw	$0x3, %eax, %xmm3, %xmm3
+               	vmovq	%xmm3, %rcx
                	movabsq	$0xffffffffffff, %rdx   # imm = 0xFFFFFFFFFFFF
                	andq	%rbx, %rdx
                	movq	%r12, %rsi
@@ -904,10 +905,9 @@ Disassembly of section .text:
                	orq	%rsi, %rdx
                	cmpq	%rdx, %rcx
                	jne	<addr>
+               	vpinsrw	$0x3, %eax, %xmm2, %xmm2
+               	vmovq	%xmm2, %rcx
                	movq	%rbx, %xmm2
-               	movapd	%xmm2, %xmm3
-               	vpinsrw	$0x3, %eax, %xmm3, %xmm3
-               	vmovq	%xmm3, %rcx
                	vpinsrw	$0x3, %eax, %xmm2, %xmm2
                	vmovq	%xmm2, %rax
                	cmpq	%rax, %rcx

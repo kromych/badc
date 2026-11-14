@@ -249,7 +249,7 @@ pub(crate) fn emit_function(
         max_call_scratch,
         &tail_pcs,
     );
-    if let Some(why) = super::ssa::reg_alloc::fp_scratch_shortfall(func, frame.fp_scratch)
+    if let Some(why) = super::ssa::reg_alloc::fp_scratch_shortfall(func, target, frame.fp_scratch)
         .or_else(|| super::ssa::emit_common::naked_refusal(func, alloc, target))
     {
         return fail(why);

@@ -1128,8 +1128,18 @@ fn x86_preferences(
 }
 
 /// Floating-point scratch registers the emit pass needs: two operand
-/// reloads, and a third for the fused multiply-add.
+/// reloads, and on AArch64 a third for the fused multiply-add.
 pub(crate) const FP_SCRATCH_COUNT: usize = 3;
+
+/// The [`FP_SCRATCH_COUNT`] entries `target`'s lowering writes: x86-64
+/// forms a spilled fused multiply-add in the second.
+fn fp_scratch_count(target: Target) -> usize {
+    if target.is_x86_64() {
+        2
+    } else {
+        FP_SCRATCH_COUNT
+    }
+}
 /// `RegBanks::fp_scratch` entry left when `-ffixed-` reserved every
 /// candidate; a function that needs it is refused at the emit.
 pub(crate) const NO_FP_SCRATCH: u8 = u8::MAX;
@@ -1193,6 +1203,7 @@ impl RegBanks {
         let mut callee_fprs = keep(rows.callee_fprs, FixedRegs::has_fpr);
         let mut caller_fprs = keep(rows.caller_fprs, FixedRegs::has_fpr);
         let mut fp_scratch = [NO_FP_SCRATCH; FP_SCRATCH_COUNT];
+        let count = fp_scratch_count(target);
         let mut n = 0usize;
         for r in rows
             .fp_scratch
@@ -1200,14 +1211,16 @@ impl RegBanks {
             .copied()
             .filter(|&r| !fixed.has_fpr(r))
         {
-            if n < FP_SCRATCH_COUNT {
+            if n < count {
                 fp_scratch[n] = r;
                 n += 1;
             } else if !fp_callee_saved(target, r) {
                 caller_fprs.push(r);
+            } else if !callee_fprs.contains(&r) {
+                callee_fprs.push(r);
             }
         }
-        while n < FP_SCRATCH_COUNT {
+        while n < count {
             let Some(r) = callee_fprs.pop() else { break };
             fp_scratch[n] = r;
             n += 1;
@@ -1508,9 +1521,9 @@ impl Rows {
                 caller_gprs: &[0, 1, 2, 6, 7, 8, 9],
                 callee_fprs: &[],
                 caller_fprs: &[0, 1, 2, 3, 4, 5, 6, 7],
-                // xmm14 / xmm15 / xmm13 are the emit pass's scratch;
-                // xmm8..xmm12 join the caller-saved bank (`RegBanks::new`).
-                fp_scratch: &[14, 15, 13, 8, 9, 10, 11, 12],
+                // xmm14 / xmm15 are the emit pass's scratch; xmm8..xmm13
+                // join the caller-saved bank (`RegBanks::new`).
+                fp_scratch: &[14, 15, 8, 9, 10, 11, 12, 13],
             },
             Target::WindowsX64 => Self {
                 // Win64 callee-saved GPRs: rbx, rsi, rdi, r12, r13, r14,
@@ -1592,7 +1605,7 @@ pub(crate) fn bank_capacity(target: Target, fixed: FixedRegs) -> BankCapacity {
 /// a foreign caller holding a live value there across a call into this
 /// code does not see it corrupted. A zero fill or a population count
 /// writes no scratch that owes a save ([`free_fp_register`]).
-pub(crate) fn fp_scratch_demand(func: &FunctionSsa) -> [bool; FP_SCRATCH_COUNT] {
+pub(crate) fn fp_scratch_demand(func: &FunctionSsa, target: Target) -> [bool; FP_SCRATCH_COUNT] {
     // Tail-call forwarders jmp out with no epilogue, so a saved register
     // could never be restored; they touch no FP scratch either.
     if func
@@ -1605,33 +1618,17 @@ pub(crate) fn fp_scratch_demand(func: &FunctionSsa) -> [bool; FP_SCRATCH_COUNT] 
     let simd = func.insts.iter().any(|i| matches!(i, Inst::Simd { .. }));
     let fp_work = simd || func.insts.iter().any(produces_fp_result);
     let fma = func.insts.iter().any(|i| matches!(i, Inst::Fma { .. }));
-    [fp_work, fp_work, fma]
-}
-
-/// [`fp_scratch_demand`], the x86-64 third scratch only for a spilled FMA.
-fn fp_scratch_writes(
-    func: &FunctionSsa,
-    places: &[Place],
-    target: Target,
-) -> [bool; FP_SCRATCH_COUNT] {
-    let mut demand = fp_scratch_demand(func);
-    if target.is_x86_64() {
-        demand[2] &= func
-            .insts
-            .iter()
-            .zip(places)
-            .any(|(i, p)| matches!(i, Inst::Fma { .. }) && matches!(p, Place::Spill(_)));
-    }
-    demand
+    [fp_work, fp_work, fma && fp_scratch_count(target) > 2]
 }
 
 /// Why `func` cannot be emitted with `fp_scratch`: an entry it needs
 /// ([`fp_scratch_demand`]) is [`NO_FP_SCRATCH`]. `None` when it can.
 pub(crate) fn fp_scratch_shortfall(
     func: &FunctionSsa,
+    target: Target,
     fp_scratch: [u8; FP_SCRATCH_COUNT],
 ) -> Option<&'static str> {
-    let demand = fp_scratch_demand(func);
+    let demand = fp_scratch_demand(func, target);
     (0..FP_SCRATCH_COUNT)
         .any(|i| demand[i] && fp_scratch[i] == NO_FP_SCRATCH)
         .then_some(
@@ -2593,7 +2590,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // value), so the filter above drops it; a callee-saved scratch the
     // body touches joins the list here so the prologue / epilogue's
     // FP-save loop preserves it, mirroring the r13 GPR handling above.
-    let demand = fp_scratch_writes(func, &places, target);
+    let demand = fp_scratch_demand(func, target);
     for (i, &r) in banks.fp_scratch.iter().enumerate() {
         if demand[i]
             && r != NO_FP_SCRATCH
@@ -6034,16 +6031,16 @@ mod tests {
     #[test]
     fn sysv_exposes_no_callee_saved_fp_and_win64_the_nonvolatile_xmm() {
         // SysV AMD64 marks no xmm callee-saved; Win64 marks xmm6..xmm15
-        // non-volatile, xmm15 being the FMA accumulator scratch.
+        // non-volatile, and the scratch is the volatile xmm4 / xmm5.
         assert!(
             RegBanks::for_target(Target::LinuxX64)
                 .callee_fprs
                 .is_empty()
         );
         let win = RegBanks::for_target(Target::WindowsX64);
-        assert_eq!(win.callee_fprs, [6, 7, 8, 9, 10, 11, 12, 13, 14]);
+        assert_eq!(win.callee_fprs, [6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
         assert_eq!(win.caller_fprs, [0, 1, 2, 3]);
-        assert_eq!(win.fp_scratch, [4, 5, 15]);
+        assert_eq!(win.fp_scratch, [4, 5, NO_FP_SCRATCH]);
     }
 
     #[test]
@@ -6110,8 +6107,9 @@ int main(void) { return 0; }
 
     #[test]
     fn win64_fp_scratch_is_saved_where_it_is_written() {
-        // xmm15 is saved where an FMA result spills; a reserved volatile
-        // scratch falls back to the callee-saved tail, which is saved.
+        // A spilled FMA result forms in the volatile scratch, which owes
+        // no save; a reserved volatile scratch falls back to the
+        // callee-saved tail, which is saved.
         let fp_src = r#"
 double f(double a, double b, double c, double d, double e, double h) {
     double s = a * b + c * d;
@@ -6148,12 +6146,12 @@ int main(void) { return 0; }
             "a Win64 FP function saves no scratch it leaves alone: {:?}",
             alloc.fp_used
         );
-        assert_eq!(alloc.fp_scratch, [4, 5, 15]);
+        assert_eq!(alloc.fp_scratch, [4, 5, NO_FP_SCRATCH]);
         let alloc = with_pool_size_override(usize::MAX, 1, || allocate(f, Target::WindowsX64));
         assert!(spills_an_fma(&alloc), "{:?}", alloc.places);
         assert!(
-            alloc.fp_used.contains(&15),
-            "a spilled FMA result writes the accumulator: {:?}",
+            !alloc.fp_used.iter().any(|&r| matches!(r, 4 | 5)),
+            "a spilled FMA result owes no save: {:?}",
             alloc.fp_used
         );
         let fixed = FixedRegs {
@@ -6161,7 +6159,7 @@ int main(void) { return 0; }
             ..FixedRegs::NONE
         };
         let alloc = super::allocate(f, Target::WindowsX64, fixed);
-        assert_eq!(alloc.fp_scratch, [15, 14, 13]);
+        assert_eq!(alloc.fp_scratch, [15, 14, NO_FP_SCRATCH]);
         assert!(
             alloc.fp_used.contains(&14) && alloc.fp_used.contains(&15),
             "the fallback scratch xmm14/15 must join the save list: {:?}",

@@ -470,7 +470,7 @@ pub(super) fn emit_fma(
     // The form with the fewest moves: into `dd`, into an xmm for vvvv, out of a gpr for r/m.
     let dd = match dst {
         Place::FpReg(r) => Reg(r),
-        Place::Spill(_) => Reg(frame.fp_scratch[2]),
+        Place::Spill(_) => Reg(frame.fp_scratch[1]),
         _ => return fail("Fma: dst not fp reg / spill"),
     };
     let ops = [a, b, c].map(|x| place_of(alloc, x));
@@ -536,11 +536,21 @@ pub(super) fn emit_fma(
                 None => emit_vex_fma_mem(code, opcode, !is_f32, dd, rv, base, off),
             }
         }
-        Place::IntReg(r) => {
-            let rm = Reg(frame.fp_scratch[1]);
-            emit_movq_xmm_r(code, rm, Reg(r));
-            emit_vex_fma(code, opcode, !is_f32, dd, rv, rm);
-        }
+        // A spilled result forms in the second scratch, so an r/m operand
+        // a general register holds goes through the result's own slot,
+        // which no operand reads any more.
+        Place::IntReg(r) => match dst {
+            Place::Spill(slot) => {
+                let (base, off) = spill_slot_addr(frame, slot);
+                emit_mr(code, Mnem::Mov, 8, base, off, Reg(r));
+                emit_vex_fma_mem(code, opcode, !is_f32, dd, rv, base, off);
+            }
+            _ => {
+                let rm = Reg(frame.fp_scratch[1]);
+                emit_movq_xmm_r(code, rm, Reg(r));
+                emit_vex_fma(code, opcode, !is_f32, dd, rv, rm);
+            }
+        },
         Place::None => return fail("Fma: r/m operand has no place"),
     }
     fp_spill_dst_to_slot(code, dst, dd, frame);

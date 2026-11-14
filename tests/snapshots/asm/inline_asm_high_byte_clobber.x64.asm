@@ -133,11 +133,10 @@ Disassembly of section .text:
                	vmulsd	%xmm1, %xmm0, %xmm11
                	vdivsd	%xmm1, %xmm0, %xmm12
                	movsd	<rip>, %xmm2
-               	vmulsd	%xmm2, %xmm0, %xmm14
-               	movsd	%xmm14, 0x8(%rsp)
+               	vmulsd	%xmm2, %xmm0, %xmm13
                	movsd	<rip>, %xmm6
                	vmulsd	%xmm6, %xmm1, %xmm14
-               	movsd	%xmm14, (%rsp)
+               	movsd	%xmm14, 0x8(%rsp)
                	xorps	%xmm0, %xmm0
                	xorps	%xmm1, %xmm1
                	xorps	%xmm2, %xmm2
@@ -154,9 +153,9 @@ Disassembly of section .text:
                	vfmadd231sd	%xmm11, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm11) + xmm0
                	movsd	<rip>, %xmm1
                	vfmadd231sd	%xmm12, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm12) + xmm0
-               	vfmadd231sd	0x8(%rsp), %xmm6, %xmm0 # xmm0 = (xmm6 * mem) + xmm0
+               	vfmadd231sd	%xmm13, %xmm6, %xmm0 # xmm0 = (xmm6 * xmm13) + xmm0
                	movsd	<rip>, %xmm1
-               	vfmadd231sd	(%rsp), %xmm1, %xmm0 # xmm0 = (xmm1 * mem) + xmm0
+               	vfmadd231sd	0x8(%rsp), %xmm1, %xmm0 # xmm0 = (xmm1 * mem) + xmm0
                	leave
                	retq
 

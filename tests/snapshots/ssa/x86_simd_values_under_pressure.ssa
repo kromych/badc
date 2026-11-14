@@ -1,7 +1,7 @@
 ; --- SSA dump (ok=true) ent_pc=498 ---
 ; name=main
 fn ent_pc=498 n_params=0 variadic=false locals=80
-  spill_count=16 gpr_used=[] fp_used=[]
+  spill_count=14 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x0
@@ -133,43 +133,43 @@ fn ent_pc=498 n_params=0 variadic=false locals=80
     v121 LocalAddr(-365)                                  -> x0
     v122 Imm(0)                                           -> x0
     v123 Imm(0)                                           -> x1
-    v124 LoadLocal { off=-365, kind=V128 }                -> [spill 8]
+    v124 LoadLocal { off=-365, kind=V128 }                -> [spill 6]
     v125 Imm(0)                                           -> x1
     v126 LocalAddr(-365)                                  -> x1
     v127 Imm(16)                                          -> x1
     v128 BinopI { op=add, lhs=v121, rhs_imm=16 }          -> x1
     v129 Imm(0)                                           -> x1
-    v130 LoadLocal { off=-365, disp=16, kind=V128 }       -> [spill 6]
+    v130 LoadLocal { off=-365, disp=16, kind=V128 }       -> [spill 4]
     v131 Imm(0)                                           -> x1
     v132 LocalAddr(-365)                                  -> x1
     v133 Imm(32)                                          -> x1
     v134 BinopI { op=add, lhs=v121, rhs_imm=32 }          -> x1
     v135 Imm(0)                                           -> x1
-    v136 LoadLocal { off=-365, disp=32, kind=V128 }       -> [spill 4]
+    v136 LoadLocal { off=-365, disp=32, kind=V128 }       -> [spill 2]
     v137 Imm(0)                                           -> x1
     v138 LocalAddr(-365)                                  -> x1
     v139 Imm(48)                                          -> x1
     v140 BinopI { op=add, lhs=v121, rhs_imm=48 }          -> x1
     v141 Imm(0)                                           -> x1
-    v142 LoadLocal { off=-365, disp=48, kind=V128 }       -> [spill 2]
+    v142 LoadLocal { off=-365, disp=48, kind=V128 }       -> [spill 0]
     v143 Imm(0)                                           -> x1
     v144 LocalAddr(-365)                                  -> x1
     v145 Imm(64)                                          -> x1
     v146 BinopI { op=add, lhs=v121, rhs_imm=64 }          -> x1
     v147 Imm(0)                                           -> x1
-    v148 LoadLocal { off=-365, disp=64, kind=V128 }       -> [spill 0]
+    v148 LoadLocal { off=-365, disp=64, kind=V128 }       -> d13
     v149 Imm(0)                                           -> x1
     v150 LocalAddr(-365)                                  -> x1
     v151 Imm(80)                                          -> x1
     v152 BinopI { op=add, lhs=v121, rhs_imm=80 }          -> x1
     v153 Imm(0)                                           -> x1
-    v154 LoadLocal { off=-365, disp=80, kind=V128 }       -> [spill 12]
+    v154 LoadLocal { off=-365, disp=80, kind=V128 }       -> [spill 10]
     v155 Imm(0)                                           -> x1
     v156 LocalAddr(-365)                                  -> x1
     v157 Imm(96)                                          -> x1
     v158 BinopI { op=add, lhs=v121, rhs_imm=96 }          -> x1
     v159 Imm(0)                                           -> x1
-    v160 LoadLocal { off=-365, disp=96, kind=V128 }       -> [spill 10]
+    v160 LoadLocal { off=-365, disp=96, kind=V128 }       -> [spill 8]
     v161 Imm(0)                                           -> x1
     v162 LocalAddr(-365)                                  -> x1
     v163 Imm(112)                                         -> x1
@@ -260,7 +260,7 @@ fn ent_pc=498 n_params=0 variadic=false locals=80
     v269 Imm(0)                                           -> x1
     v270 Imm(0)                                           -> x1
     v271 Imm(0)                                           -> x1
-    v272 SimdVal { op=__builtin_ia32_paddd128, imm=None, args=[v262, v243] } -> [spill 8]
+    v272 SimdVal { op=__builtin_ia32_paddd128, imm=None, args=[v262, v243] } -> [spill 6]
     v273 Imm(0)                                           -> x1
     v274 Imm(0)                                           -> x1
     v275 Imm(0)                                           -> x1
@@ -272,7 +272,7 @@ fn ent_pc=498 n_params=0 variadic=false locals=80
     v281 Imm(0)                                           -> x1
     v282 Imm(0)                                           -> x1
     v283 Imm(0)                                           -> x1
-    v284 SimdVal { op=__builtin_ia32_pxor128, imm=None, args=[v261, v272] } -> [spill 6]
+    v284 SimdVal { op=__builtin_ia32_pxor128, imm=None, args=[v261, v272] } -> [spill 4]
     v285 Imm(0)                                           -> x1
     v286 Imm(0)                                           -> x1
     v287 Imm(0)                                           -> x1
@@ -284,7 +284,7 @@ fn ent_pc=498 n_params=0 variadic=false locals=80
     v293 Imm(0)                                           -> x1
     v294 Imm(0)                                           -> x1
     v295 Imm(0)                                           -> x1
-    v296 SimdVal { op=__builtin_ia32_psubd128, imm=None, args=[v260, v284] } -> [spill 4]
+    v296 SimdVal { op=__builtin_ia32_psubd128, imm=None, args=[v260, v284] } -> [spill 2]
     v297 Imm(0)                                           -> x1
     v298 Imm(0)                                           -> x1
     v299 Imm(0)                                           -> x1
@@ -294,17 +294,17 @@ fn ent_pc=498 n_params=0 variadic=false locals=80
     v303 Imm(0)                                           -> x1
     v304 Imm(0)                                           -> x1
     v305 Imm(0)                                           -> x1
-    v306 SimdVal { op=__builtin_ia32_pslldi128, imm=Some(7), args=[v259] } -> [spill 2]
+    v306 SimdVal { op=__builtin_ia32_pslldi128, imm=Some(7), args=[v259] } -> [spill 0]
     v307 Imm(0)                                           -> x1
     v308 Imm(0)                                           -> x1
     v309 Imm(0)                                           -> x1
     v310 Imm(0)                                           -> x1
-    v311 SimdVal { op=__builtin_ia32_psrldi128, imm=Some(25), args=[v296] } -> [spill 14]
+    v311 SimdVal { op=__builtin_ia32_psrldi128, imm=Some(25), args=[v296] } -> [spill 12]
     v312 Imm(0)                                           -> x1
     v313 Imm(0)                                           -> x1
     v314 Imm(0)                                           -> x1
     v315 Imm(0)                                           -> x1
-    v316 SimdVal { op=__builtin_ia32_por128, imm=None, args=[v306, v311] } -> [spill 2]
+    v316 SimdVal { op=__builtin_ia32_por128, imm=None, args=[v306, v311] } -> [spill 0]
     v317 Imm(0)                                           -> x1
     v318 Imm(0)                                           -> x1
     v319 Imm(0)                                           -> x1
@@ -316,7 +316,7 @@ fn ent_pc=498 n_params=0 variadic=false locals=80
     v325 Imm(0)                                           -> x1
     v326 Imm(0)                                           -> x1
     v327 Imm(0)                                           -> x1
-    v328 SimdVal { op=__builtin_ia32_pand128, imm=None, args=[v258, v316] } -> [spill 0]
+    v328 SimdVal { op=__builtin_ia32_pand128, imm=None, args=[v258, v316] } -> d13
     v329 Imm(0)                                           -> x1
     v330 Imm(0)                                           -> x1
     v331 Imm(0)                                           -> x1
@@ -328,7 +328,7 @@ fn ent_pc=498 n_params=0 variadic=false locals=80
     v337 Imm(0)                                           -> x1
     v338 Imm(0)                                           -> x1
     v339 Imm(0)                                           -> x1
-    v340 SimdVal { op=__builtin_ia32_paddd128, imm=None, args=[v328, v257] } -> [spill 12]
+    v340 SimdVal { op=__builtin_ia32_paddd128, imm=None, args=[v328, v257] } -> [spill 10]
     v341 Imm(0)                                           -> x1
     v342 Imm(0)                                           -> x1
     v343 Imm(0)                                           -> x1
@@ -340,23 +340,23 @@ fn ent_pc=498 n_params=0 variadic=false locals=80
     v349 Imm(3)                                           -> x1
     v350 Imm(0)                                           -> x2
     v351 Imm(0)                                           -> x2
-    v352 VecInsert { vec=v351, value=v349, off=0, kind=I32, bytes=16 } -> [spill 14]
+    v352 VecInsert { vec=v351, value=v349, off=0, kind=I32, bytes=16 } -> [spill 12]
     v353 Imm(0)                                           -> x1
     v354 Imm(0)                                           -> x1
     v355 Imm(0)                                           -> x2
     v356 Imm(4)                                           -> x2
     v357 Imm(0)                                           -> x2
-    v358 VecInsert { vec=v352, value=v354, off=4, kind=I32, bytes=16 } -> [spill 14]
+    v358 VecInsert { vec=v352, value=v354, off=4, kind=I32, bytes=16 } -> [spill 12]
     v359 Imm(0)                                           -> x1
     v360 Imm(0)                                           -> x1
     v361 Imm(8)                                           -> x1
     v362 Imm(0)                                           -> x1
-    v363 VecInsert { vec=v358, value=v354, off=8, kind=I32, bytes=16 } -> [spill 16]
+    v363 VecInsert { vec=v358, value=v354, off=8, kind=I32, bytes=16 } -> [spill 14]
     v364 Imm(0)                                           -> x1
     v365 Imm(0)                                           -> x1
     v366 Imm(12)                                          -> x1
     v367 Imm(0)                                           -> x1
-    v368 VecInsert { vec=v363, value=v354, off=12, kind=I32, bytes=16 } -> [spill 16]
+    v368 VecInsert { vec=v363, value=v354, off=12, kind=I32, bytes=16 } -> [spill 14]
     v369 Imm(0)                                           -> x1
     v370 Imm(0)                                           -> x1
     v371 Imm(0)                                           -> x1
@@ -382,7 +382,7 @@ fn ent_pc=498 n_params=0 variadic=false locals=80
     v2326 Extend { value=v385, kind=I32 }                  -> x2
     v2327 Imm(0)                                           -> x2
     v2328 Imm(0)                                           -> x2
-    v2329 SimdVal { op=__builtin_ia32_pslldi128, imm=None, args=[v256, v385] } -> [spill 10]
+    v2329 SimdVal { op=__builtin_ia32_pslldi128, imm=None, args=[v256, v385] } -> [spill 8]
     v2330 Imm(0)                                           -> x1
     v2331 LifetimeEnd(0)                                   -> -
     v2332 LifetimeEnd(0)                                   -> -
@@ -566,13 +566,13 @@ fn ent_pc=498 n_params=0 variadic=false locals=80
     v253 Phi { incoming=[b3:v178, b5:v2371], kind=V128 }  -> d10
     v254 Phi { incoming=[b3:v172, b5:v2355], kind=V128 }  -> d11
     v255 Phi { incoming=[b3:v166, b5:v2345], kind=V128 }  -> d12
-    v256 Phi { incoming=[b3:v160, b5:v2329], kind=V128 }  -> [spill 10]
-    v257 Phi { incoming=[b3:v154, b5:v340], kind=V128 }   -> [spill 12]
-    v258 Phi { incoming=[b3:v148, b5:v328], kind=V128 }   -> [spill 0]
-    v259 Phi { incoming=[b3:v142, b5:v316], kind=V128 }   -> [spill 2]
-    v260 Phi { incoming=[b3:v136, b5:v296], kind=V128 }   -> [spill 4]
-    v261 Phi { incoming=[b3:v130, b5:v284], kind=V128 }   -> [spill 6]
-    v262 Phi { incoming=[b3:v124, b5:v272], kind=V128 }   -> [spill 8]
+    v256 Phi { incoming=[b3:v160, b5:v2329], kind=V128 }  -> [spill 8]
+    v257 Phi { incoming=[b3:v154, b5:v340], kind=V128 }   -> [spill 10]
+    v258 Phi { incoming=[b3:v148, b5:v328], kind=V128 }   -> d13
+    v259 Phi { incoming=[b3:v142, b5:v316], kind=V128 }   -> [spill 0]
+    v260 Phi { incoming=[b3:v136, b5:v296], kind=V128 }   -> [spill 2]
+    v261 Phi { incoming=[b3:v130, b5:v284], kind=V128 }   -> [spill 4]
+    v262 Phi { incoming=[b3:v124, b5:v272], kind=V128 }   -> [spill 6]
     v263 Phi { incoming=[b3:v122, b5:v2496], kind=I64 }   -> x0
     v264 Extend { value=v263, kind=I32 }                  -> x1
     v265 BinopI { op=lt, lhs=v263, rhs_imm=4 }            -> x1

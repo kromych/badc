@@ -4722,10 +4722,8 @@ return v0 * v1 + v2 * v3 + v4 * v5 + v6 * v7 + v8 * v9 + v10 * v11;\n}\n";
         matches!(i.op, 0x0F58 | 0x0F59 | 0x0F5C)
             && ((8..=12).contains(&reg) || i.reg_form() && (8..=12).contains(&rm))
     };
-    // TODO(#2068): the constants `3.0` and `5.0`, each read by a sum and a
-    // later product, hold xmm registers between them and one value spills.
     let spills = insns.iter().filter(|i| spill(i)).count();
-    m.expect(spills <= 1 && insns.iter().any(high), || {
+    m.expect(spills == 0 && insns.iter().any(high), || {
         format!("x86-64: {spills} spills: {insns:x?}")
     });
     m.finish();

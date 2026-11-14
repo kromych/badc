@@ -6,7 +6,9 @@
 //! the lanes' signedness has one row per arrangement, and the header casts
 //! between the vector types of one width, which reinterprets the bits.
 
-use super::simd::{AcrossOp, Cvt, FOp, Form, LongOp, NarrowKind, PermOp, Ret, Sem, Sha1F, SimdOp};
+use super::simd::{
+    AcrossOp, Cvt, FOp, Form, LongOp, NarrowKind, PermOp, Ret, RoundTo, Sem, Sha1F, SimdOp,
+};
 
 /// The row of `mnem` over `bytes`-byte vectors of `ret`'s lanes.
 const fn row(
@@ -38,6 +40,9 @@ macro_rules! sem {
     };
     ($s:ident, $w:expr, [$op:ident]) => {
         Sem::$s(FOp::$op, $w)
+    };
+    ($s:ident, $w:expr, {$to:ident, $x:expr}) => {
+        Sem::$s(RoundTo::$to, $w, $x)
     };
     ($s:ident, $w:expr, ()) => {
         Sem::$s($w)
@@ -328,6 +333,17 @@ pub(crate) const OPS: &[SimdOp] = table! {
     "fminv" V FloatAcross [MinNan]: f4s;
     "fmaxnmv" V FloatAcross [MaxNum]: f4s;
     "fminnmv" V FloatAcross [MinNum]: f4s;
+    "frintn" V RoundInt {NearestEven, false}: f2s f4s fd f2d;
+    "frinta" V RoundInt {NearestAway, false}: f2s f4s fd f2d;
+    "frintp" V RoundInt {Up, false}: f2s f4s fd f2d;
+    "frintm" V RoundInt {Down, false}: f2s f4s fd f2d;
+    "frintz" V RoundInt {Zero, false}: f2s f4s fd f2d;
+    "frintx" V RoundInt {Current, true}: f2s f4s fd f2d;
+    "frinti" V RoundInt {Current, false}: f2s f4s fd f2d;
+    "frint32z" V RoundIntN {Zero, 32}: f2s f4s fd f2d;
+    "frint32x" V RoundIntN {Current, 32}: f2s f4s fd f2d;
+    "frint64z" V RoundIntN {Zero, 64}: f2s f4s fd f2d;
+    "frint64x" V RoundIntN {Current, 64}: f2s f4s fd f2d;
     "fcmeq" Vv FloatRel (0): f2s f4s f2d;
     "fcmge" Vv FloatRel (13): f2s f4s f2d;
     "fcmgt" Vv FloatRel (14): f2s f4s f2d;

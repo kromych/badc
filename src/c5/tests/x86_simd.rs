@@ -1738,7 +1738,9 @@ fn floating_rows_compute_in_the_environment() {
         | Sem::Estimate(..)
         | Sem::Step(..)
         | Sem::FloatPair(..)
-        | Sem::FloatAcross(..) => true,
+        | Sem::FloatAcross(..)
+        | Sem::RoundInt(..)
+        | Sem::RoundIntN(..) => true,
         Sem::Add(_)
         | Sem::Sub(_)
         | Sem::MulLo(_)
@@ -1889,6 +1891,10 @@ fn floating_rows_compute_in_the_environment() {
             a
         }
         fn fma(&mut self, a: u64, _: u64, _: u64, _: bool) -> u64 {
+            self.0 += 1;
+            a
+        }
+        fn round_to_integral(&mut self, a: u64, _: simd::RoundTo, _: bool) -> u64 {
             self.0 += 1;
             a
         }

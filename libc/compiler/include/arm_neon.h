@@ -25,7 +25,8 @@
  * vmaxv vminv. Floating: vadd vsub vmul vdiv vmax vmin vabs vneg vsqrt vfma
  * vfms vrecpe vrecps vrsqrte vrsqrts vabd vmaxnm vminnm vmulx with their
  * scalar forms, the pairwise vpadd vpmax vpmin vpmaxnm vpminnm and the
- * across-lane vaddv vmaxv vminv vmaxnmv vminnmv, the
+ * across-lane vaddv vmaxv vminv vmaxnmv vminnmv, the roundings vrnd vrndn
+ * vrnda vrndm vrndp vrndx vrndi vrnd32z vrnd32x vrnd64z vrnd64x, the
  * compares, those against zero (vceqz ... vcltz, integer too, with their
  * scalar forms), and the conversions to
  * and from the integers of one width (truncating) and between single and
@@ -35,7 +36,7 @@
  *
  * Not provided: float16, bfloat16, the lane-indexed and by-scalar forms,
  * the doubling multiplies, the other structure
- * loads, stores and table lookups, the floating rounding forms, the fixed-point and
+ * loads, stores and table lookups, the fixed-point and
  * rounding-mode conversions and the dot products.
  *
  * The element typedefs match <stdint.h>, repeated so the header serves
@@ -1311,6 +1312,25 @@ __BADC_NEON_ARITH2(vminnm, __builtin_neon_fminnm)
 __BADC_NEON_ARITH2(vmulx, __builtin_neon_fmulx)
 __BADC_NEON_STEP_SCALAR(vabd)
 __BADC_NEON_STEP_SCALAR(vmulx)
+
+/* Rounding to an integral value: toward zero (vrnd), to nearest with ties
+ * to even (vrndn) or away (vrnda), toward -infinity (vrndm) or +infinity
+ * (vrndp), and in the current direction raising inexact (vrndx) or not
+ * (vrndi). vrnd32 and vrnd64 round toward zero (z) or in the current
+ * direction (x) to a value an integer of that width holds, its minimum
+ * for a NaN, an infinity or a value out of range. */
+__BADC_NEON_ARITH1(vrnd, __builtin_neon_frintz)
+__BADC_NEON_ARITH1(vrndn, __builtin_neon_frintn)
+__BADC_NEON_ARITH1(vrnda, __builtin_neon_frinta)
+__BADC_NEON_ARITH1(vrndm, __builtin_neon_frintm)
+__BADC_NEON_ARITH1(vrndp, __builtin_neon_frintp)
+__BADC_NEON_ARITH1(vrndx, __builtin_neon_frintx)
+__BADC_NEON_ARITH1(vrndi, __builtin_neon_frinti)
+__BADC_NEON_ARITH1(vrnd32z, __builtin_neon_frint32z)
+__BADC_NEON_ARITH1(vrnd32x, __builtin_neon_frint32x)
+__BADC_NEON_ARITH1(vrnd64z, __builtin_neon_frint64z)
+__BADC_NEON_ARITH1(vrnd64x, __builtin_neon_frint64x)
+__BADC_INTRIN float32_t vrndns_f32(float32_t __a) { return vrndn_f32((float32x2_t){__a})[0]; }
 
 /* Pairwise: the pairs of the first operand, then of the second. A scalar
  * pairwise or across-lane form is lane 0 of the pairwise one of the vector

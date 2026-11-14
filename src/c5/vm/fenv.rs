@@ -8,6 +8,7 @@
 //! sticky bit for any part below -- and [`FpEnv::round`] rounds it once.
 
 use crate::c5::codegen::Target;
+use crate::c5::simd::RoundTo;
 
 pub(super) const INVALID: u8 = 1;
 pub(super) const DIVBYZERO: u8 = 2;
@@ -654,16 +655,29 @@ impl FpEnv {
     /// `rint`, which raises inexact, and `nearbyint`, which does not
     /// (C99 7.12.9.3-4).
     pub(super) fn round_integral(&mut self, a: u64, raise_inexact: bool) -> u64 {
+        self.round_integral_to(a, RoundTo::Current, raise_inexact)
+    }
+
+    /// `a` rounded to an integral value in direction `to`, raising inexact
+    /// when `raise_inexact` and the value changes.
+    pub(super) fn round_integral_to(&mut self, a: u64, to: RoundTo, raise_inexact: bool) -> u64 {
         match class(a) {
             Class::Nan => self.propagate(a, a, BINARY64),
             Class::Finite(s, e) if e < 0 => {
                 let neg = negative(a);
                 let (kept, half, rest) = shift_round(u128::from(s), -e, false);
-                let kept = kept + self.round_up(neg, kept, half, rest) as u128;
+                let up = match to {
+                    RoundTo::Current => self.round_up(neg, kept, half, rest),
+                    RoundTo::NearestEven => half && (rest || kept & 1 != 0),
+                    RoundTo::NearestAway => half,
+                    RoundTo::Up => !neg && (half || rest),
+                    RoundTo::Down => neg && (half || rest),
+                    RoundTo::Zero => false,
+                };
                 if raise_inexact && (half || rest) {
                     self.flags |= INEXACT;
                 }
-                pack(neg, kept, 0)
+                pack(neg, kept + u128::from(up), 0)
             }
             _ => a,
         }
@@ -957,6 +971,10 @@ impl crate::c5::simd::FloatEnv for FpEnv {
 
     fn fma(&mut self, a: u64, b: u64, c: u64, single: bool) -> u64 {
         self.fma(a, b, c, if single { BINARY32 } else { BINARY64 })
+    }
+
+    fn round_to_integral(&mut self, a: u64, to: RoundTo, exact: bool) -> u64 {
+        self.round_integral_to(a, to, exact)
     }
 
     fn compare(&mut self, a: u64, b: u64, signaling: bool) -> Option<core::cmp::Ordering> {

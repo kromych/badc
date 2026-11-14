@@ -508,6 +508,15 @@ pub(crate) enum Sem {
     /// `2 - a * b`, or `(3 - a * b) / 2` when `true`; infinity times zero
     /// gives 2 or 1.5 (`frecps`, `frsqrts`).
     Step(u8, bool),
+    /// Each floating lane rounded to an integral value in the direction,
+    /// raising inexact when `true` and the value changed (`frintn`,
+    /// `frintx`, `frinti`).
+    RoundInt(RoundTo, u8, bool),
+    /// Each floating lane rounded to an integral value in the direction
+    /// that fits an integer of the bits, the integer minimum with invalid
+    /// for a NaN, an infinity or a value out of range (`frint32z`,
+    /// `frint64x`).
+    RoundIntN(RoundTo, u8, u8),
     /// The floating operation of each adjacent lane pair, the first
     /// operand's pairs low (`faddp`, `fmaxnmp`).
     FloatPair(FOp, u8),
@@ -616,6 +625,19 @@ pub(crate) enum FOp {
     MulX,
 }
 
+/// The direction a floating value rounds to an integral one in: to nearest
+/// with ties to even or away from zero, toward +infinity, -infinity or
+/// zero, or the environment's.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum RoundTo {
+    NearestEven,
+    NearestAway,
+    Up,
+    Down,
+    Zero,
+    Current,
+}
+
 /// The round function of a SHA-1 hash update.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum Sha1F {
@@ -676,6 +698,10 @@ pub(crate) trait FloatEnv {
     fn widen(&mut self, a: u64) -> u64;
     /// `a * b + c` rounded once.
     fn fma(&mut self, a: u64, b: u64, c: u64, single: bool) -> u64;
+    /// `a` rounded to an integral value in direction `to`, a NaN quieted
+    /// with invalid for a signaling one; inexact when `exact` and the value
+    /// changed.
+    fn round_to_integral(&mut self, a: u64, to: RoundTo, exact: bool) -> u64;
 }
 
 pub(crate) struct SimdOp {
@@ -1904,6 +1930,7 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
         Sem::Sha1Hash(_) | Sem::Sha1Su0 | Sem::Sha512Hash(_) | Sem::Sha512Su1 => {}
         Sem::FloatRel(..) | Sem::FloatFma(..) | Sem::LongAcc(..) => {}
         Sem::Estimate(..) | Sem::Step(..) | Sem::FloatPair(..) | Sem::FloatAcross(..) => {}
+        Sem::RoundInt(..) | Sem::RoundIntN(..) => {}
         Sem::Perm4x64
         | Sem::PermVar32
         | Sem::Perm2x128
@@ -2381,6 +2408,22 @@ fn float_lane(env: &mut impl FloatEnv, op: FOp, x: u64, y: u64, single: bool) ->
     }
 }
 
+/// FPRoundIntN: the `double` bit pattern `x` rounded to an integral value
+/// in direction `to` that fits a `bits`-wide integer, in `env`; a NaN, an
+/// infinity or a value out of range gives the integer minimum with
+/// invalid, which `env` raises in converting the value, and a changed
+/// value raises inexact.
+fn round_int_n(env: &mut impl FloatEnv, x: u64, to: RoundTo, bits: u32) -> u64 {
+    let min = 1 << 63 | u64::from(1022 + bits) << 52;
+    let r = env.round_to_integral(x, to, false);
+    let v = f64::from_bits(r);
+    if !(v >= f64::from_bits(min) && v < -f64::from_bits(min)) {
+        env.to_int(r, true, bits, true);
+        return min;
+    }
+    env.round_to_integral(x, to, true)
+}
+
 /// Whether a lane's `double` bit pattern is a NaN.
 fn is_nan(x: u64) -> bool {
     x & 0x7FF0_0000_0000_0000 == 0x7FF0_0000_0000_0000 && x & 0x000F_FFFF_FFFF_FFFF != 0
@@ -2416,6 +2459,18 @@ pub(crate) fn eval_float_in(
                     }
                     _ => set_flane(&mut o, w, i, float_lane(env, op, x, y, w == 4)),
                 }
+            }
+        }
+        Sem::RoundInt(to, w, exact) => {
+            for i in 0..lanes(w, false) {
+                let x = env.round_to_integral(flane(a, w, i), to, exact);
+                set_flane(&mut o, w, i, x);
+            }
+        }
+        Sem::RoundIntN(to, w, bits) => {
+            for i in 0..lanes(w, false) {
+                let x = round_int_n(env, flane(a, w, i), to, u32::from(bits));
+                set_flane(&mut o, w, i, x);
             }
         }
         // The pairs of the first operand's lanes, then of the second's.

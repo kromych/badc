@@ -126,30 +126,29 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
-               	movsd	<rip>, %xmm14 # <addr>
-               	movsd	%xmm14, 0x8(%rsp)
+               	movsd	<rip>, %xmm0 # <addr>
                	movss	<rip>, %xmm14 # <addr>
                	movsd	%xmm14, (%rsp)
-               	xorps	%xmm0, %xmm0
-               	movsd	0x8(%rsp), %xmm1
-               	vmulsd	%xmm0, %xmm1, %xmm2
-               	vmulsd	<rip>, %xmm1, %xmm1
+               	xorps	%xmm1, %xmm1
+               	vmulsd	%xmm1, %xmm0, %xmm2
+               	vmulsd	<rip>, %xmm0, %xmm3
+               	movsd	%xmm0, 0x8(%rsp)
                	movq	%xmm2, %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movsd	<rip>, %xmm3
-               	vdivsd	%xmm2, %xmm3, %xmm4
-               	comisd	%xmm4, %xmm0
+               	movsd	<rip>, %xmm0
+               	vdivsd	%xmm2, %xmm0, %xmm4
+               	comisd	%xmm4, %xmm1
                	jb	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
-               	movq	%xmm1, %rax
+               	movq	%xmm3, %rax
                	movabsq	$-0x8000000000000000, %r11 # imm = 0x8000000000000000
                	cmpq	%r11, %rax
                	jne	<addr>
-               	vdivsd	%xmm1, %xmm3, %xmm2
-               	comisd	%xmm0, %xmm2
+               	divsd	%xmm3, %xmm0
+               	comisd	%xmm1, %xmm0
                	jb	<addr>
                	movl	$0x2, %eax
                	leave

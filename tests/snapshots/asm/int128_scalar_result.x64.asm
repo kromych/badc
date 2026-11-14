@@ -90,28 +90,25 @@ Disassembly of section .text:
                	movq	<rip>, %rbx # <addr>
                	xorl	%eax, %eax
                	movq	<rip>, %rcx # <addr>
-               	movq	%rax, %r10
-               	orq	%rcx, %r10
-               	movq	%r10, 0x28(%rsp)
+               	orq	%rax, %rcx
                	movq	<rip>, %r8 # <addr>
-               	movq	<rip>, %rcx # <addr>
-               	movq	%rax, %r10
-               	orq	%rcx, %r10
-               	movq	%r10, 0x20(%rsp)
+               	movq	<rip>, %rdx # <addr>
+               	orq	%rdx, %rax
                	movl	$0x2, %edi
                	cmpq	%rbx, %r8
                	setb	%sil
                	movzbq	%sil, %rsi
                	cmpq	%rbx, %r8
-               	sete	%al
-               	movzbq	%al, %rax
-               	movq	0x20(%rsp), %rcx
-               	cmpq	0x28(%rsp), %rcx
-               	setb	%cl
-               	movzbq	%cl, %rcx
-               	andq	%rcx, %rax
-               	orq	%rax, %rsi
+               	sete	%dl
+               	movzbq	%dl, %rdx
+               	cmpq	%rcx, %rax
+               	setb	%r9b
+               	movzbq	%r9b, %r9
+               	andq	%r9, %rdx
+               	orq	%rdx, %rsi
                	movl	$0x4d, %edx
+               	movq	%rcx, 0x28(%rsp)
+               	movq	%rax, 0x20(%rsp)
                	movq	%r8, 0x18(%rsp)
                	movb	$0x0, %al
                	callq	<addr>

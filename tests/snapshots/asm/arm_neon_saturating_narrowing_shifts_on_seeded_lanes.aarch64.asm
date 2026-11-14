@@ -161,74 +161,73 @@ Disassembly of section .text:
                	bl	<addr>
                	str	q0, [sp, #0x260]
                	bl	<addr>
-               	str	q0, [sp, #0x250]
-               	ldr	q0, [sp, #0x2a0]
-               	sqshrn	v1.8b, v0.8h, #0x1
-               	str	d1, [sp, #0x2b0]
-               	sqrshrn	v1.8b, v0.8h, #0x1
-               	str	d1, [sp, #0x2b8]
-               	ldr	q1, [sp, #0x270]
-               	uqshrn	v2.8b, v1.8h, #0x1
-               	str	d2, [sp, #0x2c0]
-               	uqrshrn	v1.8b, v1.8h, #0x1
-               	str	d1, [sp, #0x2c8]
-               	sqshrun	v1.8b, v0.8h, #0x1
-               	str	d1, [sp, #0x2d0]
-               	sqrshrun	v1.8b, v0.8h, #0x1
-               	str	d1, [sp, #0x2d8]
-               	ldr	q1, [sp, #0x290]
-               	sqshrn	v2.4h, v1.4s, #0x1
-               	str	d2, [sp, #0x2e0]
-               	sqrshrn	v2.4h, v1.4s, #0x1
-               	str	d2, [sp, #0x2e8]
-               	ldr	q3, [sp, #0x260]
-               	uqshrn	v2.4h, v3.4s, #0x1
-               	str	d2, [sp, #0x2f0]
-               	uqrshrn	v2.4h, v3.4s, #0x1
-               	str	d2, [sp, #0x2f8]
-               	sqshrun	v2.4h, v1.4s, #0x1
-               	str	d2, [sp, #0x300]
-               	sqrshrun	v2.4h, v1.4s, #0x1
-               	str	d2, [sp, #0x308]
-               	ldr	q2, [sp, #0x280]
-               	sqshrn	v4.2s, v2.2d, #0x1
-               	str	d4, [sp, #0x310]
-               	sqrshrn	v4.2s, v2.2d, #0x1
-               	str	d4, [sp, #0x318]
-               	ldr	q4, [sp, #0x250]
-               	uqshrn	v5.2s, v4.2d, #0x1
+               	ldr	q1, [sp, #0x2a0]
+               	sqshrn	v2.8b, v1.8h, #0x1
+               	str	d2, [sp, #0x2b0]
+               	sqrshrn	v2.8b, v1.8h, #0x1
+               	str	d2, [sp, #0x2b8]
+               	ldr	q2, [sp, #0x270]
+               	uqshrn	v3.8b, v2.8h, #0x1
+               	str	d3, [sp, #0x2c0]
+               	uqrshrn	v2.8b, v2.8h, #0x1
+               	str	d2, [sp, #0x2c8]
+               	sqshrun	v2.8b, v1.8h, #0x1
+               	str	d2, [sp, #0x2d0]
+               	sqrshrun	v2.8b, v1.8h, #0x1
+               	str	d2, [sp, #0x2d8]
+               	ldr	q2, [sp, #0x290]
+               	sqshrn	v3.4h, v2.4s, #0x1
+               	str	d3, [sp, #0x2e0]
+               	sqrshrn	v3.4h, v2.4s, #0x1
+               	str	d3, [sp, #0x2e8]
+               	ldr	q4, [sp, #0x260]
+               	uqshrn	v3.4h, v4.4s, #0x1
+               	str	d3, [sp, #0x2f0]
+               	uqrshrn	v3.4h, v4.4s, #0x1
+               	str	d3, [sp, #0x2f8]
+               	sqshrun	v3.4h, v2.4s, #0x1
+               	str	d3, [sp, #0x300]
+               	sqrshrun	v3.4h, v2.4s, #0x1
+               	str	d3, [sp, #0x308]
+               	ldr	q3, [sp, #0x280]
+               	sqshrn	v5.2s, v3.2d, #0x1
+               	str	d5, [sp, #0x310]
+               	sqrshrn	v5.2s, v3.2d, #0x1
+               	str	d5, [sp, #0x318]
+               	uqshrn	v5.2s, v0.2d, #0x1
                	str	d5, [sp, #0x320]
-               	uqrshrn	v5.2s, v4.2d, #0x1
+               	uqrshrn	v5.2s, v0.2d, #0x1
                	str	d5, [sp, #0x328]
-               	sqshrun	v5.2s, v2.2d, #0x1
+               	sqshrun	v5.2s, v3.2d, #0x1
                	str	d5, [sp, #0x330]
-               	sqrshrun	v5.2s, v2.2d, #0x1
+               	sqrshrun	v5.2s, v3.2d, #0x1
                	str	d5, [sp, #0x338]
-               	sqshrn	v5.8b, v0.8h, #0x1
+               	sqshrn	v5.8b, v1.8h, #0x1
                	ldr	d6, [sp, #0x2b0]
                	zip1	v5.2d, v6.2d, v5.2d
                	str	q5, [sp, #0x10]
-               	sqrshrun	v0.8b, v0.8h, #0x1
+               	sqrshrun	v1.8b, v1.8h, #0x1
                	ldr	d5, [sp, #0x2d0]
-               	zip1	v0.2d, v5.2d, v0.2d
-               	str	q0, [sp, #0x20]
-               	rshrn	v0.4h, v3.4s, #0x1
-               	ldr	d3, [sp, #0x2f0]
-               	zip1	v0.2d, v3.2d, v0.2d
-               	str	q0, [sp, #0x30]
-               	shrn	v0.2s, v2.2d, #0x1
-               	ldr	d2, [sp, #0x310]
-               	zip1	v0.2d, v2.2d, v0.2d
-               	str	q0, [sp, #0x40]
-               	uqrshrn	v0.2s, v4.2d, #0x1
-               	ldr	d2, [sp, #0x320]
-               	zip1	v0.2d, v2.2d, v0.2d
-               	str	q0, [sp, #0x50]
-               	sqrshrn	v0.4h, v1.4s, #0x1
-               	ldr	d1, [sp, #0x2e0]
-               	zip1	v0.2d, v1.2d, v0.2d
-               	str	q0, [sp, #0x60]
+               	zip1	v1.2d, v5.2d, v1.2d
+               	str	q1, [sp, #0x20]
+               	rshrn	v1.4h, v4.4s, #0x1
+               	ldr	d4, [sp, #0x2f0]
+               	zip1	v1.2d, v4.2d, v1.2d
+               	str	q1, [sp, #0x30]
+               	shrn	v1.2s, v3.2d, #0x1
+               	ldr	d3, [sp, #0x310]
+               	zip1	v1.2d, v3.2d, v1.2d
+               	str	q1, [sp, #0x40]
+               	uqrshrn	v1.2s, v0.2d, #0x1
+               	ldr	d3, [sp, #0x320]
+               	zip1	v1.2d, v3.2d, v1.2d
+               	str	q1, [sp, #0x50]
+               	sqrshrn	v1.4h, v2.4s, #0x1
+               	ldr	d2, [sp, #0x2e0]
+               	zip1	v1.2d, v2.2d, v1.2d
+               	str	q1, [sp, #0x60]
                	sub	x2, x29, #0x3a0
+               	str	q0, [sp, #0x250]
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]

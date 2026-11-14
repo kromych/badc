@@ -51,24 +51,16 @@ Disassembly of section .text:
                	subq	$0x40, %rsp
                	andq	$-0x20, %rsp
                	leaq	<rip>, %rax
-               	movups	(%rax), %xmm14
-               	movups	%xmm14, -0x10(%rbp)
+               	movups	(%rax), %xmm2
                	leaq	<rip>, %rax
-               	movups	(%rax), %xmm14
-               	movups	%xmm14, -0x20(%rbp)
+               	movups	(%rax), %xmm3
                	leaq	<rip>, %rax
-               	movups	(%rax), %xmm14
-               	movups	%xmm14, -0x30(%rbp)
+               	movups	(%rax), %xmm4
                	leaq	<rip>, %rax
-               	movups	(%rax), %xmm14
-               	movups	%xmm14, -0x40(%rbp)
-               	movups	-0x10(%rbp), %xmm2
+               	movups	(%rax), %xmm5
                	vmovdqa	%xmm2, %xmm0
-               	movups	-0x20(%rbp), %xmm3
                	vinserti128	$0x1, %xmm3, %ymm0, %ymm0
-               	movups	-0x30(%rbp), %xmm4
                	vmovdqa	%xmm4, %xmm1
-               	movups	-0x40(%rbp), %xmm5
                	vinserti128	$0x1, %xmm5, %ymm1, %ymm1
                	vmovdqa	%xmm0, %xmm6
                	vmovdqa	%xmm1, %xmm7
@@ -90,11 +82,15 @@ Disassembly of section .text:
                	leaq	(%rsp), %r9
                	vmovups	%ymm6, (%rsp)
                	leaq	0x20(%rsp), %rax
-               	vaesenc	%xmm4, %xmm2, %xmm2
-               	movups	%xmm2, 0x20(%rsp)
+               	vaesenc	%xmm4, %xmm2, %xmm6
+               	movups	%xmm6, 0x20(%rsp)
                	leaq	0x30(%rsp), %rcx
-               	vaesenc	%xmm5, %xmm3, %xmm2
-               	movups	%xmm2, 0x30(%rsp)
+               	vaesenc	%xmm5, %xmm3, %xmm6
+               	movups	%xmm6, 0x30(%rsp)
+               	movups	%xmm2, -0x10(%rbp)
+               	movups	%xmm3, -0x20(%rbp)
+               	movups	%xmm4, -0x30(%rbp)
+               	movups	%xmm5, -0x40(%rbp)
                	vmovups	%ymm0, -0x60(%rbp)
                	vmovups	%ymm1, -0x80(%rbp)
                	movq	%r9, %r10

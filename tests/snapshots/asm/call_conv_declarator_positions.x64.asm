@@ -457,14 +457,14 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movq	%rdi, 0x8(%rsp)
-               	movq	%rsi, (%rsp)
+               	movq	%rdi, %rcx
+               	movq	%rsi, %rdx
                	leaq	-<rip>, %rax # <addr>
                	movq	%rax, <rip> # <addr>
                	movq	<rip>, %rax # <addr>
+               	movq	%rcx, 0x8(%rsp)
+               	movq	%rdx, (%rsp)
                	subq	$0x20, %rsp
-               	movq	0x28(%rsp), %rcx
-               	movq	0x20(%rsp), %rdx
                	callq	*%rax
                	addq	$0x20, %rsp
                	cmpq	$0x17, %rax

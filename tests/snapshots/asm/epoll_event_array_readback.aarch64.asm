@@ -36,22 +36,21 @@ Disassembly of section .text:
                	b.ge	<addr>
                	mov	x0, #0x2                // =2
                	b	<addr>
-               	mov	x16, #0x7788            // =30600
-               	movk	x16, #0x5566, lsl #16
-               	movk	x16, #0x3344, lsl #32
-               	movk	x16, #0x1122, lsl #48
-               	str	x16, [sp, #0x28]
+               	mov	x0, #0x7788             // =30600
+               	movk	x0, #0x5566, lsl #16
+               	movk	x0, #0x3344, lsl #32
+               	movk	x0, #0x1122, lsl #48
                	mov	x16, #0x2211            // =8721
                	movk	x16, #0x4433, lsl #16
                	movk	x16, #0x6655, lsl #32
                	movk	x16, #0x8877, lsl #48
-               	str	x16, [sp, #0x20]
+               	str	x16, [sp, #0x28]
                	sub	x3, x29, #0x30
                	mov	x1, #0x1                // =1
                	stur	w1, [x29, #-0x30]
-               	ldr	x16, [sp, #0x28]
-               	stur	x16, [x29, #-0x28]
+               	stur	x0, [x29, #-0x28]
                	ldursw	x2, [x29, #-0x40]
+               	str	x0, [sp, #0x20]
                	mov	x0, x21
                	bl	<addr>
                	sxtw	x0, w0
@@ -59,7 +58,7 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	b	<addr>
                	sub	x3, x29, #0x30
-               	ldr	x16, [sp, #0x20]
+               	ldr	x16, [sp, #0x28]
                	stur	x16, [x29, #-0x28]
                	mov	x1, #0x1                // =1
                	ldursw	x2, [x29, #-0x38]
@@ -112,12 +111,12 @@ Disassembly of section .text:
                	sub	x2, x29, #0x20
                	add	x1, x2, x1
                	ldr	x1, [x1, #0x8]
-               	ldr	x17, [sp, #0x28]
+               	ldr	x17, [sp, #0x20]
                	cmp	x1, x17
                	b.ne	<addr>
                	orr	x20, x20, #0x1
                	b	<addr>
-               	ldr	x17, [sp, #0x20]
+               	ldr	x17, [sp, #0x28]
                	cmp	x1, x17
                	b.ne	<addr>
                	orr	x20, x20, #0x2

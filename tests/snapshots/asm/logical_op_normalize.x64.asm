@@ -52,10 +52,9 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
-               	movslq	<rip>, %r10 # <addr>
-               	movq	%r10, 0x8(%rsp)
+               	movslq	<rip>, %rdi # <addr>
                	xorl	%esi, %esi
-               	movq	0x8(%rsp), %rdi
+               	movq	%rdi, 0x8(%rsp)
                	callq	<addr>
                	cmpl	$0x1, %eax
                	je	<addr>

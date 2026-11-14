@@ -134,17 +134,15 @@ Disassembly of section .text:
                	movq	0x38(%rsp), %rax
                	cmpl	$0x3, %eax
                	jl	<addr>
-               	movups	(%rdi), %xmm14
-               	movups	%xmm14, 0x40(%rsp)
-               	movups	(%rsi), %xmm14
-               	movups	%xmm14, 0x30(%rsp)
-               	movups	0x40(%rsp), %xmm14
-               	movups	0x30(%rsp), %xmm15
-               	vpsignb	%xmm15, %xmm14, %xmm0
+               	movups	(%rdi), %xmm0
+               	movups	(%rsi), %xmm1
+               	vpsignb	%xmm1, %xmm0, %xmm2
                	leaq	-0x30(%rbp), %rsi
                	leaq	-0x40(%rbp), %rdi
-               	movups	%xmm0, -0x40(%rbp)
+               	movups	%xmm2, -0x40(%rbp)
                	movl	$0x10, %edx
+               	movups	%xmm0, 0x40(%rsp)
+               	movups	%xmm1, 0x30(%rsp)
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

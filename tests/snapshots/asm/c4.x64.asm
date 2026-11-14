@@ -1848,22 +1848,20 @@ Disassembly of section .text:
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	leaq	-0x1(%rdi), %r10
-               	movq	%r10, 0x48(%rsp)
+               	leaq	-0x1(%rdi), %rax
                	leaq	0x8(%rsi), %r15
-               	movq	0x48(%rsp), %rax
+               	movq	%rax, 0x48(%rsp)
                	testq	%rax, %rax
                	jle	<addr>
-               	movq	(%r15), %rcx
-               	movsbq	(%rcx), %rdx
-               	cmpl	$0x2d, %edx
+               	movq	(%r15), %rax
+               	movsbq	(%rax), %rcx
+               	cmpl	$0x2d, %ecx
                	jne	<addr>
-               	movsbq	0x1(%rcx), %rcx
-               	cmpl	$0x73, %ecx
+               	movsbq	0x1(%rax), %rax
+               	cmpl	$0x73, %eax
                	jne	<addr>
                	movq	$0x1, <rip> # <addr>
-               	leaq	-0x1(%rax), %r10
-               	movq	%r10, 0x48(%rsp)
+               	addq	$-0x1, 0x48(%rsp)
                	addq	$0x8, %r15
                	movq	0x48(%rsp), %rax
                	testq	%rax, %rax

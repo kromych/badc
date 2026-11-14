@@ -290,17 +290,15 @@ Disassembly of section .text:
                	incq	%r12
                	cmpl	$0x8, %r12d
                	jl	<addr>
-               	movups	(%rdi), %xmm14
-               	movups	%xmm14, 0x20(%rsp)
-               	movups	(%rsi), %xmm14
-               	movups	%xmm14, 0x10(%rsp)
-               	movups	0x20(%rsp), %xmm14
-               	movups	0x10(%rsp), %xmm15
-               	vpmulld	%xmm15, %xmm14, %xmm0
+               	movups	(%rdi), %xmm0
+               	movups	(%rsi), %xmm1
+               	vpmulld	%xmm1, %xmm0, %xmm2
                	leaq	-0x50(%rbp), %rsi
                	leaq	-0x10(%rbp), %rdi
-               	movups	%xmm0, -0x10(%rbp)
+               	movups	%xmm2, -0x10(%rbp)
                	movl	$0x10, %edx
+               	movups	%xmm0, 0x20(%rsp)
+               	movups	%xmm1, 0x10(%rsp)
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

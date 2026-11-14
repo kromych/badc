@@ -706,17 +706,15 @@ Disassembly of section .text:
                	ldr	q0, [sp, #0x500]
                	mov	v0.d[0], x0
                	ldur	x0, [x29, #-0x48]
-               	mov	v16.16b, v0.16b
-               	mov	v16.d[1], x0
-               	str	q16, [sp, #0x500]
-               	ldr	q0, [sp, #0x500]
+               	mov	v0.d[1], x0
                	mov	d2, v0.d[0]
-               	mov	d0, v0.d[1]
-               	zip1	v0.2d, v2.2d, v0.2d
-               	tbl	v0.8b, { v0.16b }, v1.8b
-               	mov	x0, v0.d[0]
+               	mov	d3, v0.d[1]
+               	mov	v2.d[1], v3.d[0]
+               	tbl	v1.8b, { v2.16b }, v1.8b
+               	mov	x0, v1.d[0]
                	str	x0, [sp, #0x578]
                	sub	x2, x29, #0x600
+               	str	q0, [sp, #0x500]
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]

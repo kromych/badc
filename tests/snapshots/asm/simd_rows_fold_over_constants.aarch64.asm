@@ -19,57 +19,51 @@ Disassembly of section .text:
                	sub	sp, sp, #0x60
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	q16, [x0]
-               	str	q16, [sp, #0x30]
+               	ldr	q0, [x0]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	q16, [x0]
-               	str	q16, [sp, #0x20]
+               	ldr	q1, [x0]
                	adrp	x0, <page>
                	ldrsw	x1, [x0, #0xc]
-               	fmov	s0, w1
+               	fmov	s2, w1
                	adrp	x1, <page>
                	ldrsw	x1, [x1, #0x10]
-               	mov	v0.s[1], w1
+               	mov	v2.s[1], w1
                	mov	x1, #0x7fff8000         // =2147450880
-               	mov	v0.s[2], w1
+               	mov	v2.s[2], w1
                	mov	x1, #-0x1               // =-1
-               	mov	v16.16b, v0.16b
-               	mov	v16.s[3], w1
-               	str	q16, [sp, #0x50]
+               	mov	v2.s[3], w1
                	ldrsw	x0, [x0, #0xc]
                	mov	x17, #0x5677            // =22135
                	movk	x17, #0x1234, lsl #16
                	sub	x0, x0, x17
                	sxth	x0, w0
-               	mov	v0.h[0], w0
+               	mov	v3.h[0], w0
                	mov	x0, #-0x2               // =-2
-               	mov	v0.h[1], w0
+               	mov	v3.h[1], w0
                	mov	x0, #0x3                // =3
-               	mov	v0.h[2], w0
+               	mov	v3.h[2], w0
                	mov	x0, #0x7fff             // =32767
-               	mov	v0.h[3], w0
+               	mov	v3.h[3], w0
                	mov	x0, #-0x8000            // =-32768
-               	mov	v0.h[4], w0
+               	mov	v3.h[4], w0
                	mov	x0, #0x6                // =6
-               	mov	v0.h[5], w0
+               	mov	v3.h[5], w0
                	mov	x0, #-0x7               // =-7
-               	mov	v0.h[6], w0
+               	mov	v3.h[6], w0
                	mov	x0, #0x8                // =8
-               	mov	v16.16b, v0.16b
-               	mov	v16.h[7], w0
-               	str	q16, [sp, #0x40]
-               	ldr	q16, [sp, #0x30]
-               	ldr	q17, [sp, #0x20]
-               	sqadd	v0.8h, v16.8h, v17.8h
+               	mov	v3.h[7], w0
+               	sqadd	v4.8h, v0.8h, v1.8h
                	sub	x0, x29, #0x60
-               	stur	q0, [x29, #-0x60]
-               	ldr	q16, [sp, #0x50]
-               	ldr	q17, [sp, #0x40]
-               	sqadd	v0.8h, v16.8h, v17.8h
+               	stur	q4, [x29, #-0x60]
+               	sqadd	v4.8h, v2.8h, v3.8h
                	sub	x1, x29, #0x50
-               	stur	q0, [x29, #-0x50]
+               	stur	q4, [x29, #-0x50]
                	mov	x2, #0x10               // =16
+               	str	q0, [sp, #0x30]
+               	str	q1, [sp, #0x20]
+               	str	q2, [sp, #0x50]
+               	str	q3, [sp, #0x40]
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>

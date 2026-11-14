@@ -240,6 +240,164 @@ fn apply(func: &mut FunctionSsa, runs: &[Run]) -> Undo {
     undo
 }
 
+/// A spilled value read between its definition and the first barrier
+/// after it in its block, or the block's end. The definition's register
+/// keeps the value through those reads, and a copy ahead of the barrier,
+/// or of the block's last instruction, takes the rest of its range, so the
+/// slot's store moves there: a parameter is read from its argument
+/// register until the first call.
+struct Head {
+    src: ValueId,
+    is_fp: bool,
+    /// The instruction the copy goes ahead of, whose reads stay with
+    /// `src`.
+    at: ValueId,
+}
+
+/// The heads worth splitting: a spilled value with a read in its head and
+/// one past it. A phi is placed by the moves on its incoming edges, so it
+/// has no head of its own.
+fn plan_heads(func: &FunctionSsa, alloc: &Allocation) -> Vec<Head> {
+    let n = func.insts.len();
+    let mut out: Vec<Head> = Vec::new();
+    if alloc.spill_count == 0 {
+        return out;
+    }
+    let spilled =
+        |v: ValueId| -> bool { matches!(alloc.places.get(v as usize), Some(Place::Spill(_))) };
+    let mut reads: Vec<u32> = vec![0; n];
+    let mut is_open: Vec<bool> = vec![false; n];
+    let mut open: Vec<ValueId> = Vec::new();
+    for (b, block) in func.blocks.iter().enumerate() {
+        let end = super::licm::insert_point(func, b as BlockId);
+        for idx in block.inst_range.clone() {
+            let inst = &func.insts[idx as usize];
+            if matches!(inst, Inst::Phi { .. })
+                || super::emit_common::is_dead_pure_counts(inst, idx, &alloc.use_counts)
+            {
+                continue;
+            }
+            // A read past the block's copy point is the copy's.
+            let counted = end.is_none_or(|e| idx <= e);
+            super::reg_alloc::for_each_operand(inst, |op| {
+                if counted && (op as usize) < n && is_open[op as usize] {
+                    reads[op as usize] += 1;
+                }
+            });
+            if is_barrier(inst) {
+                close_heads(
+                    func,
+                    alloc,
+                    &mut open,
+                    &mut is_open,
+                    &mut reads,
+                    Some(idx),
+                    &mut out,
+                );
+            }
+            if spilled(idx) {
+                is_open[idx as usize] = true;
+                open.push(idx);
+            }
+        }
+        close_heads(
+            func,
+            alloc,
+            &mut open,
+            &mut is_open,
+            &mut reads,
+            end,
+            &mut out,
+        );
+    }
+    out
+}
+
+/// Close the open heads at `at`: a head with a read up to `at` and one
+/// past it is split there.
+fn close_heads(
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    open: &mut Vec<ValueId>,
+    is_open: &mut [bool],
+    reads: &mut [u32],
+    at: Option<ValueId>,
+    out: &mut Vec<Head>,
+) {
+    for &v in open.iter() {
+        let r = reads[v as usize];
+        if let Some(at) = at.filter(|&at| v < at)
+            && r > 0
+            && alloc.use_counts.get(v as usize).is_some_and(|&u| u > r)
+        {
+            out.push(Head {
+                src: v,
+                is_fp: alloc.is_fp_value(&func.insts[v as usize], v),
+                at,
+            });
+        }
+        reads[v as usize] = 0;
+        is_open[v as usize] = false;
+    }
+    open.clear();
+}
+
+/// Insert each head's copy ahead of its barrier and point every read of
+/// the value past the head at it.
+fn apply_heads(func: &mut FunctionSsa, heads: &[Head]) -> Undo {
+    let ins: Vec<Insertion> = heads
+        .iter()
+        .map(|h| Insertion {
+            at: At::Before(h.at),
+            inst: Inst::Copy {
+                value: h.src,
+                is_fp: h.is_fp,
+            },
+            is_f32: func
+                .f32_values
+                .get(h.src as usize)
+                .copied()
+                .unwrap_or(false),
+            copy_of: None,
+        })
+        .collect();
+    let (rewrite, undo) = super::tape::insert_undoable(func, &ins);
+    let n = func.insts.len();
+    // Per value: its copy, and the last instruction of its head.
+    let mut copy: Vec<ValueId> = vec![NO_VALUE; n];
+    let mut head_end: Vec<ValueId> = vec![0; n];
+    for (k, h) in heads.iter().enumerate() {
+        let src = rewrite.remap[h.src as usize] as usize;
+        copy[src] = rewrite.ids[k];
+        head_end[src] = rewrite.remap[h.at as usize];
+    }
+    let outside = |i: usize, op: ValueId| -> bool {
+        let o = op as usize;
+        o < n && copy[o] != NO_VALUE && !(o < i && i as ValueId <= head_end[o])
+    };
+    for (i, inst) in func.insts.iter_mut().enumerate() {
+        inst.for_each_operand_mut(|op| {
+            if outside(i, *op) {
+                *op = copy[*op as usize];
+            }
+        });
+    }
+    for block in func.blocks.iter_mut() {
+        let redirect = |op: &mut ValueId| {
+            if (*op as usize) < n && copy[*op as usize] != NO_VALUE {
+                *op = copy[*op as usize];
+            }
+        };
+        if block.exit_acc != NO_VALUE {
+            let mut acc = block.exit_acc;
+            redirect(&mut acc);
+            block.exit_acc = acc;
+        }
+        block.terminator.for_each_operand_mut(redirect);
+    }
+    undo
+}
+
 /// Loop-weighted count of the memory traffic and copies placement
 /// forces the emit to issue: one per spilled definition, one per operand
 /// reference naming a spilled value, and one per inserted copy. Charging
@@ -258,16 +416,16 @@ pub(super) fn spill_traffic(func: &FunctionSsa, alloc: &Allocation) -> u64 {
             if super::emit_common::is_dead_pure_counts(inst, idx, &alloc.use_counts) {
                 continue;
             }
+            // A copy is one instruction -- a reload, a register move, or a
+            // store of the register it reads -- and two from a slot to a
+            // slot; its operand is not charged again.
+            if let Inst::Copy { value, .. } = *inst {
+                let both = spilled(idx) && spilled(value);
+                total = total.saturating_add(wb * (1 + u64::from(both)));
+                continue;
+            }
             if spilled(idx) {
                 total = total.saturating_add(wb);
-            }
-            // A copy is one instruction whichever bank its operand sits
-            // in -- a reload when the operand is spilled, a register
-            // move otherwise -- so it is charged once and its operand is
-            // not charged again.
-            if matches!(inst, Inst::Copy { .. }) {
-                total = total.saturating_add(wb);
-                continue;
             }
             super::reg_alloc::for_each_operand(inst, |op| {
                 if spilled(op) {
@@ -312,12 +470,34 @@ pub(super) fn allocate_split_with(
     fixed: FixedRegs,
     base: Allocation,
 ) -> Allocation {
+    let base = split_heads(func, target, fixed, base);
     let runs = plan(func, &base);
     if runs.is_empty() {
         return base;
     }
     let base_traffic = spill_traffic(func, &base);
     let undo = apply(func, &runs);
+    let alt = super::reg_alloc::allocate(func, target, fixed);
+    if spill_traffic(func, &alt) < base_traffic {
+        return alt;
+    }
+    undo.restore(func);
+    base
+}
+
+/// Split the heads of [`plan_heads`] when the spill traffic drops.
+fn split_heads(
+    func: &mut FunctionSsa,
+    target: Target,
+    fixed: FixedRegs,
+    base: Allocation,
+) -> Allocation {
+    let heads = plan_heads(func, &base);
+    if heads.is_empty() {
+        return base;
+    }
+    let base_traffic = spill_traffic(func, &base);
+    let undo = apply_heads(func, &heads);
     let alt = super::reg_alloc::allocate(func, target, fixed);
     if spill_traffic(func, &alt) < base_traffic {
         return alt;
@@ -848,5 +1028,70 @@ mod tests {
             ],
         );
         assert!(plan(&f, &alloc_spilling_v0(4)).is_empty());
+    }
+
+    /// A spilled value read ahead of a call and past it keeps its
+    /// definition's register through the call's own reads; a copy ahead of
+    /// the call takes the later read.
+    #[test]
+    fn a_spilled_value_read_before_a_call_splits_its_head() {
+        let mut f = func_with(
+            vec![load(), store_of(0), call_of(alloc::vec![0]), store_of(0)],
+            vec![block(0..4, Terminator::Return(NO_VALUE))],
+        );
+        let mut a = alloc_spilling_v0(4);
+        a.use_counts[0] = 3;
+        let heads = plan_heads(&f, &a);
+        assert_eq!(heads.len(), 1);
+        assert_eq!((heads[0].src, heads[0].at), (0, 2));
+        apply_heads(&mut f, &heads);
+        let c = copies(&f);
+        assert_eq!(c, alloc::vec![2], "the copy goes ahead of the call");
+        let reads = |i: usize| {
+            let mut ops = Vec::new();
+            f.insts[i].for_each_operand(|o| ops.push(o));
+            ops
+        };
+        assert_eq!(reads(1), alloc::vec![0], "the head read keeps the value");
+        assert_eq!(reads(3), alloc::vec![0], "the call reads the value");
+        assert_eq!(reads(4), alloc::vec![2], "the later read takes the copy");
+    }
+
+    /// With no barrier in its block, the head ends ahead of the block's last
+    /// instruction, and the block's successor reads the copy.
+    #[test]
+    fn a_head_with_no_barrier_ends_at_its_block() {
+        let mut f = func_with(
+            vec![load(), store_of(0), store_of(0), store_of(0)],
+            vec![
+                block(0..3, Terminator::Jmp(1)),
+                block(3..4, Terminator::Return(NO_VALUE)),
+            ],
+        );
+        let mut a = alloc_spilling_v0(4);
+        a.use_counts[0] = 3;
+        let heads = plan_heads(&f, &a);
+        assert_eq!(heads.len(), 1);
+        assert_eq!((heads[0].src, heads[0].at), (0, 2));
+        apply_heads(&mut f, &heads);
+        assert_eq!(copies(&f), alloc::vec![2]);
+        let mut last = Vec::new();
+        f.insts[4].for_each_operand(|o| last.push(o));
+        assert_eq!(last, alloc::vec![2]);
+    }
+
+    /// A value read only past its head, or only in it, has nothing to split.
+    #[test]
+    fn a_head_needs_a_read_on_both_sides() {
+        let f = func_with(
+            vec![load(), call_of(Vec::new()), store_of(0)],
+            vec![block(0..3, Terminator::Return(NO_VALUE))],
+        );
+        assert!(plan_heads(&f, &alloc_spilling_v0(3)).is_empty());
+        let f = func_with(
+            vec![load(), store_of(0), call_of(Vec::new())],
+            vec![block(0..3, Terminator::Return(NO_VALUE))],
+        );
+        assert!(plan_heads(&f, &alloc_spilling_v0(3)).is_empty());
     }
 }

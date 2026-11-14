@@ -448,13 +448,11 @@ Disassembly of section .text:
                	cmp	x0, #0x7
                	b.ne	<addr>
                	fmov	d0, #1.00000000
-               	mov	x16, #0x5               // =5
-               	str	x16, [sp, #0x58]
-               	mov	x16, #0x7               // =7
-               	str	x16, [sp, #0x50]
+               	mov	x0, #0x5                // =5
+               	mov	x1, #0x7                // =7
+               	str	x0, [sp, #0x58]
+               	str	x1, [sp, #0x50]
                	fmov	d1, d8
-               	ldr	x0, [sp, #0x58]
-               	ldr	x1, [sp, #0x50]
                	bl	<addr>
                	cmp	x0, #0x7
                	b.eq	<addr>
@@ -464,13 +462,12 @@ Disassembly of section .text:
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x16, x29, #0x50
-               	str	x16, [sp, #0x48]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x16, [sp, #0x48]
-               	ldrh	w17, [x0]
-               	strh	w17, [x16]
+               	sub	x0, x29, #0x50
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	str	x0, [sp, #0x48]
+               	ldrh	w16, [x1]
+               	strh	w16, [x0]
                	sub	x0, x29, #0x48
                	adrp	x1, <page>
                	add	x1, x1, <lo12>

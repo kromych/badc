@@ -640,10 +640,11 @@ Disassembly of section .text:
                	mov	x1, #0x3c00             // =15360
                	sub	x0, x29, #0x8
                	stur	w1, [x29, #-0x8]
-               	adrp	x16, <page>
-               	str	x16, [sp, #0x18]
-               	ldrsw	x1, [x16, #0x20]
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	ldrsw	x1, [x2]
                	add	x1, x1, #0x1
+               	str	x2, [sp, #0x18]
                	mov	x2, x0
                	bl	<addr>
                	mov	x17, #0x1775            // =6005
@@ -666,7 +667,7 @@ Disassembly of section .text:
                	ldrb	w0, [x3, x1]
                	cbnz	w0, <addr>
                	ldr	x16, [sp, #0x18]
-               	ldrsw	x0, [x16, #0x20]
+               	ldrsw	x0, [x16]
                	add	x2, x0, #0x40
                	str	x3, [sp, #0x10]
                	str	x1, [sp, #0x8]

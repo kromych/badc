@@ -110,9 +110,7 @@ Disassembly of section .text:
                	leaq	-0x100(%rbp), %rdi
                	movl	$0x1, %esi
                	callq	<addr>
-               	movq	%rax, %r10
-               	movq	%r10, 0x18(%rsp)
-               	movq	%r10, %rax
+               	movq	%rax, 0x18(%rsp)
                	cmpq	$-0x1, %rax
                	jne	<addr>
                	movl	$0x5, %ebx

@@ -46,23 +46,21 @@ Disassembly of section .text:
                	retq
                	movl	$0x80000, %edi          # imm = 0x80000
                	callq	<addr>
-               	movq	%rax, %r10
-               	movq	%r10, 0x18(%rsp)
-               	movq	%r10, %rax
+               	movslq	%eax, %rax
+               	movq	%rax, 0x18(%rsp)
                	testl	%eax, %eax
                	jge	<addr>
                	movl	$0x2, %eax
                	jmp	<addr>
-               	movabsq	$0x1122334455667788, %r10 # imm = 0x1122334455667788
-               	movq	%r10, 0x28(%rsp)
+               	movabsq	$0x1122334455667788, %rax # imm = 0x1122334455667788
                	movabsq	$-0x778899aabbccddef, %r10 # imm = 0x8877665544332211
-               	movq	%r10, 0x20(%rsp)
+               	movq	%r10, 0x28(%rsp)
                	leaq	-0x28(%rbp), %rcx
                	movl	$0x1, %esi
                	movl	%esi, -0x28(%rbp)
-               	movq	0x28(%rsp), %r10
-               	movq	%r10, -0x24(%rbp)
+               	movq	%rax, -0x24(%rbp)
                	movl	-0x38(%rbp), %edx
+               	movq	%rax, 0x20(%rsp)
                	movq	0x18(%rsp), %rdi
                	callq	<addr>
                	movslq	%eax, %rax
@@ -71,7 +69,7 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	jmp	<addr>
                	leaq	-0x28(%rbp), %rcx
-               	movq	0x20(%rsp), %r10
+               	movq	0x28(%rsp), %r10
                	movq	%r10, -0x24(%rbp)
                	movl	$0x1, %esi
                	movl	-0x30(%rbp), %edx
@@ -119,14 +117,14 @@ Disassembly of section .text:
                	cmpl	$0x1, %esi
                	jne	<addr>
                	movq	0x4(%rdx), %rdx
-               	cmpq	0x28(%rsp), %rdx
+               	cmpq	0x20(%rsp), %rdx
                	jne	<addr>
                	orq	$0x1, %rbx
                	jmp	<addr>
                	leaq	-0x18(%rbp), %rdx
                	addq	%rdx, %rcx
                	movq	0x4(%rcx), %rcx
-               	cmpq	0x20(%rsp), %rcx
+               	cmpq	0x28(%rsp), %rcx
                	jne	<addr>
                	orq	$0x2, %rbx
                	jmp	<addr>

@@ -30,52 +30,46 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x60, %rsp
                	leaq	<rip>, %rax
-               	movups	(%rax), %xmm14
-               	movups	%xmm14, 0x20(%rsp)
+               	movups	(%rax), %xmm0
                	leaq	<rip>, %rax
-               	movups	(%rax), %xmm14
-               	movups	%xmm14, 0x30(%rsp)
+               	movups	(%rax), %xmm1
                	movl	<rip>, %eax # <addr>
-               	vmovd	%eax, %xmm0
+               	vmovd	%eax, %xmm2
                	movl	<rip>, %eax # <addr>
-               	vpinsrd	$0x1, %eax, %xmm0, %xmm0
+               	vpinsrd	$0x1, %eax, %xmm2, %xmm2
                	movl	$0x7fff8000, %eax       # imm = 0x7FFF8000
-               	vpinsrd	$0x2, %eax, %xmm0, %xmm0
+               	vpinsrd	$0x2, %eax, %xmm2, %xmm2
                	movq	$-0x1, %rax
-               	movapd	%xmm0, %xmm14
-               	vpinsrd	$0x3, %eax, %xmm14, %xmm14
-               	movups	%xmm14, 0x40(%rsp)
+               	vpinsrd	$0x3, %eax, %xmm2, %xmm2
                	movl	<rip>, %eax # <addr>
                	subq	$0x12345677, %rax       # imm = 0x12345677
                	movswq	%ax, %rax
-               	vpinsrw	$0x0, %eax, %xmm0, %xmm0
+               	vpinsrw	$0x0, %eax, %xmm3, %xmm3
                	movq	$-0x2, %rax
-               	vpinsrw	$0x1, %eax, %xmm0, %xmm0
+               	vpinsrw	$0x1, %eax, %xmm3, %xmm3
                	movl	$0x3, %eax
-               	vpinsrw	$0x2, %eax, %xmm0, %xmm0
+               	vpinsrw	$0x2, %eax, %xmm3, %xmm3
                	movl	$0x7fff, %eax           # imm = 0x7FFF
-               	vpinsrw	$0x3, %eax, %xmm0, %xmm0
+               	vpinsrw	$0x3, %eax, %xmm3, %xmm3
                	movq	$-0x8000, %rax          # imm = 0x8000
-               	vpinsrw	$0x4, %eax, %xmm0, %xmm0
+               	vpinsrw	$0x4, %eax, %xmm3, %xmm3
                	movl	$0x6, %eax
-               	vpinsrw	$0x5, %eax, %xmm0, %xmm0
+               	vpinsrw	$0x5, %eax, %xmm3, %xmm3
                	movq	$-0x7, %rax
-               	vpinsrw	$0x6, %eax, %xmm0, %xmm0
+               	vpinsrw	$0x6, %eax, %xmm3, %xmm3
                	movl	$0x8, %eax
-               	movapd	%xmm0, %xmm14
-               	vpinsrw	$0x7, %eax, %xmm14, %xmm14
-               	movups	%xmm14, 0x50(%rsp)
-               	movups	0x20(%rsp), %xmm14
-               	movups	0x30(%rsp), %xmm15
-               	vpaddw	%xmm15, %xmm14, %xmm0
+               	vpinsrw	$0x7, %eax, %xmm3, %xmm3
+               	vpaddw	%xmm1, %xmm0, %xmm4
                	leaq	-0x60(%rbp), %rdi
-               	movups	%xmm0, -0x60(%rbp)
-               	movups	0x40(%rsp), %xmm14
-               	movups	0x50(%rsp), %xmm15
-               	vpaddw	%xmm15, %xmm14, %xmm0
+               	movups	%xmm4, -0x60(%rbp)
+               	vpaddw	%xmm3, %xmm2, %xmm4
                	leaq	-0x50(%rbp), %rsi
-               	movups	%xmm0, -0x50(%rbp)
+               	movups	%xmm4, -0x50(%rbp)
                	movl	$0x10, %edx
+               	movups	%xmm0, 0x20(%rsp)
+               	movups	%xmm1, 0x30(%rsp)
+               	movups	%xmm2, 0x40(%rsp)
+               	movups	%xmm3, 0x50(%rsp)
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

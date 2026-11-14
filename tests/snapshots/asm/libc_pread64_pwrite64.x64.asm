@@ -36,9 +36,8 @@ Disassembly of section .text:
                	movl	0x10(%rax), %r10d
                	movl	%r10d, 0x10(%rdi)
                	callq	<addr>
-               	movq	%rax, %r10
-               	movq	%r10, 0x8(%rsp)
-               	movq	%r10, %rax
+               	movslq	%eax, %rax
+               	movq	%rax, 0x8(%rsp)
                	testl	%eax, %eax
                	jge	<addr>
                	movl	$0x1, %eax

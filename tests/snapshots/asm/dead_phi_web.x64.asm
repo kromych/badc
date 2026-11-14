@@ -82,15 +82,13 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
-               	movq	<rip>, %r10 # <addr>
-               	movq	%r10, 0x18(%rsp)
-               	movq	<rip>, %r10 # <addr>
-               	movq	%r10, 0x10(%rsp)
+               	movq	<rip>, %rdi # <addr>
+               	movq	<rip>, %rsi # <addr>
                	movq	<rip>, %rcx # <addr>
+               	movq	%rdi, 0x18(%rsp)
+               	movq	%rsi, 0x10(%rsp)
                	movq	%rcx, 0x8(%rsp)
                	movq	%rcx, %rdx
-               	movq	0x18(%rsp), %rdi
-               	movq	0x10(%rsp), %rsi
                	callq	<addr>
                	movq	0x8(%rsp), %rcx
                	movabsq	$-0x24bbe557ef188b23, %r11 # imm = 0xDB441AA810E774DD

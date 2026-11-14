@@ -272,6 +272,22 @@ pub(super) fn emit_copy(
         return Ok(());
     }
     let w = alloc.width(value);
+    // A register copied to a spill slot is stored from where it is.
+    match (src_place, dst) {
+        (Place::FpReg(r), Place::Spill(_)) if is_fp && w < VecWidth::V256 => {
+            if alloc.is_wide(value) {
+                mirror_v128_dst(code, dst, Reg(r), frame);
+            } else {
+                fp_spill_dst_to_slot(code, dst, Reg(r), frame);
+            }
+            return Ok(());
+        }
+        (Place::IntReg(r), Place::Spill(_)) if !is_fp => {
+            spill_dst_to_slot(code, dst, Reg(r), frame);
+            return Ok(());
+        }
+        _ => {}
+    }
     if is_fp && w >= VecWidth::V256 {
         let Some(dd) = fp_or_spill_dst(dst, frame) else {
             return fail("Copy: dst not fp reg / spill");

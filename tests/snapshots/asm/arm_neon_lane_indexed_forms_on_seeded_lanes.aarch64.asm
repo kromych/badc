@@ -294,7 +294,7 @@ Disassembly of section .text:
                	cmp	w0, #0x8
                	b.lt	<addr>
                	ldr	q16, [sp, #0x690]
-               	str	q16, [sp, #0x730]
+               	str	q16, [sp, #0x740]
                	mov	x0, #0x0                // =0
                	adrp	x2, <page>
                	ldr	x1, [x2, #0x10]
@@ -348,7 +348,7 @@ Disassembly of section .text:
                	cmp	w0, #0x4
                	b.lt	<addr>
                	ldr	q16, [sp, #0x6a0]
-               	str	q16, [sp, #0x720]
+               	str	q16, [sp, #0x730]
                	adrp	x1, <page>
                	ldr	x0, [x1, #0x10]
                	eor	x0, x0, x0, lsl #13
@@ -361,12 +361,12 @@ Disassembly of section .text:
                	str	x0, [x1, #0x10]
                	mov	v16.16b, v0.16b
                	mov	v16.d[1], x0
-               	str	q16, [sp, #0x710]
+               	str	q16, [sp, #0x720]
                	ldr	q16, [sp, #0x7a0]
                	mov	d8, v16.d[0]
                	ldr	q16, [sp, #0x790]
                	mov	d9, v16.d[0]
-               	ldr	q16, [sp, #0x730]
+               	ldr	q16, [sp, #0x740]
                	mov	d14, v16.d[0]
                	ldr	q16, [sp, #0x780]
                	mov	d13, v16.d[0]
@@ -421,14 +421,13 @@ Disassembly of section .text:
                	fmov	d16, x1
                	str	s16, [x20, x0, lsl #2]
                	b	<addr>
-               	ldr	q16, [sp, #0x6b0]
-               	str	q16, [sp, #0x740]
+               	ldr	q0, [sp, #0x6b0]
                	ldr	q16, [sp, #0x760]
                	mov	d12, v16.d[0]
                	ldr	q16, [sp, #0x750]
                	mov	d11, v16.d[1]
-               	ldr	q16, [sp, #0x740]
-               	mov	d15, v16.d[0]
+               	mov	d15, v0.d[0]
+               	str	q0, [sp, #0x710]
                	bl	<addr>
                	sub	x1, x29, #0x270
                	str	q0, [sp, #0x6c0]
@@ -478,14 +477,10 @@ Disassembly of section .text:
                	fmov	d16, x1
                	str	d16, [x20, x0, lsl #3]
                	b	<addr>
-               	ldr	q16, [sp, #0x6c0]
-               	str	q16, [sp, #0x6e0]
-               	ldr	q6, [sp, #0x700]
-               	mov	d16, v6.d[0]
-               	str	d16, [sp, #0x6d8]
-               	ldr	q19, [sp, #0x6e0]
-               	mov	d16, v19.d[1]
-               	str	d16, [sp, #0x6d0]
+               	ldr	q6, [sp, #0x6c0]
+               	ldr	q7, [sp, #0x700]
+               	mov	d19, v7.d[0]
+               	mov	d21, v6.d[1]
                	mul	v0.4h, v8.4h, v9.h[0]
                	str	d0, [sp, #0x7b0]
                	ldr	q2, [sp, #0x7a0]
@@ -500,47 +495,46 @@ Disassembly of section .text:
                	mul	v4.2s, v13.2s, v3.s[0]
                	str	d4, [sp, #0x7b8]
                	ldr	q4, [sp, #0x760]
-               	ldr	q7, [sp, #0x750]
-               	fmul	v5.4s, v4.4s, v7.s[0]
+               	ldr	q20, [sp, #0x750]
+               	fmul	v5.4s, v4.4s, v20.s[0]
                	str	q5, [sp, #0x80]
                	fmul	v5.2s, v12.2s, v11.s[0]
                	str	d5, [sp, #0x7c0]
                	ldr	q5, [sp, #0x6f0]
-               	fmul	v20.2d, v6.2d, v5.d[0]
-               	str	q20, [sp, #0x90]
-               	ldr	d20, [sp, #0x6d8]
-               	fmul	d21, d20, v5.d[0]
-               	str	d21, [sp, #0x7c8]
-               	ldr	q16, [sp, #0x730]
-               	mov	v21.16b, v16.16b
-               	mla	v21.8h, v2.8h, v9.h[0]
-               	str	q21, [sp, #0xa0]
-               	mov	v21.16b, v14.16b
-               	mls	v21.4h, v8.4h, v1.h[0]
-               	str	d21, [sp, #0x7d0]
-               	ldr	q21, [sp, #0x720]
-               	mov	v22.16b, v21.16b
-               	mls	v22.4s, v0.4s, v3.s[0]
-               	str	q22, [sp, #0xb0]
-               	ldr	q22, [sp, #0x740]
+               	fmul	v22.2d, v7.2d, v5.d[0]
+               	str	q22, [sp, #0x90]
+               	fmul	d22, d19, v5.d[0]
+               	str	d22, [sp, #0x7c8]
+               	ldr	q16, [sp, #0x740]
+               	mov	v22.16b, v16.16b
+               	mla	v22.8h, v2.8h, v9.h[0]
+               	str	q22, [sp, #0xa0]
+               	mov	v22.16b, v14.16b
+               	mls	v22.4h, v8.4h, v1.h[0]
+               	str	d22, [sp, #0x7d0]
+               	ldr	q22, [sp, #0x730]
                	mov	v23.16b, v22.16b
-               	fmla	v23.4s, v4.4s, v7.s[0]
-               	str	q23, [sp, #0xc0]
-               	mov	v23.16b, v15.16b
-               	fmls	v23.2s, v12.2s, v11.s[0]
-               	str	d23, [sp, #0x7d8]
-               	mov	v16.16b, v19.16b
-               	fmls	v16.2d, v6.2d, v5.d[0]
-               	mov	v6.16b, v16.16b
-               	str	q6, [sp, #0xd0]
-               	ldr	d16, [sp, #0x6d0]
-               	fmla	d16, d20, v5.d[0]
+               	mls	v23.4s, v0.4s, v3.s[0]
+               	str	q23, [sp, #0xb0]
+               	ldr	q23, [sp, #0x710]
+               	mov	v24.16b, v23.16b
+               	fmla	v24.4s, v4.4s, v20.s[0]
+               	str	q24, [sp, #0xc0]
+               	mov	v24.16b, v15.16b
+               	fmls	v24.2s, v12.2s, v11.s[0]
+               	str	d24, [sp, #0x7d8]
+               	mov	v16.16b, v6.16b
+               	fmls	v16.2d, v7.2d, v5.d[0]
+               	mov	v7.16b, v16.16b
+               	str	q7, [sp, #0xd0]
+               	mov	v16.16b, v21.16b
+               	fmla	d16, d19, v5.d[0]
                	mov	v5.16b, v16.16b
                	str	d5, [sp, #0x7e0]
                	fmulx	v5.4s, v4.4s, v11.s[0]
                	str	q5, [sp, #0xe0]
-               	fmul	v4.4s, v4.4s, v7.s[0]
-               	fadd	v4.4s, v22.4s, v4.4s
+               	fmul	v4.4s, v4.4s, v20.s[0]
+               	fadd	v4.4s, v23.4s, v4.4s
                	str	q4, [sp, #0xf0]
                	fmul	v4.2s, v12.2s, v11.s[0]
                	fsub	v4.2s, v15.2s, v4.2s
@@ -552,7 +546,7 @@ Disassembly of section .text:
                	mov	d4, v0.d[0]
                	umull	v4.2d, v4.2s, v3.s[0]
                	str	q4, [sp, #0x120]
-               	ldr	q4, [sp, #0x710]
+               	ldr	q4, [sp, #0x720]
                	mov	v5.16b, v4.16b
                	smlal2	v5.2d, v0.4s, v10.s[0]
                	str	q5, [sp, #0x130]
@@ -569,7 +563,7 @@ Disassembly of section .text:
                	mov	v2.16b, v14.16b
                	sqrdmlah	v2.4h, v8.4h, v1.h[0]
                	str	d2, [sp, #0x7f8]
-               	mov	v2.16b, v21.16b
+               	mov	v2.16b, v22.16b
                	sqrdmlsh	v2.4s, v0.4s, v10.s[0]
                	str	q2, [sp, #0x170]
                	sqdmull	v2.4s, v8.4h, v9.h[0]
@@ -585,6 +579,9 @@ Disassembly of section .text:
                	mov	v0.16b, v16.16b
                	str	q0, [sp, #0x1b0]
                	sub	x2, x29, #0x180
+               	str	q6, [sp, #0x6e0]
+               	str	d19, [sp, #0x6d8]
+               	str	d21, [sp, #0x6d0]
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]
@@ -1026,18 +1023,18 @@ Disassembly of section .text:
                	ldr	d19, [sp, #0x6d8]
                	fmul	d20, d19, v5.d[1]
                	str	d20, [sp, #0x818]
-               	ldr	q16, [sp, #0x730]
+               	ldr	q16, [sp, #0x740]
                	mov	v20.16b, v16.16b
                	mla	v20.8h, v2.8h, v9.h[1]
                	str	q20, [sp, #0x200]
                	mov	v20.16b, v14.16b
                	mls	v20.4h, v8.4h, v1.h[1]
                	str	d20, [sp, #0x820]
-               	ldr	q20, [sp, #0x720]
+               	ldr	q20, [sp, #0x730]
                	mov	v21.16b, v20.16b
                	mls	v21.4s, v0.4s, v3.s[1]
                	str	q21, [sp, #0x210]
-               	ldr	q21, [sp, #0x740]
+               	ldr	q21, [sp, #0x710]
                	mov	v22.16b, v21.16b
                	fmla	v22.4s, v4.4s, v6.s[1]
                	str	q22, [sp, #0x220]
@@ -1067,7 +1064,7 @@ Disassembly of section .text:
                	mov	d4, v0.d[0]
                	umull	v4.2d, v4.2s, v3.s[1]
                	str	q4, [sp, #0x280]
-               	ldr	q4, [sp, #0x710]
+               	ldr	q4, [sp, #0x720]
                	mov	v5.16b, v4.16b
                	smlal2	v5.2d, v0.4s, v10.s[1]
                	str	q5, [sp, #0x290]
@@ -1541,18 +1538,18 @@ Disassembly of section .text:
                	ldr	d19, [sp, #0x6d8]
                	fmul	d20, d19, v5.d[0]
                	stur	d20, [x29, #-0xc8]
-               	ldr	q16, [sp, #0x730]
+               	ldr	q16, [sp, #0x740]
                	mov	v20.16b, v16.16b
                	mla	v20.8h, v2.8h, v9.h[2]
                	str	q20, [sp, #0x360]
                	mov	v20.16b, v14.16b
                	mls	v20.4h, v8.4h, v1.h[2]
                	stur	d20, [x29, #-0xc0]
-               	ldr	q20, [sp, #0x720]
+               	ldr	q20, [sp, #0x730]
                	mov	v21.16b, v20.16b
                	mls	v21.4s, v0.4s, v3.s[2]
                	str	q21, [sp, #0x370]
-               	ldr	q21, [sp, #0x740]
+               	ldr	q21, [sp, #0x710]
                	mov	v22.16b, v21.16b
                	fmla	v22.4s, v4.4s, v6.s[2]
                	str	q22, [sp, #0x380]
@@ -1582,7 +1579,7 @@ Disassembly of section .text:
                	mov	d4, v0.d[0]
                	umull	v4.2d, v4.2s, v3.s[2]
                	str	q4, [sp, #0x3e0]
-               	ldr	q4, [sp, #0x710]
+               	ldr	q4, [sp, #0x720]
                	mov	v5.16b, v4.16b
                	smlal2	v5.2d, v0.4s, v10.s[0]
                	str	q5, [sp, #0x3f0]
@@ -2056,18 +2053,18 @@ Disassembly of section .text:
                	ldr	d19, [sp, #0x6d8]
                	fmul	d20, d19, v5.d[1]
                	stur	d20, [x29, #-0x78]
-               	ldr	q16, [sp, #0x730]
+               	ldr	q16, [sp, #0x740]
                	mov	v20.16b, v16.16b
                	mla	v20.8h, v2.8h, v9.h[3]
                	str	q20, [sp, #0x4c0]
                	mov	v20.16b, v14.16b
                	mls	v20.4h, v8.4h, v1.h[3]
                	stur	d20, [x29, #-0x70]
-               	ldr	q20, [sp, #0x720]
+               	ldr	q20, [sp, #0x730]
                	mov	v21.16b, v20.16b
                	mls	v21.4s, v0.4s, v3.s[3]
                	str	q21, [sp, #0x4d0]
-               	ldr	q21, [sp, #0x740]
+               	ldr	q21, [sp, #0x710]
                	mov	v22.16b, v21.16b
                	fmla	v22.4s, v4.4s, v6.s[3]
                	str	q22, [sp, #0x4e0]
@@ -2097,7 +2094,7 @@ Disassembly of section .text:
                	mov	d4, v0.d[0]
                	umull	v4.2d, v4.2s, v3.s[3]
                	str	q4, [sp, #0x540]
-               	ldr	q4, [sp, #0x710]
+               	ldr	q4, [sp, #0x720]
                	mov	v5.16b, v4.16b
                	smlal2	v5.2d, v0.4s, v10.s[1]
                	str	q5, [sp, #0x550]
@@ -2445,18 +2442,18 @@ Disassembly of section .text:
                	ldr	d19, [sp, #0x6d8]
                	fmul	d20, d19, v5.d[1]
                	stur	d20, [x29, #-0x38]
-               	ldr	q16, [sp, #0x730]
+               	ldr	q16, [sp, #0x740]
                	mov	v20.16b, v16.16b
                	mla	v20.8h, v2.8h, v9.h[1]
                	str	q20, [sp, #0x620]
                	mov	v20.16b, v14.16b
                	mls	v20.4h, v8.4h, v1.h[5]
                	stur	d20, [x29, #-0x30]
-               	ldr	q20, [sp, #0x720]
+               	ldr	q20, [sp, #0x730]
                	mov	v21.16b, v20.16b
                	mls	v21.4s, v0.4s, v3.s[1]
                	str	q21, [sp, #0x630]
-               	ldr	q21, [sp, #0x740]
+               	ldr	q21, [sp, #0x710]
                	mov	v22.16b, v21.16b
                	fmla	v22.4s, v4.4s, v6.s[1]
                	str	q22, [sp, #0x640]
@@ -2486,7 +2483,7 @@ Disassembly of section .text:
                	mov	d4, v0.d[0]
                	umull	v4.2d, v4.2s, v3.s[1]
                	str	q4, [sp, #0x540]
-               	ldr	q4, [sp, #0x710]
+               	ldr	q4, [sp, #0x720]
                	mov	v5.16b, v4.16b
                	smlal2	v5.2d, v0.4s, v10.s[1]
                	str	q5, [sp, #0x550]
@@ -2650,18 +2647,18 @@ Disassembly of section .text:
                	ldr	d19, [sp, #0x6d8]
                	fmul	d20, d19, v5.d[1]
                	stur	d20, [x29, #-0x38]
-               	ldr	q16, [sp, #0x730]
+               	ldr	q16, [sp, #0x740]
                	mov	v20.16b, v16.16b
                	mla	v20.8h, v2.8h, v9.h[3]
                	str	q20, [sp, #0x620]
                	mov	v20.16b, v14.16b
                	mls	v20.4h, v8.4h, v1.h[7]
                	stur	d20, [x29, #-0x30]
-               	ldr	q20, [sp, #0x720]
+               	ldr	q20, [sp, #0x730]
                	mov	v21.16b, v20.16b
                	mls	v21.4s, v0.4s, v3.s[3]
                	str	q21, [sp, #0x630]
-               	ldr	q21, [sp, #0x740]
+               	ldr	q21, [sp, #0x710]
                	mov	v22.16b, v21.16b
                	fmla	v22.4s, v4.4s, v6.s[3]
                	str	q22, [sp, #0x640]
@@ -2691,7 +2688,7 @@ Disassembly of section .text:
                	mov	d4, v0.d[0]
                	umull	v4.2d, v4.2s, v3.s[3]
                	str	q4, [sp, #0x540]
-               	ldr	q4, [sp, #0x710]
+               	ldr	q4, [sp, #0x720]
                	mov	v5.16b, v4.16b
                	smlal2	v5.2d, v0.4s, v10.s[1]
                	str	q5, [sp, #0x550]
@@ -2856,7 +2853,7 @@ Disassembly of section .text:
                	stur	d7, [x29, #-0x20]
                	smov	x0, v1.s[0]
                	dup	v7.2s, w0
-               	ldr	q16, [sp, #0x720]
+               	ldr	q16, [sp, #0x730]
                	mla	v16.4s, v2.4s, v7.s[0]
                	mov	v7.16b, v16.16b
                	str	q7, [sp, #0x530]
@@ -2878,7 +2875,7 @@ Disassembly of section .text:
                	str	q7, [sp, #0x550]
                	smov	x0, v1.s[2]
                	dup	v19.2s, w0
-               	ldr	q7, [sp, #0x710]
+               	ldr	q7, [sp, #0x720]
                	mov	v16.16b, v7.16b
                	smlal	v16.2d, v13.2s, v19.s[0]
                	mov	v19.16b, v16.16b
@@ -2913,7 +2910,7 @@ Disassembly of section .text:
                	str	q0, [sp, #0x5a0]
                	mov	s0, v3.s[1]
                	dup	v1.2s, v0.s[0]
-               	ldr	q0, [sp, #0x740]
+               	ldr	q0, [sp, #0x710]
                	mov	v16.16b, v0.16b
                	fmla	v16.4s, v5.4s, v1.s[0]
                	mov	v1.16b, v16.16b

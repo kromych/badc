@@ -2625,596 +2625,596 @@ fn ent_pc=501 n_params=0 variadic=false locals=3
     v7   Imm(0)                                           -> x0
     v8   Imm(0)                                           -> x0
     v9   LifetimeEnd(0)                                   -> -
-    v10  Call { target_pc=492, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> [spill 6]
+    v10  Call { target_pc=492, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> d0
     v11  Imm(0)                                           -> x0
     v12  Undef                                            -> x0
     v13  VecInsert { vec=v12, value=v10, off=0, kind=F64, bytes=16 } -> [spill 0]
     v14  Imm(0)                                           -> x0
-    v15  Call { target_pc=492, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> [spill 7]
-    v16  Imm(0)                                           -> x0
-    v17  Imm(8)                                           -> x0
-    v18  Imm(0)                                           -> x0
-    v19  VecInsert { vec=v13, value=v15, off=8, kind=F64, bytes=16 } -> [spill 8]
-    v20  Imm(0)                                           -> x0
+    v15  Copy { value=v10, fp=true }                      -> [spill 4]
+    v16  Call { target_pc=492, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> d0
+    v17  Imm(0)                                           -> x0
+    v18  Imm(8)                                           -> x0
+    v19  Imm(0)                                           -> x0
+    v20  VecInsert { vec=v13, value=v16, off=8, kind=F64, bytes=16 } -> [spill 5]
     v21  Imm(0)                                           -> x0
     v22  Imm(0)                                           -> x0
     v23  Imm(0)                                           -> x0
-    v24  Imm(1)                                           -> x0
-    v25  LocalAddr(-3)                                    -> x0
-    v26  Imm(0)                                           -> x0
+    v24  Imm(0)                                           -> x0
+    v25  Imm(1)                                           -> x0
+    v26  LocalAddr(-3)                                    -> x0
     v27  Imm(0)                                           -> x0
-    v28  BinopI { op=add, lhs=v25, rhs_imm=0 }            -> x0
-    v29  Call { target_pc=493, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> d0 [f32]
-    v30  StoreLocal { off=-3, value=v29, kind=F32 }       -> -
-    v31  Imm(0)                                           -> x0
-    v32  Imm(1)                                           -> x0
-    v33  Imm(1)                                           -> x0
+    v28  Imm(0)                                           -> x0
+    v29  BinopI { op=add, lhs=v26, rhs_imm=0 }            -> x0
+    v30  Copy { value=v16, fp=true }                      -> [spill 7]
+    v31  Call { target_pc=493, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> d0 [f32]
+    v32  StoreLocal { off=-3, value=v31, kind=F32 }       -> -
+    v33  Imm(0)                                           -> x0
     v34  Imm(1)                                           -> x0
     v35  Imm(1)                                           -> x0
-    v36  LocalAddr(-3)                                    -> x0
+    v36  Imm(1)                                           -> x0
     v37  Imm(1)                                           -> x0
-    v38  Imm(4)                                           -> x0
-    v39  BinopI { op=add, lhs=v36, rhs_imm=4 }            -> x0
-    v40  Call { target_pc=493, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> d0 [f32]
-    v41  StoreLocal { off=-3, disp=4, value=v40, kind=F32 } -> -
-    v42  Imm(1)                                           -> x0
-    v43  Imm(2)                                           -> x0
-    v44  Imm(2)                                           -> x0
+    v38  LocalAddr(-3)                                    -> x0
+    v39  Imm(1)                                           -> x0
+    v40  Imm(4)                                           -> x0
+    v41  BinopI { op=add, lhs=v38, rhs_imm=4 }            -> x0
+    v42  Call { target_pc=493, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> d0 [f32]
+    v43  StoreLocal { off=-3, disp=4, value=v42, kind=F32 } -> -
+    v44  Imm(1)                                           -> x0
     v45  Imm(2)                                           -> x0
-    v46  Imm(1)                                           -> x0
-    v47  LocalAddr(-3)                                    -> x0
-    v48  Imm(2)                                           -> x0
-    v49  Imm(8)                                           -> x0
-    v50  BinopI { op=add, lhs=v47, rhs_imm=8 }            -> x0
-    v51  Call { target_pc=493, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> d0 [f32]
-    v52  StoreLocal { off=-3, disp=8, value=v51, kind=F32 } -> -
-    v53  Imm(2)                                           -> x0
-    v54  Imm(3)                                           -> x0
-    v55  Imm(3)                                           -> x0
+    v46  Imm(2)                                           -> x0
+    v47  Imm(2)                                           -> x0
+    v48  Imm(1)                                           -> x0
+    v49  LocalAddr(-3)                                    -> x0
+    v50  Imm(2)                                           -> x0
+    v51  Imm(8)                                           -> x0
+    v52  BinopI { op=add, lhs=v49, rhs_imm=8 }            -> x0
+    v53  Call { target_pc=493, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> d0 [f32]
+    v54  StoreLocal { off=-3, disp=8, value=v53, kind=F32 } -> -
+    v55  Imm(2)                                           -> x0
     v56  Imm(3)                                           -> x0
-    v57  Imm(1)                                           -> x0
-    v58  LocalAddr(-3)                                    -> x0
-    v59  Imm(3)                                           -> x0
-    v60  Imm(12)                                          -> x0
-    v61  BinopI { op=add, lhs=v58, rhs_imm=12 }           -> x0
-    v62  Call { target_pc=493, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> d0 [f32]
-    v63  StoreLocal { off=-3, disp=12, value=v62, kind=F32 } -> -
-    v64  Imm(3)                                           -> x0
-    v65  Imm(4)                                           -> x0
-    v66  Imm(4)                                           -> x0
+    v57  Imm(3)                                           -> x0
+    v58  Imm(3)                                           -> x0
+    v59  Imm(1)                                           -> x0
+    v60  LocalAddr(-3)                                    -> x0
+    v61  Imm(3)                                           -> x0
+    v62  Imm(12)                                          -> x0
+    v63  BinopI { op=add, lhs=v60, rhs_imm=12 }           -> x0
+    v64  Call { target_pc=493, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> d0 [f32]
+    v65  StoreLocal { off=-3, disp=12, value=v64, kind=F32 } -> -
+    v66  Imm(3)                                           -> x0
     v67  Imm(4)                                           -> x0
-    v68  Imm(0)                                           -> x0
-    v69  Imm(0)                                           -> x0
-    v70  LocalAddr(-3)                                    -> x0
-    v71  LoadLocal { off=-3, kind=V128 }                  -> [spill 0]
-    v72  Imm(0)                                           -> x0
-    v73  Imm(0)                                           -> x3
+    v68  Imm(4)                                           -> x0
+    v69  Imm(4)                                           -> x0
+    v70  Imm(0)                                           -> x0
+    v71  Imm(0)                                           -> x0
+    v72  LocalAddr(-3)                                    -> x0
+    v73  LoadLocal { off=-3, kind=V128 }                  -> [spill 0]
     v74  Imm(0)                                           -> x0
-    v75  Imm(0)                                           -> x0
+    v75  Imm(0)                                           -> x3
     v76  Imm(0)                                           -> x0
-    terminator Jmp(b2)   (exit_acc=v73)
+    v77  Imm(0)                                           -> x0
+    v78  Imm(0)                                           -> x0
+    terminator Jmp(b2)   (exit_acc=v75)
   block 1  start_pc=0
-    v113 Phi { incoming=[b5:v93, b4:v110], kind=I64 }     -> x0
-    v114 Imm(0)                                           -> x1
-    v115 Binop { op=or, lhs=v78, rhs=v113 }               -> x12
-    v116 Imm(0)                                           -> x0
-    v117 Extend { value=v115, kind=I32 }                  -> x0
-    v118 Extend { value=v77, kind=I32 }                   -> x0
-    v119 BinopI { op=add, lhs=v77, rhs_imm=1 }            -> x3
-    v120 Extend { value=v119, kind=I32, nsw }             -> x0
-    terminator Jmp(b2)   (exit_acc=v119)
+    v115 Phi { incoming=[b5:v95, b4:v112], kind=I64 }     -> x0
+    v116 Imm(0)                                           -> x1
+    v117 Binop { op=or, lhs=v80, rhs=v115 }               -> x12
+    v118 Imm(0)                                           -> x0
+    v119 Extend { value=v117, kind=I32 }                  -> x0
+    v120 Extend { value=v79, kind=I32 }                   -> x0
+    v121 BinopI { op=add, lhs=v79, rhs_imm=1 }            -> x3
+    v122 Extend { value=v121, kind=I32, nsw }             -> x0
+    terminator Jmp(b2)   (exit_acc=v121)
   block 2  start_pc=0
-    v77  Phi { incoming=[b0:v73, b1:v119], kind=I64 }     -> x3
-    v78  Phi { incoming=[b0:v73, b1:v115], kind=I64 }     -> x12
-    v79  Extend { value=v77, kind=I32 }                   -> x0
-    v80  BinopI { op=lt, lhs=v77, rhs_imm=4 }             -> x0
-    terminator Bz { cond=v80, target=b6, fall=b3 }   (exit_acc=v80)
+    v79  Phi { incoming=[b0:v75, b1:v121], kind=I64 }     -> x3
+    v80  Phi { incoming=[b0:v75, b1:v117], kind=I64 }     -> x12
+    v81  Extend { value=v79, kind=I32 }                   -> x0
+    v82  BinopI { op=lt, lhs=v79, rhs_imm=4 }             -> x0
+    terminator Bz { cond=v82, target=b6, fall=b3 }   (exit_acc=v82)
   block 3  start_pc=0
-    v81  Extend { value=v78, kind=I32 }                   -> x0
-    v82  LocalAddr(-3)                                    -> x0
-    v83  Extend { value=v77, kind=I32 }                   -> x1
-    v84  BinopI { op=shl, lhs=v77, rhs_imm=2 }            -> x1
-    v85  Binop { op=add, lhs=v82, rhs=v84 }               -> x1
-    v86  LoadIndexed { base=v82, index=v77, scale=4, kind=F32 } -> d0 [f32]
-    v87  LocalAddr(-3)                                    -> x0
-    v88  Extend { value=v77, kind=I32 }                   -> x0
-    v89  BinopI { op=shl, lhs=v77, rhs_imm=2 }            -> x0
-    v90  Binop { op=add, lhs=v82, rhs=v89 }               -> x0
-    v91  LoadIndexed { base=v82, index=v77, scale=4, kind=F32 } -> d1 [f32]
-    v92  Binop { op=feq, lhs=v86, rhs=v86 }               -> x1
-    v93  Imm(0)                                           -> x0
-    v94  Imm(0)                                           -> x2
-    terminator Bz { cond=v92, target=b5, fall=b4 }   (exit_acc=v92)
+    v83  Extend { value=v80, kind=I32 }                   -> x0
+    v84  LocalAddr(-3)                                    -> x0
+    v85  Extend { value=v79, kind=I32 }                   -> x1
+    v86  BinopI { op=shl, lhs=v79, rhs_imm=2 }            -> x1
+    v87  Binop { op=add, lhs=v84, rhs=v86 }               -> x1
+    v88  LoadIndexed { base=v84, index=v79, scale=4, kind=F32 } -> d0 [f32]
+    v89  LocalAddr(-3)                                    -> x0
+    v90  Extend { value=v79, kind=I32 }                   -> x0
+    v91  BinopI { op=shl, lhs=v79, rhs_imm=2 }            -> x0
+    v92  Binop { op=add, lhs=v84, rhs=v91 }               -> x0
+    v93  LoadIndexed { base=v84, index=v79, scale=4, kind=F32 } -> d1 [f32]
+    v94  Binop { op=feq, lhs=v88, rhs=v88 }               -> x1
+    v95  Imm(0)                                           -> x0
+    v96  Imm(0)                                           -> x2
+    terminator Bz { cond=v94, target=b5, fall=b4 }   (exit_acc=v94)
   block 4  start_pc=0
-    v98  LocalAddr(-3)                                    -> x0
-    v99  Extend { value=v77, kind=I32 }                   -> x0
-    v100 BinopI { op=shl, lhs=v77, rhs_imm=2 }            -> x0
-    v101 Binop { op=add, lhs=v82, rhs=v100 }              -> x0
-    v102 LoadIndexed { base=v82, index=v77, scale=4, kind=F32 } -> d1 [f32]
-    v103 Imm(3)                                           -> x7
-    v104 Call { target_pc=497, args=[v86, v103], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
-    v105 LocalAddr(-3)                                    -> x0
-    v106 Extend { value=v77, kind=I32 }                   -> x1
-    v107 BinopI { op=shl, lhs=v77, rhs_imm=2 }            -> x1
-    v108 Binop { op=add, lhs=v105, rhs=v107 }             -> x1
-    v109 LoadIndexed { base=v105, index=v77, scale=4, kind=F32 } -> d1 [f32]
-    v110 Binop { op=fne, lhs=v104, rhs=v109 }             -> x0
-    v111 BinopI { op=ne, lhs=v110, rhs_imm=0 }            -> x1
-    v112 Imm(0)                                           -> x1
-    terminator Jmp(b1)   (exit_acc=v110)
+    v100 LocalAddr(-3)                                    -> x0
+    v101 Extend { value=v79, kind=I32 }                   -> x0
+    v102 BinopI { op=shl, lhs=v79, rhs_imm=2 }            -> x0
+    v103 Binop { op=add, lhs=v84, rhs=v102 }              -> x0
+    v104 LoadIndexed { base=v84, index=v79, scale=4, kind=F32 } -> d1 [f32]
+    v105 Imm(3)                                           -> x7
+    v106 Call { target_pc=497, args=[v88, v105], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
+    v107 LocalAddr(-3)                                    -> x0
+    v108 Extend { value=v79, kind=I32 }                   -> x1
+    v109 BinopI { op=shl, lhs=v79, rhs_imm=2 }            -> x1
+    v110 Binop { op=add, lhs=v107, rhs=v109 }             -> x1
+    v111 LoadIndexed { base=v107, index=v79, scale=4, kind=F32 } -> d1 [f32]
+    v112 Binop { op=fne, lhs=v106, rhs=v111 }             -> x0
+    v113 BinopI { op=ne, lhs=v112, rhs_imm=0 }            -> x1
+    v114 Imm(0)                                           -> x1
+    terminator Jmp(b1)   (exit_acc=v112)
   block 5  start_pc=0
     terminator Jmp(b1)
   block 6  start_pc=0
-    v95  Imm(0)                                           -> x3
-    v96  Imm(0)                                           -> x0
-    v97  Imm(0)                                           -> x13
-    terminator Jmp(b11)   (exit_acc=v95)
+    v97  Imm(0)                                           -> x3
+    v98  Imm(0)                                           -> x0
+    v99  Imm(0)                                           -> x13
+    terminator Jmp(b11)   (exit_acc=v97)
   block 7  start_pc=0
-    v129 Imm(0)                                           -> x0
-    v130 LocalAddr(-85)                                   -> x0
     v131 Imm(0)                                           -> x0
-    v132 Copy { value=v71, fp=true }                      -> d0
-    v133 VecExtract { vec=v132, off=0, kind=I64, bytes=16 } -> x0
-    v134 StoreLocal { off=-85, value=v133, kind=I64, volatile } -> -
-    v135 Imm(8)                                           -> x0
-    v136 Imm(0)                                           -> x0
-    v137 VecExtract { vec=v132, off=8, kind=I64, bytes=16 } -> x0
-    v138 BinopI { op=add, lhs=v130, rhs_imm=8 }           -> x1
-    v139 StoreLocal { off=-85, disp=8, value=v137, kind=I64, volatile } -> -
-    v140 Imm(0)                                           -> x0
-    v141 LocalAddr(-86)                                   -> x0
+    v132 LocalAddr(-85)                                   -> x0
+    v133 Imm(0)                                           -> x0
+    v134 Copy { value=v73, fp=true }                      -> d0
+    v135 VecExtract { vec=v134, off=0, kind=I64, bytes=16 } -> x0
+    v136 StoreLocal { off=-85, value=v135, kind=I64, volatile } -> -
+    v137 Imm(8)                                           -> x0
+    v138 Imm(0)                                           -> x0
+    v139 VecExtract { vec=v134, off=8, kind=I64, bytes=16 } -> x0
+    v140 BinopI { op=add, lhs=v132, rhs_imm=8 }           -> x1
+    v141 StoreLocal { off=-85, disp=8, value=v139, kind=I64, volatile } -> -
     v142 Imm(0)                                           -> x0
-    v143 Imm(0)                                           -> x0
-    v144 StoreLocal { off=-86, value=v143, kind=I64, volatile } -> -
-    v145 Imm(8)                                           -> x1
-    v146 Imm(0)                                           -> x1
-    v147 Imm(0)                                           -> x1
-    v148 BinopI { op=add, lhs=v141, rhs_imm=8 }           -> x1
-    v149 StoreLocal { off=-86, disp=8, value=v143, kind=I64, volatile } -> -
-    v150 ImmData(304)                                     -> x0
-    v151 Load { addr=v150, disp=0, kind=U32 pc_rel }      -> x0
-    v152 Imm(-24640)                                      -> x1
-    v153 Imm(4294942656)                                  -> x1
-    v154 BinopI { op=and, lhs=v151, rhs_imm=4294942656 }  -> x0
-    v155 Extend { value=v121, kind=I32 }                  -> x1
-    v156 BinopI { op=and, lhs=v121, rhs_imm=4294967295 }  -> x1
-    v157 BinopI { op=shl, lhs=v121, rhs_imm=13 }          -> x1
-    v158 BinopI { op=and, lhs=v157, rhs_imm=4294967295 }  -> x2
-    v159 Binop { op=or, lhs=v154, rhs=v157 }              -> x0
-    v160 StoreLocal { off=-1, value=v159, kind=I32 }      -> -
-    v161 LocalAddr(-1)                                    -> x0
-    v162 InlineAsm { template="ldmxcsr %0", ops=1, args=[v161] } -> -
-    v163 LocalAddr(-85)                                   -> x0
-    v164 Imm(0)                                           -> x0
-    v165 LoadLocal { off=-85, kind=I64, volatile }        -> x0
-    v166 Undef                                            -> x1
-    v167 VecInsert { vec=v166, value=v165, off=0, kind=I64, bytes=16 } -> d0
-    v168 Imm(0)                                           -> x0
-    v169 BinopI { op=add, lhs=v163, rhs_imm=8 }           -> x0
-    v170 LoadLocal { off=-85, disp=8, kind=I64, volatile } -> x0
-    v171 Imm(8)                                           -> x1
-    v172 Imm(0)                                           -> x1
-    v173 VecInsert { vec=v167, value=v170, off=8, kind=I64, bytes=16 } -> d0
-    v174 Imm(0)                                           -> x0
-    v175 LocalAddr(-86)                                   -> x0
+    v143 LocalAddr(-86)                                   -> x0
+    v144 Imm(0)                                           -> x0
+    v145 Imm(0)                                           -> x0
+    v146 StoreLocal { off=-86, value=v145, kind=I64, volatile } -> -
+    v147 Imm(8)                                           -> x1
+    v148 Imm(0)                                           -> x1
+    v149 Imm(0)                                           -> x1
+    v150 BinopI { op=add, lhs=v143, rhs_imm=8 }           -> x1
+    v151 StoreLocal { off=-86, disp=8, value=v145, kind=I64, volatile } -> -
+    v152 ImmData(304)                                     -> x0
+    v153 Load { addr=v152, disp=0, kind=U32 pc_rel }      -> x0
+    v154 Imm(-24640)                                      -> x1
+    v155 Imm(4294942656)                                  -> x1
+    v156 BinopI { op=and, lhs=v153, rhs_imm=4294942656 }  -> x0
+    v157 Extend { value=v123, kind=I32 }                  -> x1
+    v158 BinopI { op=and, lhs=v123, rhs_imm=4294967295 }  -> x1
+    v159 BinopI { op=shl, lhs=v123, rhs_imm=13 }          -> x1
+    v160 BinopI { op=and, lhs=v159, rhs_imm=4294967295 }  -> x2
+    v161 Binop { op=or, lhs=v156, rhs=v159 }              -> x0
+    v162 StoreLocal { off=-1, value=v161, kind=I32 }      -> -
+    v163 LocalAddr(-1)                                    -> x0
+    v164 InlineAsm { template="ldmxcsr %0", ops=1, args=[v163] } -> -
+    v165 LocalAddr(-85)                                   -> x0
+    v166 Imm(0)                                           -> x0
+    v167 LoadLocal { off=-85, kind=I64, volatile }        -> x0
+    v168 Undef                                            -> x1
+    v169 VecInsert { vec=v168, value=v167, off=0, kind=I64, bytes=16 } -> d0
+    v170 Imm(0)                                           -> x0
+    v171 BinopI { op=add, lhs=v165, rhs_imm=8 }           -> x0
+    v172 LoadLocal { off=-85, disp=8, kind=I64, volatile } -> x0
+    v173 Imm(8)                                           -> x1
+    v174 Imm(0)                                           -> x1
+    v175 VecInsert { vec=v169, value=v172, off=8, kind=I64, bytes=16 } -> d0
     v176 Imm(0)                                           -> x0
-    v177 LoadLocal { off=-86, kind=I64, volatile }        -> x0
+    v177 LocalAddr(-86)                                   -> x0
     v178 Imm(0)                                           -> x0
-    v179 BinopI { op=add, lhs=v175, rhs_imm=8 }           -> x0
-    v180 LoadLocal { off=-86, disp=8, kind=I64, volatile } -> x0
-    v181 Imm(0)                                           -> x0
-    v182 Imm(0)                                           -> x0
+    v179 LoadLocal { off=-86, kind=I64, volatile }        -> x0
+    v180 Imm(0)                                           -> x0
+    v181 BinopI { op=add, lhs=v177, rhs_imm=8 }           -> x0
+    v182 LoadLocal { off=-86, disp=8, kind=I64, volatile } -> x0
     v183 Imm(0)                                           -> x0
     v184 Imm(0)                                           -> x0
     v185 Imm(0)                                           -> x0
     v186 Imm(0)                                           -> x0
-    v187 SimdVal { op=__builtin_ia32_roundps, imm=Some(4), args=[v173] } -> d0
+    v187 Imm(0)                                           -> x0
     v188 Imm(0)                                           -> x0
-    v189 LocalAddr(-87)                                   -> x0
+    v189 SimdVal { op=__builtin_ia32_roundps, imm=Some(4), args=[v175] } -> d0
     v190 Imm(0)                                           -> x0
-    v191 VecExtract { vec=v187, off=0, kind=I64, bytes=16 } -> x0
-    v192 StoreLocal { off=-87, value=v191, kind=I64, volatile } -> -
-    v193 Imm(8)                                           -> x0
-    v194 Imm(0)                                           -> x0
-    v195 VecExtract { vec=v187, off=8, kind=I64, bytes=16 } -> x0
-    v196 BinopI { op=add, lhs=v189, rhs_imm=8 }           -> x1
-    v197 StoreLocal { off=-87, disp=8, value=v195, kind=I64, volatile } -> -
-    v198 LocalAddr(-1)                                    -> x0
-    v199 InlineAsm { template="stmxcsr %0", ops=1, args=[v198] } -> -
-    v200 LoadLocal { off=-1, kind=U32 }                   -> x0
-    v201 BinopI { op=and, lhs=v200, rhs_imm=4294967295 }  -> x1
-    v202 BinopI { op=shru, lhs=v200, rhs_imm=5 }          -> x0
-    v203 BinopI { op=and, lhs=v202, rhs_imm=1 }           -> x14
-    v204 Imm(0)                                           -> x0
-    v205 Extend { value=v203, kind=I32 }                  -> x0
-    v206 ImmData(304)                                     -> x0
-    v207 Load { addr=v206, disp=0, kind=U32 pc_rel }      -> x0
-    v208 StoreLocal { off=-1, value=v207, kind=I32 }      -> -
-    v209 LocalAddr(-1)                                    -> x0
-    v210 InlineAsm { template="ldmxcsr %0", ops=1, args=[v209] } -> -
-    v211 Imm(0)                                           -> x0
-    v212 LocalAddr(-87)                                   -> x0
-    v213 LoadLocal { off=-87, kind=I64, volatile }        -> x0
-    v214 Imm(0)                                           -> x1
-    v215 VecInsert { vec=v214, value=v213, off=0, kind=I64, bytes=16 } -> [spill 2]
-    v216 Imm(0)                                           -> x0
-    v217 BinopI { op=add, lhs=v212, rhs_imm=8 }           -> x0
-    v218 LoadLocal { off=-87, disp=8, kind=I64, volatile } -> x0
-    v219 Imm(8)                                           -> x1
-    v220 Imm(0)                                           -> x1
-    v221 Copy { value=v215, fp=true }                     -> d0
-    v222 VecInsert { vec=v221, value=v218, off=8, kind=I64, bytes=16 } -> [spill 4]
-    v223 Imm(0)                                           -> x0
+    v191 LocalAddr(-87)                                   -> x0
+    v192 Imm(0)                                           -> x0
+    v193 VecExtract { vec=v189, off=0, kind=I64, bytes=16 } -> x0
+    v194 StoreLocal { off=-87, value=v193, kind=I64, volatile } -> -
+    v195 Imm(8)                                           -> x0
+    v196 Imm(0)                                           -> x0
+    v197 VecExtract { vec=v189, off=8, kind=I64, bytes=16 } -> x0
+    v198 BinopI { op=add, lhs=v191, rhs_imm=8 }           -> x1
+    v199 StoreLocal { off=-87, disp=8, value=v197, kind=I64, volatile } -> -
+    v200 LocalAddr(-1)                                    -> x0
+    v201 InlineAsm { template="stmxcsr %0", ops=1, args=[v200] } -> -
+    v202 LoadLocal { off=-1, kind=U32 }                   -> x0
+    v203 BinopI { op=and, lhs=v202, rhs_imm=4294967295 }  -> x1
+    v204 BinopI { op=shru, lhs=v202, rhs_imm=5 }          -> x0
+    v205 BinopI { op=and, lhs=v204, rhs_imm=1 }           -> x14
+    v206 Imm(0)                                           -> x0
+    v207 Extend { value=v205, kind=I32 }                  -> x0
+    v208 ImmData(304)                                     -> x0
+    v209 Load { addr=v208, disp=0, kind=U32 pc_rel }      -> x0
+    v210 StoreLocal { off=-1, value=v209, kind=I32 }      -> -
+    v211 LocalAddr(-1)                                    -> x0
+    v212 InlineAsm { template="ldmxcsr %0", ops=1, args=[v211] } -> -
+    v213 Imm(0)                                           -> x0
+    v214 LocalAddr(-87)                                   -> x0
+    v215 LoadLocal { off=-87, kind=I64, volatile }        -> x0
+    v216 Imm(0)                                           -> x1
+    v217 VecInsert { vec=v216, value=v215, off=0, kind=I64, bytes=16 } -> d0
+    v218 Imm(0)                                           -> x0
+    v219 BinopI { op=add, lhs=v214, rhs_imm=8 }           -> x0
+    v220 LoadLocal { off=-87, disp=8, kind=I64, volatile } -> x0
+    v221 Imm(8)                                           -> x1
+    v222 Imm(0)                                           -> x1
+    v223 VecInsert { vec=v217, value=v220, off=8, kind=I64, bytes=16 } -> [spill 2]
     v224 Imm(0)                                           -> x0
     v225 Imm(0)                                           -> x0
     v226 Imm(0)                                           -> x0
     v227 Imm(0)                                           -> x0
-    v228 Imm(1)                                           -> x0
-    v229 Extend { value=v122, kind=I32 }                  -> x0
-    v230 Imm(0)                                           -> x0
+    v228 Imm(0)                                           -> x0
+    v229 Imm(1)                                           -> x0
+    v230 Extend { value=v124, kind=I32 }                  -> x0
     v231 Imm(0)                                           -> x0
     v232 Imm(0)                                           -> x0
     v233 Imm(0)                                           -> x0
     v234 Imm(0)                                           -> x0
-    v235 VecExtract { vec=v221, off=0, kind=F32, bytes=16 } -> d0 [f32]
-    v236 Call { target_pc=495, args=[v235], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x15
-    v237 BinopI { op=and, lhs=v236, rhs_imm=4294967295 }  -> x0
-    v238 LocalAddr(-3)                                    -> x0
-    v239 Imm(0)                                           -> x0
-    v240 Imm(0)                                           -> x0
-    v241 BinopI { op=add, lhs=v238, rhs_imm=0 }           -> x0
-    v242 LoadLocal { off=-3, kind=F32 }                   -> d0 [f32]
-    v243 Extend { value=v121, kind=I32 }                  -> x0
-    v244 Call { target_pc=497, args=[v242, v121], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
-    v245 Call { target_pc=495, args=[v244], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
-    v246 BinopI { op=and, lhs=v245, rhs_imm=4294967295 }  -> x1
-    v247 Binop { op=ne, lhs=v236, rhs=v245 }              -> x0
-    v248 Binop { op=or, lhs=v122, rhs=v247 }              -> x13
-    v249 Imm(0)                                           -> x0
-    v250 Extend { value=v248, kind=I32 }                  -> x0
+    v235 Imm(0)                                           -> x0
+    v236 VecExtract { vec=v217, off=0, kind=F32, bytes=16 } -> d1 [f32]
+    v237 Copy { value=v217, fp=true }                     -> [spill 8]
+    v238 Call { target_pc=495, args=[v236], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x15
+    v239 BinopI { op=and, lhs=v238, rhs_imm=4294967295 }  -> x0
+    v240 LocalAddr(-3)                                    -> x0
+    v241 Imm(0)                                           -> x0
+    v242 Imm(0)                                           -> x0
+    v243 BinopI { op=add, lhs=v240, rhs_imm=0 }           -> x0
+    v244 LoadLocal { off=-3, kind=F32 }                   -> d0 [f32]
+    v245 Extend { value=v123, kind=I32 }                  -> x0
+    v246 Call { target_pc=497, args=[v244, v123], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
+    v247 Call { target_pc=495, args=[v246], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
+    v248 BinopI { op=and, lhs=v247, rhs_imm=4294967295 }  -> x1
+    v249 Binop { op=ne, lhs=v238, rhs=v247 }              -> x0
+    v250 Binop { op=or, lhs=v124, rhs=v249 }              -> x13
     v251 Imm(0)                                           -> x0
-    v252 Imm(1)                                           -> x0
-    v253 Imm(1)                                           -> x0
+    v252 Extend { value=v250, kind=I32 }                  -> x0
+    v253 Imm(0)                                           -> x0
     v254 Imm(1)                                           -> x0
     v255 Imm(1)                                           -> x0
-    v256 Extend { value=v248, kind=I32 }                  -> x0
-    v257 Imm(0)                                           -> x0
-    v258 Imm(1)                                           -> x0
-    v259 Imm(4)                                           -> x0
-    v260 Imm(4)                                           -> x0
-    v261 Imm(0)                                           -> x0
-    v262 VecExtract { vec=v215, off=4, kind=F32, bytes=16 } -> d0 [f32]
-    v263 Call { target_pc=495, args=[v262], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x15
-    v264 BinopI { op=and, lhs=v263, rhs_imm=4294967295 }  -> x0
-    v265 LocalAddr(-3)                                    -> x0
-    v266 Imm(1)                                           -> x0
-    v267 Imm(4)                                           -> x0
-    v268 BinopI { op=add, lhs=v265, rhs_imm=4 }           -> x0
-    v269 LoadLocal { off=-3, disp=4, kind=F32 }           -> d0 [f32]
-    v270 Extend { value=v121, kind=I32 }                  -> x0
-    v271 Call { target_pc=497, args=[v269, v121], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
-    v272 Call { target_pc=495, args=[v271], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
-    v273 BinopI { op=and, lhs=v272, rhs_imm=4294967295 }  -> x1
-    v274 Binop { op=ne, lhs=v263, rhs=v272 }              -> x0
-    v275 Binop { op=or, lhs=v248, rhs=v274 }              -> x13
-    v276 Imm(0)                                           -> x0
-    v277 Extend { value=v275, kind=I32 }                  -> x0
-    v278 Imm(1)                                           -> x0
-    v279 Imm(2)                                           -> x0
-    v280 Imm(2)                                           -> x0
+    v256 Imm(1)                                           -> x0
+    v257 Imm(1)                                           -> x0
+    v258 Extend { value=v250, kind=I32 }                  -> x0
+    v259 Imm(0)                                           -> x0
+    v260 Imm(1)                                           -> x0
+    v261 Imm(4)                                           -> x0
+    v262 Imm(4)                                           -> x0
+    v263 Imm(0)                                           -> x0
+    v264 VecExtract { vec=v237, off=4, kind=F32, bytes=16 } -> d0 [f32]
+    v265 Call { target_pc=495, args=[v264], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x15
+    v266 BinopI { op=and, lhs=v265, rhs_imm=4294967295 }  -> x0
+    v267 LocalAddr(-3)                                    -> x0
+    v268 Imm(1)                                           -> x0
+    v269 Imm(4)                                           -> x0
+    v270 BinopI { op=add, lhs=v267, rhs_imm=4 }           -> x0
+    v271 LoadLocal { off=-3, disp=4, kind=F32 }           -> d0 [f32]
+    v272 Extend { value=v123, kind=I32 }                  -> x0
+    v273 Call { target_pc=497, args=[v271, v123], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
+    v274 Call { target_pc=495, args=[v273], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
+    v275 BinopI { op=and, lhs=v274, rhs_imm=4294967295 }  -> x1
+    v276 Binop { op=ne, lhs=v265, rhs=v274 }              -> x0
+    v277 Binop { op=or, lhs=v250, rhs=v276 }              -> x13
+    v278 Imm(0)                                           -> x0
+    v279 Extend { value=v277, kind=I32 }                  -> x0
+    v280 Imm(1)                                           -> x0
     v281 Imm(2)                                           -> x0
-    v282 Imm(1)                                           -> x0
-    v283 Extend { value=v275, kind=I32 }                  -> x0
-    v284 Imm(0)                                           -> x0
-    v285 Imm(2)                                           -> x0
-    v286 Imm(8)                                           -> x0
-    v287 Imm(8)                                           -> x0
-    v288 Imm(0)                                           -> x0
-    v289 VecExtract { vec=v222, off=8, kind=F32, bytes=16 } -> d0 [f32]
-    v290 Call { target_pc=495, args=[v289], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x15
-    v291 BinopI { op=and, lhs=v290, rhs_imm=4294967295 }  -> x0
-    v292 LocalAddr(-3)                                    -> x0
-    v293 Imm(2)                                           -> x0
-    v294 Imm(8)                                           -> x0
-    v295 BinopI { op=add, lhs=v292, rhs_imm=8 }           -> x0
-    v296 LoadLocal { off=-3, disp=8, kind=F32 }           -> d0 [f32]
-    v297 Extend { value=v121, kind=I32 }                  -> x0
-    v298 Call { target_pc=497, args=[v296, v121], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
-    v299 Call { target_pc=495, args=[v298], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
-    v300 BinopI { op=and, lhs=v299, rhs_imm=4294967295 }  -> x1
-    v301 Binop { op=ne, lhs=v290, rhs=v299 }              -> x0
-    v302 Binop { op=or, lhs=v275, rhs=v301 }              -> x13
-    v303 Imm(0)                                           -> x0
-    v304 Extend { value=v302, kind=I32 }                  -> x0
-    v305 Imm(2)                                           -> x0
-    v306 Imm(3)                                           -> x0
-    v307 Imm(3)                                           -> x0
+    v282 Imm(2)                                           -> x0
+    v283 Imm(2)                                           -> x0
+    v284 Imm(1)                                           -> x0
+    v285 Extend { value=v277, kind=I32 }                  -> x0
+    v286 Imm(0)                                           -> x0
+    v287 Imm(2)                                           -> x0
+    v288 Imm(8)                                           -> x0
+    v289 Imm(8)                                           -> x0
+    v290 Imm(0)                                           -> x0
+    v291 VecExtract { vec=v223, off=8, kind=F32, bytes=16 } -> d0 [f32]
+    v292 Call { target_pc=495, args=[v291], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x15
+    v293 BinopI { op=and, lhs=v292, rhs_imm=4294967295 }  -> x0
+    v294 LocalAddr(-3)                                    -> x0
+    v295 Imm(2)                                           -> x0
+    v296 Imm(8)                                           -> x0
+    v297 BinopI { op=add, lhs=v294, rhs_imm=8 }           -> x0
+    v298 LoadLocal { off=-3, disp=8, kind=F32 }           -> d0 [f32]
+    v299 Extend { value=v123, kind=I32 }                  -> x0
+    v300 Call { target_pc=497, args=[v298, v123], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
+    v301 Call { target_pc=495, args=[v300], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
+    v302 BinopI { op=and, lhs=v301, rhs_imm=4294967295 }  -> x1
+    v303 Binop { op=ne, lhs=v292, rhs=v301 }              -> x0
+    v304 Binop { op=or, lhs=v277, rhs=v303 }              -> x13
+    v305 Imm(0)                                           -> x0
+    v306 Extend { value=v304, kind=I32 }                  -> x0
+    v307 Imm(2)                                           -> x0
     v308 Imm(3)                                           -> x0
-    v309 Imm(1)                                           -> x0
-    v310 Extend { value=v302, kind=I32 }                  -> x0
-    v311 Imm(0)                                           -> x0
-    v312 Imm(3)                                           -> x0
-    v313 Imm(12)                                          -> x0
-    v314 Imm(12)                                          -> x0
-    v315 Imm(0)                                           -> x0
-    v316 VecExtract { vec=v222, off=12, kind=F32, bytes=16 } -> d0 [f32]
-    v317 Call { target_pc=495, args=[v316], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x15
-    v318 BinopI { op=and, lhs=v317, rhs_imm=4294967295 }  -> x0
-    v319 LocalAddr(-3)                                    -> x0
-    v320 Imm(3)                                           -> x0
-    v321 Imm(12)                                          -> x0
-    v322 BinopI { op=add, lhs=v319, rhs_imm=12 }          -> x0
-    v323 LoadLocal { off=-3, disp=12, kind=F32 }          -> d0 [f32]
-    v324 Extend { value=v121, kind=I32 }                  -> x0
-    v325 Call { target_pc=497, args=[v323, v121], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
-    v326 Call { target_pc=495, args=[v325], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
-    v327 BinopI { op=and, lhs=v326, rhs_imm=4294967295 }  -> x1
-    v328 Binop { op=ne, lhs=v317, rhs=v326 }              -> x0
-    v329 Binop { op=or, lhs=v302, rhs=v328 }              -> x0
-    v330 Imm(0)                                           -> x1
-    v331 Extend { value=v329, kind=I32 }                  -> x1
-    v332 Imm(3)                                           -> x1
-    v333 Imm(4)                                           -> x1
-    v334 Imm(4)                                           -> x1
+    v309 Imm(3)                                           -> x0
+    v310 Imm(3)                                           -> x0
+    v311 Imm(1)                                           -> x0
+    v312 Extend { value=v304, kind=I32 }                  -> x0
+    v313 Imm(0)                                           -> x0
+    v314 Imm(3)                                           -> x0
+    v315 Imm(12)                                          -> x0
+    v316 Imm(12)                                          -> x0
+    v317 Imm(0)                                           -> x0
+    v318 VecExtract { vec=v223, off=12, kind=F32, bytes=16 } -> d0 [f32]
+    v319 Call { target_pc=495, args=[v318], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x15
+    v320 BinopI { op=and, lhs=v319, rhs_imm=4294967295 }  -> x0
+    v321 LocalAddr(-3)                                    -> x0
+    v322 Imm(3)                                           -> x0
+    v323 Imm(12)                                          -> x0
+    v324 BinopI { op=add, lhs=v321, rhs_imm=12 }          -> x0
+    v325 LoadLocal { off=-3, disp=12, kind=F32 }          -> d0 [f32]
+    v326 Extend { value=v123, kind=I32 }                  -> x0
+    v327 Call { target_pc=497, args=[v325, v123], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
+    v328 Call { target_pc=495, args=[v327], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
+    v329 BinopI { op=and, lhs=v328, rhs_imm=4294967295 }  -> x1
+    v330 Binop { op=ne, lhs=v319, rhs=v328 }              -> x0
+    v331 Binop { op=or, lhs=v304, rhs=v330 }              -> x0
+    v332 Imm(0)                                           -> x1
+    v333 Extend { value=v331, kind=I32 }                  -> x1
+    v334 Imm(3)                                           -> x1
     v335 Imm(4)                                           -> x1
-    v336 Imm(0)                                           -> x1
-    v337 Extend { value=v329, kind=I32 }                  -> x1
-    v338 Extend { value=v203, kind=I32 }                  -> x1
-    v339 Extend { value=v78, kind=I32 }                   -> x1
-    v340 Binop { op=ne, lhs=v203, rhs=v78 }               -> x1
-    v341 Binop { op=or, lhs=v329, rhs=v340 }              -> x13
-    v342 Imm(0)                                           -> x0
-    v343 Extend { value=v341, kind=I32 }                  -> x0
+    v336 Imm(4)                                           -> x1
+    v337 Imm(4)                                           -> x1
+    v338 Imm(0)                                           -> x1
+    v339 Extend { value=v331, kind=I32 }                  -> x1
+    v340 Extend { value=v205, kind=I32 }                  -> x1
+    v341 Extend { value=v80, kind=I32 }                   -> x1
+    v342 Binop { op=ne, lhs=v205, rhs=v80 }               -> x1
+    v343 Binop { op=or, lhs=v331, rhs=v342 }              -> x13
     v344 Imm(0)                                           -> x0
-    v345 LocalAddr(-88)                                   -> x0
+    v345 Extend { value=v343, kind=I32 }                  -> x0
     v346 Imm(0)                                           -> x0
-    v347 Copy { value=v71, fp=true }                      -> d0
-    v348 VecExtract { vec=v347, off=0, kind=I64, bytes=16 } -> x0
-    v349 StoreLocal { off=-88, value=v348, kind=I64, volatile } -> -
-    v350 Imm(8)                                           -> x0
-    v351 Imm(0)                                           -> x0
-    v352 VecExtract { vec=v347, off=8, kind=I64, bytes=16 } -> x0
-    v353 BinopI { op=add, lhs=v345, rhs_imm=8 }           -> x1
-    v354 StoreLocal { off=-88, disp=8, value=v352, kind=I64, volatile } -> -
-    v355 Imm(0)                                           -> x0
-    v356 LocalAddr(-89)                                   -> x0
+    v347 LocalAddr(-88)                                   -> x0
+    v348 Imm(0)                                           -> x0
+    v349 Copy { value=v73, fp=true }                      -> d0
+    v350 VecExtract { vec=v349, off=0, kind=I64, bytes=16 } -> x0
+    v351 StoreLocal { off=-88, value=v350, kind=I64, volatile } -> -
+    v352 Imm(8)                                           -> x0
+    v353 Imm(0)                                           -> x0
+    v354 VecExtract { vec=v349, off=8, kind=I64, bytes=16 } -> x0
+    v355 BinopI { op=add, lhs=v347, rhs_imm=8 }           -> x1
+    v356 StoreLocal { off=-88, disp=8, value=v354, kind=I64, volatile } -> -
     v357 Imm(0)                                           -> x0
-    v358 Imm(0)                                           -> x0
-    v359 StoreLocal { off=-89, value=v358, kind=I64, volatile } -> -
-    v360 Imm(8)                                           -> x1
-    v361 Imm(0)                                           -> x1
-    v362 Imm(0)                                           -> x1
-    v363 BinopI { op=add, lhs=v356, rhs_imm=8 }           -> x1
-    v364 StoreLocal { off=-89, disp=8, value=v358, kind=I64, volatile } -> -
-    v365 ImmData(304)                                     -> x0
-    v366 Load { addr=v365, disp=0, kind=U32 pc_rel }      -> x0
-    v367 Imm(-24640)                                      -> x1
-    v368 Imm(4294942656)                                  -> x1
-    v369 BinopI { op=and, lhs=v366, rhs_imm=4294942656 }  -> x0
-    v370 Extend { value=v121, kind=I32 }                  -> x1
-    v371 BinopI { op=and, lhs=v121, rhs_imm=4294967295 }  -> x1
-    v372 BinopI { op=shl, lhs=v121, rhs_imm=13 }          -> x1
-    v373 BinopI { op=and, lhs=v372, rhs_imm=4294967295 }  -> x2
-    v374 Binop { op=or, lhs=v369, rhs=v372 }              -> x0
-    v375 StoreLocal { off=-1, value=v374, kind=I32 }      -> -
-    v376 LocalAddr(-1)                                    -> x0
-    v377 InlineAsm { template="ldmxcsr %0", ops=1, args=[v376] } -> -
-    v378 LocalAddr(-88)                                   -> x0
-    v379 Imm(0)                                           -> x0
-    v380 LoadLocal { off=-88, kind=I64, volatile }        -> x0
-    v381 Undef                                            -> x1
-    v382 VecInsert { vec=v381, value=v380, off=0, kind=I64, bytes=16 } -> d0
-    v383 Imm(0)                                           -> x0
-    v384 BinopI { op=add, lhs=v378, rhs_imm=8 }           -> x0
-    v385 LoadLocal { off=-88, disp=8, kind=I64, volatile } -> x0
-    v386 Imm(8)                                           -> x1
-    v387 Imm(0)                                           -> x1
-    v388 VecInsert { vec=v382, value=v385, off=8, kind=I64, bytes=16 } -> d0
-    v389 Imm(0)                                           -> x0
-    v390 LocalAddr(-89)                                   -> x0
+    v358 LocalAddr(-89)                                   -> x0
+    v359 Imm(0)                                           -> x0
+    v360 Imm(0)                                           -> x0
+    v361 StoreLocal { off=-89, value=v360, kind=I64, volatile } -> -
+    v362 Imm(8)                                           -> x1
+    v363 Imm(0)                                           -> x1
+    v364 Imm(0)                                           -> x1
+    v365 BinopI { op=add, lhs=v358, rhs_imm=8 }           -> x1
+    v366 StoreLocal { off=-89, disp=8, value=v360, kind=I64, volatile } -> -
+    v367 ImmData(304)                                     -> x0
+    v368 Load { addr=v367, disp=0, kind=U32 pc_rel }      -> x0
+    v369 Imm(-24640)                                      -> x1
+    v370 Imm(4294942656)                                  -> x1
+    v371 BinopI { op=and, lhs=v368, rhs_imm=4294942656 }  -> x0
+    v372 Extend { value=v123, kind=I32 }                  -> x1
+    v373 BinopI { op=and, lhs=v123, rhs_imm=4294967295 }  -> x1
+    v374 BinopI { op=shl, lhs=v123, rhs_imm=13 }          -> x1
+    v375 BinopI { op=and, lhs=v374, rhs_imm=4294967295 }  -> x2
+    v376 Binop { op=or, lhs=v371, rhs=v374 }              -> x0
+    v377 StoreLocal { off=-1, value=v376, kind=I32 }      -> -
+    v378 LocalAddr(-1)                                    -> x0
+    v379 InlineAsm { template="ldmxcsr %0", ops=1, args=[v378] } -> -
+    v380 LocalAddr(-88)                                   -> x0
+    v381 Imm(0)                                           -> x0
+    v382 LoadLocal { off=-88, kind=I64, volatile }        -> x0
+    v383 Undef                                            -> x1
+    v384 VecInsert { vec=v383, value=v382, off=0, kind=I64, bytes=16 } -> d0
+    v385 Imm(0)                                           -> x0
+    v386 BinopI { op=add, lhs=v380, rhs_imm=8 }           -> x0
+    v387 LoadLocal { off=-88, disp=8, kind=I64, volatile } -> x0
+    v388 Imm(8)                                           -> x1
+    v389 Imm(0)                                           -> x1
+    v390 VecInsert { vec=v384, value=v387, off=8, kind=I64, bytes=16 } -> d0
     v391 Imm(0)                                           -> x0
-    v392 LoadLocal { off=-89, kind=I64, volatile }        -> x0
+    v392 LocalAddr(-89)                                   -> x0
     v393 Imm(0)                                           -> x0
-    v394 BinopI { op=add, lhs=v390, rhs_imm=8 }           -> x0
-    v395 LoadLocal { off=-89, disp=8, kind=I64, volatile } -> x0
-    v396 Imm(0)                                           -> x0
-    v397 Imm(0)                                           -> x0
+    v394 LoadLocal { off=-89, kind=I64, volatile }        -> x0
+    v395 Imm(0)                                           -> x0
+    v396 BinopI { op=add, lhs=v392, rhs_imm=8 }           -> x0
+    v397 LoadLocal { off=-89, disp=8, kind=I64, volatile } -> x0
     v398 Imm(0)                                           -> x0
     v399 Imm(0)                                           -> x0
     v400 Imm(0)                                           -> x0
     v401 Imm(0)                                           -> x0
-    v402 SimdVal { op=__builtin_ia32_roundps, imm=Some(4), args=[v388] } -> d0
+    v402 Imm(0)                                           -> x0
     v403 Imm(0)                                           -> x0
-    v404 LocalAddr(-90)                                   -> x0
+    v404 SimdVal { op=__builtin_ia32_roundps, imm=Some(4), args=[v390] } -> d0
     v405 Imm(0)                                           -> x0
-    v406 VecExtract { vec=v402, off=0, kind=I64, bytes=16 } -> x0
-    v407 StoreLocal { off=-90, value=v406, kind=I64, volatile } -> -
-    v408 Imm(8)                                           -> x0
-    v409 Imm(0)                                           -> x0
-    v410 VecExtract { vec=v402, off=8, kind=I64, bytes=16 } -> x0
-    v411 BinopI { op=add, lhs=v404, rhs_imm=8 }           -> x1
-    v412 StoreLocal { off=-90, disp=8, value=v410, kind=I64, volatile } -> -
-    v413 LocalAddr(-1)                                    -> x0
-    v414 InlineAsm { template="stmxcsr %0", ops=1, args=[v413] } -> -
-    v415 LoadLocal { off=-1, kind=U32 }                   -> x0
-    v416 BinopI { op=and, lhs=v415, rhs_imm=4294967295 }  -> x1
-    v417 BinopI { op=shru, lhs=v415, rhs_imm=5 }          -> x0
-    v418 BinopI { op=and, lhs=v417, rhs_imm=1 }           -> x14
-    v419 Imm(0)                                           -> x0
-    v420 Extend { value=v418, kind=I32 }                  -> x0
-    v421 ImmData(304)                                     -> x0
-    v422 Load { addr=v421, disp=0, kind=U32 pc_rel }      -> x0
-    v423 StoreLocal { off=-1, value=v422, kind=I32 }      -> -
-    v424 LocalAddr(-1)                                    -> x0
-    v425 InlineAsm { template="ldmxcsr %0", ops=1, args=[v424] } -> -
-    v426 Imm(0)                                           -> x0
-    v427 LocalAddr(-90)                                   -> x0
-    v428 LoadLocal { off=-90, kind=I64, volatile }        -> x0
-    v429 Undef                                            -> x1
-    v430 VecInsert { vec=v429, value=v428, off=0, kind=I64, bytes=16 } -> d0
-    v431 Imm(0)                                           -> x0
-    v432 BinopI { op=add, lhs=v427, rhs_imm=8 }           -> x0
-    v433 LoadLocal { off=-90, disp=8, kind=I64, volatile } -> x0
-    v434 Imm(8)                                           -> x0
-    v435 Imm(0)                                           -> x0
-    v436 VecInsert { vec=v430, value=v433, off=8, kind=I64, bytes=16 } -> d1
+    v406 LocalAddr(-90)                                   -> x0
+    v407 Imm(0)                                           -> x0
+    v408 VecExtract { vec=v404, off=0, kind=I64, bytes=16 } -> x0
+    v409 StoreLocal { off=-90, value=v408, kind=I64, volatile } -> -
+    v410 Imm(8)                                           -> x0
+    v411 Imm(0)                                           -> x0
+    v412 VecExtract { vec=v404, off=8, kind=I64, bytes=16 } -> x0
+    v413 BinopI { op=add, lhs=v406, rhs_imm=8 }           -> x1
+    v414 StoreLocal { off=-90, disp=8, value=v412, kind=I64, volatile } -> -
+    v415 LocalAddr(-1)                                    -> x0
+    v416 InlineAsm { template="stmxcsr %0", ops=1, args=[v415] } -> -
+    v417 LoadLocal { off=-1, kind=U32 }                   -> x0
+    v418 BinopI { op=and, lhs=v417, rhs_imm=4294967295 }  -> x1
+    v419 BinopI { op=shru, lhs=v417, rhs_imm=5 }          -> x0
+    v420 BinopI { op=and, lhs=v419, rhs_imm=1 }           -> x14
+    v421 Imm(0)                                           -> x0
+    v422 Extend { value=v420, kind=I32 }                  -> x0
+    v423 ImmData(304)                                     -> x0
+    v424 Load { addr=v423, disp=0, kind=U32 pc_rel }      -> x0
+    v425 StoreLocal { off=-1, value=v424, kind=I32 }      -> -
+    v426 LocalAddr(-1)                                    -> x0
+    v427 InlineAsm { template="ldmxcsr %0", ops=1, args=[v426] } -> -
+    v428 Imm(0)                                           -> x0
+    v429 LocalAddr(-90)                                   -> x0
+    v430 LoadLocal { off=-90, kind=I64, volatile }        -> x0
+    v431 Undef                                            -> x1
+    v432 VecInsert { vec=v431, value=v430, off=0, kind=I64, bytes=16 } -> d0
+    v433 Imm(0)                                           -> x0
+    v434 BinopI { op=add, lhs=v429, rhs_imm=8 }           -> x0
+    v435 LoadLocal { off=-90, disp=8, kind=I64, volatile } -> x0
+    v436 Imm(8)                                           -> x0
     v437 Imm(0)                                           -> x0
-    v438 Imm(0)                                           -> x0
-    v439 Extend { value=v341, kind=I32 }                  -> x0
+    v438 VecInsert { vec=v432, value=v435, off=8, kind=I64, bytes=16 } -> d1
+    v439 Imm(0)                                           -> x0
     v440 Imm(0)                                           -> x0
-    v441 Imm(4)                                           -> x0
-    v442 Imm(4)                                           -> x0
-    v443 Imm(0)                                           -> x0
-    v444 VecExtract { vec=v430, off=4, kind=F32, bytes=16 } -> d0 [f32]
-    v445 Call { target_pc=495, args=[v444], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x15
-    v446 BinopI { op=and, lhs=v445, rhs_imm=4294967295 }  -> x0
-    v447 LocalAddr(-3)                                    -> x0
-    v448 Imm(4)                                           -> x0
-    v449 BinopI { op=add, lhs=v447, rhs_imm=4 }           -> x0
-    v450 LoadLocal { off=-3, disp=4, kind=F32 }           -> d0 [f32]
-    v451 Extend { value=v121, kind=I32 }                  -> x0
-    v452 Call { target_pc=497, args=[v450, v121], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
-    v453 Call { target_pc=495, args=[v452], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
-    v454 BinopI { op=and, lhs=v453, rhs_imm=4294967295 }  -> x1
-    v455 Binop { op=ne, lhs=v445, rhs=v453 }              -> x1
-    v456 Imm(1)                                           -> x1
-    v457 Imm(0)                                           -> x2
-    v458 Binop { op=ne, lhs=v418, rhs=v78 }               -> x2
-    v459 Binop { op=ne, lhs=v445, rhs=v453 }              -> x0
-    v460 Select { cond=v459, a=v456, b=v458, kind=I64 }   -> x1
+    v441 Extend { value=v343, kind=I32 }                  -> x0
+    v442 Imm(0)                                           -> x0
+    v443 Imm(4)                                           -> x0
+    v444 Imm(4)                                           -> x0
+    v445 Imm(0)                                           -> x0
+    v446 VecExtract { vec=v432, off=4, kind=F32, bytes=16 } -> d0 [f32]
+    v447 Call { target_pc=495, args=[v446], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x15
+    v448 BinopI { op=and, lhs=v447, rhs_imm=4294967295 }  -> x0
+    v449 LocalAddr(-3)                                    -> x0
+    v450 Imm(4)                                           -> x0
+    v451 BinopI { op=add, lhs=v449, rhs_imm=4 }           -> x0
+    v452 LoadLocal { off=-3, disp=4, kind=F32 }           -> d0 [f32]
+    v453 Extend { value=v123, kind=I32 }                  -> x0
+    v454 Call { target_pc=497, args=[v452, v123], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
+    v455 Call { target_pc=495, args=[v454], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
+    v456 BinopI { op=and, lhs=v455, rhs_imm=4294967295 }  -> x1
+    v457 Binop { op=ne, lhs=v447, rhs=v455 }              -> x1
+    v458 Imm(1)                                           -> x1
+    v459 Imm(0)                                           -> x2
+    v460 Binop { op=ne, lhs=v420, rhs=v80 }               -> x2
+    v461 Binop { op=ne, lhs=v447, rhs=v455 }              -> x0
+    v462 Select { cond=v461, a=v458, b=v460, kind=I64 }   -> x1
     terminator Jmp(b8)
   block 8  start_pc=0
-    v466 Copy { value=v460, fp=false }                    -> x0
-    v467 Imm(0)                                           -> x0
-    v468 Binop { op=or, lhs=v341, rhs=v460 }              -> x13
+    v468 Copy { value=v462, fp=false }                    -> x0
     v469 Imm(0)                                           -> x0
-    v470 Extend { value=v468, kind=I32 }                  -> x0
+    v470 Binop { op=or, lhs=v343, rhs=v462 }              -> x13
     v471 Imm(0)                                           -> x0
-    v472 LocalAddr(-91)                                   -> x0
+    v472 Extend { value=v470, kind=I32 }                  -> x0
     v473 Imm(0)                                           -> x0
-    v474 Copy { value=v71, fp=true }                      -> d0
-    v475 VecExtract { vec=v474, off=0, kind=I64, bytes=16 } -> x0
-    v476 StoreLocal { off=-91, value=v475, kind=I64, volatile } -> -
-    v477 Imm(8)                                           -> x0
-    v478 Imm(0)                                           -> x0
-    v479 VecExtract { vec=v474, off=8, kind=I64, bytes=16 } -> x0
-    v480 BinopI { op=add, lhs=v472, rhs_imm=8 }           -> x1
-    v481 StoreLocal { off=-91, disp=8, value=v479, kind=I64, volatile } -> -
-    v482 Imm(0)                                           -> x0
-    v483 LocalAddr(-92)                                   -> x0
+    v474 LocalAddr(-91)                                   -> x0
+    v475 Imm(0)                                           -> x0
+    v476 Copy { value=v73, fp=true }                      -> d0
+    v477 VecExtract { vec=v476, off=0, kind=I64, bytes=16 } -> x0
+    v478 StoreLocal { off=-91, value=v477, kind=I64, volatile } -> -
+    v479 Imm(8)                                           -> x0
+    v480 Imm(0)                                           -> x0
+    v481 VecExtract { vec=v476, off=8, kind=I64, bytes=16 } -> x0
+    v482 BinopI { op=add, lhs=v474, rhs_imm=8 }           -> x1
+    v483 StoreLocal { off=-91, disp=8, value=v481, kind=I64, volatile } -> -
     v484 Imm(0)                                           -> x0
-    v485 Imm(0)                                           -> x0
-    v486 StoreLocal { off=-92, value=v485, kind=I64, volatile } -> -
-    v487 Imm(8)                                           -> x1
-    v488 Imm(0)                                           -> x1
-    v489 Imm(0)                                           -> x1
-    v490 BinopI { op=add, lhs=v483, rhs_imm=8 }           -> x1
-    v491 StoreLocal { off=-92, disp=8, value=v485, kind=I64, volatile } -> -
-    v492 ImmData(304)                                     -> x0
-    v493 Load { addr=v492, disp=0, kind=U32 pc_rel }      -> x0
-    v494 Imm(-24640)                                      -> x1
-    v495 Imm(4294942656)                                  -> x1
-    v496 BinopI { op=and, lhs=v493, rhs_imm=4294942656 }  -> x0
-    v497 Extend { value=v121, kind=I32 }                  -> x1
-    v498 BinopI { op=and, lhs=v121, rhs_imm=4294967295 }  -> x1
-    v499 BinopI { op=shl, lhs=v121, rhs_imm=13 }          -> x1
-    v500 BinopI { op=and, lhs=v499, rhs_imm=4294967295 }  -> x2
-    v501 Binop { op=or, lhs=v496, rhs=v499 }              -> x0
-    v502 StoreLocal { off=-1, value=v501, kind=I32 }      -> -
-    v503 LocalAddr(-1)                                    -> x0
-    v504 InlineAsm { template="ldmxcsr %0", ops=1, args=[v503] } -> -
-    v505 LocalAddr(-91)                                   -> x0
-    v506 Imm(0)                                           -> x0
-    v507 LoadLocal { off=-91, kind=I64, volatile }        -> x0
-    v508 Undef                                            -> x1
-    v509 VecInsert { vec=v508, value=v507, off=0, kind=I64, bytes=16 } -> d0
-    v510 Imm(0)                                           -> x0
-    v511 BinopI { op=add, lhs=v505, rhs_imm=8 }           -> x0
-    v512 LoadLocal { off=-91, disp=8, kind=I64, volatile } -> x0
-    v513 Imm(8)                                           -> x1
-    v514 Imm(0)                                           -> x1
-    v515 VecInsert { vec=v509, value=v512, off=8, kind=I64, bytes=16 } -> d0
-    v516 Imm(0)                                           -> x0
-    v517 LocalAddr(-92)                                   -> x0
+    v485 LocalAddr(-92)                                   -> x0
+    v486 Imm(0)                                           -> x0
+    v487 Imm(0)                                           -> x0
+    v488 StoreLocal { off=-92, value=v487, kind=I64, volatile } -> -
+    v489 Imm(8)                                           -> x1
+    v490 Imm(0)                                           -> x1
+    v491 Imm(0)                                           -> x1
+    v492 BinopI { op=add, lhs=v485, rhs_imm=8 }           -> x1
+    v493 StoreLocal { off=-92, disp=8, value=v487, kind=I64, volatile } -> -
+    v494 ImmData(304)                                     -> x0
+    v495 Load { addr=v494, disp=0, kind=U32 pc_rel }      -> x0
+    v496 Imm(-24640)                                      -> x1
+    v497 Imm(4294942656)                                  -> x1
+    v498 BinopI { op=and, lhs=v495, rhs_imm=4294942656 }  -> x0
+    v499 Extend { value=v123, kind=I32 }                  -> x1
+    v500 BinopI { op=and, lhs=v123, rhs_imm=4294967295 }  -> x1
+    v501 BinopI { op=shl, lhs=v123, rhs_imm=13 }          -> x1
+    v502 BinopI { op=and, lhs=v501, rhs_imm=4294967295 }  -> x2
+    v503 Binop { op=or, lhs=v498, rhs=v501 }              -> x0
+    v504 StoreLocal { off=-1, value=v503, kind=I32 }      -> -
+    v505 LocalAddr(-1)                                    -> x0
+    v506 InlineAsm { template="ldmxcsr %0", ops=1, args=[v505] } -> -
+    v507 LocalAddr(-91)                                   -> x0
+    v508 Imm(0)                                           -> x0
+    v509 LoadLocal { off=-91, kind=I64, volatile }        -> x0
+    v510 Undef                                            -> x1
+    v511 VecInsert { vec=v510, value=v509, off=0, kind=I64, bytes=16 } -> d0
+    v512 Imm(0)                                           -> x0
+    v513 BinopI { op=add, lhs=v507, rhs_imm=8 }           -> x0
+    v514 LoadLocal { off=-91, disp=8, kind=I64, volatile } -> x0
+    v515 Imm(8)                                           -> x1
+    v516 Imm(0)                                           -> x1
+    v517 VecInsert { vec=v511, value=v514, off=8, kind=I64, bytes=16 } -> d0
     v518 Imm(0)                                           -> x0
-    v519 LoadLocal { off=-92, kind=I64, volatile }        -> x0
+    v519 LocalAddr(-92)                                   -> x0
     v520 Imm(0)                                           -> x0
-    v521 BinopI { op=add, lhs=v517, rhs_imm=8 }           -> x0
-    v522 LoadLocal { off=-92, disp=8, kind=I64, volatile } -> x0
-    v523 Imm(0)                                           -> x0
-    v524 Imm(0)                                           -> x0
+    v521 LoadLocal { off=-92, kind=I64, volatile }        -> x0
+    v522 Imm(0)                                           -> x0
+    v523 BinopI { op=add, lhs=v519, rhs_imm=8 }           -> x0
+    v524 LoadLocal { off=-92, disp=8, kind=I64, volatile } -> x0
     v525 Imm(0)                                           -> x0
     v526 Imm(0)                                           -> x0
     v527 Imm(0)                                           -> x0
     v528 Imm(0)                                           -> x0
-    v529 SimdVal { op=__builtin_ia32_roundps, imm=Some(12), args=[v515] } -> d0
+    v529 Imm(0)                                           -> x0
     v530 Imm(0)                                           -> x0
-    v531 LocalAddr(-93)                                   -> x0
+    v531 SimdVal { op=__builtin_ia32_roundps, imm=Some(12), args=[v517] } -> d0
     v532 Imm(0)                                           -> x0
-    v533 VecExtract { vec=v529, off=0, kind=I64, bytes=16 } -> x0
-    v534 StoreLocal { off=-93, value=v533, kind=I64, volatile } -> -
-    v535 Imm(8)                                           -> x0
-    v536 Imm(0)                                           -> x0
-    v537 VecExtract { vec=v529, off=8, kind=I64, bytes=16 } -> x0
-    v538 BinopI { op=add, lhs=v531, rhs_imm=8 }           -> x1
-    v539 StoreLocal { off=-93, disp=8, value=v537, kind=I64, volatile } -> -
-    v540 LocalAddr(-1)                                    -> x0
-    v541 InlineAsm { template="stmxcsr %0", ops=1, args=[v540] } -> -
-    v542 LoadLocal { off=-1, kind=U32 }                   -> x0
-    v543 BinopI { op=and, lhs=v542, rhs_imm=4294967295 }  -> x1
-    v544 BinopI { op=shru, lhs=v542, rhs_imm=5 }          -> x0
-    v545 BinopI { op=and, lhs=v544, rhs_imm=1 }           -> x14
-    v546 Imm(0)                                           -> x0
-    v547 Extend { value=v545, kind=I32 }                  -> x0
-    v548 ImmData(304)                                     -> x0
-    v549 Load { addr=v548, disp=0, kind=U32 pc_rel }      -> x0
-    v550 StoreLocal { off=-1, value=v549, kind=I32 }      -> -
-    v551 LocalAddr(-1)                                    -> x0
-    v552 InlineAsm { template="ldmxcsr %0", ops=1, args=[v551] } -> -
-    v553 Imm(0)                                           -> x0
-    v554 LocalAddr(-93)                                   -> x0
-    v555 LoadLocal { off=-93, kind=I64, volatile }        -> x0
-    v556 Undef                                            -> x1
-    v557 VecInsert { vec=v556, value=v555, off=0, kind=I64, bytes=16 } -> d0
-    v558 Imm(0)                                           -> x0
-    v559 BinopI { op=add, lhs=v554, rhs_imm=8 }           -> x0
-    v560 LoadLocal { off=-93, disp=8, kind=I64, volatile } -> x0
-    v561 Imm(8)                                           -> x1
-    v562 Imm(0)                                           -> x1
-    v563 VecInsert { vec=v557, value=v560, off=8, kind=I64, bytes=16 } -> d0
-    v564 Imm(0)                                           -> x0
-    v565 Imm(0)                                           -> x0
-    v566 Extend { value=v468, kind=I32 }                  -> x0
+    v533 LocalAddr(-93)                                   -> x0
+    v534 Imm(0)                                           -> x0
+    v535 VecExtract { vec=v531, off=0, kind=I64, bytes=16 } -> x0
+    v536 StoreLocal { off=-93, value=v535, kind=I64, volatile } -> -
+    v537 Imm(8)                                           -> x0
+    v538 Imm(0)                                           -> x0
+    v539 VecExtract { vec=v531, off=8, kind=I64, bytes=16 } -> x0
+    v540 BinopI { op=add, lhs=v533, rhs_imm=8 }           -> x1
+    v541 StoreLocal { off=-93, disp=8, value=v539, kind=I64, volatile } -> -
+    v542 LocalAddr(-1)                                    -> x0
+    v543 InlineAsm { template="stmxcsr %0", ops=1, args=[v542] } -> -
+    v544 LoadLocal { off=-1, kind=U32 }                   -> x0
+    v545 BinopI { op=and, lhs=v544, rhs_imm=4294967295 }  -> x1
+    v546 BinopI { op=shru, lhs=v544, rhs_imm=5 }          -> x0
+    v547 BinopI { op=and, lhs=v546, rhs_imm=1 }           -> x14
+    v548 Imm(0)                                           -> x0
+    v549 Extend { value=v547, kind=I32 }                  -> x0
+    v550 ImmData(304)                                     -> x0
+    v551 Load { addr=v550, disp=0, kind=U32 pc_rel }      -> x0
+    v552 StoreLocal { off=-1, value=v551, kind=I32 }      -> -
+    v553 LocalAddr(-1)                                    -> x0
+    v554 InlineAsm { template="ldmxcsr %0", ops=1, args=[v553] } -> -
+    v555 Imm(0)                                           -> x0
+    v556 LocalAddr(-93)                                   -> x0
+    v557 LoadLocal { off=-93, kind=I64, volatile }        -> x0
+    v558 Undef                                            -> x1
+    v559 VecInsert { vec=v558, value=v557, off=0, kind=I64, bytes=16 } -> d0
+    v560 Imm(0)                                           -> x0
+    v561 BinopI { op=add, lhs=v556, rhs_imm=8 }           -> x0
+    v562 LoadLocal { off=-93, disp=8, kind=I64, volatile } -> x0
+    v563 Imm(8)                                           -> x1
+    v564 Imm(0)                                           -> x1
+    v565 VecInsert { vec=v559, value=v562, off=8, kind=I64, bytes=16 } -> d0
+    v566 Imm(0)                                           -> x0
     v567 Imm(0)                                           -> x0
-    v568 Imm(8)                                           -> x0
-    v569 Imm(8)                                           -> x0
-    v570 Imm(0)                                           -> x0
-    v571 VecExtract { vec=v563, off=8, kind=F32, bytes=16 } -> d0 [f32]
-    v572 Call { target_pc=495, args=[v571], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x15
-    v573 BinopI { op=and, lhs=v572, rhs_imm=4294967295 }  -> x0
-    v574 LocalAddr(-3)                                    -> x0
-    v575 Imm(8)                                           -> x0
-    v576 BinopI { op=add, lhs=v574, rhs_imm=8 }           -> x0
-    v577 LoadLocal { off=-3, disp=8, kind=F32 }           -> d0 [f32]
-    v578 Extend { value=v121, kind=I32 }                  -> x0
-    v579 Call { target_pc=497, args=[v577, v121], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
-    v580 Call { target_pc=495, args=[v579], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
-    v581 BinopI { op=and, lhs=v580, rhs_imm=4294967295 }  -> x1
-    v582 Binop { op=ne, lhs=v572, rhs=v580 }              -> x1
-    v583 Imm(1)                                           -> x1
-    v584 Imm(0)                                           -> x2
-    v585 BinopI { op=ne, lhs=v545, rhs_imm=0 }            -> x2
-    v586 Binop { op=ne, lhs=v572, rhs=v580 }              -> x0
-    v587 Select { cond=v586, a=v583, b=v585, kind=I64 }   -> x1
+    v568 Extend { value=v470, kind=I32 }                  -> x0
+    v569 Imm(0)                                           -> x0
+    v570 Imm(8)                                           -> x0
+    v571 Imm(8)                                           -> x0
+    v572 Imm(0)                                           -> x0
+    v573 VecExtract { vec=v565, off=8, kind=F32, bytes=16 } -> d0 [f32]
+    v574 Call { target_pc=495, args=[v573], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x15
+    v575 BinopI { op=and, lhs=v574, rhs_imm=4294967295 }  -> x0
+    v576 LocalAddr(-3)                                    -> x0
+    v577 Imm(8)                                           -> x0
+    v578 BinopI { op=add, lhs=v576, rhs_imm=8 }           -> x0
+    v579 LoadLocal { off=-3, disp=8, kind=F32 }           -> d0 [f32]
+    v580 Extend { value=v123, kind=I32 }                  -> x0
+    v581 Call { target_pc=497, args=[v579, v123], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
+    v582 Call { target_pc=495, args=[v581], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
+    v583 BinopI { op=and, lhs=v582, rhs_imm=4294967295 }  -> x1
+    v584 Binop { op=ne, lhs=v574, rhs=v582 }              -> x1
+    v585 Imm(1)                                           -> x1
+    v586 Imm(0)                                           -> x2
+    v587 BinopI { op=ne, lhs=v547, rhs_imm=0 }            -> x2
+    v588 Binop { op=ne, lhs=v574, rhs=v582 }              -> x0
+    v589 Select { cond=v588, a=v585, b=v587, kind=I64 }   -> x1
     terminator Jmp(b9)
   block 9  start_pc=0
-    v592 Copy { value=v587, fp=false }                    -> x0
-    v593 Imm(0)                                           -> x0
-    v594 Binop { op=or, lhs=v468, rhs=v587 }              -> x13
+    v594 Copy { value=v589, fp=false }                    -> x0
     v595 Imm(0)                                           -> x0
-    v596 Extend { value=v594, kind=I32 }                  -> x0
+    v596 Binop { op=or, lhs=v470, rhs=v589 }              -> x13
     v597 Imm(0)                                           -> x0
-    v598 Imm(0)                                           -> x0
+    v598 Extend { value=v596, kind=I32 }                  -> x0
     v599 Imm(0)                                           -> x0
     v600 Imm(0)                                           -> x0
     v601 Imm(0)                                           -> x0
@@ -3222,173 +3222,175 @@ fn ent_pc=501 n_params=0 variadic=false locals=3
     v603 Imm(0)                                           -> x0
     v604 Imm(0)                                           -> x0
     v605 Imm(0)                                           -> x0
-    v606 LocalAddr(-94)                                   -> x0
+    v606 Imm(0)                                           -> x0
     v607 Imm(0)                                           -> x0
-    v608 Copy { value=v19, fp=true }                      -> d0
-    v609 VecExtract { vec=v608, off=0, kind=I64, bytes=16 } -> x0
-    v610 StoreLocal { off=-94, value=v609, kind=I64, volatile } -> -
-    v611 Imm(8)                                           -> x0
-    v612 Imm(0)                                           -> x0
-    v613 VecExtract { vec=v608, off=8, kind=I64, bytes=16 } -> x0
-    v614 BinopI { op=add, lhs=v606, rhs_imm=8 }           -> x1
-    v615 StoreLocal { off=-94, disp=8, value=v613, kind=I64, volatile } -> -
-    v616 Imm(0)                                           -> x0
-    v617 LocalAddr(-95)                                   -> x0
+    v608 LocalAddr(-94)                                   -> x0
+    v609 Imm(0)                                           -> x0
+    v610 Copy { value=v20, fp=true }                      -> d0
+    v611 VecExtract { vec=v610, off=0, kind=I64, bytes=16 } -> x0
+    v612 StoreLocal { off=-94, value=v611, kind=I64, volatile } -> -
+    v613 Imm(8)                                           -> x0
+    v614 Imm(0)                                           -> x0
+    v615 VecExtract { vec=v610, off=8, kind=I64, bytes=16 } -> x0
+    v616 BinopI { op=add, lhs=v608, rhs_imm=8 }           -> x1
+    v617 StoreLocal { off=-94, disp=8, value=v615, kind=I64, volatile } -> -
     v618 Imm(0)                                           -> x0
-    v619 VecExtract { vec=v608, off=0, kind=I64, bytes=16 } -> x0
-    v620 StoreLocal { off=-95, value=v619, kind=I64, volatile } -> -
-    v621 Imm(8)                                           -> x0
-    v622 Imm(0)                                           -> x0
-    v623 VecExtract { vec=v608, off=8, kind=I64, bytes=16 } -> x0
-    v624 BinopI { op=add, lhs=v617, rhs_imm=8 }           -> x1
-    v625 StoreLocal { off=-95, disp=8, value=v623, kind=I64, volatile } -> -
-    v626 ImmData(304)                                     -> x0
-    v627 Load { addr=v626, disp=0, kind=U32 pc_rel }      -> x0
-    v628 Imm(-24640)                                      -> x1
-    v629 Imm(4294942656)                                  -> x1
-    v630 BinopI { op=and, lhs=v627, rhs_imm=4294942656 }  -> x0
-    v631 Extend { value=v121, kind=I32 }                  -> x1
-    v632 BinopI { op=and, lhs=v121, rhs_imm=4294967295 }  -> x1
-    v633 BinopI { op=shl, lhs=v121, rhs_imm=13 }          -> x1
-    v634 BinopI { op=and, lhs=v633, rhs_imm=4294967295 }  -> x2
-    v635 Binop { op=or, lhs=v630, rhs=v633 }              -> x0
-    v636 StoreLocal { off=-1, value=v635, kind=I32 }      -> -
-    v637 LocalAddr(-1)                                    -> x0
-    v638 InlineAsm { template="ldmxcsr %0", ops=1, args=[v637] } -> -
-    v639 LocalAddr(-94)                                   -> x0
-    v640 Imm(0)                                           -> x0
-    v641 LoadLocal { off=-94, kind=I64, volatile }        -> x0
-    v642 Undef                                            -> x1
-    v643 VecInsert { vec=v642, value=v641, off=0, kind=I64, bytes=16 } -> d0
-    v644 Imm(0)                                           -> x0
-    v645 BinopI { op=add, lhs=v639, rhs_imm=8 }           -> x0
-    v646 LoadLocal { off=-94, disp=8, kind=I64, volatile } -> x0
-    v647 Imm(8)                                           -> x1
-    v648 Imm(0)                                           -> x1
-    v649 VecInsert { vec=v643, value=v646, off=8, kind=I64, bytes=16 } -> d0
-    v650 Imm(0)                                           -> x0
-    v651 LocalAddr(-95)                                   -> x0
+    v619 LocalAddr(-95)                                   -> x0
+    v620 Imm(0)                                           -> x0
+    v621 VecExtract { vec=v610, off=0, kind=I64, bytes=16 } -> x0
+    v622 StoreLocal { off=-95, value=v621, kind=I64, volatile } -> -
+    v623 Imm(8)                                           -> x0
+    v624 Imm(0)                                           -> x0
+    v625 VecExtract { vec=v610, off=8, kind=I64, bytes=16 } -> x0
+    v626 BinopI { op=add, lhs=v619, rhs_imm=8 }           -> x1
+    v627 StoreLocal { off=-95, disp=8, value=v625, kind=I64, volatile } -> -
+    v628 ImmData(304)                                     -> x0
+    v629 Load { addr=v628, disp=0, kind=U32 pc_rel }      -> x0
+    v630 Imm(-24640)                                      -> x1
+    v631 Imm(4294942656)                                  -> x1
+    v632 BinopI { op=and, lhs=v629, rhs_imm=4294942656 }  -> x0
+    v633 Extend { value=v123, kind=I32 }                  -> x1
+    v634 BinopI { op=and, lhs=v123, rhs_imm=4294967295 }  -> x1
+    v635 BinopI { op=shl, lhs=v123, rhs_imm=13 }          -> x1
+    v636 BinopI { op=and, lhs=v635, rhs_imm=4294967295 }  -> x2
+    v637 Binop { op=or, lhs=v632, rhs=v635 }              -> x0
+    v638 StoreLocal { off=-1, value=v637, kind=I32 }      -> -
+    v639 LocalAddr(-1)                                    -> x0
+    v640 InlineAsm { template="ldmxcsr %0", ops=1, args=[v639] } -> -
+    v641 LocalAddr(-94)                                   -> x0
+    v642 Imm(0)                                           -> x0
+    v643 LoadLocal { off=-94, kind=I64, volatile }        -> x0
+    v644 Undef                                            -> x1
+    v645 VecInsert { vec=v644, value=v643, off=0, kind=I64, bytes=16 } -> d0
+    v646 Imm(0)                                           -> x0
+    v647 BinopI { op=add, lhs=v641, rhs_imm=8 }           -> x0
+    v648 LoadLocal { off=-94, disp=8, kind=I64, volatile } -> x0
+    v649 Imm(8)                                           -> x1
+    v650 Imm(0)                                           -> x1
+    v651 VecInsert { vec=v645, value=v648, off=8, kind=I64, bytes=16 } -> d0
     v652 Imm(0)                                           -> x0
-    v653 LoadLocal { off=-95, kind=I64, volatile }        -> x0
+    v653 LocalAddr(-95)                                   -> x0
     v654 Imm(0)                                           -> x0
-    v655 BinopI { op=add, lhs=v651, rhs_imm=8 }           -> x0
-    v656 LoadLocal { off=-95, disp=8, kind=I64, volatile } -> x0
-    v657 Imm(0)                                           -> x0
-    v658 Imm(0)                                           -> x0
+    v655 LoadLocal { off=-95, kind=I64, volatile }        -> x0
+    v656 Imm(0)                                           -> x0
+    v657 BinopI { op=add, lhs=v653, rhs_imm=8 }           -> x0
+    v658 LoadLocal { off=-95, disp=8, kind=I64, volatile } -> x0
     v659 Imm(0)                                           -> x0
     v660 Imm(0)                                           -> x0
     v661 Imm(0)                                           -> x0
     v662 Imm(0)                                           -> x0
-    v663 SimdVal { op=__builtin_ia32_roundpd, imm=Some(12), args=[v649] } -> d0
+    v663 Imm(0)                                           -> x0
     v664 Imm(0)                                           -> x0
-    v665 LocalAddr(-96)                                   -> x0
+    v665 SimdVal { op=__builtin_ia32_roundpd, imm=Some(12), args=[v651] } -> d0
     v666 Imm(0)                                           -> x0
-    v667 VecExtract { vec=v663, off=0, kind=I64, bytes=16 } -> x0
-    v668 StoreLocal { off=-96, value=v667, kind=I64, volatile } -> -
-    v669 Imm(8)                                           -> x0
-    v670 Imm(0)                                           -> x0
-    v671 VecExtract { vec=v663, off=8, kind=I64, bytes=16 } -> x0
-    v672 BinopI { op=add, lhs=v665, rhs_imm=8 }           -> x1
-    v673 StoreLocal { off=-96, disp=8, value=v671, kind=I64, volatile } -> -
-    v674 LocalAddr(-1)                                    -> x0
-    v675 InlineAsm { template="stmxcsr %0", ops=1, args=[v674] } -> -
-    v676 LoadLocal { off=-1, kind=U32 }                   -> x0
-    v677 BinopI { op=and, lhs=v676, rhs_imm=4294967295 }  -> x1
-    v678 BinopI { op=shru, lhs=v676, rhs_imm=5 }          -> x0
-    v679 BinopI { op=and, lhs=v678, rhs_imm=1 }           -> x14
-    v680 Imm(0)                                           -> x0
-    v681 Extend { value=v679, kind=I32 }                  -> x0
-    v682 ImmData(304)                                     -> x0
-    v683 Load { addr=v682, disp=0, kind=U32 pc_rel }      -> x0
-    v684 StoreLocal { off=-1, value=v683, kind=I32 }      -> -
-    v685 LocalAddr(-1)                                    -> x0
-    v686 InlineAsm { template="ldmxcsr %0", ops=1, args=[v685] } -> -
-    v687 Imm(0)                                           -> x0
-    v688 LocalAddr(-96)                                   -> x0
-    v689 LoadLocal { off=-96, kind=I64, volatile }        -> x0
-    v690 Undef                                            -> x1
-    v691 VecInsert { vec=v690, value=v689, off=0, kind=I64, bytes=16 } -> d0
-    v692 Imm(0)                                           -> x0
-    v693 BinopI { op=add, lhs=v688, rhs_imm=8 }           -> x0
-    v694 LoadLocal { off=-96, disp=8, kind=I64, volatile } -> x0
-    v695 Imm(8)                                           -> x1
-    v696 Imm(0)                                           -> x1
-    v697 VecInsert { vec=v691, value=v694, off=8, kind=I64, bytes=16 } -> d1
-    v698 Imm(0)                                           -> x0
-    v699 Imm(0)                                           -> x0
-    v700 Extend { value=v594, kind=I32 }                  -> x0
+    v667 LocalAddr(-96)                                   -> x0
+    v668 Imm(0)                                           -> x0
+    v669 VecExtract { vec=v665, off=0, kind=I64, bytes=16 } -> x0
+    v670 StoreLocal { off=-96, value=v669, kind=I64, volatile } -> -
+    v671 Imm(8)                                           -> x0
+    v672 Imm(0)                                           -> x0
+    v673 VecExtract { vec=v665, off=8, kind=I64, bytes=16 } -> x0
+    v674 BinopI { op=add, lhs=v667, rhs_imm=8 }           -> x1
+    v675 StoreLocal { off=-96, disp=8, value=v673, kind=I64, volatile } -> -
+    v676 LocalAddr(-1)                                    -> x0
+    v677 InlineAsm { template="stmxcsr %0", ops=1, args=[v676] } -> -
+    v678 LoadLocal { off=-1, kind=U32 }                   -> x0
+    v679 BinopI { op=and, lhs=v678, rhs_imm=4294967295 }  -> x1
+    v680 BinopI { op=shru, lhs=v678, rhs_imm=5 }          -> x0
+    v681 BinopI { op=and, lhs=v680, rhs_imm=1 }           -> x14
+    v682 Imm(0)                                           -> x0
+    v683 Extend { value=v681, kind=I32 }                  -> x0
+    v684 ImmData(304)                                     -> x0
+    v685 Load { addr=v684, disp=0, kind=U32 pc_rel }      -> x0
+    v686 StoreLocal { off=-1, value=v685, kind=I32 }      -> -
+    v687 LocalAddr(-1)                                    -> x0
+    v688 InlineAsm { template="ldmxcsr %0", ops=1, args=[v687] } -> -
+    v689 Imm(0)                                           -> x0
+    v690 LocalAddr(-96)                                   -> x0
+    v691 LoadLocal { off=-96, kind=I64, volatile }        -> x0
+    v692 Undef                                            -> x1
+    v693 VecInsert { vec=v692, value=v691, off=0, kind=I64, bytes=16 } -> d0
+    v694 Imm(0)                                           -> x0
+    v695 BinopI { op=add, lhs=v690, rhs_imm=8 }           -> x0
+    v696 LoadLocal { off=-96, disp=8, kind=I64, volatile } -> x0
+    v697 Imm(8)                                           -> x1
+    v698 Imm(0)                                           -> x1
+    v699 VecInsert { vec=v693, value=v696, off=8, kind=I64, bytes=16 } -> d1
+    v700 Imm(0)                                           -> x0
     v701 Imm(0)                                           -> x0
-    v702 Imm(0)                                           -> x0
+    v702 Extend { value=v596, kind=I32 }                  -> x0
     v703 Imm(0)                                           -> x0
-    v704 VecExtract { vec=v697, off=0, kind=F64, bytes=16 } -> d0
-    v705 FpCast { kind=FpBits, value=v704 }               -> x15
-    v706 Imm(0)                                           -> x0
-    v707 Imm(0)                                           -> x0
+    v704 Imm(0)                                           -> x0
+    v705 Imm(0)                                           -> x0
+    v706 VecExtract { vec=v699, off=0, kind=F64, bytes=16 } -> d0
+    v707 FpCast { kind=FpBits, value=v706 }               -> x15
     v708 Imm(0)                                           -> x0
-    v709 Copy { value=v10, fp=true }                      -> d0
-    v710 Extend { value=v121, kind=I32 }                  -> x0
-    v711 Call { target_pc=496, args=[v709, v121], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0
-    v712 FpCast { kind=FpBits, value=v711 }               -> x0
-    v713 Binop { op=ne, lhs=v705, rhs=v712 }              -> x1
-    v714 Imm(1)                                           -> x1
-    v715 Imm(0)                                           -> x2
-    v716 BinopI { op=ne, lhs=v679, rhs_imm=0 }            -> x2
-    v717 Binop { op=ne, lhs=v705, rhs=v712 }              -> x0
-    v718 Select { cond=v717, a=v714, b=v716, kind=I64 }   -> x1
+    v709 Imm(0)                                           -> x0
+    v710 Imm(0)                                           -> x0
+    v711 Copy { value=v15, fp=true }                      -> d0
+    v712 Extend { value=v123, kind=I32 }                  -> x0
+    v713 Call { target_pc=496, args=[v711, v123], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0
+    v714 FpCast { kind=FpBits, value=v713 }               -> x0
+    v715 Binop { op=ne, lhs=v707, rhs=v714 }              -> x1
+    v716 Imm(1)                                           -> x1
+    v717 Imm(0)                                           -> x2
+    v718 BinopI { op=ne, lhs=v681, rhs_imm=0 }            -> x2
+    v719 Binop { op=ne, lhs=v707, rhs=v714 }              -> x0
+    v720 Select { cond=v719, a=v716, b=v718, kind=I64 }   -> x1
     terminator Jmp(b10)
   block 10  start_pc=0
-    v723 Copy { value=v718, fp=false }                    -> x0
-    v724 Imm(0)                                           -> x0
-    v725 Binop { op=or, lhs=v594, rhs=v718 }              -> x13
+    v725 Copy { value=v720, fp=false }                    -> x0
     v726 Imm(0)                                           -> x0
-    v727 Extend { value=v725, kind=I32 }                  -> x0
+    v727 Binop { op=or, lhs=v596, rhs=v720 }              -> x13
     v728 Imm(0)                                           -> x0
-    v729 Imm(8)                                           -> x0
-    v730 Imm(8)                                           -> x0
-    v731 Imm(0)                                           -> x0
-    v732 VecExtract { vec=v697, off=8, kind=F64, bytes=16 } -> d0
-    v733 FpCast { kind=FpBits, value=v732 }               -> x14
-    v734 Imm(0)                                           -> x0
-    v735 Imm(8)                                           -> x0
-    v736 Imm(8)                                           -> x0
-    v737 Imm(0)                                           -> x0
-    v738 Copy { value=v15, fp=true }                      -> d0
-    v739 Extend { value=v121, kind=I32 }                  -> x0
-    v740 Call { target_pc=496, args=[v738, v121], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0
-    v741 FpCast { kind=FpBits, value=v740 }               -> x0
-    v742 Binop { op=ne, lhs=v733, rhs=v741 }              -> x0
-    v743 Binop { op=or, lhs=v725, rhs=v742 }              -> x13
-    v744 Imm(0)                                           -> x0
-    v745 Extend { value=v743, kind=I32 }                  -> x0
-    v746 LifetimeEnd(0)                                   -> -
-    v747 LifetimeEnd(0)                                   -> -
-    v748 Extend { value=v121, kind=I32 }                  -> x0
-    v749 BinopI { op=add, lhs=v121, rhs_imm=1 }           -> x3
-    v750 Extend { value=v749, kind=I32, nsw }             -> x0
-    terminator Jmp(b11)   (exit_acc=v749)
+    v729 Extend { value=v727, kind=I32 }                  -> x0
+    v730 Imm(0)                                           -> x0
+    v731 Imm(8)                                           -> x0
+    v732 Imm(8)                                           -> x0
+    v733 Imm(0)                                           -> x0
+    v734 VecExtract { vec=v699, off=8, kind=F64, bytes=16 } -> d0
+    v735 FpCast { kind=FpBits, value=v734 }               -> x14
+    v736 Imm(0)                                           -> x0
+    v737 Imm(8)                                           -> x0
+    v738 Imm(8)                                           -> x0
+    v739 Imm(0)                                           -> x0
+    v740 Copy { value=v30, fp=true }                      -> d0
+    v741 Extend { value=v123, kind=I32 }                  -> x0
+    v742 Call { target_pc=496, args=[v740, v123], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0
+    v743 FpCast { kind=FpBits, value=v742 }               -> x0
+    v744 Binop { op=ne, lhs=v735, rhs=v743 }              -> x0
+    v745 Binop { op=or, lhs=v727, rhs=v744 }              -> x13
+    v746 Imm(0)                                           -> x0
+    v747 Extend { value=v745, kind=I32 }                  -> x0
+    v748 LifetimeEnd(0)                                   -> -
+    v749 LifetimeEnd(0)                                   -> -
+    v750 Extend { value=v123, kind=I32 }                  -> x0
+    v751 BinopI { op=add, lhs=v123, rhs_imm=1 }           -> x3
+    v752 Extend { value=v751, kind=I32, nsw }             -> x0
+    terminator Jmp(b11)   (exit_acc=v751)
   block 11  start_pc=0
-    v121 Phi { incoming=[b6:v95, b10:v749], kind=I64 }    -> x3
-    v122 Phi { incoming=[b6:v97, b10:v743], kind=I64 }    -> x13
-    v123 Extend { value=v121, kind=I32 }                  -> x0
-    v124 BinopI { op=lt, lhs=v121, rhs_imm=4 }            -> x0
-    terminator Bz { cond=v124, target=b12, fall=b7 }   (exit_acc=v124)
+    v123 Phi { incoming=[b6:v97, b10:v751], kind=I64 }    -> x3
+    v124 Phi { incoming=[b6:v99, b10:v745], kind=I64 }    -> x13
+    v125 Extend { value=v123, kind=I32 }                  -> x0
+    v126 BinopI { op=lt, lhs=v123, rhs_imm=4 }            -> x0
+    terminator Bz { cond=v126, target=b12, fall=b7 }   (exit_acc=v126)
   block 12  start_pc=0
-    v125 Extend { value=v122, kind=I32 }                  -> x0
-    v126 Imm(8)                                           -> x0
-    v127 Imm(0)                                           -> x1
-    v128 Select { cond=v122, a=v126, b=v127, kind=I64 }   -> x0
+    v127 Extend { value=v124, kind=I32 }                  -> x0
+    v128 Imm(8)                                           -> x0
+    v129 Imm(0)                                           -> x1
+    v130 Select { cond=v124, a=v128, b=v129, kind=I64 }   -> x0
     terminator Jmp(b13)
   block 13  start_pc=0
-    v755 Copy { value=v128, fp=false }                    -> x1
-    v756 Imm(0)                                           -> x1
-    v757 Extend { value=v128, kind=I32 }                  -> x1
-    v758 LifetimeEnd(-3)                                  -> -
-    v759 LifetimeEnd(0)                                   -> -
-    v760 LifetimeEnd(0)                                   -> -
+    v757 Copy { value=v130, fp=false }                    -> x1
+    v758 Imm(0)                                           -> x1
+    v759 Extend { value=v130, kind=I32 }                  -> x1
+    v760 LifetimeEnd(-3)                                  -> -
     v761 LifetimeEnd(0)                                   -> -
     v762 LifetimeEnd(0)                                   -> -
     v763 LifetimeEnd(0)                                   -> -
-    terminator Return(v128)   (exit_acc=v128)
+    v764 LifetimeEnd(0)                                   -> -
+    v765 LifetimeEnd(0)                                   -> -
+    terminator Return(v130)   (exit_acc=v130)
 ; --- SSA dump (ok=true) ent_pc=503 ---
 ; name=check_dot_products
 fn ent_pc=503 n_params=0 variadic=false locals=34
@@ -7268,465 +7270,480 @@ fn ent_pc=506 n_params=0 variadic=false locals=1
     v29  VecInsert { vec=v28, value=v27, off=0, kind=F32, bytes=16 } -> [spill 1]
     v30  Imm(0)                                           -> x0
     v31  Imm(0)                                           -> x0
-    v32  Call { target_pc=493, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> [spill 0] [f32]
+    v32  Call { target_pc=493, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> d0 [f32]
     v33  Undef                                            -> x0
     v34  VecInsert { vec=v33, value=v32, off=0, kind=F32, bytes=16 } -> [spill 3]
     v35  Imm(0)                                           -> x0
     v36  Imm(0)                                           -> x0
     v37  Imm(4)                                           -> x0
-    v38  Call { target_pc=493, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> [spill 18] [f32]
-    v39  Imm(0)                                           -> x0
-    v40  VecInsert { vec=v29, value=v38, off=4, kind=F32, bytes=16 } -> [spill 1]
-    v41  Imm(0)                                           -> x0
+    v38  Copy { value=v32, fp=true }                      -> [spill 0] [f32]
+    v39  Call { target_pc=493, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> d0 [f32]
+    v40  Imm(0)                                           -> x0
+    v41  VecInsert { vec=v29, value=v39, off=4, kind=F32, bytes=16 } -> [spill 1]
     v42  Imm(0)                                           -> x0
-    v43  Imm(4)                                           -> x0
-    v44  Call { target_pc=493, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> [spill 9] [f32]
-    v45  Imm(0)                                           -> x0
-    v46  VecInsert { vec=v34, value=v44, off=4, kind=F32, bytes=16 } -> [spill 3]
+    v43  Imm(0)                                           -> x0
+    v44  Imm(4)                                           -> x0
+    v45  Copy { value=v39, fp=true }                      -> [spill 18] [f32]
+    v46  Call { target_pc=493, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> d0 [f32]
     v47  Imm(0)                                           -> x0
-    v48  Imm(0)                                           -> x0
-    v49  Imm(8)                                           -> x0
-    v50  Call { target_pc=493, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> [spill 10] [f32]
-    v51  Imm(0)                                           -> x0
-    v52  VecInsert { vec=v40, value=v50, off=8, kind=F32, bytes=16 } -> [spill 1]
-    v53  Imm(0)                                           -> x0
+    v48  VecInsert { vec=v34, value=v46, off=4, kind=F32, bytes=16 } -> [spill 3]
+    v49  Imm(0)                                           -> x0
+    v50  Imm(0)                                           -> x0
+    v51  Imm(8)                                           -> x0
+    v52  Copy { value=v46, fp=true }                      -> [spill 13] [f32]
+    v53  Call { target_pc=493, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> d0 [f32]
     v54  Imm(0)                                           -> x0
-    v55  Imm(8)                                           -> x0
-    v56  Call { target_pc=493, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> [spill 11] [f32]
+    v55  VecInsert { vec=v41, value=v53, off=8, kind=F32, bytes=16 } -> [spill 1]
+    v56  Imm(0)                                           -> x0
     v57  Imm(0)                                           -> x0
-    v58  VecInsert { vec=v46, value=v56, off=8, kind=F32, bytes=16 } -> [spill 3]
-    v59  Imm(0)                                           -> x0
-    v60  Imm(0)                                           -> x0
-    v61  Imm(12)                                          -> x0
-    v62  Call { target_pc=493, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> [spill 12] [f32]
+    v58  Imm(8)                                           -> x0
+    v59  Copy { value=v53, fp=true }                      -> [spill 14] [f32]
+    v60  Call { target_pc=493, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> d0 [f32]
+    v61  Imm(0)                                           -> x0
+    v62  VecInsert { vec=v48, value=v60, off=8, kind=F32, bytes=16 } -> [spill 3]
     v63  Imm(0)                                           -> x0
-    v64  VecInsert { vec=v52, value=v62, off=12, kind=F32, bytes=16 } -> [spill 13]
-    v65  Imm(0)                                           -> x0
-    v66  Imm(0)                                           -> x0
-    v67  Imm(12)                                          -> x0
-    v68  Call { target_pc=493, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> [spill 15] [f32]
-    v69  Imm(0)                                           -> x0
-    v70  VecInsert { vec=v58, value=v68, off=12, kind=F32, bytes=16 } -> [spill 1]
+    v64  Imm(0)                                           -> x0
+    v65  Imm(12)                                          -> x0
+    v66  Copy { value=v60, fp=true }                      -> [spill 15] [f32]
+    v67  Call { target_pc=493, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> d0 [f32]
+    v68  Imm(0)                                           -> x0
+    v69  VecInsert { vec=v55, value=v67, off=12, kind=F32, bytes=16 } -> [spill 6]
+    v70  Imm(0)                                           -> x0
     v71  Imm(0)                                           -> x0
-    v72  Imm(0)                                           -> x0
-    v73  Imm(0)                                           -> x0
-    v74  Imm(0)                                           -> x0
-    v75  Call { target_pc=492, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> d0
-    v76  Undef                                            -> x0
-    v77  VecInsert { vec=v76, value=v75, off=0, kind=F64, bytes=16 } -> [spill 4]
+    v72  Imm(12)                                          -> x0
+    v73  Copy { value=v67, fp=true }                      -> [spill 16] [f32]
+    v74  Call { target_pc=493, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> d0 [f32]
+    v75  Imm(0)                                           -> x0
+    v76  VecInsert { vec=v62, value=v74, off=12, kind=F32, bytes=16 } -> [spill 1]
+    v77  Imm(0)                                           -> x0
     v78  Imm(0)                                           -> x0
     v79  Imm(0)                                           -> x0
-    v80  Call { target_pc=492, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> [spill 3]
-    v81  Undef                                            -> x0
-    v82  VecInsert { vec=v81, value=v80, off=0, kind=F64, bytes=16 } -> [spill 7]
-    v83  Imm(0)                                           -> x0
-    v84  Imm(0)                                           -> x0
-    v85  Imm(8)                                           -> x0
-    v86  Call { target_pc=492, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> [spill 6]
-    v87  Imm(0)                                           -> x0
-    v88  VecInsert { vec=v77, value=v86, off=8, kind=F64, bytes=16 } -> [spill 16]
-    v89  Imm(0)                                           -> x0
+    v80  Imm(0)                                           -> x0
+    v81  Copy { value=v74, fp=true }                      -> [spill 17] [f32]
+    v82  Call { target_pc=492, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> d0
+    v83  Undef                                            -> x0
+    v84  VecInsert { vec=v83, value=v82, off=0, kind=F64, bytes=16 } -> [spill 3]
+    v85  Imm(0)                                           -> x0
+    v86  Imm(0)                                           -> x0
+    v87  Call { target_pc=492, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> d0
+    v88  Undef                                            -> x0
+    v89  VecInsert { vec=v88, value=v87, off=0, kind=F64, bytes=16 } -> [spill 11]
     v90  Imm(0)                                           -> x0
-    v91  Imm(8)                                           -> x0
-    v92  Call { target_pc=492, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> [spill 19]
-    v93  Imm(0)                                           -> x0
-    v94  VecInsert { vec=v82, value=v92, off=8, kind=F64, bytes=16 } -> [spill 4]
+    v91  Imm(0)                                           -> x0
+    v92  Imm(8)                                           -> x0
+    v93  Copy { value=v87, fp=true }                      -> [spill 5]
+    v94  Call { target_pc=492, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> d0
     v95  Imm(0)                                           -> x0
-    v96  Imm(0)                                           -> x0
+    v96  VecInsert { vec=v84, value=v94, off=8, kind=F64, bytes=16 } -> [spill 8]
     v97  Imm(0)                                           -> x0
     v98  Imm(0)                                           -> x0
-    v99  Imm(0)                                           -> x0
-    v100 Imm(0)                                           -> x0
-    v101 Imm(0)                                           -> x0
+    v99  Imm(8)                                           -> x0
+    v100 Copy { value=v94, fp=true }                      -> [spill 10]
+    v101 Call { target_pc=492, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> d0
     v102 Imm(0)                                           -> x0
-    v103 Imm(0)                                           -> x0
+    v103 VecInsert { vec=v89, value=v101, off=8, kind=F64, bytes=16 } -> [spill 3]
     v104 Imm(0)                                           -> x0
     v105 Imm(0)                                           -> x0
-    v106 SimdVal { op=__builtin_ia32_roundss, imm=Some(3), args=[v64, v70] } -> [spill 7]
+    v106 Imm(0)                                           -> x0
     v107 Imm(0)                                           -> x0
     v108 Imm(0)                                           -> x0
     v109 Imm(0)                                           -> x0
-    v110 VecExtract { vec=v106, off=0, kind=F32, bytes=16 } -> d0 [f32]
-    v111 Call { target_pc=495, args=[v110], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x13
-    v112 BinopI { op=and, lhs=v111, rhs_imm=4294967295 }  -> x0
+    v110 Imm(0)                                           -> x0
+    v111 Imm(0)                                           -> x0
+    v112 Imm(0)                                           -> x0
     v113 Imm(0)                                           -> x0
     v114 Imm(0)                                           -> x0
-    v115 Copy { value=v32, fp=true }                      -> d0 [f32]
-    v116 Imm(3)                                           -> x7
-    v117 Call { target_pc=497, args=[v115, v116], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
-    v118 Call { target_pc=495, args=[v117], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
-    v119 BinopI { op=and, lhs=v118, rhs_imm=4294967295 }  -> x1
-    v120 Binop { op=ne, lhs=v111, rhs=v118 }              -> x13
-    v121 Imm(1)                                           -> x0
-    v122 Extend { value=v120, kind=I32 }                  -> x0
-    v123 Imm(0)                                           -> x0
-    v124 Imm(4)                                           -> x0
+    v115 SimdVal { op=__builtin_ia32_roundss, imm=Some(3), args=[v69, v76] } -> d1
+    v116 Imm(0)                                           -> x0
+    v117 Imm(0)                                           -> x0
+    v118 Imm(0)                                           -> x0
+    v119 VecExtract { vec=v115, off=0, kind=F32, bytes=16 } -> d2 [f32]
+    v120 Copy { value=v101, fp=true }                     -> [spill 19]
+    v121 Copy { value=v115, fp=true }                     -> [spill 11]
+    v122 Call { target_pc=495, args=[v119], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x13
+    v123 BinopI { op=and, lhs=v122, rhs_imm=4294967295 }  -> x0
+    v124 Imm(0)                                           -> x0
     v125 Imm(0)                                           -> x0
-    v126 VecExtract { vec=v106, off=4, kind=F32, bytes=16 } -> d0 [f32]
-    v127 Call { target_pc=495, args=[v126], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x14
-    v128 BinopI { op=and, lhs=v127, rhs_imm=4294967295 }  -> x0
-    v129 Imm(0)                                           -> x0
-    v130 Imm(4)                                           -> x0
-    v131 Imm(0)                                           -> x0
-    v132 Copy { value=v38, fp=true }                      -> d0 [f32]
-    v133 Call { target_pc=495, args=[v132], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
-    v134 BinopI { op=and, lhs=v133, rhs_imm=4294967295 }  -> x1
-    v135 Binop { op=ne, lhs=v127, rhs=v133 }              -> x0
-    v136 Binop { op=or, lhs=v120, rhs=v135 }              -> x13
-    v137 Extend { value=v136, kind=I32 }                  -> x0
-    v138 Imm(0)                                           -> x0
-    v139 Imm(8)                                           -> x0
+    v126 Copy { value=v38, fp=true }                      -> d0 [f32]
+    v127 Imm(3)                                           -> x7
+    v128 Call { target_pc=497, args=[v126, v127], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
+    v129 Call { target_pc=495, args=[v128], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
+    v130 BinopI { op=and, lhs=v129, rhs_imm=4294967295 }  -> x1
+    v131 Binop { op=ne, lhs=v122, rhs=v129 }              -> x13
+    v132 Imm(1)                                           -> x0
+    v133 Extend { value=v131, kind=I32 }                  -> x0
+    v134 Imm(0)                                           -> x0
+    v135 Imm(4)                                           -> x0
+    v136 Imm(0)                                           -> x0
+    v137 VecExtract { vec=v121, off=4, kind=F32, bytes=16 } -> d0 [f32]
+    v138 Call { target_pc=495, args=[v137], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x14
+    v139 BinopI { op=and, lhs=v138, rhs_imm=4294967295 }  -> x0
     v140 Imm(0)                                           -> x0
-    v141 VecExtract { vec=v106, off=8, kind=F32, bytes=16 } -> d0 [f32]
-    v142 Call { target_pc=495, args=[v141], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x14
-    v143 BinopI { op=and, lhs=v142, rhs_imm=4294967295 }  -> x0
-    v144 Imm(0)                                           -> x0
-    v145 Imm(8)                                           -> x0
-    v146 Imm(0)                                           -> x0
-    v147 Copy { value=v50, fp=true }                      -> d0 [f32]
-    v148 Call { target_pc=495, args=[v147], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
-    v149 BinopI { op=and, lhs=v148, rhs_imm=4294967295 }  -> x1
-    v150 Binop { op=ne, lhs=v142, rhs=v148 }              -> x0
-    v151 Binop { op=or, lhs=v136, rhs=v150 }              -> x13
-    v152 Extend { value=v151, kind=I32 }                  -> x0
-    v153 Imm(0)                                           -> x0
-    v154 Imm(12)                                          -> x0
+    v141 Imm(4)                                           -> x0
+    v142 Imm(0)                                           -> x0
+    v143 Copy { value=v45, fp=true }                      -> d0 [f32]
+    v144 Call { target_pc=495, args=[v143], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
+    v145 BinopI { op=and, lhs=v144, rhs_imm=4294967295 }  -> x1
+    v146 Binop { op=ne, lhs=v138, rhs=v144 }              -> x0
+    v147 Binop { op=or, lhs=v131, rhs=v146 }              -> x13
+    v148 Extend { value=v147, kind=I32 }                  -> x0
+    v149 Imm(0)                                           -> x0
+    v150 Imm(8)                                           -> x0
+    v151 Imm(0)                                           -> x0
+    v152 VecExtract { vec=v121, off=8, kind=F32, bytes=16 } -> d0 [f32]
+    v153 Call { target_pc=495, args=[v152], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x14
+    v154 BinopI { op=and, lhs=v153, rhs_imm=4294967295 }  -> x0
     v155 Imm(0)                                           -> x0
-    v156 VecExtract { vec=v106, off=12, kind=F32, bytes=16 } -> d0 [f32]
-    v157 Call { target_pc=495, args=[v156], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x14
-    v158 BinopI { op=and, lhs=v157, rhs_imm=4294967295 }  -> x0
-    v159 Imm(0)                                           -> x0
-    v160 Imm(12)                                          -> x0
-    v161 Imm(0)                                           -> x0
-    v162 Copy { value=v62, fp=true }                      -> d0 [f32]
-    v163 Call { target_pc=495, args=[v162], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
-    v164 BinopI { op=and, lhs=v163, rhs_imm=4294967295 }  -> x1
-    v165 Binop { op=ne, lhs=v157, rhs=v163 }              -> x0
-    v166 Binop { op=or, lhs=v151, rhs=v165 }              -> x13
-    v167 Imm(0)                                           -> x0
-    v168 SimdVal { op=__builtin_ia32_roundsd, imm=Some(2), args=[v88, v94] } -> d1
-    v169 Extend { value=v166, kind=I32 }                  -> x0
-    v170 VecExtract { vec=v168, off=0, kind=F64, bytes=16 } -> d0
-    v171 FpCast { kind=FpBits, value=v170 }               -> x14
+    v156 Imm(8)                                           -> x0
+    v157 Imm(0)                                           -> x0
+    v158 Copy { value=v59, fp=true }                      -> d0 [f32]
+    v159 Call { target_pc=495, args=[v158], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
+    v160 BinopI { op=and, lhs=v159, rhs_imm=4294967295 }  -> x1
+    v161 Binop { op=ne, lhs=v153, rhs=v159 }              -> x0
+    v162 Binop { op=or, lhs=v147, rhs=v161 }              -> x13
+    v163 Extend { value=v162, kind=I32 }                  -> x0
+    v164 Imm(0)                                           -> x0
+    v165 Imm(12)                                          -> x0
+    v166 Imm(0)                                           -> x0
+    v167 VecExtract { vec=v121, off=12, kind=F32, bytes=16 } -> d0 [f32]
+    v168 Call { target_pc=495, args=[v167], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x14
+    v169 BinopI { op=and, lhs=v168, rhs_imm=4294967295 }  -> x0
+    v170 Imm(0)                                           -> x0
+    v171 Imm(12)                                          -> x0
     v172 Imm(0)                                           -> x0
-    v173 Imm(0)                                           -> x0
-    v174 Copy { value=v80, fp=true }                      -> d0
-    v175 Imm(2)                                           -> x7
-    v176 Call { target_pc=496, args=[v174, v175], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0
-    v177 FpCast { kind=FpBits, value=v176 }               -> x0
-    v178 Binop { op=ne, lhs=v171, rhs=v177 }              -> x1
-    v179 Imm(1)                                           -> x0
-    terminator Bnz { cond=v178, target=b16, fall=b2 }   (exit_acc=v178)
+    v173 Copy { value=v73, fp=true }                      -> d0 [f32]
+    v174 Call { target_pc=495, args=[v173], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
+    v175 BinopI { op=and, lhs=v174, rhs_imm=4294967295 }  -> x1
+    v176 Binop { op=ne, lhs=v168, rhs=v174 }              -> x0
+    v177 Binop { op=or, lhs=v162, rhs=v176 }              -> x13
+    v178 Imm(0)                                           -> x0
+    v179 SimdVal { op=__builtin_ia32_roundsd, imm=Some(2), args=[v96, v103] } -> d1
+    v180 Extend { value=v177, kind=I32 }                  -> x0
+    v181 VecExtract { vec=v179, off=0, kind=F64, bytes=16 } -> d0
+    v182 FpCast { kind=FpBits, value=v181 }               -> x14
+    v183 Imm(0)                                           -> x0
+    v184 Imm(0)                                           -> x0
+    v185 Copy { value=v93, fp=true }                      -> d0
+    v186 Imm(2)                                           -> x7
+    v187 Call { target_pc=496, args=[v185, v186], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0
+    v188 FpCast { kind=FpBits, value=v187 }               -> x0
+    v189 Binop { op=ne, lhs=v182, rhs=v188 }              -> x1
+    v190 Imm(1)                                           -> x0
+    terminator Bnz { cond=v189, target=b16, fall=b2 }   (exit_acc=v189)
   block 2  start_pc=0
-    v182 VecExtract { vec=v168, off=8, kind=F64, bytes=16 } -> d0
-    v183 FpCast { kind=FpBits, value=v182 }               -> x0
-    v184 Imm(0)                                           -> x1
-    v185 Imm(8)                                           -> x1
-    v186 Imm(0)                                           -> x1
-    v187 Copy { value=v86, fp=true }                      -> d0
-    v188 FpCast { kind=FpBits, value=v187 }               -> x1
-    v189 Binop { op=ne, lhs=v183, rhs=v188 }              -> x0
-    terminator Jmp(b3)   (exit_acc=v189)
+    v193 VecExtract { vec=v179, off=8, kind=F64, bytes=16 } -> d0
+    v194 FpCast { kind=FpBits, value=v193 }               -> x0
+    v195 Imm(0)                                           -> x1
+    v196 Imm(8)                                           -> x1
+    v197 Imm(0)                                           -> x1
+    v198 Copy { value=v100, fp=true }                     -> d0
+    v199 FpCast { kind=FpBits, value=v198 }               -> x1
+    v200 Binop { op=ne, lhs=v194, rhs=v199 }              -> x0
+    terminator Jmp(b3)   (exit_acc=v200)
   block 3  start_pc=0
-    v190 Phi { incoming=[b16:v179, b2:v189], kind=I64 }   -> x0
-    v191 Binop { op=or, lhs=v166, rhs=v190 }              -> x13
-    v192 Imm(0)                                           -> x0
-    v193 SimdVal { op=__builtin_ia32_roundps, imm=Some(1), args=[v70] } -> [spill 7]
-    v194 Imm(0)                                           -> x0
-    v195 Imm(0)                                           -> x0
-    v196 Extend { value=v191, kind=I32 }                  -> x0
-    v197 Imm(0)                                           -> x0
-    v198 Imm(0)                                           -> x0
-    v199 VecExtract { vec=v193, off=0, kind=F32, bytes=16 } -> d0 [f32]
-    v200 Call { target_pc=495, args=[v199], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x14
-    v201 BinopI { op=and, lhs=v200, rhs_imm=4294967295 }  -> x0
-    v202 Imm(0)                                           -> x0
+    v201 Phi { incoming=[b16:v190, b2:v200], kind=I64 }   -> x0
+    v202 Binop { op=or, lhs=v177, rhs=v201 }              -> x13
     v203 Imm(0)                                           -> x0
-    v204 Copy { value=v32, fp=true }                      -> d0 [f32]
-    v205 Imm(1)                                           -> x7
-    v206 Call { target_pc=497, args=[v204, v205], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
-    v207 Call { target_pc=495, args=[v206], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
-    v208 BinopI { op=and, lhs=v207, rhs_imm=4294967295 }  -> x1
-    v209 Binop { op=ne, lhs=v200, rhs=v207 }              -> x0
-    v210 Binop { op=or, lhs=v191, rhs=v209 }              -> x13
-    v211 Extend { value=v210, kind=I32 }                  -> x0
-    v212 Imm(0)                                           -> x0
-    v213 Imm(4)                                           -> x0
+    v204 SimdVal { op=__builtin_ia32_roundps, imm=Some(1), args=[v76] } -> d0
+    v205 Imm(0)                                           -> x0
+    v206 Imm(0)                                           -> x0
+    v207 Extend { value=v202, kind=I32 }                  -> x0
+    v208 Imm(0)                                           -> x0
+    v209 Imm(0)                                           -> x0
+    v210 VecExtract { vec=v204, off=0, kind=F32, bytes=16 } -> d1 [f32]
+    v211 Copy { value=v204, fp=true }                     -> [spill 11]
+    v212 Call { target_pc=495, args=[v210], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x14
+    v213 BinopI { op=and, lhs=v212, rhs_imm=4294967295 }  -> x0
     v214 Imm(0)                                           -> x0
-    v215 VecExtract { vec=v193, off=4, kind=F32, bytes=16 } -> d0 [f32]
-    v216 Call { target_pc=495, args=[v215], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x14
-    v217 BinopI { op=and, lhs=v216, rhs_imm=4294967295 }  -> x0
-    v218 Imm(0)                                           -> x0
-    v219 Imm(4)                                           -> x0
-    v220 Imm(0)                                           -> x0
-    v221 Copy { value=v44, fp=true }                      -> d0 [f32]
-    v222 Imm(1)                                           -> x7
-    v223 Call { target_pc=497, args=[v221, v222], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
-    v224 Call { target_pc=495, args=[v223], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
-    v225 BinopI { op=and, lhs=v224, rhs_imm=4294967295 }  -> x1
-    v226 Binop { op=ne, lhs=v216, rhs=v224 }              -> x0
-    v227 Binop { op=or, lhs=v210, rhs=v226 }              -> x13
-    v228 Extend { value=v227, kind=I32 }                  -> x0
-    v229 Imm(0)                                           -> x0
-    v230 Imm(8)                                           -> x0
-    v231 Imm(0)                                           -> x0
-    v232 VecExtract { vec=v193, off=8, kind=F32, bytes=16 } -> d0 [f32]
-    v233 Call { target_pc=495, args=[v232], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x14
-    v234 BinopI { op=and, lhs=v233, rhs_imm=4294967295 }  -> x0
-    v235 Imm(0)                                           -> x0
-    v236 Imm(8)                                           -> x0
-    v237 Imm(0)                                           -> x0
-    v238 Copy { value=v56, fp=true }                      -> d0 [f32]
-    v239 Imm(1)                                           -> x7
-    v240 Call { target_pc=497, args=[v238, v239], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
-    v241 Call { target_pc=495, args=[v240], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
-    v242 BinopI { op=and, lhs=v241, rhs_imm=4294967295 }  -> x1
-    v243 Binop { op=ne, lhs=v233, rhs=v241 }              -> x0
-    v244 Binop { op=or, lhs=v227, rhs=v243 }              -> x13
-    v245 Extend { value=v244, kind=I32 }                  -> x0
-    v246 Imm(0)                                           -> x0
-    v247 Imm(12)                                          -> x0
-    v248 Imm(0)                                           -> x0
-    v249 VecExtract { vec=v193, off=12, kind=F32, bytes=16 } -> d0 [f32]
-    v250 Call { target_pc=495, args=[v249], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x14
-    v251 BinopI { op=and, lhs=v250, rhs_imm=4294967295 }  -> x0
-    v252 Imm(0)                                           -> x0
-    v253 Imm(12)                                          -> x0
-    v254 Imm(0)                                           -> x0
-    v255 Copy { value=v68, fp=true }                      -> d0 [f32]
-    v256 Imm(1)                                           -> x7
-    v257 Call { target_pc=497, args=[v255, v256], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
-    v258 Call { target_pc=495, args=[v257], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
-    v259 BinopI { op=and, lhs=v258, rhs_imm=4294967295 }  -> x1
-    v260 Binop { op=ne, lhs=v250, rhs=v258 }              -> x0
-    v261 Binop { op=or, lhs=v244, rhs=v260 }              -> x13
-    v262 Imm(0)                                           -> x0
-    v263 Imm(0)                                           -> x0
-    v264 SimdVal { op=__builtin_ia32_roundps, imm=Some(2), args=[v70] } -> [spill 7]
-    v265 Imm(0)                                           -> x0
+    v215 Imm(0)                                           -> x0
+    v216 Copy { value=v38, fp=true }                      -> d0 [f32]
+    v217 Imm(1)                                           -> x7
+    v218 Call { target_pc=497, args=[v216, v217], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
+    v219 Call { target_pc=495, args=[v218], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
+    v220 BinopI { op=and, lhs=v219, rhs_imm=4294967295 }  -> x1
+    v221 Binop { op=ne, lhs=v212, rhs=v219 }              -> x0
+    v222 Binop { op=or, lhs=v202, rhs=v221 }              -> x13
+    v223 Extend { value=v222, kind=I32 }                  -> x0
+    v224 Imm(0)                                           -> x0
+    v225 Imm(4)                                           -> x0
+    v226 Imm(0)                                           -> x0
+    v227 VecExtract { vec=v211, off=4, kind=F32, bytes=16 } -> d0 [f32]
+    v228 Call { target_pc=495, args=[v227], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x14
+    v229 BinopI { op=and, lhs=v228, rhs_imm=4294967295 }  -> x0
+    v230 Imm(0)                                           -> x0
+    v231 Imm(4)                                           -> x0
+    v232 Imm(0)                                           -> x0
+    v233 Copy { value=v52, fp=true }                      -> d0 [f32]
+    v234 Imm(1)                                           -> x7
+    v235 Call { target_pc=497, args=[v233, v234], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
+    v236 Call { target_pc=495, args=[v235], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
+    v237 BinopI { op=and, lhs=v236, rhs_imm=4294967295 }  -> x1
+    v238 Binop { op=ne, lhs=v228, rhs=v236 }              -> x0
+    v239 Binop { op=or, lhs=v222, rhs=v238 }              -> x13
+    v240 Extend { value=v239, kind=I32 }                  -> x0
+    v241 Imm(0)                                           -> x0
+    v242 Imm(8)                                           -> x0
+    v243 Imm(0)                                           -> x0
+    v244 VecExtract { vec=v211, off=8, kind=F32, bytes=16 } -> d0 [f32]
+    v245 Call { target_pc=495, args=[v244], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x14
+    v246 BinopI { op=and, lhs=v245, rhs_imm=4294967295 }  -> x0
+    v247 Imm(0)                                           -> x0
+    v248 Imm(8)                                           -> x0
+    v249 Imm(0)                                           -> x0
+    v250 Copy { value=v66, fp=true }                      -> d0 [f32]
+    v251 Imm(1)                                           -> x7
+    v252 Call { target_pc=497, args=[v250, v251], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
+    v253 Call { target_pc=495, args=[v252], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
+    v254 BinopI { op=and, lhs=v253, rhs_imm=4294967295 }  -> x1
+    v255 Binop { op=ne, lhs=v245, rhs=v253 }              -> x0
+    v256 Binop { op=or, lhs=v239, rhs=v255 }              -> x13
+    v257 Extend { value=v256, kind=I32 }                  -> x0
+    v258 Imm(0)                                           -> x0
+    v259 Imm(12)                                          -> x0
+    v260 Imm(0)                                           -> x0
+    v261 VecExtract { vec=v211, off=12, kind=F32, bytes=16 } -> d0 [f32]
+    v262 Call { target_pc=495, args=[v261], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x14
+    v263 BinopI { op=and, lhs=v262, rhs_imm=4294967295 }  -> x0
+    v264 Imm(0)                                           -> x0
+    v265 Imm(12)                                          -> x0
     v266 Imm(0)                                           -> x0
-    v267 Extend { value=v261, kind=I32 }                  -> x0
-    v268 Imm(0)                                           -> x0
-    v269 Imm(0)                                           -> x0
-    v270 VecExtract { vec=v264, off=0, kind=F32, bytes=16 } -> d0 [f32]
-    v271 Call { target_pc=495, args=[v270], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x14
-    v272 BinopI { op=and, lhs=v271, rhs_imm=4294967295 }  -> x0
-    v273 Imm(0)                                           -> x0
+    v267 Copy { value=v81, fp=true }                      -> d0 [f32]
+    v268 Imm(1)                                           -> x7
+    v269 Call { target_pc=497, args=[v267, v268], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
+    v270 Call { target_pc=495, args=[v269], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
+    v271 BinopI { op=and, lhs=v270, rhs_imm=4294967295 }  -> x1
+    v272 Binop { op=ne, lhs=v262, rhs=v270 }              -> x0
+    v273 Binop { op=or, lhs=v256, rhs=v272 }              -> x13
     v274 Imm(0)                                           -> x0
-    v275 Copy { value=v32, fp=true }                      -> d0 [f32]
-    v276 Imm(2)                                           -> x7
-    v277 Call { target_pc=497, args=[v275, v276], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
-    v278 Call { target_pc=495, args=[v277], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
-    v279 BinopI { op=and, lhs=v278, rhs_imm=4294967295 }  -> x1
-    v280 Binop { op=ne, lhs=v271, rhs=v278 }              -> x0
-    v281 Binop { op=or, lhs=v261, rhs=v280 }              -> x13
-    v282 Extend { value=v281, kind=I32 }                  -> x0
-    v283 Imm(0)                                           -> x0
-    v284 Imm(4)                                           -> x0
-    v285 Imm(0)                                           -> x0
-    v286 VecExtract { vec=v264, off=4, kind=F32, bytes=16 } -> d0 [f32]
-    v287 Call { target_pc=495, args=[v286], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x14
-    v288 BinopI { op=and, lhs=v287, rhs_imm=4294967295 }  -> x0
-    v289 Imm(0)                                           -> x0
-    v290 Imm(4)                                           -> x0
-    v291 Imm(0)                                           -> x0
-    v292 Copy { value=v44, fp=true }                      -> d0 [f32]
-    v293 Imm(2)                                           -> x7
-    v294 Call { target_pc=497, args=[v292, v293], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
-    v295 Call { target_pc=495, args=[v294], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
-    v296 BinopI { op=and, lhs=v295, rhs_imm=4294967295 }  -> x1
-    v297 Binop { op=ne, lhs=v287, rhs=v295 }              -> x0
-    v298 Binop { op=or, lhs=v281, rhs=v297 }              -> x13
-    v299 Extend { value=v298, kind=I32 }                  -> x0
-    v300 Imm(0)                                           -> x0
-    v301 Imm(8)                                           -> x0
+    v275 Imm(0)                                           -> x0
+    v276 SimdVal { op=__builtin_ia32_roundps, imm=Some(2), args=[v76] } -> d0
+    v277 Imm(0)                                           -> x0
+    v278 Imm(0)                                           -> x0
+    v279 Extend { value=v273, kind=I32 }                  -> x0
+    v280 Imm(0)                                           -> x0
+    v281 Imm(0)                                           -> x0
+    v282 VecExtract { vec=v276, off=0, kind=F32, bytes=16 } -> d1 [f32]
+    v283 Copy { value=v276, fp=true }                     -> [spill 11]
+    v284 Call { target_pc=495, args=[v282], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x14
+    v285 BinopI { op=and, lhs=v284, rhs_imm=4294967295 }  -> x0
+    v286 Imm(0)                                           -> x0
+    v287 Imm(0)                                           -> x0
+    v288 Copy { value=v38, fp=true }                      -> d0 [f32]
+    v289 Imm(2)                                           -> x7
+    v290 Call { target_pc=497, args=[v288, v289], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
+    v291 Call { target_pc=495, args=[v290], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
+    v292 BinopI { op=and, lhs=v291, rhs_imm=4294967295 }  -> x1
+    v293 Binop { op=ne, lhs=v284, rhs=v291 }              -> x0
+    v294 Binop { op=or, lhs=v273, rhs=v293 }              -> x13
+    v295 Extend { value=v294, kind=I32 }                  -> x0
+    v296 Imm(0)                                           -> x0
+    v297 Imm(4)                                           -> x0
+    v298 Imm(0)                                           -> x0
+    v299 VecExtract { vec=v283, off=4, kind=F32, bytes=16 } -> d0 [f32]
+    v300 Call { target_pc=495, args=[v299], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x14
+    v301 BinopI { op=and, lhs=v300, rhs_imm=4294967295 }  -> x0
     v302 Imm(0)                                           -> x0
-    v303 VecExtract { vec=v264, off=8, kind=F32, bytes=16 } -> d0 [f32]
-    v304 Call { target_pc=495, args=[v303], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x14
-    v305 BinopI { op=and, lhs=v304, rhs_imm=4294967295 }  -> x0
-    v306 Imm(0)                                           -> x0
-    v307 Imm(8)                                           -> x0
-    v308 Imm(0)                                           -> x0
-    v309 Copy { value=v56, fp=true }                      -> d0 [f32]
-    v310 Imm(2)                                           -> x7
-    v311 Call { target_pc=497, args=[v309, v310], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
-    v312 Call { target_pc=495, args=[v311], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
-    v313 BinopI { op=and, lhs=v312, rhs_imm=4294967295 }  -> x1
-    v314 Binop { op=ne, lhs=v304, rhs=v312 }              -> x0
-    v315 Binop { op=or, lhs=v298, rhs=v314 }              -> x13
-    v316 Extend { value=v315, kind=I32 }                  -> x0
-    v317 Imm(0)                                           -> x0
-    v318 Imm(12)                                          -> x0
+    v303 Imm(4)                                           -> x0
+    v304 Imm(0)                                           -> x0
+    v305 Copy { value=v52, fp=true }                      -> d0 [f32]
+    v306 Imm(2)                                           -> x7
+    v307 Call { target_pc=497, args=[v305, v306], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
+    v308 Call { target_pc=495, args=[v307], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
+    v309 BinopI { op=and, lhs=v308, rhs_imm=4294967295 }  -> x1
+    v310 Binop { op=ne, lhs=v300, rhs=v308 }              -> x0
+    v311 Binop { op=or, lhs=v294, rhs=v310 }              -> x13
+    v312 Extend { value=v311, kind=I32 }                  -> x0
+    v313 Imm(0)                                           -> x0
+    v314 Imm(8)                                           -> x0
+    v315 Imm(0)                                           -> x0
+    v316 VecExtract { vec=v283, off=8, kind=F32, bytes=16 } -> d0 [f32]
+    v317 Call { target_pc=495, args=[v316], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x14
+    v318 BinopI { op=and, lhs=v317, rhs_imm=4294967295 }  -> x0
     v319 Imm(0)                                           -> x0
-    v320 VecExtract { vec=v264, off=12, kind=F32, bytes=16 } -> d0 [f32]
-    v321 Call { target_pc=495, args=[v320], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x14
-    v322 BinopI { op=and, lhs=v321, rhs_imm=4294967295 }  -> x0
-    v323 Imm(0)                                           -> x0
-    v324 Imm(12)                                          -> x0
-    v325 Imm(0)                                           -> x0
-    v326 Copy { value=v68, fp=true }                      -> d0 [f32]
-    v327 Imm(2)                                           -> x7
-    v328 Call { target_pc=497, args=[v326, v327], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
-    v329 Call { target_pc=495, args=[v328], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
-    v330 BinopI { op=and, lhs=v329, rhs_imm=4294967295 }  -> x1
-    v331 Binop { op=ne, lhs=v321, rhs=v329 }              -> x0
-    v332 Binop { op=or, lhs=v315, rhs=v331 }              -> x13
-    v333 Imm(0)                                           -> x0
-    v334 SimdVal { op=__builtin_ia32_roundpd, imm=Some(1), args=[v94] } -> d0
-    v335 Extend { value=v332, kind=I32 }                  -> x0
-    v336 VecExtract { vec=v334, off=0, kind=F64, bytes=16 } -> d0
-    v337 FpCast { kind=FpBits, value=v336 }               -> x14
+    v320 Imm(8)                                           -> x0
+    v321 Imm(0)                                           -> x0
+    v322 Copy { value=v66, fp=true }                      -> d0 [f32]
+    v323 Imm(2)                                           -> x7
+    v324 Call { target_pc=497, args=[v322, v323], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
+    v325 Call { target_pc=495, args=[v324], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
+    v326 BinopI { op=and, lhs=v325, rhs_imm=4294967295 }  -> x1
+    v327 Binop { op=ne, lhs=v317, rhs=v325 }              -> x0
+    v328 Binop { op=or, lhs=v311, rhs=v327 }              -> x13
+    v329 Extend { value=v328, kind=I32 }                  -> x0
+    v330 Imm(0)                                           -> x0
+    v331 Imm(12)                                          -> x0
+    v332 Imm(0)                                           -> x0
+    v333 VecExtract { vec=v283, off=12, kind=F32, bytes=16 } -> d0 [f32]
+    v334 Call { target_pc=495, args=[v333], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x14
+    v335 BinopI { op=and, lhs=v334, rhs_imm=4294967295 }  -> x0
+    v336 Imm(0)                                           -> x0
+    v337 Imm(12)                                          -> x0
     v338 Imm(0)                                           -> x0
-    v339 Imm(0)                                           -> x0
-    v340 Copy { value=v80, fp=true }                      -> d0
-    v341 Imm(1)                                           -> x7
-    v342 Call { target_pc=496, args=[v340, v341], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0
-    v343 FpCast { kind=FpBits, value=v342 }               -> x0
-    v344 Binop { op=ne, lhs=v337, rhs=v343 }              -> x0
-    v345 Binop { op=or, lhs=v332, rhs=v344 }              -> x13
-    v346 SimdVal { op=__builtin_ia32_roundpd, imm=Some(2), args=[v94] } -> d0
-    v347 Extend { value=v345, kind=I32 }                  -> x0
-    v348 VecExtract { vec=v346, off=8, kind=F64, bytes=16 } -> d0
-    v349 FpCast { kind=FpBits, value=v348 }               -> x14
-    v350 Imm(0)                                           -> x0
-    v351 Imm(8)                                           -> x0
+    v339 Copy { value=v81, fp=true }                      -> d0 [f32]
+    v340 Imm(2)                                           -> x7
+    v341 Call { target_pc=497, args=[v339, v340], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
+    v342 Call { target_pc=495, args=[v341], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
+    v343 BinopI { op=and, lhs=v342, rhs_imm=4294967295 }  -> x1
+    v344 Binop { op=ne, lhs=v334, rhs=v342 }              -> x0
+    v345 Binop { op=or, lhs=v328, rhs=v344 }              -> x13
+    v346 Imm(0)                                           -> x0
+    v347 SimdVal { op=__builtin_ia32_roundpd, imm=Some(1), args=[v103] } -> d0
+    v348 Extend { value=v345, kind=I32 }                  -> x0
+    v349 VecExtract { vec=v347, off=0, kind=F64, bytes=16 } -> d0
+    v350 FpCast { kind=FpBits, value=v349 }               -> x14
+    v351 Imm(0)                                           -> x0
     v352 Imm(0)                                           -> x0
-    v353 Copy { value=v92, fp=true }                      -> d0
-    v354 Imm(2)                                           -> x7
+    v353 Copy { value=v93, fp=true }                      -> d0
+    v354 Imm(1)                                           -> x7
     v355 Call { target_pc=496, args=[v353, v354], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0
     v356 FpCast { kind=FpBits, value=v355 }               -> x0
-    v357 Binop { op=ne, lhs=v349, rhs=v356 }              -> x0
+    v357 Binop { op=ne, lhs=v350, rhs=v356 }              -> x0
     v358 Binop { op=or, lhs=v345, rhs=v357 }              -> x13
-    v359 Imm(0)                                           -> x0
-    v360 SimdVal { op=__builtin_ia32_roundss, imm=Some(1), args=[v64, v70] } -> [spill 7]
-    v361 Imm(0)                                           -> x0
-    v362 Extend { value=v358, kind=I32 }                  -> x0
+    v359 SimdVal { op=__builtin_ia32_roundpd, imm=Some(2), args=[v103] } -> d0
+    v360 Extend { value=v358, kind=I32 }                  -> x0
+    v361 VecExtract { vec=v359, off=8, kind=F64, bytes=16 } -> d0
+    v362 FpCast { kind=FpBits, value=v361 }               -> x14
     v363 Imm(0)                                           -> x0
-    v364 Imm(0)                                           -> x0
-    v365 VecExtract { vec=v360, off=0, kind=F32, bytes=16 } -> d0 [f32]
-    v366 Call { target_pc=495, args=[v365], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x14
-    v367 BinopI { op=and, lhs=v366, rhs_imm=4294967295 }  -> x0
-    v368 Imm(0)                                           -> x0
-    v369 Imm(0)                                           -> x0
-    v370 Copy { value=v32, fp=true }                      -> d0 [f32]
-    v371 Imm(1)                                           -> x7
-    v372 Call { target_pc=497, args=[v370, v371], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
-    v373 Call { target_pc=495, args=[v372], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
-    v374 BinopI { op=and, lhs=v373, rhs_imm=4294967295 }  -> x1
-    v375 Binop { op=ne, lhs=v366, rhs=v373 }              -> x1
-    v376 Imm(1)                                           -> x0
-    terminator Bnz { cond=v375, target=b15, fall=b4 }   (exit_acc=v375)
-  block 4  start_pc=0
+    v364 Imm(8)                                           -> x0
+    v365 Imm(0)                                           -> x0
+    v366 Copy { value=v120, fp=true }                     -> d0
+    v367 Imm(2)                                           -> x7
+    v368 Call { target_pc=496, args=[v366, v367], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0
+    v369 FpCast { kind=FpBits, value=v368 }               -> x0
+    v370 Binop { op=ne, lhs=v362, rhs=v369 }              -> x0
+    v371 Binop { op=or, lhs=v358, rhs=v370 }              -> x13
+    v372 Imm(0)                                           -> x0
+    v373 SimdVal { op=__builtin_ia32_roundss, imm=Some(1), args=[v69, v76] } -> d0
+    v374 Imm(0)                                           -> x0
+    v375 Extend { value=v371, kind=I32 }                  -> x0
+    v376 Imm(0)                                           -> x0
     v377 Imm(0)                                           -> x0
-    v378 Imm(12)                                          -> x0
-    v379 Imm(0)                                           -> x0
-    v380 VecExtract { vec=v360, off=12, kind=F32, bytes=16 } -> d0 [f32]
-    v381 Call { target_pc=495, args=[v380], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x14
-    v382 BinopI { op=and, lhs=v381, rhs_imm=4294967295 }  -> x0
+    v378 VecExtract { vec=v373, off=0, kind=F32, bytes=16 } -> d1 [f32]
+    v379 Copy { value=v373, fp=true }                     -> [spill 11]
+    v380 Call { target_pc=495, args=[v378], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x14
+    v381 BinopI { op=and, lhs=v380, rhs_imm=4294967295 }  -> x0
+    v382 Imm(0)                                           -> x0
     v383 Imm(0)                                           -> x0
-    v384 Imm(12)                                          -> x0
-    v385 Imm(0)                                           -> x0
-    v386 Copy { value=v62, fp=true }                      -> d0 [f32]
+    v384 Copy { value=v38, fp=true }                      -> d0 [f32]
+    v385 Imm(1)                                           -> x7
+    v386 Call { target_pc=497, args=[v384, v385], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
     v387 Call { target_pc=495, args=[v386], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
     v388 BinopI { op=and, lhs=v387, rhs_imm=4294967295 }  -> x1
-    v389 Binop { op=ne, lhs=v381, rhs=v387 }              -> x0
-    terminator Jmp(b5)   (exit_acc=v389)
-  block 5  start_pc=0
-    v390 Phi { incoming=[b15:v376, b4:v389], kind=I64 }   -> x0
-    v391 Binop { op=or, lhs=v358, rhs=v390 }              -> x13
-    v392 Imm(0)                                           -> x0
-    v393 SimdVal { op=__builtin_ia32_roundss, imm=Some(2), args=[v64, v70] } -> [spill 1]
-    v394 Imm(0)                                           -> x0
-    v395 Extend { value=v391, kind=I32 }                  -> x0
-    v396 Imm(0)                                           -> x0
+    v389 Binop { op=ne, lhs=v380, rhs=v387 }              -> x1
+    v390 Imm(1)                                           -> x0
+    terminator Bnz { cond=v389, target=b15, fall=b4 }   (exit_acc=v389)
+  block 4  start_pc=0
+    v391 Imm(0)                                           -> x0
+    v392 Imm(12)                                          -> x0
+    v393 Imm(0)                                           -> x0
+    v394 VecExtract { vec=v379, off=12, kind=F32, bytes=16 } -> d0 [f32]
+    v395 Call { target_pc=495, args=[v394], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x14
+    v396 BinopI { op=and, lhs=v395, rhs_imm=4294967295 }  -> x0
     v397 Imm(0)                                           -> x0
-    v398 VecExtract { vec=v393, off=0, kind=F32, bytes=16 } -> d0 [f32]
-    v399 Call { target_pc=495, args=[v398], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x14
-    v400 BinopI { op=and, lhs=v399, rhs_imm=4294967295 }  -> x0
-    v401 Imm(0)                                           -> x0
-    v402 Imm(0)                                           -> x0
-    v403 Copy { value=v32, fp=true }                      -> d0 [f32]
-    v404 Imm(2)                                           -> x7
-    v405 Call { target_pc=497, args=[v403, v404], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
-    v406 Call { target_pc=495, args=[v405], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
-    v407 BinopI { op=and, lhs=v406, rhs_imm=4294967295 }  -> x1
-    v408 Binop { op=ne, lhs=v399, rhs=v406 }              -> x1
-    v409 Imm(1)                                           -> x0
-    terminator Bnz { cond=v408, target=b14, fall=b6 }   (exit_acc=v408)
-  block 6  start_pc=0
+    v398 Imm(12)                                          -> x0
+    v399 Imm(0)                                           -> x0
+    v400 Copy { value=v73, fp=true }                      -> d0 [f32]
+    v401 Call { target_pc=495, args=[v400], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
+    v402 BinopI { op=and, lhs=v401, rhs_imm=4294967295 }  -> x1
+    v403 Binop { op=ne, lhs=v395, rhs=v401 }              -> x0
+    terminator Jmp(b5)   (exit_acc=v403)
+  block 5  start_pc=0
+    v404 Phi { incoming=[b15:v390, b4:v403], kind=I64 }   -> x0
+    v405 Binop { op=or, lhs=v371, rhs=v404 }              -> x13
+    v406 Imm(0)                                           -> x0
+    v407 SimdVal { op=__builtin_ia32_roundss, imm=Some(2), args=[v69, v76] } -> d0
+    v408 Imm(0)                                           -> x0
+    v409 Extend { value=v405, kind=I32 }                  -> x0
     v410 Imm(0)                                           -> x0
-    v411 Imm(8)                                           -> x0
-    v412 Imm(0)                                           -> x0
-    v413 VecExtract { vec=v393, off=8, kind=F32, bytes=16 } -> d0 [f32]
-    v414 Call { target_pc=495, args=[v413], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x14
+    v411 Imm(0)                                           -> x0
+    v412 VecExtract { vec=v407, off=0, kind=F32, bytes=16 } -> d1 [f32]
+    v413 Copy { value=v407, fp=true }                     -> [spill 1]
+    v414 Call { target_pc=495, args=[v412], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x14
     v415 BinopI { op=and, lhs=v414, rhs_imm=4294967295 }  -> x0
     v416 Imm(0)                                           -> x0
-    v417 Imm(8)                                           -> x0
-    v418 Imm(0)                                           -> x0
-    v419 Copy { value=v50, fp=true }                      -> d0 [f32]
-    v420 Call { target_pc=495, args=[v419], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
-    v421 BinopI { op=and, lhs=v420, rhs_imm=4294967295 }  -> x1
-    v422 Binop { op=ne, lhs=v414, rhs=v420 }              -> x0
-    terminator Jmp(b7)   (exit_acc=v422)
+    v417 Imm(0)                                           -> x0
+    v418 Copy { value=v38, fp=true }                      -> d0 [f32]
+    v419 Imm(2)                                           -> x7
+    v420 Call { target_pc=497, args=[v418, v419], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
+    v421 Call { target_pc=495, args=[v420], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
+    v422 BinopI { op=and, lhs=v421, rhs_imm=4294967295 }  -> x1
+    v423 Binop { op=ne, lhs=v414, rhs=v421 }              -> x1
+    v424 Imm(1)                                           -> x0
+    terminator Bnz { cond=v423, target=b14, fall=b6 }   (exit_acc=v423)
+  block 6  start_pc=0
+    v425 Imm(0)                                           -> x0
+    v426 Imm(8)                                           -> x0
+    v427 Imm(0)                                           -> x0
+    v428 VecExtract { vec=v413, off=8, kind=F32, bytes=16 } -> d0 [f32]
+    v429 Call { target_pc=495, args=[v428], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x14
+    v430 BinopI { op=and, lhs=v429, rhs_imm=4294967295 }  -> x0
+    v431 Imm(0)                                           -> x0
+    v432 Imm(8)                                           -> x0
+    v433 Imm(0)                                           -> x0
+    v434 Copy { value=v59, fp=true }                      -> d0 [f32]
+    v435 Call { target_pc=495, args=[v434], fixed_args=1, fp_return=false, fp_arg_mask=0x1 } -> x0
+    v436 BinopI { op=and, lhs=v435, rhs_imm=4294967295 }  -> x1
+    v437 Binop { op=ne, lhs=v429, rhs=v435 }              -> x0
+    terminator Jmp(b7)   (exit_acc=v437)
   block 7  start_pc=0
-    v423 Phi { incoming=[b14:v409, b6:v422], kind=I64 }   -> x0
-    v424 Binop { op=or, lhs=v391, rhs=v423 }              -> x13
-    v425 SimdVal { op=__builtin_ia32_roundsd, imm=Some(1), args=[v88, v94] } -> d1
-    v426 Extend { value=v424, kind=I32 }                  -> x0
-    v427 VecExtract { vec=v425, off=0, kind=F64, bytes=16 } -> d0
-    v428 FpCast { kind=FpBits, value=v427 }               -> x14
-    v429 Imm(0)                                           -> x0
-    v430 Imm(0)                                           -> x0
-    v431 Copy { value=v80, fp=true }                      -> d0
-    v432 Imm(1)                                           -> x7
-    v433 Call { target_pc=496, args=[v431, v432], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0
-    v434 FpCast { kind=FpBits, value=v433 }               -> x0
-    v435 Binop { op=ne, lhs=v428, rhs=v434 }              -> x1
-    v436 Imm(1)                                           -> x0
-    terminator Bnz { cond=v435, target=b13, fall=b8 }   (exit_acc=v435)
+    v438 Phi { incoming=[b14:v424, b6:v437], kind=I64 }   -> x0
+    v439 Binop { op=or, lhs=v405, rhs=v438 }              -> x13
+    v440 SimdVal { op=__builtin_ia32_roundsd, imm=Some(1), args=[v96, v103] } -> d1
+    v441 Extend { value=v439, kind=I32 }                  -> x0
+    v442 VecExtract { vec=v440, off=0, kind=F64, bytes=16 } -> d0
+    v443 FpCast { kind=FpBits, value=v442 }               -> x14
+    v444 Imm(0)                                           -> x0
+    v445 Imm(0)                                           -> x0
+    v446 Copy { value=v93, fp=true }                      -> d0
+    v447 Imm(1)                                           -> x7
+    v448 Call { target_pc=496, args=[v446, v447], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0
+    v449 FpCast { kind=FpBits, value=v448 }               -> x0
+    v450 Binop { op=ne, lhs=v443, rhs=v449 }              -> x1
+    v451 Imm(1)                                           -> x0
+    terminator Bnz { cond=v450, target=b13, fall=b8 }   (exit_acc=v450)
   block 8  start_pc=0
-    v437 VecExtract { vec=v425, off=8, kind=F64, bytes=16 } -> d0
-    v438 FpCast { kind=FpBits, value=v437 }               -> x0
-    v439 Imm(0)                                           -> x1
-    v440 Imm(8)                                           -> x1
-    v441 Imm(0)                                           -> x1
-    v442 Copy { value=v86, fp=true }                      -> d0
-    v443 FpCast { kind=FpBits, value=v442 }               -> x1
-    v444 Binop { op=ne, lhs=v438, rhs=v443 }              -> x0
-    terminator Jmp(b9)   (exit_acc=v444)
+    v452 VecExtract { vec=v440, off=8, kind=F64, bytes=16 } -> d0
+    v453 FpCast { kind=FpBits, value=v452 }               -> x0
+    v454 Imm(0)                                           -> x1
+    v455 Imm(8)                                           -> x1
+    v456 Imm(0)                                           -> x1
+    v457 Copy { value=v100, fp=true }                     -> d0
+    v458 FpCast { kind=FpBits, value=v457 }               -> x1
+    v459 Binop { op=ne, lhs=v453, rhs=v458 }              -> x0
+    terminator Jmp(b9)   (exit_acc=v459)
   block 9  start_pc=0
-    v445 Phi { incoming=[b13:v436, b8:v444], kind=I64 }   -> x0
-    v446 Binop { op=or, lhs=v424, rhs=v445 }              -> x13
-    v447 SimdVal { op=__builtin_ia32_roundsd, imm=Some(2), args=[v88, v94] } -> d1
-    v448 Extend { value=v446, kind=I32 }                  -> x0
-    v449 VecExtract { vec=v447, off=0, kind=F64, bytes=16 } -> d0
-    v450 FpCast { kind=FpBits, value=v449 }               -> x14
-    v451 Imm(0)                                           -> x0
-    v452 Imm(0)                                           -> x0
-    v453 Copy { value=v80, fp=true }                      -> d0
-    v454 Imm(2)                                           -> x7
-    v455 Call { target_pc=496, args=[v453, v454], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0
-    v456 FpCast { kind=FpBits, value=v455 }               -> x0
-    v457 Binop { op=ne, lhs=v450, rhs=v456 }              -> x1
-    v458 Imm(1)                                           -> x0
-    terminator Bnz { cond=v457, target=b12, fall=b10 }   (exit_acc=v457)
+    v460 Phi { incoming=[b13:v451, b8:v459], kind=I64 }   -> x0
+    v461 Binop { op=or, lhs=v439, rhs=v460 }              -> x13
+    v462 SimdVal { op=__builtin_ia32_roundsd, imm=Some(2), args=[v96, v103] } -> d1
+    v463 Extend { value=v461, kind=I32 }                  -> x0
+    v464 VecExtract { vec=v462, off=0, kind=F64, bytes=16 } -> d0
+    v465 FpCast { kind=FpBits, value=v464 }               -> x14
+    v466 Imm(0)                                           -> x0
+    v467 Imm(0)                                           -> x0
+    v468 Copy { value=v93, fp=true }                      -> d0
+    v469 Imm(2)                                           -> x7
+    v470 Call { target_pc=496, args=[v468, v469], fixed_args=2, fp_return=true, fp_arg_mask=0x1 } -> d0
+    v471 FpCast { kind=FpBits, value=v470 }               -> x0
+    v472 Binop { op=ne, lhs=v465, rhs=v471 }              -> x1
+    v473 Imm(1)                                           -> x0
+    terminator Bnz { cond=v472, target=b12, fall=b10 }   (exit_acc=v472)
   block 10  start_pc=0
-    v459 VecExtract { vec=v447, off=8, kind=F64, bytes=16 } -> d0
-    v460 FpCast { kind=FpBits, value=v459 }               -> x0
-    v461 Imm(0)                                           -> x1
-    v462 Imm(8)                                           -> x1
-    v463 Imm(0)                                           -> x1
-    v464 Copy { value=v86, fp=true }                      -> d0
-    v465 FpCast { kind=FpBits, value=v464 }               -> x1
-    v466 Binop { op=ne, lhs=v460, rhs=v465 }              -> x0
-    terminator Jmp(b11)   (exit_acc=v466)
+    v474 VecExtract { vec=v462, off=8, kind=F64, bytes=16 } -> d0
+    v475 FpCast { kind=FpBits, value=v474 }               -> x0
+    v476 Imm(0)                                           -> x1
+    v477 Imm(8)                                           -> x1
+    v478 Imm(0)                                           -> x1
+    v479 Copy { value=v100, fp=true }                     -> d0
+    v480 FpCast { kind=FpBits, value=v479 }               -> x1
+    v481 Binop { op=ne, lhs=v475, rhs=v480 }              -> x0
+    terminator Jmp(b11)   (exit_acc=v481)
   block 11  start_pc=0
-    v467 Phi { incoming=[b12:v458, b10:v466], kind=I64 }  -> x0
-    v468 Binop { op=or, lhs=v446, rhs=v467 }              -> x0
-    v469 Extend { value=v468, kind=I32 }                  -> x1
-    v470 Imm(4)                                           -> x1
-    v471 Imm(0)                                           -> x2
-    v472 Select { cond=v468, a=v470, b=v471, kind=I64 }   -> x1
+    v482 Phi { incoming=[b12:v473, b10:v481], kind=I64 }  -> x0
+    v483 Binop { op=or, lhs=v461, rhs=v482 }              -> x0
+    v484 Extend { value=v483, kind=I32 }                  -> x1
+    v485 Imm(4)                                           -> x1
+    v486 Imm(0)                                           -> x2
+    v487 Select { cond=v483, a=v485, b=v486, kind=I64 }   -> x1
     terminator Jmp(b17)
   block 12  start_pc=0
     terminator Jmp(b11)
@@ -7739,55 +7756,55 @@ fn ent_pc=506 n_params=0 variadic=false locals=1
   block 16  start_pc=0
     terminator Jmp(b3)
   block 17  start_pc=0
-    v475 Copy { value=v472, fp=false }                    -> x0
-    v476 Extend { value=v472, kind=I32 }                  -> x0
-    v477 LifetimeEnd(0)                                   -> -
-    v478 LifetimeEnd(0)                                   -> -
-    v479 LifetimeEnd(0)                                   -> -
-    v480 LifetimeEnd(0)                                   -> -
-    v481 LifetimeEnd(0)                                   -> -
-    v482 LifetimeEnd(0)                                   -> -
-    v483 LifetimeEnd(0)                                   -> -
-    v484 LifetimeEnd(0)                                   -> -
-    v485 LifetimeEnd(0)                                   -> -
-    v486 LifetimeEnd(0)                                   -> -
-    v487 Extend { value=v472, kind=I32 }                  -> x0
-    v488 Binop { op=or, lhs=v22, rhs=v472 }               -> x12
-    v489 Imm(0)                                           -> x0
-    v490 Extend { value=v488, kind=I32 }                  -> x0
-    v491 Call { target_pc=501, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v492 Extend { value=v491, kind=I32 }                  -> x1
-    v493 Binop { op=or, lhs=v488, rhs=v491 }              -> x12
-    v494 Imm(0)                                           -> x0
-    v495 Extend { value=v493, kind=I32 }                  -> x0
-    v496 Call { target_pc=503, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v497 Extend { value=v496, kind=I32 }                  -> x1
-    v498 Binop { op=or, lhs=v493, rhs=v496 }              -> x12
-    v499 Imm(0)                                           -> x0
-    v500 Extend { value=v498, kind=I32 }                  -> x0
-    v501 Call { target_pc=504, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v502 Extend { value=v501, kind=I32 }                  -> x1
-    v503 Binop { op=or, lhs=v498, rhs=v501 }              -> x12
+    v490 Copy { value=v487, fp=false }                    -> x0
+    v491 Extend { value=v487, kind=I32 }                  -> x0
+    v492 LifetimeEnd(0)                                   -> -
+    v493 LifetimeEnd(0)                                   -> -
+    v494 LifetimeEnd(0)                                   -> -
+    v495 LifetimeEnd(0)                                   -> -
+    v496 LifetimeEnd(0)                                   -> -
+    v497 LifetimeEnd(0)                                   -> -
+    v498 LifetimeEnd(0)                                   -> -
+    v499 LifetimeEnd(0)                                   -> -
+    v500 LifetimeEnd(0)                                   -> -
+    v501 LifetimeEnd(0)                                   -> -
+    v502 Extend { value=v487, kind=I32 }                  -> x0
+    v503 Binop { op=or, lhs=v22, rhs=v487 }               -> x12
     v504 Imm(0)                                           -> x0
     v505 Extend { value=v503, kind=I32 }                  -> x0
-    v506 Call { target_pc=505, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v506 Call { target_pc=501, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
     v507 Extend { value=v506, kind=I32 }                  -> x1
     v508 Binop { op=or, lhs=v503, rhs=v506 }              -> x12
     v509 Imm(0)                                           -> x0
     v510 Extend { value=v508, kind=I32 }                  -> x0
-    v511 Extend { value=v10, kind=I32 }                   -> x0
-    v512 BinopI { op=add, lhs=v10, rhs_imm=1 }            -> x3
-    v513 Extend { value=v512, kind=I32, nsw }             -> x0
-    terminator Jmp(b18)   (exit_acc=v512)
+    v511 Call { target_pc=503, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v512 Extend { value=v511, kind=I32 }                  -> x1
+    v513 Binop { op=or, lhs=v508, rhs=v511 }              -> x12
+    v514 Imm(0)                                           -> x0
+    v515 Extend { value=v513, kind=I32 }                  -> x0
+    v516 Call { target_pc=504, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v517 Extend { value=v516, kind=I32 }                  -> x1
+    v518 Binop { op=or, lhs=v513, rhs=v516 }              -> x12
+    v519 Imm(0)                                           -> x0
+    v520 Extend { value=v518, kind=I32 }                  -> x0
+    v521 Call { target_pc=505, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v522 Extend { value=v521, kind=I32 }                  -> x1
+    v523 Binop { op=or, lhs=v518, rhs=v521 }              -> x12
+    v524 Imm(0)                                           -> x0
+    v525 Extend { value=v523, kind=I32 }                  -> x0
+    v526 Extend { value=v10, kind=I32 }                   -> x0
+    v527 BinopI { op=add, lhs=v10, rhs_imm=1 }            -> x3
+    v528 Extend { value=v527, kind=I32, nsw }             -> x0
+    terminator Jmp(b18)   (exit_acc=v527)
   block 18  start_pc=0
-    v10  Phi { incoming=[b0:v7, b17:v512], kind=I64 }     -> x3
-    v11  Phi { incoming=[b0:v7, b17:v508], kind=I64 }     -> x12
+    v10  Phi { incoming=[b0:v7, b17:v527], kind=I64 }     -> x3
+    v11  Phi { incoming=[b0:v7, b17:v523], kind=I64 }     -> x12
     v12  Extend { value=v10, kind=I32 }                   -> x0
     v13  BinopI { op=lt, lhs=v10, rhs_imm=300 }           -> x0
     terminator Bz { cond=v13, target=b19, fall=b1 }   (exit_acc=v13)
   block 19  start_pc=0
-    v180 Extend { value=v11, kind=I32 }                   -> x0
-    v181 Extend { value=v11, kind=I32 }                   -> x0
+    v191 Extend { value=v11, kind=I32 }                   -> x0
+    v192 Extend { value=v11, kind=I32 }                   -> x0
     terminator Return(v11)   (exit_acc=v11)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

@@ -1029,22 +1029,23 @@ Disassembly of section .text:
                	cmpl	$0x8, %eax
                	jl	<addr>
                	xorl	%edx, %edx
-               	vmovups	(%rbx), %ymm14
-               	vmovups	%ymm14, -0x80(%rbp)
-               	vmovups	-0x60(%rbp), %ymm14
-               	vmovups	%ymm14, -0xb0(%rbp)
-               	vmovups	-0x40(%rbp), %ymm14
-               	vmovups	%ymm14, -0xd0(%rbp)
+               	vmovups	(%rbx), %ymm1
+               	vmovups	-0x60(%rbp), %ymm0
+               	vmovups	-0x40(%rbp), %ymm2
                	movups	(%rbx), %xmm14
-               	movups	%xmm14, -0x90(%rbp)
-               	vmovups	-0xb0(%rbp), %ymm0
+               	movups	%xmm14, -0x70(%rbp)
                	vmovdqa	%xmm0, %xmm14
-               	movups	%xmm14, -0xe0(%rbp)
-               	vmovdqu	-0xd0(%rbp), %xmm14
-               	movups	%xmm14, -0xf0(%rbp)
-               	vmovups	-0x80(%rbp), %ymm14
-               	vpsllvd	%ymm0, %ymm14, %ymm0
-               	vmovups	%ymm0, (%rsp)
+               	movups	%xmm14, -0xa0(%rbp)
+               	vmovdqa	%xmm2, %xmm14
+               	movups	%xmm14, -0xb0(%rbp)
+               	vpsllvd	%ymm0, %ymm1, %ymm3
+               	vmovups	%ymm3, (%rsp)
+               	vmovaps	%ymm1, %ymm14
+               	vmovups	%ymm14, -0x90(%rbp)
+               	vmovaps	%ymm0, %ymm14
+               	vmovups	%ymm14, -0xd0(%rbp)
+               	vmovaps	%ymm2, %ymm14
+               	vmovups	%ymm14, -0xf0(%rbp)
                	movl	$0x3, %eax
                	shlq	$0x8, %rdx
                	movzbq	(%rbx,%rax), %rcx
@@ -1324,8 +1325,8 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	movq	%rdx, %r12
                	cmovneq	%rcx, %r12
-               	vmovups	-0x80(%rbp), %ymm14
-               	vmovups	-0xb0(%rbp), %ymm15
+               	vmovups	-0x90(%rbp), %ymm14
+               	vmovups	-0xd0(%rbp), %ymm15
                	vpsrlvd	%ymm15, %ymm14, %ymm0
                	vmovups	%ymm0, (%rsp)
                	xorl	%edx, %edx
@@ -1552,8 +1553,8 @@ Disassembly of section .text:
                	movl	$0x4, %ecx
                	testq	%rax, %rax
                	cmovneq	%rcx, %r12
-               	vmovups	-0x80(%rbp), %ymm14
-               	vmovups	-0xb0(%rbp), %ymm15
+               	vmovups	-0x90(%rbp), %ymm14
+               	vmovups	-0xd0(%rbp), %ymm15
                	vpsravd	%ymm15, %ymm14, %ymm0
                	vmovups	%ymm0, (%rsp)
                	movl	$0x4, %esi
@@ -1765,8 +1766,8 @@ Disassembly of section .text:
                	movl	$0x4, %ecx
                	testq	%rax, %rax
                	cmovneq	%rcx, %r12
-               	vmovups	-0x80(%rbp), %ymm14
-               	vmovups	-0xd0(%rbp), %ymm15
+               	vmovups	-0x90(%rbp), %ymm14
+               	vmovups	-0xf0(%rbp), %ymm15
                	vpsllvq	%ymm15, %ymm14, %ymm0
                	vmovups	%ymm0, (%rsp)
                	movl	$0x8, %esi
@@ -1878,8 +1879,8 @@ Disassembly of section .text:
                	movl	$0x4, %ecx
                	testq	%rax, %rax
                	cmovneq	%rcx, %r12
-               	vmovups	-0x80(%rbp), %ymm14
-               	vmovups	-0xd0(%rbp), %ymm15
+               	vmovups	-0x90(%rbp), %ymm14
+               	vmovups	-0xf0(%rbp), %ymm15
                	vpsrlvq	%ymm15, %ymm14, %ymm0
                	vmovups	%ymm0, (%rsp)
                	movl	$0x8, %esi
@@ -1991,8 +1992,8 @@ Disassembly of section .text:
                	movl	$0x4, %ecx
                	testq	%rax, %rax
                	cmovneq	%rcx, %r12
-               	movups	-0x90(%rbp), %xmm14
-               	movups	-0xe0(%rbp), %xmm15
+               	movups	-0x70(%rbp), %xmm14
+               	movups	-0xa0(%rbp), %xmm15
                	vpsllvd	%xmm15, %xmm14, %xmm0
                	movups	%xmm0, 0x20(%rsp)
                	movl	$0x4, %esi
@@ -2104,8 +2105,8 @@ Disassembly of section .text:
                	movl	$0x4, %ecx
                	testq	%rax, %rax
                	cmovneq	%rcx, %r12
-               	movups	-0x90(%rbp), %xmm14
-               	movups	-0xe0(%rbp), %xmm15
+               	movups	-0x70(%rbp), %xmm14
+               	movups	-0xa0(%rbp), %xmm15
                	vpsrlvd	%xmm15, %xmm14, %xmm0
                	movups	%xmm0, 0x20(%rsp)
                	movl	$0x4, %esi
@@ -2217,8 +2218,8 @@ Disassembly of section .text:
                	movl	$0x4, %ecx
                	testq	%rax, %rax
                	cmovneq	%rcx, %r12
-               	movups	-0x90(%rbp), %xmm14
-               	movups	-0xe0(%rbp), %xmm15
+               	movups	-0x70(%rbp), %xmm14
+               	movups	-0xa0(%rbp), %xmm15
                	vpsravd	%xmm15, %xmm14, %xmm0
                	movups	%xmm0, 0x20(%rsp)
                	movl	$0x4, %esi
@@ -2330,8 +2331,8 @@ Disassembly of section .text:
                	movl	$0x4, %ecx
                	testq	%rax, %rax
                	cmovneq	%rcx, %r12
-               	movups	-0x90(%rbp), %xmm14
-               	movups	-0xf0(%rbp), %xmm15
+               	movups	-0x70(%rbp), %xmm14
+               	movups	-0xb0(%rbp), %xmm15
                	vpsllvq	%xmm15, %xmm14, %xmm0
                	movups	%xmm0, 0x20(%rsp)
                	movl	$0x8, %esi
@@ -2393,8 +2394,8 @@ Disassembly of section .text:
                	movl	$0x4, %ecx
                	testq	%rax, %rax
                	cmovneq	%rcx, %r12
-               	movups	-0x90(%rbp), %xmm14
-               	movups	-0xf0(%rbp), %xmm15
+               	movups	-0x70(%rbp), %xmm14
+               	movups	-0xb0(%rbp), %xmm15
                	vpsrlvq	%xmm15, %xmm14, %xmm0
                	movups	%xmm0, 0x20(%rsp)
                	movl	$0x8, %esi

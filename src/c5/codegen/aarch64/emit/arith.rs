@@ -65,6 +65,22 @@ pub(super) fn emit_copy(
     if src_place == dst {
         return Ok(());
     }
+    // A register copied to a spill slot is stored from where it is.
+    match (src_place, dst) {
+        (Place::FpReg(r), Place::Spill(_)) if is_fp => {
+            if alloc.is_wide(value) {
+                propagate_v128(code, frame, dst, r, scratch.primary);
+            } else {
+                store_spilled_fp(code, frame, dst, r);
+            }
+            return Ok(());
+        }
+        (Place::IntReg(r), Place::Spill(_)) if !is_fp => {
+            store_spilled_int(code, frame, dst, Reg(r));
+            return Ok(());
+        }
+        _ => {}
+    }
     // A reload lands in the destination itself.
     if is_fp && alloc.is_wide(value) {
         let Some(qd) = fp_or_spill_dst(dst, frame) else {

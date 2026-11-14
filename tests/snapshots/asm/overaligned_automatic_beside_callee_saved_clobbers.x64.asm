@@ -52,8 +52,8 @@ Disassembly of section .text:
                	movq	%rdx, %r11
                	addq	$0xf, %r11
                	andq	$-0x10, %r11
-               	movq	%rsp, %r10
-               	subq	%r11, %r10
+               	movq	%rsp, %rdi
+               	subq	%r11, %rdi
                	shrq	$0xc, %r11
                	testq	%r11, %r11
                	je	<addr>
@@ -61,10 +61,9 @@ Disassembly of section .text:
                	movq	$0x0, (%rsp)
                	subq	$0x1, %r11
                	jne	<addr>
-               	movq	%r10, %rsp
-               	movq	%r10, -0x18(%rbp)
+               	movq	%rdi, %rsp
                	movl	$0x4, %esi
-               	movq	-0x18(%rbp), %rdi
+               	movq	%rdi, -0x18(%rbp)
                	callq	<addr>
                	movl	$0xa, %esi
                	movq	-0x18(%rbp), %rdi
@@ -129,8 +128,8 @@ Disassembly of section .text:
                	movq	%rdx, %r11
                	addq	$0xf, %r11
                	andq	$-0x10, %r11
-               	movq	%rsp, %r10
-               	subq	%r11, %r10
+               	movq	%rsp, %rdi
+               	subq	%r11, %rdi
                	shrq	$0xc, %r11
                	testq	%r11, %r11
                	je	<addr>
@@ -138,10 +137,9 @@ Disassembly of section .text:
                	movq	$0x0, (%rsp)
                	subq	$0x1, %r11
                	jne	<addr>
-               	movq	%r10, %rsp
-               	movq	%r10, -0x18(%rbp)
+               	movq	%rdi, %rsp
                	movl	$0x6, %esi
-               	movq	-0x18(%rbp), %rdi
+               	movq	%rdi, -0x18(%rbp)
                	callq	<addr>
                	movl	$0xa, %esi
                	movq	-0x18(%rbp), %rdi
@@ -292,8 +290,8 @@ Disassembly of section .text:
                	movq	%rdx, %r11
                	addq	$0xf, %r11
                	andq	$-0x10, %r11
-               	movq	%rsp, %r10
-               	subq	%r11, %r10
+               	movq	%rsp, %rdi
+               	subq	%r11, %rdi
                	shrq	$0xc, %r11
                	testq	%r11, %r11
                	je	<addr>
@@ -301,10 +299,9 @@ Disassembly of section .text:
                	movq	$0x0, (%rsp)
                	subq	$0x1, %r11
                	jne	<addr>
-               	movq	%r10, %rsp
-               	movq	%r10, -0x18(%rbp)
+               	movq	%rdi, %rsp
                	movl	$0x4, %esi
-               	movq	-0x18(%rbp), %rdi
+               	movq	%rdi, -0x18(%rbp)
                	callq	<addr>
                	movl	$0xa, %esi
                	movq	-0x18(%rbp), %rdi

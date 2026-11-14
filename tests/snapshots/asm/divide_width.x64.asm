@@ -130,12 +130,10 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movl	<rip>, %r10d # <addr>
-               	movq	%r10, 0x8(%rsp)
-               	movl	<rip>, %r10d # <addr>
-               	movq	%r10, (%rsp)
-               	movq	0x8(%rsp), %rdi
-               	movq	(%rsp), %rsi
+               	movslq	<rip>, %rdi # <addr>
+               	movslq	<rip>, %rsi # <addr>
+               	movq	%rdi, 0x8(%rsp)
+               	movq	%rsi, (%rsp)
                	callq	<addr>
                	cmpl	$0x80000000, %eax       # imm = 0x80000000
                	je	<addr>

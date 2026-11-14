@@ -305,8 +305,8 @@ Disassembly of section .text:
                	movq	%rax, %r11
                	addq	$0xf, %r11
                	andq	$-0x10, %r11
-               	movq	%rsp, %r10
-               	subq	%r11, %r10
+               	movq	%rsp, %rdi
+               	subq	%r11, %rdi
                	shrq	$0xc, %r11
                	testq	%r11, %r11
                	je	<addr>
@@ -314,12 +314,11 @@ Disassembly of section .text:
                	movq	$0x0, (%rsp)
                	subq	$0x1, %r11
                	jne	<addr>
-               	movq	%r10, %rsp
-               	movq	%r10, -0x1038(%rbp)
+               	movq	%rdi, %rsp
                	movq	%rbx, %rsi
                	shlq	$0x4, %rsi
+               	movq	%rdi, -0x1038(%rbp)
                	movq	%rbx, %rdx
-               	movq	-0x1038(%rbp), %rdi
                	callq	<addr>
                	leaq	-0x1020(%rbp), %rdi
                	movl	$0x1000, %esi           # imm = 0x1000

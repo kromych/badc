@@ -129,10 +129,8 @@ Disassembly of section .text:
                	vzeroupper
                	callq	<addr>
                	vmovd	%xmm0, %r11d
-               	movups	-0x30(%rbp), %xmm14
-               	vpinsrd	$0x3, %r11d, %xmm14, %xmm14
-               	movups	%xmm14, -0x30(%rbp)
-               	movapd	%xmm14, %xmm0
+               	movups	-0x30(%rbp), %xmm0
+               	vpinsrd	$0x3, %r11d, %xmm0, %xmm0
                	movups	-0x10(%rbp), %xmm1
                	movups	-0x20(%rbp), %xmm2
                	vmovaps	%xmm0, %xmm3
@@ -150,9 +148,12 @@ Disassembly of section .text:
                	vmovaps	%xmm0, %xmm3
                	vfmaddsub231ps	%xmm2, %xmm1, %xmm3 # xmm3 = (xmm1 * xmm2) +/- xmm3
                	movups	%xmm3, 0x40(%rsp)
-               	vfmsubadd231ps	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm2) -/+ xmm0
-               	movups	%xmm0, 0x50(%rsp)
+               	vmovaps	%xmm0, %xmm14
+               	vfmsubadd231ps	%xmm2, %xmm1, %xmm14 # xmm14 = (xmm1 * xmm2) -/+ xmm14
+               	vmovaps	%xmm14, %xmm1
+               	movups	%xmm1, 0x50(%rsp)
                	xorl	%ebx, %ebx
+               	movups	%xmm0, -0x30(%rbp)
                	leaq	(%rsp), %rax
                	movq	%rbx, %r12
                	shlq	$0x4, %r12

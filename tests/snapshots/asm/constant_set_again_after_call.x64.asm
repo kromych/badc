@@ -44,17 +44,17 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
-               	movsd	%xmm0, 0x18(%rsp)
-               	movsd	%xmm1, 0x10(%rsp)
-               	movsd	0x18(%rsp), %xmm14
-               	vmulsd	<rip>, %xmm14, %xmm0
+               	movsd	%xmm1, 0x18(%rsp)
+               	vmulsd	<rip>, %xmm0, %xmm1
+               	movsd	%xmm0, 0x10(%rsp)
+               	movapd	%xmm1, %xmm0
                	callq	<addr>
                	movsd	%xmm0, 0x8(%rsp)
-               	movsd	0x10(%rsp), %xmm0
+               	movsd	0x18(%rsp), %xmm0
                	callq	<addr>
                	movsd	0x8(%rsp), %xmm14
                	vaddsd	%xmm0, %xmm14, %xmm0
-               	movsd	0x18(%rsp), %xmm14
+               	movsd	0x10(%rsp), %xmm14
                	vfmadd231sd	<rip>, %xmm14, %xmm0 # xmm0 = (xmm14 * mem) + xmm0
                	cvttsd2si	%xmm0, %rax
                	leave

@@ -140,19 +140,17 @@ Disassembly of section .text:
                	subq	$0x38, %rsp
                	pushq	%rbx
                	movq	<rip>, %rbx # <addr>
-               	movq	<rip>, %r10 # <addr>
-               	movq	%r10, 0x38(%rsp)
-               	movq	<rip>, %r10 # <addr>
-               	movq	%r10, 0x30(%rsp)
+               	movq	<rip>, %rsi # <addr>
+               	movq	<rip>, %rdx # <addr>
                	movq	<rip>, %r10 # <addr>
                	movq	%r10, 0x20(%rsp)
                	movq	<rip>, %r10 # <addr>
                	movq	%r10, 0x18(%rsp)
                	movq	<rip>, %r10 # <addr>
                	movq	%r10, 0x28(%rsp)
+               	movq	%rsi, 0x38(%rsp)
+               	movq	%rdx, 0x30(%rsp)
                	movq	%rbx, %rdi
-               	movq	0x38(%rsp), %rsi
-               	movq	0x30(%rsp), %rdx
                	callq	<addr>
                	cmpq	$0x45, %rax
                	je	<addr>

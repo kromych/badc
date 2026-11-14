@@ -121,23 +121,23 @@ Disassembly of section .text:
                	retq
                	movl	$0xfffe, %edi           # imm = 0xFFFE
                	callq	<addr>
-               	movq	%rax, (%rsp)
+               	movq	%rax, 0x8(%rsp)
                	movl	$0x1, %edi
                	callq	<addr>
-               	movq	%rax, 0x8(%rsp)
-               	movq	(%rsp), %rax
-               	andq	$0xffff, %rax           # imm = 0xFFFF
                	movq	0x8(%rsp), %rcx
                	andq	$0xffff, %rcx           # imm = 0xFFFF
-               	addq	%rcx, %rax
-               	movq	%rax, %rcx
-               	andq	$0xffff, %rcx           # imm = 0xFFFF
-               	cmpl	$0xffff, %ecx           # imm = 0xFFFF
+               	movq	%rax, %rdx
+               	andq	$0xffff, %rdx           # imm = 0xFFFF
+               	addq	%rdx, %rcx
+               	movq	%rcx, %rdx
+               	andq	$0xffff, %rdx           # imm = 0xFFFF
+               	movq	%rax, 0x8(%rsp)
+               	cmpl	$0xffff, %edx           # imm = 0xFFFF
                	je	<addr>
                	movl	$0xc, %eax
                	leave
                	retq
-               	incq	%rax
+               	leaq	0x1(%rcx), %rax
                	testl	$0xffff, %eax           # imm = 0xFFFF
                	je	<addr>
                	movl	$0xd, %eax

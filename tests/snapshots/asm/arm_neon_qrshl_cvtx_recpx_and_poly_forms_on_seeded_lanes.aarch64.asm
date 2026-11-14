@@ -250,7 +250,7 @@ Disassembly of section .text:
                	b	<addr>
                	lsr	x1, x1, #16
                	b	<addr>
-               	ldr	q0, [sp, #0xf0]
+               	ldr	q1, [sp, #0xf0]
                	mov	x0, #0x0                // =0
                	b	<addr>
                	str	x1, [x3, x0, lsl #3]
@@ -316,37 +316,36 @@ Disassembly of section .text:
                	eor	x2, x2, x2, lsl #17
                	str	x2, [x1, #0x10]
                	b	<addr>
-               	ldr	q16, [sp, #0x100]
-               	str	q16, [sp, #0x130]
-               	ldr	q1, [sp, #0x190]
-               	ldr	q2, [sp, #0x180]
-               	sqrshl	v3.16b, v1.16b, v2.16b
+               	ldr	q0, [sp, #0x100]
+               	ldr	q2, [sp, #0x190]
+               	ldr	q3, [sp, #0x180]
+               	sqrshl	v4.16b, v2.16b, v3.16b
                	sub	x4, x29, #0x280
-               	str	q3, [sp, #0x30]
-               	mov	d2, v2.d[1]
-               	uqrshl	v1.8b, v1.8b, v2.8b
-               	stur	d1, [x29, #-0xf8]
-               	ldr	q1, [sp, #0x170]
-               	mov	d3, v1.d[0]
-               	ldr	q2, [sp, #0x160]
+               	str	q4, [sp, #0x30]
+               	mov	d3, v3.d[1]
+               	uqrshl	v2.8b, v2.8b, v3.8b
+               	stur	d2, [x29, #-0xf8]
+               	ldr	q2, [sp, #0x170]
                	mov	d4, v2.d[0]
-               	sqrshl	v3.4h, v3.4h, v4.4h
-               	stur	d3, [x29, #-0xf0]
-               	uqrshl	v1.8h, v1.8h, v2.8h
-               	str	q1, [sp, #0x40]
-               	ldr	q1, [sp, #0x150]
-               	sqrshl	v2.4s, v1.4s, v0.4s
-               	str	q2, [sp, #0x50]
-               	uqrshl	v0.2s, v1.2s, v0.2s
-               	stur	d0, [x29, #-0xe8]
-               	ldr	q0, [sp, #0x140]
-               	mov	d2, v0.d[0]
-               	ldr	q1, [sp, #0x130]
-               	mov	d3, v1.d[0]
+               	ldr	q3, [sp, #0x160]
+               	mov	d5, v3.d[0]
+               	sqrshl	v4.4h, v4.4h, v5.4h
+               	stur	d4, [x29, #-0xf0]
+               	uqrshl	v2.8h, v2.8h, v3.8h
+               	str	q2, [sp, #0x40]
+               	ldr	q2, [sp, #0x150]
+               	sqrshl	v3.4s, v2.4s, v1.4s
+               	str	q3, [sp, #0x50]
+               	uqrshl	v1.2s, v2.2s, v1.2s
+               	stur	d1, [x29, #-0xe8]
+               	ldr	q1, [sp, #0x140]
+               	mov	d2, v1.d[0]
+               	mov	d3, v0.d[0]
                	sqrshl	d2, d2, d3
                	stur	d2, [x29, #-0xe0]
-               	uqrshl	v0.2d, v0.2d, v1.2d
-               	str	q0, [sp, #0x60]
+               	uqrshl	v1.2d, v1.2d, v0.2d
+               	str	q1, [sp, #0x60]
+               	str	q0, [sp, #0x120]
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x2, [x1, #0x18]
@@ -452,9 +451,9 @@ Disassembly of section .text:
                	b.lo	<addr>
                	bl	<addr>
                	fmov	d16, x0
-               	str	q16, [sp, #0x120]
+               	str	q16, [sp, #0x130]
                	bl	<addr>
-               	ldr	q0, [sp, #0x120]
+               	ldr	q0, [sp, #0x130]
                	mov	v0.d[1], x0
                	adrp	x0, <page>
                	ldr	x1, [x0, #0x10]
@@ -499,7 +498,7 @@ Disassembly of section .text:
                	ldr	w1, [x2, x1, lsl #2]
                	mov	v16.16b, v1.16b
                	mov	v16.s[1], w1
-               	str	q16, [sp, #0x120]
+               	str	q16, [sp, #0x130]
                	ldr	x1, [x0, #0x10]
                	eor	x1, x1, x1, lsl #13
                	eor	x1, x1, x1, lsr #7
@@ -519,7 +518,7 @@ Disassembly of section .text:
                	mul	x3, x3, x17
                	sub	x1, x1, x3
                	ldr	w1, [x2, x1, lsl #2]
-               	ldr	q1, [sp, #0x120]
+               	ldr	q1, [sp, #0x130]
                	mov	v1.s[2], w1
                	ldr	x1, [x0, #0x10]
                	eor	x1, x1, x1, lsl #13
@@ -560,7 +559,7 @@ Disassembly of section .text:
                	fcvtxn	v1.2s, v0.2d
                	sub	x21, x29, #0xd8
                	stur	d1, [x29, #-0xd8]
-               	ldr	q16, [sp, #0x120]
+               	ldr	q16, [sp, #0x130]
                	mov	d1, v16.d[0]
                	fcvtxn	v2.2s, v0.2d
                	mov	v1.d[1], v2.d[0]
@@ -708,7 +707,7 @@ Disassembly of section .text:
                	str	q0, [sp, #0xa0]
                	ldr	q0, [sp, #0x140]
                	mov	d3, v0.d[0]
-               	ldr	q2, [sp, #0x130]
+               	ldr	q2, [sp, #0x120]
                	mov	d4, v2.d[1]
                	eor	v3.8b, v3.8b, v4.8b
                	stur	d3, [x29, #-0xa8]

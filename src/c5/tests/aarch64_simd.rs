@@ -1178,6 +1178,35 @@ fn the_magnitude_compares_and_high_narrowing_forms_are_rows() {
     }
 }
 
+/// The structure loads and stores move the bytes the instructions move,
+/// on every element type at both widths: over seeded bytes the
+/// interpreter's results hash to the hardware's. Two and four vectors
+/// deinterleave by the permutes: `vld2q_u8` is two loads and `uzp1` /
+/// `uzp2` under -O.
+#[cfg(feature = "full")]
+#[test]
+fn the_structure_loads_and_stores_move_the_instructions_bytes() {
+    let src = super::load_fixture("arm_neon_structure_loads_and_stores_on_seeded_bytes.c");
+    let program = super::compile_str_bare_for(&src, crate::Target::LinuxAarch64);
+    assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 0);
+    let words = super::perf_codegen::a64_at(
+        "#include <arm_neon.h>\nuint8x16x2_t a(const uint8_t *p) { return vld2q_u8(p); }\n",
+        "a",
+        true,
+    );
+    assert_eq!(
+        words,
+        [
+            0x3DC0_0001u32,
+            0x3DC0_0402,
+            0x4E02_1820,
+            0x4E02_5821,
+            0xD65F_03C0
+        ],
+        "{words:08x?}"
+    );
+}
+
 /// `vld1`, `vst1`, `vdup_n` and `vld1_dup` are the load, store and
 /// broadcast of their vector under `-O`, as with gcc 16, with no inline asm
 /// between them and the operations that use them: `ldr q`, `str q`,

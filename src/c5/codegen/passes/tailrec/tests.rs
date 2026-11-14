@@ -211,6 +211,18 @@ fn accumulator_add_forms_a_loop_with_acc_phi() {
     assert_single_backedge(&f, header);
 }
 
+/// The entry's test moves into the header, and its `__builtin_expect`
+/// prediction with it.
+#[test]
+fn the_entry_tests_prediction_moves_with_it() {
+    let mut f = accum_add_long();
+    f.predicted = vec![Some(crate::c5::ir::Arm::Target)];
+    run(core::slice::from_mut(&mut f));
+    let header = (f.blocks.len() - 1) as BlockId;
+    assert_eq!(f.predicted_arm(0), None);
+    assert_eq!(f.predicted_arm(header), Some(crate::c5::ir::Arm::Target));
+}
+
 #[test]
 fn accumulator_add_backedge_reextends_narrow_param() {
     // Same shape but the parameter is `signed char` (I8): the back edge

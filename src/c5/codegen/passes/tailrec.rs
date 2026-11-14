@@ -904,6 +904,11 @@ fn rewrite(func: &mut FunctionSsa, plan: &Plan) {
     func.inst_src = new_src;
     func.f32_values = new_f32;
     func.blocks = new_blocks;
+    // The entry's test now ends the header, and its prediction with it.
+    if let Some(arm) = func.predicted.get_mut(0).and_then(Option::take) {
+        func.predicted.resize(n_blocks + 1, None);
+        func.predicted[header as usize] = Some(arm);
+    }
 }
 
 #[cfg(test)]

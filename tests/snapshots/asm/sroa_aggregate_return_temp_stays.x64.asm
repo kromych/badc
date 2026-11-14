@@ -161,52 +161,36 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rdi
                	movq	$0x0, -0x8(%rbp)
                	callq	<addr>
-               	movq	%rax, -0x28(%rbp)
                	leaq	-0x20(%rbp), %rdi
                	callq	<addr>
-               	movq	%rax, -0x28(%rbp)
                	leaq	-0x20(%rbp), %rdi
                	callq	<addr>
-               	movq	%rax, -0x28(%rbp)
                	leaq	-0x20(%rbp), %rdi
                	callq	<addr>
-               	movq	%rax, -0x28(%rbp)
                	leaq	-0x20(%rbp), %rdi
                	callq	<addr>
-               	movq	%rax, -0x28(%rbp)
                	leaq	-0x20(%rbp), %rdi
                	callq	<addr>
-               	movq	%rax, -0x28(%rbp)
                	leaq	-0x20(%rbp), %rdi
                	callq	<addr>
-               	movq	%rax, -0x28(%rbp)
                	leaq	-0x20(%rbp), %rdi
                	callq	<addr>
-               	movq	%rax, -0x28(%rbp)
                	leaq	-0x20(%rbp), %rdi
                	callq	<addr>
-               	movq	%rax, -0x28(%rbp)
                	leaq	-0x20(%rbp), %rdi
                	callq	<addr>
-               	movq	%rax, -0x28(%rbp)
                	leaq	-0x20(%rbp), %rdi
                	callq	<addr>
-               	movq	%rax, -0x28(%rbp)
                	leaq	-0x20(%rbp), %rdi
                	callq	<addr>
-               	movq	%rax, -0x28(%rbp)
                	leaq	-0x20(%rbp), %rdi
                	callq	<addr>
-               	movq	%rax, -0x28(%rbp)
                	leaq	-0x20(%rbp), %rdi
                	callq	<addr>
-               	movq	%rax, -0x28(%rbp)
                	leaq	-0x20(%rbp), %rdi
                	callq	<addr>
-               	movq	%rax, -0x28(%rbp)
                	leaq	-0x20(%rbp), %rdi
                	callq	<addr>
-               	movq	%rax, -0x28(%rbp)
                	leaq	-0x20(%rbp), %rdi
                	callq	<addr>
                	movq	%rax, -0x28(%rbp)

@@ -234,39 +234,38 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
   block 1  start_pc=0
     v64  Imm(5)                                           -> x6
     v65  Imm(0)                                           -> x6
-    v66  Imm(0)                                           -> x6
-    v67  LocalAddr(-1)                                    -> x6
+    v66  LocalAddr(-1)                                    -> x6
+    v67  LifetimeEnd(0)                                   -> -
     v68  LifetimeEnd(0)                                   -> -
     v69  LifetimeEnd(0)                                   -> -
-    v70  LifetimeEnd(0)                                   -> -
     terminator Jmp(b2)   (exit_acc=v26)
   block 2  start_pc=0
-    v75  Phi { incoming=[b4:v26, b1:v26], kind=I64 }      -> x0
-    v76  Imm(0)                                           -> x6
-    v77  Load { addr=v75, disp=0, kind=I64 }              -> x0
-    v78  Imm(0)                                           -> x6
-    v79  LifetimeEnd(-1)                                  -> -
-    v80  Imm(0)                                           -> x6
-    v81  Store { addr=v2, disp=0, value=v77, kind=I64 }   -> -
-    v82  LifetimeEnd(0)                                   -> -
-    v83  ImmData(32)                                      -> x0
-    v84  Load { addr=v83, disp=0, kind=I64 pc_rel }       -> x0
-    v85  BinopI { op=eq, lhs=v84, rhs_imm=3 }             -> x0
-    v86  Imm(1)                                           -> x0
-    v87  Load { addr=v83, disp=0, kind=I64 pc_rel }       -> x2
-    v88  BinopI { op=eq, lhs=v87, rhs_imm=3 }             -> x2
-    v89  Select { cond=v88, a=v48, b=v86, kind=I64 }      -> x0
+    v74  Phi { incoming=[b4:v26, b1:v26], kind=I64 }      -> x0
+    v75  Imm(0)                                           -> x6
+    v76  Load { addr=v74, disp=0, kind=I64 }              -> x0
+    v77  Imm(0)                                           -> x6
+    v78  LifetimeEnd(-1)                                  -> -
+    v79  Imm(0)                                           -> x6
+    v80  Store { addr=v2, disp=0, value=v76, kind=I64 }   -> -
+    v81  LifetimeEnd(0)                                   -> -
+    v82  ImmData(32)                                      -> x0
+    v83  Load { addr=v82, disp=0, kind=I64 pc_rel }       -> x0
+    v84  BinopI { op=eq, lhs=v83, rhs_imm=3 }             -> x0
+    v85  Imm(1)                                           -> x0
+    v86  Load { addr=v82, disp=0, kind=I64 pc_rel }       -> x2
+    v87  BinopI { op=eq, lhs=v86, rhs_imm=3 }             -> x2
+    v88  Select { cond=v87, a=v48, b=v85, kind=I64 }      -> x0
     terminator Jmp(b3)
   block 3  start_pc=0
-    v61  Copy { value=v89, fp=false }                     -> x1
+    v61  Copy { value=v88, fp=false }                     -> x1
     v62  Imm(0)                                           -> x1
-    v63  Extend { value=v89, kind=I32 }                   -> x1
-    terminator Return(v89)   (exit_acc=v89)
+    v63  Extend { value=v88, kind=I32 }                   -> x1
+    terminator Return(v88)   (exit_acc=v88)
   block 4  start_pc=0
-    v71  LocalAddr(-1)                                    -> x6
+    v70  LocalAddr(-1)                                    -> x6
+    v71  LifetimeEnd(0)                                   -> -
     v72  LifetimeEnd(0)                                   -> -
     v73  LifetimeEnd(0)                                   -> -
-    v74  LifetimeEnd(0)                                   -> -
     terminator Jmp(b2)   (exit_acc=v26)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

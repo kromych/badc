@@ -139,52 +139,36 @@ Disassembly of section .text:
                	stur	xzr, [x29, #-0x10]
                	stur	xzr, [x29, #-0x8]
                	bl	<addr>
-               	stur	x0, [x29, #-0x28]
                	sub	x0, x29, #0x20
                	bl	<addr>
-               	stur	x0, [x29, #-0x28]
                	sub	x0, x29, #0x20
                	bl	<addr>
-               	stur	x0, [x29, #-0x28]
                	sub	x0, x29, #0x20
                	bl	<addr>
-               	stur	x0, [x29, #-0x28]
                	sub	x0, x29, #0x20
                	bl	<addr>
-               	stur	x0, [x29, #-0x28]
                	sub	x0, x29, #0x20
                	bl	<addr>
-               	stur	x0, [x29, #-0x28]
                	sub	x0, x29, #0x20
                	bl	<addr>
-               	stur	x0, [x29, #-0x28]
                	sub	x0, x29, #0x20
                	bl	<addr>
-               	stur	x0, [x29, #-0x28]
                	sub	x0, x29, #0x20
                	bl	<addr>
-               	stur	x0, [x29, #-0x28]
                	sub	x0, x29, #0x20
                	bl	<addr>
-               	stur	x0, [x29, #-0x28]
                	sub	x0, x29, #0x20
                	bl	<addr>
-               	stur	x0, [x29, #-0x28]
                	sub	x0, x29, #0x20
                	bl	<addr>
-               	stur	x0, [x29, #-0x28]
                	sub	x0, x29, #0x20
                	bl	<addr>
-               	stur	x0, [x29, #-0x28]
                	sub	x0, x29, #0x20
                	bl	<addr>
-               	stur	x0, [x29, #-0x28]
                	sub	x0, x29, #0x20
                	bl	<addr>
-               	stur	x0, [x29, #-0x28]
                	sub	x0, x29, #0x20
                	bl	<addr>
-               	stur	x0, [x29, #-0x28]
                	sub	x0, x29, #0x20
                	bl	<addr>
                	stur	x0, [x29, #-0x28]

@@ -125,7 +125,7 @@ fn ent_pc=6 n_params=1 variadic=false locals=1
     terminator Return(v30)   (exit_acc=v30)
 ; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=nested
-fn ent_pc=7 n_params=1 variadic=false locals=1
+fn ent_pc=7 n_params=1 variadic=false locals=2
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -154,7 +154,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=1
     v21  Store { addr=v18, disp=0, value=v20, kind=I32 pc_rel } -> -
     v22  Binop { op=add, lhs=v17, rhs=v19 }               -> x7
     v23  StoreIndexed { base=v17, index=v19, scale=1, value=v16, kind=I8 } -> -
-    v24  LocalAddr(-1)                                    -> x2
+    v24  LocalAddr(-2)                                    -> x2
     v25  Imm(97)                                          -> x2
     v26  Imm(97)                                          -> x6
     v27  ImmData(48)                                      -> x2
@@ -200,7 +200,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=1
     terminator Jmp(b6)
   block 6  start_pc=0
     v63  Copy { value=v58, fp=false }                     -> x2
-    v64  LocalAddr(-1)                                    -> x2
+    v64  LocalAddr(-2)                                    -> x2
     v65  Imm(97)                                          -> x2
     v66  Imm(97)                                          -> x6
     v67  ImmData(48)                                      -> x2

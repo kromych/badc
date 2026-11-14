@@ -21,18 +21,10 @@ Disassembly of section .text:
                	ret
 
 <fill_first>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	stur	x1, [x29, #-0x20]
                	cbz	x1, <addr>
                	mov	x1, #0x0                // =0
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
                	b	<addr>
                	mov	x0, #-0x16              // =-22
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <main>:

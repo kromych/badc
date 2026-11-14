@@ -99,13 +99,17 @@ fn candidate_slots(func: &FunctionSsa) -> BTreeSet<i64> {
     touched
 }
 
-/// The candidate slots with no `LocalAddr` anywhere in the function:
-/// every access is a `LoadLocal` / `StoreLocal`, so no pointer to the
-/// slot ever exists and every write is visible in the SSA.
+/// The candidate slots no read `LocalAddr` names: every access is a
+/// `LoadLocal` / `StoreLocal`, so no pointer to the slot exists and every
+/// write is visible in the SSA. A `LocalAddr` nothing reads, as a
+/// spliced call leaves for an argument it passed by address, makes none.
 pub(crate) fn address_free_slots(func: &FunctionSsa) -> BTreeSet<i64> {
     let mut slots = candidate_slots(func);
-    for inst in &func.insts {
-        if let Inst::LocalAddr(off) = inst {
+    let uses = super::reg_alloc::compute_use_counts(func);
+    for (v, inst) in func.insts.iter().enumerate() {
+        if let Inst::LocalAddr(off) = inst
+            && uses.get(v).is_none_or(|&n| n > 0)
+        {
             slots.remove(off);
         }
     }
@@ -666,7 +670,9 @@ impl SlotLiveIn {
 /// union of its predecessors' exit states, back edges included, so a
 /// `LocalAddr` in a loop body reaches the loads above it on the next
 /// iteration; a `LocalAddr` sets the state for the rest of its block.
-/// A slot without a `LocalAddr` is not tracked and never escapes.
+/// A slot no read `LocalAddr` names is not tracked and never escapes: a
+/// `LocalAddr` nothing reads, as a spliced call leaves for an argument it
+/// passed by address, makes no pointer.
 struct SlotEscape {
     rank: alloc::collections::BTreeMap<i64, usize>,
     words: usize,
@@ -678,9 +684,11 @@ impl SlotEscape {
         let nblocks = func.blocks.len();
         let mut rank: alloc::collections::BTreeMap<i64, usize> =
             alloc::collections::BTreeMap::new();
-        for inst in &func.insts {
+        let uses = super::reg_alloc::compute_use_counts(func);
+        for (v, inst) in func.insts.iter().enumerate() {
             if let Inst::LocalAddr(off) = inst
                 && candidates.contains(off)
+                && uses.get(v).is_none_or(|&n| n > 0)
             {
                 let next = rank.len();
                 rank.entry(*off).or_insert(next);
@@ -2322,6 +2330,35 @@ mod tests {
         }
     }
 
+    /// Give every `LocalAddr` a reader, a store through it at the end of
+    /// the last block, so its slot escapes.
+    fn with_read_addresses(
+        mut insts: Vec<Inst>,
+        mut blocks: Vec<Block>,
+    ) -> (Vec<Inst>, Vec<Block>) {
+        let n = insts.len() as ValueId;
+        let addrs: Vec<ValueId> = (0..n)
+            .filter(|&v| matches!(insts[v as usize], Inst::LocalAddr(_)))
+            .collect();
+        for a in addrs {
+            insts.push(Inst::Store {
+                addr: a,
+                disp: 0,
+                value: a,
+                kind: StoreKind::I64,
+                volatile: false,
+                align: 0,
+                pc_rel: false,
+            });
+        }
+        if let Some(b) = blocks.last_mut()
+            && b.inst_range.end == n
+        {
+            b.inst_range.end = insts.len() as ValueId;
+        }
+        (insts, blocks)
+    }
+
     fn func_with(insts: Vec<Inst>, blocks: Vec<Block>) -> FunctionSsa {
         FunctionSsa {
             seh_scopes: Vec::new(),
@@ -2464,6 +2501,7 @@ mod tests {
             },
         ];
         let blocks = alloc::vec![empty_block(Terminator::Return(NO_VALUE))];
+        let (insts, blocks) = with_read_addresses(insts, blocks);
         let f = func_with(insts, blocks);
         let p = address_free_slots(&f);
         assert!(p.contains(&-1), "address-free slot -1 should be promotable");
@@ -3108,6 +3146,7 @@ mod tests {
             terminator: Terminator::Return(3),
             exit_acc: 3,
         }];
+        let (insts, blocks) = with_read_addresses(insts, blocks);
         let mut f = func_with(insts, blocks);
         run(&mut f);
         assert!(
@@ -4220,6 +4259,7 @@ mod tests {
             terminator: Terminator::Return(5),
             exit_acc: 5,
         }];
+        let (insts, blocks) = with_read_addresses(insts, blocks);
         let mut f = func_with(insts, blocks);
         let promoted = run(&mut f);
         assert!(
@@ -4297,6 +4337,7 @@ mod tests {
                 exit_acc: 2,
             },
         ];
+        let (insts, blocks) = with_read_addresses(insts, blocks);
         let mut f = func_with(insts, blocks);
         assert!(run(&mut f).is_empty());
         assert!(matches!(
@@ -4401,6 +4442,7 @@ mod tests {
                 exit_acc: 8,
             },
         ];
+        let (insts, blocks) = with_read_addresses(insts, blocks);
         let mut f = func_with(insts, blocks);
         let promoted = with_phi_promote_override(true, || run(&mut f));
         assert!(

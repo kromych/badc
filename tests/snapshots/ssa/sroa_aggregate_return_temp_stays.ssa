@@ -630,9 +630,9 @@ fn ent_pc=11 n_params=0 variadic=false locals=5
     v92  LocalAddr(-4)                                    -> x0
     v93  Call { target_pc=8, args=[v66], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v94  RetPart(0, kind=I64)                             -> x0
-    v95  StoreLocal { off=-5, value=v94, kind=I64 }       -> -
-    v96  LocalAddr(-5)                                    -> x0
-    v97  LifetimeEnd(-5)                                  -> -
+    v95  Imm(0)                                           -> x0
+    v96  Imm(0)                                           -> x0
+    v97  LifetimeEnd(0)                                   -> -
     v98  Imm(0)                                           -> x0
     v99  Imm(1)                                           -> x0
     v100 Imm(1)                                           -> x0
@@ -641,9 +641,9 @@ fn ent_pc=11 n_params=0 variadic=false locals=5
     v103 LocalAddr(-4)                                    -> x7
     v104 Call { target_pc=8, args=[v103], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v105 RetPart(0, kind=I64)                             -> x0
-    v106 StoreLocal { off=-5, value=v105, kind=I64 }      -> -
-    v107 LocalAddr(-5)                                    -> x0
-    v108 LifetimeEnd(-5)                                  -> -
+    v106 Imm(0)                                           -> x0
+    v107 Imm(0)                                           -> x0
+    v108 LifetimeEnd(0)                                   -> -
     v109 Imm(1)                                           -> x0
     v110 Imm(2)                                           -> x0
     v111 Imm(2)                                           -> x0
@@ -652,9 +652,9 @@ fn ent_pc=11 n_params=0 variadic=false locals=5
     v114 LocalAddr(-4)                                    -> x7
     v115 Call { target_pc=8, args=[v114], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v116 RetPart(0, kind=I64)                             -> x0
-    v117 StoreLocal { off=-5, value=v116, kind=I64 }      -> -
-    v118 LocalAddr(-5)                                    -> x0
-    v119 LifetimeEnd(-5)                                  -> -
+    v117 Imm(0)                                           -> x0
+    v118 Imm(0)                                           -> x0
+    v119 LifetimeEnd(0)                                   -> -
     v120 Imm(2)                                           -> x0
     v121 Imm(3)                                           -> x0
     v122 Imm(3)                                           -> x0
@@ -663,9 +663,9 @@ fn ent_pc=11 n_params=0 variadic=false locals=5
     v125 LocalAddr(-4)                                    -> x7
     v126 Call { target_pc=8, args=[v125], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v127 RetPart(0, kind=I64)                             -> x0
-    v128 StoreLocal { off=-5, value=v127, kind=I64 }      -> -
-    v129 LocalAddr(-5)                                    -> x0
-    v130 LifetimeEnd(-5)                                  -> -
+    v128 Imm(0)                                           -> x0
+    v129 Imm(0)                                           -> x0
+    v130 LifetimeEnd(0)                                   -> -
     v131 Imm(3)                                           -> x0
     v132 Imm(4)                                           -> x0
     v133 Imm(4)                                           -> x0
@@ -674,9 +674,9 @@ fn ent_pc=11 n_params=0 variadic=false locals=5
     v136 LocalAddr(-4)                                    -> x7
     v137 Call { target_pc=8, args=[v136], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v138 RetPart(0, kind=I64)                             -> x0
-    v139 StoreLocal { off=-5, value=v138, kind=I64 }      -> -
-    v140 LocalAddr(-5)                                    -> x0
-    v141 LifetimeEnd(-5)                                  -> -
+    v139 Imm(0)                                           -> x0
+    v140 Imm(0)                                           -> x0
+    v141 LifetimeEnd(0)                                   -> -
     v142 Imm(4)                                           -> x0
     v143 Imm(5)                                           -> x0
     v144 Imm(5)                                           -> x0
@@ -685,9 +685,9 @@ fn ent_pc=11 n_params=0 variadic=false locals=5
     v147 LocalAddr(-4)                                    -> x7
     v148 Call { target_pc=8, args=[v147], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v149 RetPart(0, kind=I64)                             -> x0
-    v150 StoreLocal { off=-5, value=v149, kind=I64 }      -> -
-    v151 LocalAddr(-5)                                    -> x0
-    v152 LifetimeEnd(-5)                                  -> -
+    v150 Imm(0)                                           -> x0
+    v151 Imm(0)                                           -> x0
+    v152 LifetimeEnd(0)                                   -> -
     v153 Imm(5)                                           -> x0
     v154 Imm(6)                                           -> x0
     v155 Imm(6)                                           -> x0
@@ -696,9 +696,9 @@ fn ent_pc=11 n_params=0 variadic=false locals=5
     v158 LocalAddr(-4)                                    -> x7
     v159 Call { target_pc=8, args=[v158], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v160 RetPart(0, kind=I64)                             -> x0
-    v161 StoreLocal { off=-5, value=v160, kind=I64 }      -> -
-    v162 LocalAddr(-5)                                    -> x0
-    v163 LifetimeEnd(-5)                                  -> -
+    v161 Imm(0)                                           -> x0
+    v162 Imm(0)                                           -> x0
+    v163 LifetimeEnd(0)                                   -> -
     v164 Imm(6)                                           -> x0
     v165 Imm(7)                                           -> x0
     v166 Imm(7)                                           -> x0
@@ -707,9 +707,9 @@ fn ent_pc=11 n_params=0 variadic=false locals=5
     v169 LocalAddr(-4)                                    -> x7
     v170 Call { target_pc=8, args=[v169], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v171 RetPart(0, kind=I64)                             -> x0
-    v172 StoreLocal { off=-5, value=v171, kind=I64 }      -> -
-    v173 LocalAddr(-5)                                    -> x0
-    v174 LifetimeEnd(-5)                                  -> -
+    v172 Imm(0)                                           -> x0
+    v173 Imm(0)                                           -> x0
+    v174 LifetimeEnd(0)                                   -> -
     v175 Imm(7)                                           -> x0
     v176 Imm(8)                                           -> x0
     v177 Imm(8)                                           -> x0
@@ -718,9 +718,9 @@ fn ent_pc=11 n_params=0 variadic=false locals=5
     v180 LocalAddr(-4)                                    -> x7
     v181 Call { target_pc=8, args=[v180], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v182 RetPart(0, kind=I64)                             -> x0
-    v183 StoreLocal { off=-5, value=v182, kind=I64 }      -> -
-    v184 LocalAddr(-5)                                    -> x0
-    v185 LifetimeEnd(-5)                                  -> -
+    v183 Imm(0)                                           -> x0
+    v184 Imm(0)                                           -> x0
+    v185 LifetimeEnd(0)                                   -> -
     v186 Imm(8)                                           -> x0
     v187 Imm(9)                                           -> x0
     v188 Imm(9)                                           -> x0
@@ -729,9 +729,9 @@ fn ent_pc=11 n_params=0 variadic=false locals=5
     v191 LocalAddr(-4)                                    -> x7
     v192 Call { target_pc=8, args=[v191], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v193 RetPart(0, kind=I64)                             -> x0
-    v194 StoreLocal { off=-5, value=v193, kind=I64 }      -> -
-    v195 LocalAddr(-5)                                    -> x0
-    v196 LifetimeEnd(-5)                                  -> -
+    v194 Imm(0)                                           -> x0
+    v195 Imm(0)                                           -> x0
+    v196 LifetimeEnd(0)                                   -> -
     v197 Imm(9)                                           -> x0
     v198 Imm(10)                                          -> x0
     v199 Imm(10)                                          -> x0
@@ -740,9 +740,9 @@ fn ent_pc=11 n_params=0 variadic=false locals=5
     v202 LocalAddr(-4)                                    -> x7
     v203 Call { target_pc=8, args=[v202], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v204 RetPart(0, kind=I64)                             -> x0
-    v205 StoreLocal { off=-5, value=v204, kind=I64 }      -> -
-    v206 LocalAddr(-5)                                    -> x0
-    v207 LifetimeEnd(-5)                                  -> -
+    v205 Imm(0)                                           -> x0
+    v206 Imm(0)                                           -> x0
+    v207 LifetimeEnd(0)                                   -> -
     v208 Imm(10)                                          -> x0
     v209 Imm(11)                                          -> x0
     v210 Imm(11)                                          -> x0
@@ -751,9 +751,9 @@ fn ent_pc=11 n_params=0 variadic=false locals=5
     v213 LocalAddr(-4)                                    -> x7
     v214 Call { target_pc=8, args=[v213], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v215 RetPart(0, kind=I64)                             -> x0
-    v216 StoreLocal { off=-5, value=v215, kind=I64 }      -> -
-    v217 LocalAddr(-5)                                    -> x0
-    v218 LifetimeEnd(-5)                                  -> -
+    v216 Imm(0)                                           -> x0
+    v217 Imm(0)                                           -> x0
+    v218 LifetimeEnd(0)                                   -> -
     v219 Imm(11)                                          -> x0
     v220 Imm(12)                                          -> x0
     v221 Imm(12)                                          -> x0
@@ -762,9 +762,9 @@ fn ent_pc=11 n_params=0 variadic=false locals=5
     v224 LocalAddr(-4)                                    -> x7
     v225 Call { target_pc=8, args=[v224], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v226 RetPart(0, kind=I64)                             -> x0
-    v227 StoreLocal { off=-5, value=v226, kind=I64 }      -> -
-    v228 LocalAddr(-5)                                    -> x0
-    v229 LifetimeEnd(-5)                                  -> -
+    v227 Imm(0)                                           -> x0
+    v228 Imm(0)                                           -> x0
+    v229 LifetimeEnd(0)                                   -> -
     v230 Imm(12)                                          -> x0
     v231 Imm(13)                                          -> x0
     v232 Imm(13)                                          -> x0
@@ -773,9 +773,9 @@ fn ent_pc=11 n_params=0 variadic=false locals=5
     v235 LocalAddr(-4)                                    -> x7
     v236 Call { target_pc=8, args=[v235], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v237 RetPart(0, kind=I64)                             -> x0
-    v238 StoreLocal { off=-5, value=v237, kind=I64 }      -> -
-    v239 LocalAddr(-5)                                    -> x0
-    v240 LifetimeEnd(-5)                                  -> -
+    v238 Imm(0)                                           -> x0
+    v239 Imm(0)                                           -> x0
+    v240 LifetimeEnd(0)                                   -> -
     v241 Imm(13)                                          -> x0
     v242 Imm(14)                                          -> x0
     v243 Imm(14)                                          -> x0
@@ -784,9 +784,9 @@ fn ent_pc=11 n_params=0 variadic=false locals=5
     v246 LocalAddr(-4)                                    -> x7
     v247 Call { target_pc=8, args=[v246], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v248 RetPart(0, kind=I64)                             -> x0
-    v249 StoreLocal { off=-5, value=v248, kind=I64 }      -> -
-    v250 LocalAddr(-5)                                    -> x0
-    v251 LifetimeEnd(-5)                                  -> -
+    v249 Imm(0)                                           -> x0
+    v250 Imm(0)                                           -> x0
+    v251 LifetimeEnd(0)                                   -> -
     v252 Imm(14)                                          -> x0
     v253 Imm(15)                                          -> x0
     v254 Imm(15)                                          -> x0
@@ -795,9 +795,9 @@ fn ent_pc=11 n_params=0 variadic=false locals=5
     v257 LocalAddr(-4)                                    -> x7
     v258 Call { target_pc=8, args=[v257], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v259 RetPart(0, kind=I64)                             -> x0
-    v260 StoreLocal { off=-5, value=v259, kind=I64 }      -> -
-    v261 LocalAddr(-5)                                    -> x0
-    v262 LifetimeEnd(-5)                                  -> -
+    v260 Imm(0)                                           -> x0
+    v261 Imm(0)                                           -> x0
+    v262 LifetimeEnd(0)                                   -> -
     v263 Imm(15)                                          -> x0
     v264 Imm(16)                                          -> x0
     v265 Imm(16)                                          -> x0

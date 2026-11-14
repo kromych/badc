@@ -1,6 +1,6 @@
 ; --- SSA dump (ok=true) ent_pc=5 ---
 ; name=by_asm
-fn ent_pc=5 n_params=1 variadic=false locals=1
+fn ent_pc=5 n_params=1 variadic=false locals=2
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -57,7 +57,7 @@ fn ent_pc=5 n_params=1 variadic=false locals=1
     v102 Binop { op=add, lhs=v94, rhs=v101 }              -> x1
     v103 Imm(0)                                           -> x1
     v104 StoreIndexed { base=v94, index=v101, scale=1, value=v103, kind=I8 } -> -
-    v105 LocalAddr(-1)                                    -> x2
+    v105 LocalAddr(-2)                                    -> x2
     v106 Imm(97)                                          -> x2
     v107 Imm(97)                                          -> x6
     v108 ImmData(16)                                      -> x2
@@ -102,7 +102,7 @@ fn ent_pc=5 n_params=1 variadic=false locals=1
     v48  Binop { op=add, lhs=v40, rhs=v47 }               -> x1
     v49  Imm(0)                                           -> x1
     v50  StoreIndexed { base=v40, index=v47, scale=1, value=v49, kind=I8 } -> -
-    v51  LocalAddr(-1)                                    -> x2
+    v51  LocalAddr(-2)                                    -> x2
     v52  Imm(97)                                          -> x2
     v53  Imm(97)                                          -> x6
     v54  ImmData(16)                                      -> x2

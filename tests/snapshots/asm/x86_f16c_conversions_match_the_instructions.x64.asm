@@ -450,12 +450,11 @@ Disassembly of section .text:
                	incq	%r13
                	cmpl	$0x54, %r13d
                	jb	<addr>
-               	movl	$0x0, -0x18(%rbp)
                	movl	$0x33800000, -0x58(%rbp) # imm = 0x33800000
                	movss	-0x58(%rbp), %xmm0
                	movss	%xmm0, -0x60(%rbp)
-               	movl	-0x60(%rbp), %ecx
-               	cmpl	$0x33800000, %ecx       # imm = 0x33800000
+               	movl	-0x60(%rbp), %eax
+               	cmpl	$0x33800000, %eax       # imm = 0x33800000
                	je	<addr>
                	movl	$0x2, %eax
                	leaq	-0xb0(%rbp), %rsp
@@ -466,56 +465,48 @@ Disassembly of section .text:
                	vzeroupper
                	leave
                	retq
-               	movl	$0x0, -0x18(%rbp)
                	movl	$0x387fc000, -0x58(%rbp) # imm = 0x387FC000
                	movss	-0x58(%rbp), %xmm0
                	movss	%xmm0, -0x60(%rbp)
-               	movl	-0x60(%rbp), %ecx
-               	cmpl	$0x387fc000, %ecx       # imm = 0x387FC000
+               	movl	-0x60(%rbp), %eax
+               	cmpl	$0x387fc000, %eax       # imm = 0x387FC000
                	jne	<addr>
-               	movl	$0x0, -0x18(%rbp)
                	movl	$0x38800000, -0x58(%rbp) # imm = 0x38800000
                	movss	-0x58(%rbp), %xmm0
                	movss	%xmm0, -0x60(%rbp)
                	movl	-0x60(%rbp), %eax
                	cmpl	$0x38800000, %eax       # imm = 0x38800000
                	jne	<addr>
-               	movl	$0x0, -0x18(%rbp)
                	movl	$0x3f800000, -0x58(%rbp) # imm = 0x3F800000
                	movss	-0x58(%rbp), %xmm0
                	movss	%xmm0, -0x60(%rbp)
-               	movl	-0x60(%rbp), %ecx
-               	cmpl	$0x3f800000, %ecx       # imm = 0x3F800000
+               	movl	-0x60(%rbp), %eax
+               	cmpl	$0x3f800000, %eax       # imm = 0x3F800000
                	jne	<addr>
-               	movl	$0x0, -0x18(%rbp)
                	movl	$0x477fe000, -0x58(%rbp) # imm = 0x477FE000
                	movss	-0x58(%rbp), %xmm0
                	movss	%xmm0, -0x60(%rbp)
-               	movl	-0x60(%rbp), %ecx
-               	cmpl	$0x477fe000, %ecx       # imm = 0x477FE000
+               	movl	-0x60(%rbp), %eax
+               	cmpl	$0x477fe000, %eax       # imm = 0x477FE000
                	jne	<addr>
-               	movl	$0x0, -0x18(%rbp)
                	movl	$0xc77fe000, -0x58(%rbp) # imm = 0xC77FE000
                	movss	-0x58(%rbp), %xmm0
                	movss	%xmm0, -0x60(%rbp)
                	movl	-0x60(%rbp), %eax
                	cmpl	$0xc77fe000, %eax       # imm = 0xC77FE000
                	jne	<addr>
-               	movl	$0x0, -0x18(%rbp)
                	movl	$0x7f800000, -0x58(%rbp) # imm = 0x7F800000
                	movss	-0x58(%rbp), %xmm0
                	movss	%xmm0, -0x60(%rbp)
-               	movl	-0x60(%rbp), %ecx
-               	cmpl	$0x7f800000, %ecx       # imm = 0x7F800000
+               	movl	-0x60(%rbp), %eax
+               	cmpl	$0x7f800000, %eax       # imm = 0x7F800000
                	jne	<addr>
-               	movl	$0x0, -0x18(%rbp)
                	movl	$0x7fc02000, -0x58(%rbp) # imm = 0x7FC02000
                	movss	-0x58(%rbp), %xmm0
                	movss	%xmm0, -0x60(%rbp)
-               	movl	-0x60(%rbp), %ecx
-               	cmpl	$0x7fc02000, %ecx       # imm = 0x7FC02000
+               	movl	-0x60(%rbp), %eax
+               	cmpl	$0x7fc02000, %eax       # imm = 0x7FC02000
                	jne	<addr>
-               	movl	$0x0, -0x18(%rbp)
                	movl	$0xffc02000, -0x58(%rbp) # imm = 0xFFC02000
                	movss	-0x58(%rbp), %xmm0
                	movss	%xmm0, -0x60(%rbp)

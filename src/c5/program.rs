@@ -241,6 +241,9 @@ pub struct Program {
     /// file-scope asm. The object writer sets `st_other` wherever the name
     /// surfaces. A later directive on the same name wins, as in GNU as.
     pub asm_visibility: Vec<(String, SymVisibility)>,
+    /// Names `.variant_pcs` marks in file-scope asm: the object writer sets
+    /// `STO_AARCH64_VARIANT_PCS` in their `st_other`.
+    pub asm_variant_pcs: Vec<String>,
     /// The unit is assembler source (`.s` / `.S`). The object writer then
     /// takes the GNU as shape: an STT_FILE symbol only per `.file` directive
     /// and a `.comment` section only from `.ident` strings, where a compiled
@@ -824,6 +827,7 @@ impl DataOffsets for Program {
             asm_weak_names: _,
             asm_global_names: _,
             asm_visibility: _,
+            asm_variant_pcs: _,
             asm_unit: _,
             asm_file_names: _,
             asm_idents: _,
@@ -979,6 +983,7 @@ mod data_offset_tests {
             asm_weak_names: Vec::new(),
             asm_global_names: Vec::new(),
             asm_visibility: Vec::new(),
+            asm_variant_pcs: Vec::new(),
             asm_unit: false,
             asm_file_names: Vec::new(),
             asm_idents: Vec::new(),

@@ -182,6 +182,9 @@ const STB_GNU_UNIQUE: u8 = 10;
 const ELFOSABI_GNU: u8 = 3;
 const SHN_COMMON: u16 = 0xfff2;
 const STV_DEFAULT: u8 = 0;
+/// The AArch64 ELF `st_other` flag of a function that may follow a variant
+/// procedure call standard (AAELF64, Symbol Table).
+pub(crate) const STO_AARCH64_VARIANT_PCS: u8 = 0x80;
 const STT_NOTYPE: u8 = 0;
 const STT_OBJECT: u8 = 1;
 const STT_FUNC: u8 = 2;
@@ -1016,6 +1019,8 @@ struct Names<'a> {
     file_names: Vec<&'a str>,
     weak_names: BTreeSet<&'a str>,
     visibility: BTreeMap<&'a str, SymVisibility>,
+    /// Names `.variant_pcs` marks.
+    variant_pcs: BTreeSet<&'a str>,
     local_func_idxs: Vec<usize>,
     global_func_idxs: Vec<usize>,
     func_strs: Vec<String>,
@@ -1883,6 +1888,7 @@ impl<'a> RelocWriter<'a> {
             .filter_map(|s| Some((s.link_name(), s.visibility?)))
             .chain(program.asm_visibility.iter().map(|(n, v)| (n.as_str(), *v)))
             .collect();
+        names.variant_pcs = program.asm_variant_pcs.iter().map(String::as_str).collect();
         let interposable: BTreeSet<&str> = (program.symbols.iter())
             .filter(|s| program.interposable_refs && s.is_interposable_definition())
             .map(|s| s.def_link_name())
@@ -1922,11 +1928,19 @@ impl<'a> RelocWriter<'a> {
         }
     }
 
+    /// The `st_other` of `name`: its visibility and, where `.variant_pcs`
+    /// marks it, `STO_AARCH64_VARIANT_PCS`.
     fn vis_for(&self, name: &str) -> u8 {
-        self.names
+        let vis = self
+            .names
             .visibility
             .get(name)
-            .map_or(STV_DEFAULT, |v| v.stv())
+            .map_or(STV_DEFAULT, |v| v.stv());
+        if self.names.variant_pcs.contains(name) {
+            vis | STO_AARCH64_VARIANT_PCS
+        } else {
+            vis
+        }
     }
 
     /// A hidden name is not preemptible, so the direct page-relative pair
@@ -2208,7 +2222,8 @@ impl<'a> RelocWriter<'a> {
                 self.names.asm_extern_names.push(n);
             }
         }
-        for n in program.asm_visibility.iter().map(|(n, _)| n.as_str()) {
+        let marked = program.asm_visibility.iter().map(|(n, _)| n.as_str());
+        for n in marked.chain(program.asm_variant_pcs.iter().map(String::as_str)) {
             if self.is_unreached(n) {
                 self.names.asm_extern_names.push(n);
             }

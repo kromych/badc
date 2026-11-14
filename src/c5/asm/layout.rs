@@ -768,6 +768,7 @@ impl AsmParseFold {
             | AsmSectionItem::Weak(_)
             | AsmSectionItem::Common { .. }
             | AsmSectionItem::Visibility { .. }
+            | AsmSectionItem::VariantPcs(_)
             | AsmSectionItem::Type { .. }
             | AsmSectionItem::Size { .. }
             | AsmSectionItem::CondDiag(_)
@@ -1217,6 +1218,7 @@ fn measure_round_inner(
                     | AsmSectionItem::Common { .. }
                     | AsmSectionItem::Local(_)
                     | AsmSectionItem::Visibility { .. }
+                    | AsmSectionItem::VariantPcs(_)
                     | AsmSectionItem::CondDiag(_)
                     | AsmSectionItem::Cfi(_)
                     | AsmSectionItem::File(_)
@@ -1939,7 +1941,7 @@ pub(crate) fn materialize_asm_sections(
                     }
                     // Visibility is carried by name to the object writer, which
                     // sets `st_other` wherever the symbol is emitted.
-                    AsmSectionItem::Visibility { .. } => {}
+                    AsmSectionItem::Visibility { .. } | AsmSectionItem::VariantPcs(_) => {}
                     // Unit-level records: the file-scope parse collects them.
                     AsmSectionItem::File(_) | AsmSectionItem::Ident(_) => {}
                     // The rule takes effect at the location counter the directive

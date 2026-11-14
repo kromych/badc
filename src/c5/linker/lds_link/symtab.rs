@@ -3,6 +3,7 @@
 use crate::c5::diag::Code;
 use crate::c5::error::C5Error;
 use crate::c5::linker::link_err;
+use crate::c5::object::elf_reloc::STO_AARCH64_VARIANT_PCS;
 use crate::c5::object::elf_reloc_types::GOT_BASE_SYMBOL as GOT_SYMBOL;
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::format;
@@ -51,6 +52,25 @@ impl<'a> LdsLinker<'a> {
             *e = most_constraining(*e, vis);
         }
         self.visibility = out;
+        // bfd ORs the flag in from every entry, as its AArch64 symbol
+        // attribute merge does.
+        if self.machine == EM_AARCH64 {
+            let objects = (self.objects.iter().flat_map(|o| &o.symbols))
+                .filter(|s| s.binding() != STB_LOCAL && s.other & STO_AARCH64_VARIANT_PCS != 0)
+                .map(|s| s.name.clone());
+            let libs =
+                (self.opts.shared_libs.iter()).flat_map(|l| l.lib.variant_pcs_exports.iter());
+            self.variant_pcs = objects.chain(libs.cloned()).collect();
+        }
+    }
+
+    /// The bits of `st_other` past the visibility the output gives `name`.
+    pub(super) fn sto_of(&self, name: &str) -> u8 {
+        if self.variant_pcs.contains(name) {
+            STO_AARCH64_VARIANT_PCS
+        } else {
+            0
+        }
     }
 
     /// The visibility the output gives the global `name`.
@@ -238,6 +258,7 @@ impl<'a> LdsLinker<'a> {
                 } else if self.dynamic() && self.visibility_of(name) == STV_PROTECTED {
                     fs.other = STV_PROTECTED;
                 }
+                fs.other |= self.sto_of(name);
                 if track {
                     index.by_name.insert(name.clone(), syms.len());
                 }

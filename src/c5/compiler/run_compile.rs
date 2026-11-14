@@ -327,6 +327,18 @@ impl Compiler {
                             None => self.asm_visibility.push((name, *vis)),
                         }
                     }
+                    AsmSectionItem::VariantPcs(name) => {
+                        if format != crate::c5::codegen::BinaryFormat::Elf {
+                            later.push(AsmError::at(
+                                li.line,
+                                String::from("`.variant_pcs` marks an ELF symbol"),
+                            ));
+                        }
+                        let name = sym(name);
+                        if !self.asm_variant_pcs.contains(&name) {
+                            self.asm_variant_pcs.push(name);
+                        }
+                    }
                     AsmSectionItem::File(name) => {
                         self.asm_file_names.push(name.clone());
                     }

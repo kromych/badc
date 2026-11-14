@@ -30,6 +30,7 @@ use alloc::vec::Vec;
 use super::link_err;
 use crate::c5::codegen::BinaryFormat;
 use crate::c5::error::C5Error;
+use crate::c5::object::elf_reloc::STO_AARCH64_VARIANT_PCS;
 
 /// The tag this module's diagnostics carry.
 const MODULE: &str = "linker::object";
@@ -318,6 +319,9 @@ pub struct DynamicImage {
     pub object_sizes: alloc::collections::BTreeMap<String, (u64, u64)>,
     pub references: alloc::collections::BTreeSet<String>,
     pub protected_exports: alloc::collections::BTreeSet<String>,
+    /// The AArch64 exports whose `st_other` carries
+    /// `STO_AARCH64_VARIANT_PCS`.
+    pub variant_pcs_exports: alloc::collections::BTreeSet<String>,
 }
 
 /// Read [`DynamicImage`] from a little-endian ELF image of either class.
@@ -383,6 +387,9 @@ pub fn read_dynamic_image(bytes: &[u8]) -> Result<DynamicImage, C5Error> {
                 }
                 if sym.st_other & 3 == STV_PROTECTED {
                     image.protected_exports.insert(name.clone());
+                }
+                if ehdr.e_machine == EM_AARCH64 && sym.st_other & STO_AARCH64_VARIANT_PCS != 0 {
+                    image.variant_pcs_exports.insert(name.clone());
                 }
                 // STT_OBJECT (1) is a data object; a reference to it must
                 // reach the object's address, not a PLT stub.

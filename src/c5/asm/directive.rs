@@ -186,6 +186,7 @@ fn is_asm_sym_directive(tok: &str) -> bool {
             | ".hidden"
             | ".internal"
             | ".protected"
+            | ".variant_pcs"
             | ".private_extern"
             | ".type"
             | ".size"
@@ -207,6 +208,7 @@ fn asm_text_has_sym_directive(text: &str) -> bool {
         || text.contains(".hidden")
         || text.contains(".internal")
         || text.contains(".protected")
+        || text.contains(".variant_pcs")
         || text.contains(".private_extern")
         || text.contains(".type")
         || text.contains(".size")
@@ -1185,6 +1187,15 @@ pub(crate) fn parse_section_item(
                 name: alloc::string::String::from(name),
                 vis,
             })
+        }
+        ".variant_pcs" if is_aarch64 => {
+            let name = rest.trim();
+            if !is_asm_symbol_name(name) {
+                return Err(alloc::format!("inline asm: bad `{tok}` operand `{rest}`"));
+            }
+            Ok(AsmSectionItem::VariantPcs(alloc::string::String::from(
+                name,
+            )))
         }
         ".reloc" => parse_reloc_directive(rest),
         // A `.set` / `.equ` names a symbol (`.set alias, target`, a unit-level

@@ -3416,6 +3416,51 @@ fn asm_label_address_immediate_into_register_relocates_absolute() {
     );
 }
 
+/// `.variant_pcs name` sets `STO_AARCH64_VARIANT_PCS` (0x80) in the
+/// `st_other` of a definition, a local, a referenced name and a name no
+/// instruction uses, which takes an undefined entry, as LLVM's assembler
+/// does; with `.hidden` the visibility bits stay. The directive is
+/// AArch64's and ELF's: x86-64 and Mach-O refuse it.
+#[test]
+fn file_scope_asm_variant_pcs_marks_the_symbol() {
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    const SRC: &str = "__asm__(\".text\\n.globl f\\n.variant_pcs f\\n.type f, @function\\n\
+        f: bl g\\n ret\\n.variant_pcs g\\n.variant_pcs h\\n.hidden h\\n\
+        .variant_pcs l\\nl: ret\\n.globl plain\\nplain: ret\\n\");\n";
+    let copts = || CompileOptions {
+        no_entry_point: true,
+        ..Default::default()
+    };
+    let program = Compiler::with_options(String::from(SRC), Target::LinuxAarch64, copts())
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    for (name, other) in [
+        ("f", 0x80),
+        ("g", 0x80),
+        ("h", 0x82),
+        ("l", 0x80),
+        ("plain", 0),
+    ] {
+        assert_eq!(
+            elf_symbol_st_other(&bytes, name),
+            other,
+            "st_other of `{name}`"
+        );
+    }
+    for target in [Target::LinuxX64, Target::MacOSAarch64] {
+        let src = String::from("__asm__(\".variant_pcs f\");\n");
+        let err = Compiler::with_options(src, target, copts()).compile().err();
+        let msg = err.map(|e| e.to_string()).unwrap_or_default();
+        assert!(msg.contains("variant_pcs"), "{target:?}: {msg}");
+    }
+}
+
 /// Read `st_other` (visibility byte) of the first `.symtab` entry named
 /// `want` from a raw ELF64 object. `parse_native_elf` drops visibility, so
 /// the byte is read directly.

@@ -2339,6 +2339,8 @@ pub struct Compiler {
     /// Symbol visibility named by `.hidden` / `.internal` / `.protected` in
     /// file-scope asm.
     pub(super) asm_visibility: Vec<(String, crate::c5::program::SymVisibility)>,
+    /// Names `.variant_pcs` marks in file-scope asm.
+    pub(super) asm_variant_pcs: Vec<String>,
     /// `.set name, target` symbol aliases from file-scope asm, merged
     /// onto `Program::function_aliases`.
     pub(super) asm_sym_sets: Vec<(String, String, i64)>,
@@ -3368,6 +3370,7 @@ impl Compiler {
             asm_weak_names: Vec::new(),
             asm_global_names: Vec::new(),
             asm_visibility: Vec::new(),
+            asm_variant_pcs: Vec::new(),
             asm_sym_sets: Vec::new(),
             pragma_weak,
             asm_file_names: Vec::new(),
@@ -4240,6 +4243,7 @@ impl Compiler {
             asm_weak_names: self.asm_weak_names,
             asm_global_names: self.asm_global_names,
             asm_visibility: self.asm_visibility,
+            asm_variant_pcs: self.asm_variant_pcs,
             asm_unit: self.asm_unit,
             asm_file_names: self.asm_file_names,
             asm_idents: self.asm_idents,

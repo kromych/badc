@@ -157,6 +157,9 @@ pub(crate) enum AsmSectionItem {
         name: alloc::string::String,
         vis: crate::c5::program::SymVisibility,
     },
+    /// `.variant_pcs name`: the AArch64 ELF `STO_AARCH64_VARIANT_PCS` flag,
+    /// a unit-level property of the name as visibility is.
+    VariantPcs(alloc::string::String),
     /// `.type name, @function|@object`: set the named label's ELF symbol
     /// type. The label must be defined in this section.
     Type {

@@ -1293,6 +1293,27 @@ fn a_pairwise_sum_of_64_bit_lanes_wraps() {
     assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 0);
 }
 
+/// The scalar forms are lane 0 of the vector ones: over seeded values with
+/// the saturating extremes the interpreter's results hash to the
+/// hardware's, and `vqadds_s32` is the vector `sqadd` between the moves in
+/// and out of v registers.
+#[cfg(feature = "full")]
+#[test]
+fn the_scalar_forms_are_lane_zero_of_the_vector_forms() {
+    let src = super::load_fixture("arm_neon_scalar_forms_on_seeded_values.c");
+    let program = super::compile_str_bare_for(&src, crate::Target::LinuxAarch64);
+    assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 0);
+    let words = super::perf_codegen::a64_at(
+        "#include <arm_neon.h>\nint32_t f(int32_t a, int32_t b) { return vqadds_s32(a, b); }\n",
+        "f",
+        true,
+    );
+    assert!(
+        words.contains(&0x0EA1_0C00),
+        "sqadd v0.2s, v0.2s, v1.2s: {words:08x?}"
+    );
+}
+
 /// `vld1`, `vst1`, `vdup_n` and `vld1_dup` are the load, store and
 /// broadcast of their vector under `-O`, as with gcc 16, with no inline asm
 /// between them and the operations that use them: `ldr q`, `str q`,

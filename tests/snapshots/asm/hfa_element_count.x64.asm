@@ -89,11 +89,9 @@ Disassembly of section .text:
                	movl	0x8(%rcx), %r10d
                	movl	%r10d, 0x8(%rax)
                	movss	-0x10(%rbp), %xmm2
-               	movss	<rip>, %xmm3
-               	movss	-0xc(%rbp), %xmm4
-               	movss	<rip>, %xmm5
-               	mulss	%xmm5, %xmm4
-               	vfmadd213ss	%xmm4, %xmm3, %xmm2 # xmm2 = (xmm3 * xmm2) + xmm4
+               	movss	-0xc(%rbp), %xmm3
+               	vmulss	<rip>, %xmm3, %xmm3
+               	vfmadd132ss	<rip>, %xmm3, %xmm2 # xmm2 = (xmm2 * mem) + xmm3
                	movss	-0x8(%rbp), %xmm3
                	addss	%xmm3, %xmm2
                	cvtss2sd	%xmm2, %xmm2
@@ -112,10 +110,9 @@ Disassembly of section .text:
                	movq	0x10(%rcx), %r10
                	movq	%r10, 0x10(%rax)
                	movsd	-0x18(%rbp), %xmm3
-               	movsd	<rip>, %xmm4
-               	movsd	-0x10(%rbp), %xmm5
-               	vmulsd	%xmm1, %xmm5, %xmm1
-               	vfmadd231sd	%xmm4, %xmm3, %xmm1 # xmm1 = (xmm3 * xmm4) + xmm1
+               	movsd	-0x10(%rbp), %xmm4
+               	vmulsd	%xmm1, %xmm4, %xmm1
+               	vfmadd231sd	<rip>, %xmm3, %xmm1 # xmm1 = (xmm3 * mem) + xmm1
                	movsd	-0x8(%rbp), %xmm3
                	addsd	%xmm3, %xmm1
                	vaddsd	%xmm0, %xmm1, %xmm0
@@ -132,11 +129,10 @@ Disassembly of section .text:
                	movq	%r10, 0x10(%rax)
                	movsd	<rip>, %xmm0
                	movsd	-0x18(%rbp), %xmm2
-               	movsd	<rip>, %xmm3
-               	movsd	-0x10(%rbp), %xmm4
+               	movsd	-0x10(%rbp), %xmm3
                	movsd	<rip>, %xmm1
-               	mulsd	%xmm1, %xmm4
-               	vfmadd213sd	%xmm4, %xmm3, %xmm2 # xmm2 = (xmm3 * xmm2) + xmm4
+               	mulsd	%xmm1, %xmm3
+               	vfmadd132sd	<rip>, %xmm3, %xmm2 # xmm2 = (xmm2 * mem) + xmm3
                	movsd	-0x8(%rbp), %xmm3
                	addsd	%xmm3, %xmm2
                	addsd	%xmm0, %xmm2

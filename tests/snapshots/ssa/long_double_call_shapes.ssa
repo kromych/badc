@@ -142,7 +142,7 @@ fn ent_pc=9 n_params=6 variadic=false locals=0
     v6   Imm(0)                                           -> x0
     v7   Imm(0)                                           -> x0
     v8   Imm(4607182418800017408)                         -> d1
-    v9   LoadLocal { off=-10, kind=F80 }                  -> d2
+    v9   LoadLocal { off=-10, kind=F80 }                  -> d1
     v10  Binop { op=fadd, lhs=v8, rhs=v9 }                -> d1
     v11  Imm(0)                                           -> x0
     v12  Binop { op=fadd, lhs=v10, rhs=v3 }               -> d0
@@ -211,19 +211,19 @@ fn ent_pc=10 n_params=18 variadic=false locals=0
     v47  Binop { op=fadd, lhs=v45, rhs=v46 }              -> d1
     v48  Imm(0)                                           -> x0
     v49  Imm(4607182418800017408)                         -> d0
-    v50  Binop { op=fadd, lhs=v47, rhs=v49 }              -> d1
+    v50  Binop { op=fadd, lhs=v47, rhs=v49 }              -> d0
     v51  Imm(0)                                           -> x0
     v52  Imm(4607182418800017408)                         -> x0
-    v53  Binop { op=fadd, lhs=v50, rhs=v49 }              -> d1
+    v53  Binop { op=fadd, lhs=v50, rhs=v49 }              -> d0
     v54  Imm(0)                                           -> x0
     v55  Imm(4607182418800017408)                         -> x0
-    v56  Binop { op=fadd, lhs=v53, rhs=v49 }              -> d1
+    v56  Binop { op=fadd, lhs=v53, rhs=v49 }              -> d0
     v57  Imm(0)                                           -> x0
     v58  Imm(4607182418800017408)                         -> x0
-    v59  Binop { op=fadd, lhs=v56, rhs=v49 }              -> d1
+    v59  Binop { op=fadd, lhs=v56, rhs=v49 }              -> d0
     v60  Imm(0)                                           -> x0
     v61  Imm(4607182418800017408)                         -> x0
-    v62  Binop { op=fadd, lhs=v59, rhs=v49 }              -> d1
+    v62  Binop { op=fadd, lhs=v59, rhs=v49 }              -> d0
     v63  Imm(0)                                           -> x0
     v64  Imm(4607182418800017408)                         -> x0
     v65  Binop { op=fadd, lhs=v62, rhs=v49 }              -> d0

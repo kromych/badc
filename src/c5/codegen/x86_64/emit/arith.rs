@@ -465,7 +465,7 @@ pub(super) fn emit_fma(
     mem: Option<Mem>,
     alloc: &Allocation,
     frame: Frame,
-) -> Emit {
+) -> Emit<Option<usize>> {
     let is_f32 = alloc.is_f32(v);
     // The form with the fewest moves: into `dd`, into an xmm for vvvv, out of a gpr for r/m.
     let dd = match dst {
@@ -551,8 +551,9 @@ pub(super) fn emit_fma(
             return fail("Fma: folded load without its memory operand");
         };
         emit_vex_fma_mem(code, opcode, !is_f32, dd, rv, mem);
+        let end = code.len();
         fp_spill_dst_to_slot(code, dst, dd, frame);
-        return Ok(());
+        return Ok(Some(end));
     }
     match rm_place {
         Place::FpReg(r) => emit_vex_fma(code, opcode, !is_f32, dd, rv, Reg(r)),
@@ -581,7 +582,7 @@ pub(super) fn emit_fma(
         Place::None => return fail("Fma: r/m operand has no place"),
     }
     fp_spill_dst_to_slot(code, dst, dd, frame);
-    Ok(())
+    Ok(None)
 }
 
 /// `Inst::MulAdd`: `imul` then `add` / `sub`, since x86-64 has no integer
@@ -1112,8 +1113,9 @@ fn emit_fp_binop(
     Ok(())
 }
 
-/// [`emit_fp_binop`] with the second operand in memory: the load the
-/// instruction reads in its place (`Allocation::fp_mem_operand`).
+/// [`emit_fp_binop`] with the second operand in memory
+/// (`Allocation::fp_mem_operand`). Returns the end of the instruction that
+/// reads it.
 pub(super) fn emit_fp_binop_mem(
     code: &mut CodeBuf,
     op: BinOp,
@@ -1122,7 +1124,7 @@ pub(super) fn emit_fp_binop_mem(
     lhs_place: Place,
     mem: Mem,
     frame: Frame,
-) -> Emit {
+) -> Emit<usize> {
     let Some(opcode) = fp_arith_opcode(op) else {
         return fail("Fbinop: memory operand of a non-arithmetic op");
     };
@@ -1133,8 +1135,9 @@ pub(super) fn emit_fp_binop_mem(
         return fail("Fbinop: lhs not fp reg / spill / int reg");
     };
     emit_vex_fp_arith_mem(code, opcode, is_f32, dd, ra, mem);
+    let end = code.len();
     fp_spill_dst_to_slot(code, dst, dd, frame);
-    Ok(())
+    Ok(end)
 }
 
 /// FP comparison: `ucomisd` / `ucomiss` sets ZF / CF / PF, PF=1 signaling

@@ -120,11 +120,10 @@ Disassembly of section .text:
                	movq	%r10, -0x10(%rbp)
                	movq	0x28(%rbp), %r10
                	movq	%r10, -0x8(%rbp)
-               	movsd	<rip>, %xmm1
                	fldt	-0x20(%rbp)
                	fstpl	-0x8(%rsp)
-               	movsd	-0x8(%rsp), %xmm2
-               	addsd	%xmm2, %xmm1
+               	movsd	-0x8(%rsp), %xmm1
+               	vaddsd	<rip>, %xmm1, %xmm1
                	vaddsd	%xmm0, %xmm1, %xmm0
                	fldt	-0x10(%rbp)
                	fstpl	-0x8(%rsp)

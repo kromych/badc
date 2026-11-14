@@ -116,8 +116,7 @@ Disassembly of section .text:
                	orq	%r10, %r11
                	cvtsi2sd	%r11, %xmm0
                	addsd	%xmm0, %xmm0
-               	movsd	<rip>, %xmm1
-               	addsd	%xmm1, %xmm0
+               	vaddsd	<rip>, %xmm0, %xmm0
                	movq	<rip>, %rax # <addr>
                	leaq	0x1(%rax), %rdi
                	movq	<rip>, %rax # <addr>

@@ -121,42 +121,28 @@ Disassembly of section .text:
                	retq
 
 <vectors>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movsd	<rip>, %xmm2
-               	vmulsd	%xmm2, %xmm0, %xmm7
-               	movsd	<rip>, %xmm2
-               	vmulsd	%xmm2, %xmm1, %xmm8
-               	vaddsd	%xmm1, %xmm0, %xmm9
-               	vsubsd	%xmm1, %xmm0, %xmm10
-               	vmulsd	%xmm1, %xmm0, %xmm11
-               	vdivsd	%xmm1, %xmm0, %xmm12
-               	movsd	<rip>, %xmm2
-               	vmulsd	%xmm2, %xmm0, %xmm13
-               	movsd	<rip>, %xmm6
-               	vmulsd	%xmm6, %xmm1, %xmm14
-               	movsd	%xmm14, 0x8(%rsp)
+               	vmulsd	<rip>, %xmm0, %xmm6
+               	vmulsd	<rip>, %xmm1, %xmm7
+               	vaddsd	%xmm1, %xmm0, %xmm8
+               	vsubsd	%xmm1, %xmm0, %xmm9
+               	vmulsd	%xmm1, %xmm0, %xmm10
+               	vdivsd	%xmm1, %xmm0, %xmm11
+               	vmulsd	<rip>, %xmm0, %xmm12
+               	vmulsd	<rip>, %xmm1, %xmm13
                	xorps	%xmm0, %xmm0
                	xorps	%xmm1, %xmm1
                	xorps	%xmm2, %xmm2
                	xorps	%xmm3, %xmm3
                	xorps	%xmm4, %xmm4
                	xorps	%xmm5, %xmm5
-               	movsd	<rip>, %xmm0
-               	vfmadd213sd	%xmm7, %xmm8, %xmm0 # xmm0 = (xmm8 * xmm0) + xmm7
-               	movsd	<rip>, %xmm1
-               	vfmadd231sd	%xmm9, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm9) + xmm0
-               	movsd	<rip>, %xmm1
-               	vfmadd231sd	%xmm10, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm10) + xmm0
-               	movsd	<rip>, %xmm1
-               	vfmadd231sd	%xmm11, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm11) + xmm0
-               	movsd	<rip>, %xmm1
-               	vfmadd231sd	%xmm12, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm12) + xmm0
-               	vfmadd231sd	%xmm13, %xmm6, %xmm0 # xmm0 = (xmm6 * xmm13) + xmm0
-               	movsd	<rip>, %xmm1
-               	vfmadd231sd	0x8(%rsp), %xmm1, %xmm0 # xmm0 = (xmm1 * mem) + xmm0
-               	leave
+               	movapd	%xmm7, %xmm0
+               	vfmadd132sd	<rip>, %xmm6, %xmm0 # xmm0 = (xmm0 * mem) + xmm6
+               	vfmadd231sd	<rip>, %xmm8, %xmm0 # xmm0 = (xmm8 * mem) + xmm0
+               	vfmadd231sd	<rip>, %xmm9, %xmm0 # xmm0 = (xmm9 * mem) + xmm0
+               	vfmadd231sd	<rip>, %xmm10, %xmm0 # xmm0 = (xmm10 * mem) + xmm0
+               	vfmadd231sd	<rip>, %xmm11, %xmm0 # xmm0 = (xmm11 * mem) + xmm0
+               	vfmadd231sd	<rip>, %xmm12, %xmm0 # xmm0 = (xmm12 * mem) + xmm0
+               	vfmadd231sd	<rip>, %xmm13, %xmm0 # xmm0 = (xmm13 * mem) + xmm0
                	retq
 
 <main>:
@@ -190,12 +176,10 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x2, %eax
                	jmp	<addr>
-               	movsd	<rip>, %xmm0
+               	movsd	<rip>, %xmm0 # <addr>
+               	vmulsd	<rip>, %xmm0, %xmm0
                	movsd	<rip>, %xmm1 # <addr>
-               	mulsd	%xmm1, %xmm0
-               	movsd	<rip>, %xmm1
-               	movsd	<rip>, %xmm2 # <addr>
-               	mulsd	%xmm2, %xmm1
+               	vmulsd	<rip>, %xmm1, %xmm1
                	callq	<addr>
                	movsd	<rip>, %xmm1
                	ucomisd	%xmm1, %xmm0

@@ -1690,7 +1690,17 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // reading only emitted values keeps it out of the coloring.
     let stack_imm = stack_arg_immediates(func, target, &use_counts);
     let stack_load = stack_arg_loads(func, target, &use_counts);
-    for &v in stack_imm.keys().chain(stack_load.keys()) {
+    // Read off its literal by every reader, a floating constant is unemitted.
+    let fp_literals = if target.is_x86_64() {
+        fp_literal_operands(func, &use_counts)
+    } else {
+        alloc::collections::BTreeSet::new()
+    };
+    for &v in stack_imm
+        .keys()
+        .chain(stack_load.keys())
+        .chain(&fp_literals)
+    {
         use_counts[v as usize] = 0;
     }
     let reads = operands_read(func, &use_counts);
@@ -2647,7 +2657,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     let asm_preserve = asm_preserve_masks(func, target, region_base);
     let imm_held = imm_already_held(func, &places, &use_counts, target);
     let fp_mem_operand = if target.is_x86_64() {
-        fp_memory_operands(func, &use_counts)
+        fp_memory_operands(func, &use_counts, fp_literals)
     } else {
         alloc::collections::BTreeSet::new()
     };
@@ -4767,6 +4777,7 @@ fn stack_arg_immediates(
 fn fp_memory_operands(
     func: &FunctionSsa,
     use_counts: &[u32],
+    literals: alloc::collections::BTreeSet<ValueId>,
 ) -> alloc::collections::BTreeSet<ValueId> {
     let f32 = |v: usize| func.f32_values.get(v).copied().unwrap_or(false);
     let mut out = alloc::collections::BTreeSet::new();
@@ -4803,21 +4814,93 @@ fn fp_memory_operands(
             }) else {
                 continue;
             };
+            let v = v as ValueId;
             let reads = match func.insts[r] {
                 Inst::Binop { op, lhs, rhs } => {
-                    crate::c5::ir::is_fp_arith_op(op) && rhs as usize == v && lhs as usize != v
+                    crate::c5::ir::is_fp_arith_op(op)
+                        && lhs != rhs
+                        && (rhs == v || (fp_commutes(op) && lhs == v))
+                        && !literals.contains(&lhs)
+                        && !literals.contains(&rhs)
                 }
                 Inst::Fma { a, b, c, .. } => {
-                    [a, b, c].iter().filter(|&&o| o as usize == v).count() == 1
+                    [a, b, c].iter().filter(|&&o| o == v).count() == 1
+                        && ![a, b, c].iter().any(|o| literals.contains(o))
                 }
                 _ => false,
             };
             if reads && f32(r) == single && use_counts.get(r).is_some_and(|&n| n > 0) {
-                out.insert(v as ValueId);
+                out.insert(v);
             }
         }
     }
+    out.extend(literals);
     out
+}
+
+fn fp_commutes(op: BinOp) -> bool {
+    matches!(op, BinOp::Fadd | BinOp::Fmul | BinOp::FmulContractible)
+}
+
+/// x86-64: the floating constants other than +0.0 that every reader takes
+/// as its memory operand, the read-only literal addressed off rip: a
+/// floating add, subtract, multiply or divide of the constant's precision
+/// reading it second, or first where the operation commutes, or a fused
+/// multiply-add reading it once, with no other constant operand. Such a
+/// constant takes no register.
+fn fp_literal_operands(
+    func: &FunctionSsa,
+    use_counts: &[u32],
+) -> alloc::collections::BTreeSet<ValueId> {
+    let f32 = |v: ValueId| func.f32_values.get(v as usize).copied().unwrap_or(false);
+    let literal = |v: ValueId| {
+        matches!(func.insts.get(v as usize), Some(Inst::Imm(bits)) if *bits != 0)
+            && use_counts.get(v as usize).is_some_and(|&n| n > 0)
+    };
+    let reads = operands_read(func, use_counts);
+    // Per value: read in a register somewhere.
+    let mut held = vec![false; func.insts.len()];
+    for (r, inst) in func.insts.iter().enumerate() {
+        if !reads[r] {
+            continue;
+        }
+        let folded = match *inst {
+            Inst::Binop { op, lhs, rhs } if crate::c5::ir::is_fp_arith_op(op) && lhs != rhs => {
+                if literal(rhs) && !literal(lhs) {
+                    Some(rhs)
+                } else if fp_commutes(op) && literal(lhs) && !literal(rhs) {
+                    Some(lhs)
+                } else {
+                    None
+                }
+            }
+            Inst::Fma { a, b, c, .. } => match [a, b, c].map(literal) {
+                [true, false, false] => Some(a),
+                [false, true, false] => Some(b),
+                [false, false, true] => Some(c),
+                _ => None,
+            },
+            _ => None,
+        }
+        .filter(|&c| f32(c) == f32(r as ValueId));
+        for_each_operand(inst, |o| {
+            if Some(o) != folded
+                && let Some(h) = held.get_mut(o as usize)
+            {
+                *h = true;
+            }
+        });
+    }
+    for block in &func.blocks {
+        block.terminator.for_each_operand(|o| {
+            if let Some(h) = held.get_mut(o as usize) {
+                *h = true;
+            }
+        });
+    }
+    (0..func.insts.len() as ValueId)
+        .filter(|&v| literal(v) && !held[v as usize])
+        .collect()
 }
 
 /// The integer `LoadLocal`s whose one reader is an argument a call in the

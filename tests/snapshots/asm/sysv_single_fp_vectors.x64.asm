@@ -32,11 +32,9 @@ Disassembly of section .text:
                	movl	0x10(%rbp), %r10d
                	movl	%r10d, -0x8(%rbp)
                	movss	-0x8(%rbp), %xmm1
-               	movss	<rip>, %xmm2
-               	mulss	%xmm2, %xmm1
-               	movsd	<rip>, %xmm2
+               	vmulss	<rip>, %xmm1, %xmm1
                	cvtss2sd	%xmm1, %xmm1
-               	vfmadd213sd	%xmm1, %xmm2, %xmm0 # xmm0 = (xmm2 * xmm0) + xmm1
+               	vfmadd132sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm0 * mem) + xmm1
                	cvttsd2si	%xmm0, %rax
                	addq	%rdi, %rax
                	leave
@@ -49,10 +47,8 @@ Disassembly of section .text:
                	movq	0x10(%rbp), %r10
                	movq	%r10, -0x8(%rbp)
                	movsd	-0x8(%rbp), %xmm1
-               	movsd	<rip>, %xmm2
-               	movsd	<rip>, %xmm3
-               	mulsd	%xmm3, %xmm0
-               	vfmadd231sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm2) + xmm0
+               	vmulsd	<rip>, %xmm0, %xmm0
+               	vfmadd231sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm1 * mem) + xmm0
                	cvttsd2si	%xmm0, %rax
                	addq	%rdi, %rax
                	leave
@@ -65,14 +61,11 @@ Disassembly of section .text:
                	movq	0x10(%rbp), %r10
                	movq	%r10, -0x8(%rbp)
                	movss	-0x8(%rbp), %xmm1
-               	movss	<rip>, %xmm2
-               	movss	-0x4(%rbp), %xmm3
-               	movss	<rip>, %xmm4
-               	mulss	%xmm4, %xmm3
-               	vfmadd213ss	%xmm3, %xmm2, %xmm1 # xmm1 = (xmm2 * xmm1) + xmm3
-               	movsd	<rip>, %xmm2
+               	movss	-0x4(%rbp), %xmm2
+               	vmulss	<rip>, %xmm2, %xmm2
+               	vfmadd132ss	<rip>, %xmm2, %xmm1 # xmm1 = (xmm1 * mem) + xmm2
                	cvtss2sd	%xmm1, %xmm1
-               	vfmadd213sd	%xmm1, %xmm2, %xmm0 # xmm0 = (xmm2 * xmm0) + xmm1
+               	vfmadd132sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm0 * mem) + xmm1
                	cvttsd2si	%xmm0, %rax
                	addq	%rdi, %rax
                	leave

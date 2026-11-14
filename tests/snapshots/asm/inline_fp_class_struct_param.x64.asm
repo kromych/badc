@@ -28,21 +28,17 @@ Disassembly of section .text:
 <use_pair>:
                	movsd	(%rdi), %xmm0
                	movsd	0x8(%rdi), %xmm1
-               	movsd	<rip>, %xmm2
-               	vfmadd231sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm2) + xmm0
+               	vfmadd231sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm1 * mem) + xmm0
                	retq
 
 <use_quad>:
                	movsd	(%rdi), %xmm0
                	movsd	0x8(%rdi), %xmm1
-               	movsd	<rip>, %xmm2
-               	vfmadd231sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm2) + xmm0
+               	vfmadd231sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm1 * mem) + xmm0
                	movsd	0x10(%rdi), %xmm1
-               	movsd	<rip>, %xmm2
-               	vfmadd231sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm2) + xmm0
+               	vfmadd231sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm1 * mem) + xmm0
                	movsd	0x18(%rdi), %xmm1
-               	movsd	<rip>, %xmm2
-               	vfmadd231sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm2) + xmm0
+               	vfmadd231sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm1 * mem) + xmm0
                	retq
 
 <use_mixed>:
@@ -65,9 +61,8 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm0
                	movsd	%xmm0, <rip> # <addr>
                	movsd	-0x10(%rbp), %xmm0
-               	movsd	<rip>, %xmm1
-               	movsd	-0x8(%rbp), %xmm2
-               	vfmadd213sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm0) + xmm2
+               	movsd	-0x8(%rbp), %xmm1
+               	vfmadd132sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm0 * mem) + xmm1
                	leave
                	retq
 

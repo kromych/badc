@@ -118,13 +118,11 @@ Disassembly of section .text:
                	retq
 
 <twice>:
-               	movss	<rip>, %xmm1
-               	mulss	%xmm1, %xmm0
+               	vmulss	<rip>, %xmm0, %xmm0
                	retq
 
 <dl>:
-               	movsd	<rip>, %xmm1
-               	mulsd	%xmm1, %xmm0
+               	vmulsd	<rip>, %xmm0, %xmm0
                	leaq	0x1(%rdi), %rax
                	retq
 
@@ -134,8 +132,7 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movq	%rdi, -0x8(%rbp)
                	movss	-0x8(%rbp), %xmm0
-               	movss	<rip>, %xmm1
-               	addss	%xmm1, %xmm0
+               	vaddss	<rip>, %xmm0, %xmm0
                	movss	%xmm0, -0x8(%rbp)
                	addl	$0x1, -0x4(%rbp)
                	movq	-0x8(%rbp), %rax

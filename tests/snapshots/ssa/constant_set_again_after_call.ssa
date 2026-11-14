@@ -55,7 +55,7 @@ fn ent_pc=2 n_params=2 variadic=false locals=0
     v15  Imm(0)                                           -> x0
     v16  Imm(0)                                           -> x0
     v17  Imm(4611686018427387904)                         -> d1
-    v18  Binop { op=fmul.c, lhs=v1, rhs=v17 }             -> d2
+    v18  Binop { op=fmul.c, lhs=v1, rhs=v17 }             -> d1
     v19  Fma { a=v1, b=v17, c=v13, neg_product=false, neg_addend=false } -> d0
     v20  FpCast { kind=FpToInt, value=v19 }               -> x0
     terminator Return(v20)   (exit_acc=v20)

@@ -76,8 +76,7 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm0
                	callq	<addr>
                	callq	<addr>
-               	movsd	<rip>, %xmm1
-               	subsd	%xmm1, %xmm0
+               	vsubsd	<rip>, %xmm0, %xmm0
                	xorps	%xmm1, %xmm1
                	comisd	%xmm0, %xmm1
                	jbe	<addr>
@@ -93,8 +92,7 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm0
                	callq	<addr>
                	callq	<addr>
-               	movsd	<rip>, %xmm1
-               	subsd	%xmm1, %xmm0
+               	vsubsd	<rip>, %xmm0, %xmm0
                	xorps	%xmm1, %xmm1
                	comisd	%xmm0, %xmm1
                	jbe	<addr>
@@ -110,8 +108,7 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm0
                	callq	<addr>
                	callq	<addr>
-               	movsd	<rip>, %xmm1
-               	subsd	%xmm1, %xmm0
+               	vsubsd	<rip>, %xmm0, %xmm0
                	xorps	%xmm1, %xmm1
                	comisd	%xmm0, %xmm1
                	jbe	<addr>

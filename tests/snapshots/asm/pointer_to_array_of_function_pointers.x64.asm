@@ -26,13 +26,11 @@ Disassembly of section .text:
                	int3
 
 <half>:
-               	movsd	<rip>, %xmm1
-               	divsd	%xmm1, %xmm0
+               	vdivsd	<rip>, %xmm0, %xmm0
                	retq
 
 <twice>:
-               	movsd	<rip>, %xmm1
-               	mulsd	%xmm1, %xmm0
+               	vmulsd	<rip>, %xmm0, %xmm0
                	retq
 
 <main>:

@@ -117,9 +117,8 @@ Disassembly of section .text:
                	cvtsd2ss	%xmm0, %xmm0
                	movss	%xmm0, <rip> # <addr>
                	movsd	<rip>, %xmm0 # <addr>
-               	movsd	<rip>, %xmm1
-               	movsd	<rip>, %xmm2 # <addr>
-               	vfmadd213sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm0) + xmm2
+               	movsd	<rip>, %xmm1 # <addr>
+               	vfmadd132sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm0 * mem) + xmm1
                	movsd	%xmm0, <rip> # <addr>
                	movss	<rip>, %xmm1 # <addr>
                	cvtss2sd	%xmm1, %xmm1

@@ -74,9 +74,8 @@ Disassembly of section .text:
                	fldt	(%rax)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
-               	movsd	<rip>, %xmm1
-               	movsd	<rip>, %xmm2 # <addr>
-               	vfmadd213sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm0) + xmm2
+               	movsd	<rip>, %xmm1 # <addr>
+               	vfmadd132sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm0 * mem) + xmm1
                	movsd	%xmm0, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	-0x50(%rbp)
@@ -168,8 +167,7 @@ Disassembly of section .text:
                	fldt	(%rax)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
-               	movsd	<rip>, %xmm1
-               	mulsd	%xmm1, %xmm0
+               	vmulsd	<rip>, %xmm0, %xmm0
                	movq	0x48(%rsp), %r10
                	testq	%r10, %r10
                	je	<addr>
@@ -211,8 +209,7 @@ Disassembly of section .text:
                	fldt	(%rax)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
-               	movsd	<rip>, %xmm1
-               	mulsd	%xmm1, %xmm0
+               	vmulsd	<rip>, %xmm0, %xmm0
                	leaq	-0x50(%rbp), %r9
                	movsd	%xmm0, -0x8(%rsp)
                	fldl	-0x8(%rsp)
@@ -236,8 +233,7 @@ Disassembly of section .text:
                	fldt	(%rax)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
-               	movsd	<rip>, %xmm1
-               	addsd	%xmm1, %xmm0
+               	vaddsd	<rip>, %xmm0, %xmm0
                	movsd	<rip>, %xmm1
                	ucomisd	%xmm1, %xmm0
                	jp	<addr>
@@ -455,8 +451,7 @@ Disassembly of section .text:
                	fldt	-0x50(%rbp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm1
-               	movsd	<rip>, %xmm2
-               	addsd	%xmm2, %xmm1
+               	vaddsd	<rip>, %xmm1, %xmm1
                	movsd	%xmm1, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	-0x50(%rbp)

@@ -94,7 +94,7 @@ fn ent_pc=4 n_params=4 variadic=false locals=0
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
     v6   Imm(4607182418800017408)                         -> d1
-    v7   LoadLocal { off=-6, kind=F80 }                   -> d2
+    v7   LoadLocal { off=-6, kind=F80 }                   -> d1
     v8   Binop { op=fadd, lhs=v6, rhs=v7 }                -> d1
     v9   Imm(0)                                           -> x0
     v10  Binop { op=fadd, lhs=v8, rhs=v3 }                -> d0

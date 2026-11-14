@@ -29,10 +29,8 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm0 # <addr>
                	movsd	<rip>, %xmm1 # <addr>
                	movss	<rip>, %xmm2 # <addr>
-               	movss	<rip>, %xmm3
-               	vmulss	%xmm2, %xmm3, %xmm2
-               	movss	<rip>, %xmm3
-               	subss	%xmm3, %xmm2
+               	vmulss	<rip>, %xmm2, %xmm2
+               	vsubss	<rip>, %xmm2, %xmm2
                	xorps	%xmm3, %xmm3
                	ucomiss	%xmm3, %xmm2
                	jp	<addr>

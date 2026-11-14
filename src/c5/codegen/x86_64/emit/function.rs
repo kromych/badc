@@ -363,6 +363,7 @@ pub(crate) fn emit_function(
         asm_text_abs_refs,
         asm_text_labels,
         abs_addr_refs,
+        fp_literals: Vec::new(),
     };
     let entry_mark = out.mark();
     let steps = flag_steps(func, alloc);
@@ -392,7 +393,6 @@ pub(crate) fn emit_function(
         },
         seh_placed: Vec::new(),
         block_addr_fixups: Vec::new(),
-        fp_literals: Vec::new(),
         jump_table_fixups: Vec::new(),
     };
     match fe.run(rodata) {
@@ -538,9 +538,6 @@ struct FnEmit<'a, 'b> {
     /// `(lea_start, target_block)` per `Inst::BlockAddr`; the disp32 resolves
     /// against `block_offsets` once the layout is final.
     block_addr_fixups: Vec<(usize, u32)>,
-    /// `(displacement offset, bits, single)` per floating constant loaded
-    /// from a read-only literal.
-    fp_literals: Vec<(usize, u64, bool)>,
     /// `(site, table_idx)` per `Terminator::JumpTable`, the site the `lea`
     /// or, under `abs32_addrs`, the load's displacement field; each table is
     /// materialized into the read-only blob once the layout is final.
@@ -604,7 +601,7 @@ impl FnEmit<'_, '_> {
         );
         self.patch_branches()?;
         self.materialize_jump_tables(rodata);
-        for (field, bits, single) in core::mem::take(&mut self.fp_literals) {
+        for (field, bits, single) in core::mem::take(&mut self.out.fp_literals) {
             rodata
                 .literals
                 .load_disp32(field, bits, if single { 4 } else { 8 });
@@ -801,7 +798,7 @@ impl FnEmit<'_, '_> {
         let body = self.out.mark();
         for pass in 0.. {
             self.block_addr_fixups.clear();
-            self.fp_literals.clear();
+            self.out.fp_literals.clear();
             self.jump_table_fixups.clear();
             self.seh_placed.clear();
             for block_idx in 0..self.fcx.func.blocks.len() {
@@ -1029,7 +1026,7 @@ impl FnEmit<'_, '_> {
                 let single = alloc.is_f32(v);
                 let prefix = if single { 0xF3 } else { 0xF2 };
                 let field = super::encode::emit_sse_mov_rip(code, prefix, false, Reg(d));
-                self.fp_literals.push((field, *bits as u64, single));
+                self.out.fp_literals.push((field, *bits as u64, single));
             }
             return Ok(());
         }

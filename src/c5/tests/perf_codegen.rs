@@ -4582,10 +4582,11 @@ int flag(long x) { int ok = 1; if (f(x)) ok = 0; return ok; }\n";
     }
     let insns = x64(SRC, "fm");
     let call = insns.iter().position(|i| i.op == 0xE8);
-    // A load of the constant's literal, `movsd disp32(%rip), %xmm`.
+    // A read of the constant's literal, `disp32(%rip)`: a load or the
+    // multiply's memory operand.
     let literal = insns
         .iter()
-        .position(|i| i.op == 0x0F10 && i.modrm.is_some_and(|m| m >> 6 == 0 && m & 7 == 5));
+        .position(|i| i.modrm.is_some_and(|m| m >> 6 == 0 && m & 7 == 5));
     m.expect(
         matches!((call, literal), (Some(c), Some(k)) if k > c),
         || format!("x86-64 fm: the constant is not set after the call: {insns:x?}"),
@@ -8453,13 +8454,13 @@ void forward(int x) { note(x + 1); note(x); }\n";
     }
 }
 
-/// A floating constant every reader of which takes it in an xmm register is
-/// built there: +0.0 by a zeroing xor, the rest by a load of a read-only
-/// literal of its precision, with no general register between.
+/// A floating constant a reader takes in an xmm register is built there:
+/// +0.0 by a zeroing xor, the rest by a load of a read-only literal of its
+/// precision, with no general register between.
 #[test]
 fn x64_a_floating_constant_is_built_in_an_xmm_register() {
     const SRC: &str = "double mix(double a, double b, double t) { return a * (1.0 - t) + b * t; }\n\
-float half(float x) { return x * 0.5f; }\n\
+float half(float x) { return 0.5f - x; }\n\
 double clamp0(double x) { return x > 0.0 ? x : 0.0; }\n";
     use super::codegen::function_bytes;
     let obj = object_at(SRC, Target::LinuxX64, true);
@@ -8681,5 +8682,37 @@ double dot(const double *x, const double *y, int n) {\n\
             loads,
             "{name}: {insns:x?}"
         );
+    }
+}
+
+/// A floating constant every reader of which takes a memory operand is read
+/// off its read-only literal by each and holds no register; one compared
+/// is loaded into a register.
+#[test]
+fn x64_a_floating_constant_read_by_arithmetic_is_a_literal_operand() {
+    const SRC: &str = "double lit(double a, double b) { return (a + 2.0) * (b - 2.0) + a * 0.5; }\n\
+float flit(float a, float b) { return (a + 2.0f) / (b * 3.0f); }\n\
+int cmp(double a, double b) { return a + 2.0 < b * 2.0 && a > 2.0; }\n";
+    use super::codegen::function_bytes;
+    let obj = object_at(SRC, Target::LinuxX64, true);
+    let rip = |i: &X64Insn| i.modrm.is_some_and(|m| m & 0xC7 == 0x05);
+    // movsd / movss off rip: a constant loaded into a register.
+    let literal_load = |i: &X64Insn| i.op == 0x0F10 && rip(i);
+    let arith = |i: &X64Insn| i.vex && matches!(i.op, 0x0F58 | 0x0F59 | 0x0F5C | 0x0F5E);
+    for (name, loads) in [("lit", 0), ("flit", 0), ("cmp", 1)] {
+        let insns = x64_insns(&function_bytes(&obj, name));
+        assert_eq!(
+            insns.iter().filter(|i| literal_load(i)).count(),
+            loads,
+            "{name}: {insns:x?}"
+        );
+        if loads == 0 {
+            assert!(
+                insns
+                    .iter()
+                    .any(|i| (arith(i) || matches!(i.op, 0x3899..=0x38BF)) && rip(i)),
+                "{name}: no literal operand: {insns:x?}"
+            );
+        }
     }
 }

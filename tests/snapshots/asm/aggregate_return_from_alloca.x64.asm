@@ -138,8 +138,7 @@ Disassembly of section .text:
                	cvtsi2ss	%rax, %xmm0
                	addss	%xmm0, %xmm1
                	movss	%xmm1, (%rbx)
-               	movss	0x4(%rbx), %xmm1
-               	vaddss	%xmm0, %xmm1, %xmm0
+               	vaddss	0x4(%rbx), %xmm0, %xmm0
                	movss	%xmm0, 0x4(%rbx)
                	movq	%rbx, %rcx
                	movsd	(%rcx), %xmm0

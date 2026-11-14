@@ -45,8 +45,7 @@ Disassembly of section .text:
                	decq	%rax
                	testl	%eax, %eax
                	jge	<addr>
-               	movsd	<rip>, %xmm2
-               	vsubsd	%xmm2, %xmm0, %xmm1
+               	vsubsd	<rip>, %xmm0, %xmm1
                	xorps	%xmm0, %xmm0
                	comisd	%xmm1, %xmm0
                	jbe	<addr>
@@ -187,8 +186,7 @@ Disassembly of section .text:
                	vfmadd231sd	%xmm0, %xmm2, %xmm1 # xmm1 = (xmm2 * xmm0) + xmm1
                	movsd	-0x50(%rbp), %xmm2
                	vfmadd213sd	%xmm1, %xmm2, %xmm0 # xmm0 = (xmm2 * xmm0) + xmm1
-               	movsd	<rip>, %xmm1
-               	subsd	%xmm1, %xmm0
+               	vsubsd	<rip>, %xmm0, %xmm0
                	movq	%rax, %xmm15
                	comisd	%xmm0, %xmm15
                	jbe	<addr>

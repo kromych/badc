@@ -80,15 +80,13 @@ Disassembly of section .text:
                	movslq	%ecx, %rcx
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rcx, %xmm0
-               	movsd	<rip>, %xmm2
-               	vfmadd231sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm2) + xmm0
+               	vfmadd231sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm1 * mem) + xmm0
                	imulq	$0x64, %r8, %rax
                	movslq	%eax, %rax
                	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rax, %xmm1
                	addsd	%xmm1, %xmm0
-               	movsd	<rip>, %xmm1
-               	vfmadd231sd	%xmm1, %xmm3, %xmm0 # xmm0 = (xmm3 * xmm1) + xmm0
+               	vfmadd231sd	<rip>, %xmm3, %xmm0 # xmm0 = (xmm3 * mem) + xmm0
                	movups	(%rsp), %xmm14
                	movups	0x10(%rsp), %xmm15
                	leave
@@ -98,15 +96,13 @@ Disassembly of section .text:
                	movslq	%edi, %rdi
                	xorps	%xmm2, %xmm2
                	cvtsi2sd	%rdi, %xmm2
-               	movsd	<rip>, %xmm3
-               	vfnmadd213sd	%xmm2, %xmm3, %xmm0 # xmm0 = -(xmm3 * xmm0) + xmm2
+               	vfnmadd132sd	<rip>, %xmm2, %xmm0 # xmm0 = -(xmm0 * mem) + xmm2
                	imulq	$0x64, %rsi, %rax
                	movslq	%eax, %rax
                	xorps	%xmm2, %xmm2
                	cvtsi2sd	%rax, %xmm2
                	addsd	%xmm2, %xmm0
-               	movsd	<rip>, %xmm2
-               	vfnmadd231sd	%xmm2, %xmm1, %xmm0 # xmm0 = -(xmm1 * xmm2) + xmm0
+               	vfnmadd231sd	<rip>, %xmm1, %xmm0 # xmm0 = -(xmm1 * mem) + xmm0
                	retq
 
 <positions>:

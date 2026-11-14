@@ -133,8 +133,7 @@ Disassembly of section .text:
                	movl	$0xa, %eax
                	retq
                	sqrtss	%xmm0, %xmm0
-               	movss	<rip>, %xmm1
-               	addss	%xmm1, %xmm0
+               	vaddss	<rip>, %xmm0, %xmm0
                	roundss	$0x9, %xmm0, %xmm0
                	movss	<rip>, %xmm1
                	ucomiss	%xmm1, %xmm0

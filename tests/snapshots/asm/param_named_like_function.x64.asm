@@ -26,8 +26,7 @@ Disassembly of section .text:
                	int3
 
 <gp>:
-               	movss	<rip>, %xmm1
-               	mulss	%xmm1, %xmm0
+               	vmulss	<rip>, %xmm0, %xmm0
                	cvtss2sd	%xmm0, %xmm0
                	retq
 

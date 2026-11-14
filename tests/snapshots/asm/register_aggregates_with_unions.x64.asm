@@ -41,11 +41,10 @@ Disassembly of section .text:
                	cmpq	$0x7, %rsi
                	jne	<addr>
                	movq	%rdi, %xmm0
-               	movsd	<rip>, %xmm1
                	movslq	%edx, %rax
-               	xorps	%xmm2, %xmm2
-               	cvtsi2sd	%rax, %xmm2
-               	vfmadd213sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm0) + xmm2
+               	xorps	%xmm1, %xmm1
+               	cvtsi2sd	%rax, %xmm1
+               	vfmadd132sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm0 * mem) + xmm1
                	movq	%xmm0, %rax
                	movq	%rsi, %rdx
                	xorq	%rcx, %rdx
@@ -81,8 +80,7 @@ Disassembly of section .text:
                	movw	%ax, -0x6(%rbp)
                	addb	$0x1, -0x10(%rbp)
                	movss	-0xc(%rbp), %xmm0
-               	movss	<rip>, %xmm1
-               	mulss	%xmm1, %xmm0
+               	vmulss	<rip>, %xmm0, %xmm0
                	movss	%xmm0, -0xc(%rbp)
                	movswq	%si, %rax
                	subq	$0x3, %rax

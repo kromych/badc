@@ -67,8 +67,7 @@ Disassembly of section .text:
                	movl	$0x3d, %edi
                	callq	<addr>
                	movss	-0x20(%rbp), %xmm0
-               	movss	<rip>, %xmm1
-               	addss	%xmm1, %xmm0
+               	vaddss	<rip>, %xmm0, %xmm0
                	movss	%xmm0, -0x8(%rbp)
                	movss	-0x8(%rbp), %xmm0
                	movss	%xmm0, -0x20(%rbp)

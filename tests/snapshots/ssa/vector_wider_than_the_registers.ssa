@@ -10727,10 +10727,10 @@ fn ent_pc=18 n_params=0 variadic=false locals=0
     v19  BinopI { op=mul, lhs=v18, rhs_imm=2001 }         -> x0
     v20  Binop { op=sub, lhs=v15, rhs=v19 }               -> x6
     v21  BinopI { op=sub, lhs=v20, rhs_imm=1000 }         -> x0
-    v22  FpCast { kind=IntToFp, value=v21 }               -> d0 [f32]
+    v22  FpCast { kind=IntToFp, value=v21 }               -> d1 [f32]
     v23  Imm(8)                                           -> x0
-    v24  Imm(1090519040)                                  -> d1 [f32]
-    v25  Binop { op=fdiv, lhs=v22, rhs=v24 }              -> d0 [f32]
+    v24  Imm(1090519040)                                  -> d0 [f32]
+    v25  Binop { op=fdiv, lhs=v22, rhs=v24 }              -> d1 [f32]
     v26  StoreLocal { off=-40, value=v25, kind=F32 }      -> -
     v27  LocalAddr(-41)                                   -> x0
     v28  Imm(0)                                           -> x0
@@ -10749,10 +10749,10 @@ fn ent_pc=18 n_params=0 variadic=false locals=0
     v41  BinopI { op=mul, lhs=v40, rhs_imm=1000 }         -> x0
     v42  Binop { op=sub, lhs=v37, rhs=v41 }               -> x7
     v43  BinopI { op=add, lhs=v42, rhs_imm=1 }            -> x0
-    v44  FpCast { kind=UIntToFp, value=v43 }              -> d0 [f32]
+    v44  FpCast { kind=UIntToFp, value=v43 }              -> d1 [f32]
     v45  Imm(4)                                           -> x0
-    v46  Imm(1082130432)                                  -> d3 [f32]
-    v47  Binop { op=fdiv, lhs=v44, rhs=v46 }              -> d0 [f32]
+    v46  Imm(1082130432)                                  -> d0 [f32]
+    v47  Binop { op=fdiv, lhs=v44, rhs=v46 }              -> d1 [f32]
     v48  StoreLocal { off=-41, value=v47, kind=F32 }      -> -
     v49  Imm(0)                                           -> x0
     v50  Imm(1)                                           -> x0
@@ -10778,7 +10778,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=0
     v70  FpCast { kind=IntToFp, value=v69 }               -> d0 [f32]
     v71  Imm(8)                                           -> x0
     v72  Imm(1090519040)                                  -> x0 [f32]
-    v73  Binop { op=fdiv, lhs=v70, rhs=v24 }              -> d0 [f32]
+    v73  Binop { op=fdiv, lhs=v70, rhs=v24 }              -> d1 [f32]
     v74  StoreLocal { off=-40, disp=4, value=v73, kind=F32 } -> -
     v75  LocalAddr(-41)                                   -> x0
     v76  Imm(1)                                           -> x0
@@ -10799,7 +10799,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=0
     v91  FpCast { kind=UIntToFp, value=v90 }              -> d0 [f32]
     v92  Imm(4)                                           -> x0
     v93  Imm(1082130432)                                  -> x0 [f32]
-    v94  Binop { op=fdiv, lhs=v91, rhs=v46 }              -> d0 [f32]
+    v94  Binop { op=fdiv, lhs=v91, rhs=v46 }              -> d1 [f32]
     v95  StoreLocal { off=-41, disp=4, value=v94, kind=F32 } -> -
     v96  Imm(1)                                           -> x0
     v97  Imm(2)                                           -> x0
@@ -10822,10 +10822,10 @@ fn ent_pc=18 n_params=0 variadic=false locals=0
     v114 BinopI { op=mul, lhs=v113, rhs_imm=2001 }        -> x0
     v115 Binop { op=sub, lhs=v111, rhs=v114 }             -> x7
     v116 BinopI { op=sub, lhs=v115, rhs_imm=1000 }        -> x0
-    v117 FpCast { kind=IntToFp, value=v116 }              -> d0 [f32]
+    v117 FpCast { kind=IntToFp, value=v116 }              -> d1 [f32]
     v118 Imm(8)                                           -> x0
-    v119 Imm(1090519040)                                  -> d1 [f32]
-    v120 Binop { op=fdiv, lhs=v117, rhs=v119 }            -> d0 [f32]
+    v119 Imm(1090519040)                                  -> d0 [f32]
+    v120 Binop { op=fdiv, lhs=v117, rhs=v119 }            -> d1 [f32]
     v121 StoreLocal { off=-40, disp=8, value=v120, kind=F32 } -> -
     v122 LocalAddr(-41)                                   -> x0
     v123 Imm(2)                                           -> x0
@@ -10843,10 +10843,10 @@ fn ent_pc=18 n_params=0 variadic=false locals=0
     v135 BinopI { op=mul, lhs=v134, rhs_imm=1000 }        -> x0
     v136 Binop { op=sub, lhs=v132, rhs=v135 }             -> x7
     v137 BinopI { op=add, lhs=v136, rhs_imm=1 }           -> x0
-    v138 FpCast { kind=UIntToFp, value=v137 }             -> d0 [f32]
+    v138 FpCast { kind=UIntToFp, value=v137 }             -> d1 [f32]
     v139 Imm(4)                                           -> x0
-    v140 Imm(1082130432)                                  -> d3 [f32]
-    v141 Binop { op=fdiv, lhs=v138, rhs=v140 }            -> d0 [f32]
+    v140 Imm(1082130432)                                  -> d0 [f32]
+    v141 Binop { op=fdiv, lhs=v138, rhs=v140 }            -> d1 [f32]
     v142 StoreLocal { off=-41, disp=8, value=v141, kind=F32 } -> -
     v143 Imm(2)                                           -> x0
     v144 Imm(3)                                           -> x0
@@ -10872,7 +10872,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=0
     v164 FpCast { kind=IntToFp, value=v163 }              -> d0 [f32]
     v165 Imm(8)                                           -> x0
     v166 Imm(1090519040)                                  -> x0 [f32]
-    v167 Binop { op=fdiv, lhs=v164, rhs=v119 }            -> d0 [f32]
+    v167 Binop { op=fdiv, lhs=v164, rhs=v119 }            -> d1 [f32]
     v168 StoreLocal { off=-40, disp=12, value=v167, kind=F32 } -> -
     v169 LocalAddr(-41)                                   -> x0
     v170 Imm(3)                                           -> x0
@@ -10893,7 +10893,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=0
     v185 FpCast { kind=UIntToFp, value=v184 }             -> d0 [f32]
     v186 Imm(4)                                           -> x0
     v187 Imm(1082130432)                                  -> x0 [f32]
-    v188 Binop { op=fdiv, lhs=v185, rhs=v140 }            -> d0 [f32]
+    v188 Binop { op=fdiv, lhs=v185, rhs=v140 }            -> d1 [f32]
     v189 StoreLocal { off=-41, disp=12, value=v188, kind=F32 } -> -
     v190 Imm(3)                                           -> x0
     v191 Imm(4)                                           -> x0
@@ -10916,10 +10916,10 @@ fn ent_pc=18 n_params=0 variadic=false locals=0
     v208 BinopI { op=mul, lhs=v207, rhs_imm=2001 }        -> x0
     v209 Binop { op=sub, lhs=v205, rhs=v208 }             -> x7
     v210 BinopI { op=sub, lhs=v209, rhs_imm=1000 }        -> x0
-    v211 FpCast { kind=IntToFp, value=v210 }              -> d0 [f32]
+    v211 FpCast { kind=IntToFp, value=v210 }              -> d1 [f32]
     v212 Imm(8)                                           -> x0
-    v213 Imm(1090519040)                                  -> d1 [f32]
-    v214 Binop { op=fdiv, lhs=v211, rhs=v213 }            -> d0 [f32]
+    v213 Imm(1090519040)                                  -> d0 [f32]
+    v214 Binop { op=fdiv, lhs=v211, rhs=v213 }            -> d1 [f32]
     v215 StoreLocal { off=-40, disp=16, value=v214, kind=F32 } -> -
     v216 LocalAddr(-41)                                   -> x0
     v217 Imm(4)                                           -> x0
@@ -10937,10 +10937,10 @@ fn ent_pc=18 n_params=0 variadic=false locals=0
     v229 BinopI { op=mul, lhs=v228, rhs_imm=1000 }        -> x0
     v230 Binop { op=sub, lhs=v226, rhs=v229 }             -> x7
     v231 BinopI { op=add, lhs=v230, rhs_imm=1 }           -> x0
-    v232 FpCast { kind=UIntToFp, value=v231 }             -> d0 [f32]
+    v232 FpCast { kind=UIntToFp, value=v231 }             -> d1 [f32]
     v233 Imm(4)                                           -> x0
-    v234 Imm(1082130432)                                  -> d3 [f32]
-    v235 Binop { op=fdiv, lhs=v232, rhs=v234 }            -> d0 [f32]
+    v234 Imm(1082130432)                                  -> d0 [f32]
+    v235 Binop { op=fdiv, lhs=v232, rhs=v234 }            -> d1 [f32]
     v236 StoreLocal { off=-41, disp=16, value=v235, kind=F32 } -> -
     v237 Imm(4)                                           -> x0
     v238 Imm(5)                                           -> x0
@@ -10966,7 +10966,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=0
     v258 FpCast { kind=IntToFp, value=v257 }              -> d0 [f32]
     v259 Imm(8)                                           -> x0
     v260 Imm(1090519040)                                  -> x0 [f32]
-    v261 Binop { op=fdiv, lhs=v258, rhs=v213 }            -> d0 [f32]
+    v261 Binop { op=fdiv, lhs=v258, rhs=v213 }            -> d1 [f32]
     v262 StoreLocal { off=-40, disp=20, value=v261, kind=F32 } -> -
     v263 LocalAddr(-41)                                   -> x0
     v264 Imm(5)                                           -> x0
@@ -10987,7 +10987,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=0
     v279 FpCast { kind=UIntToFp, value=v278 }             -> d0 [f32]
     v280 Imm(4)                                           -> x0
     v281 Imm(1082130432)                                  -> x0 [f32]
-    v282 Binop { op=fdiv, lhs=v279, rhs=v234 }            -> d0 [f32]
+    v282 Binop { op=fdiv, lhs=v279, rhs=v234 }            -> d1 [f32]
     v283 StoreLocal { off=-41, disp=20, value=v282, kind=F32 } -> -
     v284 Imm(5)                                           -> x0
     v285 Imm(6)                                           -> x0
@@ -11010,10 +11010,10 @@ fn ent_pc=18 n_params=0 variadic=false locals=0
     v302 BinopI { op=mul, lhs=v301, rhs_imm=2001 }        -> x0
     v303 Binop { op=sub, lhs=v299, rhs=v302 }             -> x7
     v304 BinopI { op=sub, lhs=v303, rhs_imm=1000 }        -> x0
-    v305 FpCast { kind=IntToFp, value=v304 }              -> d0 [f32]
+    v305 FpCast { kind=IntToFp, value=v304 }              -> d1 [f32]
     v306 Imm(8)                                           -> x0
-    v307 Imm(1090519040)                                  -> d1 [f32]
-    v308 Binop { op=fdiv, lhs=v305, rhs=v307 }            -> d0 [f32]
+    v307 Imm(1090519040)                                  -> d0 [f32]
+    v308 Binop { op=fdiv, lhs=v305, rhs=v307 }            -> d1 [f32]
     v309 StoreLocal { off=-40, disp=24, value=v308, kind=F32 } -> -
     v310 LocalAddr(-41)                                   -> x0
     v311 Imm(6)                                           -> x0
@@ -11031,10 +11031,10 @@ fn ent_pc=18 n_params=0 variadic=false locals=0
     v323 BinopI { op=mul, lhs=v322, rhs_imm=1000 }        -> x0
     v324 Binop { op=sub, lhs=v320, rhs=v323 }             -> x7
     v325 BinopI { op=add, lhs=v324, rhs_imm=1 }           -> x0
-    v326 FpCast { kind=UIntToFp, value=v325 }             -> d0 [f32]
+    v326 FpCast { kind=UIntToFp, value=v325 }             -> d1 [f32]
     v327 Imm(4)                                           -> x0
-    v328 Imm(1082130432)                                  -> d3 [f32]
-    v329 Binop { op=fdiv, lhs=v326, rhs=v328 }            -> d0 [f32]
+    v328 Imm(1082130432)                                  -> d0 [f32]
+    v329 Binop { op=fdiv, lhs=v326, rhs=v328 }            -> d1 [f32]
     v330 StoreLocal { off=-41, disp=24, value=v329, kind=F32 } -> -
     v331 Imm(6)                                           -> x0
     v332 Imm(7)                                           -> x0
@@ -11060,7 +11060,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=0
     v352 FpCast { kind=IntToFp, value=v351 }              -> d0 [f32]
     v353 Imm(8)                                           -> x0
     v354 Imm(1090519040)                                  -> x0 [f32]
-    v355 Binop { op=fdiv, lhs=v352, rhs=v307 }            -> d0 [f32]
+    v355 Binop { op=fdiv, lhs=v352, rhs=v307 }            -> d1 [f32]
     v356 StoreLocal { off=-40, disp=28, value=v355, kind=F32 } -> -
     v357 LocalAddr(-41)                                   -> x8
     v358 Imm(7)                                           -> x0
@@ -11081,7 +11081,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=0
     v373 FpCast { kind=UIntToFp, value=v372 }             -> d0 [f32]
     v374 Imm(4)                                           -> x0
     v375 Imm(1082130432)                                  -> x0 [f32]
-    v376 Binop { op=fdiv, lhs=v373, rhs=v328 }            -> d0 [f32]
+    v376 Binop { op=fdiv, lhs=v373, rhs=v328 }            -> d1 [f32]
     v377 StoreLocal { off=-41, disp=28, value=v376, kind=F32 } -> -
     v378 Imm(7)                                           -> x0
     v379 Imm(8)                                           -> x0
@@ -11512,10 +11512,10 @@ fn ent_pc=20 n_params=0 variadic=false locals=0
     v19  BinopI { op=mul, lhs=v18, rhs_imm=2001 }         -> x0
     v20  Binop { op=sub, lhs=v15, rhs=v19 }               -> x6
     v21  BinopI { op=sub, lhs=v20, rhs_imm=1000 }         -> x0
-    v22  FpCast { kind=IntToFp, value=v21 }               -> d0 [f32]
+    v22  FpCast { kind=IntToFp, value=v21 }               -> d1 [f32]
     v23  Imm(8)                                           -> x0
-    v24  Imm(1090519040)                                  -> d1 [f32]
-    v25  Binop { op=fdiv, lhs=v22, rhs=v24 }              -> d0 [f32]
+    v24  Imm(1090519040)                                  -> d0 [f32]
+    v25  Binop { op=fdiv, lhs=v22, rhs=v24 }              -> d1 [f32]
     v26  StoreLocal { off=-68, value=v25, kind=F32 }      -> -
     v27  LocalAddr(-69)                                   -> x0
     v28  Imm(0)                                           -> x0
@@ -11534,10 +11534,10 @@ fn ent_pc=20 n_params=0 variadic=false locals=0
     v41  BinopI { op=mul, lhs=v40, rhs_imm=1000 }         -> x0
     v42  Binop { op=sub, lhs=v37, rhs=v41 }               -> x7
     v43  BinopI { op=add, lhs=v42, rhs_imm=1 }            -> x0
-    v44  FpCast { kind=UIntToFp, value=v43 }              -> d0 [f32]
+    v44  FpCast { kind=UIntToFp, value=v43 }              -> d1 [f32]
     v45  Imm(4)                                           -> x0
-    v46  Imm(1082130432)                                  -> d3 [f32]
-    v47  Binop { op=fdiv, lhs=v44, rhs=v46 }              -> d0 [f32]
+    v46  Imm(1082130432)                                  -> d0 [f32]
+    v47  Binop { op=fdiv, lhs=v44, rhs=v46 }              -> d1 [f32]
     v48  StoreLocal { off=-69, value=v47, kind=F32 }      -> -
     v49  Imm(0)                                           -> x0
     v50  Imm(1)                                           -> x0
@@ -11563,7 +11563,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=0
     v70  FpCast { kind=IntToFp, value=v69 }               -> d0 [f32]
     v71  Imm(8)                                           -> x0
     v72  Imm(1090519040)                                  -> x0 [f32]
-    v73  Binop { op=fdiv, lhs=v70, rhs=v24 }              -> d0 [f32]
+    v73  Binop { op=fdiv, lhs=v70, rhs=v24 }              -> d1 [f32]
     v74  StoreLocal { off=-68, disp=4, value=v73, kind=F32 } -> -
     v75  LocalAddr(-69)                                   -> x0
     v76  Imm(1)                                           -> x0
@@ -11584,7 +11584,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=0
     v91  FpCast { kind=UIntToFp, value=v90 }              -> d0 [f32]
     v92  Imm(4)                                           -> x0
     v93  Imm(1082130432)                                  -> x0 [f32]
-    v94  Binop { op=fdiv, lhs=v91, rhs=v46 }              -> d0 [f32]
+    v94  Binop { op=fdiv, lhs=v91, rhs=v46 }              -> d1 [f32]
     v95  StoreLocal { off=-69, disp=4, value=v94, kind=F32 } -> -
     v96  Imm(1)                                           -> x0
     v97  Imm(2)                                           -> x0
@@ -11607,10 +11607,10 @@ fn ent_pc=20 n_params=0 variadic=false locals=0
     v114 BinopI { op=mul, lhs=v113, rhs_imm=2001 }        -> x0
     v115 Binop { op=sub, lhs=v111, rhs=v114 }             -> x7
     v116 BinopI { op=sub, lhs=v115, rhs_imm=1000 }        -> x0
-    v117 FpCast { kind=IntToFp, value=v116 }              -> d0 [f32]
+    v117 FpCast { kind=IntToFp, value=v116 }              -> d1 [f32]
     v118 Imm(8)                                           -> x0
-    v119 Imm(1090519040)                                  -> d1 [f32]
-    v120 Binop { op=fdiv, lhs=v117, rhs=v119 }            -> d0 [f32]
+    v119 Imm(1090519040)                                  -> d0 [f32]
+    v120 Binop { op=fdiv, lhs=v117, rhs=v119 }            -> d1 [f32]
     v121 StoreLocal { off=-68, disp=8, value=v120, kind=F32 } -> -
     v122 LocalAddr(-69)                                   -> x0
     v123 Imm(2)                                           -> x0
@@ -11628,10 +11628,10 @@ fn ent_pc=20 n_params=0 variadic=false locals=0
     v135 BinopI { op=mul, lhs=v134, rhs_imm=1000 }        -> x0
     v136 Binop { op=sub, lhs=v132, rhs=v135 }             -> x7
     v137 BinopI { op=add, lhs=v136, rhs_imm=1 }           -> x0
-    v138 FpCast { kind=UIntToFp, value=v137 }             -> d0 [f32]
+    v138 FpCast { kind=UIntToFp, value=v137 }             -> d1 [f32]
     v139 Imm(4)                                           -> x0
-    v140 Imm(1082130432)                                  -> d3 [f32]
-    v141 Binop { op=fdiv, lhs=v138, rhs=v140 }            -> d0 [f32]
+    v140 Imm(1082130432)                                  -> d0 [f32]
+    v141 Binop { op=fdiv, lhs=v138, rhs=v140 }            -> d1 [f32]
     v142 StoreLocal { off=-69, disp=8, value=v141, kind=F32 } -> -
     v143 Imm(2)                                           -> x0
     v144 Imm(3)                                           -> x0
@@ -11657,7 +11657,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=0
     v164 FpCast { kind=IntToFp, value=v163 }              -> d0 [f32]
     v165 Imm(8)                                           -> x0
     v166 Imm(1090519040)                                  -> x0 [f32]
-    v167 Binop { op=fdiv, lhs=v164, rhs=v119 }            -> d0 [f32]
+    v167 Binop { op=fdiv, lhs=v164, rhs=v119 }            -> d1 [f32]
     v168 StoreLocal { off=-68, disp=12, value=v167, kind=F32 } -> -
     v169 LocalAddr(-69)                                   -> x0
     v170 Imm(3)                                           -> x0
@@ -11678,7 +11678,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=0
     v185 FpCast { kind=UIntToFp, value=v184 }             -> d0 [f32]
     v186 Imm(4)                                           -> x0
     v187 Imm(1082130432)                                  -> x0 [f32]
-    v188 Binop { op=fdiv, lhs=v185, rhs=v140 }            -> d0 [f32]
+    v188 Binop { op=fdiv, lhs=v185, rhs=v140 }            -> d1 [f32]
     v189 StoreLocal { off=-69, disp=12, value=v188, kind=F32 } -> -
     v190 Imm(3)                                           -> x0
     v191 Imm(4)                                           -> x0
@@ -11701,10 +11701,10 @@ fn ent_pc=20 n_params=0 variadic=false locals=0
     v208 BinopI { op=mul, lhs=v207, rhs_imm=2001 }        -> x0
     v209 Binop { op=sub, lhs=v205, rhs=v208 }             -> x7
     v210 BinopI { op=sub, lhs=v209, rhs_imm=1000 }        -> x0
-    v211 FpCast { kind=IntToFp, value=v210 }              -> d0 [f32]
+    v211 FpCast { kind=IntToFp, value=v210 }              -> d1 [f32]
     v212 Imm(8)                                           -> x0
-    v213 Imm(1090519040)                                  -> d1 [f32]
-    v214 Binop { op=fdiv, lhs=v211, rhs=v213 }            -> d0 [f32]
+    v213 Imm(1090519040)                                  -> d0 [f32]
+    v214 Binop { op=fdiv, lhs=v211, rhs=v213 }            -> d1 [f32]
     v215 StoreLocal { off=-68, disp=16, value=v214, kind=F32 } -> -
     v216 LocalAddr(-69)                                   -> x0
     v217 Imm(4)                                           -> x0
@@ -11722,10 +11722,10 @@ fn ent_pc=20 n_params=0 variadic=false locals=0
     v229 BinopI { op=mul, lhs=v228, rhs_imm=1000 }        -> x0
     v230 Binop { op=sub, lhs=v226, rhs=v229 }             -> x7
     v231 BinopI { op=add, lhs=v230, rhs_imm=1 }           -> x0
-    v232 FpCast { kind=UIntToFp, value=v231 }             -> d0 [f32]
+    v232 FpCast { kind=UIntToFp, value=v231 }             -> d1 [f32]
     v233 Imm(4)                                           -> x0
-    v234 Imm(1082130432)                                  -> d3 [f32]
-    v235 Binop { op=fdiv, lhs=v232, rhs=v234 }            -> d0 [f32]
+    v234 Imm(1082130432)                                  -> d0 [f32]
+    v235 Binop { op=fdiv, lhs=v232, rhs=v234 }            -> d1 [f32]
     v236 StoreLocal { off=-69, disp=16, value=v235, kind=F32 } -> -
     v237 Imm(4)                                           -> x0
     v238 Imm(5)                                           -> x0
@@ -11751,7 +11751,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=0
     v258 FpCast { kind=IntToFp, value=v257 }              -> d0 [f32]
     v259 Imm(8)                                           -> x0
     v260 Imm(1090519040)                                  -> x0 [f32]
-    v261 Binop { op=fdiv, lhs=v258, rhs=v213 }            -> d0 [f32]
+    v261 Binop { op=fdiv, lhs=v258, rhs=v213 }            -> d1 [f32]
     v262 StoreLocal { off=-68, disp=20, value=v261, kind=F32 } -> -
     v263 LocalAddr(-69)                                   -> x0
     v264 Imm(5)                                           -> x0
@@ -11772,7 +11772,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=0
     v279 FpCast { kind=UIntToFp, value=v278 }             -> d0 [f32]
     v280 Imm(4)                                           -> x0
     v281 Imm(1082130432)                                  -> x0 [f32]
-    v282 Binop { op=fdiv, lhs=v279, rhs=v234 }            -> d0 [f32]
+    v282 Binop { op=fdiv, lhs=v279, rhs=v234 }            -> d1 [f32]
     v283 StoreLocal { off=-69, disp=20, value=v282, kind=F32 } -> -
     v284 Imm(5)                                           -> x0
     v285 Imm(6)                                           -> x0
@@ -11795,10 +11795,10 @@ fn ent_pc=20 n_params=0 variadic=false locals=0
     v302 BinopI { op=mul, lhs=v301, rhs_imm=2001 }        -> x0
     v303 Binop { op=sub, lhs=v299, rhs=v302 }             -> x7
     v304 BinopI { op=sub, lhs=v303, rhs_imm=1000 }        -> x0
-    v305 FpCast { kind=IntToFp, value=v304 }              -> d0 [f32]
+    v305 FpCast { kind=IntToFp, value=v304 }              -> d1 [f32]
     v306 Imm(8)                                           -> x0
-    v307 Imm(1090519040)                                  -> d1 [f32]
-    v308 Binop { op=fdiv, lhs=v305, rhs=v307 }            -> d0 [f32]
+    v307 Imm(1090519040)                                  -> d0 [f32]
+    v308 Binop { op=fdiv, lhs=v305, rhs=v307 }            -> d1 [f32]
     v309 StoreLocal { off=-68, disp=24, value=v308, kind=F32 } -> -
     v310 LocalAddr(-69)                                   -> x0
     v311 Imm(6)                                           -> x0
@@ -11816,10 +11816,10 @@ fn ent_pc=20 n_params=0 variadic=false locals=0
     v323 BinopI { op=mul, lhs=v322, rhs_imm=1000 }        -> x0
     v324 Binop { op=sub, lhs=v320, rhs=v323 }             -> x7
     v325 BinopI { op=add, lhs=v324, rhs_imm=1 }           -> x0
-    v326 FpCast { kind=UIntToFp, value=v325 }             -> d0 [f32]
+    v326 FpCast { kind=UIntToFp, value=v325 }             -> d1 [f32]
     v327 Imm(4)                                           -> x0
-    v328 Imm(1082130432)                                  -> d3 [f32]
-    v329 Binop { op=fdiv, lhs=v326, rhs=v328 }            -> d0 [f32]
+    v328 Imm(1082130432)                                  -> d0 [f32]
+    v329 Binop { op=fdiv, lhs=v326, rhs=v328 }            -> d1 [f32]
     v330 StoreLocal { off=-69, disp=24, value=v329, kind=F32 } -> -
     v331 Imm(6)                                           -> x0
     v332 Imm(7)                                           -> x0
@@ -11845,7 +11845,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=0
     v352 FpCast { kind=IntToFp, value=v351 }              -> d0 [f32]
     v353 Imm(8)                                           -> x0
     v354 Imm(1090519040)                                  -> x0 [f32]
-    v355 Binop { op=fdiv, lhs=v352, rhs=v307 }            -> d0 [f32]
+    v355 Binop { op=fdiv, lhs=v352, rhs=v307 }            -> d1 [f32]
     v356 StoreLocal { off=-68, disp=28, value=v355, kind=F32 } -> -
     v357 LocalAddr(-69)                                   -> x0
     v358 Imm(7)                                           -> x0
@@ -11866,7 +11866,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=0
     v373 FpCast { kind=UIntToFp, value=v372 }             -> d0 [f32]
     v374 Imm(4)                                           -> x0
     v375 Imm(1082130432)                                  -> x0 [f32]
-    v376 Binop { op=fdiv, lhs=v373, rhs=v328 }            -> d0 [f32]
+    v376 Binop { op=fdiv, lhs=v373, rhs=v328 }            -> d1 [f32]
     v377 StoreLocal { off=-69, disp=28, value=v376, kind=F32 } -> -
     v378 Imm(7)                                           -> x0
     v379 Imm(8)                                           -> x0
@@ -11889,10 +11889,10 @@ fn ent_pc=20 n_params=0 variadic=false locals=0
     v396 BinopI { op=mul, lhs=v395, rhs_imm=2001 }        -> x0
     v397 Binop { op=sub, lhs=v393, rhs=v396 }             -> x7
     v398 BinopI { op=sub, lhs=v397, rhs_imm=1000 }        -> x0
-    v399 FpCast { kind=IntToFp, value=v398 }              -> d0 [f32]
+    v399 FpCast { kind=IntToFp, value=v398 }              -> d1 [f32]
     v400 Imm(8)                                           -> x0
-    v401 Imm(1090519040)                                  -> d1 [f32]
-    v402 Binop { op=fdiv, lhs=v399, rhs=v401 }            -> d0 [f32]
+    v401 Imm(1090519040)                                  -> d0 [f32]
+    v402 Binop { op=fdiv, lhs=v399, rhs=v401 }            -> d1 [f32]
     v403 StoreLocal { off=-68, disp=32, value=v402, kind=F32 } -> -
     v404 LocalAddr(-69)                                   -> x0
     v405 Imm(8)                                           -> x0
@@ -11910,10 +11910,10 @@ fn ent_pc=20 n_params=0 variadic=false locals=0
     v417 BinopI { op=mul, lhs=v416, rhs_imm=1000 }        -> x0
     v418 Binop { op=sub, lhs=v414, rhs=v417 }             -> x7
     v419 BinopI { op=add, lhs=v418, rhs_imm=1 }           -> x0
-    v420 FpCast { kind=UIntToFp, value=v419 }             -> d0 [f32]
+    v420 FpCast { kind=UIntToFp, value=v419 }             -> d1 [f32]
     v421 Imm(4)                                           -> x0
-    v422 Imm(1082130432)                                  -> d3 [f32]
-    v423 Binop { op=fdiv, lhs=v420, rhs=v422 }            -> d0 [f32]
+    v422 Imm(1082130432)                                  -> d0 [f32]
+    v423 Binop { op=fdiv, lhs=v420, rhs=v422 }            -> d1 [f32]
     v424 StoreLocal { off=-69, disp=32, value=v423, kind=F32 } -> -
     v425 Imm(8)                                           -> x0
     v426 Imm(9)                                           -> x0
@@ -11939,7 +11939,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=0
     v446 FpCast { kind=IntToFp, value=v445 }              -> d0 [f32]
     v447 Imm(8)                                           -> x0
     v448 Imm(1090519040)                                  -> x0 [f32]
-    v449 Binop { op=fdiv, lhs=v446, rhs=v401 }            -> d0 [f32]
+    v449 Binop { op=fdiv, lhs=v446, rhs=v401 }            -> d1 [f32]
     v450 StoreLocal { off=-68, disp=36, value=v449, kind=F32 } -> -
     v451 LocalAddr(-69)                                   -> x0
     v452 Imm(9)                                           -> x0
@@ -11960,7 +11960,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=0
     v467 FpCast { kind=UIntToFp, value=v466 }             -> d0 [f32]
     v468 Imm(4)                                           -> x0
     v469 Imm(1082130432)                                  -> x0 [f32]
-    v470 Binop { op=fdiv, lhs=v467, rhs=v422 }            -> d0 [f32]
+    v470 Binop { op=fdiv, lhs=v467, rhs=v422 }            -> d1 [f32]
     v471 StoreLocal { off=-69, disp=36, value=v470, kind=F32 } -> -
     v472 Imm(9)                                           -> x0
     v473 Imm(10)                                          -> x0
@@ -11983,10 +11983,10 @@ fn ent_pc=20 n_params=0 variadic=false locals=0
     v490 BinopI { op=mul, lhs=v489, rhs_imm=2001 }        -> x0
     v491 Binop { op=sub, lhs=v487, rhs=v490 }             -> x7
     v492 BinopI { op=sub, lhs=v491, rhs_imm=1000 }        -> x0
-    v493 FpCast { kind=IntToFp, value=v492 }              -> d0 [f32]
+    v493 FpCast { kind=IntToFp, value=v492 }              -> d1 [f32]
     v494 Imm(8)                                           -> x0
-    v495 Imm(1090519040)                                  -> d1 [f32]
-    v496 Binop { op=fdiv, lhs=v493, rhs=v495 }            -> d0 [f32]
+    v495 Imm(1090519040)                                  -> d0 [f32]
+    v496 Binop { op=fdiv, lhs=v493, rhs=v495 }            -> d1 [f32]
     v497 StoreLocal { off=-68, disp=40, value=v496, kind=F32 } -> -
     v498 LocalAddr(-69)                                   -> x0
     v499 Imm(10)                                          -> x0
@@ -12004,10 +12004,10 @@ fn ent_pc=20 n_params=0 variadic=false locals=0
     v511 BinopI { op=mul, lhs=v510, rhs_imm=1000 }        -> x0
     v512 Binop { op=sub, lhs=v508, rhs=v511 }             -> x7
     v513 BinopI { op=add, lhs=v512, rhs_imm=1 }           -> x0
-    v514 FpCast { kind=UIntToFp, value=v513 }             -> d0 [f32]
+    v514 FpCast { kind=UIntToFp, value=v513 }             -> d1 [f32]
     v515 Imm(4)                                           -> x0
-    v516 Imm(1082130432)                                  -> d3 [f32]
-    v517 Binop { op=fdiv, lhs=v514, rhs=v516 }            -> d0 [f32]
+    v516 Imm(1082130432)                                  -> d0 [f32]
+    v517 Binop { op=fdiv, lhs=v514, rhs=v516 }            -> d1 [f32]
     v518 StoreLocal { off=-69, disp=40, value=v517, kind=F32 } -> -
     v519 Imm(10)                                          -> x0
     v520 Imm(11)                                          -> x0
@@ -12033,7 +12033,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=0
     v540 FpCast { kind=IntToFp, value=v539 }              -> d0 [f32]
     v541 Imm(8)                                           -> x0
     v542 Imm(1090519040)                                  -> x0 [f32]
-    v543 Binop { op=fdiv, lhs=v540, rhs=v495 }            -> d0 [f32]
+    v543 Binop { op=fdiv, lhs=v540, rhs=v495 }            -> d1 [f32]
     v544 StoreLocal { off=-68, disp=44, value=v543, kind=F32 } -> -
     v545 LocalAddr(-69)                                   -> x0
     v546 Imm(11)                                          -> x0
@@ -12054,7 +12054,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=0
     v561 FpCast { kind=UIntToFp, value=v560 }             -> d0 [f32]
     v562 Imm(4)                                           -> x0
     v563 Imm(1082130432)                                  -> x0 [f32]
-    v564 Binop { op=fdiv, lhs=v561, rhs=v516 }            -> d0 [f32]
+    v564 Binop { op=fdiv, lhs=v561, rhs=v516 }            -> d1 [f32]
     v565 StoreLocal { off=-69, disp=44, value=v564, kind=F32 } -> -
     v566 Imm(11)                                          -> x0
     v567 Imm(12)                                          -> x0
@@ -12077,10 +12077,10 @@ fn ent_pc=20 n_params=0 variadic=false locals=0
     v584 BinopI { op=mul, lhs=v583, rhs_imm=2001 }        -> x0
     v585 Binop { op=sub, lhs=v581, rhs=v584 }             -> x7
     v586 BinopI { op=sub, lhs=v585, rhs_imm=1000 }        -> x0
-    v587 FpCast { kind=IntToFp, value=v586 }              -> d0 [f32]
+    v587 FpCast { kind=IntToFp, value=v586 }              -> d1 [f32]
     v588 Imm(8)                                           -> x0
-    v589 Imm(1090519040)                                  -> d1 [f32]
-    v590 Binop { op=fdiv, lhs=v587, rhs=v589 }            -> d0 [f32]
+    v589 Imm(1090519040)                                  -> d0 [f32]
+    v590 Binop { op=fdiv, lhs=v587, rhs=v589 }            -> d1 [f32]
     v591 StoreLocal { off=-68, disp=48, value=v590, kind=F32 } -> -
     v592 LocalAddr(-69)                                   -> x0
     v593 Imm(12)                                          -> x0
@@ -12098,10 +12098,10 @@ fn ent_pc=20 n_params=0 variadic=false locals=0
     v605 BinopI { op=mul, lhs=v604, rhs_imm=1000 }        -> x0
     v606 Binop { op=sub, lhs=v602, rhs=v605 }             -> x7
     v607 BinopI { op=add, lhs=v606, rhs_imm=1 }           -> x0
-    v608 FpCast { kind=UIntToFp, value=v607 }             -> d0 [f32]
+    v608 FpCast { kind=UIntToFp, value=v607 }             -> d1 [f32]
     v609 Imm(4)                                           -> x0
-    v610 Imm(1082130432)                                  -> d3 [f32]
-    v611 Binop { op=fdiv, lhs=v608, rhs=v610 }            -> d0 [f32]
+    v610 Imm(1082130432)                                  -> d0 [f32]
+    v611 Binop { op=fdiv, lhs=v608, rhs=v610 }            -> d1 [f32]
     v612 StoreLocal { off=-69, disp=48, value=v611, kind=F32 } -> -
     v613 Imm(12)                                          -> x0
     v614 Imm(13)                                          -> x0
@@ -12127,7 +12127,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=0
     v634 FpCast { kind=IntToFp, value=v633 }              -> d0 [f32]
     v635 Imm(8)                                           -> x0
     v636 Imm(1090519040)                                  -> x0 [f32]
-    v637 Binop { op=fdiv, lhs=v634, rhs=v589 }            -> d0 [f32]
+    v637 Binop { op=fdiv, lhs=v634, rhs=v589 }            -> d1 [f32]
     v638 StoreLocal { off=-68, disp=52, value=v637, kind=F32 } -> -
     v639 LocalAddr(-69)                                   -> x0
     v640 Imm(13)                                          -> x0
@@ -12148,7 +12148,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=0
     v655 FpCast { kind=UIntToFp, value=v654 }             -> d0 [f32]
     v656 Imm(4)                                           -> x0
     v657 Imm(1082130432)                                  -> x0 [f32]
-    v658 Binop { op=fdiv, lhs=v655, rhs=v610 }            -> d0 [f32]
+    v658 Binop { op=fdiv, lhs=v655, rhs=v610 }            -> d1 [f32]
     v659 StoreLocal { off=-69, disp=52, value=v658, kind=F32 } -> -
     v660 Imm(13)                                          -> x0
     v661 Imm(14)                                          -> x0
@@ -12171,10 +12171,10 @@ fn ent_pc=20 n_params=0 variadic=false locals=0
     v678 BinopI { op=mul, lhs=v677, rhs_imm=2001 }        -> x0
     v679 Binop { op=sub, lhs=v675, rhs=v678 }             -> x7
     v680 BinopI { op=sub, lhs=v679, rhs_imm=1000 }        -> x0
-    v681 FpCast { kind=IntToFp, value=v680 }              -> d0 [f32]
+    v681 FpCast { kind=IntToFp, value=v680 }              -> d1 [f32]
     v682 Imm(8)                                           -> x0
-    v683 Imm(1090519040)                                  -> d1 [f32]
-    v684 Binop { op=fdiv, lhs=v681, rhs=v683 }            -> d0 [f32]
+    v683 Imm(1090519040)                                  -> d0 [f32]
+    v684 Binop { op=fdiv, lhs=v681, rhs=v683 }            -> d1 [f32]
     v685 StoreLocal { off=-68, disp=56, value=v684, kind=F32 } -> -
     v686 LocalAddr(-69)                                   -> x0
     v687 Imm(14)                                          -> x0
@@ -12192,10 +12192,10 @@ fn ent_pc=20 n_params=0 variadic=false locals=0
     v699 BinopI { op=mul, lhs=v698, rhs_imm=1000 }        -> x0
     v700 Binop { op=sub, lhs=v696, rhs=v699 }             -> x7
     v701 BinopI { op=add, lhs=v700, rhs_imm=1 }           -> x0
-    v702 FpCast { kind=UIntToFp, value=v701 }             -> d0 [f32]
+    v702 FpCast { kind=UIntToFp, value=v701 }             -> d1 [f32]
     v703 Imm(4)                                           -> x0
-    v704 Imm(1082130432)                                  -> d3 [f32]
-    v705 Binop { op=fdiv, lhs=v702, rhs=v704 }            -> d0 [f32]
+    v704 Imm(1082130432)                                  -> d0 [f32]
+    v705 Binop { op=fdiv, lhs=v702, rhs=v704 }            -> d1 [f32]
     v706 StoreLocal { off=-69, disp=56, value=v705, kind=F32 } -> -
     v707 Imm(14)                                          -> x0
     v708 Imm(15)                                          -> x0
@@ -12221,7 +12221,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=0
     v728 FpCast { kind=IntToFp, value=v727 }              -> d0 [f32]
     v729 Imm(8)                                           -> x0
     v730 Imm(1090519040)                                  -> x0 [f32]
-    v731 Binop { op=fdiv, lhs=v728, rhs=v683 }            -> d0 [f32]
+    v731 Binop { op=fdiv, lhs=v728, rhs=v683 }            -> d1 [f32]
     v732 StoreLocal { off=-68, disp=60, value=v731, kind=F32 } -> -
     v733 LocalAddr(-69)                                   -> x8
     v734 Imm(15)                                          -> x0
@@ -12242,7 +12242,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=0
     v749 FpCast { kind=UIntToFp, value=v748 }             -> d0 [f32]
     v750 Imm(4)                                           -> x0
     v751 Imm(1082130432)                                  -> x0 [f32]
-    v752 Binop { op=fdiv, lhs=v749, rhs=v704 }            -> d0 [f32]
+    v752 Binop { op=fdiv, lhs=v749, rhs=v704 }            -> d1 [f32]
     v753 StoreLocal { off=-69, disp=60, value=v752, kind=F32 } -> -
     v754 Imm(15)                                          -> x0
     v755 Imm(16)                                          -> x0
@@ -12604,10 +12604,10 @@ fn ent_pc=22 n_params=0 variadic=false locals=0
     v19  BinopI { op=mul, lhs=v18, rhs_imm=2001 }         -> x0
     v20  Binop { op=sub, lhs=v15, rhs=v19 }               -> x6
     v21  BinopI { op=sub, lhs=v20, rhs_imm=1000 }         -> x0
-    v22  FpCast { kind=IntToFp, value=v21 }               -> d0
+    v22  FpCast { kind=IntToFp, value=v21 }               -> d1
     v23  Imm(8)                                           -> x0
-    v24  Imm(4620693217682128896)                         -> d1
-    v25  Binop { op=fdiv, lhs=v22, rhs=v24 }              -> d0
+    v24  Imm(4620693217682128896)                         -> d0
+    v25  Binop { op=fdiv, lhs=v22, rhs=v24 }              -> d1
     v26  StoreLocal { off=-37, value=v25, kind=F64 }      -> -
     v27  LocalAddr(-38)                                   -> x0
     v28  Imm(0)                                           -> x0
@@ -12626,10 +12626,10 @@ fn ent_pc=22 n_params=0 variadic=false locals=0
     v41  BinopI { op=mul, lhs=v40, rhs_imm=1000 }         -> x0
     v42  Binop { op=sub, lhs=v37, rhs=v41 }               -> x7
     v43  BinopI { op=add, lhs=v42, rhs_imm=1 }            -> x0
-    v44  FpCast { kind=UIntToFp, value=v43 }              -> d0
+    v44  FpCast { kind=UIntToFp, value=v43 }              -> d1
     v45  Imm(4)                                           -> x0
-    v46  Imm(4616189618054758400)                         -> d3
-    v47  Binop { op=fdiv, lhs=v44, rhs=v46 }              -> d0
+    v46  Imm(4616189618054758400)                         -> d0
+    v47  Binop { op=fdiv, lhs=v44, rhs=v46 }              -> d1
     v48  StoreLocal { off=-38, value=v47, kind=F64 }      -> -
     v49  Imm(0)                                           -> x0
     v50  Imm(1)                                           -> x0
@@ -12655,7 +12655,7 @@ fn ent_pc=22 n_params=0 variadic=false locals=0
     v70  FpCast { kind=IntToFp, value=v69 }               -> d0
     v71  Imm(8)                                           -> x0
     v72  Imm(4620693217682128896)                         -> x0
-    v73  Binop { op=fdiv, lhs=v70, rhs=v24 }              -> d0
+    v73  Binop { op=fdiv, lhs=v70, rhs=v24 }              -> d1
     v74  StoreLocal { off=-37, disp=8, value=v73, kind=F64 } -> -
     v75  LocalAddr(-38)                                   -> x0
     v76  Imm(1)                                           -> x0
@@ -12676,7 +12676,7 @@ fn ent_pc=22 n_params=0 variadic=false locals=0
     v91  FpCast { kind=UIntToFp, value=v90 }              -> d0
     v92  Imm(4)                                           -> x0
     v93  Imm(4616189618054758400)                         -> x0
-    v94  Binop { op=fdiv, lhs=v91, rhs=v46 }              -> d0
+    v94  Binop { op=fdiv, lhs=v91, rhs=v46 }              -> d1
     v95  StoreLocal { off=-38, disp=8, value=v94, kind=F64 } -> -
     v96  Imm(1)                                           -> x0
     v97  Imm(2)                                           -> x0
@@ -12699,10 +12699,10 @@ fn ent_pc=22 n_params=0 variadic=false locals=0
     v114 BinopI { op=mul, lhs=v113, rhs_imm=2001 }        -> x0
     v115 Binop { op=sub, lhs=v111, rhs=v114 }             -> x7
     v116 BinopI { op=sub, lhs=v115, rhs_imm=1000 }        -> x0
-    v117 FpCast { kind=IntToFp, value=v116 }              -> d0
+    v117 FpCast { kind=IntToFp, value=v116 }              -> d1
     v118 Imm(8)                                           -> x0
-    v119 Imm(4620693217682128896)                         -> d1
-    v120 Binop { op=fdiv, lhs=v117, rhs=v119 }            -> d0
+    v119 Imm(4620693217682128896)                         -> d0
+    v120 Binop { op=fdiv, lhs=v117, rhs=v119 }            -> d1
     v121 StoreLocal { off=-37, disp=16, value=v120, kind=F64 } -> -
     v122 LocalAddr(-38)                                   -> x0
     v123 Imm(2)                                           -> x0
@@ -12720,10 +12720,10 @@ fn ent_pc=22 n_params=0 variadic=false locals=0
     v135 BinopI { op=mul, lhs=v134, rhs_imm=1000 }        -> x0
     v136 Binop { op=sub, lhs=v132, rhs=v135 }             -> x7
     v137 BinopI { op=add, lhs=v136, rhs_imm=1 }           -> x0
-    v138 FpCast { kind=UIntToFp, value=v137 }             -> d0
+    v138 FpCast { kind=UIntToFp, value=v137 }             -> d1
     v139 Imm(4)                                           -> x0
-    v140 Imm(4616189618054758400)                         -> d3
-    v141 Binop { op=fdiv, lhs=v138, rhs=v140 }            -> d0
+    v140 Imm(4616189618054758400)                         -> d0
+    v141 Binop { op=fdiv, lhs=v138, rhs=v140 }            -> d1
     v142 StoreLocal { off=-38, disp=16, value=v141, kind=F64 } -> -
     v143 Imm(2)                                           -> x0
     v144 Imm(3)                                           -> x0
@@ -12749,7 +12749,7 @@ fn ent_pc=22 n_params=0 variadic=false locals=0
     v164 FpCast { kind=IntToFp, value=v163 }              -> d0
     v165 Imm(8)                                           -> x0
     v166 Imm(4620693217682128896)                         -> x0
-    v167 Binop { op=fdiv, lhs=v164, rhs=v119 }            -> d0
+    v167 Binop { op=fdiv, lhs=v164, rhs=v119 }            -> d1
     v168 StoreLocal { off=-37, disp=24, value=v167, kind=F64 } -> -
     v169 LocalAddr(-38)                                   -> x8
     v170 Imm(3)                                           -> x0
@@ -12770,7 +12770,7 @@ fn ent_pc=22 n_params=0 variadic=false locals=0
     v185 FpCast { kind=UIntToFp, value=v184 }             -> d0
     v186 Imm(4)                                           -> x0
     v187 Imm(4616189618054758400)                         -> x0
-    v188 Binop { op=fdiv, lhs=v185, rhs=v140 }            -> d0
+    v188 Binop { op=fdiv, lhs=v185, rhs=v140 }            -> d1
     v189 StoreLocal { off=-38, disp=24, value=v188, kind=F64 } -> -
     v190 Imm(3)                                           -> x0
     v191 Imm(4)                                           -> x0
@@ -13176,10 +13176,10 @@ fn ent_pc=24 n_params=0 variadic=false locals=0
     v19  BinopI { op=mul, lhs=v18, rhs_imm=2001 }         -> x0
     v20  Binop { op=sub, lhs=v15, rhs=v19 }               -> x6
     v21  BinopI { op=sub, lhs=v20, rhs_imm=1000 }         -> x0
-    v22  FpCast { kind=IntToFp, value=v21 }               -> d0
+    v22  FpCast { kind=IntToFp, value=v21 }               -> d1
     v23  Imm(8)                                           -> x0
-    v24  Imm(4620693217682128896)                         -> d1
-    v25  Binop { op=fdiv, lhs=v22, rhs=v24 }              -> d0
+    v24  Imm(4620693217682128896)                         -> d0
+    v25  Binop { op=fdiv, lhs=v22, rhs=v24 }              -> d1
     v26  StoreLocal { off=-65, value=v25, kind=F64 }      -> -
     v27  LocalAddr(-66)                                   -> x0
     v28  Imm(0)                                           -> x0
@@ -13198,10 +13198,10 @@ fn ent_pc=24 n_params=0 variadic=false locals=0
     v41  BinopI { op=mul, lhs=v40, rhs_imm=1000 }         -> x0
     v42  Binop { op=sub, lhs=v37, rhs=v41 }               -> x7
     v43  BinopI { op=add, lhs=v42, rhs_imm=1 }            -> x0
-    v44  FpCast { kind=UIntToFp, value=v43 }              -> d0
+    v44  FpCast { kind=UIntToFp, value=v43 }              -> d1
     v45  Imm(4)                                           -> x0
-    v46  Imm(4616189618054758400)                         -> d3
-    v47  Binop { op=fdiv, lhs=v44, rhs=v46 }              -> d0
+    v46  Imm(4616189618054758400)                         -> d0
+    v47  Binop { op=fdiv, lhs=v44, rhs=v46 }              -> d1
     v48  StoreLocal { off=-66, value=v47, kind=F64 }      -> -
     v49  Imm(0)                                           -> x0
     v50  Imm(1)                                           -> x0
@@ -13227,7 +13227,7 @@ fn ent_pc=24 n_params=0 variadic=false locals=0
     v70  FpCast { kind=IntToFp, value=v69 }               -> d0
     v71  Imm(8)                                           -> x0
     v72  Imm(4620693217682128896)                         -> x0
-    v73  Binop { op=fdiv, lhs=v70, rhs=v24 }              -> d0
+    v73  Binop { op=fdiv, lhs=v70, rhs=v24 }              -> d1
     v74  StoreLocal { off=-65, disp=8, value=v73, kind=F64 } -> -
     v75  LocalAddr(-66)                                   -> x0
     v76  Imm(1)                                           -> x0
@@ -13248,7 +13248,7 @@ fn ent_pc=24 n_params=0 variadic=false locals=0
     v91  FpCast { kind=UIntToFp, value=v90 }              -> d0
     v92  Imm(4)                                           -> x0
     v93  Imm(4616189618054758400)                         -> x0
-    v94  Binop { op=fdiv, lhs=v91, rhs=v46 }              -> d0
+    v94  Binop { op=fdiv, lhs=v91, rhs=v46 }              -> d1
     v95  StoreLocal { off=-66, disp=8, value=v94, kind=F64 } -> -
     v96  Imm(1)                                           -> x0
     v97  Imm(2)                                           -> x0
@@ -13271,10 +13271,10 @@ fn ent_pc=24 n_params=0 variadic=false locals=0
     v114 BinopI { op=mul, lhs=v113, rhs_imm=2001 }        -> x0
     v115 Binop { op=sub, lhs=v111, rhs=v114 }             -> x7
     v116 BinopI { op=sub, lhs=v115, rhs_imm=1000 }        -> x0
-    v117 FpCast { kind=IntToFp, value=v116 }              -> d0
+    v117 FpCast { kind=IntToFp, value=v116 }              -> d1
     v118 Imm(8)                                           -> x0
-    v119 Imm(4620693217682128896)                         -> d1
-    v120 Binop { op=fdiv, lhs=v117, rhs=v119 }            -> d0
+    v119 Imm(4620693217682128896)                         -> d0
+    v120 Binop { op=fdiv, lhs=v117, rhs=v119 }            -> d1
     v121 StoreLocal { off=-65, disp=16, value=v120, kind=F64 } -> -
     v122 LocalAddr(-66)                                   -> x0
     v123 Imm(2)                                           -> x0
@@ -13292,10 +13292,10 @@ fn ent_pc=24 n_params=0 variadic=false locals=0
     v135 BinopI { op=mul, lhs=v134, rhs_imm=1000 }        -> x0
     v136 Binop { op=sub, lhs=v132, rhs=v135 }             -> x7
     v137 BinopI { op=add, lhs=v136, rhs_imm=1 }           -> x0
-    v138 FpCast { kind=UIntToFp, value=v137 }             -> d0
+    v138 FpCast { kind=UIntToFp, value=v137 }             -> d1
     v139 Imm(4)                                           -> x0
-    v140 Imm(4616189618054758400)                         -> d3
-    v141 Binop { op=fdiv, lhs=v138, rhs=v140 }            -> d0
+    v140 Imm(4616189618054758400)                         -> d0
+    v141 Binop { op=fdiv, lhs=v138, rhs=v140 }            -> d1
     v142 StoreLocal { off=-66, disp=16, value=v141, kind=F64 } -> -
     v143 Imm(2)                                           -> x0
     v144 Imm(3)                                           -> x0
@@ -13321,7 +13321,7 @@ fn ent_pc=24 n_params=0 variadic=false locals=0
     v164 FpCast { kind=IntToFp, value=v163 }              -> d0
     v165 Imm(8)                                           -> x0
     v166 Imm(4620693217682128896)                         -> x0
-    v167 Binop { op=fdiv, lhs=v164, rhs=v119 }            -> d0
+    v167 Binop { op=fdiv, lhs=v164, rhs=v119 }            -> d1
     v168 StoreLocal { off=-65, disp=24, value=v167, kind=F64 } -> -
     v169 LocalAddr(-66)                                   -> x0
     v170 Imm(3)                                           -> x0
@@ -13342,7 +13342,7 @@ fn ent_pc=24 n_params=0 variadic=false locals=0
     v185 FpCast { kind=UIntToFp, value=v184 }             -> d0
     v186 Imm(4)                                           -> x0
     v187 Imm(4616189618054758400)                         -> x0
-    v188 Binop { op=fdiv, lhs=v185, rhs=v140 }            -> d0
+    v188 Binop { op=fdiv, lhs=v185, rhs=v140 }            -> d1
     v189 StoreLocal { off=-66, disp=24, value=v188, kind=F64 } -> -
     v190 Imm(3)                                           -> x0
     v191 Imm(4)                                           -> x0
@@ -13365,10 +13365,10 @@ fn ent_pc=24 n_params=0 variadic=false locals=0
     v208 BinopI { op=mul, lhs=v207, rhs_imm=2001 }        -> x0
     v209 Binop { op=sub, lhs=v205, rhs=v208 }             -> x7
     v210 BinopI { op=sub, lhs=v209, rhs_imm=1000 }        -> x0
-    v211 FpCast { kind=IntToFp, value=v210 }              -> d0
+    v211 FpCast { kind=IntToFp, value=v210 }              -> d1
     v212 Imm(8)                                           -> x0
-    v213 Imm(4620693217682128896)                         -> d1
-    v214 Binop { op=fdiv, lhs=v211, rhs=v213 }            -> d0
+    v213 Imm(4620693217682128896)                         -> d0
+    v214 Binop { op=fdiv, lhs=v211, rhs=v213 }            -> d1
     v215 StoreLocal { off=-65, disp=32, value=v214, kind=F64 } -> -
     v216 LocalAddr(-66)                                   -> x0
     v217 Imm(4)                                           -> x0
@@ -13386,10 +13386,10 @@ fn ent_pc=24 n_params=0 variadic=false locals=0
     v229 BinopI { op=mul, lhs=v228, rhs_imm=1000 }        -> x0
     v230 Binop { op=sub, lhs=v226, rhs=v229 }             -> x7
     v231 BinopI { op=add, lhs=v230, rhs_imm=1 }           -> x0
-    v232 FpCast { kind=UIntToFp, value=v231 }             -> d0
+    v232 FpCast { kind=UIntToFp, value=v231 }             -> d1
     v233 Imm(4)                                           -> x0
-    v234 Imm(4616189618054758400)                         -> d3
-    v235 Binop { op=fdiv, lhs=v232, rhs=v234 }            -> d0
+    v234 Imm(4616189618054758400)                         -> d0
+    v235 Binop { op=fdiv, lhs=v232, rhs=v234 }            -> d1
     v236 StoreLocal { off=-66, disp=32, value=v235, kind=F64 } -> -
     v237 Imm(4)                                           -> x0
     v238 Imm(5)                                           -> x0
@@ -13415,7 +13415,7 @@ fn ent_pc=24 n_params=0 variadic=false locals=0
     v258 FpCast { kind=IntToFp, value=v257 }              -> d0
     v259 Imm(8)                                           -> x0
     v260 Imm(4620693217682128896)                         -> x0
-    v261 Binop { op=fdiv, lhs=v258, rhs=v213 }            -> d0
+    v261 Binop { op=fdiv, lhs=v258, rhs=v213 }            -> d1
     v262 StoreLocal { off=-65, disp=40, value=v261, kind=F64 } -> -
     v263 LocalAddr(-66)                                   -> x0
     v264 Imm(5)                                           -> x0
@@ -13436,7 +13436,7 @@ fn ent_pc=24 n_params=0 variadic=false locals=0
     v279 FpCast { kind=UIntToFp, value=v278 }             -> d0
     v280 Imm(4)                                           -> x0
     v281 Imm(4616189618054758400)                         -> x0
-    v282 Binop { op=fdiv, lhs=v279, rhs=v234 }            -> d0
+    v282 Binop { op=fdiv, lhs=v279, rhs=v234 }            -> d1
     v283 StoreLocal { off=-66, disp=40, value=v282, kind=F64 } -> -
     v284 Imm(5)                                           -> x0
     v285 Imm(6)                                           -> x0
@@ -13459,10 +13459,10 @@ fn ent_pc=24 n_params=0 variadic=false locals=0
     v302 BinopI { op=mul, lhs=v301, rhs_imm=2001 }        -> x0
     v303 Binop { op=sub, lhs=v299, rhs=v302 }             -> x7
     v304 BinopI { op=sub, lhs=v303, rhs_imm=1000 }        -> x0
-    v305 FpCast { kind=IntToFp, value=v304 }              -> d0
+    v305 FpCast { kind=IntToFp, value=v304 }              -> d1
     v306 Imm(8)                                           -> x0
-    v307 Imm(4620693217682128896)                         -> d1
-    v308 Binop { op=fdiv, lhs=v305, rhs=v307 }            -> d0
+    v307 Imm(4620693217682128896)                         -> d0
+    v308 Binop { op=fdiv, lhs=v305, rhs=v307 }            -> d1
     v309 StoreLocal { off=-65, disp=48, value=v308, kind=F64 } -> -
     v310 LocalAddr(-66)                                   -> x0
     v311 Imm(6)                                           -> x0
@@ -13480,10 +13480,10 @@ fn ent_pc=24 n_params=0 variadic=false locals=0
     v323 BinopI { op=mul, lhs=v322, rhs_imm=1000 }        -> x0
     v324 Binop { op=sub, lhs=v320, rhs=v323 }             -> x7
     v325 BinopI { op=add, lhs=v324, rhs_imm=1 }           -> x0
-    v326 FpCast { kind=UIntToFp, value=v325 }             -> d0
+    v326 FpCast { kind=UIntToFp, value=v325 }             -> d1
     v327 Imm(4)                                           -> x0
-    v328 Imm(4616189618054758400)                         -> d3
-    v329 Binop { op=fdiv, lhs=v326, rhs=v328 }            -> d0
+    v328 Imm(4616189618054758400)                         -> d0
+    v329 Binop { op=fdiv, lhs=v326, rhs=v328 }            -> d1
     v330 StoreLocal { off=-66, disp=48, value=v329, kind=F64 } -> -
     v331 Imm(6)                                           -> x0
     v332 Imm(7)                                           -> x0
@@ -13509,7 +13509,7 @@ fn ent_pc=24 n_params=0 variadic=false locals=0
     v352 FpCast { kind=IntToFp, value=v351 }              -> d0
     v353 Imm(8)                                           -> x0
     v354 Imm(4620693217682128896)                         -> x0
-    v355 Binop { op=fdiv, lhs=v352, rhs=v307 }            -> d0
+    v355 Binop { op=fdiv, lhs=v352, rhs=v307 }            -> d1
     v356 StoreLocal { off=-65, disp=56, value=v355, kind=F64 } -> -
     v357 LocalAddr(-66)                                   -> x8
     v358 Imm(7)                                           -> x0
@@ -13530,7 +13530,7 @@ fn ent_pc=24 n_params=0 variadic=false locals=0
     v373 FpCast { kind=UIntToFp, value=v372 }             -> d0
     v374 Imm(4)                                           -> x0
     v375 Imm(4616189618054758400)                         -> x0
-    v376 Binop { op=fdiv, lhs=v373, rhs=v328 }            -> d0
+    v376 Binop { op=fdiv, lhs=v373, rhs=v328 }            -> d1
     v377 StoreLocal { off=-66, disp=56, value=v376, kind=F64 } -> -
     v378 Imm(7)                                           -> x0
     v379 Imm(8)                                           -> x0

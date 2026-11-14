@@ -62,13 +62,12 @@ Disassembly of section .text:
                	cmpl	%ecx, %eax
                	jne	<addr>
                	leaq	<rip>, %rdx # <addr>
-               	movsd	<rip>, %xmm1
                	movq	(%rdx), %rcx
                	jmp	<addr>
                	movq	%rax, %rcx
                	movq	%rcx, -0x38(%rbp)
                	movq	%rcx, %xmm0
-               	addsd	%xmm1, %xmm0
+               	vaddsd	<rip>, %xmm0, %xmm0
                	movsd	%xmm0, -0x30(%rbp)
                	movq	%xmm0, %rsi
                	movq	%rcx, %rax
@@ -77,7 +76,6 @@ Disassembly of section .text:
                	cmpq	%rcx, %rax
                	jne	<addr>
                	leaq	<rip>, %rdx # <addr>
-               	movsd	<rip>, %xmm0
                	movq	<rip>, %rcx # <addr>
                	movq	<rip>, %rsi # <addr>
                	leaq	-0x28(%rbp), %rax
@@ -86,11 +84,11 @@ Disassembly of section .text:
                	leaq	-0x60(%rbp), %rcx
                	fldt	-0x28(%rbp)
                	fstpl	-0x8(%rsp)
-               	movsd	-0x8(%rsp), %xmm1
-               	addsd	%xmm0, %xmm1
+               	movsd	-0x8(%rsp), %xmm0
+               	vaddsd	<rip>, %xmm0, %xmm0
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%rcx)
-               	movsd	%xmm1, -0x8(%rsp)
+               	movsd	%xmm0, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	-0x60(%rbp)
                	movq	%rax, %r10

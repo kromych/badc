@@ -31,8 +31,7 @@ Disassembly of section .text:
 
 <main>:
                	movsd	<rip>, %xmm0 # <addr>
-               	movsd	<rip>, %xmm1
-               	vsubsd	%xmm1, %xmm0, %xmm2
+               	vsubsd	<rip>, %xmm0, %xmm2
                	movsd	<rip>, %xmm0
                	comisd	%xmm2, %xmm0
                	jbe	<addr>
@@ -42,8 +41,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	retq
                	movsd	<rip>, %xmm2 # <addr>
-               	movsd	<rip>, %xmm3
-               	subsd	%xmm3, %xmm2
+               	vsubsd	<rip>, %xmm2, %xmm2
                	comisd	%xmm2, %xmm0
                	jbe	<addr>
                	comisd	%xmm1, %xmm2
@@ -51,8 +49,7 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	retq
                	movsd	<rip>, %xmm2 # <addr>
-               	movsd	<rip>, %xmm3
-               	subsd	%xmm3, %xmm2
+               	vsubsd	<rip>, %xmm2, %xmm2
                	comisd	%xmm2, %xmm0
                	jbe	<addr>
                	comisd	%xmm1, %xmm2
@@ -60,8 +57,7 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	retq
                	movsd	<rip>, %xmm0 # <addr>
-               	movsd	<rip>, %xmm1
-               	subsd	%xmm1, %xmm0
+               	vsubsd	<rip>, %xmm0, %xmm0
                	movsd	<rip>, %xmm1
                	comisd	%xmm0, %xmm1
                	jbe	<addr>

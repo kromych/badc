@@ -37,8 +37,7 @@ Disassembly of section .text:
                	cvttsd2si	%xmm0, %rcx
                	addq	%rcx, %rax
                	movq	%rax, <rip> # <addr>
-               	movsd	<rip>, %xmm1
-               	mulsd	%xmm1, %xmm0
+               	vmulsd	<rip>, %xmm0, %xmm0
                	retq
 
 <fma_constant>:
@@ -47,17 +46,16 @@ Disassembly of section .text:
                	subq	$0x20, %rsp
                	movsd	%xmm0, 0x18(%rsp)
                	movsd	%xmm1, 0x10(%rsp)
-               	movsd	<rip>, %xmm0
                	movsd	0x18(%rsp), %xmm14
-               	vmulsd	%xmm0, %xmm14, %xmm0
+               	vmulsd	<rip>, %xmm14, %xmm0
                	callq	<addr>
                	movsd	%xmm0, 0x8(%rsp)
                	movsd	0x10(%rsp), %xmm0
                	callq	<addr>
                	movsd	0x8(%rsp), %xmm14
                	vaddsd	%xmm0, %xmm14, %xmm0
-               	movsd	<rip>, %xmm1
-               	vfmadd231sd	0x18(%rsp), %xmm1, %xmm0 # xmm0 = (xmm1 * mem) + xmm0
+               	movsd	0x18(%rsp), %xmm14
+               	vfmadd231sd	<rip>, %xmm14, %xmm0 # xmm0 = (xmm14 * mem) + xmm0
                	cvttsd2si	%xmm0, %rax
                	leave
                	retq

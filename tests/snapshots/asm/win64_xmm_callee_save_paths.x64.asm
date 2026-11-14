@@ -61,8 +61,8 @@ Disassembly of section .text:
                	vfmadd231sd	0x20(%rsp), %xmm14, %xmm1 # xmm1 = (xmm14 * mem) + xmm1
                	vfmadd132sd	0x8(%rsp), %xmm1, %xmm0 # xmm0 = (xmm0 * mem) + xmm1
                	cvttsd2si	%xmm0, %rax
-               	movsd	<rip>, %xmm1
-               	vfmadd213sd	0x28(%rsp), %xmm1, %xmm0 # xmm0 = (xmm1 * xmm0) + mem
+               	movsd	0x28(%rsp), %xmm14
+               	vfmadd132sd	<rip>, %xmm14, %xmm0 # xmm0 = (xmm0 * mem) + xmm14
                	cvttsd2si	%xmm0, %rcx
                	cmpl	$0x2c, %eax
                	je	<addr>
@@ -97,8 +97,8 @@ Disassembly of section .text:
                	vfmadd231sd	0x20(%rsp), %xmm14, %xmm1 # xmm1 = (xmm14 * mem) + xmm1
                	vfmadd132sd	0x8(%rsp), %xmm1, %xmm0 # xmm0 = (xmm0 * mem) + xmm1
                	cvttsd2si	%xmm0, %rax
-               	movsd	<rip>, %xmm1
-               	vfmadd213sd	0x28(%rsp), %xmm1, %xmm0 # xmm0 = (xmm1 * xmm0) + mem
+               	movsd	0x28(%rsp), %xmm14
+               	vfmadd132sd	<rip>, %xmm14, %xmm0 # xmm0 = (xmm0 * mem) + xmm14
                	cvttsd2si	%xmm0, %rcx
                	cmpl	$0xa, %eax
                	je	<addr>

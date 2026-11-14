@@ -83,11 +83,11 @@ fn ent_pc=2 n_params=2 variadic=false locals=0
     v17  FpCast { kind=BitsFp, value=v0 }                 -> d0
     v18  Imm(2)                                           -> x0
     v19  Imm(4611686018427387904)                         -> d1
-    v20  Binop { op=fmul.c, lhs=v17, rhs=v19 }            -> d2
+    v20  Binop { op=fmul.c, lhs=v17, rhs=v19 }            -> d1
     v21  Imm(0)                                           -> x0
     v22  Imm(0)                                           -> x0
     v23  Extend { value=v2, kind=I32 }                    -> x0
-    v24  FpCast { kind=IntToFp, value=v23 }               -> d2
+    v24  FpCast { kind=IntToFp, value=v23 }               -> d1
     v25  Fma { a=v17, b=v19, c=v24, neg_product=false, neg_addend=false } -> d0
     v26  FpCast { kind=FpBits, value=v25 }                -> x0
     terminator Jmp(b2)   (exit_acc=v25)

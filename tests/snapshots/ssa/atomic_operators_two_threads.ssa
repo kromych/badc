@@ -73,7 +73,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=8
     terminator Bz { cond=v54, target=b4, fall=b6 }   (exit_acc=v54)
   block 6  start_pc=0
     v55  ImmData(320088)                                  -> x2
-    v56  Imm(4602678819172646912)                         -> d1
+    v56  Imm(4602678819172646912)                         -> d0
     v57  AtomicLoad { addr=v55, width=8, order=SeqCst }   -> x1
     v58  Imm(0)                                           -> x0
     terminator Jmp(b8)   (exit_acc=v57)
@@ -106,8 +106,8 @@ fn ent_pc=0 n_params=1 variadic=false locals=8
     v80  LocalAddr(-31)                                   -> x1
     terminator Jmp(b10)   (exit_acc=v80)
   block 10  start_pc=0
-    v81  LoadLocal { off=-5, kind=F80 }                   -> d1
-    v82  Binop { op=fadd, lhs=v81, rhs=v72 }              -> d1
+    v81  LoadLocal { off=-5, kind=F80 }                   -> d0
+    v82  Binop { op=fadd, lhs=v81, rhs=v72 }              -> d0
     v83  Mcpy { dst=v80, src=v76, size=16, align=16 }     -> -
     v84  StoreLocal { off=-31, value=v82, kind=F80 }      -> -
     v85  AtomicCas16 { addr=v71, expected=v76, desired=v80, order=SeqCst } -> x6

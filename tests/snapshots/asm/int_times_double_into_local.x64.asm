@@ -27,10 +27,9 @@ Disassembly of section .text:
 
 <compute>:
                	movslq	%esi, %rsi
-               	movsd	<rip>, %xmm0
-               	xorps	%xmm1, %xmm1
-               	cvtsi2sd	%rsi, %xmm1
-               	mulsd	%xmm1, %xmm0
+               	xorps	%xmm0, %xmm0
+               	cvtsi2sd	%rsi, %xmm0
+               	vmulsd	<rip>, %xmm0, %xmm0
                	retq
 
 <main>:

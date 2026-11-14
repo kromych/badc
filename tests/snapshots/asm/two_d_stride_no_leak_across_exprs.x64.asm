@@ -33,8 +33,7 @@ Disassembly of section .text:
                	leaq	-0x100(%rbp), %rcx
                	xorps	%xmm0, %xmm0
                	cvtsi2ss	%rax, %xmm0
-               	movss	<rip>, %xmm1
-               	mulss	%xmm1, %xmm0
+               	vmulss	<rip>, %xmm0, %xmm0
                	movss	%xmm0, -0x100(%rbp,%rax,4)
                	incq	%rax
                	cmpl	$0x40, %eax

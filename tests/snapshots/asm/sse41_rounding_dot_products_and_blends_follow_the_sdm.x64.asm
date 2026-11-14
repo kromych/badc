@@ -196,8 +196,7 @@ Disassembly of section .text:
                	jne	<addr>
                	testb	$0x1, %cl
                	je	<addr>
-               	movsd	<rip>, %xmm1 # <addr>
-               	addsd	%xmm1, %xmm0
+               	vaddsd	<rip>, %xmm0, %xmm0 # <addr>
                	xorps	%xmm1, %xmm1
                	ucomisd	%xmm1, %xmm0
                	jp	<addr>
@@ -218,24 +217,21 @@ Disassembly of section .text:
                	jne	<addr>
                	testb	$0x1, %cl
                	je	<addr>
-               	movsd	<rip>, %xmm1 # <addr>
-               	subsd	%xmm1, %xmm0
+               	vsubsd	<rip>, %xmm0, %xmm0 # <addr>
                	jmp	<addr>
                	cmpl	$0x1, %edi
                	jne	<addr>
                	xorps	%xmm2, %xmm2
                	comisd	%xmm1, %xmm2
                	jbe	<addr>
-               	movsd	<rip>, %xmm1 # <addr>
-               	subsd	%xmm1, %xmm0
+               	vsubsd	<rip>, %xmm0, %xmm0 # <addr>
                	jmp	<addr>
                	cmpl	$0x2, %edi
                	jne	<addr>
                	xorps	%xmm2, %xmm2
                	comisd	%xmm2, %xmm1
                	jbe	<addr>
-               	movsd	<rip>, %xmm1 # <addr>
-               	addsd	%xmm1, %xmm0
+               	vaddsd	<rip>, %xmm0, %xmm0 # <addr>
                	jmp	<addr>
 
 <model_round_f>:
@@ -2229,9 +2225,8 @@ Disassembly of section .text:
                	vcvtss2sd	%xmm0, %xmm0, %xmm2
                	vmovq	%xmm2, %xmm0            # xmm0 = xmm2[0],zero
                	movss	-0x10c(%rbp), %xmm1
-               	movsd	<rip>, %xmm3 # <addr>
                	cvtss2sd	%xmm1, %xmm1
-               	vmulsd	%xmm3, %xmm1, %xmm3
+               	vmulsd	<rip>, %xmm1, %xmm3 # <addr>
                	vunpcklpd	%xmm3, %xmm0, %xmm0 # xmm0 = xmm0[0],xmm3[0]
                	movss	-0xf8(%rbp), %xmm1
                	vcvtss2sd	%xmm1, %xmm1, %xmm4
@@ -2365,57 +2360,49 @@ Disassembly of section .text:
                	subq	$0x80000, %rax          # imm = 0x80000
                	xorps	%xmm0, %xmm0
                	cvtsi2ss	%rax, %xmm0
-               	movss	<rip>, %xmm1 # <addr>
-               	divss	%xmm1, %xmm0
+               	vdivss	<rip>, %xmm0, %xmm0 # <addr>
                	jmp	<addr>
                	shrq	$0x2c, %rax
                	subq	$0x80000, %rax          # imm = 0x80000
                	xorps	%xmm0, %xmm0
                	cvtsi2ss	%rax, %xmm0
-               	movss	<rip>, %xmm1 # <addr>
-               	divss	%xmm1, %xmm0
+               	vdivss	<rip>, %xmm0, %xmm0 # <addr>
                	jmp	<addr>
                	shrq	$0x2c, %rax
                	subq	$0x80000, %rax          # imm = 0x80000
                	xorps	%xmm0, %xmm0
                	cvtsi2ss	%rax, %xmm0
-               	movss	<rip>, %xmm1 # <addr>
-               	divss	%xmm1, %xmm0
+               	vdivss	<rip>, %xmm0, %xmm0 # <addr>
                	jmp	<addr>
                	shrq	$0x2c, %rax
                	subq	$0x80000, %rax          # imm = 0x80000
                	xorps	%xmm0, %xmm0
                	cvtsi2ss	%rax, %xmm0
-               	movss	<rip>, %xmm1 # <addr>
-               	divss	%xmm1, %xmm0
+               	vdivss	<rip>, %xmm0, %xmm0 # <addr>
                	jmp	<addr>
                	shrq	$0x2c, %rax
                	subq	$0x80000, %rax          # imm = 0x80000
                	xorps	%xmm0, %xmm0
                	cvtsi2ss	%rax, %xmm0
-               	movss	<rip>, %xmm1 # <addr>
-               	divss	%xmm1, %xmm0
+               	vdivss	<rip>, %xmm0, %xmm0 # <addr>
                	jmp	<addr>
                	shrq	$0x2c, %rax
                	subq	$0x80000, %rax          # imm = 0x80000
                	xorps	%xmm0, %xmm0
                	cvtsi2ss	%rax, %xmm0
-               	movss	<rip>, %xmm1 # <addr>
-               	divss	%xmm1, %xmm0
+               	vdivss	<rip>, %xmm0, %xmm0 # <addr>
                	jmp	<addr>
                	shrq	$0x2c, %rax
                	subq	$0x80000, %rax          # imm = 0x80000
                	xorps	%xmm0, %xmm0
                	cvtsi2ss	%rax, %xmm0
-               	movss	<rip>, %xmm1 # <addr>
-               	divss	%xmm1, %xmm0
+               	vdivss	<rip>, %xmm0, %xmm0 # <addr>
                	jmp	<addr>
                	shrq	$0x2c, %rax
                	subq	$0x80000, %rax          # imm = 0x80000
                	xorps	%xmm0, %xmm0
                	cvtsi2ss	%rax, %xmm0
-               	movss	<rip>, %xmm1 # <addr>
-               	divss	%xmm1, %xmm0
+               	vdivss	<rip>, %xmm0, %xmm0 # <addr>
                	jmp	<addr>
 
 <check_insert_extract>:

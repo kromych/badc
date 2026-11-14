@@ -278,8 +278,7 @@ Disassembly of section .text:
                	incq	%rbx
                	cmpl	%r12d, %ebx
                	jge	<addr>
-               	movsd	<rip>, %xmm12
-               	addsd	%xmm12, %xmm0
+               	vaddsd	<rip>, %xmm0, %xmm0
                	vaddsd	%xmm0, %xmm10, %xmm10
                	addsd	%xmm10, %xmm9
                	addsd	%xmm9, %xmm8
@@ -357,8 +356,7 @@ Disassembly of section .text:
                	incq	%rbx
                	cmpl	%r12d, %ebx
                	jge	<addr>
-               	movsd	<rip>, %xmm12
-               	addsd	%xmm12, %xmm0
+               	vaddsd	<rip>, %xmm0, %xmm0
                	addsd	%xmm0, %xmm1
                	addsd	%xmm1, %xmm2
                	addsd	%xmm2, %xmm3

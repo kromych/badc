@@ -394,12 +394,23 @@ pub(super) fn emit_inst(
         | Inst::StoreLocal { .. }
         | Inst::LoadIndexed { .. }
         | Inst::StoreIndexed { .. } => emit_mem_inst(code, inst, v, dst, fcx),
-        Inst::Binop { op, lhs, rhs } if alloc.fp_mem_operand.contains(rhs) => {
-            let Some(mem) = folded_load_operand(code, *rhs, fcx) else {
+        // The allocator folds a commuting operation's first operand only.
+        Inst::Binop { op, lhs, rhs }
+            if alloc.fp_mem_operand.contains(rhs) || alloc.fp_mem_operand.contains(lhs) =>
+        {
+            let (held, folded) = if alloc.fp_mem_operand.contains(rhs) {
+                (*lhs, *rhs)
+            } else {
+                (*rhs, *lhs)
+            };
+            let Some(mem) = folded_operand(code, folded, fcx) else {
                 return fail("Fbinop: folded load address not int reg / spill");
             };
-            let lhs = place_of(alloc, *lhs);
-            super::arith::emit_fp_binop_mem(code, *op, alloc.is_f32(v), dst, lhs, mem, frame)
+            let held = place_of(alloc, held);
+            let end =
+                super::arith::emit_fp_binop_mem(code, *op, alloc.is_f32(v), dst, held, mem, frame)?;
+            note_literal(&mut out.fp_literals, end, func, folded, alloc.is_f32(v));
+            Ok(())
         }
         Inst::Binop { op, lhs, rhs } => emit_binop(code, *op, v, dst, *lhs, *rhs, alloc, frame),
         Inst::BinopI { op, lhs, rhs_imm } => {
@@ -545,18 +556,22 @@ pub(super) fn emit_inst(
             neg_product,
             neg_addend,
         } => {
-            let mem = match [*a, *b, *c]
+            let folded = [*a, *b, *c]
                 .into_iter()
-                .find(|x| alloc.fp_mem_operand.contains(x))
-            {
-                Some(load) => match folded_load_operand(code, load, fcx) {
+                .find(|x| alloc.fp_mem_operand.contains(x));
+            let mem = match folded {
+                Some(f) => match folded_operand(code, f, fcx) {
                     Some(mem) => Some(mem),
                     None => return fail("Fma: folded load address not int reg / spill"),
                 },
                 None => None,
             };
             let negate = (*neg_product, *neg_addend);
-            emit_fma(code, dst, v, *a, *b, *c, negate, mem, alloc, frame)
+            let end = emit_fma(code, dst, v, *a, *b, *c, negate, mem, alloc, frame)?;
+            if let (Some(f), Some(end)) = (folded, end) {
+                note_literal(&mut out.fp_literals, end, func, f, alloc.is_f32(v));
+            }
+            Ok(())
         }
         Inst::MulAdd {
             a,
@@ -786,10 +801,10 @@ pub(super) fn frame_object_base(
     Some((reg, i32::try_from(bytes).ok()?))
 }
 
-/// The memory operand of a load its reader takes in its place
-/// (`Allocation::fp_mem_operand`), a spilled base or index loaded into a
-/// scratch register.
-fn folded_load_operand(
+/// The memory operand a reader takes in place of a register
+/// (`Allocation::fp_mem_operand`): a load's address, a spilled base or index
+/// loaded into a scratch register, or a constant's read-only literal.
+fn folded_operand(
     code: &mut CodeBuf,
     load: super::super::ir::ValueId,
     fcx: &FnCtx,
@@ -815,13 +830,28 @@ fn folded_load_operand(
                 frame,
                 frame_object_base(func, base, frame, abi),
             )?;
-            Some(super::super::encode::Mem {
+            Some(super::super::encode::Mem::Base {
                 base,
                 index: Some((index, scale)),
                 disp,
             })
         }
+        Inst::Imm(_) => Some(super::super::encode::Mem::Rip),
         _ => None,
+    }
+}
+
+/// Records the literal of a folded constant `folded` in the disp32 of its
+/// reader, which ends at `end` with no immediate after it.
+fn note_literal(
+    literals: &mut Vec<(usize, u64, bool)>,
+    end: usize,
+    func: &FunctionSsa,
+    folded: super::super::ir::ValueId,
+    single: bool,
+) {
+    if let Inst::Imm(bits) = func.insts[folded as usize] {
+        literals.push((end - 4, bits as u64, single));
     }
 }
 

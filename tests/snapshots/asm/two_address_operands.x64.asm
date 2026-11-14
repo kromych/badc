@@ -51,8 +51,7 @@ Disassembly of section .text:
                	retq
 
 <fdiv_rev>:
-               	movsd	<rip>, %xmm2
-               	vmulsd	%xmm2, %xmm0, %xmm2
+               	vmulsd	<rip>, %xmm0, %xmm2
                	vdivsd	%xmm2, %xmm1, %xmm0
                	retq
 

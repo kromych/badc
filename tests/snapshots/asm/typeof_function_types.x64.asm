@@ -31,8 +31,7 @@ Disassembly of section .text:
                	retq
 
 <half>:
-               	movsd	<rip>, %xmm1
-               	divsd	%xmm1, %xmm0
+               	vdivsd	<rip>, %xmm0, %xmm0
                	retq
 
 <main>:

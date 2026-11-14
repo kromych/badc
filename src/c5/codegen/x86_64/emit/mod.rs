@@ -508,6 +508,9 @@ struct Out<'a, 'b> {
     asm_text_abs_refs: &'b mut Vec<super::AsmTextAbsRef>,
     asm_text_labels: &'b mut Vec<super::AsmTextLabel>,
     abs_addr_refs: &'b mut Vec<super::AbsAddrRef>,
+    /// `(displacement offset, bits, single)` per floating constant read
+    /// from a read-only literal.
+    fp_literals: Vec<(usize, u64, bool)>,
 }
 
 /// The length of every output buffer at one point of the emission.

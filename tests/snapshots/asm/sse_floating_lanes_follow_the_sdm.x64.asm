@@ -3435,8 +3435,7 @@ Disassembly of section .text:
                	orq	%r10, %r11
                	cvtsi2ss	%r11, %xmm0
                	addss	%xmm0, %xmm0
-               	movss	<rip>, %xmm1 # <addr>
-               	divss	%xmm1, %xmm0
+               	vdivss	<rip>, %xmm0, %xmm0 # <addr>
                	movq	%rcx, %xmm14
                	vaddss	%xmm0, %xmm14, %xmm0
                	vbroadcastss	%xmm0, %xmm1
@@ -3448,17 +3447,19 @@ Disassembly of section .text:
                	vpermilps	$0x0, %xmm3, %xmm2 # xmm2 = xmm3[0,0,0,0]
                	cvtss2sd	%xmm0, %xmm0
                	vcvtss2sd	%xmm2, %xmm2, %xmm3
-               	movsd	<rip>, %xmm2 # <addr>
-               	vfmsub213sd	%xmm2, %xmm0, %xmm3 # xmm3 = (xmm0 * xmm3) - xmm2
-               	vpermilps	$0x0, %xmm1, %xmm4 # xmm4 = xmm1[0,0,0,0]
-               	vmulss	%xmm1, %xmm4, %xmm1
+               	movapd	%xmm3, %xmm2
+               	vfmsub213sd	<rip>, %xmm0, %xmm2 # xmm2 = (xmm0 * xmm2) - mem
+                                                # <addr>
+               	vpermilps	$0x0, %xmm1, %xmm3 # xmm3 = xmm1[0,0,0,0]
+               	vmulss	%xmm1, %xmm3, %xmm1
                	cvtss2sd	%xmm1, %xmm1
-               	vfmsub213sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm0) - xmm2
+               	vfmsub213sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm0) - mem
+                                                # <addr>
                	movsd	<rip>, %xmm1 # <addr>
-               	comisd	%xmm1, %xmm3
+               	comisd	%xmm1, %xmm2
                	ja	<addr>
                	movsd	<rip>, %xmm1 # <addr>
-               	comisd	%xmm3, %xmm1
+               	comisd	%xmm2, %xmm1
                	ja	<addr>
                	movsd	<rip>, %xmm1 # <addr>
                	comisd	%xmm1, %xmm0

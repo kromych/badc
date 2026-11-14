@@ -78,13 +78,13 @@ fn ent_pc=2 n_params=2 variadic=false locals=2
     v29  LoadLocal { off=-2, kind=F64, volatile }         -> d2
     v30  LoadLocal { off=-1, kind=F64, volatile }         -> d3
     v31  Imm(4617315517961601024)                         -> d4
-    v32  Binop { op=fmul.c, lhs=v30, rhs=v31 }            -> d5
+    v32  Binop { op=fmul.c, lhs=v30, rhs=v31 }            -> d4
     v33  Fma { a=v30, b=v31, c=v29, neg_product=false, neg_addend=false } -> [spill 9]
     v34  Imm(0)                                           -> x0
     v35  LoadLocal { off=-2, kind=F64, volatile }         -> d2
     v36  Imm(4618441417868443648)                         -> d3
-    v37  Binop { op=fmul.c, lhs=v35, rhs=v36 }            -> d4
-    v38  LoadLocal { off=-1, kind=F64, volatile }         -> d4
+    v37  Binop { op=fmul.c, lhs=v35, rhs=v36 }            -> d3
+    v38  LoadLocal { off=-1, kind=F64, volatile }         -> d3
     v39  Fma { a=v35, b=v36, c=v38, neg_product=false, neg_addend=false } -> [spill 0]
     v40  Imm(0)                                           -> x0
     v41  LoadLocal { off=-2, kind=F64, volatile }         -> d2
@@ -107,14 +107,14 @@ fn ent_pc=2 n_params=2 variadic=false locals=2
     v58  Imm(0)                                           -> x0
     v59  LoadLocal { off=-2, kind=F64, volatile }         -> d2
     v60  Imm(4621819117588971520)                         -> d3
-    v61  Binop { op=fmul.c, lhs=v59, rhs=v60 }            -> d4
-    v62  LoadLocal { off=-1, kind=F64, volatile }         -> d4
+    v61  Binop { op=fmul.c, lhs=v59, rhs=v60 }            -> d3
+    v62  LoadLocal { off=-1, kind=F64, volatile }         -> d3
     v63  Fma { a=v59, b=v60, c=v62, neg_product=false, neg_addend=false } -> [spill 4]
     v64  Imm(0)                                           -> x0
     v65  LoadLocal { off=-2, kind=F64, volatile }         -> d2
     v66  LoadLocal { off=-1, kind=F64, volatile }         -> d3
     v67  Imm(4622382067542392832)                         -> d4
-    v68  Binop { op=fmul.c, lhs=v66, rhs=v67 }            -> d5
+    v68  Binop { op=fmul.c, lhs=v66, rhs=v67 }            -> d4
     v69  Fma { a=v66, b=v67, c=v65, neg_product=false, neg_addend=false } -> [spill 5]
     v70  Imm(0)                                           -> x0
     v71  Imm(0)                                           -> x0

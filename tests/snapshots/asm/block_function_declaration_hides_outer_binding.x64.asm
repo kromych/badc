@@ -70,8 +70,7 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm2
                	movb	$0x3, %al
                	callq	<addr>
-               	movsd	<rip>, %xmm1
-               	addsd	%xmm1, %xmm0
+               	vaddsd	<rip>, %xmm0, %xmm0
                	popq	%rbp
                	retq
 
@@ -85,10 +84,8 @@ Disassembly of section .text:
                	movslq	<rip>, %rax # <addr>
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rax, %xmm0
-               	movsd	<rip>, %xmm1
-               	divsd	%xmm1, %xmm0
-               	movsd	<rip>, %xmm1
-               	addsd	%xmm1, %xmm0
+               	vdivsd	<rip>, %xmm0, %xmm0
+               	vaddsd	<rip>, %xmm0, %xmm0
                	retq
 
 <outer_block_pointer>:
@@ -114,8 +111,7 @@ Disassembly of section .text:
 
 <unproto>:
                	imulq	$0x64, %rdi, %rax
-               	movsd	<rip>, %xmm1
-               	mulsd	%xmm1, %xmm0
+               	vmulsd	<rip>, %xmm0, %xmm0
                	cvttsd2si	%xmm0, %rcx
                	addq	%rcx, %rax
                	retq
@@ -129,8 +125,7 @@ Disassembly of section .text:
                	movslq	%edi, %rdi
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rdi, %xmm0
-               	movsd	<rip>, %xmm1
-               	divsd	%xmm1, %xmm0
+               	vdivsd	<rip>, %xmm0, %xmm0
                	retq
 
 <at>:

@@ -6,15 +6,15 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(4)                                       -> x0
     v2   Load { addr=v1, disp=0, kind=F32 pc_rel }        -> d0 [f32]
-    v3   FpCast { kind=F32ToF64, value=v2 }               -> d0
-    v4   Imm(4607182418800017408)                         -> d1
-    v5   Binop { op=fsub, lhs=v3, rhs=v4 }                -> d3
+    v3   FpCast { kind=F32ToF64, value=v2 }               -> d1
+    v4   Imm(4607182418800017408)                         -> d0
+    v5   Binop { op=fsub, lhs=v3, rhs=v4 }                -> d2
     v6   Imm(4562254508917369340)                         -> d0
     v7   Binop { op=flt, lhs=v5, rhs=v6 }                 -> x0
     v8   Imm(0)                                           -> x1
     terminator Bz { cond=v7, target=b2, fall=b1 }   (exit_acc=v7)
   block 1  start_pc=0
-    v71  Imm(-4661117527937406468)                        -> d2
+    v71  Imm(-4661117527937406468)                        -> d1
     v72  Binop { op=fgt, lhs=v5, rhs=v71 }                -> x0
     v73  Imm(0)                                           -> x1
     v74  Extend { value=v72, kind=I32 }                   -> x1
@@ -26,10 +26,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     terminator Return(v9)   (exit_acc=v9)
   block 3  start_pc=0
     v10  ImmData(8)                                       -> x0
-    v11  Load { addr=v10, disp=0, kind=F32 pc_rel }       -> d3 [f32]
-    v12  FpCast { kind=F32ToF64, value=v11 }              -> d3
+    v11  Load { addr=v10, disp=0, kind=F32 pc_rel }       -> d2 [f32]
+    v12  FpCast { kind=F32ToF64, value=v11 }              -> d2
     v13  Imm(4607182418800017408)                         -> x0
-    v14  Binop { op=fsub, lhs=v12, rhs=v4 }               -> d3
+    v14  Binop { op=fsub, lhs=v12, rhs=v4 }               -> d2
     v15  Imm(4562254508917369340)                         -> x0
     v16  Binop { op=flt, lhs=v14, rhs=v6 }                -> x0
     v17  Imm(0)                                           -> x1
@@ -47,10 +47,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     terminator Return(v18)   (exit_acc=v18)
   block 6  start_pc=0
     v19  ImmData(12)                                      -> x0
-    v20  Load { addr=v19, disp=0, kind=F32 pc_rel }       -> d3 [f32]
-    v21  FpCast { kind=F32ToF64, value=v20 }              -> d4
-    v22  Imm(4612811918334230528)                         -> d3
-    v23  Binop { op=fsub, lhs=v21, rhs=v22 }              -> d4
+    v20  Load { addr=v19, disp=0, kind=F32 pc_rel }       -> d2 [f32]
+    v21  FpCast { kind=F32ToF64, value=v20 }              -> d3
+    v22  Imm(4612811918334230528)                         -> d2
+    v23  Binop { op=fsub, lhs=v21, rhs=v22 }              -> d3
     v24  Imm(4562254508917369340)                         -> x0
     v25  Binop { op=flt, lhs=v23, rhs=v6 }                -> x0
     v26  Imm(0)                                           -> x1
@@ -68,10 +68,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     terminator Return(v27)   (exit_acc=v27)
   block 9  start_pc=0
     v28  ImmData(16)                                      -> x0
-    v29  Load { addr=v28, disp=0, kind=F32 pc_rel }       -> d2 [f32]
-    v30  FpCast { kind=F32ToF64, value=v29 }              -> d2
+    v29  Load { addr=v28, disp=0, kind=F32 pc_rel }       -> d1 [f32]
+    v30  FpCast { kind=F32ToF64, value=v29 }              -> d1
     v31  Imm(4607182418800017408)                         -> x0
-    v32  Binop { op=fsub, lhs=v30, rhs=v4 }               -> d2
+    v32  Binop { op=fsub, lhs=v30, rhs=v4 }               -> d1
     v33  Imm(4562254508917369340)                         -> x0
     v34  Binop { op=flt, lhs=v32, rhs=v6 }                -> x0
     v35  Imm(0)                                           -> x1
@@ -90,9 +90,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
   block 12  start_pc=0
     v37  ImmData(20)                                      -> x0
     v38  Load { addr=v37, disp=0, kind=F32 pc_rel }       -> d1 [f32]
-    v39  FpCast { kind=F32ToF64, value=v38 }              -> d1
-    v40  Imm(4607182418800017408)                         -> d2
-    v41  Binop { op=fsub, lhs=v39, rhs=v40 }              -> d4
+    v39  FpCast { kind=F32ToF64, value=v38 }              -> d2
+    v40  Imm(4607182418800017408)                         -> d1
+    v41  Binop { op=fsub, lhs=v39, rhs=v40 }              -> d2
     v42  Imm(4562254508917369340)                         -> d1
     v43  Binop { op=flt, lhs=v41, rhs=v42 }               -> x0
     v44  Imm(0)                                           -> x1
@@ -110,9 +110,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     terminator Return(v45)   (exit_acc=v45)
   block 15  start_pc=0
     v46  ImmData(24)                                      -> x0
-    v47  Load { addr=v46, disp=0, kind=F64 pc_rel }       -> d4
+    v47  Load { addr=v46, disp=0, kind=F64 pc_rel }       -> d2
     v48  Imm(4607182418800017408)                         -> x0
-    v49  Binop { op=fsub, lhs=v47, rhs=v40 }              -> d4
+    v49  Binop { op=fsub, lhs=v47, rhs=v40 }              -> d2
     v50  Imm(4562254508917369340)                         -> x0
     v51  Binop { op=flt, lhs=v49, rhs=v42 }               -> x0
     v52  Imm(0)                                           -> x1
@@ -132,7 +132,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v54  ImmData(32)                                      -> x0
     v55  Load { addr=v54, disp=0, kind=F64 pc_rel }       -> d2
     v56  Imm(4612811918334230528)                         -> x0
-    v57  Binop { op=fsub, lhs=v55, rhs=v22 }              -> d2
+    v57  Binop { op=fsub, lhs=v55, rhs=v22 }              -> d3
     v58  Imm(4562254508917369340)                         -> x0
     v59  Binop { op=flt, lhs=v57, rhs=v42 }               -> x0
     v60  Imm(0)                                           -> x1

@@ -86,8 +86,7 @@ Disassembly of section .text:
                	sarq	$0x39, %rcx
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rcx, %xmm0
-               	movsd	<rip>, %xmm1
-               	mulsd	%xmm1, %xmm0
+               	vmulsd	<rip>, %xmm0, %xmm0
                	cvttsd2si	%xmm0, %rcx
                	andq	$0x7f, %rcx
                	andq	$-0x80, %rax
@@ -111,8 +110,7 @@ Disassembly of section .text:
                	andq	$0x1, %rcx
                	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rcx, %xmm1
-               	movsd	<rip>, %xmm2
-               	addsd	%xmm2, %xmm1
+               	vaddsd	<rip>, %xmm1, %xmm1
                	ucomisd	%xmm0, %xmm1
                	setne	%cl
                	movzbq	%cl, %rcx
@@ -142,8 +140,7 @@ Disassembly of section .text:
                	andq	$0x1f, %rcx
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rcx, %xmm0
-               	movsd	<rip>, %xmm1
-               	subsd	%xmm1, %xmm0
+               	vsubsd	<rip>, %xmm0, %xmm0
                	cvttsd2si	%xmm0, %rcx
                	andq	$0x1f, %rcx
                	andq	$-0xf81, %rax           # imm = 0xF07F
@@ -289,8 +286,7 @@ Disassembly of section .text:
                	orq	0x28(%rsp), %rax
                	movq	%rax, %xmm1
                	mulsd	%xmm1, %xmm0
-               	movsd	<rip>, %xmm1
-               	mulsd	%xmm1, %xmm0
+               	vmulsd	<rip>, %xmm0, %xmm0
                	movq	%xmm0, %rcx
                	movq	%rcx, %rax
                	sarq	$0x3f, %rax
@@ -695,8 +691,7 @@ Disassembly of section .text:
                	incq	%rax
                	movl	%eax, <rip> # <addr>
                	movsd	<rip>, %xmm0 # <addr>
-               	movsd	<rip>, %xmm1
-               	addsd	%xmm1, %xmm0
+               	vaddsd	<rip>, %xmm0, %xmm0
                	movsd	%xmm0, <rip> # <addr>
                	movl	<rip>, %eax # <addr>
                	incq	%rax

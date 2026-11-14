@@ -161,8 +161,7 @@ Disassembly of section .text:
                	movq	0x48(%rsp), %r10
                	addq	0x40(%rsp), %r10
                	movq	%r10, 0x48(%rsp)
-               	movsd	<rip>, %xmm1
-               	vmulsd	%xmm1, %xmm0, %xmm1
+               	vmulsd	<rip>, %xmm0, %xmm1
                	movq	0x50(%rsp), %r10
                	movsd	%xmm1, -0x8(%rsp)
                	fldl	-0x8(%rsp)
@@ -193,8 +192,7 @@ Disassembly of section .text:
                	movsd	0x38(%rsp), %xmm0
                	leaq	<rip>, %rcx # <addr>
                	addq	0x48(%rsp), %rax
-               	movsd	<rip>, %xmm1
-               	mulsd	%xmm1, %xmm0
+               	vmulsd	<rip>, %xmm0, %xmm0
                	cvttsd2si	%xmm0, %rdx
                	addq	%rdx, %rax
                	movsd	<rip>, %xmm0

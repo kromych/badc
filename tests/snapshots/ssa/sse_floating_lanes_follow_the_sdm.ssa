@@ -8290,17 +8290,17 @@ fn ent_pc=398 n_params=0 variadic=false locals=1
     v1306 FpCast { kind=F32ToF64, value=v1304 }            -> d3
     v1307 Binop { op=fmul.c, lhs=v1306, rhs=v1305 }        -> d2
     v1308 Imm(4607182418800017408)                         -> d2
-    v1309 Fma { a=v1306, b=v1305, c=v1308, neg_product=false, neg_addend=true } -> d3
+    v1309 Fma { a=v1306, b=v1305, c=v1308, neg_product=false, neg_addend=true } -> d2
     v1310 Imm(0)                                           -> x1
     v1311 Imm(0)                                           -> x1
-    v1312 VecExtract { vec=v1285, off=0, kind=F32, bytes=16 } -> d4 [f32]
+    v1312 VecExtract { vec=v1285, off=0, kind=F32, bytes=16 } -> d3 [f32]
     v1313 Imm(0)                                           -> x1
     v1314 Imm(0)                                           -> x1
     v1315 VecExtract { vec=v1285, off=0, kind=F32, bytes=16 } -> d1 [f32]
     v1316 Binop { op=fmul, lhs=v1312, rhs=v1315 }          -> d1 [f32]
-    v1317 FpCast { kind=F32ToF64, value=v1164 }            -> d4
+    v1317 FpCast { kind=F32ToF64, value=v1164 }            -> d3
     v1318 FpCast { kind=F32ToF64, value=v1316 }            -> d1
-    v1319 Binop { op=fmul.c, lhs=v1318, rhs=v1305 }        -> d4
+    v1319 Binop { op=fmul.c, lhs=v1318, rhs=v1305 }        -> d3
     v1320 Fma { a=v1318, b=v1305, c=v1308, neg_product=false, neg_addend=true } -> d0
     v1321 Imm(4555391023085256704)                         -> d1
     v1322 Binop { op=fgt, lhs=v1309, rhs=v1321 }           -> x1

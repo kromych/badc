@@ -167,8 +167,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	jmp	<addr>
                	movsd	-0x28(%rbp), %xmm0
-               	movsd	<rip>, %xmm1 # <addr>
-               	subsd	%xmm1, %xmm0
+               	vsubsd	<rip>, %xmm0, %xmm0 # <addr>
                	movsd	<rip>, %xmm1 # <addr>
                	comisd	%xmm0, %xmm1
                	jb	<addr>
@@ -178,8 +177,7 @@ Disassembly of section .text:
                	comisd	%xmm0, %xmm1
                	jb	<addr>
                	movsd	-0x20(%rbp), %xmm0
-               	movsd	<rip>, %xmm1 # <addr>
-               	subsd	%xmm1, %xmm0
+               	vsubsd	<rip>, %xmm0, %xmm0 # <addr>
                	movsd	<rip>, %xmm1 # <addr>
                	comisd	%xmm0, %xmm1
                	jb	<addr>
@@ -189,8 +187,7 @@ Disassembly of section .text:
                	comisd	%xmm0, %xmm1
                	jb	<addr>
                	movsd	-0x18(%rbp), %xmm0
-               	movsd	<rip>, %xmm1 # <addr>
-               	subsd	%xmm1, %xmm0
+               	vsubsd	<rip>, %xmm0, %xmm0 # <addr>
                	movsd	<rip>, %xmm1 # <addr>
                	comisd	%xmm0, %xmm1
                	jb	<addr>
@@ -200,8 +197,7 @@ Disassembly of section .text:
                	comisd	%xmm0, %xmm1
                	jb	<addr>
                	movsd	-0x10(%rbp), %xmm0
-               	movsd	<rip>, %xmm1 # <addr>
-               	subsd	%xmm1, %xmm0
+               	vsubsd	<rip>, %xmm0, %xmm0 # <addr>
                	movsd	<rip>, %xmm1 # <addr>
                	comisd	%xmm0, %xmm1
                	jb	<addr>
@@ -211,8 +207,7 @@ Disassembly of section .text:
                	comisd	%xmm0, %xmm1
                	jb	<addr>
                	movsd	-0x50(%rbp), %xmm0
-               	movsd	<rip>, %xmm1 # <addr>
-               	subsd	%xmm1, %xmm0
+               	vsubsd	<rip>, %xmm0, %xmm0 # <addr>
                	movsd	<rip>, %xmm1 # <addr>
                	comisd	%xmm0, %xmm1
                	jb	<addr>

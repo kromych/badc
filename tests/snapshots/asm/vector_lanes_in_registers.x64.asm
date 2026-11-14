@@ -99,36 +99,33 @@ Disassembly of section .text:
                	retq
 
 <put_f>:
-               	movss	<rip>, %xmm2
-               	vpermilps	$0x0, %xmm0, %xmm3 # xmm3 = xmm0[0,0,0,0]
-               	mulss	%xmm2, %xmm3
-               	vmovd	%xmm3, %r11d
-               	vmovd	%r11d, %xmm3
-               	mulss	%xmm2, %xmm1
+               	vpermilps	$0x0, %xmm0, %xmm2 # xmm2 = xmm0[0,0,0,0]
+               	vmulss	<rip>, %xmm2, %xmm2
+               	vmovd	%xmm2, %r11d
+               	vmovd	%r11d, %xmm2
+               	vmulss	<rip>, %xmm1, %xmm1
                	vmovd	%xmm1, %r11d
-               	movapd	%xmm3, %xmm1
+               	movapd	%xmm2, %xmm1
                	vpinsrd	$0x1, %r11d, %xmm1, %xmm1
-               	vpermilps	$0x2, %xmm0, %xmm3 # xmm3 = xmm0[2,0,0,0]
-               	mulss	%xmm2, %xmm3
-               	vmovd	%xmm3, %r11d
+               	vpermilps	$0x2, %xmm0, %xmm2 # xmm2 = xmm0[2,0,0,0]
+               	vmulss	<rip>, %xmm2, %xmm2
+               	vmovd	%xmm2, %r11d
                	vpinsrd	$0x2, %r11d, %xmm1, %xmm1
                	vpermilps	$0x3, %xmm0, %xmm0 # xmm0 = xmm0[3,0,0,0]
-               	mulss	%xmm2, %xmm0
+               	vmulss	<rip>, %xmm0, %xmm0
                	vmovd	%xmm0, %r11d
                	movapd	%xmm1, %xmm0
                	vpinsrd	$0x3, %r11d, %xmm0, %xmm0
                	retq
 
 <get_f>:
-               	movss	<rip>, %xmm1
                	vpermilps	$0x3, %xmm0, %xmm0 # xmm0 = xmm0[3,0,0,0]
-               	addss	%xmm1, %xmm0
+               	vaddss	<rip>, %xmm0, %xmm0
                	retq
 
 <put_d>:
-               	movsd	<rip>, %xmm2
-               	subsd	%xmm2, %xmm0
-               	subsd	%xmm2, %xmm1
+               	vsubsd	<rip>, %xmm0, %xmm0
+               	vsubsd	<rip>, %xmm1, %xmm1
                	vunpcklpd	%xmm1, %xmm0, %xmm0 # xmm0 = xmm0[0],xmm1[0]
                	retq
 

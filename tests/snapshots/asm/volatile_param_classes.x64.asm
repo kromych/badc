@@ -32,8 +32,7 @@ Disassembly of section .text:
                	movss	%xmm0, -0x8(%rbp)
                	movss	-0x8(%rbp), %xmm0
                	cvtss2sd	%xmm0, %xmm0
-               	movsd	<rip>, %xmm1
-               	mulsd	%xmm1, %xmm0
+               	vmulsd	<rip>, %xmm0, %xmm0
                	leave
                	retq
 

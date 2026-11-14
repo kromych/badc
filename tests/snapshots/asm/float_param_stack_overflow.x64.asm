@@ -30,26 +30,16 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	movss	0x10(%rbp), %xmm8
                	movss	0x18(%rbp), %xmm9
-               	movss	<rip>, %xmm10
-               	movss	<rip>, %xmm11
-               	mulss	%xmm11, %xmm1
-               	vfmadd213ss	%xmm1, %xmm10, %xmm0 # xmm0 = (xmm10 * xmm0) + xmm1
-               	movss	<rip>, %xmm1
-               	vfmadd231ss	%xmm1, %xmm2, %xmm0 # xmm0 = (xmm2 * xmm1) + xmm0
-               	movss	<rip>, %xmm1
-               	vfmadd231ss	%xmm1, %xmm3, %xmm0 # xmm0 = (xmm3 * xmm1) + xmm0
-               	movss	<rip>, %xmm1
-               	vfmadd231ss	%xmm1, %xmm4, %xmm0 # xmm0 = (xmm4 * xmm1) + xmm0
-               	movss	<rip>, %xmm1
-               	vfmadd231ss	%xmm1, %xmm5, %xmm0 # xmm0 = (xmm5 * xmm1) + xmm0
-               	movss	<rip>, %xmm1
-               	vfmadd231ss	%xmm1, %xmm6, %xmm0 # xmm0 = (xmm6 * xmm1) + xmm0
-               	movss	<rip>, %xmm1
-               	vfmadd231ss	%xmm1, %xmm7, %xmm0 # xmm0 = (xmm7 * xmm1) + xmm0
-               	movss	<rip>, %xmm1
-               	vfmadd231ss	%xmm1, %xmm8, %xmm0 # xmm0 = (xmm8 * xmm1) + xmm0
-               	movss	<rip>, %xmm1
-               	vfmadd231ss	%xmm1, %xmm9, %xmm0 # xmm0 = (xmm9 * xmm1) + xmm0
+               	vmulss	<rip>, %xmm1, %xmm1
+               	vfmadd132ss	<rip>, %xmm1, %xmm0 # xmm0 = (xmm0 * mem) + xmm1
+               	vfmadd231ss	<rip>, %xmm2, %xmm0 # xmm0 = (xmm2 * mem) + xmm0
+               	vfmadd231ss	<rip>, %xmm3, %xmm0 # xmm0 = (xmm3 * mem) + xmm0
+               	vfmadd231ss	<rip>, %xmm4, %xmm0 # xmm0 = (xmm4 * mem) + xmm0
+               	vfmadd231ss	<rip>, %xmm5, %xmm0 # xmm0 = (xmm5 * mem) + xmm0
+               	vfmadd231ss	<rip>, %xmm6, %xmm0 # xmm0 = (xmm6 * mem) + xmm0
+               	vfmadd231ss	<rip>, %xmm7, %xmm0 # xmm0 = (xmm7 * mem) + xmm0
+               	vfmadd231ss	<rip>, %xmm8, %xmm0 # xmm0 = (xmm8 * mem) + xmm0
+               	vfmadd231ss	<rip>, %xmm9, %xmm0 # xmm0 = (xmm9 * mem) + xmm0
                	cvttss2si	%xmm0, %rax
                	popq	%rbp
                	retq

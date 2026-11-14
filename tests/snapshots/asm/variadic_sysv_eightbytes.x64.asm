@@ -87,12 +87,11 @@ Disassembly of section .text:
                	leaq	-0x38(%rbp), %rdx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rdx)
-               	movsd	<rip>, %xmm1
                	movq	-0x38(%rbp), %rcx
                	imulq	$0xa, %rcx, %rcx
-               	xorps	%xmm2, %xmm2
-               	cvtsi2sd	%rcx, %xmm2
-               	vfmadd213sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm0) + xmm2
+               	xorps	%xmm1, %xmm1
+               	cvtsi2sd	%rcx, %xmm1
+               	vfmadd132sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm0 * mem) + xmm1
                	movsd	-0x30(%rbp), %xmm1
                	addsd	%xmm1, %xmm0
                	incq	%rax
@@ -273,42 +272,34 @@ Disassembly of section .text:
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rdx, %xmm0
                	movsd	-0x58(%rbp), %xmm1
-               	movsd	<rip>, %xmm2
-               	vfmadd231sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm2) + xmm0
+               	vfmadd231sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm1 * mem) + xmm0
                	movq	-0x50(%rbp), %rdx
                	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rdx, %xmm1
-               	movsd	<rip>, %xmm2
-               	vfmadd231sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm2) + xmm0
+               	vfmadd231sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm1 * mem) + xmm0
                	movss	-0x48(%rbp), %xmm1
                	movss	-0x44(%rbp), %xmm2
                	addss	%xmm2, %xmm1
-               	movsd	<rip>, %xmm2
                	cvtss2sd	%xmm1, %xmm1
-               	vfmadd231sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm2) + xmm0
+               	vfmadd231sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm1 * mem) + xmm0
                	movq	-0x40(%rbp), %rdx
                	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rdx, %xmm1
-               	movsd	<rip>, %xmm2
-               	vfmadd231sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm2) + xmm0
+               	vfmadd231sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm1 * mem) + xmm0
                	movsd	-0x150(%rbp), %xmm1
-               	movsd	<rip>, %xmm2
-               	vfmadd231sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm2) + xmm0
+               	vfmadd231sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm1 * mem) + xmm0
                	movslq	%eax, %rax
                	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rax, %xmm1
-               	movsd	<rip>, %xmm2
-               	vfmadd231sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm2) + xmm0
+               	vfmadd231sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm1 * mem) + xmm0
                	movss	-0x124(%rbp), %xmm1
-               	movss	<rip>, %xmm2
-               	mulss	%xmm2, %xmm1
+               	vmulss	<rip>, %xmm1, %xmm1
                	cvtss2sd	%xmm1, %xmm1
                	addsd	%xmm1, %xmm0
                	fldt	-0x120(%rbp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm1
-               	movsd	<rip>, %xmm2
-               	vfmadd231sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm2) + xmm0
+               	vfmadd231sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm1 * mem) + xmm0
                	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rcx, %xmm1
                	addsd	%xmm1, %xmm0
@@ -406,15 +397,13 @@ Disassembly of section .text:
                	movq	%r10, %rax
                	movq	(%rax), %rax
                	leaq	-0x28(%rbp), %rcx
-               	movsd	<rip>, %xmm1
                	movq	-0x38(%rbp), %rcx
                	imulq	$0x64, %rcx, %rcx
-               	xorps	%xmm2, %xmm2
-               	cvtsi2sd	%rcx, %xmm2
-               	vfmadd213sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm0) + xmm2
+               	xorps	%xmm1, %xmm1
+               	cvtsi2sd	%rcx, %xmm1
+               	vfmadd132sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm0 * mem) + xmm1
                	movsd	-0x30(%rbp), %xmm1
-               	movsd	<rip>, %xmm2
-               	vfmadd231sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm2) + xmm0
+               	vfmadd231sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm1 * mem) + xmm0
                	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rax, %xmm1
                	addsd	%xmm1, %xmm0

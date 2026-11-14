@@ -137,14 +137,12 @@ Disassembly of section .text:
                	callq	<addr>
                	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rbx, %xmm1
-               	movsd	<rip>, %xmm2
-               	vfmadd231sd	0x28(%rsp), %xmm2, %xmm1 # xmm1 = (xmm2 * mem) + xmm1
+               	movsd	0x28(%rsp), %xmm14
+               	vfmadd231sd	<rip>, %xmm14, %xmm1 # xmm1 = (xmm14 * mem) + xmm1
                	xorps	%xmm2, %xmm2
                	cvtsi2sd	%r12, %xmm2
-               	movsd	<rip>, %xmm3
-               	vfmadd231sd	%xmm3, %xmm2, %xmm1 # xmm1 = (xmm2 * xmm3) + xmm1
-               	movsd	<rip>, %xmm2
-               	vfmadd213sd	%xmm1, %xmm2, %xmm0 # xmm0 = (xmm2 * xmm0) + xmm1
+               	vfmadd231sd	<rip>, %xmm2, %xmm1 # xmm1 = (xmm2 * mem) + xmm1
+               	vfmadd132sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm0 * mem) + xmm1
                	movsd	<rip>, %xmm1
                	ucomisd	%xmm1, %xmm0
                	jp	<addr>

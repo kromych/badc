@@ -45,25 +45,23 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movq	(%rcx), %r10
                	movq	%r10, (%rax)
-               	movss	<rip>, %xmm0
-               	movss	-0x20(%rbp), %xmm1
-               	movss	-0x1c(%rbp), %xmm2
-               	addss	%xmm2, %xmm1
-               	movss	-0x18(%rbp), %xmm2
-               	addss	%xmm2, %xmm1
-               	movss	-0x14(%rbp), %xmm2
-               	addss	%xmm2, %xmm1
-               	movss	-0x10(%rbp), %xmm2
-               	addss	%xmm2, %xmm1
-               	movss	-0xc(%rbp), %xmm2
-               	addss	%xmm2, %xmm1
-               	movss	-0x8(%rbp), %xmm2
-               	addss	%xmm2, %xmm1
-               	movss	-0x4(%rbp), %xmm2
-               	addss	%xmm2, %xmm1
-               	vaddss	%xmm0, %xmm1, %xmm0
-               	movss	<rip>, %xmm1
+               	movss	-0x20(%rbp), %xmm0
+               	movss	-0x1c(%rbp), %xmm1
                	addss	%xmm1, %xmm0
+               	movss	-0x18(%rbp), %xmm1
+               	addss	%xmm1, %xmm0
+               	movss	-0x14(%rbp), %xmm1
+               	addss	%xmm1, %xmm0
+               	movss	-0x10(%rbp), %xmm1
+               	addss	%xmm1, %xmm0
+               	movss	-0xc(%rbp), %xmm1
+               	addss	%xmm1, %xmm0
+               	movss	-0x8(%rbp), %xmm1
+               	addss	%xmm1, %xmm0
+               	movss	-0x4(%rbp), %xmm1
+               	addss	%xmm1, %xmm0
+               	vaddss	<rip>, %xmm0, %xmm0
+               	vaddss	<rip>, %xmm0, %xmm0
                	movss	<rip>, %xmm1
                	ucomiss	%xmm1, %xmm0
                	jp	<addr>

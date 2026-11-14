@@ -1533,6 +1533,38 @@ fn sve_objects_take_the_vector_length_and_copy_whole() {
     }
 }
 
+/// A vector slot more than 256 vector lengths into the region, past the
+/// reach of `[base, #imm, mul vl]`, takes its base from `addvl`.
+#[cfg(feature = "full")]
+#[test]
+fn far_sve_slots_step_the_base_with_addvl() {
+    let mut src =
+        String::from("#include <arm_sve.h>\nvoid many(svint8_t *const *s, svint8_t *const *d) {\n");
+    for i in 0..300 {
+        src += &format!("    svint8_t v{i} = *s[{i}];\n");
+    }
+    for i in 0..300 {
+        src += &format!("    *d[{i}] = v{i};\n");
+    }
+    src += "}\n";
+    let object =
+        super::perf_codegen::object_with_pool(&src, crate::Target::LinuxAarch64, (usize::MAX, 0));
+    let w = super::codegen::function_words(&object, "many");
+    // ADDVL x16 / x17, xn, #-k, and the slot accesses' offsets.
+    let steps = w
+        .iter()
+        .filter(|&&x| x & 0xFFE0_F81E == 0x0420_5010)
+        .count();
+    assert!(steps > 0, "addvl into an IP register: none");
+    let reach = (w.iter())
+        .filter(|&&x| x & 0xFFC0_E000 == 0x8580_4000 || x & 0xFFC0_E000 == 0xE580_4000)
+        .all(|&x| {
+            let imm = ((x >> 16 & 0x3F) << 3 | (x >> 10 & 7)) as i32;
+            imm << 23 >> 23 >= -256
+        });
+    assert!(reach);
+}
+
 /// `&x` of an SVE object is a pointer to it: passed to a function, the
 /// argument register takes the object's base.
 #[cfg(feature = "full")]
@@ -1555,13 +1587,13 @@ fn an_sve_object_s_address_is_a_pointer_argument() {
 
 /// The SVE object's storage is the vector length (`cntb`) or the
 /// predicate length (`cntd`) of bytes, and a copy is `ldr` and `str` of a
-/// whole Z or P register.
+/// whole Z or P register, the value's own.
 #[cfg(feature = "full")]
 #[test]
 fn sve_copies_are_whole_register_loads_and_stores() {
     const SRC: &str = "#include <arm_sve.h>\n\
-        void copy(svint32_t *dst, svint32_t *src, void (*f)(void)) { svint32_t x = *src; f(); *dst = x; }\n\
-        void copyp(svbool_t *dst, svbool_t *src) { svbool_t p = *src; *dst = p; }\n";
+        void copy(svint32_t *dst, svint32_t *src, void (*f)(void)) { svint32_t x = *src; svint32_t *px = &x; f(); *dst = *px; }\n\
+        void copyp(svbool_t *dst, svbool_t *src) { svbool_t p = *src; svbool_t *pp = &p; *dst = *pp; }\n";
     let has = |w: &[u32], mask: u32, want: u32| w.iter().filter(|&&x| x & mask == want).count();
     let z = super::perf_codegen::a64_at(SRC, "copy", true);
     assert_eq!(has(&z, 0xFFFF_FFE0, 0x0420_E3E0), 1, "cntb: {z:08x?}");
@@ -1569,6 +1601,34 @@ fn sve_copies_are_whole_register_loads_and_stores() {
     assert_eq!(has(&z, 0xFFFF_FC00, 0xE580_4000), 2, "str z: {z:08x?}");
     let p = super::perf_codegen::a64_at(SRC, "copyp", true);
     assert_eq!(has(&p, 0xFFFF_FFE0, 0x04E0_E3E0), 1, "cntd: {p:08x?}");
-    assert_eq!(has(&p, 0xFFFF_FC1F, 0x8580_000F), 2, "ldr p15: {p:08x?}");
-    assert_eq!(has(&p, 0xFFFF_FC1F, 0xE580_000F), 2, "str p15: {p:08x?}");
+    assert_eq!(has(&p, 0xFFFF_FC10, 0x8580_0000), 2, "ldr p: {p:08x?}");
+    assert_eq!(has(&p, 0xFFFF_FC10, 0xE580_0000), 2, "str p: {p:08x?}");
+}
+
+/// With no FP register to take, an SVE vector spills to the VL-scaled
+/// region, one vector length `addvl` reserves, at `[base, #-1, mul vl]`.
+#[cfg(feature = "full")]
+#[test]
+fn sve_vectors_spill_to_the_vl_scaled_region() {
+    const SRC: &str = "#include <arm_sve.h>\n\
+        void copy(svint32_t *dst, svint32_t *src) { *dst = *src; }\n";
+    let object =
+        super::perf_codegen::object_with_pool(SRC, crate::Target::LinuxAarch64, (usize::MAX, 0));
+    let w = super::codegen::function_words(&object, "copy");
+    let has = |mask: u32, want: u32| w.iter().filter(|&&x| x & mask == want).count();
+    assert_eq!(
+        has(0xFFFF_FFFF, 0x043F_57FF),
+        1,
+        "addvl sp, sp, #-1: {w:08x?}"
+    );
+    assert_eq!(
+        has(0xFFFF_FC00, 0xE5BF_5C00),
+        1,
+        "str z, [x, #-1, mul vl]: {w:08x?}"
+    );
+    assert_eq!(
+        has(0xFFFF_FC00, 0x85BF_5C00),
+        1,
+        "ldr z, [x, #-1, mul vl]: {w:08x?}"
+    );
 }

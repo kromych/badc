@@ -308,12 +308,12 @@ pub enum Intrinsic {
     /// The bytes of an SVE predicate register, an eighth of the vector
     /// length (`cntd`). No arguments.
     SvePlBytes = 90,
-    /// Copy an SVE vector from `args[1]` to `args[0]` through a vector
-    /// register (`ldr z` / `str z`). No result.
-    SveCopyZ = 91,
-    /// Copy an SVE predicate from `args[1]` to `args[0]` through a
-    /// predicate register. No result.
-    SveCopyP = 92,
+    /// The SVE vector, or predicate, at `args[0]`: a whole Z (P) register.
+    SveLoadZ = 91,
+    SveLoadP = 92,
+    /// Store the SVE vector, or predicate, `args[1]` at `args[0]`. No result.
+    SveStoreZ = 93,
+    SveStoreP = 94,
 }
 
 /// The type operand of [`Intrinsic::VaArg`], one constant packed as
@@ -471,8 +471,10 @@ impl Intrinsic {
             88 => Some(Intrinsic::BuiltinArg),
             89 => Some(Intrinsic::SveVlBytes),
             90 => Some(Intrinsic::SvePlBytes),
-            91 => Some(Intrinsic::SveCopyZ),
-            92 => Some(Intrinsic::SveCopyP),
+            91 => Some(Intrinsic::SveLoadZ),
+            92 => Some(Intrinsic::SveLoadP),
+            93 => Some(Intrinsic::SveStoreZ),
+            94 => Some(Intrinsic::SveStoreP),
             _ => None,
         }
     }

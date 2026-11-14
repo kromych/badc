@@ -383,10 +383,17 @@ impl<'a> Walker<'a> {
         }
         // An SVE value moves through a register of its kind; both sides
         // are addresses, and the value is the destination's.
-        if let Some(copy) = self.sve_copy_kind(ty) {
+        if let Some(kind) = self.sve_kind(ty) {
+            use crate::c5::op::Intrinsic as I;
+            let (load, store) = if kind == LoadKind::SveVector {
+                (I::SveLoadZ, I::SveStoreZ)
+            } else {
+                (I::SveLoadP, I::SveStoreP)
+            };
             let dst = self.walk_expr_rvalue(b, lhs)?;
             let src = self.walk_expr_rvalue(b, rhs)?;
-            b.intrinsic(copy as i64, alloc::vec![dst, src]);
+            let value = b.intrinsic(load as i64, alloc::vec![src]);
+            b.intrinsic(store as i64, alloc::vec![dst, value]);
             return Ok(dst);
         }
         // C99 6.5.16.1p1: a struct-typed assignment copies the bytes.

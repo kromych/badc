@@ -81,6 +81,7 @@ fn load_width(kind: LoadKind) -> u8 {
         LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => 16,
         LoadKind::V256 => 32,
         LoadKind::V512 => 64,
+        LoadKind::SveVector | LoadKind::SvePredicate => 0,
     }
 }
 
@@ -933,7 +934,9 @@ fn const_for_load(bits: i64, kind: LoadKind) -> Option<i64> {
         | LoadKind::F128
         | LoadKind::V128
         | LoadKind::V256
-        | LoadKind::V512 => None,
+        | LoadKind::V512
+        | LoadKind::SveVector
+        | LoadKind::SvePredicate => None,
     }
 }
 

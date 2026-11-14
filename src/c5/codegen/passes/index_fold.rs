@@ -53,6 +53,7 @@ fn load_width(kind: LoadKind) -> u8 {
         LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => 16,
         LoadKind::V256 => 32,
         LoadKind::V512 => 64,
+        LoadKind::SveVector | LoadKind::SvePredicate => 0,
     }
 }
 

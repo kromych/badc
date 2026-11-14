@@ -66,7 +66,9 @@ fn narrow_to_kind(k: i64, kind: LoadKind) -> Option<i64> {
         | LoadKind::F128
         | LoadKind::V128
         | LoadKind::V256
-        | LoadKind::V512 => None,
+        | LoadKind::V512
+        | LoadKind::SveVector
+        | LoadKind::SvePredicate => None,
     }
 }
 

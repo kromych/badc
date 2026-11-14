@@ -6,12 +6,13 @@
 //! predecessor, defined at the end of that predecessor; every other read
 //! is of a value defined earlier in the block or in a dominating block.
 //! That rule also keeps the instructions of an emptied block, which the
-//! passes leave in the tape, unread.
+//! passes leave in the tape, unread. An SVE value is read only by a reader
+//! of its register file.
 
 use alloc::format;
 use alloc::string::String;
 
-use super::super::ir::{BlockId, FunctionSsa, Inst, NO_VALUE, Terminator, ValueId};
+use super::super::ir::{BlockId, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator, ValueId};
 use super::mem2reg::{DomOrder, SuccGraph, dominators_of};
 
 const NO_BLOCK: BlockId = BlockId::MAX;
@@ -156,6 +157,92 @@ pub(crate) fn check(f: &FunctionSsa) -> Result<(), String> {
         read(blk.exit_acc);
         if let Some(e) = first {
             return Err(format!("block {b} ends reading {e}"));
+        }
+    }
+    sve_files(f)
+}
+
+/// An SVE vector is read as the value an `SveStoreZ` stores, by a vector
+/// phi or by an FP copy, which is one itself; a predicate as the value an
+/// `SveStoreP` stores or by a predicate phi. Those operands read nothing
+/// else, and no other instruction carries an SVE kind.
+fn sve_files(f: &FunctionSsa) -> Result<(), String> {
+    use crate::c5::op::Intrinsic as I;
+    let mut kind: alloc::vec::Vec<Option<LoadKind>> = f.insts.iter().map(Inst::sve_kind).collect();
+    if kind.iter().all(Option::is_none) {
+        return Ok(());
+    }
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for (v, inst) in f.insts.iter().enumerate() {
+            if let Inst::Copy { value, .. } = inst
+                && kind[v].is_none()
+                && let Some(&Some(k)) = kind.get(*value as usize)
+            {
+                kind[v] = Some(k);
+                changed = true;
+            }
+        }
+    }
+    let of = |v: ValueId| kind.get(v as usize).copied().flatten();
+    for (pc, inst) in f.insts.iter().enumerate() {
+        let mut bad = None;
+        let mut expect = |v: ValueId, want: Option<LoadKind>| {
+            let undef = matches!(f.insts.get(v as usize), Some(Inst::Undef)) && want.is_some();
+            if v != NO_VALUE && of(v) != want && !undef && bad.is_none() {
+                bad = Some(v);
+            }
+        };
+        match inst {
+            Inst::Phi { incoming, kind } => {
+                let want = kind.is_sve().then_some(*kind);
+                incoming.iter().for_each(|&(_, v)| expect(v, want));
+            }
+            Inst::Copy { value, is_fp } => {
+                if of(*value).is_some_and(|k| k == LoadKind::SvePredicate || !is_fp) {
+                    bad = Some(*value);
+                }
+            }
+            Inst::Intrinsic { kind, args } => {
+                let stored = match I::from_i64(*kind) {
+                    Some(I::SveStoreZ) => Some(LoadKind::SveVector),
+                    Some(I::SveStoreP) => Some(LoadKind::SvePredicate),
+                    _ => None,
+                };
+                for (k, &a) in args.iter().enumerate() {
+                    expect(a, stored.filter(|_| k == 1));
+                }
+            }
+            Inst::Load { kind, .. }
+            | Inst::LoadLocal { kind, .. }
+            | Inst::LoadIndexed { kind, .. }
+            | Inst::SegLoad { kind, .. }
+            | Inst::ParamRef { kind, .. }
+            | Inst::ParamPart { kind, .. }
+            | Inst::RetPart { kind, .. }
+            | Inst::AsmOut { kind, .. }
+            | Inst::Select { kind, .. }
+            | Inst::VecExtract { kind, .. }
+                if kind.is_sve() =>
+            {
+                return Err(format!("v{pc} carries an SVE kind"));
+            }
+            _ => inst.for_each_operand(|v| expect(v, None)),
+        }
+        if let Some(v) = bad {
+            return Err(format!("v{pc} reads v{v} outside its register file"));
+        }
+    }
+    for (b, blk) in f.blocks.iter().enumerate() {
+        let mut bad = None;
+        blk.terminator.for_each_operand(|v| {
+            if of(v).is_some() {
+                bad = Some(v);
+            }
+        });
+        if let Some(v) = bad {
+            return Err(format!("block {b} ends reading SVE value v{v}"));
         }
     }
     Ok(())

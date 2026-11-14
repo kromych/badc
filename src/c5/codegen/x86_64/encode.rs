@@ -226,7 +226,9 @@ pub(crate) fn emit_load_disp32(
         | LoadKind::F128
         | LoadKind::V128
         | LoadKind::V256
-        | LoadKind::V512 => {
+        | LoadKind::V512
+        | LoadKind::SveVector
+        | LoadKind::SvePredicate => {
             unreachable!("disp32 load of a floating kind")
         }
     };

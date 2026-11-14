@@ -1617,6 +1617,7 @@ fn load_width(kind: crate::c5::ir::LoadKind) -> i64 {
         F80 | F128 | V128 => 16,
         V256 => 32,
         V512 => 64,
+        SveVector | SvePredicate => 0,
     }
 }
 

@@ -10,7 +10,7 @@ impl<'a> Walker<'a> {
     /// is out of range.
     pub(super) fn struct_size(&self, ty: i64) -> i64 {
         debug_assert!(
-            self.sve_copy_kind(ty).is_none(),
+            self.sve_kind(ty).is_none(),
             "an SVE value has no static size"
         );
         let stripped = strip_unsigned(ty);
@@ -25,9 +25,9 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// The intrinsic copying a value of the SVE type `ty`, `None` for any
+    /// The register kind of a value of the SVE type `ty`, `None` for any
     /// other type.
-    pub(super) fn sve_copy_kind(&self, ty: i64) -> Option<crate::c5::op::Intrinsic> {
+    pub(super) fn sve_kind(&self, ty: i64) -> Option<crate::c5::ir::LoadKind> {
         use crate::c5::compiler::SveType;
         let stripped = strip_unsigned(ty);
         if stripped < STRUCT_BASE || struct_ptr_depth(ty) != 0 {
@@ -35,8 +35,8 @@ impl<'a> Walker<'a> {
         }
         let id = ((stripped - STRUCT_BASE) / STRUCT_STRIDE) as usize;
         match self.structs.get(id)?.sve? {
-            SveType::Predicate => Some(crate::c5::op::Intrinsic::SveCopyP),
-            SveType::Vector { .. } => Some(crate::c5::op::Intrinsic::SveCopyZ),
+            SveType::Predicate => Some(crate::c5::ir::LoadKind::SvePredicate),
+            SveType::Vector { .. } => Some(crate::c5::ir::LoadKind::SveVector),
         }
     }
 

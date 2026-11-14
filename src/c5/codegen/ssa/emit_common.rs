@@ -5,6 +5,7 @@
 //! (`x86_64/emit.rs`, `aarch64/emit.rs`) don't carry parallel
 //! copies. The assembler this file used to hold is `c5::asm`.
 
+use super::sve_alloc::PredPlace;
 use crate::c5::diag::{Code, Diagnostic, Sink};
 
 /// Mutable emit output the two backends thread identically through their
@@ -425,6 +426,7 @@ fn load_kind_width(kind: super::super::ir::LoadKind) -> u32 {
         LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => 16,
         LoadKind::V256 => 32,
         LoadKind::V512 => 64,
+        LoadKind::SveVector | LoadKind::SvePredicate => 0,
     }
 }
 
@@ -569,7 +571,14 @@ fn places_overlap(
     b_w: super::reg_alloc::VecWidth,
 ) -> bool {
     use super::reg_alloc::Place;
+    use super::reg_alloc::VecWidth;
     match (a, b) {
+        // An SVE vector's slot lies in the VL-scaled region.
+        (Place::Spill(_), Place::Spill(_))
+            if (a_w == VecWidth::Scalable) != (b_w == VecWidth::Scalable) =>
+        {
+            false
+        }
         (Place::Spill(x), Place::Spill(y)) => x < y + b_w.units() && y < x + a_w.units(),
         _ => place_same_loc(a, b),
     }
@@ -634,6 +643,21 @@ pub(crate) trait EmitBackend {
     }
     fn wide_load_const(&self, _code: &mut alloc::vec::Vec<u8>, _dst: u8, _scratch: u8, _bits: i64) {
         unreachable!("{}: no 256-bit values", Self::ARCH)
+    }
+    /// Sequentialize the parallel SVE predicate moves of a phi edge; only
+    /// AArch64 has the predicate file.
+    fn pred_place_moves(
+        &self,
+        _code: &mut alloc::vec::Vec<u8>,
+        _frame: Self::Frame,
+        moves: &mut alloc::vec::Vec<(PredPlace, PredPlace)>,
+    ) -> Emit {
+        if moves.is_empty() {
+            return Ok(());
+        }
+        let reason = "an SVE predicate move off AArch64";
+        trace_bail(Self::ARCH, reason);
+        Err(Unsupported::new(reason))
     }
     /// The three FP transfers above, of all 128 bits of a SIMD register.
     fn v128_reg_mov(&self, code: &mut alloc::vec::Vec<u8>, dst: u8, src: u8);
@@ -1124,6 +1148,7 @@ pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
         let mut m = edge_moves(func, alloc, self_block, succ);
         schedule_place_moves(b, code, &mut m.int, frame, int_hold, int_stage)?;
         schedule_fp_place_moves(b, code, &mut m.fp, frame, fp_hold, fp_stage);
+        b.pred_place_moves(code, frame, &mut m.pred)?;
         // After both same-file parallel copies: any FP move reading a phi's
         // register as its source has already run, so overwriting the FP
         // destination here cannot clobber a still-pending read.
@@ -1169,12 +1194,17 @@ pub(crate) struct EdgeMoves {
         bool,
         super::reg_alloc::VecWidth,
     )>,
+    /// `(src, dst)` of the SVE predicate phis.
+    pub(crate) pred: alloc::vec::Vec<(PredPlace, PredPlace)>,
 }
 
 impl EdgeMoves {
     /// Whether the edge emits no instruction.
     pub(crate) fn is_empty(&self) -> bool {
-        self.int.is_empty() && self.fp.is_empty() && self.fp_const.is_empty()
+        self.int.is_empty()
+            && self.fp.is_empty()
+            && self.fp_const.is_empty()
+            && self.pred.is_empty()
     }
 }
 
@@ -1220,6 +1250,7 @@ pub(crate) fn edge_moves(
         int: alloc::vec::Vec::new(),
         fp: alloc::vec::Vec::new(),
         fp_const: alloc::vec::Vec::new(),
+        pred: alloc::vec::Vec::new(),
     };
     let place =
         |v: super::super::ir::ValueId| alloc.places.get(v as usize).copied().unwrap_or(Place::None);
@@ -1230,6 +1261,15 @@ pub(crate) fn edge_moves(
         let Some((_, src_v)) = incoming.iter().find(|(p, _)| *p == pred) else {
             continue;
         };
+        if *kind == LoadKind::SvePredicate {
+            let at = |v| alloc.sve.pred_place(v);
+            if let (Some(s), Some(d)) = (at(*src_v), at(id))
+                && s != d
+            {
+                m.pred.push((s, d));
+            }
+            continue;
+        }
         let (src_place, dst_place) = (place(*src_v), place(id));
         if matches!(dst_place, Place::None)
             || matches!(func.insts.get(*src_v as usize), Some(Inst::Undef))
@@ -1246,6 +1286,7 @@ pub(crate) fn edge_moves(
                 | LoadKind::V128
                 | LoadKind::V256
                 | LoadKind::V512
+                | LoadKind::SveVector
         );
         if phi_is_fp {
             // `phi_class` never coalesces a constant into an FP phi's class,

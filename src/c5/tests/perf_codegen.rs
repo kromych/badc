@@ -20,7 +20,7 @@ pub(super) fn object_at(src: &str, target: Target, optimize: bool) -> Vec<u8> {
 }
 
 /// The `-O` object of `src` over integer / FP banks capped to `caps`.
-fn object_with_pool(src: &str, target: Target, caps: (usize, usize)) -> Vec<u8> {
+pub(super) fn object_with_pool(src: &str, target: Target, caps: (usize, usize)) -> Vec<u8> {
     object_with(src, target, true, caps, false)
 }
 

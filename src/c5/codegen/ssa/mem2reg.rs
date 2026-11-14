@@ -1331,7 +1331,9 @@ fn load_byte_width(kind: LoadKind) -> Option<u8> {
         | LoadKind::F128
         | LoadKind::V128
         | LoadKind::V256
-        | LoadKind::V512 => None,
+        | LoadKind::V512
+        | LoadKind::SveVector
+        | LoadKind::SvePredicate => None,
     }
 }
 
@@ -1375,7 +1377,9 @@ fn imm_fits_load_kind(k: i64, kind: LoadKind) -> bool {
         | LoadKind::F128
         | LoadKind::V128
         | LoadKind::V256
-        | LoadKind::V512 => false,
+        | LoadKind::V512
+        | LoadKind::SveVector
+        | LoadKind::SvePredicate => false,
     }
 }
 
@@ -1418,7 +1422,9 @@ fn narrow_load_replacement(kind: LoadKind, value: ValueId) -> Inst {
         | LoadKind::F128
         | LoadKind::V128
         | LoadKind::V256
-        | LoadKind::V512 => {
+        | LoadKind::V512
+        | LoadKind::SveVector
+        | LoadKind::SvePredicate => {
             unreachable!("not a narrow load kind")
         }
     }

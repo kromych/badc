@@ -431,6 +431,8 @@ fn load_kind_code(k: LoadKind) -> u32 {
         LoadKind::V128 => 11,
         LoadKind::V256 => 12,
         LoadKind::V512 => 13,
+        LoadKind::SveVector => 14,
+        LoadKind::SvePredicate => 15,
     }
 }
 
@@ -508,7 +510,9 @@ pub(crate) fn extend_range(kind: LoadKind) -> Option<Range> {
         | LoadKind::F128
         | LoadKind::V128
         | LoadKind::V256
-        | LoadKind::V512 => {
+        | LoadKind::V512
+        | LoadKind::SveVector
+        | LoadKind::SvePredicate => {
             return None;
         }
     })

@@ -37,7 +37,7 @@
 use crate::c5::codegen::ssa::liveness::BlockLiveness;
 use crate::c5::codegen::ssa::reg_alloc::{
     BankCapacity, compute_use_counts, for_each_operand, operands_read, produces_fp_result,
-    produces_value,
+    produces_pred_result, produces_value,
 };
 use crate::c5::ir::{
     BinOp, BitCountOp, BlockId, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator,
@@ -216,6 +216,7 @@ fn pressure(func: &FunctionSsa, reads: &[bool]) -> Pressure {
         .iter()
         .map(|i| match (produces_value(i), produces_fp_result(i)) {
             (false, _) => u8::MAX,
+            _ if produces_pred_result(i) => u8::MAX,
             (true, true) => FP as u8,
             (true, false) => GPR as u8,
         })

@@ -617,6 +617,9 @@ struct Frame<'a> {
     /// `Inst::VecBinop`), by `ValueId`, in the low bytes; their `regs`
     /// entries stay 0.
     vregs: alloc::collections::BTreeMap<ValueId, [u8; 64]>,
+    /// The SVE vector and predicate values, by `ValueId`: the run's vector
+    /// length of bytes, or an eighth of it.
+    sregs: alloc::collections::BTreeMap<ValueId, Vec<u8>>,
 }
 
 impl Frame<'_> {
@@ -991,6 +994,7 @@ fn run_func<H: Host>(
         realign_base,
         block_idx: 0,
         vregs: alloc::collections::BTreeMap::new(),
+        sregs: alloc::collections::BTreeMap::new(),
     };
     for (i, &v) in args.iter().enumerate() {
         // Host-ABI register-passed aggregate parameter. The callee body
@@ -4363,23 +4367,32 @@ fn run_intrinsic(
             frame.regs[v as usize] = (mem.sve_vl_bytes / 8) as i64;
             Ok(())
         }
-        Intrinsic::SveCopyZ | Intrinsic::SveCopyP => {
-            let n = if intr == Intrinsic::SveCopyZ {
+        Intrinsic::SveLoadZ | Intrinsic::SveLoadP => {
+            let n = if intr == Intrinsic::SveLoadZ {
                 mem.sve_vl_bytes
             } else {
                 mem.sve_vl_bytes / 8
             };
-            let [dst, src] = args else {
+            let [src] = args else {
                 return Err(C5Error::Runtime(
-                    "vm_ssa: an SVE copy expects 2 arguments".to_string(),
+                    "vm_ssa: an SVE load expects 1 argument".to_string(),
                 ));
             };
-            let (dst, src) = (
-                frame.regs[*dst as usize] as usize,
-                frame.regs[*src as usize] as usize,
-            );
-            let bytes = mem.read_bytes(src, n)?.to_vec();
-            mem.write_bytes(dst, &bytes)
+            let bytes = mem.read_bytes(frame.regs[*src as usize] as usize, n)?;
+            frame.sregs.insert(v, bytes.to_vec());
+            Ok(())
+        }
+        Intrinsic::SveStoreZ | Intrinsic::SveStoreP => {
+            let [dst, value] = args else {
+                return Err(C5Error::Runtime(
+                    "vm_ssa: an SVE store expects 2 arguments".to_string(),
+                ));
+            };
+            let bytes = frame
+                .sregs
+                .get(value)
+                .ok_or_else(|| C5Error::Runtime(format!("vm_ssa: v{value} is not an SVE value")))?;
+            mem.write_bytes(frame.regs[*dst as usize] as usize, bytes)
         }
         Intrinsic::AllocaRestore => {
             let saved = args
@@ -4796,6 +4809,7 @@ fn load_width(kind: LoadKind) -> usize {
         LoadKind::F128 | LoadKind::V128 => 16,
         LoadKind::V256 => 32,
         LoadKind::V512 => 64,
+        LoadKind::SveVector | LoadKind::SvePredicate => 0,
         LoadKind::I64 | LoadKind::F64 => 8,
         LoadKind::I32 | LoadKind::U32 | LoadKind::F32 => 4,
         LoadKind::I16 | LoadKind::U16 => 2,
@@ -4852,7 +4866,11 @@ fn load_from_memory(mem: &Memory, addr: usize, kind: LoadKind) -> Result<i64, C5
         LoadKind::I8 => slice[0] as i8 as i64,
         LoadKind::U8 => slice[0] as i64,
         // The -O vector promotion producing this kind never reaches the VM.
-        LoadKind::V128 | LoadKind::V256 | LoadKind::V512 => {
+        LoadKind::V128
+        | LoadKind::V256
+        | LoadKind::V512
+        | LoadKind::SveVector
+        | LoadKind::SvePredicate => {
             return Err(C5Error::Runtime("vector load in the interpreter".into()));
         }
     };

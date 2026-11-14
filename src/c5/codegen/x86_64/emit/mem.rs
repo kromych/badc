@@ -247,7 +247,9 @@ pub(super) fn emit_load_kind_mem(
         | LoadKind::F128
         | LoadKind::V128
         | LoadKind::V256
-        | LoadKind::V512 => {
+        | LoadKind::V512
+        | LoadKind::SveVector
+        | LoadKind::SvePredicate => {
             unreachable!()
         }
     }
@@ -729,7 +731,9 @@ pub(super) fn emit_load_indexed(
         | LoadKind::F128
         | LoadKind::V128
         | LoadKind::V256
-        | LoadKind::V512 => {
+        | LoadKind::V512
+        | LoadKind::SveVector
+        | LoadKind::SvePredicate => {
             unreachable!()
         }
     };
@@ -761,7 +765,9 @@ pub(super) fn emit_load_indexed(
         | LoadKind::F128
         | LoadKind::V128
         | LoadKind::V256
-        | LoadKind::V512 => {
+        | LoadKind::V512
+        | LoadKind::SveVector
+        | LoadKind::SvePredicate => {
             unreachable!()
         }
     };
@@ -1734,7 +1740,9 @@ fn int_load_shape(kind: LoadKind) -> (u32, bool) {
         | LoadKind::F128
         | LoadKind::V128
         | LoadKind::V256
-        | LoadKind::V512 => (0, false),
+        | LoadKind::V512
+        | LoadKind::SveVector
+        | LoadKind::SvePredicate => (0, false),
     }
 }
 

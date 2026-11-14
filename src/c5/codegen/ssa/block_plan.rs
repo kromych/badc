@@ -658,6 +658,7 @@ mod tests {
             asm_preserve: (u32::MAX, u32::MAX),
             call_saves: Vec::new(),
             loop_saves: Default::default(),
+            sve: Default::default(),
         }
     }
 

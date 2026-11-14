@@ -924,6 +924,7 @@ impl FunctionEmitter<'_, '_> {
             // it: the prologue's sp, realigned as the prologue realigns it.
             if func.is_seh_target(block_idx as BlockId) {
                 restore_dynamic_sp(self.cx.code, frame);
+                super::sve::emit_vl_region(self.cx.code, frame);
                 if frame.realign_align > 0 {
                     emit_realign_sp(self.cx.code, frame);
                 }
@@ -1760,6 +1761,7 @@ fn emit_prologue(
         // base does not depend on.
         emit(code, enc_add_imm(Reg(19), Reg(31), 0));
     }
+    super::sve::emit_vl_region(code, frame);
     if func.indirect_result_slot != 0 {
         // AAPCS64 6.9: save the caller-supplied x8 indirect-result pointer
         // into its body local; `return s;` writes the aggregate through it.
@@ -2680,6 +2682,9 @@ fn call_save(code: &mut Vec<u8>, frame: Frame, s: &super::ssa::reg_alloc::CallSa
     let off = || spill_off(frame, s.slot);
     let q = || v128_spill_off(frame, s.slot);
     match (s.is_fp, s.wide, store) {
+        (true, VecWidth::Scalable, _) => {
+            super::sve::z_slot(code, frame, !store, s.reg, s.slot, Reg(16))
+        }
         (false, _, true) => emit_spill_str_x_auto(code, frame, Reg(s.reg), off()),
         (false, _, false) => emit_spill_ldr_x(code, frame, Reg(s.reg), off()),
         (true, VecWidth::Scalar, true) => emit_spill_str_d_auto(code, frame, s.reg, off()),

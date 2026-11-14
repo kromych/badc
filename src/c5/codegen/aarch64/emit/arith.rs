@@ -65,6 +65,9 @@ pub(super) fn emit_copy(
     if src_place == dst {
         return Ok(());
     }
+    if is_fp && alloc.width(value) == super::ssa::reg_alloc::VecWidth::Scalable {
+        return super::sve::emit_z_copy(code, src_place, dst, frame);
+    }
     // A register copied to a spill slot is stored from where it is.
     match (src_place, dst) {
         (Place::FpReg(r), Place::Spill(_)) if is_fp => {

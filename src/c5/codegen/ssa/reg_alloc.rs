@@ -236,6 +236,8 @@ pub(crate) struct Allocation {
     pub call_saves: Vec<(ValueId, Vec<CallSave>)>,
     /// The registers saved around loops.
     pub loop_saves: LoopSaveCode,
+    /// The SVE predicates' places and the VL-scaled slots.
+    pub sve: super::sve_alloc::SveAlloc,
 }
 
 /// The code the saves around loops add at block boundaries
@@ -1750,6 +1752,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             asm_preserve: (u32::MAX, u32::MAX),
             call_saves: Vec::new(),
             loop_saves: LoopSaveCode::default(),
+            sve: Default::default(),
         };
     }
 
@@ -1830,7 +1833,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     let wide = wide_values(func);
     let mut node_cons: Vec<Option<NodeConstraints>> = vec![None; func.insts.len()];
     for (v, inst) in func.insts.iter().enumerate() {
-        if !produces_value(inst) {
+        if !produces_value(inst) || produces_pred_result(inst) {
             continue;
         }
         let root = node_of[v] as usize;
@@ -2658,6 +2661,27 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         ),
     );
 
+    let (mut saves_at, mut loop_code, mut spill_count) = (saves_at, loop_code, spill_count);
+    let sve = super::sve_alloc::place(
+        func,
+        super::sve_alloc::Colored {
+            places: &mut places,
+            call_saves: &mut saves_at,
+            loop_saves: &mut loop_code,
+            spill_count: &mut spill_count,
+        },
+        super::sve_alloc::Facts {
+            interference: &value_interference,
+            classes: &mut classes,
+            crosses_call: &calls_after_def,
+            width: &|v| {
+                node_cons[node_of[v as usize] as usize].map_or(VecWidth::Scalar, |c| c.wide)
+            },
+            emitted: &|v| {
+                !super::emit_common::is_dead_pure_counts(&func.insts[v as usize], v, &use_counts)
+            },
+        },
+    );
     let asm_preserve = asm_preserve_masks(func, target, region_base);
     let imm_held = imm_already_held(func, &places, &use_counts, target);
     let fp_mem_operand = if target.is_x86_64() {
@@ -2702,6 +2726,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         asm_preserve,
         call_saves: saves_at,
         loop_saves: loop_code,
+        sve,
     }
 }
 
@@ -4373,6 +4398,8 @@ pub(crate) fn for_each_operand(inst: &Inst, mut f: impl FnMut(ValueId)) {
 enum ResultKind {
     Int,
     Fp,
+    /// An SVE predicate, which [`super::sve_alloc`] places.
+    Pred,
     None,
 }
 
@@ -4391,8 +4418,16 @@ pub(crate) fn produces_value(inst: &Inst) -> bool {
     !matches!(result_kind(inst), ResultKind::None)
 }
 
+/// Whether an instruction's result is an SVE predicate, which the
+/// coloring of the integer and FP files leaves to [`super::sve_alloc`].
+pub(crate) fn produces_pred_result(inst: &Inst) -> bool {
+    matches!(result_kind(inst), ResultKind::Pred)
+}
+
 /// The width of an FP-file value: a scalar, or a vector that spills to
-/// two (128-bit) or four (256-bit) units.
+/// two (128-bit) or four (256-bit) units. A `Scalable` value, an SVE
+/// vector, takes one unit of the coloring; its slot then lies in the
+/// VL-scaled region ([`super::sve_alloc`]).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum VecWidth {
     #[default]
@@ -4400,6 +4435,7 @@ pub(crate) enum VecWidth {
     V128,
     V256,
     V512,
+    Scalable,
 }
 
 impl VecWidth {
@@ -4417,6 +4453,7 @@ impl VecWidth {
             LoadKind::V128 => VecWidth::V128,
             LoadKind::V256 => VecWidth::V256,
             LoadKind::V512 => VecWidth::V512,
+            LoadKind::SveVector => VecWidth::Scalable,
             _ => VecWidth::Scalar,
         }
     }
@@ -4424,7 +4461,7 @@ impl VecWidth {
     /// Spill units (8 bytes each) a value of this width takes.
     pub(crate) fn units(self) -> u32 {
         match self {
-            VecWidth::Scalar => 1,
+            VecWidth::Scalar | VecWidth::Scalable => 1,
             VecWidth::V128 => 2,
             VecWidth::V256 => 4,
             VecWidth::V512 => 8,
@@ -4469,6 +4506,7 @@ pub(crate) fn wide_values(func: &FunctionSsa) -> Vec<VecWidth> {
             | Inst::VecSplat { bytes, .. }
             | Inst::VecConst { bytes, .. } => VecWidth::of_bytes(*bytes),
             Inst::VecExtract { kind, .. } => VecWidth::of_load(*kind),
+            Inst::Intrinsic { kind, .. } => super::sve_alloc::intrinsic_width(*kind),
             _ => VecWidth::Scalar,
         })
         .collect();
@@ -4515,7 +4553,9 @@ fn result_kind(inst: &Inst) -> ResultKind {
             | LoadKind::F128
             | LoadKind::V128
             | LoadKind::V256
-            | LoadKind::V512 => ResultKind::Fp,
+            | LoadKind::V512
+            | LoadKind::SveVector => ResultKind::Fp,
+            LoadKind::SvePredicate => ResultKind::Pred,
             _ => ResultKind::Int,
         },
         AggParts { .. } => ResultKind::None,
@@ -4526,7 +4566,9 @@ fn result_kind(inst: &Inst) -> ResultKind {
             | LoadKind::F128
             | LoadKind::V128
             | LoadKind::V256
-            | LoadKind::V512 => ResultKind::Fp,
+            | LoadKind::V512
+            | LoadKind::SveVector => ResultKind::Fp,
+            LoadKind::SvePredicate => ResultKind::Pred,
             _ => ResultKind::Int,
         },
         Copy { is_fp, .. } => {
@@ -4543,7 +4585,9 @@ fn result_kind(inst: &Inst) -> ResultKind {
             | LoadKind::F128
             | LoadKind::V128
             | LoadKind::V256
-            | LoadKind::V512 => ResultKind::Fp,
+            | LoadKind::V512
+            | LoadKind::SveVector => ResultKind::Fp,
+            LoadKind::SvePredicate => ResultKind::Pred,
             _ => ResultKind::Int,
         },
         Store {
@@ -4604,7 +4648,9 @@ fn result_kind(inst: &Inst) -> ResultKind {
             | LoadKind::F128
             | LoadKind::V128
             | LoadKind::V256
-            | LoadKind::V512 => ResultKind::Fp,
+            | LoadKind::V512
+            | LoadKind::SveVector => ResultKind::Fp,
+            LoadKind::SvePredicate => ResultKind::Pred,
             _ => ResultKind::Int,
         },
         Binop { op, .. } | BinopI { op, .. } => match op {
@@ -4659,11 +4705,12 @@ fn result_kind(inst: &Inst) -> ResultKind {
             use super::super::op::Intrinsic as I;
             // The unary FP math intrinsics (sqrt / fabs / floor / ceil /
             // trunc, C99 7.12.7 / 7.12.9) produce an FP value; the rest
-            // yield an integer / pointer.
-            if I::from_i64(*kind).is_some_and(|i| i.is_fp_unary()) {
-                ResultKind::Fp
-            } else {
-                ResultKind::Int
+            // yield an integer / pointer, but for the SVE accesses.
+            match I::from_i64(*kind) {
+                Some(i) if i.is_fp_unary() || i == I::SveLoadZ => ResultKind::Fp,
+                Some(I::SveLoadP) => ResultKind::Pred,
+                Some(I::SveStoreZ | I::SveStoreP) => ResultKind::None,
+                _ => ResultKind::Int,
             }
         }
         AllocaInit(_) | LifetimeEnd(_) => ResultKind::None,
@@ -5126,7 +5173,7 @@ fn populate_call_result_hints(
         match result_kind(inst) {
             ResultKind::Int => hints[idx] = Some(ret_int),
             ResultKind::Fp => hints[idx] = Some(ret_fp),
-            ResultKind::None => {}
+            ResultKind::Pred | ResultKind::None => {}
         }
     }
 }
@@ -5211,7 +5258,7 @@ fn populate_return_hints(
         match kind {
             ResultKind::Int => try_set(hints, v, ret_int),
             ResultKind::Fp => try_set(hints, v, ret_fp),
-            ResultKind::None => {}
+            ResultKind::Pred | ResultKind::None => {}
         }
     }
 }
@@ -7204,7 +7251,7 @@ int main(void) { return 0; }
                             | Inst::Phi { .. }
                     );
                 match kind {
-                    ResultKind::None => assert_eq!(*p, Place::None),
+                    ResultKind::Pred | ResultKind::None => assert_eq!(*p, Place::None),
                     ResultKind::Int | ResultKind::Fp => {
                         if dead_dst {
                             continue;

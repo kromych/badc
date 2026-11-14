@@ -3733,7 +3733,9 @@ fn splice_param_ref(
         | LoadKind::F128
         | LoadKind::V128
         | LoadKind::V256
-        | LoadKind::V512 => {
+        | LoadKind::V512
+        | LoadKind::SveVector
+        | LoadKind::SvePredicate => {
             return arg;
         }
     };

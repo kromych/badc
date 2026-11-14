@@ -69,7 +69,15 @@ fn load_int_kind(kind: LoadKind) -> Option<(u8, bool)> {
         K::I32 => (4, true),
         K::U32 => (4, false),
         K::I64 => (8, true),
-        K::F32 | K::F64 | K::F80 | K::F128 | K::V128 | K::V256 | K::V512 => return None,
+        K::F32
+        | K::F64
+        | K::F80
+        | K::F128
+        | K::V128
+        | K::V256
+        | K::V512
+        | K::SveVector
+        | K::SvePredicate => return None,
     })
 }
 

@@ -565,6 +565,8 @@ fn fmt_load_kind(k: LoadKind) -> &'static str {
         LoadKind::V128 => "V128",
         LoadKind::V256 => "V256",
         LoadKind::V512 => "V512",
+        LoadKind::SveVector => "SveVector",
+        LoadKind::SvePredicate => "SvePredicate",
     }
 }
 

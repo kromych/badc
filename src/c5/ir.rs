@@ -752,6 +752,21 @@ pub(crate) enum Inst {
 }
 
 impl Inst {
+    /// The SVE kind of the value the inst defines: that of an `SveLoadZ`
+    /// or `SveLoadP` intrinsic, or of a phi of an SVE kind.
+    pub(crate) fn sve_kind(&self) -> Option<LoadKind> {
+        use crate::c5::op::Intrinsic as I;
+        match self {
+            Inst::Phi { kind, .. } if kind.is_sve() => Some(*kind),
+            Inst::Intrinsic { kind, .. } => match I::from_i64(*kind)? {
+                I::SveLoadZ => Some(LoadKind::SveVector),
+                I::SveLoadP => Some(LoadKind::SvePredicate),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
     /// Whether the inst's only effect is defining its result, so it can be
     /// dropped when nothing reads that result. The allocator's use-count
     /// fixed point and the per-arch emit's dead-value skip must agree on
@@ -1305,11 +1320,16 @@ pub(crate) enum LoadKind {
     V256,
     /// 64 bytes read whole into a zmm register, under AVX-512F.
     V512,
+    /// An SVE vector (a Z register) or predicate (a P register), of a size
+    /// known at run time. Only a phi carries these kinds: the accesses are
+    /// intrinsics, opaque to every pass, as no static extent describes them.
+    SveVector,
+    SvePredicate,
 }
 
 impl LoadKind {
     /// Bytes the access reads; an `F80` reads its 10 bytes from a 16-byte
-    /// object.
+    /// object. Zero for the SVE kinds, which no access carries.
     pub(crate) fn bytes(self) -> u8 {
         match self {
             LoadKind::I8 | LoadKind::U8 => 1,
@@ -1319,7 +1339,13 @@ impl LoadKind {
             LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => 16,
             LoadKind::V256 => 32,
             LoadKind::V512 => 64,
+            LoadKind::SveVector | LoadKind::SvePredicate => 0,
         }
+    }
+
+    /// Whether the kind is an SVE register's, of no static size.
+    pub(crate) fn is_sve(self) -> bool {
+        matches!(self, LoadKind::SveVector | LoadKind::SvePredicate)
     }
 
     /// Bytes an integer kind reads; `None` for the floating and vector
@@ -1336,7 +1362,9 @@ impl LoadKind {
             | LoadKind::F128
             | LoadKind::V128
             | LoadKind::V256
-            | LoadKind::V512 => None,
+            | LoadKind::V512
+            | LoadKind::SveVector
+            | LoadKind::SvePredicate => None,
         }
     }
 }

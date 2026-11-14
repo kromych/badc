@@ -1865,6 +1865,9 @@ pub(super) fn schedule_place_moves(
     )
 }
 
+use super::ssa::reg_alloc::VecWidth as SveWidth;
+use super::ssa::sve_alloc::PredPlace as SvePred;
+
 /// The aarch64 side of the shared phi and place-move scheduling.
 impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::Aarch64Backend {
     const ARCH: &'static str = "aarch64";
@@ -1878,6 +1881,39 @@ impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::Aarch64Ba
     }
     fn fp_spill_load(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, dst: u8) {
         emit_spill_ldr_d_auto(code, frame, dst, spill_off(frame, slot));
+    }
+    fn wide_reg_mov(&self, code: &mut Vec<u8>, w: SveWidth, dst: u8, src: u8) {
+        assert_eq!(
+            w,
+            SveWidth::Scalable,
+            "aarch64: no fixed-width vector past 128 bits"
+        );
+        emit(code, super::sve::enc_mov_z(dst, src));
+    }
+    fn wide_spill_store(&self, code: &mut Vec<u8>, frame: Frame, w: SveWidth, slot: u32, src: u8) {
+        assert_eq!(
+            w,
+            SveWidth::Scalable,
+            "aarch64: no fixed-width vector past 128 bits"
+        );
+        super::sve::z_slot(code, frame, false, src, slot, Reg(16));
+    }
+    fn wide_spill_load(&self, code: &mut Vec<u8>, frame: Frame, w: SveWidth, slot: u32, dst: u8) {
+        assert_eq!(
+            w,
+            SveWidth::Scalable,
+            "aarch64: no fixed-width vector past 128 bits"
+        );
+        super::sve::z_slot(code, frame, true, dst, slot, Reg(16));
+    }
+    fn pred_place_moves(
+        &self,
+        code: &mut Vec<u8>,
+        frame: Frame,
+        moves: &mut Vec<(SvePred, SvePred)>,
+    ) -> Emit {
+        super::sve::schedule_pred_moves(code, frame, moves);
+        Ok(())
     }
     fn v128_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
         emit(code, super::encode::enc_mov_v16b(dst, src));

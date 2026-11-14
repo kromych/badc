@@ -67,6 +67,7 @@ mod inst;
 mod intrinsic;
 mod mem;
 mod simd;
+mod sve;
 #[cfg(test)]
 mod tests;
 

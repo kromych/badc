@@ -93,6 +93,10 @@ pub(crate) struct Frame {
     pub consecutive_pairs: bool,
     /// An integer division by zero raises an exception (Windows on ARM64).
     pub raises_divide_by_zero: bool,
+    /// Vector and predicate slots of the VL-scaled region below the static
+    /// frame (`super::sve`).
+    pub sve_z_slots: u32,
+    pub sve_p_slots: u32,
 }
 
 /// One callee save: `r` alone, or with `r2` in the slot above it as one
@@ -142,6 +146,11 @@ pub(super) fn save_plan(alloc: &Allocation, frame: Frame) -> Vec<Save> {
 }
 
 impl Frame {
+    /// Vector lengths the VL-scaled region takes.
+    pub(super) fn sve_region_vls(&self) -> u32 {
+        self.sve_p_slots.div_ceil(8) + self.sve_z_slots
+    }
+
     /// fp-relative shift of the locals: the save block above them, then the
     /// canary region.
     pub(super) fn locals_shift(self) -> u32 {
@@ -221,7 +230,10 @@ pub(crate) fn compute_frame_with_tail_calls(
     let canary_bytes = super::ssa::emit_common::canary_bytes(func, &base, abi.stack_protect);
     let locals_bytes = declared_locals_bytes + canary_bytes;
     let saved_fpr_bytes = super::ssa::emit_common::slots16(alloc.fp_used.len() as u32);
-    let dynamic_sp = super::ssa::emit_common::uses_dynamic_alloca(func) || func.frame_align > 16;
+    // sp lies below the VL-scaled region, a run-time distance from fp.
+    let vl_region = alloc.sve.region_vls() > 0;
+    let dynamic_sp =
+        super::ssa::emit_common::uses_dynamic_alloca(func) || func.frame_align > 16 || vl_region;
     // The parameter cells sit below the locals, whose offsets they leave
     // alone; every region below them shifts by their size.
     let param_cells_bytes = param_cells_bytes(func, alloc, abi);
@@ -234,7 +246,9 @@ pub(crate) fn compute_frame_with_tail_calls(
     let fixed_regs = super::ssa::emit_common::fixed_for_function(func, target, abi.fixed_regs);
     let writes_third_scratch = writes_x19(func, alloc, abi);
     let local_base = !x19_overwritten(func, fixed_regs)
-        && (super::ssa::emit_common::uses_dynamic_alloca(func) || func.has_sp_moving_asm(target))
+        && (super::ssa::emit_common::uses_dynamic_alloca(func)
+            || func.has_sp_moving_asm(target)
+            || vl_region)
         && func.frame_align <= 16
         && !abi.fixed_regs.has_gpr(19)
         && local_base_wins(func, alloc, canary_bytes, upper_bytes) >= 4;
@@ -345,6 +359,8 @@ pub(crate) fn compute_frame_with_tail_calls(
         saves_top: 0,
         consecutive_pairs: target == Target::WindowsAarch64,
         raises_divide_by_zero: target == Target::WindowsAarch64,
+        sve_z_slots: alloc.sve.z_slots,
+        sve_p_slots: alloc.sve.p_slots,
     };
     // A full leaf has nothing to address and no fp to restore sp from.
     frame.dynamic_sp |= func.has_sp_moving_asm(target) && !is_full_leaf(frame, alloc);
@@ -1151,8 +1167,9 @@ pub(super) fn is_full_leaf(frame: Frame, alloc: &Allocation) -> bool {
     {
         return false;
     }
-    // Realigning sp needs fp to restore it on exit.
-    if frame.realign_align != 0 {
+    // Realigning sp or reserving the VL-scaled region needs fp to restore
+    // it on exit.
+    if frame.realign_align != 0 || frame.sve_region_vls() != 0 {
         return false;
     }
     if !alloc.gpr_used.is_empty() || !alloc.fp_used.is_empty() {

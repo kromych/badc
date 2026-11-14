@@ -226,41 +226,37 @@ Disassembly of section .text:
                	str	x20, [sp, #-0x20]!
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	mov	x0, #0x1                // =1
-               	str	x0, [x1, #0x100]
-               	adrp	x2, <page>
+               	adrp	x2, <addr>
                	add	x2, x2, <lo12>
-               	str	x0, [x2, #0xff8]
-               	adrp	x3, <addr>
-               	add	x3, x3, <lo12>
-               	str	w0, [x3, #0xff0]
-               	stp	xzr, xzr, [x1]
-               	stp	xzr, xzr, [x1, #0x10]
-               	stp	xzr, xzr, [x1, #0x20]
-               	stp	xzr, xzr, [x1, #0x30]
-               	stp	xzr, xzr, [x1, #0x40]
-               	stp	xzr, xzr, [x1, #0x50]
-               	stp	xzr, xzr, [x1, #0x60]
-               	stp	xzr, xzr, [x1, #0x70]
-               	stp	xzr, xzr, [x1, #0x80]
-               	stp	xzr, xzr, [x1, #0x90]
-               	stp	xzr, xzr, [x1, #0xa0]
-               	stp	xzr, xzr, [x1, #0xb0]
-               	stp	xzr, xzr, [x1, #0xc0]
-               	stp	xzr, xzr, [x1, #0xd0]
-               	stp	xzr, xzr, [x1, #0xe0]
-               	stp	xzr, xzr, [x1, #0xf0]
-               	str	xzr, [x1, #0x100]
-               	mov	x16, x2
+               	stp	xzr, xzr, [x0]
+               	stp	xzr, xzr, [x0, #0x10]
+               	stp	xzr, xzr, [x0, #0x20]
+               	stp	xzr, xzr, [x0, #0x30]
+               	stp	xzr, xzr, [x0, #0x40]
+               	stp	xzr, xzr, [x0, #0x50]
+               	stp	xzr, xzr, [x0, #0x60]
+               	stp	xzr, xzr, [x0, #0x70]
+               	stp	xzr, xzr, [x0, #0x80]
+               	stp	xzr, xzr, [x0, #0x90]
+               	stp	xzr, xzr, [x0, #0xa0]
+               	stp	xzr, xzr, [x0, #0xb0]
+               	stp	xzr, xzr, [x0, #0xc0]
+               	stp	xzr, xzr, [x0, #0xd0]
+               	stp	xzr, xzr, [x0, #0xe0]
+               	stp	xzr, xzr, [x0, #0xf0]
+               	str	xzr, [x0, #0x100]
+               	mov	x16, x1
                	mov	x17, #0x1000            // =4096
                	add	x17, x16, x17
                	stp	xzr, xzr, [x16, #0x10]
                	stp	xzr, xzr, [x16], #0x20
                	cmp	x16, x17
                	b.ne	<addr>
-               	mov	x16, x3
+               	mov	x16, x2
                	add	x17, x16, #0xfe0
                	stp	xzr, xzr, [x16, #0x10]
                	stp	xzr, xzr, [x16], #0x20

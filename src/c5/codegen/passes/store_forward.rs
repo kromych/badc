@@ -424,6 +424,48 @@ fn run_one(func: &mut FunctionSsa) {
                 func.insts[i] = load;
                 any = true;
             }
+            // A copy whose source bytes one store wrote whole stores that
+            // value at the destination. The copy's value, the destination
+            // address, is the destination's.
+            if let Inst::Mcpy {
+                dst,
+                src,
+                size,
+                align,
+            } = func.insts[i]
+                && let Some((value, kind)) = table.iter().find_map(|e| {
+                    let Inst::Store {
+                        addr, value, kind, ..
+                    } = func.insts[e.src_idx as usize]
+                    else {
+                        return None;
+                    };
+                    (e.addr == src
+                        && addr == src
+                        && e.disp == 0
+                        && value == e.value
+                        && kind != StoreKind::F80
+                        && i64::from(store_width(kind)) == size
+                        && span(e.src_idx, i) <= MAX_FORWARD_DISTANCE)
+                        .then_some((value, kind))
+                })
+            {
+                func.insts[i] = Inst::Store {
+                    addr: dst,
+                    disp: 0,
+                    value,
+                    kind,
+                    volatile: false,
+                    align: if i64::from(align) >= size {
+                        0
+                    } else {
+                        align as u8
+                    },
+                    pc_rel: false,
+                };
+                redirect[i] = Some(dst);
+                any = true;
+            }
             if writes_memory(&func.insts[i]) {
                 copies.clear();
             }
@@ -1020,16 +1062,16 @@ fn writes_memory(inst: &Inst) -> bool {
     )
 }
 
-/// Drop each store a later store in its block overwrites, with no access
-/// between that may read the bytes: nothing reads what it writes. Two
-/// stores through one base ([`base_disp`]) compare by their byte ranges. A
-/// load through that base keeps the stores whose bytes it reads; any other
-/// read of memory -- a load through another base or of a slot, a call, an
-/// asm statement, a copy, a volatile or atomic access -- keeps every
-/// earlier store, and a store between, which only writes, keeps none. A
-/// store whose value something reads through its id stays. A function with
-/// a `__try` region, whose handlers may read memory a fault between the
-/// stores leaves, keeps its stores.
+/// Drop each store or zero fill a later one in its block overwrites, with
+/// no access between that may read the bytes: nothing reads what it
+/// writes. Two writes through one base ([`base_disp`]) compare by their
+/// byte ranges. A load through that base keeps the stores whose bytes it
+/// reads; any other read of memory -- a load through another base or of a
+/// slot, a call, an asm statement, a copy, a volatile or atomic access --
+/// keeps every earlier store, and a store between, which only writes,
+/// keeps none. A store whose value something reads through its id stays.
+/// A function with a `__try` region, whose handlers may read memory a
+/// fault between the stores leaves, keeps its stores.
 pub(crate) fn drop_overwritten_stores(func: &mut FunctionSsa) {
     if func.has_seh() {
         return;
@@ -1052,9 +1094,9 @@ pub(crate) fn drop_overwritten_stores(func: &mut FunctionSsa) {
     let mut dead = Vec::new();
     for block in &func.blocks {
         // The byte ranges the block's later stores write, by base.
-        let mut written: Vec<(ValueId, i64, u8)> = Vec::new();
+        let mut written: Vec<(ValueId, i64, i64)> = Vec::new();
         for i in block.inst_range.clone().rev() {
-            match func.insts[i as usize] {
+            let (addr, disp, w, used) = match func.insts[i as usize] {
                 Inst::Store {
                     addr,
                     disp,
@@ -1062,20 +1104,30 @@ pub(crate) fn drop_overwritten_stores(func: &mut FunctionSsa) {
                     volatile: false,
                     pc_rel: false,
                     ..
-                } => {
-                    let (base, at) = base_disp(func, addr, disp);
-                    let w = store_width(kind);
-                    let covered = |&(b, a, aw): &(ValueId, i64, u8)| {
-                        b == base && a <= at && at + i64::from(w) <= a + i64::from(aw)
-                    };
-                    if written.iter().any(covered) {
-                        if uses[i as usize] == 0 {
-                            dead.push(i);
-                        }
-                    } else {
-                        written.push((base, at, w));
+                } => (
+                    addr,
+                    disp,
+                    i64::from(store_width(kind)),
+                    uses[i as usize] > 0,
+                ),
+                Inst::Mzero { dst, size, .. } => (dst, 0, size, false),
+                _ => (NO_VALUE, 0, 0, false),
+            };
+            if addr != NO_VALUE {
+                let (base, at) = base_disp(func, addr, disp);
+                if written
+                    .iter()
+                    .any(|&(b, a, aw)| b == base && a <= at && at + w <= a + aw)
+                {
+                    if !used {
+                        dead.push(i);
                     }
+                } else {
+                    written.push((base, at, w));
                 }
+                continue;
+            }
+            match func.insts[i as usize] {
                 Inst::Store {
                     volatile: false, ..
                 }
@@ -1091,8 +1143,8 @@ pub(crate) fn drop_overwritten_stores(func: &mut FunctionSsa) {
                     ..
                 } if uses[i as usize] > 0 => {
                     let (base, at) = base_disp(func, addr, disp);
-                    let w = load_width(kind);
-                    written.retain(|&(b, a, aw)| b == base && !overlaps64(a, aw, at, w));
+                    let w = i64::from(load_width(kind));
+                    written.retain(|&(b, a, aw)| b == base && !(a < at + w && at < a + aw));
                 }
                 // A plain load nothing reads is not emitted.
                 ref inst
@@ -1832,6 +1884,103 @@ mod tests {
         ));
         assert!(survives(None, 4, StoreKind::I32, NO_VALUE));
         assert!(survives(None, 0, StoreKind::I64, 4));
+    }
+
+    /// A zero fill a later store covers goes, as does a store a later zero
+    /// fill covers; a fill the store covers only in part stays.
+    #[test]
+    fn a_zero_fill_is_a_store_to_overwrite() {
+        use crate::c5::ir::NO_VALUE;
+        let store = |kind| Inst::Store {
+            addr: 0,
+            disp: 0,
+            value: 1,
+            kind,
+            volatile: false,
+            align: 0,
+            pc_rel: false,
+        };
+        let zero = |size| Inst::Mzero {
+            dst: 0,
+            size,
+            align: 8,
+        };
+        let params = || {
+            alloc::vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64
+                },
+                Inst::ParamRef {
+                    idx: 1,
+                    kind: LoadKind::I64
+                },
+            ]
+        };
+        let first_goes = |first: Inst, last: Inst| {
+            let mut insts = params();
+            insts.extend([first, last]);
+            let mut f = fresh(insts, Terminator::Return(NO_VALUE), NO_VALUE);
+            super::drop_overwritten_stores(&mut f);
+            matches!(f.insts[2], Inst::Imm(0))
+        };
+        assert!(first_goes(zero(8), store(StoreKind::I64)));
+        assert!(!first_goes(zero(16), store(StoreKind::I64)));
+        assert!(first_goes(store(StoreKind::I32), zero(8)));
+    }
+
+    /// A copy of the bytes one store just wrote whole stores that value at
+    /// the destination, and its value is the destination address; a copy
+    /// wider than the store stays.
+    #[test]
+    fn a_copy_of_a_stored_word_stores_the_word() {
+        let copy_of = |size| {
+            let mut f = fresh(
+                alloc::vec![
+                    Inst::ParamRef {
+                        idx: 0,
+                        kind: LoadKind::I64
+                    },
+                    Inst::ParamRef {
+                        idx: 1,
+                        kind: LoadKind::I64
+                    },
+                    Inst::Store {
+                        addr: 0,
+                        disp: 0,
+                        value: 1,
+                        kind: StoreKind::I32,
+                        volatile: false,
+                        align: 0,
+                        pc_rel: false,
+                    },
+                    Inst::Mcpy {
+                        dst: 1,
+                        src: 0,
+                        size,
+                        align: 1,
+                    },
+                ],
+                Terminator::Return(3),
+                3,
+            );
+            run_one(&mut f);
+            f
+        };
+        let f = copy_of(4);
+        assert!(matches!(
+            f.insts[3],
+            Inst::Store {
+                addr: 1,
+                disp: 0,
+                value: 1,
+                kind: StoreKind::I32,
+                align: 1,
+                ..
+            }
+        ));
+        assert!(matches!(f.blocks[0].terminator, Terminator::Return(1)));
+        assert!(matches!(copy_of(8).insts[3], Inst::Mcpy { .. }));
     }
 
     #[test]

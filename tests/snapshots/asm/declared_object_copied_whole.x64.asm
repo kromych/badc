@@ -27,12 +27,8 @@ Disassembly of section .text:
 
 <chain>:
                	andq	$0x1, %rdi
-               	leaq	<rip>, %rax # <addr>
-               	movb	$0x0, (%rax)
-               	leaq	<rip>, %rcx # <addr>
                	movb	%dil, <rip> # <addr>
-               	movzbq	(%rax), %r10
-               	movb	%r10b, (%rcx)
+               	movb	%dil, <rip> # <addr>
                	retq
 
 <to_global>:

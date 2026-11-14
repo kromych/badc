@@ -14,15 +14,11 @@ Disassembly of section .text:
                	brk	#0x1
 
 <chain>:
-               	and	x1, x0, #0x1
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	strb	wzr, [x0]
+               	and	x0, x0, #0x1
+               	adrp	x1, <page>
                	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	strb	w1, [x0]
-               	ldrb	w16, [x0]
-               	strb	w16, [x2]
+               	strb	w0, [x1, #0x30]
+               	strb	w0, [x2, #0x31]
                	ret
 
 <to_global>:

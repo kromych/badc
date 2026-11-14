@@ -213,19 +213,19 @@ fn ent_pc=9 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(16)                                      -> x1
-    v2   Imm(256)                                         -> x0
-    v3   BinopI { op=add, lhs=v1, rhs_imm=256 }           -> x0
-    v4   Imm(1)                                           -> x0
-    v5   Store { addr=v1, disp=256, value=v4, kind=I64 pc_rel } -> -
-    v6   ImmData(280)                                     -> x2
-    v7   Imm(4088)                                        -> x6
-    v8   BinopI { op=add, lhs=v6, rhs_imm=4088 }          -> x6
-    v9   Store { addr=v6, disp=4088, value=v4, kind=I64 pc_rel } -> -
-    v10  ImmData(4376)                                    -> x6
-    v11  Imm(4080)                                        -> x7
-    v12  BinopI { op=add, lhs=v10, rhs_imm=4080 }         -> x7
-    v13  Store { addr=v10, disp=4080, value=v4, kind=I32 pc_rel } -> -
+    v1   ImmData(16)                                      -> x0
+    v2   Imm(256)                                         -> x1
+    v3   BinopI { op=add, lhs=v1, rhs_imm=256 }           -> x1
+    v4   Imm(1)                                           -> x1
+    v5   Imm(0)                                           -> x1
+    v6   ImmData(280)                                     -> x1
+    v7   Imm(4088)                                        -> x2
+    v8   BinopI { op=add, lhs=v6, rhs_imm=4088 }          -> x2
+    v9   Imm(0)                                           -> x2
+    v10  ImmData(4376)                                    -> x2
+    v11  Imm(4080)                                        -> x6
+    v12  BinopI { op=add, lhs=v10, rhs_imm=4080 }         -> x6
+    v13  Imm(0)                                           -> x6
     v14  Mzero { dst=v1, size=264, align=8 }              -> -
     v15  ImmData(280)                                     -> x0
     v16  Mzero { dst=v6, size=4096, align=8 }             -> -

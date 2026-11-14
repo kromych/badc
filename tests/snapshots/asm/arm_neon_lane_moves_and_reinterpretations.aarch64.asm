@@ -2219,7 +2219,10 @@ Disassembly of section .text:
 
 <w_vreinterpretq_p128_s8>:
                	ldr	q0, [x1]
-               	str	q0, [x0]
+               	mov	x1, v0.d[0]
+               	mov	x2, v0.d[1]
+               	str	x1, [x0]
+               	str	x2, [x0, #0x8]
                	ret
 
 <w_vreinterpretq_s8_p128>:
@@ -2449,7 +2452,10 @@ Disassembly of section .text:
 
 <w_vreinterpretq_p128_u8>:
                	ldr	q0, [x1]
-               	str	q0, [x0]
+               	mov	x1, v0.d[0]
+               	mov	x2, v0.d[1]
+               	str	x1, [x0]
+               	str	x2, [x0, #0x8]
                	ret
 
 <w_vreinterpretq_u8_p128>:
@@ -2659,7 +2665,10 @@ Disassembly of section .text:
 
 <w_vreinterpretq_p128_p8>:
                	ldr	q0, [x1]
-               	str	q0, [x0]
+               	mov	x1, v0.d[0]
+               	mov	x2, v0.d[1]
+               	str	x1, [x0]
+               	str	x2, [x0, #0x8]
                	ret
 
 <w_vreinterpretq_p8_p128>:
@@ -2849,7 +2858,10 @@ Disassembly of section .text:
 
 <w_vreinterpretq_p128_s16>:
                	ldr	q0, [x1]
-               	str	q0, [x0]
+               	mov	x1, v0.d[0]
+               	mov	x2, v0.d[1]
+               	str	x1, [x0]
+               	str	x2, [x0, #0x8]
                	ret
 
 <w_vreinterpretq_s16_p128>:
@@ -3019,7 +3031,10 @@ Disassembly of section .text:
 
 <w_vreinterpretq_p128_u16>:
                	ldr	q0, [x1]
-               	str	q0, [x0]
+               	mov	x1, v0.d[0]
+               	mov	x2, v0.d[1]
+               	str	x1, [x0]
+               	str	x2, [x0, #0x8]
                	ret
 
 <w_vreinterpretq_u16_p128>:
@@ -3169,7 +3184,10 @@ Disassembly of section .text:
 
 <w_vreinterpretq_p128_p16>:
                	ldr	q0, [x1]
-               	str	q0, [x0]
+               	mov	x1, v0.d[0]
+               	mov	x2, v0.d[1]
+               	str	x1, [x0]
+               	str	x2, [x0, #0x8]
                	ret
 
 <w_vreinterpretq_p16_p128>:
@@ -3299,7 +3317,10 @@ Disassembly of section .text:
 
 <w_vreinterpretq_p128_s32>:
                	ldr	q0, [x1]
-               	str	q0, [x0]
+               	mov	x1, v0.d[0]
+               	mov	x2, v0.d[1]
+               	str	x1, [x0]
+               	str	x2, [x0, #0x8]
                	ret
 
 <w_vreinterpretq_s32_p128>:
@@ -3409,7 +3430,10 @@ Disassembly of section .text:
 
 <w_vreinterpretq_p128_u32>:
                	ldr	q0, [x1]
-               	str	q0, [x0]
+               	mov	x1, v0.d[0]
+               	mov	x2, v0.d[1]
+               	str	x1, [x0]
+               	str	x2, [x0, #0x8]
                	ret
 
 <w_vreinterpretq_u32_p128>:
@@ -3499,7 +3523,10 @@ Disassembly of section .text:
 
 <w_vreinterpretq_p128_f32>:
                	ldr	q0, [x1]
-               	str	q0, [x0]
+               	mov	x1, v0.d[0]
+               	mov	x2, v0.d[1]
+               	str	x1, [x0]
+               	str	x2, [x0, #0x8]
                	ret
 
 <w_vreinterpretq_f32_p128>:
@@ -3569,7 +3596,10 @@ Disassembly of section .text:
 
 <w_vreinterpretq_p128_s64>:
                	ldr	q0, [x1]
-               	str	q0, [x0]
+               	mov	x1, v0.d[0]
+               	mov	x2, v0.d[1]
+               	str	x1, [x0]
+               	str	x2, [x0, #0x8]
                	ret
 
 <w_vreinterpretq_s64_p128>:
@@ -3619,7 +3649,10 @@ Disassembly of section .text:
 
 <w_vreinterpretq_p128_u64>:
                	ldr	q0, [x1]
-               	str	q0, [x0]
+               	mov	x1, v0.d[0]
+               	mov	x2, v0.d[1]
+               	str	x1, [x0]
+               	str	x2, [x0, #0x8]
                	ret
 
 <w_vreinterpretq_u64_p128>:
@@ -3649,7 +3682,10 @@ Disassembly of section .text:
 
 <w_vreinterpretq_p128_p64>:
                	ldr	q0, [x1]
-               	str	q0, [x0]
+               	mov	x1, v0.d[0]
+               	mov	x2, v0.d[1]
+               	str	x1, [x0]
+               	str	x2, [x0, #0x8]
                	ret
 
 <w_vreinterpretq_p64_p128>:
@@ -3659,7 +3695,10 @@ Disassembly of section .text:
 
 <w_vreinterpretq_p128_f64>:
                	ldr	q0, [x1]
-               	str	q0, [x0]
+               	mov	x1, v0.d[0]
+               	mov	x2, v0.d[1]
+               	str	x1, [x0]
+               	str	x2, [x0, #0x8]
                	ret
 
 <w_vreinterpretq_f64_p128>:

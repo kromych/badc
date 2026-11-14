@@ -618,12 +618,53 @@ fn the_polynomial_long_products_are_rows() {
         poly128_t m(poly64_t a, poly64_t b) { return vmull_p64(a, b); }\n\
         poly128_t h(poly64x2_t a, poly64x2_t b) { return vmull_high_p64(a, b); }\n\
         poly16x8_t b8(poly8x16_t a, poly8x16_t b) { return vmull_high_p8(a, b); }\n";
-    for (name, want) in [("h", 0x4EE1_E000u32), ("b8", 0x4E21_E000)] {
-        let words = super::perf_codegen::a64_at(OPS, name, true);
-        assert_eq!(words, [want, 0xD65F_03C0], "{name}: {words:08x?}");
-    }
+    let b8 = super::perf_codegen::a64_at(OPS, "b8", true);
+    assert_eq!(b8, [0x4E21_E000, 0xD65F_03C0], "b8: {b8:08x?}");
+    // A poly128_t returns in x0:x1: `pmull2`, `mov x0, v0.d[0]`,
+    // `mov x1, v0.d[1]`.
+    let h = super::perf_codegen::a64_at(OPS, "h", true);
+    assert_eq!(
+        h,
+        [0x4EE1_E000, 0x4E08_3C00, 0x4E18_3C01, 0xD65F_03C0],
+        "h: {h:08x?}"
+    );
     let words = super::perf_codegen::a64_at(OPS, "m", true);
     assert!(words.contains(&0x0EE1_E000), "m: {words:08x?}");
+}
+
+/// `poly128_t` is the 128-bit unsigned integer the ACLE specifies: code
+/// shifts, converts and compares it as one -- the high half of a product is
+/// `pmull` and `mov x0, v0.d[1]` -- and a subscript of it is an error, as
+/// with clang and gcc.
+#[cfg(feature = "full")]
+#[test]
+fn poly128_t_is_a_128_bit_integer() {
+    const SRC: &str = "#include <arm_neon.h>\n\
+        unsigned long long hi(poly64_t a, poly64_t b) { poly128_t r = vmull_p64(a, b); return (unsigned long long)(r >> 64); }\n\
+        int zero(poly64_t a, poly64_t b) { return vmull_p64(a, b) == 0; }\n";
+    let words = super::perf_codegen::a64_at(SRC, "hi", true);
+    assert!(
+        words.ends_with(&[0x0EE1_E000, 0x4E18_3C00, 0xD65F_03C0]),
+        "hi: {words:08x?}"
+    );
+    let program = super::compile_str_bare_for(
+        "#include <arm_neon.h>\n\
+         int main(void) { poly128_t r = vmull_p64(0x8000000000000001ULL, 3); \
+             return (unsigned long long)r == 0x8000000000000003ULL && (r >> 64) == 1 ? 0 : 1; }\n",
+        crate::Target::LinuxAarch64,
+    );
+    assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 0);
+    let err = crate::Compiler::with_target(
+        "#include <arm_neon.h>\n\
+         unsigned long long hi(poly64_t a, poly64_t b) { poly128_t r = vmull_p64(a, b); return r[1]; }\n"
+            .to_string(),
+        crate::Target::LinuxAarch64,
+    )
+    .compile()
+    .err()
+    .map(|e| e.to_string())
+    .unwrap_or_default();
+    assert!(err.contains("subscripted value"), "{err}");
 }
 
 /// The FEAT_SHA3 bitwise forms are rows: `eor3` and `bcax` over four

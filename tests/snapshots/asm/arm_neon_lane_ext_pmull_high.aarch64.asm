@@ -24,6 +24,8 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldr	d1, [x0, #0x8]
                	pmull	v0.1q, v0.1d, v1.1d
+               	mov	x5, v0.d[0]
+               	mov	x6, v0.d[1]
                	mov	x1, #0xcdef             // =52719
                	movk	x1, #0x89ab, lsl #16
                	movk	x1, #0x4567, lsl #32
@@ -71,19 +73,17 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, v0.d[0]
                	mov	x17, #0xa500            // =42240
                	movk	x17, #0xb45b, lsl #16
                	movk	x17, #0xa968, lsl #32
                	movk	x17, #0xb813, lsl #48
-               	cmp	x0, x17
+               	cmp	x5, x17
                	b.ne	<addr>
-               	mov	x0, v0.d[1]
                	mov	x17, #0x1dd8            // =7640
                	movk	x17, #0xcc3, lsl #16
                	movk	x17, #0x11b0, lsl #32
                	movk	x17, #0x8b, lsl #48
-               	cmp	x0, x17
+               	cmp	x6, x17
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x10

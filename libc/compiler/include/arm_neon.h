@@ -57,7 +57,8 @@
  * stores.
  *
  * The element typedefs match <stdint.h>, repeated so the header serves
- * freestanding units; poly128_t is carried as a 16-byte vector.
+ * freestanding units; poly128_t is the 128-bit unsigned integer the ACLE
+ * specifies, passed and returned as one (x0:x1).
  */
 #ifndef BADC_ARM_NEON_H
 #define BADC_ARM_NEON_H
@@ -117,7 +118,7 @@ typedef poly16_t poly16x8_t __attribute__((vector_size(16)));
 typedef poly64_t poly64x2_t __attribute__((vector_size(16)));
 typedef float float32x4_t __attribute__((vector_size(16)));
 typedef double float64x2_t __attribute__((vector_size(16)));
-typedef poly64_t poly128_t __attribute__((vector_size(16)));
+typedef unsigned __int128 poly128_t;
 
 
 /* Operand n of a template in arrangement 4s, and `insn` over operands 0,

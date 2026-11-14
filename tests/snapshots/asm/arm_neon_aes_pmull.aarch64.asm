@@ -541,10 +541,10 @@ Disassembly of section .text:
                	fmov	d1, x16
                	pmull	v0.1q, v0.1d, v1.1d
                	mov	x0, v0.d[0]
+               	mov	x3, v0.d[1]
                	cmp	x0, x2
                	b.ne	<addr>
-               	mov	x0, v0.d[1]
-               	cmp	x0, x1
+               	cmp	x3, x1
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ldp	x29, x30, [sp, #0xc0]
@@ -560,10 +560,10 @@ Disassembly of section .text:
                	fmov	d1, x16
                	pmull	v0.1q, v0.1d, v1.1d
                	mov	x0, v0.d[0]
+               	mov	x1, v0.d[1]
                	cmp	x0, #0x123
                	b.ne	<addr>
-               	mov	x0, v0.d[1]
-               	cbz	x0, <addr>
+               	cbz	x1, <addr>
                	mov	x0, #0x6                // =6
                	ldp	x29, x30, [sp, #0xc0]
                	ldr	x28, [sp, #0x40]

@@ -1533,6 +1533,78 @@ fn sve_objects_take_the_vector_length_and_copy_whole() {
     }
 }
 
+/// SVE values live across calls, swap through phis, outnumber the registers
+/// and merge beside objects that keep storage, at four vector lengths.
+#[test]
+fn sve_values_survive_calls_and_register_exhaustion() {
+    for src in [
+        include_str!("../../../tests/fixtures/sve/values_across_calls.c"),
+        include_str!("../../../tests/fixtures/sve/values_exhaust_registers.c"),
+        include_str!("../../../tests/fixtures/sve/values_merge_with_memory.c"),
+    ] {
+        let program = crate::Compiler::with_options(
+            String::from(src),
+            crate::Target::LinuxAarch64,
+            Default::default(),
+        )
+        .compile()
+        .expect("compiles");
+        for bits in [128, 256, 512, 2048] {
+            let vm = super::Vm::new(program.clone()).with_sve_vector_bits(bits);
+            assert_eq!(vm.run().expect("runs"), bits as i64 / 128, "{bits} bits");
+        }
+    }
+}
+
+/// Under `-O` an SVE object whose address is not taken takes no storage.
+/// Across a call it takes a slot of the VL-scaled region: forty vectors and
+/// twenty predicates take 43 vector lengths, and none takes z8-z15.
+#[cfg(feature = "full")]
+#[test]
+fn sve_values_without_an_address_take_registers_and_vl_slots() {
+    let words = |src: &str, name: &str| super::perf_codegen::a64_at(src, name, true);
+    let count = |w: &[u32], mask: u32, want: u32| w.iter().filter(|&&x| x & mask == want).count();
+    // ADDVL sp, sp, #imm and its immediate.
+    let addvl = |w: &[u32]| -> i32 {
+        (w.iter().filter(|&&x| x & 0xFFFF_F81F == 0x043F_501F))
+            .map(|&x| ((x >> 5 & 0x3F) as i32) << 26 >> 26)
+            .sum()
+    };
+    let swap = words(
+        include_str!("../../../tests/fixtures/sve/values_across_calls.c"),
+        "swap",
+    );
+    for (mask, want, what) in [
+        (0xFFFF_FFE0, 0x0420_E3E0, "cntb"),
+        (0xFFFF_FFE0, 0x04E0_E3E0, "cntd"),
+    ] {
+        assert_eq!(count(&swap, mask, want), 0, "{what}: {swap:08x?}");
+    }
+    assert!(addvl(&swap) < 0, "addvl: {swap:08x?}");
+    // STR p, [x, #-k, mul vl] and STR z, [x, #-k, mul vl].
+    assert!(
+        count(&swap, 0xFFE0_E010, 0xE5A0_0000) > 0,
+        "str p: {swap:08x?}"
+    );
+    assert!(
+        count(&swap, 0xFFE0_E000, 0xE5A0_4000) > 0,
+        "str z: {swap:08x?}"
+    );
+    let reverse = words(
+        include_str!("../../../tests/fixtures/sve/values_exhaust_registers.c"),
+        "reverse",
+    );
+    assert_eq!(addvl(&reverse), -43, "{reverse:08x?}");
+    // LDR z, [x, #imm, mul vl] into z8-z15.
+    let callee_saved =
+        |x: &&u32| *x & 0xFFC0_E000 == 0x8580_4000 && (8..=15).contains(&(*x & 0x1F));
+    assert_eq!(
+        reverse.iter().filter(callee_saved).count(),
+        0,
+        "a vector across the call in z8-z15: {reverse:08x?}"
+    );
+}
+
 /// A vector slot more than 256 vector lengths into the region, past the
 /// reach of `[base, #imm, mul vl]`, takes its base from `addvl`.
 #[cfg(feature = "full")]

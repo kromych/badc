@@ -2782,11 +2782,25 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 super::asm_outputs::run(f);
             }
         });
+        pipeline.run("ssa::sve_objects::run", &mut ssa_funcs, |funcs| {
+            for f in funcs.iter_mut() {
+                let promoted = super::sve_objects::run(f);
+                if !promoted.is_empty() {
+                    promoted_local_slots
+                        .entry(f.ent_pc)
+                        .or_default()
+                        .extend(promoted);
+                }
+            }
+        });
         pipeline.run("ssa::mem2reg::run", &mut ssa_funcs, |funcs| {
             for f in funcs.iter_mut().filter(|f| !f.has_seh()) {
                 let promoted = super::mem2reg::run(f);
                 if !promoted.is_empty() {
-                    promoted_local_slots.insert(f.ent_pc, promoted);
+                    promoted_local_slots
+                        .entry(f.ent_pc)
+                        .or_default()
+                        .extend(promoted);
                 }
             }
         });

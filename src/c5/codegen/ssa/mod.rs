@@ -25,6 +25,7 @@ pub(crate) mod shadow;
 pub(crate) mod slot_coalesce;
 pub(crate) mod split_ranges;
 pub(crate) mod sve_alloc;
+pub(crate) mod sve_objects;
 pub(crate) mod tape;
 pub(crate) mod vector_slots;
 pub(crate) mod verify;

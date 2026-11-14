@@ -939,7 +939,7 @@ pub(super) fn format_type(ty: i64, structs: &[super::StructDef]) -> alloc::strin
             .unwrap_or_else(|| format!("@{id}"));
         let kw = match structs.get(id) {
             // The 128-bit integer, laid out by the struct machinery.
-            Some(s) if s.name == "__int128" => "",
+            Some(s) if s.name == "__int128" || s.sve.is_some() => "",
             Some(s) => s.keyword(),
             None => "struct",
         };

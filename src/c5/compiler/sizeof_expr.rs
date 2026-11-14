@@ -37,6 +37,15 @@ impl Compiler {
     /// pointer to an incomplete tag is itself complete, so the callers
     /// check only where no pointer decoration was parsed.
     fn require_complete_operand(&self, ty: i64, op: &str) -> Result<(), C5Error> {
+        if let Some(t) = self
+            .sve_type_of(ty)
+            .and_then(|_| self.sizeless_spelling(ty))
+        {
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                alloc::format!("`{op}` applied to sizeless type `{t}`"),
+            ));
+        }
         match self.incomplete_aggregate_tag(ty) {
             Some(_) => Err(self.compile_err(
                 Code::INVALID_DECLARATION,

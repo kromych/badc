@@ -200,6 +200,57 @@ pub struct StructDef {
     /// incomplete; once the list closes, the type is `enum_underlying`.
     pub is_enum: bool,
     pub enum_underlying: Option<i64>,
+    /// An ACLE SVE type (`__SVInt32_t`, `__SVBool_t`). It is sizeless: the
+    /// entry stays incomplete, so the rules of an incomplete type apply
+    /// besides those the ACLE lifts.
+    pub sve: Option<SveType>,
+}
+
+/// An ACLE SVE type: a scalable vector, or the predicate `svbool_t`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SveType {
+    /// A vector of elements of size log2 `size`.
+    Vector { size: u8, kind: SveElem },
+    /// One predicate bit per byte of a vector.
+    Predicate,
+}
+
+/// The element kind of an SVE vector type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SveElem {
+    Signed,
+    Unsigned,
+    Float,
+    BFloat,
+}
+
+impl SveType {
+    /// The type the builtin name spells (ACLE, SVE types).
+    pub(crate) fn of_name(name: &str) -> Option<Self> {
+        use SveElem::*;
+        let (kind, bits) = match name.strip_prefix("__SV")?.strip_suffix("_t")? {
+            "Bool" => return Some(SveType::Predicate),
+            n => {
+                let at = n.find(|c: char| c.is_ascii_digit())?;
+                let kind = match &n[..at] {
+                    "Int" => Signed,
+                    "Uint" => Unsigned,
+                    "Float" => Float,
+                    "Bfloat" => BFloat,
+                    _ => return None,
+                };
+                (kind, n[at..].parse::<u32>().ok()?)
+            }
+        };
+        let size = match (kind, bits) {
+            (Signed | Unsigned, 8) => 0,
+            (Signed | Unsigned | Float | BFloat, 16) => 1,
+            (Signed | Unsigned | Float, 32) => 2,
+            (Signed | Unsigned | Float, 64) => 3,
+            _ => return None,
+        };
+        Some(SveType::Vector { size, kind })
+    }
 }
 
 impl StructDef {
@@ -226,6 +277,7 @@ impl StructDef {
             vla_size_slot: None,
             is_enum,
             enum_underlying: None,
+            sve: None,
         }
     }
 

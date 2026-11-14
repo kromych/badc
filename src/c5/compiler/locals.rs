@@ -477,7 +477,7 @@ impl Compiler {
         {
             is_extern = true;
         }
-        self.check_atomic_base(qual_bits)?;
+        self.check_atomic_base(qual_bits, base)?;
         let lbt = apply_qual_bits(base, qual_bits);
         self.check_atomic_type(lbt)?;
         let base_spelling = self.take_base_spelling();
@@ -606,6 +606,10 @@ impl Compiler {
             // complete type by the end of its declarator; an enum used
             // before its definition is incomplete (6.7.2.3p2). A block-scope
             // `extern` has linkage and declares no object, so it is exempt.
+            if self.sve_type_of(ty).is_some() {
+                let name = self.symbols[loc_idx].name.clone();
+                return Err(self.sizeless_object_err("object", &name, ty, is_static || is_extern));
+            }
             if !is_extern && self.incomplete_aggregate_tag(ty).is_some() {
                 let name = self.symbols[loc_idx].name.clone();
                 return Err(self.compile_err(

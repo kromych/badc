@@ -674,6 +674,11 @@ impl Compiler {
         // is the function path's to parse, its result's function types are
         // taken here; any other declarator takes the carriers' whole.
         let own_signature = self.lex.tk == '(' || self.pending.fn_params.is_some();
+        // ACLE: no object of a sizeless type has static storage duration.
+        if !own_signature && !decl.is_typedef && self.sve_type_of(ty).is_some() {
+            let name = self.symbols[id_idx].name.clone();
+            return Err(self.sizeless_object_err("object", &name, ty, true));
+        }
         let decl_fn = if own_signature {
             if let Some(ret) = self.take_decl_ret_fn(true) {
                 self.symbols[id_idx].fn_type.ret = Some(ret);
@@ -1448,6 +1453,10 @@ impl Compiler {
         self.park_self_named_param(id_idx, &params);
         // C99 6.9.1p3: a definition returns void or a complete object type.
         let ret = self.symbols[id_idx].type_;
+        if self.sve_type_of(ret).is_some() {
+            let name = self.symbols[id_idx].name.clone();
+            return Err(self.sizeless_object_err("the result of", &name, ret, false));
+        }
         if self.incomplete_aggregate_tag(ret).is_some() {
             let ty = super::types::format_type(ret, &self.structs);
             let name = &self.symbols[id_idx].name;
@@ -1539,6 +1548,10 @@ impl Compiler {
         line: usize,
     ) -> Result<(), C5Error> {
         for (&idx, &ty) in params.indices.iter().zip(&params.types) {
+            if self.sve_type_of(ty).is_some() {
+                let name = &self.symbols[idx].name;
+                return Err(self.sizeless_object_err("parameter", name, ty, false));
+            }
             if self.incomplete_aggregate_tag(ty).is_some() {
                 let name = &self.symbols[idx].name;
                 return Err(self.compile_err_at(

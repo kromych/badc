@@ -455,6 +455,15 @@ impl Compiler {
             // for that, since a complete empty `struct {}` and a struct
             // whose only member is a flexible array both have size 0.
             let field_name = self.symbols[id_idx].name.clone();
+            if let Some(t) = self
+                .sve_type_of(field_ty)
+                .and_then(|_| self.sizeless_spelling(field_ty))
+            {
+                return Err(self.compile_err(
+                    Code::INVALID_DECLARATION,
+                    format!("field `{field_name}` has sizeless type `{t}`"),
+                ));
+            }
             if is_aggregate_value && self.incomplete_aggregate_tag(field_ty).is_some() {
                 return Err(self.compile_err(
                     Code::INVALID_DECLARATION,
@@ -998,6 +1007,10 @@ impl Compiler {
             // representation.
             self.next()?;
             self.builtin_va_list_tag()
+        } else if let Some(sve) = self.lex_sve_type() {
+            let tag = self.sve_type_tag(sve);
+            self.next()?;
+            tag
         } else if !mods.saw_int_mod && self.is_lex_typedef_name() {
             // C99 6.7.2p2 forbids combining a typedef-name with `unsigned` /
             // `short` / `long` / `signed`, so after an int modifier the

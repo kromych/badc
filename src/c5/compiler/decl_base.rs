@@ -388,11 +388,13 @@ impl Compiler {
 
     /// C11 6.7.3p3: `_Atomic` does not qualify an array type or a function
     /// type, which a base type through such a typedef is.
-    pub(super) fn check_atomic_base(&self, qual_bits: i64) -> Result<(), C5Error> {
+    pub(super) fn check_atomic_base(&self, qual_bits: i64, base: i64) -> Result<(), C5Error> {
         if qual_bits & types::ATOMIC_BIT == 0 {
             return Ok(());
         }
-        let what = if self.pending.typedef_base_array_size != 0 {
+        let what = if self.sve_type_of(base).is_some() {
+            "a sizeless type"
+        } else if self.pending.typedef_base_array_size != 0 {
             "an array type"
         } else if self.pending.base_is_function_type {
             "a function type"
@@ -1989,6 +1991,10 @@ impl Compiler {
             // representation, usable with no header.
             self.next()?;
             self.builtin_va_list_tag()
+        } else if let Some(sve) = self.lex_sve_type() {
+            let tag = self.sve_type_tag(sve);
+            self.next()?;
+            tag
         } else if !m.saw_int_mod && self.is_lex_typedef_name() {
             // C99 6.7.2p2 forbids combining a typedef-name with
             // `unsigned` / `short` / `long` / `signed`, so once an int
@@ -2037,7 +2043,7 @@ impl Compiler {
         self.pending.base_enum_tag = enum_tag;
         self.pending.base_implicit_int = implicit_int;
 
-        self.check_atomic_base(qual_bits)?;
+        self.check_atomic_base(qual_bits, bt)?;
         let ty = apply_qual_bits(bt, qual_bits);
         self.check_atomic_type(ty)?;
         Ok(ty)

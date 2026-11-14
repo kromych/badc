@@ -838,6 +838,14 @@ impl Compiler {
 
     /// C99 6.3.2.1p2: an lvalue of incomplete type has no value to read.
     pub(super) fn reject_incomplete_value(&self, ty: i64) -> Result<(), C5Error> {
+        if self.sve_type_of(ty).is_some() {
+            // TODO: SVE values, with the scalable frame and the SVE rows.
+            let t = super::types::format_type(ty, &self.structs);
+            return Err(self.compile_err(
+                Code::INVALID_OPERANDS,
+                alloc::format!("a value of SVE type `{t}`, which badc does not compile yet"),
+            ));
+        }
         self.require_complete_value(ty, Code::INVALID_OPERANDS, |t| {
             alloc::format!("incomplete type `{t}` where a complete type is required")
         })

@@ -140,6 +140,7 @@ pub(super) const BEYOND_REFERENCE: &[(&str, TargetSet, &str)] = &[
 pub(super) const INTRINSIC_HEADERS: &[&str] = &[
     "arm_acle.h",
     "arm_neon.h",
+    "arm_sve.h",
     "arm64_neon.h",
     "intrin.h",
     "x86intrin.h",
@@ -222,6 +223,7 @@ macro_rules! header {
 pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
     header!("arm_acle.h", AARCH64, compiler),
     header!("arm_neon.h", AARCH64, compiler),
+    header!("arm_sve.h", AARCH64, compiler),
     header!(
         "arm64_neon.h",
         TargetSet::of(Target::WindowsAarch64),

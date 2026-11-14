@@ -1872,6 +1872,89 @@ fn shufflevector_types_its_result_and_checks_its_indices() {
     }
 }
 
+/// The ACLE SVE types are sizeless (ACLE, SVE types): `<arm_sve.h>` names
+/// them over the builtin `__SV*_t` types, which pointers, prototypes and
+/// function pointers take. `sizeof`, `_Alignof`, an array, a member, an
+/// object of static storage duration, `_Atomic` and pointer arithmetic are
+/// errors, as with clang. Off AArch64 the names are ordinary identifiers.
+#[test]
+fn the_sve_types_are_sizeless() {
+    use crate::{Compiler, Target};
+    let compile = |src: &str, target| {
+        Compiler::with_target(alloc::format!("#include <arm_sve.h>\n{src}"), target)
+            .compile()
+            .err()
+            .map(|e| e.to_string())
+    };
+    let ok = "typedef svint32_t T; T *p; svuint8_t (*fp)(svbool_t, svfloat16_t);\n\
+        svint8_t a(svint16_t, svint64_t, svuint16_t, svuint32_t, svuint64_t);\n\
+        svfloat32_t b(svfloat64_t, svbfloat16_t, svint32_t *);\n\
+        void c(svint32_t *q) { (void)*q; }\n\
+        int main(void) { return 0; }\n";
+    assert_eq!(compile(ok, Target::LinuxAarch64), None);
+    for (src, want) in [
+        (
+            "svint32_t g;",
+            "object `g` has sizeless type `__SVInt32_t` and static storage duration",
+        ),
+        (
+            "extern svbool_t e;",
+            "object `e` has sizeless type `__SVBool_t` and static",
+        ),
+        (
+            "void f(void) { static svint32_t s; }",
+            "object `s` has sizeless type",
+        ),
+        (
+            "struct S { svint32_t m; };",
+            "field `m` has sizeless type `__SVInt32_t`",
+        ),
+        (
+            "svint32_t arr[2];",
+            "array has sizeless element type `__SVInt32_t`",
+        ),
+        (
+            "unsigned long n = sizeof(svint32_t);",
+            "`sizeof` applied to sizeless type",
+        ),
+        (
+            "unsigned long n = _Alignof(svfloat64_t);",
+            "`_Alignof` applied to sizeless type",
+        ),
+        (
+            "void f(svint32_t *q) { svint32_t *r = q + 1; }",
+            "on a pointer to sizeless type",
+        ),
+        (
+            "void f(svint32_t *q) { (void)q[1]; }",
+            "a pointer to a sizeless type",
+        ),
+        (
+            "void f(void) { _Atomic svint32_t *p; }",
+            "`_Atomic` qualifies a sizeless type",
+        ),
+        (
+            "void f(svint32_t x) {}",
+            "parameter `x` has SVE type `__SVInt32_t`",
+        ),
+        (
+            "void f(svint32_t *p, svint32_t *q) { *p = *q; }",
+            "a value of SVE type `__SVInt32_t`",
+        ),
+    ] {
+        let msg = compile(src, Target::LinuxAarch64).unwrap_or_default();
+        assert!(msg.contains(want), "{src}: {msg}");
+    }
+    // The header is served on AArch64 alone, as `<arm_neon.h>` is.
+    let msg = compile("", Target::LinuxX64).unwrap_or_default();
+    assert!(msg.contains("`arm_sve.h` not found"), "{msg}");
+    let plain = Compiler::with_target(
+        String::from("int __SVInt32_t = 3; int main(void) { return __SVInt32_t - 3; }\n"),
+        Target::LinuxX64,
+    );
+    assert!(plain.compile().is_ok());
+}
+
 /// A diagnostic spells the 128-bit integer types as their keywords.
 #[test]
 fn diagnostics_spell_the_128_bit_integers_as_keywords() {

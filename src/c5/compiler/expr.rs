@@ -5335,8 +5335,13 @@ impl Compiler {
             return Err(self.subscripted_value_err(ty, "a pointer to a function"));
         }
         if self.points_to_incomplete(lhs_ty) {
+            let what = if self.sizeless_spelling(lhs_ty).is_some() {
+                "a pointer to a sizeless type"
+            } else {
+                "a pointer to an incomplete type"
+            };
             let ty = format_type(lhs_ty, &self.structs);
-            return Err(self.subscripted_value_err(ty, "a pointer to an incomplete type"));
+            return Err(self.subscripted_value_err(ty, what));
         }
         self.require_category(
             idx_ty,

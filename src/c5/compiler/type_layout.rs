@@ -188,6 +188,65 @@ impl Compiler {
         })
     }
 
+    /// The ACLE SVE type the current identifier names on AArch64.
+    pub(super) fn lex_sve_type(&self) -> Option<super::SveType> {
+        (self.lex.tk == Token::Id && self.target.is_aarch64())
+            .then(|| super::SveType::of_name(&self.symbols[self.lex.curr_id_idx].name))
+            .flatten()
+    }
+
+    /// The tag of the SVE type the current identifier names, registered on
+    /// first use as an incomplete entry.
+    pub(super) fn sve_type_tag(&mut self, sve: super::SveType) -> i64 {
+        let name = self.symbols[self.lex.curr_id_idx].name.clone();
+        if let Some(id) = self
+            .structs
+            .iter()
+            .position(|s| s.sve.is_some() && s.name == name)
+        {
+            return struct_ty_for(id);
+        }
+        self.structs.push(StructDef {
+            sve: Some(sve),
+            ..StructDef::incomplete_tag(&name, false, false)
+        });
+        struct_ty_for(self.structs.len() - 1)
+    }
+
+    /// The SVE type `ty` is, as a value.
+    pub(super) fn sve_type_of(&self, ty: i64) -> Option<super::SveType> {
+        self.incomplete_aggregate_tag(ty)
+            .and_then(|id| self.structs[id].sve)
+    }
+
+    /// The spelling of `ty` where it is sizeless, which the diagnostics
+    /// of an incomplete type name instead.
+    pub(super) fn sizeless_spelling(&self, ty: i64) -> Option<alloc::string::String> {
+        let tag = is_struct_ty(ty).then(|| &self.structs[struct_id_of(ty)])?;
+        tag.sve.map(|_| tag.name.clone())
+    }
+
+    /// The rejection of `what` named `name` of the SVE type `ty`. With
+    /// static storage duration the ACLE gives it no such type.
+    pub(super) fn sizeless_object_err(
+        &self,
+        what: &str,
+        name: &str,
+        ty: i64,
+        statik: bool,
+    ) -> C5Error {
+        let t = super::types::format_type(ty, &self.structs);
+        let msg = if statik {
+            alloc::format!("{what} `{name}` has sizeless type `{t}` and static storage duration")
+        } else {
+            // TODO: the scalable frame and the SVE calling convention.
+            alloc::format!(
+                "{what} `{name}` has SVE type `{t}`, whose values badc does not compile yet"
+            )
+        };
+        self.compile_err(Code::INVALID_DECLARATION, msg)
+    }
+
     /// True when the current identifier is a spelling of the GNU C 128-bit
     /// integer type: `__int128`, `__int128_t`, or `__uint128_t`.
     pub(super) fn is_lex_int128_spelling(&self) -> bool {
@@ -257,6 +316,7 @@ impl Compiler {
             vla_size_slot: None,
             is_enum: false,
             enum_underlying: None,
+            sve: None,
         });
         struct_ty_for(self.structs.len() - 1)
     }
@@ -357,6 +417,7 @@ impl Compiler {
             vla_size_slot: None,
             is_enum: false,
             enum_underlying: None,
+            sve: None,
         });
         struct_ty_for(self.structs.len() - 1)
     }
@@ -544,6 +605,7 @@ impl Compiler {
             vla_size_slot: None,
             is_enum: false,
             enum_underlying: None,
+            sve: None,
         });
         struct_ty_for(self.structs.len() - 1)
     }
@@ -633,6 +695,7 @@ impl Compiler {
             vla_size_slot: None,
             is_enum: false,
             enum_underlying: None,
+            sve: None,
         });
         struct_ty_for(self.structs.len() - 1)
     }
@@ -783,6 +846,7 @@ impl Compiler {
             || self.is_lex_typedef_name()
             || self.is_lex_int128_spelling()
             || self.is_lex_va_list_spelling()
+            || self.lex_sve_type().is_some()
             // A leading C23 `[[ ... ]]` attribute introduces a
             // declaration (`[[noreturn]] void f(void);`).
             || (self.lex.tk == Token::Brak && self.lex.peek_after_whitespace(b'['))
@@ -863,9 +927,14 @@ impl Compiler {
             return Err(self.unknown_size_element_err());
         }
         let t = super::types::format_type(elem_ty, &self.structs);
+        let what = if self.sve_type_of(elem_ty).is_some() {
+            "sizeless"
+        } else {
+            "incomplete"
+        };
         Err(self.compile_err(
             Code::INCOMPLETE_ELEMENT_TYPE,
-            alloc::format!("array has incomplete element type `{t}`"),
+            alloc::format!("array has {what} element type `{t}`"),
         ))
     }
 
@@ -881,6 +950,12 @@ impl Compiler {
     pub(super) fn require_complete_pointee(&self, ty: i64, op: &str) -> Result<(), C5Error> {
         if !self.points_to_incomplete(ty) {
             return Ok(());
+        }
+        if let Some(t) = self.sizeless_spelling(ty) {
+            return Err(self.compile_err(
+                Code::INVALID_OPERANDS,
+                alloc::format!("`{op}` on a pointer to sizeless type `{t}`"),
+            ));
         }
         let ty = super::types::format_type(ty, &self.structs);
         Err(self.compile_err(

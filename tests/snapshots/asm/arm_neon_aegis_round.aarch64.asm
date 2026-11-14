@@ -122,13 +122,7 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>
-               	adrp	x0, <addr>
-               	add	x0, x0, <lo12>
-               	ldr	q0, [x0]
-               	sminv	b0, v0.16b
-               	umov	w0, v0.b[0]
-               	sxtb	x0, w0
-               	cmp	w0, w1
+               	cmn	w1, #0x80
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x40

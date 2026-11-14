@@ -1242,6 +1242,78 @@ pub(crate) fn by_element(sem: Sem, last: &[u8; 16], imm: u8) -> (Sem, [u8; 16], 
     }
 }
 
+/// Whether `sem` computes in a floating-point environment, whose rounding
+/// direction and exception flags at run time its result depends on.
+pub(crate) fn floating(sem: Sem) -> bool {
+    struct Probe;
+    impl FloatEnv for Probe {
+        fn arith(&mut self, _: FOp, a: u64, _: u64, _: bool) -> u64 {
+            a
+        }
+        fn compare(&mut self, _: u64, _: u64, _: bool) -> Option<core::cmp::Ordering> {
+            None
+        }
+        fn to_int(&mut self, _: u64, _: bool, _: u32, _: bool) -> i64 {
+            0
+        }
+        fn integer_to_float(&mut self, _: i64, _: bool) -> u64 {
+            0
+        }
+        fn to_single(&mut self, a: u64) -> u64 {
+            a
+        }
+        fn widen(&mut self, a: u64) -> u64 {
+            a
+        }
+        fn fma(&mut self, a: u64, _: u64, _: u64, _: bool) -> u64 {
+            a
+        }
+        fn narrow_odd(&mut self, a: u64) -> u64 {
+            a
+        }
+        fn round_to_integral(&mut self, a: u64, _: RoundTo, _: bool) -> u64 {
+            a
+        }
+    }
+    let z = [0u8; 16];
+    eval_float(&mut Probe, sem, &z, &z, 0).is_some()
+        || eval_float_acc(&mut Probe, sem, (&z, &z, &z), 16).is_some()
+        || eval_to_int(&mut Probe, sem, &z, 32).is_some()
+}
+
+/// The value of row `op` over the 16-byte constants `args` -- two for a
+/// binary form, one for a unary form or a shift by `imm` -- as the
+/// interpreter computes it; `None` for another form or width, or a row that
+/// computes in a floating-point environment.
+pub(crate) fn eval_constant(op: u32, imm: Option<u8>, args: &[[u8; 16]]) -> Option<[u8; 16]> {
+    let row = get(op);
+    if row.bytes != 16 || row.ret_bytes() != 16 || floating(row.base_sem()) {
+        return None;
+    }
+    let imm8 = imm.unwrap_or(0);
+    match (row.form, args) {
+        (Form::Vv | Form::VvI, [a, b]) => {
+            let (sem, b, imm8) = by_element(row.sem, b, imm8);
+            Some(eval(sem, a, &b, imm8, 0))
+        }
+        (Form::V | Form::VI, [a]) => Some(eval(row.sem, a, &[0; 16], imm8, 0)),
+        (Form::Shift, [a]) if imm.is_some() => Some(eval(row.sem, a, &[0; 16], 0, u64::from(imm8))),
+        _ => None,
+    }
+}
+
+/// The integer value of row `op`, a lane extract or a byte sign mask, over
+/// the 16-byte constant `a`, as the interpreter computes it; `None` for
+/// another form or width.
+pub(crate) fn eval_constant_int(op: u32, imm: Option<u8>, a: &[u8; 16]) -> Option<i64> {
+    let row = get(op);
+    match (row.form, row.bytes) {
+        (Form::Extract, 16) => Some(eval_extract(a, row.int_width, imm.unwrap_or(0)) as i64),
+        (Form::MoveMask, 16) => Some(eval_movemask(a) as i64),
+        _ => None,
+    }
+}
+
 /// [`eval`] over 8-byte operands, the low halves of `a` and `b`. A pairwise
 /// form reads the two operands as one: its result is the 16-byte form's
 /// over `a` and `b` side by side.

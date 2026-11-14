@@ -6187,18 +6187,18 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v6891 LifetimeEnd(0)                                   -> -
     v6892 Imm(0)                                           -> x0
     v6893 ImmData(360)                                     -> x0
-    v6894 Load { addr=v6893, disp=0, kind=V128, align=8 }  -> d0
+    v6894 Load { addr=v6893, disp=0, kind=V128, align=8 }  -> d1
     v6895 Imm(0)                                           -> x0
     v6896 Imm(0)                                           -> x0
     v6897 ImmData(376)                                     -> x0
-    v6898 Load { addr=v6897, disp=0, kind=V128, align=8 }  -> d1
+    v6898 Load { addr=v6897, disp=0, kind=V128, align=8 }  -> d2
     v6899 Imm(0)                                           -> x0
     v6900 Imm(0)                                           -> x0
     v6901 Imm(0)                                           -> x0
     v6902 Imm(0)                                           -> x0
     v6903 Imm(0)                                           -> x0
     v6904 Imm(0)                                           -> x0
-    v6905 SimdVal { op=__builtin_ia32_pcmpgtd128, imm=None, args=[v6898, v6894] } -> d2
+    v6905 VecConst { imm=4294967295, kind=I64, bytes=16 }  -> d0
     v6906 Imm(0)                                           -> x0
     v6907 Imm(0)                                           -> x0
     v6908 Imm(0)                                           -> x0
@@ -6207,7 +6207,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v6911 Imm(0)                                           -> x0
     v6912 Imm(0)                                           -> x0
     v6913 Imm(0)                                           -> x0
-    v6914 VecBinop { op=And, lane=I32, bytes=16, lhs=v6905, rhs=v6894 } -> d0
+    v6914 VecBinop { op=And, lane=I32, bytes=16, lhs=v6905, rhs=v6894 } -> d1
     v6915 Imm(0)                                           -> x0
     v6916 Imm(0)                                           -> x0
     v6917 Imm(0)                                           -> x0
@@ -6222,13 +6222,13 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v6926 Imm(0)                                           -> x0
     v6927 Imm(0)                                           -> x0
     v6928 Imm(0)                                           -> x0
-    v6929 VecBinop { op=Xor, lane=I32, bytes=16, lhs=v6905, rhs=v6925 } -> d2
+    v6929 VecBinop { op=Xor, lane=I32, bytes=16, lhs=v6905, rhs=v6925 } -> d0
     v6930 Imm(0)                                           -> x0
     v6931 Imm(0)                                           -> x0
     v6932 Imm(0)                                           -> x0
     v6933 Imm(0)                                           -> x0
     v6934 Imm(0)                                           -> x0
-    v6935 VecBinop { op=And, lane=I32, bytes=16, lhs=v6929, rhs=v6898 } -> d1
+    v6935 VecBinop { op=And, lane=I32, bytes=16, lhs=v6929, rhs=v6898 } -> d0
     v6936 Imm(0)                                           -> x0
     v6937 Imm(0)                                           -> x0
     v6938 Imm(0)                                           -> x0

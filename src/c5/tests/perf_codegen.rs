@@ -3271,6 +3271,36 @@ __m64 lo(__m128i a) { return _mm_movepi64_pi64(a); }\n";
     m.finish();
 }
 
+/// An integer SIMD intrinsic over constant vectors folds: a lane of
+/// `_mm_packs_epi32` over constants is `mov $0x7fff, %eax` and `ret`, a
+/// sum whose lanes agree is the splat constant, and an AArch64 lane read of
+/// `vqaddq_s16` over constants is `mov` and `ret`. Each ran the instruction.
+#[test]
+fn an_integer_simd_row_over_constants_folds() {
+    const X: &str = "#include <immintrin.h>\n\
+int lane(void) { return _mm_extract_epi16(_mm_packs_epi32(_mm_setr_epi32(1, 70000, 3, 4), _mm_set1_epi32(9)), 1); }\n\
+int mask(void) { return _mm_movemask_epi8(_mm_cmpeq_epi8(_mm_set1_epi8(3), _mm_set1_epi8(3))); }\n\
+__m128i sum(void) { return _mm_add_epi32(_mm_set1_epi32(40), _mm_set1_epi32(2)); }\n";
+    let mut m = Misses::default();
+    for name in ["lane", "mask"] {
+        let insns = x64(X, name);
+        m.expect(insns.len() == 2 && insns[0].op == 0xB8, || {
+            format!("x86-64 {name}: {insns:x?}")
+        });
+    }
+    let sum = x64(X, "sum");
+    let simd = |op: u16| sum.iter().any(|i| i.op == op);
+    m.expect(!simd(0x0FFE), || format!("x86-64 sum: {sum:x?}"));
+    const A: &str = "#include <arm_neon.h>\n\
+int lane(void) { return vgetq_lane_s16(vqaddq_s16(vdupq_n_s16(30000), vdupq_n_s16(5000)), 2); }\n";
+    let words = a64(A, "lane");
+    // `mov x0, #0x7fff` (MOVZ) and `ret`.
+    m.expect(words == [0xD28F_FFE0, 0xD65F_03C0], || {
+        format!("aarch64 lane: {words:08x?}")
+    });
+    m.finish();
+}
+
 /// A rounding intrinsic is its one instruction: `roundps` for
 /// `_mm_floor_ps`, `vroundpd` on ymm for `_mm256_round_pd` and the
 /// three-operand `vroundsd` for `_mm_ceil_sd`, and `ret`. Each was a C

@@ -289,324 +289,17 @@ Disassembly of section .text:
                	subq	$0x90, %rsp
                	leaq	<rip>, %rax # <addr>
                	movups	(%rax), %xmm0
-               	leaq	<rip>, %rax # <addr>
-               	movups	(%rax), %xmm1
-               	vpaddd	%xmm1, %xmm0, %xmm2
-               	vmovd	%xmm2, %eax
-               	cmpl	$0x65, %eax
-               	jne	<addr>
-               	vpextrd	$0x1, %xmm2, %eax
-               	cmpl	$0xca, %eax
-               	jne	<addr>
-               	vpextrd	$0x2, %xmm2, %eax
-               	cmpl	$0x12f, %eax            # imm = 0x12F
-               	jne	<addr>
-               	vpextrd	$0x3, %xmm2, %eax
-               	cmpl	$0x194, %eax            # imm = 0x194
-               	je	<addr>
-               	movl	$0x1, %eax
-               	leave
-               	retq
-               	vpxor	%xmm1, %xmm0, %xmm2
-               	vmovd	%xmm2, %eax
-               	cmpq	$0x65, %rax
-               	jne	<addr>
-               	vpextrd	$0x3, %xmm2, %eax
-               	cmpq	$0x194, %rax            # imm = 0x194
-               	je	<addr>
-               	movl	$0x2, %eax
-               	leave
-               	retq
-               	vpor	%xmm1, %xmm0, %xmm2
-               	vpextrd	$0x1, %xmm2, %eax
-               	cmpq	$0xca, %rax
-               	je	<addr>
-               	movl	$0x3, %eax
-               	leave
-               	retq
-               	vpand	%xmm1, %xmm0, %xmm0
-               	vpextrd	$0x2, %xmm0, %eax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	leave
-               	retq
-               	leaq	<rip>, %rax # <addr>
-               	movups	(%rax), %xmm1
-               	leaq	<rip>, %rax # <addr>
-               	movups	(%rax), %xmm0
-               	vpaddd	%xmm0, %xmm1, %xmm2
-               	vmovd	%xmm2, %eax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	vpextrd	$0x1, %xmm2, %eax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x5, %eax
-               	leave
-               	retq
-               	vpaddq	%xmm0, %xmm1, %xmm2
-               	vmovd	%xmm2, %eax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	vpextrd	$0x1, %xmm2, %eax
-               	cmpl	$0x1, %eax
-               	je	<addr>
-               	movl	$0x6, %eax
-               	leave
-               	retq
-               	vpaddq	%xmm0, %xmm1, %xmm1
-               	vpsubq	%xmm0, %xmm1, %xmm0
-               	vmovd	%xmm0, %eax
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpq	%r11, %rax
-               	jne	<addr>
-               	vpextrd	$0x1, %xmm0, %eax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x7, %eax
-               	leave
-               	retq
-               	leaq	<rip>, %rax # <addr>
-               	movups	(%rax), %xmm0
-               	movapd	%xmm0, %xmm1
-               	pslld	$0x4, %xmm1
-               	vpextrd	$0x3, %xmm1, %eax
-               	cmpq	$0x12233440, %rax       # imm = 0x12233440
-               	je	<addr>
                	movl	$0x8, %eax
-               	leave
-               	retq
-               	movapd	%xmm0, %xmm1
-               	psrld	$0x4, %xmm1
-               	vpextrd	$0x3, %xmm1, %eax
-               	cmpq	$0x1122334, %rax        # imm = 0x1122334
-               	je	<addr>
-               	movl	$0x9, %eax
-               	leave
-               	retq
-               	movl	$0x8, %eax
-               	movapd	%xmm0, %xmm1
                	movq	%rax, %xmm14
-               	psrld	%xmm14, %xmm1
-               	vpextrd	$0x3, %xmm1, %eax
+               	psrld	%xmm14, %xmm0
+               	vpextrd	$0x3, %xmm0, %eax
                	cmpq	$0x112233, %rax         # imm = 0x112233
                	je	<addr>
                	movl	$0xa, %eax
                	leave
                	retq
-               	movapd	%xmm0, %xmm1
-               	psrld	$0x20, %xmm1
-               	vmovd	%xmm1, %eax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	vpextrd	$0x3, %xmm1, %eax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0xb, %eax
-               	leave
-               	retq
-               	movapd	%xmm0, %xmm1
-               	psllq	$0x8, %xmm1
-               	vmovd	%xmm1, %eax
-               	movl	$0xeeff0000, %r11d      # imm = 0xEEFF0000
-               	cmpq	%r11, %rax
-               	jne	<addr>
-               	vpextrd	$0x1, %xmm1, %eax
-               	movl	$0xaabbccdd, %r11d      # imm = 0xAABBCCDD
-               	cmpq	%r11, %rax
-               	je	<addr>
-               	movl	$0xc, %eax
-               	leave
-               	retq
-               	movapd	%xmm0, %xmm1
-               	psrlq	$0x8, %xmm1
-               	vmovd	%xmm1, %eax
-               	movl	$0xccddeeff, %r11d      # imm = 0xCCDDEEFF
-               	cmpq	%r11, %rax
-               	jne	<addr>
-               	vpextrd	$0x1, %xmm1, %eax
-               	cmpq	$0x99aabb, %rax         # imm = 0x99AABB
-               	je	<addr>
-               	movl	$0xd, %eax
-               	leave
-               	retq
-               	pslldq	$0x4, %xmm0             # xmm0 = zero,zero,zero,zero,xmm0[0,1,2,3,4,5,6,7,8,9,10,11]
-               	vmovd	%xmm0, %eax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	vpextrd	$0x1, %xmm0, %eax
-               	movl	$0xddeeff00, %r11d      # imm = 0xDDEEFF00
-               	cmpq	%r11, %rax
-               	je	<addr>
-               	movl	$0xe, %eax
-               	leave
-               	retq
-               	leaq	<rip>, %rax # <addr>
-               	movups	(%rax), %xmm1
-               	movapd	%xmm1, %xmm0
-               	psllw	$0x8, %xmm0
-               	vpextrb	$0x0, %xmm0, %eax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	vpextrb	$0x1, %xmm0, %eax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	vpextrb	$0x2, %xmm0, %eax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	vpextrb	$0x3, %xmm0, %eax
-               	cmpl	$0x2, %eax
-               	je	<addr>
-               	movl	$0xf, %eax
-               	leave
-               	retq
-               	movapd	%xmm1, %xmm0
-               	psrlw	$0x8, %xmm0
-               	vpextrb	$0x0, %xmm0, %eax
-               	cmpl	$0x1, %eax
-               	jne	<addr>
-               	vpextrb	$0x1, %xmm0, %eax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	vpextrb	$0x2, %xmm0, %eax
-               	cmpl	$0x3, %eax
-               	je	<addr>
-               	movl	$0x10, %eax
-               	leave
-               	retq
-               	pshuflw	$0x1b, %xmm1, %xmm0     # xmm0 = xmm1[3,2,1,0,4,5,6,7]
-               	vpextrb	$0x0, %xmm0, %eax
-               	cmpl	$0x6, %eax
-               	jne	<addr>
-               	vpextrb	$0x1, %xmm0, %eax
-               	cmpl	$0x7, %eax
-               	jne	<addr>
-               	vpextrb	$0x6, %xmm0, %eax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	vpextrb	$0x7, %xmm0, %eax
-               	cmpl	$0x1, %eax
-               	jne	<addr>
-               	vpextrb	$0x8, %xmm0, %eax
-               	cmpl	$0x8, %eax
-               	je	<addr>
-               	movl	$0x11, %eax
-               	leave
-               	retq
-               	pshufhw	$0x1b, %xmm1, %xmm0     # xmm0 = xmm1[0,1,2,3,7,6,5,4]
-               	vpextrb	$0x0, %xmm0, %eax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	vpextrb	$0x8, %xmm0, %eax
-               	cmpl	$0xe, %eax
-               	jne	<addr>
-               	vpextrb	$0x9, %xmm0, %eax
-               	cmpl	$0xf, %eax
-               	jne	<addr>
-               	vpextrb	$0xe, %xmm0, %eax
-               	cmpl	$0x8, %eax
-               	jne	<addr>
-               	vpextrb	$0xf, %xmm0, %eax
-               	cmpl	$0x9, %eax
-               	je	<addr>
-               	movl	$0x12, %eax
-               	leave
-               	retq
                	leaq	<rip>, %rax # <addr>
                	movups	(%rax), %xmm0
-               	pshufd	$0x93, %xmm0, %xmm0     # xmm0 = xmm0[3,0,1,2]
-               	vmovd	%xmm0, %eax
-               	cmpl	$0x3, %eax
-               	jne	<addr>
-               	vpextrd	$0x1, %xmm0, %eax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	vpextrd	$0x2, %xmm0, %eax
-               	cmpl	$0x1, %eax
-               	jne	<addr>
-               	vpextrd	$0x3, %xmm0, %eax
-               	cmpl	$0x2, %eax
-               	je	<addr>
-               	movl	$0x13, %eax
-               	leave
-               	retq
-               	leaq	<rip>, %rax # <addr>
-               	movups	(%rax), %xmm0
-               	leaq	<rip>, %rax # <addr>
-               	movups	(%rax), %xmm1
-               	vpshufb	%xmm1, %xmm0, %xmm0
-               	vpextrb	$0x0, %xmm0, %eax
-               	cmpl	$0xf, %eax
-               	jne	<addr>
-               	vpextrb	$0xe, %xmm0, %eax
-               	cmpl	$0x1, %eax
-               	jne	<addr>
-               	vpextrb	$0xf, %xmm0, %eax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x14, %eax
-               	leave
-               	retq
-               	leaq	<rip>, %rax # <addr>
-               	movups	(%rax), %xmm0
-               	leaq	<rip>, %rax # <addr>
-               	movups	(%rax), %xmm2
-               	vpunpcklqdq	%xmm2, %xmm0, %xmm1 # xmm1 = xmm0[0],xmm2[0]
-               	vmovd	%xmm1, %eax
-               	cmpl	$0x1, %eax
-               	jne	<addr>
-               	vpextrd	$0x1, %xmm1, %eax
-               	cmpl	$0x1, %eax
-               	jne	<addr>
-               	vpextrd	$0x2, %xmm1, %eax
-               	cmpl	$0x2, %eax
-               	jne	<addr>
-               	vpextrd	$0x3, %xmm1, %eax
-               	cmpl	$0x2, %eax
-               	je	<addr>
-               	movl	$0x15, %eax
-               	leave
-               	retq
-               	vpcmpeqq	%xmm0, %xmm0, %xmm1
-               	vmovd	%xmm1, %eax
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpq	%r11, %rax
-               	jne	<addr>
-               	vpextrd	$0x3, %xmm1, %eax
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpq	%r11, %rax
-               	je	<addr>
-               	movl	$0x16, %eax
-               	leave
-               	retq
-               	vpcmpeqq	%xmm2, %xmm0, %xmm0
-               	vmovd	%xmm0, %eax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	vpextrd	$0x3, %xmm0, %eax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x17, %eax
-               	leave
-               	retq
-               	leaq	<rip>, %rax # <addr>
-               	movups	(%rax), %xmm0
-               	pextrw	$0x0, %xmm0, %eax
-               	cmpl	$0x2222, %eax           # imm = 0x2222
-               	jne	<addr>
-               	pextrw	$0x7, %xmm0, %eax
-               	cmpl	$0x7777, %eax           # imm = 0x7777
-               	je	<addr>
-               	movl	$0x18, %eax
-               	leave
-               	retq
-               	pextrd	$0x2, %xmm0, %eax
-               	cmpl	$0x55556666, %eax       # imm = 0x55556666
-               	je	<addr>
-               	movl	$0x19, %eax
-               	leave
-               	retq
                	movl	$0xa0b0c0d, %eax        # imm = 0xA0B0C0D
                	pinsrd	$0x1, %eax, %xmm0
                	vpextrd	$0x1, %xmm0, %eax
@@ -616,47 +309,6 @@ Disassembly of section .text:
                	cmpq	$0x11112222, %rax       # imm = 0x11112222
                	je	<addr>
                	movl	$0x1a, %eax
-               	leave
-               	retq
-               	leaq	<rip>, %rax # <addr>
-               	movups	(%rax), %xmm0
-               	leaq	<rip>, %rax # <addr>
-               	movups	(%rax), %xmm2
-               	vpclmulqdq	$0x0, %xmm0, %xmm0, %xmm1
-               	vmovd	%xmm1, %eax
-               	cmpl	$0x5, %eax
-               	jne	<addr>
-               	vpextrd	$0x1, %xmm1, %eax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x1b, %eax
-               	leave
-               	retq
-               	vpclmulqdq	$0x10, %xmm2, %xmm0, %xmm0
-               	vmovd	%xmm0, %eax
-               	cmpl	$0x5, %eax
-               	je	<addr>
-               	movl	$0x1c, %eax
-               	leave
-               	retq
-               	leaq	<rip>, %rax # <addr>
-               	movups	(%rax), %xmm0
-               	leaq	<rip>, %rax # <addr>
-               	movups	(%rax), %xmm1
-               	vshufpd	$0x1, %xmm1, %xmm0, %xmm0 # xmm0 = xmm0[1],xmm1[0]
-               	vmovd	%xmm0, %eax
-               	cmpl	$0x3, %eax
-               	jne	<addr>
-               	vpextrd	$0x1, %xmm0, %eax
-               	cmpl	$0x4, %eax
-               	jne	<addr>
-               	vpextrd	$0x2, %xmm0, %eax
-               	cmpl	$0x5, %eax
-               	jne	<addr>
-               	vpextrd	$0x3, %xmm0, %eax
-               	cmpl	$0x6, %eax
-               	je	<addr>
-               	movl	$0x1d, %eax
                	leave
                	retq
                	leaq	-0x90(%rbp), %r9
@@ -724,347 +376,15 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x5a, %r11d
-               	vmovd	%r11d, %xmm1
-               	vpbroadcastb	%xmm1, %xmm1
-               	vmovd	%xmm1, %eax
+               	vmovd	%r11d, %xmm0
+               	vpbroadcastb	%xmm0, %xmm0
+               	vmovd	%xmm0, %eax
                	cmpq	$0x5a5a5a5a, %rax       # imm = 0x5A5A5A5A
                	jne	<addr>
-               	vpextrd	$0x3, %xmm1, %eax
+               	vpextrd	$0x3, %xmm0, %eax
                	cmpq	$0x5a5a5a5a, %rax       # imm = 0x5A5A5A5A
                	je	<addr>
                	movl	$0x28, %eax
-               	leave
-               	retq
-               	vpcmpeqd	%xmm2, %xmm2, %xmm2
-               	movl	$0x1, %r11d
-               	vmovd	%r11d, %xmm1
-               	vpbroadcastb	%xmm1, %xmm1
-               	vpaddb	%xmm1, %xmm2, %xmm2
-               	vmovd	%xmm2, %eax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	vpextrd	$0x3, %xmm2, %eax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x2a, %eax
-               	leave
-               	retq
-               	xorl	%eax, %eax
-               	movq	%rax, %xmm14
-               	vpsubb	%xmm1, %xmm14, %xmm1
-               	vmovd	%xmm1, %ecx
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpq	%r11, %rcx
-               	je	<addr>
-               	movl	$0x2b, %eax
-               	leave
-               	retq
-               	vpcmpeqd	%xmm2, %xmm2, %xmm2
-               	movl	$0x1, %r11d
-               	vmovd	%r11d, %xmm1
-               	vpbroadcastw	%xmm1, %xmm1
-               	vpaddw	%xmm1, %xmm2, %xmm2
-               	vmovd	%xmm2, %ecx
-               	testq	%rcx, %rcx
-               	je	<addr>
-               	movl	$0x2c, %eax
-               	leave
-               	retq
-               	movq	%rax, %xmm14
-               	vpsubw	%xmm1, %xmm14, %xmm1
-               	vmovd	%xmm1, %ecx
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpq	%r11, %rcx
-               	je	<addr>
-               	movl	$0x2d, %eax
-               	leave
-               	retq
-               	movl	$0x5, %r11d
-               	vmovd	%r11d, %xmm1
-               	vpbroadcastd	%xmm1, %xmm1
-               	movl	$0x7, %r11d
-               	vmovd	%r11d, %xmm2
-               	vpbroadcastd	%xmm2, %xmm2
-               	vpsubd	%xmm2, %xmm1, %xmm1
-               	vmovd	%xmm1, %ecx
-               	movl	$0xfffffffe, %r11d      # imm = 0xFFFFFFFE
-               	cmpq	%r11, %rcx
-               	je	<addr>
-               	movl	$0x2e, %eax
-               	leave
-               	retq
-               	movl	$0x3, %r11d
-               	vmovd	%r11d, %xmm1
-               	vpbroadcastw	%xmm1, %xmm1
-               	vpmullw	%xmm1, %xmm0, %xmm0
-               	vmovd	%xmm0, %ecx
-               	cmpq	$0x369c369c, %rcx       # imm = 0x369C369C
-               	je	<addr>
-               	movl	$0x2f, %eax
-               	leave
-               	retq
-               	movl	$0xf000, %r11d          # imm = 0xF000
-               	vmovd	%r11d, %xmm1
-               	vpbroadcastw	%xmm1, %xmm1
-               	movl	$0x10, %r11d
-               	vmovd	%r11d, %xmm0
-               	vpbroadcastw	%xmm0, %xmm0
-               	vpmulhw	%xmm0, %xmm1, %xmm1
-               	vmovd	%xmm1, %ecx
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpq	%r11, %rcx
-               	je	<addr>
-               	movl	$0x30, %eax
-               	leave
-               	retq
-               	movl	$0x1000, %r11d          # imm = 0x1000
-               	vmovd	%r11d, %xmm1
-               	vpbroadcastw	%xmm1, %xmm1
-               	vpmulhw	%xmm0, %xmm1, %xmm0
-               	vmovd	%xmm0, %ecx
-               	cmpq	$0x10001, %rcx          # imm = 0x10001
-               	je	<addr>
-               	movl	$0x31, %eax
-               	leave
-               	retq
-               	leaq	<rip>, %rcx # <addr>
-               	movups	(%rcx), %xmm0
-               	movl	$0xfffe, %r11d          # imm = 0xFFFE
-               	vmovd	%r11d, %xmm1
-               	vpbroadcastw	%xmm1, %xmm1
-               	vpmaddwd	%xmm1, %xmm0, %xmm0
-               	vmovd	%xmm0, %ecx
-               	movl	$0xfffffffa, %r11d      # imm = 0xFFFFFFFA
-               	cmpq	%r11, %rcx
-               	jne	<addr>
-               	vpextrd	$0x3, %xmm0, %ecx
-               	movl	$0xffffffe2, %r11d      # imm = 0xFFFFFFE2
-               	cmpq	%r11, %rcx
-               	je	<addr>
-               	movl	$0x32, %eax
-               	leave
-               	retq
-               	movl	$0x12c, %r11d           # imm = 0x12C
-               	vmovd	%r11d, %xmm1
-               	vpbroadcastw	%xmm1, %xmm1
-               	movl	$0xfed4, %r11d          # imm = 0xFED4
-               	vmovd	%r11d, %xmm0
-               	vpbroadcastw	%xmm0, %xmm0
-               	vpacksswb	%xmm0, %xmm1, %xmm0
-               	vpextrb	$0x0, %xmm0, %ecx
-               	cmpl	$0x7f, %ecx
-               	jne	<addr>
-               	vpextrb	$0x7, %xmm0, %ecx
-               	cmpl	$0x7f, %ecx
-               	jne	<addr>
-               	vpextrb	$0x8, %xmm0, %ecx
-               	cmpl	$0x80, %ecx
-               	jne	<addr>
-               	vpextrb	$0xf, %xmm0, %ecx
-               	cmpl	$0x80, %ecx
-               	je	<addr>
-               	movl	$0x33, %eax
-               	leave
-               	retq
-               	movl	$0xfffb, %r11d          # imm = 0xFFFB
-               	vmovd	%r11d, %xmm0
-               	vpbroadcastw	%xmm0, %xmm0
-               	vpackuswb	%xmm0, %xmm1, %xmm0
-               	vpextrb	$0x0, %xmm0, %ecx
-               	cmpl	$0xff, %ecx
-               	jne	<addr>
-               	vpextrb	$0x7, %xmm0, %ecx
-               	cmpl	$0xff, %ecx
-               	jne	<addr>
-               	vpextrb	$0x8, %xmm0, %ecx
-               	testq	%rcx, %rcx
-               	jne	<addr>
-               	vpextrb	$0xf, %xmm0, %ecx
-               	testq	%rcx, %rcx
-               	je	<addr>
-               	movl	$0x34, %eax
-               	leave
-               	retq
-               	movl	$0x11170, %r11d         # imm = 0x11170
-               	vmovd	%r11d, %xmm0
-               	vpbroadcastd	%xmm0, %xmm0
-               	movl	$0xfffeee90, %r11d      # imm = 0xFFFEEE90
-               	vmovd	%r11d, %xmm1
-               	vpbroadcastd	%xmm1, %xmm1
-               	vpackssdw	%xmm1, %xmm0, %xmm0
-               	vpextrb	$0x0, %xmm0, %ecx
-               	cmpl	$0xff, %ecx
-               	jne	<addr>
-               	vpextrb	$0x1, %xmm0, %ecx
-               	cmpl	$0x7f, %ecx
-               	jne	<addr>
-               	vpextrb	$0x8, %xmm0, %ecx
-               	testq	%rcx, %rcx
-               	jne	<addr>
-               	vpextrb	$0x9, %xmm0, %ecx
-               	cmpl	$0x80, %ecx
-               	je	<addr>
-               	movl	$0x35, %eax
-               	leave
-               	retq
-               	leaq	<rip>, %rcx # <addr>
-               	movups	(%rcx), %xmm1
-               	movq	%rax, %xmm15
-               	vpunpcklbw	%xmm15, %xmm1, %xmm0 # xmm0 = xmm1[0],xmm15[0],xmm1[1],xmm15[1],xmm1[2],xmm15[2],xmm1[3],xmm15[3],xmm1[4],xmm15[4],xmm1[5],xmm15[5],xmm1[6],xmm15[6],xmm1[7],xmm15[7]
-               	vpextrb	$0x0, %xmm0, %eax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	vpextrb	$0x1, %xmm0, %eax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	vpextrb	$0x2, %xmm0, %eax
-               	cmpl	$0x1, %eax
-               	jne	<addr>
-               	vpextrb	$0xe, %xmm0, %eax
-               	cmpl	$0x7, %eax
-               	jne	<addr>
-               	vpextrb	$0xf, %xmm0, %eax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x36, %eax
-               	leave
-               	retq
-               	xorl	%eax, %eax
-               	movq	%rax, %xmm15
-               	vpunpckhbw	%xmm15, %xmm1, %xmm0 # xmm0 = xmm1[8],xmm15[8],xmm1[9],xmm15[9],xmm1[10],xmm15[10],xmm1[11],xmm15[11],xmm1[12],xmm15[12],xmm1[13],xmm15[13],xmm1[14],xmm15[14],xmm1[15],xmm15[15]
-               	vpextrb	$0x0, %xmm0, %ecx
-               	cmpl	$0x8, %ecx
-               	jne	<addr>
-               	vpextrb	$0x1, %xmm0, %ecx
-               	testq	%rcx, %rcx
-               	jne	<addr>
-               	vpextrb	$0xe, %xmm0, %ecx
-               	cmpl	$0xf, %ecx
-               	jne	<addr>
-               	vpextrb	$0xf, %xmm0, %ecx
-               	testq	%rcx, %rcx
-               	je	<addr>
-               	movl	$0x37, %eax
-               	leave
-               	retq
-               	movq	%rax, %xmm15
-               	vpunpcklwd	%xmm15, %xmm1, %xmm0 # xmm0 = xmm1[0],xmm15[0],xmm1[1],xmm15[1],xmm1[2],xmm15[2],xmm1[3],xmm15[3]
-               	vpextrb	$0x0, %xmm0, %ecx
-               	testq	%rcx, %rcx
-               	jne	<addr>
-               	vpextrb	$0x1, %xmm0, %ecx
-               	cmpl	$0x1, %ecx
-               	jne	<addr>
-               	vpextrb	$0x2, %xmm0, %ecx
-               	testq	%rcx, %rcx
-               	jne	<addr>
-               	vpextrb	$0x3, %xmm0, %ecx
-               	testq	%rcx, %rcx
-               	jne	<addr>
-               	vpextrb	$0x4, %xmm0, %ecx
-               	cmpl	$0x2, %ecx
-               	je	<addr>
-               	movl	$0x38, %eax
-               	leave
-               	retq
-               	movq	%rax, %xmm15
-               	vpunpckhwd	%xmm15, %xmm1, %xmm0 # xmm0 = xmm1[4],xmm15[4],xmm1[5],xmm15[5],xmm1[6],xmm15[6],xmm1[7],xmm15[7]
-               	vpextrb	$0x0, %xmm0, %eax
-               	cmpl	$0x8, %eax
-               	jne	<addr>
-               	vpextrb	$0x1, %xmm0, %eax
-               	cmpl	$0x9, %eax
-               	jne	<addr>
-               	vpextrb	$0x2, %xmm0, %eax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	vpextrb	$0x4, %xmm0, %eax
-               	cmpl	$0xa, %eax
-               	je	<addr>
-               	movl	$0x39, %eax
-               	leave
-               	retq
-               	leaq	<rip>, %rax # <addr>
-               	movups	(%rax), %xmm1
-               	leaq	<rip>, %rax # <addr>
-               	movups	(%rax), %xmm2
-               	vpunpckldq	%xmm2, %xmm1, %xmm0 # xmm0 = xmm1[0],xmm2[0],xmm1[1],xmm2[1]
-               	vmovd	%xmm0, %eax
-               	cmpl	$0x1, %eax
-               	jne	<addr>
-               	vpextrd	$0x1, %xmm0, %eax
-               	cmpl	$0x5, %eax
-               	jne	<addr>
-               	vpextrd	$0x2, %xmm0, %eax
-               	cmpl	$0x2, %eax
-               	jne	<addr>
-               	vpextrd	$0x3, %xmm0, %eax
-               	cmpl	$0x6, %eax
-               	je	<addr>
-               	movl	$0x3a, %eax
-               	leave
-               	retq
-               	vpunpckhdq	%xmm2, %xmm1, %xmm0 # xmm0 = xmm1[2],xmm2[2],xmm1[3],xmm2[3]
-               	vmovd	%xmm0, %eax
-               	cmpl	$0x3, %eax
-               	jne	<addr>
-               	vpextrd	$0x1, %xmm0, %eax
-               	cmpl	$0x7, %eax
-               	jne	<addr>
-               	vpextrd	$0x2, %xmm0, %eax
-               	cmpl	$0x4, %eax
-               	jne	<addr>
-               	vpextrd	$0x3, %xmm0, %eax
-               	cmpl	$0x8, %eax
-               	je	<addr>
-               	movl	$0x3b, %eax
-               	leave
-               	retq
-               	vpunpckhqdq	%xmm2, %xmm1, %xmm0 # xmm0 = xmm1[1],xmm2[1]
-               	vmovd	%xmm0, %eax
-               	cmpl	$0x3, %eax
-               	jne	<addr>
-               	vpextrd	$0x1, %xmm0, %eax
-               	cmpl	$0x4, %eax
-               	jne	<addr>
-               	vpextrd	$0x2, %xmm0, %eax
-               	cmpl	$0x7, %eax
-               	jne	<addr>
-               	vpextrd	$0x3, %xmm0, %eax
-               	cmpl	$0x8, %eax
-               	je	<addr>
-               	movl	$0x3c, %eax
-               	leave
-               	retq
-               	movl	$0xfff0, %r11d          # imm = 0xFFF0
-               	vmovd	%r11d, %xmm0
-               	vpbroadcastw	%xmm0, %xmm0
-               	movapd	%xmm0, %xmm1
-               	psraw	$0x2, %xmm1
-               	vmovd	%xmm1, %eax
-               	movl	$0xfffcfffc, %r11d      # imm = 0xFFFCFFFC
-               	cmpq	%r11, %rax
-               	je	<addr>
-               	movl	$0x3d, %eax
-               	leave
-               	retq
-               	psraw	$0x20, %xmm0
-               	vmovd	%xmm0, %eax
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpq	%r11, %rax
-               	je	<addr>
-               	movl	$0x3e, %eax
-               	leave
-               	retq
-               	movl	$0xfffffff0, %r11d      # imm = 0xFFFFFFF0
-               	vmovd	%r11d, %xmm0
-               	vpbroadcastd	%xmm0, %xmm0
-               	psrad	$0x2, %xmm0
-               	vmovd	%xmm0, %eax
-               	movl	$0xfffffffc, %r11d      # imm = 0xFFFFFFFC
-               	cmpq	%r11, %rax
-               	je	<addr>
-               	movl	$0x3f, %eax
                	leave
                	retq
                	movl	$0x3, %eax
@@ -1073,151 +393,37 @@ Disassembly of section .text:
                	vpbroadcastd	%xmm0, %xmm0
                	movq	%rax, %xmm14
                	psrad	%xmm14, %xmm0
-               	vmovd	%xmm0, %ecx
+               	vmovd	%xmm0, %eax
                	movl	$0xfffffff8, %r11d      # imm = 0xFFFFFFF8
-               	cmpq	%r11, %rcx
+               	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0x40, %eax
                	leave
                	retq
-               	leaq	<rip>, %rcx # <addr>
-               	movups	(%rcx), %xmm0
+               	leaq	<rip>, %rax # <addr>
+               	movups	(%rax), %xmm0
+               	movl	$0xbeef, %eax           # imm = 0xBEEF
                	movapd	%xmm0, %xmm1
-               	psrldq	$0x3, %xmm1             # xmm1 = xmm1[3,4,5,6,7,8,9,10,11,12,13,14,15],zero,zero,zero
-               	vpextrb	$0x0, %xmm1, %ecx
-               	cmpl	$0x3, %ecx
+               	pinsrw	$0x2, %eax, %xmm1
+               	vpextrb	$0x4, %xmm1, %eax
+               	cmpl	$0xef, %eax
                	jne	<addr>
-               	vpextrb	$0xc, %xmm1, %ecx
-               	cmpl	$0xf, %ecx
+               	vpextrb	$0x5, %xmm1, %eax
+               	cmpl	$0xbe, %eax
                	jne	<addr>
-               	vpextrb	$0xd, %xmm1, %ecx
-               	testq	%rcx, %rcx
-               	jne	<addr>
-               	vpextrb	$0xf, %xmm1, %ecx
-               	testq	%rcx, %rcx
-               	je	<addr>
-               	movl	$0x41, %eax
-               	leave
-               	retq
-               	movl	$0xbeef, %ecx           # imm = 0xBEEF
-               	movapd	%xmm0, %xmm1
-               	pinsrw	$0x2, %ecx, %xmm1
-               	vpextrb	$0x4, %xmm1, %ecx
-               	cmpl	$0xef, %ecx
-               	jne	<addr>
-               	vpextrb	$0x5, %xmm1, %ecx
-               	cmpl	$0xbe, %ecx
-               	jne	<addr>
-               	vpextrb	$0x6, %xmm1, %ecx
-               	cmpl	$0x6, %ecx
+               	vpextrb	$0x6, %xmm1, %eax
+               	cmpl	$0x6, %eax
                	je	<addr>
                	movl	$0x42, %eax
                	leave
                	retq
-               	movl	$0x80, %r11d
-               	vmovd	%r11d, %xmm1
-               	vpbroadcastb	%xmm1, %xmm1
-               	pmovmskb	%xmm1, %ecx
-               	cmpl	$0xffff, %ecx           # imm = 0xFFFF
-               	je	<addr>
-               	movl	$0x43, %eax
-               	leave
-               	retq
+               	movl	$0x1, %eax
                	xorl	%ecx, %ecx
-               	movq	%rcx, %xmm14
-               	pmovmskb	%xmm14, %edx
-               	testl	%edx, %edx
-               	je	<addr>
-               	movl	$0x44, %eax
-               	leave
-               	retq
-               	leaq	<rip>, %rdx # <addr>
-               	movups	(%rdx), %xmm1
-               	pmovmskb	%xmm1, %edx
-               	cmpl	$0x8001, %edx           # imm = 0x8001
-               	je	<addr>
-               	movl	$0x45, %eax
-               	leave
-               	retq
-               	movl	$0xf, %r11d
-               	vmovd	%r11d, %xmm1
-               	vpbroadcastb	%xmm1, %xmm1
-               	movl	$0x33, %r11d
-               	vmovd	%r11d, %xmm2
-               	vpbroadcastb	%xmm2, %xmm2
-               	vpandn	%xmm2, %xmm1, %xmm1
-               	vmovd	%xmm1, %edx
-               	cmpq	$0x30303030, %rdx       # imm = 0x30303030
-               	je	<addr>
-               	movl	$0x46, %eax
-               	leave
-               	retq
-               	vpcmpeqb	%xmm0, %xmm0, %xmm1
-               	vmovd	%xmm1, %edx
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpq	%r11, %rdx
-               	jne	<addr>
-               	vpextrd	$0x3, %xmm1, %edx
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpq	%r11, %rdx
-               	je	<addr>
-               	movl	$0x47, %eax
-               	leave
-               	retq
-               	movl	$0x7, %r11d
-               	vmovd	%r11d, %xmm1
-               	vpbroadcastw	%xmm1, %xmm1
-               	movl	$0x8, %r11d
-               	vmovd	%r11d, %xmm2
-               	vpbroadcastw	%xmm2, %xmm2
-               	vpcmpeqw	%xmm2, %xmm1, %xmm1
-               	vmovd	%xmm1, %edx
-               	testq	%rdx, %rdx
-               	je	<addr>
-               	movl	$0x48, %eax
-               	leave
-               	retq
-               	movl	$0x7, %r11d
-               	vmovd	%r11d, %xmm1
-               	vpbroadcastd	%xmm1, %xmm1
-               	vpcmpeqd	%xmm1, %xmm1, %xmm1
-               	vmovd	%xmm1, %edx
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpq	%r11, %rdx
-               	je	<addr>
-               	movl	$0x49, %eax
-               	leave
-               	retq
-               	vpcmpeqd	%xmm1, %xmm1, %xmm1
-               	movl	$0xfffe, %r11d          # imm = 0xFFFE
-               	vmovd	%r11d, %xmm2
-               	vpbroadcastw	%xmm2, %xmm2
-               	vpcmpgtw	%xmm2, %xmm1, %xmm1
-               	vmovd	%xmm1, %edx
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpq	%r11, %rdx
-               	je	<addr>
-               	movl	$0x4a, %eax
-               	leave
-               	retq
-               	movl	$0xfffffffe, %r11d      # imm = 0xFFFFFFFE
-               	vmovd	%r11d, %xmm1
-               	vpbroadcastd	%xmm1, %xmm1
-               	vpcmpeqd	%xmm2, %xmm2, %xmm2
-               	vpcmpgtd	%xmm1, %xmm2, %xmm1
-               	vmovd	%xmm1, %edx
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpq	%r11, %rdx
-               	je	<addr>
-               	movl	$0x4b, %eax
-               	leave
-               	retq
-               	movl	$0x1, %edx
-               	xorl	%esi, %esi
-               	movq	%rsi, %xmm1
-               	vpinsrb	$0x0, %edx, %xmm1, %xmm1
-               	movl	$0x2, %edx
-               	vpinsrb	$0x1, %edx, %xmm1, %xmm1
+               	movq	%rcx, %xmm1
+               	vpinsrb	$0x0, %eax, %xmm1, %xmm1
+               	movl	$0x2, %eax
+               	vpinsrb	$0x1, %eax, %xmm1, %xmm1
+               	movl	$0x3, %eax
                	vpinsrb	$0x2, %eax, %xmm1, %xmm1
                	movl	$0x4, %eax
                	vpinsrb	$0x3, %eax, %xmm1, %xmm1
@@ -1231,19 +437,20 @@ Disassembly of section .text:
                	vpinsrb	$0x7, %eax, %xmm1, %xmm1
                	vmovq	%xmm1, %rax
                	vmovq	%rax, %xmm1
+               	xorl	%eax, %eax
                	movapd	%xmm1, %xmm2
-               	vpinsrq	$0x1, %rcx, %xmm2, %xmm2
-               	vmovd	%xmm1, %eax
-               	cmpq	$0x4030201, %rax        # imm = 0x4030201
+               	vpinsrq	$0x1, %rax, %xmm2, %xmm2
+               	vmovd	%xmm1, %ecx
+               	cmpq	$0x4030201, %rcx        # imm = 0x4030201
                	jne	<addr>
-               	vpextrd	$0x1, %xmm1, %eax
-               	cmpq	$0x8070605, %rax        # imm = 0x8070605
+               	vpextrd	$0x1, %xmm1, %ecx
+               	cmpq	$0x8070605, %rcx        # imm = 0x8070605
                	jne	<addr>
-               	vpextrd	$0x2, %xmm2, %eax
-               	testq	%rax, %rax
+               	vpextrd	$0x2, %xmm2, %ecx
+               	testq	%rcx, %rcx
                	jne	<addr>
-               	vpextrd	$0x3, %xmm2, %eax
-               	testq	%rax, %rax
+               	vpextrd	$0x3, %xmm2, %ecx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x4c, %eax
                	leave
@@ -1251,68 +458,67 @@ Disassembly of section .text:
                	movabsq	$-0x1111111111111112, %r11 # imm = 0xEEEEEEEEEEEEEEEE
                	vmovq	%r11, %xmm1
                	vpbroadcastq	%xmm1, %xmm1
-               	movabsq	$0x200000001, %rax      # imm = 0x200000001
-               	vpinsrq	$0x0, %rax, %xmm1, %xmm1
-               	vpextrb	$0x0, %xmm1, %eax
-               	cmpl	$0x1, %eax
+               	movabsq	$0x200000001, %rcx      # imm = 0x200000001
+               	vpinsrq	$0x0, %rcx, %xmm1, %xmm1
+               	vpextrb	$0x0, %xmm1, %ecx
+               	cmpl	$0x1, %ecx
                	jne	<addr>
-               	vpextrb	$0x4, %xmm1, %eax
-               	cmpl	$0x2, %eax
+               	vpextrb	$0x4, %xmm1, %ecx
+               	cmpl	$0x2, %ecx
                	jne	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movups	%xmm0, (%rax)
-               	vpextrb	$0x0, %xmm0, %eax
-               	testq	%rax, %rax
+               	leaq	<rip>, %rcx # <addr>
+               	movups	%xmm0, (%rcx)
+               	vpextrb	$0x0, %xmm0, %ecx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x4e, %eax
                	leave
                	retq
-               	vpextrb	$0x1, %xmm0, %eax
-               	cmpq	$0x1, %rax
+               	vpextrb	$0x1, %xmm0, %ecx
+               	cmpq	$0x1, %rcx
                	jne	<addr>
-               	vpextrb	$0x2, %xmm0, %eax
-               	cmpq	$0x2, %rax
+               	vpextrb	$0x2, %xmm0, %ecx
+               	cmpq	$0x2, %rcx
                	jne	<addr>
-               	vpextrb	$0x3, %xmm0, %eax
-               	cmpq	$0x3, %rax
+               	vpextrb	$0x3, %xmm0, %ecx
+               	cmpq	$0x3, %rcx
                	jne	<addr>
-               	vpextrb	$0x4, %xmm0, %eax
-               	cmpq	$0x4, %rax
+               	vpextrb	$0x4, %xmm0, %ecx
+               	cmpq	$0x4, %rcx
                	jne	<addr>
-               	vpextrb	$0x5, %xmm0, %eax
-               	cmpq	$0x5, %rax
+               	vpextrb	$0x5, %xmm0, %ecx
+               	cmpq	$0x5, %rcx
                	jne	<addr>
-               	vpextrb	$0x6, %xmm0, %eax
-               	cmpq	$0x6, %rax
+               	vpextrb	$0x6, %xmm0, %ecx
+               	cmpq	$0x6, %rcx
                	jne	<addr>
-               	vpextrb	$0x7, %xmm0, %eax
-               	cmpq	$0x7, %rax
+               	vpextrb	$0x7, %xmm0, %ecx
+               	cmpq	$0x7, %rcx
                	jne	<addr>
-               	vpextrb	$0x8, %xmm0, %eax
-               	cmpq	$0x8, %rax
+               	vpextrb	$0x8, %xmm0, %ecx
+               	cmpq	$0x8, %rcx
                	jne	<addr>
-               	vpextrb	$0x9, %xmm0, %eax
-               	cmpq	$0x9, %rax
+               	vpextrb	$0x9, %xmm0, %ecx
+               	cmpq	$0x9, %rcx
                	jne	<addr>
-               	vpextrb	$0xa, %xmm0, %eax
-               	cmpq	$0xa, %rax
+               	vpextrb	$0xa, %xmm0, %ecx
+               	cmpq	$0xa, %rcx
                	jne	<addr>
-               	vpextrb	$0xb, %xmm0, %eax
-               	cmpq	$0xb, %rax
+               	vpextrb	$0xb, %xmm0, %ecx
+               	cmpq	$0xb, %rcx
                	jne	<addr>
-               	vpextrb	$0xc, %xmm0, %eax
-               	cmpq	$0xc, %rax
+               	vpextrb	$0xc, %xmm0, %ecx
+               	cmpq	$0xc, %rcx
                	jne	<addr>
-               	vpextrb	$0xd, %xmm0, %eax
-               	cmpq	$0xd, %rax
+               	vpextrb	$0xd, %xmm0, %ecx
+               	cmpq	$0xd, %rcx
                	jne	<addr>
-               	vpextrb	$0xe, %xmm0, %eax
-               	cmpq	$0xe, %rax
+               	vpextrb	$0xe, %xmm0, %ecx
+               	cmpq	$0xe, %rcx
                	jne	<addr>
-               	vpextrb	$0xf, %xmm0, %eax
-               	cmpq	$0xf, %rax
+               	vpextrb	$0xf, %xmm0, %ecx
+               	cmpq	$0xf, %rcx
                	jne	<addr>
-               	xorl	%eax, %eax
                	leaq	0x1(%rax), %rcx
                	movb	%cl, -0x18(%rbp,%rax)
                	movq	%rcx, %rax

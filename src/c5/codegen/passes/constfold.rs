@@ -21,7 +21,10 @@
 //!     takes three and needs no constant register;
 //!   * a `VecExtract` of a lane a `VecInsert` wrote -> the inserted value
 //!     read back as the extract's kind, past the inserts of other lanes,
-//!     and of a zero vector -> `Imm(0)` ([`fold_lane_reads`]).
+//!     and of a zero vector -> `Imm(0)` ([`fold_lane_reads`]);
+//!   * an integer SIMD row over constant 16-byte vectors -> its value
+//!     where that is one 64-bit lane in both halves, and an integer lane
+//!     read of it -> `Imm` ([`fold_constant_rows`]).
 //!
 //! Save for that sign flip, only a plain integer `Inst::Imm` whose
 //! `f32_values` flag is clear participates: `ImmData` / `ImmCode` /
@@ -60,7 +63,7 @@ const MAX_ROUNDS: usize = 4;
 
 pub(crate) fn run_one(func: &mut FunctionSsa) {
     for _ in 0..MAX_ROUNDS {
-        let folded = fold_round(func) | fold_constant_lanes(func);
+        let folded = fold_round(func) | fold_constant_lanes(func) | fold_constant_rows(func);
         let lanes = fold_lane_reads(func);
         let forwarded = forward_identities(func);
         if !folded && !lanes && !forwarded {
@@ -184,6 +187,183 @@ fn fold_constant_lanes(func: &mut FunctionSsa) -> bool {
             bytes: 8,
         };
         changed = true;
+    }
+    changed
+}
+
+/// The 16 bytes of a whole-vector load from constant data at an address
+/// and displacement, where the caller knows the data.
+pub(crate) type ConstLoad<'a> = &'a dyn Fn(&FunctionSsa, ValueId, i32) -> Option<[u8; 16]>;
+
+/// The 16 bytes of a constant vector `v`, or `None`: a `VecConst` splat,
+/// zero, a load `load` resolves, integer constants inserted into a
+/// constant (or into an undefined vector every byte of which the inserts
+/// write), the high half [`fold_constant_halves`] inserts over its low one,
+/// or an integer SIMD row over constants
+/// ([`crate::c5::simd::eval_constant`]); `depth` bounds the operands
+/// followed.
+fn vector_bytes(func: &FunctionSsa, v: ValueId, depth: u32, load: ConstLoad) -> Option<[u8; 16]> {
+    let (bytes, known) = vector_bytes_known(func, v, depth, load)?;
+    (known == u16::MAX).then_some(bytes)
+}
+
+/// [`vector_bytes`] with the mask of the bytes it determines.
+fn vector_bytes_known(
+    func: &FunctionSsa,
+    v: ValueId,
+    depth: u32,
+    load: ConstLoad,
+) -> Option<([u8; 16], u16)> {
+    if depth == 0 {
+        return None;
+    }
+    let splat = |imm: i64, kind: StoreKind| {
+        let w = usize::from(store_width(kind));
+        let mut o = [0u8; 16];
+        for (k, b) in o.iter_mut().enumerate() {
+            *b = (imm as u64 >> (8 * (k % w))) as u8;
+        }
+        o
+    };
+    match *func.insts.get(v as usize)? {
+        Inst::Imm(0) => Some(([0; 16], u16::MAX)),
+        Inst::Undef => Some(([0; 16], 0)),
+        Inst::VecConst {
+            imm,
+            kind,
+            bytes: 16,
+        } => Some((splat(imm, kind), u16::MAX)),
+        Inst::Copy { value, .. } => vector_bytes_known(func, value, depth - 1, load),
+        Inst::Load {
+            addr,
+            disp,
+            kind: LoadKind::V128,
+            volatile: false,
+            ..
+        } => load(func, addr, disp).map(|o| (o, u16::MAX)),
+        Inst::VecInsert {
+            vec,
+            value,
+            off,
+            kind,
+            bytes: 16,
+        } => {
+            let (mut o, mut known) = vector_bytes_known(func, vec, depth - 1, load)?;
+            let w = usize::from(store_width(kind));
+            let lane = match (func.insts.get(value as usize)?, kind) {
+                (
+                    &Inst::Imm(x),
+                    StoreKind::I8 | StoreKind::I16 | StoreKind::I32 | StoreKind::I64,
+                ) => x,
+                (
+                    &Inst::VecConst {
+                        imm,
+                        kind: k,
+                        bytes: 8,
+                    },
+                    StoreKind::F64,
+                ) => i64::from_le_bytes(splat(imm, k)[..8].try_into().ok()?),
+                _ => return None,
+            };
+            let at = usize::from(off);
+            if at + w > 16 {
+                return None;
+            }
+            o[at..at + w].copy_from_slice(&lane.to_le_bytes()[..w]);
+            known |= (u16::MAX >> (16 - w)) << at;
+            Some((o, known))
+        }
+        Inst::SimdVal { op, imm, ref args } => {
+            let ops: Option<Vec<[u8; 16]>> = args
+                .iter()
+                .map(|&a| vector_bytes(func, a, depth - 1, load))
+                .collect();
+            crate::c5::simd::eval_constant(op, imm, &ops?).map(|o| (o, u16::MAX))
+        }
+        _ => None,
+    }
+}
+
+fn fold_constant_rows(func: &mut FunctionSsa) -> bool {
+    fold_constant_rows_with(func, &|_, _, _| None)
+}
+
+/// An integer SIMD row over constant 16-byte vectors -- `load` resolving
+/// the loads of constant data -- whose value is one 64-bit lane in both
+/// halves is that `VecConst`, and one whose value is an integer (a lane
+/// extract, a sign mask) that `Imm`; an integer lane read of any such row
+/// is the lane's constant, extended as the read takes it.
+pub(crate) fn fold_constant_rows_with(func: &mut FunctionSsa, load: ConstLoad) -> bool {
+    let mut changed = false;
+    for i in 0..func.insts.len() {
+        match func.insts[i] {
+            Inst::SimdVal { op, imm, ref args } if args.len() == 1 => {
+                let int = vector_bytes(func, args[0], 8, load)
+                    .and_then(|a| crate::c5::simd::eval_constant_int(op, imm, &a));
+                if let Some(x) = int {
+                    func.insts[i] = Inst::Imm(x);
+                    changed = true;
+                    continue;
+                }
+                let Some(o) = vector_bytes(func, i as ValueId, 8, load) else {
+                    continue;
+                };
+                let (lo, hi) = (&o[..8], &o[8..]);
+                if lo == hi {
+                    func.insts[i] = Inst::VecConst {
+                        imm: i64::from_le_bytes(lo.try_into().unwrap()),
+                        kind: StoreKind::I64,
+                        bytes: 16,
+                    };
+                    changed = true;
+                }
+            }
+            Inst::SimdVal { .. } => {
+                let Some(o) = vector_bytes(func, i as ValueId, 8, load) else {
+                    continue;
+                };
+                let (lo, hi) = (&o[..8], &o[8..]);
+                if lo == hi {
+                    func.insts[i] = Inst::VecConst {
+                        imm: i64::from_le_bytes(lo.try_into().unwrap()),
+                        kind: StoreKind::I64,
+                        bytes: 16,
+                    };
+                    changed = true;
+                }
+            }
+            Inst::VecExtract {
+                vec,
+                off,
+                kind,
+                bytes: 16,
+            } if matches!(func.insts.get(vec as usize), Some(Inst::SimdVal { .. })) => {
+                let Some(o) = vector_bytes(func, vec, 8, load) else {
+                    continue;
+                };
+                let at = usize::from(off);
+                let le = |n: usize| -> Option<u64> {
+                    let mut b = [0u8; 8];
+                    b[..n].copy_from_slice(o.get(at..at + n)?);
+                    Some(u64::from_le_bytes(b))
+                };
+                let x = match kind {
+                    LoadKind::I8 => le(1).map(|x| x as i8 as i64),
+                    LoadKind::U8 => le(1).map(|x| x as i64),
+                    LoadKind::I16 => le(2).map(|x| x as i16 as i64),
+                    LoadKind::U16 => le(2).map(|x| x as i64),
+                    LoadKind::I32 => le(4).map(|x| x as i32 as i64),
+                    LoadKind::U32 => le(4).map(|x| x as i64),
+                    LoadKind::I64 => le(8).map(|x| x as i64),
+                    _ => None,
+                };
+                if let Some(x) = x {
+                    func.insts[i] = Inst::Imm(x);
+                    changed = true;
+                }
+            }
+            _ => {}
+        }
     }
     changed
 }

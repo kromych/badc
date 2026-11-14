@@ -2297,30 +2297,9 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	q1, [x0]
-               	cmhi	v0.16b, v0.16b, v1.16b
-               	smov	x0, v0.b[0]
-               	cmn	x0, #0x1
-               	b.ne	<addr>
-               	smov	x0, v0.b[1]
-               	cbnz	x0, <addr>
-               	smov	x0, v0.b[2]
-               	cbnz	x0, <addr>
-               	smov	x0, v0.b[3]
-               	cmn	x0, #0x1
-               	b.eq	<addr>
-               	mov	x0, #0x32               // =50
-               	add	sp, sp, #0x150
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	q0, [x0]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	q1, [x0]
-               	cmgt	v2.4s, v1.4s, v0.4s
+               	movi	v2.2d, #0x000000ffffffff
                	and	v0.16b, v2.16b, v0.16b
-               	mvn	v2.16b, v2.16b
+               	movi	v2.2d, #0xffffffff00000000
                	and	v1.16b, v2.16b, v1.16b
                	orr	v0.16b, v0.16b, v1.16b
                	smov	x0, v0.s[0]

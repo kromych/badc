@@ -3552,19 +3552,19 @@ fn ent_pc=501 n_params=2 variadic=false locals=5
     v897 Imm(0)                                           -> x0
     v898 Imm(0)                                           -> x0
     v899 Imm(0)                                           -> x0
-    v900 SimdVal { op=__builtin_ia32_pcmpeqd128, imm=None, args=[v847, v847] } -> d2
+    v900 VecConst { imm=-1, kind=I64, bytes=16 }          -> d2
     v901 Imm(0)                                           -> x0
     v902 Imm(0)                                           -> x0
     v903 Imm(-1)                                          -> x0
     v904 Undef                                            -> x0
     v905 Undef                                            -> x0
-    v906 VecConst { imm=-1, kind=I64, bytes=16 }          -> d3
+    v906 VecConst { imm=-1, kind=I64, bytes=16 }          -> d2
     v907 Imm(0)                                           -> x0
     v908 VecBinop { op=Xor, lane=I64, bytes=16, lhs=v847, rhs=v593 } -> d0
     v909 Imm(0)                                           -> x0
-    v910 VecBinop { op=And, lane=I64, bytes=16, lhs=v908, rhs=v900 } -> d0
-    v911 VecExtract { vec=v910, off=0, kind=I64, bytes=16 } -> x0
-    v912 VecExtract { vec=v910, off=8, kind=I64, bytes=16 } -> x1
+    v910 VecBinop { op=And, lane=I64, bytes=16, lhs=v908, rhs=v900 } -> d1
+    v911 VecExtract { vec=v908, off=0, kind=I64, bytes=16 } -> x0
+    v912 VecExtract { vec=v908, off=8, kind=I64, bytes=16 } -> x1
     v913 Binop { op=or, lhs=v911, rhs=v912 }              -> x0
     v914 BinopI { op=eq, lhs=v913, rhs_imm=0 }            -> x1
     v915 Extend { value=v914, kind=I32 }                  -> x1

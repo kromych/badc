@@ -3250,15 +3250,17 @@ Disassembly of section .text:
                	cmpl	$0x10, %eax
                	jl	<addr>
                	leaq	<rip>, %rax
-               	movups	(%rax), %xmm0
-               	leaq	<rip>, %rax
                	movups	(%rax), %xmm1
-               	vpcmpgtd	%xmm0, %xmm1, %xmm2
-               	vpand	%xmm0, %xmm2, %xmm0
+               	leaq	<rip>, %rax
+               	movups	(%rax), %xmm2
+               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
+               	vmovq	%r11, %xmm0
+               	vpbroadcastq	%xmm0, %xmm0
+               	vpand	%xmm1, %xmm0, %xmm1
                	vpcmpeqd	%xmm3, %xmm3, %xmm3
-               	vpxor	%xmm3, %xmm2, %xmm2
-               	vpand	%xmm1, %xmm2, %xmm1
-               	vpor	%xmm1, %xmm0, %xmm0
+               	vpxor	%xmm3, %xmm0, %xmm0
+               	vpand	%xmm2, %xmm0, %xmm0
+               	vpor	%xmm0, %xmm1, %xmm0
                	vmovd	%xmm0, %eax
                	movslq	%eax, %rax
                	cmpq	$0x1, %rax

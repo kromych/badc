@@ -47,22 +47,22 @@ fn ent_pc=1335 n_params=0 variadic=false locals=2
     v41  Imm(2941911595)                                  -> x0
     v42  Imm(3256868501)                                  -> x0
     v43  Imm(-1038098795)                                 -> x0
-    v44  Imm(0)                                           -> x1
-    v45  Undef                                            -> x1
+    v44  Imm(0)                                           -> x0
+    v45  Undef                                            -> x0
     v46  VecInsert { vec=v45, value=v43, off=0, kind=I32, bytes=16 } -> d0
     v47  Imm(0)                                           -> x0
     v48  Imm(1051548758)                                  -> x0
     v49  Imm(1051548758)                                  -> x0
-    v50  Imm(0)                                           -> x1
-    v51  Imm(4)                                           -> x1
-    v52  Imm(0)                                           -> x1
+    v50  Imm(0)                                           -> x0
+    v51  Imm(4)                                           -> x0
+    v52  Imm(0)                                           -> x0
     v53  VecInsert { vec=v46, value=v49, off=4, kind=I32, bytes=16 } -> d0
     v54  Imm(0)                                           -> x0
     v55  Imm(3441230341)                                  -> x0
     v56  Imm(-853736955)                                  -> x0
-    v57  Imm(0)                                           -> x1
-    v58  Imm(8)                                           -> x1
-    v59  Imm(0)                                           -> x1
+    v57  Imm(0)                                           -> x0
+    v58  Imm(8)                                           -> x0
+    v59  Imm(0)                                           -> x0
     v60  VecInsert { vec=v53, value=v56, off=8, kind=I32, bytes=16 } -> d0
     v61  Imm(0)                                           -> x0
     v62  Imm(2941911595)                                  -> x0
@@ -70,7 +70,7 @@ fn ent_pc=1335 n_params=0 variadic=false locals=2
     v64  Imm(0)                                           -> x0
     v65  Imm(12)                                          -> x0
     v66  Imm(0)                                           -> x0
-    v67  VecInsert { vec=v60, value=v63, off=12, kind=I32, bytes=16 } -> d1
+    v67  VecInsert { vec=v60, value=v63, off=12, kind=I32, bytes=16 } -> d0
     v68  Imm(0)                                           -> x0
     v69  Imm(0)                                           -> x0
     v70  Imm(0)                                           -> x0
@@ -137,7 +137,7 @@ fn ent_pc=1335 n_params=0 variadic=false locals=2
     v131 Imm(3278546647)                                  -> x0
     v132 Imm(3278546647)                                  -> x0
     v133 Imm(6220458242)                                  -> x0
-    v134 Imm(0)                                           -> x1
+    v134 Imm(0)                                           -> x0
     v135 VecInsert { vec=v60, value=v133, off=12, kind=I32, bytes=16 } -> d0
     v136 Imm(0)                                           -> x0
     v137 Imm(0)                                           -> x0
@@ -164,58 +164,54 @@ fn ent_pc=1335 n_params=0 variadic=false locals=2
     v158 Imm(-1038098795)                                 -> x0
     v159 Imm(0)                                           -> x0
     v160 Undef                                            -> x0
-    v161 VecInsert { vec=v160, value=v158, off=0, kind=I32, bytes=16 } -> d1
+    v161 VecInsert { vec=v160, value=v158, off=0, kind=I32, bytes=16 } -> d0
     v162 Imm(0)                                           -> x0
     v163 Imm(1051548758)                                  -> x0
     v164 Imm(1051548758)                                  -> x0
     v165 Imm(0)                                           -> x0
     v166 Imm(4)                                           -> x0
     v167 Imm(0)                                           -> x0
-    v168 VecConst { imm=4516367529016286869, kind=I64, bytes=16 } -> d1
+    v168 VecInsert { vec=v161, value=v164, off=4, kind=I32, bytes=16 } -> d0
     v169 Imm(0)                                           -> x0
     v170 Imm(3441230341)                                  -> x0
     v171 Imm(-853736955)                                  -> x0
     v172 Imm(0)                                           -> x0
     v173 Imm(8)                                           -> x0
     v174 Imm(0)                                           -> x0
-    v175 VecConst { imm=8269920645255332357, kind=I64, bytes=8 } -> d2
+    v175 VecInsert { vec=v168, value=v171, off=8, kind=I32, bytes=16 } -> d0
     v176 Imm(0)                                           -> x0
     v177 Imm(1925490946)                                  -> x0
     v178 Imm(1925490946)                                  -> x0
     v179 Imm(0)                                           -> x0
     v180 Imm(12)                                          -> x0
     v181 Imm(0)                                           -> x0
-    v182 VecInsert { vec=v168, value=v175, off=8, kind=F64, bytes=16 } -> d1
+    v182 VecInsert { vec=v175, value=v178, off=12, kind=I32, bytes=16 } -> d0
     v183 Imm(0)                                           -> x0
     v184 Imm(0)                                           -> x0
     v185 Imm(0)                                           -> x0
     v186 Imm(0)                                           -> x0
     v187 Imm(0)                                           -> x0
     v188 Imm(0)                                           -> x0
-    v189 SimdVal { op=__builtin_ia32_pcmpeqd128, imm=None, args=[v135, v182] } -> d0
+    v189 VecConst { imm=-1, kind=I64, bytes=16 }          -> d0
     v190 Imm(0)                                           -> x0
     v191 Imm(0)                                           -> x0
     v192 Imm(0)                                           -> x0
     v193 Imm(0)                                           -> x0
-    v194 SimdVal { op=__builtin_ia32_pmovmskb128, imm=None, args=[v189] } -> x0
-    v195 Imm(0)                                           -> x1
-    v196 Extend { value=v194, kind=I32 }                  -> x1
-    v197 Extend { value=v194, kind=I32 }                  -> x1
+    v194 Imm(65535)                                       -> x0
+    v195 Imm(0)                                           -> x0
+    v196 Imm(65535)                                       -> x0
+    v197 Imm(65535)                                       -> x0
     v198 LifetimeEnd(0)                                   -> -
-    v199 Extend { value=v194, kind=I32 }                  -> x1
-    v200 BinopI { op=eq, lhs=v194, rhs_imm=65535 }        -> x0
-    v201 Extend { value=v200, kind=I32 }                  -> x1
+    v199 Imm(65535)                                       -> x0
+    v200 Imm(1)                                           -> x0
+    v201 Imm(1)                                           -> x0
     v202 LifetimeEnd(0)                                   -> -
-    v203 Extend { value=v200, kind=I32 }                  -> x1
-    v204 BinopI { op=eq, lhs=v200, rhs_imm=0 }            -> x1
-    terminator Bnz { cond=v200, target=b2, fall=b1 }   (low word)   (exit_acc=v204)
-  block 1  start_pc=0
-    v205 Imm(1)                                           -> x0
-    v206 LifetimeEnd(0)                                   -> -
-    v207 LifetimeEnd(0)                                   -> -
-    v208 LifetimeEnd(0)                                   -> -
-    terminator Return(v205)   (exit_acc=v205)
-  block 2  start_pc=0
+    v203 Imm(1)                                           -> x0
+    v204 Imm(0)                                           -> x0
+    v205 Imm(0)                                           -> x0
+    v206 Imm(0)                                           -> x0
+    v207 Imm(0)                                           -> x0
+    v208 Imm(0)                                           -> x0
     v209 Imm(0)                                           -> x0
     v210 Imm(0)                                           -> x0
     v211 Imm(0)                                           -> x0
@@ -224,218 +220,214 @@ fn ent_pc=1335 n_params=0 variadic=false locals=2
     v214 Imm(0)                                           -> x0
     v215 Imm(0)                                           -> x0
     v216 Imm(0)                                           -> x0
-    v217 Imm(0)                                           -> x0
-    v218 Imm(0)                                           -> x0
-    v219 Imm(0)                                           -> x0
+    v217 Imm(3441230341)                                  -> x0
+    v218 Imm(3554461090)                                  -> x0
+    v219 Imm(516016039)                                   -> x0
     v220 Imm(0)                                           -> x0
-    v221 Imm(3441230341)                                  -> x0
-    v222 Imm(3554461090)                                  -> x0
-    v223 Imm(516016039)                                   -> x0
-    v224 Imm(0)                                           -> x0
-    v225 Undef                                            -> x0
-    v226 VecInsert { vec=v225, value=v223, off=0, kind=I32, bytes=16 } -> d0
+    v221 Undef                                            -> x0
+    v222 VecInsert { vec=v221, value=v219, off=0, kind=I32, bytes=16 } -> d0
+    v223 Imm(0)                                           -> x0
+    v224 Imm(2941911595)                                  -> x0
+    v225 Imm(2802090203)                                  -> x0
+    v226 Imm(140411632)                                   -> x0
     v227 Imm(0)                                           -> x0
-    v228 Imm(2941911595)                                  -> x0
-    v229 Imm(2802090203)                                  -> x0
-    v230 Imm(140411632)                                   -> x0
+    v228 Imm(4)                                           -> x0
+    v229 Imm(0)                                           -> x0
+    v230 VecInsert { vec=v222, value=v226, off=4, kind=I32, bytes=16 } -> d0
     v231 Imm(0)                                           -> x0
-    v232 Imm(4)                                           -> x0
-    v233 Imm(0)                                           -> x0
-    v234 VecConst { imm=603063367934003111, kind=I64, bytes=16 } -> d0
+    v232 Imm(3554461090)                                  -> x0
+    v233 Imm(3596995145)                                  -> x0
+    v234 Imm(96014315)                                    -> x0
     v235 Imm(0)                                           -> x0
-    v236 Imm(3554461090)                                  -> x0
-    v237 Imm(3596995145)                                  -> x0
-    v238 Imm(96014315)                                    -> x0
+    v236 Imm(8)                                           -> x0
+    v237 Imm(0)                                           -> x0
+    v238 VecInsert { vec=v230, value=v234, off=8, kind=I32, bytes=16 } -> d0
     v239 Imm(0)                                           -> x0
-    v240 Imm(8)                                           -> x0
-    v241 Imm(0)                                           -> x0
-    v242 VecConst { imm=-6147946187468501013, kind=I64, bytes=8 } -> d1
+    v240 Imm(2802090203)                                  -> x0
+    v241 Imm(229284703)                                   -> x0
+    v242 Imm(2863537028)                                  -> x0
     v243 Imm(0)                                           -> x0
-    v244 Imm(2802090203)                                  -> x0
-    v245 Imm(229284703)                                   -> x0
-    v246 Imm(2863537028)                                  -> x0
+    v244 Imm(12)                                          -> x0
+    v245 Imm(0)                                           -> x0
+    v246 VecInsert { vec=v238, value=v242, off=12, kind=I32, bytes=16 } -> d0
     v247 Imm(0)                                           -> x0
-    v248 Imm(12)                                          -> x0
-    v249 Imm(0)                                           -> x0
-    v250 VecInsert { vec=v234, value=v242, off=8, kind=F64, bytes=16 } -> d2
-    v251 Imm(0)                                           -> x0
-    v252 Imm(0)                                           -> x0
-    v253 LifetimeEnd(0)                                   -> -
-    v254 LifetimeEnd(0)                                   -> -
-    v255 LifetimeEnd(0)                                   -> -
-    v256 LifetimeEnd(0)                                   -> -
-    v257 Imm(0)                                           -> x0
-    v258 Imm(0)                                           -> x0
-    v259 Imm(0)                                           -> x0
-    v260 Imm(0)                                           -> x0
-    v261 Imm(516016039)                                   -> x0
-    v262 Imm(140411632)                                   -> x0
-    v263 Imm(96014315)                                    -> x0
-    v264 Imm(2863537028)                                  -> x0
-    v265 Imm(0)                                           -> x0
-    v266 Imm(0)                                           -> x0
-    v267 Imm(0)                                           -> x0
-    v268 Imm(0)                                           -> x0
+    v248 Imm(0)                                           -> x0
+    v249 LifetimeEnd(0)                                   -> -
+    v250 LifetimeEnd(0)                                   -> -
+    v251 LifetimeEnd(0)                                   -> -
+    v252 LifetimeEnd(0)                                   -> -
+    v253 Imm(0)                                           -> x0
+    v254 Imm(0)                                           -> x0
+    v255 Imm(0)                                           -> x0
+    v256 Imm(0)                                           -> x0
+    v257 Imm(516016039)                                   -> x0
+    v258 Imm(140411632)                                   -> x0
+    v259 Imm(96014315)                                    -> x0
+    v260 Imm(2863537028)                                  -> x0
+    v261 Imm(0)                                           -> x0
+    v262 Imm(0)                                           -> x0
+    v263 Imm(0)                                           -> x0
+    v264 Imm(0)                                           -> x0
+    v265 Imm(516016039)                                   -> x0
+    v266 Imm(140411632)                                   -> x0
+    v267 Imm(96014315)                                    -> x0
+    v268 Imm(2863537028)                                  -> x0
     v269 Imm(516016039)                                   -> x0
-    v270 Imm(140411632)                                   -> x0
-    v271 Imm(96014315)                                    -> x0
-    v272 Imm(2863537028)                                  -> x0
-    v273 Imm(516016039)                                   -> x0
-    v274 Imm(516016039)                                   -> x0
-    v275 Imm(0)                                           -> x0
-    v276 Undef                                            -> x0
-    v277 VecInsert { vec=v276, value=v274, off=0, kind=I32, bytes=16 } -> d3
-    v278 Imm(0)                                           -> x0
-    v279 Imm(140411632)                                   -> x0
-    v280 Imm(140411632)                                   -> x0
+    v270 Imm(516016039)                                   -> x0
+    v271 Imm(0)                                           -> x0
+    v272 Undef                                            -> x0
+    v273 VecInsert { vec=v272, value=v270, off=0, kind=I32, bytes=16 } -> d0
+    v274 Imm(0)                                           -> x0
+    v275 Imm(140411632)                                   -> x0
+    v276 Imm(140411632)                                   -> x0
+    v277 Imm(0)                                           -> x0
+    v278 Imm(4)                                           -> x0
+    v279 Imm(0)                                           -> x0
+    v280 VecInsert { vec=v273, value=v276, off=4, kind=I32, bytes=16 } -> d0
     v281 Imm(0)                                           -> x0
-    v282 Imm(4)                                           -> x0
-    v283 Imm(0)                                           -> x0
-    v284 VecConst { imm=603063367934003111, kind=I64, bytes=16 } -> d3
-    v285 Imm(0)                                           -> x0
-    v286 Imm(96014315)                                    -> x0
-    v287 Imm(96014315)                                    -> x0
+    v282 Imm(96014315)                                    -> x0
+    v283 Imm(96014315)                                    -> x0
+    v284 Imm(0)                                           -> x0
+    v285 Imm(8)                                           -> x0
+    v286 Imm(0)                                           -> x0
+    v287 VecInsert { vec=v280, value=v283, off=8, kind=I32, bytes=16 } -> d0
     v288 Imm(0)                                           -> x0
-    v289 Imm(8)                                           -> x0
-    v290 Imm(0)                                           -> x0
-    v291 VecConst { imm=-6147946187468501013, kind=I64, bytes=8 } -> d3
-    v292 Imm(0)                                           -> x0
-    v293 Imm(2863537028)                                  -> x0
-    v294 Imm(-1431430268)                                 -> x0
+    v289 Imm(2863537028)                                  -> x0
+    v290 Imm(-1431430268)                                 -> x0
+    v291 Imm(0)                                           -> x0
+    v292 Imm(12)                                          -> x0
+    v293 Imm(0)                                           -> x0
+    v294 VecInsert { vec=v287, value=v290, off=12, kind=I32, bytes=16 } -> d0
     v295 Imm(0)                                           -> x0
-    v296 Imm(12)                                          -> x0
+    v296 Imm(0)                                           -> x0
     v297 Imm(0)                                           -> x0
-    v298 VecInsert { vec=v234, value=v242, off=8, kind=F64, bytes=16 } -> d0
+    v298 Imm(0)                                           -> x0
     v299 Imm(0)                                           -> x0
     v300 Imm(0)                                           -> x0
-    v301 Imm(0)                                           -> x0
+    v301 VecConst { imm=-1, kind=I64, bytes=16 }          -> d0
     v302 Imm(0)                                           -> x0
     v303 Imm(0)                                           -> x0
     v304 Imm(0)                                           -> x0
-    v305 SimdVal { op=__builtin_ia32_pcmpeqd128, imm=None, args=[v250, v298] } -> d0
-    v306 Imm(0)                                           -> x0
+    v305 Imm(0)                                           -> x0
+    v306 Imm(65535)                                       -> x0
     v307 Imm(0)                                           -> x0
-    v308 Imm(0)                                           -> x0
-    v309 Imm(0)                                           -> x0
-    v310 SimdVal { op=__builtin_ia32_pmovmskb128, imm=None, args=[v305] } -> x0
-    v311 Imm(0)                                           -> x1
-    v312 Extend { value=v310, kind=I32 }                  -> x1
-    v313 Extend { value=v310, kind=I32 }                  -> x1
+    v308 Imm(65535)                                       -> x0
+    v309 Imm(65535)                                       -> x0
+    v310 LifetimeEnd(0)                                   -> -
+    v311 Imm(65535)                                       -> x0
+    v312 Imm(1)                                           -> x0
+    v313 Imm(1)                                           -> x0
     v314 LifetimeEnd(0)                                   -> -
-    v315 Extend { value=v310, kind=I32 }                  -> x1
-    v316 BinopI { op=eq, lhs=v310, rhs_imm=65535 }        -> x0
-    v317 Extend { value=v316, kind=I32 }                  -> x1
-    v318 LifetimeEnd(0)                                   -> -
-    v319 Extend { value=v316, kind=I32 }                  -> x1
-    v320 BinopI { op=eq, lhs=v316, rhs_imm=0 }            -> x1
-    terminator Bnz { cond=v316, target=b4, fall=b3 }   (low word)   (exit_acc=v320)
-  block 3  start_pc=0
-    v321 Imm(2)                                           -> x0
-    v322 LifetimeEnd(0)                                   -> -
-    v323 LifetimeEnd(0)                                   -> -
-    v324 LifetimeEnd(0)                                   -> -
-    terminator Return(v321)   (exit_acc=v321)
-  block 4  start_pc=0
+    v315 Imm(1)                                           -> x0
+    v316 Imm(0)                                           -> x0
+    v317 Imm(0)                                           -> x0
+    v318 Imm(0)                                           -> x0
+    v319 Imm(0)                                           -> x0
+    v320 Imm(0)                                           -> x0
+    v321 Imm(0)                                           -> x0
+    v322 Imm(0)                                           -> x0
+    v323 Imm(0)                                           -> x0
+    v324 Imm(0)                                           -> x0
     v325 Imm(0)                                           -> x0
     v326 Imm(0)                                           -> x0
     v327 Imm(0)                                           -> x0
     v328 Imm(0)                                           -> x0
-    v329 Imm(0)                                           -> x0
-    v330 Imm(0)                                           -> x0
-    v331 Imm(0)                                           -> x0
-    v332 Imm(0)                                           -> x0
-    v333 Imm(0)                                           -> x0
-    v334 Imm(0)                                           -> x0
-    v335 Imm(0)                                           -> x0
-    v336 Imm(0)                                           -> x0
-    v337 Imm(229284703)                                   -> x0
-    v338 Imm(3441230341)                                  -> x0
-    v339 Imm(3233257818)                                  -> x0
+    v329 Imm(229284703)                                   -> x0
+    v330 Imm(3441230341)                                  -> x0
+    v331 Imm(3233257818)                                  -> x0
+    v332 Imm(1)                                           -> x0
+    v333 Imm(1)                                           -> x0
+    v334 Imm(3233257818)                                  -> x0
+    v335 Imm(6466515636)                                  -> x0
+    v336 Imm(2171548340)                                  -> x0
+    v337 Imm(32)                                          -> x0
+    v338 Imm(31)                                          -> x0
+    v339 Imm(31)                                          -> x0
     v340 Imm(1)                                           -> x0
-    v341 Imm(1)                                           -> x0
-    v342 Imm(3233257818)                                  -> x0
-    v343 Imm(6466515636)                                  -> x0
-    v344 Imm(2171548340)                                  -> x0
-    v345 Imm(32)                                          -> x0
-    v346 Imm(31)                                          -> x0
-    v347 Imm(31)                                          -> x0
+    v341 Imm(2171548341)                                  -> x0
+    v342 Imm(2171548341)                                  -> x0
+    v343 Imm(2171548341)                                  -> x0
+    v344 Imm(3596995145)                                  -> x0
+    v345 Imm(1051548758)                                  -> x0
+    v346 Imm(3905459743)                                  -> x0
+    v347 Imm(1)                                           -> x0
     v348 Imm(1)                                           -> x0
-    v349 Imm(2171548341)                                  -> x0
-    v350 Imm(2171548341)                                  -> x0
-    v351 Imm(2171548341)                                  -> x0
-    v352 Imm(3596995145)                                  -> x0
-    v353 Imm(1051548758)                                  -> x0
-    v354 Imm(3905459743)                                  -> x0
+    v349 Imm(3905459743)                                  -> x0
+    v350 Imm(7810919486)                                  -> x0
+    v351 Imm(3515952190)                                  -> x0
+    v352 Imm(32)                                          -> x0
+    v353 Imm(31)                                          -> x0
+    v354 Imm(31)                                          -> x0
     v355 Imm(1)                                           -> x0
-    v356 Imm(1)                                           -> x0
-    v357 Imm(3905459743)                                  -> x0
-    v358 Imm(7810919486)                                  -> x0
-    v359 Imm(3515952190)                                  -> x0
-    v360 Imm(32)                                          -> x0
-    v361 Imm(31)                                          -> x0
-    v362 Imm(31)                                          -> x0
+    v356 Imm(3515952191)                                  -> x0
+    v357 Imm(3515952191)                                  -> x0
+    v358 Imm(3515952191)                                  -> x0
+    v359 Imm(2802090203)                                  -> x0
+    v360 Imm(3256868501)                                  -> x0
+    v361 Imm(1696292430)                                  -> x0
+    v362 Imm(1)                                           -> x0
     v363 Imm(1)                                           -> x0
-    v364 Imm(3515952191)                                  -> x0
-    v365 Imm(3515952191)                                  -> x0
-    v366 Imm(3515952191)                                  -> x0
-    v367 Imm(2802090203)                                  -> x0
-    v368 Imm(3256868501)                                  -> x0
-    v369 Imm(1696292430)                                  -> x0
-    v370 Imm(1)                                           -> x0
-    v371 Imm(1)                                           -> x0
-    v372 Imm(1696292430)                                  -> x0
+    v364 Imm(1696292430)                                  -> x0
+    v365 Imm(3392584860)                                  -> x0
+    v366 Imm(3392584860)                                  -> x0
+    v367 Imm(32)                                          -> x0
+    v368 Imm(31)                                          -> x0
+    v369 Imm(31)                                          -> x0
+    v370 Imm(0)                                           -> x0
+    v371 Imm(3392584860)                                  -> x0
+    v372 Imm(3392584860)                                  -> x0
     v373 Imm(3392584860)                                  -> x0
-    v374 Imm(3392584860)                                  -> x0
-    v375 Imm(32)                                          -> x0
-    v376 Imm(31)                                          -> x0
-    v377 Imm(31)                                          -> x0
-    v378 Imm(0)                                           -> x0
-    v379 Imm(3392584860)                                  -> x0
-    v380 Imm(3392584860)                                  -> x0
-    v381 Imm(3392584860)                                  -> x0
-    v382 Imm(3554461090)                                  -> x0
-    v383 Imm(2171548341)                                  -> x0
-    v384 Imm(1387525911)                                  -> x0
-    v385 Imm(1)                                           -> x0
-    v386 Imm(1)                                           -> x0
-    v387 Imm(1387525911)                                  -> x0
+    v374 Imm(3554461090)                                  -> x0
+    v375 Imm(2171548341)                                  -> x0
+    v376 Imm(1387525911)                                  -> x0
+    v377 Imm(1)                                           -> x0
+    v378 Imm(1)                                           -> x0
+    v379 Imm(1387525911)                                  -> x0
+    v380 Imm(2775051822)                                  -> x0
+    v381 Imm(2775051822)                                  -> x0
+    v382 Imm(32)                                          -> x0
+    v383 Imm(31)                                          -> x0
+    v384 Imm(31)                                          -> x0
+    v385 Imm(0)                                           -> x0
+    v386 Imm(2775051822)                                  -> x0
+    v387 Imm(2775051822)                                  -> x0
     v388 Imm(2775051822)                                  -> x0
     v389 Imm(2775051822)                                  -> x0
-    v390 Imm(32)                                          -> x0
-    v391 Imm(31)                                          -> x0
-    v392 Imm(31)                                          -> x0
+    v390 Imm(0)                                           -> x0
+    v391 Undef                                            -> x0
+    v392 VecInsert { vec=v391, value=v389, off=0, kind=I32, bytes=16 } -> d0
     v393 Imm(0)                                           -> x0
-    v394 Imm(2775051822)                                  -> x0
-    v395 Imm(2775051822)                                  -> x0
-    v396 Imm(2775051822)                                  -> x0
-    v397 Imm(2775051822)                                  -> x0
-    v398 Imm(0)                                           -> x0
-    v399 Undef                                            -> x0
-    v400 VecInsert { vec=v399, value=v397, off=0, kind=I32, bytes=16 } -> d0
+    v394 Imm(3392584860)                                  -> x0
+    v395 Imm(0)                                           -> x0
+    v396 Imm(4)                                           -> x0
+    v397 Imm(0)                                           -> x0
+    v398 VecInsert { vec=v392, value=v394, off=4, kind=I32, bytes=16 } -> d0
+    v399 Imm(0)                                           -> x0
+    v400 Imm(3515952191)                                  -> x0
     v401 Imm(0)                                           -> x0
-    v402 Imm(3392584860)                                  -> x0
+    v402 Imm(8)                                           -> x0
     v403 Imm(0)                                           -> x0
-    v404 Imm(4)                                           -> x0
+    v404 VecInsert { vec=v398, value=v400, off=8, kind=I32, bytes=16 } -> d0
     v405 Imm(0)                                           -> x0
-    v406 VecConst { imm=-3875703048329761234, kind=I64, bytes=16 } -> d0
+    v406 Imm(2171548341)                                  -> x0
     v407 Imm(0)                                           -> x0
-    v408 Imm(3515952191)                                  -> x0
+    v408 Imm(12)                                          -> x0
     v409 Imm(0)                                           -> x0
-    v410 Imm(8)                                           -> x0
+    v410 VecInsert { vec=v404, value=v406, off=12, kind=I32, bytes=16 } -> d0
     v411 Imm(0)                                           -> x0
-    v412 VecConst { imm=-9120014963915543489, kind=I64, bytes=8 } -> d1
-    v413 Imm(0)                                           -> x0
-    v414 Imm(2171548341)                                  -> x0
-    v415 Imm(0)                                           -> x0
-    v416 Imm(12)                                          -> x0
+    v412 Imm(0)                                           -> x0
+    v413 LifetimeEnd(0)                                   -> -
+    v414 LifetimeEnd(0)                                   -> -
+    v415 LifetimeEnd(0)                                   -> -
+    v416 LifetimeEnd(0)                                   -> -
     v417 Imm(0)                                           -> x0
-    v418 VecInsert { vec=v406, value=v412, off=8, kind=F64, bytes=16 } -> d2
+    v418 Imm(0)                                           -> x0
     v419 Imm(0)                                           -> x0
     v420 Imm(0)                                           -> x0
-    v421 LifetimeEnd(0)                                   -> -
-    v422 LifetimeEnd(0)                                   -> -
-    v423 LifetimeEnd(0)                                   -> -
-    v424 LifetimeEnd(0)                                   -> -
+    v421 Imm(2775051822)                                  -> x0
+    v422 Imm(3392584860)                                  -> x0
+    v423 Imm(3515952191)                                  -> x0
+    v424 Imm(2171548341)                                  -> x0
     v425 Imm(0)                                           -> x0
     v426 Imm(0)                                           -> x0
     v427 Imm(0)                                           -> x0
@@ -444,106 +436,90 @@ fn ent_pc=1335 n_params=0 variadic=false locals=2
     v430 Imm(3392584860)                                  -> x0
     v431 Imm(3515952191)                                  -> x0
     v432 Imm(2171548341)                                  -> x0
-    v433 Imm(0)                                           -> x0
-    v434 Imm(0)                                           -> x0
+    v433 Imm(2775051822)                                  -> x0
+    v434 Imm(-1519915474)                                 -> x0
     v435 Imm(0)                                           -> x0
-    v436 Imm(0)                                           -> x0
-    v437 Imm(2775051822)                                  -> x0
-    v438 Imm(3392584860)                                  -> x0
-    v439 Imm(3515952191)                                  -> x0
-    v440 Imm(2171548341)                                  -> x0
-    v441 Imm(2775051822)                                  -> x0
-    v442 Imm(-1519915474)                                 -> x0
+    v436 Undef                                            -> x0
+    v437 VecInsert { vec=v436, value=v434, off=0, kind=I32, bytes=16 } -> d0
+    v438 Imm(0)                                           -> x0
+    v439 Imm(3392584860)                                  -> x0
+    v440 Imm(-902382436)                                  -> x0
+    v441 Imm(0)                                           -> x0
+    v442 Imm(4)                                           -> x0
     v443 Imm(0)                                           -> x0
-    v444 Undef                                            -> x0
-    v445 VecInsert { vec=v444, value=v442, off=0, kind=I32, bytes=16 } -> d3
-    v446 Imm(0)                                           -> x0
-    v447 Imm(3392584860)                                  -> x0
-    v448 Imm(-902382436)                                  -> x0
-    v449 Imm(0)                                           -> x0
-    v450 Imm(4)                                           -> x0
-    v451 Imm(0)                                           -> x0
-    v452 VecConst { imm=-3875703048329761234, kind=I64, bytes=16 } -> d3
-    v453 Imm(0)                                           -> x0
-    v454 Imm(3515952191)                                  -> x0
-    v455 Imm(-779015105)                                  -> x0
-    v456 Imm(0)                                           -> x0
-    v457 Imm(8)                                           -> x0
-    v458 Imm(0)                                           -> x0
-    v459 VecConst { imm=-9120014963915543489, kind=I64, bytes=8 } -> d3
+    v444 VecInsert { vec=v437, value=v440, off=4, kind=I32, bytes=16 } -> d0
+    v445 Imm(0)                                           -> x0
+    v446 Imm(3515952191)                                  -> x0
+    v447 Imm(-779015105)                                  -> x0
+    v448 Imm(0)                                           -> x0
+    v449 Imm(8)                                           -> x0
+    v450 Imm(0)                                           -> x0
+    v451 VecInsert { vec=v444, value=v447, off=8, kind=I32, bytes=16 } -> d0
+    v452 Imm(0)                                           -> x0
+    v453 Imm(2171548341)                                  -> x0
+    v454 Imm(-2123418955)                                 -> x0
+    v455 Imm(0)                                           -> x0
+    v456 Imm(12)                                          -> x0
+    v457 Imm(0)                                           -> x0
+    v458 VecInsert { vec=v451, value=v454, off=12, kind=I32, bytes=16 } -> d0
+    v459 Imm(0)                                           -> x0
     v460 Imm(0)                                           -> x0
-    v461 Imm(2171548341)                                  -> x0
-    v462 Imm(-2123418955)                                 -> x0
+    v461 Imm(0)                                           -> x0
+    v462 Imm(0)                                           -> x0
     v463 Imm(0)                                           -> x0
-    v464 Imm(12)                                          -> x0
-    v465 Imm(0)                                           -> x0
-    v466 VecInsert { vec=v406, value=v412, off=8, kind=F64, bytes=16 } -> d0
+    v464 Imm(0)                                           -> x0
+    v465 VecConst { imm=-1, kind=I64, bytes=16 }          -> d0
+    v466 Imm(0)                                           -> x0
     v467 Imm(0)                                           -> x0
     v468 Imm(0)                                           -> x0
     v469 Imm(0)                                           -> x0
-    v470 Imm(0)                                           -> x0
+    v470 Imm(65535)                                       -> x0
     v471 Imm(0)                                           -> x0
-    v472 Imm(0)                                           -> x0
-    v473 SimdVal { op=__builtin_ia32_pcmpeqd128, imm=None, args=[v418, v466] } -> d0
-    v474 Imm(0)                                           -> x0
-    v475 Imm(0)                                           -> x0
-    v476 Imm(0)                                           -> x0
-    v477 Imm(0)                                           -> x0
-    v478 SimdVal { op=__builtin_ia32_pmovmskb128, imm=None, args=[v473] } -> x0
-    v479 Imm(0)                                           -> x1
-    v480 Extend { value=v478, kind=I32 }                  -> x1
-    v481 Extend { value=v478, kind=I32 }                  -> x1
-    v482 LifetimeEnd(0)                                   -> -
-    v483 Extend { value=v478, kind=I32 }                  -> x1
-    v484 BinopI { op=eq, lhs=v478, rhs_imm=65535 }        -> x0
-    v485 Extend { value=v484, kind=I32 }                  -> x1
-    v486 LifetimeEnd(0)                                   -> -
-    v487 Extend { value=v484, kind=I32 }                  -> x1
-    v488 BinopI { op=eq, lhs=v484, rhs_imm=0 }            -> x1
-    terminator Bnz { cond=v484, target=b6, fall=b5 }   (low word)   (exit_acc=v488)
-  block 5  start_pc=0
-    v489 Imm(3)                                           -> x0
-    v490 LifetimeEnd(0)                                   -> -
-    v491 LifetimeEnd(0)                                   -> -
-    v492 LifetimeEnd(0)                                   -> -
-    terminator Return(v489)   (exit_acc=v489)
-  block 6  start_pc=0
+    v472 Imm(65535)                                       -> x0
+    v473 Imm(65535)                                       -> x0
+    v474 LifetimeEnd(0)                                   -> -
+    v475 Imm(65535)                                       -> x0
+    v476 Imm(1)                                           -> x0
+    v477 Imm(1)                                           -> x0
+    v478 LifetimeEnd(0)                                   -> -
+    v479 Imm(1)                                           -> x0
+    v480 Imm(0)                                           -> x0
+    v481 Imm(0)                                           -> x0
+    v482 Imm(0)                                           -> x0
+    v483 Imm(0)                                           -> x0
+    v484 Imm(0)                                           -> x0
+    v485 Imm(0)                                           -> x0
+    v486 Imm(0)                                           -> x0
+    v487 Imm(0)                                           -> x0
+    v488 Imm(0)                                           -> x0
+    v489 Imm(0)                                           -> x0
+    v490 Imm(0)                                           -> x0
+    v491 Imm(0)                                           -> x0
+    v492 Imm(0)                                           -> x0
     v493 Imm(0)                                           -> x0
     v494 Imm(0)                                           -> x0
-    v495 Imm(0)                                           -> x0
-    v496 Imm(0)                                           -> x0
-    v497 Imm(0)                                           -> x0
-    v498 Imm(0)                                           -> x0
-    v499 Imm(0)                                           -> x0
-    v500 Imm(0)                                           -> x0
-    v501 Imm(0)                                           -> x0
-    v502 Imm(0)                                           -> x0
-    v503 Imm(0)                                           -> x0
-    v504 Imm(0)                                           -> x0
-    v505 Imm(0)                                           -> x0
+    v495 Imm(2941911595)                                  -> x0
+    v496 LocalAddr(-2)                                    -> x0
+    v497 Imm(-3666772298169712085)                        -> x0
+    v498 Imm(3441230341)                                  -> x1
+    v499 LocalAddr(-2)                                    -> x1
+    v500 BinopI { op=add, lhs=v496, rhs_imm=4 }           -> x1
+    v501 StoreLocal { off=-2, value=v497, kind=I64 }      -> -
+    v502 Imm(1051548758)                                  -> x0
+    v503 LocalAddr(-2)                                    -> x0
+    v504 BinopI { op=add, lhs=v496, rhs_imm=8 }           -> x0
+    v505 Imm(-4458600373490459562)                        -> x1
     v506 Imm(0)                                           -> x0
-    v507 Imm(2941911595)                                  -> x0
-    v508 LocalAddr(-2)                                    -> x0
-    v509 Imm(-3666772298169712085)                        -> x0
-    v510 Imm(3441230341)                                  -> x1
-    v511 LocalAddr(-2)                                    -> x1
-    v512 BinopI { op=add, lhs=v508, rhs_imm=4 }           -> x1
-    v513 StoreLocal { off=-2, value=v509, kind=I64 }      -> -
-    v514 Imm(1051548758)                                  -> x0
-    v515 LocalAddr(-2)                                    -> x0
-    v516 BinopI { op=add, lhs=v508, rhs_imm=8 }           -> x0
-    v517 Imm(-4458600373490459562)                        -> x1
-    v518 Imm(0)                                           -> x0
-    v519 Imm(3256868501)                                  -> x2
-    v520 LocalAddr(-2)                                    -> x2
-    v521 BinopI { op=add, lhs=v508, rhs_imm=12 }          -> x2
-    v522 StoreLocal { off=-2, disp=8, value=v517, kind=I64 } -> -
-    v523 Imm(229284703)                                   -> x7
-    v524 Imm(3596995145)                                  -> x1
-    v525 Imm(2802090203)                                  -> x6
-    v526 Imm(3554461090)                                  -> x2
-    terminator Jmp(b8)   (exit_acc=v518)
-  block 7  start_pc=0
+    v507 Imm(3256868501)                                  -> x2
+    v508 LocalAddr(-2)                                    -> x2
+    v509 BinopI { op=add, lhs=v496, rhs_imm=12 }          -> x2
+    v510 StoreLocal { off=-2, disp=8, value=v505, kind=I64 } -> -
+    v511 Imm(229284703)                                   -> x7
+    v512 Imm(3596995145)                                  -> x1
+    v513 Imm(2802090203)                                  -> x6
+    v514 Imm(3554461090)                                  -> x2
+    terminator Jmp(b2)   (exit_acc=v506)
+  block 1  start_pc=0
     v1522 Imm(0)                                           -> x9
     v1523 Imm(1)                                           -> x9
     v1524 Imm(1)                                           -> x9
@@ -610,18 +586,18 @@ fn ent_pc=1335 n_params=0 variadic=false locals=2
     v1585 Extend { value=v1514, kind=I32 }                 -> x9
     v1586 BinopI { op=add, lhs=v1514, rhs_imm=1 }          -> x0
     v1587 Extend { value=v1586, kind=I32, nsw }            -> x9
-    terminator Jmp(b8)   (exit_acc=v1586)
-  block 8  start_pc=0
-    v1514 Phi { incoming=[b6:v518, b7:v1586], kind=I64 }   -> x0
-    v1515 Phi { incoming=[b6:v518, b7:v1516], kind=I64 }   -> x8
-    v1516 Phi { incoming=[b6:v526, b7:v1517], kind=I64 }   -> x2
-    v1517 Phi { incoming=[b6:v525, b7:v1580], kind=I64 }   -> x6
-    v1518 Phi { incoming=[b6:v524, b7:v1519], kind=I64 }   -> x1
-    v1519 Phi { incoming=[b6:v523, b7:v1566], kind=I64 }   -> x7
+    terminator Jmp(b2)   (exit_acc=v1586)
+  block 2  start_pc=0
+    v1514 Phi { incoming=[b0:v506, b1:v1586], kind=I64 }   -> x0
+    v1515 Phi { incoming=[b0:v506, b1:v1516], kind=I64 }   -> x8
+    v1516 Phi { incoming=[b0:v514, b1:v1517], kind=I64 }   -> x2
+    v1517 Phi { incoming=[b0:v513, b1:v1580], kind=I64 }   -> x6
+    v1518 Phi { incoming=[b0:v512, b1:v1519], kind=I64 }   -> x1
+    v1519 Phi { incoming=[b0:v511, b1:v1566], kind=I64 }   -> x7
     v1520 Extend { value=v1514, kind=I32 }                 -> x9
     v1521 BinopI { op=lt, lhs=v1514, rhs_imm=4 }           -> x9
-    terminator Bz { cond=v1521, target=b9, fall=b7 }   (exit_acc=v1521)
-  block 9  start_pc=0
+    terminator Bz { cond=v1521, target=b3, fall=b1 }   (exit_acc=v1521)
+  block 3  start_pc=0
     v1588 BinopI { op=and, lhs=v1516, rhs_imm=4294967295 } -> x0
     v1589 Imm(0)                                           -> x0
     v1590 Undef                                            -> x0
@@ -715,14 +691,14 @@ fn ent_pc=1335 n_params=0 variadic=false locals=2
     v1678 LifetimeEnd(0)                                   -> -
     v1679 Extend { value=v1676, kind=I32 }                 -> x1
     v1680 BinopI { op=eq, lhs=v1676, rhs_imm=0 }           -> x1
-    terminator Bnz { cond=v1676, target=b11, fall=b10 }   (low word)   (exit_acc=v1680)
-  block 10  start_pc=0
+    terminator Bnz { cond=v1676, target=b5, fall=b4 }   (low word)   (exit_acc=v1680)
+  block 4  start_pc=0
     v527 Imm(4)                                           -> x0
     v528 LifetimeEnd(0)                                   -> -
     v529 LifetimeEnd(0)                                   -> -
     v530 LifetimeEnd(0)                                   -> -
     terminator Return(v527)   (exit_acc=v527)
-  block 11  start_pc=0
+  block 5  start_pc=0
     v531 Imm(0)                                           -> x0
     v532 Imm(0)                                           -> x0
     v533 Imm(1)                                           -> x0
@@ -757,8 +733,8 @@ fn ent_pc=1335 n_params=0 variadic=false locals=2
     v562 Imm(3596995145)                                  -> x6
     v563 Imm(2802090203)                                  -> x2
     v564 Imm(3554461090)                                  -> x1
-    terminator Jmp(b13)   (exit_acc=v556)
-  block 12  start_pc=0
+    terminator Jmp(b7)   (exit_acc=v556)
+  block 6  start_pc=0
     v1705 Imm(1)                                           -> x9
     v1706 Imm(1)                                           -> x9
     v1707 Imm(0)                                           -> x9
@@ -822,18 +798,18 @@ fn ent_pc=1335 n_params=0 variadic=false locals=2
     v1765 Extend { value=v1697, kind=I32 }                 -> x9
     v1766 BinopI { op=add, lhs=v1697, rhs_imm=1 }          -> x0
     v1767 Extend { value=v1766, kind=I32, nsw }            -> x9
-    terminator Jmp(b13)   (exit_acc=v1766)
-  block 13  start_pc=0
-    v1697 Phi { incoming=[b11:v556, b12:v1766], kind=I64 } -> x0
-    v1698 Phi { incoming=[b11:v556, b12:v1699], kind=I64 } -> x8
-    v1699 Phi { incoming=[b11:v564, b12:v1700], kind=I64 } -> x1
-    v1700 Phi { incoming=[b11:v563, b12:v1760], kind=I64 } -> x2
-    v1701 Phi { incoming=[b11:v562, b12:v1702], kind=I64 } -> x6
-    v1702 Phi { incoming=[b11:v561, b12:v1746], kind=I64 } -> x7
+    terminator Jmp(b7)   (exit_acc=v1766)
+  block 7  start_pc=0
+    v1697 Phi { incoming=[b5:v556, b6:v1766], kind=I64 }   -> x0
+    v1698 Phi { incoming=[b5:v556, b6:v1699], kind=I64 }   -> x8
+    v1699 Phi { incoming=[b5:v564, b6:v1700], kind=I64 }   -> x1
+    v1700 Phi { incoming=[b5:v563, b6:v1760], kind=I64 }   -> x2
+    v1701 Phi { incoming=[b5:v562, b6:v1702], kind=I64 }   -> x6
+    v1702 Phi { incoming=[b5:v561, b6:v1746], kind=I64 }   -> x7
     v1703 Extend { value=v1697, kind=I32 }                 -> x9
     v1704 BinopI { op=lt, lhs=v1697, rhs_imm=4 }           -> x9
-    terminator Bz { cond=v1704, target=b14, fall=b12 }   (exit_acc=v1704)
-  block 14  start_pc=0
+    terminator Bz { cond=v1704, target=b8, fall=b6 }   (exit_acc=v1704)
+  block 8  start_pc=0
     v1768 BinopI { op=and, lhs=v1699, rhs_imm=4294967295 } -> x0
     v1769 Imm(0)                                           -> x0
     v1770 Undef                                            -> x0
@@ -927,14 +903,14 @@ fn ent_pc=1335 n_params=0 variadic=false locals=2
     v1858 LifetimeEnd(0)                                   -> -
     v1859 Extend { value=v1856, kind=I32 }                 -> x1
     v1860 BinopI { op=eq, lhs=v1856, rhs_imm=0 }           -> x1
-    terminator Bnz { cond=v1856, target=b16, fall=b15 }   (low word)   (exit_acc=v1860)
-  block 15  start_pc=0
+    terminator Bnz { cond=v1856, target=b10, fall=b9 }   (low word)   (exit_acc=v1860)
+  block 9  start_pc=0
     v565 Imm(5)                                           -> x0
     v566 LifetimeEnd(0)                                   -> -
     v567 LifetimeEnd(0)                                   -> -
     v568 LifetimeEnd(0)                                   -> -
     terminator Return(v565)   (exit_acc=v565)
-  block 16  start_pc=0
+  block 10  start_pc=0
     v569 Imm(0)                                           -> x0
     v570 Imm(0)                                           -> x0
     v571 Imm(2)                                           -> x0
@@ -969,8 +945,8 @@ fn ent_pc=1335 n_params=0 variadic=false locals=2
     v600 Imm(3596995145)                                  -> x6
     v601 Imm(2802090203)                                  -> x2
     v602 Imm(3554461090)                                  -> x1
-    terminator Jmp(b18)   (exit_acc=v594)
-  block 17  start_pc=0
+    terminator Jmp(b12)   (exit_acc=v594)
+  block 11  start_pc=0
     v1888 Imm(2)                                           -> x9
     v1889 Imm(0)                                           -> x9
     v1890 Imm(1)                                           -> x9
@@ -1037,18 +1013,18 @@ fn ent_pc=1335 n_params=0 variadic=false locals=2
     v1951 Extend { value=v1880, kind=I32 }                 -> x9
     v1952 BinopI { op=add, lhs=v1880, rhs_imm=1 }          -> x0
     v1953 Extend { value=v1952, kind=I32, nsw }            -> x9
-    terminator Jmp(b18)   (exit_acc=v1952)
-  block 18  start_pc=0
-    v1880 Phi { incoming=[b16:v594, b17:v1952], kind=I64 } -> x0
-    v1881 Phi { incoming=[b16:v594, b17:v1882], kind=I64 } -> x8
-    v1882 Phi { incoming=[b16:v602, b17:v1883], kind=I64 } -> x1
-    v1883 Phi { incoming=[b16:v601, b17:v1946], kind=I64 } -> x2
-    v1884 Phi { incoming=[b16:v600, b17:v1885], kind=I64 } -> x6
-    v1885 Phi { incoming=[b16:v599, b17:v1932], kind=I64 } -> x7
+    terminator Jmp(b12)   (exit_acc=v1952)
+  block 12  start_pc=0
+    v1880 Phi { incoming=[b10:v594, b11:v1952], kind=I64 } -> x0
+    v1881 Phi { incoming=[b10:v594, b11:v1882], kind=I64 } -> x8
+    v1882 Phi { incoming=[b10:v602, b11:v1883], kind=I64 } -> x1
+    v1883 Phi { incoming=[b10:v601, b11:v1946], kind=I64 } -> x2
+    v1884 Phi { incoming=[b10:v600, b11:v1885], kind=I64 } -> x6
+    v1885 Phi { incoming=[b10:v599, b11:v1932], kind=I64 } -> x7
     v1886 Extend { value=v1880, kind=I32 }                 -> x9
     v1887 BinopI { op=lt, lhs=v1880, rhs_imm=4 }           -> x9
-    terminator Bz { cond=v1887, target=b19, fall=b17 }   (exit_acc=v1887)
-  block 19  start_pc=0
+    terminator Bz { cond=v1887, target=b13, fall=b11 }   (exit_acc=v1887)
+  block 13  start_pc=0
     v1954 BinopI { op=and, lhs=v1882, rhs_imm=4294967295 } -> x0
     v1955 Imm(0)                                           -> x0
     v1956 Undef                                            -> x0
@@ -1142,14 +1118,14 @@ fn ent_pc=1335 n_params=0 variadic=false locals=2
     v2044 LifetimeEnd(0)                                   -> -
     v2045 Extend { value=v2042, kind=I32 }                 -> x1
     v2046 BinopI { op=eq, lhs=v2042, rhs_imm=0 }           -> x1
-    terminator Bnz { cond=v2042, target=b21, fall=b20 }   (low word)   (exit_acc=v2046)
-  block 20  start_pc=0
+    terminator Bnz { cond=v2042, target=b15, fall=b14 }   (low word)   (exit_acc=v2046)
+  block 14  start_pc=0
     v603 Imm(6)                                           -> x0
     v604 LifetimeEnd(0)                                   -> -
     v605 LifetimeEnd(0)                                   -> -
     v606 LifetimeEnd(0)                                   -> -
     terminator Return(v603)   (exit_acc=v603)
-  block 21  start_pc=0
+  block 15  start_pc=0
     v607 Imm(0)                                           -> x0
     v608 Imm(0)                                           -> x0
     v609 Imm(3)                                           -> x0
@@ -1184,8 +1160,8 @@ fn ent_pc=1335 n_params=0 variadic=false locals=2
     v638 Imm(3596995145)                                  -> x6
     v639 Imm(2802090203)                                  -> x2
     v640 Imm(3554461090)                                  -> x1
-    terminator Jmp(b23)   (exit_acc=v632)
-  block 22  start_pc=0
+    terminator Jmp(b17)   (exit_acc=v632)
+  block 16  start_pc=0
     v2071 Imm(3)                                           -> x9
     v2072 Imm(0)                                           -> x9
     v2073 Imm(0)                                           -> x9
@@ -1249,18 +1225,18 @@ fn ent_pc=1335 n_params=0 variadic=false locals=2
     v2131 Extend { value=v2063, kind=I32 }                 -> x9
     v2132 BinopI { op=add, lhs=v2063, rhs_imm=1 }          -> x0
     v2133 Extend { value=v2132, kind=I32, nsw }            -> x9
-    terminator Jmp(b23)   (exit_acc=v2132)
-  block 23  start_pc=0
-    v2063 Phi { incoming=[b21:v632, b22:v2132], kind=I64 } -> x0
-    v2064 Phi { incoming=[b21:v632, b22:v2065], kind=I64 } -> x8
-    v2065 Phi { incoming=[b21:v640, b22:v2066], kind=I64 } -> x1
-    v2066 Phi { incoming=[b21:v639, b22:v2126], kind=I64 } -> x2
-    v2067 Phi { incoming=[b21:v638, b22:v2068], kind=I64 } -> x6
-    v2068 Phi { incoming=[b21:v637, b22:v2112], kind=I64 } -> x7
+    terminator Jmp(b17)   (exit_acc=v2132)
+  block 17  start_pc=0
+    v2063 Phi { incoming=[b15:v632, b16:v2132], kind=I64 } -> x0
+    v2064 Phi { incoming=[b15:v632, b16:v2065], kind=I64 } -> x8
+    v2065 Phi { incoming=[b15:v640, b16:v2066], kind=I64 } -> x1
+    v2066 Phi { incoming=[b15:v639, b16:v2126], kind=I64 } -> x2
+    v2067 Phi { incoming=[b15:v638, b16:v2068], kind=I64 } -> x6
+    v2068 Phi { incoming=[b15:v637, b16:v2112], kind=I64 } -> x7
     v2069 Extend { value=v2063, kind=I32 }                 -> x9
     v2070 BinopI { op=lt, lhs=v2063, rhs_imm=4 }           -> x9
-    terminator Bz { cond=v2070, target=b24, fall=b22 }   (exit_acc=v2070)
-  block 24  start_pc=0
+    terminator Bz { cond=v2070, target=b18, fall=b16 }   (exit_acc=v2070)
+  block 18  start_pc=0
     v2134 BinopI { op=and, lhs=v2065, rhs_imm=4294967295 } -> x0
     v2135 Imm(0)                                           -> x0
     v2136 Undef                                            -> x0
@@ -1354,14 +1330,14 @@ fn ent_pc=1335 n_params=0 variadic=false locals=2
     v2224 LifetimeEnd(0)                                   -> -
     v2225 Extend { value=v2222, kind=I32 }                 -> x1
     v2226 BinopI { op=eq, lhs=v2222, rhs_imm=0 }           -> x1
-    terminator Bnz { cond=v2222, target=b26, fall=b25 }   (low word)   (exit_acc=v2226)
-  block 25  start_pc=0
+    terminator Bnz { cond=v2222, target=b20, fall=b19 }   (low word)   (exit_acc=v2226)
+  block 19  start_pc=0
     v641 Imm(7)                                           -> x0
     v642 LifetimeEnd(0)                                   -> -
     v643 LifetimeEnd(0)                                   -> -
     v644 LifetimeEnd(0)                                   -> -
     terminator Return(v641)   (exit_acc=v641)
-  block 26  start_pc=0
+  block 20  start_pc=0
     v645 Imm(0)                                           -> x0
     v646 Imm(0)                                           -> x0
     v647 Imm(0)                                           -> x0
@@ -1640,19 +1616,19 @@ fn ent_pc=1335 n_params=0 variadic=false locals=2
     v920 Imm(0)                                           -> x0
     v921 Imm(4)                                           -> x0
     v922 Imm(0)                                           -> x0
-    v923 VecConst { imm=4231650646844903385, kind=I64, bytes=16 } -> d0
+    v923 VecInsert { vec=v917, value=v919, off=4, kind=I32, bytes=16 } -> d0
     v924 Imm(0)                                           -> x0
     v925 Imm(469081222)                                   -> x0
     v926 Imm(0)                                           -> x0
     v927 Imm(8)                                           -> x0
     v928 Imm(0)                                           -> x0
-    v929 VecConst { imm=8154857158458317958, kind=I64, bytes=8 } -> d1
+    v929 VecInsert { vec=v923, value=v925, off=8, kind=I32, bytes=16 } -> d0
     v930 Imm(0)                                           -> x0
     v931 Imm(1898700641)                                  -> x0
     v932 Imm(0)                                           -> x0
     v933 Imm(12)                                          -> x0
     v934 Imm(0)                                           -> x0
-    v935 VecInsert { vec=v923, value=v929, off=8, kind=F64, bytes=16 } -> d2
+    v935 VecInsert { vec=v929, value=v931, off=12, kind=I32, bytes=16 } -> d0
     v936 Imm(0)                                           -> x0
     v937 Imm(0)                                           -> x0
     v938 LifetimeEnd(0)                                   -> -
@@ -1681,492 +1657,484 @@ fn ent_pc=1335 n_params=0 variadic=false locals=2
     v961 Imm(-759296039)                                  -> x0
     v962 Imm(0)                                           -> x0
     v963 Undef                                            -> x0
-    v964 VecInsert { vec=v963, value=v961, off=0, kind=I32, bytes=16 } -> d3
+    v964 VecInsert { vec=v963, value=v961, off=0, kind=I32, bytes=16 } -> d0
     v965 Imm(0)                                           -> x0
     v966 Imm(985257943)                                   -> x0
     v967 Imm(985257943)                                   -> x0
     v968 Imm(0)                                           -> x0
     v969 Imm(4)                                           -> x0
     v970 Imm(0)                                           -> x0
-    v971 VecConst { imm=4231650646844903385, kind=I64, bytes=16 } -> d3
+    v971 VecInsert { vec=v964, value=v967, off=4, kind=I32, bytes=16 } -> d0
     v972 Imm(0)                                           -> x0
     v973 Imm(469081222)                                   -> x0
     v974 Imm(469081222)                                   -> x0
     v975 Imm(0)                                           -> x0
     v976 Imm(8)                                           -> x0
     v977 Imm(0)                                           -> x0
-    v978 VecConst { imm=8154857158458317958, kind=I64, bytes=8 } -> d3
+    v978 VecInsert { vec=v971, value=v974, off=8, kind=I32, bytes=16 } -> d0
     v979 Imm(0)                                           -> x0
     v980 Imm(1898700641)                                  -> x0
     v981 Imm(1898700641)                                  -> x0
     v982 Imm(0)                                           -> x0
     v983 Imm(12)                                          -> x0
     v984 Imm(0)                                           -> x0
-    v985 VecInsert { vec=v923, value=v929, off=8, kind=F64, bytes=16 } -> d0
+    v985 VecInsert { vec=v978, value=v981, off=12, kind=I32, bytes=16 } -> d0
     v986 Imm(0)                                           -> x0
     v987 Imm(0)                                           -> x0
     v988 Imm(0)                                           -> x0
     v989 Imm(0)                                           -> x0
     v990 Imm(0)                                           -> x0
     v991 Imm(0)                                           -> x0
-    v992 SimdVal { op=__builtin_ia32_pcmpeqd128, imm=None, args=[v935, v985] } -> d0
+    v992 VecConst { imm=-1, kind=I64, bytes=16 }          -> d0
     v993 Imm(0)                                           -> x0
     v994 Imm(0)                                           -> x0
     v995 Imm(0)                                           -> x0
     v996 Imm(0)                                           -> x0
-    v997 SimdVal { op=__builtin_ia32_pmovmskb128, imm=None, args=[v992] } -> x0
-    v998 Imm(0)                                           -> x1
-    v999 Extend { value=v997, kind=I32 }                  -> x1
-    v1000 Extend { value=v997, kind=I32 }                  -> x1
+    v997 Imm(65535)                                       -> x0
+    v998 Imm(0)                                           -> x0
+    v999 Imm(65535)                                       -> x0
+    v1000 Imm(65535)                                       -> x0
     v1001 LifetimeEnd(0)                                   -> -
-    v1002 Extend { value=v997, kind=I32 }                  -> x1
-    v1003 BinopI { op=eq, lhs=v997, rhs_imm=65535 }        -> x0
-    v1004 Extend { value=v1003, kind=I32 }                 -> x1
+    v1002 Imm(65535)                                       -> x0
+    v1003 Imm(1)                                           -> x0
+    v1004 Imm(1)                                           -> x0
     v1005 LifetimeEnd(0)                                   -> -
-    v1006 Extend { value=v1003, kind=I32 }                 -> x1
-    v1007 BinopI { op=eq, lhs=v1003, rhs_imm=0 }           -> x1
-    terminator Bnz { cond=v1003, target=b28, fall=b27 }   (low word)   (exit_acc=v1007)
-  block 27  start_pc=0
-    v1008 Imm(8)                                           -> x0
-    v1009 LifetimeEnd(0)                                   -> -
-    v1010 LifetimeEnd(0)                                   -> -
-    v1011 LifetimeEnd(0)                                   -> -
-    terminator Return(v1008)   (exit_acc=v1008)
-  block 28  start_pc=0
+    v1006 Imm(1)                                           -> x0
+    v1007 Imm(0)                                           -> x0
+    v1008 Imm(0)                                           -> x0
+    v1009 Imm(0)                                           -> x0
+    v1010 Imm(0)                                           -> x0
+    v1011 Imm(0)                                           -> x0
     v1012 Imm(0)                                           -> x0
     v1013 Imm(0)                                           -> x0
     v1014 Imm(0)                                           -> x0
     v1015 Imm(0)                                           -> x0
     v1016 Imm(0)                                           -> x0
     v1017 Imm(0)                                           -> x0
-    v1018 Imm(0)                                           -> x0
-    v1019 Imm(0)                                           -> x0
-    v1020 Imm(0)                                           -> x0
-    v1021 Imm(0)                                           -> x0
-    v1022 Imm(3256868501)                                  -> x0
-    v1023 Imm(3554461090)                                  -> x0
+    v1018 Imm(3256868501)                                  -> x0
+    v1019 Imm(3554461090)                                  -> x0
+    v1020 Imm(2802090203)                                  -> x0
+    v1021 Imm(2802090203)                                  -> x0
+    v1022 Imm(7)                                           -> x0
+    v1023 Imm(7)                                           -> x0
     v1024 Imm(2802090203)                                  -> x0
-    v1025 Imm(2802090203)                                  -> x0
-    v1026 Imm(7)                                           -> x0
-    v1027 Imm(7)                                           -> x0
-    v1028 Imm(2802090203)                                  -> x0
-    v1029 Imm(21891329)                                    -> x0
-    v1030 Imm(32)                                          -> x0
-    v1031 Imm(25)                                          -> x0
-    v1032 Imm(25)                                          -> x0
-    v1033 Imm(94022545174429696)                           -> x0
-    v1034 Imm(3053453312)                                  -> x0
-    v1035 Imm(3075344641)                                  -> x0
-    v1036 Imm(3075344641)                                  -> x0
-    v1037 Imm(3075344641)                                  -> x0
-    v1038 Imm(2802090203)                                  -> x0
-    v1039 Imm(18)                                          -> x0
-    v1040 Imm(18)                                          -> x0
-    v1041 Imm(2802090203)                                  -> x0
-    v1042 Imm(10689)                                       -> x0
-    v1043 Imm(32)                                          -> x0
-    v1044 Imm(14)                                          -> x0
-    v1045 Imm(14)                                          -> x0
-    v1046 Imm(45909445885952)                              -> x0
-    v1047 Imm(540459008)                                   -> x0
-    v1048 Imm(540469697)                                   -> x0
-    v1049 Imm(540469697)                                   -> x0
-    v1050 Imm(540469697)                                   -> x0
-    v1051 Imm(2541281472)                                  -> x0
-    v1052 Imm(2802090203)                                  -> x0
-    v1053 Imm(350261275)                                   -> x0
-    v1054 Imm(2207805659)                                  -> x0
-    v1055 Imm(2207805659)                                  -> x0
-    v1056 Imm(2207805659)                                  -> x0
-    v1057 Imm(5762266749)                                  -> x0
-    v1058 Imm(1467299453)                                  -> x0
-    v1059 Imm(0)                                           -> x0
-    v1060 Undef                                            -> x0
-    v1061 VecInsert { vec=v1060, value=v1058, off=0, kind=I32, bytes=16 } -> d0
-    v1062 Imm(0)                                           -> x0
-    v1063 Imm(2802090203)                                  -> x0
+    v1025 Imm(21891329)                                    -> x0
+    v1026 Imm(32)                                          -> x0
+    v1027 Imm(25)                                          -> x0
+    v1028 Imm(25)                                          -> x0
+    v1029 Imm(94022545174429696)                           -> x0
+    v1030 Imm(3053453312)                                  -> x0
+    v1031 Imm(3075344641)                                  -> x0
+    v1032 Imm(3075344641)                                  -> x0
+    v1033 Imm(3075344641)                                  -> x0
+    v1034 Imm(2802090203)                                  -> x0
+    v1035 Imm(18)                                          -> x0
+    v1036 Imm(18)                                          -> x0
+    v1037 Imm(2802090203)                                  -> x0
+    v1038 Imm(10689)                                       -> x0
+    v1039 Imm(32)                                          -> x0
+    v1040 Imm(14)                                          -> x0
+    v1041 Imm(14)                                          -> x0
+    v1042 Imm(45909445885952)                              -> x0
+    v1043 Imm(540459008)                                   -> x0
+    v1044 Imm(540469697)                                   -> x0
+    v1045 Imm(540469697)                                   -> x0
+    v1046 Imm(540469697)                                   -> x0
+    v1047 Imm(2541281472)                                  -> x0
+    v1048 Imm(2802090203)                                  -> x0
+    v1049 Imm(350261275)                                   -> x0
+    v1050 Imm(2207805659)                                  -> x0
+    v1051 Imm(2207805659)                                  -> x0
+    v1052 Imm(2207805659)                                  -> x0
+    v1053 Imm(5762266749)                                  -> x0
+    v1054 Imm(1467299453)                                  -> x0
+    v1055 Imm(0)                                           -> x0
+    v1056 Undef                                            -> x0
+    v1057 VecInsert { vec=v1056, value=v1054, off=0, kind=I32, bytes=16 } -> d0
+    v1058 Imm(0)                                           -> x0
+    v1059 Imm(2802090203)                                  -> x0
+    v1060 Imm(3596995145)                                  -> x0
+    v1061 Imm(3596995145)                                  -> x0
+    v1062 Imm(7)                                           -> x0
+    v1063 Imm(7)                                           -> x0
     v1064 Imm(3596995145)                                  -> x0
-    v1065 Imm(3596995145)                                  -> x0
-    v1066 Imm(7)                                           -> x0
-    v1067 Imm(7)                                           -> x0
-    v1068 Imm(3596995145)                                  -> x0
-    v1069 Imm(28101524)                                    -> x0
-    v1070 Imm(32)                                          -> x0
-    v1071 Imm(25)                                          -> x0
-    v1072 Imm(25)                                          -> x0
-    v1073 Imm(120695128997232640)                          -> x0
-    v1074 Imm(2449473536)                                  -> x0
-    v1075 Imm(2477575060)                                  -> x0
-    v1076 Imm(2477575060)                                  -> x0
-    v1077 Imm(2477575060)                                  -> x0
-    v1078 Imm(3596995145)                                  -> x0
-    v1079 Imm(18)                                          -> x0
-    v1080 Imm(18)                                          -> x0
-    v1081 Imm(3596995145)                                  -> x0
-    v1082 Imm(13721)                                       -> x0
-    v1083 Imm(32)                                          -> x0
-    v1084 Imm(14)                                          -> x0
-    v1085 Imm(14)                                          -> x0
-    v1086 Imm(58933168455680)                              -> x0
-    v1087 Imm(1922187264)                                  -> x0
-    v1088 Imm(1922200985)                                  -> x0
-    v1089 Imm(1922200985)                                  -> x0
-    v1090 Imm(1922200985)                                  -> x0
-    v1091 Imm(3778985485)                                  -> x0
-    v1092 Imm(3596995145)                                  -> x0
-    v1093 Imm(449624393)                                   -> x0
-    v1094 Imm(4226942788)                                  -> x0
-    v1095 Imm(4226942788)                                  -> x0
-    v1096 Imm(4226942788)                                  -> x0
-    v1097 Imm(7029032991)                                  -> x0
-    v1098 Imm(2734065695)                                  -> x0
+    v1065 Imm(28101524)                                    -> x0
+    v1066 Imm(32)                                          -> x0
+    v1067 Imm(25)                                          -> x0
+    v1068 Imm(25)                                          -> x0
+    v1069 Imm(120695128997232640)                          -> x0
+    v1070 Imm(2449473536)                                  -> x0
+    v1071 Imm(2477575060)                                  -> x0
+    v1072 Imm(2477575060)                                  -> x0
+    v1073 Imm(2477575060)                                  -> x0
+    v1074 Imm(3596995145)                                  -> x0
+    v1075 Imm(18)                                          -> x0
+    v1076 Imm(18)                                          -> x0
+    v1077 Imm(3596995145)                                  -> x0
+    v1078 Imm(13721)                                       -> x0
+    v1079 Imm(32)                                          -> x0
+    v1080 Imm(14)                                          -> x0
+    v1081 Imm(14)                                          -> x0
+    v1082 Imm(58933168455680)                              -> x0
+    v1083 Imm(1922187264)                                  -> x0
+    v1084 Imm(1922200985)                                  -> x0
+    v1085 Imm(1922200985)                                  -> x0
+    v1086 Imm(1922200985)                                  -> x0
+    v1087 Imm(3778985485)                                  -> x0
+    v1088 Imm(3596995145)                                  -> x0
+    v1089 Imm(449624393)                                   -> x0
+    v1090 Imm(4226942788)                                  -> x0
+    v1091 Imm(4226942788)                                  -> x0
+    v1092 Imm(4226942788)                                  -> x0
+    v1093 Imm(7029032991)                                  -> x0
+    v1094 Imm(2734065695)                                  -> x0
+    v1095 Imm(0)                                           -> x0
+    v1096 Imm(4)                                           -> x0
+    v1097 Imm(0)                                           -> x0
+    v1098 VecInsert { vec=v1057, value=v1094, off=4, kind=I32, bytes=16 } -> d0
     v1099 Imm(0)                                           -> x0
-    v1100 Imm(4)                                           -> x0
-    v1101 Imm(0)                                           -> x0
-    v1102 VecConst { imm=-6704021327101741443, kind=I64, bytes=16 } -> d0
-    v1103 Imm(0)                                           -> x0
-    v1104 Imm(3596995145)                                  -> x0
+    v1100 Imm(3596995145)                                  -> x0
+    v1101 Imm(229284703)                                   -> x0
+    v1102 Imm(229284703)                                   -> x0
+    v1103 Imm(7)                                           -> x0
+    v1104 Imm(7)                                           -> x0
     v1105 Imm(229284703)                                   -> x0
-    v1106 Imm(229284703)                                   -> x0
-    v1107 Imm(7)                                           -> x0
-    v1108 Imm(7)                                           -> x0
-    v1109 Imm(229284703)                                   -> x0
-    v1110 Imm(1791286)                                     -> x0
-    v1111 Imm(32)                                          -> x0
-    v1112 Imm(25)                                          -> x0
-    v1113 Imm(25)                                          -> x0
-    v1114 Imm(7693517975453696)                            -> x0
-    v1115 Imm(3187671040)                                  -> x0
-    v1116 Imm(3189462326)                                  -> x0
-    v1117 Imm(3189462326)                                  -> x0
-    v1118 Imm(3189462326)                                  -> x0
-    v1119 Imm(229284703)                                   -> x0
-    v1120 Imm(18)                                          -> x0
-    v1121 Imm(18)                                          -> x0
-    v1122 Imm(229284703)                                   -> x0
-    v1123 Imm(874)                                         -> x0
-    v1124 Imm(32)                                          -> x0
-    v1125 Imm(14)                                          -> x0
-    v1126 Imm(14)                                          -> x0
-    v1127 Imm(3756600573952)                               -> x0
-    v1128 Imm(2799157248)                                  -> x0
-    v1129 Imm(2799158122)                                  -> x0
-    v1130 Imm(2799158122)                                  -> x0
-    v1131 Imm(2799158122)                                  -> x0
-    v1132 Imm(416061020)                                   -> x0
-    v1133 Imm(229284703)                                   -> x0
-    v1134 Imm(28660587)                                    -> x0
-    v1135 Imm(427410743)                                   -> x0
-    v1136 Imm(427410743)                                   -> x0
-    v1137 Imm(427410743)                                   -> x0
-    v1138 Imm(4024405888)                                  -> x0
-    v1139 Imm(4024405888)                                  -> x0
+    v1106 Imm(1791286)                                     -> x0
+    v1107 Imm(32)                                          -> x0
+    v1108 Imm(25)                                          -> x0
+    v1109 Imm(25)                                          -> x0
+    v1110 Imm(7693517975453696)                            -> x0
+    v1111 Imm(3187671040)                                  -> x0
+    v1112 Imm(3189462326)                                  -> x0
+    v1113 Imm(3189462326)                                  -> x0
+    v1114 Imm(3189462326)                                  -> x0
+    v1115 Imm(229284703)                                   -> x0
+    v1116 Imm(18)                                          -> x0
+    v1117 Imm(18)                                          -> x0
+    v1118 Imm(229284703)                                   -> x0
+    v1119 Imm(874)                                         -> x0
+    v1120 Imm(32)                                          -> x0
+    v1121 Imm(14)                                          -> x0
+    v1122 Imm(14)                                          -> x0
+    v1123 Imm(3756600573952)                               -> x0
+    v1124 Imm(2799157248)                                  -> x0
+    v1125 Imm(2799158122)                                  -> x0
+    v1126 Imm(2799158122)                                  -> x0
+    v1127 Imm(2799158122)                                  -> x0
+    v1128 Imm(416061020)                                   -> x0
+    v1129 Imm(229284703)                                   -> x0
+    v1130 Imm(28660587)                                    -> x0
+    v1131 Imm(427410743)                                   -> x0
+    v1132 Imm(427410743)                                   -> x0
+    v1133 Imm(427410743)                                   -> x0
+    v1134 Imm(4024405888)                                  -> x0
+    v1135 Imm(4024405888)                                  -> x0
+    v1136 Imm(0)                                           -> x0
+    v1137 Imm(8)                                           -> x0
+    v1138 Imm(0)                                           -> x0
+    v1139 VecInsert { vec=v1098, value=v1135, off=8, kind=I32, bytes=16 } -> d0
     v1140 Imm(0)                                           -> x0
-    v1141 Imm(8)                                           -> x0
-    v1142 Imm(0)                                           -> x0
-    v1143 VecConst { imm=-3310901881150140544, kind=I64, bytes=8 } -> d1
-    v1144 Imm(0)                                           -> x0
-    v1145 Imm(229284703)                                   -> x0
+    v1141 Imm(229284703)                                   -> x0
+    v1142 Imm(3256868501)                                  -> x0
+    v1143 Imm(3256868501)                                  -> x0
+    v1144 Imm(7)                                           -> x0
+    v1145 Imm(7)                                           -> x0
     v1146 Imm(3256868501)                                  -> x0
-    v1147 Imm(3256868501)                                  -> x0
-    v1148 Imm(7)                                           -> x0
-    v1149 Imm(7)                                           -> x0
-    v1150 Imm(3256868501)                                  -> x0
-    v1151 Imm(25444285)                                    -> x0
-    v1152 Imm(32)                                          -> x0
-    v1153 Imm(25)                                          -> x0
-    v1154 Imm(25)                                          -> x0
-    v1155 Imm(109282372649746432)                          -> x0
-    v1156 Imm(704643072)                                   -> x0
-    v1157 Imm(730087357)                                   -> x0
-    v1158 Imm(730087357)                                   -> x0
-    v1159 Imm(730087357)                                   -> x0
-    v1160 Imm(3256868501)                                  -> x0
-    v1161 Imm(18)                                          -> x0
-    v1162 Imm(18)                                          -> x0
-    v1163 Imm(3256868501)                                  -> x0
-    v1164 Imm(12423)                                       -> x0
-    v1165 Imm(32)                                          -> x0
-    v1166 Imm(14)                                          -> x0
-    v1167 Imm(14)                                          -> x0
-    v1168 Imm(53360533520384)                              -> x0
-    v1169 Imm(4154802176)                                  -> x0
-    v1170 Imm(4154814599)                                  -> x0
-    v1171 Imm(4154814599)                                  -> x0
-    v1172 Imm(4154814599)                                  -> x0
-    v1173 Imm(3693170490)                                  -> x0
-    v1174 Imm(3256868501)                                  -> x0
-    v1175 Imm(407108562)                                   -> x0
-    v1176 Imm(3294803176)                                  -> x0
-    v1177 Imm(3294803176)                                  -> x0
-    v1178 Imm(3294803176)                                  -> x0
-    v1179 Imm(3524087879)                                  -> x0
-    v1180 Imm(3524087879)                                  -> x0
+    v1147 Imm(25444285)                                    -> x0
+    v1148 Imm(32)                                          -> x0
+    v1149 Imm(25)                                          -> x0
+    v1150 Imm(25)                                          -> x0
+    v1151 Imm(109282372649746432)                          -> x0
+    v1152 Imm(704643072)                                   -> x0
+    v1153 Imm(730087357)                                   -> x0
+    v1154 Imm(730087357)                                   -> x0
+    v1155 Imm(730087357)                                   -> x0
+    v1156 Imm(3256868501)                                  -> x0
+    v1157 Imm(18)                                          -> x0
+    v1158 Imm(18)                                          -> x0
+    v1159 Imm(3256868501)                                  -> x0
+    v1160 Imm(12423)                                       -> x0
+    v1161 Imm(32)                                          -> x0
+    v1162 Imm(14)                                          -> x0
+    v1163 Imm(14)                                          -> x0
+    v1164 Imm(53360533520384)                              -> x0
+    v1165 Imm(4154802176)                                  -> x0
+    v1166 Imm(4154814599)                                  -> x0
+    v1167 Imm(4154814599)                                  -> x0
+    v1168 Imm(4154814599)                                  -> x0
+    v1169 Imm(3693170490)                                  -> x0
+    v1170 Imm(3256868501)                                  -> x0
+    v1171 Imm(407108562)                                   -> x0
+    v1172 Imm(3294803176)                                  -> x0
+    v1173 Imm(3294803176)                                  -> x0
+    v1174 Imm(3294803176)                                  -> x0
+    v1175 Imm(3524087879)                                  -> x0
+    v1176 Imm(3524087879)                                  -> x0
+    v1177 Imm(0)                                           -> x0
+    v1178 Imm(12)                                          -> x0
+    v1179 Imm(0)                                           -> x0
+    v1180 VecInsert { vec=v1139, value=v1176, off=12, kind=I32, bytes=16 } -> d0
     v1181 Imm(0)                                           -> x0
-    v1182 Imm(12)                                          -> x0
-    v1183 Imm(0)                                           -> x0
-    v1184 VecInsert { vec=v1102, value=v1143, off=8, kind=F64, bytes=16 } -> d2
-    v1185 Imm(0)                                           -> x0
+    v1182 Imm(0)                                           -> x0
+    v1183 LifetimeEnd(0)                                   -> -
+    v1184 LifetimeEnd(0)                                   -> -
+    v1185 LifetimeEnd(0)                                   -> -
     v1186 Imm(0)                                           -> x0
-    v1187 LifetimeEnd(0)                                   -> -
-    v1188 LifetimeEnd(0)                                   -> -
-    v1189 LifetimeEnd(0)                                   -> -
-    v1190 Imm(0)                                           -> x0
-    v1191 Imm(0)                                           -> x0
-    v1192 Imm(0)                                           -> x0
-    v1193 Imm(0)                                           -> x0
-    v1194 Imm(1467299453)                                  -> x0
-    v1195 Imm(2734065695)                                  -> x0
-    v1196 Imm(4024405888)                                  -> x0
-    v1197 Imm(3524087879)                                  -> x0
-    v1198 Imm(0)                                           -> x0
-    v1199 Imm(0)                                           -> x0
-    v1200 Imm(0)                                           -> x0
-    v1201 Imm(0)                                           -> x0
+    v1187 Imm(0)                                           -> x0
+    v1188 Imm(0)                                           -> x0
+    v1189 Imm(0)                                           -> x0
+    v1190 Imm(1467299453)                                  -> x0
+    v1191 Imm(2734065695)                                  -> x0
+    v1192 Imm(4024405888)                                  -> x0
+    v1193 Imm(3524087879)                                  -> x0
+    v1194 Imm(0)                                           -> x0
+    v1195 Imm(0)                                           -> x0
+    v1196 Imm(0)                                           -> x0
+    v1197 Imm(0)                                           -> x0
+    v1198 Imm(1467299453)                                  -> x0
+    v1199 Imm(2734065695)                                  -> x0
+    v1200 Imm(4024405888)                                  -> x0
+    v1201 Imm(3524087879)                                  -> x0
     v1202 Imm(1467299453)                                  -> x0
-    v1203 Imm(2734065695)                                  -> x0
-    v1204 Imm(4024405888)                                  -> x0
-    v1205 Imm(3524087879)                                  -> x0
-    v1206 Imm(1467299453)                                  -> x0
-    v1207 Imm(1467299453)                                  -> x0
-    v1208 Imm(0)                                           -> x0
-    v1209 Undef                                            -> x0
-    v1210 VecInsert { vec=v1209, value=v1207, off=0, kind=I32, bytes=16 } -> d3
-    v1211 Imm(0)                                           -> x0
-    v1212 Imm(2734065695)                                  -> x0
-    v1213 Imm(-1560901601)                                 -> x0
+    v1203 Imm(1467299453)                                  -> x0
+    v1204 Imm(0)                                           -> x0
+    v1205 Undef                                            -> x0
+    v1206 VecInsert { vec=v1205, value=v1203, off=0, kind=I32, bytes=16 } -> d0
+    v1207 Imm(0)                                           -> x0
+    v1208 Imm(2734065695)                                  -> x0
+    v1209 Imm(-1560901601)                                 -> x0
+    v1210 Imm(0)                                           -> x0
+    v1211 Imm(4)                                           -> x0
+    v1212 Imm(0)                                           -> x0
+    v1213 VecInsert { vec=v1206, value=v1209, off=4, kind=I32, bytes=16 } -> d0
     v1214 Imm(0)                                           -> x0
-    v1215 Imm(4)                                           -> x0
-    v1216 Imm(0)                                           -> x0
-    v1217 VecConst { imm=-6704021327101741443, kind=I64, bytes=16 } -> d3
-    v1218 Imm(0)                                           -> x0
-    v1219 Imm(4024405888)                                  -> x0
-    v1220 Imm(-270561408)                                  -> x0
+    v1215 Imm(4024405888)                                  -> x0
+    v1216 Imm(-270561408)                                  -> x0
+    v1217 Imm(0)                                           -> x0
+    v1218 Imm(8)                                           -> x0
+    v1219 Imm(0)                                           -> x0
+    v1220 VecInsert { vec=v1213, value=v1216, off=8, kind=I32, bytes=16 } -> d0
     v1221 Imm(0)                                           -> x0
-    v1222 Imm(8)                                           -> x0
-    v1223 Imm(0)                                           -> x0
-    v1224 VecConst { imm=-3310901881150140544, kind=I64, bytes=8 } -> d3
-    v1225 Imm(0)                                           -> x0
-    v1226 Imm(3524087879)                                  -> x0
-    v1227 Imm(-770879417)                                  -> x0
+    v1222 Imm(3524087879)                                  -> x0
+    v1223 Imm(-770879417)                                  -> x0
+    v1224 Imm(0)                                           -> x0
+    v1225 Imm(12)                                          -> x0
+    v1226 Imm(0)                                           -> x0
+    v1227 VecInsert { vec=v1220, value=v1223, off=12, kind=I32, bytes=16 } -> d0
     v1228 Imm(0)                                           -> x0
-    v1229 Imm(12)                                          -> x0
+    v1229 Imm(0)                                           -> x0
     v1230 Imm(0)                                           -> x0
-    v1231 VecInsert { vec=v1102, value=v1143, off=8, kind=F64, bytes=16 } -> d0
+    v1231 Imm(0)                                           -> x0
     v1232 Imm(0)                                           -> x0
     v1233 Imm(0)                                           -> x0
-    v1234 Imm(0)                                           -> x0
+    v1234 VecConst { imm=-1, kind=I64, bytes=16 }          -> d0
     v1235 Imm(0)                                           -> x0
     v1236 Imm(0)                                           -> x0
     v1237 Imm(0)                                           -> x0
-    v1238 SimdVal { op=__builtin_ia32_pcmpeqd128, imm=None, args=[v1184, v1231] } -> d0
-    v1239 Imm(0)                                           -> x0
+    v1238 Imm(0)                                           -> x0
+    v1239 Imm(65535)                                       -> x0
     v1240 Imm(0)                                           -> x0
-    v1241 Imm(0)                                           -> x0
-    v1242 Imm(0)                                           -> x0
-    v1243 SimdVal { op=__builtin_ia32_pmovmskb128, imm=None, args=[v1238] } -> x0
-    v1244 Imm(0)                                           -> x1
-    v1245 Extend { value=v1243, kind=I32 }                 -> x1
-    v1246 Extend { value=v1243, kind=I32 }                 -> x1
+    v1241 Imm(65535)                                       -> x0
+    v1242 Imm(65535)                                       -> x0
+    v1243 LifetimeEnd(0)                                   -> -
+    v1244 Imm(65535)                                       -> x0
+    v1245 Imm(1)                                           -> x0
+    v1246 Imm(1)                                           -> x0
     v1247 LifetimeEnd(0)                                   -> -
-    v1248 Extend { value=v1243, kind=I32 }                 -> x1
-    v1249 BinopI { op=eq, lhs=v1243, rhs_imm=65535 }       -> x0
-    v1250 Extend { value=v1249, kind=I32 }                 -> x1
-    v1251 LifetimeEnd(0)                                   -> -
-    v1252 Extend { value=v1249, kind=I32 }                 -> x1
-    v1253 BinopI { op=eq, lhs=v1249, rhs_imm=0 }           -> x1
-    terminator Bnz { cond=v1249, target=b30, fall=b29 }   (low word)   (exit_acc=v1253)
-  block 29  start_pc=0
-    v1254 Imm(9)                                           -> x0
-    v1255 LifetimeEnd(0)                                   -> -
-    v1256 LifetimeEnd(0)                                   -> -
-    v1257 LifetimeEnd(0)                                   -> -
-    terminator Return(v1254)   (exit_acc=v1254)
-  block 30  start_pc=0
+    v1248 Imm(1)                                           -> x0
+    v1249 Imm(0)                                           -> x0
+    v1250 Imm(0)                                           -> x0
+    v1251 Imm(0)                                           -> x0
+    v1252 Imm(0)                                           -> x0
+    v1253 Imm(0)                                           -> x0
+    v1254 Imm(0)                                           -> x0
+    v1255 Imm(0)                                           -> x0
+    v1256 Imm(0)                                           -> x0
+    v1257 Imm(0)                                           -> x0
     v1258 Imm(0)                                           -> x0
     v1259 Imm(0)                                           -> x0
     v1260 Imm(0)                                           -> x0
     v1261 Imm(0)                                           -> x0
-    v1262 Imm(0)                                           -> x0
-    v1263 Imm(0)                                           -> x0
-    v1264 Imm(0)                                           -> x0
-    v1265 Imm(0)                                           -> x0
-    v1266 Imm(0)                                           -> x0
-    v1267 Imm(0)                                           -> x0
-    v1268 Imm(0)                                           -> x0
-    v1269 Imm(0)                                           -> x0
-    v1270 Imm(3554461090)                                  -> x0
-    v1271 Imm(3441230341)                                  -> x0
-    v1272 Imm(3441230341)                                  -> x0
-    v1273 Imm(17)                                          -> x0
-    v1274 Imm(17)                                          -> x0
-    v1275 Imm(3441230341)                                  -> x0
-    v1276 Imm(26254)                                       -> x0
-    v1277 Imm(32)                                          -> x0
-    v1278 Imm(15)                                          -> x0
-    v1279 Imm(15)                                          -> x0
-    v1280 Imm(112762235813888)                             -> x0
-    v1281 Imm(2164424704)                                  -> x0
-    v1282 Imm(2164450958)                                  -> x0
-    v1283 Imm(2164450958)                                  -> x0
-    v1284 Imm(2164450958)                                  -> x0
-    v1285 Imm(3441230341)                                  -> x0
-    v1286 Imm(19)                                          -> x0
-    v1287 Imm(19)                                          -> x0
-    v1288 Imm(3441230341)                                  -> x0
-    v1289 Imm(6563)                                        -> x0
-    v1290 Imm(32)                                          -> x0
-    v1291 Imm(13)                                          -> x0
-    v1292 Imm(13)                                          -> x0
-    v1293 Imm(28190558953472)                              -> x0
-    v1294 Imm(2688589824)                                  -> x0
-    v1295 Imm(2688596387)                                  -> x0
-    v1296 Imm(2688596387)                                  -> x0
-    v1297 Imm(2688596387)                                  -> x0
-    v1298 Imm(557997869)                                   -> x0
-    v1299 Imm(3441230341)                                  -> x0
-    v1300 Imm(3360576)                                     -> x0
-    v1301 Imm(561059949)                                   -> x0
-    v1302 Imm(561059949)                                   -> x0
-    v1303 Imm(561059949)                                   -> x0
-    v1304 Imm(4115521039)                                  -> x0
-    v1305 Imm(4115521039)                                  -> x0
-    v1306 Imm(2802090203)                                  -> x0
-    v1307 Imm(2941911595)                                  -> x0
-    v1308 Imm(2941911595)                                  -> x0
-    v1309 Imm(17)                                          -> x0
-    v1310 Imm(17)                                          -> x0
-    v1311 Imm(2941911595)                                  -> x0
-    v1312 Imm(22445)                                       -> x0
-    v1313 Imm(32)                                          -> x0
-    v1314 Imm(15)                                          -> x0
-    v1315 Imm(15)                                          -> x0
-    v1316 Imm(96400559144960)                              -> x0
-    v1317 Imm(18186240)                                    -> x0
-    v1318 Imm(18208685)                                    -> x0
-    v1319 Imm(18208685)                                    -> x0
-    v1320 Imm(18208685)                                    -> x0
-    v1321 Imm(2941911595)                                  -> x0
-    v1322 Imm(19)                                          -> x0
-    v1323 Imm(19)                                          -> x0
-    v1324 Imm(2941911595)                                  -> x0
-    v1325 Imm(5611)                                        -> x0
-    v1326 Imm(32)                                          -> x0
-    v1327 Imm(13)                                          -> x0
-    v1328 Imm(13)                                          -> x0
-    v1329 Imm(24100139786240)                              -> x0
-    v1330 Imm(1078288384)                                  -> x0
-    v1331 Imm(1078293995)                                  -> x0
-    v1332 Imm(1078293995)                                  -> x0
-    v1333 Imm(1078293995)                                  -> x0
-    v1334 Imm(1095803462)                                  -> x0
-    v1335 Imm(2941911595)                                  -> x0
-    v1336 Imm(2872960)                                     -> x0
-    v1337 Imm(1098609862)                                  -> x0
-    v1338 Imm(1098609862)                                  -> x0
-    v1339 Imm(1098609862)                                  -> x0
-    v1340 Imm(3900700065)                                  -> x0
-    v1341 Imm(3900700065)                                  -> x0
-    v1342 Imm(3596995145)                                  -> x0
-    v1343 Imm(4115521039)                                  -> x0
-    v1344 Imm(4115521039)                                  -> x0
-    v1345 Imm(17)                                          -> x0
-    v1346 Imm(17)                                          -> x0
-    v1347 Imm(4115521039)                                  -> x0
-    v1348 Imm(31398)                                       -> x0
-    v1349 Imm(32)                                          -> x0
-    v1350 Imm(15)                                          -> x0
-    v1351 Imm(15)                                          -> x0
-    v1352 Imm(134857393405952)                             -> x0
-    v1353 Imm(4010246144)                                  -> x0
-    v1354 Imm(4010277542)                                  -> x0
-    v1355 Imm(4010277542)                                  -> x0
-    v1356 Imm(4010277542)                                  -> x0
-    v1357 Imm(4115521039)                                  -> x0
-    v1358 Imm(19)                                          -> x0
-    v1359 Imm(19)                                          -> x0
-    v1360 Imm(4115521039)                                  -> x0
-    v1361 Imm(7849)                                        -> x0
-    v1362 Imm(32)                                          -> x0
-    v1363 Imm(13)                                          -> x0
-    v1364 Imm(13)                                          -> x0
-    v1365 Imm(33714348351488)                              -> x0
-    v1366 Imm(3150045184)                                  -> x0
-    v1367 Imm(3150053033)                                  -> x0
-    v1368 Imm(3150053033)                                  -> x0
-    v1369 Imm(3150053033)                                  -> x0
-    v1370 Imm(1422263311)                                  -> x0
-    v1371 Imm(4115521039)                                  -> x0
-    v1372 Imm(4019063)                                     -> x0
-    v1373 Imm(1425758072)                                  -> x0
-    v1374 Imm(1425758072)                                  -> x0
-    v1375 Imm(1425758072)                                  -> x0
-    v1376 Imm(5022753217)                                  -> x0
-    v1377 Imm(727785921)                                   -> x0
-    v1378 Imm(229284703)                                   -> x0
-    v1379 Imm(3900700065)                                  -> x0
-    v1380 Imm(3900700065)                                  -> x0
-    v1381 Imm(17)                                          -> x0
-    v1382 Imm(17)                                          -> x0
-    v1383 Imm(3900700065)                                  -> x0
-    v1384 Imm(29759)                                       -> x0
-    v1385 Imm(32)                                          -> x0
-    v1386 Imm(15)                                          -> x0
-    v1387 Imm(15)                                          -> x0
-    v1388 Imm(127818139729920)                             -> x0
-    v1389 Imm(4207968256)                                  -> x0
-    v1390 Imm(4207998015)                                  -> x0
-    v1391 Imm(4207998015)                                  -> x0
-    v1392 Imm(4207998015)                                  -> x0
-    v1393 Imm(3900700065)                                  -> x0
-    v1394 Imm(19)                                          -> x0
-    v1395 Imm(19)                                          -> x0
-    v1396 Imm(3900700065)                                  -> x0
-    v1397 Imm(7439)                                        -> x0
-    v1398 Imm(32)                                          -> x0
-    v1399 Imm(13)                                          -> x0
-    v1400 Imm(13)                                          -> x0
-    v1401 Imm(31954534932480)                              -> x0
-    v1402 Imm(4273217536)                                  -> x0
-    v1403 Imm(4273224975)                                  -> x0
-    v1404 Imm(4273224975)                                  -> x0
-    v1405 Imm(4273224975)                                  -> x0
-    v1406 Imm(73713968)                                    -> x0
-    v1407 Imm(3900700065)                                  -> x0
-    v1408 Imm(3809277)                                     -> x0
-    v1409 Imm(73324237)                                    -> x0
-    v1410 Imm(73324237)                                    -> x0
-    v1411 Imm(73324237)                                    -> x0
-    v1412 Imm(302608940)                                   -> x0
-    v1413 Imm(302608940)                                   -> x0
-    v1414 Imm(4115521039)                                  -> x0
-    v1415 Imm(0)                                           -> x0
-    v1416 Undef                                            -> x0
-    v1417 VecInsert { vec=v1416, value=v1414, off=0, kind=I32, bytes=16 } -> d0
+    v1262 Imm(3554461090)                                  -> x0
+    v1263 Imm(3441230341)                                  -> x0
+    v1264 Imm(3441230341)                                  -> x0
+    v1265 Imm(17)                                          -> x0
+    v1266 Imm(17)                                          -> x0
+    v1267 Imm(3441230341)                                  -> x0
+    v1268 Imm(26254)                                       -> x0
+    v1269 Imm(32)                                          -> x0
+    v1270 Imm(15)                                          -> x0
+    v1271 Imm(15)                                          -> x0
+    v1272 Imm(112762235813888)                             -> x0
+    v1273 Imm(2164424704)                                  -> x0
+    v1274 Imm(2164450958)                                  -> x0
+    v1275 Imm(2164450958)                                  -> x0
+    v1276 Imm(2164450958)                                  -> x0
+    v1277 Imm(3441230341)                                  -> x0
+    v1278 Imm(19)                                          -> x0
+    v1279 Imm(19)                                          -> x0
+    v1280 Imm(3441230341)                                  -> x0
+    v1281 Imm(6563)                                        -> x0
+    v1282 Imm(32)                                          -> x0
+    v1283 Imm(13)                                          -> x0
+    v1284 Imm(13)                                          -> x0
+    v1285 Imm(28190558953472)                              -> x0
+    v1286 Imm(2688589824)                                  -> x0
+    v1287 Imm(2688596387)                                  -> x0
+    v1288 Imm(2688596387)                                  -> x0
+    v1289 Imm(2688596387)                                  -> x0
+    v1290 Imm(557997869)                                   -> x0
+    v1291 Imm(3441230341)                                  -> x0
+    v1292 Imm(3360576)                                     -> x0
+    v1293 Imm(561059949)                                   -> x0
+    v1294 Imm(561059949)                                   -> x0
+    v1295 Imm(561059949)                                   -> x0
+    v1296 Imm(4115521039)                                  -> x0
+    v1297 Imm(4115521039)                                  -> x0
+    v1298 Imm(2802090203)                                  -> x0
+    v1299 Imm(2941911595)                                  -> x0
+    v1300 Imm(2941911595)                                  -> x0
+    v1301 Imm(17)                                          -> x0
+    v1302 Imm(17)                                          -> x0
+    v1303 Imm(2941911595)                                  -> x0
+    v1304 Imm(22445)                                       -> x0
+    v1305 Imm(32)                                          -> x0
+    v1306 Imm(15)                                          -> x0
+    v1307 Imm(15)                                          -> x0
+    v1308 Imm(96400559144960)                              -> x0
+    v1309 Imm(18186240)                                    -> x0
+    v1310 Imm(18208685)                                    -> x0
+    v1311 Imm(18208685)                                    -> x0
+    v1312 Imm(18208685)                                    -> x0
+    v1313 Imm(2941911595)                                  -> x0
+    v1314 Imm(19)                                          -> x0
+    v1315 Imm(19)                                          -> x0
+    v1316 Imm(2941911595)                                  -> x0
+    v1317 Imm(5611)                                        -> x0
+    v1318 Imm(32)                                          -> x0
+    v1319 Imm(13)                                          -> x0
+    v1320 Imm(13)                                          -> x0
+    v1321 Imm(24100139786240)                              -> x0
+    v1322 Imm(1078288384)                                  -> x0
+    v1323 Imm(1078293995)                                  -> x0
+    v1324 Imm(1078293995)                                  -> x0
+    v1325 Imm(1078293995)                                  -> x0
+    v1326 Imm(1095803462)                                  -> x0
+    v1327 Imm(2941911595)                                  -> x0
+    v1328 Imm(2872960)                                     -> x0
+    v1329 Imm(1098609862)                                  -> x0
+    v1330 Imm(1098609862)                                  -> x0
+    v1331 Imm(1098609862)                                  -> x0
+    v1332 Imm(3900700065)                                  -> x0
+    v1333 Imm(3900700065)                                  -> x0
+    v1334 Imm(3596995145)                                  -> x0
+    v1335 Imm(4115521039)                                  -> x0
+    v1336 Imm(4115521039)                                  -> x0
+    v1337 Imm(17)                                          -> x0
+    v1338 Imm(17)                                          -> x0
+    v1339 Imm(4115521039)                                  -> x0
+    v1340 Imm(31398)                                       -> x0
+    v1341 Imm(32)                                          -> x0
+    v1342 Imm(15)                                          -> x0
+    v1343 Imm(15)                                          -> x0
+    v1344 Imm(134857393405952)                             -> x0
+    v1345 Imm(4010246144)                                  -> x0
+    v1346 Imm(4010277542)                                  -> x0
+    v1347 Imm(4010277542)                                  -> x0
+    v1348 Imm(4010277542)                                  -> x0
+    v1349 Imm(4115521039)                                  -> x0
+    v1350 Imm(19)                                          -> x0
+    v1351 Imm(19)                                          -> x0
+    v1352 Imm(4115521039)                                  -> x0
+    v1353 Imm(7849)                                        -> x0
+    v1354 Imm(32)                                          -> x0
+    v1355 Imm(13)                                          -> x0
+    v1356 Imm(13)                                          -> x0
+    v1357 Imm(33714348351488)                              -> x0
+    v1358 Imm(3150045184)                                  -> x0
+    v1359 Imm(3150053033)                                  -> x0
+    v1360 Imm(3150053033)                                  -> x0
+    v1361 Imm(3150053033)                                  -> x0
+    v1362 Imm(1422263311)                                  -> x0
+    v1363 Imm(4115521039)                                  -> x0
+    v1364 Imm(4019063)                                     -> x0
+    v1365 Imm(1425758072)                                  -> x0
+    v1366 Imm(1425758072)                                  -> x0
+    v1367 Imm(1425758072)                                  -> x0
+    v1368 Imm(5022753217)                                  -> x0
+    v1369 Imm(727785921)                                   -> x0
+    v1370 Imm(229284703)                                   -> x0
+    v1371 Imm(3900700065)                                  -> x0
+    v1372 Imm(3900700065)                                  -> x0
+    v1373 Imm(17)                                          -> x0
+    v1374 Imm(17)                                          -> x0
+    v1375 Imm(3900700065)                                  -> x0
+    v1376 Imm(29759)                                       -> x0
+    v1377 Imm(32)                                          -> x0
+    v1378 Imm(15)                                          -> x0
+    v1379 Imm(15)                                          -> x0
+    v1380 Imm(127818139729920)                             -> x0
+    v1381 Imm(4207968256)                                  -> x0
+    v1382 Imm(4207998015)                                  -> x0
+    v1383 Imm(4207998015)                                  -> x0
+    v1384 Imm(4207998015)                                  -> x0
+    v1385 Imm(3900700065)                                  -> x0
+    v1386 Imm(19)                                          -> x0
+    v1387 Imm(19)                                          -> x0
+    v1388 Imm(3900700065)                                  -> x0
+    v1389 Imm(7439)                                        -> x0
+    v1390 Imm(32)                                          -> x0
+    v1391 Imm(13)                                          -> x0
+    v1392 Imm(13)                                          -> x0
+    v1393 Imm(31954534932480)                              -> x0
+    v1394 Imm(4273217536)                                  -> x0
+    v1395 Imm(4273224975)                                  -> x0
+    v1396 Imm(4273224975)                                  -> x0
+    v1397 Imm(4273224975)                                  -> x0
+    v1398 Imm(73713968)                                    -> x0
+    v1399 Imm(3900700065)                                  -> x0
+    v1400 Imm(3809277)                                     -> x0
+    v1401 Imm(73324237)                                    -> x0
+    v1402 Imm(73324237)                                    -> x0
+    v1403 Imm(73324237)                                    -> x0
+    v1404 Imm(302608940)                                   -> x0
+    v1405 Imm(302608940)                                   -> x0
+    v1406 Imm(4115521039)                                  -> x0
+    v1407 Imm(0)                                           -> x0
+    v1408 Undef                                            -> x0
+    v1409 VecInsert { vec=v1408, value=v1406, off=0, kind=I32, bytes=16 } -> d0
+    v1410 Imm(0)                                           -> x0
+    v1411 Imm(3900700065)                                  -> x0
+    v1412 Imm(0)                                           -> x0
+    v1413 Imm(4)                                           -> x0
+    v1414 Imm(0)                                           -> x0
+    v1415 VecInsert { vec=v1409, value=v1411, off=4, kind=I32, bytes=16 } -> d0
+    v1416 Imm(0)                                           -> x0
+    v1417 Imm(727785921)                                   -> x0
     v1418 Imm(0)                                           -> x0
-    v1419 Imm(3900700065)                                  -> x0
+    v1419 Imm(8)                                           -> x0
     v1420 Imm(0)                                           -> x0
-    v1421 Imm(4)                                           -> x0
+    v1421 VecInsert { vec=v1415, value=v1417, off=8, kind=I32, bytes=16 } -> d0
     v1422 Imm(0)                                           -> x0
-    v1423 VecConst { imm=-1693364858913956337, kind=I64, bytes=16 } -> d0
+    v1423 Imm(302608940)                                   -> x0
     v1424 Imm(0)                                           -> x0
-    v1425 Imm(727785921)                                   -> x0
+    v1425 Imm(12)                                          -> x0
     v1426 Imm(0)                                           -> x0
-    v1427 Imm(8)                                           -> x0
+    v1427 VecInsert { vec=v1421, value=v1423, off=12, kind=I32, bytes=16 } -> d0
     v1428 Imm(0)                                           -> x0
-    v1429 VecConst { imm=1299695501505012161, kind=I64, bytes=8 } -> d1
-    v1430 Imm(0)                                           -> x0
-    v1431 Imm(302608940)                                   -> x0
-    v1432 Imm(0)                                           -> x0
-    v1433 Imm(12)                                          -> x0
+    v1429 Imm(0)                                           -> x0
+    v1430 LifetimeEnd(0)                                   -> -
+    v1431 LifetimeEnd(0)                                   -> -
+    v1432 LifetimeEnd(0)                                   -> -
+    v1433 LifetimeEnd(0)                                   -> -
     v1434 Imm(0)                                           -> x0
-    v1435 VecInsert { vec=v1423, value=v1429, off=8, kind=F64, bytes=16 } -> d2
+    v1435 Imm(0)                                           -> x0
     v1436 Imm(0)                                           -> x0
     v1437 Imm(0)                                           -> x0
-    v1438 LifetimeEnd(0)                                   -> -
-    v1439 LifetimeEnd(0)                                   -> -
-    v1440 LifetimeEnd(0)                                   -> -
-    v1441 LifetimeEnd(0)                                   -> -
+    v1438 Imm(4115521039)                                  -> x0
+    v1439 Imm(3900700065)                                  -> x0
+    v1440 Imm(727785921)                                   -> x0
+    v1441 Imm(302608940)                                   -> x0
     v1442 Imm(0)                                           -> x0
     v1443 Imm(0)                                           -> x0
     v1444 Imm(0)                                           -> x0
@@ -2175,75 +2143,59 @@ fn ent_pc=1335 n_params=0 variadic=false locals=2
     v1447 Imm(3900700065)                                  -> x0
     v1448 Imm(727785921)                                   -> x0
     v1449 Imm(302608940)                                   -> x0
-    v1450 Imm(0)                                           -> x0
-    v1451 Imm(0)                                           -> x0
+    v1450 Imm(4115521039)                                  -> x0
+    v1451 Imm(-179446257)                                  -> x0
     v1452 Imm(0)                                           -> x0
-    v1453 Imm(0)                                           -> x0
-    v1454 Imm(4115521039)                                  -> x0
-    v1455 Imm(3900700065)                                  -> x0
-    v1456 Imm(727785921)                                   -> x0
-    v1457 Imm(302608940)                                   -> x0
-    v1458 Imm(4115521039)                                  -> x0
-    v1459 Imm(-179446257)                                  -> x0
+    v1453 Undef                                            -> x0
+    v1454 VecInsert { vec=v1453, value=v1451, off=0, kind=I32, bytes=16 } -> d0
+    v1455 Imm(0)                                           -> x0
+    v1456 Imm(3900700065)                                  -> x0
+    v1457 Imm(-394267231)                                  -> x0
+    v1458 Imm(0)                                           -> x0
+    v1459 Imm(4)                                           -> x0
     v1460 Imm(0)                                           -> x0
-    v1461 Undef                                            -> x0
-    v1462 VecInsert { vec=v1461, value=v1459, off=0, kind=I32, bytes=16 } -> d3
-    v1463 Imm(0)                                           -> x0
-    v1464 Imm(3900700065)                                  -> x0
-    v1465 Imm(-394267231)                                  -> x0
-    v1466 Imm(0)                                           -> x0
-    v1467 Imm(4)                                           -> x0
-    v1468 Imm(0)                                           -> x0
-    v1469 VecConst { imm=-1693364858913956337, kind=I64, bytes=16 } -> d3
-    v1470 Imm(0)                                           -> x0
-    v1471 Imm(727785921)                                   -> x0
-    v1472 Imm(727785921)                                   -> x0
-    v1473 Imm(0)                                           -> x0
-    v1474 Imm(8)                                           -> x0
-    v1475 Imm(0)                                           -> x0
-    v1476 VecConst { imm=1299695501505012161, kind=I64, bytes=8 } -> d3
+    v1461 VecInsert { vec=v1454, value=v1457, off=4, kind=I32, bytes=16 } -> d0
+    v1462 Imm(0)                                           -> x0
+    v1463 Imm(727785921)                                   -> x0
+    v1464 Imm(727785921)                                   -> x0
+    v1465 Imm(0)                                           -> x0
+    v1466 Imm(8)                                           -> x0
+    v1467 Imm(0)                                           -> x0
+    v1468 VecInsert { vec=v1461, value=v1464, off=8, kind=I32, bytes=16 } -> d0
+    v1469 Imm(0)                                           -> x0
+    v1470 Imm(302608940)                                   -> x0
+    v1471 Imm(302608940)                                   -> x0
+    v1472 Imm(0)                                           -> x0
+    v1473 Imm(12)                                          -> x0
+    v1474 Imm(0)                                           -> x0
+    v1475 VecInsert { vec=v1468, value=v1471, off=12, kind=I32, bytes=16 } -> d0
+    v1476 Imm(0)                                           -> x0
     v1477 Imm(0)                                           -> x0
-    v1478 Imm(302608940)                                   -> x0
-    v1479 Imm(302608940)                                   -> x0
+    v1478 Imm(0)                                           -> x0
+    v1479 Imm(0)                                           -> x0
     v1480 Imm(0)                                           -> x0
-    v1481 Imm(12)                                          -> x0
-    v1482 Imm(0)                                           -> x0
-    v1483 VecInsert { vec=v1423, value=v1429, off=8, kind=F64, bytes=16 } -> d0
+    v1481 Imm(0)                                           -> x0
+    v1482 VecConst { imm=-1, kind=I64, bytes=16 }          -> d0
+    v1483 Imm(0)                                           -> x0
     v1484 Imm(0)                                           -> x0
     v1485 Imm(0)                                           -> x0
     v1486 Imm(0)                                           -> x0
-    v1487 Imm(0)                                           -> x0
+    v1487 Imm(65535)                                       -> x0
     v1488 Imm(0)                                           -> x0
-    v1489 Imm(0)                                           -> x0
-    v1490 SimdVal { op=__builtin_ia32_pcmpeqd128, imm=None, args=[v1435, v1483] } -> d0
-    v1491 Imm(0)                                           -> x0
-    v1492 Imm(0)                                           -> x0
-    v1493 Imm(0)                                           -> x0
-    v1494 Imm(0)                                           -> x0
-    v1495 SimdVal { op=__builtin_ia32_pmovmskb128, imm=None, args=[v1490] } -> x0
-    v1496 Imm(0)                                           -> x1
-    v1497 Extend { value=v1495, kind=I32 }                 -> x1
-    v1498 Extend { value=v1495, kind=I32 }                 -> x1
+    v1489 Imm(65535)                                       -> x0
+    v1490 Imm(65535)                                       -> x0
+    v1491 LifetimeEnd(0)                                   -> -
+    v1492 Imm(65535)                                       -> x0
+    v1493 Imm(1)                                           -> x0
+    v1494 Imm(1)                                           -> x0
+    v1495 LifetimeEnd(0)                                   -> -
+    v1496 Imm(1)                                           -> x0
+    v1497 Imm(0)                                           -> x0
+    v1498 Imm(0)                                           -> x0
     v1499 LifetimeEnd(0)                                   -> -
-    v1500 Extend { value=v1495, kind=I32 }                 -> x1
-    v1501 BinopI { op=eq, lhs=v1495, rhs_imm=65535 }       -> x0
-    v1502 Extend { value=v1501, kind=I32 }                 -> x1
-    v1503 LifetimeEnd(0)                                   -> -
-    v1504 Extend { value=v1501, kind=I32 }                 -> x1
-    v1505 BinopI { op=eq, lhs=v1501, rhs_imm=0 }           -> x1
-    terminator Bnz { cond=v1501, target=b32, fall=b31 }   (low word)   (exit_acc=v1505)
-  block 31  start_pc=0
-    v1506 Imm(10)                                          -> x0
-    v1507 LifetimeEnd(0)                                   -> -
-    v1508 LifetimeEnd(0)                                   -> -
-    v1509 LifetimeEnd(0)                                   -> -
-    terminator Return(v1506)   (exit_acc=v1506)
-  block 32  start_pc=0
-    v1510 Imm(0)                                           -> x0
-    v1511 LifetimeEnd(0)                                   -> -
-    v1512 LifetimeEnd(0)                                   -> -
-    v1513 LifetimeEnd(0)                                   -> -
-    terminator Return(v1510)   (exit_acc=v1510)
+    v1500 LifetimeEnd(0)                                   -> -
+    v1501 LifetimeEnd(0)                                   -> -
+    terminator Return(v1498)   (exit_acc=v1498)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

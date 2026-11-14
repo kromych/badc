@@ -1245,9 +1245,7 @@ Disassembly of section .text:
                	cmpl	%eax, %ecx
                	jne	<addr>
                	vpcmpeqd	%xmm0, %xmm0, %xmm0
-               	vpcmpeqd	%xmm0, %xmm0, %xmm2
                	vpxor	%xmm1, %xmm0, %xmm0
-               	vpand	%xmm2, %xmm0, %xmm0
                	vmovq	%xmm0, %rax
                	vpextrq	$0x1, %xmm0, %rcx
                	orq	%rcx, %rax

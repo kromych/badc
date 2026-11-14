@@ -30,58 +30,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x18, %rsp
                	pushq	%rbx
-               	movq	$-0x3de0216b, %rax      # imm = 0xC21FDE95
-               	vmovd	%eax, %xmm0
-               	movl	$0x3ead5c56, %eax       # imm = 0x3EAD5C56
-               	vpinsrd	$0x1, %eax, %xmm0, %xmm0
-               	movq	$-0x32e2fdfb, %rax      # imm = 0xCD1D0205
-               	vpinsrd	$0x2, %eax, %xmm0, %xmm0
-               	movabsq	$0x172c4a902, %rax      # imm = 0x172C4A902
-               	vpinsrd	$0x3, %eax, %xmm0, %xmm0
-               	movabsq	$0x3ead5c56c21fde95, %r11 # imm = 0x3EAD5C56C21FDE95
-               	vmovq	%r11, %xmm1
-               	vpbroadcastq	%xmm1, %xmm1
-               	movabsq	$0x72c4a902cd1d0205, %r11 # imm = 0x72C4A902CD1D0205
-               	vmovq	%r11, %xmm2
-               	vunpcklpd	%xmm2, %xmm1, %xmm1 # xmm1 = xmm1[0],xmm2[0]
-               	vpcmpeqd	%xmm1, %xmm0, %xmm0
-               	pmovmskb	%xmm0, %eax
-               	cmpl	$0xffff, %eax           # imm = 0xFFFF
-               	je	<addr>
-               	movl	$0x1, %eax
-               	popq	%rbx
-               	leave
-               	retq
-               	movabsq	$0x85e82f01ec1c7a7, %r11 # imm = 0x85E82F01EC1C7A7
-               	vmovq	%r11, %xmm0
-               	vpbroadcastq	%xmm0, %xmm0
-               	movabsq	$-0x5551e47bfa46f015, %r11 # imm = 0xAAAE1B8405B90FEB
-               	vmovq	%r11, %xmm1
-               	vunpcklpd	%xmm1, %xmm0, %xmm2 # xmm2 = xmm0[0],xmm1[0]
-               	vunpcklpd	%xmm1, %xmm0, %xmm0 # xmm0 = xmm0[0],xmm1[0]
-               	vpcmpeqd	%xmm0, %xmm2, %xmm0
-               	pmovmskb	%xmm0, %eax
-               	cmpl	$0xffff, %eax           # imm = 0xFFFF
-               	je	<addr>
-               	movl	$0x2, %eax
-               	popq	%rbx
-               	leave
-               	retq
-               	movabsq	$-0x35c943635a9811d2, %r11 # imm = 0xCA36BC9CA567EE2E
-               	vmovq	%r11, %xmm0
-               	vpbroadcastq	%xmm0, %xmm0
-               	movabsq	$-0x7e90cd4a2e6ed3c1, %r11 # imm = 0x816F32B5D1912C3F
-               	vmovq	%r11, %xmm1
-               	vunpcklpd	%xmm1, %xmm0, %xmm2 # xmm2 = xmm0[0],xmm1[0]
-               	vunpcklpd	%xmm1, %xmm0, %xmm0 # xmm0 = xmm0[0],xmm1[0]
-               	vpcmpeqd	%xmm0, %xmm2, %xmm0
-               	pmovmskb	%xmm0, %eax
-               	cmpl	$0xffff, %eax           # imm = 0xFFFF
-               	je	<addr>
-               	movl	$0x3, %eax
-               	popq	%rbx
-               	leave
-               	retq
                	movabsq	$-0x32e2fdfa50a5fdd5, %rax # imm = 0xCD1D0205AF5A022B
                	movq	%rax, -0x10(%rbp)
                	movabsq	$-0x3de0216ac152a3aa, %rcx # imm = 0xC21FDE953EAD5C56
@@ -277,51 +225,6 @@ Disassembly of section .text:
                	cmpl	$0xffff, %eax           # imm = 0xFFFF
                	je	<addr>
                	movl	$0x7, %eax
-               	popq	%rbx
-               	leave
-               	retq
-               	movabsq	$0x3ab9d7d7d2be0fd9, %r11 # imm = 0x3AB9D7D7D2BE0FD9
-               	vmovq	%r11, %xmm0
-               	vpbroadcastq	%xmm0, %xmm0
-               	movabsq	$0x712bdf611bf59c86, %r11 # imm = 0x712BDF611BF59C86
-               	vmovq	%r11, %xmm1
-               	vunpcklpd	%xmm1, %xmm0, %xmm2 # xmm2 = xmm0[0],xmm1[0]
-               	vunpcklpd	%xmm1, %xmm0, %xmm0 # xmm0 = xmm0[0],xmm1[0]
-               	vpcmpeqd	%xmm0, %xmm2, %xmm0
-               	pmovmskb	%xmm0, %eax
-               	cmpl	$0xffff, %eax           # imm = 0xFFFF
-               	je	<addr>
-               	movl	$0x8, %eax
-               	popq	%rbx
-               	leave
-               	retq
-               	movabsq	$-0x5d0977e0a88ac983, %r11 # imm = 0xA2F6881F5775367D
-               	vmovq	%r11, %xmm0
-               	vpbroadcastq	%xmm0, %xmm0
-               	movabsq	$-0x2df2afb810207080, %r11 # imm = 0xD20D5047EFDF8F80
-               	vmovq	%r11, %xmm1
-               	vunpcklpd	%xmm1, %xmm0, %xmm2 # xmm2 = xmm0[0],xmm1[0]
-               	vunpcklpd	%xmm1, %xmm0, %xmm0 # xmm0 = xmm0[0],xmm1[0]
-               	vpcmpeqd	%xmm0, %xmm2, %xmm0
-               	pmovmskb	%xmm0, %eax
-               	cmpl	$0xffff, %eax           # imm = 0xFFFF
-               	je	<addr>
-               	movl	$0x9, %eax
-               	popq	%rbx
-               	leave
-               	retq
-               	movabsq	$-0x17800a5e0ab221f1, %r11 # imm = 0xE87FF5A1F54DDE0F
-               	vmovq	%r11, %xmm0
-               	vpbroadcastq	%xmm0, %xmm0
-               	movabsq	$0x1209722c2b6121c1, %r11 # imm = 0x1209722C2B6121C1
-               	vmovq	%r11, %xmm1
-               	vunpcklpd	%xmm1, %xmm0, %xmm2 # xmm2 = xmm0[0],xmm1[0]
-               	vunpcklpd	%xmm1, %xmm0, %xmm0 # xmm0 = xmm0[0],xmm1[0]
-               	vpcmpeqd	%xmm0, %xmm2, %xmm0
-               	pmovmskb	%xmm0, %eax
-               	cmpl	$0xffff, %eax           # imm = 0xFFFF
-               	je	<addr>
-               	movl	$0xa, %eax
                	popq	%rbx
                	leave
                	retq

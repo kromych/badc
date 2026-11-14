@@ -578,7 +578,24 @@ fn uniform_fill(cd: &ConstData<'_>, off: i64, bytes: i64) -> Option<i64> {
 
 pub(crate) fn fold_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) -> bool {
     let ext = extern_imm_data(func);
-    let mut changed_vectors = false;
+    // A SIMD row over vectors loaded from constant data, and the lanes
+    // read of it.
+    let rows = {
+        let ext = &ext;
+        let load = |func: &FunctionSsa, addr: ValueId, disp: i32| -> Option<[u8; 16]> {
+            let off = data_addr(func, ext, addr, i64::from(disp))?;
+            let mut o = [0u8; 16];
+            for (k, half) in o.as_chunks_mut::<8>().0.iter_mut().enumerate() {
+                let ConstValue::Bytes(b) = cd.read(off + 8 * k as i64, 8)? else {
+                    return None;
+                };
+                *half = b;
+            }
+            Some(o)
+        };
+        super::constfold::fold_constant_rows_with(func, &load)
+    };
+    let mut changed_vectors = rows;
     let mut folds: Vec<(ValueId, Folded)> = Vec::new();
     for i in func.blocks.iter().flat_map(|b| b.inst_range.clone()) {
         let (addr, disp, kind) = match func.insts[i as usize] {

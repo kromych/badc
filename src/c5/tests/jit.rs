@@ -191,7 +191,83 @@ fn beside_others<R>(src: &str, run: impl FnOnce() -> R) -> R {
 /// Panics on compile or JIT-load failure -- the call sites here
 /// expect both phases to succeed.
 fn jit_exit(src: &str, args: &[&str]) -> i32 {
+    if in_own_process(src) {
+        return beside_others(src, || jit_exit_in_child(src, args, false));
+    }
     beside_others(src, || jit_exit_held(src, args))
+}
+
+/// On Windows every child a test thread creates inherits each inheritable
+/// handle open in the process, and the C runtime opens files inheritable
+/// without delete sharing: a file a program in this process just closed
+/// can still be open in such a child, which makes deleting or renaming it
+/// fail. A program that does either runs in a process of its own.
+fn in_own_process(src: &str) -> bool {
+    cfg!(windows)
+        && ["remove(", "unlink(", "rmdir(", "rename("]
+            .iter()
+            .any(|call| src.contains(call))
+}
+
+const CHILD_SRC: &str = "BADC_JIT_CHILD_SRC";
+const CHILD_ARGS: &str = "BADC_JIT_CHILD_ARGS";
+const CHILD_OPTIMIZE: &str = "BADC_JIT_CHILD_OPTIMIZE";
+const CHILD_RAN: &str = "jit child ran";
+
+/// The exit status of `src` run by the JIT in a child test process.
+fn jit_exit_in_child(src: &str, args: &[&str], optimize: bool) -> i32 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    (src, optimize).hash(&mut h);
+    let dir = std::env::temp_dir().join(format!(
+        "badc-jit-child-{}-{:x}",
+        std::process::id(),
+        h.finish()
+    ));
+    std::fs::create_dir_all(&dir).expect("child directory");
+    let path = dir.join("program.c");
+    std::fs::write(&path, src).expect("write the program");
+    let mut cmd = std::process::Command::new(std::env::current_exe().expect("test binary"));
+    cmd.args(["c5::tests::jit::jit_exit_child", "--exact", "--ignored"])
+        .args(["--test-threads=1", "--nocapture"])
+        .env(CHILD_SRC, &path)
+        .env(CHILD_ARGS, args.join("\u{1f}"));
+    if optimize {
+        cmd.env(CHILD_OPTIMIZE, "1");
+    }
+    let out = cmd.output().expect("spawn the child");
+    let _ = std::fs::remove_dir_all(&dir);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains(CHILD_RAN),
+        "the child ran no program: {stdout}{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    out.status.code().expect("the child exited")
+}
+
+/// The child half of [`jit_exit_in_child`].
+#[test]
+#[ignore = "runs as the child of jit_exit_in_child"]
+fn jit_exit_child() {
+    let Some(path) = std::env::var_os(CHILD_SRC) else {
+        return;
+    };
+    let src = std::fs::read_to_string(path).expect("read the program");
+    let args = std::env::var(CHILD_ARGS).unwrap_or_default();
+    let argv: Vec<String> = args.split('\u{1f}').map(String::from).collect();
+    let program = Compiler::new(super::with_prelude(&src))
+        .compile()
+        .expect("compile failed");
+    let code = if std::env::var_os(CHILD_OPTIMIZE).is_some() {
+        let opts = NativeOptions::new().with_optimize();
+        jit_run_with_options(&program, &argv, opts, &mut |_| {})
+    } else {
+        jit_run(&program, &argv)
+    }
+    .expect("jit_run failed");
+    println!("{CHILD_RAN}");
+    std::process::exit(code);
 }
 
 /// [`jit_exit`] for a program the caller runs under its own hold on
@@ -208,6 +284,9 @@ fn jit_exit_held(src: &str, args: &[&str]) -> i32 {
 /// `--optimize` / `-O` triggers from the CLI). Used to guard parity
 /// between the default and optimized lowerings.
 fn jit_exit_native_optimized(src: &str, args: &[&str]) -> i32 {
+    if in_own_process(src) {
+        return beside_others(src, || jit_exit_in_child(src, args, true));
+    }
     let program = Compiler::new(super::with_prelude(src))
         .compile()
         .expect("compile failed");

@@ -180,7 +180,7 @@ fn ent_pc=8 n_params=2 variadic=false locals=0
     v24  Extend { value=v11, kind=I32 }                   -> x1
     v25  BinopI { op=shl, lhs=v11, rhs_imm=3 }            -> x1
     v26  Binop { op=add, lhs=v1, rhs=v25 }                -> x1
-    v27  Load { addr=v26, disp=0, kind=F64 }              -> d1
+    v27  LoadIndexed { base=v1, index=v11, scale=8, kind=F64 } -> d1
     v28  Binop { op=fadd, lhs=v22, rhs=v27 }              -> d0
     v29  FpCast { kind=FpBits, value=v28 }                -> x1
     v30  Imm(0)                                           -> x2

@@ -410,13 +410,13 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v306 ImmData(608)                                     -> x1
     v307 Extend { value=v302, kind=I32 }                  -> x2
     v308 BinopI { op=shl, lhs=v302, rhs_imm=2 }           -> x2
-    v309 Binop { op=add, lhs=v306, rhs=v308 }             -> x1
-    v310 Imm(1065369600)                                  -> d1 [f32]
-    v311 Store { addr=v309, disp=0, value=v310, kind=F32 } -> -
+    v309 Binop { op=add, lhs=v306, rhs=v308 }             -> x2
+    v310 Imm(1065369600)                                  -> x2 [f32]
+    v311 StoreIndexed { base=v306, index=v302, scale=4, value=v310, kind=F32 } -> -
     v312 Extend { value=v302, kind=I32 }                  -> x2
     v313 BinopI { op=shl, lhs=v302, rhs_imm=2 }           -> x2
-    v314 Binop { op=add, lhs=v306, rhs=v308 }             -> x2
-    v315 Load { addr=v309, disp=0, kind=F32 }             -> d1 [f32]
+    v314 Binop { op=add, lhs=v306, rhs=v313 }             -> x2
+    v315 LoadIndexed { base=v306, index=v302, scale=4, kind=F32 } -> d1 [f32]
     v316 Binop { op=fadd, lhs=v303, rhs=v315 }            -> d0 [f32]
     v317 Extend { value=v302, kind=I32 }                  -> x1
     v318 BinopI { op=add, lhs=v302, rhs_imm=1 }           -> x0
@@ -456,13 +456,13 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v325 ImmData(608)                                     -> x1
     v326 Extend { value=v321, kind=I32 }                  -> x2
     v327 BinopI { op=shl, lhs=v321, rhs_imm=2 }           -> x2
-    v328 Binop { op=add, lhs=v325, rhs=v327 }             -> x1
-    v329 Imm(1065369600)                                  -> d1 [f32]
-    v330 Store { addr=v328, disp=0, value=v329, kind=F32 } -> -
+    v328 Binop { op=add, lhs=v325, rhs=v327 }             -> x2
+    v329 Imm(1065369600)                                  -> x2 [f32]
+    v330 StoreIndexed { base=v325, index=v321, scale=4, value=v329, kind=F32 } -> -
     v331 Extend { value=v321, kind=I32 }                  -> x2
     v332 BinopI { op=shl, lhs=v321, rhs_imm=2 }           -> x2
-    v333 Binop { op=add, lhs=v325, rhs=v327 }             -> x2
-    v334 Load { addr=v328, disp=0, kind=F32 }             -> d1 [f32]
+    v333 Binop { op=add, lhs=v325, rhs=v332 }             -> x2
+    v334 LoadIndexed { base=v325, index=v321, scale=4, kind=F32 } -> d1 [f32]
     v335 Binop { op=fadd, lhs=v322, rhs=v334 }            -> d0 [f32]
     v336 Extend { value=v321, kind=I32 }                  -> x1
     v337 BinopI { op=add, lhs=v321, rhs_imm=1 }           -> x0

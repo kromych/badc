@@ -85,21 +85,18 @@ Disassembly of section .text:
                	movk	x2, #0xe6a5, lsl #32
                	movk	x2, #0x1069, lsl #48
                	str	x2, [x1, #0x98]
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
-               	adrp	x5, <page>
-               	add	x5, x5, <lo12>
-               	lsl	x2, x0, #3
-               	add	x6, x3, x2
-               	add	x2, x1, x2
-               	ldr	x2, [x2]
-               	str	x2, [x6]
-               	ldr	x2, [x1, x0, lsl #3]
-               	str	w2, [x4, x0, lsl #2]
-               	ldr	x2, [x1, x0, lsl #3]
-               	str	w2, [x5, x0, lsl #2]
+               	ldr	x5, [x1, x0, lsl #3]
+               	str	x5, [x2, x0, lsl #3]
+               	ldr	x5, [x1, x0, lsl #3]
+               	str	w5, [x3, x0, lsl #2]
+               	ldr	x5, [x1, x0, lsl #3]
+               	str	w5, [x4, x0, lsl #2]
                	add	x0, x0, #0x1
                	cmp	w0, #0x14
                	b.lt	<addr>

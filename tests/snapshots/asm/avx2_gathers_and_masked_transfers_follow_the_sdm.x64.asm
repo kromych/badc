@@ -9849,34 +9849,28 @@ Disassembly of section .text:
                	vmovups	(%rax), %ymm3
                	vmovdqa	%xmm2, %xmm0
                	vmovdqa	%xmm3, %xmm1
-               	leaq	0x140(%rsp), %rsi
+               	leaq	0x140(%rsp), %rcx
                	movups	%xmm0, 0x140(%rsp)
+               	leaq	0x100(%rsp), %rsi
                	movups	%xmm1, 0x100(%rsp)
                	movl	$0xb5, %edx
                	xorl	%eax, %eax
                	jmp	<addr>
-               	movss	%xmm0, (%rdi)
+               	movss	%xmm0, -0x38(%rbp,%rax,4)
                	incq	%rax
                	cmpl	$0x4, %eax
                	jge	<addr>
                	leaq	-0x38(%rbp), %rdi
-               	movq	%rax, %rcx
-               	shlq	$0x2, %rcx
-               	addq	%rcx, %rdi
                	leaq	0x4(%rax), %r8
                	sarxq	%r8, %rdx, %r8
                	testb	$0x1, %r8b
                	je	<addr>
-               	leaq	(%rsi,%rcx), %r8
-               	movss	(%r8), %xmm0
-               	leaq	0x100(%rsp), %r8
-               	addq	%r8, %rcx
-               	movss	(%rcx), %xmm1
+               	movss	0x140(%rsp,%rax,4), %xmm0
+               	movss	0x100(%rsp,%rax,4), %xmm1
                	mulss	%xmm1, %xmm0
                	jmp	<addr>
                	xorps	%xmm0, %xmm0
                	jmp	<addr>
-               	leaq	-0x38(%rbp), %rsi
                	xorl	%eax, %eax
                	movss	-0x38(%rbp), %xmm0
                	movss	-0x34(%rbp), %xmm1
@@ -9886,46 +9880,38 @@ Disassembly of section .text:
                	addss	%xmm4, %xmm1
                	addss	%xmm1, %xmm0
                	jmp	<addr>
-               	movss	%xmm1, (%rcx)
+               	movss	%xmm1, 0x140(%rsp,%rax,4)
                	incq	%rax
                	cmpl	$0x4, %eax
                	jge	<addr>
-               	leaq	0x140(%rsp), %rcx
-               	movq	%rax, %rdi
-               	shlq	$0x2, %rdi
-               	addq	%rdi, %rcx
-               	sarxq	%rax, %rdx, %rdi
-               	testb	$0x1, %dil
+               	sarxq	%rax, %rdx, %rsi
+               	testb	$0x1, %sil
                	je	<addr>
                	movapd	%xmm0, %xmm1
                	jmp	<addr>
                	xorps	%xmm1, %xmm1
                	jmp	<addr>
-               	leaq	0x140(%rsp), %rdi
+               	leaq	0x140(%rsp), %rcx
                	movups	0x140(%rsp), %xmm4
                	vextracti128	$0x1, %ymm2, %xmm0
                	vextracti128	$0x1, %ymm3, %xmm1
                	movups	%xmm0, 0x140(%rsp)
+               	leaq	0x100(%rsp), %rsi
                	movups	%xmm1, 0x100(%rsp)
                	movl	$0xb5, %edx
                	xorl	%eax, %eax
                	jmp	<addr>
-               	movss	%xmm0, (%r8)
+               	movss	%xmm0, -0x38(%rbp,%rax,4)
                	incq	%rax
                	cmpl	$0x4, %eax
                	jge	<addr>
-               	movq	%rax, %rcx
-               	shlq	$0x2, %rcx
-               	leaq	(%rsi,%rcx), %r8
-               	leaq	0x4(%rax), %r9
-               	sarxq	%r9, %rdx, %r9
-               	testb	$0x1, %r9b
+               	leaq	-0x38(%rbp), %rdi
+               	leaq	0x4(%rax), %r8
+               	sarxq	%r8, %rdx, %r8
+               	testb	$0x1, %r8b
                	je	<addr>
-               	leaq	(%rdi,%rcx), %r9
-               	movss	(%r9), %xmm0
-               	leaq	0x100(%rsp), %r9
-               	addq	%r9, %rcx
-               	movss	(%rcx), %xmm1
+               	movss	0x140(%rsp,%rax,4), %xmm0
+               	movss	0x100(%rsp,%rax,4), %xmm1
                	mulss	%xmm1, %xmm0
                	jmp	<addr>
                	xorps	%xmm0, %xmm0
@@ -9939,14 +9925,10 @@ Disassembly of section .text:
                	addss	%xmm2, %xmm1
                	addss	%xmm1, %xmm0
                	jmp	<addr>
-               	movss	%xmm1, (%rcx)
+               	movss	%xmm1, 0x140(%rsp,%rax,4)
                	incq	%rax
                	cmpl	$0x4, %eax
                	jge	<addr>
-               	leaq	0x140(%rsp), %rcx
-               	movq	%rax, %rsi
-               	shlq	$0x2, %rsi
-               	addq	%rsi, %rcx
                	sarxq	%rax, %rdx, %rsi
                	testb	$0x1, %sil
                	je	<addr>

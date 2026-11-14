@@ -166,16 +166,12 @@ Disassembly of section .text:
                	leaq	<rip>, %r8 # <addr>
                	movq	%rdx, %rax
                	shlq	$0x4, %rax
-               	leaq	(%r8,%rax), %r9
-               	movq	%rcx, %r8
-               	shlq	$0x2, %r8
-               	addq	%r8, %r9
-               	movss	(%r9), %xmm0
+               	addq	%rax, %r8
+               	movss	(%r8,%rcx,4), %xmm0
                	cvtss2sd	%xmm0, %xmm0
-               	leaq	<rip>, %r9 # <addr>
-               	addq	%r9, %rax
+               	leaq	<rip>, %r8 # <addr>
                	addq	%r8, %rax
-               	movss	(%rax), %xmm1
+               	movss	(%rax,%rcx,4), %xmm1
                	cvtss2sd	%xmm1, %xmm1
                	movb	$0x2, %al
                	callq	<addr>

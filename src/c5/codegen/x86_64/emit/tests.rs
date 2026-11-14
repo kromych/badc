@@ -790,7 +790,16 @@ mod indexed_tests {
             let dst = Place::IntReg(Reg::RAX.0);
             let lsl = (index, IndexExt::None);
             emit_load_indexed(
-                &mut code, dst, base, lsl, scale, kind, true, &alloc, frame, None,
+                &mut code,
+                dst,
+                base,
+                lsl,
+                scale,
+                kind,
+                (true, false),
+                &alloc,
+                frame,
+                None,
             )
             .expect("emit_load_indexed");
             assert_eq!(*code, want, "{src}");
@@ -799,7 +808,16 @@ mod indexed_tests {
                 let marked = (index, ext);
                 assert!(
                     emit_load_indexed(
-                        &mut code, dst, base, marked, scale, kind, true, &alloc, frame, None
+                        &mut code,
+                        dst,
+                        base,
+                        marked,
+                        scale,
+                        kind,
+                        (true, false),
+                        &alloc,
+                        frame,
+                        None
                     )
                     .is_err()
                 );

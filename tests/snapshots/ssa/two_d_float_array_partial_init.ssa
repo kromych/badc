@@ -411,15 +411,15 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v375 Extend { value=v370, kind=I32 }                  -> x0
     v376 ImmData(272)                                     -> x8
     v377 BinopI { op=shl, lhs=v3, rhs_imm=4 }             -> x0
-    v378 Binop { op=add, lhs=v376, rhs=v377 }             -> x9
-    v379 BinopI { op=shl, lhs=v370, rhs_imm=2 }           -> x8
+    v378 Binop { op=add, lhs=v376, rhs=v377 }             -> x8
+    v379 BinopI { op=shl, lhs=v370, rhs_imm=2 }           -> x9
     v380 Binop { op=add, lhs=v378, rhs=v379 }             -> x9
-    v381 Load { addr=v380, disp=0, kind=F32 }             -> d0 [f32]
+    v381 LoadIndexed { base=v378, index=v370, scale=4, kind=F32 } -> d0 [f32]
     v382 FpCast { kind=F32ToF64, value=v381 }             -> d0
-    v383 ImmData(16)                                      -> x9
+    v383 ImmData(16)                                      -> x8
     v384 Binop { op=add, lhs=v383, rhs=v377 }             -> x0
-    v385 Binop { op=add, lhs=v384, rhs=v379 }             -> x0
-    v386 Load { addr=v385, disp=0, kind=F32 }             -> d1 [f32]
+    v385 Binop { op=add, lhs=v384, rhs=v379 }             -> x8
+    v386 LoadIndexed { base=v384, index=v370, scale=4, kind=F32 } -> d1 [f32]
     v387 FpCast { kind=F32ToF64, value=v386 }             -> d1
     v388 CallExt { binding_idx=1, args=[v372, v373, v3, v370, v382, v387], fp_arg_mask=0x30 } -> x0
     v389 Imm(1)                                           -> x0

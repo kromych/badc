@@ -730,21 +730,17 @@ Disassembly of section .text:
                	sub	x8, x29, #0x6d0
                	bl	<addr>
                	sub	x0, x29, #0x6d0
-               	sub	x2, x29, #0x6f0
+               	sub	x1, x29, #0x6f0
                	ldp	x16, x17, [x0]
-               	stp	x16, x17, [x2]
+               	stp	x16, x17, [x1]
                	ldp	x16, x17, [x0, #0x10]
-               	stp	x16, x17, [x2, #0x10]
+               	stp	x16, x17, [x1, #0x10]
                	mov	x0, #0x0                // =0
-               	lsl	x1, x0, #2
-               	add	x3, x20, x1
-               	ldr	s0, [x3]
-               	add	x3, x21, x1
-               	ldr	s1, [x3]
+               	ldr	s0, [x20, x0, lsl #2]
+               	ldr	s1, [x21, x0, lsl #2]
                	fmul	s2, s0, s1
                	fadd	s2, s2, s0
-               	add	x1, x2, x1
-               	ldr	s3, [x1]
+               	ldr	s3, [x1, x0, lsl #2]
                	fsub	s0, s1, s0
                	fdiv	s0, s2, s0
                	fcmp	s3, s0

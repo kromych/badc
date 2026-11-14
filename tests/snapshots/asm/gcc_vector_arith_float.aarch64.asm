@@ -590,10 +590,10 @@ Disassembly of section .text:
                	fneg	d1, d1
                	mov	d2, v0.d[1]
                	fneg	d2, d2
-               	sub	x1, x29, #0x40
+               	sub	x2, x29, #0x40
                	stur	d1, [x29, #-0x40]
                	stur	d2, [x29, #-0x38]
-               	sub	x2, x29, #0x10
+               	sub	x1, x29, #0x10
                	mov	d1, v0.d[0]
                	fneg	d1, d1
                	stur	d1, [x29, #-0x10]
@@ -601,15 +601,15 @@ Disassembly of section .text:
                	fneg	d0, d0
                	stur	d0, [x29, #-0x8]
                	mov	x0, #0x0                // =0
-               	ldrb	w3, [x1, x0]
-               	ldrb	w4, [x2, x0]
+               	ldrb	w3, [x2, x0]
+               	ldrb	w4, [x1, x0]
                	cmp	w3, w4
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>
-               	sub	x5, x29, #0xa0
-               	sub	x6, x29, #0x90
+               	sub	x3, x29, #0xa0
+               	sub	x4, x29, #0x90
                	ldur	q0, [x29, #-0xa0]
                	ldur	q1, [x29, #-0x90]
                	fadd	v0.4s, v0.4s, v1.4s
@@ -631,16 +631,12 @@ Disassembly of section .text:
                	fsub	v0.4s, v0.4s, v1.4s
                	stur	q0, [x29, #-0x40]
                	mov	x0, #0x0                // =0
-               	lsl	x1, x0, #2
-               	add	x3, x2, x1
-               	add	x4, x5, x1
-               	ldr	s0, [x4]
-               	add	x1, x6, x1
-               	ldr	s1, [x1]
+               	ldr	s0, [x3, x0, lsl #2]
+               	ldr	s1, [x4, x0, lsl #2]
                	fadd	s1, s0, s1
                	fmov	s2, #2.00000000
                	fnmsub	s0, s1, s2, s0
-               	str	s0, [x3]
+               	str	s0, [x1, x0, lsl #2]
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
                	b.lt	<addr>

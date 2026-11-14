@@ -77,14 +77,14 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v71  Imm(0)                                           -> x0
     terminator Jmp(b2)   (exit_acc=v71)
   block 1  start_pc=0
-    v2679 ImmData(176)                                     -> x6
-    v2680 Extend { value=v2676, kind=I32 }                 -> x2
-    v2681 BinopI { op=shl, lhs=v2676, rhs_imm=3 }          -> x2
+    v2679 ImmData(176)                                     -> x2
+    v2680 Extend { value=v2676, kind=I32 }                 -> x6
+    v2681 BinopI { op=shl, lhs=v2676, rhs_imm=3 }          -> x6
     v2682 Binop { op=add, lhs=v2679, rhs=v2681 }           -> x6
-    v2683 ImmData(16)                                      -> x7
-    v2684 Binop { op=add, lhs=v63, rhs=v2681 }             -> x2
-    v2685 Load { addr=v2684, disp=0, kind=I64 }            -> x2
-    v2686 Store { addr=v2682, disp=0, value=v2685, kind=I64 } -> -
+    v2683 ImmData(16)                                      -> x6
+    v2684 Binop { op=add, lhs=v63, rhs=v2681 }             -> x6
+    v2685 LoadIndexed { base=v63, index=v2676, scale=8, kind=I64 } -> x6
+    v2686 StoreIndexed { base=v2679, index=v2676, scale=8, value=v2685, kind=I64 } -> -
     v2687 ImmData(336)                                     -> x2
     v2688 Extend { value=v2676, kind=I32 }                 -> x6
     v2689 BinopI { op=shl, lhs=v2676, rhs_imm=2 }          -> x6

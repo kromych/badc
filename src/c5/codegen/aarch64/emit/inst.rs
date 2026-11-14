@@ -261,6 +261,7 @@ pub(super) fn emit_inst(
             (*index, *index_ext),
             *scale,
             *kind,
+            alloc.is_f32(v),
             alloc,
             frame,
             scratch,

@@ -1839,6 +1839,19 @@ pub(crate) fn enc_ldr_reg_lsl3(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> u32 
     enc_reg_offset(0xF860_1800, rt, rn, rm, ext)
 }
 
+/// `LDR St` / `LDR Dt, [Xn|SP, Rm, <ext> #2 / #3]`: the integer forms with
+/// the SIMD&FP bit (26) set.
+pub(crate) fn enc_ldr_fp_reg(single: bool, rt: u8, rn: Reg, rm: Reg, ext: IndexExt) -> u32 {
+    let form = if single { 0xBC60_1800 } else { 0xFC60_1800 };
+    enc_reg_offset(form, Reg(rt), rn, rm, ext)
+}
+
+/// The store counterpart of [`enc_ldr_fp_reg`].
+pub(crate) fn enc_str_fp_reg(single: bool, rt: u8, rn: Reg, rm: Reg, ext: IndexExt) -> u32 {
+    let form = if single { 0xBC20_1800 } else { 0xFC20_1800 };
+    enc_reg_offset(form, Reg(rt), rn, rm, ext)
+}
+
 /// `LDRSW Xt, [Xn|SP, Rm, <ext> #2]`.
 pub(crate) fn enc_ldrsw_reg_lsl2(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> u32 {
     enc_reg_offset(0xB8A0_1800, rt, rn, rm, ext)

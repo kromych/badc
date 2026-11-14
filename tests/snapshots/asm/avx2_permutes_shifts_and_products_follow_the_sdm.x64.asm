@@ -1006,15 +1006,11 @@ Disassembly of section .text:
                	cmpl	$0x190, %ebx            # imm = 0x190
                	jl	<addr>
                	xorl	%eax, %eax
+               	leaq	<rip>, %rcx # <addr>
                	leaq	<rip>, %rdx # <addr>
-               	leaq	<rip>, %rsi # <addr>
-               	movq	%rax, %rcx
-               	shlq	$0x3, %rcx
-               	leaq	(%rsi,%rcx), %rdi
-               	movq	(%rdi), %rdi
-               	addq	%rdx, %rcx
-               	movq	(%rcx), %rcx
-               	cmpq	%rcx, %rdi
+               	movq	(%rdx,%rax,8), %rsi
+               	movq	(%rcx,%rax,8), %rdi
+               	cmpq	%rdi, %rsi
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x15, %eax

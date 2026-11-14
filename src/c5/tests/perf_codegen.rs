@@ -8502,3 +8502,27 @@ fn a_big_endian_word_built_from_bytes_is_one_load() {
         "{ws:08x?}"
     );
 }
+
+/// An index scaled once for two arrays, of integers or of doubles, folds
+/// into both accesses: no shift or address add stays in the loop.
+#[test]
+fn a_shared_scaled_index_folds_into_every_access() {
+    const SRC: &str = "void icopy(int *a, const int *b, int n) {\n\
+    for (int i = 0; i < n; i++) a[i] = b[i] + 1;\n\
+}\n\
+void fscale(double *a, const double *b, double x, int n) {\n\
+    for (int i = 0; i < n; i++) a[i] = b[i] * x;\n\
+}\n";
+    for name in ["icopy", "fscale"] {
+        let insns = x64(SRC, name);
+        // `shl` by an immediate, or an `add` / `lea` forming an address.
+        let shl =
+            |i: &X64Insn| matches!(i.op, 0xC1 | 0xD1) && i.modrm.is_some_and(|m| (m >> 3) & 7 == 4);
+        assert!(!insns.iter().any(shl), "{name}: {insns:x?}");
+        assert!(!insns.iter().any(|i| i.op == 0x8D), "{name}: {insns:x?}");
+        let ws = a64(SRC, name);
+        // `lsl Xd, Xn, #k` is `ubfm`; a register-offset access carries the scale.
+        let lsl = |w: &u32| w & 0xFFC0_0000 == 0xD340_0000;
+        assert!(!ws.iter().any(lsl), "{name}: {ws:08x?}");
+    }
+}

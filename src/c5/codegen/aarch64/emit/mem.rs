@@ -1668,18 +1668,41 @@ pub(super) fn emit_load_indexed(
     (index, ext): (u32, IndexExt),
     scale: u8,
     kind: LoadKind,
+    keep_f32: bool,
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
 ) -> Emit {
+    let base_place = place_of(alloc, base);
+    let index_place = place_of(alloc, index);
+    // A single or double off the register-offset form, a single widened
+    // where the value is carried as a double.
+    if let LoadKind::F32 | LoadKind::F64 = kind
+        && scale == if kind == LoadKind::F32 { 4 } else { 8 }
+    {
+        let (Some(rn), Some(rm)) = (
+            materialize_int(code, base_place, scratch.primary, frame),
+            materialize_int(code, index_place, scratch.secondary, frame),
+        ) else {
+            return fail("LoadIndexed: base / index not int reg / spill");
+        };
+        let Some(dd) = fp_or_spill_dst(dst, frame) else {
+            return fail("LoadIndexed: dst not fp reg / spill");
+        };
+        let single = kind == LoadKind::F32;
+        emit(code, super::encode::enc_ldr_fp_reg(single, dd, rn, rm, ext));
+        if single && !keep_f32 {
+            emit(code, super::encode::enc_fcvt_d_s(dd, dd));
+        }
+        store_spilled_fp(code, frame, dst, dd);
+        return Ok(());
+    }
     if matches!(
         kind,
         LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128
     ) {
         return fail("LoadIndexed: FP not implemented");
     }
-    let base_place = place_of(alloc, base);
-    let index_place = place_of(alloc, index);
     let rn = match materialize_int(code, base_place, scratch.primary, frame) {
         Some(r) => r,
         None => return fail("LoadIndexed: base not int reg / spill"),
@@ -1749,15 +1772,44 @@ pub(super) fn emit_store_indexed(
     frame: Frame,
     scratch: &ScratchPool,
 ) -> Emit {
+    let base_place = place_of(alloc, base);
+    let index_place = place_of(alloc, index);
+    let value_place = place_of(alloc, value);
+    // A single or double through the register-offset form, a value carried
+    // as a double narrowed first. The value is reloaded ahead of the base
+    // and index, as its reload may take an address scratch.
+    if let StoreKind::F32 | StoreKind::F64 = kind
+        && scale == if kind == StoreKind::F32 { 4 } else { 8 }
+    {
+        let Some(dn) = materialize_fp(code, value_place, frame.fp_scratch[0], frame) else {
+            return fail("StoreIndexed: value not fp reg / spill / int reg");
+        };
+        let single = kind == StoreKind::F32;
+        let src = if single && !alloc.is_f32(value) {
+            emit(code, super::encode::enc_fcvt_s_d(frame.fp_scratch[1], dn));
+            frame.fp_scratch[1]
+        } else {
+            dn
+        };
+        let (Some(rn), Some(rm)) = (
+            materialize_int(code, base_place, scratch.primary, frame),
+            materialize_int(code, index_place, scratch.secondary, frame),
+        ) else {
+            return fail("StoreIndexed: base / index not int reg / spill");
+        };
+        emit(
+            code,
+            super::encode::enc_str_fp_reg(single, src, rn, rm, ext),
+        );
+        propagate_fp(code, frame, dst, dn);
+        return Ok(());
+    }
     if matches!(
         kind,
         StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128
     ) {
         return fail("StoreIndexed: FP not implemented");
     }
-    let base_place = place_of(alloc, base);
-    let index_place = place_of(alloc, index);
-    let value_place = place_of(alloc, value);
     let rn = match materialize_int(code, base_place, scratch.primary, frame) {
         Some(r) => r,
         None => return fail("StoreIndexed: base not int reg / spill"),

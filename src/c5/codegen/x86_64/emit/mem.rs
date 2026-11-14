@@ -652,7 +652,7 @@ pub(super) fn emit_load_indexed(
     (index, ext): (u32, IndexExt),
     scale: u8,
     kind: LoadKind,
-    hi: bool,
+    (hi, keep_f32): (bool, bool),
     alloc: &Allocation,
     frame: Frame,
     frame_base: Option<(Reg, i32)>,
@@ -683,6 +683,31 @@ pub(super) fn emit_load_indexed(
         };
         super::intrinsic::encode_wide(code, "vmovq", &[at, xmm])?;
         mirror_fp_dst(code, dst, dd, frame);
+        return Ok(());
+    }
+    // A single or double: `movss` / `movsd` off the SIB form, a single
+    // widened where the value is carried as a double.
+    if let LoadKind::F32 | LoadKind::F64 = kind
+        && ext == IndexExt::None
+        && scale == if kind == LoadKind::F32 { 4 } else { 8 }
+    {
+        let Some((rbase, rindex, disp)) = indexed_operands(
+            code,
+            (place_of(alloc, base), place_of(alloc, index)),
+            frame,
+            frame_base,
+        ) else {
+            return fail("LoadIndexed: base / index not int reg / spill");
+        };
+        let Some(dd) = fp_or_spill_dst(dst, frame) else {
+            return fail("LoadIndexed: dst not fp reg / spill");
+        };
+        let single = kind == LoadKind::F32;
+        super::encode::emit_sse_mov_sib(code, single, false, dd, (rbase, rindex, scale, disp));
+        if single && !keep_f32 {
+            emit_cvtss2sd(code, dd, dd);
+        }
+        fp_spill_dst_to_slot(code, dst, dd, frame);
         return Ok(());
     }
     if is_fp_load(kind) {
@@ -777,11 +802,44 @@ pub(super) fn emit_store_indexed(
     frame: Frame,
     frame_base: Option<(Reg, i32)>,
 ) -> Emit {
-    if is_fp_store(kind) {
-        return fail("StoreIndexed: FP not implemented");
-    }
     if ext != IndexExt::None {
         return fail("StoreIndexed: widening index on x86_64");
+    }
+    // A single or double through the SIB form of `movss` / `movsd`, a
+    // value carried as a double narrowed first.
+    if let StoreKind::F32 | StoreKind::F64 = kind
+        && scale == if kind == StoreKind::F32 { 4 } else { 8 }
+    {
+        let Some((rbase, rindex, disp)) = indexed_operands(
+            code,
+            (place_of(alloc, base), place_of(alloc, index)),
+            frame,
+            frame_base,
+        ) else {
+            return fail("StoreIndexed: base / index not int reg / spill");
+        };
+        let Some(dn) = materialize_fp(
+            code,
+            place_of(alloc, value),
+            Reg(frame.fp_scratch[0]),
+            frame,
+        ) else {
+            return fail("StoreIndexed: value not fp reg / spill / int reg");
+        };
+        let single = kind == StoreKind::F32;
+        let src = if single && !alloc.is_f32(value) {
+            let narrow = Reg(frame.fp_scratch[1]);
+            emit_cvtsd2ss(code, narrow, dn);
+            narrow
+        } else {
+            dn
+        };
+        super::encode::emit_sse_mov_sib(code, single, true, src, (rbase, rindex, scale, disp));
+        mirror_fp_dst(code, dst, dn, frame);
+        return Ok(());
+    }
+    if is_fp_store(kind) {
+        return fail("StoreIndexed: FP not implemented");
     }
     let expected_scale: u8 = match kind {
         StoreKind::I64 => 8,

@@ -70,10 +70,7 @@ Disassembly of section .text:
                	shlq	$0x28, %rdx
                	xorq	%rcx, %rdx
                	movq	%rdx, %xmm0
-               	movq	%rax, %rcx
-               	shlq	$0x3, %rcx
-               	addq	%rdi, %rcx
-               	movsd	(%rcx), %xmm1
+               	vmovq	(%rdi,%rax,8), %xmm1
                	addsd	%xmm1, %xmm0
                	movq	%xmm0, %rcx
                	incq	%rax

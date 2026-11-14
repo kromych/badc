@@ -147,16 +147,13 @@ Disassembly of section .text:
                	adrp	x5, <page>
                	add	x5, x5, <lo12>
                	lsl	x4, x2, #4
-               	add	x6, x5, x4
-               	lsl	x5, x3, #2
-               	add	x6, x6, x5
-               	ldr	s0, [x6]
+               	add	x5, x5, x4
+               	ldr	s0, [x5, x3, lsl #2]
                	fcvt	d0, s0
-               	adrp	x6, <addr>
-               	add	x6, x6, <lo12>
-               	add	x4, x6, x4
-               	add	x4, x4, x5
-               	ldr	s1, [x4]
+               	adrp	x5, <addr>
+               	add	x5, x5, <lo12>
+               	add	x4, x5, x4
+               	ldr	s1, [x4, x3, lsl #2]
                	fcvt	d1, s1
                	bl	<addr>
                	mov	x0, #0x1                // =1

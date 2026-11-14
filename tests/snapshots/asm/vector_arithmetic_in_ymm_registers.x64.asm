@@ -333,36 +333,24 @@ Disassembly of section .text:
                	movq	%r9, %r10
                	vmovups	(%r10), %ymm1
                	callq	<addr>
-               	leaq	0x1c0(%rsp), %rdx
+               	leaq	0x1c0(%rsp), %rcx
                	vmovups	%ymm0, 0x1c0(%rsp)
-               	xorl	%ecx, %ecx
-               	movq	%rcx, %rax
-               	shlq	$0x2, %rax
-               	leaq	(%rbx,%rax), %rsi
-               	movss	(%rsi), %xmm0
-               	leaq	0x160(%rsp), %rsi
-               	addq	%rax, %rsi
-               	movss	(%rsi), %xmm1
-               	mulss	%xmm1, %xmm0
-               	leaq	0x140(%rsp), %rsi
-               	addq	%rax, %rsi
-               	movss	(%rsi), %xmm1
-               	addss	%xmm1, %xmm0
-               	leaq	(%rdx,%rax), %rsi
-               	movss	(%rsi), %xmm1
-               	leaq	0x160(%rsp), %rsi
-               	addq	%rax, %rsi
-               	movss	(%rsi), %xmm2
-               	leaq	0x140(%rsp), %rsi
-               	addq	%rsi, %rax
-               	movss	(%rax), %xmm3
-               	subss	%xmm3, %xmm2
-               	divss	%xmm2, %xmm0
-               	ucomiss	%xmm0, %xmm1
+               	xorl	%eax, %eax
+               	movss	0x140(%rsp,%rax,4), %xmm1
+               	leaq	0x160(%rsp), %rdx
+               	movss	0x160(%rsp,%rax,4), %xmm0
+               	vmulss	%xmm0, %xmm1, %xmm2
+               	leaq	0x140(%rsp), %rdx
+               	movss	0x140(%rsp,%rax,4), %xmm1
+               	addss	%xmm1, %xmm2
+               	movss	0x1c0(%rsp,%rax,4), %xmm3
+               	subss	%xmm1, %xmm0
+               	vdivss	%xmm0, %xmm2, %xmm1
+               	ucomiss	%xmm1, %xmm3
                	jp	<addr>
                	jne	<addr>
-               	incq	%rcx
-               	cmpl	$0x8, %ecx
+               	incq	%rax
+               	cmpl	$0x8, %eax
                	jl	<addr>
                	leaq	0x180(%rsp), %r9
                	leaq	0x1a0(%rsp), %rax

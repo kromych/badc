@@ -584,7 +584,7 @@ Disassembly of section .text:
                	xorpd	%xmm15, %xmm2
                	movsd	%xmm1, (%rsp)
                	movsd	%xmm2, 0x8(%rsp)
-               	leaq	-0x10(%rbp), %rdx
+               	leaq	-0x10(%rbp), %rcx
                	vpermilpd	$0x0, %xmm0, %xmm1 # xmm1 = xmm0[0,0]
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
                	movq	%r10, %xmm15
@@ -603,8 +603,8 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x10, %eax
                	jl	<addr>
-               	leaq	0x20(%rsp), %r8
-               	leaq	0x30(%rsp), %r9
+               	leaq	0x20(%rsp), %rsi
+               	leaq	0x30(%rsp), %rdi
                	movups	0x20(%rsp), %xmm0
                	movups	0x30(%rsp), %xmm1
                	vaddps	%xmm1, %xmm0, %xmm0
@@ -630,17 +630,12 @@ Disassembly of section .text:
                	vsubps	%xmm1, %xmm0, %xmm0
                	movups	%xmm0, (%rsp)
                	xorl	%eax, %eax
-               	movq	%rax, %rcx
-               	shlq	$0x2, %rcx
-               	leaq	(%rdx,%rcx), %rsi
-               	leaq	(%r8,%rcx), %rdi
-               	movss	(%rdi), %xmm0
-               	addq	%r9, %rcx
-               	movss	(%rcx), %xmm1
+               	movss	0x20(%rsp,%rax,4), %xmm0
+               	movss	0x30(%rsp,%rax,4), %xmm1
                	vaddss	%xmm1, %xmm0, %xmm1
                	movss	<rip>, %xmm2
                	vfmsub231ss	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm2) - xmm0
-               	movss	%xmm0, (%rsi)
+               	movss	%xmm0, -0x10(%rbp,%rax,4)
                	incq	%rax
                	cmpl	$0x4, %eax
                	jl	<addr>

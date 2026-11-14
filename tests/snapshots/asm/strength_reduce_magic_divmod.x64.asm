@@ -66,13 +66,9 @@ Disassembly of section .text:
                	movabsq	$0x1069e6a57e06665d, %rax # imm = 0x1069E6A57E06665D
                	movq	%rax, <rip> # <addr>
                	xorl	%eax, %eax
-               	leaq	<rip>, %rsi # <addr>
-               	movq	%rax, %rdx
-               	shlq	$0x3, %rdx
-               	addq	%rdx, %rsi
-               	addq	%rcx, %rdx
-               	movq	(%rdx), %rdx
-               	movq	%rdx, (%rsi)
+               	leaq	<rip>, %rdx # <addr>
+               	movq	(%rcx,%rax,8), %rsi
+               	movq	%rsi, (%rdx,%rax,8)
                	leaq	<rip>, %rdx # <addr>
                	movq	(%rcx,%rax,8), %rsi
                	movl	%esi, (%rdx,%rax,4)

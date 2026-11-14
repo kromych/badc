@@ -346,10 +346,7 @@ Disassembly of section .text:
                	leaq	-0x28(%rbp), %rcx
                	movsd	%xmm0, -0x28(%rbp)
                	xorl	%eax, %eax
-               	movq	%rax, %rdx
-               	shlq	$0x2, %rdx
-               	addq	%rcx, %rdx
-               	movss	(%rdx), %xmm1
+               	movss	-0x28(%rbp,%rax,4), %xmm1
                	movss	-0x10(%rbp), %xmm2
                	ucomiss	%xmm2, %xmm1
                	jp	<addr>
@@ -516,10 +513,7 @@ Disassembly of section .text:
                	leaq	-0x30(%rbp), %rcx
                	movups	%xmm0, -0x30(%rbp)
                	xorl	%eax, %eax
-               	movq	%rax, %rdx
-               	shlq	$0x2, %rdx
-               	addq	%rcx, %rdx
-               	movss	(%rdx), %xmm1
+               	movss	-0x30(%rbp,%rax,4), %xmm1
                	movss	-0x10(%rbp), %xmm2
                	ucomiss	%xmm2, %xmm1
                	jp	<addr>
@@ -530,13 +524,9 @@ Disassembly of section .text:
                	movsd	-0x8(%rbp), %xmm0
                	vzeroupper
                	callq	<addr>
-               	leaq	-0x30(%rbp), %rcx
                	movups	%xmm0, -0x30(%rbp)
                	xorl	%eax, %eax
-               	movq	%rax, %rdx
-               	shlq	$0x3, %rdx
-               	addq	%rcx, %rdx
-               	movsd	(%rdx), %xmm1
+               	vmovq	-0x30(%rbp,%rax,8), %xmm1
                	movsd	-0x8(%rbp), %xmm2
                	ucomisd	%xmm2, %xmm1
                	jp	<addr>
@@ -608,10 +598,7 @@ Disassembly of section .text:
                	leaq	-0x40(%rbp), %rcx
                	vmovups	%ymm0, -0x40(%rbp)
                	xorl	%eax, %eax
-               	movq	%rax, %rdx
-               	shlq	$0x2, %rdx
-               	addq	%rcx, %rdx
-               	movss	(%rdx), %xmm1
+               	movss	-0x40(%rbp,%rax,4), %xmm1
                	movss	-0x10(%rbp), %xmm2
                	ucomiss	%xmm2, %xmm1
                	jp	<addr>
@@ -622,13 +609,9 @@ Disassembly of section .text:
                	movsd	-0x8(%rbp), %xmm0
                	vzeroupper
                	callq	<addr>
-               	leaq	-0x40(%rbp), %rcx
                	vmovups	%ymm0, -0x40(%rbp)
                	xorl	%eax, %eax
-               	movq	%rax, %rdx
-               	shlq	$0x3, %rdx
-               	addq	%rcx, %rdx
-               	movsd	(%rdx), %xmm1
+               	vmovq	-0x40(%rbp,%rax,8), %xmm1
                	movsd	-0x8(%rbp), %xmm2
                	ucomisd	%xmm2, %xmm1
                	jp	<addr>

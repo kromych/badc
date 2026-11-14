@@ -228,11 +228,8 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	xorps	%xmm0, %xmm0
                	leaq	<rip>, %rcx # <addr>
-               	movq	%rax, %rdx
-               	shlq	$0x2, %rdx
-               	addq	%rdx, %rcx
-               	movl	$0x3f804000, (%rcx)     # imm = 0x3F804000
-               	movss	(%rcx), %xmm1
+               	movl	$0x3f804000, (%rcx,%rax,4) # imm = 0x3F804000
+               	movss	(%rcx,%rax,4), %xmm1
                	addss	%xmm1, %xmm0
                	incq	%rax
                	cmpl	$0x10, %eax
@@ -250,11 +247,8 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	xorps	%xmm0, %xmm0
                	leaq	<rip>, %rcx # <addr>
-               	movq	%rax, %rdx
-               	shlq	$0x2, %rdx
-               	addq	%rdx, %rcx
-               	movl	$0x3f804000, (%rcx)     # imm = 0x3F804000
-               	movss	(%rcx), %xmm1
+               	movl	$0x3f804000, (%rcx,%rax,4) # imm = 0x3F804000
+               	movss	(%rcx,%rax,4), %xmm1
                	addss	%xmm1, %xmm0
                	incq	%rax
                	cmpl	$0x10, %eax

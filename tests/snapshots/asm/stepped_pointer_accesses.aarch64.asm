@@ -272,11 +272,9 @@ Disassembly of section .text:
                	movi	d0, #0000000000000000
                	b	<addr>
                	ldur	x0, [x29, #-0x8]
-               	add	x0, x3, x0, lsl #3
-               	ldr	d1, [x0]
+               	ldr	d1, [x3, x0, lsl #3]
                	ldur	x0, [x29, #-0x8]
-               	add	x0, x1, x0, lsl #2
-               	ldr	s2, [x0]
+               	ldr	s2, [x1, x0, lsl #2]
                	fcvt	d2, s2
                	fmadd	d0, d1, d2, d0
                	ldur	x0, [x29, #-0x8]
@@ -370,18 +368,16 @@ Disassembly of section .text:
                	add	x13, x0, #0x3
                	mul	x13, x13, x2
                	str	x13, [x10, x0, lsl #3]
-               	add	x13, x11, x0, lsl #3
                	scvtf	d0, x0
                	fmov	d1, #0.25000000
                	fmov	d2, #3.00000000
                	fnmsub	d1, d0, d1, d2
-               	str	d1, [x13]
-               	add	x0, x12, x0, lsl #2
+               	str	d1, [x11, x0, lsl #3]
                	fmov	d1, #1.50000000
                	fmov	d2, #20.00000000
                	fnmsub	d0, d0, d1, d2
                	fcvt	s0, d0
-               	str	s0, [x0]
+               	str	s0, [x12, x0, lsl #2]
                	mov	x0, x1
                	cmp	w0, #0x40
                	b.lt	<addr>

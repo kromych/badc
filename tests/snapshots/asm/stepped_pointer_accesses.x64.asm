@@ -271,13 +271,9 @@ Disassembly of section .text:
                	xorps	%xmm0, %xmm0
                	jmp	<addr>
                	movq	-0x8(%rbp), %rax
-               	shlq	$0x3, %rax
-               	addq	%rdi, %rax
-               	movsd	(%rax), %xmm1
+               	vmovq	(%rdi,%rax,8), %xmm1
                	movq	-0x8(%rbp), %rax
-               	shlq	$0x2, %rax
-               	addq	%rsi, %rax
-               	movss	(%rax), %xmm2
+               	movss	(%rsi,%rax,4), %xmm2
                	cvtss2sd	%xmm2, %xmm2
                	vfmadd231sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm2) + xmm0
                	movq	-0x8(%rbp), %rax
@@ -359,23 +355,18 @@ Disassembly of section .text:
                	imulq	%r11, %rsi
                	movq	%rsi, (%rdx,%rax,8)
                	leaq	<rip>, %rdx # <addr>
-               	movq	%rax, %rsi
-               	shlq	$0x3, %rsi
-               	addq	%rsi, %rdx
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rax, %xmm0
                	movsd	<rip>, %xmm1
                	movsd	<rip>, %xmm2
                	vfmsub213sd	%xmm2, %xmm0, %xmm1 # xmm1 = (xmm0 * xmm1) - xmm2
-               	movsd	%xmm1, (%rdx)
+               	movsd	%xmm1, (%rdx,%rax,8)
                	leaq	<rip>, %rdx # <addr>
-               	shlq	$0x2, %rax
-               	addq	%rdx, %rax
                	movsd	<rip>, %xmm1
                	movsd	<rip>, %xmm2
                	vfmsub213sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm0) - xmm2
                	cvtsd2ss	%xmm0, %xmm0
-               	movss	%xmm0, (%rax)
+               	movss	%xmm0, (%rdx,%rax,4)
                	movq	%rcx, %rax
                	cmpl	$0x40, %eax
                	jl	<addr>

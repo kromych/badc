@@ -30,8 +30,7 @@ Disassembly of section .text:
                	stur	d0, [x29, #-0x8]
                	ldur	d0, [x29, #-0x8]
                	mov	x0, #0x3                // =3
-               	add	x2, x1, x0, lsl #3
-               	ldr	d2, [x2]
+               	ldr	d2, [x1, x0, lsl #3]
                	fmadd	d0, d0, d1, d2
                	sub	x0, x0, #0x1
                	cmp	w0, #0x0
@@ -54,16 +53,15 @@ Disassembly of section .text:
                	sub	x1, x29, #0x28
                	ldur	d1, [x29, #-0x8]
                	mov	x0, #0x3                // =3
-               	add	x2, x1, x0, lsl #3
-               	ldr	d2, [x2]
+               	ldr	d2, [x1, x0, lsl #3]
                	fmadd	d1, d1, d0, d2
                	sub	x0, x0, #0x1
                	cmp	w0, #0x0
                	b.ge	<addr>
                	fmov	d0, #1.00000000
                	fsub	d1, d1, d0
-               	mov	x4, #0x0                // =0
-               	fmov	d17, x4
+               	mov	x3, #0x0                // =0
+               	fmov	d17, x3
                	fcmpe	d1, d17
                	b.pl	<addr>
                	fneg	d1, d1
@@ -75,32 +73,29 @@ Disassembly of section .text:
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x8, #0x18               // =24
+               	mov	x7, #0x18               // =24
                	mov	x1, #0x0                // =0
-               	mul	x2, x4, x8
-               	add	x5, x4, x4, lsl #1
+               	mul	x2, x3, x7
+               	add	x4, x3, x3, lsl #1
                	mov	x0, x1
-               	sub	x3, x29, #0x90
-               	add	x6, x3, x2
-               	lsl	x3, x0, #3
-               	add	x6, x6, x3
-               	add	x7, x5, x0
-               	add	x7, x7, #0x1
-               	sxtw	x7, w7
-               	scvtf	d1, x7
-               	str	d1, [x6]
-               	sub	x6, x29, #0x48
-               	add	x6, x6, x2
-               	add	x3, x6, x3
-               	cmp	w4, w0
+               	sub	x5, x29, #0x90
+               	add	x5, x5, x2
+               	add	x6, x4, x0
+               	add	x6, x6, #0x1
+               	sxtw	x6, w6
+               	scvtf	d1, x6
+               	str	d1, [x5, x0, lsl #3]
+               	sub	x5, x29, #0x48
+               	add	x5, x5, x2
+               	cmp	w3, w0
                	fmov	d17, x1
                	fcsel	d1, d0, d17, eq
-               	str	d1, [x3]
+               	str	d1, [x5, x0, lsl #3]
                	add	x0, x0, #0x1
                	cmp	w0, #0x3
                	b.lt	<addr>
-               	add	x4, x4, #0x1
-               	cmp	w4, #0x3
+               	add	x3, x3, #0x1
+               	cmp	w3, #0x3
                	b.lt	<addr>
                	mov	x2, #0x0                // =0
                	mov	x3, #0x18               // =24

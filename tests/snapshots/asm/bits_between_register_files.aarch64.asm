@@ -55,8 +55,7 @@ Disassembly of section .text:
                	b.ge	<addr>
                	eor	x3, x3, x2, lsl #40
                	fmov	d0, x3
-               	add	x3, x0, x2, lsl #3
-               	ldr	d1, [x3]
+               	ldr	d1, [x0, x2, lsl #3]
                	fadd	d0, d0, d1
                	fmov	x3, d0
                	add	x2, x2, #0x1

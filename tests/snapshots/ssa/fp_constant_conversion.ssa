@@ -22,7 +22,7 @@ fn ent_pc=0 n_params=1 variadic=true locals=3
     v19  Extend { value=v8, kind=I32 }                    -> x6
     v20  BinopI { op=shl, lhs=v8, rhs_imm=3 }             -> x6
     v21  Binop { op=add, lhs=v6, rhs=v20 }                -> x6
-    v22  Load { addr=v21, disp=0, kind=F64 }              -> d1
+    v22  LoadIndexed { base=v6, index=v8, scale=8, kind=F64 } -> d1
     v23  Binop { op=fne, lhs=v17, rhs=v22 }               -> x6
     v24  Binop { op=add, lhs=v9, rhs=v23 }                -> x1
     v25  Extend { value=v24, kind=I32, nsw }              -> x6

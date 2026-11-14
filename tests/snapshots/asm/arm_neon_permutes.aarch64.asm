@@ -1057,8 +1057,7 @@ Disassembly of section .text:
                	cmp	w2, #0x2
                	b.ge	<addr>
                	sub	x3, x29, #0x40
-               	add	x3, x3, x2, lsl #2
-               	ldr	s2, [x3]
+               	ldr	s2, [x3, x2, lsl #2]
                	add	x2, x2, #0x1
                	cmp	w2, #0x2
                	b.ge	<addr>
@@ -1066,57 +1065,45 @@ Disassembly of section .text:
                	cbz	x1, <addr>
                	sub	x2, x29, #0x38
                	sub	x3, x0, #0x1
-               	add	x2, x2, x3, lsl #2
-               	ldr	s4, [x2]
+               	ldr	s4, [x2, x3, lsl #2]
                	cbz	x1, <addr>
                	sub	x1, x29, #0x38
-               	add	x1, x1, x0, lsl #2
-               	ldr	s5, [x1]
+               	ldr	s5, [x1, x0, lsl #2]
                	sub	x1, x29, #0x30
-               	lsl	x2, x0, #2
-               	add	x3, x1, x2
-               	ldr	s6, [x3]
+               	ldr	s6, [x1, x0, lsl #2]
                	fcmp	s6, s0
                	b.ne	<addr>
-               	add	x3, x1, #0x8
-               	add	x3, x3, x2
-               	ldr	s0, [x3]
+               	add	x2, x1, #0x8
+               	ldr	s0, [x2, x0, lsl #2]
                	fcmp	s0, s1
                	b.ne	<addr>
-               	add	x3, x1, #0x10
-               	add	x3, x3, x2
-               	ldr	s0, [x3]
+               	add	x2, x1, #0x10
+               	ldr	s0, [x2, x0, lsl #2]
                	fcmp	s0, s2
                	b.ne	<addr>
-               	add	x3, x1, #0x18
-               	add	x3, x3, x2
-               	ldr	s0, [x3]
+               	add	x2, x1, #0x18
+               	ldr	s0, [x2, x0, lsl #2]
                	fcmp	s0, s3
                	b.ne	<addr>
-               	add	x3, x1, #0x20
-               	add	x3, x3, x2
-               	ldr	s0, [x3]
+               	add	x2, x1, #0x20
+               	ldr	s0, [x2, x0, lsl #2]
                	fcmp	s0, s4
                	b.ne	<addr>
                	add	x1, x1, #0x28
-               	add	x1, x1, x2
-               	ldr	s0, [x1]
+               	ldr	s0, [x1, x0, lsl #2]
                	fcmp	s0, s5
                	b.eq	<addr>
                	b	<addr>
                	sub	x1, x29, #0x40
                	add	x2, x0, #0x1
-               	add	x1, x1, x2, lsl #2
-               	ldr	s5, [x1]
+               	ldr	s5, [x1, x2, lsl #2]
                	b	<addr>
                	sub	x2, x29, #0x40
-               	add	x2, x2, x0, lsl #2
-               	ldr	s4, [x2]
+               	ldr	s4, [x2, x0, lsl #2]
                	b	<addr>
                	sub	x3, x29, #0x38
                	sub	x2, x2, #0x2
-               	add	x2, x3, x2, lsl #2
-               	ldr	s3, [x2]
+               	ldr	s3, [x3, x2, lsl #2]
                	b	<addr>
                	ldur	s2, [x29, #-0x38]
                	b	<addr>
@@ -1182,92 +1169,73 @@ Disassembly of section .text:
                	lsl	x3, x0, #1
                	cbz	x2, <addr>
                	sub	x4, x29, #0x10
-               	add	x4, x4, x1, lsl #2
-               	ldr	s0, [x4]
+               	ldr	s0, [x4, x1, lsl #2]
                	cbz	x2, <addr>
                	sub	x4, x29, #0x10
                	add	x1, x1, #0x2
-               	add	x1, x4, x1, lsl #2
-               	ldr	s1, [x1]
+               	ldr	s1, [x4, x1, lsl #2]
                	cmp	w3, #0x4
                	b.ge	<addr>
                	sub	x1, x29, #0x20
-               	add	x1, x1, x3, lsl #2
-               	ldr	s2, [x1]
+               	ldr	s2, [x1, x3, lsl #2]
                	add	x1, x3, #0x1
                	cmp	w1, #0x4
                	b.ge	<addr>
                	sub	x3, x29, #0x20
-               	add	x1, x3, x1, lsl #2
-               	ldr	s3, [x1]
+               	ldr	s3, [x3, x1, lsl #2]
                	cbz	x2, <addr>
                	sub	x1, x29, #0x10
                	sub	x3, x0, #0x1
-               	add	x1, x1, x3, lsl #2
-               	ldr	s4, [x1]
+               	ldr	s4, [x1, x3, lsl #2]
                	cbz	x2, <addr>
                	sub	x1, x29, #0x10
-               	add	x1, x1, x0, lsl #2
-               	ldr	s5, [x1]
+               	ldr	s5, [x1, x0, lsl #2]
                	sub	x1, x29, #0x80
-               	lsl	x2, x0, #2
-               	add	x3, x1, x2
-               	ldr	s6, [x3]
+               	ldr	s6, [x1, x0, lsl #2]
                	fcmp	s6, s0
                	b.ne	<addr>
-               	add	x3, x1, #0x10
-               	add	x3, x3, x2
-               	ldr	s0, [x3]
+               	add	x2, x1, #0x10
+               	ldr	s0, [x2, x0, lsl #2]
                	fcmp	s0, s1
                	b.ne	<addr>
-               	add	x3, x1, #0x20
-               	add	x3, x3, x2
-               	ldr	s0, [x3]
+               	add	x2, x1, #0x20
+               	ldr	s0, [x2, x0, lsl #2]
                	fcmp	s0, s2
                	b.ne	<addr>
-               	add	x3, x1, #0x30
-               	add	x3, x3, x2
-               	ldr	s0, [x3]
+               	add	x2, x1, #0x30
+               	ldr	s0, [x2, x0, lsl #2]
                	fcmp	s0, s3
                	b.ne	<addr>
-               	add	x3, x1, #0x40
-               	add	x3, x3, x2
-               	ldr	s0, [x3]
+               	add	x2, x1, #0x40
+               	ldr	s0, [x2, x0, lsl #2]
                	fcmp	s0, s4
                	b.ne	<addr>
                	add	x1, x1, #0x50
-               	add	x1, x1, x2
-               	ldr	s0, [x1]
+               	ldr	s0, [x1, x0, lsl #2]
                	fcmp	s0, s5
                	b.eq	<addr>
                	b	<addr>
                	sub	x1, x29, #0x20
                	add	x2, x0, #0x1
-               	add	x1, x1, x2, lsl #2
-               	ldr	s5, [x1]
+               	ldr	s5, [x1, x2, lsl #2]
                	b	<addr>
                	sub	x1, x29, #0x20
-               	add	x1, x1, x0, lsl #2
-               	ldr	s4, [x1]
+               	ldr	s4, [x1, x0, lsl #2]
                	b	<addr>
                	sub	x3, x29, #0x10
                	sub	x1, x1, #0x4
-               	add	x1, x3, x1, lsl #2
-               	ldr	s3, [x1]
+               	ldr	s3, [x3, x1, lsl #2]
                	b	<addr>
                	sub	x1, x29, #0x10
                	sub	x4, x3, #0x4
-               	add	x1, x1, x4, lsl #2
-               	ldr	s2, [x1]
+               	ldr	s2, [x1, x4, lsl #2]
                	b	<addr>
                	sub	x4, x29, #0x20
                	add	x1, x1, #0x2
-               	add	x1, x4, x1, lsl #2
-               	ldr	s1, [x1]
+               	ldr	s1, [x4, x1, lsl #2]
                	b	<addr>
                	sub	x4, x29, #0x20
-               	add	x4, x4, x1, lsl #2
-               	ldr	s0, [x4]
+               	ldr	s0, [x4, x1, lsl #2]
                	b	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
@@ -1423,8 +1391,7 @@ Disassembly of section .text:
                	cmp	w2, #0x2
                	b.ge	<addr>
                	sub	x3, x29, #0x20
-               	add	x3, x3, x2, lsl #3
-               	ldr	d2, [x3]
+               	ldr	d2, [x3, x2, lsl #3]
                	add	x2, x2, #0x1
                	cmp	w2, #0x2
                	b.ge	<addr>
@@ -1432,57 +1399,45 @@ Disassembly of section .text:
                	cbz	x1, <addr>
                	sub	x2, x29, #0x10
                	sub	x3, x0, #0x1
-               	add	x2, x2, x3, lsl #3
-               	ldr	d4, [x2]
+               	ldr	d4, [x2, x3, lsl #3]
                	cbz	x1, <addr>
                	sub	x1, x29, #0x10
-               	add	x1, x1, x0, lsl #3
-               	ldr	d5, [x1]
+               	ldr	d5, [x1, x0, lsl #3]
                	sub	x1, x29, #0x80
-               	lsl	x2, x0, #3
-               	add	x3, x1, x2
-               	ldr	d6, [x3]
+               	ldr	d6, [x1, x0, lsl #3]
                	fcmp	d6, d0
                	b.ne	<addr>
-               	add	x3, x1, #0x10
-               	add	x3, x3, x2
-               	ldr	d0, [x3]
+               	add	x2, x1, #0x10
+               	ldr	d0, [x2, x0, lsl #3]
                	fcmp	d0, d1
                	b.ne	<addr>
-               	add	x3, x1, #0x20
-               	add	x3, x3, x2
-               	ldr	d0, [x3]
+               	add	x2, x1, #0x20
+               	ldr	d0, [x2, x0, lsl #3]
                	fcmp	d0, d2
                	b.ne	<addr>
-               	add	x3, x1, #0x30
-               	add	x3, x3, x2
-               	ldr	d0, [x3]
+               	add	x2, x1, #0x30
+               	ldr	d0, [x2, x0, lsl #3]
                	fcmp	d0, d3
                	b.ne	<addr>
-               	add	x3, x1, #0x40
-               	add	x3, x3, x2
-               	ldr	d0, [x3]
+               	add	x2, x1, #0x40
+               	ldr	d0, [x2, x0, lsl #3]
                	fcmp	d0, d4
                	b.ne	<addr>
                	add	x1, x1, #0x50
-               	add	x1, x1, x2
-               	ldr	d0, [x1]
+               	ldr	d0, [x1, x0, lsl #3]
                	fcmp	d0, d5
                	b.eq	<addr>
                	b	<addr>
                	sub	x1, x29, #0x20
                	add	x2, x0, #0x1
-               	add	x1, x1, x2, lsl #3
-               	ldr	d5, [x1]
+               	ldr	d5, [x1, x2, lsl #3]
                	b	<addr>
                	sub	x2, x29, #0x20
-               	add	x2, x2, x0, lsl #3
-               	ldr	d4, [x2]
+               	ldr	d4, [x2, x0, lsl #3]
                	b	<addr>
                	sub	x3, x29, #0x10
                	sub	x2, x2, #0x2
-               	add	x2, x3, x2, lsl #3
-               	ldr	d3, [x2]
+               	ldr	d3, [x3, x2, lsl #3]
                	b	<addr>
                	ldur	d2, [x29, #-0x10]
                	b	<addr>
@@ -1804,8 +1759,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	cmp	w0, #0x4
                	b.ge	<addr>
-               	add	x10, x7, x0, lsl #2
-               	ldr	s0, [x10]
+               	ldr	s0, [x7, x0, lsl #2]
                	fmov	s1, #-2.50000000
                	fcmp	s0, s1
                	b.eq	<addr>

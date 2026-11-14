@@ -731,7 +731,7 @@ fn emit_mem_inst(
             (*index, *index_ext),
             *scale,
             *kind,
-            !alloc.high_dead(v),
+            (!alloc.high_dead(v), alloc.is_f32(v)),
             alloc,
             frame,
             frame_object_base(func, *base, frame, abi),

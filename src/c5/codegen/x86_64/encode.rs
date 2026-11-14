@@ -896,6 +896,43 @@ pub(crate) fn emit_movsd_xmm_mem(code: &mut Vec<u8>, xmm: Reg, base: Reg, disp: 
     emit_modrm_mem(code, xmm, base, disp);
 }
 
+/// `MOVSS` / `MOVSD` between `xmm` and `[base + index * scale + disp]`:
+/// `F3` (single) / `F2` (double) `0F 10 /r` loading, `0F 11 /r` storing.
+/// A load clears the register above the element. `index` is not rsp.
+pub(crate) fn emit_sse_mov_sib(
+    code: &mut Vec<u8>,
+    single: bool,
+    store: bool,
+    xmm: Reg,
+    (base, index, scale, disp): (Reg, Reg, u8, i32),
+) {
+    emit_byte(code, if single { 0xF3 } else { 0xF2 });
+    if xmm.high() || index.high() || base.high() {
+        emit_byte(code, rex(false, xmm.high(), index.high(), base.high()));
+    }
+    emit_byte(code, 0x0F);
+    emit_byte(code, if store { 0x11 } else { 0x10 });
+    // mod=00 with an rbp / r13 base names a bare disp32, so that base
+    // takes a zero disp8.
+    let (mod_, disp8) = if disp == 0 && base.lo() != 5 {
+        (0b00, None)
+    } else if let Ok(d) = i8::try_from(disp) {
+        (0b01, Some(d))
+    } else {
+        (0b10, None)
+    };
+    emit_byte(code, modrm(mod_, xmm.lo(), 4));
+    emit_byte(
+        code,
+        sib(scale.trailing_zeros() as u8, index.lo(), base.lo()),
+    );
+    match (mod_, disp8) {
+        (0b01, Some(d)) => emit_byte(code, d as u8),
+        (0b10, _) => emit_i32(code, disp),
+        _ => {}
+    }
+}
+
 /// `MOVSD [base+disp], xmm` -- store 8 bytes from the low quad of
 /// an XMM register. Encoding: `F2 0F 11 /r`.
 pub(crate) fn emit_movsd_mem_xmm(code: &mut Vec<u8>, base: Reg, disp: i32, xmm: Reg) {
@@ -2666,6 +2703,37 @@ fn decode_frame(window: &[u8], frame: usize) -> Option<Vec<(u32, super::Prologue
 
 #[cfg(test)]
 mod tests {
+    /// The SIB forms of `movss` / `movsd` match the assembler's encoding,
+    /// an rbp base taking a zero disp8 and an extended index taking REX.X.
+    #[test]
+    fn sse_scalar_moves_take_any_sib_operand() {
+        let enc = |single, store, x: u8, b: u8, i: u8, s: u8, d: i32| {
+            let mut code = alloc::vec::Vec::new();
+            emit_sse_mov_sib(&mut code, single, store, Reg(x), (Reg(b), Reg(i), s, d));
+            code
+        };
+        assert_eq!(
+            enc(false, false, 2, 7, 0, 8, 0),
+            [0xF2, 0x0F, 0x10, 0x14, 0xC7]
+        );
+        assert_eq!(
+            enc(true, true, 9, 13, 12, 4, 0x10),
+            [0xF3, 0x47, 0x0F, 0x11, 0x4C, 0xA5, 0x10]
+        );
+        assert_eq!(
+            enc(false, false, 0, 5, 1, 8, 0),
+            [0xF2, 0x0F, 0x10, 0x44, 0xCD, 0x00]
+        );
+        assert_eq!(
+            enc(false, false, 1, 0, 3, 8, 0x1000),
+            [0xF2, 0x0F, 0x10, 0x8C, 0xD8, 0x00, 0x10, 0x00, 0x00]
+        );
+        assert_eq!(
+            enc(true, true, 15, 4, 9, 4, -8),
+            [0xF3, 0x46, 0x0F, 0x11, 0x7C, 0x8C, 0xF8]
+        );
+    }
+
     use super::*;
     use crate::c5::codegen::ssa::code_buf::CodeBuf;
     use alloc::vec;

@@ -15,9 +15,9 @@
 //!   v = LoadIndexed { base, index=i, scale=width, kind }
 //! ```
 //!
-//! The fold fires when the shift amount matches the access width (the
-//! per-arch emit requires `scale == width`) and the shift feeds only its
-//! address. A byte subscript has no shift: `Binop(Add, base, i)` folds at
+//! The fold fires for an integer, single or double access when the shift
+//! amount matches the access width (the per-arch emit requires `scale ==
+//! width`) and the shift feeds only its address. A byte subscript has no shift: `Binop(Add, base, i)` folds at
 //! scale 1. A shared `base + i*scale` (one address feeding both the load
 //! and the store of a swapped element) folds into every use, provided
 //! every use is a load or store of the matching width, so the shared
@@ -29,7 +29,7 @@
 //! `BinopI(Sub, base, -c)` address with an in-range `c` becomes
 //! `Load { addr=base, disp=c }`, added to the displacement the access
 //! already has.
-//! Unlike the scaled-index fold this covers the floating kinds too.
+//! This covers the wider floating kinds as well.
 //! As with the scaled-index case this fires for a shared address too --
 //! the accesses of a read-modify-write, or of several members, fold the
 //! offset into each, provided every use is an access the composed
@@ -85,7 +85,7 @@ pub(crate) fn displacement_fits(disp: i64, w: u8) -> bool {
 }
 
 /// [`load_width`] restricted to the integer kinds, `None` for the
-/// floating kinds (the indexed emit handles integers only).
+/// floating kinds.
 fn int_load_width(kind: LoadKind) -> Option<u8> {
     match kind {
         LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => None,
@@ -99,6 +99,23 @@ fn int_store_width(kind: StoreKind) -> Option<u8> {
     match kind {
         StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 => None,
         k => Some(store_width(k)),
+    }
+}
+
+/// The widths the scaled-index fold takes: the integer kinds, a single and
+/// a double.
+fn scaled_load_width(kind: LoadKind) -> Option<u8> {
+    match kind {
+        LoadKind::F32 | LoadKind::F64 => Some(load_width(kind)),
+        k => int_load_width(k),
+    }
+}
+
+/// [`scaled_load_width`] for a store.
+fn scaled_store_width(kind: StoreKind) -> Option<u8> {
+    match kind {
+        StoreKind::F32 | StoreKind::F64 => Some(store_width(kind)),
+        k => int_store_width(k),
     }
 }
 
@@ -258,17 +275,16 @@ fn use_counts(func: &FunctionSsa) -> Vec<u32> {
     counts
 }
 
-/// `(base, index)` of `lhs + rhs` read as `base + index * scale`. Above
-/// scale 1 the index is the operand of a single-use `Shl` by `log2(scale)`;
-/// at scale 1 an extension or a mask is the index, an address constant the
-/// base.
+/// `(base, index, shift)` of `lhs + rhs` read as `base + index * scale`.
+/// Above scale 1 the index is the operand of `shift`, a `Shl` by
+/// `log2(scale)`; at scale 1 an extension or a mask is the index, an
+/// address constant the base, and there is no shift.
 fn split_address(
     func: &FunctionSsa,
-    counts: &[u32],
     lhs: ValueId,
     rhs: ValueId,
     scale: u8,
-) -> Option<(ValueId, ValueId)> {
+) -> Option<(ValueId, ValueId, Option<ValueId>)> {
     let inst = |v: ValueId| func.insts.get(v as usize);
     if scale == 1 {
         let index_like = |v: ValueId| {
@@ -289,7 +305,11 @@ fn split_address(
             )
         };
         let swap = (index_like(lhs) && !index_like(rhs)) || (address(rhs) && !address(lhs));
-        return Some(if swap { (rhs, lhs) } else { (lhs, rhs) });
+        return Some(if swap {
+            (rhs, lhs, None)
+        } else {
+            (lhs, rhs, None)
+        });
     }
     if !matches!(scale, 2 | 4 | 8) {
         return None;
@@ -302,17 +322,17 @@ fn split_address(
                 op: BinOp::Shl,
                 lhs: index,
                 rhs_imm,
-            }) if *rhs_imm == shift && counts.get(scaled as usize) == Some(&1) => {
-                Some((base, *index))
-            }
+            }) if *rhs_imm == shift => Some((base, *index, Some(scaled))),
             _ => None,
         })
 }
 
-/// Addresses whose every use is an integer load or store of one width,
-/// mapped to `(base, index, scale)` with `scale` that width. A shared
-/// address (the load and the store of a swapped element) folds into every
-/// access, so the add and the shift drop out.
+/// Addresses whose every use is a load or store of one width the fold
+/// takes, mapped to `(base, index, scale)` with `scale` that width. A
+/// shared address (the load and the store of a swapped element) folds into
+/// every access, so the add drops out; a shift every reader of which is
+/// such an address (`a[i] = b[i]`, the index scaled once for both arrays)
+/// drops out with them.
 fn foldable_scaled_addresses(
     func: &FunctionSsa,
     counts: &[u32],
@@ -334,7 +354,7 @@ fn foldable_scaled_addresses(
                 volatile: false,
                 align: 0,
                 ..
-            } => (*addr, int_load_width(*kind)),
+            } => (*addr, scaled_load_width(*kind)),
             Inst::Store {
                 addr,
                 disp: 0,
@@ -342,7 +362,7 @@ fn foldable_scaled_addresses(
                 volatile: false,
                 align: 0,
                 ..
-            } => (*addr, int_store_width(*kind)),
+            } => (*addr, scaled_store_width(*kind)),
             _ => continue,
         };
         let is_add = matches!(
@@ -355,7 +375,10 @@ fn foldable_scaled_addresses(
             e.1 += 1;
         }
     }
-    seen.into_iter()
+    // Per address: its `(base, index, scale)` and the shift it reads.
+    type Split = ((ValueId, ValueId, u8), Option<ValueId>);
+    let found: Vec<(ValueId, Split)> = seen
+        .into_iter()
         .filter_map(|(p, (w, valid))| {
             let total = counts.get(p as usize).copied().unwrap_or(0);
             if w == MIXED || valid != total {
@@ -364,8 +387,23 @@ fn foldable_scaled_addresses(
             let Some(Inst::Binop { lhs, rhs, .. }) = func.insts.get(p as usize) else {
                 return None;
             };
-            split_address(func, counts, *lhs, *rhs, w).map(|(base, index)| (p, (base, index, w)))
+            split_address(func, *lhs, *rhs, w)
+                .map(|(base, index, shift)| (p, ((base, index, w), shift)))
         })
+        .collect();
+    let mut folding: alloc::collections::BTreeMap<ValueId, u32> =
+        alloc::collections::BTreeMap::new();
+    for (_, (_, shift)) in &found {
+        if let Some(s) = shift {
+            *folding.entry(*s).or_default() += 1;
+        }
+    }
+    found
+        .into_iter()
+        .filter(|(_, (_, shift))| {
+            shift.is_none_or(|s| counts.get(s as usize).copied() == folding.get(&s).copied())
+        })
+        .map(|(p, (t, _))| (p, t))
         .collect()
 }
 
@@ -775,7 +813,7 @@ fn fold_round(func: &mut FunctionSsa) -> bool {
                 } => {
                     if let (0, Some(width), Some(&(base, index, scale))) = (
                         *disp,
-                        int_load_width(*kind),
+                        scaled_load_width(*kind),
                         scaled.get(addr).filter(|_| *align == 0 && !*volatile),
                     ) {
                         debug_assert_eq!(scale, width);
@@ -815,7 +853,7 @@ fn fold_round(func: &mut FunctionSsa) -> bool {
                 } => {
                     if let (0, Some(width), Some(&(base, index, scale))) = (
                         *disp,
-                        int_store_width(*kind),
+                        scaled_store_width(*kind),
                         scaled.get(addr).filter(|_| *align == 0 && !*volatile),
                     ) {
                         debug_assert_eq!(scale, width);
@@ -1208,6 +1246,56 @@ mod tests {
             }
         ));
         assert!(matches!(shifted(true)[5], Inst::Load { addr: 4, .. }));
+    }
+
+    /// `a[i] = b[i]` over doubles scales the index once for both arrays:
+    /// every reader of the shift is an address that folds, so both accesses
+    /// take the scaled-index form and the shift drops out with them.
+    #[test]
+    fn a_shift_every_reader_of_which_folds_drops_out() {
+        let mut insts = pointer_and_index();
+        insts.extend([
+            param(2, LoadKind::I64),
+            Inst::BinopI {
+                op: BinOp::Shl,
+                lhs: 2,
+                rhs_imm: 3,
+            },
+            add(0, 4),
+            add(3, 4),
+            load(6, LoadKind::F64),
+            store(5, 7, StoreKind::F64),
+        ]);
+        let out = folded(insts);
+        assert!(
+            matches!(
+                out[7],
+                Inst::LoadIndexed {
+                    base: 3,
+                    index: 2,
+                    scale: 8,
+                    kind: LoadKind::F64,
+                    ..
+                }
+            ),
+            "{:?}",
+            out[7]
+        );
+        assert!(
+            matches!(
+                out[8],
+                Inst::StoreIndexed {
+                    base: 0,
+                    index: 2,
+                    scale: 8,
+                    value: 7,
+                    kind: StoreKind::F64,
+                    ..
+                }
+            ),
+            "{:?}",
+            out[8]
+        );
     }
 
     /// The address stays when a use is not a plain one-byte access or the

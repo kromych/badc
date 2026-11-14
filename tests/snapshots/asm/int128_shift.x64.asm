@@ -69,14 +69,10 @@ Disassembly of section .text:
                	andq	%rbx, %rax
                	andq	%r12, %r9
                	orq	%rax, %r9
-               	leaq	<rip>, %rbx # <addr>
-               	movq	%rcx, %rax
-               	shlq	$0x3, %rax
-               	addq	%rax, %rbx
-               	movq	(%rbx), %rbx
-               	leaq	<rip>, %r12 # <addr>
-               	addq	%r12, %rax
-               	movq	(%rax), %r12
+               	leaq	<rip>, %rax # <addr>
+               	movq	(%rax,%rcx,8), %rbx
+               	leaq	<rip>, %rax # <addr>
+               	movq	(%rax,%rcx,8), %r12
                	leaq	0x14(%rcx), %rax
                	movq	%rbx, %r10
                	movq	0x10(%rsp), %rbx
@@ -110,17 +106,10 @@ Disassembly of section .text:
                	andq	%r12, %r9
                	orq	%rax, %r9
                	andq	%r12, %rbx
-               	leaq	<rip>, %r12 # <addr>
-               	movq	%rcx, %rax
-               	shlq	$0x3, %rax
-               	addq	%rax, %r12
-               	movq	(%r12), %r12
-               	leaq	<rip>, %r10 # <addr>
-               	movq	%r10, 0x10(%rsp)
-               	movq	%rax, %r10
-               	movq	0x10(%rsp), %rax
-               	addq	%r10, %rax
-               	movq	(%rax), %r10
+               	leaq	<rip>, %rax # <addr>
+               	movq	(%rax,%rcx,8), %r12
+               	leaq	<rip>, %rax # <addr>
+               	movq	(%rax,%rcx,8), %r10
                	movq	%r10, 0x10(%rsp)
                	leaq	0x1e(%rcx), %rax
                	cmpq	%r12, %r9
@@ -154,14 +143,10 @@ Disassembly of section .text:
                	orq	%rax, %r12
                	andq	%rbx, %r9
                	orq	%r9, %rdx
-               	leaq	<rip>, %r9 # <addr>
-               	movq	%rcx, %rax
-               	shlq	$0x3, %rax
-               	addq	%rax, %r9
-               	movq	(%r9), %r9
-               	leaq	<rip>, %rbx # <addr>
-               	addq	%rbx, %rax
-               	movq	(%rax), %rbx
+               	leaq	<rip>, %rax # <addr>
+               	movq	(%rax,%rcx,8), %r9
+               	leaq	<rip>, %rax # <addr>
+               	movq	(%rax,%rcx,8), %rbx
                	leaq	0x28(%rcx), %rax
                	cmpq	%r9, %r12
                	jne	<addr>

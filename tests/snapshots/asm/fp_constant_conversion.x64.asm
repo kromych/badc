@@ -71,10 +71,7 @@ Disassembly of section .text:
                	addq	$0x8, 0x8(%r11)
                	movq	%r10, %rsi
                	movsd	(%rsi), %xmm0
-               	movq	%rax, %rsi
-               	shlq	$0x3, %rsi
-               	addq	%rdx, %rsi
-               	movsd	(%rsi), %xmm1
+               	vmovq	(%rdx,%rax,8), %xmm1
                	ucomisd	%xmm1, %xmm0
                	setne	%sil
                	movzbq	%sil, %rsi

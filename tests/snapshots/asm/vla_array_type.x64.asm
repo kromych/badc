@@ -129,7 +129,7 @@ Disassembly of section .text:
                	movslq	%edi, %rdi
                	imulq	$0xc, %rdi, %r10
                	movq	%r10, -0x18(%rbp)
-               	movq	-0x18(%rbp), %r11
+               	movq	%r10, %r11
                	addq	$0xf, %r11
                	andq	$-0x10, %r11
                	movq	%rsp, %rdx
@@ -144,7 +144,7 @@ Disassembly of section .text:
                	movq	%rdx, %rsp
                	imulq	$0xc, %rdi, %r10
                	movq	%r10, -0x20(%rbp)
-               	movq	-0x20(%rbp), %r11
+               	movq	%r10, %r11
                	addq	$0xf, %r11
                	andq	$-0x10, %r11
                	movq	%rsp, %rcx

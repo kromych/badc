@@ -240,7 +240,6 @@ Disassembly of section .text:
                	movq	%r10, 0x28(%rsp)
                	movzwq	-0x2(%rax), %r10
                	movq	%r10, 0x20(%rsp)
-               	movq	0x20(%rsp), %r10
                	shlq	$0x20, %r10
                	movq	%r10, 0x20(%rsp)
                	movq	0x28(%rsp), %r10

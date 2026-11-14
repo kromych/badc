@@ -91,43 +91,30 @@ Disassembly of section .text:
                	movq	%r10, -0x30(%rbp)
                	leaq	(%r15,%rbx), %r10
                	movq	%r10, -0x38(%rbp)
-               	movq	-0x38(%rbp), %r10
                	addq	%r12, %r10
                	movq	%r10, -0x38(%rbp)
-               	movq	-0x38(%rbp), %r10
                	addq	%r13, %r10
                	movq	%r10, -0x38(%rbp)
-               	movq	-0x38(%rbp), %r10
                	addq	%r14, %r10
                	movq	%r10, -0x38(%rbp)
-               	movq	-0x38(%rbp), %r10
                	addq	-0x18(%rbp), %r10
                	movq	%r10, -0x38(%rbp)
-               	movq	-0x38(%rbp), %r10
                	addq	%rdx, %r10
                	movq	%r10, -0x38(%rbp)
-               	movq	-0x38(%rbp), %r10
                	addq	%rcx, %r10
                	movq	%r10, -0x38(%rbp)
-               	movq	-0x38(%rbp), %r10
                	addq	%rsi, %r10
                	movq	%r10, -0x38(%rbp)
-               	movq	-0x38(%rbp), %r10
                	addq	%rdi, %r10
                	movq	%r10, -0x38(%rbp)
-               	movq	-0x38(%rbp), %r10
                	addq	%r8, %r10
                	movq	%r10, -0x38(%rbp)
-               	movq	-0x38(%rbp), %r10
                	addq	%r9, %r10
                	movq	%r10, -0x38(%rbp)
-               	movq	-0x38(%rbp), %r10
                	addq	-0x20(%rbp), %r10
                	movq	%r10, -0x20(%rbp)
-               	movq	-0x20(%rbp), %r10
                	addq	-0x28(%rbp), %r10
                	movq	%r10, -0x20(%rbp)
-               	movq	-0x20(%rbp), %r10
                	addq	-0x30(%rbp), %r10
                	movq	%r10, -0x20(%rbp)
                	cmpl	%ebx, %r15d

@@ -125,12 +125,10 @@ Disassembly of section .text:
                	imulq	%rsi, %r15
                	movq	0x60(%rdi), %r10
                	movq	%r10, 0x78(%rsp)
-               	movq	0x78(%rsp), %r10
                	imulq	%rsi, %r10
                	movq	%r10, 0x78(%rsp)
                	movq	0x68(%rdi), %r10
                	movq	%r10, 0x70(%rsp)
-               	movq	0x70(%rsp), %r10
                	imulq	%rsi, %r10
                	movq	%r10, 0x70(%rsp)
                	movq	0x70(%rdi), %r10

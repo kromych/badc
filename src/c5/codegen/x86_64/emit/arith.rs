@@ -83,7 +83,7 @@ pub(super) fn int_cmp_cc(op: BinOp) -> Option<Cc> {
 /// cond, cond`. A floating compare's `==` and `!=` add `cmovp`. A floating
 /// select moves the bits through r10 / r11; `mov` and `movq` keep the flags.
 pub(super) fn emit_select(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     (v, cond, a, b, kind): (u32, u32, u32, u32, LoadKind),
     func: &super::super::ir::FunctionSsa,
@@ -220,7 +220,7 @@ fn finish_int_cmp(
 /// `Inst::Extend { value, kind }` -- sign-extend the low bytes of a
 /// GPR value to 64 bits via `MOVSX` / `MOVSXD`.
 pub(super) fn emit_extend(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     v: super::super::ir::ValueId,
     value: u32,
@@ -260,7 +260,7 @@ pub(super) fn emit_sign_extend(code: &mut Vec<u8>, rd: Reg, rn: Reg, kind: LoadK
 /// instruction's own place. Bit-exact in both banks, so a
 /// single-precision operand keeps its pattern.
 pub(super) fn emit_copy(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     value: u32,
     is_fp: bool,
@@ -327,7 +327,7 @@ pub(super) fn emit_copy(
 /// `Inst::Neg { value }` -- `negq dst`, after moving the operand into
 /// `dst` when it is not already there.
 pub(super) fn emit_neg(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     value: u32,
     alloc: &Allocation,
@@ -353,7 +353,7 @@ pub(super) fn emit_neg(
 /// low dword, zero-extends). 16-bit: `movzx` clears the upper bits the
 /// rotate would keep, then `rol dst16, 8` swaps the two low bytes.
 pub(super) fn emit_bswap(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     value: u32,
     width: u8,
@@ -394,7 +394,7 @@ pub(super) fn emit_bswap(
 /// `bits - 1 - i`. `nonzero` states that the operand cannot be zero, which
 /// leaves the guard's constant and `cmovz` dead.
 pub(super) fn emit_bit_count(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     op: BitCountOp,
     value: u32,
@@ -455,7 +455,7 @@ pub(super) fn emit_bit_count(
 /// `Inst::Fma`: `dst = (neg_product ? -(a*b) : a*b) + (neg_addend ? -c : c)`
 /// with one rounding (C99 6.5p8 / FP_CONTRACT), on the FMA3 baseline.
 pub(super) fn emit_fma(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     v: super::super::ir::ValueId,
     a: u32,
@@ -531,7 +531,10 @@ pub(super) fn emit_fma(
         Place::FpReg(r) => emit_vex_fma(code, opcode, !is_f32, dd, rv, Reg(r)),
         Place::Spill(slot) => {
             let (base, off) = spill_slot_addr(frame, slot);
-            emit_vex_fma_mem(code, opcode, !is_f32, dd, rv, base, off);
+            match code.holding(base.0, off, SpillWidth::Scalar) {
+                Some(r) => emit_vex_fma(code, opcode, !is_f32, dd, rv, Reg(r)),
+                None => emit_vex_fma_mem(code, opcode, !is_f32, dd, rv, base, off),
+            }
         }
         Place::IntReg(r) => {
             let rm = Reg(frame.fp_scratch[1]);
@@ -551,7 +554,7 @@ pub(super) fn emit_fma(
 /// reader, else in `SCRATCH_R11`.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_mul_add(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     v: super::super::ir::ValueId,
     a: u32,
@@ -633,7 +636,7 @@ pub(super) fn emit_mul_add(
 /// `1 << 31` for a single held in the low dword (C99 6.3.1.8), through a
 /// mask built in the second FP scratch.
 pub(super) fn emit_fneg(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     v: super::super::ir::ValueId,
     value: u32,
@@ -668,7 +671,7 @@ pub(super) fn emit_fneg(
 /// `fabs` as an AND with the inverted sign mask (C99 7.12.7) built as in
 /// `emit_fneg`.
 pub(super) fn emit_fp_unary(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     v: super::super::ir::ValueId,
     value: u32,
@@ -730,7 +733,7 @@ pub(super) fn emit_fp_unary(
 /// For `FpToInt`, `CVTTSD2SI` rounds-to-zero an xmm into a 64-bit
 /// signed int.
 pub(super) fn emit_fp_cast(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     v: super::super::ir::ValueId,
     kind: FpCastKind,
@@ -950,7 +953,7 @@ fn stage_lhs(code: &mut Vec<u8>, rd: Reg, rn: Reg) {
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_binop(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     op: BinOp,
     v: super::super::ir::ValueId,
     dst: Place,
@@ -1012,7 +1015,7 @@ pub(super) fn emit_binop(
 
 /// Scalar FP arithmetic in xmm: the VEX row, or in place the SSE row where no longer.
 fn emit_fp_binop(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     opcode: u8,
     is_f32: bool,
     dst: Place,
@@ -1042,7 +1045,10 @@ fn emit_fp_binop(
         Place::FpReg(r) => emit_vex_fp_arith(code, opcode, is_f32, dd, ra, Reg(r)),
         Place::Spill(slot) => {
             let (base, off) = spill_slot_addr(frame, slot);
-            emit_vex_fp_arith_mem(code, opcode, is_f32, dd, ra, base, off);
+            match code.holding(base.0, off, SpillWidth::Scalar) {
+                Some(r) => emit_vex_fp_arith(code, opcode, is_f32, dd, ra, Reg(r)),
+                None => emit_vex_fp_arith_mem(code, opcode, is_f32, dd, ra, base, off),
+            }
         }
         Place::IntReg(r) => {
             let rb = Reg(frame.fp_scratch[1]);
@@ -1062,7 +1068,7 @@ fn emit_fp_binop(
 /// instead.
 #[allow(clippy::too_many_arguments)]
 fn emit_fp_compare(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     op: BinOp,
     v: super::super::ir::ValueId,
     dst: Place,
@@ -1133,7 +1139,7 @@ fn emit_fp_compare(
 /// takes the register path.
 #[allow(clippy::too_many_arguments)]
 fn emit_binop_spilled_rhs(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     op: BinOp,
     v: super::super::ir::ValueId,
     dst: Place,
@@ -1181,7 +1187,7 @@ fn emit_binop_spilled_rhs(
 /// The two-operand integer path: stage lhs into rd, then `OP rd, rm`.
 #[allow(clippy::too_many_arguments)]
 fn emit_int_binop(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     op: BinOp,
     v: super::super::ir::ValueId,
     dst: Place,
@@ -1357,7 +1363,7 @@ fn implicit_holds_live(
 /// `rhs_place` routes into r10.
 #[allow(clippy::too_many_arguments)]
 fn emit_binop_rdx_rax(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     op: BinOp,
     v: super::super::ir::ValueId,
     dst: Place,
@@ -1463,7 +1469,7 @@ fn emit_binop_rdx_rax(
 /// keeps within rax; values live in rax / rdx across it are saved.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_udiv128(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     v: super::super::ir::ValueId,
     dst: Place,
     hi: super::super::ir::ValueId,
@@ -1494,7 +1500,7 @@ pub(super) fn emit_udiv128(
     if preserve_rdx {
         emit_push_r(code, Reg::RDX);
     }
-    let load = |code: &mut Vec<u8>, to: Reg, from: Place| match from {
+    let load = |code: &mut CodeBuf, to: Reg, from: Place| match from {
         Place::IntReg(r) => {
             emit_mov_rr(code, to, Reg(r));
             true
@@ -1555,7 +1561,7 @@ enum ShiftCount {
 /// count (C99 6.5.7p3) does too.
 #[allow(clippy::too_many_arguments)]
 fn emit_shift_by_count_reg(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     op: BinOp,
     v: super::super::ir::ValueId,
     dst: Place,
@@ -1581,7 +1587,7 @@ fn emit_shift_by_count_reg(
         ShiftCount::Reg(r) => Some(r),
         ShiftCount::Imm(_) => None,
     };
-    let do_shift = |code: &mut Vec<u8>, target: Reg| {
+    let do_shift = |code: &mut CodeBuf, target: Reg| {
         emit_shift_cl(code, shift_mnem(op), shift_size(op), target)
     };
     if rd.0 == Reg::RCX.0 {
@@ -1643,7 +1649,7 @@ pub(crate) fn binop_imm_materializes(op: BinOp, imm: i64) -> bool {
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_binop_imm(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     op: BinOp,
     v: super::super::ir::ValueId,
     dst: Place,
@@ -1656,8 +1662,11 @@ pub(super) fn emit_binop_imm(
         return fail("BinopI: dst not int reg / spill");
     };
     let lhs_place = place_of(alloc, lhs);
-    // A slot both the operand and the result live in is updated in place.
+    // A slot both the operand and the result live in is updated in place,
+    // unless a register still holds what was just stored there.
     if let (Place::Spill(slot), true) = (dst, dst == lhs_place)
+        && let (base, disp) = spill_slot_addr(frame, slot)
+        && code.holding(base.0, disp, SpillWidth::Int).is_none()
         && let Ok(imm) = i32::try_from(rhs_imm)
         && matches!(
             op,
@@ -1665,7 +1674,6 @@ pub(super) fn emit_binop_imm(
         )
         && !(op == BinOp::And && alloc.branch_fused.get(v as usize).copied().unwrap_or(false))
     {
-        let (base, disp) = spill_slot_addr(frame, slot);
         super::encode::emit_mi(code, alu_mnem(op).unwrap(), 8, base, disp, imm);
         return Ok(());
     }

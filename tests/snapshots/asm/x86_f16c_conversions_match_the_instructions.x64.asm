@@ -200,7 +200,6 @@ Disassembly of section .text:
                	movq	%r9, %r10
                	andq	$0x1, %r10
                	movq	%r10, 0x18(%rsp)
-               	movq	0x18(%rsp), %r10
                	testl	%r10d, %r10d
                	setne	%r10b
                	movzbq	%r10b, %r10
@@ -234,7 +233,6 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r10
                	andq	$0x1, %r10
                	movq	%r10, 0x8(%rsp)
-               	movq	0x8(%rsp), %r10
                	testl	%r10d, %r10d
                	setne	%r10b
                	movzbq	%r10b, %r10

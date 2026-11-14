@@ -51,7 +51,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %r10
                	movq	%r10, 0x18(%rsp)
-               	movq	0x18(%rsp), %rax
+               	movq	%r10, %rax
                	testl	%eax, %eax
                	jge	<addr>
                	movl	$0x2, %eax

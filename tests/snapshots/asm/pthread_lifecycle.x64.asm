@@ -277,7 +277,7 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %r10 # <addr>
                	movq	%r10, 0x18(%rsp)
-               	movq	0x18(%rsp), %rdi
+               	movq	%r10, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	movl	<rip>, %eax # <addr>

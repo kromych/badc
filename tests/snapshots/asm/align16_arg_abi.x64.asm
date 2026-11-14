@@ -556,7 +556,6 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rax
                	leaq	<rip>, %r10
                	movq	%r10, 0x38(%rsp)
-               	movq	0x38(%rsp), %r10
                	movups	(%r10), %xmm14
                	movups	%xmm14, (%rax)
                	leaq	-0x20(%rbp), %rax

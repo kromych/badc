@@ -48,7 +48,7 @@ Disassembly of section .text:
                	movswq	%ax, %rax
                	movsbq	%sil, %r10
                	movq	%r10, 0x18(%rsp)
-               	movq	0x18(%rsp), %rcx
+               	movq	%r10, %rcx
                	xorq	$0x61, %rcx
                	movq	%rax, %rdi
                	shlq	%rdi

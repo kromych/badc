@@ -19,7 +19,7 @@ pub(super) struct BranchFixup {
 /// case to `target`, `JnpAnd` to `fall_through`). The caller emits
 /// the trailing `jmp fall_through` when the layout needs one.
 pub(super) fn emit_fused_branch(
-    code: &mut alloc::vec::Vec<u8>,
+    code: &mut CodeBuf,
     branch_fixups: &mut alloc::vec::Vec<BranchFixup>,
     branch_short: &[bool],
     fused: FusedBranch,
@@ -76,7 +76,7 @@ pub(super) fn emit_fused_branch(
 /// and record the fixup. `branch_short` is empty on the first all-long
 /// emission pass and is populated by `relax_branches` for the second.
 pub(super) fn emit_local_branch(
-    code: &mut alloc::vec::Vec<u8>,
+    code: &mut CodeBuf,
     branch_fixups: &mut alloc::vec::Vec<BranchFixup>,
     branch_short: &[bool],
     kind: LocalBranchKind,
@@ -601,7 +601,7 @@ pub(super) fn emit_inst(
 
 /// The load / store instructions.
 fn emit_mem_inst(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     inst: &Inst,
     v: super::super::ir::ValueId,
     dst: Place,
@@ -904,7 +904,7 @@ fn emit_call_inst(
 /// marks the parameters that read the home the prologue stored
 /// (`param_home_off`); a stack-passed parameter always reads its home.
 fn emit_incoming(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     inst: &Inst,
     dst: Place,
     v: super::super::ir::ValueId,
@@ -963,7 +963,7 @@ fn emit_incoming(
         // A `float` occupies the low 32 bits of the xmm; the body re-narrows
         // it through the f32 store the walker seeded, so a scalar copy
         // serves either width.
-        let load_home = |code: &mut Vec<u8>, r: Reg| {
+        let load_home = |code: &mut CodeBuf, r: Reg| {
             if matches!(kind, LoadKind::F32) {
                 emit_movss_xmm_mem(code, r, Reg::RBP, home_off);
             } else {
@@ -1008,7 +1008,7 @@ fn emit_incoming(
         }
     };
     let ext = param_entry_ext(kind, v, alloc);
-    let materialize = |code: &mut Vec<u8>, rd: Reg| {
+    let materialize = |code: &mut CodeBuf, rd: Reg| {
         if from_home {
             match ext {
                 Some(LoadKind::I8) => {

@@ -40,7 +40,7 @@ Disassembly of section .text:
                	movswq	%si, %rsi
                	movsbq	%dl, %r10
                	movq	%r10, 0x18(%rsp)
-               	movq	0x18(%rsp), %rdi
+               	movq	%r10, %rdi
                	xorq	$0x7a, %rdi
                	leaq	(%rax,%rax), %r8
                	movq	%rax, %r9

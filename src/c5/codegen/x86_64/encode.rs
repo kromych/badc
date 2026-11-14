@@ -1641,13 +1641,19 @@ pub(crate) fn emit_mov_mem8_r(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg
 //      rel32` is 6.
 
 /// `JMP rel32` -- unconditional branch, 5 bytes.
-pub(crate) fn emit_jmp_rel32(code: &mut Vec<u8>, rel32: i32) {
+pub(crate) fn emit_jmp_rel32(code: &mut crate::c5::codegen::ssa::code_buf::CodeBuf, rel32: i32) {
+    code.note_branch();
     emit_byte(code, 0xE9);
     emit_i32(code, rel32);
 }
 
 /// `Jcc rel32` -- conditional branch, 6 bytes.
-pub(crate) fn emit_jcc_rel32(code: &mut Vec<u8>, cc: Cc, rel32: i32) {
+pub(crate) fn emit_jcc_rel32(
+    code: &mut crate::c5::codegen::ssa::code_buf::CodeBuf,
+    cc: Cc,
+    rel32: i32,
+) {
+    code.note_branch();
     emit_byte(code, 0x0F);
     emit_byte(code, 0x80 | (cc as u8));
     emit_i32(code, rel32);
@@ -1656,7 +1662,8 @@ pub(crate) fn emit_jcc_rel32(code: &mut Vec<u8>, cc: Cc, rel32: i32) {
 /// `Jmp rel8` -- short unconditional branch, 2 bytes. The target must
 /// be within -128..127 of the byte after the rel8 field; the caller
 /// (branch relaxation) guarantees the range.
-pub(crate) fn emit_jmp_rel8(code: &mut Vec<u8>, rel8: i8) {
+pub(crate) fn emit_jmp_rel8(code: &mut crate::c5::codegen::ssa::code_buf::CodeBuf, rel8: i8) {
+    code.note_branch();
     emit_byte(code, 0xEB);
     emit_byte(code, rel8 as u8);
 }
@@ -1664,7 +1671,12 @@ pub(crate) fn emit_jmp_rel8(code: &mut Vec<u8>, rel8: i8) {
 /// `Jcc rel8` -- short conditional branch, 2 bytes. The opcode is
 /// `0x70 | cc`, the one-byte-displacement form of the `0x0F 0x80 | cc`
 /// rel32 encoding.
-pub(crate) fn emit_jcc_rel8(code: &mut Vec<u8>, cc: Cc, rel8: i8) {
+pub(crate) fn emit_jcc_rel8(
+    code: &mut crate::c5::codegen::ssa::code_buf::CodeBuf,
+    cc: Cc,
+    rel8: i8,
+) {
+    code.note_branch();
     emit_byte(code, 0x70 | (cc as u8));
     emit_byte(code, rel8 as u8);
 }
@@ -2639,12 +2651,13 @@ fn decode_frame(window: &[u8], frame: usize) -> Option<Vec<(u32, super::Prologue
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::c5::codegen::ssa::code_buf::CodeBuf;
     use alloc::vec;
 
-    fn assemble<F: FnOnce(&mut Vec<u8>)>(f: F) -> Vec<u8> {
-        let mut buf = Vec::new();
+    fn assemble<F: FnOnce(&mut CodeBuf)>(f: F) -> Vec<u8> {
+        let mut buf = CodeBuf::default();
         f(&mut buf);
-        buf
+        buf.into_bytes()
     }
 
     /// Bytes from LLVM's assembler.
@@ -3109,12 +3122,12 @@ mod tests {
 
     #[test]
     fn ret_is_c3() {
-        assert_eq!(assemble(emit_ret), vec![0xC3]);
+        assert_eq!(assemble(|c| emit_ret(c)), vec![0xC3]);
     }
 
     #[test]
     fn syscall_is_0f_05() {
-        assert_eq!(assemble(emit_syscall), vec![0x0F, 0x05]);
+        assert_eq!(assemble(|c| emit_syscall(c)), vec![0x0F, 0x05]);
     }
 
     #[test]

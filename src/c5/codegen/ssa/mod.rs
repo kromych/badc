@@ -7,6 +7,7 @@ pub(crate) mod ast_reach;
 pub(crate) mod block_plan;
 pub(crate) mod build;
 pub(crate) mod cfi;
+pub(crate) mod code_buf;
 #[cfg(feature = "std")]
 pub(crate) mod dump;
 pub(crate) mod early_exit;

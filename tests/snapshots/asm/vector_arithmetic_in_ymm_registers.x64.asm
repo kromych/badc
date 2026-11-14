@@ -506,7 +506,7 @@ Disassembly of section .text:
                	vmovups	-0x280(%rbp), %ymm15
                	vpsubd	%ymm15, %ymm14, %ymm14
                	vmovups	%ymm14, -0x260(%rbp)
-               	vmovups	-0x260(%rbp), %ymm15
+               	vmovaps	%ymm14, %ymm15
                	vpaddd	%ymm15, %ymm12, %ymm12
                	vpxor	%ymm12, %ymm11, %ymm11
                	vmovups	%ymm0, -0x328(%rbp)

@@ -33,7 +33,6 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %r10
                	movq	%r10, 0x8(%rsp)
-               	movq	0x8(%rsp), %r10
                	testq	%r10, %r10
                	jne	<addr>
                	movl	$0x3, %eax

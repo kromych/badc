@@ -323,7 +323,7 @@ Disassembly of section .text:
                	vzeroupper
                	callq	<addr>
                	movsd	%xmm0, -0x70(%rbp)
-               	movsd	-0x70(%rbp), %xmm14
+               	movapd	%xmm0, %xmm14
                	vmovd	%xmm14, %ecx
                	movslq	%ecx, %rcx
                	movq	-0x68(%rbp), %rax

@@ -789,7 +789,6 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %r10
                	movq	%r10, 0x18(%rsp)
-               	movq	0x18(%rsp), %r10
                	testq	%r10, %r10
                	je	<addr>
                	leaq	<rip>, %rsi
@@ -886,7 +885,6 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %r10
                	movq	%r10, 0x8(%rsp)
-               	movq	0x8(%rsp), %r10
                	testq	%r10, %r10
                	je	<addr>
                	leaq	<rip>, %rsi

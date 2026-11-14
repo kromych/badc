@@ -7966,3 +7966,45 @@ unsigned sigma32(unsigned x) { return (x >> 7 | x << 25) ^ (x >> 18 | x << 14) ^
     assert_eq!(rorx("sigma", 1), 2);
     assert!(rorx("sigma32", 0) >= 1);
 }
+
+/// An operand read of the spill slot the previous instruction just stored
+/// takes the register it was stored from: no load of the slot follows the
+/// store, for an integer and for a scalar.
+#[test]
+fn x64_a_spill_slot_read_right_after_its_store_is_no_load() {
+    const SRC: &str = "long f(const unsigned char *p, const long *t, long a, long b, long c, long d) {\n\
+    long i = p[a] ^ b;\n\
+    long v = t[i & 7];\n\
+    long w = t[(i >> 3) & 7];\n\
+    return v * w + a + b + c + d + i;\n\
+}\n\
+double g(const double *p, double a, double b, double c) {\n\
+    double x = p[0] * a;\n\
+    double y = x * b;\n\
+    return y + a + b + c + x;\n\
+}\n";
+    use super::codegen::function_bytes;
+    let obj = object_with_pool(SRC, Target::LinuxX64, (2, 2));
+    for name in ["f", "g"] {
+        let insns = x64_insns(&function_bytes(&obj, name));
+        let slot = |i: &X64Insn| (i.mem_base(), i.disp, i.regs().0, i.rex_w());
+        let frame = |i: &X64Insn| matches!(i.mem_base(), Some(4 | 5)) && !i.reg_form();
+        let stores = insns
+            .iter()
+            .filter(|i| matches!(i.op, 0x89 | 0x0F11) && frame(i))
+            .count();
+        let reloads = insns
+            .windows(2)
+            .filter(|w| {
+                matches!((w[0].op, w[1].op), (0x89, 0x8B) | (0x0F11, 0x0F10))
+                    && frame(&w[0])
+                    && slot(&w[0]) == slot(&w[1])
+            })
+            .count();
+        assert!(stores > 0, "{name}: nothing spilled under two registers");
+        assert_eq!(
+            reloads, 0,
+            "{name}: a slot is reloaded right after its store"
+        );
+    }
+}

@@ -507,12 +507,12 @@ mod mul_add_tests {
         alloc.last_use[b as usize] = v + 1;
         alloc.spill_count = alloc.spill_count.max(4);
         let frame = compute_frame(&func, &alloc, target.abi(), target);
-        let mut code = Vec::new();
+        let mut code = CodeBuf::default();
         assert!(
             emit_mul_add(&mut code, dst, v, a, b, c, neg_product, &alloc, frame).is_ok(),
             "emit_mul_add bailed",
         );
-        code
+        code.into_bytes()
     }
 
     /// `c + a*b` with the addend outside the destination multiplies
@@ -657,12 +657,12 @@ mod fma_tests {
         alloc.places[v as usize] = dst;
         alloc.spill_count = alloc.spill_count.max(4);
         let frame = compute_frame(&func, &alloc, target.abi(), target);
-        let mut code = Vec::new();
+        let mut code = CodeBuf::default();
         assert!(
             emit_fma(&mut code, dst, v, a, b, c, false, false, &alloc, frame).is_ok(),
             "emit_fma bailed"
         );
-        (code, frame)
+        (code.into_bytes(), frame)
     }
 
     /// `a` dying in a register, `b` and `c` spilled: one spill loads into the
@@ -698,7 +698,7 @@ mod fma_tests {
         emit_movq_xmm_r(&mut want, s0, Reg(1));
         let (base, a_off) = spill_slot_addr(frame, 0);
         emit_vex_fma_mem(&mut want, 0xB9, true, Reg(0), s0, base, a_off);
-        assert_eq!(code, want, "movq b, then vfmadd231sd [a]");
+        assert_eq!(*code, want, "movq b, then vfmadd231sd [a]");
     }
 
     /// An operand in the destination's register is the overwritten one.
@@ -714,7 +714,7 @@ mod fma_tests {
         emit_movq_xmm_r(&mut want, s0, Reg(1));
         let (base, c_off) = spill_slot_addr(frame, 1);
         emit_vex_fma_mem(&mut want, 0xA9, true, Reg(0), s0, base, c_off);
-        assert_eq!(code, want, "movq b, then vfmadd213sd [c]");
+        assert_eq!(*code, want, "movq b, then vfmadd213sd [c]");
     }
 }
 
@@ -722,7 +722,6 @@ mod fma_tests {
 mod indexed_tests {
     use super::*;
     use crate::c5::ir::Inst;
-    use alloc::vec::Vec;
 
     /// The function of `src` that holds an indexed access after the
     /// index fold, that access, and the function's allocation with room
@@ -787,14 +786,14 @@ mod indexed_tests {
             alloc.places[base as usize] = Place::IntReg(Reg::RDI.0);
             alloc.places[index as usize] = Place::IntReg(Reg::RSI.0);
             let frame = compute_frame(&func, &alloc, target.abi(), target);
-            let mut code = Vec::new();
+            let mut code = CodeBuf::default();
             let dst = Place::IntReg(Reg::RAX.0);
             let lsl = (index, IndexExt::None);
             emit_load_indexed(
                 &mut code, dst, base, lsl, scale, kind, true, &alloc, frame, None,
             )
             .expect("emit_load_indexed");
-            assert_eq!(code, want, "{src}");
+            assert_eq!(*code, want, "{src}");
             // No SIB form widens its index: a marked access is refused.
             for ext in [IndexExt::Sxtw, IndexExt::Uxtw] {
                 let marked = (index, ext);
@@ -826,7 +825,7 @@ mod indexed_tests {
             alloc.places[index as usize] = places[1];
             alloc.places[value as usize] = places[2];
             let frame = compute_frame(&func, &alloc, target.abi(), target);
-            let mut code = Vec::new();
+            let mut code = CodeBuf::default();
             emit_store_indexed(
                 &mut code,
                 Place::None,
@@ -839,7 +838,7 @@ mod indexed_tests {
                 frame,
                 None,
             )
-            .map(|()| code)
+            .map(|()| code.into_bytes())
         };
         let mut store =
             |places: [Place; 3]| store_as(places, IndexExt::None).expect("emit_store_indexed");
@@ -942,10 +941,10 @@ mod two_address_tests {
             alloc.places[lhs as usize] = Place::Spill(lhs_at);
             alloc.places[v as usize] = Place::Spill(dst_at);
             let frame = compute_frame(&func, &alloc, target.abi(), target);
-            let mut code = Vec::new();
+            let mut code = CodeBuf::default();
             let dst = Place::Spill(dst_at);
             emit_binop_imm(&mut code, BinOp::Add, v, dst, lhs, 3, &alloc, frame).expect("emit");
-            code
+            code.into_bytes()
         };
         let same = emit(0, 0);
         // REX.W 83 /0 with a memory operand, imm8 3, and nothing else.
@@ -977,10 +976,10 @@ mod two_address_tests {
             alloc.places[lhs as usize] = lhs_at;
             alloc.places[rhs as usize] = rhs_at;
             let frame = compute_frame(&func, &alloc, target.abi(), target);
-            let mut code = Vec::new();
+            let mut code = CodeBuf::default();
             let dst = reg(Reg::RAX);
             emit_binop(&mut code, BinOp::Sub, v, dst, lhs, rhs, &alloc, frame).expect("emit_binop");
-            code
+            code.into_bytes()
         };
         let two = "long f(long a, long b){ return a - b; }";
         assert_eq!(
@@ -1016,10 +1015,10 @@ mod two_address_tests {
         alloc.places[rhs as usize] = reg(Reg::RSI);
         let emit = |alloc: &Allocation, dst: Reg| {
             let frame = compute_frame(&func, alloc, target.abi(), target);
-            let mut code = Vec::new();
+            let mut code = CodeBuf::default();
             emit_binop(&mut code, BinOp::Shl, v, reg(dst), lhs, rhs, alloc, frame)
                 .expect("emit_binop");
-            code
+            code.into_bytes()
         };
         // shlx rax, rdi, rsi: the count rides rsi, so nothing stages
         // into cl or saves rcx whatever holds it.
@@ -1060,7 +1059,7 @@ mod two_address_tests {
         alloc.places[rhs as usize] = reg(Reg::RSI);
         let emit = |alloc: &Allocation| {
             let frame = compute_frame(&func, alloc, target.abi(), target);
-            let mut code = Vec::new();
+            let mut code = CodeBuf::default();
             emit_binop(
                 &mut code,
                 BinOp::Ror,
@@ -1072,7 +1071,7 @@ mod two_address_tests {
                 frame,
             )
             .expect("emit_binop");
-            code
+            code.into_bytes()
         };
         // mov rax, rdi; [push rcx;] mov rcx, rsi; ror rax, cl; [pop rcx]
         let bare = [0x48, 0x89, 0xF8, 0x48, 0x89, 0xF1, 0x48, 0xD3, 0xC8];
@@ -1134,7 +1133,7 @@ mod two_address_tests {
         alloc.places[src as usize] = Place::IntReg(Reg::RSI.0);
         let mut frame = compute_frame(&func, &alloc, target.abi(), target);
         frame.wide_regs = true;
-        let mut code = Vec::new();
+        let mut code = CodeBuf::default();
         emit_mcpy(
             &mut code,
             v,
@@ -1156,7 +1155,7 @@ mod two_address_tests {
             0xc5, 0x78, 0x10, 0x76, 0x20, // vmovups 0x20(%rsi), %xmm14
             0xc5, 0x78, 0x11, 0x77, 0x20, // vmovups %xmm14, 0x20(%rdi)
         ];
-        assert_eq!(code, want, "{code:02x?}");
+        assert_eq!(*code, want, "{code:02x?}");
     }
 
     /// In a body holding 256-bit values a zero fill clears the ymm and
@@ -1174,14 +1173,14 @@ mod two_address_tests {
         alloc.places[dst as usize] = Place::IntReg(Reg::RDI.0);
         let mut frame = compute_frame(&func, &alloc, target.abi(), target);
         frame.wide_regs = true;
-        let mut code = Vec::new();
+        let mut code = CodeBuf::default();
         emit_mzero(&mut code, dst, 48, 8, Some(14), false, &alloc, frame).expect("emit_mzero");
         let want = [
             0xc4, 0x41, 0x0c, 0x57, 0xf6, // vxorps %ymm14, %ymm14, %ymm14
             0xc5, 0x7c, 0x11, 0x37, // vmovups %ymm14, (%rdi)
             0xc5, 0x78, 0x11, 0x77, 0x20, // vmovups %xmm14, 0x20(%rdi)
         ];
-        assert_eq!(code, want, "{code:02x?}");
+        assert_eq!(*code, want, "{code:02x?}");
     }
 
     /// A copy moves 16 bytes through the xmm the zero fill uses and takes
@@ -1202,7 +1201,7 @@ mod two_address_tests {
         let reg = |r: Reg| Place::IntReg(r.0);
         let emit = |alloc: &Allocation, xmm: Option<u8>| {
             let frame = compute_frame(&func, alloc, target.abi(), target);
-            let mut code = Vec::new();
+            let mut code = CodeBuf::default();
             emit_mcpy(
                 &mut code,
                 v,
@@ -1218,7 +1217,7 @@ mod two_address_tests {
                 target.abi(),
             )
             .expect("emit_mcpy");
-            code
+            code.into_bytes()
         };
         alloc.implicit_live = alloc::vec![0; func.insts.len()];
         alloc.places[dst as usize] = reg(Reg::RDI);
@@ -1261,7 +1260,7 @@ mod two_address_tests {
         for place in [Place::Spill(0), Place::IntReg(Reg::RBX.0)] {
             alloc.places[v as usize] = place;
             let frame = compute_frame(&func, &alloc, target.abi(), target);
-            let mut code = Vec::new();
+            let mut code = CodeBuf::default();
             super::super::arith::emit_copy(&mut code, place, v, false, &alloc, frame)
                 .expect("copy");
             assert!(code.is_empty(), "{place:?}: {code:02x?}");
@@ -1276,7 +1275,7 @@ mod two_address_tests {
         let (func, v, mut alloc) = binop_of("long f(long a, long b) { return a + b; }", BinOp::Add);
         alloc.places[v as usize] = Place::Spill(0);
         let frame = compute_frame(&func, &alloc, target.abi(), target);
-        let mut code = Vec::new();
+        let mut code = CodeBuf::default();
         super::super::mem::emit_tls_addr(
             &mut code,
             Place::Spill(0),
@@ -1323,9 +1322,9 @@ mod two_address_tests {
                 panic!("{:?}", func.insts[v as usize])
             };
             let frame = compute_frame(func, alloc, target.abi(), target);
-            let mut code = Vec::new();
+            let mut code = CodeBuf::default();
             emit_binop(&mut code, op, v, reg(dst), lhs, rhs, alloc, frame).expect("emit_binop");
-            code
+            code.into_bytes()
         };
         let (rax, rdx) = (1u32 << Reg::RAX.0, 1u32 << Reg::RDX.0);
         // mov rax, rdi; cqo; idiv rsi
@@ -1436,10 +1435,10 @@ mod two_address_tests {
             alloc.places[lo as usize] = reg(l);
             alloc.places[divisor as usize] = reg(d);
             let frame = compute_frame(&func, &alloc, target.abi(), target);
-            let mut code = Vec::new();
+            let mut code = CodeBuf::default();
             emit_udiv128(&mut code, v, reg(Reg::R8), hi, lo, divisor, &alloc, frame)
                 .expect("emit_udiv128");
-            code
+            code.into_bytes()
         };
         let div_rcx: &[u8] = &[0x48, 0xF7, 0xF1];
         let div_r11: &[u8] = &[0x49, 0xF7, 0xF3];
@@ -1533,10 +1532,10 @@ mod imm_store_tests {
 
     fn emit(func: &FunctionSsa, v: u32, alloc: &Allocation, abi: Abi) -> Vec<u8> {
         let frame = compute_frame(func, alloc, abi, Target::LinuxX64);
-        let mut code = Vec::new();
+        let mut code = CodeBuf::default();
         emit_store_of_imm(&mut code, &func.insts[v as usize], func, alloc, frame, abi)
             .expect("emit_store_of_imm");
-        code
+        code.into_bytes()
     }
 
     /// Spilled operands reload into r10 and r11, which the immediate

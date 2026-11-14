@@ -40,7 +40,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %r10
                	movq	%r10, 0x8(%rsp)
-               	movq	0x8(%rsp), %rax
+               	movq	%r10, %rax
                	testl	%eax, %eax
                	jge	<addr>
                	movl	$0xa, %eax

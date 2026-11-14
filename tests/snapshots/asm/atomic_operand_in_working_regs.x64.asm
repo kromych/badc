@@ -48,7 +48,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx # <addr>
                	leaq	(%rdi,%rsi), %r10
                	movq	%r10, 0x8(%rsp)
-               	movq	0x8(%rsp), %r10
                	lock
                	xaddq	%r10, (%rcx)
                	movq	%r10, %rcx

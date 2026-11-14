@@ -130,7 +130,6 @@ Disassembly of section .text:
                	movups	0x140(%rsp), %xmm14
                	vpinsrd	$0x1, %ecx, %xmm14, %xmm14
                	movups	%xmm14, 0x140(%rsp)
-               	movups	0x140(%rsp), %xmm14
                	vmovq	%xmm14, %rcx
                	movl	$0x40, %edx
                	cmpq	$0x40, %rcx

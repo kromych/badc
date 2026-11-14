@@ -608,7 +608,7 @@ impl SectionInsn<'_> {
         }
         let bid = goto_block(k)
             .ok_or_else(|| self.err(&alloc::format!("`%l{k}` names no `asm goto` label")))?;
-        let mut bytes = alloc::vec::Vec::new();
+        let mut bytes = CodeBuf::default();
         let offset = match cc {
             Some(cc) => {
                 super::encode::emit_jcc_rel32(&mut bytes, cc, 0);
@@ -630,7 +630,7 @@ impl SectionInsn<'_> {
             addend: -4,
         };
         Ok(Some(AsmSectionItem::CodeBytes {
-            bytes,
+            bytes: bytes.into_bytes(),
             relocs: alloc::vec![reloc],
             short: None,
         }))
@@ -1627,6 +1627,8 @@ pub(super) fn emit_inline_asm(
     fcx: &FnCtx,
     mut goto_ctx: Option<AsmGotoCtx<'_>>,
 ) -> Emit {
+    // The template's branches bypass the branch encoders.
+    out.cx.code.note_branch();
     let mut long_sites: alloc::collections::BTreeSet<usize> = alloc::collections::BTreeSet::new();
     let base = out.mark();
     loop {
@@ -4027,7 +4029,7 @@ struct GotoExits {
 }
 
 /// A `jmp` / `jcc` in the rel32 form with a zero displacement.
-fn emit_rel32_branch(code: &mut Vec<u8>, cc: Option<Cc>) {
+fn emit_rel32_branch(code: &mut CodeBuf, cc: Option<Cc>) {
     match cc {
         Some(cc) => super::encode::emit_jcc_rel32(code, cc, 0),
         None => super::encode::emit_jmp_rel32(code, 0),

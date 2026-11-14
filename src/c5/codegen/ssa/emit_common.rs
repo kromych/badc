@@ -17,7 +17,7 @@ use crate::c5::diag::{Code, Diagnostic, Sink};
 /// type is non-generic. Holds `&mut` field references so a per-function caller
 /// constructs it from its own output vectors; grows as more helpers adopt it.
 pub(crate) struct EmitCtx<'a> {
-    pub(crate) code: &'a mut alloc::vec::Vec<u8>,
+    pub(crate) code: &'a mut super::code_buf::CodeBuf,
     pub(crate) plt_call_fixups: &'a mut alloc::vec::Vec<super::PltCallFixup>,
     pub(crate) data_fixups: &'a mut alloc::vec::Vec<super::DataFixup>,
     pub(crate) user_extern_data_refs: &'a mut alloc::vec::Vec<super::UserExternDataRef>,
@@ -2164,7 +2164,7 @@ pub(crate) fn record_block_start_pc(
 /// code buffer, the fixup and relocation vectors both backends fill, and
 /// the per-function bookkeeping the object writers read back off `Build`.
 pub(crate) struct LowerState {
-    pub(crate) code: alloc::vec::Vec<u8>,
+    pub(crate) code: super::code_buf::CodeBuf,
     pub(crate) func_ent_pcs: alloc::vec::Vec<usize>,
     pub(crate) func_ends: alloc::vec::Vec<usize>,
     pub(crate) patchable_entries: alloc::vec::Vec<super::EntryArea>,
@@ -2204,7 +2204,7 @@ pub(crate) struct LowerState {
 impl LowerState {
     fn new() -> Self {
         Self {
-            code: alloc::vec::Vec::new(),
+            code: super::code_buf::CodeBuf::default(),
             func_ent_pcs: alloc::vec::Vec::new(),
             func_ends: alloc::vec::Vec::new(),
             patchable_entries: alloc::vec::Vec::new(),
@@ -3646,7 +3646,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         asm_sym_fixups: st.asm_sym_fixups,
         asm_text_labels: st.asm_text_labels,
         copy_relocs: alloc::vec::Vec::new(),
-        text: st.code,
+        text: st.code.into_bytes(),
         text_align: st.text_align,
         data: program.data.clone(),
         // Region boundaries the data compaction produced; zero when

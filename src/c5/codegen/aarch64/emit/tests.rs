@@ -1359,7 +1359,7 @@ fn lift_and_alloc(src: &str, target: Target) -> (crate::c5::ir::FunctionSsa, All
 #[test]
 fn emit_return_42() {
     let (func, alloc) = lift_and_alloc("int main(void) { return 42; }", Target::MacOSAarch64);
-    let mut code = Vec::new();
+    let mut code = crate::c5::codegen::ssa::code_buf::CodeBuf::default();
     let mut fx = Vec::new();
     let mut plt = Vec::new();
     let mut data_fx = Vec::new();
@@ -2585,7 +2585,7 @@ fn aapcs64_va_arg_leaves_x19_alone() {
 #[test]
 fn emit_return_one_plus_two() {
     let (func, alloc) = lift_and_alloc("int main(void) { return 1 + 2; }", Target::MacOSAarch64);
-    let mut code = Vec::new();
+    let mut code = crate::c5::codegen::ssa::code_buf::CodeBuf::default();
     let mut fx = Vec::new();
     let mut plt = Vec::new();
     let mut data_fx = Vec::new();
@@ -2686,7 +2686,7 @@ fn emit_if_else_returns() {
     // declaration order, but `Inst::Call` for main isn't in
     // the thin slice yet, so we only check that `test` emits
     // cleanly. main will fall back.
-    let mut code = Vec::new();
+    let mut code = crate::c5::codegen::ssa::code_buf::CodeBuf::default();
     let mut fx = Vec::new();
     let mut plt = Vec::new();
     let mut data_fx = Vec::new();

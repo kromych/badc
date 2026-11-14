@@ -2237,7 +2237,7 @@ Disassembly of section .text:
                	movq	%r8, -0x28(%rbp)
                	xorl	%r10d, %r10d
                	movq	%r10, 0x48(%rsp)
-               	movq	0x48(%rsp), %rax
+               	movq	%r10, %rax
                	cmpl	$0x3, %eax
                	jge	<addr>
                	leaq	<rip>, %rcx # <addr>

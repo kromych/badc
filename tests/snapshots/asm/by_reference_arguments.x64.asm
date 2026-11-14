@@ -224,7 +224,6 @@ Disassembly of section .text:
                	movq	%r10, 0x8(%rsp)
                	movabsq	$0x500000004, %r10      # imm = 0x500000004
                	movq	%r10, (%rsp)
-               	movq	(%rsp), %r10
                	movq	%r10, -0x58(%rbp)
                	movl	$0x6, -0x50(%rbp)
                	leaq	-0x30(%rbp), %r10

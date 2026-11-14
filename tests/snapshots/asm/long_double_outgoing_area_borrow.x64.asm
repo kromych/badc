@@ -87,7 +87,6 @@ Disassembly of section .text:
                	movq	%r10, 0x58(%rsp)
                	leaq	<rip>, %r10 # <addr>
                	movq	%r10, 0x50(%rsp)
-               	movq	0x50(%rsp), %r10
                	fldt	(%r10)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
@@ -329,10 +328,8 @@ Disassembly of section .text:
                	movq	0x40(%rsp), %r10
                	subq	0x48(%rsp), %r10
                	movq	%r10, 0x48(%rsp)
-               	movq	0x48(%rsp), %r10
                	addq	0x50(%rsp), %r10
                	movq	%r10, 0x50(%rsp)
-               	movq	0x50(%rsp), %r10
                	subq	0x58(%rsp), %r10
                	movq	%r10, 0x58(%rsp)
                	movq	%r15, %r10

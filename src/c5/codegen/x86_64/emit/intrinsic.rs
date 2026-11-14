@@ -5,7 +5,7 @@ use super::*;
 /// destination address. The operands are memory-resident and only 8-byte
 /// aligned, so every transfer is an unaligned `movdqu`.
 pub(super) fn emit_x86_simd(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     op: u32,
     imm: Option<u8>,
     args: &[super::super::ir::ValueId],
@@ -24,7 +24,7 @@ pub(super) fn emit_x86_simd(
     let row = simd::get(op);
     // An operand's value (an address for the 128-bit and pointer operands),
     // in its own register or loaded into `scratch`.
-    let operand = |code: &mut Vec<u8>, i: usize, scratch: Reg| -> Option<Reg> {
+    let operand = |code: &mut CodeBuf, i: usize, scratch: Reg| -> Option<Reg> {
         let place = alloc.places.get(args[i] as usize).copied()?;
         materialize_int(code, place, scratch, frame)
     };
@@ -267,7 +267,7 @@ pub(super) fn emit_x86_simd(
 /// spilled as 8 bytes.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn sse_binary(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     mnem: &'static str,
     imm: Option<u8>,
     commutes: bool,
@@ -276,7 +276,7 @@ pub(super) fn sse_binary(
     (a, b): (Place, Place),
     frame: Frame,
 ) -> Emit {
-    let load = |code: &mut Vec<u8>, p: Place, scratch: Reg| {
+    let load = |code: &mut CodeBuf, p: Place, scratch: Reg| {
         if wide {
             materialize_v128(code, p, scratch, frame)
         } else {
@@ -301,7 +301,7 @@ pub(super) fn sse_binary(
         }
         Ok(())
     };
-    let source = |code: &mut Vec<u8>, p: Place| -> Emit<u8> {
+    let source = |code: &mut CodeBuf, p: Place| -> Emit<u8> {
         match load(code, p, Reg(src_x)) {
             Some(Reg(r)) => Ok(r),
             None => fail("x86 simd: a source has no place"),
@@ -344,7 +344,7 @@ pub(super) fn sse_binary(
 /// `Inst::VecBinop`: the SSE instruction for the element-wise operation, an
 /// 8-byte vector in the low half of the xmm register.
 pub(super) fn emit_vec_binop(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     (op, lane, bytes): (super::super::ir::BinOp, super::super::ir::VecLane, u8),
     (lhs, rhs): (super::super::ir::ValueId, super::super::ir::ValueId),
     dst: Place,
@@ -407,7 +407,7 @@ pub(super) fn emit_vec_binop(
 /// copied into the destination first. A spilled source is loaded into an
 /// FP scratch, and a spilled result is formed in one and stored.
 pub(super) fn vex_binary(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     encode: &dyn Fn(&mut Vec<u8>, &[super::asm::Concrete]) -> Emit,
     imm: Option<u8>,
     wide: bool,
@@ -416,7 +416,7 @@ pub(super) fn vex_binary(
     frame: Frame,
 ) -> Emit {
     let (sa, sb) = (Reg(frame.fp_scratch[0]), Reg(frame.fp_scratch[1]));
-    let load = |code: &mut Vec<u8>, p: Place, scratch: Reg| match wide {
+    let load = |code: &mut CodeBuf, p: Place, scratch: Reg| match wide {
         true => materialize_v128(code, p, scratch, frame),
         false => materialize_fp(code, p, scratch, frame),
     };
@@ -446,7 +446,7 @@ pub(super) fn vex_binary(
 /// registers, `dst = a op b`: a spilled source is loaded into an FP
 /// scratch, and a spilled result is formed in one and stored.
 pub(super) fn wide_binary(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     mnem: &'static str,
     imm: Option<u8>,
     w: VecWidth,
@@ -491,7 +491,7 @@ pub(super) fn wide_binary(
 /// it is copied from; an integer result goes to its register or through
 /// r11 to its spill slot.
 pub(super) fn emit_x86_simd_val(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     op: u32,
     imm: Option<u8>,
     args: &[super::super::ir::ValueId],
@@ -527,7 +527,7 @@ pub(super) fn emit_x86_simd_val(
             .copied()
             .unwrap_or(Place::None)
     };
-    let vector = |code: &mut Vec<u8>, i: usize, scratch: u8| -> Emit<u8> {
+    let vector = |code: &mut CodeBuf, i: usize, scratch: u8| -> Emit<u8> {
         match materialize_v128(code, place(i), Reg(scratch), frame) {
             Some(r) => Ok(r.0),
             None => fail(alloc::format!("x86 simd: operand {i} has no place")),
@@ -540,7 +540,7 @@ pub(super) fn emit_x86_simd_val(
         _ => dst_x,
     };
     // Copy operand `i` into `w`.
-    let into = |code: &mut Vec<u8>, i: usize, w: u8| -> Emit {
+    let into = |code: &mut CodeBuf, i: usize, w: u8| -> Emit {
         match place(i) {
             Place::FpReg(r) if r == w => {}
             Place::FpReg(r) => emit_movapd_xmm_xmm(code, Reg(w), Reg(r)),
@@ -592,7 +592,7 @@ pub(super) fn emit_x86_simd_val(
                     super::asm::encode(code, 8, m, None, ops)
                         .or_else(|e| fail(alloc::format!("x86 simd: {e}")))
                 };
-                let mut probe = Vec::new();
+                let mut probe = CodeBuf::default();
                 let pair = (place(0), place(1));
                 if vex_binary(&mut probe, &encode, imm, row.bytes == 16, dst, pair, frame).is_ok() {
                     code.extend_from_slice(&probe);
@@ -678,7 +678,7 @@ pub(super) fn emit_x86_simd_val(
 const VA_CURSOR_STRIDE: i32 = 8;
 
 pub(super) fn emit_intrinsic(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     kind: i64,
     args: &[u32],
     dst: Place,
@@ -941,7 +941,7 @@ fn arg_place(alloc: &Allocation, args: &[u32], i: usize, what: &'static str) -> 
 /// overflow_arg_area = the first incoming stack argument, reg_save_area =
 /// the prologue-spilled area.
 fn emit_va_start_sysv(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     args: &[u32],
     func: &FunctionSsa,
     alloc: &Allocation,
@@ -982,7 +982,7 @@ fn emit_va_start_sysv(
 /// `args[0]` = &dst, `args[1]` = &src. The pointers ride r10 / r11; the
 /// copied word borrows a pool register around a push / pop pair, the spill
 /// loads running before the push.
-fn emit_va_copy_sysv(code: &mut Vec<u8>, args: &[u32], alloc: &Allocation, frame: Frame) -> Emit {
+fn emit_va_copy_sysv(code: &mut CodeBuf, args: &[u32], alloc: &Allocation, frame: Frame) -> Emit {
     if args.len() != 2 {
         return fail("VaCopy: expected 2 args");
     }
@@ -1013,7 +1013,7 @@ fn emit_va_copy_sysv(code: &mut Vec<u8>, args: &[u32], alloc: &Allocation, frame
 /// Win64 `va_start(&ap, &last)`: `*ap` = the home slot past the named parameters,
 /// one slot each; `&last` of an aggregate is its body copy, so it goes unused.
 fn emit_va_start_cursor(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     args: &[u32],
     func: &FunctionSsa,
     alloc: &Allocation,
@@ -1038,7 +1038,7 @@ fn emit_va_start_cursor(
 /// writeback goes through the cursor: the cursor moves to r11 when it
 /// would alias the work register, the advance takes r10.
 fn emit_va_arg_cursor(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     args: &[u32],
     dst: Place,
     func: &FunctionSsa,
@@ -1098,7 +1098,7 @@ fn emit_va_arg_cursor(
 /// Win64 `va_copy(&dst, &src)`: `*dst = *src`. The source value loads into
 /// r10 before the destination pointer materializes, so r11 serves both
 /// pointers in turn.
-fn emit_va_copy_cursor(code: &mut Vec<u8>, args: &[u32], alloc: &Allocation, frame: Frame) -> Emit {
+fn emit_va_copy_cursor(code: &mut CodeBuf, args: &[u32], alloc: &Allocation, frame: Frame) -> Emit {
     if args.len() != 2 {
         return fail("VaCopy: expected 2 args");
     }
@@ -1122,7 +1122,7 @@ fn emit_va_copy_cursor(code: &mut Vec<u8>, args: &[u32], alloc: &Allocation, fra
 /// walks down page by page as in `emit_stack_alloc`, the size being a
 /// run-time value.
 fn emit_alloca(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     args: &[u32],
     dst: Place,
     alloc: &Allocation,
@@ -1179,7 +1179,7 @@ fn emit_alloca(
 }
 
 /// Snapshot rsp for a VLA block (C99 6.2.4p2).
-fn emit_alloca_save(code: &mut Vec<u8>, dst: Place, frame: Frame) -> Emit {
+fn emit_alloca_save(code: &mut CodeBuf, dst: Place, frame: Frame) -> Emit {
     if !frame.dynamic_sp {
         return fail("AllocaSave: AllocaInit didn't run for this function");
     }
@@ -1198,7 +1198,7 @@ fn emit_alloca_save(code: &mut Vec<u8>, dst: Place, frame: Frame) -> Emit {
 
 /// Restore the saved rsp on VLA block exit, reclaiming the block's storage
 /// (per iteration for a loop body).
-fn emit_alloca_restore(code: &mut Vec<u8>, args: &[u32], alloc: &Allocation, frame: Frame) -> Emit {
+fn emit_alloca_restore(code: &mut CodeBuf, args: &[u32], alloc: &Allocation, frame: Frame) -> Emit {
     if !frame.dynamic_sp {
         return fail("AllocaRestore: AllocaInit didn't run for this function");
     }
@@ -1220,7 +1220,7 @@ fn emit_alloca_restore(code: &mut Vec<u8>, args: &[u32], alloc: &Allocation, fra
 ///   sgdt/sidt = 0F 01 /0,/1 ; lgdt/lidt = 0F 01 /2,/3 ;
 ///   sldt/str  = 0F 00 /0,/1 ; lldt = 0F 00 /2 ; clflush = 0F AE /7.
 fn emit_mem_operand_insn(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     intrinsic: crate::c5::op::Intrinsic,
     args: &[u32],
     alloc: &Allocation,
@@ -1267,7 +1267,7 @@ fn emit_mem_operand_insn(
 /// `[q_addr, rem_addr, n0, n1, d]`. rax / rdx are preserved and the output
 /// addresses pushed (remainder popped first); each operand is read through
 /// the rsp shift the pushes produced.
-fn emit_divq128(code: &mut Vec<u8>, args: &[u32], alloc: &Allocation, frame: Frame) -> Emit {
+fn emit_divq128(code: &mut CodeBuf, args: &[u32], alloc: &Allocation, frame: Frame) -> Emit {
     const RAX: Reg = Reg(0);
     const RDX: Reg = Reg(2);
     const R10: Reg = Reg(10);
@@ -1278,7 +1278,7 @@ fn emit_divq128(code: &mut Vec<u8>, args: &[u32], alloc: &Allocation, frame: Fra
     // Force args[idx] into `scratch`; `pushed` counts the 8-byte pushes
     // emitted so far.
     let materialize_at =
-        |code: &mut Vec<u8>, idx: usize, scratch: Reg, pushed: u32| -> Option<Reg> {
+        |code: &mut CodeBuf, idx: usize, scratch: Reg, pushed: u32| -> Option<Reg> {
             let place = alloc.places.get(args[idx] as usize).copied()?;
             let r = materialize_int_shifted(code, place, scratch, frame, 8 * pushed)?;
             if r.0 != scratch.0 {
@@ -1321,7 +1321,7 @@ fn emit_divq128(code: &mut Vec<u8>, args: &[u32], alloc: &Allocation, frame: Fra
 
 /// The value of `src` (rbp or rsp) into the destination.
 fn emit_reg_read(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     frame: Frame,
     src: Reg,
@@ -1339,7 +1339,7 @@ fn emit_reg_read(
 /// [fp + 8], above the saved rbp. Without an operand the record is the
 /// current frame's; with one, the frame address a level above 0 walked to.
 fn emit_return_address(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     args: &[u32],
     dst: Place,
     alloc: &Allocation,
@@ -1367,7 +1367,7 @@ fn emit_return_address(
 /// immediate store per unit; past `MAX_MEM_FILL_ACCESSES` stores, a loop of r10 up to r11.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_mzero(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst_val: u32,
     size: i64,
     align: u32,
@@ -1401,7 +1401,7 @@ pub(super) fn emit_mzero(
         }
         w
     };
-    let store = |code: &mut Vec<u8>, w: u32, base: Reg, off: i32| match xmm {
+    let store = |code: &mut CodeBuf, w: u32, base: Reg, off: i32| match xmm {
         Some(x) if w == 32 => super::encode::emit_vmovups_mem_ymm(code, base, off, x),
         Some(x) if w == 16 && vex => super::encode::emit_vmovups_mem_xmm(code, base, off, x),
         Some(x) if w == 16 => emit_movups_mem_xmm(code, base, off, x),
@@ -1477,7 +1477,7 @@ fn copy_temps(abi: super::Abi) -> Vec<u8> {
 /// reload, serves as its own cursor.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_mcpy(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     v: super::super::ir::ValueId,
     dst_place: Place,
     dst_val: u32,
@@ -1574,7 +1574,7 @@ pub(super) fn emit_mcpy(
             matches!(place, Place::Spill(_))
                 || (!alloc.holds_live_across(v, r.0) && !frame.fixed_regs.has_gpr(r.0))
         };
-        let cursor = |code: &mut Vec<u8>, regs: &mut SiteRegs, base: Reg| {
+        let cursor = |code: &mut CodeBuf, regs: &mut SiteRegs, base: Reg| {
             let c = regs.take(code)?;
             emit_mov_rr(code, c, base);
             Some(c)
@@ -1678,7 +1678,7 @@ fn emit_mov_mem_r_width(code: &mut Vec<u8>, base: Reg, src: Reg, width: u8) {
 /// has one so the caller may clobber that register; `sp_shift` counts the
 /// borrowed registers already pushed.
 fn operand_into(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     value: super::super::ir::ValueId,
     scratch: Reg,
     frame: Frame,
@@ -1699,7 +1699,7 @@ fn operand_into(
 /// rides its own register or r11; the result lands in `dst`'s register
 /// or r10.
 pub(super) fn emit_atomic_load(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     addr: super::super::ir::ValueId,
     width: u8,
@@ -1720,7 +1720,7 @@ pub(super) fn emit_atomic_load(
 /// (Intel SDM Vol.3 8.2.3.9); a plain `mov`, already a release, for
 /// the rest. The address rides its own register or r11, the value r10.
 pub(super) fn emit_atomic_store(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     addr: super::super::ir::ValueId,
     value: super::super::ir::ValueId,
     width: u8,
@@ -1784,7 +1784,7 @@ fn finish_atomic(code: &mut Vec<u8>, regs: &[&SiteRegs], dst: Place, r: Reg, fra
 /// C11 atomics). The address rides its own register or r11.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_atomic_rmw(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     v: super::super::ir::ValueId,
     dst: Place,
     (op, addr, value, width): (
@@ -1893,7 +1893,7 @@ pub(super) fn emit_atomic_rmw(
 /// around it, as are rax, rcx and rdx where a value lives in them. The
 /// value is whether it matched.
 pub(super) fn emit_atomic_cas16(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     v: super::super::ir::ValueId,
     dst: Place,
     addr: super::super::ir::ValueId,
@@ -1903,7 +1903,7 @@ pub(super) fn emit_atomic_cas16(
     frame: Frame,
 ) -> Emit {
     use super::encode::emit_lock_cmpxchg16b_mem;
-    let operand = |code: &mut Vec<u8>, value, r: Reg, shift: u32| -> Emit {
+    let operand = |code: &mut CodeBuf, value, r: Reg, shift: u32| -> Emit {
         let Some(x) = materialize_int_shifted(code, place_of(alloc, value), r, frame, shift) else {
             return fail("AtomicCas16: operand not int reg / spill");
         };
@@ -1958,7 +1958,7 @@ pub(super) fn emit_atomic_cas16(
 /// or r11, `desired` its own or r10.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_atomic_cas(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     v: super::super::ir::ValueId,
     dst: Place,
     addr: super::super::ir::ValueId,
@@ -2205,7 +2205,7 @@ fn wide_movemask(code: &mut Vec<u8>, row: &crate::c5::x86_simd::SimdOp, a: u8, r
 /// FP scratch registers through their addresses, a three-source form's last
 /// one read in place, and the result stores through the destination's.
 fn emit_x86_simd_wide(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     op: u32,
     imm: Option<u8>,
     args: &[super::super::ir::ValueId],
@@ -2217,7 +2217,7 @@ fn emit_x86_simd_wide(
     let row = simd::get(op);
     let w = VecWidth::of_bytes(row.bytes);
     let (src_x, dst_x) = (frame.fp_scratch[0], frame.fp_scratch[1]);
-    let operand = |code: &mut Vec<u8>, i: usize, scratch: Reg| -> Emit<Reg> {
+    let operand = |code: &mut CodeBuf, i: usize, scratch: Reg| -> Emit<Reg> {
         let place = args
             .get(i)
             .and_then(|&a| alloc.places.get(a as usize).copied());
@@ -2226,7 +2226,7 @@ fn emit_x86_simd_wide(
             None => fail(alloc::format!("x86 simd: operand {i} has no place")),
         }
     };
-    let load = |code: &mut Vec<u8>, i: usize, n: u8| -> Emit {
+    let load = |code: &mut CodeBuf, i: usize, n: u8| -> Emit {
         let a = operand(code, i, SCRATCH_R10)?;
         emit_wide_load(code, w, Reg(n), a, 0);
         Ok(())
@@ -2388,7 +2388,7 @@ fn narrow(
 /// source of a three-source form read from its spill slot), and the result
 /// formed in its register or in a scratch it is stored from.
 fn emit_x86_simd_val_wide(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     op: u32,
     imm: Option<u8>,
     args: &[super::super::ir::ValueId],
@@ -2405,7 +2405,7 @@ fn emit_x86_simd_val_wide(
         args.get(i)
             .and_then(|&a| alloc.places.get(a as usize).copied())
     };
-    let vector = |code: &mut Vec<u8>, i: usize, scratch: u8| -> Emit<u8> {
+    let vector = |code: &mut CodeBuf, i: usize, scratch: u8| -> Emit<u8> {
         match place(i).and_then(|p| materialize_wide(code, w, p, Reg(scratch), frame)) {
             Some(r) => Ok(r.0),
             None => fail(alloc::format!("x86 simd: operand {i} has no place")),
@@ -2572,7 +2572,7 @@ fn lane_part(code: &mut Vec<u8>, bytes: u8, v: u8, off: u8, scratch: u8) -> Emit
 /// register, extended as `kind` reads it, or into an FP one, the lane moved
 /// into the low element.
 pub(super) fn emit_vec_extract(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     (vec, off, kind, bytes): (super::super::ir::ValueId, u8, LoadKind, u8),
     dst: Place,
     alloc: &Allocation,
@@ -2666,7 +2666,7 @@ pub(super) fn emit_vec_extract(
 /// read no register; another lane is built in a general register and
 /// broadcast. An 8-byte vector's upper half is cleared by `vmovq`.
 pub(super) fn emit_vec_const(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     (imm, kind, bytes): (i64, StoreKind, u8),
     dst: Place,
     frame: Frame,
@@ -2733,7 +2733,7 @@ pub(super) fn emit_vec_const(
 /// `vbroadcastsd` of a double; an 8-byte vector's upper half cleared by
 /// `vmovq`.
 pub(super) fn emit_vec_splat(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     (value, kind, bytes): (super::super::ir::ValueId, StoreKind, u8),
     dst: Place,
     alloc: &Allocation,
@@ -2792,7 +2792,7 @@ pub(super) fn emit_vec_splat(
 /// `vmovq` / `vmovd`); a wide vector's 128-bit part is extracted, updated and
 /// inserted back, as a VEX.128 write clears the bits above it.
 pub(super) fn emit_vec_insert(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     (vec, value, off, kind, bytes): (
         super::super::ir::ValueId,
         super::super::ir::ValueId,
@@ -2808,7 +2808,7 @@ pub(super) fn emit_vec_insert(
     use super::asm::Concrete;
     let (sa, sb) = (frame.fp_scratch[0], frame.fp_scratch[1]);
     let w = VecWidth::of_bytes(bytes);
-    let mirror = |code: &mut Vec<u8>, rd: u8| {
+    let mirror = |code: &mut CodeBuf, rd: u8| {
         if bytes > 16 {
             mirror_wide_dst(code, w, dst, Reg(rd), frame);
         } else if bytes == 8 {
@@ -2898,7 +2898,7 @@ pub(super) fn emit_vec_insert(
 
 /// [`emit_vec_insert`] of a scalar lane through a general register.
 fn emit_vec_insert_gpr(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     (vec, value, off, kind, bytes): (
         super::super::ir::ValueId,
         super::super::ir::ValueId,
@@ -2916,7 +2916,7 @@ fn emit_vec_insert_gpr(
     let (sa, sb) = (frame.fp_scratch[0], frame.fp_scratch[1]);
     let w = VecWidth::of_bytes(bytes);
     let q = |r: Reg, size| Concrete::Reg { reg: r.0, size };
-    let mirror = |code: &mut Vec<u8>, rd: u8| {
+    let mirror = |code: &mut CodeBuf, rd: u8| {
         if bytes > 16 {
             mirror_wide_dst(code, w, dst, Reg(rd), frame);
         } else if bytes == 8 {

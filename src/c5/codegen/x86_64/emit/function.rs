@@ -310,9 +310,9 @@ pub(crate) fn emit_function(
     let mcount_frame = entry.profile.is_some_and(|call| call.after_prologue);
     let early_exit = if repeat_tests && !mcount_frame && !is_full_leaf(func, frame, alloc, abi) {
         super::ssa::early_exit::early_exit(func, &param_plan).filter(|exit| {
-            emit_early_test(&mut Vec::new(), exit, frame.fixed_regs).is_some()
+            emit_early_test(&mut CodeBuf::default(), exit, frame.fixed_regs).is_some()
                 && emit_early_return(
-                    &mut Vec::new(),
+                    &mut CodeBuf::default(),
                     exit,
                     abi,
                     frame.fixed_regs,
@@ -587,7 +587,8 @@ impl FnEmit<'_, '_> {
         // A naked body describes no frame: the unwinder keeps the entry
         // rule, as for a leaf.
         if func.is_naked {
-            code.resize(code.len() + self.entry.nops_after as usize, 0x90);
+            let padded = code.len() + self.entry.nops_after as usize;
+            code.resize(padded, 0x90);
             return super::FnUnwind {
                 leaf: true,
                 ..super::FnUnwind::default()
@@ -596,7 +597,8 @@ impl FnEmit<'_, '_> {
         if abi.hardening.cf_protection_branch {
             super::encode::emit_endbr64(code);
         }
-        code.resize(code.len() + self.entry.nops_after as usize, 0x90);
+        let padded = code.len() + self.entry.nops_after as usize;
+        code.resize(padded, 0x90);
         if let Some(call) = self.entry.profile
             && !call.after_prologue
         {
@@ -842,6 +844,7 @@ impl FnEmit<'_, '_> {
         } = self.fcx;
         let block = &func.blocks[block_idx];
         self.block_offsets[block_idx] = self.out.cx.code.len();
+        self.out.cx.code.begin_block();
         self.windows.open = None;
         // A `__try` handler is entered with rsp where the exception left it:
         // the prologue's rsp, realigned as the prologue realigns it.
@@ -923,6 +926,7 @@ impl FnEmit<'_, '_> {
         } = self.fcx;
         let inst = &func.insts[v as usize];
         let place = place_of(alloc, v);
+        self.out.cx.code.begin_instruction();
         if super::ssa::emit_common::inst_emits_nothing(inst, v, alloc) {
             return Ok(());
         }
@@ -1239,7 +1243,7 @@ impl FnEmit<'_, '_> {
         let len = usize::from(w.prev.get(first).copied().unwrap_or(0));
         let at = code.len() % 32;
         if len > 0 && len < 32 && at + len >= 32 {
-            push_x86_nops(code, 32 - at);
+            code.pad(|code| push_x86_nops(code, 32 - at));
         }
         w.open = Some(code.len());
         first
@@ -1492,7 +1496,7 @@ pub(super) fn emit_stack_probe(code: &mut Vec<u8>) {
 /// 6.7.5). The AND descends up to `realign_align - 1` bytes the probe
 /// schedule cannot see; when that can outrun the unprobed margin, a probe
 /// on each side keeps every step within a page of a touched address.
-fn emit_realign_rsp(code: &mut Vec<u8>, frame: Frame) {
+fn emit_realign_rsp(code: &mut CodeBuf, frame: Frame) {
     let slack = frame.realign_align - 1;
     let probe = frame.realign_region_bytes.saturating_add(slack) > MAX_UNPROBED_STACK_STEP;
     emit_stack_alloc(code, frame.realign_region_bytes, Some(Reg::R11));
@@ -1510,7 +1514,7 @@ fn emit_realign_rsp(code: &mut Vec<u8>, frame: Frame) {
 /// with a store after each step, so an overflow faults in the guard. Given
 /// `scratch`, more than [`STACK_PROBE_UNROLL_MAX`] steps become a counted
 /// loop.
-pub(super) fn emit_stack_alloc(code: &mut Vec<u8>, bytes: u32, scratch: Option<Reg>) {
+pub(super) fn emit_stack_alloc(code: &mut CodeBuf, bytes: u32, scratch: Option<Reg>) {
     if bytes <= MAX_UNPROBED_STACK_STEP {
         emit_sub_rsp(code, bytes);
         return;
@@ -1657,7 +1661,7 @@ pub(super) fn restore_callee_saved(code: &mut Vec<u8>, frame: Frame, alloc: &All
 /// instruction boundary relative to it for the PE unwind table and the
 /// DWARF CFI (`begin` / `end` are the caller's).
 fn emit_prologue(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     func: &FunctionSsa,
     alloc: &Allocation,
     frame: Frame,
@@ -1915,7 +1919,7 @@ fn emit_struct_param_scatter(
 }
 
 fn emit_return(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     value: u32,
     alloc: &Allocation,
     frame: Frame,
@@ -2142,7 +2146,7 @@ fn emit_parts_return(
 /// Frame teardown and `ret` after the canary check and the callee-saved
 /// restores. A full leaf needs only the `ret`.
 fn emit_epilogue_ret(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     func: &FunctionSsa,
     frame: Frame,
     alloc: &Allocation,
@@ -2273,7 +2277,7 @@ fn emit_canary_store(
 /// `__stack_chk_fail` when they differ. Emitted on every path that leaves
 /// the frame, ahead of the teardown, while rbp still addresses the slot.
 pub(super) fn emit_canary_check(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     frame: Frame,
     abi: super::Abi,
     extern_sites: &mut Vec<super::UserExternCallSite>,
@@ -2302,7 +2306,7 @@ pub(super) fn emit_canary_check(
 /// a zero displacement and a by-name call site for the writer's
 /// relocation.
 fn emit_extern_branch(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     extern_sites: &mut Vec<super::UserExternCallSite>,
     symbol: &str,
     is_call: bool,
@@ -2323,7 +2327,7 @@ fn emit_extern_branch(
 /// name, or under `-mnop-mcount` a NOP of the call's width in its place.
 /// `-mrecord-mcount` records the site either way.
 fn emit_profile_call(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     call: super::ProfileCall,
     extern_sites: &mut Vec<super::UserExternCallSite>,
     mcount_sites: &mut Vec<usize>,
@@ -2340,7 +2344,7 @@ fn emit_profile_call(
 /// a jump to the external return thunk, which returns itself; the
 /// straight-line-speculation trap then has no `ret` to guard.
 pub(super) fn emit_hardened_ret(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     abi: super::Abi,
     extern_sites: &mut Vec<super::UserExternCallSite>,
 ) {
@@ -2386,7 +2390,7 @@ fn emit_retpoline_capture(code: &mut Vec<u8>, target: Reg) {
 /// `thunk-inline`. A call has an architectural successor, so `-mharden-sls=`
 /// places no trap here.
 pub(super) fn emit_hardened_call_r(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     target: Reg,
     abi: super::Abi,
     extern_sites: &mut Vec<super::UserExternCallSite>,
@@ -2398,6 +2402,7 @@ pub(super) fn emit_hardened_call_r(
             emit_extern_branch(code, extern_sites, symbol, true);
         }
         IndirectBranch::ThunkInline => {
+            code.note_branch();
             code.extend_from_slice(&[0xEB, 0x11]); // jmp over the thunk body
             code.extend_from_slice(&[0xE8, 0x07, 0x00, 0x00, 0x00]); // call the capture
             emit_retpoline_capture(code, target);
@@ -2413,7 +2418,7 @@ pub(super) fn emit_hardened_call_r(
 /// embedded retpoline under `-mindirect-branch=`;
 /// `-mharden-sls=indirect-jmp` traps after the transfer in every form.
 fn emit_hardened_jmp_r(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     target: Reg,
     abi: super::Abi,
     extern_sites: &mut Vec<super::UserExternCallSite>,
@@ -2437,7 +2442,7 @@ fn emit_hardened_jmp_r(
 
 /// Store a register a call clobbers to its slot ahead of the call, or load
 /// it back after ([`super::ssa::reg_alloc::Allocation::call_saves`]).
-fn call_save(code: &mut Vec<u8>, frame: Frame, s: &super::ssa::reg_alloc::CallSave, store: bool) {
+fn call_save(code: &mut CodeBuf, frame: Frame, s: &super::ssa::reg_alloc::CallSave, store: bool) {
     use super::ssa::reg_alloc::VecWidth;
     let (slot, r) = (Place::Spill(s.slot), Reg(s.reg));
     match (s.is_fp, s.wide, store) {

@@ -5,7 +5,7 @@ use super::*;
 /// Windows: the TEB `gs:[0x58]` table indexed by `_tls_index`, plus a
 /// final `lea`; the writer fixup patches the `_tls_index` slot.
 pub(super) fn emit_tls_addr(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     offset: i64,
     v: super::super::ir::ValueId,
@@ -284,7 +284,7 @@ fn emit_store_kind_mem(
 
 /// Mirror a just-stored FP value into `dst` (movapd into a distinct
 /// FP register, or a spill store).
-pub(super) fn mirror_fp_dst(code: &mut Vec<u8>, dst: Place, dn: Reg, frame: Frame) {
+pub(super) fn mirror_fp_dst(code: &mut CodeBuf, dst: Place, dn: Reg, frame: Frame) {
     match dst {
         Place::FpReg(r) if r != dn.0 => emit_movapd_xmm_xmm(code, Reg(r), dn),
         Place::Spill(_) => fp_spill_dst_to_slot(code, dst, dn, frame),
@@ -298,7 +298,7 @@ pub(super) fn mirror_fp_dst(code: &mut Vec<u8>, dst: Place, dn: Reg, frame: Fram
 /// `movsd` covers the 8-byte `double` lvalue.
 #[allow(clippy::too_many_arguments)]
 fn emit_load_fp_mem(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     kind: LoadKind,
     keep_f32: bool,
@@ -382,7 +382,7 @@ fn emit_load_fp_mem(
 /// The stored value also feeds `dst` (C99 6.5.16p3).
 #[allow(clippy::too_many_arguments)]
 fn emit_store_fp_mem(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     value_place: Place,
     value_is_f32: bool,
@@ -510,7 +510,7 @@ pub(super) fn local_slot_base_disp(
 /// `Inst::LoadLocal`: the c5 slot offset folds into the load's
 /// displacement with `disp`, so no `LocalAddr` is materialized.
 pub(super) fn emit_load_local(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     off: i64,
     disp: i32,
@@ -580,7 +580,7 @@ pub(super) fn is_fp_store(kind: StoreKind) -> bool {
 /// stored value in the accumulator, so the destination `Place`
 /// receives a copy after the store lands.
 pub(super) fn emit_store_local(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     _v: super::super::ir::ValueId,
     off: i64,
@@ -646,7 +646,7 @@ pub(super) fn emit_store_local(
 /// produces today.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_load_indexed(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     base: u32,
     (index, ext): (u32, IndexExt),
@@ -721,7 +721,7 @@ pub(super) fn emit_load_indexed(
 /// the frame register and the object's offset for a frame object's address,
 /// else both operands, a spilled one loaded into r10 or r11.
 fn indexed_operands(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     (base, index): (Place, Place),
     frame: Frame,
     frame_base: Option<(Reg, i32)>,
@@ -738,7 +738,7 @@ fn indexed_operands(
 /// Lower `Inst::StoreIndexed`: `*(kind*)(base + index * scale) = value`.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_store_indexed(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     base: u32,
     (index, ext): (u32, IndexExt),
@@ -861,7 +861,7 @@ pub(super) fn emit_store_indexed(
 /// (`Allocation::branch_fused`): `cmp $0, mem` at the load's width, which
 /// sets ZF as a test of the extended value would. The terminator branches
 /// on it; no register is written.
-pub(super) fn emit_zero_test_of_load(code: &mut Vec<u8>, inst: &Inst, fcx: &FnCtx) -> Emit {
+pub(super) fn emit_zero_test_of_load(code: &mut CodeBuf, inst: &Inst, fcx: &FnCtx) -> Emit {
     let FnCtx {
         func,
         alloc,
@@ -957,7 +957,7 @@ fn store_imm_operand(inst: &Inst, func: &FunctionSsa) -> Emit<(u8, i32)> {
 /// of the constant's low bytes at the store's width. The `Imm` was never
 /// materialized, and the store's own value is unread.
 pub(super) fn emit_store_of_imm(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     inst: &Inst,
     func: &FunctionSsa,
     alloc: &Allocation,
@@ -1034,7 +1034,7 @@ fn abs_base_data(func: &FunctionSsa, mut v: u32) -> Option<u32> {
 /// writer's `R_X86_64_32S`. The allocator's fused forms apply as to the
 /// register-based access: a zero test and an immediate store.
 pub(super) fn emit_abs_indexed(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     refs: &mut Vec<super::AbsAddrRef>,
     inst: &Inst,
     v: u32,
@@ -1131,7 +1131,7 @@ pub(super) fn emit_abs_indexed(
 /// `ImmData`, recorded as an [`AddrPart::Disp32`] data fixup. The
 /// allocator's fused forms apply as to the register-based access.
 pub(super) fn emit_pc_rel(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     data_fixups: &mut Vec<DataFixup>,
     inst: &Inst,
     v: u32,
@@ -1233,7 +1233,7 @@ pub(super) fn emit_pc_rel(
 }
 
 pub(super) fn emit_load(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     addr: u32,
     disp: i32,
@@ -1270,7 +1270,7 @@ pub(super) fn emit_load(
 }
 
 pub(super) fn emit_store(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     _v: super::super::ir::ValueId,
     addr: u32,
@@ -1331,7 +1331,7 @@ pub(super) fn emit_store(
 }
 
 pub(super) fn emit_imm_data(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     offset: i64,
     data_fixups: &mut Vec<DataFixup>,
@@ -1355,7 +1355,7 @@ pub(super) fn emit_imm_data(
 }
 
 pub(super) fn emit_imm_code(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     target_ent_pc: usize,
     pending_func_fixups: &mut Vec<(usize, usize)>,
@@ -1376,7 +1376,7 @@ pub(super) fn emit_imm_code(
 /// reaches) by an `is_addr` PLT-call fixup; the disp32 sits three bytes
 /// in.
 pub(super) fn emit_imm_ext_code(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     binding_idx: i64,
     plt_call_fixups: &mut Vec<PltCallFixup>,

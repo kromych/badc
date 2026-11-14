@@ -43,7 +43,7 @@ Disassembly of section .text:
                	movslq	%ecx, %rcx
                	shlxq	%rcx, %rax, %r10
                	movq	%r10, 0x10(%rsp)
-               	movq	0x10(%rsp), %rax
+               	movq	%r10, %rax
                	movq	%rax, %rcx
                	xorq	$-0x1, %rcx
                	andq	%r9, %rcx
@@ -2178,13 +2178,13 @@ Disassembly of section .text:
                	pushq	%rbx
                	callq	<addr>
                	movsd	%xmm0, 0x178(%rsp)
-               	movsd	0x178(%rsp), %xmm15
+               	movapd	%xmm0, %xmm15
                	vmovq	%xmm15, %r11
                	vmovq	%r11, %xmm14
                	movups	%xmm14, 0x1a0(%rsp)
                	callq	<addr>
                	movsd	%xmm0, 0x170(%rsp)
-               	movsd	0x170(%rsp), %xmm15
+               	movapd	%xmm0, %xmm15
                	vmovq	%xmm15, %r11
                	movups	0x1a0(%rsp), %xmm14
                	vpinsrq	$0x1, %r11, %xmm14, %xmm14

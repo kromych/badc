@@ -59,7 +59,6 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r11
                	shrxq	%r11, %rsi, %r10
                	movq	%r10, 0x10(%rsp)
-               	movq	0x10(%rsp), %r10
                	shrq	%r10
                	movq	%r10, 0x10(%rsp)
                	shlxq	%rax, %rdi, %rax
@@ -103,7 +102,6 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r11
                	shlxq	%r11, %rdi, %r10
                	movq	%r10, 0x10(%rsp)
-               	movq	0x10(%rsp), %r10
                	shlq	%r10
                	movq	%r10, 0x10(%rsp)
                	shrxq	%rax, %rsi, %rax

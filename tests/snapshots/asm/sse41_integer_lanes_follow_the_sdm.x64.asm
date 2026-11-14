@@ -387,7 +387,7 @@ Disassembly of section .text:
                	movups	%xmm0, -0x50(%rbp)
                	xorl	%r10d, %r10d
                	movq	%r10, 0xf8(%rsp)
-               	movq	0xf8(%rsp), %rax
+               	movq	%r10, %rax
                	cmpl	$0xc, %eax
                	jge	<addr>
                	leaq	<rip>, %rcx # <addr>
@@ -2167,7 +2167,7 @@ Disassembly of section .text:
                	movups	%xmm0, -0x90(%rbp)
                	xorl	%r10d, %r10d
                	movq	%r10, 0xc0(%rsp)
-               	movq	0xc0(%rsp), %rax
+               	movq	%r10, %rax
                	cmpl	$0x8, %eax
                	jge	<addr>
                	leaq	<rip>, %rcx # <addr>

@@ -57,7 +57,7 @@ Disassembly of section .text:
                	movsd	%xmm14, 0x48(%rsp)
                	movq	<rip>, %r10 # <addr>
                	movq	%r10, 0x40(%rsp)
-               	movq	0x40(%rsp), %r11
+               	movq	%r10, %r11
                	movsd	0x88(%rsp), %xmm0
                	movsd	0x80(%rsp), %xmm1
                	callq	*%r11
@@ -892,7 +892,6 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	addb	%al, (%rax)
 
 <svd>:
                	mulsd	%xmm1, %xmm0

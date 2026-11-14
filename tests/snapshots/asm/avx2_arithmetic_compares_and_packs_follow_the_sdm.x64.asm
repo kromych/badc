@@ -524,7 +524,7 @@ Disassembly of section .text:
                	vmovups	%ymm0, 0x160(%rsp)
                	xorl	%r10d, %r10d
                	movq	%r10, -0x60(%rbp)
-               	movq	-0x60(%rbp), %rax
+               	movq	%r10, %rax
                	cmpl	$0xc, %eax
                	jge	<addr>
                	movl	$0x1, %edx
@@ -717,7 +717,7 @@ Disassembly of section .text:
                	vmovups	%ymm0, 0xa0(%rsp)
                	xorl	%r10d, %r10d
                	movq	%r10, -0x80(%rbp)
-               	movq	-0x80(%rbp), %rax
+               	movq	%r10, %rax
                	cmpl	$0x3, %eax
                	jge	<addr>
                	movl	$0x1, %ecx
@@ -1257,7 +1257,7 @@ Disassembly of section .text:
                	vmovups	%ymm0, 0x60(%rsp)
                	xorl	%r10d, %r10d
                	movq	%r10, -0x50(%rbp)
-               	movq	-0x50(%rbp), %rax
+               	movq	%r10, %rax
                	cmpl	$0x4, %eax
                	jge	<addr>
                	movl	$0x1, %ecx
@@ -1418,7 +1418,7 @@ Disassembly of section .text:
                	vmovups	%ymm0, 0x60(%rsp)
                	xorl	%r10d, %r10d
                	movq	%r10, -0x98(%rbp)
-               	movq	-0x98(%rbp), %rax
+               	movq	%r10, %rax
                	cmpl	$0x4, %eax
                	jge	<addr>
                	movl	$0x4, %ecx
@@ -1442,14 +1442,12 @@ Disassembly of section .text:
                	movq	%r9, %r10
                	shlq	$0x3, %r10
                	movq	%r10, -0x60(%rbp)
-               	movq	-0x60(%rbp), %r10
                	decq	%r10
                	movq	%r10, -0x80(%rbp)
                	shrq	%r9
                	movq	%r9, %r10
                	shlq	$0x3, %r10
                	movq	%r10, -0x68(%rbp)
-               	movq	-0x68(%rbp), %r10
                	decq	%r10
                	movq	%r10, -0x48(%rbp)
                	movq	%r14, %r10
@@ -1616,7 +1614,7 @@ Disassembly of section .text:
                	vmovups	%ymm0, 0x60(%rsp)
                	xorl	%r10d, %r10d
                	movq	%r10, -0x70(%rbp)
-               	movq	-0x70(%rbp), %rax
+               	movq	%r10, %rax
                	cmpl	$0x4, %eax
                	jge	<addr>
                	movl	$0x2, %r8d
@@ -1924,7 +1922,7 @@ Disassembly of section .text:
                	vmovups	%ymm0, 0xe0(%rsp)
                	xorl	%r10d, %r10d
                	movq	%r10, -0x98(%rbp)
-               	movq	-0x98(%rbp), %rax
+               	movq	%r10, %rax
                	cmpl	$0x8, %eax
                	jge	<addr>
                	movl	$0x2, %edi
@@ -1937,7 +1935,6 @@ Disassembly of section .text:
                	movq	%rdi, %r10
                	shlq	$0x3, %r10
                	movq	%r10, -0x90(%rbp)
-               	movq	-0x90(%rbp), %r10
                	decq	%r10
                	movq	%r10, -0x88(%rbp)
                	xorl	%r14d, %r14d

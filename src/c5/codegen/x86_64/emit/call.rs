@@ -7,7 +7,7 @@ use super::*;
 /// registers as one parallel copy, then the spilled sources.
 #[allow(clippy::too_many_arguments)]
 fn marshal_args(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     plan: &super::CallPlan,
     args: &[u32],
     aggs: &[Option<super::ArgAgg>],
@@ -101,7 +101,7 @@ impl Marshal<'_> {
     /// Read `args[i]` into an integer register: its own when it holds one,
     /// else `scratch`, through the rsp shift the plan's outgoing area
     /// produced.
-    fn arg_int(&self, code: &mut Vec<u8>, i: usize, scratch: Reg) -> Option<Reg> {
+    fn arg_int(&self, code: &mut CodeBuf, i: usize, scratch: Reg) -> Option<Reg> {
         // A constant the allocator left to the call (`Allocation::stack_imm`).
         if let Some(&k) = self.alloc.stack_imm.get(&self.args[i]) {
             emit_mov_r_imm64(code, scratch, k);
@@ -128,7 +128,7 @@ impl Marshal<'_> {
 
     /// Read `args[i]` into `scratch`. A caller that knows the argument's
     /// role reports that in place of the reason given here.
-    fn arg_into(&self, code: &mut Vec<u8>, i: usize, scratch: Reg) -> Emit {
+    fn arg_into(&self, code: &mut CodeBuf, i: usize, scratch: Reg) -> Emit {
         let Some(src) = self.arg_int(code, i, scratch) else {
             return self.fail("arg not in int reg / spill");
         };
@@ -138,7 +138,7 @@ impl Marshal<'_> {
         Ok(())
     }
 
-    fn stack_args(&self, code: &mut Vec<u8>) -> Emit {
+    fn stack_args(&self, code: &mut CodeBuf) -> Emit {
         for (i, &placement) in self.plan.placements.iter().enumerate() {
             if let super::ArgPlacement::Stack(off) = placement {
                 // `mov m64, imm32` sign-extends: a constant in its range
@@ -161,7 +161,7 @@ impl Marshal<'_> {
     /// Aggregates passed on the outgoing stack (System V AMD64 MEMORY class),
     /// copied while their base address, possibly in an argument register the
     /// register moves overwrite, is still live.
-    fn struct_stack_args(&self, code: &mut Vec<u8>) -> Emit {
+    fn struct_stack_args(&self, code: &mut CodeBuf) -> Emit {
         for (i, &placement) in self.plan.placements.iter().enumerate() {
             let super::ArgPlacement::StructStack { off, size, align } = placement else {
                 continue;
@@ -190,7 +190,7 @@ impl Marshal<'_> {
     /// FP register placements: the xmm-to-xmm moves as a parallel copy first,
     /// so every xmm source is consumed before a spilled or integer source
     /// lands in its target xmm; a cycle goes through a free operand scratch, else r10.
-    fn fp_args(&self, code: &mut Vec<u8>) -> Emit {
+    fn fp_args(&self, code: &mut CodeBuf) -> Emit {
         let mut fp_moves: Vec<(u8, u8)> = Vec::new();
         let mut targets = 0u32;
         for (i, &placement) in self.plan.placements.iter().enumerate() {
@@ -249,7 +249,7 @@ impl Marshal<'_> {
     /// register can hold the base, so it goes through a scratch GPR. A mixed
     /// aggregate waits for the integer parallel move, since its integer
     /// eightbyte targets may still be another argument's pending source.
-    fn sse_aggs(&self, code: &mut Vec<u8>) -> Emit {
+    fn sse_aggs(&self, code: &mut CodeBuf) -> Emit {
         for (i, &placement) in self.plan.placements.iter().enumerate() {
             let super::ArgPlacement::StructRegs { regs, n, align } = placement else {
                 continue;
@@ -283,7 +283,7 @@ impl Marshal<'_> {
     /// base through its own first integer eightbyte register, so no
     /// aggregate's loads clobber another's pending base. The sources not
     /// register-resident then materialize into their targets.
-    fn int_args(&self, code: &mut Vec<u8>) -> Emit {
+    fn int_args(&self, code: &mut CodeBuf) -> Emit {
         let mut int_moves: Vec<(u8, u8)> = Vec::new();
         for (i, &placement) in self.plan.placements.iter().enumerate() {
             match placement {
@@ -485,7 +485,7 @@ fn store_ret_agg(
 
 /// Route a call's xmm0 FP result into `dst`: `movapd` into an FP
 /// register, a spill store, or `movq` into an integer register.
-fn xmm0_result_to_dst(code: &mut Vec<u8>, dst: Place, frame: Frame) {
+fn xmm0_result_to_dst(code: &mut CodeBuf, dst: Place, frame: Frame) {
     match dst {
         Place::FpReg(r) => {
             if r != Reg::XMM0.0 {
@@ -500,7 +500,7 @@ fn xmm0_result_to_dst(code: &mut Vec<u8>, dst: Place, frame: Frame) {
 
 /// Mirror an integer result in `src` into an integer-or-spill `dst`
 /// through the shared working-register pick; no-op for an FP dst.
-pub(super) fn mirror_int_dst(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Frame) {
+pub(super) fn mirror_int_dst(code: &mut CodeBuf, dst: Place, src: Reg, frame: Frame) {
     if let Some(rd) = int_or_spill_dst(dst) {
         if rd.0 != src.0 {
             emit_mov_rr(code, rd, src);
@@ -511,7 +511,7 @@ pub(super) fn mirror_int_dst(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Fr
 
 /// Route an integer result in `src` into any `dst` kind: register
 /// copy, direct spill store, or `movq` into an FP register.
-fn int_result_to_dst(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Frame) {
+fn int_result_to_dst(code: &mut CodeBuf, dst: Place, src: Reg, frame: Frame) {
     match dst {
         Place::IntReg(r) => {
             if r != src.0 {
@@ -583,7 +583,7 @@ fn emit_call_to(code: &mut Vec<u8>, fixups: &mut Vec<Fixup>, target_pc: usize) {
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_call(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     target_pc: usize,
     args: &[u32],
@@ -676,7 +676,7 @@ pub(super) fn emit_call(
 }
 
 pub(super) fn emit_call_ext(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     v: super::super::ir::ValueId,
     binding_idx: i64,
@@ -792,7 +792,7 @@ pub(super) fn callee_abi(abi: super::Abi, target: Target, conv: super::CallConv)
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_call_indirect(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Place,
     target: u32,
     args: &[u32],
@@ -987,7 +987,7 @@ pub(super) fn emit_call_indirect(
 /// temporary `args[2]` names, whose address is returned. Layout: gp_offset
 /// at +0, fp_offset at +4, overflow_arg_area at +8, reg_save_area at +16.
 pub(super) fn emit_va_arg_sysv(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     args: &[u32],
     dst: Place,
     func: &FunctionSsa,
@@ -1095,7 +1095,7 @@ pub(super) fn emit_va_arg_sysv(
 /// offsets and leave `temp` in r10. rax is borrowed around the copy. Returns
 /// the offset of the rel32 of the `jmp` to the join.
 fn emit_va_arg_eightbytes(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     desc: crate::c5::op::VaArgDesc,
     ap: Reg,
     temp: Place,
@@ -1258,7 +1258,7 @@ pub(super) fn detect_tail_call<'a>(
 /// own `ret` returns to this function's caller.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_tail_call(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     target_pc: usize,
     args: &[u32],
     alloc: &Allocation,
@@ -1385,7 +1385,7 @@ mod tests {
         let frame = compute_frame(func, &alloc, target.abi(), target);
         let abi = callee_abi(target.abi(), target, *callee_conv);
         let plan = super::super::plan_call_args(args.len(), args.len(), fp_arg_mask, abi);
-        let mut code = Vec::new();
+        let mut code = CodeBuf::default();
         marshal_args(&mut code, &plan, args, &[], &alloc, frame, abi, "Call").expect("marshal");
         let mut regs: [u8; 32] = core::array::from_fn(|r| r as u8);
         for (dst, src) in decode_moves(&code) {
@@ -1405,8 +1405,10 @@ mod tests {
                 "System V places floating argument {k} in xmm{k}"
             );
             assert_eq!(
-                regs[t as usize], want,
-                "argument {k} in xmm{t}: {code:02x?}"
+                regs[t as usize],
+                want,
+                "argument {k} in xmm{t}: {:02x?}",
+                &code[..]
             );
         }
     }

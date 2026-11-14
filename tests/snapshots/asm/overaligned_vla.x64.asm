@@ -77,7 +77,7 @@ Disassembly of section .text:
                	movq	%rax, %r10
                	shlq	$0x6, %r10
                	movq	%r10, -0x18(%rbp)
-               	movq	-0x18(%rbp), %rax
+               	movq	%r10, %rax
                	addq	$0x30, %rax
                	movq	%rax, %r11
                	addq	$0xf, %r11
@@ -223,7 +223,7 @@ Disassembly of section .text:
                	callq	<addr>
                	leaq	0x3(%r12), %r10
                	movq	%r10, -0x18(%rbp)
-               	movq	-0x18(%rbp), %rax
+               	movq	%r10, %rax
                	addq	$0x70, %rax
                	movq	%rax, %r11
                	addq	$0xf, %r11

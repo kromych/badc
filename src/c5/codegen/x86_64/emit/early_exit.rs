@@ -11,7 +11,7 @@ use super::*;
 const TEMPS: [Reg; 3] = [Reg(0), SCRATCH_R10, SCRATCH_R11];
 
 struct Shadow<'a> {
-    code: &'a mut Vec<u8>,
+    code: &'a mut CodeBuf,
     next: usize,
     fixed: FixedRegs,
 }
@@ -203,7 +203,7 @@ impl Shadow<'_> {
 /// the branch's displacement, or `None`, with nothing emitted, where the
 /// test needs more temporaries than it has.
 pub(super) fn emit_early_test(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     exit: &EarlyExit,
     fixed: FixedRegs,
 ) -> Option<usize> {
@@ -223,7 +223,7 @@ pub(super) fn emit_early_test(
 /// The early return of `exit`: the returned value into rax, then the return.
 /// `false`, with nothing emitted, where it needs more temporaries than it has.
 pub(super) fn emit_early_return(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     exit: &EarlyExit,
     abi: super::Abi,
     fixed: FixedRegs,

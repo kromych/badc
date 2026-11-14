@@ -43,7 +43,7 @@ Disassembly of section .text:
                	movslq	%ecx, %rcx
                	shlxq	%rcx, %rax, %r10
                	movq	%r10, 0x10(%rsp)
-               	movq	0x10(%rsp), %rax
+               	movq	%r10, %rax
                	movq	%rax, %rcx
                	xorq	$-0x1, %rcx
                	andq	%r9, %rcx
@@ -9236,7 +9236,6 @@ Disassembly of section .text:
                	movq	-0x58(%rbp), %r10
                	andq	-0x60(%rbp), %r10
                	movq	%r10, -0xc8(%rbp)
-               	movq	-0xc8(%rbp), %r10
                	testq	%r10, %r10
                	setge	%r10b
                	movzbq	%r10b, %r10
@@ -9251,7 +9250,6 @@ Disassembly of section .text:
                	movq	-0x68(%rbp), %r10
                	andq	-0x70(%rbp), %r10
                	movq	%r10, -0xc8(%rbp)
-               	movq	-0xc8(%rbp), %r10
                	testq	%r10, %r10
                	setge	%r10b
                	movzbq	%r10b, %r10
@@ -9266,7 +9264,6 @@ Disassembly of section .text:
                	movq	-0x78(%rbp), %r10
                	andq	-0x80(%rbp), %r10
                	movq	%r10, -0xc8(%rbp)
-               	movq	-0xc8(%rbp), %r10
                	testq	%r10, %r10
                	setge	%r10b
                	movzbq	%r10b, %r10
@@ -9281,7 +9278,6 @@ Disassembly of section .text:
                	movq	-0x88(%rbp), %r10
                	andq	-0x90(%rbp), %r10
                	movq	%r10, -0xc8(%rbp)
-               	movq	-0xc8(%rbp), %r10
                	testq	%r10, %r10
                	setge	%r10b
                	movzbq	%r10b, %r10
@@ -9296,7 +9292,6 @@ Disassembly of section .text:
                	movq	-0x98(%rbp), %r10
                	andq	-0xa0(%rbp), %r10
                	movq	%r10, -0xc8(%rbp)
-               	movq	-0xc8(%rbp), %r10
                	testq	%r10, %r10
                	setge	%r10b
                	movzbq	%r10b, %r10
@@ -9311,7 +9306,6 @@ Disassembly of section .text:
                	movq	-0xa8(%rbp), %r10
                	andq	-0xb0(%rbp), %r10
                	movq	%r10, -0xc8(%rbp)
-               	movq	-0xc8(%rbp), %r10
                	testq	%r10, %r10
                	setge	%r10b
                	movzbq	%r10b, %r10
@@ -9326,7 +9320,6 @@ Disassembly of section .text:
                	movq	-0xb8(%rbp), %r10
                	andq	-0xc0(%rbp), %r10
                	movq	%r10, -0xc8(%rbp)
-               	movq	-0xc8(%rbp), %r10
                	testq	%r10, %r10
                	setge	%r10b
                	movzbq	%r10b, %r10
@@ -9556,7 +9549,6 @@ Disassembly of section .text:
                	movq	%r15, %r10
                	andq	-0x70(%rbp), %r10
                	movq	%r10, -0x88(%rbp)
-               	movq	-0x88(%rbp), %r10
                	testq	%r10, %r10
                	setge	%r10b
                	movzbq	%r10b, %r10
@@ -9565,7 +9557,6 @@ Disassembly of section .text:
                	movq	-0x58(%rbp), %r10
                	andq	-0x78(%rbp), %r10
                	movq	%r10, -0x88(%rbp)
-               	movq	-0x88(%rbp), %r10
                	testq	%r10, %r10
                	setge	%r10b
                	movzbq	%r10b, %r10
@@ -9574,7 +9565,6 @@ Disassembly of section .text:
                	movq	-0x60(%rbp), %r10
                	andq	-0x80(%rbp), %r10
                	movq	%r10, -0x88(%rbp)
-               	movq	-0x88(%rbp), %r10
                	testq	%r10, %r10
                	setge	%r10b
                	movzbq	%r10b, %r10
@@ -9761,7 +9751,7 @@ Disassembly of section .text:
                	movapd	%xmm0, %xmm14
                	vpinsrd	$0x3, %r14d, %xmm14, %xmm14
                	movups	%xmm14, -0x1f0(%rbp)
-               	movups	-0x1f0(%rbp), %xmm15
+               	movapd	%xmm14, %xmm15
                	vmovdqa	%xmm15, %xmm0
                	movq	%rax, %rcx
                	shrq	$0xc, %rcx
@@ -9816,7 +9806,7 @@ Disassembly of section .text:
                	movabsq	$0x2545f4914f6cdd1d, %r10 # imm = 0x2545F4914F6CDD1D
                	imulq	%rax, %r10
                	movq	%r10, -0x1f8(%rbp)
-               	movq	-0x1f8(%rbp), %rax
+               	movq	%r10, %rax
                	movapd	%xmm1, %xmm14
                	vpinsrd	$0x1, %eax, %xmm14, %xmm14
                	movups	%xmm14, -0x208(%rbp)
@@ -9879,11 +9869,11 @@ Disassembly of section .text:
                	movabsq	$0x2545f4914f6cdd1d, %r10 # imm = 0x2545F4914F6CDD1D
                	imulq	%rdx, %r10
                	movq	%r10, -0x218(%rbp)
-               	movq	-0x218(%rbp), %rdx
+               	movq	%r10, %rdx
                	movapd	%xmm1, %xmm14
                	vpinsrd	$0x3, %edx, %xmm14, %xmm14
                	movups	%xmm14, -0x228(%rbp)
-               	movups	-0x228(%rbp), %xmm15
+               	movapd	%xmm14, %xmm15
                	vinserti128	$0x1, %xmm15, %ymm0, %ymm14
                	vmovups	%ymm14, -0x1d0(%rbp)
                	vmovups	-0x68(%rbp), %ymm14

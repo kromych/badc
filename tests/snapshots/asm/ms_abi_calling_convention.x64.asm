@@ -259,7 +259,6 @@ Disassembly of section .text:
                	movl	$0x2, %edi
                	callq	<addr>
                	movq	%rax, 0x28(%rsp)
-               	movq	0x28(%rsp), %rax
                	movq	%rax, %r10
                	shlq	%r10
                	movq	%r10, 0x20(%rsp)

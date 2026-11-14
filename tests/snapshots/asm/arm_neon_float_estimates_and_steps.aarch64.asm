@@ -532,7 +532,7 @@ Disassembly of section .text:
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x3]
                	ldur	q0, [x29, #-0x90]
-               	ldur	q1, [x29, #-0x80]
+               	ldr	q1, [x0]
                	frecps	v1.2d, v0.2d, v1.2d
                	sub	x4, x29, #0x70
                	stur	q1, [x29, #-0x70]
@@ -654,7 +654,7 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x2]
-               	ldur	q0, [x29, #-0x80]
+               	ldr	q0, [x1]
                	frecpe	v0.4s, v0.4s
                	sub	x3, x29, #0x70
                	stur	q0, [x29, #-0x70]

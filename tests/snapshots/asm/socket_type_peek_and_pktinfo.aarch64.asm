@@ -237,7 +237,7 @@ Disassembly of section .text:
                	str	x16, [x0]
                	ldr	w16, [x2, #0x8]
                	str	w16, [x0, #0x8]
-               	ldur	w20, [x29, #-0x40]
+               	ldr	w20, [x1, #0x18]
                	mov	x0, #0x1                // =1
                	movk	x0, #0x7f00, lsl #16
                	str	x1, [sp, #0x18]

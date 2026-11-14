@@ -46,7 +46,7 @@ Disassembly of section .text:
                	ldur	q3, [x29, #-0x68]
                	ldur	q1, [x29, #-0x58]
                	ldur	q4, [x29, #-0x48]
-               	ldur	q5, [x29, #-0x38]
+               	ldr	q5, [x0]
                	saddl	v6.8h, v0.8b, v2.8b
                	str	q6, [sp]
                	saddl2	v6.8h, v3.16b, v1.16b
@@ -185,13 +185,13 @@ Disassembly of section .text:
                	sturh	w2, [x29, #-0x6]
                	sturh	w0, [x29, #-0x4]
                	mov	x0, #0x0                // =0
-               	sub	x2, x29, #0x70
-               	sub	x3, x29, #0x1b0
-               	add	x3, x3, x0, lsl #4
-               	add	x3, x3, x1, lsl #1
-               	ldrh	w16, [x3]
-               	strh	w16, [x2]
-               	ldurh	w2, [x29, #-0x70]
+               	sub	x3, x29, #0x70
+               	sub	x2, x29, #0x1b0
+               	add	x2, x2, x0, lsl #4
+               	add	x2, x2, x1, lsl #1
+               	ldrh	w16, [x2]
+               	strh	w16, [x3]
+               	ldrh	w2, [x2]
                	sub	x3, x29, #0x28
                	ldrh	w3, [x3, x0, lsl #1]
                	cmp	w2, w3
@@ -320,7 +320,7 @@ Disassembly of section .text:
                	ldur	q3, [x29, #-0x68]
                	ldur	q1, [x29, #-0x58]
                	ldur	q4, [x29, #-0x48]
-               	ldur	q5, [x29, #-0x38]
+               	ldr	q5, [x0]
                	uaddl	v6.8h, v0.8b, v2.8b
                	str	q6, [sp]
                	uaddl2	v6.8h, v3.16b, v1.16b
@@ -449,13 +449,13 @@ Disassembly of section .text:
                	sturh	w2, [x29, #-0x6]
                	sturh	w0, [x29, #-0x4]
                	mov	x0, #0x0                // =0
-               	sub	x2, x29, #0x70
-               	sub	x3, x29, #0x1b0
-               	add	x3, x3, x0, lsl #4
-               	add	x3, x3, x1, lsl #1
-               	ldrh	w16, [x3]
-               	strh	w16, [x2]
-               	ldurh	w2, [x29, #-0x70]
+               	sub	x3, x29, #0x70
+               	sub	x2, x29, #0x1b0
+               	add	x2, x2, x0, lsl #4
+               	add	x2, x2, x1, lsl #1
+               	ldrh	w16, [x2]
+               	strh	w16, [x3]
+               	ldrh	w2, [x2]
                	sub	x3, x29, #0x28
                	ldrh	w3, [x3, x0, lsl #1]
                	cmp	w2, w3
@@ -534,7 +534,7 @@ Disassembly of section .text:
                	ldur	q3, [x29, #-0x90]
                	ldur	q1, [x29, #-0x80]
                	ldur	q4, [x29, #-0x70]
-               	ldur	q5, [x29, #-0x60]
+               	ldr	q5, [x0]
                	saddl	v6.4s, v0.4h, v2.4h
                	str	q6, [sp]
                	saddl2	v6.4s, v3.8h, v1.8h
@@ -659,13 +659,13 @@ Disassembly of section .text:
                	stur	w2, [x29, #-0xc]
                	stur	w0, [x29, #-0x8]
                	mov	x0, #0x0                // =0
-               	sub	x2, x29, #0x98
-               	sub	x3, x29, #0x1e0
-               	add	x3, x3, x0, lsl #4
-               	add	x3, x3, x1, lsl #2
-               	ldr	w16, [x3]
-               	str	w16, [x2]
-               	ldur	w2, [x29, #-0x98]
+               	sub	x3, x29, #0x98
+               	sub	x2, x29, #0x1e0
+               	add	x2, x2, x0, lsl #4
+               	add	x2, x2, x1, lsl #2
+               	ldr	w16, [x2]
+               	str	w16, [x3]
+               	ldr	w2, [x2]
                	sub	x3, x29, #0x50
                	ldr	w3, [x3, x0, lsl #2]
                	cmp	w2, w3
@@ -779,7 +779,7 @@ Disassembly of section .text:
                	ldur	q3, [x29, #-0x90]
                	ldur	q1, [x29, #-0x80]
                	ldur	q4, [x29, #-0x70]
-               	ldur	q5, [x29, #-0x60]
+               	ldr	q5, [x0]
                	uaddl	v6.4s, v0.4h, v2.4h
                	str	q6, [sp]
                	uaddl2	v6.4s, v3.8h, v1.8h
@@ -904,13 +904,13 @@ Disassembly of section .text:
                	stur	w2, [x29, #-0xc]
                	stur	w0, [x29, #-0x8]
                	mov	x0, #0x0                // =0
-               	sub	x2, x29, #0x98
-               	sub	x3, x29, #0x1e0
-               	add	x3, x3, x0, lsl #4
-               	add	x3, x3, x1, lsl #2
-               	ldr	w16, [x3]
-               	str	w16, [x2]
-               	ldur	w2, [x29, #-0x98]
+               	sub	x3, x29, #0x98
+               	sub	x2, x29, #0x1e0
+               	add	x2, x2, x0, lsl #4
+               	add	x2, x2, x1, lsl #2
+               	ldr	w16, [x2]
+               	str	w16, [x3]
+               	ldr	w2, [x2]
                	sub	x3, x29, #0x50
                	ldr	w3, [x3, x0, lsl #2]
                	cmp	w2, w3
@@ -990,7 +990,7 @@ Disassembly of section .text:
                	ldur	q3, [x29, #-0xd8]
                	ldur	q1, [x29, #-0xc8]
                	ldur	q4, [x29, #-0xb8]
-               	ldur	q5, [x29, #-0xa8]
+               	ldr	q5, [x0]
                	saddl	v6.2d, v0.2s, v2.2s
                	str	q6, [sp]
                	saddl2	v6.2d, v3.4s, v1.4s
@@ -1115,13 +1115,13 @@ Disassembly of section .text:
                	stur	x2, [x29, #-0x10]
                	stur	x0, [x29, #-0x8]
                	mov	x0, #0x0                // =0
-               	sub	x2, x29, #0xe0
-               	sub	x3, x29, #0x220
-               	add	x3, x3, x0, lsl #4
-               	add	x3, x3, x1, lsl #3
-               	ldr	x16, [x3]
-               	str	x16, [x2]
-               	ldur	x2, [x29, #-0xe0]
+               	sub	x3, x29, #0xe0
+               	sub	x2, x29, #0x220
+               	add	x2, x2, x0, lsl #4
+               	add	x2, x2, x1, lsl #3
+               	ldr	x16, [x2]
+               	str	x16, [x3]
+               	ldr	x2, [x2]
                	sub	x3, x29, #0x98
                	ldr	x3, [x3, x0, lsl #3]
                	cmp	x2, x3
@@ -1234,7 +1234,7 @@ Disassembly of section .text:
                	ldur	q3, [x29, #-0xd8]
                	ldur	q1, [x29, #-0xc8]
                	ldur	q4, [x29, #-0xb8]
-               	ldur	q5, [x29, #-0xa8]
+               	ldr	q5, [x0]
                	uaddl	v6.2d, v0.2s, v2.2s
                	str	q6, [sp]
                	uaddl2	v6.2d, v3.4s, v1.4s
@@ -1359,13 +1359,13 @@ Disassembly of section .text:
                	stur	x2, [x29, #-0x10]
                	stur	x0, [x29, #-0x8]
                	mov	x0, #0x0                // =0
-               	sub	x2, x29, #0xe0
-               	sub	x3, x29, #0x220
-               	add	x3, x3, x0, lsl #4
-               	add	x3, x3, x1, lsl #3
-               	ldr	x16, [x3]
-               	str	x16, [x2]
-               	ldur	x2, [x29, #-0xe0]
+               	sub	x3, x29, #0xe0
+               	sub	x2, x29, #0x220
+               	add	x2, x2, x0, lsl #4
+               	add	x2, x2, x1, lsl #3
+               	ldr	x16, [x2]
+               	str	x16, [x3]
+               	ldr	x2, [x2]
                	sub	x3, x29, #0x98
                	ldr	x3, [x3, x0, lsl #3]
                	cmp	x2, x3

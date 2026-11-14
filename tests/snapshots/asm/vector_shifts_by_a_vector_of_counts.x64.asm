@@ -1335,7 +1335,7 @@ Disassembly of section .text:
                	movups	%xmm14, 0x10(%rax)
                	leaq	0x40(%rsp), %rax
                	movzwq	(%rsp), %rcx
-               	movzwq	0x20(%rsp), %rdx
+               	movzwq	(%rdx), %rdx
                	shlxq	%rdx, %rcx, %rcx
                	movw	%cx, 0x40(%rsp)
                	movzwq	0x2(%rsp), %rcx

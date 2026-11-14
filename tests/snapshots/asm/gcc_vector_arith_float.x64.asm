@@ -35,20 +35,20 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	vmovups	(%rcx), %xmm14
                	vmovups	%xmm14, (%rax)
-               	leaq	0x30(%rsp), %rax
+               	leaq	0x30(%rsp), %rcx
+               	leaq	<rip>, %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
                	leaq	<rip>, %rcx
-               	vmovups	(%rcx), %xmm14
-               	vmovups	%xmm14, (%rax)
-               	leaq	<rip>, %rax
-               	movups	(%rax), %xmm0
-               	leaq	<rip>, %rax
-               	movups	(%rax), %xmm3
-               	leaq	<rip>, %rax
-               	vmovups	(%rax), %ymm1
-               	leaq	<rip>, %rax
-               	vmovups	(%rax), %ymm2
+               	movups	(%rcx), %xmm0
+               	leaq	<rip>, %rcx
+               	movups	(%rcx), %xmm3
+               	leaq	<rip>, %rcx
+               	vmovups	(%rcx), %ymm1
+               	leaq	<rip>, %rcx
+               	vmovups	(%rcx), %ymm2
                	movups	0x20(%rsp), %xmm4
-               	movups	0x30(%rsp), %xmm5
+               	movups	(%rax), %xmm5
                	vaddps	%xmm5, %xmm4, %xmm5
                	movups	%xmm5, (%rsp)
                	vpermilps	$0x0, %xmm4, %xmm5 # xmm5 = xmm4[0,0,0,0]

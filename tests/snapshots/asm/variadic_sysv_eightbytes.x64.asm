@@ -87,13 +87,12 @@ Disassembly of section .text:
                	leaq	-0x38(%rbp), %rdx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rdx)
-               	movq	-0x38(%rbp), %rcx
-               	imulq	$0xa, %rcx, %rcx
+               	movq	(%rcx), %rdx
+               	imulq	$0xa, %rdx, %rdx
                	xorps	%xmm1, %xmm1
-               	cvtsi2sd	%rcx, %xmm1
+               	cvtsi2sd	%rdx, %xmm1
                	vfmadd231sd	<rip>, %xmm0, %xmm1 # xmm1 = (xmm0 * mem) + xmm1
-               	movsd	-0x30(%rbp), %xmm0
-               	vaddsd	%xmm0, %xmm1, %xmm0
+               	vaddsd	0x8(%rcx), %xmm1, %xmm0
                	incq	%rax
                	movl	-0xf0(%rbp), %ecx
                	cmpl	%ecx, %eax

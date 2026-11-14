@@ -72,7 +72,7 @@ Disassembly of section .text:
                	sub	x2, x29, #0x20
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x2]
-               	ldur	x0, [x29, #-0x18]
+               	ldr	x0, [x0, #0x8]
                	sub	x3, x29, #0x10
                	stur	x0, [x29, #-0x10]
                	ldur	x0, [x29, #-0x20]

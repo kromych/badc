@@ -4867,39 +4867,39 @@ Disassembly of section .text:
                	sub	x0, x29, #0x20
                	stur	x4, [x29, #-0x20]
                	stur	x2, [x29, #-0x18]
-               	sub	x2, x29, #0x50
+               	sub	x3, x29, #0x50
                	ldp	x16, x17, [x0]
-               	stp	x16, x17, [x2]
-               	ldur	x3, [x29, #-0x70]
-               	ldur	x0, [x29, #-0x68]
-               	ldur	x5, [x29, #-0x60]
-               	ldur	x4, [x29, #-0x58]
-               	cmp	x0, x4
-               	cset	x6, lt
-               	cmp	x0, x4
-               	cset	x4, eq
-               	cmp	x3, x5
-               	cset	x5, lo
-               	and	x4, x4, x5
-               	orr	x4, x6, x4
-               	cbz	x4, <addr>
+               	stp	x16, x17, [x3]
+               	ldur	x4, [x29, #-0x70]
+               	ldur	x2, [x29, #-0x68]
+               	ldur	x6, [x29, #-0x60]
+               	ldur	x5, [x29, #-0x58]
+               	cmp	x2, x5
+               	cset	x8, lt
+               	cmp	x2, x5
+               	cset	x5, eq
+               	cmp	x4, x6
+               	cset	x6, lo
+               	and	x5, x5, x6
+               	orr	x5, x8, x5
+               	cbz	x5, <addr>
                	ldr	x0, [x1]
                	ldr	x1, [x1, #0x8]
                	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldur	x4, [x29, #-0x50]
-               	ldur	x1, [x29, #-0x48]
-               	cmp	x1, x0
+               	ldr	x1, [x0]
+               	ldr	x0, [x0, #0x8]
+               	cmp	x0, x2
                	cset	x5, lt
-               	cmp	x1, x0
+               	cmp	x0, x2
                	cset	x0, eq
-               	cmp	x4, x3
+               	cmp	x1, x4
                	cset	x1, lo
                	and	x0, x0, x1
                	orr	x0, x5, x0
                	cmp	x0, #0x0
-               	csel	x1, x2, x7, ne
+               	csel	x1, x3, x7, ne
                	b	<addr>
                	mov	x3, #0x1                // =1
                	mov	x6, #0x0                // =0

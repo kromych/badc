@@ -396,7 +396,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=20
     v310 Mcpy { dst=v308, src=v309, size=12, align=1 }    -> -
     v311 LocalAddr(-9)                                    -> x0
     v312 BinopI { op=add, lhs=v308, rhs_imm=8 }           -> x0
-    v313 LoadLocal { off=-9, disp=8, kind=U32 }           -> x3
+    v313 Load { addr=v296, disp=24, kind=U32, align=1 }   -> x3
     v314 Imm(2130706433)                                  -> x7
     v315 CallExt { binding_idx=68, args=[v314], fp_arg_mask=0x0 } -> x0
     v316 Binop { op=eq, lhs=v313, rhs=v315 }              -> x0

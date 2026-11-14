@@ -24,11 +24,11 @@ Disassembly of section .text:
                	str	w16, [x0]
                	adrp	x0, <page>
                	ldr	d1, [x0, #0x10]
-               	sub	x1, x29, #0x8
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x16, [x0]
-               	str	x16, [x1]
+               	sub	x2, x29, #0x8
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldr	x16, [x1]
+               	str	x16, [x2]
                	ldur	s2, [x29, #-0x10]
                	fmov	s0, #1.50000000
                	fcmp	s2, s0
@@ -44,25 +44,25 @@ Disassembly of section .text:
                	mov	x0, #0x3ff8000000000000 // =4609434218613702656
                	fmov	d17, x0
                	fcmp	d1, d17
-               	cset	x2, eq
-               	orr	x2, x2, #0x2
-               	orr	x2, x2, #0x4
-               	cmp	x2, #0x7
+               	cset	x3, eq
+               	orr	x3, x3, #0x2
+               	orr	x3, x3, #0x4
+               	cmp	x3, #0x7
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldur	s1, [x29, #-0x8]
+               	ldr	s1, [x1]
                	fcmp	s1, s0
                	b.ne	<addr>
                	ldur	s1, [x29, #-0x4]
                	fmov	s2, #3.00000000
                	fcmp	s1, s2
-               	cset	x2, eq
-               	orr	x2, x2, #0x2
-               	orr	x2, x2, #0x4
-               	cmp	x2, #0x7
+               	cset	x1, eq
+               	orr	x1, x1, #0x2
+               	orr	x1, x1, #0x4
+               	cmp	x1, #0x7
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x10
@@ -73,22 +73,22 @@ Disassembly of section .text:
                	fmov	d1, #25.00000000
                	fmov	d16, x0
                	fmadd	d2, d16, d2, d1
-               	fcvtzs	x2, d2
-               	add	x2, x2, #0x7
-               	cmp	x2, #0xb6
+               	fcvtzs	x1, d2
+               	add	x1, x1, #0x7
+               	cmp	x1, #0xb6
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	ldr	x16, [x2]
-               	str	x16, [x1]
-               	ldur	s2, [x29, #-0x8]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldr	x16, [x1]
+               	str	x16, [x2]
+               	ldr	s2, [x1]
                	mov	x16, #0x42c80000        // =1120403456
                	fmov	s3, w16
-               	ldur	s4, [x29, #-0x4]
+               	ldr	s4, [x1, #0x4]
                	mov	x16, #0x447a0000        // =1148846080
                	fmov	s5, w16
                	fmul	s4, s4, s5

@@ -1636,7 +1636,7 @@ fn ent_pc=398 n_params=2 variadic=false locals=5
     v24  Undef                                            -> x1
     v25  VecInsert { vec=v24, value=v22, off=0, kind=I64, bytes=16 } -> d0
     v26  Imm(0)                                           -> x1
-    v27  LoadLocal { off=-5, kind=I64 }                   -> x1
+    v27  Load { addr=v3, disp=0, kind=I64, align=1 }      -> x1
     v28  Imm(0)                                           -> x1
     v29  Imm(8)                                           -> x1
     v30  Imm(0)                                           -> x1

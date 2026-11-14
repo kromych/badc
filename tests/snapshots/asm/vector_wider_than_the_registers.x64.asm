@@ -1125,10 +1125,10 @@ Disassembly of section .text:
                	vmovups	0x20(%rdx), %ymm14
                	vmovups	%ymm14, 0x20(%rax)
                	vmovups	(%rsp), %ymm0
-               	vmovups	0x40(%rsp), %ymm1
+               	vmovups	(%rdx), %ymm1
                	vpaddb	%ymm1, %ymm0, %ymm0
                	vmovups	0x20(%rsp), %ymm1
-               	vmovups	0x60(%rsp), %ymm2
+               	vmovups	0x20(%rdx), %ymm2
                	vpaddb	%ymm2, %ymm1, %ymm1
                	vmovups	%ymm0, (%rdi)
                	vmovups	%ymm1, 0x20(%rdi)
@@ -3497,10 +3497,10 @@ Disassembly of section .text:
                	vmovups	0x20(%rdx), %ymm14
                	vmovups	%ymm14, 0x20(%rax)
                	vmovups	(%rsp), %ymm0
-               	vmovups	0x40(%rsp), %ymm1
+               	vmovups	(%rdx), %ymm1
                	vpaddw	%ymm1, %ymm0, %ymm0
                	vmovups	0x20(%rsp), %ymm1
-               	vmovups	0x60(%rsp), %ymm2
+               	vmovups	0x20(%rdx), %ymm2
                	vpaddw	%ymm2, %ymm1, %ymm1
                	vmovups	%ymm0, (%rdi)
                	vmovups	%ymm1, 0x20(%rdi)
@@ -4420,10 +4420,10 @@ Disassembly of section .text:
                	vmovups	0x20(%rdx), %ymm14
                	vmovups	%ymm14, 0x20(%rax)
                	vmovups	(%rsp), %ymm0
-               	vmovups	0x40(%rsp), %ymm1
+               	vmovups	(%rdx), %ymm1
                	vpaddd	%ymm1, %ymm0, %ymm0
                	vmovups	0x20(%rsp), %ymm1
-               	vmovups	0x60(%rsp), %ymm2
+               	vmovups	0x20(%rdx), %ymm2
                	vpaddd	%ymm2, %ymm1, %ymm1
                	vmovups	%ymm0, (%rdi)
                	vmovups	%ymm1, 0x20(%rdi)
@@ -5334,10 +5334,10 @@ Disassembly of section .text:
                	vmovups	0x20(%rdx), %ymm14
                	vmovups	%ymm14, 0x20(%rax)
                	vmovups	(%rsp), %ymm0
-               	vmovups	0x40(%rsp), %ymm1
+               	vmovups	(%rdx), %ymm1
                	vpaddq	%ymm1, %ymm0, %ymm0
                	vmovups	0x20(%rsp), %ymm1
-               	vmovups	0x60(%rsp), %ymm2
+               	vmovups	0x20(%rdx), %ymm2
                	vpaddq	%ymm2, %ymm1, %ymm1
                	vmovups	%ymm0, (%rdi)
                	vmovups	%ymm1, 0x20(%rdi)
@@ -6237,10 +6237,10 @@ Disassembly of section .text:
                	vmovups	0x20(%rdx), %ymm14
                	vmovups	%ymm14, 0x20(%rax)
                	vmovups	(%rsp), %ymm0
-               	vmovups	0x40(%rsp), %ymm1
+               	vmovups	(%rdx), %ymm1
                	vaddps	%ymm1, %ymm0, %ymm0
                	vmovups	0x20(%rsp), %ymm1
-               	vmovups	0x60(%rsp), %ymm2
+               	vmovups	0x20(%rdx), %ymm2
                	vaddps	%ymm2, %ymm1, %ymm1
                	vmovups	%ymm0, (%rdi)
                	vmovups	%ymm1, 0x20(%rdi)
@@ -7436,10 +7436,10 @@ Disassembly of section .text:
                	vmovups	0x20(%rdx), %ymm14
                	vmovups	%ymm14, 0x20(%rax)
                	vmovups	(%rsp), %ymm0
-               	vmovups	0x40(%rsp), %ymm1
+               	vmovups	(%rdx), %ymm1
                	vaddpd	%ymm1, %ymm0, %ymm0
                	vmovups	0x20(%rsp), %ymm1
-               	vmovups	0x60(%rsp), %ymm2
+               	vmovups	0x20(%rdx), %ymm2
                	vaddpd	%ymm2, %ymm1, %ymm1
                	vmovups	%ymm0, (%rdi)
                	vmovups	%ymm1, 0x20(%rdi)

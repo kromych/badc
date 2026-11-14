@@ -119,7 +119,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=4
     v106 Mcpy { dst=v105, src=v83, size=12, align=1 }     -> -
     v107 LocalAddr(-2)                                    -> x0
     v108 BinopI { op=add, lhs=v105, rhs_imm=11 }          -> x0
-    v109 LoadLocal { off=-2, disp=11, kind=U8 }           -> x0
+    v109 Load { addr=v83, disp=11, kind=U8 pc_rel }       -> x0
     v110 BinopI { op=add, lhs=v109, rhs_imm=1 }           -> x0
     v111 StoreLocal { off=-2, disp=11, value=v110, kind=I8 } -> -
     v112 LocalAddr(-2)                                    -> x0

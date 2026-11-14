@@ -52,7 +52,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	movss	-0x10(%rbp), %xmm0
+               	movss	<rip>, %xmm0
                	cvtss2sd	%xmm0, %xmm0
                	vaddsd	<rip>, %xmm0, %xmm0
                	cvtsd2ss	%xmm0, %xmm0
@@ -89,7 +89,7 @@ Disassembly of section .text:
                	movups	%xmm14, (%rax)
                	movq	0x10(%rcx), %r10
                	movq	%r10, 0x10(%rax)
-               	movsd	-0x10(%rbp), %xmm1
+               	movsd	<rip>, %xmm1
                	movsd	<rip>, %xmm0
                	addsd	%xmm0, %xmm1
                	movsd	%xmm1, -0x10(%rbp)

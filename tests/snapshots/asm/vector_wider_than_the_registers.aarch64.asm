@@ -28,10 +28,10 @@ Disassembly of section .text:
                	ldp	x16, x17, [x2, #0x10]
                	stp	x16, x17, [x1, #0x10]
                	ldur	q0, [x29, #-0x40]
-               	ldur	q1, [x29, #-0x20]
+               	ldr	q1, [x2]
                	add	v0.16b, v0.16b, v1.16b
                	ldur	q1, [x29, #-0x30]
-               	ldur	q2, [x29, #-0x10]
+               	ldr	q2, [x2, #0x10]
                	add	v1.16b, v1.16b, v2.16b
                	str	q0, [x0]
                	str	q1, [x0, #0x10]
@@ -346,16 +346,16 @@ Disassembly of section .text:
                	ldp	x16, x17, [x2, #0x30]
                	stp	x16, x17, [x1, #0x30]
                	ldur	q0, [x29, #-0x80]
-               	ldur	q1, [x29, #-0x40]
+               	ldr	q1, [x2]
                	add	v0.16b, v0.16b, v1.16b
                	ldur	q1, [x29, #-0x70]
-               	ldur	q2, [x29, #-0x30]
+               	ldr	q2, [x2, #0x10]
                	add	v1.16b, v1.16b, v2.16b
                	ldur	q2, [x29, #-0x60]
-               	ldur	q3, [x29, #-0x20]
+               	ldr	q3, [x2, #0x20]
                	add	v2.16b, v2.16b, v3.16b
                	ldur	q3, [x29, #-0x50]
-               	ldur	q4, [x29, #-0x10]
+               	ldr	q4, [x2, #0x30]
                	add	v3.16b, v3.16b, v4.16b
                	str	q0, [x0]
                	str	q1, [x0, #0x10]
@@ -754,10 +754,10 @@ Disassembly of section .text:
                	ldp	x16, x17, [x2, #0x10]
                	stp	x16, x17, [x1, #0x10]
                	ldur	q0, [x29, #-0x40]
-               	ldur	q1, [x29, #-0x20]
+               	ldr	q1, [x2]
                	add	v0.8h, v0.8h, v1.8h
                	ldur	q1, [x29, #-0x30]
-               	ldur	q2, [x29, #-0x10]
+               	ldr	q2, [x2, #0x10]
                	add	v1.8h, v1.8h, v2.8h
                	str	q0, [x0]
                	str	q1, [x0, #0x10]
@@ -1074,16 +1074,16 @@ Disassembly of section .text:
                	ldp	x16, x17, [x2, #0x30]
                	stp	x16, x17, [x1, #0x30]
                	ldur	q0, [x29, #-0x80]
-               	ldur	q1, [x29, #-0x40]
+               	ldr	q1, [x2]
                	add	v0.8h, v0.8h, v1.8h
                	ldur	q1, [x29, #-0x70]
-               	ldur	q2, [x29, #-0x30]
+               	ldr	q2, [x2, #0x10]
                	add	v1.8h, v1.8h, v2.8h
                	ldur	q2, [x29, #-0x60]
-               	ldur	q3, [x29, #-0x20]
+               	ldr	q3, [x2, #0x20]
                	add	v2.8h, v2.8h, v3.8h
                	ldur	q3, [x29, #-0x50]
-               	ldur	q4, [x29, #-0x10]
+               	ldr	q4, [x2, #0x30]
                	add	v3.8h, v3.8h, v4.8h
                	str	q0, [x0]
                	str	q1, [x0, #0x10]
@@ -1480,10 +1480,10 @@ Disassembly of section .text:
                	ldp	x16, x17, [x2, #0x10]
                	stp	x16, x17, [x1, #0x10]
                	ldur	q0, [x29, #-0x40]
-               	ldur	q1, [x29, #-0x20]
+               	ldr	q1, [x2]
                	add	v0.4s, v0.4s, v1.4s
                	ldur	q1, [x29, #-0x30]
-               	ldur	q2, [x29, #-0x10]
+               	ldr	q2, [x2, #0x10]
                	add	v1.4s, v1.4s, v2.4s
                	str	q0, [x0]
                	str	q1, [x0, #0x10]
@@ -1790,16 +1790,16 @@ Disassembly of section .text:
                	ldp	x16, x17, [x2, #0x30]
                	stp	x16, x17, [x1, #0x30]
                	ldur	q0, [x29, #-0x80]
-               	ldur	q1, [x29, #-0x40]
+               	ldr	q1, [x2]
                	add	v0.4s, v0.4s, v1.4s
                	ldur	q1, [x29, #-0x70]
-               	ldur	q2, [x29, #-0x30]
+               	ldr	q2, [x2, #0x10]
                	add	v1.4s, v1.4s, v2.4s
                	ldur	q2, [x29, #-0x60]
-               	ldur	q3, [x29, #-0x20]
+               	ldr	q3, [x2, #0x20]
                	add	v2.4s, v2.4s, v3.4s
                	ldur	q3, [x29, #-0x50]
-               	ldur	q4, [x29, #-0x10]
+               	ldr	q4, [x2, #0x30]
                	add	v3.4s, v3.4s, v4.4s
                	str	q0, [x0]
                	str	q1, [x0, #0x10]
@@ -2188,10 +2188,10 @@ Disassembly of section .text:
                	ldp	x16, x17, [x2, #0x10]
                	stp	x16, x17, [x1, #0x10]
                	ldur	q0, [x29, #-0x40]
-               	ldur	q1, [x29, #-0x20]
+               	ldr	q1, [x2]
                	add	v0.2d, v0.2d, v1.2d
                	ldur	q1, [x29, #-0x30]
-               	ldur	q2, [x29, #-0x10]
+               	ldr	q2, [x2, #0x10]
                	add	v1.2d, v1.2d, v2.2d
                	str	q0, [x0]
                	str	q1, [x0, #0x10]
@@ -2506,16 +2506,16 @@ Disassembly of section .text:
                	ldp	x16, x17, [x2, #0x30]
                	stp	x16, x17, [x1, #0x30]
                	ldur	q0, [x29, #-0x80]
-               	ldur	q1, [x29, #-0x40]
+               	ldr	q1, [x2]
                	add	v0.2d, v0.2d, v1.2d
                	ldur	q1, [x29, #-0x70]
-               	ldur	q2, [x29, #-0x30]
+               	ldr	q2, [x2, #0x10]
                	add	v1.2d, v1.2d, v2.2d
                	ldur	q2, [x29, #-0x60]
-               	ldur	q3, [x29, #-0x20]
+               	ldr	q3, [x2, #0x20]
                	add	v2.2d, v2.2d, v3.2d
                	ldur	q3, [x29, #-0x50]
-               	ldur	q4, [x29, #-0x10]
+               	ldr	q4, [x2, #0x30]
                	add	v3.2d, v3.2d, v4.2d
                	str	q0, [x0]
                	str	q1, [x0, #0x10]
@@ -2920,10 +2920,10 @@ Disassembly of section .text:
                	ldp	x16, x17, [x2, #0x10]
                	stp	x16, x17, [x1, #0x10]
                	ldur	q0, [x29, #-0x40]
-               	ldur	q1, [x29, #-0x20]
+               	ldr	q1, [x2]
                	fadd	v0.4s, v0.4s, v1.4s
                	ldur	q1, [x29, #-0x30]
-               	ldur	q2, [x29, #-0x10]
+               	ldr	q2, [x2, #0x10]
                	fadd	v1.4s, v1.4s, v2.4s
                	str	q0, [x0]
                	str	q1, [x0, #0x10]
@@ -3421,16 +3421,16 @@ Disassembly of section .text:
                	ldp	x16, x17, [x2, #0x30]
                	stp	x16, x17, [x1, #0x30]
                	ldur	q0, [x29, #-0x80]
-               	ldur	q1, [x29, #-0x40]
+               	ldr	q1, [x2]
                	fadd	v0.4s, v0.4s, v1.4s
                	ldur	q1, [x29, #-0x70]
-               	ldur	q2, [x29, #-0x30]
+               	ldr	q2, [x2, #0x10]
                	fadd	v1.4s, v1.4s, v2.4s
                	ldur	q2, [x29, #-0x60]
-               	ldur	q3, [x29, #-0x20]
+               	ldr	q3, [x2, #0x20]
                	fadd	v2.4s, v2.4s, v3.4s
                	ldur	q3, [x29, #-0x50]
-               	ldur	q4, [x29, #-0x10]
+               	ldr	q4, [x2, #0x30]
                	fadd	v3.4s, v3.4s, v4.4s
                	str	q0, [x0]
                	str	q1, [x0, #0x10]
@@ -4323,10 +4323,10 @@ Disassembly of section .text:
                	ldp	x16, x17, [x2, #0x10]
                	stp	x16, x17, [x1, #0x10]
                	ldur	q0, [x29, #-0x40]
-               	ldur	q1, [x29, #-0x20]
+               	ldr	q1, [x2]
                	fadd	v0.2d, v0.2d, v1.2d
                	ldur	q1, [x29, #-0x30]
-               	ldur	q2, [x29, #-0x10]
+               	ldr	q2, [x2, #0x10]
                	fadd	v1.2d, v1.2d, v2.2d
                	str	q0, [x0]
                	str	q1, [x0, #0x10]
@@ -4640,16 +4640,16 @@ Disassembly of section .text:
                	ldp	x16, x17, [x2, #0x30]
                	stp	x16, x17, [x1, #0x30]
                	ldur	q0, [x29, #-0x80]
-               	ldur	q1, [x29, #-0x40]
+               	ldr	q1, [x2]
                	fadd	v0.2d, v0.2d, v1.2d
                	ldur	q1, [x29, #-0x70]
-               	ldur	q2, [x29, #-0x30]
+               	ldr	q2, [x2, #0x10]
                	fadd	v1.2d, v1.2d, v2.2d
                	ldur	q2, [x29, #-0x60]
-               	ldur	q3, [x29, #-0x20]
+               	ldr	q3, [x2, #0x20]
                	fadd	v2.2d, v2.2d, v3.2d
                	ldur	q3, [x29, #-0x50]
-               	ldur	q4, [x29, #-0x10]
+               	ldr	q4, [x2, #0x30]
                	fadd	v3.2d, v3.2d, v4.2d
                	str	q0, [x0]
                	str	q1, [x0, #0x10]

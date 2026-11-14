@@ -29,18 +29,18 @@ fn ent_pc=492 n_params=0 variadic=false locals=1
     terminator Bnz { cond=v21, target=b2, fall=b1 }   (low word)   (exit_acc=v22)
   block 1  start_pc=0
     v23  LocalAddr(-1)                                    -> x1
-    v24  ImmData(208)                                     -> x2
-    v25  Imm(0)                                           -> x6
+    v24  ImmData(208)                                     -> x1
+    v25  Imm(0)                                           -> x2
     v26  BinopI { op=shru, lhs=v18, rhs_imm=32 }          -> x0
-    v27  Imm(3)                                           -> x6
-    v28  BinopI { op=mul, lhs=v26, rhs_imm=2863311531 }   -> x6
-    v29  BinopI { op=shru, lhs=v28, rhs_imm=33 }          -> x6
-    v30  BinopI { op=mul, lhs=v29, rhs_imm=3 }            -> x6
+    v27  Imm(3)                                           -> x2
+    v28  BinopI { op=mul, lhs=v26, rhs_imm=2863311531 }   -> x2
+    v29  BinopI { op=shru, lhs=v28, rhs_imm=33 }          -> x2
+    v30  BinopI { op=mul, lhs=v29, rhs_imm=3 }            -> x2
     v31  Binop { op=sub, lhs=v26, rhs=v30 }               -> x0
     v32  BinopI { op=shl, lhs=v31, rhs_imm=3 }            -> x0
     v33  Binop { op=add, lhs=v24, rhs=v32 }               -> x0
-    v34  Mcpy { dst=v23, src=v33, size=8, align=8 }       -> -
-    v35  LoadLocal { off=-1, kind=F64 }                   -> d0
+    v34  Imm(0)                                           -> x1
+    v35  Load { addr=v33, disp=0, kind=F64 }              -> d0
     v36  LifetimeEnd(-1)                                  -> -
     terminator Return(v35)   (exit_acc=v35)
   block 2  start_pc=0
@@ -122,18 +122,18 @@ fn ent_pc=493 n_params=0 variadic=false locals=1
     terminator Bnz { cond=v21, target=b2, fall=b1 }   (low word)   (exit_acc=v22)
   block 1  start_pc=0
     v23  LocalAddr(-1)                                    -> x1
-    v24  ImmData(232)                                     -> x2
-    v25  Imm(0)                                           -> x6
+    v24  ImmData(232)                                     -> x1
+    v25  Imm(0)                                           -> x2
     v26  BinopI { op=shru, lhs=v18, rhs_imm=32 }          -> x0
-    v27  Imm(3)                                           -> x6
-    v28  BinopI { op=mul, lhs=v26, rhs_imm=2863311531 }   -> x6
-    v29  BinopI { op=shru, lhs=v28, rhs_imm=33 }          -> x6
-    v30  BinopI { op=mul, lhs=v29, rhs_imm=3 }            -> x6
+    v27  Imm(3)                                           -> x2
+    v28  BinopI { op=mul, lhs=v26, rhs_imm=2863311531 }   -> x2
+    v29  BinopI { op=shru, lhs=v28, rhs_imm=33 }          -> x2
+    v30  BinopI { op=mul, lhs=v29, rhs_imm=3 }            -> x2
     v31  Binop { op=sub, lhs=v26, rhs=v30 }               -> x0
     v32  BinopI { op=shl, lhs=v31, rhs_imm=2 }            -> x0
     v33  Binop { op=add, lhs=v24, rhs=v32 }               -> x0
-    v34  Mcpy { dst=v23, src=v33, size=4, align=4 }       -> -
-    v35  LoadLocal { off=-1, kind=F32 }                   -> d0 [f32]
+    v34  Imm(0)                                           -> x1
+    v35  Load { addr=v33, disp=0, kind=F32 }              -> d0 [f32]
     v36  LifetimeEnd(-1)                                  -> -
     terminator Return(v35)   (exit_acc=v35)
   block 2  start_pc=0

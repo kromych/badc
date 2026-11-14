@@ -56,7 +56,7 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm0
                	movl	$0x1, %eax
                	xorl	%ecx, %ecx
-               	movsd	-0x10(%rbp), %xmm1
+               	movsd	<rip>, %xmm1
                	ucomisd	%xmm0, %xmm1
                	movq	%rcx, %r10
                	cmovpq	%rax, %r10

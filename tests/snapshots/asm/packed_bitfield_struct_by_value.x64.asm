@@ -91,7 +91,9 @@ Disassembly of section .text:
                	movq	%r10, (%rcx)
                	movl	0x8(%rax), %r10d
                	movl	%r10d, 0x8(%rcx)
-               	addb	$0x1, -0x5(%rbp)
+               	movzbq	<rip>, %rax # <addr>
+               	incq	%rax
+               	movb	%al, -0x5(%rbp)
                	movq	-0x10(%rbp), %rcx
                	movl	-0x8(%rbp), %eax
                	movq	%rcx, -0x20(%rbp)

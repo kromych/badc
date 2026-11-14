@@ -17,22 +17,22 @@ fn ent_pc=14 n_params=1 variadic=true locals=3
     v14  Intrinsic { kind=VaArg, args=[v12, v13] }        -> x1
     v15  LocalAddr(-8)                                    -> x2
     v16  Mcpy { dst=v15, src=v14, size=16, align=16 }     -> -
-    v17  Imm(0)                                           -> x1
-    v18  Imm(100)                                         -> x1
+    v17  Imm(0)                                           -> x2
+    v18  Imm(100)                                         -> x2
     v19  Imm(4636737291354636288)                         -> d1
     v20  Binop { op=fmul.c, lhs=v8, rhs=v19 }             -> d1
-    v21  LocalAddr(-8)                                    -> x1
-    v22  Imm(0)                                           -> x1
-    v23  LoadLocal { off=-8, kind=F32 }                   -> d1 [f32]
-    v24  Imm(10)                                          -> x1
+    v21  LocalAddr(-8)                                    -> x2
+    v22  Imm(0)                                           -> x2
+    v23  Load { addr=v14, disp=0, kind=F32 }              -> d1 [f32]
+    v24  Imm(10)                                          -> x2
     v25  Imm(1092616192)                                  -> d2 [f32]
     v26  Binop { op=fmul.c, lhs=v23, rhs=v25 }            -> d1 [f32]
     v27  FpCast { kind=F32ToF64, value=v26 }              -> d1
     v28  Fma { a=v8, b=v19, c=v27, neg_product=false, neg_addend=false } -> d1
-    v29  LocalAddr(-8)                                    -> x1
-    v30  Imm(12)                                          -> x1
-    v31  BinopI { op=add, lhs=v15, rhs_imm=12 }           -> x1
-    v32  LoadLocal { off=-8, disp=12, kind=F32 }          -> d0 [f32]
+    v29  LocalAddr(-8)                                    -> x2
+    v30  Imm(12)                                          -> x2
+    v31  BinopI { op=add, lhs=v15, rhs_imm=12 }           -> x2
+    v32  Load { addr=v14, disp=12, kind=F32 }             -> d0 [f32]
     v33  FpCast { kind=F32ToF64, value=v32 }              -> d0
     v34  Binop { op=fadd, lhs=v28, rhs=v33 }              -> d0
     v35  Imm(0)                                           -> x1
@@ -73,31 +73,31 @@ fn ent_pc=15 n_params=1 variadic=true locals=3
     v14  Intrinsic { kind=VaArg, args=[v12, v13] }        -> x1
     v15  LocalAddr(-10)                                   -> x2
     v16  Mcpy { dst=v15, src=v14, size=32, align=16 }     -> -
-    v17  Imm(0)                                           -> x1
-    v18  Imm(1000)                                        -> x1
+    v17  Imm(0)                                           -> x2
+    v18  Imm(1000)                                        -> x2
     v19  Imm(4652007308841189376)                         -> d1
     v20  Binop { op=fmul.c, lhs=v8, rhs=v19 }             -> d1
-    v21  LocalAddr(-10)                                   -> x1
-    v22  Imm(12)                                          -> x1
-    v23  BinopI { op=add, lhs=v15, rhs_imm=12 }           -> x1
-    v24  LoadLocal { off=-10, disp=12, kind=F32 }         -> d1 [f32]
-    v25  Imm(100)                                         -> x1
+    v21  LocalAddr(-10)                                   -> x2
+    v22  Imm(12)                                          -> x2
+    v23  BinopI { op=add, lhs=v15, rhs_imm=12 }           -> x2
+    v24  Load { addr=v14, disp=12, kind=F32 }             -> d1 [f32]
+    v25  Imm(100)                                         -> x2
     v26  Imm(1120403456)                                  -> d2 [f32]
     v27  Binop { op=fmul.c, lhs=v24, rhs=v26 }            -> d1 [f32]
     v28  FpCast { kind=F32ToF64, value=v27 }              -> d1
     v29  Fma { a=v8, b=v19, c=v28, neg_product=false, neg_addend=false } -> d1
-    v30  LocalAddr(-10)                                   -> x1
-    v31  BinopI { op=add, lhs=v15, rhs_imm=16 }           -> x1
-    v32  Imm(4)                                           -> x1
-    v33  BinopI { op=add, lhs=v15, rhs_imm=20 }           -> x1
-    v34  LoadLocal { off=-10, disp=20, kind=I32 }         -> x1
-    v35  BinopI { op=mul, lhs=v34, rhs_imm=10 }           -> x1
-    v36  Extend { value=v35, kind=I32, nsw }              -> x1
+    v30  LocalAddr(-10)                                   -> x2
+    v31  BinopI { op=add, lhs=v15, rhs_imm=16 }           -> x2
+    v32  Imm(4)                                           -> x2
+    v33  BinopI { op=add, lhs=v15, rhs_imm=20 }           -> x2
+    v34  Load { addr=v14, disp=20, kind=I32 }             -> x2
+    v35  BinopI { op=mul, lhs=v34, rhs_imm=10 }           -> x2
+    v36  Extend { value=v35, kind=I32, nsw }              -> x2
     v37  FpCast { kind=IntToFp, value=v36 }               -> d0
     v38  Binop { op=fadd, lhs=v29, rhs=v37 }              -> d0
-    v39  LocalAddr(-10)                                   -> x1
-    v40  Imm(0)                                           -> x1
-    v41  LoadLocal { off=-10, kind=F32 }                  -> d1 [f32]
+    v39  LocalAddr(-10)                                   -> x2
+    v40  Imm(0)                                           -> x2
+    v41  Load { addr=v14, disp=0, kind=F32 }              -> d1 [f32]
     v42  FpCast { kind=F32ToF64, value=v41 }              -> d1
     v43  Binop { op=fadd, lhs=v38, rhs=v42 }              -> d0
     v44  Imm(0)                                           -> x1
@@ -138,31 +138,31 @@ fn ent_pc=16 n_params=1 variadic=true locals=6
     v14  Intrinsic { kind=VaArg, args=[v12, v13] }        -> x1
     v15  LocalAddr(-3)                                    -> x2
     v16  Mcpy { dst=v15, src=v14, size=24, align=8 }      -> -
-    v17  Imm(0)                                           -> x1
-    v18  Imm(1000)                                        -> x1
+    v17  Imm(0)                                           -> x2
+    v18  Imm(1000)                                        -> x2
     v19  Imm(4652007308841189376)                         -> d1
     v20  Binop { op=fmul.c, lhs=v8, rhs=v19 }             -> d1
-    v21  LocalAddr(-3)                                    -> x1
-    v22  Imm(0)                                           -> x1
-    v23  LoadLocal { off=-3, kind=F32 }                   -> d1 [f32]
-    v24  Imm(100)                                         -> x1
+    v21  LocalAddr(-3)                                    -> x2
+    v22  Imm(0)                                           -> x2
+    v23  Load { addr=v14, disp=0, kind=F32 }              -> d1 [f32]
+    v24  Imm(100)                                         -> x2
     v25  Imm(1120403456)                                  -> d2 [f32]
     v26  Binop { op=fmul.c, lhs=v23, rhs=v25 }            -> d1 [f32]
     v27  FpCast { kind=F32ToF64, value=v26 }              -> d1
     v28  Fma { a=v8, b=v19, c=v27, neg_product=false, neg_addend=false } -> d1
-    v29  LocalAddr(-3)                                    -> x1
-    v30  BinopI { op=add, lhs=v15, rhs_imm=8 }            -> x1
-    v31  Imm(4)                                           -> x1
-    v32  BinopI { op=add, lhs=v15, rhs_imm=12 }           -> x1
-    v33  LoadLocal { off=-3, disp=12, kind=F32 }          -> d0 [f32]
-    v34  Imm(10)                                          -> x1
+    v29  LocalAddr(-3)                                    -> x2
+    v30  BinopI { op=add, lhs=v15, rhs_imm=8 }            -> x2
+    v31  Imm(4)                                           -> x2
+    v32  BinopI { op=add, lhs=v15, rhs_imm=12 }           -> x2
+    v33  Load { addr=v14, disp=12, kind=F32 }             -> d0 [f32]
+    v34  Imm(10)                                          -> x2
     v35  Imm(1092616192)                                  -> d2 [f32]
     v36  Binop { op=fmul.c, lhs=v33, rhs=v35 }            -> d0 [f32]
     v37  FpCast { kind=F32ToF64, value=v36 }              -> d0
     v38  Binop { op=fadd, lhs=v28, rhs=v37 }              -> d0
-    v39  LocalAddr(-3)                                    -> x1
-    v40  BinopI { op=add, lhs=v15, rhs_imm=16 }           -> x1
-    v41  LoadLocal { off=-3, disp=16, kind=F32 }          -> d1 [f32]
+    v39  LocalAddr(-3)                                    -> x2
+    v40  BinopI { op=add, lhs=v15, rhs_imm=16 }           -> x2
+    v41  Load { addr=v14, disp=16, kind=F32 }             -> d1 [f32]
     v42  FpCast { kind=F32ToF64, value=v41 }              -> d1
     v43  Binop { op=fadd, lhs=v38, rhs=v42 }              -> d0
     v44  Imm(0)                                           -> x1

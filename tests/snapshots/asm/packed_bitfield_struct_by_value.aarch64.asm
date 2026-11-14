@@ -93,7 +93,7 @@ Disassembly of section .text:
                	str	x16, [x1]
                	ldr	w16, [x0, #0x8]
                	str	w16, [x1, #0x8]
-               	ldurb	w0, [x29, #-0x5]
+               	ldrb	w0, [x0, #0xb]
                	add	x0, x0, #0x1
                	sturb	w0, [x29, #-0x5]
                	ldur	x1, [x29, #-0x10]

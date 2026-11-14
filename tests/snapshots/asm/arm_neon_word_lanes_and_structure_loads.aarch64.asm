@@ -146,7 +146,7 @@ Disassembly of section .text:
                	ldr	x16, [x0]
                	str	x16, [x2]
                	ldur	d0, [x29, #-0x70]
-               	ldur	d3, [x29, #-0x68]
+               	ldr	d3, [x0]
                	sli	v0.8b, v3.8b, #0x4
                	sub	x3, x29, #0x48
                	stur	d0, [x29, #-0x48]

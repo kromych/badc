@@ -36,11 +36,11 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x100(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	movups	(%rcx), %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	-0x100(%rbp), %xmm0
+               	leaq	-0x100(%rbp), %rcx
+               	leaq	<rip>, %rax
+               	movups	(%rax), %xmm14
+               	movups	%xmm14, (%rcx)
+               	movups	(%rax), %xmm0
                	movups	-0x110(%rbp), %xmm1
                	vpcmpgtb	%xmm1, %xmm0, %xmm0
                	movups	%xmm0, -0xf0(%rbp)
@@ -220,19 +220,19 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movq	(%rcx), %r10
                	movq	%r10, (%rax)
-               	movsd	-0x40(%rbp), %xmm0
-               	movsd	-0x48(%rbp), %xmm1
-               	vpcmpgtw	%xmm1, %xmm0, %xmm2
-               	movsd	%xmm2, -0x28(%rbp)
+               	movsd	<rip>, %xmm1
+               	movsd	-0x48(%rbp), %xmm0
+               	vpcmpgtw	%xmm0, %xmm1, %xmm1
+               	movsd	%xmm1, -0x28(%rbp)
                	xorl	%eax, %eax
                	movl	$0xffffffff, %ecx       # imm = 0xFFFFFFFF
                	movq	%rcx, -0x20(%rbp)
-               	vpcmpgtw	%xmm0, %xmm1, %xmm0
+               	movsd	-0x40(%rbp), %xmm1
+               	vpcmpgtw	%xmm1, %xmm0, %xmm0
                	movsd	%xmm0, -0x18(%rbp)
                	xorl	%edx, %edx
                	movq	$-0x10000, -0x10(%rbp)  # imm = 0xFFFF0000
                	movsd	-0x48(%rbp), %xmm0
-               	movsd	-0x40(%rbp), %xmm1
                	vpcmpeqw	%xmm1, %xmm0, %xmm0
                	movsd	%xmm0, -0x8(%rbp)
                	movswq	-0x28(%rbp,%rax,2), %rdi
@@ -355,11 +355,11 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x70(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	movups	(%rcx), %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	-0x70(%rbp), %xmm1
+               	leaq	-0x70(%rbp), %rcx
+               	leaq	<rip>, %rax
+               	movups	(%rax), %xmm14
+               	movups	%xmm14, (%rcx)
+               	movups	(%rax), %xmm1
                	movups	-0x80(%rbp), %xmm0
                	vpcmpgtd	%xmm0, %xmm1, %xmm1
                	movups	%xmm1, -0xf0(%rbp)
@@ -499,11 +499,11 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x70(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	movups	(%rcx), %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	-0x70(%rbp), %xmm1
+               	leaq	-0x70(%rbp), %rcx
+               	leaq	<rip>, %rax
+               	movups	(%rax), %xmm14
+               	movups	%xmm14, (%rcx)
+               	movups	(%rax), %xmm1
                	movups	-0x60(%rbp), %xmm0
                	vpcmpgtq	%xmm0, %xmm1, %xmm1
                	movups	%xmm1, -0xf0(%rbp)

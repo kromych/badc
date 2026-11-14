@@ -98,7 +98,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     v112 ImmData(8)                                       -> x1
     v113 Mcpy { dst=v111, src=v112, size=16, align=8 }    -> -
     v114 LocalAddr(-2)                                    -> x0
-    v115 LoadLocal { off=-2, kind=F32 }                   -> d0 [f32]
+    v115 Load { addr=v112, disp=0, kind=F32 pc_rel }      -> d0 [f32]
     v116 Imm(4607182418800017408)                         -> x0
     v117 FpCast { kind=F32ToF64, value=v115 }             -> d0
     v118 Binop { op=fadd, lhs=v117, rhs=v69 }             -> d0
@@ -158,7 +158,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     v162 LocalAddr(-3)                                    -> x0
     v163 Imm(8)                                           -> x0
     v164 BinopI { op=add, lhs=v159, rhs_imm=8 }           -> x0
-    v165 LoadLocal { off=-3, disp=8, kind=F64 }           -> d1
+    v165 Load { addr=v160, disp=8, kind=F64 pc_rel }      -> d1
     v166 Imm(4607182418800017408)                         -> d0
     v167 Binop { op=fadd, lhs=v165, rhs=v166 }            -> d1
     v168 StoreLocal { off=-3, disp=8, value=v167, kind=F64 } -> -

@@ -27,7 +27,7 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x3]
-               	ldur	q1, [x29, #-0x100]
+               	ldr	q1, [x0]
                	ldr	q0, [sp]
                	cmgt	v1.16b, v1.16b, v0.16b
                	sub	x4, x29, #0xf0
@@ -179,22 +179,22 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldr	x16, [x0]
                	str	x16, [x3]
-               	ldur	d0, [x29, #-0x40]
-               	ldur	d1, [x29, #-0x48]
-               	cmgt	v2.4h, v0.4h, v1.4h
+               	ldr	d1, [x0]
+               	ldur	d0, [x29, #-0x48]
+               	cmgt	v1.4h, v1.4h, v0.4h
                	sub	x4, x29, #0x28
-               	stur	d2, [x29, #-0x28]
-               	cmge	v2.4h, v0.4h, v1.4h
+               	stur	d1, [x29, #-0x28]
+               	ldur	d1, [x29, #-0x40]
+               	cmge	v2.4h, v1.4h, v0.4h
                	sub	x5, x29, #0x20
                	stur	d2, [x29, #-0x20]
-               	cmgt	v2.4h, v1.4h, v0.4h
+               	cmgt	v2.4h, v0.4h, v1.4h
                	sub	x6, x29, #0x18
                	stur	d2, [x29, #-0x18]
-               	cmge	v0.4h, v1.4h, v0.4h
+               	cmge	v0.4h, v0.4h, v1.4h
                	sub	x7, x29, #0x10
                	stur	d0, [x29, #-0x10]
                	ldur	d0, [x29, #-0x48]
-               	ldur	d1, [x29, #-0x40]
                	cmeq	v0.4h, v0.4h, v1.4h
                	sub	x8, x29, #0x8
                	stur	d0, [x29, #-0x8]
@@ -331,7 +331,7 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x3]
-               	ldur	q1, [x29, #-0x70]
+               	ldr	q1, [x0]
                	ldur	q0, [x29, #-0x80]
                	cmgt	v1.4s, v1.4s, v0.4s
                	sub	x4, x29, #0xf0
@@ -483,7 +483,7 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x3]
-               	ldur	q1, [x29, #-0x70]
+               	ldr	q1, [x0]
                	ldur	q0, [x29, #-0x60]
                	cmgt	v1.2d, v1.2d, v0.2d
                	sub	x4, x29, #0xf0

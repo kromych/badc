@@ -127,25 +127,26 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	jmp	<addr>
                	incq	%rax
+               	movq	%rcx, %rdi
                	cmpl	%esi, %eax
                	jge	<addr>
-               	leaq	-0x10(%rbp), %rcx
-               	addq	$-0x10, %rdi
-               	movups	(%rdi), %xmm14
-               	movups	%xmm14, (%rcx)
-               	movq	-0x8(%rbp), %rcx
-               	cmpq	$0x7, %rcx
+               	leaq	-0x10(%rbp), %rdx
+               	leaq	-0x10(%rdi), %rcx
+               	movups	(%rcx), %xmm14
+               	movups	%xmm14, (%rdx)
+               	movq	-0x8(%rdi), %rdx
+               	cmpq	$0x7, %rdx
                	jne	<addr>
-               	movl	<rip>, %ecx # <addr>
-               	movsd	-0x10(%rbp), %xmm0
-               	cvttsd2si	%xmm0, %rdx
-               	addq	%rdx, %rcx
-               	movl	%ecx, <rip> # <addr>
+               	movl	<rip>, %edx # <addr>
+               	movsd	-0x10(%rdi), %xmm0
+               	cvttsd2si	%xmm0, %rdi
+               	addq	%rdi, %rdx
+               	movl	%edx, <rip> # <addr>
                	jmp	<addr>
-               	movl	<rip>, %ecx # <addr>
-               	movl	-0x10(%rbp), %edx
-               	addq	%rdx, %rcx
-               	movl	%ecx, <rip> # <addr>
+               	movl	<rip>, %edx # <addr>
+               	movl	-0x10(%rbp), %edi
+               	addq	%rdi, %rdx
+               	movl	%edx, <rip> # <addr>
                	jmp	<addr>
                	leaq	-0x10(%rbp), %rax
                	movups	(%rax), %xmm14

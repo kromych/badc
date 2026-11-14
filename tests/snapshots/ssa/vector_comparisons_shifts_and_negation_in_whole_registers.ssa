@@ -7,13 +7,13 @@ fn ent_pc=0 n_params=0 variadic=false locals=9
     v1   LocalAddr(-354)                                  -> x0
     v2   ImmData(8)                                       -> x1
     v3   Mcpy { dst=v1, src=v2, size=16, align=8 }        -> -
-    v4   LocalAddr(-355)                                  -> x0
-    v5   ImmData(24)                                      -> x1
+    v4   LocalAddr(-355)                                  -> x1
+    v5   ImmData(24)                                      -> x0
     v6   Mcpy { dst=v4, src=v5, size=16, align=8 }        -> -
-    v7   LocalAddr(-354)                                  -> x0
-    v8   LocalAddr(-355)                                  -> x0
-    v9   Imm(0)                                           -> x0
-    v10  LoadLocal { off=-355, kind=V128 }                -> d0
+    v7   LocalAddr(-354)                                  -> x1
+    v8   LocalAddr(-355)                                  -> x1
+    v9   Imm(0)                                           -> x1
+    v10  Load { addr=v5, disp=0, kind=V128, align=8 }     -> d0
     v11  LoadLocal { off=-354, kind=V128 }                -> d1
     v12  SimdVal { op=__builtin_ia32_pcmpgtb128, imm=None, args=[v10, v11] } -> d0
     v13  Imm(0)                                           -> x0
@@ -1175,9 +1175,9 @@ fn ent_pc=0 n_params=0 variadic=false locals=9
     v1059 LocalAddr(-9)                                    -> x0
     v1060 LocalAddr(-8)                                    -> x0
     v1061 Imm(0)                                           -> x0
-    v1062 LoadLocal { off=-8, kind=F64 }                   -> d0
-    v1063 LoadLocal { off=-9, kind=F64 }                   -> d1
-    v1064 SimdVal { op=__builtin_ia32_pcmpgtw, imm=None, args=[v1062, v1063] } -> d2
+    v1062 Load { addr=v1057, disp=0, kind=F64 pc_rel }     -> d1
+    v1063 LoadLocal { off=-9, kind=F64 }                   -> d0
+    v1064 SimdVal { op=__builtin_ia32_pcmpgtw, imm=None, args=[v1062, v1063] } -> d1
     v1065 Imm(0)                                           -> x0
     v1066 LocalAddr(-5)                                    -> x0
     v1067 Imm(0)                                           -> x0
@@ -1227,9 +1227,9 @@ fn ent_pc=0 n_params=0 variadic=false locals=9
     v1111 LocalAddr(-9)                                    -> x1
     v1112 LocalAddr(-8)                                    -> x1
     v1113 Imm(0)                                           -> x1
-    v1114 LoadLocal { off=-9, kind=F64 }                   -> d2
-    v1115 LoadLocal { off=-8, kind=F64 }                   -> d2
-    v1116 SimdVal { op=__builtin_ia32_pcmpgtw, imm=None, args=[v1063, v1062] } -> d0
+    v1114 LoadLocal { off=-9, kind=F64 }                   -> d1
+    v1115 LoadLocal { off=-8, kind=F64 }                   -> d1
+    v1116 SimdVal { op=__builtin_ia32_pcmpgtw, imm=None, args=[v1063, v1115] } -> d0
     v1117 Imm(0)                                           -> x1
     v1118 LocalAddr(-3)                                    -> x1
     v1119 Imm(0)                                           -> x1
@@ -1279,8 +1279,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=9
     v1163 LocalAddr(-8)                                    -> x6
     v1164 Imm(0)                                           -> x7
     v1165 LoadLocal { off=-9, kind=F64 }                   -> d0
-    v1166 LoadLocal { off=-8, kind=F64 }                   -> d1
-    v1167 SimdVal { op=__builtin_ia32_pcmpeqw, imm=None, args=[v1165, v1166] } -> d0
+    v1166 LoadLocal { off=-8, kind=F64 }                   -> d2
+    v1167 SimdVal { op=__builtin_ia32_pcmpeqw, imm=None, args=[v1165, v1115] } -> d0
     v1168 Imm(0)                                           -> x7
     v1169 LocalAddr(-1)                                    -> x7
     v1170 Imm(0)                                           -> x7
@@ -1830,13 +1830,13 @@ fn ent_pc=0 n_params=0 variadic=false locals=9
     v1752 LocalAddr(-368)                                  -> x0
     v1753 ImmData(56)                                      -> x1
     v1754 Mcpy { dst=v1752, src=v1753, size=16, align=8 }  -> -
-    v1755 LocalAddr(-369)                                  -> x0
-    v1756 ImmData(72)                                      -> x1
+    v1755 LocalAddr(-369)                                  -> x1
+    v1756 ImmData(72)                                      -> x0
     v1757 Mcpy { dst=v1755, src=v1756, size=16, align=8 }  -> -
-    v1758 LocalAddr(-368)                                  -> x0
-    v1759 LocalAddr(-369)                                  -> x0
-    v1760 Imm(0)                                           -> x0
-    v1761 LoadLocal { off=-369, kind=V128 }                -> d1
+    v1758 LocalAddr(-368)                                  -> x1
+    v1759 LocalAddr(-369)                                  -> x1
+    v1760 Imm(0)                                           -> x1
+    v1761 Load { addr=v1756, disp=0, kind=V128, align=8 }  -> d1
     v1762 LoadLocal { off=-368, kind=V128 }                -> d0
     v1763 SimdVal { op=__builtin_ia32_pcmpgtd128, imm=None, args=[v1761, v1762] } -> d1
     v1764 Imm(0)                                           -> x0
@@ -2491,13 +2491,13 @@ fn ent_pc=0 n_params=0 variadic=false locals=9
     v2463 LocalAddr(-382)                                  -> x0
     v2464 ImmData(88)                                      -> x1
     v2465 Mcpy { dst=v2463, src=v2464, size=16, align=8 }  -> -
-    v2466 LocalAddr(-383)                                  -> x0
-    v2467 ImmData(104)                                     -> x1
+    v2466 LocalAddr(-383)                                  -> x1
+    v2467 ImmData(104)                                     -> x0
     v2468 Mcpy { dst=v2466, src=v2467, size=16, align=8 }  -> -
-    v2469 LocalAddr(-382)                                  -> x0
-    v2470 LocalAddr(-383)                                  -> x0
-    v2471 Imm(0)                                           -> x0
-    v2472 LoadLocal { off=-383, kind=V128 }                -> d1
+    v2469 LocalAddr(-382)                                  -> x1
+    v2470 LocalAddr(-383)                                  -> x1
+    v2471 Imm(0)                                           -> x1
+    v2472 Load { addr=v2467, disp=0, kind=V128, align=8 }  -> d1
     v2473 LoadLocal { off=-382, kind=V128 }                -> d0
     v2474 SimdVal { op=__builtin_ia32_pcmpgtq, imm=None, args=[v2472, v2473] } -> d1
     v2475 Imm(0)                                           -> x0

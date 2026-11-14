@@ -2384,7 +2384,7 @@ fn ent_pc=7 n_params=3 variadic=false locals=0
     v16  LocalAddr(-18)                                   -> x0
     v17  LocalAddr(-19)                                   -> x0
     v18  LoadLocal { off=-17, kind=U16 }                  -> x1
-    v19  LoadLocal { off=-18, kind=U16 }                  -> x2
+    v19  Load { addr=v5, disp=0, kind=U16 }               -> x2
     v20  Binop { op=shl, lhs=v18, rhs=v19 }               -> x1
     v21  StoreLocal { off=-19, value=v20, kind=I16 }      -> -
     v22  BinopI { op=add, lhs=v8, rhs_imm=2 }             -> x1

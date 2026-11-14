@@ -249,7 +249,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=131
     v238 BinopI { op=add, lhs=v232, rhs_imm=1 }           -> x0
     v239 LocalAddr(-1)                                    -> x1
     v240 Mcpy { dst=v239, src=v238, size=4, align=1 }     -> -
-    v241 LoadLocal { off=-1, kind=U32 }                   -> x0
+    v241 Load { addr=v232, disp=1, kind=U32, align=1 pc_rel } -> x0
     v242 LifetimeEnd(-1)                                  -> -
     v243 BinopI { op=and, lhs=v241, rhs_imm=4294967295 }  -> x1
     v244 Imm(287454020)                                   -> x1
@@ -282,7 +282,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=131
     v261 BinopI { op=add, lhs=v255, rhs_imm=8 }           -> x0
     v262 LocalAddr(-1)                                    -> x1
     v263 Mcpy { dst=v262, src=v261, size=4, align=1 }     -> -
-    v264 LoadLocal { off=-1, kind=U32 }                   -> x0
+    v264 Load { addr=v255, disp=8, kind=U32, align=1 pc_rel } -> x0
     v265 LifetimeEnd(-1)                                  -> -
     v266 BinopI { op=and, lhs=v264, rhs_imm=4294967295 }  -> x1
     v267 Imm(287454020)                                   -> x1
@@ -307,7 +307,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=131
     v284 BinopI { op=add, lhs=v278, rhs_imm=15 }          -> x0
     v285 LocalAddr(-1)                                    -> x1
     v286 Mcpy { dst=v285, src=v284, size=4, align=1 }     -> -
-    v287 LoadLocal { off=-1, kind=U32 }                   -> x0
+    v287 Load { addr=v278, disp=15, kind=U32, align=1 pc_rel } -> x0
     v288 LifetimeEnd(-1)                                  -> -
     v289 BinopI { op=and, lhs=v287, rhs_imm=4294967295 }  -> x1
     v290 Imm(287454020)                                   -> x1
@@ -332,7 +332,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=131
     v307 BinopI { op=add, lhs=v301, rhs_imm=22 }          -> x0
     v308 LocalAddr(-1)                                    -> x1
     v309 Mcpy { dst=v308, src=v307, size=4, align=1 }     -> -
-    v310 LoadLocal { off=-1, kind=U32 }                   -> x0
+    v310 Load { addr=v301, disp=22, kind=U32, align=1 pc_rel } -> x0
     v311 LifetimeEnd(-1)                                  -> -
     v312 BinopI { op=and, lhs=v310, rhs_imm=4294967295 }  -> x1
     v313 Imm(287454020)                                   -> x1
@@ -357,7 +357,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=131
     v330 BinopI { op=add, lhs=v324, rhs_imm=29 }          -> x0
     v331 LocalAddr(-1)                                    -> x1
     v332 Mcpy { dst=v331, src=v330, size=4, align=1 }     -> -
-    v333 LoadLocal { off=-1, kind=U32 }                   -> x0
+    v333 Load { addr=v324, disp=29, kind=U32, align=1 pc_rel } -> x0
     v334 LifetimeEnd(-1)                                  -> -
     v335 BinopI { op=and, lhs=v333, rhs_imm=4294967295 }  -> x1
     v336 Imm(287454020)                                   -> x1

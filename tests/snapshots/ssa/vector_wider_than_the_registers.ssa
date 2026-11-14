@@ -1780,12 +1780,12 @@ fn ent_pc=3 n_params=3 variadic=false locals=0
     v15  LocalAddr(-137)                                  -> x0
     v16  LocalAddr(-138)                                  -> x0
     v17  LoadLocal { off=-137, kind=V256 }                -> d0
-    v18  LoadLocal { off=-138, kind=V256 }                -> d1
+    v18  Load { addr=v5, disp=0, kind=V256 }              -> d1
     v19  VecBinop { op=Add, lane=I8, bytes=32, lhs=v17, rhs=v18 } -> d0
     v20  BinopI { op=add, lhs=v8, rhs_imm=32 }            -> x0
     v21  LoadLocal { off=-137, disp=32, kind=V256 }       -> d1
     v22  BinopI { op=add, lhs=v11, rhs_imm=32 }           -> x0
-    v23  LoadLocal { off=-138, disp=32, kind=V256 }       -> d2
+    v23  Load { addr=v5, disp=32, kind=V256 }             -> d2
     v24  VecBinop { op=Add, lane=I8, bytes=32, lhs=v21, rhs=v23 } -> d1
     v25  Imm(0)                                           -> x0
     v26  Store { addr=v1, disp=0, value=v19, kind=V256 }  -> -
@@ -5676,12 +5676,12 @@ fn ent_pc=7 n_params=3 variadic=false locals=0
     v15  LocalAddr(-161)                                  -> x0
     v16  LocalAddr(-162)                                  -> x0
     v17  LoadLocal { off=-161, kind=V256 }                -> d0
-    v18  LoadLocal { off=-162, kind=V256 }                -> d1
+    v18  Load { addr=v5, disp=0, kind=V256 }              -> d1
     v19  VecBinop { op=Add, lane=I16, bytes=32, lhs=v17, rhs=v18 } -> d0
     v20  BinopI { op=add, lhs=v8, rhs_imm=32 }            -> x0
     v21  LoadLocal { off=-161, disp=32, kind=V256 }       -> d1
     v22  BinopI { op=add, lhs=v11, rhs_imm=32 }           -> x0
-    v23  LoadLocal { off=-162, disp=32, kind=V256 }       -> d2
+    v23  Load { addr=v5, disp=32, kind=V256 }             -> d2
     v24  VecBinop { op=Add, lane=I16, bytes=32, lhs=v21, rhs=v23 } -> d1
     v25  Imm(0)                                           -> x0
     v26  Store { addr=v1, disp=0, value=v19, kind=V256 }  -> -
@@ -7629,12 +7629,12 @@ fn ent_pc=11 n_params=3 variadic=false locals=0
     v15  LocalAddr(-153)                                  -> x0
     v16  LocalAddr(-154)                                  -> x0
     v17  LoadLocal { off=-153, kind=V256 }                -> d0
-    v18  LoadLocal { off=-154, kind=V256 }                -> d1
+    v18  Load { addr=v5, disp=0, kind=V256 }              -> d1
     v19  VecBinop { op=Add, lane=I32, bytes=32, lhs=v17, rhs=v18 } -> d0
     v20  BinopI { op=add, lhs=v8, rhs_imm=32 }            -> x0
     v21  LoadLocal { off=-153, disp=32, kind=V256 }       -> d1
     v22  BinopI { op=add, lhs=v11, rhs_imm=32 }           -> x0
-    v23  LoadLocal { off=-154, disp=32, kind=V256 }       -> d2
+    v23  Load { addr=v5, disp=32, kind=V256 }             -> d2
     v24  VecBinop { op=Add, lane=I32, bytes=32, lhs=v21, rhs=v23 } -> d1
     v25  Imm(0)                                           -> x0
     v26  Store { addr=v1, disp=0, value=v19, kind=V256 }  -> -
@@ -9622,12 +9622,12 @@ fn ent_pc=15 n_params=3 variadic=false locals=0
     v15  LocalAddr(-153)                                  -> x0
     v16  LocalAddr(-154)                                  -> x0
     v17  LoadLocal { off=-153, kind=V256 }                -> d0
-    v18  LoadLocal { off=-154, kind=V256 }                -> d1
+    v18  Load { addr=v5, disp=0, kind=V256 }              -> d1
     v19  VecBinop { op=Add, lane=I64, bytes=32, lhs=v17, rhs=v18 } -> d0
     v20  BinopI { op=add, lhs=v8, rhs_imm=32 }            -> x0
     v21  LoadLocal { off=-153, disp=32, kind=V256 }       -> d1
     v22  BinopI { op=add, lhs=v11, rhs_imm=32 }           -> x0
-    v23  LoadLocal { off=-154, disp=32, kind=V256 }       -> d2
+    v23  Load { addr=v5, disp=32, kind=V256 }             -> d2
     v24  VecBinop { op=Add, lane=I64, bytes=32, lhs=v21, rhs=v23 } -> d1
     v25  Imm(0)                                           -> x0
     v26  Store { addr=v1, disp=0, value=v19, kind=V256 }  -> -
@@ -11332,12 +11332,12 @@ fn ent_pc=19 n_params=3 variadic=false locals=0
     v15  LocalAddr(-57)                                   -> x0
     v16  LocalAddr(-58)                                   -> x0
     v17  LoadLocal { off=-57, kind=V256 }                 -> d0
-    v18  LoadLocal { off=-58, kind=V256 }                 -> d1
+    v18  Load { addr=v5, disp=0, kind=V256 }              -> d1
     v19  VecBinop { op=Fadd, lane=F32, bytes=32, lhs=v17, rhs=v18 } -> d0
     v20  BinopI { op=add, lhs=v8, rhs_imm=32 }            -> x0
     v21  LoadLocal { off=-57, disp=32, kind=V256 }        -> d1
     v22  BinopI { op=add, lhs=v11, rhs_imm=32 }           -> x0
-    v23  LoadLocal { off=-58, disp=32, kind=V256 }        -> d2
+    v23  Load { addr=v5, disp=32, kind=V256 }             -> d2
     v24  VecBinop { op=Fadd, lane=F32, bytes=32, lhs=v21, rhs=v23 } -> d1
     v25  Imm(0)                                           -> x0
     v26  Store { addr=v1, disp=0, value=v19, kind=V256 }  -> -
@@ -13021,12 +13021,12 @@ fn ent_pc=23 n_params=3 variadic=false locals=0
     v15  LocalAddr(-57)                                   -> x0
     v16  LocalAddr(-58)                                   -> x0
     v17  LoadLocal { off=-57, kind=V256 }                 -> d0
-    v18  LoadLocal { off=-58, kind=V256 }                 -> d1
+    v18  Load { addr=v5, disp=0, kind=V256 }              -> d1
     v19  VecBinop { op=Fadd, lane=F64, bytes=32, lhs=v17, rhs=v18 } -> d0
     v20  BinopI { op=add, lhs=v8, rhs_imm=32 }            -> x0
     v21  LoadLocal { off=-57, disp=32, kind=V256 }        -> d1
     v22  BinopI { op=add, lhs=v11, rhs_imm=32 }           -> x0
-    v23  LoadLocal { off=-58, disp=32, kind=V256 }        -> d2
+    v23  Load { addr=v5, disp=32, kind=V256 }             -> d2
     v24  VecBinop { op=Fadd, lane=F64, bytes=32, lhs=v21, rhs=v23 } -> d1
     v25  Imm(0)                                           -> x0
     v26  Store { addr=v1, disp=0, value=v19, kind=V256 }  -> -

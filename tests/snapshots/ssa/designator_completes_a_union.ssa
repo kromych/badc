@@ -124,12 +124,12 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v137 Imm(10)                                          -> x0
     v138 Imm(0)                                           -> x0
     v139 Imm(0)                                           -> x0
-    v140 LoadLocal { off=-2, kind=F64 }                   -> d0
+    v140 Load { addr=v115, disp=0, kind=F64 pc_rel }      -> d0
     v141 Imm(4612811918334230528)                         -> d0
     v142 Binop { op=fne, lhs=v140, rhs=v141 }             -> x0
     v143 Imm(1)                                           -> x0
     v144 Imm(0)                                           -> x1
-    v145 LoadLocal { off=-2, kind=F64 }                   -> d1
+    v145 Load { addr=v115, disp=0, kind=F64 pc_rel }      -> d1
     v146 Binop { op=fne, lhs=v145, rhs=v141 }             -> x2
     v147 Select { cond=v146, a=v143, b=v144, kind=I64 }   -> x0
     terminator Jmp(b7)

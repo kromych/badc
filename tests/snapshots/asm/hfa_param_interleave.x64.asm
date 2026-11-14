@@ -41,10 +41,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movq	(%rcx), %r10
                	movq	%r10, (%rax)
-               	leaq	-0x8(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	movq	(%rcx), %r10
-               	movq	%r10, (%rax)
                	movss	-0x20(%rbp), %xmm0
                	movss	-0x1c(%rbp), %xmm1
                	addss	%xmm1, %xmm0
@@ -56,9 +52,9 @@ Disassembly of section .text:
                	addss	%xmm1, %xmm0
                	movss	-0xc(%rbp), %xmm1
                	addss	%xmm1, %xmm0
-               	movss	-0x8(%rbp), %xmm1
+               	movss	<rip>, %xmm1
                	addss	%xmm1, %xmm0
-               	movss	-0x4(%rbp), %xmm1
+               	movss	<rip>, %xmm1
                	addss	%xmm1, %xmm0
                	vaddss	<rip>, %xmm0, %xmm0
                	vaddss	<rip>, %xmm0, %xmm0

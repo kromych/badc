@@ -252,7 +252,7 @@ Disassembly of section .text:
                	movq	%r10, (%rax)
                	movl	0x8(%rdx), %r10d
                	movl	%r10d, 0x8(%rax)
-               	movl	-0x40(%rbp), %ebx
+               	movl	0x18(%rcx), %ebx
                	movl	$0x7f000001, %edi       # imm = 0x7F000001
                	movq	%rcx, 0x20(%rsp)
                	callq	<addr>

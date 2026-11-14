@@ -35,9 +35,9 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x30
                	mov	x0, #0x0                // =0
-               	sub	x1, x29, #0x20
-               	add	x2, x29, #0x10
-               	mov	x16, x1
+               	sub	x2, x29, #0x20
+               	add	x1, x29, #0x10
+               	mov	x16, x2
                	add	x17, x29, #0xd0
                	str	x17, [x16]
                	add	x17, x29, #0x50
@@ -48,12 +48,12 @@ Disassembly of section .text:
                	str	w17, [x16, #0x18]
                	mov	x17, #-0x80             // =-128
                	str	w17, [x16, #0x1c]
-               	mov	x2, #0xa                // =10
+               	mov	x3, #0xa                // =10
                	movi	d0, #0000000000000000
-               	ldrsw	x3, [x29, #0x10]
-               	cmp	w0, w3
+               	ldrsw	x1, [x29, #0x10]
+               	cmp	w0, w1
                	b.ge	<addr>
-               	mov	x17, x1
+               	mov	x17, x2
                	str	x9, [sp, #-0x10]!
                	ldrsw	x16, [x17, #0x18]
                	cmp	x16, #0x0
@@ -70,21 +70,21 @@ Disassembly of section .text:
                	add	x9, x16, #0x10
                	str	x9, [x17]
                	ldr	x9, [sp], #0x10
-               	mov	x3, x16
+               	mov	x1, x16
                	sub	x4, x29, #0x30
-               	ldp	x16, x17, [x3]
+               	ldp	x16, x17, [x1]
                	stp	x16, x17, [x4]
                	mov	x16, #0x4059000000000000 // =4636737291354636288
                	fmov	d1, x16
-               	ldur	x3, [x29, #-0x30]
-               	mul	x3, x3, x2
-               	scvtf	d2, x3
+               	ldr	x4, [x1]
+               	mul	x4, x4, x3
+               	scvtf	d2, x4
                	fmadd	d0, d0, d1, d2
-               	ldur	d1, [x29, #-0x28]
+               	ldr	d1, [x1, #0x8]
                	fadd	d0, d0, d1
                	add	x0, x0, #0x1
-               	ldrsw	x3, [x29, #0x10]
-               	cmp	w0, w3
+               	ldrsw	x1, [x29, #0x10]
+               	cmp	w0, w1
                	b.lt	<addr>
                	sub	x0, x29, #0x20
                	add	sp, sp, #0x30

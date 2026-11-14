@@ -418,7 +418,7 @@ fn run_one(func: &mut FunctionSsa) {
             // A copy of a copy reads the first source; the load then
             // forwards from what that source holds.
             for _ in 0..copies.len() {
-                let Some(load) = copy_source(func, &copies, i) else {
+                let Some(load) = copy_source(func, &copies, i, &span) else {
                     break;
                 };
                 func.insts[i] = load;
@@ -504,6 +504,7 @@ fn run_one(func: &mut FunctionSsa) {
                     size,
                     src,
                     align,
+                    idx: i as u32,
                 });
             }
             match &func.insts[i] {
@@ -999,13 +1000,20 @@ struct Copied {
     size: i64,
     src: ValueId,
     align: u32,
+    /// The copy's own index.
+    idx: u32,
 }
 
-/// The frame load of the copy source a frame load `i` within one of
-/// `copies` becomes, when the source is a frame object: the same bytes of
-/// it, at an alignment the copy proves at that offset. A source behind a
-/// pointer would keep the pointer live to the load.
-fn copy_source(func: &FunctionSsa, copies: &[Copied], i: usize) -> Option<Inst> {
+/// The load of the copy source a frame load `i` within one of `copies`
+/// becomes: the same bytes of it, at an alignment the copy proves at that
+/// offset. A source behind a pointer keeps the pointer live to the load,
+/// so it is read there only within [`MAX_FORWARD_DISTANCE`] of the copy.
+fn copy_source(
+    func: &FunctionSsa,
+    copies: &[Copied],
+    i: usize,
+    span: &impl Fn(u32, usize) -> u32,
+) -> Option<Inst> {
     let Inst::LoadLocal {
         off,
         disp,
@@ -1032,6 +1040,19 @@ fn copy_source(func: &FunctionSsa, copies: &[Copied], i: usize) -> Option<Inst> 
             disp: i32::try_from(sat).ok()?,
             kind,
             volatile: false,
+        }),
+        Inst::LocalAddr(_) => None,
+        _ if span(c.idx, i) <= MAX_FORWARD_DISTANCE => Some(Inst::Load {
+            addr: s,
+            disp: i32::try_from(sat).ok()?,
+            kind,
+            volatile: false,
+            align: if i64::from(proven) >= w {
+                0
+            } else {
+                proven as u8
+            },
+            pc_rel: false,
         }),
         _ => None,
     }
@@ -2391,9 +2412,9 @@ mod tests {
         }
     }
 
-    /// A frame load of bytes a block copy filled from a frame object reads
-    /// that object at the same offset. A source behind a pointer, or a
-    /// store after the copy, keeps the frame load.
+    /// A frame load of bytes a block copy filled reads the copy's source at
+    /// the same offset: a frame object, or the pointer the copy read
+    /// through. A store after the copy keeps the frame load.
     #[test]
     fn a_load_of_copied_bytes_reads_the_copy_source() {
         for (src, stored, want) in [
@@ -2403,11 +2424,13 @@ mod tests {
                     kind: LoadKind::I64,
                 },
                 false,
-                Inst::LoadLocal {
-                    off: -2,
+                Inst::Load {
+                    addr: 0,
                     disp: 8,
                     kind: LoadKind::I64,
                     volatile: false,
+                    align: 0,
+                    pc_rel: false,
                 },
             ),
             (

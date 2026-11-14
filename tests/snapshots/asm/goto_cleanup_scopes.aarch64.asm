@@ -322,16 +322,16 @@ Disassembly of section .text:
                	mov	x3, #0x0                // =0
                	stur	w3, [x29, #-0x8]
                	sub	x5, x29, #0x10
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldp	x16, x17, [x0]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldp	x16, x17, [x1]
                	stp	x16, x17, [x5]
                	adrp	x6, <addr>
                	add	x6, x6, <lo12>
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
                	adrp	x0, <page>
-               	ldur	x2, [x29, #-0x8]
+               	ldr	x2, [x1, #0x8]
                	mov	x1, x3
                	br	x2
                	ldrsw	x2, [x0, #0x70]

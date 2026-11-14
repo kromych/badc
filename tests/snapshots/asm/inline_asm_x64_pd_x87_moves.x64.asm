@@ -230,12 +230,12 @@ Disassembly of section .text:
                	leaq	-0x68(%rbp), %rcx
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%rcx)
-               	movsd	-0x68(%rbp), %xmm0
+               	movsd	<rip>, %xmm0 # <addr>
                	movsd	<rip>, %xmm1 # <addr>
                	ucomisd	%xmm1, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	movsd	-0x60(%rbp), %xmm0
+               	movsd	<rip>, %xmm0 # <addr>
                	movsd	<rip>, %xmm1 # <addr>
                	ucomisd	%xmm1, %xmm0
                	jp	<addr>

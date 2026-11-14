@@ -38,12 +38,12 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x10
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldp	x16, x17, [x1]
-               	stp	x16, x17, [x0]
-               	ldur	s1, [x29, #-0x10]
+               	sub	x1, x29, #0x10
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldp	x16, x17, [x0]
+               	stp	x16, x17, [x1]
+               	ldr	s1, [x0]
                	fcvt	d1, s1
                	fadd	d1, d1, d0
                	fcvt	s1, d1
@@ -75,14 +75,14 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x18
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldp	x16, x17, [x1]
-               	stp	x16, x17, [x0]
-               	ldr	x16, [x1, #0x10]
-               	str	x16, [x0, #0x10]
-               	ldur	d2, [x29, #-0x10]
+               	sub	x1, x29, #0x18
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldp	x16, x17, [x0]
+               	stp	x16, x17, [x1]
+               	ldr	x16, [x0, #0x10]
+               	str	x16, [x1, #0x10]
+               	ldr	d2, [x0, #0x8]
                	fadd	d2, d2, d0
                	stur	d2, [x29, #-0x10]
                	ldur	d3, [x29, #-0x8]

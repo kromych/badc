@@ -61,14 +61,14 @@ Disassembly of section .text:
                	negq	%rcx
                	addq	%r9, %rcx
                	jmp	<addr>
-               	leaq	-0x28(%rbp), %rax
-               	leaq	-0x20(%rbp), %rcx
+               	leaq	-0x28(%rbp), %rcx
+               	leaq	-0x20(%rbp), %rax
                	movq	%r12, %r8
                	shlq	$0x3, %r8
-               	addq	%r8, %rcx
-               	movq	(%rcx), %r10
-               	movq	%r10, (%rax)
-               	movq	-0x28(%rbp), %rax
+               	addq	%r8, %rax
+               	movq	(%rax), %r10
+               	movq	%r10, (%rcx)
+               	movq	(%rax), %rax
                	cmpq	%rdx, %rax
                	jne	<addr>
                	incq	%r12

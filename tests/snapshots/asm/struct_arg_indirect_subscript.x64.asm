@@ -67,8 +67,8 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	movsd	-0x98(%rbp), %xmm1
-               	movsd	-0x90(%rbp), %xmm2
+               	movsd	<rip>, %xmm1
+               	movsd	<rip>, %xmm2
                	vmulsd	<rip>, %xmm2, %xmm0
                	vfmadd132sd	<rip>, %xmm0, %xmm1 # xmm1 = (xmm1 * mem) + xmm0
                	vaddsd	<rip>, %xmm1, %xmm1

@@ -1333,10 +1333,10 @@ Disassembly of section .text:
                	ldp	x16, x17, [x2, #0x10]
                	stp	x16, x17, [x1, #0x10]
                	ldur	q0, [x29, #-0x40]
-               	ldur	q1, [x29, #-0x20]
+               	ldr	q1, [x2]
                	ushl	v0.8h, v0.8h, v1.8h
                	ldur	q1, [x29, #-0x30]
-               	ldur	q2, [x29, #-0x10]
+               	ldr	q2, [x2, #0x10]
                	ushl	v1.8h, v1.8h, v2.8h
                	str	q0, [x0]
                	str	q1, [x0, #0x10]
@@ -1871,10 +1871,10 @@ Disassembly of section .text:
                	ldp	x16, x17, [x2, #0x10]
                	stp	x16, x17, [x1, #0x10]
                	ldur	q0, [x29, #-0x40]
-               	ldur	q1, [x29, #-0x20]
+               	ldr	q1, [x2]
                	ushl	v0.4s, v0.4s, v1.4s
                	ldur	q1, [x29, #-0x30]
-               	ldur	q2, [x29, #-0x10]
+               	ldr	q2, [x2, #0x10]
                	ushl	v1.4s, v1.4s, v2.4s
                	str	q0, [x0]
                	str	q1, [x0, #0x10]
@@ -2448,10 +2448,10 @@ Disassembly of section .text:
                	ldp	x16, x17, [x2, #0x10]
                	stp	x16, x17, [x1, #0x10]
                	ldur	q0, [x29, #-0x40]
-               	ldur	q1, [x29, #-0x20]
+               	ldr	q1, [x2]
                	ushl	v0.2d, v0.2d, v1.2d
                	ldur	q1, [x29, #-0x30]
-               	ldur	q2, [x29, #-0x10]
+               	ldr	q2, [x2, #0x10]
                	ushl	v1.2d, v1.2d, v2.2d
                	str	q0, [x0]
                	str	q1, [x0, #0x10]

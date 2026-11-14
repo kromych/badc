@@ -8870,3 +8870,22 @@ int main(void) { return rec(5) & 1; }\n";
     let insns = x64(SRC, "main");
     assert!(!insns.is_empty());
 }
+
+/// A constant-size copy into a local read back whole right after is one
+/// load from the source: no frame slot, no store, no reload.
+#[test]
+fn x64_a_value_copied_out_by_memcpy_is_loaded_from_its_source() {
+    const SRC: &str = "#include <string.h>\n\
+#include <stdint.h>\n\
+static inline uint32_t read_u32(const uint16_t *p) { uint32_t v; memcpy(&v, p, sizeof v); return v; }\n\
+static inline uint64_t read_u64(const uint16_t *p) { uint64_t v; memcpy(&v, p, sizeof v); return v; }\n\
+uint64_t f(const uint16_t *p) { return read_u32(p + 1) + read_u64(p + 3); }\n";
+    let insns = x64(SRC, "f");
+    let frame = |i: &X64Insn| matches!(i.mem_base(), Some(4 | 5)) && !i.reg_form();
+    assert!(!insns.iter().any(frame), "{insns:x?}");
+    let loads = insns
+        .iter()
+        .filter(|i| i.op == 0x8B && !i.reg_form())
+        .count();
+    assert_eq!(loads, 2, "{insns:x?}");
+}

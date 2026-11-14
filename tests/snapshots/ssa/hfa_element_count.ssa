@@ -62,11 +62,11 @@ fn ent_pc=24 n_params=0 variadic=false locals=4
     v56  Imm(4602678819172646912)                         -> x1
     v57  Imm(0)                                           -> x1
     v58  LocalAddr(-4)                                    -> x1
-    v59  ImmData(8)                                       -> x2
-    v60  Mcpy { dst=v58, src=v59, size=8, align=8 }       -> -
+    v59  ImmData(8)                                       -> x1
+    v60  Imm(0)                                           -> x1
     v61  LocalAddr(-4)                                    -> x1
     v62  LocalAddr(-4)                                    -> x1
-    v63  LoadLocal { off=-4, kind=F64 }                   -> d0
+    v63  Load { addr=v59, disp=0, kind=F64 pc_rel }       -> d0
     v64  Imm(4612811918334230528)                         -> d1
     v65  Binop { op=fne, lhs=v63, rhs=v64 }               -> x1
     terminator Bz { cond=v65, target=b2, fall=b1 }   (exit_acc=v65)
@@ -278,7 +278,7 @@ fn ent_pc=24 n_params=0 variadic=false locals=4
     v302 Mcpy { dst=v300, src=v301, size=8, align=8 }     -> -
     v303 LocalAddr(-1)                                    -> x1
     v304 Imm(4602678819172646912)                         -> d0
-    v305 LoadLocal { off=-1, kind=F64 }                   -> d2
+    v305 Load { addr=v301, disp=0, kind=F64 pc_rel }      -> d2
     v306 Imm(4621819117588971520)                         -> d1
     v307 Binop { op=fmul.c, lhs=v305, rhs=v306 }          -> d3
     v308 Fma { a=v305, b=v306, c=v304, neg_product=false, neg_addend=false } -> d2
@@ -302,16 +302,16 @@ fn ent_pc=24 n_params=0 variadic=false locals=4
     v350 Mcpy { dst=v4, src=v349, size=12, align=8 }      -> -
     v351 LocalAddr(-2)                                    -> x0
     v352 Imm(4602678819172646912)                         -> x0
-    v353 LoadLocal { off=-2, kind=F32 }                   -> d2 [f32]
+    v353 Load { addr=v349, disp=0, kind=F32 pc_rel }      -> d2 [f32]
     v354 Imm(1120403456)                                  -> d3 [f32]
     v355 Binop { op=fmul.c, lhs=v353, rhs=v354 }          -> d3 [f32]
     v356 BinopI { op=add, lhs=v351, rhs_imm=4 }           -> x0
-    v357 LoadLocal { off=-2, disp=4, kind=F32 }           -> d3 [f32]
+    v357 Load { addr=v349, disp=4, kind=F32 pc_rel }      -> d3 [f32]
     v358 Imm(1092616192)                                  -> d4 [f32]
     v359 Binop { op=fmul.c, lhs=v357, rhs=v358 }          -> d3 [f32]
     v360 Fma { a=v353, b=v354, c=v359, neg_product=false, neg_addend=false } -> d2 [f32]
     v361 BinopI { op=add, lhs=v351, rhs_imm=8 }           -> x0
-    v362 LoadLocal { off=-2, disp=8, kind=F32 }           -> d3 [f32]
+    v362 Load { addr=v349, disp=8, kind=F32 pc_rel }      -> d3 [f32]
     v363 Binop { op=fadd, lhs=v360, rhs=v362 }            -> d2 [f32]
     v364 FpCast { kind=F32ToF64, value=v363 }             -> d2
     v365 Binop { op=fadd, lhs=v364, rhs=v304 }            -> d3
@@ -335,16 +335,16 @@ fn ent_pc=24 n_params=0 variadic=false locals=4
     v379 Mcpy { dst=v377, src=v378, size=24, align=8 }    -> -
     v380 LocalAddr(-3)                                    -> x1
     v381 Imm(4602678819172646912)                         -> x1
-    v382 LoadLocal { off=-3, kind=F64 }                   -> d3
+    v382 Load { addr=v378, disp=0, kind=F64 pc_rel }      -> d3
     v383 Imm(4636737291354636288)                         -> d4
     v384 Binop { op=fmul.c, lhs=v382, rhs=v383 }          -> d4
     v385 BinopI { op=add, lhs=v377, rhs_imm=8 }           -> x1
-    v386 LoadLocal { off=-3, disp=8, kind=F64 }           -> d4
+    v386 Load { addr=v378, disp=8, kind=F64 pc_rel }      -> d4
     v387 Imm(4621819117588971520)                         -> x1
     v388 Binop { op=fmul.c, lhs=v386, rhs=v306 }          -> d1
     v389 Fma { a=v382, b=v383, c=v388, neg_product=false, neg_addend=false } -> d1
     v390 BinopI { op=add, lhs=v377, rhs_imm=16 }          -> x1
-    v391 LoadLocal { off=-3, disp=16, kind=F64 }          -> d3
+    v391 Load { addr=v378, disp=16, kind=F64 pc_rel }     -> d3
     v392 Binop { op=fadd, lhs=v389, rhs=v391 }            -> d1
     v393 Binop { op=fadd, lhs=v392, rhs=v304 }            -> d0
     v394 LifetimeEnd(-3)                                  -> -
@@ -367,16 +367,16 @@ fn ent_pc=24 n_params=0 variadic=false locals=4
     v407 Mcpy { dst=v377, src=v406, size=24, align=8 }    -> -
     v408 LocalAddr(-3)                                    -> x0
     v409 Imm(4602678819172646912)                         -> d0
-    v410 LoadLocal { off=-3, kind=F64 }                   -> d2
+    v410 Load { addr=v406, disp=0, kind=F64 pc_rel }      -> d2
     v411 Imm(4636737291354636288)                         -> d1
     v412 Binop { op=fmul.c, lhs=v410, rhs=v411 }          -> d1
     v413 BinopI { op=add, lhs=v377, rhs_imm=8 }           -> x0
-    v414 LoadLocal { off=-3, disp=8, kind=F64 }           -> d3
+    v414 Load { addr=v406, disp=8, kind=F64 pc_rel }      -> d3
     v415 Imm(4621819117588971520)                         -> d1
     v416 Binop { op=fmul.c, lhs=v414, rhs=v415 }          -> d3
     v417 Fma { a=v410, b=v411, c=v416, neg_product=false, neg_addend=false } -> d2
     v418 BinopI { op=add, lhs=v377, rhs_imm=16 }          -> x0
-    v419 LoadLocal { off=-3, disp=16, kind=F64 }          -> d3
+    v419 Load { addr=v406, disp=16, kind=F64 pc_rel }     -> d3
     v420 Binop { op=fadd, lhs=v417, rhs=v419 }            -> d2
     v421 Binop { op=fadd, lhs=v420, rhs=v409 }            -> d2
     v422 LifetimeEnd(-3)                                  -> -

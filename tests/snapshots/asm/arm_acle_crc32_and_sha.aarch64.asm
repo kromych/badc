@@ -66,9 +66,6 @@ Disassembly of section .text:
                	ret
 
 <crc_acle>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	mov	x0, #0xffffffff         // =4294967295
                	sxtw	x2, w2
                	b	<addr>
@@ -76,37 +73,28 @@ Disassembly of section .text:
                	add	x1, x1, #0x8
                	cmp	w2, #0x8
                	b.lt	<addr>
-               	sub	x4, x29, #0x8
-               	ldr	x16, [x1]
-               	str	x16, [x4]
                	cbz	w3, <addr>
                	mov	w0, w0
-               	ldur	x4, [x29, #-0x8]
+               	ldr	x4, [x1]
                	crc32cx	w0, w0, x4
                	b	<addr>
                	mov	w0, w0
-               	ldur	x4, [x29, #-0x8]
+               	ldr	x4, [x1]
                	crc32x	w0, w0, x4
                	b	<addr>
                	cmp	w2, #0x4
                	b.lt	<addr>
-               	sub	x4, x29, #0x8
-               	ldr	w16, [x1]
-               	str	w16, [x4]
                	cbz	w3, <addr>
                	mov	w0, w0
-               	ldur	w4, [x29, #-0x8]
+               	ldr	w4, [x1]
                	crc32cw	w0, w0, w4
                	add	x1, x1, #0x4
                	sub	x2, x2, #0x4
                	cmp	w2, #0x2
                	b.lt	<addr>
-               	sub	x4, x29, #0x8
-               	ldrh	w16, [x1]
-               	strh	w16, [x4]
                	cbz	w3, <addr>
                	mov	w0, w0
-               	ldurh	w4, [x29, #-0x8]
+               	ldrh	w4, [x1]
                	crc32ch	w0, w0, w4
                	add	x1, x1, #0x2
                	sub	x2, x2, #0x2
@@ -115,19 +103,17 @@ Disassembly of section .text:
                	mov	w0, w0
                	ldrb	w1, [x1]
                	crc32cb	w0, w0, w1
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	w0, w0
                	ldrb	w1, [x1]
                	crc32b	w0, w0, w1
                	b	<addr>
                	mov	w0, w0
-               	ldurh	w4, [x29, #-0x8]
+               	ldrh	w4, [x1]
                	crc32h	w0, w0, w4
                	b	<addr>
                	mov	w0, w0
-               	ldur	w4, [x29, #-0x8]
+               	ldr	w4, [x1]
                	crc32w	w0, w0, w4
                	b	<addr>
 

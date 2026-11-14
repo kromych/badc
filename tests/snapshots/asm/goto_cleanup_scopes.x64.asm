@@ -295,7 +295,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%rdi)
-               	movq	-0x8(%rbp), %rcx
+               	movq	<rip>, %rcx
                	movq	%rdx, %rax
                	jmpq	*%rcx
                	leaq	<rip>, %rcx # <addr>

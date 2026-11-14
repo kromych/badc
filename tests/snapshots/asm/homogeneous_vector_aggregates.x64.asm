@@ -75,11 +75,11 @@ Disassembly of section .text:
                	leaq	-0xe0(%rbp), %rdx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rdx)
-               	movss	-0xe0(%rbp), %xmm1
+               	movss	(%rcx), %xmm1
                	vmulss	<rip>, %xmm1, %xmm1
                	cvtss2sd	%xmm1, %xmm1
                	vfmadd231sd	<rip>, %xmm0, %xmm1 # xmm1 = (xmm0 * mem) + xmm1
-               	movss	-0xd4(%rbp), %xmm0
+               	movss	0xc(%rcx), %xmm0
                	cvtss2sd	%xmm0, %xmm0
                	vaddsd	%xmm0, %xmm1, %xmm0
                	incq	%rax
@@ -136,17 +136,17 @@ Disassembly of section .text:
                	movups	%xmm14, (%rdx)
                	movups	0x10(%rcx), %xmm14
                	movups	%xmm14, 0x10(%rdx)
-               	movss	-0xe4(%rbp), %xmm1
+               	movss	0xc(%rcx), %xmm1
                	vmulss	<rip>, %xmm1, %xmm1
                	cvtss2sd	%xmm1, %xmm1
                	vfmadd231sd	<rip>, %xmm0, %xmm1 # xmm1 = (xmm0 * mem) + xmm1
-               	movl	-0xdc(%rbp), %ecx
-               	imulq	$0xa, %rcx, %rcx
-               	movslq	%ecx, %rcx
+               	movl	0x14(%rcx), %edx
+               	imulq	$0xa, %rdx, %rdx
+               	movslq	%edx, %rdx
                	xorps	%xmm0, %xmm0
-               	cvtsi2sd	%rcx, %xmm0
+               	cvtsi2sd	%rdx, %xmm0
                	vaddsd	%xmm0, %xmm1, %xmm0
-               	movss	-0xf0(%rbp), %xmm1
+               	movss	(%rcx), %xmm1
                	cvtss2sd	%xmm1, %xmm1
                	addsd	%xmm1, %xmm0
                	incq	%rax
@@ -200,15 +200,15 @@ Disassembly of section .text:
                	movups	%xmm14, (%rdx)
                	movq	0x10(%rcx), %r10
                	movq	%r10, 0x10(%rdx)
-               	movss	-0x18(%rbp), %xmm1
+               	movss	(%rcx), %xmm1
                	vmulss	<rip>, %xmm1, %xmm1
                	cvtss2sd	%xmm1, %xmm1
                	vfmadd231sd	<rip>, %xmm0, %xmm1 # xmm1 = (xmm0 * mem) + xmm1
-               	movss	-0xc(%rbp), %xmm0
+               	movss	0xc(%rcx), %xmm0
                	vmulss	<rip>, %xmm0, %xmm0
                	cvtss2sd	%xmm0, %xmm0
                	vaddsd	%xmm0, %xmm1, %xmm0
-               	movss	-0x8(%rbp), %xmm1
+               	movss	0x10(%rcx), %xmm1
                	cvtss2sd	%xmm1, %xmm1
                	addsd	%xmm1, %xmm0
                	incq	%rax

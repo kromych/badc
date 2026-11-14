@@ -282,10 +282,10 @@ Disassembly of section .text:
                	leaq	(%rsp), %rax
                	vmovups	(%r12), %ymm14
                	vmovups	%ymm14, (%rax)
-               	movq	(%rsp), %r13
-               	movq	0x8(%rsp), %r14
-               	movq	0x10(%rsp), %r15
-               	movq	0x18(%rsp), %r10
+               	movq	(%r12), %r13
+               	movq	0x8(%r12), %r14
+               	movq	0x10(%r12), %r15
+               	movq	0x18(%r12), %r10
                	movq	%r10, -0x58(%rbp)
                	xorl	%ebx, %ebx
                	movq	%rbx, %rcx
@@ -5509,24 +5509,24 @@ Disassembly of section .text:
                	leaq	(%rsp), %rax
                	vmovups	(%rbx), %ymm14
                	vmovups	%ymm14, (%rax)
-               	movq	(%rsp), %r10
+               	movq	(%rbx), %r10
                	movq	%r10, -0x50(%rbp)
-               	movq	0x8(%rsp), %r10
+               	movq	0x8(%rbx), %r10
                	movq	%r10, -0x58(%rbp)
-               	movq	0x10(%rsp), %r10
+               	movq	0x10(%rbx), %r10
                	movq	%r10, -0x60(%rbp)
-               	movq	0x18(%rsp), %r10
+               	movq	0x18(%rbx), %r10
                	movq	%r10, -0x68(%rbp)
                	leaq	(%rsp), %rax
                	vmovups	(%r12), %ymm14
                	vmovups	%ymm14, (%rax)
-               	movq	(%rsp), %r10
+               	movq	(%r12), %r10
                	movq	%r10, -0x70(%rbp)
-               	movq	0x8(%rsp), %r10
+               	movq	0x8(%r12), %r10
                	movq	%r10, -0x78(%rbp)
-               	movq	0x10(%rsp), %r10
+               	movq	0x10(%r12), %r10
                	movq	%r10, -0x80(%rbp)
-               	movq	0x18(%rsp), %r10
+               	movq	0x18(%r12), %r10
                	movq	%r10, -0x88(%rbp)
                	xorl	%r10d, %r10d
                	movq	%r10, -0x48(%rbp)

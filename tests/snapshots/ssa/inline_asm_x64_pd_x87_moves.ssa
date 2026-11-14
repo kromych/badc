@@ -310,14 +310,14 @@ fn ent_pc=4 n_params=0 variadic=false locals=13
     v27  LocalAddr(-13)                                   -> x1
     v28  Mcpy { dst=v27, src=v25, size=16, align=1 }      -> -
     v29  LocalAddr(-13)                                   -> x0
-    v30  LoadLocal { off=-13, kind=F64 }                  -> d0
+    v30  Load { addr=v21, disp=24, kind=F64, align=1 pc_rel } -> d0
     v31  Imm(4608308318706860032)                         -> d1
     v32  Binop { op=feq, lhs=v30, rhs=v31 }               -> x0
     terminator Bz { cond=v32, target=b39, fall=b36 }   (exit_acc=v32)
   block 36  start_pc=0
     v33  LocalAddr(-13)                                   -> x0
     v34  BinopI { op=add, lhs=v27, rhs_imm=8 }            -> x0
-    v35  LoadLocal { off=-13, disp=8, kind=F64 }          -> d0
+    v35  Load { addr=v21, disp=32, kind=F64, align=1 pc_rel } -> d0
     v36  Imm(-4608308318706860032)                        -> d1
     v37  Binop { op=feq, lhs=v35, rhs=v36 }               -> x0
     v38  Imm(0)                                           -> x1

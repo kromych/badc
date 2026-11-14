@@ -66,17 +66,17 @@ Disassembly of section .text:
                	movk	x4, #0x1122, lsl #16
                	stur	w4, [x29, #-0x8]
                	str	w4, [x5]
-               	add	x4, x0, #0x1d
-               	mov	x0, #0x3348             // =13128
-               	movk	x0, #0x1122, lsl #16
-               	stur	w0, [x29, #-0x8]
-               	str	w0, [x4]
+               	add	x5, x0, #0x1d
+               	mov	x4, #0x3348             // =13128
+               	movk	x4, #0x1122, lsl #16
+               	stur	w4, [x29, #-0x8]
+               	str	w4, [x5]
                	ldr	w16, [x1]
                	str	w16, [x3]
-               	ldur	w0, [x29, #-0x8]
+               	ldur	w1, [x0, #0x1]
                	mov	x17, #0x3344            // =13124
                	movk	x17, #0x1122, lsl #16
-               	cmp	w0, w17
+               	cmp	w1, w17
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x420
@@ -84,7 +84,7 @@ Disassembly of section .text:
                	ret
                	ldr	w16, [x2]
                	str	w16, [x3]
-               	ldur	w0, [x29, #-0x8]
+               	ldr	w0, [x0, #0x8]
                	mov	x17, #0x3345            // =13125
                	movk	x17, #0x1122, lsl #16
                	cmp	w0, w17
@@ -95,7 +95,7 @@ Disassembly of section .text:
                	sub	x1, x29, #0x8
                	ldr	w16, [x2]
                	str	w16, [x1]
-               	ldur	w2, [x29, #-0x8]
+               	ldur	w2, [x0, #0xf]
                	mov	x17, #0x3346            // =13126
                	movk	x17, #0x1122, lsl #16
                	cmp	w2, w17
@@ -103,7 +103,7 @@ Disassembly of section .text:
                	add	x2, x0, #0x16
                	ldr	w16, [x2]
                	str	w16, [x1]
-               	ldur	w2, [x29, #-0x8]
+               	ldur	w2, [x0, #0x16]
                	mov	x17, #0x3347            // =13127
                	movk	x17, #0x1122, lsl #16
                	cmp	w2, w17
@@ -111,7 +111,7 @@ Disassembly of section .text:
                	add	x2, x0, #0x1d
                	ldr	w16, [x2]
                	str	w16, [x1]
-               	ldur	w1, [x29, #-0x8]
+               	ldur	w1, [x0, #0x1d]
                	mov	x17, #0x3348            // =13128
                	movk	x17, #0x1122, lsl #16
                	cmp	w1, w17

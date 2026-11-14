@@ -531,12 +531,9 @@ static inline __m64 _mm_insert_pi16(__m64 __A, int __D, int __N) {
     return (__m64)__a;
 }
 
-static inline __m64 _mm_shuffle_pi16(__m64 __A, int __N) {
-    __v4hi __a = (__v4hi)__A, __r;
-    for (int __i = 0; __i < 4; __i++)
-        __r[__i] = __a[(__N >> (2 * __i)) & 3];
-    return (__m64)__r;
-}
+/* PSHUFW: PSHUFLW on the operand in the low half. */
+#define _mm_shuffle_pi16(A, N)                                                     \
+    __BADC_M64_LOW(__builtin_ia32_pshuflw((__badc_v8hi_)__BADC_M64_PAIR((A), 0), (int)(N)))
 
 __BADC_INTRIN __m64 _mm_max_pi16(__m64 __A, __m64 __B) {
     return (__m64)__builtin_ia32_pmaxsw((__v4hi)__A, (__v4hi)__B);
@@ -554,12 +551,10 @@ __BADC_INTRIN __m64 _mm_min_pu8(__m64 __A, __m64 __B) {
     return (__m64)__builtin_ia32_pminub((__v8qi)__A, (__v8qi)__B);
 }
 
-static inline int _mm_movemask_pi8(__m64 __A) {
-    __v8qu __a = (__v8qu)__A;
-    int __r = 0;
-    for (int __i = 0; __i < 8; __i++)
-        __r |= (__a[__i] >> 7) << __i;
-    return __r;
+/* PMOVMSKB on __m64: the 128-bit form on the operand over a zero high half. */
+__BADC_INTRIN int _mm_movemask_pi8(__m64 __A) {
+    typedef char __v16qi_ __attribute__((__vector_size__(16)));
+    return __builtin_ia32_pmovmskb128((__v16qi_)__BADC_M64_PAIR(__A, 0));
 }
 
 __BADC_INTRIN __m64 _mm_mulhi_pu16(__m64 __A, __m64 __B) {

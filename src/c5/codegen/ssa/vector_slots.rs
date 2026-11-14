@@ -600,12 +600,17 @@ fn split_wide_reads(func: &mut FunctionSsa) {
     }
 }
 
-/// A 64-bit integer lane that a load reads only for one insert into a
-/// 16-byte vector, loaded as the bits of a double: the load fills an FP
-/// register, which the insert takes as it is, with no trip through a
-/// general one (x86-64 `vmovq` into the low lane over a vector of no value,
-/// `vunpcklpd` pairing it with the high one).
+/// A 64-bit integer lane that a load, or the read of an 8-byte vector's
+/// bits, gives only to one insert into a 16-byte vector, taken as the bits
+/// of a double: the load fills an FP register, the 8-byte vector is one,
+/// and the insert takes it as it is, with no trip through a general one
+/// (x86-64 `vmovq` into the low lane over a vector of no value,
+/// `vunpcklpd` pairing it with the high one). A zero inserted into the high
+/// lane over such a low insert makes the vector under it the zero, and a
+/// 64-bit lane read out only to be taken as a double is read as one.
 pub(crate) fn fp_lane_loads(func: &mut FunctionSsa) {
+    zero_high_lanes(func);
+    fp_lane_reads(func);
     let uses = super::reg_alloc::compute_use_counts(func);
     let lane_load = |inst: &Inst| {
         matches!(
@@ -637,7 +642,8 @@ pub(crate) fn fp_lane_loads(func: &mut FunctionSsa) {
                 bytes: 16,
             } if uses[v] > 0
                 && uses[value as usize] == 1
-                && lane_load(&func.insts[value as usize])
+                && (lane_load(&func.insts[value as usize])
+                    || bits_of_pair(func, value).is_some())
                 && (off == 8 || matches!(func.insts[vec as usize], Inst::Undef | Inst::Imm(0))) =>
             {
                 Some((v, value))
@@ -646,8 +652,10 @@ pub(crate) fn fp_lane_loads(func: &mut FunctionSsa) {
         })
         .collect();
     for (v, value) in sites {
-        if let Inst::VecInsert { kind, .. } = &mut func.insts[v] {
+        let pair = bits_of_pair(func, value);
+        if let Inst::VecInsert { kind, value: x, .. } = &mut func.insts[v] {
             *kind = StoreKind::F64;
+            *x = pair.unwrap_or(*x);
         }
         match &mut func.insts[value as usize] {
             Inst::Load { kind, .. }
@@ -657,6 +665,96 @@ pub(crate) fn fp_lane_loads(func: &mut FunctionSsa) {
             }
             _ => {}
         }
+    }
+}
+
+/// A 64-bit lane of a 16-byte vector that only a bit cast to a double
+/// reads, read as the double (`FpCast { BitsFp }` of a `VecExtract`).
+fn fp_lane_reads(func: &mut FunctionSsa) {
+    let uses = super::reg_alloc::compute_use_counts(func);
+    for v in 0..func.insts.len() {
+        let Inst::FpCast {
+            kind: super::super::ir::FpCastKind::BitsFp,
+            value,
+        } = func.insts[v]
+        else {
+            continue;
+        };
+        if let Inst::VecExtract {
+            vec,
+            off,
+            kind: LoadKind::I64,
+            bytes: 16,
+        } = func.insts[value as usize]
+            && uses[value as usize] == 1
+        {
+            func.insts[v] = Inst::VecExtract {
+                vec,
+                off,
+                kind: LoadKind::F64,
+                bytes: 16,
+            };
+        }
+    }
+}
+
+/// The 8-byte vector whose whole bits `v` reads as an integer.
+fn bits_of_pair(func: &FunctionSsa, v: ValueId) -> Option<ValueId> {
+    match func.insts[v as usize] {
+        Inst::VecExtract {
+            vec,
+            off: 0,
+            kind: LoadKind::I64,
+            bytes: 8,
+        } => Some(vec),
+        _ => None,
+    }
+}
+
+/// A zero inserted into the high 64-bit lane of a 16-byte vector over an
+/// insert into the low lane of a vector of no value, each read once: the
+/// vector under the low insert becomes the zero and the high insert a copy.
+fn zero_high_lanes(func: &mut FunctionSsa) {
+    let uses = super::reg_alloc::compute_use_counts(func);
+    let half = |k: StoreKind| matches!(k, StoreKind::I64 | StoreKind::F64);
+    let sites: Vec<(usize, ValueId, ValueId)> = (func.insts.iter().enumerate())
+        .filter_map(|(v, inst)| {
+            let Inst::VecInsert {
+                vec: low,
+                value,
+                off: 8,
+                kind,
+                bytes: 16,
+            } = *inst
+            else {
+                return None;
+            };
+            let Inst::VecInsert {
+                vec: base,
+                off: 0,
+                kind: k,
+                bytes: 16,
+                ..
+            } = func.insts[low as usize]
+            else {
+                return None;
+            };
+            let zero = matches!(func.insts[value as usize], Inst::Imm(0));
+            (zero
+                && half(kind)
+                && half(k)
+                && uses[low as usize] == 1
+                && uses[base as usize] == 1
+                && matches!(func.insts[base as usize], Inst::Undef | Inst::Imm(0)))
+            .then_some((v, low, base))
+        })
+        .collect();
+    for (v, low, base) in sites {
+        func.insts[base as usize] = Inst::Imm(0);
+        func.insts[v] = Inst::Copy {
+            value: low,
+            is_fp: true,
+        };
     }
 }
 

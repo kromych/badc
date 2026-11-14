@@ -29,6 +29,42 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
+               	movabsq	$-0x4fffa012bfed4, %rax # imm = 0xFFFB0005FED4012C
+               	vmovq	%rax, %xmm0
+               	movabsq	$-0x7fff8000007fff81, %rax # imm = 0x80007FFFFF80007F
+               	vpinsrq	$0x1, %rax, %xmm0, %xmm0
+               	vpacksswb	%xmm0, %xmm0, %xmm0
+               	vmovq	%xmm0, %rax
+               	movabsq	$-0x7f807f8004fa7f81, %r11 # imm = 0x807F807FFB05807F
+               	cmpq	%r11, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	leave
+               	retq
+               	movabsq	$0xff0005fed4012c, %rax # imm = 0xFF0005FED4012C
+               	vmovq	%rax, %xmm0
+               	movabsq	$-0xff7fffffff00, %rax  # imm = 0xFFFF008000000100
+               	vpinsrq	$0x1, %rax, %xmm0, %xmm0
+               	vpackuswb	%xmm0, %xmm0, %xmm0
+               	vmovq	%xmm0, %rax
+               	movabsq	$0x8000ffff0500ff, %r11 # imm = 0x8000FFFF0500FF
+               	cmpq	%r11, %rax
+               	je	<addr>
+               	movl	$0x5, %eax
+               	leave
+               	retq
+               	movabsq	$-0x1116ffffeee90, %rax # imm = 0xFFFEEE9000011170
+               	vmovq	%rax, %xmm0
+               	movabsq	$-0xffffffff, %rax      # imm = 0xFFFFFFFF00000001
+               	vpinsrq	$0x1, %rax, %xmm0, %xmm0
+               	vpackssdw	%xmm0, %xmm0, %xmm0
+               	vmovq	%xmm0, %rax
+               	movabsq	$-0xfffe7fff8001, %r11  # imm = 0xFFFF000180007FFF
+               	cmpq	%r11, %rax
+               	je	<addr>
+               	movl	$0x6, %eax
+               	leave
+               	retq
                	movl	$0x64, %r11d
                	vmovd	%r11d, %xmm0
                	vpbroadcastb	%xmm0, %xmm0

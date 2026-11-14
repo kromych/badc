@@ -1,6 +1,6 @@
-; --- SSA dump (ok=true) ent_pc=439 ---
+; --- SSA dump (ok=true) ent_pc=437 ---
 ; name=check_sad_madd
-fn ent_pc=439 n_params=2 variadic=false locals=5
+fn ent_pc=437 n_params=2 variadic=false locals=5
   spill_count=0 gpr_used=[3, 12] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -256,9 +256,9 @@ fn ent_pc=439 n_params=2 variadic=false locals=5
     v131 LifetimeEnd(0)                                   -> -
     v132 LifetimeEnd(0)                                   -> -
     terminator Return(v125)   (exit_acc=v125)
-; --- SSA dump (ok=true) ent_pc=440 ---
+; --- SSA dump (ok=true) ent_pc=438 ---
 ; name=check_ps_logic
-fn ent_pc=440 n_params=2 variadic=false locals=2
+fn ent_pc=438 n_params=2 variadic=false locals=2
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -525,9 +525,9 @@ fn ent_pc=440 n_params=2 variadic=false locals=2
     v227 LifetimeEnd(0)                                   -> -
     v228 LifetimeEnd(0)                                   -> -
     terminator Return(v222)   (exit_acc=v222)
-; --- SSA dump (ok=true) ent_pc=441 ---
+; --- SSA dump (ok=true) ent_pc=439 ---
 ; name=main
-fn ent_pc=441 n_params=0 variadic=false locals=6
+fn ent_pc=439 n_params=0 variadic=false locals=6
   spill_count=2 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -1010,7 +1010,7 @@ fn ent_pc=441 n_params=0 variadic=false locals=6
     v255 Imm(0)                                           -> x0
     v256 LocalAddr(-6)                                    -> x7
     v257 LocalAddr(-4)                                    -> x6
-    v258 Call { target_pc=439, args=[v256, v257], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v258 Call { target_pc=437, args=[v256, v257], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v259 Extend { value=v258, kind=I32 }                  -> x1
     v260 BinopI { op=eq, lhs=v258, rhs_imm=0 }            -> x1
     v261 BinopI { op=eq, lhs=v260, rhs_imm=0 }            -> x1
@@ -1019,7 +1019,7 @@ fn ent_pc=441 n_params=0 variadic=false locals=6
     v137 Imm(0)                                           -> x0
     v138 LocalAddr(-6)                                    -> x7
     v139 LocalAddr(-4)                                    -> x6
-    v140 Call { target_pc=440, args=[v138, v139], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v140 Call { target_pc=438, args=[v138, v139], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v141 Extend { value=v140, kind=I32 }                  -> x1
     v142 BinopI { op=eq, lhs=v140, rhs_imm=0 }            -> x1
     v143 BinopI { op=eq, lhs=v142, rhs_imm=0 }            -> x1

@@ -254,8 +254,8 @@ Disassembly of section .text:
                	movq	(%rax), %r10
                	movq	%r10, (%rcx)
                	movsd	-0x8(%rbp), %xmm0
+               	vmovq	%xmm0, %xmm0            # xmm0 = xmm0[0],zero
                	xorl	%eax, %eax
-               	vpinsrq	$0x1, %rax, %xmm0, %xmm0
                	movups	%xmm0, -0x50(%rbp)
                	leaq	0x3(%r14), %rdx
                	movl	(%rdx), %r10d

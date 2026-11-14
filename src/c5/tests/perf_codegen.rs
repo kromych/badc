@@ -3236,6 +3236,41 @@ __m128i sad(__m128i a, __m128i b) { return _mm_mpsadbw_epu8(a, b, 5); }\n";
     m.finish();
 }
 
+/// The `__m64` forms run as their 128-bit instructions on the operands in
+/// xmm registers: a lane-wise one on the operand widened by one `vmovq`, a
+/// pairwise one, a pack and PALIGNR on the two operands paired by one
+/// `vunpcklpd`, and the result is the low half where it stands. An
+/// `__m64` widens to `__m128i` by one `vmovq` and narrows by none. Each
+/// was a loop over the lanes, and the widening a trip through a general
+/// register.
+#[test]
+fn the_m64_forms_are_their_128_bit_instructions() {
+    const SRC: &str = "#include <tmmintrin.h>\n\
+__m64 ab(__m64 a) { return _mm_abs_pi16(a); }\n\
+__m64 ha(__m64 a, __m64 b) { return _mm_hadd_pi16(a, b); }\n\
+__m64 al(__m64 a, __m64 b) { return _mm_alignr_pi8(a, b, 3); }\n\
+__m64 pk(__m64 a, __m64 b) { return _mm_packs_pi16(a, b); }\n\
+__m64 sw(__m64 a) { return _mm_shuffle_pi16(a, 0x1b); }\n\
+int mm(__m64 a) { return _mm_movemask_pi8(a); }\n\
+__m128i wide(__m64 a) { return _mm_movpi64_epi64(a); }\n\
+__m64 lo(__m128i a) { return _mm_movepi64_pi64(a); }\n";
+    let mut m = Misses::default();
+    for (name, len) in [
+        ("ab", 3),
+        ("ha", 3),
+        ("al", 3),
+        ("pk", 3),
+        ("sw", 3),
+        ("mm", 3),
+        ("wide", 2),
+        ("lo", 1),
+    ] {
+        let insns = x64(SRC, name);
+        m.expect(insns.len() == len, || format!("x86-64 {name}: {insns:x?}"));
+    }
+    m.finish();
+}
+
 /// A rounding intrinsic is its one instruction: `roundps` for
 /// `_mm_floor_ps`, `vroundpd` on ymm for `_mm256_round_pd` and the
 /// three-operand `vroundsd` for `_mm_ceil_sd`, and `ret`. Each was a C

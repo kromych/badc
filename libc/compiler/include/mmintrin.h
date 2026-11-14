@@ -105,37 +105,27 @@ static inline int __mm_sat_unsigned(int __v, int __bits) {
     return __v > __hi ? __hi : __v < 0 ? 0 : __v;
 }
 
-/* PACKSSWB, PACKSSDW, PACKUSWB: the first operand's lanes, then the
-** second's, each saturated to half the width. */
+/* The packs on __m64: the 128-bit form on the first operand's lanes
+** followed by the second's, whose low half holds the result. */
+typedef long long __badc_m64x2 __attribute__((__vector_size__(16)));
+typedef short __badc_v8hi_ __attribute__((__vector_size__(16)));
+typedef int __badc_v4si_ __attribute__((__vector_size__(16)));
+#define __BADC_M64_PAIR(A, B) ((__badc_m64x2){(long long)(A), (long long)(B)})
+#define __BADC_M64_LOW(V) ((__m64)((__badc_m64x2)(V))[0])
 
-static inline __m64 _mm_packs_pi16(__m64 __m1, __m64 __m2) {
-    __v4hi __a = (__v4hi)__m1, __b = (__v4hi)__m2;
-    __v8qs __r;
-    for (int __i = 0; __i < 4; __i++) {
-        __r[__i] = (signed char)__mm_sat_signed(__a[__i], 8);
-        __r[__i + 4] = (signed char)__mm_sat_signed(__b[__i], 8);
-    }
-    return (__m64)__r;
+__BADC_INTRIN __m64 _mm_packs_pi16(__m64 __m1, __m64 __m2) {
+    __badc_v8hi_ __p = (__badc_v8hi_)__BADC_M64_PAIR(__m1, __m2);
+    return __BADC_M64_LOW(__builtin_ia32_packsswb128(__p, __p));
 }
 
-static inline __m64 _mm_packs_pi32(__m64 __m1, __m64 __m2) {
-    __v2si __a = (__v2si)__m1, __b = (__v2si)__m2;
-    __v4hi __r;
-    for (int __i = 0; __i < 2; __i++) {
-        __r[__i] = (short)__mm_sat_signed(__a[__i], 16);
-        __r[__i + 2] = (short)__mm_sat_signed(__b[__i], 16);
-    }
-    return (__m64)__r;
+__BADC_INTRIN __m64 _mm_packs_pi32(__m64 __m1, __m64 __m2) {
+    __badc_v4si_ __p = (__badc_v4si_)__BADC_M64_PAIR(__m1, __m2);
+    return __BADC_M64_LOW(__builtin_ia32_packssdw128(__p, __p));
 }
 
-static inline __m64 _mm_packs_pu16(__m64 __m1, __m64 __m2) {
-    __v4hi __a = (__v4hi)__m1, __b = (__v4hi)__m2;
-    __v8qu __r;
-    for (int __i = 0; __i < 4; __i++) {
-        __r[__i] = (unsigned char)__mm_sat_unsigned(__a[__i], 8);
-        __r[__i + 4] = (unsigned char)__mm_sat_unsigned(__b[__i], 8);
-    }
-    return (__m64)__r;
+__BADC_INTRIN __m64 _mm_packs_pu16(__m64 __m1, __m64 __m2) {
+    __badc_v8hi_ __p = (__badc_v8hi_)__BADC_M64_PAIR(__m1, __m2);
+    return __BADC_M64_LOW(__builtin_ia32_packuswb128(__p, __p));
 }
 
 /* PUNPCKH*, PUNPCKL*: the lanes of the high or the low half of each

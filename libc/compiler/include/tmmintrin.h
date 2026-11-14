@@ -79,136 +79,49 @@ __BADC_INTRIN __m128i _mm_mulhrs_epi16(__m128i __X, __m128i __Y) {
 #define _mm_alignr_epi8(X, Y, N) \
     ((__m128i)__builtin_ia32_palignr128((__v2di)(__m128i)(X), (__v2di)(__m128i)(Y), (int)(N) * 8))
 
-/* PABS*: the magnitude as an unsigned lane, so the most negative value is
-** its own. */
-static inline __m64 _mm_abs_pi8(__m64 __X) {
-    __v8qs __x = (__v8qs)__X;
-    __v8qu __r;
-    for (int __i = 0; __i < 8; __i++)
-        __r[__i] = (unsigned char)(__x[__i] < 0 ? -__x[__i] : __x[__i]);
-    return (__m64)__r;
-}
-
-static inline __m64 _mm_abs_pi16(__m64 __X) {
-    __v4hi __x = (__v4hi)__X;
-    __v4hu __r;
-    for (int __i = 0; __i < 4; __i++)
-        __r[__i] = (unsigned short)(__x[__i] < 0 ? -__x[__i] : __x[__i]);
-    return (__m64)__r;
-}
-
-static inline __m64 _mm_abs_pi32(__m64 __X) {
-    __v2si __x = (__v2si)__X;
-    __v2su __r;
-    for (int __i = 0; __i < 2; __i++)
-        __r[__i] = __x[__i] < 0 ? 0u - (unsigned)__x[__i] : (unsigned)__x[__i];
-    return (__m64)__r;
-}
-
-/* PHADD*, PHSUB*: the sums or differences of adjacent lanes, the first
-** operand's pairs in the low half; wrapping, or saturating in the S forms. */
-static inline __m64 _mm_hadd_pi16(__m64 __X, __m64 __Y) {
-    __v4hu __x = (__v4hu)__X, __y = (__v4hu)__Y;
-    return (__m64)(__v4hu){(unsigned short)(__x[0] + __x[1]), (unsigned short)(__x[2] + __x[3]),
-                           (unsigned short)(__y[0] + __y[1]), (unsigned short)(__y[2] + __y[3])};
-}
-
-static inline __m64 _mm_hadd_pi32(__m64 __X, __m64 __Y) {
-    __v2su __x = (__v2su)__X, __y = (__v2su)__Y;
-    return (__m64)(__v2su){__x[0] + __x[1], __y[0] + __y[1]};
-}
-
-static inline __m64 _mm_hadds_pi16(__m64 __X, __m64 __Y) {
-    __v4hi __x = (__v4hi)__X, __y = (__v4hi)__Y;
-    return (__m64)(__v4hi){(short)__mm_sat_signed(__x[0] + __x[1], 16),
-                           (short)__mm_sat_signed(__x[2] + __x[3], 16),
-                           (short)__mm_sat_signed(__y[0] + __y[1], 16),
-                           (short)__mm_sat_signed(__y[2] + __y[3], 16)};
-}
-
-static inline __m64 _mm_hsub_pi16(__m64 __X, __m64 __Y) {
-    __v4hu __x = (__v4hu)__X, __y = (__v4hu)__Y;
-    return (__m64)(__v4hu){(unsigned short)(__x[0] - __x[1]), (unsigned short)(__x[2] - __x[3]),
-                           (unsigned short)(__y[0] - __y[1]), (unsigned short)(__y[2] - __y[3])};
-}
-
-static inline __m64 _mm_hsub_pi32(__m64 __X, __m64 __Y) {
-    __v2su __x = (__v2su)__X, __y = (__v2su)__Y;
-    return (__m64)(__v2su){__x[0] - __x[1], __y[0] - __y[1]};
-}
-
-static inline __m64 _mm_hsubs_pi16(__m64 __X, __m64 __Y) {
-    __v4hi __x = (__v4hi)__X, __y = (__v4hi)__Y;
-    return (__m64)(__v4hi){(short)__mm_sat_signed(__x[0] - __x[1], 16),
-                           (short)__mm_sat_signed(__x[2] - __x[3], 16),
-                           (short)__mm_sat_signed(__y[0] - __y[1], 16),
-                           (short)__mm_sat_signed(__y[2] - __y[3], 16)};
-}
-
-/* PMADDUBSW: unsigned bytes of the first operand by signed bytes of the
-** second, adjacent products summed with signed saturation. */
-static inline __m64 _mm_maddubs_pi16(__m64 __X, __m64 __Y) {
-    __v8qu __x = (__v8qu)__X;
-    __v8qs __y = (__v8qs)__Y;
-    __v4hi __r;
-    for (int __i = 0; __i < 4; __i++)
-        __r[__i] = (short)__mm_sat_signed(
-            __x[2 * __i] * __y[2 * __i] + __x[2 * __i + 1] * __y[2 * __i + 1], 16);
-    return (__m64)__r;
-}
-
-/* PMULHRSW: the product's bits 30:15, rounded at bit 14. */
-static inline __m64 _mm_mulhrs_pi16(__m64 __X, __m64 __Y) {
-    __v4hi __x = (__v4hi)__X, __y = (__v4hi)__Y;
-    __v4hu __r;
-    for (int __i = 0; __i < 4; __i++)
-        __r[__i] = (unsigned short)((((__x[__i] * __y[__i]) >> 14) + 1) >> 1);
-    return (__m64)__r;
-}
-
-/* PSHUFB: a byte of the first operand selected by the low three bits of
-** the selector byte, or zero where its top bit is set. */
-static inline __m64 _mm_shuffle_pi8(__m64 __X, __m64 __Y) {
-    __v8qi __x = (__v8qi)__X, __r;
-    __v8qu __y = (__v8qu)__Y;
-    for (int __i = 0; __i < 8; __i++)
-        __r[__i] = __y[__i] & 0x80 ? 0 : __x[__y[__i] & 7];
-    return (__m64)__r;
-}
-
-/* PSIGN*: the lane negated where the second operand's is negative, zero
-** where it is zero; the negation wraps. */
-static inline __m64 _mm_sign_pi8(__m64 __X, __m64 __Y) {
-    __v8qs __x = (__v8qs)__X, __y = (__v8qs)__Y;
-    __v8qu __r;
-    for (int __i = 0; __i < 8; __i++)
-        __r[__i] = (unsigned char)(__y[__i] < 0 ? -__x[__i] : __y[__i] ? __x[__i] : 0);
-    return (__m64)__r;
-}
-
-static inline __m64 _mm_sign_pi16(__m64 __X, __m64 __Y) {
-    __v4hi __x = (__v4hi)__X, __y = (__v4hi)__Y;
-    __v4hu __r;
-    for (int __i = 0; __i < 4; __i++)
-        __r[__i] = (unsigned short)(__y[__i] < 0 ? -__x[__i] : __y[__i] ? __x[__i] : 0);
-    return (__m64)__r;
-}
-
-static inline __m64 _mm_sign_pi32(__m64 __X, __m64 __Y) {
-    __v2si __x = (__v2si)__X, __y = (__v2si)__Y;
-    __v2su __r;
-    for (int __i = 0; __i < 2; __i++)
-        __r[__i] = __y[__i] < 0 ? 0u - (unsigned)__x[__i] : __y[__i] ? (unsigned)__x[__i] : 0u;
-    return (__m64)__r;
-}
-
-/* PALIGNR: eight bytes from byte __N of the second operand followed by the
-** first, zero past the sixteenth. */
-static inline __m64 _mm_alignr_pi8(__m64 __X, __m64 __Y, int __N) {
-    __v8qu __x = (__v8qu)__X, __y = (__v8qu)__Y, __r;
-    for (int __i = 0; __i < 8; __i++) {
-        unsigned __k = (unsigned)__N + __i;
-        __r[__i] = __k < 8 ? __y[__k] : __k < 16 ? __x[__k - 8] : 0;
+/* The __m64 forms: the 128-bit instruction on the operand in the low half,
+** or on the first operand's lanes followed by the second's where the lanes
+** of the two meet (the pairwise forms, PSHUFB's selection, PALIGNR's
+** shift). */
+#define __BADC_M64_1(name, form)                                                   \
+    __BADC_INTRIN __m64 name(__m64 __X) {                                          \
+        return _mm_movepi64_pi64(form(_mm_movpi64_epi64(__X)));                    \
     }
-    return (__m64)__r;
+#define __BADC_M64_2(name, form)                                                   \
+    __BADC_INTRIN __m64 name(__m64 __X, __m64 __Y) {                               \
+        return _mm_movepi64_pi64(form(_mm_movpi64_epi64(__X), _mm_movpi64_epi64(__Y))); \
+    }
+#define __BADC_M64_PAIRWISE(name, form)                                            \
+    __BADC_INTRIN __m64 name(__m64 __X, __m64 __Y) {                               \
+        __m128i __p = (__m128i)__BADC_M64_PAIR(__X, __Y);                         \
+        return _mm_movepi64_pi64(form(__p, __p));                                  \
+    }
+__BADC_M64_1(_mm_abs_pi8, _mm_abs_epi8)
+__BADC_M64_1(_mm_abs_pi16, _mm_abs_epi16)
+__BADC_M64_1(_mm_abs_pi32, _mm_abs_epi32)
+__BADC_M64_2(_mm_sign_pi8, _mm_sign_epi8)
+__BADC_M64_2(_mm_sign_pi16, _mm_sign_epi16)
+__BADC_M64_2(_mm_sign_pi32, _mm_sign_epi32)
+__BADC_M64_2(_mm_maddubs_pi16, _mm_maddubs_epi16)
+__BADC_M64_2(_mm_mulhrs_pi16, _mm_mulhrs_epi16)
+__BADC_M64_PAIRWISE(_mm_hadd_pi16, _mm_hadd_epi16)
+__BADC_M64_PAIRWISE(_mm_hadd_pi32, _mm_hadd_epi32)
+__BADC_M64_PAIRWISE(_mm_hadds_pi16, _mm_hadds_epi16)
+__BADC_M64_PAIRWISE(_mm_hsub_pi16, _mm_hsub_epi16)
+__BADC_M64_PAIRWISE(_mm_hsub_pi32, _mm_hsub_epi32)
+__BADC_M64_PAIRWISE(_mm_hsubs_pi16, _mm_hsubs_epi16)
+#undef __BADC_M64_1
+#undef __BADC_M64_2
+#undef __BADC_M64_PAIRWISE
+
+/* PSHUFB on __m64 selects by the low three bits of a selector byte, so the
+** 128-bit form takes the selectors with bits 6:3 cleared. */
+__BADC_INTRIN __m64 _mm_shuffle_pi8(__m64 __X, __m64 __Y) {
+    __m128i __s = _mm_and_si128(_mm_movpi64_epi64(__Y), _mm_set1_epi8((char)0x87));
+    return _mm_movepi64_pi64(_mm_shuffle_epi8(_mm_movpi64_epi64(__X), __s));
 }
+
+/* PALIGNR on __m64: eight bytes from byte N of the second operand followed
+** by the first, zero past the sixteenth. */
+#define _mm_alignr_pi8(X, Y, N)                                                    \
+    _mm_movepi64_pi64(_mm_srli_si128((__m128i)__BADC_M64_PAIR((Y), (X)), (N)))

@@ -2702,7 +2702,6 @@ Disassembly of section .text:
                	vpextrq	$0x1, %xmm1, %r8
                	vmovq	%r8, %xmm2
                	xorl	%eax, %eax
-               	vpinsrq	$0x1, %rax, %xmm2, %xmm2
                	movups	%xmm2, -0xe0(%rbp)
                	movq	<rip>, %rcx # <addr>
                	movabsq	$0x100000001b3, %rsi    # imm = 0x100000001B3

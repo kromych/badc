@@ -4,7 +4,9 @@
 //! typed family is the SVE type that selects the row and types the result.
 //! The shapes and semantics are the shared vocabulary of [`super::simd`].
 
-use super::simd::{AcrossOp, FOp, Form, Ret, Sem, SimdOp, SveElems, SveForm, SvePred, SveShape};
+use super::simd::{
+    AcrossOp, FOp, Form, Ret, Sem, SimdOp, SveElems, SveForm, SvePred, SveShape, SveTest,
+};
 
 const fn row(
     name: &'static str,
@@ -50,6 +52,27 @@ const fn fcmgt(w: u8) -> Sem {
 const fn move_(_: u8) -> Sem {
     Sem::Move
 }
+const fn and(_: u8) -> Sem {
+    Sem::And
+}
+const fn orr(_: u8) -> Sem {
+    Sem::Or
+}
+const fn eor(_: u8) -> Sem {
+    Sem::Xor
+}
+const fn bic(_: u8) -> Sem {
+    Sem::BitClear
+}
+const fn orn(_: u8) -> Sem {
+    Sem::OrNot
+}
+const fn nand(_: u8) -> Sem {
+    Sem::Nand
+}
+const fn nor(_: u8) -> Sem {
+    Sem::Nor
+}
 const fn saddv(w: u8) -> Sem {
     Sem::Across(AcrossOp::Add, w, true, 0)
 }
@@ -91,6 +114,28 @@ pub(crate) const OPS: &[SimdOp] = rows! {
     "mul_z" "fmul" SveShape::Binary(Z), Float, fmul: 4 8;
     "mul_x" "mul" SveShape::Binary(X), Int, Sem::MulLo: 1 2 4 8;
     "mul_x" "fmul" SveShape::Binary(X), Float, fmul: 4 8;
+    "and_m" "and" SveShape::Binary(M), Int, and: 1 2 4 8;
+    "and_z" "and" SveShape::Binary(Z), Int, and: 1 2 4 8;
+    "and_z" "and" SveShape::PredLogic, Any, and: 1;
+    "and_x" "and" SveShape::Binary(X), Int, and: 1 2 4 8;
+    "orr_m" "orr" SveShape::Binary(M), Int, orr: 1 2 4 8;
+    "orr_z" "orr" SveShape::Binary(Z), Int, orr: 1 2 4 8;
+    "orr_z" "orr" SveShape::PredLogic, Any, orr: 1;
+    "orr_x" "orr" SveShape::Binary(X), Int, orr: 1 2 4 8;
+    "eor_m" "eor" SveShape::Binary(M), Int, eor: 1 2 4 8;
+    "eor_z" "eor" SveShape::Binary(Z), Int, eor: 1 2 4 8;
+    "eor_z" "eor" SveShape::PredLogic, Any, eor: 1;
+    "eor_x" "eor" SveShape::Binary(X), Int, eor: 1 2 4 8;
+    "bic_z" "bic" SveShape::PredLogic, Any, bic: 1;
+    "orn_z" "orn" SveShape::PredLogic, Any, orn: 1;
+    "nand_z" "nand" SveShape::PredLogic, Any, nand: 1;
+    "nor_z" "nor" SveShape::PredLogic, Any, nor: 1;
+    "not_z" "not" SveShape::PredNot, Any, eor: 1;
+    "sel" "sel" SveShape::Select, Any, move_: 1 2 4 8;
+    "sel" "sel" SveShape::PredSelect, Any, move_: 1;
+    "ptest_any" "ptest" SveShape::Test(SveTest::Any), Any, move_: 1;
+    "ptest_first" "ptest" SveShape::Test(SveTest::First), Any, move_: 1;
+    "ptest_last" "ptest" SveShape::Test(SveTest::Last), Any, move_: 1;
     "cmpeq" "cmpeq" SveShape::Compare, Int, Sem::CmpEq: 1 2 4 8;
     "cmpeq" "fcmeq" SveShape::Compare, Float, fcmeq: 4 8;
     "cmpne" "cmpne" SveShape::Compare, Int, Sem::CmpNe: 1 2 4 8;

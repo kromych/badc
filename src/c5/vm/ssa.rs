@@ -5132,6 +5132,19 @@ fn sve_lanewise(mem: &mut Memory, sem: crate::c5::simd::Sem, a: &[u8], b: &[u8])
     out
 }
 
+/// [`simd::eval`](crate::c5::simd::eval) of bitwise `sem` over predicates
+/// of any length.
+fn sve_bits(sem: crate::c5::simd::Sem, a: &[u8], b: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(a.len());
+    for (x, y) in a.chunks(16).zip(b.chunks(16)) {
+        let (mut p, mut q) = ([0u8; 16], [0u8; 16]);
+        p[..x.len()].copy_from_slice(x);
+        q[..y.len()].copy_from_slice(y);
+        out.extend_from_slice(&crate::c5::simd::eval(sem, &p, &q, 0, 0)[..x.len()]);
+    }
+    out
+}
+
 /// Lane `i` of `w` bytes of `v`, zero-extended.
 fn sve_lane(v: &[u8], w: usize, i: usize) -> u64 {
     let mut b = [0u8; 8];
@@ -5147,7 +5160,7 @@ fn run_sve_row(
     (op, imm): (u32, Option<u8>),
     args: &[ValueId],
 ) -> Result<(), C5Error> {
-    use crate::c5::simd::{self, FloatEnv, SveElems, SvePred, SveShape};
+    use crate::c5::simd::{self, FloatEnv, SveElems, SvePred, SveShape, SveTest};
     let row = simd::get(op);
     let simd::Form::Sve(form) = row.form else {
         return Err(C5Error::Runtime(format!(
@@ -5260,6 +5273,44 @@ fn run_sve_row(
             };
             let lane = x.to_le_bytes();
             frame.sregs.insert(v, (0..n).map(|k| lane[k % w]).collect());
+        }
+        SveShape::Select => {
+            let pg = sve_bytes(frame, args[0])?.to_vec();
+            let a = sve_bytes(frame, args[1])?.to_vec();
+            let mut out = sve_bytes(frame, args[2])?.to_vec();
+            for i in (0..lanes).filter(|&i| sve_active(&pg, w, i)) {
+                out[i * w..i * w + w].copy_from_slice(&a[i * w..i * w + w]);
+            }
+            frame.sregs.insert(v, out);
+        }
+        SveShape::PredSelect | SveShape::PredLogic | SveShape::PredNot => {
+            let pg = sve_bytes(frame, args[0])?.to_vec();
+            let a = sve_bytes(frame, args[1])?.to_vec();
+            let b = match form.shape {
+                SveShape::PredNot => pg.clone(),
+                _ => sve_bytes(frame, args[2])?.to_vec(),
+            };
+            let out = if form.shape == SveShape::PredSelect {
+                (0..pg.len())
+                    .map(|k| a[k] & pg[k] | b[k] & !pg[k])
+                    .collect()
+            } else {
+                let r = sve_bits(row.sem, &a, &b);
+                r.iter().zip(&pg).map(|(x, g)| x & g).collect()
+            };
+            frame.sregs.insert(v, out);
+        }
+        SveShape::Test(test) => {
+            let pg = sve_bytes(frame, args[0])?;
+            let p = sve_bytes(frame, args[1])?;
+            let set = |i: usize| sve_active(p, 1, i);
+            let mut active = (0..pg.len() * 8).filter(|&i| sve_active(pg, 1, i));
+            let r = match test {
+                SveTest::Any => active.any(set),
+                SveTest::First => active.next().is_some_and(set),
+                SveTest::Last => active.next_back().is_some_and(set),
+            };
+            frame.regs[v as usize] = i64::from(r);
         }
         SveShape::Load | SveShape::Store => {
             return Err(C5Error::Runtime(format!(

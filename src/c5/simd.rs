@@ -173,6 +173,28 @@ pub(crate) enum SveShape {
     Reduce,
     /// `v = op(x)`: the scalar in every lane.
     Dup,
+    /// `v = op(pg, a, b)`: the active lanes of `a`, the others of `b`.
+    Select,
+    /// `p = op(pg, a, b)` over predicates: the bits `pg` sets of `a`, the
+    /// others of `b`.
+    PredSelect,
+    /// `p = op(pg, a, b)` over predicates: `a op b` at the bits `pg` sets,
+    /// zero at the others.
+    PredLogic,
+    /// `p = op(pg, a)`: [`Self::PredLogic`] with `pg` as `b`, whose `eor`
+    /// is `not`.
+    PredNot,
+    /// `n = op(pg, p)`: whether `p` sets a bit `pg` sets: any, the first
+    /// or the last of them.
+    Test(SveTest),
+}
+
+/// The bits of a predicate a test reads (`ptest`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum SveTest {
+    Any,
+    First,
+    Last,
 }
 
 /// The inactive lanes of a predicated result: the first operand's (`_m`),
@@ -201,16 +223,27 @@ impl SveShape {
     pub(crate) fn result(self) -> Option<crate::c5::ir::LoadKind> {
         use crate::c5::ir::LoadKind;
         match self {
-            SveShape::Binary(_) | SveShape::Load | SveShape::Dup => Some(LoadKind::SveVector),
-            SveShape::Compare | SveShape::PTrue | SveShape::While { .. } => {
-                Some(LoadKind::SvePredicate)
+            SveShape::Binary(_) | SveShape::Load | SveShape::Dup | SveShape::Select => {
+                Some(LoadKind::SveVector)
             }
-            SveShape::Count | SveShape::Store | SveShape::Reduce => None,
+            SveShape::Compare
+            | SveShape::PTrue
+            | SveShape::While { .. }
+            | SveShape::PredSelect
+            | SveShape::PredLogic
+            | SveShape::PredNot => Some(LoadKind::SvePredicate),
+            SveShape::Count | SveShape::Store | SveShape::Reduce | SveShape::Test(_) => None,
         }
     }
 
     /// Whether a governing predicate is operand 0.
     pub(crate) fn governed(self) -> bool {
+        self.governs_low() || self.on_predicates() || self == SveShape::Select
+    }
+
+    /// Whether operand 0 governs through a 3-bit field, which reaches
+    /// p0-p7; the other shapes' fields reach p0-p15.
+    pub(crate) fn governs_low(self) -> bool {
         matches!(
             self,
             SveShape::Binary(_)
@@ -218,6 +251,14 @@ impl SveShape {
                 | SveShape::Load
                 | SveShape::Store
                 | SveShape::Reduce
+        )
+    }
+
+    /// Whether every operand is a predicate.
+    pub(crate) fn on_predicates(self) -> bool {
+        matches!(
+            self,
+            SveShape::PredSelect | SveShape::PredLogic | SveShape::PredNot | SveShape::Test(_)
         )
     }
 }
@@ -537,6 +578,10 @@ pub(crate) enum Sem {
     BitClear,
     /// `a | !b` (`orn`).
     OrNot,
+    /// `!(a & b)` (`nand`).
+    Nand,
+    /// `!(a | b)` (`nor`).
+    Nor,
     /// A lane of ones where signed `a >= b` holds (`cmge`).
     CmpGe(u8),
     /// A lane of ones where unsigned `a > b` holds (`cmhi`).
@@ -807,6 +852,8 @@ impl Sem {
                 | Sem::And
                 | Sem::Or
                 | Sem::Xor
+                | Sem::Nand
+                | Sem::Nor
                 | Sem::CmpEq(_)
                 | Sem::HalvingAdd(..)
                 | Sem::AbsDiff(..)
@@ -1007,8 +1054,17 @@ impl Form {
             Form::Sve(f) => match f.shape {
                 SveShape::PTrue | SveShape::Count => 0,
                 SveShape::Dup => 1,
-                SveShape::While { .. } | SveShape::Load | SveShape::Reduce => 2,
-                SveShape::Binary(_) | SveShape::Compare | SveShape::Store => 3,
+                SveShape::While { .. }
+                | SveShape::Load
+                | SveShape::Reduce
+                | SveShape::PredNot
+                | SveShape::Test(_) => 2,
+                SveShape::Binary(_)
+                | SveShape::Compare
+                | SveShape::Store
+                | SveShape::Select
+                | SveShape::PredSelect
+                | SveShape::PredLogic => 3,
             },
         }
     }
@@ -1681,6 +1737,16 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
         Sem::OrNot => {
             for i in 0..16 {
                 o[i] = a[i] | !b[i];
+            }
+        }
+        Sem::Nand => {
+            for i in 0..16 {
+                o[i] = !(a[i] & b[i]);
+            }
+        }
+        Sem::Nor => {
+            for i in 0..16 {
+                o[i] = !(a[i] | b[i]);
             }
         }
         Sem::CmpGe(w)

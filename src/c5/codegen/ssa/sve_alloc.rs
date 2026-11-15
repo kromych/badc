@@ -3,10 +3,11 @@
 //! out of z8-z15 across a call, whose upper bits the base PCS does not
 //! preserve (AAPCS64 6.1.2), and its slots move here into the VL-scaled
 //! region. A predicate aliases no other file and is placed here by phi
-//! class on p0-p6, p8-p13 and p15, p7 and p14 carrying the moves; one live
-//! across a call takes a slot, as the base PCS preserves no P register. A
-//! class that governs an instruction takes p0-p6, the 3-bit field's reach
-//! less p7, which stages a governing predicate reloaded from its slot.
+//! class on p0-p6 and p8-p13, p7, p14 and p15 carrying the moves and the
+//! reloads; one live across a call takes a slot, as the base PCS preserves
+//! no P register. A class that governs through a 3-bit field takes p0-p6,
+//! its reach less p7, which stages a governing predicate reloaded from its
+//! slot.
 
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
@@ -14,9 +15,9 @@ use alloc::vec::Vec;
 use super::super::ir::{FunctionSsa, LoadKind, ValueId};
 use super::reg_alloc::{CallSave, LoopSaveCode, Place, VecWidth};
 
-/// The P registers values may take: all but [`PRED_STAGE`] and
-/// [`PRED_HOLD`].
-pub(crate) const PRED_REGS: u16 = 0xBF7F;
+/// The P registers values may take: all but [`PRED_STAGE`],
+/// [`PRED_HOLD`] and [`PRED_OPERAND`].
+pub(crate) const PRED_REGS: u16 = 0x3F7F;
 /// The P registers an operand that governs may take, p0-p6.
 pub(crate) const PRED_GOVERNING: u16 = 0x007F;
 /// The P register a parallel move parks a cycle's value in, or a result
@@ -24,6 +25,9 @@ pub(crate) const PRED_GOVERNING: u16 = 0x007F;
 /// move passes through, which can govern.
 pub(crate) const PRED_HOLD: u8 = 14;
 pub(crate) const PRED_STAGE: u8 = 7;
+/// The P register a row's second predicate operand is reloaded into; the
+/// first takes [`PRED_STAGE`] and the third [`PRED_HOLD`].
+pub(crate) const PRED_OPERAND: u8 = 15;
 
 /// Where an SVE predicate value lives: a register, or a slot of the
 /// VL-scaled region.
@@ -143,12 +147,13 @@ pub(crate) struct PredNode {
     pub crosses_call: bool,
 }
 
-/// The predicates that govern an SVE row or an SVE load or store.
+/// The predicates that govern an SVE row or an SVE load or store through
+/// a 3-bit field.
 fn governing_operands(func: &FunctionSsa) -> alloc::collections::BTreeSet<ValueId> {
     use crate::c5::ir::Inst;
     let governed = |inst: &Inst| match inst {
         Inst::SimdVal { op, args, .. } => match crate::c5::simd::get(*op).form {
-            crate::c5::simd::Form::Sve(f) if f.shape.governed() => args.first().copied(),
+            crate::c5::simd::Form::Sve(f) if f.shape.governs_low() => args.first().copied(),
             _ => None,
         },
         Inst::Intrinsic { kind, args } => crate::c5::op::Intrinsic::from_i64(*kind)
@@ -430,14 +435,14 @@ mod tests {
         assert_eq!(slots, 1);
     }
 
-    /// Fourteen interfering classes fill p0-p6, p8-p13 and p15; the
-    /// fifteenth takes a slot.
+    /// Thirteen interfering classes fill p0-p6 and p8-p13; the fourteenth
+    /// takes a slot.
     #[test]
     fn predicates_past_the_bank_take_slots() {
-        let (places, slots) = color_predicates(&clique(15, 0));
+        let (places, slots) = color_predicates(&clique(14, 0));
         assert_eq!(places[&6], PredPlace::Reg(6));
         assert_eq!(places[&7], PredPlace::Reg(8));
-        assert_eq!(places[&13], PredPlace::Reg(15));
-        assert_eq!((places[&14], slots), (PredPlace::Slot(0), 1));
+        assert_eq!(places[&12], PredPlace::Reg(13));
+        assert_eq!((places[&13], slots), (PredPlace::Slot(0), 1));
     }
 }

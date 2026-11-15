@@ -1954,3 +1954,119 @@ fn a_governing_predicate_takes_p0_to_p6_or_is_reloaded_into_p7() {
         "{w:08x?}"
     );
 }
+
+/// svand, svorr and sveor in each predication form and with a scalar
+/// operand, the predicate logic svand_b_z to svnot_b_z, svsel of vectors
+/// and of predicates, and svptest compute what scalar C does; the
+/// interpreter runs the fixture at four vector lengths.
+#[test]
+fn the_sve_logic_select_and_test_rows_run_in_the_interpreter() {
+    const SRC: &str = include_str!("../../../tests/fixtures/sve/rows_logic.c");
+    for optimize in [false, true] {
+        let options = crate::CompileOptions::default().with_optimize(optimize);
+        let program =
+            crate::Compiler::with_options(String::from(SRC), crate::Target::LinuxAarch64, options)
+                .compile()
+                .expect("compiles");
+        for bits in [128, 256, 512, 2048] {
+            let vm = super::Vm::new(program.clone()).with_sve_vector_bits(bits);
+            assert_eq!(
+                vm.run().expect("runs"),
+                bits as i64 / 128,
+                "{bits} bits, -O {optimize}"
+            );
+        }
+    }
+}
+
+/// The logic, select and test intrinsics are their instructions on the
+/// argument registers under `-O`: a bitwise don't-care form the
+/// unpredicated doubleword one, a predicate form its zeroing instruction,
+/// svnot_b_z `not`, svsel `sel`, svptest `ptest` and the `cset` of the
+/// flag it reads.
+#[cfg(feature = "full")]
+#[test]
+fn the_sve_logic_select_and_test_rows_emit_their_instructions() {
+    const SRC: &str = "#include <arm_sve.h>\n\
+        svint32_t and_m(svbool_t pg, svint32_t a, svint32_t b) { return svand_m(pg, a, b); }\n\
+        svuint16_t orr_x(svbool_t pg, svuint16_t a, svuint16_t b) { return svorr_x(pg, a, b); }\n\
+        svint8_t eor_z(svbool_t pg, svint8_t a, svint8_t b) { return sveor_z(pg, a, b); }\n\
+        svbool_t pand(svbool_t pg, svbool_t a, svbool_t b) { return svand_z(pg, a, b); }\n\
+        svbool_t pnand(svbool_t pg, svbool_t a, svbool_t b) { return svnand_b_z(pg, a, b); }\n\
+        svbool_t pnot(svbool_t pg, svbool_t a) { return svnot_b_z(pg, a); }\n\
+        svfloat64_t sel(svbool_t pg, svfloat64_t a, svfloat64_t b) { return svsel(pg, a, b); }\n\
+        svbool_t psel(svbool_t pg, svbool_t a, svbool_t b) { return svsel_b(pg, a, b); }\n\
+        _Bool any(svbool_t pg, svbool_t p) { return svptest_any(pg, p); }\n\
+        _Bool first(svbool_t pg, svbool_t p) { return svptest_first(pg, p); }\n\
+        _Bool last(svbool_t pg, svbool_t p) { return svptest_last(pg, p); }\n";
+    let object = super::perf_codegen::object_at(SRC, crate::Target::LinuxAarch64, true);
+    for (name, words, what) in [
+        ("and_m", &[0x049a_0020u32][..], "and z0.s, p0/m, z0.s, z1.s"),
+        ("orr_x", &[0x0461_3000], "orr z0.d, z0.d, z1.d"),
+        (
+            "eor_z",
+            &[0x0410_2000, 0x0419_0020],
+            "movprfx z0.b, p0/z, z0.b; eor",
+        ),
+        ("pand", &[0x2502_4020], "and p0.b, p0/z, p1.b, p2.b"),
+        ("pnand", &[0x2582_4230], "nand p0.b, p0/z, p1.b, p2.b"),
+        ("pnot", &[0x2500_4220], "not p0.b, p0/z, p1.b"),
+        ("sel", &[0x05e1_c000], "sel z0.d, p0, z0.d, z1.d"),
+        ("psel", &[0x2502_4230], "sel p0.b, p0, p1.b, p2.b"),
+        (
+            "any",
+            &[0x2550_c020, 0x9a9f_07e0],
+            "ptest p0, p1.b; cset ne",
+        ),
+        (
+            "first",
+            &[0x2550_c020, 0x9a9f_57e0],
+            "ptest p0, p1.b; cset mi",
+        ),
+        (
+            "last",
+            &[0x2550_c020, 0x9a9f_27e0],
+            "ptest p0, p1.b; cset lo",
+        ),
+    ] {
+        let w = super::codegen::function_words(&object, name);
+        assert!(
+            w.windows(words.len()).any(|x| x == words),
+            "{what}: {w:08x?}"
+        );
+    }
+}
+
+/// A row's predicate operands in slots reload into p7, p15 and p14 in
+/// turn; an SVE-PCS function whose row reloads one into p15 saves it.
+#[cfg(feature = "full")]
+#[test]
+fn predicate_operands_in_slots_reload_into_p7_p15_and_p14() {
+    const ACROSS: &str = "#include <arm_sve.h>\n\
+        void keep(svbool_t *p0, svbool_t *p1, svbool_t *p2, svbool_t *o, void (*f)(void)) {\n\
+            svbool_t pg = *p0, a = *p1, b = *p2; f(); *o = svorr_b_z(pg, a, b); }\n";
+    let w = super::perf_codegen::a64_at(ACROSS, "keep", true);
+    let ldr_p = |p: u32| move |x: &u32| x & 0xFFC0_E01F == 0x8580_0000 | p;
+    let orr = w.iter().position(|&x| x & 0xFFFF_FFF0 == 0x258E_5DE0);
+    let orr = orr.expect("orr pd.b, p7/z, p15.b, p14.b");
+    for p in [7, 15, 14] {
+        assert!(w[..orr].iter().any(ldr_p(p)), "ldr p{p}: {w:08x?}");
+    }
+    // Fifteen predicates live at once leave q12 and q13 in slots; the
+    // first EOR reads q13 second, through p15.
+    let mut src = String::from("#include <arm_sve.h>\nsvbool_t many(svbool_t pg, int n) {\n");
+    for k in 0..14 {
+        src += &alloc::format!("svbool_t q{k} = svwhilelt_b8({k}, n);\n");
+    }
+    src += "svbool_t r = sveor_b_z(pg, q13, q12);\n";
+    for k in (0..12).rev() {
+        src += &alloc::format!("r = sveor_b_z(pg, q{k}, r);\n");
+    }
+    src += "return r; }\n";
+    let w = super::perf_codegen::a64_at(&src, "many", true);
+    let body = w.iter().position(|&x| x & 0xFF20_FC10 == 0x2520_0400);
+    let body = body.expect("whilelt");
+    assert!(w[body..].iter().any(ldr_p(15)), "ldr p15: {w:08x?}");
+    let str_p15 = |x: &u32| x & 0xFFC0_E01F == 0xE580_000F;
+    assert!(w[..body].iter().any(str_p15), "str p15: {w:08x?}");
+}

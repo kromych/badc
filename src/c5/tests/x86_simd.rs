@@ -2039,6 +2039,8 @@ fn floating_rows_compute_in_the_environment() {
         | Sem::AbsDiff(..)
         | Sem::BitClear
         | Sem::OrNot
+        | Sem::Nand
+        | Sem::Nor
         | Sem::CmpGe(_)
         | Sem::CmpHi(_)
         | Sem::CmpHs(_)

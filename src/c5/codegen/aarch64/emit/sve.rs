@@ -348,10 +348,13 @@ fn preserved(
             p |= 1 << r;
         }
     }
-    // A slot's predicate reloads into p7 and a result bound for one is
-    // computed in p14.
+    // A slot's predicate reloads into p7, or p15 or p14 as a row's second
+    // or third operand, and a result bound for one is computed in p14.
     if alloc.sve.p_slots > 0 {
         p |= 1 << PRED_STAGE | 1 << PRED_HOLD;
+    }
+    if super::sve_rows::reloads_second_predicate(func, alloc) {
+        p |= 1 << super::super::ssa::sve_alloc::PRED_OPERAND;
     }
     if cycles.1 {
         p |= 1 << PRED_HOLD;

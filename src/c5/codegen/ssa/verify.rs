@@ -279,7 +279,9 @@ fn sve_row_operands(op: u32) -> alloc::vec::Vec<Option<LoadKind>> {
     let (p, z) = (Some(LoadKind::SvePredicate), Some(LoadKind::SveVector));
     match crate::c5::simd::get(op).form {
         Form::Sve(f) => match f.shape {
-            SveShape::Binary(_) | SveShape::Compare => alloc::vec![p, z, z],
+            SveShape::Binary(_) | SveShape::Compare | SveShape::Select => alloc::vec![p, z, z],
+            SveShape::PredSelect | SveShape::PredLogic => alloc::vec![p, p, p],
+            SveShape::PredNot | SveShape::Test(_) => alloc::vec![p, p],
             SveShape::Reduce => alloc::vec![p, z],
             SveShape::Load => alloc::vec![p, None],
             SveShape::Store => alloc::vec![p, None, z],

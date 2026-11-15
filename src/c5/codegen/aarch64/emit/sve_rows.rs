@@ -1,12 +1,17 @@
 //! The SVE rows of the SIMD tables ([`crate::c5::aarch64_sve`]) on values in
 //! Z and P registers: each row's instruction over its lanes, a governing
-//! predicate in p0-p6 or reloaded into p7, a spilled vector reloaded into the
-//! FP scratch, and a result bound for a slot computed in the scratch.
+//! predicate of a 3-bit field in p0-p6 or reloaded into p7, the predicate
+//! operands of a 4-bit field reloaded into p7, p15 and p14 in turn, a
+//! spilled vector reloaded into the FP scratch, and a result bound for a
+//! slot computed in the scratch, or p14.
 
-use super::super::ssa::sve_alloc::{PRED_HOLD, PRED_STAGE, PredPlace};
+use super::super::ssa::sve_alloc::{PRED_HOLD, PRED_OPERAND, PRED_STAGE, PredPlace};
 use super::table::{self, Opnd};
 use super::*;
-use crate::c5::simd::{self, Form, SvePred, SveShape};
+use crate::c5::simd::{self, Form, SvePred, SveShape, SveTest};
+
+/// The P registers predicate operands 0, 1 and 2 of a row reload into.
+const PRED_STAGES: [u8; 3] = [PRED_STAGE, PRED_OPERAND, PRED_HOLD];
 
 /// The operands of one row: the allocation and the scratch it reloads into.
 struct Operands<'a> {
@@ -39,6 +44,19 @@ impl Operands<'_> {
                 Ok(PRED_STAGE)
             }
             None => fail("SVE row: governing predicate has no place"),
+        }
+    }
+
+    /// The register predicate operand `k`, `v`, is read in from a 4-bit
+    /// field: its own, else its stage, which a reload fills.
+    fn pred(&self, code: &mut Vec<u8>, v: u32, k: usize) -> Emit<u8> {
+        match self.alloc.sve.pred_place(v) {
+            Some(PredPlace::Reg(r)) => Ok(r),
+            Some(p) => {
+                super::sve::pred_move(code, self.frame, p, PredPlace::Reg(PRED_STAGES[k]));
+                Ok(PRED_STAGES[k])
+            }
+            None => fail("SVE row: predicate operand has no place"),
         }
     }
 
@@ -237,13 +255,97 @@ pub(super) fn emit_row(
             o.z_done(code, dst, d);
             Ok(())
         }
+        SveShape::Select => {
+            let pg = o.pred(code, args[0], 0)?;
+            let (a, b) = (o.z(code, args[1], 0)?, o.z(code, args[2], 1)?);
+            let d = o.z_dst(dst)?;
+            let p = Opnd::PReg {
+                num: pg,
+                size: None,
+            };
+            word(code, "sel", &[z(d, size), p, z(a, size), z(b, size)])?;
+            o.z_done(code, dst, d);
+            Ok(())
+        }
+        SveShape::PredSelect | SveShape::PredLogic | SveShape::PredNot => {
+            let mut ps = [0u8; 3];
+            for (k, &a) in args.iter().enumerate().take(row.form.arity()) {
+                ps[k] = o.pred(code, a, k)?;
+            }
+            let pd = o.pred_dst(v)?;
+            let b = |num| Opnd::PReg { num, size: Some(0) };
+            let pg = if form.shape == SveShape::PredSelect {
+                Opnd::PReg {
+                    num: ps[0],
+                    size: None,
+                }
+            } else {
+                Opnd::PRegQ {
+                    num: ps[0],
+                    merge: false,
+                }
+            };
+            let ops = [b(pd.0), pg, b(ps[1]), b(ps[2])];
+            let n = if form.shape == SveShape::PredNot {
+                3
+            } else {
+                4
+            };
+            word(code, row.mnem, &ops[..n])?;
+            o.pred_done(code, pd);
+            Ok(())
+        }
+        SveShape::Test(test) => {
+            let pg = o.pred(code, args[0], 0)?;
+            let p = o.pred(code, args[1], 1)?;
+            let pg = Opnd::PReg {
+                num: pg,
+                size: None,
+            };
+            let p = Opnd::PReg {
+                num: p,
+                size: Some(0),
+            };
+            word(code, "ptest", &[pg, p])?;
+            let Some(rd) = int_or_spill_scratch(dst, scratch) else {
+                return fail("SVE test: dst not int reg / spill");
+            };
+            // PTEST sets N for the first bit, clears Z for any and C for
+            // the last.
+            let cond = match test {
+                SveTest::Any => Cond::Ne,
+                SveTest::First => Cond::Mi,
+                SveTest::Last => Cond::Lo,
+            };
+            emit(code, enc_cset(rd, cond));
+            store_spilled_int(code, frame, dst, rd);
+            Ok(())
+        }
         SveShape::Load | SveShape::Store => fail("SVE row: a load or store is an intrinsic"),
     }
 }
 
-/// Whether the row's operation has an unpredicated form in SVE.
-fn unpredicated(mnem: &str) -> bool {
-    matches!(mnem, "add" | "sub" | "fadd" | "fsub" | "fmul")
+/// Whether a row of `func` reloads its second predicate operand into
+/// [`PRED_OPERAND`].
+pub(super) fn reloads_second_predicate(func: &FunctionSsa, alloc: &Allocation) -> bool {
+    let slot = |v: &u32| matches!(alloc.sve.pred_place(*v), Some(PredPlace::Slot(_)));
+    func.insts.iter().any(|i| match i {
+        Inst::SimdVal { op, args, .. } => {
+            matches!(simd::get(*op).form, Form::Sve(f) if f.shape.on_predicates())
+                && args.get(1).is_some_and(slot)
+        }
+        _ => false,
+    })
+}
+
+/// The lane size of the row's unpredicated form, where SVE has one: a
+/// bitwise operation's is the doubleword.
+fn unpredicated(mnem: &str, size: u8) -> Option<u8> {
+    match mnem {
+        "add" | "sub" | "fadd" | "fsub" | "fmul" => Some(size),
+        "and" | "orr" | "eor" => Some(3),
+        _ => None,
+    }
 }
 
 /// A binary row: the unpredicated form where the inactive lanes may be
@@ -261,8 +363,8 @@ fn binary(
 ) -> Emit {
     let (a, b) = (o.z(code, args[1], 0)?, o.z(code, args[2], 1)?);
     let d = o.z_dst(dst)?;
-    if mode == SvePred::Any && unpredicated(mnem) {
-        word(code, mnem, &[z(d, size), z(a, size), z(b, size)])?;
+    if let Some(s) = unpredicated(mnem, size).filter(|_| mode == SvePred::Any) {
+        word(code, mnem, &[z(d, s), z(a, s), z(b, s)])?;
         o.z_done(code, dst, d);
         return Ok(());
     }

@@ -501,25 +501,26 @@ impl Compiler {
     }
 
     /// An SVE builtin (`__builtin_sve_*`, ACLE), the `(` consumed. A typed
-    /// family's first operand is the SVE vector type that selects its row
-    /// and types its result; a load's may be `void`, its pointer's element
-    /// type then selecting the vector type. A scalar where a vector operand
-    /// stands is that vector with the scalar in every lane, and a pattern
-    /// operand an integer constant expression.
+    /// family's first operand is the SVE type that selects its row and
+    /// types its result, `svbool_t` its row over predicates; a load's may
+    /// be `void`, its pointer's element type then selecting the vector
+    /// type. A scalar where a vector operand stands is that vector with the
+    /// scalar in every lane, and a pattern operand an integer constant
+    /// expression.
     fn parse_sve_builtin(
         &mut self,
-        first: u32,
+        mut first: u32,
         form: super::super::simd::SveForm,
         name: &str,
     ) -> Result<(), C5Error> {
         use super::super::ast::Expr;
-        use super::super::simd::{self, SveShape};
+        use super::super::simd::{self, Form, SveShape};
         use super::{SveElem, SveType};
         let pred = self.sve_type_tag(SveType::Predicate);
-        let shape = form.shape;
+        let mut shape = form.shape;
         let typed = !matches!(
             shape,
-            SveShape::PTrue | SveShape::Count | SveShape::While { .. }
+            SveShape::PTrue | SveShape::Count | SveShape::While { .. } | SveShape::Test(_)
         );
         let mut vty: Option<i64> = None;
         if typed {
@@ -530,7 +531,21 @@ impl Compiler {
                 ));
             }
             let t = self.parse_type_name()?.ty;
-            if !(shape == SveShape::Load && is_void_ty(t)) {
+            let on_predicates = (self.sve_type_of(t) == Some(SveType::Predicate))
+                .then(|| simd::select_sve(name, 1, SveElem::Signed, SveShape::on_predicates))
+                .flatten();
+            if let Some(op) = on_predicates {
+                if let Form::Sve(f) = simd::get(op).form {
+                    shape = f.shape;
+                }
+                (first, vty) = (op, Some(t));
+            } else if shape.on_predicates() {
+                let t = super::types::format_type(t, &self.structs);
+                return Err(self.compile_err(
+                    Code::INVALID_ARGUMENTS,
+                    format!("`{name}` has no form over `{t}`"),
+                ));
+            } else if !(shape == SveShape::Load && is_void_ty(t)) {
                 if !matches!(self.sve_type_of(t), Some(SveType::Vector { .. })) {
                     return Err(self.compile_err(
                         Code::INVALID_ARGUMENTS,
@@ -556,7 +571,11 @@ impl Compiler {
             let what = format!("operand {} of `{name}`", i + 1);
             let governing = shape.governed() && i == 0;
             let id = match shape {
-                _ if governing => self.parse_sve_operand(pred, &what)?,
+                _ if governing || shape.on_predicates() => self.parse_sve_operand(pred, &what)?,
+                SveShape::Select => {
+                    let t = vty.ok_or_else(|| self.compile_err(Code::SYNTAX, "type expected"))?;
+                    self.parse_sve_operand(t, &what)?
+                }
                 SveShape::Load | SveShape::Store if i == 1 => {
                     self.expr(Token::Assign as i64)?;
                     let elem = self.sve_pointer_element(name)?;
@@ -645,6 +664,7 @@ impl Compiler {
                 })
             }
             (SveShape::PTrue | SveShape::Count, _) => Some(first),
+            _ if shape.on_predicates() => Some(first),
             (_, Some((size, kind))) => simd::select_sve(name, 1 << size, kind, |s| s == shape),
             _ => None,
         };
@@ -659,8 +679,16 @@ impl Compiler {
         };
         let lane = |t: i64| self.sve_lane(t).unwrap_or((0, SveElem::Signed));
         let ty = match shape {
-            SveShape::Binary(_) | SveShape::Load | SveShape::Dup => vty.unwrap_or(pred),
-            SveShape::Compare | SveShape::PTrue | SveShape::While { .. } => pred,
+            SveShape::Binary(_) | SveShape::Load | SveShape::Dup | SveShape::Select => {
+                vty.unwrap_or(pred)
+            }
+            SveShape::Compare
+            | SveShape::PTrue
+            | SveShape::While { .. }
+            | SveShape::PredSelect
+            | SveShape::PredLogic
+            | SveShape::PredNot => pred,
+            SveShape::Test(_) => Ty::Bool as i64,
             SveShape::Count => self.size_t_ty(),
             SveShape::Store => super::types::void_ty(),
             SveShape::Reduce => match vty.map(lane) {

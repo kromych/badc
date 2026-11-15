@@ -8947,3 +8947,22 @@ void many(void) { fill(1); fill(2); fill(3); fill(4); }\n";
         .collect();
     assert_eq!(frame, [16], "{insns:x?}");
 }
+
+/// A word copied out of memory into a local, as a read of an unaligned
+/// field is written, is a load of that width, so the local keeps no
+/// address: with another local's address escaping, which leaves every
+/// store to the frame in place, the loop stores nothing into the frame.
+#[test]
+fn x64_a_word_copied_into_a_local_is_a_load_of_that_width() {
+    const SRC: &str = "typedef unsigned short u16; typedef unsigned int u32;\n\
+void *memcpy(void *d, const void *s, unsigned long n);\n\
+static inline u32 read_u32(const u16 *p) { u32 v; memcpy(&v, p, sizeof v); return v; }\n\
+void sink(u32 v); void keep(int *p);\n\
+unsigned long words(const u16 *p, int n) {\n\
+  int tag = n; keep(&tag); unsigned long s = 0;\n\
+  for (int i = 0; i < n; i++) { u32 a = read_u32(p + i); sink(a); s += a; }\n\
+  return s + tag; }\n";
+    let insns = x64(SRC, "words");
+    let frame_address = |i: &&X64Insn| i.op == 0x8D && i.mem_base() == Some(5);
+    assert_eq!(insns.iter().filter(frame_address).count(), 1, "{insns:x?}");
+}

@@ -78,12 +78,9 @@ Disassembly of section .text:
                	ldr	x1, [x1]
                	add	x0, x0, x1
                	add	x0, x0, #0x3e8
-               	sub	x1, x29, #0x50
                	stur	x0, [x29, #-0x38]
-               	add	x0, x1, #0x10
-               	add	x1, x29, #0x50
-               	ldr	x16, [x1]
-               	str	x16, [x0]
+               	ldr	x0, [x29, #0x50]
+               	stur	x0, [x29, #-0x40]
                	sub	x0, x29, #0x30
                	sub	x0, x29, #0x50
                	mov	x16, x0

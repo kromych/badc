@@ -44,66 +44,31 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x1(%rax), %rcx
-               	movl	$0x11223344, -0x8(%rbp) # imm = 0x11223344
-               	movl	$0x11223344, (%rcx)     # imm = 0x11223344
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x8(%rax), %rcx
-               	movl	$0x11223345, -0x8(%rbp) # imm = 0x11223345
-               	movl	$0x11223345, (%rcx)     # imm = 0x11223345
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0xf(%rax), %rcx
-               	movl	$0x11223346, -0x8(%rbp) # imm = 0x11223346
-               	movl	$0x11223346, (%rcx)     # imm = 0x11223346
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x16(%rax), %rcx
-               	movl	$0x11223347, -0x8(%rbp) # imm = 0x11223347
-               	movl	$0x11223347, (%rcx)     # imm = 0x11223347
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x1d(%rax), %rcx
-               	movl	$0x11223348, -0x8(%rbp) # imm = 0x11223348
-               	movl	$0x11223348, (%rcx)     # imm = 0x11223348
-               	leaq	<rip>, %rax # <addr>
-               	incq	%rax
-               	leaq	-0x8(%rbp), %rcx
-               	movl	(%rax), %r10d
-               	movl	%r10d, (%rcx)
+               	movl	$0x11223344, <rip> # imm = 0x11223344
+                                                # <addr>
+               	movl	$0x11223345, <rip> # imm = 0x11223345
+                                                # <addr>
+               	movl	$0x11223346, <rip> # imm = 0x11223346
+                                                # <addr>
+               	movl	$0x11223347, <rip> # imm = 0x11223347
+                                                # <addr>
+               	movl	$0x11223348, <rip> # imm = 0x11223348
+                                                # <addr>
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x11223344, %eax       # imm = 0x11223344
                	je	<addr>
                	movl	$0x3, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	addq	$0x8, %rax
-               	leaq	-0x8(%rbp), %rcx
-               	movl	(%rax), %r10d
-               	movl	%r10d, (%rcx)
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x11223345, %eax       # imm = 0x11223345
                	jne	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	addq	$0xf, %rax
-               	leaq	-0x8(%rbp), %rcx
-               	movl	(%rax), %r10d
-               	movl	%r10d, (%rcx)
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x11223346, %eax       # imm = 0x11223346
                	jne	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	addq	$0x16, %rax
-               	leaq	-0x8(%rbp), %rcx
-               	movl	(%rax), %r10d
-               	movl	%r10d, (%rcx)
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x11223347, %eax       # imm = 0x11223347
                	jne	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	addq	$0x1d, %rax
-               	leaq	-0x8(%rbp), %rcx
-               	movl	(%rax), %r10d
-               	movl	%r10d, (%rcx)
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x11223348, %eax       # imm = 0x11223348
                	jne	<addr>

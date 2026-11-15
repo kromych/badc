@@ -1582,7 +1582,10 @@ pub(crate) fn with_phi_promote_override<R>(value: bool, f: impl FnOnce() -> R) -
 /// A copy of 1, 2, 4 or 8 bytes between two one-cell frame objects, each
 /// named by an address only the copy reads and computed just ahead of it,
 /// becomes a load and a store of that width: the objects keep no address.
-/// An object with a volatile access keeps its copy.
+/// So does a copy between such an object and memory elsewhere, whose
+/// access keeps the alignment the copy states. The copy takes the form of
+/// the object's other accesses: an aggregate only its address reaches keeps
+/// it, as does an object with a volatile access.
 fn copy_words(func: &mut FunctionSsa) {
     let words = |size: i64| matches!(size, 1 | 2 | 4 | 8);
     if !func
@@ -1619,21 +1622,35 @@ fn copy_words(func: &mut FunctionSsa) {
             _ => None,
         })
         .collect();
+    // Slots some instruction reads or writes by name.
+    let direct: BTreeSet<i64> = func
+        .insts
+        .iter()
+        .filter_map(|i| match *i {
+            Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } => Some(off),
+            _ => None,
+        })
+        .collect();
     let kept = |off: i64| {
-        volatile.contains(&off) || func.multi_cell_slots.iter().any(|&(base, _)| base == off)
+        volatile.contains(&off)
+            || (!direct.contains(&off)
+                && func.multi_cell_slots.iter().any(|&(base, _)| base == off))
     };
     let mut rewrites = Vec::new();
+    let mut outside = Vec::new();
     for block in &func.blocks {
         let range = block.inst_range.start as usize..block.inst_range.end as usize;
-        for i in range.start + 2..range.end {
-            let Inst::Mcpy { dst, src, size, .. } = func.insts[i] else {
-                continue;
-            };
-            let (dst, src) = (dst as usize, src as usize);
-            let (Inst::LocalAddr(to), Inst::LocalAddr(from)) = (&func.insts[dst], &func.insts[src])
+        for i in range.start + 1..range.end {
+            let Inst::Mcpy {
+                dst,
+                src,
+                size,
+                align,
+            } = func.insts[i]
             else {
                 continue;
             };
+            let (dst, src) = (dst as usize, src as usize);
             let (load, store) = match size {
                 8 => (LoadKind::I64, StoreKind::I64),
                 4 => (LoadKind::U32, StoreKind::I32),
@@ -1641,17 +1658,98 @@ fn copy_words(func: &mut FunctionSsa) {
                 1 => (LoadKind::U8, StoreKind::I8),
                 _ => continue,
             };
+            let slot = |v: usize| match func.insts[v] {
+                Inst::LocalAddr(off) => Some(off),
+                _ => None,
+            };
+            // One end is an object whose address is computed right ahead
+            // of the copy and read by it alone; the other is not a frame
+            // object's address.
+            let near = i - 1;
+            let align = if (align as i64) < size {
+                align as u8
+            } else {
+                0
+            };
+            match (slot(dst), slot(src)) {
+                (Some(to), None) if dst == near && uses[dst] == 1 && src != near && !kept(to) => {
+                    outside.push((i, Some(to), load, store, align));
+                    continue;
+                }
+                (None, Some(from))
+                    if src == near && uses[src] == 1 && dst != near && !kept(from) =>
+                {
+                    outside.push((i, None, load, store, align));
+                    continue;
+                }
+                _ => {}
+            }
+            if i < range.start + 2 {
+                continue;
+            }
+            let (Some(to), Some(from)) = (slot(dst), slot(src)) else {
+                continue;
+            };
             if dst.min(src) != i - 2
                 || dst.max(src) != i - 1
                 || uses[dst] != 1
                 || uses[src] != 1
                 || to == from
-                || kept(*to)
-                || kept(*from)
+                || kept(to)
+                || kept(from)
             {
                 continue;
             }
-            rewrites.push((i, *to, *from, load, store));
+            rewrites.push((i, to, from, load, store));
+        }
+    }
+    for (i, to, load, store, align) in outside {
+        let Inst::Mcpy { dst, src, .. } = func.insts[i] else {
+            unreachable!()
+        };
+        match to {
+            // The object's address becomes the load from the source; the
+            // copy, the store into the object.
+            Some(to) => {
+                func.insts[i - 1] = Inst::Load {
+                    addr: src,
+                    disp: 0,
+                    kind: load,
+                    volatile: false,
+                    align,
+                    pc_rel: false,
+                };
+                func.insts[i] = Inst::StoreLocal {
+                    off: to,
+                    disp: 0,
+                    value: (i - 1) as ValueId,
+                    kind: store,
+                    volatile: false,
+                    nsw: false,
+                };
+            }
+            // The object's address becomes the load of the object; the
+            // copy, the store to the destination.
+            None => {
+                let Inst::LocalAddr(from) = func.insts[i - 1] else {
+                    unreachable!()
+                };
+                func.insts[i - 1] = Inst::LoadLocal {
+                    off: from,
+                    disp: 0,
+                    kind: load,
+                    volatile: false,
+                };
+                func.insts[i] = Inst::Store {
+                    addr: dst,
+                    disp: 0,
+                    value: (i - 1) as ValueId,
+                    kind: store,
+                    volatile: false,
+                    align,
+                    pc_rel: false,
+                };
+            }
         }
     }
     for (i, to, from, load, store) in rewrites {

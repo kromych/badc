@@ -4279,6 +4279,7 @@ impl Compiler {
         // the unit's `.globl` / `.weak` directives, in either order and from
         // either statement, so the object writer settles it.
         let strlen_folds = !self.library_name_is_opaque("strlen");
+        let variant_pcs = self.variant_pcs_names();
         let mut function_aliases = self.function_aliases;
         for (name, target, addend) in self.asm_sym_sets {
             function_aliases.push(crate::c5::program::FunctionAlias {
@@ -4295,7 +4296,7 @@ impl Compiler {
             asm_weak_names: self.asm_weak_names,
             asm_global_names: self.asm_global_names,
             asm_visibility: self.asm_visibility,
-            asm_variant_pcs: self.asm_variant_pcs,
+            variant_pcs,
             asm_unit: self.asm_unit,
             asm_file_names: self.asm_file_names,
             asm_idents: self.asm_idents,

@@ -80,6 +80,9 @@ pub(super) fn emit_inst(
         | Inst::AggParts { .. }
         | Inst::AsmOut { .. }
         | Inst::Undef => Ok(()),
+        Inst::ParamRef { kind, .. } | Inst::RetPart { kind, .. } if kind.is_sve() => {
+            super::sve::emit_incoming(code, inst, (v, dst), alloc, frame, param_plan)
+        }
         Inst::ParamRef { .. } | Inst::ParamPart { .. } | Inst::RetPart { .. } => {
             let src = super::ssa::reg_alloc::incoming_reg(param_plan, inst)
                 .or_else(|| super::ssa::reg_alloc::ret_part_reg(target, inst));

@@ -161,6 +161,7 @@ pub(crate) fn early_exit(func: &FunctionSsa, plan: &[ArgPlacement]) -> Option<Ea
         || func.indirect_result_slot != 0
         || func.ret_agg.is_some()
         || func.ret_is_fp
+        || func.sve_pcs.is_some()
         || func.has_returns_twice_call
         || func.blocks.is_empty()
     {

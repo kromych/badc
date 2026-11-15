@@ -1888,7 +1888,7 @@ impl<'a> RelocWriter<'a> {
             .filter_map(|s| Some((s.link_name(), s.visibility?)))
             .chain(program.asm_visibility.iter().map(|(n, v)| (n.as_str(), *v)))
             .collect();
-        names.variant_pcs = program.asm_variant_pcs.iter().map(String::as_str).collect();
+        names.variant_pcs = program.variant_pcs.iter().map(String::as_str).collect();
         let interposable: BTreeSet<&str> = (program.symbols.iter())
             .filter(|s| program.interposable_refs && s.is_interposable_definition())
             .map(|s| s.def_link_name())
@@ -2223,7 +2223,7 @@ impl<'a> RelocWriter<'a> {
             }
         }
         let marked = program.asm_visibility.iter().map(|(n, _)| n.as_str());
-        for n in marked.chain(program.asm_variant_pcs.iter().map(String::as_str)) {
+        for n in marked.chain(program.variant_pcs.iter().map(String::as_str)) {
             if self.is_unreached(n) {
                 self.names.asm_extern_names.push(n);
             }

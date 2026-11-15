@@ -900,6 +900,12 @@ fn candidacy(
         say(format_args!("naked function"));
         return false;
     }
+    // TODO: SVE values across the splice: the call's result is a `RetPart`
+    // of z0 or p0, and a parameter passed by reference is a copy's address.
+    if func.sve_pcs.is_some() {
+        say(format_args!("SVE procedure call standard"));
+        return false;
+    }
     // A weak definition is replaceable: the linker binds every reference to
     // a strong definition of the same name when one exists in another
     // object, so the body visible here need not be the one that runs.
@@ -3656,6 +3662,7 @@ fn splice_multi_block(
 
         param_local_slots: original.param_local_slots,
         ret_agg: original.ret_agg,
+        sve_pcs: original.sve_pcs,
         ret_is_fp: original.ret_is_fp,
         ret_type_tag: original.ret_type_tag,
         indirect_result_slot: original.indirect_result_slot,

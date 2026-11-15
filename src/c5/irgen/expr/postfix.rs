@@ -100,7 +100,11 @@ impl<'a> Walker<'a> {
         // implicit int-to-double lift the parser emitted here.
         let mut fp_arg_mask = crate::c5::ir::FpMask::EMPTY;
         for (i, a) in args.iter().enumerate() {
-            arg_vals.push(self.walk_copy_operand(b, *a)?);
+            let sve = crate::c5::ast::expr_ty(self.ast.expr(*a)).and_then(|t| self.sve_kind(t));
+            arg_vals.push(match sve {
+                Some(_) => self.walk_sve_value(b, *a)?,
+                None => self.walk_copy_operand(b, *a)?,
+            });
             if arg_value_ty(self.ast.expr(*a))
                 .is_some_and(|t| self.crosses_in_fp_reg(callee_conv, t))
             {
@@ -526,6 +530,10 @@ impl<'a> Walker<'a> {
         ty: i64,
         extend: bool,
     ) -> ValueId {
+        // An SVE result arrives in z0 or p0 (AAPCS64 6.9).
+        if let Some(kind) = self.sve_kind(ty) {
+            return b.sve_result(kind);
+        }
         if let Some((ridx, slot)) = ret_temp {
             b.set_call_ret_agg(call, ridx, slot);
             self.call_temps.push(slot);

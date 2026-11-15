@@ -1891,6 +1891,8 @@ fn the_sve_types_are_sizeless() {
         svint8_t a(svint16_t, svint64_t, svuint16_t, svuint32_t, svuint64_t);\n\
         svfloat32_t b(svfloat64_t, svbfloat16_t, svint32_t *);\n\
         void c(svint32_t *q) { (void)*q; }\n\
+        svint32_t d(svint32_t x, svbool_t p) { return x; }\n\
+        void e(svint32_t *q, svbool_t *p) { *q = d(*q, *p); d(*q, *p); }\n\
         int main(void) { return 0; }\n";
     assert_eq!(compile(ok, Target::LinuxAarch64), None);
     for (src, want) in [
@@ -1935,16 +1937,20 @@ fn the_sve_types_are_sizeless() {
             "`_Atomic` qualifies a sizeless type",
         ),
         (
-            "void f(svint32_t x) {}",
-            "parameter `x` has SVE type `__SVInt32_t`",
+            "void f(svint32_t x, ...) {}",
+            "parameter `x` of a variadic definition has SVE type `__SVInt32_t`",
         ),
         (
-            "void h(svint32_t); void f(svint32_t *p) { h(*p); }",
+            "void h(int, ...); void f(svint32_t *p) { h(1, *p); }",
             "a value of SVE type `__SVInt32_t`",
         ),
         (
-            "svint32_t h(void); void f(svint32_t *p) { *p = h(); }",
-            "with incomplete return type",
+            "svint32_t g(void); void h(int, ...); void f(void) { h(1, g()); }",
+            "an SVE argument of type `__SVInt32_t` past the prototype",
+        ),
+        (
+            "svbool_t g(void); void h(); void f(void) { h(g()); }",
+            "past the prototype",
         ),
         (
             "void f(int c, svint32_t *p, svint32_t *q) { svint32_t x = c ? *p : *q; }",

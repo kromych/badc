@@ -104,6 +104,10 @@ struct Memory {
     bytes: Vec<u8>,
     /// The SVE vector length in bytes the run models, fixed for the run.
     sve_vl_bytes: usize,
+    /// The SVE values of the call being entered, by argument position, and
+    /// the SVE value the last return left, as `z0` / `p0` carry them.
+    sve_args: Vec<Option<Vec<u8>>>,
+    sve_ret: Vec<u8>,
     data_end: usize,
     /// Bump-pointer next-frame-allocation cursor. Pushed by
     /// `alloc_frame` on call entry; reset to the saved base on
@@ -203,6 +207,8 @@ impl Memory {
         let mut mem = Self {
             bytes,
             sve_vl_bytes: SVE_DEFAULT_VL_BYTES,
+            sve_args: Vec::new(),
+            sve_ret: Vec::new(),
             data_end,
             stack_top: data_end,
             heap_base,
@@ -620,6 +626,8 @@ struct Frame<'a> {
     /// The SVE vector and predicate values, by `ValueId`: the run's vector
     /// length of bytes, or an eighth of it.
     sregs: alloc::collections::BTreeMap<ValueId, Vec<u8>>,
+    /// The SVE arguments the frame was entered with, by position.
+    sve_args: Vec<Option<Vec<u8>>>,
 }
 
 impl Frame<'_> {
@@ -995,6 +1003,7 @@ fn run_func<H: Host>(
         block_idx: 0,
         vregs: alloc::collections::BTreeMap::new(),
         sregs: alloc::collections::BTreeMap::new(),
+        sve_args: core::mem::take(&mut mem.sve_args),
     };
     for (i, &v) in args.iter().enumerate() {
         // Host-ABI register-passed aggregate parameter. The callee body
@@ -1047,6 +1056,9 @@ fn run_func<H: Host>(
                 let r = if rv == super::super::ir::NO_VALUE {
                     0
                 } else {
+                    if let Some(bytes) = frame.sregs.get(&rv) {
+                        mem.sve_ret = bytes.clone();
+                    }
                     frame.regs[rv as usize]
                 };
                 break Ok(r);
@@ -1236,6 +1248,33 @@ fn function_at(prog: &Program<'_>, raw: i64) -> Result<usize, C5Error> {
 /// interpreter's register convention holds every f32 value as the f64
 /// pattern of its single-precision value, so narrow at the cell
 /// boundary.
+/// Hand a call its SVE arguments as the callee reads either form of one:
+/// the value its register carries, and the address of a copy, the integer
+/// argument a callee whose registers ran out reads (AAPCS64 6.8.2). The
+/// stack top the copies take, to release after the call.
+fn pass_sve_args(
+    frame: &Frame<'_>,
+    mem: &mut Memory,
+    args: &[ValueId],
+    arg_vals: &mut [i64],
+) -> Result<usize, C5Error> {
+    let top = mem.stack_top;
+    let mut values = Vec::with_capacity(args.len());
+    for (i, a) in args.iter().enumerate() {
+        let bytes = frame.sregs.get(a).cloned();
+        if let Some(b) = &bytes {
+            let at = mem.alloc_frame(b.len())?;
+            mem.write_bytes(at, b)?;
+            if let Some(slot) = arg_vals.get_mut(i) {
+                *slot = at as i64;
+            }
+        }
+        values.push(bytes);
+    }
+    mem.sve_args = values;
+    Ok(top)
+}
+
 fn collect_call_args(
     frame: &Frame<'_>,
     mem: &Memory,
@@ -1713,9 +1752,12 @@ fn run_inst<H: Host>(
             let callee = prog.lookup(*target_pc).ok_or_else(|| {
                 C5Error::Runtime(format!("vm_ssa: Call: no function at ent_pc {target_pc}",))
             })?;
-            let arg_vals = collect_call_args(frame, mem, args, arg_aggs, *fixed_args)?;
+            let mut arg_vals = collect_call_args(frame, mem, args, arg_aggs, *fixed_args)?;
+            let copies = pass_sve_args(frame, mem, args, &mut arg_vals)?;
             let link = frame.link_to(callee, v);
-            let ret = run_func(prog, mem, host, link, &arg_vals, arg_aggs)?;
+            let ret = run_func(prog, mem, host, link, &arg_vals, arg_aggs);
+            mem.release_frame(copies);
+            let ret = ret?;
             frame.regs[v as usize] = finish_agg_return(frame, mem, *ret_agg, *ret_slot_local, ret)?;
             return Ok(());
         }
@@ -1745,9 +1787,12 @@ fn run_inst<H: Host>(
                 return Ok(());
             }
             let callee = function_at(prog, raw)?;
-            let arg_vals = collect_call_args(frame, mem, args, arg_aggs, *fixed_args)?;
+            let mut arg_vals = collect_call_args(frame, mem, args, arg_aggs, *fixed_args)?;
+            let copies = pass_sve_args(frame, mem, args, &mut arg_vals)?;
             let link = frame.link_to(callee, v);
-            let ret = run_func(prog, mem, host, link, &arg_vals, arg_aggs)?;
+            let ret = run_func(prog, mem, host, link, &arg_vals, arg_aggs);
+            mem.release_frame(copies);
+            let ret = ret?;
             frame.regs[v as usize] = finish_agg_return(frame, mem, *ret_agg, *ret_slot_local, ret)?;
             return Ok(());
         }
@@ -1829,6 +1874,18 @@ fn run_inst<H: Host>(
             // No-op for v0 == AllocaInit(0); the SSA-VM does not
             // expose alloca yet -- callers requesting a real
             // arena get the "not implemented" path below.
+            return Ok(());
+        }
+        Inst::ParamRef { idx, kind } if kind.is_sve() => {
+            let bytes = frame.sve_args.get(*idx as usize).cloned().flatten();
+            let bytes = bytes.ok_or_else(|| {
+                C5Error::Runtime(format!("vm_ssa: ParamRef({idx}): no SVE argument"))
+            })?;
+            frame.sregs.insert(v, bytes);
+            return Ok(());
+        }
+        Inst::RetPart { kind, .. } if kind.is_sve() => {
+            frame.sregs.insert(v, core::mem::take(&mut mem.sve_ret));
             return Ok(());
         }
         Inst::ParamRef { idx, kind } => {

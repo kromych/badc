@@ -1451,13 +1451,10 @@ impl Compiler {
         params.enumerators.extend(enumerators);
         self.check_complete_parameters(&params, def.at.line)?;
         self.park_self_named_param(id_idx, &params);
-        // C99 6.9.1p3: a definition returns void or a complete object type.
+        // C99 6.9.1p3: a definition returns void or a complete object type,
+        // or an SVE type (ACLE).
         let ret = self.symbols[id_idx].type_;
-        if self.sve_type_of(ret).is_some() {
-            let name = self.symbols[id_idx].name.clone();
-            return Err(self.sizeless_object_err("the result of", &name, ret, false));
-        }
-        if self.incomplete_aggregate_tag(ret).is_some() {
+        if self.incomplete_aggregate_tag(ret).is_some() && self.sve_type_of(ret).is_none() {
             let ty = super::types::format_type(ret, &self.structs);
             let name = &self.symbols[id_idx].name;
             return Err(self.compile_err_at(
@@ -1548,9 +1545,14 @@ impl Compiler {
         line: usize,
     ) -> Result<(), C5Error> {
         for (&idx, &ty) in params.indices.iter().zip(&params.types) {
-            if self.sve_type_of(ty).is_some() {
+            // AAPCS64 passes no unnamed SVE argument in a register, and the
+            // register save area of a variadic definition holds none.
+            if self.sve_type_of(ty).is_some() && params.is_variadic {
                 let name = &self.symbols[idx].name;
                 return Err(self.sizeless_object_err("parameter", name, ty, false));
+            }
+            if self.sve_type_of(ty).is_some() {
+                continue;
             }
             if self.incomplete_aggregate_tag(ty).is_some() {
                 let name = &self.symbols[idx].name;
@@ -1859,6 +1861,19 @@ impl Compiler {
             if !is_struct_ty(pty) || struct_ptr_depth(pty) != 0 {
                 continue;
             }
+            // An SVE parameter is an object of the vector length the entry
+            // allocates and fills from its register or the caller's copy.
+            if self.sve_type_of(pty).is_some() {
+                let ptr_slot = self.reserve_slots(1);
+                let size_slot = self.reserve_slots(1);
+                let s = &mut self.symbols[idx];
+                s.is_vla = true;
+                s.vla_ptr_slot = ptr_slot;
+                s.vla_size_slot = size_slot;
+                s.val = ptr_slot;
+                self.uses_alloca_in_current_fn = true;
+                continue;
+            }
             let slots = self.slots_of_type(pty);
             let param_val = self.symbols[idx].val;
             let local_val = self.reserve_object_slots(pty, slots)?;
@@ -2080,7 +2095,8 @@ impl Compiler {
             })
             .collect();
         let ret_ty_for_finish = self.current_func_return_ty;
-        let returns_struct_finish = is_struct_value_ty(ret_ty_for_finish);
+        let returns_struct_finish =
+            is_struct_value_ty(ret_ty_for_finish) && self.sve_type_of(ret_ty_for_finish).is_none();
         let return_struct_size_finish = if returns_struct_finish {
             self.size_of_type(ret_ty_for_finish) as i64
         } else {

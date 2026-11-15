@@ -463,12 +463,12 @@ impl CallOperands<'_> {
     /// named parameter count.
     pub(super) fn plan(
         &self,
-        agg_descs: &[super::super::ir::AggDesc],
+        func: &FunctionSsa,
         abi: super::Abi,
         callee_variadic: bool,
         fixed_args: usize,
     ) -> super::CallPlan {
-        let aggs = build_arg_aggs(self.arg_aggs, agg_descs, abi);
+        let aggs = super::ssa::emit_common::build_call_aggs(func, self.args, self.arg_aggs, abi);
         let named = super::named_args(abi, callee_variadic, fixed_args, self.args.len());
         super::plan_call_args_aggs(
             self.args.len(),
@@ -517,13 +517,13 @@ pub(super) fn emit_call_ext(
         None => return fail("CallExt: binding index has no resolved import"),
     };
     let imp = &imports.imports[import_index];
-    let plan = ops.plan(agg_descs, abi, imp.is_variadic, imp.fixed_args);
+    let plan = ops.plan(func, abi, imp.is_variadic, imp.fixed_args);
     // The argument area at `[sp, #0]`: the reserved one, or bytes the call
     // lowers sp by.
     let lowered = frame.sp_lowering(plan.scratch_bytes);
     emit_stack_alloc(code, lowered, None);
     marshal_args(
-        code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs, abi,
+        code, &plan, args, alloc, scratch, frame, arg_aggs, func, abi,
     )?;
     setup_indirect_result(code, ret_agg, ret_slot_off, agg_descs, func, frame, &plan);
     plt_call_fixups.push(PltCallFixup {
@@ -627,7 +627,12 @@ pub(super) fn detect_tail_call<'a>(
     imports: &super::ResolvedImports,
     target: Target,
 ) -> Option<TailCall<'a>> {
-    if !abi.sibling_calls || target == Target::WindowsAarch64 || func.is_variadic {
+    // A callee of another standard may change what the SVE PCS preserves.
+    if !abi.sibling_calls
+        || target == Target::WindowsAarch64
+        || func.is_variadic
+        || func.sve_pcs.is_some()
+    {
         return None;
     }
     let (v, void) = super::ssa::emit_common::tail_call_site(func, alloc, block)?;
@@ -700,11 +705,13 @@ pub(super) fn detect_tail_call<'a>(
         }
         _ => return None,
     };
-    if ops.arg_aggs.iter().any(Option::is_some) {
+    if ops.arg_aggs.iter().any(Option::is_some)
+        || ops.args.iter().any(|&a| func.value_sve_kind(a).is_some())
+    {
         return None;
     }
     // A stack argument would land in this function's incoming argument area.
-    let plan = ops.plan(&func.agg_descs, abi, false, fixed_args);
+    let plan = ops.plan(func, abi, false, fixed_args);
     if plan.scratch_bytes > 0
         || plan
             .placements
@@ -744,7 +751,7 @@ pub(super) fn emit_tail_call(
         ..
     } = *fcx;
     let ops = tail.ops;
-    let plan = ops.plan(&func.agg_descs, abi, false, tail.fixed_args);
+    let plan = ops.plan(func, abi, false, tail.fixed_args);
     marshal_args(
         code,
         &plan,
@@ -753,7 +760,7 @@ pub(super) fn emit_tail_call(
         scratch,
         frame,
         ops.arg_aggs,
-        &func.agg_descs,
+        func,
         abi,
     )?;
     emit_frame_exit(
@@ -821,11 +828,11 @@ pub(super) fn emit_call(
     {
         return fail("Call: variadic callee not matched by a host-ABI branch");
     }
-    let plan = ops.plan(agg_descs, abi, callee_is_variadic, fixed_args);
+    let plan = ops.plan(func, abi, callee_is_variadic, fixed_args);
     let lowered = frame.sp_lowering(plan.scratch_bytes);
     emit_stack_alloc(code, lowered, None);
     marshal_args(
-        code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs, abi,
+        code, &plan, args, alloc, scratch, frame, arg_aggs, func, abi,
     )?;
     setup_indirect_result(code, ret_agg, ret_slot_off, agg_descs, func, frame, &plan);
     fixups.push(Fixup {
@@ -1072,7 +1079,7 @@ pub(super) fn emit_call_indirect(
     }
     // A non-variadic call plans every argument as fixed, which also serves a
     // prototype the walker could not recover.
-    let mut plan = ops.plan(agg_descs, abi, callee_variadic, fixed_args);
+    let mut plan = ops.plan(func, abi, callee_variadic, fixed_args);
     // A target in a register the marshal does not write is called where it
     // is: no other argument lands in it, and it is neither the scratch
     // pair, x19, which a lowering may take as a third scratch, nor x8,
@@ -1131,7 +1138,7 @@ pub(super) fn emit_call_indirect(
         emit_sp_str_x_auto(code, target_reg, off);
     }
     marshal_args(
-        code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs, abi,
+        code, &plan, args, alloc, scratch, frame, arg_aggs, func, abi,
     )?;
     setup_indirect_result(code, ret_agg, ret_slot_off, agg_descs, func, frame, &plan);
     // The marshal consumed every argument source, so x16 is free to
@@ -1173,11 +1180,124 @@ struct CallArgs<'a> {
     arg_aggs: &'a [Option<u32>],
     agg_descs: &'a [super::super::ir::AggDesc],
     abi: super::Abi,
+    /// Per argument, its SVE kind.
+    sve: Vec<Option<LoadKind>>,
 }
 
 impl CallArgs<'_> {
     fn arg_place(&self, i: usize) -> Place {
         place_of(self.alloc, self.args[i])
+    }
+
+    /// Argument `i` is an SVE value the plan passes by reference.
+    fn sve_by_ref(&self, i: usize) -> bool {
+        self.sve[i].is_some()
+            && matches!(
+                self.plan.placements[i],
+                super::ArgPlacement::IntReg(_) | super::ArgPlacement::Stack(_)
+            )
+    }
+
+    /// The copies of the SVE arguments passed by reference, in argument
+    /// order, each with its slot; an address bound for the stack is
+    /// stored there now, one for a register once the registers are set.
+    fn copy_sve_args(&self, code: &mut CodeBuf, at_reg: bool) -> Emit {
+        let (mut z, mut p) = (0u32, 0u32);
+        for i in 0..self.args.len() {
+            if !self.sve_by_ref(i) {
+                continue;
+            }
+            let pred = self.sve[i] == Some(LoadKind::SvePredicate);
+            let k = if pred { &mut p } else { &mut z };
+            let slot = self.frame.sve.out_slot(pred, *k);
+            *k += 1;
+            let value = self.args[i];
+            match (at_reg, self.plan.placements[i]) {
+                (false, place) => {
+                    super::sve::store_copy(code, self.frame, self.alloc, value, pred, slot)?;
+                    if let super::ArgPlacement::Stack(off) = place {
+                        let t = self.scratch.primary;
+                        super::sve::slot_address(code, self.frame, !pred, slot, t);
+                        emit_mem(
+                            code,
+                            super::encode::STR_X,
+                            t.0,
+                            Reg(31),
+                            off.into(),
+                            self.scratch.secondary,
+                        );
+                    }
+                }
+                (true, super::ArgPlacement::IntReg(r)) => {
+                    super::sve::slot_address(code, self.frame, !pred, slot, Reg(r));
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
+    /// SVE vectors in z0-z7 and predicates in p0-p3, each file one parallel
+    /// copy; a scalar FP argument joins the vectors', whose registers its
+    /// own alias.
+    fn marshal_sve_regs(&self, code: &mut CodeBuf) -> Emit {
+        use super::ssa::reg_alloc::VecWidth;
+        let mut z: Vec<(Place, Place, VecWidth)> = Vec::new();
+        let mut preds = Vec::new();
+        for (i, &placement) in self.plan.placements.iter().enumerate() {
+            match placement {
+                super::ArgPlacement::FpReg(r) => {
+                    let w = if self.sve[i].is_some() {
+                        VecWidth::Scalable
+                    } else {
+                        VecWidth::Scalar
+                    };
+                    let src = self.arg_place(i);
+                    if matches!(src, Place::FpReg(_)) || w == VecWidth::Scalable {
+                        z.push((src, Place::FpReg(r), w));
+                    }
+                }
+                super::ArgPlacement::PredReg(r) => {
+                    let Some(from) = self.alloc.sve.pred_place(self.args[i]) else {
+                        return fail("Call: SVE predicate argument has no place");
+                    };
+                    preds.push((from, super::super::ssa::sve_alloc::PredPlace::Reg(r)));
+                }
+                _ => {}
+            }
+        }
+        // A spilled vector is reloaded once the register moves read their sources.
+        let (moves, loads): (Vec<_>, Vec<_>) =
+            z.into_iter().partition(|m| matches!(m.0, Place::FpReg(_)));
+        let mut moves = moves;
+        super::ssa::emit_common::schedule_fp_place_moves(
+            &super::ssa::emit_common::Aarch64Backend::default(),
+            code,
+            &mut moves,
+            self.frame,
+            self.frame.fp_scratch[1],
+            self.frame.fp_scratch[0],
+        );
+        for (src, dst, _) in loads {
+            super::sve::emit_z_copy(code, src, dst, self.frame)?;
+        }
+        for (i, &placement) in self.plan.placements.iter().enumerate() {
+            let super::ArgPlacement::FpReg(r) = placement else {
+                continue;
+            };
+            let ap = self.arg_place(i);
+            if self.sve[i].is_some() || matches!(ap, Place::FpReg(_)) {
+                continue;
+            }
+            let Some(src) = materialize_fp_shifted(code, ap, r, self.frame, self.sp_shift()) else {
+                return fail("Call: FP arg not fp reg / spill");
+            };
+            if src != r {
+                emit(code, super::encode::enc_fmov_d_d(r, src));
+            }
+        }
+        super::sve::schedule_pred_moves(code, self.frame, &mut preds);
+        Ok(())
     }
 
     /// How far the call lowered sp ([`Frame::sp_lowering`]), which an
@@ -1223,6 +1343,9 @@ impl CallArgs<'_> {
             let super::ArgPlacement::Stack(off) = placement else {
                 continue;
             };
+            if self.sve[i].is_some() {
+                continue;
+            }
             let ap = self.arg_place(i);
             let bytes = self.plan.stack_widths.bytes(i);
             if let Place::FpReg(_) = ap {
@@ -1314,6 +1437,9 @@ impl CallArgs<'_> {
     /// scratch breaking cycles; spilled and integer sources then
     /// materialize into their targets.
     fn marshal_fp_args(&self, code: &mut CodeBuf) -> Emit {
+        if self.sve.iter().any(Option::is_some) {
+            return self.marshal_sve_regs(code);
+        }
         let mut fp_moves: Vec<(u8, u8)> = Vec::new();
         for (i, &placement) in self.plan.placements.iter().enumerate() {
             if let super::ArgPlacement::FpReg(r) = placement
@@ -1411,6 +1537,9 @@ impl CallArgs<'_> {
             let super::ArgPlacement::IntReg(r) = placement else {
                 continue;
             };
+            if self.sve[i].is_some() {
+                continue;
+            }
             let ap = self.arg_place(i);
             match ap {
                 Place::IntReg(_) => {}
@@ -1503,8 +1632,9 @@ impl CallArgs<'_> {
 /// Place every call argument into its AAPCS64 slot in an order that
 /// survives source / target overlaps: each register bank is a parallel
 /// copy whose residual cycles break through one scratch-mediated move.
-/// Passes: stack slots, stack aggregates, FP registers, HFA members,
-/// integer registers, aggregate eightbytes.
+/// Passes: the copies of the SVE arguments passed by reference, stack
+/// slots, stack aggregates, FP and SVE registers, HFA members, integer
+/// registers, aggregate eightbytes, the copies' addresses.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn marshal_args(
     code: &mut CodeBuf,
@@ -1514,7 +1644,7 @@ pub(super) fn marshal_args(
     scratch: &ScratchPool,
     frame: Frame,
     arg_aggs: &[Option<u32>],
-    agg_descs: &[super::super::ir::AggDesc],
+    func: &FunctionSsa,
     abi: super::Abi,
 ) -> Emit {
     let call = CallArgs {
@@ -1524,13 +1654,16 @@ pub(super) fn marshal_args(
         scratch,
         frame,
         arg_aggs,
-        agg_descs,
+        agg_descs: &func.agg_descs,
         abi,
+        sve: args.iter().map(|&a| func.value_sve_kind(a)).collect(),
     };
+    call.copy_sve_args(code, false)?;
     call.marshal_stack_args(code)?;
     call.marshal_struct_stack_args(code)?;
     call.marshal_fp_args(code)?;
     call.marshal_hfa_args(code)?;
     call.marshal_int_args(code)?;
-    call.load_struct_eightbytes(code)
+    call.load_struct_eightbytes(code)?;
+    call.copy_sve_args(code, true)
 }

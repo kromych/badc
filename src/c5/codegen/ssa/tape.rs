@@ -72,6 +72,7 @@ fn keyed(func: &mut FunctionSsa) -> Keyed<'_> {
         param_aggs: _,
         param_local_slots: _,
         ret_agg: _,
+        sve_pcs: _,
         ret_is_fp: _,
         ret_type_tag: _,
         indirect_result_slot: _,

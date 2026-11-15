@@ -3461,6 +3461,41 @@ fn file_scope_asm_variant_pcs_marks_the_symbol() {
     }
 }
 
+/// A function following the SVE PCS -- taking or returning an SVE value,
+/// or declared `aarch64_sve_pcs` -- carries `STO_AARCH64_VARIANT_PCS` in
+/// its symbol, defined or referenced, as gcc's `.variant_pcs` gives the
+/// references too (AAELF64); a function of the base standard does not.
+#[test]
+fn sve_pcs_functions_are_marked_variant_pcs() {
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    const SRC: &str = "#include <arm_sve.h>\n\
+        svint32_t g(svint32_t);\n\
+        void __attribute__((aarch64_sve_pcs)) h(void);\n\
+        void unused(svbool_t);\n\
+        svint32_t f(svint32_t x) { h(); return g(x); }\n\
+        void plain(svint32_t *p) { *p = g(*p); }\n";
+    let copts = CompileOptions {
+        no_entry_point: true,
+        ..Default::default()
+    };
+    let program = Compiler::with_options(String::from(SRC), Target::LinuxAarch64, copts)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    for (name, other) in [("f", 0x80), ("g", 0x80), ("h", 0x80), ("plain", 0)] {
+        assert_eq!(
+            elf_symbol_st_other(&bytes, name),
+            other,
+            "st_other of `{name}`"
+        );
+    }
+}
+
 /// Read `st_other` (visibility byte) of the first `.symtab` entry named
 /// `want` from a raw ELF64 object. `parse_native_elf` drops visibility, so
 /// the byte is read directly.

@@ -57,6 +57,7 @@ struct AttrFlags {
     designated_init: bool,
     ms_abi: bool,
     sysv_abi: bool,
+    aarch64_sve_pcs: bool,
 }
 
 impl AttrFlags {
@@ -84,6 +85,7 @@ impl AttrFlags {
         self.designated_init |= other.designated_init;
         self.ms_abi |= other.ms_abi;
         self.sysv_abi |= other.sysv_abi;
+        self.aarch64_sve_pcs |= other.aarch64_sve_pcs;
     }
 }
 
@@ -1138,6 +1140,7 @@ impl Compiler {
             // the Linux `__efiapi` spelling relies on.
             Attr::MsAbi => f.ms_abi = true,
             Attr::SysvAbi => f.sysv_abi = true,
+            Attr::Aarch64SvePcs => f.aarch64_sve_pcs = true,
             // Read with their operands by the caller.
             Attr::VectorSize
             | Attr::Mode
@@ -1605,6 +1608,11 @@ impl Compiler {
                 let conv = Some(if own { CallConv::Target } else { conv });
                 self.pending.attrs.call_conv = self.add_conv(self.pending.attrs.call_conv, conv)?;
             }
+        }
+        // `aarch64_sve_pcs` is inert off AArch64, as clang's is.
+        if attrs.aarch64_sve_pcs && self.target.is_aarch64() {
+            let conv = Some(CallConv::Sve);
+            self.pending.attrs.call_conv = self.add_conv(self.pending.attrs.call_conv, conv)?;
         }
         Ok(attrs.packed)
     }

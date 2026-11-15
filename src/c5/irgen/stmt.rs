@@ -821,6 +821,11 @@ impl<'a> Walker<'a> {
             self.return_without_value(b);
             return Ok(true);
         }
+        if self.sve_kind(self.scalar_return_ty).is_some() {
+            let v = self.walk_sve_value(b, e)?;
+            self.return_value(b, v);
+            return Ok(true);
+        }
         // C99 6.8.6.4p3: the operand converts as if by assignment. A
         // scalar returned through the 128-bit integer carrier is a
         // value, not an address, so widen it into a 16-byte object

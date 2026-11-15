@@ -1375,7 +1375,12 @@ pub(crate) fn param_plan(
     abi: super::Abi,
     named: usize,
 ) -> super::CallPlan {
-    let aggs = build_arg_aggs(&func.param_aggs, &func.agg_descs, abi);
+    let mut aggs = build_arg_aggs(&func.param_aggs, &func.agg_descs, abi);
+    if let Some(kinds) = &func.sve_pcs {
+        class_scalable(&mut aggs, func.n_params, |i| {
+            kinds.get(i).copied().flatten()
+        });
+    }
     super::plan_call_args_aggs(
         func.n_params,
         named,
@@ -1401,6 +1406,35 @@ pub(crate) fn build_arg_aggs(
         .iter()
         .map(|o| o.map(|idx| super::ArgAgg::new(&agg_descs[idx as usize], abi)))
         .collect()
+}
+
+/// [`build_arg_aggs`] for the call arguments `args` of `func`, an SVE
+/// value classed by its kind.
+pub(crate) fn build_call_aggs(
+    func: &super::super::ir::FunctionSsa,
+    args: &[super::super::ir::ValueId],
+    arg_aggs: &[Option<u32>],
+    abi: super::Abi,
+) -> alloc::vec::Vec<Option<super::ArgAgg>> {
+    let mut aggs = build_arg_aggs(arg_aggs, &func.agg_descs, abi);
+    class_scalable(&mut aggs, args.len(), |i| func.value_sve_kind(args[i]));
+    aggs
+}
+
+/// Class each of the `n` positions `kind` names an SVE kind for.
+fn class_scalable(
+    aggs: &mut alloc::vec::Vec<Option<super::ArgAgg>>,
+    n: usize,
+    kind: impl Fn(usize) -> Option<super::super::ir::LoadKind>,
+) {
+    for i in 0..n {
+        if let Some(k) = kind(i) {
+            aggs.resize(aggs.len().max(n), None);
+            aggs[i] = Some(super::ArgAgg::scalable(
+                k == super::super::ir::LoadKind::SvePredicate,
+            ));
+        }
+    }
 }
 
 /// Whether per-pass wall-clock instrumentation is enabled. The

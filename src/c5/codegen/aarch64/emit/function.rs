@@ -224,7 +224,14 @@ pub(crate) fn emit_function(
     if let Some(bytes) = super::ssa::emit_common::locals_bytes_over_limit(func) {
         return fail(super::ssa::emit_common::frame_too_large_msg(bytes));
     }
-    let max_call_scratch = outgoing_bytes(func, alloc, abi, variadic_targets, imports);
+    let sve_alloc;
+    let alloc = if func.sve_pcs.is_some() {
+        sve_alloc = super::sve::sve_pcs_allocation(func, alloc, target, abi.fixed_regs);
+        &sve_alloc
+    } else {
+        alloc
+    };
+    let outgoing = outgoing_bytes(func, alloc, abi, variadic_targets, imports);
     // The frame and the emission read one decision on each block's tail call.
     let tail_calls: Vec<Option<super::TailCall<'_>>> = (func.blocks.iter())
         .map(|b| {
@@ -241,14 +248,8 @@ pub(crate) fn emit_function(
         })
         .collect();
     let tail_pcs: Vec<usize> = tail_calls.iter().flatten().map(|t| t.pc).collect();
-    let frame = super::frame::compute_frame_with_tail_calls(
-        func,
-        alloc,
-        abi,
-        target,
-        max_call_scratch,
-        &tail_pcs,
-    );
+    let frame =
+        super::frame::compute_frame_with_tail_calls(func, alloc, abi, target, outgoing, &tail_pcs);
     if let Some(why) = super::ssa::reg_alloc::fp_scratch_shortfall(func, target, frame.fp_scratch)
         .or_else(|| super::ssa::emit_common::naked_refusal(func, alloc, target))
     {
@@ -437,6 +438,7 @@ impl FunctionEmitter<'_, '_> {
             self.prebatched = alloc::vec![false; self.fcx.func.insts.len()];
             self.place_int_params()?;
             self.place_fp_params();
+            self.place_pred_params()?;
             self.emit_blocks()?;
             let early_far = !self.emit_early_return();
             let grew = self.mark_far_branches();
@@ -844,7 +846,10 @@ impl FunctionEmitter<'_, '_> {
             let (Inst::ParamRef { kind, .. } | Inst::ParamPart { kind, .. }) = inst else {
                 continue;
             };
-            if !matches!(kind, LoadKind::F32 | LoadKind::F64 | LoadKind::V128) {
+            if !matches!(
+                kind,
+                LoadKind::F32 | LoadKind::F64 | LoadKind::V128 | LoadKind::SveVector
+            ) {
                 continue;
             }
             if super::ssa::emit_common::is_dead_pure(inst, vid as super::super::ir::ValueId, alloc)
@@ -874,11 +879,35 @@ impl FunctionEmitter<'_, '_> {
             self.cx.code,
             &mut fp_moves,
             frame,
-            17,
-            16,
+            frame.fp_scratch[1],
+            frame.fp_scratch[0],
         );
         for vid in fp_vids {
             self.prebatched[vid] = true;
+        }
+    }
+
+    /// The predicate counterpart of [`Self::place_int_params`], which the
+    /// allocation of the P file, blind to p0-p3 at entry, always takes.
+    fn place_pred_params(&mut self) -> Emit {
+        let FnCtx {
+            func,
+            alloc,
+            frame,
+            param_plan,
+            ..
+        } = self.fcx;
+        if func.sve_pcs.is_none() {
+            return Ok(());
+        }
+        match super::sve::place_pred_params(self.cx.code, func, alloc, frame, param_plan) {
+            Ok(placed) => {
+                for vid in placed {
+                    self.prebatched[vid] = true;
+                }
+                Ok(())
+            }
+            Err(e) => self.rollback(e),
         }
     }
 
@@ -1762,6 +1791,7 @@ fn emit_prologue(
         emit(code, enc_add_imm(Reg(19), Reg(31), 0));
     }
     super::sve::emit_vl_region(code, frame);
+    super::sve::emit_pcs_saves(code, frame, true);
     if func.indirect_result_slot != 0 {
         // AAPCS64 6.9: save the caller-supplied x8 indirect-result pointer
         // into its body local; `return s;` writes the aggregate through it.
@@ -2393,6 +2423,8 @@ pub(super) fn emit_return(
 ) -> Emit<usize> {
     if let Some(ai) = func.ret_agg {
         emit_aggregate_return(code, value, ai, alloc, frame, scratch, func, abi)?;
+    } else if value != super::super::ir::NO_VALUE && func.value_sve_kind(value).is_some() {
+        super::sve::emit_return(code, func, value, alloc, frame)?;
     } else if value != super::super::ir::NO_VALUE {
         emit_scalar_return(code, value, alloc, frame, scratch, func);
     }
@@ -2436,6 +2468,7 @@ pub(super) fn emit_frame_exit(
         return start;
     }
     emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
+    super::sve::emit_pcs_saves(code, frame, false);
     let start = code.len();
     // The folded shape restores fp/lr first (the lr load feeds `ret`) and
     // tears the frame down with the last restore's post-index.
@@ -2496,7 +2529,7 @@ pub(super) fn emit_frame_exit(
 
 /// A return in registers: each part moves into its class's register
 /// (AAPCS64 6.9), the integer parts as one parallel copy through x16 /
-/// x17, the floating-point ones through d16 / d17, and a constant's bit
+/// x17, the floating-point ones through the FP scratch, and a constant's bit
 /// pattern crossing banks between the two.
 fn emit_parts_return(
     code: &mut Vec<u8>,
@@ -2529,8 +2562,8 @@ fn emit_parts_return(
         code,
         &mut fp_moves,
         frame,
-        17,
-        16,
+        frame.fp_scratch[1],
+        frame.fp_scratch[0],
     );
     for (d, s) in cross {
         emit(code, enc_fmov_x_to_d(d, s));

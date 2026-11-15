@@ -818,7 +818,7 @@ pub(crate) mod test_support {
             asm_weak_names: Vec::new(),
             asm_global_names: Vec::new(),
             asm_visibility: Vec::new(),
-            asm_variant_pcs: Vec::new(),
+            variant_pcs: Vec::new(),
             asm_unit: false,
             asm_file_names: Vec::new(),
             asm_idents: Vec::new(),

@@ -753,11 +753,16 @@ pub(crate) enum Inst {
 
 impl Inst {
     /// The SVE kind of the value the inst defines: that of an `SveLoadZ`
-    /// or `SveLoadP` intrinsic, or of a phi of an SVE kind.
+    /// or `SveLoadP` intrinsic, or of a phi, parameter or call result of an
+    /// SVE kind.
     pub(crate) fn sve_kind(&self) -> Option<LoadKind> {
         use crate::c5::op::Intrinsic as I;
         match self {
-            Inst::Phi { kind, .. } if kind.is_sve() => Some(*kind),
+            Inst::Phi { kind, .. } | Inst::ParamRef { kind, .. } | Inst::RetPart { kind, .. }
+                if kind.is_sve() =>
+            {
+                Some(*kind)
+            }
             Inst::Intrinsic { kind, .. } => match I::from_i64(*kind)? {
                 I::SveLoadZ => Some(LoadKind::SveVector),
                 I::SveLoadP => Some(LoadKind::SvePredicate),
@@ -2781,6 +2786,10 @@ pub(crate) struct FunctionSsa {
     /// `agg_descs[i]` by value through the host ABI; `None` for a
     /// scalar / void return.
     pub ret_agg: Option<u32>,
+    /// `Some` when the function follows the SVE procedure call standard
+    /// (AAPCS64 6.1.3): it takes or returns an SVE value. Per declared
+    /// parameter, its SVE kind.
+    pub sve_pcs: Option<Vec<Option<LoadKind>>>,
     /// True when the function returns a floating-point scalar (C99
     /// 6.2.5p10): the result is delivered in the FP return register
     /// (d0 / xmm0). This is the declared-type signal the return emit
@@ -2976,6 +2985,14 @@ impl SspFacts {
 impl FunctionSsa {
     pub(crate) fn has_seh(&self) -> bool {
         !self.seh_scopes.is_empty()
+    }
+
+    /// The SVE kind of value `v`, through the copies a live-range split made.
+    pub(crate) fn value_sve_kind(&self, mut v: ValueId) -> Option<LoadKind> {
+        while let Some(Inst::Copy { value, .. }) = self.insts.get(v as usize) {
+            v = *value;
+        }
+        self.insts.get(v as usize)?.sve_kind()
     }
 
     /// The innermost `__try` region block `b` lies in.
@@ -3265,6 +3282,7 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
             param_aggs: _,
             param_local_slots: _,
             ret_agg: _,
+            sve_pcs: _,
             ret_is_fp: _,
             ret_type_tag: _,
             indirect_result_slot: _,

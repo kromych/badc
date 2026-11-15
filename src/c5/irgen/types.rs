@@ -28,16 +28,7 @@ impl<'a> Walker<'a> {
     /// The register kind of a value of the SVE type `ty`, `None` for any
     /// other type.
     pub(super) fn sve_kind(&self, ty: i64) -> Option<crate::c5::ir::LoadKind> {
-        use crate::c5::compiler::SveType;
-        let stripped = strip_unsigned(ty);
-        if stripped < STRUCT_BASE || struct_ptr_depth(ty) != 0 {
-            return None;
-        }
-        let id = ((stripped - STRUCT_BASE) / STRUCT_STRIDE) as usize;
-        match self.structs.get(id)?.sve? {
-            SveType::Predicate => Some(crate::c5::ir::LoadKind::SvePredicate),
-            SveType::Vector { .. } => Some(crate::c5::ir::LoadKind::SveVector),
-        }
+        sve_kind_of(self.structs, ty)
     }
 
     /// Alignment of the struct type encoded by `ty`, bounding the
@@ -362,5 +353,23 @@ pub(super) fn lvalue_shape_label(expr: &Expr) -> &'static str {
         Expr::MsIntrinsic { .. } => "MsIntrinsic",
         Expr::MemTransfer { .. } => "MemTransfer",
         Expr::InlineAsm(_) => "InlineAsm",
+    }
+}
+
+/// The register kind of a value of the SVE type `ty`, `None` for any
+/// other type.
+pub(super) fn sve_kind_of(
+    structs: &[crate::c5::compiler::StructDef],
+    ty: i64,
+) -> Option<crate::c5::ir::LoadKind> {
+    use crate::c5::compiler::SveType;
+    let stripped = strip_unsigned(ty);
+    if stripped < STRUCT_BASE || struct_ptr_depth(ty) != 0 {
+        return None;
+    }
+    let id = ((stripped - STRUCT_BASE) / STRUCT_STRIDE) as usize;
+    match structs.get(id)?.sve? {
+        SveType::Predicate => Some(crate::c5::ir::LoadKind::SvePredicate),
+        SveType::Vector { .. } => Some(crate::c5::ir::LoadKind::SveVector),
     }
 }

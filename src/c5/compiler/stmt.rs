@@ -3802,11 +3802,14 @@ impl Compiler {
             self.check_seh_exit("`return`", None)?;
             self.next()?;
             let ret_ty = self.current_func_return_ty;
-            let returns_struct = is_struct_value_ty(ret_ty);
+            let returns_sve = self.sve_type_of(ret_ty).is_some();
+            let returns_struct = is_struct_value_ty(ret_ty) && !returns_sve;
             let returns_void = self.current_func_returns_void;
             let mut return_value: Option<super::super::ast::ExprId> = None;
             if self.lex.tk != ';' {
-                if returns_void {
+                if returns_sve {
+                    return_value = Some(self.parse_sve_operand(ret_ty, "return")?);
+                } else if returns_void {
                     self.parse_full_expr_or_void()?;
                     // C99 6.8.6.4p1: a return statement with an expression
                     // shall not appear in a function whose return type is

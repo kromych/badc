@@ -4479,6 +4479,7 @@ pub(crate) fn wide_values(func: &FunctionSsa) -> Vec<VecWidth> {
             | Inst::LoadLocal { kind, .. }
             | Inst::Phi { kind, .. }
             | Inst::AsmOut { kind, .. }
+            | Inst::ParamRef { kind, .. }
             | Inst::ParamPart { kind, .. }
             | Inst::RetPart { kind, .. } => VecWidth::of_load(*kind),
             Inst::Store { kind, .. } | Inst::StoreLocal { kind, .. } => match kind {
@@ -4770,7 +4771,7 @@ fn call_plan<'f>(
         _ => return None,
     };
     let abi = target.abi_for(inst.call_conv()?);
-    let aggs = super::emit_common::build_arg_aggs(arg_aggs, &func.agg_descs, abi);
+    let aggs = super::emit_common::build_call_aggs(func, args, arg_aggs, abi);
     let plan = crate::c5::codegen::plan_call_args_aggs(
         args.len(),
         fixed,
@@ -5314,10 +5315,19 @@ pub(crate) fn ret_part_reg(target: Target, inst: &Inst) -> Option<(bool, u8)> {
     let Inst::RetPart { slot, kind } = inst else {
         return None;
     };
+    // A predicate result's p0 is placed by `sve_alloc`.
+    if *kind == LoadKind::SvePredicate {
+        return None;
+    }
     let (ints, fps) = agg_return_regs(target);
     let fp = matches!(
         kind,
-        LoadKind::F32 | LoadKind::F64 | LoadKind::V128 | LoadKind::V256 | LoadKind::V512
+        LoadKind::F32
+            | LoadKind::F64
+            | LoadKind::V128
+            | LoadKind::V256
+            | LoadKind::V512
+            | LoadKind::SveVector
     );
     let bank = if fp { fps } else { ints };
     bank.get(*slot as usize).map(|&r| (fp, r))
@@ -5477,7 +5487,7 @@ fn compute_call_target_forbid(func: &FunctionSsa, target: Target) -> Vec<u64> {
         if (*t as usize) >= forbid.len() {
             continue;
         }
-        let aggs = super::emit_common::build_arg_aggs(arg_aggs, &func.agg_descs, abi);
+        let aggs = super::emit_common::build_call_aggs(func, args, arg_aggs, abi);
         let plan = if target.is_x86_64() && *callee_variadic && abi.position_indexed_args {
             plan_mirrored_call(args.len(), fp_arg_mask, abi, &aggs)
         } else if target.is_aarch64() {
@@ -7619,6 +7629,7 @@ int main(void) { return 0; }
             param_aggs: alloc::vec::Vec::new(),
             param_local_slots: alloc::vec::Vec::new(),
             ret_agg: None,
+            sve_pcs: None,
             ret_is_fp: false,
             ret_type_tag: None,
             indirect_result_slot: 0,
@@ -7870,6 +7881,7 @@ int main(void) { return 0; }
             param_aggs: Vec::new(),
             param_local_slots: Vec::new(),
             ret_agg: None,
+            sve_pcs: None,
             ret_is_fp: false,
             ret_type_tag: None,
             indirect_result_slot: 0,

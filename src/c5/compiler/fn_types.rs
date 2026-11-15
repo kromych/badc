@@ -580,10 +580,24 @@ impl Compiler {
         new: Option<CallConv>,
     ) -> Result<Option<CallConv>, C5Error> {
         match (prev, new) {
-            (Some(p), Some(n)) if p != n => Err(self.compile_err(
-                Code::INVALID_DECLARATION,
-                "`ms_abi` and `sysv_abi` attributes are not compatible",
-            )),
+            (Some(p), Some(n)) if p != n => {
+                // The target's own convention is what the attribute naming it became.
+                let name = |c: CallConv| match c {
+                    CallConv::Ms => "ms_abi",
+                    CallConv::Target if self.target == crate::Target::WindowsX64 => "ms_abi",
+                    CallConv::SysV | CallConv::Target => "sysv_abi",
+                    CallConv::Sve => "aarch64_sve_pcs",
+                };
+                let (a, b) = if name(p) < name(n) {
+                    (name(p), name(n))
+                } else {
+                    (name(n), name(p))
+                };
+                Err(self.compile_err(
+                    Code::INVALID_DECLARATION,
+                    alloc::format!("`{a}` and `{b}` attributes are not compatible"),
+                ))
+            }
             _ => Ok(new.or(prev)),
         }
     }

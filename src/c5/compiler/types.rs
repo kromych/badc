@@ -1032,6 +1032,7 @@ pub(super) fn format_fn_type(
             crate::c5::codegen::CallConv::Target => "",
             crate::c5::codegen::CallConv::Ms => "__attribute__((ms_abi))",
             crate::c5::codegen::CallConv::SysV => "__attribute__((sysv_abi))",
+            crate::c5::codegen::CallConv::Sve => "__attribute__((aarch64_sve_pcs))",
         };
         decl = match (depth == 0 && decl.is_empty(), conv.is_empty()) {
             (true, true) => alloc::format!("({params})"),

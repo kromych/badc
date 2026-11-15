@@ -94,9 +94,10 @@ pub(crate) struct Frame {
     /// An integer division by zero raises an exception (Windows on ARM64).
     pub raises_divide_by_zero: bool,
     /// Vector and predicate slots of the VL-scaled region below the static
-    /// frame (`super::sve`).
+    /// frame (`super::sve`), and what they hold.
     pub sve_z_slots: u32,
     pub sve_p_slots: u32,
+    pub sve: super::sve::SveFrame,
 }
 
 /// One callee save: `r` alone, or with `r2` in the slot above it as one
@@ -210,7 +211,7 @@ pub(crate) fn compute_frame(
     target: Target,
     max_call_scratch: u32,
 ) -> Frame {
-    compute_frame_with_tail_calls(func, alloc, abi, target, max_call_scratch, &[])
+    compute_frame_with_tail_calls(func, alloc, abi, target, (max_call_scratch, (0, 0)), &[])
 }
 
 /// [`compute_frame`] for a body whose calls at `tail_calls` are tail calls.
@@ -219,7 +220,7 @@ pub(crate) fn compute_frame_with_tail_calls(
     alloc: &Allocation,
     abi: super::Abi,
     target: Target,
-    max_call_scratch: u32,
+    (max_call_scratch, sve_copies): (u32, (u32, u32)),
     tail_calls: &[usize],
 ) -> Frame {
     let base = super::ssa::emit_common::compute_frame_base(func, alloc);
@@ -231,7 +232,9 @@ pub(crate) fn compute_frame_with_tail_calls(
     let locals_bytes = declared_locals_bytes + canary_bytes;
     let saved_fpr_bytes = super::ssa::emit_common::slots16(alloc.fp_used.len() as u32);
     // sp lies below the VL-scaled region, a run-time distance from fp.
-    let vl_region = alloc.sve.region_vls() > 0;
+    let count_fp = count_fp_register(func, alloc, abi, target);
+    let sve = super::sve::sve_frame(func, alloc, target, count_fp, sve_copies);
+    let vl_region = sve.z_slots() + sve.p_slots() > 0;
     let dynamic_sp =
         super::ssa::emit_common::uses_dynamic_alloca(func) || func.frame_align > 16 || vl_region;
     // The parameter cells sit below the locals, whose offsets they leave
@@ -310,7 +313,7 @@ pub(crate) fn compute_frame_with_tail_calls(
         ),
         fixed_regs,
         fp_scratch: alloc.fp_scratch,
-        count_fp: count_fp_register(func, alloc, abi, target),
+        count_fp,
         parts: super::ssa::emit_common::FrameStack {
             record: 0,
             locals: declared_locals_bytes,
@@ -359,8 +362,9 @@ pub(crate) fn compute_frame_with_tail_calls(
         saves_top: 0,
         consecutive_pairs: target == Target::WindowsAarch64,
         raises_divide_by_zero: target == Target::WindowsAarch64,
-        sve_z_slots: alloc.sve.z_slots,
-        sve_p_slots: alloc.sve.p_slots,
+        sve_z_slots: sve.z_slots(),
+        sve_p_slots: sve.p_slots(),
+        sve,
     };
     // A full leaf has nothing to address and no fp to restore sp from.
     frame.dynamic_sp |= func.has_sp_moving_asm(target) && !is_full_leaf(frame, alloc);
@@ -453,16 +457,24 @@ pub(super) fn outgoing_bytes(
     abi: super::Abi,
     variadic_targets: &alloc::collections::BTreeSet<usize>,
     imports: &super::ResolvedImports,
-) -> u32 {
+) -> (u32, (u32, u32)) {
     let mut max_out = 0u32;
     let note = |m: &mut u32, n: u32| {
         if n > *m {
             *m = n;
         }
     };
+    // The SVE arguments a call passes by reference take copies in the region.
+    let copies = core::cell::Cell::new((0u32, 0u32));
+    let note_copies = |plan: &super::CallPlan, args: &[u32]| {
+        let (z, p) = super::sve::arg_copies(func, plan, args);
+        let (mz, mp) = copies.get();
+        copies.set((mz.max(z), mp.max(p)));
+    };
     let call_scratch = |ops: super::CallOperands, callee_variadic: bool, fixed_args: usize| {
-        ops.plan(&func.agg_descs, abi, callee_variadic, fixed_args)
-            .scratch_bytes
+        let plan = ops.plan(func, abi, callee_variadic, fixed_args);
+        note_copies(&plan, ops.args);
+        plan.scratch_bytes
     };
     for block in &func.blocks {
         for v in block.inst_range.clone() {
@@ -544,7 +556,8 @@ pub(super) fn outgoing_bytes(
                         ret_slot_off: 0,
                         ends_path: false,
                     };
-                    let mut plan = ops.plan(&func.agg_descs, abi, *callee_variadic, *fixed_args);
+                    let mut plan = ops.plan(func, abi, *callee_variadic, *fixed_args);
+                    note_copies(&plan, args);
                     // Mirror `emit_call_indirect`'s register selection: a
                     // target no register can hold is staged in a cell above
                     // the argument slots.
@@ -599,7 +612,7 @@ pub(super) fn outgoing_bytes(
             }
         }
     }
-    max_out
+    (max_out, copies.get())
 }
 
 /// Frame scratch bytes of one inline-asm statement: 8 per operand
@@ -1042,6 +1055,7 @@ fn va_named_home_off(i: usize, func: &FunctionSsa, abi: super::Abi) -> Option<i6
         P::StructRegs { regs, .. } if regs[0].is_fp => vector(regs[0].reg),
         P::StructRegs { regs, .. } => 16 + regs[0].reg as i64 * 8,
         P::IntReg(r) | P::StructSplit { reg: r, .. } => 16 + r as i64 * 8,
+        P::PredReg(_) => unreachable!("ICE: a variadic definition takes no SVE parameter"),
     })
 }
 
@@ -1087,6 +1101,11 @@ fn param_home_masks(
     let mut elidable = alloc::vec![false; placements.len()];
     let mut store_dead = alloc::vec![false; placements.len()];
     for (i, p) in placements.iter().enumerate() {
+        // An SVE value is read through its `ParamRef` alone, its cell never.
+        if super::sve::sve_param(func, i) {
+            (elidable[i], store_dead[i]) = (true, true);
+            continue;
+        }
         if !matches!(
             p,
             super::ArgPlacement::IntReg(_) | super::ArgPlacement::FpReg(_)
@@ -1128,7 +1147,7 @@ fn param_home_needed(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) ->
     let elidable = param_elidable_mask(func, alloc, abi);
     placements.iter().enumerate().any(|(i, p)| match p {
         super::ArgPlacement::IntReg(_) | super::ArgPlacement::FpReg(_) => !elidable[i],
-        super::ArgPlacement::StructRegs { .. } => false,
+        super::ArgPlacement::StructRegs { .. } | super::ArgPlacement::PredReg(_) => false,
         _ => true,
     })
 }

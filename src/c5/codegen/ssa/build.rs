@@ -264,6 +264,7 @@ impl SsaBuilder {
             param_aggs: alloc::vec::Vec::new(),
             param_local_slots: alloc::vec::Vec::new(),
             ret_agg: None,
+            sve_pcs: None,
             ret_is_fp: false,
             ret_type_tag: None,
             indirect_result_slot: 0,
@@ -677,6 +678,17 @@ impl SsaBuilder {
     /// [`FunctionSsa::ret_is_fp`].
     pub(crate) fn set_ret_is_fp(&mut self, is_fp: bool) {
         self.func.ret_is_fp = is_fp;
+    }
+
+    /// Record that the function follows the SVE PCS, with each parameter's
+    /// SVE kind. See [`FunctionSsa::sve_pcs`].
+    pub(crate) fn set_sve_pcs(&mut self, kinds: Vec<Option<LoadKind>>) {
+        self.func.sve_pcs = Some(kinds);
+    }
+
+    /// The SVE value a call left in z0 or p0.
+    pub(crate) fn sve_result(&mut self, kind: LoadKind) -> ValueId {
+        self.push(Inst::RetPart { slot: 0, kind })
     }
 
     /// Record the declared return type. See

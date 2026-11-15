@@ -44,11 +44,6 @@ impl SveAlloc {
     pub(crate) fn pred_place(&self, v: ValueId) -> Option<PredPlace> {
         self.pred.get(&v).copied()
     }
-
-    /// Vector lengths the region takes, the predicate slots eight to one.
-    pub(crate) fn region_vls(&self) -> u32 {
-        self.p_slots.div_ceil(8) + self.z_slots
-    }
 }
 
 /// The value width of the result of intrinsic `kind`.

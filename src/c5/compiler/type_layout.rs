@@ -219,6 +219,32 @@ impl Compiler {
             .and_then(|id| self.structs[id].sve)
     }
 
+    /// The names whose symbols carry `STO_AARCH64_VARIANT_PCS` (AAELF64):
+    /// those `.variant_pcs` marks in file-scope asm, and each function the
+    /// unit defines or references that follows the SVE PCS: its type takes
+    /// or returns an SVE value, or names `aarch64_sve_pcs`.
+    pub(super) fn variant_pcs_names(&mut self) -> Vec<alloc::string::String> {
+        let mut names = core::mem::take(&mut self.asm_variant_pcs);
+        if self.target != Target::LinuxAarch64 {
+            return names;
+        }
+        let sve = |t: i64| self.sve_type_of(t).is_some();
+        for s in &self.symbols {
+            let function = s.class == Token::Fun as i64 || s.class == Token::Sys as i64;
+            let used = s.defined_here || s.binding.was_referenced;
+            let pcs = s.fn_type.conv == crate::c5::codegen::CallConv::Sve
+                || sve(s.type_)
+                || s.params().iter().any(|&t| sve(t));
+            if function && used && pcs {
+                let name = alloc::string::String::from(s.link_name());
+                if !names.contains(&name) {
+                    names.push(name);
+                }
+            }
+        }
+        names
+    }
+
     /// The spelling of `ty` where it is sizeless, which the diagnostics
     /// of an incomplete type name instead.
     pub(super) fn sizeless_spelling(&self, ty: i64) -> Option<alloc::string::String> {
@@ -239,9 +265,11 @@ impl Compiler {
         let msg = if statik {
             alloc::format!("{what} `{name}` has sizeless type `{t}` and static storage duration")
         } else {
-            // TODO: the scalable frame and the SVE calling convention.
+            // TODO: a variadic definition's named SVE parameters, which its
+            // register save area does not hold.
             alloc::format!(
-                "{what} `{name}` has SVE type `{t}`, whose values badc does not compile yet"
+                "{what} `{name}` of a variadic definition has SVE type `{t}`, which badc \
+                 does not compile yet"
             )
         };
         self.compile_err(Code::INVALID_DECLARATION, msg)
@@ -1530,7 +1558,7 @@ pub(crate) fn host_abi_agg_desc_conv(
         return None;
     }
     let id = struct_id_of(ty);
-    if id >= structs.len() {
+    if id >= structs.len() || structs[id].sve.is_some() {
         return None;
     }
     let size = abi_size(structs, target, id);
@@ -1596,6 +1624,9 @@ pub(crate) fn passes_by_reference(
         return false;
     }
     let id = struct_id_of(ty);
+    if structs[id].sve.is_some() {
+        return false;
+    }
     let size = structs[id].size;
     let homogeneous = || homogeneous_aggregate(structs, target, ty).is_some();
     match target.abi_row(conv) {
@@ -1647,6 +1678,13 @@ pub(crate) fn struct_return_abi_conv(
             .map_or(StructReturnAbi::NotStruct, StructReturnAbi::Regs);
     }
     if !is_struct_ty(ty) || struct_ptr_depth(ty) != 0 {
+        return StructReturnAbi::NotStruct;
+    }
+    // An SVE value returns in z0 or p0.
+    if structs
+        .get(struct_id_of(ty))
+        .is_some_and(|s| s.sve.is_some())
+    {
         return StructReturnAbi::NotStruct;
     }
     let aarch64 = matches!(

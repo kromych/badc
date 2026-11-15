@@ -495,6 +495,7 @@ fn classify(func: &FunctionSsa, b: BlockId) -> Class {
 fn analyze(func: &FunctionSsa) -> Option<Plan> {
     if func.is_variadic
         || func.ret_is_fp
+        || func.sve_pcs.is_some()
         || func.ret_agg.is_some()
         || func.has_returns_twice_call
         || !func.param_fp_mask.is_empty()

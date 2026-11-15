@@ -1499,6 +1499,7 @@ mod tests {
             param_aggs: alloc::vec::Vec::new(),
             param_local_slots: alloc::vec::Vec::new(),
             ret_agg: None,
+            sve_pcs: None,
             ret_is_fp: false,
             ret_type_tag: None,
             indirect_result_slot: 0,

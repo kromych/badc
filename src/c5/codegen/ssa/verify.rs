@@ -165,7 +165,9 @@ pub(crate) fn check(f: &FunctionSsa) -> Result<(), String> {
 /// An SVE vector is read as the value an `SveStoreZ` stores, by a vector
 /// phi or by an FP copy, which is one itself; a predicate as the value an
 /// `SveStoreP` stores or by a predicate phi. Those operands read nothing
-/// else, and no other instruction carries an SVE kind.
+/// else. A call's argument and an SVE-PCS function's result may be
+/// either; a parameter or a call result carries the kind it arrives as,
+/// and no other instruction carries an SVE kind.
 fn sve_files(f: &FunctionSsa) -> Result<(), String> {
     use crate::c5::op::Intrinsic as I;
     let mut kind: alloc::vec::Vec<Option<LoadKind>> = f.insts.iter().map(Inst::sve_kind).collect();
@@ -214,13 +216,21 @@ fn sve_files(f: &FunctionSsa) -> Result<(), String> {
                     expect(a, stored.filter(|_| k == 1));
                 }
             }
+            Inst::Call { args, .. }
+            | Inst::CallIndirect { args, .. }
+            | Inst::CallExt { args, .. } => {
+                for &a in args {
+                    expect(a, of(a));
+                }
+                if let Inst::CallIndirect { target, .. } = inst {
+                    expect(*target, None);
+                }
+            }
             Inst::Load { kind, .. }
             | Inst::LoadLocal { kind, .. }
             | Inst::LoadIndexed { kind, .. }
             | Inst::SegLoad { kind, .. }
-            | Inst::ParamRef { kind, .. }
             | Inst::ParamPart { kind, .. }
-            | Inst::RetPart { kind, .. }
             | Inst::AsmOut { kind, .. }
             | Inst::Select { kind, .. }
             | Inst::VecExtract { kind, .. }
@@ -236,8 +246,9 @@ fn sve_files(f: &FunctionSsa) -> Result<(), String> {
     }
     for (b, blk) in f.blocks.iter().enumerate() {
         let mut bad = None;
+        let result = matches!(blk.terminator, Terminator::Return(_)) && f.sve_pcs.is_some();
         blk.terminator.for_each_operand(|v| {
-            if of(v).is_some() {
+            if of(v).is_some() && !result {
                 bad = Some(v);
             }
         });

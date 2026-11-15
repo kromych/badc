@@ -2,7 +2,7 @@
 //! the incoming parameters (C99 6.9.1).
 
 use super::access::{load_kind_for, seg_copy_bytes, store_kind_for};
-use super::types::{arg_width, is_floating_scalar};
+use super::types::{arg_width, is_floating_scalar, sve_kind_of};
 use super::*;
 use crate::c5::codegen::{ArgAgg, CallConv, CallPlan};
 use crate::c5::compiler::{StructDef, StructReturnAbi};
@@ -55,8 +55,8 @@ pub(crate) fn walk_function(
     let entry = ParamEntry::plan(&mut b, fun, structs, target, ret.outptr);
     // A naked function has no prologue to home or copy its parameters in.
     if !fun.is_naked {
-        entry.seed_param_refs(&mut b);
-        entry.emit_entry_copies(&mut b);
+        let sve = entry.seed_param_refs(&mut b);
+        entry.emit_entry_copies(&mut b, &sve);
     }
     let mut ctx = Walker {
         ast,
@@ -255,6 +255,23 @@ impl<'a> ParamEntry<'a> {
             local_slots.extend_from_slice(&fun.param_local_slots);
             b.set_param_aggs(aggs.clone(), local_slots);
         }
+        // A function taking or returning an SVE value follows the SVE PCS.
+        let sve: alloc::vec::Vec<Option<LoadKind>> = (0..shift)
+            .map(|_| None)
+            .chain(param_tys.iter().map(|&t| sve_kind_of(structs, t)))
+            .collect();
+        if sve.iter().any(Option::is_some)
+            || sve_kind_of(structs, fun.return_ty).is_some()
+            || fun.conv == CallConv::Sve
+        {
+            arg_aggs.resize(sve.len(), None);
+            for (a, k) in arg_aggs.iter_mut().zip(&sve) {
+                if let Some(k) = k {
+                    *a = Some(ArgAgg::scalable(*k == LoadKind::SvePredicate));
+                }
+            }
+            b.set_sve_pcs(sve);
+        }
         // C99 6.2.5p10 with System V AMD64 3.2.3 / AAPCS64 6.4.2: a floating-point
         // parameter, a variadic callee's named one included, takes an FP register
         // unless the call passes every argument in the integer bank.
@@ -317,12 +334,28 @@ impl<'a> ParamEntry<'a> {
     /// host argument register while it still holds the caller's value:
     /// an entry mcpy's scratch writes can land on any caller-saved
     /// register, an argument register included.
-    fn seed_param_refs(&self, b: &mut SsaBuilder) {
+    fn seed_param_refs(&self, b: &mut SsaBuilder) -> alloc::vec::Vec<Option<ValueId>> {
+        let mut sve = alloc::vec![None; self.param_tys.len()];
         if !self.host_abi {
-            return;
+            return sve;
         }
         for i in 0..self.param_tys.len() {
             let pty = self.param_tys[i];
+            // An SVE value arrives in its register, or the address of the
+            // caller's copy in its argument cell.
+            if let Some(kind) = sve_kind_of(self.structs, pty) {
+                match self.plan.placements.get(self.shift + i) {
+                    Some(ArgPlacement::FpReg(_) | ArgPlacement::PredReg(_)) => {
+                        sve[i] = Some(b.param_ref((self.shift + i) as u32, kind));
+                    }
+                    Some(ArgPlacement::IntReg(_)) => {
+                        let pr = b.param_ref((self.shift + i) as u32, LoadKind::I64);
+                        b.store_local((i as i64) + self.arg_slot_base, pr, StoreKind::I64);
+                    }
+                    _ => {}
+                }
+                continue;
+            }
             if is_struct_value_ty(pty) {
                 // The register of one passed by address holds the address
                 // `emit_entry_copies` reads.
@@ -378,6 +411,7 @@ impl<'a> ParamEntry<'a> {
             let pr = b.param_ref((self.shift + i) as u32, ref_kind);
             b.store_local(arg_slot, pr, store_kind_for(pty, self.target));
         }
+        sve
     }
 
     /// Copy each by-address aggregate parameter into the body local the
@@ -386,7 +420,7 @@ impl<'a> ParamEntry<'a> {
     /// parameter into its narrow-storage local, and widen each `long
     /// double` passed as binary64 into its local of the platform format. A
     /// negative `param_local_slots` entry marks all three kinds.
-    fn emit_entry_copies(&self, b: &mut SsaBuilder) {
+    fn emit_entry_copies(&self, b: &mut SsaBuilder, sve: &[Option<ValueId>]) {
         for i in 0..self.param_tys.len() {
             let pty = self.param_tys[i];
             let local_slot = self.param_local_slots[i];
@@ -395,6 +429,29 @@ impl<'a> ParamEntry<'a> {
             }
             let stripped = strip_unsigned(pty);
             let arg_slot = (i as i64) + self.arg_slot_base;
+            // An SVE parameter's object takes the vector length from the
+            // arena, as an automatic one does, and the value it arrived as.
+            if let Some(kind) = sve_kind_of(self.structs, pty) {
+                use crate::c5::op::Intrinsic as I;
+                let (bytes, load, store) = if kind == LoadKind::SveVector {
+                    (I::SveVlBytes, I::SveLoadZ, I::SveStoreZ)
+                } else {
+                    (I::SvePlBytes, I::SveLoadP, I::SveStoreP)
+                };
+                let value = match sve.get(i).copied().flatten() {
+                    Some(v) => v,
+                    None => {
+                        let copy = b.load_local(arg_slot, LoadKind::I64);
+                        b.intrinsic(load as i64, alloc::vec![copy])
+                    }
+                };
+                let n = b.intrinsic(bytes as i64, alloc::vec::Vec::new());
+                let base = b.intrinsic(I::Alloca as i64, alloc::vec![n]);
+                b.store_local(local_slot, base, StoreKind::I64);
+                let at = b.load_local(local_slot, LoadKind::I64);
+                b.intrinsic(store as i64, alloc::vec![at, value]);
+                continue;
+            }
             if is_struct_value_ty(pty) {
                 // A host-ABI register-passed aggregate takes no entry
                 // copy: the backend writes the incoming registers

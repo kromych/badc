@@ -191,6 +191,11 @@ pub(crate) enum AggClass {
     /// supplies (System V > 16 bytes, AAPCS64 via x8, Win64 over
     /// the by-value size).
     ReturnIndirect,
+    /// An SVE vector, or predicate when `pred`: a named one takes the next
+    /// z or p argument register while they last, and any other passes as
+    /// the address of a copy the caller makes (AAPCS64 6.8.2, the Pure
+    /// Scalable Type rules).
+    Scalable { pred: bool },
 }
 
 /// Width of the aggregate when it is one vector value and nothing

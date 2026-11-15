@@ -1427,10 +1427,9 @@ impl Compiler {
         Ok(())
     }
 
-    /// The SVE value of type `ty` an assignment or initializer reads: an
-    /// SVE object, `*p`, or another such assignment. Any other source --
-    /// a call, a conditional, a cast -- is refused until the SVE calling
-    /// convention and the SVE rows land.
+    /// The SVE value of type `ty` an assignment, initializer, argument or
+    /// return reads: an SVE object, `*p`, a call, or another such
+    /// assignment.
     pub(super) fn parse_sve_operand(
         &mut self,
         ty: i64,
@@ -1455,10 +1454,12 @@ impl Compiler {
         match self.ast.exprs[id as usize] {
             Expr::VlaBase { .. }
             | Expr::Assign { .. }
+            | Expr::Call { .. }
             | Expr::Unary {
                 op: UnOp::Deref, ..
             } => Ok(id),
-            // TODO: SVE values from calls and the SVE rows.
+            // TODO: SVE values from conditionals, comma expressions and the
+            // SVE rows.
             _ => Err(self.compile_err(
                 Code::INVALID_OPERANDS,
                 format!(
@@ -2598,7 +2599,9 @@ impl Compiler {
             is_sys_call,
             narrows_to_params: is_sys_call,
             ret_ty: s.type_,
-            returns_struct: s.class == Token::Fun as i64 && is_struct_value_ty(s.type_),
+            returns_struct: s.class == Token::Fun as i64
+                && is_struct_value_ty(s.type_)
+                && self.sve_type_of(s.type_).is_none(),
             count_known: s.prototyped() || old_style_def,
             count_is_constraint: s.prototyped(),
             prototyped: s.prototyped(),
@@ -2712,6 +2715,9 @@ impl Compiler {
         }
         self.ast_vstack.truncate(saved_ast_vstack_depth);
         self.emit_direct_call_ast(id_idx, &callee, ast_arg_ids, result_temp_off);
+        if self.sve_type_of(self.ty).is_some() {
+            return Ok(());
+        }
         // C99 6.5.2.2p1: the called function returns void or a complete
         // object type.
         self.require_complete_value(self.ty, Code::INVALID_OPERANDS, |t| {
@@ -2741,16 +2747,33 @@ impl Compiler {
             self.pending.object_size_operands += 1;
             self.pending.object_ref = None;
         }
-        let parsed = self.expr(Token::Assign as i64);
+        // An SVE parameter takes an SVE value of its own type (ACLE).
+        let sve_param = callee
+            .params
+            .get(nargs as usize)
+            .copied()
+            .filter(|&t| self.sve_type_of(t).is_some());
+        let parsed = match sve_param {
+            Some(want) => {
+                let what = format!("argument {} of `{}`", nargs + 1, callee.name);
+                self.parse_sve_operand(want, &what).map(|id| {
+                    self.ast_acc = Some(id);
+                    self.ty = want;
+                })
+            }
+            None => self.expr(Token::Assign as i64),
+        };
         if measured {
             self.pending.object_size_operands -= 1;
         }
         parsed?;
+        self.reject_unnamed_sve_argument(sve_param)?;
         let bound = (measured.then(|| self.pending.object_ref.take()).flatten())
             .filter(|r| r.addr)
             .and_then(|r| r.sub);
 
-        if (nargs as usize) < callee.params.len() {
+        if sve_param.is_some() {
+        } else if (nargs as usize) < callee.params.len() {
             self.convert_declared_argument(callee, nargs, arg_at)?;
         } else {
             if callee.count_known && !callee.is_variadic {
@@ -2786,6 +2809,22 @@ impl Compiler {
         let arg_ast = self.ast_acc;
         self.ast_assign();
         Ok((temp_off, arg_ast))
+    }
+
+    /// An SVE value passed where no SVE parameter `sve_param` takes it.
+    fn reject_unnamed_sve_argument(&self, sve_param: Option<i64>) -> Result<(), C5Error> {
+        if sve_param.is_some() || self.sve_type_of(self.ty).is_none() {
+            return Ok(());
+        }
+        // TODO: an SVE value past the prototype, which AAPCS64 passes as
+        // the address of a copy.
+        let t = super::types::format_type(self.ty, &self.structs);
+        Err(self.compile_err(
+            Code::INVALID_ARGUMENTS,
+            format!(
+                "an SVE argument of type `{t}` past the prototype, which badc does not compile yet"
+            ),
+        ))
     }
 
     /// An argument count that does not match the callee's parameters: an
@@ -4045,9 +4084,11 @@ impl Compiler {
             Ty::Int as i64
         };
         // C99 6.5.2.2p1, as for a direct call.
-        self.require_complete_value(indirect_ret_ty, Code::INVALID_OPERANDS, |t| {
-            format!("calling a function with incomplete return type `{t}`")
-        })?;
+        if self.sve_type_of(indirect_ret_ty).is_none() {
+            self.require_complete_value(indirect_ret_ty, Code::INVALID_OPERANDS, |t| {
+                format!("calling a function with incomplete return type `{t}`")
+            })?;
+        }
         let fp_temp = self.reserve_slots(1);
         self.mark_emit_other();
         // Arguments are evaluated left to right into staging slots and
@@ -4078,8 +4119,20 @@ impl Compiler {
                 let arg_at = self.site();
                 self.emit_lea(temp_off);
                 self.ast_psh();
-                self.expr(Token::Assign as i64)?;
+                let sve_param = (callee.as_ref())
+                    .and_then(|c| c.params.get(arg_idx).copied())
+                    .filter(|&t| self.sve_type_of(t).is_some());
+                match sve_param {
+                    Some(want) => {
+                        let what = format!("argument {} of the call", arg_idx + 1);
+                        self.ast_acc = Some(self.parse_sve_operand(want, &what)?);
+                        self.ty = want;
+                    }
+                    None => self.expr(Token::Assign as i64)?,
+                }
+                self.reject_unnamed_sve_argument(sve_param)?;
                 match &callee {
+                    _ if sve_param.is_some() => {}
                     Some(c) if arg_idx < c.params.len() => {
                         self.convert_declared_argument(c, arg_idx as i64, arg_at)?;
                     }

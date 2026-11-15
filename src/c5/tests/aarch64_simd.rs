@@ -1704,3 +1704,141 @@ fn sve_vectors_spill_to_the_vl_scaled_region() {
         "ldr z, [x, #-1, mul vl]: {w:08x?}"
     );
 }
+
+/// SVE arguments, parameters and results cross calls by the SVE procedure
+/// call standard; the interpreter runs the fixture at four vector lengths.
+#[test]
+fn sve_arguments_and_results_follow_the_sve_pcs() {
+    const SRC: &str = include_str!("../../../tests/fixtures/sve/pcs_arguments.c");
+    for optimize in [false, true] {
+        let options = crate::CompileOptions::default().with_optimize(optimize);
+        let program =
+            crate::Compiler::with_options(String::from(SRC), crate::Target::LinuxAarch64, options)
+                .compile()
+                .expect("compiles");
+        for bits in [128, 256, 512, 2048] {
+            let vm = super::Vm::new(program.clone()).with_sve_vector_bits(bits);
+            assert_eq!(
+                vm.run().expect("runs"),
+                bits as i64 / 128,
+                "{bits} bits, -O {optimize}"
+            );
+        }
+    }
+}
+
+/// AAPCS64 6.8.2: a vector argument takes z[NSRN], which the
+/// floating-point arguments advance too, and a predicate p[NPRN]; past z7
+/// and p3 the caller passes the address of a copy in its VL-scaled region,
+/// in x[NGRN] or on the stack. Each callee reads its arguments there.
+#[cfg(feature = "full")]
+#[test]
+fn sve_arguments_take_z_and_p_registers_or_a_copy_s_address() {
+    const SRC: &str = include_str!("../../../tests/fixtures/sve/pcs_arguments.c");
+    let has = |w: &[u32], mask: u32, want: u32| w.iter().any(|&x| x & mask == want);
+    // `mixed(int, double, a, p, b, double, q, c)`: a, b and c in z1, z2 and
+    // z4, p and q in p0 and p1.
+    let mixed = super::perf_codegen::a64_at(SRC, "mixed", true);
+    for (word, what) in [
+        (0x0461_3020, "mov z0.d, z1.d"),
+        (0x0462_3040, "mov z0.d, z2.d"),
+        (0x0464_3080, "mov z0.d, z4.d"),
+    ] {
+        assert!(mixed.contains(&word), "{what}: {mixed:08x?}");
+    }
+    assert!(
+        has(&mixed, 0xFFFF_FC1F, 0xE580_0000),
+        "str p0: {mixed:08x?}"
+    );
+    assert!(
+        has(&mixed, 0xFFFF_FC1F, 0xE580_0001),
+        "str p1: {mixed:08x?}"
+    );
+    // `nth`'s ninth to eleventh vectors and `nthp`'s fifth and sixth
+    // predicates through x1-x3: LDR z / p, [xn].
+    let nth = super::perf_codegen::a64_at(SRC, "nth", true);
+    for n in 1..=3 {
+        assert!(
+            has(&nth, 0xFFFF_FFE0, 0x8580_4000 | n << 5),
+            "x{n}: {nth:08x?}"
+        );
+    }
+    let nthp = super::perf_codegen::a64_at(SRC, "nthp", true);
+    for n in 1..=2 {
+        assert!(
+            has(&nthp, 0xFFFF_FFF0, 0x8580_0000 | n << 5),
+            "x{n}: {nthp:08x?}"
+        );
+    }
+    // `far`'s copy address on the stack: LDR xt, [x29, #16], then LDR z, [xt].
+    let far = super::perf_codegen::a64_at(SRC, "far", true);
+    let at = (far.iter().position(|&x| x & 0xFFFF_FFE0 == 0xF940_0BA0)).expect("ldr x, [x29, #16]");
+    assert!(
+        far[at + 1] & 0xFFFF_FFE0 == 0x8580_4000 | (far[at] & 0x1F) << 5,
+        "{far:08x?}"
+    );
+    // The caller makes the copies: ADDVL x1-x3 and ADDPL x1-x2 at the
+    // calls, and the stack copy's address through x16.
+    let main = super::perf_codegen::a64_at(SRC, "main", true);
+    for n in 1..=3 {
+        assert!(
+            has(&main, 0xFFE0_F81F, 0x0420_5000 | n),
+            "addvl x{n}: {main:08x?}"
+        );
+    }
+    for n in 1..=2 {
+        assert!(
+            has(&main, 0xFFE0_F81F, 0x0460_5000 | n),
+            "addpl x{n}: {main:08x?}"
+        );
+    }
+    assert!(main.contains(&0xF900_03F0), "str x16, [sp]: {main:08x?}");
+}
+
+/// A function following the SVE PCS preserves z8-z23 and p4-p15 whole
+/// (AAPCS64 6.1.3, 6.1.4): all of them where it calls a function of the
+/// base standard, those it writes where it does not, and none where its
+/// values stay in z0-z7 and z24-z31. `aarch64_sve_pcs` declares the
+/// standard for a function of no SVE type. A vector across the base
+/// standard's call takes a slot, not z8-z15.
+#[cfg(feature = "full")]
+#[test]
+fn sve_pcs_functions_preserve_z8_to_z23_and_p4_to_p15() {
+    const SRC: &str = include_str!("../../../tests/fixtures/sve/pcs_preserves.c");
+    // STR z / p, [xn, #imm, mul vl] of a register the standard preserves.
+    let saves = |w: &[u32]| {
+        let z = (w.iter())
+            .filter(|&&x| x & 0xFFC0_E000 == 0xE580_4000 && (8..=23).contains(&(x & 0x1F)))
+            .count();
+        let p = (w.iter())
+            .filter(|&&x| x & 0xFFC0_E010 == 0xE580_0000 && (4..=15).contains(&(x & 0xF)))
+            .count();
+        (z, p)
+    };
+    let across = super::perf_codegen::a64_at(SRC, "across", true);
+    assert_eq!(saves(&across), (16, 12), "{across:08x?}");
+    let call = across.iter().position(|&x| x >> 26 == 0x25).expect("bl");
+    // MOV z0.d, zn.d from z8-z15 after the call.
+    let held = |x: &&u32| *x & 0xFFE0_FC1F == 0x0460_3000 && (8..=15).contains(&(*x >> 16 & 0x1F));
+    assert_eq!(
+        across[call..].iter().filter(held).count(),
+        0,
+        "{across:08x?}"
+    );
+    let many = super::perf_codegen::a64_at(SRC, "many", true);
+    let (z, p) = saves(&many);
+    assert!(z > 0 && z < 16 && p > 0 && p < 12, "{many:08x?}");
+    let mixed = super::perf_codegen::a64_at(
+        include_str!("../../../tests/fixtures/sve/pcs_arguments.c"),
+        "mixed",
+        true,
+    );
+    assert_eq!(saves(&mixed), (0, 0), "{mixed:08x?}");
+    const ATTR: &str = "double g(double);\n\
+        void __attribute__((aarch64_sve_pcs)) f(double *x) { *x = g(*x); }\n\
+        void __attribute__((aarch64_sve_pcs)) leaf(double *x) { *x = *x * 2.0; }\n";
+    let f = super::perf_codegen::a64_at(ATTR, "f", true);
+    assert_eq!(saves(&f), (16, 12), "{f:08x?}");
+    let leaf = super::perf_codegen::a64_at(ATTR, "leaf", true);
+    assert_eq!(saves(&leaf), (0, 0), "{leaf:08x?}");
+}

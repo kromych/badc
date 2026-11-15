@@ -597,8 +597,10 @@ pub(crate) enum ArgPlacement {
     IntReg(u8),
     /// Goes into a floating-point arg register. Index is the
     /// register number (d0..d7 on aarch64, xmm0..xmm7 on
-    /// x86_64).
+    /// x86_64), or z0..z7 for an SVE vector.
     FpReg(u8),
+    /// An SVE predicate in p0..p3.
+    PredReg(u8),
     /// Goes onto the host outgoing-args stack at `[sp + offset]`
     /// (post-`shadow_space`, post-scratch-allocation). 8-byte
     /// stride.
@@ -819,6 +821,18 @@ pub(crate) struct ArgAgg {
 }
 
 impl ArgAgg {
+    /// An SVE vector, or predicate when `pred`, which the planner places
+    /// by [`abi_classify::AggClass::Scalable`]'s rule.
+    pub(crate) fn scalable(pred: bool) -> Self {
+        Self {
+            class: abi_classify::AggClass::Scalable { pred },
+            size: 8,
+            align: 8,
+            arg_align: 8,
+            int32: false,
+        }
+    }
+
     /// The classification every call site and callee entry takes for `desc`.
     pub(crate) fn new(desc: &crate::c5::ir::AggDesc, abi: Abi) -> Self {
         Self {
@@ -885,7 +899,31 @@ pub(super) fn plan_call_args_aggs(
         *stack_used = off + bytes;
         off
     };
+    let mut pred_idx = 0u8;
     for i in 0..arg_count {
+        // An SVE argument the registers do not take passes as the address
+        // of the caller's copy, an integer argument.
+        if let Some(Some(ArgAgg {
+            class: AggClass::Scalable { pred },
+            ..
+        })) = aggs.get(i)
+        {
+            let named = i < fixed_args;
+            let placement = if named && *pred && pred_idx < 4 {
+                pred_idx += 1;
+                ArgPlacement::PredReg(pred_idx - 1)
+            } else if named && !*pred && fp_idx < 8 {
+                fp_idx += 1;
+                ArgPlacement::FpReg(fp_idx as u8 - 1)
+            } else if int_idx < int_max {
+                int_idx += 1;
+                ArgPlacement::IntReg(abi.int_arg_regs[int_idx - 1])
+            } else {
+                ArgPlacement::Stack(scalar_slot(&mut stack_used, i))
+            };
+            placements.push(placement);
+            continue;
+        }
         // Aggregate argument: classify into registers / by-reference
         // / by-stack per the host ABI. A variadic aggregate on the
         // macOS AAPCS64 variadic ABI rides the overflow stack like
@@ -1131,6 +1169,7 @@ pub(super) fn plan_call_args_aggs(
                         align: agg.align,
                     }
                 }
+                AggClass::Scalable { .. } => unreachable!("placed above"),
                 AggClass::ReturnIndirect => {
                     // Not an argument classification; treat as
                     // by-stack defensively.
@@ -5846,6 +5885,11 @@ pub(crate) enum CallConv {
     Ms,
     /// System V AMD64 (`__attribute__((sysv_abi))`).
     SysV,
+    /// AArch64's SVE procedure call standard
+    /// (`__attribute__((aarch64_sve_pcs))`): the base standard's argument
+    /// placement, with z8-z23 and p4-p15 preserved whole (AAPCS64 6.1.3,
+    /// 6.1.4).
+    Sve,
 }
 
 impl Target {
@@ -6119,6 +6163,73 @@ mod abi_plan_tests {
             plan.placements[6],
             ArgPlacement::IntReg(abi.int_arg_regs[0])
         );
+    }
+
+    /// AAPCS64 6.8.2 places a named SVE vector in z[NSRN], the count the
+    /// floating-point arguments advance too, and a named predicate in
+    /// p[NPRN] while p0-p3 last; any other passes as the address of the
+    /// caller's copy, an integer argument, in x[NGRN] or on the stack.
+    #[test]
+    fn sve_arguments_take_z_and_p_registers_then_pass_by_reference() {
+        let abi = Target::LinuxAarch64.abi();
+        let (z, p) = (Some(ArgAgg::scalable(false)), Some(ArgAgg::scalable(true)));
+        // double, z, p, int, double, z, p, p, p, p (fifth predicate by reference)
+        let aggs = [
+            None,
+            z.clone(),
+            p.clone(),
+            None,
+            None,
+            z.clone(),
+            p.clone(),
+            p.clone(),
+            p.clone(),
+            p.clone(),
+        ];
+        let plan = plan_call_args_aggs(
+            10,
+            10,
+            &FpMask::from_bits(0b1_0001),
+            abi,
+            &aggs,
+            false,
+            ArgWidths::default(),
+        );
+        use ArgPlacement::{FpReg, IntReg, PredReg};
+        assert_eq!(
+            plan.placements,
+            [
+                FpReg(0),
+                FpReg(1),
+                PredReg(0),
+                IntReg(0),
+                FpReg(2),
+                FpReg(3),
+                PredReg(1),
+                PredReg(2),
+                PredReg(3),
+                IntReg(1)
+            ]
+        );
+        // Nine vectors: the ninth by reference; past x7 its address is on
+        // the stack; an unnamed vector goes by reference as well.
+        let mut aggs = alloc::vec![z.clone(); 9];
+        aggs.extend(alloc::vec![None; 7]);
+        aggs.extend([z.clone(), z.clone()]);
+        let plan = plan_call_args_aggs(
+            18,
+            17,
+            &FpMask::EMPTY,
+            abi,
+            &aggs,
+            false,
+            ArgWidths::default(),
+        );
+        assert_eq!(plan.placements[7], FpReg(7));
+        assert_eq!(plan.placements[8], IntReg(0));
+        assert_eq!(plan.placements[15], IntReg(7));
+        assert_eq!(plan.placements[16], ArgPlacement::Stack(0));
+        assert_eq!(plan.placements[17], ArgPlacement::Stack(8));
     }
 
     fn int128() -> ArgAgg {

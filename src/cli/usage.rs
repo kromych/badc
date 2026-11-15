@@ -591,9 +591,9 @@ Compile knobs:
                            the __ARM_FEATURE_* macros; `+EXT` enables an
                            extension and those it requires, `+noEXT`
                            disables it and those requiring it. An
-                           extension whose intrinsics badc lacks (SVE,
-                           SME, BF16, ...) is refused when a modifier
-                           enables it. The instructions stay badc's
+                           extension whose intrinsics badc does not
+                           implement in full (SVE, SME, BF16, ...) is
+                           refused when a modifier enables it. The instructions stay badc's
                            baseline.
   -march=ARCH[+mod...]     AArch64: an architecture (`armv8-a` to
                            `armv9.6-a`, `armv8-r`) or `native`, with

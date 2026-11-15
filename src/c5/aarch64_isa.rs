@@ -369,7 +369,7 @@ pub enum Aarch64ExtError {
     /// No extension has the name.
     Unknown,
     /// It enables the feature named, whose intrinsics badc does not
-    /// implement.
+    /// implement in full.
     Unimplemented(&'static str),
 }
 
@@ -686,8 +686,9 @@ mod tests {
         });
     }
 
-    /// A modifier that brings a feature whose intrinsics badc lacks is
-    /// refused, naming the extension first; one already present is not.
+    /// A modifier that brings a feature whose intrinsics badc does not
+    /// implement in full is refused, naming the extension first; one
+    /// already present is not.
     #[test]
     fn enabling_a_withheld_feature_is_refused() {
         let mut f = arch("armv8-a");

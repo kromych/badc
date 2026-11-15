@@ -2853,7 +2853,7 @@ impl Parser {
     /// in order, with the dependencies between extensions. `native` names
     /// the host's.
     /// `-mtune=` takes a CPU and changes nothing. An extension whose
-    /// intrinsics badc does not implement is refused when a modifier
+    /// intrinsics badc does not implement in full is refused when a modifier
     /// enables it.
     fn apply_aarch64_isa(&mut self, target: Target) -> Result<(), ParseError> {
         if !target.is_aarch64() {
@@ -2923,7 +2923,7 @@ impl Parser {
                     }
                     badc::Aarch64ExtError::Unimplemented(f) => format!(
                         "badc: error: `+{modifier}` ({option}={spec}) enables `{f}`, whose \
-                         intrinsics badc does not implement"
+                         intrinsics badc does not implement in full"
                     ),
                 })
             })?;
@@ -4346,7 +4346,7 @@ mod tests {
         assert_eq!(
             reject(&[A64, "-march=armv8.2-a+sve", "-c", "a.c"]).0,
             "badc: error: `+sve` (-march=armv8.2-a+sve) enables `sve`, whose intrinsics badc \
-             does not implement"
+             does not implement in full"
         );
         // The name half is checked as the extension half is.
         assert_eq!(

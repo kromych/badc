@@ -82,6 +82,15 @@ const fn smax(w: u8) -> Sem {
 const fn umax(w: u8) -> Sem {
     Sem::Max(w, false)
 }
+const fn lsl(w: u8) -> Sem {
+    Sem::ShlVar(w)
+}
+const fn lsr(w: u8) -> Sem {
+    Sem::ShrVar(w)
+}
+const fn asr(w: u8) -> Sem {
+    Sem::SarVar(w)
+}
 const fn not(_: u8) -> Sem {
     Sem::Not
 }
@@ -212,6 +221,15 @@ pub(crate) const OPS: &[SimdOp] = rows! {
     "max_x" "smax" SveShape::Binary(X), Signed, smax: 1 2 4 8;
     "max_x" "umax" SveShape::Binary(X), Unsigned, umax: 1 2 4 8;
     "max_x" "fmax" SveShape::Binary(X), Float, fmax: 4 8;
+    "lsl_m" "lsl" SveShape::Binary(M), Int, lsl: 1 2 4 8;
+    "lsl_z" "lsl" SveShape::Binary(Z), Int, lsl: 1 2 4 8;
+    "lsl_x" "lsl" SveShape::Binary(X), Int, lsl: 1 2 4 8;
+    "lsr_m" "lsr" SveShape::Binary(M), Unsigned, lsr: 1 2 4 8;
+    "lsr_z" "lsr" SveShape::Binary(Z), Unsigned, lsr: 1 2 4 8;
+    "lsr_x" "lsr" SveShape::Binary(X), Unsigned, lsr: 1 2 4 8;
+    "asr_m" "asr" SveShape::Binary(M), Signed, asr: 1 2 4 8;
+    "asr_z" "asr" SveShape::Binary(Z), Signed, asr: 1 2 4 8;
+    "asr_x" "asr" SveShape::Binary(X), Signed, asr: 1 2 4 8;
     "minnm_m" "fminnm" SveShape::Binary(M), Float, fminnm: 4 8;
     "minnm_z" "fminnm" SveShape::Binary(Z), Float, fminnm: 4 8;
     "minnm_x" "fminnm" SveShape::Binary(X), Float, fminnm: 4 8;

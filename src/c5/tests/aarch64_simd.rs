@@ -2003,6 +2003,62 @@ fn the_sve_arithmetic_rows_run_in_the_interpreter() {
     }
 }
 
+/// svlsl, svlsr and svasr shift by an unsigned vector of counts or a
+/// scalar in each predication form, a count of the lane width or more
+/// shifting every bit out or the sign in, as scalar C computes; the
+/// interpreter runs the fixture at four vector lengths. Under `-O` a shift
+/// is its destructive instruction, and one into its count's register the
+/// reversed LSLR, LSRR or ASRR; a signed count does not convert.
+#[test]
+fn the_sve_shift_rows_take_unsigned_counts() {
+    const SRC: &str = include_str!("../../../tests/fixtures/sve/rows_shift.c");
+    for optimize in [false, true] {
+        let options = crate::CompileOptions::default().with_optimize(optimize);
+        let program =
+            crate::Compiler::with_options(String::from(SRC), crate::Target::LinuxAarch64, options)
+                .compile()
+                .expect("compiles");
+        for bits in [128, 256, 512, 2048] {
+            let vm = super::Vm::new(program.clone()).with_sve_vector_bits(bits);
+            assert_eq!(
+                vm.run().expect("runs"),
+                bits as i64 / 128,
+                "{bits} bits, -O {optimize}"
+            );
+        }
+    }
+    let err = crate::Compiler::with_target(
+        String::from(
+            "#include <arm_sve.h>\n\
+             svint32_t f(svbool_t pg, svint32_t a) { return svlsl_x(pg, a, a); }\n",
+        ),
+        crate::Target::LinuxAarch64,
+    )
+    .compile()
+    .err()
+    .map(|e| e.to_string())
+    .unwrap_or_default();
+    assert!(err.contains("types differ in the operand 3"), "{err}");
+    #[cfg(feature = "full")]
+    {
+        const ASM: &str = "#include <arm_sve.h>\n\
+            svint32_t lsl_x(svbool_t pg, svint32_t a, svuint32_t c) { return svlsl_x(pg, a, c); }\n\
+            svint16_t lsl_r(svbool_t pg, svuint16_t c, svint16_t a) { return svlsl_z(pg, a, c); }\n\
+            svuint8_t lsr_m(svbool_t pg, svuint8_t a, svuint8_t c) { return svlsr_m(pg, a, c); }\n\
+            svint64_t asr_r(svbool_t pg, svuint64_t c, svint64_t a) { return svasr_x(pg, a, c); }\n";
+        const RET: u32 = 0xD65F_03C0;
+        let words = |name: &str| super::perf_codegen::a64_at(ASM, name, true);
+        // LSL z0.s, p0/m, z0.s, z1.s.
+        assert_eq!(words("lsl_x"), [0x0493_8020, RET]);
+        // MOVPRFX z0.h, p0/z, z0.h; LSLR z0.h, p0/m, z0.h, z1.h.
+        assert_eq!(words("lsl_r"), [0x0450_2000, 0x0457_8020, RET]);
+        // LSR z0.b, p0/m, z0.b, z1.b.
+        assert_eq!(words("lsr_m"), [0x0411_8020, RET]);
+        // ASRR z0.d, p0/m, z0.d, z1.d.
+        assert_eq!(words("asr_r"), [0x04D4_8020, RET]);
+    }
+}
+
 /// A unary row is its instruction on the argument registers under `-O`:
 /// the don't-care form in place, the merging form on a `movprfx` copy of
 /// the inactive operand, the zeroing form on a zeroing `movprfx` of the

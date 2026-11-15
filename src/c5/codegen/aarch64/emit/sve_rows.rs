@@ -459,6 +459,9 @@ fn reversed(mnem: &str) -> Option<&'static str> {
         "sdiv" => Some("sdivr"),
         "udiv" => Some("udivr"),
         "fdiv" => Some("fdivr"),
+        "lsl" => Some("lslr"),
+        "lsr" => Some("lsrr"),
+        "asr" => Some("asrr"),
         _ => None,
     }
 }

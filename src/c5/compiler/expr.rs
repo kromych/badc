@@ -639,6 +639,7 @@ impl Compiler {
                 }
                 _ => {
                     let t = vty.ok_or_else(|| self.compile_err(Code::SYNTAX, "type expected"))?;
+                    let t = self.sve_operand_ty(first, i, t);
                     self.expr_or_void(Token::Assign as i64)?;
                     if shape == SveShape::Dup {
                         self.sve_scalar(t, &what)?
@@ -682,7 +683,10 @@ impl Compiler {
                     _ if shape.on_predicates() => self.check_sve_operand(pred, &what)?,
                     SveShape::Select => self.check_sve_operand(t, &what)?,
                     SveShape::Store if i == 1 => self.sve_pointer_arg(Some(t), name, &what)?.1,
-                    _ => self.sve_vector_arg(t, &what)?,
+                    _ => {
+                        let t = self.sve_operand_ty(first, i, t);
+                        self.sve_vector_arg(t, &what)?
+                    }
                 };
             }
         }
@@ -737,6 +741,24 @@ impl Compiler {
         self.ty = ty;
         self.ast_acc = Some(id);
         Ok(())
+    }
+
+    /// The type of vector operand `i` of the family of row `first` whose
+    /// type is `ty`: a shift's count is the unsigned vector of its width
+    /// (ACLE, svlsl).
+    fn sve_operand_ty(&mut self, first: u32, i: usize, ty: i64) -> i64 {
+        use super::super::simd::{self, Sem};
+        let count = matches!(
+            simd::get(first).sem,
+            Sem::ShlVar(_) | Sem::ShrVar(_) | Sem::SarVar(_)
+        );
+        match self.sve_lane(ty) {
+            Some((size, _)) if count && i == 2 => self.sve_type_tag(super::SveType::Vector {
+                size,
+                kind: super::SveElem::Unsigned,
+            }),
+            _ => ty,
+        }
     }
 
     /// The pointer operand of a load or store just parsed, and the vector

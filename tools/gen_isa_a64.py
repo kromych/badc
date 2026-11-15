@@ -177,6 +177,23 @@ for _m, _o in (('mla', '010'), ('mls', '011')):
     DB_FIXES[(f'{_m} Zda.t, Pg/M, Zn.t, Zm.t', f'00000100|sz|0|Zm|{_o}|Pg:3|Za|Zdn')] = (
         None, f'00000100|sz|0|Zm|{_o}|Pg:3|Zn|Zda')
 
+# The predicated negations name the source Zm and the destination Zdn, and
+# the floating reductions the source Zm and the scalar Zd; the exclusive-OR
+# reduction spells each size's row with the generic `.t`; the AND reduction
+# is one row of a generic `Vd`, a row per size below.
+for _m in ('neg', 'fneg'):
+    _o = '010111101' if _m == 'neg' else '011101101'
+    DB_FIXES[(f'{_m} Zd.t, Pg/M, Zn.t', f'00000100|sz|{_o}|Pg:3|Zm|Zdn')] = (
+        None, f'00000100|sz|{_o}|Pg:3|Zn|Zd')
+for _m, _o in (('fmaxnmv', '000100001'), ('fminnmv', '000101001'),
+               ('fmaxv', '000110001'), ('fminv', '000111001')):
+    for _e, _sz in (('H', '01'), ('S', '10'), ('D', '11')):
+        DB_FIXES[(f'{_m} {_e}d, Pg, Zn.{_e}', f'01100101|{_sz}|{_o}|Pg:3|Zm|Zd')] = (
+            None, f'01100101|{_sz}|{_o}|Pg:3|Zn|Rd')
+for _e, _sz in (('B', '00'), ('H', '01'), ('S', '10'), ('D', '11')):
+    DB_FIXES[(f'eorv {_e}d, Pg, Zn.t', f'00000100|{_sz}|011001001|Pg:3|Zn|Rd')] = (
+        f'eorv {_e}d, Pg, Zn.{_e}', None)
+
 # Rows a differential sweep against that assembler finds wrong: base words
 # (bic, bics, orr of predicates), a W form spelled as the X one (uqincp,
 # uqdecp), a merging spelling of a zeroing-only form (brkas, brkbs), the
@@ -216,10 +233,12 @@ SIZE_FIXES = {
 }
 
 # Rows whose written immediate is not the raw field value (addg/subg #imm1 is
-# the field scaled by 16); a raw UImm form would encode them wrongly.
+# the field scaled by 16), which a raw UImm form would encode wrongly, and the
+# generic row of the SVE AND reduction, which EXTRA_FORMS gives per size.
 EXCLUDED_ROWS = {
     'addg Xd|SP, Xn|SP, #imm1, #imm2',
     'subg Xd|SP, Xn|SP, #imm1, #imm2',
+    'andv Vd, Pg, Zn.t',
 }
 
 # Forms the instruction database does not carry as rows.
@@ -244,6 +263,14 @@ EXTRA_FORMS = {
         'Reg { op: 0, shift: 0 }', 'Reg { op: 1, shift: 10 }',
         'Reg { op: 2, shift: 5 }'], 'ldxp Xd, Xd2, [Xn|SP]', 0x04),
 }
+
+# The SVE AND reduction, one row per element size (the database's generic
+# `Vd` row is excluded above): ANDV <V><d>, <Pg>, <Zn>.<T>.
+for _e in range(4):
+    EXTRA_FORMS[('andv', (f'Fpr({_e})', 'P', f'Zs({_e})'))] = (
+        0x041A2000 | _e << 22, ['Reg { op: 0, shift: 0 }', 'PLow { op: 1, shift: 10 }',
+                                'Reg { op: 2, shift: 5 }'],
+        f'andv {"BHSD"[_e]}d, Pg, Zn.{"BHSD"[_e]}', 0x00)
 
 # The FEAT_LSUI unprivileged atomics, absent from the database. Operand layout
 # is the LSE one -- Rs at 16, Rt at 0, base register at 5 -- so only the base

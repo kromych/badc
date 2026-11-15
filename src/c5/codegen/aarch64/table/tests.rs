@@ -2397,6 +2397,32 @@ fn sve_forms_check_sizes_predicates_and_tied_registers() {
 }
 
 #[test]
+fn sve_negations_and_reductions_take_their_operand_fields() {
+    // GNU as 2.46.1 words: the source at bit 5, the destination at bit 0.
+    let z = |num, size| Opnd::ZReg {
+        num,
+        size: Some(size),
+    };
+    let pm = |num| Opnd::PRegQ { num, merge: true };
+    let p = |num| Opnd::PReg { num, size: None };
+    let v = |num, size: u8| match size {
+        0 | 1 => Opnd::VScalar { num, size },
+        _ => Opnd::VReg {
+            num,
+            is_d: size == 3,
+        },
+    };
+    assert_eq!(enc("neg", &[z(0, 3), pm(0), z(1, 3)]), 0x04D7A020);
+    assert_eq!(enc("fneg", &[z(7, 1), pm(2), z(9, 1)]), 0x045DA927);
+    assert_eq!(enc("andv", &[v(0, 2), p(0), z(1, 2)]), 0x049A2020);
+    assert_eq!(enc("eorv", &[v(5, 3), p(3), z(4, 3)]), 0x04D92C85);
+    assert_eq!(enc("fmaxv", &[v(9, 3), p(6), z(2, 3)]), 0x65C63849);
+    assert_eq!(enc("fminv", &[v(1, 2), p(0), z(3, 2)]), 0x65872061);
+    assert_eq!(enc("fmaxnmv", &[v(0, 2), p(0), z(1, 2)]), 0x65842020);
+    assert_eq!(enc("fminnmv", &[v(3, 1), p(1), z(17, 1)]), 0x65452623);
+}
+
+#[test]
 fn sve_vector_length_and_element_count() {
     // llvm-mc 22.1.8 (-mattr=+sve) words. The pattern defaults to ALL and the
     // multiplier to 1; register 31 is xzr except in addvl / addpl, whose

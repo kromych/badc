@@ -1,6 +1,6 @@
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main
-fn ent_pc=2 n_params=0 variadic=false locals=1
+fn ent_pc=2 n_params=0 variadic=false locals=2
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -12,13 +12,13 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v6   Extend { value=v2, kind=I16 }                    -> x7
     v7   Extend { value=v2, kind=I32 }                    -> x0
     v8   Imm(0)                                           -> x0
-    v9   StoreLocal { off=-1, value=v8, kind=I32, volatile } -> -
+    v9   StoreLocal { off=-2, value=v8, kind=I32, volatile } -> -
     terminator Jmp(b2)   (exit_acc=v8)
   block 1  start_pc=0
-    v19  LoadLocal { off=-1, kind=I32, volatile }         -> x1
+    v19  LoadLocal { off=-2, kind=I32, volatile }         -> x1
     v20  Extend { value=v16, kind=I32 }                   -> x8
     v21  Binop { op=add, lhs=v19, rhs=v16 }               -> x1
-    v22  StoreLocal { off=-1, value=v21, kind=I32, volatile } -> -
+    v22  StoreLocal { off=-2, value=v21, kind=I32, volatile } -> -
     v23  Extend { value=v21, kind=I32 }                   -> x1
     v24  Extend { value=v16, kind=I32 }                   -> x1
     v25  BinopI { op=add, lhs=v16, rhs_imm=1 }            -> x0
@@ -30,7 +30,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v18  BinopI { op=lt, lhs=v16, rhs_imm=3 }             -> x1
     terminator Bz { cond=v18, target=b3, fall=b1 }   (exit_acc=v18)
   block 3  start_pc=0
-    v27  LoadLocal { off=-1, kind=I32, volatile }         -> x0
+    v27  LoadLocal { off=-2, kind=I32, volatile }         -> x0
     v28  BinopI { op=mul, lhs=v5, rhs_imm=100000 }        -> x0
     v29  Extend { value=v28, kind=I32, nsw }              -> x1
     v30  BinopI { op=mul, lhs=v6, rhs_imm=10 }            -> x1

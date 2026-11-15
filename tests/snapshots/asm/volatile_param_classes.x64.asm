@@ -39,25 +39,25 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x40, %rsp
                	leaq	-0x10(%rbp), %rax
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rax)
                	movsd	<rip>, %xmm0
                	movl	$0x1, %eax
-               	movsd	%xmm0, -0x18(%rbp)
+               	movsd	%xmm0, -0x38(%rbp)
                	movsd	-0x10(%rbp), %xmm0
-               	movsd	%xmm0, -0x20(%rbp)
-               	movsd	-0x20(%rbp), %xmm0
-               	movsd	-0x18(%rbp), %xmm1
+               	movsd	%xmm0, -0x40(%rbp)
+               	movsd	-0x40(%rbp), %xmm0
+               	movsd	-0x38(%rbp), %xmm1
                	addsd	%xmm1, %xmm0
                	movsd	%xmm0, -0x10(%rbp)
                	movsd	<rip>, %xmm0
-               	movsd	%xmm0, -0x18(%rbp)
+               	movsd	%xmm0, -0x28(%rbp)
                	movsd	-0x10(%rbp), %xmm0
-               	movsd	%xmm0, -0x20(%rbp)
-               	movsd	-0x20(%rbp), %xmm0
-               	movsd	-0x18(%rbp), %xmm1
+               	movsd	%xmm0, -0x30(%rbp)
+               	movsd	-0x30(%rbp), %xmm0
+               	movsd	-0x28(%rbp), %xmm1
                	addsd	%xmm1, %xmm0
                	movsd	%xmm0, -0x10(%rbp)
                	movsd	<rip>, %xmm0

@@ -82,11 +82,11 @@ Disassembly of section .text:
                	leave
                	retq
                	movq	<rip>, %rax # <addr>
-               	movq	$0x0, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rcx
+               	movq	$0x0, -0x10(%rbp)
+               	leaq	-0x10(%rbp), %rcx
                	movq	%rcx, <rip> # <addr>
                	movq	%rax, %rax
-               	movq	%rax, -0x8(%rbp)
+               	movq	%rax, -0x10(%rbp)
                	movq	<rip>, %rcx # <addr>
                	movq	(%rcx), %rcx
                	addq	%rcx, %rax

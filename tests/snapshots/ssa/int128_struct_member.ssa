@@ -303,9 +303,9 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v275 Imm(2)                                           -> x2
     v276 Imm(0)                                           -> x2
     v277 LifetimeEnd(0)                                   -> -
-    v278 Imm(0)                                           -> x2
-    v279 Imm(2)                                           -> x2
-    v280 Imm(0)                                           -> x2
+    v278 LifetimeEnd(0)                                   -> -
+    v279 Imm(0)                                           -> x2
+    v280 Imm(2)                                           -> x2
     v281 Imm(0)                                           -> x2
     v282 Imm(0)                                           -> x2
     v283 Imm(0)                                           -> x2
@@ -325,42 +325,42 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v297 Imm(0)                                           -> x2
     v298 Imm(0)                                           -> x2
     v299 Imm(0)                                           -> x2
-    v300 Imm(10)                                          -> x2
-    v301 Imm(0)                                           -> x2
+    v300 Imm(0)                                           -> x2
+    v301 Imm(10)                                          -> x2
     v302 Imm(0)                                           -> x2
     v303 Imm(0)                                           -> x2
     v304 Imm(0)                                           -> x2
     v305 Imm(0)                                           -> x2
     v306 Imm(0)                                           -> x2
     v307 Imm(0)                                           -> x2
-    v308 Imm(64)                                          -> x2
-    v309 Imm(0)                                           -> x2
+    v308 Imm(0)                                           -> x2
+    v309 Imm(64)                                          -> x2
     v310 Imm(0)                                           -> x2
     v311 Imm(0)                                           -> x2
     v312 Imm(0)                                           -> x2
     v313 Imm(0)                                           -> x2
     v314 Imm(0)                                           -> x2
-    v315 Imm(7)                                           -> x2
+    v315 Imm(0)                                           -> x2
     v316 Imm(7)                                           -> x2
-    v317 Imm(10)                                          -> x2
-    v318 Imm(0)                                           -> x2
+    v317 Imm(7)                                           -> x2
+    v318 Imm(10)                                          -> x2
     v319 Imm(0)                                           -> x2
     v320 Imm(0)                                           -> x2
     v321 Imm(0)                                           -> x2
     v322 Imm(0)                                           -> x2
     v323 Imm(0)                                           -> x2
-    v324 BinopI { op=xor, lhs=v262, rhs_imm=7 }           -> x6
-    v325 BinopI { op=xor, lhs=v265, rhs_imm=10 }          -> x1
-    v326 Binop { op=or, lhs=v324, rhs=v325 }              -> x1
-    v327 BinopI { op=ne, lhs=v326, rhs_imm=0 }            -> x2
-    terminator Bz { cond=v326, target=b13, fall=b12 }   (exit_acc=v327)
+    v324 Imm(0)                                           -> x2
+    v325 BinopI { op=xor, lhs=v262, rhs_imm=7 }           -> x6
+    v326 BinopI { op=xor, lhs=v265, rhs_imm=10 }          -> x1
+    v327 Binop { op=or, lhs=v325, rhs=v326 }              -> x1
+    v328 BinopI { op=ne, lhs=v327, rhs_imm=0 }            -> x2
+    terminator Bz { cond=v327, target=b13, fall=b12 }   (exit_acc=v328)
   block 12  start_pc=0
-    v335 Imm(11)                                          -> x0
-    v336 LifetimeEnd(0)                                   -> -
+    v336 Imm(11)                                          -> x0
     v337 LifetimeEnd(0)                                   -> -
-    terminator Return(v335)   (exit_acc=v335)
+    v338 LifetimeEnd(0)                                   -> -
+    terminator Return(v336)   (exit_acc=v336)
   block 13  start_pc=0
-    v338 Imm(0)                                           -> x1
     v339 Imm(0)                                           -> x1
     v340 Imm(0)                                           -> x1
     v341 Imm(0)                                           -> x1
@@ -380,11 +380,11 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v355 Imm(0)                                           -> x1
     v356 Imm(0)                                           -> x1
     v357 Imm(0)                                           -> x1
-    v358 Imm(1)                                           -> x1
-    v359 Imm(0)                                           -> x1
+    v358 Imm(0)                                           -> x1
+    v359 Imm(1)                                           -> x1
     v360 Imm(0)                                           -> x1
-    v361 Imm(2)                                           -> x1
-    v362 Imm(0)                                           -> x1
+    v361 Imm(0)                                           -> x1
+    v362 Imm(2)                                           -> x1
     v363 Imm(0)                                           -> x1
     v364 Imm(0)                                           -> x1
     v365 Imm(0)                                           -> x1
@@ -423,9 +423,9 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v398 Imm(0)                                           -> x1
     v399 Imm(0)                                           -> x1
     v400 Imm(0)                                           -> x1
-    v401 LifetimeEnd(0)                                   -> -
-    v402 Imm(1)                                           -> x1
-    v403 Imm(0)                                           -> x1
+    v401 Imm(0)                                           -> x1
+    v402 LifetimeEnd(0)                                   -> -
+    v403 Imm(1)                                           -> x1
     v404 Imm(0)                                           -> x1
     v405 Imm(0)                                           -> x1
     v406 Imm(0)                                           -> x1
@@ -442,9 +442,9 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v417 Imm(0)                                           -> x1
     v418 Imm(0)                                           -> x1
     v419 Imm(0)                                           -> x1
-    v420 Imm(127)                                         -> x1
-    v421 Imm(-9223372036854775808)                        -> x1
-    v422 Imm(0)                                           -> x1
+    v420 Imm(0)                                           -> x1
+    v421 Imm(127)                                         -> x1
+    v422 Imm(-9223372036854775808)                        -> x1
     v423 Imm(0)                                           -> x1
     v424 Imm(0)                                           -> x1
     v425 Imm(0)                                           -> x1
@@ -461,8 +461,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v436 Imm(0)                                           -> x1
     v437 Imm(0)                                           -> x1
     v438 Imm(0)                                           -> x1
-    v439 Imm(16)                                          -> x1
-    v440 Imm(0)                                           -> x1
+    v439 Imm(0)                                           -> x1
+    v440 Imm(16)                                          -> x1
     v441 Imm(0)                                           -> x1
     v442 Imm(0)                                           -> x1
     v443 Imm(0)                                           -> x1
@@ -478,22 +478,22 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v453 Imm(0)                                           -> x1
     v454 Imm(0)                                           -> x1
     v455 Imm(0)                                           -> x1
-    v456 Imm(32)                                          -> x1
-    v457 Imm(0)                                           -> x1
+    v456 Imm(0)                                           -> x1
+    v457 Imm(32)                                          -> x1
     v458 Imm(0)                                           -> x1
     v459 Imm(0)                                           -> x1
     v460 Imm(0)                                           -> x1
-    v461 Imm(1)                                           -> x1
-    v462 Imm(0)                                           -> x1
+    v461 Imm(0)                                           -> x1
+    v462 Imm(1)                                           -> x1
     v463 Imm(0)                                           -> x1
     v464 Imm(0)                                           -> x1
     v465 Imm(0)                                           -> x1
     v466 Imm(0)                                           -> x1
     v467 Imm(0)                                           -> x1
     v468 Imm(0)                                           -> x1
-    v469 Imm(127)                                         -> x1
-    v470 Imm(-9223372036854775808)                        -> x1
-    v471 Imm(0)                                           -> x1
+    v469 Imm(0)                                           -> x1
+    v470 Imm(127)                                         -> x1
+    v471 Imm(-9223372036854775808)                        -> x1
     v472 Imm(0)                                           -> x1
     v473 Imm(0)                                           -> x1
     v474 Imm(0)                                           -> x1
@@ -505,16 +505,17 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v480 Imm(0)                                           -> x1
     v481 Imm(0)                                           -> x1
     v482 Imm(0)                                           -> x1
-    v483 Imm(32)                                          -> x1
-    v484 Imm(0)                                           -> x1
+    v483 Imm(0)                                           -> x1
+    v484 Imm(32)                                          -> x1
     v485 Imm(0)                                           -> x1
     v486 Imm(0)                                           -> x1
     v487 Imm(0)                                           -> x1
     v488 Imm(0)                                           -> x1
     v489 Imm(0)                                           -> x1
-    v490 LifetimeEnd(0)                                   -> -
-    v491 Imm(0)                                           -> x1
-    v492 LifetimeEnd(0)                                   -> -
+    v490 Imm(0)                                           -> x1
+    v491 LifetimeEnd(0)                                   -> -
+    v492 Imm(0)                                           -> x1
+    v493 LifetimeEnd(0)                                   -> -
     terminator Return(v5)   (exit_acc=v5)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

@@ -710,8 +710,13 @@ def access_counts(text: str, arch: str) -> tuple[int, int, int, int]:
 # in the callee-saved registers its depth bound counts; 27 recursive
 # functions grew (0.2910 -> 0.2971), and fib runs at 0.56 of its time on
 # the aarch64 box, binary_trees at 0.91.
+#
+# aarch64 0.298 -> 0.302: inlined bodies take frame slots of their own, so
+# sroa splits the vector-structure objects of the NEON structure load and
+# store driver; its main keeps 11 more values across the checks it calls
+# and makes 597 fewer memory accesses (0.2964 -> 0.3004).
 SAVED_PER_FUNCTION: dict[str, float] = {
-    "aarch64": 0.298,
+    "aarch64": 0.302,
     "x64": 0.545,
 }
 

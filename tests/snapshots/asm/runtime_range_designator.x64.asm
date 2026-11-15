@@ -28,7 +28,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x70, %rsp
+               	subq	$0x50, %rsp
                	movl	$0x1, <rip> # <addr>
                	movl	$0xb, -0x48(%rbp)
                	movl	-0x48(%rbp), %eax
@@ -66,22 +66,15 @@ Disassembly of section .text:
                	incq	%rax
                	incq	%rax
                	incq	%rax
-               	movl	%eax, <rip> # <addr>
-               	movq	$0x0, -0x48(%rbp)
-               	movl	<rip>, %eax # <addr>
+               	incq	%rax
                	incq	%rax
                	movl	%eax, <rip> # <addr>
-               	movsd	<rip>, %xmm0
-               	movsd	%xmm0, -0x48(%rbp)
-               	movq	-0x48(%rbp), %rax
-               	movl	<rip>, %ecx # <addr>
-               	incq	%rcx
-               	movl	%ecx, <rip> # <addr>
-               	movl	$0x40400000, -0x68(%rbp) # imm = 0x40400000
-               	movl	-0x68(%rbp), %ecx
-               	movl	%ecx, -0x60(%rbp)
-               	movl	<rip>, %ecx # <addr>
-               	cmpl	$0x5, %ecx
+               	movss	<rip>, %xmm0
+               	movss	%xmm0, -0x10(%rbp)
+               	movl	-0x10(%rbp), %eax
+               	movl	%eax, -0x8(%rbp)
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x67, %eax
                	testq	%rax, %rax
@@ -133,28 +126,17 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0xe, %eax
                	jmp	<addr>
-               	movsd	-0x48(%rbp), %xmm1
-               	ucomisd	%xmm0, %xmm1
-               	jp	<addr>
-               	jne	<addr>
-               	movq	%rax, %xmm1
-               	ucomisd	%xmm0, %xmm1
-               	jp	<addr>
-               	jne	<addr>
-               	movss	-0x68(%rbp), %xmm1
-               	movss	<rip>, %xmm0
+               	movss	-0x10(%rbp), %xmm1
                	ucomiss	%xmm0, %xmm1
                	jp	<addr>
                	jne	<addr>
-               	movss	-0x60(%rbp), %xmm1
+               	movss	-0x8(%rbp), %xmm1
                	ucomiss	%xmm0, %xmm1
                	jp	<addr>
                	je	<addr>
                	movl	$0xd, %eax
                	jmp	<addr>
                	xorl	%eax, %eax
-               	jmp	<addr>
-               	movl	$0xc, %eax
                	jmp	<addr>
                	xorl	%eax, %eax
                	movl	-0x48(%rbp,%rax,4), %edx

@@ -22,14 +22,14 @@ Disassembly of section .text:
                	sxtb	x3, w2
                	sxth	x4, w2
                	mov	x0, #0x0                // =0
-               	stur	w0, [x29, #-0x8]
-               	ldursw	x1, [x29, #-0x8]
+               	stur	w0, [x29, #-0x10]
+               	ldursw	x1, [x29, #-0x10]
                	add	x1, x1, x0
-               	stur	w1, [x29, #-0x8]
+               	stur	w1, [x29, #-0x10]
                	add	x0, x0, #0x1
                	cmp	w0, #0x3
                	b.lt	<addr>
-               	ldursw	x0, [x29, #-0x8]
+               	ldursw	x0, [x29, #-0x10]
                	mov	x17, #0x86a0            // =34464
                	movk	x17, #0x1, lsl #16
                	mul	x0, x3, x17

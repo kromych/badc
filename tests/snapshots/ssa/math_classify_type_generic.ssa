@@ -21,12 +21,12 @@ fn ent_pc=19 n_params=0 variadic=false locals=7
     v15  StoreLocal { off=-2, value=v14, kind=F64, volatile } -> -
     v16  Imm(4607182418800017408)                         -> x0
     v17  StoreLocal { off=-1, value=v16, kind=F64, volatile } -> -
-    v18  StoreLocal { off=-55, value=v16, kind=F80, volatile } -> -
+    v18  StoreLocal { off=-177, value=v16, kind=F80, volatile } -> -
     v19  Imm(0)                                           -> x0
-    v20  StoreLocal { off=-56, value=v19, kind=F80, volatile } -> -
+    v20  StoreLocal { off=-178, value=v19, kind=F80, volatile } -> -
     v21  Imm(2139095040)                                  -> x1 [f32]
     v22  Imm(9218868437227405312)                         -> x1
-    v23  StoreLocal { off=-57, value=v22, kind=F80, volatile } -> -
+    v23  StoreLocal { off=-179, value=v22, kind=F80, volatile } -> -
     v24  Imm(0)                                           -> x1
     v25  LoadLocal { off=-1, kind=F64, volatile }         -> d1
     v26  Imm(0)                                           -> x1
@@ -687,12 +687,12 @@ fn ent_pc=19 n_params=0 variadic=false locals=7
     v171 Imm(0)                                           -> x0
     v172 Imm(0)                                           -> x0
     v173 Imm(0)                                           -> x0
-    v174 LoadLocal { off=-55, kind=F80, volatile }        -> d0
-    v175 LocalAddr(-58)                                   -> x0
-    v176 StoreLocal { off=-58, value=v174, kind=F80 }     -> -
-    v177 LocalAddr(-58)                                   -> x0
+    v174 LoadLocal { off=-177, kind=F80, volatile }       -> d0
+    v175 LocalAddr(-180)                                  -> x0
+    v176 StoreLocal { off=-180, value=v174, kind=F80 }    -> -
+    v177 LocalAddr(-180)                                  -> x0
     v178 Copy { value=v177, fp=false }                    -> x0
-    v179 LoadLocal { off=-58, kind=F80 }                  -> d0
+    v179 LoadLocal { off=-180, kind=F80 }                 -> d0
     v180 Imm(0)                                           -> x0
     v181 Imm(0)                                           -> x0
     v182 Imm(0)                                           -> x0
@@ -737,12 +737,12 @@ fn ent_pc=19 n_params=0 variadic=false locals=7
   block 72  start_pc=0
     v881 Imm(4)                                           -> x0
     v882 LifetimeEnd(0)                                   -> -
-    v883 LoadLocal { off=-56, kind=F80, volatile }        -> d0
-    v884 LocalAddr(-58)                                   -> x0
-    v885 StoreLocal { off=-58, value=v883, kind=F80 }     -> -
-    v886 LocalAddr(-58)                                   -> x0
+    v883 LoadLocal { off=-178, kind=F80, volatile }       -> d0
+    v884 LocalAddr(-181)                                  -> x0
+    v885 StoreLocal { off=-181, value=v883, kind=F80 }    -> -
+    v886 LocalAddr(-181)                                  -> x0
     v887 Copy { value=v886, fp=false }                    -> x0
-    v888 LoadLocal { off=-58, kind=F80 }                  -> d0
+    v888 LoadLocal { off=-181, kind=F80 }                 -> d0
     v889 Imm(0)                                           -> x0
     v890 Imm(0)                                           -> x0
     v891 Imm(0)                                           -> x0
@@ -780,12 +780,12 @@ fn ent_pc=19 n_params=0 variadic=false locals=7
     v941 Imm(0)                                           -> x1
     terminator Bnz { cond=v935, target=b69, fall=b76 }   (exit_acc=v935)
   block 76  start_pc=0
-    v191 LoadLocal { off=-57, kind=F80, volatile }        -> d0
-    v192 LocalAddr(-58)                                   -> x0
-    v193 StoreLocal { off=-58, value=v191, kind=F80 }     -> -
-    v194 LocalAddr(-58)                                   -> x0
+    v191 LoadLocal { off=-179, kind=F80, volatile }       -> d0
+    v192 LocalAddr(-182)                                  -> x0
+    v193 StoreLocal { off=-182, value=v191, kind=F80 }    -> -
+    v194 LocalAddr(-182)                                  -> x0
     v195 Copy { value=v194, fp=false }                    -> x0
-    v196 LoadLocal { off=-58, kind=F80 }                  -> d0
+    v196 LoadLocal { off=-182, kind=F80 }                 -> d0
     v197 Imm(0)                                           -> x0
     v198 Imm(0)                                           -> x0
     v199 Imm(0)                                           -> x0
@@ -823,12 +823,12 @@ fn ent_pc=19 n_params=0 variadic=false locals=7
     v975 Imm(0)                                           -> x1
     terminator Bz { cond=v969, target=b69, fall=b80 }   (low word)   (exit_acc=v970)
   block 80  start_pc=0
-    v207 LoadLocal { off=-55, kind=F80, volatile }        -> d0
-    v208 LocalAddr(-59)                                   -> x0
-    v209 StoreLocal { off=-59, value=v207, kind=F80 }     -> -
-    v210 LocalAddr(-59)                                   -> x0
+    v207 LoadLocal { off=-177, kind=F80, volatile }       -> d0
+    v208 LocalAddr(-183)                                  -> x0
+    v209 StoreLocal { off=-183, value=v207, kind=F80 }    -> -
+    v210 LocalAddr(-183)                                  -> x0
     v211 Copy { value=v210, fp=false }                    -> x0
-    v212 LoadLocal { off=-59, kind=F80 }                  -> d0
+    v212 LoadLocal { off=-183, kind=F80 }                 -> d0
     v213 Imm(0)                                           -> x0
     v214 Imm(0)                                           -> x0
     v215 Imm(0)                                           -> x0

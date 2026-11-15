@@ -158,11 +158,14 @@ pub(crate) struct StackGrowth {
 }
 
 /// The bounds of the optional splices: the body cap (`--inline-cap`) and
-/// the stack growth.
+/// the stack growth; and whether slot coalescing repacks the caller's frame
+/// by lifetime after the pass (`-O`), which decides where splices put their
+/// locals ([`CallerRegions`]).
 #[derive(Clone, Copy)]
 pub(crate) struct Limits {
     pub(crate) cap: u32,
     pub(crate) stack: StackGrowth,
+    pub(crate) repacked: bool,
 }
 
 impl StackGrowth {
@@ -193,6 +196,13 @@ enum RegionKey {
 /// fixpoint: a splice places the callee's relocated locals (own slots plus
 /// materialized parameter cells) into a recorded region instead of
 /// appending a fresh one per call site, so N sites cost one region.
+///
+/// Where slot coalescing repacks the frame after the pass and may share its
+/// storage (`slot_coalesce::shares_storage`), the records size the frame
+/// budget alone and every splice appends slots of its own: a slot is one
+/// object to `mem2reg` and `sroa`, so splices sharing it would each keep the
+/// others' objects in memory whenever one escapes, and the repack shares
+/// the storage of splices whose lifetimes are disjoint anyway.
 ///
 /// A region may back at most one live activation: the spliced objects'
 /// lifetimes end when the inlined body exits (C99 6.2.4p2), so a non-UB
@@ -254,6 +264,11 @@ struct CallerRegions {
     pool: Option<(i64, i64)>,
     /// One region per call-bearing off-cycle callee, keyed by ent_pc.
     per_callee: BTreeMap<usize, Option<(i64, i64)>>,
+    /// Splices append slots of their own, the records describing the
+    /// frame as shared regions would lay it out.
+    fresh: bool,
+    /// Cells the splices hold past that layout.
+    appended: i64,
 }
 
 /// Which region record backs a splice of `callee` into the caller at
@@ -369,7 +384,32 @@ impl CallerRegions {
         }
     }
 
+    fn new(repacked: bool) -> Self {
+        Self {
+            fresh: repacked,
+            ..Self::default()
+        }
+    }
+
+    /// The caller's frame of `locals` cells as the records lay it out.
+    fn pooled_locals(&self, locals: i64) -> i64 {
+        locals - self.appended
+    }
+
+    /// Slot-magnitude base of the splice's `needed` slots in a frame of
+    /// `locals`: the record's region, or fresh slots on top of the frame.
     fn place(&mut self, key: Option<RegionKey>, needed: i64, locals: i64) -> i64 {
+        if !self.fresh || key.is_none() {
+            return self.place_pooled(key, needed, locals);
+        }
+        let pooled = self.pooled_locals(locals);
+        let grows = self.growth(key, needed, pooled);
+        self.place_pooled(key, needed, pooled);
+        self.appended += needed - grows;
+        locals
+    }
+
+    fn place_pooled(&mut self, key: Option<RegionKey>, needed: i64, locals: i64) -> i64 {
         let rec: &mut Option<(i64, i64)> = match key {
             None => return locals,
             Some(RegionKey::Pool) => &mut self.pool,
@@ -2750,6 +2790,34 @@ fn splice_multi_block(
         .enumerate()
         .map(|(i, &s)| (s, -(region_base + callee.locals + i as i64 + 1)))
         .collect();
+    // The callee's objects end when it returns (C99 6.2.4p2). In slots of
+    // their own, those reached through an address that state no end of
+    // their own state it at the head of the continuation, so the repack
+    // bounds them as the shared region did.
+    let returned_ends: Vec<i64> = if regions.fresh {
+        let marked: BTreeSet<i64> = callee
+            .insts
+            .iter()
+            .filter_map(|i| match *i {
+                Inst::LifetimeEnd(s) => Some(s),
+                _ => None,
+            })
+            .collect();
+        callee
+            .insts
+            .iter()
+            .filter_map(|i| match *i {
+                Inst::LocalAddr(s) if marked.contains(&s) || held_ends.contains(&s) => None,
+                Inst::LocalAddr(s) if s < 0 => Some(s - region_base),
+                Inst::LocalAddr(s) => param_cell_reloc.get(&s).copied(),
+                _ => None,
+            })
+            .collect::<BTreeSet<i64>>()
+            .into_iter()
+            .collect()
+    } else {
+        Vec::new()
+    };
     // Caller's own rows precede the callee's in `merged_jump_tables`; a
     // spliced callee's `table` re-indexes to `caller_jt_len + table`.
     let caller_jt_len = original.jump_tables.len() as u32;
@@ -2841,6 +2909,7 @@ fn splice_multi_block(
             pieces_base = at;
             at += 1 + 2 * pieces.len() as u32 + held_ends.len() as u32;
         }
+        at += returned_ends.len() as u32;
         for pc in (call_pc + 1)..splice_block.inst_range.end {
             count(pc, &mut remap, &mut at);
         }
@@ -3117,6 +3186,11 @@ fn splice_multi_block(
                 new_inst_src.push(crate::c5::ir::InstSrc::default());
                 new_f32.push(false);
             }
+        }
+        for &s in &returned_ends {
+            new_insts.push(Inst::LifetimeEnd(s));
+            new_inst_src.push(crate::c5::ir::InstSrc::default());
+            new_f32.push(false);
         }
         for pc in (call_pc + 1)..splice_block.inst_range.end {
             emit_caller_inst(
@@ -4386,8 +4460,9 @@ fn inline_caller(
                         args,
                         &caller.insts,
                     );
-                    let charge = cost.min(placement.regions.growth(key, needed, caller.locals));
-                    let grown = caller.locals - placement.orig_locals + charge;
+                    let pooled = placement.regions.pooled_locals(caller.locals);
+                    let charge = cost.min(placement.regions.growth(key, needed, pooled));
+                    let grown = pooled - placement.orig_locals + charge;
                     let frame = placement.own_cells + grown;
                     if !c.is_always_inline
                         && charge > 0
@@ -4448,7 +4523,11 @@ fn inline_caller(
 /// reachable other than through the `Inst::Call` sites in `funcs`.
 pub(crate) fn run(
     funcs: &mut [FunctionSsa],
-    Limits { cap, stack }: Limits,
+    Limits {
+        cap,
+        stack,
+        repacked,
+    }: Limits,
     abi: Abi,
     code_syms: &BTreeMap<u32, usize>,
     extern_fns: &BTreeMap<usize, ExternFnTarget>,
@@ -4620,7 +4699,11 @@ pub(crate) fn run(
                 let recursive = caller.insts.iter().any(
                     |i| matches!(i, Inst::Call { target_pc, .. } if *target_pc == caller.ent_pc),
                 );
-                let only_marked = (recursive && caller.locals > RECURSIVE_FRAME_SLOTS)
+                // The frame as shared regions lay it out ([`CallerRegions`]).
+                let locals = regions
+                    .get(&caller.ent_pc)
+                    .map_or(caller.locals, |r| r.pooled_locals(caller.locals));
+                let only_marked = (recursive && locals > RECURSIVE_FRAME_SLOTS)
                     || (caller.insts.len() + caller.blocks.len()
                         > orig_insts[fi] + CALLER_INST_BUDGET
                         && emitted_inst_count(caller) > orig_insts[fi] + CALLER_INST_BUDGET);
@@ -4631,8 +4714,8 @@ pub(crate) fn run(
                 // The absolute bound is enforced per splice (see
                 // `inline_caller_multi_block`), where the growth is known
                 // exactly.
-                let only_frame_free = caller.locals > CALLER_FRAME_SLOTS
-                    && caller.locals > orig_locals[fi].saturating_mul(FRAME_GROWTH_FACTOR);
+                let only_frame_free = locals > CALLER_FRAME_SLOTS
+                    && locals > orig_locals[fi].saturating_mul(FRAME_GROWTH_FACTOR);
                 // Splicing a self-recursive call would expand indefinitely,
                 // so the caller's own entry is excluded from its view.
                 let local = pools[usize::from(only_marked) | (usize::from(only_frame_free) << 1)]
@@ -4655,7 +4738,14 @@ pub(crate) fn run(
                     &local,
                     &facts,
                     &mut SlotPlacement {
-                        regions: regions.entry(caller.ent_pc).or_default(),
+                        regions: regions.entry(caller.ent_pc).or_insert_with(|| {
+                            CallerRegions::new(
+                                repacked
+                                    && crate::c5::codegen::ssa::slot_coalesce::shares_storage(
+                                        caller,
+                                    ),
+                            )
+                        }),
                         cyclic,
                         sp_tainted: &sp_tainted,
                         orig_locals: orig_locals[fi],
@@ -4756,7 +4846,11 @@ fn live_across_self_calls(f: &FunctionSsa) -> usize {
 /// outnumber the `callee_saved` registers and spill.
 pub(crate) fn inline_self(
     funcs: &mut [FunctionSsa],
-    Limits { cap, stack }: Limits,
+    Limits {
+        cap,
+        stack,
+        repacked,
+    }: Limits,
     abi: Abi,
     callee_saved: usize,
 ) {
@@ -4828,13 +4922,15 @@ pub(crate) fn inline_self(
         let pool = CandidatePool::build(&bodies, |_| true);
         let orig_locals = f.locals;
         let own_cells = lasting_cells(f, &live_inst_mask(f), true, 0);
-        let mut regions = CallerRegions::default();
+        let mut regions = CallerRegions::new(
+            repacked && crate::c5::codegen::ssa::slot_coalesce::shares_storage(f),
+        );
         for _ in 0..depth {
             let caller = &mut *f;
             let sites = self_calls(caller);
             let grown = emitted_inst_count(caller) + sites * body_size;
             if sites == 0
-                || caller.locals > RECURSIVE_FRAME_SLOTS
+                || regions.pooled_locals(caller.locals) > RECURSIVE_FRAME_SLOTS
                 || grown > SELF_INLINE_TOTAL.min(SELF_INLINE_GROWTH * body_size)
             {
                 break;
@@ -5216,6 +5312,23 @@ mod tests {
             funcs[0].locals, 6,
             "8 splices of a 4-slot call-free callee must add one 4-slot region"
         );
+    }
+
+    /// In a frame repacked after the pass, each of the 8 splices takes slots
+    /// of its own, and the frame budget still charges the one region.
+    #[test]
+    fn repacked_splices_take_slots_of_their_own() {
+        let abi = Target::LinuxX64.abi();
+        let mut funcs = alloc::vec![multi_call_caller(1, 2, 100, 8), asm_callee(100, 4),];
+        run_repacked(&mut funcs, 32, abi, &BTreeMap::new(), true);
+        assert!(
+            funcs[0]
+                .insts
+                .iter()
+                .all(|i| !matches!(i, Inst::Call { .. })),
+            "all 8 sites must inline"
+        );
+        assert_eq!(funcs[0].locals, 2 + 8 * 4, "one 4-slot region per splice");
     }
 
     /// A call-bearing callee off every call cycle reuses one per-callee
@@ -5637,7 +5750,11 @@ mod tests {
             let mut funcs = alloc::vec![caller, wide(20, false), leaf(600)];
             super::run(
                 &mut funcs,
-                Limits { cap: 32, stack },
+                Limits {
+                    cap: 32,
+                    stack,
+                    repacked: false,
+                },
                 abi,
                 &BTreeMap::new(),
                 &BTreeMap::new(),
@@ -7420,11 +7537,22 @@ mod tests {
     /// The pass entry points with no imported targets, the shape the
     /// tests below build; the imported path has its own tests.
     fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi, code_syms: &BTreeMap<u32, usize>) {
+        run_repacked(funcs, cap, abi, code_syms, false);
+    }
+
+    fn run_repacked(
+        funcs: &mut [FunctionSsa],
+        cap: u32,
+        abi: Abi,
+        code_syms: &BTreeMap<u32, usize>,
+        repacked: bool,
+    ) {
         super::run(
             funcs,
             Limits {
                 cap,
                 stack: StackGrowth::DEFAULT,
+                repacked,
             },
             abi,
             code_syms,

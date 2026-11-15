@@ -272,7 +272,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
-               	subq	$0xa0, %rsp
+               	subq	$0x80, %rsp
                	andq	$-0x20, %rsp
                	movl	$0x1, %edi
                	callq	<addr>
@@ -287,18 +287,18 @@ Disassembly of section .text:
                	movq	-0x20(%rbp), %rcx
                	subq	$0x2, %rcx
                	addq	%rcx, %rax
-               	leaq	0x40(%rsp), %rcx
+               	leaq	(%rsp), %rcx
                	movl	$0x2, %edx
                	movabsq	$0x202020202020202, %rsi # imm = 0x202020202020202
-               	movq	%rsi, 0x40(%rsp)
-               	movq	%rsi, 0x48(%rsp)
-               	movq	%rsi, 0x50(%rsp)
-               	movq	%rsi, 0x58(%rsp)
+               	movq	%rsi, (%rsp)
+               	movq	%rsi, 0x8(%rsp)
+               	movq	%rsi, 0x10(%rsp)
+               	movq	%rsi, 0x18(%rsp)
                	andq	$0xf, %rcx
                	addq	%rcx, %rax
-               	leaq	0x60(%rsp), %rcx
-               	movq	%rsi, 0x60(%rsp)
-               	movq	%rsi, 0x68(%rsp)
+               	leaq	0x40(%rsp), %rcx
+               	movq	%rsi, 0x40(%rsp)
+               	movq	%rsi, 0x48(%rsp)
                	andq	$0xf, %rcx
                	addq	%rcx, %rax
                	testl	%eax, %eax
@@ -323,17 +323,17 @@ Disassembly of section .text:
                	movq	-0x8(%rbp), %rcx
                	shlq	%rcx
                	subq	%rcx, %rax
-               	leaq	0x70(%rsp), %rcx
+               	leaq	0x40(%rsp), %rcx
                	movabsq	$0x404040404040404, %rdx # imm = 0x404040404040404
-               	movq	%rdx, 0x70(%rsp)
-               	movq	%rdx, 0x78(%rsp)
-               	movq	%rdx, 0x80(%rsp)
-               	movq	%rdx, 0x88(%rsp)
+               	movq	%rdx, 0x40(%rsp)
+               	movq	%rdx, 0x48(%rsp)
+               	movq	%rdx, 0x50(%rsp)
+               	movq	%rdx, 0x58(%rsp)
                	andq	$0xf, %rcx
                	addq	%rcx, %rax
-               	leaq	0x90(%rsp), %rcx
-               	movq	%rdx, 0x90(%rsp)
-               	movq	%rdx, 0x98(%rsp)
+               	leaq	0x60(%rsp), %rcx
+               	movq	%rdx, 0x60(%rsp)
+               	movq	%rdx, 0x68(%rsp)
                	andq	$0xf, %rcx
                	leaq	(%rax,%rcx), %r10
                	movq	%r10, -0x28(%rbp)

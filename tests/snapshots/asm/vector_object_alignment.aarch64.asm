@@ -105,14 +105,14 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x90
+               	sub	sp, sp, #0x70
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	and	x0, x2, #0x7
                	cbz	w0, <addr>
                	mov	x0, #0xe                // =14
                	cbz	x0, <addr>
-               	add	sp, sp, #0x90
+               	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x1, <page>
@@ -121,39 +121,39 @@ Disassembly of section .text:
                	cbz	w0, <addr>
                	mov	x0, #0x17               // =23
                	cbz	x0, <addr>
-               	add	sp, sp, #0x90
+               	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret
                	bl	<addr>
                	cbz	w0, <addr>
-               	add	sp, sp, #0x90
+               	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x1, x29, #0x90
+               	sub	x1, x29, #0x70
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x1]
-               	sub	x0, x29, #0x80
+               	sub	x0, x29, #0x60
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	ldp	x16, x17, [x2]
                	stp	x16, x17, [x0]
                	ldp	x16, x17, [x2, #0x10]
                	stp	x16, x17, [x0, #0x10]
-               	sub	x2, x29, #0x60
+               	sub	x2, x29, #0x40
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	ldp	x16, x17, [x3]
                	stp	x16, x17, [x2]
                	ldp	x16, x17, [x3, #0x10]
                	stp	x16, x17, [x2, #0x10]
-               	sub	x3, x29, #0x40
+               	sub	x3, x29, #0x20
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x3]
                	ldp	x16, x17, [x0, #0x10]
                	stp	x16, x17, [x3, #0x10]
-               	sub	x0, x29, #0x20
+               	sub	x0, x29, #0x60
                	ldp	x16, x17, [x2]
                	stp	x16, x17, [x0]
                	ldp	x16, x17, [x2, #0x10]
@@ -161,7 +161,7 @@ Disassembly of section .text:
                	and	x1, x1, #0xf
                	cbz	w1, <addr>
                	mov	x0, #0x25               // =37
-               	add	sp, sp, #0x90
+               	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret
                	and	x1, x3, #0xf

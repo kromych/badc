@@ -1099,10 +1099,10 @@ Disassembly of section .text:
 <check_gathers>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0xe0, %rsp
+               	subq	$0x90, %rsp
                	pushq	%r12
                	pushq	%rbx
-               	subq	$0x640, %rsp            # imm = 0x640
+               	subq	$0x160, %rsp            # imm = 0x160
                	andq	$-0x20, %rsp
                	movq	%rdi, %rbx
                	movl	$0x4, %esi
@@ -1113,7 +1113,7 @@ Disassembly of section .text:
                	movq	%rsi, %rcx
                	vzeroupper
                	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
+               	leaq	0x120(%rsp), %rcx
                	leaq	-0x80(%rbp), %rax
                	vmovups	(%rax), %xmm14
                	vmovups	%xmm14, (%rcx)
@@ -1122,42 +1122,42 @@ Disassembly of section .text:
                	vmovups	%ymm14, (%rcx)
                	movups	-0x60(%rbp), %xmm0
                	movups	-0x40(%rbp), %xmm1
-               	leaq	0x430(%rsp), %r8
+               	leaq	0x130(%rsp), %r8
                	testl	%ebx, %ebx
                	je	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm2
-               	movups	%xmm1, 0x460(%rsp)
-               	movups	%xmm0, 0x470(%rsp)
-               	leaq	0x480(%rsp), %rax
+               	movups	0x120(%rsp), %xmm2
+               	movups	%xmm1, 0xe0(%rsp)
+               	movups	%xmm0, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rax
                	vxorps	%ymm14, %ymm14, %ymm14
                	vmovups	%xmm14, (%rax)
-               	movups	%xmm2, 0x490(%rsp)
+               	movups	%xmm2, 0xa0(%rsp)
                	xorl	%eax, %eax
                	jmp	<addr>
-               	movl	-0xe0(%rbp), %edi
-               	movl	%edi, 0x480(%rsp,%rax,4)
+               	movl	-0x88(%rbp), %edi
+               	movl	%edi, 0xc0(%rsp,%rax,4)
                	incq	%rax
                	cmpl	$0x4, %eax
                	jge	<addr>
-               	movl	0x460(%rsp,%rax,4), %esi
-               	movl	%esi, -0xe0(%rbp)
-               	movl	0x470(%rsp,%rax,4), %esi
+               	movl	0xe0(%rsp,%rax,4), %esi
+               	movl	%esi, -0x88(%rbp)
+               	movl	0x80(%rsp,%rax,4), %esi
                	testl	%esi, %esi
                	jge	<addr>
-               	leaq	-0xe0(%rbp), %rsi
-               	movslq	0x490(%rsp,%rax,4), %rdi
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
                	addq	%rcx, %rdi
                	movl	(%rdi), %r10d
                	movl	%r10d, (%rsi)
                	jmp	<addr>
-               	leaq	0xe0(%rsp), %rax
-               	movups	0x480(%rsp), %xmm0
-               	movups	%xmm0, 0xe0(%rsp)
+               	leaq	0x80(%rsp), %rax
+               	movups	0xc0(%rsp), %xmm0
+               	movups	%xmm0, 0x80(%rsp)
                	vmovups	(%rax), %xmm14
                	vmovups	%xmm14, (%r8)
-               	leaq	0x430(%rsp), %rdi
+               	leaq	0x130(%rsp), %rdi
                	leaq	-0x80(%rbp), %rax
                	leaq	0x60(%rax), %rsi
                	movl	$0x10, %edx
@@ -1180,7 +1180,7 @@ Disassembly of section .text:
                	movq	%rbx, %r9
                	vzeroupper
                	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
+               	leaq	0x120(%rsp), %rcx
                	leaq	-0x80(%rbp), %rax
                	vmovups	(%rax), %xmm14
                	vmovups	%xmm14, (%rcx)
@@ -1194,38 +1194,38 @@ Disassembly of section .text:
                	je	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rcx
-               	leaq	0x1c0(%rsp), %rax
+               	leaq	0x100(%rsp), %rax
                	vmovups	(%rdx), %ymm14
                	vmovups	%ymm14, (%rax)
-               	vmovups	%ymm1, 0x1e0(%rsp)
-               	vmovups	%ymm0, 0x200(%rsp)
-               	leaq	0x220(%rsp), %rsi
+               	vmovups	%ymm1, 0xe0(%rsp)
+               	vmovups	%ymm0, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rsi
                	vxorps	%ymm14, %ymm14, %ymm14
                	vmovups	%ymm14, (%rsi)
-               	leaq	0x240(%rsp), %rsi
+               	leaq	0xa0(%rsp), %rsi
                	vmovups	(%rax), %ymm14
                	vmovups	%ymm14, (%rsi)
                	xorl	%eax, %eax
                	jmp	<addr>
-               	movl	-0xd8(%rbp), %edi
-               	movl	%edi, 0x220(%rsp,%rax,4)
+               	movl	-0x88(%rbp), %edi
+               	movl	%edi, 0xc0(%rsp,%rax,4)
                	incq	%rax
                	cmpl	$0x8, %eax
                	jge	<addr>
-               	movl	0x1e0(%rsp,%rax,4), %esi
-               	movl	%esi, -0xd8(%rbp)
-               	movl	0x200(%rsp,%rax,4), %esi
+               	movl	0xe0(%rsp,%rax,4), %esi
+               	movl	%esi, -0x88(%rbp)
+               	movl	0x80(%rsp,%rax,4), %esi
                	testl	%esi, %esi
                	jge	<addr>
-               	leaq	-0xd8(%rbp), %rsi
-               	movslq	0x240(%rsp,%rax,4), %rdi
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
                	addq	%rcx, %rdi
                	movl	(%rdi), %r10d
                	movl	%r10d, (%rsi)
                	jmp	<addr>
-               	leaq	0xe0(%rsp), %rax
-               	vmovups	0x220(%rsp), %ymm0
-               	vmovups	%ymm0, 0xe0(%rsp)
+               	leaq	0x80(%rsp), %rax
+               	vmovups	0xc0(%rsp), %ymm0
+               	vmovups	%ymm0, 0x80(%rsp)
                	vmovups	(%rax), %ymm14
                	vmovups	%ymm14, (%r8)
                	leaq	0x20(%rsp), %rdi
@@ -1250,7 +1250,7 @@ Disassembly of section .text:
                	movq	%rbx, %r9
                	vzeroupper
                	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
+               	leaq	0x120(%rsp), %rcx
                	leaq	-0x80(%rbp), %rax
                	vmovups	(%rax), %xmm14
                	vmovups	%xmm14, (%rcx)
@@ -1259,1063 +1259,42 @@ Disassembly of section .text:
                	vmovups	%ymm14, (%rcx)
                	movups	-0x60(%rbp), %xmm0
                	movups	-0x40(%rbp), %xmm1
-               	leaq	0x430(%rsp), %r8
+               	leaq	0x130(%rsp), %r8
                	testl	%ebx, %ebx
                	je	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm2
-               	movups	%xmm1, 0x4a0(%rsp)
-               	movups	%xmm0, 0x4b0(%rsp)
-               	leaq	0x4c0(%rsp), %rax
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%xmm14, (%rax)
-               	movups	%xmm2, 0x4d0(%rsp)
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movq	-0xd0(%rbp), %rdi
-               	movq	%rdi, 0x4c0(%rsp,%rax,8)
-               	incq	%rax
-               	cmpl	$0x2, %eax
-               	jge	<addr>
-               	movq	0x4a0(%rsp,%rax,8), %rsi
-               	movq	%rsi, -0xd0(%rbp)
-               	movq	0x4b0(%rsp,%rax,8), %rsi
-               	testq	%rsi, %rsi
-               	jge	<addr>
-               	leaq	-0xd0(%rbp), %rsi
-               	movslq	0x4d0(%rsp,%rax,4), %rdi
-               	addq	%rcx, %rdi
-               	movq	(%rdi), %r10
-               	movq	%r10, (%rsi)
-               	jmp	<addr>
-               	leaq	0xe0(%rsp), %rax
-               	movups	0x4c0(%rsp), %xmm0
-               	movups	%xmm0, 0xe0(%rsp)
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%r8)
-               	leaq	0x430(%rsp), %rdi
-               	leaq	-0x80(%rbp), %rax
-               	leaq	0x60(%rax), %rsi
-               	movl	$0x10, %edx
-               	vzeroupper
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movl	$0x1, %ecx
-               	testl	%ebx, %ebx
-               	cmoveq	%rcx, %rax
-               	orq	%rax, %r12
-               	leaq	-0x80(%rbp), %rdi
-               	movl	$0x4, %esi
-               	movl	$0x8, %edx
-               	movl	$0x1, %r8d
-               	movq	%rsi, %rcx
-               	movq	%rbx, %r9
-               	vzeroupper
-               	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
-               	leaq	-0x80(%rbp), %rax
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	(%rsp), %rcx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rcx)
-               	vmovups	-0x60(%rbp), %ymm0
-               	vmovups	-0x40(%rbp), %ymm1
-               	leaq	0x20(%rsp), %r8
-               	testl	%ebx, %ebx
-               	je	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm2
-               	vmovups	%ymm1, 0x260(%rsp)
-               	vmovups	%ymm0, 0x180(%rsp)
+               	movups	0x120(%rsp), %xmm2
+               	movups	%xmm1, 0xe0(%rsp)
+               	movups	%xmm0, 0x80(%rsp)
                	leaq	0xc0(%rsp), %rax
                	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%ymm14, (%rax)
-               	movups	%xmm2, 0x4e0(%rsp)
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movq	-0xc8(%rbp), %rdi
-               	movq	%rdi, 0xc0(%rsp,%rax,8)
-               	incq	%rax
-               	cmpl	$0x4, %eax
-               	jge	<addr>
-               	movq	0x260(%rsp,%rax,8), %rsi
-               	movq	%rsi, -0xc8(%rbp)
-               	movq	0x180(%rsp,%rax,8), %rsi
-               	testq	%rsi, %rsi
-               	jge	<addr>
-               	leaq	-0xc8(%rbp), %rsi
-               	movslq	0x4e0(%rsp,%rax,4), %rdi
-               	addq	%rcx, %rdi
-               	movq	(%rdi), %r10
-               	movq	%r10, (%rsi)
-               	jmp	<addr>
-               	leaq	0xe0(%rsp), %rax
-               	vmovups	0xc0(%rsp), %ymm0
-               	vmovups	%ymm0, 0xe0(%rsp)
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%r8)
-               	leaq	0x20(%rsp), %rdi
-               	leaq	-0x80(%rbp), %rax
-               	leaq	0x60(%rax), %rsi
-               	movl	$0x20, %edx
-               	vzeroupper
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movl	$0x1, %ecx
-               	testl	%ebx, %ebx
-               	cmoveq	%rcx, %rax
-               	orq	%rax, %r12
-               	leaq	-0x80(%rbp), %rdi
-               	movl	$0x4, %esi
-               	movl	$0x1, %r8d
-               	movq	%rsi, %rdx
-               	movq	%rbx, %r9
-               	movq	%rsi, %rcx
-               	vzeroupper
-               	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
-               	leaq	-0x80(%rbp), %rax
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	(%rsp), %rcx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rcx)
-               	movups	-0x60(%rbp), %xmm0
-               	movups	-0x40(%rbp), %xmm1
-               	leaq	0x440(%rsp), %r8
-               	testl	%ebx, %ebx
-               	je	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm2
-               	movups	%xmm1, 0x4f0(%rsp)
-               	movups	%xmm0, 0x500(%rsp)
-               	leaq	0x510(%rsp), %rax
-               	vxorps	%ymm14, %ymm14, %ymm14
                	vmovups	%xmm14, (%rax)
-               	movups	%xmm2, 0x520(%rsp)
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movl	-0xc0(%rbp), %edi
-               	movl	%edi, 0x510(%rsp,%rax,4)
-               	incq	%rax
-               	cmpl	$0x4, %eax
-               	jge	<addr>
-               	movl	0x4f0(%rsp,%rax,4), %esi
-               	movl	%esi, -0xc0(%rbp)
-               	movl	0x500(%rsp,%rax,4), %esi
-               	testl	%esi, %esi
-               	jge	<addr>
-               	leaq	-0xc0(%rbp), %rsi
-               	movslq	0x520(%rsp,%rax,4), %rdi
-               	addq	%rcx, %rdi
-               	movl	(%rdi), %r10d
-               	movl	%r10d, (%rsi)
-               	jmp	<addr>
-               	leaq	0xe0(%rsp), %rax
-               	movups	0x510(%rsp), %xmm0
-               	movups	%xmm0, 0xe0(%rsp)
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%r8)
-               	leaq	0x440(%rsp), %rdi
-               	leaq	-0x80(%rbp), %rax
-               	leaq	0x60(%rax), %rsi
-               	movl	$0x10, %edx
-               	vzeroupper
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movl	$0x1, %ecx
-               	testl	%ebx, %ebx
-               	cmoveq	%rcx, %rax
-               	orq	%rax, %r12
-               	leaq	-0x80(%rbp), %rdi
-               	movl	$0x8, %esi
-               	movl	$0x4, %edx
-               	movl	$0x1, %r8d
-               	movq	%rdx, %rcx
-               	movq	%rbx, %r9
-               	vzeroupper
-               	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
-               	leaq	-0x80(%rbp), %rax
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	(%rsp), %rdx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rdx)
-               	vmovups	-0x60(%rbp), %ymm0
-               	vmovups	-0x40(%rbp), %ymm1
-               	leaq	0x40(%rsp), %r8
-               	testl	%ebx, %ebx
-               	je	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	leaq	0x280(%rsp), %rax
-               	vmovups	(%rdx), %ymm14
-               	vmovups	%ymm14, (%rax)
-               	vmovups	%ymm1, 0x2a0(%rsp)
-               	vmovups	%ymm0, 0x2c0(%rsp)
-               	leaq	0x2e0(%rsp), %rsi
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%ymm14, (%rsi)
-               	leaq	0x1a0(%rsp), %rsi
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rsi)
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movl	-0xb8(%rbp), %edi
-               	movl	%edi, 0x2e0(%rsp,%rax,4)
-               	incq	%rax
-               	cmpl	$0x8, %eax
-               	jge	<addr>
-               	movl	0x2a0(%rsp,%rax,4), %esi
-               	movl	%esi, -0xb8(%rbp)
-               	movl	0x2c0(%rsp,%rax,4), %esi
-               	testl	%esi, %esi
-               	jge	<addr>
-               	leaq	-0xb8(%rbp), %rsi
-               	movslq	0x1a0(%rsp,%rax,4), %rdi
-               	addq	%rcx, %rdi
-               	movl	(%rdi), %r10d
-               	movl	%r10d, (%rsi)
-               	jmp	<addr>
-               	leaq	0xe0(%rsp), %rax
-               	vmovups	0x2e0(%rsp), %ymm0
-               	vmovups	%ymm0, 0xe0(%rsp)
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%r8)
-               	leaq	0x40(%rsp), %rdi
-               	leaq	-0x80(%rbp), %rax
-               	leaq	0x60(%rax), %rsi
-               	movl	$0x20, %edx
-               	vzeroupper
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movl	$0x1, %ecx
-               	testl	%ebx, %ebx
-               	cmoveq	%rcx, %rax
-               	orq	%rax, %r12
-               	leaq	-0x80(%rbp), %rdi
-               	movl	$0x2, %esi
-               	movl	$0x8, %edx
-               	movl	$0x4, %ecx
-               	movl	$0x1, %r8d
-               	movq	%rbx, %r9
-               	vzeroupper
-               	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
-               	leaq	-0x80(%rbp), %rax
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	(%rsp), %rcx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rcx)
-               	movups	-0x60(%rbp), %xmm0
-               	movups	-0x40(%rbp), %xmm1
-               	leaq	0x450(%rsp), %r8
-               	testl	%ebx, %ebx
-               	je	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm2
-               	movups	%xmm1, 0x530(%rsp)
-               	movups	%xmm0, 0x540(%rsp)
-               	leaq	0x550(%rsp), %rax
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%xmm14, (%rax)
-               	movups	%xmm2, 0x560(%rsp)
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movq	-0xb0(%rbp), %rdi
-               	movq	%rdi, 0x550(%rsp,%rax,8)
-               	incq	%rax
-               	cmpl	$0x2, %eax
-               	jge	<addr>
-               	movq	0x530(%rsp,%rax,8), %rsi
-               	movq	%rsi, -0xb0(%rbp)
-               	movq	0x540(%rsp,%rax,8), %rsi
-               	testq	%rsi, %rsi
-               	jge	<addr>
-               	leaq	-0xb0(%rbp), %rsi
-               	movslq	0x560(%rsp,%rax,4), %rdi
-               	addq	%rcx, %rdi
-               	movq	(%rdi), %r10
-               	movq	%r10, (%rsi)
-               	jmp	<addr>
-               	leaq	0xe0(%rsp), %rax
-               	movups	0x550(%rsp), %xmm0
-               	movups	%xmm0, 0xe0(%rsp)
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%r8)
-               	leaq	0x450(%rsp), %rdi
-               	leaq	-0x80(%rbp), %rax
-               	leaq	0x60(%rax), %rsi
-               	movl	$0x10, %edx
-               	vzeroupper
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movl	$0x1, %ecx
-               	testl	%ebx, %ebx
-               	cmoveq	%rcx, %rax
-               	orq	%rax, %r12
-               	leaq	-0x80(%rbp), %rdi
-               	movl	$0x4, %esi
-               	movl	$0x8, %edx
-               	movl	$0x1, %r8d
-               	movq	%rsi, %rcx
-               	movq	%rbx, %r9
-               	vzeroupper
-               	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
-               	leaq	-0x80(%rbp), %rax
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	(%rsp), %rcx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rcx)
-               	vmovups	-0x60(%rbp), %ymm0
-               	vmovups	-0x40(%rbp), %ymm1
-               	leaq	0x60(%rsp), %r8
-               	testl	%ebx, %ebx
-               	je	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm2
-               	vmovups	%ymm1, 0x300(%rsp)
-               	vmovups	%ymm0, 0x320(%rsp)
-               	leaq	0x340(%rsp), %rax
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%ymm14, (%rax)
-               	movups	%xmm2, 0x570(%rsp)
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movq	-0xa8(%rbp), %rdi
-               	movq	%rdi, 0x340(%rsp,%rax,8)
-               	incq	%rax
-               	cmpl	$0x4, %eax
-               	jge	<addr>
-               	movq	0x300(%rsp,%rax,8), %rsi
-               	movq	%rsi, -0xa8(%rbp)
-               	movq	0x320(%rsp,%rax,8), %rsi
-               	testq	%rsi, %rsi
-               	jge	<addr>
-               	leaq	-0xa8(%rbp), %rsi
-               	movslq	0x570(%rsp,%rax,4), %rdi
-               	addq	%rcx, %rdi
-               	movq	(%rdi), %r10
-               	movq	%r10, (%rsi)
-               	jmp	<addr>
-               	leaq	0xe0(%rsp), %rax
-               	vmovups	0x340(%rsp), %ymm0
-               	vmovups	%ymm0, 0xe0(%rsp)
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%r8)
-               	leaq	0x60(%rsp), %rdi
-               	leaq	-0x80(%rbp), %rax
-               	leaq	0x60(%rax), %rsi
-               	movl	$0x20, %edx
-               	vzeroupper
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movl	$0x1, %ecx
-               	testl	%ebx, %ebx
-               	cmoveq	%rcx, %rax
-               	orq	%rax, %r12
-               	movl	$0x8, %ecx
-               	leaq	-0x80(%rbp), %rdi
-               	movl	$0x2, %esi
-               	movl	$0x4, %edx
-               	movl	$0x1, %r8d
-               	movq	%rbx, %r9
-               	vzeroupper
-               	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
-               	leaq	-0x80(%rbp), %rax
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	(%rsp), %rcx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rcx)
-               	movups	-0x60(%rbp), %xmm0
-               	movups	-0x40(%rbp), %xmm1
-               	leaq	0x430(%rsp), %r8
-               	testl	%ebx, %ebx
-               	je	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm2
-               	movups	%xmm1, 0x580(%rsp)
-               	movups	%xmm0, 0x590(%rsp)
-               	leaq	0x5a0(%rsp), %rax
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%xmm14, (%rax)
-               	movups	%xmm2, 0x5b0(%rsp)
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movl	-0xa0(%rbp), %edi
-               	movl	%edi, 0x5a0(%rsp,%rax,4)
-               	incq	%rax
-               	cmpl	$0x2, %eax
-               	jge	<addr>
-               	movl	0x580(%rsp,%rax,4), %esi
-               	movl	%esi, -0xa0(%rbp)
-               	movl	0x590(%rsp,%rax,4), %esi
-               	testl	%esi, %esi
-               	jge	<addr>
-               	leaq	-0xa0(%rbp), %rsi
-               	movq	0x5b0(%rsp,%rax,8), %rdi
-               	addq	%rcx, %rdi
-               	movl	(%rdi), %r10d
-               	movl	%r10d, (%rsi)
-               	jmp	<addr>
-               	leaq	0xe0(%rsp), %rax
-               	movups	0x5a0(%rsp), %xmm0
-               	movups	%xmm0, 0xe0(%rsp)
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%r8)
-               	leaq	0x430(%rsp), %rdi
-               	leaq	-0x80(%rbp), %rax
-               	leaq	0x60(%rax), %rsi
-               	movl	$0x10, %edx
-               	vzeroupper
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movl	$0x2, %ecx
-               	testl	%ebx, %ebx
-               	cmoveq	%rcx, %rax
-               	orq	%rax, %r12
-               	leaq	-0x80(%rbp), %rdi
-               	movl	$0x4, %esi
-               	movl	$0x8, %ecx
-               	movl	$0x1, %r8d
-               	movq	%rsi, %rdx
-               	movq	%rbx, %r9
-               	vzeroupper
-               	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
-               	leaq	-0x80(%rbp), %rax
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	(%rsp), %rdx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rdx)
-               	movups	-0x60(%rbp), %xmm0
-               	movups	-0x40(%rbp), %xmm1
-               	leaq	0x430(%rsp), %r8
-               	testl	%ebx, %ebx
-               	je	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	leaq	0x360(%rsp), %rax
-               	vmovups	(%rdx), %ymm14
-               	vmovups	%ymm14, (%rax)
-               	movups	%xmm1, 0x5c0(%rsp)
-               	movups	%xmm0, 0x5d0(%rsp)
-               	leaq	0x5e0(%rsp), %rsi
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%xmm14, (%rsi)
-               	leaq	0x380(%rsp), %rsi
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rsi)
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movl	-0x98(%rbp), %edi
-               	movl	%edi, 0x5e0(%rsp,%rax,4)
-               	incq	%rax
-               	cmpl	$0x4, %eax
-               	jge	<addr>
-               	movl	0x5c0(%rsp,%rax,4), %esi
-               	movl	%esi, -0x98(%rbp)
-               	movl	0x5d0(%rsp,%rax,4), %esi
-               	testl	%esi, %esi
-               	jge	<addr>
-               	leaq	-0x98(%rbp), %rsi
-               	movq	0x380(%rsp,%rax,8), %rdi
-               	addq	%rcx, %rdi
-               	movl	(%rdi), %r10d
-               	movl	%r10d, (%rsi)
-               	jmp	<addr>
-               	leaq	0xe0(%rsp), %rax
-               	movups	0x5e0(%rsp), %xmm0
-               	movups	%xmm0, 0xe0(%rsp)
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%r8)
-               	leaq	0x430(%rsp), %rdi
-               	leaq	-0x80(%rbp), %rax
-               	leaq	0x60(%rax), %rsi
-               	movl	$0x10, %edx
-               	vzeroupper
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movl	$0x2, %ecx
-               	testl	%ebx, %ebx
-               	cmoveq	%rcx, %rax
-               	orq	%rax, %r12
-               	leaq	-0x80(%rbp), %rdi
-               	movl	$0x2, %esi
-               	movl	$0x8, %edx
-               	movl	$0x1, %r8d
-               	movq	%rdx, %rcx
-               	movq	%rbx, %r9
-               	vzeroupper
-               	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
-               	leaq	-0x80(%rbp), %rax
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	(%rsp), %rcx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rcx)
-               	movups	-0x60(%rbp), %xmm0
-               	movups	-0x40(%rbp), %xmm1
-               	leaq	0x430(%rsp), %r8
-               	testl	%ebx, %ebx
-               	je	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm2
-               	movups	%xmm1, 0x5f0(%rsp)
-               	movups	%xmm0, 0x600(%rsp)
-               	leaq	0x610(%rsp), %rax
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%xmm14, (%rax)
-               	movups	%xmm2, 0x620(%rsp)
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movq	-0x90(%rbp), %rdi
-               	movq	%rdi, 0x610(%rsp,%rax,8)
-               	incq	%rax
-               	cmpl	$0x2, %eax
-               	jge	<addr>
-               	movq	0x5f0(%rsp,%rax,8), %rsi
-               	movq	%rsi, -0x90(%rbp)
-               	movq	0x600(%rsp,%rax,8), %rsi
-               	testq	%rsi, %rsi
-               	jge	<addr>
-               	leaq	-0x90(%rbp), %rsi
-               	movq	0x620(%rsp,%rax,8), %rdi
-               	addq	%rcx, %rdi
-               	movq	(%rdi), %r10
-               	movq	%r10, (%rsi)
-               	jmp	<addr>
-               	leaq	0xe0(%rsp), %rax
-               	movups	0x610(%rsp), %xmm0
-               	movups	%xmm0, 0xe0(%rsp)
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%r8)
-               	leaq	0x430(%rsp), %rdi
-               	leaq	-0x80(%rbp), %rax
-               	leaq	0x60(%rax), %rsi
-               	movl	$0x10, %edx
-               	vzeroupper
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movl	$0x2, %ecx
-               	testl	%ebx, %ebx
-               	cmoveq	%rcx, %rax
-               	orq	%rax, %r12
-               	leaq	-0x80(%rbp), %rdi
-               	movl	$0x4, %esi
-               	movl	$0x8, %edx
-               	movl	$0x1, %r8d
-               	movq	%rdx, %rcx
-               	movq	%rbx, %r9
-               	vzeroupper
-               	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
-               	leaq	-0x80(%rbp), %rax
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	(%rsp), %rdx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rdx)
-               	vmovups	-0x60(%rbp), %ymm0
-               	vmovups	-0x40(%rbp), %ymm1
-               	leaq	0x20(%rsp), %r8
-               	testl	%ebx, %ebx
-               	je	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	leaq	0x3a0(%rsp), %rax
-               	vmovups	(%rdx), %ymm14
-               	vmovups	%ymm14, (%rax)
-               	vmovups	%ymm1, 0x3c0(%rsp)
-               	vmovups	%ymm0, 0x3e0(%rsp)
-               	leaq	0x400(%rsp), %rsi
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%ymm14, (%rsi)
-               	leaq	0xe0(%rsp), %rsi
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rsi)
+               	movups	%xmm2, 0xa0(%rsp)
                	xorl	%eax, %eax
                	jmp	<addr>
                	movq	-0x88(%rbp), %rdi
-               	movq	%rdi, 0x400(%rsp,%rax,8)
+               	movq	%rdi, 0xc0(%rsp,%rax,8)
                	incq	%rax
-               	cmpl	$0x4, %eax
+               	cmpl	$0x2, %eax
                	jge	<addr>
-               	movq	0x3c0(%rsp,%rax,8), %rsi
+               	movq	0xe0(%rsp,%rax,8), %rsi
                	movq	%rsi, -0x88(%rbp)
-               	movq	0x3e0(%rsp,%rax,8), %rsi
+               	movq	0x80(%rsp,%rax,8), %rsi
                	testq	%rsi, %rsi
                	jge	<addr>
                	leaq	-0x88(%rbp), %rsi
-               	movq	0xe0(%rsp,%rax,8), %rdi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
                	addq	%rcx, %rdi
                	movq	(%rdi), %r10
                	movq	%r10, (%rsi)
                	jmp	<addr>
-               	leaq	0x120(%rsp), %rax
-               	vmovups	0x400(%rsp), %ymm0
-               	vmovups	%ymm0, 0x120(%rsp)
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%r8)
-               	leaq	0x20(%rsp), %rdi
-               	leaq	-0x80(%rbp), %rax
-               	leaq	0x60(%rax), %rsi
-               	movl	$0x20, %edx
-               	vzeroupper
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movl	$0x2, %ecx
-               	testl	%ebx, %ebx
-               	cmoveq	%rcx, %rax
-               	orq	%rax, %r12
-               	leaq	-0x80(%rbp), %rdi
-               	movl	$0x2, %esi
-               	movl	$0x4, %edx
-               	movl	$0x8, %ecx
-               	movl	$0x1, %r8d
-               	movq	%rbx, %r9
-               	vzeroupper
-               	callq	<addr>
-               	leaq	0x420(%rsp), %r9
-               	leaq	-0x80(%rbp), %rax
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%r9)
-               	leaq	(%rsp), %rcx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rcx)
-               	movups	-0x60(%rbp), %xmm0
-               	movups	-0x40(%rbp), %xmm1
-               	testl	%ebx, %ebx
-               	je	<addr>
-               	leaq	0x120(%rsp), %rax
-               	movups	%xmm1, 0x120(%rsp)
-               	leaq	<rip>, %rcx # <addr>
-               	leaq	0x200(%rcx), %rdi
-               	leaq	0x140(%rsp), %rcx
-               	movups	%xmm0, 0x140(%rsp)
-               	movl	$0x1, %esi
-               	movq	%rax, %r10
-               	movups	(%r10), %xmm0
-               	movq	%r9, %r10
-               	movups	(%r10), %xmm1
-               	movq	%rcx, %r10
-               	movups	(%r10), %xmm2
-               	vzeroupper
-               	callq	<addr>
-               	movups	%xmm0, 0x120(%rsp)
-               	leaq	0x120(%rsp), %rax
-               	leaq	0x440(%rsp), %rcx
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	0x440(%rsp), %rdi
-               	leaq	-0x80(%rbp), %rax
-               	leaq	0x60(%rax), %rsi
-               	movl	$0x10, %edx
-               	vzeroupper
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movl	$0x2, %ecx
-               	testl	%ebx, %ebx
-               	cmoveq	%rcx, %rax
-               	orq	%rax, %r12
-               	leaq	-0x80(%rbp), %rdi
-               	movl	$0x4, %esi
-               	movl	$0x8, %ecx
-               	movl	$0x1, %r8d
-               	movq	%rsi, %rdx
-               	movq	%rbx, %r9
-               	vzeroupper
-               	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
-               	leaq	-0x80(%rbp), %rax
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	(%rsp), %r9
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%r9)
-               	movups	-0x60(%rbp), %xmm0
-               	movups	-0x40(%rbp), %xmm1
-               	testl	%ebx, %ebx
-               	je	<addr>
-               	leaq	0x120(%rsp), %rax
-               	movups	%xmm1, 0x120(%rsp)
-               	leaq	<rip>, %rcx # <addr>
-               	leaq	0x200(%rcx), %rdi
-               	leaq	0x140(%rsp), %rcx
-               	movups	%xmm0, 0x140(%rsp)
-               	movl	$0x1, %esi
-               	movq	%rax, %r10
-               	movups	(%r10), %xmm0
-               	movq	%r9, %r10
-               	vmovups	(%r10), %ymm1
-               	movq	%rcx, %r10
-               	movups	(%r10), %xmm2
-               	callq	<addr>
-               	movups	%xmm0, 0x120(%rsp)
-               	leaq	0x120(%rsp), %rax
-               	leaq	0x440(%rsp), %rcx
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	0x440(%rsp), %rdi
-               	leaq	-0x80(%rbp), %rax
-               	leaq	0x60(%rax), %rsi
-               	movl	$0x10, %edx
-               	vzeroupper
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movl	$0x2, %ecx
-               	testl	%ebx, %ebx
-               	cmoveq	%rcx, %rax
-               	orq	%rax, %r12
-               	leaq	-0x80(%rbp), %rdi
-               	movl	$0x2, %esi
-               	movl	$0x8, %edx
-               	movl	$0x1, %r8d
-               	movq	%rdx, %rcx
-               	movq	%rbx, %r9
-               	vzeroupper
-               	callq	<addr>
-               	leaq	0x420(%rsp), %r9
-               	leaq	-0x80(%rbp), %rax
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%r9)
-               	leaq	(%rsp), %rcx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rcx)
-               	movups	-0x60(%rbp), %xmm0
-               	movups	-0x40(%rbp), %xmm1
-               	testl	%ebx, %ebx
-               	je	<addr>
-               	leaq	0x120(%rsp), %rax
-               	movups	%xmm1, 0x120(%rsp)
-               	leaq	<rip>, %rcx # <addr>
-               	leaq	0x200(%rcx), %rdi
-               	leaq	0x140(%rsp), %rcx
-               	movups	%xmm0, 0x140(%rsp)
-               	movl	$0x1, %esi
-               	movq	%rax, %r10
-               	movups	(%r10), %xmm0
-               	movq	%r9, %r10
-               	movups	(%r10), %xmm1
-               	movq	%rcx, %r10
-               	movups	(%r10), %xmm2
-               	vzeroupper
-               	callq	<addr>
-               	movups	%xmm0, 0x120(%rsp)
-               	leaq	0x120(%rsp), %rax
-               	leaq	0x450(%rsp), %rcx
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	0x450(%rsp), %rdi
-               	leaq	-0x80(%rbp), %rax
-               	leaq	0x60(%rax), %rsi
-               	movl	$0x10, %edx
-               	vzeroupper
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movl	$0x2, %ecx
-               	testl	%ebx, %ebx
-               	cmoveq	%rcx, %rax
-               	orq	%rax, %r12
-               	leaq	-0x80(%rbp), %rdi
-               	movl	$0x4, %esi
-               	movl	$0x8, %edx
-               	movl	$0x1, %r8d
-               	movq	%rdx, %rcx
-               	movq	%rbx, %r9
-               	vzeroupper
-               	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
-               	leaq	-0x80(%rbp), %rax
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	(%rsp), %r9
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%r9)
-               	vmovups	-0x60(%rbp), %ymm0
-               	vmovups	-0x40(%rbp), %ymm1
-               	testl	%ebx, %ebx
-               	je	<addr>
-               	leaq	0x120(%rsp), %rax
-               	vmovups	%ymm1, 0x120(%rsp)
-               	leaq	<rip>, %rcx # <addr>
-               	leaq	0x200(%rcx), %rdi
-               	leaq	0x140(%rsp), %rcx
-               	vmovups	%ymm0, 0x140(%rsp)
-               	movl	$0x1, %esi
-               	movq	%rax, %r10
-               	vmovups	(%r10), %ymm0
-               	movq	%r9, %r10
-               	vmovups	(%r10), %ymm1
-               	movq	%rcx, %r10
-               	vmovups	(%r10), %ymm2
-               	callq	<addr>
-               	vmovups	%ymm0, 0x120(%rsp)
-               	leaq	0x120(%rsp), %rax
-               	leaq	0x60(%rsp), %rcx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rcx)
-               	leaq	0x60(%rsp), %rdi
-               	leaq	-0x80(%rbp), %rax
-               	leaq	0x60(%rax), %rsi
-               	movl	$0x20, %edx
-               	vzeroupper
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movl	$0x2, %ecx
-               	testl	%ebx, %ebx
-               	cmoveq	%rcx, %rax
-               	orq	%rax, %r12
-               	movl	$0x4, %esi
-               	leaq	-0x80(%rbp), %rdi
-               	movl	$0x2, %r8d
-               	movq	%rsi, %rdx
-               	movq	%rbx, %r9
-               	movq	%rsi, %rcx
-               	vzeroupper
-               	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
-               	leaq	-0x80(%rbp), %rax
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	(%rsp), %rcx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rcx)
-               	movups	-0x60(%rbp), %xmm0
-               	movups	-0x40(%rbp), %xmm1
-               	leaq	0x430(%rsp), %r8
-               	testl	%ebx, %ebx
-               	je	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm2
-               	movups	%xmm1, 0x460(%rsp)
-               	movups	%xmm0, 0x470(%rsp)
-               	leaq	0x480(%rsp), %rax
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%xmm14, (%rax)
-               	movups	%xmm2, 0x490(%rsp)
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movl	-0xe0(%rbp), %edi
-               	movl	%edi, 0x480(%rsp,%rax,4)
-               	incq	%rax
-               	cmpl	$0x4, %eax
-               	jge	<addr>
-               	movl	0x460(%rsp,%rax,4), %esi
-               	movl	%esi, -0xe0(%rbp)
-               	movl	0x470(%rsp,%rax,4), %esi
-               	testl	%esi, %esi
-               	jge	<addr>
-               	leaq	-0xe0(%rbp), %rsi
-               	movslq	0x490(%rsp,%rax,4), %rdi
-               	shlq	%rdi
-               	addq	%rcx, %rdi
-               	movl	(%rdi), %r10d
-               	movl	%r10d, (%rsi)
-               	jmp	<addr>
-               	leaq	0x120(%rsp), %rax
-               	movups	0x480(%rsp), %xmm0
-               	movups	%xmm0, 0x120(%rsp)
+               	leaq	0x80(%rsp), %rax
+               	movups	0xc0(%rsp), %xmm0
+               	movups	%xmm0, 0x80(%rsp)
                	vmovups	(%rax), %xmm14
                	vmovups	%xmm14, (%r8)
-               	leaq	0x430(%rsp), %rdi
-               	leaq	-0x80(%rbp), %rax
-               	leaq	0x60(%rax), %rsi
-               	movl	$0x10, %edx
-               	vzeroupper
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movl	$0x1, %ecx
-               	testl	%ebx, %ebx
-               	cmoveq	%rcx, %rax
-               	orq	%rax, %r12
-               	leaq	-0x80(%rbp), %rdi
-               	movl	$0x8, %esi
-               	movl	$0x4, %edx
-               	movl	$0x2, %r8d
-               	movq	%rdx, %rcx
-               	movq	%rbx, %r9
-               	vzeroupper
-               	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
-               	leaq	-0x80(%rbp), %rax
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	(%rsp), %rdx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rdx)
-               	vmovups	-0x60(%rbp), %ymm0
-               	vmovups	-0x40(%rbp), %ymm1
-               	leaq	0x20(%rsp), %r8
-               	testl	%ebx, %ebx
-               	je	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	leaq	0x1c0(%rsp), %rax
-               	vmovups	(%rdx), %ymm14
-               	vmovups	%ymm14, (%rax)
-               	vmovups	%ymm1, 0x1e0(%rsp)
-               	vmovups	%ymm0, 0x200(%rsp)
-               	leaq	0x220(%rsp), %rsi
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%ymm14, (%rsi)
-               	leaq	0x240(%rsp), %rsi
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rsi)
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movl	-0xd8(%rbp), %edi
-               	movl	%edi, 0x220(%rsp,%rax,4)
-               	incq	%rax
-               	cmpl	$0x8, %eax
-               	jge	<addr>
-               	movl	0x1e0(%rsp,%rax,4), %esi
-               	movl	%esi, -0xd8(%rbp)
-               	movl	0x200(%rsp,%rax,4), %esi
-               	testl	%esi, %esi
-               	jge	<addr>
-               	leaq	-0xd8(%rbp), %rsi
-               	movslq	0x240(%rsp,%rax,4), %rdi
-               	shlq	%rdi
-               	addq	%rcx, %rdi
-               	movl	(%rdi), %r10d
-               	movl	%r10d, (%rsi)
-               	jmp	<addr>
-               	leaq	0x120(%rsp), %rax
-               	vmovups	0x220(%rsp), %ymm0
-               	vmovups	%ymm0, 0x120(%rsp)
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%r8)
-               	leaq	0x20(%rsp), %rdi
-               	leaq	-0x80(%rbp), %rax
-               	leaq	0x60(%rax), %rsi
-               	movl	$0x20, %edx
-               	vzeroupper
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movl	$0x1, %ecx
-               	testl	%ebx, %ebx
-               	cmoveq	%rcx, %rax
-               	orq	%rax, %r12
-               	leaq	-0x80(%rbp), %rdi
-               	movl	$0x2, %esi
-               	movl	$0x8, %edx
-               	movl	$0x4, %ecx
-               	movq	%rsi, %r8
-               	movq	%rbx, %r9
-               	vzeroupper
-               	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
-               	leaq	-0x80(%rbp), %rax
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	(%rsp), %rcx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rcx)
-               	movups	-0x60(%rbp), %xmm0
-               	movups	-0x40(%rbp), %xmm1
-               	leaq	0x430(%rsp), %r8
-               	testl	%ebx, %ebx
-               	je	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm2
-               	movups	%xmm1, 0x4a0(%rsp)
-               	movups	%xmm0, 0x4b0(%rsp)
-               	leaq	0x4c0(%rsp), %rax
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%xmm14, (%rax)
-               	movups	%xmm2, 0x4d0(%rsp)
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movq	-0xd0(%rbp), %rdi
-               	movq	%rdi, 0x4c0(%rsp,%rax,8)
-               	incq	%rax
-               	cmpl	$0x2, %eax
-               	jge	<addr>
-               	movq	0x4a0(%rsp,%rax,8), %rsi
-               	movq	%rsi, -0xd0(%rbp)
-               	movq	0x4b0(%rsp,%rax,8), %rsi
-               	testq	%rsi, %rsi
-               	jge	<addr>
-               	leaq	-0xd0(%rbp), %rsi
-               	movslq	0x4d0(%rsp,%rax,4), %rdi
-               	shlq	%rdi
-               	addq	%rcx, %rdi
-               	movq	(%rdi), %r10
-               	movq	%r10, (%rsi)
-               	jmp	<addr>
-               	leaq	0x120(%rsp), %rax
-               	movups	0x4c0(%rsp), %xmm0
-               	movups	%xmm0, 0x120(%rsp)
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%r8)
-               	leaq	0x430(%rsp), %rdi
+               	leaq	0x130(%rsp), %rdi
                	leaq	-0x80(%rbp), %rax
                	leaq	0x60(%rax), %rsi
                	movl	$0x10, %edx
@@ -2332,12 +1311,12 @@ Disassembly of section .text:
                	leaq	-0x80(%rbp), %rdi
                	movl	$0x4, %esi
                	movl	$0x8, %edx
-               	movl	$0x2, %r8d
+               	movl	$0x1, %r8d
                	movq	%rsi, %rcx
                	movq	%rbx, %r9
                	vzeroupper
                	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
+               	leaq	0x120(%rsp), %rcx
                	leaq	-0x80(%rbp), %rax
                	vmovups	(%rax), %xmm14
                	vmovups	%xmm14, (%rcx)
@@ -2351,1065 +1330,34 @@ Disassembly of section .text:
                	je	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm2
-               	vmovups	%ymm1, 0x260(%rsp)
-               	vmovups	%ymm0, 0x180(%rsp)
-               	leaq	0xc0(%rsp), %rax
+               	movups	0x120(%rsp), %xmm2
+               	vmovups	%ymm1, 0x80(%rsp)
+               	vmovups	%ymm0, 0xc0(%rsp)
+               	leaq	0xa0(%rsp), %rax
                	vxorps	%ymm14, %ymm14, %ymm14
                	vmovups	%ymm14, (%rax)
-               	movups	%xmm2, 0x4e0(%rsp)
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movq	-0xc8(%rbp), %rdi
-               	movq	%rdi, 0xc0(%rsp,%rax,8)
-               	incq	%rax
-               	cmpl	$0x4, %eax
-               	jge	<addr>
-               	movq	0x260(%rsp,%rax,8), %rsi
-               	movq	%rsi, -0xc8(%rbp)
-               	movq	0x180(%rsp,%rax,8), %rsi
-               	testq	%rsi, %rsi
-               	jge	<addr>
-               	leaq	-0xc8(%rbp), %rsi
-               	movslq	0x4e0(%rsp,%rax,4), %rdi
-               	shlq	%rdi
-               	addq	%rcx, %rdi
-               	movq	(%rdi), %r10
-               	movq	%r10, (%rsi)
-               	jmp	<addr>
-               	leaq	0x120(%rsp), %rax
-               	vmovups	0xc0(%rsp), %ymm0
-               	vmovups	%ymm0, 0x120(%rsp)
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%r8)
-               	leaq	0x20(%rsp), %rdi
-               	leaq	-0x80(%rbp), %rax
-               	leaq	0x60(%rax), %rsi
-               	movl	$0x20, %edx
-               	vzeroupper
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movl	$0x1, %ecx
-               	testl	%ebx, %ebx
-               	cmoveq	%rcx, %rax
-               	orq	%rax, %r12
-               	leaq	-0x80(%rbp), %rdi
-               	movl	$0x4, %esi
-               	movl	$0x2, %r8d
-               	movq	%rsi, %rdx
-               	movq	%rbx, %r9
-               	movq	%rsi, %rcx
-               	vzeroupper
-               	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
-               	leaq	-0x80(%rbp), %rax
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	(%rsp), %rcx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rcx)
-               	movups	-0x60(%rbp), %xmm0
-               	movups	-0x40(%rbp), %xmm1
-               	leaq	0x440(%rsp), %r8
-               	testl	%ebx, %ebx
-               	je	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm2
-               	movups	%xmm1, 0x4f0(%rsp)
-               	movups	%xmm0, 0x500(%rsp)
-               	leaq	0x510(%rsp), %rax
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%xmm14, (%rax)
-               	movups	%xmm2, 0x520(%rsp)
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movl	-0xc0(%rbp), %edi
-               	movl	%edi, 0x510(%rsp,%rax,4)
-               	incq	%rax
-               	cmpl	$0x4, %eax
-               	jge	<addr>
-               	movl	0x4f0(%rsp,%rax,4), %esi
-               	movl	%esi, -0xc0(%rbp)
-               	movl	0x500(%rsp,%rax,4), %esi
-               	testl	%esi, %esi
-               	jge	<addr>
-               	leaq	-0xc0(%rbp), %rsi
-               	movslq	0x520(%rsp,%rax,4), %rdi
-               	shlq	%rdi
-               	addq	%rcx, %rdi
-               	movl	(%rdi), %r10d
-               	movl	%r10d, (%rsi)
-               	jmp	<addr>
-               	leaq	0x120(%rsp), %rax
-               	movups	0x510(%rsp), %xmm0
-               	movups	%xmm0, 0x120(%rsp)
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%r8)
-               	leaq	0x440(%rsp), %rdi
-               	leaq	-0x80(%rbp), %rax
-               	leaq	0x60(%rax), %rsi
-               	movl	$0x10, %edx
-               	vzeroupper
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movl	$0x1, %ecx
-               	testl	%ebx, %ebx
-               	cmoveq	%rcx, %rax
-               	orq	%rax, %r12
-               	leaq	-0x80(%rbp), %rdi
-               	movl	$0x8, %esi
-               	movl	$0x4, %edx
-               	movl	$0x2, %r8d
-               	movq	%rdx, %rcx
-               	movq	%rbx, %r9
-               	vzeroupper
-               	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
-               	leaq	-0x80(%rbp), %rax
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	(%rsp), %rdx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rdx)
-               	vmovups	-0x60(%rbp), %ymm0
-               	vmovups	-0x40(%rbp), %ymm1
-               	leaq	0x40(%rsp), %r8
-               	testl	%ebx, %ebx
-               	je	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	leaq	0x280(%rsp), %rax
-               	vmovups	(%rdx), %ymm14
-               	vmovups	%ymm14, (%rax)
-               	vmovups	%ymm1, 0x2a0(%rsp)
-               	vmovups	%ymm0, 0x2c0(%rsp)
-               	leaq	0x2e0(%rsp), %rsi
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%ymm14, (%rsi)
-               	leaq	0x1a0(%rsp), %rsi
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rsi)
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movl	-0xb8(%rbp), %edi
-               	movl	%edi, 0x2e0(%rsp,%rax,4)
-               	incq	%rax
-               	cmpl	$0x8, %eax
-               	jge	<addr>
-               	movl	0x2a0(%rsp,%rax,4), %esi
-               	movl	%esi, -0xb8(%rbp)
-               	movl	0x2c0(%rsp,%rax,4), %esi
-               	testl	%esi, %esi
-               	jge	<addr>
-               	leaq	-0xb8(%rbp), %rsi
-               	movslq	0x1a0(%rsp,%rax,4), %rdi
-               	shlq	%rdi
-               	addq	%rcx, %rdi
-               	movl	(%rdi), %r10d
-               	movl	%r10d, (%rsi)
-               	jmp	<addr>
-               	leaq	0x120(%rsp), %rax
-               	vmovups	0x2e0(%rsp), %ymm0
-               	vmovups	%ymm0, 0x120(%rsp)
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%r8)
-               	leaq	0x40(%rsp), %rdi
-               	leaq	-0x80(%rbp), %rax
-               	leaq	0x60(%rax), %rsi
-               	movl	$0x20, %edx
-               	vzeroupper
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movl	$0x1, %ecx
-               	testl	%ebx, %ebx
-               	cmoveq	%rcx, %rax
-               	orq	%rax, %r12
-               	leaq	-0x80(%rbp), %rdi
-               	movl	$0x2, %esi
-               	movl	$0x8, %edx
-               	movl	$0x4, %ecx
-               	movq	%rsi, %r8
-               	movq	%rbx, %r9
-               	vzeroupper
-               	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
-               	leaq	-0x80(%rbp), %rax
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	(%rsp), %rcx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rcx)
-               	movups	-0x60(%rbp), %xmm0
-               	movups	-0x40(%rbp), %xmm1
-               	leaq	0x450(%rsp), %r8
-               	testl	%ebx, %ebx
-               	je	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm2
-               	movups	%xmm1, 0x530(%rsp)
-               	movups	%xmm0, 0x540(%rsp)
-               	leaq	0x550(%rsp), %rax
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%xmm14, (%rax)
-               	movups	%xmm2, 0x560(%rsp)
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movq	-0xb0(%rbp), %rdi
-               	movq	%rdi, 0x550(%rsp,%rax,8)
-               	incq	%rax
-               	cmpl	$0x2, %eax
-               	jge	<addr>
-               	movq	0x530(%rsp,%rax,8), %rsi
-               	movq	%rsi, -0xb0(%rbp)
-               	movq	0x540(%rsp,%rax,8), %rsi
-               	testq	%rsi, %rsi
-               	jge	<addr>
-               	leaq	-0xb0(%rbp), %rsi
-               	movslq	0x560(%rsp,%rax,4), %rdi
-               	shlq	%rdi
-               	addq	%rcx, %rdi
-               	movq	(%rdi), %r10
-               	movq	%r10, (%rsi)
-               	jmp	<addr>
-               	leaq	0x120(%rsp), %rax
-               	movups	0x550(%rsp), %xmm0
-               	movups	%xmm0, 0x120(%rsp)
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%r8)
-               	leaq	0x450(%rsp), %rdi
-               	leaq	-0x80(%rbp), %rax
-               	leaq	0x60(%rax), %rsi
-               	movl	$0x10, %edx
-               	vzeroupper
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movl	$0x1, %ecx
-               	testl	%ebx, %ebx
-               	cmoveq	%rcx, %rax
-               	orq	%rax, %r12
-               	leaq	-0x80(%rbp), %rdi
-               	movl	$0x4, %esi
-               	movl	$0x8, %edx
-               	movl	$0x2, %r8d
-               	movq	%rsi, %rcx
-               	movq	%rbx, %r9
-               	vzeroupper
-               	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
-               	leaq	-0x80(%rbp), %rax
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	(%rsp), %rcx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rcx)
-               	vmovups	-0x60(%rbp), %ymm0
-               	vmovups	-0x40(%rbp), %ymm1
-               	leaq	0x60(%rsp), %r8
-               	testl	%ebx, %ebx
-               	je	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm2
-               	vmovups	%ymm1, 0x300(%rsp)
-               	vmovups	%ymm0, 0x320(%rsp)
-               	leaq	0x340(%rsp), %rax
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%ymm14, (%rax)
-               	movups	%xmm2, 0x570(%rsp)
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movq	-0xa8(%rbp), %rdi
-               	movq	%rdi, 0x340(%rsp,%rax,8)
-               	incq	%rax
-               	cmpl	$0x4, %eax
-               	jge	<addr>
-               	movq	0x300(%rsp,%rax,8), %rsi
-               	movq	%rsi, -0xa8(%rbp)
-               	movq	0x320(%rsp,%rax,8), %rsi
-               	testq	%rsi, %rsi
-               	jge	<addr>
-               	leaq	-0xa8(%rbp), %rsi
-               	movslq	0x570(%rsp,%rax,4), %rdi
-               	shlq	%rdi
-               	addq	%rcx, %rdi
-               	movq	(%rdi), %r10
-               	movq	%r10, (%rsi)
-               	jmp	<addr>
-               	leaq	0x120(%rsp), %rax
-               	vmovups	0x340(%rsp), %ymm0
-               	vmovups	%ymm0, 0x120(%rsp)
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%r8)
-               	leaq	0x60(%rsp), %rdi
-               	leaq	-0x80(%rbp), %rax
-               	leaq	0x60(%rax), %rsi
-               	movl	$0x20, %edx
-               	vzeroupper
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movl	$0x1, %ecx
-               	testl	%ebx, %ebx
-               	cmoveq	%rcx, %rax
-               	orq	%rax, %r12
-               	movl	$0x8, %ecx
-               	leaq	-0x80(%rbp), %rdi
-               	movl	$0x2, %esi
-               	movl	$0x4, %edx
-               	movq	%rsi, %r8
-               	movq	%rbx, %r9
-               	vzeroupper
-               	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
-               	leaq	-0x80(%rbp), %rax
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	(%rsp), %rcx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rcx)
-               	movups	-0x60(%rbp), %xmm0
-               	movups	-0x40(%rbp), %xmm1
-               	leaq	0x430(%rsp), %r8
-               	testl	%ebx, %ebx
-               	je	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm2
-               	movups	%xmm1, 0x580(%rsp)
-               	movups	%xmm0, 0x590(%rsp)
-               	leaq	0x5a0(%rsp), %rax
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%xmm14, (%rax)
-               	movups	%xmm2, 0x5b0(%rsp)
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movl	-0xa0(%rbp), %edi
-               	movl	%edi, 0x5a0(%rsp,%rax,4)
-               	incq	%rax
-               	cmpl	$0x2, %eax
-               	jge	<addr>
-               	movl	0x580(%rsp,%rax,4), %esi
-               	movl	%esi, -0xa0(%rbp)
-               	movl	0x590(%rsp,%rax,4), %esi
-               	testl	%esi, %esi
-               	jge	<addr>
-               	leaq	-0xa0(%rbp), %rsi
-               	movq	0x5b0(%rsp,%rax,8), %rdi
-               	shlq	%rdi
-               	addq	%rcx, %rdi
-               	movl	(%rdi), %r10d
-               	movl	%r10d, (%rsi)
-               	jmp	<addr>
-               	leaq	0x120(%rsp), %rax
-               	movups	0x5a0(%rsp), %xmm0
-               	movups	%xmm0, 0x120(%rsp)
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%r8)
-               	leaq	0x430(%rsp), %rdi
-               	leaq	-0x80(%rbp), %rax
-               	leaq	0x60(%rax), %rsi
-               	movl	$0x10, %edx
-               	vzeroupper
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movl	$0x2, %ecx
-               	testl	%ebx, %ebx
-               	cmoveq	%rcx, %rax
-               	orq	%rax, %r12
-               	leaq	-0x80(%rbp), %rdi
-               	movl	$0x4, %esi
-               	movl	$0x8, %ecx
-               	movl	$0x2, %r8d
-               	movq	%rsi, %rdx
-               	movq	%rbx, %r9
-               	vzeroupper
-               	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
-               	leaq	-0x80(%rbp), %rax
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	(%rsp), %rdx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rdx)
-               	movups	-0x60(%rbp), %xmm0
-               	movups	-0x40(%rbp), %xmm1
-               	leaq	0x430(%rsp), %r8
-               	testl	%ebx, %ebx
-               	je	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	leaq	0x360(%rsp), %rax
-               	vmovups	(%rdx), %ymm14
-               	vmovups	%ymm14, (%rax)
-               	movups	%xmm1, 0x5c0(%rsp)
-               	movups	%xmm0, 0x5d0(%rsp)
-               	leaq	0x5e0(%rsp), %rsi
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%xmm14, (%rsi)
-               	leaq	0x380(%rsp), %rsi
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rsi)
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movl	-0x98(%rbp), %edi
-               	movl	%edi, 0x5e0(%rsp,%rax,4)
-               	incq	%rax
-               	cmpl	$0x4, %eax
-               	jge	<addr>
-               	movl	0x5c0(%rsp,%rax,4), %esi
-               	movl	%esi, -0x98(%rbp)
-               	movl	0x5d0(%rsp,%rax,4), %esi
-               	testl	%esi, %esi
-               	jge	<addr>
-               	leaq	-0x98(%rbp), %rsi
-               	movq	0x380(%rsp,%rax,8), %rdi
-               	shlq	%rdi
-               	addq	%rcx, %rdi
-               	movl	(%rdi), %r10d
-               	movl	%r10d, (%rsi)
-               	jmp	<addr>
-               	leaq	0x140(%rsp), %rax
-               	movups	0x5e0(%rsp), %xmm0
-               	movups	%xmm0, 0x140(%rsp)
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%r8)
-               	leaq	0x430(%rsp), %rdi
-               	leaq	-0x80(%rbp), %rax
-               	leaq	0x60(%rax), %rsi
-               	movl	$0x10, %edx
-               	vzeroupper
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movl	$0x2, %ecx
-               	testl	%ebx, %ebx
-               	cmoveq	%rcx, %rax
-               	orq	%rax, %r12
-               	leaq	-0x80(%rbp), %rdi
-               	movl	$0x2, %esi
-               	movl	$0x8, %edx
-               	movq	%rdx, %rcx
-               	movq	%rbx, %r9
-               	movq	%rsi, %r8
-               	vzeroupper
-               	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
-               	leaq	-0x80(%rbp), %rax
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	(%rsp), %rcx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rcx)
-               	movups	-0x60(%rbp), %xmm0
-               	movups	-0x40(%rbp), %xmm1
-               	leaq	0x430(%rsp), %r8
-               	testl	%ebx, %ebx
-               	je	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm2
-               	movups	%xmm1, 0x5f0(%rsp)
-               	movups	%xmm0, 0x600(%rsp)
-               	leaq	0x610(%rsp), %rax
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%xmm14, (%rax)
-               	movups	%xmm2, 0x620(%rsp)
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movq	-0x90(%rbp), %rdi
-               	movq	%rdi, 0x610(%rsp,%rax,8)
-               	incq	%rax
-               	cmpl	$0x2, %eax
-               	jge	<addr>
-               	movq	0x5f0(%rsp,%rax,8), %rsi
-               	movq	%rsi, -0x90(%rbp)
-               	movq	0x600(%rsp,%rax,8), %rsi
-               	testq	%rsi, %rsi
-               	jge	<addr>
-               	leaq	-0x90(%rbp), %rsi
-               	movq	0x620(%rsp,%rax,8), %rdi
-               	shlq	%rdi
-               	addq	%rcx, %rdi
-               	movq	(%rdi), %r10
-               	movq	%r10, (%rsi)
-               	jmp	<addr>
-               	leaq	0x140(%rsp), %rax
-               	movups	0x610(%rsp), %xmm0
-               	movups	%xmm0, 0x140(%rsp)
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%r8)
-               	leaq	0x430(%rsp), %rdi
-               	leaq	-0x80(%rbp), %rax
-               	leaq	0x60(%rax), %rsi
-               	movl	$0x10, %edx
-               	vzeroupper
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movl	$0x2, %ecx
-               	testl	%ebx, %ebx
-               	cmoveq	%rcx, %rax
-               	orq	%rax, %r12
-               	leaq	-0x80(%rbp), %rdi
-               	movl	$0x4, %esi
-               	movl	$0x8, %edx
-               	movl	$0x2, %r8d
-               	movq	%rdx, %rcx
-               	movq	%rbx, %r9
-               	vzeroupper
-               	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
-               	leaq	-0x80(%rbp), %rax
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	(%rsp), %rdx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rdx)
-               	vmovups	-0x60(%rbp), %ymm0
-               	vmovups	-0x40(%rbp), %ymm1
-               	leaq	0x20(%rsp), %r8
-               	testl	%ebx, %ebx
-               	je	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	leaq	0x3a0(%rsp), %rax
-               	vmovups	(%rdx), %ymm14
-               	vmovups	%ymm14, (%rax)
-               	vmovups	%ymm1, 0x3c0(%rsp)
-               	vmovups	%ymm0, 0x3e0(%rsp)
-               	leaq	0x400(%rsp), %rsi
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%ymm14, (%rsi)
-               	leaq	0xe0(%rsp), %rsi
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rsi)
+               	movups	%xmm2, 0xe0(%rsp)
                	xorl	%eax, %eax
                	jmp	<addr>
                	movq	-0x88(%rbp), %rdi
-               	movq	%rdi, 0x400(%rsp,%rax,8)
+               	movq	%rdi, 0xa0(%rsp,%rax,8)
                	incq	%rax
                	cmpl	$0x4, %eax
                	jge	<addr>
-               	movq	0x3c0(%rsp,%rax,8), %rsi
+               	movq	0x80(%rsp,%rax,8), %rsi
                	movq	%rsi, -0x88(%rbp)
-               	movq	0x3e0(%rsp,%rax,8), %rsi
+               	movq	0xc0(%rsp,%rax,8), %rsi
                	testq	%rsi, %rsi
                	jge	<addr>
                	leaq	-0x88(%rbp), %rsi
-               	movq	0xe0(%rsp,%rax,8), %rdi
-               	shlq	%rdi
+               	movslq	0xe0(%rsp,%rax,4), %rdi
                	addq	%rcx, %rdi
                	movq	(%rdi), %r10
                	movq	%r10, (%rsi)
                	jmp	<addr>
-               	leaq	0x160(%rsp), %rax
-               	vmovups	0x400(%rsp), %ymm0
-               	vmovups	%ymm0, 0x160(%rsp)
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%r8)
-               	leaq	0x20(%rsp), %rdi
-               	leaq	-0x80(%rbp), %rax
-               	leaq	0x60(%rax), %rsi
-               	movl	$0x20, %edx
-               	vzeroupper
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movl	$0x2, %ecx
-               	testl	%ebx, %ebx
-               	cmoveq	%rcx, %rax
-               	orq	%rax, %r12
-               	leaq	-0x80(%rbp), %rdi
-               	movl	$0x2, %esi
-               	movl	$0x4, %edx
-               	movl	$0x8, %ecx
-               	movq	%rsi, %r8
-               	movq	%rbx, %r9
-               	vzeroupper
-               	callq	<addr>
-               	leaq	0x420(%rsp), %r9
-               	leaq	-0x80(%rbp), %rax
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%r9)
-               	leaq	(%rsp), %rcx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rcx)
-               	movups	-0x60(%rbp), %xmm0
-               	movups	-0x40(%rbp), %xmm1
-               	testl	%ebx, %ebx
-               	je	<addr>
-               	leaq	0x160(%rsp), %rax
-               	movups	%xmm1, 0x160(%rsp)
-               	leaq	<rip>, %rcx # <addr>
-               	leaq	0x200(%rcx), %rdi
-               	leaq	0x100(%rsp), %rcx
-               	movups	%xmm0, 0x100(%rsp)
-               	movl	$0x2, %esi
-               	movq	%rax, %r10
-               	movups	(%r10), %xmm0
-               	movq	%r9, %r10
-               	movups	(%r10), %xmm1
-               	movq	%rcx, %r10
-               	movups	(%r10), %xmm2
-               	vzeroupper
-               	callq	<addr>
-               	movups	%xmm0, 0x160(%rsp)
-               	leaq	0x160(%rsp), %rax
-               	leaq	0x440(%rsp), %rcx
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	0x440(%rsp), %rdi
-               	leaq	-0x80(%rbp), %rax
-               	leaq	0x60(%rax), %rsi
-               	movl	$0x10, %edx
-               	vzeroupper
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movl	$0x2, %ecx
-               	testl	%ebx, %ebx
-               	cmoveq	%rcx, %rax
-               	orq	%rax, %r12
-               	leaq	-0x80(%rbp), %rdi
-               	movl	$0x4, %esi
-               	movl	$0x8, %ecx
-               	movl	$0x2, %r8d
-               	movq	%rsi, %rdx
-               	movq	%rbx, %r9
-               	vzeroupper
-               	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
-               	leaq	-0x80(%rbp), %rax
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	(%rsp), %r9
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%r9)
-               	movups	-0x60(%rbp), %xmm0
-               	movups	-0x40(%rbp), %xmm1
-               	testl	%ebx, %ebx
-               	je	<addr>
-               	leaq	0x160(%rsp), %rax
-               	movups	%xmm1, 0x160(%rsp)
-               	leaq	<rip>, %rcx # <addr>
-               	leaq	0x200(%rcx), %rdi
-               	leaq	0x100(%rsp), %rcx
-               	movups	%xmm0, 0x100(%rsp)
-               	movl	$0x2, %esi
-               	movq	%rax, %r10
-               	movups	(%r10), %xmm0
-               	movq	%r9, %r10
-               	vmovups	(%r10), %ymm1
-               	movq	%rcx, %r10
-               	movups	(%r10), %xmm2
-               	callq	<addr>
-               	movups	%xmm0, 0x160(%rsp)
-               	leaq	0x160(%rsp), %rax
-               	leaq	0x440(%rsp), %rcx
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	0x440(%rsp), %rdi
-               	leaq	-0x80(%rbp), %rax
-               	leaq	0x60(%rax), %rsi
-               	movl	$0x10, %edx
-               	vzeroupper
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movl	$0x2, %ecx
-               	testl	%ebx, %ebx
-               	cmoveq	%rcx, %rax
-               	orq	%rax, %r12
-               	leaq	-0x80(%rbp), %rdi
-               	movl	$0x2, %esi
-               	movl	$0x8, %edx
-               	movq	%rdx, %rcx
-               	movq	%rbx, %r9
-               	movq	%rsi, %r8
-               	vzeroupper
-               	callq	<addr>
-               	leaq	0x420(%rsp), %r9
-               	leaq	-0x80(%rbp), %rax
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%r9)
-               	leaq	(%rsp), %rcx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rcx)
-               	movups	-0x60(%rbp), %xmm0
-               	movups	-0x40(%rbp), %xmm1
-               	testl	%ebx, %ebx
-               	je	<addr>
-               	leaq	0x160(%rsp), %rax
-               	movups	%xmm1, 0x160(%rsp)
-               	leaq	<rip>, %rcx # <addr>
-               	leaq	0x200(%rcx), %rdi
-               	leaq	0x100(%rsp), %rcx
-               	movups	%xmm0, 0x100(%rsp)
-               	movl	$0x2, %esi
-               	movq	%rax, %r10
-               	movups	(%r10), %xmm0
-               	movq	%r9, %r10
-               	movups	(%r10), %xmm1
-               	movq	%rcx, %r10
-               	movups	(%r10), %xmm2
-               	vzeroupper
-               	callq	<addr>
-               	movups	%xmm0, 0x160(%rsp)
-               	leaq	0x160(%rsp), %rax
-               	leaq	0x450(%rsp), %rcx
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	0x450(%rsp), %rdi
-               	leaq	-0x80(%rbp), %rax
-               	leaq	0x60(%rax), %rsi
-               	movl	$0x10, %edx
-               	vzeroupper
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movl	$0x2, %ecx
-               	testl	%ebx, %ebx
-               	cmoveq	%rcx, %rax
-               	orq	%rax, %r12
-               	leaq	-0x80(%rbp), %rdi
-               	movl	$0x4, %esi
-               	movl	$0x8, %edx
-               	movl	$0x2, %r8d
-               	movq	%rdx, %rcx
-               	movq	%rbx, %r9
-               	vzeroupper
-               	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
-               	leaq	-0x80(%rbp), %rax
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	(%rsp), %r9
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%r9)
-               	vmovups	-0x60(%rbp), %ymm0
-               	vmovups	-0x40(%rbp), %ymm1
-               	testl	%ebx, %ebx
-               	je	<addr>
-               	leaq	0x160(%rsp), %rax
-               	vmovups	%ymm1, 0x160(%rsp)
-               	leaq	<rip>, %rcx # <addr>
-               	leaq	0x200(%rcx), %rdi
-               	leaq	0x100(%rsp), %rcx
-               	vmovups	%ymm0, 0x100(%rsp)
-               	movl	$0x2, %esi
-               	movq	%rax, %r10
-               	vmovups	(%r10), %ymm0
-               	movq	%r9, %r10
-               	vmovups	(%r10), %ymm1
-               	movq	%rcx, %r10
-               	vmovups	(%r10), %ymm2
-               	callq	<addr>
-               	vmovups	%ymm0, 0x160(%rsp)
-               	leaq	0x160(%rsp), %rax
-               	leaq	0x60(%rsp), %rcx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rcx)
-               	leaq	0x60(%rsp), %rdi
-               	leaq	-0x80(%rbp), %rax
-               	leaq	0x60(%rax), %rsi
-               	movl	$0x20, %edx
-               	vzeroupper
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movl	$0x2, %ecx
-               	testl	%ebx, %ebx
-               	cmoveq	%rcx, %rax
-               	orq	%rax, %r12
-               	movl	$0x4, %esi
-               	leaq	-0x80(%rbp), %rdi
-               	movq	%rsi, %rdx
-               	movq	%rbx, %r9
-               	movq	%rsi, %r8
-               	movq	%rsi, %rcx
-               	vzeroupper
-               	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
-               	leaq	-0x80(%rbp), %rax
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	(%rsp), %rcx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rcx)
-               	movups	-0x60(%rbp), %xmm0
-               	movups	-0x40(%rbp), %xmm1
-               	leaq	0x430(%rsp), %r8
-               	testl	%ebx, %ebx
-               	je	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm2
-               	movups	%xmm1, 0x460(%rsp)
-               	movups	%xmm0, 0x470(%rsp)
-               	leaq	0x480(%rsp), %rax
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%xmm14, (%rax)
-               	movups	%xmm2, 0x490(%rsp)
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movl	-0xe0(%rbp), %edi
-               	movl	%edi, 0x480(%rsp,%rax,4)
-               	incq	%rax
-               	cmpl	$0x4, %eax
-               	jge	<addr>
-               	movl	0x460(%rsp,%rax,4), %esi
-               	movl	%esi, -0xe0(%rbp)
-               	movl	0x470(%rsp,%rax,4), %esi
-               	testl	%esi, %esi
-               	jge	<addr>
-               	leaq	-0xe0(%rbp), %rsi
-               	movslq	0x490(%rsp,%rax,4), %rdi
-               	shlq	$0x2, %rdi
-               	addq	%rcx, %rdi
-               	movl	(%rdi), %r10d
-               	movl	%r10d, (%rsi)
-               	jmp	<addr>
-               	leaq	0x160(%rsp), %rax
-               	movups	0x480(%rsp), %xmm0
-               	movups	%xmm0, 0x160(%rsp)
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%r8)
-               	leaq	0x430(%rsp), %rdi
-               	leaq	-0x80(%rbp), %rax
-               	leaq	0x60(%rax), %rsi
-               	movl	$0x10, %edx
-               	vzeroupper
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movl	$0x1, %ecx
-               	testl	%ebx, %ebx
-               	cmoveq	%rcx, %rax
-               	orq	%rax, %r12
-               	leaq	-0x80(%rbp), %rdi
-               	movl	$0x8, %esi
-               	movl	$0x4, %edx
-               	movq	%rdx, %rcx
-               	movq	%rbx, %r9
-               	movq	%rdx, %r8
-               	vzeroupper
-               	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
-               	leaq	-0x80(%rbp), %rax
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	(%rsp), %rdx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rdx)
-               	vmovups	-0x60(%rbp), %ymm0
-               	vmovups	-0x40(%rbp), %ymm1
-               	leaq	0x20(%rsp), %r8
-               	testl	%ebx, %ebx
-               	je	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	leaq	0x1c0(%rsp), %rax
-               	vmovups	(%rdx), %ymm14
-               	vmovups	%ymm14, (%rax)
-               	vmovups	%ymm1, 0x1e0(%rsp)
-               	vmovups	%ymm0, 0x200(%rsp)
-               	leaq	0x220(%rsp), %rsi
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%ymm14, (%rsi)
-               	leaq	0x240(%rsp), %rsi
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rsi)
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movl	-0xd8(%rbp), %edi
-               	movl	%edi, 0x220(%rsp,%rax,4)
-               	incq	%rax
-               	cmpl	$0x8, %eax
-               	jge	<addr>
-               	movl	0x1e0(%rsp,%rax,4), %esi
-               	movl	%esi, -0xd8(%rbp)
-               	movl	0x200(%rsp,%rax,4), %esi
-               	testl	%esi, %esi
-               	jge	<addr>
-               	leaq	-0xd8(%rbp), %rsi
-               	movslq	0x240(%rsp,%rax,4), %rdi
-               	shlq	$0x2, %rdi
-               	addq	%rcx, %rdi
-               	movl	(%rdi), %r10d
-               	movl	%r10d, (%rsi)
-               	jmp	<addr>
-               	leaq	0x160(%rsp), %rax
-               	vmovups	0x220(%rsp), %ymm0
-               	vmovups	%ymm0, 0x160(%rsp)
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%r8)
-               	leaq	0x20(%rsp), %rdi
-               	leaq	-0x80(%rbp), %rax
-               	leaq	0x60(%rax), %rsi
-               	movl	$0x20, %edx
-               	vzeroupper
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movl	$0x1, %ecx
-               	testl	%ebx, %ebx
-               	cmoveq	%rcx, %rax
-               	orq	%rax, %r12
-               	leaq	-0x80(%rbp), %rdi
-               	movl	$0x2, %esi
-               	movl	$0x8, %edx
-               	movl	$0x4, %ecx
-               	movq	%rcx, %r8
-               	movq	%rbx, %r9
-               	vzeroupper
-               	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
-               	leaq	-0x80(%rbp), %rax
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	(%rsp), %rcx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rcx)
-               	movups	-0x60(%rbp), %xmm0
-               	movups	-0x40(%rbp), %xmm1
-               	leaq	0x430(%rsp), %r8
-               	testl	%ebx, %ebx
-               	je	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm2
-               	movups	%xmm1, 0x4a0(%rsp)
-               	movups	%xmm0, 0x4b0(%rsp)
-               	leaq	0x4c0(%rsp), %rax
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%xmm14, (%rax)
-               	movups	%xmm2, 0x4d0(%rsp)
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movq	-0xd0(%rbp), %rdi
-               	movq	%rdi, 0x4c0(%rsp,%rax,8)
-               	incq	%rax
-               	cmpl	$0x2, %eax
-               	jge	<addr>
-               	movq	0x4a0(%rsp,%rax,8), %rsi
-               	movq	%rsi, -0xd0(%rbp)
-               	movq	0x4b0(%rsp,%rax,8), %rsi
-               	testq	%rsi, %rsi
-               	jge	<addr>
-               	leaq	-0xd0(%rbp), %rsi
-               	movslq	0x4d0(%rsp,%rax,4), %rdi
-               	shlq	$0x2, %rdi
-               	addq	%rcx, %rdi
-               	movq	(%rdi), %r10
-               	movq	%r10, (%rsi)
-               	jmp	<addr>
-               	leaq	0x160(%rsp), %rax
-               	movups	0x4c0(%rsp), %xmm0
-               	movups	%xmm0, 0x160(%rsp)
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%r8)
-               	leaq	0x430(%rsp), %rdi
-               	leaq	-0x80(%rbp), %rax
-               	leaq	0x60(%rax), %rsi
-               	movl	$0x10, %edx
-               	vzeroupper
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movl	$0x1, %ecx
-               	testl	%ebx, %ebx
-               	cmoveq	%rcx, %rax
-               	orq	%rax, %r12
-               	leaq	-0x80(%rbp), %rdi
-               	movl	$0x4, %esi
-               	movl	$0x8, %edx
-               	movq	%rsi, %rcx
-               	movq	%rbx, %r9
-               	movq	%rsi, %r8
-               	vzeroupper
-               	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
-               	leaq	-0x80(%rbp), %rax
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	(%rsp), %rcx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rcx)
-               	vmovups	-0x60(%rbp), %ymm0
-               	vmovups	-0x40(%rbp), %ymm1
-               	leaq	0x20(%rsp), %r8
-               	testl	%ebx, %ebx
-               	je	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm2
-               	vmovups	%ymm1, 0x260(%rsp)
-               	vmovups	%ymm0, 0x180(%rsp)
                	leaq	0xc0(%rsp), %rax
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%ymm14, (%rax)
-               	movups	%xmm2, 0x4e0(%rsp)
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movq	-0xc8(%rbp), %rdi
-               	movq	%rdi, 0xc0(%rsp,%rax,8)
-               	incq	%rax
-               	cmpl	$0x4, %eax
-               	jge	<addr>
-               	movq	0x260(%rsp,%rax,8), %rsi
-               	movq	%rsi, -0xc8(%rbp)
-               	movq	0x180(%rsp,%rax,8), %rsi
-               	testq	%rsi, %rsi
-               	jge	<addr>
-               	leaq	-0xc8(%rbp), %rsi
-               	movslq	0x4e0(%rsp,%rax,4), %rdi
-               	shlq	$0x2, %rdi
-               	addq	%rcx, %rdi
-               	movq	(%rdi), %r10
-               	movq	%r10, (%rsi)
-               	jmp	<addr>
-               	leaq	0x160(%rsp), %rax
-               	vmovups	0xc0(%rsp), %ymm0
-               	vmovups	%ymm0, 0x160(%rsp)
+               	vmovups	0xa0(%rsp), %ymm0
+               	vmovups	%ymm0, 0xc0(%rsp)
                	vmovups	(%rax), %ymm14
                	vmovups	%ymm14, (%r8)
                	leaq	0x20(%rsp), %rdi
@@ -3428,151 +1376,13 @@ Disassembly of section .text:
                	orq	%rax, %r12
                	leaq	-0x80(%rbp), %rdi
                	movl	$0x4, %esi
+               	movl	$0x1, %r8d
                	movq	%rsi, %rdx
                	movq	%rbx, %r9
-               	movq	%rsi, %r8
                	movq	%rsi, %rcx
                	vzeroupper
                	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
-               	leaq	-0x80(%rbp), %rax
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	(%rsp), %rcx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rcx)
-               	movups	-0x60(%rbp), %xmm0
-               	movups	-0x40(%rbp), %xmm1
-               	leaq	0x120(%rsp), %r8
-               	testl	%ebx, %ebx
-               	je	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm2
-               	movups	%xmm1, 0x4f0(%rsp)
-               	movups	%xmm0, 0x500(%rsp)
-               	leaq	0x510(%rsp), %rax
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%xmm14, (%rax)
-               	movups	%xmm2, 0x520(%rsp)
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movl	-0xc0(%rbp), %edi
-               	movl	%edi, 0x510(%rsp,%rax,4)
-               	incq	%rax
-               	cmpl	$0x4, %eax
-               	jge	<addr>
-               	movl	0x4f0(%rsp,%rax,4), %esi
-               	movl	%esi, -0xc0(%rbp)
-               	movl	0x500(%rsp,%rax,4), %esi
-               	testl	%esi, %esi
-               	jge	<addr>
-               	leaq	-0xc0(%rbp), %rsi
-               	movslq	0x520(%rsp,%rax,4), %rdi
-               	shlq	$0x2, %rdi
-               	addq	%rcx, %rdi
-               	movl	(%rdi), %r10d
-               	movl	%r10d, (%rsi)
-               	jmp	<addr>
-               	leaq	0x160(%rsp), %rax
-               	movups	0x510(%rsp), %xmm0
-               	movups	%xmm0, 0x160(%rsp)
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%r8)
-               	leaq	0x120(%rsp), %rdi
-               	leaq	-0x80(%rbp), %rax
-               	leaq	0x60(%rax), %rsi
-               	movl	$0x10, %edx
-               	vzeroupper
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movl	$0x1, %ecx
-               	testl	%ebx, %ebx
-               	cmoveq	%rcx, %rax
-               	orq	%rax, %r12
-               	leaq	-0x80(%rbp), %rdi
-               	movl	$0x8, %esi
-               	movl	$0x4, %edx
-               	movq	%rdx, %rcx
-               	movq	%rbx, %r9
-               	movq	%rdx, %r8
-               	vzeroupper
-               	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
-               	leaq	-0x80(%rbp), %rax
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	(%rsp), %rdx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rdx)
-               	vmovups	-0x60(%rbp), %ymm0
-               	vmovups	-0x40(%rbp), %ymm1
-               	leaq	0x80(%rsp), %r8
-               	testl	%ebx, %ebx
-               	je	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	leaq	0x280(%rsp), %rax
-               	vmovups	(%rdx), %ymm14
-               	vmovups	%ymm14, (%rax)
-               	vmovups	%ymm1, 0x2a0(%rsp)
-               	vmovups	%ymm0, 0x2c0(%rsp)
-               	leaq	0x2e0(%rsp), %rsi
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%ymm14, (%rsi)
-               	leaq	0x1a0(%rsp), %rsi
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rsi)
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movl	-0xb8(%rbp), %edi
-               	movl	%edi, 0x2e0(%rsp,%rax,4)
-               	incq	%rax
-               	cmpl	$0x8, %eax
-               	jge	<addr>
-               	movl	0x2a0(%rsp,%rax,4), %esi
-               	movl	%esi, -0xb8(%rbp)
-               	movl	0x2c0(%rsp,%rax,4), %esi
-               	testl	%esi, %esi
-               	jge	<addr>
-               	leaq	-0xb8(%rbp), %rsi
-               	movslq	0x1a0(%rsp,%rax,4), %rdi
-               	shlq	$0x2, %rdi
-               	addq	%rcx, %rdi
-               	movl	(%rdi), %r10d
-               	movl	%r10d, (%rsi)
-               	jmp	<addr>
-               	leaq	0x160(%rsp), %rax
-               	vmovups	0x2e0(%rsp), %ymm0
-               	vmovups	%ymm0, 0x160(%rsp)
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%r8)
-               	leaq	0x80(%rsp), %rdi
-               	leaq	-0x80(%rbp), %rax
-               	leaq	0x60(%rax), %rsi
-               	movl	$0x20, %edx
-               	vzeroupper
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movl	$0x1, %ecx
-               	testl	%ebx, %ebx
-               	cmoveq	%rcx, %rax
-               	orq	%rax, %r12
-               	leaq	-0x80(%rbp), %rdi
-               	movl	$0x2, %esi
-               	movl	$0x8, %edx
-               	movl	$0x4, %ecx
-               	movq	%rcx, %r8
-               	movq	%rbx, %r9
-               	vzeroupper
-               	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
+               	leaq	0x120(%rsp), %rcx
                	leaq	-0x80(%rbp), %rax
                	vmovups	(%rax), %xmm14
                	vmovups	%xmm14, (%rcx)
@@ -3586,35 +1396,34 @@ Disassembly of section .text:
                	je	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm2
-               	movups	%xmm1, 0x530(%rsp)
-               	movups	%xmm0, 0x540(%rsp)
-               	leaq	0x550(%rsp), %rax
+               	movups	0x120(%rsp), %xmm2
+               	movups	%xmm1, 0xe0(%rsp)
+               	movups	%xmm0, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rax
                	vxorps	%ymm14, %ymm14, %ymm14
                	vmovups	%xmm14, (%rax)
-               	movups	%xmm2, 0x560(%rsp)
+               	movups	%xmm2, 0xa0(%rsp)
                	xorl	%eax, %eax
                	jmp	<addr>
-               	movq	-0xb0(%rbp), %rdi
-               	movq	%rdi, 0x550(%rsp,%rax,8)
+               	movl	-0x88(%rbp), %edi
+               	movl	%edi, 0xc0(%rsp,%rax,4)
                	incq	%rax
-               	cmpl	$0x2, %eax
+               	cmpl	$0x4, %eax
                	jge	<addr>
-               	movq	0x530(%rsp,%rax,8), %rsi
-               	movq	%rsi, -0xb0(%rbp)
-               	movq	0x540(%rsp,%rax,8), %rsi
-               	testq	%rsi, %rsi
+               	movl	0xe0(%rsp,%rax,4), %esi
+               	movl	%esi, -0x88(%rbp)
+               	movl	0x80(%rsp,%rax,4), %esi
+               	testl	%esi, %esi
                	jge	<addr>
-               	leaq	-0xb0(%rbp), %rsi
-               	movslq	0x560(%rsp,%rax,4), %rdi
-               	shlq	$0x2, %rdi
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
                	addq	%rcx, %rdi
-               	movq	(%rdi), %r10
-               	movq	%r10, (%rsi)
+               	movl	(%rdi), %r10d
+               	movl	%r10d, (%rsi)
                	jmp	<addr>
-               	leaq	0x160(%rsp), %rax
-               	movups	0x550(%rsp), %xmm0
-               	movups	%xmm0, 0x160(%rsp)
+               	leaq	0x80(%rsp), %rax
+               	movups	0xc0(%rsp), %xmm0
+               	movups	%xmm0, 0x80(%rsp)
                	vmovups	(%rax), %xmm14
                	vmovups	%xmm14, (%r8)
                	leaq	0x140(%rsp), %rdi
@@ -3632,14 +1441,150 @@ Disassembly of section .text:
                	cmoveq	%rcx, %rax
                	orq	%rax, %r12
                	leaq	-0x80(%rbp), %rdi
-               	movl	$0x4, %esi
-               	movl	$0x8, %edx
-               	movq	%rsi, %rcx
+               	movl	$0x8, %esi
+               	movl	$0x4, %edx
+               	movl	$0x1, %r8d
+               	movq	%rdx, %rcx
                	movq	%rbx, %r9
-               	movq	%rsi, %r8
                	vzeroupper
                	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
+               	leaq	0x120(%rsp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	(%rsp), %rdx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rdx)
+               	vmovups	-0x60(%rbp), %ymm0
+               	vmovups	-0x40(%rbp), %ymm1
+               	leaq	0x40(%rsp), %r8
+               	testl	%ebx, %ebx
+               	je	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rcx
+               	leaq	0x100(%rsp), %rax
+               	vmovups	(%rdx), %ymm14
+               	vmovups	%ymm14, (%rax)
+               	vmovups	%ymm1, 0xe0(%rsp)
+               	vmovups	%ymm0, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rsi
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	leaq	0xa0(%rsp), %rsi
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movl	-0x88(%rbp), %edi
+               	movl	%edi, 0xc0(%rsp,%rax,4)
+               	incq	%rax
+               	cmpl	$0x8, %eax
+               	jge	<addr>
+               	movl	0xe0(%rsp,%rax,4), %esi
+               	movl	%esi, -0x88(%rbp)
+               	movl	0x80(%rsp,%rax,4), %esi
+               	testl	%esi, %esi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
+               	addq	%rcx, %rdi
+               	movl	(%rdi), %r10d
+               	movl	%r10d, (%rsi)
+               	jmp	<addr>
+               	leaq	0x80(%rsp), %rax
+               	vmovups	0xc0(%rsp), %ymm0
+               	vmovups	%ymm0, 0x80(%rsp)
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%r8)
+               	leaq	0x40(%rsp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	leaq	0x60(%rax), %rsi
+               	movl	$0x20, %edx
+               	vzeroupper
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x1, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
+               	orq	%rax, %r12
+               	leaq	-0x80(%rbp), %rdi
+               	movl	$0x2, %esi
+               	movl	$0x8, %edx
+               	movl	$0x4, %ecx
+               	movl	$0x1, %r8d
+               	movq	%rbx, %r9
+               	vzeroupper
+               	callq	<addr>
+               	leaq	0x120(%rsp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	movups	-0x60(%rbp), %xmm0
+               	movups	-0x40(%rbp), %xmm1
+               	leaq	0x150(%rsp), %r8
+               	testl	%ebx, %ebx
+               	je	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rcx
+               	movups	0x120(%rsp), %xmm2
+               	movups	%xmm1, 0xe0(%rsp)
+               	movups	%xmm0, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%xmm14, (%rax)
+               	movups	%xmm2, 0xa0(%rsp)
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movq	-0x88(%rbp), %rdi
+               	movq	%rdi, 0xc0(%rsp,%rax,8)
+               	incq	%rax
+               	cmpl	$0x2, %eax
+               	jge	<addr>
+               	movq	0xe0(%rsp,%rax,8), %rsi
+               	movq	%rsi, -0x88(%rbp)
+               	movq	0x80(%rsp,%rax,8), %rsi
+               	testq	%rsi, %rsi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
+               	addq	%rcx, %rdi
+               	movq	(%rdi), %r10
+               	movq	%r10, (%rsi)
+               	jmp	<addr>
+               	leaq	0x80(%rsp), %rax
+               	movups	0xc0(%rsp), %xmm0
+               	movups	%xmm0, 0x80(%rsp)
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%r8)
+               	leaq	0x150(%rsp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	leaq	0x60(%rax), %rsi
+               	movl	$0x10, %edx
+               	vzeroupper
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x1, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
+               	orq	%rax, %r12
+               	leaq	-0x80(%rbp), %rdi
+               	movl	$0x4, %esi
+               	movl	$0x8, %edx
+               	movl	$0x1, %r8d
+               	movq	%rsi, %rcx
+               	movq	%rbx, %r9
+               	vzeroupper
+               	callq	<addr>
+               	leaq	0x120(%rsp), %rcx
                	leaq	-0x80(%rbp), %rax
                	vmovups	(%rax), %xmm14
                	vmovups	%xmm14, (%rcx)
@@ -3648,43 +1593,42 @@ Disassembly of section .text:
                	vmovups	%ymm14, (%rcx)
                	vmovups	-0x60(%rbp), %ymm0
                	vmovups	-0x40(%rbp), %ymm1
-               	leaq	0xa0(%rsp), %r8
+               	leaq	0x60(%rsp), %r8
                	testl	%ebx, %ebx
                	je	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm2
-               	vmovups	%ymm1, 0x300(%rsp)
-               	vmovups	%ymm0, 0x320(%rsp)
-               	leaq	0x340(%rsp), %rax
+               	movups	0x120(%rsp), %xmm2
+               	vmovups	%ymm1, 0x80(%rsp)
+               	vmovups	%ymm0, 0xc0(%rsp)
+               	leaq	0xa0(%rsp), %rax
                	vxorps	%ymm14, %ymm14, %ymm14
                	vmovups	%ymm14, (%rax)
-               	movups	%xmm2, 0x570(%rsp)
+               	movups	%xmm2, 0xe0(%rsp)
                	xorl	%eax, %eax
                	jmp	<addr>
-               	movq	-0xa8(%rbp), %rdi
-               	movq	%rdi, 0x340(%rsp,%rax,8)
+               	movq	-0x88(%rbp), %rdi
+               	movq	%rdi, 0xa0(%rsp,%rax,8)
                	incq	%rax
                	cmpl	$0x4, %eax
                	jge	<addr>
-               	movq	0x300(%rsp,%rax,8), %rsi
-               	movq	%rsi, -0xa8(%rbp)
-               	movq	0x320(%rsp,%rax,8), %rsi
+               	movq	0x80(%rsp,%rax,8), %rsi
+               	movq	%rsi, -0x88(%rbp)
+               	movq	0xc0(%rsp,%rax,8), %rsi
                	testq	%rsi, %rsi
                	jge	<addr>
-               	leaq	-0xa8(%rbp), %rsi
-               	movslq	0x570(%rsp,%rax,4), %rdi
-               	shlq	$0x2, %rdi
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xe0(%rsp,%rax,4), %rdi
                	addq	%rcx, %rdi
                	movq	(%rdi), %r10
                	movq	%r10, (%rsi)
                	jmp	<addr>
-               	leaq	0x160(%rsp), %rax
-               	vmovups	0x340(%rsp), %ymm0
-               	vmovups	%ymm0, 0x160(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	vmovups	0xa0(%rsp), %ymm0
+               	vmovups	%ymm0, 0xc0(%rsp)
                	vmovups	(%rax), %ymm14
                	vmovups	%ymm14, (%r8)
-               	leaq	0xa0(%rsp), %rdi
+               	leaq	0x60(%rsp), %rdi
                	leaq	-0x80(%rbp), %rax
                	leaq	0x60(%rax), %rsi
                	movl	$0x20, %edx
@@ -3702,11 +1646,11 @@ Disassembly of section .text:
                	leaq	-0x80(%rbp), %rdi
                	movl	$0x2, %esi
                	movl	$0x4, %edx
-               	movq	%rdx, %r8
+               	movl	$0x1, %r8d
                	movq	%rbx, %r9
                	vzeroupper
                	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
+               	leaq	0x120(%rsp), %rcx
                	leaq	-0x80(%rbp), %rax
                	vmovups	(%rax), %xmm14
                	vmovups	%xmm14, (%rcx)
@@ -3715,43 +1659,42 @@ Disassembly of section .text:
                	vmovups	%ymm14, (%rcx)
                	movups	-0x60(%rbp), %xmm0
                	movups	-0x40(%rbp), %xmm1
+               	leaq	0x130(%rsp), %r8
                	testl	%ebx, %ebx
                	je	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm2
-               	movups	%xmm1, 0x580(%rsp)
-               	movups	%xmm0, 0x590(%rsp)
-               	leaq	0x5a0(%rsp), %rax
+               	movups	0x120(%rsp), %xmm2
+               	movups	%xmm1, 0xe0(%rsp)
+               	movups	%xmm0, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rax
                	vxorps	%ymm14, %ymm14, %ymm14
                	vmovups	%xmm14, (%rax)
-               	movups	%xmm2, 0x5b0(%rsp)
+               	movups	%xmm2, 0xa0(%rsp)
                	xorl	%eax, %eax
                	jmp	<addr>
-               	movl	-0xa0(%rbp), %edi
-               	movl	%edi, 0x5a0(%rsp,%rax,4)
+               	movl	-0x88(%rbp), %edi
+               	movl	%edi, 0xc0(%rsp,%rax,4)
                	incq	%rax
                	cmpl	$0x2, %eax
                	jge	<addr>
-               	movl	0x580(%rsp,%rax,4), %esi
-               	movl	%esi, -0xa0(%rbp)
-               	movl	0x590(%rsp,%rax,4), %esi
+               	movl	0xe0(%rsp,%rax,4), %esi
+               	movl	%esi, -0x88(%rbp)
+               	movl	0x80(%rsp,%rax,4), %esi
                	testl	%esi, %esi
                	jge	<addr>
-               	leaq	-0xa0(%rbp), %rsi
-               	movq	0x5b0(%rsp,%rax,8), %rdi
-               	shlq	$0x2, %rdi
+               	leaq	-0x88(%rbp), %rsi
+               	movq	0xa0(%rsp,%rax,8), %rdi
                	addq	%rcx, %rdi
                	movl	(%rdi), %r10d
                	movl	%r10d, (%rsi)
                	jmp	<addr>
-               	leaq	0x160(%rsp), %rax
-               	movups	0x5a0(%rsp), %xmm0
-               	movups	%xmm0, 0x160(%rsp)
-               	leaq	0x430(%rsp), %rcx
+               	leaq	0x80(%rsp), %rax
+               	movups	0xc0(%rsp), %xmm0
+               	movups	%xmm0, 0x80(%rsp)
                	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	0x430(%rsp), %rdi
+               	vmovups	%xmm14, (%r8)
+               	leaq	0x130(%rsp), %rdi
                	leaq	-0x80(%rbp), %rax
                	leaq	0x60(%rax), %rsi
                	movl	$0x10, %edx
@@ -3768,12 +1711,12 @@ Disassembly of section .text:
                	leaq	-0x80(%rbp), %rdi
                	movl	$0x4, %esi
                	movl	$0x8, %ecx
+               	movl	$0x1, %r8d
                	movq	%rsi, %rdx
                	movq	%rbx, %r9
-               	movq	%rsi, %r8
                	vzeroupper
                	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
+               	leaq	0x120(%rsp), %rcx
                	leaq	-0x80(%rbp), %rax
                	vmovups	(%rax), %xmm14
                	vmovups	%xmm14, (%rcx)
@@ -3782,47 +1725,46 @@ Disassembly of section .text:
                	vmovups	%ymm14, (%rdx)
                	movups	-0x60(%rbp), %xmm0
                	movups	-0x40(%rbp), %xmm1
+               	leaq	0x130(%rsp), %r8
                	testl	%ebx, %ebx
                	je	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rcx
-               	leaq	0x360(%rsp), %rax
+               	leaq	0xc0(%rsp), %rax
                	vmovups	(%rdx), %ymm14
                	vmovups	%ymm14, (%rax)
-               	movups	%xmm1, 0x5c0(%rsp)
-               	movups	%xmm0, 0x5d0(%rsp)
-               	leaq	0x5e0(%rsp), %rsi
+               	movups	%xmm1, 0x100(%rsp)
+               	movups	%xmm0, 0xe0(%rsp)
+               	leaq	0x80(%rsp), %rsi
                	vxorps	%ymm14, %ymm14, %ymm14
                	vmovups	%xmm14, (%rsi)
-               	leaq	0x380(%rsp), %rsi
+               	leaq	0xa0(%rsp), %rsi
                	vmovups	(%rax), %ymm14
                	vmovups	%ymm14, (%rsi)
                	xorl	%eax, %eax
                	jmp	<addr>
-               	movl	-0x98(%rbp), %edi
-               	movl	%edi, 0x5e0(%rsp,%rax,4)
+               	movl	-0x88(%rbp), %edi
+               	movl	%edi, 0x80(%rsp,%rax,4)
                	incq	%rax
                	cmpl	$0x4, %eax
                	jge	<addr>
-               	movl	0x5c0(%rsp,%rax,4), %esi
-               	movl	%esi, -0x98(%rbp)
-               	movl	0x5d0(%rsp,%rax,4), %esi
+               	movl	0x100(%rsp,%rax,4), %esi
+               	movl	%esi, -0x88(%rbp)
+               	movl	0xe0(%rsp,%rax,4), %esi
                	testl	%esi, %esi
                	jge	<addr>
-               	leaq	-0x98(%rbp), %rsi
-               	movq	0x380(%rsp,%rax,8), %rdi
-               	shlq	$0x2, %rdi
+               	leaq	-0x88(%rbp), %rsi
+               	movq	0xa0(%rsp,%rax,8), %rdi
                	addq	%rcx, %rdi
                	movl	(%rdi), %r10d
                	movl	%r10d, (%rsi)
                	jmp	<addr>
-               	leaq	0x160(%rsp), %rax
-               	movups	0x5e0(%rsp), %xmm0
-               	movups	%xmm0, 0x160(%rsp)
-               	leaq	0x430(%rsp), %rcx
+               	leaq	0xc0(%rsp), %rax
+               	movups	0x80(%rsp), %xmm0
+               	movups	%xmm0, 0xc0(%rsp)
                	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	0x430(%rsp), %rdi
+               	vmovups	%xmm14, (%r8)
+               	leaq	0x130(%rsp), %rdi
                	leaq	-0x80(%rbp), %rax
                	leaq	0x60(%rax), %rsi
                	movl	$0x10, %edx
@@ -3839,12 +1781,12 @@ Disassembly of section .text:
                	leaq	-0x80(%rbp), %rdi
                	movl	$0x2, %esi
                	movl	$0x8, %edx
-               	movl	$0x4, %r8d
+               	movl	$0x1, %r8d
                	movq	%rdx, %rcx
                	movq	%rbx, %r9
                	vzeroupper
                	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
+               	leaq	0x120(%rsp), %rcx
                	leaq	-0x80(%rbp), %rax
                	vmovups	(%rax), %xmm14
                	vmovups	%xmm14, (%rcx)
@@ -3853,43 +1795,42 @@ Disassembly of section .text:
                	vmovups	%ymm14, (%rcx)
                	movups	-0x60(%rbp), %xmm0
                	movups	-0x40(%rbp), %xmm1
+               	leaq	0x130(%rsp), %r8
                	testl	%ebx, %ebx
                	je	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm2
-               	movups	%xmm1, 0x5f0(%rsp)
-               	movups	%xmm0, 0x600(%rsp)
-               	leaq	0x610(%rsp), %rax
+               	movups	0x120(%rsp), %xmm2
+               	movups	%xmm1, 0xe0(%rsp)
+               	movups	%xmm0, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rax
                	vxorps	%ymm14, %ymm14, %ymm14
                	vmovups	%xmm14, (%rax)
-               	movups	%xmm2, 0x620(%rsp)
+               	movups	%xmm2, 0xa0(%rsp)
                	xorl	%eax, %eax
                	jmp	<addr>
-               	movq	-0x90(%rbp), %rdi
-               	movq	%rdi, 0x610(%rsp,%rax,8)
+               	movq	-0x88(%rbp), %rdi
+               	movq	%rdi, 0xc0(%rsp,%rax,8)
                	incq	%rax
                	cmpl	$0x2, %eax
                	jge	<addr>
-               	movq	0x5f0(%rsp,%rax,8), %rsi
-               	movq	%rsi, -0x90(%rbp)
-               	movq	0x600(%rsp,%rax,8), %rsi
+               	movq	0xe0(%rsp,%rax,8), %rsi
+               	movq	%rsi, -0x88(%rbp)
+               	movq	0x80(%rsp,%rax,8), %rsi
                	testq	%rsi, %rsi
                	jge	<addr>
-               	leaq	-0x90(%rbp), %rsi
-               	movq	0x620(%rsp,%rax,8), %rdi
-               	shlq	$0x2, %rdi
+               	leaq	-0x88(%rbp), %rsi
+               	movq	0xa0(%rsp,%rax,8), %rdi
                	addq	%rcx, %rdi
                	movq	(%rdi), %r10
                	movq	%r10, (%rsi)
                	jmp	<addr>
-               	leaq	0x160(%rsp), %rax
-               	movups	0x610(%rsp), %xmm0
-               	movups	%xmm0, 0x160(%rsp)
-               	leaq	0x430(%rsp), %rcx
+               	leaq	0x80(%rsp), %rax
+               	movups	0xc0(%rsp), %xmm0
+               	movups	%xmm0, 0x80(%rsp)
                	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	0x430(%rsp), %rdi
+               	vmovups	%xmm14, (%r8)
+               	leaq	0x130(%rsp), %rdi
                	leaq	-0x80(%rbp), %rax
                	leaq	0x60(%rax), %rsi
                	movl	$0x10, %edx
@@ -3906,12 +1847,12 @@ Disassembly of section .text:
                	leaq	-0x80(%rbp), %rdi
                	movl	$0x4, %esi
                	movl	$0x8, %edx
+               	movl	$0x1, %r8d
                	movq	%rdx, %rcx
                	movq	%rbx, %r9
-               	movq	%rsi, %r8
                	vzeroupper
                	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
+               	leaq	0x120(%rsp), %rcx
                	leaq	-0x80(%rbp), %rax
                	vmovups	(%rax), %xmm14
                	vmovups	%xmm14, (%rcx)
@@ -3920,46 +1861,45 @@ Disassembly of section .text:
                	vmovups	%ymm14, (%rdx)
                	vmovups	-0x60(%rbp), %ymm0
                	vmovups	-0x40(%rbp), %ymm1
+               	leaq	0x20(%rsp), %r8
                	testl	%ebx, %ebx
                	je	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rcx
-               	leaq	0x3a0(%rsp), %rax
+               	leaq	0x100(%rsp), %rax
                	vmovups	(%rdx), %ymm14
                	vmovups	%ymm14, (%rax)
-               	vmovups	%ymm1, 0x3c0(%rsp)
-               	vmovups	%ymm0, 0x3e0(%rsp)
-               	leaq	0x400(%rsp), %rsi
+               	vmovups	%ymm1, 0xe0(%rsp)
+               	vmovups	%ymm0, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rsi
                	vxorps	%ymm14, %ymm14, %ymm14
                	vmovups	%ymm14, (%rsi)
-               	leaq	0xe0(%rsp), %rsi
+               	leaq	0xa0(%rsp), %rsi
                	vmovups	(%rax), %ymm14
                	vmovups	%ymm14, (%rsi)
                	xorl	%eax, %eax
                	jmp	<addr>
                	movq	-0x88(%rbp), %rdi
-               	movq	%rdi, 0x400(%rsp,%rax,8)
+               	movq	%rdi, 0xc0(%rsp,%rax,8)
                	incq	%rax
                	cmpl	$0x4, %eax
                	jge	<addr>
-               	movq	0x3c0(%rsp,%rax,8), %rsi
+               	movq	0xe0(%rsp,%rax,8), %rsi
                	movq	%rsi, -0x88(%rbp)
-               	movq	0x3e0(%rsp,%rax,8), %rsi
+               	movq	0x80(%rsp,%rax,8), %rsi
                	testq	%rsi, %rsi
                	jge	<addr>
                	leaq	-0x88(%rbp), %rsi
-               	movq	0xe0(%rsp,%rax,8), %rdi
-               	shlq	$0x2, %rdi
+               	movq	0xa0(%rsp,%rax,8), %rdi
                	addq	%rcx, %rdi
                	movq	(%rdi), %r10
                	movq	%r10, (%rsi)
                	jmp	<addr>
-               	leaq	0x160(%rsp), %rax
-               	vmovups	0x400(%rsp), %ymm0
-               	vmovups	%ymm0, 0x160(%rsp)
-               	leaq	0x20(%rsp), %rcx
+               	leaq	0x80(%rsp), %rax
+               	vmovups	0xc0(%rsp), %ymm0
+               	vmovups	%ymm0, 0x80(%rsp)
                	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rcx)
+               	vmovups	%ymm14, (%r8)
                	leaq	0x20(%rsp), %rdi
                	leaq	-0x80(%rbp), %rax
                	leaq	0x60(%rax), %rsi
@@ -3978,11 +1918,11 @@ Disassembly of section .text:
                	movl	$0x2, %esi
                	movl	$0x4, %edx
                	movl	$0x8, %ecx
-               	movq	%rdx, %r8
+               	movl	$0x1, %r8d
                	movq	%rbx, %r9
                	vzeroupper
                	callq	<addr>
-               	leaq	0x420(%rsp), %r9
+               	leaq	0x120(%rsp), %r9
                	leaq	-0x80(%rbp), %rax
                	vmovups	(%rax), %xmm14
                	vmovups	%xmm14, (%r9)
@@ -3993,13 +1933,13 @@ Disassembly of section .text:
                	movups	-0x40(%rbp), %xmm1
                	testl	%ebx, %ebx
                	je	<addr>
-               	leaq	0x160(%rsp), %rax
-               	movups	%xmm1, 0x160(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	movups	%xmm1, 0xc0(%rsp)
                	leaq	<rip>, %rcx # <addr>
                	leaq	0x200(%rcx), %rdi
-               	leaq	0x100(%rsp), %rcx
-               	movups	%xmm0, 0x100(%rsp)
-               	movl	$0x4, %esi
+               	leaq	0xa0(%rsp), %rcx
+               	movups	%xmm0, 0xa0(%rsp)
+               	movl	$0x1, %esi
                	movq	%rax, %r10
                	movups	(%r10), %xmm0
                	movq	%r9, %r10
@@ -4008,113 +1948,8 @@ Disassembly of section .text:
                	movups	(%r10), %xmm2
                	vzeroupper
                	callq	<addr>
-               	movups	%xmm0, 0x160(%rsp)
-               	leaq	0x160(%rsp), %rax
-               	leaq	0x120(%rsp), %rcx
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	0x120(%rsp), %rdi
-               	leaq	-0x80(%rbp), %rax
-               	leaq	0x60(%rax), %rsi
-               	movl	$0x10, %edx
-               	vzeroupper
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movl	$0x2, %ecx
-               	testl	%ebx, %ebx
-               	cmoveq	%rcx, %rax
-               	orq	%rax, %r12
-               	leaq	-0x80(%rbp), %rdi
-               	movl	$0x4, %esi
-               	movl	$0x8, %ecx
-               	movq	%rsi, %rdx
-               	movq	%rbx, %r9
-               	movq	%rsi, %r8
-               	vzeroupper
-               	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
-               	leaq	-0x80(%rbp), %rax
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	(%rsp), %r9
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%r9)
-               	movups	-0x60(%rbp), %xmm0
-               	movups	-0x40(%rbp), %xmm1
-               	testl	%ebx, %ebx
-               	je	<addr>
-               	leaq	0x160(%rsp), %rax
-               	movups	%xmm1, 0x160(%rsp)
-               	leaq	<rip>, %rcx # <addr>
-               	leaq	0x200(%rcx), %rdi
-               	leaq	0x100(%rsp), %rcx
-               	movups	%xmm0, 0x100(%rsp)
-               	movl	$0x4, %esi
-               	movq	%rax, %r10
-               	movups	(%r10), %xmm0
-               	movq	%r9, %r10
-               	vmovups	(%r10), %ymm1
-               	movq	%rcx, %r10
-               	movups	(%r10), %xmm2
-               	callq	<addr>
-               	movups	%xmm0, 0x160(%rsp)
-               	leaq	0x160(%rsp), %rax
-               	leaq	0x120(%rsp), %rcx
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	0x120(%rsp), %rdi
-               	leaq	-0x80(%rbp), %rax
-               	leaq	0x60(%rax), %rsi
-               	movl	$0x10, %edx
-               	vzeroupper
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movl	$0x2, %ecx
-               	testl	%ebx, %ebx
-               	cmoveq	%rcx, %rax
-               	orq	%rax, %r12
-               	leaq	-0x80(%rbp), %rdi
-               	movl	$0x2, %esi
-               	movl	$0x8, %edx
-               	movl	$0x4, %r8d
-               	movq	%rdx, %rcx
-               	movq	%rbx, %r9
-               	vzeroupper
-               	callq	<addr>
-               	leaq	0x420(%rsp), %r9
-               	leaq	-0x80(%rbp), %rax
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%r9)
-               	leaq	(%rsp), %rcx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rcx)
-               	movups	-0x60(%rbp), %xmm0
-               	movups	-0x40(%rbp), %xmm1
-               	testl	%ebx, %ebx
-               	je	<addr>
-               	leaq	0x160(%rsp), %rax
-               	movups	%xmm1, 0x160(%rsp)
-               	leaq	<rip>, %rcx # <addr>
-               	leaq	0x200(%rcx), %rdi
-               	leaq	0x100(%rsp), %rcx
-               	movups	%xmm0, 0x100(%rsp)
-               	movl	$0x4, %esi
-               	movq	%rax, %r10
-               	movups	(%r10), %xmm0
-               	movq	%r9, %r10
-               	movups	(%r10), %xmm1
-               	movq	%rcx, %r10
-               	movups	(%r10), %xmm2
-               	vzeroupper
-               	callq	<addr>
-               	movups	%xmm0, 0x160(%rsp)
-               	leaq	0x160(%rsp), %rax
+               	movups	%xmm0, 0xc0(%rsp)
+               	leaq	0xc0(%rsp), %rax
                	leaq	0x140(%rsp), %rcx
                	vmovups	(%rax), %xmm14
                	vmovups	%xmm14, (%rcx)
@@ -4134,13 +1969,118 @@ Disassembly of section .text:
                	orq	%rax, %r12
                	leaq	-0x80(%rbp), %rdi
                	movl	$0x4, %esi
-               	movl	$0x8, %edx
-               	movq	%rdx, %rcx
+               	movl	$0x8, %ecx
+               	movl	$0x1, %r8d
+               	movq	%rsi, %rdx
                	movq	%rbx, %r9
-               	movq	%rsi, %r8
                	vzeroupper
                	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
+               	leaq	0x120(%rsp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	(%rsp), %r9
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%r9)
+               	movups	-0x60(%rbp), %xmm0
+               	movups	-0x40(%rbp), %xmm1
+               	testl	%ebx, %ebx
+               	je	<addr>
+               	leaq	0xc0(%rsp), %rax
+               	movups	%xmm1, 0xc0(%rsp)
+               	leaq	<rip>, %rcx # <addr>
+               	leaq	0x200(%rcx), %rdi
+               	leaq	0xa0(%rsp), %rcx
+               	movups	%xmm0, 0xa0(%rsp)
+               	movl	$0x1, %esi
+               	movq	%rax, %r10
+               	movups	(%r10), %xmm0
+               	movq	%r9, %r10
+               	vmovups	(%r10), %ymm1
+               	movq	%rcx, %r10
+               	movups	(%r10), %xmm2
+               	callq	<addr>
+               	movups	%xmm0, 0xc0(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	leaq	0x140(%rsp), %rcx
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	0x140(%rsp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	leaq	0x60(%rax), %rsi
+               	movl	$0x10, %edx
+               	vzeroupper
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x2, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
+               	orq	%rax, %r12
+               	leaq	-0x80(%rbp), %rdi
+               	movl	$0x2, %esi
+               	movl	$0x8, %edx
+               	movl	$0x1, %r8d
+               	movq	%rdx, %rcx
+               	movq	%rbx, %r9
+               	vzeroupper
+               	callq	<addr>
+               	leaq	0x120(%rsp), %r9
+               	leaq	-0x80(%rbp), %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%r9)
+               	leaq	(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	movups	-0x60(%rbp), %xmm0
+               	movups	-0x40(%rbp), %xmm1
+               	testl	%ebx, %ebx
+               	je	<addr>
+               	leaq	0xc0(%rsp), %rax
+               	movups	%xmm1, 0xc0(%rsp)
+               	leaq	<rip>, %rcx # <addr>
+               	leaq	0x200(%rcx), %rdi
+               	leaq	0xa0(%rsp), %rcx
+               	movups	%xmm0, 0xa0(%rsp)
+               	movl	$0x1, %esi
+               	movq	%rax, %r10
+               	movups	(%r10), %xmm0
+               	movq	%r9, %r10
+               	movups	(%r10), %xmm1
+               	movq	%rcx, %r10
+               	movups	(%r10), %xmm2
+               	vzeroupper
+               	callq	<addr>
+               	movups	%xmm0, 0xc0(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	leaq	0x150(%rsp), %rcx
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	0x150(%rsp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	leaq	0x60(%rax), %rsi
+               	movl	$0x10, %edx
+               	vzeroupper
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x2, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
+               	orq	%rax, %r12
+               	leaq	-0x80(%rbp), %rdi
+               	movl	$0x4, %esi
+               	movl	$0x8, %edx
+               	movl	$0x1, %r8d
+               	movq	%rdx, %rcx
+               	movq	%rbx, %r9
+               	vzeroupper
+               	callq	<addr>
+               	leaq	0x120(%rsp), %rcx
                	leaq	-0x80(%rbp), %rax
                	vmovups	(%rax), %xmm14
                	vmovups	%xmm14, (%rcx)
@@ -4151,13 +2091,13 @@ Disassembly of section .text:
                	vmovups	-0x40(%rbp), %ymm1
                	testl	%ebx, %ebx
                	je	<addr>
-               	leaq	0x160(%rsp), %rax
-               	vmovups	%ymm1, 0x160(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	vmovups	%ymm1, 0xc0(%rsp)
                	leaq	<rip>, %rcx # <addr>
                	leaq	0x200(%rcx), %rdi
-               	leaq	0x100(%rsp), %rcx
-               	vmovups	%ymm0, 0x100(%rsp)
-               	movl	$0x4, %esi
+               	leaq	0xa0(%rsp), %rcx
+               	vmovups	%ymm0, 0xa0(%rsp)
+               	movl	$0x1, %esi
                	movq	%rax, %r10
                	vmovups	(%r10), %ymm0
                	movq	%r9, %r10
@@ -4165,12 +2105,12 @@ Disassembly of section .text:
                	movq	%rcx, %r10
                	vmovups	(%r10), %ymm2
                	callq	<addr>
-               	vmovups	%ymm0, 0x160(%rsp)
-               	leaq	0x160(%rsp), %rax
-               	leaq	0xa0(%rsp), %rcx
+               	vmovups	%ymm0, 0xc0(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	leaq	0x60(%rsp), %rcx
                	vmovups	(%rax), %ymm14
                	vmovups	%ymm14, (%rcx)
-               	leaq	0xa0(%rsp), %rdi
+               	leaq	0x60(%rsp), %rdi
                	leaq	-0x80(%rbp), %rax
                	leaq	0x60(%rax), %rsi
                	movl	$0x20, %edx
@@ -4186,13 +2126,13 @@ Disassembly of section .text:
                	orq	%rax, %r12
                	movl	$0x4, %esi
                	leaq	-0x80(%rbp), %rdi
-               	movl	$0x8, %r8d
+               	movl	$0x2, %r8d
                	movq	%rsi, %rdx
                	movq	%rbx, %r9
                	movq	%rsi, %rcx
                	vzeroupper
                	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
+               	leaq	0x120(%rsp), %rcx
                	leaq	-0x80(%rbp), %rax
                	vmovups	(%rax), %xmm14
                	vmovups	%xmm14, (%rcx)
@@ -4201,315 +2141,43 @@ Disassembly of section .text:
                	vmovups	%ymm14, (%rcx)
                	movups	-0x60(%rbp), %xmm0
                	movups	-0x40(%rbp), %xmm1
+               	leaq	0x130(%rsp), %r8
                	testl	%ebx, %ebx
                	je	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm2
-               	movups	%xmm1, 0x460(%rsp)
-               	movups	%xmm0, 0x470(%rsp)
-               	leaq	0x480(%rsp), %rax
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%xmm14, (%rax)
-               	movups	%xmm2, 0x490(%rsp)
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movl	-0xe0(%rbp), %edi
-               	movl	%edi, 0x480(%rsp,%rax,4)
-               	incq	%rax
-               	cmpl	$0x4, %eax
-               	jge	<addr>
-               	movl	0x460(%rsp,%rax,4), %esi
-               	movl	%esi, -0xe0(%rbp)
-               	movl	0x470(%rsp,%rax,4), %esi
-               	testl	%esi, %esi
-               	jge	<addr>
-               	leaq	-0xe0(%rbp), %rsi
-               	movslq	0x490(%rsp,%rax,4), %rdi
-               	shlq	$0x3, %rdi
-               	addq	%rcx, %rdi
-               	movl	(%rdi), %r10d
-               	movl	%r10d, (%rsi)
-               	jmp	<addr>
-               	leaq	0x160(%rsp), %rax
-               	movups	0x480(%rsp), %xmm0
-               	movups	%xmm0, 0x160(%rsp)
-               	leaq	0x430(%rsp), %rcx
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	0x430(%rsp), %rdi
-               	leaq	-0x80(%rbp), %rax
-               	leaq	0x60(%rax), %rsi
-               	movl	$0x10, %edx
-               	vzeroupper
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movl	$0x1, %ecx
-               	testl	%ebx, %ebx
-               	cmoveq	%rcx, %rax
-               	orq	%rax, %r12
-               	leaq	-0x80(%rbp), %rdi
-               	movl	$0x8, %esi
-               	movl	$0x4, %edx
-               	movq	%rdx, %rcx
-               	movq	%rbx, %r9
-               	movq	%rsi, %r8
-               	vzeroupper
-               	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
-               	leaq	-0x80(%rbp), %rax
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	(%rsp), %rdx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rdx)
-               	vmovups	-0x60(%rbp), %ymm0
-               	vmovups	-0x40(%rbp), %ymm1
-               	testl	%ebx, %ebx
-               	je	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	leaq	0x1c0(%rsp), %rax
-               	vmovups	(%rdx), %ymm14
-               	vmovups	%ymm14, (%rax)
-               	vmovups	%ymm1, 0x1e0(%rsp)
-               	vmovups	%ymm0, 0x200(%rsp)
-               	leaq	0x220(%rsp), %rsi
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%ymm14, (%rsi)
-               	leaq	0x240(%rsp), %rsi
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rsi)
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movl	-0xd8(%rbp), %edi
-               	movl	%edi, 0x220(%rsp,%rax,4)
-               	incq	%rax
-               	cmpl	$0x8, %eax
-               	jge	<addr>
-               	movl	0x1e0(%rsp,%rax,4), %esi
-               	movl	%esi, -0xd8(%rbp)
-               	movl	0x200(%rsp,%rax,4), %esi
-               	testl	%esi, %esi
-               	jge	<addr>
-               	leaq	-0xd8(%rbp), %rsi
-               	movslq	0x240(%rsp,%rax,4), %rdi
-               	shlq	$0x3, %rdi
-               	addq	%rcx, %rdi
-               	movl	(%rdi), %r10d
-               	movl	%r10d, (%rsi)
-               	jmp	<addr>
-               	leaq	0x160(%rsp), %rax
-               	vmovups	0x220(%rsp), %ymm0
-               	vmovups	%ymm0, 0x160(%rsp)
-               	leaq	0x20(%rsp), %rcx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rcx)
-               	leaq	0x20(%rsp), %rdi
-               	leaq	-0x80(%rbp), %rax
-               	leaq	0x60(%rax), %rsi
-               	movl	$0x20, %edx
-               	vzeroupper
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movl	$0x1, %ecx
-               	testl	%ebx, %ebx
-               	cmoveq	%rcx, %rax
-               	orq	%rax, %r12
-               	leaq	-0x80(%rbp), %rdi
-               	movl	$0x2, %esi
-               	movl	$0x8, %edx
-               	movl	$0x4, %ecx
-               	movq	%rdx, %r8
-               	movq	%rbx, %r9
-               	vzeroupper
-               	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
-               	leaq	-0x80(%rbp), %rax
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	(%rsp), %rcx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rcx)
-               	movups	-0x60(%rbp), %xmm0
-               	movups	-0x40(%rbp), %xmm1
-               	testl	%ebx, %ebx
-               	je	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm2
-               	movups	%xmm1, 0x4a0(%rsp)
-               	movups	%xmm0, 0x4b0(%rsp)
-               	leaq	0x4c0(%rsp), %rax
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%xmm14, (%rax)
-               	movups	%xmm2, 0x4d0(%rsp)
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movq	-0xd0(%rbp), %rdi
-               	movq	%rdi, 0x4c0(%rsp,%rax,8)
-               	incq	%rax
-               	cmpl	$0x2, %eax
-               	jge	<addr>
-               	movq	0x4a0(%rsp,%rax,8), %rsi
-               	movq	%rsi, -0xd0(%rbp)
-               	movq	0x4b0(%rsp,%rax,8), %rsi
-               	testq	%rsi, %rsi
-               	jge	<addr>
-               	leaq	-0xd0(%rbp), %rsi
-               	movslq	0x4d0(%rsp,%rax,4), %rdi
-               	shlq	$0x3, %rdi
-               	addq	%rcx, %rdi
-               	movq	(%rdi), %r10
-               	movq	%r10, (%rsi)
-               	jmp	<addr>
-               	leaq	0x160(%rsp), %rax
-               	movups	0x4c0(%rsp), %xmm0
-               	movups	%xmm0, 0x160(%rsp)
-               	leaq	0x430(%rsp), %rcx
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	0x430(%rsp), %rdi
-               	leaq	-0x80(%rbp), %rax
-               	leaq	0x60(%rax), %rsi
-               	movl	$0x10, %edx
-               	vzeroupper
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movl	$0x1, %ecx
-               	testl	%ebx, %ebx
-               	cmoveq	%rcx, %rax
-               	orq	%rax, %r12
-               	leaq	-0x80(%rbp), %rdi
-               	movl	$0x4, %esi
-               	movl	$0x8, %edx
-               	movq	%rsi, %rcx
-               	movq	%rbx, %r9
-               	movq	%rdx, %r8
-               	vzeroupper
-               	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
-               	leaq	-0x80(%rbp), %rax
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	(%rsp), %rcx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rcx)
-               	vmovups	-0x60(%rbp), %ymm0
-               	vmovups	-0x40(%rbp), %ymm1
-               	testl	%ebx, %ebx
-               	je	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm2
-               	vmovups	%ymm1, 0x260(%rsp)
-               	vmovups	%ymm0, 0x180(%rsp)
+               	movups	0x120(%rsp), %xmm2
+               	movups	%xmm1, 0xe0(%rsp)
+               	movups	%xmm0, 0x80(%rsp)
                	leaq	0xc0(%rsp), %rax
                	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%ymm14, (%rax)
-               	movups	%xmm2, 0x4e0(%rsp)
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movq	-0xc8(%rbp), %rdi
-               	movq	%rdi, 0xc0(%rsp,%rax,8)
-               	incq	%rax
-               	cmpl	$0x4, %eax
-               	jge	<addr>
-               	movq	0x260(%rsp,%rax,8), %rsi
-               	movq	%rsi, -0xc8(%rbp)
-               	movq	0x180(%rsp,%rax,8), %rsi
-               	testq	%rsi, %rsi
-               	jge	<addr>
-               	leaq	-0xc8(%rbp), %rsi
-               	movslq	0x4e0(%rsp,%rax,4), %rdi
-               	shlq	$0x3, %rdi
-               	addq	%rcx, %rdi
-               	movq	(%rdi), %r10
-               	movq	%r10, (%rsi)
-               	jmp	<addr>
-               	leaq	0x160(%rsp), %rax
-               	vmovups	0xc0(%rsp), %ymm0
-               	vmovups	%ymm0, 0x160(%rsp)
-               	leaq	0x20(%rsp), %rcx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rcx)
-               	leaq	0x20(%rsp), %rdi
-               	leaq	-0x80(%rbp), %rax
-               	leaq	0x60(%rax), %rsi
-               	movl	$0x20, %edx
-               	vzeroupper
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movl	$0x1, %ecx
-               	testl	%ebx, %ebx
-               	cmoveq	%rcx, %rax
-               	orq	%rax, %r12
-               	leaq	-0x80(%rbp), %rdi
-               	movl	$0x4, %esi
-               	movl	$0x8, %r8d
-               	movq	%rsi, %rdx
-               	movq	%rbx, %r9
-               	movq	%rsi, %rcx
-               	vzeroupper
-               	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
-               	leaq	-0x80(%rbp), %rax
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	(%rsp), %rcx
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rcx)
-               	movups	-0x60(%rbp), %xmm0
-               	movups	-0x40(%rbp), %xmm1
-               	testl	%ebx, %ebx
-               	je	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm2
-               	movups	%xmm1, 0x4f0(%rsp)
-               	movups	%xmm0, 0x500(%rsp)
-               	leaq	0x510(%rsp), %rax
-               	vxorps	%ymm14, %ymm14, %ymm14
                	vmovups	%xmm14, (%rax)
-               	movups	%xmm2, 0x520(%rsp)
+               	movups	%xmm2, 0xa0(%rsp)
                	xorl	%eax, %eax
                	jmp	<addr>
-               	movl	-0xc0(%rbp), %edi
-               	movl	%edi, 0x510(%rsp,%rax,4)
+               	movl	-0x88(%rbp), %edi
+               	movl	%edi, 0xc0(%rsp,%rax,4)
                	incq	%rax
                	cmpl	$0x4, %eax
                	jge	<addr>
-               	movl	0x4f0(%rsp,%rax,4), %esi
-               	movl	%esi, -0xc0(%rbp)
-               	movl	0x500(%rsp,%rax,4), %esi
+               	movl	0xe0(%rsp,%rax,4), %esi
+               	movl	%esi, -0x88(%rbp)
+               	movl	0x80(%rsp,%rax,4), %esi
                	testl	%esi, %esi
                	jge	<addr>
-               	leaq	-0xc0(%rbp), %rsi
-               	movslq	0x520(%rsp,%rax,4), %rdi
-               	shlq	$0x3, %rdi
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
+               	shlq	%rdi
                	addq	%rcx, %rdi
                	movl	(%rdi), %r10d
                	movl	%r10d, (%rsi)
                	jmp	<addr>
-               	leaq	0x160(%rsp), %rax
-               	movups	0x510(%rsp), %xmm0
-               	movups	%xmm0, 0x160(%rsp)
-               	leaq	0x180(%rsp), %rcx
+               	leaq	0x80(%rsp), %rax
+               	movups	0xc0(%rsp), %xmm0
+               	movups	%xmm0, 0x80(%rsp)
                	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	0x180(%rsp), %rdi
+               	vmovups	%xmm14, (%r8)
+               	leaq	0x130(%rsp), %rdi
                	leaq	-0x80(%rbp), %rax
                	leaq	0x60(%rax), %rsi
                	movl	$0x10, %edx
@@ -4526,12 +2194,12 @@ Disassembly of section .text:
                	leaq	-0x80(%rbp), %rdi
                	movl	$0x8, %esi
                	movl	$0x4, %edx
+               	movl	$0x2, %r8d
                	movq	%rdx, %rcx
                	movq	%rbx, %r9
-               	movq	%rsi, %r8
                	vzeroupper
                	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
+               	leaq	0x120(%rsp), %rcx
                	leaq	-0x80(%rbp), %rax
                	vmovups	(%rax), %xmm14
                	vmovups	%xmm14, (%rcx)
@@ -4540,47 +2208,47 @@ Disassembly of section .text:
                	vmovups	%ymm14, (%rdx)
                	vmovups	-0x60(%rbp), %ymm0
                	vmovups	-0x40(%rbp), %ymm1
+               	leaq	0x20(%rsp), %r8
                	testl	%ebx, %ebx
                	je	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rcx
-               	leaq	0x280(%rsp), %rax
+               	leaq	0x100(%rsp), %rax
                	vmovups	(%rdx), %ymm14
                	vmovups	%ymm14, (%rax)
-               	vmovups	%ymm1, 0x2a0(%rsp)
-               	vmovups	%ymm0, 0x2c0(%rsp)
-               	leaq	0x2e0(%rsp), %rsi
+               	vmovups	%ymm1, 0xe0(%rsp)
+               	vmovups	%ymm0, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rsi
                	vxorps	%ymm14, %ymm14, %ymm14
                	vmovups	%ymm14, (%rsi)
-               	leaq	0x1a0(%rsp), %rsi
+               	leaq	0xa0(%rsp), %rsi
                	vmovups	(%rax), %ymm14
                	vmovups	%ymm14, (%rsi)
                	xorl	%eax, %eax
                	jmp	<addr>
-               	movl	-0xb8(%rbp), %edi
-               	movl	%edi, 0x2e0(%rsp,%rax,4)
+               	movl	-0x88(%rbp), %edi
+               	movl	%edi, 0xc0(%rsp,%rax,4)
                	incq	%rax
                	cmpl	$0x8, %eax
                	jge	<addr>
-               	movl	0x2a0(%rsp,%rax,4), %esi
-               	movl	%esi, -0xb8(%rbp)
-               	movl	0x2c0(%rsp,%rax,4), %esi
+               	movl	0xe0(%rsp,%rax,4), %esi
+               	movl	%esi, -0x88(%rbp)
+               	movl	0x80(%rsp,%rax,4), %esi
                	testl	%esi, %esi
                	jge	<addr>
-               	leaq	-0xb8(%rbp), %rsi
-               	movslq	0x1a0(%rsp,%rax,4), %rdi
-               	shlq	$0x3, %rdi
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
+               	shlq	%rdi
                	addq	%rcx, %rdi
                	movl	(%rdi), %r10d
                	movl	%r10d, (%rsi)
                	jmp	<addr>
-               	leaq	0x160(%rsp), %rax
-               	vmovups	0x2e0(%rsp), %ymm0
-               	vmovups	%ymm0, 0x160(%rsp)
-               	leaq	0xc0(%rsp), %rcx
+               	leaq	0x80(%rsp), %rax
+               	vmovups	0xc0(%rsp), %ymm0
+               	vmovups	%ymm0, 0x80(%rsp)
                	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rcx)
-               	leaq	0xc0(%rsp), %rdi
+               	vmovups	%ymm14, (%r8)
+               	leaq	0x20(%rsp), %rdi
                	leaq	-0x80(%rbp), %rax
                	leaq	0x60(%rax), %rsi
                	movl	$0x20, %edx
@@ -4598,11 +2266,11 @@ Disassembly of section .text:
                	movl	$0x2, %esi
                	movl	$0x8, %edx
                	movl	$0x4, %ecx
-               	movq	%rdx, %r8
+               	movq	%rsi, %r8
                	movq	%rbx, %r9
                	vzeroupper
                	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
+               	leaq	0x120(%rsp), %rcx
                	leaq	-0x80(%rbp), %rax
                	vmovups	(%rax), %xmm14
                	vmovups	%xmm14, (%rcx)
@@ -4611,43 +2279,43 @@ Disassembly of section .text:
                	vmovups	%ymm14, (%rcx)
                	movups	-0x60(%rbp), %xmm0
                	movups	-0x40(%rbp), %xmm1
+               	leaq	0x130(%rsp), %r8
                	testl	%ebx, %ebx
                	je	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm2
-               	movups	%xmm1, 0x530(%rsp)
-               	movups	%xmm0, 0x540(%rsp)
-               	leaq	0x550(%rsp), %rax
+               	movups	0x120(%rsp), %xmm2
+               	movups	%xmm1, 0xe0(%rsp)
+               	movups	%xmm0, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rax
                	vxorps	%ymm14, %ymm14, %ymm14
                	vmovups	%xmm14, (%rax)
-               	movups	%xmm2, 0x560(%rsp)
+               	movups	%xmm2, 0xa0(%rsp)
                	xorl	%eax, %eax
                	jmp	<addr>
-               	movq	-0xb0(%rbp), %rdi
-               	movq	%rdi, 0x550(%rsp,%rax,8)
+               	movq	-0x88(%rbp), %rdi
+               	movq	%rdi, 0xc0(%rsp,%rax,8)
                	incq	%rax
                	cmpl	$0x2, %eax
                	jge	<addr>
-               	movq	0x530(%rsp,%rax,8), %rsi
-               	movq	%rsi, -0xb0(%rbp)
-               	movq	0x540(%rsp,%rax,8), %rsi
+               	movq	0xe0(%rsp,%rax,8), %rsi
+               	movq	%rsi, -0x88(%rbp)
+               	movq	0x80(%rsp,%rax,8), %rsi
                	testq	%rsi, %rsi
                	jge	<addr>
-               	leaq	-0xb0(%rbp), %rsi
-               	movslq	0x560(%rsp,%rax,4), %rdi
-               	shlq	$0x3, %rdi
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
+               	shlq	%rdi
                	addq	%rcx, %rdi
                	movq	(%rdi), %r10
                	movq	%r10, (%rsi)
                	jmp	<addr>
-               	leaq	0x160(%rsp), %rax
-               	movups	0x550(%rsp), %xmm0
-               	movups	%xmm0, 0x160(%rsp)
-               	leaq	0x1a0(%rsp), %rcx
+               	leaq	0x80(%rsp), %rax
+               	movups	0xc0(%rsp), %xmm0
+               	movups	%xmm0, 0x80(%rsp)
                	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	0x1a0(%rsp), %rdi
+               	vmovups	%xmm14, (%r8)
+               	leaq	0x130(%rsp), %rdi
                	leaq	-0x80(%rbp), %rax
                	leaq	0x60(%rax), %rsi
                	movl	$0x10, %edx
@@ -4664,12 +2332,12 @@ Disassembly of section .text:
                	leaq	-0x80(%rbp), %rdi
                	movl	$0x4, %esi
                	movl	$0x8, %edx
+               	movl	$0x2, %r8d
                	movq	%rsi, %rcx
                	movq	%rbx, %r9
-               	movq	%rdx, %r8
                	vzeroupper
                	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
+               	leaq	0x120(%rsp), %rcx
                	leaq	-0x80(%rbp), %rax
                	vmovups	(%rax), %xmm14
                	vmovups	%xmm14, (%rcx)
@@ -4678,43 +2346,315 @@ Disassembly of section .text:
                	vmovups	%ymm14, (%rcx)
                	vmovups	-0x60(%rbp), %ymm0
                	vmovups	-0x40(%rbp), %ymm1
+               	leaq	0x20(%rsp), %r8
                	testl	%ebx, %ebx
                	je	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm2
-               	vmovups	%ymm1, 0x300(%rsp)
-               	vmovups	%ymm0, 0x320(%rsp)
-               	leaq	0x340(%rsp), %rax
+               	movups	0x120(%rsp), %xmm2
+               	vmovups	%ymm1, 0x80(%rsp)
+               	vmovups	%ymm0, 0xc0(%rsp)
+               	leaq	0xa0(%rsp), %rax
                	vxorps	%ymm14, %ymm14, %ymm14
                	vmovups	%ymm14, (%rax)
-               	movups	%xmm2, 0x570(%rsp)
+               	movups	%xmm2, 0xe0(%rsp)
                	xorl	%eax, %eax
                	jmp	<addr>
-               	movq	-0xa8(%rbp), %rdi
-               	movq	%rdi, 0x340(%rsp,%rax,8)
+               	movq	-0x88(%rbp), %rdi
+               	movq	%rdi, 0xa0(%rsp,%rax,8)
                	incq	%rax
                	cmpl	$0x4, %eax
                	jge	<addr>
-               	movq	0x300(%rsp,%rax,8), %rsi
-               	movq	%rsi, -0xa8(%rbp)
-               	movq	0x320(%rsp,%rax,8), %rsi
+               	movq	0x80(%rsp,%rax,8), %rsi
+               	movq	%rsi, -0x88(%rbp)
+               	movq	0xc0(%rsp,%rax,8), %rsi
                	testq	%rsi, %rsi
                	jge	<addr>
-               	leaq	-0xa8(%rbp), %rsi
-               	movslq	0x570(%rsp,%rax,4), %rdi
-               	shlq	$0x3, %rdi
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xe0(%rsp,%rax,4), %rdi
+               	shlq	%rdi
                	addq	%rcx, %rdi
                	movq	(%rdi), %r10
                	movq	%r10, (%rsi)
                	jmp	<addr>
-               	leaq	0x160(%rsp), %rax
-               	vmovups	0x340(%rsp), %ymm0
-               	vmovups	%ymm0, 0x160(%rsp)
-               	leaq	0xa0(%rsp), %rcx
+               	leaq	0xc0(%rsp), %rax
+               	vmovups	0xa0(%rsp), %ymm0
+               	vmovups	%ymm0, 0xc0(%rsp)
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%r8)
+               	leaq	0x20(%rsp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	leaq	0x60(%rax), %rsi
+               	movl	$0x20, %edx
+               	vzeroupper
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x1, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
+               	orq	%rax, %r12
+               	leaq	-0x80(%rbp), %rdi
+               	movl	$0x4, %esi
+               	movl	$0x2, %r8d
+               	movq	%rsi, %rdx
+               	movq	%rbx, %r9
+               	movq	%rsi, %rcx
+               	vzeroupper
+               	callq	<addr>
+               	leaq	0x120(%rsp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	(%rsp), %rcx
                	vmovups	(%rax), %ymm14
                	vmovups	%ymm14, (%rcx)
-               	leaq	0xa0(%rsp), %rdi
+               	movups	-0x60(%rbp), %xmm0
+               	movups	-0x40(%rbp), %xmm1
+               	leaq	0x140(%rsp), %r8
+               	testl	%ebx, %ebx
+               	je	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rcx
+               	movups	0x120(%rsp), %xmm2
+               	movups	%xmm1, 0xe0(%rsp)
+               	movups	%xmm0, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%xmm14, (%rax)
+               	movups	%xmm2, 0xa0(%rsp)
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movl	-0x88(%rbp), %edi
+               	movl	%edi, 0xc0(%rsp,%rax,4)
+               	incq	%rax
+               	cmpl	$0x4, %eax
+               	jge	<addr>
+               	movl	0xe0(%rsp,%rax,4), %esi
+               	movl	%esi, -0x88(%rbp)
+               	movl	0x80(%rsp,%rax,4), %esi
+               	testl	%esi, %esi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
+               	shlq	%rdi
+               	addq	%rcx, %rdi
+               	movl	(%rdi), %r10d
+               	movl	%r10d, (%rsi)
+               	jmp	<addr>
+               	leaq	0x80(%rsp), %rax
+               	movups	0xc0(%rsp), %xmm0
+               	movups	%xmm0, 0x80(%rsp)
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%r8)
+               	leaq	0x140(%rsp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	leaq	0x60(%rax), %rsi
+               	movl	$0x10, %edx
+               	vzeroupper
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x1, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
+               	orq	%rax, %r12
+               	leaq	-0x80(%rbp), %rdi
+               	movl	$0x8, %esi
+               	movl	$0x4, %edx
+               	movl	$0x2, %r8d
+               	movq	%rdx, %rcx
+               	movq	%rbx, %r9
+               	vzeroupper
+               	callq	<addr>
+               	leaq	0x120(%rsp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	(%rsp), %rdx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rdx)
+               	vmovups	-0x60(%rbp), %ymm0
+               	vmovups	-0x40(%rbp), %ymm1
+               	leaq	0x40(%rsp), %r8
+               	testl	%ebx, %ebx
+               	je	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rcx
+               	leaq	0x100(%rsp), %rax
+               	vmovups	(%rdx), %ymm14
+               	vmovups	%ymm14, (%rax)
+               	vmovups	%ymm1, 0xe0(%rsp)
+               	vmovups	%ymm0, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rsi
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	leaq	0xa0(%rsp), %rsi
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movl	-0x88(%rbp), %edi
+               	movl	%edi, 0xc0(%rsp,%rax,4)
+               	incq	%rax
+               	cmpl	$0x8, %eax
+               	jge	<addr>
+               	movl	0xe0(%rsp,%rax,4), %esi
+               	movl	%esi, -0x88(%rbp)
+               	movl	0x80(%rsp,%rax,4), %esi
+               	testl	%esi, %esi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
+               	shlq	%rdi
+               	addq	%rcx, %rdi
+               	movl	(%rdi), %r10d
+               	movl	%r10d, (%rsi)
+               	jmp	<addr>
+               	leaq	0x80(%rsp), %rax
+               	vmovups	0xc0(%rsp), %ymm0
+               	vmovups	%ymm0, 0x80(%rsp)
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%r8)
+               	leaq	0x40(%rsp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	leaq	0x60(%rax), %rsi
+               	movl	$0x20, %edx
+               	vzeroupper
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x1, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
+               	orq	%rax, %r12
+               	leaq	-0x80(%rbp), %rdi
+               	movl	$0x2, %esi
+               	movl	$0x8, %edx
+               	movl	$0x4, %ecx
+               	movq	%rsi, %r8
+               	movq	%rbx, %r9
+               	vzeroupper
+               	callq	<addr>
+               	leaq	0x120(%rsp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	movups	-0x60(%rbp), %xmm0
+               	movups	-0x40(%rbp), %xmm1
+               	leaq	0x150(%rsp), %r8
+               	testl	%ebx, %ebx
+               	je	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rcx
+               	movups	0x120(%rsp), %xmm2
+               	movups	%xmm1, 0xe0(%rsp)
+               	movups	%xmm0, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%xmm14, (%rax)
+               	movups	%xmm2, 0xa0(%rsp)
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movq	-0x88(%rbp), %rdi
+               	movq	%rdi, 0xc0(%rsp,%rax,8)
+               	incq	%rax
+               	cmpl	$0x2, %eax
+               	jge	<addr>
+               	movq	0xe0(%rsp,%rax,8), %rsi
+               	movq	%rsi, -0x88(%rbp)
+               	movq	0x80(%rsp,%rax,8), %rsi
+               	testq	%rsi, %rsi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
+               	shlq	%rdi
+               	addq	%rcx, %rdi
+               	movq	(%rdi), %r10
+               	movq	%r10, (%rsi)
+               	jmp	<addr>
+               	leaq	0x80(%rsp), %rax
+               	movups	0xc0(%rsp), %xmm0
+               	movups	%xmm0, 0x80(%rsp)
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%r8)
+               	leaq	0x150(%rsp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	leaq	0x60(%rax), %rsi
+               	movl	$0x10, %edx
+               	vzeroupper
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x1, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
+               	orq	%rax, %r12
+               	leaq	-0x80(%rbp), %rdi
+               	movl	$0x4, %esi
+               	movl	$0x8, %edx
+               	movl	$0x2, %r8d
+               	movq	%rsi, %rcx
+               	movq	%rbx, %r9
+               	vzeroupper
+               	callq	<addr>
+               	leaq	0x120(%rsp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	vmovups	-0x60(%rbp), %ymm0
+               	vmovups	-0x40(%rbp), %ymm1
+               	leaq	0x60(%rsp), %r8
+               	testl	%ebx, %ebx
+               	je	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rcx
+               	movups	0x120(%rsp), %xmm2
+               	vmovups	%ymm1, 0x80(%rsp)
+               	vmovups	%ymm0, 0xc0(%rsp)
+               	leaq	0xa0(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rax)
+               	movups	%xmm2, 0xe0(%rsp)
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movq	-0x88(%rbp), %rdi
+               	movq	%rdi, 0xa0(%rsp,%rax,8)
+               	incq	%rax
+               	cmpl	$0x4, %eax
+               	jge	<addr>
+               	movq	0x80(%rsp,%rax,8), %rsi
+               	movq	%rsi, -0x88(%rbp)
+               	movq	0xc0(%rsp,%rax,8), %rsi
+               	testq	%rsi, %rsi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xe0(%rsp,%rax,4), %rdi
+               	shlq	%rdi
+               	addq	%rcx, %rdi
+               	movq	(%rdi), %r10
+               	movq	%r10, (%rsi)
+               	jmp	<addr>
+               	leaq	0xc0(%rsp), %rax
+               	vmovups	0xa0(%rsp), %ymm0
+               	vmovups	%ymm0, 0xc0(%rsp)
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%r8)
+               	leaq	0x60(%rsp), %rdi
                	leaq	-0x80(%rbp), %rax
                	leaq	0x60(%rax), %rsi
                	movl	$0x20, %edx
@@ -4732,11 +2672,11 @@ Disassembly of section .text:
                	leaq	-0x80(%rbp), %rdi
                	movl	$0x2, %esi
                	movl	$0x4, %edx
-               	movq	%rcx, %r8
+               	movq	%rsi, %r8
                	movq	%rbx, %r9
                	vzeroupper
                	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
+               	leaq	0x120(%rsp), %rcx
                	leaq	-0x80(%rbp), %rax
                	vmovups	(%rax), %xmm14
                	vmovups	%xmm14, (%rcx)
@@ -4745,43 +2685,43 @@ Disassembly of section .text:
                	vmovups	%ymm14, (%rcx)
                	movups	-0x60(%rbp), %xmm0
                	movups	-0x40(%rbp), %xmm1
+               	leaq	0x130(%rsp), %r8
                	testl	%ebx, %ebx
                	je	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm2
-               	movups	%xmm1, 0x580(%rsp)
-               	movups	%xmm0, 0x590(%rsp)
-               	leaq	0x5a0(%rsp), %rax
+               	movups	0x120(%rsp), %xmm2
+               	movups	%xmm1, 0xe0(%rsp)
+               	movups	%xmm0, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rax
                	vxorps	%ymm14, %ymm14, %ymm14
                	vmovups	%xmm14, (%rax)
-               	movups	%xmm2, 0x5b0(%rsp)
+               	movups	%xmm2, 0xa0(%rsp)
                	xorl	%eax, %eax
                	jmp	<addr>
-               	movl	-0xa0(%rbp), %edi
-               	movl	%edi, 0x5a0(%rsp,%rax,4)
+               	movl	-0x88(%rbp), %edi
+               	movl	%edi, 0xc0(%rsp,%rax,4)
                	incq	%rax
                	cmpl	$0x2, %eax
                	jge	<addr>
-               	movl	0x580(%rsp,%rax,4), %esi
-               	movl	%esi, -0xa0(%rbp)
-               	movl	0x590(%rsp,%rax,4), %esi
+               	movl	0xe0(%rsp,%rax,4), %esi
+               	movl	%esi, -0x88(%rbp)
+               	movl	0x80(%rsp,%rax,4), %esi
                	testl	%esi, %esi
                	jge	<addr>
-               	leaq	-0xa0(%rbp), %rsi
-               	movq	0x5b0(%rsp,%rax,8), %rdi
-               	shlq	$0x3, %rdi
+               	leaq	-0x88(%rbp), %rsi
+               	movq	0xa0(%rsp,%rax,8), %rdi
+               	shlq	%rdi
                	addq	%rcx, %rdi
                	movl	(%rdi), %r10d
                	movl	%r10d, (%rsi)
                	jmp	<addr>
-               	leaq	0x160(%rsp), %rax
-               	movups	0x5a0(%rsp), %xmm0
-               	movups	%xmm0, 0x160(%rsp)
-               	leaq	0x430(%rsp), %rcx
+               	leaq	0x80(%rsp), %rax
+               	movups	0xc0(%rsp), %xmm0
+               	movups	%xmm0, 0x80(%rsp)
                	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	0x430(%rsp), %rdi
+               	vmovups	%xmm14, (%r8)
+               	leaq	0x130(%rsp), %rdi
                	leaq	-0x80(%rbp), %rax
                	leaq	0x60(%rax), %rsi
                	movl	$0x10, %edx
@@ -4798,12 +2738,12 @@ Disassembly of section .text:
                	leaq	-0x80(%rbp), %rdi
                	movl	$0x4, %esi
                	movl	$0x8, %ecx
+               	movl	$0x2, %r8d
                	movq	%rsi, %rdx
                	movq	%rbx, %r9
-               	movq	%rcx, %r8
                	vzeroupper
                	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
+               	leaq	0x120(%rsp), %rcx
                	leaq	-0x80(%rbp), %rax
                	vmovups	(%rax), %xmm14
                	vmovups	%xmm14, (%rcx)
@@ -4812,47 +2752,47 @@ Disassembly of section .text:
                	vmovups	%ymm14, (%rdx)
                	movups	-0x60(%rbp), %xmm0
                	movups	-0x40(%rbp), %xmm1
+               	leaq	0x130(%rsp), %r8
                	testl	%ebx, %ebx
                	je	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rcx
-               	leaq	0x360(%rsp), %rax
+               	leaq	0xc0(%rsp), %rax
                	vmovups	(%rdx), %ymm14
                	vmovups	%ymm14, (%rax)
-               	movups	%xmm1, 0x5c0(%rsp)
-               	movups	%xmm0, 0x5d0(%rsp)
-               	leaq	0x5e0(%rsp), %rsi
+               	movups	%xmm1, 0x100(%rsp)
+               	movups	%xmm0, 0xe0(%rsp)
+               	leaq	0x80(%rsp), %rsi
                	vxorps	%ymm14, %ymm14, %ymm14
                	vmovups	%xmm14, (%rsi)
-               	leaq	0x380(%rsp), %rsi
+               	leaq	0xa0(%rsp), %rsi
                	vmovups	(%rax), %ymm14
                	vmovups	%ymm14, (%rsi)
                	xorl	%eax, %eax
                	jmp	<addr>
-               	movl	-0x98(%rbp), %edi
-               	movl	%edi, 0x5e0(%rsp,%rax,4)
+               	movl	-0x88(%rbp), %edi
+               	movl	%edi, 0x80(%rsp,%rax,4)
                	incq	%rax
                	cmpl	$0x4, %eax
                	jge	<addr>
-               	movl	0x5c0(%rsp,%rax,4), %esi
-               	movl	%esi, -0x98(%rbp)
-               	movl	0x5d0(%rsp,%rax,4), %esi
+               	movl	0x100(%rsp,%rax,4), %esi
+               	movl	%esi, -0x88(%rbp)
+               	movl	0xe0(%rsp,%rax,4), %esi
                	testl	%esi, %esi
                	jge	<addr>
-               	leaq	-0x98(%rbp), %rsi
-               	movq	0x380(%rsp,%rax,8), %rdi
-               	shlq	$0x3, %rdi
+               	leaq	-0x88(%rbp), %rsi
+               	movq	0xa0(%rsp,%rax,8), %rdi
+               	shlq	%rdi
                	addq	%rcx, %rdi
                	movl	(%rdi), %r10d
                	movl	%r10d, (%rsi)
                	jmp	<addr>
-               	leaq	0x160(%rsp), %rax
-               	movups	0x5e0(%rsp), %xmm0
-               	movups	%xmm0, 0x160(%rsp)
-               	leaq	0x430(%rsp), %rcx
+               	leaq	0xc0(%rsp), %rax
+               	movups	0x80(%rsp), %xmm0
+               	movups	%xmm0, 0xc0(%rsp)
                	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	0x430(%rsp), %rdi
+               	vmovups	%xmm14, (%r8)
+               	leaq	0x130(%rsp), %rdi
                	leaq	-0x80(%rbp), %rax
                	leaq	0x60(%rax), %rsi
                	movl	$0x10, %edx
@@ -4871,10 +2811,10 @@ Disassembly of section .text:
                	movl	$0x8, %edx
                	movq	%rdx, %rcx
                	movq	%rbx, %r9
-               	movq	%rdx, %r8
+               	movq	%rsi, %r8
                	vzeroupper
                	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
+               	leaq	0x120(%rsp), %rcx
                	leaq	-0x80(%rbp), %rax
                	vmovups	(%rax), %xmm14
                	vmovups	%xmm14, (%rcx)
@@ -4883,43 +2823,43 @@ Disassembly of section .text:
                	vmovups	%ymm14, (%rcx)
                	movups	-0x60(%rbp), %xmm0
                	movups	-0x40(%rbp), %xmm1
+               	leaq	0x130(%rsp), %r8
                	testl	%ebx, %ebx
                	je	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm2
-               	movups	%xmm1, 0x5f0(%rsp)
-               	movups	%xmm0, 0x600(%rsp)
-               	leaq	0x610(%rsp), %rax
+               	movups	0x120(%rsp), %xmm2
+               	movups	%xmm1, 0xe0(%rsp)
+               	movups	%xmm0, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rax
                	vxorps	%ymm14, %ymm14, %ymm14
                	vmovups	%xmm14, (%rax)
-               	movups	%xmm2, 0x620(%rsp)
+               	movups	%xmm2, 0xa0(%rsp)
                	xorl	%eax, %eax
                	jmp	<addr>
-               	movq	-0x90(%rbp), %rdi
-               	movq	%rdi, 0x610(%rsp,%rax,8)
+               	movq	-0x88(%rbp), %rdi
+               	movq	%rdi, 0xc0(%rsp,%rax,8)
                	incq	%rax
                	cmpl	$0x2, %eax
                	jge	<addr>
-               	movq	0x5f0(%rsp,%rax,8), %rsi
-               	movq	%rsi, -0x90(%rbp)
-               	movq	0x600(%rsp,%rax,8), %rsi
+               	movq	0xe0(%rsp,%rax,8), %rsi
+               	movq	%rsi, -0x88(%rbp)
+               	movq	0x80(%rsp,%rax,8), %rsi
                	testq	%rsi, %rsi
                	jge	<addr>
-               	leaq	-0x90(%rbp), %rsi
-               	movq	0x620(%rsp,%rax,8), %rdi
-               	shlq	$0x3, %rdi
+               	leaq	-0x88(%rbp), %rsi
+               	movq	0xa0(%rsp,%rax,8), %rdi
+               	shlq	%rdi
                	addq	%rcx, %rdi
                	movq	(%rdi), %r10
                	movq	%r10, (%rsi)
                	jmp	<addr>
-               	leaq	0x160(%rsp), %rax
-               	movups	0x610(%rsp), %xmm0
-               	movups	%xmm0, 0x160(%rsp)
-               	leaq	0x430(%rsp), %rcx
+               	leaq	0x80(%rsp), %rax
+               	movups	0xc0(%rsp), %xmm0
+               	movups	%xmm0, 0x80(%rsp)
                	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	leaq	0x430(%rsp), %rdi
+               	vmovups	%xmm14, (%r8)
+               	leaq	0x130(%rsp), %rdi
                	leaq	-0x80(%rbp), %rax
                	leaq	0x60(%rax), %rsi
                	movl	$0x10, %edx
@@ -4936,12 +2876,12 @@ Disassembly of section .text:
                	leaq	-0x80(%rbp), %rdi
                	movl	$0x4, %esi
                	movl	$0x8, %edx
+               	movl	$0x2, %r8d
                	movq	%rdx, %rcx
                	movq	%rbx, %r9
-               	movq	%rdx, %r8
                	vzeroupper
                	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
+               	leaq	0x120(%rsp), %rcx
                	leaq	-0x80(%rbp), %rax
                	vmovups	(%rax), %xmm14
                	vmovups	%xmm14, (%rcx)
@@ -4950,43 +2890,2103 @@ Disassembly of section .text:
                	vmovups	%ymm14, (%rdx)
                	vmovups	-0x60(%rbp), %ymm0
                	vmovups	-0x40(%rbp), %ymm1
+               	leaq	0x20(%rsp), %r8
                	testl	%ebx, %ebx
                	je	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rcx
-               	leaq	0x3a0(%rsp), %rax
+               	leaq	0x100(%rsp), %rax
                	vmovups	(%rdx), %ymm14
                	vmovups	%ymm14, (%rax)
-               	vmovups	%ymm1, 0x3c0(%rsp)
-               	vmovups	%ymm0, 0x3e0(%rsp)
-               	leaq	0x400(%rsp), %rsi
+               	vmovups	%ymm1, 0xe0(%rsp)
+               	vmovups	%ymm0, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rsi
                	vxorps	%ymm14, %ymm14, %ymm14
                	vmovups	%ymm14, (%rsi)
-               	leaq	0xe0(%rsp), %rsi
+               	leaq	0xa0(%rsp), %rsi
                	vmovups	(%rax), %ymm14
                	vmovups	%ymm14, (%rsi)
                	xorl	%eax, %eax
                	jmp	<addr>
                	movq	-0x88(%rbp), %rdi
-               	movq	%rdi, 0x400(%rsp,%rax,8)
+               	movq	%rdi, 0xc0(%rsp,%rax,8)
                	incq	%rax
                	cmpl	$0x4, %eax
                	jge	<addr>
-               	movq	0x3c0(%rsp,%rax,8), %rsi
+               	movq	0xe0(%rsp,%rax,8), %rsi
                	movq	%rsi, -0x88(%rbp)
-               	movq	0x3e0(%rsp,%rax,8), %rsi
+               	movq	0x80(%rsp,%rax,8), %rsi
                	testq	%rsi, %rsi
                	jge	<addr>
                	leaq	-0x88(%rbp), %rsi
-               	movq	0xe0(%rsp,%rax,8), %rdi
+               	movq	0xa0(%rsp,%rax,8), %rdi
+               	shlq	%rdi
+               	addq	%rcx, %rdi
+               	movq	(%rdi), %r10
+               	movq	%r10, (%rsi)
+               	jmp	<addr>
+               	leaq	0x80(%rsp), %rax
+               	vmovups	0xc0(%rsp), %ymm0
+               	vmovups	%ymm0, 0x80(%rsp)
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%r8)
+               	leaq	0x20(%rsp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	leaq	0x60(%rax), %rsi
+               	movl	$0x20, %edx
+               	vzeroupper
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x2, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
+               	orq	%rax, %r12
+               	leaq	-0x80(%rbp), %rdi
+               	movl	$0x2, %esi
+               	movl	$0x4, %edx
+               	movl	$0x8, %ecx
+               	movq	%rsi, %r8
+               	movq	%rbx, %r9
+               	vzeroupper
+               	callq	<addr>
+               	leaq	0x120(%rsp), %r9
+               	leaq	-0x80(%rbp), %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%r9)
+               	leaq	(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	movups	-0x60(%rbp), %xmm0
+               	movups	-0x40(%rbp), %xmm1
+               	testl	%ebx, %ebx
+               	je	<addr>
+               	leaq	0xc0(%rsp), %rax
+               	movups	%xmm1, 0xc0(%rsp)
+               	leaq	<rip>, %rcx # <addr>
+               	leaq	0x200(%rcx), %rdi
+               	leaq	0xa0(%rsp), %rcx
+               	movups	%xmm0, 0xa0(%rsp)
+               	movl	$0x2, %esi
+               	movq	%rax, %r10
+               	movups	(%r10), %xmm0
+               	movq	%r9, %r10
+               	movups	(%r10), %xmm1
+               	movq	%rcx, %r10
+               	movups	(%r10), %xmm2
+               	vzeroupper
+               	callq	<addr>
+               	movups	%xmm0, 0xc0(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	leaq	0x140(%rsp), %rcx
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	0x140(%rsp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	leaq	0x60(%rax), %rsi
+               	movl	$0x10, %edx
+               	vzeroupper
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x2, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
+               	orq	%rax, %r12
+               	leaq	-0x80(%rbp), %rdi
+               	movl	$0x4, %esi
+               	movl	$0x8, %ecx
+               	movl	$0x2, %r8d
+               	movq	%rsi, %rdx
+               	movq	%rbx, %r9
+               	vzeroupper
+               	callq	<addr>
+               	leaq	0x120(%rsp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	(%rsp), %r9
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%r9)
+               	movups	-0x60(%rbp), %xmm0
+               	movups	-0x40(%rbp), %xmm1
+               	testl	%ebx, %ebx
+               	je	<addr>
+               	leaq	0xc0(%rsp), %rax
+               	movups	%xmm1, 0xc0(%rsp)
+               	leaq	<rip>, %rcx # <addr>
+               	leaq	0x200(%rcx), %rdi
+               	leaq	0xa0(%rsp), %rcx
+               	movups	%xmm0, 0xa0(%rsp)
+               	movl	$0x2, %esi
+               	movq	%rax, %r10
+               	movups	(%r10), %xmm0
+               	movq	%r9, %r10
+               	vmovups	(%r10), %ymm1
+               	movq	%rcx, %r10
+               	movups	(%r10), %xmm2
+               	callq	<addr>
+               	movups	%xmm0, 0xc0(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	leaq	0x140(%rsp), %rcx
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	0x140(%rsp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	leaq	0x60(%rax), %rsi
+               	movl	$0x10, %edx
+               	vzeroupper
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x2, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
+               	orq	%rax, %r12
+               	leaq	-0x80(%rbp), %rdi
+               	movl	$0x2, %esi
+               	movl	$0x8, %edx
+               	movq	%rdx, %rcx
+               	movq	%rbx, %r9
+               	movq	%rsi, %r8
+               	vzeroupper
+               	callq	<addr>
+               	leaq	0x120(%rsp), %r9
+               	leaq	-0x80(%rbp), %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%r9)
+               	leaq	(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	movups	-0x60(%rbp), %xmm0
+               	movups	-0x40(%rbp), %xmm1
+               	testl	%ebx, %ebx
+               	je	<addr>
+               	leaq	0xc0(%rsp), %rax
+               	movups	%xmm1, 0xc0(%rsp)
+               	leaq	<rip>, %rcx # <addr>
+               	leaq	0x200(%rcx), %rdi
+               	leaq	0xa0(%rsp), %rcx
+               	movups	%xmm0, 0xa0(%rsp)
+               	movl	$0x2, %esi
+               	movq	%rax, %r10
+               	movups	(%r10), %xmm0
+               	movq	%r9, %r10
+               	movups	(%r10), %xmm1
+               	movq	%rcx, %r10
+               	movups	(%r10), %xmm2
+               	vzeroupper
+               	callq	<addr>
+               	movups	%xmm0, 0xc0(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	leaq	0x150(%rsp), %rcx
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	0x150(%rsp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	leaq	0x60(%rax), %rsi
+               	movl	$0x10, %edx
+               	vzeroupper
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x2, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
+               	orq	%rax, %r12
+               	leaq	-0x80(%rbp), %rdi
+               	movl	$0x4, %esi
+               	movl	$0x8, %edx
+               	movl	$0x2, %r8d
+               	movq	%rdx, %rcx
+               	movq	%rbx, %r9
+               	vzeroupper
+               	callq	<addr>
+               	leaq	0x120(%rsp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	(%rsp), %r9
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%r9)
+               	vmovups	-0x60(%rbp), %ymm0
+               	vmovups	-0x40(%rbp), %ymm1
+               	testl	%ebx, %ebx
+               	je	<addr>
+               	leaq	0xc0(%rsp), %rax
+               	vmovups	%ymm1, 0xc0(%rsp)
+               	leaq	<rip>, %rcx # <addr>
+               	leaq	0x200(%rcx), %rdi
+               	leaq	0xa0(%rsp), %rcx
+               	vmovups	%ymm0, 0xa0(%rsp)
+               	movl	$0x2, %esi
+               	movq	%rax, %r10
+               	vmovups	(%r10), %ymm0
+               	movq	%r9, %r10
+               	vmovups	(%r10), %ymm1
+               	movq	%rcx, %r10
+               	vmovups	(%r10), %ymm2
+               	callq	<addr>
+               	vmovups	%ymm0, 0xc0(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	leaq	0x60(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	leaq	0x60(%rsp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	leaq	0x60(%rax), %rsi
+               	movl	$0x20, %edx
+               	vzeroupper
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x2, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
+               	orq	%rax, %r12
+               	movl	$0x4, %esi
+               	leaq	-0x80(%rbp), %rdi
+               	movq	%rsi, %rdx
+               	movq	%rbx, %r9
+               	movq	%rsi, %r8
+               	movq	%rsi, %rcx
+               	vzeroupper
+               	callq	<addr>
+               	leaq	0x120(%rsp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	movups	-0x60(%rbp), %xmm0
+               	movups	-0x40(%rbp), %xmm1
+               	leaq	0x130(%rsp), %r8
+               	testl	%ebx, %ebx
+               	je	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rcx
+               	movups	0x120(%rsp), %xmm2
+               	movups	%xmm1, 0xe0(%rsp)
+               	movups	%xmm0, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%xmm14, (%rax)
+               	movups	%xmm2, 0xa0(%rsp)
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movl	-0x88(%rbp), %edi
+               	movl	%edi, 0xc0(%rsp,%rax,4)
+               	incq	%rax
+               	cmpl	$0x4, %eax
+               	jge	<addr>
+               	movl	0xe0(%rsp,%rax,4), %esi
+               	movl	%esi, -0x88(%rbp)
+               	movl	0x80(%rsp,%rax,4), %esi
+               	testl	%esi, %esi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
+               	shlq	$0x2, %rdi
+               	addq	%rcx, %rdi
+               	movl	(%rdi), %r10d
+               	movl	%r10d, (%rsi)
+               	jmp	<addr>
+               	leaq	0x80(%rsp), %rax
+               	movups	0xc0(%rsp), %xmm0
+               	movups	%xmm0, 0x80(%rsp)
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%r8)
+               	leaq	0x130(%rsp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	leaq	0x60(%rax), %rsi
+               	movl	$0x10, %edx
+               	vzeroupper
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x1, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
+               	orq	%rax, %r12
+               	leaq	-0x80(%rbp), %rdi
+               	movl	$0x8, %esi
+               	movl	$0x4, %edx
+               	movq	%rdx, %rcx
+               	movq	%rbx, %r9
+               	movq	%rdx, %r8
+               	vzeroupper
+               	callq	<addr>
+               	leaq	0x120(%rsp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	(%rsp), %rdx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rdx)
+               	vmovups	-0x60(%rbp), %ymm0
+               	vmovups	-0x40(%rbp), %ymm1
+               	leaq	0x20(%rsp), %r8
+               	testl	%ebx, %ebx
+               	je	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rcx
+               	leaq	0x100(%rsp), %rax
+               	vmovups	(%rdx), %ymm14
+               	vmovups	%ymm14, (%rax)
+               	vmovups	%ymm1, 0xe0(%rsp)
+               	vmovups	%ymm0, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rsi
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	leaq	0xa0(%rsp), %rsi
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movl	-0x88(%rbp), %edi
+               	movl	%edi, 0xc0(%rsp,%rax,4)
+               	incq	%rax
+               	cmpl	$0x8, %eax
+               	jge	<addr>
+               	movl	0xe0(%rsp,%rax,4), %esi
+               	movl	%esi, -0x88(%rbp)
+               	movl	0x80(%rsp,%rax,4), %esi
+               	testl	%esi, %esi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
+               	shlq	$0x2, %rdi
+               	addq	%rcx, %rdi
+               	movl	(%rdi), %r10d
+               	movl	%r10d, (%rsi)
+               	jmp	<addr>
+               	leaq	0x80(%rsp), %rax
+               	vmovups	0xc0(%rsp), %ymm0
+               	vmovups	%ymm0, 0x80(%rsp)
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%r8)
+               	leaq	0x20(%rsp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	leaq	0x60(%rax), %rsi
+               	movl	$0x20, %edx
+               	vzeroupper
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x1, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
+               	orq	%rax, %r12
+               	leaq	-0x80(%rbp), %rdi
+               	movl	$0x2, %esi
+               	movl	$0x8, %edx
+               	movl	$0x4, %ecx
+               	movq	%rcx, %r8
+               	movq	%rbx, %r9
+               	vzeroupper
+               	callq	<addr>
+               	leaq	0x120(%rsp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	movups	-0x60(%rbp), %xmm0
+               	movups	-0x40(%rbp), %xmm1
+               	leaq	0x130(%rsp), %r8
+               	testl	%ebx, %ebx
+               	je	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rcx
+               	movups	0x120(%rsp), %xmm2
+               	movups	%xmm1, 0xe0(%rsp)
+               	movups	%xmm0, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%xmm14, (%rax)
+               	movups	%xmm2, 0xa0(%rsp)
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movq	-0x88(%rbp), %rdi
+               	movq	%rdi, 0xc0(%rsp,%rax,8)
+               	incq	%rax
+               	cmpl	$0x2, %eax
+               	jge	<addr>
+               	movq	0xe0(%rsp,%rax,8), %rsi
+               	movq	%rsi, -0x88(%rbp)
+               	movq	0x80(%rsp,%rax,8), %rsi
+               	testq	%rsi, %rsi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
+               	shlq	$0x2, %rdi
+               	addq	%rcx, %rdi
+               	movq	(%rdi), %r10
+               	movq	%r10, (%rsi)
+               	jmp	<addr>
+               	leaq	0x80(%rsp), %rax
+               	movups	0xc0(%rsp), %xmm0
+               	movups	%xmm0, 0x80(%rsp)
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%r8)
+               	leaq	0x130(%rsp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	leaq	0x60(%rax), %rsi
+               	movl	$0x10, %edx
+               	vzeroupper
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x1, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
+               	orq	%rax, %r12
+               	leaq	-0x80(%rbp), %rdi
+               	movl	$0x4, %esi
+               	movl	$0x8, %edx
+               	movq	%rsi, %rcx
+               	movq	%rbx, %r9
+               	movq	%rsi, %r8
+               	vzeroupper
+               	callq	<addr>
+               	leaq	0x120(%rsp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	vmovups	-0x60(%rbp), %ymm0
+               	vmovups	-0x40(%rbp), %ymm1
+               	leaq	0x20(%rsp), %r8
+               	testl	%ebx, %ebx
+               	je	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rcx
+               	movups	0x120(%rsp), %xmm2
+               	vmovups	%ymm1, 0x80(%rsp)
+               	vmovups	%ymm0, 0xc0(%rsp)
+               	leaq	0xa0(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rax)
+               	movups	%xmm2, 0xe0(%rsp)
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movq	-0x88(%rbp), %rdi
+               	movq	%rdi, 0xa0(%rsp,%rax,8)
+               	incq	%rax
+               	cmpl	$0x4, %eax
+               	jge	<addr>
+               	movq	0x80(%rsp,%rax,8), %rsi
+               	movq	%rsi, -0x88(%rbp)
+               	movq	0xc0(%rsp,%rax,8), %rsi
+               	testq	%rsi, %rsi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xe0(%rsp,%rax,4), %rdi
+               	shlq	$0x2, %rdi
+               	addq	%rcx, %rdi
+               	movq	(%rdi), %r10
+               	movq	%r10, (%rsi)
+               	jmp	<addr>
+               	leaq	0xc0(%rsp), %rax
+               	vmovups	0xa0(%rsp), %ymm0
+               	vmovups	%ymm0, 0xc0(%rsp)
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%r8)
+               	leaq	0x20(%rsp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	leaq	0x60(%rax), %rsi
+               	movl	$0x20, %edx
+               	vzeroupper
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x1, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
+               	orq	%rax, %r12
+               	leaq	-0x80(%rbp), %rdi
+               	movl	$0x4, %esi
+               	movq	%rsi, %rdx
+               	movq	%rbx, %r9
+               	movq	%rsi, %r8
+               	movq	%rsi, %rcx
+               	vzeroupper
+               	callq	<addr>
+               	leaq	0x120(%rsp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	movups	-0x60(%rbp), %xmm0
+               	movups	-0x40(%rbp), %xmm1
+               	leaq	0x140(%rsp), %r8
+               	testl	%ebx, %ebx
+               	je	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rcx
+               	movups	0x120(%rsp), %xmm2
+               	movups	%xmm1, 0xe0(%rsp)
+               	movups	%xmm0, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%xmm14, (%rax)
+               	movups	%xmm2, 0xa0(%rsp)
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movl	-0x88(%rbp), %edi
+               	movl	%edi, 0xc0(%rsp,%rax,4)
+               	incq	%rax
+               	cmpl	$0x4, %eax
+               	jge	<addr>
+               	movl	0xe0(%rsp,%rax,4), %esi
+               	movl	%esi, -0x88(%rbp)
+               	movl	0x80(%rsp,%rax,4), %esi
+               	testl	%esi, %esi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
+               	shlq	$0x2, %rdi
+               	addq	%rcx, %rdi
+               	movl	(%rdi), %r10d
+               	movl	%r10d, (%rsi)
+               	jmp	<addr>
+               	leaq	0x80(%rsp), %rax
+               	movups	0xc0(%rsp), %xmm0
+               	movups	%xmm0, 0x80(%rsp)
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%r8)
+               	leaq	0x140(%rsp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	leaq	0x60(%rax), %rsi
+               	movl	$0x10, %edx
+               	vzeroupper
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x1, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
+               	orq	%rax, %r12
+               	leaq	-0x80(%rbp), %rdi
+               	movl	$0x8, %esi
+               	movl	$0x4, %edx
+               	movq	%rdx, %rcx
+               	movq	%rbx, %r9
+               	movq	%rdx, %r8
+               	vzeroupper
+               	callq	<addr>
+               	leaq	0x120(%rsp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	(%rsp), %rdx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rdx)
+               	vmovups	-0x60(%rbp), %ymm0
+               	vmovups	-0x40(%rbp), %ymm1
+               	leaq	0x40(%rsp), %r8
+               	testl	%ebx, %ebx
+               	je	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rcx
+               	leaq	0x100(%rsp), %rax
+               	vmovups	(%rdx), %ymm14
+               	vmovups	%ymm14, (%rax)
+               	vmovups	%ymm1, 0xe0(%rsp)
+               	vmovups	%ymm0, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rsi
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	leaq	0xa0(%rsp), %rsi
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movl	-0x88(%rbp), %edi
+               	movl	%edi, 0xc0(%rsp,%rax,4)
+               	incq	%rax
+               	cmpl	$0x8, %eax
+               	jge	<addr>
+               	movl	0xe0(%rsp,%rax,4), %esi
+               	movl	%esi, -0x88(%rbp)
+               	movl	0x80(%rsp,%rax,4), %esi
+               	testl	%esi, %esi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
+               	shlq	$0x2, %rdi
+               	addq	%rcx, %rdi
+               	movl	(%rdi), %r10d
+               	movl	%r10d, (%rsi)
+               	jmp	<addr>
+               	leaq	0x80(%rsp), %rax
+               	vmovups	0xc0(%rsp), %ymm0
+               	vmovups	%ymm0, 0x80(%rsp)
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%r8)
+               	leaq	0x40(%rsp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	leaq	0x60(%rax), %rsi
+               	movl	$0x20, %edx
+               	vzeroupper
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x1, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
+               	orq	%rax, %r12
+               	leaq	-0x80(%rbp), %rdi
+               	movl	$0x2, %esi
+               	movl	$0x8, %edx
+               	movl	$0x4, %ecx
+               	movq	%rcx, %r8
+               	movq	%rbx, %r9
+               	vzeroupper
+               	callq	<addr>
+               	leaq	0x120(%rsp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	movups	-0x60(%rbp), %xmm0
+               	movups	-0x40(%rbp), %xmm1
+               	leaq	0x150(%rsp), %r8
+               	testl	%ebx, %ebx
+               	je	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rcx
+               	movups	0x120(%rsp), %xmm2
+               	movups	%xmm1, 0xe0(%rsp)
+               	movups	%xmm0, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%xmm14, (%rax)
+               	movups	%xmm2, 0xa0(%rsp)
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movq	-0x88(%rbp), %rdi
+               	movq	%rdi, 0xc0(%rsp,%rax,8)
+               	incq	%rax
+               	cmpl	$0x2, %eax
+               	jge	<addr>
+               	movq	0xe0(%rsp,%rax,8), %rsi
+               	movq	%rsi, -0x88(%rbp)
+               	movq	0x80(%rsp,%rax,8), %rsi
+               	testq	%rsi, %rsi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
+               	shlq	$0x2, %rdi
+               	addq	%rcx, %rdi
+               	movq	(%rdi), %r10
+               	movq	%r10, (%rsi)
+               	jmp	<addr>
+               	leaq	0x80(%rsp), %rax
+               	movups	0xc0(%rsp), %xmm0
+               	movups	%xmm0, 0x80(%rsp)
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%r8)
+               	leaq	0x150(%rsp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	leaq	0x60(%rax), %rsi
+               	movl	$0x10, %edx
+               	vzeroupper
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x1, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
+               	orq	%rax, %r12
+               	leaq	-0x80(%rbp), %rdi
+               	movl	$0x4, %esi
+               	movl	$0x8, %edx
+               	movq	%rsi, %rcx
+               	movq	%rbx, %r9
+               	movq	%rsi, %r8
+               	vzeroupper
+               	callq	<addr>
+               	leaq	0x120(%rsp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	vmovups	-0x60(%rbp), %ymm0
+               	vmovups	-0x40(%rbp), %ymm1
+               	leaq	0x60(%rsp), %r8
+               	testl	%ebx, %ebx
+               	je	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rcx
+               	movups	0x120(%rsp), %xmm2
+               	vmovups	%ymm1, 0x80(%rsp)
+               	vmovups	%ymm0, 0xc0(%rsp)
+               	leaq	0xa0(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rax)
+               	movups	%xmm2, 0xe0(%rsp)
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movq	-0x88(%rbp), %rdi
+               	movq	%rdi, 0xa0(%rsp,%rax,8)
+               	incq	%rax
+               	cmpl	$0x4, %eax
+               	jge	<addr>
+               	movq	0x80(%rsp,%rax,8), %rsi
+               	movq	%rsi, -0x88(%rbp)
+               	movq	0xc0(%rsp,%rax,8), %rsi
+               	testq	%rsi, %rsi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xe0(%rsp,%rax,4), %rdi
+               	shlq	$0x2, %rdi
+               	addq	%rcx, %rdi
+               	movq	(%rdi), %r10
+               	movq	%r10, (%rsi)
+               	jmp	<addr>
+               	leaq	0xc0(%rsp), %rax
+               	vmovups	0xa0(%rsp), %ymm0
+               	vmovups	%ymm0, 0xc0(%rsp)
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%r8)
+               	leaq	0x60(%rsp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	leaq	0x60(%rax), %rsi
+               	movl	$0x20, %edx
+               	vzeroupper
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x1, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
+               	orq	%rax, %r12
+               	movl	$0x8, %ecx
+               	leaq	-0x80(%rbp), %rdi
+               	movl	$0x2, %esi
+               	movl	$0x4, %edx
+               	movq	%rdx, %r8
+               	movq	%rbx, %r9
+               	vzeroupper
+               	callq	<addr>
+               	leaq	0x120(%rsp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	movups	-0x60(%rbp), %xmm0
+               	movups	-0x40(%rbp), %xmm1
+               	testl	%ebx, %ebx
+               	je	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rcx
+               	movups	0x120(%rsp), %xmm2
+               	movups	%xmm1, 0xe0(%rsp)
+               	movups	%xmm0, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%xmm14, (%rax)
+               	movups	%xmm2, 0xa0(%rsp)
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movl	-0x88(%rbp), %edi
+               	movl	%edi, 0xc0(%rsp,%rax,4)
+               	incq	%rax
+               	cmpl	$0x2, %eax
+               	jge	<addr>
+               	movl	0xe0(%rsp,%rax,4), %esi
+               	movl	%esi, -0x88(%rbp)
+               	movl	0x80(%rsp,%rax,4), %esi
+               	testl	%esi, %esi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movq	0xa0(%rsp,%rax,8), %rdi
+               	shlq	$0x2, %rdi
+               	addq	%rcx, %rdi
+               	movl	(%rdi), %r10d
+               	movl	%r10d, (%rsi)
+               	jmp	<addr>
+               	leaq	0x80(%rsp), %rax
+               	movups	0xc0(%rsp), %xmm0
+               	movups	%xmm0, 0x80(%rsp)
+               	leaq	0x130(%rsp), %rcx
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	0x130(%rsp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	leaq	0x60(%rax), %rsi
+               	movl	$0x10, %edx
+               	vzeroupper
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x2, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
+               	orq	%rax, %r12
+               	leaq	-0x80(%rbp), %rdi
+               	movl	$0x4, %esi
+               	movl	$0x8, %ecx
+               	movq	%rsi, %rdx
+               	movq	%rbx, %r9
+               	movq	%rsi, %r8
+               	vzeroupper
+               	callq	<addr>
+               	leaq	0x120(%rsp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	(%rsp), %rdx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rdx)
+               	movups	-0x60(%rbp), %xmm0
+               	movups	-0x40(%rbp), %xmm1
+               	testl	%ebx, %ebx
+               	je	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rcx
+               	leaq	0xc0(%rsp), %rax
+               	vmovups	(%rdx), %ymm14
+               	vmovups	%ymm14, (%rax)
+               	movups	%xmm1, 0x100(%rsp)
+               	movups	%xmm0, 0xe0(%rsp)
+               	leaq	0x80(%rsp), %rsi
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%xmm14, (%rsi)
+               	leaq	0xa0(%rsp), %rsi
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movl	-0x88(%rbp), %edi
+               	movl	%edi, 0x80(%rsp,%rax,4)
+               	incq	%rax
+               	cmpl	$0x4, %eax
+               	jge	<addr>
+               	movl	0x100(%rsp,%rax,4), %esi
+               	movl	%esi, -0x88(%rbp)
+               	movl	0xe0(%rsp,%rax,4), %esi
+               	testl	%esi, %esi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movq	0xa0(%rsp,%rax,8), %rdi
+               	shlq	$0x2, %rdi
+               	addq	%rcx, %rdi
+               	movl	(%rdi), %r10d
+               	movl	%r10d, (%rsi)
+               	jmp	<addr>
+               	leaq	0xc0(%rsp), %rax
+               	movups	0x80(%rsp), %xmm0
+               	movups	%xmm0, 0xc0(%rsp)
+               	leaq	0x130(%rsp), %rcx
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	0x130(%rsp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	leaq	0x60(%rax), %rsi
+               	movl	$0x10, %edx
+               	vzeroupper
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x2, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
+               	orq	%rax, %r12
+               	leaq	-0x80(%rbp), %rdi
+               	movl	$0x2, %esi
+               	movl	$0x8, %edx
+               	movl	$0x4, %r8d
+               	movq	%rdx, %rcx
+               	movq	%rbx, %r9
+               	vzeroupper
+               	callq	<addr>
+               	leaq	0x120(%rsp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	movups	-0x60(%rbp), %xmm0
+               	movups	-0x40(%rbp), %xmm1
+               	testl	%ebx, %ebx
+               	je	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rcx
+               	movups	0x120(%rsp), %xmm2
+               	movups	%xmm1, 0xe0(%rsp)
+               	movups	%xmm0, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%xmm14, (%rax)
+               	movups	%xmm2, 0xa0(%rsp)
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movq	-0x88(%rbp), %rdi
+               	movq	%rdi, 0xc0(%rsp,%rax,8)
+               	incq	%rax
+               	cmpl	$0x2, %eax
+               	jge	<addr>
+               	movq	0xe0(%rsp,%rax,8), %rsi
+               	movq	%rsi, -0x88(%rbp)
+               	movq	0x80(%rsp,%rax,8), %rsi
+               	testq	%rsi, %rsi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movq	0xa0(%rsp,%rax,8), %rdi
+               	shlq	$0x2, %rdi
+               	addq	%rcx, %rdi
+               	movq	(%rdi), %r10
+               	movq	%r10, (%rsi)
+               	jmp	<addr>
+               	leaq	0x80(%rsp), %rax
+               	movups	0xc0(%rsp), %xmm0
+               	movups	%xmm0, 0x80(%rsp)
+               	leaq	0x130(%rsp), %rcx
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	0x130(%rsp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	leaq	0x60(%rax), %rsi
+               	movl	$0x10, %edx
+               	vzeroupper
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x2, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
+               	orq	%rax, %r12
+               	leaq	-0x80(%rbp), %rdi
+               	movl	$0x4, %esi
+               	movl	$0x8, %edx
+               	movq	%rdx, %rcx
+               	movq	%rbx, %r9
+               	movq	%rsi, %r8
+               	vzeroupper
+               	callq	<addr>
+               	leaq	0x120(%rsp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	(%rsp), %rdx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rdx)
+               	vmovups	-0x60(%rbp), %ymm0
+               	vmovups	-0x40(%rbp), %ymm1
+               	testl	%ebx, %ebx
+               	je	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rcx
+               	leaq	0x100(%rsp), %rax
+               	vmovups	(%rdx), %ymm14
+               	vmovups	%ymm14, (%rax)
+               	vmovups	%ymm1, 0xe0(%rsp)
+               	vmovups	%ymm0, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rsi
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	leaq	0xa0(%rsp), %rsi
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movq	-0x88(%rbp), %rdi
+               	movq	%rdi, 0xc0(%rsp,%rax,8)
+               	incq	%rax
+               	cmpl	$0x4, %eax
+               	jge	<addr>
+               	movq	0xe0(%rsp,%rax,8), %rsi
+               	movq	%rsi, -0x88(%rbp)
+               	movq	0x80(%rsp,%rax,8), %rsi
+               	testq	%rsi, %rsi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movq	0xa0(%rsp,%rax,8), %rdi
+               	shlq	$0x2, %rdi
+               	addq	%rcx, %rdi
+               	movq	(%rdi), %r10
+               	movq	%r10, (%rsi)
+               	jmp	<addr>
+               	leaq	0x80(%rsp), %rax
+               	vmovups	0xc0(%rsp), %ymm0
+               	vmovups	%ymm0, 0x80(%rsp)
+               	leaq	0x20(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	leaq	0x20(%rsp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	leaq	0x60(%rax), %rsi
+               	movl	$0x20, %edx
+               	vzeroupper
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x2, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
+               	orq	%rax, %r12
+               	leaq	-0x80(%rbp), %rdi
+               	movl	$0x2, %esi
+               	movl	$0x4, %edx
+               	movl	$0x8, %ecx
+               	movq	%rdx, %r8
+               	movq	%rbx, %r9
+               	vzeroupper
+               	callq	<addr>
+               	leaq	0x120(%rsp), %r9
+               	leaq	-0x80(%rbp), %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%r9)
+               	leaq	(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	movups	-0x60(%rbp), %xmm0
+               	movups	-0x40(%rbp), %xmm1
+               	testl	%ebx, %ebx
+               	je	<addr>
+               	leaq	0xc0(%rsp), %rax
+               	movups	%xmm1, 0xc0(%rsp)
+               	leaq	<rip>, %rcx # <addr>
+               	leaq	0x200(%rcx), %rdi
+               	leaq	0xa0(%rsp), %rcx
+               	movups	%xmm0, 0xa0(%rsp)
+               	movl	$0x4, %esi
+               	movq	%rax, %r10
+               	movups	(%r10), %xmm0
+               	movq	%r9, %r10
+               	movups	(%r10), %xmm1
+               	movq	%rcx, %r10
+               	movups	(%r10), %xmm2
+               	vzeroupper
+               	callq	<addr>
+               	movups	%xmm0, 0xc0(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	leaq	0x140(%rsp), %rcx
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	0x140(%rsp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	leaq	0x60(%rax), %rsi
+               	movl	$0x10, %edx
+               	vzeroupper
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x2, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
+               	orq	%rax, %r12
+               	leaq	-0x80(%rbp), %rdi
+               	movl	$0x4, %esi
+               	movl	$0x8, %ecx
+               	movq	%rsi, %rdx
+               	movq	%rbx, %r9
+               	movq	%rsi, %r8
+               	vzeroupper
+               	callq	<addr>
+               	leaq	0x120(%rsp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	(%rsp), %r9
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%r9)
+               	movups	-0x60(%rbp), %xmm0
+               	movups	-0x40(%rbp), %xmm1
+               	testl	%ebx, %ebx
+               	je	<addr>
+               	leaq	0xc0(%rsp), %rax
+               	movups	%xmm1, 0xc0(%rsp)
+               	leaq	<rip>, %rcx # <addr>
+               	leaq	0x200(%rcx), %rdi
+               	leaq	0xa0(%rsp), %rcx
+               	movups	%xmm0, 0xa0(%rsp)
+               	movl	$0x4, %esi
+               	movq	%rax, %r10
+               	movups	(%r10), %xmm0
+               	movq	%r9, %r10
+               	vmovups	(%r10), %ymm1
+               	movq	%rcx, %r10
+               	movups	(%r10), %xmm2
+               	callq	<addr>
+               	movups	%xmm0, 0xc0(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	leaq	0x140(%rsp), %rcx
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	0x140(%rsp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	leaq	0x60(%rax), %rsi
+               	movl	$0x10, %edx
+               	vzeroupper
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x2, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
+               	orq	%rax, %r12
+               	leaq	-0x80(%rbp), %rdi
+               	movl	$0x2, %esi
+               	movl	$0x8, %edx
+               	movl	$0x4, %r8d
+               	movq	%rdx, %rcx
+               	movq	%rbx, %r9
+               	vzeroupper
+               	callq	<addr>
+               	leaq	0x120(%rsp), %r9
+               	leaq	-0x80(%rbp), %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%r9)
+               	leaq	(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	movups	-0x60(%rbp), %xmm0
+               	movups	-0x40(%rbp), %xmm1
+               	testl	%ebx, %ebx
+               	je	<addr>
+               	leaq	0xc0(%rsp), %rax
+               	movups	%xmm1, 0xc0(%rsp)
+               	leaq	<rip>, %rcx # <addr>
+               	leaq	0x200(%rcx), %rdi
+               	leaq	0xa0(%rsp), %rcx
+               	movups	%xmm0, 0xa0(%rsp)
+               	movl	$0x4, %esi
+               	movq	%rax, %r10
+               	movups	(%r10), %xmm0
+               	movq	%r9, %r10
+               	movups	(%r10), %xmm1
+               	movq	%rcx, %r10
+               	movups	(%r10), %xmm2
+               	vzeroupper
+               	callq	<addr>
+               	movups	%xmm0, 0xc0(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	leaq	0x150(%rsp), %rcx
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	0x150(%rsp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	leaq	0x60(%rax), %rsi
+               	movl	$0x10, %edx
+               	vzeroupper
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x2, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
+               	orq	%rax, %r12
+               	leaq	-0x80(%rbp), %rdi
+               	movl	$0x4, %esi
+               	movl	$0x8, %edx
+               	movq	%rdx, %rcx
+               	movq	%rbx, %r9
+               	movq	%rsi, %r8
+               	vzeroupper
+               	callq	<addr>
+               	leaq	0x120(%rsp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	(%rsp), %r9
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%r9)
+               	vmovups	-0x60(%rbp), %ymm0
+               	vmovups	-0x40(%rbp), %ymm1
+               	testl	%ebx, %ebx
+               	je	<addr>
+               	leaq	0xc0(%rsp), %rax
+               	vmovups	%ymm1, 0xc0(%rsp)
+               	leaq	<rip>, %rcx # <addr>
+               	leaq	0x200(%rcx), %rdi
+               	leaq	0xa0(%rsp), %rcx
+               	vmovups	%ymm0, 0xa0(%rsp)
+               	movl	$0x4, %esi
+               	movq	%rax, %r10
+               	vmovups	(%r10), %ymm0
+               	movq	%r9, %r10
+               	vmovups	(%r10), %ymm1
+               	movq	%rcx, %r10
+               	vmovups	(%r10), %ymm2
+               	callq	<addr>
+               	vmovups	%ymm0, 0xc0(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	leaq	0x60(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	leaq	0x60(%rsp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	leaq	0x60(%rax), %rsi
+               	movl	$0x20, %edx
+               	vzeroupper
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x2, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
+               	orq	%rax, %r12
+               	movl	$0x4, %esi
+               	leaq	-0x80(%rbp), %rdi
+               	movl	$0x8, %r8d
+               	movq	%rsi, %rdx
+               	movq	%rbx, %r9
+               	movq	%rsi, %rcx
+               	vzeroupper
+               	callq	<addr>
+               	leaq	0x120(%rsp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	movups	-0x60(%rbp), %xmm0
+               	movups	-0x40(%rbp), %xmm1
+               	testl	%ebx, %ebx
+               	je	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rcx
+               	movups	0x120(%rsp), %xmm2
+               	movups	%xmm1, 0xe0(%rsp)
+               	movups	%xmm0, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%xmm14, (%rax)
+               	movups	%xmm2, 0xa0(%rsp)
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movl	-0x88(%rbp), %edi
+               	movl	%edi, 0xc0(%rsp,%rax,4)
+               	incq	%rax
+               	cmpl	$0x4, %eax
+               	jge	<addr>
+               	movl	0xe0(%rsp,%rax,4), %esi
+               	movl	%esi, -0x88(%rbp)
+               	movl	0x80(%rsp,%rax,4), %esi
+               	testl	%esi, %esi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
+               	shlq	$0x3, %rdi
+               	addq	%rcx, %rdi
+               	movl	(%rdi), %r10d
+               	movl	%r10d, (%rsi)
+               	jmp	<addr>
+               	leaq	0x80(%rsp), %rax
+               	movups	0xc0(%rsp), %xmm0
+               	movups	%xmm0, 0x80(%rsp)
+               	leaq	0x130(%rsp), %rcx
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	0x130(%rsp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	leaq	0x60(%rax), %rsi
+               	movl	$0x10, %edx
+               	vzeroupper
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x1, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
+               	orq	%rax, %r12
+               	leaq	-0x80(%rbp), %rdi
+               	movl	$0x8, %esi
+               	movl	$0x4, %edx
+               	movq	%rdx, %rcx
+               	movq	%rbx, %r9
+               	movq	%rsi, %r8
+               	vzeroupper
+               	callq	<addr>
+               	leaq	0x120(%rsp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	(%rsp), %rdx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rdx)
+               	vmovups	-0x60(%rbp), %ymm0
+               	vmovups	-0x40(%rbp), %ymm1
+               	testl	%ebx, %ebx
+               	je	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rcx
+               	leaq	0x100(%rsp), %rax
+               	vmovups	(%rdx), %ymm14
+               	vmovups	%ymm14, (%rax)
+               	vmovups	%ymm1, 0xe0(%rsp)
+               	vmovups	%ymm0, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rsi
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	leaq	0xa0(%rsp), %rsi
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movl	-0x88(%rbp), %edi
+               	movl	%edi, 0xc0(%rsp,%rax,4)
+               	incq	%rax
+               	cmpl	$0x8, %eax
+               	jge	<addr>
+               	movl	0xe0(%rsp,%rax,4), %esi
+               	movl	%esi, -0x88(%rbp)
+               	movl	0x80(%rsp,%rax,4), %esi
+               	testl	%esi, %esi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
+               	shlq	$0x3, %rdi
+               	addq	%rcx, %rdi
+               	movl	(%rdi), %r10d
+               	movl	%r10d, (%rsi)
+               	jmp	<addr>
+               	leaq	0x80(%rsp), %rax
+               	vmovups	0xc0(%rsp), %ymm0
+               	vmovups	%ymm0, 0x80(%rsp)
+               	leaq	0x20(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	leaq	0x20(%rsp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	leaq	0x60(%rax), %rsi
+               	movl	$0x20, %edx
+               	vzeroupper
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x1, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
+               	orq	%rax, %r12
+               	leaq	-0x80(%rbp), %rdi
+               	movl	$0x2, %esi
+               	movl	$0x8, %edx
+               	movl	$0x4, %ecx
+               	movq	%rdx, %r8
+               	movq	%rbx, %r9
+               	vzeroupper
+               	callq	<addr>
+               	leaq	0x120(%rsp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	movups	-0x60(%rbp), %xmm0
+               	movups	-0x40(%rbp), %xmm1
+               	testl	%ebx, %ebx
+               	je	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rcx
+               	movups	0x120(%rsp), %xmm2
+               	movups	%xmm1, 0xe0(%rsp)
+               	movups	%xmm0, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%xmm14, (%rax)
+               	movups	%xmm2, 0xa0(%rsp)
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movq	-0x88(%rbp), %rdi
+               	movq	%rdi, 0xc0(%rsp,%rax,8)
+               	incq	%rax
+               	cmpl	$0x2, %eax
+               	jge	<addr>
+               	movq	0xe0(%rsp,%rax,8), %rsi
+               	movq	%rsi, -0x88(%rbp)
+               	movq	0x80(%rsp,%rax,8), %rsi
+               	testq	%rsi, %rsi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
                	shlq	$0x3, %rdi
                	addq	%rcx, %rdi
                	movq	(%rdi), %r10
                	movq	%r10, (%rsi)
                	jmp	<addr>
-               	leaq	0xe0(%rsp), %rax
-               	vmovups	0x400(%rsp), %ymm0
-               	vmovups	%ymm0, 0xe0(%rsp)
+               	leaq	0x80(%rsp), %rax
+               	movups	0xc0(%rsp), %xmm0
+               	movups	%xmm0, 0x80(%rsp)
+               	leaq	0x130(%rsp), %rcx
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	0x130(%rsp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	leaq	0x60(%rax), %rsi
+               	movl	$0x10, %edx
+               	vzeroupper
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x1, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
+               	orq	%rax, %r12
+               	leaq	-0x80(%rbp), %rdi
+               	movl	$0x4, %esi
+               	movl	$0x8, %edx
+               	movq	%rsi, %rcx
+               	movq	%rbx, %r9
+               	movq	%rdx, %r8
+               	vzeroupper
+               	callq	<addr>
+               	leaq	0x120(%rsp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	vmovups	-0x60(%rbp), %ymm0
+               	vmovups	-0x40(%rbp), %ymm1
+               	testl	%ebx, %ebx
+               	je	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rcx
+               	movups	0x120(%rsp), %xmm2
+               	vmovups	%ymm1, 0x80(%rsp)
+               	vmovups	%ymm0, 0xc0(%rsp)
+               	leaq	0xa0(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rax)
+               	movups	%xmm2, 0xe0(%rsp)
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movq	-0x88(%rbp), %rdi
+               	movq	%rdi, 0xa0(%rsp,%rax,8)
+               	incq	%rax
+               	cmpl	$0x4, %eax
+               	jge	<addr>
+               	movq	0x80(%rsp,%rax,8), %rsi
+               	movq	%rsi, -0x88(%rbp)
+               	movq	0xc0(%rsp,%rax,8), %rsi
+               	testq	%rsi, %rsi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xe0(%rsp,%rax,4), %rdi
+               	shlq	$0x3, %rdi
+               	addq	%rcx, %rdi
+               	movq	(%rdi), %r10
+               	movq	%r10, (%rsi)
+               	jmp	<addr>
+               	leaq	0xc0(%rsp), %rax
+               	vmovups	0xa0(%rsp), %ymm0
+               	vmovups	%ymm0, 0xc0(%rsp)
+               	leaq	0x20(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	leaq	0x20(%rsp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	leaq	0x60(%rax), %rsi
+               	movl	$0x20, %edx
+               	vzeroupper
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x1, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
+               	orq	%rax, %r12
+               	leaq	-0x80(%rbp), %rdi
+               	movl	$0x4, %esi
+               	movl	$0x8, %r8d
+               	movq	%rsi, %rdx
+               	movq	%rbx, %r9
+               	movq	%rsi, %rcx
+               	vzeroupper
+               	callq	<addr>
+               	leaq	0x120(%rsp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	movups	-0x60(%rbp), %xmm0
+               	movups	-0x40(%rbp), %xmm1
+               	testl	%ebx, %ebx
+               	je	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rcx
+               	movups	0x120(%rsp), %xmm2
+               	movups	%xmm1, 0xe0(%rsp)
+               	movups	%xmm0, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%xmm14, (%rax)
+               	movups	%xmm2, 0xa0(%rsp)
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movl	-0x88(%rbp), %edi
+               	movl	%edi, 0xc0(%rsp,%rax,4)
+               	incq	%rax
+               	cmpl	$0x4, %eax
+               	jge	<addr>
+               	movl	0xe0(%rsp,%rax,4), %esi
+               	movl	%esi, -0x88(%rbp)
+               	movl	0x80(%rsp,%rax,4), %esi
+               	testl	%esi, %esi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
+               	shlq	$0x3, %rdi
+               	addq	%rcx, %rdi
+               	movl	(%rdi), %r10d
+               	movl	%r10d, (%rsi)
+               	jmp	<addr>
+               	leaq	0x80(%rsp), %rax
+               	movups	0xc0(%rsp), %xmm0
+               	movups	%xmm0, 0x80(%rsp)
+               	leaq	0x140(%rsp), %rcx
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	0x140(%rsp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	leaq	0x60(%rax), %rsi
+               	movl	$0x10, %edx
+               	vzeroupper
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x1, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
+               	orq	%rax, %r12
+               	leaq	-0x80(%rbp), %rdi
+               	movl	$0x8, %esi
+               	movl	$0x4, %edx
+               	movq	%rdx, %rcx
+               	movq	%rbx, %r9
+               	movq	%rsi, %r8
+               	vzeroupper
+               	callq	<addr>
+               	leaq	0x120(%rsp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	(%rsp), %rdx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rdx)
+               	vmovups	-0x60(%rbp), %ymm0
+               	vmovups	-0x40(%rbp), %ymm1
+               	testl	%ebx, %ebx
+               	je	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rcx
+               	leaq	0x100(%rsp), %rax
+               	vmovups	(%rdx), %ymm14
+               	vmovups	%ymm14, (%rax)
+               	vmovups	%ymm1, 0xe0(%rsp)
+               	vmovups	%ymm0, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rsi
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	leaq	0xa0(%rsp), %rsi
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movl	-0x88(%rbp), %edi
+               	movl	%edi, 0xc0(%rsp,%rax,4)
+               	incq	%rax
+               	cmpl	$0x8, %eax
+               	jge	<addr>
+               	movl	0xe0(%rsp,%rax,4), %esi
+               	movl	%esi, -0x88(%rbp)
+               	movl	0x80(%rsp,%rax,4), %esi
+               	testl	%esi, %esi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
+               	shlq	$0x3, %rdi
+               	addq	%rcx, %rdi
+               	movl	(%rdi), %r10d
+               	movl	%r10d, (%rsi)
+               	jmp	<addr>
+               	leaq	0x80(%rsp), %rax
+               	vmovups	0xc0(%rsp), %ymm0
+               	vmovups	%ymm0, 0x80(%rsp)
+               	leaq	0x40(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	leaq	0x40(%rsp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	leaq	0x60(%rax), %rsi
+               	movl	$0x20, %edx
+               	vzeroupper
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x1, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
+               	orq	%rax, %r12
+               	leaq	-0x80(%rbp), %rdi
+               	movl	$0x2, %esi
+               	movl	$0x8, %edx
+               	movl	$0x4, %ecx
+               	movq	%rdx, %r8
+               	movq	%rbx, %r9
+               	vzeroupper
+               	callq	<addr>
+               	leaq	0x120(%rsp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	movups	-0x60(%rbp), %xmm0
+               	movups	-0x40(%rbp), %xmm1
+               	testl	%ebx, %ebx
+               	je	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rcx
+               	movups	0x120(%rsp), %xmm2
+               	movups	%xmm1, 0xe0(%rsp)
+               	movups	%xmm0, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%xmm14, (%rax)
+               	movups	%xmm2, 0xa0(%rsp)
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movq	-0x88(%rbp), %rdi
+               	movq	%rdi, 0xc0(%rsp,%rax,8)
+               	incq	%rax
+               	cmpl	$0x2, %eax
+               	jge	<addr>
+               	movq	0xe0(%rsp,%rax,8), %rsi
+               	movq	%rsi, -0x88(%rbp)
+               	movq	0x80(%rsp,%rax,8), %rsi
+               	testq	%rsi, %rsi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
+               	shlq	$0x3, %rdi
+               	addq	%rcx, %rdi
+               	movq	(%rdi), %r10
+               	movq	%r10, (%rsi)
+               	jmp	<addr>
+               	leaq	0x80(%rsp), %rax
+               	movups	0xc0(%rsp), %xmm0
+               	movups	%xmm0, 0x80(%rsp)
+               	leaq	0x150(%rsp), %rcx
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	0x150(%rsp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	leaq	0x60(%rax), %rsi
+               	movl	$0x10, %edx
+               	vzeroupper
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x1, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
+               	orq	%rax, %r12
+               	leaq	-0x80(%rbp), %rdi
+               	movl	$0x4, %esi
+               	movl	$0x8, %edx
+               	movq	%rsi, %rcx
+               	movq	%rbx, %r9
+               	movq	%rdx, %r8
+               	vzeroupper
+               	callq	<addr>
+               	leaq	0x120(%rsp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	vmovups	-0x60(%rbp), %ymm0
+               	vmovups	-0x40(%rbp), %ymm1
+               	testl	%ebx, %ebx
+               	je	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rcx
+               	movups	0x120(%rsp), %xmm2
+               	vmovups	%ymm1, 0x80(%rsp)
+               	vmovups	%ymm0, 0xc0(%rsp)
+               	leaq	0xa0(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rax)
+               	movups	%xmm2, 0xe0(%rsp)
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movq	-0x88(%rbp), %rdi
+               	movq	%rdi, 0xa0(%rsp,%rax,8)
+               	incq	%rax
+               	cmpl	$0x4, %eax
+               	jge	<addr>
+               	movq	0x80(%rsp,%rax,8), %rsi
+               	movq	%rsi, -0x88(%rbp)
+               	movq	0xc0(%rsp,%rax,8), %rsi
+               	testq	%rsi, %rsi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xe0(%rsp,%rax,4), %rdi
+               	shlq	$0x3, %rdi
+               	addq	%rcx, %rdi
+               	movq	(%rdi), %r10
+               	movq	%r10, (%rsi)
+               	jmp	<addr>
+               	leaq	0xc0(%rsp), %rax
+               	vmovups	0xa0(%rsp), %ymm0
+               	vmovups	%ymm0, 0xc0(%rsp)
+               	leaq	0x60(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	leaq	0x60(%rsp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	leaq	0x60(%rax), %rsi
+               	movl	$0x20, %edx
+               	vzeroupper
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x1, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
+               	orq	%rax, %r12
+               	movl	$0x8, %ecx
+               	leaq	-0x80(%rbp), %rdi
+               	movl	$0x2, %esi
+               	movl	$0x4, %edx
+               	movq	%rcx, %r8
+               	movq	%rbx, %r9
+               	vzeroupper
+               	callq	<addr>
+               	leaq	0x120(%rsp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	movups	-0x60(%rbp), %xmm0
+               	movups	-0x40(%rbp), %xmm1
+               	testl	%ebx, %ebx
+               	je	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rcx
+               	movups	0x120(%rsp), %xmm2
+               	movups	%xmm1, 0xe0(%rsp)
+               	movups	%xmm0, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%xmm14, (%rax)
+               	movups	%xmm2, 0xa0(%rsp)
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movl	-0x88(%rbp), %edi
+               	movl	%edi, 0xc0(%rsp,%rax,4)
+               	incq	%rax
+               	cmpl	$0x2, %eax
+               	jge	<addr>
+               	movl	0xe0(%rsp,%rax,4), %esi
+               	movl	%esi, -0x88(%rbp)
+               	movl	0x80(%rsp,%rax,4), %esi
+               	testl	%esi, %esi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movq	0xa0(%rsp,%rax,8), %rdi
+               	shlq	$0x3, %rdi
+               	addq	%rcx, %rdi
+               	movl	(%rdi), %r10d
+               	movl	%r10d, (%rsi)
+               	jmp	<addr>
+               	leaq	0x80(%rsp), %rax
+               	movups	0xc0(%rsp), %xmm0
+               	movups	%xmm0, 0x80(%rsp)
+               	leaq	0x130(%rsp), %rcx
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	0x130(%rsp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	leaq	0x60(%rax), %rsi
+               	movl	$0x10, %edx
+               	vzeroupper
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x2, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
+               	orq	%rax, %r12
+               	leaq	-0x80(%rbp), %rdi
+               	movl	$0x4, %esi
+               	movl	$0x8, %ecx
+               	movq	%rsi, %rdx
+               	movq	%rbx, %r9
+               	movq	%rcx, %r8
+               	vzeroupper
+               	callq	<addr>
+               	leaq	0x120(%rsp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	(%rsp), %rdx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rdx)
+               	movups	-0x60(%rbp), %xmm0
+               	movups	-0x40(%rbp), %xmm1
+               	testl	%ebx, %ebx
+               	je	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rcx
+               	leaq	0xc0(%rsp), %rax
+               	vmovups	(%rdx), %ymm14
+               	vmovups	%ymm14, (%rax)
+               	movups	%xmm1, 0x100(%rsp)
+               	movups	%xmm0, 0xe0(%rsp)
+               	leaq	0x80(%rsp), %rsi
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%xmm14, (%rsi)
+               	leaq	0xa0(%rsp), %rsi
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movl	-0x88(%rbp), %edi
+               	movl	%edi, 0x80(%rsp,%rax,4)
+               	incq	%rax
+               	cmpl	$0x4, %eax
+               	jge	<addr>
+               	movl	0x100(%rsp,%rax,4), %esi
+               	movl	%esi, -0x88(%rbp)
+               	movl	0xe0(%rsp,%rax,4), %esi
+               	testl	%esi, %esi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movq	0xa0(%rsp,%rax,8), %rdi
+               	shlq	$0x3, %rdi
+               	addq	%rcx, %rdi
+               	movl	(%rdi), %r10d
+               	movl	%r10d, (%rsi)
+               	jmp	<addr>
+               	leaq	0xc0(%rsp), %rax
+               	movups	0x80(%rsp), %xmm0
+               	movups	%xmm0, 0xc0(%rsp)
+               	leaq	0x130(%rsp), %rcx
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	0x130(%rsp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	leaq	0x60(%rax), %rsi
+               	movl	$0x10, %edx
+               	vzeroupper
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x2, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
+               	orq	%rax, %r12
+               	leaq	-0x80(%rbp), %rdi
+               	movl	$0x2, %esi
+               	movl	$0x8, %edx
+               	movq	%rdx, %rcx
+               	movq	%rbx, %r9
+               	movq	%rdx, %r8
+               	vzeroupper
+               	callq	<addr>
+               	leaq	0x120(%rsp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	movups	-0x60(%rbp), %xmm0
+               	movups	-0x40(%rbp), %xmm1
+               	testl	%ebx, %ebx
+               	je	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rcx
+               	movups	0x120(%rsp), %xmm2
+               	movups	%xmm1, 0xe0(%rsp)
+               	movups	%xmm0, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%xmm14, (%rax)
+               	movups	%xmm2, 0xa0(%rsp)
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movq	-0x88(%rbp), %rdi
+               	movq	%rdi, 0xc0(%rsp,%rax,8)
+               	incq	%rax
+               	cmpl	$0x2, %eax
+               	jge	<addr>
+               	movq	0xe0(%rsp,%rax,8), %rsi
+               	movq	%rsi, -0x88(%rbp)
+               	movq	0x80(%rsp,%rax,8), %rsi
+               	testq	%rsi, %rsi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movq	0xa0(%rsp,%rax,8), %rdi
+               	shlq	$0x3, %rdi
+               	addq	%rcx, %rdi
+               	movq	(%rdi), %r10
+               	movq	%r10, (%rsi)
+               	jmp	<addr>
+               	leaq	0x80(%rsp), %rax
+               	movups	0xc0(%rsp), %xmm0
+               	movups	%xmm0, 0x80(%rsp)
+               	leaq	0x130(%rsp), %rcx
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	0x130(%rsp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	leaq	0x60(%rax), %rsi
+               	movl	$0x10, %edx
+               	vzeroupper
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x2, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
+               	orq	%rax, %r12
+               	leaq	-0x80(%rbp), %rdi
+               	movl	$0x4, %esi
+               	movl	$0x8, %edx
+               	movq	%rdx, %rcx
+               	movq	%rbx, %r9
+               	movq	%rdx, %r8
+               	vzeroupper
+               	callq	<addr>
+               	leaq	0x120(%rsp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
+               	leaq	(%rsp), %rdx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rdx)
+               	vmovups	-0x60(%rbp), %ymm0
+               	vmovups	-0x40(%rbp), %ymm1
+               	testl	%ebx, %ebx
+               	je	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rcx
+               	leaq	0x100(%rsp), %rax
+               	vmovups	(%rdx), %ymm14
+               	vmovups	%ymm14, (%rax)
+               	vmovups	%ymm1, 0xe0(%rsp)
+               	vmovups	%ymm0, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rsi
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	leaq	0xa0(%rsp), %rsi
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movq	-0x88(%rbp), %rdi
+               	movq	%rdi, 0xc0(%rsp,%rax,8)
+               	incq	%rax
+               	cmpl	$0x4, %eax
+               	jge	<addr>
+               	movq	0xe0(%rsp,%rax,8), %rsi
+               	movq	%rsi, -0x88(%rbp)
+               	movq	0x80(%rsp,%rax,8), %rsi
+               	testq	%rsi, %rsi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movq	0xa0(%rsp,%rax,8), %rdi
+               	shlq	$0x3, %rdi
+               	addq	%rcx, %rdi
+               	movq	(%rdi), %r10
+               	movq	%r10, (%rsi)
+               	jmp	<addr>
+               	leaq	0x80(%rsp), %rax
+               	vmovups	0xc0(%rsp), %ymm0
+               	vmovups	%ymm0, 0x80(%rsp)
                	leaq	0x20(%rsp), %rcx
                	vmovups	(%rax), %ymm14
                	vmovups	%ymm14, (%rcx)
@@ -5012,7 +5012,7 @@ Disassembly of section .text:
                	movq	%rbx, %r9
                	vzeroupper
                	callq	<addr>
-               	leaq	0x420(%rsp), %r9
+               	leaq	0x120(%rsp), %r9
                	leaq	-0x80(%rbp), %rax
                	vmovups	(%rax), %xmm14
                	vmovups	%xmm14, (%r9)
@@ -5023,12 +5023,12 @@ Disassembly of section .text:
                	movups	-0x40(%rbp), %xmm1
                	testl	%ebx, %ebx
                	je	<addr>
-               	leaq	0xe0(%rsp), %rax
-               	movups	%xmm1, 0xe0(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	movups	%xmm1, 0xc0(%rsp)
                	leaq	<rip>, %rcx # <addr>
                	leaq	0x200(%rcx), %rdi
-               	leaq	0x100(%rsp), %rcx
-               	movups	%xmm0, 0x100(%rsp)
+               	leaq	0xa0(%rsp), %rcx
+               	movups	%xmm0, 0xa0(%rsp)
                	movl	$0x8, %esi
                	movq	%rax, %r10
                	movups	(%r10), %xmm0
@@ -5038,12 +5038,12 @@ Disassembly of section .text:
                	movups	(%r10), %xmm2
                	vzeroupper
                	callq	<addr>
-               	movups	%xmm0, 0xe0(%rsp)
-               	leaq	0xe0(%rsp), %rax
-               	leaq	0x180(%rsp), %rcx
+               	movups	%xmm0, 0xc0(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	leaq	0x140(%rsp), %rcx
                	vmovups	(%rax), %xmm14
                	vmovups	%xmm14, (%rcx)
-               	leaq	0x180(%rsp), %rdi
+               	leaq	0x140(%rsp), %rdi
                	leaq	-0x80(%rbp), %rax
                	leaq	0x60(%rax), %rsi
                	movl	$0x10, %edx
@@ -5065,7 +5065,7 @@ Disassembly of section .text:
                	movq	%rcx, %r8
                	vzeroupper
                	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
+               	leaq	0x120(%rsp), %rcx
                	leaq	-0x80(%rbp), %rax
                	vmovups	(%rax), %xmm14
                	vmovups	%xmm14, (%rcx)
@@ -5076,12 +5076,12 @@ Disassembly of section .text:
                	movups	-0x40(%rbp), %xmm1
                	testl	%ebx, %ebx
                	je	<addr>
-               	leaq	0xe0(%rsp), %rax
-               	movups	%xmm1, 0xe0(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	movups	%xmm1, 0xc0(%rsp)
                	leaq	<rip>, %rcx # <addr>
                	leaq	0x200(%rcx), %rdi
-               	leaq	0x100(%rsp), %rcx
-               	movups	%xmm0, 0x100(%rsp)
+               	leaq	0xa0(%rsp), %rcx
+               	movups	%xmm0, 0xa0(%rsp)
                	movl	$0x8, %esi
                	movq	%rax, %r10
                	movups	(%r10), %xmm0
@@ -5090,12 +5090,12 @@ Disassembly of section .text:
                	movq	%rcx, %r10
                	movups	(%r10), %xmm2
                	callq	<addr>
-               	movups	%xmm0, 0xe0(%rsp)
-               	leaq	0xe0(%rsp), %rax
-               	leaq	0x180(%rsp), %rcx
+               	movups	%xmm0, 0xc0(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	leaq	0x140(%rsp), %rcx
                	vmovups	(%rax), %xmm14
                	vmovups	%xmm14, (%rcx)
-               	leaq	0x180(%rsp), %rdi
+               	leaq	0x140(%rsp), %rdi
                	leaq	-0x80(%rbp), %rax
                	leaq	0x60(%rax), %rsi
                	movl	$0x10, %edx
@@ -5117,7 +5117,7 @@ Disassembly of section .text:
                	movq	%rdx, %r8
                	vzeroupper
                	callq	<addr>
-               	leaq	0x420(%rsp), %r9
+               	leaq	0x120(%rsp), %r9
                	leaq	-0x80(%rbp), %rax
                	vmovups	(%rax), %xmm14
                	vmovups	%xmm14, (%r9)
@@ -5128,12 +5128,12 @@ Disassembly of section .text:
                	movups	-0x40(%rbp), %xmm1
                	testl	%ebx, %ebx
                	je	<addr>
-               	leaq	0xe0(%rsp), %rax
-               	movups	%xmm1, 0xe0(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	movups	%xmm1, 0xc0(%rsp)
                	leaq	<rip>, %rcx # <addr>
                	leaq	0x200(%rcx), %rdi
-               	leaq	0x100(%rsp), %rcx
-               	movups	%xmm0, 0x100(%rsp)
+               	leaq	0xa0(%rsp), %rcx
+               	movups	%xmm0, 0xa0(%rsp)
                	movl	$0x8, %esi
                	movq	%rax, %r10
                	movups	(%r10), %xmm0
@@ -5143,12 +5143,12 @@ Disassembly of section .text:
                	movups	(%r10), %xmm2
                	vzeroupper
                	callq	<addr>
-               	movups	%xmm0, 0xe0(%rsp)
-               	leaq	0xe0(%rsp), %rax
-               	leaq	0x1a0(%rsp), %rcx
+               	movups	%xmm0, 0xc0(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	leaq	0x150(%rsp), %rcx
                	vmovups	(%rax), %xmm14
                	vmovups	%xmm14, (%rcx)
-               	leaq	0x1a0(%rsp), %rdi
+               	leaq	0x150(%rsp), %rdi
                	leaq	-0x80(%rbp), %rax
                	leaq	0x60(%rax), %rsi
                	movl	$0x10, %edx
@@ -5170,7 +5170,7 @@ Disassembly of section .text:
                	movq	%rdx, %r8
                	vzeroupper
                	callq	<addr>
-               	leaq	0x420(%rsp), %rcx
+               	leaq	0x120(%rsp), %rcx
                	leaq	-0x80(%rbp), %rax
                	vmovups	(%rax), %xmm14
                	vmovups	%xmm14, (%rcx)
@@ -5181,12 +5181,12 @@ Disassembly of section .text:
                	vmovups	-0x40(%rbp), %ymm1
                	testl	%ebx, %ebx
                	je	<addr>
-               	leaq	0xe0(%rsp), %rax
-               	vmovups	%ymm1, 0xe0(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	vmovups	%ymm1, 0xc0(%rsp)
                	leaq	<rip>, %rcx # <addr>
                	leaq	0x200(%rcx), %rdi
-               	leaq	0x100(%rsp), %rcx
-               	vmovups	%ymm0, 0x100(%rsp)
+               	leaq	0xa0(%rsp), %rcx
+               	vmovups	%ymm0, 0xa0(%rsp)
                	movl	$0x8, %esi
                	movq	%rax, %r10
                	vmovups	(%r10), %ymm0
@@ -5195,12 +5195,12 @@ Disassembly of section .text:
                	movq	%rcx, %r10
                	vmovups	(%r10), %ymm2
                	callq	<addr>
-               	vmovups	%ymm0, 0xe0(%rsp)
-               	leaq	0xe0(%rsp), %rax
-               	leaq	0xa0(%rsp), %rcx
+               	vmovups	%ymm0, 0xc0(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	leaq	0x60(%rsp), %rcx
                	vmovups	(%rax), %ymm14
                	vmovups	%ymm14, (%rcx)
-               	leaq	0xa0(%rsp), %rdi
+               	leaq	0x60(%rsp), %rdi
                	leaq	-0x80(%rbp), %rax
                	leaq	0x60(%rax), %rsi
                	movl	$0x20, %edx
@@ -5215,7 +5215,7 @@ Disassembly of section .text:
                	cmoveq	%rcx, %rax
                	orq	%rax, %r12
                	movq	%r12, %rax
-               	leaq	-0xf0(%rbp), %rsp
+               	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
                	popq	%r12
                	vzeroupper
@@ -5228,19 +5228,19 @@ Disassembly of section .text:
                	movq	%r9, %r10
                	vmovups	(%r10), %ymm0
                	callq	<addr>
-               	vmovups	%ymm0, 0x100(%rsp)
-               	leaq	0x100(%rsp), %rax
+               	vmovups	%ymm0, 0xa0(%rsp)
+               	leaq	0xa0(%rsp), %rax
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rdi
-               	leaq	0x420(%rsp), %r9
+               	leaq	0x120(%rsp), %r9
                	movl	$0x8, %esi
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	vzeroupper
                	callq	<addr>
-               	movups	%xmm0, 0x100(%rsp)
-               	leaq	0x100(%rsp), %rax
+               	movups	%xmm0, 0xa0(%rsp)
+               	leaq	0xa0(%rsp), %rax
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rdi
@@ -5249,19 +5249,19 @@ Disassembly of section .text:
                	movq	%r9, %r10
                	vmovups	(%r10), %ymm0
                	callq	<addr>
-               	movups	%xmm0, 0x100(%rsp)
-               	leaq	0x100(%rsp), %rax
+               	movups	%xmm0, 0xa0(%rsp)
+               	leaq	0xa0(%rsp), %rax
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rdi
-               	leaq	0x420(%rsp), %r9
+               	leaq	0x120(%rsp), %r9
                	movl	$0x8, %esi
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	vzeroupper
                	callq	<addr>
-               	movups	%xmm0, 0x100(%rsp)
-               	leaq	0x100(%rsp), %rax
+               	movups	%xmm0, 0xa0(%rsp)
+               	leaq	0xa0(%rsp), %rax
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rdi
@@ -5270,19 +5270,19 @@ Disassembly of section .text:
                	movq	%r9, %r10
                	vmovups	(%r10), %ymm0
                	callq	<addr>
-               	vmovups	%ymm0, 0x100(%rsp)
-               	leaq	0x100(%rsp), %rax
+               	vmovups	%ymm0, 0xa0(%rsp)
+               	leaq	0xa0(%rsp), %rax
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rdi
-               	leaq	0x420(%rsp), %r9
+               	leaq	0x120(%rsp), %r9
                	movl	$0x8, %esi
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	vzeroupper
                	callq	<addr>
-               	movups	%xmm0, 0x100(%rsp)
-               	leaq	0x100(%rsp), %rax
+               	movups	%xmm0, 0xa0(%rsp)
+               	leaq	0xa0(%rsp), %rax
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rdi
@@ -5291,41 +5291,41 @@ Disassembly of section .text:
                	movq	%r9, %r10
                	vmovups	(%r10), %ymm0
                	callq	<addr>
-               	movups	%xmm0, 0x100(%rsp)
-               	leaq	0x100(%rsp), %rax
+               	movups	%xmm0, 0xa0(%rsp)
+               	leaq	0xa0(%rsp), %rax
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rdi
-               	leaq	0x420(%rsp), %r9
+               	leaq	0x120(%rsp), %r9
                	movl	$0x8, %esi
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	vzeroupper
                	callq	<addr>
-               	movups	%xmm0, 0x100(%rsp)
-               	leaq	0x100(%rsp), %rax
+               	movups	%xmm0, 0xa0(%rsp)
+               	leaq	0xa0(%rsp), %rax
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rdi
-               	leaq	0x420(%rsp), %r9
+               	leaq	0x120(%rsp), %r9
                	movl	$0x8, %esi
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	vzeroupper
                	callq	<addr>
-               	vmovups	%ymm0, 0x100(%rsp)
-               	leaq	0x100(%rsp), %rax
+               	vmovups	%ymm0, 0xa0(%rsp)
+               	leaq	0xa0(%rsp), %rax
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rdi
-               	leaq	0x420(%rsp), %r9
+               	leaq	0x120(%rsp), %r9
                	movl	$0x8, %esi
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	vzeroupper
                	callq	<addr>
-               	movups	%xmm0, 0x100(%rsp)
-               	leaq	0x100(%rsp), %rax
+               	movups	%xmm0, 0xa0(%rsp)
+               	leaq	0xa0(%rsp), %rax
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rdi
@@ -5334,41 +5334,41 @@ Disassembly of section .text:
                	movq	%r9, %r10
                	vmovups	(%r10), %ymm0
                	callq	<addr>
-               	vmovups	%ymm0, 0x100(%rsp)
-               	leaq	0x100(%rsp), %rax
+               	vmovups	%ymm0, 0xa0(%rsp)
+               	leaq	0xa0(%rsp), %rax
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rdi
-               	leaq	0x420(%rsp), %r9
+               	leaq	0x120(%rsp), %r9
                	movl	$0x8, %esi
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	vzeroupper
                	callq	<addr>
-               	movups	%xmm0, 0x100(%rsp)
-               	leaq	0x100(%rsp), %rax
+               	movups	%xmm0, 0xa0(%rsp)
+               	leaq	0xa0(%rsp), %rax
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rdi
-               	leaq	0x420(%rsp), %r9
+               	leaq	0x120(%rsp), %r9
                	movl	$0x8, %esi
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	vzeroupper
                	callq	<addr>
-               	vmovups	%ymm0, 0x100(%rsp)
-               	leaq	0x100(%rsp), %rax
+               	vmovups	%ymm0, 0xa0(%rsp)
+               	leaq	0xa0(%rsp), %rax
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rdi
-               	leaq	0x420(%rsp), %r9
+               	leaq	0x120(%rsp), %r9
                	movl	$0x8, %esi
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	vzeroupper
                	callq	<addr>
-               	movups	%xmm0, 0x100(%rsp)
-               	leaq	0x100(%rsp), %rax
+               	movups	%xmm0, 0xa0(%rsp)
+               	leaq	0xa0(%rsp), %rax
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rdi
@@ -5377,40 +5377,19 @@ Disassembly of section .text:
                	movq	%r9, %r10
                	vmovups	(%r10), %ymm0
                	callq	<addr>
-               	vmovups	%ymm0, 0x100(%rsp)
-               	leaq	0x100(%rsp), %rax
+               	vmovups	%ymm0, 0xa0(%rsp)
+               	leaq	0xa0(%rsp), %rax
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rdi
-               	leaq	0x420(%rsp), %r9
+               	leaq	0x120(%rsp), %r9
                	movl	$0x8, %esi
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	vzeroupper
                	callq	<addr>
-               	movups	%xmm0, 0x100(%rsp)
-               	leaq	0x100(%rsp), %rax
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rdi
-               	leaq	(%rsp), %r9
-               	movl	$0x4, %esi
-               	movq	%r9, %r10
-               	vmovups	(%r10), %ymm0
-               	callq	<addr>
-               	vmovups	%ymm0, 0x100(%rsp)
-               	leaq	0x100(%rsp), %rax
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rdi
-               	leaq	0x420(%rsp), %r9
-               	movl	$0x4, %esi
-               	movq	%r9, %r10
-               	movups	(%r10), %xmm0
-               	vzeroupper
-               	callq	<addr>
-               	movups	%xmm0, 0x100(%rsp)
-               	leaq	0x100(%rsp), %rax
+               	movups	%xmm0, 0xa0(%rsp)
+               	leaq	0xa0(%rsp), %rax
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rdi
@@ -5419,19 +5398,19 @@ Disassembly of section .text:
                	movq	%r9, %r10
                	vmovups	(%r10), %ymm0
                	callq	<addr>
-               	movups	%xmm0, 0x100(%rsp)
-               	leaq	0x100(%rsp), %rax
+               	vmovups	%ymm0, 0xa0(%rsp)
+               	leaq	0xa0(%rsp), %rax
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rdi
-               	leaq	0x420(%rsp), %r9
+               	leaq	0x120(%rsp), %r9
                	movl	$0x4, %esi
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	vzeroupper
                	callq	<addr>
-               	movups	%xmm0, 0x100(%rsp)
-               	leaq	0x100(%rsp), %rax
+               	movups	%xmm0, 0xa0(%rsp)
+               	leaq	0xa0(%rsp), %rax
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rdi
@@ -5440,19 +5419,19 @@ Disassembly of section .text:
                	movq	%r9, %r10
                	vmovups	(%r10), %ymm0
                	callq	<addr>
-               	vmovups	%ymm0, 0x100(%rsp)
-               	leaq	0x100(%rsp), %rax
+               	movups	%xmm0, 0xa0(%rsp)
+               	leaq	0xa0(%rsp), %rax
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rdi
-               	leaq	0x420(%rsp), %r9
+               	leaq	0x120(%rsp), %r9
                	movl	$0x4, %esi
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	vzeroupper
                	callq	<addr>
-               	movups	%xmm0, 0x100(%rsp)
-               	leaq	0x100(%rsp), %rax
+               	movups	%xmm0, 0xa0(%rsp)
+               	leaq	0xa0(%rsp), %rax
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rdi
@@ -5461,87 +5440,524 @@ Disassembly of section .text:
                	movq	%r9, %r10
                	vmovups	(%r10), %ymm0
                	callq	<addr>
-               	movups	%xmm0, 0x100(%rsp)
-               	leaq	0x100(%rsp), %rax
+               	vmovups	%ymm0, 0xa0(%rsp)
+               	leaq	0xa0(%rsp), %rax
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rdi
-               	leaq	0x420(%rsp), %r9
+               	leaq	0x120(%rsp), %r9
                	movl	$0x4, %esi
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	vzeroupper
                	callq	<addr>
-               	movups	%xmm0, 0x100(%rsp)
-               	leaq	0x100(%rsp), %rax
+               	movups	%xmm0, 0xa0(%rsp)
+               	leaq	0xa0(%rsp), %rax
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm0
-               	vpcmpeqd	%ymm1, %ymm1, %ymm1
-               	xorl	%eax, %eax
-               	vmovq	%rax, %xmm14
-               	vmovups	%ymm14, 0x300(%rsp)
-               	vmovups	%ymm1, 0x320(%rsp)
-               	leaq	0x340(%rsp), %rsi
+               	leaq	0x200(%rax), %rdi
+               	leaq	(%rsp), %r9
+               	movl	$0x4, %esi
+               	movq	%r9, %r10
+               	vmovups	(%r10), %ymm0
+               	callq	<addr>
+               	movups	%xmm0, 0xa0(%rsp)
+               	leaq	0xa0(%rsp), %rax
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rdi
+               	leaq	0x120(%rsp), %r9
+               	movl	$0x4, %esi
+               	movq	%r9, %r10
+               	movups	(%r10), %xmm0
+               	vzeroupper
+               	callq	<addr>
+               	movups	%xmm0, 0xa0(%rsp)
+               	leaq	0xa0(%rsp), %rax
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rdx
+               	movups	0x120(%rsp), %xmm0
+               	leaq	0x80(%rsp), %rcx
                	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	movq	$-0x1, 0x80(%rsp)
+               	movq	$-0x1, 0x88(%rsp)
+               	movq	$-0x1, 0x90(%rsp)
+               	movq	$-0x1, 0x98(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rax)
+               	leaq	0xa0(%rsp), %rsi
+               	vmovups	(%rcx), %ymm14
                	vmovups	%ymm14, (%rsi)
-               	movups	%xmm0, 0x570(%rsp)
+               	leaq	0x80(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	leaq	0xc0(%rsp), %rax
+               	vmovups	(%rsi), %ymm14
+               	vmovups	%ymm14, (%rax)
+               	leaq	0xa0(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rax)
+               	movups	%xmm0, 0xe0(%rsp)
+               	xorl	%eax, %eax
                	jmp	<addr>
-               	movq	-0xa8(%rbp), %rdi
-               	movq	%rdi, 0x340(%rsp,%rax,8)
+               	movq	-0x88(%rbp), %rdi
+               	movq	%rdi, 0xa0(%rsp,%rax,8)
                	incq	%rax
                	cmpl	$0x4, %eax
                	jge	<addr>
-               	movq	0x300(%rsp,%rax,8), %rsi
-               	movq	%rsi, -0xa8(%rbp)
-               	movq	0x320(%rsp,%rax,8), %rsi
+               	movq	0x80(%rsp,%rax,8), %rsi
+               	movq	%rsi, -0x88(%rbp)
+               	movq	0xc0(%rsp,%rax,8), %rsi
                	testq	%rsi, %rsi
                	jge	<addr>
-               	leaq	-0xa8(%rbp), %rsi
-               	movslq	0x570(%rsp,%rax,4), %rdi
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xe0(%rsp,%rax,4), %rdi
                	shlq	$0x2, %rdi
-               	addq	%rcx, %rdi
+               	addq	%rdx, %rdi
                	movq	(%rdi), %r10
                	movq	%r10, (%rsi)
                	jmp	<addr>
-               	vmovups	0x340(%rsp), %ymm0
-               	leaq	0x100(%rsp), %rax
-               	vmovups	%ymm0, 0x100(%rsp)
+               	vmovups	0xa0(%rsp), %ymm0
+               	leaq	0xa0(%rsp), %rax
+               	vmovups	%ymm0, 0xa0(%rsp)
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm0
+               	movups	0x120(%rsp), %xmm0
                	vpcmpeqd	%xmm1, %xmm1, %xmm1
                	xorl	%eax, %eax
                	movq	%rax, %xmm14
-               	movups	%xmm14, 0x530(%rsp)
-               	movups	%xmm1, 0x540(%rsp)
-               	leaq	0x550(%rsp), %rsi
+               	movups	%xmm14, 0xe0(%rsp)
+               	movups	%xmm1, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rsi
                	vxorps	%ymm14, %ymm14, %ymm14
                	vmovups	%xmm14, (%rsi)
-               	movups	%xmm0, 0x560(%rsp)
+               	movups	%xmm0, 0xa0(%rsp)
                	jmp	<addr>
-               	movq	-0xb0(%rbp), %rdi
-               	movq	%rdi, 0x550(%rsp,%rax,8)
+               	movq	-0x88(%rbp), %rdi
+               	movq	%rdi, 0xc0(%rsp,%rax,8)
                	incq	%rax
                	cmpl	$0x2, %eax
                	jge	<addr>
-               	movq	0x530(%rsp,%rax,8), %rsi
-               	movq	%rsi, -0xb0(%rbp)
-               	movq	0x540(%rsp,%rax,8), %rsi
+               	movq	0xe0(%rsp,%rax,8), %rsi
+               	movq	%rsi, -0x88(%rbp)
+               	movq	0x80(%rsp,%rax,8), %rsi
                	testq	%rsi, %rsi
                	jge	<addr>
-               	leaq	-0xb0(%rbp), %rsi
-               	movslq	0x560(%rsp,%rax,4), %rdi
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
                	shlq	$0x2, %rdi
                	addq	%rcx, %rdi
                	movq	(%rdi), %r10
                	movq	%r10, (%rsi)
                	jmp	<addr>
-               	movups	0x550(%rsp), %xmm0
+               	movups	0xc0(%rsp), %xmm0
+               	leaq	0xa0(%rsp), %rax
+               	movups	%xmm0, 0xa0(%rsp)
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rdx
+               	leaq	(%rsp), %rcx
+               	leaq	0xa0(%rsp), %rax
+               	vmovups	(%rcx), %ymm14
+               	vmovups	%ymm14, (%rax)
+               	leaq	0x80(%rsp), %rcx
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	movq	$-0x1, 0x80(%rsp)
+               	movq	$-0x1, 0x88(%rsp)
+               	movq	$-0x1, 0x90(%rsp)
+               	movq	$-0x1, 0x98(%rsp)
+               	leaq	0xc0(%rsp), %rsi
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	leaq	0x100(%rsp), %rdi
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rdi)
+               	leaq	0xa0(%rsp), %rax
+               	vmovups	(%rcx), %ymm14
+               	vmovups	%ymm14, (%rax)
+               	leaq	0xe0(%rsp), %rcx
+               	vmovups	(%rsi), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	leaq	0x80(%rsp), %rsi
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	leaq	0xc0(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rax)
                	leaq	0x100(%rsp), %rax
-               	movups	%xmm0, 0x100(%rsp)
+               	leaq	0xa0(%rsp), %rsi
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movl	-0x88(%rbp), %edi
+               	movl	%edi, 0xc0(%rsp,%rax,4)
+               	incq	%rax
+               	cmpl	$0x8, %eax
+               	jge	<addr>
+               	movl	0xe0(%rsp,%rax,4), %esi
+               	movl	%esi, -0x88(%rbp)
+               	movl	0x80(%rsp,%rax,4), %esi
+               	testl	%esi, %esi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
+               	shlq	$0x2, %rdi
+               	addq	%rdx, %rdi
+               	movl	(%rdi), %r10d
+               	movl	%r10d, (%rsi)
+               	jmp	<addr>
+               	vmovups	0xc0(%rsp), %ymm0
+               	leaq	0xa0(%rsp), %rax
+               	vmovups	%ymm0, 0xa0(%rsp)
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rcx
+               	movups	0x120(%rsp), %xmm0
+               	vpcmpeqd	%xmm1, %xmm1, %xmm1
+               	xorl	%eax, %eax
+               	movq	%rax, %xmm14
+               	movups	%xmm14, 0xe0(%rsp)
+               	movups	%xmm1, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rsi
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%xmm14, (%rsi)
+               	movups	%xmm0, 0xa0(%rsp)
+               	jmp	<addr>
+               	movl	-0x88(%rbp), %edi
+               	movl	%edi, 0xc0(%rsp,%rax,4)
+               	incq	%rax
+               	cmpl	$0x4, %eax
+               	jge	<addr>
+               	movl	0xe0(%rsp,%rax,4), %esi
+               	movl	%esi, -0x88(%rbp)
+               	movl	0x80(%rsp,%rax,4), %esi
+               	testl	%esi, %esi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
+               	shlq	$0x2, %rdi
+               	addq	%rcx, %rdi
+               	movl	(%rdi), %r10d
+               	movl	%r10d, (%rsi)
+               	jmp	<addr>
+               	movups	0xc0(%rsp), %xmm0
+               	leaq	0xa0(%rsp), %rax
+               	movups	%xmm0, 0xa0(%rsp)
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rdx
+               	movups	0x120(%rsp), %xmm0
+               	leaq	0x80(%rsp), %rcx
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	movq	$-0x1, 0x80(%rsp)
+               	movq	$-0x1, 0x88(%rsp)
+               	movq	$-0x1, 0x90(%rsp)
+               	movq	$-0x1, 0x98(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rax)
+               	leaq	0xa0(%rsp), %rsi
+               	vmovups	(%rcx), %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	leaq	0x80(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	leaq	0xc0(%rsp), %rax
+               	vmovups	(%rsi), %ymm14
+               	vmovups	%ymm14, (%rax)
+               	leaq	0xa0(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rax)
+               	movups	%xmm0, 0xe0(%rsp)
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movq	-0x88(%rbp), %rdi
+               	movq	%rdi, 0xa0(%rsp,%rax,8)
+               	incq	%rax
+               	cmpl	$0x4, %eax
+               	jge	<addr>
+               	movq	0x80(%rsp,%rax,8), %rsi
+               	movq	%rsi, -0x88(%rbp)
+               	movq	0xc0(%rsp,%rax,8), %rsi
+               	testq	%rsi, %rsi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xe0(%rsp,%rax,4), %rdi
+               	shlq	$0x2, %rdi
+               	addq	%rdx, %rdi
+               	movq	(%rdi), %r10
+               	movq	%r10, (%rsi)
+               	jmp	<addr>
+               	vmovups	0xa0(%rsp), %ymm0
+               	leaq	0xa0(%rsp), %rax
+               	vmovups	%ymm0, 0xa0(%rsp)
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rcx
+               	movups	0x120(%rsp), %xmm0
+               	vpcmpeqd	%xmm1, %xmm1, %xmm1
+               	xorl	%eax, %eax
+               	movq	%rax, %xmm14
+               	movups	%xmm14, 0xe0(%rsp)
+               	movups	%xmm1, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rsi
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%xmm14, (%rsi)
+               	movups	%xmm0, 0xa0(%rsp)
+               	jmp	<addr>
+               	movq	-0x88(%rbp), %rdi
+               	movq	%rdi, 0xc0(%rsp,%rax,8)
+               	incq	%rax
+               	cmpl	$0x2, %eax
+               	jge	<addr>
+               	movq	0xe0(%rsp,%rax,8), %rsi
+               	movq	%rsi, -0x88(%rbp)
+               	movq	0x80(%rsp,%rax,8), %rsi
+               	testq	%rsi, %rsi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
+               	shlq	$0x2, %rdi
+               	addq	%rcx, %rdi
+               	movq	(%rdi), %r10
+               	movq	%r10, (%rsi)
+               	jmp	<addr>
+               	movups	0xc0(%rsp), %xmm0
+               	leaq	0xa0(%rsp), %rax
+               	movups	%xmm0, 0xa0(%rsp)
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rdx
+               	leaq	(%rsp), %rcx
+               	leaq	0xa0(%rsp), %rax
+               	vmovups	(%rcx), %ymm14
+               	vmovups	%ymm14, (%rax)
+               	leaq	0x80(%rsp), %rcx
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	movq	$-0x1, 0x80(%rsp)
+               	movq	$-0x1, 0x88(%rsp)
+               	movq	$-0x1, 0x90(%rsp)
+               	movq	$-0x1, 0x98(%rsp)
+               	leaq	0xc0(%rsp), %rsi
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	leaq	0x100(%rsp), %rdi
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rdi)
+               	leaq	0xa0(%rsp), %rax
+               	vmovups	(%rcx), %ymm14
+               	vmovups	%ymm14, (%rax)
+               	leaq	0xe0(%rsp), %rcx
+               	vmovups	(%rsi), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	leaq	0x80(%rsp), %rsi
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	leaq	0xc0(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rax)
+               	leaq	0x100(%rsp), %rax
+               	leaq	0xa0(%rsp), %rsi
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movl	-0x88(%rbp), %edi
+               	movl	%edi, 0xc0(%rsp,%rax,4)
+               	incq	%rax
+               	cmpl	$0x8, %eax
+               	jge	<addr>
+               	movl	0xe0(%rsp,%rax,4), %esi
+               	movl	%esi, -0x88(%rbp)
+               	movl	0x80(%rsp,%rax,4), %esi
+               	testl	%esi, %esi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
+               	shlq	$0x2, %rdi
+               	addq	%rdx, %rdi
+               	movl	(%rdi), %r10d
+               	movl	%r10d, (%rsi)
+               	jmp	<addr>
+               	vmovups	0xc0(%rsp), %ymm0
+               	leaq	0xa0(%rsp), %rax
+               	vmovups	%ymm0, 0xa0(%rsp)
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rcx
+               	movups	0x120(%rsp), %xmm0
+               	vpcmpeqd	%xmm1, %xmm1, %xmm1
+               	xorl	%eax, %eax
+               	movq	%rax, %xmm14
+               	movups	%xmm14, 0xe0(%rsp)
+               	movups	%xmm1, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rsi
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%xmm14, (%rsi)
+               	movups	%xmm0, 0xa0(%rsp)
+               	jmp	<addr>
+               	movl	-0x88(%rbp), %edi
+               	movl	%edi, 0xc0(%rsp,%rax,4)
+               	incq	%rax
+               	cmpl	$0x4, %eax
+               	jge	<addr>
+               	movl	0xe0(%rsp,%rax,4), %esi
+               	movl	%esi, -0x88(%rbp)
+               	movl	0x80(%rsp,%rax,4), %esi
+               	testl	%esi, %esi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
+               	shlq	$0x2, %rdi
+               	addq	%rcx, %rdi
+               	movl	(%rdi), %r10d
+               	movl	%r10d, (%rsi)
+               	jmp	<addr>
+               	movups	0xc0(%rsp), %xmm0
+               	leaq	0xa0(%rsp), %rax
+               	movups	%xmm0, 0xa0(%rsp)
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rdi
+               	leaq	(%rsp), %r9
+               	movl	$0x2, %esi
+               	movq	%r9, %r10
+               	vmovups	(%r10), %ymm0
+               	callq	<addr>
+               	vmovups	%ymm0, 0xa0(%rsp)
+               	leaq	0xa0(%rsp), %rax
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rdi
+               	leaq	0x120(%rsp), %r9
+               	movl	$0x2, %esi
+               	movq	%r9, %r10
+               	movups	(%r10), %xmm0
+               	vzeroupper
+               	callq	<addr>
+               	movups	%xmm0, 0xa0(%rsp)
+               	leaq	0xa0(%rsp), %rax
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rdi
+               	leaq	(%rsp), %r9
+               	movl	$0x2, %esi
+               	movq	%r9, %r10
+               	vmovups	(%r10), %ymm0
+               	callq	<addr>
+               	movups	%xmm0, 0xa0(%rsp)
+               	leaq	0xa0(%rsp), %rax
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rdi
+               	leaq	0x120(%rsp), %r9
+               	movl	$0x2, %esi
+               	movq	%r9, %r10
+               	movups	(%r10), %xmm0
+               	vzeroupper
+               	callq	<addr>
+               	movups	%xmm0, 0xa0(%rsp)
+               	leaq	0xa0(%rsp), %rax
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rdx
+               	leaq	(%rsp), %rax
+               	leaq	0xa0(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	leaq	0x80(%rsp), %rsi
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	movq	$-0x1, 0x80(%rsp)
+               	movq	$-0x1, 0x88(%rsp)
+               	movq	$-0x1, 0x90(%rsp)
+               	movq	$-0x1, 0x98(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rax)
+               	leaq	0x100(%rsp), %rdi
+               	vmovups	(%rcx), %ymm14
+               	vmovups	%ymm14, (%rdi)
+               	leaq	0xa0(%rsp), %rdi
+               	vmovups	(%rsi), %ymm14
+               	vmovups	%ymm14, (%rdi)
+               	leaq	0xe0(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	leaq	0x80(%rsp), %rax
+               	vmovups	(%rdi), %ymm14
+               	vmovups	%ymm14, (%rax)
+               	leaq	0xc0(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rax)
+               	leaq	0x100(%rsp), %rax
+               	leaq	0xa0(%rsp), %rsi
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movq	-0x88(%rbp), %rdi
+               	movq	%rdi, 0xc0(%rsp,%rax,8)
+               	incq	%rax
+               	cmpl	$0x4, %eax
+               	jge	<addr>
+               	movq	0xe0(%rsp,%rax,8), %rsi
+               	movq	%rsi, -0x88(%rbp)
+               	movq	0x80(%rsp,%rax,8), %rsi
+               	testq	%rsi, %rsi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movq	0xa0(%rsp,%rax,8), %rdi
+               	shlq	%rdi
+               	addq	%rdx, %rdi
+               	movq	(%rdi), %r10
+               	movq	%r10, (%rsi)
+               	jmp	<addr>
+               	vmovups	0xc0(%rsp), %ymm0
+               	leaq	0xa0(%rsp), %rax
+               	vmovups	%ymm0, 0xa0(%rsp)
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rcx
+               	movups	0x120(%rsp), %xmm0
+               	vpcmpeqd	%xmm1, %xmm1, %xmm1
+               	xorl	%eax, %eax
+               	movq	%rax, %xmm14
+               	movups	%xmm14, 0xe0(%rsp)
+               	movups	%xmm1, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rsi
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%xmm14, (%rsi)
+               	movups	%xmm0, 0xa0(%rsp)
+               	jmp	<addr>
+               	movq	-0x88(%rbp), %rdi
+               	movq	%rdi, 0xc0(%rsp,%rax,8)
+               	incq	%rax
+               	cmpl	$0x2, %eax
+               	jge	<addr>
+               	movq	0xe0(%rsp,%rax,8), %rsi
+               	movq	%rsi, -0x88(%rbp)
+               	movq	0x80(%rsp,%rax,8), %rsi
+               	testq	%rsi, %rsi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movq	0xa0(%rsp,%rax,8), %rdi
+               	shlq	%rdi
+               	addq	%rcx, %rdi
+               	movq	(%rdi), %r10
+               	movq	%r10, (%rsi)
+               	jmp	<addr>
+               	movups	0xc0(%rsp), %xmm0
+               	leaq	0xa0(%rsp), %rax
+               	movups	%xmm0, 0xa0(%rsp)
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rcx
@@ -5549,487 +5965,560 @@ Disassembly of section .text:
                	leaq	0xa0(%rsp), %rax
                	vmovups	(%rdx), %ymm14
                	vmovups	%ymm14, (%rax)
-               	vpcmpeqd	%ymm0, %ymm0, %ymm0
-               	xorl	%edi, %edi
-               	leaq	0x280(%rsp), %rsi
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rsi)
-               	vmovq	%rdi, %xmm14
-               	vmovups	%ymm14, 0x2a0(%rsp)
-               	vmovups	%ymm0, 0x2c0(%rsp)
-               	leaq	0x2e0(%rsp), %rax
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%ymm14, (%rax)
-               	leaq	0x1a0(%rsp), %rax
-               	vmovups	(%rsi), %ymm14
-               	vmovups	%ymm14, (%rax)
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movl	-0xb8(%rbp), %edi
-               	movl	%edi, 0x2e0(%rsp,%rax,4)
-               	incq	%rax
-               	cmpl	$0x8, %eax
-               	jge	<addr>
-               	movl	0x2a0(%rsp,%rax,4), %esi
-               	movl	%esi, -0xb8(%rbp)
-               	movl	0x2c0(%rsp,%rax,4), %esi
-               	testl	%esi, %esi
-               	jge	<addr>
-               	leaq	-0xb8(%rbp), %rsi
-               	movslq	0x1a0(%rsp,%rax,4), %rdi
-               	shlq	$0x2, %rdi
-               	addq	%rcx, %rdi
-               	movl	(%rdi), %r10d
-               	movl	%r10d, (%rsi)
-               	jmp	<addr>
-               	vmovups	0x2e0(%rsp), %ymm0
-               	leaq	0x100(%rsp), %rax
-               	vmovups	%ymm0, 0x100(%rsp)
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm0
-               	vpcmpeqd	%xmm1, %xmm1, %xmm1
-               	xorl	%eax, %eax
-               	movq	%rax, %xmm14
-               	movups	%xmm14, 0x4f0(%rsp)
-               	movups	%xmm1, 0x500(%rsp)
-               	leaq	0x510(%rsp), %rsi
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%xmm14, (%rsi)
-               	movups	%xmm0, 0x520(%rsp)
-               	jmp	<addr>
-               	movl	-0xc0(%rbp), %edi
-               	movl	%edi, 0x510(%rsp,%rax,4)
-               	incq	%rax
-               	cmpl	$0x4, %eax
-               	jge	<addr>
-               	movl	0x4f0(%rsp,%rax,4), %esi
-               	movl	%esi, -0xc0(%rbp)
-               	movl	0x500(%rsp,%rax,4), %esi
-               	testl	%esi, %esi
-               	jge	<addr>
-               	leaq	-0xc0(%rbp), %rsi
-               	movslq	0x520(%rsp,%rax,4), %rdi
-               	shlq	$0x2, %rdi
-               	addq	%rcx, %rdi
-               	movl	(%rdi), %r10d
-               	movl	%r10d, (%rsi)
-               	jmp	<addr>
-               	movups	0x510(%rsp), %xmm0
-               	leaq	0x100(%rsp), %rax
-               	movups	%xmm0, 0x100(%rsp)
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm0
-               	vpcmpeqd	%ymm1, %ymm1, %ymm1
-               	xorl	%eax, %eax
-               	vmovq	%rax, %xmm14
-               	vmovups	%ymm14, 0x260(%rsp)
-               	vmovups	%ymm1, 0x180(%rsp)
-               	leaq	0xc0(%rsp), %rsi
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%ymm14, (%rsi)
-               	movups	%xmm0, 0x4e0(%rsp)
-               	jmp	<addr>
-               	movq	-0xc8(%rbp), %rdi
-               	movq	%rdi, 0xc0(%rsp,%rax,8)
-               	incq	%rax
-               	cmpl	$0x4, %eax
-               	jge	<addr>
-               	movq	0x260(%rsp,%rax,8), %rsi
-               	movq	%rsi, -0xc8(%rbp)
-               	movq	0x180(%rsp,%rax,8), %rsi
-               	testq	%rsi, %rsi
-               	jge	<addr>
-               	leaq	-0xc8(%rbp), %rsi
-               	movslq	0x4e0(%rsp,%rax,4), %rdi
-               	shlq	$0x2, %rdi
-               	addq	%rcx, %rdi
-               	movq	(%rdi), %r10
-               	movq	%r10, (%rsi)
-               	jmp	<addr>
-               	vmovups	0xc0(%rsp), %ymm0
-               	leaq	0x100(%rsp), %rax
-               	vmovups	%ymm0, 0x100(%rsp)
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm0
-               	vpcmpeqd	%xmm1, %xmm1, %xmm1
-               	xorl	%eax, %eax
-               	movq	%rax, %xmm14
-               	movups	%xmm14, 0x4a0(%rsp)
-               	movups	%xmm1, 0x4b0(%rsp)
-               	leaq	0x4c0(%rsp), %rsi
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%xmm14, (%rsi)
-               	movups	%xmm0, 0x4d0(%rsp)
-               	jmp	<addr>
-               	movq	-0xd0(%rbp), %rdi
-               	movq	%rdi, 0x4c0(%rsp,%rax,8)
-               	incq	%rax
-               	cmpl	$0x2, %eax
-               	jge	<addr>
-               	movq	0x4a0(%rsp,%rax,8), %rsi
-               	movq	%rsi, -0xd0(%rbp)
-               	movq	0x4b0(%rsp,%rax,8), %rsi
-               	testq	%rsi, %rsi
-               	jge	<addr>
-               	leaq	-0xd0(%rbp), %rsi
-               	movslq	0x4d0(%rsp,%rax,4), %rdi
-               	shlq	$0x2, %rdi
-               	addq	%rcx, %rdi
-               	movq	(%rdi), %r10
-               	movq	%r10, (%rsi)
-               	jmp	<addr>
-               	movups	0x4c0(%rsp), %xmm0
-               	leaq	0x100(%rsp), %rax
-               	movups	%xmm0, 0x100(%rsp)
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	leaq	(%rsp), %rdx
-               	leaq	0x80(%rsp), %rax
-               	vmovups	(%rdx), %ymm14
-               	vmovups	%ymm14, (%rax)
-               	vpcmpeqd	%ymm0, %ymm0, %ymm0
-               	xorl	%edi, %edi
-               	leaq	0x1c0(%rsp), %rsi
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rsi)
-               	vmovq	%rdi, %xmm14
-               	vmovups	%ymm14, 0x1e0(%rsp)
-               	vmovups	%ymm0, 0x200(%rsp)
-               	leaq	0x220(%rsp), %rax
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%ymm14, (%rax)
-               	leaq	0x240(%rsp), %rax
-               	vmovups	(%rsi), %ymm14
-               	vmovups	%ymm14, (%rax)
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movl	-0xd8(%rbp), %edi
-               	movl	%edi, 0x220(%rsp,%rax,4)
-               	incq	%rax
-               	cmpl	$0x8, %eax
-               	jge	<addr>
-               	movl	0x1e0(%rsp,%rax,4), %esi
-               	movl	%esi, -0xd8(%rbp)
-               	movl	0x200(%rsp,%rax,4), %esi
-               	testl	%esi, %esi
-               	jge	<addr>
-               	leaq	-0xd8(%rbp), %rsi
-               	movslq	0x240(%rsp,%rax,4), %rdi
-               	shlq	$0x2, %rdi
-               	addq	%rcx, %rdi
-               	movl	(%rdi), %r10d
-               	movl	%r10d, (%rsi)
-               	jmp	<addr>
-               	vmovups	0x220(%rsp), %ymm0
-               	leaq	0x100(%rsp), %rax
-               	vmovups	%ymm0, 0x100(%rsp)
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm0
-               	vpcmpeqd	%xmm1, %xmm1, %xmm1
-               	xorl	%eax, %eax
-               	movq	%rax, %xmm14
-               	movups	%xmm14, 0x460(%rsp)
-               	movups	%xmm1, 0x470(%rsp)
-               	leaq	0x480(%rsp), %rsi
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%xmm14, (%rsi)
-               	movups	%xmm0, 0x490(%rsp)
-               	jmp	<addr>
-               	movl	-0xe0(%rbp), %edi
-               	movl	%edi, 0x480(%rsp,%rax,4)
-               	incq	%rax
-               	cmpl	$0x4, %eax
-               	jge	<addr>
-               	movl	0x460(%rsp,%rax,4), %esi
-               	movl	%esi, -0xe0(%rbp)
-               	movl	0x470(%rsp,%rax,4), %esi
-               	testl	%esi, %esi
-               	jge	<addr>
-               	leaq	-0xe0(%rbp), %rsi
-               	movslq	0x490(%rsp,%rax,4), %rdi
-               	shlq	$0x2, %rdi
-               	addq	%rcx, %rdi
-               	movl	(%rdi), %r10d
-               	movl	%r10d, (%rsi)
-               	jmp	<addr>
-               	movups	0x480(%rsp), %xmm0
-               	leaq	0x100(%rsp), %rax
-               	movups	%xmm0, 0x100(%rsp)
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rdi
-               	leaq	(%rsp), %r9
-               	movl	$0x2, %esi
-               	movq	%r9, %r10
-               	vmovups	(%r10), %ymm0
-               	callq	<addr>
-               	vmovups	%ymm0, 0x100(%rsp)
-               	leaq	0x100(%rsp), %rax
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rdi
-               	leaq	0x420(%rsp), %r9
-               	movl	$0x2, %esi
-               	movq	%r9, %r10
-               	movups	(%r10), %xmm0
-               	vzeroupper
-               	callq	<addr>
-               	movups	%xmm0, 0x100(%rsp)
-               	leaq	0x100(%rsp), %rax
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rdi
-               	leaq	(%rsp), %r9
-               	movl	$0x2, %esi
-               	movq	%r9, %r10
-               	vmovups	(%r10), %ymm0
-               	callq	<addr>
-               	movups	%xmm0, 0x100(%rsp)
-               	leaq	0x100(%rsp), %rax
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rdi
-               	leaq	0x420(%rsp), %r9
-               	movl	$0x2, %esi
-               	movq	%r9, %r10
-               	movups	(%r10), %xmm0
-               	vzeroupper
-               	callq	<addr>
-               	movups	%xmm0, 0x100(%rsp)
-               	leaq	0x100(%rsp), %rax
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	leaq	(%rsp), %rdx
-               	leaq	0x100(%rsp), %rax
-               	vmovups	(%rdx), %ymm14
-               	vmovups	%ymm14, (%rax)
-               	vpcmpeqd	%ymm0, %ymm0, %ymm0
-               	xorl	%edi, %edi
-               	leaq	0x3a0(%rsp), %rsi
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rsi)
-               	vmovq	%rdi, %xmm14
-               	vmovups	%ymm14, 0x3c0(%rsp)
-               	vmovups	%ymm0, 0x3e0(%rsp)
-               	leaq	0x400(%rsp), %rax
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%ymm14, (%rax)
-               	leaq	0xe0(%rsp), %rax
-               	vmovups	(%rsi), %ymm14
-               	vmovups	%ymm14, (%rax)
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movq	-0x88(%rbp), %rdi
-               	movq	%rdi, 0x400(%rsp,%rax,8)
-               	incq	%rax
-               	cmpl	$0x4, %eax
-               	jge	<addr>
-               	movq	0x3c0(%rsp,%rax,8), %rsi
-               	movq	%rsi, -0x88(%rbp)
-               	movq	0x3e0(%rsp,%rax,8), %rsi
-               	testq	%rsi, %rsi
-               	jge	<addr>
-               	leaq	-0x88(%rbp), %rsi
-               	movq	0xe0(%rsp,%rax,8), %rdi
-               	shlq	%rdi
-               	addq	%rcx, %rdi
-               	movq	(%rdi), %r10
-               	movq	%r10, (%rsi)
-               	jmp	<addr>
-               	vmovups	0x400(%rsp), %ymm0
-               	leaq	0x100(%rsp), %rax
-               	vmovups	%ymm0, 0x100(%rsp)
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm0
-               	vpcmpeqd	%xmm1, %xmm1, %xmm1
-               	xorl	%eax, %eax
-               	movq	%rax, %xmm14
-               	movups	%xmm14, 0x5f0(%rsp)
-               	movups	%xmm1, 0x600(%rsp)
-               	leaq	0x610(%rsp), %rsi
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%xmm14, (%rsi)
-               	movups	%xmm0, 0x620(%rsp)
-               	jmp	<addr>
-               	movq	-0x90(%rbp), %rdi
-               	movq	%rdi, 0x610(%rsp,%rax,8)
-               	incq	%rax
-               	cmpl	$0x2, %eax
-               	jge	<addr>
-               	movq	0x5f0(%rsp,%rax,8), %rsi
-               	movq	%rsi, -0x90(%rbp)
-               	movq	0x600(%rsp,%rax,8), %rsi
-               	testq	%rsi, %rsi
-               	jge	<addr>
-               	leaq	-0x90(%rbp), %rsi
-               	movq	0x620(%rsp,%rax,8), %rdi
-               	shlq	%rdi
-               	addq	%rcx, %rdi
-               	movq	(%rdi), %r10
-               	movq	%r10, (%rsi)
-               	jmp	<addr>
-               	movups	0x610(%rsp), %xmm0
-               	leaq	0x160(%rsp), %rax
-               	movups	%xmm0, 0x160(%rsp)
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	leaq	(%rsp), %rdx
-               	leaq	0x160(%rsp), %rax
-               	vmovups	(%rdx), %ymm14
-               	vmovups	%ymm14, (%rax)
                	vpcmpeqd	%xmm0, %xmm0, %xmm0
                	xorl	%edi, %edi
-               	leaq	0x360(%rsp), %rsi
+               	leaq	0xc0(%rsp), %rsi
                	vmovups	(%rax), %ymm14
                	vmovups	%ymm14, (%rsi)
                	movq	%rdi, %xmm14
-               	movups	%xmm14, 0x5c0(%rsp)
-               	movups	%xmm0, 0x5d0(%rsp)
-               	leaq	0x5e0(%rsp), %rax
+               	movups	%xmm14, 0x100(%rsp)
+               	movups	%xmm0, 0xe0(%rsp)
+               	leaq	0x80(%rsp), %rax
                	vxorps	%ymm14, %ymm14, %ymm14
                	vmovups	%xmm14, (%rax)
-               	leaq	0x380(%rsp), %rax
+               	leaq	0xa0(%rsp), %rax
                	vmovups	(%rsi), %ymm14
                	vmovups	%ymm14, (%rax)
                	xorl	%eax, %eax
                	jmp	<addr>
-               	movl	-0x98(%rbp), %edi
-               	movl	%edi, 0x5e0(%rsp,%rax,4)
+               	movl	-0x88(%rbp), %edi
+               	movl	%edi, 0x80(%rsp,%rax,4)
                	incq	%rax
                	cmpl	$0x4, %eax
                	jge	<addr>
-               	movl	0x5c0(%rsp,%rax,4), %esi
-               	movl	%esi, -0x98(%rbp)
-               	movl	0x5d0(%rsp,%rax,4), %esi
+               	movl	0x100(%rsp,%rax,4), %esi
+               	movl	%esi, -0x88(%rbp)
+               	movl	0xe0(%rsp,%rax,4), %esi
                	testl	%esi, %esi
                	jge	<addr>
-               	leaq	-0x98(%rbp), %rsi
-               	movq	0x380(%rsp,%rax,8), %rdi
+               	leaq	-0x88(%rbp), %rsi
+               	movq	0xa0(%rsp,%rax,8), %rdi
                	shlq	%rdi
                	addq	%rcx, %rdi
                	movl	(%rdi), %r10d
                	movl	%r10d, (%rsi)
                	jmp	<addr>
-               	movups	0x5e0(%rsp), %xmm0
-               	leaq	0x160(%rsp), %rax
-               	movups	%xmm0, 0x160(%rsp)
+               	movups	0x80(%rsp), %xmm0
+               	leaq	0xa0(%rsp), %rax
+               	movups	%xmm0, 0xa0(%rsp)
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm0
+               	movups	0x120(%rsp), %xmm0
                	xorl	%eax, %eax
                	movl	$0xffffffff, %edx       # imm = 0xFFFFFFFF
                	vmovd	%edx, %xmm1
                	vpinsrd	$0x1, %edx, %xmm1, %xmm1
                	movq	%rax, %xmm14
-               	movups	%xmm14, 0x580(%rsp)
-               	movups	%xmm1, 0x590(%rsp)
-               	leaq	0x5a0(%rsp), %rsi
+               	movups	%xmm14, 0xe0(%rsp)
+               	movups	%xmm1, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rsi
                	vxorps	%ymm14, %ymm14, %ymm14
                	vmovups	%xmm14, (%rsi)
-               	movups	%xmm0, 0x5b0(%rsp)
+               	movups	%xmm0, 0xa0(%rsp)
                	jmp	<addr>
-               	movl	-0xa0(%rbp), %edi
-               	movl	%edi, 0x5a0(%rsp,%rax,4)
+               	movl	-0x88(%rbp), %edi
+               	movl	%edi, 0xc0(%rsp,%rax,4)
                	incq	%rax
                	cmpl	$0x2, %eax
                	jge	<addr>
-               	movl	0x580(%rsp,%rax,4), %esi
-               	movl	%esi, -0xa0(%rbp)
-               	movl	0x590(%rsp,%rax,4), %esi
+               	movl	0xe0(%rsp,%rax,4), %esi
+               	movl	%esi, -0x88(%rbp)
+               	movl	0x80(%rsp,%rax,4), %esi
                	testl	%esi, %esi
                	jge	<addr>
-               	leaq	-0xa0(%rbp), %rsi
-               	movq	0x5b0(%rsp,%rax,8), %rdi
+               	leaq	-0x88(%rbp), %rsi
+               	movq	0xa0(%rsp,%rax,8), %rdi
                	shlq	%rdi
                	addq	%rcx, %rdi
                	movl	(%rdi), %r10d
                	movl	%r10d, (%rsi)
                	jmp	<addr>
-               	movups	0x5a0(%rsp), %xmm0
-               	leaq	0x140(%rsp), %rax
-               	movups	%xmm0, 0x140(%rsp)
+               	movups	0xc0(%rsp), %xmm0
+               	leaq	0xa0(%rsp), %rax
+               	movups	%xmm0, 0xa0(%rsp)
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm0
-               	vpcmpeqd	%ymm1, %ymm1, %ymm1
-               	xorl	%eax, %eax
-               	vmovq	%rax, %xmm14
-               	vmovups	%ymm14, 0x300(%rsp)
-               	vmovups	%ymm1, 0x320(%rsp)
-               	leaq	0x340(%rsp), %rsi
+               	leaq	0x200(%rax), %rdx
+               	movups	0x120(%rsp), %xmm0
+               	leaq	0x80(%rsp), %rcx
                	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	movq	$-0x1, 0x80(%rsp)
+               	movq	$-0x1, 0x88(%rsp)
+               	movq	$-0x1, 0x90(%rsp)
+               	movq	$-0x1, 0x98(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rax)
+               	leaq	0xa0(%rsp), %rsi
+               	vmovups	(%rcx), %ymm14
                	vmovups	%ymm14, (%rsi)
-               	movups	%xmm0, 0x570(%rsp)
+               	leaq	0x80(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	leaq	0xc0(%rsp), %rax
+               	vmovups	(%rsi), %ymm14
+               	vmovups	%ymm14, (%rax)
+               	leaq	0xa0(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rax)
+               	movups	%xmm0, 0xe0(%rsp)
+               	xorl	%eax, %eax
                	jmp	<addr>
-               	movq	-0xa8(%rbp), %rdi
-               	movq	%rdi, 0x340(%rsp,%rax,8)
+               	movq	-0x88(%rbp), %rdi
+               	movq	%rdi, 0xa0(%rsp,%rax,8)
                	incq	%rax
                	cmpl	$0x4, %eax
                	jge	<addr>
-               	movq	0x300(%rsp,%rax,8), %rsi
-               	movq	%rsi, -0xa8(%rbp)
-               	movq	0x320(%rsp,%rax,8), %rsi
+               	movq	0x80(%rsp,%rax,8), %rsi
+               	movq	%rsi, -0x88(%rbp)
+               	movq	0xc0(%rsp,%rax,8), %rsi
                	testq	%rsi, %rsi
                	jge	<addr>
-               	leaq	-0xa8(%rbp), %rsi
-               	movslq	0x570(%rsp,%rax,4), %rdi
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xe0(%rsp,%rax,4), %rdi
                	shlq	%rdi
-               	addq	%rcx, %rdi
+               	addq	%rdx, %rdi
                	movq	(%rdi), %r10
                	movq	%r10, (%rsi)
                	jmp	<addr>
-               	vmovups	0x340(%rsp), %ymm0
-               	leaq	0x140(%rsp), %rax
-               	vmovups	%ymm0, 0x140(%rsp)
+               	vmovups	0xa0(%rsp), %ymm0
+               	leaq	0xa0(%rsp), %rax
+               	vmovups	%ymm0, 0xa0(%rsp)
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm0
+               	movups	0x120(%rsp), %xmm0
                	vpcmpeqd	%xmm1, %xmm1, %xmm1
                	xorl	%eax, %eax
                	movq	%rax, %xmm14
-               	movups	%xmm14, 0x530(%rsp)
-               	movups	%xmm1, 0x540(%rsp)
-               	leaq	0x550(%rsp), %rsi
+               	movups	%xmm14, 0xe0(%rsp)
+               	movups	%xmm1, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rsi
                	vxorps	%ymm14, %ymm14, %ymm14
                	vmovups	%xmm14, (%rsi)
-               	movups	%xmm0, 0x560(%rsp)
+               	movups	%xmm0, 0xa0(%rsp)
                	jmp	<addr>
-               	movq	-0xb0(%rbp), %rdi
-               	movq	%rdi, 0x550(%rsp,%rax,8)
+               	movq	-0x88(%rbp), %rdi
+               	movq	%rdi, 0xc0(%rsp,%rax,8)
                	incq	%rax
                	cmpl	$0x2, %eax
                	jge	<addr>
-               	movq	0x530(%rsp,%rax,8), %rsi
-               	movq	%rsi, -0xb0(%rbp)
-               	movq	0x540(%rsp,%rax,8), %rsi
+               	movq	0xe0(%rsp,%rax,8), %rsi
+               	movq	%rsi, -0x88(%rbp)
+               	movq	0x80(%rsp,%rax,8), %rsi
                	testq	%rsi, %rsi
                	jge	<addr>
-               	leaq	-0xb0(%rbp), %rsi
-               	movslq	0x560(%rsp,%rax,4), %rdi
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
                	shlq	%rdi
                	addq	%rcx, %rdi
                	movq	(%rdi), %r10
                	movq	%r10, (%rsi)
                	jmp	<addr>
-               	movups	0x550(%rsp), %xmm0
-               	leaq	0x140(%rsp), %rax
-               	movups	%xmm0, 0x140(%rsp)
+               	movups	0xc0(%rsp), %xmm0
+               	leaq	0xa0(%rsp), %rax
+               	movups	%xmm0, 0xa0(%rsp)
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rdx
+               	leaq	(%rsp), %rcx
+               	leaq	0xa0(%rsp), %rax
+               	vmovups	(%rcx), %ymm14
+               	vmovups	%ymm14, (%rax)
+               	leaq	0x80(%rsp), %rcx
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	movq	$-0x1, 0x80(%rsp)
+               	movq	$-0x1, 0x88(%rsp)
+               	movq	$-0x1, 0x90(%rsp)
+               	movq	$-0x1, 0x98(%rsp)
+               	leaq	0xc0(%rsp), %rsi
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	leaq	0x100(%rsp), %rdi
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rdi)
+               	leaq	0xa0(%rsp), %rax
+               	vmovups	(%rcx), %ymm14
+               	vmovups	%ymm14, (%rax)
+               	leaq	0xe0(%rsp), %rcx
+               	vmovups	(%rsi), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	leaq	0x80(%rsp), %rsi
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	leaq	0xc0(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rax)
+               	leaq	0x100(%rsp), %rax
+               	leaq	0xa0(%rsp), %rsi
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movl	-0x88(%rbp), %edi
+               	movl	%edi, 0xc0(%rsp,%rax,4)
+               	incq	%rax
+               	cmpl	$0x8, %eax
+               	jge	<addr>
+               	movl	0xe0(%rsp,%rax,4), %esi
+               	movl	%esi, -0x88(%rbp)
+               	movl	0x80(%rsp,%rax,4), %esi
+               	testl	%esi, %esi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
+               	shlq	%rdi
+               	addq	%rdx, %rdi
+               	movl	(%rdi), %r10d
+               	movl	%r10d, (%rsi)
+               	jmp	<addr>
+               	vmovups	0xc0(%rsp), %ymm0
+               	leaq	0xa0(%rsp), %rax
+               	vmovups	%ymm0, 0xa0(%rsp)
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rcx
+               	movups	0x120(%rsp), %xmm0
+               	vpcmpeqd	%xmm1, %xmm1, %xmm1
+               	xorl	%eax, %eax
+               	movq	%rax, %xmm14
+               	movups	%xmm14, 0xe0(%rsp)
+               	movups	%xmm1, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rsi
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%xmm14, (%rsi)
+               	movups	%xmm0, 0xa0(%rsp)
+               	jmp	<addr>
+               	movl	-0x88(%rbp), %edi
+               	movl	%edi, 0xc0(%rsp,%rax,4)
+               	incq	%rax
+               	cmpl	$0x4, %eax
+               	jge	<addr>
+               	movl	0xe0(%rsp,%rax,4), %esi
+               	movl	%esi, -0x88(%rbp)
+               	movl	0x80(%rsp,%rax,4), %esi
+               	testl	%esi, %esi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
+               	shlq	%rdi
+               	addq	%rcx, %rdi
+               	movl	(%rdi), %r10d
+               	movl	%r10d, (%rsi)
+               	jmp	<addr>
+               	movups	0xc0(%rsp), %xmm0
+               	leaq	0xa0(%rsp), %rax
+               	movups	%xmm0, 0xa0(%rsp)
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rdx
+               	movups	0x120(%rsp), %xmm0
+               	leaq	0x80(%rsp), %rcx
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	movq	$-0x1, 0x80(%rsp)
+               	movq	$-0x1, 0x88(%rsp)
+               	movq	$-0x1, 0x90(%rsp)
+               	movq	$-0x1, 0x98(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rax)
+               	leaq	0xa0(%rsp), %rsi
+               	vmovups	(%rcx), %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	leaq	0x80(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	leaq	0xc0(%rsp), %rax
+               	vmovups	(%rsi), %ymm14
+               	vmovups	%ymm14, (%rax)
+               	leaq	0xa0(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rax)
+               	movups	%xmm0, 0xe0(%rsp)
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movq	-0x88(%rbp), %rdi
+               	movq	%rdi, 0xa0(%rsp,%rax,8)
+               	incq	%rax
+               	cmpl	$0x4, %eax
+               	jge	<addr>
+               	movq	0x80(%rsp,%rax,8), %rsi
+               	movq	%rsi, -0x88(%rbp)
+               	movq	0xc0(%rsp,%rax,8), %rsi
+               	testq	%rsi, %rsi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xe0(%rsp,%rax,4), %rdi
+               	shlq	%rdi
+               	addq	%rdx, %rdi
+               	movq	(%rdi), %r10
+               	movq	%r10, (%rsi)
+               	jmp	<addr>
+               	vmovups	0xa0(%rsp), %ymm0
+               	leaq	0xa0(%rsp), %rax
+               	vmovups	%ymm0, 0xa0(%rsp)
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rcx
+               	movups	0x120(%rsp), %xmm0
+               	vpcmpeqd	%xmm1, %xmm1, %xmm1
+               	xorl	%eax, %eax
+               	movq	%rax, %xmm14
+               	movups	%xmm14, 0xe0(%rsp)
+               	movups	%xmm1, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rsi
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%xmm14, (%rsi)
+               	movups	%xmm0, 0xa0(%rsp)
+               	jmp	<addr>
+               	movq	-0x88(%rbp), %rdi
+               	movq	%rdi, 0xc0(%rsp,%rax,8)
+               	incq	%rax
+               	cmpl	$0x2, %eax
+               	jge	<addr>
+               	movq	0xe0(%rsp,%rax,8), %rsi
+               	movq	%rsi, -0x88(%rbp)
+               	movq	0x80(%rsp,%rax,8), %rsi
+               	testq	%rsi, %rsi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
+               	shlq	%rdi
+               	addq	%rcx, %rdi
+               	movq	(%rdi), %r10
+               	movq	%r10, (%rsi)
+               	jmp	<addr>
+               	movups	0xc0(%rsp), %xmm0
+               	leaq	0xa0(%rsp), %rax
+               	movups	%xmm0, 0xa0(%rsp)
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rdx
+               	leaq	(%rsp), %rcx
+               	leaq	0xa0(%rsp), %rax
+               	vmovups	(%rcx), %ymm14
+               	vmovups	%ymm14, (%rax)
+               	leaq	0x80(%rsp), %rcx
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	movq	$-0x1, 0x80(%rsp)
+               	movq	$-0x1, 0x88(%rsp)
+               	movq	$-0x1, 0x90(%rsp)
+               	movq	$-0x1, 0x98(%rsp)
+               	leaq	0xc0(%rsp), %rsi
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	leaq	0x100(%rsp), %rdi
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rdi)
+               	leaq	0xa0(%rsp), %rax
+               	vmovups	(%rcx), %ymm14
+               	vmovups	%ymm14, (%rax)
+               	leaq	0xe0(%rsp), %rcx
+               	vmovups	(%rsi), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	leaq	0x80(%rsp), %rsi
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	leaq	0xc0(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rax)
+               	leaq	0x100(%rsp), %rax
+               	leaq	0xa0(%rsp), %rsi
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movl	-0x88(%rbp), %edi
+               	movl	%edi, 0xc0(%rsp,%rax,4)
+               	incq	%rax
+               	cmpl	$0x8, %eax
+               	jge	<addr>
+               	movl	0xe0(%rsp,%rax,4), %esi
+               	movl	%esi, -0x88(%rbp)
+               	movl	0x80(%rsp,%rax,4), %esi
+               	testl	%esi, %esi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
+               	shlq	%rdi
+               	addq	%rdx, %rdi
+               	movl	(%rdi), %r10d
+               	movl	%r10d, (%rsi)
+               	jmp	<addr>
+               	vmovups	0xc0(%rsp), %ymm0
+               	leaq	0xa0(%rsp), %rax
+               	vmovups	%ymm0, 0xa0(%rsp)
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rcx
+               	movups	0x120(%rsp), %xmm0
+               	vpcmpeqd	%xmm1, %xmm1, %xmm1
+               	xorl	%eax, %eax
+               	movq	%rax, %xmm14
+               	movups	%xmm14, 0xe0(%rsp)
+               	movups	%xmm1, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rsi
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%xmm14, (%rsi)
+               	movups	%xmm0, 0xa0(%rsp)
+               	jmp	<addr>
+               	movl	-0x88(%rbp), %edi
+               	movl	%edi, 0xc0(%rsp,%rax,4)
+               	incq	%rax
+               	cmpl	$0x4, %eax
+               	jge	<addr>
+               	movl	0xe0(%rsp,%rax,4), %esi
+               	movl	%esi, -0x88(%rbp)
+               	movl	0x80(%rsp,%rax,4), %esi
+               	testl	%esi, %esi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
+               	shlq	%rdi
+               	addq	%rcx, %rdi
+               	movl	(%rdi), %r10d
+               	movl	%r10d, (%rsi)
+               	jmp	<addr>
+               	movups	0xc0(%rsp), %xmm0
+               	leaq	0xa0(%rsp), %rax
+               	movups	%xmm0, 0xa0(%rsp)
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rdi
+               	leaq	(%rsp), %r9
+               	movl	$0x1, %esi
+               	movq	%r9, %r10
+               	vmovups	(%r10), %ymm0
+               	callq	<addr>
+               	vmovups	%ymm0, 0xa0(%rsp)
+               	leaq	0xa0(%rsp), %rax
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rdi
+               	leaq	0x120(%rsp), %r9
+               	movl	$0x1, %esi
+               	movq	%r9, %r10
+               	movups	(%r10), %xmm0
+               	vzeroupper
+               	callq	<addr>
+               	movups	%xmm0, 0xa0(%rsp)
+               	leaq	0xa0(%rsp), %rax
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rdi
+               	leaq	(%rsp), %r9
+               	movl	$0x1, %esi
+               	movq	%r9, %r10
+               	vmovups	(%r10), %ymm0
+               	callq	<addr>
+               	movups	%xmm0, 0xa0(%rsp)
+               	leaq	0xa0(%rsp), %rax
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rdi
+               	leaq	0x120(%rsp), %r9
+               	movl	$0x1, %esi
+               	movq	%r9, %r10
+               	movups	(%r10), %xmm0
+               	vzeroupper
+               	callq	<addr>
+               	movups	%xmm0, 0xa0(%rsp)
+               	leaq	0xa0(%rsp), %rax
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rdx
+               	leaq	(%rsp), %rax
+               	leaq	0xa0(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	leaq	0x80(%rsp), %rsi
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	movq	$-0x1, 0x80(%rsp)
+               	movq	$-0x1, 0x88(%rsp)
+               	movq	$-0x1, 0x90(%rsp)
+               	movq	$-0x1, 0x98(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rax)
+               	leaq	0x100(%rsp), %rdi
+               	vmovups	(%rcx), %ymm14
+               	vmovups	%ymm14, (%rdi)
+               	leaq	0xa0(%rsp), %rdi
+               	vmovups	(%rsi), %ymm14
+               	vmovups	%ymm14, (%rdi)
+               	leaq	0xe0(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	leaq	0x80(%rsp), %rax
+               	vmovups	(%rdi), %ymm14
+               	vmovups	%ymm14, (%rax)
+               	leaq	0xc0(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rax)
+               	leaq	0x100(%rsp), %rax
+               	leaq	0xa0(%rsp), %rsi
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movq	-0x88(%rbp), %rdi
+               	movq	%rdi, 0xc0(%rsp,%rax,8)
+               	incq	%rax
+               	cmpl	$0x4, %eax
+               	jge	<addr>
+               	movq	0xe0(%rsp,%rax,8), %rsi
+               	movq	%rsi, -0x88(%rbp)
+               	movq	0x80(%rsp,%rax,8), %rsi
+               	testq	%rsi, %rsi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movq	0xa0(%rsp,%rax,8), %rdi
+               	addq	%rdx, %rdi
+               	movq	(%rdi), %r10
+               	movq	%r10, (%rsi)
+               	jmp	<addr>
+               	vmovups	0xc0(%rsp), %ymm0
+               	leaq	0xa0(%rsp), %rax
+               	vmovups	%ymm0, 0xa0(%rsp)
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rcx
+               	movups	0x120(%rsp), %xmm0
+               	vpcmpeqd	%xmm1, %xmm1, %xmm1
+               	xorl	%eax, %eax
+               	movq	%rax, %xmm14
+               	movups	%xmm14, 0xe0(%rsp)
+               	movups	%xmm1, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rsi
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%xmm14, (%rsi)
+               	movups	%xmm0, 0xa0(%rsp)
+               	jmp	<addr>
+               	movq	-0x88(%rbp), %rdi
+               	movq	%rdi, 0xc0(%rsp,%rax,8)
+               	incq	%rax
+               	cmpl	$0x2, %eax
+               	jge	<addr>
+               	movq	0xe0(%rsp,%rax,8), %rsi
+               	movq	%rsi, -0x88(%rbp)
+               	movq	0x80(%rsp,%rax,8), %rsi
+               	testq	%rsi, %rsi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movq	0xa0(%rsp,%rax,8), %rdi
+               	addq	%rcx, %rdi
+               	movq	(%rdi), %r10
+               	movq	%r10, (%rsi)
+               	jmp	<addr>
+               	movups	0xc0(%rsp), %xmm0
+               	leaq	0xa0(%rsp), %rax
+               	movups	%xmm0, 0xa0(%rsp)
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rcx
@@ -6037,699 +6526,420 @@ Disassembly of section .text:
                	leaq	0xa0(%rsp), %rax
                	vmovups	(%rdx), %ymm14
                	vmovups	%ymm14, (%rax)
-               	vpcmpeqd	%ymm0, %ymm0, %ymm0
-               	xorl	%edi, %edi
-               	leaq	0x280(%rsp), %rsi
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rsi)
-               	vmovq	%rdi, %xmm14
-               	vmovups	%ymm14, 0x2a0(%rsp)
-               	vmovups	%ymm0, 0x2c0(%rsp)
-               	leaq	0x2e0(%rsp), %rax
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%ymm14, (%rax)
-               	leaq	0x1a0(%rsp), %rax
-               	vmovups	(%rsi), %ymm14
-               	vmovups	%ymm14, (%rax)
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movl	-0xb8(%rbp), %edi
-               	movl	%edi, 0x2e0(%rsp,%rax,4)
-               	incq	%rax
-               	cmpl	$0x8, %eax
-               	jge	<addr>
-               	movl	0x2a0(%rsp,%rax,4), %esi
-               	movl	%esi, -0xb8(%rbp)
-               	movl	0x2c0(%rsp,%rax,4), %esi
-               	testl	%esi, %esi
-               	jge	<addr>
-               	leaq	-0xb8(%rbp), %rsi
-               	movslq	0x1a0(%rsp,%rax,4), %rdi
-               	shlq	%rdi
-               	addq	%rcx, %rdi
-               	movl	(%rdi), %r10d
-               	movl	%r10d, (%rsi)
-               	jmp	<addr>
-               	vmovups	0x2e0(%rsp), %ymm0
-               	leaq	0x140(%rsp), %rax
-               	vmovups	%ymm0, 0x140(%rsp)
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm0
-               	vpcmpeqd	%xmm1, %xmm1, %xmm1
-               	xorl	%eax, %eax
-               	movq	%rax, %xmm14
-               	movups	%xmm14, 0x4f0(%rsp)
-               	movups	%xmm1, 0x500(%rsp)
-               	leaq	0x510(%rsp), %rsi
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%xmm14, (%rsi)
-               	movups	%xmm0, 0x520(%rsp)
-               	jmp	<addr>
-               	movl	-0xc0(%rbp), %edi
-               	movl	%edi, 0x510(%rsp,%rax,4)
-               	incq	%rax
-               	cmpl	$0x4, %eax
-               	jge	<addr>
-               	movl	0x4f0(%rsp,%rax,4), %esi
-               	movl	%esi, -0xc0(%rbp)
-               	movl	0x500(%rsp,%rax,4), %esi
-               	testl	%esi, %esi
-               	jge	<addr>
-               	leaq	-0xc0(%rbp), %rsi
-               	movslq	0x520(%rsp,%rax,4), %rdi
-               	shlq	%rdi
-               	addq	%rcx, %rdi
-               	movl	(%rdi), %r10d
-               	movl	%r10d, (%rsi)
-               	jmp	<addr>
-               	movups	0x510(%rsp), %xmm0
-               	leaq	0x140(%rsp), %rax
-               	movups	%xmm0, 0x140(%rsp)
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm0
-               	vpcmpeqd	%ymm1, %ymm1, %ymm1
-               	xorl	%eax, %eax
-               	vmovq	%rax, %xmm14
-               	vmovups	%ymm14, 0x260(%rsp)
-               	vmovups	%ymm1, 0x180(%rsp)
-               	leaq	0xc0(%rsp), %rsi
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%ymm14, (%rsi)
-               	movups	%xmm0, 0x4e0(%rsp)
-               	jmp	<addr>
-               	movq	-0xc8(%rbp), %rdi
-               	movq	%rdi, 0xc0(%rsp,%rax,8)
-               	incq	%rax
-               	cmpl	$0x4, %eax
-               	jge	<addr>
-               	movq	0x260(%rsp,%rax,8), %rsi
-               	movq	%rsi, -0xc8(%rbp)
-               	movq	0x180(%rsp,%rax,8), %rsi
-               	testq	%rsi, %rsi
-               	jge	<addr>
-               	leaq	-0xc8(%rbp), %rsi
-               	movslq	0x4e0(%rsp,%rax,4), %rdi
-               	shlq	%rdi
-               	addq	%rcx, %rdi
-               	movq	(%rdi), %r10
-               	movq	%r10, (%rsi)
-               	jmp	<addr>
-               	vmovups	0xc0(%rsp), %ymm0
-               	leaq	0x140(%rsp), %rax
-               	vmovups	%ymm0, 0x140(%rsp)
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm0
-               	vpcmpeqd	%xmm1, %xmm1, %xmm1
-               	xorl	%eax, %eax
-               	movq	%rax, %xmm14
-               	movups	%xmm14, 0x4a0(%rsp)
-               	movups	%xmm1, 0x4b0(%rsp)
-               	leaq	0x4c0(%rsp), %rsi
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%xmm14, (%rsi)
-               	movups	%xmm0, 0x4d0(%rsp)
-               	jmp	<addr>
-               	movq	-0xd0(%rbp), %rdi
-               	movq	%rdi, 0x4c0(%rsp,%rax,8)
-               	incq	%rax
-               	cmpl	$0x2, %eax
-               	jge	<addr>
-               	movq	0x4a0(%rsp,%rax,8), %rsi
-               	movq	%rsi, -0xd0(%rbp)
-               	movq	0x4b0(%rsp,%rax,8), %rsi
-               	testq	%rsi, %rsi
-               	jge	<addr>
-               	leaq	-0xd0(%rbp), %rsi
-               	movslq	0x4d0(%rsp,%rax,4), %rdi
-               	shlq	%rdi
-               	addq	%rcx, %rdi
-               	movq	(%rdi), %r10
-               	movq	%r10, (%rsi)
-               	jmp	<addr>
-               	movups	0x4c0(%rsp), %xmm0
-               	leaq	0x140(%rsp), %rax
-               	movups	%xmm0, 0x140(%rsp)
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	leaq	(%rsp), %rdx
-               	leaq	0x80(%rsp), %rax
-               	vmovups	(%rdx), %ymm14
-               	vmovups	%ymm14, (%rax)
-               	vpcmpeqd	%ymm0, %ymm0, %ymm0
-               	xorl	%edi, %edi
-               	leaq	0x1c0(%rsp), %rsi
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rsi)
-               	vmovq	%rdi, %xmm14
-               	vmovups	%ymm14, 0x1e0(%rsp)
-               	vmovups	%ymm0, 0x200(%rsp)
-               	leaq	0x220(%rsp), %rax
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%ymm14, (%rax)
-               	leaq	0x240(%rsp), %rax
-               	vmovups	(%rsi), %ymm14
-               	vmovups	%ymm14, (%rax)
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movl	-0xd8(%rbp), %edi
-               	movl	%edi, 0x220(%rsp,%rax,4)
-               	incq	%rax
-               	cmpl	$0x8, %eax
-               	jge	<addr>
-               	movl	0x1e0(%rsp,%rax,4), %esi
-               	movl	%esi, -0xd8(%rbp)
-               	movl	0x200(%rsp,%rax,4), %esi
-               	testl	%esi, %esi
-               	jge	<addr>
-               	leaq	-0xd8(%rbp), %rsi
-               	movslq	0x240(%rsp,%rax,4), %rdi
-               	shlq	%rdi
-               	addq	%rcx, %rdi
-               	movl	(%rdi), %r10d
-               	movl	%r10d, (%rsi)
-               	jmp	<addr>
-               	vmovups	0x220(%rsp), %ymm0
-               	leaq	0x140(%rsp), %rax
-               	vmovups	%ymm0, 0x140(%rsp)
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm0
-               	vpcmpeqd	%xmm1, %xmm1, %xmm1
-               	xorl	%eax, %eax
-               	movq	%rax, %xmm14
-               	movups	%xmm14, 0x460(%rsp)
-               	movups	%xmm1, 0x470(%rsp)
-               	leaq	0x480(%rsp), %rsi
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%xmm14, (%rsi)
-               	movups	%xmm0, 0x490(%rsp)
-               	jmp	<addr>
-               	movl	-0xe0(%rbp), %edi
-               	movl	%edi, 0x480(%rsp,%rax,4)
-               	incq	%rax
-               	cmpl	$0x4, %eax
-               	jge	<addr>
-               	movl	0x460(%rsp,%rax,4), %esi
-               	movl	%esi, -0xe0(%rbp)
-               	movl	0x470(%rsp,%rax,4), %esi
-               	testl	%esi, %esi
-               	jge	<addr>
-               	leaq	-0xe0(%rbp), %rsi
-               	movslq	0x490(%rsp,%rax,4), %rdi
-               	shlq	%rdi
-               	addq	%rcx, %rdi
-               	movl	(%rdi), %r10d
-               	movl	%r10d, (%rsi)
-               	jmp	<addr>
-               	movups	0x480(%rsp), %xmm0
-               	leaq	0x140(%rsp), %rax
-               	movups	%xmm0, 0x140(%rsp)
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rdi
-               	leaq	(%rsp), %r9
-               	movl	$0x1, %esi
-               	movq	%r9, %r10
-               	vmovups	(%r10), %ymm0
-               	callq	<addr>
-               	vmovups	%ymm0, 0x140(%rsp)
-               	leaq	0x140(%rsp), %rax
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rdi
-               	leaq	0x420(%rsp), %r9
-               	movl	$0x1, %esi
-               	movq	%r9, %r10
-               	movups	(%r10), %xmm0
-               	vzeroupper
-               	callq	<addr>
-               	movups	%xmm0, 0x140(%rsp)
-               	leaq	0x140(%rsp), %rax
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rdi
-               	leaq	(%rsp), %r9
-               	movl	$0x1, %esi
-               	movq	%r9, %r10
-               	vmovups	(%r10), %ymm0
-               	callq	<addr>
-               	movups	%xmm0, 0x140(%rsp)
-               	leaq	0x140(%rsp), %rax
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rdi
-               	leaq	0x420(%rsp), %r9
-               	movl	$0x1, %esi
-               	movq	%r9, %r10
-               	movups	(%r10), %xmm0
-               	vzeroupper
-               	callq	<addr>
-               	movups	%xmm0, 0x140(%rsp)
-               	leaq	0x140(%rsp), %rax
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	leaq	(%rsp), %rdx
-               	leaq	0x100(%rsp), %rax
-               	vmovups	(%rdx), %ymm14
-               	vmovups	%ymm14, (%rax)
-               	vpcmpeqd	%ymm0, %ymm0, %ymm0
-               	xorl	%edi, %edi
-               	leaq	0x3a0(%rsp), %rsi
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rsi)
-               	vmovq	%rdi, %xmm14
-               	vmovups	%ymm14, 0x3c0(%rsp)
-               	vmovups	%ymm0, 0x3e0(%rsp)
-               	leaq	0x400(%rsp), %rax
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%ymm14, (%rax)
-               	leaq	0xe0(%rsp), %rax
-               	vmovups	(%rsi), %ymm14
-               	vmovups	%ymm14, (%rax)
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movq	-0x88(%rbp), %rdi
-               	movq	%rdi, 0x400(%rsp,%rax,8)
-               	incq	%rax
-               	cmpl	$0x4, %eax
-               	jge	<addr>
-               	movq	0x3c0(%rsp,%rax,8), %rsi
-               	movq	%rsi, -0x88(%rbp)
-               	movq	0x3e0(%rsp,%rax,8), %rsi
-               	testq	%rsi, %rsi
-               	jge	<addr>
-               	leaq	-0x88(%rbp), %rsi
-               	movq	0xe0(%rsp,%rax,8), %rdi
-               	addq	%rcx, %rdi
-               	movq	(%rdi), %r10
-               	movq	%r10, (%rsi)
-               	jmp	<addr>
-               	vmovups	0x400(%rsp), %ymm0
-               	leaq	0x140(%rsp), %rax
-               	vmovups	%ymm0, 0x140(%rsp)
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm0
-               	vpcmpeqd	%xmm1, %xmm1, %xmm1
-               	xorl	%eax, %eax
-               	movq	%rax, %xmm14
-               	movups	%xmm14, 0x5f0(%rsp)
-               	movups	%xmm1, 0x600(%rsp)
-               	leaq	0x610(%rsp), %rsi
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%xmm14, (%rsi)
-               	movups	%xmm0, 0x620(%rsp)
-               	jmp	<addr>
-               	movq	-0x90(%rbp), %rdi
-               	movq	%rdi, 0x610(%rsp,%rax,8)
-               	incq	%rax
-               	cmpl	$0x2, %eax
-               	jge	<addr>
-               	movq	0x5f0(%rsp,%rax,8), %rsi
-               	movq	%rsi, -0x90(%rbp)
-               	movq	0x600(%rsp,%rax,8), %rsi
-               	testq	%rsi, %rsi
-               	jge	<addr>
-               	leaq	-0x90(%rbp), %rsi
-               	movq	0x620(%rsp,%rax,8), %rdi
-               	addq	%rcx, %rdi
-               	movq	(%rdi), %r10
-               	movq	%r10, (%rsi)
-               	jmp	<addr>
-               	movups	0x610(%rsp), %xmm0
-               	leaq	0x100(%rsp), %rax
-               	movups	%xmm0, 0x100(%rsp)
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	leaq	(%rsp), %rdx
-               	leaq	0x160(%rsp), %rax
-               	vmovups	(%rdx), %ymm14
-               	vmovups	%ymm14, (%rax)
                	vpcmpeqd	%xmm0, %xmm0, %xmm0
                	xorl	%edi, %edi
-               	leaq	0x360(%rsp), %rsi
+               	leaq	0xc0(%rsp), %rsi
                	vmovups	(%rax), %ymm14
                	vmovups	%ymm14, (%rsi)
                	movq	%rdi, %xmm14
-               	movups	%xmm14, 0x5c0(%rsp)
-               	movups	%xmm0, 0x5d0(%rsp)
-               	leaq	0x5e0(%rsp), %rax
+               	movups	%xmm14, 0x100(%rsp)
+               	movups	%xmm0, 0xe0(%rsp)
+               	leaq	0x80(%rsp), %rax
                	vxorps	%ymm14, %ymm14, %ymm14
                	vmovups	%xmm14, (%rax)
-               	leaq	0x380(%rsp), %rax
+               	leaq	0xa0(%rsp), %rax
                	vmovups	(%rsi), %ymm14
                	vmovups	%ymm14, (%rax)
                	xorl	%eax, %eax
                	jmp	<addr>
-               	movl	-0x98(%rbp), %edi
-               	movl	%edi, 0x5e0(%rsp,%rax,4)
+               	movl	-0x88(%rbp), %edi
+               	movl	%edi, 0x80(%rsp,%rax,4)
                	incq	%rax
                	cmpl	$0x4, %eax
                	jge	<addr>
-               	movl	0x5c0(%rsp,%rax,4), %esi
-               	movl	%esi, -0x98(%rbp)
-               	movl	0x5d0(%rsp,%rax,4), %esi
+               	movl	0x100(%rsp,%rax,4), %esi
+               	movl	%esi, -0x88(%rbp)
+               	movl	0xe0(%rsp,%rax,4), %esi
                	testl	%esi, %esi
                	jge	<addr>
-               	leaq	-0x98(%rbp), %rsi
-               	movq	0x380(%rsp,%rax,8), %rdi
+               	leaq	-0x88(%rbp), %rsi
+               	movq	0xa0(%rsp,%rax,8), %rdi
                	addq	%rcx, %rdi
                	movl	(%rdi), %r10d
                	movl	%r10d, (%rsi)
                	jmp	<addr>
-               	movups	0x5e0(%rsp), %xmm0
-               	leaq	0x100(%rsp), %rax
-               	movups	%xmm0, 0x100(%rsp)
+               	movups	0x80(%rsp), %xmm0
+               	leaq	0xa0(%rsp), %rax
+               	movups	%xmm0, 0xa0(%rsp)
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm0
+               	movups	0x120(%rsp), %xmm0
                	xorl	%eax, %eax
                	movl	$0xffffffff, %edx       # imm = 0xFFFFFFFF
                	vmovd	%edx, %xmm1
                	vpinsrd	$0x1, %edx, %xmm1, %xmm1
                	movq	%rax, %xmm14
-               	movups	%xmm14, 0x580(%rsp)
-               	movups	%xmm1, 0x590(%rsp)
-               	leaq	0x5a0(%rsp), %rsi
+               	movups	%xmm14, 0xe0(%rsp)
+               	movups	%xmm1, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rsi
                	vxorps	%ymm14, %ymm14, %ymm14
                	vmovups	%xmm14, (%rsi)
-               	movups	%xmm0, 0x5b0(%rsp)
+               	movups	%xmm0, 0xa0(%rsp)
                	jmp	<addr>
-               	movl	-0xa0(%rbp), %edi
-               	movl	%edi, 0x5a0(%rsp,%rax,4)
+               	movl	-0x88(%rbp), %edi
+               	movl	%edi, 0xc0(%rsp,%rax,4)
                	incq	%rax
                	cmpl	$0x2, %eax
                	jge	<addr>
-               	movl	0x580(%rsp,%rax,4), %esi
-               	movl	%esi, -0xa0(%rbp)
-               	movl	0x590(%rsp,%rax,4), %esi
+               	movl	0xe0(%rsp,%rax,4), %esi
+               	movl	%esi, -0x88(%rbp)
+               	movl	0x80(%rsp,%rax,4), %esi
                	testl	%esi, %esi
                	jge	<addr>
-               	leaq	-0xa0(%rbp), %rsi
-               	movq	0x5b0(%rsp,%rax,8), %rdi
+               	leaq	-0x88(%rbp), %rsi
+               	movq	0xa0(%rsp,%rax,8), %rdi
                	addq	%rcx, %rdi
                	movl	(%rdi), %r10d
                	movl	%r10d, (%rsi)
                	jmp	<addr>
-               	movups	0x5a0(%rsp), %xmm0
-               	leaq	0x100(%rsp), %rax
-               	movups	%xmm0, 0x100(%rsp)
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm0
-               	vpcmpeqd	%ymm1, %ymm1, %ymm1
-               	xorl	%eax, %eax
-               	vmovq	%rax, %xmm14
-               	vmovups	%ymm14, 0x300(%rsp)
-               	vmovups	%ymm1, 0x320(%rsp)
-               	leaq	0x340(%rsp), %rsi
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%ymm14, (%rsi)
-               	movups	%xmm0, 0x570(%rsp)
-               	jmp	<addr>
-               	movq	-0xa8(%rbp), %rdi
-               	movq	%rdi, 0x340(%rsp,%rax,8)
-               	incq	%rax
-               	cmpl	$0x4, %eax
-               	jge	<addr>
-               	movq	0x300(%rsp,%rax,8), %rsi
-               	movq	%rsi, -0xa8(%rbp)
-               	movq	0x320(%rsp,%rax,8), %rsi
-               	testq	%rsi, %rsi
-               	jge	<addr>
-               	leaq	-0xa8(%rbp), %rsi
-               	movslq	0x570(%rsp,%rax,4), %rdi
-               	addq	%rcx, %rdi
-               	movq	(%rdi), %r10
-               	movq	%r10, (%rsi)
-               	jmp	<addr>
-               	vmovups	0x340(%rsp), %ymm0
-               	leaq	0x100(%rsp), %rax
-               	vmovups	%ymm0, 0x100(%rsp)
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm0
-               	vpcmpeqd	%xmm1, %xmm1, %xmm1
-               	xorl	%eax, %eax
-               	movq	%rax, %xmm14
-               	movups	%xmm14, 0x530(%rsp)
-               	movups	%xmm1, 0x540(%rsp)
-               	leaq	0x550(%rsp), %rsi
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%xmm14, (%rsi)
-               	movups	%xmm0, 0x560(%rsp)
-               	jmp	<addr>
-               	movq	-0xb0(%rbp), %rdi
-               	movq	%rdi, 0x550(%rsp,%rax,8)
-               	incq	%rax
-               	cmpl	$0x2, %eax
-               	jge	<addr>
-               	movq	0x530(%rsp,%rax,8), %rsi
-               	movq	%rsi, -0xb0(%rbp)
-               	movq	0x540(%rsp,%rax,8), %rsi
-               	testq	%rsi, %rsi
-               	jge	<addr>
-               	leaq	-0xb0(%rbp), %rsi
-               	movslq	0x560(%rsp,%rax,4), %rdi
-               	addq	%rcx, %rdi
-               	movq	(%rdi), %r10
-               	movq	%r10, (%rsi)
-               	jmp	<addr>
-               	movups	0x550(%rsp), %xmm0
-               	leaq	0x100(%rsp), %rax
-               	movups	%xmm0, 0x100(%rsp)
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	leaq	(%rsp), %rdx
+               	movups	0xc0(%rsp), %xmm0
                	leaq	0xa0(%rsp), %rax
-               	vmovups	(%rdx), %ymm14
-               	vmovups	%ymm14, (%rax)
-               	vpcmpeqd	%ymm0, %ymm0, %ymm0
-               	xorl	%edi, %edi
-               	leaq	0x280(%rsp), %rsi
-               	vmovups	(%rax), %ymm14
-               	vmovups	%ymm14, (%rsi)
-               	vmovq	%rdi, %xmm14
-               	vmovups	%ymm14, 0x2a0(%rsp)
-               	vmovups	%ymm0, 0x2c0(%rsp)
-               	leaq	0x2e0(%rsp), %rax
+               	movups	%xmm0, 0xa0(%rsp)
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rdx
+               	movups	0x120(%rsp), %xmm0
+               	leaq	0x80(%rsp), %rcx
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	movq	$-0x1, 0x80(%rsp)
+               	movq	$-0x1, 0x88(%rsp)
+               	movq	$-0x1, 0x90(%rsp)
+               	movq	$-0x1, 0x98(%rsp)
+               	leaq	0xc0(%rsp), %rax
                	vxorps	%ymm14, %ymm14, %ymm14
                	vmovups	%ymm14, (%rax)
-               	leaq	0x1a0(%rsp), %rax
+               	leaq	0xa0(%rsp), %rsi
+               	vmovups	(%rcx), %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	leaq	0x80(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	leaq	0xc0(%rsp), %rax
                	vmovups	(%rsi), %ymm14
                	vmovups	%ymm14, (%rax)
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movl	-0xb8(%rbp), %edi
-               	movl	%edi, 0x2e0(%rsp,%rax,4)
-               	incq	%rax
-               	cmpl	$0x8, %eax
-               	jge	<addr>
-               	movl	0x2a0(%rsp,%rax,4), %esi
-               	movl	%esi, -0xb8(%rbp)
-               	movl	0x2c0(%rsp,%rax,4), %esi
-               	testl	%esi, %esi
-               	jge	<addr>
-               	leaq	-0xb8(%rbp), %rsi
-               	movslq	0x1a0(%rsp,%rax,4), %rdi
-               	addq	%rcx, %rdi
-               	movl	(%rdi), %r10d
-               	movl	%r10d, (%rsi)
-               	jmp	<addr>
-               	vmovups	0x2e0(%rsp), %ymm0
-               	leaq	0x100(%rsp), %rax
-               	vmovups	%ymm0, 0x100(%rsp)
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm0
-               	vpcmpeqd	%xmm1, %xmm1, %xmm1
-               	xorl	%eax, %eax
-               	movq	%rax, %xmm14
-               	movups	%xmm14, 0x4f0(%rsp)
-               	movups	%xmm1, 0x500(%rsp)
-               	leaq	0x510(%rsp), %rsi
+               	leaq	0xa0(%rsp), %rax
                	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%xmm14, (%rsi)
-               	movups	%xmm0, 0x520(%rsp)
+               	vmovups	%ymm14, (%rax)
+               	movups	%xmm0, 0xe0(%rsp)
+               	xorl	%eax, %eax
                	jmp	<addr>
-               	movl	-0xc0(%rbp), %edi
-               	movl	%edi, 0x510(%rsp,%rax,4)
+               	movq	-0x88(%rbp), %rdi
+               	movq	%rdi, 0xa0(%rsp,%rax,8)
                	incq	%rax
                	cmpl	$0x4, %eax
                	jge	<addr>
-               	movl	0x4f0(%rsp,%rax,4), %esi
-               	movl	%esi, -0xc0(%rbp)
-               	movl	0x500(%rsp,%rax,4), %esi
-               	testl	%esi, %esi
+               	movq	0x80(%rsp,%rax,8), %rsi
+               	movq	%rsi, -0x88(%rbp)
+               	movq	0xc0(%rsp,%rax,8), %rsi
+               	testq	%rsi, %rsi
                	jge	<addr>
-               	leaq	-0xc0(%rbp), %rsi
-               	movslq	0x520(%rsp,%rax,4), %rdi
-               	addq	%rcx, %rdi
-               	movl	(%rdi), %r10d
-               	movl	%r10d, (%rsi)
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xe0(%rsp,%rax,4), %rdi
+               	addq	%rdx, %rdi
+               	movq	(%rdi), %r10
+               	movq	%r10, (%rsi)
                	jmp	<addr>
-               	movups	0x510(%rsp), %xmm0
-               	leaq	0x100(%rsp), %rax
-               	movups	%xmm0, 0x100(%rsp)
+               	vmovups	0xa0(%rsp), %ymm0
+               	leaq	0xa0(%rsp), %rax
+               	vmovups	%ymm0, 0xa0(%rsp)
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm0
-               	vpcmpeqd	%ymm1, %ymm1, %ymm1
+               	movups	0x120(%rsp), %xmm0
+               	vpcmpeqd	%xmm1, %xmm1, %xmm1
                	xorl	%eax, %eax
-               	vmovq	%rax, %xmm14
-               	vmovups	%ymm14, 0x260(%rsp)
-               	vmovups	%ymm1, 0x180(%rsp)
+               	movq	%rax, %xmm14
+               	movups	%xmm14, 0xe0(%rsp)
+               	movups	%xmm1, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rsi
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%xmm14, (%rsi)
+               	movups	%xmm0, 0xa0(%rsp)
+               	jmp	<addr>
+               	movq	-0x88(%rbp), %rdi
+               	movq	%rdi, 0xc0(%rsp,%rax,8)
+               	incq	%rax
+               	cmpl	$0x2, %eax
+               	jge	<addr>
+               	movq	0xe0(%rsp,%rax,8), %rsi
+               	movq	%rsi, -0x88(%rbp)
+               	movq	0x80(%rsp,%rax,8), %rsi
+               	testq	%rsi, %rsi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
+               	addq	%rcx, %rdi
+               	movq	(%rdi), %r10
+               	movq	%r10, (%rsi)
+               	jmp	<addr>
+               	movups	0xc0(%rsp), %xmm0
+               	leaq	0xa0(%rsp), %rax
+               	movups	%xmm0, 0xa0(%rsp)
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rdx
+               	leaq	(%rsp), %rcx
+               	leaq	0xa0(%rsp), %rax
+               	vmovups	(%rcx), %ymm14
+               	vmovups	%ymm14, (%rax)
+               	leaq	0x80(%rsp), %rcx
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	movq	$-0x1, 0x80(%rsp)
+               	movq	$-0x1, 0x88(%rsp)
+               	movq	$-0x1, 0x90(%rsp)
+               	movq	$-0x1, 0x98(%rsp)
                	leaq	0xc0(%rsp), %rsi
                	vxorps	%ymm14, %ymm14, %ymm14
                	vmovups	%ymm14, (%rsi)
-               	movups	%xmm0, 0x4e0(%rsp)
-               	jmp	<addr>
-               	movq	-0xc8(%rbp), %rdi
-               	movq	%rdi, 0xc0(%rsp,%rax,8)
-               	incq	%rax
-               	cmpl	$0x4, %eax
-               	jge	<addr>
-               	movq	0x260(%rsp,%rax,8), %rsi
-               	movq	%rsi, -0xc8(%rbp)
-               	movq	0x180(%rsp,%rax,8), %rsi
-               	testq	%rsi, %rsi
-               	jge	<addr>
-               	leaq	-0xc8(%rbp), %rsi
-               	movslq	0x4e0(%rsp,%rax,4), %rdi
-               	addq	%rcx, %rdi
-               	movq	(%rdi), %r10
-               	movq	%r10, (%rsi)
-               	jmp	<addr>
-               	vmovups	0xc0(%rsp), %ymm0
-               	leaq	0x100(%rsp), %rax
-               	vmovups	%ymm0, 0x100(%rsp)
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm0
-               	vpcmpeqd	%xmm1, %xmm1, %xmm1
-               	xorl	%eax, %eax
-               	movq	%rax, %xmm14
-               	movups	%xmm14, 0x4a0(%rsp)
-               	movups	%xmm1, 0x4b0(%rsp)
-               	leaq	0x4c0(%rsp), %rsi
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%xmm14, (%rsi)
-               	movups	%xmm0, 0x4d0(%rsp)
-               	jmp	<addr>
-               	movq	-0xd0(%rbp), %rdi
-               	movq	%rdi, 0x4c0(%rsp,%rax,8)
-               	incq	%rax
-               	cmpl	$0x2, %eax
-               	jge	<addr>
-               	movq	0x4a0(%rsp,%rax,8), %rsi
-               	movq	%rsi, -0xd0(%rbp)
-               	movq	0x4b0(%rsp,%rax,8), %rsi
-               	testq	%rsi, %rsi
-               	jge	<addr>
-               	leaq	-0xd0(%rbp), %rsi
-               	movslq	0x4d0(%rsp,%rax,4), %rdi
-               	addq	%rcx, %rdi
-               	movq	(%rdi), %r10
-               	movq	%r10, (%rsi)
-               	jmp	<addr>
-               	movups	0x4c0(%rsp), %xmm0
-               	leaq	0x100(%rsp), %rax
-               	movups	%xmm0, 0x100(%rsp)
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x200(%rax), %rcx
-               	leaq	(%rsp), %rdx
-               	leaq	0x80(%rsp), %rax
-               	vmovups	(%rdx), %ymm14
+               	leaq	0x100(%rsp), %rdi
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rdi)
+               	leaq	0xa0(%rsp), %rax
+               	vmovups	(%rcx), %ymm14
                	vmovups	%ymm14, (%rax)
-               	vpcmpeqd	%ymm0, %ymm0, %ymm0
-               	xorl	%edi, %edi
-               	leaq	0x1c0(%rsp), %rsi
+               	leaq	0xe0(%rsp), %rcx
+               	vmovups	(%rsi), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	leaq	0x80(%rsp), %rsi
                	vmovups	(%rax), %ymm14
                	vmovups	%ymm14, (%rsi)
-               	vmovq	%rdi, %xmm14
-               	vmovups	%ymm14, 0x1e0(%rsp)
-               	vmovups	%ymm0, 0x200(%rsp)
-               	leaq	0x220(%rsp), %rax
+               	leaq	0xc0(%rsp), %rax
                	vxorps	%ymm14, %ymm14, %ymm14
                	vmovups	%ymm14, (%rax)
-               	leaq	0x240(%rsp), %rax
-               	vmovups	(%rsi), %ymm14
-               	vmovups	%ymm14, (%rax)
+               	leaq	0x100(%rsp), %rax
+               	leaq	0xa0(%rsp), %rsi
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rsi)
                	xorl	%eax, %eax
                	jmp	<addr>
-               	movl	-0xd8(%rbp), %edi
-               	movl	%edi, 0x220(%rsp,%rax,4)
+               	movl	-0x88(%rbp), %edi
+               	movl	%edi, 0xc0(%rsp,%rax,4)
                	incq	%rax
                	cmpl	$0x8, %eax
                	jge	<addr>
-               	movl	0x1e0(%rsp,%rax,4), %esi
-               	movl	%esi, -0xd8(%rbp)
-               	movl	0x200(%rsp,%rax,4), %esi
+               	movl	0xe0(%rsp,%rax,4), %esi
+               	movl	%esi, -0x88(%rbp)
+               	movl	0x80(%rsp,%rax,4), %esi
                	testl	%esi, %esi
                	jge	<addr>
-               	leaq	-0xd8(%rbp), %rsi
-               	movslq	0x240(%rsp,%rax,4), %rdi
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
+               	addq	%rdx, %rdi
+               	movl	(%rdi), %r10d
+               	movl	%r10d, (%rsi)
+               	jmp	<addr>
+               	vmovups	0xc0(%rsp), %ymm0
+               	leaq	0xa0(%rsp), %rax
+               	vmovups	%ymm0, 0xa0(%rsp)
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rcx
+               	movups	0x120(%rsp), %xmm0
+               	vpcmpeqd	%xmm1, %xmm1, %xmm1
+               	xorl	%eax, %eax
+               	movq	%rax, %xmm14
+               	movups	%xmm14, 0xe0(%rsp)
+               	movups	%xmm1, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rsi
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%xmm14, (%rsi)
+               	movups	%xmm0, 0xa0(%rsp)
+               	jmp	<addr>
+               	movl	-0x88(%rbp), %edi
+               	movl	%edi, 0xc0(%rsp,%rax,4)
+               	incq	%rax
+               	cmpl	$0x4, %eax
+               	jge	<addr>
+               	movl	0xe0(%rsp,%rax,4), %esi
+               	movl	%esi, -0x88(%rbp)
+               	movl	0x80(%rsp,%rax,4), %esi
+               	testl	%esi, %esi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
                	addq	%rcx, %rdi
                	movl	(%rdi), %r10d
                	movl	%r10d, (%rsi)
                	jmp	<addr>
-               	vmovups	0x220(%rsp), %ymm0
+               	movups	0xc0(%rsp), %xmm0
+               	leaq	0xa0(%rsp), %rax
+               	movups	%xmm0, 0xa0(%rsp)
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rdx
+               	movups	0x120(%rsp), %xmm0
+               	leaq	0x80(%rsp), %rcx
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	movq	$-0x1, 0x80(%rsp)
+               	movq	$-0x1, 0x88(%rsp)
+               	movq	$-0x1, 0x90(%rsp)
+               	movq	$-0x1, 0x98(%rsp)
+               	leaq	0xc0(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rax)
+               	leaq	0xa0(%rsp), %rsi
+               	vmovups	(%rcx), %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	leaq	0x80(%rsp), %rcx
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	leaq	0xc0(%rsp), %rax
+               	vmovups	(%rsi), %ymm14
+               	vmovups	%ymm14, (%rax)
+               	leaq	0xa0(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rax)
+               	movups	%xmm0, 0xe0(%rsp)
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movq	-0x88(%rbp), %rdi
+               	movq	%rdi, 0xa0(%rsp,%rax,8)
+               	incq	%rax
+               	cmpl	$0x4, %eax
+               	jge	<addr>
+               	movq	0x80(%rsp,%rax,8), %rsi
+               	movq	%rsi, -0x88(%rbp)
+               	movq	0xc0(%rsp,%rax,8), %rsi
+               	testq	%rsi, %rsi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xe0(%rsp,%rax,4), %rdi
+               	addq	%rdx, %rdi
+               	movq	(%rdi), %r10
+               	movq	%r10, (%rsi)
+               	jmp	<addr>
+               	vmovups	0xa0(%rsp), %ymm0
+               	leaq	0xa0(%rsp), %rax
+               	vmovups	%ymm0, 0xa0(%rsp)
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rcx
+               	movups	0x120(%rsp), %xmm0
+               	vpcmpeqd	%xmm1, %xmm1, %xmm1
+               	xorl	%eax, %eax
+               	movq	%rax, %xmm14
+               	movups	%xmm14, 0xe0(%rsp)
+               	movups	%xmm1, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rsi
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%xmm14, (%rsi)
+               	movups	%xmm0, 0xa0(%rsp)
+               	jmp	<addr>
+               	movq	-0x88(%rbp), %rdi
+               	movq	%rdi, 0xc0(%rsp,%rax,8)
+               	incq	%rax
+               	cmpl	$0x2, %eax
+               	jge	<addr>
+               	movq	0xe0(%rsp,%rax,8), %rsi
+               	movq	%rsi, -0x88(%rbp)
+               	movq	0x80(%rsp,%rax,8), %rsi
+               	testq	%rsi, %rsi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
+               	addq	%rcx, %rdi
+               	movq	(%rdi), %r10
+               	movq	%r10, (%rsi)
+               	jmp	<addr>
+               	movups	0xc0(%rsp), %xmm0
+               	leaq	0xa0(%rsp), %rax
+               	movups	%xmm0, 0xa0(%rsp)
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x200(%rax), %rdx
+               	leaq	(%rsp), %rcx
+               	leaq	0xa0(%rsp), %rax
+               	vmovups	(%rcx), %ymm14
+               	vmovups	%ymm14, (%rax)
+               	leaq	0x80(%rsp), %rcx
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	movq	$-0x1, 0x80(%rsp)
+               	movq	$-0x1, 0x88(%rsp)
+               	movq	$-0x1, 0x90(%rsp)
+               	movq	$-0x1, 0x98(%rsp)
+               	leaq	0xc0(%rsp), %rsi
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	leaq	0x100(%rsp), %rdi
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rdi)
+               	leaq	0xa0(%rsp), %rax
+               	vmovups	(%rcx), %ymm14
+               	vmovups	%ymm14, (%rax)
+               	leaq	0xe0(%rsp), %rcx
+               	vmovups	(%rsi), %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	leaq	0x80(%rsp), %rsi
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	leaq	0xc0(%rsp), %rax
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rax)
                	leaq	0x100(%rsp), %rax
-               	vmovups	%ymm0, 0x100(%rsp)
+               	leaq	0xa0(%rsp), %rsi
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rsi)
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movl	-0x88(%rbp), %edi
+               	movl	%edi, 0xc0(%rsp,%rax,4)
+               	incq	%rax
+               	cmpl	$0x8, %eax
+               	jge	<addr>
+               	movl	0xe0(%rsp,%rax,4), %esi
+               	movl	%esi, -0x88(%rbp)
+               	movl	0x80(%rsp,%rax,4), %esi
+               	testl	%esi, %esi
+               	jge	<addr>
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
+               	addq	%rdx, %rdi
+               	movl	(%rdi), %r10d
+               	movl	%r10d, (%rsi)
+               	jmp	<addr>
+               	vmovups	0xc0(%rsp), %ymm0
+               	leaq	0xa0(%rsp), %rax
+               	vmovups	%ymm0, 0xa0(%rsp)
                	jmp	<addr>
                	xorl	%r12d, %r12d
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x200(%rax), %rcx
-               	movups	0x420(%rsp), %xmm0
+               	movups	0x120(%rsp), %xmm0
                	vpcmpeqd	%xmm1, %xmm1, %xmm1
                	xorl	%eax, %eax
                	movq	%rax, %xmm14
-               	movups	%xmm14, 0x460(%rsp)
-               	movups	%xmm1, 0x470(%rsp)
-               	leaq	0x480(%rsp), %rsi
+               	movups	%xmm14, 0xe0(%rsp)
+               	movups	%xmm1, 0x80(%rsp)
+               	leaq	0xc0(%rsp), %rsi
                	vxorps	%ymm14, %ymm14, %ymm14
                	vmovups	%xmm14, (%rsi)
-               	movups	%xmm0, 0x490(%rsp)
+               	movups	%xmm0, 0xa0(%rsp)
                	jmp	<addr>
-               	movl	-0xe0(%rbp), %edi
-               	movl	%edi, 0x480(%rsp,%rax,4)
+               	movl	-0x88(%rbp), %edi
+               	movl	%edi, 0xc0(%rsp,%rax,4)
                	incq	%rax
                	cmpl	$0x4, %eax
                	jge	<addr>
-               	movl	0x460(%rsp,%rax,4), %esi
-               	movl	%esi, -0xe0(%rbp)
-               	movl	0x470(%rsp,%rax,4), %esi
+               	movl	0xe0(%rsp,%rax,4), %esi
+               	movl	%esi, -0x88(%rbp)
+               	movl	0x80(%rsp,%rax,4), %esi
                	testl	%esi, %esi
                	jge	<addr>
-               	leaq	-0xe0(%rbp), %rsi
-               	movslq	0x490(%rsp,%rax,4), %rdi
+               	leaq	-0x88(%rbp), %rsi
+               	movslq	0xa0(%rsp,%rax,4), %rdi
                	addq	%rcx, %rdi
                	movl	(%rdi), %r10d
                	movl	%r10d, (%rsi)
                	jmp	<addr>
-               	movups	0x480(%rsp), %xmm0
-               	leaq	0x100(%rsp), %rax
-               	movups	%xmm0, 0x100(%rsp)
+               	movups	0xc0(%rsp), %xmm0
+               	leaq	0xa0(%rsp), %rax
+               	movups	%xmm0, 0xa0(%rsp)
                	jmp	<addr>
 
 <check_masked_moves>:
@@ -6821,14 +7031,14 @@ Disassembly of section .text:
                	testb	$-0x80, %cl
                	je	<addr>
                	leaq	-0xa0(%rbp), %rcx
-               	movq	$0x0, -0x128(%rbp)
-               	leaq	-0x128(%rbp), %rdi
+               	movq	$0x0, -0xe8(%rbp)
+               	leaq	-0xe8(%rbp), %rdi
                	movslq	%eax, %rax
                	leaq	(%rcx,%rax), %rsi
                	movq	%rbx, %rdx
                	vzeroupper
                	callq	<addr>
-               	movq	-0x128(%rbp), %rdx
+               	movq	-0xe8(%rbp), %rdx
                	movq	%rbx, %rsi
                	imulq	%r14, %rsi
                	xorl	%ecx, %ecx
@@ -6873,16 +7083,16 @@ Disassembly of section .text:
                	movups	%xmm14, 0x370(%rsp)
                	xorl	%eax, %eax
                	jmp	<addr>
-               	movl	-0x120(%rbp), %esi
+               	movl	-0x128(%rbp), %esi
                	movl	%esi, 0x380(%rsp,%rax,4)
                	incq	%rax
                	cmpl	$0x4, %eax
                	jge	<addr>
-               	movl	$0x0, -0x120(%rbp)
+               	movl	$0x0, -0x128(%rbp)
                	movl	0x370(%rsp,%rax,4), %edx
                	testl	%edx, %edx
                	jge	<addr>
-               	leaq	-0x120(%rbp), %rdx
+               	leaq	-0x128(%rbp), %rdx
                	movq	%rax, %rsi
                	shlq	$0x2, %rsi
                	addq	%rcx, %rsi
@@ -6897,16 +7107,16 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	movq	%rcx, %rax
                	jmp	<addr>
-               	movl	-0x118(%rbp), %edi
+               	movl	-0x120(%rbp), %edi
                	movl	%edi, 0x3a0(%rsp,%rax,4)
                	incq	%rax
                	cmpl	$0x4, %eax
                	jge	<addr>
-               	movl	%ecx, -0x118(%rbp)
+               	movl	%ecx, -0x120(%rbp)
                	movl	0x390(%rsp,%rax,4), %esi
                	testl	%esi, %esi
                	jge	<addr>
-               	leaq	-0x118(%rbp), %rsi
+               	leaq	-0x120(%rbp), %rsi
                	movq	%rax, %rdi
                	shlq	$0x2, %rdi
                	addq	%rdx, %rdi
@@ -6949,14 +7159,14 @@ Disassembly of section .text:
                	testb	$-0x80, %al
                	je	<addr>
                	leaq	-0x80(%rbp), %rax
-               	movq	$0x0, -0x128(%rbp)
-               	leaq	-0x128(%rbp), %rdi
+               	movq	$0x0, -0xe8(%rbp)
+               	leaq	-0xe8(%rbp), %rdi
                	movslq	%ecx, %rcx
                	leaq	(%rax,%rcx), %rsi
                	movq	%rbx, %rdx
                	vzeroupper
                	callq	<addr>
-               	movq	-0x128(%rbp), %rdx
+               	movq	-0xe8(%rbp), %rdx
                	movq	%rbx, %rsi
                	imulq	%r14, %rsi
                	xorl	%ecx, %ecx
@@ -7235,16 +7445,16 @@ Disassembly of section .text:
                	vmovups	%ymm14, (%rax)
                	xorl	%eax, %eax
                	jmp	<addr>
-               	movl	-0x110(%rbp), %esi
+               	movl	-0x118(%rbp), %esi
                	movl	%esi, 0xa0(%rsp,%rax,4)
                	incq	%rax
                	cmpl	$0x8, %eax
                	jge	<addr>
-               	movl	$0x0, -0x110(%rbp)
+               	movl	$0x0, -0x118(%rbp)
                	movl	0x80(%rsp,%rax,4), %edx
                	testl	%edx, %edx
                	jge	<addr>
-               	leaq	-0x110(%rbp), %rdx
+               	leaq	-0x118(%rbp), %rdx
                	movq	%rax, %rsi
                	shlq	$0x2, %rsi
                	addq	%rcx, %rsi
@@ -7264,16 +7474,16 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	movq	%rcx, %rax
                	jmp	<addr>
-               	movl	-0x108(%rbp), %edi
+               	movl	-0x110(%rbp), %edi
                	movl	%edi, 0x100(%rsp,%rax,4)
                	incq	%rax
                	cmpl	$0x8, %eax
                	jge	<addr>
-               	movl	%ecx, -0x108(%rbp)
+               	movl	%ecx, -0x110(%rbp)
                	movl	0xe0(%rsp,%rax,4), %esi
                	testl	%esi, %esi
                	jge	<addr>
-               	leaq	-0x108(%rbp), %rsi
+               	leaq	-0x110(%rbp), %rsi
                	movq	%rax, %rdi
                	shlq	$0x2, %rdi
                	addq	%rdx, %rdi
@@ -7309,16 +7519,16 @@ Disassembly of section .text:
                	movups	%xmm14, 0x3b0(%rsp)
                	xorl	%eax, %eax
                	jmp	<addr>
-               	movq	-0x100(%rbp), %rsi
+               	movq	-0x108(%rbp), %rsi
                	movq	%rsi, 0x3c0(%rsp,%rax,8)
                	incq	%rax
                	cmpl	$0x2, %eax
                	jge	<addr>
-               	movq	$0x0, -0x100(%rbp)
+               	movq	$0x0, -0x108(%rbp)
                	movq	0x3b0(%rsp,%rax,8), %rdx
                	testq	%rdx, %rdx
                	jge	<addr>
-               	leaq	-0x100(%rbp), %rdx
+               	leaq	-0x108(%rbp), %rdx
                	movq	%rax, %rsi
                	shlq	$0x3, %rsi
                	addq	%rcx, %rsi
@@ -7333,16 +7543,16 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	movq	%rcx, %rax
                	jmp	<addr>
-               	movq	-0xf8(%rbp), %rdi
+               	movq	-0x100(%rbp), %rdi
                	movq	%rdi, 0x3e0(%rsp,%rax,8)
                	incq	%rax
                	cmpl	$0x2, %eax
                	jge	<addr>
-               	movq	%rcx, -0xf8(%rbp)
+               	movq	%rcx, -0x100(%rbp)
                	movq	0x3d0(%rsp,%rax,8), %rsi
                	testq	%rsi, %rsi
                	jge	<addr>
-               	leaq	-0xf8(%rbp), %rsi
+               	leaq	-0x100(%rbp), %rsi
                	movq	%rax, %rdi
                	shlq	$0x3, %rdi
                	addq	%rdx, %rdi
@@ -7380,16 +7590,16 @@ Disassembly of section .text:
                	vmovups	%ymm14, (%rax)
                	xorl	%eax, %eax
                	jmp	<addr>
-               	movq	-0xf0(%rbp), %rsi
+               	movq	-0xf8(%rbp), %rsi
                	movq	%rsi, 0x160(%rsp,%rax,8)
                	incq	%rax
                	cmpl	$0x4, %eax
                	jge	<addr>
-               	movq	$0x0, -0xf0(%rbp)
+               	movq	$0x0, -0xf8(%rbp)
                	movq	0x140(%rsp,%rax,8), %rdx
                	testq	%rdx, %rdx
                	jge	<addr>
-               	leaq	-0xf0(%rbp), %rdx
+               	leaq	-0xf8(%rbp), %rdx
                	movq	%rax, %rsi
                	shlq	$0x3, %rsi
                	addq	%rcx, %rsi
@@ -7409,16 +7619,16 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	movq	%rcx, %rax
                	jmp	<addr>
-               	movq	-0xe8(%rbp), %rdi
+               	movq	-0xf0(%rbp), %rdi
                	movq	%rdi, 0x1c0(%rsp,%rax,8)
                	incq	%rax
                	cmpl	$0x4, %eax
                	jge	<addr>
-               	movq	%rcx, -0xe8(%rbp)
+               	movq	%rcx, -0xf0(%rbp)
                	movq	0x1a0(%rsp,%rax,8), %rsi
                	testq	%rsi, %rsi
                	jge	<addr>
-               	leaq	-0xe8(%rbp), %rsi
+               	leaq	-0xf0(%rbp), %rsi
                	movq	%rax, %rdi
                	shlq	$0x3, %rdi
                	addq	%rdx, %rdi

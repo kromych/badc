@@ -689,7 +689,7 @@ Disassembly of section .text:
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	subq	$0xe0, %rsp
+               	subq	$0x100, %rsp            # imm = 0x100
                	andq	$-0x20, %rsp
                	movq	%rdi, %rbx
                	movq	%rsi, %r12
@@ -853,7 +853,7 @@ Disassembly of section .text:
                	shlq	$0x5, %rcx
                	addq	%rax, %rcx
                	leaq	-0x40(%rbp), %rsi
-               	leaq	0xc0(%rsp), %rax
+               	leaq	0xe0(%rsp), %rax
                	vmovups	(%rcx), %ymm14
                	vmovups	%ymm14, (%rax)
                	leaq	-0x20(%rbp), %rdi

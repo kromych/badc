@@ -273,7 +273,7 @@ fn ent_pc=8 n_params=4 variadic=false locals=1
     terminator Return(v32)   (exit_acc=v32)
 ; --- SSA dump (ok=true) ent_pc=9 ---
 ; name=main
-fn ent_pc=9 n_params=0 variadic=false locals=1
+fn ent_pc=9 n_params=0 variadic=false locals=3
   spill_count=0 gpr_used=[3, 12, 13] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -402,21 +402,21 @@ fn ent_pc=9 n_params=0 variadic=false locals=1
     v90  Extend { value=v70, kind=I32 }                   -> x2
     v91  Extend { value=v70, kind=I32 }                   -> x2
     v92  Imm(0)                                           -> x2
-    v93  StoreLocal { off=-1, value=v92, kind=I32, volatile } -> -
+    v93  StoreLocal { off=-3, value=v92, kind=I32, volatile } -> -
     terminator Jmp(b22)   (exit_acc=v93)
   block 21  start_pc=0
-    v824 LoadLocal { off=-1, kind=I32, volatile }         -> x2
+    v824 LoadLocal { off=-3, kind=I32, volatile }         -> x2
     v825 Binop { op=add, lhs=v87, rhs=v824 }              -> x6
-    v826 LoadLocal { off=-1, kind=I32, volatile }         -> x6
+    v826 LoadLocal { off=-3, kind=I32, volatile }         -> x6
     v827 Binop { op=add, lhs=v89, rhs=v826 }              -> x7
     v828 LoadIndexed { base=v89, index=v826, scale=1, kind=U8 } -> x6
     v829 StoreIndexed { base=v87, index=v824, scale=1, value=v828, kind=I8 } -> -
-    v830 LoadLocal { off=-1, kind=I32, volatile }         -> x2
+    v830 LoadLocal { off=-3, kind=I32, volatile }         -> x2
     v831 BinopI { op=add, lhs=v830, rhs_imm=1 }           -> x2
-    v832 StoreLocal { off=-1, value=v831, kind=I32, volatile } -> -
+    v832 StoreLocal { off=-3, value=v831, kind=I32, volatile } -> -
     terminator Jmp(b22)   (exit_acc=v832)
   block 22  start_pc=0
-    v822 LoadLocal { off=-1, kind=I32, volatile }         -> x2
+    v822 LoadLocal { off=-3, kind=I32, volatile }         -> x2
     v823 Binop { op=lt, lhs=v822, rhs=v70 }               -> x2
     terminator Bz { cond=v823, target=b23, fall=b21 }   (exit_acc=v823)
   block 23  start_pc=0
@@ -578,21 +578,21 @@ fn ent_pc=9 n_params=0 variadic=false locals=1
     v145 Extend { value=v129, kind=I32 }                  -> x2
     v146 Extend { value=v129, kind=I32 }                  -> x2
     v147 Imm(0)                                           -> x2
-    v148 StoreLocal { off=-1, value=v147, kind=I32, volatile } -> -
+    v148 StoreLocal { off=-2, value=v147, kind=I32, volatile } -> -
     terminator Jmp(b48)   (exit_acc=v148)
   block 47  start_pc=0
-    v893 LoadLocal { off=-1, kind=I32, volatile }         -> x2
+    v893 LoadLocal { off=-2, kind=I32, volatile }         -> x2
     v894 Binop { op=add, lhs=v142, rhs=v893 }             -> x6
-    v895 LoadLocal { off=-1, kind=I32, volatile }         -> x6
+    v895 LoadLocal { off=-2, kind=I32, volatile }         -> x6
     v896 Binop { op=add, lhs=v144, rhs=v895 }             -> x7
     v897 LoadIndexed { base=v144, index=v895, scale=1, kind=U8 } -> x6
     v898 StoreIndexed { base=v142, index=v893, scale=1, value=v897, kind=I8 } -> -
-    v899 LoadLocal { off=-1, kind=I32, volatile }         -> x2
+    v899 LoadLocal { off=-2, kind=I32, volatile }         -> x2
     v900 BinopI { op=add, lhs=v899, rhs_imm=1 }           -> x2
-    v901 StoreLocal { off=-1, value=v900, kind=I32, volatile } -> -
+    v901 StoreLocal { off=-2, value=v900, kind=I32, volatile } -> -
     terminator Jmp(b48)   (exit_acc=v901)
   block 48  start_pc=0
-    v891 LoadLocal { off=-1, kind=I32, volatile }         -> x2
+    v891 LoadLocal { off=-2, kind=I32, volatile }         -> x2
     v892 Binop { op=lt, lhs=v891, rhs=v129 }              -> x2
     terminator Bz { cond=v892, target=b49, fall=b47 }   (exit_acc=v892)
   block 49  start_pc=0

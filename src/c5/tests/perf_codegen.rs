@@ -8930,3 +8930,20 @@ void drop(unsigned long *p) { Ref r = { *p | 1 }; close_ref(r); }\n";
     let frame = |i: &X64Insn| matches!(i.mem_base(), Some(4 | 5)) && !i.reg_form();
     assert!(!insns.iter().any(frame), "{insns:x?}");
 }
+
+/// An inlined function's objects end when it returns (C99 6.2.4p2), so the
+/// arrays four splices pass to an external function share one storage
+/// although each splice has slots of its own.
+#[test]
+fn x64_escaped_objects_of_inlined_calls_share_storage() {
+    const SRC: &str = "void sink(unsigned *p);\n\
+static inline void fill(unsigned k) { unsigned a[4] = { k }; sink(a); }\n\
+void many(void) { fill(1); fill(2); fill(3); fill(4); }\n";
+    let insns = x64(SRC, "many");
+    let frame: Vec<i64> = insns
+        .iter()
+        .filter(|i| matches!(i.op, 0x81 | 0x83) && i.modrm == Some(0xEC))
+        .map(|i| i.imm)
+        .collect();
+    assert_eq!(frame, [16], "{insns:x?}");
+}

@@ -178,19 +178,21 @@ fn ent_pc=10 n_params=1 variadic=false locals=0
     v27  Imm(0)                                           -> x2
     v28  Imm(0)                                           -> x2
     v29  Imm(0)                                           -> x2
-    v30  Imm(0)                                           -> x2
-    v31  Imm(0)                                           -> x2
+    v30  LifetimeEnd(0)                                   -> -
+    v31  LifetimeEnd(0)                                   -> -
     v32  Imm(0)                                           -> x2
-    v33  LifetimeEnd(0)                                   -> -
+    v33  Imm(0)                                           -> x2
     v34  Imm(0)                                           -> x2
-    v35  Imm(0)                                           -> x2
-    v36  BinopI { op=mul, lhs=v5, rhs_imm=10 }            -> x0
+    v35  LifetimeEnd(0)                                   -> -
+    v36  Imm(0)                                           -> x2
     v37  Imm(0)                                           -> x2
-    v38  Imm(0)                                           -> x2
+    v38  BinopI { op=mul, lhs=v5, rhs_imm=10 }            -> x0
     v39  Imm(0)                                           -> x2
-    v40  Binop { op=add, lhs=v36, rhs=v7 }                -> x0
-    v41  LifetimeEnd(0)                                   -> -
-    terminator Return(v40)   (exit_acc=v40)
+    v40  Imm(0)                                           -> x2
+    v41  Imm(0)                                           -> x2
+    v42  Binop { op=add, lhs=v38, rhs=v7 }                -> x0
+    v43  LifetimeEnd(0)                                   -> -
+    terminator Return(v42)   (exit_acc=v42)
 ; --- SSA dump (ok=true) ent_pc=11 ---
 ; name=use_pick
 fn ent_pc=11 n_params=2 variadic=false locals=4

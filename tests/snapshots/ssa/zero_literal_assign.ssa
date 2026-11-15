@@ -148,7 +148,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=0
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
-    v7   Imm(0)                                           -> x0
+    v7   LifetimeEnd(0)                                   -> -
     v8   Imm(0)                                           -> x0
     v9   Imm(0)                                           -> x0
     v10  Imm(0)                                           -> x0
@@ -173,8 +173,8 @@ fn ent_pc=10 n_params=0 variadic=false locals=0
     v29  Imm(0)                                           -> x0
     v30  Imm(0)                                           -> x0
     v31  Imm(0)                                           -> x0
-    v32  Imm(2)                                           -> x0
-    v33  Imm(0)                                           -> x0
+    v32  Imm(0)                                           -> x0
+    v33  Imm(2)                                           -> x0
     v34  Imm(0)                                           -> x0
     v35  Imm(0)                                           -> x0
     v36  Imm(0)                                           -> x0
@@ -182,16 +182,16 @@ fn ent_pc=10 n_params=0 variadic=false locals=0
     v38  Imm(0)                                           -> x0
     v39  Imm(0)                                           -> x0
     v40  Imm(0)                                           -> x0
-    v41  Imm(12)                                          -> x0
-    v42  Imm(0)                                           -> x0
+    v41  Imm(0)                                           -> x0
+    v42  Imm(12)                                          -> x0
     v43  Imm(0)                                           -> x0
     v44  Imm(0)                                           -> x0
     v45  Imm(0)                                           -> x0
     v46  Imm(0)                                           -> x0
     v47  Imm(0)                                           -> x0
     v48  Imm(0)                                           -> x0
-    v49  Imm(592)                                         -> x0
-    v50  Imm(0)                                           -> x0
+    v49  Imm(0)                                           -> x0
+    v50  Imm(592)                                         -> x0
     v51  Imm(0)                                           -> x0
     v52  Imm(0)                                           -> x0
     v53  Imm(0)                                           -> x0
@@ -211,18 +211,19 @@ fn ent_pc=10 n_params=0 variadic=false locals=0
     v67  Imm(0)                                           -> x0
     v68  Imm(0)                                           -> x0
     v69  Imm(0)                                           -> x0
-    v70  LifetimeEnd(0)                                   -> -
-    v71  Imm(0)                                           -> x0
+    v70  Imm(0)                                           -> x0
+    v71  LifetimeEnd(0)                                   -> -
     v72  Imm(0)                                           -> x0
     v73  Imm(0)                                           -> x0
-    v74  LifetimeEnd(0)                                   -> -
+    v74  Imm(0)                                           -> x0
     v75  LifetimeEnd(0)                                   -> -
     v76  LifetimeEnd(0)                                   -> -
     v77  LifetimeEnd(0)                                   -> -
     v78  LifetimeEnd(0)                                   -> -
     v79  LifetimeEnd(0)                                   -> -
     v80  LifetimeEnd(0)                                   -> -
-    terminator Return(v73)   (exit_acc=v73)
+    v81  LifetimeEnd(0)                                   -> -
+    terminator Return(v74)   (exit_acc=v74)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

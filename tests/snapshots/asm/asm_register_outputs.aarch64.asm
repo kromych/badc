@@ -90,12 +90,12 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x1, [x0, #0x30]
-               	stur	xzr, [x29, #-0x8]
+               	stur	xzr, [x29, #-0x10]
                	adrp	x0, <page>
-               	sub	x2, x29, #0x8
+               	sub	x2, x29, #0x10
                	str	x2, [x0, #0x60]
                	mov	x1, x1
-               	stur	x1, [x29, #-0x8]
+               	stur	x1, [x29, #-0x10]
                	ldr	x0, [x0, #0x60]
                	ldr	x0, [x0]
                	add	x0, x0, x1

@@ -1,21 +1,21 @@
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=main
-fn ent_pc=3 n_params=0 variadic=false locals=2
+fn ent_pc=3 n_params=0 variadic=false locals=3
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(8)                                       -> x0
-    v2   StoreLocal { off=-1, value=v1, kind=I64 }        -> -
-    v3   LoadLocal { off=-1, kind=I64, volatile }         -> x0
+    v2   StoreLocal { off=-3, value=v1, kind=I64 }        -> -
+    v3   LoadLocal { off=-3, kind=I64, volatile }         -> x0
     v4   Load { addr=v3, disp=0, kind=I64, volatile }     -> x1
     v5   ImmData(16)                                      -> x0
-    v6   StoreLocal { off=-1, value=v5, kind=I64, volatile } -> -
-    v7   LoadLocal { off=-1, kind=I64, volatile }         -> x2
+    v6   StoreLocal { off=-3, value=v5, kind=I64, volatile } -> -
+    v7   LoadLocal { off=-3, kind=I64, volatile }         -> x2
     v8   Load { addr=v7, disp=0, kind=I64, volatile }     -> x2
     v9   Binop { op=add, lhs=v4, rhs=v8 }                 -> x1
     v10  ImmData(24)                                      -> x2
-    v11  StoreLocal { off=-1, value=v10, kind=I64, volatile } -> -
-    v12  LoadLocal { off=-1, kind=I64, volatile }         -> x2
+    v11  StoreLocal { off=-3, value=v10, kind=I64, volatile } -> -
+    v12  LoadLocal { off=-3, kind=I64, volatile }         -> x2
     v13  Load { addr=v12, disp=0, kind=I64, volatile }    -> x2
     v14  Binop { op=add, lhs=v9, rhs=v13 }                -> x1
     v15  BinopI { op=ne, lhs=v14, rhs_imm=60 }            -> x1

@@ -398,8 +398,8 @@ Disassembly of section .text:
                	leave
                	retq
                	movsd	<rip>, %xmm1
-               	movsd	%xmm1, -0x10(%rbp)
-               	movsd	-0x10(%rbp), %xmm2
+               	movsd	%xmm1, -0x8(%rbp)
+               	movsd	-0x8(%rbp), %xmm2
                	leaq	<rip>, %rax
                	movups	(%rax), %xmm3
                	vpermilpd	$0x0, %xmm3, %xmm4 # xmm4 = xmm3[0,0]
@@ -422,11 +422,11 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%eax, %eax
-               	movb	%al, -0x20(%rbp,%rax)
+               	movb	%al, -0x18(%rbp,%rax)
                	incq	%rax
                	cmpl	$0x11, %eax
                	jl	<addr>
-               	movups	-0x1f(%rbp), %xmm0
+               	movups	-0x17(%rbp), %xmm0
                	vmovd	%xmm0, %eax
                	movslq	%eax, %rax
                	cmpl	$0x4030201, %eax        # imm = 0x4030201

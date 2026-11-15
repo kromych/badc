@@ -310,7 +310,7 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x60
                	mov	x0, #-0x1               // =-1
-               	stur	w0, [x29, #-0x50]
+               	stur	w0, [x29, #-0x48]
                	adrp	x0, <page>
                	mov	x1, #0x7                // =7
                	str	w1, [x0, #0x58]
@@ -437,7 +437,7 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x0, #0x0                // =0
                	b	<addr>
-               	sub	x0, x29, #0x60
+               	sub	x0, x29, #0x58
                	mov	x1, #0x0                // =0
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
@@ -445,12 +445,12 @@ Disassembly of section .text:
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>
-               	ldur	x0, [x29, #-0x60]
-               	sub	x1, x29, #0x58
+               	ldur	x0, [x29, #-0x58]
+               	sub	x1, x29, #0x50
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>
-               	ldur	x0, [x29, #-0x58]
+               	ldur	x0, [x29, #-0x50]
                	cbz	x0, <addr>
                	mov	x0, #0x3                // =3
                	b	<addr>
@@ -466,7 +466,7 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	mov	x0, #0x4                // =4
                	b	<addr>
-               	sub	x0, x29, #0x60
+               	sub	x0, x29, #0x58
                	mov	x1, #0x0                // =0
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
@@ -474,12 +474,12 @@ Disassembly of section .text:
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>
-               	ldur	x0, [x29, #-0x60]
-               	sub	x1, x29, #0x58
+               	ldur	x0, [x29, #-0x58]
+               	sub	x1, x29, #0x50
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>
-               	ldur	x0, [x29, #-0x58]
+               	ldur	x0, [x29, #-0x50]
                	cbz	x0, <addr>
                	mov	x0, #0x5                // =5
                	b	<addr>
@@ -490,46 +490,46 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	mov	x0, #0x9                // =9
                	b	<addr>
-               	sub	x0, x29, #0x8
+               	sub	x0, x29, #0x60
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x6                // =6
                	b	<addr>
-               	sub	x0, x29, #0x8
+               	sub	x0, x29, #0x60
                	mov	x1, #0x0                // =0
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>
-               	sub	x0, x29, #0x8
-               	sub	x1, x29, #0x50
+               	sub	x0, x29, #0x60
+               	sub	x1, x29, #0x48
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>
-               	ldursw	x0, [x29, #-0x50]
+               	ldursw	x0, [x29, #-0x48]
                	cbz	w0, <addr>
                	mov	x0, #0x7                // =7
                	b	<addr>
-               	sub	x0, x29, #0x40
-               	sub	x1, x29, #0x8
+               	sub	x0, x29, #0x38
+               	sub	x1, x29, #0x60
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>
-               	sub	x0, x29, #0x40
+               	sub	x0, x29, #0x38
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>
-               	sub	x0, x29, #0x40
+               	sub	x0, x29, #0x38
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>
-               	sub	x0, x29, #0x40
+               	sub	x0, x29, #0x38
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x8                // =8
                	b	<addr>
-               	sub	x0, x29, #0x8
+               	sub	x0, x29, #0x60
                	bl	<addr>
                	mov	x0, #0x0                // =0
                	b	<addr>

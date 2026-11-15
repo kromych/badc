@@ -61,65 +61,68 @@ fn ent_pc=3 n_params=0 variadic=false locals=3
     v36  Imm(0)                                           -> x6
     v37  LoadLocal { off=-1, kind=I64 }                   -> x6
     v38  Imm(0)                                           -> x7
-    v39  Imm(0)                                           -> x7
-    v40  Imm(0)                                           -> x7
-    v41  BinopI { op=eq, lhs=v28, rhs_imm=0 }             -> x7
+    v39  LifetimeEnd(-1)                                  -> -
+    v40  LifetimeEnd(-2)                                  -> -
+    v41  LifetimeEnd(-3)                                  -> -
     v42  Imm(0)                                           -> x7
-    terminator Bz { cond=v28, target=b6, fall=b5 }   (exit_acc=v41)
-  block 5  start_pc=0
     v43  Imm(0)                                           -> x7
-    v44  Imm(0)                                           -> x7
+    v44  BinopI { op=eq, lhs=v28, rhs_imm=0 }             -> x7
     v45  Imm(0)                                           -> x7
-    v46  BinopI { op=eq, lhs=v34, rhs_imm=0 }             -> x7
+    terminator Bz { cond=v28, target=b6, fall=b5 }   (exit_acc=v44)
+  block 5  start_pc=0
+    v46  Imm(0)                                           -> x7
     v47  Imm(0)                                           -> x7
     v48  Imm(0)                                           -> x7
-    v49  Imm(0)                                           -> x7
-    terminator Bnz { cond=v34, target=b7, fall=b6 }   (exit_acc=v46)
-  block 6  start_pc=0
-    v50  Imm(3)                                           -> x0
-    v51  LifetimeEnd(0)                                   -> -
-    terminator Return(v50)   (exit_acc=v50)
-  block 7  start_pc=0
+    v49  BinopI { op=eq, lhs=v34, rhs_imm=0 }             -> x7
+    v50  Imm(0)                                           -> x7
+    v51  Imm(0)                                           -> x7
     v52  Imm(0)                                           -> x7
-    v53  Imm(0)                                           -> x7
-    v54  Imm(0)                                           -> x7
+    terminator Bnz { cond=v34, target=b7, fall=b6 }   (exit_acc=v49)
+  block 6  start_pc=0
+    v53  Imm(3)                                           -> x0
+    v54  LifetimeEnd(0)                                   -> -
+    terminator Return(v53)   (exit_acc=v53)
+  block 7  start_pc=0
     v55  Imm(0)                                           -> x7
     v56  Imm(0)                                           -> x7
-    v57  Binop { op=ne, lhs=v28, rhs=v31 }                -> x2
-    terminator Bz { cond=v57, target=b9, fall=b8 }   (exit_acc=v57)
+    v57  Imm(0)                                           -> x7
+    v58  Imm(0)                                           -> x7
+    v59  Imm(0)                                           -> x7
+    v60  Binop { op=ne, lhs=v28, rhs=v31 }                -> x2
+    terminator Bz { cond=v60, target=b9, fall=b8 }   (exit_acc=v60)
   block 8  start_pc=0
-    v58  Imm(4)                                           -> x0
-    v59  LifetimeEnd(0)                                   -> -
-    terminator Return(v58)   (exit_acc=v58)
+    v61  Imm(4)                                           -> x0
+    v62  LifetimeEnd(0)                                   -> -
+    terminator Return(v61)   (exit_acc=v61)
   block 9  start_pc=0
-    v60  Imm(0)                                           -> x2
-    v61  Imm(0)                                           -> x2
-    v62  Imm(0)                                           -> x2
     v63  Imm(0)                                           -> x2
     v64  Imm(0)                                           -> x2
-    v65  Binop { op=ult, lhs=v34, rhs=v28 }               -> x1
-    terminator Bz { cond=v65, target=b11, fall=b10 }   (exit_acc=v65)
+    v65  Imm(0)                                           -> x2
+    v66  Imm(0)                                           -> x2
+    v67  Imm(0)                                           -> x2
+    v68  Binop { op=ult, lhs=v34, rhs=v28 }               -> x1
+    terminator Bz { cond=v68, target=b11, fall=b10 }   (exit_acc=v68)
   block 10  start_pc=0
-    v66  Imm(5)                                           -> x0
-    v67  LifetimeEnd(0)                                   -> -
-    terminator Return(v66)   (exit_acc=v66)
+    v69  Imm(5)                                           -> x0
+    v70  LifetimeEnd(0)                                   -> -
+    terminator Return(v69)   (exit_acc=v69)
   block 11  start_pc=0
-    v68  Imm(0)                                           -> x1
-    v69  Imm(0)                                           -> x1
-    v70  Imm(0)                                           -> x1
     v71  Imm(0)                                           -> x1
     v72  Imm(0)                                           -> x1
-    v73  BinopI { op=add, lhs=v28, rhs_imm=8 }            -> x0
-    v74  Binop { op=ne, lhs=v37, rhs=v73 }                -> x0
-    terminator Bz { cond=v74, target=b13, fall=b12 }   (exit_acc=v74)
+    v73  Imm(0)                                           -> x1
+    v74  Imm(0)                                           -> x1
+    v75  Imm(0)                                           -> x1
+    v76  BinopI { op=add, lhs=v28, rhs_imm=8 }            -> x0
+    v77  Binop { op=ne, lhs=v37, rhs=v76 }                -> x0
+    terminator Bz { cond=v77, target=b13, fall=b12 }   (exit_acc=v77)
   block 12  start_pc=0
-    v75  Imm(6)                                           -> x0
-    v76  LifetimeEnd(0)                                   -> -
-    terminator Return(v75)   (exit_acc=v75)
+    v78  Imm(6)                                           -> x0
+    v79  LifetimeEnd(0)                                   -> -
+    terminator Return(v78)   (exit_acc=v78)
   block 13  start_pc=0
-    v77  Imm(0)                                           -> x0
-    v78  LifetimeEnd(0)                                   -> -
-    terminator Return(v77)   (exit_acc=v77)
+    v80  Imm(0)                                           -> x0
+    v81  LifetimeEnd(0)                                   -> -
+    terminator Return(v80)   (exit_acc=v80)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

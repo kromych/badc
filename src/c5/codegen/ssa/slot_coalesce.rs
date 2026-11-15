@@ -229,6 +229,12 @@ fn resolve(
     r
 }
 
+/// Whether the pass may give two of `f`'s slots one storage: not across a
+/// returns-twice call or stack-pointer asm (see `coalesce`).
+pub(crate) fn shares_storage(f: &FunctionSsa) -> bool {
+    !(f.has_returns_twice_call || f.has_sp_asm())
+}
+
 /// Group event kinds. `START` (address take) begins the lifetime but
 /// touches no memory, so it never interferes by itself.
 const READ: u8 = 1;
@@ -250,7 +256,7 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
     // justifies; keeping a slot no instruction and no `FunctionSsa` field
     // names is not, so such a function still drops its unreferenced slots and
     // renumbers the survivors one-to-one below.
-    let dedicated = f.has_returns_twice_call || f.has_sp_asm();
+    let dedicated = !shares_storage(f);
     // A non-negative `synthetic_base` marks a walker-built function, one
     // with no declared locals included; hand-built SSA (sys-trampolines)
     // carries -1 and is left alone -- its slot model is not the walker's.

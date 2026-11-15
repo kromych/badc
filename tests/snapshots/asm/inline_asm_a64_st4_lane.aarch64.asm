@@ -74,7 +74,7 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldr	x16, [x1]
                	str	x16, [x0]
-               	sub	x1, x29, #0x30
+               	sub	x1, x29, #0x8
                	str	xzr, [x1]
                	str	x0, [sp]
                	str	x1, [sp, #0x8]
@@ -87,19 +87,19 @@ Disassembly of section .text:
                	ld2	{ v4.h, v5.h }[7], [x0]
                	st2	{ v4.h, v5.h }[0], [x1], x2
                	st2	{ v4.h, v5.h }[7], [x1]
-               	ldurh	w0, [x29, #-0x30]
+               	ldurh	w0, [x29, #-0x8]
                	ldurh	w1, [x29, #-0x28]
                	cmp	w0, w1
                	b.ne	<addr>
-               	ldurh	w0, [x29, #-0x2e]
+               	ldurh	w0, [x29, #-0x6]
                	ldurh	w1, [x29, #-0x26]
                	cmp	w0, w1
                	b.ne	<addr>
-               	ldurh	w0, [x29, #-0x2c]
+               	ldurh	w0, [x29, #-0x4]
                	ldurh	w1, [x29, #-0x24]
                	cmp	w0, w1
                	b.ne	<addr>
-               	ldurh	w0, [x29, #-0x2a]
+               	ldurh	w0, [x29, #-0x2]
                	ldurh	w1, [x29, #-0x22]
                	cmp	w0, w1
                	b.ne	<addr>

@@ -249,7 +249,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x30
-               	sub	sp, sp, #0xa0
+               	sub	sp, sp, #0x80
                	mov	x16, sp
                	and	sp, x16, #0xffffffffffffffe0
                	mov	x0, #0x1                // =1
@@ -265,18 +265,18 @@ Disassembly of section .text:
                	ldur	x1, [x29, #-0x20]
                	sub	x1, x1, #0x2
                	add	x0, x0, x1
-               	add	x1, sp, #0x40
+               	mov	x1, sp
                	mov	x2, #0x2                // =2
                	mov	x3, #0x202020202020202  // =144680345676153346
-               	str	x3, [sp, #0x40]
-               	str	x3, [sp, #0x48]
-               	str	x3, [sp, #0x50]
-               	str	x3, [sp, #0x58]
+               	str	x3, [sp]
+               	str	x3, [sp, #0x8]
+               	str	x3, [sp, #0x10]
+               	str	x3, [sp, #0x18]
                	and	x1, x1, #0xf
                	add	x0, x0, x1
-               	add	x1, sp, #0x60
-               	str	x3, [sp, #0x60]
-               	str	x3, [sp, #0x68]
+               	add	x1, sp, #0x40
+               	str	x3, [sp, #0x40]
+               	str	x3, [sp, #0x48]
                	and	x1, x1, #0xf
                	add	x0, x0, x1
                	cbz	w0, <addr>
@@ -300,17 +300,17 @@ Disassembly of section .text:
                	add	x0, x0, x2
                	ldur	x2, [x29, #-0x8]
                	sub	x0, x0, x2, lsl #1
-               	add	x2, sp, #0x70
+               	add	x2, sp, #0x40
                	mov	x3, #0x404040404040404  // =289360691352306692
-               	str	x3, [sp, #0x70]
-               	str	x3, [sp, #0x78]
-               	str	x3, [sp, #0x80]
-               	str	x3, [sp, #0x88]
+               	str	x3, [sp, #0x40]
+               	str	x3, [sp, #0x48]
+               	str	x3, [sp, #0x50]
+               	str	x3, [sp, #0x58]
                	and	x2, x2, #0xf
                	add	x0, x0, x2
-               	add	x2, sp, #0x90
-               	str	x3, [sp, #0x90]
-               	str	x3, [sp, #0x98]
+               	add	x2, sp, #0x60
+               	str	x3, [sp, #0x60]
+               	str	x3, [sp, #0x68]
                	and	x2, x2, #0xf
                	add	x16, x0, x2
                	stur	x16, [x29, #-0x28]

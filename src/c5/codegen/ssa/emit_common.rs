@@ -2750,6 +2750,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 super::super::passes::inline::Limits {
                     cap: 0,
                     stack: super::super::passes::inline::StackGrowth::DEFAULT,
+                    repacked: false,
                 },
                 target.abi(),
                 &code_syms,
@@ -2906,6 +2907,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 super::super::passes::inline::Limits {
                     cap: native.inline_cap,
                     stack,
+                    repacked: true,
                 },
                 target.abi(),
                 &code_syms,
@@ -2932,6 +2934,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 super::super::passes::inline::Limits {
                     cap: native.inline_cap,
                     stack,
+                    repacked: true,
                 },
                 target.abi(),
                 super::reg_alloc::RegBanks::for_target(target)

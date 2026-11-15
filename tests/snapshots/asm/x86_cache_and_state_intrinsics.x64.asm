@@ -30,12 +30,12 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	xorl	%edi, %edi
-               	movl	$0x5, -0x10(%rbp)
-               	leaq	-0x10(%rbp), %r10
+               	movl	$0x5, -0x8(%rbp)
+               	leaq	-0x8(%rbp), %r10
                	clflushopt	(%r10)
-               	leaq	-0x10(%rbp), %r10
+               	leaq	-0x8(%rbp), %r10
                	prefetchw	(%r10)
-               	movl	-0x10(%rbp), %eax
+               	movl	-0x8(%rbp), %eax
                	movl	$0x1, %ecx
                	cmpl	$0x5, %eax
                	cmovneq	%rcx, %rdi
@@ -82,9 +82,9 @@ Disassembly of section .text:
                	leaq	<rip>, %rax # <addr>
                	movq	%rax, %r10
                	fxrstor	(%r10)
-               	leaq	-0x8(%rbp), %rax
+               	leaq	-0x10(%rbp), %rax
                	stmxcsr	(%rax)
-               	movl	-0x8(%rbp), %eax
+               	movl	-0x10(%rbp), %eax
                	andq	$0xffc0, %rax           # imm = 0xFFC0
                	movq	%rdi, %rcx
                	orq	$0x4, %rcx

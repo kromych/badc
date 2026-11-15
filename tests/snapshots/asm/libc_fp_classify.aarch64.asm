@@ -17,48 +17,6 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	fmov	d0, #-1.00000000
-               	stur	d0, [x29, #-0x8]
-               	ldur	x0, [x29, #-0x8]
-               	and	x0, x0, #0x8000000000000000
-               	mov	x17, #0x4008000000000000 // =4613937818241073152
-               	orr	x0, x0, x17
-               	fmov	d0, x0
-               	fmov	d1, #-3.00000000
-               	fcmp	d0, d1
-               	b.eq	<addr>
-               	mov	x0, #0x1                // =1
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	fmov	d0, #1.00000000
-               	stur	d0, [x29, #-0x8]
-               	ldur	x0, [x29, #-0x8]
-               	and	x0, x0, #0x8000000000000000
-               	mov	x17, #0x4008000000000000 // =4613937818241073152
-               	orr	x0, x0, x17
-               	fmov	d0, x0
-               	fmov	d1, #3.00000000
-               	fcmp	d0, d1
-               	b.eq	<addr>
-               	mov	x0, #0x2                // =2
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	fmov	d0, #-5.00000000
-               	stur	d0, [x29, #-0x8]
-               	ldur	x0, [x29, #-0x8]
-               	and	x0, x0, #0x8000000000000000
-               	orr	x0, x0, #0x4000000000000000
-               	fmov	d0, x0
-               	fcvt	s0, d0
-               	fmov	s1, #-2.00000000
-               	fcmp	s0, s1
-               	b.eq	<addr>
-               	mov	x0, #0x3                // =3
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	mov	x16, #0x7f800000        // =2139095040
                	fmov	s0, w16
                	stur	s0, [x29, #-0x8]

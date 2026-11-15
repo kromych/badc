@@ -281,16 +281,17 @@ fn ent_pc=5 n_params=0 variadic=false locals=2
     v197 Imm(7)                                           -> x0
     v198 Imm(7)                                           -> x0
     v199 Imm(7)                                           -> x0
-    v200 Imm(7)                                           -> x0
-    v201 Imm(0)                                           -> x0
-    terminator Jmp(b26)   (exit_acc=v201)
+    v200 LifetimeEnd(-1)                                  -> -
+    v201 Imm(7)                                           -> x0
+    v202 Imm(0)                                           -> x0
+    terminator Jmp(b26)   (exit_acc=v202)
   block 26  start_pc=0
-    v203 Imm(0)                                           -> x0
-    v204 Imm(2)                                           -> x0
+    v204 Imm(0)                                           -> x0
     v205 Imm(2)                                           -> x0
-    v206 Imm(0)                                           -> x0
+    v206 Imm(2)                                           -> x0
     v207 Imm(0)                                           -> x0
-    terminator Return(v207)   (exit_acc=v207)
+    v208 Imm(0)                                           -> x0
+    terminator Return(v208)   (exit_acc=v208)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

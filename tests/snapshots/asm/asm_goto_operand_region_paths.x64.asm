@@ -116,8 +116,11 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	cmpl	$0x2, %eax
                	jne	<addr>
+               	leaq	-0x10(%rbp), %rcx
                	movq	$0x0, -0x10(%rbp)
                	movq	$0x2, -0x8(%rbp)
+               	testb	$0xf, %cl
+               	jne	<addr>
                	xorl	%r10d, %r10d
                	testl	%r10d, %r10d
                	jne	<addr>

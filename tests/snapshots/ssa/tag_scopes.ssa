@@ -17,39 +17,39 @@ fn ent_pc=4 n_params=0 variadic=false locals=1
     v11  Imm(3)                                           -> x0
     v12  StoreLocal { off=-1, value=v11, kind=I32 }       -> -
     v13  LocalAddr(-1)                                    -> x1
-    v14  LoadLocal { off=-1, kind=U32 }                   -> x2
-    v15  Extend { value=v14, kind=I32 }                   -> x6
+    v14  LoadLocal { off=-1, kind=U32 }                   -> x1
+    v15  Extend { value=v14, kind=I32 }                   -> x2
     v16  LifetimeEnd(-1)                                  -> -
-    v17  Extend { value=v14, kind=I32 }                   -> x6
-    v18  BinopI { op=ne, lhs=v14, rhs_imm=3 }             -> x2
+    v17  Extend { value=v14, kind=I32 }                   -> x2
+    v18  BinopI { op=ne, lhs=v14, rhs_imm=3 }             -> x1
     terminator Bz { cond=v18, target=b2, fall=b1 }   (exit_acc=v18)
   block 1  start_pc=0
     v21  Imm(3)                                           -> x1
     terminator Return(v11)   (exit_acc=v11)
   block 2  start_pc=0
-    v23  LocalAddr(-1)                                    -> x0
-    v24  ImmData(8)                                       -> x0
-    v25  Mcpy { dst=v13, src=v24, size=3, align=8 }       -> -
-    v26  LocalAddr(-1)                                    -> x0
-    v27  BinopI { op=add, lhs=v26, rhs_imm=2 }            -> x0
-    v28  Imm(3)                                           -> x0
-    v29  Imm(6)                                           -> x0
+    v23  Imm(0)                                           -> x0
+    v24  Imm(0)                                           -> x0
+    v25  Imm(3)                                           -> x0
+    v26  Imm(0)                                           -> x0
+    v27  Imm(0)                                           -> x0
+    v28  Imm(0)                                           -> x0
+    v29  Imm(3)                                           -> x0
     v30  Imm(6)                                           -> x0
     v31  Imm(6)                                           -> x0
-    v32  LifetimeEnd(-1)                                  -> -
-    v33  Imm(6)                                           -> x0
-    v34  Imm(0)                                           -> x0
+    v32  Imm(6)                                           -> x0
+    v33  LifetimeEnd(0)                                   -> -
+    v34  Imm(6)                                           -> x0
     v35  Imm(0)                                           -> x0
     v36  Imm(0)                                           -> x0
     v37  Imm(0)                                           -> x0
-    v38  Imm(40)                                          -> x0
-    v39  Imm(0)                                           -> x0
-    v40  Imm(1)                                           -> x0
-    v41  Imm(0)                                           -> x0
+    v38  Imm(0)                                           -> x0
+    v39  Imm(40)                                          -> x0
+    v40  Imm(0)                                           -> x0
+    v41  Imm(1)                                           -> x0
     v42  Imm(0)                                           -> x0
-    v43  Imm(90)                                          -> x0
+    v43  Imm(0)                                           -> x0
     v44  Imm(90)                                          -> x0
-    v45  Imm(0)                                           -> x0
+    v45  Imm(90)                                          -> x0
     v46  Imm(0)                                           -> x0
     v47  Imm(0)                                           -> x0
     v48  Imm(0)                                           -> x0
@@ -59,7 +59,8 @@ fn ent_pc=4 n_params=0 variadic=false locals=1
     v52  Imm(0)                                           -> x0
     v53  Imm(0)                                           -> x0
     v54  Imm(0)                                           -> x0
-    terminator Return(v54)   (exit_acc=v54)
+    v55  Imm(0)                                           -> x0
+    terminator Return(v55)   (exit_acc=v55)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

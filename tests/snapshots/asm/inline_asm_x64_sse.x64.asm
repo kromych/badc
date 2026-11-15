@@ -98,13 +98,13 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	-0x20(%rbp), %rax
+               	leaq	-0x10(%rbp), %rax
                	movdqu	<rip>, %xmm0 # <addr>
                	cvtdq2ps	%xmm0, %xmm0
                	cvtps2dq	%xmm0, %xmm0
                	shufps	$0x1b, %xmm0, %xmm0     # xmm0 = xmm0[3,2,1,0]
                	movdqu	%xmm0, (%rax)
-               	movl	-0x20(%rbp), %eax
+               	movl	-0x10(%rbp), %eax
                	cmpl	$0x2a, %eax
                	je	<addr>
                	movl	$0x7, %eax

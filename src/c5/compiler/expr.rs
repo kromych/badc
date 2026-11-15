@@ -565,10 +565,13 @@ impl Compiler {
         // The operands of a deferred type, by index, with their types.
         let mut pending: Vec<(usize, i64)> = Vec::new();
         let mut imm = None;
+        // The lane index of an extraction, checked once the type is known.
+        let mut index: Option<i64> = None;
         let mut while_kind = (true, 32);
         // A pattern operand rides the row as its immediate.
         let arity = match shape {
             SveShape::PTrue | SveShape::Count => 1,
+            SveShape::Extract => 3,
             _ => simd::get(first).form.arity(),
         };
         for i in 0..arity {
@@ -577,7 +580,8 @@ impl Compiler {
             }
             let what = format!("operand {} of `{name}`", i + 1);
             let governing = shape.governed() && i == 0;
-            if deferred && !governing {
+            let immediate = shape == SveShape::Extract && i == 2;
+            if deferred && !governing && !immediate {
                 self.expr_or_void(Token::Assign as i64)?;
                 let id = (self.ast_acc)
                     .ok_or_else(|| self.compile_err(Code::SYNTAX, "expression expected"))?;
@@ -620,6 +624,18 @@ impl Compiler {
                     self.convert_assign_rhs(to);
                     self.ast_acc
                         .ok_or_else(|| self.compile_err(Code::SYNTAX, "expression expected"))?
+                }
+                SveShape::Extract if immediate => {
+                    index = Some(self.parse_constant_int()?);
+                    continue;
+                }
+                SveShape::Reinterpret => {
+                    self.expr_or_void(Token::Assign as i64)?;
+                    self.sve_any_vector(&what)?
+                }
+                SveShape::DupLane if i == 1 => {
+                    self.expr(Token::Assign as i64)?;
+                    self.sve_index(&what)?
                 }
                 SveShape::PTrue | SveShape::Count => {
                     self.expr(Token::Assign as i64)?;
@@ -683,6 +699,7 @@ impl Compiler {
                     _ if shape.on_predicates() => self.check_sve_operand(pred, &what)?,
                     SveShape::Select => self.check_sve_operand(t, &what)?,
                     SveShape::Store if i == 1 => self.sve_pointer_arg(Some(t), name, &what)?.1,
+                    SveShape::DupLane if i == 1 => self.sve_index(&what)?,
                     _ => {
                         let t = self.sve_operand_ty(first, i, t);
                         self.sve_vector_arg(t, &what)?
@@ -713,12 +730,31 @@ impl Compiler {
             ));
         };
         let lane = |t: i64| self.sve_lane(t).unwrap_or((0, SveElem::Signed));
+        // An extraction's index counts lanes, of which the bytes of the
+        // longest vector, 256, hold at most 256 >> size.
+        if shape == SveShape::Extract {
+            let last = (256i64 >> vty.map_or(0, |t| lane(t).0)) - 1;
+            match index {
+                Some(k) if (0..=last).contains(&k) => imm = Some(k as u8),
+                _ => {
+                    return Err(self.compile_err(
+                        Code::CONSTANT_EXPRESSION,
+                        format!("operand 3 of `{name}` must be a constant from 0 to {last}"),
+                    ));
+                }
+            }
+        }
         let ty = match shape {
             SveShape::Binary(_)
             | SveShape::Unary(_)
             | SveShape::Load
             | SveShape::Dup
-            | SveShape::Select => vty.unwrap_or(pred),
+            | SveShape::Select
+            | SveShape::DupLane
+            | SveShape::Reinterpret
+            | SveShape::Permute
+            | SveShape::Reverse
+            | SveShape::Extract => vty.unwrap_or(pred),
             SveShape::Compare
             | SveShape::PTrue
             | SveShape::While { .. }
@@ -749,6 +785,31 @@ impl Compiler {
         self.ty = ty;
         self.ast_acc = Some(id);
         Ok(())
+    }
+
+    /// The vector operand just parsed, of any SVE vector type.
+    fn sve_any_vector(&mut self, what: &str) -> Result<super::super::ast::ExprId, C5Error> {
+        if self.sve_lane(self.ty).is_none() {
+            return Err(
+                self.compile_err(Code::INVALID_ARGUMENTS, format!("{what}: vector expected"))
+            );
+        }
+        let ty = self.ty;
+        self.check_sve_operand(ty, what)
+    }
+
+    /// The lane index just parsed, an integer converted to 64 bits, whose
+    /// low bits as wide as the lane select it.
+    fn sve_index(&mut self, what: &str) -> Result<super::super::ast::ExprId, C5Error> {
+        if !super::types::is_integer_scalar_ty(self.ty) {
+            return Err(self.compile_err(
+                Code::INVALID_ARGUMENTS,
+                format!("{what} must be an integer"),
+            ));
+        }
+        self.convert_assign_rhs(Ty::LongLong as i64 | UNSIGNED_BIT);
+        self.ast_acc
+            .ok_or_else(|| self.compile_err(Code::SYNTAX, "expression expected"))
     }
 
     /// The type of vector operand `i` of the family of row `first` whose

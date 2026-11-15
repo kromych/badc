@@ -5,7 +5,7 @@
 //! The shapes and semantics are the shared vocabulary of [`super::simd`].
 
 use super::simd::{
-    AcrossOp, FOp, Form, Ret, Sem, SimdOp, SveElems, SveForm, SvePred, SveShape, SveTest,
+    AcrossOp, FOp, Form, PermOp, Ret, Sem, SimdOp, SveElems, SveForm, SvePred, SveShape, SveTest,
 };
 
 const fn row(
@@ -90,6 +90,27 @@ const fn lsr(w: u8) -> Sem {
 }
 const fn asr(w: u8) -> Sem {
     Sem::SarVar(w)
+}
+const fn zip1(w: u8) -> Sem {
+    Sem::Perm(PermOp::Zip, w, false, 0)
+}
+const fn zip2(w: u8) -> Sem {
+    Sem::Perm(PermOp::Zip, w, true, 0)
+}
+const fn uzp1(w: u8) -> Sem {
+    Sem::Perm(PermOp::Uzp, w, false, 0)
+}
+const fn uzp2(w: u8) -> Sem {
+    Sem::Perm(PermOp::Uzp, w, true, 0)
+}
+const fn trn1(w: u8) -> Sem {
+    Sem::Perm(PermOp::Trn, w, false, 0)
+}
+const fn trn2(w: u8) -> Sem {
+    Sem::Perm(PermOp::Trn, w, true, 0)
+}
+const fn rev(w: u8) -> Sem {
+    Sem::Rev(w, 0)
 }
 const fn not(_: u8) -> Sem {
     Sem::Not
@@ -345,6 +366,16 @@ pub(crate) const OPS: &[SimdOp] = rows! {
     "eorv" "eorv" SveShape::Reduce, Unsigned, ueorv: 1 2 4 8;
     "dup" "dup" SveShape::Dup, Int, move_: 1 2 4 8;
     "dup" "dup" SveShape::Dup, Float, move_: 4 8;
+    "dup_lane" "tbl" SveShape::DupLane, Any, Sem::Tbl: 1 2 4 8;
+    "reinterpret" "mov" SveShape::Reinterpret, Any, move_: 1 2 4 8;
+    "zip1" "zip1" SveShape::Permute, Any, zip1: 1 2 4 8;
+    "zip2" "zip2" SveShape::Permute, Any, zip2: 1 2 4 8;
+    "uzp1" "uzp1" SveShape::Permute, Any, uzp1: 1 2 4 8;
+    "uzp2" "uzp2" SveShape::Permute, Any, uzp2: 1 2 4 8;
+    "trn1" "trn1" SveShape::Permute, Any, trn1: 1 2 4 8;
+    "trn2" "trn2" SveShape::Permute, Any, trn2: 1 2 4 8;
+    "rev" "rev" SveShape::Reverse, Any, rev: 1 2 4 8;
+    "ext" "ext" SveShape::Extract, Any, Sem::Ext: 1 2 4 8;
 };
 
 pub(crate) fn get(i: usize) -> &'static SimdOp {

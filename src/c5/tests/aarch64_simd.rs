@@ -2110,6 +2110,71 @@ fn the_sve_reductions_take_their_lanes_type() {
     }
 }
 
+/// svzip1 to svtrn2, svrev, svext, svdup_lane and svreinterpret move lanes
+/// across the whole vector as scalar C computes for the run's length, an
+/// index past the vector giving zero lanes (svdup_lane) or the first vector
+/// whole (svext); the interpreter runs the fixture at four vector lengths.
+/// Under `-O` svdup_lane is the index in every lane of a scratch and TBL,
+/// svext the destructive EXT by bytes, in a scratch where the destination
+/// holds the second operand, and svreinterpret a move or nothing. An index
+/// past the type's range is diagnosed.
+#[test]
+fn the_sve_permutes_move_lanes_across_the_vector() {
+    const SRC: &str = include_str!("../../../tests/fixtures/sve/rows_permute.c");
+    for optimize in [false, true] {
+        let options = crate::CompileOptions::default().with_optimize(optimize);
+        let program =
+            crate::Compiler::with_options(String::from(SRC), crate::Target::LinuxAarch64, options)
+                .compile()
+                .expect("compiles");
+        for bits in [128, 256, 512, 2048] {
+            let vm = super::Vm::new(program.clone()).with_sve_vector_bits(bits);
+            assert_eq!(
+                vm.run().expect("runs"),
+                bits as i64 / 128,
+                "{bits} bits, -O {optimize}"
+            );
+        }
+    }
+    let err = crate::Compiler::with_target(
+        String::from(
+            "#include <arm_sve.h>\n\
+             svint32_t f(svint32_t a) { return svext(a, a, 64); }\n",
+        ),
+        crate::Target::LinuxAarch64,
+    )
+    .compile()
+    .err()
+    .map(|e| e.to_string())
+    .unwrap_or_default();
+    assert!(err.contains("must be a constant from 0 to 63"), "{err}");
+    #[cfg(feature = "full")]
+    {
+        const ASM: &str = "#include <arm_sve.h>\n\
+            svint32_t dl(svint32_t a, uint32_t i) { return svdup_lane(a, i); }\n\
+            svint16_t zip(svint16_t a, svint16_t b) { return svzip1(a, b); }\n\
+            svint32_t ext(svint32_t b, svint32_t a) { return svext(a, b, 3); }\n\
+            svuint8_t same(svint32_t a) { return svreinterpret_u8(a); }\n\
+            svfloat32_t moved(svint32_t x, svint32_t a) { return svreinterpret_f32(a); }\n";
+        const RET: u32 = 0xD65F_03C0;
+        let words = |name: &str| super::perf_codegen::a64_at(ASM, name, true);
+        // DUP zt.s, w0; TBL z0.s, {z0.s}, zt.s.
+        let w = words("dl");
+        let t = w[0] & 0x1F;
+        assert_eq!(w, [0x05A0_3800 | t, 0x05A0_3000 | t << 16, RET]);
+        // ZIP1 z0.h, z0.h, z1.h.
+        assert_eq!(words("zip"), [0x0561_6000, RET]);
+        // MOVPRFX zt, z1; EXT zt.b, zt.b, z0.b, #12; MOV z0.d, zt.d.
+        let w = words("ext");
+        let t = w[0] & 0x1F;
+        let mov = 0x0460_3000 | t << 16 | t << 5;
+        assert_eq!(w, [0x0420_BC20 | t, 0x0521_1000 | t, mov, RET]);
+        assert_eq!(words("same"), [RET]);
+        // MOV z0.d, z1.d.
+        assert_eq!(words("moved"), [0x0461_3020, RET]);
+    }
+}
+
 /// A unary row is its instruction on the argument registers under `-O`:
 /// the don't-care form in place, the merging form on a `movprfx` copy of
 /// the inactive operand, the zeroing form on a zeroing `movprfx` of the

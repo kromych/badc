@@ -336,8 +336,72 @@ pub(super) fn emit_row(
             store_spilled_int(code, frame, dst, rd);
             Ok(())
         }
+        SveShape::DupLane => {
+            // The index in every lane of the second scratch, then TBL.
+            let a = o.z(code, args[0], 0)?;
+            let x = o.x(code, args[1], scratch.primary)?;
+            let t = frame.fp_scratch[1];
+            let r = Opnd::Reg {
+                num: x.0,
+                is64: size == 3,
+                sp: false,
+            };
+            word(code, "dup", &[z(t, size), r])?;
+            let d = o.z_dst(dst)?;
+            word(code, "tbl", &[z(d, size), z(a, size), z(t, size)])?;
+            o.z_done(code, dst, d);
+            Ok(())
+        }
+        SveShape::Reinterpret => {
+            super::sve::emit_z_copy(code, place_of(alloc, args[0]), dst, frame)
+        }
+        SveShape::Permute | SveShape::Reverse => {
+            let a = o.z(code, args[0], 0)?;
+            let b = match args.get(1) {
+                Some(&b) if form.shape == SveShape::Permute => Some(o.z(code, b, 1)?),
+                _ => None,
+            };
+            let d = o.z_dst(dst)?;
+            let ops: alloc::vec::Vec<Opnd> = [Some(d), Some(a), b]
+                .into_iter()
+                .flatten()
+                .map(|r| z(r, size))
+                .collect();
+            word(code, row.mnem, &ops)?;
+            o.z_done(code, dst, d);
+            Ok(())
+        }
+        SveShape::Extract => {
+            // EXT counts bytes, the intrinsic lanes.
+            let at = Opnd::Imm(i64::from(imm.unwrap_or(0)) << size);
+            let (a, b) = (o.z(code, args[0], 0)?, o.z(code, args[1], 1)?);
+            let d = o.z_dst(dst)?;
+            let fs = frame.fp_scratch;
+            let t = match extract_in_scratch(d, a, b) {
+                true if a == fs[0] => fs[1],
+                true => fs[0],
+                false => d,
+            };
+            if t != a {
+                let whole = |num| Opnd::ZReg { num, size: None };
+                word(code, "movprfx", &[whole(t), whole(a)])?;
+            }
+            word(code, "ext", &[z(t, 0), z(t, 0), z(b, 0), at])?;
+            if t != d {
+                emit(code, super::sve::enc_mov_z(d, t));
+            }
+            o.z_done(code, dst, d);
+            Ok(())
+        }
         SveShape::Load | SveShape::Store => fail("SVE row: a load or store is an intrinsic"),
     }
+}
+
+/// Whether an extraction in registers computes in a scratch: its
+/// destination `d` holds the second operand `b` and not the first, which
+/// EXT overwrites in place after a MOVPRFX that `b` may not share.
+fn extract_in_scratch(d: u8, a: u8, b: u8) -> bool {
+    d == b && d != a
 }
 
 /// The P registers the rows and accesses of `func` stage predicates
@@ -419,6 +483,12 @@ pub(super) fn scratch_writes(func: &FunctionSsa, alloc: &Allocation) -> [bool; 2
                 w[0] |= unary_in_scratch(mode, d, i, a);
             }
             (SveShape::Reduce, _) => w[1] |= f.elems != simd::SveElems::Float,
+            (SveShape::DupLane, _) => w[1] = true,
+            (SveShape::Extract, &[a, b]) => {
+                if let (Some(d), Some(a), Some(b)) = (fp(v as u32), fp(a), fp(b)) {
+                    w[0] |= extract_in_scratch(d, a, b);
+                }
+            }
             _ => {}
         }
     }

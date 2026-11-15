@@ -5366,6 +5366,25 @@ fn run_sve_row(
             };
             frame.regs[v as usize] = i64::from(r);
         }
+        SveShape::DupLane => {
+            let a = sve_bytes(frame, args[0])?;
+            let k = frame.regs[args[1] as usize] as u64 & (u64::MAX >> (64 - 8 * w));
+            let lane = usize::try_from(k).ok().filter(|&k| k < lanes);
+            let x = lane.map_or(alloc::vec![0; w], |k| a[k * w..k * w + w].to_vec());
+            frame.sregs.insert(v, x.repeat(lanes));
+        }
+        SveShape::Reinterpret => {
+            let a = sve_bytes(frame, args[0])?.to_vec();
+            frame.sregs.insert(v, a);
+        }
+        SveShape::Permute | SveShape::Reverse | SveShape::Extract => {
+            let a = sve_bytes(frame, args[0])?.to_vec();
+            let b = match args.get(1) {
+                Some(&b) => sve_bytes(frame, b)?.to_vec(),
+                None => Vec::new(),
+            };
+            frame.sregs.insert(v, sve_permute(row.sem, w, imm, &a, &b));
+        }
         SveShape::Load | SveShape::Store => {
             return Err(C5Error::Runtime(format!(
                 "vm_ssa: {} is an intrinsic",
@@ -5374,6 +5393,48 @@ fn run_sve_row(
         }
     }
     Ok(())
+}
+
+/// The lanes of `w` bytes of `a` and `b` as permutation `sem` orders them
+/// over the whole vector (Arm ARM ZIP1 to TRN2, REV, EXT); EXT's `imm`
+/// counts lanes, a byte offset past the vector taking `a` whole.
+fn sve_permute(
+    sem: crate::c5::simd::Sem,
+    w: usize,
+    imm: Option<u8>,
+    a: &[u8],
+    b: &[u8],
+) -> Vec<u8> {
+    use crate::c5::simd::{PermOp, Sem};
+    let n = a.len();
+    let lanes = n / w;
+    let lane = |v: &[u8], i: usize| v[i * w..i * w + w].to_vec();
+    let pick = |i: usize| {
+        if i < lanes {
+            lane(a, i)
+        } else {
+            lane(b, i - lanes)
+        }
+    };
+    let order: Vec<usize> = match sem {
+        Sem::Perm(op, _, second, _) => {
+            let s = usize::from(second);
+            (0..lanes)
+                .map(|i| match op {
+                    PermOp::Zip => (s * lanes / 2 + i / 2) + (i % 2) * lanes,
+                    PermOp::Uzp => 2 * i + s,
+                    PermOp::Trn => (i & !1) + s + (i % 2) * lanes,
+                })
+                .collect()
+        }
+        Sem::Rev(..) => (0..lanes).rev().collect(),
+        _ => {
+            let at = usize::from(imm.unwrap_or(0)) * w;
+            let at = if at >= n { 0 } else { at / w };
+            (at..at + lanes).collect()
+        }
+    };
+    order.into_iter().flat_map(pick).collect()
 }
 
 /// A governed SVE load or store: the active lanes alone touch memory.

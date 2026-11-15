@@ -190,6 +190,18 @@ pub(crate) enum SveShape {
     /// `n = op(pg, p)`: whether `p` sets a bit `pg` sets: any, the first
     /// or the last of them.
     Test(SveTest),
+    /// `v = op(a, i)`: lane `i` of `a` in every lane, zero where `i` is past
+    /// the vector (`tbl` of the index in every lane).
+    DupLane,
+    /// `v = op(a)`: the bits of a vector of any type.
+    Reinterpret,
+    /// `v = op(a, b)`: a permutation of the lanes of `a` and `b`.
+    Permute,
+    /// `v = op(a)`: the lanes in reverse order.
+    Reverse,
+    /// `v = op(a, b)`: the lanes of `a` from the immediate's on, then those
+    /// of `b`; an immediate past the vector takes `a` whole.
+    Extract,
 }
 
 /// The bits of a predicate a test reads (`ptest`).
@@ -230,7 +242,12 @@ impl SveShape {
             | SveShape::Unary(_)
             | SveShape::Load
             | SveShape::Dup
-            | SveShape::Select => Some(LoadKind::SveVector),
+            | SveShape::Select
+            | SveShape::DupLane
+            | SveShape::Reinterpret
+            | SveShape::Permute
+            | SveShape::Reverse
+            | SveShape::Extract => Some(LoadKind::SveVector),
             SveShape::Compare
             | SveShape::PTrue
             | SveShape::While { .. }
@@ -312,6 +329,7 @@ pub(crate) fn sve_low_word(op: u32, k: usize) -> bool {
         Form::Sve(f) => match f.shape {
             SveShape::While { bits, .. } => bits == 32 && k < 2,
             SveShape::Dup => f.elems != SveElems::Float && row.int_width <= 4,
+            SveShape::DupLane => k == 1 && row.int_width <= 4,
             _ => false,
         },
         _ => false,
@@ -1105,7 +1123,8 @@ impl Form {
             Form::VvvI => 4,
             Form::Sve(f) => match f.shape {
                 SveShape::PTrue | SveShape::Count => 0,
-                SveShape::Dup => 1,
+                SveShape::Dup | SveShape::Reinterpret | SveShape::Reverse => 1,
+                SveShape::DupLane | SveShape::Permute | SveShape::Extract => 2,
                 SveShape::Unary(SvePred::Merge) => 3,
                 SveShape::Unary(_) => 2,
                 SveShape::While { .. }

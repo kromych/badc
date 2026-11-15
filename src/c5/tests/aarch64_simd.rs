@@ -2373,6 +2373,51 @@ fn sve_multiply_adds_destroy_the_operand_the_destination_holds() {
     }
 }
 
+/// svcnt, svclz and svcls give the unsigned type of their width, and svcvt
+/// converts between the integer and floating types of a width, rounding to
+/// nearest and back toward zero, saturating, as scalar C computes; a
+/// merging form's inactive operand and an overloaded form's result are of
+/// the result's type, the operand's selecting the row. The interpreter
+/// runs the fixture at four vector lengths. Under `-O` each is its unary
+/// instruction: CNT, CLZ, CLS, SCVTF, UCVTF, FCVTZS and FCVTZU.
+#[test]
+fn sve_bit_counts_and_conversions_change_the_element_type() {
+    const SRC: &str = include_str!("../../../tests/fixtures/sve/rows_count_convert.c");
+    for optimize in [false, true] {
+        let options = crate::CompileOptions::default().with_optimize(optimize);
+        let program =
+            crate::Compiler::with_options(String::from(SRC), crate::Target::LinuxAarch64, options)
+                .compile()
+                .expect("compiles");
+        for bits in [128, 256, 512, 2048] {
+            let vm = super::Vm::new(program.clone()).with_sve_vector_bits(bits);
+            assert_eq!(
+                vm.run().expect("runs"),
+                bits as i64 / 128,
+                "{bits} bits, -O {optimize}"
+            );
+        }
+    }
+    #[cfg(feature = "full")]
+    {
+        const ASM: &str = "#include <arm_sve.h>\n\
+            svuint32_t cnt_m(svuint32_t i, svbool_t pg, svint32_t a) { return svcnt_m(i, pg, a); }\n\
+            svuint8_t cls_x(svbool_t pg, svint8_t a) { return svcls_x(pg, a); }\n\
+            svfloat32_t cvt_x(svbool_t pg, svint32_t a) { return svcvt_f32_x(pg, a); }\n\
+            svuint64_t cvt_m(svuint64_t i, svbool_t pg, svfloat64_t a) { return svcvt_u64_m(i, pg, a); }\n";
+        const RET: u32 = 0xD65F_03C0;
+        let words = |name: &str| super::perf_codegen::a64_at(ASM, name, true);
+        // CNT z0.s, p0/m, z1.s.
+        assert_eq!(words("cnt_m"), [0x049A_A020, RET]);
+        // CLS z0.b, p0/m, z0.b.
+        assert_eq!(words("cls_x"), [0x0418_A000, RET]);
+        // SCVTF z0.s, p0/m, z0.s.
+        assert_eq!(words("cvt_x"), [0x6594_A000, RET]);
+        // FCVTZU z0.d, p0/m, z1.d.
+        assert_eq!(words("cvt_m"), [0x65DF_A020, RET]);
+    }
+}
+
 /// A constant operand of an SVE row compiles as scalar C computes at the
 /// edges of the immediates' ranges and past them; the interpreter runs the
 /// fixture at four vector lengths. Under `-O` a constant is its row's

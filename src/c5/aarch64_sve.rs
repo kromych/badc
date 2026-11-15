@@ -5,8 +5,8 @@
 //! The shapes and semantics are the shared vocabulary of [`super::simd`].
 
 use super::simd::{
-    AcrossOp, Addend, FOp, Form, PermOp, Ret, Sem, SimdOp, SveElems, SveForm, SvePred, SveShape,
-    SveTest,
+    AcrossOp, Addend, Cvt, FOp, Form, PermOp, Ret, RoundTo, Sem, SimdOp, SveElems, SveForm,
+    SvePred, SveShape, SveTest,
 };
 
 const fn row(
@@ -228,6 +228,35 @@ const fn fnmla(w: u8) -> Sem {
 const fn fnmls(w: u8) -> Sem {
     Sem::FloatFma(w, false, Addend::Minus)
 }
+const fn cnt(w: u8) -> Sem {
+    Sem::PopCnt(w)
+}
+const fn clz(w: u8) -> Sem {
+    Sem::Clz(w)
+}
+const fn cls(w: u8) -> Sem {
+    Sem::Cls(w)
+}
+const fn scvtf(w: u8) -> Sem {
+    Sem::Convert(Cvt::FixedToFloat { w, signed: true })
+}
+const fn ucvtf(w: u8) -> Sem {
+    Sem::Convert(Cvt::FixedToFloat { w, signed: false })
+}
+const fn fcvtzs(w: u8) -> Sem {
+    Sem::Convert(Cvt::ToIntSat {
+        w,
+        signed: true,
+        to: RoundTo::Zero,
+    })
+}
+const fn fcvtzu(w: u8) -> Sem {
+    Sem::Convert(Cvt::ToIntSat {
+        w,
+        signed: false,
+        to: RoundTo::Zero,
+    })
+}
 const fn sqadd(w: u8) -> Sem {
     Sem::AddSat(w, true)
 }
@@ -403,6 +432,39 @@ pub(crate) const OPS: &[SimdOp] = rows! {
     "nmsb_m" "fnmsb" SveShape::Ternary(M, true), Float, fnmls: 4 8;
     "nmsb_z" "fnmsb" SveShape::Ternary(Z, true), Float, fnmls: 4 8;
     "nmsb_x" "fnmsb" SveShape::Ternary(X, true), Float, fnmls: 4 8;
+    "cnt_m" "cnt" SveShape::Unary(M), Any, cnt: 1 2 4 8;
+    "clz_m" "clz" SveShape::Unary(M), Int, clz: 1 2 4 8;
+    "cls_m" "cls" SveShape::Unary(M), Signed, cls: 1 2 4 8;
+    "cvt_f32_m" "scvtf" SveShape::Unary(M), Signed, scvtf: 4;
+    "cvt_f32_m" "ucvtf" SveShape::Unary(M), Unsigned, ucvtf: 4;
+    "cvt_f64_m" "scvtf" SveShape::Unary(M), Signed, scvtf: 8;
+    "cvt_f64_m" "ucvtf" SveShape::Unary(M), Unsigned, ucvtf: 8;
+    "cvt_s32_m" "fcvtzs" SveShape::Unary(M), Float, fcvtzs: 4;
+    "cvt_s64_m" "fcvtzs" SveShape::Unary(M), Float, fcvtzs: 8;
+    "cvt_u32_m" "fcvtzu" SveShape::Unary(M), Float, fcvtzu: 4;
+    "cvt_u64_m" "fcvtzu" SveShape::Unary(M), Float, fcvtzu: 8;
+    "cnt_z" "cnt" SveShape::Unary(Z), Any, cnt: 1 2 4 8;
+    "clz_z" "clz" SveShape::Unary(Z), Int, clz: 1 2 4 8;
+    "cls_z" "cls" SveShape::Unary(Z), Signed, cls: 1 2 4 8;
+    "cvt_f32_z" "scvtf" SveShape::Unary(Z), Signed, scvtf: 4;
+    "cvt_f32_z" "ucvtf" SveShape::Unary(Z), Unsigned, ucvtf: 4;
+    "cvt_f64_z" "scvtf" SveShape::Unary(Z), Signed, scvtf: 8;
+    "cvt_f64_z" "ucvtf" SveShape::Unary(Z), Unsigned, ucvtf: 8;
+    "cvt_s32_z" "fcvtzs" SveShape::Unary(Z), Float, fcvtzs: 4;
+    "cvt_s64_z" "fcvtzs" SveShape::Unary(Z), Float, fcvtzs: 8;
+    "cvt_u32_z" "fcvtzu" SveShape::Unary(Z), Float, fcvtzu: 4;
+    "cvt_u64_z" "fcvtzu" SveShape::Unary(Z), Float, fcvtzu: 8;
+    "cnt_x" "cnt" SveShape::Unary(X), Any, cnt: 1 2 4 8;
+    "clz_x" "clz" SveShape::Unary(X), Int, clz: 1 2 4 8;
+    "cls_x" "cls" SveShape::Unary(X), Signed, cls: 1 2 4 8;
+    "cvt_f32_x" "scvtf" SveShape::Unary(X), Signed, scvtf: 4;
+    "cvt_f32_x" "ucvtf" SveShape::Unary(X), Unsigned, ucvtf: 4;
+    "cvt_f64_x" "scvtf" SveShape::Unary(X), Signed, scvtf: 8;
+    "cvt_f64_x" "ucvtf" SveShape::Unary(X), Unsigned, ucvtf: 8;
+    "cvt_s32_x" "fcvtzs" SveShape::Unary(X), Float, fcvtzs: 4;
+    "cvt_s64_x" "fcvtzs" SveShape::Unary(X), Float, fcvtzs: 8;
+    "cvt_u32_x" "fcvtzu" SveShape::Unary(X), Float, fcvtzu: 4;
+    "cvt_u64_x" "fcvtzu" SveShape::Unary(X), Float, fcvtzu: 8;
     "qadd" "sqadd" SveShape::Lanewise, Signed, sqadd: 1 2 4 8;
     "qadd" "uqadd" SveShape::Lanewise, Unsigned, uqadd: 1 2 4 8;
     "qsub" "sqsub" SveShape::Lanewise, Signed, sqsub: 1 2 4 8;

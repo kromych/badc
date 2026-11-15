@@ -333,6 +333,23 @@ pub(crate) fn sve_narrow_result(op: u32) -> Option<crate::c5::ir::LoadKind> {
     }
 }
 
+/// The element kind of the vectors SVE row `op` gives where it is not its
+/// operands' (ACLE): an unsigned count of bits (svcnt, svclz, svcls), or
+/// a conversion's type.
+pub(crate) fn sve_result_elems(op: u32) -> Option<crate::c5::compiler::SveElem> {
+    use crate::c5::compiler::SveElem as E;
+    if !sve_row(op) {
+        return None;
+    }
+    match get(op).sem {
+        Sem::Clz(_) | Sem::Cls(_) | Sem::PopCnt(_) => Some(E::Unsigned),
+        Sem::Convert(Cvt::FixedToFloat { .. }) => Some(E::Float),
+        Sem::Convert(Cvt::ToIntSat { signed: true, .. }) => Some(E::Signed),
+        Sem::Convert(Cvt::ToIntSat { signed: false, .. }) => Some(E::Unsigned),
+        _ => None,
+    }
+}
+
 /// Whether SVE row `op` reads only the low 32 bits of operand `k`: the
 /// bounds of a 32-bit `while`, the scalar a `dup` puts in lanes of up to 4
 /// bytes.
@@ -687,8 +704,8 @@ pub(crate) enum Sem {
     /// below the sign that equal it (`cls`).
     Clz(u8),
     Cls(u8),
-    /// The number of set bits of each byte (`cnt`).
-    PopCnt,
+    /// The number of set bits of each lane (`cnt`).
+    PopCnt(u8),
     /// The complement of each bit (`mvn`).
     Not,
     /// The accumulator plus or minus the lane-wise product of the other two
@@ -2171,9 +2188,9 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
                 set_lane(&mut o, w, i, u64::from(n));
             }
         }
-        Sem::PopCnt => {
-            for i in 0..16 {
-                o[i] = a[i].count_ones() as u8;
+        Sem::PopCnt(w) => {
+            for i in 0..16 / w as usize {
+                set_lane(&mut o, w, i, u64::from(lane(a, w, i).count_ones()));
             }
         }
         // A 64-bit polynomial product fills the 128-bit result.

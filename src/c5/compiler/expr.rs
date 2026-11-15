@@ -668,10 +668,14 @@ impl Compiler {
         }
         self.consume(b')', "`)` expected after the operands")?;
         if deferred {
-            let t = pending
-                .iter()
-                .map(|p| p.1)
-                .find(|&t| self.sve_type_of(t).is_some());
+            // A family whose result is of another type takes the type of
+            // its last operand, a merging form's first being of the result's.
+            let last = simd::sve_result_elems(first).is_some();
+            let mut types = pending.iter().map(|p| p.1);
+            let t = match last {
+                true => types.rev().find(|&t| self.sve_type_of(t).is_some()),
+                false => types.find(|&t| self.sve_type_of(t).is_some()),
+            };
             let Some(t) = t else {
                 return Err(self.compile_err(
                     Code::INVALID_ARGUMENTS,
@@ -745,8 +749,8 @@ impl Compiler {
             }
         }
         let ty = match shape {
+            SveShape::Unary(_) => vty.map_or(pred, |t| self.sve_result_ty(op, t)),
             SveShape::Binary(_)
-            | SveShape::Unary(_)
             | SveShape::Load
             | SveShape::Dup
             | SveShape::Select
@@ -816,18 +820,32 @@ impl Compiler {
 
     /// The type of vector operand `i` of the family of row `first` whose
     /// type is `ty`: a shift's count is the unsigned vector of its width
-    /// (ACLE, svlsl).
+    /// (ACLE, svlsl), and a merging form's inactive operand is of its
+    /// result's type.
     fn sve_operand_ty(&mut self, first: u32, i: usize, ty: i64) -> i64 {
-        use super::super::simd::{self, Sem};
-        let count = matches!(
-            simd::get(first).sem,
-            Sem::ShlVar(_) | Sem::ShrVar(_) | Sem::SarVar(_)
-        );
+        use super::super::simd::{self, Sem, SvePred, SveShape};
+        let row = simd::get(first);
+        let count = matches!(row.sem, Sem::ShlVar(_) | Sem::ShrVar(_) | Sem::SarVar(_));
+        let inactive =
+            matches!(row.form, simd::Form::Sve(f) if f.shape == SveShape::Unary(SvePred::Merge));
         match self.sve_lane(ty) {
             Some((size, _)) if count && i == 2 => self.sve_type_tag(super::SveType::Vector {
                 size,
                 kind: super::SveElem::Unsigned,
             }),
+            Some(_) if inactive && i == 1 => self.sve_result_ty(first, ty),
+            _ => ty,
+        }
+    }
+
+    /// The vector type row `op` over vectors of type `ty` gives: `ty`, or
+    /// the vector of its width of the row's result kind
+    /// ([`simd::sve_result_elems`](super::super::simd::sve_result_elems)).
+    fn sve_result_ty(&mut self, op: u32, ty: i64) -> i64 {
+        match (super::super::simd::sve_result_elems(op), self.sve_lane(ty)) {
+            (Some(kind), Some((size, _))) => {
+                self.sve_type_tag(super::SveType::Vector { size, kind })
+            }
             _ => ty,
         }
     }

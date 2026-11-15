@@ -287,7 +287,7 @@ pub(crate) const OPS: &[SimdOp] = table! {
     "sqabs" V AbsSat (): b8 b16 h4 h8 s2 s4 d1 d2;
     "clz" V Clz (): b8 b16 h4 h8 s2 s4;
     "cls" V Cls (): b8 b16 h4 h8 s2 s4;
-    "cnt" V PopCnt -: b8 b16;
+    "cnt" V PopCnt (): b8 b16;
     "mvn" V Not -: b8 b16;
     "mla" Vvv MulAcc (): b8 b16 h4 h8 s2 s4;
     "mls" Vvv MulSub (): b8 b16 h4 h8 s2 s4;

@@ -2053,7 +2053,7 @@ fn floating_rows_compute_in_the_environment() {
         | Sem::AbsSat(_)
         | Sem::Clz(_)
         | Sem::Cls(_)
-        | Sem::PopCnt
+        | Sem::PopCnt(_)
         | Sem::Not
         | Sem::MulAcc(_)
         | Sem::MulSub(_)

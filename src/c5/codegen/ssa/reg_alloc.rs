@@ -2738,8 +2738,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
 }
 
 /// Each call a node the coloring saved crosses, with the caller-saved
-/// registers of those nodes and a slot per node, which the reservation
-/// grows by.
+/// registers of those nodes and their slots, which the reservation grows
+/// by. A slot holds its value only around one call, so nodes saved at no
+/// common call share it.
 fn call_save_lists(
     (crossings, node_of): (&[(ValueId, Vec<ValueId>)], &[ValueId]),
     (saved, node_cons, places): (&[bool], &[Option<NodeConstraints>], &[Place]),
@@ -2748,13 +2749,31 @@ fn call_save_lists(
     if !saved.iter().any(|&s| s) {
         return Vec::new();
     }
-    let mut slot = alloc::vec![u32::MAX; saved.len()];
-    for (node, &s) in saved.iter().enumerate() {
-        if s {
-            slot[node] = *spill_count;
-            *spill_count += node_cons[node].map_or(1, |c| c.wide.units());
+    let in_reg = |v: ValueId| matches!(places[v as usize], Place::IntReg(_) | Place::FpReg(_));
+    let mut sites_of: Vec<Vec<usize>> = alloc::vec![Vec::new(); saved.len()];
+    for (k, (_, live)) in crossings.iter().enumerate() {
+        for &v in live {
+            let root = node_of[v as usize] as usize;
+            if saved[root] && in_reg(v) && sites_of[root].last() != Some(&k) {
+                sites_of[root].push(k);
+            }
         }
     }
+    // The units taken at each call, by the nodes placed so far.
+    let mut taken: Vec<Vec<u32>> = alloc::vec![Vec::new(); crossings.len()];
+    let mut slot = alloc::vec![u32::MAX; saved.len()];
+    let mut end = 0u32;
+    for (node, sites) in sites_of.iter().enumerate().filter(|(_, s)| !s.is_empty()) {
+        let units = node_cons[node].map_or(1, |c| c.wide.units());
+        let free = |s: u32| (sites.iter()).all(|&k| (s..s + units).all(|u| !taken[k].contains(&u)));
+        let s = (0..).find(|&s| free(s)).unwrap_or(0);
+        for &k in sites {
+            taken[k].extend(s..s + units);
+        }
+        slot[node] = *spill_count + s;
+        end = end.max(s + units);
+    }
+    *spill_count += end;
     let mut out = Vec::new();
     for (site, live) in crossings {
         let mut saves: Vec<CallSave> = Vec::new();
@@ -8793,6 +8812,63 @@ int main(void) { return 0; }
             }
         }
         assert!(saved > 0);
+    }
+
+    /// A call-save slot holds its value only around one call, so values
+    /// saved at no common call share it, and the reservation grows by what
+    /// the calls need at once.
+    #[test]
+    fn values_saved_at_no_common_call_share_a_slot() {
+        let cons = |wide| {
+            Some(NodeConstraints {
+                is_fp: false,
+                must_callee: true,
+                call_forbid: 0,
+                save_cost: 0,
+                save_freq: 0,
+                spill_freq: 0,
+                def_cost: 0,
+                hint: None,
+                forbid: 0,
+                avoid: 0,
+                loop_avoid: 0,
+                wide,
+                follow: [None; 4],
+            })
+        };
+        // v0 lives across the call at v3, v1 across the one at v4, v2 across
+        // both.
+        let crossings: Vec<(ValueId, Vec<ValueId>)> = vec![(3, vec![0, 2]), (4, vec![1, 2])];
+        let node_of: Vec<ValueId> = (0..5).collect();
+        let saved = [true, true, true, false, false];
+        let places = [9, 10, 11]
+            .map(Place::IntReg)
+            .into_iter()
+            .chain([Place::None; 2])
+            .collect::<Vec<_>>();
+        for (wide, grown) in [(VecWidth::Scalar, 2), (VecWidth::V128, 3)] {
+            let node_cons = [
+                cons(VecWidth::Scalar),
+                cons(VecWidth::Scalar),
+                cons(wide),
+                None,
+                None,
+            ];
+            let mut count = 7;
+            let lists = call_save_lists(
+                (&crossings, &node_of),
+                (&saved, &node_cons, &places),
+                &mut count,
+            );
+            let slot = |site: ValueId, reg: u8| {
+                let (_, saves) = lists.iter().find(|(s, _)| *s == site).expect("site");
+                saves.iter().find(|c| c.reg == reg).expect("save").slot
+            };
+            assert_eq!(slot(3, 9), slot(4, 10), "{wide:?}: v0 and v1 share");
+            assert_eq!(slot(3, 11), slot(4, 11), "{wide:?}: v2 keeps one slot");
+            assert_ne!(slot(3, 9), slot(3, 11), "{wide:?}: v0 and v2 do not");
+            assert_eq!(count, 7 + grown, "{wide:?}");
+        }
     }
 
     /// The parts of a return in registers are hinted to their class's

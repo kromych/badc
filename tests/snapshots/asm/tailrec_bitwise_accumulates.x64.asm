@@ -133,9 +133,9 @@ Disassembly of section .text:
                	cmpl	$0x14, %eax
                	jbe	<addr>
                	movl	$0x14, %edi
-               	movq	%rcx, (%rsp)
+               	movq	%rcx, 0x8(%rsp)
                	callq	<addr>
-               	movq	(%rsp), %rcx
+               	movq	0x8(%rsp), %rcx
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	cmpl	%ecx, %eax
                	je	<addr>

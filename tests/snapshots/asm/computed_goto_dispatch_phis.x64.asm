@@ -795,9 +795,9 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	leaq	<rip>, %rdi # <addr>
                	movl	$0xb, %esi
-               	movq	%rcx, (%rsp)
+               	movq	%rcx, 0x8(%rsp)
                	callq	<addr>
-               	movq	(%rsp), %rcx
+               	movq	0x8(%rsp), %rcx
                	cmpq	%rax, %rcx
                	je	<addr>
                	movl	$0x4, %eax

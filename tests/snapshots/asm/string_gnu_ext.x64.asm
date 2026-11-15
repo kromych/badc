@@ -245,11 +245,11 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	leaq	<rip>, %rsi
-               	movq	%rcx, (%rsp)
+               	movq	%rcx, 0x8(%rsp)
                	movq	%rcx, %rdi
                	callq	<addr>
                	movslq	%eax, %rax
-               	movq	(%rsp), %rcx
+               	movq	0x8(%rsp), %rcx
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x12, %eax

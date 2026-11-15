@@ -277,11 +277,11 @@ Disassembly of section .text:
                	cbz	x2, <addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	str	x2, [sp]
+               	str	x2, [sp, #0x8]
                	mov	x0, x2
                	bl	<addr>
                	sxtw	x0, w0
-               	ldr	x2, [sp]
+               	ldr	x2, [sp, #0x8]
                	cbz	x0, <addr>
                	mov	x0, #0x12               // =18
                	add	sp, sp, #0x20

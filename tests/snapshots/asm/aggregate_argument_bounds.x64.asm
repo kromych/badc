@@ -251,7 +251,7 @@ Disassembly of section .text:
                	movzbq	-0x1(%rax), %rax
                	shlq	$0x30, %rax
                	orq	%rax, %r8
-               	movq	%rcx, (%rsp)
+               	movq	%rcx, 0x10(%rsp)
                	subq	$0x10, %rsp
                	movq	%r9, %r10
                	movq	(%r10), %r11
@@ -266,7 +266,7 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	addq	$0x10, %rsp
-               	movq	(%rsp), %rcx
+               	movq	0x10(%rsp), %rcx
                	cmpl	$0xc3c, %eax            # imm = 0xC3C
                	je	<addr>
                	movl	$0x8, %eax

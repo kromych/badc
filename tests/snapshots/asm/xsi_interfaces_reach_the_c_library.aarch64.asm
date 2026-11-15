@@ -199,7 +199,7 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0xc0
+               	sub	sp, sp, #0xb0
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>
@@ -283,11 +283,11 @@ Disassembly of section .text:
                	cbnz	x0, <addr>
                	mov	x0, #0x1e               // =30
                	cbz	x0, <addr>
-               	add	sp, sp, #0xc0
+               	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	add	sp, sp, #0xc0
+               	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0xa                // =10
@@ -362,9 +362,9 @@ Disassembly of section .text:
                	mov	x1, x0
                	bl	<addr>
                	mov	x1, x0
-               	str	x1, [sp, #0x8]
+               	str	x1, [sp]
                	bl	<addr>
-               	ldr	x1, [sp, #0x8]
+               	ldr	x1, [sp]
                	ldrsw	x0, [x0]
                	cbnz	x0, <addr>
                	cmn	w1, #0x14
@@ -481,23 +481,23 @@ Disassembly of section .text:
                	fmov	d0, #1.00000000
                	fcmpe	d1, d0
                	b.ge	<addr>
-               	str	d1, [sp, #0x10]
+               	str	d1, [sp]
                	bl	<addr>
-               	ldr	d1, [sp, #0x10]
+               	ldr	d1, [sp]
                	fcmp	d1, d0
                	b.ne	<addr>
                	sub	x0, x29, #0xa0
                	bl	<addr>
-               	str	x0, [sp, #0x18]
+               	str	x0, [sp, #0x8]
                	bl	<addr>
-               	ldr	x16, [sp, #0x18]
+               	ldr	x16, [sp, #0x8]
                	cmp	x16, x0
                	b.ne	<addr>
                	sub	x0, x29, #0xa0
                	bl	<addr>
-               	str	x0, [sp, #0x18]
+               	str	x0, [sp, #0x8]
                	bl	<addr>
-               	ldr	x16, [sp, #0x18]
+               	ldr	x16, [sp, #0x8]
                	cmp	x16, x0
                	b.eq	<addr>
                	mov	x0, #0xd                // =13

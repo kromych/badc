@@ -28,7 +28,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
+               	subq	$0x20, %rsp
                	leaq	-0x10(%rbp), %rdi
                	leaq	<rip>, %rax
                	movq	(%rax), %r10
@@ -53,10 +53,10 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rsi
                	movl	$0x3, %edx
-               	movq	%rcx, 0x10(%rsp)
+               	movq	%rcx, (%rsp)
                	movq	%rcx, %rdi
                	callq	<addr>
-               	movq	0x10(%rsp), %rcx
+               	movq	(%rsp), %rcx
                	cmpq	$0x3, %rax
                	jne	<addr>
                	movq	%rcx, %rdi
@@ -78,19 +78,19 @@ Disassembly of section .text:
                	retq
                	xorl	%esi, %esi
                	movl	$0x2, %edx
-               	movq	%rcx, 0x8(%rsp)
+               	movq	%rcx, (%rsp)
                	movq	%rcx, %rdi
                	callq	<addr>
-               	movq	0x8(%rsp), %rcx
-               	movq	%rcx, 0x8(%rsp)
+               	movq	(%rsp), %rcx
+               	movq	%rcx, (%rsp)
                	movq	%rcx, %rdi
                	callq	<addr>
                	movq	%rax, %r10
-               	movq	%r10, 0x18(%rsp)
-               	movq	0x8(%rsp), %rcx
+               	movq	%r10, 0x8(%rsp)
+               	movq	(%rsp), %rcx
                	movq	%rcx, %rdi
                	callq	<addr>
-               	movq	0x18(%rsp), %rax
+               	movq	0x8(%rsp), %rax
                	cmpq	$0x3, %rax
                	jne	<addr>
                	leaq	-0x10(%rbp), %rdi
@@ -126,11 +126,11 @@ Disassembly of section .text:
                	movq	%rcx, %rdi
                	callq	<addr>
                	movq	%rax, %r10
-               	movq	%r10, 0x18(%rsp)
+               	movq	%r10, 0x8(%rsp)
                	movq	(%rsp), %rcx
                	movq	%rcx, %rdi
                	callq	<addr>
-               	movq	0x18(%rsp), %r10
+               	movq	0x8(%rsp), %r10
                	testq	%r10, %r10
                	jne	<addr>
                	leaq	-0x10(%rbp), %rdi

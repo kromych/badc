@@ -391,10 +391,10 @@ Disassembly of section .text:
                	sub	x0, x29, #0x40
                	ldr	x0, [x0, x2, lsl #3]
                	sub	x1, x29, #0x48
-               	str	x2, [sp, #0x10]
+               	str	x2, [sp, #0x18]
                	bl	<addr>
                	sxtw	x0, w0
-               	ldr	x2, [sp, #0x10]
+               	ldr	x2, [sp, #0x18]
                	cbnz	x0, <addr>
                	ldur	x0, [x29, #-0x48]
                	cbnz	x0, <addr>

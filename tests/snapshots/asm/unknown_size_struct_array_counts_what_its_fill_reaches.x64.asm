@@ -325,11 +325,11 @@ Disassembly of section .text:
                	leaq	0x8(%rax), %rcx
                	leaq	<rip>, %rsi
                	movl	$0x3, %edx
-               	movq	%rcx, (%rsp)
+               	movq	%rcx, 0x8(%rsp)
                	movq	%rcx, %rdi
                	callq	<addr>
                	movslq	%eax, %rax
-               	movq	(%rsp), %rcx
+               	movq	0x8(%rsp), %rcx
                	testq	%rax, %rax
                	jne	<addr>
                	movl	0x4(%rcx), %eax

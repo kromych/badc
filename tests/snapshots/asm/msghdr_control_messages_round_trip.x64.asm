@@ -624,11 +624,11 @@ Disassembly of section .text:
                	xorl	%edx, %edx
                	jmp	<addr>
                	leaq	-0x78(%rbp), %rdi
-               	movq	%rdx, 0x10(%rsp)
+               	movq	%rdx, 0x18(%rsp)
                	movq	%rcx, %rsi
                	callq	<addr>
                	movq	%rax, %rcx
-               	movq	0x10(%rsp), %rdx
+               	movq	0x18(%rsp), %rdx
                	testq	%rcx, %rcx
                	je	<addr>
                	cmpl	$0x0, 0x8(%rcx)
@@ -664,10 +664,10 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x12, %eax
                	jmp	<addr>
-               	movq	%rdx, 0x10(%rsp)
+               	movq	%rdx, 0x18(%rsp)
                	movq	%r12, %rdi
                	callq	<addr>
-               	movq	0x10(%rsp), %rdx
+               	movq	0x18(%rsp), %rdx
                	xorl	%eax, %eax
                	movl	$0x13, %ecx
                	testq	%rdx, %rdx

@@ -154,9 +154,9 @@ Disassembly of section .text:
                	movl	$0x28, %edx
                	leaq	<rip>, %rdi # <addr>
                	leaq	<rip>, %rsi # <addr>
-               	movq	%rdi, (%rsp)
+               	movq	%rdi, 0x8(%rsp)
                	callq	<addr>
-               	movq	(%rsp), %rdi
+               	movq	0x8(%rsp), %rdi
                	xorl	%ecx, %ecx
                	movq	%rcx, %rax
                	movsbq	(%rdi,%rax), %rdx

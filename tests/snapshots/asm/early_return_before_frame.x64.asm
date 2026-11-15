@@ -580,9 +580,9 @@ Disassembly of section .text:
                	jmp	<addr>
                	incq	%rcx
                	movq	<rip>, %rax # <addr>
-               	movq	%rcx, 0x10(%rsp)
+               	movq	%rcx, 0x18(%rsp)
                	callq	*%rax
-               	movq	0x10(%rsp), %rcx
+               	movq	0x18(%rsp), %rcx
                	movsbq	(%rcx), %rax
                	subq	$0x2a, %rax
                	cmpq	$0x10, %rax

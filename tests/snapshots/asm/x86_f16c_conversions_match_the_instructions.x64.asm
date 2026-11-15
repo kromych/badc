@@ -249,7 +249,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0xf0, %rsp
+               	subq	$0xe0, %rsp
                	pushq	%r14
                	pushq	%r13
                	pushq	%r12
@@ -457,7 +457,7 @@ Disassembly of section .text:
                	cmpl	$0x33800000, %eax       # imm = 0x33800000
                	je	<addr>
                	movl	$0x2, %eax
-               	leaq	-0x110(%rbp), %rsp
+               	leaq	-0x100(%rbp), %rsp
                	popq	%rbx
                	popq	%r12
                	popq	%r13
@@ -567,11 +567,11 @@ Disassembly of section .text:
                	movl	-0x38(%rbp), %edi
                	xorl	%esi, %esi
                	leaq	-0x40(%rbp), %rcx
-               	movups	%xmm0, -0xf0(%rbp)
+               	movups	%xmm0, -0xd0(%rbp)
                	movq	%r13, %rdx
                	vzeroupper
                	callq	<addr>
-               	movups	-0xf0(%rbp), %xmm0
+               	movups	-0xd0(%rbp), %xmm0
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	movw	%ax, -0x10(%rbp,%rbx,2)
                	incq	%rbx
@@ -915,7 +915,7 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x4, %eax
-               	leaq	-0x110(%rbp), %rsp
+               	leaq	-0x100(%rbp), %rsp
                	popq	%rbx
                	popq	%r12
                	popq	%r13
@@ -924,7 +924,7 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%eax, %eax
-               	leaq	-0x110(%rbp), %rsp
+               	leaq	-0x100(%rbp), %rsp
                	popq	%rbx
                	popq	%r12
                	popq	%r13
@@ -1209,7 +1209,7 @@ Disassembly of section .text:
                	orq	%rcx, %rax
                	jmp	<addr>
                	movl	$0x3, %eax
-               	leaq	-0x110(%rbp), %rsp
+               	leaq	-0x100(%rbp), %rsp
                	popq	%rbx
                	popq	%r12
                	popq	%r13
@@ -1218,7 +1218,7 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x1, %eax
-               	leaq	-0x110(%rbp), %rsp
+               	leaq	-0x100(%rbp), %rsp
                	popq	%rbx
                	popq	%r12
                	popq	%r13

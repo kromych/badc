@@ -94,17 +94,17 @@ Disassembly of section .text:
                	cmpq	%rax, %rbx
                	jge	<addr>
                	movq	0x8(%rcx), %rdi
-               	movq	%rcx, 0x10(%rsp)
+               	movq	%rcx, 0x18(%rsp)
                	movq	%rbx, %rsi
                	callq	<addr>
-               	movq	0x10(%rsp), %rcx
+               	movq	0x18(%rsp), %rcx
                	movq	%rax, 0x8(%rcx)
                	jmp	<addr>
                	movq	0x10(%rcx), %rdi
-               	movq	%rcx, 0x10(%rsp)
+               	movq	%rcx, 0x18(%rsp)
                	movq	%rbx, %rsi
                	callq	<addr>
-               	movq	0x10(%rsp), %rcx
+               	movq	0x18(%rsp), %rcx
                	movq	%rax, 0x10(%rcx)
                	jmp	<addr>
 

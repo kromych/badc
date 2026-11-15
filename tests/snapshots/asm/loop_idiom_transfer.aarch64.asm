@@ -160,10 +160,10 @@ Disassembly of section .text:
                	add	x3, x3, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	str	x3, [sp]
+               	str	x3, [sp, #0x8]
                	mov	x0, x3
                	bl	<addr>
-               	ldr	x3, [sp]
+               	ldr	x3, [sp, #0x8]
                	mov	x1, #0x0                // =0
                	mov	x0, x1
                	ldrb	w2, [x3, x0]

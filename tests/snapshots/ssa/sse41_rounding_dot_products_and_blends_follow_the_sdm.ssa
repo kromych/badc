@@ -7382,7 +7382,7 @@ fn ent_pc=505 n_params=0 variadic=false locals=10
 ; --- SSA dump (ok=true) ent_pc=506 ---
 ; name=main
 fn ent_pc=506 n_params=0 variadic=false locals=1
-  spill_count=26 gpr_used=[3, 12, 13, 14] fp_used=[]
+  spill_count=22 gpr_used=[3, 12, 13, 14] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(304)                                     -> x0

@@ -353,11 +353,11 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	mov	x2, #0x3                // =3
-               	str	x3, [sp]
+               	str	x3, [sp, #0x8]
                	mov	x0, x3
                	bl	<addr>
                	sxtw	x0, w0
-               	ldr	x3, [sp]
+               	ldr	x3, [sp, #0x8]
                	cbnz	x0, <addr>
                	ldrsw	x0, [x3, #0x4]
                	cmp	w0, #0x2

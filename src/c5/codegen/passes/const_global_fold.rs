@@ -653,7 +653,86 @@ pub(crate) fn fold_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) -> bool {
         };
         folds.push((i, Folded::of(value, kind)));
     }
-    apply(func, &mut folds) | changed_vectors
+    apply(func, &mut folds) | changed_vectors | fold_copies(func, cd)
+}
+
+/// Rewrite a copy of up to eight bytes out of const data, whose own value
+/// nothing reads, into a store of those bytes as an immediate: a struct
+/// assignment from a `const` object of static duration stores its
+/// initializer (C17 6.7.3p6). A copy into a frame object stays, as
+/// [`fold_template_loads`] reads the object's later loads from the image.
+fn fold_copies(func: &mut FunctionSsa, cd: &ConstData<'_>) -> bool {
+    use crate::c5::ir::StoreKind;
+    let ext = extern_imm_data(func);
+    let mut read = alloc::vec![false; func.insts.len()];
+    let mut mark = |v: ValueId| {
+        if let Some(r) = read.get_mut(v as usize) {
+            *r = true;
+        }
+    };
+    func.insts
+        .iter()
+        .for_each(|i| i.for_each_operand(&mut mark));
+    for b in &func.blocks {
+        b.terminator.for_each_operand(&mut mark);
+        mark(b.exit_acc);
+    }
+    let mut copies: Vec<(ValueId, i64)> = Vec::new();
+    for i in func.blocks.iter().flat_map(|b| b.inst_range.clone()) {
+        if let Inst::Mcpy {
+            dst,
+            src,
+            size: size @ (1 | 2 | 4 | 8),
+            ..
+        } = func.insts[i as usize]
+            && !read[i as usize]
+            && frame_addr(func, dst, 0).is_none()
+            && let Some(off) = data_addr(func, &ext, src, 0)
+            && let Some(ConstValue::Bytes(b)) = cd.read(off, size)
+        {
+            copies.push((i, i64::from_le_bytes(b)));
+        }
+    }
+    if copies.is_empty() {
+        return false;
+    }
+    let ins: Vec<Insertion> = (copies.iter())
+        .map(|&(at, bits)| Insertion {
+            at: At::Before(at),
+            inst: Inst::Imm(bits),
+            is_f32: false,
+            copy_of: None,
+        })
+        .collect();
+    let rewrite = tape::insert(func, &ins);
+    for (&(at, _), &value) in copies.iter().zip(&rewrite.ids) {
+        let i = rewrite.remap[at as usize] as usize;
+        let Inst::Mcpy {
+            dst, size, align, ..
+        } = func.insts[i]
+        else {
+            continue;
+        };
+        func.insts[i] = Inst::Store {
+            addr: dst,
+            disp: 0,
+            value,
+            kind: match size {
+                1 => StoreKind::I8,
+                2 => StoreKind::I16,
+                4 => StoreKind::I32,
+                _ => StoreKind::I64,
+            },
+            volatile: false,
+            align: if i64::from(align) >= size {
+                0
+            } else {
+                align as u8
+            },
+            pc_rel: false,
+        };
+    }
+    true
 }
 
 /// Resolve `v` to a frame byte coordinate: `LocalAddr(slot)` addresses

@@ -89,13 +89,13 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rcx # <addr>
                	xorl	%eax, %eax
+               	movw	$0x0, <rip> # <addr>
+               	movl	$0x0, <rip> # <addr>
                	movq	$0x0, <rip> # <addr>
                	movq	$0x0, <rip> # <addr>
                	movq	$0x0, <rip> # <addr>
-               	movq	$0x0, <rip> # <addr>
-               	leaq	<rip>, %rdx
-               	movzwq	(%rdx), %r10
-               	movw	%r10w, (%rcx)
+               	movw	$0x7978, <rip> # imm = 0x7978
+                                                # <addr>
                	leaq	0x2(%rax), %rdx
                	movsbq	(%rcx,%rax), %rsi
                	movb	%sil, (%rcx,%rdx)

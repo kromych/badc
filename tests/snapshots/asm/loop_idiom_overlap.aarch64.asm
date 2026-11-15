@@ -82,14 +82,13 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	mov	x0, #0x0                // =0
-               	str	xzr, [x1]
+               	strh	wzr, [x1, #0x2]
+               	str	wzr, [x1, #0x4]
                	str	xzr, [x1, #0x8]
                	str	xzr, [x1, #0x10]
                	str	xzr, [x1, #0x18]
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	ldrh	w16, [x2]
-               	strh	w16, [x1]
+               	mov	x2, #0x7978             // =31096
+               	strh	w2, [x1]
                	add	x2, x0, #0x2
                	ldrb	w3, [x1, x0]
                	strb	w3, [x1, x2]

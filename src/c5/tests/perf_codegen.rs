@@ -8123,6 +8123,37 @@ int take(struct obj *p) { if (p) { if ((p->n -= 5) != 0) return 1; } return 2; }
     m.finish();
 }
 
+/// A struct assignment from a `const` object of static duration stores the
+/// object's bytes as an immediate: no load of the object, through a pointer
+/// or at an index.
+#[test]
+fn a_copy_out_of_a_const_object_stores_its_bytes() {
+    const SRC: &str = "typedef struct { unsigned long long bits; } Ref;\n\
+static const Ref NIL = { 1 };\n\
+struct pair { int a; short b; };\n\
+static const struct pair Z = { 3, -2 };\n\
+void set(Ref *p) { *p = NIL; }\n\
+void push(Ref *sp, long i) { sp[i] = NIL; }\n\
+void setp(struct pair *p) { *p = Z; }\n";
+    let mut m = Misses::default();
+    for name in ["set", "push", "setp"] {
+        // LDR and LDUR, any width, at an immediate offset.
+        let ws = a64(SRC, name);
+        let loads = (ws.iter())
+            .filter(|&&w| w & 0x3B40_0000 == 0x3940_0000 || w & 0x3B60_0C00 == 0x3840_0000)
+            .count();
+        m.expect(loads == 0, || format!("aarch64 {name}: {ws:08x?}"));
+        // The only memory operand is the store's.
+        let insns = x64(SRC, name);
+        let accesses = insns
+            .iter()
+            .filter(|i| i.modrm.is_some_and(|r| r >> 6 != 3))
+            .count();
+        m.expect(accesses == 1, || format!("x86-64 {name}: {insns:x?}"));
+    }
+    m.finish();
+}
+
 /// Stores to one member in sequence, with no read between, leave the last:
 /// one store on both targets.
 #[test]

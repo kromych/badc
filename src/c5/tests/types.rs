@@ -1892,6 +1892,7 @@ fn the_sve_types_are_sizeless() {
         svfloat32_t b(svfloat64_t, svbfloat16_t, svint32_t *);\n\
         void c(svint32_t *q) { (void)*q; }\n\
         svint32_t d(svint32_t x, svbool_t p) { return x; }\n\
+        void g(svint32_t x) { svadd_x(svptrue_b32(), x, x); (void)svcntw(); }\n\
         void e(svint32_t *q, svbool_t *p) { *q = d(*q, *p); d(*q, *p); }\n\
         int main(void) { return 0; }\n";
     assert_eq!(compile(ok, Target::LinuxAarch64), None);

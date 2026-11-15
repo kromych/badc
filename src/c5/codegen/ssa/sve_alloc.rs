@@ -3,8 +3,10 @@
 //! out of z8-z15 across a call, whose upper bits the base PCS does not
 //! preserve (AAPCS64 6.1.2), and its slots move here into the VL-scaled
 //! region. A predicate aliases no other file and is placed here by phi
-//! class on p0-p13, p14 and p15 carrying the moves; one live across a call
-//! takes a slot, as the base PCS preserves no P register.
+//! class on p0-p6, p8-p13 and p15, p7 and p14 carrying the moves; one live
+//! across a call takes a slot, as the base PCS preserves no P register. A
+//! class that governs an instruction takes p0-p6, the 3-bit field's reach
+//! less p7, which stages a governing predicate reloaded from its slot.
 
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
@@ -12,16 +14,16 @@ use alloc::vec::Vec;
 use super::super::ir::{FunctionSsa, LoadKind, ValueId};
 use super::reg_alloc::{CallSave, LoopSaveCode, Place, VecWidth};
 
-/// The P registers values may take, p0-p13.
-pub(crate) const PRED_REGS: u16 = 0x3FFF;
-/// The P registers an operand that governs may take, p0-p7.
-// TODO: SVE rows -- the classes of the governing operands take this mask.
-#[allow(dead_code)]
-pub(crate) const PRED_GOVERNING: u16 = 0x00FF;
-/// The P register a parallel move parks a cycle's value in, and the one a
-/// reload or a slot-to-slot move passes through.
+/// The P registers values may take: all but [`PRED_STAGE`] and
+/// [`PRED_HOLD`].
+pub(crate) const PRED_REGS: u16 = 0xBF7F;
+/// The P registers an operand that governs may take, p0-p6.
+pub(crate) const PRED_GOVERNING: u16 = 0x007F;
+/// The P register a parallel move parks a cycle's value in, or a result
+/// bound for a slot is computed in; and the one a reload or a slot-to-slot
+/// move passes through, which can govern.
 pub(crate) const PRED_HOLD: u8 = 14;
-pub(crate) const PRED_STAGE: u8 = 15;
+pub(crate) const PRED_STAGE: u8 = 7;
 
 /// Where an SVE predicate value lives: a register, or a slot of the
 /// VL-scaled region.
@@ -48,7 +50,8 @@ impl SveAlloc {
 
 /// The value width of the result of intrinsic `kind`.
 pub(crate) fn intrinsic_width(kind: i64) -> VecWidth {
-    if kind == crate::c5::op::Intrinsic::SveLoadZ as i64 {
+    let result = crate::c5::op::Intrinsic::from_i64(kind).and_then(|i| i.sve_result());
+    if result == Some(LoadKind::SveVector) {
         VecWidth::Scalable
     } else {
         VecWidth::Scalar
@@ -90,6 +93,7 @@ pub(crate) fn place(func: &FunctionSsa, colored: Colored<'_>, facts: Facts<'_>) 
     for &v in &preds {
         members.entry(facts.classes.find(v)).or_default().push(v);
     }
+    let governs = governing_operands(func);
     let root_of: BTreeMap<ValueId, ValueId> = members
         .iter()
         .flat_map(|(&r, ms)| ms.iter().map(move |&m| (m, r)))
@@ -105,10 +109,15 @@ pub(crate) fn place(func: &FunctionSsa, colored: Colored<'_>, facts: Facts<'_>) 
                 .collect();
             near.sort_unstable();
             near.dedup();
+            let allowed = if ms.iter().any(|m| governs.contains(m)) {
+                PRED_GOVERNING
+            } else {
+                PRED_REGS
+            };
             PredNode {
                 root,
                 near,
-                allowed: PRED_REGS,
+                allowed,
                 crosses_call: ms.iter().any(|&m| facts.crosses_call[m as usize]),
             }
         })
@@ -134,12 +143,31 @@ pub(crate) struct PredNode {
     pub crosses_call: bool,
 }
 
-/// A place per class root, in root order, and the slots taken: the lowest
-/// allowed register no interfering class holds, else the lowest such slot.
+/// The predicates that govern an SVE row or an SVE load or store.
+fn governing_operands(func: &FunctionSsa) -> alloc::collections::BTreeSet<ValueId> {
+    use crate::c5::ir::Inst;
+    let governed = |inst: &Inst| match inst {
+        Inst::SimdVal { op, args, .. } => match crate::c5::simd::get(*op).form {
+            crate::c5::simd::Form::Sve(f) if f.shape.governed() => args.first().copied(),
+            _ => None,
+        },
+        Inst::Intrinsic { kind, args } => crate::c5::op::Intrinsic::from_i64(*kind)
+            .filter(|i| i.sve_lanes().is_some())
+            .and_then(|_| args.first().copied()),
+        _ => None,
+    };
+    func.insts.iter().filter_map(governed).collect()
+}
+
+/// A place per class root and the slots taken, the classes with the
+/// fewest allowed registers first: the lowest allowed register no
+/// interfering class holds, else the lowest such slot.
 pub(crate) fn color_predicates(nodes: &[PredNode]) -> (BTreeMap<ValueId, PredPlace>, u32) {
     let mut out: BTreeMap<ValueId, PredPlace> = BTreeMap::new();
     let mut slots = 0u32;
-    for n in nodes {
+    let mut order: Vec<&PredNode> = nodes.iter().collect();
+    order.sort_by_key(|n| n.allowed.count_ones());
+    for n in order {
         let held = n.near.iter().filter_map(|r| out.get(r));
         let regs = held.clone().fold(0u16, |m, p| match p {
             PredPlace::Reg(r) => m | 1 << r,
@@ -365,43 +393,51 @@ mod tests {
         }
     }
 
-    /// Interfering classes take the lowest free registers; one live across a
-    /// call takes a slot, as does one that governs once p0-p7 are held.
+    /// `n` mutually interfering classes, the first `governing` of them
+    /// governing.
+    fn clique(n: u32, governing: u32) -> Vec<PredNode> {
+        let all: Vec<ValueId> = (0..n).collect();
+        (0..n)
+            .map(|r| {
+                let near: Vec<ValueId> = all.iter().copied().filter(|&x| x != r).collect();
+                let allowed = if r < governing {
+                    PRED_GOVERNING
+                } else {
+                    PRED_REGS
+                };
+                node(r, &near, allowed, false)
+            })
+            .collect()
+    }
+
+    /// Interfering classes take the lowest free registers, the governing
+    /// ones first and within p0-p6; one live across a call takes a slot, as
+    /// does a governing one once p0-p6 are held.
     #[test]
     fn predicates_take_registers_apart_and_slots_across_calls() {
-        let low: Vec<ValueId> = (0..8).collect();
-        let mut nodes: Vec<PredNode> = (0..8)
-            .map(|r| {
-                let near: Vec<ValueId> = low.iter().copied().filter(|&x| x != r).collect();
-                node(r, &near, PRED_REGS, false)
-            })
-            .collect();
-        nodes.push(node(8, &[], PRED_REGS, true));
-        nodes.push(node(9, &low, PRED_GOVERNING, false));
-        nodes.push(node(10, &low, PRED_REGS, false));
+        let mut nodes = clique(9, 1);
+        nodes.push(node(9, &[], PRED_REGS, true));
         let (places, slots) = color_predicates(&nodes);
-        for r in 0..8 {
-            assert_eq!(places[&r], PredPlace::Reg(r as u8));
-        }
-        assert_eq!(places[&8], PredPlace::Slot(0));
-        assert_eq!(places[&9], PredPlace::Slot(0));
-        assert_eq!(places[&10], PredPlace::Reg(8));
+        let regs: Vec<PredPlace> = (0..9).map(|r| places[&r]).collect();
+        assert_eq!(regs, [0, 1, 2, 3, 4, 5, 6, 8, 9].map(PredPlace::Reg));
+        assert_eq!((places[&9], slots), (PredPlace::Slot(0), 1));
+        let (places, slots) = color_predicates(&clique(9, 8));
+        assert_eq!(places[&6], PredPlace::Reg(6));
+        assert_eq!(
+            (places[&7], places[&8]),
+            (PredPlace::Slot(0), PredPlace::Reg(8))
+        );
         assert_eq!(slots, 1);
     }
 
-    /// Fourteen interfering classes fill p0-p13; the fifteenth takes a slot.
+    /// Fourteen interfering classes fill p0-p6, p8-p13 and p15; the
+    /// fifteenth takes a slot.
     #[test]
     fn predicates_past_the_bank_take_slots() {
-        let all: Vec<ValueId> = (0..15).collect();
-        let nodes: Vec<PredNode> = (0..15)
-            .map(|r| {
-                let near: Vec<ValueId> = all.iter().copied().filter(|&x| x != r).collect();
-                node(r, &near, PRED_REGS, false)
-            })
-            .collect();
-        let (places, slots) = color_predicates(&nodes);
-        assert_eq!(places[&13], PredPlace::Reg(13));
-        assert_eq!(places[&14], PredPlace::Slot(0));
-        assert_eq!(slots, 1);
+        let (places, slots) = color_predicates(&clique(15, 0));
+        assert_eq!(places[&6], PredPlace::Reg(6));
+        assert_eq!(places[&7], PredPlace::Reg(8));
+        assert_eq!(places[&13], PredPlace::Reg(15));
+        assert_eq!((places[&14], slots), (PredPlace::Slot(0), 1));
     }
 }

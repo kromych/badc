@@ -94,7 +94,8 @@ pub(super) fn emit_x86_simd(
         | Form::MaskStore
         | Form::Narrow
         | Form::Widen
-        | Form::Zext => {
+        | Form::Zext
+        | Form::Sve(_) => {
             return fail("x86 simd: a wide form outside the wide lowering");
         }
         Form::Vv | Form::VvI => {
@@ -600,7 +601,8 @@ pub(super) fn emit_x86_simd_val(
         | Form::MaskStore
         | Form::Narrow
         | Form::Widen
-        | Form::Zext => {
+        | Form::Zext
+        | Form::Sve(_) => {
             return fail("x86 simd: a wide form outside the wide lowering");
         }
         Form::Vv | Form::VvI => {
@@ -720,9 +722,20 @@ pub(super) fn emit_intrinsic(
             fail("a deferred builtin must be resolved before lowering")
         }
         // The SVE types exist on AArch64 alone.
-        I::SveVlBytes | I::SvePlBytes | I::SveLoadZ | I::SveLoadP | I::SveStoreZ | I::SveStoreP => {
-            fail("an SVE intrinsic reached the x86-64 lowering")
-        }
+        I::SveVlBytes
+        | I::SvePlBytes
+        | I::SveLoadZ
+        | I::SveLoadP
+        | I::SveStoreZ
+        | I::SveStoreP
+        | I::SveLd1B
+        | I::SveLd1H
+        | I::SveLd1W
+        | I::SveLd1D
+        | I::SveSt1B
+        | I::SveSt1H
+        | I::SveSt1W
+        | I::SveSt1D => fail("an SVE intrinsic reached the x86-64 lowering"),
         I::VaStart if sysv_variadic_callee(func, abi) => {
             emit_va_start_sysv(code, args, func, alloc, frame, abi)
         }
@@ -868,9 +881,20 @@ pub(super) fn intrinsic_keeps_frame(intrinsic: crate::c5::op::Intrinsic, abi: su
         // rbp-relative: the variadic areas, the frame address, the return
         // slot above the saved rbp. A read of rsp observes the same frame,
         // below its record.
-        I::SveVlBytes | I::SvePlBytes | I::SveLoadZ | I::SveLoadP | I::SveStoreZ | I::SveStoreP => {
-            false
-        }
+        I::SveVlBytes
+        | I::SvePlBytes
+        | I::SveLoadZ
+        | I::SveLoadP
+        | I::SveStoreZ
+        | I::SveStoreP
+        | I::SveLd1B
+        | I::SveLd1H
+        | I::SveLd1W
+        | I::SveLd1D
+        | I::SveSt1B
+        | I::SveSt1H
+        | I::SveSt1W
+        | I::SveSt1D => false,
         I::VaStart
         | I::FrameAddress
         | I::ReturnAddress

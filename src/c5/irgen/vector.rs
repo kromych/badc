@@ -490,6 +490,9 @@ impl<'a> Walker<'a> {
         use crate::c5::simd::{Form, Ret};
         let row = simd::get(op);
         let form = row.form;
+        if let Form::Sve(f) = form {
+            return self.walk_sve_row(b, (op, f), args, imm);
+        }
         let mut ops: alloc::vec::Vec<ValueId> = alloc::vec::Vec::with_capacity(args.len() + 1);
         for &a in args {
             let v = if self.expr_is_vector(a) {
@@ -510,6 +513,40 @@ impl<'a> Walker<'a> {
             Ok(b.load(dst, LoadKind::I64))
         } else {
             Ok(b.load(dst, LoadKind::I32))
+        }
+    }
+
+    /// An SVE row on values: an SVE operand's value, a scalar's or a
+    /// pointer's itself. A load or store is the governed intrinsic of its
+    /// lane width, which other passes take as an access to memory.
+    fn walk_sve_row(
+        &mut self,
+        b: &mut SsaBuilder,
+        (op, form): (u32, crate::c5::simd::SveForm),
+        args: &[ExprId],
+        imm: Option<u8>,
+    ) -> Result<ValueId, WalkError> {
+        use crate::c5::simd::{SveElems, SveShape};
+        let mut ops: alloc::vec::Vec<ValueId> = alloc::vec::Vec::with_capacity(args.len());
+        for &a in args {
+            let sve = crate::c5::ast::expr_ty(self.ast.expr(a)).and_then(|t| self.sve_kind(t));
+            ops.push(match sve {
+                Some(_) => self.walk_sve_value(b, a)?,
+                None => self.walk_expr_rvalue(b, a)?,
+            });
+        }
+        let lane = crate::c5::simd::get(op).int_width;
+        match form.shape {
+            SveShape::Load | SveShape::Store => {
+                let store = form.shape == SveShape::Store;
+                let kind = crate::c5::op::Intrinsic::sve_governed(lane, store);
+                Ok(b.intrinsic(kind as i64, ops))
+            }
+            SveShape::Reduce if form.elems == SveElems::Float && lane == 4 => {
+                let v = b.simd_val(op, imm, ops);
+                Ok(b.mark_f32(v))
+            }
+            _ => Ok(b.simd_val(op, imm, ops)),
         }
     }
 

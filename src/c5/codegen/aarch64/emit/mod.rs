@@ -68,6 +68,7 @@ mod intrinsic;
 mod mem;
 mod simd;
 mod sve;
+mod sve_rows;
 #[cfg(test)]
 mod tests;
 

@@ -166,8 +166,10 @@ pub(crate) fn check(f: &FunctionSsa) -> Result<(), String> {
 /// phi or by an FP copy, which is one itself; a predicate as the value an
 /// `SveStoreP` stores or by a predicate phi. Those operands read nothing
 /// else. A call's argument and an SVE-PCS function's result may be
-/// either; a parameter or a call result carries the kind it arrives as,
-/// and no other instruction carries an SVE kind.
+/// either; a parameter or a call result carries the kind it arrives as.
+/// An SVE row and a governed load or store read a predicate and vectors
+/// where their shapes place them; no other instruction carries an SVE
+/// kind.
 fn sve_files(f: &FunctionSsa) -> Result<(), String> {
     use crate::c5::op::Intrinsic as I;
     let mut kind: alloc::vec::Vec<Option<LoadKind>> = f.insts.iter().map(Inst::sve_kind).collect();
@@ -212,8 +214,20 @@ fn sve_files(f: &FunctionSsa) -> Result<(), String> {
                     Some(I::SveStoreP) => Some(LoadKind::SvePredicate),
                     _ => None,
                 };
+                let governed = I::from_i64(*kind).is_some_and(|i| i.sve_lanes().is_some());
                 for (k, &a) in args.iter().enumerate() {
-                    expect(a, stored.filter(|_| k == 1));
+                    let want = match k {
+                        0 if governed => Some(LoadKind::SvePredicate),
+                        2 if governed => Some(LoadKind::SveVector),
+                        _ => stored.filter(|_| k == 1),
+                    };
+                    expect(a, want);
+                }
+            }
+            Inst::SimdVal { op, args, .. } if crate::c5::simd::sve_row(*op) => {
+                let row_kinds = sve_row_operands(*op);
+                for (k, &a) in args.iter().enumerate() {
+                    expect(a, row_kinds.get(k).copied().flatten());
                 }
             }
             Inst::Call { args, .. }
@@ -257,6 +271,24 @@ fn sve_files(f: &FunctionSsa) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// The SVE kind of each operand of SVE row `op`, by its shape.
+fn sve_row_operands(op: u32) -> alloc::vec::Vec<Option<LoadKind>> {
+    use crate::c5::simd::{Form, SveShape};
+    let (p, z) = (Some(LoadKind::SvePredicate), Some(LoadKind::SveVector));
+    match crate::c5::simd::get(op).form {
+        Form::Sve(f) => match f.shape {
+            SveShape::Binary(_) | SveShape::Compare => alloc::vec![p, z, z],
+            SveShape::Reduce => alloc::vec![p, z],
+            SveShape::Load => alloc::vec![p, None],
+            SveShape::Store => alloc::vec![p, None, z],
+            SveShape::Dup | SveShape::While { .. } | SveShape::PTrue | SveShape::Count => {
+                alloc::vec![None, None]
+            }
+        },
+        _ => alloc::vec::Vec::new(),
+    }
 }
 
 /// The block holding each instruction, `NO_BLOCK` for none, once the

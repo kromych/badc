@@ -371,6 +371,9 @@ impl Compiler {
                 format!("`{name}` requires an {} target", simd::arch(op)),
             ));
         }
+        if let Form::Sve(form) = row.form {
+            return self.parse_sve_builtin(op, form, name);
+        }
         let mut args: Vec<ExprId> = Vec::new();
         let mut arg_tys: Vec<i64> = Vec::new();
         if self.lex.tk != ')' {
@@ -412,7 +415,7 @@ impl Compiler {
                 Form::Store | Form::MaskStore => i == row.form.arity() - 1,
                 Form::Narrow | Form::Zext => i == 0,
                 Form::Widen => i < 2,
-                Form::Load | Form::RdRand | Form::MaskLoad => false,
+                Form::Load | Form::RdRand | Form::MaskLoad | Form::Sve(_) => false,
             };
             let wants_pointer = matches!(row.form, Form::Load | Form::RdRand)
                 || (matches!(row.form, Form::Store | Form::MaskStore) && i == 0)
@@ -495,6 +498,280 @@ impl Compiler {
         self.ty = ty;
         self.ast_acc = Some(id);
         Ok(())
+    }
+
+    /// An SVE builtin (`__builtin_sve_*`, ACLE), the `(` consumed. A typed
+    /// family's first operand is the SVE vector type that selects its row
+    /// and types its result; a load's may be `void`, its pointer's element
+    /// type then selecting the vector type. A scalar where a vector operand
+    /// stands is that vector with the scalar in every lane, and a pattern
+    /// operand an integer constant expression.
+    fn parse_sve_builtin(
+        &mut self,
+        first: u32,
+        form: super::super::simd::SveForm,
+        name: &str,
+    ) -> Result<(), C5Error> {
+        use super::super::ast::Expr;
+        use super::super::simd::{self, SveShape};
+        use super::{SveElem, SveType};
+        let pred = self.sve_type_tag(SveType::Predicate);
+        let shape = form.shape;
+        let typed = !matches!(
+            shape,
+            SveShape::PTrue | SveShape::Count | SveShape::While { .. }
+        );
+        let mut vty: Option<i64> = None;
+        if typed {
+            if !self.lex_is_type_start() {
+                return Err(self.compile_err(
+                    Code::INVALID_ARGUMENTS,
+                    format!("`{name}` takes an SVE type first"),
+                ));
+            }
+            let t = self.parse_type_name()?.ty;
+            if !(shape == SveShape::Load && is_void_ty(t)) {
+                if !matches!(self.sve_type_of(t), Some(SveType::Vector { .. })) {
+                    return Err(self.compile_err(
+                        Code::INVALID_ARGUMENTS,
+                        format!("`{name}` takes an SVE vector type first"),
+                    ));
+                }
+                vty = Some(t);
+            }
+            self.consume(b',', "`,` expected after the type")?;
+        }
+        let mut args = Vec::new();
+        let mut imm = None;
+        let mut while_kind = (true, 32);
+        // A pattern operand rides the row as its immediate.
+        let arity = match shape {
+            SveShape::PTrue | SveShape::Count => 1,
+            _ => simd::get(first).form.arity(),
+        };
+        for i in 0..arity {
+            if i > 0 {
+                self.consume(b',', "`,` expected between the operands")?;
+            }
+            let what = format!("operand {} of `{name}`", i + 1);
+            let governing = shape.governed() && i == 0;
+            let id = match shape {
+                _ if governing => self.parse_sve_operand(pred, &what)?,
+                SveShape::Load | SveShape::Store if i == 1 => {
+                    self.expr(Token::Assign as i64)?;
+                    let elem = self.sve_pointer_element(name)?;
+                    let t = match vty {
+                        Some(t) => t,
+                        None => self.sve_type_tag(SveType::Vector {
+                            size: elem.0,
+                            kind: elem.1,
+                        }),
+                    };
+                    if self.sve_type_of(t)
+                        != Some(SveType::Vector {
+                            size: elem.0,
+                            kind: elem.1,
+                        })
+                        && self.sve_lane(t).map(|l| l.0) != Some(elem.0)
+                    {
+                        return Err(self.compile_err(
+                            Code::INCOMPATIBLE_TYPES,
+                            format!("{what} points to elements of another width"),
+                        ));
+                    }
+                    vty = Some(t);
+                    self.ast_acc
+                        .ok_or_else(|| self.compile_err(Code::SYNTAX, "expression expected"))?
+                }
+                SveShape::While { .. } => {
+                    self.expr(Token::Assign as i64)?;
+                    if !super::types::is_integer_scalar_ty(self.ty) {
+                        return Err(self.compile_err(
+                            Code::INVALID_ARGUMENTS,
+                            format!("{what} must be an integer"),
+                        ));
+                    }
+                    let wide = self.size_of_type(self.ty) == 8;
+                    let signed = !super::types::is_unsigned_ty(self.ty)
+                        || !wide && self.size_of_type(self.ty) < 4;
+                    if i == 0 {
+                        while_kind = (signed, if wide { 64 } else { 32 });
+                    }
+                    let to = if wide {
+                        Ty::LongLong as i64
+                    } else {
+                        Ty::Int as i64
+                    };
+                    let to = if signed { to } else { to | UNSIGNED_BIT };
+                    self.convert_assign_rhs(to);
+                    self.ast_acc
+                        .ok_or_else(|| self.compile_err(Code::SYNTAX, "expression expected"))?
+                }
+                SveShape::PTrue | SveShape::Count => {
+                    self.expr(Token::Assign as i64)?;
+                    let id = self
+                        .ast_acc
+                        .ok_or_else(|| self.compile_err(Code::SYNTAX, "expression expected"))?;
+                    match self.expr_const_int(id) {
+                        Some(p @ 0..=31) => imm = Some(p as u8),
+                        _ => {
+                            return Err(self.compile_err(
+                                Code::CONSTANT_EXPRESSION,
+                                format!("{what} must be a pattern, a constant from 0 to 31"),
+                            ));
+                        }
+                    }
+                    continue;
+                }
+                _ => {
+                    let t = vty.ok_or_else(|| self.compile_err(Code::SYNTAX, "type expected"))?;
+                    self.expr_or_void(Token::Assign as i64)?;
+                    if shape == SveShape::Dup {
+                        self.sve_scalar(t, &what)?
+                    } else {
+                        self.sve_vector_arg(t, &what)?
+                    }
+                }
+            };
+            args.push(id);
+        }
+        self.consume(b')', "`)` expected after the operands")?;
+        let row = match (shape, vty.and_then(|t| self.sve_lane(t))) {
+            (SveShape::While { .. }, _) => {
+                let lane = simd::get(first).int_width;
+                let (signed, bits) = while_kind;
+                simd::select_sve(name, lane, SveElem::Signed, |s| {
+                    s == SveShape::While { signed, bits }
+                })
+            }
+            (SveShape::PTrue | SveShape::Count, _) => Some(first),
+            (_, Some((size, kind))) => simd::select_sve(name, 1 << size, kind, |s| s == shape),
+            _ => None,
+        };
+        let Some(op) = row else {
+            let t = vty
+                .map(|t| super::types::format_type(t, &self.structs))
+                .unwrap_or_default();
+            return Err(self.compile_err(
+                Code::INVALID_ARGUMENTS,
+                format!("`{name}` has no form over `{t}`"),
+            ));
+        };
+        let lane = |t: i64| self.sve_lane(t).unwrap_or((0, SveElem::Signed));
+        let ty = match shape {
+            SveShape::Binary(_) | SveShape::Load | SveShape::Dup => vty.unwrap_or(pred),
+            SveShape::Compare | SveShape::PTrue | SveShape::While { .. } => pred,
+            SveShape::Count => self.size_t_ty(),
+            SveShape::Store => super::types::void_ty(),
+            SveShape::Reduce => match vty.map(lane) {
+                Some((2, SveElem::Float)) => Ty::Float as i64,
+                Some((3, SveElem::Float)) => Ty::Double as i64,
+                Some((_, SveElem::Unsigned)) => self.size_t_ty(),
+                _ => self.ptrdiff_t_ty(),
+            },
+        };
+        self.mark_emit_other();
+        let pos = self.ast_src_pos();
+        let id = self.ast.push_expr(Expr::Simd { op, args, imm, ty }, pos);
+        self.ty = ty;
+        self.ast_acc = Some(id);
+        Ok(())
+    }
+
+    /// The lane size (log2) and element kind of SVE vector type `t`.
+    fn sve_lane(&self, t: i64) -> Option<(u8, super::SveElem)> {
+        match self.sve_type_of(t)? {
+            super::SveType::Vector { size, kind } => Some((size, kind)),
+            super::SveType::Predicate => None,
+        }
+    }
+
+    /// The element of the pointer operand just parsed, as an SVE vector
+    /// type's lane: its size (log2) and kind.
+    fn sve_pointer_element(&self, name: &str) -> Result<(u8, super::SveElem), C5Error> {
+        use super::SveElem;
+        let elem = pointee_ty(self.ty);
+        let size = self.size_of_type(elem);
+        let kind = if super::types::is_float_ty(elem) || super::types::is_double_ty(elem) {
+            SveElem::Float
+        } else if super::types::is_unsigned_ty(elem) {
+            SveElem::Unsigned
+        } else {
+            SveElem::Signed
+        };
+        let integer = super::types::is_integer_scalar_ty(elem) || kind == SveElem::Float;
+        if !is_pointer_ty(self.ty) || !integer || !matches!(size, 1 | 2 | 4 | 8) {
+            return Err(self.compile_err(
+                Code::INVALID_ARGUMENTS,
+                format!("`{name}` takes a pointer to integer or floating elements"),
+            ));
+        }
+        Ok((size.trailing_zeros() as u8, kind))
+    }
+
+    /// The vector operand of type `ty` just parsed: an SVE value of it, or a
+    /// scalar, the vector with it in every lane (the ACLE's `_n` forms),
+    /// which the row `dup` of `ty` builds.
+    fn sve_vector_arg(
+        &mut self,
+        ty: i64,
+        what: &str,
+    ) -> Result<super::super::ast::ExprId, C5Error> {
+        use super::super::ast::Expr;
+        if self.sve_type_of(self.ty).is_some() {
+            return self.check_sve_operand(ty, what);
+        }
+        let id = self.sve_scalar(ty, what)?;
+        let Some((size, kind)) = self.sve_lane(ty) else {
+            return Err(
+                self.compile_err(Code::INVALID_ARGUMENTS, format!("{what}: vector expected"))
+            );
+        };
+        let dup = super::super::simd::select_sve("__builtin_sve_dup", 1 << size, kind, |_| true);
+        let Some(op) = dup else {
+            return Err(
+                self.compile_err(Code::INVALID_ARGUMENTS, format!("{what}: no scalar form"))
+            );
+        };
+        let pos = self.ast_src_pos();
+        Ok(self.ast.push_expr(
+            Expr::Simd {
+                op,
+                args: alloc::vec![id],
+                imm: None,
+                ty,
+            },
+            pos,
+        ))
+    }
+
+    /// The scalar operand just parsed, converted for a lane of vector type
+    /// `ty`: a floating one to the lane's type, an integer one to 64 bits,
+    /// whose low bits the lane takes.
+    fn sve_scalar(&mut self, ty: i64, what: &str) -> Result<super::super::ast::ExprId, C5Error> {
+        use super::SveElem;
+        let Some((size, kind)) = self.sve_lane(ty) else {
+            return Err(
+                self.compile_err(Code::INVALID_ARGUMENTS, format!("{what}: vector expected"))
+            );
+        };
+        if !super::types::is_integer_scalar_ty(self.ty)
+            && !super::types::is_floating_scalar(self.ty)
+        {
+            return Err(self.compile_err(
+                Code::INVALID_ARGUMENTS,
+                format!("{what} must be an SVE vector or a scalar"),
+            ));
+        }
+        let elem = match (kind, size) {
+            (SveElem::Float, 2) => Ty::Float as i64,
+            (SveElem::Float, _) => Ty::Double as i64,
+            (SveElem::Unsigned, _) => Ty::LongLong as i64 | UNSIGNED_BIT,
+            _ => Ty::LongLong as i64,
+        };
+        self.convert_assign_rhs(elem);
+        self.ast_acc
+            .ok_or_else(|| self.compile_err(Code::SYNTAX, "expression expected"))
     }
 
     /// `__builtin_shufflevector(a, b, idx...)` with the `(` consumed: two
@@ -1435,8 +1712,17 @@ impl Compiler {
         ty: i64,
         what: &str,
     ) -> Result<super::super::ast::ExprId, C5Error> {
-        use super::super::ast::{Expr, UnOp};
         self.expr_or_void(Token::Assign as i64)?;
+        self.check_sve_operand(ty, what)
+    }
+
+    /// [`Self::parse_sve_operand`] of the expression just parsed.
+    fn check_sve_operand(
+        &mut self,
+        ty: i64,
+        what: &str,
+    ) -> Result<super::super::ast::ExprId, C5Error> {
+        use super::super::ast::{Expr, UnOp};
         self.reject_void_value(self.ty)?;
         if super::types::strip_unsigned(self.ty) != super::types::strip_unsigned(ty) {
             let (l, r) = (
@@ -1455,11 +1741,11 @@ impl Compiler {
             Expr::VlaBase { .. }
             | Expr::Assign { .. }
             | Expr::Call { .. }
+            | Expr::Simd { .. }
             | Expr::Unary {
                 op: UnOp::Deref, ..
             } => Ok(id),
-            // TODO: SVE values from conditionals, comma expressions and the
-            // SVE rows.
+            // TODO: SVE values from conditionals and comma expressions.
             _ => Err(self.compile_err(
                 Code::INVALID_OPERANDS,
                 format!(

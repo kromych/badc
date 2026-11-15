@@ -1821,6 +1821,10 @@ fn run_inst<H: Host>(
             return Ok(());
         }
         // The -O rewrites producing these never reach the VM.
+        Inst::SimdVal { op, imm, args } if crate::c5::simd::sve_row(*op) => {
+            run_sve_row(mem, frame, v, (*op, *imm), args)?;
+            return Ok(());
+        }
         Inst::SimdVal { .. } => "SimdVal",
         Inst::VecInsert { .. } => "VecInsert",
         Inst::VecSplat { .. } => "VecSplat",
@@ -4146,7 +4150,8 @@ fn run_x86_simd(
         | Form::MaskStore
         | Form::Narrow
         | Form::Widen
-        | Form::Zext => {
+        | Form::Zext
+        | Form::Sve(_) => {
             return Err(C5Error::Runtime(format!(
                 "vm_ssa: {} has no 16-byte form",
                 row.name
@@ -4439,6 +4444,14 @@ fn run_intrinsic(
             frame.sregs.insert(v, bytes.to_vec());
             Ok(())
         }
+        Intrinsic::SveLd1B
+        | Intrinsic::SveLd1H
+        | Intrinsic::SveLd1W
+        | Intrinsic::SveLd1D
+        | Intrinsic::SveSt1B
+        | Intrinsic::SveSt1H
+        | Intrinsic::SveSt1W
+        | Intrinsic::SveSt1D => run_sve_governed(mem, frame, v, intr, args),
         Intrinsic::SveStoreZ | Intrinsic::SveStoreP => {
             let [dst, value] = args else {
                 return Err(C5Error::Runtime(
@@ -5066,6 +5079,227 @@ fn format_of(frame: &Frame<'_>, v: ValueId) -> Format {
     } else {
         BINARY64
     }
+}
+
+/// SVE value `v` of `frame`, as bytes.
+fn sve_bytes<'f>(frame: &'f Frame<'_>, v: ValueId) -> Result<&'f [u8], C5Error> {
+    (frame.sregs.get(&v).map(Vec::as_slice))
+        .ok_or_else(|| C5Error::Runtime(format!("vm_ssa: v{v} is not an SVE value")))
+}
+
+/// Whether lane `i` of `w` bytes is active in predicate `p`: the bit of its
+/// first byte.
+fn sve_active(p: &[u8], w: usize, i: usize) -> bool {
+    p.get(i * w / 8).is_some_and(|b| b >> (i * w % 8) & 1 != 0)
+}
+
+/// A predicate of `bytes` bytes with lanes of `w` bytes active where `on`.
+fn sve_pred(bytes: usize, w: usize, on: impl Fn(usize) -> bool) -> Vec<u8> {
+    let mut p = alloc::vec![0u8; bytes];
+    for i in (0..bytes * 8 / w).filter(|&i| on(i)) {
+        p[i * w / 8] |= 1 << (i * w % 8);
+    }
+    p
+}
+
+/// The lane count a predicate pattern selects of `lanes` (Arm ARM
+/// DecodePredCount).
+fn sve_pattern_count(pattern: u8, lanes: usize) -> usize {
+    let fixed = |n: usize| if n <= lanes { n } else { 0 };
+    match pattern {
+        0 => 1 << lanes.ilog2(),
+        1..=8 => fixed(usize::from(pattern)),
+        9..=13 => fixed(16 << (pattern - 9)),
+        29 => lanes - lanes % 4,
+        30 => lanes - lanes % 3,
+        31 => lanes,
+        _ => 0,
+    }
+}
+
+/// [`simd::eval`] or its floating form over the run's vector length, 16
+/// bytes at a time.
+fn sve_lanewise(mem: &mut Memory, sem: crate::c5::simd::Sem, a: &[u8], b: &[u8]) -> Vec<u8> {
+    use crate::c5::simd;
+    let mut out = alloc::vec![0u8; a.len()];
+    for k in (0..a.len()).step_by(16) {
+        let x: [u8; 16] = a[k..k + 16].try_into().unwrap_or([0; 16]);
+        let y: [u8; 16] = b[k..k + 16].try_into().unwrap_or([0; 16]);
+        let r = simd::eval_float_in(&mut mem.fp, sem, &x, &y, 0, 16)
+            .unwrap_or_else(|| simd::eval(sem, &x, &y, 0, 0));
+        out[k..k + 16].copy_from_slice(&r);
+    }
+    out
+}
+
+/// Lane `i` of `w` bytes of `v`, zero-extended.
+fn sve_lane(v: &[u8], w: usize, i: usize) -> u64 {
+    let mut b = [0u8; 8];
+    b[..w].copy_from_slice(&v[i * w..i * w + w]);
+    u64::from_le_bytes(b)
+}
+
+/// An SVE row (`crate::c5::aarch64_sve`) on the run's vector length.
+fn run_sve_row(
+    mem: &mut Memory,
+    frame: &mut Frame<'_>,
+    v: ValueId,
+    (op, imm): (u32, Option<u8>),
+    args: &[ValueId],
+) -> Result<(), C5Error> {
+    use crate::c5::simd::{self, FloatEnv, SveElems, SvePred, SveShape};
+    let row = simd::get(op);
+    let simd::Form::Sve(form) = row.form else {
+        return Err(C5Error::Runtime(format!(
+            "vm_ssa: {} is not an SVE row",
+            row.name
+        )));
+    };
+    let (n, w) = (mem.sve_vl_bytes, usize::from(row.int_width));
+    let lanes = n / w;
+    let pattern = imm.unwrap_or(31);
+    match form.shape {
+        SveShape::Binary(mode) => {
+            let pg = sve_bytes(frame, args[0])?.to_vec();
+            let a = sve_bytes(frame, args[1])?.to_vec();
+            let b = sve_bytes(frame, args[2])?.to_vec();
+            let r = sve_lanewise(mem, row.sem, &a, &b);
+            let mut out = r.clone();
+            for i in (0..lanes).filter(|&i| !sve_active(&pg, w, i)) {
+                let keep = match mode {
+                    SvePred::Merge => &a[i * w..i * w + w],
+                    SvePred::Zero => &[0u8; 8][..w],
+                    SvePred::Any => &r[i * w..i * w + w],
+                };
+                out[i * w..i * w + w].copy_from_slice(keep);
+            }
+            frame.sregs.insert(v, out);
+        }
+        SveShape::Compare => {
+            let pg = sve_bytes(frame, args[0])?.to_vec();
+            let a = sve_bytes(frame, args[1])?.to_vec();
+            let b = sve_bytes(frame, args[2])?.to_vec();
+            let r = sve_lanewise(mem, row.sem, &a, &b);
+            let p = sve_pred(n / 8, w, |i| {
+                sve_active(&pg, w, i) && sve_lane(&r, w, i) != 0
+            });
+            frame.sregs.insert(v, p);
+        }
+        SveShape::PTrue => {
+            let count = sve_pattern_count(pattern, lanes);
+            frame.sregs.insert(v, sve_pred(n / 8, w, |i| i < count));
+        }
+        SveShape::While { signed, bits } => {
+            let value = |x: i64| -> i128 {
+                match (signed, bits) {
+                    (true, 32) => i128::from(x as i32),
+                    (false, 32) => i128::from(x as u32),
+                    (true, _) => i128::from(x),
+                    (false, _) => i128::from(x as u64),
+                }
+            };
+            let (a, b) = (
+                value(frame.regs[args[0] as usize]),
+                value(frame.regs[args[1] as usize]),
+            );
+            frame
+                .sregs
+                .insert(v, sve_pred(n / 8, w, |i| a + (i as i128) < b));
+        }
+        SveShape::Count => frame.regs[v as usize] = sve_pattern_count(pattern, lanes) as i64,
+        SveShape::Reduce => {
+            let pg = sve_bytes(frame, args[0])?.to_vec();
+            let a = sve_bytes(frame, args[1])?.to_vec();
+            let active = |i: usize| sve_active(&pg, w, i);
+            frame.regs[v as usize] = if form.elems == SveElems::Float {
+                // The halves summed pairwise over a power of two of lanes,
+                // an inactive or padding one +0.0 (Arm ARM FADDV).
+                let single = w == 4;
+                let widen = |bits: u64| {
+                    if single {
+                        super::fenv::f32_to_reg(bits as u32)
+                    } else {
+                        bits
+                    }
+                };
+                let mut x: Vec<u64> = (0..lanes.next_power_of_two())
+                    .map(|i| {
+                        if i < lanes && active(i) {
+                            widen(sve_lane(&a, w, i))
+                        } else {
+                            0
+                        }
+                    })
+                    .collect();
+                while x.len() > 1 {
+                    x = (x.chunks(2))
+                        .map(|c| mem.fp.arith(simd::FOp::Add, c[0], c[1], single))
+                        .collect();
+                }
+                x[0] as i64
+            } else {
+                let signed = matches!(row.sem, simd::Sem::Across(_, _, true, _));
+                let shift = 64 - 8 * w as u32;
+                (0..lanes).filter(|&i| active(i)).fold(0i64, |s, i| {
+                    let x = sve_lane(&a, w, i);
+                    let x = if signed && w < 8 {
+                        ((x << shift) as i64) >> shift
+                    } else {
+                        x as i64
+                    };
+                    s.wrapping_add(x)
+                })
+            };
+        }
+        SveShape::Dup => {
+            let x = frame.regs[args[0] as usize] as u64;
+            let x = if form.elems == SveElems::Float && w == 4 {
+                u64::from(super::fenv::reg_to_f32(x))
+            } else {
+                x
+            };
+            let lane = x.to_le_bytes();
+            frame.sregs.insert(v, (0..n).map(|k| lane[k % w]).collect());
+        }
+        SveShape::Load | SveShape::Store => {
+            return Err(C5Error::Runtime(format!(
+                "vm_ssa: {} is an intrinsic",
+                row.name
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// A governed SVE load or store: the active lanes alone touch memory.
+fn run_sve_governed(
+    mem: &mut Memory,
+    frame: &mut Frame<'_>,
+    v: ValueId,
+    intr: crate::c5::op::Intrinsic,
+    args: &[ValueId],
+) -> Result<(), C5Error> {
+    let Some((w, store)) = intr.sve_lanes() else {
+        return Err(C5Error::Runtime(
+            "vm_ssa: not a governed SVE access".to_string(),
+        ));
+    };
+    let (n, w) = (mem.sve_vl_bytes, usize::from(w));
+    let pg = sve_bytes(frame, args[0])?.to_vec();
+    let base = frame.regs[args[1] as usize] as usize;
+    if store {
+        let value = sve_bytes(frame, args[2])?.to_vec();
+        for i in (0..n / w).filter(|&i| sve_active(&pg, w, i)) {
+            mem.write_bytes(base + i * w, &value[i * w..i * w + w])?;
+        }
+        return Ok(());
+    }
+    let mut out = alloc::vec![0u8; n];
+    for i in (0..n / w).filter(|&i| sve_active(&pg, w, i)) {
+        out[i * w..i * w + w].copy_from_slice(mem.read_bytes(base + i * w, w)?);
+    }
+    frame.sregs.insert(v, out);
+    Ok(())
 }
 
 #[cfg(test)]

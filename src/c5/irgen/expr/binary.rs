@@ -406,7 +406,7 @@ impl<'a> Walker<'a> {
         };
         match *self.ast.expr(id) {
             Expr::Assign { lhs, rhs, ty } => Ok(self.walk_sve_assign(b, lhs, rhs, ty)?.1),
-            Expr::Call { .. } => self.walk_expr_rvalue(b, id),
+            Expr::Call { .. } | Expr::Simd { .. } => self.walk_expr_rvalue(b, id),
             _ => {
                 let load = if kind == LoadKind::SveVector {
                     I::SveLoadZ

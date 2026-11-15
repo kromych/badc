@@ -1842,3 +1842,115 @@ fn sve_pcs_functions_preserve_z8_to_z23_and_p4_to_p15() {
     let leaf = super::perf_codegen::a64_at(ATTR, "leaf", true);
     assert_eq!(saves(&leaf), (0, 0), "{leaf:08x?}");
 }
+
+/// The first ACLE SVE intrinsics -- svwhilelt loops stepped by svcnt*,
+/// svld1, svst1, svadd, svsub and svmul in each predication form and with a
+/// scalar operand, the compares, svaddv and svptrue -- compute what scalar C
+/// does; the interpreter runs the fixture at four vector lengths.
+#[test]
+fn the_first_sve_rows_run_in_the_interpreter() {
+    const SRC: &str = include_str!("../../../tests/fixtures/sve/rows_basic.c");
+    for optimize in [false, true] {
+        let options = crate::CompileOptions::default().with_optimize(optimize);
+        let program =
+            crate::Compiler::with_options(String::from(SRC), crate::Target::LinuxAarch64, options)
+                .compile()
+                .expect("compiles");
+        for bits in [128, 256, 512, 2048] {
+            let vm = super::Vm::new(program.clone()).with_sve_vector_bits(bits);
+            assert_eq!(
+                vm.run().expect("runs"),
+                bits as i64 / 128,
+                "{bits} bits, -O {optimize}"
+            );
+        }
+    }
+}
+
+/// Each SVE intrinsic is its instruction on the argument registers under
+/// `-O`: the don't-care form the unpredicated one where SVE has it, the
+/// zeroing form `movprfx` of the governed lanes, the merging form into a
+/// destination holding its second operand through a scratch; an unsigned
+/// compare `cmphi`, an unsigned `svwhilelt` `whilelo`.
+#[cfg(feature = "full")]
+#[test]
+fn the_sve_rows_emit_their_instructions() {
+    const SRC: &str = "#include <arm_sve.h>\n\
+        svint32_t add_m(svbool_t pg, svint32_t a, svint32_t b) { return svadd_m(pg, a, b); }\n\
+        svint32_t add_x(svbool_t pg, svint32_t a, svint32_t b) { return svadd_x(pg, a, b); }\n\
+        svint32_t sub_z(svbool_t pg, svint32_t a, svint32_t b) { return svsub_z(pg, a, b); }\n\
+        svint32_t sub_m(svbool_t pg, svint32_t a, svint32_t b) { return svsub_m(pg, b, a); }\n\
+        svint16_t mul_x(svbool_t pg, svint16_t a, svint16_t b) { return svmul_x(pg, a, b); }\n\
+        svbool_t gt(svbool_t pg, svuint8_t a, svuint8_t b) { return svcmpgt(pg, a, b); }\n\
+        svbool_t wl(long i, long n) { return svwhilelt_b32(i, n); }\n\
+        svbool_t wlo(unsigned i, unsigned n) { return svwhilelt_b8(i, n); }\n\
+        uint64_t cw(void) { return svcntw(); }\n\
+        int64_t sum(svbool_t pg, svint16_t a) { return svaddv(pg, a); }\n\
+        float fsum(svbool_t pg, svfloat32_t a) { return svaddv(pg, a); }\n\
+        svfloat64_t ld(svbool_t pg, const double *p) { return svld1(pg, p); }\n\
+        void st(svbool_t pg, float *p, svfloat32_t v) { svst1(pg, p, v); }\n\
+        svbool_t pt(void) { return svptrue_pat_b16(SV_VL4); }\n\
+        svint64_t dup(long x) { return svdup_n_s64(x); }\n\
+        svfloat32_t fdup(float x) { return svdup_f32(x); }\n";
+    let object = super::perf_codegen::object_at(SRC, crate::Target::LinuxAarch64, true);
+    for (name, words, what) in [
+        ("add_m", &[0x0480_0020u32][..], "add z0.s, p0/m, z0.s, z1.s"),
+        ("add_x", &[0x04a1_0000], "add z0.s, z0.s, z1.s"),
+        (
+            "sub_z",
+            &[0x0490_2000, 0x0481_0020],
+            "movprfx z0.s, p0/z, z0.s; sub",
+        ),
+        ("mul_x", &[0x0450_0020], "mul z0.h, p0/m, z0.h, z1.h"),
+        ("gt", &[0x2401_0010], "cmphi p0.b, p0/z, z0.b, z1.b"),
+        ("wl", &[0x25a1_1400], "whilelt p0.s, x0, x1"),
+        ("wlo", &[0x2521_0c00], "whilelo p0.b, w0, w1"),
+        ("cw", &[0x04a0_e3e0], "cntw x0"),
+        ("fsum", &[0x6580_2000], "faddv s0, p0, z0.s"),
+        ("ld", &[0xa5e0_a000], "ld1d {z0.d}, p0/z, [x0]"),
+        ("st", &[0xe540_e000], "st1w {z0.s}, p0, [x0]"),
+        ("pt", &[0x2558_e080], "ptrue p0.h, vl4"),
+        ("dup", &[0x05e0_3800], "mov z0.d, x0"),
+        ("fdup", &[0x0524_2000], "mov z0.s, s0"),
+    ] {
+        let w = super::codegen::function_words(&object, name);
+        assert!(
+            w.windows(words.len()).any(|x| x == words),
+            "{what}: {w:08x?}"
+        );
+    }
+    // `svsub_m(pg, b, a)` into z0, which holds `a`: MOVPRFX zt, z1; SUB zt,
+    // p0/m, zt, z0; MOV z0.d, zt.d.
+    let w = super::codegen::function_words(&object, "sub_m");
+    assert!(
+        w[0] & 0xFFFF_FFE0 == 0x0420_BC20 && w[1] & 0xFFFF_FFE0 == 0x0481_0000,
+        "{w:08x?}"
+    );
+    // SADDV d, p0, z0.h, then FMOV x0 from that d.
+    let w = super::codegen::function_words(&object, "sum");
+    let d = w[0] & 0x1F;
+    assert!(
+        w[0] & 0xFFFF_FFE0 == 0x0440_2000 && w[1] == 0x9E66_0000 | d << 5,
+        "{w:08x?}"
+    );
+}
+
+/// A predicate that governs an instruction takes p0-p6; one live across a
+/// call, in its slot, is reloaded into p7 for the store it governs.
+#[cfg(feature = "full")]
+#[test]
+fn a_governing_predicate_takes_p0_to_p6_or_is_reloaded_into_p7() {
+    const SRC: &str = "#include <arm_sve.h>\n\
+        void keep(svbool_t *pp, svint32_t *v, int32_t *p, void (*f)(void)) {\n\
+            svbool_t pg = *pp; svint32_t x = *v; f(); svst1(pg, p, x); }\n";
+    let w = super::perf_codegen::a64_at(SRC, "keep", true);
+    // LDR p7, [x, #imm, mul vl], then ST1W {z.s}, p7, [x].
+    let reload = w
+        .iter()
+        .position(|&x| x & 0xFFC0_E01F == 0x8580_0007)
+        .expect("ldr p7");
+    assert!(
+        w[reload..].iter().any(|&x| x & 0xFFFF_FC00 == 0xE540_FC00),
+        "{w:08x?}"
+    );
+}

@@ -4496,7 +4496,9 @@ pub(crate) fn wide_values(func: &FunctionSsa) -> Vec<VecWidth> {
                 .map_or(VecWidth::Scalar, |_| VecWidth::V128),
             Inst::SimdVal { op, .. } => {
                 let row = crate::c5::simd::get(*op);
-                if row.form.returns_vector() {
+                if crate::c5::simd::sve_result(*op).is_some() {
+                    VecWidth::of_load(crate::c5::simd::sve_result(*op).unwrap_or(LoadKind::I64))
+                } else if row.form.returns_vector() {
                     VecWidth::of_bytes(row.ret_bytes())
                 } else {
                     VecWidth::Scalar
@@ -4634,13 +4636,12 @@ fn result_kind(inst: &Inst) -> ResultKind {
             LoadKind::F32 | LoadKind::F64 => ResultKind::Fp,
             _ => ResultKind::Int,
         },
-        SimdVal { op, .. } => {
-            if crate::c5::simd::get(*op).form.returns_vector() {
-                ResultKind::Fp
-            } else {
-                ResultKind::Int
-            }
-        }
+        SimdVal { op, .. } => match crate::c5::simd::sve_result(*op) {
+            Some(LoadKind::SvePredicate) => ResultKind::Pred,
+            _ if crate::c5::simd::get(*op).form.returns_vector() => ResultKind::Fp,
+            _ if crate::c5::simd::sve_float_result(*op) => ResultKind::Fp,
+            _ => ResultKind::Int,
+        },
         Store { .. } | StoreLocal { .. } | StoreIndexed { .. } | SegStore { .. } => ResultKind::Int,
         LoadIndexed { kind, .. } => match kind {
             LoadKind::F32
@@ -4708,10 +4709,15 @@ fn result_kind(inst: &Inst) -> ResultKind {
             // trunc, C99 7.12.7 / 7.12.9) produce an FP value; the rest
             // yield an integer / pointer, but for the SVE accesses.
             match I::from_i64(*kind) {
-                Some(i) if i.is_fp_unary() || i == I::SveLoadZ => ResultKind::Fp,
-                Some(I::SveLoadP) => ResultKind::Pred,
-                Some(I::SveStoreZ | I::SveStoreP) => ResultKind::None,
-                _ => ResultKind::Int,
+                Some(i) if i.is_fp_unary() => ResultKind::Fp,
+                Some(i) => match i.sve_result() {
+                    Some(LoadKind::SveVector) => ResultKind::Fp,
+                    Some(_) => ResultKind::Pred,
+                    None if i == I::SveStoreZ || i == I::SveStoreP => ResultKind::None,
+                    None if i.sve_lanes().is_some() => ResultKind::None,
+                    None => ResultKind::Int,
+                },
+                None => ResultKind::Int,
             }
         }
         AllocaInit(_) | LifetimeEnd(_) => ResultKind::None,

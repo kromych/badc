@@ -314,6 +314,18 @@ pub enum Intrinsic {
     /// Store the SVE vector, or predicate, `args[1]` at `args[0]`. No result.
     SveStoreZ = 93,
     SveStoreP = 94,
+    /// The SVE vector of 1-, 2-, 4- or 8-byte lanes at `args[1]`, its lanes
+    /// `args[0]` governs loaded and the others zero (`ld1b` .. `ld1d`).
+    SveLd1B = 95,
+    SveLd1H = 96,
+    SveLd1W = 97,
+    SveLd1D = 98,
+    /// Store the lanes of SVE vector `args[2]` that `args[0]` governs at
+    /// `args[1]` (`st1b` .. `st1d`). No result.
+    SveSt1B = 99,
+    SveSt1H = 100,
+    SveSt1W = 101,
+    SveSt1D = 102,
 }
 
 /// The type operand of [`Intrinsic::VaArg`], one constant packed as
@@ -475,6 +487,56 @@ impl Intrinsic {
             92 => Some(Intrinsic::SveLoadP),
             93 => Some(Intrinsic::SveStoreZ),
             94 => Some(Intrinsic::SveStoreP),
+            95 => Some(Intrinsic::SveLd1B),
+            96 => Some(Intrinsic::SveLd1H),
+            97 => Some(Intrinsic::SveLd1W),
+            98 => Some(Intrinsic::SveLd1D),
+            99 => Some(Intrinsic::SveSt1B),
+            100 => Some(Intrinsic::SveSt1H),
+            101 => Some(Intrinsic::SveSt1W),
+            102 => Some(Intrinsic::SveSt1D),
+            _ => None,
+        }
+    }
+
+    /// The lane bytes of a governed SVE load or store, and whether it stores.
+    pub(crate) fn sve_lanes(self) -> Option<(u8, bool)> {
+        use Intrinsic as I;
+        Some(match self {
+            I::SveLd1B => (1, false),
+            I::SveLd1H => (2, false),
+            I::SveLd1W => (4, false),
+            I::SveLd1D => (8, false),
+            I::SveSt1B => (1, true),
+            I::SveSt1H => (2, true),
+            I::SveSt1W => (4, true),
+            I::SveSt1D => (8, true),
+            _ => return None,
+        })
+    }
+
+    /// The governed SVE load (`store` false) or store of `lane`-byte lanes.
+    pub(crate) fn sve_governed(lane: u8, store: bool) -> Self {
+        use Intrinsic as I;
+        match (lane, store) {
+            (1, false) => I::SveLd1B,
+            (2, false) => I::SveLd1H,
+            (4, false) => I::SveLd1W,
+            (8, false) => I::SveLd1D,
+            (1, true) => I::SveSt1B,
+            (2, true) => I::SveSt1H,
+            (4, true) => I::SveSt1W,
+            _ => I::SveSt1D,
+        }
+    }
+
+    /// The SVE kind of the value the intrinsic defines.
+    pub(crate) fn sve_result(self) -> Option<crate::c5::ir::LoadKind> {
+        use crate::c5::ir::LoadKind;
+        match self {
+            Intrinsic::SveLoadP => Some(LoadKind::SvePredicate),
+            Intrinsic::SveLoadZ => Some(LoadKind::SveVector),
+            i if i.sve_lanes().is_some_and(|(_, store)| !store) => Some(LoadKind::SveVector),
             _ => None,
         }
     }

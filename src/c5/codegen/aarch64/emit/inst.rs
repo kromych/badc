@@ -489,6 +489,9 @@ pub(super) fn emit_inst(
         Inst::Simd { op, imm, args } => {
             emit_a64_simd(code, (*op, *imm), args, alloc, frame, scratch)
         }
+        Inst::SimdVal { op, imm, args } if crate::c5::simd::sve_row(*op) => {
+            super::sve_rows::emit_row(code, (*op, *imm), args, (v, dst), alloc, frame, scratch)
+        }
         Inst::SimdVal { op, imm, args } => {
             emit_a64_simd_val(code, (*op, *imm), args, dst, alloc, frame, scratch)
         }

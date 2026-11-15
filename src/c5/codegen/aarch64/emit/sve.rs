@@ -209,7 +209,7 @@ pub(super) fn schedule_pred_moves(
     }
 }
 
-fn pred_move(code: &mut Vec<u8>, frame: Frame, src: PredPlace, dst: PredPlace) {
+pub(super) fn pred_move(code: &mut Vec<u8>, frame: Frame, src: PredPlace, dst: PredPlace) {
     let t = Reg(16);
     match (src, dst) {
         _ if src == dst => {}
@@ -348,8 +348,10 @@ fn preserved(
             p |= 1 << r;
         }
     }
+    // A slot's predicate reloads into p7 and a result bound for one is
+    // computed in p14.
     if alloc.sve.p_slots > 0 {
-        p |= 1 << PRED_STAGE;
+        p |= 1 << PRED_STAGE | 1 << PRED_HOLD;
     }
     if cycles.1 {
         p |= 1 << PRED_HOLD;
@@ -360,7 +362,8 @@ fn preserved(
 /// The FP scratch registers the emitter may write in `func`, and whether a
 /// parallel move of vectors, or of predicates, has a cycle, which a hold
 /// register breaks. A body of SVE values alone writes the FP scratch only
-/// to stage a spilled vector or break such a cycle; any other FP work takes
+/// to stage a spilled vector, break such a cycle or compute an SVE row; any
+/// other FP work takes
 /// [`fp_scratch_demand`](super::ssa::reg_alloc::fp_scratch_demand).
 fn scratch_writes(
     func: &FunctionSsa,
@@ -459,7 +462,9 @@ fn scratch_writes(
             (z, p),
         );
     }
-    let staged = alloc.sve.z_slots > 0 || z;
+    let rows = (func.insts.iter())
+        .any(|i| matches!(i, Inst::SimdVal { op, .. } if crate::c5::simd::sve_row(*op)));
+    let staged = alloc.sve.z_slots > 0 || z || rows;
     ([staged, staged, false], (z, p))
 }
 

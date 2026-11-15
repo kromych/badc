@@ -11,19 +11,37 @@ use super::token::Ty;
 /// The first op id of the AArch64 rows; the x86 rows number from 0, so one
 /// id names a row of either table.
 pub(crate) const A64_BASE: u32 = 1 << 16;
+/// The first op id of the SVE rows.
+pub(crate) const SVE_BASE: u32 = 2 << 16;
 
 /// The row an op id names.
 pub(crate) fn get(op: u32) -> &'static SimdOp {
+    if let Some(i) = op.checked_sub(SVE_BASE) {
+        return super::aarch64_sve::get(i as usize);
+    }
     match op.checked_sub(A64_BASE) {
         Some(i) => super::aarch64_simd::get(i as usize),
         None => &super::x86_simd::OPS[op as usize],
     }
 }
 
-/// The op id of the SIMD builtin `name` of any target, or `None`.
+/// The op id of the SIMD builtin `name` of any target, or `None`; an SVE
+/// builtin's is the first row of its family.
 pub(crate) fn lookup(name: &str) -> Option<u32> {
     super::x86_simd::lookup(name)
         .or_else(|| super::aarch64_simd::lookup(name).map(|i| i + A64_BASE))
+        .or_else(|| super::aarch64_sve::lookup(name).map(|i| i + SVE_BASE))
+}
+
+/// The op id of the row of SVE builtin `name` over lanes of `lane` bytes
+/// of element `kind` whose shape `fits`.
+pub(crate) fn select_sve(
+    name: &str,
+    lane: u8,
+    kind: crate::c5::compiler::SveElem,
+    fits: impl Fn(SveShape) -> bool,
+) -> Option<u32> {
+    super::aarch64_sve::select(name, lane, kind, fits).map(|i| i + SVE_BASE)
 }
 
 /// The architecture whose instruction an op id's row names.
@@ -120,6 +138,107 @@ pub(crate) enum Form {
     Widen,
     /// `v = op(part)`: the part zero-extended (`vmovdqa` of the xmm form).
     Zext,
+    /// An SVE row: vectors of the run's vector length (ACLE).
+    Sve(SveForm),
+}
+
+/// An SVE row's operand shape and the element kinds its vectors take. A
+/// governing predicate leads the operands of the shapes that have one.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) struct SveForm {
+    pub shape: SveShape,
+    pub elems: SveElems,
+}
+
+/// The operands and result of an SVE row.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum SveShape {
+    /// `v = op(pg, a, b)`, the inactive lanes as the predication says.
+    Binary(SvePred),
+    /// `p = op(pg, a, b)`: the active lanes where the relation holds.
+    Compare,
+    /// `p = op()`: the lanes of the width the pattern immediate selects.
+    PTrue,
+    /// `p = op(a, b)`: lane `i` while `a + i < b`, of `bits`-wide signed or
+    /// unsigned integers.
+    While { signed: bool, bits: u8 },
+    /// `n = op()`: the count of the lanes the pattern immediate selects.
+    Count,
+    /// `v = op(pg, p)`: the active lanes loaded, the others zero.
+    Load,
+    /// `op(pg, p, v)`: the active lanes stored.
+    Store,
+    /// `n = op(pg, v)`: the sum of the active lanes, signed or unsigned
+    /// into 64 bits, or floating in the lane's width.
+    Reduce,
+    /// `v = op(x)`: the scalar in every lane.
+    Dup,
+}
+
+/// The inactive lanes of a predicated result: the first operand's (`_m`),
+/// zero (`_z`), or any value (`_x`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum SvePred {
+    Merge,
+    Zero,
+    Any,
+}
+
+/// The element kinds of the vector types an SVE row takes.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum SveElems {
+    /// Signed and unsigned integers, whose operation does not tell them apart.
+    Int,
+    Signed,
+    Unsigned,
+    Float,
+    /// Every element kind: a load or store moves the bits.
+    Any,
+}
+
+impl SveShape {
+    /// Whether the result is a vector, a predicate, or neither.
+    pub(crate) fn result(self) -> Option<crate::c5::ir::LoadKind> {
+        use crate::c5::ir::LoadKind;
+        match self {
+            SveShape::Binary(_) | SveShape::Load | SveShape::Dup => Some(LoadKind::SveVector),
+            SveShape::Compare | SveShape::PTrue | SveShape::While { .. } => {
+                Some(LoadKind::SvePredicate)
+            }
+            SveShape::Count | SveShape::Store | SveShape::Reduce => None,
+        }
+    }
+
+    /// Whether a governing predicate is operand 0.
+    pub(crate) fn governed(self) -> bool {
+        matches!(
+            self,
+            SveShape::Binary(_)
+                | SveShape::Compare
+                | SveShape::Load
+                | SveShape::Store
+                | SveShape::Reduce
+        )
+    }
+}
+
+/// Whether op id `op` names an SVE row.
+pub(crate) fn sve_row(op: u32) -> bool {
+    op >= SVE_BASE
+}
+
+/// Whether SVE row `op` defines a floating-point scalar: a floating sum.
+pub(crate) fn sve_float_result(op: u32) -> bool {
+    matches!(get(op).form, Form::Sve(f) if f.shape == SveShape::Reduce && f.elems == SveElems::Float)
+}
+
+/// The SVE kind of the value row `op` defines, `None` for another row or
+/// a result of no SVE type.
+pub(crate) fn sve_result(op: u32) -> Option<crate::c5::ir::LoadKind> {
+    match get(op).form {
+        Form::Sve(f) => f.shape.result(),
+        _ => None,
+    }
 }
 
 /// Result type, as the builtin's prototype declares it: one of the headers'
@@ -242,6 +361,8 @@ pub(crate) enum Sem {
     Or,
     Xor,
     CmpEq(u8),
+    /// A lane of ones where `a != b` holds (SVE `cmpne`).
+    CmpNe(u8),
     /// Signed lane comparison.
     CmpGt(u8),
     Shl(u8),
@@ -883,6 +1004,12 @@ impl Form {
             Form::MaskStore => 3,
             Form::MaskLoad => 2,
             Form::VvvI => 4,
+            Form::Sve(f) => match f.shape {
+                SveShape::PTrue | SveShape::Count => 0,
+                SveShape::Dup => 1,
+                SveShape::While { .. } | SveShape::Load | SveShape::Reduce => 2,
+                SveShape::Binary(_) | SveShape::Compare | SveShape::Store => 3,
+            },
         }
     }
 
@@ -929,7 +1056,7 @@ impl Form {
                 | Form::Narrow
                 | Form::Widen
                 | Form::Zext
-        )
+        ) || matches!(self, Form::Sve(f) if f.shape.result() == Some(crate::c5::ir::LoadKind::SveVector))
     }
 }
 
@@ -1645,6 +1772,12 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
             for i in 0..16 / w as usize {
                 let eq = lane(a, w, i) == lane(b, w, i);
                 set_lane(&mut o, w, i, if eq { mask(w) } else { 0 });
+            }
+        }
+        Sem::CmpNe(w) => {
+            for i in 0..16 / w as usize {
+                let ne = lane(a, w, i) != lane(b, w, i);
+                set_lane(&mut o, w, i, if ne { mask(w) } else { 0 });
             }
         }
         Sem::CmpGt(w) => {

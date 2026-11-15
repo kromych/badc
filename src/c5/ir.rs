@@ -763,11 +763,8 @@ impl Inst {
             {
                 Some(*kind)
             }
-            Inst::Intrinsic { kind, .. } => match I::from_i64(*kind)? {
-                I::SveLoadZ => Some(LoadKind::SveVector),
-                I::SveLoadP => Some(LoadKind::SvePredicate),
-                _ => None,
-            },
+            Inst::Intrinsic { kind, .. } => I::from_i64(*kind)?.sve_result(),
+            Inst::SimdVal { op, .. } => crate::c5::simd::sve_result(*op),
             _ => None,
         }
     }

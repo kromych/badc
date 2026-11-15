@@ -1955,6 +1955,7 @@ fn floating_rows_compute_in_the_environment() {
         | Sem::DotFloat(_)
         | Sem::RecipExponent(_) => true,
         Sem::Add(_)
+        | Sem::CmpNe(_)
         | Sem::Sub(_)
         | Sem::MulLo(_)
         | Sem::PolyMul(_)

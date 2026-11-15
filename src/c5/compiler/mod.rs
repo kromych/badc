@@ -225,6 +225,21 @@ pub enum SveElem {
 }
 
 impl SveType {
+    /// The builtin name that spells the type, the inverse of [`Self::of_name`].
+    pub(crate) fn builtin_name(self) -> String {
+        let (kind, size) = match self {
+            SveType::Predicate => return String::from("__SVBool_t"),
+            SveType::Vector { size, kind } => (kind, size),
+        };
+        let kind = match kind {
+            SveElem::Signed => "Int",
+            SveElem::Unsigned => "Uint",
+            SveElem::Float => "Float",
+            SveElem::BFloat => "Bfloat",
+        };
+        alloc::format!("__SV{kind}{}_t", 8u32 << size)
+    }
+
     /// The type the builtin name spells (ACLE, SVE types).
     pub(crate) fn of_name(name: &str) -> Option<Self> {
         use SveElem::*;

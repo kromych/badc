@@ -59,6 +59,21 @@ pub(super) fn emit_intrinsic(
         I::SveLoadZ | I::SveLoadP | I::SveStoreZ | I::SveStoreP => {
             super::sve::emit_sve_access(code, intrinsic, (args, v, dst), alloc, frame, scratch)
         }
+        I::SveLd1B
+        | I::SveLd1H
+        | I::SveLd1W
+        | I::SveLd1D
+        | I::SveSt1B
+        | I::SveSt1H
+        | I::SveSt1W
+        | I::SveSt1D => super::sve_rows::emit_governed_access(
+            code,
+            intrinsic,
+            (args, dst),
+            alloc,
+            frame,
+            scratch,
+        ),
         I::AllocaSave => emit_alloca_save(code, dst, frame, scratch),
         I::AllocaRestore => emit_alloca_restore(code, args, alloc, frame, scratch),
         I::SetjmpAArch64 => emit_setjmp(code, args, dst, alloc, frame, scratch),
@@ -195,9 +210,20 @@ pub(super) fn intrinsic_keeps_frame(intrinsic: crate::c5::op::Intrinsic, abi: su
         | I::EstablisherFrame => true,
         // sp moves for the rest of the function, or to another frame.
         I::Alloca | I::AllocaSave | I::AllocaRestore | I::SetjmpAArch64 | I::LongjmpAArch64 => true,
-        I::SveVlBytes | I::SvePlBytes | I::SveLoadZ | I::SveLoadP | I::SveStoreZ | I::SveStoreP => {
-            false
-        }
+        I::SveVlBytes
+        | I::SvePlBytes
+        | I::SveLoadZ
+        | I::SveLoadP
+        | I::SveStoreZ
+        | I::SveStoreP
+        | I::SveLd1B
+        | I::SveLd1H
+        | I::SveLd1W
+        | I::SveLd1D
+        | I::SveSt1B
+        | I::SveSt1H
+        | I::SveSt1W
+        | I::SveSt1D => false,
         // The AAPCS64 `va_list` forms borrow a register around a push / pop;
         // the cursor forms are loads and stores.
         I::VaArg | I::VaCopy => abi.aarch64_host_variadic(),

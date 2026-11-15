@@ -195,10 +195,10 @@ impl Compiler {
             .flatten()
     }
 
-    /// The tag of the SVE type the current identifier names, registered on
-    /// first use as an incomplete entry.
+    /// The tag of SVE type `sve`, registered on first use as an incomplete
+    /// entry under its builtin name.
     pub(super) fn sve_type_tag(&mut self, sve: super::SveType) -> i64 {
-        let name = self.symbols[self.lex.curr_id_idx].name.clone();
+        let name = sve.builtin_name();
         if let Some(id) = self
             .structs
             .iter()

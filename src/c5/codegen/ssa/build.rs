@@ -1972,6 +1972,11 @@ impl SsaBuilder {
         })
     }
 
+    /// `Inst::SimdVal` of row `op`, which reads and writes no memory.
+    pub(crate) fn simd_val(&mut self, op: u32, imm: Option<u8>, args: Vec<ValueId>) -> ValueId {
+        self.push(Inst::SimdVal { op, imm, args })
+    }
+
     pub(crate) fn simd(&mut self, op: u32, imm: Option<u8>, args: Vec<ValueId>) -> ValueId {
         self.local_cache.clear();
         self.push(Inst::Simd { op, imm, args })

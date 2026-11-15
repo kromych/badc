@@ -284,6 +284,7 @@ fn sve_row_operands(op: u32) -> alloc::vec::Vec<Option<LoadKind>> {
             | SveShape::Compare
             | SveShape::Select => alloc::vec![p, z, z],
             SveShape::Unary(_) => alloc::vec![p, z],
+            SveShape::Ternary(..) => alloc::vec![p, z, z, z],
             SveShape::Permute | SveShape::Extract | SveShape::Lanewise => alloc::vec![z, z],
             SveShape::Reinterpret | SveShape::Reverse => alloc::vec![z],
             SveShape::DupLane => alloc::vec![z, None],

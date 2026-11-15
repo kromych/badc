@@ -164,6 +164,9 @@ pub(super) fn emit_row(
             None => binary(code, row, mode, size, args, dst, &o),
         },
         SveShape::Unary(mode) => unary(code, row, mode, size, args, dst, &o),
+        SveShape::Ternary(mode, acc_last) => {
+            ternary(code, row.mnem, (mode, acc_last), size, args, dst, &o)
+        }
         SveShape::Compare => {
             let pg = o.governing(code, args[0])?;
             let (mnem, x, y) = match encoded {
@@ -504,13 +507,14 @@ pub(super) fn pred_stage_writes(func: &FunctionSsa, alloc: &Allocation) -> u16 {
 
 /// The FP scratch registers the rows of `func` write while every vector is
 /// in a register: a destructive form's scratch ([`destructive`]) and an
-/// integer sum's D register.
-pub(super) fn scratch_writes(func: &FunctionSsa, alloc: &Allocation) -> [bool; 2] {
+/// integer sum's D register; and a ternary row's third operand reloaded,
+/// and its scratch.
+pub(super) fn scratch_writes(func: &FunctionSsa, alloc: &Allocation) -> [bool; 3] {
     let fp = |v: u32| match place_of(alloc, v) {
         Place::FpReg(r) => Some(r),
         _ => None,
     };
-    let mut w = [false; 2];
+    let mut w = [false; 3];
     for (v, inst) in func.insts.iter().enumerate() {
         let Inst::SimdVal { op, args, .. } = inst else {
             continue;
@@ -538,6 +542,18 @@ pub(super) fn scratch_writes(func: &FunctionSsa, alloc: &Allocation) -> [bool; 2
                     continue;
                 };
                 w[0] |= unary_in_scratch(mode, d, i, a);
+            }
+            (SveShape::Ternary(mode, acc_last), &[_, a, b, c]) => {
+                // A spilled operand stands for the scratch it reloads into,
+                // numbered past the registers.
+                let at = |v: u32, k: u8| fp(v).unwrap_or(32 + k);
+                let r = [at(a, 0), at(b, 1), at(c, 2)];
+                let plan = ternary_plan((mode, acc_last, negates(row.mnem)), at(v as u32, 0), r);
+                w[2] |= fp(c).is_none();
+                if plan.1 {
+                    let t = (32..35u8).find(|s| !r.contains(s)).unwrap_or(32);
+                    w[usize::from(t - 32)] = true;
+                }
             }
             (SveShape::Reduce, _) => w[1] |= f.elems != simd::SveElems::Float,
             (SveShape::DupLane, _) => w[1] = true,
@@ -698,6 +714,112 @@ fn binary_immediate(
             merge: true,
         };
         word(code, mnem, &[z(d, size), pgm, z(d, size), immediate(i)])?;
+    }
+    o.z_done(code, dst, d);
+    Ok(())
+}
+
+/// The accumulating instructions, whose destructive operand is the addend,
+/// and the multiplying ones, whose destructive operand is a factor (Arm
+/// ARM, MLA and MAD and their kin).
+const FUSED: [(&str, &str); 6] = [
+    ("mla", "mad"),
+    ("mls", "msb"),
+    ("fmla", "fmad"),
+    ("fmls", "fmsb"),
+    ("fnmla", "fnmad"),
+    ("fnmls", "fnmsb"),
+];
+
+/// Whether a fused floating instruction negates a factor, the first one
+/// (`fmls`, `fnmla`) or the destructive one (`fmsb`, `fnmad`).
+fn negates(mnem: &str) -> bool {
+    matches!(mnem, "fmls" | "fnmla" | "fmsb" | "fnmad")
+}
+
+/// Which operand (1 to 3) of a ternary row computes into `d` from
+/// registers `r`, and whether in a scratch: a merging one's first, as its
+/// inactive lanes are; another's whichever `d` holds where the others are
+/// not `d`, which MOVPRFX requires (Arm ARM, MOVPRFX), but the second
+/// factor of a negating floating row, whose negation keeps the first.
+fn ternary_plan(
+    (mode, acc_last, negates): (SvePred, bool, bool),
+    d: u8,
+    r: [u8; 3],
+) -> (usize, bool) {
+    let second = if acc_last { 2 } else { 3 };
+    let candidates =
+        (1..=3).filter(|&k| (k == 1 || mode != SvePred::Merge) && !(negates && k == second));
+    let others_free = |k: usize| (1..=3).all(|j| j == k || r[j - 1] != d);
+    let pick = match mode {
+        SvePred::Any => candidates
+            .clone()
+            .find(|&k| r[k - 1] == d)
+            .or_else(|| (!r.contains(&d)).then_some(1)),
+        _ => candidates.clone().find(|&k| others_free(k)),
+    };
+    pick.map_or((1, true), |k| (k, false))
+}
+
+/// A ternary row: its operand the plan picks ([`ternary_plan`]) copied
+/// into the destination where it is not there, zeroed outside the
+/// predicate for a `_z` one, then the accumulating instruction where that
+/// operand is the addend, else the multiplying one.
+fn ternary(
+    code: &mut CodeBuf,
+    mnem: &str,
+    (mode, acc_last): (SvePred, bool),
+    size: u8,
+    args: &[u32],
+    dst: Place,
+    o: &Operands,
+) -> Emit {
+    let r = [
+        o.z(code, args[1], 0)?,
+        o.z(code, args[2], 1)?,
+        o.z(code, args[3], 2)?,
+    ];
+    let d = o.z_dst(dst)?;
+    let pg = o.governing(code, args[0])?;
+    let (k, scratch) = ternary_plan((mode, acc_last, negates(mnem)), d, r);
+    let fs = o.frame.fp_scratch;
+    let t = match scratch {
+        true => fs.into_iter().find(|s| !r.contains(s)).unwrap_or(fs[0]),
+        false => d,
+    };
+    let whole = |num| Opnd::ZReg { num, size: None };
+    let from = r[k - 1];
+    match mode {
+        SvePred::Zero => {
+            let pgz = Opnd::PRegQ {
+                num: pg,
+                merge: false,
+            };
+            word(code, "movprfx", &[z(t, size), pgz, z(from, size)])?;
+        }
+        _ if t != from => word(code, "movprfx", &[whole(t), whole(from)])?,
+        _ => {}
+    }
+    let Some(&(acc_form, mul_form)) = FUSED.iter().find(|p| p.0 == mnem || p.1 == mnem) else {
+        return fail("SVE row: not a fused multiply");
+    };
+    let acc = if acc_last { 3 } else { 1 };
+    let factors: [usize; 2] = if acc_last { [1, 2] } else { [2, 3] };
+    let (m, ops) = match factors.iter().position(|&f| f == k) {
+        None => (acc_form, [r[factors[0] - 1], r[factors[1] - 1]]),
+        Some(i) => (mul_form, [r[factors[1 - i] - 1], r[acc - 1]]),
+    };
+    let pgm = Opnd::PRegQ {
+        num: pg,
+        merge: true,
+    };
+    word(
+        code,
+        m,
+        &[z(t, size), pgm, z(ops[0], size), z(ops[1], size)],
+    )?;
+    if t != d {
+        emit(code, super::sve::enc_mov_z(d, t));
     }
     o.z_done(code, dst, d);
     Ok(())

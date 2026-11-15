@@ -5,7 +5,8 @@
 //! The shapes and semantics are the shared vocabulary of [`super::simd`].
 
 use super::simd::{
-    AcrossOp, FOp, Form, PermOp, Ret, Sem, SimdOp, SveElems, SveForm, SvePred, SveShape, SveTest,
+    AcrossOp, Addend, FOp, Form, PermOp, Ret, Sem, SimdOp, SveElems, SveForm, SvePred, SveShape,
+    SveTest,
 };
 
 const fn row(
@@ -208,6 +209,25 @@ const fn umulh(w: u8) -> Sem {
 const fn fsqrt(w: u8) -> Sem {
     Sem::Float(FOp::Sqrt, w, false)
 }
+const fn mla(w: u8) -> Sem {
+    Sem::MulAcc(w)
+}
+const fn mls(w: u8) -> Sem {
+    Sem::MulSub(w)
+}
+/// The fused forms, as the first factor and the addend are negated.
+const fn fmla(w: u8) -> Sem {
+    Sem::FloatFma(w, false, Addend::Plus)
+}
+const fn fmls(w: u8) -> Sem {
+    Sem::FloatFma(w, true, Addend::Plus)
+}
+const fn fnmla(w: u8) -> Sem {
+    Sem::FloatFma(w, true, Addend::Minus)
+}
+const fn fnmls(w: u8) -> Sem {
+    Sem::FloatFma(w, false, Addend::Minus)
+}
 const fn sqadd(w: u8) -> Sem {
     Sem::AddSat(w, true)
 }
@@ -347,6 +367,42 @@ pub(crate) const OPS: &[SimdOp] = rows! {
     "sqrt_m" "fsqrt" SveShape::Unary(M), Float, fsqrt: 4 8;
     "sqrt_z" "fsqrt" SveShape::Unary(Z), Float, fsqrt: 4 8;
     "sqrt_x" "fsqrt" SveShape::Unary(X), Float, fsqrt: 4 8;
+    "mla_m" "mla" SveShape::Ternary(M, false), Int, mla: 1 2 4 8;
+    "mla_m" "fmla" SveShape::Ternary(M, false), Float, fmla: 4 8;
+    "mla_z" "mla" SveShape::Ternary(Z, false), Int, mla: 1 2 4 8;
+    "mla_z" "fmla" SveShape::Ternary(Z, false), Float, fmla: 4 8;
+    "mla_x" "mla" SveShape::Ternary(X, false), Int, mla: 1 2 4 8;
+    "mla_x" "fmla" SveShape::Ternary(X, false), Float, fmla: 4 8;
+    "mls_m" "mls" SveShape::Ternary(M, false), Int, mls: 1 2 4 8;
+    "mls_m" "fmls" SveShape::Ternary(M, false), Float, fmls: 4 8;
+    "mls_z" "mls" SveShape::Ternary(Z, false), Int, mls: 1 2 4 8;
+    "mls_z" "fmls" SveShape::Ternary(Z, false), Float, fmls: 4 8;
+    "mls_x" "mls" SveShape::Ternary(X, false), Int, mls: 1 2 4 8;
+    "mls_x" "fmls" SveShape::Ternary(X, false), Float, fmls: 4 8;
+    "mad_m" "mad" SveShape::Ternary(M, true), Int, mla: 1 2 4 8;
+    "mad_m" "fmad" SveShape::Ternary(M, true), Float, fmla: 4 8;
+    "mad_z" "mad" SveShape::Ternary(Z, true), Int, mla: 1 2 4 8;
+    "mad_z" "fmad" SveShape::Ternary(Z, true), Float, fmla: 4 8;
+    "mad_x" "mad" SveShape::Ternary(X, true), Int, mla: 1 2 4 8;
+    "mad_x" "fmad" SveShape::Ternary(X, true), Float, fmla: 4 8;
+    "msb_m" "msb" SveShape::Ternary(M, true), Int, mls: 1 2 4 8;
+    "msb_m" "fmsb" SveShape::Ternary(M, true), Float, fmls: 4 8;
+    "msb_z" "msb" SveShape::Ternary(Z, true), Int, mls: 1 2 4 8;
+    "msb_z" "fmsb" SveShape::Ternary(Z, true), Float, fmls: 4 8;
+    "msb_x" "msb" SveShape::Ternary(X, true), Int, mls: 1 2 4 8;
+    "msb_x" "fmsb" SveShape::Ternary(X, true), Float, fmls: 4 8;
+    "nmla_m" "fnmla" SveShape::Ternary(M, false), Float, fnmla: 4 8;
+    "nmla_z" "fnmla" SveShape::Ternary(Z, false), Float, fnmla: 4 8;
+    "nmla_x" "fnmla" SveShape::Ternary(X, false), Float, fnmla: 4 8;
+    "nmls_m" "fnmls" SveShape::Ternary(M, false), Float, fnmls: 4 8;
+    "nmls_z" "fnmls" SveShape::Ternary(Z, false), Float, fnmls: 4 8;
+    "nmls_x" "fnmls" SveShape::Ternary(X, false), Float, fnmls: 4 8;
+    "nmad_m" "fnmad" SveShape::Ternary(M, true), Float, fnmla: 4 8;
+    "nmad_z" "fnmad" SveShape::Ternary(Z, true), Float, fnmla: 4 8;
+    "nmad_x" "fnmad" SveShape::Ternary(X, true), Float, fnmla: 4 8;
+    "nmsb_m" "fnmsb" SveShape::Ternary(M, true), Float, fnmls: 4 8;
+    "nmsb_z" "fnmsb" SveShape::Ternary(Z, true), Float, fnmls: 4 8;
+    "nmsb_x" "fnmsb" SveShape::Ternary(X, true), Float, fnmls: 4 8;
     "qadd" "sqadd" SveShape::Lanewise, Signed, sqadd: 1 2 4 8;
     "qadd" "uqadd" SveShape::Lanewise, Unsigned, uqadd: 1 2 4 8;
     "qsub" "sqsub" SveShape::Lanewise, Signed, sqsub: 1 2 4 8;

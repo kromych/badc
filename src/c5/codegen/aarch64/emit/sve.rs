@@ -464,7 +464,7 @@ fn scratch_writes(func: &FunctionSsa, alloc: &Allocation, target: Target) -> ([b
     }
     let rows = super::sve_rows::scratch_writes(func, alloc);
     let staged = alloc.sve.z_slots > 0 || z;
-    ([staged || rows[0], staged || rows[1], false], p)
+    ([staged || rows[0], staged || rows[1], rows[2]], p)
 }
 
 /// Whether the register moves `(source, target)` form a cycle.

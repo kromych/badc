@@ -204,6 +204,10 @@ pub(crate) enum SveShape {
     Extract,
     /// `v = op(a, b)`, unpredicated, lane by lane.
     Lanewise,
+    /// `v = op(pg, a, b, c)`: a product of two operands added to or taken
+    /// from the third, `a` (`mla`) or, where set, `c` (`mad`); the inactive
+    /// lanes as the predication says, `a`'s where they merge.
+    Ternary(SvePred, bool),
 }
 
 /// The bits of a predicate a test reads (`ptest`).
@@ -250,7 +254,8 @@ impl SveShape {
             | SveShape::Permute
             | SveShape::Reverse
             | SveShape::Extract
-            | SveShape::Lanewise => Some(LoadKind::SveVector),
+            | SveShape::Lanewise
+            | SveShape::Ternary(..) => Some(LoadKind::SveVector),
             SveShape::Compare
             | SveShape::PTrue
             | SveShape::While { .. }
@@ -273,6 +278,7 @@ impl SveShape {
             self,
             SveShape::Binary(_)
                 | SveShape::Unary(_)
+                | SveShape::Ternary(..)
                 | SveShape::Compare
                 | SveShape::Load
                 | SveShape::Store
@@ -1145,6 +1151,7 @@ impl Form {
                 | SveShape::Select
                 | SveShape::PredSelect
                 | SveShape::PredLogic => 3,
+                SveShape::Ternary(..) => 4,
             },
         }
     }

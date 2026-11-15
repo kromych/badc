@@ -2317,6 +2317,62 @@ fn sve_differences_high_products_roots_and_saturation() {
     }
 }
 
+/// svmla, svmls, svmad, svmsb and the floating svnmla to svnmsb in each
+/// predication form and with a scalar compute what scalar C does, with the
+/// result's register holding each operand in turn; the interpreter runs
+/// the fixture at four vector lengths. Under `-O` the destructive operand
+/// is the one the destination holds -- the addend for MLA, a factor for
+/// MAD -- where the other two are not there, a merging form's the first,
+/// and a negating floating row's never the second factor, else a scratch.
+#[test]
+fn sve_multiply_adds_destroy_the_operand_the_destination_holds() {
+    const SRC: &str = include_str!("../../../tests/fixtures/sve/rows_fused.c");
+    for optimize in [false, true] {
+        let options = crate::CompileOptions::default().with_optimize(optimize);
+        let program =
+            crate::Compiler::with_options(String::from(SRC), crate::Target::LinuxAarch64, options)
+                .compile()
+                .expect("compiles");
+        for bits in [128, 256, 512, 2048] {
+            let vm = super::Vm::new(program.clone()).with_sve_vector_bits(bits);
+            assert_eq!(
+                vm.run().expect("runs"),
+                bits as i64 / 128,
+                "{bits} bits, -O {optimize}"
+            );
+        }
+    }
+    #[cfg(feature = "full")]
+    {
+        const ASM: &str = "#include <arm_sve.h>\n\
+            svint32_t mla_m(svbool_t pg, svint32_t b, svint32_t a, svint32_t c) { return svmla_m(pg, a, b, c); }\n\
+            svint32_t mla_x(svbool_t pg, svint32_t b, svint32_t a, svint32_t c) { return svmla_x(pg, a, b, c); }\n\
+            svint32_t mla_z(svbool_t pg, svint32_t b, svint32_t a, svint32_t c) { return svmla_z(pg, a, b, c); }\n\
+            svint32_t mad_x(svbool_t pg, svint32_t c, svint32_t a, svint32_t b) { return svmad_x(pg, a, b, c); }\n\
+            svfloat64_t mls_x(svbool_t pg, svfloat64_t c, svfloat64_t a, svfloat64_t b) { return svmls_x(pg, a, b, c); }\n\
+            svfloat32_t nmla_z(svbool_t pg, svfloat32_t a, svfloat32_t b, svfloat32_t c) { return svnmla_z(pg, a, b, c); }\n";
+        const RET: u32 = 0xD65F_03C0;
+        let words = |name: &str| super::perf_codegen::a64_at(ASM, name, true);
+        let mov = |t: u32| 0x0460_3000 | t << 16 | t << 5;
+        // MOVPRFX zt, z1; MLA zt.s, p0/m, z0.s, z2.s; MOV z0.d, zt.d.
+        let w = words("mla_m");
+        let t = w[0] & 0x1F;
+        assert_eq!(w, [0x0420_BC20 | t, 0x0482_4000 | t, mov(t), RET]);
+        // MAD z0.s, p0/m, z2.s, z1.s.
+        assert_eq!(words("mla_x"), [0x0482_C020, RET]);
+        // MOVPRFX z0.s, p0/z, z0.s; MAD z0.s, p0/m, z2.s, z1.s.
+        assert_eq!(words("mla_z"), [0x0490_2000, 0x0482_C020, RET]);
+        // MLA z0.s, p0/m, z1.s, z2.s.
+        assert_eq!(words("mad_x"), [0x0482_4020, RET]);
+        // MOVPRFX zt, z1; FMLS zt.d, p0/m, z2.d, z0.d; MOV z0.d, zt.d.
+        let w = words("mls_x");
+        let t = w[0] & 0x1F;
+        assert_eq!(w, [0x0420_BC20 | t, 0x65E0_2040 | t, mov(t), RET]);
+        // MOVPRFX z0.s, p0/z, z0.s; FNMLA z0.s, p0/m, z1.s, z2.s.
+        assert_eq!(words("nmla_z"), [0x0490_2000, 0x65A2_4020, RET]);
+    }
+}
+
 /// A constant operand of an SVE row compiles as scalar C computes at the
 /// edges of the immediates' ranges and past them; the interpreter runs the
 /// fixture at four vector lengths. Under `-O` a constant is its row's

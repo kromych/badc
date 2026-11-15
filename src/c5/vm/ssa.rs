@@ -5403,6 +5403,46 @@ fn run_sve_row(
             let a = sve_bytes(frame, args[0])?.to_vec();
             frame.sregs.insert(v, a);
         }
+        SveShape::Ternary(mode, acc_last) => {
+            let pg = sve_bytes(frame, args[0])?.to_vec();
+            let x = (args[1..4].iter())
+                .map(|&a| sve_bytes(frame, a).map(<[u8]>::to_vec))
+                .collect::<Result<Vec<_>, _>>()?;
+            let (acc, m, n) = match acc_last {
+                true => (&x[2], &x[0], &x[1]),
+                false => (&x[0], &x[1], &x[2]),
+            };
+            let active = |i: usize| sve_active(&pg, w, i);
+            let mut out = match mode {
+                SvePred::Zero => alloc::vec![0u8; x[0].len()],
+                _ => x[0].clone(),
+            };
+            let chunk = |v: &[u8], k: usize| -> [u8; 16] {
+                let mut x = [0u8; 16];
+                let end = (k + 16).min(v.len());
+                x[..end - k].copy_from_slice(&v[k..end]);
+                x
+            };
+            // A floating lane is computed alone, active, as an inactive one
+            // raises no exception.
+            let step = if simd::floating(row.sem) { w } else { 16 };
+            for k in (0..out.len()).step_by(step) {
+                let (p, q, r) = (chunk(acc, k), chunk(m, k), chunk(n, k));
+                let here: Vec<usize> = (k / w..(k + step) / w).filter(|&i| active(i)).collect();
+                if here.is_empty() {
+                    continue;
+                }
+                let y = match simd::eval_float_acc(&mut mem.fp, row.sem, (&p, &q, &r), step) {
+                    Some(y) => y,
+                    None => simd::eval_acc(row.sem, &p, &q, &r).unwrap_or([0; 16]),
+                };
+                for i in here {
+                    let at = i * w - k;
+                    out[i * w..i * w + w].copy_from_slice(&y[at..at + w]);
+                }
+            }
+            frame.sregs.insert(v, out);
+        }
         SveShape::Lanewise => {
             let a = sve_bytes(frame, args[0])?.to_vec();
             let b = sve_bytes(frame, args[1])?.to_vec();

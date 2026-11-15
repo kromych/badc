@@ -2059,6 +2059,57 @@ fn the_sve_shift_rows_take_unsigned_counts() {
     }
 }
 
+/// svmaxv, svminv, svmaxnmv, svminnmv, svandv, svorv and sveorv reduce the
+/// active lanes into a value of the lane's type, the operation's identity
+/// with none active, as scalar C computes; the interpreter runs the fixture
+/// at four vector lengths. Under `-O` a narrow integer reduction moves its
+/// lane into the register extended as its type is, SMOV or UMOV, which
+/// leaves the return no extension of its own; a doubleword one is FMOV and
+/// a floating one stays in its register.
+#[test]
+fn the_sve_reductions_take_their_lanes_type() {
+    const SRC: &str = include_str!("../../../tests/fixtures/sve/rows_reduce.c");
+    for optimize in [false, true] {
+        let options = crate::CompileOptions::default().with_optimize(optimize);
+        let program =
+            crate::Compiler::with_options(String::from(SRC), crate::Target::LinuxAarch64, options)
+                .compile()
+                .expect("compiles");
+        for bits in [128, 256, 512, 2048] {
+            let vm = super::Vm::new(program.clone()).with_sve_vector_bits(bits);
+            assert_eq!(
+                vm.run().expect("runs"),
+                bits as i64 / 128,
+                "{bits} bits, -O {optimize}"
+            );
+        }
+    }
+    #[cfg(feature = "full")]
+    {
+        const ASM: &str = "#include <arm_sve.h>\n\
+            int8_t maxv(svbool_t pg, svint8_t a) { return svmaxv(pg, a); }\n\
+            uint32_t orv(svbool_t pg, svuint32_t a) { return svorv(pg, a); }\n\
+            int64_t eorv(svbool_t pg, svint64_t a) { return sveorv(pg, a); }\n\
+            float fmaxv(svbool_t pg, svfloat32_t a) { return svmaxv(pg, a); }\n";
+        const RET: u32 = 0xD65F_03C0;
+        let words = |name: &str| super::perf_codegen::a64_at(ASM, name, true);
+        // SMAXV bt, p0, z0.b; SMOV x0, vt.b[0].
+        let w = words("maxv");
+        let t = w[0] & 0x1F;
+        assert_eq!(w, [0x0408_2000 | t, 0x4E01_2C00 | t << 5, RET]);
+        // ORV st, p0, z0.s; MOV w0, vt.s[0].
+        let w = words("orv");
+        let t = w[0] & 0x1F;
+        assert_eq!(w, [0x0498_2000 | t, 0x0E04_3C00 | t << 5, RET]);
+        // EORV dt, p0, z0.d; FMOV x0, dt.
+        let w = words("eorv");
+        let t = w[0] & 0x1F;
+        assert_eq!(w, [0x04D9_2000 | t, 0x9E66_0000 | t << 5, RET]);
+        // FMAXV s0, p0, z0.s.
+        assert_eq!(words("fmaxv"), [0x6586_2000, RET]);
+    }
+}
+
 /// A unary row is its instruction on the argument registers under `-O`:
 /// the don't-care form in place, the merging form on a `movprfx` copy of
 /// the inactive operand, the zeroing form on a zeroing `movprfx` of the

@@ -880,14 +880,16 @@ fn drop_call_arg_reextends(funcs: &mut [FunctionSsa]) {
     }
 }
 
-/// If `v` is a narrow integer load, its width in bits and whether it
-/// sign-extends. A signed load fills the bits above its width with the sign
-/// bit; an unsigned load fills them with zero.
+/// If `v` is a narrow integer load, or an SVE reduction into a narrow lane
+/// ([`crate::c5::simd::sve_narrow_result`]), its width in bits and whether
+/// it sign-extends. A signed load fills the bits above its width with the
+/// sign bit; an unsigned load fills them with zero.
 fn narrow_int_load(insts: &[Inst], v: ValueId) -> Option<(u32, bool)> {
     if v == NO_VALUE {
         return None;
     }
     let kind = match insts.get(v as usize)? {
+        Inst::SimdVal { op, .. } => return crate::c5::simd::sve_narrow_result(*op),
         Inst::Load { kind, .. } => *kind,
         Inst::LoadLocal { disp: 0, kind, .. } => *kind,
         Inst::LoadIndexed { kind, .. } => *kind,

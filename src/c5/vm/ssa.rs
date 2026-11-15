@@ -5152,6 +5152,78 @@ fn sve_lane(v: &[u8], w: usize, i: usize) -> u64 {
     u64::from_le_bytes(b)
 }
 
+/// The floating reduction `op` of the lanes `lane` gives over a power of two
+/// of them, each half reduced and then the two, an inactive or padding lane
+/// the operation's identity: +0.0, -infinity for FMAXV, +infinity for FMINV
+/// and the default NaN for FMAXNMV and FMINNMV (Arm ARM ReducePredicated).
+fn sve_float_reduce(
+    mem: &mut Memory,
+    op: crate::c5::simd::FOp,
+    w: usize,
+    lane: impl Fn(usize) -> Option<u64>,
+) -> u64 {
+    use crate::c5::simd::FOp;
+    let single = w == 4;
+    let widen = |bits: u64| {
+        if single {
+            super::fenv::f32_to_reg(bits as u32)
+        } else {
+            bits
+        }
+    };
+    let identity = match (op, single) {
+        (FOp::Add, _) => 0,
+        (FOp::MaxNan, true) => 0xFF80_0000,
+        (FOp::MaxNan, false) => 0xFFF0_0000_0000_0000,
+        (FOp::MinNan, true) => 0x7F80_0000,
+        (FOp::MinNan, false) => 0x7FF0_0000_0000_0000,
+        (_, true) => 0x7FC0_0000,
+        (_, false) => 0x7FF8_0000_0000_0000,
+    };
+    let lanes = mem.sve_vl_bytes / w;
+    let mut x: Vec<u64> = (0..lanes.next_power_of_two())
+        .map(|i| widen(lane(i).unwrap_or(identity)))
+        .collect();
+    while x.len() > 1 {
+        x = (x.chunks(2))
+            .map(|c| crate::c5::simd::float_lane(&mut mem.fp, op, c[0], c[1], single))
+            .collect();
+    }
+    x[0]
+}
+
+/// The integer reduction `op` of the active lanes `lanes`, of `w` bytes:
+/// a sum into 64 bits, its lanes sign-extended when `signed`; any other
+/// into the lane's width, extended as its type is.
+fn sve_int_reduce(
+    op: crate::c5::simd::AcrossOp,
+    w: usize,
+    signed: bool,
+    lanes: impl Iterator<Item = u64>,
+) -> i64 {
+    use crate::c5::simd::AcrossOp;
+    let shift = 64 - 8 * w as u32;
+    let sext = |x: u64| ((x << shift) as i64) >> shift;
+    let value = |x: u64| if signed { sext(x) } else { x as i64 };
+    let r = match op {
+        AcrossOp::Add | AcrossOp::AddLong => {
+            return lanes.fold(0i64, |s, x| s.wrapping_add(value(x)));
+        }
+        AcrossOp::Max if signed => lanes.map(sext).fold(i64::MIN >> shift, i64::max),
+        AcrossOp::Min if signed => lanes.map(sext).fold(i64::MAX >> shift, i64::min),
+        AcrossOp::Max => lanes.fold(0, u64::max) as i64,
+        AcrossOp::Min => lanes.fold(u64::MAX >> shift, u64::min) as i64,
+        AcrossOp::And => lanes.fold(u64::MAX, |s, x| s & x) as i64,
+        AcrossOp::Or => lanes.fold(0, |s, x| s | x) as i64,
+        AcrossOp::Xor => lanes.fold(0, |s, x| s ^ x) as i64,
+    };
+    if signed {
+        sext(r as u64)
+    } else {
+        (r as u64 & u64::MAX >> shift) as i64
+    }
+}
+
 /// An SVE row (`crate::c5::aarch64_sve`) on the run's vector length.
 fn run_sve_row(
     mem: &mut Memory,
@@ -5160,7 +5232,7 @@ fn run_sve_row(
     (op, imm): (u32, Option<u8>),
     args: &[ValueId],
 ) -> Result<(), C5Error> {
-    use crate::c5::simd::{self, FloatEnv, SveElems, SvePred, SveShape, SveTest};
+    use crate::c5::simd::{self, SveElems, SvePred, SveShape, SveTest};
     let row = simd::get(op);
     let simd::Form::Sve(form) = row.form else {
         return Err(C5Error::Runtime(format!(
@@ -5230,44 +5302,20 @@ fn run_sve_row(
             let pg = sve_bytes(frame, args[0])?.to_vec();
             let a = sve_bytes(frame, args[1])?.to_vec();
             let active = |i: usize| sve_active(&pg, w, i);
-            frame.regs[v as usize] = if form.elems == SveElems::Float {
-                // The halves summed pairwise over a power of two of lanes,
-                // an inactive or padding one +0.0 (Arm ARM FADDV).
-                let single = w == 4;
-                let widen = |bits: u64| {
-                    if single {
-                        super::fenv::f32_to_reg(bits as u32)
-                    } else {
-                        bits
-                    }
-                };
-                let mut x: Vec<u64> = (0..lanes.next_power_of_two())
-                    .map(|i| {
-                        if i < lanes && active(i) {
-                            widen(sve_lane(&a, w, i))
-                        } else {
-                            0
-                        }
-                    })
-                    .collect();
-                while x.len() > 1 {
-                    x = (x.chunks(2))
-                        .map(|c| mem.fp.arith(simd::FOp::Add, c[0], c[1], single))
-                        .collect();
+            frame.regs[v as usize] = match row.sem {
+                simd::Sem::FloatAcross(op, _) => sve_float_reduce(mem, op, w, |i| {
+                    (i < lanes && active(i)).then(|| sve_lane(&a, w, i))
+                }) as i64,
+                simd::Sem::Across(op, _, signed, _) => {
+                    let lanes = (0..lanes).filter(|&i| active(i));
+                    sve_int_reduce(op, w, signed, lanes.map(|i| sve_lane(&a, w, i)))
                 }
-                x[0] as i64
-            } else {
-                let signed = matches!(row.sem, simd::Sem::Across(_, _, true, _));
-                let shift = 64 - 8 * w as u32;
-                (0..lanes).filter(|&i| active(i)).fold(0i64, |s, i| {
-                    let x = sve_lane(&a, w, i);
-                    let x = if signed && w < 8 {
-                        ((x << shift) as i64) >> shift
-                    } else {
-                        x as i64
-                    };
-                    s.wrapping_add(x)
-                })
+                _ => {
+                    return Err(C5Error::Runtime(format!(
+                        "vm_ssa: {} is no reduction",
+                        row.name
+                    )));
+                }
             };
         }
         SveShape::Dup => {

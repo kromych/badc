@@ -279,6 +279,30 @@ pub(crate) fn sve_float_result(op: u32) -> bool {
     matches!(get(op).form, Form::Sve(f) if f.shape == SveShape::Reduce && f.elems == SveElems::Float)
 }
 
+/// Whether SVE row `op` is a reduction into 64 bits whatever its lanes'
+/// width: the integer sum (`saddv`, `uaddv`); the others reduce into a
+/// value of the lane's type.
+pub(crate) fn sve_widening_sum(op: u32) -> bool {
+    matches!(get(op).sem, Sem::Across(AcrossOp::Add, ..))
+}
+
+/// The width in bits of the integer SVE row `op` reduces into, below 64,
+/// and whether its value sign-extends from it, as its lanes' type does.
+pub(crate) fn sve_narrow_result(op: u32) -> Option<(u32, bool)> {
+    let row = get(op);
+    match row.form {
+        Form::Sve(f) if f.shape == SveShape::Reduce && !sve_widening_sum(op) => {
+            let signed = match f.elems {
+                SveElems::Signed => true,
+                SveElems::Unsigned => false,
+                _ => return None,
+            };
+            (row.int_width < 8).then_some((8 * u32::from(row.int_width), signed))
+        }
+        _ => None,
+    }
+}
+
 /// Whether SVE row `op` reads only the low 32 bits of operand `k`: the
 /// bounds of a 32-bit `while`, the scalar a `dup` puts in lanes of up to 4
 /// bytes.
@@ -816,6 +840,9 @@ pub(crate) enum AcrossOp {
     AddLong,
     Max,
     Min,
+    And,
+    Or,
+    Xor,
 }
 
 /// The operation of a widening form: on the narrow lanes, its result as
@@ -2194,6 +2221,9 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
                 AcrossOp::Add | AcrossOp::AddLong => lanes.sum(),
                 AcrossOp::Max => lanes.max().unwrap_or(0),
                 AcrossOp::Min => lanes.min().unwrap_or(0),
+                AcrossOp::And => lanes.fold(-1, |x, y| x & y),
+                AcrossOp::Or => lanes.fold(0, |x, y| x | y),
+                AcrossOp::Xor => lanes.fold(0, |x, y| x ^ y),
             };
             let rw = if op == AcrossOp::AddLong { 2 * w } else { w };
             set_lane(&mut o, rw, 0, r as u64 & mask(rw));
@@ -3004,7 +3034,7 @@ pub(crate) fn eval_float(
 /// One floating lane of `op` over the `double` bit patterns `x` and `y` in
 /// `env`, for an operation that does not select an operand's bits (all but
 /// MIN and MAX).
-fn float_lane(env: &mut impl FloatEnv, op: FOp, x: u64, y: u64, single: bool) -> u64 {
+pub(crate) fn float_lane(env: &mut impl FloatEnv, op: FOp, x: u64, y: u64, single: bool) -> u64 {
     use core::cmp::Ordering::{Equal, Greater};
     let quiet = |v: u64| is_nan(v) && v & 1 << 51 != 0;
     let (inf, zero) = (

@@ -731,6 +731,14 @@ impl Compiler {
             SveShape::Reduce => match vty.map(lane) {
                 Some((2, SveElem::Float)) => Ty::Float as i64,
                 Some((3, SveElem::Float)) => Ty::Double as i64,
+                Some((size, kind)) if size < 3 && !simd::sve_widening_sum(op) => {
+                    let t = [Ty::Char, Ty::Short, Ty::Int][usize::from(size)] as i64;
+                    if kind == SveElem::Unsigned {
+                        t | UNSIGNED_BIT
+                    } else {
+                        t
+                    }
+                }
                 Some((_, SveElem::Unsigned)) => self.size_t_ty(),
                 _ => self.ptrdiff_t_ty(),
             },

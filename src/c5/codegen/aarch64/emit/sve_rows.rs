@@ -213,20 +213,34 @@ pub(super) fn emit_row(
                 Place::FpReg(r) if float => r,
                 _ => frame.fp_scratch[1],
             };
-            let is_d = !float || size == 3;
-            word(
-                code,
-                row.mnem,
-                &[Opnd::VReg { num: vd, is_d }, p, z(a, size)],
-            )?;
+            // An integer sum is 64 bits wide; another reduction the lane's.
+            let rsize = if simd::sve_widening_sum(op) { 3 } else { size };
+            let v = match rsize {
+                0 | 1 => Opnd::VScalar {
+                    num: vd,
+                    size: rsize,
+                },
+                _ => Opnd::VReg {
+                    num: vd,
+                    is_d: rsize == 3,
+                },
+            };
+            word(code, row.mnem, &[v, p, z(a, size)])?;
             if float {
                 store_spilled_fp(code, frame, dst, vd);
                 return Ok(());
             }
             let Some(rd) = int_or_spill_scratch(dst, scratch) else {
-                return fail("SVE sum: dst not int reg / spill");
+                return fail("SVE reduction: dst not int reg / spill");
             };
-            emit(code, enc_fmov_d_to_x(rd, vd));
+            // The lane into the register as its type extends.
+            let esize = 1 << rsize;
+            let word = match (rsize, form.elems) {
+                (3, _) => enc_fmov_d_to_x(rd, vd),
+                (_, simd::SveElems::Signed) => enc_smov_gen(rd, vd, esize, 0),
+                _ => enc_umov_gen(rd, vd, esize, 0),
+            };
+            emit(code, word);
             store_spilled_int(code, frame, dst, rd);
             Ok(())
         }

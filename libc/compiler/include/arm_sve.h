@@ -16,9 +16,10 @@
  * unsigned (_m, _z, _x, and _n), svand, svorr, sveor and svbic (_m, _z,
  * _x, _n, and _b_z), svorn, svnand and svnor (_b_z), svnot (_m, _z, _x,
  * and _b_z), svabs and svneg (_m, _z, _x), svsel, svcmpeq, svcmpne,
- * svcmpgt, svcmpge, svcmplt, svcmple (and _n), svaddv, svdup_n and
- * svptest_any/first/last, over the 8- to 64-bit integer and the 32- and
- * 64-bit floating element types. */
+ * svcmpgt, svcmpge, svcmplt, svcmple (and _n), the reductions svaddv,
+ * svmaxv, svminv, svmaxnmv, svminnmv, svandv, svorv and sveorv, svdup_n
+ * and svptest_any/first/last, over the 8- to 64-bit integer and the 32-
+ * and 64-bit floating element types. */
 #ifndef BADC_ARM_SVE_H
 #define BADC_ARM_SVE_H
 
@@ -1080,6 +1081,68 @@ enum svpattern {
 #define svaddv_f32(pg, op) __builtin_sve_addv(svfloat32_t, pg, op)
 #define svaddv_f64(pg, op) __builtin_sve_addv(svfloat64_t, pg, op)
 #define svaddv(pg, op) __builtin_sve_addv(void, pg, op)
+
+#define svmaxv_s8(pg, op) __builtin_sve_maxv(svint8_t, pg, op)
+#define svmaxv_s16(pg, op) __builtin_sve_maxv(svint16_t, pg, op)
+#define svmaxv_s32(pg, op) __builtin_sve_maxv(svint32_t, pg, op)
+#define svmaxv_s64(pg, op) __builtin_sve_maxv(svint64_t, pg, op)
+#define svmaxv_u8(pg, op) __builtin_sve_maxv(svuint8_t, pg, op)
+#define svmaxv_u16(pg, op) __builtin_sve_maxv(svuint16_t, pg, op)
+#define svmaxv_u32(pg, op) __builtin_sve_maxv(svuint32_t, pg, op)
+#define svmaxv_u64(pg, op) __builtin_sve_maxv(svuint64_t, pg, op)
+#define svmaxv_f32(pg, op) __builtin_sve_maxv(svfloat32_t, pg, op)
+#define svmaxv_f64(pg, op) __builtin_sve_maxv(svfloat64_t, pg, op)
+#define svmaxv(pg, op) __builtin_sve_maxv(void, pg, op)
+
+#define svminv_s8(pg, op) __builtin_sve_minv(svint8_t, pg, op)
+#define svminv_s16(pg, op) __builtin_sve_minv(svint16_t, pg, op)
+#define svminv_s32(pg, op) __builtin_sve_minv(svint32_t, pg, op)
+#define svminv_s64(pg, op) __builtin_sve_minv(svint64_t, pg, op)
+#define svminv_u8(pg, op) __builtin_sve_minv(svuint8_t, pg, op)
+#define svminv_u16(pg, op) __builtin_sve_minv(svuint16_t, pg, op)
+#define svminv_u32(pg, op) __builtin_sve_minv(svuint32_t, pg, op)
+#define svminv_u64(pg, op) __builtin_sve_minv(svuint64_t, pg, op)
+#define svminv_f32(pg, op) __builtin_sve_minv(svfloat32_t, pg, op)
+#define svminv_f64(pg, op) __builtin_sve_minv(svfloat64_t, pg, op)
+#define svminv(pg, op) __builtin_sve_minv(void, pg, op)
+
+#define svmaxnmv_f32(pg, op) __builtin_sve_maxnmv(svfloat32_t, pg, op)
+#define svmaxnmv_f64(pg, op) __builtin_sve_maxnmv(svfloat64_t, pg, op)
+#define svmaxnmv(pg, op) __builtin_sve_maxnmv(void, pg, op)
+
+#define svminnmv_f32(pg, op) __builtin_sve_minnmv(svfloat32_t, pg, op)
+#define svminnmv_f64(pg, op) __builtin_sve_minnmv(svfloat64_t, pg, op)
+#define svminnmv(pg, op) __builtin_sve_minnmv(void, pg, op)
+
+#define svandv_s8(pg, op) __builtin_sve_andv(svint8_t, pg, op)
+#define svandv_s16(pg, op) __builtin_sve_andv(svint16_t, pg, op)
+#define svandv_s32(pg, op) __builtin_sve_andv(svint32_t, pg, op)
+#define svandv_s64(pg, op) __builtin_sve_andv(svint64_t, pg, op)
+#define svandv_u8(pg, op) __builtin_sve_andv(svuint8_t, pg, op)
+#define svandv_u16(pg, op) __builtin_sve_andv(svuint16_t, pg, op)
+#define svandv_u32(pg, op) __builtin_sve_andv(svuint32_t, pg, op)
+#define svandv_u64(pg, op) __builtin_sve_andv(svuint64_t, pg, op)
+#define svandv(pg, op) __builtin_sve_andv(void, pg, op)
+
+#define svorv_s8(pg, op) __builtin_sve_orv(svint8_t, pg, op)
+#define svorv_s16(pg, op) __builtin_sve_orv(svint16_t, pg, op)
+#define svorv_s32(pg, op) __builtin_sve_orv(svint32_t, pg, op)
+#define svorv_s64(pg, op) __builtin_sve_orv(svint64_t, pg, op)
+#define svorv_u8(pg, op) __builtin_sve_orv(svuint8_t, pg, op)
+#define svorv_u16(pg, op) __builtin_sve_orv(svuint16_t, pg, op)
+#define svorv_u32(pg, op) __builtin_sve_orv(svuint32_t, pg, op)
+#define svorv_u64(pg, op) __builtin_sve_orv(svuint64_t, pg, op)
+#define svorv(pg, op) __builtin_sve_orv(void, pg, op)
+
+#define sveorv_s8(pg, op) __builtin_sve_eorv(svint8_t, pg, op)
+#define sveorv_s16(pg, op) __builtin_sve_eorv(svint16_t, pg, op)
+#define sveorv_s32(pg, op) __builtin_sve_eorv(svint32_t, pg, op)
+#define sveorv_s64(pg, op) __builtin_sve_eorv(svint64_t, pg, op)
+#define sveorv_u8(pg, op) __builtin_sve_eorv(svuint8_t, pg, op)
+#define sveorv_u16(pg, op) __builtin_sve_eorv(svuint16_t, pg, op)
+#define sveorv_u32(pg, op) __builtin_sve_eorv(svuint32_t, pg, op)
+#define sveorv_u64(pg, op) __builtin_sve_eorv(svuint64_t, pg, op)
+#define sveorv(pg, op) __builtin_sve_eorv(void, pg, op)
 
 #define svdup_n_s8(op) __builtin_sve_dup(svint8_t, op)
 #define svdup_s8(op) __builtin_sve_dup(svint8_t, op)

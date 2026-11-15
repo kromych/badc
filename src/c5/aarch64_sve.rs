@@ -127,6 +127,48 @@ const fn uaddv(w: u8) -> Sem {
 const fn faddv(w: u8) -> Sem {
     Sem::FloatAcross(FOp::Add, w)
 }
+const fn smaxv(w: u8) -> Sem {
+    Sem::Across(AcrossOp::Max, w, true, 0)
+}
+const fn umaxv(w: u8) -> Sem {
+    Sem::Across(AcrossOp::Max, w, false, 0)
+}
+const fn sminv(w: u8) -> Sem {
+    Sem::Across(AcrossOp::Min, w, true, 0)
+}
+const fn uminv(w: u8) -> Sem {
+    Sem::Across(AcrossOp::Min, w, false, 0)
+}
+const fn sandv(w: u8) -> Sem {
+    Sem::Across(AcrossOp::And, w, true, 0)
+}
+const fn uandv(w: u8) -> Sem {
+    Sem::Across(AcrossOp::And, w, false, 0)
+}
+const fn sorv(w: u8) -> Sem {
+    Sem::Across(AcrossOp::Or, w, true, 0)
+}
+const fn uorv(w: u8) -> Sem {
+    Sem::Across(AcrossOp::Or, w, false, 0)
+}
+const fn seorv(w: u8) -> Sem {
+    Sem::Across(AcrossOp::Xor, w, true, 0)
+}
+const fn ueorv(w: u8) -> Sem {
+    Sem::Across(AcrossOp::Xor, w, false, 0)
+}
+const fn fmaxv(w: u8) -> Sem {
+    Sem::FloatAcross(FOp::MaxNan, w)
+}
+const fn fminv(w: u8) -> Sem {
+    Sem::FloatAcross(FOp::MinNan, w)
+}
+const fn fmaxnmv(w: u8) -> Sem {
+    Sem::FloatAcross(FOp::MaxNum, w)
+}
+const fn fminnmv(w: u8) -> Sem {
+    Sem::FloatAcross(FOp::MinNum, w)
+}
 
 use SveElems::{Any, Float, Int, Signed, Unsigned};
 use SvePred::{Any as X, Merge as M, Zero as Z};
@@ -287,6 +329,20 @@ pub(crate) const OPS: &[SimdOp] = rows! {
     "addv" "uaddv" SveShape::Reduce, Signed, uaddv: 8;
     "addv" "uaddv" SveShape::Reduce, Unsigned, uaddv: 1 2 4 8;
     "addv" "faddv" SveShape::Reduce, Float, faddv: 4 8;
+    "maxv" "smaxv" SveShape::Reduce, Signed, smaxv: 1 2 4 8;
+    "maxv" "umaxv" SveShape::Reduce, Unsigned, umaxv: 1 2 4 8;
+    "maxv" "fmaxv" SveShape::Reduce, Float, fmaxv: 4 8;
+    "minv" "sminv" SveShape::Reduce, Signed, sminv: 1 2 4 8;
+    "minv" "uminv" SveShape::Reduce, Unsigned, uminv: 1 2 4 8;
+    "minv" "fminv" SveShape::Reduce, Float, fminv: 4 8;
+    "maxnmv" "fmaxnmv" SveShape::Reduce, Float, fmaxnmv: 4 8;
+    "minnmv" "fminnmv" SveShape::Reduce, Float, fminnmv: 4 8;
+    "andv" "andv" SveShape::Reduce, Signed, sandv: 1 2 4 8;
+    "andv" "andv" SveShape::Reduce, Unsigned, uandv: 1 2 4 8;
+    "orv" "orv" SveShape::Reduce, Signed, sorv: 1 2 4 8;
+    "orv" "orv" SveShape::Reduce, Unsigned, uorv: 1 2 4 8;
+    "eorv" "eorv" SveShape::Reduce, Signed, seorv: 1 2 4 8;
+    "eorv" "eorv" SveShape::Reduce, Unsigned, ueorv: 1 2 4 8;
     "dup" "dup" SveShape::Dup, Int, move_: 1 2 4 8;
     "dup" "dup" SveShape::Dup, Float, move_: 4 8;
 };

@@ -5,9 +5,12 @@
 //! spilled vector reloaded into the FP scratch, and a result bound for a
 //! slot computed in the scratch, or p14.
 
-use super::super::ssa::sve_alloc::{PRED_HOLD, PRED_OPERAND, PRED_STAGE, PredPlace};
+use super::super::ssa::sve_alloc::{
+    PRED_HOLD, PRED_OPERAND, PRED_STAGE, PredPlace, encoded_operand,
+};
 use super::table::{self, Opnd};
 use super::*;
+use crate::c5::aarch64_sve::SveImm;
 use crate::c5::simd::{self, Form, SvePred, SveShape, SveTest};
 
 /// The P registers predicate operands 0, 1 and 2 of a row reload into.
@@ -108,6 +111,13 @@ fn z(num: u8, size: u8) -> Opnd {
     }
 }
 
+fn immediate(i: SveImm) -> Opnd {
+    match i {
+        SveImm::Int(v) => Opnd::Imm(v),
+        SveImm::Fp(code) => Opnd::FpImm(code),
+    }
+}
+
 fn word(code: &mut Vec<u8>, mnem: &str, ops: &[Opnd]) -> Emit {
     match table::encode(mnem, ops) {
         Ok(w) => {
@@ -118,9 +128,11 @@ fn word(code: &mut Vec<u8>, mnem: &str, ops: &[Opnd]) -> Emit {
     }
 }
 
-/// `Inst::SimdVal` of an SVE row, defining `v` in `dst`.
+/// `Inst::SimdVal` of an SVE row, defining `v` in `dst`; an operand a
+/// constant fills, its immediate form's ([`encoded_operand`]).
 pub(super) fn emit_row(
     code: &mut CodeBuf,
+    func: &FunctionSsa,
     (op, imm): (u32, Option<u8>),
     args: &[u32],
     (v, dst): (u32, Place),
@@ -142,12 +154,26 @@ pub(super) fn emit_row(
     };
     let size = row.int_width.trailing_zeros() as u8;
     let pattern = Opnd::SvePattern(imm.unwrap_or(31));
+    let encoded = encoded_operand(func, op, args);
     match form.shape {
-        SveShape::Binary(mode) => binary(code, row, mode, size, args, dst, &o),
+        SveShape::Binary(mode) => match encoded {
+            Some((_, mnem, i)) => {
+                let float = form.elems == simd::SveElems::Float;
+                binary_immediate(code, (mnem, i), (mode, float), size, args, dst, &o)
+            }
+            None => binary(code, row, mode, size, args, dst, &o),
+        },
         SveShape::Unary(mode) => unary(code, row, mode, size, args, dst, &o),
         SveShape::Compare => {
             let pg = o.governing(code, args[0])?;
-            let (a, b) = (o.z(code, args[1], 0)?, o.z(code, args[2], 1)?);
+            let (mnem, x, y) = match encoded {
+                Some((k, mnem, i)) => (mnem, o.z(code, args[3 - k], 0)?, immediate(i)),
+                None => (
+                    row.mnem,
+                    o.z(code, args[1], 0)?,
+                    z(o.z(code, args[2], 1)?, size),
+                ),
+            };
             let pd = o.pred_dst(v)?;
             let pgz = Opnd::PRegQ {
                 num: pg,
@@ -157,7 +183,7 @@ pub(super) fn emit_row(
                 num: pd.0,
                 size: Some(size),
             };
-            word(code, row.mnem, &[p, pgz, z(a, size), z(b, size)])?;
+            word(code, mnem, &[p, pgz, z(x, size), y])?;
             o.pred_done(code, pd);
             Ok(())
         }
@@ -246,7 +272,9 @@ pub(super) fn emit_row(
         }
         SveShape::Dup => {
             let d = o.z_dst(dst)?;
-            if form.elems == simd::SveElems::Float {
+            if let Some((_, mnem, i)) = encoded {
+                word(code, mnem, &[z(d, size), immediate(i)])?;
+            } else if form.elems == simd::SveElems::Float {
                 let Some(s) =
                     materialize_fp(code, place_of(alloc, args[0]), frame.fp_scratch[1], frame)
                 else {
@@ -337,8 +365,19 @@ pub(super) fn emit_row(
             Ok(())
         }
         SveShape::DupLane => {
-            // The index in every lane of the second scratch, then TBL.
             let a = o.z(code, args[0], 0)?;
+            if let Some((_, mnem, SveImm::Int(index))) = encoded {
+                let d = o.z_dst(dst)?;
+                let e = Opnd::ZElem {
+                    num: a,
+                    size,
+                    index: index as u8,
+                };
+                word(code, mnem, &[z(d, size), e])?;
+                o.z_done(code, dst, d);
+                return Ok(());
+            }
+            // The index in every lane of the second scratch, then TBL.
             let x = o.x(code, args[1], scratch.primary)?;
             let t = frame.fp_scratch[1];
             let r = Opnd::Reg {
@@ -466,6 +505,10 @@ pub(super) fn scratch_writes(func: &FunctionSsa, alloc: &Allocation) -> [bool; 2
         let Form::Sve(f) = row.form else {
             continue;
         };
+        // An immediate form takes no scratch.
+        if encoded_operand(func, *op, args).is_some() {
+            continue;
+        }
         match (f.shape, args.as_slice()) {
             (SveShape::Binary(mode), &[_, a, b]) => {
                 let (Some(d), Some(a), Some(b)) = (fp(v as u32), fp(a), fp(b)) else {
@@ -595,6 +638,52 @@ fn binary(
     word(code, mnem, &[z(t, size), pgm, z(t, size), z(y, size)])?;
     if t != d {
         emit(code, super::sve::enc_mov_z(d, t));
+    }
+    o.z_done(code, dst, d);
+    Ok(())
+}
+
+/// A binary row whose second operand is immediate `i` of instruction
+/// `mnem`: an unpredicated shift, the unpredicated destructive integer
+/// form where the inactive lanes may be anything, else the predicated
+/// destructive form on a copy of the first operand, zeroed outside the
+/// predicate by `movprfx` for a `_z` one.
+fn binary_immediate(
+    code: &mut CodeBuf,
+    (mnem, i): (&str, SveImm),
+    (mode, float): (SvePred, bool),
+    size: u8,
+    args: &[u32],
+    dst: Place,
+    o: &Operands,
+) -> Emit {
+    let a = o.z(code, args[1], 0)?;
+    let d = o.z_dst(dst)?;
+    let whole = |num| Opnd::ZReg { num, size: None };
+    let shift = matches!(mnem, "lsl" | "lsr" | "asr");
+    if mode == SvePred::Any && shift {
+        word(code, mnem, &[z(d, size), z(a, size), immediate(i)])?;
+    } else if mode == SvePred::Any && !float {
+        if d != a {
+            word(code, "movprfx", &[whole(d), whole(a)])?;
+        }
+        word(code, mnem, &[z(d, size), z(d, size), immediate(i)])?;
+    } else {
+        let pg = o.governing(code, args[0])?;
+        if mode == SvePred::Zero {
+            let pgz = Opnd::PRegQ {
+                num: pg,
+                merge: false,
+            };
+            word(code, "movprfx", &[z(d, size), pgz, z(a, size)])?;
+        } else if d != a {
+            word(code, "movprfx", &[whole(d), whole(a)])?;
+        }
+        let pgm = Opnd::PRegQ {
+            num: pg,
+            merge: true,
+        };
+        word(code, mnem, &[z(d, size), pgm, z(d, size), immediate(i)])?;
     }
     o.z_done(code, dst, d);
     Ok(())

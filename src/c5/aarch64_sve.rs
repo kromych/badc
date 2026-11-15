@@ -382,6 +382,114 @@ pub(crate) fn get(i: usize) -> &'static SimdOp {
     &OPS[i]
 }
 
+/// The immediate of an SVE instruction: an integer as the assembler writes
+/// it, `#0.0` being the integer zero, or a floating constant's 8-bit code.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum SveImm {
+    Int(i64),
+    Fp(u8),
+}
+
+/// The instruction and immediate with which row `op` takes operand `k`
+/// that holds `lane`, the bits of a lane, in every lane (Arm ARM, the SVE
+/// immediate forms): the unpredicated integer and the predicated floating
+/// arithmetic, the shifts, the compares, DUP, FDUP and DUPM of a scalar,
+/// and DUP (indexed) of a lane index.
+pub(crate) fn immediate(op: u32, k: usize, lane: u64) -> Option<(&'static str, SveImm)> {
+    use super::codegen::aarch64::encode::{encode_logical_imm, fp_imm8};
+    let row = super::simd::get(op);
+    let Form::Sve(f) = row.form else {
+        return None;
+    };
+    let bits = 8 * u32::from(row.int_width);
+    let mask = u64::MAX >> (64 - bits);
+    let lane = lane & mask;
+    let signed = ((lane << (64 - bits)) as i64) >> (64 - bits);
+    let negated = lane.wrapping_neg() & mask;
+    // ADD, SUB and DUP take a byte, shifted left by 8 above byte lanes.
+    let byte = |v: i64, lo: i64| {
+        (lo..=lo + 255).contains(&v)
+            || bits > 8 && v & 0xff == 0 && (lo..=lo + 255).contains(&(v >> 8))
+    };
+    let logical = |v: u64| {
+        let (mut rep, mut w) = (v, bits);
+        while w < 64 {
+            rep |= rep << w;
+            w *= 2;
+        }
+        encode_logical_imm(rep, true).is_some()
+    };
+    let int = |m: &'static str, v: i64| Some((m, SveImm::Int(v)));
+    let in_simm8 = (-128..=127).contains(&signed);
+    match (f.shape, k) {
+        (SveShape::Binary(_), 2) if f.elems == Float => {
+            let pair = match row.mnem {
+                "fadd" | "fsub" => [0.5, 1.0],
+                "fmul" => [0.5, 2.0],
+                "fmax" | "fmin" | "fmaxnm" | "fminnm" => [0.0, 1.0],
+                _ => return None,
+            };
+            let of = |x: f64| match bits {
+                32 => u64::from((x as f32).to_bits()),
+                _ => x.to_bits(),
+            };
+            match pair.into_iter().find(|&x| of(x) == lane)? {
+                0.0 => int(row.mnem, 0),
+                _ => Some((row.mnem, SveImm::Fp(fp_imm8(lane, bits == 32)?))),
+            }
+        }
+        (SveShape::Binary(mode), 2) => match row.mnem {
+            // A count of the lane's width or more shifts every bit out,
+            // which LSR and ASR by the width do; a zero count is LSL #0.
+            "lsl" => (lane < u64::from(bits)).then_some(("lsl", SveImm::Int(lane as i64))),
+            "lsr" | "asr" if lane == 0 => int("lsl", 0),
+            "lsr" | "asr" => int(row.mnem, lane.min(u64::from(bits)) as i64),
+            _ if mode != SvePred::Any => None,
+            "add" | "sub" if byte(lane as i64, 0) => int(row.mnem, lane as i64),
+            "add" if byte(negated as i64, 0) => int("sub", negated as i64),
+            "sub" if byte(negated as i64, 0) => int("add", negated as i64),
+            "mul" | "smin" | "smax" if in_simm8 => int(row.mnem, signed),
+            "umin" | "umax" if lane <= 0xff => int(row.mnem, lane as i64),
+            "and" | "orr" | "eor" if logical(lane) => int(row.mnem, lane as i64),
+            "bic" if logical(!lane & mask) => int("and", (!lane & mask) as i64),
+            _ => None,
+        },
+        (SveShape::Compare, 1 | 2) => {
+            // An immediate stands second: a first operand swaps the relation.
+            let mnem = match (k, row.mnem) {
+                (2, m) | (_, m @ ("cmpeq" | "cmpne" | "fcmeq" | "fcmne")) => m,
+                (_, "cmpgt") => "cmplt",
+                (_, "cmpge") => "cmple",
+                (_, "cmphi") => "cmplo",
+                (_, "cmphs") => "cmpls",
+                (_, "fcmgt") => "fcmlt",
+                (_, "fcmge") => "fcmle",
+                _ => return None,
+            };
+            let imm = match f.elems {
+                // Either zero compares as zero.
+                Float => (lane & (mask >> 1) == 0).then_some(0),
+                Unsigned => (lane <= 127).then_some(lane as i64),
+                _ => (-16..=15).contains(&signed).then_some(signed),
+            };
+            Some((mnem, SveImm::Int(imm?)))
+        }
+        (SveShape::Dup, 0) => match (f.elems == Float)
+            .then(|| fp_imm8(lane, bits == 32))
+            .flatten()
+        {
+            Some(code) => Some(("fdup", SveImm::Fp(code))),
+            None if byte(signed, -128) => int("dup", signed),
+            None => logical(lane).then_some(("dupm", SveImm::Int(lane as i64))),
+        },
+        // DUP (indexed) reaches the lanes of 512 bits.
+        (SveShape::DupLane, 1) => {
+            (lane < 64 / u64::from(row.int_width)).then_some(("dup", SveImm::Int(lane as i64)))
+        }
+        _ => None,
+    }
+}
+
 /// The table index of the first row of builtin `name`, or `None` when it
 /// is not an SVE builtin.
 pub(crate) fn lookup(name: &str) -> Option<u32> {

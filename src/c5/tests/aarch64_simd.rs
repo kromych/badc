@@ -2266,6 +2266,71 @@ fn the_sve_arithmetic_rows_emit_their_instructions() {
     assert_eq!(words("minnm_x"), [0x6585_8020, RET]);
 }
 
+/// A constant operand of an SVE row compiles as scalar C computes at the
+/// edges of the immediates' ranges and past them; the interpreter runs the
+/// fixture at four vector lengths. Under `-O` a constant is its row's
+/// immediate form where one encodes it -- the unpredicated integer and
+/// shift forms of a `_x` row, the predicated shift and floating forms, the
+/// compares, DUP, FDUP and DUPM, and DUP (indexed) of a lane -- and no
+/// general register holds it.
+#[test]
+fn sve_constant_operands_take_the_immediate_forms() {
+    const SRC: &str = include_str!("../../../tests/fixtures/sve/rows_immediate.c");
+    for optimize in [false, true] {
+        let options = crate::CompileOptions::default().with_optimize(optimize);
+        let program =
+            crate::Compiler::with_options(String::from(SRC), crate::Target::LinuxAarch64, options)
+                .compile()
+                .expect("compiles");
+        for bits in [128, 256, 512, 2048] {
+            let vm = super::Vm::new(program.clone()).with_sve_vector_bits(bits);
+            assert_eq!(
+                vm.run().expect("runs"),
+                bits as i64 / 128,
+                "{bits} bits, -O {optimize}"
+            );
+        }
+    }
+    #[cfg(feature = "full")]
+    {
+        const ASM: &str = "#include <arm_sve.h>\n\
+            svint32_t asr_x(svbool_t pg, svint32_t a) { return svasr_n_s32_x(pg, a, 3); }\n\
+            svint32_t asr_z(svbool_t pg, svint32_t a) { return svasr_n_s32_z(pg, a, 3); }\n\
+            svint8_t smin_x(svbool_t pg, svint8_t a) { return svmin_n_s8_x(pg, a, -3); }\n\
+            svint32_t add_m(svbool_t pg, svint32_t a) { return svadd_n_s32_m(pg, a, 3); }\n\
+            svint16_t sub_x(svbool_t pg, svint16_t x, svint16_t a) { return svsub_x(pg, a, -256); }\n\
+            svfloat64_t fmax_m(svbool_t pg, svfloat64_t a) { return svmax_n_f64_m(pg, a, 0.0); }\n\
+            svbool_t cmple(svbool_t pg, svuint8_t a) { return svcmple_n_u8(pg, a, 127); }\n\
+            svint32_t lane(svint32_t a) { return svdup_lane_s32(a, 2); }\n\
+            svfloat32_t one(void) { return svdup_n_f32(1.0f); }\n\
+            svuint64_t bit(void) { return svdup_n_u64(0x100000000); }\n";
+        const RET: u32 = 0xD65F_03C0;
+        let words = |name: &str| super::perf_codegen::a64_at(ASM, name, true);
+        // ASR z0.s, z0.s, #3.
+        assert_eq!(words("asr_x"), [0x047D_9000, RET]);
+        // MOVPRFX z0.s, p0/z, z0.s; ASR z0.s, p0/m, z0.s, #3.
+        assert_eq!(words("asr_z"), [0x0490_2000, 0x0440_83A0, RET]);
+        // SMIN z0.b, z0.b, #-3.
+        assert_eq!(words("smin_x"), [0x252A_DFA0, RET]);
+        // DUP zt.s, #3; ADD z0.s, p0/m, z0.s, zt.s.
+        let w = words("add_m");
+        let t = w[0] & 0x1F;
+        assert_eq!(w, [0x25B8_C060 | t, 0x0480_0000 | t << 5, RET]);
+        // MOVPRFX z0, z1; SUB z0.h, z0.h, #0xff00.
+        assert_eq!(words("sub_x"), [0x0420_BC20, 0x2561_FFE0, RET]);
+        // FMAX z0.d, p0/m, z0.d, #0.0.
+        assert_eq!(words("fmax_m"), [0x65DE_8000, RET]);
+        // CMPLS p0.b, p0/z, z0.b, #127.
+        assert_eq!(words("cmple"), [0x243F_E010, RET]);
+        // DUP z0.s, z0.s[2].
+        assert_eq!(words("lane"), [0x0534_2000, RET]);
+        // FDUP z0.s, #1.0.
+        assert_eq!(words("one"), [0x25B9_CE00, RET]);
+        // DUPM z0.d, #0x100000000.
+        assert_eq!(words("bit"), [0x05C3_0000, RET]);
+    }
+}
+
 /// The logic, select and test intrinsics are their instructions on the
 /// argument registers under `-O`: a bitwise don't-care form the
 /// unpredicated doubleword one, a predicate form its zeroing instruction,

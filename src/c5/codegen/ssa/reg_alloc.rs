@@ -1719,6 +1719,10 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     {
         use_counts[v as usize] = 0;
     }
+    // Likewise a constant the SVE rows reading it take from their encoding.
+    if target.is_aarch64() {
+        super::sve_alloc::drop_encoded_reads(func, &mut use_counts);
+    }
     let reads = operands_read(func, &use_counts);
     let fp_const = fp_constants(func, target, &reads);
     populate_return_hints(func, conv_target, &fp_const, &mut hints);

@@ -204,6 +204,14 @@ pub(crate) enum SveShape {
     Extract,
     /// `v = op(a, b)`, unpredicated, lane by lane.
     Lanewise,
+    /// `v = op(a, b)`: lane `i` the scalar `a + i * b`, wrapping.
+    Index,
+    /// `p = op(a, b)` over predicates: a permutation of their lanes.
+    PredPermute,
+    /// `p = op(a)`: the lanes of a predicate in reverse order.
+    PredReverse,
+    /// `p = op()`: no lane set.
+    PFalse,
     /// `v = op(pg, a, b, c)`: a product of two operands added to or taken
     /// from the third, `a` (`mla`) or, where set, `c` (`mad`); the inactive
     /// lanes as the predication says, `a`'s where they merge.
@@ -255,13 +263,17 @@ impl SveShape {
             | SveShape::Reverse
             | SveShape::Extract
             | SveShape::Lanewise
+            | SveShape::Index
             | SveShape::Ternary(..) => Some(LoadKind::SveVector),
             SveShape::Compare
             | SveShape::PTrue
             | SveShape::While { .. }
             | SveShape::PredSelect
             | SveShape::PredLogic
-            | SveShape::PredNot => Some(LoadKind::SvePredicate),
+            | SveShape::PredNot
+            | SveShape::PredPermute
+            | SveShape::PredReverse
+            | SveShape::PFalse => Some(LoadKind::SvePredicate),
             SveShape::Count | SveShape::Store | SveShape::Reduce | SveShape::Test(_) => None,
         }
     }
@@ -290,7 +302,12 @@ impl SveShape {
     pub(crate) fn on_predicates(self) -> bool {
         matches!(
             self,
-            SveShape::PredSelect | SveShape::PredLogic | SveShape::PredNot | SveShape::Test(_)
+            SveShape::PredSelect
+                | SveShape::PredLogic
+                | SveShape::PredNot
+                | SveShape::Test(_)
+                | SveShape::PredPermute
+                | SveShape::PredReverse
         )
     }
 }
@@ -360,6 +377,7 @@ pub(crate) fn sve_low_word(op: u32, k: usize) -> bool {
             SveShape::While { bits, .. } => bits == 32 && k < 2,
             SveShape::Dup => f.elems != SveElems::Float && row.int_width <= 4,
             SveShape::DupLane => k == 1 && row.int_width <= 4,
+            SveShape::Index => row.int_width <= 4,
             _ => false,
         },
         _ => false,
@@ -1152,7 +1170,9 @@ impl Form {
             Form::MaskLoad => 2,
             Form::VvvI => 4,
             Form::Sve(f) => match f.shape {
-                SveShape::PTrue | SveShape::Count => 0,
+                SveShape::PTrue | SveShape::Count | SveShape::PFalse => 0,
+                SveShape::PredReverse => 1,
+                SveShape::PredPermute | SveShape::Index => 2,
                 SveShape::Dup | SveShape::Reinterpret | SveShape::Reverse => 1,
                 SveShape::DupLane | SveShape::Permute | SveShape::Extract | SveShape::Lanewise => 2,
                 SveShape::Unary(SvePred::Merge) => 3,

@@ -6,7 +6,7 @@
 //! slot computed in the scratch, or p14.
 
 use super::super::ssa::sve_alloc::{
-    PRED_HOLD, PRED_OPERAND, PRED_STAGE, PredPlace, encoded_operand,
+    PRED_HOLD, PRED_OPERAND, PRED_STAGE, PredPlace, encoded_operand, encoded_operands,
 };
 use super::table::{self, Opnd};
 use super::*;
@@ -187,6 +187,58 @@ pub(super) fn emit_row(
                 size: Some(size),
             };
             word(code, mnem, &[p, pgz, z(x, size), y])?;
+            o.pred_done(code, pd);
+            Ok(())
+        }
+        SveShape::Index => {
+            // Each scalar its immediate where one encodes it, else a W or,
+            // for doubleword lanes, an X register.
+            let enc = encoded_operands(func, op, args);
+            let mut ops = alloc::vec![z(o.z_dst(dst)?, size)];
+            for (k, into) in [(0, scratch.primary), (1, scratch.secondary)] {
+                match enc.iter().flatten().find(|e| e.0 == k) {
+                    Some(&(_, _, i)) => ops.push(immediate(i)),
+                    None => {
+                        let x = o.x(code, args[k], into)?;
+                        ops.push(Opnd::Reg {
+                            num: x.0,
+                            is64: size == 3,
+                            sp: false,
+                        });
+                    }
+                }
+            }
+            word(code, "index", &ops)?;
+            o.z_done(code, dst, o.z_dst(dst)?);
+            Ok(())
+        }
+        SveShape::PFalse => {
+            let pd = o.pred_dst(v)?;
+            word(
+                code,
+                "pfalse",
+                &[Opnd::PReg {
+                    num: pd.0,
+                    size: Some(0),
+                }],
+            )?;
+            o.pred_done(code, pd);
+            Ok(())
+        }
+        SveShape::PredPermute | SveShape::PredReverse => {
+            let mut ps = alloc::vec::Vec::new();
+            for (k, &a) in args.iter().enumerate().take(row.form.arity()) {
+                ps.push(o.pred(code, a, k)?);
+            }
+            let pd = o.pred_dst(v)?;
+            let ops: alloc::vec::Vec<Opnd> = core::iter::once(pd.0)
+                .chain(ps)
+                .map(|num| Opnd::PReg {
+                    num,
+                    size: Some(size),
+                })
+                .collect();
+            word(code, row.mnem, &ops)?;
             o.pred_done(code, pd);
             Ok(())
         }

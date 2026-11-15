@@ -488,6 +488,35 @@ pub(crate) const OPS: &[SimdOp] = rows! {
     "ptrue_b16" "ptrue" SveShape::PTrue, Any, move_: 2;
     "ptrue_b32" "ptrue" SveShape::PTrue, Any, move_: 4;
     "ptrue_b64" "ptrue" SveShape::PTrue, Any, move_: 8;
+    "zip1_b8" "zip1" SveShape::PredPermute, Any, zip1: 1;
+    "zip1_b16" "zip1" SveShape::PredPermute, Any, zip1: 2;
+    "zip1_b32" "zip1" SveShape::PredPermute, Any, zip1: 4;
+    "zip1_b64" "zip1" SveShape::PredPermute, Any, zip1: 8;
+    "zip2_b8" "zip2" SveShape::PredPermute, Any, zip2: 1;
+    "zip2_b16" "zip2" SveShape::PredPermute, Any, zip2: 2;
+    "zip2_b32" "zip2" SveShape::PredPermute, Any, zip2: 4;
+    "zip2_b64" "zip2" SveShape::PredPermute, Any, zip2: 8;
+    "uzp1_b8" "uzp1" SveShape::PredPermute, Any, uzp1: 1;
+    "uzp1_b16" "uzp1" SveShape::PredPermute, Any, uzp1: 2;
+    "uzp1_b32" "uzp1" SveShape::PredPermute, Any, uzp1: 4;
+    "uzp1_b64" "uzp1" SveShape::PredPermute, Any, uzp1: 8;
+    "uzp2_b8" "uzp2" SveShape::PredPermute, Any, uzp2: 1;
+    "uzp2_b16" "uzp2" SveShape::PredPermute, Any, uzp2: 2;
+    "uzp2_b32" "uzp2" SveShape::PredPermute, Any, uzp2: 4;
+    "uzp2_b64" "uzp2" SveShape::PredPermute, Any, uzp2: 8;
+    "trn1_b8" "trn1" SveShape::PredPermute, Any, trn1: 1;
+    "trn1_b16" "trn1" SveShape::PredPermute, Any, trn1: 2;
+    "trn1_b32" "trn1" SveShape::PredPermute, Any, trn1: 4;
+    "trn1_b64" "trn1" SveShape::PredPermute, Any, trn1: 8;
+    "trn2_b8" "trn2" SveShape::PredPermute, Any, trn2: 1;
+    "trn2_b16" "trn2" SveShape::PredPermute, Any, trn2: 2;
+    "trn2_b32" "trn2" SveShape::PredPermute, Any, trn2: 4;
+    "trn2_b64" "trn2" SveShape::PredPermute, Any, trn2: 8;
+    "rev_b8" "rev" SveShape::PredReverse, Any, rev: 1;
+    "rev_b16" "rev" SveShape::PredReverse, Any, rev: 2;
+    "rev_b32" "rev" SveShape::PredReverse, Any, rev: 4;
+    "rev_b64" "rev" SveShape::PredReverse, Any, rev: 8;
+    "pfalse" "pfalse" SveShape::PFalse, Any, move_: 1;
     "cntb" "cntb" SveShape::Count, Any, move_: 1;
     "cnth" "cnth" SveShape::Count, Any, move_: 2;
     "cntw" "cntw" SveShape::Count, Any, move_: 4;
@@ -535,6 +564,7 @@ pub(crate) const OPS: &[SimdOp] = rows! {
     "eorv" "eorv" SveShape::Reduce, Signed, seorv: 1 2 4 8;
     "eorv" "eorv" SveShape::Reduce, Unsigned, ueorv: 1 2 4 8;
     "dup" "dup" SveShape::Dup, Int, move_: 1 2 4 8;
+    "index" "index" SveShape::Index, Int, move_: 1 2 4 8;
     "dup" "dup" SveShape::Dup, Float, move_: 4 8;
     "dup_lane" "tbl" SveShape::DupLane, Any, Sem::Tbl: 1 2 4 8;
     "reinterpret" "mov" SveShape::Reinterpret, Any, move_: 1 2 4 8;
@@ -661,6 +691,9 @@ pub(crate) fn immediate(op: u32, k: usize, lane: u64) -> Option<(&'static str, S
             None if byte(signed, -128) => int("dup", signed),
             None => logical(lane).then_some(("dupm", SveImm::Int(lane as i64))),
         },
+        (SveShape::Index, 0 | 1) => (-16..=15)
+            .contains(&signed)
+            .then_some(("index", SveImm::Int(signed))),
         // DUP (indexed) reaches the lanes of 512 bits.
         (SveShape::DupLane, 1) => {
             (lane < 64 / u64::from(row.int_width)).then_some(("dup", SveImm::Int(lane as i64)))

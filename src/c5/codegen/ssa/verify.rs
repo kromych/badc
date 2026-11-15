@@ -289,11 +289,17 @@ fn sve_row_operands(op: u32) -> alloc::vec::Vec<Option<LoadKind>> {
             SveShape::Reinterpret | SveShape::Reverse => alloc::vec![z],
             SveShape::DupLane => alloc::vec![z, None],
             SveShape::PredSelect | SveShape::PredLogic => alloc::vec![p, p, p],
-            SveShape::PredNot | SveShape::Test(_) => alloc::vec![p, p],
+            SveShape::PredNot | SveShape::Test(_) | SveShape::PredPermute => alloc::vec![p, p],
+            SveShape::PredReverse => alloc::vec![p],
+            SveShape::PFalse => alloc::vec::Vec::new(),
             SveShape::Reduce => alloc::vec![p, z],
             SveShape::Load => alloc::vec![p, None],
             SveShape::Store => alloc::vec![p, None, z],
-            SveShape::Dup | SveShape::While { .. } | SveShape::PTrue | SveShape::Count => {
+            SveShape::Dup
+            | SveShape::Index
+            | SveShape::While { .. }
+            | SveShape::PTrue
+            | SveShape::Count => {
                 alloc::vec![None, None]
             }
         },

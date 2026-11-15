@@ -522,7 +522,13 @@ impl Compiler {
         let mut shape = form.shape;
         let typed = !matches!(
             shape,
-            SveShape::PTrue | SveShape::Count | SveShape::While { .. } | SveShape::Test(_)
+            SveShape::PTrue
+                | SveShape::Count
+                | SveShape::While { .. }
+                | SveShape::Test(_)
+                | SveShape::PredPermute
+                | SveShape::PredReverse
+                | SveShape::PFalse
         );
         let mut vty: Option<i64> = None;
         let mut deferred = false;
@@ -657,7 +663,7 @@ impl Compiler {
                     let t = vty.ok_or_else(|| self.compile_err(Code::SYNTAX, "type expected"))?;
                     let t = self.sve_operand_ty(first, i, t);
                     self.expr_or_void(Token::Assign as i64)?;
-                    if shape == SveShape::Dup {
+                    if matches!(shape, SveShape::Dup | SveShape::Index) {
                         self.sve_scalar(t, &what)?
                     } else {
                         self.sve_vector_arg(t, &what)?
@@ -719,7 +725,7 @@ impl Compiler {
                     s == SveShape::While { signed, bits }
                 })
             }
-            (SveShape::PTrue | SveShape::Count, _) => Some(first),
+            (SveShape::PTrue | SveShape::Count | SveShape::PFalse, _) => Some(first),
             _ if shape.on_predicates() => Some(first),
             (_, Some((size, kind))) => simd::select_sve(name, 1 << size, kind, |s| s == shape),
             _ => None,
@@ -760,9 +766,13 @@ impl Compiler {
             | SveShape::Reverse
             | SveShape::Extract
             | SveShape::Lanewise
+            | SveShape::Index
             | SveShape::Ternary(..) => vty.unwrap_or(pred),
             SveShape::Compare
             | SveShape::PTrue
+            | SveShape::PFalse
+            | SveShape::PredPermute
+            | SveShape::PredReverse
             | SveShape::While { .. }
             | SveShape::PredSelect
             | SveShape::PredLogic

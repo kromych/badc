@@ -5302,6 +5302,33 @@ fn run_sve_row(
             });
             frame.sregs.insert(v, p);
         }
+        SveShape::Index => {
+            let (a, b) = (frame.regs[args[0] as usize], frame.regs[args[1] as usize]);
+            let lanes_of = (0..lanes as i64).flat_map(|i| {
+                let x = a.wrapping_add(i.wrapping_mul(b)) as u64;
+                x.to_le_bytes().into_iter().take(w)
+            });
+            frame.sregs.insert(v, lanes_of.collect());
+        }
+        SveShape::PFalse => {
+            frame.sregs.insert(v, alloc::vec![0u8; n / 8]);
+        }
+        SveShape::PredPermute | SveShape::PredReverse => {
+            // A bit per byte, each lane its `w` bits, permuted as vector
+            // lanes are, then packed.
+            let bits = |p: &[u8]| -> Vec<u8> { (0..n).map(|i| p[i / 8] >> (i % 8) & 1).collect() };
+            let a = bits(sve_bytes(frame, args[0])?);
+            let b = match args.get(1) {
+                Some(&b) => bits(sve_bytes(frame, b)?),
+                None => Vec::new(),
+            };
+            let r = sve_permute(row.sem, w, None, &a, &b);
+            let mut p = alloc::vec![0u8; n / 8];
+            for (i, &x) in r.iter().enumerate() {
+                p[i / 8] |= x << (i % 8);
+            }
+            frame.sregs.insert(v, p);
+        }
         SveShape::PTrue => {
             let count = sve_pattern_count(pattern, lanes);
             frame.sregs.insert(v, sve_pred(n / 8, w, |i| i < count));

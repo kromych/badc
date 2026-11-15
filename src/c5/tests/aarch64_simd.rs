@@ -2418,6 +2418,85 @@ fn sve_bit_counts_and_conversions_change_the_element_type() {
     }
 }
 
+/// svzip1 to svrev over predicates move whole lanes of 1 to 8 bits, every
+/// bit of a lane, and svpfalse sets none, as scalar C computes over the
+/// bits; the interpreter runs the fixture at four vector lengths. Under
+/// `-O` each is its P-register instruction.
+#[test]
+fn sve_predicate_permutes_move_whole_lanes() {
+    const SRC: &str = include_str!("../../../tests/fixtures/sve/rows_predicate_permute.c");
+    for optimize in [false, true] {
+        let options = crate::CompileOptions::default().with_optimize(optimize);
+        let program =
+            crate::Compiler::with_options(String::from(SRC), crate::Target::LinuxAarch64, options)
+                .compile()
+                .expect("compiles");
+        for bits in [128, 256, 512, 2048] {
+            let vm = super::Vm::new(program.clone()).with_sve_vector_bits(bits);
+            assert_eq!(
+                vm.run().expect("runs"),
+                bits as i64 / 128,
+                "{bits} bits, -O {optimize}"
+            );
+        }
+    }
+    #[cfg(feature = "full")]
+    {
+        const ASM: &str = "#include <arm_sve.h>\n\
+            svbool_t z1(svbool_t a, svbool_t b) { return svzip1_b16(a, b); }\n\
+            svbool_t u2(svbool_t b, svbool_t a) { return svuzp2_b64(a, b); }\n\
+            svbool_t r(svbool_t a) { return svrev_b32(a); }\n\
+            svbool_t f(void) { return svpfalse_b(); }\n";
+        const RET: u32 = 0xD65F_03C0;
+        let words = |name: &str| super::perf_codegen::a64_at(ASM, name, true);
+        // ZIP1 p0.h, p0.h, p1.h.
+        assert_eq!(words("z1"), [0x0561_4000, RET]);
+        // UZP2 p0.d, p1.d, p0.d.
+        assert_eq!(words("u2"), [0x05E0_4C20, RET]);
+        // REV p0.s, p0.s.
+        assert_eq!(words("r"), [0x05B4_4000, RET]);
+        // PFALSE p0.b.
+        assert_eq!(words("f"), [0x2518_E400, RET]);
+    }
+}
+
+/// svindex gives lane `i` as base + i * step, wrapping in the lane's width,
+/// over every integer type; the interpreter runs the fixture at four
+/// vector lengths. Under `-O` it is INDEX, a base or a step from -16 to
+/// 15 its immediate and another a W or, for doubleword lanes, an X
+/// register.
+#[test]
+fn sve_index_counts_from_its_base_by_its_step() {
+    const SRC: &str = include_str!("../../../tests/fixtures/sve/rows_index.c");
+    for optimize in [false, true] {
+        let options = crate::CompileOptions::default().with_optimize(optimize);
+        let program =
+            crate::Compiler::with_options(String::from(SRC), crate::Target::LinuxAarch64, options)
+                .compile()
+                .expect("compiles");
+        for bits in [128, 256, 512, 2048] {
+            let vm = super::Vm::new(program.clone()).with_sve_vector_bits(bits);
+            assert_eq!(
+                vm.run().expect("runs"),
+                bits as i64 / 128,
+                "{bits} bits, -O {optimize}"
+            );
+        }
+    }
+    #[cfg(feature = "full")]
+    {
+        const ASM: &str = "#include <arm_sve.h>\n\
+            svint32_t i0(void) { return svindex_s32(0, 1); }\n\
+            svint64_t i1(int64_t b) { return svindex_s64(b, -3); }\n";
+        const RET: u32 = 0xD65F_03C0;
+        let words = |name: &str| super::perf_codegen::a64_at(ASM, name, true);
+        // INDEX z0.s, #0, #1.
+        assert_eq!(words("i0"), [0x04A1_4000, RET]);
+        // INDEX z0.d, x0, #-3.
+        assert_eq!(words("i1"), [0x04FD_4400, RET]);
+    }
+}
+
 /// A constant operand of an SVE row compiles as scalar C computes at the
 /// edges of the immediates' ranges and past them; the interpreter runs the
 /// fixture at four vector lengths. Under `-O` a constant is its row's

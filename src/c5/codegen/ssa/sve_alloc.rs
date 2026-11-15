@@ -64,20 +64,30 @@ pub(crate) fn reaches_other_pcs(func: &FunctionSsa, target: crate::c5::Target) -
     })
 }
 
-/// The operand SVE row `op` over `args` takes from its encoding, with the
+/// An operand an SVE row takes from its encoding: its index, the
+/// instruction, and the immediate.
+pub(crate) type Encoded = (usize, &'static str, crate::c5::aarch64_sve::SveImm);
+
+/// The first of [`encoded_operands`].
+pub(crate) fn encoded_operand(func: &FunctionSsa, op: u32, args: &[ValueId]) -> Option<Encoded> {
+    encoded_operands(func, op, args)[0]
+}
+
+/// The operands SVE row `op` over `args` takes from its encoding, with the
 /// instruction and the immediate ([`crate::c5::aarch64_sve::immediate`]):
 /// one a constant fills every lane of -- a `dup` of an `Imm` of the row's
-/// lane width -- or the `Imm` a scalar or a lane index is.
-pub(crate) fn encoded_operand(
+/// lane width -- or the `Imm` a scalar or a lane index is. An index takes
+/// both its scalars so, another row one operand at most.
+pub(crate) fn encoded_operands(
     func: &FunctionSsa,
     op: u32,
     args: &[ValueId],
-) -> Option<(usize, &'static str, crate::c5::aarch64_sve::SveImm)> {
+) -> [Option<Encoded>; 2] {
     use crate::c5::ir::Inst;
     use crate::c5::simd::{self, Form, SveShape};
     let row = simd::get(op);
     let Form::Sve(f) = row.form else {
-        return None;
+        return [None; 2];
     };
     let constant = |v: ValueId| match func.insts.get(v as usize) {
         Some(&Inst::Imm(c)) => Some(c as u64),
@@ -98,12 +108,17 @@ pub(crate) fn encoded_operand(
         SveShape::Compare => (&[2, 1], &splat),
         SveShape::Dup => (&[0], &constant),
         SveShape::DupLane => (&[1], &constant),
-        _ => return None,
+        SveShape::Index => (&[0, 1], &constant),
+        _ => return [None; 2],
     };
-    operands.iter().find_map(|&k| {
+    let mut found = operands.iter().filter_map(|&k| {
         let (mnem, imm) = crate::c5::aarch64_sve::immediate(op, k, lane(*args.get(k)?)?)?;
         Some((k, mnem, imm))
-    })
+    });
+    match f.shape {
+        SveShape::Index => [found.next(), found.next()],
+        _ => [found.next(), None],
+    }
 }
 
 /// Drop from `use_counts` the reads SVE rows take from their encoding
@@ -114,14 +129,16 @@ pub(crate) fn drop_encoded_reads(func: &FunctionSsa, use_counts: &mut [u32]) {
     let n = func.insts.len();
     let encoded = |v: usize| match &func.insts[v] {
         Inst::SimdVal { op, args, .. } if crate::c5::simd::sve_row(*op) => {
-            encoded_operand(func, *op, args).map(|(k, ..)| k)
+            encoded_operands(func, *op, args).map(|e| e.map(|(k, ..)| k))
         }
-        _ => None,
+        _ => [None; 2],
     };
     let mut imm = alloc::vec![0u32; n];
     for v in (0..n).filter(|&v| use_counts[v] > 0) {
-        if let (Some(k), Inst::SimdVal { args, .. }) = (encoded(v), &func.insts[v]) {
-            imm[args[k] as usize] += 1;
+        if let Inst::SimdVal { args, .. } = &func.insts[v] {
+            for k in encoded(v).into_iter().flatten() {
+                imm[args[k] as usize] += 1;
+            }
         }
     }
     let mut work: Vec<usize> = (0..n)
@@ -141,7 +158,7 @@ pub(crate) fn drop_encoded_reads(func: &FunctionSsa, use_counts: &mut [u32]) {
                 continue;
             }
             use_counts[o] = use_counts[o].saturating_sub(1);
-            if taken == Some(k) {
+            if taken.contains(&Some(k)) {
                 imm[o] -= 1;
             }
             if func.insts[o].is_pure() && use_counts[o] == imm[o] {

@@ -23,9 +23,10 @@
  * width (_m, _z, _x), svsel, svcmpeq, svcmpne,
  * svcmpgt, svcmpge, svcmplt, svcmple (and _n), the reductions svaddv,
  * svmaxv, svminv, svmaxnmv, svminnmv, svandv, svorv and sveorv, svdup_n,
- * svdup_lane, svreinterpret, the permutes svzip1, svzip2, svuzp1, svuzp2,
+ * svindex, svdup_lane, svreinterpret, the permutes svzip1, svzip2, svuzp1, svuzp2,
  * svtrn1, svtrn2, svrev and svext, and svptest_any/first/last, over the 8-
- * to 64-bit integer and the 32- and 64-bit floating element types. */
+ * to 64-bit integer and the 32- and 64-bit floating element types; and
+ * over predicates svpfalse and the permutes svzip1_b8 to svrev_b64. */
 #ifndef BADC_ARM_SVE_H
 #define BADC_ARM_SVE_H
 
@@ -1997,5 +1998,47 @@ enum svpattern {
 #define svcvt_u64_z(pg, op) __builtin_sve_cvt_u64_z(void, pg, op)
 #define svcvt_u64_f64_x(pg, op) __builtin_sve_cvt_u64_x(svfloat64_t, pg, op)
 #define svcvt_u64_x(pg, op) __builtin_sve_cvt_u64_x(void, pg, op)
+
+#define svzip1_b8(op1, op2) __builtin_sve_zip1_b8(op1, op2)
+#define svzip1_b16(op1, op2) __builtin_sve_zip1_b16(op1, op2)
+#define svzip1_b32(op1, op2) __builtin_sve_zip1_b32(op1, op2)
+#define svzip1_b64(op1, op2) __builtin_sve_zip1_b64(op1, op2)
+#define svzip2_b8(op1, op2) __builtin_sve_zip2_b8(op1, op2)
+#define svzip2_b16(op1, op2) __builtin_sve_zip2_b16(op1, op2)
+#define svzip2_b32(op1, op2) __builtin_sve_zip2_b32(op1, op2)
+#define svzip2_b64(op1, op2) __builtin_sve_zip2_b64(op1, op2)
+#define svuzp1_b8(op1, op2) __builtin_sve_uzp1_b8(op1, op2)
+#define svuzp1_b16(op1, op2) __builtin_sve_uzp1_b16(op1, op2)
+#define svuzp1_b32(op1, op2) __builtin_sve_uzp1_b32(op1, op2)
+#define svuzp1_b64(op1, op2) __builtin_sve_uzp1_b64(op1, op2)
+#define svuzp2_b8(op1, op2) __builtin_sve_uzp2_b8(op1, op2)
+#define svuzp2_b16(op1, op2) __builtin_sve_uzp2_b16(op1, op2)
+#define svuzp2_b32(op1, op2) __builtin_sve_uzp2_b32(op1, op2)
+#define svuzp2_b64(op1, op2) __builtin_sve_uzp2_b64(op1, op2)
+#define svtrn1_b8(op1, op2) __builtin_sve_trn1_b8(op1, op2)
+#define svtrn1_b16(op1, op2) __builtin_sve_trn1_b16(op1, op2)
+#define svtrn1_b32(op1, op2) __builtin_sve_trn1_b32(op1, op2)
+#define svtrn1_b64(op1, op2) __builtin_sve_trn1_b64(op1, op2)
+#define svtrn2_b8(op1, op2) __builtin_sve_trn2_b8(op1, op2)
+#define svtrn2_b16(op1, op2) __builtin_sve_trn2_b16(op1, op2)
+#define svtrn2_b32(op1, op2) __builtin_sve_trn2_b32(op1, op2)
+#define svtrn2_b64(op1, op2) __builtin_sve_trn2_b64(op1, op2)
+
+#define svrev_b8(op) __builtin_sve_rev_b8(op)
+#define svrev_b16(op) __builtin_sve_rev_b16(op)
+#define svrev_b32(op) __builtin_sve_rev_b32(op)
+#define svrev_b64(op) __builtin_sve_rev_b64(op)
+
+#define svpfalse_b() __builtin_sve_pfalse()
+#define svpfalse() __builtin_sve_pfalse()
+
+#define svindex_s8(base, step) __builtin_sve_index(svint8_t, (int8_t)(base), (int8_t)(step))
+#define svindex_s16(base, step) __builtin_sve_index(svint16_t, (int16_t)(base), (int16_t)(step))
+#define svindex_s32(base, step) __builtin_sve_index(svint32_t, (int32_t)(base), (int32_t)(step))
+#define svindex_s64(base, step) __builtin_sve_index(svint64_t, (int64_t)(base), (int64_t)(step))
+#define svindex_u8(base, step) __builtin_sve_index(svuint8_t, (uint8_t)(base), (uint8_t)(step))
+#define svindex_u16(base, step) __builtin_sve_index(svuint16_t, (uint16_t)(base), (uint16_t)(step))
+#define svindex_u32(base, step) __builtin_sve_index(svuint32_t, (uint32_t)(base), (uint32_t)(step))
+#define svindex_u64(base, step) __builtin_sve_index(svuint64_t, (uint64_t)(base), (uint64_t)(step))
 
 #endif

@@ -338,6 +338,39 @@ pub(super) fn reloads_second_predicate(func: &FunctionSsa, alloc: &Allocation) -
     })
 }
 
+/// The FP scratch registers the rows of `func` write while every vector is
+/// in a register: a destructive form's scratch ([`destructive`]) and an
+/// integer sum's D register.
+pub(super) fn scratch_writes(func: &FunctionSsa, alloc: &Allocation) -> [bool; 2] {
+    let fp = |v: u32| match place_of(alloc, v) {
+        Place::FpReg(r) => Some(r),
+        _ => None,
+    };
+    let mut w = [false; 2];
+    for (v, inst) in func.insts.iter().enumerate() {
+        let Inst::SimdVal { op, args, .. } = inst else {
+            continue;
+        };
+        let row = simd::get(*op);
+        let Form::Sve(f) = row.form else {
+            continue;
+        };
+        match (f.shape, args.as_slice()) {
+            (SveShape::Binary(mode), &[_, a, b]) => {
+                let (Some(d), Some(a), Some(b)) = (fp(v as u32), fp(a), fp(b)) else {
+                    continue;
+                };
+                let size = row.int_width.trailing_zeros() as u8;
+                let plain = mode == SvePred::Any && unpredicated(row.mnem, size).is_some();
+                w[0] |= !plain && destructive(row, mode, (d, a, b)) == Destructive::Scratch;
+            }
+            (SveShape::Reduce, _) => w[1] |= f.elems != simd::SveElems::Float,
+            _ => {}
+        }
+    }
+    w
+}
+
 /// The lane size of the row's unpredicated form, where SVE has one: a
 /// bitwise operation's is the doubleword.
 fn unpredicated(mnem: &str, size: u8) -> Option<u8> {

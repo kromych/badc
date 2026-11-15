@@ -2145,3 +2145,56 @@ fn a_destructive_sve_row_into_its_second_operand_swaps_reverses_or_takes_a_scrat
         [0x0490_0000 | t, 0x0460_3000 | t << 16 | t << 5, RET]
     );
 }
+
+/// An SVE-PCS leaf moves the FP scratch its rows write into z24-z31 where
+/// a register there is free, and saves of z16 and z17, the scratch it
+/// falls back to, the one a row writes alone: the integer sum's D register.
+#[cfg(feature = "full")]
+#[test]
+fn an_sve_pcs_leaf_saves_the_scratch_its_rows_write_alone() {
+    // `n` sums live at once; the result their sum, or its svaddv.
+    let src = |n: usize, sum: bool| {
+        let mut s = String::from("#include <arm_sve.h>\n");
+        s += if sum { "int64_t" } else { "svint32_t" };
+        s += " f(svbool_t pg, svint32_t a, svint32_t b) {\n";
+        for k in 0..n {
+            s += &alloc::format!(
+                "svint32_t t{k} = svmul_x(pg, a, svadd_x(pg, b, svdup_n_s32({k})));\n"
+            );
+        }
+        let mut acc = String::from("t0");
+        for k in 1..n {
+            acc = alloc::format!("svadd_x(pg, {acc}, t{k})");
+        }
+        if sum {
+            acc = alloc::format!("svaddv(pg, {acc})");
+        }
+        s + &alloc::format!("return {acc}; }}\n")
+    };
+    // STR zt, [xn, #imm, mul vl] of z16-z18; SADDV dd, p0, z0.s.
+    let saved = |w: &[u32]| -> Vec<u32> {
+        let str_z = w.iter().filter(|&&x| x & 0xFFC0_E000 == 0xE580_4000);
+        str_z
+            .map(|x| x & 0x1F)
+            .filter(|r| (16..19).contains(r))
+            .collect()
+    };
+    let sum = |w: &[u32]| {
+        w.iter()
+            .find(|&&x| x & 0xFFFF_FFE0 == 0x0480_2000)
+            .map(|x| x & 0x1F)
+    };
+    let w = super::perf_codegen::a64_at(&src(21, false), "f", true);
+    for r in 24..32 {
+        let held = w.iter().any(|&x| x >> 24 == 0x04 && x & 0x1F == r);
+        assert!(held, "z{r} holds no value: {w:08x?}");
+    }
+    assert_eq!(saved(&w), [], "{w:08x?}");
+    let w = super::perf_codegen::a64_at(&src(21, true), "f", true);
+    let d = sum(&w).expect("saddv");
+    assert_eq!(saved(&w), [d], "{w:08x?}");
+    // One register of z24-z31 free: the sum's scratch takes it.
+    let w = super::perf_codegen::a64_at(&src(18, true), "f", true);
+    assert!((24..32).contains(&sum(&w).expect("saddv")), "{w:08x?}");
+    assert_eq!(saved(&w), [], "{w:08x?}");
+}

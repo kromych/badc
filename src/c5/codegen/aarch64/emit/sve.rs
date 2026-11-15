@@ -259,8 +259,9 @@ impl SveFrame {
 
 /// `alloc` for SVE-PCS `func`: without the base standard's saves of
 /// d8-d15, as the function saves z8-z15 whole; and, where it reaches no
-/// code of another standard, with the FP scratch in z24-z31, which the SVE
-/// PCS leaves volatile, as far as no value holds them.
+/// code of another standard, with each FP scratch register, those the body
+/// writes first, moved to a register of z24-z31 no value holds, which the
+/// SVE PCS leaves volatile.
 pub(super) fn sve_pcs_allocation(
     func: &FunctionSsa,
     alloc: &Allocation,
@@ -277,14 +278,14 @@ pub(super) fn sve_pcs_allocation(
         Place::FpReg(r) => m | 1 << r,
         _ => m,
     });
-    let mut free = (24..32u8).filter(|&r| held >> r & 1 == 0 && !fixed.has_fpr(r));
-    let wanted = a.fp_scratch.iter().filter(|&&r| r != NO_FP_SCRATCH).count();
-    let picks: Vec<u8> = free.by_ref().take(wanted).collect();
-    if picks.len() == wanted {
-        let slots = a.fp_scratch.iter_mut().filter(|r| **r != NO_FP_SCRATCH);
-        for (slot, r) in slots.zip(picks) {
-            *slot = r;
-        }
+    let free = (24..32u8).filter(|&r| held >> r & 1 == 0 && !fixed.has_fpr(r));
+    let writes = scratch_writes(func, &a, target).0;
+    let mut order: Vec<usize> = (0..a.fp_scratch.len())
+        .filter(|&k| a.fp_scratch[k] != NO_FP_SCRATCH)
+        .collect();
+    order.sort_by_key(|&k| !writes[k]);
+    for (k, r) in order.into_iter().zip(free) {
+        a.fp_scratch[k] = r;
     }
     a
 }
@@ -365,8 +366,9 @@ fn preserved(
 /// The FP scratch registers the emitter may write in `func`, and whether a
 /// parallel move of vectors, or of predicates, has a cycle, which a hold
 /// register breaks. A body of SVE values alone writes the FP scratch only
-/// to stage a spilled vector, break such a cycle or compute an SVE row; any
-/// other FP work takes
+/// to stage a spilled vector, break such a cycle or where an SVE row needs
+/// it ([`scratch_writes`](super::sve_rows::scratch_writes)); any other FP
+/// work takes
 /// [`fp_scratch_demand`](super::ssa::reg_alloc::fp_scratch_demand).
 fn scratch_writes(
     func: &FunctionSsa,
@@ -465,10 +467,9 @@ fn scratch_writes(
             (z, p),
         );
     }
-    let rows = (func.insts.iter())
-        .any(|i| matches!(i, Inst::SimdVal { op, .. } if crate::c5::simd::sve_row(*op)));
-    let staged = alloc.sve.z_slots > 0 || z || rows;
-    ([staged, staged, false], (z, p))
+    let rows = super::sve_rows::scratch_writes(func, alloc);
+    let staged = alloc.sve.z_slots > 0 || z;
+    ([staged || rows[0], staged || rows[1], false], (z, p))
 }
 
 /// Whether the register moves `(source, target)` form a cycle.

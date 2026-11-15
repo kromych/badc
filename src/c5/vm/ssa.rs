@@ -5118,10 +5118,32 @@ fn sve_pattern_count(pattern: u8, lanes: usize) -> usize {
 }
 
 /// [`simd::eval`] or its floating form over the run's vector length, 16
-/// bytes at a time.
-fn sve_lanewise(mem: &mut Memory, sem: crate::c5::simd::Sem, a: &[u8], b: &[u8]) -> Vec<u8> {
+/// bytes at a time. A floating operation computes the `w`-byte lanes
+/// `active` names alone, one at a time, so an inactive lane raises no
+/// exception, as none does under a predicated instruction; the others are
+/// zero.
+fn sve_lanewise(
+    mem: &mut Memory,
+    (sem, w): (crate::c5::simd::Sem, usize),
+    a: &[u8],
+    b: &[u8],
+    active: impl Fn(usize) -> bool,
+) -> Vec<u8> {
     use crate::c5::simd;
     let mut out = alloc::vec![0u8; a.len()];
+    if simd::floating(sem) {
+        let lane = |v: &[u8], i: usize| {
+            let mut x = [0u8; 16];
+            x[..w].copy_from_slice(&v[i * w..i * w + w]);
+            x
+        };
+        for i in (0..a.len() / w).filter(|&i| active(i)) {
+            if let Some(r) = simd::eval_float_in(&mut mem.fp, sem, &lane(a, i), &lane(b, i), 0, w) {
+                out[i * w..i * w + w].copy_from_slice(&r[..w]);
+            }
+        }
+        return out;
+    }
     for k in (0..a.len()).step_by(16) {
         let x: [u8; 16] = a[k..k + 16].try_into().unwrap_or([0; 16]);
         let y: [u8; 16] = b[k..k + 16].try_into().unwrap_or([0; 16]);
@@ -5254,7 +5276,11 @@ fn run_sve_row(
                 SveShape::Binary(_) => (a.clone(), sve_bytes(frame, args[2])?.to_vec()),
                 _ => (sve_bytes(frame, args[last])?.to_vec(), Vec::new()),
             };
-            let r = sve_lanewise(mem, row.sem, &x, if y.is_empty() { &x } else { &y });
+            // A don't-care form may compute every lane, as an unpredicated
+            // instruction does.
+            let active = |i: usize| mode == SvePred::Any || sve_active(&pg, w, i);
+            let y = if y.is_empty() { &x } else { &y };
+            let r = sve_lanewise(mem, (row.sem, w), &x, y, active);
             let mut out = r.clone();
             for i in (0..lanes).filter(|&i| !sve_active(&pg, w, i)) {
                 let keep = match mode {
@@ -5270,7 +5296,7 @@ fn run_sve_row(
             let pg = sve_bytes(frame, args[0])?.to_vec();
             let a = sve_bytes(frame, args[1])?.to_vec();
             let b = sve_bytes(frame, args[2])?.to_vec();
-            let r = sve_lanewise(mem, row.sem, &a, &b);
+            let r = sve_lanewise(mem, (row.sem, w), &a, &b, |i| sve_active(&pg, w, i));
             let p = sve_pred(n / 8, w, |i| {
                 sve_active(&pg, w, i) && sve_lane(&r, w, i) != 0
             });

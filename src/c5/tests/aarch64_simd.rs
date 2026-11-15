@@ -2175,6 +2175,31 @@ fn the_sve_permutes_move_lanes_across_the_vector() {
     }
 }
 
+/// A floating SVE row raises the exceptions of its active lanes alone, as
+/// a predicated instruction does: the interpreter computes those lanes one
+/// at a time, so a zero divisor or a NaN compared in an inactive lane of
+/// svdiv_m, svdiv_z or svcmpgt sets no flag, where one in an active lane
+/// does; at four vector lengths.
+#[test]
+fn an_inactive_sve_lane_raises_no_floating_exception() {
+    const SRC: &str = include_str!("../../../tests/fixtures/sve/rows_fenv.c");
+    for optimize in [false, true] {
+        let options = crate::CompileOptions::default().with_optimize(optimize);
+        let program =
+            crate::Compiler::with_options(String::from(SRC), crate::Target::LinuxAarch64, options)
+                .compile()
+                .expect("compiles");
+        for bits in [128, 256, 512, 2048] {
+            let vm = super::Vm::new(program.clone()).with_sve_vector_bits(bits);
+            assert_eq!(
+                vm.run().expect("runs"),
+                bits as i64 / 128,
+                "{bits} bits, -O {optimize}"
+            );
+        }
+    }
+}
+
 /// A unary row is its instruction on the argument registers under `-O`:
 /// the don't-care form in place, the merging form on a `movprfx` copy of
 /// the inactive operand, the zeroing form on a zeroing `movprfx` of the

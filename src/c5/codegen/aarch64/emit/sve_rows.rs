@@ -143,7 +143,7 @@ pub(super) fn emit_row(
     let size = row.int_width.trailing_zeros() as u8;
     let pattern = Opnd::SvePattern(imm.unwrap_or(31));
     match form.shape {
-        SveShape::Binary(mode) => binary(code, row.mnem, mode, size, args, dst, &o),
+        SveShape::Binary(mode) => binary(code, row, mode, size, args, dst, &o),
         SveShape::Compare => {
             let pg = o.governing(code, args[0])?;
             let (a, b) = (o.z(code, args[1], 0)?, o.z(code, args[2], 1)?);
@@ -348,13 +348,52 @@ fn unpredicated(mnem: &str, size: u8) -> Option<u8> {
     }
 }
 
+/// How a destructive row computes `a op b` into `d`, which holds `b`
+/// where the plan is not the plain one. MOVPRFX has the next instruction
+/// read its destination as the destructive operand alone (Arm ARM,
+/// MOVPRFX), and the merging form keeps `a` in the inactive lanes.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Destructive {
+    /// In `d` from `a`, from `b` where `swap` (an operation that commutes).
+    InPlace { swap: bool },
+    /// In `d` from `b` by the reversed instruction (`subr`, `fsubr`).
+    Reversed,
+    /// In a scratch from `a`, then moved to `d`.
+    Scratch,
+}
+
+/// The plan of a destructive row whose operands and destination are in
+/// registers `a`, `b` and `d`.
+fn destructive(row: &simd::SimdOp, mode: SvePred, (d, a, b): (u8, u8, u8)) -> Destructive {
+    if d != b || d == a && mode != SvePred::Zero {
+        Destructive::InPlace { swap: false }
+    } else if mode == SvePred::Merge || d == a {
+        Destructive::Scratch
+    } else if row.sem.commutes() {
+        Destructive::InPlace { swap: true }
+    } else if reversed(row.mnem).is_some() {
+        Destructive::Reversed
+    } else {
+        Destructive::Scratch
+    }
+}
+
+/// The instruction computing `b op a` with `a` the destructive operand.
+fn reversed(mnem: &str) -> Option<&'static str> {
+    match mnem {
+        "sub" => Some("subr"),
+        "fsub" => Some("fsubr"),
+        _ => None,
+    }
+}
+
 /// A binary row: the unpredicated form where the inactive lanes may be
-/// anything and one exists, else the destructive form on the first
-/// operand's copy, `movprfx` zeroing the inactive lanes of a `_z` one.
-/// A destination holding the second operand computes in a scratch.
+/// anything and one exists, else the destructive form on a copy of the
+/// first operand ([`destructive`]), `movprfx` zeroing the inactive lanes
+/// of a `_z` one.
 fn binary(
     code: &mut CodeBuf,
-    mnem: &str,
+    row: &simd::SimdOp,
     mode: SvePred,
     size: u8,
     args: &[u32],
@@ -363,33 +402,34 @@ fn binary(
 ) -> Emit {
     let (a, b) = (o.z(code, args[1], 0)?, o.z(code, args[2], 1)?);
     let d = o.z_dst(dst)?;
-    if let Some(s) = unpredicated(mnem, size).filter(|_| mode == SvePred::Any) {
-        word(code, mnem, &[z(d, s), z(a, s), z(b, s)])?;
+    if let Some(s) = unpredicated(row.mnem, size).filter(|_| mode == SvePred::Any) {
+        word(code, row.mnem, &[z(d, s), z(a, s), z(b, s)])?;
         o.z_done(code, dst, d);
         return Ok(());
     }
     let pg = o.governing(code, args[0])?;
     let fs = o.frame.fp_scratch;
-    let t = match d {
-        _ if d != b || d == a => d,
-        _ if a == fs[0] => fs[1],
-        _ => fs[0],
+    let (t, x, y, mnem) = match destructive(row, mode, (d, a, b)) {
+        Destructive::InPlace { swap: false } => (d, a, b, row.mnem),
+        Destructive::InPlace { swap: true } => (d, b, a, row.mnem),
+        Destructive::Reversed => (d, b, a, reversed(row.mnem).unwrap_or(row.mnem)),
+        Destructive::Scratch => (if a == fs[0] { fs[1] } else { fs[0] }, a, b, row.mnem),
     };
     if mode == SvePred::Zero {
         let pgz = Opnd::PRegQ {
             num: pg,
             merge: false,
         };
-        word(code, "movprfx", &[z(t, size), pgz, z(a, size)])?;
-    } else if t != a {
+        word(code, "movprfx", &[z(t, size), pgz, z(x, size)])?;
+    } else if t != x {
         let whole = |num| Opnd::ZReg { num, size: None };
-        word(code, "movprfx", &[whole(t), whole(a)])?;
+        word(code, "movprfx", &[whole(t), whole(x)])?;
     }
     let pgm = Opnd::PRegQ {
         num: pg,
         merge: true,
     };
-    word(code, mnem, &[z(t, size), pgm, z(t, size), z(b, size)])?;
+    word(code, mnem, &[z(t, size), pgm, z(t, size), z(y, size)])?;
     if t != d {
         emit(code, super::sve::enc_mov_z(d, t));
     }

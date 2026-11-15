@@ -2100,3 +2100,48 @@ fn a_32_bit_while_and_a_narrow_dup_read_the_low_word_alone() {
         );
     }
 }
+
+/// A destructive SVE row whose destination holds its second operand: the
+/// zeroing form of a vector with itself computes in a scratch, as the
+/// instruction MOVPRFX prefixes may read its destination as the
+/// destructive operand alone; a commutative one takes the operands the
+/// other way round, a subtraction is the reversed one, and the don't-care
+/// form of a vector with itself needs no prefix. The fixture computes
+/// what scalar C does.
+#[cfg(feature = "full")]
+#[test]
+fn a_destructive_sve_row_into_its_second_operand_swaps_reverses_or_takes_a_scratch() {
+    const SRC: &str = include_str!("../../../tests/fixtures/sve/rows_destructive.c");
+    const RET: u32 = 0xd65f_03c0;
+    for optimize in [false, true] {
+        let options = crate::CompileOptions::default().with_optimize(optimize);
+        let program =
+            crate::Compiler::with_options(String::from(SRC), crate::Target::LinuxAarch64, options)
+                .compile()
+                .expect("compiles");
+        let vm = super::Vm::new(program).with_sve_vector_bits(512);
+        assert_eq!(vm.run().expect("runs"), 4, "-O {optimize}");
+    }
+    let object = super::perf_codegen::object_at(SRC, crate::Target::LinuxAarch64, true);
+    for (name, words) in [
+        ("mul_x", &[0x0490_0020, RET][..]),
+        ("and_z", &[0x0490_2000, 0x049a_0020, RET]),
+        ("sub_z", &[0x0490_2000, 0x0483_0020, RET]),
+        ("fsub_z", &[0x0490_2000, 0x6583_8020, RET]),
+        ("square_x", &[0x0490_0000, RET]),
+    ] {
+        assert_eq!(
+            super::codegen::function_words(&object, name),
+            words,
+            "{name}"
+        );
+    }
+    // MOVPRFX zt.s, p0/z, z0.s; MUL zt.s, p0/m, zt.s, z0.s; MOV z0.d, zt.d.
+    let w = super::codegen::function_words(&object, "square_z");
+    let t = w[0] & 0x1F;
+    assert!(t != 0 && w[0] == 0x0490_2000 | t, "{w:08x?}");
+    assert_eq!(
+        w[1..],
+        [0x0490_0000 | t, 0x0460_3000 | t << 16 | t << 5, RET]
+    );
+}

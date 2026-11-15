@@ -471,19 +471,22 @@ fn subobject_left(func: &FunctionSsa, v: ValueId, depth: u32) -> Option<i64> {
     }
 }
 
-/// The data offset `v` addresses: an `ImmData` plus constants.
-fn data_offset(func: &FunctionSsa, v: ValueId, depth: u32) -> Option<i64> {
+/// The data offset `v` addresses: an `ImmData` plus constants. An extern
+/// symbol's `ImmData`, in `ext`, addresses no offset of this unit, as for
+/// [`data_addr`].
+fn data_offset(func: &FunctionSsa, ext: &BTreeSet<u32>, v: ValueId, depth: u32) -> Option<i64> {
     match func.insts.get(v as usize)? {
+        Inst::ImmData(_) if ext.contains(&v) => None,
         Inst::ImmData(off) => Some(*off),
         Inst::Copy {
             value,
             is_fp: false,
-        } if depth > 0 => data_offset(func, *value, depth - 1),
+        } if depth > 0 => data_offset(func, ext, *value, depth - 1),
         Inst::Intrinsic { kind, args } if is_wrapper(*kind) && depth > 0 => {
-            data_offset(func, args[0], depth - 1)
+            data_offset(func, ext, args[0], depth - 1)
         }
         Inst::BinopI { op, lhs, rhs_imm } if depth > 0 => {
-            let base = data_offset(func, *lhs, depth - 1)?;
+            let base = data_offset(func, ext, *lhs, depth - 1)?;
             match op {
                 BinOp::Add => base.checked_add(*rhs_imm),
                 BinOp::Sub => base.checked_sub(*rhs_imm),
@@ -504,6 +507,7 @@ fn data_offset(func: &FunctionSsa, v: ValueId, depth: u32) -> Option<i64> {
 pub(crate) fn fold_data_queries(func: &mut FunctionSsa, cd: &ConstData<'_>) -> bool {
     use crate::c5::op::Intrinsic as I;
     let (size, constant_p) = (I::ObjectSize as i64, I::ConstantP as i64);
+    let ext = extern_imm_data(func);
     let mut changed = false;
     for i in 0..func.insts.len() {
         let folded = match &func.insts[i] {
@@ -512,13 +516,13 @@ pub(crate) fn fold_data_queries(func: &mut FunctionSsa, cd: &ConstData<'_>) -> b
                     Inst::Imm(w) => w,
                     _ => continue,
                 };
-                data_offset(func, args[0], 8)
+                data_offset(func, &ext, args[0], 8)
                     .and_then(|o| cd.read(o, width))
                     .and_then(|v| matches!(v, ConstValue::Bytes(_)).then_some(1))
             }
             Inst::Intrinsic { kind, args } if *kind == size && args.len() == 2 => {
                 let p = args[0];
-                let whole = || data_offset(func, p, 8).and_then(|o| cd.remaining(o));
+                let whole = || data_offset(func, &ext, p, 8).and_then(|o| cd.remaining(o));
                 match func.insts[args[1] as usize] {
                     Inst::Imm(0 | 2) => whole(),
                     Inst::Imm(1) => match (subobject_left(func, p, 8), whole()) {
@@ -535,7 +539,7 @@ pub(crate) fn fold_data_queries(func: &mut FunctionSsa, cd: &ConstData<'_>) -> b
                 && args.len() == 1
                 && folds_as_builtin(func, args[0], cd.strlen_folds) =>
             {
-                data_offset(func, args[0], 8).and_then(|o| cd.string_len(o))
+                data_offset(func, &ext, args[0], 8).and_then(|o| cd.string_len(o))
             }
             Inst::Call {
                 target_pc, args, ..
@@ -543,7 +547,7 @@ pub(crate) fn fold_data_queries(func: &mut FunctionSsa, cd: &ConstData<'_>) -> b
                 && args.len() == 1
                 && folds_as_builtin(func, args[0], cd.strlen_folds) =>
             {
-                data_offset(func, args[0], 8).and_then(|o| cd.string_len(o))
+                data_offset(func, &ext, args[0], 8).and_then(|o| cd.string_len(o))
             }
             _ => None,
         };
@@ -1271,5 +1275,54 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], program: &Program) {
             // compile-time constant.
             f.insts[i] = Inst::Imm(i64::from(op == BinOp::Ne));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// An extern object's `ImmData` holds a placeholder, not an offset of the
+    /// unit's data: `__builtin_object_size` past it stays unknown, although a
+    /// local object ends at that placeholder offset plus the displacement.
+    #[test]
+    fn an_extern_address_is_no_offset_of_the_units_data() {
+        use crate::c5::op::Intrinsic as I;
+        let data = alloc::vec![0u8; 256];
+        let cd = ConstData {
+            intervals: Vec::new(),
+            objects: alloc::vec![(8, 128)],
+            relocs: Vec::new(),
+            strlen: (None, None),
+            strlen_folds: true,
+            data: &data,
+        };
+        let query = |extern_ref: bool| {
+            let mut f = FunctionSsa {
+                insts: alloc::vec![
+                    Inst::ImmData(0),
+                    Inst::BinopI {
+                        op: BinOp::Add,
+                        lhs: 0,
+                        rhs_imm: 128,
+                    },
+                    Inst::Imm(1),
+                    Inst::Intrinsic {
+                        kind: I::ObjectSize as i64,
+                        args: alloc::vec![1, 2],
+                    },
+                ],
+                extern_imm_data_refs: if extern_ref {
+                    alloc::vec![(0, 0)]
+                } else {
+                    Vec::new()
+                },
+                ..Default::default()
+            };
+            fold_data_queries(&mut f, &cd);
+            f.insts[3].clone()
+        };
+        assert!(matches!(query(true), Inst::Intrinsic { .. }));
+        assert!(matches!(query(false), Inst::Imm(0)));
     }
 }

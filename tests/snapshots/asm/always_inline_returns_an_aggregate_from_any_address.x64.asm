@@ -49,20 +49,19 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
-               	leaq	-0x20(%rbp), %rsi
-               	leaq	<rip>, %rax
-               	movq	(%rax), %r10
-               	movq	%r10, (%rsi)
+               	leaq	-0x20(%rbp), %rax
+               	leaq	<rip>, %rcx
+               	movq	(%rcx), %r10
+               	movq	%r10, (%rax)
+               	movl	$0x3, %esi
                	leaq	-0x18(%rbp), %rdi
                	movq	$0x0, (%rdi)
                	leaq	-0x10(%rbp), %rax
                	leaq	<rip>, %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	movq	(%rsi), %rsi
                	callq	<addr>
-               	leaq	-0x20(%rbp), %rdi
-               	movq	(%rdi), %rdi
+               	movl	$0x3, %edi
                	callq	<addr>
                	cmpq	$0x3, %rax
                	je	<addr>

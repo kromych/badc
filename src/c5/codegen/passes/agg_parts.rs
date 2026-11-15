@@ -40,6 +40,12 @@
 //! store follows the callee's return, so no destination is observable to
 //! the callee the way a hidden result pointer's is (`copy_elide`).
 //!
+//! A named argument the ABI passes in one eight-byte register, an
+//! aggregate of eight bytes aligned to eight, is placed as a scalar of
+//! that register's bank: in the register, or past the registers in an
+//! eight-byte stack slot. The pass loads it ahead of the call and passes
+//! the value, so what the call reads of the object is a load in the tape.
+//!
 //! Runs after the inliner, whose splices bind a callee's parameter object
 //! to the caller's argument and copy a returned object field by field, and
 //! before `sroa`.
@@ -451,6 +457,7 @@ fn run_one(func: &mut FunctionSsa, target: Target) {
     // The call-side stores go first: a return at the same block end may
     // gather what they store.
     let calls = call_parts(func, target, &mut plan, ret_parts.is_some());
+    let args = argument_values(func, target, &mut plan);
     let mut bundles: Vec<(usize, ValueId)> = Vec::new();
     if let Some((ai, parts)) = ret_parts {
         let desc = &func.agg_descs[ai as usize];
@@ -503,6 +510,36 @@ fn run_one(func: &mut FunctionSsa, target: Target) {
     for i in taken {
         func.param_local_slots[i] = 0;
     }
+    for (v, k, value, fp) in args {
+        let value = rewrite.ids[pos[(value - base) as usize]];
+        match &mut func.insts[rewrite.remap[v as usize] as usize] {
+            Inst::Call {
+                args,
+                arg_aggs,
+                fp_arg_mask,
+                low_word_args,
+                arg_widths,
+                ..
+            }
+            | Inst::CallIndirect {
+                args,
+                arg_aggs,
+                fp_arg_mask,
+                low_word_args,
+                arg_widths,
+                ..
+            } => {
+                args[k] = value;
+                arg_aggs[k] = None;
+                if fp {
+                    fp_arg_mask.set(k);
+                }
+                *low_word_args &= !1u64.checked_shl(k as u32).unwrap_or(0);
+                arg_widths.set(k, 8);
+            }
+            _ => unreachable!("only a call's argument is replaced"),
+        }
+    }
     for v in calls {
         match &mut func.insts[rewrite.remap[v as usize] as usize] {
             Inst::Call { ret_slot_local, .. }
@@ -511,6 +548,73 @@ fn run_one(func: &mut FunctionSsa, target: Target) {
             _ => unreachable!("only a call's result slot is released"),
         }
     }
+}
+
+/// Plan the load of each named argument the callee's convention passes as
+/// one eight-byte register, an aggregate of eight bytes aligned to eight,
+/// right ahead of its call. A library call's binding does not say which of
+/// its arguments are named, so its arguments keep their addresses. Returns the call, the argument's position, the
+/// planned load and whether it is a floating-point register's.
+fn argument_values(
+    func: &FunctionSsa,
+    target: Target,
+    plan: &mut Plan,
+) -> Vec<(ValueId, usize, ValueId, bool)> {
+    let mut out = Vec::new();
+    for block in &func.blocks {
+        for v in block.inst_range.clone() {
+            let inst = &func.insts[v as usize];
+            let (args, arg_aggs, fixed_args) = match inst {
+                Inst::Call {
+                    args,
+                    arg_aggs,
+                    fixed_args,
+                    ..
+                }
+                | Inst::CallIndirect {
+                    args,
+                    arg_aggs,
+                    fixed_args,
+                    ..
+                } => (args, arg_aggs, *fixed_args),
+                _ => continue,
+            };
+            let Some(conv) = inst.call_conv() else {
+                continue;
+            };
+            let abi = target.abi_row(conv).abi();
+            for (k, agg) in arg_aggs.iter().enumerate().take(fixed_args) {
+                let Some(d) = agg else { continue };
+                let desc = &func.agg_descs[*d as usize];
+                if (desc.size, desc.align) != (8, 8) || desc.vector {
+                    continue;
+                }
+                let Some([part]) =
+                    register_parts(desc, abi, false).and_then(|p| <[RegPart; 1]>::try_from(p).ok())
+                else {
+                    continue;
+                };
+                let kind = part_kind(&part);
+                if part.width != 8 || !matches!(kind, LoadKind::I64 | LoadKind::F64) {
+                    continue;
+                }
+                let value = plan.push(
+                    At::Before(v),
+                    Inst::Load {
+                        addr: args[k],
+                        disp: 0,
+                        kind,
+                        volatile: false,
+                        align: 0,
+                        pc_rel: false,
+                    },
+                    false,
+                );
+                out.push((v, k, value, kind == LoadKind::F64));
+            }
+        }
+    }
+    out
 }
 
 /// Plan the `RetPart`s of each call returning in registers and their

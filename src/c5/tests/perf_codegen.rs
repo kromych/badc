@@ -8918,3 +8918,15 @@ unsigned long pair(unsigned long *p, unsigned long *q) {\n\
     let frame = |i: &X64Insn| matches!(i.mem_base(), Some(4 | 5)) && !i.reg_form();
     assert!(!insns.iter().any(frame), "{insns:x?}");
 }
+
+/// A one-word aggregate passed by value takes the register a scalar of its
+/// bank takes, so the call reads its value and the object is no frame slot.
+#[test]
+fn x64_a_one_word_aggregate_argument_is_passed_without_the_frame() {
+    const SRC: &str = "typedef struct { unsigned long bits; } Ref;\n\
+void close_ref(Ref r);\n\
+void drop(unsigned long *p) { Ref r = { *p | 1 }; close_ref(r); }\n";
+    let insns = x64(SRC, "drop");
+    let frame = |i: &X64Insn| matches!(i.mem_base(), Some(4 | 5)) && !i.reg_form();
+    assert!(!insns.iter().any(frame), "{insns:x?}");
+}

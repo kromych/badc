@@ -1441,6 +1441,7 @@ impl Compiler {
         // is parsed elsewhere, so every block reaching here is nested and
         // holds no parameter binding (C99 6.2.1p4).
         {
+            let value_item = value_item.filter(|_| stmt_expr);
             let slots = self.block_lifetime_slots(&block_symbols, &top_level_ids, value_item);
             if !slots.is_empty() {
                 let pos = self.ast_src_pos();

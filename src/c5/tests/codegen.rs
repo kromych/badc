@@ -5482,6 +5482,31 @@ fn escaped_objects_in_disjoint_blocks_share_one_cell() {
     );
 }
 
+/// Only a statement expression yields its last statement's value, so a
+/// plain block ending in an aggregate assignment still ends the lifetimes
+/// of its objects (C99 6.2.4p2), and two such sibling blocks share storage.
+#[test]
+fn a_block_ending_in_an_aggregate_assignment_ends_its_objects_lifetime() {
+    let src = r#"
+        typedef struct { unsigned long bits; } ref;
+        ref wrap(unsigned *p);
+        void sink(ref *r);
+        void last(int n)
+        {
+            ref r;
+            if (n) { unsigned a[4]; r = wrap(a); }
+            else { unsigned b[4]; r = wrap(b); }
+            sink(&r);
+        }
+        int main(void) { return 0; }
+    "#;
+    assert_eq!(
+        coalesced_locals(src, "last", true),
+        4,
+        "the arrays share two cells, beside `r` and the call result's"
+    );
+}
+
 /// A block left by `break` ends the lifetime of the object it declared on
 /// that edge too (C99 6.2.4p2), so the object shares its cell with one
 /// declared after the loop.

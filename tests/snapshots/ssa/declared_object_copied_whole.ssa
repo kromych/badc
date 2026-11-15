@@ -28,6 +28,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v22  Copy { value=v13, fp=false }                     -> x0
     v23  Store { addr=v15, disp=0, value=v8, kind=I8 pc_rel } -> -
     v24  LifetimeEnd(0)                                   -> -
+    v25  LifetimeEnd(0)                                   -> -
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=to_global

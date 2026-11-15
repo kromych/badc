@@ -889,7 +889,7 @@ fn narrow_int_load(insts: &[Inst], v: ValueId) -> Option<(u32, bool)> {
         return None;
     }
     let kind = match insts.get(v as usize)? {
-        Inst::SimdVal { op, .. } => return crate::c5::simd::sve_narrow_result(*op),
+        Inst::SimdVal { op, .. } => crate::c5::simd::sve_narrow_result(*op)?,
         Inst::Load { kind, .. } => *kind,
         Inst::LoadLocal { disp: 0, kind, .. } => *kind,
         Inst::LoadIndexed { kind, .. } => *kind,

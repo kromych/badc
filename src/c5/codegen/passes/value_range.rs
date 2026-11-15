@@ -1020,6 +1020,10 @@ fn eval(inst: &Inst, params: &[Range], mut range_of: impl FnMut(ValueId) -> Rang
         Inst::Load { kind, .. } | Inst::LoadLocal { disp: 0, kind, .. } => {
             extend_range(*kind).unwrap_or(UNIVERSE)
         }
+        // So is an SVE reduction into a narrow lane.
+        Inst::SimdVal { op, .. } => crate::c5::simd::sve_narrow_result(*op)
+            .and_then(extend_range)
+            .unwrap_or(UNIVERSE),
         // A 16-byte exchange yields whether it matched.
         Inst::AtomicCas16 { .. } => extend_range(LoadKind::U8).unwrap_or(UNIVERSE),
         Inst::AtomicLoad { width, .. } | Inst::AtomicCas { width, .. } => {

@@ -303,18 +303,22 @@ pub(crate) fn sve_widening_sum(op: u32) -> bool {
     matches!(get(op).sem, Sem::Across(AcrossOp::Add, ..))
 }
 
-/// The width in bits of the integer SVE row `op` reduces into, below 64,
-/// and whether its value sign-extends from it, as its lanes' type does.
-pub(crate) fn sve_narrow_result(op: u32) -> Option<(u32, bool)> {
+/// The narrow integer type SVE row `op` reduces into, as a load of it
+/// extends: its lanes' type, below 64 bits.
+pub(crate) fn sve_narrow_result(op: u32) -> Option<crate::c5::ir::LoadKind> {
+    use crate::c5::ir::LoadKind as K;
     let row = get(op);
     match row.form {
         Form::Sve(f) if f.shape == SveShape::Reduce && !sve_widening_sum(op) => {
-            let signed = match f.elems {
-                SveElems::Signed => true,
-                SveElems::Unsigned => false,
-                _ => return None,
-            };
-            (row.int_width < 8).then_some((8 * u32::from(row.int_width), signed))
+            match (f.elems, row.int_width) {
+                (SveElems::Signed, 1) => Some(K::I8),
+                (SveElems::Signed, 2) => Some(K::I16),
+                (SveElems::Signed, 4) => Some(K::I32),
+                (SveElems::Unsigned, 1) => Some(K::U8),
+                (SveElems::Unsigned, 2) => Some(K::U16),
+                (SveElems::Unsigned, 4) => Some(K::U32),
+                _ => None,
+            }
         }
         _ => None,
     }

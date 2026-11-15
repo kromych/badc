@@ -2064,8 +2064,8 @@ fn the_sve_shift_rows_take_unsigned_counts() {
 /// with none active, as scalar C computes; the interpreter runs the fixture
 /// at four vector lengths. Under `-O` a narrow integer reduction moves its
 /// lane into the register extended as its type is, SMOV or UMOV, which
-/// leaves the return no extension of its own; a doubleword one is FMOV and
-/// a floating one stays in its register.
+/// leaves the return no extension or mask of its own; a doubleword one is
+/// FMOV and a floating one stays in its register.
 #[test]
 fn the_sve_reductions_take_their_lanes_type() {
     const SRC: &str = include_str!("../../../tests/fixtures/sve/rows_reduce.c");
@@ -2090,9 +2090,14 @@ fn the_sve_reductions_take_their_lanes_type() {
             int8_t maxv(svbool_t pg, svint8_t a) { return svmaxv(pg, a); }\n\
             uint32_t orv(svbool_t pg, svuint32_t a) { return svorv(pg, a); }\n\
             int64_t eorv(svbool_t pg, svint64_t a) { return sveorv(pg, a); }\n\
-            float fmaxv(svbool_t pg, svfloat32_t a) { return svmaxv(pg, a); }\n";
+            float fmaxv(svbool_t pg, svfloat32_t a) { return svmaxv(pg, a); }\n\
+            uint16_t minv(svbool_t pg, svuint16_t a) { return svminv(pg, a); }\n";
         const RET: u32 = 0xD65F_03C0;
         let words = |name: &str| super::perf_codegen::a64_at(ASM, name, true);
+        // UMINV ht, p0, z0.h; UMOV w0, vt.h[0].
+        let w = words("minv");
+        let t = w[0] & 0x1F;
+        assert_eq!(w, [0x044B_2000 | t, 0x0E02_3C00 | t << 5, RET]);
         // SMAXV bt, p0, z0.b; SMOV x0, vt.b[0].
         let w = words("maxv");
         let t = w[0] & 0x1F;

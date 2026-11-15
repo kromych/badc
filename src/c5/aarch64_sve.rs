@@ -190,6 +190,36 @@ const fn fmaxnmv(w: u8) -> Sem {
 const fn fminnmv(w: u8) -> Sem {
     Sem::FloatAcross(FOp::MinNum, w)
 }
+const fn sabd(w: u8) -> Sem {
+    Sem::AbsDiff(w, true)
+}
+const fn uabd(w: u8) -> Sem {
+    Sem::AbsDiff(w, false)
+}
+const fn fabd(w: u8) -> Sem {
+    Sem::Float(FOp::AbsDiff, w, false)
+}
+const fn smulh(w: u8) -> Sem {
+    Sem::MulHi(w, true)
+}
+const fn umulh(w: u8) -> Sem {
+    Sem::MulHi(w, false)
+}
+const fn fsqrt(w: u8) -> Sem {
+    Sem::Float(FOp::Sqrt, w, false)
+}
+const fn sqadd(w: u8) -> Sem {
+    Sem::AddSat(w, true)
+}
+const fn uqadd(w: u8) -> Sem {
+    Sem::AddSat(w, false)
+}
+const fn sqsub(w: u8) -> Sem {
+    Sem::SubSat(w, true)
+}
+const fn uqsub(w: u8) -> Sem {
+    Sem::SubSat(w, false)
+}
 
 use SveElems::{Any, Float, Int, Signed, Unsigned};
 use SvePred::{Any as X, Merge as M, Zero as Z};
@@ -299,6 +329,28 @@ pub(crate) const OPS: &[SimdOp] = rows! {
     "maxnm_m" "fmaxnm" SveShape::Binary(M), Float, fmaxnm: 4 8;
     "maxnm_z" "fmaxnm" SveShape::Binary(Z), Float, fmaxnm: 4 8;
     "maxnm_x" "fmaxnm" SveShape::Binary(X), Float, fmaxnm: 4 8;
+    "abd_m" "sabd" SveShape::Binary(M), Signed, sabd: 1 2 4 8;
+    "abd_m" "uabd" SveShape::Binary(M), Unsigned, uabd: 1 2 4 8;
+    "abd_m" "fabd" SveShape::Binary(M), Float, fabd: 4 8;
+    "abd_z" "sabd" SveShape::Binary(Z), Signed, sabd: 1 2 4 8;
+    "abd_z" "uabd" SveShape::Binary(Z), Unsigned, uabd: 1 2 4 8;
+    "abd_z" "fabd" SveShape::Binary(Z), Float, fabd: 4 8;
+    "abd_x" "sabd" SveShape::Binary(X), Signed, sabd: 1 2 4 8;
+    "abd_x" "uabd" SveShape::Binary(X), Unsigned, uabd: 1 2 4 8;
+    "abd_x" "fabd" SveShape::Binary(X), Float, fabd: 4 8;
+    "mulh_m" "smulh" SveShape::Binary(M), Signed, smulh: 1 2 4 8;
+    "mulh_m" "umulh" SveShape::Binary(M), Unsigned, umulh: 1 2 4 8;
+    "mulh_z" "smulh" SveShape::Binary(Z), Signed, smulh: 1 2 4 8;
+    "mulh_z" "umulh" SveShape::Binary(Z), Unsigned, umulh: 1 2 4 8;
+    "mulh_x" "smulh" SveShape::Binary(X), Signed, smulh: 1 2 4 8;
+    "mulh_x" "umulh" SveShape::Binary(X), Unsigned, umulh: 1 2 4 8;
+    "sqrt_m" "fsqrt" SveShape::Unary(M), Float, fsqrt: 4 8;
+    "sqrt_z" "fsqrt" SveShape::Unary(Z), Float, fsqrt: 4 8;
+    "sqrt_x" "fsqrt" SveShape::Unary(X), Float, fsqrt: 4 8;
+    "qadd" "sqadd" SveShape::Lanewise, Signed, sqadd: 1 2 4 8;
+    "qadd" "uqadd" SveShape::Lanewise, Unsigned, uqadd: 1 2 4 8;
+    "qsub" "sqsub" SveShape::Lanewise, Signed, sqsub: 1 2 4 8;
+    "qsub" "uqsub" SveShape::Lanewise, Unsigned, uqsub: 1 2 4 8;
     "sel" "sel" SveShape::Select, Any, move_: 1 2 4 8;
     "sel" "sel" SveShape::PredSelect, Any, move_: 1;
     "ptest_any" "ptest" SveShape::Test(SveTest::Any), Any, move_: 1;
@@ -452,6 +504,15 @@ pub(crate) fn immediate(op: u32, k: usize, lane: u64) -> Option<(&'static str, S
             "umin" | "umax" if lane <= 0xff => int(row.mnem, lane as i64),
             "and" | "orr" | "eor" if logical(lane) => int(row.mnem, lane as i64),
             "bic" if logical(!lane & mask) => int("and", (!lane & mask) as i64),
+            _ => None,
+        },
+        // The saturating forms add or subtract an unsigned byte: a signed
+        // sum of a negative constant is the difference of its negation.
+        (SveShape::Lanewise, 1) => match row.mnem {
+            "uqadd" | "uqsub" if byte(lane as i64, 0) => int(row.mnem, lane as i64),
+            "sqadd" | "sqsub" if byte(signed, 0) => int(row.mnem, signed),
+            "sqadd" if byte(signed.wrapping_neg(), 0) => int("sqsub", signed.wrapping_neg()),
+            "sqsub" if byte(signed.wrapping_neg(), 0) => int("sqadd", signed.wrapping_neg()),
             _ => None,
         },
         (SveShape::Compare, 1 | 2) => {

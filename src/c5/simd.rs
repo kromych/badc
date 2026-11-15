@@ -202,6 +202,8 @@ pub(crate) enum SveShape {
     /// `v = op(a, b)`: the lanes of `a` from the immediate's on, then those
     /// of `b`; an immediate past the vector takes `a` whole.
     Extract,
+    /// `v = op(a, b)`, unpredicated, lane by lane.
+    Lanewise,
 }
 
 /// The bits of a predicate a test reads (`ptest`).
@@ -247,7 +249,8 @@ impl SveShape {
             | SveShape::Reinterpret
             | SveShape::Permute
             | SveShape::Reverse
-            | SveShape::Extract => Some(LoadKind::SveVector),
+            | SveShape::Extract
+            | SveShape::Lanewise => Some(LoadKind::SveVector),
             SveShape::Compare
             | SveShape::PTrue
             | SveShape::While { .. }
@@ -1128,7 +1131,7 @@ impl Form {
             Form::Sve(f) => match f.shape {
                 SveShape::PTrue | SveShape::Count => 0,
                 SveShape::Dup | SveShape::Reinterpret | SveShape::Reverse => 1,
-                SveShape::DupLane | SveShape::Permute | SveShape::Extract => 2,
+                SveShape::DupLane | SveShape::Permute | SveShape::Extract | SveShape::Lanewise => 2,
                 SveShape::Unary(SvePred::Merge) => 3,
                 SveShape::Unary(_) => 2,
                 SveShape::While { .. }
@@ -1769,12 +1772,11 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
         }
         Sem::MulHi(w, signed) => {
             for i in 0..16 / w as usize {
-                let x = if signed {
-                    (slane(a, w, i) * slane(b, w, i)) as u64
-                } else {
-                    lane(a, w, i) * lane(b, w, i)
+                let x = match signed {
+                    true => (i128::from(slane(a, w, i)) * i128::from(slane(b, w, i))) as u128,
+                    false => u128::from(lane(a, w, i)) * u128::from(lane(b, w, i)),
                 };
-                set_lane(&mut o, w, i, (x >> (8 * w as u32)) & mask(w));
+                set_lane(&mut o, w, i, (x >> (8 * w as u32)) as u64 & mask(w));
             }
         }
         Sem::Avg(w) => {

@@ -2266,6 +2266,57 @@ fn the_sve_arithmetic_rows_emit_their_instructions() {
     assert_eq!(words("minnm_x"), [0x6585_8020, RET]);
 }
 
+/// svabd and svmulh in each predication form and with a scalar, svsqrt
+/// in each form, and svqadd and svqsub at the bounds of every lane width
+/// compute what scalar C does; the interpreter runs the fixture at four
+/// vector lengths. Under `-O` svabd and svmulh are the destructive SABD,
+/// UABD, FABD, SMULH and UMULH, svsqrt FSQRT, svqadd and svqsub the
+/// unpredicated SQADD to UQSUB, a constant their immediate form, a
+/// negative one's signed sum the difference of its negation.
+#[test]
+fn sve_differences_high_products_roots_and_saturation() {
+    const SRC: &str = include_str!("../../../tests/fixtures/sve/rows_difference.c");
+    for optimize in [false, true] {
+        let options = crate::CompileOptions::default().with_optimize(optimize);
+        let program =
+            crate::Compiler::with_options(String::from(SRC), crate::Target::LinuxAarch64, options)
+                .compile()
+                .expect("compiles");
+        for bits in [128, 256, 512, 2048] {
+            let vm = super::Vm::new(program.clone()).with_sve_vector_bits(bits);
+            assert_eq!(
+                vm.run().expect("runs"),
+                bits as i64 / 128,
+                "{bits} bits, -O {optimize}"
+            );
+        }
+    }
+    #[cfg(feature = "full")]
+    {
+        const ASM: &str = "#include <arm_sve.h>\n\
+            svint32_t abd_z(svbool_t pg, svint32_t b, svint32_t a) { return svabd_z(pg, a, b); }\n\
+            svint64_t mulh_x(svbool_t pg, svint64_t a, svint64_t b) { return svmulh_x(pg, a, b); }\n\
+            svfloat32_t sqrt_m(svfloat32_t i, svbool_t pg, svfloat32_t a) { return svsqrt_m(i, pg, a); }\n\
+            svint8_t qadd(svint8_t a, svint8_t b) { return svqadd(a, b); }\n\
+            svint8_t qaddn(svint8_t a) { return svqadd_n_s8(a, -3); }\n\
+            svuint32_t qsubn(svuint32_t x, svuint32_t a) { return svqsub_n_u32(a, 0x100); }\n";
+        const RET: u32 = 0xD65F_03C0;
+        let words = |name: &str| super::perf_codegen::a64_at(ASM, name, true);
+        // MOVPRFX z0.s, p0/z, z0.s; SABD z0.s, p0/m, z0.s, z1.s.
+        assert_eq!(words("abd_z"), [0x0490_2000, 0x048C_0020, RET]);
+        // SMULH z0.d, p0/m, z0.d, z1.d.
+        assert_eq!(words("mulh_x"), [0x04D2_0020, RET]);
+        // FSQRT z0.s, p0/m, z1.s.
+        assert_eq!(words("sqrt_m"), [0x658D_A020, RET]);
+        // SQADD z0.b, z0.b, z1.b.
+        assert_eq!(words("qadd"), [0x0421_1000, RET]);
+        // SQSUB z0.b, z0.b, #3.
+        assert_eq!(words("qaddn"), [0x2526_C060, RET]);
+        // MOVPRFX z0, z1; UQSUB z0.s, z0.s, #256.
+        assert_eq!(words("qsubn"), [0x0420_BC20, 0x25A7_E020, RET]);
+    }
+}
+
 /// A constant operand of an SVE row compiles as scalar C computes at the
 /// edges of the immediates' ranges and past them; the interpreter runs the
 /// fixture at four vector lengths. Under `-O` a constant is its row's

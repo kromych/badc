@@ -5403,6 +5403,12 @@ fn run_sve_row(
             let a = sve_bytes(frame, args[0])?.to_vec();
             frame.sregs.insert(v, a);
         }
+        SveShape::Lanewise => {
+            let a = sve_bytes(frame, args[0])?.to_vec();
+            let b = sve_bytes(frame, args[1])?.to_vec();
+            let r = sve_lanewise(mem, (row.sem, w), &a, &b, |_| true);
+            frame.sregs.insert(v, r);
+        }
         SveShape::Permute | SveShape::Reverse | SveShape::Extract => {
             let a = sve_bytes(frame, args[0])?.to_vec();
             let b = match args.get(1) {

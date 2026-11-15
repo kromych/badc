@@ -394,10 +394,24 @@ pub(super) fn emit_row(
         SveShape::Reinterpret => {
             super::sve::emit_z_copy(code, place_of(alloc, args[0]), dst, frame)
         }
-        SveShape::Permute | SveShape::Reverse => {
+        SveShape::Lanewise if encoded.is_some() => {
+            let Some((_, mnem, i)) = encoded else {
+                return fail("SVE row: no immediate");
+            };
+            let a = o.z(code, args[0], 0)?;
+            let d = o.z_dst(dst)?;
+            if d != a {
+                let whole = |num| Opnd::ZReg { num, size: None };
+                word(code, "movprfx", &[whole(d), whole(a)])?;
+            }
+            word(code, mnem, &[z(d, size), z(d, size), immediate(i)])?;
+            o.z_done(code, dst, d);
+            Ok(())
+        }
+        SveShape::Permute | SveShape::Reverse | SveShape::Lanewise => {
             let a = o.z(code, args[0], 0)?;
             let b = match args.get(1) {
-                Some(&b) if form.shape == SveShape::Permute => Some(o.z(code, b, 1)?),
+                Some(&b) if form.shape != SveShape::Reverse => Some(o.z(code, b, 1)?),
                 _ => None,
             };
             let d = o.z_dst(dst)?;

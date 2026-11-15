@@ -94,6 +94,7 @@ pub(crate) fn encoded_operand(
     };
     let (operands, lane): (&[usize], &dyn Fn(ValueId) -> Option<u64>) = match f.shape {
         SveShape::Binary(_) => (&[2], &splat),
+        SveShape::Lanewise => (&[1], &splat),
         SveShape::Compare => (&[2, 1], &splat),
         SveShape::Dup => (&[0], &constant),
         SveShape::DupLane => (&[1], &constant),

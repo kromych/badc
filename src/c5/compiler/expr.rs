@@ -754,7 +754,8 @@ impl Compiler {
             | SveShape::Reinterpret
             | SveShape::Permute
             | SveShape::Reverse
-            | SveShape::Extract => vty.unwrap_or(pred),
+            | SveShape::Extract
+            | SveShape::Lanewise => vty.unwrap_or(pred),
             SveShape::Compare
             | SveShape::PTrue
             | SveShape::While { .. }

@@ -157,6 +157,8 @@ struct FunctionEmitter<'a, 'b> {
     /// Inline-asm `.subsection` replacement sequences, appended after the
     /// body.
     deferred_regions: Vec<DeferredAsmRegion>,
+    /// Calls of the binary128 conversions, appended after the body.
+    binary128_calls: super::binary128::HelperCalls,
     /// `(block, start)` of each block placed, in order, and where the
     /// blocks end, for a function with a `__try` region.
     seh_placed: Vec<(BlockId, usize)>,
@@ -385,6 +387,7 @@ pub(crate) fn emit_function(
         jump_table_fixups: Vec::new(),
         fp_literals: Vec::new(),
         deferred_regions: Vec::new(),
+        binary128_calls: (!func.is_naked && !is_full_leaf(frame, alloc)).then(Vec::new),
         seh_placed: Vec::new(),
         seh_body_end: 0,
         unwind: Vec::new(),
@@ -1129,6 +1132,7 @@ impl FunctionEmitter<'_, '_> {
                 self.text_map_state,
                 self.asm_text_labels,
                 self.asm_section_text_refs,
+                &mut self.binary128_calls,
             )
         });
         if let Err(e) = lowered {
@@ -1487,6 +1491,10 @@ impl FunctionEmitter<'_, '_> {
             &|bid| self.block_offsets[bid as usize],
         );
         self.append_deferred_regions()?;
+        if let Some(calls) = self.binary128_calls.take().filter(|c| !c.is_empty()) {
+            self.align_stream();
+            super::binary128::emit_helpers(self.cx.code, self.fcx.frame, &calls)?;
+        }
         self.patch_direct_goto_branches()?;
         self.patch_branch_fixups()?;
         self.materialize_jump_tables();

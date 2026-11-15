@@ -50,6 +50,7 @@ pub(super) fn emit_inst(
     text_map_state: &mut Option<super::super::map_syms::MapClass>,
     asm_text_labels: &mut Vec<super::AsmTextLabel>,
     asm_section_text_refs: &mut Vec<super::AsmSectionTextRef>,
+    binary128_calls: &mut super::binary128::HelperCalls,
 ) -> Emit {
     let FnCtx {
         func,
@@ -201,6 +202,7 @@ pub(super) fn emit_inst(
                 frame,
                 scratch,
                 narrow_bound(*align, abi),
+                binary128_calls,
             )?;
             note_in_page(cx, fcx, *addr, start)
         }
@@ -225,6 +227,7 @@ pub(super) fn emit_inst(
                 frame,
                 scratch,
                 narrow_bound(*align, abi),
+                binary128_calls,
             )?;
             note_in_page(cx, fcx, *addr, start)
         }
@@ -240,6 +243,7 @@ pub(super) fn emit_inst(
             func,
             frame,
             scratch,
+            binary128_calls,
         ),
         Inst::StoreLocal {
             off,
@@ -248,7 +252,18 @@ pub(super) fn emit_inst(
             kind,
             ..
         } => emit_store_local(
-            code, v, dst, *off, *disp, *value, *kind, alloc, func, frame, scratch,
+            code,
+            v,
+            dst,
+            *off,
+            *disp,
+            *value,
+            *kind,
+            alloc,
+            func,
+            frame,
+            scratch,
+            binary128_calls,
         ),
         Inst::LoadIndexed {
             base,

@@ -1297,6 +1297,7 @@ pub(super) fn emit_load(
     frame: Frame,
     scratch: &ScratchPool,
     bound: Option<u32>,
+    calls: &mut super::binary128::HelperCalls,
 ) -> Emit {
     let disp = i64::from(disp);
     let Some(rn) = materialize_int(code, place_of(alloc, addr), scratch.primary, frame) else {
@@ -1335,7 +1336,7 @@ pub(super) fn emit_load(
         let Some(dd) = fp_or_spill_dst(dst, frame) else {
             return fail("Load F128: dst not fp reg / spill");
         };
-        super::binary128::emit_narrow_load(code, dd, rn, disp, bound, frame)?;
+        super::binary128::emit_narrow_load(code, dd, rn, disp, bound, frame, calls)?;
         store_spilled_fp(code, frame, dst, dd);
         return Ok(());
     }
@@ -1446,16 +1447,6 @@ pub(super) fn page_only_data(
         .collect()
 }
 
-/// A base for the binary128 object at `loc` that its sequences, which move sp, may address.
-fn binary128_base(code: &mut Vec<u8>, loc: FrameLoc, t: Reg) -> (Reg, i64) {
-    let (base, disp) = loc.pick(|d| LDR_X.offset(d).is_some() && LDR_X.offset(d + 8).is_some());
-    if base.0 != 31 {
-        return (base, disp);
-    }
-    emit_reg_disp(code, t, base, disp);
-    (t, 0)
-}
-
 /// `Inst::LoadLocal`. A single-precision value stays f32 (C99 6.3.1.8); the
 /// untagged archive-reload value widens.
 #[allow(clippy::too_many_arguments)]
@@ -1469,6 +1460,7 @@ pub(super) fn emit_load_local(
     func: &FunctionSsa,
     frame: Frame,
     scratch: &ScratchPool,
+    calls: &mut super::binary128::HelperCalls,
 ) -> Emit {
     let loc = local_slot(off, func, frame).shifted(disp);
     let t = scratch.primary;
@@ -1498,8 +1490,8 @@ pub(super) fn emit_load_local(
         let Some(dd) = fp_or_spill_dst(dst, frame) else {
             return fail("LoadLocal F128: dst not fp reg / spill");
         };
-        let (base, disp) = binary128_base(code, loc, t);
-        super::binary128::emit_narrow_load(code, dd, base, disp, None, frame)?;
+        let (base, disp) = loc.pick(|d| (0..4096).contains(&d));
+        super::binary128::emit_narrow_load(code, dd, base, disp, None, frame, calls)?;
         store_spilled_fp(code, frame, dst, dd);
         return Ok(());
     }
@@ -1532,6 +1524,7 @@ pub(super) fn emit_store_local(
     func: &FunctionSsa,
     frame: Frame,
     scratch: &ScratchPool,
+    calls: &mut super::binary128::HelperCalls,
 ) -> Emit {
     let loc = local_slot(off, func, frame).shifted(disp);
     let t = scratch.secondary;
@@ -1568,8 +1561,8 @@ pub(super) fn emit_store_local(
         if let StoreKind::F64 = kind {
             emit_frame_mem(code, STR_D, dn, loc, t);
         } else {
-            let (base, disp) = binary128_base(code, loc, t);
-            super::binary128::emit_widen_store(code, dn, base, disp, None, frame)?;
+            let (base, disp) = loc.pick(|d| (0..4096).contains(&d));
+            super::binary128::emit_widen_store(code, dn, base, disp, None, frame, calls)?;
         }
         propagate_fp(code, frame, dst, dn);
         return Ok(());
@@ -1929,6 +1922,7 @@ pub(super) fn emit_store(
     frame: Frame,
     scratch: &ScratchPool,
     bound: Option<u32>,
+    calls: &mut super::binary128::HelperCalls,
 ) -> Emit {
     let disp = i64::from(disp);
     // The c5 store ops leave the stored value in the accumulator, which
@@ -2041,7 +2035,7 @@ pub(super) fn emit_store(
         if let StoreKind::F64 = kind {
             emit_fp_store(code, STR_D, dn, rn, disp, bound, scratch, frame.fixed_regs)?;
         } else {
-            super::binary128::emit_widen_store(code, dn, rn, disp, bound, frame)?;
+            super::binary128::emit_widen_store(code, dn, rn, disp, bound, frame, calls)?;
         }
         if let Some(rd) = fp_reg(dst) {
             if rd != dn {

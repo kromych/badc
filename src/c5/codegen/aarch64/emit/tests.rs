@@ -1998,6 +1998,7 @@ fn fp_store_keeps_its_spilled_address_across_the_value_reload() {
             frame,
             &ScratchPool::new(),
             None,
+            &mut None,
         )
         .expect("emit_store");
         let words: Vec<u32> = code

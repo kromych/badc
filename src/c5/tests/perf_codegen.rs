@@ -6773,6 +6773,32 @@ fn a64_binary128_borrow_in_a_frameless_leaf_lowers_sp() {
     m.finish();
 }
 
+/// A function that saves its link register converts each binary128 object
+/// through a `bl` to the one sequence per direction it holds, rather than
+/// a sequence per access.
+#[test]
+fn a64_binary128_conversions_share_one_sequence_per_direction() {
+    const SRC: &str = "long double a, b, c;\n\
+        void put(double x, double y) { a = x; b = y; c = x * y; }\n\
+        double get(void) { return (double)a + (double)b * (double)c; }\n";
+    let mut m = Misses::default();
+    for name in ["put", "get"] {
+        let ws = a64(SRC, name);
+        let targets: Vec<usize> = (0..ws.len())
+            .filter(|&i| ws[i] & 0xFC00_0000 == 0x9400_0000)
+            .map(|i| i + (ws[i] & 0x03FF_FFFF) as usize)
+            .filter(|&t| t < ws.len())
+            .collect();
+        // `stp x9, x10, [sp]`: one save per sequence.
+        let saves = ws.iter().filter(|&&w| w == 0xA900_2BE9).count();
+        m.expect(
+            targets.len() == 3 && targets.iter().all(|&t| t == targets[0]) && saves == 1,
+            || format!("aarch64 {name}: calls {targets:?}, saves {saves}: {ws:08x?}"),
+        );
+    }
+    m.finish();
+}
+
 /// The register a data-processing instruction writes and those it reads
 /// (Rn, Rm, Ra); `None` for another class.
 fn a64_dp_regs(w: u32) -> Option<(u32, [Option<u32>; 3])> {
@@ -6789,27 +6815,33 @@ fn a64_dp_regs(w: u32) -> Option<(u32, [Option<u32>; 3])> {
     None
 }
 
-/// long_double_outgoing_area_borrow's `mix` at -O: the narrowing saves
-/// x9..x14 at `[sp]` while they hold values computed ahead of it and read
-/// after the restore, so the fixture runs that save and restore over live
+/// long_double_outgoing_area_borrow's `mix` at -O: the narrowing is a `bl`
+/// to the function's helper, which saves x9..x14 at `[sp]` and restores
+/// them before its `ret` while they hold values computed ahead of the call
+/// and read after it, so the fixture runs that save and restore over live
 /// values.
 #[test]
 fn a64_binary128_borrow_saves_live_values() {
     let src = super::load_fixture("long_double_outgoing_area_borrow.c");
     let ws = a64(&src, "mix");
-    // `stp x9, x10, [sp]` and the `ldp x9, x10, [sp]` after it.
-    let save = ws.iter().position(|&w| w == 0xA900_2BE9);
-    let restore = save.and_then(|s| (s..ws.len()).find(|&i| ws[i] == 0xA940_2BE9));
-    let (Some(s), Some(r)) = (save, restore) else {
-        panic!("no save / restore of x9, x10: {ws:08x?}");
-    };
+    // The first `bl` whose target lies inside the function.
+    let target = |i: usize| i + (ws[i] & 0x03FF_FFFF) as usize;
+    let site = (0..ws.len())
+        .find(|&i| ws[i] & 0xFC00_0000 == 0x9400_0000 && target(i) < ws.len())
+        .unwrap_or_else(|| panic!("no call of a helper: {ws:08x?}"));
+    let helper = target(site);
+    // `stp x9, x10, [sp]` opens the helper; `ldp x9, x10, [sp]` comes
+    // before its `ret`.
+    let ret = (helper..ws.len()).find(|&i| ws[i] == 0xD65F_03C0);
+    let restores = ret.is_some_and(|r| ws[helper..r].contains(&0xA940_2BE9));
+    assert!(ws[helper] == 0xA900_2BE9 && restores, "{ws:08x?}");
     let written = |x: u32| {
-        ws[..s]
+        ws[..site]
             .iter()
             .any(|&w| a64_dp_regs(w).is_some_and(|(d, _)| d == x))
     };
     let read = |x: u32| {
-        ws[r..]
+        ws[site + 1..helper]
             .iter()
             .any(|&w| a64_dp_regs(w).is_some_and(|(_, src)| src.contains(&Some(x))))
     };

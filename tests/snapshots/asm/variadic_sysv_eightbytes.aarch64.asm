@@ -326,12 +326,22 @@ Disassembly of section .text:
                	fmul	s1, s1, s2
                	fcvt	d1, s1
                	fadd	d0, d0, d1
+               	add	x16, sp, #0x70
+               	bl	<addr>
+               	fmov	d1, x16
+               	fmov	d2, #10.00000000
+               	fmadd	d0, d1, d2, d0
+               	scvtf	d1, x1
+               	fadd	d0, d0, d1
+               	add	sp, sp, #0xc0
+               	ldp	x29, x30, [sp], #0x10
+               	add	sp, sp, #0xc0
+               	ret
                	stp	x9, x10, [sp]
                	stp	x11, x12, [sp, #0x10]
                	stp	x13, x14, [sp, #0x20]
                	str	x15, [sp, #0x30]
-               	ldur	x9, [x29, #-0x50]
-               	ldur	x10, [x29, #-0x48]
+               	ldp	x9, x10, [x16]
                	lsr	x11, x10, #63
                	lsl	x11, x11, #63
                	lsl	x12, x10, #1
@@ -395,18 +405,11 @@ Disassembly of section .text:
                	orr	x14, x11, #0x7ff0000000000000
                	b	<addr>
                	mov	x14, x11
-               	fmov	d1, x14
+               	mov	x16, x14
                	ldp	x9, x10, [sp]
                	ldp	x11, x12, [sp, #0x10]
                	ldp	x13, x14, [sp, #0x20]
                	ldr	x15, [sp, #0x30]
-               	fmov	d2, #10.00000000
-               	fmadd	d0, d1, d2, d0
-               	scvtf	d1, x1
-               	fadd	d0, d0, d1
-               	add	sp, sp, #0xc0
-               	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0xc0
                	ret
 
 <after_fp>:

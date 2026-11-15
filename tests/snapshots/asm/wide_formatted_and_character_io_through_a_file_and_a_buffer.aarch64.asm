@@ -477,12 +477,50 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	bl	<addr>
                	stur	q0, [x29, #-0x60]
+               	add	x16, sp, #0x40
+               	bl	<addr>
+               	fmov	d0, x16
+               	fmov	d1, #0.25000000
+               	fcmp	d0, d1
+               	b.eq	<addr>
+               	mov	x0, #0x19               // =25
+               	add	sp, sp, #0xa0
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	sub	x0, x29, #0x48
+               	bl	<addr>
+               	sxtw	x0, w0
+               	cbz	x0, <addr>
+               	mov	x0, #0x0                // =0
+               	bl	<addr>
+               	sxtw	x0, w0
+               	cbz	x0, <addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	mov	x1, #0x1                // =1
+               	sub	x2, x29, #0x48
+               	bl	<addr>
+               	cmp	x0, #0x1
+               	b.ne	<addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	mov	x1, #0x1                // =1
+               	sub	x2, x29, #0x48
+               	bl	<addr>
+               	cbz	x0, <addr>
+               	mov	x0, #0x1a               // =26
+               	add	sp, sp, #0xa0
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x0, #0x0                // =0
+               	add	sp, sp, #0xa0
+               	ldp	x29, x30, [sp], #0x10
+               	ret
                	stp	x9, x10, [sp]
                	stp	x11, x12, [sp, #0x10]
                	stp	x13, x14, [sp, #0x20]
                	str	x15, [sp, #0x30]
-               	ldur	x9, [x29, #-0x60]
-               	ldur	x10, [x29, #-0x58]
+               	ldp	x9, x10, [x16]
                	lsr	x11, x10, #63
                	lsl	x11, x11, #63
                	lsl	x12, x10, #1
@@ -546,46 +584,11 @@ Disassembly of section .text:
                	orr	x14, x11, #0x7ff0000000000000
                	b	<addr>
                	mov	x14, x11
-               	fmov	d0, x14
+               	mov	x16, x14
                	ldp	x9, x10, [sp]
                	ldp	x11, x12, [sp, #0x10]
                	ldp	x13, x14, [sp, #0x20]
                	ldr	x15, [sp, #0x30]
-               	fmov	d1, #0.25000000
-               	fcmp	d0, d1
-               	b.eq	<addr>
-               	mov	x0, #0x19               // =25
-               	add	sp, sp, #0xa0
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	sub	x0, x29, #0x48
-               	bl	<addr>
-               	sxtw	x0, w0
-               	cbz	x0, <addr>
-               	mov	x0, #0x0                // =0
-               	bl	<addr>
-               	sxtw	x0, w0
-               	cbz	x0, <addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	mov	x1, #0x1                // =1
-               	sub	x2, x29, #0x48
-               	bl	<addr>
-               	cmp	x0, #0x1
-               	b.ne	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	mov	x1, #0x1                // =1
-               	sub	x2, x29, #0x48
-               	bl	<addr>
-               	cbz	x0, <addr>
-               	mov	x0, #0x1a               // =26
-               	add	sp, sp, #0xa0
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x0, #0x0                // =0
-               	add	sp, sp, #0xa0
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <main>:

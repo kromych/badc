@@ -84,8 +84,10 @@ SKIP = ("http-4.15",)
 # parallel demo pass run the rest and leave these to a phase with the host
 # to itself (scripts/run_demos.py AFTER_POOL); unset runs the whole suite.
 TIMED = {
-    # timerate's measurement window while the measured command slows down.
-    "cmdMZ.test": ("cmdMZ-6.6",),
+    # timerate's measurement window while the measured command slows down,
+    # and one or ten iterations of a `break` or `continue` each bounded at a
+    # millisecond of wall time.
+    "cmdMZ.test": ("cmdMZ-6.6", "cmdMZ-6.8", "cmdMZ-6.8.1"),
     # A 10 ms timer against an idle-time handler.
     "interp.test": ("interp-36.7",),
     # A 5 ms timer against a 720000-byte client write, and a 200 ms one

@@ -1959,6 +1959,7 @@ fn floating_rows_compute_in_the_environment() {
         | Sem::Sub(_)
         | Sem::MulLo(_)
         | Sem::PolyMul(_)
+        | Sem::Div(..)
         | Sem::AesRound(_)
         | Sem::AesMix
         | Sem::Eor3

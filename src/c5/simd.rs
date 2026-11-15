@@ -155,6 +155,9 @@ pub(crate) struct SveForm {
 pub(crate) enum SveShape {
     /// `v = op(pg, a, b)`, the inactive lanes as the predication says.
     Binary(SvePred),
+    /// `v = op(pg, a)`, or `op(pg, inactive, a)` in the merging form, the
+    /// inactive lanes as the predication says.
+    Unary(SvePred),
     /// `p = op(pg, a, b)`: the active lanes where the relation holds.
     Compare,
     /// `p = op()`: the lanes of the width the pattern immediate selects.
@@ -223,9 +226,11 @@ impl SveShape {
     pub(crate) fn result(self) -> Option<crate::c5::ir::LoadKind> {
         use crate::c5::ir::LoadKind;
         match self {
-            SveShape::Binary(_) | SveShape::Load | SveShape::Dup | SveShape::Select => {
-                Some(LoadKind::SveVector)
-            }
+            SveShape::Binary(_)
+            | SveShape::Unary(_)
+            | SveShape::Load
+            | SveShape::Dup
+            | SveShape::Select => Some(LoadKind::SveVector),
             SveShape::Compare
             | SveShape::PTrue
             | SveShape::While { .. }
@@ -247,6 +252,7 @@ impl SveShape {
         matches!(
             self,
             SveShape::Binary(_)
+                | SveShape::Unary(_)
                 | SveShape::Compare
                 | SveShape::Load
                 | SveShape::Store
@@ -401,6 +407,10 @@ pub(crate) enum Sem {
     /// Lane-wise minimum and maximum, signed (`true`) or unsigned.
     Min(u8, bool),
     Max(u8, bool),
+    /// Lane-wise quotient rounded toward zero, signed (`true`) or unsigned;
+    /// a zero divisor gives zero, the signed minimum over -1 itself
+    /// (`sdiv`, `udiv`).
+    Div(u8, bool),
     /// Signed products of adjacent word pairs, summed into doublewords.
     MulAddWords,
     /// Products of the first operand's unsigned bytes and the second's
@@ -1069,6 +1079,8 @@ impl Form {
             Form::Sve(f) => match f.shape {
                 SveShape::PTrue | SveShape::Count => 0,
                 SveShape::Dup => 1,
+                SveShape::Unary(SvePred::Merge) => 3,
+                SveShape::Unary(_) => 2,
                 SveShape::While { .. }
                 | SveShape::Load
                 | SveShape::Reduce
@@ -1781,6 +1793,16 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
                     _ => x & y != 0,
                 };
                 set_lane(&mut o, w, i, if holds { mask(w) } else { 0 });
+            }
+        }
+        Sem::Div(w, signed) => {
+            for i in 0..16 / w as usize {
+                let q = match (lane(b, w, i), signed) {
+                    (0, _) => 0,
+                    (_, true) => slane(a, w, i).wrapping_div(slane(b, w, i)) as u64,
+                    (y, false) => lane(a, w, i) / y,
+                };
+                set_lane(&mut o, w, i, q & mask(w));
             }
         }
         Sem::Min(w, signed) | Sem::Max(w, signed) => {

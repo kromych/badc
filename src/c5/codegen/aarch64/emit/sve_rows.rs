@@ -144,6 +144,7 @@ pub(super) fn emit_row(
     let pattern = Opnd::SvePattern(imm.unwrap_or(31));
     match form.shape {
         SveShape::Binary(mode) => binary(code, row, mode, size, args, dst, &o),
+        SveShape::Unary(mode) => unary(code, row, mode, size, args, dst, &o),
         SveShape::Compare => {
             let pg = o.governing(code, args[0])?;
             let (a, b) = (o.z(code, args[1], 0)?, o.z(code, args[2], 1)?);
@@ -396,6 +397,13 @@ pub(super) fn scratch_writes(func: &FunctionSsa, alloc: &Allocation) -> [bool; 2
                 let plain = mode == SvePred::Any && unpredicated(row.mnem, size).is_some();
                 w[0] |= !plain && destructive(row, mode, (d, a, b)) == Destructive::Scratch;
             }
+            (SveShape::Unary(mode), _) => {
+                let i = (mode == SvePred::Merge).then(|| fp(args[1])).flatten();
+                let (Some(d), Some(a)) = (fp(v as u32), args.last().and_then(|&a| fp(a))) else {
+                    continue;
+                };
+                w[0] |= unary_in_scratch(mode, d, i, a);
+            }
             (SveShape::Reduce, _) => w[1] |= f.elems != simd::SveElems::Float,
             _ => {}
         }
@@ -408,7 +416,7 @@ pub(super) fn scratch_writes(func: &FunctionSsa, alloc: &Allocation) -> [bool; 2
 fn unpredicated(mnem: &str, size: u8) -> Option<u8> {
     match mnem {
         "add" | "sub" | "fadd" | "fsub" | "fmul" => Some(size),
-        "and" | "orr" | "eor" => Some(3),
+        "and" | "orr" | "eor" | "bic" => Some(3),
         _ => None,
     }
 }
@@ -448,6 +456,9 @@ fn reversed(mnem: &str) -> Option<&'static str> {
     match mnem {
         "sub" => Some("subr"),
         "fsub" => Some("fsubr"),
+        "sdiv" => Some("sdivr"),
+        "udiv" => Some("udivr"),
+        "fdiv" => Some("fdivr"),
         _ => None,
     }
 }
@@ -495,6 +506,65 @@ fn binary(
         merge: true,
     };
     word(code, mnem, &[z(t, size), pgm, z(t, size), z(y, size)])?;
+    if t != d {
+        emit(code, super::sve::enc_mov_z(d, t));
+    }
+    o.z_done(code, dst, d);
+    Ok(())
+}
+
+/// Whether a unary row in registers computes in a scratch: the merging or
+/// zeroing form whose destination `d` holds its operand `a` and not the
+/// inactive operand `i`, as MOVPRFX has the next instruction read its
+/// destination as the destructive operand alone (Arm ARM, MOVPRFX).
+fn unary_in_scratch(mode: SvePred, d: u8, i: Option<u8>, a: u8) -> bool {
+    mode != SvePred::Any && d == a && i != Some(d)
+}
+
+/// A unary row over its last operand: the merging form on a copy of the
+/// inactive operand, the zeroing form on `movprfx` of the operand under
+/// the predicate, the don't-care form in place.
+fn unary(
+    code: &mut CodeBuf,
+    row: &simd::SimdOp,
+    mode: SvePred,
+    size: u8,
+    args: &[u32],
+    dst: Place,
+    o: &Operands,
+) -> Emit {
+    let i = match mode {
+        SvePred::Merge => Some(o.z(code, args[1], 0)?),
+        _ => None,
+    };
+    let a = o.z(code, args[args.len() - 1], 1)?;
+    let d = o.z_dst(dst)?;
+    let pg = o.governing(code, args[0])?;
+    let fs = o.frame.fp_scratch;
+    let t = match unary_in_scratch(mode, d, i, a) {
+        true if i == Some(fs[0]) => fs[1],
+        true => fs[0],
+        false => d,
+    };
+    match (mode, i) {
+        (SvePred::Merge, Some(i)) if i != t => {
+            let whole = |num| Opnd::ZReg { num, size: None };
+            word(code, "movprfx", &[whole(t), whole(i)])?;
+        }
+        (SvePred::Zero, _) => {
+            let pgz = Opnd::PRegQ {
+                num: pg,
+                merge: false,
+            };
+            word(code, "movprfx", &[z(t, size), pgz, z(a, size)])?;
+        }
+        _ => {}
+    }
+    let pgm = Opnd::PRegQ {
+        num: pg,
+        merge: true,
+    };
+    word(code, row.mnem, &[z(t, size), pgm, z(a, size)])?;
     if t != d {
         emit(code, super::sve::enc_mov_z(d, t));
     }

@@ -275,11 +275,15 @@ fn sve_files(f: &FunctionSsa) -> Result<(), String> {
 
 /// The SVE kind of each operand of SVE row `op`, by its shape.
 fn sve_row_operands(op: u32) -> alloc::vec::Vec<Option<LoadKind>> {
-    use crate::c5::simd::{Form, SveShape};
+    use crate::c5::simd::{Form, SvePred, SveShape};
     let (p, z) = (Some(LoadKind::SvePredicate), Some(LoadKind::SveVector));
     match crate::c5::simd::get(op).form {
         Form::Sve(f) => match f.shape {
-            SveShape::Binary(_) | SveShape::Compare | SveShape::Select => alloc::vec![p, z, z],
+            SveShape::Binary(_)
+            | SveShape::Unary(SvePred::Merge)
+            | SveShape::Compare
+            | SveShape::Select => alloc::vec![p, z, z],
+            SveShape::Unary(_) => alloc::vec![p, z],
             SveShape::PredSelect | SveShape::PredLogic => alloc::vec![p, p, p],
             SveShape::PredNot | SveShape::Test(_) => alloc::vec![p, p],
             SveShape::Reduce => alloc::vec![p, z],

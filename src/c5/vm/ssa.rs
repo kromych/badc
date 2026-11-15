@@ -5172,11 +5172,17 @@ fn run_sve_row(
     let lanes = n / w;
     let pattern = imm.unwrap_or(31);
     match form.shape {
-        SveShape::Binary(mode) => {
+        SveShape::Binary(mode) | SveShape::Unary(mode) => {
+            // A unary row's operand is its last; the merging forms keep
+            // operand 1 in the inactive lanes.
             let pg = sve_bytes(frame, args[0])?.to_vec();
+            let last = args.len() - 1;
             let a = sve_bytes(frame, args[1])?.to_vec();
-            let b = sve_bytes(frame, args[2])?.to_vec();
-            let r = sve_lanewise(mem, row.sem, &a, &b);
+            let (x, y) = match form.shape {
+                SveShape::Binary(_) => (a.clone(), sve_bytes(frame, args[2])?.to_vec()),
+                _ => (sve_bytes(frame, args[last])?.to_vec(), Vec::new()),
+            };
+            let r = sve_lanewise(mem, row.sem, &x, if y.is_empty() { &x } else { &y });
             let mut out = r.clone();
             for i in (0..lanes).filter(|&i| !sve_active(&pg, w, i)) {
                 let keep = match mode {

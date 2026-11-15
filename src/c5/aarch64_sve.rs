@@ -49,6 +49,42 @@ const fn fcmge(w: u8) -> Sem {
 const fn fcmgt(w: u8) -> Sem {
     Sem::FloatRel(w, 14)
 }
+const fn fdiv(w: u8) -> Sem {
+    Sem::Float(FOp::Div, w, false)
+}
+const fn fmin(w: u8) -> Sem {
+    Sem::Float(FOp::MinNan, w, false)
+}
+const fn fmax(w: u8) -> Sem {
+    Sem::Float(FOp::MaxNan, w, false)
+}
+const fn fminnm(w: u8) -> Sem {
+    Sem::Float(FOp::MinNum, w, false)
+}
+const fn fmaxnm(w: u8) -> Sem {
+    Sem::Float(FOp::MaxNum, w, false)
+}
+const fn sdiv(w: u8) -> Sem {
+    Sem::Div(w, true)
+}
+const fn udiv(w: u8) -> Sem {
+    Sem::Div(w, false)
+}
+const fn smin(w: u8) -> Sem {
+    Sem::Min(w, true)
+}
+const fn umin(w: u8) -> Sem {
+    Sem::Min(w, false)
+}
+const fn smax(w: u8) -> Sem {
+    Sem::Max(w, true)
+}
+const fn umax(w: u8) -> Sem {
+    Sem::Max(w, false)
+}
+const fn not(_: u8) -> Sem {
+    Sem::Not
+}
 const fn move_(_: u8) -> Sem {
     Sem::Move
 }
@@ -126,11 +162,62 @@ pub(crate) const OPS: &[SimdOp] = rows! {
     "eor_z" "eor" SveShape::Binary(Z), Int, eor: 1 2 4 8;
     "eor_z" "eor" SveShape::PredLogic, Any, eor: 1;
     "eor_x" "eor" SveShape::Binary(X), Int, eor: 1 2 4 8;
+    "bic_m" "bic" SveShape::Binary(M), Int, bic: 1 2 4 8;
+    "bic_z" "bic" SveShape::Binary(Z), Int, bic: 1 2 4 8;
     "bic_z" "bic" SveShape::PredLogic, Any, bic: 1;
+    "bic_x" "bic" SveShape::Binary(X), Int, bic: 1 2 4 8;
     "orn_z" "orn" SveShape::PredLogic, Any, orn: 1;
     "nand_z" "nand" SveShape::PredLogic, Any, nand: 1;
     "nor_z" "nor" SveShape::PredLogic, Any, nor: 1;
+    "not_m" "not" SveShape::Unary(M), Int, not: 1 2 4 8;
+    "not_z" "not" SveShape::Unary(Z), Int, not: 1 2 4 8;
     "not_z" "not" SveShape::PredNot, Any, eor: 1;
+    "not_x" "not" SveShape::Unary(X), Int, not: 1 2 4 8;
+    "abs_m" "abs" SveShape::Unary(M), Signed, Sem::Abs: 1 2 4 8;
+    "abs_m" "fabs" SveShape::Unary(M), Float, Sem::FAbs: 4 8;
+    "abs_z" "abs" SveShape::Unary(Z), Signed, Sem::Abs: 1 2 4 8;
+    "abs_z" "fabs" SveShape::Unary(Z), Float, Sem::FAbs: 4 8;
+    "abs_x" "abs" SveShape::Unary(X), Signed, Sem::Abs: 1 2 4 8;
+    "abs_x" "fabs" SveShape::Unary(X), Float, Sem::FAbs: 4 8;
+    "neg_m" "neg" SveShape::Unary(M), Signed, Sem::Neg: 1 2 4 8;
+    "neg_m" "fneg" SveShape::Unary(M), Float, Sem::FNeg: 4 8;
+    "neg_z" "neg" SveShape::Unary(Z), Signed, Sem::Neg: 1 2 4 8;
+    "neg_z" "fneg" SveShape::Unary(Z), Float, Sem::FNeg: 4 8;
+    "neg_x" "neg" SveShape::Unary(X), Signed, Sem::Neg: 1 2 4 8;
+    "neg_x" "fneg" SveShape::Unary(X), Float, Sem::FNeg: 4 8;
+    "div_m" "sdiv" SveShape::Binary(M), Signed, sdiv: 4 8;
+    "div_m" "udiv" SveShape::Binary(M), Unsigned, udiv: 4 8;
+    "div_m" "fdiv" SveShape::Binary(M), Float, fdiv: 4 8;
+    "div_z" "sdiv" SveShape::Binary(Z), Signed, sdiv: 4 8;
+    "div_z" "udiv" SveShape::Binary(Z), Unsigned, udiv: 4 8;
+    "div_z" "fdiv" SveShape::Binary(Z), Float, fdiv: 4 8;
+    "div_x" "sdiv" SveShape::Binary(X), Signed, sdiv: 4 8;
+    "div_x" "udiv" SveShape::Binary(X), Unsigned, udiv: 4 8;
+    "div_x" "fdiv" SveShape::Binary(X), Float, fdiv: 4 8;
+    "min_m" "smin" SveShape::Binary(M), Signed, smin: 1 2 4 8;
+    "min_m" "umin" SveShape::Binary(M), Unsigned, umin: 1 2 4 8;
+    "min_m" "fmin" SveShape::Binary(M), Float, fmin: 4 8;
+    "min_z" "smin" SveShape::Binary(Z), Signed, smin: 1 2 4 8;
+    "min_z" "umin" SveShape::Binary(Z), Unsigned, umin: 1 2 4 8;
+    "min_z" "fmin" SveShape::Binary(Z), Float, fmin: 4 8;
+    "min_x" "smin" SveShape::Binary(X), Signed, smin: 1 2 4 8;
+    "min_x" "umin" SveShape::Binary(X), Unsigned, umin: 1 2 4 8;
+    "min_x" "fmin" SveShape::Binary(X), Float, fmin: 4 8;
+    "max_m" "smax" SveShape::Binary(M), Signed, smax: 1 2 4 8;
+    "max_m" "umax" SveShape::Binary(M), Unsigned, umax: 1 2 4 8;
+    "max_m" "fmax" SveShape::Binary(M), Float, fmax: 4 8;
+    "max_z" "smax" SveShape::Binary(Z), Signed, smax: 1 2 4 8;
+    "max_z" "umax" SveShape::Binary(Z), Unsigned, umax: 1 2 4 8;
+    "max_z" "fmax" SveShape::Binary(Z), Float, fmax: 4 8;
+    "max_x" "smax" SveShape::Binary(X), Signed, smax: 1 2 4 8;
+    "max_x" "umax" SveShape::Binary(X), Unsigned, umax: 1 2 4 8;
+    "max_x" "fmax" SveShape::Binary(X), Float, fmax: 4 8;
+    "minnm_m" "fminnm" SveShape::Binary(M), Float, fminnm: 4 8;
+    "minnm_z" "fminnm" SveShape::Binary(Z), Float, fminnm: 4 8;
+    "minnm_x" "fminnm" SveShape::Binary(X), Float, fminnm: 4 8;
+    "maxnm_m" "fmaxnm" SveShape::Binary(M), Float, fmaxnm: 4 8;
+    "maxnm_z" "fmaxnm" SveShape::Binary(Z), Float, fmaxnm: 4 8;
+    "maxnm_x" "fmaxnm" SveShape::Binary(X), Float, fmaxnm: 4 8;
     "sel" "sel" SveShape::Select, Any, move_: 1 2 4 8;
     "sel" "sel" SveShape::PredSelect, Any, move_: 1;
     "ptest_any" "ptest" SveShape::Test(SveTest::Any), Any, move_: 1;

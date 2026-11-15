@@ -710,9 +710,11 @@ impl Compiler {
         };
         let lane = |t: i64| self.sve_lane(t).unwrap_or((0, SveElem::Signed));
         let ty = match shape {
-            SveShape::Binary(_) | SveShape::Load | SveShape::Dup | SveShape::Select => {
-                vty.unwrap_or(pred)
-            }
+            SveShape::Binary(_)
+            | SveShape::Unary(_)
+            | SveShape::Load
+            | SveShape::Dup
+            | SveShape::Select => vty.unwrap_or(pred),
             SveShape::Compare
             | SveShape::PTrue
             | SveShape::While { .. }

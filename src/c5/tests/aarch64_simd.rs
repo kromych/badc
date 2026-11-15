@@ -1979,6 +1979,91 @@ fn the_sve_logic_select_and_test_rows_run_in_the_interpreter() {
     }
 }
 
+/// svdiv, svmin, svmax, svminnm, svmaxnm and svbic in each predication form
+/// and with a scalar operand, and svnot, svabs and svneg in each form,
+/// compute what scalar C does over integer and floating lanes; the
+/// interpreter runs the fixture at four vector lengths.
+#[test]
+fn the_sve_arithmetic_rows_run_in_the_interpreter() {
+    const SRC: &str = include_str!("../../../tests/fixtures/sve/rows_arith.c");
+    for optimize in [false, true] {
+        let options = crate::CompileOptions::default().with_optimize(optimize);
+        let program =
+            crate::Compiler::with_options(String::from(SRC), crate::Target::LinuxAarch64, options)
+                .compile()
+                .expect("compiles");
+        for bits in [128, 256, 512, 2048] {
+            let vm = super::Vm::new(program.clone()).with_sve_vector_bits(bits);
+            assert_eq!(
+                vm.run().expect("runs"),
+                bits as i64 / 128,
+                "{bits} bits, -O {optimize}"
+            );
+        }
+    }
+}
+
+/// A unary row is its instruction on the argument registers under `-O`:
+/// the don't-care form in place, the merging form on a `movprfx` copy of
+/// the inactive operand, the zeroing form on a zeroing `movprfx` of the
+/// operand, both in a scratch where the destination holds the operand;
+/// the bit clear, division, minimum and maximum the destructive forms,
+/// a division into its divisor's register `sdivr`, and svbic_x the
+/// unpredicated doubleword BIC.
+#[cfg(feature = "full")]
+#[test]
+fn the_sve_arithmetic_rows_emit_their_instructions() {
+    const SRC: &str = "#include <arm_sve.h>\n\
+        svint32_t not_x(svbool_t pg, svint32_t a) { return svnot_x(pg, a); }\n\
+        svint32_t not_m(svint32_t i, svbool_t pg, svint32_t a) { return svnot_m(i, pg, a); }\n\
+        svint32_t not_m2(svint32_t a, svbool_t pg, svint32_t i) { return svnot_m(i, pg, a); }\n\
+        svint16_t abs_z(svbool_t pg, svint16_t x, svint16_t a) { return svabs_z(pg, a); }\n\
+        svfloat64_t neg_z(svbool_t pg, svfloat64_t a) { return svneg_z(pg, a); }\n\
+        svuint8_t bic_x(svbool_t pg, svuint8_t a, svuint8_t b) { return svbic_x(pg, a, b); }\n\
+        svint32_t div_r(svbool_t pg, svint32_t b, svint32_t a) { return svdiv_z(pg, a, b); }\n\
+        svuint64_t max_m(svbool_t pg, svuint64_t a, svuint64_t b) { return svmax_m(pg, a, b); }\n\
+        svfloat32_t minnm_x(svbool_t pg, svfloat32_t a, svfloat32_t b) { return svminnm_x(pg, a, b); }\n";
+    const RET: u32 = 0xD65F_03C0;
+    let words = |name: &str| super::perf_codegen::a64_at(SRC, name, true);
+    // NOT z0.s, p0/m, z0.s.
+    assert_eq!(words("not_x"), [0x049E_A000, RET]);
+    // NOT z0.s, p0/m, z1.s.
+    assert_eq!(words("not_m"), [0x049E_A020, RET]);
+    // MOVPRFX zt, z1; NOT zt.s, p0/m, z0.s; MOV z0.d, zt.d.
+    let w = words("not_m2");
+    let t = w[0] & 0x1F;
+    assert_eq!(
+        w,
+        [
+            0x0420_BC20 | t,
+            0x049E_A000 | t,
+            0x0460_3000 | t << 16 | t << 5,
+            RET
+        ]
+    );
+    // MOVPRFX z0.h, p0/z, z1.h; ABS z0.h, p0/m, z1.h.
+    assert_eq!(words("abs_z"), [0x0450_2020, 0x0456_A020, RET]);
+    // MOVPRFX zt.d, p0/z, z0.d; FNEG zt.d, p0/m, z0.d; MOV z0.d, zt.d.
+    let w = words("neg_z");
+    let t = w[0] & 0x1F;
+    assert_eq!(
+        w,
+        [
+            0x04D0_2000 | t,
+            0x04DD_A000 | t,
+            0x0460_3000 | t << 16 | t << 5,
+            RET
+        ]
+    );
+    // BIC z0.d, z0.d, z1.d.
+    assert_eq!(words("bic_x"), [0x04E1_3000, RET]);
+    // MOVPRFX z0.s, p0/z, z0.s; SDIVR z0.s, p0/m, z0.s, z1.s.
+    assert_eq!(words("div_r"), [0x0490_2000, 0x0496_0020, RET]);
+    // UMAX z0.d, p0/m, z0.d, z1.d; FMINNM z0.s, p0/m, z0.s, z1.s.
+    assert_eq!(words("max_m"), [0x04C9_0020, RET]);
+    assert_eq!(words("minnm_x"), [0x6585_8020, RET]);
+}
+
 /// The logic, select and test intrinsics are their instructions on the
 /// argument registers under `-O`: a bitwise don't-care form the
 /// unpredicated doubleword one, a predicate form its zeroing instruction,

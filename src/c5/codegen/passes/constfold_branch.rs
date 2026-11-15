@@ -605,11 +605,9 @@ pub(crate) fn test_decrements(func: &mut FunctionSsa) {
     if ins.is_empty() {
         return;
     }
-    let n = func.insts.len();
-    let pos = tape::sort(&mut ins, &func.blocks, n);
     let rewrite = tape::insert(func, &ins);
     for (j, &(b, low_word)) in tests.iter().enumerate() {
-        let c = rewrite.ids[pos[j]];
+        let c = rewrite.ids[j];
         if let Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } =
             &mut func.blocks[b as usize].terminator
         {

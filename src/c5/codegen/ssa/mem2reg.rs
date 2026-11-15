@@ -1954,9 +1954,8 @@ fn split_address_phi_loads(func: &mut FunctionSsa) {
             });
         }
     }
-    let pos = super::tape::sort(&mut ins, &func.blocks, n_old);
     let rewrite = super::tape::insert(func, &ins);
-    let mut values = values.into_iter().map(|j| rewrite.ids[pos[j]]);
+    let mut values = values.into_iter().map(|j| rewrite.ids[j]);
     for (l, phi, reads) in plans {
         let (l, phi) = (rewrite.remap[l as usize], rewrite.remap[phi as usize]);
         if let Inst::Phi { incoming, kind } = &mut func.insts[phi as usize] {

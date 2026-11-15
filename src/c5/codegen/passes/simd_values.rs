@@ -141,11 +141,10 @@ fn run_one(func: &mut FunctionSsa) {
     if ins.is_empty() && memory.is_empty() {
         return;
     }
-    let pos = tape::sort(&mut ins, &func.blocks, base);
     let rewrite = tape::insert(func, &ins);
     let new_id = |s: Src| match s {
         Src::Old(v) => rewrite.remap[v as usize],
-        Src::Loaded(k) => rewrite.ids[pos[k]],
+        Src::Loaded(k) => rewrite.ids[k],
     };
     for (v, op, imm, srcs) in rewrites {
         let args = srcs.into_iter().map(new_id).collect();
@@ -156,7 +155,7 @@ fn run_one(func: &mut FunctionSsa) {
             *o = if (*o as usize) < base {
                 rewrite.remap[*o as usize]
             } else {
-                rewrite.ids[pos[*o as usize - base]]
+                rewrite.ids[*o as usize - base]
             };
         });
         func.insts[rewrite.remap[v as usize] as usize] = inst;

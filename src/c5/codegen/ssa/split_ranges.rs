@@ -345,7 +345,7 @@ fn close_heads(
 /// Insert each head's copy ahead of its barrier and point every read of
 /// the value past the head at it.
 fn apply_heads(func: &mut FunctionSsa, heads: &[Head]) -> Undo {
-    let mut ins: Vec<Insertion> = heads
+    let ins: Vec<Insertion> = heads
         .iter()
         .map(|h| Insertion {
             at: At::Before(h.at),
@@ -361,7 +361,6 @@ fn apply_heads(func: &mut FunctionSsa, heads: &[Head]) -> Undo {
             copy_of: None,
         })
         .collect();
-    let pos = super::tape::sort(&mut ins, &func.blocks, func.insts.len());
     let (rewrite, undo) = super::tape::insert_undoable(func, &ins);
     let n = func.insts.len();
     // Per value: its copy, and the last instruction of its head.
@@ -369,7 +368,7 @@ fn apply_heads(func: &mut FunctionSsa, heads: &[Head]) -> Undo {
     let mut head_end: Vec<ValueId> = vec![0; n];
     for (k, h) in heads.iter().enumerate() {
         let src = rewrite.remap[h.src as usize] as usize;
-        copy[src] = rewrite.ids[pos[k]];
+        copy[src] = rewrite.ids[k];
         head_end[src] = rewrite.remap[h.at as usize];
     }
     let outside = |i: usize, op: ValueId| -> bool {

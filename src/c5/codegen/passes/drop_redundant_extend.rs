@@ -1304,10 +1304,9 @@ fn normalize_loop_entries(func: &mut FunctionSsa, assumed: &mut Vec<Option<LoadK
                 uses.push((plan.phi, pred, j));
             }
         }
-        let new_pos = crate::c5::codegen::ssa::tape::sort(&mut ins, &func.blocks, n);
         let (rewrite, undo) = crate::c5::codegen::ssa::tape::insert_undoable(func, &ins);
         for &(phi, pred, j) in &uses {
-            let id = rewrite.ids[new_pos[j]];
+            let id = rewrite.ids[j];
             if let Some(Inst::Phi { incoming, .. }) =
                 func.insts.get_mut(rewrite.remap[phi as usize] as usize)
             {

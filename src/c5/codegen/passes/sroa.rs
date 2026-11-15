@@ -528,10 +528,9 @@ fn copy_arguments(func: &mut FunctionSsa) -> BTreeSet<i64> {
             });
         }
     }
-    let pos = tape::sort(&mut ins, &func.blocks, base as usize);
     let rewrite = tape::insert(func, &ins);
     for (k, &(i, j, ..)) in sites.iter().enumerate() {
-        let addr = rewrite.ids[pos[2 * k]];
+        let addr = rewrite.ids[2 * k];
         if let Inst::Call { args, .. }
         | Inst::CallIndirect { args, .. }
         | Inst::CallExt { args, .. } = &mut func.insts[rewrite.remap[i] as usize]

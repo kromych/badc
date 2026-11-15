@@ -173,6 +173,7 @@ impl At {
 /// [`insert`] maps with the rest; one at or past the old tape's length
 /// names the insertion that far past it in the slice [`insert`] takes,
 /// so an insertion can read an earlier one.
+#[derive(Clone)]
 pub(crate) struct Insertion {
     pub at: At,
     pub inst: Inst,
@@ -219,11 +220,11 @@ impl Undo {
     }
 }
 
-/// Order `ins` for [`insert`]: ascending by [`At::order`], insertions at
-/// one place keeping their order, and an operand naming an insertion
-/// pointed at its new position. `n_old` is the tape's length. Returns
-/// each insertion's new position.
-pub(crate) fn sort(ins: &mut Vec<Insertion>, blocks: &[Block], n_old: usize) -> Vec<usize> {
+/// Order `ins` ascending by [`At::order`], insertions at one place
+/// keeping their order, and an operand naming an insertion pointed at
+/// its new position. `n_old` is the tape's length. Returns each
+/// insertion's new position.
+fn sort(ins: &mut Vec<Insertion>, blocks: &[Block], n_old: usize) -> Vec<usize> {
     let mut order: Vec<usize> = (0..ins.len()).collect();
     order.sort_by_key(|&j| ins[j].at.order(blocks));
     let mut new_pos = vec![0; ins.len()];
@@ -245,12 +246,12 @@ pub(crate) fn sort(ins: &mut Vec<Insertion>, blocks: &[Block], n_old: usize) -> 
     new_pos
 }
 
-/// Place `ins` -- ascending by [`At::order`] -- into the tape and move
-/// everything keyed by value id with it: the parallel tables, every
-/// block range, every operand, terminator and `exit_acc`, and the
-/// relocation tables. An inserted value takes the source position of
-/// the instruction it goes ahead of or after, or of the one after an
-/// empty block.
+/// Place `ins` into the tape and move everything keyed by value id with
+/// it: the parallel tables, every block range, every operand, terminator
+/// and `exit_acc`, and the relocation tables. Insertions at one place
+/// land in slice order, and `Rewrite::ids` follows the slice. An
+/// inserted value takes the source position of the instruction it goes
+/// ahead of or after, or of the one after an empty block.
 pub(crate) fn insert(func: &mut FunctionSsa, ins: &[Insertion]) -> Rewrite {
     insert_keeping(func, ins, false).0
 }
@@ -267,6 +268,14 @@ fn insert_keeping(
     ins: &[Insertion],
     keep_undo: bool,
 ) -> (Rewrite, Option<Undo>) {
+    let order = |i: &Insertion| i.at.order(&func.blocks);
+    if ins.windows(2).any(|w| order(&w[0]) > order(&w[1])) {
+        let mut sorted = ins.to_vec();
+        let pos = sort(&mut sorted, &func.blocks, func.insts.len());
+        let (mut rewrite, undo) = insert_keeping(func, &sorted, keep_undo);
+        rewrite.ids = pos.iter().map(|&p| rewrite.ids[p]).collect();
+        return (rewrite, undo);
+    }
     let mut k = keyed(func);
     let Keyed {
         insts,
@@ -721,8 +730,10 @@ mod tests {
     /// A plan given out of tape order keeps each insertion's reads of an
     /// earlier one once [`sort`] has ordered it: two at a block's end and
     /// two into an empty block, each second one reading the first.
+    /// A plan out of tape order lands in tape order, its chained operands
+    /// follow it, and the ids it receives follow the slice.
     #[test]
-    fn a_sorted_plan_keeps_its_chained_operands() {
+    fn an_unsorted_plan_keeps_its_chained_operands() {
         let mut f = func_with(
             alloc::vec![Inst::Imm(1), Inst::Imm(2)],
             alloc::vec![
@@ -737,17 +748,14 @@ mod tests {
             is_f32: false,
             copy_of: None,
         };
-        let mut ins = alloc::vec![
+        let ins = alloc::vec![
             put(At::After(1), Inst::Imm(5)),
             put(At::After(1), add(1, 2)),
             put(At::Empty(1), Inst::Imm(7)),
             put(At::Empty(1), add(0, 4)),
         ];
-        assert_eq!(sort(&mut ins, &f.blocks, 2), alloc::vec![2, 3, 0, 1]);
-        assert!(matches!(ins[1].inst, Inst::Binop { lhs: 0, rhs: 2, .. }));
-        assert!(matches!(ins[3].inst, Inst::Binop { lhs: 1, rhs: 4, .. }));
         let rw = insert(&mut f, &ins);
-        assert_eq!(rw.ids, alloc::vec![1, 2, 4, 5]);
+        assert_eq!(rw.ids, alloc::vec![4, 5, 1, 2]);
         assert_eq!(rw.remap, alloc::vec![0, 3]);
         let ranges: Vec<_> = f.blocks.iter().map(|b| b.inst_range.clone()).collect();
         assert_eq!(ranges, alloc::vec![0..1, 1..3, 3..6]);

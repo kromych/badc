@@ -8154,6 +8154,26 @@ void setp(struct pair *p) { *p = Z; }\n";
     m.finish();
 }
 
+/// Copies out of const data in blocks the tape holds against their layout
+/// order each store their own bytes.
+#[test]
+fn copies_out_of_const_data_in_blocks_off_tape_order_store_their_bytes() {
+    const SRC: &str = "char buf[4];\nchar *b;\nint a;\n\
+void c(void) {\n\
+    switch (a)\n\
+    case 4:\n\
+        b = __builtin_memcpy(buf, \"NULL\", 1);\n\
+    __builtin_memcpy(buf, \"\", 1);\n\
+}\n";
+    let ws = a64(SRC, "c");
+    // MOVZ of 'N', either width.
+    assert!(
+        ws.iter().any(|&w| w & 0x7FFF_FFE0 == 0x5280_09C0),
+        "{ws:08x?}"
+    );
+    assert!(!x64(SRC, "c").is_empty());
+}
+
 /// Stores to one member in sequence, with no read between, leave the last:
 /// one store on both targets.
 #[test]

@@ -500,18 +500,17 @@ fn run_one(func: &mut FunctionSsa, target: Target) {
     if plan.ins.is_empty() {
         return;
     }
-    let Plan { mut ins, base } = plan;
-    let pos = tape::sort(&mut ins, &func.blocks, base as usize);
+    let Plan { ins, base } = plan;
     let rewrite = tape::insert(func, &ins);
     for (b, bundle) in bundles {
-        let id = rewrite.ids[pos[(bundle - base) as usize]];
+        let id = rewrite.ids[(bundle - base) as usize];
         func.blocks[b].terminator = Terminator::Return(id);
     }
     for i in taken {
         func.param_local_slots[i] = 0;
     }
     for (v, k, value, fp) in args {
-        let value = rewrite.ids[pos[(value - base) as usize]];
+        let value = rewrite.ids[(value - base) as usize];
         match &mut func.insts[rewrite.remap[v as usize] as usize] {
             Inst::Call {
                 args,

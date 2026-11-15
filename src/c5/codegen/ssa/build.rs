@@ -843,6 +843,11 @@ impl SsaBuilder {
     /// `Inst::Imm`. In-block CSE: a prior `imm(v)` returns the
     /// same ValueId. Pure value, no aliasing concerns; the
     /// `switch_to` block-boundary clear is the only invalidation.
+    /// `Inst::Undef`: a value no store has defined.
+    pub(crate) fn undef(&mut self) -> ValueId {
+        self.push(Inst::Undef)
+    }
+
     pub(crate) fn imm(&mut self, v: i64) -> ValueId {
         if let Some(cached) = self.lookup_pure(PureKey::Imm(v)) {
             return cached;

@@ -125,7 +125,7 @@ Disassembly of section .text:
                	ldr	d1, [sp, #0x10]
                	ldr	d2, [sp, #0x18]
                	add	d0, d1, d2
-               	mov	x0, v0.d[0]
+               	fmov	x0, d0
                	mov	x17, #0x5               // =5
                	movk	x17, #0x100, lsl #32
                	cmp	x0, x17

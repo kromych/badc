@@ -965,7 +965,7 @@ fn filled_locals(func: &FunctionSsa) -> BTreeSet<i64> {
 
 /// Make each `Inst::Undef` an instruction or a terminator reads the
 /// constant zero, which suits every kind and register file, ahead of
-/// allocation. One only phis read stays: its edges move nothing and keep
+/// allocation; a store of one to a frame slot goes. One only phis read stays: its edges move nothing and keep
 /// it unplaced. So does the vector under the low half of a pair
 /// ([`super::vector_slots::pair_low`]) or under any run of inserts writing
 /// every byte ([`super::vector_slots::covered_bottom`]).
@@ -974,6 +974,7 @@ pub(crate) fn zero_read_undefs(func: &mut FunctionSsa) {
     if !func.insts.iter().any(|i| matches!(i, Inst::Undef)) {
         return;
     }
+    drop_undefined_stores(func);
     let counts = super::reg_alloc::compute_use_counts(func);
     let reads = super::reg_alloc::operands_read(func, &counts);
     let lows: BTreeSet<ValueId> = func
@@ -1004,6 +1005,27 @@ pub(crate) fn zero_read_undefs(func: &mut FunctionSsa) {
     for (inst, read) in func.insts.iter_mut().zip(read) {
         if read && matches!(inst, Inst::Undef) {
             *inst = Inst::Imm(0);
+        }
+    }
+}
+
+/// Drop each store of an undefined value to a frame slot: it leaves the
+/// object indeterminate, which whatever the object held already is.
+fn drop_undefined_stores(func: &mut FunctionSsa) {
+    if !func.insts.iter().any(|i| matches!(i, Inst::Undef)) {
+        return;
+    }
+    let counts = super::reg_alloc::compute_use_counts(func);
+    for v in 0..func.insts.len() {
+        if let Inst::StoreLocal {
+            value,
+            volatile: false,
+            ..
+        } = func.insts[v]
+            && matches!(func.insts.get(value as usize), Some(Inst::Undef))
+            && counts.get(v) == Some(&0)
+        {
+            func.insts[v] = Inst::Imm(0);
         }
     }
 }
@@ -1950,7 +1972,16 @@ fn split_address_phi_loads(func: &mut FunctionSsa) {
     }
 }
 
+/// Promote the function's promotable slots; returns them. A store of an
+/// undefined value to a slot left in memory goes, so the passes after do
+/// not take it for a write of the object.
 pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
+    let promoted = promote(func);
+    drop_undefined_stores(func);
+    promoted
+}
+
+fn promote(func: &mut FunctionSsa) -> Vec<i64> {
     // Opt out of promotion for A/B measurement against the unpromoted
     // frame-slot codegen. Diagnostic only: read under the `codegen_test`
     // feature so a production build never consults the environment.

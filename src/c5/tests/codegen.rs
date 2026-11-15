@@ -5507,6 +5507,55 @@ fn a_block_ending_in_an_aggregate_assignment_ends_its_objects_lifetime() {
     );
 }
 
+/// An object declared without an initializer is indeterminate each time
+/// its declaration is reached (C17 6.2.4p6), so a read the compiler cannot
+/// tie to this pass's assignment does not carry the previous pass's value
+/// round the loop: the counter is the loop header's only phi.
+#[test]
+fn an_uninitialized_declaration_starts_each_pass_indeterminate() {
+    let src = r#"
+        int guarded(int n, const int *a, int *out)
+        {
+            for (int i = 0; i < n; i++) {
+                int t;
+                int ok = a[i] > 0;
+                if (ok)
+                    t = a[i] * 3;
+                if (ok)
+                    out[i] = t;
+            }
+            return 0;
+        }
+        int main(void) { return 0; }
+    "#;
+    let program = super::compile_str(src);
+    let mut funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(
+        &program,
+        crate::Target::host(),
+        true,
+        true,
+    )
+    .expect("ssa");
+    let f = funcs
+        .iter_mut()
+        .find(|f| f.name == "guarded")
+        .expect("guarded");
+    crate::c5::codegen::ssa::mem2reg::run(f);
+    let phis_in = |b: &crate::c5::ir::Block| {
+        b.inst_range
+            .clone()
+            .filter(|&v| matches!(f.insts[v as usize], crate::c5::ir::Inst::Phi { .. }))
+            .count()
+    };
+    // The loop header is the first block holding a phi.
+    let header = f
+        .blocks
+        .iter()
+        .find(|b| phis_in(b) > 0)
+        .expect("a loop phi");
+    assert_eq!(phis_in(header), 1, "{:?}", f.insts);
+}
+
 /// A block left by `break` ends the lifetime of the object it declared on
 /// that edge too (C99 6.2.4p2), so the object shares its cell with one
 /// declared after the loop.

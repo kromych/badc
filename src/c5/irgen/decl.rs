@@ -243,7 +243,33 @@ impl<'a> Walker<'a> {
     ) -> Result<(), WalkError> {
         self.release_atomic_lock_word(b, slot, ty);
         match init {
-            LocalInit::None => Ok(()),
+            // An object declared without an initializer is indeterminate
+            // each time its declaration is reached (C17 6.2.4p6). Stating
+            // it for a scalar keeps a value from an earlier pass round a
+            // loop from reaching the next; an array or aggregate is left to
+            // the passes that split it.
+            LocalInit::None => {
+                let kind = store_kind_for(ty, self.target);
+                if self.optimize
+                    && matches!(
+                        kind,
+                        StoreKind::I8 | StoreKind::I16 | StoreKind::I32 | StoreKind::I64
+                    )
+                    && !is_struct_value_ty(ty)
+                    && !is_volatile_object_ty(ty)
+                    && !is_atomic_object_ty(ty)
+                    && !self.fun.array_slots.contains(&slot)
+                    && !self
+                        .fun
+                        .multi_cell_slots
+                        .iter()
+                        .any(|&(base, _)| base == slot)
+                {
+                    let u = b.undef();
+                    b.store_local(slot, u, kind);
+                }
+                Ok(())
+            }
             LocalInit::Scalar(init_id) => {
                 let v = self.walk_copy_operand(b, *init_id)?;
                 // C99 6.7.8p13: a struct-value initializer copies the

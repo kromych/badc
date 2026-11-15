@@ -21,7 +21,7 @@ Disassembly of section .text:
                	stur	d0, [x29, #-0x18]
                	ldur	d0, [x29, #-0x18]
                	fmov	d0, d0
-               	mov	x0, v0.d[0]
+               	fmov	x0, d0
                	add	x0, x0, #0x1
                	mov	x17, #0x1               // =1
                	movk	x17, #0x4004, lsl #48

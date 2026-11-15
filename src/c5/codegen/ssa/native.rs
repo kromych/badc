@@ -128,6 +128,7 @@ pub(crate) fn compile_function_to_bytes(
                     &mut macho_tlv_descriptors,
                     &alloc::collections::BTreeMap::new(),
                     &alloc::collections::BTreeMap::new(),
+                    &[],
                     &mut asm_text_labels,
                     &mut asm_section_text_refs,
                     &mut None,

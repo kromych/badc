@@ -637,7 +637,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=10
     v481 Imm(25)                                          -> x0
     terminator Return(v481)   (exit_acc=v481)
   block 76  start_pc=0
-    v482 ImmData(568)                                     -> x0
+    v482 ImmData(564)                                     -> x0
     v483 Load { addr=v482, disp=0, kind=I32 pc_rel }      -> x0
     v484 Imm(2)                                           -> x1
     v485 Imm(8)                                           -> x1
@@ -648,7 +648,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=10
     v488 Imm(26)                                          -> x0
     terminator Return(v488)   (exit_acc=v488)
   block 78  start_pc=0
-    v489 ImmData(576)                                     -> x0
+    v489 ImmData(568)                                     -> x0
     v490 Load { addr=v489, disp=0, kind=I32 pc_rel }      -> x0
     v491 Imm(3)                                           -> x1
     v492 Imm(8)                                           -> x1

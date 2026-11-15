@@ -23,7 +23,7 @@ use super::{AddrPart, Build};
 use crate::c5::CodeModel;
 use crate::c5::asm::{AsmSymDecl, AsmSymValue};
 use crate::c5::codegen::AbsAddrTarget;
-use crate::c5::layout::{round_up, write_struct};
+use crate::c5::layout::{DATA_ALIGN_MIN, congruent_at, round_up, write_struct};
 // Relocation types this writer emits. `R_AARCH64_ADR_GOT_PAGE` /
 // `R_AARCH64_LD64_GOT_LO12_NC` take a dylib-routed import's address through
 // the GOT, because the symbol binds against a shared object at load time; a
@@ -717,7 +717,9 @@ fn carve_anonymous_const_data(
         })
         .collect();
     for (lo, hi) in merge(carvable) {
-        let align = 1u64 << lo.trailing_zeros().min(3);
+        // Placed congruent modulo the widest access, as the emitter folds a
+        // read of these bytes by their offset in the unit's data.
+        let align = DATA_ALIGN_MIN as u64;
         let e = carve
             .table
             .get_or_insert(RODATA_SECTION, SHT_PROGBITS, SHF_ALLOC, align)
@@ -741,8 +743,6 @@ fn plan_data_layout(
     sizes: &mut Vec<u64>,
     internal: impl Fn(alloc::string::String) -> C5Error,
 ) -> Result<DataPlan, C5Error> {
-    use crate::c5::symbol::Linkage;
-    use crate::c5::token::Token;
     let data_file_len = build.data.len() as u64;
     let bss_size = build.bss_size.max(0) as u64;
     let base_align = build.data_align.max(1) as u64;
@@ -753,32 +753,17 @@ fn plan_data_layout(
 
     // Recorded placement alignment per object start: kept content splits at
     // these offsets so every object repacks at its own alignment.
-    let mut split_align: alloc::collections::BTreeMap<u64, u64> =
-        alloc::collections::BTreeMap::new();
-    for sym in &program.symbols {
-        if sym.class == Token::Glo as i64
-            && sym.defined_here
-            && !sym.is_alias
-            && !sym.is_thread_local
-            && matches!(sym.linkage, Linkage::External | Linkage::Internal)
-            && (sym.val as u64) < unified_len
-        {
-            let a = sym.data_align.max(1) as u64;
-            let e = split_align.entry(sym.val as u64).or_insert(a);
-            *e = (*e).max(a);
-        }
-    }
-    for &(off, a) in &program.data_align_marks {
-        if (0..unified_len as i64).contains(&off) && a > 0 {
-            let e = split_align.entry(off as u64).or_insert(a as u64);
-            *e = (*e).max(a as u64);
-        }
-    }
+    let split_align: alloc::collections::BTreeMap<u64, u64> =
+        crate::c5::layout::data_start_aligns(program, unified_len as i64)
+            .into_iter()
+            .map(|(off, a)| (off as u64, a as u64))
+            .collect();
 
-    // In-section base per named object, packed in declaration order at the
-    // member's alignment. Removal ranges leave the default sections: the
-    // object bytes, the slot-rounding slack past them, and the recorded
-    // alignment padding (`entry == usize::MAX` marks dropped padding).
+    // In-section base per named object, packed in declaration order, each
+    // congruent to its unified offset modulo its alignment. Removal ranges
+    // leave the default sections: the object bytes, the slot-rounding slack
+    // past them, and the recorded alignment padding (`entry == usize::MAX`
+    // marks dropped padding).
     let mut named_home: alloc::collections::BTreeMap<u64, (usize, u64)> =
         alloc::collections::BTreeMap::new();
     let mut removals: Vec<(u64, u64, usize)> = Vec::new();
@@ -786,7 +771,7 @@ fn plan_data_layout(
         if sizes.len() <= o.entry {
             sizes.resize(o.entry + 1, 0);
         }
-        let base = round_up(sizes[o.entry], o.align.max(1));
+        let base = congruent_at(sizes[o.entry], o.val, o.align);
         sizes[o.entry] = base + o.copy;
         named_home.insert(o.val, (o.entry, base));
         removals.push((o.val, o.val + o.copy, o.entry));
@@ -814,7 +799,7 @@ fn plan_data_layout(
     let mut spans: Vec<DataSpan> = Vec::new();
     let mut cursor_data: u64 = 0;
     let mut cursor_bss: u64 = 0;
-    let mut data_align: u64 = crate::c5::layout::DATA_ALIGN_MIN as u64;
+    let mut data_align: u64 = DATA_ALIGN_MIN as u64;
     let mut bss_align: u64 = crate::c5::layout::BSS_ALIGN_MIN as u64;
     // One past the previously placed content; padding offsets map here so a
     // one-past-the-end address stays adjacent to its object.
@@ -868,7 +853,7 @@ fn plan_data_layout(
             } else {
                 bss_align = bss_align.max(a);
             }
-            round_up(*cursor, a)
+            congruent_at(*cursor, pos, a)
         } else {
             // Every boundary the layout placed content on is recorded.
             *cursor

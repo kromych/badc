@@ -6,7 +6,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I32)                            -> x0
     v2   Imm(0)                                           -> x1
-    v3   ImmData(84)                                      -> x1
+    v3   ImmData(64)                                      -> x1
     v4   Load { addr=v3, disp=0, kind=I32, volatile pc_rel } -> x1
     v5   Imm(0)                                           -> x2
     v6   Binop { op=add, lhs=v4, rhs=v1 }                 -> x1
@@ -533,7 +533,7 @@ fn ent_pc=16 n_params=1 variadic=false locals=0
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x1
-    v5   ImmData(48)                                      -> x1
+    v5   ImmData(32)                                      -> x1
     v6   Imm(0)                                           -> x2
     v7   BinopI { op=shl, lhs=v1, rhs_imm=3 }             -> x2
     v8   Binop { op=add, lhs=v5, rhs=v7 }                 -> x2
@@ -1577,7 +1577,7 @@ fn ent_pc=22 n_params=0 variadic=false locals=0
     v1112 Imm(0)                                           -> x0
     terminator Bnz { cond=v686, target=b51, fall=b47 }   (low word)   (exit_acc=v1111)
   block 47  start_pc=0
-    v1113 ImmData(84)                                      -> x0
+    v1113 ImmData(64)                                      -> x0
     v1114 Load { addr=v1113, disp=0, kind=I32, volatile pc_rel } -> x0
     v1115 Extend { value=v692, kind=I32 }                  -> x2
     v1116 Binop { op=eq, lhs=v1114, rhs=v692 }             -> x0
@@ -1919,7 +1919,7 @@ fn ent_pc=22 n_params=0 variadic=false locals=0
     v548 Imm(0)                                           -> x0
     terminator Bnz { cond=v544, target=b134, fall=b98 }   (low word)   (exit_acc=v547)
   block 98  start_pc=0
-    v549 ImmData(8)                                       -> x7
+    v549 ImmData(4)                                       -> x7
     v550 Imm(7)                                           -> x6
     v551 Imm(3)                                           -> x2
     v552 Call { target_pc=15, args=[v549, v550, v551, v550], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -1944,7 +1944,7 @@ fn ent_pc=22 n_params=0 variadic=false locals=0
     v565 Imm(0)                                           -> x0
     terminator Bnz { cond=v561, target=b133, fall=b102 }   (low word)   (exit_acc=v564)
   block 102  start_pc=0
-    v566 ImmData(8)                                       -> x7
+    v566 ImmData(4)                                       -> x7
     v567 Imm(7)                                           -> x6
     v568 Imm(0)                                           -> x2
     v569 Imm(100)                                         -> x1
@@ -1970,7 +1970,7 @@ fn ent_pc=22 n_params=0 variadic=false locals=0
     v583 Imm(0)                                           -> x0
     terminator Bnz { cond=v579, target=b132, fall=b106 }   (low word)   (exit_acc=v582)
   block 106  start_pc=0
-    v584 ImmData(8)                                       -> x7
+    v584 ImmData(4)                                       -> x7
     v585 Imm(0)                                           -> x6
     v586 Imm(100)                                         -> x1
     v587 Call { target_pc=15, args=[v584, v585, v585, v586], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0

@@ -42,13 +42,13 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v35  Imm(0)                                           -> x1
     v36  Imm(0)                                           -> x1
     v37  Imm(0)                                           -> x1
-    v38  ImmData(52)                                      -> x1
+    v38  ImmData(48)                                      -> x1
     v39  Imm(0)                                           -> x1
     v40  Imm(107)                                         -> x1
     v41  Imm(0)                                           -> x1
     v42  Imm(1)                                           -> x1
     v43  Imm(0)                                           -> x1
-    v44  ImmData(52)                                      -> x1
+    v44  ImmData(48)                                      -> x1
     v45  Imm(3)                                           -> x1
     v46  BinopI { op=add, lhs=v44, rhs_imm=3 }            -> x1
     v47  Imm(116)                                         -> x1
@@ -58,7 +58,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v51  Imm(0)                                           -> x1
     v52  Imm(0)                                           -> x1
     v53  Imm(0)                                           -> x1
-    v54  ImmData(52)                                      -> x1
+    v54  ImmData(48)                                      -> x1
     v55  Imm(4)                                           -> x1
     v56  BinopI { op=add, lhs=v54, rhs_imm=4 }            -> x1
     v57  Imm(0)                                           -> x1
@@ -135,7 +135,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v115 Imm(7)                                           -> x0
     terminator Return(v115)   (exit_acc=v115)
   block 10  start_pc=0
-    v116 ImmData(52)                                      -> x2
+    v116 ImmData(48)                                      -> x2
     v117 ImmData(16)                                      -> x1
     v118 Binop { op=eq, lhs=v116, rhs=v9 }                -> x0
     terminator Bz { cond=v118, target=b12, fall=b11 }   (exit_acc=v118)
@@ -143,12 +143,12 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v119 Imm(8)                                           -> x0
     terminator Return(v119)   (exit_acc=v119)
   block 12  start_pc=0
-    v120 ImmData(64)                                      -> x7
+    v120 ImmData(53)                                      -> x7
     v121 Imm(0)                                           -> x0
     v122 ImmData(16)                                      -> x0
     v123 BinopI { op=add, lhs=v122, rhs_imm=24 }          -> x0
     v124 Imm(40)                                          -> x6
-    v125 ImmData(52)                                      -> x0
+    v125 ImmData(48)                                      -> x0
     v126 ImmData(128)                                     -> x0
     v127 Imm(8)                                           -> x0
     v128 BinopI { op=add, lhs=v62, rhs_imm=8 }            -> x0

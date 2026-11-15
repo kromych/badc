@@ -6,7 +6,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x0
     v2   Imm(0)                                           -> x0
-    v3   ImmData(20)                                      -> x1
+    v3   ImmData(16)                                      -> x1
     v4   Imm(0)                                           -> x1
     v5   BinopI { op=add, lhs=v3, rhs_imm=0 }             -> x1
     v6   Store { addr=v3, disp=0, value=v2, kind=I32 pc_rel } -> -

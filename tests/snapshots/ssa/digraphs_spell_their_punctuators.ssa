@@ -28,7 +28,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v22  Imm(0)                                           -> x0
     v23  Imm(3)                                           -> x0
     v24  Imm(0)                                           -> x0
-    v25  ImmData(68)                                      -> x0
+    v25  ImmData(64)                                      -> x0
     v26  Load { addr=v25, disp=0, kind=I32 pc_rel }       -> x0
     v27  BinopI { op=eq, lhs=v26, rhs_imm=0 }             -> x1
     v28  Imm(1)                                           -> x1
@@ -45,8 +45,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v37  Imm(12)                                          -> x0
     v38  Imm(0)                                           -> x0
     v39  Imm(0)                                           -> x0
-    v40  ImmData(8)                                       -> x0
-    v41  ImmData(28)                                      -> x1
+    v40  ImmData(1)                                       -> x0
+    v41  ImmData(21)                                      -> x1
     terminator Jmp(b4)   (exit_acc=v41)
   block 2  start_pc=0
     v106 Load { addr=v95, disp=0, kind=I8 }               -> x6
@@ -72,8 +72,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v105 Imm(0)                                           -> x1
     terminator Bnz { cond=v102, target=b11, fall=b6 }   (exit_acc=v102)
   block 6  start_pc=0
-    v45  ImmData(48)                                      -> x0
-    v46  ImmData(51)                                      -> x1
+    v45  ImmData(41)                                      -> x0
+    v46  ImmData(44)                                      -> x1
     terminator Jmp(b9)   (exit_acc=v46)
   block 7  start_pc=0
     v123 Load { addr=v110, disp=0, kind=I8 }              -> x6
@@ -106,8 +106,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v49  LifetimeEnd(0)                                   -> -
     terminator Return(v47)   (exit_acc=v47)
   block 12  start_pc=0
-    v50  ImmData(54)                                      -> x0
-    v51  ImmData(59)                                      -> x1
+    v50  ImmData(47)                                      -> x0
+    v51  ImmData(52)                                      -> x1
     terminator Jmp(b15)   (exit_acc=v51)
   block 13  start_pc=0
     v139 Load { addr=v127, disp=0, kind=I8 }              -> x6

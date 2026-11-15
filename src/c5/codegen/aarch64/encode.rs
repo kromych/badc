@@ -2435,6 +2435,8 @@ struct Aarch64Lower {
     /// local-symbol dedup for a block-scope static sharing a file-scope
     /// name.
     data_sym_offsets: alloc::collections::BTreeMap<alloc::string::String, i64>,
+    /// [`crate::c5::layout::data_start_aligns`] over the unit's data.
+    data_aligns: Vec<(i64, i64)>,
     /// The mapping state spans the section: a body ending in data leaves the
     /// padding to the next function's first instruction, as under GNU as.
     text_map_state: Option<super::map_syms::MapClass>,
@@ -2464,6 +2466,7 @@ impl Aarch64Lower {
             macho_tlv_fixups: Vec::new(),
             macho_tlv_descriptors: Vec::new(),
             data_sym_offsets,
+            data_aligns: crate::c5::layout::data_start_aligns(program, i64::MAX),
             text_map_state: None,
             ret_tags: alloc::collections::BTreeMap::new(),
         }
@@ -2588,6 +2591,7 @@ impl super::ssa::emit_common::LowerTarget for Aarch64Lower {
             &mut self.macho_tlv_descriptors,
             inputs.name2entpc,
             &self.data_sym_offsets,
+            &self.data_aligns,
             fe.asm_text_labels,
             fe.asm_section_text_refs,
             &mut self.text_map_state,

@@ -24,7 +24,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=23
     v11  BinopI { op=lt, lhs=v9, rhs_imm=4 }              -> x0
     terminator Bz { cond=v11, target=b16, fall=b3 }   (exit_acc=v11)
   block 3  start_pc=0
-    v15  ImmData(8)                                       -> x0
+    v15  ImmData(4)                                       -> x0
     v16  Extend { value=v9, kind=I32 }                    -> x1
     v17  BinopI { op=shl, lhs=v9, rhs_imm=2 }             -> x1
     v18  Binop { op=add, lhs=v15, rhs=v17 }               -> x1
@@ -61,7 +61,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=23
     v696 Imm(0)                                           -> x1
     terminator Bnz { cond=v688, target=b7, fall=b15 }   (low word)   (exit_acc=v693)
   block 7  start_pc=0
-    v51  ImmData(8)                                       -> x0
+    v51  ImmData(4)                                       -> x0
     v52  Extend { value=v9, kind=I32 }                    -> x1
     v53  BinopI { op=shl, lhs=v9, rhs_imm=2 }             -> x1
     v54  Binop { op=add, lhs=v51, rhs=v53 }               -> x1

@@ -41,6 +41,13 @@ pub(crate) fn round_up<T: AlignInt>(n: T, align: T) -> T {
     n.round_up_to(align)
 }
 
+/// The first offset at or past `cursor` congruent to `old` modulo `align`:
+/// the base at which an object moved from `old` keeps its offset's residue.
+pub(crate) fn congruent_at(cursor: u64, old: u64, align: u64) -> u64 {
+    let align = align.max(1);
+    cursor + (old % align + align - cursor % align) % align
+}
+
 /// Append a `Copy` record as raw host-order bytes. Callers pass
 /// `#[repr(C)]` on-disk headers whose in-memory layout is the file
 /// layout; badc's targets are little-endian, so no byte swap is needed.
@@ -121,11 +128,6 @@ pub(crate) fn bss_image_align(declared: usize) -> usize {
 /// the next recorded start, so every constraint recorded inside it binds
 /// it: a base congruent to the interval's start modulo the value here
 /// keeps each object in it on its boundary.
-///
-/// No value is below the image's own minimum, so a moved object keeps the
-/// alignment its offset had up to the widest scalar access: code generated
-/// before the move folds an access into its address by that offset, which
-/// a packed object, aligned to 1, would otherwise lose.
 pub(crate) fn data_object_aligns(
     program: &crate::c5::program::Program,
     starts: &[i64],
@@ -133,7 +135,7 @@ pub(crate) fn data_object_aligns(
 ) -> alloc::vec::Vec<i64> {
     let data_len = program.data.len() as i64;
     let cap = bss_image_align(cap) as i64;
-    let mut aligns = alloc::vec![(DATA_ALIGN_MIN as i64).min(cap); starts.len()];
+    let mut aligns = alloc::vec![1i64; starts.len()];
     let mut note = |off: i64, a: i64| {
         if a <= 1 || !(0..data_len).contains(&off) {
             return;
@@ -159,6 +161,52 @@ pub(crate) fn data_object_aligns(
         note(off, a);
     }
     aligns
+}
+
+/// Each recorded object start in the first `len` bytes of the unit's data,
+/// ascending, with the alignment every writer places it on: its defining
+/// symbol's `data_align` or a `Program::data_align_marks` entry, the
+/// larger where both name it. The bytes up to the next start move with it.
+pub(crate) fn data_start_aligns(
+    program: &crate::c5::program::Program,
+    len: i64,
+) -> alloc::vec::Vec<(i64, i64)> {
+    use crate::c5::symbol::Linkage;
+    let syms = program.symbols.iter().filter(|s| {
+        s.class == crate::c5::token::Token::Glo as i64
+            && s.defined_here
+            && !s.is_alias
+            && !s.is_thread_local
+            && matches!(s.linkage, Linkage::External | Linkage::Internal)
+    });
+    let mut v: alloc::vec::Vec<(i64, i64)> = (syms.map(|s| (s.val, s.data_align.max(1))))
+        .chain(program.data_align_marks.iter().copied())
+        .filter(|&(off, a)| (0..len).contains(&off) && a > 0)
+        .collect();
+    v.sort_unstable();
+    let mut out: alloc::vec::Vec<(i64, i64)> = alloc::vec::Vec::with_capacity(v.len());
+    for (off, a) in v {
+        match out.last_mut() {
+            Some(last) if last.0 == off => last.1 = last.1.max(a),
+            _ => out.push((off, a)),
+        }
+    }
+    out
+}
+
+/// The alignment the byte at `off` keeps wherever the writers move the
+/// data: that of the last of `starts` ([`data_start_aligns`]) at or before
+/// it, reduced by its distance from that start. Ahead of every start it is
+/// the image's own.
+pub(crate) fn data_offset_align(starts: &[(i64, i64)], off: i64) -> i64 {
+    let i = starts.partition_point(|&(s, _)| s <= off);
+    let Some(&(s, a)) = i.checked_sub(1).and_then(|i| starts.get(i)) else {
+        return DATA_ALIGN_MIN as i64;
+    };
+    match off - s {
+        0 => a,
+        d => a.min(1 << d.trailing_zeros()),
+    }
 }
 
 // ------------------------------------------------------------------

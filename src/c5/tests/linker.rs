@@ -18958,3 +18958,33 @@ fn a_link_with_warnings_off_reports_none() {
     let dash_w = build(true, true);
     assert!(dash_w.warnings.is_empty(), "-w: {:?}", dash_w.warnings);
 }
+
+/// A packed object the object writer moves keeps its offset's residue up to
+/// the widest access: the aarch64 emitter folded the object's accesses into
+/// the scaled low-12 offset by that offset, and `k`, carved into `.rodata`
+/// ahead of `e`, must not shift `e` off the access width.
+#[test]
+fn a_packed_object_behind_carved_const_data_keeps_its_access_alignment() {
+    use crate::c5::{NativeOptions, Target};
+    let src = "#pragma pack(1)\nstruct inner { int b; };\n#pragma pack()\n\
+        const int k[3] = {1, 2, 3};\nstruct inner e = {9};\nint g;\n\
+        void read_member(void) { int *i = &e.b; g = *i; }\n\
+        int main(void) { return e.b == 9 && k[1] == 2 ? 0 : 1; }\n";
+    for target in [
+        Target::MacOSAarch64,
+        Target::LinuxAarch64,
+        Target::WindowsAarch64,
+    ] {
+        let program = crate::c5::Compiler::with_options(
+            src.into(),
+            target,
+            crate::c5::compiler::CompileOptions::default(),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("{target:?}: compile: {e}"));
+        let opts = NativeOptions::new().with_optimize();
+        if let Err(e) = super::link_executable_with_runtime(&program, target, opts) {
+            panic!("{target:?}: {e}");
+        }
+    }
+}

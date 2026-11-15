@@ -192,6 +192,7 @@ pub(crate) fn emit_function(
     macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
     name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
     data_sym_offsets: &alloc::collections::BTreeMap<alloc::string::String, i64>,
+    data_aligns: &[(i64, i64)],
     asm_text_labels: &mut Vec<super::AsmTextLabel>,
     asm_section_text_refs: &mut Vec<super::AsmSectionTextRef>,
     // The mapping state spans the section: a body ending in data leaves the
@@ -334,7 +335,7 @@ pub(crate) fn emit_function(
         seh_rows: cx.seh_rows.len(),
         text_map_state: *text_map_state,
     };
-    let page_only = super::mem::page_only_data(func, alloc, extern_data_names);
+    let page_only = super::mem::page_only_data(func, alloc, extern_data_names, data_aligns);
     let ends_path = super::ssa::emit_common::calls_ending_paths(func);
     let mut em = FunctionEmitter {
         cx,

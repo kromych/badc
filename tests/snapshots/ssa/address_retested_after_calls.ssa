@@ -6,7 +6,7 @@ fn ent_pc=2 n_params=1 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7
     v2   Imm(0)                                           -> x0
-    v3   ImmData(20)                                      -> x0
+    v3   ImmData(16)                                      -> x0
     v4   Load { addr=v3, disp=0, kind=I32 pc_rel }        -> x0
     v5   BinopI { op=add, lhs=v4, rhs_imm=1 }             -> x0
     v6   Store { addr=v3, disp=0, value=v5, kind=I32 pc_rel } -> -
@@ -22,7 +22,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(20)                                      -> x0
+    v1   ImmData(16)                                      -> x0
     v2   Load { addr=v1, disp=0, kind=I32 pc_rel }        -> x0
     v3   BinopI { op=add, lhs=v2, rhs_imm=1 }             -> x0
     v4   Store { addr=v1, disp=0, value=v3, kind=I32 pc_rel } -> -
@@ -173,7 +173,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v52  Extend { value=v51, kind=I32 }                   -> x2
     v53  Binop { op=add, lhs=v33, rhs=v51 }               -> x0
     v54  Extend { value=v53, kind=I32, nsw }              -> x1
-    v55  ImmData(20)                                      -> x1
+    v55  ImmData(16)                                      -> x1
     v56  Load { addr=v55, disp=0, kind=I32 pc_rel }       -> x1
     v57  BinopI { op=eq, lhs=v56, rhs_imm=2 }             -> x1
     v58  Imm(0)                                           -> x1

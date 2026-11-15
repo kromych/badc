@@ -275,7 +275,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=132
     v188 BinopI { op=lt, lhs=v186, rhs_imm=40 }           -> x7
     terminator Bz { cond=v188, target=b25, fall=b20 }   (exit_acc=v188)
   block 25  start_pc=0
-    v202 ImmData(8)                                       -> x7
+    v202 ImmData(1)                                       -> x7
     v203 CallExt { binding_idx=0, args=[v202], fp_arg_mask=0x0 } -> x0
     v204 Imm(0)                                           -> x0
     v205 LifetimeEnd(-66)                                 -> -

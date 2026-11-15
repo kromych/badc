@@ -1379,22 +1379,27 @@ pub(super) fn emit_load(
 /// low 12 bits of the same address in its offset, as compilers pair `adrp`
 /// with `ldr` / `str`; another reader, or a displacement, needs the whole
 /// address, since the page of `sym + disp` need not be that of `sym`. The
-/// scaled offset holds only a multiple of the access width, so an object
-/// placed off that alignment -- a packed one -- needs the whole address too.
+/// scaled offset holds only a multiple of the access width, so an address
+/// the data layout keeps off that alignment -- in a packed object -- needs
+/// the whole address too. `data_aligns` is the unit's
+/// [`crate::c5::layout::data_start_aligns`].
 pub(super) fn page_only_data(
     func: &FunctionSsa,
     alloc: &Allocation,
     extern_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
+    data_aligns: &[(i64, i64)],
 ) -> Vec<bool> {
     let n = func.insts.len();
     let (mut folded, mut whole) = (alloc::vec![false; n], alloc::vec![false; n]);
     let scalar_load = |k: LoadKind| !matches!(k, LoadKind::F80 | LoadKind::F128 | LoadKind::V128);
     let scalar_store =
         |k: StoreKind| !matches!(k, StoreKind::F80 | StoreKind::F128 | StoreKind::V128);
-    // The unit's data image is placed at an alignment at least the widest
-    // access's, so an object's offset in it gives its alignment.
     let placed = |addr: u32, bytes: u8| match func.insts.get(addr as usize) {
-        Some(&Inst::ImmData(off)) => off.rem_euclid(i64::from(bytes.max(1))) == 0,
+        Some(&Inst::ImmData(off)) => {
+            let width = i64::from(bytes.max(1));
+            off.rem_euclid(width) == 0
+                && crate::c5::layout::data_offset_align(data_aligns, off) >= width
+        }
         _ => true,
     };
     for (v, inst) in func.insts.iter().enumerate() {

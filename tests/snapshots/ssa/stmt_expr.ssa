@@ -92,7 +92,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v73  Imm(0)                                           -> x0
     v74  Imm(0)                                           -> x1
     v75  ImmData(16)                                      -> x1
-    v76  Imm(0)                                           -> x1
+    v76  Load { addr=v72, disp=0, kind=I32 pc_rel }       -> x1
     v77  Imm(1)                                           -> x1
     v78  Imm(0)                                           -> x1
     v79  Imm(1)                                           -> x1
@@ -189,7 +189,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v160 Imm(0)                                           -> x0
     v161 Imm(0)                                           -> x1
     v162 ImmData(16)                                      -> x1
-    v163 Imm(0)                                           -> x1
+    v163 Load { addr=v117, disp=0, kind=I32 pc_rel }      -> x1
     v164 Imm(1)                                           -> x1
     v165 Imm(0)                                           -> x1
     v166 Imm(1)                                           -> x1
@@ -234,7 +234,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v199 Imm(0)                                           -> x1
     v200 Imm(0)                                           -> x1
     v201 ImmData(16)                                      -> x1
-    v202 Imm(0)                                           -> x1
+    v202 Load { addr=v191, disp=0, kind=I32 pc_rel }      -> x1
     v203 Imm(1)                                           -> x1
     v204 Imm(0)                                           -> x1
     v205 Imm(1)                                           -> x1

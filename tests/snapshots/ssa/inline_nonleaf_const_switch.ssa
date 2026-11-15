@@ -5,7 +5,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=3
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x0
-    v2   StoreLocal { off=-3, value=v1, kind=I32 }        -> -
+    v2   Imm(0)                                           -> x1
     v3   Imm(13124)                                       -> x1
     v4   StoreLocal { off=-1, value=v1, kind=I32 }        -> -
     v5   LocalAddr(-3)                                    -> x0
@@ -18,7 +18,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=3
     v12  Imm(1)                                           -> x0
     v13  Imm(287454020)                                   -> x0
     v14  Imm(287454020)                                   -> x0
-    v15  StoreLocal { off=-3, value=v14, kind=I32 }       -> -
+    v15  Imm(0)                                           -> x0
     v16  LocalAddr(-2)                                    -> x0
     v17  Imm(2)                                           -> x0
     v18  Imm(287454020)                                   -> x0
@@ -43,13 +43,13 @@ fn ent_pc=5 n_params=0 variadic=false locals=3
     v37  Imm(68)                                          -> x0
     v38  StoreLocal { off=-1, value=v37, kind=I8 }        -> -
     v39  LoadLocal { off=-3, kind=U32 }                   -> x0
-    v40  BinopI { op=xor, lhs=v39, rhs_imm=287454020 }    -> x0
-    v41  LoadLocal { off=-2, kind=U32 }                   -> x1
-    v42  BinopI { op=xor, lhs=v41, rhs_imm=13124 }        -> x1
-    v43  Binop { op=or, lhs=v40, rhs=v42 }                -> x0
+    v40  Imm(0)                                           -> x0
+    v41  LoadLocal { off=-2, kind=U32 }                   -> x0
+    v42  BinopI { op=xor, lhs=v41, rhs_imm=13124 }        -> x0
+    v43  BinopI { op=or, lhs=v42, rhs_imm=0 }             -> x1
     v44  LoadLocal { off=-1, kind=U32 }                   -> x1
     v45  BinopI { op=xor, lhs=v44, rhs_imm=68 }           -> x1
-    v46  Binop { op=or, lhs=v43, rhs=v45 }                -> x0
+    v46  Binop { op=or, lhs=v42, rhs=v45 }                -> x0
     v47  Imm(0)                                           -> x1
     v48  BinopI { op=and, lhs=v46, rhs_imm=4294967295 }   -> x1
     v49  Extend { value=v46, kind=I32 }                   -> x1

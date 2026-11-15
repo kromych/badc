@@ -341,7 +341,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     terminator Bnz { cond=v269, target=b33, fall=b31 }   (exit_acc=v269)
   block 31  start_pc=0
     v275 ImmData(576)                                     -> x0
-    v276 Imm(55)                                          -> x0
+    v276 Load { addr=v246, disp=0, kind=I32 pc_rel }      -> x0
     v277 Imm(0)                                           -> x0
     v278 Imm(0)                                           -> x0
     v279 Imm(0)                                           -> x0

@@ -71,10 +71,7 @@ Disassembly of section .text:
                	movq	<rip>, %rax # <addr>
                	cmpq	$0x2222, %rax           # imm = 0x2222
                	jne	<addr>
-               	movl	<rip>, %eax # <addr>
-               	cmpl	$0x6, %eax
-               	je	<addr>
-               	movl	$0x5, %eax
-               	retq
                	xorl	%eax, %eax
+               	retq
+               	movl	$0x5, %eax
                	retq

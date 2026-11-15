@@ -140,7 +140,7 @@ fn ent_pc=9 n_params=2 variadic=false locals=3
     v117 BinopI { op=add, lhs=v87, rhs_imm=80 }           -> x0
     v118 Imm(12)                                          -> x0
     v119 BinopI { op=add, lhs=v87, rhs_imm=92 }           -> x0
-    v120 Imm(42)                                          -> x0
+    v120 Load { addr=v87, disp=92, kind=I32 pc_rel }      -> x0
     v121 Imm(0)                                           -> x0
     v122 Imm(0)                                           -> x0
     v123 Imm(0)                                           -> x0

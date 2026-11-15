@@ -130,11 +130,6 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	mov	x1, #0x80000000         // =2147483648
                	str	w1, [x0, #0x80]
-               	ldr	w0, [x0, #0x80]
-               	cmp	w0, w1
-               	b.eq	<addr>
-               	mov	x0, #0xd                // =13
-               	b	<addr>
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
                	ldr	x0, [x0]

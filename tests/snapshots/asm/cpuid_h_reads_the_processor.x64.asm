@@ -207,7 +207,7 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	cpuid
                	movl	%ebx, -0x8(%rbp)
-               	movl	-0x8(%rbp), %eax
+               	movl	%ebx, %eax
                	cmpl	%esi, %eax
                	jne	<addr>
                	cmpl	%edi, %ecx

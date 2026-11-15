@@ -31,20 +31,18 @@ Disassembly of section .text:
                	andq	%r11, %rax
                	orq	$0x240, %rax            # imm = 0x240
                	movl	%eax, <rip> # <addr>
-               	movl	<rip>, %eax # <addr>
+               	movl	<rip>, %ecx # <addr>
                	movabsq	$-0xffffffc1, %r11      # imm = 0xFFFFFFFF0000003F
-               	andq	%r11, %rax
-               	orq	$0x140, %rax            # imm = 0x140
-               	movl	%eax, <rip> # <addr>
-               	movl	<rip>, %eax # <addr>
+               	andq	%r11, %rcx
+               	orq	$0x140, %rcx            # imm = 0x140
+               	movl	%ecx, <rip> # <addr>
                	sarq	$0x6, %rax
                	cmpl	$0x9, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	movl	<rip>, %eax # <addr>
-               	sarq	$0x6, %rax
-               	cmpl	$0x5, %eax
+               	sarq	$0x6, %rcx
+               	cmpl	$0x5, %ecx
                	je	<addr>
                	movl	$0x2, %eax
                	retq

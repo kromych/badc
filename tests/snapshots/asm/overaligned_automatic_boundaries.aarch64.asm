@@ -102,12 +102,10 @@ Disassembly of section .text:
                	strb	w1, [sp]
                	mov	x1, #0x2                // =2
                	strb	w1, [sp, #0xfff]
-               	and	x1, x0, #0xfff
+               	tst	x0, #0xfff
                	mov	x0, #0x0                // =0
-               	cbnz	w1, <addr>
-               	ldrb	w1, [sp]
-               	cmp	w1, #0x1
-               	cset	x1, eq
+               	mov	x2, #0x1                // =1
+               	csel	x1, x0, x2, ne
                	cbz	x1, <addr>
                	ldrb	w0, [sp, #0xfff]
                	cmp	w0, #0x2
@@ -115,8 +113,6 @@ Disassembly of section .text:
                	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, x0
-               	b	<addr>
 
 <over_a_page>:
                	stp	x29, x30, [sp, #-0x10]!
@@ -142,12 +138,10 @@ Disassembly of section .text:
                	add	x2, x0, x17
                	mov	x3, #0x3                // =3
                	strb	w3, [x2]
-               	and	x3, x0, #0x3f
+               	tst	x0, #0x3f
                	mov	x0, #0x0                // =0
-               	cbnz	w3, <addr>
-               	ldrb	w3, [sp]
-               	cmp	w3, #0x1
-               	cset	x3, eq
+               	mov	x4, #0x1                // =1
+               	csel	x3, x0, x4, ne
                	cbz	x3, <addr>
                	ldrb	w1, [x1]
                	cmp	w1, #0x2
@@ -160,8 +154,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x1, x0
-               	b	<addr>
-               	mov	x3, x0
                	b	<addr>
 
 <nested>:

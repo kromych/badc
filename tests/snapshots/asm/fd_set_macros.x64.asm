@@ -41,29 +41,30 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x80, %eax
                	jl	<addr>
-               	orb	$0x1, -0x80(%rbp)
-               	orb	$-0x80, -0x80(%rbp)
-               	orb	$0x1, -0x7f(%rbp)
-               	orb	$0x10, -0x74(%rbp)
                	movzbq	-0x80(%rbp), %rax
+               	orq	$0x1, %rax
+               	movb	%al, -0x80(%rbp)
+               	orq	$0x80, %rax
+               	movb	%al, -0x80(%rbp)
+               	movzbq	-0x7f(%rbp), %rcx
+               	orq	$0x1, %rcx
+               	movb	%cl, -0x7f(%rbp)
+               	movzbq	-0x74(%rbp), %rdx
+               	orq	$0x10, %rdx
+               	movb	%dl, -0x74(%rbp)
                	testb	$0x1, %al
                	jne	<addr>
                	movl	$0x2, %eax
                	leave
                	retq
-               	testb	$-0x80, %al
-               	jne	<addr>
-               	movl	$0x3, %eax
-               	leave
-               	retq
-               	movzbq	-0x7f(%rbp), %rax
-               	testb	$0x1, %al
+               	andq	$0xff, %rcx
+               	testb	$0x1, %cl
                	jne	<addr>
                	movl	$0x4, %eax
                	leave
                	retq
-               	movzbq	-0x74(%rbp), %rax
-               	testb	$0x10, %al
+               	andq	$0xff, %rdx
+               	testb	$0x10, %dl
                	jne	<addr>
                	movl	$0x5, %eax
                	leave
@@ -97,8 +98,9 @@ Disassembly of section .text:
                	movl	$0xd, %eax
                	leave
                	retq
-               	andb	$0x7f, -0x80(%rbp)
                	movzbq	-0x80(%rbp), %rax
+               	andq	$-0x81, %rax
+               	movb	%al, -0x80(%rbp)
                	testb	$-0x80, %al
                	je	<addr>
                	movl	$0x15, %eax
@@ -117,12 +119,6 @@ Disassembly of section .text:
                	retq
                	orq	$0x1, %rax
                	movb	%al, -0x80(%rbp)
-               	movzbq	-0x80(%rbp), %rax
-               	testb	$0x1, %al
-               	jne	<addr>
-               	movl	$0x18, %eax
-               	leave
-               	retq
                	xorl	%ecx, %ecx
                	movq	%rcx, %rax
                	movb	%cl, -0x80(%rbp,%rax)

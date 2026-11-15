@@ -32,8 +32,6 @@ Disassembly of section .text:
                	movl	<rip>, %eax # <addr>
                	andq	$-0x80, %rax
                	orq	$0x7d, %rax
-               	movl	%eax, <rip> # <addr>
-               	movl	<rip>, %eax # <addr>
                	movq	%rax, %rcx
                	shlq	$0x39, %rcx
                	sarq	$0x39, %rcx
@@ -43,7 +41,6 @@ Disassembly of section .text:
                	andq	$-0x80, %rax
                	orq	%rcx, %rax
                	movl	%eax, <rip> # <addr>
-               	movl	<rip>, %eax # <addr>
                	movq	%rax, %rcx
                	shlq	$0x39, %rcx
                	sarq	$0x39, %rcx
@@ -54,8 +51,6 @@ Disassembly of section .text:
                	retq
                	andq	$-0x80, %rax
                	orq	$0x7d, %rax
-               	movl	%eax, <rip> # <addr>
-               	movl	<rip>, %eax # <addr>
                	movq	%rax, %rcx
                	shlq	$0x39, %rcx
                	sarq	$0x39, %rcx
@@ -68,19 +63,17 @@ Disassembly of section .text:
                	andq	$-0x80, %rax
                	orq	%rcx, %rax
                	movl	%eax, <rip> # <addr>
-               	movl	<rip>, %eax # <addr>
-               	movq	%rax, %rcx
-               	shlq	$0x39, %rcx
-               	sarq	$0x39, %rcx
-               	cmpl	$0x3, %ecx
+               	movl	%eax, %ecx
+               	shlq	$0x39, %rax
+               	sarq	$0x39, %rax
+               	cmpl	$0x3, %eax
                	je	<addr>
                	movl	$0x6, %eax
                	leave
                	retq
+               	movq	%rcx, %rax
                	andq	$-0x80, %rax
                	orq	$0x3, %rax
-               	movl	%eax, <rip> # <addr>
-               	movl	<rip>, %eax # <addr>
                	movq	%rax, %rcx
                	shlq	$0x39, %rcx
                	sarq	$0x39, %rcx
@@ -92,7 +85,6 @@ Disassembly of section .text:
                	andq	$-0x80, %rax
                	orq	%rcx, %rax
                	movl	%eax, <rip> # <addr>
-               	movl	<rip>, %eax # <addr>
                	shlq	$0x39, %rax
                	sarq	$0x39, %rax
                	cmpl	$0x4, %eax
@@ -103,8 +95,6 @@ Disassembly of section .text:
                	xorps	%xmm0, %xmm0
                	movzbq	<rip>, %rax # <addr>
                	andq	$-0x11, %rax
-               	movb	%al, <rip> # <addr>
-               	movzbq	<rip>, %rax # <addr>
                	movq	%rax, %rcx
                	sarq	$0x4, %rcx
                	andq	$0x1, %rcx
@@ -122,7 +112,6 @@ Disassembly of section .text:
                	shlq	$0x4, %rcx
                	orq	%rcx, %rax
                	movb	%al, <rip> # <addr>
-               	movzbq	<rip>, %rax # <addr>
                	sarq	$0x4, %rax
                	andq	$0x1, %rax
                	cmpl	$0x1, %eax
@@ -133,8 +122,6 @@ Disassembly of section .text:
                	movl	<rip>, %eax # <addr>
                	andq	$-0xf81, %rax           # imm = 0xF07F
                	orq	$0xf00, %rax            # imm = 0xF00
-               	movl	%eax, <rip> # <addr>
-               	movl	<rip>, %eax # <addr>
                	movq	%rax, %rcx
                	sarq	$0x7, %rcx
                	andq	$0x1f, %rcx
@@ -147,7 +134,6 @@ Disassembly of section .text:
                	shlq	$0x7, %rcx
                	orq	%rcx, %rax
                	movl	%eax, <rip> # <addr>
-               	movl	<rip>, %eax # <addr>
                	sarq	$0x7, %rax
                	andq	$0x1f, %rax
                	cmpl	$0x1d, %eax
@@ -440,7 +426,6 @@ Disassembly of section .text:
                	andq	$-0x80, %rax
                	orq	%rcx, %rax
                	movl	%eax, <rip> # <addr>
-               	movl	<rip>, %eax # <addr>
                	shlq	$0x39, %rax
                	sarq	$0x39, %rax
                	cmpl	$0x1, %eax
@@ -485,8 +470,6 @@ Disassembly of section .text:
                	movl	<rip>, %eax # <addr>
                	andq	$-0x80, %rax
                	orq	$0x7d, %rax
-               	movl	%eax, <rip> # <addr>
-               	movl	<rip>, %eax # <addr>
                	movq	%rax, %rcx
                	shlq	$0x39, %rcx
                	sarq	$0x39, %rcx
@@ -495,7 +478,6 @@ Disassembly of section .text:
                	andq	$-0x80, %rax
                	orq	%rcx, %rax
                	movl	%eax, <rip> # <addr>
-               	movl	<rip>, %eax # <addr>
                	shlq	$0x39, %rax
                	sarq	$0x39, %rax
                	cmpl	$-0x9, %eax
@@ -505,12 +487,9 @@ Disassembly of section .text:
                	retq
                	movzbq	<rip>, %rax # <addr>
                	andq	$-0x11, %rax
-               	movb	%al, <rip> # <addr>
-               	movzbq	<rip>, %rax # <addr>
                	andq	$-0x11, %rax
                	orq	$0x10, %rax
                	movb	%al, <rip> # <addr>
-               	movzbq	<rip>, %rax # <addr>
                	sarq	$0x4, %rax
                	andq	$0x1, %rax
                	cmpl	$0x1, %eax
@@ -542,8 +521,6 @@ Disassembly of section .text:
                	movl	<rip>, %eax # <addr>
                	andq	$-0x80, %rax
                	orq	$0x3f, %rax
-               	movl	%eax, <rip> # <addr>
-               	movl	<rip>, %eax # <addr>
                	movq	%rax, %rcx
                	shlq	$0x39, %rcx
                	sarq	$0x39, %rcx
@@ -557,7 +534,6 @@ Disassembly of section .text:
                	sarq	$0x39, %rcx
                	cmpl	$-0x40, %ecx
                	jne	<addr>
-               	movl	<rip>, %eax # <addr>
                	shlq	$0x39, %rax
                	sarq	$0x39, %rax
                	cmpl	$-0x40, %eax
@@ -624,8 +600,6 @@ Disassembly of section .text:
                	movl	<rip>, %eax # <addr>
                	andq	$-0xf81, %rax           # imm = 0xF07F
                	orq	$0x180, %rax            # imm = 0x180
-               	movl	%eax, <rip> # <addr>
-               	movl	<rip>, %eax # <addr>
                	movq	%rax, %rcx
                	sarq	$0x7, %rcx
                	andq	$0x1f, %rcx
@@ -635,7 +609,6 @@ Disassembly of section .text:
                	shlq	$0x7, %rcx
                	orq	%rcx, %rax
                	movl	%eax, <rip> # <addr>
-               	movl	<rip>, %eax # <addr>
                	sarq	$0x7, %rax
                	andq	$0x1f, %rax
                	cmpl	$0x9, %eax

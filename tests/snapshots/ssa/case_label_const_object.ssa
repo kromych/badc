@@ -180,7 +180,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     terminator Bz { cond=v91, target=b5, fall=b1 }   (exit_acc=v91)
   block 1  start_pc=0
     v206 ImmData(16)                                      -> x0
-    v207 Imm(9)                                           -> x0
+    v207 Load { addr=v66, disp=0, kind=I32 pc_rel }       -> x0
     v208 Imm(1)                                           -> x0
     v209 Imm(0)                                           -> x0
     v210 Imm(1)                                           -> x0

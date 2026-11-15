@@ -341,46 +341,45 @@ Disassembly of section .text:
                	orq	$0x20, %r9
                	leaq	0x1(%rdi), %rcx
                	movl	%ecx, -0x8(%rbp)
-               	shrq	$0x20, %rcx
-               	cmpl	$0x1, %ecx
+               	movq	%rcx, %rdx
+               	shrq	$0x20, %rdx
+               	cmpl	$0x1, %edx
                	jne	<addr>
-               	cmpl	$0x0, -0x8(%rbp)
+               	testl	%ecx, %ecx
                	jne	<addr>
                	movl	%edi, -0x8(%rbp)
-               	movl	-0x8(%rbp), %ecx
-               	cmpl	%edi, %ecx
-               	jne	<addr>
                	leaq	0x1(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, -0x8(%rbp)
-               	shrq	$0x20, %rcx
-               	testl	%ecx, %ecx
+               	movq	%rcx, %rdx
+               	shrq	$0x20, %rdx
+               	testl	%edx, %edx
                	jne	<addr>
-               	movl	-0x8(%rbp), %ecx
+               	movl	%ecx, %ecx
                	addq	$0x2, %rax
                	cmpl	%eax, %ecx
                	jne	<addr>
                	leaq	(%rdi,%rdi), %rax
                	incq	%rax
                	movl	%eax, -0x8(%rbp)
-               	shrq	$0x20, %rax
-               	cmpl	$0x1, %eax
+               	movq	%rax, %rcx
+               	shrq	$0x20, %rcx
+               	cmpl	$0x1, %ecx
                	jne	<addr>
-               	movl	-0x8(%rbp), %eax
+               	movl	%eax, %eax
                	cmpl	%edi, %eax
                	je	<addr>
                	orq	$0x40, %r9
                	leaq	-0x1(%rbx), %rax
                	movl	%eax, -0x8(%rbp)
-               	shrq	$0x3f, %rax
-               	cmpl	$0x1, %eax
+               	movq	%rax, %rcx
+               	shrq	$0x3f, %rcx
+               	cmpl	$0x1, %ecx
                	jne	<addr>
-               	movl	-0x8(%rbp), %eax
+               	movl	%eax, %eax
                	cmpl	%edi, %eax
                	jne	<addr>
                	movl	$0x0, -0x8(%rbp)
-               	cmpl	$0x0, -0x8(%rbp)
-               	jne	<addr>
                	leaq	(%r14,%r15), %rax
                	cmpq	%r14, %rax
                	setb	%dl

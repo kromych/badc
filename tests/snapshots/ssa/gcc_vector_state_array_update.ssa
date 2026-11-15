@@ -1688,7 +1688,7 @@ fn ent_pc=7 n_params=2 variadic=false locals=0
     v504 BinopI { op=and, lhs=v503, rhs_imm=255 }         -> x8
     v505 Binop { op=xor, lhs=v488, rhs=v503 }             -> x2
     v506 StoreIndexed { base=v1, index=v484, scale=1, value=v505, kind=I8 } -> -
-    v507 LoadIndexed { base=v1, index=v484, scale=1, kind=U8 } -> x1
+    v507 BinopI { op=and, lhs=v505, rhs_imm=255 }         -> x1
     v508 Imm(0)                                           -> x1
     v509 Imm(1)                                           -> x1
     v510 Imm(1)                                           -> x1

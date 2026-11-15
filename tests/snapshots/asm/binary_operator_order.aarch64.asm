@@ -15,7 +15,8 @@ Disassembly of section .text:
 
 <main>:
                	adrp	x0, <page>
-               	str	wzr, [x0, #0x20]
+               	mov	x2, #0x0                // =0
+               	str	w2, [x0, #0x20]
                	mov	x1, #0x1                // =1
                	str	w1, [x0, #0x20]
                	mov	x1, #0x2                // =2
@@ -43,10 +44,9 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	mov	x4, #0x0                // =0
-               	mov	x5, #0x1                // =1
-               	str	w5, [x0, #0x44]
-               	str	w3, [x1, x4, lsl #2]
+               	mov	x4, #0x1                // =1
+               	str	w4, [x0, #0x44]
+               	str	w3, [x1, x2, lsl #2]
                	mov	x4, #0x2                // =2
                	ldrsw	x3, [x0, #0x44]
                	add	x5, x3, #0x1
@@ -71,14 +71,13 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x19               // =25
                	ret
-               	mov	x3, #0x0                // =0
-               	mov	x4, #0x1                // =1
-               	str	w4, [x0, #0x44]
-               	str	wzr, [x1, x3, lsl #2]
+               	mov	x3, #0x1                // =1
+               	str	w3, [x0, #0x44]
+               	str	w2, [x1, x2, lsl #2]
                	ldrsw	x3, [x0, #0x44]
                	add	x4, x3, #0x1
                	str	w4, [x0, #0x44]
-               	str	wzr, [x1, x3, lsl #2]
+               	str	w2, [x1, x3, lsl #2]
                	mov	x3, #0x4                // =4
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
@@ -95,34 +94,33 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x1b               // =27
                	ret
+               	mov	x2, #0x0                // =0
                	mov	x3, #0x1                // =1
-               	mov	x4, #0x0                // =0
-               	mov	x5, #0x1                // =1
-               	str	w5, [x0, #0x44]
-               	str	w3, [x1, x4, lsl #2]
+               	mov	x4, #0x1                // =1
+               	str	w4, [x0, #0x44]
+               	str	w3, [x1, x2, lsl #2]
                	ldrsw	x4, [x0, #0x44]
                	add	x5, x4, #0x1
                	str	w5, [x0, #0x44]
-               	str	wzr, [x1, x4, lsl #2]
+               	str	w2, [x1, x4, lsl #2]
                	ldrsw	x4, [x0, #0x44]
                	cmp	w4, #0x2
                	b.eq	<addr>
                	mov	x0, #0x1c               // =28
                	ret
-               	mov	x4, #0x0                // =0
-               	mov	x5, #0x1                // =1
-               	str	w5, [x0, #0x44]
-               	str	wzr, [x1, x4, lsl #2]
+               	mov	x4, #0x1                // =1
+               	str	w4, [x0, #0x44]
+               	str	w2, [x1, x2, lsl #2]
                	ldrsw	x4, [x0, #0x44]
                	add	x5, x4, #0x1
                	str	w5, [x0, #0x44]
-               	str	wzr, [x1, x4, lsl #2]
+               	str	w2, [x1, x4, lsl #2]
                	ldrsw	x1, [x0, #0x44]
                	cmp	w1, #0x2
                	b.eq	<addr>
                	mov	x0, #0x1d               // =29
                	ret
-               	str	wzr, [x0, #0x44]
+               	str	w2, [x0, #0x44]
                	mov	x2, #0x6                // =6
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
@@ -183,10 +181,9 @@ Disassembly of section .text:
                	mov	x0, #0x21               // =33
                	ret
                	mov	x0, #0x0                // =0
-               	mov	x3, #0x0                // =0
-               	mov	x4, #0x1                // =1
-               	str	w4, [x1, #0x44]
-               	str	w0, [x2, x3, lsl #2]
+               	mov	x3, #0x1                // =1
+               	str	w3, [x1, #0x44]
+               	str	w0, [x2, x0, lsl #2]
                	ldrsw	x3, [x1, #0x44]
                	add	x4, x3, #0x1
                	str	w4, [x1, #0x44]

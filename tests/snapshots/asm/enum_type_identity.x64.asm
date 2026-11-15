@@ -45,13 +45,7 @@ Disassembly of section .text:
                	cmpq	$0x2, %rax
                	jne	<addr>
                	movl	$0x2, -0xc(%rbp)
-               	movl	-0xc(%rbp), %eax
-               	cmpl	$0x2, %eax
-               	jne	<addr>
                	xorl	%eax, %eax
-               	leave
-               	retq
-               	movl	$0x4, %eax
                	leave
                	retq
                	movl	$0x3, %eax

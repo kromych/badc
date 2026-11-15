@@ -157,11 +157,6 @@ Disassembly of section .text:
                	ldrb	w2, [x2, #0x8c]
                	cmp	w2, #0x2
                	b.ne	<addr>
-               	ldrb	w2, [x3, #0x8d]
-               	cmp	w2, #0xc
-               	b.eq	<addr>
-               	mov	x0, x1
-               	ret
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	mov	x1, #0xd                // =13
@@ -176,6 +171,8 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, x1
                	ret
+               	ret
+               	mov	x0, x1
                	ret
                	mov	x0, x7
                	ret

@@ -103,46 +103,53 @@ Disassembly of section .text:
                	movq	(%rdi), %rdi
                	callq	<addr>
                	movq	%rax, -0x8(%rbp)
-               	movl	-0x8(%rbp), %edx
-               	movl	-0x4(%rbp), %esi
+               	movl	-0x8(%rbp), %edi
+               	movl	-0x4(%rbp), %r8d
                	movl	0x8(%rbx), %ecx
                	movl	0xc(%rbx), %eax
-               	movq	%rcx, %rdi
-               	shlq	$0x11, %rdi
-               	movq	%rax, %r8
-               	shrq	$0xf, %r8
-               	orq	%r8, %rdi
-               	movq	%rax, %r8
-               	shlq	$0x11, %r8
-               	movl	(%rbx), %r9d
-               	movl	0x4(%rbx), %r12d
+               	movq	%rcx, %rdx
+               	shlq	$0x11, %rdx
+               	movq	%rax, %rsi
+               	shrq	$0xf, %rsi
+               	movq	%rdx, %r9
+               	orq	%rsi, %r9
+               	movq	%rax, %r12
+               	shlq	$0x11, %r12
+               	movl	(%rbx), %edx
+               	movl	0x4(%rbx), %esi
+               	movl	0x10(%rbx), %r13d
+               	xorq	%r13, %rdx
+               	movl	%edx, 0x10(%rbx)
+               	movl	0x14(%rbx), %r13d
+               	xorq	%r13, %rsi
+               	movl	%esi, 0x14(%rbx)
+               	movl	0x18(%rbx), %r13d
+               	xorq	%r13, %rcx
+               	movl	%ecx, 0x18(%rbx)
+               	movl	0x1c(%rbx), %r13d
+               	xorq	%r13, %rax
+               	movl	%eax, 0x1c(%rbx)
+               	xorl	%edx, 0x8(%rbx)
+               	xorl	%esi, 0xc(%rbx)
+               	xorl	%ecx, (%rbx)
+               	xorl	%eax, 0x4(%rbx)
                	xorl	%r9d, 0x10(%rbx)
                	xorl	%r12d, 0x14(%rbx)
-               	xorl	%ecx, 0x18(%rbx)
-               	xorl	%eax, 0x1c(%rbx)
-               	movl	0x10(%rbx), %eax
-               	movl	0x14(%rbx), %ecx
-               	xorl	%eax, 0x8(%rbx)
-               	xorl	%ecx, 0xc(%rbx)
                	movl	0x18(%rbx), %eax
                	movl	0x1c(%rbx), %ecx
-               	xorl	%eax, (%rbx)
-               	xorl	%ecx, 0x4(%rbx)
-               	xorl	%edi, 0x10(%rbx)
-               	xorl	%r8d, 0x14(%rbx)
-               	movq	%rax, %rdi
-               	shrq	$0x13, %rdi
-               	movq	%rcx, %r8
-               	shlq	$0xd, %r8
-               	orq	%r8, %rdi
+               	movq	%rax, %rdx
+               	shrq	$0x13, %rdx
+               	movq	%rcx, %rsi
+               	shlq	$0xd, %rsi
+               	orq	%rsi, %rdx
                	shlq	$0xd, %rax
                	shrq	$0x13, %rcx
                	orq	%rcx, %rax
-               	movl	%edi, 0x18(%rbx)
+               	movl	%edx, 0x18(%rbx)
                	movl	%eax, 0x1c(%rbx)
-               	movq	%rsi, %rax
+               	movq	%r8, %rax
                	shlq	$0x20, %rax
-               	orq	%rdx, %rax
+               	orq	%rdi, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13

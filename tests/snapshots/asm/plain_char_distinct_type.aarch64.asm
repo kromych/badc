@@ -17,10 +17,5 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	mov	x1, #0xff               // =255
                	strb	w1, [x0, #0x20]
-               	ldrb	w0, [x0, #0x20]
-               	cmp	w0, #0xff
-               	b.ne	<addr>
                	mov	x0, #0x0                // =0
-               	ret
-               	mov	x0, #0xa                // =10
                	ret

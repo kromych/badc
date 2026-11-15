@@ -19,9 +19,6 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	mov	x0, #0x78               // =120
                	sturb	w0, [x29, #-0x8]
-               	ldurb	w0, [x29, #-0x8]
-               	cmp	w0, #0x78
-               	b.ne	<addr>
                	mov	x0, #0x0                // =0
                	mov	x1, x0
                	add	x1, x1, x0, lsl #1
@@ -38,10 +35,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x0, #0x1                // =1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

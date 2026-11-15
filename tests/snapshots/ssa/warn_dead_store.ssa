@@ -50,14 +50,14 @@ fn ent_pc=3 n_params=0 variadic=false locals=1
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(1)                                           -> x0
-    v2   Imm(0)                                           -> x0
-    v3   LocalAddr(-1)                                    -> x0
-    v4   Imm(0)                                           -> x0
-    v5   Imm(0)                                           -> x0
-    v6   Imm(1)                                           -> x0
+    v2   Imm(0)                                           -> x1
+    v3   LocalAddr(-1)                                    -> x1
+    v4   Imm(0)                                           -> x1
+    v5   Imm(0)                                           -> x1
+    v6   LoadLocal { off=-1, kind=I32 }                   -> x1
     v7   Imm(1)                                           -> x1
     v8   LifetimeEnd(-1)                                  -> -
-    terminator Return(v6)   (exit_acc=v6)
+    terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=4 ---
 ; name=block_local_dies
 fn ent_pc=4 n_params=0 variadic=false locals=0
@@ -116,7 +116,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v17  Imm(1)                                           -> x0
     v18  Imm(0)                                           -> x0
     v19  LocalAddr(-1)                                    -> x0
-    v20  Imm(1)                                           -> x0
+    v20  LoadLocal { off=-1, kind=I32 }                   -> x0
     v21  Imm(1)                                           -> x0
     v22  LifetimeEnd(-1)                                  -> -
     v23  Imm(1)                                           -> x0

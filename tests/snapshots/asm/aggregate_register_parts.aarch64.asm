@@ -801,25 +801,27 @@ Disassembly of section .text:
                	ldrb	w0, [x0]
                	bl	<addr>
                	sturb	w0, [x29, #-0x20]
-               	sub	x0, x29, #0x20
-               	ldurb	w17, [x29, #-0x20]
-               	str	x17, [sp, #0x48]
-               	mov	x1, #0x258              // =600
-               	sturh	w1, [x29, #-0x20]
+               	sub	x1, x29, #0x20
+               	and	x16, x0, #0xff
+               	str	x16, [sp, #0x48]
+               	mov	x0, #0x258              // =600
+               	sturh	w0, [x29, #-0x20]
+               	mov	x0, x1
                	ldrh	w0, [x0]
                	bl	<addr>
                	sturh	w0, [x29, #-0x20]
-               	sub	x0, x29, #0x20
-               	ldurh	w17, [x29, #-0x20]
-               	str	x17, [sp, #0x40]
-               	mov	x1, #0x1170             // =4464
-               	movk	x1, #0x1, lsl #16
-               	stur	w1, [x29, #-0x20]
+               	sub	x1, x29, #0x20
+               	and	x16, x0, #0xffff
+               	str	x16, [sp, #0x40]
+               	mov	x0, #0x1170             // =4464
+               	movk	x0, #0x1, lsl #16
+               	stur	w0, [x29, #-0x20]
+               	mov	x0, x1
                	ldr	w0, [x0]
                	bl	<addr>
                	stur	w0, [x29, #-0x20]
-               	ldur	w17, [x29, #-0x20]
-               	str	x17, [sp, #0x38]
+               	mov	w16, w0
+               	str	x16, [sp, #0x38]
                	mov	x0, #0x5000             // =20480
                	movk	x0, #0xdcd6, lsl #16
                	movk	x0, #0x1, lsl #32

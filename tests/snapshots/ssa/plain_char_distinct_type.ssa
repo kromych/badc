@@ -25,7 +25,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v19  Imm(1)                                           -> x0
     v20  Imm(0)                                           -> x0
     v21  ImmData(16)                                      -> x0
-    v22  Imm(-1)                                          -> x0
+    v22  Load { addr=v10, disp=0, kind=I8 pc_rel }        -> x0
     v23  Imm(255)                                         -> x0
     v24  Imm(0)                                           -> x0
     v25  Imm(0)                                           -> x0

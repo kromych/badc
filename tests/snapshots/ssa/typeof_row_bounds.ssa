@@ -256,7 +256,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=6
     v250 BinopI { op=add, lhs=v144, rhs_imm=32 }          -> x0
     v251 Imm(12)                                          -> x0
     v252 BinopI { op=add, lhs=v144, rhs_imm=44 }          -> x0
-    v253 Imm(23)                                          -> x0
+    v253 LoadLocal { off=-6, disp=44, kind=I32 }          -> x0
     v254 Imm(0)                                           -> x0
     v255 Imm(0)                                           -> x0
     terminator Jmp(b1)   (exit_acc=v254)

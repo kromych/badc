@@ -126,12 +126,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x80000000, <rip> # imm = 0x80000000
                                                 # <addr>
-               	movl	<rip>, %eax # <addr>
-               	movl	$0x80000000, %ecx       # imm = 0x80000000
-               	cmpl	%ecx, %eax
-               	je	<addr>
-               	movl	$0xd, %eax
-               	jmp	<addr>
                	movq	<rip>, %rax # <addr>
                	movq	(%rax), %rax
                	movabsq	$0x7fffffffffff, %r11   # imm = 0x7FFFFFFFFFFF

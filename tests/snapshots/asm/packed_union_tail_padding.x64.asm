@@ -46,12 +46,6 @@ Disassembly of section .text:
                	leave
                	retq
                	movb	$0x7, -0x5(%rbp)
-               	movzbq	-0x5(%rbp), %rax
-               	cmpl	$0x7, %eax
-               	je	<addr>
-               	movl	$0x11, %eax
-               	leave
-               	retq
                	xorl	%eax, %eax
                	leave
                	retq

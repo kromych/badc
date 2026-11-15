@@ -67,7 +67,7 @@ Disassembly of section .text:
                	movl	$0x0, -0x18(%rbp)
                	movl	$0xfffffff9, -0x8(%rbp) # imm = 0xFFFFFFF9
                	leaq	-0x18(%rbp), %rax
-               	movl	-0x8(%rbp), %ecx
+               	movl	$0xfffffff9, %ecx       # imm = 0xFFFFFFF9
                	movl	%ecx, (%rax)
                	movl	-0x18(%rbp), %eax
                	cmpl	$-0x7, %eax

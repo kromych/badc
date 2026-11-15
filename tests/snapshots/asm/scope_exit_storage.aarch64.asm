@@ -329,18 +329,17 @@ Disassembly of section .text:
                	mov	x4, sp
                	add	x17, x2, #0xf
                	and	x17, x17, #0xfffffffffffffff0
-               	mov	x5, sp
-               	sub	x5, x5, x17
+               	mov	x7, sp
+               	sub	x7, x7, x17
                	lsr	x17, x17, #12
                	cbz	x17, <addr>
                	sub	sp, sp, #0x1, lsl #12   // =0x1000
                	str	xzr, [sp]
                	subs	x17, x17, #0x1
                	b.ne	<addr>
-               	mov	sp, x5
-               	and	x7, x1, #0xff
-               	strb	w7, [x5]
-               	ldrb	w5, [x5]
+               	mov	sp, x7
+               	and	x5, x1, #0xff
+               	strb	w5, [x7]
                	str	w5, [x6, #0x28]
                	tbz	w1, #0x0, <addr>
                	mov	sp, x4
@@ -353,18 +352,17 @@ Disassembly of section .text:
                	mov	x6, sp
                	add	x17, x2, #0xf
                	and	x17, x17, #0xfffffffffffffff0
-               	mov	x4, sp
-               	sub	x4, x4, x17
+               	mov	x7, sp
+               	sub	x7, x7, x17
                	lsr	x17, x17, #12
                	cbz	x17, <addr>
                	sub	sp, sp, #0x1, lsl #12   // =0x1000
                	str	xzr, [sp]
                	subs	x17, x17, #0x1
                	b.ne	<addr>
-               	mov	sp, x4
-               	and	x7, x1, #0xff
-               	strb	w7, [x4, #0x7ff]
-               	ldrb	w4, [x4, #0x7ff]
+               	mov	sp, x7
+               	and	x4, x1, #0xff
+               	strb	w4, [x7, #0x7ff]
                	str	w4, [x5, #0x28]
                	add	x0, x0, #0x1
                	mov	sp, x6
@@ -380,18 +378,17 @@ Disassembly of section .text:
                	mov	x4, sp
                	add	x17, x2, #0xf
                	and	x17, x17, #0xfffffffffffffff0
-               	mov	x5, sp
-               	sub	x5, x5, x17
+               	mov	x7, sp
+               	sub	x7, x7, x17
                	lsr	x17, x17, #12
                	cbz	x17, <addr>
                	sub	sp, sp, #0x1, lsl #12   // =0x1000
                	str	xzr, [sp]
                	subs	x17, x17, #0x1
                	b.ne	<addr>
-               	mov	sp, x5
-               	and	x7, x1, #0xff
-               	strb	w7, [x5]
-               	ldrb	w5, [x5]
+               	mov	sp, x7
+               	and	x5, x1, #0xff
+               	strb	w5, [x7]
                	str	w5, [x6, #0x28]
                	tbz	w1, #0x0, <addr>
                	mov	sp, x4

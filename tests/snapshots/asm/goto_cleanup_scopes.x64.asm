@@ -672,10 +672,10 @@ Disassembly of section .text:
                	movb	$0x0, <rip> # <addr>
                	movl	$0x78, -0x10(%rbp)
                	movl	$0x79, -0x8(%rbp)
-               	movslq	<rip>, %rcx # <addr>
-               	leaq	0x1(%rcx), %rdi
+               	movslq	<rip>, %rsi # <addr>
+               	leaq	0x1(%rsi), %rdi
                	movl	%edi, <rip> # <addr>
-               	movb	$0x79, (%rdx,%rcx)
+               	movb	$0x79, (%rdx,%rsi)
                	movslq	<rip>, %rcx # <addr>
                	movb	$0x0, (%rdx,%rcx)
                	movslq	<rip>, %rax # <addr>

@@ -1068,8 +1068,8 @@ impl FnEmit<'_, '_> {
         for s in saves {
             call_save(self.out.cx.code, self.fcx.frame, s, true);
         }
-        let lowered = emit_flag_step(self.out.cx.code, v, &self.flag_steps, &self.fcx)
-            .or_else(|| emit_memory_destination(self.out.cx.code, v, &self.mem_dest, &self.fcx))
+        let lowered = emit_memory_destination(self.out.cx.code, v, &self.mem_dest, &self.fcx)
+            .or_else(|| emit_flag_step(self.out.cx.code, v, &self.flag_steps, &self.fcx))
             .unwrap_or_else(|| emit_inst(&mut self.out, inst, v, place, &self.fcx));
         lowered.inspect_err(|_| {
             #[cfg(feature = "codegen_test")]

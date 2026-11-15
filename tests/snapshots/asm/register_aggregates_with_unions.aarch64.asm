@@ -73,8 +73,9 @@ Disassembly of section .text:
                	sxth	x0, w1
                	sub	x0, x0, #0x3
                	sturh	w0, [x29, #-0x8]
+               	sxth	x1, w0
                	ldur	x0, [x29, #-0x10]
-               	ldurh	w1, [x29, #-0x8]
+               	and	x1, x1, #0xffff
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

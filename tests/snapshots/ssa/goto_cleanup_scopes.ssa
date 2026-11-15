@@ -924,7 +924,7 @@ fn ent_pc=33 n_params=0 variadic=false locals=5
     v131 Imm(1)                                           -> x0
     v132 Imm(0)                                           -> x0
     v133 Imm(0)                                           -> x0
-    v134 Imm(1)                                           -> x0
+    v134 LoadLocal { off=-2, kind=I32 }                   -> x0
     v135 Imm(1)                                           -> x0
     v136 Imm(1)                                           -> x0
     v137 Imm(0)                                           -> x0
@@ -1428,17 +1428,17 @@ fn ent_pc=33 n_params=0 variadic=false locals=5
     v581 StoreLocal { off=-2, value=v580, kind=I32 }      -> -
     v582 Imm(121)                                         -> x1
     v583 StoreLocal { off=-1, value=v582, kind=I32 }      -> -
-    v584 LocalAddr(-1)                                    -> x1
-    v585 Imm(121)                                         -> x6
-    v586 Imm(121)                                         -> x1
-    v587 Imm(121)                                         -> x1
-    v588 ImmData(144)                                     -> x1
-    v589 ImmData(208)                                     -> x1
-    v590 Load { addr=v575, disp=0, kind=I32 pc_rel }      -> x1
+    v584 LocalAddr(-1)                                    -> x6
+    v585 LoadLocal { off=-1, kind=I32 }                   -> x6
+    v586 Imm(121)                                         -> x6
+    v587 Imm(121)                                         -> x6
+    v588 ImmData(144)                                     -> x6
+    v589 ImmData(208)                                     -> x6
+    v590 Load { addr=v575, disp=0, kind=I32 pc_rel }      -> x6
     v591 BinopI { op=add, lhs=v590, rhs_imm=1 }           -> x7
     v592 Store { addr=v575, disp=0, value=v591, kind=I32 pc_rel } -> -
     v593 Binop { op=add, lhs=v562, rhs=v590 }             -> x7
-    v594 StoreIndexed { base=v562, index=v590, scale=1, value=v585, kind=I8 } -> -
+    v594 StoreIndexed { base=v562, index=v590, scale=1, value=v582, kind=I8 } -> -
     v595 Load { addr=v575, disp=0, kind=I32 pc_rel }      -> x1
     v596 Binop { op=add, lhs=v562, rhs=v595 }             -> x6
     v597 Imm(0)                                           -> x6

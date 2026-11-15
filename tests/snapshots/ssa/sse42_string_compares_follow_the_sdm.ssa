@@ -4398,8 +4398,8 @@ fn ent_pc=497 n_params=9 variadic=false locals=2
     v103 Imm(0)                                           -> x1
     v104 Binop { op=or, lhs=v102, rhs=v2 }                -> x0
     v105 Store { addr=v101, disp=0, value=v104, kind=I32 pc_rel } -> -
-    v106 Extend { value=v104, kind=I32 }                  -> x0
-    terminator Jmp(b10)   (exit_acc=v106)
+    v106 Load { addr=v101, disp=0, kind=I32 pc_rel }      -> x0
+    terminator Jmp(b10)   (exit_acc=v104)
   block 10  start_pc=0
     v107 LifetimeEnd(-2)                                  -> -
     v108 LifetimeEnd(0)                                   -> -

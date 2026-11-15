@@ -13,45 +13,45 @@ fn ent_pc=6 n_params=0 variadic=false locals=9
     v7   Imm(0)                                           -> x0
     v8   Imm(11)                                          -> x0
     v9   ImmData(16)                                      -> x0
-    v10  Imm(0)                                           -> x0
+    v10  Load { addr=v5, disp=0, kind=I32 pc_rel }        -> x0
     v11  Imm(1)                                           -> x0
     v12  Store { addr=v5, disp=0, value=v11, kind=I32 pc_rel } -> -
     v13  Imm(11)                                          -> x0
     v14  Imm(11)                                          -> x0
     v15  LocalAddr(-9)                                    -> x1
     v16  StoreLocal { off=-9, value=v14, kind=I32 }       -> -
-    v17  LocalAddr(-9)                                    -> x0
-    v18  BinopI { op=add, lhs=v15, rhs_imm=4 }            -> x0
-    v19  LoadLocal { off=-9, kind=U32 }                   -> x0
-    v20  StoreLocal { off=-9, disp=4, value=v19, kind=I32 } -> -
+    v17  LocalAddr(-9)                                    -> x1
+    v18  BinopI { op=add, lhs=v15, rhs_imm=4 }            -> x1
+    v19  LoadLocal { off=-9, kind=U32 }                   -> x1
+    v20  StoreLocal { off=-9, disp=4, value=v14, kind=I32 } -> -
     v21  LocalAddr(-9)                                    -> x1
     v22  BinopI { op=add, lhs=v15, rhs_imm=8 }            -> x1
     v23  LoadLocal { off=-9, kind=U32 }                   -> x1
-    v24  StoreLocal { off=-9, disp=8, value=v19, kind=I32 } -> -
-    v25  LocalAddr(-9)                                    -> x1
-    v26  BinopI { op=add, lhs=v15, rhs_imm=12 }           -> x1
-    v27  LoadLocal { off=-9, kind=U32 }                   -> x1
-    v28  StoreLocal { off=-9, disp=12, value=v19, kind=I32 } -> -
+    v24  Imm(47244640267)                                 -> x1
+    v25  LocalAddr(-9)                                    -> x2
+    v26  BinopI { op=add, lhs=v15, rhs_imm=12 }           -> x2
+    v27  LoadLocal { off=-9, kind=U32 }                   -> x2
+    v28  StoreLocal { off=-9, disp=8, value=v24, kind=I64 } -> -
     v29  LocalAddr(-9)                                    -> x1
     v30  BinopI { op=add, lhs=v15, rhs_imm=16 }           -> x1
     v31  LoadLocal { off=-9, kind=U32 }                   -> x1
-    v32  StoreLocal { off=-9, disp=16, value=v19, kind=I32 } -> -
-    v33  LocalAddr(-9)                                    -> x1
-    v34  BinopI { op=add, lhs=v15, rhs_imm=20 }           -> x1
-    v35  LoadLocal { off=-9, kind=U32 }                   -> x1
-    v36  StoreLocal { off=-9, disp=20, value=v19, kind=I32 } -> -
+    v32  Imm(47244640267)                                 -> x1
+    v33  LocalAddr(-9)                                    -> x2
+    v34  BinopI { op=add, lhs=v15, rhs_imm=20 }           -> x2
+    v35  LoadLocal { off=-9, kind=U32 }                   -> x2
+    v36  StoreLocal { off=-9, disp=16, value=v32, kind=I64 } -> -
     v37  LocalAddr(-9)                                    -> x1
     v38  BinopI { op=add, lhs=v15, rhs_imm=24 }           -> x1
     v39  LoadLocal { off=-9, kind=U32 }                   -> x1
-    v40  StoreLocal { off=-9, disp=24, value=v19, kind=I32 } -> -
-    v41  LocalAddr(-9)                                    -> x1
-    v42  BinopI { op=add, lhs=v41, rhs_imm=28 }           -> x1
-    v43  LoadLocal { off=-9, kind=U32 }                   -> x1
-    v44  StoreLocal { off=-9, disp=28, value=v19, kind=I32 } -> -
+    v40  Imm(47244640267)                                 -> x1
+    v41  LocalAddr(-9)                                    -> x2
+    v42  BinopI { op=add, lhs=v41, rhs_imm=28 }           -> x2
+    v43  LoadLocal { off=-9, kind=U32 }                   -> x2
+    v44  StoreLocal { off=-9, disp=24, value=v40, kind=I64 } -> -
     v45  LocalAddr(-9)                                    -> x1
     v46  BinopI { op=add, lhs=v41, rhs_imm=32 }           -> x1
     v47  LoadLocal { off=-9, kind=U32 }                   -> x1
-    v48  StoreLocal { off=-9, disp=32, value=v19, kind=I32 } -> -
+    v48  StoreLocal { off=-9, disp=32, value=v14, kind=I32 } -> -
     v49  LocalAddr(-9)                                    -> x0
     v50  BinopI { op=add, lhs=v41, rhs_imm=36 }           -> x0
     v51  LoadLocal { off=-9, kind=U32 }                   -> x0
@@ -165,7 +165,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=9
     v146 Imm(0)                                           -> x1
     v147 Imm(31)                                          -> x1
     v148 ImmData(16)                                      -> x1
-    v149 Imm(0)                                           -> x1
+    v149 Load { addr=v91, disp=0, kind=I32 pc_rel }       -> x1
     v150 Imm(1)                                           -> x1
     v151 Imm(0)                                           -> x1
     v152 Imm(31)                                          -> x1
@@ -455,7 +455,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=9
     v325 Imm(0)                                           -> x0
     v326 Imm(19)                                          -> x0
     v327 ImmData(16)                                      -> x0
-    v328 Imm(0)                                           -> x0
+    v328 Load { addr=v323, disp=0, kind=I32 pc_rel }      -> x0
     v329 Imm(1)                                           -> x0
     v330 Store { addr=v323, disp=0, value=v329, kind=I32 pc_rel } -> -
     v331 Imm(19)                                          -> x0
@@ -463,38 +463,38 @@ fn ent_pc=6 n_params=0 variadic=false locals=9
     v333 Imm(19)                                          -> x0
     v334 LocalAddr(-9)                                    -> x1
     v335 StoreLocal { off=-9, value=v333, kind=I32 }      -> -
-    v336 LocalAddr(-9)                                    -> x0
-    v337 BinopI { op=add, lhs=v334, rhs_imm=4 }           -> x0
-    v338 LoadLocal { off=-9, kind=U32 }                   -> x0
-    v339 StoreLocal { off=-9, disp=4, value=v338, kind=I32 } -> -
+    v336 LocalAddr(-9)                                    -> x1
+    v337 BinopI { op=add, lhs=v334, rhs_imm=4 }           -> x1
+    v338 LoadLocal { off=-9, kind=U32 }                   -> x1
+    v339 StoreLocal { off=-9, disp=4, value=v333, kind=I32 } -> -
     v340 LocalAddr(-9)                                    -> x1
     v341 BinopI { op=add, lhs=v334, rhs_imm=8 }           -> x1
     v342 LoadLocal { off=-9, kind=U32 }                   -> x1
-    v343 StoreLocal { off=-9, disp=8, value=v338, kind=I32 } -> -
-    v344 LocalAddr(-9)                                    -> x1
-    v345 BinopI { op=add, lhs=v334, rhs_imm=12 }          -> x1
-    v346 LoadLocal { off=-9, kind=U32 }                   -> x1
-    v347 StoreLocal { off=-9, disp=12, value=v338, kind=I32 } -> -
+    v343 Imm(81604378643)                                 -> x1
+    v344 LocalAddr(-9)                                    -> x2
+    v345 BinopI { op=add, lhs=v334, rhs_imm=12 }          -> x2
+    v346 LoadLocal { off=-9, kind=U32 }                   -> x2
+    v347 StoreLocal { off=-9, disp=8, value=v343, kind=I64 } -> -
     v348 LocalAddr(-9)                                    -> x1
     v349 BinopI { op=add, lhs=v334, rhs_imm=16 }          -> x1
     v350 LoadLocal { off=-9, kind=U32 }                   -> x1
-    v351 StoreLocal { off=-9, disp=16, value=v338, kind=I32 } -> -
-    v352 LocalAddr(-9)                                    -> x1
-    v353 BinopI { op=add, lhs=v334, rhs_imm=20 }          -> x1
-    v354 LoadLocal { off=-9, kind=U32 }                   -> x1
-    v355 StoreLocal { off=-9, disp=20, value=v338, kind=I32 } -> -
+    v351 Imm(81604378643)                                 -> x1
+    v352 LocalAddr(-9)                                    -> x2
+    v353 BinopI { op=add, lhs=v334, rhs_imm=20 }          -> x2
+    v354 LoadLocal { off=-9, kind=U32 }                   -> x2
+    v355 StoreLocal { off=-9, disp=16, value=v351, kind=I64 } -> -
     v356 LocalAddr(-9)                                    -> x1
     v357 BinopI { op=add, lhs=v334, rhs_imm=24 }          -> x1
     v358 LoadLocal { off=-9, kind=U32 }                   -> x1
-    v359 StoreLocal { off=-9, disp=24, value=v338, kind=I32 } -> -
-    v360 LocalAddr(-9)                                    -> x1
-    v361 BinopI { op=add, lhs=v360, rhs_imm=28 }          -> x1
-    v362 LoadLocal { off=-9, kind=U32 }                   -> x1
-    v363 StoreLocal { off=-9, disp=28, value=v338, kind=I32 } -> -
+    v359 Imm(81604378643)                                 -> x1
+    v360 LocalAddr(-9)                                    -> x2
+    v361 BinopI { op=add, lhs=v360, rhs_imm=28 }          -> x2
+    v362 LoadLocal { off=-9, kind=U32 }                   -> x2
+    v363 StoreLocal { off=-9, disp=24, value=v359, kind=I64 } -> -
     v364 LocalAddr(-9)                                    -> x1
     v365 BinopI { op=add, lhs=v360, rhs_imm=32 }          -> x1
     v366 LoadLocal { off=-9, kind=U32 }                   -> x1
-    v367 StoreLocal { off=-9, disp=32, value=v338, kind=I32 } -> -
+    v367 StoreLocal { off=-9, disp=32, value=v333, kind=I32 } -> -
     v368 LocalAddr(-9)                                    -> x0
     v369 BinopI { op=add, lhs=v360, rhs_imm=36 }          -> x0
     v370 LoadLocal { off=-9, kind=U32 }                   -> x0

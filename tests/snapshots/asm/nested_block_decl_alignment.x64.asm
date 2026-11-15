@@ -34,17 +34,14 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movl	$0x3, <rip> # <addr>
                	testb	$0x3f, %cl
-               	jne	<addr>
-               	movl	<rip>, %ecx # <addr>
-               	cmpl	$0x3, %ecx
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	leaq	<rip>, %rdx # <addr>
+               	movl	$0x1, %edx
+               	cmovneq	%rax, %rdx
+               	leaq	<rip>, %rcx # <addr>
                	movb	$0x5, <rip> # <addr>
-               	testb	$0x7f, %dl
+               	testb	$0x7f, %cl
                	movl	$0x1, %esi
                	cmovneq	%rax, %rsi
-               	addq	%rsi, %rcx
+               	leaq	(%rdx,%rsi), %rcx
                	leaq	(%rsp), %rdx
                	movb	$0x7, (%rsp)
                	testb	$0x3f, %dl
@@ -54,16 +51,11 @@ Disassembly of section .text:
                	leaq	(%rsp), %rdx
                	movl	$0x9, (%rsp)
                	testb	$0x3f, %dl
-               	jne	<addr>
-               	movl	(%rsp), %eax
-               	cmpl	$0x9, %eax
-               	sete	%al
-               	movzbq	%al, %rax
+               	movl	$0x1, %esi
+               	cmoveq	%rsi, %rax
                	addq	%rcx, %rax
                	movl	$0x2a, %ecx
                	cmpl	$0x4, %eax
                	cmoveq	%rcx, %rax
                	leave
                	retq
-               	movq	%rax, %rcx
-               	jmp	<addr>

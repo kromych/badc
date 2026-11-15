@@ -69,8 +69,8 @@ Disassembly of section .text:
 
 <stored_u>:
                	movslq	%esi, %rsi
-               	movb	$0x2c, (%rdi,%rsi)
-               	movzbq	(%rdi,%rsi), %rax
+               	movl	$0x2c, %eax
+               	movb	%al, (%rdi,%rsi)
                	retq
 
 <across_pointer>:

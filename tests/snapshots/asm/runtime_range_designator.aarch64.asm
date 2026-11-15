@@ -24,17 +24,15 @@ Disassembly of section .text:
                	mov	x2, #0xb                // =11
                	sub	x1, x29, #0x48
                	stur	w2, [x29, #-0x48]
-               	ldur	w2, [x29, #-0x48]
                	stur	w2, [x29, #-0x44]
-               	stur	w2, [x29, #-0x40]
-               	stur	w2, [x29, #-0x3c]
-               	stur	w2, [x29, #-0x38]
-               	stur	w2, [x29, #-0x34]
-               	stur	w2, [x29, #-0x30]
-               	stur	w2, [x29, #-0x2c]
+               	mov	x4, #0xb                // =11
+               	movk	x4, #0xb, lsl #32
+               	stur	x4, [x29, #-0x40]
+               	stur	x4, [x29, #-0x38]
+               	stur	x4, [x29, #-0x30]
                	stur	w2, [x29, #-0x28]
-               	stur	w2, [x29, #-0x24]
                	ldur	w2, [x29, #-0x48]
+               	stur	w2, [x29, #-0x24]
                	stur	w2, [x29, #-0x20]
                	stur	w2, [x29, #-0x1c]
                	stur	w2, [x29, #-0x18]
@@ -77,17 +75,15 @@ Disassembly of section .text:
                	mov	x2, #0x13               // =19
                	sub	x1, x29, #0x48
                	stur	w2, [x29, #-0x48]
-               	ldur	w2, [x29, #-0x48]
                	stur	w2, [x29, #-0x44]
-               	stur	w2, [x29, #-0x40]
-               	stur	w2, [x29, #-0x3c]
-               	stur	w2, [x29, #-0x38]
-               	stur	w2, [x29, #-0x34]
-               	stur	w2, [x29, #-0x30]
-               	stur	w2, [x29, #-0x2c]
+               	mov	x4, #0x13               // =19
+               	movk	x4, #0x13, lsl #32
+               	stur	x4, [x29, #-0x40]
+               	stur	x4, [x29, #-0x38]
+               	stur	x4, [x29, #-0x30]
                	stur	w2, [x29, #-0x28]
-               	stur	w2, [x29, #-0x24]
                	ldur	w2, [x29, #-0x48]
+               	stur	w2, [x29, #-0x24]
                	stur	w2, [x29, #-0x20]
                	stur	w2, [x29, #-0x1c]
                	stur	w2, [x29, #-0x18]

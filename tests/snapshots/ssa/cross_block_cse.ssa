@@ -151,7 +151,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=6
     v145 Imm(0)                                           -> x0
     v146 Imm(28)                                          -> x0
     v147 BinopI { op=add, lhs=v89, rhs_imm=28 }           -> x0
-    v148 Imm(49)                                          -> x0
+    v148 LoadLocal { off=-5, disp=28, kind=I32 }          -> x0
     v149 Imm(49)                                          -> x0
     v150 Imm(49)                                          -> x0
     v151 Imm(49)                                          -> x0

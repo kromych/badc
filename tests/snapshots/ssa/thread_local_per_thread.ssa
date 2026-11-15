@@ -6,22 +6,22 @@ fn ent_pc=6 n_params=1 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7
     v2   Imm(0)                                           -> x0
-    v3   TlsAddr(0)                                       -> x0
-    v4   Load { addr=v3, disp=0, kind=I32 }               -> x1
+    v3   TlsAddr(0)                                       -> x1
+    v4   Load { addr=v3, disp=0, kind=I32 }               -> x0
     v5   BinopI { op=ne, lhs=v4, rhs_imm=0 }              -> x2
     terminator Bz { cond=v4, target=b2, fall=b1 }   (low word)   (exit_acc=v5)
   block 1  start_pc=0
     v6   Imm(47825)                                       -> x0
     terminator Return(v6)   (exit_acc=v6)
   block 2  start_pc=0
-    v7   TlsAddr(0)                                       -> x1
-    v8   Imm(99)                                          -> x1
+    v7   TlsAddr(0)                                       -> x0
+    v8   Imm(99)                                          -> x0
     v9   Store { addr=v3, disp=0, value=v8, kind=I32 }    -> -
-    v10  Imm(99)                                          -> x0
-    v11  Imm(0)                                           -> x0
-    v12  TlsAddr(0)                                       -> x0
-    v13  Imm(99)                                          -> x0
-    terminator Return(v13)   (exit_acc=v13)
+    v10  Imm(99)                                          -> x1
+    v11  Imm(0)                                           -> x1
+    v12  TlsAddr(0)                                       -> x1
+    v13  Load { addr=v3, disp=0, kind=I32 }               -> x1
+    terminator Return(v8)   (exit_acc=v8)
 ; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=main
 fn ent_pc=7 n_params=0 variadic=false locals=2

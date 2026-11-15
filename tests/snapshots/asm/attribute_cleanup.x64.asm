@@ -34,14 +34,14 @@ Disassembly of section .text:
                	movl	$0x2, -0x10(%rbp)
                	movl	$0x3, -0x8(%rbp)
                	leaq	<rip>, %rax # <addr>
-               	movslq	<rip>, %rcx # <addr>
-               	leaq	0x1(%rcx), %rsi
+               	movslq	<rip>, %rsi # <addr>
+               	leaq	0x1(%rsi), %rdi
+               	movl	%edi, <rip> # <addr>
+               	movl	$0x3, (%rax,%rsi,4)
+               	movslq	<rip>, %rdx # <addr>
+               	leaq	0x1(%rdx), %rsi
                	movl	%esi, <rip> # <addr>
-               	movl	$0x3, (%rax,%rcx,4)
-               	movslq	<rip>, %rcx # <addr>
-               	leaq	0x1(%rcx), %rsi
-               	movl	%esi, <rip> # <addr>
-               	movl	$0x2, (%rax,%rcx,4)
+               	movl	$0x2, (%rax,%rdx,4)
                	movl	-0x18(%rbp), %edx
                	movslq	<rip>, %rcx # <addr>
                	leaq	0x1(%rcx), %rsi
@@ -90,11 +90,10 @@ Disassembly of section .text:
                	movl	%eax, -0x8(%rbp)
                	cmpl	$0x1, %eax
                	jne	<addr>
-               	movq	%rax, %rdi
                	movslq	<rip>, %rcx # <addr>
-               	leaq	0x1(%rcx), %r8
-               	movl	%r8d, <rip> # <addr>
-               	movl	%edi, (%rdx,%rcx,4)
+               	leaq	0x1(%rcx), %rdi
+               	movl	%edi, <rip> # <addr>
+               	movl	%eax, (%rdx,%rcx,4)
                	jmp	<addr>
                	cmpl	$0x2, %eax
                	je	<addr>
@@ -141,14 +140,14 @@ Disassembly of section .text:
                	movl	$0xa, -0x18(%rbp)
                	movl	$0xb, -0x10(%rbp)
                	movl	$0xc, -0x8(%rbp)
-               	movslq	<rip>, %rcx # <addr>
-               	leaq	0x1(%rcx), %rsi
+               	movslq	<rip>, %rsi # <addr>
+               	leaq	0x1(%rsi), %rdi
+               	movl	%edi, <rip> # <addr>
+               	movl	$0xc, (%rax,%rsi,4)
+               	movslq	<rip>, %rdx # <addr>
+               	leaq	0x1(%rdx), %rsi
                	movl	%esi, <rip> # <addr>
-               	movl	$0xc, (%rax,%rcx,4)
-               	movslq	<rip>, %rcx # <addr>
-               	leaq	0x1(%rcx), %rsi
-               	movl	%esi, <rip> # <addr>
-               	movl	$0xb, (%rax,%rcx,4)
+               	movl	$0xb, (%rax,%rdx,4)
                	movl	-0x18(%rbp), %edx
                	movslq	<rip>, %rcx # <addr>
                	leaq	0x1(%rcx), %rsi
@@ -174,14 +173,14 @@ Disassembly of section .text:
                	movl	$0xa, -0x18(%rbp)
                	movl	$0xb, -0x10(%rbp)
                	movl	$0xc, -0x8(%rbp)
-               	movslq	<rip>, %rcx # <addr>
-               	leaq	0x1(%rcx), %rsi
+               	movslq	<rip>, %rsi # <addr>
+               	leaq	0x1(%rsi), %rdi
+               	movl	%edi, <rip> # <addr>
+               	movl	$0xc, (%rax,%rsi,4)
+               	movslq	<rip>, %rdx # <addr>
+               	leaq	0x1(%rdx), %rsi
                	movl	%esi, <rip> # <addr>
-               	movl	$0xc, (%rax,%rcx,4)
-               	movslq	<rip>, %rcx # <addr>
-               	leaq	0x1(%rcx), %rsi
-               	movl	%esi, <rip> # <addr>
-               	movl	$0xb, (%rax,%rcx,4)
+               	movl	$0xb, (%rax,%rdx,4)
                	movl	-0x18(%rbp), %edx
                	movslq	<rip>, %rcx # <addr>
                	leaq	0x1(%rcx), %rsi
@@ -206,14 +205,14 @@ Disassembly of section .text:
                	movl	$0x0, <rip> # <addr>
                	movl	$0x28, -0x10(%rbp)
                	movl	$0x29, -0x8(%rbp)
-               	movslq	<rip>, %rcx # <addr>
-               	leaq	0x1(%rcx), %rsi
+               	movslq	<rip>, %rsi # <addr>
+               	leaq	0x1(%rsi), %rdi
+               	movl	%edi, <rip> # <addr>
+               	movl	$0x29, (%rax,%rsi,4)
+               	movslq	<rip>, %rdx # <addr>
+               	leaq	0x1(%rdx), %rsi
                	movl	%esi, <rip> # <addr>
-               	movl	$0x29, (%rax,%rcx,4)
-               	movslq	<rip>, %rcx # <addr>
-               	leaq	0x1(%rcx), %rsi
-               	movl	%esi, <rip> # <addr>
-               	movl	$0x28, (%rax,%rcx,4)
+               	movl	$0x28, (%rax,%rdx,4)
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x2, %eax
                	jne	<addr>
@@ -230,14 +229,14 @@ Disassembly of section .text:
                	movl	$0x0, <rip> # <addr>
                	movl	$0x28, -0x10(%rbp)
                	movl	$0x29, -0x8(%rbp)
-               	movslq	<rip>, %rcx # <addr>
-               	leaq	0x1(%rcx), %rsi
+               	movslq	<rip>, %rsi # <addr>
+               	leaq	0x1(%rsi), %rdi
+               	movl	%edi, <rip> # <addr>
+               	movl	$0x29, (%rax,%rsi,4)
+               	movslq	<rip>, %rdx # <addr>
+               	leaq	0x1(%rdx), %rsi
                	movl	%esi, <rip> # <addr>
-               	movl	$0x29, (%rax,%rcx,4)
-               	movslq	<rip>, %rcx # <addr>
-               	leaq	0x1(%rcx), %rsi
-               	movl	%esi, <rip> # <addr>
-               	movl	$0x28, (%rax,%rcx,4)
+               	movl	$0x28, (%rax,%rdx,4)
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x2, %eax
                	jne	<addr>
@@ -254,14 +253,14 @@ Disassembly of section .text:
                	movl	$0x0, <rip> # <addr>
                	movl	$0x14, -0x10(%rbp)
                	movl	$0x15, -0x8(%rbp)
-               	movslq	<rip>, %rcx # <addr>
-               	leaq	0x1(%rcx), %rsi
+               	movslq	<rip>, %rsi # <addr>
+               	leaq	0x1(%rsi), %rdi
+               	movl	%edi, <rip> # <addr>
+               	movl	$0x15, (%rax,%rsi,4)
+               	movslq	<rip>, %rdx # <addr>
+               	leaq	0x1(%rdx), %rsi
                	movl	%esi, <rip> # <addr>
-               	movl	$0x15, (%rax,%rcx,4)
-               	movslq	<rip>, %rcx # <addr>
-               	leaq	0x1(%rcx), %rsi
-               	movl	%esi, <rip> # <addr>
-               	movl	$0x14, (%rax,%rcx,4)
+               	movl	$0x14, (%rax,%rdx,4)
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x2, %eax
                	jne	<addr>
@@ -278,14 +277,14 @@ Disassembly of section .text:
                	movl	$0x0, <rip> # <addr>
                	movl	$0x14, -0x10(%rbp)
                	movl	$0x15, -0x8(%rbp)
-               	movslq	<rip>, %rcx # <addr>
-               	leaq	0x1(%rcx), %rsi
+               	movslq	<rip>, %rsi # <addr>
+               	leaq	0x1(%rsi), %rdi
+               	movl	%edi, <rip> # <addr>
+               	movl	$0x15, (%rax,%rsi,4)
+               	movslq	<rip>, %rdx # <addr>
+               	leaq	0x1(%rdx), %rsi
                	movl	%esi, <rip> # <addr>
-               	movl	$0x15, (%rax,%rcx,4)
-               	movslq	<rip>, %rcx # <addr>
-               	leaq	0x1(%rcx), %rsi
-               	movl	%esi, <rip> # <addr>
-               	movl	$0x14, (%rax,%rcx,4)
+               	movl	$0x14, (%rax,%rdx,4)
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x2, %eax
                	jne	<addr>

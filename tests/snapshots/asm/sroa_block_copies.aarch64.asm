@@ -259,11 +259,10 @@ Disassembly of section .text:
                	sub	x1, x1, #0x1
                	mov	x3, #0x3                // =3
                	strb	w3, [x2, x1]
-               	ldr	x3, [x0]
+               	ldr	x1, [x0]
                	ldr	x0, [x0, #0x8]
-               	ldrb	w1, [x2, x1]
-               	add	x0, x0, x1
-               	add	x0, x3, x0
+               	add	x0, x0, #0x3
+               	add	x0, x1, x0
                	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -358,26 +357,14 @@ Disassembly of section .text:
                	ret
 
 <field_literals>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	stur	wzr, [x29, #-0x8]
                	and	x1, x0, #0xff
-               	stur	w1, [x29, #-0x8]
                	add	x0, x0, #0x1
-               	ldur	w1, [x29, #-0x8]
                	and	w1, w1, #0xffff00ff
                	lsl	x0, x0, #8
                	and	x0, x0, #0xff00
                	orr	x0, x1, x0
-               	stur	w0, [x29, #-0x8]
-               	ldur	w0, [x29, #-0x8]
                	and	w0, w0, #0xfffeffff
                	orr	x0, x0, #0x10000
-               	stur	w0, [x29, #-0x8]
-               	ldur	w0, [x29, #-0x8]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <main>:

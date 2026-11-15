@@ -40,14 +40,6 @@ Disassembly of section .text:
                	stur	x1, [x29, #-0x8]
                	mov	x1, #0x3fc00000         // =1069547520
                	stur	w1, [x29, #-0x8]
-               	ldur	w1, [x29, #-0x8]
-               	mov	x17, #0x3fc00000        // =1069547520
-               	cmp	w1, w17
-               	b.eq	<addr>
-               	mov	x0, #0x3                // =3
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	ldr	x16, [x2]
                	str	x16, [x3]
                	ldur	x1, [x29, #-0x8]

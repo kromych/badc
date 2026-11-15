@@ -26,14 +26,14 @@ Disassembly of section .text:
                	int3
 
 <thread_main>:
-               	movq	%fs:0x0, %rax
-               	addq	$-0x8, %rax
-               	cmpl	$0x0, (%rax)
+               	movq	%fs:0x0, %rcx
+               	addq	$-0x8, %rcx
+               	cmpl	$0x0, (%rcx)
                	je	<addr>
                	movl	$0xbad1, %eax           # imm = 0xBAD1
                	retq
-               	movl	$0x63, (%rax)
                	movl	$0x63, %eax
+               	movl	%eax, (%rcx)
                	retq
 
 <main>:

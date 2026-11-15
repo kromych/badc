@@ -52,9 +52,10 @@ Disassembly of section .text:
                	ret
 
 <stored_u>:
-               	mov	x2, #0x2c               // =44
-               	strb	w2, [x0, w1, sxtw]
-               	ldrb	w0, [x0, w1, sxtw]
+               	mov	x2, x0
+               	sxtw	x1, w1
+               	mov	x0, #0x2c               // =44
+               	strb	w0, [x2, w1, sxtw]
                	ret
 
 <across_pointer>:

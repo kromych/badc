@@ -26,14 +26,8 @@ Disassembly of section .text:
                	int3
 
 <is_ready>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	leaq	0x38(%rdi), %rax
                	movzbq	(%rax), %rax
-               	movb	%al, -0x8(%rbp)
-               	movzbq	-0x8(%rbp), %rax
-               	leave
                	retq
 
 <main>:

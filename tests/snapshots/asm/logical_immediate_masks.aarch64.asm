@@ -201,20 +201,17 @@ Disassembly of section .text:
                	ldr	w3, [x0]
                	and	x3, x3, #0xffffffffffffff07
                	orr	x2, x3, x2, lsl #3
-               	str	w2, [x0]
-               	ldr	w2, [x0]
                	eor	x1, x1, x2, asr #16
                	and	x1, x1, #0xffff
                	and	x2, x2, #0xffffffff0000ffff
                	orr	x1, x2, x1, lsl #16
                	str	w1, [x0]
-               	ldr	w0, [x0]
-               	and	x1, x0, #0x7
-               	ubfx	x2, x0, #3, #5
-               	add	x1, x1, x2
-               	ubfx	x2, x0, #8, #8
-               	add	x1, x1, x2
-               	add	x0, x1, x0, asr #16
+               	and	x0, x1, #0x7
+               	ubfx	x2, x1, #3, #5
+               	add	x0, x0, x2
+               	ubfx	x2, x1, #8, #8
+               	add	x0, x0, x2
+               	add	x0, x0, x1, asr #16
                	ret
 
 <main>:

@@ -57,23 +57,22 @@ Disassembly of section .text:
                	bl	<addr>
                	sub	x0, x29, #0x80
                	ldurb	w1, [x29, #-0x80]
-               	ldurb	w2, [x29, #-0x7f]
-               	ldurb	w3, [x29, #-0x7e]
-               	ldurb	w4, [x29, #-0x7d]
-               	ldurb	w5, [x29, #-0x7c]
+               	ldurb	w3, [x29, #-0x7f]
+               	ldurb	w4, [x29, #-0x7e]
+               	ldurb	w5, [x29, #-0x7d]
+               	ldurb	w2, [x29, #-0x7c]
                	sturb	w1, [x29, #-0x7e]
-               	sturb	w2, [x29, #-0x7d]
-               	sturb	w3, [x29, #-0x7c]
-               	sturb	w4, [x29, #-0x7b]
-               	sturb	w5, [x29, #-0x7a]
-               	ldurb	w1, [x29, #-0x7e]
+               	sturb	w3, [x29, #-0x7d]
+               	sturb	w4, [x29, #-0x7c]
+               	sturb	w5, [x29, #-0x7b]
+               	sturb	w2, [x29, #-0x7a]
                	cmp	w1, #0x30
                	b.eq	<addr>
                	mov	x0, #0x8                // =8
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldurb	w1, [x29, #-0x7a]
+               	and	x1, x2, #0xff
                	cmp	w1, #0x34
                	b.eq	<addr>
                	mov	x0, #0x9                // =9

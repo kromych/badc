@@ -19384,7 +19384,7 @@ fn ent_pc=1344 n_params=0 variadic=false locals=10
     v60  Binop { op=and, lhs=v53, rhs=v59 }               -> x6
     v61  StoreIndexed { base=v6, index=v14, scale=1, value=v60, kind=I8 } -> -
     v62  LoadIndexed { base=v6, index=v14, scale=1, kind=U8 } -> x6
-    terminator Jmp(b7)   (exit_acc=v62)
+    terminator Jmp(b7)   (exit_acc=v60)
   block 11  start_pc=0
     v40  Imm(0)                                           -> [spill 15]
     v41  Imm(0)                                           -> x0

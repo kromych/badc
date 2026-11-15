@@ -41,13 +41,14 @@
 //!     stored value; an `F64` load of an 8-byte integer store, or an `I64`
 //!     load of such an `F64` store, becomes the bit-for-bit `FpCast`
 //!     (`BitsFp`, `FpBits`).
-//!   - Unsigned sub-width loads and `F32` loads are not forwarded:
-//!     `Inst::Extend` does not zero-extend the unsigned widths (it assumes
-//!     a clean upper half), and an `F32` load widens.
+//!   - An unsigned sub-width load becomes `BinopI { And, mask }`, the
+//!     zero-extension the load performs. An `F32` load is not forwarded:
+//!     it widens.
 //!   - A whole vector load of a store of the same vector kind reuses the
 //!     stored register, unless the stored value is an immediate.
-//! A load forwards from an earlier load only when the load kinds match
-//! exactly, so the extension already applied is the one wanted.
+//! A load forwards from an earlier load of the same kind as it stands,
+//! and from a narrow integer load of the other signedness through its own
+//! extension, as the low bytes of either value are the location's.
 //!
 //! Frame slots (`StoreLocal` / `LoadLocal`) are tracked in a second
 //! table keyed by slot index and displacement, with the same width, volatile, and
@@ -64,9 +65,10 @@
 //! pointer also kills its entries. A volatile access neither forwards
 //! nor seeds on either discipline.
 
+use super::value_range;
 use crate::c5::codegen::ssa::mem2reg::address_free_slots;
 use crate::c5::ir::{
-    FpCastKind, FunctionSsa, IndexExt, Inst, LoadKind, NO_VALUE, StoreKind, ValueId,
+    BinOp, BlockId, FpCastKind, FunctionSsa, IndexExt, Inst, LoadKind, NO_VALUE, StoreKind, ValueId,
 };
 use alloc::collections::BTreeSet;
 use alloc::vec::Vec;
@@ -238,27 +240,39 @@ struct IndexedEntry {
 }
 
 /// How a load takes a location's available value: as it stands,
-/// sign-extended from the load's width, or its 64 bits moved to the other
-/// register file.
+/// sign- or zero-extended from the load's width, or its 64 bits moved to
+/// the other register file.
 #[derive(Clone, Copy)]
 enum Reuse {
     Direct,
     Extended,
+    Masked,
     Bits(FpCastKind),
 }
 
+/// The extension a narrow integer load of `kind` applies to the bytes it
+/// reads; `None` for any other kind.
+fn narrow_reuse(kind: LoadKind) -> Option<Reuse> {
+    match kind {
+        LoadKind::I8 | LoadKind::I16 | LoadKind::I32 => Some(Reuse::Extended),
+        LoadKind::U8 | LoadKind::U16 | LoadKind::U32 => Some(Reuse::Masked),
+        _ => None,
+    }
+}
+
 /// The reuse open to a load of `kind` from an entry of origin `origin`
-/// ([`Entry::load_kind`]), per the module note; `None` reads memory.
+/// ([`Entry::load_kind`]), per the module note; `None` reads memory. The
+/// caller matches widths, so a narrow origin holds the same bytes.
 fn reuse(origin: Option<LoadKind>, kind: LoadKind) -> Option<Reuse> {
     match origin {
         None => match kind {
             LoadKind::I64 => Some(Reuse::Direct),
-            LoadKind::I8 | LoadKind::I16 | LoadKind::I32 => Some(Reuse::Extended),
             LoadKind::F64 => Some(Reuse::Bits(FpCastKind::BitsFp)),
-            _ => None,
+            _ => narrow_reuse(kind),
         },
         Some(LoadKind::F64) if kind == LoadKind::I64 => Some(Reuse::Bits(FpCastKind::FpBits)),
-        Some(k) => (k == kind).then_some(Reuse::Direct),
+        Some(k) if k == kind => Some(Reuse::Direct),
+        Some(k) => narrow_reuse(k).and(narrow_reuse(kind)),
     }
 }
 
@@ -309,17 +323,22 @@ fn overlaps(a: i32, aw: u8, b: i32, bw: u8) -> bool {
     (a as i64) < b_end && (b as i64) < a_end
 }
 
-/// Apply [`reuse`] to load `i`; true when it recorded a redirect.
+/// Apply [`reuse`] to load `i`; true when it recorded a redirect. With
+/// `fits` the value already holds what the load's extension produces.
 fn take(
     redirect: &mut [Option<ValueId>],
     rewrites: &mut Vec<(usize, Inst)>,
     i: usize,
     value: ValueId,
     origin: Option<LoadKind>,
-    kind: LoadKind,
+    (kind, fits): (LoadKind, bool),
 ) -> bool {
     match reuse(origin, kind) {
         Some(Reuse::Direct) => {
+            redirect[i] = Some(value);
+            true
+        }
+        Some(Reuse::Extended | Reuse::Masked) if fits => {
             redirect[i] = Some(value);
             true
         }
@@ -330,6 +349,18 @@ fn take(
                     value,
                     kind,
                     nsw: false,
+                },
+            ));
+            false
+        }
+        Some(Reuse::Masked) => {
+            let rhs_imm = (1i64 << (8 * load_width(kind))) - 1;
+            rewrites.push((
+                i,
+                Inst::BinopI {
+                    op: BinOp::And,
+                    lhs: value,
+                    rhs_imm,
                 },
             ));
             false
@@ -399,6 +430,19 @@ fn run_one(func: &mut FunctionSsa) {
     let slots = forwardable_slots(func);
     let exposed = exposed_slots(func, &slots);
     let span = emitted_span(func);
+    // Whether `value` read where block `b` reads it already holds what an
+    // extension to `kind` would produce: computed on the first narrow
+    // forward.
+    let mut ranges: Option<value_range::Ranges> = None;
+    let mut fits = |func: &FunctionSsa, b: usize, value: ValueId, origin, kind| {
+        let narrow = matches!(reuse(origin, kind), Some(Reuse::Extended | Reuse::Masked));
+        let fit = narrow
+            && ranges
+                .get_or_insert_with(|| value_range::Ranges::compute(func, &[]))
+                .at(b as BlockId, value)
+                .fits(kind);
+        (kind, fit)
+    };
 
     // A block one predecessor alone reaches starts from what that block
     // ended with: the predecessor dominates it, and no other path enters.
@@ -533,7 +577,8 @@ fn run_one(func: &mut FunctionSsa) {
                     // live-range-extension bound; a farther reuse reloads.
                     let hit = hit.filter(|e| span(e.src_idx, i) <= MAX_FORWARD_DISTANCE);
                     if let Some(e) = hit {
-                        any |= take(&mut redirect, &mut rewrites, i, e.value, e.load_kind, kind);
+                        let k = fits(func, b, e.value, e.load_kind, kind);
+                        any |= take(&mut redirect, &mut rewrites, i, e.value, e.load_kind, k);
                     }
                     // Record this load so a later identical one forwards:
                     // one that did not forward stands in for an entry too
@@ -646,8 +691,8 @@ fn run_one(func: &mut FunctionSsa) {
                         .then(|| half(disp).zip(half(disp + 8)))
                         .flatten();
                     if let Some(e) = hit {
-                        let direct =
-                            take(&mut redirect, &mut rewrites, i, e.value, e.load_kind, kind);
+                        let k = fits(func, b, e.value, e.load_kind, kind);
+                        let direct = take(&mut redirect, &mut rewrites, i, e.value, e.load_kind, k);
                         any |= direct;
                         // A load rewritten to an extension or a cast serves the
                         // next load of its kind.
@@ -795,7 +840,8 @@ fn run_one(func: &mut FunctionSsa) {
                         .copied()
                         .filter(|e| span(e.src_idx, i) <= MAX_FORWARD_DISTANCE);
                     if let Some(e) = hit {
-                        any |= take(&mut redirect, &mut rewrites, i, e.value, e.load_kind, kind);
+                        let k = fits(func, b, e.value, e.load_kind, kind);
+                        any |= take(&mut redirect, &mut rewrites, i, e.value, e.load_kind, k);
                     }
                     if redirect[i].is_none() {
                         indexed.retain(|e| !same(e));
@@ -1808,38 +1854,70 @@ mod tests {
         );
     }
 
-    /// An unsigned sub-width reload is left alone: `Inst::Extend` does
-    /// not zero-extend the unsigned widths, so the stored register cannot
-    /// be reused without a mask the pass does not emit.
+    fn binop_imm(op: crate::c5::ir::BinOp, lhs: u32, rhs_imm: i64) -> Inst {
+        Inst::BinopI { op, lhs, rhs_imm }
+    }
+
+    fn store_at(value: u32, kind: StoreKind) -> Inst {
+        Inst::Store {
+            addr: 0,
+            disp: 0,
+            value,
+            kind,
+            volatile: false,
+            align: 0,
+            pc_rel: false,
+        }
+    }
+
+    fn load_at(kind: LoadKind) -> Inst {
+        Inst::Load {
+            addr: 0,
+            disp: 0,
+            kind,
+            volatile: false,
+            align: 0,
+            pc_rel: false,
+        }
+    }
+
+    /// An unsigned sub-width reload of a store at its width becomes the
+    /// stored value masked to that width, the zero-extension the load
+    /// performs (C17 6.3.1.3p2).
     #[test]
-    fn unsigned_subwidth_load_not_forwarded() {
+    fn unsigned_subwidth_load_masks_the_stored_value() {
+        use crate::c5::ir::BinOp;
+        for (store, load, mask) in [
+            (StoreKind::I8, LoadKind::U8, 0xff),
+            (StoreKind::I16, LoadKind::U16, 0xffff),
+            (StoreKind::I32, LoadKind::U32, 0xffff_ffff),
+        ] {
+            let mut f = fresh(
+                alloc::vec![param(0), param(1), store_at(1, store), load_at(load)],
+                Terminator::Return(3),
+                3,
+            );
+            run_one(&mut f);
+            assert!(
+                matches!(f.insts[3], Inst::BinopI { op: BinOp::And, lhs: 1, rhs_imm } if rhs_imm == mask),
+                "{load:?}: {:?}",
+                f.insts[3],
+            );
+        }
+    }
+
+    /// A narrow load after a load of the same bytes at the other signedness
+    /// takes the earlier value through its own extension: the low bytes of
+    /// either are the location's.
+    #[test]
+    fn a_narrow_load_takes_a_load_of_the_other_signedness() {
+        use crate::c5::ir::BinOp;
         let mut f = fresh(
             alloc::vec![
-                Inst::ParamRef {
-                    idx: 0,
-                    kind: LoadKind::I64
-                },
-                Inst::ParamRef {
-                    idx: 1,
-                    kind: LoadKind::I64
-                },
-                Inst::Store {
-                    addr: 0,
-                    disp: 0,
-                    value: 1,
-                    kind: StoreKind::I8,
-                    volatile: false,
-                    align: 0,
-                    pc_rel: false
-                },
-                Inst::Load {
-                    addr: 0,
-                    disp: 0,
-                    kind: LoadKind::U8,
-                    volatile: false,
-                    align: 0,
-                    pc_rel: false
-                },
+                param(0),
+                param(1),
+                load_at(LoadKind::I32),
+                load_at(LoadKind::U32)
             ],
             Terminator::Return(3),
             3,
@@ -1848,18 +1926,69 @@ mod tests {
         assert!(
             matches!(
                 f.insts[3],
-                Inst::Load {
-                    addr: 0,
-                    disp: 0,
-                    kind: LoadKind::U8,
-                    volatile: false,
-                    align: 0,
+                Inst::BinopI {
+                    op: BinOp::And,
+                    lhs: 2,
+                    rhs_imm: 0xffff_ffff
+                }
+            ),
+            "{:?}",
+            f.insts[3],
+        );
+        let mut f = fresh(
+            alloc::vec![
+                param(0),
+                param(1),
+                load_at(LoadKind::U16),
+                load_at(LoadKind::I16)
+            ],
+            Terminator::Return(3),
+            3,
+        );
+        run_one(&mut f);
+        assert!(
+            matches!(
+                f.insts[3],
+                Inst::Extend {
+                    value: 2,
+                    kind: LoadKind::I16,
                     ..
                 }
             ),
-            "an unsigned sub-width reload must not forward",
+            "{:?}",
+            f.insts[3],
         );
-        assert!(matches!(f.blocks[0].terminator, Terminator::Return(3)));
+    }
+
+    /// A stored value whose range the load's extension keeps is the load's
+    /// value as it stands: a reload of `x & 0x7f` at either signedness of
+    /// a byte reads the masked value itself.
+    #[test]
+    fn a_stored_value_the_load_kind_holds_is_taken_as_it_stands() {
+        use crate::c5::ir::BinOp;
+        let mut f = fresh(
+            alloc::vec![
+                param(0),
+                param(1),
+                binop_imm(BinOp::And, 1, 0x7f),
+                store_at(2, StoreKind::I8),
+                load_at(LoadKind::U8),
+                load_at(LoadKind::I8),
+                Inst::Binop {
+                    op: BinOp::Add,
+                    lhs: 4,
+                    rhs: 5
+                },
+            ],
+            Terminator::Return(6),
+            6,
+        );
+        run_one(&mut f);
+        assert!(
+            matches!(f.insts[6], Inst::Binop { lhs: 2, rhs: 2, .. }),
+            "{:?}",
+            f.insts[6],
+        );
     }
 
     /// A block copy between the store and the load clears the table: the
@@ -2904,13 +3033,13 @@ mod tests {
         );
     }
 
-    /// A different index value, scale, base or load kind is another key.
+    /// A different index value, scale, base or width is another key.
     #[test]
     fn indexed_load_with_another_key_reads_memory() {
         for first in [
             load_indexed(0, 2, 1, LoadKind::U8),
             load_indexed(2, 1, 1, LoadKind::U8),
-            load_indexed(0, 1, 1, LoadKind::I8),
+            load_indexed(0, 1, 1, LoadKind::U16),
             load_indexed(0, 1, 4, LoadKind::U32),
         ] {
             let (v, last) = indexed_reload(first.clone(), Vec::new(), LoadKind::U8);
@@ -2945,8 +3074,15 @@ mod tests {
         );
         assert_eq!(v, 4);
         assert!(
-            matches!(last, Inst::LoadIndexed { .. }),
-            "an unsigned sub-width reload reads memory: {last:?}"
+            matches!(
+                last,
+                Inst::BinopI {
+                    op: crate::c5::ir::BinOp::And,
+                    lhs: 2,
+                    rhs_imm: 0xff
+                }
+            ),
+            "an unsigned sub-width reload masks the stored value: {last:?}"
         );
     }
 

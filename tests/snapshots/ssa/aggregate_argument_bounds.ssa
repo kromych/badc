@@ -226,7 +226,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=3
   block 15  start_pc=0
     v102 Imm(0)                                           -> x2
     v103 Imm(0)                                           -> x2
-    v104 Load { addr=v221, disp=-7, kind=U8 }             -> x2
+    v104 BinopI { op=and, lhs=v77, rhs_imm=255 }          -> x2
     v105 Load { addr=v221, disp=-6, kind=U8 }             -> x2
     v106 Load { addr=v221, disp=-5, kind=U8 }             -> x2
     v107 Load { addr=v221, disp=-4, kind=U8 }             -> x2

@@ -54,19 +54,6 @@ Disassembly of section .text:
                	mov	x2, #0x6968             // =26984
                	strh	w2, [x1]
                	strb	w0, [x1, #0x2]
-               	ldrb	w2, [x1, #0x1]
-               	cmp	w2, #0x69
-               	b.eq	<addr>
-               	mov	x0, #0x7                // =7
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	ldrb	w1, [x1, #0x2]
-               	cbz	w1, <addr>
-               	mov	x0, #0x8                // =8
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	ldursw	x1, [x29, #-0x10]
                	ldursw	x2, [x29, #-0xc]
                	add	x1, x1, x2

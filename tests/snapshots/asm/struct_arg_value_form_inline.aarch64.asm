@@ -38,8 +38,4 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	mov	x0, #0x0                // =0
                	str	w0, [x1, #0x20]
-               	ldr	w1, [x1, #0x20]
-               	cbz	w1, <addr>
-               	mov	x0, #0x8                // =8
-               	ret
                	ret

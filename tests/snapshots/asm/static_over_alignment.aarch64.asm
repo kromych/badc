@@ -26,13 +26,8 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	mov	x2, #0x9                // =9
                	strb	w2, [x1]
-               	and	x2, x1, #0xfff
-               	cbz	w2, <addr>
-               	ret
-               	ldrb	w0, [x1]
-               	cmp	w0, #0x9
-               	b.eq	<addr>
-               	mov	x0, #0x4                // =4
+               	and	x1, x1, #0xfff
+               	cbz	w1, <addr>
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

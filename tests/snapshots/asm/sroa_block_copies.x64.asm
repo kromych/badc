@@ -352,28 +352,17 @@ Disassembly of section .text:
                	retq
 
 <field_literals>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	$0x0, -0x8(%rbp)
                	movq	%rdi, %rax
                	andq	$0xff, %rax
-               	movl	%eax, -0x8(%rbp)
-               	leaq	0x1(%rdi), %rax
-               	movl	-0x8(%rbp), %ecx
+               	leaq	0x1(%rdi), %rcx
                	movl	$0xffff00ff, %r11d      # imm = 0xFFFF00FF
-               	andq	%r11, %rcx
-               	shlq	$0x8, %rax
-               	andq	$0xff00, %rax           # imm = 0xFF00
+               	andq	%r11, %rax
+               	shlq	$0x8, %rcx
+               	andq	$0xff00, %rcx           # imm = 0xFF00
                	orq	%rcx, %rax
-               	movl	%eax, -0x8(%rbp)
-               	movl	-0x8(%rbp), %eax
                	movl	$0xfffeffff, %r11d      # imm = 0xFFFEFFFF
                	andq	%r11, %rax
                	orq	$0x10000, %rax          # imm = 0x10000
-               	movl	%eax, -0x8(%rbp)
-               	movl	-0x8(%rbp), %eax
-               	leave
                	retq
 
 <main>:

@@ -70,7 +70,8 @@ Disassembly of section .text:
                	mov	x1, #-0x7               // =-7
                	stur	w1, [x29, #-0x8]
                	sub	x1, x29, #0x18
-               	ldur	w2, [x29, #-0x8]
+               	mov	x2, #0xfff9             // =65529
+               	movk	x2, #0xffff, lsl #16
                	str	w2, [x1]
                	ldursw	x1, [x29, #-0x18]
                	cmn	w1, #0x7

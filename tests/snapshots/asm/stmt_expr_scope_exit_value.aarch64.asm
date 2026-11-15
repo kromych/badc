@@ -108,16 +108,16 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	str	wzr, [x0, #0x20]
+               	mov	x3, #0x1                // =1
+               	mov	x4, #0x2                // =2
                	ldrsw	x2, [x0, #0x20]
                	add	x2, x2, #0x1
                	str	w2, [x0, #0x20]
                	adrp	x2, <page>
-               	mov	x3, #0x2                // =2
-               	str	w3, [x2, #0x24]
-               	ldrsw	x3, [x0, #0x20]
-               	add	x3, x3, #0x1
-               	str	w3, [x0, #0x20]
-               	mov	x3, #0x1                // =1
+               	str	w4, [x2, #0x24]
+               	ldrsw	x4, [x0, #0x20]
+               	add	x4, x4, #0x1
+               	str	w4, [x0, #0x20]
                	str	w3, [x2, #0x24]
                	ldrsw	x3, [x0, #0x20]
                	cmp	w3, #0x2
@@ -126,10 +126,10 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	str	wzr, [x0, #0x20]
-               	ldrsw	x3, [x0, #0x20]
-               	add	x3, x3, #0x1
-               	str	w3, [x0, #0x20]
                	mov	x3, #0xb                // =11
+               	ldrsw	x4, [x0, #0x20]
+               	add	x4, x4, #0x1
+               	str	w4, [x0, #0x20]
                	str	w3, [x2, #0x24]
                	ldrsw	x3, [x0, #0x20]
                	cmp	w3, #0x1
@@ -146,17 +146,17 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	str	wzr, [x0, #0x20]
+               	mov	x3, #0x4                // =4
                	adrp	x0, <page>
-               	ldrsw	x1, [x0, #0x20]
-               	add	x1, x1, #0x1
-               	str	w1, [x0, #0x20]
-               	adrp	x1, <page>
-               	mov	x2, #0x4                // =4
-               	str	w2, [x1, #0x24]
                	ldrsw	x2, [x0, #0x20]
                	add	x2, x2, #0x1
                	str	w2, [x0, #0x20]
-               	str	wzr, [x1, #0x24]
+               	adrp	x2, <page>
+               	str	w3, [x2, #0x24]
+               	ldrsw	x3, [x0, #0x20]
+               	add	x3, x3, #0x1
+               	str	w3, [x0, #0x20]
+               	str	wzr, [x2, #0x24]
                	ldrsw	x0, [x0, #0x20]
                	cmp	w0, #0x2
                	b.eq	<addr>

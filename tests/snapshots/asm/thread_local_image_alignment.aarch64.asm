@@ -35,16 +35,15 @@ Disassembly of section .text:
                	add	x3, x3, #0x30
                	mov	x4, #0x2                // =2
                	strb	w4, [x3]
-               	ldr	x4, [x1]
+               	ldr	x3, [x1]
                	ldr	x1, [x1, #0x8]
-               	add	x1, x4, x1
+               	add	x1, x3, x1
                	cmp	x1, #0x7
                	b.eq	<addr>
                	add	x0, x0, #0x2
                	ret
                	ldrb	w1, [x2]
-               	ldrb	w2, [x3]
-               	add	x1, x1, x2
+               	add	x1, x1, #0x2
                	cmp	w1, #0x3
                	b.eq	<addr>
                	add	x0, x0, #0x3

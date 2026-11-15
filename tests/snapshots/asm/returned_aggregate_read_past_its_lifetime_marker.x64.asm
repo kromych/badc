@@ -30,22 +30,16 @@ Disassembly of section .text:
                	movsbq	%dl, %rdx
                	movl	$0x3, %eax
                	movb	$0x0, <rip> # <addr>
-               	movzbq	<rip>, %rcx # <addr>
-               	cmpl	$0x7, %ecx
-               	je	<addr>
-               	retq
                	retq
 
 <main>:
                	movq	<rip>, %rdx # <addr>
-               	movl	$0x3, %eax
-               	xorl	%ecx, %ecx
-               	movb	%cl, <rip> # <addr>
-               	movzbq	<rip>, %rsi # <addr>
-               	cmpl	$0x7, %esi
-               	movq	%rax, (%rdx)
-               	movl	$0x1, %eax
+               	movl	$0x3, %ecx
+               	xorl	%eax, %eax
+               	movb	%al, <rip> # <addr>
+               	movq	%rcx, (%rdx)
+               	movl	$0x1, %ecx
                	movq	<rip>, %rdx # <addr>
                	cmpq	$0x3, %rdx
-               	cmoveq	%rcx, %rax
+               	cmovneq	%rcx, %rax
                	retq

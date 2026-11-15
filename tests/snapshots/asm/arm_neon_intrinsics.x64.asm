@@ -55,11 +55,11 @@ Disassembly of section .text:
                	movw	$0x8885, -0x22(%rbp)    # imm = 0x8885
                	movw	$0xe2c5, -0x12(%rbp)    # imm = 0xE2C5
                	xorl	%eax, %eax
-               	movzbq	-0x40(%rbp,%rax), %rsi
+               	movzbq	-0x40(%rbp,%rax), %rdx
                	movzbq	-0x30(%rbp,%rax), %r8
-               	xorq	%r8, %rsi
-               	movb	%sil, -0x10(%rbp,%rax)
-               	movzbq	-0x10(%rbp,%rax), %rdx
+               	xorq	%r8, %rdx
+               	movb	%dl, -0x10(%rbp,%rax)
+               	andq	$0xff, %rdx
                	movzbq	-0x40(%rbp,%rax), %rsi
                	movzbq	-0x30(%rbp,%rax), %r8
                	xorq	%r8, %rsi

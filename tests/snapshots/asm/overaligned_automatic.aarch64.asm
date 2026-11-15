@@ -43,9 +43,6 @@ Disassembly of section .text:
                	str	x2, [sp, #0x40]
                	mov	x2, #0x2c               // =44
                	str	w2, [sp, #0x80]
-               	ldrb	w2, [sp]
-               	cmp	w2, #0xb
-               	b.ne	<addr>
                	ldrsw	x2, [sp, #0x6c]
                	cmp	w2, #0x16
                	b.ne	<addr>

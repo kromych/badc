@@ -53,8 +53,10 @@ Disassembly of section .text:
                	orq	$0x100, %rax            # imm = 0x100
                	xorq	%rdx, %rax
                	movq	%rax, 0x8(%rdi)
-               	xorb	$-0x7f, 0x6(%rdi)
-               	orb	$0x2, 0x6(%rdi)
+               	movzbq	0x6(%rdi), %rax
+               	xorq	$0x81, %rax
+               	orq	$0x2, %rax
+               	movb	%al, 0x6(%rdi)
                	retq
 
 <add_from>:

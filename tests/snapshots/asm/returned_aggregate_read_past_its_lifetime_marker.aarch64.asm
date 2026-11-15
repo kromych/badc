@@ -19,25 +19,19 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	adrp	x1, <page>
                	strb	wzr, [x1, #0x48]
-               	ldrb	w1, [x1, #0x48]
-               	cmp	w1, #0x7
-               	b.eq	<addr>
-               	ret
                	ret
 
 <main>:
                	adrp	x0, <page>
-               	ldr	x3, [x0, #0x10]
-               	mov	x0, #0x3                // =3
+               	ldr	x2, [x0, #0x10]
+               	mov	x1, #0x3                // =3
+               	adrp	x3, <page>
+               	mov	x0, #0x0                // =0
+               	strb	w0, [x3, #0x48]
+               	str	x1, [x2]
                	adrp	x1, <page>
-               	mov	x2, #0x0                // =0
-               	strb	w2, [x1, #0x48]
-               	ldrb	w1, [x1, #0x48]
-               	cmp	w1, #0x7
-               	str	x0, [x3]
-               	adrp	x0, <page>
-               	mov	x1, #0x1                // =1
-               	ldr	x0, [x0, #0x30]
-               	cmp	x0, #0x3
-               	csel	x0, x2, x1, eq
+               	mov	x2, #0x1                // =1
+               	ldr	x1, [x1, #0x30]
+               	cmp	x1, #0x3
+               	csel	x0, x0, x2, eq
                	ret

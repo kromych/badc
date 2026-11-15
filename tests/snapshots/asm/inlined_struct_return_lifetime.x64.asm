@@ -62,8 +62,8 @@ Disassembly of section .text:
 
 <check_one>:
                	movw	$0xa, <rip> # <addr>
-               	movl	$0x0, <rip> # <addr>
                	xorl	%eax, %eax
+               	movl	%eax, <rip> # <addr>
                	retq
 
 <check_three>:

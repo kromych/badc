@@ -81,8 +81,7 @@ Disassembly of section .text:
                	ldrb	w0, [x6]
                	ldrb	w1, [x3]
                	add	x0, x0, x1
-               	ldrb	w1, [x4]
-               	add	x0, x0, x1
+               	add	x0, x0, #0x3
                	cmp	w0, #0x6
                	b.eq	<addr>
                	mov	x0, #0x11               // =17

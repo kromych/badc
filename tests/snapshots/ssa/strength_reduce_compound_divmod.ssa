@@ -4217,8 +4217,8 @@ fn ent_pc=4 n_params=0 variadic=false locals=17
     v223 Imm(0)                                           -> x2
     v224 Neg(v222)                                        -> x0
     v225 StoreIndexed { base=v214, index=v197, scale=4, value=v224, kind=I32 } -> -
-    v226 Extend { value=v224, kind=I32 }                  -> x0
-    v227 Binop { op=ne, lhs=v226, rhs=v213 }              -> x2
+    v226 LoadIndexed { base=v214, index=v197, scale=4, kind=I32 } -> x2
+    v227 Binop { op=ne, lhs=v224, rhs=v213 }              -> x2
     terminator Bz { cond=v227, target=b14, fall=b33 }   (exit_acc=v227)
   block 14  start_pc=0
     v239 LocalAddr(-17)                                   -> x2
@@ -4226,7 +4226,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=17
     v241 BinopI { op=shl, lhs=v197, rhs_imm=2 }           -> x2
     v242 Binop { op=add, lhs=v214, rhs=v241 }             -> x2
     v243 LoadIndexed { base=v214, index=v197, scale=4, kind=I32 } -> x2
-    v244 Binop { op=ne, lhs=v226, rhs=v213 }              -> x0
+    v244 Binop { op=ne, lhs=v224, rhs=v213 }              -> x0
     terminator Bz { cond=v244, target=b15, fall=b32 }   (exit_acc=v244)
   block 15  start_pc=0
     v251 LoadLocal { off=-2, kind=I32, volatile }         -> x8

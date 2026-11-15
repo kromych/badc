@@ -31,15 +31,12 @@ Disassembly of section .text:
                	subq	$0x50, %rsp
                	movl	$0x1, <rip> # <addr>
                	movl	$0xb, -0x48(%rbp)
-               	movl	-0x48(%rbp), %eax
-               	movl	%eax, -0x44(%rbp)
-               	movl	%eax, -0x40(%rbp)
-               	movl	%eax, -0x3c(%rbp)
-               	movl	%eax, -0x38(%rbp)
-               	movl	%eax, -0x34(%rbp)
-               	movl	%eax, -0x30(%rbp)
-               	movl	%eax, -0x2c(%rbp)
-               	movl	%eax, -0x28(%rbp)
+               	movl	$0xb, -0x44(%rbp)
+               	movabsq	$0xb0000000b, %rcx      # imm = 0xB0000000B
+               	movq	%rcx, -0x40(%rbp)
+               	movq	%rcx, -0x38(%rbp)
+               	movq	%rcx, -0x30(%rbp)
+               	movl	$0xb, -0x28(%rbp)
                	movl	-0x48(%rbp), %eax
                	movl	%eax, -0x24(%rbp)
                	movl	%eax, -0x20(%rbp)
@@ -83,15 +80,12 @@ Disassembly of section .text:
                	retq
                	movl	$0x1, <rip> # <addr>
                	movl	$0x13, -0x48(%rbp)
-               	movl	-0x48(%rbp), %eax
-               	movl	%eax, -0x44(%rbp)
-               	movl	%eax, -0x40(%rbp)
-               	movl	%eax, -0x3c(%rbp)
-               	movl	%eax, -0x38(%rbp)
-               	movl	%eax, -0x34(%rbp)
-               	movl	%eax, -0x30(%rbp)
-               	movl	%eax, -0x2c(%rbp)
-               	movl	%eax, -0x28(%rbp)
+               	movl	$0x13, -0x44(%rbp)
+               	movabsq	$0x1300000013, %rcx     # imm = 0x1300000013
+               	movq	%rcx, -0x40(%rbp)
+               	movq	%rcx, -0x38(%rbp)
+               	movq	%rcx, -0x30(%rbp)
+               	movl	$0x13, -0x28(%rbp)
                	movl	-0x48(%rbp), %eax
                	movl	%eax, -0x24(%rbp)
                	movl	%eax, -0x20(%rbp)

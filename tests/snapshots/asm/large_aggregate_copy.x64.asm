@@ -43,7 +43,6 @@ Disassembly of section .text:
                	movl	$0x4d2, -0x8(%rbp)      # imm = 0x4D2
                	movzbq	-0x2330(%rbp), %rax
                	movzbq	-0x330(%rbp), %rcx
-               	movl	-0x8(%rbp), %edx
                	movsbq	%al, %rax
                	testl	%eax, %eax
                	jne	<addr>
@@ -51,11 +50,6 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
-               	retq
-               	cmpl	$0x4d2, %edx            # imm = 0x4D2
-               	je	<addr>
-               	movl	$0x4, %eax
                	leave
                	retq
                	xorl	%eax, %eax

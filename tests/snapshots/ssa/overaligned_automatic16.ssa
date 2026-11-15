@@ -55,8 +55,8 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v47  Load { addr=v46, disp=0, kind=I32 pc_rel }       -> x1
     v48  BinopI { op=or, lhs=v47, rhs_imm=1 }             -> x1
     v49  Store { addr=v46, disp=0, value=v48, kind=I32 pc_rel } -> -
-    v50  Extend { value=v48, kind=I32 }                   -> x1
-    terminator Jmp(b2)   (exit_acc=v50)
+    v50  Load { addr=v46, disp=0, kind=I32 pc_rel }       -> x1
+    terminator Jmp(b2)   (exit_acc=v48)
   block 2  start_pc=0
     v51  LocalAddr(-13)                                   -> x1
     v52  LoadLocal { off=-13, kind=I64 }                  -> x1
@@ -101,8 +101,8 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v85  Load { addr=v84, disp=0, kind=I32 pc_rel }       -> x0
     v86  BinopI { op=or, lhs=v85, rhs_imm=2 }             -> x0
     v87  Store { addr=v84, disp=0, value=v86, kind=I32 pc_rel } -> -
-    v88  Extend { value=v86, kind=I32 }                   -> x0
-    terminator Jmp(b6)   (exit_acc=v88)
+    v88  Load { addr=v84, disp=0, kind=I32 pc_rel }       -> x0
+    terminator Jmp(b6)   (exit_acc=v86)
   block 6  start_pc=0
     v89  LifetimeEnd(-15)                                 -> -
     v90  LifetimeEnd(-14)                                 -> -
@@ -164,8 +164,8 @@ fn ent_pc=1 n_params=1 variadic=false locals=1
     v46  Load { addr=v45, disp=0, kind=I32 pc_rel }       -> x0
     v47  BinopI { op=or, lhs=v46, rhs_imm=4 }             -> x0
     v48  Store { addr=v45, disp=0, value=v47, kind=I32 pc_rel } -> -
-    v49  Extend { value=v47, kind=I32 }                   -> x0
-    terminator Jmp(b2)   (exit_acc=v49)
+    v49  Load { addr=v45, disp=0, kind=I32 pc_rel }       -> x0
+    terminator Jmp(b2)   (exit_acc=v47)
   block 2  start_pc=0
     v50  LocalAddr(-14)                                   -> x0
     v51  LoadLocal { off=-14, kind=I64 }                  -> x0
@@ -210,8 +210,8 @@ fn ent_pc=1 n_params=1 variadic=false locals=1
     v84  Load { addr=v83, disp=0, kind=I32 pc_rel }       -> x0
     v85  BinopI { op=or, lhs=v84, rhs_imm=8 }             -> x0
     v86  Store { addr=v83, disp=0, value=v85, kind=I32 pc_rel } -> -
-    v87  Extend { value=v85, kind=I32 }                   -> x0
-    terminator Jmp(b6)   (exit_acc=v87)
+    v87  Load { addr=v83, disp=0, kind=I32 pc_rel }       -> x0
+    terminator Jmp(b6)   (exit_acc=v85)
   block 6  start_pc=0
     v88  LifetimeEnd(-16)                                 -> -
     v89  LifetimeEnd(-15)                                 -> -

@@ -17,10 +17,9 @@ Disassembly of section .text:
                	str	x20, [sp, #-0x20]!
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
-               	adrp	x0, <page>
-               	mov	x1, #-0x1               // =-1
-               	str	w1, [x0, #0x28]
+               	adrp	x1, <page>
                	mov	x0, #-0x1               // =-1
+               	str	w0, [x1, #0x28]
                	adrp	x1, <page>
                	ldrsw	x1, [x1, #0xc]
                	udiv	w17, w0, w1

@@ -27,16 +27,6 @@ Disassembly of section .text:
                	mov	x0, #0x1234             // =4660
                	movk	x0, #0x10, lsl #16
                	str	w0, [sp, #0x14]
-               	ldrh	w0, [sp, #0x14]
-               	ldrh	w1, [sp, #0x16]
-               	add	x0, x0, x1
-               	mov	x17, #0x1244            // =4676
-               	cmp	w0, w17
-               	b.eq	<addr>
-               	mov	x0, #0x1                // =1
-               	add	sp, sp, #0x400
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	mov	x0, #0x0                // =0
                	mov	x3, #0xc                // =12
                	mov	x4, #0x64               // =100

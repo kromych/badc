@@ -32,14 +32,14 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v15  LocalAddr(-1)                                    -> x0
     v16  Imm(0)                                           -> x0
     v17  Imm(0)                                           -> x0
-    v18  Imm(8)                                           -> x0
+    v18  LoadLocal { off=-1, kind=I32 }                   -> x0
     v19  Imm(0)                                           -> x0
     terminator Jmp(b1)   (exit_acc=v19)
   block 1  start_pc=0
     v32  LocalAddr(-2)                                    -> x0
     v33  Imm(0)                                           -> x0
     v34  Imm(0)                                           -> x0
-    v35  Imm(5)                                           -> x0
+    v35  LoadLocal { off=-2, kind=I32 }                   -> x0
     v36  Imm(0)                                           -> x0
     terminator Jmp(b2)   (exit_acc=v36)
   block 2  start_pc=0

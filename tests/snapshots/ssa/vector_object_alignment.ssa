@@ -672,7 +672,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v206 Extend { value=v205, kind=I32, nsw }             -> x1
     v207 ImmData(384)                                     -> x1
     v208 BinopI { op=add, lhs=v185, rhs_imm=36 }          -> x1
-    v209 Imm(13)                                          -> x1
+    v209 Load { addr=v185, disp=36, kind=I32 pc_rel }     -> x1
     v210 BinopI { op=add, lhs=v205, rhs_imm=13 }          -> x0
     v211 Extend { value=v210, kind=I32, nsw }             -> x1
     v212 BinopI { op=ne, lhs=v210, rhs_imm=39 }           -> x0

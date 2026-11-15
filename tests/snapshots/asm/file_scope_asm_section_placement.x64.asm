@@ -50,12 +50,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movl	$0x77778888, (%rax)     # imm = 0x77778888
-               	movl	(%rax), %eax
-               	cmpl	$0x77778888, %eax       # imm = 0x77778888
-               	je	<addr>
-               	movl	$0x4, %eax
-               	popq	%rbp
-               	retq
                	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>

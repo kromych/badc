@@ -2178,7 +2178,9 @@ fn loaded_at(inst: &Inst) -> Option<(Location, LoadKind)> {
 /// width, where `op` is an addition, subtraction or bitwise operation, whose
 /// low bytes the operands' low bytes alone decide: the load and the
 /// operation each read only by the next, nothing emitted between them, and
-/// no flags another instruction set read past the store. The bytes are a
+/// no flags another instruction set read past the store. The operation may
+/// also be the [`flag_steps`] step the block's branch tests for zero at the
+/// store's width, whose flags the memory form sets alike. The bytes are a
 /// pointer's, held in a register, or a frame slot's.
 pub(super) fn memory_destinations(
     func: &FunctionSsa,
@@ -2215,12 +2217,18 @@ pub(super) fn memory_destinations(
                 Location::Ptr(addr, _) => in_reg(addr).is_some(),
                 Location::Slot(..) => true,
             };
+            let tested = matches!(block.terminator,
+                Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } if cond == o)
+                && alloc.use_counts.get(o as usize) == Some(&2)
+                && matches!(width, 4 | 8)
+                && steps.get(o as usize).copied().flatten()
+                    == Some(FlagStep::Sets { w32: width == 4 });
             if place_of(alloc, s) != Place::None
                 || !range.contains(&o)
                 || o >= s
-                || !single(o)
+                || !(single(o) || tested)
                 || !(o + 1..s).all(silent)
-                || (range.start..s).any(sets_flags)
+                || (range.start..s).any(|u| sets_flags(u) && !(u == o && tested))
                 || !addressable
             {
                 continue;

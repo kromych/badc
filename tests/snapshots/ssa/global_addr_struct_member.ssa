@@ -43,7 +43,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v25  Imm(0)                                           -> x0
     v26  ImmData(48)                                      -> x0
     v27  BinopI { op=add, lhs=v1, rhs_imm=36 }            -> x0
-    v28  Imm(42)                                          -> x0
+    v28  Load { addr=v1, disp=36, kind=I32 pc_rel }       -> x0
     v29  Imm(0)                                           -> x0
     terminator Jmp(b7)   (exit_acc=v29)
   block 7  start_pc=0

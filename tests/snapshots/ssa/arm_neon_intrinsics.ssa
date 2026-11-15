@@ -526,24 +526,24 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v520 Imm(0)                                           -> x2
     terminator Jmp(b6)   (exit_acc=v519)
   block 1  start_pc=0
-    v527 LocalAddr(-2)                                    -> x2
-    v528 Extend { value=v521, kind=I32 }                  -> x6
-    v529 Binop { op=add, lhs=v527, rhs=v521 }             -> x6
-    v530 LocalAddr(-8)                                    -> x6
-    v531 Extend { value=v521, kind=I32 }                  -> x6
-    v532 Binop { op=add, lhs=v487, rhs=v521 }             -> x6
-    v533 LoadIndexed { base=v487, index=v521, scale=1, kind=U8 } -> x6
+    v527 LocalAddr(-2)                                    -> x6
+    v528 Extend { value=v521, kind=I32 }                  -> x2
+    v529 Binop { op=add, lhs=v527, rhs=v521 }             -> x2
+    v530 LocalAddr(-8)                                    -> x2
+    v531 Extend { value=v521, kind=I32 }                  -> x2
+    v532 Binop { op=add, lhs=v487, rhs=v521 }             -> x2
+    v533 LoadIndexed { base=v487, index=v521, scale=1, kind=U8 } -> x2
     v534 LocalAddr(-6)                                    -> x8
     v535 Extend { value=v521, kind=I32 }                  -> x8
     v536 Binop { op=add, lhs=v496, rhs=v521 }             -> x8
     v537 LoadIndexed { base=v496, index=v521, scale=1, kind=U8 } -> x8
-    v538 Binop { op=xor, lhs=v533, rhs=v537 }             -> x6
+    v538 Binop { op=xor, lhs=v533, rhs=v537 }             -> x2
     v539 BinopI { op=and, lhs=v538, rhs_imm=255 }         -> x8
     v540 StoreIndexed { base=v527, index=v521, scale=1, value=v538, kind=I8 } -> -
     v541 LocalAddr(-2)                                    -> x6
     v542 Extend { value=v521, kind=I32 }                  -> x6
     v543 Binop { op=add, lhs=v527, rhs=v521 }             -> x6
-    v544 LoadIndexed { base=v527, index=v521, scale=1, kind=U8 } -> x2
+    v544 BinopI { op=and, lhs=v538, rhs_imm=255 }         -> x2
     v545 LocalAddr(-8)                                    -> x6
     v546 Extend { value=v521, kind=I32 }                  -> x6
     v547 Binop { op=add, lhs=v487, rhs=v521 }             -> x6

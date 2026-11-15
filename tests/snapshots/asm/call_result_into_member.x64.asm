@@ -115,9 +115,9 @@ Disassembly of section .text:
                	cvtsi2ss	%rdi, %xmm0
                	movss	%xmm0, -0x10(%rbp)
                	movl	$0x2, -0xc(%rbp)
-               	movb	$0x3, -0x8(%rbp)
+               	movl	$0x3, %edx
+               	movb	%dl, -0x8(%rbp)
                	movq	-0x10(%rbp), %rax
-               	movzbq	-0x8(%rbp), %rdx
                	leave
                	retq
 

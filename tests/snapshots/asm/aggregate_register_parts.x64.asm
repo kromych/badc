@@ -797,21 +797,23 @@ Disassembly of section .text:
                	movzbq	(%rdi), %rdi
                	callq	<addr>
                	movb	%al, -0x8(%rbp)
-               	movzbq	-0x8(%rbp), %r10
+               	movq	%rax, %r10
+               	andq	$0xff, %r10
                	movq	%r10, 0x48(%rsp)
                	leaq	-0x8(%rbp), %rdi
                	movw	$0x258, -0x8(%rbp)      # imm = 0x258
                	movzwq	(%rdi), %rdi
                	callq	<addr>
                	movw	%ax, -0x8(%rbp)
-               	movzwq	-0x8(%rbp), %r10
+               	movq	%rax, %r10
+               	andq	$0xffff, %r10           # imm = 0xFFFF
                	movq	%r10, 0x40(%rsp)
                	leaq	-0x8(%rbp), %rdi
                	movl	$0x11170, -0x8(%rbp)    # imm = 0x11170
                	movl	(%rdi), %edi
                	callq	<addr>
                	movl	%eax, -0x8(%rbp)
-               	movl	-0x8(%rbp), %r10d
+               	movl	%eax, %r10d
                	movq	%r10, 0x38(%rsp)
                	movabsq	$0x1dcd65000, %rdi      # imm = 0x1DCD65000
                	callq	<addr>

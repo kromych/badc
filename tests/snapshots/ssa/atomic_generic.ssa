@@ -85,7 +85,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=6
     v67  StoreLocal { off=-1, value=v66, kind=I32 }       -> -
     v68  LocalAddr(-3)                                    -> x0
     v69  LocalAddr(-1)                                    -> x1
-    v70  LoadLocal { off=-1, kind=U32 }                   -> x1
+    v70  Imm(4294967289)                                  -> x1
     v71  AtomicStore { addr=v68, value=v70, width=4, order=Relaxed } -> -
     v72  LoadLocal { off=-3, kind=I32 }                   -> x0
     v73  BinopI { op=ne, lhs=v72, rhs_imm=-7 }            -> x0

@@ -74,55 +74,53 @@ Disassembly of section .text:
                	ldr	x0, [x0]
                	bl	<addr>
                	stur	x0, [x29, #-0x8]
-               	ldur	w3, [x29, #-0x8]
-               	ldur	w4, [x29, #-0x4]
+               	ldur	w5, [x29, #-0x8]
+               	ldur	w6, [x29, #-0x4]
                	ldr	w1, [x20, #0x8]
                	ldr	w0, [x20, #0xc]
                	lsl	x2, x1, #17
-               	orr	x5, x2, x0, lsr #15
+               	orr	x7, x2, x0, lsr #15
                	ldr	w2, [x20]
-               	ldr	w6, [x20, #0x4]
-               	ldr	w7, [x20, #0x10]
-               	eor	x2, x7, x2
+               	ldr	w3, [x20, #0x4]
+               	ldr	w4, [x20, #0x10]
+               	eor	x2, x4, x2
                	str	w2, [x20, #0x10]
-               	ldr	w2, [x20, #0x14]
-               	eor	x2, x2, x6
-               	str	w2, [x20, #0x14]
-               	ldr	w2, [x20, #0x18]
-               	eor	x1, x2, x1
+               	ldr	w4, [x20, #0x14]
+               	eor	x3, x4, x3
+               	str	w3, [x20, #0x14]
+               	ldr	w4, [x20, #0x18]
+               	eor	x1, x4, x1
                	str	w1, [x20, #0x18]
-               	ldr	w1, [x20, #0x1c]
-               	eor	x1, x1, x0
-               	str	w1, [x20, #0x1c]
+               	ldr	w4, [x20, #0x1c]
+               	eor	x4, x4, x0
+               	str	w4, [x20, #0x1c]
+               	ldr	w8, [x20, #0x8]
+               	eor	x2, x8, x2
+               	str	w2, [x20, #0x8]
+               	ldr	w2, [x20, #0xc]
+               	eor	x2, x2, x3
+               	str	w2, [x20, #0xc]
+               	ldr	w2, [x20]
+               	eor	x1, x2, x1
+               	str	w1, [x20]
+               	ldr	w1, [x20, #0x4]
+               	eor	x1, x1, x4
+               	str	w1, [x20, #0x4]
                	ldr	w1, [x20, #0x10]
-               	ldr	w2, [x20, #0x14]
-               	ldr	w6, [x20, #0x8]
-               	eor	x1, x6, x1
-               	str	w1, [x20, #0x8]
-               	ldr	w1, [x20, #0xc]
-               	eor	x1, x1, x2
-               	str	w1, [x20, #0xc]
-               	ldr	w1, [x20, #0x18]
-               	ldr	w2, [x20, #0x1c]
-               	ldr	w6, [x20]
-               	eor	x6, x6, x1
-               	str	w6, [x20]
-               	ldr	w6, [x20, #0x4]
-               	eor	x6, x6, x2
-               	str	w6, [x20, #0x4]
-               	ldr	w6, [x20, #0x10]
-               	eor	x5, x6, x5
-               	str	w5, [x20, #0x10]
-               	ldr	w5, [x20, #0x14]
-               	eor	x0, x5, x0, lsl #17
+               	eor	x1, x1, x7
+               	str	w1, [x20, #0x10]
+               	ldr	w1, [x20, #0x14]
+               	eor	x0, x1, x0, lsl #17
                	str	w0, [x20, #0x14]
-               	lsr	x0, x1, #19
-               	orr	x0, x0, x2, lsl #13
-               	lsl	x1, x1, #13
-               	orr	x1, x1, x2, lsr #19
-               	str	w0, [x20, #0x18]
-               	str	w1, [x20, #0x1c]
-               	orr	x0, x3, x4, lsl #32
+               	ldr	w0, [x20, #0x18]
+               	ldr	w1, [x20, #0x1c]
+               	lsr	x2, x0, #19
+               	orr	x2, x2, x1, lsl #13
+               	lsl	x0, x0, #13
+               	orr	x0, x0, x1, lsr #19
+               	str	w2, [x20, #0x18]
+               	str	w0, [x20, #0x1c]
+               	orr	x0, x5, x6, lsl #32
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x20, [sp], #0x30
                	ret

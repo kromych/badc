@@ -71,16 +71,9 @@ fn ent_pc=5 n_params=0 variadic=false locals=2
     v64  LoadLocal { off=-1, kind=U32 }                   -> x0
     v65  LifetimeEnd(-1)                                  -> -
     v66  LifetimeEnd(0)                                   -> -
-    v67  BinopI { op=ne, lhs=v64, rhs_imm=1069547520 }    -> x0
-    terminator Bz { cond=v67, target=b5, fall=b4 }   (exit_acc=v67)
+    v67  Imm(0)                                           -> x0
+    terminator Jmp(b4)   (exit_acc=v67)
   block 4  start_pc=0
-    v68  Imm(3)                                           -> x0
-    v69  LifetimeEnd(-2)                                  -> -
-    v70  LifetimeEnd(0)                                   -> -
-    v71  LifetimeEnd(0)                                   -> -
-    v72  LifetimeEnd(0)                                   -> -
-    terminator Return(v68)   (exit_acc=v68)
-  block 5  start_pc=0
     v73  LocalAddr(-2)                                    -> x0
     v74  Imm(0)                                           -> x0
     v75  Imm(0)                                           -> x0
@@ -92,15 +85,15 @@ fn ent_pc=5 n_params=0 variadic=false locals=2
     v81  LifetimeEnd(0)                                   -> -
     v82  BinopI { op=and, lhs=v78, rhs_imm=-4294967041 }  -> x0
     v83  BinopI { op=ne, lhs=v82, rhs_imm=4620693217682128961 } -> x0
-    terminator Bz { cond=v83, target=b7, fall=b6 }   (exit_acc=v83)
-  block 6  start_pc=0
+    terminator Bz { cond=v83, target=b6, fall=b5 }   (exit_acc=v83)
+  block 5  start_pc=0
     v84  Imm(4)                                           -> x0
     v85  LifetimeEnd(-2)                                  -> -
     v86  LifetimeEnd(0)                                   -> -
     v87  LifetimeEnd(0)                                   -> -
     v88  LifetimeEnd(0)                                   -> -
     terminator Return(v84)   (exit_acc=v84)
-  block 7  start_pc=0
+  block 6  start_pc=0
     v89  Imm(1077936128)                                  -> d0 [f32]
     v90  Imm(1082130432)                                  -> d1 [f32]
     v91  Imm(0)                                           -> x0
@@ -119,15 +112,15 @@ fn ent_pc=5 n_params=0 variadic=false locals=2
     v104 LifetimeEnd(-1)                                  -> -
     v105 LifetimeEnd(0)                                   -> -
     v106 BinopI { op=ne, lhs=v103, rhs_imm=4647714816524288000 } -> x0
-    terminator Bz { cond=v106, target=b9, fall=b8 }   (exit_acc=v106)
-  block 8  start_pc=0
+    terminator Bz { cond=v106, target=b8, fall=b7 }   (exit_acc=v106)
+  block 7  start_pc=0
     v107 Imm(5)                                           -> x0
     v108 LifetimeEnd(-2)                                  -> -
     v109 LifetimeEnd(0)                                   -> -
     v110 LifetimeEnd(0)                                   -> -
     v111 LifetimeEnd(0)                                   -> -
     terminator Return(v107)   (exit_acc=v107)
-  block 9  start_pc=0
+  block 8  start_pc=0
     v112 Imm(0)                                           -> x0
     v113 LifetimeEnd(-2)                                  -> -
     v114 LifetimeEnd(0)                                   -> -

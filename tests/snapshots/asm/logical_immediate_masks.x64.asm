@@ -229,8 +229,6 @@ Disassembly of section .text:
                	andq	$-0xf9, %rcx
                	shlq	$0x3, %rax
                	orq	%rcx, %rax
-               	movl	%eax, (%rdi)
-               	movl	(%rdi), %eax
                	movq	%rax, %rcx
                	sarq	$0x10, %rcx
                	xorq	%rsi, %rcx
@@ -240,7 +238,6 @@ Disassembly of section .text:
                	shlq	$0x10, %rcx
                	orq	%rcx, %rax
                	movl	%eax, (%rdi)
-               	movl	(%rdi), %eax
                	movq	%rax, %rcx
                	andq	$0x7, %rcx
                	movq	%rax, %rdx

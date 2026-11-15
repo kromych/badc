@@ -31,7 +31,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v13  LoadLocal { off=-13, disp=9, kind=U8 }           -> x0
     v14  BinopI { op=xor, lhs=v13, rhs_imm=1 }            -> x0
     v15  StoreLocal { off=-13, disp=9, value=v14, kind=I8 } -> -
-    v16  LoadLocal { off=-13, disp=9, kind=U8 }           -> x0
+    v16  BinopI { op=and, lhs=v14, rhs_imm=255 }          -> x0
     v17  LoadLocal { off=-13, kind=F80 }                  -> d0
     v18  StoreLocal { off=-15, value=v17, kind=F80 }      -> -
     v19  LoadLocal { off=-14, kind=F80 }                  -> d0
@@ -43,7 +43,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v25  LoadLocal { off=-16, disp=9, kind=U8 }           -> x0
     v26  BinopI { op=xor, lhs=v25, rhs_imm=1 }            -> x0
     v27  StoreLocal { off=-16, disp=9, value=v26, kind=I8 } -> -
-    v28  LoadLocal { off=-16, disp=9, kind=U8 }           -> x0
+    v28  BinopI { op=and, lhs=v26, rhs_imm=255 }          -> x0
     v29  LoadLocal { off=-15, kind=F80 }                  -> d1
     v30  LoadLocal { off=-14, kind=F80 }                  -> d2
     v31  Binop { op=fne, lhs=v29, rhs=v19 }               -> x0

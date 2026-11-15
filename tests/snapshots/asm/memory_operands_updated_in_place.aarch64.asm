@@ -50,8 +50,6 @@ Disassembly of section .text:
                	ldrb	w1, [x0, #0x6]
                	mov	x17, #0x81              // =129
                	eor	x1, x1, x17
-               	strb	w1, [x0, #0x6]
-               	ldrb	w1, [x0, #0x6]
                	orr	x1, x1, #0x2
                	strb	w1, [x0, #0x6]
                	ret

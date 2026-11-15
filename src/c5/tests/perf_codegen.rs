@@ -8088,6 +8088,41 @@ void frame(long k) { struct pair r = {1, 2}; use(&r); r.x += 5; r.y -= k; use(&r
     m.finish();
 }
 
+/// An update whose result the branch ending its block tests for zero reads
+/// the location once, at any width and signedness: on x86-64 the
+/// memory-destination instruction and a branch on its flags, on AArch64 one
+/// load, the flag-setting update and the store.
+#[test]
+fn an_update_tested_for_zero_reads_the_location_once() {
+    const SRC: &str = "void release(void *);\n\
+struct obj { unsigned refcnt; long count; int n; };\n\
+void drop(struct obj *p) { if (p) { if (--p->refcnt == 0) release(p); } }\n\
+void drop_long(struct obj *p) { if (p) { if (--p->count == 0) release(p); } }\n\
+int take(struct obj *p) { if (p) { if ((p->n -= 5) != 0) return 1; } return 2; }\n";
+    let mut m = Misses::default();
+    for name in ["drop", "drop_long", "take"] {
+        let insns = x64(SRC, name);
+        let rmw = (insns.iter()).position(|i| matches!(i.op, 0x81 | 0x83) && !i.reg_form());
+        let accesses = insns.iter().filter(|i| i.mem_base().is_some()).count();
+        m.expect(
+            rmw.is_some_and(|k| insns.get(k + 1).is_some_and(X64Insn::is_jcc)) && accesses == 1,
+            || format!("x86-64 {name}: {insns:x?}"),
+        );
+        // LDR and LDRSW at an unsigned offset, LDUR and LDURSW.
+        let ws = a64(SRC, name);
+        let loads = (ws.iter())
+            .filter(|&&w| {
+                w & 0xBFC0_0000 == 0xB940_0000
+                    || w & 0xFFC0_0000 == 0xB980_0000
+                    || w & 0xBFE0_0C00 == 0xB840_0000
+                    || w & 0xFFE0_0C00 == 0xB880_0000
+            })
+            .count();
+        m.expect(loads == 1, || format!("aarch64 {name}: {ws:08x?}"));
+    }
+    m.finish();
+}
+
 /// Stores to one member in sequence, with no read between, leave the last:
 /// one store on both targets.
 #[test]

@@ -28,7 +28,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v22  Imm(3000)                                        -> x0
     v23  Imm(123000)                                      -> x0
     v24  Imm(123000)                                      -> x0
-    v25  Imm(7)                                           -> x0
+    v25  LoadLocal { off=-1, kind=I32 }                   -> x0
     v26  Imm(700)                                         -> x0
     v27  Imm(700)                                         -> x0
     v28  Imm(123700)                                      -> x0

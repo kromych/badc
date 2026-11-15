@@ -35,15 +35,6 @@ Disassembly of section .text:
                	movq	%rcx, -0x410(%rbp)
                	movabsq	$0x5adeadbeef, %rax     # imm = 0x5ADEADBEEF
                	movq	%rax, -0x408(%rbp)
-               	movl	-0x408(%rbp), %eax
-               	cmpl	$0xdeadbeef, %eax       # imm = 0xDEADBEEF
-               	jne	<addr>
-               	movzbq	-0x404(%rbp), %rax
-               	cmpl	$0x5a, %eax
-               	je	<addr>
-               	movl	$0x2, %eax
-               	leave
-               	retq
                	movl	$0x11223344, <rip> # imm = 0x11223344
                                                 # <addr>
                	movl	$0x11223345, <rip> # imm = 0x11223345

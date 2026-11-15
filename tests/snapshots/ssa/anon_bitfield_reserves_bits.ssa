@@ -364,54 +364,46 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v358 StoreLocal { off=-2, disp=8, value=v352, kind=I64 } -> -
     v359 LocalAddr(-2)                                    -> x0
     v360 LoadLocal { off=-2, kind=U32 }                   -> x0
-    v361 BinopI { op=ne, lhs=v360, rhs_imm=1 }            -> x0
-    v362 BinopI { op=and, lhs=v361, rhs_imm=4294967295 }  -> x1
-    v363 BinopI { op=ne, lhs=v360, rhs_imm=1 }            -> x1
-    terminator Bz { cond=v361, target=b2, fall=b1 }   (exit_acc=v363)
+    v361 Imm(0)                                           -> x0
+    v362 Imm(0)                                           -> x0
+    v363 Imm(0)                                           -> x0
+    terminator Jmp(b1)   (exit_acc=v363)
   block 1  start_pc=0
-    v374 Imm(22)                                          -> x0
-    v375 LifetimeEnd(-2)                                  -> -
-    terminator Return(v374)   (exit_acc=v374)
-  block 2  start_pc=0
     v376 LocalAddr(-2)                                    -> x0
     v377 BinopI { op=add, lhs=v308, rhs_imm=8 }           -> x0
     v378 Imm(0)                                           -> x0
     v379 LoadLocal { off=-2, disp=8, kind=U32 }           -> x0
-    v380 BinopI { op=ne, lhs=v379, rhs_imm=287454020 }    -> x0
-    v381 BinopI { op=and, lhs=v380, rhs_imm=4294967295 }  -> x1
-    v382 BinopI { op=ne, lhs=v379, rhs_imm=287454020 }    -> x1
-    v383 Imm(0)                                           -> x1
-    terminator Bnz { cond=v380, target=b4, fall=b3 }   (exit_acc=v382)
-  block 3  start_pc=0
+    v380 Imm(0)                                           -> x0
+    v381 Imm(0)                                           -> x0
+    v382 Imm(0)                                           -> x0
+    v383 Imm(0)                                           -> x0
+    terminator Jmp(b2)   (exit_acc=v382)
+  block 2  start_pc=0
     v384 LocalAddr(-2)                                    -> x0
     v385 BinopI { op=add, lhs=v308, rhs_imm=8 }           -> x0
     v386 Imm(4)                                           -> x0
     v387 BinopI { op=add, lhs=v308, rhs_imm=12 }          -> x0
     v388 LoadLocal { off=-2, disp=12, kind=U32 }          -> x0
-    v389 BinopI { op=ne, lhs=v388, rhs_imm=1432778632 }   -> x0
-    v390 BinopI { op=and, lhs=v389, rhs_imm=4294967295 }  -> x1
-    v391 BinopI { op=ne, lhs=v388, rhs_imm=1432778632 }   -> x1
-    v392 Imm(0)                                           -> x1
-    v393 Imm(0)                                           -> x1
-    v394 Imm(0)                                           -> x1
-    terminator Bz { cond=v389, target=b5, fall=b4 }   (exit_acc=v391)
-  block 4  start_pc=0
-    v395 Imm(23)                                          -> x0
-    v396 LifetimeEnd(-2)                                  -> -
-    terminator Return(v395)   (exit_acc=v395)
-  block 5  start_pc=0
+    v389 Imm(0)                                           -> x0
+    v390 Imm(0)                                           -> x0
+    v391 Imm(0)                                           -> x0
+    v392 Imm(0)                                           -> x0
+    v393 Imm(0)                                           -> x0
+    v394 Imm(0)                                           -> x0
+    terminator Jmp(b3)   (exit_acc=v391)
+  block 3  start_pc=0
     v397 LocalAddr(-2)                                    -> x0
     v398 BinopI { op=add, lhs=v397, rhs_imm=8 }           -> x1
     v399 Imm(0)                                           -> x2
     v400 LocalAddr(-2)                                    -> x2
     v401 Binop { op=sub, lhs=v398, rhs=v397 }             -> x1
     v402 BinopI { op=ne, lhs=v401, rhs_imm=8 }            -> x0
-    terminator Bz { cond=v402, target=b7, fall=b6 }   (exit_acc=v402)
-  block 6  start_pc=0
+    terminator Bz { cond=v402, target=b5, fall=b4 }   (exit_acc=v402)
+  block 4  start_pc=0
     v403 Imm(24)                                          -> x0
     v404 LifetimeEnd(-2)                                  -> -
     terminator Return(v403)   (exit_acc=v403)
-  block 7  start_pc=0
+  block 5  start_pc=0
     v405 LifetimeEnd(-2)                                  -> -
     v406 Imm(0)                                           -> x0
     terminator Return(v406)   (exit_acc=v406)

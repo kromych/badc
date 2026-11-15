@@ -295,19 +295,19 @@ Disassembly of section .text:
                	movl	%ecx, -0xcc(%rbp)
                	movl	%edx, -0xc8(%rbp)
                	movl	%esi, -0xc4(%rbp)
-               	movl	-0xc0(%rbp), %eax
-               	movl	-0xd0(%rbp), %ecx
-               	imulq	%rcx, %rax
+               	movl	-0xc0(%rbp), %edx
+               	movl	%eax, %eax
+               	imulq	%rdx, %rax
                	movl	%eax, -0xc0(%rbp)
                	movl	-0xbc(%rbp), %eax
-               	movl	-0xcc(%rbp), %ecx
+               	movl	%ecx, %ecx
                	imulq	%rcx, %rax
                	movl	%eax, -0xbc(%rbp)
                	movl	-0xb8(%rbp), %eax
                	movl	-0xc8(%rbp), %ecx
                	imulq	%rcx, %rax
                	movl	%eax, -0xb8(%rbp)
-               	movl	-0xb8(%rbp), %eax
+               	movl	%eax, %eax
                	movl	-0xb4(%rbp), %ecx
                	movl	-0xc4(%rbp), %edx
                	imulq	%rdx, %rcx
@@ -361,12 +361,12 @@ Disassembly of section .text:
                	movl	%ecx, -0x7c(%rbp)
                	movl	%edx, -0x78(%rbp)
                	movl	%esi, -0x74(%rbp)
-               	movl	-0x70(%rbp), %eax
-               	movl	-0x80(%rbp), %ecx
-               	addq	%rcx, %rax
+               	movl	-0x70(%rbp), %edx
+               	movl	%eax, %eax
+               	addq	%rdx, %rax
                	movl	%eax, -0x70(%rbp)
                	movl	-0x6c(%rbp), %eax
-               	movl	-0x7c(%rbp), %ecx
+               	movl	%ecx, %ecx
                	addq	%rcx, %rax
                	movl	%eax, -0x6c(%rbp)
                	movl	-0x68(%rbp), %eax

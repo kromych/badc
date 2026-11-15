@@ -90,8 +90,8 @@ fn ent_pc=4 n_params=5 variadic=false locals=0
     v67  Store { addr=v5, disp=0, value=v66, kind=I32 }   -> -
     v68  ImmData(52)                                      -> x0
     v69  Load { addr=v68, disp=0, kind=I32 pc_rel }       -> x0
-    v70  Extend { value=v66, kind=I32 }                   -> x1
-    terminator Jmp(b2)   (exit_acc=v70)
+    v70  Load { addr=v5, disp=0, kind=I32 }               -> x1
+    terminator Jmp(b2)   (exit_acc=v66)
   block 2  start_pc=0
     v74  ImmData(52)                                      -> x1
     v75  Load { addr=v74, disp=0, kind=I32 pc_rel }       -> x1

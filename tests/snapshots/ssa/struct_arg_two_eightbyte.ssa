@@ -158,29 +158,29 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v130 Load { addr=v102, disp=0, kind=I64 pc_rel }      -> x0
     v131 BinopI { op=ne, lhs=v130, rhs_imm=8738 }         -> x0
     v132 Imm(0)                                           -> x1
-    terminator Bnz { cond=v131, target=b13, fall=b12 }   (exit_acc=v131)
+    terminator Bnz { cond=v131, target=b14, fall=b12 }   (exit_acc=v131)
   block 12  start_pc=0
     v133 ImmData(68)                                      -> x0
     v134 Load { addr=v106, disp=0, kind=U32 pc_rel }      -> x0
-    v135 BinopI { op=ne, lhs=v134, rhs_imm=6 }            -> x0
-    v136 BinopI { op=and, lhs=v135, rhs_imm=4294967295 }  -> x1
-    v137 BinopI { op=ne, lhs=v134, rhs_imm=6 }            -> x1
-    v138 Imm(0)                                           -> x1
-    v139 Imm(0)                                           -> x1
-    v140 Imm(0)                                           -> x1
-    terminator Bz { cond=v135, target=b14, fall=b13 }   (exit_acc=v137)
+    v135 Imm(0)                                           -> x0
+    v136 Imm(0)                                           -> x0
+    v137 Imm(0)                                           -> x0
+    v138 Imm(0)                                           -> x0
+    v139 Imm(0)                                           -> x0
+    v140 Imm(0)                                           -> x0
+    terminator Jmp(b13)   (exit_acc=v137)
   block 13  start_pc=0
-    v141 Imm(5)                                           -> x0
-    v142 LifetimeEnd(0)                                   -> -
-    v143 LifetimeEnd(0)                                   -> -
-    v144 LifetimeEnd(0)                                   -> -
-    terminator Return(v141)   (exit_acc=v141)
-  block 14  start_pc=0
     v145 Imm(0)                                           -> x0
     v146 LifetimeEnd(0)                                   -> -
     v147 LifetimeEnd(0)                                   -> -
     v148 LifetimeEnd(0)                                   -> -
     terminator Return(v145)   (exit_acc=v145)
+  block 14  start_pc=0
+    v141 Imm(5)                                           -> x0
+    v142 LifetimeEnd(0)                                   -> -
+    v143 LifetimeEnd(0)                                   -> -
+    v144 LifetimeEnd(0)                                   -> -
+    terminator Return(v141)   (exit_acc=v141)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

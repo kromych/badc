@@ -69,12 +69,12 @@ Disassembly of section .text:
                	ret
 
 <check_one>:
-               	adrp	x0, <page>
                	adrp	x1, <page>
+               	adrp	x0, <page>
                	mov	x2, #0xa                // =10
-               	strh	w2, [x1, #0x20]
-               	str	wzr, [x0, #0x24]
+               	strh	w2, [x0, #0x20]
                	mov	x0, #0x0                // =0
+               	str	w0, [x1, #0x24]
                	ret
 
 <check_three>:

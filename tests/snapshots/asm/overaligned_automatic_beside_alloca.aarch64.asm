@@ -16,11 +16,10 @@ Disassembly of section .text:
 <touch>:
                	and	x1, x1, #0xff
                	strb	w1, [x0]
-               	adrp	x1, <page>
-               	ldrsw	x2, [x1, #0x20]
-               	ldrb	w0, [x0]
-               	add	x0, x2, x0
-               	str	w0, [x1, #0x20]
+               	adrp	x0, <page>
+               	ldrsw	x2, [x0, #0x20]
+               	add	x1, x2, x1
+               	str	w1, [x0, #0x20]
                	ret
 
 <with_alloca>:

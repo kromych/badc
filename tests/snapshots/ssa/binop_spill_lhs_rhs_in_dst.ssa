@@ -89,7 +89,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v26  Imm(4)                                           -> x1
     v27  Imm(16)                                          -> x1
     v28  BinopI { op=add, lhs=v1, rhs_imm=16 }            -> x1
-    v29  Imm(10)                                          -> x1
+    v29  LoadLocal { off=-3, disp=16, kind=I32 }          -> x1
     v30  Imm(0)                                           -> x1
     terminator Jmp(b2)   (exit_acc=v25)
   block 1  start_pc=0

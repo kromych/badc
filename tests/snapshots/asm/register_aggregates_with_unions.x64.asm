@@ -85,8 +85,9 @@ Disassembly of section .text:
                	movswq	%si, %rax
                	subq	$0x3, %rax
                	movw	%ax, -0x8(%rbp)
+               	movswq	%ax, %rdx
                	movq	-0x10(%rbp), %rax
-               	movzwq	-0x8(%rbp), %rdx
+               	andq	$0xffff, %rdx           # imm = 0xFFFF
                	leave
                	retq
 

@@ -119,6 +119,47 @@ svint8_t many(svint8_t x) {
     return x;
 }
 
+/* Holds more predicates than p0-p6 and p8-p13 keep: those in slots are
+ * read as the second operand of svorr_z, or govern svadd_m. */
+svint8_t preds(svint8_t x) {
+    svbool_t pg = svptrue_b8();
+    svbool_t c0 = svcmpgt(pg, x, svdup_n_s8(0)), c1 = svcmpgt(pg, x, svdup_n_s8(1));
+    svbool_t c2 = svcmpgt(pg, x, svdup_n_s8(2)), c3 = svcmpgt(pg, x, svdup_n_s8(3));
+    svbool_t c4 = svcmpgt(pg, x, svdup_n_s8(4)), c5 = svcmpgt(pg, x, svdup_n_s8(5));
+    svbool_t c6 = svcmpgt(pg, x, svdup_n_s8(6)), c7 = svcmpgt(pg, x, svdup_n_s8(7));
+    svbool_t c8 = svcmpgt(pg, x, svdup_n_s8(8)), c9 = svcmpgt(pg, x, svdup_n_s8(9));
+    svbool_t c10 = svcmpgt(pg, x, svdup_n_s8(10)), c11 = svcmpgt(pg, x, svdup_n_s8(11));
+    svbool_t c12 = svcmpgt(pg, x, svdup_n_s8(12)), c13 = svcmpgt(pg, x, svdup_n_s8(13));
+    svbool_t c14 = svcmpgt(pg, x, svdup_n_s8(14)), c15 = svcmpgt(pg, x, svdup_n_s8(15));
+    svbool_t any = svorr_z(pg, c0, pg);
+    any = svorr_z(pg, c1, any); any = svorr_z(pg, c2, any); any = svorr_z(pg, c3, any);
+    any = svorr_z(pg, c4, any); any = svorr_z(pg, c5, any); any = svorr_z(pg, c6, any);
+    any = svorr_z(pg, c7, any); any = svorr_z(pg, c8, any); any = svorr_z(pg, c9, any);
+    any = svorr_z(pg, c10, any); any = svorr_z(pg, c11, any); any = svorr_z(pg, c12, any);
+    any = svorr_z(pg, c13, any); any = svorr_z(pg, c14, any); any = svorr_z(pg, c15, any);
+    return svadd_m(any, x, svdup_n_s8(0));
+}
+
+svint8_t govern(svint8_t x) {
+    svbool_t pg = svptrue_b8();
+    svint8_t d = svdup_n_s8(0);
+    svbool_t c0 = svcmpgt(pg, x, svdup_n_s8(0)), c1 = svcmpgt(pg, x, svdup_n_s8(1));
+    svbool_t c2 = svcmpgt(pg, x, svdup_n_s8(2)), c3 = svcmpgt(pg, x, svdup_n_s8(3));
+    svbool_t c4 = svcmpgt(pg, x, svdup_n_s8(4)), c5 = svcmpgt(pg, x, svdup_n_s8(5));
+    svbool_t c6 = svcmpgt(pg, x, svdup_n_s8(6)), c7 = svcmpgt(pg, x, svdup_n_s8(7));
+    svbool_t c8 = svcmpgt(pg, x, svdup_n_s8(8)), c9 = svcmpgt(pg, x, svdup_n_s8(9));
+    svbool_t c10 = svcmpgt(pg, x, svdup_n_s8(10)), c11 = svcmpgt(pg, x, svdup_n_s8(11));
+    svbool_t c12 = svcmpgt(pg, x, svdup_n_s8(12)), c13 = svcmpgt(pg, x, svdup_n_s8(13));
+    svbool_t c14 = svcmpgt(pg, x, svdup_n_s8(14)), c15 = svcmpgt(pg, x, svdup_n_s8(15));
+    svint8_t r = svadd_m(c0, x, d);
+    r = svadd_m(c1, r, d); r = svadd_m(c2, r, d); r = svadd_m(c3, r, d);
+    r = svadd_m(c4, r, d); r = svadd_m(c5, r, d); r = svadd_m(c6, r, d);
+    r = svadd_m(c7, r, d); r = svadd_m(c8, r, d); r = svadd_m(c9, r, d);
+    r = svadd_m(c10, r, d); r = svadd_m(c11, r, d); r = svadd_m(c12, r, d);
+    r = svadd_m(c13, r, d); r = svadd_m(c14, r, d); r = svadd_m(c15, r, d);
+    return r;
+}
+
 int main(void) {
     for (int i = 0; i < 256; i++)
         buf[i] = (unsigned char)(i * 13 + 5);
@@ -129,6 +170,10 @@ int main(void) {
         return 100;
     if (probe(many, buf) != 0)
         return 101;
+    if (probe(preds, buf) != 0)
+        return 104;
+    if (probe(govern, buf) != 0)
+        return 105;
     /* The argument came back, and `many` reversed the objects. */
     for (int i = 0; i < 256; i++)
         if (buf[i] != (unsigned char)(i * 13 + 5))

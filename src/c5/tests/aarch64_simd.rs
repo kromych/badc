@@ -2246,3 +2246,24 @@ fn an_sve_pcs_function_without_calls_takes_z24_to_z31_before_z16_to_z23() {
     };
     assert_eq!(loaded("f"), loaded("h"));
 }
+
+/// An SVE-PCS leaf saves the P registers it stages predicates through where
+/// a site writes them, not wherever a predicate sits in a slot: p15
+/// reloading a second operand of a 4-bit field and p14 computing a result
+/// bound for a slot, and p7 only where a predicate in a slot governs.
+#[cfg(feature = "full")]
+#[test]
+fn an_sve_pcs_leaf_saves_the_predicate_stages_its_sites_write() {
+    const SRC: &str = include_str!("../../../tests/fixtures/sve/pcs_preserves.c");
+    // STR pt, [xn, #imm, mul vl]: a save, or a store to a slot.
+    let stored = |name: &str| -> u16 {
+        let w = super::perf_codegen::a64_at(SRC, name, true);
+        (w.iter())
+            .filter(|&&x| x & 0xFFC0_E010 == 0xE580_0000)
+            .fold(0, |m, x| m | 1 << (x & 0xF))
+    };
+    let preds = stored("preds");
+    assert_eq!(preds & 0xC080, 0xC000, "{preds:016b}");
+    let govern = stored("govern");
+    assert_eq!(govern & 0xC080, 0x4080, "{govern:016b}");
+}

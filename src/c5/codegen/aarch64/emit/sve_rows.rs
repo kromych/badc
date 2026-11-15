@@ -325,17 +325,49 @@ pub(super) fn emit_row(
     }
 }
 
-/// Whether a row of `func` reloads its second predicate operand into
-/// [`PRED_OPERAND`].
-pub(super) fn reloads_second_predicate(func: &FunctionSsa, alloc: &Allocation) -> bool {
-    let slot = |v: &u32| matches!(alloc.sve.pred_place(*v), Some(PredPlace::Slot(_)));
-    func.insts.iter().any(|i| match i {
-        Inst::SimdVal { op, args, .. } => {
-            matches!(simd::get(*op).form, Form::Sve(f) if f.shape.on_predicates())
-                && args.get(1).is_some_and(slot)
+/// The P registers the rows and accesses of `func` stage predicates
+/// through: p7 for a governing operand outside p0-p6, p7, p15 and p14 for
+/// the first, second and third predicate operands of a 4-bit field reloaded
+/// from their slots, and p14 for a predicate result bound for a slot.
+pub(super) fn pred_stage_writes(func: &FunctionSsa, alloc: &Allocation) -> u16 {
+    use crate::c5::op::Intrinsic as I;
+    let slot = |v: u32| matches!(alloc.sve.pred_place(v), Some(PredPlace::Slot(_)));
+    let staged = |v: Option<&u32>| {
+        v.is_some_and(|&v| !matches!(alloc.sve.pred_place(v), Some(PredPlace::Reg(r)) if r < 8))
+    };
+    let mut w = 0u16;
+    for (v, inst) in func.insts.iter().enumerate() {
+        let (op, args) = match inst {
+            Inst::SimdVal { op, args, .. } => (*op, args),
+            Inst::Intrinsic { kind, args } => {
+                let stage = match I::from_i64(*kind) {
+                    Some(i) if i.sve_lanes().is_some() => staged(args.first()),
+                    Some(I::SveLoadP) => slot(v as u32),
+                    Some(I::SveStoreP) => args.get(1).is_some_and(|&a| slot(a)),
+                    _ => false,
+                };
+                w |= u16::from(stage) << PRED_STAGE;
+                continue;
+            }
+            _ => continue,
+        };
+        let row = simd::get(op);
+        let Form::Sve(f) = row.form else {
+            continue;
+        };
+        let operands = match f.shape {
+            s if s.on_predicates() => row.form.arity(),
+            SveShape::Select => 1,
+            _ => 0,
+        };
+        for (k, &a) in args.iter().enumerate().take(operands) {
+            w |= u16::from(slot(a)) << PRED_STAGES[k];
         }
-        _ => false,
-    })
+        w |= u16::from(f.shape.governs_low() && staged(args.first())) << PRED_STAGE;
+        let result = f.shape.result() == Some(crate::c5::ir::LoadKind::SvePredicate);
+        w |= u16::from(result && slot(v as u32)) << PRED_HOLD;
+    }
+    w
 }
 
 /// The FP scratch registers the rows of `func` write while every vector is

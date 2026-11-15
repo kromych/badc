@@ -178,13 +178,21 @@ pub(super) fn emit_sve_access(
     Ok(())
 }
 
-/// Sequentialize a phi edge's parallel predicate moves: a move whose target
-/// no other move reads goes first; a cycle parks one source in p14.
+/// Sequentialize a phi edge's parallel predicate moves ([`sequence_pred_moves`]).
 pub(super) fn schedule_pred_moves(
     code: &mut Vec<u8>,
     frame: Frame,
     moves: &mut Vec<(PredPlace, PredPlace)>,
 ) {
+    for (s, t) in sequence_pred_moves(core::mem::take(moves)) {
+        pred_move(code, frame, s, t);
+    }
+}
+
+/// The parallel predicate moves `moves` in sequence: a move whose target no
+/// other move reads goes first; a cycle parks one source in p14.
+fn sequence_pred_moves(mut moves: Vec<(PredPlace, PredPlace)>) -> Vec<(PredPlace, PredPlace)> {
+    let mut out = Vec::new();
     moves.retain(|(s, t)| s != t);
     while !moves.is_empty() {
         let mut progress = false;
@@ -195,18 +203,31 @@ pub(super) fn schedule_pred_moves(
                 i += 1;
                 continue;
             }
-            pred_move(code, frame, s, t);
+            out.push((s, t));
             moves.swap_remove(i);
             progress = true;
         }
         if !progress {
             let (cyc, hold) = (moves[0].0, PredPlace::Reg(PRED_HOLD));
-            pred_move(code, frame, cyc, hold);
+            out.push((cyc, hold));
             for m in moves.iter_mut().filter(|m| m.0 == cyc) {
                 m.0 = hold;
             }
         }
     }
+    out
+}
+
+/// The P registers the parallel predicate moves `moves` stage through:
+/// p14 parking a cycle's value, p7 carrying a slot-to-slot move.
+fn pred_move_stages(moves: Vec<(PredPlace, PredPlace)>) -> u16 {
+    sequence_pred_moves(moves)
+        .iter()
+        .fold(0, |m, &(s, t)| match (s, t) {
+            (PredPlace::Slot(_), PredPlace::Slot(_)) => m | 1 << PRED_STAGE,
+            (_, PredPlace::Reg(PRED_HOLD)) => m | 1 << PRED_HOLD,
+            _ => m,
+        })
 }
 
 pub(super) fn pred_move(code: &mut Vec<u8>, frame: Frame, src: PredPlace, dst: PredPlace) {
@@ -322,54 +343,36 @@ fn preserved(
             z |= 1 << r;
         }
     }
-    let (fp, cycles) = scratch_writes(func, alloc, target);
+    let (fp, moves) = scratch_writes(func, alloc, target);
     for (k, &r) in alloc.fp_scratch.iter().enumerate() {
         if fp[k] {
             z |= 1 << r;
         }
     }
-    let mut p = 0u16;
+    let mut p = moves | super::sve_rows::pred_stage_writes(func, alloc);
     for place in alloc.sve.pred.values() {
         if let PredPlace::Reg(r) = place {
             p |= 1 << r;
         }
     }
-    // A slot's predicate reloads into p7, or p15 or p14 as a row's second
-    // or third operand, and a result bound for one is computed in p14.
-    if alloc.sve.p_slots > 0 {
-        p |= 1 << PRED_STAGE | 1 << PRED_HOLD;
-    }
-    if super::sve_rows::reloads_second_predicate(func, alloc) {
-        p |= 1 << super::super::ssa::sve_alloc::PRED_OPERAND;
-    }
-    if cycles.1 {
-        p |= 1 << PRED_HOLD;
-    }
     (z & SVE_PCS_Z, p & SVE_PCS_P)
 }
 
-/// The FP scratch registers the emitter may write in `func`, and whether a
-/// parallel move of vectors, or of predicates, has a cycle, which a hold
-/// register breaks. A body of SVE values alone writes the FP scratch only
-/// to stage a spilled vector, break such a cycle or where an SVE row needs
-/// it ([`scratch_writes`](super::sve_rows::scratch_writes)); any other FP
-/// work takes
+/// The FP scratch registers the emitter may write in `func`, and the P
+/// registers its parallel moves of predicates stage through
+/// ([`pred_move_stages`]). A body of SVE values alone writes the FP scratch
+/// only to stage a spilled vector, break a cycle of vector moves or where an
+/// SVE row needs it ([`scratch_writes`](super::sve_rows::scratch_writes));
+/// any other FP work takes
 /// [`fp_scratch_demand`](super::ssa::reg_alloc::fp_scratch_demand).
-fn scratch_writes(
-    func: &FunctionSsa,
-    alloc: &Allocation,
-    target: Target,
-) -> ([bool; 3], (bool, bool)) {
+fn scratch_writes(func: &FunctionSsa, alloc: &Allocation, target: Target) -> ([bool; 3], u16) {
     use super::ssa::reg_alloc::produces_fp_result;
     let fp = |v: u32| match alloc.places.get(v as usize) {
         Some(Place::FpReg(r)) => Some(*r),
         _ => None,
     };
-    let pred = |v: u32| match alloc.sve.pred_place(v) {
-        Some(PredPlace::Reg(r)) => Some(r),
-        _ => None,
-    };
-    let (mut z, mut p) = (false, false);
+    let pred = |v: u32| alloc.sve.pred_place(v);
+    let (mut z, mut p) = (false, 0u16);
     // Each phi edge, each call's register arguments, the parameters' entry.
     for (b, blk) in func.blocks.iter().enumerate() {
         let term = &blk.terminator;
@@ -386,7 +389,9 @@ fn scratch_writes(
             };
             let edge: Vec<(u32, u32)> = phis.filter_map(incoming).collect();
             z |= cyclic(edge.iter().filter_map(|&(x, v)| Some((fp(x)?, fp(v)?))));
-            p |= cyclic(edge.iter().filter_map(|&(x, v)| Some((pred(x)?, pred(v)?))));
+            p |= pred_move_stages(
+                super::ssa::emit_common::edge_moves(func, alloc, b as u32, s).pred,
+            );
         }
     }
     for inst in &func.insts {
@@ -422,10 +427,14 @@ fn scratch_writes(
                 super::ArgPlacement::FpReg(r) => Some((fp(a)?, *r)),
                 _ => None,
             }));
-            p |= cyclic(args.iter().zip(&plan).filter_map(|(&a, pl)| match pl {
-                super::ArgPlacement::PredReg(r) => Some((pred(a)?, *r)),
-                _ => None,
-            }));
+            p |= pred_move_stages(
+                (args.iter().zip(&plan))
+                    .filter_map(|(&a, pl)| match pl {
+                        super::ArgPlacement::PredReg(r) => Some((pred(a)?, PredPlace::Reg(*r))),
+                        _ => None,
+                    })
+                    .collect(),
+            );
         }
     }
     let params = super::ssa::emit_common::param_placements_common(func, target.abi_for(func.conv));
@@ -438,23 +447,24 @@ fn scratch_writes(
         super::ArgPlacement::FpReg(n) => Some((n, fp(v)?)),
         _ => None,
     }));
-    p |= cyclic(entry.filter_map(|(v, pl)| match pl {
-        super::ArgPlacement::PredReg(n) => Some((n, pred(v)?)),
-        _ => None,
-    }));
+    p |= pred_move_stages(
+        entry
+            .filter_map(|(v, pl)| match pl {
+                super::ArgPlacement::PredReg(n) => Some((PredPlace::Reg(n), pred(v)?)),
+                _ => None,
+            })
+            .collect(),
+    );
     let scalar = (func.insts.iter().enumerate()).any(|(v, i)| {
         (produces_fp_result(i) && func.value_sve_kind(v as u32).is_none())
             || matches!(i, Inst::Simd { .. })
     });
     if scalar {
-        return (
-            super::ssa::reg_alloc::fp_scratch_demand(func, target),
-            (z, p),
-        );
+        return (super::ssa::reg_alloc::fp_scratch_demand(func, target), p);
     }
     let rows = super::sve_rows::scratch_writes(func, alloc);
     let staged = alloc.sve.z_slots > 0 || z;
-    ([staged || rows[0], staged || rows[1], false], (z, p))
+    ([staged || rows[0], staged || rows[1], false], p)
 }
 
 /// Whether the register moves `(source, target)` form a cycle.

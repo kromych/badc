@@ -114,9 +114,11 @@ mod jit_lane {
             .copied()
             .collect();
         let failures = crate::c5::tests::parity_failures(&table, |name, expected| {
-            let program = program_for(&crate::c5::tests::load_fixture(name), AutoVarInit::Zero);
+            let src = crate::c5::tests::load_fixture(name);
+            let program = program_for(&src, AutoVarInit::Zero);
             let opts = NativeOptions::new().with_optimize();
-            match jit_run_with_options(&program, &[name.to_string()], opts, &mut |_| {}) {
+            let run = || jit_run_with_options(&program, &[name.to_string()], opts, &mut |_| {});
+            match crate::c5::tests::jit::beside_others(&src, run) {
                 Ok(code) if code == *expected => None,
                 Ok(code) => Some(alloc::format!("{name}: exit {code}, expected {expected}")),
                 Err(e) => Some(alloc::format!("{name}: {e}")),

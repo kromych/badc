@@ -121,10 +121,11 @@ pub(super) fn runs_without_linker(name: &str) -> bool {
     !EMBEDDED_LIBC_FIXTURES.contains(&name)
 }
 
-/// The locale (C17 7.11.1.1), the working directory, the signal actions and,
-/// on macOS, where `sigprocmask` applies to the process, the signal mask are
-/// the program's, and the programs the JIT runs share one process: a program
-/// that sets any of them runs with no other beside it. So does one that starts
+/// The locale (C17 7.11.1.1), the working directory, the standard streams
+/// (C17 7.21.3p7), the signal actions and, on macOS, where `sigprocmask`
+/// applies to the process, the signal mask are the program's, and the
+/// programs the JIT runs share one process: a program that sets any of them
+/// runs with no other beside it. So does one that starts
 /// a process, which inherits the inheritable handles of every program open
 /// then; on Windows a file a child holds open cannot be removed.
 static C_LIBRARY_STATE: std::sync::RwLock<()> = std::sync::RwLock::new(());
@@ -160,11 +161,17 @@ impl Drop for Turn {
     }
 }
 
-fn beside_others<R>(src: &str, run: impl FnOnce() -> R) -> R {
+/// Run the program `src` under [`C_LIBRARY_STATE`] and its own turn: alone
+/// when it sets the process's C library state, else beside the others.
+pub(super) fn beside_others<R>(src: &str, run: impl FnOnce() -> R) -> R {
     let _turn = Turn::take(src);
     if [
         "setlocale(",
         "chdir(",
+        "stdin =",
+        "stdout =",
+        "stderr =",
+        "freopen(",
         "SetCurrentDirectory",
         "sigprocmask(",
         "sigaction(",

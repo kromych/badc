@@ -104,24 +104,18 @@ Disassembly of section .text:
                	subq	$0x20, %rsp
                	vmulsd	%xmm1, %xmm0, %xmm14
                	movsd	%xmm14, 0x18(%rsp)
+               	movsd	<rip>, %xmm8
+               	movsd	<rip>, %xmm9
                	movsd	<rip>, %xmm2
                	movsd	<rip>, %xmm3
                	movsd	<rip>, %xmm4
                	movsd	<rip>, %xmm5
                	movsd	<rip>, %xmm6
                	movsd	<rip>, %xmm7
-               	movsd	<rip>, %xmm8
-               	movsd	<rip>, %xmm9
                	movsd	%xmm0, 0x10(%rsp)
                	movsd	%xmm1, 0x8(%rsp)
-               	movapd	%xmm2, %xmm0
-               	movapd	%xmm3, %xmm1
-               	movapd	%xmm4, %xmm2
-               	movapd	%xmm5, %xmm3
-               	movapd	%xmm6, %xmm4
-               	movapd	%xmm8, %xmm6
-               	movapd	%xmm7, %xmm5
-               	movapd	%xmm9, %xmm7
+               	movapd	%xmm8, %xmm0
+               	movapd	%xmm9, %xmm1
                	callq	<addr>
                	movapd	%xmm0, %xmm2
                	movsd	0x10(%rsp), %xmm0
@@ -177,17 +171,13 @@ Disassembly of section .text:
                	retq
 
 <swap6>:
+               	movapd	%xmm2, %xmm5
+               	movsd	<rip>, %xmm2
                	movsd	<rip>, %xmm3
                	movsd	<rip>, %xmm4
-               	movsd	<rip>, %xmm5
                	movapd	%xmm1, %xmm15
                	movapd	%xmm0, %xmm1
                	movapd	%xmm15, %xmm0
-               	movapd	%xmm5, %xmm15
-               	movapd	%xmm2, %xmm5
-               	movapd	%xmm3, %xmm2
-               	movapd	%xmm4, %xmm3
-               	movapd	%xmm15, %xmm4
                	jmp	<addr>
 
 <main>:

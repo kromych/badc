@@ -382,12 +382,10 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x1, %ecx
-               	movsd	<rip>, %xmm0
-               	movl	$0x3, %r8d
                	movsd	<rip>, %xmm1
+               	movl	$0x3, %r8d
+               	movsd	<rip>, %xmm3
                	subq	$0x20, %rsp
-               	movapd	%xmm1, %xmm3
-               	movapd	%xmm0, %xmm1
                	callq	<addr>
                	addq	$0x20, %rsp
                	movsd	<rip>, %xmm1

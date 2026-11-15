@@ -382,10 +382,9 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpq	$0x7, %rax
                	jne	<addr>
-               	movsd	<rip>, %xmm0
+               	movsd	<rip>, %xmm1
                	movl	$0x5, %edi
                	movl	$0x7, %esi
-               	movapd	%xmm0, %xmm1
                	movsd	0x8(%rsp), %xmm0
                	callq	<addr>
                	cmpq	$0x5, %rax
@@ -431,10 +430,9 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpq	$0x7, %rax
                	jne	<addr>
-               	movsd	<rip>, %xmm0
+               	movsd	<rip>, %xmm1
                	movl	$0x5, %edi
                	movl	$0x7, %esi
-               	movapd	%xmm0, %xmm1
                	movsd	0x8(%rsp), %xmm0
                	callq	<addr>
                	cmpq	$0x7, %rax

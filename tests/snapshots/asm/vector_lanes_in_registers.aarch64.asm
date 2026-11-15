@@ -510,8 +510,7 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x7]
-               	fmov	s0, #10.00000000
-               	fmov	d1, d0
+               	fmov	s1, #10.00000000
                	ldr	q0, [x7]
                	bl	<addr>
                	mov	s1, v0.s[0]
@@ -550,8 +549,7 @@ Disassembly of section .text:
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x7]
                	adrp	x16, <page>
-               	ldr	d0, [x16, #0x70]
-               	fmov	d1, d0
+               	ldr	d1, [x16, #0x70]
                	ldr	q0, [x7]
                	bl	<addr>
                	mov	d1, v0.d[0]

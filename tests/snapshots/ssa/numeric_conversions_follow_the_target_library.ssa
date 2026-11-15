@@ -137,7 +137,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v131 CallExt { binding_idx=87, args=[v129, v130], fp_arg_mask=0x0, fp_return=true } -> [spill 0]
     v132 ImmData(203)                                     -> x7
     v133 Imm(0)                                           -> x6
-    v134 CallExt { binding_idx=87, args=[v132, v133], fp_arg_mask=0x0, fp_return=true } -> d0
+    v134 CallExt { binding_idx=87, args=[v132, v133], fp_arg_mask=0x0, fp_return=true } -> d1
     v135 ImmData(188)                                     -> x7
     v136 CallExt { binding_idx=1, args=[v135, v131, v134], fp_arg_mask=0x6 } -> x0
     v137 ImmData(227)                                     -> x0
@@ -148,7 +148,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v142 ImmData(241)                                     -> x7
     v143 Imm(0)                                           -> x6
     v144 CallExt { binding_idx=88, args=[v142, v143], fp_arg_mask=0x0, fp_return=true } -> d0 [f32]
-    v145 FpCast { kind=F32ToF64, value=v144 }             -> d0
+    v145 FpCast { kind=F32ToF64, value=v144 }             -> d1
     v146 ImmData(227)                                     -> x7
     v147 CallExt { binding_idx=1, args=[v146, v141, v145], fp_arg_mask=0x6 } -> x0
     v148 ImmData(247)                                     -> x7
@@ -216,7 +216,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v210 CallExt { binding_idx=84, args=[v209], fp_arg_mask=0x0, fp_return=true } -> [spill 1]
     v211 ImmData(357)                                     -> x7
     v212 Imm(0)                                           -> x6
-    v213 CallExt { binding_idx=87, args=[v211, v212], fp_arg_mask=0x0, fp_return=true } -> d0
+    v213 CallExt { binding_idx=87, args=[v211, v212], fp_arg_mask=0x0, fp_return=true } -> d2
     v214 ImmData(333)                                     -> x7
     v215 CallExt { binding_idx=1, args=[v214, v208, v210, v213], fp_arg_mask=0xe } -> x0
     v216 Imm(2048)                                        -> x7

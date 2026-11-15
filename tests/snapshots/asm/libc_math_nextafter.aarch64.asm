@@ -19,24 +19,23 @@ Disassembly of section .text:
                	fmov	d0, #1.00000000
                	fmov	d1, #2.00000000
                	bl	<addr>
-               	fmov	d1, #1.00000000
-               	fcmpe	d0, d1
+               	fmov	d1, d0
+               	fmov	d0, #1.00000000
+               	fcmpe	d1, d0
                	b.hi	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	movi	d0, #0000000000000000
-               	fmov	d17, d1
-               	fmov	d1, d0
-               	fmov	d0, d17
+               	movi	d1, #0000000000000000
                	bl	<addr>
-               	fmov	d1, #1.00000000
-               	fcmpe	d0, d1
+               	fmov	d1, d0
+               	fmov	d0, #1.00000000
+               	fcmpe	d1, d0
                	b.lt	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	fmov	d0, d1
+               	fmov	d1, d0
                	bl	<addr>
                	fmov	d1, #1.00000000
                	fcmp	d0, d1

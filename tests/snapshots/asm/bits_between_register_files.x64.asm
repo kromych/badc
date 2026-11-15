@@ -144,11 +144,11 @@ Disassembly of section .text:
                	jne	<addr>
                	movsd	<rip>, %xmm0
                	callq	<addr>
-               	xorps	%xmm1, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	movapd	%xmm0, %xmm1
+               	xorps	%xmm0, %xmm0
+               	ucomisd	%xmm0, %xmm1
                	jp	<addr>
                	jne	<addr>
-               	movapd	%xmm1, %xmm0
                	callq	<addr>
                	movsd	%xmm0, -0xf0(%rbp)
                	leaq	-0x100(%rbp), %rax

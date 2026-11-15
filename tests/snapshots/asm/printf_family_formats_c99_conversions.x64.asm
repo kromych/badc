@@ -72,17 +72,14 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	movl	$0xa0, %esi
                	leaq	<rip>, %rdx
-               	movsd	<rip>, %xmm0
+               	movsd	<rip>, %xmm2
                	movsd	-0x8(%rbp), %xmm1
-               	vdivsd	%xmm1, %xmm0, %xmm2
+               	vdivsd	%xmm1, %xmm2, %xmm0
                	movsd	<rip>, %xmm1
                	movsd	-0x8(%rbp), %xmm3
                	divsd	%xmm3, %xmm1
                	movsd	-0x8(%rbp), %xmm3
-               	divsd	%xmm3, %xmm0
-               	movapd	%xmm2, %xmm15
-               	movapd	%xmm0, %xmm2
-               	movapd	%xmm15, %xmm0
+               	divsd	%xmm3, %xmm2
                	movb	$0x3, %al
                	callq	<addr>
                	movq	%rax, %rbx
@@ -101,17 +98,14 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	movl	$0xa0, %esi
                	leaq	<rip>, %rdx
-               	movsd	<rip>, %xmm0
+               	movsd	<rip>, %xmm2
                	movsd	-0x8(%rbp), %xmm1
-               	vdivsd	%xmm1, %xmm0, %xmm2
+               	vdivsd	%xmm1, %xmm2, %xmm0
                	movsd	<rip>, %xmm1
                	movsd	-0x8(%rbp), %xmm3
                	divsd	%xmm3, %xmm1
                	movsd	-0x8(%rbp), %xmm3
-               	divsd	%xmm3, %xmm0
-               	movapd	%xmm2, %xmm15
-               	movapd	%xmm0, %xmm2
-               	movapd	%xmm15, %xmm0
+               	divsd	%xmm3, %xmm2
                	movb	$0x3, %al
                	callq	<addr>
                	cmpl	%ebx, %eax
@@ -230,8 +224,7 @@ Disassembly of section .text:
                	movl	$0xa0, %esi
                	leaq	<rip>, %rdx
                	movsd	<rip>, %xmm0
-               	movsd	<rip>, %xmm1
-               	movapd	%xmm1, %xmm2
+               	movsd	<rip>, %xmm2
                	movapd	%xmm0, %xmm1
                	movb	$0x3, %al
                	callq	<addr>
@@ -252,8 +245,7 @@ Disassembly of section .text:
                	movl	$0xa0, %esi
                	leaq	<rip>, %rdx
                	movsd	<rip>, %xmm0
-               	movsd	<rip>, %xmm1
-               	movapd	%xmm1, %xmm2
+               	movsd	<rip>, %xmm2
                	movapd	%xmm0, %xmm1
                	movb	$0x3, %al
                	callq	<addr>

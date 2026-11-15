@@ -98,8 +98,9 @@ Disassembly of section .text:
                	callq	<addr>
                	movsd	<rip>, %xmm0
                	callq	<addr>
-               	xorps	%xmm1, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	movapd	%xmm0, %xmm1
+               	xorps	%xmm0, %xmm0
+               	ucomisd	%xmm0, %xmm1
                	setne	%al
                	movzbq	%al, %rax
                	setp	%r10b
@@ -111,7 +112,6 @@ Disassembly of section .text:
                	movl	$0x8, %eax
                	leave
                	retq
-               	movapd	%xmm1, %xmm0
                	callq	<addr>
                	xorps	%xmm1, %xmm1
                	ucomisd	%xmm1, %xmm0

@@ -352,19 +352,19 @@ Disassembly of section .text:
                	fstpt	-0xd0(%rbp)
                	fldt	-0xd0(%rbp)
                	fstpl	-0x8(%rsp)
-               	movsd	-0x8(%rsp), %xmm1
-               	movsd	<rip>, %xmm0
-               	ucomisd	%xmm0, %xmm1
+               	movsd	-0x8(%rsp), %xmm0
+               	movsd	<rip>, %xmm5
+               	ucomisd	%xmm5, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax
                	leave
                	retq
+               	movsd	<rip>, %xmm0
                	movsd	<rip>, %xmm1
                	movsd	<rip>, %xmm2
                	movsd	<rip>, %xmm3
                	movsd	<rip>, %xmm4
-               	movsd	<rip>, %xmm5
                	movsd	<rip>, %xmm6
                	movsd	<rip>, %xmm7
                	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
@@ -379,13 +379,6 @@ Disassembly of section .text:
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
-               	movapd	%xmm1, %xmm15
-               	movapd	%xmm2, %xmm1
-               	movapd	%xmm3, %xmm2
-               	movapd	%xmm4, %xmm3
-               	movapd	%xmm5, %xmm4
-               	movapd	%xmm0, %xmm5
-               	movapd	%xmm15, %xmm0
                	callq	<addr>
                	addq	$0x10, %rsp
                	movsd	<rip>, %xmm1

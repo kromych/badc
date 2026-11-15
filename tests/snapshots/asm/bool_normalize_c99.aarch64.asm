@@ -88,8 +88,9 @@ Disassembly of section .text:
                	bl	<addr>
                	fmov	d0, #0.50000000
                	bl	<addr>
-               	movi	d1, #0000000000000000
-               	fcmp	d0, d1
+               	fmov	d1, d0
+               	movi	d0, #0000000000000000
+               	fcmp	d1, d0
                	cset	x0, ne
                	and	x0, x0, #0xff
                	cmp	w0, #0x1
@@ -98,7 +99,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	fmov	d0, d1
                	bl	<addr>
                	movi	d1, #0000000000000000
                	fcmp	d0, d1

@@ -31,15 +31,15 @@ Disassembly of section .text:
                	movq	<rip>, %rax # <addr>
                	xorps	%xmm0, %xmm0
                	callq	*%rax
-               	xorps	%xmm1, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	movapd	%xmm0, %xmm1
+               	xorps	%xmm0, %xmm0
+               	ucomisd	%xmm0, %xmm1
                	jp	<addr>
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
                	movq	<rip>, %rax # <addr>
-               	movapd	%xmm1, %xmm0
                	callq	*%rax
                	movsd	<rip>, %xmm1
                	ucomisd	%xmm1, %xmm0
@@ -62,15 +62,15 @@ Disassembly of section .text:
                	movq	<rip>, %rax # <addr>
                	xorps	%xmm0, %xmm0
                	callq	*%rax
-               	xorps	%xmm1, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	movapd	%xmm0, %xmm1
+               	xorps	%xmm0, %xmm0
+               	ucomisd	%xmm0, %xmm1
                	jp	<addr>
                	je	<addr>
                	movl	$0x4, %eax
                	popq	%rbp
                	retq
                	movq	<rip>, %rax # <addr>
-               	movapd	%xmm1, %xmm0
                	callq	*%rax
                	movsd	<rip>, %xmm1
                	ucomisd	%xmm1, %xmm0

@@ -538,8 +538,7 @@ Disassembly of section .text:
                	fmov	d0, #0.50000000
                	sub	x3, x29, #0xe0
                	mov	x2, #0x9                // =9
-               	fmov	d1, #0.25000000
-               	fmov	d2, d1
+               	fmov	d2, #0.25000000
                	ldr	q1, [x3]
                	ldr	q3, [x7]
                	bl	<addr>
@@ -559,52 +558,49 @@ Disassembly of section .text:
                	movk	x1, #0x605, lsl #32
                	movk	x1, #0x807, lsl #48
                	stur	x1, [x29, #-0x38]
-               	fmov	d1, #0.50000000
+               	fmov	d2, #0.50000000
                	sub	x1, x29, #0x30
                	mov	x2, #0x302              // =770
                	movk	x2, #0x504, lsl #16
                	movk	x2, #0x706, lsl #32
                	movk	x2, #0x908, lsl #48
                	stur	x2, [x29, #-0x30]
-               	fmov	d2, #0.75000000
+               	fmov	d4, #0.75000000
                	sub	x2, x29, #0x28
                	mov	x3, #0x403              // =1027
                	movk	x3, #0x605, lsl #16
                	movk	x3, #0x807, lsl #32
                	movk	x3, #0xa09, lsl #48
                	stur	x3, [x29, #-0x28]
-               	fmov	d3, #1.00000000
+               	fmov	d6, #1.00000000
                	sub	x3, x29, #0x20
                	mov	x4, #0x504              // =1284
                	movk	x4, #0x706, lsl #16
                	movk	x4, #0x908, lsl #32
                	movk	x4, #0xb0a, lsl #48
                	stur	x4, [x29, #-0x20]
-               	fmov	d4, #1.25000000
+               	fmov	d1, #1.25000000
                	sub	x4, x29, #0x18
                	mov	x5, #0x605              // =1541
                	movk	x5, #0x807, lsl #16
                	movk	x5, #0xa09, lsl #32
                	movk	x5, #0xc0b, lsl #48
                	stur	x5, [x29, #-0x18]
-               	fmov	d5, #1.50000000
+               	fmov	d3, #1.50000000
                	sub	x5, x29, #0x8
                	mov	x6, #0x706              // =1798
                	movk	x6, #0x908, lsl #16
                	movk	x6, #0xb0a, lsl #32
                	movk	x6, #0xd0c, lsl #48
                	stur	x6, [x29, #-0x8]
-               	str	d4, [sp]
-               	str	d5, [sp, #0x10]
+               	str	d1, [sp]
+               	str	d3, [sp, #0x10]
                	mov	x16, x4
                	ldr	x17, [x16]
                	str	x17, [sp, #0x8]
                	mov	x16, x5
                	ldr	x17, [x16]
                	str	x17, [sp, #0x18]
-               	fmov	d4, d2
-               	fmov	d6, d3
-               	fmov	d2, d1
                	ldr	d1, [x7]
                	ldr	d3, [x1]
                	ldr	d5, [x2]

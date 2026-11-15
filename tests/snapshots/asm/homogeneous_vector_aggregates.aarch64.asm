@@ -444,44 +444,41 @@ Disassembly of section .text:
                	stur	d0, [x29, #-0x58]
                	fmov	d0, #3.00000000
                	stur	d0, [x29, #-0x50]
-               	fmov	d0, #0.50000000
-               	fmov	d1, d0
+               	fmov	d1, #0.50000000
                	ldr	q0, [x7]
                	bl	<addr>
-               	fmov	d1, #0.50000000
-               	fcmp	d0, d1
+               	fmov	d2, #0.50000000
+               	fcmp	d0, d2
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x120
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x7, x29, #0xc0
-               	fmov	d2, d1
                	ldr	q0, [x7]
                	ldr	q1, [x7, #0x10]
                	bl	<addr>
-               	fmov	d1, #0.50000000
-               	fcmp	d0, d1
+               	fmov	d3, #0.50000000
+               	fcmp	d0, d3
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x120
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x7, x29, #0x48
-               	fmov	d3, d1
                	ldr	d0, [x7]
                	ldr	d1, [x7, #0x8]
                	ldr	d2, [x7, #0x10]
                	bl	<addr>
-               	fmov	d1, #0.50000000
-               	fcmp	d0, d1
+               	fmov	d1, d0
+               	fmov	d0, #0.50000000
+               	fcmp	d1, d0
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x120
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x58
-               	fmov	d0, d1
                	ldr	x1, [x0, #0x8]
                	ldr	x0, [x0]
                	bl	<addr>

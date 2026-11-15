@@ -248,60 +248,53 @@ Disassembly of section .text:
                	stur	s0, [x29, #-0x60]
                	fmov	s0, #2.00000000
                	stur	s0, [x29, #-0x5c]
-               	fmov	d0, #0.50000000
-               	ldur	d1, [x29, #-0x8]
-               	fmov	d17, d1
-               	fmov	d1, d0
-               	fmov	d0, d17
-               	bl	<addr>
                	fmov	d1, #0.50000000
-               	fcmp	d0, d1
+               	ldur	d0, [x29, #-0x8]
+               	bl	<addr>
+               	fmov	d3, #0.50000000
+               	fcmp	d0, d3
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x7, x29, #0x58
-               	fmov	d3, d1
                	ldr	s0, [x7]
                	ldr	s1, [x7, #0x4]
                	ldr	s2, [x7, #0x8]
                	bl	<addr>
-               	fmov	d1, #0.50000000
-               	fcmp	d0, d1
+               	fmov	d3, #0.50000000
+               	fcmp	d0, d3
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x7, x29, #0x48
-               	fmov	d3, d1
                	ldr	d0, [x7]
                	ldr	d1, [x7, #0x8]
                	ldr	d2, [x7, #0x10]
                	bl	<addr>
-               	fmov	d1, #0.50000000
-               	fcmp	d0, d1
+               	fmov	d3, #0.50000000
+               	fcmp	d0, d3
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x7, x29, #0x30
-               	fmov	d3, d1
                	ldr	d0, [x7]
                	ldr	d1, [x7, #0x8]
                	ldr	d2, [x7, #0x10]
                	bl	<addr>
-               	fmov	d1, #0.50000000
-               	fcmp	d0, d1
+               	fmov	d2, #0.50000000
+               	fcmp	d0, d2
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x7, x29, #0x60
-               	fmov	d2, d1
                	ldr	s0, [x7]
                	ldr	s1, [x7, #0x4]
                	bl	<addr>

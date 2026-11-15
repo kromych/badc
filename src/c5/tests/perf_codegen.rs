@@ -8966,3 +8966,17 @@ unsigned long words(const u16 *p, int n) {\n\
     let frame_address = |i: &&X64Insn| i.op == 0x8D && i.mem_base() == Some(5);
     assert_eq!(insns.iter().filter(frame_address).count(), 1, "{insns:x?}");
 }
+
+/// A floating-point argument takes its register as a hint, as an integer
+/// one does, so a value computed ahead of the arguments and passed on the
+/// stack keeps out of the argument registers, and no argument is built in
+/// one register to be moved to another.
+#[test]
+fn x64_floating_arguments_are_built_in_their_registers() {
+    const SRC: &str = "double reals(double a, double b, double c, double d, double e, \
+double f, double g, double h, double t);\n\
+double one(const double *x) { double t = x[0]; return reals(1, 2, 3, 4, 5, 6, 7, 8, t); }\n";
+    let insns = x64(SRC, "one");
+    let moves = |i: &&X64Insn| i.op == 0x0F28 && i.reg_form();
+    assert_eq!(insns.iter().filter(moves).count(), 0, "{insns:x?}");
+}

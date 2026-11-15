@@ -311,8 +311,8 @@ fn ent_pc=30 n_params=0 variadic=false locals=20
     terminator Bnz { cond=v78, target=b4, fall=b2 }   (exit_acc=v78)
   block 2  start_pc=0
     v79  Imm(0)                                           -> d0
-    v80  CallExt { binding_idx=582, args=[v79], fp_arg_mask=0x1, fp_return=true } -> d0
-    v81  Imm(0)                                           -> d1
+    v80  CallExt { binding_idx=582, args=[v79], fp_arg_mask=0x1, fp_return=true } -> d1
+    v81  Imm(0)                                           -> d0
     v82  Binop { op=fne, lhs=v80, rhs=v81 }               -> x0
     v83  Imm(0)                                           -> x1
     terminator Bnz { cond=v82, target=b4, fall=b3 }   (exit_acc=v82)

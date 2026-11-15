@@ -23,7 +23,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=82
     v17  Imm(0)                                           -> x0
     v18  Imm(1036831949)                                  -> x0 [f32]
     v19  Imm(0)                                           -> x0
-    v20  Imm(4613303445314885481)                         -> d0
+    v20  Imm(4613303445314885481)                         -> d1
     v21  Imm(0)                                           -> x0
     v22  Imm(4614500768194494464)                         -> x0
     v23  StoreLocal { off=-138, value=v22, kind=F80 }     -> -
@@ -46,7 +46,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=82
     v40  Imm(0)                                           -> x0
     v41  Imm(493)                                         -> -
     v42  Imm(0)                                           -> x0 [f32]
-    v43  Imm(4591870180174331904)                         -> d1
+    v43  Imm(4591870180174331904)                         -> d0
     v44  Imm(0)                                           -> x0
     v45  LoadLocal { off=-138, kind=F80 }                 -> d2
     v46  LoadLocal { off=-139, kind=F80 }                 -> d3

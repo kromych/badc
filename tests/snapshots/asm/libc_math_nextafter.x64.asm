@@ -31,24 +31,23 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm0
                	movsd	<rip>, %xmm1
                	callq	<addr>
-               	movsd	<rip>, %xmm1
-               	comisd	%xmm0, %xmm1
+               	movapd	%xmm0, %xmm1
+               	movsd	<rip>, %xmm0
+               	comisd	%xmm1, %xmm0
                	jb	<addr>
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
-               	xorps	%xmm0, %xmm0
-               	movapd	%xmm1, %xmm15
-               	movapd	%xmm0, %xmm1
-               	movapd	%xmm15, %xmm0
+               	xorps	%xmm1, %xmm1
                	callq	<addr>
-               	movsd	<rip>, %xmm1
-               	comisd	%xmm1, %xmm0
+               	movapd	%xmm0, %xmm1
+               	movsd	<rip>, %xmm0
+               	comisd	%xmm0, %xmm1
                	jb	<addr>
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
-               	movapd	%xmm1, %xmm0
+               	movapd	%xmm0, %xmm1
                	callq	<addr>
                	movsd	<rip>, %xmm1
                	ucomisd	%xmm1, %xmm0

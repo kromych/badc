@@ -433,15 +433,12 @@ Disassembly of section .text:
                	movl	$0x4, %ecx
                	movl	$0x5, %r8d
                	movl	$0x6, %r9d
-               	movsd	<rip>, %xmm0
-               	movss	<rip>, %xmm1
+               	movsd	<rip>, %xmm1
+               	movss	<rip>, %xmm0
                	subq	$0x20, %rsp
                	movq	$0x7, (%rsp)
                	movq	$0x8, 0x8(%rsp)
                	movq	$0x9, 0x10(%rsp)
-               	movapd	%xmm1, %xmm15
-               	movapd	%xmm0, %xmm1
-               	movapd	%xmm15, %xmm0
                	movb	$0x2, %al
                	callq	<addr>
                	addq	$0x20, %rsp

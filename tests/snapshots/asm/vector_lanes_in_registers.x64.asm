@@ -519,8 +519,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	vmovups	(%rax), %xmm14
                	vmovups	%xmm14, (%r9)
-               	movss	<rip>, %xmm0
-               	movapd	%xmm0, %xmm1
+               	movss	<rip>, %xmm1
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	vzeroupper
@@ -566,8 +565,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	vmovups	(%rax), %xmm14
                	vmovups	%xmm14, (%r9)
-               	movsd	<rip>, %xmm0
-               	movapd	%xmm0, %xmm1
+               	movsd	<rip>, %xmm1
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	vzeroupper
@@ -657,8 +655,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	vmovups	(%rax), %ymm14
                	vmovups	%ymm14, (%r9)
-               	movsd	<rip>, %xmm0
-               	movapd	%xmm0, %xmm1
+               	movsd	<rip>, %xmm1
                	movq	%r9, %r10
                	vmovups	(%r10), %ymm0
                	callq	<addr>

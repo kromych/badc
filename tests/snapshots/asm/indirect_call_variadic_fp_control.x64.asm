@@ -106,9 +106,9 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm1
                	movb	$0x2, %al
                	callq	<addr>
-               	movapd	%xmm0, %xmm1
+               	movapd	%xmm0, %xmm2
                	movsd	<rip>, %xmm0
-               	ucomisd	%xmm0, %xmm1
+               	ucomisd	%xmm0, %xmm2
                	jp	<addr>
                	je	<addr>
                	movl	$0x1, %eax
@@ -118,13 +118,12 @@ Disassembly of section .text:
                	movl	$0x1, %esi
                	movsd	<rip>, %xmm0
                	movl	$0x3, %edx
-               	movsd	<rip>, %xmm2
-               	movsd	%xmm1, 0x8(%rsp)
-               	movapd	%xmm2, %xmm1
+               	movsd	<rip>, %xmm1
+               	movsd	%xmm2, 0x8(%rsp)
                	movb	$0x2, %al
                	callq	<addr>
-               	movsd	0x8(%rsp), %xmm1
-               	ucomisd	%xmm0, %xmm1
+               	movsd	0x8(%rsp), %xmm2
+               	ucomisd	%xmm0, %xmm2
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax

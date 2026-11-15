@@ -243,12 +243,12 @@ Disassembly of section .text:
                	jne	<addr>
                	xorps	%xmm0, %xmm0
                	callq	<addr>
-               	xorps	%xmm1, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	movapd	%xmm0, %xmm1
+               	xorps	%xmm0, %xmm0
+               	ucomisd	%xmm0, %xmm1
                	jp	<addr>
                	jne	<addr>
                	movl	$0x2, %edi
-               	movapd	%xmm1, %xmm0
                	callq	<addr>
                	xorps	%xmm1, %xmm1
                	ucomisd	%xmm1, %xmm0

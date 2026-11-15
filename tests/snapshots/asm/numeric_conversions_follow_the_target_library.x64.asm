@@ -171,8 +171,8 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	xorl	%esi, %esi
                	callq	<addr>
-               	leaq	<rip>, %rdi
                	movapd	%xmm0, %xmm1
+               	leaq	<rip>, %rdi
                	movsd	0x48(%rsp), %xmm0
                	movb	$0x2, %al
                	callq	<addr>
@@ -184,9 +184,8 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	xorl	%esi, %esi
                	callq	<addr>
-               	cvtss2sd	%xmm0, %xmm0
+               	vcvtss2sd	%xmm0, %xmm0, %xmm1
                	leaq	<rip>, %rdi
-               	movapd	%xmm0, %xmm1
                	movsd	0x48(%rsp), %xmm0
                	movb	$0x2, %al
                	callq	<addr>
@@ -281,8 +280,8 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	xorl	%esi, %esi
                	callq	<addr>
-               	leaq	<rip>, %rdi
                	movapd	%xmm0, %xmm2
+               	leaq	<rip>, %rdi
                	movsd	0x48(%rsp), %xmm0
                	movsd	0x40(%rsp), %xmm1
                	movb	$0x3, %al

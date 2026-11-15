@@ -169,8 +169,7 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x30(%rbp), %r9
-               	movsd	<rip>, %xmm0
-               	movapd	%xmm0, %xmm1
+               	movsd	<rip>, %xmm1
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	callq	<addr>

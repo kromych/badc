@@ -61,10 +61,10 @@ Disassembly of section .text:
                	stur	d1, [x29, #-0x8]
                	ldur	d0, [x29, #-0x10]
                	fmov	d1, #1.00000000
-               	fadd	d1, d0, d1
-               	ldur	d0, [x29, #-0x8]
+               	fadd	d0, d0, d1
+               	ldur	d1, [x29, #-0x8]
                	fmov	d2, #2.00000000
-               	fadd	d0, d0, d2
+               	fadd	d1, d1, d2
                	ldur	d2, [x29, #-0x10]
                	ldur	d3, [x29, #-0x8]
                	fmov	d4, #3.00000000
@@ -106,17 +106,15 @@ Disassembly of section .text:
                	ldur	d3, [x29, #-0x8]
                	fmov	d4, #11.00000000
                	fmadd	d13, d3, d4, d2
-               	str	d0, [sp, #0x40]
+               	str	d1, [sp, #0x40]
                	fmov	d2, d15
                	fmov	d3, d13
-               	fmov	d17, d1
-               	fmov	d1, d0
-               	fmov	d0, d17
                	bl	<addr>
                	fmov	d14, d0
-               	ldr	d0, [sp, #0x40]
-               	fmov	d1, d15
+               	ldr	d1, [sp, #0x40]
+               	fmov	d0, d1
                	fmov	d3, d12
+               	fmov	d1, d15
                	ldr	d2, [sp, #0x58]
                	bl	<addr>
                	str	d0, [sp, #0x48]

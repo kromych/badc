@@ -135,10 +135,10 @@ Disassembly of section .text:
                	mov	x16, #-0x8000000000000000 // =-9223372036854775808
                	fmov	d0, x16
                	bl	<addr>
-               	movi	d1, #0000000000000000
-               	fcmp	d0, d1
+               	fmov	d1, d0
+               	movi	d0, #0000000000000000
+               	fcmp	d1, d0
                	b.ne	<addr>
-               	fmov	d0, d1
                	bl	<addr>
                	stur	d0, [x29, #-0xf0]
                	sub	x0, x29, #0x100

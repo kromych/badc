@@ -69,18 +69,14 @@ Disassembly of section .text:
                	mov	x1, #0xa0               // =160
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	fmov	d0, #1.00000000
-               	ldur	d1, [x29, #-0x8]
-               	fdiv	d1, d0, d1
-               	fmov	d2, #-1.00000000
+               	fmov	d2, #1.00000000
+               	ldur	d0, [x29, #-0x8]
+               	fdiv	d0, d2, d0
+               	fmov	d1, #-1.00000000
+               	ldur	d3, [x29, #-0x8]
+               	fdiv	d1, d1, d3
                	ldur	d3, [x29, #-0x8]
                	fdiv	d2, d2, d3
-               	ldur	d3, [x29, #-0x8]
-               	fdiv	d0, d0, d3
-               	fmov	d17, d1
-               	fmov	d1, d2
-               	fmov	d2, d0
-               	fmov	d0, d17
                	bl	<addr>
                	mov	x20, x0
                	cmp	w20, #0xc
@@ -101,18 +97,14 @@ Disassembly of section .text:
                	mov	x1, #0xa0               // =160
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	fmov	d0, #1.00000000
-               	ldur	d1, [x29, #-0x8]
-               	fdiv	d1, d0, d1
-               	fmov	d2, #-1.00000000
+               	fmov	d2, #1.00000000
+               	ldur	d0, [x29, #-0x8]
+               	fdiv	d0, d2, d0
+               	fmov	d1, #-1.00000000
+               	ldur	d3, [x29, #-0x8]
+               	fdiv	d1, d1, d3
                	ldur	d3, [x29, #-0x8]
                	fdiv	d2, d2, d3
-               	ldur	d3, [x29, #-0x8]
-               	fdiv	d0, d0, d3
-               	fmov	d17, d1
-               	fmov	d1, d2
-               	fmov	d2, d0
-               	fmov	d0, d17
                	bl	<addr>
                	cmp	w0, w20
                	b.ne	<addr>
@@ -236,8 +228,7 @@ Disassembly of section .text:
                	add	x2, x2, <lo12>
                	fmov	d0, #1.50000000
                	adrp	x16, <page>
-               	ldr	d1, [x16, #0x558]
-               	fmov	d2, d1
+               	ldr	d2, [x16, #0x558]
                	fmov	d1, d0
                	bl	<addr>
                	mov	x20, x0
@@ -261,8 +252,7 @@ Disassembly of section .text:
                	add	x2, x2, <lo12>
                	fmov	d0, #1.50000000
                	adrp	x16, <page>
-               	ldr	d1, [x16, #0x558]
-               	fmov	d2, d1
+               	ldr	d2, [x16, #0x558]
                	fmov	d1, d0
                	bl	<addr>
                	cmp	w0, w20

@@ -1793,7 +1793,14 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // the hint to values whose last use is exactly this call so the
     // call consumes them and there is no surviving live range to
     // protect.
-    populate_call_arg_hints(func, target, &last_use, &calls_after_def, &mut hints);
+    populate_call_arg_hints(
+        func,
+        target,
+        &last_use,
+        &calls_after_def,
+        &fp_const,
+        &mut hints,
+    );
     populate_call_result_hints(func, target, &calls_after_def, &mut hints);
 
     // Build the interference graph over phi-congruence-class roots and
@@ -5038,6 +5045,7 @@ fn populate_call_arg_hints(
     target: Target,
     last_use: &[u32],
     calls_after_def: &[bool],
+    fp_const: &[bool],
     hints: &mut [Option<u8>],
 ) {
     use crate::c5::codegen::ArgPlacement;
@@ -5078,20 +5086,31 @@ fn populate_call_arg_hints(
         let pc = pc as u32;
         for (&v, placement) in args.iter().zip(&plan.placements) {
             let vu = v as usize;
-            let r = match placement.register_part() {
-                ArgPlacement::IntReg(r) => Some(r),
-                ArgPlacement::StructRegs { regs, n, .. } => regs[..n as usize]
-                    .iter()
-                    .find(|c| !c.is_fp)
-                    .map(|c| c.reg)
-                    .or(spare),
-                ArgPlacement::StructStack { .. } => spare,
-                _ => None,
+            let (r, fp) = match placement.register_part() {
+                ArgPlacement::IntReg(r) => (Some(r), false),
+                ArgPlacement::FpReg(r) => (Some(r), true),
+                ArgPlacement::StructRegs { regs, n, .. } => (
+                    regs[..n as usize]
+                        .iter()
+                        .find(|c| !c.is_fp)
+                        .map(|c| c.reg)
+                        .or(spare),
+                    false,
+                ),
+                ArgPlacement::StructStack { .. } => (spare, false),
+                _ => (None, false),
             };
             let Some(r) = r else {
                 continue;
             };
-            if vu >= hints.len() || result_kind(&func.insts[vu]) != ResultKind::Int {
+            // A constant the FP bank holds is a floating-point value.
+            let in_fp = vu < hints.len()
+                && (result_kind(&func.insts[vu]) == ResultKind::Fp
+                    || fp_const.get(vu).copied().unwrap_or(false));
+            if vu >= hints.len()
+                || in_fp != fp
+                || (!fp && result_kind(&func.insts[vu]) != ResultKind::Int)
+            {
                 continue;
             }
             // Each argument value's last use must be exactly this call,
@@ -5118,7 +5137,7 @@ fn populate_call_arg_hints(
                     .get(*pi as usize)
                     .copied()
                     .flatten()
-                    .filter(|(fp, _)| !fp)
+                    .filter(|&(f, _)| f == fp)
                     .map(|(_, reg)| reg),
                 _ => None,
             };
@@ -5127,17 +5146,17 @@ fn populate_call_arg_hints(
                     &func.insts[vu],
                     Inst::ParamRef { idx: pi, .. } | Inst::ParamPart { idx: pi, .. }
                         if incoming.get(*pi as usize).copied().flatten()
-                            == Some((false, h))
+                            == Some((fp, h))
                 ) && !incoming
                     .iter()
                     .flatten()
-                    .any(|&(fp, reg)| !fp && reg == r && Some(reg) != own_incoming))
+                    .any(|&(f, reg)| f == fp && reg == r && Some(reg) != own_incoming))
             {
                 continue;
             }
             // Never into a later parameter's still unread incoming register.
             if let Inst::ParamRef { idx: pi, .. } | Inst::ParamPart { idx: pi, .. } = func.insts[vu]
-                && incoming[(pi as usize + 1).min(incoming.len())..].contains(&Some((false, r)))
+                && incoming[(pi as usize + 1).min(incoming.len())..].contains(&Some((fp, r)))
             {
                 continue;
             }

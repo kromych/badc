@@ -527,13 +527,10 @@ Disassembly of section .text:
                	mov	x5, #0x6                // =6
                	mov	x6, #0x7                // =7
                	mov	x7, #0x8                // =8
-               	fmov	d0, #0.25000000
-               	fmov	s1, #2.50000000
+               	fmov	d1, #0.25000000
+               	fmov	s0, #2.50000000
                	mov	x16, #0x9               // =9
                	str	x16, [sp]
-               	fmov	d17, d1
-               	fmov	d1, d0
-               	fmov	d0, d17
                	bl	<addr>
                	adrp	x16, <page>
                	ldr	d1, [x16, #0x28]

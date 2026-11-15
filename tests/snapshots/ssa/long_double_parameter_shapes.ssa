@@ -222,8 +222,8 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v15  StoreLocal { off=-67, value=v13, kind=F80 }      -> -
     v16  Call { target_pc=1, args=[v14], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-68)                                   -> x0
-    v18  LoadLocal { off=-68, kind=F80 }                  -> d1
-    v19  Imm(4618441417868443648)                         -> d0
+    v18  LoadLocal { off=-68, kind=F80 }                  -> d0
+    v19  Imm(4618441417868443648)                         -> d5
     v20  Binop { op=fne, lhs=v18, rhs=v19 }               -> x0
     terminator Bz { cond=v20, target=b4, fall=b3 }   (exit_acc=v20)
   block 3  start_pc=0
@@ -231,15 +231,15 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     terminator Return(v21)   (exit_acc=v21)
   block 4  start_pc=0
     v22  Imm(1)                                           -> x0
-    v23  Imm(4607182418800017408)                         -> d1
+    v23  Imm(4607182418800017408)                         -> d0
     v24  Imm(2)                                           -> x0
-    v25  Imm(4611686018427387904)                         -> d2
+    v25  Imm(4611686018427387904)                         -> d1
     v26  Imm(3)                                           -> x0
-    v27  Imm(4613937818241073152)                         -> d3
+    v27  Imm(4613937818241073152)                         -> d2
     v28  Imm(4)                                           -> x0
-    v29  Imm(4616189618054758400)                         -> d4
+    v29  Imm(4616189618054758400)                         -> d3
     v30  Imm(5)                                           -> x0
-    v31  Imm(4617315517961601024)                         -> d5
+    v31  Imm(4617315517961601024)                         -> d4
     v32  Imm(6)                                           -> x0
     v33  Imm(4618441417868443648)                         -> x0
     v34  Imm(7)                                           -> x0

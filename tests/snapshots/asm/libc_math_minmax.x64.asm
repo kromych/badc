@@ -41,17 +41,15 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm0
                	movsd	<rip>, %xmm1
                	callq	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	movapd	%xmm0, %xmm1
+               	movsd	<rip>, %xmm0
+               	ucomisd	%xmm0, %xmm1
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
-               	movsd	<rip>, %xmm0
-               	movapd	%xmm1, %xmm15
-               	movapd	%xmm0, %xmm1
-               	movapd	%xmm15, %xmm0
+               	movsd	<rip>, %xmm1
                	callq	<addr>
                	movsd	<rip>, %xmm1
                	ucomisd	%xmm1, %xmm0
@@ -95,17 +93,15 @@ Disassembly of section .text:
                	movss	<rip>, %xmm0
                	movss	<rip>, %xmm1
                	callq	<addr>
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	movapd	%xmm0, %xmm1
+               	movss	<rip>, %xmm0
+               	ucomiss	%xmm0, %xmm1
                	jp	<addr>
                	je	<addr>
                	movl	$0x7, %eax
                	popq	%rbp
                	retq
-               	movss	<rip>, %xmm0
-               	movapd	%xmm1, %xmm15
-               	movapd	%xmm0, %xmm1
-               	movapd	%xmm15, %xmm0
+               	movss	<rip>, %xmm1
                	callq	<addr>
                	movss	<rip>, %xmm1
                	ucomiss	%xmm1, %xmm0

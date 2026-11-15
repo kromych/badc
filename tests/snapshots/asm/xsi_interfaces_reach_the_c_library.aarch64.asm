@@ -233,11 +233,11 @@ Disassembly of section .text:
                	b.ne	<addr>
                	movi	d0, #0000000000000000
                	bl	<addr>
-               	movi	d1, #0000000000000000
-               	fcmp	d0, d1
+               	fmov	d1, d0
+               	movi	d0, #0000000000000000
+               	fcmp	d1, d0
                	b.ne	<addr>
                	mov	x0, #0x2                // =2
-               	fmov	d0, d1
                	bl	<addr>
                	movi	d1, #0000000000000000
                	fcmp	d0, d1

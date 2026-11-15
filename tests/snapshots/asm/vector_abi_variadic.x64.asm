@@ -488,8 +488,7 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm0
                	leaq	-0x100(%rbp), %rax
                	movl	$0x9, %edx
-               	movsd	<rip>, %xmm1
-               	movapd	%xmm1, %xmm2
+               	movsd	<rip>, %xmm2
                	movq	%rax, %r10
                	movups	(%r10), %xmm1
                	movq	%r9, %r10
@@ -508,30 +507,30 @@ Disassembly of section .text:
                	leaq	-0x38(%rbp), %r9
                	movabsq	$0x807060504030201, %rax # imm = 0x807060504030201
                	movq	%rax, -0x38(%rbp)
-               	movsd	<rip>, %xmm1
+               	movsd	<rip>, %xmm2
                	leaq	-0x30(%rbp), %rax
                	movabsq	$0x908070605040302, %rcx # imm = 0x908070605040302
                	movq	%rcx, -0x30(%rbp)
-               	movsd	<rip>, %xmm2
+               	movsd	<rip>, %xmm4
                	movabsq	$0xa09080706050403, %rcx # imm = 0xA09080706050403
                	movq	%rcx, -0x28(%rbp)
                	leaq	-0x28(%rbp), %rcx
-               	movsd	<rip>, %xmm3
+               	movsd	<rip>, %xmm6
                	movabsq	$0xb0a090807060504, %rdx # imm = 0xB0A090807060504
                	movq	%rdx, -0x20(%rbp)
                	leaq	-0x20(%rbp), %rdx
-               	movsd	<rip>, %xmm4
+               	movsd	<rip>, %xmm1
                	movabsq	$0xc0b0a0908070605, %rsi # imm = 0xC0B0A0908070605
                	movq	%rsi, -0x18(%rbp)
                	leaq	-0x18(%rbp), %rsi
-               	movsd	<rip>, %xmm5
+               	movsd	<rip>, %xmm3
                	movabsq	$0xd0c0b0a09080706, %r8 # imm = 0xD0C0B0A09080706
                	movq	%r8, -0x8(%rbp)
                	leaq	-0x8(%rbp), %r8
                	subq	$0x20, %rsp
-               	movq	%xmm4, %r10
+               	movq	%xmm1, %r10
                	movq	%r10, (%rsp)
-               	movq	%xmm5, %r10
+               	movq	%xmm3, %r10
                	movq	%r10, 0x10(%rsp)
                	movq	%rsi, %r10
                	movq	(%r10), %r11
@@ -539,9 +538,6 @@ Disassembly of section .text:
                	movq	%r8, %r10
                	movq	(%r10), %r11
                	movq	%r11, 0x18(%rsp)
-               	movapd	%xmm2, %xmm4
-               	movapd	%xmm3, %xmm6
-               	movapd	%xmm1, %xmm2
                	movq	%r9, %r10
                	movsd	(%r10), %xmm1
                	movq	%rax, %r10

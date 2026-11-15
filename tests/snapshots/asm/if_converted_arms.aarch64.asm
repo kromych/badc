@@ -384,10 +384,9 @@ Disassembly of section .text:
                	bl	<addr>
                	cmp	x0, #0x7
                	b.ne	<addr>
-               	fmov	d0, #1.00000000
+               	fmov	d1, #1.00000000
                	mov	x0, #0x5                // =5
                	mov	x1, #0x7                // =7
-               	fmov	d1, d0
                	fmov	d0, d8
                	bl	<addr>
                	cmp	x0, #0x5
@@ -439,10 +438,9 @@ Disassembly of section .text:
                	bl	<addr>
                	cmp	x0, #0x7
                	b.ne	<addr>
-               	fmov	d0, #1.00000000
+               	fmov	d1, #1.00000000
                	mov	x0, #0x5                // =5
                	mov	x1, #0x7                // =7
-               	fmov	d1, d0
                	fmov	d0, d8
                	bl	<addr>
                	cmp	x0, #0x7

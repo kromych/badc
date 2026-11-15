@@ -36,13 +36,12 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm1
                	movss	<rip>, %xmm2
                	cvtss2sd	%xmm2, %xmm2
-               	movsd	<rip>, %xmm3
+               	movsd	<rip>, %xmm5
                	movl	$0x7, %ecx
                	movl	$0xff, %r8d
                	leaq	<rip>, %r9
-               	movapd	%xmm0, %xmm4
-               	movapd	%xmm3, %xmm5
                	movapd	%xmm1, %xmm3
+               	movapd	%xmm0, %xmm4
                	movb	$0x6, %al
                	callq	<addr>
                	leaq	-0x180(%rbp), %rdi

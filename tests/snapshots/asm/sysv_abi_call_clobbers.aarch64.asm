@@ -143,17 +143,13 @@ Disassembly of section .text:
                	ret
 
 <swap6>:
-               	fmov	d3, #3.00000000
-               	fmov	d4, #4.00000000
-               	fmov	d5, #5.00000000
+               	fmov	d5, d2
+               	fmov	d2, #3.00000000
+               	fmov	d3, #4.00000000
+               	fmov	d4, #5.00000000
                	fmov	d17, d1
                	fmov	d1, d0
                	fmov	d0, d17
-               	fmov	d17, d5
-               	fmov	d5, d2
-               	fmov	d2, d3
-               	fmov	d3, d4
-               	fmov	d4, d17
                	b	<addr>
 
 <main>:

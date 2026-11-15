@@ -1378,7 +1378,9 @@ pub(super) fn emit_load(
 /// itself. Such a value is the `adrp` page alone, and each access takes the
 /// low 12 bits of the same address in its offset, as compilers pair `adrp`
 /// with `ldr` / `str`; another reader, or a displacement, needs the whole
-/// address, since the page of `sym + disp` need not be that of `sym`.
+/// address, since the page of `sym + disp` need not be that of `sym`. The
+/// scaled offset holds only a multiple of the access width, so an object
+/// placed off that alignment -- a packed one -- needs the whole address too.
 pub(super) fn page_only_data(
     func: &FunctionSsa,
     alloc: &Allocation,
@@ -1389,6 +1391,12 @@ pub(super) fn page_only_data(
     let scalar_load = |k: LoadKind| !matches!(k, LoadKind::F80 | LoadKind::F128 | LoadKind::V128);
     let scalar_store =
         |k: StoreKind| !matches!(k, StoreKind::F80 | StoreKind::F128 | StoreKind::V128);
+    // The unit's data image is placed at an alignment at least the widest
+    // access's, so an object's offset in it gives its alignment.
+    let placed = |addr: u32, bytes: u8| match func.insts.get(addr as usize) {
+        Some(&Inst::ImmData(off)) => off.rem_euclid(i64::from(bytes.max(1))) == 0,
+        _ => true,
+    };
     for (v, inst) in func.insts.iter().enumerate() {
         if super::ssa::emit_common::is_dead_pure(inst, v as u32, alloc) {
             continue;
@@ -1400,7 +1408,7 @@ pub(super) fn page_only_data(
                 align: 0,
                 kind,
                 ..
-            } if scalar_load(*kind) => folded[*addr as usize] = true,
+            } if scalar_load(*kind) && placed(*addr, kind.bytes()) => folded[*addr as usize] = true,
             Inst::Store {
                 addr,
                 value,
@@ -1408,7 +1416,7 @@ pub(super) fn page_only_data(
                 align: 0,
                 kind,
                 ..
-            } if scalar_store(*kind) => {
+            } if scalar_store(*kind) && placed(*addr, kind.bytes()) => {
                 folded[*addr as usize] = true;
                 whole[*value as usize] = true;
             }

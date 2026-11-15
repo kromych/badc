@@ -273,6 +273,21 @@ pub(crate) fn sve_float_result(op: u32) -> bool {
     matches!(get(op).form, Form::Sve(f) if f.shape == SveShape::Reduce && f.elems == SveElems::Float)
 }
 
+/// Whether SVE row `op` reads only the low 32 bits of operand `k`: the
+/// bounds of a 32-bit `while`, the scalar a `dup` puts in lanes of up to 4
+/// bytes.
+pub(crate) fn sve_low_word(op: u32, k: usize) -> bool {
+    let row = get(op);
+    match row.form {
+        Form::Sve(f) => match f.shape {
+            SveShape::While { bits, .. } => bits == 32 && k < 2,
+            SveShape::Dup => f.elems != SveElems::Float && row.int_width <= 4,
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
 /// The SVE kind of the value row `op` defines, `None` for another row or
 /// a result of no SVE type.
 pub(crate) fn sve_result(op: u32) -> Option<crate::c5::ir::LoadKind> {

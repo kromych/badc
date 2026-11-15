@@ -319,6 +319,13 @@ fn compute_high_observed_through(
                 observe(&mut hi, &mut work, *a);
                 observe(&mut hi, &mut work, *b);
             }
+            Inst::SimdVal { op, args, .. } if crate::c5::simd::sve_row(*op) => {
+                for (k, &a) in args.iter().enumerate() {
+                    if !crate::c5::simd::sve_low_word(*op, k) {
+                        observe(&mut hi, &mut work, a);
+                    }
+                }
+            }
             Inst::Intrinsic { args, .. }
             | Inst::Simd { args, .. }
             | Inst::SimdVal { args, .. }

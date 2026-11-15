@@ -2070,3 +2070,33 @@ fn predicate_operands_in_slots_reload_into_p7_p15_and_p14() {
     let str_p15 = |x: &u32| x & 0xFFC0_E01F == 0xE580_000F;
     assert!(w[..body].iter().any(str_p15), "str p15: {w:08x?}");
 }
+
+/// A 32-bit svwhilelt reads the W registers of its bounds and a dup into
+/// lanes of up to 4 bytes that of its scalar, so under `-O` no extension
+/// of a 32-bit parameter precedes them; a doubleword lane takes the
+/// sign-extended int.
+#[cfg(feature = "full")]
+#[test]
+fn a_32_bit_while_and_a_narrow_dup_read_the_low_word_alone() {
+    const SRC: &str = "#include <arm_sve.h>\n\
+        svbool_t wlo(unsigned i, unsigned n) { return svwhilelt_b8(i, n); }\n\
+        svbool_t wlt(int i, int n) { return svwhilelt_b32(i, n); }\n\
+        svint32_t d32(int x) { return svdup_n_s32(x); }\n\
+        svuint8_t d8(unsigned x) { return svdup_n_u8(x); }\n\
+        svint64_t d64(int x) { return svdup_n_s64(x); }\n";
+    const RET: u32 = 0xd65f_03c0;
+    let object = super::perf_codegen::object_at(SRC, crate::Target::LinuxAarch64, true);
+    for (name, words) in [
+        ("wlo", &[0x2521_0c00, RET][..]),
+        ("wlt", &[0x25a1_0400, RET]),
+        ("d32", &[0x05a0_3800, RET]),
+        ("d8", &[0x0520_3800, RET]),
+        ("d64", &[0x9340_7c00, 0x05e0_3800, RET]),
+    ] {
+        assert_eq!(
+            super::codegen::function_words(&object, name),
+            words,
+            "{name}"
+        );
+    }
+}

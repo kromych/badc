@@ -2350,7 +2350,8 @@ fn sve_multiply_adds_destroy_the_operand_the_destination_holds() {
             svint32_t mla_z(svbool_t pg, svint32_t b, svint32_t a, svint32_t c) { return svmla_z(pg, a, b, c); }\n\
             svint32_t mad_x(svbool_t pg, svint32_t c, svint32_t a, svint32_t b) { return svmad_x(pg, a, b, c); }\n\
             svfloat64_t mls_x(svbool_t pg, svfloat64_t c, svfloat64_t a, svfloat64_t b) { return svmls_x(pg, a, b, c); }\n\
-            svfloat32_t nmla_z(svbool_t pg, svfloat32_t a, svfloat32_t b, svfloat32_t c) { return svnmla_z(pg, a, b, c); }\n";
+            svfloat32_t nmla_z(svbool_t pg, svfloat32_t a, svfloat32_t b, svfloat32_t c) { return svnmla_z(pg, a, b, c); }\n\
+            svint32_t mla_aa(svint32_t a, svbool_t pg, svint32_t c) { return svmla_m(pg, a, a, c); }\n";
         const RET: u32 = 0xD65F_03C0;
         let words = |name: &str| super::perf_codegen::a64_at(ASM, name, true);
         let mov = |t: u32| 0x0460_3000 | t << 16 | t << 5;
@@ -2370,6 +2371,8 @@ fn sve_multiply_adds_destroy_the_operand_the_destination_holds() {
         assert_eq!(w, [0x0420_BC20 | t, 0x65E0_2040 | t, mov(t), RET]);
         // MOVPRFX z0.s, p0/z, z0.s; FNMLA z0.s, p0/m, z1.s, z2.s.
         assert_eq!(words("nmla_z"), [0x0490_2000, 0x65A2_4020, RET]);
+        // MLA z0.s, p0/m, z0.s, z1.s: no MOVPRFX, so z0 may be a factor too.
+        assert_eq!(words("mla_aa"), [0x0481_4000, RET]);
     }
 }
 

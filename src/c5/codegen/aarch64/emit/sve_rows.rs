@@ -790,10 +790,12 @@ fn negates(mnem: &str) -> bool {
 }
 
 /// Which operand (1 to 3) of a ternary row computes into `d` from
-/// registers `r`, and whether in a scratch: a merging one's first, as its
-/// inactive lanes are; another's whichever `d` holds where the others are
-/// not `d`, which MOVPRFX requires (Arm ARM, MOVPRFX), but the second
-/// factor of a negating floating row, whose negation keeps the first.
+/// registers `r`, and whether in a scratch: the one `d` holds, else the
+/// first after a copy into `d` none of the others is in, a merging form's
+/// always the first, as its inactive lanes are; a zeroing form's where
+/// the others are not `d`, as its MOVPRFX requires (Arm ARM, MOVPRFX).
+/// The second factor of a negating floating row is never it, so the
+/// negation stays on the first.
 fn ternary_plan(
     (mode, acc_last, negates): (SvePred, bool, bool),
     d: u8,
@@ -804,11 +806,10 @@ fn ternary_plan(
         (1..=3).filter(|&k| (k == 1 || mode != SvePred::Merge) && !(negates && k == second));
     let others_free = |k: usize| (1..=3).all(|j| j == k || r[j - 1] != d);
     let pick = match mode {
-        SvePred::Any => candidates
-            .clone()
+        SvePred::Zero => candidates.clone().find(|&k| others_free(k)),
+        _ => (candidates.clone())
             .find(|&k| r[k - 1] == d)
             .or_else(|| (!r.contains(&d)).then_some(1)),
-        _ => candidates.clone().find(|&k| others_free(k)),
     };
     pick.map_or((1, true), |k| (k, false))
 }

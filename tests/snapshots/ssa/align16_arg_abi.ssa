@@ -703,7 +703,7 @@ fn ent_pc=12 n_params=0 variadic=false locals=0
     v186 Imm(0)                                           -> x0
     terminator Jmp(b2)   (exit_acc=v183)
   block 2  start_pc=0
-    v190 ImmData(112)                                     -> x7
+    v190 ImmData(116)                                     -> x7
     v191 LocalAddr(-147)                                  -> x0
     v192 Imm(3)                                           -> x1
     v193 Call { target_pc=2, args=[v190, v65, v192], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0

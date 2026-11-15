@@ -29,11 +29,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v13  CallExt { binding_idx=219, args=[v11, v12], fp_arg_mask=0x0 } -> x3
     v14  Imm(0)                                           -> x0
     v15  Imm(0)                                           -> x0
-    v16  ImmData(1)                                       -> x6
+    v16  ImmData(4)                                       -> x6
     v17  CallExt { binding_idx=220, args=[v13, v16], fp_arg_mask=0x0 } -> x12
     v18  Imm(0)                                           -> x0
     v19  Imm(0)                                           -> x0
-    v20  ImmData(16)                                      -> x6
+    v20  ImmData(19)                                      -> x6
     v21  CallExt { binding_idx=220, args=[v13, v20], fp_arg_mask=0x0 } -> x3
     v22  Imm(0)                                           -> x0
     v23  LocalAddr(-2)                                    -> x7

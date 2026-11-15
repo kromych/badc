@@ -127,7 +127,7 @@ fn ent_pc=12 n_params=0 variadic=false locals=49
     terminator Bnz { cond=v63, target=b5, fall=b4 }   (exit_acc=v63)
   block 4  start_pc=0
     v65  LocalAddr(-46)                                   -> x0
-    v66  ImmData(1)                                       -> x6
+    v66  ImmData(4)                                       -> x6
     v67  CallExt { binding_idx=143, args=[v62, v66], fp_arg_mask=0x0 } -> x0
     v68  BinopI { op=ne, lhs=v67, rhs_imm=0 }             -> x1
     v69  Imm(0)                                           -> x1
@@ -144,7 +144,7 @@ fn ent_pc=12 n_params=0 variadic=false locals=49
     v78  LifetimeEnd(-49)                                 -> -
     terminator Return(v72)   (exit_acc=v72)
   block 6  start_pc=0
-    v79  ImmData(27)                                      -> x7
+    v79  ImmData(30)                                      -> x7
     v80  CallExt { binding_idx=35, args=[v79], fp_arg_mask=0x0 } -> x1
     v81  Imm(0)                                           -> x0
     v82  Imm(0)                                           -> x0

@@ -4,7 +4,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(32)                                      -> x0
+    v1   ImmData(36)                                      -> x0
     v2   BinopI { op=or, lhs=v1, rhs_imm=1 }              -> x1
     v3   Imm(0)                                           -> x2
     v4   Imm(0)                                           -> x2
@@ -28,7 +28,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v18  LoadLocal { off=-1, kind=I64, volatile }         -> x1
     v19  Imm(-2)                                          -> x2
     v20  BinopI { op=and, lhs=v18, rhs_imm=-2 }           -> x1
-    v21  ImmData(32)                                      -> x2
+    v21  ImmData(36)                                      -> x2
     v22  Binop { op=ne, lhs=v20, rhs=v1 }                 -> x1
     terminator Bz { cond=v22, target=b4, fall=b3 }   (exit_acc=v22)
   block 3  start_pc=0
@@ -38,7 +38,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v26  LifetimeEnd(0)                                   -> -
     terminator Return(v23)   (exit_acc=v23)
   block 4  start_pc=0
-    v27  ImmData(32)                                      -> x1
+    v27  ImmData(36)                                      -> x1
     v28  BinopI { op=shru, lhs=v1, rhs_imm=2 }            -> x0
     v29  Imm(0)                                           -> x1
     v30  Imm(0)                                           -> x1
@@ -58,7 +58,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v42  LifetimeEnd(0)                                   -> -
     terminator Return(v39)   (exit_acc=v39)
   block 6  start_pc=0
-    v43  ImmData(32)                                      -> x0
+    v43  ImmData(36)                                      -> x0
     v44  Imm(0)                                           -> x0
     v45  Imm(0)                                           -> x0
     v46  ImmData(16)                                      -> x0

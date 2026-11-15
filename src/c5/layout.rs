@@ -121,6 +121,11 @@ pub(crate) fn bss_image_align(declared: usize) -> usize {
 /// the next recorded start, so every constraint recorded inside it binds
 /// it: a base congruent to the interval's start modulo the value here
 /// keeps each object in it on its boundary.
+///
+/// No value is below the image's own minimum, so a moved object keeps the
+/// alignment its offset had up to the widest scalar access: code generated
+/// before the move folds an access into its address by that offset, which
+/// a packed object, aligned to 1, would otherwise lose.
 pub(crate) fn data_object_aligns(
     program: &crate::c5::program::Program,
     starts: &[i64],
@@ -128,7 +133,7 @@ pub(crate) fn data_object_aligns(
 ) -> alloc::vec::Vec<i64> {
     let data_len = program.data.len() as i64;
     let cap = bss_image_align(cap) as i64;
-    let mut aligns = alloc::vec![1i64; starts.len()];
+    let mut aligns = alloc::vec![(DATA_ALIGN_MIN as i64).min(cap); starts.len()];
     let mut note = |off: i64, a: i64| {
         if a <= 1 || !(0..data_len).contains(&off) {
             return;

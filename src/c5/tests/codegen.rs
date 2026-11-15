@@ -14544,6 +14544,55 @@ fn an_inlined_object_size_answers_the_arguments_subobject() {
     }
 }
 
+/// A string literal is an array of its characters and the NUL (C17
+/// 6.4.5p6): `""` measures one byte under `__builtin_object_size`, and the
+/// literal lexed before it keeps its own length rather than gaining that
+/// NUL. A check the size fails keeps its call.
+#[test]
+fn an_empty_string_literal_is_a_one_byte_object() {
+    use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
+    const SRC: &str = "\
+        typedef __SIZE_TYPE__ size_t;\n\
+        #define FI static inline __attribute__((__always_inline__))\n\
+        extern void over_1(void), over_2(void), over_3(void), over_4(void);\n\
+        FI size_t whole(const void *p) { return __builtin_object_size(p, 0); }\n\
+        static const char *tab[] = { \"xyz\", \"q\" };\n\
+        const char **use_tab = tab;\n\
+        void f1(void) { if (whole(\"\") != 1) over_1(); }\n\
+        void f2(void) { const char *m = \"abc\"; if (whole(m) != 4) over_2(); }\n\
+        void f3(void) { if (whole(\"\") != 1) over_3(); }\n\
+        void f4(void) { if (whole(\"\") < 2) over_4(); }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let prog = crate::Compiler::with_options(
+            SRC.to_string(),
+            target,
+            CompileOptions::default()
+                .with_no_entry_point(true)
+                .with_optimize(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile for {target:?}: {e}"));
+        let obj = emit_native_with_options(
+            &prog,
+            target,
+            NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..NativeOptions::new().with_optimize()
+            },
+        )
+        .unwrap_or_else(|e| panic!("emit for {target:?}: {e}"));
+        let syms = elf_symbol_shndx(&obj);
+        for n in 1..=4 {
+            let name = alloc::format!("over_{n}");
+            assert_eq!(
+                syms.iter().any(|(s, _)| *s == name),
+                n == 4,
+                "{target:?}: {name}"
+            );
+        }
+    }
+}
+
 /// A shift whose count is outside `0 ..= 63` has no result C99 6.5.7p3
 /// defines, so it must not fold to one: folding makes
 /// `__builtin_constant_p` over the result true and decides the guard of

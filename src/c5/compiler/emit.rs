@@ -88,35 +88,51 @@ impl Compiler {
         // the previous literal (C99 6.4.5 concatenation) -- same object,
         // no new boundary. Static DCE needs the boundary to drop a dead
         // literal instead of gluing it to its neighbors.
+        let len = self.data.len() as i64;
         if self.lex.tk == '"' && prev_tk != '"' {
             self.note_literal_start();
+            self.pending_empty_literal = None;
             // A literal's storage is immutable (C99 6.4.5p6), so record
             // its byte range for the const-data load fold. Gated on the
             // bytes being freshly appended: a snapshot restore re-lexes
             // a literal whose bytes are already interned, and its range
-            // (if any survived the restore) is already recorded.
-            if self.lex.ival >= pre_len && self.lex.ival < self.data.len() as i64 {
-                self.const_data_ranges
-                    .push((self.lex.ival, self.data.len() as i64));
+            // (if any survived the restore) is already recorded. An empty
+            // literal appends none yet; its range starts with the bytes of
+            // a later part or with its NUL.
+            if self.lex.ival >= pre_len && self.lex.ival < len {
+                self.const_data_ranges.push((self.lex.ival, len));
+            } else if self.lex.ival == pre_len {
+                self.pending_empty_literal = Some(self.lex.ival);
             }
-        } else if self.lex.tk == '"'
-            && prev_tk == '"'
-            && let Some(last) = self.const_data_ranges.last_mut()
-            && last.1 == pre_len
-        {
+        } else if self.lex.tk == '"' && prev_tk == '"' {
             // Concatenated part: the same object grew by [pre_len, len).
-            last.1 = self.data.len() as i64;
+            if let Some(start) = self
+                .pending_empty_literal
+                .filter(|&s| s == pre_len && s < len)
+            {
+                self.const_data_ranges.push((start, len));
+                self.pending_empty_literal = None;
+            } else if let Some(last) = self.const_data_ranges.last_mut()
+                && last.1 == pre_len
+            {
+                last.1 = len;
+            }
         }
         Ok(())
     }
 
     /// Append a narrow literal's terminating NUL and extend its
     /// recorded const range over it, when the NUL is contiguous with
-    /// that range.
+    /// that range. An empty literal's range is the NUL alone.
     pub(super) fn push_literal_nul(&mut self) {
         self.data.push(0);
-        if let Some(last) = self.const_data_ranges.last_mut()
-            && last.1 + 1 == self.data.len() as i64
+        let len = self.data.len() as i64;
+        if let Some(start) = self.pending_empty_literal.take()
+            && start + 1 == len
+        {
+            self.const_data_ranges.push((start, len));
+        } else if let Some(last) = self.const_data_ranges.last_mut()
+            && last.1 + 1 == len
         {
             last.1 += 1;
         }
@@ -189,6 +205,7 @@ impl Compiler {
             }
         }
         examined += pop_tail_past(&mut self.const_data_ranges, |r| r.0 >= end);
+        self.pending_empty_literal = self.pending_empty_literal.filter(|&s| s < end);
         if let Some(last) = self.const_data_ranges.last_mut() {
             last.1 = last.1.min(end);
             if last.0 >= last.1 {

@@ -495,14 +495,14 @@ Disassembly of section .text:
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
-               	adrp	x0, <page>
+               	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	mov	x1, #0x1                // =1
                	sub	x2, x29, #0x48
                	bl	<addr>
                	cmp	x0, #0x1
                	b.ne	<addr>
-               	adrp	x0, <page>
+               	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	mov	x1, #0x1                // =1
                	sub	x2, x29, #0x48

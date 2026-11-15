@@ -178,7 +178,7 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rdi # <addr>
                	movl	$0x1, %esi
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	movq	%rsi, %rcx
                	callq	<addr>
                	testq	%rax, %rax
@@ -188,7 +188,7 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rdi # <addr>
                	movl	$0xb, %esi
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	xorl	%ecx, %ecx
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
@@ -198,7 +198,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	xorl	%esi, %esi
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	movq	%rsi, %rcx
                	callq	<addr>
                	leaq	<rip>, %rcx # <addr>

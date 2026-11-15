@@ -174,7 +174,7 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	leave
                	retq
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	leaq	-0x30(%rbp), %rdx
                	movq	0x8(%rsp), %rdi
                	movb	$0x0, %al
@@ -186,7 +186,7 @@ Disassembly of section .text:
                	retq
                	movq	0x8(%rsp), %rdi
                	callq	<addr>
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rdi # <addr>
                	movb	$0x0, %al
                	callq	<addr>
                	testl	%eax, %eax

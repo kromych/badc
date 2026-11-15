@@ -451,13 +451,13 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rdi # <addr>
                	movl	$0x1, %esi
                	leaq	-0x48(%rbp), %rdx
                	callq	<addr>
                	cmpq	$0x1, %rax
                	jne	<addr>
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rdi # <addr>
                	movl	$0x1, %esi
                	leaq	-0x48(%rbp), %rdx
                	callq	<addr>

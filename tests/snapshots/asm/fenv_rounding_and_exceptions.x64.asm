@@ -40,22 +40,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -66,15 +66,15 @@ Disassembly of section .text:
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>
 
 <main>:
@@ -154,22 +154,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -193,22 +193,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -228,22 +228,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -264,22 +264,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -303,22 +303,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -338,22 +338,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -376,22 +376,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -413,22 +413,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -448,22 +448,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -486,22 +486,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -523,22 +523,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -559,22 +559,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -594,22 +594,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -629,22 +629,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -670,22 +670,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -707,22 +707,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -778,22 +778,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -829,22 +829,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -875,22 +875,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -911,22 +911,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -945,22 +945,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -979,22 +979,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -1015,22 +1015,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -1051,22 +1051,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -1087,22 +1087,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -1128,22 +1128,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -1164,22 +1164,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -1200,358 +1200,358 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rsi
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	jmp	<addr>
-               	leaq	<rip>, %r9
-               	jmp	<addr>
-               	leaq	<rip>, %r8
-               	jmp	<addr>
-               	leaq	<rip>, %rcx
-               	jmp	<addr>
-               	leaq	<rip>, %rdx
-               	jmp	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rsi
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	jmp	<addr>
-               	leaq	<rip>, %r9
-               	jmp	<addr>
-               	leaq	<rip>, %r8
-               	jmp	<addr>
-               	leaq	<rip>, %rcx
-               	jmp	<addr>
-               	leaq	<rip>, %rdx
-               	jmp	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rsi
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	jmp	<addr>
-               	leaq	<rip>, %r9
-               	jmp	<addr>
-               	leaq	<rip>, %r8
-               	jmp	<addr>
-               	leaq	<rip>, %rcx
-               	jmp	<addr>
-               	leaq	<rip>, %rdx
-               	jmp	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rsi
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	jmp	<addr>
-               	leaq	<rip>, %r9
-               	jmp	<addr>
-               	leaq	<rip>, %r8
-               	jmp	<addr>
-               	leaq	<rip>, %rcx
-               	jmp	<addr>
-               	leaq	<rip>, %rdx
-               	jmp	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rsi
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	jmp	<addr>
-               	leaq	<rip>, %r9
-               	jmp	<addr>
-               	leaq	<rip>, %r8
-               	jmp	<addr>
-               	leaq	<rip>, %rcx
-               	jmp	<addr>
-               	leaq	<rip>, %rdx
-               	jmp	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rsi
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	jmp	<addr>
-               	leaq	<rip>, %r9
-               	jmp	<addr>
-               	leaq	<rip>, %r8
-               	jmp	<addr>
-               	leaq	<rip>, %rcx
-               	jmp	<addr>
-               	leaq	<rip>, %rdx
-               	jmp	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rsi
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	jmp	<addr>
-               	leaq	<rip>, %r9
-               	jmp	<addr>
-               	leaq	<rip>, %r8
-               	jmp	<addr>
-               	leaq	<rip>, %rcx
-               	jmp	<addr>
-               	leaq	<rip>, %rdx
-               	jmp	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rsi
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	jmp	<addr>
-               	leaq	<rip>, %r9
-               	jmp	<addr>
-               	leaq	<rip>, %r8
-               	jmp	<addr>
-               	leaq	<rip>, %rcx
-               	jmp	<addr>
-               	leaq	<rip>, %rdx
-               	jmp	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rsi
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	jmp	<addr>
-               	leaq	<rip>, %r9
-               	jmp	<addr>
-               	leaq	<rip>, %r8
-               	jmp	<addr>
-               	leaq	<rip>, %rcx
-               	jmp	<addr>
-               	leaq	<rip>, %rdx
-               	jmp	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rsi
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	jmp	<addr>
-               	leaq	<rip>, %r9
-               	jmp	<addr>
-               	leaq	<rip>, %r8
-               	jmp	<addr>
-               	leaq	<rip>, %rcx
-               	jmp	<addr>
-               	leaq	<rip>, %rdx
-               	jmp	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rsi
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	jmp	<addr>
-               	leaq	<rip>, %r9
-               	jmp	<addr>
-               	leaq	<rip>, %r8
-               	jmp	<addr>
-               	leaq	<rip>, %rcx
-               	jmp	<addr>
-               	leaq	<rip>, %rdx
-               	jmp	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rsi
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	jmp	<addr>
-               	leaq	<rip>, %r9
-               	jmp	<addr>
-               	leaq	<rip>, %r8
-               	jmp	<addr>
-               	leaq	<rip>, %rcx
-               	jmp	<addr>
-               	leaq	<rip>, %rdx
-               	jmp	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rsi
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	jmp	<addr>
-               	leaq	<rip>, %r9
-               	jmp	<addr>
-               	leaq	<rip>, %r8
-               	jmp	<addr>
-               	leaq	<rip>, %rcx
-               	jmp	<addr>
-               	leaq	<rip>, %rdx
-               	jmp	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r8 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rcx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rdx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rsi # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r8 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rcx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rdx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rsi # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r8 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rcx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rdx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rsi # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r8 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rcx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rdx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rsi # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r8 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rcx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rdx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rsi # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r8 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rcx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rdx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rsi # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r8 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rcx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rdx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rsi # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r8 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rcx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rdx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rsi # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r8 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rcx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rdx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rsi # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r8 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rcx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rdx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rsi # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r8 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rcx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rdx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rsi # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r8 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rcx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rdx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rsi # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r8 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rcx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rdx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>
                	xorl	%edi, %edi
                	callq	<addr>
@@ -1568,22 +1568,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -1603,22 +1603,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -1646,22 +1646,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -1688,22 +1688,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -1730,22 +1730,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -1766,22 +1766,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -1803,22 +1803,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -1838,22 +1838,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -1880,22 +1880,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -1923,22 +1923,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -1957,22 +1957,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -1991,22 +1991,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -2025,22 +2025,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -2059,22 +2059,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -2093,22 +2093,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -2133,22 +2133,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -2174,22 +2174,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -2226,22 +2226,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -2264,22 +2264,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -2300,22 +2300,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -2338,22 +2338,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -2374,22 +2374,22 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax # <addr>
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
                	movb	$0x0, %al
@@ -2406,265 +2406,265 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rsi
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	jmp	<addr>
-               	leaq	<rip>, %r9
-               	jmp	<addr>
-               	leaq	<rip>, %r8
-               	jmp	<addr>
-               	leaq	<rip>, %rcx
-               	jmp	<addr>
-               	leaq	<rip>, %rdx
-               	jmp	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rsi
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	jmp	<addr>
-               	leaq	<rip>, %r9
-               	jmp	<addr>
-               	leaq	<rip>, %r8
-               	jmp	<addr>
-               	leaq	<rip>, %rcx
-               	jmp	<addr>
-               	leaq	<rip>, %rdx
-               	jmp	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rsi
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	jmp	<addr>
-               	leaq	<rip>, %r9
-               	jmp	<addr>
-               	leaq	<rip>, %r8
-               	jmp	<addr>
-               	leaq	<rip>, %rcx
-               	jmp	<addr>
-               	leaq	<rip>, %rdx
-               	jmp	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rsi
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	jmp	<addr>
-               	leaq	<rip>, %r9
-               	jmp	<addr>
-               	leaq	<rip>, %r8
-               	jmp	<addr>
-               	leaq	<rip>, %rcx
-               	jmp	<addr>
-               	leaq	<rip>, %rdx
-               	jmp	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rsi
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	jmp	<addr>
-               	leaq	<rip>, %r9
-               	jmp	<addr>
-               	leaq	<rip>, %r8
-               	jmp	<addr>
-               	leaq	<rip>, %rcx
-               	jmp	<addr>
-               	leaq	<rip>, %rdx
-               	jmp	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rsi
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	jmp	<addr>
-               	leaq	<rip>, %r9
-               	jmp	<addr>
-               	leaq	<rip>, %r8
-               	jmp	<addr>
-               	leaq	<rip>, %rcx
-               	jmp	<addr>
-               	leaq	<rip>, %rdx
-               	jmp	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rsi
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	jmp	<addr>
-               	leaq	<rip>, %r9
-               	jmp	<addr>
-               	leaq	<rip>, %r8
-               	jmp	<addr>
-               	leaq	<rip>, %rcx
-               	jmp	<addr>
-               	leaq	<rip>, %rdx
-               	jmp	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rsi
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	jmp	<addr>
-               	leaq	<rip>, %r9
-               	jmp	<addr>
-               	leaq	<rip>, %r8
-               	jmp	<addr>
-               	leaq	<rip>, %rcx
-               	jmp	<addr>
-               	leaq	<rip>, %rdx
-               	jmp	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rsi
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	jmp	<addr>
-               	leaq	<rip>, %r9
-               	jmp	<addr>
-               	leaq	<rip>, %r8
-               	jmp	<addr>
-               	leaq	<rip>, %rcx
-               	jmp	<addr>
-               	leaq	<rip>, %rdx
-               	jmp	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rsi
-               	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	jmp	<addr>
-               	leaq	<rip>, %r9
-               	jmp	<addr>
-               	leaq	<rip>, %r8
-               	jmp	<addr>
-               	leaq	<rip>, %rcx
-               	jmp	<addr>
-               	leaq	<rip>, %rdx
-               	jmp	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %r9 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8 # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx # <addr>
                	jmp	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r8 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rcx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rdx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rsi # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r8 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rcx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rdx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rsi # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r8 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rcx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rdx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rsi # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r8 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rcx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rdx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rsi # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r8 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rcx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rdx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rsi # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r8 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rcx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rdx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rsi # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r8 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rcx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rdx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rsi # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r8 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rcx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rdx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rsi # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r8 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rcx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rdx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rsi # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r8 # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rcx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rdx # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>

@@ -399,7 +399,7 @@ Disassembly of section .text:
                	mov	x0, #0x28               // =40
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x1, <page>
+               	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	mov	x0, #0x0                // =0
                	ldrb	w2, [x1, x0]

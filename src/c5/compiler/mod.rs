@@ -2117,6 +2117,9 @@ pub struct Compiler {
     /// `__func__` arrays, staged local-initializer templates). See
     /// `Program::const_data_ranges`.
     const_data_ranges: Vec<(i64, i64)>,
+    /// The offset of an empty string literal lexed last, whose range waits
+    /// for the bytes of a concatenated part or for its NUL.
+    pending_empty_literal: Option<i64>,
     /// Alignment-padding ranges within `data`. See
     /// `Program::data_pad_ranges`.
     data_pad_ranges: Vec<(i64, i64)>,
@@ -3380,6 +3383,7 @@ impl Compiler {
             data,
             data_object_starts: Vec::new(),
             const_data_ranges: Vec::new(),
+            pending_empty_literal: None,
             data_pad_ranges: Vec::new(),
             data_align_marks: Vec::new(),
             flex_array_measured_count: None,

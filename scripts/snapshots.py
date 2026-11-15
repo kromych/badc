@@ -616,14 +616,20 @@ FUNCTION_LABEL_RE = re.compile(r"^<[^>]+>:")
 
 # What counts as a memory access, and which of those accesses are the
 # entry/exit traffic a function pays for the callee-saved registers it
-# touches. The saved sets exclude the frame record (aarch64 x29/x30,
-# x86_64 %rbp), which any frame carries whatever the allocator does with
-# the rest of the bank.
+# touches: the stores of those registers in its prologue, the run of
+# frame-record, stack-pointer and save instructions that opens it. A store
+# of such a register later in the body is the value it holds, not a save.
+# The saved sets exclude the frame record (aarch64 x29/x30, x86_64 %rbp),
+# which any frame carries whatever the allocator does with the rest of
+# the bank.
 ARCH_ACCESS: dict[str, dict[str, re.Pattern[str]]] = {
     "aarch64": {
         "mem": re.compile(r"^(ld|st|prfm)"),
         "saved": re.compile(r"\b(x19|x2[0-8]|d[89]|d1[0-5])\b"),
-        "stack": re.compile(r"\bsp\b"),
+        # A large frame's prologue addresses some saves through x29.
+        "stack": re.compile(r"\b(sp|x29)\b"),
+        "frame": re.compile(r"^(stp|str)\s+x29, x30|^str\s+x30|^mov\s+x29, sp|"
+                            r"^(add|sub)\s+(x29|sp), sp"),
     },
     "x64": {
         # A memory operand is a base/index form or a RIP-relative one.
@@ -631,6 +637,7 @@ ARCH_ACCESS: dict[str, dict[str, re.Pattern[str]]] = {
         "mem": re.compile(r"\((?:%[a-z0-9]+)?[,%]|<rip>"),
         "saved": re.compile(r"%(rbx|ebx|bx|bl|r1[2-5][dwb]?)\b"),
         "stack": re.compile(r"\((%rsp|%rbp)\)|\(%rsp,|0x[0-9a-f]+\(%(rsp|rbp)\)"),
+        "frame": re.compile(r"^push\w*\s+%rbp|^mov\w*\s+%rsp, %rbp|^(sub|add)\w*\s+\$\S+, %rsp"),
     },
 }
 
@@ -640,36 +647,41 @@ def access_counts(text: str, arch: str) -> tuple[int, int, int, int]:
     callee-saved register to the stack in one disassembly."""
     rules = ARCH_ACCESS[arch]
     funcs = insts = mem = saves = 0
+    prologue = False
     for line in text.splitlines():
         if FUNCTION_LABEL_RE.match(line):
             funcs += 1
+            prologue = True
             continue
         m = MNEMONIC_RE.match(line)
         if not m:
             continue
         mnemonic, operands = m.group(1), m.group(2)
         insts += 1
+        # A save is a store of a callee-saved register to the stack.
+        if arch == "x64":
+            src, _, dst = operands.partition(",")
+            save = (mnemonic.startswith("push") and bool(rules["saved"].search(operands))) or (
+                mnemonic.startswith("mov") and bool(rules["saved"].search(src))
+                and bool(rules["stack"].search(dst)))
+        else:
+            save = (mnemonic.startswith("st") and bool(rules["saved"].search(operands))
+                    and bool(rules["stack"].search(operands)))
+        if prologue and not save and not rules["frame"].match(f"{mnemonic} {operands}"):
+            prologue = False
+        if prologue and save:
+            saves += 1
         if arch == "x64":
             # push / pop / leave name no operand but access the stack.
             if mnemonic.startswith(("push", "pop", "leave")):
                 mem += 1
-                if mnemonic.startswith("push") and rules["saved"].search(operands):
-                    saves += 1
                 continue
             if mnemonic.startswith(("lea", "nop")) or not rules["mem"].search(operands):
                 continue
             mem += 1
-            src, _, dst = operands.partition(",")
-            if (mnemonic.startswith("mov") and rules["saved"].search(src)
-                    and rules["stack"].search(dst)):
-                saves += 1
             continue
-        if not rules["mem"].match(mnemonic):
-            continue
-        mem += 1
-        if (mnemonic.startswith("st") and rules["stack"].search(operands)
-                and rules["saved"].search(operands)):
-            saves += 1
+        if rules["mem"].match(mnemonic):
+            mem += 1
     return funcs, insts, mem, saves
 
 
@@ -715,9 +727,18 @@ def access_counts(text: str, arch: str) -> tuple[int, int, int, int]:
 # sroa splits the vector-structure objects of the NEON structure load and
 # store driver; its main keeps 11 more values across the checks it calls
 # and makes 597 fewer memory accesses (0.2964 -> 0.3004).
+#
+# Since 2026-11-15 the count takes the prologue's saves alone. The figures
+# above are of the earlier count, which took a store of a callee-saved
+# register to the stack anywhere in a function: on aarch64 it missed the
+# saves a large frame addresses through x29 and took stack-argument
+# stores, and on x86_64 it took body stores through %rsp and %rbp. Over
+# the corpus at 34fab95c37 the new count reads 0.2556 (aarch64) and
+# 0.2922 (x86_64) where the old one read 0.2965 and 0.3738, so each
+# ceiling is scaled by that ratio, keeping its headroom.
 SAVED_PER_FUNCTION: dict[str, float] = {
-    "aarch64": 0.302,
-    "x64": 0.545,
+    "aarch64": 0.261,
+    "x64": 0.426,
 }
 
 BUDGET_EXEMPT_RE = re.compile(r"^//\s*snapshot-budget:\s*exempt\b", re.MULTILINE)
@@ -851,6 +872,10 @@ def self_test() -> int:
          "\tldp\tx20, x21, [sp], #0x20\n\tret\n"
          "\tldp\tx20, x21, [sp], #0x20\n\tret\n",
          (1, 8, 5, 1)),
+        ("aarch64",
+         "<f>:\n\tstp\tx29, x30, [sp, #-0x10]!\n\tmov\tx29, sp\n"
+         "\tstur\tx19, [x29, #-0x8]\n\tldur\tx19, [x29, #-0x8]\n\tret\n",
+         (1, 5, 3, 1)),
         ("x64",
          "<f>:\n\tpushq\t%rbp\n\tpushq\t%rbx\n\tmovq\t%r12, 0x8(%rsp)\n"
          "\tleaq\t(%rdi,%rcx), %rax\n\tmovq\t(%rax), %rdx\n"

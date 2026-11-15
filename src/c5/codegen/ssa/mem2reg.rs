@@ -1680,9 +1680,12 @@ fn copy_words(func: &mut FunctionSsa) {
 /// nothing else, no longer pin them to the frame. Each object is read at
 /// the end of its predecessor, or ahead of the compare a conditional
 /// terminator reads, and nothing between that point and the load may
-/// write memory.
+/// write memory. The load is in the phi's block or in one that block
+/// reaches by unconditional jumps into blocks with no other predecessor,
+/// as an inlined aggregate return's merge reaches the caller's copy.
 fn split_address_phi_loads(func: &mut FunctionSsa) {
     let uses = super::reg_alloc::compute_use_counts(func);
+    let preds = predecessors(func);
     let quiet = |inst: &Inst| {
         inst.is_pure()
             || matches!(
@@ -1702,7 +1705,32 @@ fn split_address_phi_loads(func: &mut FunctionSsa) {
     // Per load: the phi, and per predecessor the object and where its read goes.
     type Plan = (ValueId, ValueId, Vec<(i64, At)>);
     let mut plans: Vec<Plan> = Vec::new();
-    for block in &func.blocks {
+    // Whether the phi `addr` is in block `b` or in a block reaching it
+    // along such a chain, every block of which writes no memory. A chain
+    // visits a block once, unless it is a cycle no entry reaches.
+    let reaches = |b: usize, addr: ValueId| {
+        let mut cur = b;
+        for _ in 0..func.blocks.len() {
+            if func.blocks[cur].inst_range.contains(&addr) {
+                return true;
+            }
+            let [q] = preds[cur][..] else {
+                return false;
+            };
+            let pred = &func.blocks[q as usize];
+            if pred.terminator != Terminator::Jmp(cur as BlockId)
+                || !pred
+                    .inst_range
+                    .clone()
+                    .all(|i| quiet(&func.insts[i as usize]))
+            {
+                return false;
+            }
+            cur = q as usize;
+        }
+        false
+    };
+    for (b, block) in func.blocks.iter().enumerate() {
         for l in block.inst_range.clone() {
             let Inst::Load {
                 addr,
@@ -1731,8 +1759,7 @@ fn split_address_phi_loads(func: &mut FunctionSsa) {
             let Some(Inst::Phi { incoming, .. }) = func.insts.get(addr as usize) else {
                 continue;
             };
-            if !integer || !block.inst_range.contains(&addr) || uses.get(addr as usize) != Some(&1)
-            {
+            if !integer || uses.get(addr as usize) != Some(&1) || !reaches(b, addr) {
                 continue;
             }
             let mut reads = Vec::with_capacity(incoming.len());
@@ -1763,34 +1790,58 @@ fn split_address_phi_loads(func: &mut FunctionSsa) {
     if plans.is_empty() {
         return;
     }
+    // An aggregate is read through its address, as its other accesses
+    // are, so the pass splitting aggregates still sees all of them.
+    let aggregate: BTreeSet<i64> = func.multi_cell_slots.iter().map(|&(b, _)| b).collect();
+    let n_old = func.insts.len();
     let mut ins: Vec<Insertion> = Vec::new();
+    // Per read, the insertion holding the value read.
+    let mut values: Vec<usize> = Vec::new();
     for &(l, _, ref reads) in &plans {
         let Inst::Load { disp, kind, .. } = func.insts[l as usize] else {
             unreachable!()
         };
         for &(off, at) in reads {
-            ins.push(Insertion {
-                at,
-                inst: Inst::LoadLocal {
+            let inst = if aggregate.contains(&off) {
+                ins.push(Insertion {
+                    at,
+                    inst: Inst::LocalAddr(off),
+                    is_f32: false,
+                    copy_of: None,
+                });
+                Inst::Load {
+                    addr: (n_old + ins.len() - 1) as ValueId,
+                    disp,
+                    kind,
+                    volatile: false,
+                    align: 0,
+                    pc_rel: false,
+                }
+            } else {
+                Inst::LoadLocal {
                     off,
                     disp,
                     kind,
                     volatile: false,
-                },
+                }
+            };
+            values.push(ins.len());
+            ins.push(Insertion {
+                at,
+                inst,
                 is_f32: false,
                 copy_of: None,
             });
         }
     }
-    let pos = super::tape::sort(&mut ins, &func.blocks, func.insts.len());
+    let pos = super::tape::sort(&mut ins, &func.blocks, n_old);
     let rewrite = super::tape::insert(func, &ins);
-    let mut k = 0;
+    let mut values = values.into_iter().map(|j| rewrite.ids[pos[j]]);
     for (l, phi, reads) in plans {
         let (l, phi) = (rewrite.remap[l as usize], rewrite.remap[phi as usize]);
         if let Inst::Phi { incoming, kind } = &mut func.insts[phi as usize] {
             for (inc, _) in incoming.iter_mut().zip(&reads) {
-                inc.1 = rewrite.ids[pos[k]];
-                k += 1;
+                inc.1 = values.next().expect("one value per read");
             }
             *kind = LoadKind::I64;
         }

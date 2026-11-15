@@ -61,17 +61,9 @@ Disassembly of section .text:
                	retq
 
 <check_one>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x10(%rbp), %rax
-               	movl	$0x0, (%rax)
                	movw	$0xa, <rip> # <addr>
-               	leaq	<rip>, %rcx # <addr>
-               	movq	%rcx, -0x8(%rbp)
-               	movl	(%rax), %eax
-               	movl	%eax, <rip> # <addr>
-               	leave
+               	movl	$0x0, <rip> # <addr>
+               	xorl	%eax, %eax
                	retq
 
 <check_three>:

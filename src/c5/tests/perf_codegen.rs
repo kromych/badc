@@ -8902,3 +8902,19 @@ unsigned long pick(void *p, int c) { Ref r = c ? borrow(p) : steal(p); return r.
     let frame = |i: &X64Insn| matches!(i.mem_base(), Some(4 | 5)) && !i.reg_form();
     assert!(!insns.iter().any(frame), "{insns:x?}");
 }
+
+/// An inlined function's two `return` statements each hand back the
+/// address of their own object; the caller's copy reads it a jump past the
+/// merge, which takes each object's value, so neither stays in the frame.
+#[test]
+fn x64_an_inlined_struct_return_reads_its_object_without_the_frame() {
+    const SRC: &str = "typedef struct { unsigned long bits; } Ref;\n\
+static inline Ref take(unsigned long *p) {\n\
+  if (*p & 1) { Ref r = { (unsigned long)p | 1 }; return r; }\n\
+  ++*p; Ref r = { (unsigned long)p }; return r; }\n\
+unsigned long pair(unsigned long *p, unsigned long *q) {\n\
+  Ref a = take(p); Ref b = take(q); return a.bits ^ b.bits; }\n";
+    let insns = x64(SRC, "pair");
+    let frame = |i: &X64Insn| matches!(i.mem_base(), Some(4 | 5)) && !i.reg_form();
+    assert!(!insns.iter().any(frame), "{insns:x?}");
+}

@@ -122,7 +122,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=1
     terminator Return(v59)   (exit_acc=v59)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=check_one
-fn ent_pc=2 n_params=1 variadic=false locals=2
+fn ent_pc=2 n_params=1 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -131,40 +131,43 @@ fn ent_pc=2 n_params=1 variadic=false locals=2
     v3   ImmData(20)                                      -> x0
     v4   Imm(0)                                           -> x0
     v5   Extend { value=v1, kind=I32 }                    -> x0
-    v6   LocalAddr(-2)                                    -> x0
-    v7   Mzero { dst=v6, size=4, align=8 }                -> -
-    v8   ImmData(16)                                      -> x1
-    v9   Imm(10)                                          -> x1
-    v10  Store { addr=v8, disp=0, value=v9, kind=I16 pc_rel } -> -
-    v11  ImmData(16)                                      -> x1
-    v12  Imm(10)                                          -> x1
-    v13  Imm(0)                                           -> x1
-    terminator Jmp(b1)   (exit_acc=v13)
+    v6   Imm(0)                                           -> x0
+    v7   Imm(0)                                           -> x0
+    v8   Imm(0)                                           -> x0
+    v9   ImmData(16)                                      -> x0
+    v10  Imm(10)                                          -> x0
+    v11  Store { addr=v9, disp=0, value=v10, kind=I16 pc_rel } -> -
+    v12  ImmData(16)                                      -> x0
+    v13  Imm(10)                                          -> x0
+    v14  Imm(0)                                           -> x0
+    terminator Jmp(b1)   (exit_acc=v14)
   block 1  start_pc=0
-    v16  ImmData(18)                                      -> x1
-    v17  StoreLocal { off=-1, value=v16, kind=I64 }       -> -
-    v18  LocalAddr(-1)                                    -> x1
-    v19  Imm(0)                                           -> x1
-    v20  Imm(1)                                           -> x1
-    v21  BinopI { op=ne, lhs=v1, rhs_imm=0 }              -> x1
-    v22  Imm(0)                                           -> x1
-    v23  LocalAddr(-2)                                    -> x1
-    v24  LifetimeEnd(-1)                                  -> -
-    terminator Jmp(b2)   (exit_acc=v6)
+    v19  ImmData(18)                                      -> x0
+    v20  Imm(0)                                           -> x0
+    v21  LocalAddr(-1)                                    -> x0
+    v22  Imm(0)                                           -> x0
+    v23  Imm(1)                                           -> x0
+    v24  BinopI { op=ne, lhs=v1, rhs_imm=0 }              -> x0
+    v25  Imm(0)                                           -> x0
+    v26  Imm(0)                                           -> x0
+    v27  LifetimeEnd(-1)                                  -> -
+    v28  Imm(0)                                           -> x0
+    v29  Imm(0)                                           -> x0
+    terminator Jmp(b2)   (exit_acc=v26)
   block 2  start_pc=0
-    v25  Phi { incoming=[b1:v6], kind=I64 }               -> x0
-    v26  Imm(0)                                           -> x1
-    v27  Load { addr=v25, disp=0, kind=U32 }              -> x0
-    v28  Imm(0)                                           -> x1
-    v29  LifetimeEnd(-2)                                  -> -
-    v30  Imm(0)                                           -> x1
-    v31  BinopI { op=and, lhs=v27, rhs_imm=4294967295 }   -> x1
-    v32  Store { addr=v3, disp=0, value=v27, kind=I32 pc_rel } -> -
-    v33  LifetimeEnd(0)                                   -> -
-    v34  ImmData(20)                                      -> x1
-    v35  Extend { value=v27, kind=I32 }                   -> x0
-    v36  Extend { value=v35, kind=I32 }                   -> x1
-    terminator Return(v35)   (exit_acc=v35)
+    v30  Phi { incoming=[b1:v7], kind=I64 }               -> -
+    v31  Imm(0)                                           -> x0
+    v32  Copy { value=v30, fp=false }                     -> x0
+    v33  Imm(0)                                           -> x0
+    v34  LifetimeEnd(0)                                   -> -
+    v35  Imm(0)                                           -> x0
+    v36  Imm(0)                                           -> x0
+    v37  Store { addr=v3, disp=0, value=v36, kind=I32 pc_rel } -> -
+    v38  LifetimeEnd(0)                                   -> -
+    v39  ImmData(20)                                      -> x0
+    v40  Imm(0)                                           -> x0
+    v41  Imm(0)                                           -> x1
+    terminator Return(v40)   (exit_acc=v40)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=check_three
 fn ent_pc=3 n_params=1 variadic=false locals=4

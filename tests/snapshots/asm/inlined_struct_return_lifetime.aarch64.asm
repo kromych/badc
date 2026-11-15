@@ -69,22 +69,12 @@ Disassembly of section .text:
                	ret
 
 <check_one>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
+               	adrp	x0, <page>
                	adrp	x1, <page>
-               	sub	x0, x29, #0x10
-               	str	wzr, [x0]
-               	adrp	x2, <page>
-               	mov	x3, #0xa                // =10
-               	strh	w3, [x2, #0x20]
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	stur	x2, [x29, #-0x8]
-               	ldr	w0, [x0]
-               	str	w0, [x1, #0x24]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	mov	x2, #0xa                // =10
+               	strh	w2, [x1, #0x20]
+               	str	wzr, [x0, #0x24]
+               	mov	x0, #0x0                // =0
                	ret
 
 <check_three>:

@@ -152,21 +152,16 @@ Disassembly of section .text:
                	cmpq	%r11, %rax
                	jne	<addr>
                	movq	$0x0, -0x8(%rbp)
-               	movabsq	$0xf0000000f, %rcx      # imm = 0xF0000000F
-               	movq	%rcx, -0x8(%rbp)
+               	movabsq	$0xf0000000f, %rax      # imm = 0xF0000000F
+               	movq	%rax, -0x8(%rbp)
                	movsd	-0x8(%rbp), %xmm0
-               	vmovq	%xmm0, %rcx
+               	vmovq	%xmm0, %rax
                	movabsq	$0xf0000000f, %r11      # imm = 0xF0000000F
-               	cmpq	%r11, %rcx
+               	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0xe, %eax
                	leave
                	retq
-               	movabsq	$-0x8000000000000000, %rcx # imm = 0x8000000000000000
-               	movq	%rcx, -0x8(%rbp)
-               	movq	$0x0, -0x8(%rbp)
-               	movabsq	$0xfffffffffffffff, %rax # imm = 0xFFFFFFFFFFFFFFF
-               	movq	%rax, -0x8(%rbp)
                	movsd	<rip>, %xmm0
                	movsd	<rip>, %xmm2
                	vpcmpeqw	%xmm2, %xmm0, %xmm0

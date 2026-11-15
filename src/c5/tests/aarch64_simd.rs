@@ -2267,3 +2267,69 @@ fn an_sve_pcs_leaf_saves_the_predicate_stages_its_sites_write() {
     let govern = stored("govern");
     assert_eq!(govern & 0xC080, 0x4080, "{govern:016b}");
 }
+
+/// An overloaded intrinsic of `<arm_sve.h>` passes `void` for its type and
+/// takes its row from its first SVE operand after the governing one, so no
+/// macro names an operand twice and a chain of nested intrinsics expands to
+/// text in proportion to its depth, not doubling with each level. A
+/// scalar before that operand, as in svcmplt's `_n` form, becomes a vector
+/// of its type; a `void`-typed call with no SVE operand is diagnosed.
+#[test]
+fn an_overloaded_sve_intrinsic_names_each_operand_once() {
+    const HDR: &str = include_str!("../../../libc/compiler/include/arm_sve.h");
+    let ident = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    for def in HDR.lines().filter_map(|l| l.strip_prefix("#define ")) {
+        let head_end = def.find(|c: char| !ident(c)).unwrap_or(def.len());
+        let Some(rest) = def[head_end..].strip_prefix('(') else {
+            continue;
+        };
+        let (params, body) = rest.split_once(')').expect("parameter list");
+        for p in params.split(',').map(str::trim).filter(|p| !p.is_empty()) {
+            let n = body.split(|c: char| !ident(c)).filter(|w| *w == p).count();
+            assert!(n <= 1, "{def}: `{p}` appears {n} times");
+        }
+    }
+    let chain = (0..64).fold(String::from("a"), |s, _| {
+        alloc::format!("svadd_x(pg, {s}, a)")
+    });
+    let src = alloc::format!(
+        "#include <arm_sve.h>\n\
+         int main(void) {{\n\
+           int32_t x[64], y[64];\n\
+           for (int i = 0; i < 64; i++) x[i] = i - 7;\n\
+           svbool_t pg = svptrue_b32();\n\
+           svint32_t a = svld1(pg, x), s = {chain};\n\
+           svbool_t in = svand_z(pg, svcmplt(pg, a, 3), svcmpgt(pg, a, -2));\n\
+           svst1(pg, y, svsel(in, s, a));\n\
+           for (int i = 0; i < (int)svcntw(); i++)\n\
+             if (y[i] != (x[i] < 3 && x[i] > -2 ? 65 * x[i] : x[i])) return 100 + i;\n\
+           return (int)svaddv(pg, svdup_n_s32(1));\n\
+         }}\n"
+    );
+    for optimize in [false, true] {
+        let options = crate::CompileOptions::default().with_optimize(optimize);
+        let program =
+            crate::Compiler::with_options(src.clone(), crate::Target::LinuxAarch64, options)
+                .compile()
+                .expect("compiles");
+        for bits in [128, 512] {
+            let vm = super::Vm::new(program.clone()).with_sve_vector_bits(bits);
+            assert_eq!(vm.run().expect("runs"), bits as i64 / 32, "{bits} bits");
+        }
+    }
+    let err = crate::Compiler::with_target(
+        String::from(
+            "#include <arm_sve.h>\n\
+             int f(void) { return (int)__builtin_sve_add_x(void, svptrue_b8(), 1, 2); }\n",
+        ),
+        crate::Target::LinuxAarch64,
+    )
+    .compile()
+    .err()
+    .map(|e| e.to_string())
+    .unwrap_or_default();
+    assert!(
+        err.contains("takes an SVE vector or predicate operand"),
+        "{err}"
+    );
+}

@@ -504,9 +504,11 @@ impl Compiler {
     /// family's first operand is the SVE type that selects its row and
     /// types its result, `svbool_t` its row over predicates; a load's may
     /// be `void`, its pointer's element type then selecting the vector
-    /// type. A scalar where a vector operand stands is that vector with the
-    /// scalar in every lane, and a pattern operand an integer constant
-    /// expression.
+    /// type, and another's `void`, the type of its first SVE operand after
+    /// the governing one then selecting it, as an overloaded intrinsic's
+    /// operands do. A scalar where a vector operand stands is that vector
+    /// with the scalar in every lane, and a pattern operand an integer
+    /// constant expression.
     fn parse_sve_builtin(
         &mut self,
         mut first: u32,
@@ -523,6 +525,7 @@ impl Compiler {
             SveShape::PTrue | SveShape::Count | SveShape::While { .. } | SveShape::Test(_)
         );
         let mut vty: Option<i64> = None;
+        let mut deferred = false;
         if typed {
             if !self.lex_is_type_start() {
                 return Err(self.compile_err(
@@ -539,13 +542,15 @@ impl Compiler {
                     shape = f.shape;
                 }
                 (first, vty) = (op, Some(t));
+            } else if is_void_ty(t) {
+                deferred = shape != SveShape::Load;
             } else if shape.on_predicates() {
                 let t = super::types::format_type(t, &self.structs);
                 return Err(self.compile_err(
                     Code::INVALID_ARGUMENTS,
                     format!("`{name}` has no form over `{t}`"),
                 ));
-            } else if !(shape == SveShape::Load && is_void_ty(t)) {
+            } else {
                 if !matches!(self.sve_type_of(t), Some(SveType::Vector { .. })) {
                     return Err(self.compile_err(
                         Code::INVALID_ARGUMENTS,
@@ -557,6 +562,8 @@ impl Compiler {
             self.consume(b',', "`,` expected after the type")?;
         }
         let mut args = Vec::new();
+        // The operands of a deferred type, by index, with their types.
+        let mut pending: Vec<(usize, i64)> = Vec::new();
         let mut imm = None;
         let mut while_kind = (true, 32);
         // A pattern operand rides the row as its immediate.
@@ -570,6 +577,14 @@ impl Compiler {
             }
             let what = format!("operand {} of `{name}`", i + 1);
             let governing = shape.governed() && i == 0;
+            if deferred && !governing {
+                self.expr_or_void(Token::Assign as i64)?;
+                let id = (self.ast_acc)
+                    .ok_or_else(|| self.compile_err(Code::SYNTAX, "expression expected"))?;
+                args.push(id);
+                pending.push((i, self.ty));
+                continue;
+            }
             let id = match shape {
                 _ if governing || shape.on_predicates() => self.parse_sve_operand(pred, &what)?,
                 SveShape::Select => {
@@ -578,29 +593,9 @@ impl Compiler {
                 }
                 SveShape::Load | SveShape::Store if i == 1 => {
                     self.expr(Token::Assign as i64)?;
-                    let elem = self.sve_pointer_element(name)?;
-                    let t = match vty {
-                        Some(t) => t,
-                        None => self.sve_type_tag(SveType::Vector {
-                            size: elem.0,
-                            kind: elem.1,
-                        }),
-                    };
-                    if self.sve_type_of(t)
-                        != Some(SveType::Vector {
-                            size: elem.0,
-                            kind: elem.1,
-                        })
-                        && self.sve_lane(t).map(|l| l.0) != Some(elem.0)
-                    {
-                        return Err(self.compile_err(
-                            Code::INCOMPATIBLE_TYPES,
-                            format!("{what} points to elements of another width"),
-                        ));
-                    }
+                    let (t, id) = self.sve_pointer_arg(vty, name, &what)?;
                     vty = Some(t);
-                    self.ast_acc
-                        .ok_or_else(|| self.compile_err(Code::SYNTAX, "expression expected"))?
+                    id
                 }
                 SveShape::While { .. } => {
                     self.expr(Token::Assign as i64)?;
@@ -655,6 +650,42 @@ impl Compiler {
             args.push(id);
         }
         self.consume(b')', "`)` expected after the operands")?;
+        if deferred {
+            let t = pending
+                .iter()
+                .map(|p| p.1)
+                .find(|&t| self.sve_type_of(t).is_some());
+            let Some(t) = t else {
+                return Err(self.compile_err(
+                    Code::INVALID_ARGUMENTS,
+                    format!("`{name}` takes an SVE vector or predicate operand"),
+                ));
+            };
+            if self.sve_type_of(t) == Some(SveType::Predicate) {
+                let rows = simd::select_sve(name, 1, SveElem::Signed, SveShape::on_predicates);
+                let Some(op) = rows.filter(|&op| simd::get(op).form.arity() == args.len()) else {
+                    return Err(self.compile_err(
+                        Code::INVALID_ARGUMENTS,
+                        format!("`{name}` has no form over `svbool_t`"),
+                    ));
+                };
+                if let Form::Sve(f) = simd::get(op).form {
+                    shape = f.shape;
+                }
+                first = op;
+            }
+            vty = Some(t);
+            for (i, ty) in pending {
+                let what = format!("operand {} of `{name}`", i + 1);
+                (self.ast_acc, self.ty) = (Some(args[i]), ty);
+                args[i] = match shape {
+                    _ if shape.on_predicates() => self.check_sve_operand(pred, &what)?,
+                    SveShape::Select => self.check_sve_operand(t, &what)?,
+                    SveShape::Store if i == 1 => self.sve_pointer_arg(Some(t), name, &what)?.1,
+                    _ => self.sve_vector_arg(t, &what)?,
+                };
+            }
+        }
         let row = match (shape, vty.and_then(|t| self.sve_lane(t))) {
             (SveShape::While { .. }, _) => {
                 let lane = simd::get(first).int_width;
@@ -704,6 +735,29 @@ impl Compiler {
         self.ty = ty;
         self.ast_acc = Some(id);
         Ok(())
+    }
+
+    /// The pointer operand of a load or store just parsed, and the vector
+    /// type `vty` it accesses, or its elements' when `None`.
+    fn sve_pointer_arg(
+        &mut self,
+        vty: Option<i64>,
+        name: &str,
+        what: &str,
+    ) -> Result<(i64, super::super::ast::ExprId), C5Error> {
+        use super::SveType;
+        let (size, kind) = self.sve_pointer_element(name)?;
+        let elems = SveType::Vector { size, kind };
+        let t = vty.unwrap_or_else(|| self.sve_type_tag(elems));
+        if self.sve_type_of(t) != Some(elems) && self.sve_lane(t).map(|l| l.0) != Some(size) {
+            return Err(self.compile_err(
+                Code::INCOMPATIBLE_TYPES,
+                format!("{what} points to elements of another width"),
+            ));
+        }
+        let id =
+            (self.ast_acc).ok_or_else(|| self.compile_err(Code::SYNTAX, "expression expected"))?;
+        Ok((t, id))
     }
 
     /// The lane size (log2) and element kind of SVE vector type `t`.

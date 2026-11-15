@@ -2,9 +2,11 @@
  * vector and predicate types over the builtin type names, and the
  * intrinsics as calls of the compiler's rows (`__builtin_sve_<op>`), whose
  * first operand, where the row family has one, is the SVE type that
- * selects the row. The overloaded forms take that type from an operand;
- * a scalar where a vector operand stands is that vector with the scalar in
- * every lane, which serves the `_n` forms. svcmplt and svcmple are svcmpgt
+ * selects the row. The overloaded forms pass `void`, the builtin then
+ * taking the type of its first SVE operand after the governing one, so
+ * each macro names an operand once; a scalar where a vector operand stands
+ * is that vector with the scalar in every lane, which serves the `_n`
+ * forms. svcmplt and svcmple are svcmpgt
  * and svcmpge with the operands swapped. A family's svbool_t form, such as
  * svand_b_z, takes svbool_t as its type.
  *
@@ -122,7 +124,7 @@ enum svpattern {
 #define svld1_f64(pg, base) __builtin_sve_ld1(svfloat64_t, pg, base)
 #define svst1_f64(pg, base, data) __builtin_sve_st1(svfloat64_t, pg, base, data)
 #define svld1(pg, base) __builtin_sve_ld1(void, pg, base)
-#define svst1(pg, base, data) __builtin_sve_st1(__typeof__(data), pg, base, data)
+#define svst1(pg, base, data) __builtin_sve_st1(void, pg, base, data)
 
 #define svadd_s8_m(pg, op1, op2) __builtin_sve_add_m(svint8_t, pg, op1, op2)
 #define svadd_n_s8_m(pg, op1, op2) __builtin_sve_add_m(svint8_t, pg, op1, (int8_t)(op2))
@@ -144,7 +146,7 @@ enum svpattern {
 #define svadd_n_f32_m(pg, op1, op2) __builtin_sve_add_m(svfloat32_t, pg, op1, (float32_t)(op2))
 #define svadd_f64_m(pg, op1, op2) __builtin_sve_add_m(svfloat64_t, pg, op1, op2)
 #define svadd_n_f64_m(pg, op1, op2) __builtin_sve_add_m(svfloat64_t, pg, op1, (float64_t)(op2))
-#define svadd_m(pg, op1, op2) __builtin_sve_add_m(__typeof__(op1), pg, op1, op2)
+#define svadd_m(pg, op1, op2) __builtin_sve_add_m(void, pg, op1, op2)
 #define svadd_s8_z(pg, op1, op2) __builtin_sve_add_z(svint8_t, pg, op1, op2)
 #define svadd_n_s8_z(pg, op1, op2) __builtin_sve_add_z(svint8_t, pg, op1, (int8_t)(op2))
 #define svadd_s16_z(pg, op1, op2) __builtin_sve_add_z(svint16_t, pg, op1, op2)
@@ -165,7 +167,7 @@ enum svpattern {
 #define svadd_n_f32_z(pg, op1, op2) __builtin_sve_add_z(svfloat32_t, pg, op1, (float32_t)(op2))
 #define svadd_f64_z(pg, op1, op2) __builtin_sve_add_z(svfloat64_t, pg, op1, op2)
 #define svadd_n_f64_z(pg, op1, op2) __builtin_sve_add_z(svfloat64_t, pg, op1, (float64_t)(op2))
-#define svadd_z(pg, op1, op2) __builtin_sve_add_z(__typeof__(op1), pg, op1, op2)
+#define svadd_z(pg, op1, op2) __builtin_sve_add_z(void, pg, op1, op2)
 #define svadd_s8_x(pg, op1, op2) __builtin_sve_add_x(svint8_t, pg, op1, op2)
 #define svadd_n_s8_x(pg, op1, op2) __builtin_sve_add_x(svint8_t, pg, op1, (int8_t)(op2))
 #define svadd_s16_x(pg, op1, op2) __builtin_sve_add_x(svint16_t, pg, op1, op2)
@@ -186,7 +188,7 @@ enum svpattern {
 #define svadd_n_f32_x(pg, op1, op2) __builtin_sve_add_x(svfloat32_t, pg, op1, (float32_t)(op2))
 #define svadd_f64_x(pg, op1, op2) __builtin_sve_add_x(svfloat64_t, pg, op1, op2)
 #define svadd_n_f64_x(pg, op1, op2) __builtin_sve_add_x(svfloat64_t, pg, op1, (float64_t)(op2))
-#define svadd_x(pg, op1, op2) __builtin_sve_add_x(__typeof__(op1), pg, op1, op2)
+#define svadd_x(pg, op1, op2) __builtin_sve_add_x(void, pg, op1, op2)
 
 #define svsub_s8_m(pg, op1, op2) __builtin_sve_sub_m(svint8_t, pg, op1, op2)
 #define svsub_n_s8_m(pg, op1, op2) __builtin_sve_sub_m(svint8_t, pg, op1, (int8_t)(op2))
@@ -208,7 +210,7 @@ enum svpattern {
 #define svsub_n_f32_m(pg, op1, op2) __builtin_sve_sub_m(svfloat32_t, pg, op1, (float32_t)(op2))
 #define svsub_f64_m(pg, op1, op2) __builtin_sve_sub_m(svfloat64_t, pg, op1, op2)
 #define svsub_n_f64_m(pg, op1, op2) __builtin_sve_sub_m(svfloat64_t, pg, op1, (float64_t)(op2))
-#define svsub_m(pg, op1, op2) __builtin_sve_sub_m(__typeof__(op1), pg, op1, op2)
+#define svsub_m(pg, op1, op2) __builtin_sve_sub_m(void, pg, op1, op2)
 #define svsub_s8_z(pg, op1, op2) __builtin_sve_sub_z(svint8_t, pg, op1, op2)
 #define svsub_n_s8_z(pg, op1, op2) __builtin_sve_sub_z(svint8_t, pg, op1, (int8_t)(op2))
 #define svsub_s16_z(pg, op1, op2) __builtin_sve_sub_z(svint16_t, pg, op1, op2)
@@ -229,7 +231,7 @@ enum svpattern {
 #define svsub_n_f32_z(pg, op1, op2) __builtin_sve_sub_z(svfloat32_t, pg, op1, (float32_t)(op2))
 #define svsub_f64_z(pg, op1, op2) __builtin_sve_sub_z(svfloat64_t, pg, op1, op2)
 #define svsub_n_f64_z(pg, op1, op2) __builtin_sve_sub_z(svfloat64_t, pg, op1, (float64_t)(op2))
-#define svsub_z(pg, op1, op2) __builtin_sve_sub_z(__typeof__(op1), pg, op1, op2)
+#define svsub_z(pg, op1, op2) __builtin_sve_sub_z(void, pg, op1, op2)
 #define svsub_s8_x(pg, op1, op2) __builtin_sve_sub_x(svint8_t, pg, op1, op2)
 #define svsub_n_s8_x(pg, op1, op2) __builtin_sve_sub_x(svint8_t, pg, op1, (int8_t)(op2))
 #define svsub_s16_x(pg, op1, op2) __builtin_sve_sub_x(svint16_t, pg, op1, op2)
@@ -250,7 +252,7 @@ enum svpattern {
 #define svsub_n_f32_x(pg, op1, op2) __builtin_sve_sub_x(svfloat32_t, pg, op1, (float32_t)(op2))
 #define svsub_f64_x(pg, op1, op2) __builtin_sve_sub_x(svfloat64_t, pg, op1, op2)
 #define svsub_n_f64_x(pg, op1, op2) __builtin_sve_sub_x(svfloat64_t, pg, op1, (float64_t)(op2))
-#define svsub_x(pg, op1, op2) __builtin_sve_sub_x(__typeof__(op1), pg, op1, op2)
+#define svsub_x(pg, op1, op2) __builtin_sve_sub_x(void, pg, op1, op2)
 
 #define svmul_s8_m(pg, op1, op2) __builtin_sve_mul_m(svint8_t, pg, op1, op2)
 #define svmul_n_s8_m(pg, op1, op2) __builtin_sve_mul_m(svint8_t, pg, op1, (int8_t)(op2))
@@ -272,7 +274,7 @@ enum svpattern {
 #define svmul_n_f32_m(pg, op1, op2) __builtin_sve_mul_m(svfloat32_t, pg, op1, (float32_t)(op2))
 #define svmul_f64_m(pg, op1, op2) __builtin_sve_mul_m(svfloat64_t, pg, op1, op2)
 #define svmul_n_f64_m(pg, op1, op2) __builtin_sve_mul_m(svfloat64_t, pg, op1, (float64_t)(op2))
-#define svmul_m(pg, op1, op2) __builtin_sve_mul_m(__typeof__(op1), pg, op1, op2)
+#define svmul_m(pg, op1, op2) __builtin_sve_mul_m(void, pg, op1, op2)
 #define svmul_s8_z(pg, op1, op2) __builtin_sve_mul_z(svint8_t, pg, op1, op2)
 #define svmul_n_s8_z(pg, op1, op2) __builtin_sve_mul_z(svint8_t, pg, op1, (int8_t)(op2))
 #define svmul_s16_z(pg, op1, op2) __builtin_sve_mul_z(svint16_t, pg, op1, op2)
@@ -293,7 +295,7 @@ enum svpattern {
 #define svmul_n_f32_z(pg, op1, op2) __builtin_sve_mul_z(svfloat32_t, pg, op1, (float32_t)(op2))
 #define svmul_f64_z(pg, op1, op2) __builtin_sve_mul_z(svfloat64_t, pg, op1, op2)
 #define svmul_n_f64_z(pg, op1, op2) __builtin_sve_mul_z(svfloat64_t, pg, op1, (float64_t)(op2))
-#define svmul_z(pg, op1, op2) __builtin_sve_mul_z(__typeof__(op1), pg, op1, op2)
+#define svmul_z(pg, op1, op2) __builtin_sve_mul_z(void, pg, op1, op2)
 #define svmul_s8_x(pg, op1, op2) __builtin_sve_mul_x(svint8_t, pg, op1, op2)
 #define svmul_n_s8_x(pg, op1, op2) __builtin_sve_mul_x(svint8_t, pg, op1, (int8_t)(op2))
 #define svmul_s16_x(pg, op1, op2) __builtin_sve_mul_x(svint16_t, pg, op1, op2)
@@ -314,7 +316,7 @@ enum svpattern {
 #define svmul_n_f32_x(pg, op1, op2) __builtin_sve_mul_x(svfloat32_t, pg, op1, (float32_t)(op2))
 #define svmul_f64_x(pg, op1, op2) __builtin_sve_mul_x(svfloat64_t, pg, op1, op2)
 #define svmul_n_f64_x(pg, op1, op2) __builtin_sve_mul_x(svfloat64_t, pg, op1, (float64_t)(op2))
-#define svmul_x(pg, op1, op2) __builtin_sve_mul_x(__typeof__(op1), pg, op1, op2)
+#define svmul_x(pg, op1, op2) __builtin_sve_mul_x(void, pg, op1, op2)
 
 #define svand_s8_m(pg, op1, op2) __builtin_sve_and_m(svint8_t, pg, op1, op2)
 #define svand_n_s8_m(pg, op1, op2) __builtin_sve_and_m(svint8_t, pg, op1, (int8_t)(op2))
@@ -332,7 +334,7 @@ enum svpattern {
 #define svand_n_u32_m(pg, op1, op2) __builtin_sve_and_m(svuint32_t, pg, op1, (uint32_t)(op2))
 #define svand_u64_m(pg, op1, op2) __builtin_sve_and_m(svuint64_t, pg, op1, op2)
 #define svand_n_u64_m(pg, op1, op2) __builtin_sve_and_m(svuint64_t, pg, op1, (uint64_t)(op2))
-#define svand_m(pg, op1, op2) __builtin_sve_and_m(__typeof__(op1), pg, op1, op2)
+#define svand_m(pg, op1, op2) __builtin_sve_and_m(void, pg, op1, op2)
 #define svand_s8_z(pg, op1, op2) __builtin_sve_and_z(svint8_t, pg, op1, op2)
 #define svand_n_s8_z(pg, op1, op2) __builtin_sve_and_z(svint8_t, pg, op1, (int8_t)(op2))
 #define svand_s16_z(pg, op1, op2) __builtin_sve_and_z(svint16_t, pg, op1, op2)
@@ -350,7 +352,7 @@ enum svpattern {
 #define svand_u64_z(pg, op1, op2) __builtin_sve_and_z(svuint64_t, pg, op1, op2)
 #define svand_n_u64_z(pg, op1, op2) __builtin_sve_and_z(svuint64_t, pg, op1, (uint64_t)(op2))
 #define svand_b_z(pg, op1, op2) __builtin_sve_and_z(svbool_t, pg, op1, op2)
-#define svand_z(pg, op1, op2) __builtin_sve_and_z(__typeof__(op1), pg, op1, op2)
+#define svand_z(pg, op1, op2) __builtin_sve_and_z(void, pg, op1, op2)
 #define svand_s8_x(pg, op1, op2) __builtin_sve_and_x(svint8_t, pg, op1, op2)
 #define svand_n_s8_x(pg, op1, op2) __builtin_sve_and_x(svint8_t, pg, op1, (int8_t)(op2))
 #define svand_s16_x(pg, op1, op2) __builtin_sve_and_x(svint16_t, pg, op1, op2)
@@ -367,7 +369,7 @@ enum svpattern {
 #define svand_n_u32_x(pg, op1, op2) __builtin_sve_and_x(svuint32_t, pg, op1, (uint32_t)(op2))
 #define svand_u64_x(pg, op1, op2) __builtin_sve_and_x(svuint64_t, pg, op1, op2)
 #define svand_n_u64_x(pg, op1, op2) __builtin_sve_and_x(svuint64_t, pg, op1, (uint64_t)(op2))
-#define svand_x(pg, op1, op2) __builtin_sve_and_x(__typeof__(op1), pg, op1, op2)
+#define svand_x(pg, op1, op2) __builtin_sve_and_x(void, pg, op1, op2)
 
 #define svorr_s8_m(pg, op1, op2) __builtin_sve_orr_m(svint8_t, pg, op1, op2)
 #define svorr_n_s8_m(pg, op1, op2) __builtin_sve_orr_m(svint8_t, pg, op1, (int8_t)(op2))
@@ -385,7 +387,7 @@ enum svpattern {
 #define svorr_n_u32_m(pg, op1, op2) __builtin_sve_orr_m(svuint32_t, pg, op1, (uint32_t)(op2))
 #define svorr_u64_m(pg, op1, op2) __builtin_sve_orr_m(svuint64_t, pg, op1, op2)
 #define svorr_n_u64_m(pg, op1, op2) __builtin_sve_orr_m(svuint64_t, pg, op1, (uint64_t)(op2))
-#define svorr_m(pg, op1, op2) __builtin_sve_orr_m(__typeof__(op1), pg, op1, op2)
+#define svorr_m(pg, op1, op2) __builtin_sve_orr_m(void, pg, op1, op2)
 #define svorr_s8_z(pg, op1, op2) __builtin_sve_orr_z(svint8_t, pg, op1, op2)
 #define svorr_n_s8_z(pg, op1, op2) __builtin_sve_orr_z(svint8_t, pg, op1, (int8_t)(op2))
 #define svorr_s16_z(pg, op1, op2) __builtin_sve_orr_z(svint16_t, pg, op1, op2)
@@ -403,7 +405,7 @@ enum svpattern {
 #define svorr_u64_z(pg, op1, op2) __builtin_sve_orr_z(svuint64_t, pg, op1, op2)
 #define svorr_n_u64_z(pg, op1, op2) __builtin_sve_orr_z(svuint64_t, pg, op1, (uint64_t)(op2))
 #define svorr_b_z(pg, op1, op2) __builtin_sve_orr_z(svbool_t, pg, op1, op2)
-#define svorr_z(pg, op1, op2) __builtin_sve_orr_z(__typeof__(op1), pg, op1, op2)
+#define svorr_z(pg, op1, op2) __builtin_sve_orr_z(void, pg, op1, op2)
 #define svorr_s8_x(pg, op1, op2) __builtin_sve_orr_x(svint8_t, pg, op1, op2)
 #define svorr_n_s8_x(pg, op1, op2) __builtin_sve_orr_x(svint8_t, pg, op1, (int8_t)(op2))
 #define svorr_s16_x(pg, op1, op2) __builtin_sve_orr_x(svint16_t, pg, op1, op2)
@@ -420,7 +422,7 @@ enum svpattern {
 #define svorr_n_u32_x(pg, op1, op2) __builtin_sve_orr_x(svuint32_t, pg, op1, (uint32_t)(op2))
 #define svorr_u64_x(pg, op1, op2) __builtin_sve_orr_x(svuint64_t, pg, op1, op2)
 #define svorr_n_u64_x(pg, op1, op2) __builtin_sve_orr_x(svuint64_t, pg, op1, (uint64_t)(op2))
-#define svorr_x(pg, op1, op2) __builtin_sve_orr_x(__typeof__(op1), pg, op1, op2)
+#define svorr_x(pg, op1, op2) __builtin_sve_orr_x(void, pg, op1, op2)
 
 #define sveor_s8_m(pg, op1, op2) __builtin_sve_eor_m(svint8_t, pg, op1, op2)
 #define sveor_n_s8_m(pg, op1, op2) __builtin_sve_eor_m(svint8_t, pg, op1, (int8_t)(op2))
@@ -438,7 +440,7 @@ enum svpattern {
 #define sveor_n_u32_m(pg, op1, op2) __builtin_sve_eor_m(svuint32_t, pg, op1, (uint32_t)(op2))
 #define sveor_u64_m(pg, op1, op2) __builtin_sve_eor_m(svuint64_t, pg, op1, op2)
 #define sveor_n_u64_m(pg, op1, op2) __builtin_sve_eor_m(svuint64_t, pg, op1, (uint64_t)(op2))
-#define sveor_m(pg, op1, op2) __builtin_sve_eor_m(__typeof__(op1), pg, op1, op2)
+#define sveor_m(pg, op1, op2) __builtin_sve_eor_m(void, pg, op1, op2)
 #define sveor_s8_z(pg, op1, op2) __builtin_sve_eor_z(svint8_t, pg, op1, op2)
 #define sveor_n_s8_z(pg, op1, op2) __builtin_sve_eor_z(svint8_t, pg, op1, (int8_t)(op2))
 #define sveor_s16_z(pg, op1, op2) __builtin_sve_eor_z(svint16_t, pg, op1, op2)
@@ -456,7 +458,7 @@ enum svpattern {
 #define sveor_u64_z(pg, op1, op2) __builtin_sve_eor_z(svuint64_t, pg, op1, op2)
 #define sveor_n_u64_z(pg, op1, op2) __builtin_sve_eor_z(svuint64_t, pg, op1, (uint64_t)(op2))
 #define sveor_b_z(pg, op1, op2) __builtin_sve_eor_z(svbool_t, pg, op1, op2)
-#define sveor_z(pg, op1, op2) __builtin_sve_eor_z(__typeof__(op1), pg, op1, op2)
+#define sveor_z(pg, op1, op2) __builtin_sve_eor_z(void, pg, op1, op2)
 #define sveor_s8_x(pg, op1, op2) __builtin_sve_eor_x(svint8_t, pg, op1, op2)
 #define sveor_n_s8_x(pg, op1, op2) __builtin_sve_eor_x(svint8_t, pg, op1, (int8_t)(op2))
 #define sveor_s16_x(pg, op1, op2) __builtin_sve_eor_x(svint16_t, pg, op1, op2)
@@ -473,18 +475,18 @@ enum svpattern {
 #define sveor_n_u32_x(pg, op1, op2) __builtin_sve_eor_x(svuint32_t, pg, op1, (uint32_t)(op2))
 #define sveor_u64_x(pg, op1, op2) __builtin_sve_eor_x(svuint64_t, pg, op1, op2)
 #define sveor_n_u64_x(pg, op1, op2) __builtin_sve_eor_x(svuint64_t, pg, op1, (uint64_t)(op2))
-#define sveor_x(pg, op1, op2) __builtin_sve_eor_x(__typeof__(op1), pg, op1, op2)
+#define sveor_x(pg, op1, op2) __builtin_sve_eor_x(void, pg, op1, op2)
 
 #define svbic_b_z(pg, op1, op2) __builtin_sve_bic_z(svbool_t, pg, op1, op2)
-#define svbic_z(pg, op1, op2) __builtin_sve_bic_z(__typeof__(op1), pg, op1, op2)
+#define svbic_z(pg, op1, op2) __builtin_sve_bic_z(void, pg, op1, op2)
 #define svorn_b_z(pg, op1, op2) __builtin_sve_orn_z(svbool_t, pg, op1, op2)
-#define svorn_z(pg, op1, op2) __builtin_sve_orn_z(__typeof__(op1), pg, op1, op2)
+#define svorn_z(pg, op1, op2) __builtin_sve_orn_z(void, pg, op1, op2)
 #define svnand_b_z(pg, op1, op2) __builtin_sve_nand_z(svbool_t, pg, op1, op2)
-#define svnand_z(pg, op1, op2) __builtin_sve_nand_z(__typeof__(op1), pg, op1, op2)
+#define svnand_z(pg, op1, op2) __builtin_sve_nand_z(void, pg, op1, op2)
 #define svnor_b_z(pg, op1, op2) __builtin_sve_nor_z(svbool_t, pg, op1, op2)
-#define svnor_z(pg, op1, op2) __builtin_sve_nor_z(__typeof__(op1), pg, op1, op2)
+#define svnor_z(pg, op1, op2) __builtin_sve_nor_z(void, pg, op1, op2)
 #define svnot_b_z(pg, op) __builtin_sve_not_z(svbool_t, pg, op)
-#define svnot_z(pg, op) __builtin_sve_not_z(__typeof__(op), pg, op)
+#define svnot_z(pg, op) __builtin_sve_not_z(void, pg, op)
 
 #define svsel_s8(pg, op1, op2) __builtin_sve_sel(svint8_t, pg, op1, op2)
 #define svsel_s16(pg, op1, op2) __builtin_sve_sel(svint16_t, pg, op1, op2)
@@ -497,7 +499,7 @@ enum svpattern {
 #define svsel_f32(pg, op1, op2) __builtin_sve_sel(svfloat32_t, pg, op1, op2)
 #define svsel_f64(pg, op1, op2) __builtin_sve_sel(svfloat64_t, pg, op1, op2)
 #define svsel_b(pg, op1, op2) __builtin_sve_sel(svbool_t, pg, op1, op2)
-#define svsel(pg, op1, op2) __builtin_sve_sel(__typeof__(op1), pg, op1, op2)
+#define svsel(pg, op1, op2) __builtin_sve_sel(void, pg, op1, op2)
 
 #define svptest_any(pg, op) __builtin_sve_ptest_any(pg, op)
 #define svptest_first(pg, op) __builtin_sve_ptest_first(pg, op)
@@ -523,7 +525,7 @@ enum svpattern {
 #define svcmpeq_n_f32(pg, op1, op2) __builtin_sve_cmpeq(svfloat32_t, pg, op1, (float32_t)(op2))
 #define svcmpeq_f64(pg, op1, op2) __builtin_sve_cmpeq(svfloat64_t, pg, op1, op2)
 #define svcmpeq_n_f64(pg, op1, op2) __builtin_sve_cmpeq(svfloat64_t, pg, op1, (float64_t)(op2))
-#define svcmpeq(pg, op1, op2) __builtin_sve_cmpeq(__typeof__(op1), pg, op1, op2)
+#define svcmpeq(pg, op1, op2) __builtin_sve_cmpeq(void, pg, op1, op2)
 
 #define svcmpne_s8(pg, op1, op2) __builtin_sve_cmpne(svint8_t, pg, op1, op2)
 #define svcmpne_n_s8(pg, op1, op2) __builtin_sve_cmpne(svint8_t, pg, op1, (int8_t)(op2))
@@ -545,7 +547,7 @@ enum svpattern {
 #define svcmpne_n_f32(pg, op1, op2) __builtin_sve_cmpne(svfloat32_t, pg, op1, (float32_t)(op2))
 #define svcmpne_f64(pg, op1, op2) __builtin_sve_cmpne(svfloat64_t, pg, op1, op2)
 #define svcmpne_n_f64(pg, op1, op2) __builtin_sve_cmpne(svfloat64_t, pg, op1, (float64_t)(op2))
-#define svcmpne(pg, op1, op2) __builtin_sve_cmpne(__typeof__(op1), pg, op1, op2)
+#define svcmpne(pg, op1, op2) __builtin_sve_cmpne(void, pg, op1, op2)
 
 #define svcmpgt_s8(pg, op1, op2) __builtin_sve_cmpgt(svint8_t, pg, op1, op2)
 #define svcmpgt_n_s8(pg, op1, op2) __builtin_sve_cmpgt(svint8_t, pg, op1, (int8_t)(op2))
@@ -567,7 +569,7 @@ enum svpattern {
 #define svcmpgt_n_f32(pg, op1, op2) __builtin_sve_cmpgt(svfloat32_t, pg, op1, (float32_t)(op2))
 #define svcmpgt_f64(pg, op1, op2) __builtin_sve_cmpgt(svfloat64_t, pg, op1, op2)
 #define svcmpgt_n_f64(pg, op1, op2) __builtin_sve_cmpgt(svfloat64_t, pg, op1, (float64_t)(op2))
-#define svcmpgt(pg, op1, op2) __builtin_sve_cmpgt(__typeof__(op1), pg, op1, op2)
+#define svcmpgt(pg, op1, op2) __builtin_sve_cmpgt(void, pg, op1, op2)
 
 #define svcmpge_s8(pg, op1, op2) __builtin_sve_cmpge(svint8_t, pg, op1, op2)
 #define svcmpge_n_s8(pg, op1, op2) __builtin_sve_cmpge(svint8_t, pg, op1, (int8_t)(op2))
@@ -589,7 +591,7 @@ enum svpattern {
 #define svcmpge_n_f32(pg, op1, op2) __builtin_sve_cmpge(svfloat32_t, pg, op1, (float32_t)(op2))
 #define svcmpge_f64(pg, op1, op2) __builtin_sve_cmpge(svfloat64_t, pg, op1, op2)
 #define svcmpge_n_f64(pg, op1, op2) __builtin_sve_cmpge(svfloat64_t, pg, op1, (float64_t)(op2))
-#define svcmpge(pg, op1, op2) __builtin_sve_cmpge(__typeof__(op1), pg, op1, op2)
+#define svcmpge(pg, op1, op2) __builtin_sve_cmpge(void, pg, op1, op2)
 
 #define svcmplt_s8(pg, op1, op2) __builtin_sve_cmpgt(svint8_t, pg, op2, op1)
 #define svcmplt_n_s8(pg, op1, op2) __builtin_sve_cmpgt(svint8_t, pg, (int8_t)(op2), op1)
@@ -611,7 +613,7 @@ enum svpattern {
 #define svcmplt_n_f32(pg, op1, op2) __builtin_sve_cmpgt(svfloat32_t, pg, (float32_t)(op2), op1)
 #define svcmplt_f64(pg, op1, op2) __builtin_sve_cmpgt(svfloat64_t, pg, op2, op1)
 #define svcmplt_n_f64(pg, op1, op2) __builtin_sve_cmpgt(svfloat64_t, pg, (float64_t)(op2), op1)
-#define svcmplt(pg, op1, op2) __builtin_sve_cmpgt(__typeof__(op1), pg, op2, op1)
+#define svcmplt(pg, op1, op2) __builtin_sve_cmpgt(void, pg, op2, op1)
 
 #define svcmple_s8(pg, op1, op2) __builtin_sve_cmpge(svint8_t, pg, op2, op1)
 #define svcmple_n_s8(pg, op1, op2) __builtin_sve_cmpge(svint8_t, pg, (int8_t)(op2), op1)
@@ -633,7 +635,7 @@ enum svpattern {
 #define svcmple_n_f32(pg, op1, op2) __builtin_sve_cmpge(svfloat32_t, pg, (float32_t)(op2), op1)
 #define svcmple_f64(pg, op1, op2) __builtin_sve_cmpge(svfloat64_t, pg, op2, op1)
 #define svcmple_n_f64(pg, op1, op2) __builtin_sve_cmpge(svfloat64_t, pg, (float64_t)(op2), op1)
-#define svcmple(pg, op1, op2) __builtin_sve_cmpge(__typeof__(op1), pg, op2, op1)
+#define svcmple(pg, op1, op2) __builtin_sve_cmpge(void, pg, op2, op1)
 
 #define svaddv_s8(pg, op) __builtin_sve_addv(svint8_t, pg, op)
 #define svaddv_s16(pg, op) __builtin_sve_addv(svint16_t, pg, op)
@@ -645,7 +647,7 @@ enum svpattern {
 #define svaddv_u64(pg, op) __builtin_sve_addv(svuint64_t, pg, op)
 #define svaddv_f32(pg, op) __builtin_sve_addv(svfloat32_t, pg, op)
 #define svaddv_f64(pg, op) __builtin_sve_addv(svfloat64_t, pg, op)
-#define svaddv(pg, op) __builtin_sve_addv(__typeof__(op), pg, op)
+#define svaddv(pg, op) __builtin_sve_addv(void, pg, op)
 
 #define svdup_n_s8(op) __builtin_sve_dup(svint8_t, op)
 #define svdup_s8(op) __builtin_sve_dup(svint8_t, op)

@@ -30,7 +30,7 @@ badc writes Mach-O, ELF, and PE32+ directly:
 
 | system | architectures | images |
 |---|---|---|
-| macOS | ARM64 | executables, dynamic libraries |
+| macOS | ARM64 | executables, dynamic libraries, bundles |
 | Linux | ARM64, x86-64 | executables, shared libraries |
 | Windows | ARM64, x86-64 | console, GUI, NT native and driver images, DLLs |
 

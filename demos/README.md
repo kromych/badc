@@ -322,8 +322,10 @@ raw-byte templates on both). `preempt.c` is a preemptive multitasking kernel: it
 installs its own timer interrupt and context-switches three threads on every
 tick through a `__attribute__((naked))` interrupt service routine, on both
 x86_64 (8259 PIC + 8254 PIT + IDT) and AArch64 (GICv2 + virtual generic timer +
-EL1 vector table). The build is the hard gate; each target also boots where QEMU
-and the firmware are present. See [`kernel/README.md`](./kernel/README.md).
+EL1 vector table). Built with `-DKERNEL_SEH`, `kernel.c` runs a `__try` scope
+whose `__finally` blocks run under the image's own language handler. Every
+image must have an empty import directory. The build is the hard gate; each
+target also boots where QEMU and the firmware are present. See [`kernel/README.md`](./kernel/README.md).
 
 ## nt_hello/
 

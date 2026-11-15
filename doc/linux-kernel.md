@@ -288,10 +288,14 @@ the metadata sections the kernel's asm emits (`__jump_table`,
 Kernel objects also constrain code generation, and the shim forwards the flags
 that express it:
 
-- `-mno-sse` and `-mgeneral-regs-only`: a kernel object must keep off the
+- `-mno-sse`, when it is the last of `-mno-sse`, `-msse`, and `-msse2`, as
+  gcc reads them, and `-mgeneral-regs-only`: a kernel object must keep off the
   FP/SIMD registers, which the kernel runs with trapped and whose callers do
   not maintain the System V `al` convention.
 - `-mstrict-align`, for early-boot units that run with the MMU off.
+- `-fconserve-stack`, under which the inliner refuses a splice that takes the
+  caller's frame past both 100 bytes and 400% growth over its own, gcc's
+  bounds.
 - `-fPIC` / `-fpic` / `-fPIE` / `-fpie`, for the EFI stub and the boot
   decompressor, which reject absolute relocations. Those units take badc's
   position-independent object form. Every other unit keeps the absolute form

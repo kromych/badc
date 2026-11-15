@@ -3,7 +3,9 @@
 Both modes run a program without writing an image, and both exit with the
 program's status. `--jit` compiles for the host in memory and calls `main`.
 `--interp` compiles for the target and runs the SSA IR in badc's interpreter,
-which checks how the program uses pointers.
+which checks how the program uses pointers. Every argument after the input
+goes to the program; `--` ends badc's arguments. `--jit` defines
+`__BADC_JIT__` and `--interp` `__BADC_INTERP__`, both to 1.
 
 ```sh
 $ badc --interp hello.c; echo "status $?"
@@ -18,10 +20,13 @@ ARM64. It runs host code only: `--jit` with another `--target` is an error.
 Library calls go to the host's C library, as from a native image. `-O`
 applies as it does to an image.
 
-The JIT refuses two constructs, each with B4001 `unsupported`:
+The JIT refuses four constructs, each with B4001 `unsupported`:
 
 * an access to a `_Thread_local` object;
-* a structured exception handling region (`__try`) on Windows.
+* a structured exception handling region (`__try`) on Windows;
+* a `wmain`, `WinMain`, or `wWinMain` entry, which takes other arguments than
+  `main`;
+* a TLS callback in a `.CRT$XL*` section.
 
 ## `--interp`
 
@@ -62,7 +67,8 @@ line each: the function, the block, the value number, and the instruction
 The interpreter has its own C library. It provides `malloc`, `calloc`,
 `realloc`, `free`, `memcpy`, `memmove`, `memset`, `memcmp`, `printf`,
 `fprintf`, `fputs`, `puts`, `fputc`, `putc`, `putchar`, `fwrite`, `fflush`,
-`fileno`, `stdin`, `stdout`, `stderr`, `open`, `read`, `write`, `close`,
+`fileno`, `stdin`, `stdout`, `stderr`, `tmpfile`, `open`, `read`, `write`,
+`pread`, `pwrite`, `lseek`, Linux's `copy_file_range`, `close`,
 `getenv`, `setenv`, `_putenv_s`, `exit`, and the `dlopen` family. Calls that
 badc compiles to instructions, such as `sqrt`, `fabs`, `floor`, and `labs`,
 also work.
@@ -135,15 +141,18 @@ Any other library call stops the program when it is reached:
 error: runtime: vm_ssa: library call `remove` is not implemented under --interp
 ```
 
-Among the calls not implemented are `remove`, `rename`, `tmpfile`,
-`mktime`, `localtime`, `strftime`, `setjmp`, `signal`, and
-`pthread_create`.
+Among the calls not implemented are `remove`, `rename`, `mktime`,
+`localtime`, `strftime`, `setjmp`, `signal`, and `pthread_create`.
 
 ### Other limits
 
 * Inline asm runs for x86-64 and AArch64 instructions on general registers.
   Memory operands, `asm goto`, vector registers, condition-flag outputs, and
-  system registers are refused at the `asm` statement.
+  system registers are refused at the `asm` statement, except that the
+  fences, `stmxcsr`, `ldmxcsr`, `fnstcw`, `fldcw`, and `fxsave` run and a
+  cache write-back or prefetch does nothing. A control word that unmasks an
+  exception, sets DAZ or FZ, changes the x87 precision, or rounds apart from
+  the other unit's is refused when it is loaded.
 * A structured exception handling region (`__try`) is refused with B4001
   `unsupported`.
 

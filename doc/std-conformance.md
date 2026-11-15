@@ -84,8 +84,11 @@ An object has the platform's layout and encoding, so a struct, an array, or a
 byte. A load converts the stored value to binary64, and a store converts it
 back exactly. On linux-x64 the conversions are `fld` and `fstp`, which match
 the hardware bit for bit, noncanonical encodings included. linux-aarch64 has
-no quad-precision unit; there the conversions are inline integer sequences
-that match gcc's `__extenddftf2` and `__trunctfdf2` bit for bit.
+no quad-precision unit; there the conversions are integer sequences that
+match gcc's `__extenddftf2` and `__trunctfdf2` bit for bit. A function that
+keeps a frame record calls one copy per direction, placed after its body; a
+frameless leaf, and an access to under-aligned storage, run the sequence in
+place.
 
 Calls follow the platform convention, so the type crosses calls to code built
 by the platform toolchain, `printf("%Lf", x)` and `strtold` included:
@@ -251,7 +254,7 @@ PE targets use MSVC's inline linkage instead ([MSVC](#msvc)).
 badc implements a subset of gcc's options and has no list of options it
 accepts and ignores. Any other option is an error. Options that fail this way
 include `-static`, `-nostdlib`, `-fno-common`, `-fomit-frame-pointer`, `-pipe`,
-and `-march=native`. A build that passes another compiler's full flag set has
+and `-S`. A build that passes another compiler's full flag set has
 to filter it. [Command-line compatibility](#command-line-compatibility) lists
 the options badc accepts with a narrower meaning than gcc's.
 
@@ -328,6 +331,13 @@ vector, and the arguments after it, on the stack, and returns it and the
 integer vectors in `w0`. A struct holding such a vector is passed in
 general-purpose registers under either compiler.
 
+**AAPCS64: an `_Atomic` member of a homogeneous aggregate.** AAPCS64 does not
+say whether an `_Atomic` floating type is a homogeneous aggregate's base type.
+gcc takes `_Atomic` as a qualifier and keeps `struct { _Atomic float a; float
+b; }`, and an `_Atomic` struct of such members, homogeneous, in `s0` and `s1`;
+clang takes no `_Atomic` type as a base and passes them in general-purpose
+registers. badc follows clang on macOS arm64 and gcc on Linux.
+
 ## Command-line compatibility
 
 badc accepts these gcc options with a narrower meaning than gcc's:
@@ -339,6 +349,7 @@ badc accepts these gcc options with a narrower meaning than gcc's:
 | `-gdwarf`, `-gdwarf-<n>`, `-gdwarf32`, `-gdwarf64`, `-gstrict-dwarf`, `-gno-strict-dwarf` | badc writes DWARF version 4 in the 32-bit format. A request for another version from 2 to 5, or for the 64-bit format, is reported as `dwarf-output` (B7011) with what is written instead, and the compile continues. A version outside 2 to 5, a level above 3 or a non-integer version is refused with gcc's message. |
 | `-gsplit-dwarf`, `-gz`, `-gline-tables-only` | Refused. |
 | `-mcpu=<part>[+mod...]`, `-march=<arch>[+mod...]` on AArch64 | Select the extensions whose `__ARM_FEATURE_*` macros are predefined; `-march=` overrides `-mcpu=`'s extensions. They select no scheduling model, and the instructions stay the [baseline](./native-compilation.md#instruction-set-baseline). A modifier enabling an extension whose intrinsics badc lacks is refused. |
+| `-march=<cpu>`, `-m<ext>`, `-mno-<ext>` on x86-64 | Select the extensions whose feature macros (`__AVX2__`, `__AVX512F__`, ...) are predefined, combined as gcc combines them. `-m<ext>` takes the extensions whose intrinsics the headers carry and refuses any other; see [native compilation](./native-compilation.md). |
 | `-Wa,<opt>`, `-Xassembler <opt>` | Checked against the built-in assembler. `-L` and `--keep-locals` keep the local labels in the symbol table, as GNU as does. `--fatal-warnings`, `-mrelax-relocations=`, `--noexecstack`, `--no-warn-rwx-segments` and `-march=` are accepted and change nothing, because the assembler already behaves that way; `-march=` does not reject instructions above a lower ceiling. Any other option is refused as `unsupported assembler option`. |
 
 **Warnings.** `-w`, `-Werror`, `-Wno-error`, `-Werror=<sel>`,
@@ -462,9 +473,9 @@ interfaces, `<dlfcn.h>`, `<pthread.h>`, `<dirent.h>`, and `<setjmp.h>` among
 them. `struct dirent` has the host C library's layout, so `readdir` finds
 `d_name` where the library writes it.
 
-- `fseeko` and `ftello` take and return `long` rather than `off_t`; both are
-  64 bits on every LP64 target. The Windows targets have `_fseeki64` and
-  `_ftelli64` instead, as their C library does.
+- `fseeko` and `ftello` take and return `off_t`, 64 bits on macOS and Linux.
+  The Windows targets have `_fseeki64` and `_ftelli64` instead, as their C
+  library does.
 - On Linux, glibc's `malloc_usable_size` and `sighandler_t`.
 
 On the Windows targets a header declares what mingw-w64's header of the same
@@ -505,7 +516,9 @@ declared.
 - The x86-64 named address spaces `__seg_gs` and `__seg_fs`, which become a
   segment override on each access. AArch64 refuses them.
 - The vector extension: `vector_size(N)` types with element-wise arithmetic,
-  comparison, and subscripting.
+  comparison, and subscripting, and `__builtin_shufflevector`. Two vector types
+  of one size convert implicitly only under `-flax-vector-conversions` (`=all`,
+  the bare flag, or `=integer`); `--msvc` makes `all` the default.
 - Named variadic macro parameters (`#define f(args...)`).
 - `__FUNCTION__` and `__PRETTY_FUNCTION__`, alongside C99's `__func__`.
 - GNU line markers (`# N "file"`), alongside C99's `#line N "file"`.
@@ -617,7 +630,7 @@ attributes are parsed. These take effect:
 | attribute | effect |
 |-----------|--------|
 | `packed` | Packs a structure or union. An anonymous union inside a packed structure keeps its members overlapping. |
-| `aligned(N)`, `aligned`, `_Alignas` | Sets the alignment; bare `aligned` is 16. |
+| `aligned(N)`, `aligned`, `_Alignas` | Sets the alignment; bare `aligned` takes `__BIGGEST_ALIGNMENT__`: 16, and on x86-64 32 under AVX and 64 under AVX-512F. |
 | `section("name")` | Places the object or function in that section. |
 | `alias("target")` | Defines the name as an alias of `target`. |
 | `visibility("kind")` | `default`, `hidden`, `protected` or `internal`, written to the ELF symbol. |
@@ -640,15 +653,14 @@ attributes are parsed. These take effect:
 | `no_stack_protector` | No stack canary under `-fstack-protector*`. |
 | `uninitialized` | The automatic object is exempt from `-ftrivial-auto-var-init`. |
 | `patchable_function_entry(N[,M])` | NOP padding at the function entry, as `-fpatchable-function-entry`. |
+| `error("msg")`, `warning("msg")` | A call of the function left in the emitted code is an error (B4007 `attribute-error`) or a warning (B4008 `attribute-warning`) quoting the message. |
 | `__declspec(thread)` | As `_Thread_local`. |
 | `dllexport`, `dllimport` | PE targets: exports the definition; a dllimport reference reads the import-address slot `__imp_<name>`, as MSVC, mingw-w64 gcc and clang emit it. Elsewhere `dllimport` is ignored with a warning and `dllexport` without one. |
 
 Other attributes, such as `format`, `pure`, `const`, `deprecated`, and
 `fallthrough`, are parsed and discarded without a diagnostic.
-`__has_attribute` answers 1 for a fixed list of gcc attribute names wider than
-the set above. It answers 0 for `vector_size`, `mode`, `ms_abi`, `sysv_abi`,
-`selectany`, and `weak_import`, although badc honors them, and for `dllexport`
-and `dllimport` outside the PE targets. The `[[...]]` form honors
+`__has_attribute` answers 1 for each GNU attribute badc applies or accepts,
+`dllexport` and `dllimport` on the PE targets only, and 0 otherwise. The `[[...]]` form honors
 the attributes without arguments plus `aligned`, `constructor`, and
 `destructor`. It drops any other attribute with arguments, so
 `[[gnu::section("x")]]` has no effect while `__attribute__((section("x")))`
@@ -662,8 +674,10 @@ in `xmm0` or `v0`. A variadic vector uses the same registers, counted in `al`
 on System V and read back from the vector save area. Windows x64 passes a
 16-byte vector by implicit reference, as its convention states, and macOS
 arm64 puts variadic arguments on the stack, as its variant of AAPCS64 states.
-On System V a vector wider than a register (32 bytes and up) goes to memory,
-as gcc places it without `-mavx`; AAPCS64 passes it by reference. A
+On System V a named 32-byte vector argument or result takes one ymm register,
+counted with `xmm0`-`xmm7`, as gcc passes it under AVX; an unnamed one goes to
+memory, and so does a 64-byte vector, as gcc passes it without AVX-512, under
+`-mavx512f` too. AAPCS64 passes a vector wider than 16 bytes by reference. A
 floating-point vector of one element also goes to memory on System V
 ([Divergences](#argument-passing-the-abi-documents-leave-open)). A struct of
 two to four vectors of one width, an AAPCS64 homogeneous vector aggregate,
@@ -677,14 +691,11 @@ operations lower to the instruction the Intel SDM gives for them, through
 `__builtin_ia32_*` builtins with gcc's names. The composition intrinsics
 (`_mm_set*`, `_mm_setr*`, `_mm_cvtsi*`), `_mm_loadl_epi64`,
 `_mm_storel_epi64`, the 16-, 32-, and 64-bit `_mm_loadu_si*` and
-`_mm_storeu_si*`, the SSE3 floating operations, the `__m64` operations, the
-SSE4.1 operations whose instruction reads `xmm0` or yields a flag, rounds, or
-forms dot products or sums of differences, and the string compares are
-written lane by lane over the vector extension. A 256-bit integer operation
-that an SSE instruction performs on each 128-bit half is that instruction on
-the two halves; the rest are written lane by lane. The
-`__m64` ones use no MMX register and the 256-bit ones no VEX instruction. An operation outside the subset is absent, so a unit that needs
-one fails at the undeclared name.
+`_mm_storeu_si*`, the SSE3 floating operations, the `__m64` operations,
+`_mm_testz_si128`, `_mm_testc_si128`, and the string compares are written lane
+by lane over the vector extension; the `__m64` ones use no MMX register. A
+256-bit vector is a value in a ymm register. An operation outside the subset
+is absent, so a unit that needs one fails at the undeclared name.
 
 | header | contents |
 |--------|----------|
@@ -696,7 +707,7 @@ one fails at the undeclared name.
 | `<smmintrin.h>` | SSE4.1: the minimums and maximums, `_mm_mullo_epi32`, `_mm_mul_epi32`, `_mm_packus_epi32`, `_mm_cmpeq_epi64`, the `_mm_cvtepi*` and `_mm_cvtepu*` extensions, the blends, the element extracts and inserts, `_mm_testz_si128` / `_testc` / `_testnzc` and the `_mm_test_*` forms, `_mm_round_*`, `_mm_floor_*` and `_mm_ceil_*` with the `_MM_FROUND_*` modes, `_mm_dp_ps` / `_pd`, `_mm_minpos_epu16`, `_mm_mpsadbw_epu8`, `_mm_stream_load_si128`; SSE4.2: `_mm_cmpgt_epi64`, the `_mm_cmpestr*` and `_mm_cmpistr*` string compares with the `_SIDD_*` controls, `_mm_crc32_u8`, `_u16`, `_u32` and `_u64`. |
 | `<nmmintrin.h>` | SSE4.2, through `<smmintrin.h>`. |
 | `<wmmintrin.h>` | AES-NI and `_mm_clmulepi64_si128`. |
-| `<immintrin.h>` | The above; AVX2's integer operations on `__m256i` and their 128-bit forms: loads, stores, the non-temporal transfers, the split 128-bit transfers, `_mm256_setzero_si256`, `_mm256_set*` and `_mm256_setr*`, the broadcasts, the 128-bit casts, extract and insert, the element extracts and inserts, logic, `_mm256_testz_si256` / `_testc` / `_testnzc`, add and subtract, saturating, averages, products, `_mm256_madd_epi16`, `_mm256_maddubs_epi16`, `_mm256_sad_epu8`, `_mm256_mpsadbw_epu8`, minimums and maximums, `abs`, `sign`, the horizontal sums and differences, the compares, `_mm256_movemask_epi8`, packs and interleaves, the shifts by an immediate, a vector count and a count per lane, the byte shifts and `alignr`, the shuffles and permutes, the blends, the sign and zero extensions, the masked loads and stores and the gathers; of AVX on `__m256` and `__m256d`, the arithmetic, minimum, maximum and square root, logic, `addsub` and the horizontal forms, `_mm256_cmp_ps` / `_pd` and `_mm_cmp_ps` / `_pd` / `_ss` / `_sd` by all 32 predicates, conversions, rounding, `_mm256_dp_ps`, `_mm256_set*`, loads, stores, the masked loads and stores, broadcasts, casts, 128-bit extract and insert, permutes, shuffles, interleaves, blends, `_mm*_test*_ps` / `_pd` and `_mm256_movemask_ps` / `_pd`, each built from the SSE operations on the two halves; the FMA3 forms, 128- and 256-bit; of AVX-512F with VL, `_mm_cvtps_epu32`, `_mm_cvttps_epu32`, `_mm_cvtepu32_ps` and their 256-bit forms; `_rdrand*_step`, `_rdseed*_step`, `_xgetbv`, `_mm_popcnt_u32` and `_mm_popcnt_u64`; BMI1, BMI2, LZCNT and ADX (`_tzcnt_*`, `_lzcnt_*`, `_andn_*`, `_bextr_*`, `_blsi_*`, `_blsmsk_*`, `_blsr_*`, `_bzhi_*`, `_pdep_*`, `_pext_*`, `_mulx_*`, `_addcarry_*`, `_addcarryx_*`, `_subborrow_*`, and MSVC's `_rorx_*`, `_sarx_*`, `_shlx_*` and `_shrx_*` on Windows), each the instruction's result on any processor; VAES and VPCLMULQDQ (`_mm256_aesenc_epi128`, `_aesenclast_`, `_aesdec_`, `_aesdeclast_` and `_mm256_clmulepi64_epi128`) as the AES-NI and PCLMULQDQ instruction on each lane; the SHA extensions (`_mm_sha1rnds4_epu32`, `_mm_sha1nexte_epu32`, `_mm_sha1msg1_epu32`, `_mm_sha1msg2_epu32`, `_mm_sha256rnds2_epu32`, `_mm_sha256msg1_epu32` and `_mm_sha256msg2_epu32`) from the SDM's operation, on any processor; MSVC's `_XCR_XFEATURE_ENABLED_MASK`. |
+| `<immintrin.h>` | The above; AVX2's integer operations on `__m256i` and their 128-bit forms: loads, stores, the non-temporal transfers, the split 128-bit transfers, `_mm256_setzero_si256`, `_mm256_set*` and `_mm256_setr*`, the broadcasts, the 128-bit casts, extract and insert, the element extracts and inserts, logic, `_mm256_testz_si256` / `_testc` / `_testnzc`, add and subtract, saturating, averages, products, `_mm256_madd_epi16`, `_mm256_maddubs_epi16`, `_mm256_sad_epu8`, `_mm256_mpsadbw_epu8`, minimums and maximums, `abs`, `sign`, the horizontal sums and differences, the compares, `_mm256_movemask_epi8`, packs and interleaves, the shifts by an immediate, a vector count and a count per lane, the byte shifts and `alignr`, the shuffles and permutes, the blends, the sign and zero extensions, the masked loads and stores and the gathers; of AVX on `__m256` and `__m256d`, the arithmetic, minimum, maximum and square root, logic, `addsub` and the horizontal forms, `_mm256_cmp_ps` / `_pd` and `_mm_cmp_ps` / `_pd` / `_ss` / `_sd` by all 32 predicates, conversions, rounding, `_mm256_dp_ps`, `_mm256_set*`, loads, stores, the masked loads and stores, broadcasts, casts, 128-bit extract and insert, permutes, shuffles, interleaves, blends, `_mm*_test*_ps` / `_pd` and `_mm256_movemask_ps` / `_pd` -- the compares, `_mm256_dp_ps`, the roundings, the blends, and the permutes by a register one VEX instruction each, the rest built from the SSE operations on the two halves; the FMA3 forms, 128- and 256-bit; F16C's `_cvtsh_ss`, `_cvtss_sh`, `_mm_cvtph_ps`, `_mm_cvtps_ph`, and their 256-bit forms from the SDM's operation, on any processor; `_mm_clflushopt`, `_mm_clwb`, `_fxsave`, `_fxrstor`, `_xsave`, `_xrstor`, and their 64-bit forms; of AVX-512F with VL, `_mm_cvtps_epu32`, `_mm_cvttps_epu32`, `_mm_cvtepu32_ps` and their 256-bit forms; `_rdrand*_step`, `_rdseed*_step`, `_xgetbv`, `_mm_popcnt_u32` and `_mm_popcnt_u64`; BMI1, BMI2, LZCNT and ADX (`_tzcnt_*`, `_lzcnt_*`, `_andn_*`, `_bextr_*`, `_blsi_*`, `_blsmsk_*`, `_blsr_*`, `_bzhi_*`, `_pdep_*`, `_pext_*`, `_mulx_*`, `_addcarry_*`, `_addcarryx_*`, `_subborrow_*`, and MSVC's `_rorx_*`, `_sarx_*`, `_shlx_*` and `_shrx_*` on Windows), each the instruction's result on any processor; VAES and VPCLMULQDQ (`_mm256_aesenc_epi128`, `_aesenclast_`, `_aesdec_`, `_aesdeclast_` and `_mm256_clmulepi64_epi128`) as the AES-NI and PCLMULQDQ instruction on each lane; the SHA extensions (`_mm_sha1rnds4_epu32`, `_mm_sha1nexte_epu32`, `_mm_sha1msg1_epu32`, `_mm_sha1msg2_epu32`, `_mm_sha256rnds2_epu32`, `_mm_sha256msg1_epu32` and `_mm_sha256msg2_epu32`) from the SDM's operation, on any processor; MSVC's `_XCR_XFEATURE_ENABLED_MASK`. |
 | `<x86intrin.h>` | The above and the scalar set: byte swaps, bit scans, rotates, `rdtsc`, `rdtscp`, `rdpmc` and the RFLAGS access. |
 
 Of AVX-512 (AVX512F, BW, DQ, CD, VL and VNNI, and VPCLMULQDQ; declared
@@ -710,26 +721,31 @@ provided: the rest of AVX-512's floating-point and conversion forms, and the
 `_mm_reduce_*_epi8` / `_epi16` sequences. `_mm_load_si128` and `_mm_store_si128` use the unaligned move.
 An intrinsic whose last operand its instruction encodes as an `imm8` is a
 macro, as gcc's are without `-O`; a lane move written over the vector
-extension takes its selector as an argument. The rest are `static inline` functions, which `-O` inlines so the
-instruction appears at the call site; without `-O` they stay calls.
+extension takes its selector as an argument. The rest are inlined at every optimization level, except those of several
+statements, which are `static inline` and stay calls without `-O`.
 
-On the AArch64 targets `<arm_neon.h>` provides a subset of the ACLE NEON
+On the AArch64 targets `<arm_neon.h>` provides the ACLE Advanced SIMD
 intrinsics, and `<intrin.h>` includes it on windows-arm64 as MSVC's includes
-its own NEON header. For the integer vectors: `vld1` and `vst1`, bitwise operations,
-immediate shifts, `vdup`, the polynomial byte multiply, table lookups, byte
-equality, halfword reversal, the across-lanes minimum, and 64-bit lane
-composition; the halfword broadcast and equality, the narrowing shift right,
-the doubleword load and store, the integer lane reads, and the
-reinterpretations between lane widths; on 32- and 64-bit lanes the broadcasts,
-add, multiply, the widening multiply-accumulate `vmlal` and `vmlal_high`, the
-narrowing `vmovn` and `vshrn_n`, `vshrq_n_u64`, the shift-and-insert `vsli_n`
-and `vsriq_n`, `vuzpq_u32`, `vget_low` and `vget_high`; and `vld2q_u16` and
-`vld4q_u8`, which deinterleave lane by lane. The FEAT_AES rounds and the 64-bit carry-less multiply. For
-`float32x2_t`, `float32x4_t`, `float64x1_t`, and `float64x2_t`: loads and
-stores, arithmetic, square root, fused multiply-add, compares, `vbsl`,
-conversions, lane access, `vget_low`, `vget_high`, `vcombine`, and the
-reinterpretations. Lane-indexed multiplies, rounding, estimates, the other
-structure loads, float16, and bfloat16 are not provided.
+its own NEON header. Each is the instruction the ACLE maps it to, on every
+element type the ACLE defines it for: the 64- and 128-bit vectors,
+`poly128_t`, and the structures of two to four vectors. The AES, SHA, SM3,
+SM4, dot-product, and int8 matrix forms are declared whatever the options. Not
+provided: float16 and bfloat16, which need `__fp16` and `__bf16`, the
+complex-arithmetic forms (FEAT_FCMA), and the FEAT_LRCPC3 lane loads and
+stores. `<arm_acle.h>` carries the barrier, hint, data-processing, CRC32,
+JSCVT, FRINTTS, RNG, floating-point (`__sqrt`, `__fma`), prefetch (`__pld`,
+`__pli`), and special-register intrinsics.
+
+`<arm_sve.h>` provides the ACLE SVE types and a subset of the SVE intrinsics,
+which its opening comment lists, on every AArch64 target. The types are
+sizeless: `sizeof` of one, and a structure or union member of one, are
+errors (B2021). An SVE argument or result follows the SVE procedure call
+standard: `z0`-`z7` and `p0`-`p3` carry them and the rest pass by reference;
+a function that takes or returns one, or is declared with
+`__attribute__((aarch64_sve_pcs))`, preserves `z8`-`z23` and `p4`-`p15` in
+full, and its ELF symbol is marked `STO_AARCH64_VARIANT_PCS`. As the subset is
+partial, `__ARM_FEATURE_SVE` stays undefined and `-march=` / `-mcpu=` refuse
+`+sve`. Under `--interp` the vector length is 128 bits.
 
 ### MSVC
 
@@ -803,9 +819,10 @@ structure loads, float16, and bfloat16 are not provided.
   `lock`-prefixed on x64, and the FEAT_LSE form on arm64, with the `_acq`,
   `_rel`, and `_nf` orders. cl emits the LSE form under `/arch:armv8.1`; its
   default calls out-of-line helpers. `<windows.h>` maps winnt.h's Interlocked
-  names onto them. The `_InterlockedMax`, `_InterlockedMin`,
-  `_InterlockedUMax`, `_InterlockedUMin`, and `_InterlockedNand` families are
-  not provided.
+  names onto them, the Acquire, Release, and NoFence spellings as winnt.h
+  does. The `_InterlockedNand`, `_InterlockedMax`, `_InterlockedMin`,
+  `_InterlockedUMax`, and `_InterlockedUMin` families are a compare-exchange
+  retried after a load, and `_interlockedadd` yields the sum.
 - `__int8`, `__int16`, `__int32`, and `__int64` on the Windows targets.
 - `--msvc`, off by default and taken by the Windows targets only, gives the
   identity of cl 19.28, the first with `/std:c17`: `_MSC_VER` 1928,
@@ -815,8 +832,9 @@ structure loads, float16, and bfloat16 are not provided.
   Microsoft layouts; `__STDC_VERSION__` stays, and `__STDC_NO_ATOMICS__` and
   `__STDC_NO_VLA__` are `1`, as under cl's `/std:c17`. A tag a parameter
   list declares takes the enclosing scope, as cl gives it (warning C4115),
-  where C17 6.2.1p4 limits it to the list. The Microsoft extensions above
-  apply with or without it. `-include msvc_compat.h` adds the MinGW identity
+  where C17 6.2.1p4 limits it to the list. Any two vector types of one size
+  convert implicitly. The Microsoft extensions above apply with or without
+  it. `-include msvc_compat.h` adds the MinGW identity
   and the calling-convention and SAL no-ops.
 
 ### badc-specific
@@ -828,7 +846,8 @@ structure loads, float16, and bfloat16 are not provided.
 - `#pragma intrinsic(<name>)` binds a library name to an intrinsic badc
   lowers. The bundled headers reach `sqrt` and `fma` this way, and MSVC's
   `_byteswap_*` lower to a byte swap once a pragma names them. Under
-  `-fno-builtin` it binds only reserved names (7.1.3); `alloca` is a macro
+  `-fno-builtin`, and for a name `-fno-builtin-<name>` names, it binds only
+  reserved names (7.1.3); `alloca` is a macro
   over `__builtin_alloca`, as in the glibc and macOS headers. A name that is
   no builtin draws B1007 (cl's C4163) unless one of badc's intrinsic headers
   declares it in the unit, as the `_mm_*` functions are.
@@ -879,7 +898,8 @@ structure loads, float16, and bfloat16 are not provided.
   too (`unknown-pragmas`, B1004), except that pragmas headed `pack`, `once`,
   `STDC`, `GCC`, `clang`, `region`, or `endregion` are accepted silently.
 - The predefines `__BADC_VERSION__` and `__BADC_TARGET__`, both string
-  literals, on every target, and `__BADC_WINDOWS__` on the Windows targets.
+  literals, on every target, `__BADC_WINDOWS__` on the Windows targets, and
+  `__BADC_JIT__` or `__BADC_INTERP__`, `1` under `--jit` or `--interp`.
 - A `#if` or `#elif` condition accepts a string operand in one position: as an
   operand of `==` or `!=` whose other operand is also a string. The operand is
   a string literal, with any encoding prefix and its escapes left undecoded, or

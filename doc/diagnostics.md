@@ -47,6 +47,9 @@ A selector names one diagnostic or one group:
 | `-pedantic`, `-pedantic-errors` | `-Wpedantic`, `-Werror=pedantic` |
 | `-fpermissive` | report `int-conversion`, `incompatible-pointer-types`, `implicit-int` and `return-mismatch` as warnings |
 
+Before C99, `implicit-int` is off unless `-Wall` or its own selector turns it
+on.
+
 A warning name of another compiler that badc does not implement is accepted.
 Turning one on reports B7012 and has no other effect. Any other unknown name is
 an error, except after `-Wno-`, which accepts any name.

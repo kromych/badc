@@ -33,7 +33,9 @@ backends, the linker, DWARF, and the `tests/cli_*.rs` suites that run the
 
 `python3 scripts/cargo_test.py --features full` runs the same tests and also
 fails a test binary that exits 0 before reporting every test it announced,
-which `cargo test` lets pass. CI and the local gate run the tests this way.
+which `cargo test` lets pass. A test still running 30 minutes after libtest
+names it as slow stops the run's process group and fails it, naming the test.
+CI and the local gate run the tests this way.
 
 A release build, `cargo test --release --features full`, adds a few tests that
 are too slow in a debug build: calls with large stack-argument areas, and the
@@ -72,7 +74,8 @@ blocks, and in `src/c5/tests/`, one module per subject. The main modules:
 A backend module runs only where its images can run: `native` and `dwarf` on
 macOS, `native_elf` on Linux ARM64, `native_elf_x64` on Linux x86-64,
 `native_pe_x64` on Windows x64, `native_pe_arm64` on Windows ARM64, and `jit`
-on Linux and on macOS ARM64. The two PE modules also run under Wine with
+on Linux, macOS ARM64, and Windows x64 and ARM64, where it runs the PE tables
+less the fixtures `src/c5/tests/jit.rs` lists. The two PE modules also run under Wine with
 `BADC_RUN_WINE=1`. The expected exit codes are in
 `src/c5/tests/fixture_tables.rs`; each was measured from gcc and clang builds
 of the fixture.
@@ -112,7 +115,13 @@ shows up there as a diff to review.
 python3 scripts/snapshots.py                  # regenerate every snapshot
 python3 scripts/snapshots.py --only c4        # regenerate one fixture's
 python3 scripts/snapshots.py --check          # regenerate, fail on any difference
+python3 scripts/snapshots.py --budget         # the access ratios and the save ceiling
 ```
+
+`--budget` reports the corpus's memory-access ratios and the callee-saved
+saves in each function's prologue, and fails when the saves per function
+exceed the architecture's ceiling (`SAVED_PER_FUNCTION`); `--check` ends with
+the same test. A fixture with a `// snapshot-budget: exempt` line is left out.
 
 The script prefers `llvm-objdump`, and the committed snapshots were written
 with it; GNU objdump's text differs. The `post-commit` hook regenerates the
@@ -212,10 +221,12 @@ x86-64 and AArch64 instruction encodings with the system assembler's.
 
 ## Benchmarks
 
-`tests/perf/` holds ten benchmark programs, each of which prints its own
-run time. `tests/perf/run.py` builds each with every compiler it finds, runs
-each binary three times, and prints a Markdown table per program: the median
-run time, the binary size, and the ratio to `badc -O`.
+`tests/perf/` holds twenty-one benchmark programs, each of which prints its
+own run time. `tests/perf/run.py` builds each with every compiler it finds,
+runs each binary three times -- on Linux pinned to one CPU of the highest
+`cpu_capacity` when the cores differ -- and prints a Markdown table per
+program: the median run time, the binary size, and the ratio to `badc -O`.
+Every optimized leg, `badc -O` included, passes `-DNDEBUG`.
 
 ```sh
 cargo build --release --features full     # run.py takes target/release/badc, or $BADC
@@ -306,6 +317,7 @@ the committed `HEAD` and refuses a tree with uncommitted changes;
 | step | Linux | Windows | macOS |
 |---|---|---|---|
 | `cargo clippy --all-targets --features full -- -D warnings` | yes | | |
+| `scripts/harness_self_tests.py`, as CI's `fmt + clippy` | yes | | |
 | release build, then `scripts/cargo_test.py` in release and in debug | yes | yes | yes |
 | the library tests in release with `BADC_MAX_GPR=2 BADC_MAX_FPR=2` and `--features "codegen_test full"`, as CI's `pressure` jobs | yes | | |
 | the gating demos, run concurrently by `scripts/run_demos.py` | yes | yes | yes |
@@ -314,7 +326,8 @@ the committed `HEAD` and refuses a tree with uncommitted changes;
 | `demos/linux/verify.py --linker badc` over the pinned `defconfig` kernel: compile, link and boot | yes | | |
 
 The gating demos are `GATING_DEMOS` in the script, with the reason for each.
-At this commit they are Tcl, edk2, QEMU at `-O0` and at `-O`, BearSSL,
+At this commit they are OpenSSL on Linux, one configuration per
+architecture alternating between runs (`OPENSSL_ASSIGNMENTS`), Tcl, edk2, QEMU at `-O0` and at `-O`, BearSSL,
 SQLite, Lua, miniz, Monocypher, stb, TweetNaCl, QuickJS, raylib, curl,
 libmill, libdill, coroutines, nasm, bzip2, kissfft, gui_hello, nt_loader,
 the demo kernel, TinyCC, chibicc, uemacs, and picocom; each runs on the
@@ -328,5 +341,7 @@ the kernel without booting it, and says so in its summary.
 | `--no-demos` | skip the demos |
 | `--demo-jobs N` | run at most N demos at a time (default 4); every demo still runs |
 | `--nested-kvm` | add a kernel boot under KVM in which the badc-built kernel runs a guest on the badc-built QEMU |
+| `--openssl-assignment 0\|1\|repeat` | run that OpenSSL assignment, or the last one again, and leave the alternation state |
+| `--openssl-plan` | print each architecture's next OpenSSL configuration and exit |
 
 A push whose gate skipped a step has no coverage from that step.

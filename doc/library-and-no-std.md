@@ -16,7 +16,8 @@ with `CompileOptions`. From a `Program`:
 * `emit_native` and `emit_native_with_options` return the image as bytes;
 * `jit_run` and `jit_run_with_options` run it in-process on the host;
 * `Vm::new(program).run()` runs it in the interpreter, and
-  `with_pointer_tracking` and `with_args` configure the run.
+  `with_pointer_tracking`, `with_trace`, `with_args`, and
+  `with_sve_vector_bits` (128 bits by default) configure the run.
 
 `NativeOptions::new().with_optimize()` runs the SSA optimizer during
 `emit_native_with_options` or `jit_run_with_options`; there is no separate

@@ -105,7 +105,8 @@ info: wrote file hello for target macos-aarch64
 
 Two or more inputs, or any of `-c`, `-l`, and `-L`, go through badc's linker.
 An input may be a `.c`, `.i`, `.s`, or `.S` source, a `.o` object, or a `.a`
-archive. [`--interp` and `--jit`](interpreter.md) describes the two modes
+archive; a PE link also takes a compiled resource file (`.res`) and a
+module-definition file (`.def`). [`--interp` and `--jit`](interpreter.md) describes the two modes
 that run the program.
 
 ## Options
@@ -122,7 +123,7 @@ that run the program.
 | `-M`, `-MM`, `-MD`, `-MMD`, `-MF`, `-MT`, `-MQ`, `-MP` | make dependency rules; also `-Wp,-MD,<file>` and `-Wp,-MMD,<file>` |
 | `-H`, `--show-includes` | print the path of every included header to stderr |
 | `--gnu` | define the GNU C identity macros (`__GNUC__` and the rest); off by default |
-| `--msvc` | Windows targets: define the MSVC identity macros (`_MSC_VER` and the rest) and leave `__STDC__` undefined; off by default |
+| `--msvc` | Windows targets: define the MSVC identity macros (`_MSC_VER` and the rest), `__STDC_NO_ATOMICS__`, and `__STDC_NO_VLA__`, and leave `__STDC__` undefined; off by default |
 | `-flax-vector-conversions[=all\|integer\|none]` | let two vector types of one size convert implicitly: any two, or two integer ones; none by default, all under `--msvc` |
 | `-ffreestanding` | compile for a freestanding implementation: `__STDC_HOSTED__` is 0 and `-fno-builtin` applies |
 | `--freestanding` | link without badc's startup runtime; the program supplies its entry point |
@@ -209,8 +210,6 @@ Two options help when badc itself is the suspect:
   placement of each value to stderr before lowering.
 * `--verify-ssa` checks the SSA form after each pass and stops at the first
   pass that breaks it. A debug build of badc always checks.
-
-`badc --help` does not list these two.
 
 ## C as a script
 

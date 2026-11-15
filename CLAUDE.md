@@ -85,6 +85,15 @@ Keep the tool output terse to slow context growth.
 * Add a regression test for each bug or feature to lock the behaviors in
 * Analyze SSA and assembler delta's under `./tests/snapshots` for improvements.
 
+## Closing a milestone
+
+A milestone closes when no critical, high-severity, or miscompile issue is
+open in it, the rest have moved to the next milestone, the queues are
+drained, the release head is pushed with CI green, and the documentation and
+the open issues have been audited against that head. `doc/std-conformance.md`
+is the normative document and is audited first. The steps are the
+`milestone-close` skill.
+
 ## Issue labels
 
 Every issue carries:

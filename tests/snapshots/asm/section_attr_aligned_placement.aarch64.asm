@@ -102,10 +102,9 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0xb                // =11
                	ret
-               	ldrb	w0, [x7, #0x9]
-               	adrp	x1, <addr>
-               	ldrsw	x1, [x1, #0xc]
-               	add	x0, x0, x1
+               	adrp	x0, <addr>
+               	ldrsw	x0, [x0, #0xc]
+               	add	x0, x0, #0x4
                	cmp	w0, #0xb
                	b.eq	<addr>
                	mov	x0, #0xc                // =12

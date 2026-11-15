@@ -35,34 +35,33 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	mov	x1, #0x0                // =0
-               	adrp	x0, <page>
+               	adrp	x2, <page>
                	b	<addr>
-               	strh	w2, [x3, x1, lsl #1]
+               	strh	w0, [x3, x1, lsl #1]
                	add	x1, x1, #0x1
                	cmp	w1, #0x8
                	b.ge	<addr>
                	sub	x3, x29, #0x10
-               	ldr	x2, [x0, #0x10]
-               	eor	x2, x2, x2, lsl #13
-               	eor	x2, x2, x2, lsr #7
-               	eor	x2, x2, x2, lsl #17
-               	str	x2, [x0, #0x10]
-               	and	x4, x2, #0x3
+               	ldr	x0, [x2, #0x10]
+               	eor	x0, x0, x0, lsl #13
+               	eor	x0, x0, x0, lsr #7
+               	eor	x0, x0, x0, lsl #17
+               	str	x0, [x2, #0x10]
+               	and	x4, x0, #0x3
                	cbz	x4, <addr>
-               	eor	x2, x2, x2, lsl #13
-               	eor	x2, x2, x2, lsr #7
-               	eor	x2, x2, x2, lsl #17
-               	str	x2, [x0, #0x10]
-               	sxth	x2, w2
+               	eor	x0, x0, x0, lsl #13
+               	eor	x0, x0, x0, lsr #7
+               	eor	x0, x0, x0, lsl #17
+               	str	x0, [x2, #0x10]
+               	sxth	x0, w0
                	b	<addr>
-               	ldr	x2, [x0, #0x10]
-               	eor	x2, x2, x2, lsl #13
-               	eor	x2, x2, x2, lsr #7
-               	eor	x2, x2, x2, lsl #17
-               	str	x2, [x0, #0x10]
-               	sxtb	x2, w2
-               	add	x2, x2, x2, lsl #1
-               	sxth	x2, w2
+               	eor	x0, x0, x0, lsl #13
+               	eor	x0, x0, x0, lsr #7
+               	eor	x0, x0, x0, lsl #17
+               	str	x0, [x2, #0x10]
+               	sxtb	x0, w0
+               	add	x0, x0, x0, lsl #1
+               	sxth	x0, w0
                	b	<addr>
                	ldur	q0, [x29, #-0x10]
                	add	sp, sp, #0x10
@@ -74,32 +73,31 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	mov	x1, #0x0                // =0
-               	adrp	x0, <page>
+               	adrp	x2, <page>
                	b	<addr>
-               	str	w2, [x3, x1, lsl #2]
+               	str	w0, [x3, x1, lsl #2]
                	add	x1, x1, #0x1
                	cmp	w1, #0x4
                	b.ge	<addr>
                	sub	x3, x29, #0x10
-               	ldr	x2, [x0, #0x10]
-               	eor	x2, x2, x2, lsl #13
-               	eor	x2, x2, x2, lsr #7
-               	eor	x2, x2, x2, lsl #17
-               	str	x2, [x0, #0x10]
-               	and	x4, x2, #0x3
+               	ldr	x0, [x2, #0x10]
+               	eor	x0, x0, x0, lsl #13
+               	eor	x0, x0, x0, lsr #7
+               	eor	x0, x0, x0, lsl #17
+               	str	x0, [x2, #0x10]
+               	and	x4, x0, #0x3
                	cbz	x4, <addr>
-               	eor	x2, x2, x2, lsl #13
-               	eor	x2, x2, x2, lsr #7
-               	eor	x2, x2, x2, lsl #17
-               	str	x2, [x0, #0x10]
+               	eor	x0, x0, x0, lsl #13
+               	eor	x0, x0, x0, lsr #7
+               	eor	x0, x0, x0, lsl #17
+               	str	x0, [x2, #0x10]
                	b	<addr>
-               	ldr	x2, [x0, #0x10]
-               	eor	x2, x2, x2, lsl #13
-               	eor	x2, x2, x2, lsr #7
-               	eor	x2, x2, x2, lsl #17
-               	str	x2, [x0, #0x10]
-               	sxth	x2, w2
-               	add	x2, x2, x2, lsl #2
+               	eor	x0, x0, x0, lsl #13
+               	eor	x0, x0, x0, lsr #7
+               	eor	x0, x0, x0, lsl #17
+               	str	x0, [x2, #0x10]
+               	sxth	x0, w0
+               	add	x0, x0, x0, lsl #2
                	b	<addr>
                	ldur	q0, [x29, #-0x10]
                	add	sp, sp, #0x10
@@ -112,32 +110,31 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	mov	x1, #0x0                // =0
                	mov	x3, #0x7                // =7
-               	adrp	x0, <page>
+               	adrp	x2, <page>
                	b	<addr>
-               	str	x2, [x4, x1, lsl #3]
+               	str	x0, [x4, x1, lsl #3]
                	add	x1, x1, #0x1
                	cmp	w1, #0x2
                	b.ge	<addr>
                	sub	x4, x29, #0x10
-               	ldr	x2, [x0, #0x10]
-               	eor	x2, x2, x2, lsl #13
-               	eor	x2, x2, x2, lsr #7
-               	eor	x2, x2, x2, lsl #17
-               	str	x2, [x0, #0x10]
-               	and	x5, x2, #0x3
+               	ldr	x0, [x2, #0x10]
+               	eor	x0, x0, x0, lsl #13
+               	eor	x0, x0, x0, lsr #7
+               	eor	x0, x0, x0, lsl #17
+               	str	x0, [x2, #0x10]
+               	and	x5, x0, #0x3
                	cbz	x5, <addr>
-               	eor	x2, x2, x2, lsl #13
-               	eor	x2, x2, x2, lsr #7
-               	eor	x2, x2, x2, lsl #17
-               	str	x2, [x0, #0x10]
+               	eor	x0, x0, x0, lsl #13
+               	eor	x0, x0, x0, lsr #7
+               	eor	x0, x0, x0, lsl #17
+               	str	x0, [x2, #0x10]
                	b	<addr>
-               	ldr	x2, [x0, #0x10]
-               	eor	x2, x2, x2, lsl #13
-               	eor	x2, x2, x2, lsr #7
-               	eor	x2, x2, x2, lsl #17
-               	str	x2, [x0, #0x10]
-               	sxtw	x2, w2
-               	mul	x2, x2, x3
+               	eor	x0, x0, x0, lsl #13
+               	eor	x0, x0, x0, lsr #7
+               	eor	x0, x0, x0, lsl #17
+               	str	x0, [x2, #0x10]
+               	sxtw	x0, w0
+               	mul	x0, x0, x3
                	b	<addr>
                	ldur	q0, [x29, #-0x10]
                	add	sp, sp, #0x10

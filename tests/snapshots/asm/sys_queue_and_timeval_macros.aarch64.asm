@@ -244,7 +244,6 @@ Disassembly of section .text:
                	str	x2, [x2, #0x8]
                	ldur	x0, [x29, #-0x68]
                	cbz	x0, <addr>
-               	ldur	x0, [x29, #-0x68]
                	ldur	x2, [x29, #-0x60]
                	str	x2, [x0, #0x30]
                	ldur	x0, [x29, #-0x60]

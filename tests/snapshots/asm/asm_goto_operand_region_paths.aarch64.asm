@@ -98,9 +98,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldur	x0, [x29, #-0x10]
-               	sxtw	x0, w0
-               	cbnz	w0, <addr>
+               	mov	x16, #0x4               // =4
+               	cbnz	w16, <addr>
                	ldur	x0, [x29, #-0x10]
                	ldur	x1, [x29, #-0x8]
                	add	x0, x0, x1

@@ -662,7 +662,6 @@ Disassembly of section .text:
                	movk	x17, #0x3b9a, lsl #16
                	cmp	x0, x17
                	b.lt	<addr>
-               	ldur	x0, [x29, #-0x58]
                	mov	x17, #0xca00            // =51712
                	movk	x17, #0x3b9a, lsl #16
                	sub	x0, x0, x17
@@ -760,7 +759,6 @@ Disassembly of section .text:
                	movk	x17, #0x3b9a, lsl #16
                	cmp	x0, x17
                	b.lt	<addr>
-               	ldur	x0, [x29, #-0x68]
                	mov	x17, #0xca00            // =51712
                	movk	x17, #0x3b9a, lsl #16
                	sub	x0, x0, x17

@@ -685,13 +685,13 @@ Disassembly of section .text:
                	jl	<addr>
                	xorl	%eax, %eax
                	movswq	-0x10(%rbp,%rax,2), %rdx
-               	movswq	-0x48(%rbp,%rax,2), %r8
+               	movswq	-0x48(%rbp,%rax,2), %rcx
+               	movq	%rcx, %r8
                	shlq	$0x5, %r8
                	movswq	%r8w, %r8
                	cmpl	%r8d, %edx
                	jne	<addr>
                	movswq	-0x8(%rbp,%rax,2), %rdx
-               	movswq	-0x48(%rbp,%rax,2), %rcx
                	sarq	$0xf, %rcx
                	cmpl	%ecx, %edx
                	jne	<addr>

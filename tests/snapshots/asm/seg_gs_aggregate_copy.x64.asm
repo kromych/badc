@@ -357,9 +357,9 @@ Disassembly of section .text:
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x55667788, %eax       # imm = 0x55667788
                	jne	<addr>
-               	movq	<rip>, %rax # <addr>
                	movabsq	$0x123456789abcdef, %r11 # imm = 0x123456789ABCDEF
-               	cmpq	%r11, %rax
+               	movq	%rcx, %rax
+               	cmpq	%r11, %rcx
                	je	<addr>
                	movl	$0x4, %eax
                	leave

@@ -2259,26 +2259,27 @@ Disassembly of section .text:
                	movq	%rax, %rdx
                	shrq	$0x3f, %rdx
                	addq	%rdx, %rax
-               	negq	%rax
-               	movl	%eax, -0x88(%rbp,%rcx,4)
-               	cmpl	%edi, %eax
+               	movq	%rax, %rsi
+               	negq	%rsi
+               	movl	%esi, -0x88(%rbp,%rcx,4)
+               	cmpl	%edi, %esi
                	jne	<addr>
-               	cmpl	%edi, %eax
+               	cmpl	%edi, %esi
                	jne	<addr>
-               	movslq	-0x10(%rbp), %r8
+               	movslq	-0x10(%rbp), %r9
                	movq	%rdi, %rax
                	cqto
-               	idivq	%r8
-               	movslq	-0x88(%rbp,%rcx,4), %rax
-               	imulq	$0x38e38e39, %rax, %rdi # imm = 0x38E38E39
-               	sarq	$0x21, %rdi
-               	movq	%rdi, %r8
-               	shrq	$0x3f, %r8
-               	addq	%r8, %rdi
-               	negq	%rdi
-               	imulq	$-0x9, %rdi, %rdi
-               	subq	%rdi, %rax
-               	movl	%eax, -0x88(%rbp,%rcx,4)
+               	idivq	%r9
+               	imulq	$0x38e38e39, %rsi, %rax # imm = 0x38E38E39
+               	sarq	$0x21, %rax
+               	movq	%rax, %rdi
+               	shrq	$0x3f, %rdi
+               	addq	%rdi, %rax
+               	negq	%rax
+               	imulq	$-0x9, %rax, %rax
+               	subq	%rax, %rsi
+               	movl	%esi, -0x88(%rbp,%rcx,4)
+               	movq	%rsi, %rax
                	cmpl	%edx, %eax
                	jne	<addr>
                	incq	%rcx

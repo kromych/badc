@@ -224,12 +224,12 @@ Disassembly of section .text:
                	movl	$0x16, %eax
                	leave
                	retq
-               	movsd	-0x10(%rbp), %xmm0
+               	movsd	<rip>, %xmm0
                	movsd	<rip>, %xmm1
                	ucomisd	%xmm1, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	movsd	-0x8(%rbp), %xmm0
+               	movsd	<rip>, %xmm0
                	movsd	<rip>, %xmm1
                	ucomisd	%xmm1, %xmm0
                	jp	<addr>

@@ -145,7 +145,7 @@ Disassembly of section .text:
                	movl	%edx, <rip> # <addr>
                	jmp	<addr>
                	movl	<rip>, %edx # <addr>
-               	movl	-0x10(%rbp), %edi
+               	movl	-0x10(%rdi), %edi
                	addq	%rdi, %rdx
                	movl	%edx, <rip> # <addr>
                	jmp	<addr>

@@ -164,9 +164,13 @@ const MAX_FORWARD_DISTANCE: u32 = 16;
 
 /// Distance between two instruction indices in emitted instructions:
 /// the bound above is about the live range the forward extends, and
-/// neither a lifetime marker nor a pure value nothing reads adds any. Returns a closure over a prefix count so
-/// each query is O(1).
-fn emitted_span(func: &FunctionSsa) -> impl Fn(u32, usize) -> u32 + use<> {
+/// neither a lifetime marker nor a pure value nothing reads adds any. The
+/// count runs along the extended block [`run_one`] walks, as `preds` gives
+/// it: a block one earlier predecessor alone reaches continues that
+/// block's count, whatever lies between the two in the instruction arena
+/// (a spliced body is appended to it). Returns a closure over a position
+/// per instruction so each query is O(1).
+fn emitted_span(func: &FunctionSsa, preds: &[Vec<BlockId>]) -> impl Fn(u32, usize) -> u32 + use<> {
     let mut used = alloc::vec![false; func.insts.len()];
     let mut mark = |v: ValueId| {
         if let Some(u) = used.get_mut(v as usize) {
@@ -179,17 +183,27 @@ fn emitted_span(func: &FunctionSsa) -> impl Fn(u32, usize) -> u32 + use<> {
     func.blocks
         .iter()
         .for_each(|b| b.terminator.for_each_operand(&mut mark));
-    let mut prefix: Vec<u32> = Vec::with_capacity(func.insts.len() + 1);
-    let mut n = 0u32;
-    for (inst, used) in func.insts.iter().zip(used) {
-        prefix.push(n);
-        n += u32::from(!inst.is_lifetime_marker() && (used || !inst.is_pure()));
+    let mut at: Vec<u32> = alloc::vec![0; func.insts.len()];
+    let mut ends: Vec<u32> = Vec::with_capacity(func.blocks.len());
+    for (b, block) in func.blocks.iter().enumerate() {
+        let mut n = match preds.get(b).map(Vec::as_slice) {
+            Some(&[p]) if (p as usize) < b => ends[p as usize],
+            _ => 0,
+        };
+        for i in block.inst_range.clone() {
+            let (Some(inst), Some(&used)) = (func.insts.get(i as usize), used.get(i as usize))
+            else {
+                break;
+            };
+            at[i as usize] = n;
+            n += u32::from(!inst.is_lifetime_marker() && (used || !inst.is_pure()));
+        }
+        ends.push(n);
     }
-    prefix.push(n);
     move |from: u32, to: usize| {
         let (a, b) = (
-            prefix.get(from as usize).copied().unwrap_or(0),
-            prefix.get(to).copied().unwrap_or(0),
+            at.get(from as usize).copied().unwrap_or(0),
+            at.get(to).copied().unwrap_or(0),
         );
         b.saturating_sub(a)
     }
@@ -429,7 +443,10 @@ fn run_one(func: &mut FunctionSsa) {
     let mut any = false;
     let slots = forwardable_slots(func);
     let exposed = exposed_slots(func, &slots);
-    let span = emitted_span(func);
+    // A block one predecessor alone reaches starts from what that block
+    // ended with: the predecessor dominates it, and no other path enters.
+    let preds = crate::c5::codegen::ssa::mem2reg::predecessors(func);
+    let span = emitted_span(func, &preds);
     // Whether `value` read where block `b` reads it already holds what an
     // extension to `kind` would produce: computed on the first narrow
     // forward.
@@ -443,10 +460,6 @@ fn run_one(func: &mut FunctionSsa) {
                 .fits(kind);
         (kind, fit)
     };
-
-    // A block one predecessor alone reaches starts from what that block
-    // ended with: the predecessor dominates it, and no other path enters.
-    let preds = crate::c5::codegen::ssa::mem2reg::predecessors(func);
     type Tables = (Vec<Entry>, Vec<IndexedEntry>, Vec<SlotEntry>, Vec<Copied>);
     let mut exits: Vec<Option<Tables>> = alloc::vec![None; func.blocks.len()];
     for b in 0..func.blocks.len() {
@@ -3265,6 +3278,52 @@ mod tests {
             matches!(f.insts[3], Inst::Binop { lhs: 1, rhs: 1, .. }),
             "{:?}",
             f.insts[3]
+        );
+    }
+
+    /// The distance a forward is bounded by runs along the path: a block
+    /// laid out in the arena after unrelated instructions, as a spliced body
+    /// is, continues the count of its one predecessor. Here block 2 follows
+    /// block 0 directly while block 1's chain sits between them.
+    #[test]
+    fn the_forward_distance_runs_along_the_path_not_the_arena() {
+        let mut insts = alloc::vec![param(0), load_of(0)];
+        insts.extend(live_filler(2));
+        let chain = insts.len() as ValueId - 1;
+        let reload = insts.len() as ValueId;
+        insts.extend([
+            load_of(0),
+            Inst::Binop {
+                op: BinOp::Add,
+                lhs: 1,
+                rhs: reload,
+            },
+        ]);
+        let n = insts.len() as u32;
+        let mut f = fresh(insts, Terminator::Return(n - 1), n - 1);
+        let block = |r: core::ops::Range<u32>, terminator| crate::c5::ir::Block {
+            start_pc: 0,
+            inst_range: r,
+            terminator,
+            exit_acc: NO_VALUE,
+        };
+        f.blocks = alloc::vec![
+            block(
+                0..2,
+                Terminator::Bnz {
+                    cond: 1,
+                    target: 2,
+                    fall_through: 1,
+                }
+            ),
+            block(2..reload, Terminator::Return(chain)),
+            block(reload..n, Terminator::Return(n - 1)),
+        ];
+        run_one(&mut f);
+        assert!(
+            matches!(f.insts[n as usize - 1], Inst::Binop { lhs: 1, rhs: 1, .. }),
+            "{:?}",
+            f.insts[n as usize - 1]
         );
     }
 

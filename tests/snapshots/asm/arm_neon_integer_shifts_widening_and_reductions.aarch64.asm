@@ -5370,7 +5370,6 @@ Disassembly of section .text:
                	ldrsw	x0, [x24, #0xc]
                	cmp	w0, #0xb
                	b.lt	<addr>
-               	ldrsw	x0, [x24, #0xc]
                	cmp	w0, #0x12
                	b.gt	<addr>
                	add	x1, x21, x21, lsr #63
@@ -5461,7 +5460,6 @@ Disassembly of section .text:
                	ldrsw	x0, [x24, #0xc]
                	cmp	w0, #0x13
                	b.lt	<addr>
-               	ldrsw	x0, [x24, #0xc]
                	cmp	w0, #0x1b
                	b.gt	<addr>
                	ldr	x20, [sp, #0x330]

@@ -2240,29 +2240,27 @@ Disassembly of section .text:
                	ldursw	x2, [x29, #-0x10]
                	sdiv	w1, w1, w2
                	sxtw	x2, w1
-               	sub	x1, x29, #0x88
-               	ldrsw	x3, [x1, x0, lsl #2]
-               	mul	x3, x3, x4
-               	asr	x3, x3, #33
-               	add	x3, x3, x3, lsr #63
-               	neg	x3, x3
-               	str	w3, [x1, x0, lsl #2]
-               	cmp	w3, w2
+               	sub	x3, x29, #0x88
+               	ldrsw	x1, [x3, x0, lsl #2]
+               	mul	x1, x1, x4
+               	asr	x1, x1, #33
+               	add	x1, x1, x1, lsr #63
+               	neg	x1, x1
+               	str	w1, [x3, x0, lsl #2]
+               	cmp	w1, w2
                	b.ne	<addr>
-               	cmp	w3, w2
+               	cmp	w1, w2
                	b.ne	<addr>
-               	ldursw	x3, [x29, #-0x10]
-               	sdiv	x17, x2, x3
-               	msub	x6, x17, x3, x2
-               	ldrsw	x2, [x1, x0, lsl #2]
-               	mul	x3, x2, x4
-               	asr	x3, x3, #33
-               	add	x3, x3, x3, lsr #63
-               	neg	x3, x3
-               	mul	x3, x3, x5
-               	sub	x2, x2, x3
-               	str	w2, [x1, x0, lsl #2]
-               	mov	x1, x2
+               	ldursw	x6, [x29, #-0x10]
+               	sdiv	x17, x2, x6
+               	msub	x6, x17, x6, x2
+               	mul	x2, x1, x4
+               	asr	x2, x2, #33
+               	add	x2, x2, x2, lsr #63
+               	neg	x2, x2
+               	mul	x2, x2, x5
+               	sub	x1, x1, x2
+               	str	w1, [x3, x0, lsl #2]
                	cmp	w1, w6
                	b.ne	<addr>
                	add	x0, x0, #0x1

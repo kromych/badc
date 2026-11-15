@@ -45,7 +45,6 @@ Disassembly of section .text:
                	ret
                	cmp	w2, #0x2
                	b.ne	<addr>
-               	ldr	x0, [x1, #0x10]
                	eor	x0, x0, x0, lsl #13
                	eor	x0, x0, x0, lsr #7
                	eor	x0, x0, x0, lsl #17
@@ -53,7 +52,6 @@ Disassembly of section .text:
                	mov	x1, #0x3fe0000000000000 // =4602678819172646912
                	add	x0, x1, x0, lsr #11
                	ret
-               	ldr	x0, [x1, #0x10]
                	eor	x0, x0, x0, lsl #13
                	eor	x0, x0, x0, lsr #7
                	eor	x0, x0, x0, lsl #17

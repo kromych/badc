@@ -88,15 +88,14 @@ Disassembly of section .text:
                	movl	$0x1, <rip> # <addr>
                	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
                                                 # <addr>
-               	movl	<rip>, %ecx # <addr>
-               	cmpl	$0x1, %ecx
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
-               	movl	<rip>, %ecx # <addr>
-               	incq	%rcx
-               	movl	%ecx, <rip> # <addr>
+               	incq	%rax
+               	movl	%eax, <rip> # <addr>
                	movl	$0x0, <rip> # <addr>
                	movl	$0x4, %edi
                	callq	<addr>

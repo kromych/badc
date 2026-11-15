@@ -45,8 +45,8 @@ Disassembly of section .text:
                	stur	xzr, [x29, #-0x8]
                	cmp	x5, x0
                	b.eq	<addr>
-               	ldrb	w2, [x3]
-               	cmp	w2, #0x69
+               	ldrb	w3, [x3]
+               	cmp	w3, #0x69
                	b.ne	<addr>
                	ldrb	w0, [x0]
                	cmp	w0, #0x6c
@@ -58,8 +58,7 @@ Disassembly of section .text:
                	ldrsw	x0, [x1]
                	cmp	w0, #0x7
                	b.ne	<addr>
-               	ldur	x0, [x29, #-0x10]
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x2]
                	cmp	w0, #0x9
                	b.ne	<addr>
                	stur	x1, [x29, #-0x8]

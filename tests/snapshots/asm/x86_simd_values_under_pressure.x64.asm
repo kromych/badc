@@ -336,22 +336,20 @@ Disassembly of section .text:
                	jmp	<addr>
                	xorl	%eax, %eax
                	jmp	<addr>
-               	movl	%edx, (%rcx,%rax,4)
+               	movl	%ecx, (%rsi,%rax,4)
                	incq	%rax
                	cmpl	$0x4, %eax
                	jge	<addr>
                	leaq	-0x140(%rbp), %rdx
-               	leaq	0xb0(%rdx), %rcx
-               	movl	(%rcx,%rax,4), %esi
+               	leaq	0xb0(%rdx), %rsi
+               	movl	(%rsi,%rax,4), %ecx
                	addq	$0xa0, %rdx
                	movl	(%rdx,%rax,4), %edx
-               	cmpl	%edx, %esi
-               	jge	<addr>
-               	movl	(%rcx,%rax,4), %edx
-               	jmp	<addr>
-               	leaq	-0x140(%rbp), %rdx
-               	addq	$0xa0, %rdx
-               	movl	(%rdx,%rax,4), %edx
+               	cmpl	%edx, %ecx
+               	jl	<addr>
+               	leaq	-0x140(%rbp), %rcx
+               	addq	$0xa0, %rcx
+               	movl	(%rcx,%rax,4), %ecx
                	jmp	<addr>
                	movl	-0x80(%rbp), %eax
                	movl	-0x90(%rbp), %ecx

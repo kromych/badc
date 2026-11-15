@@ -54,18 +54,18 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x4, %eax
                	retq
-               	movl	0x18(%rax), %eax
-               	cmpl	$0x28b, %eax            # imm = 0x28B
+               	movl	0x18(%rax), %ecx
+               	cmpl	$0x28b, %ecx            # imm = 0x28B
                	je	<addr>
                	movl	$0x5, %eax
                	retq
-               	movq	<rip>, %rax # <addr>
-               	movq	0x10(%rax), %rcx
-               	movsbq	0x1(%rcx), %rcx
-               	cmpl	$0x6e, %ecx
+               	movq	0x10(%rax), %rax
+               	movsbq	0x1(%rax), %rax
+               	cmpl	$0x6e, %eax
                	je	<addr>
                	movl	$0x6, %eax
                	retq
+               	movq	<rip>, %rax # <addr>
                	movl	0x28(%rax), %eax
                	cmpl	$-0x1, %eax
                	je	<addr>

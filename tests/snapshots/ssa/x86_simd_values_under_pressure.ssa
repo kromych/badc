@@ -1674,8 +1674,8 @@ fn ent_pc=492 n_params=0 variadic=false locals=80
     v1539 Imm(0)                                           -> x1
     terminator Jmp(b19)   (exit_acc=v1538)
   block 18  start_pc=0
-    v1950 Phi { incoming=[b21:v1940, b22:v1948], kind=I64 } -> x2
-    v1951 Imm(0)                                           -> x6
+    v1950 Phi { incoming=[b21:v1577, b22:v1948], kind=I64 } -> x1
+    v1951 Imm(0)                                           -> x2
     v1952 StoreIndexed { base=v1568, index=v1563, scale=4, value=v1950, kind=I32 } -> -
     v1953 BinopI { op=and, lhs=v1950, rhs_imm=4294967295 } -> x1
     v1954 Extend { value=v1563, kind=I32 }                 -> x1
@@ -1690,16 +1690,16 @@ fn ent_pc=492 n_params=0 variadic=false locals=80
   block 20  start_pc=0
     v1566 LocalAddr(-40)                                   -> x2
     v1567 Imm(176)                                         -> x1
-    v1568 BinopI { op=add, lhs=v1566, rhs_imm=176 }        -> x1
-    v1569 Extend { value=v1563, kind=I32 }                 -> x6
-    v1570 BinopI { op=shl, lhs=v1563, rhs_imm=2 }          -> x6
-    v1571 Binop { op=add, lhs=v1568, rhs=v1570 }           -> x6
-    v1572 LocalAddr(-40)                                   -> x6
-    v1573 BinopI { op=add, lhs=v1566, rhs_imm=176 }        -> x6
-    v1574 Extend { value=v1563, kind=I32 }                 -> x6
-    v1575 BinopI { op=shl, lhs=v1563, rhs_imm=2 }          -> x6
-    v1576 Binop { op=add, lhs=v1568, rhs=v1575 }           -> x6
-    v1577 LoadIndexed { base=v1568, index=v1563, scale=4, kind=U32 } -> x6
+    v1568 BinopI { op=add, lhs=v1566, rhs_imm=176 }        -> x6
+    v1569 Extend { value=v1563, kind=I32 }                 -> x1
+    v1570 BinopI { op=shl, lhs=v1563, rhs_imm=2 }          -> x1
+    v1571 Binop { op=add, lhs=v1568, rhs=v1570 }           -> x1
+    v1572 LocalAddr(-40)                                   -> x1
+    v1573 BinopI { op=add, lhs=v1566, rhs_imm=176 }        -> x1
+    v1574 Extend { value=v1563, kind=I32 }                 -> x1
+    v1575 BinopI { op=shl, lhs=v1563, rhs_imm=2 }          -> x1
+    v1576 Binop { op=add, lhs=v1568, rhs=v1575 }           -> x1
+    v1577 LoadIndexed { base=v1568, index=v1563, scale=4, kind=U32 } -> x1
     v1578 Extend { value=v1577, kind=I32 }                 -> x7
     v1579 LocalAddr(-40)                                   -> x7
     v1580 Imm(160)                                         -> x7
@@ -1719,17 +1719,17 @@ fn ent_pc=492 n_params=0 variadic=false locals=80
     v1938 BinopI { op=shl, lhs=v1563, rhs_imm=2 }          -> x2
     v1939 Binop { op=add, lhs=v1568, rhs=v1938 }           -> x2
     v1940 LoadIndexed { base=v1568, index=v1563, scale=4, kind=U32 } -> x2
-    v1941 Imm(0)                                           -> x6
-    terminator Jmp(b18)   (exit_acc=v1940)
+    v1941 Imm(0)                                           -> x2
+    terminator Jmp(b18)   (exit_acc=v1577)
   block 22  start_pc=0
-    v1942 LocalAddr(-40)                                   -> x2
-    v1943 Imm(160)                                         -> x6
-    v1944 BinopI { op=add, lhs=v1942, rhs_imm=160 }        -> x2
-    v1945 Extend { value=v1563, kind=I32 }                 -> x6
-    v1946 BinopI { op=shl, lhs=v1563, rhs_imm=2 }          -> x6
-    v1947 Binop { op=add, lhs=v1944, rhs=v1946 }           -> x6
-    v1948 LoadIndexed { base=v1944, index=v1563, scale=4, kind=U32 } -> x2
-    v1949 Imm(0)                                           -> x6
+    v1942 LocalAddr(-40)                                   -> x1
+    v1943 Imm(160)                                         -> x2
+    v1944 BinopI { op=add, lhs=v1942, rhs_imm=160 }        -> x1
+    v1945 Extend { value=v1563, kind=I32 }                 -> x2
+    v1946 BinopI { op=shl, lhs=v1563, rhs_imm=2 }          -> x2
+    v1947 Binop { op=add, lhs=v1944, rhs=v1946 }           -> x2
+    v1948 LoadIndexed { base=v1944, index=v1563, scale=4, kind=U32 } -> x1
+    v1949 Imm(0)                                           -> x2
     terminator Jmp(b18)   (exit_acc=v1948)
   block 23  start_pc=0
     v1588 Imm(0)                                           -> x0

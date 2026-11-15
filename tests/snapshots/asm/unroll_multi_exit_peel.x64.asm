@@ -200,7 +200,11 @@ Disassembly of section .text:
                	movq	<rip>, %rax # <addr>
                	movq	<rip>, %rcx # <addr>
                	imulq	%rcx, %rax
-               	movl	$0x1, %ecx
+               	movq	<rip>, %rcx # <addr>
+               	movq	<rip>, %rdx # <addr>
+               	imulq	%rdx, %rcx
+               	addq	%rcx, %rax
+               	movl	$0x2, %ecx
                	movq	<rip>, %rdx # <addr>
                	movq	<rip>, %rsi # <addr>
                	imulq	%rsi, %rdx
@@ -254,7 +258,11 @@ Disassembly of section .text:
                	movq	<rip>, %rax # <addr>
                	movq	<rip>, %rcx # <addr>
                	imulq	%rcx, %rax
-               	movl	$0x1, %ecx
+               	movq	<rip>, %rcx # <addr>
+               	movq	<rip>, %rdx # <addr>
+               	imulq	%rdx, %rcx
+               	addq	%rcx, %rax
+               	movl	$0x2, %ecx
                	movq	<rip>, %rdx # <addr>
                	movq	<rip>, %rsi # <addr>
                	imulq	%rsi, %rdx
@@ -957,14 +965,6 @@ Disassembly of section .text:
                	jl	<addr>
                	movl	$0x4, %eax
                	jmp	<addr>
-               	movl	$0x2, %ecx
-               	movq	<rip>, %rdx # <addr>
-               	movq	<rip>, %rsi # <addr>
-               	imulq	%rsi, %rdx
-               	addq	%rdx, %rax
-               	movq	<rip>, %rdx # <addr>
-               	testq	%rdx, %rdx
-               	jl	<addr>
                	movl	$0x3, %ecx
                	movq	<rip>, %rdx # <addr>
                	movq	<rip>, %rsi # <addr>
@@ -975,14 +975,6 @@ Disassembly of section .text:
                	jl	<addr>
                	movl	$0x4, %ecx
                	jmp	<addr>
-               	movl	$0x2, %ecx
-               	movq	<rip>, %rdx # <addr>
-               	movq	<rip>, %rsi # <addr>
-               	imulq	%rsi, %rdx
-               	addq	%rdx, %rax
-               	movq	<rip>, %rdx # <addr>
-               	testq	%rdx, %rdx
-               	jl	<addr>
                	movl	$0x3, %ecx
                	movq	<rip>, %rdx # <addr>
                	movq	<rip>, %rsi # <addr>

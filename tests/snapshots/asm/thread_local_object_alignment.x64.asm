@@ -77,8 +77,8 @@ Disassembly of section .text:
                	addq	%rcx, %rdx
                	movq	%fs:0x0, %rcx
                	addq	$-0xc0, %rcx
-               	movq	0x10(%rcx), %r8
-               	addq	%r8, %rdx
+               	movq	0x10(%rcx), %rdi
+               	addq	%rdi, %rdx
                	movq	0x18(%rcx), %rcx
                	addq	%rdx, %rcx
                	cmpq	$0xa, %rcx
@@ -88,8 +88,7 @@ Disassembly of section .text:
                	movsbq	(%rax), %rax
                	movsbq	(%rsi), %rcx
                	addq	%rcx, %rax
-               	movsbq	(%rdi), %rcx
-               	addq	%rcx, %rax
+               	addq	$0x3, %rax
                	cmpl	$0x6, %eax
                	je	<addr>
                	movl	$0x11, %eax

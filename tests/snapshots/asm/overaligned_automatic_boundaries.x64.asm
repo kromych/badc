@@ -198,9 +198,6 @@ Disassembly of section .text:
                	movw	%dx, -0x22(%rbp)
                	testb	$0xf, %al
                	jne	<addr>
-               	movswq	-0xa0(%rbp), %rax
-               	cmpl	$0x1, %eax
-               	jne	<addr>
                	leaq	-0x20(%rbp), %rax
                	movq	%rax, <rip> # <addr>
                	movq	$0x7, -0x20(%rbp)

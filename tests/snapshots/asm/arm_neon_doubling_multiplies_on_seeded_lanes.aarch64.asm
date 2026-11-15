@@ -159,7 +159,7 @@ Disassembly of section .text:
                	ldur	q20, [x29, #-0xa0]
                	mov	x4, #0x0                // =0
                	b	<addr>
-               	str	x3, [x5, x4, lsl #3]
+               	str	x3, [x6, x4, lsl #3]
                	add	x4, x4, #0x1
                	cmp	w4, #0x2
                	b.ge	<addr>
@@ -168,16 +168,15 @@ Disassembly of section .text:
                	eor	x3, x3, x3, lsr #7
                	eor	x3, x3, x3, lsl #17
                	str	x3, [x2, #0x10]
-               	sub	x5, x29, #0x90
-               	and	x3, x3, #0x7
-               	cbnz	w3, <addr>
+               	sub	x6, x29, #0x90
+               	and	x5, x3, #0x7
+               	cbnz	w5, <addr>
                	mov	x3, #-0x8000000000000000 // =-9223372036854775808
                	b	<addr>
-               	cmp	w3, #0x1
+               	cmp	w5, #0x1
                	b.ne	<addr>
                	mov	x3, #0x7fffffffffffffff // =9223372036854775807
                	b	<addr>
-               	ldr	x3, [x2, #0x10]
                	eor	x3, x3, x3, lsl #13
                	eor	x3, x3, x3, lsr #7
                	eor	x3, x3, x3, lsl #17

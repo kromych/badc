@@ -133,9 +133,9 @@ Disassembly of section .text:
                	add	x0, x5, x0
                	str	w0, [x2, #0x20]
                	b	<addr>
-               	ldrsw	x0, [x2, #0x20]
-               	ldursw	x5, [x29, #-0x10]
-               	add	x0, x0, x5
+               	ldrsw	x5, [x2, #0x20]
+               	ldursw	x0, [x0, #-0x10]
+               	add	x0, x5, x0
                	str	w0, [x2, #0x20]
                	b	<addr>
                	sub	x1, x29, #0x10

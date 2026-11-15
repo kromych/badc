@@ -24,19 +24,17 @@ Disassembly of section .text:
                	ldr	w6, [x0, #0x98]
                	cmp	w1, #0x1
                	b.ne	<addr>
-               	ldrh	w7, [x0, #0x2]
-               	cmp	w7, #0x2
+               	cmp	w2, #0x2
                	b.ne	<addr>
-               	ldrh	w7, [x0, #0xa]
-               	cmp	w7, #0x7
+               	cmp	w3, #0x7
                	b.ne	<addr>
-               	ldrsw	x7, [x0, #0x24]
+               	mov	x7, x4
                	cmp	w7, #0x5
                	b.ne	<addr>
-               	ldrsw	x7, [x0, #0x2c]
+               	mov	x7, x5
                	cmp	w7, #0x6
                	b.ne	<addr>
-               	ldrsw	x7, [x0, #0x98]
+               	mov	x7, x6
                	cmp	w7, #0x9
                	b.ne	<addr>
                	ldrh	w7, [x0, #0x6]

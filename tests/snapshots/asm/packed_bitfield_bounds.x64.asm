@@ -380,16 +380,16 @@ Disassembly of section .text:
                	orq	%rsi, %rdx
                	movabsq	$-0x1000000000000, %r11 # imm = 0xFFFF000000000000
                	andq	%r11, %rdx
-               	movabsq	$0xfedcba987654, %r11   # imm = 0xFEDCBA987654
-               	orq	%r11, %rdx
-               	movl	%edx, -0x6(%rax)
-               	movq	%rdx, %rsi
-               	shrq	$0x20, %rsi
-               	movw	%si, -0x2(%rax)
-               	movl	%edx, %edx
-               	movq	%rsi, %rdi
+               	movabsq	$0xfedcba987654, %rsi   # imm = 0xFEDCBA987654
+               	orq	%rdx, %rsi
+               	movl	%esi, -0x6(%rax)
+               	movq	%rsi, %rdx
+               	shrq	$0x20, %rdx
+               	movw	%dx, -0x2(%rax)
+               	movl	%esi, %esi
+               	movq	%rdx, %rdi
                	shlq	$0x20, %rdi
-               	orq	%rdx, %rdi
+               	orq	%rsi, %rdi
                	movabsq	$0xfedcba987654, %r11   # imm = 0xFEDCBA987654
                	cmpq	%r11, %rdi
                	jne	<addr>
@@ -399,15 +399,15 @@ Disassembly of section .text:
                	movl	$0xc, %eax
                	leave
                	retq
-               	shlq	$0x20, %rsi
-               	orq	%rdx, %rsi
-               	shrq	$0x4, %rsi
-               	movzwq	-0x2(%rax), %rdi
+               	movq	%rdx, %rdi
                	shlq	$0x20, %rdi
-               	orq	%rdi, %rdx
+               	orq	%rsi, %rdi
+               	shrq	$0x4, %rdi
+               	shlq	$0x20, %rdx
+               	orq	%rsi, %rdx
                	movabsq	$-0x1000000000000, %r11 # imm = 0xFFFF000000000000
                	andq	%r11, %rdx
-               	orq	%rsi, %rdx
+               	orq	%rdi, %rdx
                	movl	%edx, -0x6(%rax)
                	movq	%rdx, %rsi
                	shrq	$0x20, %rsi

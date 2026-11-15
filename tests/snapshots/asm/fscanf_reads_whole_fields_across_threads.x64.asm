@@ -44,18 +44,17 @@ Disassembly of section .text:
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	je	<addr>
-               	leaq	<rip>, %rcx # <addr>
-               	movq	(%rcx,%rbx,8), %rdx
-               	movq	-0x8(%rbp), %rax
-               	cmpq	$0x186a0, %rax          # imm = 0x186A0
-               	movl	$0x1, %eax
-               	jl	<addr>
-               	movq	-0x8(%rbp), %rax
-               	cmpq	$0x19640, %rax          # imm = 0x19640
-               	setge	%al
-               	movzbq	%al, %rax
-               	addq	%rdx, %rax
-               	movq	%rax, (%rcx,%rbx,8)
+               	leaq	<rip>, %rax # <addr>
+               	movq	(%rax,%rbx,8), %rdx
+               	movq	-0x8(%rbp), %rcx
+               	movl	$0x1, %esi
+               	cmpq	$0x19640, %rcx          # imm = 0x19640
+               	setge	%dil
+               	movzbq	%dil, %rdi
+               	cmpq	$0x186a0, %rcx          # imm = 0x186A0
+               	cmovgeq	%rdi, %rsi
+               	leaq	(%rdx,%rsi), %rcx
+               	movq	%rcx, (%rax,%rbx,8)
                	leaq	<rip>, %rax # <addr>
                	movq	(%rax,%rbx,8), %rcx
                	movq	-0x8(%rbp), %rdx

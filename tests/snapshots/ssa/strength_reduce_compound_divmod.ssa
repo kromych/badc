@@ -4205,7 +4205,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=17
     v211 LoadLocal { off=-2, kind=I32, volatile }         -> x6
     v212 Binop { op=div, lhs=v209, rhs=v211 }             -> x0
     v213 Extend { value=v212, kind=I32, nsw }             -> x7
-    v214 LocalAddr(-17)                                   -> x6
+    v214 LocalAddr(-17)                                   -> x8
     v215 Extend { value=v197, kind=I32 }                  -> x0
     v216 BinopI { op=shl, lhs=v197, rhs_imm=2 }           -> x0
     v217 Binop { op=add, lhs=v214, rhs=v216 }             -> x0
@@ -4215,21 +4215,21 @@ fn ent_pc=4 n_params=0 variadic=false locals=17
     v221 BinopI { op=shru, lhs=v220, rhs_imm=63 }         -> x2
     v222 Binop { op=add, lhs=v220, rhs=v221 }             -> x0
     v223 Imm(0)                                           -> x2
-    v224 Neg(v222)                                        -> x0
+    v224 Neg(v222)                                        -> x6
     v225 StoreIndexed { base=v214, index=v197, scale=4, value=v224, kind=I32 } -> -
-    v226 LoadIndexed { base=v214, index=v197, scale=4, kind=I32 } -> x2
-    v227 Binop { op=ne, lhs=v224, rhs=v213 }              -> x2
+    v226 LoadIndexed { base=v214, index=v197, scale=4, kind=I32 } -> x0
+    v227 Binop { op=ne, lhs=v224, rhs=v213 }              -> x0
     terminator Bz { cond=v227, target=b14, fall=b33 }   (exit_acc=v227)
   block 14  start_pc=0
-    v239 LocalAddr(-17)                                   -> x2
-    v240 Extend { value=v197, kind=I32 }                  -> x2
-    v241 BinopI { op=shl, lhs=v197, rhs_imm=2 }           -> x2
-    v242 Binop { op=add, lhs=v214, rhs=v241 }             -> x2
-    v243 LoadIndexed { base=v214, index=v197, scale=4, kind=I32 } -> x2
+    v239 LocalAddr(-17)                                   -> x0
+    v240 Extend { value=v197, kind=I32 }                  -> x0
+    v241 BinopI { op=shl, lhs=v197, rhs_imm=2 }           -> x0
+    v242 Binop { op=add, lhs=v214, rhs=v241 }             -> x0
+    v243 LoadIndexed { base=v214, index=v197, scale=4, kind=I32 } -> x0
     v244 Binop { op=ne, lhs=v224, rhs=v213 }              -> x0
     terminator Bz { cond=v244, target=b15, fall=b32 }   (exit_acc=v244)
   block 15  start_pc=0
-    v251 LoadLocal { off=-2, kind=I32, volatile }         -> x8
+    v251 LoadLocal { off=-2, kind=I32, volatile }         -> x9
     v252 Binop { op=div, lhs=v213, rhs=v251 }             -> x0
     v253 Binop { op=mul, lhs=v252, rhs=v251 }             -> x0
     v254 Binop { op=mod, lhs=v213, rhs=v251 }             -> x2
@@ -4238,14 +4238,14 @@ fn ent_pc=4 n_params=0 variadic=false locals=17
     v257 BinopI { op=shl, lhs=v197, rhs_imm=2 }           -> x0
     v258 Binop { op=add, lhs=v214, rhs=v257 }             -> x0
     v259 LoadIndexed { base=v214, index=v197, scale=4, kind=I32 } -> x0
-    v260 BinopI { op=mul, lhs=v259, rhs_imm=954437177 }   -> x7
-    v261 BinopI { op=shr, lhs=v260, rhs_imm=33 }          -> x7
-    v262 BinopI { op=shru, lhs=v261, rhs_imm=63 }         -> x8
-    v263 Binop { op=add, lhs=v261, rhs=v262 }             -> x7
-    v264 Imm(0)                                           -> x8
-    v265 Neg(v263)                                        -> x7
-    v266 BinopI { op=mul, lhs=v265, rhs_imm=-9 }          -> x7
-    v267 Binop { op=sub, lhs=v259, rhs=v266 }             -> x0
+    v260 BinopI { op=mul, lhs=v224, rhs_imm=954437177 }   -> x0
+    v261 BinopI { op=shr, lhs=v260, rhs_imm=33 }          -> x0
+    v262 BinopI { op=shru, lhs=v261, rhs_imm=63 }         -> x7
+    v263 Binop { op=add, lhs=v261, rhs=v262 }             -> x0
+    v264 Imm(0)                                           -> x7
+    v265 Neg(v263)                                        -> x0
+    v266 BinopI { op=mul, lhs=v265, rhs_imm=-9 }          -> x0
+    v267 Binop { op=sub, lhs=v224, rhs=v266 }             -> x6
     v268 StoreIndexed { base=v214, index=v197, scale=4, value=v267, kind=I32 } -> -
     v269 Extend { value=v267, kind=I32 }                  -> x0
     v270 Extend { value=v254, kind=I32 }                  -> x6

@@ -538,9 +538,9 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x80
                	ret
                	and	x2, x1, #0x7
+               	ubfx	x1, x1, #3, #5
+               	add	x2, x2, x1
                	ldur	w1, [x29, #-0x48]
-               	ubfx	x3, x1, #3, #5
-               	add	x2, x2, x3
                	ubfx	x3, x1, #8, #8
                	add	x2, x2, x3
                	add	x1, x2, x1, asr #16

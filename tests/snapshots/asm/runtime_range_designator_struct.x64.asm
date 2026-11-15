@@ -221,12 +221,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x6, %eax
                	jmp	<addr>
-               	movl	-0x20(%rbp), %eax
-               	cmpl	$0x11, %eax
-               	jne	<addr>
                	xorl	%eax, %eax
-               	jmp	<addr>
-               	movl	$0x7, %eax
                	jmp	<addr>
                	movl	$0x4, %eax
                	jmp	<addr>

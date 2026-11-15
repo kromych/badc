@@ -211,23 +211,23 @@ Disassembly of section .text:
                	ret
                	stur	xzr, [x29, #-0x80]
                	sub	x5, x29, #0x10
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	ldp	x16, x17, [x3]
+               	adrp	x6, <page>
+               	add	x6, x6, <lo12>
+               	ldp	x16, x17, [x6]
                	stp	x16, x17, [x5]
                	adrp	x3, <page>
-               	ldr	x6, [x3, #0x38]
-               	cmp	x2, x6
+               	ldr	x7, [x3, #0x38]
+               	cmp	x2, x7
                	b.eq	<addr>
                	mov	x0, #0x16               // =22
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldur	d0, [x29, #-0x10]
+               	ldr	d0, [x6]
                	fmov	d1, #1.50000000
                	fcmp	d0, d1
                	b.ne	<addr>
-               	ldur	d0, [x29, #-0x8]
+               	ldr	d0, [x6, #0x8]
                	fmov	d1, #2.50000000
                	fcmp	d0, d1
                	b.ne	<addr>

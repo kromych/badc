@@ -99,38 +99,38 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
   block 1  start_pc=0
     v161 BinopI { op=add, lhs=v1, rhs_imm=2 }             -> x9
     v162 Load { addr=v1, disp=2, kind=U16 pc_rel }        -> x9
-    v163 BinopI { op=ne, lhs=v162, rhs_imm=2 }            -> x9
+    v163 BinopI { op=ne, lhs=v5, rhs_imm=2 }              -> x9
     v164 BinopI { op=and, lhs=v163, rhs_imm=4294967295 }  -> x3
-    v165 BinopI { op=eq, lhs=v162, rhs_imm=2 }            -> x3
+    v165 BinopI { op=eq, lhs=v5, rhs_imm=2 }              -> x3
     v166 Imm(0)                                           -> x3
     v167 Imm(0)                                           -> x3
     terminator Bnz { cond=v163, target=b9, fall=b2 }   (exit_acc=v165)
   block 2  start_pc=0
     v168 BinopI { op=add, lhs=v1, rhs_imm=10 }            -> x9
     v169 Load { addr=v1, disp=10, kind=U16 pc_rel }       -> x9
-    v170 BinopI { op=ne, lhs=v169, rhs_imm=7 }            -> x9
+    v170 BinopI { op=ne, lhs=v7, rhs_imm=7 }              -> x9
     v171 BinopI { op=and, lhs=v170, rhs_imm=4294967295 }  -> x3
-    v172 BinopI { op=eq, lhs=v169, rhs_imm=7 }            -> x3
+    v172 BinopI { op=eq, lhs=v7, rhs_imm=7 }              -> x3
     v173 Imm(0)                                           -> x3
     v174 Imm(0)                                           -> x3
     terminator Bnz { cond=v170, target=b9, fall=b3 }   (exit_acc=v172)
   block 3  start_pc=0
     v175 BinopI { op=add, lhs=v1, rhs_imm=36 }            -> x9
-    v176 Load { addr=v1, disp=36, kind=I32 pc_rel }       -> x9
+    v176 Extend { value=v9, kind=I32 }                    -> x9
     v177 BinopI { op=eq, lhs=v176, rhs_imm=5 }            -> x9
     v178 Imm(0)                                           -> x3
     v179 Imm(0)                                           -> x3
     terminator Bz { cond=v177, target=b9, fall=b4 }   (exit_acc=v177)
   block 4  start_pc=0
     v180 BinopI { op=add, lhs=v1, rhs_imm=44 }            -> x9
-    v181 Load { addr=v1, disp=44, kind=I32 pc_rel }       -> x9
+    v181 Extend { value=v11, kind=I32 }                   -> x9
     v182 BinopI { op=eq, lhs=v181, rhs_imm=6 }            -> x9
     v183 Imm(0)                                           -> x3
     v184 Imm(0)                                           -> x3
     terminator Bz { cond=v182, target=b9, fall=b5 }   (exit_acc=v182)
   block 5  start_pc=0
     v185 BinopI { op=add, lhs=v1, rhs_imm=152 }           -> x9
-    v186 Load { addr=v1, disp=152, kind=I32 pc_rel }      -> x9
+    v186 Extend { value=v13, kind=I32 }                   -> x9
     v187 BinopI { op=eq, lhs=v186, rhs_imm=9 }            -> x9
     v188 Imm(0)                                           -> x3
     v189 Imm(0)                                           -> x3

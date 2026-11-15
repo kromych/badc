@@ -563,29 +563,29 @@ fn ent_pc=14 n_params=0 variadic=false locals=0
     v187 SegLoad { addr=v115, kind=I64, seg=Gs }          -> x1
     v188 BinopI { op=add, lhs=v164, rhs_imm=24 }          -> x2
     v189 Store { addr=v164, disp=24, value=v187, kind=I64, align=8 pc_rel } -> -
-    v190 ImmData(80)                                      -> x1
-    v191 Load { addr=v164, disp=0, kind=I64 pc_rel }      -> x1
+    v190 ImmData(80)                                      -> x2
+    v191 Load { addr=v164, disp=0, kind=I64 pc_rel }      -> x2
     v192 BinopI { op=eq, lhs=v176, rhs_imm=-77129852519530769 } -> x0
-    v193 Imm(0)                                           -> x1
+    v193 Imm(0)                                           -> x2
     terminator Bz { cond=v192, target=b19, fall=b16 }   (exit_acc=v192)
   block 16  start_pc=0
     v545 BinopI { op=add, lhs=v164, rhs_imm=8 }           -> x0
     v546 Load { addr=v164, disp=8, kind=U32 pc_rel }      -> x0
     v547 BinopI { op=eq, lhs=v546, rhs_imm=287454020 }    -> x0
-    v548 Imm(0)                                           -> x1
-    v549 Imm(0)                                           -> x1
+    v548 Imm(0)                                           -> x2
+    v549 Imm(0)                                           -> x2
     terminator Bz { cond=v547, target=b19, fall=b17 }   (exit_acc=v547)
   block 17  start_pc=0
     v550 BinopI { op=add, lhs=v164, rhs_imm=16 }          -> x0
     v551 Load { addr=v164, disp=16, kind=U32 pc_rel }     -> x0
     v552 BinopI { op=eq, lhs=v551, rhs_imm=1432778632 }   -> x0
-    v553 Imm(0)                                           -> x1
-    v554 Imm(0)                                           -> x1
+    v553 Imm(0)                                           -> x2
+    v554 Imm(0)                                           -> x2
     terminator Bz { cond=v552, target=b19, fall=b18 }   (exit_acc=v552)
   block 18  start_pc=0
     v555 BinopI { op=add, lhs=v164, rhs_imm=24 }          -> x0
     v556 Load { addr=v164, disp=24, kind=I64 pc_rel }     -> x0
-    v557 BinopI { op=eq, lhs=v556, rhs_imm=81985529216486895 } -> x0
+    v557 BinopI { op=eq, lhs=v187, rhs_imm=81985529216486895 } -> x0
     v558 Imm(0)                                           -> x1
     v559 Extend { value=v557, kind=I32 }                  -> x1
     v560 Extend { value=v557, kind=I32 }                  -> x1

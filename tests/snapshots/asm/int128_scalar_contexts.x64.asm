@@ -628,17 +628,16 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	leaq	<rip>, %rcx # <addr>
-               	movq	<rip>, %rax # <addr>
-               	movl	(%rcx,%rax,4), %edx
-               	cmpl	$0x1e, %edx
-               	jne	<addr>
-               	movl	(%rcx,%rax,4), %edx
-               	cmpl	$0x1e, %edx
-               	jne	<addr>
-               	movl	(%rcx,%rax,4), %eax
+               	movq	<rip>, %rdx # <addr>
+               	movl	(%rcx,%rdx,4), %eax
                	cmpl	$0x1e, %eax
                	jne	<addr>
-               	movq	<rip>, %rdx # <addr>
+               	movl	(%rcx,%rdx,4), %eax
+               	cmpl	$0x1e, %eax
+               	jne	<addr>
+               	movl	(%rcx,%rdx,4), %eax
+               	cmpl	$0x1e, %eax
+               	jne	<addr>
                	leaq	<rip>, %rax # <addr>
                	movl	(%rax,%rdx,4), %edx
                	cmpl	$0x1e, %edx

@@ -941,13 +941,13 @@ fn ent_pc=16 n_params=0 variadic=false locals=20
     v481 LocalAddr(-12)                                   -> x1
     v482 BinopI { op=add, lhs=v473, rhs_imm=8 }           -> x1
     v483 LoadLocal { off=-12, disp=8, kind=I64 }          -> x1
-    v484 BinopI { op=ge, lhs=v479, rhs_imm=1000000000 }   -> x0
+    v484 BinopI { op=ge, lhs=v479, rhs_imm=1000000000 }   -> x1
     terminator Bz { cond=v484, target=b117, fall=b116 }   (exit_acc=v484)
   block 116  start_pc=0
-    v693 LocalAddr(-12)                                   -> x0
-    v694 BinopI { op=add, lhs=v473, rhs_imm=8 }           -> x0
-    v695 LoadLocal { off=-12, disp=8, kind=I64 }          -> x0
-    v696 BinopI { op=sub, lhs=v695, rhs_imm=1000000000 }  -> x0
+    v693 LocalAddr(-12)                                   -> x1
+    v694 BinopI { op=add, lhs=v473, rhs_imm=8 }           -> x1
+    v695 LoadLocal { off=-12, disp=8, kind=I64 }          -> x1
+    v696 BinopI { op=sub, lhs=v479, rhs_imm=1000000000 }  -> x0
     v697 StoreLocal { off=-12, disp=8, value=v696, kind=I64 } -> -
     v698 LocalAddr(-12)                                   -> x0
     v699 LoadLocal { off=-12, kind=I64 }                  -> x0
@@ -1084,13 +1084,13 @@ fn ent_pc=16 n_params=0 variadic=false locals=20
     v547 LocalAddr(-14)                                   -> x1
     v548 BinopI { op=add, lhs=v539, rhs_imm=8 }           -> x1
     v549 LoadLocal { off=-14, disp=8, kind=I64 }          -> x1
-    v550 BinopI { op=ge, lhs=v545, rhs_imm=1000000000 }   -> x0
+    v550 BinopI { op=ge, lhs=v545, rhs_imm=1000000000 }   -> x1
     terminator Bz { cond=v550, target=b130, fall=b129 }   (exit_acc=v550)
   block 129  start_pc=0
-    v742 LocalAddr(-14)                                   -> x0
-    v743 BinopI { op=add, lhs=v539, rhs_imm=8 }           -> x0
-    v744 LoadLocal { off=-14, disp=8, kind=I64 }          -> x0
-    v745 BinopI { op=sub, lhs=v744, rhs_imm=1000000000 }  -> x0
+    v742 LocalAddr(-14)                                   -> x1
+    v743 BinopI { op=add, lhs=v539, rhs_imm=8 }           -> x1
+    v744 LoadLocal { off=-14, disp=8, kind=I64 }          -> x1
+    v745 BinopI { op=sub, lhs=v545, rhs_imm=1000000000 }  -> x0
     v746 StoreLocal { off=-14, disp=8, value=v745, kind=I64 } -> -
     v747 LocalAddr(-14)                                   -> x0
     v748 LoadLocal { off=-14, kind=I64 }                  -> x0

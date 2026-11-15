@@ -102,100 +102,94 @@ Disassembly of section .text:
                	bl	<addr>
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
+               	adrp	x3, <page>
+               	add	x3, x3, <lo12>
                	mov	x0, #0x0                // =0
-               	ldrb	w3, [x1, x0]
-               	cbz	x3, <addr>
-               	ldrb	w3, [x1, x0]
+               	ldrb	w1, [x3, x0]
+               	cbz	x1, <addr>
                	ldrb	w4, [x2, x0]
-               	cmp	w3, w4
+               	cmp	w1, w4
                	b.ne	<addr>
                	add	x0, x0, #0x1
-               	ldrb	w3, [x1, x0]
-               	cbnz	x3, <addr>
+               	ldrb	w1, [x3, x0]
+               	cbnz	x1, <addr>
                	adrp	x20, <page>
                	add	x20, x20, <lo12>
                	ldrb	w1, [x20, x0]
                	ldrb	w0, [x2, x0]
                	cmp	w1, w0
                	adrp	x0, <page>
-               	ldrsw	x2, [x0, #0x34]
-               	add	x2, x2, #0x1
-               	str	w2, [x0, #0x34]
+               	ldrsw	x1, [x0, #0x34]
+               	add	x1, x1, #0x1
+               	str	w1, [x0, #0x34]
                	b.eq	<addr>
-               	adrp	x1, <page>
-               	ldrsw	x2, [x1, #0x38]
+               	adrp	x0, <page>
+               	ldrsw	x2, [x0, #0x38]
                	cbnz	w2, <addr>
-               	ldrsw	x0, [x0, #0x34]
-               	str	w0, [x1, #0x38]
+               	str	w1, [x0, #0x38]
                	adrp	x1, <page>
                	str	wzr, [x1, #0x30]
                	strb	wzr, [x20]
                	mov	x0, #0x1                // =1
                	bl	<addr>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
                	mov	x0, #0x0                // =0
-               	ldrb	w2, [x20, x0]
-               	cbz	x2, <addr>
-               	ldrb	w2, [x20, x0]
-               	ldrb	w3, [x1, x0]
-               	cmp	w2, w3
+               	ldrb	w1, [x20, x0]
+               	cbz	x1, <addr>
+               	ldrb	w3, [x2, x0]
+               	cmp	w1, w3
                	b.ne	<addr>
                	add	x0, x0, #0x1
-               	ldrb	w2, [x20, x0]
-               	cbnz	x2, <addr>
+               	ldrb	w1, [x20, x0]
+               	cbnz	x1, <addr>
                	adrp	x20, <page>
                	add	x20, x20, <lo12>
-               	ldrb	w2, [x20, x0]
-               	ldrb	w0, [x1, x0]
-               	cmp	w2, w0
+               	ldrb	w1, [x20, x0]
+               	ldrb	w0, [x2, x0]
+               	cmp	w1, w0
                	adrp	x0, <page>
-               	ldrsw	x2, [x0, #0x34]
-               	add	x2, x2, #0x1
-               	str	w2, [x0, #0x34]
+               	ldrsw	x1, [x0, #0x34]
+               	add	x1, x1, #0x1
+               	str	w1, [x0, #0x34]
                	b.eq	<addr>
-               	adrp	x1, <page>
-               	ldrsw	x2, [x1, #0x38]
+               	adrp	x0, <page>
+               	ldrsw	x2, [x0, #0x38]
                	cbnz	w2, <addr>
-               	ldrsw	x0, [x0, #0x34]
-               	str	w0, [x1, #0x38]
+               	str	w1, [x0, #0x38]
                	adrp	x1, <page>
                	str	wzr, [x1, #0x30]
                	strb	wzr, [x20]
                	mov	x0, #0x2                // =2
                	bl	<addr>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	mov	x0, #0x0                // =0
-               	ldrb	w2, [x20, x0]
-               	cbz	x2, <addr>
-               	ldrb	w2, [x20, x0]
-               	ldrb	w3, [x1, x0]
-               	cmp	w2, w3
-               	b.ne	<addr>
-               	add	x0, x0, #0x1
-               	ldrb	w2, [x20, x0]
-               	cbnz	x2, <addr>
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
+               	mov	x0, #0x0                // =0
+               	ldrb	w1, [x20, x0]
+               	cbz	x1, <addr>
                	ldrb	w3, [x2, x0]
-               	ldrb	w0, [x1, x0]
+               	cmp	w1, w3
+               	b.ne	<addr>
+               	add	x0, x0, #0x1
+               	ldrb	w1, [x20, x0]
+               	cbnz	x1, <addr>
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldrb	w3, [x1, x0]
+               	ldrb	w0, [x2, x0]
                	cmp	w3, w0
                	adrp	x0, <page>
-               	ldrsw	x3, [x0, #0x34]
-               	add	x3, x3, #0x1
-               	str	w3, [x0, #0x34]
+               	ldrsw	x2, [x0, #0x34]
+               	add	x2, x2, #0x1
+               	str	w2, [x0, #0x34]
                	b.eq	<addr>
-               	adrp	x1, <page>
-               	ldrsw	x3, [x1, #0x38]
+               	adrp	x0, <page>
+               	ldrsw	x3, [x0, #0x38]
                	cbnz	w3, <addr>
-               	ldrsw	x0, [x0, #0x34]
-               	str	w0, [x1, #0x38]
-               	adrp	x1, <page>
-               	str	wzr, [x1, #0x30]
-               	strb	wzr, [x2]
+               	str	w2, [x0, #0x38]
+               	adrp	x2, <page>
+               	str	wzr, [x2, #0x30]
+               	strb	wzr, [x1]
                	mov	x0, #0x1                // =1
                	mov	x16, #0x1               // =1
                	cmp	w16, #0x1

@@ -84,17 +84,17 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v26  Load { addr=v6, disp=0, kind=I64 pc_rel }        -> x1
     v27  ImmData(24)                                      -> x1
     v28  Load { addr=v27, disp=0, kind=I64 pc_rel }       -> x1
-    v29  Binop { op=ne, lhs=v7, rhs=v28 }                 -> x0
+    v29  Binop { op=ne, lhs=v7, rhs=v28 }                 -> x1
     terminator Bz { cond=v29, target=b9, fall=b8 }   (exit_acc=v29)
   block 8  start_pc=0
     v30  Imm(4)                                           -> x0
     terminator Return(v30)   (exit_acc=v30)
   block 9  start_pc=0
-    v31  ImmData(32)                                      -> x0
-    v32  Load { addr=v2, disp=0, kind=I64 pc_rel }        -> x0
-    v33  ImmData(48)                                      -> x1
-    v34  Load { addr=v6, disp=0, kind=I64 pc_rel }        -> x1
-    v35  Binop { op=eq, lhs=v32, rhs=v34 }                -> x0
+    v31  ImmData(32)                                      -> x1
+    v32  Load { addr=v2, disp=0, kind=I64 pc_rel }        -> x1
+    v33  ImmData(48)                                      -> x2
+    v34  Load { addr=v6, disp=0, kind=I64 pc_rel }        -> x2
+    v35  Binop { op=eq, lhs=v32, rhs=v7 }                 -> x0
     terminator Bz { cond=v35, target=b11, fall=b10 }   (exit_acc=v35)
   block 10  start_pc=0
     v36  Imm(5)                                           -> x0

@@ -558,11 +558,10 @@ Disassembly of section .text:
                	retq
                	movq	%rcx, %rdx
                	andq	$0x7, %rdx
+               	sarq	$0x3, %rcx
+               	andq	$0x1f, %rcx
+               	addq	%rcx, %rdx
                	movl	-0x48(%rbp), %ecx
-               	movq	%rcx, %rsi
-               	sarq	$0x3, %rsi
-               	andq	$0x1f, %rsi
-               	addq	%rsi, %rdx
                	movq	%rcx, %rsi
                	sarq	$0x8, %rsi
                	andq	$0xff, %rsi

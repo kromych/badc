@@ -34,19 +34,17 @@ Disassembly of section .text:
                	movl	<rip>, %r8d # <addr>
                	cmpl	$0x1, %eax
                	jne	<addr>
-               	movzwq	<rip>, %r9 # <addr>
-               	cmpl	$0x2, %r9d
+               	cmpl	$0x2, %ecx
                	jne	<addr>
-               	movzwq	<rip>, %r9 # <addr>
-               	cmpl	$0x7, %r9d
+               	cmpl	$0x7, %edx
                	jne	<addr>
-               	movl	<rip>, %r9d # <addr>
+               	movq	%rsi, %r9
                	cmpl	$0x5, %r9d
                	jne	<addr>
-               	movl	<rip>, %r9d # <addr>
+               	movq	%rdi, %r9
                	cmpl	$0x6, %r9d
                	jne	<addr>
-               	movl	<rip>, %r9d # <addr>
+               	movq	%r8, %r9
                	cmpl	$0x9, %r9d
                	jne	<addr>
                	cmpw	$0x0, <rip> # <addr>

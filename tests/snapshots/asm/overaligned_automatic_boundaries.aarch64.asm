@@ -188,9 +188,6 @@ Disassembly of section .text:
                	sturh	w3, [x29, #-0x22]
                	and	x0, x0, #0xf
                	cbnz	w0, <addr>
-               	ldursh	x0, [x29, #-0xa0]
-               	cmp	w0, #0x1
-               	b.ne	<addr>
                	sub	x0, x29, #0x20
                	str	x0, [x1, #0x20]
                	mov	x1, #0x7                // =7

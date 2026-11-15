@@ -257,9 +257,9 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	movq	%rsi, <rip> # <addr>
-               	cmpq	$0x0, -0x68(%rbp)
-               	je	<addr>
                	movq	-0x68(%rbp), %rax
+               	testq	%rax, %rax
+               	je	<addr>
                	movq	-0x60(%rbp), %rdx
                	movq	%rdx, 0x30(%rax)
                	movq	-0x60(%rbp), %rax

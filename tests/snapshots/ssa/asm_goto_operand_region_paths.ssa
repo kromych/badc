@@ -165,7 +165,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
   block 14  start_pc=0
     v95  LocalAddr(-13)                                   -> x0
     v96  LoadLocal { off=-13, kind=I64 }                  -> x0
-    v97  Extend { value=v96, kind=I32 }                   -> x0
+    v97  Imm(4)                                           -> x0
     v98  InlineAsm { template="testl %0, %0; jnz %l0", ops=1, args=[v97] } -> -
     terminator AsmGoto { table=4 }   [b15, b33]
   block 15  start_pc=0

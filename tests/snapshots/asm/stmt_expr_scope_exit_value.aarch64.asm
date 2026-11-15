@@ -80,17 +80,16 @@ Disassembly of section .text:
                	mov	x1, #0x1                // =1
                	str	w1, [x0, #0x20]
                	adrp	x1, <page>
-               	mov	x3, #-0x1               // =-1
-               	str	w3, [x1, #0x24]
-               	ldrsw	x3, [x0, #0x20]
-               	cmp	w3, #0x1
+               	mov	x2, #-0x1               // =-1
+               	str	w2, [x1, #0x24]
+               	ldrsw	x2, [x0, #0x20]
+               	cmp	w2, #0x1
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldrsw	x3, [x0, #0x20]
-               	add	x3, x3, #0x1
-               	str	w3, [x0, #0x20]
+               	add	x2, x2, #0x1
+               	str	w2, [x0, #0x20]
                	str	wzr, [x1, #0x24]
                	mov	x0, #0x4                // =4
                	bl	<addr>

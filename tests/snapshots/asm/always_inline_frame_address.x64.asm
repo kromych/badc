@@ -83,9 +83,8 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	popq	%rbp
                	retq
-               	movq	<rip>, %rax # <addr>
                	movq	<rip>, %rcx # <addr>
-               	cmpq	%rcx, %rax
+               	cmpq	%rax, %rcx
                	jne	<addr>
                	movl	$0x5, %eax
                	popq	%rbp

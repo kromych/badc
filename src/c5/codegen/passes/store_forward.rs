@@ -622,6 +622,24 @@ fn run_one(func: &mut FunctionSsa) {
                     let kind = *kind;
                     let volatile = *volatile;
                     let w = store_width(kind);
+                    // A store of the bytes an entry says the location holds
+                    // writes nothing: it goes, and nothing it would clear
+                    // changes.
+                    let held = resolve(&redirect, value);
+                    if !volatile
+                        && is_int_store(kind)
+                        && table.iter().any(|e| {
+                            (e.addr, e.disp, e.width) == (addr, disp, w)
+                                && resolve(&redirect, e.value) == held
+                                && e.load_kind
+                                    .is_none_or(|k| k == LoadKind::I64 || narrow_reuse(k).is_some())
+                        })
+                    {
+                        rewrites.push((i, Inst::Imm(0)));
+                        redirect[i] = Some(value);
+                        any = true;
+                        continue;
+                    }
                     // Drop every entry not provably disjoint from the
                     // written range. An exposed slot's address is a value,
                     // so the write can reach it, off its own address the bytes named.
@@ -3279,6 +3297,49 @@ mod tests {
             "{:?}",
             f.insts[3]
         );
+    }
+
+    /// A store of the value the location holds -- read from it, or stored
+    /// to it, with nothing between that may write it -- goes, and a use of
+    /// the store's id reads the value. A store through another base between
+    /// keeps it, as does a store of another value.
+    #[test]
+    fn a_store_of_the_value_the_location_holds_goes() {
+        let gone = |insts: Vec<Inst>, store: usize| {
+            let n = insts.len() as ValueId;
+            let mut f = fresh(insts, Terminator::Return(n - 1), n - 1);
+            run_one(&mut f);
+            matches!(f.insts[store], Inst::Imm(_))
+        };
+        let other = Inst::Store {
+            addr: 1,
+            disp: 0,
+            value: 2,
+            kind: StoreKind::I64,
+            volatile: false,
+            align: 0,
+            pc_rel: false,
+        };
+        let reloaded = alloc::vec![param(0), param(1), load_of(0), store_at(2, StoreKind::I64)];
+        assert!(gone(reloaded.clone(), 3));
+        let mut narrow = reloaded.clone();
+        narrow[2] = load_at(LoadKind::U16);
+        narrow[3] = store_at(2, StoreKind::I16);
+        assert!(gone(narrow, 3));
+        let restored = alloc::vec![
+            param(0),
+            param(1),
+            store_at(1, StoreKind::I32),
+            load_at(LoadKind::I8),
+            store_at(1, StoreKind::I32),
+        ];
+        assert!(gone(restored, 4));
+        let mut between = reloaded.clone();
+        between.insert(3, other);
+        assert!(!gone(between, 4));
+        let mut another = reloaded;
+        another[3] = store_at(1, StoreKind::I64);
+        assert!(!gone(another, 3));
     }
 
     /// The distance a forward is bounded by runs along the path: a block

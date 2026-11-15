@@ -79,12 +79,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x20
                	ret
-               	mov	x2, #-0x1               // =-1
-               	stur	x2, [x0, #-0x10]
-               	mov	x2, #0xffffffff         // =4294967295
-               	stur	w2, [x0, #-0x8]
-               	mov	x2, #0xffff             // =65535
-               	sturh	w2, [x0, #-0x4]
+               	sturb	w1, [x0, #-0x3]
                	sturb	w1, [x0, #-0x2]
                	ldur	w2, [x0, #-0x5]
                	orr	x2, x2, #0xff00000000
@@ -128,9 +123,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x20
                	ret
-               	mov	x2, #-0x1               // =-1
-               	stur	x2, [x0, #-0x10]
-               	stur	x2, [x0, #-0x8]
+               	sturb	w1, [x0, #-0x5]
+               	mov	x2, #0xffffffff         // =4294967295
+               	stur	w2, [x0, #-0x4]
                	ldur	w2, [x0, #-0x6]
                	ldurh	w3, [x0, #-0x2]
                	orr	x2, x2, x3, lsl #32
@@ -161,11 +156,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x20
                	ret
-               	mov	x2, #-0x1               // =-1
-               	stur	x2, [x0, #-0x10]
-               	mov	x2, #0xffffffff         // =4294967295
-               	stur	w2, [x0, #-0x8]
                	mov	x2, #0xffff             // =65535
+               	sturh	w2, [x0, #-0x6]
                	sturh	w2, [x0, #-0x4]
                	sturb	w1, [x0, #-0x2]
                	ldur	w2, [x0, #-0x7]
@@ -502,11 +494,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x20
                	ret
-               	stur	xzr, [x0, #-0x20]
-               	stur	xzr, [x0, #-0x18]
-               	stur	wzr, [x0, #-0x10]
-               	sturh	wzr, [x0, #-0xc]
-               	sturb	w2, [x0, #-0xa]
                	ldurb	w1, [x0, #-0x11]
                	and	x1, x1, #0xfffffffffffffffe
                	orr	x1, x1, #0x1

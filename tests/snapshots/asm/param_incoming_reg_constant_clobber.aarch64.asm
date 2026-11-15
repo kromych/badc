@@ -31,13 +31,11 @@ Disassembly of section .text:
 
 <func_10>:
                	adrp	x1, <page>
-               	adrp	x3, <page>
+               	adrp	x2, <page>
                	ldrsw	x0, [x1, #0x40]
                	cmp	w0, #0x5
                	b.gt	<addr>
-               	ldrsw	x0, [x2]
-               	str	w0, [x2]
-               	ldrsw	x0, [x3, #0x44]
+               	ldrsw	x0, [x2, #0x44]
                	cbnz	x0, <addr>
                	ldrsw	x0, [x1, #0x40]
                	add	x0, x0, #0x1

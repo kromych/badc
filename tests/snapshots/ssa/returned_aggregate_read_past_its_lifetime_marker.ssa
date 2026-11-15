@@ -142,8 +142,8 @@ fn ent_pc=0 n_params=5 variadic=false locals=1
     v136 LocalAddr(-1)                                    -> x1
     v137 ImmData(40)                                      -> x1
     v138 Imm(0)                                           -> x1
-    v139 Imm(0)                                           -> x2
-    v140 Store { addr=v137, disp=0, value=v138, kind=I8 pc_rel } -> -
+    v139 Store { addr=v137, disp=0, value=v138, kind=I8 pc_rel } -> -
+    v140 Imm(0)                                           -> x1
     v141 Imm(0)                                           -> x1
     v142 ImmData(40)                                      -> x1
     v143 Load { addr=v137, disp=0, kind=U8 pc_rel }       -> x1
@@ -220,8 +220,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v47  Imm(0)                                           -> x0
     v48  ImmData(40)                                      -> x0
     v49  Imm(0)                                           -> x0
-    v50  Imm(0)                                           -> x6
-    v51  Store { addr=v48, disp=0, value=v49, kind=I8 pc_rel } -> -
+    v50  Store { addr=v48, disp=0, value=v49, kind=I8 pc_rel } -> -
+    v51  Imm(0)                                           -> x6
     v52  Imm(0)                                           -> x6
     v53  ImmData(40)                                      -> x6
     v54  Load { addr=v48, disp=0, kind=U8 pc_rel }        -> x6

@@ -31,8 +31,51 @@ env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
+  # A push to master whose tree a pull request's run already tested and
+  # passed runs nothing again. That run checked out the merge preview, and a
+  # merge, squash, or rebase onto an unchanged master writes the same tree;
+  # a master that moved meanwhile gives another tree and the full run.
+  # `lint` names each pull request run's tree in an artifact; this job looks
+  # for a successful run that named the pushed one. It runs, and succeeds,
+  # on every event: a job's default condition fails when any job above it
+  # was skipped or failed, so a skipped or failed `verified` would skip every
+  # job below `build`. A failed lookup leaves the outputs empty, and the full
+  # run follows.
+  verified:
+    name: tree verified by a pull request
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      run: ${{ steps.find.outputs.run }}
+      head: ${{ steps.find.outputs.head }}
+    steps:
+      - if: github.event_name == 'push'
+        uses: actions/checkout@v4
+      - id: find
+        if: github.event_name == 'push'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tree=$(git rev-parse 'HEAD^{tree}')
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=tested-tree-$tree&per_page=100" \
+            --jq '.artifacts[] | "\(.workflow_run.id) \(.workflow_run.head_sha)"' |
+          while read -r id head; do
+            if [ "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$id" --jq .conclusion)" = success ]; then
+              echo "run=$id" >> "$GITHUB_OUTPUT"
+              echo "head=$head" >> "$GITHUB_OUTPUT"
+              echo "Tree $tree passed in run $id (pull request head $head)." >> "$GITHUB_STEP_SUMMARY"
+              break
+            fi
+          done
+
   lint:
     name: fmt + clippy
+    needs: verified
+    if: needs.verified.outputs.run == ''
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -82,8 +125,24 @@ jobs:
             echo "Common replacements: -> for U+2192, -- for em dash (U+2014), ... for ellipsis (U+2026)."
             exit 1
           fi
+      # Name this pull request run's tree for `verified`.
+      - name: record the tested tree
+        if: github.event_name == 'pull_request'
+        run: |
+          mkdir -p tested-tree
+          git rev-parse HEAD > tested-tree/commit
+          echo "TESTED_TREE=$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_ENV"
+      - if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tested-tree-${{ env.TESTED_TREE }}
+          path: tested-tree
+          retention-days: 90
+          overwrite: true
 
   build:
+    needs: verified
+    if: needs.verified.outputs.run == ''
     # One release build of the `badc` binary per runner label, shared with
     # every job below that only runs it. Those jobs took the same build
     # each -- twenty of them a run, two minutes warm and eight to ten on a
@@ -122,6 +181,8 @@ jobs:
           retention-days: 1
 
   test:
+    needs: verified
+    if: needs.verified.outputs.run == ''
     name: test (${{ matrix.os }})
     strategy:
       fail-fast: false
@@ -912,6 +973,8 @@ jobs:
         run: python demos/simplevisor/smoke.py
 
   pressure:
+    needs: verified
+    if: needs.verified.outputs.run == ''
     # Run the test suite and the functional demos with the register
     # allocator's per-bank counts capped to a fixed N, to catch
     # spill / scratch / reload bugs that only appear under pressure.
@@ -959,6 +1022,8 @@ jobs:
           done
 
   features:
+    needs: verified
+    if: needs.verified.outputs.run == ''
     name: feature combos
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -986,12 +1051,12 @@ jobs:
   snapshots-clean:
     name: snapshots clean
     runs-on: ubuntu-latest
-    needs: [test, build]
+    needs: [verified, test, build]
     # Snapshot drift is independent of which test lane failed; the
     # regenerator only needs a working ubuntu-latest test (which is
     # the runner this job uses). Don't block on Windows / aarch64
     # regressions.
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && needs.verified.outputs.run == '' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -1024,14 +1089,14 @@ jobs:
 
   perf-table:
     name: perf comparison (${{ matrix.os }})
-    needs: [test, build]
+    needs: [verified, test, build]
     # Run the perf comparison whenever the test matrix has finished,
     # even if some lane failed: a failure on one OS should not block
     # visibility on another's perf delta. The Windows lanes measure badc
     # against MSVC's cl; the steps that need a POSIX host or clang (tcc,
     # ccc, the throughput counters, the CPython and QuickJS comparisons) run
     # on Linux only.
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && needs.verified.outputs.run == '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -1225,6 +1290,49 @@ jobs:
         run: |
           python3 demos/quickjs/bench.py | tee perf-out/qjs_cmp.md
           cat perf-out/qjs_cmp.md >> "$GITHUB_STEP_SUMMARY"
+
+  # A push `verified` matched files the measuring run's perf records under
+  # the pushed commit and branch, so the branch's series continues without
+  # measuring the same tree again. `perf_publish.py` keeps a record's own
+  # measurements and provenance and replaces its commit.
+  perf-records:
+    name: perf records of the verified tree
+    needs: verified
+    if: needs.verified.outputs.run != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: file the pull request run's records under this commit
+        env:
+          DEPLOY_KEY: ${{ secrets.PERF_DATA_DEPLOY_KEY }}
+          HEAD_SHA: ${{ needs.verified.outputs.head }}
+        shell: bash
+        run: |
+          set -eu
+          [ -n "${DEPLOY_KEY:-}" ] || { echo "no deploy key configured"; exit 0; }
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/perf_data
+          chmod 600 ~/.ssh/perf_data
+          ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/perf_data -o IdentitiesOnly=yes"
+          repo="$RUNNER_TEMP/perf-data"
+          git clone --depth 1 git@github.com:kromych/badc-perf-data.git "$repo"
+          dir="$repo/runs/${HEAD_SHA:0:2}/${HEAD_SHA:2:2}/$HEAD_SHA"
+          [ -d "$dir" ] || { echo "the measuring run filed no records under $HEAD_SHA"; exit 0; }
+          for attempt in 1 2 3 4 5; do
+            for f in "$dir"/*.json; do
+              python3 scripts/perf_publish.py --data "$f" --repo "$repo" \
+                --sha "$GITHUB_SHA" --branch "$GITHUB_REF_NAME" \
+                --runner "$(basename "$f" .json)"
+            done
+            if git -C "$repo" push origin HEAD:main; then exit 0; fi
+            git -C "$repo" fetch --depth 1 origin main
+            git -C "$repo" reset --hard FETCH_HEAD
+          done
+          echo "the records did not publish in five attempts" >&2
+          exit 1
 
   # Build the Tcl 8.6.18 interpreter with badc and run the upstream
   # test suite (tests/all.tcl). Isolated from the `test` job because the

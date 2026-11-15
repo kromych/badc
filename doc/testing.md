@@ -281,6 +281,13 @@ build comparisons from the Linux runners.
 GUI demos only build their programs. [`demos/`](../demos/) says what each
 demo exercises.
 
+A push to `master` whose tree a pull request's run already tested and passed
+runs none of these: the `tree verified by a pull request` job finds that run
+through the artifact `fmt + clippy` names after each pull request run's tree,
+and `perf records of the verified tree` files that run's perf records under
+the pushed commit. A merge onto a `master` that moved since the pull request's
+last run gives another tree, and the full run follows.
+
 ## Before a push
 
 ### Git hooks

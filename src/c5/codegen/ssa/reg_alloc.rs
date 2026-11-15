@@ -1200,6 +1200,18 @@ impl RegBanks {
     /// touches ([`fp_scratch_demand`]). What is still missing is
     /// [`NO_FP_SCRATCH`].
     pub fn new(target: Target, fixed: FixedRegs) -> Self {
+        Self::with_fp_saved(target, fixed, |r| fp_callee_saved(target, r))
+    }
+
+    /// The banks of an SVE-PCS function that reaches no code of another
+    /// standard: z16-z23 are callee-saved as z8-z15 are (AAPCS64 6.1.3), so
+    /// z24-z31 come first after z0-z7. A base-PCS callee may change z16-z31.
+    pub fn sve_pcs(target: Target, fixed: FixedRegs) -> Self {
+        Self::with_fp_saved(target, fixed, |r| (8..=23).contains(&r))
+    }
+
+    /// The banks where `fp_saved` names the callee-saved FP registers.
+    fn with_fp_saved(target: Target, fixed: FixedRegs, fp_saved: impl Fn(u8) -> bool) -> Self {
         let rows = Rows::for_target(target);
         let keep = |bank: &[u8], reserved: fn(FixedRegs, u8) -> bool| -> Vec<u8> {
             bank.iter()
@@ -1221,7 +1233,7 @@ impl RegBanks {
             if n < count {
                 fp_scratch[n] = r;
                 n += 1;
-            } else if !fp_callee_saved(target, r) {
+            } else if !fp_saved(r) {
                 caller_fprs.push(r);
             } else if !callee_fprs.contains(&r) {
                 callee_fprs.push(r);
@@ -1719,7 +1731,11 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // preserves, and this function's callees follow the target's
     // convention unless they say otherwise. Only the prologue's save
     // list grows for a foreign convention -- see `conv_banks` below.
-    let banks = RegBanks::new(target, fixed);
+    let banks = if func.sve_pcs.is_some() && !super::sve_alloc::reaches_other_pcs(func, target) {
+        RegBanks::sve_pcs(target, fixed)
+    } else {
+        RegBanks::new(target, fixed)
+    };
     if n_insts == 0 {
         return Allocation {
             places,

@@ -4,7 +4,7 @@
 //! to a vector length, then the vector slots, each at `[base, #-k, mul vl]`
 //! from the static frame's bottom (`fp - frame_bytes`, or x19).
 
-use super::super::ssa::sve_alloc::{PRED_HOLD, PRED_STAGE, PredPlace};
+use super::super::ssa::sve_alloc::{PRED_HOLD, PRED_STAGE, PredPlace, reaches_other_pcs};
 use super::*;
 
 /// `ldr` / `str` of a whole Z (`vector`) or P register at
@@ -298,21 +298,6 @@ const SVE_PCS_P: u16 = 0xFFF0;
 /// Whether parameter `i` of `func` is an SVE value.
 pub(super) fn sve_param(func: &FunctionSsa, i: usize) -> bool {
     (func.sve_pcs.as_ref()).is_some_and(|k| k.get(i).copied().flatten().is_some())
-}
-
-/// Whether `func` reaches code another procedure call standard governs: a
-/// call, inline asm, or a TLS descriptor call. The base PCS preserves only
-/// the low 64 bits of z8-z15 and no p register.
-fn reaches_other_pcs(func: &FunctionSsa, target: Target) -> bool {
-    func.insts.iter().any(|i| match i {
-        Inst::Call { .. }
-        | Inst::CallIndirect { .. }
-        | Inst::CallExt { .. }
-        | Inst::TailExt(_)
-        | Inst::InlineAsm { .. } => true,
-        Inst::TlsAddr(_) => super::ssa::reg_alloc::tls_addr_is_call(target, func),
-        _ => false,
-    })
 }
 
 /// The z and p registers the prologue of SVE-PCS `func` saves: all it must

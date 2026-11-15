@@ -52,6 +52,18 @@ impl SveAlloc {
     }
 }
 
+/// Whether `func` reaches code another procedure call standard governs: a
+/// call, inline asm, a TLS descriptor call, or the inline setjmp. The base
+/// PCS preserves only the low 64 bits of z8-z15 and no p register.
+pub(crate) fn reaches_other_pcs(func: &FunctionSsa, target: crate::c5::Target) -> bool {
+    use crate::c5::ir::Inst;
+    let tls = super::reg_alloc::tls_addr_is_call(target, func);
+    (func.insts.iter()).any(|i| {
+        super::reg_alloc::is_call_site(i, tls)
+            || matches!(i, Inst::TailExt(_) | Inst::InlineAsm { .. })
+    })
+}
+
 /// The value width of the result of intrinsic `kind`.
 pub(crate) fn intrinsic_width(kind: i64) -> VecWidth {
     let result = crate::c5::op::Intrinsic::from_i64(kind).and_then(|i| i.sve_result());

@@ -2193,8 +2193,56 @@ fn an_sve_pcs_leaf_saves_the_scratch_its_rows_write_alone() {
     let w = super::perf_codegen::a64_at(&src(21, true), "f", true);
     let d = sum(&w).expect("saddv");
     assert_eq!(saved(&w), [d], "{w:08x?}");
-    // One register of z24-z31 free: the sum's scratch takes it.
-    let w = super::perf_codegen::a64_at(&src(18, true), "f", true);
+    // Registers of z24-z31 free: the sum's scratch takes one.
+    let w = super::perf_codegen::a64_at(&src(12, true), "f", true);
     assert!((24..32).contains(&sum(&w).expect("saddv")), "{w:08x?}");
     assert_eq!(saved(&w), [], "{w:08x?}");
+}
+
+/// The SVE PCS has a function preserve z16-z23 as it does z8-z15 (AAPCS64
+/// 6.1.3), so an SVE-PCS function whose values cross no call takes z24-z31
+/// before them: 12 sums live at once save no register. One that calls
+/// keeps the base banks, as a callee of the base standard may change
+/// z16-z31: its scalars across the call take the registers a base-PCS
+/// twin gives them.
+#[cfg(feature = "full")]
+#[test]
+fn an_sve_pcs_function_without_calls_takes_z24_to_z31_before_z16_to_z23() {
+    let mut src = String::from(
+        "#include <arm_sve.h>\nsvint32_t f(svbool_t pg, svint32_t a, svint32_t b) {\n",
+    );
+    for k in 0..12 {
+        src +=
+            &alloc::format!("svint32_t t{k} = svmul_x(pg, a, svadd_x(pg, b, svdup_n_s32({k})));\n");
+    }
+    let sum = (1..12).fold(String::from("t0"), |acc, k| {
+        alloc::format!("svadd_x(pg, {acc}, t{k})")
+    });
+    src += &alloc::format!("return {sum}; }}\n");
+    let w = super::perf_codegen::a64_at(&src, "f", true);
+    // STR zt, [xn, #imm, mul vl]; MUL zd.s, p0/m, zd.s, z0.s.
+    assert!(
+        !w.iter().any(|&x| x & 0xFFC0_E000 == 0xE580_4000),
+        "{w:08x?}"
+    );
+    let mul_into = |r: u32| w.contains(&(0x0490_0000 | r));
+    assert!((24..29).all(mul_into), "{w:08x?}");
+    assert!(!(16..24).any(mul_into), "{w:08x?}");
+    const CALLS: &str = "#include <arm_sve.h>\ndouble g(double);\n\
+        #define BODY double s0 = x[0], s1 = x[1], s2 = x[2], s3 = x[3], s4 = x[4], \\\n\
+          s5 = x[5], s6 = x[6], s7 = x[7], s8 = x[8], s9 = x[9], s10 = x[10]; \\\n\
+          double r = g(s0) + s1 * s2 + s3 * s4 + s5 * s6 + s7 * s8 + s9 * s10;\n\
+        svint32_t f(svbool_t pg, svint32_t a, const double *x) {\n\
+          BODY return svadd_x(pg, a, svdup_n_s32((int)r)); }\n\
+        int h(const double *x) { BODY return (int)r; }\n";
+    // LDR dt, [xn, #imm] ahead of the call: the registers of s0-s10.
+    let loaded = |name: &str| -> Vec<u32> {
+        let w = super::perf_codegen::a64_at(CALLS, name, true);
+        let call = w.iter().position(|&x| x >> 26 == 0x25).expect("bl");
+        (w[..call].iter())
+            .filter(|&&x| x & 0xFFC0_0000 == 0xFD40_0000)
+            .map(|x| x & 0x1F)
+            .collect()
+    };
+    assert_eq!(loaded("f"), loaded("h"));
 }

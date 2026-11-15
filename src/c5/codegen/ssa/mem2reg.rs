@@ -1782,13 +1782,14 @@ fn split_address_phi_loads(func: &mut FunctionSsa) {
             });
         }
     }
+    let pos = super::tape::sort(&mut ins, &func.blocks, func.insts.len());
     let rewrite = super::tape::insert(func, &ins);
     let mut k = 0;
     for (l, phi, reads) in plans {
         let (l, phi) = (rewrite.remap[l as usize], rewrite.remap[phi as usize]);
         if let Inst::Phi { incoming, kind } = &mut func.insts[phi as usize] {
             for (inc, _) in incoming.iter_mut().zip(&reads) {
-                inc.1 = rewrite.ids[k];
+                inc.1 = rewrite.ids[pos[k]];
                 k += 1;
             }
             *kind = LoadKind::I64;
@@ -2796,6 +2797,91 @@ mod tests {
         // dominance frontier.
         assert!(df[2].contains(&1), "back edge -> header in body DF");
         assert!(df[1].contains(&1), "loop header is in its own DF");
+    }
+
+    #[test]
+    fn a_phi_naming_its_later_predecessor_first_reads_each_object() {
+        // Block 0 branches to blocks 1 and 2, each storing its own object
+        // and passing its address to block 3's phi, which names block 2
+        // first; block 3 loads through the phi.
+        let store = |off, value| Inst::StoreLocal {
+            disp: 0,
+            off,
+            value,
+            kind: StoreKind::I64,
+            volatile: false,
+            nsw: false,
+        };
+        let insts = alloc::vec![
+            Inst::ParamRef {
+                idx: 0,
+                kind: LoadKind::I64
+            },
+            Inst::Imm(7),
+            store(-1, 1),
+            Inst::LocalAddr(-1),
+            Inst::Imm(9),
+            store(-2, 4),
+            Inst::LocalAddr(-2),
+            Inst::Phi {
+                incoming: alloc::vec![(2, 6), (1, 3)],
+                kind: LoadKind::I64,
+            },
+            Inst::Load {
+                addr: 7,
+                disp: 0,
+                kind: LoadKind::I64,
+                volatile: false,
+                align: 0,
+                pc_rel: false,
+            },
+        ];
+        let block = |range: core::ops::Range<ValueId>, terminator| Block {
+            start_pc: 0,
+            inst_range: range,
+            terminator,
+            exit_acc: NO_VALUE,
+        };
+        let blocks = alloc::vec![
+            block(
+                0..1,
+                Terminator::Bz {
+                    cond: 0,
+                    target: 2,
+                    fall_through: 1,
+                },
+            ),
+            block(1..4, Terminator::Jmp(3)),
+            block(4..7, Terminator::Jmp(3)),
+            block(7..9, Terminator::Return(8)),
+        ];
+        let mut f = func_with(insts, blocks);
+        run(&mut f);
+        let value = |mut v: ValueId| {
+            while let Some(Inst::Copy { value, .. }) = f.insts.get(v as usize) {
+                v = *value;
+            }
+            f.insts.get(v as usize).cloned()
+        };
+        let Terminator::Return(r) = f.blocks[3].terminator else {
+            panic!("{:?}", f.blocks[3].terminator)
+        };
+        let Some(Inst::Phi { incoming, .. }) = value(r) else {
+            panic!("{:?}", f.insts)
+        };
+        let arms: Vec<(BlockId, Option<i64>)> = incoming
+            .iter()
+            .map(|&(b, v)| match value(v) {
+                Some(Inst::Imm(k)) => (b, Some(k)),
+                _ => (b, None),
+            })
+            .collect();
+        assert_eq!(
+            arms,
+            alloc::vec![(2, Some(9)), (1, Some(7))],
+            "{:?}",
+            f.insts
+        );
     }
 
     #[test]

@@ -19,7 +19,7 @@ pub(super) struct BranchFixup {
 /// case to `target`, `JnpAnd` to `fall_through`). The caller emits
 /// the trailing `jmp fall_through` when the layout needs one.
 pub(super) fn emit_fused_branch(
-    code: &mut alloc::vec::Vec<u8>,
+    code: &mut CodeBuf,
     branch_fixups: &mut alloc::vec::Vec<BranchFixup>,
     branch_short: &[bool],
     fused: FusedBranch,
@@ -76,7 +76,7 @@ pub(super) fn emit_fused_branch(
 /// and record the fixup. `branch_short` is empty on the first all-long
 /// emission pass and is populated by `relax_branches` for the second.
 pub(super) fn emit_local_branch(
-    code: &mut alloc::vec::Vec<u8>,
+    code: &mut CodeBuf,
     branch_fixups: &mut alloc::vec::Vec<BranchFixup>,
     branch_short: &[bool],
     kind: LocalBranchKind,
@@ -160,7 +160,7 @@ pub(super) enum FusedBranch {
 /// nor the branch needs a parity test. The compare, its `setcc` and
 /// [`fused_branch_cc`] derive it alike.
 pub(super) fn fp_compare_swaps_operands(op: BinOp) -> bool {
-    matches!(op, BinOp::Flt | BinOp::Fle)
+    matches!(crate::c5::ir::fp_relation(op), BinOp::Flt | BinOp::Fle)
 }
 
 /// Return the branch shape to use when the terminator's cond was
@@ -219,7 +219,7 @@ pub(super) fn fused_branch_cc(
     // FP compares: `ucomisd` leaves ZF=PF=CF=1 on NaN, so `A` / `Ae` and
     // their inversions match C99 6.5.8p6 for the operand-swapped `Flt` /
     // `Fle`; `==` / `!=` carry the parity test in the branch shape.
-    Some(match op {
+    Some(match crate::c5::ir::fp_relation(op) {
         BinOp::Fgt | BinOp::Flt => FusedBranch::Jcc(if negate { Cc::Be } else { Cc::A }),
         BinOp::Fge | BinOp::Fle => FusedBranch::Jcc(if negate { Cc::B } else { Cc::Ae }),
         BinOp::Feq => {
@@ -243,7 +243,7 @@ pub(super) fn fused_branch_cc(
 }
 
 /// Logical complement of an integer-compare condition code.
-fn invert_cc(cc: Cc) -> Option<Cc> {
+pub(super) fn invert_cc(cc: Cc) -> Option<Cc> {
     Some(match cc {
         Cc::E => Cc::Ne,
         Cc::Ne => Cc::E,
@@ -333,6 +333,7 @@ pub(super) fn emit_inst(
             spill_dst_to_slot(code, dst, rd, frame);
             Ok(())
         }
+        Inst::Imm(_) if alloc.imm_held.get(v as usize).copied().unwrap_or(false) => Ok(()),
         Inst::Imm(value) => {
             let Some(rd) = int_or_spill_dst(dst) else {
                 return fail("Imm: dst not int reg / spill");
@@ -393,6 +394,24 @@ pub(super) fn emit_inst(
         | Inst::StoreLocal { .. }
         | Inst::LoadIndexed { .. }
         | Inst::StoreIndexed { .. } => emit_mem_inst(code, inst, v, dst, fcx),
+        // The allocator folds a commuting operation's first operand only.
+        Inst::Binop { op, lhs, rhs }
+            if alloc.fp_mem_operand.contains(rhs) || alloc.fp_mem_operand.contains(lhs) =>
+        {
+            let (held, folded) = if alloc.fp_mem_operand.contains(rhs) {
+                (*lhs, *rhs)
+            } else {
+                (*rhs, *lhs)
+            };
+            let Some(mem) = folded_operand(code, folded, fcx) else {
+                return fail("Fbinop: folded load address not int reg / spill");
+            };
+            let held = place_of(alloc, held);
+            let end =
+                super::arith::emit_fp_binop_mem(code, *op, alloc.is_f32(v), dst, held, mem, frame)?;
+            note_literal(&mut out.fp_literals, end, func, folded, alloc.is_f32(v));
+            Ok(())
+        }
         Inst::Binop { op, lhs, rhs } => emit_binop(code, *op, v, dst, *lhs, *rhs, alloc, frame),
         Inst::BinopI { op, lhs, rhs_imm } => {
             emit_binop_imm(code, *op, v, dst, *lhs, *rhs_imm, alloc, frame)
@@ -449,7 +468,16 @@ pub(super) fn emit_inst(
             value,
             width,
             ..
-        } => emit_atomic_rmw(code, v, dst, *op, *addr, *value, *width, alloc, frame, abi),
+        } => emit_atomic_rmw(
+            code,
+            v,
+            dst,
+            (*op, *addr, *value, *width),
+            func,
+            alloc,
+            frame,
+            abi,
+        ),
         Inst::AtomicCas {
             addr,
             expected,
@@ -477,9 +505,49 @@ pub(super) fn emit_inst(
         Inst::Intrinsic { kind, args } => {
             emit_intrinsic(code, *kind, args, dst, v, func, alloc, frame, abi)
         }
-        Inst::X86Simd { op, imm, args } => emit_x86_simd(code, *op, *imm, args, alloc, frame),
+        Inst::Simd { op, imm, args } => emit_x86_simd(code, *op, *imm, args, alloc, frame),
+        Inst::SimdVal { op, imm, args } => {
+            emit_x86_simd_val(code, *op, *imm, args, dst, alloc, frame)
+        }
+        Inst::VecBinop {
+            op,
+            lane,
+            bytes,
+            lhs,
+            rhs,
+        } => emit_vec_binop(code, (*op, *lane, *bytes), (*lhs, *rhs), dst, alloc, frame),
+        Inst::VecExtract {
+            vec,
+            off,
+            kind,
+            bytes,
+        } => emit_vec_extract(code, (*vec, *off, *kind, *bytes), dst, alloc, frame),
+        Inst::VecInsert {
+            vec,
+            value,
+            off,
+            kind,
+            bytes,
+        } => {
+            let blank = match fcx.func.insts[*vec as usize] {
+                Inst::Undef => Some(true),
+                Inst::Imm(0) => Some(false),
+                _ => None,
+            };
+            let lane = (*vec, *value, *off, *kind, *bytes);
+            emit_vec_insert(code, lane, blank, dst, alloc, frame)
+        }
+        Inst::VecSplat { value, kind, bytes } => {
+            emit_vec_splat(code, (*value, *kind, *bytes), dst, alloc, frame)
+        }
+        Inst::VecConst { imm, kind, bytes } => {
+            emit_vec_const(code, (*imm, *kind, *bytes), dst, frame)
+        }
         Inst::InlineAsm { asm, args } => emit_inline_asm(out, asm, args, v, fcx, None),
         Inst::Neg(value) => emit_neg(code, dst, *value, alloc, frame),
+        Inst::Select { cond, a, b, kind } => {
+            super::arith::emit_select(code, dst, (v, *cond, *a, *b, *kind), func, alloc, frame)
+        }
         Inst::Fneg(value) => emit_fneg(code, dst, v, *value, alloc, frame),
         Inst::Fma {
             a,
@@ -487,18 +555,24 @@ pub(super) fn emit_inst(
             c,
             neg_product,
             neg_addend,
-        } => emit_fma(
-            code,
-            dst,
-            v,
-            *a,
-            *b,
-            *c,
-            *neg_product,
-            *neg_addend,
-            alloc,
-            frame,
-        ),
+        } => {
+            let folded = [*a, *b, *c]
+                .into_iter()
+                .find(|x| alloc.fp_mem_operand.contains(x));
+            let mem = match folded {
+                Some(f) => match folded_operand(code, f, fcx) {
+                    Some(mem) => Some(mem),
+                    None => return fail("Fma: folded load address not int reg / spill"),
+                },
+                None => None,
+            };
+            let negate = (*neg_product, *neg_addend);
+            let end = emit_fma(code, dst, v, *a, *b, *c, negate, mem, alloc, frame)?;
+            if let (Some(f), Some(end)) = (folded, end) {
+                note_literal(&mut out.fp_literals, end, func, f, alloc.is_f32(v));
+            }
+            Ok(())
+        }
         Inst::MulAdd {
             a,
             b,
@@ -551,7 +625,7 @@ pub(super) fn emit_inst(
 
 /// The load / store instructions.
 fn emit_mem_inst(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     inst: &Inst,
     v: super::super::ir::ValueId,
     dst: Place,
@@ -571,6 +645,8 @@ fn emit_mem_inst(
         return emit_store_of_imm(code, inst, func, alloc, frame, abi);
     }
     match inst {
+        // Read by the next instruction as its memory operand.
+        Inst::Load { .. } | Inst::LoadIndexed { .. } if alloc.fp_mem_operand.contains(&v) => Ok(()),
         Inst::Load {
             addr,
             disp,
@@ -681,9 +757,10 @@ fn emit_mem_inst(
             (*index, *index_ext),
             *scale,
             *kind,
-            !alloc.high_dead(v),
+            (!alloc.high_dead(v), alloc.is_f32(v)),
             alloc,
             frame,
+            frame_object_base(func, *base, frame, abi),
         ),
         Inst::StoreIndexed {
             base,
@@ -703,8 +780,78 @@ fn emit_mem_inst(
             *kind,
             alloc,
             frame,
+            frame_object_base(func, *base, frame, abi),
         ),
         _ => unreachable!(),
+    }
+}
+
+/// The frame register and displacement a frame object's address `base`
+/// names, for an access to address off the frame directly.
+pub(super) fn frame_object_base(
+    func: &FunctionSsa,
+    base: super::super::ir::ValueId,
+    frame: Frame,
+    abi: super::Abi,
+) -> Option<(Reg, i32)> {
+    let &Inst::LocalAddr(off) = func.insts.get(base as usize)? else {
+        return None;
+    };
+    let (reg, bytes) = super::mem::local_slot_base_disp(off, func, frame, abi);
+    Some((reg, i32::try_from(bytes).ok()?))
+}
+
+/// The memory operand a reader takes in place of a register
+/// (`Allocation::fp_mem_operand`): a load's address, a spilled base or index
+/// loaded into a scratch register, or a constant's read-only literal.
+fn folded_operand(
+    code: &mut CodeBuf,
+    load: super::super::ir::ValueId,
+    fcx: &FnCtx,
+) -> Option<super::super::encode::Mem> {
+    let FnCtx {
+        func,
+        alloc,
+        frame,
+        abi,
+        ..
+    } = *fcx;
+    match func.insts[load as usize] {
+        Inst::Load { addr, disp, .. } => {
+            let base = materialize_int(code, place_of(alloc, addr), SCRATCH_R10, frame)?;
+            Some(super::super::encode::Mem::at(base, disp))
+        }
+        Inst::LoadIndexed {
+            base, index, scale, ..
+        } => {
+            let (base, index, disp) = super::mem::indexed_operands(
+                code,
+                (place_of(alloc, base), place_of(alloc, index)),
+                frame,
+                frame_object_base(func, base, frame, abi),
+            )?;
+            Some(super::super::encode::Mem::Base {
+                base,
+                index: Some((index, scale)),
+                disp,
+            })
+        }
+        Inst::Imm(_) => Some(super::super::encode::Mem::Rip),
+        _ => None,
+    }
+}
+
+/// Records the literal of a folded constant `folded` in the disp32 of its
+/// reader, which ends at `end` with no immediate after it.
+fn note_literal(
+    literals: &mut Vec<(usize, u64, bool)>,
+    end: usize,
+    func: &FunctionSsa,
+    folded: super::super::ir::ValueId,
+    single: bool,
+) {
+    if let Inst::Imm(bits) = func.insts[folded as usize] {
+        literals.push((end - 4, bits as u64, single));
     }
 }
 
@@ -724,8 +871,10 @@ fn emit_call_inst(
         target,
         imports,
         variadic_targets,
+        ends_path,
         ..
     } = *fcx;
+    let ends_path = ends_path[v as usize];
     let cx = &mut *out.cx;
     let fixups = &mut *out.fixups;
     let code = &mut *cx.code;
@@ -761,6 +910,7 @@ fn emit_call_inst(
             *ret_agg,
             *ret_slot_local,
             func,
+            ends_path,
         ),
         Inst::CallExt {
             binding_idx,
@@ -790,6 +940,7 @@ fn emit_call_inst(
             *ret_agg,
             *ret_slot_local,
             func,
+            ends_path,
         ),
         Inst::CallIndirect {
             target: callee,
@@ -819,6 +970,7 @@ fn emit_call_inst(
             *ret_slot_local,
             func,
             asm_extern_call_sites,
+            ends_path,
         ),
         _ => unreachable!(),
     }
@@ -832,7 +984,7 @@ fn emit_call_inst(
 /// marks the parameters that read the home the prologue stored
 /// (`param_home_off`); a stack-passed parameter always reads its home.
 fn emit_incoming(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     inst: &Inst,
     dst: Place,
     v: super::super::ir::ValueId,
@@ -858,11 +1010,40 @@ fn emit_incoming(
     let home_off = home.map_or(0, |i| param_home_off(i, func, frame, abi) as i32);
     let incoming = super::ssa::reg_alloc::incoming_reg(param_plan, inst)
         .or_else(|| super::ssa::reg_alloc::ret_part_reg(target, inst));
+    if kind == LoadKind::V256 {
+        let Some((true, x)) = incoming else {
+            return fail(alloc::format!(
+                "{name}: vector not in an FP argument register"
+            ));
+        };
+        mirror_wide_dst(code, VecWidth::V256, dst, Reg(x), frame);
+        return Ok(());
+    }
+    if kind == LoadKind::V128 {
+        let Some((true, x)) = incoming else {
+            return fail(alloc::format!(
+                "{name}: vector not in an FP argument register"
+            ));
+        };
+        match dst {
+            Place::FpReg(r) => {
+                if r != x {
+                    emit_movapd_xmm_xmm(code, Reg(r), Reg(x));
+                }
+            }
+            Place::Spill(slot) => {
+                let (sb, off) = v128_spill_addr(frame, slot);
+                emit_movups_mem_xmm(code, sb, off, Reg(x));
+            }
+            _ => return fail(alloc::format!("{name}: vector dst not fp reg / spill")),
+        }
+        return Ok(());
+    }
     if matches!(kind, LoadKind::F32 | LoadKind::F64) {
         // A `float` occupies the low 32 bits of the xmm; the body re-narrows
         // it through the f32 store the walker seeded, so a scalar copy
         // serves either width.
-        let load_home = |code: &mut Vec<u8>, r: Reg| {
+        let load_home = |code: &mut CodeBuf, r: Reg| {
             if matches!(kind, LoadKind::F32) {
                 emit_movss_xmm_mem(code, r, Reg::RBP, home_off);
             } else {
@@ -907,7 +1088,7 @@ fn emit_incoming(
         }
     };
     let ext = param_entry_ext(kind, v, alloc);
-    let materialize = |code: &mut Vec<u8>, rd: Reg| {
+    let materialize = |code: &mut CodeBuf, rd: Reg| {
         if from_home {
             match ext {
                 Some(LoadKind::I8) => {

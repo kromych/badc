@@ -28,37 +28,36 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
+               	subq	$0x10, %rsp
+               	movq	<rip>, %rcx # <addr>
                	movq	<rip>, %rax # <addr>
+               	cmpq	%rcx, %rax
+               	jne	<addr>
                	movq	<rip>, %rcx # <addr>
                	cmpq	%rax, %rcx
-               	jne	<addr>
-               	movq	<rip>, %rax # <addr>
-               	movq	<rip>, %rcx # <addr>
-               	cmpq	%rcx, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	popq	%rbx
                	leave
                	retq
                	leaq	<rip>, %rdi
-               	movq	<rip>, %rax # <addr>
                	callq	*%rax
-               	movq	%rax, %rbx
+               	movq	%rax, 0x8(%rsp)
                	leaq	<rip>, %rdi
                	movq	<rip>, %rax # <addr>
                	callq	*%rax
-               	addq	%rax, %rbx
+               	movq	0x8(%rsp), %r10
+               	addq	%rax, %r10
+               	movq	%r10, 0x8(%rsp)
                	leaq	<rip>, %rdi
                	movq	<rip>, %rax # <addr>
                	callq	*%rax
-               	addq	%rbx, %rax
+               	movq	%rax, %r10
+               	movq	0x8(%rsp), %rax
+               	addq	%r10, %rax
+               	xorl	%ecx, %ecx
+               	movl	$0x2, %edx
                	cmpq	$0x6, %rax
-               	jne	<addr>
-               	xorl	%eax, %eax
-               	popq	%rbx
+               	cmovneq	%rdx, %rcx
+               	movq	%rcx, %rax
                	leave
                	retq
-               	movl	$0x2, %eax
-               	jmp	<addr>

@@ -22,84 +22,76 @@ Disassembly of section .text:
                	sub	x0, x0, x1
                	cmp	x0, #0x1
                	cset	x5, ne
-               	adrp	x0, <page>
-               	ldr	x3, [x0, #0x30]
-               	mov	x2, #0x0                // =0
-               	cbz	x3, <addr>
-               	ldr	x3, [x0, #0x30]
-               	add	x4, x3, #0x1
-               	sub	x3, x4, x3
-               	cmp	x3, #0x1
-               	cset	x4, ne
                	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	str	x3, [x0, #0x30]
+               	ldr	x0, [x3, #0x20]
+               	mov	x2, #0x0                // =0
+               	cbz	x0, <addr>
+               	add	x4, x0, #0x1
+               	sub	x0, x4, x0
+               	cmp	x0, #0x1
+               	cset	x4, ne
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	str	x0, [x3, #0x20]
                	orr	x4, x5, x4
                	add	x5, x1, #0x2
                	sub	x5, x5, x1
                	cmp	x5, #0x2
                	cset	x5, ne
                	orr	x5, x4, x5
-               	ldr	x4, [x0, #0x30]
-               	cbz	x4, <addr>
-               	ldr	x4, [x0, #0x30]
-               	add	x6, x4, #0x2
-               	sub	x4, x6, x4
+               	cbz	x0, <addr>
+               	add	x4, x0, #0x2
+               	sub	x4, x4, x0
                	cmp	x4, #0x2
                	cset	x4, ne
-               	str	x3, [x0, #0x30]
+               	str	x0, [x3, #0x20]
                	orr	x4, x5, x4
                	add	x5, x1, #0x4
                	sub	x5, x5, x1
                	cmp	x5, #0x4
                	cset	x5, ne
                	orr	x4, x4, x5
-               	ldr	x5, [x0, #0x30]
-               	cbz	x5, <addr>
-               	ldr	x2, [x0, #0x30]
-               	add	x5, x2, #0x4
-               	sub	x2, x5, x2
+               	cbz	x0, <addr>
+               	add	x2, x0, #0x4
+               	sub	x2, x2, x0
                	cmp	x2, #0x4
                	cset	x2, ne
-               	str	x3, [x0, #0x30]
+               	str	x0, [x3, #0x20]
                	orr	x0, x4, x2
                	add	x2, x1, #0x8
                	sub	x1, x2, x1
                	cmp	x1, #0x8
                	cset	x1, ne
                	orr	x4, x0, x1
-               	adrp	x0, <page>
-               	ldr	x2, [x0, #0x30]
+               	adrp	x2, <page>
+               	ldr	x0, [x2, #0x20]
                	mov	x1, #0x0                // =0
-               	cbz	x2, <addr>
-               	ldr	x2, [x0, #0x30]
-               	add	x3, x2, #0x8
-               	sub	x2, x3, x2
-               	cmp	x2, #0x8
-               	cset	x2, ne
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	str	x3, [x0, #0x30]
-               	orr	x4, x4, x2
-               	sub	x2, x29, #0x40
-               	add	x5, x2, #0x10
-               	sub	x2, x5, x2
-               	cmp	x2, #0x10
-               	cset	x2, ne
-               	orr	x2, x4, x2
-               	ldr	x4, [x0, #0x30]
-               	cbz	x4, <addr>
-               	ldr	x1, [x0, #0x30]
-               	add	x4, x1, #0x10
-               	sub	x1, x4, x1
+               	cbz	x0, <addr>
+               	add	x3, x0, #0x8
+               	sub	x0, x3, x0
+               	cmp	x0, #0x8
+               	cset	x3, ne
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	str	x0, [x2, #0x20]
+               	orr	x4, x4, x3
+               	sub	x3, x29, #0x40
+               	add	x5, x3, #0x10
+               	sub	x3, x5, x3
+               	cmp	x3, #0x10
+               	cset	x3, ne
+               	orr	x3, x4, x3
+               	cbz	x0, <addr>
+               	add	x1, x0, #0x10
+               	sub	x1, x1, x0
                	cmp	x1, #0x10
                	cset	x1, ne
-               	str	x3, [x0, #0x30]
-               	orr	x0, x2, x1
+               	str	x0, [x2, #0x20]
+               	orr	x0, x3, x1
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x2, x1
+               	mov	x3, x1
                	b	<addr>
                	mov	x4, x2
                	b	<addr>

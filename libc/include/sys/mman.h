@@ -1,6 +1,7 @@
 // sys/mman.h -- memory protection flags.
 
 #pragma once
+#include <sys/types.h>
 
 #define PROT_NONE  0
 #define PROT_READ  1
@@ -32,8 +33,12 @@
 #define MAP_FAILED    ((void*)-1)
 
 #define MS_ASYNC      1
-#define MS_SYNC       4
 #define MS_INVALIDATE 2
+#ifdef __APPLE__
+#define MS_SYNC       0x10
+#else
+#define MS_SYNC       4
+#endif
 
 // mlockall() flags. MCL_CURRENT / MCL_FUTURE share values across the POSIX
 // targets; MCL_ONFAULT is Linux-only.
@@ -118,12 +123,16 @@ int memfd_create(const char *name, unsigned int flags);
 // 64-bit. An `int` length/offset truncates a mapping at or past 2GB.
 // `long` / `unsigned long` match off_t / size_t on LP64 (this block's
 // POSIX targets).
-void *mmap(void *addr, unsigned long len, int prot, int flags, int fd, long offset);
+void *mmap(void *addr, size_t len, int prot, int flags, int fd, off_t offset);
 int munmap(void *addr, unsigned long len);
 // Report which pages of a mapping are resident; `vec` gets one byte per page.
-int mincore(void *addr, unsigned long len, unsigned char *vec);
+#ifdef __APPLE__
+int mincore(const void *addr, size_t len, char *vec);
+#else
+int mincore(void *addr, size_t len, unsigned char *vec);
+#endif
 #ifdef __linux__
-void *mremap(void *old, unsigned long old_size, unsigned long new_size, int flags);
+void *mremap(void *old, size_t old_size, size_t new_size, int flags, ...);
 #endif
 int msync(void *addr, unsigned long len, int flags);
 int mprotect(void *addr, unsigned long len, int prot);
@@ -135,7 +144,7 @@ int madvise(void *addr, unsigned long len, int advice);
 #ifdef __APPLE__
 int shm_open(const char *name, int oflag, ...);
 #else
-int shm_open(const char *name, int oflag, int mode);
+int shm_open(const char *name, int oflag, mode_t mode);
 #endif
 int shm_unlink(const char *name);
 // Lock/unlock the whole address space (POSIX); flags are the MCL_* set.

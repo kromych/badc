@@ -42,9 +42,9 @@ Disassembly of section .text:
                	orr	x2, x2, x3
                	cbz	x2, <addr>
                	adrp	x2, <page>
-               	ldrsw	x3, [x2, #0x30]
+               	ldrsw	x3, [x2, #0x20]
                	orr	x3, x3, #0x1
-               	str	w3, [x2, #0x30]
+               	str	w3, [x2, #0x20]
                	ldur	x2, [x29, #-0x30]
                	cmp	x2, x0
                	b.ne	<addr>
@@ -60,9 +60,9 @@ Disassembly of section .text:
                	cmp	x0, x1
                	b.eq	<addr>
                	adrp	x0, <page>
-               	ldrsw	x1, [x0, #0x30]
+               	ldrsw	x1, [x0, #0x20]
                	orr	x1, x1, #0x2
-               	str	w1, [x0, #0x30]
+               	str	w1, [x0, #0x20]
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -98,9 +98,9 @@ Disassembly of section .text:
                	orr	x1, x1, x2
                	cbz	x1, <addr>
                	adrp	x1, <page>
-               	ldrsw	x2, [x1, #0x30]
+               	ldrsw	x2, [x1, #0x20]
                	orr	x2, x2, #0x4
-               	str	w2, [x1, #0x30]
+               	str	w2, [x1, #0x20]
                	ldur	x1, [x29, #-0x40]
                	cmp	x1, x0
                	b.ne	<addr>
@@ -118,26 +118,26 @@ Disassembly of section .text:
                	cmp	x1, x0
                	b.eq	<addr>
                	adrp	x0, <page>
-               	ldrsw	x1, [x0, #0x30]
+               	ldrsw	x1, [x0, #0x20]
                	orr	x1, x1, #0x8
-               	str	w1, [x0, #0x30]
+               	str	w1, [x0, #0x20]
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
 
 <walk>:
-               	str	x20, [sp, #-0x40]!
-               	stp	x29, x30, [sp, #0x30]
-               	add	x29, sp, #0x30
+               	stp	x20, x21, [sp, #-0x90]!
+               	stp	x22, x23, [sp, #0x10]
+               	stp	x29, x30, [sp, #0x80]
+               	add	x29, sp, #0x80
                	sxtw	x20, w0
-               	sub	x1, x29, #0x18
+               	sub	x1, x29, #0x60
                	mov	x17, #0x5556            // =21846
                	movk	x17, #0x5555, lsl #16
                	mul	x0, x20, x17
                	asr	x0, x0, #32
                	add	x0, x0, x0, lsr #63
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #1
                	sub	x0, x20, x0
                	add	x0, x1, x0, lsl #3
                	str	x20, [x0]
@@ -147,21 +147,96 @@ Disassembly of section .text:
                	bl	<addr>
                	cmp	w20, #0x0
                	b.le	<addr>
-               	sub	x0, x20, #0x1
+               	sub	x21, x20, #0x1
+               	sub	x0, x29, #0x48
+               	mov	x17, #0x5556            // =21846
+               	movk	x17, #0x5555, lsl #16
+               	mul	x1, x21, x17
+               	lsr	x1, x1, #32
+               	add	x1, x1, x1, lsl #1
+               	sub	x1, x21, x1
+               	add	x0, x0, x1, lsl #3
+               	str	x21, [x0]
+               	mov	x0, x21
                	bl	<addr>
-               	sub	x1, x29, #0x18
+               	mov	x0, x21
+               	bl	<addr>
+               	cmp	w21, #0x0
+               	b.le	<addr>
+               	sub	x22, x21, #0x1
+               	sub	x0, x29, #0x30
+               	mov	x17, #0x5556            // =21846
+               	movk	x17, #0x5555, lsl #16
+               	mul	x1, x22, x17
+               	lsr	x1, x1, #32
+               	add	x1, x1, x1, lsl #1
+               	sub	x1, x22, x1
+               	add	x0, x0, x1, lsl #3
+               	str	x22, [x0]
+               	mov	x0, x22
+               	bl	<addr>
+               	mov	x0, x22
+               	bl	<addr>
+               	cmp	w22, #0x0
+               	b.le	<addr>
+               	sub	x23, x22, #0x1
+               	sub	x0, x29, #0x18
+               	mov	x17, #0x5556            // =21846
+               	movk	x17, #0x5555, lsl #16
+               	mul	x1, x23, x17
+               	lsr	x1, x1, #32
+               	add	x1, x1, x1, lsl #1
+               	sub	x1, x23, x1
+               	add	x0, x0, x1, lsl #3
+               	str	x23, [x0]
+               	mov	x0, x23
+               	bl	<addr>
+               	mov	x0, x23
+               	bl	<addr>
+               	cmp	w23, #0x0
+               	b.le	<addr>
+               	sub	x0, x23, #0x1
+               	bl	<addr>
+               	sub	x0, x29, #0x18
+               	mov	x17, #0x5556            // =21846
+               	movk	x17, #0x5555, lsl #16
+               	mul	x1, x23, x17
+               	lsr	x1, x1, #32
+               	add	x1, x1, x1, lsl #1
+               	sub	x1, x23, x1
+               	add	x0, x0, x1, lsl #3
+               	ldr	x0, [x0]
+               	sub	x0, x29, #0x30
+               	mov	x17, #0x5556            // =21846
+               	movk	x17, #0x5555, lsl #16
+               	mul	x1, x22, x17
+               	lsr	x1, x1, #32
+               	add	x1, x1, x1, lsl #1
+               	sub	x1, x22, x1
+               	add	x0, x0, x1, lsl #3
+               	ldr	x0, [x0]
+               	sub	x0, x29, #0x48
+               	mov	x17, #0x5556            // =21846
+               	movk	x17, #0x5555, lsl #16
+               	mul	x1, x21, x17
+               	lsr	x1, x1, #32
+               	add	x1, x1, x1, lsl #1
+               	sub	x1, x21, x1
+               	add	x0, x0, x1, lsl #3
+               	ldr	x0, [x0]
+               	sub	x1, x29, #0x60
                	mov	x17, #0x5556            // =21846
                	movk	x17, #0x5555, lsl #16
                	mul	x0, x20, x17
                	asr	x0, x0, #32
                	add	x0, x0, x0, lsr #63
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #1
                	sub	x0, x20, x0
                	add	x0, x1, x0, lsl #3
                	ldr	x0, [x0]
-               	ldp	x29, x30, [sp, #0x30]
-               	ldr	x20, [sp], #0x40
+               	ldp	x29, x30, [sp, #0x80]
+               	ldp	x22, x23, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x90
                	ret
 
 <main>:
@@ -170,6 +245,6 @@ Disassembly of section .text:
                	mov	x0, #0x6                // =6
                	bl	<addr>
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x30]
+               	ldrsw	x0, [x0, #0x20]
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -15,21 +15,21 @@ Disassembly of section .text:
 
 <main>:
                	adrp	x0, <page>
-               	ldr	d0, [x0, #0x18]
+               	ldr	d0, [x0, #0x10]
                	fmov	d1, #1.50000000
                	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
                	adrp	x0, <page>
-               	ldr	d0, [x0, #0x20]
+               	ldr	d0, [x0, #0x18]
                	fmov	d1, #3.50000000
                	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
                	adrp	x0, <page>
-               	ldr	s0, [x0, #0x28]
+               	ldr	s0, [x0, #0x20]
                	fmov	s1, #1.50000000
                	fcmp	s0, s1
                	b.eq	<addr>

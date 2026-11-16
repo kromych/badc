@@ -14,8 +14,7 @@ Disassembly of section .text:
                	brk	#0x1
 
 <mix>:
-               	mov	x17, #0x3               // =3
-               	mul	x1, x0, x17
+               	add	x1, x0, x0, lsl #1
                	add	x1, x1, #0x1
                	eor	x1, x1, x1, lsr #2
                	add	x1, x1, x1, lsl #3
@@ -25,8 +24,7 @@ Disassembly of section .text:
                	add	x1, x1, x1, lsl #13
                	eor	x2, x1, x1, lsr #17
                	add	x1, x0, #0x1
-               	mov	x17, #0x5               // =5
-               	mul	x1, x1, x17
+               	add	x1, x1, x1, lsl #2
                	add	x1, x1, #0x1
                	eor	x1, x1, x1, lsr #2
                	add	x1, x1, x1, lsl #3
@@ -85,14 +83,13 @@ Disassembly of section .text:
                	add	x0, x0, #0x3
                	bl	<addr>
                	add	x0, x20, x0
+               	mov	x1, #0x0                // =0
+               	mov	x2, #0x1                // =1
                	mov	x17, #0x8adc            // =35548
                	movk	x17, #0xac62, lsl #16
                	movk	x17, #0x1, lsl #32
                	cmp	x0, x17
-               	b.ne	<addr>
-               	mov	x0, #0x0                // =0
+               	csel	x0, x1, x2, eq
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret
-               	mov	x0, #0x1                // =1
-               	b	<addr>

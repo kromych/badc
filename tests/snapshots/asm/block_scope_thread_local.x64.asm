@@ -27,7 +27,7 @@ Disassembly of section .text:
 
 <counter>:
                	movq	%fs:0x0, %rax
-               	addq	$-0x60, %rax
+               	addq	$-0x70, %rax
                	movl	(%rax), %ecx
                	incq	%rcx
                	movl	%ecx, (%rax)
@@ -36,10 +36,10 @@ Disassembly of section .text:
 
 <array_and_struct>:
                	movq	%fs:0x0, %rax
-               	addq	$-0x58, %rax
+               	addq	$-0x60, %rax
                	movb	$0x5, 0x3(%rax)
                	movq	%fs:0x0, %rcx
-               	addq	$-0x18, %rcx
+               	addq	$-0x20, %rcx
                	movq	$0x9, (%rcx)
                	movq	$0xb, 0x8(%rcx)
                	movsbq	0x3(%rax), %rax
@@ -49,7 +49,7 @@ Disassembly of section .text:
 
 <with_bool>:
                	movq	%fs:0x0, %rcx
-               	addq	$-0x8, %rcx
+               	addq	$-0x10, %rcx
                	cmpl	$0x0, (%rcx)
                	je	<addr>
                	xorl	%eax, %eax

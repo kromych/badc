@@ -481,6 +481,34 @@ fn build_and_run_fixture_with_options(name: &str, opts: NativeOptions, suffix: &
     build_and_run_outcome_with_options(&src, &format!("fixture-{stem}{suffix}"), opts)
 }
 
+/// glibc exports `strlcpy` and `strlcat` only above the version floor, so a
+/// Linux image takes them from `libc/lib/string_ext.c`, which joins the link
+/// because the fixture leaves them undefined. `fixture_parity` emits one
+/// object and never links; this builds the fixture through the
+/// object-then-link writer.
+#[test]
+fn string_extensions_join_the_linux_link() {
+    let src = super::load_fixture("self_declared_string_and_ctype_extensions.c");
+    let program = super::compile_str_bare_for(&src, Target::LinuxX64);
+    for opts in [
+        NativeOptions::default(),
+        NativeOptions::new().with_optimize(),
+    ] {
+        let bytes = super::link_executable_with_runtime(&program, Target::LinuxX64, opts)
+            .expect("link the fixture");
+        let path = super::unique_temp_path("badc-elf64-test", "string-ext-link", ".bin");
+        {
+            let mut f = std::fs::File::create(&path).expect("create temp file");
+            f.write_all(&bytes).expect("write temp file");
+            f.sync_all().expect("sync temp file");
+        }
+        set_executable(&path);
+        let output = exec_with_retry(&path).expect("run the fixture");
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(output.status.code(), Some(0), "{output:?}");
+    }
+}
+
 #[test]
 fn fixture_parity() {
     let failures = super::parity_failures(NATIVE_ELF_X64_FIXTURES, |name, expected| {
@@ -1343,6 +1371,88 @@ fn foreign_caller_r13_preserved() {
     );
 }
 
+/// A 32-byte vector argument or result crosses a call in a ymm register,
+/// counted with the xmm argument registers (System V AMD64 3.2.3 under
+/// AVX, which the x86-64 baseline has): a cc-compiled `-mavx2` caller and
+/// callee meet badc's at -O0 and -O. Each went through memory.
+#[test]
+fn ymm_vectors_cross_calls_with_cc() {
+    use crate::{CompileOptions, OutputKind};
+    let Some(cc) = host_cc() else {
+        eprintln!("skipping ymm_vectors_cross_calls_with_cc: no system C compiler");
+        return;
+    };
+    const BADC: &str = "#include <immintrin.h>\n\
+__m256i badc_mix(__m256i v, double d, __m128i k, __m256i w) {\n\
+    __m256i s = _mm256_add_epi64(v, _mm256_set1_epi64x((long long)d));\n\
+    return _mm256_xor_si256(s, _mm256_add_epi64(w, _mm256_zextsi128_si256(k)));\n\
+}\n\
+extern __m256i cc_mix(__m256i a, double d, __m256i b);\n\
+long long badc_calls(long long x) {\n\
+    __m256i r = cc_mix(_mm256_set1_epi64x(x), 2.0, _mm256_set_epi64x(4, 3, 2, 1));\n\
+    return _mm256_extract_epi64(r, 0) + _mm256_extract_epi64(r, 3) * 1000;\n\
+}\n";
+    const MAIN: &str = "#include <immintrin.h>\n\
+extern __m256i badc_mix(__m256i v, double d, __m128i k, __m256i w);\n\
+extern long long badc_calls(long long x);\n\
+__m256i cc_mix(__m256i a, double d, __m256i b) {\n\
+    return _mm256_add_epi64(_mm256_add_epi64(a, b), _mm256_set1_epi64x((long long)(d * 10)));\n\
+}\n\
+int main(void) {\n\
+    __m256i r = badc_mix(_mm256_set_epi64x(40, 30, 20, 10), 5.0, _mm_set_epi64x(7, 6),\n\
+                         _mm256_set_epi64x(400, 300, 200, 100));\n\
+    long long l[4];\n\
+    _mm256_storeu_si256((__m256i *)l, r);\n\
+    if (l[0] != (15 ^ 106) || l[1] != (25 ^ 207) || l[2] != (35 ^ 300) || l[3] != (45 ^ 400))\n\
+        return 1;\n\
+    return badc_calls(5) == (5 + 1 + 20) + (5 + 4 + 20) * 1000 ? 0 : 2;\n\
+}\n";
+    let dir = super::unique_temp_path("badc-elf64-ymm", "dir", "");
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let main_path = dir.join("main.c");
+    std::fs::write(&main_path, MAIN).expect("write main");
+    for optimize in [false, true] {
+        let prog = Compiler::with_options(
+            BADC.to_string(),
+            Target::LinuxX64,
+            CompileOptions::default()
+                .with_no_entry_point(true)
+                .with_optimize(optimize),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile badc unit: {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..if optimize {
+                NativeOptions::new().with_optimize()
+            } else {
+                NativeOptions::default()
+            }
+        };
+        let obj = emit_native_with_options(&prog, Target::LinuxX64, opts)
+            .unwrap_or_else(|e| panic!("emit badc object: {e}"));
+        let obj_path = dir.join(format!("badc{}.o", u8::from(optimize)));
+        let exe_path = dir.join(format!("ymm{}", u8::from(optimize)));
+        std::fs::write(&obj_path, &obj).expect("write badc object");
+        let status = Command::new(&cc)
+            .args(["-O2", "-mavx2"])
+            .arg(&main_path)
+            .arg(&obj_path)
+            .arg("-o")
+            .arg(&exe_path)
+            .status()
+            .expect("invoke system C driver");
+        assert!(
+            status.success(),
+            "system C driver failed (optimize={optimize})"
+        );
+        set_executable(&exe_path);
+        let output = exec_with_retry(&exe_path).expect("run linked binary");
+        assert_eq!(output.status.code(), Some(0), "optimize={optimize}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// A badc caller into a foreign (cc-compiled) callee that returns a 24-byte
 /// aggregate by value. System V AMD64 3.2.3 returns an aggregate larger than
 /// 16 bytes (MEMORY class) through a hidden pointer the caller passes in the
@@ -1462,8 +1572,7 @@ int main(void) { return pick(); }\n";
 
 /// The same override under `-O`: the weak body is small enough to inline,
 /// but a weak definition is replaceable, so the call has to stay out of
-/// line for the linker to bind it to the strong definition. gcc and clang
-/// keep the call for the same reason.
+/// line for the linker to bind it to the strong definition.
 #[test]
 fn weak_definition_overridden_by_strong_under_optimize() {
     use crate::{CompileOptions, Program};

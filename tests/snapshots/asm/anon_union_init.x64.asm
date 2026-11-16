@@ -37,7 +37,6 @@ Disassembly of section .text:
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x3, %eax
                	jne	<addr>
-               	movl	<rip>, %eax # <addr>
                	cmpl	$0x3, %eax
                	je	<addr>
                	movl	$0x2, %eax

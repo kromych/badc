@@ -45,16 +45,12 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movb	$0x1, -0x8(%rbp)
-               	movb	$0x2, -0x7(%rbp)
-               	movb	$0x3, -0x6(%rbp)
-               	movb	$0x4, -0x5(%rbp)
-               	movb	$0x5, -0x4(%rbp)
-               	movb	$0x6, -0x3(%rbp)
-               	movb	$0x7, -0x2(%rbp)
+               	movw	$0x201, -0x8(%rbp)      # imm = 0x201
+               	movw	$0x403, -0x6(%rbp)      # imm = 0x403
+               	movw	$0x605, -0x4(%rbp)      # imm = 0x605
                	leaq	-0x8(%rbp), %rdi
-               	movb	$0x8, -0x1(%rbp)
-               	movq	(%rdi), %rax
+               	movw	$0x807, -0x2(%rbp)      # imm = 0x807
+               	movq	-0x8(%rbp), %rax
                	bswapq	%rax
                	movabsq	$0x102030405060708, %r11 # imm = 0x102030405060708
                	cmpq	%r11, %rax

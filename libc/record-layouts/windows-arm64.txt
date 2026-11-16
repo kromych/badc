@@ -1,0 +1,6612 @@
+# Reference record layouts for windows-arm64, written by scripts/measure_record_layouts.py.
+# `<header> y|p` (p: the unit includes the base headers first), then
+# `struct|union <tag>|typedef <name> <size> <align> [signed|unsigned]`
+# and per member
+# `<name> <offset>` or, for a bit-field, `<name> bit <first bit> <width>`.
+
+arm_neon.h y
+struct uint8x16x4_t 64 16
+  val 0
+struct int8x8x2_t 16 8
+  val 0
+struct int8x16x2_t 32 16
+  val 0
+struct uint8x8x2_t 16 8
+  val 0
+struct uint8x16x2_t 32 16
+  val 0
+struct poly8x8x2_t 16 8
+  val 0
+struct poly8x16x2_t 32 16
+  val 0
+struct int16x4x2_t 16 8
+  val 0
+struct int16x8x2_t 32 16
+  val 0
+struct uint16x4x2_t 16 8
+  val 0
+struct uint16x8x2_t 32 16
+  val 0
+struct poly16x4x2_t 16 8
+  val 0
+struct poly16x8x2_t 32 16
+  val 0
+struct int32x2x2_t 16 8
+  val 0
+struct int32x4x2_t 32 16
+  val 0
+struct uint32x2x2_t 16 8
+  val 0
+struct uint32x4x2_t 32 16
+  val 0
+struct float32x2x2_t 16 8
+  val 0
+struct float32x4x2_t 32 16
+  val 0
+typedef int8_t 1 1 signed
+typedef int16_t 2 2 signed
+typedef int32_t 4 4 signed
+typedef int64_t 8 8 signed
+typedef uint8_t 1 1 unsigned
+typedef uint16_t 2 2 unsigned
+typedef uint32_t 4 4 unsigned
+typedef uint64_t 8 8 unsigned
+typedef poly8_t 1 1 unsigned
+typedef poly16_t 2 2 unsigned
+typedef poly64_t 8 8 unsigned
+typedef float32_t 4 4
+typedef float64_t 8 8
+typedef uint8x16x4_t 64 16
+  val 0
+typedef int8x8x2_t 16 8
+  val 0
+typedef int8x16x2_t 32 16
+  val 0
+typedef uint8x8x2_t 16 8
+  val 0
+typedef uint8x16x2_t 32 16
+  val 0
+typedef poly8x8x2_t 16 8
+  val 0
+typedef poly8x16x2_t 32 16
+  val 0
+typedef int16x4x2_t 16 8
+  val 0
+typedef int16x8x2_t 32 16
+  val 0
+typedef uint16x4x2_t 16 8
+  val 0
+typedef uint16x8x2_t 32 16
+  val 0
+typedef poly16x4x2_t 16 8
+  val 0
+typedef poly16x8x2_t 32 16
+  val 0
+typedef int32x2x2_t 16 8
+  val 0
+typedef int32x4x2_t 32 16
+  val 0
+typedef uint32x2x2_t 16 8
+  val 0
+typedef uint32x4x2_t 32 16
+  val 0
+typedef float32x2x2_t 16 8
+  val 0
+typedef float32x4x2_t 32 16
+  val 0
+
+mm_malloc.h y
+struct localeinfo_struct 16 8
+  locinfo 0
+  mbcinfo 8
+typedef size_t 8 8 unsigned
+typedef ptrdiff_t 8 8 signed
+typedef wchar_t 2 2 unsigned
+typedef max_align_t 16 8
+typedef errno_t 4 4 signed
+typedef rsize_t 8 8 unsigned
+typedef intptr_t 8 8 signed
+typedef uintptr_t 8 8 unsigned
+typedef __time32_t 4 4 signed
+typedef __time64_t 8 8 signed
+typedef pthreadlocinfo 8 8
+typedef pthreadmbcinfo 8 8
+typedef _locale_tstruct 16 8
+  locinfo 0
+  mbcinfo 8
+typedef _locale_t 8 8
+typedef _LDOUBLE 10 1
+  ld 0
+typedef _CRT_DOUBLE 8 8
+  x 0
+typedef _CRT_FLOAT 4 4
+  f 0
+typedef _LONGDOUBLE 8 8
+  x 0
+typedef _LDBL12 12 1
+  ld12 0
+typedef div_t 8 4
+  quot 0
+  rem 4
+typedef ldiv_t 8 4
+  quot 0
+  rem 4
+typedef lldiv_t 16 8
+  quot 0
+  rem 8
+
+stdint.h y
+typedef intmax_t 8 8 signed
+typedef uintmax_t 8 8 unsigned
+typedef int_least8_t 1 1 signed
+typedef int_least16_t 2 2 signed
+typedef int_least32_t 4 4 signed
+typedef int_least64_t 8 8 signed
+typedef uint_least8_t 1 1 unsigned
+typedef uint_least16_t 2 2 unsigned
+typedef uint_least32_t 4 4 unsigned
+typedef uint_least64_t 8 8 unsigned
+typedef int_fast8_t 1 1 signed
+typedef int_fast16_t 2 2 signed
+typedef int_fast32_t 4 4 signed
+typedef int_fast64_t 8 8 signed
+typedef uint_fast8_t 1 1 unsigned
+typedef uint_fast16_t 2 2 unsigned
+typedef uint_fast32_t 4 4 unsigned
+typedef uint_fast64_t 8 8 unsigned
+
+inttypes.h y
+typedef imaxdiv_t 16 8
+  quot 0
+  rem 8
+
+setjmp.h y
+typedef jmp_buf 192 8
+
+sched.h y
+struct timespec 16 8
+  tv_sec 0
+  tv_nsec 8
+struct sched_param 4 4
+  sched_priority 0
+typedef time_t 8 8 signed
+typedef clockid_t 4 4 signed
+typedef ssize_t 8 8 signed
+typedef off64_t 8 8 signed
+typedef off_t 4 4 signed
+typedef pid_t 8 8 signed
+typedef mode_t 2 2 unsigned
+typedef dev_t 4 4 unsigned
+typedef ino_t 2 2 unsigned
+typedef useconds_t 4 4 unsigned
+
+stdio.h y
+typedef fpos_t 8 8 signed
+typedef FILE 48 8
+  _ptr 0
+  _cnt 8
+  _base 16
+  _flag 24
+  _file 28
+  _charbuf 32
+  _bufsiz 36
+  _tmpfname 40
+typedef wint_t 2 2 unsigned
+
+stdarg.h y
+typedef va_list 8 8
+
+stdatomic.h y
+struct atomic_flag 1 1
+  _Value 0
+typedef memory_order 4 4 unsigned
+typedef atomic_bool 1 1
+typedef atomic_char 1 1
+typedef atomic_schar 1 1
+typedef atomic_uchar 1 1
+typedef atomic_short 2 2
+typedef atomic_ushort 2 2
+typedef atomic_int 4 4
+typedef atomic_uint 4 4
+typedef atomic_long 4 4
+typedef atomic_ulong 4 4
+typedef atomic_llong 8 8
+typedef atomic_ullong 8 8
+typedef atomic_char16_t 2 2
+typedef atomic_char32_t 4 4
+typedef atomic_wchar_t 2 2
+typedef atomic_int_least8_t 1 1
+typedef atomic_uint_least8_t 1 1
+typedef atomic_int_least16_t 2 2
+typedef atomic_uint_least16_t 2 2
+typedef atomic_int_least32_t 4 4
+typedef atomic_uint_least32_t 4 4
+typedef atomic_int_least64_t 8 8
+typedef atomic_uint_least64_t 8 8
+typedef atomic_int_fast8_t 1 1
+typedef atomic_uint_fast8_t 1 1
+typedef atomic_int_fast16_t 2 2
+typedef atomic_uint_fast16_t 2 2
+typedef atomic_int_fast32_t 4 4
+typedef atomic_uint_fast32_t 4 4
+typedef atomic_int_fast64_t 8 8
+typedef atomic_uint_fast64_t 8 8
+typedef atomic_intptr_t 8 8
+typedef atomic_uintptr_t 8 8
+typedef atomic_size_t 8 8
+typedef atomic_ptrdiff_t 8 8
+typedef atomic_intmax_t 8 8
+typedef atomic_uintmax_t 8 8
+typedef atomic_flag 1 1
+  _Value 0
+
+ctype.h y
+typedef wctype_t 2 2 unsigned
+
+locale.h y
+struct lconv 152 8
+  decimal_point 0
+  thousands_sep 8
+  grouping 16
+  int_curr_symbol 24
+  currency_symbol 32
+  mon_decimal_point 40
+  mon_thousands_sep 48
+  mon_grouping 56
+  positive_sign 64
+  negative_sign 72
+  int_frac_digits 80
+  frac_digits 81
+  p_cs_precedes 82
+  p_sep_by_space 83
+  n_cs_precedes 84
+  n_sep_by_space 85
+  p_sign_posn 86
+  n_sign_posn 87
+  _W_decimal_point 88
+  _W_thousands_sep 96
+  _W_int_curr_symbol 104
+  _W_currency_symbol 112
+  _W_mon_decimal_point 120
+  _W_mon_thousands_sep 128
+  _W_positive_sign 136
+  _W_negative_sign 144
+
+signal.h y
+typedef sig_atomic_t 4 4 signed
+
+time.h y
+struct tm 36 4
+  tm_sec 0
+  tm_min 4
+  tm_hour 8
+  tm_mday 12
+  tm_mon 16
+  tm_year 20
+  tm_wday 24
+  tm_yday 28
+  tm_isdst 32
+typedef clock_t 4 4 signed
+
+uchar.h y
+struct _wfinddata64i32_t 560 8
+  attrib 0
+  time_create 8
+  time_access 16
+  time_write 24
+  size 32
+  name 36
+struct _wfinddata64_t 560 8
+  attrib 0
+  time_create 8
+  time_access 16
+  time_write 24
+  size 32
+  name 40
+typedef mbstate_t 4 4
+typedef char16_t 2 2 unsigned
+typedef char32_t 4 4 unsigned
+
+utime.h y
+struct utimbuf 16 8
+  actime 0
+  modtime 8
+struct _utimbuf 16 8
+  actime 0
+  modtime 8
+
+dirent.h y
+struct dirent 268 4
+  d_ino 0
+  d_reclen 4
+  d_namlen 6
+  d_name 8
+
+ftw.h y
+struct _stat64i32 48 8
+  st_dev 0
+  st_ino 4
+  st_mode 6
+  st_nlink 8
+  st_uid 10
+  st_gid 12
+  st_rdev 16
+  st_size 20
+  st_atime 24
+  st_mtime 32
+  st_ctime 40
+struct _stat64 56 8
+  st_dev 0
+  st_ino 4
+  st_mode 6
+  st_nlink 8
+  st_uid 10
+  st_gid 12
+  st_rdev 16
+  st_size 24
+  st_atime 32
+  st_mtime 40
+  st_ctime 48
+struct stat 48 8
+  st_dev 0
+  st_ino 4
+  st_mode 6
+  st_nlink 8
+  st_uid 10
+  st_gid 12
+  st_rdev 16
+  st_size 20
+  st_atime 24
+  st_mtime 32
+  st_ctime 40
+struct stat64 56 8
+  st_dev 0
+  st_ino 4
+  st_mode 6
+  st_nlink 8
+  st_uid 10
+  st_gid 12
+  st_rdev 16
+  st_size 24
+  st_atime 32
+  st_mtime 40
+  st_ctime 48
+struct FTW 8 4
+  base 0
+  level 4
+
+getopt.h y
+struct option 32 8
+  name 0
+  has_arg 8
+  flag 16
+  val 24
+
+wctype.h y
+typedef wctrans_t 2 2 unsigned
+
+sys/time.h y
+struct timeval 8 4
+  tv_sec 0
+  tv_usec 4
+struct timezone 8 4
+  tz_minuteswest 0
+  tz_dsttime 4
+
+pthread.h y
+typedef pthread_mutex_t 8 8
+typedef pthread_cond_t 8 8
+typedef pthread_mutexattr_t 4 4 unsigned
+typedef pthread_condattr_t 4 4 signed
+typedef pthread_attr_t 32 8
+typedef pthread_t 8 8 unsigned
+typedef pthread_key_t 4 4 unsigned
+typedef pthread_once_t 4 4 signed
+
+semaphore.h y
+typedef sem_t 8 8
+
+search.h y
+struct entry 16 8
+  key 0
+  data 8
+typedef ENTRY 16 8
+  key 0
+  data 8
+typedef ACTION 4 4 unsigned
+typedef VISIT 4 4 unsigned
+
+fenv.h y
+typedef fexcept_t 4 4 unsigned
+typedef fenv_t 8 4
+  _Fe_ctl 0
+  _Fe_stat 4
+
+bcrypt.h p
+struct _EXCEPTION_RECORD 152 8
+  ExceptionCode 0
+  ExceptionFlags 4
+  ExceptionRecord 8
+  ExceptionAddress 16
+  NumberParameters 24
+  ExceptionInformation 32
+struct _CONTEXT 912 16
+  ContextFlags 0
+  Cpsr 4
+  X0 8
+  X1 16
+  X2 24
+  X3 32
+  X4 40
+  X5 48
+  X6 56
+  X7 64
+  X8 72
+  X9 80
+  X10 88
+  X11 96
+  X12 104
+  X13 112
+  X14 120
+  X15 128
+  X16 136
+  X17 144
+  X18 152
+  X19 160
+  X20 168
+  X21 176
+  X22 184
+  X23 192
+  X24 200
+  X25 208
+  X26 216
+  X27 224
+  X28 232
+  Fp 240
+  Lr 248
+  X 8
+  Sp 256
+  Pc 264
+  V 272
+  Fpcr 784
+  Fpsr 788
+  Bcr 792
+  Bvr 824
+  Wcr 888
+  Wvr 896
+struct _EXCEPTION_POINTERS 16 8
+  ExceptionRecord 0
+  ContextRecord 8
+struct HKEY__ 4 4
+  unused 0
+struct HMETAFILE__ 4 4
+  unused 0
+struct HINSTANCE__ 4 4
+  unused 0
+struct HRGN__ 4 4
+  unused 0
+struct HRSRC__ 4 4
+  unused 0
+struct HSPRITE__ 4 4
+  unused 0
+struct HLSURF__ 4 4
+  unused 0
+struct HSTR__ 4 4
+  unused 0
+struct HTASK__ 4 4
+  unused 0
+struct HWINSTA__ 4 4
+  unused 0
+struct HKL__ 4 4
+  unused 0
+struct HWND__ 4 4
+  unused 0
+struct HHOOK__ 4 4
+  unused 0
+struct HACCEL__ 4 4
+  unused 0
+struct HBITMAP__ 4 4
+  unused 0
+struct HBRUSH__ 4 4
+  unused 0
+struct HCOLORSPACE__ 4 4
+  unused 0
+struct HDC__ 4 4
+  unused 0
+struct HGLRC__ 4 4
+  unused 0
+struct HDESK__ 4 4
+  unused 0
+struct HENHMETAFILE__ 4 4
+  unused 0
+struct HFONT__ 4 4
+  unused 0
+struct HICON__ 4 4
+  unused 0
+struct HMENU__ 4 4
+  unused 0
+struct HPALETTE__ 4 4
+  unused 0
+struct HPEN__ 4 4
+  unused 0
+struct HWINEVENTHOOK__ 4 4
+  unused 0
+struct HMONITOR__ 4 4
+  unused 0
+struct HUMPD__ 4 4
+  unused 0
+struct HDROP__ 4 4
+  unused 0
+struct HRAWINPUT__ 4 4
+  unused 0
+struct _SECURITY_ATTRIBUTES 24 8
+  nLength 0
+  lpSecurityDescriptor 8
+  bInheritHandle 16
+struct _OVERLAPPED 32 8
+  Internal 0
+  InternalHigh 8
+  Offset 16
+  OffsetHigh 20
+  Pointer 16
+  hEvent 24
+struct _SYSTEMTIME 16 2
+  wYear 0
+  wMonth 2
+  wDayOfWeek 4
+  wDay 6
+  wHour 8
+  wMinute 10
+  wSecond 12
+  wMilliseconds 14
+struct _REASON_CONTEXT 32 8
+  Version 0
+  Flags 4
+  Reason 8
+struct _RTL_SRWLOCK 8 8
+  Ptr 0
+struct _RTL_CONDITION_VARIABLE 8 8
+  Ptr 0
+struct _RTL_RUN_ONCE 8 8
+  Ptr 0
+struct _LIST_ENTRY 16 8
+  Flink 0
+  Blink 8
+struct _RTL_CRITICAL_SECTION_DEBUG 48 8
+  Type 0
+  CreatorBackTraceIndex 2
+  CriticalSection 8
+  ProcessLocksList 16
+  EntryCount 32
+  ContentionCount 36
+  Flags 40
+  CreatorBackTraceIndexHigh 44
+struct _RTL_CRITICAL_SECTION 40 8
+  DebugInfo 0
+  LockCount 8
+  RecursionCount 12
+  OwningThread 16
+  LockSemaphore 24
+  SpinCount 32
+struct _FILE_ID_128 16 1
+  Identifier 0
+union _LARGE_INTEGER 8 8
+  LowPart 0
+  HighPart 4
+  u 0
+  QuadPart 0
+union _ULARGE_INTEGER 8 8
+  LowPart 0
+  HighPart 4
+  u 0
+  QuadPart 0
+struct _SYSTEM_INFO 48 8
+  dwOemId 0
+  wProcessorArchitecture 0
+  wReserved 2
+  dwPageSize 4
+  lpMinimumApplicationAddress 8
+  lpMaximumApplicationAddress 16
+  dwActiveProcessorMask 24
+  dwNumberOfProcessors 32
+  dwProcessorType 36
+  dwAllocationGranularity 40
+  wProcessorLevel 44
+  wProcessorRevision 46
+struct _GROUP_AFFINITY 16 8
+  Mask 0
+  Group 8
+  Reserved 10
+struct _PROCESSOR_NUMBER 4 2
+  Group 0
+  Number 2
+  Reserved 3
+struct _IMAGE_RUNTIME_FUNCTION_ENTRY 12 4
+  BeginAddress 0
+  EndAddress 4
+  UnwindInfoAddress 8
+  UnwindData 8
+struct _IMAGE_ARM64_RUNTIME_FUNCTION_ENTRY 8 4
+  BeginAddress 0
+  UnwindData 4
+  Flag bit 32 2
+  FunctionLength bit 34 11
+  RegF bit 45 3
+  RegI bit 48 4
+  H bit 52 1
+  CR bit 53 2
+  FrameSize bit 55 9
+struct _FILETIME 8 4
+  dwLowDateTime 0
+  dwHighDateTime 4
+struct _BY_HANDLE_FILE_INFORMATION 52 4
+  dwFileAttributes 0
+  ftCreationTime 4
+  ftLastAccessTime 12
+  ftLastWriteTime 20
+  dwVolumeSerialNumber 28
+  nFileSizeHigh 32
+  nFileSizeLow 36
+  nNumberOfLinks 40
+  nFileIndexHigh 44
+  nFileIndexLow 48
+struct _FILE_BASIC_INFO 40 8
+  CreationTime 0
+  LastAccessTime 8
+  LastWriteTime 16
+  ChangeTime 24
+  FileAttributes 32
+struct _FILE_ATTRIBUTE_TAG_INFO 8 4
+  FileAttributes 0
+  ReparseTag 4
+struct _GUID 16 4
+  Data1 0
+  Data2 4
+  Data3 6
+  Data4 8
+struct _nlsversioninfo 12 4
+  dwNLSVersionInfoSize 0
+  dwNLSVersion 4
+  dwDefinedVersion 8
+struct _STARTUPINFOW 104 8
+  cb 0
+  lpReserved 8
+  lpDesktop 16
+  lpTitle 24
+  dwX 32
+  dwY 36
+  dwXSize 40
+  dwYSize 44
+  dwXCountChars 48
+  dwYCountChars 52
+  dwFillAttribute 56
+  dwFlags 60
+  wShowWindow 64
+  cbReserved2 66
+  lpReserved2 72
+  hStdInput 80
+  hStdOutput 88
+  hStdError 96
+struct _STARTUPINFOA 104 8
+  cb 0
+  lpReserved 8
+  lpDesktop 16
+  lpTitle 24
+  dwX 32
+  dwY 36
+  dwXSize 40
+  dwYSize 44
+  dwXCountChars 48
+  dwYCountChars 52
+  dwFillAttribute 56
+  dwFlags 60
+  wShowWindow 64
+  cbReserved2 66
+  lpReserved2 72
+  hStdInput 80
+  hStdOutput 88
+  hStdError 96
+struct _STARTUPINFOEXW 112 8
+  StartupInfo 0
+  lpAttributeList 104
+struct _STARTUPINFOEXA 112 8
+  StartupInfo 0
+  lpAttributeList 104
+struct _PROCESS_INFORMATION 24 8
+  hProcess 0
+  hThread 8
+  dwProcessId 16
+  dwThreadId 20
+struct _LUID 8 4
+  LowPart 0
+  HighPart 4
+struct _LUID_AND_ATTRIBUTES 12 4
+  Luid 0
+  Attributes 8
+struct _TOKEN_PRIVILEGES 16 4
+  PrivilegeCount 0
+  Privileges 4
+struct _MEMORY_BASIC_INFORMATION 48 8
+  BaseAddress 0
+  AllocationBase 8
+  AllocationProtect 16
+  PartitionId 20
+  RegionSize 24
+  State 32
+  Protect 36
+  Type 40
+struct _FILE_FS_PERSISTENT_VOLUME_INFORMATION 16 4
+  VolumeFlags 0
+  FlagMask 4
+  Version 8
+  Reserved 12
+struct _OSVERSIONINFOEXW 284 4
+  dwOSVersionInfoSize 0
+  dwMajorVersion 4
+  dwMinorVersion 8
+  dwBuildNumber 12
+  dwPlatformId 16
+  szCSDVersion 20
+  wServicePackMajor 276
+  wServicePackMinor 278
+  wSuiteMask 280
+  wProductType 282
+  wReserved 283
+struct _OSVERSIONINFOEXA 156 4
+  dwOSVersionInfoSize 0
+  dwMajorVersion 4
+  dwMinorVersion 8
+  dwBuildNumber 12
+  dwPlatformId 16
+  szCSDVersion 20
+  wServicePackMajor 148
+  wServicePackMinor 150
+  wSuiteMask 152
+  wProductType 154
+  wReserved 155
+struct _OSVERSIONINFOA 148 4
+  dwOSVersionInfoSize 0
+  dwMajorVersion 4
+  dwMinorVersion 8
+  dwBuildNumber 12
+  dwPlatformId 16
+  szCSDVersion 20
+struct _OSVERSIONINFOW 276 4
+  dwOSVersionInfoSize 0
+  dwMajorVersion 4
+  dwMinorVersion 8
+  dwBuildNumber 12
+  dwPlatformId 16
+  szCSDVersion 20
+struct _M128A 16 16
+  Low 0
+  High 8
+struct _XSAVE_FORMAT 512 16
+  ControlWord 0
+  StatusWord 2
+  TagWord 4
+  Reserved1 5
+  ErrorOpcode 6
+  ErrorOffset 8
+  ErrorSelector 12
+  Reserved2 14
+  DataOffset 16
+  DataSelector 20
+  Reserved3 22
+  MxCsr 24
+  MxCsr_Mask 28
+  FloatRegisters 32
+  XmmRegisters 160
+  Reserved4 416
+union _ARM64_NT_NEON128 16 8
+  Low 0
+  High 8
+  D 0
+  S 0
+  H 0
+  B 0
+struct _UNWIND_HISTORY_TABLE_ENTRY 16 8
+  ImageBase 0
+  FunctionEntry 8
+struct _UNWIND_HISTORY_TABLE 216 8
+  Count 0
+  LocalHint 4
+  GlobalHint 5
+  Search 6
+  Once 7
+  LowAddress 8
+  HighAddress 16
+  Entry 24
+struct _KNONVOLATILE_CONTEXT_POINTERS_ARM64 160 8
+  X19 0
+  X20 8
+  X21 16
+  X22 24
+  X23 32
+  X24 40
+  X25 48
+  X26 56
+  X27 64
+  X28 72
+  Fp 80
+  Lr 88
+  D8 96
+  D9 104
+  D10 112
+  D11 120
+  D12 128
+  D13 136
+  D14 144
+  D15 152
+struct _TIME_ZONE_INFORMATION 172 4
+  Bias 0
+  StandardName 4
+  StandardDate 68
+  StandardBias 84
+  DaylightName 88
+  DaylightDate 152
+  DaylightBias 168
+struct _WIN32_FILE_ATTRIBUTE_DATA 36 4
+  dwFileAttributes 0
+  ftCreationTime 4
+  ftLastAccessTime 12
+  ftLastWriteTime 20
+  nFileSizeHigh 28
+  nFileSizeLow 32
+struct _WIN32_FIND_DATAA 320 4
+  dwFileAttributes 0
+  ftCreationTime 4
+  ftLastAccessTime 12
+  ftLastWriteTime 20
+  nFileSizeHigh 28
+  nFileSizeLow 32
+  dwReserved0 36
+  dwReserved1 40
+  cFileName 44
+  cAlternateFileName 304
+struct _WIN32_FIND_DATAW 592 4
+  dwFileAttributes 0
+  ftCreationTime 4
+  ftLastAccessTime 12
+  ftLastWriteTime 20
+  nFileSizeHigh 28
+  nFileSizeLow 32
+  dwReserved0 36
+  dwReserved1 40
+  cFileName 44
+  cAlternateFileName 564
+struct _COORD 4 2
+  X 0
+  Y 2
+struct _SMALL_RECT 8 2
+  Left 0
+  Top 2
+  Right 4
+  Bottom 6
+struct _CONSOLE_SCREEN_BUFFER_INFO 22 2
+  dwSize 0
+  dwCursorPosition 4
+  wAttributes 8
+  srWindow 10
+  dwMaximumWindowSize 18
+struct _KEY_EVENT_RECORD 16 4
+  bKeyDown 0
+  wRepeatCount 4
+  wVirtualKeyCode 6
+  wVirtualScanCode 8
+  uChar 10
+  dwControlKeyState 12
+struct _MOUSE_EVENT_RECORD 16 4
+  dwMousePosition 0
+  dwButtonState 4
+  dwControlKeyState 8
+  dwEventFlags 12
+struct _WINDOW_BUFFER_SIZE_RECORD 4 2
+  dwSize 0
+struct _MENU_EVENT_RECORD 4 4
+  dwCommandId 0
+struct _FOCUS_EVENT_RECORD 4 4
+  bSetFocus 0
+struct _INPUT_RECORD 20 4
+  EventType 0
+  Event 4
+struct _CHAR_INFO 4 2
+  Char 0
+  Attributes 2
+struct _CONSOLE_READCONSOLE_CONTROL 16 4
+  nLength 0
+  nInitialChars 4
+  dwCtrlWakeupMask 8
+  dwControlKeyState 12
+struct _IMAGE_DOS_HEADER 64 2
+  e_magic 0
+  e_cblp 2
+  e_cp 4
+  e_crlc 6
+  e_cparhdr 8
+  e_minalloc 10
+  e_maxalloc 12
+  e_ss 14
+  e_sp 16
+  e_csum 18
+  e_ip 20
+  e_cs 22
+  e_lfarlc 24
+  e_ovno 26
+  e_res 28
+  e_oemid 36
+  e_oeminfo 38
+  e_res2 40
+  e_lfanew 60
+struct _IMAGE_FILE_HEADER 20 4
+  Machine 0
+  NumberOfSections 2
+  TimeDateStamp 4
+  PointerToSymbolTable 8
+  NumberOfSymbols 12
+  SizeOfOptionalHeader 16
+  Characteristics 18
+struct _IMAGE_DATA_DIRECTORY 8 4
+  VirtualAddress 0
+  Size 4
+struct _IMAGE_OPTIONAL_HEADER 224 4
+  Magic 0
+  MajorLinkerVersion 2
+  MinorLinkerVersion 3
+  SizeOfCode 4
+  SizeOfInitializedData 8
+  SizeOfUninitializedData 12
+  AddressOfEntryPoint 16
+  BaseOfCode 20
+  BaseOfData 24
+  ImageBase 28
+  SectionAlignment 32
+  FileAlignment 36
+  MajorOperatingSystemVersion 40
+  MinorOperatingSystemVersion 42
+  MajorImageVersion 44
+  MinorImageVersion 46
+  MajorSubsystemVersion 48
+  MinorSubsystemVersion 50
+  Win32VersionValue 52
+  SizeOfImage 56
+  SizeOfHeaders 60
+  CheckSum 64
+  Subsystem 68
+  DllCharacteristics 70
+  SizeOfStackReserve 72
+  SizeOfStackCommit 76
+  SizeOfHeapReserve 80
+  SizeOfHeapCommit 84
+  LoaderFlags 88
+  NumberOfRvaAndSizes 92
+  DataDirectory 96
+struct _IMAGE_OPTIONAL_HEADER64 240 4
+  Magic 0
+  MajorLinkerVersion 2
+  MinorLinkerVersion 3
+  SizeOfCode 4
+  SizeOfInitializedData 8
+  SizeOfUninitializedData 12
+  AddressOfEntryPoint 16
+  BaseOfCode 20
+  ImageBase 24
+  SectionAlignment 32
+  FileAlignment 36
+  MajorOperatingSystemVersion 40
+  MinorOperatingSystemVersion 42
+  MajorImageVersion 44
+  MinorImageVersion 46
+  MajorSubsystemVersion 48
+  MinorSubsystemVersion 50
+  Win32VersionValue 52
+  SizeOfImage 56
+  SizeOfHeaders 60
+  CheckSum 64
+  Subsystem 68
+  DllCharacteristics 70
+  SizeOfStackReserve 72
+  SizeOfStackCommit 80
+  SizeOfHeapReserve 88
+  SizeOfHeapCommit 96
+  LoaderFlags 104
+  NumberOfRvaAndSizes 108
+  DataDirectory 112
+struct _IMAGE_NT_HEADERS64 264 4
+  Signature 0
+  FileHeader 4
+  OptionalHeader 24
+struct _IMAGE_NT_HEADERS 248 4
+  Signature 0
+  FileHeader 4
+  OptionalHeader 24
+struct _IMAGE_SECTION_HEADER 40 4
+  Name 0
+  Misc 8
+  VirtualAddress 12
+  SizeOfRawData 16
+  PointerToRawData 20
+  PointerToRelocations 24
+  PointerToLinenumbers 28
+  NumberOfRelocations 32
+  NumberOfLinenumbers 34
+  Characteristics 36
+struct _IMAGE_BASE_RELOCATION 8 4
+  VirtualAddress 0
+  SizeOfBlock 4
+struct _IMAGE_EXPORT_DIRECTORY 40 4
+  Characteristics 0
+  TimeDateStamp 4
+  MajorVersion 8
+  MinorVersion 10
+  Name 12
+  Base 16
+  NumberOfFunctions 20
+  NumberOfNames 24
+  AddressOfFunctions 28
+  AddressOfNames 32
+  AddressOfNameOrdinals 36
+struct _IMAGE_IMPORT_BY_NAME 4 2
+  Hint 0
+  Name 2
+struct _IMAGE_THUNK_DATA64 8 8
+  u1 0
+struct _IMAGE_THUNK_DATA32 4 4
+  u1 0
+struct _IMAGE_TLS_DIRECTORY64 40 4
+  StartAddressOfRawData 0
+  EndAddressOfRawData 8
+  AddressOfIndex 16
+  AddressOfCallBacks 24
+  SizeOfZeroFill 32
+  Characteristics 36
+struct _IMAGE_TLS_DIRECTORY32 24 4
+  StartAddressOfRawData 0
+  EndAddressOfRawData 4
+  AddressOfIndex 8
+  AddressOfCallBacks 12
+  SizeOfZeroFill 16
+  Characteristics 20
+struct _IMAGE_IMPORT_DESCRIPTOR 20 4
+  Characteristics 0
+  OriginalFirstThunk 0
+  TimeDateStamp 4
+  ForwarderChain 8
+  Name 12
+  FirstThunk 16
+struct _IMAGE_RESOURCE_DIRECTORY 16 4
+  Characteristics 0
+  TimeDateStamp 4
+  MajorVersion 8
+  MinorVersion 10
+  NumberOfNamedEntries 12
+  NumberOfIdEntries 14
+struct _IMAGE_RESOURCE_DIRECTORY_ENTRY 8 4
+  NameOffset bit 0 31
+  NameIsString bit 31 1
+  Name 0
+  Id 0
+  OffsetToData 4
+  OffsetToDirectory bit 32 31
+  DataIsDirectory bit 63 1
+struct _IMAGE_RESOURCE_DIRECTORY_STRING 4 2
+  Length 0
+  NameString 2
+struct _IMAGE_RESOURCE_DIR_STRING_U 4 2
+  Length 0
+  NameString 2
+struct _IMAGE_RESOURCE_DATA_ENTRY 16 4
+  OffsetToData 0
+  Size 4
+  CodePage 8
+  Reserved 12
+struct tagPOINT 8 4
+  x 0
+  y 4
+struct tagRECT 16 4
+  left 0
+  top 4
+  right 8
+  bottom 12
+struct _RECTL 16 4
+  left 0
+  top 4
+  right 8
+  bottom 12
+struct _POINTL 8 4
+  x 0
+  y 4
+struct tagSIZE 8 4
+  cx 0
+  cy 4
+struct tagPOINTS 4 2
+  x 0
+  y 2
+struct tagMSG 48 8
+  hwnd 0
+  message 8
+  wParam 16
+  lParam 24
+  time 32
+  pt 36
+struct _DRAWPATRECT 20 4
+  ptPosition 0
+  ptSize 8
+  wStyle 16
+  wPattern 18
+struct _PSINJECTDATA 8 4
+  DataBytes 0
+  InjectionPoint 4
+  PageNumber 6
+struct _PSFEATURE_OUTPUT 8 4
+  bPageIndependent 0
+  bSetPageDevice 4
+struct _PSFEATURE_CUSTPAPER 20 4
+  lOrientation 0
+  lWidth 4
+  lHeight 8
+  lWidthOffset 12
+  lHeightOffset 16
+struct tagXFORM 24 4
+  eM11 0
+  eM12 4
+  eM21 8
+  eM22 12
+  eDx 16
+  eDy 20
+struct tagBITMAP 32 8
+  bmType 0
+  bmWidth 4
+  bmHeight 8
+  bmWidthBytes 12
+  bmPlanes 16
+  bmBitsPixel 18
+  bmBits 24
+struct tagRGBTRIPLE 3 1
+  rgbtBlue 0
+  rgbtGreen 1
+  rgbtRed 2
+struct tagRGBQUAD 4 1
+  rgbBlue 0
+  rgbGreen 1
+  rgbRed 2
+  rgbReserved 3
+struct tagCIEXYZ 12 4
+  ciexyzX 0
+  ciexyzY 4
+  ciexyzZ 8
+struct tagICEXYZTRIPLE 36 4
+  ciexyzRed 0
+  ciexyzGreen 12
+  ciexyzBlue 24
+struct tagLOGCOLORSPACEA 328 4
+  lcsSignature 0
+  lcsVersion 4
+  lcsSize 8
+  lcsCSType 12
+  lcsIntent 16
+  lcsEndpoints 20
+  lcsGammaRed 56
+  lcsGammaGreen 60
+  lcsGammaBlue 64
+  lcsFilename 68
+struct tagLOGCOLORSPACEW 588 4
+  lcsSignature 0
+  lcsVersion 4
+  lcsSize 8
+  lcsCSType 12
+  lcsIntent 16
+  lcsEndpoints 20
+  lcsGammaRed 56
+  lcsGammaGreen 60
+  lcsGammaBlue 64
+  lcsFilename 68
+struct tagBITMAPCOREHEADER 12 4
+  bcSize 0
+  bcWidth 4
+  bcHeight 6
+  bcPlanes 8
+  bcBitCount 10
+struct tagBITMAPINFOHEADER 40 4
+  biSize 0
+  biWidth 4
+  biHeight 8
+  biPlanes 12
+  biBitCount 14
+  biCompression 16
+  biSizeImage 20
+  biXPelsPerMeter 24
+  biYPelsPerMeter 28
+  biClrUsed 32
+  biClrImportant 36
+struct tagBITMAPINFO 44 4
+  bmiHeader 0
+  bmiColors 40
+struct tagBITMAPCOREINFO 16 4
+  bmciHeader 0
+  bmciColors 12
+struct tagBITMAPFILEHEADER 14 2
+  bfType 0
+  bfSize 2
+  bfReserved1 6
+  bfReserved2 8
+  bfOffBits 10
+struct tagFONTSIGNATURE 24 4
+  fsUsb 0
+  fsCsb 16
+struct tagCHARSETINFO 32 4
+  ciCharset 0
+  ciACP 4
+  fs 8
+struct tagLOCALESIGNATURE 32 4
+  lsUsb 0
+  lsCsbDefault 16
+  lsCsbSupported 24
+struct tagHANDLETABLE 8 8
+  objectHandle 0
+struct tagMETARECORD 8 4
+  rdSize 0
+  rdFunction 4
+  rdParm 6
+struct tagMETAFILEPICT 24 8
+  mm 0
+  xExt 4
+  yExt 8
+  hMF 16
+struct tagMETAHEADER 18 2
+  mtType 0
+  mtHeaderSize 2
+  mtVersion 4
+  mtSize 6
+  mtNoObjects 10
+  mtMaxRecord 12
+  mtNoParameters 16
+struct tagENHMETARECORD 12 4
+  iType 0
+  nSize 4
+  dParm 8
+struct tagENHMETAHEADER 108 4
+  iType 0
+  nSize 4
+  rclBounds 8
+  rclFrame 24
+  dSignature 40
+  nVersion 44
+  nBytes 48
+  nRecords 52
+  nHandles 56
+  sReserved 58
+  nDescription 60
+  offDescription 64
+  nPalEntries 68
+  szlDevice 72
+  szlMillimeters 80
+  cbPixelFormat 88
+  offPixelFormat 92
+  bOpenGL 96
+  szlMicrometers 100
+struct tagTEXTMETRICA 56 4
+  tmHeight 0
+  tmAscent 4
+  tmDescent 8
+  tmInternalLeading 12
+  tmExternalLeading 16
+  tmAveCharWidth 20
+  tmMaxCharWidth 24
+  tmWeight 28
+  tmOverhang 32
+  tmDigitizedAspectX 36
+  tmDigitizedAspectY 40
+  tmFirstChar 44
+  tmLastChar 45
+  tmDefaultChar 46
+  tmBreakChar 47
+  tmItalic 48
+  tmUnderlined 49
+  tmStruckOut 50
+  tmPitchAndFamily 51
+  tmCharSet 52
+struct tagTEXTMETRICW 60 4
+  tmHeight 0
+  tmAscent 4
+  tmDescent 8
+  tmInternalLeading 12
+  tmExternalLeading 16
+  tmAveCharWidth 20
+  tmMaxCharWidth 24
+  tmWeight 28
+  tmOverhang 32
+  tmDigitizedAspectX 36
+  tmDigitizedAspectY 40
+  tmFirstChar 44
+  tmLastChar 46
+  tmDefaultChar 48
+  tmBreakChar 50
+  tmItalic 52
+  tmUnderlined 53
+  tmStruckOut 54
+  tmPitchAndFamily 55
+  tmCharSet 56
+struct tagNEWTEXTMETRICA 72 4
+  tmHeight 0
+  tmAscent 4
+  tmDescent 8
+  tmInternalLeading 12
+  tmExternalLeading 16
+  tmAveCharWidth 20
+  tmMaxCharWidth 24
+  tmWeight 28
+  tmOverhang 32
+  tmDigitizedAspectX 36
+  tmDigitizedAspectY 40
+  tmFirstChar 44
+  tmLastChar 45
+  tmDefaultChar 46
+  tmBreakChar 47
+  tmItalic 48
+  tmUnderlined 49
+  tmStruckOut 50
+  tmPitchAndFamily 51
+  tmCharSet 52
+  ntmFlags 56
+  ntmSizeEM 60
+  ntmCellHeight 64
+  ntmAvgWidth 68
+struct tagNEWTEXTMETRICW 76 4
+  tmHeight 0
+  tmAscent 4
+  tmDescent 8
+  tmInternalLeading 12
+  tmExternalLeading 16
+  tmAveCharWidth 20
+  tmMaxCharWidth 24
+  tmWeight 28
+  tmOverhang 32
+  tmDigitizedAspectX 36
+  tmDigitizedAspectY 40
+  tmFirstChar 44
+  tmLastChar 46
+  tmDefaultChar 48
+  tmBreakChar 50
+  tmItalic 52
+  tmUnderlined 53
+  tmStruckOut 54
+  tmPitchAndFamily 55
+  tmCharSet 56
+  ntmFlags 60
+  ntmSizeEM 64
+  ntmCellHeight 68
+  ntmAvgWidth 72
+struct tagNEWTEXTMETRICEXA 96 4
+  ntmTm 0
+  ntmFontSig 72
+struct tagNEWTEXTMETRICEXW 100 4
+  ntmTm 0
+  ntmFontSig 76
+struct tagPELARRAY 20 4
+  paXCount 0
+  paYCount 4
+  paXExt 8
+  paYExt 12
+  paRGBs 16
+struct tagLOGBRUSH 16 8
+  lbStyle 0
+  lbColor 4
+  lbHatch 8
+struct tagLOGBRUSH32 12 4
+  lbStyle 0
+  lbColor 4
+  lbHatch 8
+struct tagLOGPEN 16 4
+  lopnStyle 0
+  lopnWidth 4
+  lopnColor 12
+struct tagEXTLOGPEN 32 8
+  elpPenStyle 0
+  elpWidth 4
+  elpBrushStyle 8
+  elpColor 12
+  elpHatch 16
+  elpNumEntries 24
+  elpStyleEntry 28
+struct tagEXTLOGPEN32 28 4
+  elpPenStyle 0
+  elpWidth 4
+  elpBrushStyle 8
+  elpColor 12
+  elpHatch 16
+  elpNumEntries 20
+  elpStyleEntry 24
+struct tagPALETTEENTRY 4 1
+  peRed 0
+  peGreen 1
+  peBlue 2
+  peFlags 3
+struct tagLOGPALETTE 8 2
+  palVersion 0
+  palNumEntries 2
+  palPalEntry 4
+struct tagLOGFONTA 60 4
+  lfHeight 0
+  lfWidth 4
+  lfEscapement 8
+  lfOrientation 12
+  lfWeight 16
+  lfItalic 20
+  lfUnderline 21
+  lfStrikeOut 22
+  lfCharSet 23
+  lfOutPrecision 24
+  lfClipPrecision 25
+  lfQuality 26
+  lfPitchAndFamily 27
+  lfFaceName 28
+struct tagLOGFONTW 92 4
+  lfHeight 0
+  lfWidth 4
+  lfEscapement 8
+  lfOrientation 12
+  lfWeight 16
+  lfItalic 20
+  lfUnderline 21
+  lfStrikeOut 22
+  lfCharSet 23
+  lfOutPrecision 24
+  lfClipPrecision 25
+  lfQuality 26
+  lfPitchAndFamily 27
+  lfFaceName 28
+struct tagENUMLOGFONTA 156 4
+  elfLogFont 0
+  elfFullName 60
+  elfStyle 124
+struct tagENUMLOGFONTW 284 4
+  elfLogFont 0
+  elfFullName 92
+  elfStyle 220
+struct tagENUMLOGFONTEXA 188 4
+  elfLogFont 0
+  elfFullName 60
+  elfStyle 124
+  elfScript 156
+struct tagENUMLOGFONTEXW 348 4
+  elfLogFont 0
+  elfFullName 92
+  elfStyle 220
+  elfScript 284
+struct tagPANOSE 10 1
+  bFamilyType 0
+  bSerifStyle 1
+  bWeight 2
+  bProportion 3
+  bContrast 4
+  bStrokeVariation 5
+  bArmStyle 6
+  bLetterform 7
+  bMidline 8
+  bXHeight 9
+struct tagEXTLOGFONTA 192 4
+  elfLogFont 0
+  elfFullName 60
+  elfStyle 124
+  elfVersion 156
+  elfStyleSize 160
+  elfMatch 164
+  elfReserved 168
+  elfVendorId 172
+  elfCulture 176
+  elfPanose 180
+struct tagEXTLOGFONTW 320 4
+  elfLogFont 0
+  elfFullName 92
+  elfStyle 220
+  elfVersion 284
+  elfStyleSize 288
+  elfMatch 292
+  elfReserved 296
+  elfVendorId 300
+  elfCulture 304
+  elfPanose 308
+struct _devicemodeA 156 4
+  dmDeviceName 0
+  dmSpecVersion 32
+  dmDriverVersion 34
+  dmSize 36
+  dmDriverExtra 38
+  dmFields 40
+  dmOrientation 44
+  dmPaperSize 46
+  dmPaperLength 48
+  dmPaperWidth 50
+  dmScale 52
+  dmCopies 54
+  dmDefaultSource 56
+  dmPrintQuality 58
+  dmPosition 44
+  dmDisplayOrientation 52
+  dmDisplayFixedOutput 56
+  dmColor 60
+  dmDuplex 62
+  dmYResolution 64
+  dmTTOption 66
+  dmCollate 68
+  dmFormName 70
+  dmLogPixels 102
+  dmBitsPerPel 104
+  dmPelsWidth 108
+  dmPelsHeight 112
+  dmDisplayFlags 116
+  dmNup 116
+  dmDisplayFrequency 120
+  dmICMMethod 124
+  dmICMIntent 128
+  dmMediaType 132
+  dmDitherType 136
+  dmReserved1 140
+  dmReserved2 144
+  dmPanningWidth 148
+  dmPanningHeight 152
+struct _devicemodeW 220 4
+  dmDeviceName 0
+  dmSpecVersion 64
+  dmDriverVersion 66
+  dmSize 68
+  dmDriverExtra 70
+  dmFields 72
+  dmOrientation 76
+  dmPaperSize 78
+  dmPaperLength 80
+  dmPaperWidth 82
+  dmScale 84
+  dmCopies 86
+  dmDefaultSource 88
+  dmPrintQuality 90
+  dmPosition 76
+  dmDisplayOrientation 84
+  dmDisplayFixedOutput 88
+  dmColor 92
+  dmDuplex 94
+  dmYResolution 96
+  dmTTOption 98
+  dmCollate 100
+  dmFormName 102
+  dmLogPixels 166
+  dmBitsPerPel 168
+  dmPelsWidth 172
+  dmPelsHeight 176
+  dmDisplayFlags 180
+  dmNup 180
+  dmDisplayFrequency 184
+  dmICMMethod 188
+  dmICMIntent 192
+  dmMediaType 196
+  dmDitherType 200
+  dmReserved1 204
+  dmReserved2 208
+  dmPanningWidth 212
+  dmPanningHeight 216
+struct _DISPLAY_DEVICEA 424 4
+  cb 0
+  DeviceName 4
+  DeviceString 36
+  StateFlags 164
+  DeviceID 168
+  DeviceKey 296
+struct _DISPLAY_DEVICEW 840 4
+  cb 0
+  DeviceName 4
+  DeviceString 68
+  StateFlags 324
+  DeviceID 328
+  DeviceKey 584
+struct DISPLAYCONFIG_RATIONAL 8 4
+  Numerator 0
+  Denominator 4
+struct DISPLAYCONFIG_2DREGION 8 4
+  cx 0
+  cy 4
+struct DISPLAYCONFIG_VIDEO_SIGNAL_INFO 48 8
+  pixelRate 0
+  hSyncFreq 8
+  vSyncFreq 16
+  activeSize 24
+  totalSize 32
+  AdditionalSignalInfo 40
+  videoStandard 40
+  scanLineOrdering 44
+struct DISPLAYCONFIG_SOURCE_MODE 20 4
+  width 0
+  height 4
+  pixelFormat 8
+  position 12
+struct DISPLAYCONFIG_TARGET_MODE 48 8
+  targetVideoSignalInfo 0
+struct DISPLAYCONFIG_DESKTOP_IMAGE_INFO 40 4
+  PathSourceSize 0
+  DesktopImageRegion 8
+  DesktopImageClip 24
+struct DISPLAYCONFIG_MODE_INFO 64 8
+  infoType 0
+  id 4
+  adapterId 8
+  targetMode 16
+  sourceMode 16
+struct DISPLAYCONFIG_PATH_SOURCE_INFO 20 4
+  adapterId 0
+  id 8
+  modeInfoIdx 12
+  cloneGroupId bit 96 16
+  sourceModeInfoIdx bit 112 16
+  statusFlags 16
+struct DISPLAYCONFIG_PATH_TARGET_INFO 48 4
+  adapterId 0
+  id 8
+  modeInfoIdx 12
+  desktopModeInfoIdx bit 96 16
+  targetModeInfoIdx bit 112 16
+  outputTechnology 16
+  rotation 20
+  scaling 24
+  refreshRate 28
+  scanLineOrdering 36
+  targetAvailable 40
+  statusFlags 44
+struct DISPLAYCONFIG_PATH_INFO 72 4
+  sourceInfo 0
+  targetInfo 20
+  flags 68
+struct DISPLAYCONFIG_DEVICE_INFO_HEADER 20 4
+  type 0
+  size 4
+  adapterId 8
+  id 16
+struct DISPLAYCONFIG_SOURCE_DEVICE_NAME 84 4
+  header 0
+  viewGdiDeviceName 20
+struct DISPLAYCONFIG_TARGET_DEVICE_NAME_FLAGS 4 4
+  friendlyNameFromEdid bit 0 1
+  friendlyNameForced bit 1 1
+  edidIdsValid bit 2 1
+  reserved bit 3 29
+  value 0
+struct DISPLAYCONFIG_TARGET_DEVICE_NAME 420 4
+  header 0
+  flags 20
+  outputTechnology 24
+  edidManufactureId 28
+  edidProductCodeId 30
+  connectorInstance 32
+  monitorFriendlyDeviceName 36
+  monitorDevicePath 164
+struct DISPLAYCONFIG_TARGET_PREFERRED_MODE 80 8
+  header 0
+  width 20
+  height 24
+  targetMode 32
+struct DISPLAYCONFIG_ADAPTER_NAME 276 4
+  header 0
+  adapterDevicePath 20
+struct DISPLAYCONFIG_TARGET_BASE_TYPE 24 4
+  header 0
+  baseOutputTechnology 20
+struct DISPLAYCONFIG_SET_TARGET_PERSISTENCE 24 4
+  header 0
+  bootPersistenceOn bit 160 1
+  reserved bit 161 31
+  value 20
+struct DISPLAYCONFIG_SUPPORT_VIRTUAL_RESOLUTION 24 4
+  header 0
+  disableMonitorVirtualResolution bit 160 1
+  reserved bit 161 31
+  value 20
+struct _DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO 32 4
+  header 0
+  advancedColorSupported bit 160 1
+  advancedColorEnabled bit 161 1
+  wideColorEnforced bit 162 1
+  advancedColorForceDisabled bit 163 1
+  reserved bit 164 28
+  value 20
+  colorEncoding 24
+  bitsPerColorChannel 28
+struct _DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE 24 4
+  header 0
+  enableAdvancedColor bit 160 1
+  reserved bit 161 31
+  value 20
+struct _DISPLAYCONFIG_SDR_WHITE_LEVEL 24 4
+  header 0
+  SDRWhiteLevel 20
+struct _DISPLAYCONFIG_GET_MONITOR_SPECIALIZATION 24 4
+  header 0
+  isSpecializationEnabled bit 160 1
+  isSpecializationAvailableForMonitor bit 161 1
+  isSpecializationAvailableForSystem bit 162 1
+  reserved bit 163 29
+  value 20
+struct _DISPLAYCONFIG_SET_MONITOR_SPECIALIZATION 312 4
+  header 0
+  isSpecializationEnabled bit 160 1
+  reserved bit 161 31
+  value 20
+  specializationType 24
+  specializationSubType 40
+  specializationApplicationName 56
+struct _RGNDATAHEADER 32 4
+  dwSize 0
+  iType 4
+  nCount 8
+  nRgnSize 12
+  rcBound 16
+struct _RGNDATA 36 4
+  rdh 0
+  Buffer 32
+struct _ABC 12 4
+  abcA 0
+  abcB 4
+  abcC 8
+struct _ABCFLOAT 12 4
+  abcfA 0
+  abcfB 4
+  abcfC 8
+struct _OUTLINETEXTMETRICA 232 8
+  otmSize 0
+  otmTextMetrics 4
+  otmFiller 60
+  otmPanoseNumber 61
+  otmfsSelection 72
+  otmfsType 76
+  otmsCharSlopeRise 80
+  otmsCharSlopeRun 84
+  otmItalicAngle 88
+  otmEMSquare 92
+  otmAscent 96
+  otmDescent 100
+  otmLineGap 104
+  otmsCapEmHeight 108
+  otmsXHeight 112
+  otmrcFontBox 116
+  otmMacAscent 132
+  otmMacDescent 136
+  otmMacLineGap 140
+  otmusMinimumPPEM 144
+  otmptSubscriptSize 148
+  otmptSubscriptOffset 156
+  otmptSuperscriptSize 164
+  otmptSuperscriptOffset 172
+  otmsStrikeoutSize 180
+  otmsStrikeoutPosition 184
+  otmsUnderscoreSize 188
+  otmsUnderscorePosition 192
+  otmpFamilyName 200
+  otmpFaceName 208
+  otmpStyleName 216
+  otmpFullName 224
+struct _OUTLINETEXTMETRICW 232 8
+  otmSize 0
+  otmTextMetrics 4
+  otmFiller 64
+  otmPanoseNumber 65
+  otmfsSelection 76
+  otmfsType 80
+  otmsCharSlopeRise 84
+  otmsCharSlopeRun 88
+  otmItalicAngle 92
+  otmEMSquare 96
+  otmAscent 100
+  otmDescent 104
+  otmLineGap 108
+  otmsCapEmHeight 112
+  otmsXHeight 116
+  otmrcFontBox 120
+  otmMacAscent 136
+  otmMacDescent 140
+  otmMacLineGap 144
+  otmusMinimumPPEM 148
+  otmptSubscriptSize 152
+  otmptSubscriptOffset 160
+  otmptSuperscriptSize 168
+  otmptSuperscriptOffset 176
+  otmsStrikeoutSize 184
+  otmsStrikeoutPosition 188
+  otmsUnderscoreSize 192
+  otmsUnderscorePosition 196
+  otmpFamilyName 200
+  otmpFaceName 208
+  otmpStyleName 216
+  otmpFullName 224
+struct tagPOLYTEXTA 56 8
+  x 0
+  y 4
+  n 8
+  lpstr 16
+  uiFlags 24
+  rcl 28
+  pdx 48
+struct tagPOLYTEXTW 56 8
+  x 0
+  y 4
+  n 8
+  lpstr 16
+  uiFlags 24
+  rcl 28
+  pdx 48
+struct _FIXED 4 2
+  fract 0
+  value 2
+struct _MAT2 16 2
+  eM11 0
+  eM12 4
+  eM21 8
+  eM22 12
+struct _GLYPHMETRICS 20 4
+  gmBlackBoxX 0
+  gmBlackBoxY 4
+  gmptGlyphOrigin 8
+  gmCellIncX 16
+  gmCellIncY 18
+struct tagPOINTFX 8 2
+  x 0
+  y 4
+struct tagTTPOLYCURVE 12 2
+  wType 0
+  cpfx 2
+  apfx 4
+struct tagTTPOLYGONHEADER 16 4
+  cb 0
+  dwType 4
+  pfxStart 8
+struct tagGCP_RESULTSA 64 8
+  lStructSize 0
+  lpOutString 8
+  lpOrder 16
+  lpDx 24
+  lpCaretPos 32
+  lpClass 40
+  lpGlyphs 48
+  nGlyphs 56
+  nMaxFit 60
+struct tagGCP_RESULTSW 64 8
+  lStructSize 0
+  lpOutString 8
+  lpOrder 16
+  lpDx 24
+  lpCaretPos 32
+  lpClass 40
+  lpGlyphs 48
+  nGlyphs 56
+  nMaxFit 60
+struct _RASTERIZER_STATUS 6 2
+  nSize 0
+  wFlags 2
+  nLanguageID 4
+struct tagPIXELFORMATDESCRIPTOR 40 4
+  nSize 0
+  nVersion 2
+  dwFlags 4
+  iPixelType 8
+  cColorBits 9
+  cRedBits 10
+  cRedShift 11
+  cGreenBits 12
+  cGreenShift 13
+  cBlueBits 14
+  cBlueShift 15
+  cAlphaBits 16
+  cAlphaShift 17
+  cAccumBits 18
+  cAccumRedBits 19
+  cAccumGreenBits 20
+  cAccumBlueBits 21
+  cAccumAlphaBits 22
+  cDepthBits 23
+  cStencilBits 24
+  cAuxBuffers 25
+  iLayerType 26
+  bReserved 27
+  dwLayerMask 28
+  dwVisibleMask 32
+  dwDamageMask 36
+struct tagWCRANGE 4 2
+  wcLow 0
+  cGlyphs 2
+struct tagGLYPHSET 20 4
+  cbThis 0
+  flAccel 4
+  cGlyphsSupported 8
+  cRanges 12
+  ranges 16
+struct tagDESIGNVECTOR 72 4
+  dvReserved 0
+  dvNumAxes 4
+  dvValues 8
+struct tagAXISINFOA 24 4
+  axMinValue 0
+  axMaxValue 4
+  axAxisName 8
+struct tagAXISINFOW 40 4
+  axMinValue 0
+  axMaxValue 4
+  axAxisName 8
+struct tagAXESLISTA 392 4
+  axlReserved 0
+  axlNumAxes 4
+  axlAxisInfo 8
+struct tagAXESLISTW 648 4
+  axlReserved 0
+  axlNumAxes 4
+  axlAxisInfo 8
+struct tagENUMLOGFONTEXDVA 260 4
+  elfEnumLogfontEx 0
+  elfDesignVector 188
+struct tagENUMLOGFONTEXDVW 420 4
+  elfEnumLogfontEx 0
+  elfDesignVector 348
+struct tagENUMTEXTMETRICA 488 4
+  etmNewTextMetricEx 0
+  etmAxesList 96
+struct tagENUMTEXTMETRICW 748 4
+  etmNewTextMetricEx 0
+  etmAxesList 100
+struct _TRIVERTEX 16 4
+  x 0
+  y 4
+  Red 8
+  Green 10
+  Blue 12
+  Alpha 14
+struct _GRADIENT_TRIANGLE 12 4
+  Vertex1 0
+  Vertex2 4
+  Vertex3 8
+struct _GRADIENT_RECT 8 4
+  UpperLeft 0
+  LowerRight 4
+struct _BLENDFUNCTION 4 1
+  BlendOp 0
+  BlendFlags 1
+  SourceConstantAlpha 2
+  AlphaFormat 3
+struct tagDIBSECTION 104 8
+  dsBm 0
+  dsBmih 32
+  dsBitfields 72
+  dshSection 88
+  dsOffset 96
+struct tagCOLORADJUSTMENT 24 2
+  caSize 0
+  caFlags 2
+  caIlluminantIndex 4
+  caRedGamma 6
+  caGreenGamma 8
+  caBlueGamma 10
+  caReferenceBlack 12
+  caReferenceWhite 14
+  caContrast 16
+  caBrightness 18
+  caColorfulness 20
+  caRedGreenTint 22
+struct _DOCINFOA 40 8
+  cbSize 0
+  lpszDocName 8
+  lpszOutput 16
+  lpszDatatype 24
+  fwType 32
+struct _DOCINFOW 40 8
+  cbSize 0
+  lpszDocName 8
+  lpszOutput 16
+  lpszDatatype 24
+  fwType 32
+struct tagKERNINGPAIR 8 4
+  wFirst 0
+  wSecond 2
+  iKernAmount 4
+struct tagEMR 8 4
+  iType 0
+  nSize 4
+struct tagEMRTEXT 40 4
+  ptlReference 0
+  nChars 8
+  offString 12
+  fOptions 16
+  rcl 20
+  offDx 36
+struct tagABORTPATH 8 4
+  emr 0
+struct tagEMRSELECTCLIPPATH 12 4
+  emr 0
+  iMode 8
+struct tagEMRSETMITERLIMIT 12 4
+  emr 0
+  eMiterLimit 8
+struct tagEMRRESTOREDC 12 4
+  emr 0
+  iRelative 8
+struct tagEMRSETARCDIRECTION 12 4
+  emr 0
+  iArcDirection 8
+struct tagEMRSETMAPPERFLAGS 12 4
+  emr 0
+  dwFlags 8
+struct tagEMRSETTEXTCOLOR 12 4
+  emr 0
+  crColor 8
+struct tagEMRSELECTOBJECT 12 4
+  emr 0
+  ihObject 8
+struct tagEMRSELECTPALETTE 12 4
+  emr 0
+  ihPal 8
+struct tagEMRRESIZEPALETTE 16 4
+  emr 0
+  ihPal 8
+  cEntries 12
+struct tagEMRSETPALETTEENTRIES 24 4
+  emr 0
+  ihPal 8
+  iStart 12
+  cEntries 16
+  aPalEntries 20
+struct tagEMRSETCOLORADJUSTMENT 32 4
+  emr 0
+  ColorAdjustment 8
+struct tagEMRGDICOMMENT 16 4
+  emr 0
+  cbData 8
+  Data 12
+struct tagEMREOF 20 4
+  emr 0
+  nPalEntries 8
+  offPalEntries 12
+  nSizeLast 16
+struct tagEMRLINETO 16 4
+  emr 0
+  ptl 8
+struct tagEMROFFSETCLIPRGN 16 4
+  emr 0
+  ptlOffset 8
+struct tagEMRFILLPATH 24 4
+  emr 0
+  rclBounds 8
+struct tagEMREXCLUDECLIPRECT 24 4
+  emr 0
+  rclClip 8
+struct tagEMRSETVIEWPORTORGEX 16 4
+  emr 0
+  ptlOrigin 8
+struct tagEMRSETVIEWPORTEXTEX 16 4
+  emr 0
+  szlExtent 8
+struct tagEMRSCALEVIEWPORTEXTEX 24 4
+  emr 0
+  xNum 8
+  xDenom 12
+  yNum 16
+  yDenom 20
+struct tagEMRSETWORLDTRANSFORM 32 4
+  emr 0
+  xform 8
+struct tagEMRMODIFYWORLDTRANSFORM 36 4
+  emr 0
+  xform 8
+  iMode 32
+struct tagEMRSETPIXELV 20 4
+  emr 0
+  ptlPixel 8
+  crColor 16
+struct tagEMREXTFLOODFILL 24 4
+  emr 0
+  ptlStart 8
+  crColor 16
+  iMode 20
+struct tagEMRELLIPSE 24 4
+  emr 0
+  rclBox 8
+struct tagEMRROUNDRECT 32 4
+  emr 0
+  rclBox 8
+  szlCorner 24
+struct tagEMRARC 40 4
+  emr 0
+  rclBox 8
+  ptlStart 24
+  ptlEnd 32
+struct tagEMRANGLEARC 28 4
+  emr 0
+  ptlCenter 8
+  nRadius 16
+  eStartAngle 20
+  eSweepAngle 24
+struct tagEMRPOLYLINE 36 4
+  emr 0
+  rclBounds 8
+  cptl 24
+  aptl 28
+struct tagEMRPOLYLINE16 32 4
+  emr 0
+  rclBounds 8
+  cpts 24
+  apts 28
+struct tagEMRPOLYDRAW 40 4
+  emr 0
+  rclBounds 8
+  cptl 24
+  aptl 28
+  abTypes 36
+struct tagEMRPOLYDRAW16 36 4
+  emr 0
+  rclBounds 8
+  cpts 24
+  apts 28
+  abTypes 32
+struct tagEMRPOLYPOLYLINE 44 4
+  emr 0
+  rclBounds 8
+  nPolys 24
+  cptl 28
+  aPolyCounts 32
+  aptl 36
+struct tagEMRPOLYPOLYLINE16 40 4
+  emr 0
+  rclBounds 8
+  nPolys 24
+  cpts 28
+  aPolyCounts 32
+  apts 36
+struct tagEMRINVERTRGN 32 4
+  emr 0
+  rclBounds 8
+  cbRgnData 24
+  RgnData 28
+struct tagEMRFILLRGN 36 4
+  emr 0
+  rclBounds 8
+  cbRgnData 24
+  ihBrush 28
+  RgnData 32
+struct tagEMRFRAMERGN 44 4
+  emr 0
+  rclBounds 8
+  cbRgnData 24
+  ihBrush 28
+  szlStroke 32
+  RgnData 40
+struct tagEMREXTSELECTCLIPRGN 20 4
+  emr 0
+  cbRgnData 8
+  iMode 12
+  RgnData 16
+struct tagEMREXTTEXTOUTA 76 4
+  emr 0
+  rclBounds 8
+  iGraphicsMode 24
+  exScale 28
+  eyScale 32
+  emrtext 36
+struct tagEMRPOLYTEXTOUTA 80 4
+  emr 0
+  rclBounds 8
+  iGraphicsMode 24
+  exScale 28
+  eyScale 32
+  cStrings 36
+  aemrtext 40
+struct tagEMRBITBLT 100 4
+  emr 0
+  rclBounds 8
+  xDest 24
+  yDest 28
+  cxDest 32
+  cyDest 36
+  dwRop 40
+  xSrc 44
+  ySrc 48
+  xformSrc 52
+  crBkColorSrc 76
+  iUsageSrc 80
+  offBmiSrc 84
+  cbBmiSrc 88
+  offBitsSrc 92
+  cbBitsSrc 96
+struct tagEMRSTRETCHBLT 108 4
+  emr 0
+  rclBounds 8
+  xDest 24
+  yDest 28
+  cxDest 32
+  cyDest 36
+  dwRop 40
+  xSrc 44
+  ySrc 48
+  xformSrc 52
+  crBkColorSrc 76
+  iUsageSrc 80
+  offBmiSrc 84
+  cbBmiSrc 88
+  offBitsSrc 92
+  cbBitsSrc 96
+  cxSrc 100
+  cySrc 104
+struct tagEMRMASKBLT 128 4
+  emr 0
+  rclBounds 8
+  xDest 24
+  yDest 28
+  cxDest 32
+  cyDest 36
+  dwRop 40
+  xSrc 44
+  ySrc 48
+  xformSrc 52
+  crBkColorSrc 76
+  iUsageSrc 80
+  offBmiSrc 84
+  cbBmiSrc 88
+  offBitsSrc 92
+  cbBitsSrc 96
+  xMask 100
+  yMask 104
+  iUsageMask 108
+  offBmiMask 112
+  cbBmiMask 116
+  offBitsMask 120
+  cbBitsMask 124
+struct tagEMRPLGBLT 140 4
+  emr 0
+  rclBounds 8
+  aptlDest 24
+  xSrc 48
+  ySrc 52
+  cxSrc 56
+  cySrc 60
+  xformSrc 64
+  crBkColorSrc 88
+  iUsageSrc 92
+  offBmiSrc 96
+  cbBmiSrc 100
+  offBitsSrc 104
+  cbBitsSrc 108
+  xMask 112
+  yMask 116
+  iUsageMask 120
+  offBmiMask 124
+  cbBmiMask 128
+  offBitsMask 132
+  cbBitsMask 136
+struct tagEMRSETDIBITSTODEVICE 76 4
+  emr 0
+  rclBounds 8
+  xDest 24
+  yDest 28
+  xSrc 32
+  ySrc 36
+  cxSrc 40
+  cySrc 44
+  offBmiSrc 48
+  cbBmiSrc 52
+  offBitsSrc 56
+  cbBitsSrc 60
+  iUsageSrc 64
+  iStartScan 68
+  cScans 72
+struct tagEMRSTRETCHDIBITS 80 4
+  emr 0
+  rclBounds 8
+  xDest 24
+  yDest 28
+  xSrc 32
+  ySrc 36
+  cxSrc 40
+  cySrc 44
+  offBmiSrc 48
+  cbBmiSrc 52
+  offBitsSrc 56
+  cbBitsSrc 60
+  iUsageSrc 64
+  dwRop 68
+  cxDest 72
+  cyDest 76
+struct tagEMREXTCREATEFONTINDIRECTW 332 4
+  emr 0
+  ihFont 8
+  elfw 12
+struct tagEMRCREATEPALETTE 20 4
+  emr 0
+  ihPal 8
+  lgpl 12
+struct tagEMRCREATEPEN 28 4
+  emr 0
+  ihPen 8
+  lopn 12
+struct tagEMREXTCREATEPEN 64 8
+  emr 0
+  ihPen 8
+  offBmi 12
+  cbBmi 16
+  offBits 20
+  cbBits 24
+  elp 32
+struct tagEMRCREATEBRUSHINDIRECT 24 4
+  emr 0
+  ihBrush 8
+  lb 12
+struct tagEMRCREATEMONOBRUSH 32 4
+  emr 0
+  ihBrush 8
+  iUsage 12
+  offBmi 16
+  cbBmi 20
+  offBits 24
+  cbBits 28
+struct tagEMRCREATEDIBPATTERNBRUSHPT 32 4
+  emr 0
+  ihBrush 8
+  iUsage 12
+  offBmi 16
+  cbBmi 20
+  offBits 24
+  cbBits 28
+struct tagEMRFORMAT 16 4
+  dSignature 0
+  nVersion 4
+  cbData 8
+  offData 12
+struct tagEMRGLSRECORD 16 4
+  emr 0
+  cbData 8
+  Data 12
+struct tagEMRGLSBOUNDEDRECORD 32 4
+  emr 0
+  rclBounds 8
+  cbData 24
+  Data 28
+struct tagEMRPIXELFORMAT 48 4
+  emr 0
+  pfd 8
+struct tagEMRCREATECOLORSPACE 340 4
+  emr 0
+  ihCS 8
+  lcs 12
+struct tagEMRSETCOLORSPACE 12 4
+  emr 0
+  ihCS 8
+struct tagEMREXTESCAPE 20 4
+  emr 0
+  iEscape 8
+  cbEscData 12
+  EscData 16
+struct tagEMRNAMEDESCAPE 24 4
+  emr 0
+  iEscape 8
+  cbDriver 12
+  cbEscData 16
+  EscData 20
+struct tagEMRSETICMPROFILE 24 4
+  emr 0
+  dwFlags 8
+  cbName 12
+  cbData 16
+  Data 20
+struct tagEMRCREATECOLORSPACEW 612 4
+  emr 0
+  ihCS 8
+  lcs 12
+  dwFlags 600
+  cbData 604
+  Data 608
+struct tagCOLORMATCHTOTARGET 28 4
+  emr 0
+  dwAction 8
+  dwFlags 12
+  cbName 16
+  cbData 20
+  Data 24
+struct tagCOLORCORRECTPALETTE 24 4
+  emr 0
+  ihPalette 8
+  nFirstEntry 12
+  nPalEntries 16
+  nReserved 20
+struct tagEMRALPHABLEND 108 4
+  emr 0
+  rclBounds 8
+  xDest 24
+  yDest 28
+  cxDest 32
+  cyDest 36
+  dwRop 40
+  xSrc 44
+  ySrc 48
+  xformSrc 52
+  crBkColorSrc 76
+  iUsageSrc 80
+  offBmiSrc 84
+  cbBmiSrc 88
+  offBitsSrc 92
+  cbBitsSrc 96
+  cxSrc 100
+  cySrc 104
+struct tagEMRGRADIENTFILL 52 4
+  emr 0
+  rclBounds 8
+  nVer 24
+  nTri 28
+  ulMode 32
+  Ver 36
+struct tagEMRTRANSPARENTBLT 108 4
+  emr 0
+  rclBounds 8
+  xDest 24
+  yDest 28
+  cxDest 32
+  cyDest 36
+  dwRop 40
+  xSrc 44
+  ySrc 48
+  xformSrc 52
+  crBkColorSrc 76
+  iUsageSrc 80
+  offBmiSrc 84
+  cbBmiSrc 88
+  offBitsSrc 92
+  cbBitsSrc 96
+  cxSrc 100
+  cySrc 104
+struct _POINTFLOAT 8 4
+  x 0
+  y 4
+struct _GLYPHMETRICSFLOAT 24 4
+  gmfBlackBoxX 0
+  gmfBlackBoxY 4
+  gmfptGlyphOrigin 8
+  gmfCellIncX 16
+  gmfCellIncY 20
+struct tagLAYERPLANEDESCRIPTOR 32 4
+  nSize 0
+  nVersion 2
+  dwFlags 4
+  iPixelType 8
+  cColorBits 9
+  cRedBits 10
+  cRedShift 11
+  cGreenBits 12
+  cGreenShift 13
+  cBlueBits 14
+  cBlueShift 15
+  cAlphaBits 16
+  cAlphaShift 17
+  cAccumBits 18
+  cAccumRedBits 19
+  cAccumGreenBits 20
+  cAccumBlueBits 21
+  cAccumAlphaBits 22
+  cDepthBits 23
+  cStencilBits 24
+  cAuxBuffers 25
+  iLayerPlane 26
+  bReserved 27
+  crTransparent 28
+struct _WGLSWAP 16 8
+  hdc 0
+  uiFlags 8
+struct tagWNDCLASSA 72 8
+  style 0
+  lpfnWndProc 8
+  cbClsExtra 16
+  cbWndExtra 20
+  hInstance 24
+  hIcon 32
+  hCursor 40
+  hbrBackground 48
+  lpszMenuName 56
+  lpszClassName 64
+struct tagWNDCLASSW 72 8
+  style 0
+  lpfnWndProc 8
+  cbClsExtra 16
+  cbWndExtra 20
+  hInstance 24
+  hIcon 32
+  hCursor 40
+  hbrBackground 48
+  lpszMenuName 56
+  lpszClassName 64
+struct tagMINMAXINFO 40 4
+  ptReserved 0
+  ptMaxSize 8
+  ptMaxPosition 16
+  ptMinTrackSize 24
+  ptMaxTrackSize 32
+struct tagWINDOWPLACEMENT 44 4
+  length 0
+  flags 4
+  showCmd 8
+  ptMinPosition 12
+  ptMaxPosition 20
+  rcNormalPosition 28
+struct tagMONITORINFO 40 4
+  cbSize 0
+  rcMonitor 4
+  rcWork 20
+  dwFlags 36
+struct tagMONITORINFOEXW 104 4
+  cbSize 0
+  rcMonitor 4
+  rcWork 20
+  dwFlags 36
+  szDevice 40
+struct tagMONITORINFOEXA 72 4
+  cbSize 0
+  rcMonitor 4
+  rcWork 20
+  dwFlags 36
+  szDevice 40
+struct tagRAWINPUTHEADER 24 8
+  dwType 0
+  dwSize 4
+  hDevice 8
+  wParam 16
+struct tagRAWMOUSE 24 4
+  usFlags 0
+  ulButtons 4
+  ulRawButtons 8
+  lLastX 12
+  lLastY 16
+  ulExtraInformation 20
+struct tagRAWKEYBOARD 16 4
+  MakeCode 0
+  Flags 2
+  Reserved 4
+  VKey 6
+  Message 8
+  ExtraInformation 12
+struct tagRAWHID 12 4
+  dwSizeHid 0
+  dwCount 4
+  bRawData 8
+struct tagRAWINPUT 48 8
+  header 0
+  data 24
+struct tagRAWINPUTDEVICE 16 8
+  usUsagePage 0
+  usUsage 2
+  dwFlags 4
+  hwndTarget 8
+struct tagRAWINPUTDEVICELIST 16 8
+  hDevice 0
+  dwType 8
+struct tagRID_DEVICE_INFO_MOUSE 16 4
+  dwId 0
+  dwNumberOfButtons 4
+  dwSampleRate 8
+  fHasHorizontalWheel 12
+struct tagRID_DEVICE_INFO_KEYBOARD 24 4
+  dwType 0
+  dwSubType 4
+  dwKeyboardMode 8
+  dwNumberOfFunctionKeys 12
+  dwNumberOfIndicators 16
+  dwNumberOfKeysTotal 20
+struct tagRID_DEVICE_INFO_HID 16 4
+  dwVendorId 0
+  dwProductId 4
+  dwVersionNumber 8
+  usUsagePage 12
+  usUsage 14
+struct tagRID_DEVICE_INFO 32 4
+  cbSize 0
+  dwType 4
+  mouse 8
+  keyboard 8
+  hid 8
+struct _ICONINFO 32 8
+  fIcon 0
+  xHotspot 4
+  yHotspot 8
+  hbmMask 16
+  hbmColor 24
+struct tagPAINTSTRUCT 72 8
+  hdc 0
+  fErase 8
+  rcPaint 12
+  fRestore 28
+  fIncUpdate 32
+  rgbReserved 36
+struct sockaddr 16 2
+  sa_family 0
+  sa_data 2
+struct sockaddr_storage 128 8
+  ss_family 0
+  __ss_pad1 2
+  __ss_align 8
+  __ss_pad2 16
+struct WSAData 408 8
+  wVersion 0
+  wHighVersion 2
+  iMaxSockets 4
+  iMaxUdpDg 6
+  lpVendorInfo 8
+  szDescription 16
+  szSystemStatus 273
+struct in_addr 4 4
+  S_un 0
+struct sockaddr_in 16 4
+  sin_family 0
+  sin_port 2
+  sin_addr 4
+  sin_zero 8
+struct _WSANETWORKEVENTS 44 4
+  lNetworkEvents 0
+  iErrorCode 4
+struct _WSAPROTOCOLCHAIN 32 4
+  ChainLen 0
+  ChainEntries 4
+struct _WSAPROTOCOL_INFOW 628 4
+  dwServiceFlags1 0
+  dwServiceFlags2 4
+  dwServiceFlags3 8
+  dwServiceFlags4 12
+  dwProviderFlags 16
+  ProviderId 20
+  dwCatalogEntryId 36
+  ProtocolChain 40
+  iVersion 72
+  iAddressFamily 76
+  iMaxSockAddr 80
+  iMinSockAddr 84
+  iSocketType 88
+  iProtocol 92
+  iProtocolMaxOffset 96
+  iNetworkByteOrder 100
+  iSecurityScheme 104
+  dwMessageSize 108
+  dwProviderReserved 112
+  szProtocol 116
+struct _WSAPROTOCOL_INFOA 372 4
+  dwServiceFlags1 0
+  dwServiceFlags2 4
+  dwServiceFlags3 8
+  dwServiceFlags4 12
+  dwProviderFlags 16
+  ProviderId 20
+  dwCatalogEntryId 36
+  ProtocolChain 40
+  iVersion 72
+  iAddressFamily 76
+  iMaxSockAddr 80
+  iMinSockAddr 84
+  iSocketType 88
+  iProtocol 92
+  iProtocolMaxOffset 96
+  iNetworkByteOrder 100
+  iSecurityScheme 104
+  dwMessageSize 108
+  dwProviderReserved 112
+  szProtocol 116
+struct fd_set 520 8
+  fd_count 0
+  fd_array 8
+struct _WSABUF 16 8
+  len 0
+  buf 8
+struct protoent 24 8
+  p_name 0
+  p_aliases 8
+  p_proto 16
+typedef EXCEPTION_DISPOSITION 4 4 signed
+typedef DWORD 4 4 unsigned
+typedef BOOL 4 4 signed
+typedef BYTE 1 1 unsigned
+typedef WORD 2 2 unsigned
+typedef FLOAT 4 4
+typedef PFLOAT 8 8
+typedef PBOOL 8 8
+typedef LPBOOL 8 8
+typedef PBYTE 8 8
+typedef LPBYTE 8 8
+typedef PINT 8 8
+typedef LPINT 8 8
+typedef PWORD 8 8
+typedef LPWORD 8 8
+typedef LPLONG 8 8
+typedef PDWORD 8 8
+typedef LPDWORD 8 8
+typedef LPVOID 8 8
+typedef LPCVOID 8 8
+typedef INT 4 4 signed
+typedef UINT 4 4 unsigned
+typedef PUINT 8 8
+typedef PVOID 8 8
+typedef CHAR 1 1 signed
+typedef SHORT 2 2 signed
+typedef LONG 4 4 signed
+typedef ULONG 4 4 unsigned
+typedef PULONG 8 8
+typedef USHORT 2 2 unsigned
+typedef PUSHORT 8 8
+typedef UCHAR 1 1 unsigned
+typedef PUCHAR 8 8
+typedef PLONG 8 8
+typedef WCHAR 2 2 unsigned
+typedef PWCHAR 8 8
+typedef LPWCH 8 8
+typedef PWCH 8 8
+typedef LPCWCH 8 8
+typedef PCWCH 8 8
+typedef NWPSTR 8 8
+typedef LPWSTR 8 8
+typedef PWSTR 8 8
+typedef LPCWSTR 8 8
+typedef PCWSTR 8 8
+typedef PCHAR 8 8
+typedef LPCH 8 8
+typedef PCH 8 8
+typedef LPCCH 8 8
+typedef PCCH 8 8
+typedef NPSTR 8 8
+typedef LPSTR 8 8
+typedef PSTR 8 8
+typedef LPCSTR 8 8
+typedef PCSTR 8 8
+typedef TCHAR 1 1 signed
+typedef PTCHAR 8 8
+typedef TBYTE 1 1 unsigned
+typedef PTBYTE 8 8
+typedef PTSTR 8 8
+typedef LPTSTR 8 8
+typedef PCTSTR 8 8
+typedef LPCTSTR 8 8
+typedef LONGLONG 8 8 signed
+typedef ULONGLONG 8 8 unsigned
+typedef PULONGLONG 8 8
+typedef DWORDLONG 8 8 unsigned
+typedef INT_PTR 8 8 signed
+typedef PINT_PTR 8 8
+typedef UINT_PTR 8 8 unsigned
+typedef PUINT_PTR 8 8
+typedef LONG_PTR 8 8 signed
+typedef PLONG_PTR 8 8
+typedef ULONG_PTR 8 8 unsigned
+typedef PULONG_PTR 8 8
+typedef SIZE_T 8 8 unsigned
+typedef PSIZE_T 8 8
+typedef SSIZE_T 8 8 signed
+typedef PSSIZE_T 8 8
+typedef DWORD_PTR 8 8 unsigned
+typedef PDWORD_PTR 8 8
+typedef LONG64 8 8 signed
+typedef PLONG64 8 8
+typedef ULONG64 8 8 unsigned
+typedef PULONG64 8 8
+typedef DWORD64 8 8 unsigned
+typedef PDWORD64 8 8
+typedef INT8 1 1 signed
+typedef PINT8 8 8
+typedef INT16 2 2 signed
+typedef PINT16 8 8
+typedef INT32 4 4 signed
+typedef PINT32 8 8
+typedef INT64 8 8 signed
+typedef PINT64 8 8
+typedef UINT8 1 1 unsigned
+typedef PUINT8 8 8
+typedef UINT16 2 2 unsigned
+typedef PUINT16 8 8
+typedef UINT32 4 4 unsigned
+typedef PUINT32 8 8
+typedef UINT64 8 8 unsigned
+typedef PUINT64 8 8
+typedef LONG32 4 4 signed
+typedef PLONG32 8 8
+typedef ULONG32 4 4 unsigned
+typedef PULONG32 8 8
+typedef DWORD32 4 4 unsigned
+typedef PDWORD32 8 8
+typedef WPARAM 8 8 unsigned
+typedef LPARAM 8 8 signed
+typedef LRESULT 8 8 signed
+typedef HRESULT 4 4 signed
+typedef NTSTATUS 4 4 signed
+typedef BOOLEAN 1 1 unsigned
+typedef ATOM 2 2 unsigned
+typedef LCID 4 4 unsigned
+typedef LANGID 2 2 unsigned
+typedef LCTYPE 4 4 unsigned
+typedef ACCESS_MASK 4 4 unsigned
+typedef PACCESS_MASK 8 8
+typedef REGSAM 4 4 unsigned
+typedef LSTATUS 4 4 signed
+typedef COLORREF 4 4 unsigned
+typedef LPCOLORREF 8 8
+typedef RPC_STATUS 4 4 signed
+typedef EXECUTION_STATE 4 4 unsigned
+typedef HANDLE 8 8
+typedef PHANDLE 8 8
+typedef SPHANDLE 8 8
+typedef LPHANDLE 8 8
+typedef HGLOBAL 8 8
+typedef HLOCAL 8 8
+typedef GLOBALHANDLE 8 8
+typedef LOCALHANDLE 8 8
+typedef FARPROC 8 8
+typedef NEARPROC 8 8
+typedef PROC 8 8
+typedef HKEY 8 8
+typedef PHKEY 8 8
+typedef HMETAFILE 8 8
+typedef HINSTANCE 8 8
+typedef HMODULE 8 8
+typedef HRGN 8 8
+typedef HRSRC 8 8
+typedef HSPRITE 8 8
+typedef HLSURF 8 8
+typedef HSTR 8 8
+typedef HTASK 8 8
+typedef HWINSTA 8 8
+typedef HKL 8 8
+typedef HFILE 4 4 signed
+typedef HWND 8 8
+typedef HHOOK 8 8
+typedef HGDIOBJ 8 8
+typedef HACCEL 8 8
+typedef HBITMAP 8 8
+typedef HBRUSH 8 8
+typedef HCOLORSPACE 8 8
+typedef HDC 8 8
+typedef HGLRC 8 8
+typedef HDESK 8 8
+typedef HENHMETAFILE 8 8
+typedef HFONT 8 8
+typedef HICON 8 8
+typedef HMENU 8 8
+typedef HPALETTE 8 8
+typedef HPEN 8 8
+typedef HWINEVENTHOOK 8 8
+typedef HMONITOR 8 8
+typedef HUMPD 8 8
+typedef HCURSOR 8 8
+typedef HDROP 8 8
+typedef HRAWINPUT 8 8
+typedef HCRYPTPROV 8 8 unsigned
+typedef HCRYPTKEY 8 8 unsigned
+typedef HCRYPTHASH 8 8 unsigned
+typedef DLL_DIRECTORY_COOKIE 8 8
+typedef PDLL_DIRECTORY_COOKIE 8 8
+typedef BCRYPT_HANDLE 8 8
+typedef BCRYPT_ALG_HANDLE 8 8
+typedef PSECURITY_DESCRIPTOR 8 8
+typedef PSID 8 8
+typedef SECURITY_ATTRIBUTES 24 8
+  nLength 0
+  lpSecurityDescriptor 8
+  bInheritHandle 16
+typedef PSECURITY_ATTRIBUTES 8 8
+typedef LPSECURITY_ATTRIBUTES 8 8
+typedef OVERLAPPED 32 8
+  Internal 0
+  InternalHigh 8
+  Offset 16
+  OffsetHigh 20
+  Pointer 16
+  hEvent 24
+typedef LPOVERLAPPED 8 8
+typedef SYSTEMTIME 16 2
+  wYear 0
+  wMonth 2
+  wDayOfWeek 4
+  wDay 6
+  wHour 8
+  wMinute 10
+  wSecond 12
+  wMilliseconds 14
+typedef PSYSTEMTIME 8 8
+typedef LPSYSTEMTIME 8 8
+typedef PTHREAD_START_ROUTINE 8 8
+typedef LPTHREAD_START_ROUTINE 8 8
+typedef PTIMERAPCROUTINE 8 8
+typedef PHANDLER_ROUTINE 8 8
+typedef PTOP_LEVEL_EXCEPTION_FILTER 8 8
+typedef LPTOP_LEVEL_EXCEPTION_FILTER 8 8
+typedef PVECTORED_EXCEPTION_HANDLER 8 8
+typedef GET_FILEEX_INFO_LEVELS 4 4 unsigned
+typedef REASON_CONTEXT 32 8
+  Version 0
+  Flags 4
+  Reason 8
+typedef PREASON_CONTEXT 8 8
+typedef RTL_SRWLOCK 8 8
+  Ptr 0
+typedef PRTL_SRWLOCK 8 8
+typedef SRWLOCK 8 8
+  Ptr 0
+typedef PSRWLOCK 8 8
+typedef RTL_CONDITION_VARIABLE 8 8
+  Ptr 0
+typedef PRTL_CONDITION_VARIABLE 8 8
+typedef CONDITION_VARIABLE 8 8
+  Ptr 0
+typedef PCONDITION_VARIABLE 8 8
+typedef RTL_RUN_ONCE 8 8
+  Ptr 0
+typedef PRTL_RUN_ONCE 8 8
+typedef INIT_ONCE 8 8
+  Ptr 0
+typedef PINIT_ONCE 8 8
+typedef LPINIT_ONCE 8 8
+typedef LIST_ENTRY 16 8
+  Flink 0
+  Blink 8
+typedef PLIST_ENTRY 8 8
+typedef PRLIST_ENTRY 8 8
+typedef RTL_CRITICAL_SECTION_DEBUG 48 8
+  Type 0
+  CreatorBackTraceIndex 2
+  CriticalSection 8
+  ProcessLocksList 16
+  EntryCount 32
+  ContentionCount 36
+  Flags 40
+  CreatorBackTraceIndexHigh 44
+typedef PRTL_CRITICAL_SECTION_DEBUG 8 8
+typedef RTL_RESOURCE_DEBUG 48 8
+  Type 0
+  CreatorBackTraceIndex 2
+  CriticalSection 8
+  ProcessLocksList 16
+  EntryCount 32
+  ContentionCount 36
+  Flags 40
+  CreatorBackTraceIndexHigh 44
+typedef PRTL_RESOURCE_DEBUG 8 8
+typedef RTL_CRITICAL_SECTION 40 8
+  DebugInfo 0
+  LockCount 8
+  RecursionCount 12
+  OwningThread 16
+  LockSemaphore 24
+  SpinCount 32
+typedef PRTL_CRITICAL_SECTION 8 8
+typedef CRITICAL_SECTION 40 8
+  DebugInfo 0
+  LockCount 8
+  RecursionCount 12
+  OwningThread 16
+  LockSemaphore 24
+  SpinCount 32
+typedef PCRITICAL_SECTION 8 8
+typedef LPCRITICAL_SECTION 8 8
+typedef FILE_ID_128 16 1
+  Identifier 0
+typedef PFILE_ID_128 8 8
+typedef LARGE_INTEGER 8 8
+  LowPart 0
+  HighPart 4
+  u 0
+  QuadPart 0
+typedef ULARGE_INTEGER 8 8
+  LowPart 0
+  HighPart 4
+  u 0
+  QuadPart 0
+typedef PLARGE_INTEGER 8 8
+typedef PULARGE_INTEGER 8 8
+typedef SYSTEM_INFO 48 8
+  dwOemId 0
+  wProcessorArchitecture 0
+  wReserved 2
+  dwPageSize 4
+  lpMinimumApplicationAddress 8
+  lpMaximumApplicationAddress 16
+  dwActiveProcessorMask 24
+  dwNumberOfProcessors 32
+  dwProcessorType 36
+  dwAllocationGranularity 40
+  wProcessorLevel 44
+  wProcessorRevision 46
+typedef LPSYSTEM_INFO 8 8
+typedef KAFFINITY 8 8 unsigned
+typedef GROUP_AFFINITY 16 8
+  Mask 0
+  Group 8
+  Reserved 10
+typedef PGROUP_AFFINITY 8 8
+typedef PROCESSOR_NUMBER 4 2
+  Group 0
+  Number 2
+  Reserved 3
+typedef PPROCESSOR_NUMBER 8 8
+typedef _IMAGE_RUNTIME_FUNCTION_ENTRY 12 4
+  BeginAddress 0
+  EndAddress 4
+  UnwindInfoAddress 8
+  UnwindData 8
+typedef _PIMAGE_RUNTIME_FUNCTION_ENTRY 8 8
+typedef IMAGE_ARM64_RUNTIME_FUNCTION_ENTRY 8 4
+  BeginAddress 0
+  UnwindData 4
+  Flag bit 32 2
+  FunctionLength bit 34 11
+  RegF bit 45 3
+  RegI bit 48 4
+  H bit 52 1
+  CR bit 53 2
+  FrameSize bit 55 9
+typedef PIMAGE_ARM64_RUNTIME_FUNCTION_ENTRY 8 8
+typedef IMAGE_RUNTIME_FUNCTION_ENTRY 8 4
+  BeginAddress 0
+  UnwindData 4
+  Flag bit 32 2
+  FunctionLength bit 34 11
+  RegF bit 45 3
+  RegI bit 48 4
+  H bit 52 1
+  CR bit 53 2
+  FrameSize bit 55 9
+typedef PIMAGE_RUNTIME_FUNCTION_ENTRY 8 8
+typedef RUNTIME_FUNCTION 8 4
+  BeginAddress 0
+  UnwindData 4
+  Flag bit 32 2
+  FunctionLength bit 34 11
+  RegF bit 45 3
+  RegI bit 48 4
+  H bit 52 1
+  CR bit 53 2
+  FrameSize bit 55 9
+typedef PRUNTIME_FUNCTION 8 8
+typedef FILETIME 8 4
+  dwLowDateTime 0
+  dwHighDateTime 4
+typedef LPFILETIME 8 8
+typedef PFILETIME 8 8
+typedef BY_HANDLE_FILE_INFORMATION 52 4
+  dwFileAttributes 0
+  ftCreationTime 4
+  ftLastAccessTime 12
+  ftLastWriteTime 20
+  dwVolumeSerialNumber 28
+  nFileSizeHigh 32
+  nFileSizeLow 36
+  nNumberOfLinks 40
+  nFileIndexHigh 44
+  nFileIndexLow 48
+typedef PBY_HANDLE_FILE_INFORMATION 8 8
+typedef LPBY_HANDLE_FILE_INFORMATION 8 8
+typedef FILE_BASIC_INFO 40 8
+  CreationTime 0
+  LastAccessTime 8
+  LastWriteTime 16
+  ChangeTime 24
+  FileAttributes 32
+typedef FILE_ATTRIBUTE_TAG_INFO 8 4
+  FileAttributes 0
+  ReparseTag 4
+typedef VS_FIXEDFILEINFO 52 4
+  dwSignature 0
+  dwStrucVersion 4
+  dwFileVersionMS 8
+  dwFileVersionLS 12
+  dwProductVersionMS 16
+  dwProductVersionLS 20
+  dwFileFlagsMask 24
+  dwFileFlags 28
+  dwFileOS 32
+  dwFileType 36
+  dwFileSubtype 40
+  dwFileDateMS 44
+  dwFileDateLS 48
+typedef GUID 16 4
+  Data1 0
+  Data2 4
+  Data3 6
+  Data4 8
+typedef UUID 16 4
+  Data1 0
+  Data2 4
+  Data3 6
+  Data4 8
+typedef LPGUID 8 8
+typedef NLSVERSIONINFO 12 4
+  dwNLSVersionInfoSize 0
+  dwNLSVersion 4
+  dwDefinedVersion 8
+typedef LPNLSVERSIONINFO 8 8
+typedef STARTUPINFOW 104 8
+  cb 0
+  lpReserved 8
+  lpDesktop 16
+  lpTitle 24
+  dwX 32
+  dwY 36
+  dwXSize 40
+  dwYSize 44
+  dwXCountChars 48
+  dwYCountChars 52
+  dwFillAttribute 56
+  dwFlags 60
+  wShowWindow 64
+  cbReserved2 66
+  lpReserved2 72
+  hStdInput 80
+  hStdOutput 88
+  hStdError 96
+typedef LPSTARTUPINFOW 8 8
+typedef STARTUPINFOA 104 8
+  cb 0
+  lpReserved 8
+  lpDesktop 16
+  lpTitle 24
+  dwX 32
+  dwY 36
+  dwXSize 40
+  dwYSize 44
+  dwXCountChars 48
+  dwYCountChars 52
+  dwFillAttribute 56
+  dwFlags 60
+  wShowWindow 64
+  cbReserved2 66
+  lpReserved2 72
+  hStdInput 80
+  hStdOutput 88
+  hStdError 96
+typedef LPSTARTUPINFOA 8 8
+typedef LPPROC_THREAD_ATTRIBUTE_LIST 8 8
+typedef STARTUPINFOEXW 112 8
+  StartupInfo 0
+  lpAttributeList 104
+typedef LPSTARTUPINFOEXW 8 8
+typedef STARTUPINFOEXA 112 8
+  StartupInfo 0
+  lpAttributeList 104
+typedef LPSTARTUPINFOEXA 8 8
+typedef PROCESS_INFORMATION 24 8
+  hProcess 0
+  hThread 8
+  dwProcessId 16
+  dwThreadId 20
+typedef LPPROCESS_INFORMATION 8 8
+typedef PPROCESS_INFORMATION 8 8
+typedef LUID 8 4
+  LowPart 0
+  HighPart 4
+typedef PLUID 8 8
+typedef LUID_AND_ATTRIBUTES 12 4
+  Luid 0
+  Attributes 8
+typedef TOKEN_PRIVILEGES 16 4
+  PrivilegeCount 0
+  Privileges 4
+typedef PTOKEN_PRIVILEGES 8 8
+typedef MEMORY_BASIC_INFORMATION 48 8
+  BaseAddress 0
+  AllocationBase 8
+  AllocationProtect 16
+  PartitionId 20
+  RegionSize 24
+  State 32
+  Protect 36
+  Type 40
+typedef PMEMORY_BASIC_INFORMATION 8 8
+typedef COPYFILE2_MESSAGE_ACTION 4 4 unsigned
+typedef PCOPYFILE2_PROGRESS_ROUTINE 8 8
+typedef COPYFILE2_EXTENDED_PARAMETERS 32 8
+  dwSize 0
+  dwCopyFlags 4
+  pfCancel 8
+  pProgressRoutine 16
+  pvCallbackContext 24
+typedef FILE_FS_PERSISTENT_VOLUME_INFORMATION 16 4
+  VolumeFlags 0
+  FlagMask 4
+  Version 8
+  Reserved 12
+typedef OSVERSIONINFOEXW 284 4
+  dwOSVersionInfoSize 0
+  dwMajorVersion 4
+  dwMinorVersion 8
+  dwBuildNumber 12
+  dwPlatformId 16
+  szCSDVersion 20
+  wServicePackMajor 276
+  wServicePackMinor 278
+  wSuiteMask 280
+  wProductType 282
+  wReserved 283
+typedef LPOSVERSIONINFOEXW 8 8
+typedef POSVERSIONINFOEXW 8 8
+typedef OSVERSIONINFOEXA 156 4
+  dwOSVersionInfoSize 0
+  dwMajorVersion 4
+  dwMinorVersion 8
+  dwBuildNumber 12
+  dwPlatformId 16
+  szCSDVersion 20
+  wServicePackMajor 148
+  wServicePackMinor 150
+  wSuiteMask 152
+  wProductType 154
+  wReserved 155
+typedef LPOSVERSIONINFOEXA 8 8
+typedef POSVERSIONINFOEXA 8 8
+typedef OSVERSIONINFOA 148 4
+  dwOSVersionInfoSize 0
+  dwMajorVersion 4
+  dwMinorVersion 8
+  dwBuildNumber 12
+  dwPlatformId 16
+  szCSDVersion 20
+typedef LPOSVERSIONINFOA 8 8
+typedef POSVERSIONINFOA 8 8
+typedef OSVERSIONINFOW 276 4
+  dwOSVersionInfoSize 0
+  dwMajorVersion 4
+  dwMinorVersion 8
+  dwBuildNumber 12
+  dwPlatformId 16
+  szCSDVersion 20
+typedef LPOSVERSIONINFOW 8 8
+typedef POSVERSIONINFOW 8 8
+typedef COMPUTER_NAME_FORMAT 4 4 unsigned
+typedef FILE_INFO_BY_HANDLE_CLASS 4 4 unsigned
+typedef PFILE_INFO_BY_HANDLE_CLASS 8 8
+typedef EXCEPTION_RECORD 152 8
+  ExceptionCode 0
+  ExceptionFlags 4
+  ExceptionRecord 8
+  ExceptionAddress 16
+  NumberParameters 24
+  ExceptionInformation 32
+typedef PEXCEPTION_RECORD 8 8
+typedef M128A 16 16
+  Low 0
+  High 8
+typedef PM128A 8 8
+typedef XSAVE_FORMAT 512 16
+  ControlWord 0
+  StatusWord 2
+  TagWord 4
+  Reserved1 5
+  ErrorOpcode 6
+  ErrorOffset 8
+  ErrorSelector 12
+  Reserved2 14
+  DataOffset 16
+  DataSelector 20
+  Reserved3 22
+  MxCsr 24
+  MxCsr_Mask 28
+  FloatRegisters 32
+  XmmRegisters 160
+  Reserved4 416
+typedef PXSAVE_FORMAT 8 8
+typedef ARM64_NT_NEON128 16 8
+  Low 0
+  High 8
+  D 0
+  S 0
+  H 0
+  B 0
+typedef PARM64_NT_NEON128 8 8
+typedef ARM64_NT_CONTEXT 912 16
+  ContextFlags 0
+  Cpsr 4
+  X0 8
+  X1 16
+  X2 24
+  X3 32
+  X4 40
+  X5 48
+  X6 56
+  X7 64
+  X8 72
+  X9 80
+  X10 88
+  X11 96
+  X12 104
+  X13 112
+  X14 120
+  X15 128
+  X16 136
+  X17 144
+  X18 152
+  X19 160
+  X20 168
+  X21 176
+  X22 184
+  X23 192
+  X24 200
+  X25 208
+  X26 216
+  X27 224
+  X28 232
+  Fp 240
+  Lr 248
+  X 8
+  Sp 256
+  Pc 264
+  V 272
+  Fpcr 784
+  Fpsr 788
+  Bcr 792
+  Bvr 824
+  Wcr 888
+  Wvr 896
+typedef PARM64_NT_CONTEXT 8 8
+typedef NEON128 16 8
+  Low 0
+  High 8
+  D 0
+  S 0
+  H 0
+  B 0
+typedef PNEON128 8 8
+typedef CONTEXT 912 16
+  ContextFlags 0
+  Cpsr 4
+  X0 8
+  X1 16
+  X2 24
+  X3 32
+  X4 40
+  X5 48
+  X6 56
+  X7 64
+  X8 72
+  X9 80
+  X10 88
+  X11 96
+  X12 104
+  X13 112
+  X14 120
+  X15 128
+  X16 136
+  X17 144
+  X18 152
+  X19 160
+  X20 168
+  X21 176
+  X22 184
+  X23 192
+  X24 200
+  X25 208
+  X26 216
+  X27 224
+  X28 232
+  Fp 240
+  Lr 248
+  X 8
+  Sp 256
+  Pc 264
+  V 272
+  Fpcr 784
+  Fpsr 788
+  Bcr 792
+  Bvr 824
+  Wcr 888
+  Wvr 896
+typedef PCONTEXT 8 8
+typedef EXCEPTION_POINTERS 16 8
+  ExceptionRecord 0
+  ContextRecord 8
+typedef PEXCEPTION_POINTERS 8 8
+typedef LPEXCEPTION_POINTERS 8 8
+typedef UNWIND_HISTORY_TABLE_ENTRY 16 8
+  ImageBase 0
+  FunctionEntry 8
+typedef PUNWIND_HISTORY_TABLE_ENTRY 8 8
+typedef UNWIND_HISTORY_TABLE 216 8
+  Count 0
+  LocalHint 4
+  GlobalHint 5
+  Search 6
+  Once 7
+  LowAddress 8
+  HighAddress 16
+  Entry 24
+typedef PUNWIND_HISTORY_TABLE 8 8
+typedef KNONVOLATILE_CONTEXT_POINTERS_ARM64 160 8
+  X19 0
+  X20 8
+  X21 16
+  X22 24
+  X23 32
+  X24 40
+  X25 48
+  X26 56
+  X27 64
+  X28 72
+  Fp 80
+  Lr 88
+  D8 96
+  D9 104
+  D10 112
+  D11 120
+  D12 128
+  D13 136
+  D14 144
+  D15 152
+typedef PKNONVOLATILE_CONTEXT_POINTERS_ARM64 8 8
+typedef KNONVOLATILE_CONTEXT_POINTERS 160 8
+  X19 0
+  X20 8
+  X21 16
+  X22 24
+  X23 32
+  X24 40
+  X25 48
+  X26 56
+  X27 64
+  X28 72
+  Fp 80
+  Lr 88
+  D8 96
+  D9 104
+  D10 112
+  D11 120
+  D12 128
+  D13 136
+  D14 144
+  D15 152
+typedef PKNONVOLATILE_CONTEXT_POINTERS 8 8
+typedef PEXCEPTION_ROUTINE 8 8
+typedef TIME_ZONE_INFORMATION 172 4
+  Bias 0
+  StandardName 4
+  StandardDate 68
+  StandardBias 84
+  DaylightName 88
+  DaylightDate 152
+  DaylightBias 168
+typedef PTIME_ZONE_INFORMATION 8 8
+typedef LPTIME_ZONE_INFORMATION 8 8
+typedef WIN32_FILE_ATTRIBUTE_DATA 36 4
+  dwFileAttributes 0
+  ftCreationTime 4
+  ftLastAccessTime 12
+  ftLastWriteTime 20
+  nFileSizeHigh 28
+  nFileSizeLow 32
+typedef LPWIN32_FILE_ATTRIBUTE_DATA 8 8
+typedef WIN32_FIND_DATAA 320 4
+  dwFileAttributes 0
+  ftCreationTime 4
+  ftLastAccessTime 12
+  ftLastWriteTime 20
+  nFileSizeHigh 28
+  nFileSizeLow 32
+  dwReserved0 36
+  dwReserved1 40
+  cFileName 44
+  cAlternateFileName 304
+typedef LPWIN32_FIND_DATAA 8 8
+typedef PWIN32_FIND_DATAA 8 8
+typedef WIN32_FIND_DATAW 592 4
+  dwFileAttributes 0
+  ftCreationTime 4
+  ftLastAccessTime 12
+  ftLastWriteTime 20
+  nFileSizeHigh 28
+  nFileSizeLow 32
+  dwReserved0 36
+  dwReserved1 40
+  cFileName 44
+  cAlternateFileName 564
+typedef LPWIN32_FIND_DATAW 8 8
+typedef PWIN32_FIND_DATAW 8 8
+typedef COORD 4 2
+  X 0
+  Y 2
+typedef PCOORD 8 8
+typedef SMALL_RECT 8 2
+  Left 0
+  Top 2
+  Right 4
+  Bottom 6
+typedef PSMALL_RECT 8 8
+typedef CONSOLE_SCREEN_BUFFER_INFO 22 2
+  dwSize 0
+  dwCursorPosition 4
+  wAttributes 8
+  srWindow 10
+  dwMaximumWindowSize 18
+typedef PCONSOLE_SCREEN_BUFFER_INFO 8 8
+typedef KEY_EVENT_RECORD 16 4
+  bKeyDown 0
+  wRepeatCount 4
+  wVirtualKeyCode 6
+  wVirtualScanCode 8
+  uChar 10
+  dwControlKeyState 12
+typedef PKEY_EVENT_RECORD 8 8
+typedef MOUSE_EVENT_RECORD 16 4
+  dwMousePosition 0
+  dwButtonState 4
+  dwControlKeyState 8
+  dwEventFlags 12
+typedef PMOUSE_EVENT_RECORD 8 8
+typedef WINDOW_BUFFER_SIZE_RECORD 4 2
+  dwSize 0
+typedef PWINDOW_BUFFER_SIZE_RECORD 8 8
+typedef MENU_EVENT_RECORD 4 4
+  dwCommandId 0
+typedef PMENU_EVENT_RECORD 8 8
+typedef FOCUS_EVENT_RECORD 4 4
+  bSetFocus 0
+typedef PFOCUS_EVENT_RECORD 8 8
+typedef INPUT_RECORD 20 4
+  EventType 0
+  Event 4
+typedef PINPUT_RECORD 8 8
+typedef CHAR_INFO 4 2
+  Char 0
+  Attributes 2
+typedef PCHAR_INFO 8 8
+typedef CONSOLE_READCONSOLE_CONTROL 16 4
+  nLength 0
+  nInitialChars 4
+  dwCtrlWakeupMask 8
+  dwControlKeyState 12
+typedef PCONSOLE_READCONSOLE_CONTROL 8 8
+typedef PFLS_CALLBACK_FUNCTION 8 8
+typedef SOCKET 8 8 unsigned
+typedef PCNZCH 8 8
+typedef PCNZWCH 8 8
+typedef WAITORTIMERCALLBACK 8 8
+typedef IMAGE_DOS_HEADER 64 2
+  e_magic 0
+  e_cblp 2
+  e_cp 4
+  e_crlc 6
+  e_cparhdr 8
+  e_minalloc 10
+  e_maxalloc 12
+  e_ss 14
+  e_sp 16
+  e_csum 18
+  e_ip 20
+  e_cs 22
+  e_lfarlc 24
+  e_ovno 26
+  e_res 28
+  e_oemid 36
+  e_oeminfo 38
+  e_res2 40
+  e_lfanew 60
+typedef PIMAGE_DOS_HEADER 8 8
+typedef IMAGE_FILE_HEADER 20 4
+  Machine 0
+  NumberOfSections 2
+  TimeDateStamp 4
+  PointerToSymbolTable 8
+  NumberOfSymbols 12
+  SizeOfOptionalHeader 16
+  Characteristics 18
+typedef PIMAGE_FILE_HEADER 8 8
+typedef IMAGE_DATA_DIRECTORY 8 4
+  VirtualAddress 0
+  Size 4
+typedef PIMAGE_DATA_DIRECTORY 8 8
+typedef IMAGE_OPTIONAL_HEADER32 224 4
+  Magic 0
+  MajorLinkerVersion 2
+  MinorLinkerVersion 3
+  SizeOfCode 4
+  SizeOfInitializedData 8
+  SizeOfUninitializedData 12
+  AddressOfEntryPoint 16
+  BaseOfCode 20
+  BaseOfData 24
+  ImageBase 28
+  SectionAlignment 32
+  FileAlignment 36
+  MajorOperatingSystemVersion 40
+  MinorOperatingSystemVersion 42
+  MajorImageVersion 44
+  MinorImageVersion 46
+  MajorSubsystemVersion 48
+  MinorSubsystemVersion 50
+  Win32VersionValue 52
+  SizeOfImage 56
+  SizeOfHeaders 60
+  CheckSum 64
+  Subsystem 68
+  DllCharacteristics 70
+  SizeOfStackReserve 72
+  SizeOfStackCommit 76
+  SizeOfHeapReserve 80
+  SizeOfHeapCommit 84
+  LoaderFlags 88
+  NumberOfRvaAndSizes 92
+  DataDirectory 96
+typedef PIMAGE_OPTIONAL_HEADER32 8 8
+typedef IMAGE_OPTIONAL_HEADER64 240 4
+  Magic 0
+  MajorLinkerVersion 2
+  MinorLinkerVersion 3
+  SizeOfCode 4
+  SizeOfInitializedData 8
+  SizeOfUninitializedData 12
+  AddressOfEntryPoint 16
+  BaseOfCode 20
+  ImageBase 24
+  SectionAlignment 32
+  FileAlignment 36
+  MajorOperatingSystemVersion 40
+  MinorOperatingSystemVersion 42
+  MajorImageVersion 44
+  MinorImageVersion 46
+  MajorSubsystemVersion 48
+  MinorSubsystemVersion 50
+  Win32VersionValue 52
+  SizeOfImage 56
+  SizeOfHeaders 60
+  CheckSum 64
+  Subsystem 68
+  DllCharacteristics 70
+  SizeOfStackReserve 72
+  SizeOfStackCommit 80
+  SizeOfHeapReserve 88
+  SizeOfHeapCommit 96
+  LoaderFlags 104
+  NumberOfRvaAndSizes 108
+  DataDirectory 112
+typedef PIMAGE_OPTIONAL_HEADER64 8 8
+typedef IMAGE_OPTIONAL_HEADER 240 4
+  Magic 0
+  MajorLinkerVersion 2
+  MinorLinkerVersion 3
+  SizeOfCode 4
+  SizeOfInitializedData 8
+  SizeOfUninitializedData 12
+  AddressOfEntryPoint 16
+  BaseOfCode 20
+  ImageBase 24
+  SectionAlignment 32
+  FileAlignment 36
+  MajorOperatingSystemVersion 40
+  MinorOperatingSystemVersion 42
+  MajorImageVersion 44
+  MinorImageVersion 46
+  MajorSubsystemVersion 48
+  MinorSubsystemVersion 50
+  Win32VersionValue 52
+  SizeOfImage 56
+  SizeOfHeaders 60
+  CheckSum 64
+  Subsystem 68
+  DllCharacteristics 70
+  SizeOfStackReserve 72
+  SizeOfStackCommit 80
+  SizeOfHeapReserve 88
+  SizeOfHeapCommit 96
+  LoaderFlags 104
+  NumberOfRvaAndSizes 108
+  DataDirectory 112
+typedef PIMAGE_OPTIONAL_HEADER 8 8
+typedef IMAGE_NT_HEADERS64 264 4
+  Signature 0
+  FileHeader 4
+  OptionalHeader 24
+typedef PIMAGE_NT_HEADERS64 8 8
+typedef IMAGE_NT_HEADERS32 248 4
+  Signature 0
+  FileHeader 4
+  OptionalHeader 24
+typedef PIMAGE_NT_HEADERS32 8 8
+typedef IMAGE_NT_HEADERS 264 4
+  Signature 0
+  FileHeader 4
+  OptionalHeader 24
+typedef PIMAGE_NT_HEADERS 8 8
+typedef IMAGE_SECTION_HEADER 40 4
+  Name 0
+  Misc 8
+  VirtualAddress 12
+  SizeOfRawData 16
+  PointerToRawData 20
+  PointerToRelocations 24
+  PointerToLinenumbers 28
+  NumberOfRelocations 32
+  NumberOfLinenumbers 34
+  Characteristics 36
+typedef PIMAGE_SECTION_HEADER 8 8
+typedef IMAGE_BASE_RELOCATION 8 4
+  VirtualAddress 0
+  SizeOfBlock 4
+typedef PIMAGE_BASE_RELOCATION 8 8
+typedef IMAGE_EXPORT_DIRECTORY 40 4
+  Characteristics 0
+  TimeDateStamp 4
+  MajorVersion 8
+  MinorVersion 10
+  Name 12
+  Base 16
+  NumberOfFunctions 20
+  NumberOfNames 24
+  AddressOfFunctions 28
+  AddressOfNames 32
+  AddressOfNameOrdinals 36
+typedef PIMAGE_EXPORT_DIRECTORY 8 8
+typedef IMAGE_IMPORT_BY_NAME 4 2
+  Hint 0
+  Name 2
+typedef PIMAGE_IMPORT_BY_NAME 8 8
+typedef IMAGE_THUNK_DATA64 8 8
+  u1 0
+typedef PIMAGE_THUNK_DATA64 8 8
+typedef IMAGE_THUNK_DATA32 4 4
+  u1 0
+typedef PIMAGE_THUNK_DATA32 8 8
+typedef PIMAGE_TLS_CALLBACK 8 8
+typedef IMAGE_TLS_DIRECTORY64 40 4
+  StartAddressOfRawData 0
+  EndAddressOfRawData 8
+  AddressOfIndex 16
+  AddressOfCallBacks 24
+  SizeOfZeroFill 32
+  Characteristics 36
+typedef PIMAGE_TLS_DIRECTORY64 8 8
+typedef IMAGE_TLS_DIRECTORY32 24 4
+  StartAddressOfRawData 0
+  EndAddressOfRawData 4
+  AddressOfIndex 8
+  AddressOfCallBacks 12
+  SizeOfZeroFill 16
+  Characteristics 20
+typedef PIMAGE_TLS_DIRECTORY32 8 8
+typedef IMAGE_THUNK_DATA 8 8
+  u1 0
+typedef PIMAGE_THUNK_DATA 8 8
+typedef IMAGE_TLS_DIRECTORY 40 4
+  StartAddressOfRawData 0
+  EndAddressOfRawData 8
+  AddressOfIndex 16
+  AddressOfCallBacks 24
+  SizeOfZeroFill 32
+  Characteristics 36
+typedef PIMAGE_TLS_DIRECTORY 8 8
+typedef IMAGE_IMPORT_DESCRIPTOR 20 4
+  Characteristics 0
+  OriginalFirstThunk 0
+  TimeDateStamp 4
+  ForwarderChain 8
+  Name 12
+  FirstThunk 16
+typedef PIMAGE_IMPORT_DESCRIPTOR 8 8
+typedef IMAGE_RESOURCE_DIRECTORY 16 4
+  Characteristics 0
+  TimeDateStamp 4
+  MajorVersion 8
+  MinorVersion 10
+  NumberOfNamedEntries 12
+  NumberOfIdEntries 14
+typedef PIMAGE_RESOURCE_DIRECTORY 8 8
+typedef IMAGE_RESOURCE_DIRECTORY_ENTRY 8 4
+  NameOffset bit 0 31
+  NameIsString bit 31 1
+  Name 0
+  Id 0
+  OffsetToData 4
+  OffsetToDirectory bit 32 31
+  DataIsDirectory bit 63 1
+typedef PIMAGE_RESOURCE_DIRECTORY_ENTRY 8 8
+typedef IMAGE_RESOURCE_DIRECTORY_STRING 4 2
+  Length 0
+  NameString 2
+typedef PIMAGE_RESOURCE_DIRECTORY_STRING 8 8
+typedef IMAGE_RESOURCE_DIR_STRING_U 4 2
+  Length 0
+  NameString 2
+typedef PIMAGE_RESOURCE_DIR_STRING_U 8 8
+typedef IMAGE_RESOURCE_DATA_ENTRY 16 4
+  OffsetToData 0
+  Size 4
+  CodePage 8
+  Reserved 12
+typedef PIMAGE_RESOURCE_DATA_ENTRY 8 8
+typedef POINT 8 4
+  x 0
+  y 4
+typedef LPPOINT 8 8
+typedef PPOINT 8 8
+typedef RECT 16 4
+  left 0
+  top 4
+  right 8
+  bottom 12
+typedef LPRECT 8 8
+typedef PRECT 8 8
+typedef NPRECT 8 8
+typedef LPCRECT 8 8
+typedef NPPOINT 8 8
+typedef RECTL 16 4
+  left 0
+  top 4
+  right 8
+  bottom 12
+typedef PRECTL 8 8
+typedef LPRECTL 8 8
+typedef LPCRECTL 8 8
+typedef POINTL 8 4
+  x 0
+  y 4
+typedef PPOINTL 8 8
+typedef SIZE 8 4
+  cx 0
+  cy 4
+typedef PSIZE 8 8
+typedef LPSIZE 8 8
+typedef SIZEL 8 4
+  cx 0
+  cy 4
+typedef PSIZEL 8 8
+typedef LPSIZEL 8 8
+typedef POINTS 4 2
+  x 0
+  y 2
+typedef PPOINTS 8 8
+typedef LPPOINTS 8 8
+typedef MSG 48 8
+  hwnd 0
+  message 8
+  wParam 16
+  lParam 24
+  time 32
+  pt 36
+typedef LPMSG 8 8
+typedef PMSG 8 8
+typedef DRAWPATRECT 20 4
+  ptPosition 0
+  ptSize 8
+  wStyle 16
+  wPattern 18
+typedef PDRAWPATRECT 8 8
+typedef PSINJECTDATA 8 4
+  DataBytes 0
+  InjectionPoint 4
+  PageNumber 6
+typedef PPSINJECTDATA 8 8
+typedef PSFEATURE_OUTPUT 8 4
+  bPageIndependent 0
+  bSetPageDevice 4
+typedef PPSFEATURE_OUTPUT 8 8
+typedef PSFEATURE_CUSTPAPER 20 4
+  lOrientation 0
+  lWidth 4
+  lHeight 8
+  lWidthOffset 12
+  lHeightOffset 16
+typedef PPSFEATURE_CUSTPAPER 8 8
+typedef XFORM 24 4
+  eM11 0
+  eM12 4
+  eM21 8
+  eM22 12
+  eDx 16
+  eDy 20
+typedef PXFORM 8 8
+typedef LPXFORM 8 8
+typedef BITMAP 32 8
+  bmType 0
+  bmWidth 4
+  bmHeight 8
+  bmWidthBytes 12
+  bmPlanes 16
+  bmBitsPixel 18
+  bmBits 24
+typedef PBITMAP 8 8
+typedef NPBITMAP 8 8
+typedef LPBITMAP 8 8
+typedef RGBTRIPLE 3 1
+  rgbtBlue 0
+  rgbtGreen 1
+  rgbtRed 2
+typedef PRGBTRIPLE 8 8
+typedef NPRGBTRIPLE 8 8
+typedef LPRGBTRIPLE 8 8
+typedef RGBQUAD 4 1
+  rgbBlue 0
+  rgbGreen 1
+  rgbRed 2
+  rgbReserved 3
+typedef LPRGBQUAD 8 8
+typedef LCSCSTYPE 4 4 signed
+typedef LCSGAMUTMATCH 4 4 signed
+typedef FXPT16DOT16 4 4 signed
+typedef LPFXPT16DOT16 8 8
+typedef FXPT2DOT30 4 4 signed
+typedef LPFXPT2DOT30 8 8
+typedef CIEXYZ 12 4
+  ciexyzX 0
+  ciexyzY 4
+  ciexyzZ 8
+typedef LPCIEXYZ 8 8
+typedef CIEXYZTRIPLE 36 4
+  ciexyzRed 0
+  ciexyzGreen 12
+  ciexyzBlue 24
+typedef LPCIEXYZTRIPLE 8 8
+typedef LOGCOLORSPACEA 328 4
+  lcsSignature 0
+  lcsVersion 4
+  lcsSize 8
+  lcsCSType 12
+  lcsIntent 16
+  lcsEndpoints 20
+  lcsGammaRed 56
+  lcsGammaGreen 60
+  lcsGammaBlue 64
+  lcsFilename 68
+typedef LPLOGCOLORSPACEA 8 8
+typedef LOGCOLORSPACEW 588 4
+  lcsSignature 0
+  lcsVersion 4
+  lcsSize 8
+  lcsCSType 12
+  lcsIntent 16
+  lcsEndpoints 20
+  lcsGammaRed 56
+  lcsGammaGreen 60
+  lcsGammaBlue 64
+  lcsFilename 68
+typedef LPLOGCOLORSPACEW 8 8
+typedef LOGCOLORSPACE 328 4
+  lcsSignature 0
+  lcsVersion 4
+  lcsSize 8
+  lcsCSType 12
+  lcsIntent 16
+  lcsEndpoints 20
+  lcsGammaRed 56
+  lcsGammaGreen 60
+  lcsGammaBlue 64
+  lcsFilename 68
+typedef LPLOGCOLORSPACE 8 8
+typedef BITMAPCOREHEADER 12 4
+  bcSize 0
+  bcWidth 4
+  bcHeight 6
+  bcPlanes 8
+  bcBitCount 10
+typedef LPBITMAPCOREHEADER 8 8
+typedef PBITMAPCOREHEADER 8 8
+typedef BITMAPINFOHEADER 40 4
+  biSize 0
+  biWidth 4
+  biHeight 8
+  biPlanes 12
+  biBitCount 14
+  biCompression 16
+  biSizeImage 20
+  biXPelsPerMeter 24
+  biYPelsPerMeter 28
+  biClrUsed 32
+  biClrImportant 36
+typedef LPBITMAPINFOHEADER 8 8
+typedef PBITMAPINFOHEADER 8 8
+typedef BITMAPV4HEADER 108 4
+  bV4Size 0
+  bV4Width 4
+  bV4Height 8
+  bV4Planes 12
+  bV4BitCount 14
+  bV4V4Compression 16
+  bV4SizeImage 20
+  bV4XPelsPerMeter 24
+  bV4YPelsPerMeter 28
+  bV4ClrUsed 32
+  bV4ClrImportant 36
+  bV4RedMask 40
+  bV4GreenMask 44
+  bV4BlueMask 48
+  bV4AlphaMask 52
+  bV4CSType 56
+  bV4Endpoints 60
+  bV4GammaRed 96
+  bV4GammaGreen 100
+  bV4GammaBlue 104
+typedef LPBITMAPV4HEADER 8 8
+typedef PBITMAPV4HEADER 8 8
+typedef BITMAPV5HEADER 124 4
+  bV5Size 0
+  bV5Width 4
+  bV5Height 8
+  bV5Planes 12
+  bV5BitCount 14
+  bV5Compression 16
+  bV5SizeImage 20
+  bV5XPelsPerMeter 24
+  bV5YPelsPerMeter 28
+  bV5ClrUsed 32
+  bV5ClrImportant 36
+  bV5RedMask 40
+  bV5GreenMask 44
+  bV5BlueMask 48
+  bV5AlphaMask 52
+  bV5CSType 56
+  bV5Endpoints 60
+  bV5GammaRed 96
+  bV5GammaGreen 100
+  bV5GammaBlue 104
+  bV5Intent 108
+  bV5ProfileData 112
+  bV5ProfileSize 116
+  bV5Reserved 120
+typedef LPBITMAPV5HEADER 8 8
+typedef PBITMAPV5HEADER 8 8
+typedef BITMAPINFO 44 4
+  bmiHeader 0
+  bmiColors 40
+typedef LPBITMAPINFO 8 8
+typedef PBITMAPINFO 8 8
+typedef BITMAPCOREINFO 16 4
+  bmciHeader 0
+  bmciColors 12
+typedef LPBITMAPCOREINFO 8 8
+typedef PBITMAPCOREINFO 8 8
+typedef BITMAPFILEHEADER 14 2
+  bfType 0
+  bfSize 2
+  bfReserved1 6
+  bfReserved2 8
+  bfOffBits 10
+typedef LPBITMAPFILEHEADER 8 8
+typedef PBITMAPFILEHEADER 8 8
+typedef FONTSIGNATURE 24 4
+  fsUsb 0
+  fsCsb 16
+typedef PFONTSIGNATURE 8 8
+typedef LPFONTSIGNATURE 8 8
+typedef CHARSETINFO 32 4
+  ciCharset 0
+  ciACP 4
+  fs 8
+typedef PCHARSETINFO 8 8
+typedef NPCHARSETINFO 8 8
+typedef LPCHARSETINFO 8 8
+typedef LOCALESIGNATURE 32 4
+  lsUsb 0
+  lsCsbDefault 16
+  lsCsbSupported 24
+typedef PLOCALESIGNATURE 8 8
+typedef LPLOCALESIGNATURE 8 8
+typedef HANDLETABLE 8 8
+  objectHandle 0
+typedef PHANDLETABLE 8 8
+typedef LPHANDLETABLE 8 8
+typedef METARECORD 8 4
+  rdSize 0
+  rdFunction 4
+  rdParm 6
+typedef PMETARECORD 8 8
+typedef LPMETARECORD 8 8
+typedef METAFILEPICT 24 8
+  mm 0
+  xExt 4
+  yExt 8
+  hMF 16
+typedef LPMETAFILEPICT 8 8
+typedef METAHEADER 18 2
+  mtType 0
+  mtHeaderSize 2
+  mtVersion 4
+  mtSize 6
+  mtNoObjects 10
+  mtMaxRecord 12
+  mtNoParameters 16
+typedef PMETAHEADER 8 8
+typedef LPMETAHEADER 8 8
+typedef ENHMETARECORD 12 4
+  iType 0
+  nSize 4
+  dParm 8
+typedef PENHMETARECORD 8 8
+typedef LPENHMETARECORD 8 8
+typedef ENHMETAHEADER 108 4
+  iType 0
+  nSize 4
+  rclBounds 8
+  rclFrame 24
+  dSignature 40
+  nVersion 44
+  nBytes 48
+  nRecords 52
+  nHandles 56
+  sReserved 58
+  nDescription 60
+  offDescription 64
+  nPalEntries 68
+  szlDevice 72
+  szlMillimeters 80
+  cbPixelFormat 88
+  offPixelFormat 92
+  bOpenGL 96
+  szlMicrometers 100
+typedef PENHMETAHEADER 8 8
+typedef LPENHMETAHEADER 8 8
+typedef BCHAR 1 1 unsigned
+typedef TEXTMETRICA 56 4
+  tmHeight 0
+  tmAscent 4
+  tmDescent 8
+  tmInternalLeading 12
+  tmExternalLeading 16
+  tmAveCharWidth 20
+  tmMaxCharWidth 24
+  tmWeight 28
+  tmOverhang 32
+  tmDigitizedAspectX 36
+  tmDigitizedAspectY 40
+  tmFirstChar 44
+  tmLastChar 45
+  tmDefaultChar 46
+  tmBreakChar 47
+  tmItalic 48
+  tmUnderlined 49
+  tmStruckOut 50
+  tmPitchAndFamily 51
+  tmCharSet 52
+typedef PTEXTMETRICA 8 8
+typedef NPTEXTMETRICA 8 8
+typedef LPTEXTMETRICA 8 8
+typedef TEXTMETRICW 60 4
+  tmHeight 0
+  tmAscent 4
+  tmDescent 8
+  tmInternalLeading 12
+  tmExternalLeading 16
+  tmAveCharWidth 20
+  tmMaxCharWidth 24
+  tmWeight 28
+  tmOverhang 32
+  tmDigitizedAspectX 36
+  tmDigitizedAspectY 40
+  tmFirstChar 44
+  tmLastChar 46
+  tmDefaultChar 48
+  tmBreakChar 50
+  tmItalic 52
+  tmUnderlined 53
+  tmStruckOut 54
+  tmPitchAndFamily 55
+  tmCharSet 56
+typedef PTEXTMETRICW 8 8
+typedef NPTEXTMETRICW 8 8
+typedef LPTEXTMETRICW 8 8
+typedef TEXTMETRIC 56 4
+  tmHeight 0
+  tmAscent 4
+  tmDescent 8
+  tmInternalLeading 12
+  tmExternalLeading 16
+  tmAveCharWidth 20
+  tmMaxCharWidth 24
+  tmWeight 28
+  tmOverhang 32
+  tmDigitizedAspectX 36
+  tmDigitizedAspectY 40
+  tmFirstChar 44
+  tmLastChar 45
+  tmDefaultChar 46
+  tmBreakChar 47
+  tmItalic 48
+  tmUnderlined 49
+  tmStruckOut 50
+  tmPitchAndFamily 51
+  tmCharSet 52
+typedef PTEXTMETRIC 8 8
+typedef NPTEXTMETRIC 8 8
+typedef LPTEXTMETRIC 8 8
+typedef NEWTEXTMETRICA 72 4
+  tmHeight 0
+  tmAscent 4
+  tmDescent 8
+  tmInternalLeading 12
+  tmExternalLeading 16
+  tmAveCharWidth 20
+  tmMaxCharWidth 24
+  tmWeight 28
+  tmOverhang 32
+  tmDigitizedAspectX 36
+  tmDigitizedAspectY 40
+  tmFirstChar 44
+  tmLastChar 45
+  tmDefaultChar 46
+  tmBreakChar 47
+  tmItalic 48
+  tmUnderlined 49
+  tmStruckOut 50
+  tmPitchAndFamily 51
+  tmCharSet 52
+  ntmFlags 56
+  ntmSizeEM 60
+  ntmCellHeight 64
+  ntmAvgWidth 68
+typedef PNEWTEXTMETRICA 8 8
+typedef NPNEWTEXTMETRICA 8 8
+typedef LPNEWTEXTMETRICA 8 8
+typedef NEWTEXTMETRICW 76 4
+  tmHeight 0
+  tmAscent 4
+  tmDescent 8
+  tmInternalLeading 12
+  tmExternalLeading 16
+  tmAveCharWidth 20
+  tmMaxCharWidth 24
+  tmWeight 28
+  tmOverhang 32
+  tmDigitizedAspectX 36
+  tmDigitizedAspectY 40
+  tmFirstChar 44
+  tmLastChar 46
+  tmDefaultChar 48
+  tmBreakChar 50
+  tmItalic 52
+  tmUnderlined 53
+  tmStruckOut 54
+  tmPitchAndFamily 55
+  tmCharSet 56
+  ntmFlags 60
+  ntmSizeEM 64
+  ntmCellHeight 68
+  ntmAvgWidth 72
+typedef PNEWTEXTMETRICW 8 8
+typedef NPNEWTEXTMETRICW 8 8
+typedef LPNEWTEXTMETRICW 8 8
+typedef NEWTEXTMETRIC 72 4
+  tmHeight 0
+  tmAscent 4
+  tmDescent 8
+  tmInternalLeading 12
+  tmExternalLeading 16
+  tmAveCharWidth 20
+  tmMaxCharWidth 24
+  tmWeight 28
+  tmOverhang 32
+  tmDigitizedAspectX 36
+  tmDigitizedAspectY 40
+  tmFirstChar 44
+  tmLastChar 45
+  tmDefaultChar 46
+  tmBreakChar 47
+  tmItalic 48
+  tmUnderlined 49
+  tmStruckOut 50
+  tmPitchAndFamily 51
+  tmCharSet 52
+  ntmFlags 56
+  ntmSizeEM 60
+  ntmCellHeight 64
+  ntmAvgWidth 68
+typedef PNEWTEXTMETRIC 8 8
+typedef NPNEWTEXTMETRIC 8 8
+typedef LPNEWTEXTMETRIC 8 8
+typedef NEWTEXTMETRICEXA 96 4
+  ntmTm 0
+  ntmFontSig 72
+typedef NEWTEXTMETRICEXW 100 4
+  ntmTm 0
+  ntmFontSig 76
+typedef NEWTEXTMETRICEX 96 4
+  ntmTm 0
+  ntmFontSig 72
+typedef PELARRAY 20 4
+  paXCount 0
+  paYCount 4
+  paXExt 8
+  paYExt 12
+  paRGBs 16
+typedef PPELARRAY 8 8
+typedef NPPELARRAY 8 8
+typedef LPPELARRAY 8 8
+typedef LOGBRUSH 16 8
+  lbStyle 0
+  lbColor 4
+  lbHatch 8
+typedef PLOGBRUSH 8 8
+typedef NPLOGBRUSH 8 8
+typedef LPLOGBRUSH 8 8
+typedef LOGBRUSH32 12 4
+  lbStyle 0
+  lbColor 4
+  lbHatch 8
+typedef PLOGBRUSH32 8 8
+typedef NPLOGBRUSH32 8 8
+typedef LPLOGBRUSH32 8 8
+typedef PATTERN 16 8
+  lbStyle 0
+  lbColor 4
+  lbHatch 8
+typedef PPATTERN 8 8
+typedef NPPATTERN 8 8
+typedef LPPATTERN 8 8
+typedef LOGPEN 16 4
+  lopnStyle 0
+  lopnWidth 4
+  lopnColor 12
+typedef PLOGPEN 8 8
+typedef NPLOGPEN 8 8
+typedef LPLOGPEN 8 8
+typedef EXTLOGPEN 32 8
+  elpPenStyle 0
+  elpWidth 4
+  elpBrushStyle 8
+  elpColor 12
+  elpHatch 16
+  elpNumEntries 24
+  elpStyleEntry 28
+typedef PEXTLOGPEN 8 8
+typedef NPEXTLOGPEN 8 8
+typedef LPEXTLOGPEN 8 8
+typedef EXTLOGPEN32 28 4
+  elpPenStyle 0
+  elpWidth 4
+  elpBrushStyle 8
+  elpColor 12
+  elpHatch 16
+  elpNumEntries 20
+  elpStyleEntry 24
+typedef PEXTLOGPEN32 8 8
+typedef NPEXTLOGPEN32 8 8
+typedef LPEXTLOGPEN32 8 8
+typedef PALETTEENTRY 4 1
+  peRed 0
+  peGreen 1
+  peBlue 2
+  peFlags 3
+typedef PPALETTEENTRY 8 8
+typedef LPPALETTEENTRY 8 8
+typedef LOGPALETTE 8 2
+  palVersion 0
+  palNumEntries 2
+  palPalEntry 4
+typedef PLOGPALETTE 8 8
+typedef NPLOGPALETTE 8 8
+typedef LPLOGPALETTE 8 8
+typedef LOGFONTA 60 4
+  lfHeight 0
+  lfWidth 4
+  lfEscapement 8
+  lfOrientation 12
+  lfWeight 16
+  lfItalic 20
+  lfUnderline 21
+  lfStrikeOut 22
+  lfCharSet 23
+  lfOutPrecision 24
+  lfClipPrecision 25
+  lfQuality 26
+  lfPitchAndFamily 27
+  lfFaceName 28
+typedef PLOGFONTA 8 8
+typedef NPLOGFONTA 8 8
+typedef LPLOGFONTA 8 8
+typedef LOGFONTW 92 4
+  lfHeight 0
+  lfWidth 4
+  lfEscapement 8
+  lfOrientation 12
+  lfWeight 16
+  lfItalic 20
+  lfUnderline 21
+  lfStrikeOut 22
+  lfCharSet 23
+  lfOutPrecision 24
+  lfClipPrecision 25
+  lfQuality 26
+  lfPitchAndFamily 27
+  lfFaceName 28
+typedef PLOGFONTW 8 8
+typedef NPLOGFONTW 8 8
+typedef LPLOGFONTW 8 8
+typedef LOGFONT 60 4
+  lfHeight 0
+  lfWidth 4
+  lfEscapement 8
+  lfOrientation 12
+  lfWeight 16
+  lfItalic 20
+  lfUnderline 21
+  lfStrikeOut 22
+  lfCharSet 23
+  lfOutPrecision 24
+  lfClipPrecision 25
+  lfQuality 26
+  lfPitchAndFamily 27
+  lfFaceName 28
+typedef PLOGFONT 8 8
+typedef NPLOGFONT 8 8
+typedef LPLOGFONT 8 8
+typedef ENUMLOGFONTA 156 4
+  elfLogFont 0
+  elfFullName 60
+  elfStyle 124
+typedef LPENUMLOGFONTA 8 8
+typedef ENUMLOGFONTW 284 4
+  elfLogFont 0
+  elfFullName 92
+  elfStyle 220
+typedef LPENUMLOGFONTW 8 8
+typedef ENUMLOGFONT 156 4
+  elfLogFont 0
+  elfFullName 60
+  elfStyle 124
+typedef LPENUMLOGFONT 8 8
+typedef ENUMLOGFONTEXA 188 4
+  elfLogFont 0
+  elfFullName 60
+  elfStyle 124
+  elfScript 156
+typedef LPENUMLOGFONTEXA 8 8
+typedef ENUMLOGFONTEXW 348 4
+  elfLogFont 0
+  elfFullName 92
+  elfStyle 220
+  elfScript 284
+typedef LPENUMLOGFONTEXW 8 8
+typedef ENUMLOGFONTEX 188 4
+  elfLogFont 0
+  elfFullName 60
+  elfStyle 124
+  elfScript 156
+typedef LPENUMLOGFONTEX 8 8
+typedef PANOSE 10 1
+  bFamilyType 0
+  bSerifStyle 1
+  bWeight 2
+  bProportion 3
+  bContrast 4
+  bStrokeVariation 5
+  bArmStyle 6
+  bLetterform 7
+  bMidline 8
+  bXHeight 9
+typedef LPPANOSE 8 8
+typedef EXTLOGFONTA 192 4
+  elfLogFont 0
+  elfFullName 60
+  elfStyle 124
+  elfVersion 156
+  elfStyleSize 160
+  elfMatch 164
+  elfReserved 168
+  elfVendorId 172
+  elfCulture 176
+  elfPanose 180
+typedef PEXTLOGFONTA 8 8
+typedef NPEXTLOGFONTA 8 8
+typedef LPEXTLOGFONTA 8 8
+typedef EXTLOGFONTW 320 4
+  elfLogFont 0
+  elfFullName 92
+  elfStyle 220
+  elfVersion 284
+  elfStyleSize 288
+  elfMatch 292
+  elfReserved 296
+  elfVendorId 300
+  elfCulture 304
+  elfPanose 308
+typedef PEXTLOGFONTW 8 8
+typedef NPEXTLOGFONTW 8 8
+typedef LPEXTLOGFONTW 8 8
+typedef EXTLOGFONT 192 4
+  elfLogFont 0
+  elfFullName 60
+  elfStyle 124
+  elfVersion 156
+  elfStyleSize 160
+  elfMatch 164
+  elfReserved 168
+  elfVendorId 172
+  elfCulture 176
+  elfPanose 180
+typedef PEXTLOGFONT 8 8
+typedef NPEXTLOGFONT 8 8
+typedef LPEXTLOGFONT 8 8
+typedef DEVMODEA 156 4
+  dmDeviceName 0
+  dmSpecVersion 32
+  dmDriverVersion 34
+  dmSize 36
+  dmDriverExtra 38
+  dmFields 40
+  dmOrientation 44
+  dmPaperSize 46
+  dmPaperLength 48
+  dmPaperWidth 50
+  dmScale 52
+  dmCopies 54
+  dmDefaultSource 56
+  dmPrintQuality 58
+  dmPosition 44
+  dmDisplayOrientation 52
+  dmDisplayFixedOutput 56
+  dmColor 60
+  dmDuplex 62
+  dmYResolution 64
+  dmTTOption 66
+  dmCollate 68
+  dmFormName 70
+  dmLogPixels 102
+  dmBitsPerPel 104
+  dmPelsWidth 108
+  dmPelsHeight 112
+  dmDisplayFlags 116
+  dmNup 116
+  dmDisplayFrequency 120
+  dmICMMethod 124
+  dmICMIntent 128
+  dmMediaType 132
+  dmDitherType 136
+  dmReserved1 140
+  dmReserved2 144
+  dmPanningWidth 148
+  dmPanningHeight 152
+typedef PDEVMODEA 8 8
+typedef NPDEVMODEA 8 8
+typedef LPDEVMODEA 8 8
+typedef DEVMODEW 220 4
+  dmDeviceName 0
+  dmSpecVersion 64
+  dmDriverVersion 66
+  dmSize 68
+  dmDriverExtra 70
+  dmFields 72
+  dmOrientation 76
+  dmPaperSize 78
+  dmPaperLength 80
+  dmPaperWidth 82
+  dmScale 84
+  dmCopies 86
+  dmDefaultSource 88
+  dmPrintQuality 90
+  dmPosition 76
+  dmDisplayOrientation 84
+  dmDisplayFixedOutput 88
+  dmColor 92
+  dmDuplex 94
+  dmYResolution 96
+  dmTTOption 98
+  dmCollate 100
+  dmFormName 102
+  dmLogPixels 166
+  dmBitsPerPel 168
+  dmPelsWidth 172
+  dmPelsHeight 176
+  dmDisplayFlags 180
+  dmNup 180
+  dmDisplayFrequency 184
+  dmICMMethod 188
+  dmICMIntent 192
+  dmMediaType 196
+  dmDitherType 200
+  dmReserved1 204
+  dmReserved2 208
+  dmPanningWidth 212
+  dmPanningHeight 216
+typedef PDEVMODEW 8 8
+typedef NPDEVMODEW 8 8
+typedef LPDEVMODEW 8 8
+typedef DEVMODE 156 4
+  dmDeviceName 0
+  dmSpecVersion 32
+  dmDriverVersion 34
+  dmSize 36
+  dmDriverExtra 38
+  dmFields 40
+  dmOrientation 44
+  dmPaperSize 46
+  dmPaperLength 48
+  dmPaperWidth 50
+  dmScale 52
+  dmCopies 54
+  dmDefaultSource 56
+  dmPrintQuality 58
+  dmPosition 44
+  dmDisplayOrientation 52
+  dmDisplayFixedOutput 56
+  dmColor 60
+  dmDuplex 62
+  dmYResolution 64
+  dmTTOption 66
+  dmCollate 68
+  dmFormName 70
+  dmLogPixels 102
+  dmBitsPerPel 104
+  dmPelsWidth 108
+  dmPelsHeight 112
+  dmDisplayFlags 116
+  dmNup 116
+  dmDisplayFrequency 120
+  dmICMMethod 124
+  dmICMIntent 128
+  dmMediaType 132
+  dmDitherType 136
+  dmReserved1 140
+  dmReserved2 144
+  dmPanningWidth 148
+  dmPanningHeight 152
+typedef PDEVMODE 8 8
+typedef NPDEVMODE 8 8
+typedef LPDEVMODE 8 8
+typedef DISPLAY_DEVICEA 424 4
+  cb 0
+  DeviceName 4
+  DeviceString 36
+  StateFlags 164
+  DeviceID 168
+  DeviceKey 296
+typedef PDISPLAY_DEVICEA 8 8
+typedef LPDISPLAY_DEVICEA 8 8
+typedef DISPLAY_DEVICEW 840 4
+  cb 0
+  DeviceName 4
+  DeviceString 68
+  StateFlags 324
+  DeviceID 328
+  DeviceKey 584
+typedef PDISPLAY_DEVICEW 8 8
+typedef LPDISPLAY_DEVICEW 8 8
+typedef DISPLAY_DEVICE 424 4
+  cb 0
+  DeviceName 4
+  DeviceString 36
+  StateFlags 164
+  DeviceID 168
+  DeviceKey 296
+typedef PDISPLAY_DEVICE 8 8
+typedef LPDISPLAY_DEVICE 8 8
+typedef DISPLAYCONFIG_RATIONAL 8 4
+  Numerator 0
+  Denominator 4
+typedef DISPLAYCONFIG_VIDEO_OUTPUT_TECHNOLOGY 4 4 signed
+typedef DISPLAYCONFIG_SCANLINE_ORDERING 4 4 unsigned
+typedef DISPLAYCONFIG_2DREGION 8 4
+  cx 0
+  cy 4
+typedef DISPLAYCONFIG_VIDEO_SIGNAL_INFO 48 8
+  pixelRate 0
+  hSyncFreq 8
+  vSyncFreq 16
+  activeSize 24
+  totalSize 32
+  AdditionalSignalInfo 40
+  videoStandard 40
+  scanLineOrdering 44
+typedef DISPLAYCONFIG_SCALING 4 4 unsigned
+typedef DISPLAYCONFIG_ROTATION 4 4 unsigned
+typedef DISPLAYCONFIG_MODE_INFO_TYPE 4 4 unsigned
+typedef DISPLAYCONFIG_PIXELFORMAT 4 4 unsigned
+typedef DISPLAYCONFIG_SOURCE_MODE 20 4
+  width 0
+  height 4
+  pixelFormat 8
+  position 12
+typedef DISPLAYCONFIG_TARGET_MODE 48 8
+  targetVideoSignalInfo 0
+typedef DISPLAYCONFIG_DESKTOP_IMAGE_INFO 40 4
+  PathSourceSize 0
+  DesktopImageRegion 8
+  DesktopImageClip 24
+typedef DISPLAYCONFIG_MODE_INFO 64 8
+  infoType 0
+  id 4
+  adapterId 8
+  targetMode 16
+  sourceMode 16
+typedef DISPLAYCONFIG_PATH_SOURCE_INFO 20 4
+  adapterId 0
+  id 8
+  modeInfoIdx 12
+  cloneGroupId bit 96 16
+  sourceModeInfoIdx bit 112 16
+  statusFlags 16
+typedef DISPLAYCONFIG_PATH_TARGET_INFO 48 4
+  adapterId 0
+  id 8
+  modeInfoIdx 12
+  desktopModeInfoIdx bit 96 16
+  targetModeInfoIdx bit 112 16
+  outputTechnology 16
+  rotation 20
+  scaling 24
+  refreshRate 28
+  scanLineOrdering 36
+  targetAvailable 40
+  statusFlags 44
+typedef DISPLAYCONFIG_PATH_INFO 72 4
+  sourceInfo 0
+  targetInfo 20
+  flags 68
+typedef DISPLAYCONFIG_TOPOLOGY_ID 4 4 unsigned
+typedef DISPLAYCONFIG_DEVICE_INFO_TYPE 4 4 unsigned
+typedef DISPLAYCONFIG_DEVICE_INFO_HEADER 20 4
+  type 0
+  size 4
+  adapterId 8
+  id 16
+typedef DISPLAYCONFIG_SOURCE_DEVICE_NAME 84 4
+  header 0
+  viewGdiDeviceName 20
+typedef DISPLAYCONFIG_TARGET_DEVICE_NAME_FLAGS 4 4
+  friendlyNameFromEdid bit 0 1
+  friendlyNameForced bit 1 1
+  edidIdsValid bit 2 1
+  reserved bit 3 29
+  value 0
+typedef DISPLAYCONFIG_TARGET_DEVICE_NAME 420 4
+  header 0
+  flags 20
+  outputTechnology 24
+  edidManufactureId 28
+  edidProductCodeId 30
+  connectorInstance 32
+  monitorFriendlyDeviceName 36
+  monitorDevicePath 164
+typedef DISPLAYCONFIG_TARGET_PREFERRED_MODE 80 8
+  header 0
+  width 20
+  height 24
+  targetMode 32
+typedef DISPLAYCONFIG_ADAPTER_NAME 276 4
+  header 0
+  adapterDevicePath 20
+typedef DISPLAYCONFIG_TARGET_BASE_TYPE 24 4
+  header 0
+  baseOutputTechnology 20
+typedef DISPLAYCONFIG_SET_TARGET_PERSISTENCE 24 4
+  header 0
+  bootPersistenceOn bit 160 1
+  reserved bit 161 31
+  value 20
+typedef DISPLAYCONFIG_SUPPORT_VIRTUAL_RESOLUTION 24 4
+  header 0
+  disableMonitorVirtualResolution bit 160 1
+  reserved bit 161 31
+  value 20
+typedef DISPLAYCONFIG_COLOR_ENCODING 4 4 unsigned
+typedef DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO 32 4
+  header 0
+  advancedColorSupported bit 160 1
+  advancedColorEnabled bit 161 1
+  wideColorEnforced bit 162 1
+  advancedColorForceDisabled bit 163 1
+  reserved bit 164 28
+  value 20
+  colorEncoding 24
+  bitsPerColorChannel 28
+typedef DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE 24 4
+  header 0
+  enableAdvancedColor bit 160 1
+  reserved bit 161 31
+  value 20
+typedef DISPLAYCONFIG_SDR_WHITE_LEVEL 24 4
+  header 0
+  SDRWhiteLevel 20
+typedef DISPLAYCONFIG_GET_MONITOR_SPECIALIZATION 24 4
+  header 0
+  isSpecializationEnabled bit 160 1
+  isSpecializationAvailableForMonitor bit 161 1
+  isSpecializationAvailableForSystem bit 162 1
+  reserved bit 163 29
+  value 20
+typedef DISPLAYCONFIG_SET_MONITOR_SPECIALIZATION 312 4
+  header 0
+  isSpecializationEnabled bit 160 1
+  reserved bit 161 31
+  value 20
+  specializationType 24
+  specializationSubType 40
+  specializationApplicationName 56
+typedef RGNDATAHEADER 32 4
+  dwSize 0
+  iType 4
+  nCount 8
+  nRgnSize 12
+  rcBound 16
+typedef PRGNDATAHEADER 8 8
+typedef RGNDATA 36 4
+  rdh 0
+  Buffer 32
+typedef PRGNDATA 8 8
+typedef NPRGNDATA 8 8
+typedef LPRGNDATA 8 8
+typedef ABC 12 4
+  abcA 0
+  abcB 4
+  abcC 8
+typedef PABC 8 8
+typedef NPABC 8 8
+typedef LPABC 8 8
+typedef ABCFLOAT 12 4
+  abcfA 0
+  abcfB 4
+  abcfC 8
+typedef PABCFLOAT 8 8
+typedef NPABCFLOAT 8 8
+typedef LPABCFLOAT 8 8
+typedef OUTLINETEXTMETRICA 232 8
+  otmSize 0
+  otmTextMetrics 4
+  otmFiller 60
+  otmPanoseNumber 61
+  otmfsSelection 72
+  otmfsType 76
+  otmsCharSlopeRise 80
+  otmsCharSlopeRun 84
+  otmItalicAngle 88
+  otmEMSquare 92
+  otmAscent 96
+  otmDescent 100
+  otmLineGap 104
+  otmsCapEmHeight 108
+  otmsXHeight 112
+  otmrcFontBox 116
+  otmMacAscent 132
+  otmMacDescent 136
+  otmMacLineGap 140
+  otmusMinimumPPEM 144
+  otmptSubscriptSize 148
+  otmptSubscriptOffset 156
+  otmptSuperscriptSize 164
+  otmptSuperscriptOffset 172
+  otmsStrikeoutSize 180
+  otmsStrikeoutPosition 184
+  otmsUnderscoreSize 188
+  otmsUnderscorePosition 192
+  otmpFamilyName 200
+  otmpFaceName 208
+  otmpStyleName 216
+  otmpFullName 224
+typedef POUTLINETEXTMETRICA 8 8
+typedef NPOUTLINETEXTMETRICA 8 8
+typedef LPOUTLINETEXTMETRICA 8 8
+typedef OUTLINETEXTMETRICW 232 8
+  otmSize 0
+  otmTextMetrics 4
+  otmFiller 64
+  otmPanoseNumber 65
+  otmfsSelection 76
+  otmfsType 80
+  otmsCharSlopeRise 84
+  otmsCharSlopeRun 88
+  otmItalicAngle 92
+  otmEMSquare 96
+  otmAscent 100
+  otmDescent 104
+  otmLineGap 108
+  otmsCapEmHeight 112
+  otmsXHeight 116
+  otmrcFontBox 120
+  otmMacAscent 136
+  otmMacDescent 140
+  otmMacLineGap 144
+  otmusMinimumPPEM 148
+  otmptSubscriptSize 152
+  otmptSubscriptOffset 160
+  otmptSuperscriptSize 168
+  otmptSuperscriptOffset 176
+  otmsStrikeoutSize 184
+  otmsStrikeoutPosition 188
+  otmsUnderscoreSize 192
+  otmsUnderscorePosition 196
+  otmpFamilyName 200
+  otmpFaceName 208
+  otmpStyleName 216
+  otmpFullName 224
+typedef POUTLINETEXTMETRICW 8 8
+typedef NPOUTLINETEXTMETRICW 8 8
+typedef LPOUTLINETEXTMETRICW 8 8
+typedef OUTLINETEXTMETRIC 232 8
+  otmSize 0
+  otmTextMetrics 4
+  otmFiller 60
+  otmPanoseNumber 61
+  otmfsSelection 72
+  otmfsType 76
+  otmsCharSlopeRise 80
+  otmsCharSlopeRun 84
+  otmItalicAngle 88
+  otmEMSquare 92
+  otmAscent 96
+  otmDescent 100
+  otmLineGap 104
+  otmsCapEmHeight 108
+  otmsXHeight 112
+  otmrcFontBox 116
+  otmMacAscent 132
+  otmMacDescent 136
+  otmMacLineGap 140
+  otmusMinimumPPEM 144
+  otmptSubscriptSize 148
+  otmptSubscriptOffset 156
+  otmptSuperscriptSize 164
+  otmptSuperscriptOffset 172
+  otmsStrikeoutSize 180
+  otmsStrikeoutPosition 184
+  otmsUnderscoreSize 188
+  otmsUnderscorePosition 192
+  otmpFamilyName 200
+  otmpFaceName 208
+  otmpStyleName 216
+  otmpFullName 224
+typedef POUTLINETEXTMETRIC 8 8
+typedef NPOUTLINETEXTMETRIC 8 8
+typedef LPOUTLINETEXTMETRIC 8 8
+typedef POLYTEXTA 56 8
+  x 0
+  y 4
+  n 8
+  lpstr 16
+  uiFlags 24
+  rcl 28
+  pdx 48
+typedef PPOLYTEXTA 8 8
+typedef NPPOLYTEXTA 8 8
+typedef LPPOLYTEXTA 8 8
+typedef POLYTEXTW 56 8
+  x 0
+  y 4
+  n 8
+  lpstr 16
+  uiFlags 24
+  rcl 28
+  pdx 48
+typedef PPOLYTEXTW 8 8
+typedef NPPOLYTEXTW 8 8
+typedef LPPOLYTEXTW 8 8
+typedef POLYTEXT 56 8
+  x 0
+  y 4
+  n 8
+  lpstr 16
+  uiFlags 24
+  rcl 28
+  pdx 48
+typedef PPOLYTEXT 8 8
+typedef NPPOLYTEXT 8 8
+typedef LPPOLYTEXT 8 8
+typedef FIXED 4 2
+  fract 0
+  value 2
+typedef MAT2 16 2
+  eM11 0
+  eM12 4
+  eM21 8
+  eM22 12
+typedef LPMAT2 8 8
+typedef GLYPHMETRICS 20 4
+  gmBlackBoxX 0
+  gmBlackBoxY 4
+  gmptGlyphOrigin 8
+  gmCellIncX 16
+  gmCellIncY 18
+typedef LPGLYPHMETRICS 8 8
+typedef POINTFX 8 2
+  x 0
+  y 4
+typedef LPPOINTFX 8 8
+typedef TTPOLYCURVE 12 2
+  wType 0
+  cpfx 2
+  apfx 4
+typedef LPTTPOLYCURVE 8 8
+typedef TTPOLYGONHEADER 16 4
+  cb 0
+  dwType 4
+  pfxStart 8
+typedef LPTTPOLYGONHEADER 8 8
+typedef GCP_RESULTSA 64 8
+  lStructSize 0
+  lpOutString 8
+  lpOrder 16
+  lpDx 24
+  lpCaretPos 32
+  lpClass 40
+  lpGlyphs 48
+  nGlyphs 56
+  nMaxFit 60
+typedef LPGCP_RESULTSA 8 8
+typedef GCP_RESULTSW 64 8
+  lStructSize 0
+  lpOutString 8
+  lpOrder 16
+  lpDx 24
+  lpCaretPos 32
+  lpClass 40
+  lpGlyphs 48
+  nGlyphs 56
+  nMaxFit 60
+typedef LPGCP_RESULTSW 8 8
+typedef GCP_RESULTS 64 8
+  lStructSize 0
+  lpOutString 8
+  lpOrder 16
+  lpDx 24
+  lpCaretPos 32
+  lpClass 40
+  lpGlyphs 48
+  nGlyphs 56
+  nMaxFit 60
+typedef LPGCP_RESULTS 8 8
+typedef RASTERIZER_STATUS 6 2
+  nSize 0
+  wFlags 2
+  nLanguageID 4
+typedef LPRASTERIZER_STATUS 8 8
+typedef PIXELFORMATDESCRIPTOR 40 4
+  nSize 0
+  nVersion 2
+  dwFlags 4
+  iPixelType 8
+  cColorBits 9
+  cRedBits 10
+  cRedShift 11
+  cGreenBits 12
+  cGreenShift 13
+  cBlueBits 14
+  cBlueShift 15
+  cAlphaBits 16
+  cAlphaShift 17
+  cAccumBits 18
+  cAccumRedBits 19
+  cAccumGreenBits 20
+  cAccumBlueBits 21
+  cAccumAlphaBits 22
+  cDepthBits 23
+  cStencilBits 24
+  cAuxBuffers 25
+  iLayerType 26
+  bReserved 27
+  dwLayerMask 28
+  dwVisibleMask 32
+  dwDamageMask 36
+typedef PPIXELFORMATDESCRIPTOR 8 8
+typedef LPPIXELFORMATDESCRIPTOR 8 8
+typedef OLDFONTENUMPROCA 8 8
+typedef OLDFONTENUMPROCW 8 8
+typedef FONTENUMPROCA 8 8
+typedef FONTENUMPROCW 8 8
+typedef FONTENUMPROC 8 8
+typedef GOBJENUMPROC 8 8
+typedef LINEDDAPROC 8 8
+typedef LPFNDEVMODE 8 8
+typedef LPFNDEVCAPS 8 8
+typedef WCRANGE 4 2
+  wcLow 0
+  cGlyphs 2
+typedef PWCRANGE 8 8
+typedef LPWCRANGE 8 8
+typedef GLYPHSET 20 4
+  cbThis 0
+  flAccel 4
+  cGlyphsSupported 8
+  cRanges 12
+  ranges 16
+typedef PGLYPHSET 8 8
+typedef LPGLYPHSET 8 8
+typedef DESIGNVECTOR 72 4
+  dvReserved 0
+  dvNumAxes 4
+  dvValues 8
+typedef PDESIGNVECTOR 8 8
+typedef LPDESIGNVECTOR 8 8
+typedef AXISINFOA 24 4
+  axMinValue 0
+  axMaxValue 4
+  axAxisName 8
+typedef PAXISINFOA 8 8
+typedef LPAXISINFOA 8 8
+typedef AXISINFOW 40 4
+  axMinValue 0
+  axMaxValue 4
+  axAxisName 8
+typedef PAXISINFOW 8 8
+typedef LPAXISINFOW 8 8
+typedef AXISINFO 24 4
+  axMinValue 0
+  axMaxValue 4
+  axAxisName 8
+typedef PAXISINFO 8 8
+typedef LPAXISINFO 8 8
+typedef AXESLISTA 392 4
+  axlReserved 0
+  axlNumAxes 4
+  axlAxisInfo 8
+typedef PAXESLISTA 8 8
+typedef LPAXESLISTA 8 8
+typedef AXESLISTW 648 4
+  axlReserved 0
+  axlNumAxes 4
+  axlAxisInfo 8
+typedef PAXESLISTW 8 8
+typedef LPAXESLISTW 8 8
+typedef AXESLIST 392 4
+  axlReserved 0
+  axlNumAxes 4
+  axlAxisInfo 8
+typedef PAXESLIST 8 8
+typedef LPAXESLIST 8 8
+typedef ENUMLOGFONTEXDVA 260 4
+  elfEnumLogfontEx 0
+  elfDesignVector 188
+typedef PENUMLOGFONTEXDVA 8 8
+typedef LPENUMLOGFONTEXDVA 8 8
+typedef ENUMLOGFONTEXDVW 420 4
+  elfEnumLogfontEx 0
+  elfDesignVector 348
+typedef PENUMLOGFONTEXDVW 8 8
+typedef LPENUMLOGFONTEXDVW 8 8
+typedef ENUMLOGFONTEXDV 260 4
+  elfEnumLogfontEx 0
+  elfDesignVector 188
+typedef PENUMLOGFONTEXDV 8 8
+typedef LPENUMLOGFONTEXDV 8 8
+typedef ENUMTEXTMETRICA 488 4
+  etmNewTextMetricEx 0
+  etmAxesList 96
+typedef PENUMTEXTMETRICA 8 8
+typedef LPENUMTEXTMETRICA 8 8
+typedef ENUMTEXTMETRICW 748 4
+  etmNewTextMetricEx 0
+  etmAxesList 100
+typedef PENUMTEXTMETRICW 8 8
+typedef LPENUMTEXTMETRICW 8 8
+typedef ENUMTEXTMETRIC 488 4
+  etmNewTextMetricEx 0
+  etmAxesList 96
+typedef PENUMTEXTMETRIC 8 8
+typedef LPENUMTEXTMETRIC 8 8
+typedef COLOR16 2 2 unsigned
+typedef TRIVERTEX 16 4
+  x 0
+  y 4
+  Red 8
+  Green 10
+  Blue 12
+  Alpha 14
+typedef PTRIVERTEX 8 8
+typedef LPTRIVERTEX 8 8
+typedef GRADIENT_TRIANGLE 12 4
+  Vertex1 0
+  Vertex2 4
+  Vertex3 8
+typedef PGRADIENT_TRIANGLE 8 8
+typedef LPGRADIENT_TRIANGLE 8 8
+typedef GRADIENT_RECT 8 4
+  UpperLeft 0
+  LowerRight 4
+typedef PGRADIENT_RECT 8 8
+typedef LPGRADIENT_RECT 8 8
+typedef BLENDFUNCTION 4 1
+  BlendOp 0
+  BlendFlags 1
+  SourceConstantAlpha 2
+  AlphaFormat 3
+typedef PBLENDFUNCTION 8 8
+typedef MFENUMPROC 8 8
+typedef ENHMFENUMPROC 8 8
+typedef DIBSECTION 104 8
+  dsBm 0
+  dsBmih 32
+  dsBitfields 72
+  dshSection 88
+  dsOffset 96
+typedef LPDIBSECTION 8 8
+typedef PDIBSECTION 8 8
+typedef COLORADJUSTMENT 24 2
+  caSize 0
+  caFlags 2
+  caIlluminantIndex 4
+  caRedGamma 6
+  caGreenGamma 8
+  caBlueGamma 10
+  caReferenceBlack 12
+  caReferenceWhite 14
+  caContrast 16
+  caBrightness 18
+  caColorfulness 20
+  caRedGreenTint 22
+typedef PCOLORADJUSTMENT 8 8
+typedef LPCOLORADJUSTMENT 8 8
+typedef ABORTPROC 8 8
+typedef DOCINFOA 40 8
+  cbSize 0
+  lpszDocName 8
+  lpszOutput 16
+  lpszDatatype 24
+  fwType 32
+typedef LPDOCINFOA 8 8
+typedef DOCINFOW 40 8
+  cbSize 0
+  lpszDocName 8
+  lpszOutput 16
+  lpszDatatype 24
+  fwType 32
+typedef LPDOCINFOW 8 8
+typedef DOCINFO 40 8
+  cbSize 0
+  lpszDocName 8
+  lpszOutput 16
+  lpszDatatype 24
+  fwType 32
+typedef LPDOCINFO 8 8
+typedef KERNINGPAIR 8 4
+  wFirst 0
+  wSecond 2
+  iKernAmount 4
+typedef LPKERNINGPAIR 8 8
+typedef ICMENUMPROCA 8 8
+typedef ICMENUMPROCW 8 8
+typedef EMR 8 4
+  iType 0
+  nSize 4
+typedef PEMR 8 8
+typedef EMRTEXT 40 4
+  ptlReference 0
+  nChars 8
+  offString 12
+  fOptions 16
+  rcl 20
+  offDx 36
+typedef PEMRTEXT 8 8
+typedef EMRABORTPATH 8 4
+  emr 0
+typedef PEMRABORTPATH 8 8
+typedef EMRBEGINPATH 8 4
+  emr 0
+typedef PEMRBEGINPATH 8 8
+typedef EMRENDPATH 8 4
+  emr 0
+typedef PEMRENDPATH 8 8
+typedef EMRCLOSEFIGURE 8 4
+  emr 0
+typedef PEMRCLOSEFIGURE 8 8
+typedef EMRFLATTENPATH 8 4
+  emr 0
+typedef PEMRFLATTENPATH 8 8
+typedef EMRWIDENPATH 8 4
+  emr 0
+typedef PEMRWIDENPATH 8 8
+typedef EMRSETMETARGN 8 4
+  emr 0
+typedef PEMRSETMETARGN 8 8
+typedef EMRSAVEDC 8 4
+  emr 0
+typedef PEMRSAVEDC 8 8
+typedef EMRREALIZEPALETTE 8 4
+  emr 0
+typedef PEMRREALIZEPALETTE 8 8
+typedef EMRSELECTCLIPPATH 12 4
+  emr 0
+  iMode 8
+typedef PEMRSELECTCLIPPATH 8 8
+typedef EMRSETBKMODE 12 4
+  emr 0
+  iMode 8
+typedef PEMRSETBKMODE 8 8
+typedef EMRSETMAPMODE 12 4
+  emr 0
+  iMode 8
+typedef PEMRSETMAPMODE 8 8
+typedef EMRSETLAYOUT 12 4
+  emr 0
+  iMode 8
+typedef PEMRSETLAYOUT 8 8
+typedef EMRSETPOLYFILLMODE 12 4
+  emr 0
+  iMode 8
+typedef PEMRSETPOLYFILLMODE 8 8
+typedef EMRSETROP2 12 4
+  emr 0
+  iMode 8
+typedef PEMRSETROP2 8 8
+typedef EMRSETSTRETCHBLTMODE 12 4
+  emr 0
+  iMode 8
+typedef PEMRSETSTRETCHBLTMODE 8 8
+typedef EMRSETICMMODE 12 4
+  emr 0
+  iMode 8
+typedef PEMRSETICMMODE 8 8
+typedef EMRSETTEXTALIGN 12 4
+  emr 0
+  iMode 8
+typedef PEMRSETTEXTALIGN 8 8
+typedef EMRSETMITERLIMIT 12 4
+  emr 0
+  eMiterLimit 8
+typedef PEMRSETMITERLIMIT 8 8
+typedef EMRRESTOREDC 12 4
+  emr 0
+  iRelative 8
+typedef PEMRRESTOREDC 8 8
+typedef EMRSETARCDIRECTION 12 4
+  emr 0
+  iArcDirection 8
+typedef PEMRSETARCDIRECTION 8 8
+typedef EMRSETMAPPERFLAGS 12 4
+  emr 0
+  dwFlags 8
+typedef PEMRSETMAPPERFLAGS 8 8
+typedef EMRSETBKCOLOR 12 4
+  emr 0
+  crColor 8
+typedef PEMRSETBKCOLOR 8 8
+typedef EMRSETTEXTCOLOR 12 4
+  emr 0
+  crColor 8
+typedef PEMRSETTEXTCOLOR 8 8
+typedef EMRSELECTOBJECT 12 4
+  emr 0
+  ihObject 8
+typedef PEMRSELECTOBJECT 8 8
+typedef EMRDELETEOBJECT 12 4
+  emr 0
+  ihObject 8
+typedef PEMRDELETEOBJECT 8 8
+typedef EMRSELECTPALETTE 12 4
+  emr 0
+  ihPal 8
+typedef PEMRSELECTPALETTE 8 8
+typedef EMRRESIZEPALETTE 16 4
+  emr 0
+  ihPal 8
+  cEntries 12
+typedef PEMRRESIZEPALETTE 8 8
+typedef EMRSETPALETTEENTRIES 24 4
+  emr 0
+  ihPal 8
+  iStart 12
+  cEntries 16
+  aPalEntries 20
+typedef PEMRSETPALETTEENTRIES 8 8
+typedef EMRSETCOLORADJUSTMENT 32 4
+  emr 0
+  ColorAdjustment 8
+typedef PEMRSETCOLORADJUSTMENT 8 8
+typedef EMRGDICOMMENT 16 4
+  emr 0
+  cbData 8
+  Data 12
+typedef PEMRGDICOMMENT 8 8
+typedef EMREOF 20 4
+  emr 0
+  nPalEntries 8
+  offPalEntries 12
+  nSizeLast 16
+typedef PEMREOF 8 8
+typedef EMRLINETO 16 4
+  emr 0
+  ptl 8
+typedef PEMRLINETO 8 8
+typedef EMRMOVETOEX 16 4
+  emr 0
+  ptl 8
+typedef PEMRMOVETOEX 8 8
+typedef EMROFFSETCLIPRGN 16 4
+  emr 0
+  ptlOffset 8
+typedef PEMROFFSETCLIPRGN 8 8
+typedef EMRFILLPATH 24 4
+  emr 0
+  rclBounds 8
+typedef PEMRFILLPATH 8 8
+typedef EMRSTROKEANDFILLPATH 24 4
+  emr 0
+  rclBounds 8
+typedef PEMRSTROKEANDFILLPATH 8 8
+typedef EMRSTROKEPATH 24 4
+  emr 0
+  rclBounds 8
+typedef PEMRSTROKEPATH 8 8
+typedef EMREXCLUDECLIPRECT 24 4
+  emr 0
+  rclClip 8
+typedef PEMREXCLUDECLIPRECT 8 8
+typedef EMRINTERSECTCLIPRECT 24 4
+  emr 0
+  rclClip 8
+typedef PEMRINTERSECTCLIPRECT 8 8
+typedef EMRSETVIEWPORTORGEX 16 4
+  emr 0
+  ptlOrigin 8
+typedef PEMRSETVIEWPORTORGEX 8 8
+typedef EMRSETWINDOWORGEX 16 4
+  emr 0
+  ptlOrigin 8
+typedef PEMRSETWINDOWORGEX 8 8
+typedef EMRSETBRUSHORGEX 16 4
+  emr 0
+  ptlOrigin 8
+typedef PEMRSETBRUSHORGEX 8 8
+typedef EMRSETVIEWPORTEXTEX 16 4
+  emr 0
+  szlExtent 8
+typedef PEMRSETVIEWPORTEXTEX 8 8
+typedef EMRSETWINDOWEXTEX 16 4
+  emr 0
+  szlExtent 8
+typedef PEMRSETWINDOWEXTEX 8 8
+typedef EMRSCALEVIEWPORTEXTEX 24 4
+  emr 0
+  xNum 8
+  xDenom 12
+  yNum 16
+  yDenom 20
+typedef PEMRSCALEVIEWPORTEXTEX 8 8
+typedef EMRSCALEWINDOWEXTEX 24 4
+  emr 0
+  xNum 8
+  xDenom 12
+  yNum 16
+  yDenom 20
+typedef PEMRSCALEWINDOWEXTEX 8 8
+typedef EMRSETWORLDTRANSFORM 32 4
+  emr 0
+  xform 8
+typedef PEMRSETWORLDTRANSFORM 8 8
+typedef EMRMODIFYWORLDTRANSFORM 36 4
+  emr 0
+  xform 8
+  iMode 32
+typedef PEMRMODIFYWORLDTRANSFORM 8 8
+typedef EMRSETPIXELV 20 4
+  emr 0
+  ptlPixel 8
+  crColor 16
+typedef PEMRSETPIXELV 8 8
+typedef EMREXTFLOODFILL 24 4
+  emr 0
+  ptlStart 8
+  crColor 16
+  iMode 20
+typedef PEMREXTFLOODFILL 8 8
+typedef EMRELLIPSE 24 4
+  emr 0
+  rclBox 8
+typedef PEMRELLIPSE 8 8
+typedef EMRRECTANGLE 24 4
+  emr 0
+  rclBox 8
+typedef PEMRRECTANGLE 8 8
+typedef EMRROUNDRECT 32 4
+  emr 0
+  rclBox 8
+  szlCorner 24
+typedef PEMRROUNDRECT 8 8
+typedef EMRARC 40 4
+  emr 0
+  rclBox 8
+  ptlStart 24
+  ptlEnd 32
+typedef PEMRARC 8 8
+typedef EMRARCTO 40 4
+  emr 0
+  rclBox 8
+  ptlStart 24
+  ptlEnd 32
+typedef PEMRARCTO 8 8
+typedef EMRCHORD 40 4
+  emr 0
+  rclBox 8
+  ptlStart 24
+  ptlEnd 32
+typedef PEMRCHORD 8 8
+typedef EMRPIE 40 4
+  emr 0
+  rclBox 8
+  ptlStart 24
+  ptlEnd 32
+typedef PEMRPIE 8 8
+typedef EMRANGLEARC 28 4
+  emr 0
+  ptlCenter 8
+  nRadius 16
+  eStartAngle 20
+  eSweepAngle 24
+typedef PEMRANGLEARC 8 8
+typedef EMRPOLYLINE 36 4
+  emr 0
+  rclBounds 8
+  cptl 24
+  aptl 28
+typedef PEMRPOLYLINE 8 8
+typedef EMRPOLYBEZIER 36 4
+  emr 0
+  rclBounds 8
+  cptl 24
+  aptl 28
+typedef PEMRPOLYBEZIER 8 8
+typedef EMRPOLYGON 36 4
+  emr 0
+  rclBounds 8
+  cptl 24
+  aptl 28
+typedef PEMRPOLYGON 8 8
+typedef EMRPOLYBEZIERTO 36 4
+  emr 0
+  rclBounds 8
+  cptl 24
+  aptl 28
+typedef PEMRPOLYBEZIERTO 8 8
+typedef EMRPOLYLINETO 36 4
+  emr 0
+  rclBounds 8
+  cptl 24
+  aptl 28
+typedef PEMRPOLYLINETO 8 8
+typedef EMRPOLYLINE16 32 4
+  emr 0
+  rclBounds 8
+  cpts 24
+  apts 28
+typedef PEMRPOLYLINE16 8 8
+typedef EMRPOLYBEZIER16 32 4
+  emr 0
+  rclBounds 8
+  cpts 24
+  apts 28
+typedef PEMRPOLYBEZIER16 8 8
+typedef EMRPOLYGON16 32 4
+  emr 0
+  rclBounds 8
+  cpts 24
+  apts 28
+typedef PEMRPOLYGON16 8 8
+typedef EMRPOLYBEZIERTO16 32 4
+  emr 0
+  rclBounds 8
+  cpts 24
+  apts 28
+typedef PEMRPOLYBEZIERTO16 8 8
+typedef EMRPOLYLINETO16 32 4
+  emr 0
+  rclBounds 8
+  cpts 24
+  apts 28
+typedef PEMRPOLYLINETO16 8 8
+typedef EMRPOLYDRAW 40 4
+  emr 0
+  rclBounds 8
+  cptl 24
+  aptl 28
+  abTypes 36
+typedef PEMRPOLYDRAW 8 8
+typedef EMRPOLYDRAW16 36 4
+  emr 0
+  rclBounds 8
+  cpts 24
+  apts 28
+  abTypes 32
+typedef PEMRPOLYDRAW16 8 8
+typedef EMRPOLYPOLYLINE 44 4
+  emr 0
+  rclBounds 8
+  nPolys 24
+  cptl 28
+  aPolyCounts 32
+  aptl 36
+typedef PEMRPOLYPOLYLINE 8 8
+typedef EMRPOLYPOLYGON 44 4
+  emr 0
+  rclBounds 8
+  nPolys 24
+  cptl 28
+  aPolyCounts 32
+  aptl 36
+typedef PEMRPOLYPOLYGON 8 8
+typedef EMRPOLYPOLYLINE16 40 4
+  emr 0
+  rclBounds 8
+  nPolys 24
+  cpts 28
+  aPolyCounts 32
+  apts 36
+typedef PEMRPOLYPOLYLINE16 8 8
+typedef EMRPOLYPOLYGON16 40 4
+  emr 0
+  rclBounds 8
+  nPolys 24
+  cpts 28
+  aPolyCounts 32
+  apts 36
+typedef PEMRPOLYPOLYGON16 8 8
+typedef EMRINVERTRGN 32 4
+  emr 0
+  rclBounds 8
+  cbRgnData 24
+  RgnData 28
+typedef PEMRINVERTRGN 8 8
+typedef EMRPAINTRGN 32 4
+  emr 0
+  rclBounds 8
+  cbRgnData 24
+  RgnData 28
+typedef PEMRPAINTRGN 8 8
+typedef EMRFILLRGN 36 4
+  emr 0
+  rclBounds 8
+  cbRgnData 24
+  ihBrush 28
+  RgnData 32
+typedef PEMRFILLRGN 8 8
+typedef EMRFRAMERGN 44 4
+  emr 0
+  rclBounds 8
+  cbRgnData 24
+  ihBrush 28
+  szlStroke 32
+  RgnData 40
+typedef PEMRFRAMERGN 8 8
+typedef EMREXTSELECTCLIPRGN 20 4
+  emr 0
+  cbRgnData 8
+  iMode 12
+  RgnData 16
+typedef PEMREXTSELECTCLIPRGN 8 8
+typedef EMREXTTEXTOUTA 76 4
+  emr 0
+  rclBounds 8
+  iGraphicsMode 24
+  exScale 28
+  eyScale 32
+  emrtext 36
+typedef PEMREXTTEXTOUTA 8 8
+typedef EMREXTTEXTOUTW 76 4
+  emr 0
+  rclBounds 8
+  iGraphicsMode 24
+  exScale 28
+  eyScale 32
+  emrtext 36
+typedef PEMREXTTEXTOUTW 8 8
+typedef EMRPOLYTEXTOUTA 80 4
+  emr 0
+  rclBounds 8
+  iGraphicsMode 24
+  exScale 28
+  eyScale 32
+  cStrings 36
+  aemrtext 40
+typedef PEMRPOLYTEXTOUTA 8 8
+typedef EMRPOLYTEXTOUTW 80 4
+  emr 0
+  rclBounds 8
+  iGraphicsMode 24
+  exScale 28
+  eyScale 32
+  cStrings 36
+  aemrtext 40
+typedef PEMRPOLYTEXTOUTW 8 8
+typedef EMRBITBLT 100 4
+  emr 0
+  rclBounds 8
+  xDest 24
+  yDest 28
+  cxDest 32
+  cyDest 36
+  dwRop 40
+  xSrc 44
+  ySrc 48
+  xformSrc 52
+  crBkColorSrc 76
+  iUsageSrc 80
+  offBmiSrc 84
+  cbBmiSrc 88
+  offBitsSrc 92
+  cbBitsSrc 96
+typedef PEMRBITBLT 8 8
+typedef EMRSTRETCHBLT 108 4
+  emr 0
+  rclBounds 8
+  xDest 24
+  yDest 28
+  cxDest 32
+  cyDest 36
+  dwRop 40
+  xSrc 44
+  ySrc 48
+  xformSrc 52
+  crBkColorSrc 76
+  iUsageSrc 80
+  offBmiSrc 84
+  cbBmiSrc 88
+  offBitsSrc 92
+  cbBitsSrc 96
+  cxSrc 100
+  cySrc 104
+typedef PEMRSTRETCHBLT 8 8
+typedef EMRMASKBLT 128 4
+  emr 0
+  rclBounds 8
+  xDest 24
+  yDest 28
+  cxDest 32
+  cyDest 36
+  dwRop 40
+  xSrc 44
+  ySrc 48
+  xformSrc 52
+  crBkColorSrc 76
+  iUsageSrc 80
+  offBmiSrc 84
+  cbBmiSrc 88
+  offBitsSrc 92
+  cbBitsSrc 96
+  xMask 100
+  yMask 104
+  iUsageMask 108
+  offBmiMask 112
+  cbBmiMask 116
+  offBitsMask 120
+  cbBitsMask 124
+typedef PEMRMASKBLT 8 8
+typedef EMRPLGBLT 140 4
+  emr 0
+  rclBounds 8
+  aptlDest 24
+  xSrc 48
+  ySrc 52
+  cxSrc 56
+  cySrc 60
+  xformSrc 64
+  crBkColorSrc 88
+  iUsageSrc 92
+  offBmiSrc 96
+  cbBmiSrc 100
+  offBitsSrc 104
+  cbBitsSrc 108
+  xMask 112
+  yMask 116
+  iUsageMask 120
+  offBmiMask 124
+  cbBmiMask 128
+  offBitsMask 132
+  cbBitsMask 136
+typedef PEMRPLGBLT 8 8
+typedef EMRSETDIBITSTODEVICE 76 4
+  emr 0
+  rclBounds 8
+  xDest 24
+  yDest 28
+  xSrc 32
+  ySrc 36
+  cxSrc 40
+  cySrc 44
+  offBmiSrc 48
+  cbBmiSrc 52
+  offBitsSrc 56
+  cbBitsSrc 60
+  iUsageSrc 64
+  iStartScan 68
+  cScans 72
+typedef PEMRSETDIBITSTODEVICE 8 8
+typedef EMRSTRETCHDIBITS 80 4
+  emr 0
+  rclBounds 8
+  xDest 24
+  yDest 28
+  xSrc 32
+  ySrc 36
+  cxSrc 40
+  cySrc 44
+  offBmiSrc 48
+  cbBmiSrc 52
+  offBitsSrc 56
+  cbBitsSrc 60
+  iUsageSrc 64
+  dwRop 68
+  cxDest 72
+  cyDest 76
+typedef PEMRSTRETCHDIBITS 8 8
+typedef EMREXTCREATEFONTINDIRECTW 332 4
+  emr 0
+  ihFont 8
+  elfw 12
+typedef PEMREXTCREATEFONTINDIRECTW 8 8
+typedef EMRCREATEPALETTE 20 4
+  emr 0
+  ihPal 8
+  lgpl 12
+typedef PEMRCREATEPALETTE 8 8
+typedef EMRCREATEPEN 28 4
+  emr 0
+  ihPen 8
+  lopn 12
+typedef PEMRCREATEPEN 8 8
+typedef EMREXTCREATEPEN 64 8
+  emr 0
+  ihPen 8
+  offBmi 12
+  cbBmi 16
+  offBits 20
+  cbBits 24
+  elp 32
+typedef PEMREXTCREATEPEN 8 8
+typedef EMRCREATEBRUSHINDIRECT 24 4
+  emr 0
+  ihBrush 8
+  lb 12
+typedef PEMRCREATEBRUSHINDIRECT 8 8
+typedef EMRCREATEMONOBRUSH 32 4
+  emr 0
+  ihBrush 8
+  iUsage 12
+  offBmi 16
+  cbBmi 20
+  offBits 24
+  cbBits 28
+typedef PEMRCREATEMONOBRUSH 8 8
+typedef EMRCREATEDIBPATTERNBRUSHPT 32 4
+  emr 0
+  ihBrush 8
+  iUsage 12
+  offBmi 16
+  cbBmi 20
+  offBits 24
+  cbBits 28
+typedef PEMRCREATEDIBPATTERNBRUSHPT 8 8
+typedef EMRFORMAT 16 4
+  dSignature 0
+  nVersion 4
+  cbData 8
+  offData 12
+typedef PEMRFORMAT 8 8
+typedef EMRGLSRECORD 16 4
+  emr 0
+  cbData 8
+  Data 12
+typedef PEMRGLSRECORD 8 8
+typedef EMRGLSBOUNDEDRECORD 32 4
+  emr 0
+  rclBounds 8
+  cbData 24
+  Data 28
+typedef PEMRGLSBOUNDEDRECORD 8 8
+typedef EMRPIXELFORMAT 48 4
+  emr 0
+  pfd 8
+typedef PEMRPIXELFORMAT 8 8
+typedef EMRCREATECOLORSPACE 340 4
+  emr 0
+  ihCS 8
+  lcs 12
+typedef PEMRCREATECOLORSPACE 8 8
+typedef EMRSETCOLORSPACE 12 4
+  emr 0
+  ihCS 8
+typedef PEMRSETCOLORSPACE 8 8
+typedef EMRSELECTCOLORSPACE 12 4
+  emr 0
+  ihCS 8
+typedef PEMRSELECTCOLORSPACE 8 8
+typedef EMRDELETECOLORSPACE 12 4
+  emr 0
+  ihCS 8
+typedef PEMRDELETECOLORSPACE 8 8
+typedef EMREXTESCAPE 20 4
+  emr 0
+  iEscape 8
+  cbEscData 12
+  EscData 16
+typedef PEMREXTESCAPE 8 8
+typedef EMRDRAWESCAPE 20 4
+  emr 0
+  iEscape 8
+  cbEscData 12
+  EscData 16
+typedef PEMRDRAWESCAPE 8 8
+typedef EMRNAMEDESCAPE 24 4
+  emr 0
+  iEscape 8
+  cbDriver 12
+  cbEscData 16
+  EscData 20
+typedef PEMRNAMEDESCAPE 8 8
+typedef EMRSETICMPROFILE 24 4
+  emr 0
+  dwFlags 8
+  cbName 12
+  cbData 16
+  Data 20
+typedef PEMRSETICMPROFILE 8 8
+typedef EMRSETICMPROFILEA 24 4
+  emr 0
+  dwFlags 8
+  cbName 12
+  cbData 16
+  Data 20
+typedef PEMRSETICMPROFILEA 8 8
+typedef EMRSETICMPROFILEW 24 4
+  emr 0
+  dwFlags 8
+  cbName 12
+  cbData 16
+  Data 20
+typedef PEMRSETICMPROFILEW 8 8
+typedef EMRCREATECOLORSPACEW 612 4
+  emr 0
+  ihCS 8
+  lcs 12
+  dwFlags 600
+  cbData 604
+  Data 608
+typedef PEMRCREATECOLORSPACEW 8 8
+typedef EMRCOLORMATCHTOTARGET 28 4
+  emr 0
+  dwAction 8
+  dwFlags 12
+  cbName 16
+  cbData 20
+  Data 24
+typedef PEMRCOLORMATCHTOTARGET 8 8
+typedef EMRCOLORCORRECTPALETTE 24 4
+  emr 0
+  ihPalette 8
+  nFirstEntry 12
+  nPalEntries 16
+  nReserved 20
+typedef PEMRCOLORCORRECTPALETTE 8 8
+typedef EMRALPHABLEND 108 4
+  emr 0
+  rclBounds 8
+  xDest 24
+  yDest 28
+  cxDest 32
+  cyDest 36
+  dwRop 40
+  xSrc 44
+  ySrc 48
+  xformSrc 52
+  crBkColorSrc 76
+  iUsageSrc 80
+  offBmiSrc 84
+  cbBmiSrc 88
+  offBitsSrc 92
+  cbBitsSrc 96
+  cxSrc 100
+  cySrc 104
+typedef PEMRALPHABLEND 8 8
+typedef EMRGRADIENTFILL 52 4
+  emr 0
+  rclBounds 8
+  nVer 24
+  nTri 28
+  ulMode 32
+  Ver 36
+typedef PEMRGRADIENTFILL 8 8
+typedef EMRTRANSPARENTBLT 108 4
+  emr 0
+  rclBounds 8
+  xDest 24
+  yDest 28
+  cxDest 32
+  cyDest 36
+  dwRop 40
+  xSrc 44
+  ySrc 48
+  xformSrc 52
+  crBkColorSrc 76
+  iUsageSrc 80
+  offBmiSrc 84
+  cbBmiSrc 88
+  offBitsSrc 92
+  cbBitsSrc 96
+  cxSrc 100
+  cySrc 104
+typedef PEMRTRANSPARENTBLT 8 8
+typedef POINTFLOAT 8 4
+  x 0
+  y 4
+typedef PPOINTFLOAT 8 8
+typedef GLYPHMETRICSFLOAT 24 4
+  gmfBlackBoxX 0
+  gmfBlackBoxY 4
+  gmfptGlyphOrigin 8
+  gmfCellIncX 16
+  gmfCellIncY 20
+typedef PGLYPHMETRICSFLOAT 8 8
+typedef LPGLYPHMETRICSFLOAT 8 8
+typedef LAYERPLANEDESCRIPTOR 32 4
+  nSize 0
+  nVersion 2
+  dwFlags 4
+  iPixelType 8
+  cColorBits 9
+  cRedBits 10
+  cRedShift 11
+  cGreenBits 12
+  cGreenShift 13
+  cBlueBits 14
+  cBlueShift 15
+  cAlphaBits 16
+  cAlphaShift 17
+  cAccumBits 18
+  cAccumRedBits 19
+  cAccumGreenBits 20
+  cAccumBlueBits 21
+  cAccumAlphaBits 22
+  cDepthBits 23
+  cStencilBits 24
+  cAuxBuffers 25
+  iLayerPlane 26
+  bReserved 27
+  crTransparent 28
+typedef PLAYERPLANEDESCRIPTOR 8 8
+typedef LPLAYERPLANEDESCRIPTOR 8 8
+typedef WGLSWAP 16 8
+  hdc 0
+  uiFlags 8
+typedef PWGLSWAP 8 8
+typedef LPWGLSWAP 8 8
+typedef WNDPROC 8 8
+typedef MONITORENUMPROC 8 8
+typedef WNDCLASSA 72 8
+  style 0
+  lpfnWndProc 8
+  cbClsExtra 16
+  cbWndExtra 20
+  hInstance 24
+  hIcon 32
+  hCursor 40
+  hbrBackground 48
+  lpszMenuName 56
+  lpszClassName 64
+typedef LPWNDCLASSA 8 8
+typedef WNDCLASSW 72 8
+  style 0
+  lpfnWndProc 8
+  cbClsExtra 16
+  cbWndExtra 20
+  hInstance 24
+  hIcon 32
+  hCursor 40
+  hbrBackground 48
+  lpszMenuName 56
+  lpszClassName 64
+typedef LPWNDCLASSW 8 8
+typedef MINMAXINFO 40 4
+  ptReserved 0
+  ptMaxSize 8
+  ptMaxPosition 16
+  ptMinTrackSize 24
+  ptMaxTrackSize 32
+typedef PMINMAXINFO 8 8
+typedef WINDOWPLACEMENT 44 4
+  length 0
+  flags 4
+  showCmd 8
+  ptMinPosition 12
+  ptMaxPosition 20
+  rcNormalPosition 28
+typedef PWINDOWPLACEMENT 8 8
+typedef LPWINDOWPLACEMENT 8 8
+typedef MONITORINFO 40 4
+  cbSize 0
+  rcMonitor 4
+  rcWork 20
+  dwFlags 36
+typedef LPMONITORINFO 8 8
+typedef MONITORINFOEXW 104 4
+  cbSize 0
+  rcMonitor 4
+  rcWork 20
+  dwFlags 36
+  szDevice 40
+typedef LPMONITORINFOEXW 8 8
+typedef MONITORINFOEXA 72 4
+  cbSize 0
+  rcMonitor 4
+  rcWork 20
+  dwFlags 36
+  szDevice 40
+typedef LPMONITORINFOEXA 8 8
+typedef RAWINPUTHEADER 24 8
+  dwType 0
+  dwSize 4
+  hDevice 8
+  wParam 16
+typedef RAWMOUSE 24 4
+  usFlags 0
+  ulButtons 4
+  ulRawButtons 8
+  lLastX 12
+  lLastY 16
+  ulExtraInformation 20
+typedef RAWKEYBOARD 16 4
+  MakeCode 0
+  Flags 2
+  Reserved 4
+  VKey 6
+  Message 8
+  ExtraInformation 12
+typedef RAWHID 12 4
+  dwSizeHid 0
+  dwCount 4
+  bRawData 8
+typedef RAWINPUT 48 8
+  header 0
+  data 24
+typedef RAWINPUTDEVICE 16 8
+  usUsagePage 0
+  usUsage 2
+  dwFlags 4
+  hwndTarget 8
+typedef PRAWINPUTDEVICE 8 8
+typedef PCRAWINPUTDEVICE 8 8
+typedef RAWINPUTDEVICELIST 16 8
+  hDevice 0
+  dwType 8
+typedef PRAWINPUTDEVICELIST 8 8
+typedef RID_DEVICE_INFO_MOUSE 16 4
+  dwId 0
+  dwNumberOfButtons 4
+  dwSampleRate 8
+  fHasHorizontalWheel 12
+typedef RID_DEVICE_INFO_KEYBOARD 24 4
+  dwType 0
+  dwSubType 4
+  dwKeyboardMode 8
+  dwNumberOfFunctionKeys 12
+  dwNumberOfIndicators 16
+  dwNumberOfKeysTotal 20
+typedef RID_DEVICE_INFO_HID 16 4
+  dwVendorId 0
+  dwProductId 4
+  dwVersionNumber 8
+  usUsagePage 12
+  usUsage 14
+typedef RID_DEVICE_INFO 32 4
+  cbSize 0
+  dwType 4
+  mouse 8
+  keyboard 8
+  hid 8
+typedef PRID_DEVICE_INFO 8 8
+typedef ICONINFO 32 8
+  fIcon 0
+  xHotspot 4
+  yHotspot 8
+  hbmMask 16
+  hbmColor 24
+typedef PICONINFO 8 8
+typedef TIMERPROC 8 8
+typedef PAINTSTRUCT 72 8
+  hdc 0
+  fErase 8
+  rcPaint 12
+  fRestore 28
+  fIncUpdate 32
+  rgbReserved 36
+typedef LPPAINTSTRUCT 8 8
+typedef FLASHWINFO 32 8
+  cbSize 0
+  hwnd 8
+  dwFlags 16
+  uCount 20
+  dwTimeout 24
+typedef PFLASHWINFO 8 8
+typedef MONITORINFOEX 72 4
+  cbSize 0
+  rcMonitor 4
+  rcWork 20
+  dwFlags 36
+  szDevice 40
+typedef LPMONITORINFOEX 8 8
+typedef OSVERSIONINFO 148 4
+  dwOSVersionInfoSize 0
+  dwMajorVersion 4
+  dwMinorVersion 8
+  dwBuildNumber 12
+  dwPlatformId 16
+  szCSDVersion 20
+typedef POSVERSIONINFO 8 8
+typedef LPOSVERSIONINFO 8 8
+typedef OSVERSIONINFOEX 156 4
+  dwOSVersionInfoSize 0
+  dwMajorVersion 4
+  dwMinorVersion 8
+  dwBuildNumber 12
+  dwPlatformId 16
+  szCSDVersion 20
+  wServicePackMajor 148
+  wServicePackMinor 150
+  wSuiteMask 152
+  wProductType 154
+  wReserved 155
+typedef POSVERSIONINFOEX 8 8
+typedef LPOSVERSIONINFOEX 8 8
+typedef STARTUPINFO 104 8
+  cb 0
+  lpReserved 8
+  lpDesktop 16
+  lpTitle 24
+  dwX 32
+  dwY 36
+  dwXSize 40
+  dwYSize 44
+  dwXCountChars 48
+  dwYCountChars 52
+  dwFillAttribute 56
+  dwFlags 60
+  wShowWindow 64
+  cbReserved2 66
+  lpReserved2 72
+  hStdInput 80
+  hStdOutput 88
+  hStdError 96
+typedef LPSTARTUPINFO 8 8
+typedef STARTUPINFOEX 112 8
+  StartupInfo 0
+  lpAttributeList 104
+typedef LPSTARTUPINFOEX 8 8
+typedef WIN32_FIND_DATA 320 4
+  dwFileAttributes 0
+  ftCreationTime 4
+  ftLastAccessTime 12
+  ftLastWriteTime 20
+  nFileSizeHigh 28
+  nFileSizeLow 32
+  dwReserved0 36
+  dwReserved1 40
+  cFileName 44
+  cAlternateFileName 304
+typedef PWIN32_FIND_DATA 8 8
+typedef LPWIN32_FIND_DATA 8 8
+typedef WNDCLASS 72 8
+  style 0
+  lpfnWndProc 8
+  cbClsExtra 16
+  cbWndExtra 20
+  hInstance 24
+  hIcon 32
+  hCursor 40
+  hbrBackground 48
+  lpszMenuName 56
+  lpszClassName 64
+typedef LPWNDCLASS 8 8
+typedef u_char 1 1 unsigned
+typedef u_short 2 2 unsigned
+typedef u_int 4 4 unsigned
+typedef u_long 4 4 unsigned
+typedef ADDRESS_FAMILY 2 2 unsigned
+typedef WSAEVENT 8 8
+typedef LPWSAEVENT 8 8
+typedef GROUP 4 4 unsigned
+typedef WSAOVERLAPPED 32 8
+  Internal 0
+  InternalHigh 8
+  Offset 16
+  OffsetHigh 20
+  Pointer 16
+  hEvent 24
+typedef LPWSAOVERLAPPED 8 8
+typedef LPWSAOVERLAPPED_COMPLETION_ROUTINE 8 8
+typedef LPQOS 8 8
+typedef WSANETWORKEVENTS 44 4
+  lNetworkEvents 0
+  iErrorCode 4
+typedef LPWSANETWORKEVENTS 8 8
+typedef SOCKADDR_IN 16 4
+  sin_family 0
+  sin_port 2
+  sin_addr 4
+  sin_zero 8
+typedef PSOCKADDR_IN 8 8
+typedef LPSOCKADDR_IN 8 8
+typedef WSADATA 408 8
+  wVersion 0
+  wHighVersion 2
+  iMaxSockets 4
+  iMaxUdpDg 6
+  lpVendorInfo 8
+  szDescription 16
+  szSystemStatus 273
+typedef LPWSADATA 8 8
+typedef WSAPROTOCOLCHAIN 32 4
+  ChainLen 0
+  ChainEntries 4
+typedef WSAPROTOCOL_INFOW 628 4
+  dwServiceFlags1 0
+  dwServiceFlags2 4
+  dwServiceFlags3 8
+  dwServiceFlags4 12
+  dwProviderFlags 16
+  ProviderId 20
+  dwCatalogEntryId 36
+  ProtocolChain 40
+  iVersion 72
+  iAddressFamily 76
+  iMaxSockAddr 80
+  iMinSockAddr 84
+  iSocketType 88
+  iProtocol 92
+  iProtocolMaxOffset 96
+  iNetworkByteOrder 100
+  iSecurityScheme 104
+  dwMessageSize 108
+  dwProviderReserved 112
+  szProtocol 116
+typedef LPWSAPROTOCOL_INFOW 8 8
+typedef WSAPROTOCOL_INFOA 372 4
+  dwServiceFlags1 0
+  dwServiceFlags2 4
+  dwServiceFlags3 8
+  dwServiceFlags4 12
+  dwProviderFlags 16
+  ProviderId 20
+  dwCatalogEntryId 36
+  ProtocolChain 40
+  iVersion 72
+  iAddressFamily 76
+  iMaxSockAddr 80
+  iMinSockAddr 84
+  iSocketType 88
+  iProtocol 92
+  iProtocolMaxOffset 96
+  iNetworkByteOrder 100
+  iSecurityScheme 104
+  dwMessageSize 108
+  dwProviderReserved 112
+  szProtocol 116
+typedef LPWSAPROTOCOL_INFOA 8 8
+typedef fd_set 520 8
+  fd_count 0
+  fd_array 8
+typedef SOCKADDR 16 2
+  sa_family 0
+  sa_data 2
+typedef PSOCKADDR 8 8
+typedef LPSOCKADDR 8 8
+typedef WSABUF 16 8
+  len 0
+  buf 8
+typedef LPWSABUF 8 8
+typedef WSAPROTOCOL_INFO 372 4
+  dwServiceFlags1 0
+  dwServiceFlags2 4
+  dwServiceFlags3 8
+  dwServiceFlags4 12
+  dwProviderFlags 16
+  ProviderId 20
+  dwCatalogEntryId 36
+  ProtocolChain 40
+  iVersion 72
+  iAddressFamily 76
+  iMaxSockAddr 80
+  iMinSockAddr 84
+  iSocketType 88
+  iProtocol 92
+  iProtocolMaxOffset 96
+  iNetworkByteOrder 100
+  iSecurityScheme 104
+  dwMessageSize 108
+  dwProviderReserved 112
+  szProtocol 116
+typedef LPWSAPROTOCOL_INFO 8 8
+
+psapi.h p
+struct _PROCESS_MEMORY_COUNTERS 72 8
+  cb 0
+  PageFaultCount 4
+  PeakWorkingSetSize 8
+  WorkingSetSize 16
+  QuotaPeakPagedPoolUsage 24
+  QuotaPagedPoolUsage 32
+  QuotaPeakNonPagedPoolUsage 40
+  QuotaNonPagedPoolUsage 48
+  PagefileUsage 56
+  PeakPagefileUsage 64
+typedef PROCESS_MEMORY_COUNTERS 72 8
+  cb 0
+  PageFaultCount 4
+  PeakWorkingSetSize 8
+  WorkingSetSize 16
+  QuotaPeakPagedPoolUsage 24
+  QuotaPagedPoolUsage 32
+  QuotaPeakNonPagedPoolUsage 40
+  QuotaNonPagedPoolUsage 48
+  PagefileUsage 56
+  PeakPagefileUsage 64
+typedef PPROCESS_MEMORY_COUNTERS 8 8
+
+delayimp.h p
+struct ImgDelayDescr 32 4
+  grAttrs 0
+  rvaDLLName 4
+  rvaHmod 8
+  rvaIAT 12
+  rvaINT 16
+  rvaBoundIAT 20
+  rvaUnloadIAT 24
+  dwTimeStamp 28
+struct DelayLoadProc 16 8
+  fImportByName 0
+  szProcName 8
+  dwOrdinal 8
+struct DelayLoadInfo 72 8
+  cb 0
+  pidd 8
+  ppfn 16
+  szDll 24
+  dlp 32
+  hmodCur 48
+  pfnCur 56
+  dwLastError 64
+typedef PImgThunkData 8 8
+typedef PCImgThunkData 8 8
+typedef RVA 4 4 unsigned
+typedef ImgDelayDescr 32 4
+  grAttrs 0
+  rvaDLLName 4
+  rvaHmod 8
+  rvaIAT 12
+  rvaINT 16
+  rvaBoundIAT 20
+  rvaUnloadIAT 24
+  dwTimeStamp 28
+typedef PImgDelayDescr 8 8
+typedef PCImgDelayDescr 8 8
+typedef DelayLoadProc 16 8
+  fImportByName 0
+  szProcName 8
+  dwOrdinal 8
+typedef DelayLoadInfo 72 8
+  cb 0
+  pidd 8
+  ppfn 16
+  szDll 24
+  dlp 32
+  hmodCur 48
+  pfnCur 56
+  dwLastError 64
+typedef PDelayLoadInfo 8 8
+typedef PfnDliHook 8 8
+
+crtdbg.h y
+typedef _HFILE 8 8
+
+wincrypt.h p
+typedef ALG_ID 4 4 unsigned
+
+tchar.h y
+typedef _TCHAR 1 1 signed
+typedef _TSCHAR 1 1 signed
+typedef _TUCHAR 1 1 unsigned
+typedef _TXCHAR 1 1 signed
+typedef _TINT 4 4 signed
+
+ws2tcpip.h y
+struct in6_addr 16 2
+  u 0
+struct sockaddr_in6 28 4
+  sin6_family 0
+  sin6_port 2
+  sin6_flowinfo 4
+  sin6_addr 8
+  sin6_scope_id 24
+struct servent 32 8
+  s_name 0
+  s_aliases 8
+  s_proto 16
+  s_port 24
+struct addrinfo 48 8
+  ai_flags 0
+  ai_family 4
+  ai_socktype 8
+  ai_protocol 12
+  ai_addrlen 16
+  ai_canonname 24
+  ai_addr 32
+  ai_next 40
+struct hostent 32 8
+  h_name 0
+  h_aliases 8
+  h_addrtype 16
+  h_length 18
+  h_addr_list 24
+typedef socklen_t 4 4 signed
+typedef SOCKADDR_IN6 28 4
+  sin6_family 0
+  sin6_port 2
+  sin6_flowinfo 4
+  sin6_addr 8
+  sin6_scope_id 24
+typedef PSOCKADDR_IN6 8 8
+typedef LPSOCKADDR_IN6 8 8
+
+mstcpip.h p
+struct tcp_keepalive 12 4
+  onoff 0
+  keepalivetime 4
+  keepaliveinterval 8
+
+mswsock.h y
+struct _TRANSMIT_FILE_BUFFERS 32 8
+  Head 0
+  HeadLength 8
+  Tail 16
+  TailLength 24
+typedef TRANSMIT_FILE_BUFFERS 32 8
+  Head 0
+  HeadLength 8
+  Tail 16
+  TailLength 24
+typedef PTRANSMIT_FILE_BUFFERS 8 8
+typedef LPTRANSMIT_FILE_BUFFERS 8 8
+typedef LPFN_ACCEPTEX 8 8
+typedef LPFN_CONNECTEX 8 8
+typedef LPFN_DISCONNECTEX 8 8
+typedef LPFN_TRANSMITFILE 8 8
+typedef LPFN_GETACCEPTEXSOCKADDRS 8 8
+
+iphlpapi.h y
+typedef NET_IFINDEX 4 4 unsigned
+typedef NET_LUID 8 8
+  Value 0
+  Info 0
+typedef PNET_LUID 8 8
+typedef IF_LUID 8 8
+  Value 0
+  Info 0
+
+ws2bth.h p
+struct _SOCKADDR_BTH 30 1
+  addressFamily 0
+  btAddr 2
+  serviceClassId 10
+  port 26
+typedef BTH_ADDR 8 8 unsigned
+typedef PBTH_ADDR 8 8
+typedef SOCKADDR_BTH 30 1
+  addressFamily 0
+  btAddr 2
+  serviceClassId 10
+  port 26
+typedef PSOCKADDR_BTH 8 8
+
+Rpc.h y
+typedef RPC_WSTR 8 8
+typedef RPC_CSTR 8 8
+
+hvsocket.h p
+struct _SOCKADDR_HV 36 4
+  Family 0
+  Reserved 2
+  VmId 4
+  ServiceId 20
+typedef SOCKADDR_HV 36 4
+  Family 0
+  Reserved 2
+  VmId 4
+  ServiceId 20
+
+winternl.h y
+struct _UNICODE_STRING 16 8
+  Length 0
+  MaximumLength 2
+  Buffer 8
+struct _OBJECT_ATTRIBUTES 48 8
+  Length 0
+  RootDirectory 8
+  ObjectName 16
+  Attributes 24
+  SecurityDescriptor 32
+  SecurityQualityOfService 40
+typedef UNICODE_STRING 16 8
+  Length 0
+  MaximumLength 2
+  Buffer 8
+typedef PUNICODE_STRING 8 8
+typedef OBJECT_ATTRIBUTES 48 8
+  Length 0
+  RootDirectory 8
+  ObjectName 16
+  Attributes 24
+  SecurityDescriptor 32
+  SecurityQualityOfService 40
+typedef POBJECT_ATTRIBUTES 8 8

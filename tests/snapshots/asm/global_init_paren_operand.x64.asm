@@ -27,9 +27,8 @@ Disassembly of section .text:
 
 <main>:
                	movsd	<rip>, %xmm0 # <addr>
-               	movabsq	$0x4018000000000000, %rax # imm = 0x4018000000000000
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	movsd	<rip>, %xmm1 # <addr>
+               	ucomisd	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x5, %eax

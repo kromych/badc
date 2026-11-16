@@ -49,15 +49,13 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	callq	<addr>
-               	xorq	$0x7, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
                	callq	<addr>
-               	xorq	$0x32, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x32, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbp

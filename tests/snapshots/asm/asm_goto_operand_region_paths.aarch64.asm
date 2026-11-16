@@ -87,31 +87,30 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x4                // =4
-               	sub	x0, x29, #0x10
-               	stp	xzr, xzr, [x0]
-               	stur	x1, [x29, #-0x10]
-               	mov	x1, #0x2                // =2
-               	stur	x1, [x29, #-0x8]
-               	and	x0, x0, #0xf
+               	mov	x0, #0x4                // =4
+               	sub	x1, x29, #0x10
+               	stur	x0, [x29, #-0x10]
+               	mov	x0, #0x2                // =2
+               	stur	x0, [x29, #-0x8]
+               	and	x0, x1, #0xf
                	cbz	w0, <addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldur	x0, [x29, #-0x10]
-               	sxtw	x0, w0
-               	cbnz	w0, <addr>
+               	mov	x16, #0x4               // =4
+               	cbnz	w16, <addr>
                	ldur	x0, [x29, #-0x10]
                	ldur	x1, [x29, #-0x8]
                	add	x0, x0, x1
                	cmp	w0, #0x2
                	b.ne	<addr>
                	sub	x1, x29, #0x10
-               	stp	xzr, xzr, [x1]
                	stur	xzr, [x29, #-0x10]
                	mov	x0, #0x2                // =2
                	stur	x0, [x29, #-0x8]
+               	and	x0, x1, #0xf
+               	cbnz	w0, <addr>
                	mov	x16, #0x0               // =0
                	cbnz	w16, <addr>
                	ldur	x0, [x29, #-0x10]

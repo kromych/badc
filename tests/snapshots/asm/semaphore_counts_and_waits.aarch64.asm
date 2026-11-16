@@ -89,8 +89,7 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	bl	<addr>
                	sxtw	x0, w0
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	b.ne	<addr>
                	bl	<addr>
                	ldrsw	x0, [x0]
@@ -107,8 +106,7 @@ Disassembly of section .text:
                	sub	x1, x29, #0x20
                	bl	<addr>
                	sxtw	x0, w0
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	b.ne	<addr>
                	bl	<addr>
                	ldrsw	x0, [x0]
@@ -125,8 +123,7 @@ Disassembly of section .text:
                	sub	x1, x29, #0x10
                	bl	<addr>
                	sxtw	x0, w0
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	b.ne	<addr>
                	bl	<addr>
                	ldrsw	x0, [x0]

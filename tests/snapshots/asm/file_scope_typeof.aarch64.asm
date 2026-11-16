@@ -19,19 +19,19 @@ Disassembly of section .text:
 
 <main>:
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x18]
+               	ldrsw	x0, [x0, #0xc]
                	cmp	w0, #0x7
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x20]
+               	ldrsw	x0, [x0, #0x10]
                	cmp	w0, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x30]
+               	ldrsw	x0, [x0, #0x18]
                	cmp	w0, #0x9
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
@@ -39,19 +39,19 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	str	x0, [x1, #0x70]
+               	str	x0, [x1, #0x40]
                	ldrsw	x0, [x0]
                	cmp	w0, #0x5
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x38]
+               	ldrsw	x0, [x0, #0x1c]
                	adrp	x1, <page>
-               	ldrsw	x1, [x1, #0x40]
+               	ldrsw	x1, [x1, #0x20]
                	add	x0, x0, x1
                	adrp	x1, <page>
-               	ldrsw	x1, [x1, #0x48]
+               	ldrsw	x1, [x1, #0x24]
                	add	x0, x0, x1
                	cmp	w0, #0x6
                	b.eq	<addr>

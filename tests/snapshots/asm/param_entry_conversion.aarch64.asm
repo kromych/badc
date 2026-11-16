@@ -66,8 +66,7 @@ Disassembly of section .text:
                	movk	x17, #0xf, lsl #16
                	mul	x1, x1, x17
                	add	x0, x0, x1
-               	mov	x17, #0x3               // =3
-               	mul	x1, x2, x17
+               	add	x1, x2, x2, lsl #1
                	add	x0, x0, x1
                	add	x0, x0, x3
                	ret
@@ -209,8 +208,7 @@ Disassembly of section .text:
                	movk	x1, #0xa5a5, lsl #48
                	ldur	x2, [x29, #-0x8]
                	blr	x2
-               	mov	x17, #-0x5              // =-5
-               	cmp	w0, w17
+               	cmn	w0, #0x5
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x20

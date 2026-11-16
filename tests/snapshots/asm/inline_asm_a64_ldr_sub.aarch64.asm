@@ -22,8 +22,7 @@ Disassembly of section .text:
                	ldrsw	x1, [x16, #0xc]
                	cmp	x0, #0x21
                	b.ne	<addr>
-               	mov	x17, #-0x7              // =-7
-               	cmp	x1, x17
+               	cmn	x1, #0x7
                	b.ne	<addr>
                	mov	x0, #0x2a               // =42
                	ret

@@ -775,7 +775,7 @@ mod tests {
             aarch64_movw_field(R_AARCH64_MOVW_SABS_G2),
             Some((2, true, Some(49)))
         );
-        // The neighbouring types are not MOVW group relocations.
+        // The neighboring types are not MOVW group relocations.
         assert_eq!(aarch64_movw_field(R_AARCH64_PREL32), None);
         assert_eq!(aarch64_movw_field(R_AARCH64_LD_PREL_LO19), None);
         // The PC-relative MOVW family is a different rule and unhandled.
@@ -785,7 +785,7 @@ mod tests {
     /// Every named constant must carry the number the ABI table
     /// assigns to that name. Catches a constant transcribed from the
     /// wrong table row -- the defect class that let the linker match
-    /// an incoming relocation under a neighbouring type's arm.
+    /// an incoming relocation under a neighboring type's arm.
     #[test]
     fn constants_match_the_abi_numbering() {
         let check = |names: &[(u32, &str)], value: u32, name: &str| {

@@ -26,49 +26,29 @@ Disassembly of section .text:
                	int3
 
 <ne_rhs>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	%edi, -0x8(%rbp)
-               	movl	-0x8(%rbp), %eax
+               	movq	%rdi, %rax
                	cmpl	$-0x1, %eax
                	setne	%al
                	movzbq	%al, %rax
-               	leave
                	retq
 
 <eq_rhs>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	%edi, -0x8(%rbp)
-               	movl	-0x8(%rbp), %eax
+               	movq	%rdi, %rax
                	cmpl	$-0x1, %eax
                	sete	%al
                	movzbq	%al, %rax
-               	leave
                	retq
 
 <add_rhs>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	%edi, -0x8(%rbp)
-               	movl	-0x8(%rbp), %eax
+               	movq	%rdi, %rax
                	decq	%rax
-               	leave
                	retq
 
 <swapped>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	%edi, -0x8(%rbp)
-               	movl	-0x8(%rbp), %eax
+               	movq	%rdi, %rax
                	cmpl	$-0x1, %eax
                	setne	%al
                	movzbq	%al, %rax
-               	leave
                	retq
 
 <main>:

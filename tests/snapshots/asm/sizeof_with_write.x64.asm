@@ -29,16 +29,14 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movl	$0x10, %edi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %rsi
                	movl	$0x1, %edi
-               	movl	%edi, (%rsi)
-               	movl	$0x2, 0x4(%rsi)
+               	movabsq	$0x200000001, %rax      # imm = 0x200000001
+               	movq	%rax, (%rsi)
                	leaq	<rip>, %rax
                	movq	%rax, 0x8(%rsi)
                	movl	$0x10, %edx
-               	xorl	%eax, %eax
                	callq	<addr>
                	movl	$0x10, %eax
                	popq	%rbp

@@ -14,14 +14,12 @@ Disassembly of section .text:
                	brk	#0x1
 
 <msf>:
-               	mov	x17, #0x5               // =5
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #2
                	add	x0, x0, x1
                	ret
 
 <svf>:
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #1
                	sub	x0, x0, x1
                	ret
 

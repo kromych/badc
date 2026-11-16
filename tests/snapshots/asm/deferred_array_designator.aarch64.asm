@@ -60,17 +60,14 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrb	w1, [x0]
-               	mov	x17, #0x61              // =97
-               	eor	x1, x1, x17
-               	cbnz	w1, <addr>
+               	cmp	w1, #0x61
+               	b.ne	<addr>
                	ldrb	w1, [x0, #0x2]
-               	mov	x17, #0x63              // =99
-               	eor	x1, x1, x17
-               	cbnz	w1, <addr>
+               	cmp	w1, #0x63
+               	b.ne	<addr>
                	ldrb	w1, [x0, #0x4]
-               	mov	x17, #0x65              // =101
-               	eor	x1, x1, x17
-               	cbnz	w1, <addr>
+               	cmp	w1, #0x65
+               	b.ne	<addr>
                	ldrb	w0, [x0, #0x1]
                	cbz	w0, <addr>
                	mov	x0, #0x6                // =6

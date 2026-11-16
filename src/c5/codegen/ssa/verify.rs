@@ -6,12 +6,13 @@
 //! predecessor, defined at the end of that predecessor; every other read
 //! is of a value defined earlier in the block or in a dominating block.
 //! That rule also keeps the instructions of an emptied block, which the
-//! passes leave in the tape, unread.
+//! passes leave in the tape, unread. An SVE value is read only by a reader
+//! of its register file.
 
 use alloc::format;
 use alloc::string::String;
 
-use super::super::ir::{BlockId, FunctionSsa, Inst, NO_VALUE, Terminator, ValueId};
+use super::super::ir::{BlockId, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator, ValueId};
 use super::mem2reg::{DomOrder, SuccGraph, dominators_of};
 
 const NO_BLOCK: BlockId = BlockId::MAX;
@@ -158,7 +159,152 @@ pub(crate) fn check(f: &FunctionSsa) -> Result<(), String> {
             return Err(format!("block {b} ends reading {e}"));
         }
     }
+    sve_files(f)
+}
+
+/// An SVE vector is read as the value an `SveStoreZ` stores, by a vector
+/// phi or by an FP copy, which is one itself; a predicate as the value an
+/// `SveStoreP` stores or by a predicate phi. Those operands read nothing
+/// else. A call's argument and an SVE-PCS function's result may be
+/// either; a parameter or a call result carries the kind it arrives as.
+/// An SVE row and a governed load or store read a predicate and vectors
+/// where their shapes place them; no other instruction carries an SVE
+/// kind.
+fn sve_files(f: &FunctionSsa) -> Result<(), String> {
+    use crate::c5::op::Intrinsic as I;
+    let mut kind: alloc::vec::Vec<Option<LoadKind>> = f.insts.iter().map(Inst::sve_kind).collect();
+    if kind.iter().all(Option::is_none) {
+        return Ok(());
+    }
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for (v, inst) in f.insts.iter().enumerate() {
+            if let Inst::Copy { value, .. } = inst
+                && kind[v].is_none()
+                && let Some(&Some(k)) = kind.get(*value as usize)
+            {
+                kind[v] = Some(k);
+                changed = true;
+            }
+        }
+    }
+    let of = |v: ValueId| kind.get(v as usize).copied().flatten();
+    for (pc, inst) in f.insts.iter().enumerate() {
+        let mut bad = None;
+        let mut expect = |v: ValueId, want: Option<LoadKind>| {
+            let undef = matches!(f.insts.get(v as usize), Some(Inst::Undef)) && want.is_some();
+            if v != NO_VALUE && of(v) != want && !undef && bad.is_none() {
+                bad = Some(v);
+            }
+        };
+        match inst {
+            Inst::Phi { incoming, kind } => {
+                let want = kind.is_sve().then_some(*kind);
+                incoming.iter().for_each(|&(_, v)| expect(v, want));
+            }
+            Inst::Copy { value, is_fp } => {
+                if of(*value).is_some_and(|k| k == LoadKind::SvePredicate || !is_fp) {
+                    bad = Some(*value);
+                }
+            }
+            Inst::Intrinsic { kind, args } => {
+                let stored = match I::from_i64(*kind) {
+                    Some(I::SveStoreZ) => Some(LoadKind::SveVector),
+                    Some(I::SveStoreP) => Some(LoadKind::SvePredicate),
+                    _ => None,
+                };
+                let governed = I::from_i64(*kind).is_some_and(|i| i.sve_lanes().is_some());
+                for (k, &a) in args.iter().enumerate() {
+                    let want = match k {
+                        0 if governed => Some(LoadKind::SvePredicate),
+                        2 if governed => Some(LoadKind::SveVector),
+                        _ => stored.filter(|_| k == 1),
+                    };
+                    expect(a, want);
+                }
+            }
+            Inst::SimdVal { op, args, .. } if crate::c5::simd::sve_row(*op) => {
+                let row_kinds = sve_row_operands(*op);
+                for (k, &a) in args.iter().enumerate() {
+                    expect(a, row_kinds.get(k).copied().flatten());
+                }
+            }
+            Inst::Call { args, .. }
+            | Inst::CallIndirect { args, .. }
+            | Inst::CallExt { args, .. } => {
+                for &a in args {
+                    expect(a, of(a));
+                }
+                if let Inst::CallIndirect { target, .. } = inst {
+                    expect(*target, None);
+                }
+            }
+            Inst::Load { kind, .. }
+            | Inst::LoadLocal { kind, .. }
+            | Inst::LoadIndexed { kind, .. }
+            | Inst::SegLoad { kind, .. }
+            | Inst::ParamPart { kind, .. }
+            | Inst::AsmOut { kind, .. }
+            | Inst::Select { kind, .. }
+            | Inst::VecExtract { kind, .. }
+                if kind.is_sve() =>
+            {
+                return Err(format!("v{pc} carries an SVE kind"));
+            }
+            _ => inst.for_each_operand(|v| expect(v, None)),
+        }
+        if let Some(v) = bad {
+            return Err(format!("v{pc} reads v{v} outside its register file"));
+        }
+    }
+    for (b, blk) in f.blocks.iter().enumerate() {
+        let mut bad = None;
+        let result = matches!(blk.terminator, Terminator::Return(_)) && f.sve_pcs.is_some();
+        blk.terminator.for_each_operand(|v| {
+            if of(v).is_some() && !result {
+                bad = Some(v);
+            }
+        });
+        if let Some(v) = bad {
+            return Err(format!("block {b} ends reading SVE value v{v}"));
+        }
+    }
     Ok(())
+}
+
+/// The SVE kind of each operand of SVE row `op`, by its shape.
+fn sve_row_operands(op: u32) -> alloc::vec::Vec<Option<LoadKind>> {
+    use crate::c5::simd::{Form, SvePred, SveShape};
+    let (p, z) = (Some(LoadKind::SvePredicate), Some(LoadKind::SveVector));
+    match crate::c5::simd::get(op).form {
+        Form::Sve(f) => match f.shape {
+            SveShape::Binary(_)
+            | SveShape::Unary(SvePred::Merge)
+            | SveShape::Compare
+            | SveShape::Select => alloc::vec![p, z, z],
+            SveShape::Unary(_) => alloc::vec![p, z],
+            SveShape::Ternary(..) => alloc::vec![p, z, z, z],
+            SveShape::Permute | SveShape::Extract | SveShape::Lanewise => alloc::vec![z, z],
+            SveShape::Reinterpret | SveShape::Reverse => alloc::vec![z],
+            SveShape::DupLane => alloc::vec![z, None],
+            SveShape::PredSelect | SveShape::PredLogic => alloc::vec![p, p, p],
+            SveShape::PredNot | SveShape::Test(_) | SveShape::PredPermute => alloc::vec![p, p],
+            SveShape::PredReverse => alloc::vec![p],
+            SveShape::PFalse => alloc::vec::Vec::new(),
+            SveShape::Reduce => alloc::vec![p, z],
+            SveShape::Load => alloc::vec![p, None],
+            SveShape::Store => alloc::vec![p, None, z],
+            SveShape::Dup
+            | SveShape::Index
+            | SveShape::While { .. }
+            | SveShape::PTrue
+            | SveShape::Count => {
+                alloc::vec![None, None]
+            }
+        },
+        _ => alloc::vec::Vec::new(),
+    }
 }
 
 /// The block holding each instruction, `NO_BLOCK` for none, once the
@@ -205,7 +351,7 @@ mod tests {
         let n = insts.len();
         FunctionSsa {
             name: "f".into(),
-            inst_src: alloc::vec![(0, 0); n],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); n],
             f32_values: alloc::vec![false; n],
             insts,
             blocks,

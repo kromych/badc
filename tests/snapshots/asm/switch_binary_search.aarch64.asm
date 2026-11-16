@@ -40,20 +40,17 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	x0, #0x4                // =4
                	ret
-               	mov	x17, #-0x3              // =-3
-               	cmp	w0, w17
+               	cmn	w0, #0x3
                	b.lt	<addr>
                	cmp	w0, #0x0
                	b.lt	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	mov	x17, #-0x3              // =-3
-               	cmp	w0, w17
+               	cmn	w0, #0x3
                	b.ne	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	mov	x17, #-0x64             // =-100
-               	cmp	w0, w17
+               	cmn	w0, #0x64
                	b.ne	<addr>
                	mov	x0, #0x1                // =1
                	ret

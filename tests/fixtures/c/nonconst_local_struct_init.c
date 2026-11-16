@@ -1,4 +1,4 @@
-/* C99 6.7.8p13: a local-storage object can be initialised with
+/* C99 6.7.8p13: a local-storage object can be initialized with
  * an expression that isn't a compile-time constant. c5 used to
  * stage all struct initializers into the data segment (Mcpy-
  * once-at-runtime), which works for `struct S s = { 1, 2 };`
@@ -69,7 +69,7 @@ int main(void) {
         return 6;
     }
 
-    /* Re-initialise an existing struct via fresh init -- this
+    /* Re-initialize an existing struct via fresh init -- this
      * fires twice in the same frame, so the zero-init prelude
      * has to actually zero, not piggy-back on stale data. */
     {

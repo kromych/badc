@@ -35,7 +35,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movl	$0x56, %esi
-               	xorl	%eax, %eax
                	callq	<addr>
                	testq	%rax, %rax
                	jne	<addr>
@@ -44,7 +43,6 @@ Disassembly of section .text:
                	retq
                	movl	$0x7a, %esi
                	leaq	<rip>, %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	testq	%rax, %rax
                	je	<addr>

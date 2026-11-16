@@ -9,9 +9,8 @@
 #include <string.h>
 #include <windows.h>
 
-// ucrtbase.dll's export `name`, found by name: an image imports a name from
-// one DLL, and the headers bind msvcrt.dll's spelling of the ones both
-// export (_create_locale, _strtod_l, ...).
+// ucrtbase.dll's export `name`, found by name: the headers bind msvcrt.dll's
+// spelling of the names both export (_create_locale, _strtod_l, ...).
 void (*__c5_ucrt_proc(const char *name))(void) {
     static HMODULE ucrt;
     HMODULE m = __atomic_load_n(&ucrt, __ATOMIC_ACQUIRE);

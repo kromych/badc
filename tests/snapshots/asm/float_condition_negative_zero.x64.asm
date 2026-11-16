@@ -28,76 +28,9 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	xorl	%ecx, %ecx
-               	movabsq	$-0x8000000000000000, %rdx # imm = 0x8000000000000000
-               	movq	%rdx, %xmm14
-               	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	jp	<addr>
-               	je	<addr>
-               	movl	$0x1, %esi
-               	movq	%rcx, %xmm14
-               	movq	%rdx, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	jp	<addr>
-               	je	<addr>
-               	orq	$0x2, %rsi
-               	movq	%rcx, %rax
-               	movq	%rdx, %xmm14
-               	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	jp	<addr>
-               	je	<addr>
-               	incq	%rax
-               	cmpl	$0x2, %eax
-               	jg	<addr>
-               	movq	%rdx, %xmm14
-               	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	jp	<addr>
-               	jne	<addr>
-               	testl	%eax, %eax
-               	je	<addr>
-               	orq	$0x4, %rsi
-               	xorl	%eax, %eax
-               	movq	%rdx, %xmm14
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	jp	<addr>
-               	je	<addr>
-               	orq	$0x8, %rsi
-               	movq	%rdx, %xmm14
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	jp	<addr>
-               	je	<addr>
-               	orq	$0x10, %rsi
-               	movq	%rdx, %xmm14
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	jp	<addr>
-               	je	<addr>
-               	orq	$0x20, %rsi
-               	movq	%rdx, %xmm14
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	jp	<addr>
-               	jne	<addr>
-               	testq	%rsi, %rsi
-               	je	<addr>
-               	leaq	<rip>, %rdi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
                	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
                	xorl	%eax, %eax
                	popq	%rbp
                	retq
-               	orq	$0x40, %rsi
-               	jmp	<addr>
-               	movq	%rcx, %rsi
-               	jmp	<addr>

@@ -14,22 +14,14 @@ Disassembly of section .text:
                	brk	#0x1
 
 <block_first>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x58]
+               	ldrsw	x0, [x0, #0x50]
                	add	x0, x0, #0xe
-               	bl	<addr>
-               	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
 
 <block_plain>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
                	mov	x0, #0x2                // =2
-               	bl	<addr>
-               	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
 
 <hidden_by_local>:
                	str	x20, [sp, #-0x20]!
@@ -46,12 +38,8 @@ Disassembly of section .text:
                	ret
 
 <names_foreign>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
                	mov	x0, #0x1                // =1
-               	bl	<addr>
-               	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
 
 <keeps_values>:
                	stp	x20, x21, [sp, #-0x50]!
@@ -71,17 +59,15 @@ Disassembly of section .text:
                	ldr	x26, [x0, #0x30]
                	ldr	x27, [x0, #0x38]
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x58]
+               	ldrsw	x0, [x0, #0x50]
                	bl	<addr>
                	sxtw	x0, w0
                	add	x0, x0, x20
                	add	x0, x0, x21, lsl #1
-               	mov	x17, #0x3               // =3
-               	mul	x1, x22, x17
+               	add	x1, x22, x22, lsl #1
                	add	x0, x0, x1
                	add	x0, x0, x23, lsl #2
-               	mov	x17, #0x5               // =5
-               	mul	x1, x24, x17
+               	add	x1, x24, x24, lsl #2
                	add	x0, x0, x1
                	mov	x17, #0x6               // =6
                	mul	x1, x25, x17
@@ -106,8 +92,7 @@ Disassembly of section .text:
                	ret
 
 <times3>:
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #1
                	ret
 
 <fcl>:

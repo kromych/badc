@@ -1,10 +1,10 @@
 // Parameter-slot promotion: a non-variadic, non-struct-returning
 // function with an integer parameter whose body reads the param
 // across recursive calls. C99 6.2.4p5 / 6.9.1p10 leave the
-// implementation free to materialise parameters however it wants;
+// implementation free to materialize parameters however it wants;
 // keeping the value in a register and skipping the per-use spill /
 // reload is the codegen choice mem2reg drives once the walker
-// synthesises a single reaching `StoreLocal` for the c5 cdecl arg
+// synthesizes a single reaching `StoreLocal` for the c5 cdecl arg
 // slot from a fresh `Inst::ParamRef`. The recursive `fib`-shape
 // exercises the promotion at -O: `n` is read four times across two
 // calls and at exit, and all four reads must agree without ever

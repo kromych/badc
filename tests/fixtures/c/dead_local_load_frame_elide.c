@@ -1,7 +1,7 @@
 // A slot load with no consumers emits no machine code, so it must not
 // force a frame: an object that is never observed needs no storage
 // (C99 6.2.4p2), and the loop leaf below compiles without a prologue.
-// A volatile slot access is itself observable behaviour (5.1.2.3p2 /
+// A volatile slot access is itself observable behavior (5.1.2.3p2 /
 // 6.7.3p6), is always emitted, and keeps the frame.
 
 typedef unsigned char u8;

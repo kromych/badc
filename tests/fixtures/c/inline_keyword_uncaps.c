@@ -1,5 +1,5 @@
 // C99 6.7.4: a function declared with the `inline` keyword is a
-// hint to the optimiser that calls should be inlined. badc honours
+// hint to the optimizer that calls should be inlined. badc honors
 // the hint under -O by bypassing `--inline-cap=N`'s body-size
 // gate; the candidate's other shape constraints (single block, no
 // internal calls, no LocalAddr, etc.) still apply.

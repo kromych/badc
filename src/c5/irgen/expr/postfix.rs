@@ -100,7 +100,11 @@ impl<'a> Walker<'a> {
         // implicit int-to-double lift the parser emitted here.
         let mut fp_arg_mask = crate::c5::ir::FpMask::EMPTY;
         for (i, a) in args.iter().enumerate() {
-            arg_vals.push(self.walk_copy_operand(b, *a)?);
+            let sve = crate::c5::ast::expr_ty(self.ast.expr(*a)).and_then(|t| self.sve_kind(t));
+            arg_vals.push(match sve {
+                Some(_) => self.walk_sve_value(b, *a)?,
+                None => self.walk_copy_operand(b, *a)?,
+            });
             if arg_value_ty(self.ast.expr(*a))
                 .is_some_and(|t| self.crosses_in_fp_reg(callee_conv, t))
             {
@@ -519,15 +523,20 @@ impl<'a> Walker<'a> {
     /// single-precision (C99 6.2.5p10). `extend` widens a narrow scalar
     /// return whose high bits the callee may leave undefined.
     fn call_result(
-        &self,
+        &mut self,
         b: &mut SsaBuilder,
         call: ValueId,
         ret_temp: Option<(u32, i64)>,
         ty: i64,
         extend: bool,
     ) -> ValueId {
+        // An SVE result arrives in z0 or p0 (AAPCS64 6.9).
+        if let Some(kind) = self.sve_kind(ty) {
+            return b.sve_result(kind);
+        }
         if let Some((ridx, slot)) = ret_temp {
             b.set_call_ret_agg(call, ridx, slot);
+            self.call_temps.push(slot);
             let addr = b.local_addr(slot);
             // A `long double` returns its image.
             if is_long_double_scalar(ty) {
@@ -861,11 +870,12 @@ impl<'a> Walker<'a> {
     /// and route its address via an integer slot so the codegen passes it in
     /// a host integer argument register the way every other pointer argument
     /// goes. Returns the object's frame slot and the argument value.
-    fn out_ptr_arg(&self, b: &mut SsaBuilder, ty: i64) -> (i64, ValueId) {
+    fn out_ptr_arg(&mut self, b: &mut SsaBuilder, ty: i64) -> (i64, ValueId) {
         // The callee writes the whole struct through the pointer, so the
         // object holds `sizeof(struct)` bytes, not a single slot.
         let result_size = self.struct_size(ty);
         let result_slot = b.alloc_synthetic_struct(result_size, i64::from(self.struct_align(ty)));
+        self.call_temps.push(result_slot);
         let addr = b.local_addr(result_slot);
         let temp = b.alloc_synthetic_local();
         b.store_local(temp, addr, StoreKind::I64);

@@ -25,22 +25,22 @@
 //! the temporary its `ret_slot_local` names -- the AArch64 x8 return, or
 //! the out-pointer the call passes first on System V and Win64 -- and
 //! `s = f(...)` copies that into `s`; pointing the call at `s` builds the
-//! result in place, as the return-slot rule of gcc and clang does. The
-//! callee then writes `s` while it runs, so it must have no way to reach
-//! `s`: no escaping use of `s`'s address may execute on a path to the
-//! call, the call's own operands included. A local whose address first
-//! escapes after the call qualifies; a destination reached through a
-//! pointer never does, since the callee may hold another pointer to it.
-//! The window rule applies from the call to the copy, and a function
-//! calling a returns-twice function keeps its copies: a `longjmp` out of
-//! the callee would leave `s` partly written, where the abstract machine
-//! left it unchanged (C99 7.13.2.1p3). A read of the temporary past the
-//! copy -- one of `s` an earlier pass forwarded -- reads `s` instead,
-//! which holds the same bytes there when nothing else writes `s` and no
-//! escape of `s` reaches the read. A call returning in registers stores
-//! the result's own bytes, so its copy may fill a leading member; an
-//! out-pointer call carries no result layout, so its copy must cover the
-//! temporary's whole cells, which a copy of a leading member cannot.
+//! result in place. The callee then writes `s` while it runs, so it must
+//! have no way to reach `s`: no escaping use of `s`'s address may execute
+//! on a path to the call, the call's own operands included. A local whose
+//! address first escapes after the call qualifies; a destination reached
+//! through a pointer never does, since the callee may hold another
+//! pointer to it. The window rule applies from the call to the copy, and
+//! a function calling a returns-twice function keeps its copies: a
+//! `longjmp` out of the callee would leave `s` partly written, where the
+//! abstract machine left it unchanged (C99 7.13.2.1p3). A read of the
+//! temporary past the copy -- one of `s` an earlier pass forwarded --
+//! reads `s` instead, which holds the same bytes there when nothing else
+//! writes `s` and no escape of `s` reaches the read. A call returning in
+//! registers stores the result's own bytes, so its copy may fill a
+//! leading member; an out-pointer call carries no result layout, so its
+//! copy must cover the temporary's whole cells, which a copy of a leading
+//! member cannot.
 
 use super::super::ir::{BinOp, BlockId, FunctionSsa, Inst, NO_VALUE, ValueId};
 use alloc::collections::{BTreeMap, BTreeSet};
@@ -54,6 +54,14 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
 
 /// The frame slot and byte offset an address value names: a
 /// `LocalAddr`, or a constant add off one.
+/// The frame cells of the object based at `slot`: its multi-cell record's,
+/// else one.
+fn cells(f: &FunctionSsa, slot: i64) -> i64 {
+    (f.multi_cell_slots.iter())
+        .find(|&&(b, _)| b == slot)
+        .map_or(1, |&(_, c)| c)
+}
+
 fn base_of(f: &FunctionSsa, v: ValueId) -> Option<(i64, i64)> {
     match f.insts.get(v as usize)? {
         Inst::LocalAddr(off) if *off < 0 => Some((*off, 0)),
@@ -67,7 +75,7 @@ fn base_of(f: &FunctionSsa, v: ValueId) -> Option<(i64, i64)> {
 }
 
 fn run_one(f: &mut FunctionSsa) {
-    if f.synthetic_base <= 0 || !f.insts.iter().any(|i| matches!(i, Inst::Mcpy { .. })) {
+    if f.synthetic_base < 0 || !f.insts.iter().any(|i| matches!(i, Inst::Mcpy { .. })) {
         return;
     }
     // Where each slot is named, and by what. A slot this pass may
@@ -121,6 +129,8 @@ fn run_one(f: &mut FunctionSsa) {
     // addresses of a temporary that name the destination in its place.
     let mut retargets: Vec<(usize, i64)> = Vec::new();
     let mut renamed: Vec<(usize, i64)> = Vec::new();
+    // Frame destinations taking an elided temporary of a vector type.
+    let mut vector_dsts: Vec<i64> = Vec::new();
     let mut escapes = Escapes::new(f);
     for blk in &f.blocks {
         for pc in blk.inst_range.clone() {
@@ -153,6 +163,9 @@ fn run_one(f: &mut FunctionSsa) {
                     renamed.extend(renames.iter().map(|&a| (a, d)));
                     elided.push((i, dst));
                     taken.insert(slot);
+                    if f.vector_objects.contains(&slot) && cells(f, d) == cells(f, slot) {
+                        vector_dsts.push(d);
+                    }
                 }
                 continue;
             };
@@ -169,10 +182,21 @@ fn run_one(f: &mut FunctionSsa) {
             }
             elided.push((i, dst));
             taken.insert(slot);
+            if let Some((d, 0)) = base_of(f, dst)
+                && f.vector_objects.contains(&slot)
+                && cells(f, d) == cells(f, slot)
+            {
+                vector_dsts.push(d);
+            }
         }
     }
     if elided.is_empty() {
         return;
+    }
+    for d in vector_dsts {
+        if !f.vector_objects.contains(&d) {
+            f.vector_objects.push(d);
+        }
     }
     for (call, d) in retargets {
         match &mut f.insts[call] {
@@ -555,7 +579,7 @@ fn covers(spans: &[(i64, i64)], size: i64) -> bool {
     at >= size
 }
 
-fn store_width(kind: crate::c5::ir::StoreKind) -> i64 {
+pub(super) fn store_width(kind: crate::c5::ir::StoreKind) -> i64 {
     use crate::c5::ir::StoreKind::*;
     match kind {
         I8 => 1,
@@ -563,6 +587,8 @@ fn store_width(kind: crate::c5::ir::StoreKind) -> i64 {
         I32 | F32 => 4,
         I64 | F64 => 8,
         F80 | F128 | V128 => 16,
+        V256 => 32,
+        V512 => 64,
     }
 }
 
@@ -676,6 +702,7 @@ fn plan_one(
                 | Inst::ImmExtCode(_)
                 | Inst::BlockAddr(_)
                 | Inst::TlsAddr(_)
+                | Inst::LocalAddr(_)
                 | Inst::Binop { .. }
                 | Inst::BinopI { .. }
                 | Inst::Neg(_)
@@ -723,7 +750,7 @@ mod tests {
             locals,
             synthetic_base: 1,
             multi_cell_slots: groups,
-            inst_src: alloc::vec![(0, 0); n as usize],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); n as usize],
             f32_values: alloc::vec![false; n as usize],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -826,7 +853,7 @@ mod tests {
             });
         }
         f.blocks[0].inst_range = 0..f.insts.len() as u32;
-        f.inst_src.push((0, 0));
+        f.inst_src.push(crate::c5::ir::InstSrc::default());
         f.f32_values.push(false);
         let before = shape(&f);
         run_one(&mut f);
@@ -862,7 +889,7 @@ mod tests {
             pc_rel: false,
         });
         f.blocks[0].inst_range = 0..f.insts.len() as u32;
-        f.inst_src.push((0, 0));
+        f.inst_src.push(crate::c5::ir::InstSrc::default());
         f.f32_values.push(false);
         let before = shape(&f);
         run_one(&mut f);
@@ -1043,6 +1070,20 @@ mod tests {
         assert!(matches!(f.insts[2], Inst::Mzero { dst: 1, .. }));
         assert!(matches!(f.insts[5], Inst::Copy { value: 3, .. }));
         assert_eq!(f.extern_imm_data_refs, [(1, 5), (3, 5)]);
+        assert!(defs_precede_uses(&f), "{:?}", shape(&f));
+    }
+
+    /// `T t = {0}; T u = t;`: the declared object's address, set after the
+    /// writes, reads no memory and replaces the base.
+    #[test]
+    fn a_local_destination_set_after_the_writes_is_named_at_the_base() {
+        let mut f = filled_then_copied(Inst::LocalAddr(-4));
+        f.locals = 4;
+        f.multi_cell_slots.push((-4, 2));
+        run_one(&mut f);
+        assert!(matches!(f.insts[1], Inst::LocalAddr(-4)), "{:?}", shape(&f));
+        assert!(matches!(f.insts[2], Inst::Mzero { dst: 1, .. }));
+        assert!(matches!(f.insts[5], Inst::Copy { value: 3, .. }));
         assert!(defs_precede_uses(&f), "{:?}", shape(&f));
     }
 

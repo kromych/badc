@@ -14,8 +14,7 @@ Disassembly of section .text:
                	brk	#0x1
 
 <rsub>:
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #1
                	sub	x0, x1, x0
                	ret
 
@@ -83,17 +82,17 @@ Disassembly of section .text:
                	ret
 
 <carried>:
-               	mov	x5, x0
-               	mov	x0, #0x0                // =0
                	mov	x4, x0
-               	cmp	x4, x5
+               	mov	x0, #0x0                // =0
+               	lsl	x2, x1, x2
+               	mov	x1, x0
+               	cmp	x1, x4
                	b.ge	<addr>
-               	add	x4, x0, x3
-               	lsl	x6, x1, x2
-               	add	x0, x0, x6
-               	cmp	x4, x5
+               	add	x1, x0, x3
+               	add	x0, x0, x2
+               	cmp	x1, x4
                	b.lt	<addr>
-               	mov	x0, x4
+               	mov	x0, x1
                	ret
 
 <rotr>:
@@ -148,8 +147,7 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	bl	<addr>
-               	mov	x17, #-0x5              // =-5
-               	cmp	x0, x17
+               	cmn	x0, #0x5
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp], #0x10

@@ -21,7 +21,7 @@
 #define RCVALL_ON               1
 #define RCVALL_SOCKETLEVELONLY  2
 #define RCVALL_IPLEVEL          3
-#define RCVALL_MAX              4
+#define RCVALL_MAX              RCVALL_IPLEVEL
 
 // SIO_KEEPALIVE_VALS input buffer (mstcpip.h). All fields are in
 // milliseconds; `onoff` enables per-connection keepalive.

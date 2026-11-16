@@ -47,11 +47,10 @@ Disassembly of section .text:
                	add	x1, x1, x17
                	ldrb	w1, [x1]
                	add	x0, x0, x1
+               	mov	x1, #0x2a               // =42
+               	mov	x2, #0x1                // =1
                	cmp	w0, #0x3
-               	b.ne	<addr>
-               	mov	x0, #0x2a               // =42
+               	csel	x0, x1, x2, eq
                	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x1                // =1
-               	b	<addr>

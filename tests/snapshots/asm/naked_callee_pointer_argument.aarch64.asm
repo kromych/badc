@@ -39,13 +39,11 @@ Disassembly of section .text:
                	sub	x0, x29, #0x20
                	adrp	x1, <page>
                	ldr	x1, [x1, <lo12>]
-               	mov	x17, #0x5               // =5
-               	mul	x1, x1, x17
+               	add	x1, x1, x1, lsl #2
                	stur	x1, [x29, #-0x10]
                	adrp	x1, <page>
                	ldr	x1, [x1, <lo12>]
-               	mov	x17, #0x3               // =3
-               	mul	x1, x1, x17
+               	add	x1, x1, x1, lsl #1
                	stur	x1, [x29, #-0x8]
                	add	x0, x0, #0x10
                	bl	<addr>

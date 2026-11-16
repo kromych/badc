@@ -126,9 +126,9 @@ Disassembly of section .text:
 
 <guard_then_join>:
                	xorl	%eax, %eax
+               	movl	$0x1, %ecx
                	cmpl	$0x64, %edi
-               	jge	<addr>
-               	movl	$0x1, %eax
+               	cmovlq	%rcx, %rax
                	leaq	0x1(%rdi), %rcx
                	movslq	%ecx, %rcx
                	addq	%rcx, %rax

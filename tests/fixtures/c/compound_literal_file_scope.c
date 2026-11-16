@@ -1,10 +1,10 @@
 // File-scope compound literals -- C99 6.5.2.5p5: a compound
 // literal at file scope has static storage duration and its
-// address is a constant expression suitable for initialising
+// address is a constant expression suitable for initializing
 // another file-scope object. The empty initializer form
-// `(T){}` is the zero-initialisation shape.
+// `(T){}` is the zero-initialization shape.
 //
-// Each `&(T){...}` synthesises an anonymous internal-linkage
+// Each `&(T){...}` synthesizes an anonymous internal-linkage
 // symbol whose bytes are written through the struct-initializer
 // collector; the surrounding `&` reloc resolves to the new
 // symbol's slot.

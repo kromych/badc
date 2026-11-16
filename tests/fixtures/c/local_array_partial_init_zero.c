@@ -5,8 +5,8 @@
 // trailing zeros to the declared dimension, so the single
 // Mcpy populates every position of the local.
 //
-// The fixture pushes a recognisable pattern onto the prior
-// stack frame, then declares a partially-initialised local
+// The fixture pushes a recognizable pattern onto the prior
+// stack frame, then declares a partially-initialized local
 // array and walks every element. A C99-conforming
 // implementation returns 0; before the fix, the residual
 // bytes seeded by clobber would survive in the trailing

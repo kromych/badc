@@ -36,6 +36,8 @@ Disassembly of section .text:
                	movl	$0x3, %ecx
                	movq	<rip>, %rax # <addr>
                	movq	%rdx, %rsi
+               	testl	%ecx, %ecx
+               	je	<addr>
                	movq	<rip>, %rdi # <addr>
                	addq	%rax, %rdi
                	movq	%rdi, <rip> # <addr>
@@ -52,8 +54,6 @@ Disassembly of section .text:
                	movl	$0x1, %ecx
                	jmp	<addr>
                	movq	%rdx, %rcx
-               	testl	%ecx, %ecx
-               	jne	<addr>
                	cmpq	$0x1, %rsi
                	je	<addr>
                	movl	$0x1, %eax

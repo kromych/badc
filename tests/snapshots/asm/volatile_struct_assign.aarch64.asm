@@ -17,20 +17,18 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	sub	x1, x29, #0x10
                	mov	x0, #0x3                // =3
                	movk	x0, #0x4, lsl #32
-               	str	x0, [x1]
+               	stur	x0, [x29, #-0x10]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	w2, [x1]
-               	str	w2, [x0]
-               	ldr	w1, [x1, #0x4]
-               	str	w1, [x0, #0x4]
-               	mov	x1, x2
+               	ldur	w1, [x29, #-0x10]
+               	str	w1, [x0]
+               	ldur	w2, [x29, #-0xc]
+               	str	w2, [x0, #0x4]
                	cmp	w1, #0x3
                	b.ne	<addr>
-               	ldrsw	x1, [x0, #0x4]
+               	mov	x1, x2
                	cmp	w1, #0x4
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
@@ -38,20 +36,14 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x1, #0x5                // =5
-               	str	w1, [x0]
-               	mov	x2, #0x6                // =6
-               	str	w2, [x0, #0x4]
-               	ldrsw	x0, [x0, #0x4]
-               	cmp	w0, #0x6
-               	b.eq	<addr>
-               	mov	x0, #0x2                // =2
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
+               	mov	x2, #0x5                // =5
+               	movk	x2, #0x6, lsl #32
+               	mov	x3, #0x6                // =6
+               	str	x2, [x0]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	str	w1, [x0]
-               	str	w2, [x0, #0x4]
+               	str	w3, [x0, #0x4]
                	ldrsw	x1, [x0]
                	cmp	w1, #0x5
                	b.ne	<addr>
@@ -67,11 +59,11 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldr	x16, [x1]
                	str	x16, [x0]
-               	ldr	w1, [x0]
-               	ldr	w0, [x0, #0x4]
-               	cmp	w1, #0x7
+               	ldur	w0, [x29, #-0x8]
+               	ldur	w1, [x29, #-0x4]
+               	cmp	w0, #0x7
                	b.ne	<addr>
-               	cmp	w0, #0x8
+               	cmp	w1, #0x8
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x10

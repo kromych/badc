@@ -57,7 +57,7 @@ pub trait Host {
     /// Look up `name` in the host environment. None on miss.
     fn getenv(&mut self, name: &str) -> Option<String>;
 
-    /// Set `name` to `value`, honouring `overwrite`.
+    /// Set `name` to `value`, honoring `overwrite`.
     fn setenv(&mut self, name: &str, value: &str, overwrite: Overwrite);
 
     /// `dlopen` -- load a shared library at runtime. `path = None`
@@ -80,7 +80,49 @@ pub trait Host {
     /// if no error has occurred since the last call). Mirrors POSIX:
     /// fetching the error consumes it.
     fn dlerror(&mut self) -> Option<String>;
+
+    /// Open `name` as `fopen`'s `mode` asks (C99 7.19.5.3): `r` reads, `w`
+    /// creates or truncates, `a` appends, `+` adds the other direction.
+    /// Returns a fresh fd, or minus the `errno` value of the failure, as
+    /// every target numbers it. The default opens `r` through [`Self::open`]
+    /// and fails a writing mode with `EROFS`.
+    fn open_mode(&mut self, name: &str, mode: &str) -> i64 {
+        if mode.starts_with('r') && !mode.contains('+') {
+            let fd = self.open(name);
+            return if fd >= 0 { fd } else { -ENOENT };
+        }
+        -EROFS
+    }
+
+    /// A temporary file open for update and removed when it is closed or
+    /// the program ends (C99 7.19.4.3). Returns a fresh fd, or minus the
+    /// `errno` value of the failure; the default has no files to write.
+    fn tmpfile(&mut self) -> i64 {
+        -EROFS
+    }
+
+    /// Move `fd`'s file position as `lseek` does, from the start, the
+    /// current position or the end for `whence` 0, 1 or 2. Returns the new
+    /// position, or -1; the default cannot seek.
+    fn seek(&mut self, _fd: i64, _offset: i64, _whence: i32) -> i64 {
+        -1
+    }
+
+    /// The calendar time in seconds since 1970-01-01 UTC, or -1 where the
+    /// host has no clock (C99 7.23.2.4).
+    fn time(&mut self) -> i64 {
+        -1
+    }
+
+    /// Microseconds since the host was made, or -1 where it cannot tell.
+    fn elapsed_micros(&mut self) -> i64 {
+        -1
+    }
 }
+
+/// The `errno` values [`Host::open_mode`] reports, the same on every target.
+const ENOENT: i64 = 2;
+const EROFS: i64 = 30;
 
 #[cfg(feature = "std")]
 mod std_host {
@@ -96,6 +138,7 @@ mod std_host {
     pub struct StdHost {
         fd_table: HashMap<i64, File>,
         next_fd: i64,
+        started: std::time::Instant,
     }
 
     impl Default for StdHost {
@@ -105,20 +148,111 @@ mod std_host {
             Self {
                 fd_table: HashMap::new(),
                 next_fd: 3,
+                started: std::time::Instant::now(),
             }
+        }
+    }
+
+    impl StdHost {
+        fn install(&mut self, file: File) -> i64 {
+            let fd = self.next_fd;
+            self.next_fd += 1;
+            self.fd_table.insert(fd, file);
+            fd
+        }
+    }
+
+    /// The `errno` value of an open failure, numbered as on every target.
+    fn errno_of(e: &std::io::Error) -> i64 {
+        use std::io::ErrorKind;
+        match e.kind() {
+            ErrorKind::NotFound => 2,
+            ErrorKind::PermissionDenied => 13,
+            ErrorKind::AlreadyExists => 17,
+            ErrorKind::NotADirectory => 20,
+            ErrorKind::IsADirectory => 21,
+            ErrorKind::InvalidInput => 22,
+            _ => 5,
         }
     }
 
     impl Host for StdHost {
         fn open(&mut self, name: &str) -> i64 {
             match File::open(name) {
-                Ok(file) => {
-                    let fd = self.next_fd;
-                    self.next_fd += 1;
-                    self.fd_table.insert(fd, file);
-                    fd
-                }
+                Ok(file) => self.install(file),
                 Err(_) => -1,
+            }
+        }
+
+        fn open_mode(&mut self, name: &str, mode: &str) -> i64 {
+            let mut options = std::fs::OpenOptions::new();
+            let plus = mode.contains('+');
+            match mode.as_bytes().first() {
+                Some(b'r') => options.read(true).write(plus),
+                Some(b'w') => options.write(true).create(true).truncate(true).read(plus),
+                Some(b'a') => options.append(true).create(true).read(plus),
+                _ => return -22,
+            };
+            // C11 7.21.5.3p5: `x` fails when the file exists.
+            if mode.contains('x') {
+                options.create_new(true);
+            }
+            match options.open(name) {
+                Ok(file) => self.install(file),
+                Err(e) => -errno_of(&e),
+            }
+        }
+
+        fn tmpfile(&mut self) -> i64 {
+            let dir = std::env::temp_dir();
+            for k in 0..64 {
+                let name = format!("badc-tmpfile-{}-{}-{k}", std::process::id(), self.next_fd);
+                let path = dir.join(name);
+                let mut options = std::fs::OpenOptions::new();
+                options.read(true).write(true).create_new(true);
+                // Windows removes the file when its handle closes; other
+                // hosts unlink the name once the file is open.
+                #[cfg(windows)]
+                {
+                    use std::os::windows::fs::OpenOptionsExt;
+                    const FILE_FLAG_DELETE_ON_CLOSE: u32 = 0x0400_0000;
+                    options
+                        .custom_flags(FILE_FLAG_DELETE_ON_CLOSE)
+                        .share_mode(7);
+                }
+                match options.open(&path) {
+                    Ok(file) => {
+                        #[cfg(not(windows))]
+                        let _ = std::fs::remove_file(&path);
+                        return self.install(file);
+                    }
+                    Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                    Err(e) => return -errno_of(&e),
+                }
+            }
+            -17
+        }
+
+        fn time(&mut self) -> i64 {
+            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH);
+            now.map_or(-1, |d| d.as_secs() as i64)
+        }
+
+        fn elapsed_micros(&mut self) -> i64 {
+            self.started.elapsed().as_micros() as i64
+        }
+
+        fn seek(&mut self, fd: i64, offset: i64, whence: i32) -> i64 {
+            use std::io::{Seek, SeekFrom};
+            let pos = match whence {
+                0 => SeekFrom::Start(offset as u64),
+                1 => SeekFrom::Current(offset),
+                2 => SeekFrom::End(offset),
+                _ => return -1,
+            };
+            match self.fd_table.get_mut(&fd) {
+                Some(file) => file.seek(pos).map_or(-1, |p| p as i64),
+                None => -1,
             }
         }
 
@@ -161,7 +295,7 @@ mod std_host {
         fn setenv(&mut self, name: &str, value: &str, overwrite: Overwrite) {
             if overwrite == Overwrite::Force || std::env::var(name).is_err() {
                 // SAFETY: env mutation is process-global; tests must
-                // serialise via a Mutex on the variable name. The
+                // serialize via a Mutex on the variable name. The
                 // 2024 edition flags this as unsafe to surface that
                 // exposure.
                 unsafe { std::env::set_var(name, value) };
@@ -248,7 +382,7 @@ mod std_host {
         // dlopen(NULL) we return `GetModuleHandleA(NULL)` -- the
         // main process handle -- which lets `GetProcAddress` look up
         // symbols in the executable itself. POSIX's "search every
-        // loaded library" behaviour is not reproduced; callers that
+        // loaded library" behavior is not reproduced; callers that
         // need a libc symbol should `dlopen("ucrtbase.dll")`
         // explicitly. dlerror is approximated via `GetLastError +
         // FormatMessageA`.

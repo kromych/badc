@@ -35,7 +35,7 @@ python demos/nuklear/smoke.py     # the checks, at -O0 and -O
 ```
 
 `smoke.py` prints `nuklear smoke OK` and returns 0 when every check passes,
-and 1 with a line naming the failed step otherwise. It honours
+and 1 with a line naming the failed step otherwise. It honors
 `BADC=path/to/badc`.
 
 ## What the smoke does

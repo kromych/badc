@@ -55,10 +55,9 @@ Disassembly of section .text:
 
 <times3_short>:
                	mov	x1, #0xc                // =12
-               	mov	x2, #0x3                // =3
                	mov	x0, #0x1                // =1
                	sub	x1, x1, #0x1
-               	mul	x0, x0, x2
+               	add	x0, x0, x0, lsl #1
                	sxth	x0, w0
                	cbnz	w1, <addr>
                	ret

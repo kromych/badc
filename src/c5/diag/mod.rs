@@ -2,11 +2,11 @@
 //! decides its severity, and one place that prints it.
 //!
 //! A site reports through a [`Sink`], which resolves the level from the
-//! catalogue default, then the command line ([`Config`]), then the
+//! catalog default, then the command line ([`Config`]), then the
 //! diagnostic pragmas in effect at the source position ([`Control`]).
 //! Whatever survives is a [`Diagnostic`], printed by [`Diagnostic::render`].
 //!
-//! The catalogue carries the driver rows. The preprocessor, front end,
+//! The catalog carries the driver rows. The preprocessor, front end,
 //! assembler, object writer and linker rows arrive with the sites that
 //! emit them; `pedantic` has no driver row, since no command-line
 //! diagnostic is about ISO C conformance, and fills in with them.

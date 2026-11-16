@@ -41,10 +41,26 @@ pub(crate) fn run_script_link(cli: &Cli, script: &std::path::Path, inputs: Vec<L
     enum Slot {
         Ready(Vec<badc::LdsObject>),
         Lazy {
-            members: Vec<Option<badc::LdsObject>>,
+            members: Vec<Option<Lazy>>,
             pulled: Vec<badc::LdsObject>,
         },
     }
+    // A member the link may pull: the names it defines, from the symbol
+    // index -- so it is read only once pulled -- or, without one, from the
+    // member read up front.
+    struct Lazy {
+        label: String,
+        bytes: Vec<u8>,
+        names: Vec<String>,
+        read: Option<badc::LdsObject>,
+    }
+    let defined_names = |o: &badc::LdsObject| -> Vec<String> {
+        o.symbols
+            .iter()
+            .filter(|s| (s.info >> 4) != 0 && s.shndx != 0 && !s.name.is_empty())
+            .map(|s| s.name.clone())
+            .collect()
+    };
     let mut slots: Vec<Slot> = Vec::new();
     let mut have_lazy = false;
     for input in &inputs {
@@ -66,25 +82,49 @@ pub(crate) fn run_script_link(cli: &Cli, script: &std::path::Path, inputs: Vec<L
                 };
                 // Thin archive members resolve against the archive's
                 // directory.
-                let members =
-                    match badc::read_archive_at(&blob, std::path::Path::new(path).parent()) {
-                        Ok(m) => m,
+                let ar =
+                    match badc::read_indexed_archive_at(&blob, std::path::Path::new(path).parent())
+                    {
+                        Ok(a) => a,
                         Err(e) => fail(format!("error: {path}: {e}")),
                     };
-                let mut objs = Vec::new();
-                for m in members {
+                let read = |label: &str, bytes: Vec<u8>| match badc::parse_lds_object(label, bytes)
+                {
+                    Ok(o) => o,
+                    Err(e) => fail(format!("{e}")),
+                };
+                let mut index = ar.symbols.map(Vec::into_iter);
+                let mut members = Vec::new();
+                for m in ar.members {
                     let label = format!("{path}({})", m.name);
-                    match badc::parse_lds_object(&label, m.bytes) {
-                        Ok(o) => objs.push(o),
-                        Err(e) => fail(format!("{e}")),
-                    }
+                    let names = index.as_mut().map(|x| x.next().unwrap_or_default());
+                    members.push(match (*whole, names) {
+                        (false, Some(names)) => Lazy {
+                            label,
+                            bytes: m.bytes,
+                            names,
+                            read: None,
+                        },
+                        _ => {
+                            let o = read(&label, m.bytes);
+                            let names = defined_names(&o);
+                            Lazy {
+                                label,
+                                bytes: Vec::new(),
+                                names,
+                                read: Some(o),
+                            }
+                        }
+                    });
                 }
                 if *whole {
-                    slots.push(Slot::Ready(objs));
+                    slots.push(Slot::Ready(
+                        members.into_iter().filter_map(|m| m.read).collect(),
+                    ));
                 } else {
                     have_lazy = true;
                     slots.push(Slot::Lazy {
-                        members: objs.into_iter().map(Some).collect(),
+                        members: members.into_iter().map(Some).collect(),
                         pulled: Vec::new(),
                     });
                 }
@@ -92,13 +132,6 @@ pub(crate) fn run_script_link(cli: &Cli, script: &std::path::Path, inputs: Vec<L
         }
     }
     if have_lazy {
-        let defined_names = |o: &badc::LdsObject| -> Vec<String> {
-            o.symbols
-                .iter()
-                .filter(|s| (s.info >> 4) != 0 && s.shndx != 0 && !s.name.is_empty())
-                .map(|s| s.name.clone())
-                .collect()
-        };
         let mut defined: std::collections::HashSet<String> = std::collections::HashSet::new();
         let mut undefined: std::collections::HashSet<String> = std::collections::HashSet::new();
         let account = |o: &badc::LdsObject,
@@ -134,9 +167,16 @@ pub(crate) fn run_script_link(cli: &Cli, script: &std::path::Path, inputs: Vec<L
                 for m in members.iter_mut() {
                     let wanted = m
                         .as_ref()
-                        .is_some_and(|o| defined_names(o).iter().any(|n| undefined.contains(n)));
+                        .is_some_and(|l| l.names.iter().any(|n| undefined.contains(n)));
                     if wanted {
-                        let o = m.take().expect("wanted member is occupied");
+                        let l = m.take().expect("wanted member is occupied");
+                        let o = match l.read {
+                            Some(o) => o,
+                            None => match badc::parse_lds_object(&l.label, l.bytes) {
+                                Ok(o) => o,
+                                Err(e) => fail(format!("{e}")),
+                            },
+                        };
                         account(&o, &mut defined, &mut undefined);
                         pulled.push(o);
                         progress = true;

@@ -12,7 +12,7 @@
 // the comma's lhs (the `*A = ...` store), so the store never ran
 // and the byte was never written -- a silent data-corruption bug.
 //
-// The pin covers three flavours of comma in the ternary middle:
+// The pin covers three flavors of comma in the ternary middle:
 // flat-comma, parens-around-assign, parens-around-whole.
 
 #include <stdio.h>
@@ -25,14 +25,14 @@ int main(void) {
     unsigned char a[4] = {0};
     int B = rt(42);
 
-    // Flavour A: full parens around the comma expression.
+    // Flavor A: full parens around the comma expression.
     int n_a = ((unsigned int)B < 0x80u) ? (a[0] = (unsigned char)B, 1) : 99;
     if (n_a != 1 || a[0] != 42) {
         printf("FAIL A: n=%d a[0]=%d\n", n_a, a[0]);
         return 1;
     }
 
-    // Flavour B: no parens at all.
+    // Flavor B: no parens at all.
     unsigned char b[4] = {0};
     int n_b = ((unsigned int)B < 0x80u) ? b[0] = (unsigned char)B, 1 : 99;
     if (n_b != 1 || b[0] != 42) {
@@ -40,7 +40,7 @@ int main(void) {
         return 2;
     }
 
-    // Flavour C: parens around just the assign, comma at top of middle.
+    // Flavor C: parens around just the assign, comma at top of middle.
     unsigned char c[4] = {0};
     int n_c = ((unsigned int)B < 0x80u) ? (c[0] = (unsigned char)B), 1 : 99;
     if (n_c != 1 || c[0] != 42) {
@@ -48,7 +48,7 @@ int main(void) {
         return 3;
     }
 
-    // Flavour D: longer comma chain (three side effects + value).
+    // Flavor D: longer comma chain (three side effects + value).
     int x = rt(0), y = rt(0), z = rt(0);
     int n_d = (B > 0) ? (x = 1), (y = 2), (z = 3), x + y + z : -1;
     if (n_d != 6 || x != 1 || y != 2 || z != 3) {
@@ -56,7 +56,7 @@ int main(void) {
         return 4;
     }
 
-    // Flavour E: rhs branch with no side effects (control).
+    // Flavor E: rhs branch with no side effects (control).
     unsigned char e[4] = {0};
     B = rt(200);  /* >= 0x80: takes alt branch */
     int n_e = ((unsigned int)B < 0x80u) ? (e[0] = (unsigned char)B), 1 : 99;

@@ -23,7 +23,7 @@ use super::{AddrPart, Build};
 use crate::c5::CodeModel;
 use crate::c5::asm::{AsmSymDecl, AsmSymValue};
 use crate::c5::codegen::AbsAddrTarget;
-use crate::c5::layout::{round_up, write_struct};
+use crate::c5::layout::{DATA_ALIGN_MIN, congruent_at, round_up, write_struct};
 // Relocation types this writer emits. `R_AARCH64_ADR_GOT_PAGE` /
 // `R_AARCH64_LD64_GOT_LO12_NC` take a dylib-routed import's address through
 // the GOT, because the symbol binds against a shared object at load time; a
@@ -93,7 +93,7 @@ const SHT_LLVM_DEPENDENT_LIBRARIES: u32 = 0x6fff_4c04;
 //   PROLOGUE_END        (u64 entry, u64 post-prologue) `.text` offsets.
 //   EXTERN_DATA         NUL-separated names this unit takes the address of
 //                       through an undefined symbol; every undefined
-//                       reference is typed STT_NOTYPE, as gcc types its own.
+//                       reference is typed STT_NOTYPE.
 const NT_BADC_DYLIBS: u32 = 1;
 const NT_BADC_BINDING_MAP: u32 = 2;
 const NT_BADC_EXPORTS: u32 = 3;
@@ -112,6 +112,15 @@ const NT_BADC_SEH_SCOPE: u32 = 15;
 /// `(u64 entry, record)` per function: its prologue's unwind steps
 /// (`UnwindSteps::encode`).
 const NT_BADC_UNWIND: u32 = 16;
+/// `#pragma comment(linker, ...)` strings, NUL-separated.
+const NT_BADC_LINKER_DIRECTIVES: u32 = 17;
+/// `(u64 lo, u64 hi, u64 base, name NUL)` per code range carved into a named
+/// section: the other records' code offsets in `[lo, hi)` lie from `base` in
+/// that section, the rest at the same offset in `.text`.
+const NT_BADC_TEXT_CARVE: u32 = 18;
+/// `(name NUL, record)` per asm function its `.seh_*` directives describe:
+/// the function the symbol names and its unwind steps.
+const NT_BADC_SYMBOL_UNWIND: u32 = 19;
 /// The target of a `__finally` row, the handler of a row whose filter is
 /// the constant `EXCEPTION_EXECUTE_HANDLER`.
 pub(crate) const SEH_NONE: u64 = u64::MAX;
@@ -173,6 +182,9 @@ const STB_GNU_UNIQUE: u8 = 10;
 const ELFOSABI_GNU: u8 = 3;
 const SHN_COMMON: u16 = 0xfff2;
 const STV_DEFAULT: u8 = 0;
+/// The AArch64 ELF `st_other` flag of a function that may follow a variant
+/// procedure call standard (AAELF64, Symbol Table).
+pub(crate) const STO_AARCH64_VARIANT_PCS: u8 = 0x80;
 const STT_NOTYPE: u8 = 0;
 const STT_OBJECT: u8 = 1;
 const STT_FUNC: u8 = 2;
@@ -402,8 +414,7 @@ fn text_slot_rela(
 /// `__patchable_function_entries` section of its own, `SHF_LINK_ORDER` on
 /// the text section holding the function and relocated to the NOP area's
 /// first byte, so a linker dropping the function drops the record with it.
-/// gcc emits the same shape: writable, allocated, 8-aligned, one section
-/// per function.
+/// The section is writable, allocated, and 8-aligned.
 fn build_patchable_entry_sections(
     build: &Build,
     carve: &CarvePlan,
@@ -689,7 +700,7 @@ fn carve_anonymous_const_data(
             .collect(),
     );
     // Disqualify per recorded span, before merging: merging first would let
-    // one span's relocation or named overlap withdraw its neighbours, which
+    // one span's relocation or named overlap withdraw its neighbors, which
     // are separate objects.
     let carvable: Vec<(u64, u64)> = spans
         .into_iter()
@@ -706,7 +717,9 @@ fn carve_anonymous_const_data(
         })
         .collect();
     for (lo, hi) in merge(carvable) {
-        let align = 1u64 << lo.trailing_zeros().min(3);
+        // Placed congruent modulo the widest access, as the emitter folds a
+        // read of these bytes by their offset in the unit's data.
+        let align = DATA_ALIGN_MIN as u64;
         let e = carve
             .table
             .get_or_insert(RODATA_SECTION, SHT_PROGBITS, SHF_ALLOC, align)
@@ -730,44 +743,27 @@ fn plan_data_layout(
     sizes: &mut Vec<u64>,
     internal: impl Fn(alloc::string::String) -> C5Error,
 ) -> Result<DataPlan, C5Error> {
-    use crate::c5::symbol::Linkage;
-    use crate::c5::token::Token;
     let data_file_len = build.data.len() as u64;
     let bss_size = build.bss_size.max(0) as u64;
     let base_align = build.data_align.max(1) as u64;
-    if named_objs.is_empty() {
+    if named_objs.is_empty() && program.data_pad_ranges.is_empty() {
         return Ok(DataPlan::identity(data_file_len, bss_size, base_align));
     }
     let unified_len = data_file_len + bss_size;
 
     // Recorded placement alignment per object start: kept content splits at
     // these offsets so every object repacks at its own alignment.
-    let mut split_align: alloc::collections::BTreeMap<u64, u64> =
-        alloc::collections::BTreeMap::new();
-    for sym in &program.symbols {
-        if sym.class == Token::Glo as i64
-            && sym.defined_here
-            && !sym.is_alias
-            && !sym.is_thread_local
-            && matches!(sym.linkage, Linkage::External | Linkage::Internal)
-            && (sym.val as u64) < unified_len
-        {
-            let a = sym.data_align.max(1) as u64;
-            let e = split_align.entry(sym.val as u64).or_insert(a);
-            *e = (*e).max(a);
-        }
-    }
-    for &(off, a) in &program.data_align_marks {
-        if (0..unified_len as i64).contains(&off) && a > 0 {
-            let e = split_align.entry(off as u64).or_insert(a as u64);
-            *e = (*e).max(a as u64);
-        }
-    }
+    let split_align: alloc::collections::BTreeMap<u64, u64> =
+        crate::c5::layout::data_start_aligns(program, unified_len as i64)
+            .into_iter()
+            .map(|(off, a)| (off as u64, a as u64))
+            .collect();
 
-    // In-section base per named object, packed in declaration order at the
-    // member's alignment. Removal ranges leave the default sections: the
-    // object bytes, the slot-rounding slack past them, and the recorded
-    // alignment padding (`entry == usize::MAX` marks dropped padding).
+    // In-section base per named object, packed in declaration order, each
+    // congruent to its unified offset modulo its alignment. Removal ranges
+    // leave the default sections: the object bytes, the slot-rounding slack
+    // past them, and the recorded alignment padding (`entry == usize::MAX`
+    // marks dropped padding).
     let mut named_home: alloc::collections::BTreeMap<u64, (usize, u64)> =
         alloc::collections::BTreeMap::new();
     let mut removals: Vec<(u64, u64, usize)> = Vec::new();
@@ -775,7 +771,7 @@ fn plan_data_layout(
         if sizes.len() <= o.entry {
             sizes.resize(o.entry + 1, 0);
         }
-        let base = round_up(sizes[o.entry], o.align.max(1));
+        let base = congruent_at(sizes[o.entry], o.val, o.align);
         sizes[o.entry] = base + o.copy;
         named_home.insert(o.val, (o.entry, base));
         removals.push((o.val, o.val + o.copy, o.entry));
@@ -803,7 +799,7 @@ fn plan_data_layout(
     let mut spans: Vec<DataSpan> = Vec::new();
     let mut cursor_data: u64 = 0;
     let mut cursor_bss: u64 = 0;
-    let mut data_align: u64 = crate::c5::layout::DATA_ALIGN_MIN as u64;
+    let mut data_align: u64 = DATA_ALIGN_MIN as u64;
     let mut bss_align: u64 = crate::c5::layout::BSS_ALIGN_MIN as u64;
     // One past the previously placed content; padding offsets map here so a
     // one-past-the-end address stays adjacent to its object.
@@ -851,16 +847,16 @@ fn plan_data_layout(
             &mut cursor_bss
         };
         let base = if let Some(&a) = split_align.get(&pos) {
-            let a = crate::c5::layout::data_image_align(a as usize) as u64;
+            let a = a.max(1);
             if in_file {
                 data_align = data_align.max(a);
             } else {
                 bss_align = bss_align.max(a);
             }
-            round_up(*cursor, a)
+            congruent_at(*cursor, pos, a)
         } else {
-            // Anonymous content keeps its 8-byte residue.
-            *cursor + (pos as i64 - *cursor as i64).rem_euclid(8) as u64
+            // Every boundary the layout placed content on is recorded.
+            *cursor
         };
         let home = if in_file {
             DataHome::Data(base)
@@ -1008,6 +1004,8 @@ struct Names<'a> {
     file_names: Vec<&'a str>,
     weak_names: BTreeSet<&'a str>,
     visibility: BTreeMap<&'a str, SymVisibility>,
+    /// Names `.variant_pcs` marks.
+    variant_pcs: BTreeSet<&'a str>,
     local_func_idxs: Vec<usize>,
     global_func_idxs: Vec<usize>,
     func_strs: Vec<String>,
@@ -1062,14 +1060,16 @@ struct Symtab<'a> {
     first_global: u32,
     func_symidx_by_name: BTreeMap<String, u32>,
     asm_label_symidx: BTreeMap<&'a str, u32>,
+    /// These four hold code offsets ahead of the named-section carve, which
+    /// `NT_BADC_TEXT_CARVE` maps. Each function's entry and post-prologue.
     prologue_end_pairs: Vec<(u64, u64)>,
-    /// `(entry, frame path, early return)` `.text` offsets of each function
-    /// that returns ahead of its frame.
+    /// `(entry, frame path, early return)` of each function that returns
+    /// ahead of its frame.
     early_returns: Vec<(u64, u64, u64)>,
-    /// `(function, begin, end, target, handler)` `.text` offsets of each
-    /// `__try` scope-table row, [`SEH_NONE`] for an absent one.
+    /// `(function, begin, end, target, handler)` of each `__try` scope-table
+    /// row, [`SEH_NONE`] for an absent one.
     seh_rows: Vec<[u64; 5]>,
-    /// Each function's `.text` entry offset and prologue unwind steps.
+    /// Each function's entry and prologue unwind steps.
     unwind: Vec<(u64, crate::c5::codegen::UnwindSteps)>,
     alias_syms: Vec<Option<(u8, Elf64Sym)>>,
     defined_data_local_symidx: BTreeMap<&'a str, u64>,
@@ -1327,11 +1327,24 @@ impl<'a> RelocWriter<'a> {
                 .and_then(|&pc| build.pc_to_native.get(pc).copied())
                 .filter(|&off| off != usize::MAX)
         };
-        for i in 0..build.func_ent_pcs.len() {
-            let Some(name) = build.func_names.get(i) else {
-                continue;
-            };
-            let Some(sec) = fn_section.get(name.as_str()) else {
+        let count = build.func_ent_pcs.len();
+        let mut section_of: Vec<Option<&str>> = (0..count)
+            .map(|i| {
+                build
+                    .func_names
+                    .get(i)
+                    .and_then(|n| fn_section.get(n.as_str()).copied())
+            })
+            .collect();
+        // A funclet, a scope-table row's handler, goes with its function.
+        let index_at = |at: u32| (0..count).find(|&i| func_start(i) == Some(at as usize));
+        for r in &build.seh_rows {
+            if let (Some(f), Some(h)) = (index_at(r.func), r.handler.and_then(index_at)) {
+                section_of[h] = section_of[h].or(section_of[f]);
+            }
+        }
+        for (i, sec) in section_of.into_iter().enumerate() {
+            let Some(sec) = sec else {
                 continue;
             };
             let lo = func_start(i).unwrap_or(usize::MAX);
@@ -1604,8 +1617,8 @@ impl<'a> RelocWriter<'a> {
     fn place_writer_payloads(&mut self) -> Result<(), C5Error> {
         let build = self.build;
         // The system linkers read a missing `.note.GNU-stack` as a request
-        // for an executable stack. Compiled C needs none, as gcc's objects
-        // state; an assembler unit carries only the note its source names.
+        // for an executable stack. Compiled C needs none; an assembler unit
+        // carries only the note its source names.
         if !self.program.asm_unit {
             self.layout
                 .carve
@@ -1634,7 +1647,7 @@ impl<'a> RelocWriter<'a> {
             let base = self.place_in_entry(e, gnu_property_align, body.len() as u64);
             self.layout.writer_bodies.push((e, base, body));
         }
-        // `#pragma comment(lib, ...)`'s names, NUL-terminated, as clang writes them.
+        // `#pragma comment(lib, ...)`'s names, NUL-terminated, in the LLVM `.deplibs` section.
         if !self.program.default_libs.is_empty() {
             let body: Vec<u8> = (self.program.default_libs.iter())
                 .flat_map(|n| n.bytes().chain([0]))
@@ -1663,7 +1676,16 @@ impl<'a> RelocWriter<'a> {
             let base = self.place_in_entry(e, 8, tables_len);
             self.layout.jt_placement = Some((e, base));
         }
-        // Floating literals take GNU as's mergeable constant sections.
+        // Floating literals take GNU as's mergeable constant sections. An
+        // x86-64 load reaches its literal through a displacement whose addend
+        // carries -4, which a linker resolving a section-relative reference
+        // into a mergeable section reads as a place ahead of the element, so
+        // there they are plain read-only data.
+        let merge = if self.machine == Machine::Aarch64 {
+            SHF_MERGE
+        } else {
+            0
+        };
         for (k, (name, width)) in [(".rodata.cst8", 8), (".rodata.cst4", 4)]
             .into_iter()
             .enumerate()
@@ -1676,9 +1698,11 @@ impl<'a> RelocWriter<'a> {
                 .layout
                 .carve
                 .table
-                .get_or_insert(name, SHT_PROGBITS, SHF_ALLOC | SHF_MERGE, width)
+                .get_or_insert(name, SHT_PROGBITS, SHF_ALLOC | merge, width)
                 .map_err(Self::internal)?;
-            self.layout.carve.table.entries[e].entsize = width;
+            if merge != 0 {
+                self.layout.carve.table.entries[e].entsize = width;
+            }
             let base = self.place_in_entry(e, width, len);
             self.layout.literal_placements[k] = Some((e, base));
         }
@@ -1721,14 +1745,7 @@ impl<'a> RelocWriter<'a> {
     /// against, and one `STT_SECTION` per named entry.
     fn emit_section_symbols(&mut self) {
         let (program, build) = (self.program, self.build);
-        // A built-in source's label (`<runtime/runtime.c>`) names a path
-        // inside its brackets.
-        let path = &program.source_path;
-        let path = match path.strip_prefix('<').and_then(|p| p.strip_suffix('>')) {
-            Some(inner) if inner.contains('/') => inner,
-            _ => path,
-        };
-        let file_basename = crate::c5::host::path_base_name(path);
+        let file_basename = crate::c5::host::path_base_name(&program.source_path);
         self.names.file_names = if program.asm_unit {
             program.asm_file_names.iter().map(|s| s.as_str()).collect()
         } else {
@@ -1856,6 +1873,7 @@ impl<'a> RelocWriter<'a> {
             .filter_map(|s| Some((s.link_name(), s.visibility?)))
             .chain(program.asm_visibility.iter().map(|(n, v)| (n.as_str(), *v)))
             .collect();
+        names.variant_pcs = program.variant_pcs.iter().map(String::as_str).collect();
         let interposable: BTreeSet<&str> = (program.symbols.iter())
             .filter(|s| program.interposable_refs && s.is_interposable_definition())
             .map(|s| s.def_link_name())
@@ -1895,11 +1913,19 @@ impl<'a> RelocWriter<'a> {
         }
     }
 
+    /// The `st_other` of `name`: its visibility and, where `.variant_pcs`
+    /// marks it, `STO_AARCH64_VARIANT_PCS`.
     fn vis_for(&self, name: &str) -> u8 {
-        self.names
+        let vis = self
+            .names
             .visibility
             .get(name)
-            .map_or(STV_DEFAULT, |v| v.stv())
+            .map_or(STV_DEFAULT, |v| v.stv());
+        if self.names.variant_pcs.contains(name) {
+            vis | STO_AARCH64_VARIANT_PCS
+        } else {
+            vis
+        }
     }
 
     /// A hidden name is not preemptible, so the direct page-relative pair
@@ -2181,7 +2207,8 @@ impl<'a> RelocWriter<'a> {
                 self.names.asm_extern_names.push(n);
             }
         }
-        for n in program.asm_visibility.iter().map(|(n, _)| n.as_str()) {
+        let marked = program.asm_visibility.iter().map(|(n, _)| n.as_str());
+        for n in marked.chain(program.variant_pcs.iter().map(String::as_str)) {
             if self.is_unreached(n) {
                 self.names.asm_extern_names.push(n);
             }
@@ -2584,19 +2611,12 @@ impl<'a> RelocWriter<'a> {
         for k in 0..self.names.prologue_end_entries.len() {
             let (i, post_native) = self.names.prologue_end_entries[k];
             let (lo, _) = self.func_extent(i)?;
-            let (fn_shndx, fn_off) = self.text_place(lo as u64);
-            let (post_shndx, post_off) = self.text_place(post_native as u64);
-            if fn_shndx == SHIDX_TEXT && post_shndx == SHIDX_TEXT {
-                self.syms.prologue_end_pairs.push((fn_off, post_off));
-            }
+            (self.syms.prologue_end_pairs).push((lo as u64, post_native as u64));
         }
         let build = self.build;
         for e in &build.early_returns {
-            let place = |at: u32| self.text_place(u64::from(e.begin + at));
-            let [(a, entry), (b, frame), (c, exit)] = [place(0), place(e.frame), place(e.exit)];
-            if [a, b, c] == [SHIDX_TEXT; 3] {
-                self.syms.early_returns.push((entry, frame, exit));
-            }
+            let at = |d: u32| u64::from(e.begin + d);
+            (self.syms.early_returns).push((at(0), at(e.frame), at(e.exit)));
         }
         // The link reads the steps for a PE image's unwind table and for
         // `.debug_frame`.
@@ -2616,23 +2636,10 @@ impl<'a> RelocWriter<'a> {
             };
             (u.begin, steps)
         });
-        for (begin, steps) in x64.chain(a64) {
-            if let (SHIDX_TEXT, entry) = self.text_place(u64::from(begin)) {
-                self.syms.unwind.push((entry, steps));
-            }
-        }
+        (self.syms.unwind).extend(x64.chain(a64).map(|(b, steps)| (u64::from(b), steps)));
         for r in &build.seh_rows {
-            let place = |at: u32| self.text_place(u64::from(at));
-            let (target, handler) = (r.target.map(place), r.handler.map(place));
-            let at = [place(r.func), place(r.begin), place(r.end)];
-            if !(at.iter().chain(&target).chain(&handler)).all(|p| p.0 == SHIDX_TEXT) {
-                return Err(C5Error::hard(
-                    Code::OBJECT_FORMAT,
-                    "a `__try` region in a function placed outside `.text`",
-                ));
-            }
-            let [func, begin, end] = at.map(|p| p.1);
-            let [target, handler] = [target, handler].map(|p| p.map_or(SEH_NONE, |p| p.1));
+            let [target, handler] = [r.target, r.handler].map(|p| p.map_or(SEH_NONE, u64::from));
+            let [func, begin, end] = [r.func, r.begin, r.end].map(u64::from);
             self.syms.seh_rows.push([func, begin, end, target, handler]);
         }
         Ok(())
@@ -3006,8 +3013,8 @@ impl<'a> RelocWriter<'a> {
         Ok(())
     }
 
-    /// Import symbols: undefined and untyped, as gcc and clang write a
-    /// reference; global unless the declaration is weak.
+    /// Import symbols: undefined and untyped; global unless the declaration
+    /// is weak.
     fn emit_import_symbols(&mut self) {
         let build = self.build;
         for i in 0..build.imports.imports.len() {
@@ -3432,7 +3439,7 @@ impl<'a> RelocWriter<'a> {
                 fx.code_offset as u64,
                 sym,
                 addend,
-                AddrPart::Whole,
+                fx.part,
             )?;
         }
         self.relocs.text = table;
@@ -4304,6 +4311,17 @@ impl<'a> RelocWriter<'a> {
                 noted_names.push(s);
             }
         }
+        let carve = &self.layout.carve;
+        let text_carve: Vec<(u64, u64, u64, &str)> = (carve.text_ranges.iter())
+            .map(|r| {
+                (
+                    r.old_lo,
+                    r.old_hi,
+                    r.new_base,
+                    carve.table.entries[r.entry].name.as_str(),
+                )
+            })
+            .collect();
         let note = build_badc_note(
             &build.imports,
             &export_names,
@@ -4316,7 +4334,10 @@ impl<'a> RelocWriter<'a> {
             &self.syms.early_returns,
             &self.syms.seh_rows,
             &self.syms.unwind,
+            &text_carve,
+            &build.asm_unwind,
             &noted_names,
+            &self.program.linker_directives,
         );
         let (layout, relocs) = (&self.layout, &self.relocs);
         let mut shndx = ShndxMap {
@@ -4740,7 +4761,7 @@ impl<'a> RelocWriter<'a> {
         }
     }
 
-    /// `.tdata` holds the initialised slice of the TLS template and `.tbss`
+    /// `.tdata` holds the initialized slice of the TLS template and `.tbss`
     /// the zero-fill remainder, both `SHF_TLS` so the linker groups them
     /// into `PT_TLS`; `.rela.tdata` follows `.tbss` so the fixed indices
     /// below it stay put.
@@ -4906,9 +4927,9 @@ impl<'a> RelocWriter<'a> {
         }
     }
 
-    /// `.comment`: non-alloc, `SHF_MERGE | SHF_STRINGS` with a byte entsize
-    /// as gcc and clang flag theirs, so a linker merging many badc objects
-    /// folds identical lines into one copy.
+    /// `.comment`: non-alloc, `SHF_MERGE | SHF_STRINGS` with a byte entsize,
+    /// so a linker merging many badc objects folds identical lines into one
+    /// copy.
     fn emit_comment_section(&mut self) {
         let out = &mut self.out;
         if let Some(body) = out.comment.take() {
@@ -5120,7 +5141,10 @@ fn build_badc_note(
     early_returns: &[(u64, u64, u64)],
     seh_rows: &[[u64; 5]],
     unwind: &[(u64, crate::c5::codegen::UnwindSteps)],
+    text_carve: &[(u64, u64, u64, &str)],
+    symbol_unwind: &[(String, crate::c5::codegen::UnwindSteps)],
     extern_data_names: &[&str],
+    linker_directives: &[String],
 ) -> Vec<u8> {
     let mut out: Vec<u8> = Vec::new();
 
@@ -5269,6 +5293,32 @@ fn build_badc_note(
         push_note_record(&mut out, NT_BADC_UNWIND, &desc);
     }
 
+    if !symbol_unwind.is_empty() {
+        let mut desc: Vec<u8> = Vec::new();
+        for (name, steps) in symbol_unwind {
+            desc.extend_from_slice(name.as_bytes());
+            desc.push(0);
+            steps.encode(&mut desc);
+        }
+        push_note_record(&mut out, NT_BADC_SYMBOL_UNWIND, &desc);
+    }
+
+    let rows = !(prologue_ends.is_empty()
+        && early_returns.is_empty()
+        && seh_rows.is_empty()
+        && unwind.is_empty());
+    if rows && !text_carve.is_empty() {
+        let mut desc: Vec<u8> = Vec::new();
+        for &(lo, hi, base, name) in text_carve {
+            for w in [lo, hi, base] {
+                desc.extend_from_slice(&w.to_le_bytes());
+            }
+            desc.extend_from_slice(name.as_bytes());
+            desc.push(0);
+        }
+        push_note_record(&mut out, NT_BADC_TEXT_CARVE, &desc);
+    }
+
     if !imports.data_bindings.is_empty() {
         let mut desc: Vec<u8> = Vec::new();
         for (local, host, _dylib_index) in &imports.data_bindings {
@@ -5280,7 +5330,7 @@ fn build_badc_note(
         push_note_record(&mut out, NT_BADC_COPY_RELOC, &desc);
     }
 
-    // Record 12: names whose address this unit materialises through an
+    // Record 12: names whose address this unit materializes through an
     // undefined symbol, NUL-separated. Typed STT_NOTYPE in the symbol table
     // like every other undefined reference, so the distinction lives only
     // here.
@@ -5291,6 +5341,12 @@ fn build_badc_note(
             desc.push(0);
         }
         push_note_record(&mut out, NT_BADC_EXTERN_DATA, &desc);
+    }
+    if !linker_directives.is_empty() {
+        let desc: Vec<u8> = (linker_directives.iter())
+            .flat_map(|d| d.bytes().chain([0]))
+            .collect();
+        push_note_record(&mut out, NT_BADC_LINKER_DIRECTIVES, &desc);
     }
     out
 }

@@ -30,11 +30,11 @@ Disassembly of section .text:
                	fmov	d8, d0
                	fmov	d9, d1
                	adrp	x0, <page>
-               	ldr	x20, [x0, #0x18]
+               	ldr	x20, [x0, #0x10]
                	adrp	x0, <page>
-               	ldr	d10, [x0, #0x58]
+               	ldr	d10, [x0, #0x50]
                	adrp	x0, <page>
-               	ldr	x21, [x0, #0x90]
+               	ldr	x21, [x0, #0x80]
                	fmov	d0, d8
                	fmov	d1, d9
                	blr	x21
@@ -80,9 +80,9 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
                	adrp	x1, <page>
-               	ldr	x20, [x1, #0x18]
+               	ldr	x20, [x1, #0x10]
                	adrp	x1, <page>
-               	ldr	d8, [x1, #0x58]
+               	ldr	d8, [x1, #0x50]
                	blr	x0
                	fmov	d1, #2.00000000
                	fmul	d1, d8, d1
@@ -118,9 +118,9 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x40]
                	add	x29, sp, #0x40
                	adrp	x0, <page>
-               	ldr	x20, [x0, #0x18]
+               	ldr	x20, [x0, #0x10]
                	adrp	x0, <page>
-               	ldr	d8, [x0, #0x58]
+               	ldr	d8, [x0, #0x50]
                	sub	x0, x29, #0x20
                	add	x1, x29, #0x10
                	mov	x16, x0
@@ -177,11 +177,11 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x30]
                	add	x29, sp, #0x30
                	adrp	x0, <page>
-               	ldr	x20, [x0, #0x18]
+               	ldr	x20, [x0, #0x10]
                	adrp	x0, <page>
-               	ldr	d8, [x0, #0x58]
+               	ldr	d8, [x0, #0x50]
                	adrp	x0, <page>
-               	ldr	x21, [x0, #0x98]
+               	ldr	x21, [x0, #0x88]
                	blr	x21
                	fmov	d0, #2.00000000
                	fmul	d0, d8, d0
@@ -207,9 +207,9 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
                	adrp	x1, <page>
-               	ldr	x20, [x1, #0x18]
+               	ldr	x20, [x1, #0x10]
                	adrp	x1, <page>
-               	ldr	d8, [x1, #0x58]
+               	ldr	d8, [x1, #0x50]
                	blr	x0
                	fmov	d0, #2.00000000
                	fmul	d0, d8, d0
@@ -229,7 +229,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
                	adrp	x1, <page>
-               	ldr	d0, [x1, #0x58]
+               	ldr	d0, [x1, #0x50]
                	fmov	d1, #2.00000000
                	fmul	d0, d0, d1
                	fcvtzs	x1, d0
@@ -237,11 +237,11 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	str	x1, [x0, #0x90]
+               	str	x1, [x0, #0x80]
                	adrp	x0, <page>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	str	x1, [x0, #0x98]
+               	str	x1, [x0, #0x88]
                	fmov	d0, #0.37500000
                	scvtf	d1, x20
                	fadd	d8, d0, d1
@@ -262,9 +262,9 @@ Disassembly of section .text:
                	fmov	d0, #0.75000000
                	fmov	d1, #0.50000000
                	adrp	x1, <page>
-               	ldr	x21, [x1, #0x18]
+               	ldr	x21, [x1, #0x10]
                	adrp	x1, <page>
-               	ldr	d9, [x1, #0x58]
+               	ldr	d9, [x1, #0x50]
                	blr	x0
                	fmov	d1, #2.00000000
                	fmul	d1, d9, d1
@@ -303,9 +303,9 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
                	adrp	x1, <page>
-               	ldr	x21, [x1, #0x18]
+               	ldr	x21, [x1, #0x10]
                	adrp	x1, <page>
-               	ldr	d8, [x1, #0x58]
+               	ldr	d8, [x1, #0x50]
                	blr	x0
                	fmov	d0, #2.00000000
                	fmul	d0, d8, d0

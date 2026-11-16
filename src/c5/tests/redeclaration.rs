@@ -1,5 +1,5 @@
 //! Redeclarations of an identifier with linkage (C99 6.7p4, 6.2.7, 6.9p3):
-//! conflicts are errors, the GNU forms GCC accepts warn, the rest compose.
+//! conflicts are errors, the GNU C forms warn, the rest compose.
 
 use super::{Compiler, Vm};
 use crate::c5::diag::Code;
@@ -40,10 +40,9 @@ fn a_block_scope_extern_objects_address_binds_a_later_definition() {
     }
 }
 
-/// gcc's rule, which mingw-w64's gcc and clang for the windows-gnu triples
-/// follow on the PE targets, makes an enum with no negative enumerator
-/// compatible with `unsigned int` (C99 6.7.2.2p4), and a `mode` attribute
-/// narrows that unsigned type.
+/// gcc's rule, which the windows-gnu toolchains follow on the PE targets,
+/// makes an enum with no negative enumerator compatible with `unsigned int`
+/// (C99 6.7.2.2p4), and a `mode` attribute narrows that unsigned type.
 #[test]
 fn an_enum_takes_the_type_gcc_gives_on_the_pe_targets() {
     for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
@@ -134,8 +133,8 @@ fn function_redeclarations_of_another_type_are_rejected() {
             "now:      int (float)",
         ),
         ("int f(char c);\nint f();\n", "now:      int ()"),
-        // GCC and clang take a type before its promotion from a prototype
-        // ahead of an old-style definition only.
+        // The GNU C extension takes a type before its promotion from a
+        // prototype ahead of an old-style definition only.
         (
             "int f(c) short c; { return c; }\nint f(short);\n",
             "now:      int (short)",
@@ -231,9 +230,8 @@ fn object_redeclarations_of_another_type_are_rejected() {
 fn declarations_with_linkage_meet_past_a_binding_without_one() {
     // C99 6.2.2p2, p4: every declaration of an identifier with linkage
     // denotes one entity, so a function and an object declared at block
-    // scope meet across a typedef or enumerator of the name, in any order,
-    // as gcc and clang diagnose; a GNU global register variable takes the
-    // name too.
+    // scope meet across a typedef or enumerator of the name, in any order;
+    // a GNU global register variable takes the name too.
     let kind = "`big` redeclared as a different kind of symbol";
     for src in [
         "long a(void) { long big(int); return big(5); }\ntypedef short big;\n\
@@ -299,13 +297,13 @@ fn block_scope_declarations_meet_the_other_declarations() {
 
 #[test]
 fn a_function_keeps_one_calling_convention() {
-    // The calling convention is part of a function's type, as gcc and clang
-    // take it: the first declaration's, in whatever scope it is, which a
-    // later declaration names again or leaves unnamed; naming another, the
-    // target's own included, through an attribute, a typedef or typeof, is
-    // rejected (C99 6.2.7p2). `F` names the convention foreign to the
-    // target and `N` the target's own; every call and the definition of `f`
-    // follow the convention a row accepts.
+    // The calling convention is part of a function's type: the first
+    // declaration's, in whatever scope it is, which a later declaration
+    // names again or leaves unnamed; naming another, the target's own
+    // included, through an attribute, a typedef or typeof, is rejected
+    // (C99 6.2.7p2). `F` names the convention foreign to the target and `N`
+    // the target's own; every call and the definition of `f` follow the
+    // convention a row accepts.
     use crate::c5::codegen::CallConv;
     use crate::c5::ir::Inst;
     #[derive(Clone, Copy)]
@@ -463,7 +461,7 @@ fn a_function_keeps_one_calling_convention() {
             "N int n(int); F int f(int); __typeof__(n) f;",
             DeclaredForeign,
         ),
-        // gcc: a convention a later declaration named stays on the type.
+        // A convention a later declaration named stays on the type.
         (
             "F int f(int); int n(int); N int n(int); int n(int); __typeof__(n) f;",
             DeclaredForeign,
@@ -516,7 +514,7 @@ fn a_function_keeps_one_calling_convention() {
 
 #[test]
 fn a_function_type_names_one_calling_convention() {
-    // gcc rejects a function type naming two calling conventions: in one
+    // A function type naming two calling conventions is rejected: in one
     // attribute list, the specifiers and the declarator, a declarator's
     // group, or over a function or pointer typedef or typeof that names
     // one. `F` names the convention foreign to the target, `N` its own.
@@ -759,14 +757,14 @@ fn compatible_redeclarations_compose() {
 #[test]
 fn gnu_redeclarations_warn() {
     for (src, now) in [
-        // GCC keeps `void` for an implicit `int` definition of a function
-        // declared `void`, once the implicit `int` is lowered to a warning.
+        // An implicit `int` definition of a function declared `void` keeps
+        // `void`, once the implicit `int` is lowered to a warning.
         (
             "#pragma GCC diagnostic warning \"-Wimplicit-int\"\n\
              void f(void);\nf(void) { }\nint main(void) { f(); return 0; }\n",
             "now:      int (void)",
         ),
-        // GCC lets the prototype's `char` stand for the promoted `int` of an
+        // The prototype's `char` stands for the promoted `int` of an
         // old-style definition.
         (
             "int f(char);\nint f(c) char c; { return c - 1; }\nint main(void) { return f(1); }\n",
@@ -975,11 +973,11 @@ fn dllimport_follows_gcc_on_redeclarations_and_misuse() {
 }
 
 /// C99 6.2.2p7: an identifier declared with both external and internal
-/// linkage is undefined, which gcc 16 and clang 22 reject; a later
-/// `extern`, or a function declaration with no storage class, takes the
-/// earlier linkage (6.2.2p4-5). For a windows-msvc triple clang, as MSVC,
-/// lets a `static` declaration make an external one internal, and still
-/// rejects an external object after a `static` one.
+/// linkage is undefined and is rejected; a later `extern`, or a function
+/// declaration with no storage class, takes the earlier linkage
+/// (6.2.2p4-5). On the PE targets, as under MSVC, a `static` declaration
+/// makes an external one internal, and an external object after a `static`
+/// one is still rejected.
 #[test]
 fn an_identifier_declared_with_both_linkages_is_rejected() {
     for (src, needle) in [

@@ -7,7 +7,7 @@ For every `.c` file under `tests/fixtures/c/`, this writes three files:
   tests/snapshots/asm/<name>.x64.asm        -- linux-x64 disassembly
   tests/snapshots/asm/<name>.aarch64.asm    -- linux-aarch64 disassembly
 
-The asm is normalised through `objdump --disassemble --no-show-raw-insn
+The asm is normalized through `objdump --disassemble --no-show-raw-insn
 --no-addresses` so per-emit byte-offset shifts don't churn the snapshot
 for cosmetic reasons. Cross-arch ELFs are produced via `badc
 --target=linux-{x64,aarch64}` and disassembled with the host objdump
@@ -93,7 +93,7 @@ OBJDUMP_FLAGS = ["--disassemble", "--no-show-raw-insn", "--no-addresses"]
 # unchanged. Each regex below rewrites one form to a stable token so a
 # diff line surfaces only when the actual mnemonic / operand mix
 # changes.
-ASM_NORMALISATION_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
+ASM_NORMALIZATION_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
     # `callq 0x4002dc <.text+0xbc>` and similar: branch / call operand
     # followed by an `<symbol+offset>` annotation. Both halves shift in
     # lock-step on any earlier reflow. Both halves sit on one line: the
@@ -184,8 +184,8 @@ ASM_NORMALISATION_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
 )
 
 
-def normalise_asm(text: str) -> str:
-    for pattern, replacement in ASM_NORMALISATION_RULES:
+def normalize_asm(text: str) -> str:
+    for pattern, replacement in ASM_NORMALIZATION_RULES:
         text = pattern.sub(replacement, text)
     return text
 
@@ -241,7 +241,7 @@ def emit_ssa(badc: Path, src: Path, dst: Path, tmp_bin: Path, root: Path) -> boo
     text = proc.stderr.decode("utf-8", errors="replace")
     text = "\n".join(
         line for line in text.splitlines()
-        if not line.startswith("info: produced a Linux/")
+        if "[B7009]" not in line
     )
     text = text.replace(str(src.relative_to(root)), src.name).replace(str(src), src.name)
     if text and not text.endswith("\n"):
@@ -362,7 +362,7 @@ def emit_asm(badc: Path, src: Path, dst: Path, tmp_bin: Path, target: str, root:
     # snapshot every run because the temp dir name varies. Replace the
     # path with the snapshot's stable name.
     text = text.replace(str(tmp_bin), dst.stem)
-    text = normalise_asm(text)
+    text = normalize_asm(text)
     dst.write_text(text)
     return True
 
@@ -616,14 +616,20 @@ FUNCTION_LABEL_RE = re.compile(r"^<[^>]+>:")
 
 # What counts as a memory access, and which of those accesses are the
 # entry/exit traffic a function pays for the callee-saved registers it
-# touches. The saved sets exclude the frame record (aarch64 x29/x30,
-# x86_64 %rbp), which any frame carries whatever the allocator does with
-# the rest of the bank.
+# touches: the stores of those registers in its prologue, the run of
+# frame-record, stack-pointer and save instructions that opens it. A store
+# of such a register later in the body is the value it holds, not a save.
+# The saved sets exclude the frame record (aarch64 x29/x30, x86_64 %rbp),
+# which any frame carries whatever the allocator does with the rest of
+# the bank.
 ARCH_ACCESS: dict[str, dict[str, re.Pattern[str]]] = {
     "aarch64": {
         "mem": re.compile(r"^(ld|st|prfm)"),
         "saved": re.compile(r"\b(x19|x2[0-8]|d[89]|d1[0-5])\b"),
-        "stack": re.compile(r"\bsp\b"),
+        # A large frame's prologue addresses some saves through x29.
+        "stack": re.compile(r"\b(sp|x29)\b"),
+        "frame": re.compile(r"^(stp|str)\s+x29, x30|^str\s+x30|^mov\s+x29, sp|"
+                            r"^(add|sub)\s+(x29|sp), sp"),
     },
     "x64": {
         # A memory operand is a base/index form or a RIP-relative one.
@@ -631,6 +637,7 @@ ARCH_ACCESS: dict[str, dict[str, re.Pattern[str]]] = {
         "mem": re.compile(r"\((?:%[a-z0-9]+)?[,%]|<rip>"),
         "saved": re.compile(r"%(rbx|ebx|bx|bl|r1[2-5][dwb]?)\b"),
         "stack": re.compile(r"\((%rsp|%rbp)\)|\(%rsp,|0x[0-9a-f]+\(%(rsp|rbp)\)"),
+        "frame": re.compile(r"^push\w*\s+%rbp|^mov\w*\s+%rsp, %rbp|^(sub|add)\w*\s+\$\S+, %rsp"),
     },
 }
 
@@ -640,36 +647,41 @@ def access_counts(text: str, arch: str) -> tuple[int, int, int, int]:
     callee-saved register to the stack in one disassembly."""
     rules = ARCH_ACCESS[arch]
     funcs = insts = mem = saves = 0
+    prologue = False
     for line in text.splitlines():
         if FUNCTION_LABEL_RE.match(line):
             funcs += 1
+            prologue = True
             continue
         m = MNEMONIC_RE.match(line)
         if not m:
             continue
         mnemonic, operands = m.group(1), m.group(2)
         insts += 1
+        # A save is a store of a callee-saved register to the stack.
+        if arch == "x64":
+            src, _, dst = operands.partition(",")
+            save = (mnemonic.startswith("push") and bool(rules["saved"].search(operands))) or (
+                mnemonic.startswith("mov") and bool(rules["saved"].search(src))
+                and bool(rules["stack"].search(dst)))
+        else:
+            save = (mnemonic.startswith("st") and bool(rules["saved"].search(operands))
+                    and bool(rules["stack"].search(operands)))
+        if prologue and not save and not rules["frame"].match(f"{mnemonic} {operands}"):
+            prologue = False
+        if prologue and save:
+            saves += 1
         if arch == "x64":
             # push / pop / leave name no operand but access the stack.
             if mnemonic.startswith(("push", "pop", "leave")):
                 mem += 1
-                if mnemonic.startswith("push") and rules["saved"].search(operands):
-                    saves += 1
                 continue
             if mnemonic.startswith(("lea", "nop")) or not rules["mem"].search(operands):
                 continue
             mem += 1
-            src, _, dst = operands.partition(",")
-            if (mnemonic.startswith("mov") and rules["saved"].search(src)
-                    and rules["stack"].search(dst)):
-                saves += 1
             continue
-        if not rules["mem"].match(mnemonic):
-            continue
-        mem += 1
-        if (mnemonic.startswith("st") and rules["stack"].search(operands)
-                and rules["saved"].search(operands)):
-            saves += 1
+        if rules["mem"].match(mnemonic):
+            mem += 1
     return funcs, insts, mem, saves
 
 
@@ -699,9 +711,34 @@ def access_counts(text: str, arch: str) -> tuple[int, int, int, int]:
 # change the number in the commit that spends it. A fixture marked
 # `// snapshot-budget: exempt`, whose functions keep values live across
 # calls by design, takes no part; its own snapshots pin its code.
+#
+# x64 0.536 -> 0.545: splicing callees aligned above 16 removed 25 functions,
+# most of them 256-bit intrinsic bodies with no saves, and their test drivers
+# keep the operands live across the checks they call (0.5338 -> 0.5405);
+# the corpus lost 651 instructions and 346 memory accesses.
+#
+# aarch64 0.292 -> 0.298: splicing a small self-recursive function into
+# itself keeps each level's values across the recursive call left in it,
+# in the callee-saved registers its depth bound counts; 27 recursive
+# functions grew (0.2910 -> 0.2971), and fib runs at 0.56 of its time on
+# the aarch64 box, binary_trees at 0.91.
+#
+# aarch64 0.298 -> 0.302: inlined bodies take frame slots of their own, so
+# sroa splits the vector-structure objects of the NEON structure load and
+# store driver; its main keeps 11 more values across the checks it calls
+# and makes 597 fewer memory accesses (0.2964 -> 0.3004).
+#
+# Since 2026-11-15 the count takes the prologue's saves alone. The figures
+# above are of the earlier count, which took a store of a callee-saved
+# register to the stack anywhere in a function: on aarch64 it missed the
+# saves a large frame addresses through x29 and took stack-argument
+# stores, and on x86_64 it took body stores through %rsp and %rbp. Over
+# the corpus at 34fab95c37 the new count reads 0.2556 (aarch64) and
+# 0.2922 (x86_64) where the old one read 0.2965 and 0.3738, so each
+# ceiling is scaled by that ratio, keeping its headroom.
 SAVED_PER_FUNCTION: dict[str, float] = {
-    "aarch64": 0.292,
-    "x64": 0.536,
+    "aarch64": 0.261,
+    "x64": 0.426,
 }
 
 BUDGET_EXEMPT_RE = re.compile(r"^//\s*snapshot-budget:\s*exempt\b", re.MULTILINE)
@@ -809,7 +846,7 @@ def self_test() -> int:
     near = "\tleaq\t0x2f(%rip), %rax           # 0x401030 <x>\n"
     far = "\tleaq\t0x12345(%rip), %rax        # 0x413348 <x>\n"
     want = "\tleaq\t<rip>, %rax # <addr>\n"
-    assert normalise_asm(near) == normalise_asm(far) == want, normalise_asm(near)
+    assert normalize_asm(near) == normalize_asm(far) == want, normalize_asm(near)
     runs = [
         ("  400540: 04 04 04 07 07 07 07 07         ........\n",
          "  400560: 04 04 04 07 07 07 07 07         ........\n"),
@@ -817,9 +854,9 @@ def self_test() -> int:
          " 10005b8: b8 fe ff ff  \t.word\t0xfffffeb8\n"),
     ]
     for before, after in runs:
-        got = normalise_asm(before)
-        assert got == normalise_asm(after) and got.startswith("  <addr>: "), got
-    assert normalise_asm("\tmovl\t$0x1, %eax\n") == "\tmovl\t$0x1, %eax\n"
+        got = normalize_asm(before)
+        assert got == normalize_asm(after) and got.startswith("  <addr>: "), got
+    assert normalize_asm("\tmovl\t$0x1, %eax\n") == "\tmovl\t$0x1, %eax\n"
     assert snapshot_arch("f.aarch64.asm") == "aarch64"
     assert snapshot_arch("f.x64.asm") == "x64"
 
@@ -835,6 +872,10 @@ def self_test() -> int:
          "\tldp\tx20, x21, [sp], #0x20\n\tret\n"
          "\tldp\tx20, x21, [sp], #0x20\n\tret\n",
          (1, 8, 5, 1)),
+        ("aarch64",
+         "<f>:\n\tstp\tx29, x30, [sp, #-0x10]!\n\tmov\tx29, sp\n"
+         "\tstur\tx19, [x29, #-0x8]\n\tldur\tx19, [x29, #-0x8]\n\tret\n",
+         (1, 5, 3, 1)),
         ("x64",
          "<f>:\n\tpushq\t%rbp\n\tpushq\t%rbx\n\tmovq\t%r12, 0x8(%rsp)\n"
          "\tleaq\t(%rdi,%rcx), %rax\n\tmovq\t(%rax), %rdx\n"

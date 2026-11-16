@@ -33,9 +33,8 @@ Disassembly of section .text:
                	movq	%r11, -0x8(%rbp)
                	xorl	%r11d, %r11d
                	movl	$0x3, -0x28(%rbp)
-               	leaq	-0x20(%rbp), %rcx
                	xorl	%eax, %eax
-               	movb	$0x3, (%rcx,%rax)
+               	movb	$0x3, -0x20(%rbp,%rax)
                	incq	%rax
                	cmpl	$0x10, %eax
                	jl	<addr>

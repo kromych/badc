@@ -6,7 +6,7 @@
 // struct's size and alignment, an array's stride, and the placement of
 // every object of the type: file-scope, static local, automatic, a compound
 // literal and the body's copy of a by-value parameter. The single-byte
-// neighbours keep the running data offset and the frame cursor off every
+// neighbors keep the running data offset and the frame cursor off every
 // wide boundary. Returns 0, distinct non-zero per failure.
 
 typedef short v4hi __attribute__((vector_size(8)));

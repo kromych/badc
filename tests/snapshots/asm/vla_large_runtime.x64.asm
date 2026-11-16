@@ -63,10 +63,9 @@ Disassembly of section .text:
                	incq	%rax
                	cmpq	%rcx, %rax
                	jl	<addr>
-               	cmpq	%rcx, %rdx
-               	jne	<addr>
                	movl	$0x2a, %eax
+               	movl	$0x1, %esi
+               	cmpq	%rcx, %rdx
+               	cmovneq	%rsi, %rax
                	leave
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>

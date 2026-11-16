@@ -33,20 +33,10 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	movl	<rip>, %ecx # <addr>
-               	cmpl	$0x3, %ecx
-               	je	<addr>
-               	movl	$0x2, %eax
-               	retq
                	leaq	<rip>, %rcx # <addr>
                	movb	$0x9, <rip> # <addr>
                	testl	$0xfff, %ecx            # imm = 0xFFF
                	je	<addr>
-               	retq
-               	movsbq	<rip>, %rax # <addr>
-               	cmpl	$0x9, %eax
-               	je	<addr>
-               	movl	$0x4, %eax
                	retq
                	leaq	<rip>, %rax # <addr>
                	testb	$0x3f, %al

@@ -33,7 +33,9 @@ backends, the linker, DWARF, and the `tests/cli_*.rs` suites that run the
 
 `python3 scripts/cargo_test.py --features full` runs the same tests and also
 fails a test binary that exits 0 before reporting every test it announced,
-which `cargo test` lets pass. CI and the local gate run the tests this way.
+which `cargo test` lets pass. A test still running 30 minutes after libtest
+names it as slow stops the run's process group and fails it, naming the test.
+CI and the local gate run the tests this way.
 
 A release build, `cargo test --release --features full`, adds a few tests that
 are too slow in a debug build: calls with large stack-argument areas, and the
@@ -72,7 +74,8 @@ blocks, and in `src/c5/tests/`, one module per subject. The main modules:
 A backend module runs only where its images can run: `native` and `dwarf` on
 macOS, `native_elf` on Linux ARM64, `native_elf_x64` on Linux x86-64,
 `native_pe_x64` on Windows x64, `native_pe_arm64` on Windows ARM64, and `jit`
-on Linux and on macOS ARM64. The two PE modules also run under Wine with
+on Linux, macOS ARM64, and Windows x64 and ARM64, where it runs the PE tables
+less the fixtures `src/c5/tests/jit.rs` lists. The two PE modules also run under Wine with
 `BADC_RUN_WINE=1`. The expected exit codes are in
 `src/c5/tests/fixture_tables.rs`; each was measured from gcc and clang builds
 of the fixture.
@@ -88,9 +91,9 @@ to get right:
 
 * `c4.c`: the original c4 compiler, which badc compiles and which runs itself.
 * `fma_numeric_kernels.c`: Horner polynomial evaluation, a dense matrix
-  product and a fourth-order Runge-Kutta step, checked within a tolerance at
+  product, and a fourth-order Runge-Kutta step, checked within a tolerance at
   `-O`, where badc fuses multiply-adds, and at `-O0`, where it does not.
-* `fma_contraction.c`: the `a*b+c`, `a*b-c` and `c-a*b` contraction shapes,
+* `fma_contraction.c`: the `a*b+c`, `a*b-c`, and `c-a*b` contraction shapes,
   and C99 `fma` and `fmaf`.
 * `aapcs64_variadic_host_abi.c`, `sysv_variadic_host_abi.c`: variadic calls
   under the AArch64 and x86-64 calling conventions.
@@ -112,7 +115,13 @@ shows up there as a diff to review.
 python3 scripts/snapshots.py                  # regenerate every snapshot
 python3 scripts/snapshots.py --only c4        # regenerate one fixture's
 python3 scripts/snapshots.py --check          # regenerate, fail on any difference
+python3 scripts/snapshots.py --budget         # the access ratios and the save ceiling
 ```
+
+`--budget` reports the corpus's memory-access ratios and the callee-saved
+saves in each function's prologue, and fails when the saves per function
+exceed the architecture's ceiling (`SAVED_PER_FUNCTION`); `--check` ends with
+the same test. A fixture with a `// snapshot-budget: exempt` line is left out.
 
 The script prefers `llvm-objdump`, and the committed snapshots were written
 with it; GNU objdump's text differs. The `post-commit` hook regenerates the
@@ -144,16 +153,16 @@ python3 scripts/csmith_fuzz.py --minutes 5 --badc target/release/badc
 ```
 
 `scripts/csmith_fuzz.py` generates C programs with csmith. It builds each
-with a reference compiler (`clang`, else `gcc`, else `cc`), with `badc -O0`
-and with `badc -O`, runs the three binaries and compares the checksums they
+with a reference compiler (`clang`, else `gcc`, else `cc`), with `badc -O0`,
+and with `badc -O`; runs the three binaries; and compares the checksums they
 print. csmith's programs have no undefined behavior, so a disagreement, a
-crash or a failed build is a compiler defect. Every badc build runs with
+crash, or a failed build is a compiler defect. Every badc build runs with
 `--verify-ssa`.
 
 The reference compiler decides which cases count:
 
 * A case is skipped unless the reference, without optimization, builds it,
-  finishes within a second and prints a checksum. Some csmith programs never
+  finishes within a second, and prints a checksum. Some csmith programs never
   terminate, and this drops them.
 * A runtime finding is confirmed by rebuilding the case with the reference at
   `-O2`. A case on which the two reference builds disagree is dropped.
@@ -212,10 +221,12 @@ x86-64 and AArch64 instruction encodings with the system assembler's.
 
 ## Benchmarks
 
-`tests/perf/` holds ten benchmark programs, each of which prints its own
-run time. `tests/perf/run.py` builds each with every compiler it finds, runs
-each binary three times, and prints a Markdown table per program: the median
-run time, the binary size and the ratio to `badc -O`.
+`tests/perf/` holds twenty-one benchmark programs, each of which prints its
+own run time. `tests/perf/run.py` builds each with every compiler it finds,
+runs each binary three times -- on Linux pinned to one CPU of the highest
+`cpu_capacity` when the cores differ -- and prints a Markdown table per
+program: the median run time, the binary size, and the ratio to `badc -O`.
+Every optimized leg, `badc -O` included, passes `-DNDEBUG`.
 
 ```sh
 cargo build --release --features full     # run.py takes target/release/badc, or $BADC
@@ -235,7 +246,7 @@ The compilers it looks for:
 
 A compiler it does not find is skipped with an `info:` line. The other six
 programs need sources that the demos fetch: run `python3 demos/<name>/setup.py`
-for `tweetnacl`, `miniz`, `stb`, `sqlite3` and `quickjs`. Binaries go to
+for `tweetnacl`, `miniz`, `stb`, `sqlite3`, and `quickjs`. Binaries go to
 `tests/perf/build/`, which git ignores. `--json PATH` also writes the run as
 JSON. The script exits 1 if any build or run fails.
 
@@ -266,9 +277,16 @@ build comparisons from the Linux runners.
 | `kernel` | Linux x86-64 and ARM64 | a Linux `defconfig` kernel compiled and linked by badc and booted on the badc-built QEMU; see [the kernel page](linux-kernel.md) |
 
 "All five" are `ubuntu-latest`, `ubuntu-24.04-arm`, `macos-latest`,
-`windows-latest` and `windows-11-arm`. The runners have no display, so the
+`windows-latest`, and `windows-11-arm`. The runners have no display, so the
 GUI demos only build their programs. [`demos/`](../demos/) says what each
 demo exercises.
+
+A push to `master` whose tree a pull request's run already tested and passed
+runs none of these: the `tree verified by a pull request` job finds that run
+through the artifact `fmt + clippy` names after each pull request run's tree,
+and `perf records of the verified tree` files that run's perf records under
+the pushed commit. A merge onto a `master` that moved since the pull request's
+last run gives another tree, and the full run follows.
 
 ## Before a push
 
@@ -280,7 +298,7 @@ into `.git/hooks/`:
 * `pre-push` rejects non-ASCII bytes in source files, then runs
   `cargo fmt --check`, clippy with `-D warnings` with and without
   `--features full` and for each other Rust target installed,
-  `cargo build --no-default-features --lib` and
+  `cargo build --no-default-features --lib`, and
   `cargo check --all-features --lib`.
 * `post-commit` regenerates `tests/snapshots/` and prints what changed, to
   be folded into the commit.
@@ -298,7 +316,7 @@ python3 scripts/validate_local_boxes.py \
 
 `NAME=HOST:PATH:KIND` names a checkout reached over ssh, where `KIND` is
 `linux` or `windows`. The script adds a git remote called `NAME`, pushes the
-commit to it and checks it out there. `NAME=macos` runs in the host's own
+commit to it, and checks it out there. `NAME=macos` runs in the host's own
 working tree; macOS is the only Mach-O target. By default the script gates
 the committed `HEAD` and refuses a tree with uncommitted changes;
 `--allow-dirty` gates the working tree instead.
@@ -306,6 +324,7 @@ the committed `HEAD` and refuses a tree with uncommitted changes;
 | step | Linux | Windows | macOS |
 |---|---|---|---|
 | `cargo clippy --all-targets --features full -- -D warnings` | yes | | |
+| `scripts/harness_self_tests.py`, as CI's `fmt + clippy` | yes | | |
 | release build, then `scripts/cargo_test.py` in release and in debug | yes | yes | yes |
 | the library tests in release with `BADC_MAX_GPR=2 BADC_MAX_FPR=2` and `--features "codegen_test full"`, as CI's `pressure` jobs | yes | | |
 | the gating demos, run concurrently by `scripts/run_demos.py` | yes | yes | yes |
@@ -314,10 +333,11 @@ the committed `HEAD` and refuses a tree with uncommitted changes;
 | `demos/linux/verify.py --linker badc` over the pinned `defconfig` kernel: compile, link and boot | yes | | |
 
 The gating demos are `GATING_DEMOS` in the script, with the reason for each.
-At this commit they are Tcl, edk2, QEMU at `-O0` and at `-O`, BearSSL,
+At this commit they are OpenSSL on Linux, one configuration per
+architecture alternating between runs (`OPENSSL_ASSIGNMENTS`), Tcl, edk2, QEMU at `-O0` and at `-O`, BearSSL,
 SQLite, Lua, miniz, Monocypher, stb, TweetNaCl, QuickJS, raylib, curl,
 libmill, libdill, coroutines, nasm, bzip2, kissfft, gui_hello, nt_loader,
-the demo kernel, TinyCC, chibicc, uemacs and picocom; each runs on the
+the demo kernel, TinyCC, chibicc, uemacs, and picocom; each runs on the
 systems it supports. A machine without `qemu-system-<arch>` compiles and links
 the kernel without booting it, and says so in its summary.
 
@@ -328,5 +348,7 @@ the kernel without booting it, and says so in its summary.
 | `--no-demos` | skip the demos |
 | `--demo-jobs N` | run at most N demos at a time (default 4); every demo still runs |
 | `--nested-kvm` | add a kernel boot under KVM in which the badc-built kernel runs a guest on the badc-built QEMU |
+| `--openssl-assignment 0\|1\|repeat` | run that OpenSSL assignment, or the last one again, and leave the alternation state |
+| `--openssl-plan` | print each architecture's next OpenSSL configuration and exit |
 
 A push whose gate skipped a step has no coverage from that step.

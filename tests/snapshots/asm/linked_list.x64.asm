@@ -31,31 +31,26 @@ Disassembly of section .text:
                	pushq	%r12
                	pushq	%rbx
                	movl	$0x10, %edi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %rbx
                	movq	$0x0, (%rbx)
                	movq	$0x0, 0x8(%rbx)
                	movl	$0x10, %edi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %r12
                	movq	$0x1, (%r12)
                	movq	%rbx, 0x8(%r12)
                	movl	$0x10, %edi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %rbx
                	movq	$0x2, (%rbx)
                	movq	%r12, 0x8(%rbx)
                	movl	$0x10, %edi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %r12
                	movq	$0x3, (%r12)
                	movq	%rbx, 0x8(%r12)
                	movl	$0x10, %edi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	$0x4, (%rax)
                	movq	%r12, 0x8(%rax)

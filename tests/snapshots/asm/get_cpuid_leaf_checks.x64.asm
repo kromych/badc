@@ -54,8 +54,7 @@ Disassembly of section .text:
                	cpuid
                	testl	%eax, %eax
                	je	<addr>
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpl	%r11d, %eax
+               	cmpl	$-0x1, %eax
                	jae	<addr>
                	xorl	%eax, %eax
                	cpuid

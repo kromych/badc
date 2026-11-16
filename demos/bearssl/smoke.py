@@ -3,7 +3,7 @@
 
 Builds every .c file under demos/bearssl/src + the hand-written
 driver and the upstream test/test_crypto.c through badc, in the
-per-TU and archive flavours (-O / no-O each). Returns 0 on success,
+per-TU and archive flavors (-O / no-O each). Returns 0 on success,
 non-zero with a diagnostic on failure.
 
 Two driver stages:

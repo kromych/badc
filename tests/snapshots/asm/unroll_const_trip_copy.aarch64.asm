@@ -46,14 +46,12 @@ Disassembly of section .text:
                	ldr	x3, [x2, #0x10]
                	add	x1, x1, x3, lsl #1
                	ldr	x3, [x2, #0x18]
-               	mov	x17, #0x3               // =3
-               	mul	x3, x3, x17
+               	add	x3, x3, x3, lsl #1
                	add	x1, x1, x3
                	ldr	x3, [x2, #0x20]
                	add	x1, x1, x3, lsl #2
                	ldr	x3, [x2, #0x28]
-               	mov	x17, #0x5               // =5
-               	mul	x3, x3, x17
+               	add	x3, x3, x3, lsl #2
                	add	x1, x1, x3
                	ldr	x3, [x2, #0x30]
                	mov	x17, #0x6               // =6

@@ -7,6 +7,8 @@
 
 #pragma once
 
+#include <sys/types.h>
+
 #define O_RDONLY 0
 #define O_WRONLY 1
 #define O_RDWR   2
@@ -192,9 +194,9 @@
 // its SDK does; Windows keeps a trailing __pad[].
 #ifdef __APPLE__
 struct flock {
-    long  l_start;     /* offset  0 */
-    long  l_len;       /* offset  8 */
-    int   l_pid;       /* offset 16 */
+    off_t l_start;     /* offset  0 */
+    off_t l_len;       /* offset  8 */
+    pid_t l_pid;       /* offset 16 */
     short l_type;      /* offset 20 */
     short l_whence;    /* offset 22 */
 };
@@ -204,9 +206,9 @@ struct flock {
     short l_whence;    /* offset  2 */
     /* Linux inserts 4 bytes of padding so off_t l_start is 8-aligned. */
     int   __pad0;      /* offset  4 */
-    long  l_start;     /* offset  8 */
-    long  l_len;       /* offset 16 */
-    int   l_pid;       /* offset 24 */
+    off_t l_start;     /* offset  8 */
+    off_t l_len;       /* offset 16 */
+    pid_t l_pid;       /* offset 24 */
 #ifndef __linux__
     char  __pad[64];
 #endif
@@ -227,7 +229,13 @@ struct flock {
 #define AT_REMOVEDIR        0x0200
 #define AT_EACCESS          0x0200
 #define AT_SYMLINK_FOLLOW   0x0400
+#define AT_NO_AUTOMOUNT     0x0800
 #define AT_EMPTY_PATH       0x1000
+// statx(2) synchronization modes.
+#define AT_STATX_SYNC_TYPE    0x6000
+#define AT_STATX_SYNC_AS_STAT 0x0000
+#define AT_STATX_FORCE_SYNC   0x2000
+#define AT_STATX_DONT_SYNC    0x4000
 #endif
 
 #ifdef __APPLE__
@@ -274,5 +282,20 @@ int fallocate(int fd, int mode, long offset, long len);
 #define SYNC_FILE_RANGE_WAIT_BEFORE 1
 #define SYNC_FILE_RANGE_WRITE       2
 #define SYNC_FILE_RANGE_WAIT_AFTER  4
-int sync_file_range(int fd, long long offset, long long nbytes, unsigned int flags);
+int sync_file_range(int fd, off64_t offset, off64_t nbytes, unsigned int flags);
+#endif
+
+// creat(path, mode) is open(path, O_WRONLY | O_CREAT | O_TRUNC, mode) (POSIX).
+#ifdef __APPLE__
+#pragma binding(libc::creat, "_creat")
+#elif defined(__linux__)
+#pragma binding(libc::creat, "creat")
+#elif defined(_WIN32)
+#pragma dylib(msvcrt, "msvcrt.dll")
+#pragma binding(msvcrt::creat, "_creat")
+#endif
+#ifdef _WIN32
+int creat(const char *path, int mode);
+#else
+int creat(const char *path, mode_t mode);
 #endif

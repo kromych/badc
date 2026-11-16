@@ -65,58 +65,34 @@ Disassembly of section .text:
                	retq
 
 <via_scale>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	orq	$0x1, %rdi
-               	popq	%rbp
                	jmp	<addr>
 
 <via_widen>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	incq	%rdi
-               	popq	%rbp
                	jmp	<addr>
 
 <via_halve>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	xorq	$0x2, %rdi
-               	popq	%rbp
                	jmp	<addr>
 
 <via_sum>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	decq	%rsi
-               	popq	%rbp
                	jmp	<addr>
 
 <via_pick>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	subq	$0x5, %rsi
-               	popq	%rbp
                	jmp	<addr>
 
 <via_pick_u>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	incq	%rsi
-               	popq	%rbp
                	jmp	<addr>
 
 <via_byte>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	popq	%rbp
                	jmp	<addr>
 
 <via_half>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	andq	$0xffff, %rdi           # imm = 0xFFFF
-               	popq	%rbp
                	jmp	<addr>
 
 <main>:

@@ -28,6 +28,13 @@ Disassembly of section .text:
 <main>:
                	xorl	%esi, %esi
                	movq	$-0x2, %rdx
+               	jmp	<addr>
+               	imulq	$0x1f, %rax, %rax
+               	addq	%rcx, %rax
+               	addq	%rax, %rsi
+               	incq	%rdx
+               	cmpl	$0xe, %edx
+               	jge	<addr>
                	movq	$-0x1, %rax
                	xorl	%ecx, %ecx
                	imulq	$0x21, %rsi, %rdi
@@ -537,17 +544,10 @@ Disassembly of section .text:
                	movl	$0xd, %esi
                	movl	$0x11, %ecx
                	jmp	<addr>
-               	imulq	$0x1f, %rax, %rax
-               	addq	%rcx, %rax
-               	addq	%rax, %rsi
-               	incq	%rdx
-               	cmpl	$0xe, %edx
-               	jl	<addr>
-               	movabsq	$-0x2eb506b7b9cbd8a0, %r11 # imm = 0xD14AF94846342760
-               	movq	%rsi, %rax
-               	cmpq	%r11, %rsi
-               	jne	<addr>
                	xorl	%eax, %eax
+               	movl	$0x1, %ecx
+               	movabsq	$-0x2eb506b7b9cbd8a0, %r11 # imm = 0xD14AF94846342760
+               	movq	%rsi, %rdx
+               	cmpq	%r11, %rsi
+               	cmovneq	%rcx, %rax
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>

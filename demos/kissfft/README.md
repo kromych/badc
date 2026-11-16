@@ -40,7 +40,7 @@ python demos/kissfft/smoke.py    # builds + runs impulse / roundtrip / real-sine
 builds pass all three scenarios within tolerance. Anything
 else returns 1 with a diagnostic on stderr.
 
-`smoke.py` honours `BADC=path/to/badc`.
+`smoke.py` honors `BADC=path/to/badc`.
 
 ## Build defines
 

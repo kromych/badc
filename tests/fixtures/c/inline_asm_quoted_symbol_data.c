@@ -3,13 +3,19 @@
  * symbol (not string data). The addressable-record shape: the section
  * collects symbol addresses and is discarded from an executable. */
 
+#if defined(__APPLE__)
+#define CSYM(name) "_" name
+#else
+#define CSYM(name) name
+#endif
+
 long external_key;
 
 int record(int v) {
     __asm__(".pushsection .discard.addressable,\"aw\"\n"
             ".balign 8\n"
-            ".quad \"external_key\"\n"
-            ".quad external_key\n"
+            ".quad \"" CSYM("external_key") "\"\n"
+            ".quad " CSYM("external_key") "\n"
             ".popsection\n" : : : "memory");
     return v + 1;
 }

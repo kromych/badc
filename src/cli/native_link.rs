@@ -75,6 +75,7 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
         cli,
         reloc_opts,
         pool_slot: None,
+        efi: false,
     };
     // `#pragma entrypoint(<name>)` names the entry function (C99 5.1.2.2.1), the
     // first unit's winning; without one `program_entry` chooses.
@@ -100,6 +101,7 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
         compile_native_tu(src, None, &cfg)
     });
     let mut source_objs: Vec<Option<badc::NativeObject>> = Vec::with_capacity(sources.len());
+    let mut ssa_dumps: Vec<String> = Vec::with_capacity(sources.len());
     for (i, mut tu) in tus.into_iter().enumerate() {
         if entry_override.is_none() {
             entry_override = tu.entry;
@@ -108,6 +110,7 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
             subsystem_override = tu.subsystem;
         }
         source_auto_includes.push(tu.auto_includes);
+        ssa_dumps.push(core::mem::take(&mut tu.ssa_dump));
         tu.obj.source = sources[i].clone();
         source_objs.push(Some(tu.obj));
     }
@@ -138,10 +141,28 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
             .unwrap_or("__c5_entry")
             .to_string()
     });
-    // gcc's order: the startup runtime where crt1.o stands, then the inputs.
+    // Link order: the startup runtime where crt1.o stands, then the inputs.
     let mut slots = vec![Slot::Fixed(Vec::new())];
     let mut source_slots = vec![0; sources.len()];
+    // Compiled resource files, which link.exe takes for the image's `.rsrc`.
+    let mut resources = Vec::new();
+    // A module-definition file's `LIBRARY` name, for the export directory.
+    let mut def_image_name: Option<String> = None;
+    let mut vcrt = false;
     for input in ordered {
+        if let LinkInput::Object(path) = &input
+            && let Some(res) = read_resource_input(path, cli.target)
+        {
+            resources.push(res);
+            continue;
+        }
+        if let LinkInput::Object(path) = &input
+            && let Some((obj, name)) = read_definition_input(path, cli.target)
+        {
+            def_image_name = def_image_name.or(name);
+            slots.push(Slot::Fixed(vec![obj]));
+            continue;
+        }
         let slot = match input {
             LinkInput::Source(i) => {
                 source_slots[i] = slots.len();
@@ -149,6 +170,7 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
             }
             LinkInput::Object(path) => Slot::Fixed(vec![read_object_input(&path, cli.target)]),
             LinkInput::Archive { path, whole } => {
+                vcrt |= is_static_vc_runtime(&path);
                 let (members, imports) = read_archive_members(&path, cli.target);
                 for lib in imports {
                     shared_libs.push(lib);
@@ -173,6 +195,18 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
         };
         slots.push(slot);
     }
+    // The delay-load helper joins as `/INCLUDE:` would make it.
+    if !cli.link.delay_load.is_empty() {
+        slots.push(Slot::Fixed(vec![badc::delay_load_root(target_machine(
+            cli.target,
+        ))]));
+    }
+    // ld64 checks a bundle's references against its loader as against a
+    // library on the command line.
+    if let Some(path) = &cli.link.bundle_loader {
+        shared_libs.push(read_bundle_loader(path, cli.target));
+        slots.push(Slot::Shared(shared_libs.len() - 1));
+    }
     stats.mark("parse");
     if entry_override.is_none() && cli.mode != Mode::SharedLibrary {
         entry_override = program_entry(&mut slots, cli.target).map(str::to_string);
@@ -184,16 +218,35 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
     {
         subsystem_override = Some(badc::Subsystem::Windows);
     }
+    embedded.efi = matches!(
+        subsystem_override,
+        Some(
+            badc::Subsystem::EfiApplication
+                | badc::Subsystem::EfiBootServiceDriver
+                | badc::Subsystem::EfiRuntimeDriver
+                | badc::Subsystem::EfiRom
+        )
+    );
     if let Some(lib) = target_libc.as_mut()
         && !loads_user_mode_crt(cli, subsystem_override)
     {
         lib.drop_default_dll();
     }
+    // The startup runtime calls the C runtime the link's own libraries supply
+    // when they supply the UCRT's startup interface (ucrt.lib, ucrtbase.dll).
+    let ucrt = cli.target.binary_format() == badc::BinaryFormat::Pe
+        && (shared_libs.iter()).any(|l| l.exports.contains("_configure_narrow_argv"));
+    let vcrt = vcrt && cli.target.binary_format() == badc::BinaryFormat::Pe;
     let mut runtime = Vec::new();
-    embedded.push_runtime(entry_override.as_deref(), subsystem_override, &mut runtime);
+    let runtime_dump = embedded.push_runtime(
+        entry_override.as_deref(),
+        subsystem_override,
+        (ucrt, vcrt),
+        &mut runtime,
+    );
     slots[0] = Slot::Fixed(runtime);
     stats.mark("runtime");
-    rebind_auto_includes(
+    let recompiled = rebind_auto_includes(
         &cfg,
         &mut embedded,
         &mut slots,
@@ -202,6 +255,14 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
         &sources,
         &mut stats,
     );
+    for (i, dump) in recompiled {
+        ssa_dumps[i] = dump;
+    }
+    // Each unit's dump is that of the compile the link keeps, then the
+    // runtime's.
+    for dump in ssa_dumps.iter().chain([&runtime_dump]) {
+        eprint!("{dump}");
+    }
     let (native_objs, archive_inclusions) = select_archive_members(
         &mut embedded,
         slots,
@@ -240,6 +301,8 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
             entry: entry_override.as_deref(),
             subsystem: subsystem_override,
             first_source: sources.first().map(|s| s.as_str()).unwrap_or("a"),
+            resources: &resources,
+            library: def_image_name.as_deref(),
         },
         &mut stats,
     );
@@ -283,25 +346,30 @@ struct EmbeddedSources<'a> {
     reloc_opts: badc::NativeOptions,
     /// The slot the pool joined; it is compiled at most once per link.
     pool_slot: Option<usize>,
+    /// The image is a UEFI one: the pool compiles with `__BADC_EFI__`.
+    efi: bool,
 }
 
 impl EmbeddedSources<'_> {
     /// Compile one embedded source to relocatable bytes: the same
     /// compile and emit chain as a file, with no filesystem read.
-    /// `dump` clears `--dump-ssa` for a speculative compile.
+    /// `dump` clears `--dump-ssa` for a speculative compile; the dump text
+    /// comes back with the bytes.
     fn compile(
         &self,
         label: &str,
         src: String,
         extra: &[(&str, &str)],
         dump: bool,
-    ) -> Result<Vec<u8>, badc::C5Error> {
+    ) -> Result<(Vec<u8>, String), badc::C5Error> {
         let cli = self.cli;
         // The embedded runtime gates its sections on macros the
         // driver sets per image: `__BADC_C5_START__`
         // (an entry stub is emitted), `__BADC_WIN_WINMAIN__`
         // (WinMain-shaped entry), `__BADC_WIN_WIDE__` (wide
-        // `wmain` / `wWinMain` entry).
+        // `wmain` / `wWinMain` entry), `__BADC_WIN_UCRT__` (the link
+        // supplies the UCRT), `__BADC_WIN_VCRT__` (the link names the
+        // static VC runtime).
         let defines = (extra.iter()).map(|(k, v)| (k.to_string(), v.to_string()));
         let copts = (embedded_compile_options(cli, label))
             .with_defines(defines.collect())
@@ -309,18 +377,22 @@ impl EmbeddedSources<'_> {
         let program = Compiler::with_options(src, cli.target, copts).compile()?;
         let mut opts = self.reloc_opts.clone().for_embedded_sources();
         opts.dump_ssa &= dump;
-        badc::emit_native_with_options_owned(program, cli.target, opts)
+        badc::emit_native_reporting(program, cli.target, opts, None).map(|e| (e.image, e.ssa_dump))
     }
 
     /// Compile the startup runtime for this image and append its
     /// objects. The runtime source compiles to nothing unless one of
     /// the gate macros below is set.
+    /// The `--dump-ssa` text of the runtime's units comes back, for the
+    /// link to print after its own units'.
     fn push_runtime(
         &self,
         entry_override: Option<&str>,
         subsystem_override: Option<badc::Subsystem>,
+        (ucrt, vcrt): (bool, bool),
         objs: &mut Vec<badc::NativeObject>,
-    ) {
+    ) -> String {
+        let mut dumps = String::new();
         let links_crt = loads_user_mode_crt(self.cli, subsystem_override);
         // The startup section (`__c5_entry`, `__c5_exit`, `environ`)
         // links only when the writer emits an entry stub -- not into
@@ -350,13 +422,19 @@ impl EmbeddedSources<'_> {
                 _ => {}
             }
         }
+        if ucrt {
+            runtime_defines.push(("__BADC_WIN_UCRT__", "1"));
+        }
+        if vcrt && emits_start_stub {
+            runtime_defines.push(("__BADC_WIN_VCRT__", "1"));
+        }
         // An installed runtime source (`<badc-home>/lib/<name>`) replaces
         // the embedded body on the header overlay's terms: the unit keeps
-        // the bare `<runtime/<name>>` label, so the DWARF unit name, the
-        // line table and the link map carry no path of the build machine.
+        // the embedded source's label, so the DWARF unit name, the line
+        // table and the link map carry no path of the build machine.
         let runtime_dir = self.cli.badc_home.as_ref().map(|h| h.join("lib"));
         for (name, body) in badc::embedded_runtime().iter() {
-            let label = format!("<runtime/{name}>");
+            let label = badc::embedded_source_label("runtime", name, self.cli.target);
             let installed = runtime_dir.as_ref().map(|d| d.join(name));
             let src = match &installed {
                 Some(p) if p.is_file() => match std::fs::read_to_string(p) {
@@ -371,7 +449,7 @@ impl EmbeddedSources<'_> {
                 },
                 _ => body.to_string(),
             };
-            let bytes = self
+            let (bytes, dump) = self
                 .compile(&label, src, &runtime_defines, true)
                 .unwrap_or_else(|e| {
                     eprint_error("", &e);
@@ -383,6 +461,7 @@ impl EmbeddedSources<'_> {
                     }
                     std::process::exit(1);
                 });
+            dumps.push_str(&dump);
             match badc::parse_native_elf(&bytes) {
                 Ok(mut o) => {
                     o.source = label.clone();
@@ -394,6 +473,7 @@ impl EmbeddedSources<'_> {
                 }
             }
         }
+        dumps
     }
 
     /// Compiler-runtime helpers (a libgcc / compiler-rt subset) and the
@@ -406,19 +486,26 @@ impl EmbeddedSources<'_> {
     /// The pool joins `slots` as its last archive.
     fn push_pool(&mut self, slots: &mut Vec<Slot>, stats: &mut LinkStats) {
         self.pool_slot = Some(slots.len());
+        let target = self.cli.target;
+        let label = |dir, name| badc::embedded_source_label(dir, name, target);
         let sources: Vec<(String, &str)> = (badc::embedded_compiler_rt().iter())
-            .map(|(name, body)| (format!("<compiler-rt/{name}>"), *body))
-            .chain(
-                (badc::embedded_libc().iter())
-                    .map(|(name, body)| (format!("<libc/{name}>"), *body)),
-            )
+            .map(|(name, body)| (label("compiler-rt", name), *body))
+            .chain((badc::embedded_libc().iter()).map(|(name, body)| (label("libc", name), *body)))
             .collect();
         // Each source compiles alone; the objects join in source order.
         let this = &*self;
+        let extra: &[(&str, &str)] = if self.efi {
+            &[("__BADC_EFI__", "1")]
+        } else {
+            &[]
+        };
         let compiled: Vec<_> = std::thread::scope(|scope| {
             let jobs: Vec<_> = (sources.iter())
                 .map(|(label, body)| {
-                    scope.spawn(move || this.compile(label, body.to_string(), &[], false))
+                    scope.spawn(move || {
+                        this.compile(label, body.to_string(), extra, false)
+                            .map(|(bytes, _)| bytes)
+                    })
                 })
                 .collect();
             (jobs.into_iter())
@@ -459,6 +546,75 @@ fn parse_input_object(bytes: &[u8], label: String, target: badc::Target) -> badc
     }
     o.source = label;
     o
+}
+
+/// A compiled resource file's bytes, when the input is one: a PE image
+/// takes it into `.rsrc`, and another image refuses it.
+fn read_resource_input(path: &str, target: badc::Target) -> Option<Vec<u8>> {
+    use std::io::Read;
+    let mut head = [0u8; 32];
+    std::fs::File::open(path).ok()?.read_exact(&mut head).ok()?;
+    if !badc::is_resource_file(&head) {
+        return None;
+    }
+    let bytes = std::fs::read(path).ok()?;
+    if target.binary_format() != badc::BinaryFormat::Pe {
+        eprint_diagnostic(format!(
+            "badc: error: `{path}` is a compiled resource file, which only a PE image takes"
+        ));
+        std::process::exit(1);
+    }
+    Some(bytes)
+}
+
+/// A module-definition file's exports as an object, and its image name, when
+/// the input is one (by its `.def` suffix): a PE image takes it, as
+/// link.exe's `/DEF:` does, and another image refuses it.
+fn read_definition_input(
+    path: &str,
+    target: badc::Target,
+) -> Option<(badc::NativeObject, Option<String>)> {
+    let is_def = std::path::Path::new(path)
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("def"));
+    if !is_def {
+        return None;
+    }
+    let fail = |why: String| -> ! {
+        eprint_diagnostic(format!("badc: error: `{path}`: {why}"));
+        std::process::exit(1);
+    };
+    if target.binary_format() != badc::BinaryFormat::Pe {
+        fail("a module-definition file applies to a PE image".to_string());
+    }
+    let text = std::fs::read_to_string(path).unwrap_or_else(|e| fail(e.to_string()));
+    let (mut obj, name) = badc::module_definition(&text, target_machine(target))
+        .unwrap_or_else(|e| fail(e.to_string()));
+    obj.source = path.to_string();
+    Some((obj, name))
+}
+
+/// Read the executable `-bundle_loader` names, whose exports a bundle
+/// binds to the main executable.
+fn read_bundle_loader(path: &std::path::Path, target: badc::Target) -> badc::SharedLibrary {
+    let fail = |why: String| -> ! {
+        eprint_diagnostic(format!(
+            "badc: error: -bundle_loader `{}`: {why}",
+            path.display()
+        ));
+        std::process::exit(1);
+    };
+    let bytes = std::fs::read(path).unwrap_or_else(|e| fail(e.to_string()));
+    let mut lib = badc::parse_mach_o_loader(&bytes).unwrap_or_else(|e| fail(e.to_string()));
+    if lib.machine != super::inputs::target_machine(target) {
+        fail(format!(
+            "an executable for {}; the link targets {}",
+            super::inputs::machine_label(lib.machine),
+            super::inputs::machine_label(super::inputs::target_machine(target)),
+        ));
+    }
+    lib.soname = path.display().to_string();
+    lib
 }
 
 /// Read and parse a `.o` input.
@@ -565,11 +721,11 @@ fn read_archive_members(
             }
             continue;
         }
-        // ranlib spells a Mach-O name with the leading underscore the reader
-        // drops, badc's archiver as the reader does: an entry stands for both.
+        // An index entry spells a Mach-O symbol as the file does: it stands
+        // for the name the reader gives the symbol, and for itself.
         let names = if badc::is_mach_o_object(&member_bytes) {
-            let both = |n: String| [n.strip_prefix('_').map(str::to_string), Some(n)];
-            names.into_iter().flat_map(both).flatten().collect()
+            let both = |n: String| [badc::mach_o_symbol_name(&n).into_owned(), n];
+            names.into_iter().flat_map(both).collect()
         } else {
             names
         };
@@ -722,10 +878,10 @@ fn program_entry(slots: &mut [Slot], target: badc::Target) -> Option<&'static st
 }
 
 /// A definition anywhere in the link satisfies a call to a library
-/// function, as under gcc and clang. A unit whose auto-included header
-/// binds such a function to its library is compiled again with that
-/// binding dropped and the same headers included, so the call keeps the
-/// header's declaration and resolves to the link's definition.
+/// function. A unit whose auto-included header binds such a function to
+/// its library is compiled again with that binding dropped and the same
+/// headers included, so the call keeps the header's declaration and
+/// resolves to the link's definition.
 fn rebind_auto_includes(
     cfg: &CompileCfg,
     embedded: &mut EmbeddedSources,
@@ -734,13 +890,14 @@ fn rebind_auto_includes(
     source_auto_includes: &[Vec<badc::AutoInclude>],
     sources: &[String],
     stats: &mut LinkStats,
-) {
+) -> Vec<(usize, String)> {
     let bound: Vec<&str> = (source_auto_includes.iter().flatten())
         .filter(|a| a.bound)
         .map(|a| a.name.as_str())
         .collect();
+    let mut recompiled = Vec::new();
     if bound.is_empty() {
-        return;
+        return recompiled;
     }
     // The scan folds unpulled pool members into `defined_fns`, so the
     // on-demand sources join the link here, as its last archive.
@@ -791,6 +948,7 @@ fn rebind_auto_includes(
         match res {
             Ok(mut tu) => {
                 tu.obj.source = sources[i].clone();
+                recompiled.push((i, tu.ssa_dump));
                 slots[source_slots[i]] = Slot::Fixed(vec![tu.obj]);
             }
             Err(()) => {
@@ -799,6 +957,7 @@ fn rebind_auto_includes(
             }
         }
     }
+    recompiled
 }
 
 /// What archive selection knows as it walks the inputs: names defined so
@@ -835,6 +994,11 @@ impl Selection {
         for (name, _) in &o.import_dylib_map {
             self.shared.insert(name.clone());
         }
+        // A `__try` scope table names the language handler.
+        const HANDLER: &str = "__C_specific_handler";
+        if !o.seh_rows.is_empty() && !self.defined.contains(HANDLER) {
+            (self.undefined.entry(HANDLER.to_string())).or_insert_with(|| o.source.clone());
+        }
         for (name, alt) in &o.alternate_names {
             self.alternates.insert(name.clone(), alt.clone());
         }
@@ -848,6 +1012,8 @@ impl Selection {
             } else if s.binding == 1
                 && !self.defined.contains(&s.name)
                 && !self.shared.contains(&s.name)
+                && !(self.target.binary_format() == badc::BinaryFormat::Pe
+                    && badc::pe_link_supplies_tls_support(&s.name))
             {
                 self.undefined
                     .entry(s.name.clone())
@@ -868,8 +1034,9 @@ impl Selection {
 
     /// Pull the members of the archives at `span` that define a name
     /// still undefined, until a pass over all of them pulls none. A
-    /// member is pulled on its strong section-resident definitions, and
-    /// read first when the archive's index lists a name still undefined.
+    /// member is pulled on its strong section-resident definitions and its
+    /// COFF alias weak externals, and read first when the archive's index
+    /// lists a name still undefined.
     fn pull(&mut self, slots: &mut [Slot], span: &[usize]) {
         loop {
             let mut progress = false;
@@ -880,7 +1047,7 @@ impl Selection {
                 for member in members.iter_mut() {
                     member.read_if(self.target, |n| self.undefined.contains_key(n));
                     let wanted = member.object().and_then(|o| {
-                        o.symbols.iter().find_map(|s| {
+                        let defined = o.symbols.iter().find_map(|s| {
                             (s.binding == 1
                                 && !matches!(
                                     s.section,
@@ -888,7 +1055,13 @@ impl Selection {
                                 )
                                 && self.undefined.contains_key(&s.name))
                             .then(|| s.name.clone())
-                        })
+                        });
+                        let aliased = || {
+                            (o.weak_aliases.iter())
+                                .find(|n| self.undefined.contains_key(*n))
+                                .cloned()
+                        };
+                        defined.or_else(aliased)
                     });
                     if let Some(symbol) = wanted {
                         let Member::Read(o) = core::mem::replace(member, Member::Pulled) else {
@@ -992,12 +1165,14 @@ fn select_archive_members(
     // them -- matching a system linker, where the implicit C library
     // sits after the archives on the line.
     // An import-address slot asks for its name, which the check covers.
+    // A UEFI image's language handler is its own (`__BADC_EFI__`).
+    let own = |n: &str| embedded.efi && n == "__C_specific_handler";
     if embedded.pool_slot.is_none()
         && !sel.undefined.keys().all(|n| {
             n.starts_with("__imp_")
                 || badc::link_resolves_symbol(n)
                 || shared_libs.iter().any(|l| l.exports.contains(n))
-                || target_libc.as_mut().is_some_and(|l| l.admit(n))
+                || (!own(n) && target_libc.as_mut().is_some_and(|l| l.admit(n)))
         })
     {
         embedded.push_pool(&mut slots, stats);
@@ -1022,6 +1197,7 @@ fn select_archive_members(
         }
     }
     yield_pool_definitions(&mut native_objs, pool);
+    bind_alternates(&mut native_objs, &sel, shared_libs);
     // Whatever the selection left undefined is what the target's C
     // library has to cover for the link to resolve it as an import.
     // Weak references count: a system linker binds one the implicit
@@ -1051,7 +1227,7 @@ fn select_archive_members(
             let label = "<copies>";
             let object = embedded
                 .compile(label, src, &[], false)
-                .and_then(|bytes| badc::parse_native_elf(&bytes));
+                .and_then(|(bytes, _)| badc::parse_native_elf(&bytes));
             match object {
                 Ok(mut o) => {
                     o.source = label.to_string();
@@ -1068,6 +1244,51 @@ fn select_archive_members(
         }
     }
     (native_objs, sel.inclusions)
+}
+
+/// A reference to a name nothing defines or exports binds to its COFF
+/// alternate (a weak external's default or a `/alternatename:`), followed
+/// transitively, when the alternate is defined or a shared library exports
+/// it, as link.exe resolves one; `__imp_X` stands for an export `X`.
+fn bind_alternates(
+    objs: &mut [badc::NativeObject],
+    sel: &Selection,
+    shared_libs: &[badc::SharedLibrary],
+) {
+    if sel.alternates.is_empty() {
+        return;
+    }
+    let exported = |n: &str| shared_libs.iter().any(|l| l.exports.contains(n));
+    let resolved = |n: &str| {
+        sel.defined.contains(n) || exported(n) || n.strip_prefix("__imp_").is_some_and(exported)
+    };
+    let mut bound: hashbrown::HashMap<&str, &str> = hashbrown::HashMap::new();
+    for name in sel.alternates.keys().filter(|n| !resolved(n)) {
+        let mut alt = name.as_str();
+        for _ in 0..sel.alternates.len() {
+            match sel.alternates.get(alt) {
+                Some(next) if !resolved(alt) => alt = next,
+                _ => break,
+            }
+        }
+        if resolved(alt) {
+            bound.insert(name, alt);
+        }
+    }
+    for o in objs.iter_mut() {
+        for s in &mut o.symbols {
+            if s.section == badc::NativeSymSection::Undef
+                && let Some(alt) = bound.get(s.name.as_str())
+            {
+                s.name = alt.to_string();
+            }
+        }
+        for n in &mut o.extern_data_names {
+            if let Some(alt) = bound.get(n.as_str()) {
+                *n = alt.to_string();
+            }
+        }
+    }
 }
 
 /// A pulled on-demand source's definition of a name the program defines is
@@ -1105,10 +1326,7 @@ fn pull_default_libraries(
     if let Some(root) = &cli.sysroot {
         dirs.extend(super::paths::sysroot_library_paths(cli.target, root));
     }
-    if cli.target.binary_format() == badc::BinaryFormat::Pe {
-        let lib = std::env::var("LIB").unwrap_or_default();
-        dirs.extend(lib.split(';').filter(|d| !d.is_empty()).map(str::to_string));
-    }
+    dirs.extend(super::paths::pe_lib_env_paths(cli.target));
     let mut searched = std::collections::HashSet::<String>::new();
     loop {
         let named: Vec<String> = (slots.iter())
@@ -1155,6 +1373,20 @@ fn pull_default_libraries(
 }
 
 /// The MSVC C runtime's libraries, static and DLL, release and debug.
+/// Whether the archive at `path` is the static VC runtime, `libvcruntime`
+/// (`libvcruntimed` for debug), whose initialization the startup runs.
+fn is_static_vc_runtime(path: &str) -> bool {
+    let stem = std::path::Path::new(path)
+        .file_stem()
+        .and_then(|s| s.to_str());
+    stem.is_some_and(|s| {
+        matches!(
+            s.to_ascii_lowercase().as_str(),
+            "libvcruntime" | "libvcruntimed"
+        )
+    })
+}
+
 fn is_c_runtime_library(name: &str) -> bool {
     let name = name.to_ascii_lowercase();
     let stem = name.strip_suffix(".lib").unwrap_or(&name);
@@ -1182,6 +1414,11 @@ struct ImageInputs<'a> {
     subsystem: Option<badc::Subsystem>,
     /// Names the default output path when `-o` is absent.
     first_source: &'a str,
+    /// Compiled resource files for a PE image's `.rsrc`.
+    resources: &'a [Vec<u8>],
+    /// A module-definition file's `LIBRARY` name, which the export
+    /// directory takes over the output's.
+    library: Option<&'a str>,
 }
 
 /// A freestanding Linux image runs without the dynamic loader unless it
@@ -1221,6 +1458,43 @@ fn warn_freestanding_imports(cli: &Cli, merged: &badc::MergedNative) {
     emit_link_warnings(cli, warnings);
 }
 
+/// `--out-implib`: the import library of the DLL just written, read back
+/// from its export directory; `data` names the exports it imports as data,
+/// and `forms` those it leaves out (`PRIVATE`) or imports by ordinal
+/// (`NONAME`).
+fn write_import_library(
+    path: &std::path::Path,
+    dll: &[u8],
+    data: &[&str],
+    forms: &[badc::ExportForm],
+    cli: &Cli,
+) {
+    if cli.mode != Mode::SharedLibrary || !badc::is_pe_dll(dll) {
+        eprint_diagnostic("badc: error: --out-implib applies to a PE shared library");
+        std::process::exit(1);
+    }
+    let mut lib = badc::parse_pe_dll(dll).unwrap_or_else(|e| {
+        eprint_diagnostic(format!("badc: {e}"));
+        std::process::exit(1);
+    });
+    lib.data_exports.extend(data.iter().map(|n| n.to_string()));
+    for f in forms {
+        if f.private {
+            lib.exports.remove(&f.name);
+        } else if let Some(ordinal) = f.ordinal.filter(|_| f.noname) {
+            lib.exports.insert(f.name.clone());
+            lib.export_ordinals.insert(f.name.clone(), ordinal);
+        }
+    }
+    write_output(
+        path,
+        &badc::write_import_library(&lib),
+        cli.target,
+        cli.quiet,
+        false,
+    );
+}
+
 /// Report link warnings at the levels the command line set; under
 /// `--fatal-warnings` or `-Werror` one fails the link.
 fn emit_link_warnings(cli: &Cli, warnings: impl IntoIterator<Item = (badc::diag::Code, String)>) {
@@ -1253,6 +1527,7 @@ fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
         export_all: cli.link.export_all || cli.exports_definitions(),
         export_data: cli.link.export_data || cli.exports_definitions(),
         format: cli.target.binary_format(),
+        delay_load: cli.link.delay_load.clone(),
     };
     let mut merged = match badc::link_native_objects_with(image.objs, image.shared_libs, &opts) {
         Ok(m) => m,
@@ -1309,29 +1584,10 @@ fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
                 &shared_default_path
             }
         };
-        path.file_name().and_then(|n| n.to_str())
+        image.library.or(path.file_name().and_then(|n| n.to_str()))
     } else {
         None
     };
-    let write_result = badc::write_native_image_from_merged_ex(
-        &merged,
-        &plt,
-        entry_name,
-        image.subsystem,
-        native_output_kind,
-        cli.target,
-        shared_lib_name,
-        &cli.image_options(exec_stack),
-    );
-
-    let bytes = match write_result {
-        Ok(b) => b,
-        Err(e) => {
-            eprint_diagnostic(format!("badc: {e}"));
-            std::process::exit(1);
-        }
-    };
-    stats.mark("image");
     let default_path;
     let out: &std::path::Path = match cli.output_path.as_deref() {
         Some(o) => o,
@@ -1340,8 +1596,51 @@ fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
             &default_path
         }
     };
+    let image_options = cli.image_options(exec_stack);
+    // A PE image linked with -g names the program database beside it by
+    // its absolute path, as its debug directory records it.
+    let pdb_path = (cli.target.binary_format() == badc::BinaryFormat::Pe
+        && cli.codegen.emit_debug_info
+        && !image_options.strip_debug)
+        .then(|| out.with_extension("pdb"));
+    let pdb_name = (pdb_path.as_deref())
+        .map(|p| std::path::absolute(p).unwrap_or_else(|_| p.to_path_buf()))
+        .map(|p| p.to_string_lossy().into_owned());
+    let write_result = badc::write_native_image_and_pdb(
+        &merged,
+        &plt,
+        entry_name,
+        image.subsystem,
+        native_output_kind,
+        cli.target,
+        shared_lib_name,
+        &image_options,
+        pdb_name.as_deref(),
+        image.resources,
+    );
+
+    let linked = match write_result {
+        Ok(b) => b,
+        Err(e) => {
+            eprint_diagnostic(format!("badc: {e}"));
+            std::process::exit(1);
+        }
+    };
+    let bytes = linked.image;
+    stats.mark("image");
     write_output(out, &bytes, cli.target, cli.quiet, true);
-    post_write_native(out, cli.target);
+    if let Some(path) = &cli.link.out_implib {
+        // A forwarder's slot does not say what it forwards; `,DATA` does.
+        let data: Vec<&str> = (merged.export_aliases.iter())
+            .filter(|a| a.data)
+            .map(|a| a.name.as_str())
+            .collect();
+        write_import_library(path, &bytes, &data, &merged.export_forms, cli);
+    }
+    if let (Some(path), Some(pdb)) = (&pdb_path, &linked.pdb) {
+        write_output(path, pdb, cli.target, cli.quiet, false);
+    }
+    post_write_native(out, cli.target, &cli.front.diag, cli.quiet);
     if cli.link.map_path.is_some() || cli.link.print_map {
         let out_name = out.file_name().and_then(|n| n.to_str()).unwrap_or("a.out");
         let map = match badc::render_link_map(&merged, &bytes, image.inclusions, out_name) {

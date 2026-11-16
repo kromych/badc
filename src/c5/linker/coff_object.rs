@@ -11,9 +11,9 @@ use alloc::vec::Vec;
 
 use super::link_err;
 use super::object::{
-    Comdat, InputSection, NativeInitFunc, NativeMachine, NativeObject, NativeReloc,
-    NativeSymSection, NativeSymbol, PeUnwindData, PeUnwindEntry, STT_FUNC, STT_NOTYPE, STT_OBJECT,
-    SectionFamily, SymRef, grouped_by_name,
+    Comdat, ExportAlias, InitTable, InitTarget, InputSection, NativeInitFunc, NativeMachine,
+    NativeObject, NativeReloc, NativeSymSection, NativeSymbol, PeUnwindData, PeUnwindEntry,
+    STT_FUNC, STT_NOTYPE, STT_OBJECT, SectionFamily, SymRef, grouped_by_name,
 };
 use crate::c5::diag::Code;
 use crate::c5::error::C5Error;
@@ -66,6 +66,7 @@ const IMAGE_SYM_CLASS_SECTION: u8 = 104;
 const IMAGE_SYM_CLASS_WEAK_EXTERNAL: u8 = 105;
 const IMAGE_COMDAT_SELECT_ASSOCIATIVE: u8 = 5;
 const IMAGE_WEAK_EXTERN_SEARCH_NOLIBRARY: u32 = 1;
+const IMAGE_WEAK_EXTERN_SEARCH_ALIAS: u32 = 3;
 
 const IMAGE_REL_AMD64_ABSOLUTE: u16 = 0x0;
 const IMAGE_REL_AMD64_ADDR64: u16 = 0x1;
@@ -276,6 +277,8 @@ fn section_name(field: &[u8], strtab: &[u8]) -> Result<String, C5Error> {
     )
 }
 
+const IMAGE_SCN_TYPE_NO_PAD: u32 = 0x8;
+
 /// One section header, plus what the parse assigns it.
 struct Sect {
     name: String,
@@ -285,16 +288,21 @@ struct Sect {
     nrelocs: u32,
     flags: u32,
     family: SectionFamily,
-    /// A `.ctors` / `.CRT$XC*` table: `(destructor, priority)`.
-    init: Option<(bool, Option<u32>)>,
+    /// The table a `.ctors` / `.dtors` / `.CRT$X*` section feeds.
+    init: Option<InitTable>,
     base: u64,
     record: Option<u32>,
 }
 
 impl Sect {
+    /// The `IMAGE_SCN_ALIGN_*` field; without one the default is 16, and the
+    /// legacy `IMAGE_SCN_TYPE_NO_PAD` asks for 1, as LLVM's COFF reader takes it.
     fn align(&self) -> u64 {
+        if self.flags & IMAGE_SCN_TYPE_NO_PAD != 0 {
+            return 1;
+        }
         match (self.flags >> 20) & 0xF {
-            0 => 1,
+            0 => 16,
             n => 1 << (n - 1),
         }
     }
@@ -343,26 +351,23 @@ fn read_sections(bytes: &[u8], h: &Header) -> Result<Vec<Sect>, C5Error> {
     Ok(out)
 }
 
-/// `(destructor, priority)` of a constructor / destructor table: GNU's
+/// The table of a constructor / destructor section: GNU's
 /// `.ctors[.NNNNN]` / `.dtors[.NNNNN]`, whose suffix is 65535 minus the
-/// priority, and the C runtime's `.CRT$X[CI]*` / `.CRT$X[PT]*`.
-fn init_table(name: &str) -> Option<(bool, Option<u32>)> {
-    for (prefix, dtor) in [(".ctors", false), (".dtors", true)] {
+/// priority, and the C runtime's `.CRT$X*`.
+fn init_table(name: &str) -> Option<InitTable> {
+    for (prefix, fini) in [(".ctors", false), (".dtors", true)] {
         if let Some(rest) = name.strip_prefix(prefix) {
-            return match rest {
-                "" => Some((dtor, None)),
-                _ => {
-                    let n = rest.strip_prefix('.')?.parse::<u32>().ok()?;
-                    Some((dtor, Some(65535u32.checked_sub(n)?)))
-                }
+            let priority = match rest {
+                "" => None,
+                _ => Some(65535u32.checked_sub(rest.strip_prefix('.')?.parse().ok()?)?),
             };
+            return Some(match fini {
+                true => InitTable::Fini(priority),
+                false => InitTable::Init(priority),
+            });
         }
     }
-    match name.strip_prefix(".CRT$X")?.as_bytes().first()? {
-        b'C' | b'I' => Some((false, None)),
-        b'P' | b'T' => Some((true, None)),
-        _ => None,
-    }
+    super::object::crt_init_table(name)
 }
 
 /// `.pdata`, and gcc's `.pdata.<suffix>` beside `.text.<suffix>`.
@@ -446,6 +451,115 @@ fn read_unwind(
     Ok(out)
 }
 
+/// cvtres's resource sections: `.rsrc$01` the directory tree, `.rsrc$02`
+/// the data its entries reach through relocations.
+fn is_rsrc(name: &str) -> bool {
+    name.starts_with(".rsrc$")
+}
+
+/// A cvtres object's resources as compiled resource file records, rc.exe's
+/// layout, which the image's `.rsrc` takes as it takes a `.res` input: the
+/// `.rsrc$01` tree walked by type, name and language, each data entry's
+/// bytes found through the relocation on its address field.
+fn read_resources(
+    bytes: &[u8],
+    machine: u16,
+    sects: &[Sect],
+    raw: &[Option<RawSym>],
+) -> Result<Vec<u8>, C5Error> {
+    let Some(tree) = sects.iter().find(|s| s.name == ".rsrc$01") else {
+        return Ok(Vec::new());
+    };
+    let content = tree.content(bytes)?;
+    let nb = match machine {
+        IMAGE_FILE_MACHINE_AMD64 => IMAGE_REL_AMD64_ADDR32NB,
+        _ => IMAGE_REL_ARM64_ADDR32NB,
+    };
+    let mut data_at: BTreeMap<u32, &[u8]> = BTreeMap::new();
+    for k in 0..tree.nrelocs as usize {
+        let p = tree.reloc_off as usize + k * RELOCATION_SIZE;
+        let (off, sym, t) = (
+            need_u32(bytes, p, "relocation")?,
+            need_u32(bytes, p + 4, "relocation")? as usize,
+            need_u16(bytes, p + 8, "relocation")?,
+        );
+        let target = (raw.get(sym).and_then(Option::as_ref))
+            .filter(|_| t == nb)
+            .and_then(|r| {
+                sects
+                    .get(usize::try_from(r.section).ok()?.checked_sub(1)?)
+                    .map(|s| (r, s))
+            });
+        let (Some((r, s)), Some(addend)) = (target, u32le(content, off as usize)) else {
+            return Err(bad(&format!(
+                "`.rsrc$01` offset {off:#x}: no resource data"
+            )));
+        };
+        let size = need_u32(content, off as usize + 4, "resource data entry")? as usize;
+        let start = (r.value + addend) as usize;
+        let data = s.content(bytes)?.get(start..start + size);
+        data_at.insert(
+            off,
+            data.ok_or_else(|| bad("resource data runs past its section"))?,
+        );
+    }
+    let rd = |off: u32, what: &str| need_u32(content, off as usize, what);
+    // The entries of the directory table at `dir`: name word, target word.
+    let entries = |dir: u32| -> Result<Vec<(u32, u32)>, C5Error> {
+        let named = need_u16(content, dir as usize + 12, "resource directory")?;
+        let ids = need_u16(content, dir as usize + 14, "resource directory")?;
+        (0..u32::from(named) + u32::from(ids))
+            .map(|i| {
+                Ok((
+                    rd(dir + 16 + 8 * i, "entry")?,
+                    rd(dir + 20 + 8 * i, "entry")?,
+                ))
+            })
+            .collect()
+    };
+    // A type or name field of a record: an ordinal, or the entry's string.
+    let key = |word: u32, out: &mut Vec<u8>| -> Result<(), C5Error> {
+        if word & 0x8000_0000 == 0 {
+            out.extend([0xff, 0xff]);
+            out.extend((word as u16).to_le_bytes());
+            return Ok(());
+        }
+        let at = (word & 0x7fff_ffff) as usize;
+        let len = need_u16(content, at, "resource name")? as usize;
+        let units = (content.get(at + 2..at + 2 + 2 * len)).ok_or_else(|| bad("resource name"))?;
+        out.extend(units);
+        out.extend([0, 0]);
+        Ok(())
+    };
+    let mut out = Vec::new();
+    for (ty, names) in entries(0)? {
+        for (name, langs) in entries(names & 0x7fff_ffff)? {
+            for (lang, entry) in entries(langs & 0x7fff_ffff)? {
+                let data = *data_at
+                    .get(&entry)
+                    .ok_or_else(|| bad("resource data entry"))?;
+                let start = out.len();
+                out.extend((data.len() as u32).to_le_bytes());
+                out.extend([0; 4]);
+                key(ty, &mut out)?;
+                key(name, &mut out)?;
+                out.resize(out.len().next_multiple_of(4), 0);
+                // DataVersion, MemoryFlags (moveable, pure), LanguageId,
+                // Version, Characteristics.
+                out.extend([0; 4]);
+                out.extend(0x0030u16.to_le_bytes());
+                out.extend((lang as u16).to_le_bytes());
+                out.extend([0; 8]);
+                let header = (out.len() - start) as u32;
+                out[start + 4..start + 8].copy_from_slice(&header.to_le_bytes());
+                out.extend(data);
+                out.resize(out.len().next_multiple_of(4), 0);
+            }
+        }
+    }
+    Ok(out)
+}
+
 fn is_tls(name: &str) -> bool {
     name == ".tls" || name.starts_with(".tls$")
 }
@@ -457,19 +571,15 @@ fn is_tls(name: &str) -> bool {
 /// any other initialized data, which its `MEM_*` flags place.
 fn classify(s: &Sect) -> Result<SectionFamily, C5Error> {
     let f = s.flags;
-    // `.pdata` is read by `read_unwind`. GNU as gives `.drectve` data flags, not LNK_INFO.
+    // `.pdata` is read by `read_unwind`, `.rsrc$*` by `read_resources`. GNU
+    // as gives `.drectve` data flags, not LNK_INFO.
     if f & (IMAGE_SCN_LNK_REMOVE | IMAGE_SCN_LNK_INFO | IMAGE_SCN_MEM_DISCARDABLE) != 0
         || s.name == ".drectve"
         || s.name.starts_with(".debug")
         || is_pdata(&s.name)
+        || is_rsrc(&s.name)
     {
         return Ok(SectionFamily::Discard);
-    }
-    if s.name.starts_with(".CRT$XL") {
-        return Err(unsupported(&format!(
-            "section `{}` holds TLS callbacks, which the image's TLS directory does not list",
-            s.name
-        )));
     }
     if is_tls(&s.name) {
         return Ok(if f & IMAGE_SCN_CNT_UNINITIALIZED_DATA != 0 {
@@ -478,6 +588,9 @@ fn classify(s: &Sect) -> Result<SectionFamily, C5Error> {
             SectionFamily::Tdata
         });
     }
+    // The WDK's `<f>_$fo_bdd$` / `_$fo_rvas$` let link.exe route calls through
+    // a `fothk` thunk the kernel may retarget; kept as data, the calls reach
+    // `<f>`'s default body, the thunk's own target.
     let content =
         IMAGE_SCN_CNT_CODE | IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_CNT_UNINITIALIZED_DATA;
     let group = (f & content == 0).then(|| s.name.split('$').next().unwrap_or_default());
@@ -626,17 +739,42 @@ fn read_symbols<'a>(bytes: &'a [u8], h: &Header) -> Result<Vec<Option<RawSym<'a>
     Ok(out)
 }
 
-/// What `.drectve` asks of the link.
+/// What `.drectve`, or a badc unit's `#pragma comment(linker, ...)`, asks
+/// of the link.
 #[derive(Default)]
-struct Directives {
-    alternate_names: Vec<(String, String)>,
+pub(crate) struct Directives {
+    pub(crate) alternate_names: Vec<(String, String)>,
     /// `-aligncomm:name,log2`: a common symbol's alignment.
     align_common: BTreeMap<String, u64>,
     /// `/EXPORT:` / `-export:`: a definition the image exports.
-    exports: Vec<String>,
+    pub(crate) exports: Vec<String>,
+    /// `/EXPORT:name=target`: an export under another name or forwarded.
+    pub(crate) export_aliases: Vec<ExportAlias>,
     /// `/INCLUDE:`: a name the link resolves as if referenced.
-    includes: Vec<String>,
-    default_libs: Vec<String>,
+    pub(crate) includes: Vec<String>,
+    pub(crate) default_libs: Vec<String>,
+    /// `/FAILIFMISMATCH:key=value`, which a link checks across its inputs.
+    pub(crate) mismatch_keys: Vec<(String, String)>,
+    /// `/merge:from=to`: the image section `from`'s contents join `to`.
+    pub(crate) section_merges: Vec<(String, String)>,
+    pub(crate) export_forms: Vec<super::object::ExportForm>,
+}
+
+impl Directives {
+    /// The undefined references `/INCLUDE:` forces, as `ld -u` does, and
+    /// the definitions an export under another name takes.
+    pub(crate) fn include_symbols(&self) -> impl Iterator<Item = NativeSymbol> + '_ {
+        let targets = (self.export_aliases.iter())
+            .filter(|a| !a.target.contains('.'))
+            .map(|a| &a.target);
+        (self.includes.iter())
+            .chain(targets)
+            .map(|name| NativeSymbol {
+                name: name.clone(),
+                binding: STB_GLOBAL,
+                ..null_symbol()
+            })
+    }
 }
 
 /// The directive string's options, split as link.exe splits them: on
@@ -667,53 +805,184 @@ fn read_directives(bytes: &[u8], sects: &[Sect]) -> Result<Directives, C5Error> 
         let body = s.content(bytes)?;
         let text = core::str::from_utf8(body.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(body))
             .map_err(|_| bad("`.drectve` is not UTF-8"))?;
-        for tok in directive_tokens(text.trim_end_matches('\0')) {
-            let Some(opt) = tok.strip_prefix('/').or_else(|| tok.strip_prefix('-')) else {
-                return Err(bad(&format!(
-                    "`.drectve` holds `{tok}`, which is no option"
-                )));
-            };
-            let (key, arg) = opt.split_once(':').unwrap_or((opt, ""));
-            match key.to_ascii_lowercase().as_str() {
-                "defaultlib" => d.default_libs.push(arg.to_string()),
-                "include" => d.includes.push(arg.to_string()),
-                // `DATA` and `PRIVATE` (no import library entry) change nothing
-                // here; an ordinal and an alias are refused.
-                "export" => {
-                    let mut parts = arg.split(',');
-                    let name = parts.next().unwrap_or("");
-                    let plain =
-                        |f: &str| matches!(f.to_ascii_lowercase().as_str(), "data" | "private");
-                    if name.is_empty() || name.contains('=') || !parts.all(plain) {
-                        return Err(unsupported(&format!(
-                            "`.drectve` option `{tok}` exports by ordinal or under another \
-                             name, which the linker does not carry out"
-                        )));
-                    }
-                    d.exports.push(name.to_string());
+        parse_directives(text.trim_end_matches('\0'), &mut d)?;
+    }
+    Ok(d)
+}
+
+/// Adds the options of one directive string to `d`.
+/// A module-definition file, link.exe's `/DEF:` input: its `EXPORTS` as the
+/// `/EXPORT:` options they stand for, in an object of no content for
+/// `machine`, and the image name its `LIBRARY` or `NAME` statement gives.
+/// `;` opens a comment.
+pub fn module_definition(
+    text: &str,
+    machine: super::object::NativeMachine,
+) -> Result<(NativeObject, Option<String>), C5Error> {
+    let bad_def = |what: &str| bad(&format!("module-definition file: {what}"));
+    let (mut options, mut image, mut exporting) = (String::new(), None, false);
+    for line in text
+        .lines()
+        .map(|l| l.split(';').next().unwrap_or("").trim())
+    {
+        let words: Vec<&str> = line.split_whitespace().collect();
+        let Some(&first) = words.first() else {
+            continue;
+        };
+        let unquote = |w: &str| w.trim_matches('"').to_string();
+        match first.to_ascii_uppercase().as_str() {
+            "LIBRARY" | "NAME" => {
+                image = words
+                    .get(1)
+                    .filter(|w| !w.contains('='))
+                    .map(|w| unquote(w));
+                exporting = false;
+                continue;
+            }
+            "EXPORTS" => {
+                exporting = true;
+                if words.len() == 1 {
+                    continue;
                 }
-                "alternatename" => {
-                    let (from, to) = arg.split_once('=').ok_or_else(|| {
-                        bad(&format!("`.drectve` option `{tok}` names no alternate"))
-                    })?;
-                    d.alternate_names.push((from.to_string(), to.to_string()));
-                }
-                "aligncomm" => {
-                    let (name, log2) = arg
-                        .split_once(',')
-                        .and_then(|(n, l)| Some((n, l.parse::<u32>().ok().filter(|&l| l < 32)?)))
-                        .ok_or_else(|| bad(&format!("`.drectve` option `{tok}` is malformed")))?;
-                    d.align_common.insert(name.to_string(), 1 << log2);
-                }
-                _ => {
-                    return Err(unsupported(&format!(
-                        "`.drectve` option `{tok}` is not one the linker carries out"
-                    )));
-                }
+            }
+            s @ ("HEAPSIZE" | "STACKSIZE" | "SECTIONS" | "STUB" | "VERSION" | "IMPORTS") => {
+                return Err(bad_def(&format!("the `{s}` statement is not supported")));
+            }
+            _ if !exporting => return Err(bad_def(&format!("`{line}` outside `EXPORTS`"))),
+            _ => {}
+        }
+        // `name[=internal] [@ordinal [NONAME]] [DATA] [PRIVATE]`, the `=` and
+        // the ordinal's `@` possibly set apart.
+        let spec = line
+            .strip_prefix(first)
+            .filter(|_| first.eq_ignore_ascii_case("EXPORTS"));
+        let joined = spec.unwrap_or(line).replace(" = ", "=").replace("@ ", "@");
+        let mut parts = joined.split_whitespace();
+        let entry = unquote(parts.next().ok_or_else(|| bad_def("an empty export"))?);
+        options.push_str(&format!(" /EXPORT:{entry}"));
+        for part in parts {
+            match part.to_ascii_uppercase().as_str() {
+                p @ ("NONAME" | "DATA" | "PRIVATE") => options.push_str(&format!(",{p}")),
+                p if p.starts_with('@') => options.push_str(&format!(",{p}")),
+                p => return Err(bad_def(&format!("`{p}` in the export of `{entry}`"))),
             }
         }
     }
-    Ok(d)
+    let mut d = Directives::default();
+    parse_directives(&options, &mut d)?;
+    let mut obj = NativeObject::empty(machine);
+    obj.symbols = d.include_symbols().collect();
+    obj.exports = d.exports;
+    obj.export_aliases = d.export_aliases;
+    obj.includes = d.includes;
+    obj.export_forms = d.export_forms;
+    Ok((obj, image))
+}
+
+pub(crate) fn parse_directives(text: &str, d: &mut Directives) -> Result<(), C5Error> {
+    for tok in directive_tokens(text) {
+        let Some(opt) = tok.strip_prefix('/').or_else(|| tok.strip_prefix('-')) else {
+            return Err(bad(&format!(
+                "`.drectve` holds `{tok}`, which is no option"
+            )));
+        };
+        let (key, arg) = opt.split_once(':').unwrap_or((opt, ""));
+        match key.to_ascii_lowercase().as_str() {
+            "defaultlib" => d.default_libs.push(arg.to_string()),
+            "include" => d.includes.push(arg.to_string()),
+            // `PRIVATE` (no import library entry) changes nothing here;
+            // `DATA` makes the import library's entry a data import. An
+            // ordinal is refused.
+            "export" => {
+                let mut parts = arg.split(',');
+                let entry = parts.next().unwrap_or("");
+                let (mut data, mut noname, mut private, mut ordinal) = (false, false, false, None);
+                for flag in parts {
+                    match flag.to_ascii_lowercase().as_str() {
+                        "data" => data = true,
+                        "private" => private = true,
+                        "noname" => noname = true,
+                        f => {
+                            let n = f.strip_prefix('@').and_then(|n| n.parse::<u16>().ok());
+                            ordinal = Some(n.filter(|&n| n > 0).ok_or_else(|| {
+                                bad(&format!("`.drectve` option `{tok}` is malformed"))
+                            })?);
+                        }
+                    }
+                }
+                if noname && ordinal.is_none() {
+                    return Err(bad(&format!(
+                        "`.drectve` option `{tok}`: NONAME takes an ordinal"
+                    )));
+                }
+                if ordinal.is_some() || private {
+                    let name = entry.split_once('=').map_or(entry, |(n, _)| n);
+                    d.export_forms.push(super::object::ExportForm {
+                        name: name.to_string(),
+                        ordinal,
+                        noname,
+                        private,
+                    });
+                }
+                match entry.split_once('=') {
+                    _ if entry.is_empty() => {
+                        return Err(bad(&format!("`.drectve` option `{tok}` names no export")));
+                    }
+                    Some((name, target)) if !name.is_empty() && !target.is_empty() => {
+                        d.export_aliases.push(ExportAlias {
+                            name: name.to_string(),
+                            target: target.to_string(),
+                            data,
+                        });
+                    }
+                    Some(_) => {
+                        return Err(bad(&format!("`.drectve` option `{tok}` is malformed")));
+                    }
+                    None => d.exports.push(entry.to_string()),
+                }
+            }
+            "alternatename" => {
+                let (from, to) = arg
+                    .split_once('=')
+                    .ok_or_else(|| bad(&format!("`.drectve` option `{tok}` names no alternate")))?;
+                d.alternate_names.push((from.to_string(), to.to_string()));
+            }
+            "failifmismatch" => {
+                let (key, value) = arg
+                    .split_once('=')
+                    .ok_or_else(|| bad(&format!("`.drectve` option `{tok}` names no value")))?;
+                d.mismatch_keys.push((key.to_string(), value.to_string()));
+            }
+            "merge" => {
+                let (from, to) = (arg.split_once('='))
+                    .filter(|(f, t)| !f.is_empty() && !t.is_empty())
+                    .ok_or_else(|| bad(&format!("`.drectve` option `{tok}` is malformed")))?;
+                d.section_merges.push((from.to_string(), to.to_string()));
+            }
+            "aligncomm" => {
+                let (name, log2) = arg
+                    .split_once(',')
+                    .and_then(|(n, l)| Some((n, l.parse::<u32>().ok().filter(|&l| l < 32)?)))
+                    .ok_or_else(|| bad(&format!("`.drectve` option `{tok}` is malformed")))?;
+                d.align_common.insert(name.to_string(), 1 << log2);
+            }
+            // The MSVC runtime's `new_scalar.obj` carries it; lld-link takes
+            // it as a link.exe option that changes nothing.
+            "throwingnew" if arg.is_empty() => {}
+            // Control Flow Guard attributes of one symbol; the image carries
+            // no guard tables.
+            "guardsym"
+                if arg
+                    .split_once(',')
+                    .is_some_and(|(n, f)| !n.is_empty() && !f.is_empty()) => {}
+            _ => {
+                return Err(unsupported(&format!(
+                    "`.drectve` option `{tok}` is not one the linker carries out"
+                )));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// A COMDAT section's selection, checksum, leader and associative parent.
@@ -846,6 +1115,7 @@ fn decode_symbols(
     sects: &[Sect],
     directives: &Directives,
     alternates: &mut Vec<(String, String)>,
+    aliases: &mut Vec<String>,
 ) -> Result<Vec<NativeSymbol>, C5Error> {
     let mut out = Vec::with_capacity(raw.len() + 1);
     out.push(null_symbol());
@@ -965,6 +1235,9 @@ fn decode_symbols(
                     STB_GLOBAL
                 };
                 alternates.push((r.name.clone(), default.name.clone()));
+                if search == IMAGE_WEAK_EXTERN_SEARCH_ALIAS {
+                    aliases.push(r.name.clone());
+                }
             }
             _ => {
                 *weak = NativeSymbol {
@@ -1171,7 +1444,7 @@ fn translate_relocs(
     symbols: &[NativeSymbol],
 ) -> Result<Relocs, C5Error> {
     let mut out = Relocs::default();
-    let mut inits: Vec<(&str, u32, Vec<u64>)> = Vec::new();
+    let mut inits: Vec<(&str, u32, Vec<InitTarget>)> = Vec::new();
     for s in sects {
         if (s.family == SectionFamily::Discard && s.init.is_none()) || s.nrelocs == 0 {
             continue;
@@ -1228,16 +1501,20 @@ fn translate_relocs(
                 }
             };
             if s.init.is_some() {
+                let named = target.section == NativeSymSection::Undef
+                    && !target.name.is_empty()
+                    && addend == 0;
                 if !matches!(rtype, R_X86_64_64 | R_AARCH64_ABS64)
-                    || target.section != NativeSymSection::Text
+                    || (target.section != NativeSymSection::Text && !named)
                 {
                     return Err(unsupported(&format!(
-                        "{site}: a constructor table entry must be the address of a function \
-                         this object defines"
+                        "{site}: a constructor table entry must be the address of a function"
                     )));
                 }
-                entries.push((target.value as i64 + addend) as u64);
-                continue;
+                entries.push(match named {
+                    true => InitTarget::Named(target.name.clone()),
+                    false => InitTarget::Text((target.value as i64 + addend) as u64),
+                });
             }
             let reloc = NativeReloc {
                 offset,
@@ -1265,15 +1542,14 @@ fn translate_relocs(
     // from its end.
     inits.sort_by(|a, b| a.0.cmp(b.0).then(a.1.cmp(&b.1)));
     for (name, _, mut entries) in inits {
-        let (is_destructor, priority) = init_table(name).unwrap();
+        let table = init_table(name).unwrap();
         if name.starts_with(".ctors") {
             entries.reverse();
         }
         out.init_funcs
-            .extend(entries.into_iter().map(|unit_text_offset| NativeInitFunc {
-                is_destructor,
-                priority,
-                unit_text_offset,
+            .extend(entries.into_iter().map(|target| NativeInitFunc {
+                table: table.clone(),
+                target,
             }));
     }
     out.text.sort_by_key(|r| r.offset);
@@ -1292,6 +1568,8 @@ pub struct ImportMember {
     pub import_name: String,
     /// `IMPORT_OBJECT_ORDINAL`: the ordinal the DLL is asked for instead of a name.
     pub ordinal: Option<u16>,
+    /// A name import's hint: the name's index in the DLL's export name table.
+    pub hint: u16,
     /// `IMPORT_OBJECT_DATA` / `_CONST`: reached through `__imp_<symbol>` only.
     pub data: bool,
 }
@@ -1330,7 +1608,8 @@ pub fn parse_import_member(bytes: &[u8]) -> Result<Option<ImportMember>, C5Error
     let stripped = symbol
         .strip_prefix(|c| matches!(c, '?' | '@' | '_'))
         .unwrap_or(symbol);
-    let ordinal = ((kinds >> 2) & 7 == 0).then(|| u16le(bytes, 16).unwrap_or(0));
+    let ordinal_or_hint = u16le(bytes, 16).unwrap_or(0);
+    let ordinal = ((kinds >> 2) & 7 == 0).then_some(ordinal_or_hint);
     let import_name = match (kinds >> 2) & 7 {
         0 | 1 => symbol.to_string(),
         2 => stripped.to_string(),
@@ -1352,6 +1631,7 @@ pub fn parse_import_member(bytes: &[u8]) -> Result<Option<ImportMember>, C5Error
         dll: dll.to_string(),
         import_name,
         ordinal,
+        hint: ordinal_or_hint,
         data: kinds & 3 != 0,
     }))
 }
@@ -1375,7 +1655,9 @@ pub fn import_libraries(members: &[ImportMember]) -> Vec<super::object::SharedLi
                 references: Default::default(),
                 protected_exports: Default::default(),
                 from_image: true,
+                main_executable: false,
                 export_ordinals: Default::default(),
+                export_hints: Default::default(),
             });
         lib.exports.insert(m.symbol.clone());
         lib.exports.insert(format!("__imp_{}", m.symbol));
@@ -1384,7 +1666,10 @@ pub fn import_libraries(members: &[ImportMember]) -> Vec<super::object::SharedLi
         }
         if let Some(ordinal) = m.ordinal {
             lib.export_ordinals.insert(m.symbol.clone(), ordinal);
-        } else if m.import_name != m.symbol {
+        } else {
+            lib.export_hints.insert(m.symbol.clone(), m.hint);
+        }
+        if m.ordinal.is_none() && m.import_name != m.symbol {
             lib.export_symbols
                 .insert(m.symbol.clone(), m.import_name.clone());
         }
@@ -1470,9 +1755,14 @@ impl Shallow<'_> {
         })?;
         let content = s.content(self.bytes).ok()?;
         let slot = u64::from_le_bytes(content.get(at as usize..at as usize + 8)?.try_into().ok()?);
-        let (import_name, ordinal) = match self.image_relative_at(s, at) {
-            Some(entry) => (self.string_at(entry, (slot as u32).checked_add(2)?)?, None),
-            None if slot >> 63 == 1 => (symbol.to_string(), Some(slot as u16)),
+        let (import_name, ordinal, hint) = match self.image_relative_at(s, at) {
+            Some(entry) => {
+                let name = self.string_at(entry, (slot as u32).checked_add(2)?)?;
+                let content = self.section_of(entry)?.content(self.bytes).ok()?;
+                let hint = u16le(content, (entry.value as usize).checked_add(slot as usize)?);
+                (name, None, hint.unwrap_or(0))
+            }
+            None if slot >> 63 == 1 => (symbol.to_string(), Some(slot as u16), 0),
             None => return None,
         };
         let references = (self.externals())
@@ -1485,6 +1775,7 @@ impl Shallow<'_> {
             dll: String::new(),
             import_name,
             ordinal,
+            hint,
             data: self.defined(symbol).is_none(),
         };
         Some((import, references))
@@ -1630,7 +1921,9 @@ pub fn parse_pe_dll(bytes: &[u8]) -> Result<super::object::SharedLibrary, C5Erro
         references: Default::default(),
         protected_exports: Default::default(),
         from_image: true,
+        main_executable: false,
         export_ordinals: Default::default(),
+        export_hints: Default::default(),
     };
     let dir_rva = need_u32(bytes, opt + 112, "export directory")?;
     let dir_size = need_u32(bytes, opt + 116, "export directory")?;
@@ -1698,13 +1991,14 @@ pub fn parse_native_coff(
     let assoc: BTreeMap<usize, usize> = (comdat.iter().enumerate())
         .filter_map(|(k, c)| Some((k, c.as_ref()?.parent?)))
         .collect();
-    // A constructor table is consumed as init / fini entries, whose array
-    // the link materializes, rather than merged as bytes.
+    // A constructor table is read for the entries the link runs, and its
+    // bytes join the relocated read-only data, where its names and the
+    // references into it resolve.
     for s in sects.iter_mut() {
         s.family = classify(s)?;
         s.init = init_table(&s.name).filter(|_| s.family != SectionFamily::Discard);
         if s.init.is_some() {
-            s.family = SectionFamily::Discard;
+            s.family = SectionFamily::RelRo;
         }
     }
     for (&k, &parent) in &assoc {
@@ -1718,17 +2012,19 @@ pub fn parse_native_coff(
     let blobs = concat_families(bytes, &mut sects)?;
     let comdats = comdat_groups(&comdat, &sects);
     let mut alternate_names = directives.alternate_names.clone();
-    let mut symbols = decode_symbols(&raw, &sects, &directives, &mut alternate_names)?;
+    let mut weak_aliases = Vec::new();
+    let mut symbols = decode_symbols(
+        &raw,
+        &sects,
+        &directives,
+        &mut alternate_names,
+        &mut weak_aliases,
+    )?;
     let relocs = translate_relocs(bytes, h.machine, &sects, &raw, &symbols)?;
     let pe_unwind = read_unwind(bytes, h.machine, &sects, &raw)?;
+    let resources = read_resources(bytes, h.machine, &sects, &raw)?;
     // A forced reference archive selection resolves, as `ld -u` does.
-    for name in &directives.includes {
-        symbols.push(NativeSymbol {
-            name: name.clone(),
-            binding: STB_GLOBAL,
-            ..null_symbol()
-        });
-    }
+    symbols.extend(directives.include_symbols());
     let tls_symbols = symbols
         .iter()
         .filter(|s| s.section == NativeSymSection::Tls && s.binding != STB_LOCAL)
@@ -1763,6 +2059,8 @@ pub fn parse_native_coff(
         dylibs: Vec::new(),
         import_dylib_map: Vec::new(),
         exports: directives.exports.clone(),
+        export_aliases: directives.export_aliases.clone(),
+        includes: directives.includes.clone(),
         tls_index_fixups: Vec::new(),
         macho_tlv_descriptors: Vec::new(),
         macho_tlv_fixups: Vec::new(),
@@ -1776,8 +2074,13 @@ pub fn parse_native_coff(
         unwind: Vec::new(),
         extern_data_names: Vec::new(),
         alternate_names,
+        weak_aliases,
         comdats,
         default_libs: directives.default_libs.clone(),
+        mismatch_keys: directives.mismatch_keys.clone(),
+        section_merges: directives.section_merges.clone(),
+        resources,
+        export_forms: directives.export_forms.clone(),
         debug_info: Vec::new(),
         debug_abbrev: Vec::new(),
         debug_line: Vec::new(),
@@ -1935,6 +2238,42 @@ mod tests {
     use super::build::{Sec, object, sec, section_aux, sym, weak_aux};
     use super::*;
 
+    /// A module-definition file's exports become `/EXPORT:` options: an
+    /// alias, an ordinal with `NONAME`, `DATA` and `PRIVATE`, with comments
+    /// and a spaced `=` and `@`; `LIBRARY` names the image.
+    #[test]
+    fn a_module_definition_file_reads_as_export_options() {
+        let text = "; probe\nLIBRARY \"probe.dll\"\nEXPORTS\n  zeta @5\n  beta @ 2 NONAME ; by ordinal\n\
+                    gamma DATA\n  delta PRIVATE\n  outer = inner\n";
+        let (obj, name) =
+            module_definition(text, super::super::object::NativeMachine::X86_64).unwrap();
+        assert_eq!(name.as_deref(), Some("probe.dll"));
+        assert_eq!(obj.exports, ["zeta", "beta", "gamma", "delta"]);
+        assert_eq!(obj.export_aliases.len(), 1);
+        assert_eq!(
+            (
+                obj.export_aliases[0].name.as_str(),
+                obj.export_aliases[0].target.as_str()
+            ),
+            ("outer", "inner")
+        );
+        let form = |n: &str| obj.export_forms.iter().find(|f| f.name == n).cloned();
+        assert_eq!(
+            form("beta").map(|f| (f.ordinal, f.noname)),
+            Some((Some(2), true))
+        );
+        assert_eq!(
+            form("zeta").map(|f| (f.ordinal, f.noname)),
+            Some((Some(5), false))
+        );
+        assert!(form("delta").is_some_and(|f| f.private && f.ordinal.is_none()));
+        let err = module_definition(
+            "EXPORTS\n f\nSTACKSIZE 4096\n",
+            super::super::object::NativeMachine::X86_64,
+        );
+        assert!(err.unwrap_err().to_string().contains("`STACKSIZE`"));
+    }
+
     const TEXT: u32 = IMAGE_SCN_CNT_CODE | IMAGE_SCN_MEM_EXECUTE | 0x0050_0000;
     const RDATA: u32 = IMAGE_SCN_CNT_INITIALIZED_DATA | 0x0040_0000;
     const DATA: u32 = IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_WRITE | 0x0040_0000;
@@ -1947,6 +2286,22 @@ mod tests {
 
     fn parse(secs: &[Sec], syms: &[super::build::Sym]) -> Result<NativeObject, C5Error> {
         parse_native_coff(&object(AMD64, secs, syms), None)
+    }
+
+    /// A section with no `IMAGE_SCN_ALIGN_*` field is 16-aligned, and one
+    /// with `IMAGE_SCN_TYPE_NO_PAD` 1-aligned.
+    #[test]
+    fn a_section_without_an_alignment_is_sixteen_aligned() {
+        let plain = IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_WRITE;
+        for (flags, want) in [(plain, 16), (plain | IMAGE_SCN_TYPE_NO_PAD, 1)] {
+            let o = parse(
+                &[sec(".data", DATA, &[1]), sec(".data$b", flags, &[2])],
+                &[sym("second", 0, 2, IMAGE_SYM_CLASS_EXTERNAL)],
+            )
+            .unwrap();
+            let second = o.symbols.iter().find(|s| s.name == "second").unwrap();
+            assert_eq!(second.value, want, "flags {flags:#x}");
+        }
     }
 
     /// `REL32_k` measures from `k` bytes past the field's end, which the
@@ -2062,12 +2417,14 @@ mod tests {
     }
 
     /// `.drectve`: `/alternatename:` names a stand-in, `-aligncomm:` a
-    /// common symbol's alignment; an option the linker does not carry out
-    /// is refused by name.
+    /// common symbol's alignment, `/merge:` a section merge, `/GUARDSYM:` and
+    /// `/ThrowingNew` nothing; an option the linker does not carry out is
+    /// refused by name.
     #[test]
     fn directives_name_stand_ins_and_common_alignment() {
         let drectve = IMAGE_SCN_LNK_INFO | IMAGE_SCN_LNK_REMOVE;
-        let text = b"   /DEFAULTLIB:\"LIBCMT\" /alternatename:__isa=__isa_default -aligncomm:c,4";
+        let text = b"   /DEFAULTLIB:\"LIBCMT\" /alternatename:__isa=__isa_default -aligncomm:c,4 \
+                     /merge:minATL=.rdata /GUARDSYM:c,S /ThrowingNew";
         let o = parse(
             &[sec(".drectve", drectve, text)],
             &[sym("c", 3, 0, IMAGE_SYM_CLASS_EXTERNAL)],
@@ -2083,29 +2440,53 @@ mod tests {
             (NativeSymSection::Common, 3, 16)
         );
         assert_eq!(o.discarded, [(".drectve".to_string(), text.len() as u64)]);
-        for refused in ["/MERGE:.a=.b", "/EXPORT:f,@1,NONAME", "/EXPORT:f=g"] {
+        assert_eq!(
+            o.section_merges,
+            [("minATL".to_string(), ".rdata".to_string())]
+        );
+        for refused in [
+            "/SECTION:.a,R",
+            "/MERGE:.a",
+            "/EXPORT:f,@0",
+            "/EXPORT:f,NONAME",
+            "/EXPORT:=g",
+            "/GUARDSYM:c",
+            "/ThrowingNew:x",
+        ] {
             let err = parse(&[sec(".drectve", drectve, refused.as_bytes())], &[]).unwrap_err();
             assert!(err.to_string().contains(&format!("`{refused}`")), "{err}");
         }
     }
 
     /// `/EXPORT:`, `-export:` (gcc quotes the name), `/INCLUDE:` and `/DEFAULTLIB:`
-    /// reach the link, whatever the section's flags.
+    /// reach the link, whatever the section's flags; `/EXPORT:name=target`
+    /// exports a definition under another name or forwards it to a DLL.
     #[test]
     fn directives_export_include_and_name_libraries() {
         // GNU as gives `.drectve` the flags of writable data.
         let gnu_as = DATA;
         let text = b" /INCLUDE:forced /DEFAULTLIB:\"user32\" /EXPORT:f /EXPORT:d,DATA \
-                     -export:\"g\",data /defaultlib:extra.lib";
+                     -export:\"g\",data /defaultlib:extra.lib /EXPORT:h=k.h,DATA";
         let o = parse(&[sec(".drectve", gnu_as, text)], &[]).unwrap();
         assert!(o.data.is_empty() && o.discarded.len() == 1);
         assert_eq!(o.exports, ["f", "d", "g"]);
+        let forward = ExportAlias {
+            name: "h".into(),
+            target: "k.h".into(),
+            data: true,
+        };
+        assert_eq!(o.export_aliases, [forward]);
         assert_eq!(o.default_libs, ["user32", "extra.lib"]);
         let forced = o.symbols.last().unwrap();
         assert_eq!(
             (forced.name.as_str(), forced.section, forced.binding),
             ("forced", NativeSymSection::Undef, STB_GLOBAL)
         );
+        // `#pragma detect_mismatch` and every cl C++ object write these.
+        let text = b"/FAILIFMISMATCH:\"_MSC_VER=1900\" /FAILIFMISMATCH:\"probe=1\"";
+        let m = parse(&[sec(".drectve", gnu_as, text)], &[]).unwrap();
+        let pairs = [("_MSC_VER", "1900"), ("probe", "1")].map(|(k, v)| (k.into(), v.into()));
+        assert_eq!(m.mismatch_keys, pairs);
     }
 
     #[test]
@@ -2331,7 +2712,9 @@ mod tests {
     }
 
     /// GNU's `.ctors` and the C runtime's `.CRT$XCU` list constructors, each
-    /// entry the address of a function; the link materializes the array.
+    /// entry the address of a function; the link materializes the array, and
+    /// the tables' bytes join the relocated read-only data, so their names
+    /// and the references into them have addresses.
     #[test]
     fn constructor_tables_become_init_entries() {
         let mut entry = alloc::vec![0u8; 8];
@@ -2346,10 +2729,13 @@ mod tests {
         )
         .unwrap();
         let entries: Vec<_> = (o.init_funcs.iter())
-            .map(|f| (f.is_destructor, f.unit_text_offset))
+            .map(|f| (f.table.clone(), f.target.clone()))
             .collect();
-        assert_eq!(entries, [(false, 0), (false, 1)]);
-        assert!(o.data.is_empty() && o.relro.is_empty());
+        let crt = InitTable::Crt("CU".into());
+        let text = InitTarget::Text;
+        assert_eq!(entries, [(crt, text(0)), (InitTable::Init(None), text(1))]);
+        assert!(o.data.is_empty() && o.relro.len() >= 16, "{:?}", o.relro);
+        assert_eq!(o.relro_relocs.len(), 2);
     }
 
     /// Debug tables, `.pdata`, link-time metadata and an associative section

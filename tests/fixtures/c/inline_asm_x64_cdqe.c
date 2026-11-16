@@ -1,5 +1,5 @@
 // x86-64 accumulator sign-extend (cdqe) via inline asm, reached through the
-// catalogue passthrough: eax is sign-extended into rax. Returns 42 only when
+// catalog passthrough: eax is sign-extended into rax. Returns 42 only when
 // both the negative and positive extensions are correct. Native x86-64 only.
 
 static long sext_asm(int x) {

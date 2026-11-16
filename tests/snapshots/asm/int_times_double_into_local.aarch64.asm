@@ -17,37 +17,10 @@ Disassembly of section .text:
                	sxtw	x1, w1
                	adrp	x16, <page>
                	ldr	d0, [x16]
-               	fmov	d1, #-2.00000000
-               	fmul	d0, d1, d0
                	scvtf	d1, x1
                	fmul	d0, d0, d1
                	ret
 
 <main>:
-               	adrp	x16, <page>
-               	ldr	d1, [x16]
-               	fmov	d0, #-2.00000000
-               	fmul	d0, d0, d1
                	mov	x0, #0x0                // =0
-               	fmov	d17, x0
-               	fmul	d2, d0, d17
-               	fmov	d17, x0
-               	fcmp	d2, d17
-               	b.eq	<addr>
-               	mov	x0, #0x1                // =1
-               	ret
-               	fmov	d2, #1.00000000
-               	fmul	d2, d0, d2
-               	fcmp	d2, d0
-               	b.eq	<addr>
-               	mov	x0, #0x2                // =2
-               	ret
-               	fmov	d2, #2.00000000
-               	fmul	d0, d0, d2
-               	fmov	d2, #-4.00000000
-               	fmul	d1, d2, d1
-               	fcmp	d0, d1
-               	b.eq	<addr>
-               	mov	x0, #0x3                // =3
-               	ret
                	ret

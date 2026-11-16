@@ -33,7 +33,8 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
         incoming: sites.clone(),
         kind: LoadKind::I64,
     });
-    func.inst_src.resize(func.insts.len(), (0, 0));
+    func.inst_src
+        .resize(func.insts.len(), crate::c5::ir::InstSrc::default());
     func.f32_values.resize(func.insts.len(), false);
     let dispatch = func.blocks.len() as BlockId;
     func.blocks.push(Block {
@@ -80,7 +81,7 @@ mod tests {
             Inst::Imm(16),
         ];
         let mut f = FunctionSsa {
-            inst_src: vec![(0, 0); insts.len()],
+            inst_src: vec![crate::c5::ir::InstSrc::default(); insts.len()],
             f32_values: vec![false; insts.len()],
             insts,
             blocks: vec![

@@ -70,19 +70,11 @@ Disassembly of section .text:
 <at_function_end>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x18, %rsp
-               	pushq	%rbx
+               	subq	$0x10, %rsp
                	movl	$0x64, -0x8(%rbp)
-               	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
-               	movabsq	$0x4010000000000000, %rcx # imm = 0x4010000000000000
-               	movq	%rax, %xmm14
-               	movq	%rcx, %xmm15
-               	vmulsd	%xmm15, %xmm14, %xmm0
-               	cvttsd2si	%xmm0, %rbx
                	leaq	-0x8(%rbp), %rdi
                	callq	<addr>
-               	movq	%rbx, %rax
-               	popq	%rbx
+               	movl	$0x2, %eax
                	leave
                	retq
 

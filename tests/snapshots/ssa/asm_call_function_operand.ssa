@@ -11,15 +11,17 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(0)                                       -> x0
-    v2   Load { addr=v1, disp=0, kind=I64 }               -> x0
-    v3   StoreLocal { off=-1, value=v2, kind=I64 }        -> -
-    v4   LocalAddr(-1)                                    -> x0
-    v5   Intrinsic { kind=StackPointer, args=[] }         -> x0
-    v6   ImmCode(ent_pc=5)                                -> x1
-    v7   LoadLocal { off=-1, kind=I64 }                   -> x1
-    v8   InlineAsm { template="movq %%rsp, (%3)\n\tmovq %3, %%rsp\n\tcall %c2\n\tpopq %%rsp", ops=4, args=[v4, v5, v6, v7] } -> -
-    v9   Imm(0)                                           -> x0
+    v1   Undef                                            -> x0
+    v2   Imm(0)                                           -> x0
+    v3   ImmData(0)                                       -> x0
+    v4   Load { addr=v3, disp=0, kind=I64 }               -> x0
+    v5   StoreLocal { off=-1, value=v4, kind=I64 }        -> -
+    v6   LocalAddr(-1)                                    -> x0
+    v7   Intrinsic { kind=StackPointer, args=[] }         -> x0
+    v8   ImmCode(ent_pc=5)                                -> x1
+    v9   LoadLocal { off=-1, kind=I64 }                   -> x1
+    v10  InlineAsm { template="movq %%rsp, (%3)\n\tmovq %3, %%rsp\n\tcall %c2\n\tpopq %%rsp", ops=4, args=[v6, v7, v8, v9] } -> -
+    v11  Imm(0)                                           -> x0
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=run_local
@@ -27,15 +29,17 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(0)                                       -> x0
-    v2   Load { addr=v1, disp=0, kind=I64 }               -> x0
-    v3   StoreLocal { off=-1, value=v2, kind=I64 }        -> -
-    v4   LocalAddr(-1)                                    -> x0
-    v5   Intrinsic { kind=StackPointer, args=[] }         -> x0
-    v6   ImmCode(ent_pc=0)                                -> x1
-    v7   LoadLocal { off=-1, kind=I64 }                   -> x1
-    v8   InlineAsm { template="movq %%rsp, (%3)\n\tmovq %3, %%rsp\n\tcall %c2\n\tpopq %%rsp", ops=4, args=[v4, v5, v6, v7] } -> -
-    v9   Imm(0)                                           -> x0
+    v1   Undef                                            -> x0
+    v2   Imm(0)                                           -> x0
+    v3   ImmData(0)                                       -> x0
+    v4   Load { addr=v3, disp=0, kind=I64 }               -> x0
+    v5   StoreLocal { off=-1, value=v4, kind=I64 }        -> -
+    v6   LocalAddr(-1)                                    -> x0
+    v7   Intrinsic { kind=StackPointer, args=[] }         -> x0
+    v8   ImmCode(ent_pc=0)                                -> x1
+    v9   LoadLocal { off=-1, kind=I64 }                   -> x1
+    v10  InlineAsm { template="movq %%rsp, (%3)\n\tmovq %3, %%rsp\n\tcall %c2\n\tpopq %%rsp", ops=4, args=[v6, v7, v8, v9] } -> -
+    v11  Imm(0)                                           -> x0
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=jump_external

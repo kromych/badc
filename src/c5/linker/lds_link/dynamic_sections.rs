@@ -469,7 +469,7 @@ impl<'a> LdsLinker<'a> {
         let mut sym = DynSym {
             name: String::from(name),
             info: (bind << 4) | kind,
-            other: STV_DEFAULT,
+            other: STV_DEFAULT | self.sto_of(name),
             shndx: SHN_UNDEF,
             value: 0,
             size: 0,
@@ -510,7 +510,7 @@ impl<'a> LdsLinker<'a> {
                 out.push(DynSym {
                     name: fs.name,
                     info: fs.info,
-                    other: (fs.other & !0x3) | vis,
+                    other: (fs.other & !0x3) | vis | self.sto_of(name),
                     shndx: fs.shndx,
                     value: fs.value,
                     size: fs.size,
@@ -663,6 +663,7 @@ impl<'a> LdsLinker<'a> {
             },
             symbolic: self.opts.symbolic,
             textrel: self.has_readonly_dynamic_reloc(),
+            variant_pcs: (self.plt_syms.iter()).any(|n| self.sto_of(n) != 0),
             pie: self.opts.emit == LdsEmit::Dyn && !self.opts.shared,
             executable: !self.opts.shared,
             flags: self.opts.dynamic_flags,

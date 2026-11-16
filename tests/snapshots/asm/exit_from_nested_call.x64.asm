@@ -29,27 +29,50 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movl	$0x3, %edi
-               	xorl	%eax, %eax
                	callq	<addr>
                	ud2
 
 <descend>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
-               	movb	%dil, -0x40(%rbp)
+               	subq	$0x100, %rsp            # imm = 0x100
+               	movb	%dil, -0x100(%rbp)
                	testl	%edi, %edi
-               	jne	<addr>
-               	movl	$0x2, %edi
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	ud2
-               	decq	%rdi
+               	je	<addr>
+               	movq	%rdi, %rax
+               	subl	$0x1, %eax
+               	movb	%al, -0xc0(%rbp)
+               	je	<addr>
+               	subl	$0x1, %eax
+               	movb	%al, -0x80(%rbp)
+               	je	<addr>
+               	subl	$0x1, %eax
+               	movb	%al, -0x40(%rbp)
+               	je	<addr>
+               	leaq	-0x1(%rax), %rdi
                	callq	<addr>
                	movsbq	-0x40(%rbp), %rcx
                	addq	%rcx, %rax
+               	movsbq	-0x80(%rbp), %rcx
+               	addq	%rcx, %rax
+               	movsbq	-0xc0(%rbp), %rcx
+               	addq	%rcx, %rax
+               	movsbq	-0x100(%rbp), %rcx
+               	addq	%rcx, %rax
                	leave
                	retq
+               	movl	$0x2, %edi
+               	callq	<addr>
+               	ud2
+               	movl	$0x2, %edi
+               	callq	<addr>
+               	ud2
+               	movl	$0x2, %edi
+               	callq	<addr>
+               	ud2
+               	movl	$0x2, %edi
+               	callq	<addr>
+               	ud2
 
 <main>:
                	pushq	%rbp
@@ -57,14 +80,13 @@ Disassembly of section .text:
                	leaq	-<rip>, %rdi # <addr>
                	xorl	%esi, %esi
                	movq	%rsi, %rdx
-               	xorl	%eax, %eax
                	callq	<addr>
                	movl	$0x8, %edi
                	callq	<addr>
+               	movl	$0x4, %ecx
+               	movl	$0x5, %edx
                	testl	%eax, %eax
-               	jne	<addr>
-               	movl	$0x4, %eax
+               	cmovneq	%rdx, %rcx
+               	movq	%rcx, %rax
                	popq	%rbp
                	retq
-               	movl	$0x5, %eax
-               	jmp	<addr>

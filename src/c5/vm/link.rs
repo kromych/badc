@@ -234,6 +234,8 @@ fn pull_members(
 pub(super) struct Linked {
     pub(super) funcs: Vec<FunctionSsa>,
     pub(super) data: Vec<u8>,
+    /// The interpreter's stdio block in `data`.
+    pub(super) stdio: usize,
     pub(super) tls_base: usize,
     pub(super) binding_names: Vec<String>,
     pub(super) entry_pc: usize,
@@ -254,6 +256,15 @@ type Table = BTreeMap<String, (usize, Def, bool)>;
 
 fn undefined(name: &str) -> C5Error {
     C5Error::Runtime(format!("undefined reference to `{name}`"))
+}
+
+/// The interpreter's object for a C library object the unit binds as data:
+/// a standard stream's `FILE *`.
+fn bound_object(unit: &VmUnit, stdio: usize, name: &str) -> Option<i64> {
+    (unit.data_bound(name))
+        .then(|| ssa::std_stream_object(stdio, name))
+        .flatten()
+        .map(|at| at as i64)
 }
 
 /// An object nothing in the unit defines: host data the interpreter
@@ -313,9 +324,11 @@ pub(super) fn link(units: Vec<VmUnit>) -> Result<Linked, C5Error> {
     };
     let tls_block = (data as usize).next_multiple_of(tls_align);
     let mut image = alloc::vec![0u8; tls_block + tls as usize];
+    let stdio = ssa::reserve_stdio(&mut image);
     let mut out = Linked {
         funcs: Vec::new(),
         data: Vec::new(),
+        stdio,
         tls_base: tls_block,
         binding_names: Vec::new(),
         entry_pc: units.first().map_or(0, |u| u.program.entry_pc),
@@ -380,8 +393,11 @@ pub(super) fn link(units: Vec<VmUnit>) -> Result<Linked, C5Error> {
                     Some((unit, def @ Def::Code(_))) if !tls => {
                         Inst::ImmCode(address(unit, def) as usize)
                     }
-                    _ if u.weak.contains(name) => Inst::Imm(0),
-                    _ => return Err(unreachable_object(&u, name)),
+                    _ => match bound_object(&u, stdio, name) {
+                        Some(at) if !tls => Inst::ImmData(at),
+                        _ if u.weak.contains(name) => Inst::Imm(0),
+                        _ => return Err(unreachable_object(&u, name)),
+                    },
                 };
                 named.insert(v);
             }
@@ -471,8 +487,11 @@ pub(super) fn link(units: Vec<VmUnit>) -> Result<Linked, C5Error> {
                 Some((unit, def @ Def::Code(_))) => {
                     ssa::CODE_ADDR_TAG as u64 | address(unit, def) as u64
                 }
-                None if u.weak.contains(r.symbol_name.as_str()) => 0,
-                None => return Err(unreachable_object(&u, &r.symbol_name)),
+                None => match bound_object(&u, stdio, &r.symbol_name) {
+                    Some(at) => at as u64,
+                    None if u.weak.contains(r.symbol_name.as_str()) => 0,
+                    None => return Err(unreachable_object(&u, &r.symbol_name)),
+                },
             };
             put(
                 &mut image,

@@ -42,6 +42,17 @@ fn is_pcrel_word(r: &crate::c5::asm::AsmSectionReloc) -> bool {
     r.kind == crate::c5::asm::AsmRelocKind::Data && r.pcrel && matches!(r.width, 4 | 8)
 }
 
+/// An AArch64 branch (JUMP26 or CALL26, by instruction or `.reloc`) on a
+/// word of a data section, which holds the distance to its target as a
+/// pc-relative word does.
+fn is_branch_word(r: &crate::c5::asm::AsmSectionReloc) -> bool {
+    use crate::c5::asm::AsmRelocKind;
+    matches!(
+        r.kind,
+        AsmRelocKind::A64Branch26 { .. } | AsmRelocKind::Explicit(282 | 283)
+    )
+}
+
 /// The anchor, part and addend of the fixup a folded field takes when the
 /// writer must place its target: an aarch64 page or in-page half.
 fn image_field_fixup(
@@ -166,7 +177,11 @@ pub(crate) fn fold_asm_sections(
                 // its tail is the only writable byte range left to grow.
                 // Materialize the zero-fill so appending cannot move a bss
                 // object; the payload needs file backing regardless.
-                if !s.relocs.iter().all(is_pcrel_word) {
+                if !s
+                    .relocs
+                    .iter()
+                    .all(|r| is_pcrel_word(r) || is_branch_word(r))
+                {
                     return Err(err(
                         Code::OBJECT_FORMAT,
                         alloc::format!(
@@ -272,8 +287,9 @@ pub(crate) fn fold_asm_sections(
                         target_offset: target_offset.wrapping_add_signed(r.addend),
                         target_anchor: target_offset,
                         target_in_data,
-                        width: r.width,
+                        width: 4.max(r.width),
                         image_relative: false,
+                        branch26: is_branch_word(r),
                     });
                     continue;
                 }

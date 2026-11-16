@@ -42,4 +42,8 @@ int _wutime(const unsigned short *path, struct _utimbuf *times);
 // POSIX: set the access and modification times of `path` to the values in
 // `times`, or to the current time when `times` is NULL. Returns 0 on success,
 // -1 on error.
+#ifdef _WIN32
+int utime(const char *path, struct utimbuf *times);
+#else
 int utime(const char *path, const struct utimbuf *times);
+#endif

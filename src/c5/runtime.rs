@@ -45,6 +45,14 @@ pub(super) static EMBEDDED_COMPILER_RT: &[(&str, &str)] = &[
     ),
     ("divti3.c", include_str!("../../libc/lib/divti3.c")),
     ("atomic.c", include_str!("../../libc/lib/atomic.c")),
+    (
+        "isa_available.c",
+        include_str!("../../libc/lib/isa_available.c"),
+    ),
+    (
+        "interlocked.c",
+        include_str!("../../libc/lib/interlocked.c"),
+    ),
 ];
 
 /// C-library sources joined to the link the same way, for entry points a
@@ -55,7 +63,21 @@ pub fn embedded_libc() -> &'static [(&'static str, &'static str)] {
     EMBEDDED_LIBC
 }
 
+/// The name an embedded source compiles under: its registry directory
+/// (`runtime`, `compiler-rt` or `libc`) and file name, joined with the
+/// target's path separator. Debug info and link maps show it.
+pub fn embedded_source_label(
+    dir: &str,
+    name: &str,
+    target: crate::c5::Target,
+) -> alloc::string::String {
+    let sep = if target.is_windows() { '\\' } else { '/' };
+    alloc::format!("{dir}{sep}{name}")
+}
+
 pub(super) static EMBEDDED_LIBC: &[(&str, &str)] = &[
+    ("ctype_ext.c", include_str!("../../libc/lib/ctype_ext.c")),
+    ("delay_load.c", include_str!("../../libc/lib/delay_load.c")),
     ("dirent_ext.c", include_str!("../../libc/lib/dirent_ext.c")),
     ("dlfcn_ext.c", include_str!("../../libc/lib/dlfcn_ext.c")),
     ("fenv_ext.c", include_str!("../../libc/lib/fenv_ext.c")),
@@ -88,6 +110,7 @@ pub(super) static EMBEDDED_LIBC: &[(&str, &str)] = &[
     ("string_ext.c", include_str!("../../libc/lib/string_ext.c")),
     ("strtod_ext.c", include_str!("../../libc/lib/strtod_ext.c")),
     ("time_ext.c", include_str!("../../libc/lib/time_ext.c")),
+    ("uchar_ext.c", include_str!("../../libc/lib/uchar_ext.c")),
     (
         "ucrt_locale.c",
         include_str!("../../libc/lib/ucrt_locale.c"),

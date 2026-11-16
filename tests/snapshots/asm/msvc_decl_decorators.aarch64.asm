@@ -32,9 +32,9 @@ Disassembly of section .text:
                	str	w1, [x0]
                	mov	x0, x1
                	cmp	w0, #0xb
-               	b.eq	<addr>
-               	bl	<addr>
-               	brk	#0x1
+               	b.ne	<addr>
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	bl	<addr>
+               	brk	#0x1

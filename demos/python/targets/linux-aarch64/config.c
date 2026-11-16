@@ -14,12 +14,12 @@ extern "C" {
 
 
 extern PyObject* PyInit_array(void);
-extern PyObject* PyInit__asyncio(void);
 extern PyObject* PyInit__bisect(void);
 extern PyObject* PyInit__csv(void);
 extern PyObject* PyInit__heapq(void);
 extern PyObject* PyInit__json(void);
 extern PyObject* PyInit__lsprof(void);
+extern PyObject* PyInit__math_integer(void);
 extern PyObject* PyInit__pickle(void);
 extern PyObject* PyInit__queue(void);
 extern PyObject* PyInit__random(void);
@@ -61,6 +61,7 @@ extern PyObject* PyInit_syslog(void);
 extern PyObject* PyInit_termios(void);
 extern PyObject* PyInit__posixshmem(void);
 extern PyObject* PyInit__multiprocessing(void);
+extern PyObject* PyInit__asyncio(void);
 extern PyObject* PyInit_atexit(void);
 extern PyObject* PyInit_faulthandler(void);
 extern PyObject* PyInit_posix(void);
@@ -103,12 +104,12 @@ extern PyObject* PyInit__string(void);
 struct _inittab _PyImport_Inittab[] = {
 
     {"array", PyInit_array},
-    {"_asyncio", PyInit__asyncio},
     {"_bisect", PyInit__bisect},
     {"_csv", PyInit__csv},
     {"_heapq", PyInit__heapq},
     {"_json", PyInit__json},
     {"_lsprof", PyInit__lsprof},
+    {"_math_integer", PyInit__math_integer},
     {"_pickle", PyInit__pickle},
     {"_queue", PyInit__queue},
     {"_random", PyInit__random},
@@ -150,6 +151,7 @@ struct _inittab _PyImport_Inittab[] = {
     {"termios", PyInit_termios},
     {"_posixshmem", PyInit__posixshmem},
     {"_multiprocessing", PyInit__multiprocessing},
+    {"_asyncio", PyInit__asyncio},
     {"atexit", PyInit_atexit},
     {"faulthandler", PyInit_faulthandler},
     {"posix", PyInit_posix},

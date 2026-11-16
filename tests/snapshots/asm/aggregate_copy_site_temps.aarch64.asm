@@ -181,11 +181,10 @@ Disassembly of section .text:
                	stp	x16, x17, [x1, #0x10]
                	ldr	x16, [x2, #0x20]
                	str	x16, [x1, #0x20]
-               	ldur	x0, [x29, #-0x8]
+               	ldur	x0, [x29, #-0x48]
+               	add	x3, x0, #0xe
                	add	x0, x0, #0xe
-               	ldur	x3, [x29, #-0x48]
-               	add	x3, x3, #0xe
-               	cmp	x0, x3
+               	cmp	x3, x0
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
                	ldrb	w3, [x2, x0]

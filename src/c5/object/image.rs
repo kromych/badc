@@ -100,6 +100,21 @@ pub(crate) fn bake_data_relocs(
             )));
         }
         let value = target as i64 - from as i64;
+        if r.branch26 {
+            let word = u32::from_le_bytes(data[off..off + 4].try_into().unwrap());
+            let word = crate::c5::codegen::aarch64::patch::branch26_word(word, value).ok_or_else(
+                || {
+                    C5Error::hard(
+                        Code::RELOCATION,
+                        format!(
+                            "{format}: a branch at data slot {off:#x} cannot reach {target:#x}"
+                        ),
+                    )
+                },
+            )?;
+            data[off..off + 4].copy_from_slice(&word.to_le_bytes());
+            continue;
+        }
         if width == 8 {
             data[off..off + 8].copy_from_slice(&value.to_le_bytes());
             continue;

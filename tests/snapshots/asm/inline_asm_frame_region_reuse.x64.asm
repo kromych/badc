@@ -35,9 +35,9 @@ Disassembly of section .text:
                	incq	%rax
                	incq	%rax
                	incq	%rax
+               	xorl	%ecx, %ecx
+               	movl	$0x1, %edx
                	cmpq	$0x8, %rax
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	movq	%rdx, %rax
+               	cmoveq	%rcx, %rax
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>

@@ -54,18 +54,15 @@ Disassembly of section .text:
                	ret
 
 <s32>:
-               	mov	x17, #-0x1              // =-1
-               	cmp	w0, w17
+               	cmn	w0, #0x1
                	b.lt	<addr>
-               	mov	x17, #-0x1              // =-1
-               	cmp	w0, w17
+               	cmn	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x3e7              // =999
                	ret
                	mov	x0, #0x64               // =100
                	ret
-               	mov	x17, #-0x2              // =-2
-               	cmp	w0, w17
+               	cmn	w0, #0x2
                	b.ne	<addr>
                	mov	x0, #0xc8               // =200
                	ret

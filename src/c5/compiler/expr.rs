@@ -17,7 +17,7 @@ use super::super::token::{Token, Ty};
 use super::CODE_BASE;
 use super::Compiler;
 use super::declarator::Derivation;
-use super::diag::{Category, Operand};
+use super::diag::{Category, Operand, Site};
 
 /// Largest byte count `__builtin_memcpy` is expanded inline for; gcc's
 /// threshold on both supported targets. The copy rides `Inst::Mcpy`,
@@ -83,7 +83,7 @@ impl Compiler {
         let suffix_long = self.lex.int_suffix_long;
         let mut is_unsigned = self.lex.int_suffix_unsigned;
         // A Microsoft sized suffix names the type outright; `i8` is plain
-        // `char`, as clang types it.
+        // `char`, as `__int8` is.
         let sized = match self.lex.int_suffix_width {
             8 if !is_unsigned => {
                 return super::types::plain_char_ty(self.lex.char_signed);
@@ -139,8 +139,7 @@ impl Compiler {
             }
             if rank >= 2 {
                 // C99 6.4.4.1p5 lists no unsigned type for a decimal constant; one
-                // past the widest signed type takes the unsigned type of that rank,
-                // as gcc and clang do.
+                // past the widest signed type takes the unsigned type of that rank.
                 is_unsigned = is_unsigned || allow_unsigned_fallback || fits(sizes[rank], false);
                 break;
             }
@@ -207,7 +206,7 @@ impl Compiler {
         }
     }
 
-    /// A GCC atomic builtin's value operand, converted to the type of the
+    /// An atomic builtin's value operand, converted to the type of the
     /// object it is stored into or combined with (C11 7.17.7).
     fn gcc_atomic_value(
         &mut self,
@@ -219,7 +218,38 @@ impl Compiler {
         Ok(self.convert_operand(a, elem_ty))
     }
 
-    /// Fetch a required GCC-builtin operand or report an arity error.
+    /// The operand of `__c11_atomic_fetch_add` / `_sub`: for an atomic
+    /// pointer, a count of pointees scaled to bytes as `+` and `-` scale it
+    /// (C17 7.17.7.5p3 with 6.5.6p8); otherwise as [`Self::gcc_atomic_value`].
+    fn c11_atomic_operand(
+        &mut self,
+        a: Option<super::super::ast::ExprId>,
+        name: &str,
+        elem_ty: i64,
+    ) -> Result<super::super::ast::ExprId, C5Error> {
+        use super::super::ast::Expr;
+        if !is_pointer_ty(elem_ty) {
+            return self.gcc_atomic_value(a, name, elem_ty);
+        }
+        let a = self.require_gcc_arg(a, name)?;
+        let diff_ty = self.ptrdiff_t_ty();
+        let count = self.convert_operand(a, diff_ty);
+        let pos = self.ast_src_pos();
+        let val = self.pointee_size(elem_ty).max(1);
+        let size = self.ast.push_expr(Expr::IntLit { val, ty: diff_ty }, pos);
+        let bytes = self.ast.push_expr(
+            Expr::Binary {
+                op: super::super::ir::BinOp::Mul,
+                lhs: count,
+                rhs: size,
+                ty: diff_ty,
+            },
+            pos,
+        );
+        Ok(self.convert_operand(bytes, elem_ty))
+    }
+
+    /// Fetch a required builtin operand or report an arity error.
     fn require_gcc_arg(
         &self,
         a: Option<super::super::ast::ExprId>,
@@ -329,16 +359,20 @@ impl Compiler {
     /// Parse an x86 SIMD builtin call (`__builtin_ia32_*`), the opening
     /// `(` already consumed. Operand count and kinds come from the table
     /// row; the immediate operand of the forms that take one must be an
-    /// integer constant expression, as it does in gcc.
-    fn parse_x86_simd_builtin(&mut self, op: u32, name: &str) -> Result<(), C5Error> {
+    /// integer constant expression.
+    fn parse_simd_builtin(&mut self, op: u32, name: &str) -> Result<(), C5Error> {
         use super::super::ast::{Expr, ExprId};
-        use super::super::x86_simd::{self, Form, Ret, Sem};
-        let row = x86_simd::get(op);
-        if !self.target.is_x86_64() {
+        use super::super::simd;
+        use super::super::simd::{Form, Ret, Sem};
+        let row = simd::get(op);
+        if !simd::on_target(op, self.target) {
             return Err(self.compile_err(
                 Code::UNSUPPORTED,
-                format!("`{name}` requires an x86 target"),
+                format!("`{name}` requires an {} target", simd::arch(op)),
             ));
+        }
+        if let Form::Sve(form) = row.form {
+            return self.parse_sve_builtin(op, form, name);
         }
         let mut args: Vec<ExprId> = Vec::new();
         let mut arg_tys: Vec<i64> = Vec::new();
@@ -372,17 +406,26 @@ impl Compiler {
                 | Form::Shift
                 | Form::Extract
                 | Form::Insert
-                | Form::MoveMask => i == 0,
+                | Form::MoveMask
+                | Form::ToInt => i == 0,
                 Form::Vv | Form::VvI => i < 2,
-                Form::Store => i == 1,
-                Form::Load | Form::RdRand => false,
+                Form::Vvv | Form::VvvI => i < 3,
+                Form::CmpMask => i < 2,
+                Form::MaskBlend => i != 1,
+                Form::Store | Form::MaskStore => i == row.form.arity() - 1,
+                Form::Narrow | Form::Zext => i == 0,
+                Form::Widen => i < 2,
+                Form::Load | Form::RdRand | Form::MaskLoad | Form::Sve(_) => false,
             };
             let wants_pointer = matches!(row.form, Form::Load | Form::RdRand)
-                || (row.form == Form::Store && i == 0);
-            if wants_vector && !(is_vector_ty(&self.structs, ty) && self.size_of_type(ty) == 16) {
+                || (matches!(row.form, Form::Store | Form::MaskStore) && i == 0)
+                || (row.form == Form::MaskLoad && i == 1);
+            let bytes = usize::from(row.arg_bytes(i));
+            if wants_vector && !(is_vector_ty(&self.structs, ty) && self.size_of_type(ty) == bytes)
+            {
                 return Err(self.compile_err(
                     Code::INVALID_ARGUMENTS,
-                    format!("`{name}` argument {} must be a 16-byte vector", i + 1),
+                    format!("`{name}` argument {} must be a {bytes}-byte vector", i + 1),
                 ));
             }
             if wants_pointer && !is_pointer_ty(ty) {
@@ -405,12 +448,14 @@ impl Compiler {
                     format!("`{name}` last argument must be an integer constant expression"),
                 ));
             };
+            // gcc's PALIGNR builtin counts bits.
+            let n = if row.sem == Sem::AlignR { n / 8 } else { n };
             imm = Some(n as u8);
             args.truncate(last);
         } else if row.form == Form::Shift {
             // The byte-granular shifts encode a byte count while their
-            // builtins take bits, as gcc's do; they have no register-count
-            // form, so the operand must be constant.
+            // builtins take bits; they have no register-count form, so the
+            // operand must be constant.
             let bits_per_unit = if matches!(row.sem, Sem::ShlBytes | Sem::ShrBytes) {
                 8
             } else {
@@ -441,26 +486,584 @@ impl Compiler {
             // The headers' `__v16qi` is a vector of plain `char`.
             Some(Ty::Char) => {
                 let lane = super::types::plain_char_ty(self.lex.char_signed);
-                self.make_vector_type(lane, 16)
+                self.make_vector_type(lane, i64::from(row.ret_bytes()))
             }
-            Some(lane) => self.make_vector_type(lane as i64, 16),
+            Some(lane) => self.make_vector_type(lane as i64, i64::from(row.ret_bytes())),
             None if row.ret == Ret::Void => super::types::void_ty(),
+            None if row.ret == Ret::Int64 => Ty::LongLong as i64,
             None => Ty::Int as i64,
         };
         let pos = self.ast_src_pos();
-        let id = self.ast.push_expr(Expr::X86Simd { op, args, imm, ty }, pos);
+        let id = self.ast.push_expr(Expr::Simd { op, args, imm, ty }, pos);
         self.ty = ty;
         self.ast_acc = Some(id);
         Ok(())
     }
 
-    /// Parse a GCC memory-transfer builtin (`__builtin_memcpy`,
+    /// An SVE builtin (`__builtin_sve_*`, ACLE), the `(` consumed. A typed
+    /// family's first operand is the SVE type that selects its row and
+    /// types its result, `svbool_t` its row over predicates; a load's may
+    /// be `void`, its pointer's element type then selecting the vector
+    /// type, and another's `void`, the type of its first SVE operand after
+    /// the governing one then selecting it, as an overloaded intrinsic's
+    /// operands do. A scalar where a vector operand stands is that vector
+    /// with the scalar in every lane, and a pattern operand an integer
+    /// constant expression.
+    fn parse_sve_builtin(
+        &mut self,
+        mut first: u32,
+        form: super::super::simd::SveForm,
+        name: &str,
+    ) -> Result<(), C5Error> {
+        use super::super::ast::Expr;
+        use super::super::simd::{self, Form, SveShape};
+        use super::{SveElem, SveType};
+        let pred = self.sve_type_tag(SveType::Predicate);
+        let mut shape = form.shape;
+        let typed = !matches!(
+            shape,
+            SveShape::PTrue
+                | SveShape::Count
+                | SveShape::While { .. }
+                | SveShape::Test(_)
+                | SveShape::PredPermute
+                | SveShape::PredReverse
+                | SveShape::PFalse
+        );
+        let mut vty: Option<i64> = None;
+        let mut deferred = false;
+        if typed {
+            if !self.lex_is_type_start() {
+                return Err(self.compile_err(
+                    Code::INVALID_ARGUMENTS,
+                    format!("`{name}` takes an SVE type first"),
+                ));
+            }
+            let t = self.parse_type_name()?.ty;
+            let on_predicates = (self.sve_type_of(t) == Some(SveType::Predicate))
+                .then(|| simd::select_sve(name, 1, SveElem::Signed, SveShape::on_predicates))
+                .flatten();
+            if let Some(op) = on_predicates {
+                if let Form::Sve(f) = simd::get(op).form {
+                    shape = f.shape;
+                }
+                (first, vty) = (op, Some(t));
+            } else if is_void_ty(t) {
+                deferred = shape != SveShape::Load;
+            } else if shape.on_predicates() {
+                let t = super::types::format_type(t, &self.structs);
+                return Err(self.compile_err(
+                    Code::INVALID_ARGUMENTS,
+                    format!("`{name}` has no form over `{t}`"),
+                ));
+            } else {
+                if !matches!(self.sve_type_of(t), Some(SveType::Vector { .. })) {
+                    return Err(self.compile_err(
+                        Code::INVALID_ARGUMENTS,
+                        format!("`{name}` takes an SVE vector type first"),
+                    ));
+                }
+                vty = Some(t);
+            }
+            self.consume(b',', "`,` expected after the type")?;
+        }
+        let mut args = Vec::new();
+        // The operands of a deferred type, by index, with their types.
+        let mut pending: Vec<(usize, i64)> = Vec::new();
+        let mut imm = None;
+        // The lane index of an extraction, checked once the type is known.
+        let mut index: Option<i64> = None;
+        let mut while_kind = (true, 32);
+        // A pattern operand rides the row as its immediate.
+        let arity = match shape {
+            SveShape::PTrue | SveShape::Count => 1,
+            SveShape::Extract => 3,
+            _ => simd::get(first).form.arity(),
+        };
+        for i in 0..arity {
+            if i > 0 {
+                self.consume(b',', "`,` expected between the operands")?;
+            }
+            let what = format!("operand {} of `{name}`", i + 1);
+            let governing = shape.governed() && i == 0;
+            let immediate = shape == SveShape::Extract && i == 2;
+            if deferred && !governing && !immediate {
+                self.expr_or_void(Token::Assign as i64)?;
+                let id = (self.ast_acc)
+                    .ok_or_else(|| self.compile_err(Code::SYNTAX, "expression expected"))?;
+                args.push(id);
+                pending.push((i, self.ty));
+                continue;
+            }
+            let id = match shape {
+                _ if governing || shape.on_predicates() => self.parse_sve_operand(pred, &what)?,
+                SveShape::Select => {
+                    let t = vty.ok_or_else(|| self.compile_err(Code::SYNTAX, "type expected"))?;
+                    self.parse_sve_operand(t, &what)?
+                }
+                SveShape::Load | SveShape::Store if i == 1 => {
+                    self.expr(Token::Assign as i64)?;
+                    let (t, id) = self.sve_pointer_arg(vty, name, &what)?;
+                    vty = Some(t);
+                    id
+                }
+                SveShape::While { .. } => {
+                    self.expr(Token::Assign as i64)?;
+                    if !super::types::is_integer_scalar_ty(self.ty) {
+                        return Err(self.compile_err(
+                            Code::INVALID_ARGUMENTS,
+                            format!("{what} must be an integer"),
+                        ));
+                    }
+                    let wide = self.size_of_type(self.ty) == 8;
+                    let signed = !super::types::is_unsigned_ty(self.ty)
+                        || !wide && self.size_of_type(self.ty) < 4;
+                    if i == 0 {
+                        while_kind = (signed, if wide { 64 } else { 32 });
+                    }
+                    let to = if wide {
+                        Ty::LongLong as i64
+                    } else {
+                        Ty::Int as i64
+                    };
+                    let to = if signed { to } else { to | UNSIGNED_BIT };
+                    self.convert_assign_rhs(to);
+                    self.ast_acc
+                        .ok_or_else(|| self.compile_err(Code::SYNTAX, "expression expected"))?
+                }
+                SveShape::Extract if immediate => {
+                    index = Some(self.parse_constant_int()?);
+                    continue;
+                }
+                SveShape::Reinterpret => {
+                    self.expr_or_void(Token::Assign as i64)?;
+                    self.sve_any_vector(&what)?
+                }
+                SveShape::DupLane if i == 1 => {
+                    self.expr(Token::Assign as i64)?;
+                    self.sve_index(&what)?
+                }
+                SveShape::PTrue | SveShape::Count => {
+                    self.expr(Token::Assign as i64)?;
+                    let id = self
+                        .ast_acc
+                        .ok_or_else(|| self.compile_err(Code::SYNTAX, "expression expected"))?;
+                    match self.expr_const_int(id) {
+                        Some(p @ 0..=31) => imm = Some(p as u8),
+                        _ => {
+                            return Err(self.compile_err(
+                                Code::CONSTANT_EXPRESSION,
+                                format!("{what} must be a pattern, a constant from 0 to 31"),
+                            ));
+                        }
+                    }
+                    continue;
+                }
+                _ => {
+                    let t = vty.ok_or_else(|| self.compile_err(Code::SYNTAX, "type expected"))?;
+                    let t = self.sve_operand_ty(first, i, t);
+                    self.expr_or_void(Token::Assign as i64)?;
+                    if matches!(shape, SveShape::Dup | SveShape::Index) {
+                        self.sve_scalar(t, &what)?
+                    } else {
+                        self.sve_vector_arg(t, &what)?
+                    }
+                }
+            };
+            args.push(id);
+        }
+        self.consume(b')', "`)` expected after the operands")?;
+        if deferred {
+            // A family whose result is of another type takes the type of
+            // its last operand, a merging form's first being of the result's.
+            let last = simd::sve_result_elems(first).is_some();
+            let mut types = pending.iter().map(|p| p.1);
+            let t = match last {
+                true => types.rev().find(|&t| self.sve_type_of(t).is_some()),
+                false => types.find(|&t| self.sve_type_of(t).is_some()),
+            };
+            let Some(t) = t else {
+                return Err(self.compile_err(
+                    Code::INVALID_ARGUMENTS,
+                    format!("`{name}` takes an SVE vector or predicate operand"),
+                ));
+            };
+            if self.sve_type_of(t) == Some(SveType::Predicate) {
+                let rows = simd::select_sve(name, 1, SveElem::Signed, SveShape::on_predicates);
+                let Some(op) = rows.filter(|&op| simd::get(op).form.arity() == args.len()) else {
+                    return Err(self.compile_err(
+                        Code::INVALID_ARGUMENTS,
+                        format!("`{name}` has no form over `svbool_t`"),
+                    ));
+                };
+                if let Form::Sve(f) = simd::get(op).form {
+                    shape = f.shape;
+                }
+                first = op;
+            }
+            vty = Some(t);
+            for (i, ty) in pending {
+                let what = format!("operand {} of `{name}`", i + 1);
+                (self.ast_acc, self.ty) = (Some(args[i]), ty);
+                args[i] = match shape {
+                    _ if shape.on_predicates() => self.check_sve_operand(pred, &what)?,
+                    SveShape::Select => self.check_sve_operand(t, &what)?,
+                    SveShape::Store if i == 1 => self.sve_pointer_arg(Some(t), name, &what)?.1,
+                    SveShape::DupLane if i == 1 => self.sve_index(&what)?,
+                    _ => {
+                        let t = self.sve_operand_ty(first, i, t);
+                        self.sve_vector_arg(t, &what)?
+                    }
+                };
+            }
+        }
+        let row = match (shape, vty.and_then(|t| self.sve_lane(t))) {
+            (SveShape::While { .. }, _) => {
+                let lane = simd::get(first).int_width;
+                let (signed, bits) = while_kind;
+                simd::select_sve(name, lane, SveElem::Signed, |s| {
+                    s == SveShape::While { signed, bits }
+                })
+            }
+            (SveShape::PTrue | SveShape::Count | SveShape::PFalse, _) => Some(first),
+            _ if shape.on_predicates() => Some(first),
+            (_, Some((size, kind))) => simd::select_sve(name, 1 << size, kind, |s| s == shape),
+            _ => None,
+        };
+        let Some(op) = row else {
+            let t = vty
+                .map(|t| super::types::format_type(t, &self.structs))
+                .unwrap_or_default();
+            return Err(self.compile_err(
+                Code::INVALID_ARGUMENTS,
+                format!("`{name}` has no form over `{t}`"),
+            ));
+        };
+        let lane = |t: i64| self.sve_lane(t).unwrap_or((0, SveElem::Signed));
+        // An extraction's index counts lanes, of which the bytes of the
+        // longest vector, 256, hold at most 256 >> size.
+        if shape == SveShape::Extract {
+            let last = (256i64 >> vty.map_or(0, |t| lane(t).0)) - 1;
+            match index {
+                Some(k) if (0..=last).contains(&k) => imm = Some(k as u8),
+                _ => {
+                    return Err(self.compile_err(
+                        Code::CONSTANT_EXPRESSION,
+                        format!("operand 3 of `{name}` must be a constant from 0 to {last}"),
+                    ));
+                }
+            }
+        }
+        let ty = match shape {
+            SveShape::Unary(_) => vty.map_or(pred, |t| self.sve_result_ty(op, t)),
+            SveShape::Binary(_)
+            | SveShape::Load
+            | SveShape::Dup
+            | SveShape::Select
+            | SveShape::DupLane
+            | SveShape::Reinterpret
+            | SveShape::Permute
+            | SveShape::Reverse
+            | SveShape::Extract
+            | SveShape::Lanewise
+            | SveShape::Index
+            | SveShape::Ternary(..) => vty.unwrap_or(pred),
+            SveShape::Compare
+            | SveShape::PTrue
+            | SveShape::PFalse
+            | SveShape::PredPermute
+            | SveShape::PredReverse
+            | SveShape::While { .. }
+            | SveShape::PredSelect
+            | SveShape::PredLogic
+            | SveShape::PredNot => pred,
+            SveShape::Test(_) => Ty::Bool as i64,
+            SveShape::Count => self.size_t_ty(),
+            SveShape::Store => super::types::void_ty(),
+            SveShape::Reduce => match vty.map(lane) {
+                Some((2, SveElem::Float)) => Ty::Float as i64,
+                Some((3, SveElem::Float)) => Ty::Double as i64,
+                Some((size, kind)) if size < 3 && !simd::sve_widening_sum(op) => {
+                    let t = [Ty::Char, Ty::Short, Ty::Int][usize::from(size)] as i64;
+                    if kind == SveElem::Unsigned {
+                        t | UNSIGNED_BIT
+                    } else {
+                        t
+                    }
+                }
+                Some((_, SveElem::Unsigned)) => self.size_t_ty(),
+                _ => self.ptrdiff_t_ty(),
+            },
+        };
+        self.mark_emit_other();
+        let pos = self.ast_src_pos();
+        let id = self.ast.push_expr(Expr::Simd { op, args, imm, ty }, pos);
+        self.ty = ty;
+        self.ast_acc = Some(id);
+        Ok(())
+    }
+
+    /// The vector operand just parsed, of any SVE vector type.
+    fn sve_any_vector(&mut self, what: &str) -> Result<super::super::ast::ExprId, C5Error> {
+        if self.sve_lane(self.ty).is_none() {
+            return Err(
+                self.compile_err(Code::INVALID_ARGUMENTS, format!("{what}: vector expected"))
+            );
+        }
+        let ty = self.ty;
+        self.check_sve_operand(ty, what)
+    }
+
+    /// The lane index just parsed, an integer converted to 64 bits, whose
+    /// low bits as wide as the lane select it.
+    fn sve_index(&mut self, what: &str) -> Result<super::super::ast::ExprId, C5Error> {
+        if !super::types::is_integer_scalar_ty(self.ty) {
+            return Err(self.compile_err(
+                Code::INVALID_ARGUMENTS,
+                format!("{what} must be an integer"),
+            ));
+        }
+        self.convert_assign_rhs(Ty::LongLong as i64 | UNSIGNED_BIT);
+        self.ast_acc
+            .ok_or_else(|| self.compile_err(Code::SYNTAX, "expression expected"))
+    }
+
+    /// The type of vector operand `i` of the family of row `first` whose
+    /// type is `ty`: a shift's count is the unsigned vector of its width
+    /// (ACLE, svlsl), and a merging form's inactive operand is of its
+    /// result's type.
+    fn sve_operand_ty(&mut self, first: u32, i: usize, ty: i64) -> i64 {
+        use super::super::simd::{self, Sem, SvePred, SveShape};
+        let row = simd::get(first);
+        let count = matches!(row.sem, Sem::ShlVar(_) | Sem::ShrVar(_) | Sem::SarVar(_));
+        let inactive =
+            matches!(row.form, simd::Form::Sve(f) if f.shape == SveShape::Unary(SvePred::Merge));
+        match self.sve_lane(ty) {
+            Some((size, _)) if count && i == 2 => self.sve_type_tag(super::SveType::Vector {
+                size,
+                kind: super::SveElem::Unsigned,
+            }),
+            Some(_) if inactive && i == 1 => self.sve_result_ty(first, ty),
+            _ => ty,
+        }
+    }
+
+    /// The vector type row `op` over vectors of type `ty` gives: `ty`, or
+    /// the vector of its width of the row's result kind
+    /// ([`simd::sve_result_elems`](super::super::simd::sve_result_elems)).
+    fn sve_result_ty(&mut self, op: u32, ty: i64) -> i64 {
+        match (super::super::simd::sve_result_elems(op), self.sve_lane(ty)) {
+            (Some(kind), Some((size, _))) => {
+                self.sve_type_tag(super::SveType::Vector { size, kind })
+            }
+            _ => ty,
+        }
+    }
+
+    /// The pointer operand of a load or store just parsed, and the vector
+    /// type `vty` it accesses, or its elements' when `None`.
+    fn sve_pointer_arg(
+        &mut self,
+        vty: Option<i64>,
+        name: &str,
+        what: &str,
+    ) -> Result<(i64, super::super::ast::ExprId), C5Error> {
+        use super::SveType;
+        let (size, kind) = self.sve_pointer_element(name)?;
+        let elems = SveType::Vector { size, kind };
+        let t = vty.unwrap_or_else(|| self.sve_type_tag(elems));
+        if self.sve_type_of(t) != Some(elems) && self.sve_lane(t).map(|l| l.0) != Some(size) {
+            return Err(self.compile_err(
+                Code::INCOMPATIBLE_TYPES,
+                format!("{what} points to elements of another width"),
+            ));
+        }
+        let id =
+            (self.ast_acc).ok_or_else(|| self.compile_err(Code::SYNTAX, "expression expected"))?;
+        Ok((t, id))
+    }
+
+    /// The lane size (log2) and element kind of SVE vector type `t`.
+    fn sve_lane(&self, t: i64) -> Option<(u8, super::SveElem)> {
+        match self.sve_type_of(t)? {
+            super::SveType::Vector { size, kind } => Some((size, kind)),
+            super::SveType::Predicate => None,
+        }
+    }
+
+    /// The element of the pointer operand just parsed, as an SVE vector
+    /// type's lane: its size (log2) and kind.
+    fn sve_pointer_element(&self, name: &str) -> Result<(u8, super::SveElem), C5Error> {
+        use super::SveElem;
+        let elem = pointee_ty(self.ty);
+        let size = self.size_of_type(elem);
+        let kind = if super::types::is_float_ty(elem) || super::types::is_double_ty(elem) {
+            SveElem::Float
+        } else if super::types::is_unsigned_ty(elem) {
+            SveElem::Unsigned
+        } else {
+            SveElem::Signed
+        };
+        let integer = super::types::is_integer_scalar_ty(elem) || kind == SveElem::Float;
+        if !is_pointer_ty(self.ty) || !integer || !matches!(size, 1 | 2 | 4 | 8) {
+            return Err(self.compile_err(
+                Code::INVALID_ARGUMENTS,
+                format!("`{name}` takes a pointer to integer or floating elements"),
+            ));
+        }
+        Ok((size.trailing_zeros() as u8, kind))
+    }
+
+    /// The vector operand of type `ty` just parsed: an SVE value of it, or a
+    /// scalar, the vector with it in every lane (the ACLE's `_n` forms),
+    /// which the row `dup` of `ty` builds.
+    fn sve_vector_arg(
+        &mut self,
+        ty: i64,
+        what: &str,
+    ) -> Result<super::super::ast::ExprId, C5Error> {
+        use super::super::ast::Expr;
+        if self.sve_type_of(self.ty).is_some() {
+            return self.check_sve_operand(ty, what);
+        }
+        let id = self.sve_scalar(ty, what)?;
+        let Some((size, kind)) = self.sve_lane(ty) else {
+            return Err(
+                self.compile_err(Code::INVALID_ARGUMENTS, format!("{what}: vector expected"))
+            );
+        };
+        let dup = super::super::simd::select_sve("__builtin_sve_dup", 1 << size, kind, |_| true);
+        let Some(op) = dup else {
+            return Err(
+                self.compile_err(Code::INVALID_ARGUMENTS, format!("{what}: no scalar form"))
+            );
+        };
+        let pos = self.ast_src_pos();
+        Ok(self.ast.push_expr(
+            Expr::Simd {
+                op,
+                args: alloc::vec![id],
+                imm: None,
+                ty,
+            },
+            pos,
+        ))
+    }
+
+    /// The scalar operand just parsed, converted for a lane of vector type
+    /// `ty`: a floating one to the lane's type, an integer one to 64 bits,
+    /// whose low bits the lane takes.
+    fn sve_scalar(&mut self, ty: i64, what: &str) -> Result<super::super::ast::ExprId, C5Error> {
+        use super::SveElem;
+        let Some((size, kind)) = self.sve_lane(ty) else {
+            return Err(
+                self.compile_err(Code::INVALID_ARGUMENTS, format!("{what}: vector expected"))
+            );
+        };
+        if !super::types::is_integer_scalar_ty(self.ty)
+            && !super::types::is_floating_scalar(self.ty)
+        {
+            return Err(self.compile_err(
+                Code::INVALID_ARGUMENTS,
+                format!("{what} must be an SVE vector or a scalar"),
+            ));
+        }
+        let elem = match (kind, size) {
+            (SveElem::Float, 2) => Ty::Float as i64,
+            (SveElem::Float, _) => Ty::Double as i64,
+            (SveElem::Unsigned, _) => Ty::LongLong as i64 | UNSIGNED_BIT,
+            _ => Ty::LongLong as i64,
+        };
+        self.convert_assign_rhs(elem);
+        self.ast_acc
+            .ok_or_else(|| self.compile_err(Code::SYNTAX, "expression expected"))
+    }
+
+    /// `__builtin_shufflevector(a, b, idx...)` with the `(` consumed: two
+    /// vectors of one type, then an integer constant per result lane, a
+    /// lane of `a` followed by `b` or -1 for an undefined one. The result
+    /// has `a`'s element type and one lane per index, which counts a power
+    /// of two.
+    fn parse_shufflevector_builtin(&mut self) -> Result<(), C5Error> {
+        use super::super::ast::Expr;
+        const NAME: &str = "__builtin_shufflevector";
+        let mut ops = Vec::with_capacity(2);
+        for _ in 0..2 {
+            self.expr(Token::Assign as i64)?;
+            let (Some(e), ty) = (self.ast_acc, self.ty) else {
+                return Err(self.compile_err(Code::SYNTAX, "expression expected"));
+            };
+            if !is_vector_ty(&self.structs, ty) {
+                return Err(self.compile_err(
+                    Code::INVALID_ARGUMENTS,
+                    format!("`{NAME}` operands must be vectors"),
+                ));
+            }
+            ops.push((e, ty));
+            if self.lex.tk != ',' {
+                return Err(self.compile_err(
+                    Code::INVALID_ARGUMENTS,
+                    format!("`{NAME}` expects two vectors and the lanes to take"),
+                ));
+            }
+            self.next()?;
+        }
+        let ((a, aty), (b, bty)) = (ops[0], ops[1]);
+        let lanes_of = |c: &Self, ty: i64| {
+            let f = &c.structs[struct_id_of(ty)].fields[0];
+            (unqualified_version_ty(f.ty), f.array_size.max(1))
+        };
+        let (elem, lanes) = lanes_of(self, aty);
+        if lanes_of(self, bty) != (elem, lanes) {
+            return Err(self.compile_err(
+                Code::INVALID_ARGUMENTS,
+                format!("`{NAME}` operands must have the same vector type"),
+            ));
+        }
+        let mut idx = Vec::new();
+        loop {
+            let i = self.parse_constant_int()?;
+            if !(-1..2 * lanes).contains(&i) {
+                return Err(self.compile_err(
+                    Code::INVALID_ARGUMENTS,
+                    format!("`{NAME}` index {i} is outside -1 to {}", 2 * lanes - 1),
+                ));
+            }
+            idx.push(i as i32);
+            match self.lex.tk {
+                t if t == ',' as i64 => self.next()?,
+                t if t == ')' as i64 => break,
+                _ => return Err(self.compile_err(Code::SYNTAX, "`)` expected")),
+            }
+        }
+        self.next()?; // consume ')'
+        if !idx.len().is_power_of_two() {
+            return Err(self.compile_err(
+                Code::INVALID_ARGUMENTS,
+                format!(
+                    "`{NAME}` takes a power-of-two count of indices, not {}",
+                    idx.len()
+                ),
+            ));
+        }
+        let elem_size = self.size_of_type(elem) as i64;
+        let ty = self.make_vector_type(elem, elem_size * idx.len() as i64);
+        self.mark_emit_other();
+        let pos = self.ast_src_pos();
+        let id = self
+            .ast
+            .push_expr(Expr::ShuffleVector { a, b, idx, ty }, pos);
+        self.ty = ty;
+        self.ast_acc = Some(id);
+        Ok(())
+    }
+
+    /// Parse a memory-transfer builtin (`__builtin_memcpy`,
     /// `__builtin_memmove`, `__builtin_memset`) with the opening `(`
     /// already consumed. A byte count that is an integer constant
     /// expression within the expansion cap builds the inline-expansion
     /// node; any other count builds a call to the library function of
-    /// the same name -- the split gcc makes between an expanded and a
-    /// called transfer. The decision is per call site, so one declined
+    /// the same name. The decision is per call site, so one declined
     /// count in a translation unit does not withdraw the expansion from
     /// the rest.
     fn parse_mem_transfer_builtin(
@@ -482,7 +1085,7 @@ impl Compiler {
                         format!("too many arguments to `{name}` (expected 3)"),
                     ));
                 };
-                let line = self.lex.line;
+                let at = self.site();
                 self.expr(Token::Assign as i64)?;
                 self.reject_void_value(self.ty)?;
                 // The pointer operands guarantee their pointee type's
@@ -497,7 +1100,7 @@ impl Compiler {
                     };
                     ptr_align = ptr_align.min(a.max(1));
                 }
-                args.push(self.convert_builtin_value(name, args.len(), want, line)?);
+                args.push(self.convert_builtin_value(name, args.len(), want, at)?);
                 if !self.list_separator(')', "argument")? {
                     break;
                 }
@@ -615,7 +1218,7 @@ impl Compiler {
     /// the library function `name`, with the arguments already parsed. An
     /// undeclared library name reports the same "unknown function" the
     /// ordinary call path does, so the auto-include retry brings its header
-    /// in (C99 7.1.4p2).
+    /// in.
     pub(super) fn emit_builtin_libcall(
         &mut self,
         name: &str,
@@ -769,10 +1372,43 @@ impl Compiler {
             ));
         }
         let elem_ty = pointee_ty(first_ty);
+        // The generic forms on an object no instruction covers call the
+        // runtime's generic functions, which Windows has none of.
+        if matches!(name, "__atomic_load" | "__atomic_store")
+            && !matches!(self.size_of_type(elem_ty), 1 | 2 | 4 | 8)
+            && !self.target.is_windows()
+        {
+            self.atomic_generic_libcalls = true;
+        }
         let ptr = args[0];
         let val1 = args.get(1).copied();
         let val2 = args.get(2).copied();
         let pos = self.ast_src_pos();
+        // The atomic object every form but a load writes is a modifiable
+        // lvalue (C17 6.5.16p2); the generic load's result and the expected
+        // value a compare-exchange writes back are `T *` parameters, so a
+        // pointer to const discards its qualifier (6.5.16.1p1).
+        if !matches!(name, "__atomic_load_n" | "__atomic_load") {
+            self.require_modifiable(elem_ty, &format!("`{name}` write"))?;
+        }
+        let out_arg = match name {
+            "__atomic_load" => Some(1),
+            "__atomic_compare_exchange_n" | "__atomic_compare_exchange" => Some(1),
+            _ => None,
+        };
+        let out_ty = out_arg
+            .and_then(|i| args.get(i))
+            .and_then(|a| super::super::ast::expr_ty(self.ast.expr(*a)));
+        if let (Some(i), Some(ty)) = (out_arg, out_ty)
+            && is_pointer_ty(ty)
+            && super::types::is_const_object_ty(pointee_ty(ty))
+        {
+            let text = format!(
+                "discards `const` qualifier from pointer target type in argument {} of `{name}`",
+                i + 1
+            );
+            self.warn_at(Code::DISCARDED_QUALIFIERS, self.site(), text);
+        }
 
         let seq = MemOrder::SeqCst;
         let rmw_order = |this: &Self| {
@@ -858,6 +1494,15 @@ impl Compiler {
                     elem_ty,
                     rmw_order(self),
                 )
+            }
+            "__c11_atomic_fetch_add" | "__c11_atomic_fetch_sub" => {
+                let v = self.c11_atomic_operand(val1, name, elem_ty)?;
+                let kind = if name.ends_with("add") {
+                    AtomicKind::FetchAdd
+                } else {
+                    AtomicKind::FetchSub
+                };
+                (kind, alloc::vec![ptr, v], elem_ty, rmw_order(self))
             }
             "__atomic_fetch_and" | "__sync_fetch_and_and" => {
                 let v = self.gcc_atomic_value(val1, name, elem_ty)?;
@@ -1026,7 +1671,7 @@ impl Compiler {
         self.require_operands(op, false, lhs_ty, rhs_ty)
     }
 
-    /// Result type of a GCC vector-extension binary operation, or `None` when
+    /// Result type of a GNU C vector-extension binary operation, or `None` when
     /// the operand pair is not one. `+ - * / %`, `& | ^` and the shifts take
     /// two vectors of the same byte width and the same element width and
     /// kind, or a vector against a scalar that broadcasts to every lane.
@@ -1076,7 +1721,7 @@ impl Compiler {
         Some(vec_ty)
     }
 
-    /// Result type of a GCC vector-extension comparison, or `None` when
+    /// Result type of a vector-extension comparison, or `None` when
     /// the operand pair is not one. The operand rule is the arithmetic
     /// one; the result is a vector of the same byte width whose elements
     /// are the signed integer type of the operands' element width, each
@@ -1094,9 +1739,9 @@ impl Compiler {
         Some(self.make_vector_type(signed, bytes))
     }
 
-    /// Comparison opcode flavour for a vector operand pair: floating by
+    /// Comparison opcode flavor for a vector operand pair: floating by
     /// the element type; between two integer vectors unsigned when either
-    /// element is (6.3.1.8 common type, as gcc compares); against a
+    /// element is (the 6.3.1.8 common type); against a
     /// broadcast scalar the vector's element decides, since the scalar
     /// converts to it first.
     fn vector_compare_op(
@@ -1210,7 +1855,7 @@ impl Compiler {
     /// The lvalue and type for a `++` / `--` operand that cannot use the
     /// generic trailing-load rewrite and must build `Expr::PreInc` /
     /// `Expr::PostInc` directly: a bitfield member (its load is a
-    /// shift-and-mask sequence, not one scalar load) and the GCC 128-bit
+    /// shift-and-mask sequence, not one scalar load) and the 128-bit
     /// integer (its lvalue's value is its address, so there is no
     /// trailing load at all).
     fn direct_inc_lvalue(&self) -> Option<(super::super::ast::ExprId, i64)> {
@@ -1264,6 +1909,57 @@ impl Compiler {
         Ok(())
     }
 
+    /// The SVE value of type `ty` an assignment, initializer, argument or
+    /// return reads: an SVE object, `*p`, a call, or another such
+    /// assignment.
+    pub(super) fn parse_sve_operand(
+        &mut self,
+        ty: i64,
+        what: &str,
+    ) -> Result<super::super::ast::ExprId, C5Error> {
+        self.expr_or_void(Token::Assign as i64)?;
+        self.check_sve_operand(ty, what)
+    }
+
+    /// [`Self::parse_sve_operand`] of the expression just parsed.
+    fn check_sve_operand(
+        &mut self,
+        ty: i64,
+        what: &str,
+    ) -> Result<super::super::ast::ExprId, C5Error> {
+        use super::super::ast::{Expr, UnOp};
+        self.reject_void_value(self.ty)?;
+        if super::types::strip_unsigned(self.ty) != super::types::strip_unsigned(ty) {
+            let (l, r) = (
+                format_type(ty, &self.structs),
+                format_type(self.ty, &self.structs),
+            );
+            return Err(self.compile_err(
+                Code::INCOMPATIBLE_TYPES,
+                format!("types differ in the {what} (lhs={l}, rhs={r})"),
+            ));
+        }
+        let id = self
+            .ast_acc
+            .ok_or_else(|| self.compile_err(Code::SYNTAX, "expression expected"))?;
+        match self.ast.exprs[id as usize] {
+            Expr::VlaBase { .. }
+            | Expr::Assign { .. }
+            | Expr::Call { .. }
+            | Expr::Simd { .. }
+            | Expr::Unary {
+                op: UnOp::Deref, ..
+            } => Ok(id),
+            // TODO: SVE values from conditionals and comma expressions.
+            _ => Err(self.compile_err(
+                Code::INVALID_OPERANDS,
+                format!(
+                    "an SVE value of this form, which badc does not compile yet, in the {what}"
+                ),
+            )),
+        }
+    }
+
     pub(super) fn drop_operand_array_decay(&mut self) {
         self.pending.last_array_decay_size = 0;
         self.pending.last_array_decay_bytes = 0;
@@ -1283,14 +1979,16 @@ impl Compiler {
     }
 
     fn expr_inner(&mut self, lev: i64) -> Result<(), C5Error> {
+        let start = self.site();
         let outer = core::mem::replace(&mut self.operand_start, self.lex.tok_start());
         let r = self.parse_unary().and_then(|()| {
-            while self.lex.tk >= lev || self.lex.tk == '(' {
+            while self.lex.tk == '(' || (self.lex.tk >= lev && is_operator(self.lex.tk)) {
                 self.parse_operator()?;
             }
             Ok(())
         });
         self.operand_start = outer;
+        self.value_start = start;
         r
     }
 
@@ -1344,9 +2042,8 @@ impl Compiler {
             self.emit_int_constant(v, Ty::Int as i64);
             Ok(())
         } else if let Some(v) = self.try_fold_strlen_builtin()? {
-            // Likewise the length of a literal, which gcc folds at every
-            // optimization level; folding it here lets a `sizeof` over it see a
-            // constant.
+            // Likewise the length of a literal, folded at every optimization
+            // level so a `sizeof` over it sees a constant.
             let ty = self.size_t_ty();
             self.emit_int_constant(v.as_int(), ty);
             Ok(())
@@ -1487,7 +2184,7 @@ impl Compiler {
     }
 
     fn parse_offsetof_expr(&mut self) -> Result<(), C5Error> {
-        // A constant unless a designator subscript is a runtime value (GCC
+        // A constant unless a designator subscript is a runtime value (GNU C
         // extension), which the parser emitted onto the accumulator.
         self.next()?;
         match self.parse_builtin_offsetof(true)? {
@@ -1505,7 +2202,7 @@ impl Compiler {
 
     fn parse_func_name(&mut self) -> Result<(), C5Error> {
         // C99 6.4.2.2: `__func__` is `static const char[]` in the data
-        // segment; `__FUNCTION__` / `__PRETTY_FUNCTION__` are the GCC aliases.
+        // segment; `__FUNCTION__` / `__PRETTY_FUNCTION__` are the GNU C aliases.
         let offset = self.intern_func_name();
         self.emit_data_imm(offset);
         self.next()?;
@@ -1562,19 +2259,20 @@ impl Compiler {
             return self.parse_intrinsic_call(id_idx, kind as i64);
         }
         // A diagnostic about the call names it as written, `__builtin_strlen`
-        // where that binds `strlen`, as gcc and clang do.
+        // where that binds `strlen`.
         let spelled = self.symbols[id_idx].name.clone();
         let id_idx = self.bind_call_target(id_idx);
         match self.builtin_call(id_idx) {
             Some(BuiltinCall::Simd(op)) => {
                 let name = self.symbols[id_idx].name.clone();
-                self.parse_x86_simd_builtin(op, &name)
+                self.parse_simd_builtin(op, &name)
             }
             Some(BuiltinCall::MemTransfer(op)) => {
                 let name = self.symbols[id_idx].name.clone();
                 self.parse_mem_transfer_builtin(op, &name)
             }
             Some(BuiltinCall::ChooseExpr) => self.parse_choose_expr_builtin(),
+            Some(BuiltinCall::ShuffleVector) => self.parse_shufflevector_builtin(),
             Some(BuiltinCall::ConstantP) => self.parse_constant_p_builtin(),
             Some(BuiltinCall::HasAttribute) => self.parse_has_attribute_builtin(),
             Some(BuiltinCall::ObjectSize) => self.parse_object_size_builtin(),
@@ -1595,8 +2293,43 @@ impl Compiler {
                 let name = self.symbols[id_idx].name.clone();
                 self.parse_ms_intrinsic(&name)
             }
-            None => self.parse_direct_call(id_idx, spelled),
+            None => {
+                if self.symbols[id_idx].class == 0
+                    && self.std.pre_c99()
+                    && self.auto_include_unavailable(&spelled)
+                {
+                    self.declare_implicitly(id_idx)?;
+                }
+                self.parse_direct_call(id_idx, spelled)
+            }
         }
+    }
+
+    /// C90 6.3.2.2: a call to an undeclared identifier declares it as if
+    /// `extern int identifier();` preceded it. A library function the
+    /// auto-include retry can declare keeps the error that starts it.
+    fn declare_implicitly(&mut self, idx: usize) -> Result<(), C5Error> {
+        use super::redeclaration::{DeclaredType, LinkClaim, Params, Spelled};
+        let name = self.symbols[idx].name.clone();
+        let at = self.site();
+        let text = format!("implicit declaration of function `{name}`");
+        self.warn_at(Code::IMPLICIT_FUNCTION_DECLARATION, at, text);
+        let int = Spelled::plain(Ty::Int as i64);
+        let declared = DeclaredType::Function(int, Params::Unspecified, None, None);
+        self.declare_linked(idx, declared, at.line, false, LinkClaim::Prior)?;
+        let in_user_source = self.in_user_source();
+        let sym = &mut self.symbols[idx];
+        sym.class = Token::Fun as i64;
+        sym.type_ = Ty::Int as i64;
+        sym.set_fn_params(super::super::symbol::FnParams::default());
+        sym.linkage = super::super::symbol::Linkage::External;
+        sym.defined_here = false;
+        sym.is_extern_decl = true;
+        sym.saw_extern_decl = true;
+        sym.saw_noninline_decl = true;
+        sym.binding.set_decl_site(at);
+        sym.binding.decl_in_user_source = in_user_source;
+        Ok(())
     }
 
     /// The symbol a call binds to: a `__builtin_*` alias of a library
@@ -1631,14 +2364,26 @@ impl Compiler {
         if let Some(kind) = super::value_builtin::ValueBuiltin::of(name) {
             return Some(BuiltinCall::Value(kind));
         }
-        if super::super::preprocessor::builtins::is_ms_intrinsic(name, self.target) {
+        if self.is_call_site_intrinsic(name) {
             return Some(BuiltinCall::Ms);
         }
         let class = self.symbols[id_idx].class;
         let intrinsic_id = self.pp_intrinsics.get(name).copied();
         let not_real_fn = class != Token::Fun as i64 && class != Token::Sys as i64;
+        // The library `memcpy`, `memmove` and `memset` lower as their
+        // builtins unless `-fno-builtin`; a definition in the unit, a
+        // fortified wrapper among them, is called.
+        if !not_real_fn
+            && let Some(op) = library_mem_transfer_op(name)
+            && !self.library_name_is_opaque(name)
+            && !self.symbols[id_idx].defined_here
+            && self.current_function_name != name
+            && self.symbols[id_idx].params().len() == 3
+        {
+            return Some(BuiltinCall::MemTransfer(op));
+        }
         if not_real_fn {
-            if let Some(op) = super::super::x86_simd::lookup(name) {
+            if let Some(op) = super::super::simd::lookup(name) {
                 return Some(BuiltinCall::Simd(op));
             }
             if let Some(op) = mem_transfer_op(name) {
@@ -1646,6 +2391,7 @@ impl Compiler {
             }
             match name {
                 "__builtin_choose_expr" => return Some(BuiltinCall::ChooseExpr),
+                "__builtin_shufflevector" => return Some(BuiltinCall::ShuffleVector),
                 "__builtin_constant_p" => return Some(BuiltinCall::ConstantP),
                 "__builtin_has_attribute" => return Some(BuiltinCall::HasAttribute),
                 "__builtin_object_size" => return Some(BuiltinCall::ObjectSize),
@@ -1659,7 +2405,10 @@ impl Compiler {
             }
             if name.starts_with("__atomic_")
                 || name.starts_with("__sync_")
-                || name == "__c11_atomic_init"
+                || matches!(
+                    name,
+                    "__c11_atomic_init" | "__c11_atomic_fetch_add" | "__c11_atomic_fetch_sub"
+                )
             {
                 return Some(BuiltinCall::GccAtomic);
             }
@@ -1860,7 +2609,15 @@ impl Compiler {
             }
             // The `va_list`, then the rightmost fixed parameter (`va_start`, C99
             // 7.15.1.4) or the source `va_list` (`va_copy`), both as addresses.
+            // Both macros write the first (C17 6.5.16p2).
             self.expr(Token::Assign as i64)?;
+            // An array `va_list` (System V x86-64) decays to its element's address.
+            let va_ty = if is_struct_ty(self.ty) && struct_ptr_depth(self.ty) > 0 {
+                pointee_ty(self.ty)
+            } else {
+                self.ty
+            };
+            self.require_modifiable(va_ty, &format!("`{fn_name}` operand"))?;
             self.va_list_operand_address();
             if let Some(a) = self.ast_acc {
                 ast_intrinsic_args.push(a);
@@ -1873,12 +2630,12 @@ impl Compiler {
                 ));
             }
             self.next()?;
-            let line = self.lex.line;
+            let at = self.site();
             self.expr(Token::Assign as i64)?;
             if is(Intrinsic::VaCopy) {
                 self.va_list_operand_address();
             } else {
-                self.check_va_start_operand(self.ast_acc, line);
+                self.check_va_start_operand(self.ast_acc, at);
                 self.va_operand_take_address();
             }
             if let Some(a) = self.ast_acc {
@@ -1947,20 +2704,23 @@ impl Compiler {
         fn_name: &str,
         index: usize,
     ) -> Result<(), C5Error> {
-        let line = self.lex.line;
+        let at = self.site();
         self.expr(Token::Assign as i64)?;
         // C99 6.5.2.2p7: the operand converts as if by assignment to the
-        // builtin's parameter type, as gcc and clang check it.
+        // builtin's parameter type.
         let zero = self.value_is_null_pointer_constant();
-        if let Some(m) = Self::type_warning_with_flags(&self.structs, to_ty, self.ty, zero, false) {
+        let lax = self.lax_vectors;
+        if let Some(m) =
+            Self::type_warning_with_flags(&self.structs, to_ty, self.ty, zero, false, lax)
+        {
             let want = super::types::format_type(to_ty, &self.structs);
             let got = super::types::format_type(self.ty, &self.structs);
             let (reason, n) = (m.reason, index + 1);
             let text = format!("{reason} in argument {n} of `{fn_name}` (param={want}, arg={got})");
             if m.no_conversion {
-                return Err(self.compile_err_at(Code::INCOMPATIBLE_TYPES, line, text));
+                return Err(self.compile_err_at(Code::INCOMPATIBLE_TYPES, at.line, text));
             }
-            self.report_mismatch(&m, line, text)?;
+            self.report_mismatch(&m, at, text)?;
         }
         if let Some(child) = self.ast_acc {
             let pos = self.ast_src_pos();
@@ -2048,7 +2808,7 @@ impl Compiler {
 
     /// C99 7.15.1.4p1: `va_start` reaches the variable arguments of the
     /// function it appears in, so that function's parameter list ends in
-    /// `...`. gcc and clang reject it anywhere else, in every spelling.
+    /// `...`. It is rejected anywhere else, in every spelling.
     pub(super) fn require_variadic_function(&self) -> Result<(), C5Error> {
         if self.current_func_variadic {
             return Ok(());
@@ -2066,7 +2826,7 @@ impl Compiler {
     pub(super) fn check_va_start_operand(
         &mut self,
         operand: Option<super::super::ast::ExprId>,
-        line: usize,
+        at: super::Site,
     ) {
         use super::super::ast::Expr;
         let mut node = operand;
@@ -2097,7 +2857,7 @@ impl Compiler {
             }
             _ => String::from("second operand of `va_start` is not the last named parameter"),
         };
-        self.warn_at(Code::VARARGS, line, text);
+        self.warn_at(Code::VARARGS, at, text);
     }
 
     /// The operands of `__builtin_va_arg(ap, T)`: the `va_list` address
@@ -2127,19 +2887,19 @@ impl Compiler {
                 format!("intrinsic `{fn_name}` second operand must be a type name"),
             ));
         }
-        let line = self.lex.line;
+        let at = self.site();
         let type_name = self.parse_type_name()?;
         let arg_ty = type_name.ty;
         let is_pointer = type_name.ptr_levels > 0;
         // C99 7.15.1.1p2: the next argument arrived promoted, so a type the
-        // promotions change never matches it (clang's `-Wvarargs`).
+        // promotions change never matches it (`-Wvarargs`).
         if let Some(promoted) = super::types::argument_promotion(arg_ty).filter(|_| !is_pointer) {
             let t = super::types::format_type(arg_ty, &self.structs);
             let p = super::types::format_type(promoted, &self.structs);
             let text = format!(
                 "`va_arg` of type `{t}` is undefined: the argument arrives promoted to `{p}`"
             );
-            self.warn_at(Code::VARARGS, line, text);
+            self.warn_at(Code::VARARGS, at, text);
         }
         let arg_fn = self.type_name_fn(type_name);
         // C99 7.15.1.1p2: the type is an object type a pointer to which is
@@ -2170,11 +2930,7 @@ impl Compiler {
             && !is_vector_ty(&self.structs, arg_ty)
             && self.target.abi().aarch64_host_variadic()
         {
-            super::type_layout::homogeneous_aggregate(
-                &self.structs,
-                self.target,
-                struct_id_of(arg_ty),
-            )
+            super::type_layout::homogeneous_aggregate(&self.structs, self.target, arg_ty)
         } else {
             None
         };
@@ -2306,7 +3062,7 @@ impl Compiler {
             // type as `int` for every form.
             Ty::Int as i64
         } else if is_bswap {
-            // GCC types the result as the unsigned operand
+            // The result is the unsigned type of the operand
             // width: uint16_t / uint32_t / uint64_t.
             (match intr_kind {
                 Some(crate::c5::op::Intrinsic::Bswap16) => Ty::Short as i64,
@@ -2321,6 +3077,8 @@ impl Compiler {
     }
 
     fn parse_direct_call(&mut self, id_idx: usize, spelled: String) -> Result<(), C5Error> {
+        let builtin_spelling = super::super::preprocessor::builtins::library_alias(&spelled)
+            .is_some_and(|f| self.library_name_is_opaque(f));
         let s = &self.symbols[id_idx];
         let is_sys_call = s.class == Token::Sys as i64;
         let old_style_def = s.class == Token::Fun as i64 && s.unprototyped_def;
@@ -2332,10 +3090,14 @@ impl Compiler {
             is_sys_call,
             narrows_to_params: is_sys_call,
             ret_ty: s.type_,
-            returns_struct: s.class == Token::Fun as i64 && is_struct_value_ty(s.type_),
+            returns_struct: s.class == Token::Fun as i64
+                && is_struct_value_ty(s.type_)
+                && self.sve_type_of(s.type_).is_none(),
             count_known: s.prototyped() || old_style_def,
-            count_is_constraint: s.prototyped() && !is_sys_call,
+            count_is_constraint: s.prototyped(),
             prototyped: s.prototyped(),
+            object_size_params: s.object_size_params,
+            builtin_spelling,
         };
         let mut nargs = 0;
         // The per-argument stores consume the AST vstack slots they push;
@@ -2402,11 +3164,11 @@ impl Compiler {
                 callee.name,
                 callee.params.len(),
             );
-            let line = self.lex.line;
+            let at = self.site();
             self.report_arity(
                 callee.count_is_constraint,
                 Code::TOO_FEW_ARGUMENTS,
-                line,
+                at,
                 text,
             )?;
         }
@@ -2444,6 +3206,9 @@ impl Compiler {
         }
         self.ast_vstack.truncate(saved_ast_vstack_depth);
         self.emit_direct_call_ast(id_idx, &callee, ast_arg_ids, result_temp_off);
+        if self.sve_type_of(self.ty).is_some() {
+            return Ok(());
+        }
         // C99 6.5.2.2p1: the called function returns void or a complete
         // object type.
         self.require_complete_value(self.ty, Code::INVALID_OPERANDS, |t| {
@@ -2461,15 +3226,46 @@ impl Compiler {
         callee: &DirectCallee,
         nargs: i64,
     ) -> Result<(i64, Option<super::super::ast::ExprId>), C5Error> {
-        let arg_line = self.lex.line;
+        let arg_at = self.site();
         let temp_off = self.reserve_slots(1);
 
         self.emit_lea(temp_off);
         self.ast_psh();
-        self.expr(Token::Assign as i64)?;
+        // Under -O an argument to a parameter whose subobject the callee
+        // measures carries the subobject's bound into the inlined body.
+        let measured = self.optimize && nargs < 32 && callee.object_size_params >> nargs & 1 == 1;
+        if measured {
+            self.pending.object_size_operands += 1;
+            self.pending.object_ref = None;
+        }
+        // An SVE parameter takes an SVE value of its own type (ACLE).
+        let sve_param = callee
+            .params
+            .get(nargs as usize)
+            .copied()
+            .filter(|&t| self.sve_type_of(t).is_some());
+        let parsed = match sve_param {
+            Some(want) => {
+                let what = format!("argument {} of `{}`", nargs + 1, callee.name);
+                self.parse_sve_operand(want, &what).map(|id| {
+                    self.ast_acc = Some(id);
+                    self.ty = want;
+                })
+            }
+            None => self.expr(Token::Assign as i64),
+        };
+        if measured {
+            self.pending.object_size_operands -= 1;
+        }
+        parsed?;
+        self.reject_unnamed_sve_argument(sve_param)?;
+        let bound = (measured.then(|| self.pending.object_ref.take()).flatten())
+            .filter(|r| r.addr)
+            .and_then(|r| r.sub);
 
-        if (nargs as usize) < callee.params.len() {
-            self.convert_declared_argument(callee, nargs, arg_line)?;
+        if sve_param.is_some() {
+        } else if (nargs as usize) < callee.params.len() {
+            self.convert_declared_argument(callee, nargs, arg_at)?;
         } else {
             if callee.count_known && !callee.is_variadic {
                 let text = format!(
@@ -2479,7 +3275,7 @@ impl Compiler {
                     nargs + 1,
                 );
                 let constraint = callee.count_is_constraint;
-                self.report_arity(constraint, Code::TOO_MANY_ARGUMENTS, arg_line, text)?;
+                self.report_arity(constraint, Code::TOO_MANY_ARGUMENTS, arg_at, text)?;
             }
             // C99 6.5.2.2p6: an argument past the declared parameters, or to a
             // callee with no prototype, undergoes the default argument
@@ -2489,9 +3285,37 @@ impl Compiler {
             }
         }
 
+        if let Some(arg) = self.ast_acc.filter(|_| measured) {
+            match bound {
+                Some(extent) => self.ast_wrap_subobject_bound(arg, extent.remaining()),
+                None => self.note_object_size_param(arg),
+            }
+        }
+        if let Some(arg) = self
+            .ast_acc
+            .filter(|_| callee.builtin_spelling && nargs == 0)
+        {
+            self.ast_wrap_builtin_arg(arg);
+        }
         let arg_ast = self.ast_acc;
         self.ast_assign();
         Ok((temp_off, arg_ast))
+    }
+
+    /// An SVE value passed where no SVE parameter `sve_param` takes it.
+    fn reject_unnamed_sve_argument(&self, sve_param: Option<i64>) -> Result<(), C5Error> {
+        if sve_param.is_some() || self.sve_type_of(self.ty).is_none() {
+            return Ok(());
+        }
+        // TODO: an SVE value past the prototype, which AAPCS64 passes as
+        // the address of a copy.
+        let t = super::types::format_type(self.ty, &self.structs);
+        Err(self.compile_err(
+            Code::INVALID_ARGUMENTS,
+            format!(
+                "an SVE argument of type `{t}` past the prototype, which badc does not compile yet"
+            ),
+        ))
     }
 
     /// An argument count that does not match the callee's parameters: an
@@ -2500,13 +3324,13 @@ impl Compiler {
         &mut self,
         constraint: bool,
         code: Code,
-        line: usize,
+        at: Site,
         text: String,
     ) -> Result<(), C5Error> {
         if constraint {
-            return Err(self.compile_err_at(Code::INVALID_ARGUMENTS, line, text));
+            return Err(self.compile_err_at(Code::INVALID_ARGUMENTS, at.line, text));
         }
-        self.warn_at(code, line, text);
+        self.warn_at(code, at, text);
         Ok(())
     }
 
@@ -2517,7 +3341,7 @@ impl Compiler {
         &mut self,
         callee: &DirectCallee,
         nargs: i64,
-        arg_line: usize,
+        arg_at: Site,
     ) -> Result<(), C5Error> {
         let want = callee.params[nargs as usize];
         let arg_ty = self.ty;
@@ -2526,10 +3350,10 @@ impl Compiler {
         // A GNU `transparent_union` parameter accepts an argument compatible
         // with any member and takes it as that member.
         let tu_member = Self::transparent_union_member(&self.structs, want, self.ty, zero);
-        // A `Token::Sys` prototype spells no `const` of the library's, and
-        // `char *` for `void *`, so its pointer parameters are not compared.
+        // A `Token::Sys` prototype may spell `char *` for `void *` or another
+        // pointee signedness, so only its qualifiers are compared (C17
+        // 6.5.16.1p1).
         let sys_exempt = [
-            Code::DISCARDED_QUALIFIERS,
             Code::INCOMPATIBLE_POINTER_TYPES,
             Code::NESTED_QUALIFIERS,
             Code::POINTER_SIGN,
@@ -2540,13 +3364,19 @@ impl Compiler {
             let context = format!("argument {} of `{}`", nargs + 1, callee.name);
             let what = (context.as_str(), "param", "arg");
             let (to, from) = ((want, &want_fn), (self.ty, &arg_fn));
-            self.check_function_conversion(to, from, true, arg_line, what)?
+            self.check_function_conversion(to, from, true, arg_at, what)?
         };
         if tu_member.is_none()
             && !fn_checked
-            && let Some(m) =
-                Self::type_warning_with_flags(&self.structs, want, self.ty, zero, untyped)
-                    .filter(|m| !(callee.is_sys_call && sys_exempt.contains(&m.code)))
+            && let Some(m) = Self::type_warning_with_flags(
+                &self.structs,
+                want,
+                self.ty,
+                zero,
+                untyped,
+                self.lax_vectors,
+            )
+            .filter(|m| !(callee.is_sys_call && sys_exempt.contains(&m.code)))
         {
             let got = self.ty;
             let want_s = self.typed_text(want, &want_fn);
@@ -2557,20 +3387,19 @@ impl Compiler {
                 nargs + 1,
                 callee.name,
             );
-            // A `Token::Sys` prototype approximates the platform libc (`char *`
-            // for `void *`, `int` for `size_t`), so only a declared prototype
-            // raises the 6.5.2.2p2 constraint.
-            if m.no_conversion && !callee.is_sys_call {
-                return Err(self.compile_err_at(Code::INCOMPATIBLE_TYPES, arg_line, text));
+            // C99 6.5.2.2p2: an argument the parameter type cannot take by
+            // assignment violates the constraint, a library prototype's too.
+            if m.no_conversion {
+                return Err(self.compile_err_at(Code::INCOMPATIBLE_TYPES, arg_at.line, text));
             }
-            self.report_mismatch(&m, arg_line, text)?;
+            self.report_mismatch(&m, arg_at, text)?;
         }
         if tu_member.is_none() && !callee.is_sys_call && callee.prototyped {
-            self.check_value_conversion_of(self.ast_acc, want, 0, arg_line);
+            self.check_value_conversion_of(self.ast_acc, want, 0, arg_at);
         }
         if let Some(member_ty) = tu_member {
             // The member is materialized in an anonymous union object, so every
-            // backend passes the union, as GCC does.
+            // backend passes the union.
             self.convert_assign_rhs(member_ty);
             let slots = self.slots_of_type(want);
             let off = self.reserve_slots(slots);
@@ -2754,6 +3583,9 @@ impl Compiler {
         } else if self.symbols[id_idx].class == Token::Glo as i64 {
             self.emit_data_imm(self.symbols[id_idx].val);
             self.glo_imm_refs.push(id_idx);
+        } else if self.is_bare_noop(&self.symbols[id_idx].name) {
+            self.ms_noop_value();
+            return Ok(());
         } else {
             return Err(self.compile_err(
                 Code::UNDECLARED_IDENTIFIER,
@@ -2771,7 +3603,12 @@ impl Compiler {
         if !is_array_var && !is_struct_value && fn_ptr {
             self.pending.indirect_callee_ret_fn_ptr = self.symbols[id_idx].fn_ptr_ret_indirection;
         }
-        if is_vla_var {
+        if is_vla_var && self.sve_type_of(self.ty).is_some() {
+            // An SVE object is its storage's base, as a struct value is its
+            // address.
+            let ptr_slot = self.symbols[id_idx].vla_ptr_slot;
+            self.ast_emit_vla_base(ptr_slot, self.ty);
+        } else if is_vla_var {
             // C99 6.3.2.1p3: a VLA decays to its runtime base pointer, loaded
             // from the hidden slot.
             let ptr_slot = self.symbols[id_idx].vla_ptr_slot;
@@ -2802,8 +3639,8 @@ impl Compiler {
 
     /// The `register` arrays (C99 6.3.2.1p3) converted since the parse was
     /// `since` entries in, not taken by a subscript or read whole by
-    /// `sizeof` or `typeof`: each takes the array's address, which gcc and
-    /// clang reject.
+    /// `sizeof` or `typeof`: each takes the array's address, which is
+    /// rejected.
     pub(super) fn check_register_decays(&mut self, since: usize) -> Result<(), C5Error> {
         match self.register_decays.get(since) {
             Some(&(_, sym, line)) => Err(self.register_address_err(sym, line)),
@@ -2825,6 +3662,12 @@ impl Compiler {
     /// 6.7.5.2p4) have no extent this unit knows.
     fn declared_object_ref(&mut self, id_idx: usize) -> Option<super::ObjectRef> {
         if self.pending.object_size_operands == 0 || self.symbols[id_idx].is_vla {
+            return None;
+        }
+        // A later declaration of the unit may still size the array.
+        if self.symbols[id_idx].class == Token::Glo as i64
+            && self.provisional_bounds.contains(&id_idx)
+        {
             return None;
         }
         let elem = self.size_of_type(self.symbols[id_idx].type_) as i64;
@@ -2953,7 +3796,7 @@ impl Compiler {
         } else {
             return Err(self.compile_err(Code::INVALID_OPERANDS, "bad cast"));
         }
-        // gcc's -Wstrict-prototypes passes over a cast's type name.
+        // `-Wstrict-prototypes` passes over a cast's type name.
         if self.lex.tk != '{' {
             self.unprototyped_lists.truncate(unprototyped);
         }
@@ -2981,7 +3824,7 @@ impl Compiler {
                 .filter(|f| f.ptr_depth >= 1 && !type_name.dims.is_empty())
                 .map(|f| (f.f.clone(), f.ptr_depth as i64));
             self.parse_block_compound_literal((type_name.ty, elem_fn), &type_name.dims)?;
-            // gcc answers unknown for a compound literal's object.
+            // `__builtin_object_size` answers unknown for a compound literal's object.
             self.pending.object_ref = None;
             if let Some(id) = self.ast_acc
                 && let Some((f, depth)) = self.type_name_fn(type_name)
@@ -3011,7 +3854,7 @@ impl Compiler {
         // C99 6.5.4p5: a cast to a qualified type is one to its
         // unqualified version.
         let t = strip_object_const(type_name.ty);
-        let line = self.lex.line;
+        let at = self.site();
         self.expr_or_void(Token::Inc as i64)?;
         if !is_void_ty(t) {
             self.reject_void_value(self.ty)?;
@@ -3021,7 +3864,7 @@ impl Compiler {
         if let Some(to) = type_name.fn_ty.as_ref().filter(|f| f.ptr_depth == 1)
             && let Some(from) = self.value_fn_type(self.ast_acc).filter(|f| f.1 == 1)
         {
-            self.check_function_cast((t, &to.f), (self.ty, &from.0), line);
+            self.check_function_cast((t, &to.f), (self.ty, &from.0), at);
         }
         if let Some(member) = self.union_cast_member(t, self.ty) {
             return self.union_cast_literal(t, member);
@@ -3110,7 +3953,11 @@ impl Compiler {
         self.next()?;
         self.expr(Token::Inc as i64)?;
         let operand_ref = self.pending.object_ref.take();
+        // Whether `*e` is an array row, whose value is its address; any
+        // other pointer result is a value loaded out of the object.
+        let mut row = false;
         if let Some(id) = self.ptr_array_id_depth1(self.ty) {
+            row = true;
             // A pointer-to-array tag is never a function pointer, and a cast
             // leaves the decay depth at 0, so this is tested first: `*p` reaches
             // the array, which decays to a pointer to its first element (C99
@@ -3167,10 +4014,9 @@ impl Compiler {
         }
         // `*e` is element 0 of what `e` points at: of the object the
         // operand designates when its value is that address, and of an
-        // object reached through a pointer otherwise. A pointer result
-        // is a row, whose address is the value.
+        // object reached through a pointer otherwise.
         if self.pending.object_size_operands > 0 {
-            let decays = is_pointer_ty(self.ty);
+            let decays = row;
             self.pending.object_ref = Some(match operand_ref {
                 Some(r) if r.addr => {
                     let stride = if decays {
@@ -3190,7 +4036,7 @@ impl Compiler {
     }
 
     fn parse_label_address(&mut self) -> Result<(), C5Error> {
-        // GCC labels as values: `&&label` is the label's address as
+        // GNU C labels as values: `&&label` is the label's address as
         // `void *`; a forward reference is interned and resolved by the
         // walker.
         let label = self.parse_label_addr_operand()?;
@@ -3248,6 +4094,7 @@ impl Compiler {
                         | super::super::ast::Expr::Index { .. }
                         | super::super::ast::Expr::Binary { .. }
                         | super::super::ast::Expr::CompoundLiteral { .. }
+                        | super::super::ast::Expr::VlaBase { .. }
                         | super::super::ast::Expr::Unary {
                             op: super::super::ast::UnOp::Deref,
                             ..
@@ -3301,9 +4148,15 @@ impl Compiler {
             self.pending.fn_ptr_chain_depth += 1;
         }
         // The value is now the address of the object the operand
-        // designates, which is what `__builtin_object_size` answers for.
+        // designates, which is what `__builtin_object_size` answers for;
+        // an array element's address answers for the array holding it.
         if let Some(r) = self.pending.object_ref {
-            self.pending.object_ref = Some(super::ObjectRef { addr: true, ..r });
+            self.pending.object_ref = Some(super::ObjectRef {
+                addr: true,
+                sub: r.element_of.or(r.sub),
+                element_of: None,
+                ..r
+            });
         }
         Ok(())
     }
@@ -3335,7 +4188,7 @@ impl Compiler {
         }
     }
 
-    /// gcc's and clang's error for the address of a `register` object.
+    /// The error for the address of a `register` object (C99 6.5.3.2p1).
     fn register_address_err(&self, sym: usize, line: usize) -> C5Error {
         let name = &self.symbols[sym].name;
         let text = format!("address of `register` object `{name}` requested");
@@ -3369,7 +4222,7 @@ impl Compiler {
     /// scalar to a scalar, and no pointer to or from a floating type. GNU C
     /// adds a cast to the operand's own type, a union from a member's type,
     /// and a cast between a vector and a vector or an integer (not `_Bool`)
-    /// of the same size, which gcc and clang accept and no other.
+    /// of the same size, and no other.
     pub(super) fn check_cast(&self, to: i64, from: i64) -> Result<(), C5Error> {
         let bare = |ty: i64| {
             super::types::unqualified_object_ty(ty) & !(UNSIGNED_BIT | super::types::PLAIN_CHAR_BIT)
@@ -3424,7 +4277,7 @@ impl Compiler {
         self.next()?;
         self.expr(Token::Inc as i64)?;
         self.require_unary_operand("~", Category::Integer)?;
-        // GCC vector extension: `~v` is element-wise over an integer
+        // Vector extension: `~v` is element-wise over an integer
         // vector and the result keeps the vector type (no promotion).
         if is_vector_ty(&self.structs, self.ty) {
             let elem_ty = self.structs[struct_id_of(self.ty)].fields[0].ty;
@@ -3490,7 +4343,7 @@ impl Compiler {
             self.expr(Token::Inc as i64)?;
             self.require_unary_operand("-", Category::Arithmetic)?;
             if is_vector_ty(&self.structs, self.ty) {
-                // GCC vector extension: `-v` is element-wise and the
+                // Vector extension: `-v` is element-wise and the
                 // result keeps the vector type (no promotion).
                 self.ast_apply_unary(super::super::ast::UnOp::Neg);
             } else if is_floating_scalar(self.ty) {
@@ -3578,17 +4431,18 @@ impl Compiler {
         &mut self,
         what: &str,
     ) -> Result<(Option<super::super::ast::ExprId>, bool), C5Error> {
+        self.reject_function_designator(what)?;
         let lvalue = self.ast_acc;
         let fn_ptr_step = self.value_is_function_pointer();
         self.rewrite_trailing_load_as_psh().ok_or_else(|| {
             self.compile_err(Code::INVALID_OPERANDS, format!("bad lvalue in {what}"))
         })?;
-        let line = self.lex.line;
+        let at = self.site();
         if let Some(idx) = self.take_last_loaded_local() {
             self.symbols[idx].binding.was_read = true;
             self.symbols[idx].binding.was_written = true;
             self.record_local_read(idx);
-            self.record_local_store(idx, line);
+            self.record_local_store(idx, at);
         }
         self.mark_emit_other();
         self.ast_psh();
@@ -3721,9 +4575,11 @@ impl Compiler {
             Ty::Int as i64
         };
         // C99 6.5.2.2p1, as for a direct call.
-        self.require_complete_value(indirect_ret_ty, Code::INVALID_OPERANDS, |t| {
-            format!("calling a function with incomplete return type `{t}`")
-        })?;
+        if self.sve_type_of(indirect_ret_ty).is_none() {
+            self.require_complete_value(indirect_ret_ty, Code::INVALID_OPERANDS, |t| {
+                format!("calling a function with incomplete return type `{t}`")
+            })?;
+        }
         let fp_temp = self.reserve_slots(1);
         self.mark_emit_other();
         // Arguments are evaluated left to right into staging slots and
@@ -3742,6 +4598,8 @@ impl Compiler {
             count_known: f.params.prototyped,
             count_is_constraint: f.params.prototyped,
             prototyped: f.params.prototyped,
+            object_size_params: 0,
+            builtin_spelling: false,
         });
         let callee_ret_fn_ptr = core::mem::take(&mut self.pending.indirect_callee_ret_fn_ptr);
         let mut arg_idx: usize = 0;
@@ -3749,13 +4607,25 @@ impl Compiler {
         if self.lex.tk != ')' {
             loop {
                 let temp_off = self.reserve_slots(1);
-                let arg_line = self.lex.line;
+                let arg_at = self.site();
                 self.emit_lea(temp_off);
                 self.ast_psh();
-                self.expr(Token::Assign as i64)?;
+                let sve_param = (callee.as_ref())
+                    .and_then(|c| c.params.get(arg_idx).copied())
+                    .filter(|&t| self.sve_type_of(t).is_some());
+                match sve_param {
+                    Some(want) => {
+                        let what = format!("argument {} of the call", arg_idx + 1);
+                        self.ast_acc = Some(self.parse_sve_operand(want, &what)?);
+                        self.ty = want;
+                    }
+                    None => self.expr(Token::Assign as i64)?,
+                }
+                self.reject_unnamed_sve_argument(sve_param)?;
                 match &callee {
+                    _ if sve_param.is_some() => {}
                     Some(c) if arg_idx < c.params.len() => {
-                        self.convert_declared_argument(c, arg_idx as i64, arg_line)?;
+                        self.convert_declared_argument(c, arg_idx as i64, arg_at)?;
                     }
                     // C99 6.5.2.2p6: past the prototype, or with none, `float` becomes `double`.
                     Some(_) if is_float_ty(self.ty) => self.convert_assign_rhs(Ty::Double as i64),
@@ -3847,8 +4717,22 @@ impl Compiler {
         }
     }
 
+    /// C17 6.3.2.1p1: `*fp` designates a function, not an object, though its
+    /// node is the pointer's.
+    fn reject_function_designator(&self, what: &str) -> Result<(), C5Error> {
+        let designator = self
+            .ast_acc
+            .and_then(|id| self.expr_fn(id))
+            .is_some_and(|(_, d)| d == 0);
+        if designator {
+            return Err(self.compile_err(Code::INVALID_OPERANDS, format!("bad lvalue in {what}")));
+        }
+        Ok(())
+    }
+
     fn parse_assignment(&mut self, lhs_ty: i64) -> Result<(), C5Error> {
         self.require_modifiable(lhs_ty, "assignment")?;
+        self.reject_function_designator("assignment")?;
         let lhs_fn = self.ast_acc.and_then(|id| self.expr_fn(id));
         self.next()?;
         // A parenthesized bitfield lvalue (`(s.f) = v`, C99 6.5.1p5) arrives
@@ -3867,10 +4751,10 @@ impl Compiler {
             });
         let lhs_is_struct_value = is_struct_value_ty(lhs_ty);
         if let Some((obj, field_off, desc)) = bf_lvalue {
-            let line = self.lex.line;
+            let at = self.site();
             self.expr(Token::Assign as i64)?;
             let bits = u32::from(desc.bit_width);
-            self.check_value_conversion_of(self.ast_acc, desc.ty, bits, line);
+            self.check_value_conversion_of(self.ast_acc, desc.ty, bits, at);
             if let Some(rhs) = self.ast_acc {
                 self.ty = Ty::Int as i64;
                 let res_ty = self.ty;
@@ -3882,7 +4766,7 @@ impl Compiler {
             // The trailing load becomes a push of the address. The dead-store
             // record follows the right operand's parse: `x = x + 1` reads the
             // prior value.
-            let line = self.lex.line;
+            let at = self.site();
             let assigned_local = self.take_last_loaded_local();
             if let Some(idx) = assigned_local {
                 self.symbols[idx].binding.was_written = true;
@@ -3893,29 +4777,30 @@ impl Compiler {
             let rhs_fn = self.value_fn_type(self.ast_acc);
             let what = ("assignment", "lhs", "rhs");
             let (to, from) = ((lhs_ty, &lhs_fn), (self.ty, &rhs_fn));
-            if !self.check_function_conversion(to, from, false, line, what)?
+            if !self.check_function_conversion(to, from, false, at, what)?
                 && let Some(m) = Self::type_warning_with_flags(
                     &self.structs,
                     lhs_ty,
                     self.ty,
                     rhs_is_zero,
                     rhs_is_untyped,
+                    self.lax_vectors,
                 )
             {
                 let lhs_s = self.typed_text(lhs_ty, &lhs_fn);
                 let rhs_s = self.typed_text(self.ty, &rhs_fn);
                 let text = format!("{} in assignment (lhs={lhs_s}, rhs={rhs_s})", m.reason);
                 if m.no_conversion {
-                    return Err(self.compile_err_at(Code::INVALID_OPERANDS, line, text));
+                    return Err(self.compile_err_at(Code::INVALID_OPERANDS, at.line, text));
                 }
-                self.report_mismatch(&m, line, text)?;
+                self.report_mismatch(&m, at, text)?;
             }
-            self.check_value_conversion_of(self.ast_acc, lhs_ty, 0, line);
+            self.check_value_conversion_of(self.ast_acc, lhs_ty, 0, at);
             self.convert_assign_rhs(lhs_ty);
             self.ty = lhs_ty;
             self.ast_assign();
             if let Some(idx) = assigned_local {
-                self.record_local_store(idx, line);
+                self.record_local_store(idx, at);
                 let prior = core::mem::replace(&mut self.symbols[idx].binding.was_read, true);
                 self.pending.value_assignment = self.ast_acc.map(|id| (id, idx, prior));
             }
@@ -3934,6 +4819,21 @@ impl Compiler {
         // pointer's load tag, which the scalar path would rewrite.
         let struct_lhs_ast = self.ast_acc.take();
         self.mark_emit_other();
+        if self.sve_type_of(lhs_ty).is_some() {
+            let rhs = self.parse_sve_operand(lhs_ty, "assignment")?;
+            self.mark_emit_other();
+            self.ty = lhs_ty;
+            let pos = self.ast_src_pos();
+            self.ast_acc = struct_lhs_ast.map(|lhs| {
+                let e = super::super::ast::Expr::Assign {
+                    lhs,
+                    rhs,
+                    ty: lhs_ty,
+                };
+                self.ast.push_expr(e, pos)
+            });
+            return Ok(());
+        }
         self.expr(Token::Assign as i64)?;
         let mut struct_rhs_ast = self.ast_acc;
         if !is_struct_ty(self.ty) || struct_ptr_depth(self.ty) != 0 {
@@ -3961,7 +4861,9 @@ impl Compiler {
         // C99 6.5.16.1p1: compatible unqualified struct types; lvalue
         // conversion (6.3.2.1p2) dropped the qualifiers, and the 128-bit
         // integer's signedness bit converts by a bit copy (6.3.1.3).
-        if super::types::strip_unsigned(lhs_ty) != super::types::strip_unsigned(self.ty) {
+        if super::types::strip_unsigned(lhs_ty) != super::types::strip_unsigned(self.ty)
+            && !Self::lax_vector_pair(&self.structs, lhs_ty, self.ty, self.lax_vectors)
+        {
             let lhs_s = format_type(lhs_ty, &self.structs);
             let rhs_s = format_type(self.ty, &self.structs);
             let vector =
@@ -3992,11 +4894,12 @@ impl Compiler {
     }
 
     fn parse_compound_assignment(&mut self, lhs_ty: i64) -> Result<(), C5Error> {
+        self.reject_function_designator("compound assignment")?;
         self.require_modifiable(lhs_ty, "assignment")?;
         // The lexer left the operator's token in `lex.ival`.
         let binop = self.lex.ival;
         let compound_lhs_ast = self.object_lvalue();
-        // GCC vector extension: `v OP= w` is `v = v OP w` (C99 6.5.16.2p3),
+        // Vector extension: `v OP= w` is `v = v OP w` (C99 6.5.16.2p3),
         // with the side-effect-free lvalue as both store target and
         // operand.
         if is_vector_ty(&self.structs, lhs_ty) && is_vector_binop_token(binop) {
@@ -4044,7 +4947,7 @@ impl Compiler {
             ));
         }
         // The nominal opcode; the walker picks the signed /
-        // unsigned / floating flavour from the element type.
+        // unsigned / floating flavor from the element type.
         let bop = vector_binop_op(binop);
         let bin = self.ast.push_expr(
             super::super::ast::Expr::Binary {
@@ -4148,7 +5051,7 @@ impl Compiler {
         // The operand is read and stored; the dead-store record follows
         // the operator so a self-referencing right operand does not cancel
         // the store.
-        let line = self.lex.line;
+        let at = self.site();
         let assigned_local = self.take_last_loaded_local();
         if let Some(idx) = assigned_local {
             self.symbols[idx].binding.was_read = true;
@@ -4166,7 +5069,7 @@ impl Compiler {
         self.ty = lhs_ty;
         self.ast_assign();
         if let Some(idx) = assigned_local {
-            self.record_local_store(idx, line);
+            self.record_local_store(idx, at);
         }
         if let (Some(lhs), Some(rhs)) = (compound_lhs_ast, compound_rhs_ast) {
             // The operation is performed in the lvalue's own type, or the
@@ -4290,7 +5193,8 @@ impl Compiler {
             return void_ty();
         }
         let mut result_ty = else_ty;
-        let arith = |t: i64| !is_pointer_ty(t) && !is_struct_ty(t);
+        // The 128-bit integer is laid out as an aggregate but is arithmetic.
+        let arith = |t: i64| !is_pointer_ty(t) && (!is_struct_ty(t) || self.is_int128_ty(t));
         let arms_fp = is_floating_scalar(then_ty) || is_floating_scalar(else_ty);
         let then_ptr = is_pointer_ty(then_ty);
         let else_ptr = is_pointer_ty(else_ty);
@@ -4999,7 +5903,7 @@ impl Compiler {
         self.pending.last_array_decay_dims.clear();
         self.pending.last_array_decay_vla = None;
         let index = self.peek_constant_index();
-        // GCC vector extension: `v[i]` is lane `i`, an element-typed
+        // Vector extension: `v[i]` is lane `i`, an element-typed
         // lvalue; the vector's address is its value, as for an array.
         if is_vector_ty(&self.structs, lhs_ty) {
             let elem_ty = self.structs[struct_id_of(lhs_ty)].fields[0].ty;
@@ -5015,7 +5919,7 @@ impl Compiler {
             fn_ptr_depth_is_array_elem: saved_fn_ptr_elem,
         } = self.parse_subscript_index(lhs_ty)?;
         lhs_ty = base_ty;
-        // gcc subscripts a `register` array, either operand; clang rejects it.
+        // Subscripting a `register` array, as either operand, is accepted.
         self.take_register_decay(array_ast);
         self.take_register_decay(idx_ast);
         if self.lex.tk == ']' {
@@ -5037,8 +5941,13 @@ impl Compiler {
             return Err(self.subscripted_value_err(ty, "a pointer to a function"));
         }
         if self.points_to_incomplete(lhs_ty) {
+            let what = if self.sizeless_spelling(lhs_ty).is_some() {
+                "a pointer to a sizeless type"
+            } else {
+                "a pointer to an incomplete type"
+            };
             let ty = format_type(lhs_ty, &self.structs);
-            return Err(self.subscripted_value_err(ty, "a pointer to an incomplete type"));
+            return Err(self.subscripted_value_err(ty, what));
         }
         self.require_category(
             idx_ty,
@@ -5250,7 +6159,7 @@ impl Compiler {
         // same segment.
         let obj_ty = if is_dot { lhs_ty } else { pointee_ty(lhs_ty) };
         // C11 6.5.2.3p5: a member of an atomic structure or union is not
-        // accessed atomically, which is undefined; refused, as clang does.
+        // accessed atomically, which is undefined; refused.
         if super::types::is_atomic_object_ty(obj_ty) {
             return Err(self.compile_err(
                 Code::INVALID_OPERANDS,
@@ -5300,7 +6209,7 @@ impl Compiler {
     ) -> Result<(), C5Error> {
         // The token after the member decides between a store, which
         // preserves the other bits of the storage unit, and an extraction.
-        let line = self.lex.line;
+        let at = self.site();
         let is_bf_assign = self.lex.tk == Token::Assign;
         let is_bf_incdec = self.lex.tk == Token::Inc || self.lex.tk == Token::Dec;
         if is_bf_assign || is_bf_incdec {
@@ -5348,7 +6257,7 @@ impl Compiler {
                 // The stored value was parsed inside `emit_bitfield_access` and
                 // kept in `pending.bf_assign_rhs`.
                 if let Some(rhs) = self.pending.bf_assign_rhs.take() {
-                    self.check_value_conversion_of(Some(rhs), field.ty, field.bit_width, line);
+                    self.check_value_conversion_of(Some(rhs), field.ty, field.bit_width, at);
                     let res_ty = self.ty;
                     self.ast_emit_bitfield_assign(obj, bf_field_off, bf_desc, rhs, res_ty);
                 }
@@ -5408,7 +6317,7 @@ impl Compiler {
                 self.pending.last_array_decay_dims = dims;
             } else {
                 // A flexible array member (C99 6.7.2.1p16) is an incomplete array,
-                // signalled to `typeof` / `__builtin_types_compatible_p` with the
+                // signaled to `typeof` / `__builtin_types_compatible_p` with the
                 // `-1` sentinel as for a zero-length array object.
                 self.pending.last_array_decay_size = -1;
                 // A multi-dimensional flexible member records a 0 placeholder for
@@ -5675,20 +6584,27 @@ impl Compiler {
     pub(super) fn discard_unevaluated_node(
         &mut self,
     ) -> Result<Option<super::super::ast::ExprId>, C5Error> {
+        Ok(self.discard_unevaluated_typed()?.0)
+    }
+
+    /// [`Self::discard_unevaluated_node`] with the expression's type.
+    pub(super) fn discard_unevaluated_typed(
+        &mut self,
+    ) -> Result<(Option<super::super::ast::ExprId>, i64), C5Error> {
         let saved_text_len = self.next_ent_pc;
         let saved_reloc = self.code_reloc_sym_idx.len();
         let saved_ast_acc = self.ast_acc;
         let saved_vstack = self.ast_vstack.len();
         let saved_ty = self.ty;
         let result = self.unevaluated(|c| c.expr_or_void(Token::Assign as i64));
-        let node = self.ast_acc;
+        let (node, ty) = (self.ast_acc, self.ty);
         self.ty = saved_ty;
         self.next_ent_pc = saved_text_len;
         self.clear_recent_emits();
         self.code_reloc_sym_idx.truncate(saved_reloc);
         self.ast_acc = saved_ast_acc;
         self.ast_vstack.truncate(saved_vstack);
-        result.map(|_| node)
+        result.map(|_| (node, ty))
     }
 
     /// Parse one assignment-expression for its type only. The lexer
@@ -5785,7 +6701,7 @@ impl Compiler {
     /// 7.19), the keyword consumed; the designator is a member name and
     /// a chain of `.field` and `[index]` steps. Returns `Some(off)` for a
     /// constant offset. Under `allow_runtime` a non-constant subscript
-    /// (GCC extension) makes the offset a `size_t` value emitted onto the
+    /// (GNU C extension) makes the offset a `size_t` value emitted onto the
     /// accumulator, and `None` is returned.
     pub(super) fn parse_builtin_offsetof(
         &mut self,
@@ -5851,7 +6767,7 @@ impl Compiler {
                 match self.try_parse_constant_dim()? {
                     Some(idx) => offset += idx * stride,
                     None => {
-                        // GCC extension: a runtime array subscript contributes
+                        // A runtime array subscript contributes
                         // `(size_t)i * stride`; multiple runtime subscripts sum.
                         if !allow_runtime {
                             return Err(self.compile_err(
@@ -6447,8 +7363,8 @@ enum BinaryKind {
 }
 
 impl BinaryKind {
-    /// The opcode the GCC vector extension lowers element-wise; the
-    /// walker picks the signed, unsigned or floating flavour from the
+    /// The opcode the vector extension lowers element-wise; the
+    /// walker picks the signed, unsigned or floating flavor from the
     /// element type. `None` for an operator the extension does not take.
     fn vector_op(self) -> Option<super::super::ir::BinOp> {
         match self {
@@ -6635,6 +7551,7 @@ enum BuiltinCall {
     Simd(u32),
     MemTransfer(super::super::ast::MemTransferOp),
     ChooseExpr,
+    ShuffleVector,
     ConstantP,
     HasAttribute,
     ObjectSize,
@@ -6687,6 +7604,10 @@ struct DirectCallee {
     count_is_constraint: bool,
     /// Arguments convert as if by assignment (C99 6.5.2.2p7).
     prototyped: bool,
+    object_size_params: u32,
+    /// A `__builtin_` spelling of a library function `-fno-builtin` keeps a
+    /// plain call, whose first argument is marked to fold as the builtin.
+    builtin_spelling: bool,
 }
 
 impl DirectCallee {
@@ -6833,7 +7754,18 @@ fn typed_overflow_builtin(name: &str) -> Option<(i64, bool, u8)> {
     Some((op, unsigned, rank))
 }
 
-/// The transfer kind of a GCC memory-transfer builtin name.
+/// The transfer a library function of `name` performs.
+fn library_mem_transfer_op(name: &str) -> Option<super::super::ast::MemTransferOp> {
+    use super::super::ast::MemTransferOp;
+    Some(match name {
+        "memcpy" => MemTransferOp::Copy,
+        "memmove" => MemTransferOp::Move,
+        "memset" => MemTransferOp::Fill,
+        _ => return None,
+    })
+}
+
+/// The transfer kind of a memory-transfer builtin name.
 fn mem_transfer_op(name: &str) -> Option<super::super::ast::MemTransferOp> {
     use super::super::ast::MemTransferOp;
     Some(match name {
@@ -6842,4 +7774,12 @@ fn mem_transfer_op(name: &str) -> Option<super::super::ast::MemTransferOp> {
         "__builtin_memset" => MemTransferOp::Fill,
         _ => return None,
     })
+}
+
+/// Tokens the precedence-climbing loop applies to an operand; any other token
+/// ends the expression.
+fn is_operator(tk: super::super::token::Tok) -> bool {
+    (Token::Assign as i64..=Token::Brak as i64).contains(&tk.raw())
+        || tk == Token::Arrow
+        || tk == Token::Dot
 }

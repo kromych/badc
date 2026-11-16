@@ -47,14 +47,13 @@ Disassembly of section .text:
                	ldrsw	x0, [sp, #0x8]
                	add	x2, x0, x0, lsr #61
                	asr	x2, x2, #3
-               	add	x0, x0, x0, lsr #61
-               	asr	x0, x0, #3
-               	ldrb	w0, [x1, x0]
-               	mov	x3, #0x1                // =1
-               	ldrsw	x4, [sp, #0x8]
-               	and	x4, x4, #0x7
-               	lsl	x3, x3, x4
-               	orr	x0, x0, x3
+               	add	x3, x0, x0, lsr #61
+               	asr	x3, x3, #3
+               	ldrb	w3, [x1, x3]
+               	mov	x4, #0x1                // =1
+               	and	x0, x0, #0x7
+               	lsl	x0, x4, x0
+               	orr	x0, x3, x0
                	strb	w0, [x1, x2]
                	mov	x2, #0x0                // =0
                	ldrsw	x0, [sp, #0x8]
@@ -93,14 +92,13 @@ Disassembly of section .text:
                	ldrsw	x0, [sp, #0x8]
                	add	x2, x0, x0, lsr #61
                	asr	x2, x2, #3
-               	add	x0, x0, x0, lsr #61
-               	asr	x0, x0, #3
-               	ldrb	w0, [x1, x0]
-               	mov	x3, #0x1                // =1
-               	ldrsw	x4, [sp, #0x8]
-               	and	x4, x4, #0x7
-               	lsl	x3, x3, x4
-               	orr	x0, x0, x3
+               	add	x3, x0, x0, lsr #61
+               	asr	x3, x3, #3
+               	ldrb	w3, [x1, x3]
+               	mov	x4, #0x1                // =1
+               	and	x0, x0, #0x7
+               	lsl	x0, x4, x0
+               	orr	x0, x3, x0
                	strb	w0, [x1, x2]
                	mov	x2, #0x0                // =0
                	ldrsw	x0, [sp, #0x8]

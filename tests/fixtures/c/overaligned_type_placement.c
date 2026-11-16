@@ -1,7 +1,7 @@
 // An object whose alignment comes from its TYPE, with no attribute on the
 // declarator, must be placed on that boundary: a struct with an
 // over-aligned member raises the aggregate, so `struct S g;` needs the
-// wider slot. Covers file-scope, block-scope static, and initialised
+// wider slot. Covers file-scope, block-scope static, and initialized
 // storage at 64 and 128. A layout-only check cannot see an under-placed
 // object, so the checks read the runtime address. Matches GCC and clang
 // on x86-64 and aarch64; returns 0, distinct non-zero per failure.

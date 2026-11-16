@@ -2,8 +2,8 @@ use super::builtins;
 use super::directive::format_line_marker;
 use super::text::skip_literal;
 use super::{
-    Binding, DylibSpec, IGNORED_PRAGMA_INTRINSIC, PRAGMA_POP_WITHOUT_PUSH, PRAGMA_SYNTAX,
-    Preprocessor, SavedMacro, Site, Subsystem, UNKNOWN_PRAGMA, UNKNOWN_WARNING_OPTION,
+    Binding, DylibSpec, PRAGMA_POP_WITHOUT_PUSH, PRAGMA_SYNTAX, Preprocessor, SavedMacro, Site,
+    Subsystem, UNKNOWN_PRAGMA, UNKNOWN_WARNING_OPTION,
 };
 use crate::c5::diag::{Code, Control, Level, Selector, rows};
 use crate::c5::error::C5Error;
@@ -15,11 +15,13 @@ use alloc::vec::Vec;
 
 impl Preprocessor {
     /// The intrinsic `#pragma intrinsic(name)` binds `name` to, or `None`
-    /// when badc has none for this target or `-fno-builtin` has made the
-    /// library spelling opaque. A reserved name is the implementation's
-    /// own, which the flag leaves bound as gcc leaves `__builtin_` names.
+    /// when badc has none for this target or `-fno-builtin` or
+    /// `-fno-builtin-<name>` has made the library spelling opaque. A
+    /// reserved name is the implementation's own, which the flags leave
+    /// bound, like a `__builtin_` name.
     fn registered_intrinsic(&self, name: &str) -> Option<i64> {
-        if self.no_builtin && !ident::is_reserved(name) {
+        let opaque = self.no_builtin || self.no_builtin_names.contains(name);
+        if opaque && !ident::is_reserved(name) {
             return None;
         }
         builtins::intrinsic_id(name, self.target)
@@ -124,9 +126,7 @@ impl Preprocessor {
                 self.parse_pragma_macro_stack(verb, operand, site)?;
             }
             PragmaDirective::Other => {
-                let lexer_reads = pragma_is_pack(args)
-                    || pragma_is_visibility(args, self.dollar())
-                    || pragma_is_fp_contract(args, self.dollar());
+                let lexer_reads = self.lexer_reads_pragma(args);
                 if !lexer_reads {
                     self.parse_pragma(args, site)?;
                 }
@@ -145,6 +145,17 @@ impl Preprocessor {
     /// `export`, `intrinsic`, `entrypoint`, `subsystem`). `pack`
     /// and `once` are handled elsewhere and bypass this function.
     /// Any other directive is accepted with a warning.
+    /// Whether `args` is a pragma whose state holds from its position, which
+    /// the line passes through for the lexer to fold in place: `pack`, GCC
+    /// `visibility`, `STDC FP_CONTRACT`, and on the PE targets MSVC's segment
+    /// pragmas.
+    pub(super) fn lexer_reads_pragma(&self, args: &str) -> bool {
+        pragma_is_pack(args)
+            || pragma_is_visibility(args, self.dollar())
+            || pragma_is_fp_contract(args, self.dollar())
+            || (self.target.is_windows() && crate::c5::segment_pragma::is_segment_pragma(args))
+    }
+
     pub(super) fn parse_pragma(&mut self, args: &str, site: Site<'_>) -> Result<(), C5Error> {
         let (line_no, filename) = (site.line, site.file);
         let args = args.trim();
@@ -168,9 +179,11 @@ impl Preprocessor {
             "binding(",
             "export(",
             "intrinsic(",
+            "function(",
             "entrypoint(",
             "subsystem(",
             "comment(",
+            "detect_mismatch(",
         ]
         .iter()
         .any(|p| args.starts_with(p));
@@ -201,7 +214,18 @@ impl Preprocessor {
             .strip_prefix("intrinsic(")
             .and_then(|s| s.strip_suffix(')'))
         {
+            for name in inner.split(',').map(|n| n.trim().trim_matches('"')) {
+                self.functions.remove(name);
+            }
             return self.parse_pragma_intrinsic(inner.trim(), site);
+        }
+        if let Some(inner) = args
+            .strip_prefix("function(")
+            .and_then(|s| s.strip_suffix(')'))
+        {
+            let names = inner.split(',').map(str::trim).filter(|n| !n.is_empty());
+            self.functions.extend(names.map(String::from));
+            return Ok(());
         }
         if let Some(inner) = args
             .strip_prefix("entrypoint(")
@@ -221,14 +245,34 @@ impl Preprocessor {
         {
             return self.parse_pragma_warning(inner.trim(), site);
         }
-        if let Some(lib) = args
+        if let Some((kind, operand)) = args
             .strip_prefix("comment(")
             .and_then(|s| s.strip_suffix(')'))
             .and_then(|s| s.split_once(','))
-            .filter(|(kind, _)| kind.trim() == "lib")
-            .map(|(_, operand)| operand.trim())
+            .map(|(kind, operand)| (kind.trim(), operand.trim()))
+            .filter(|(kind, _)| matches!(*kind, "lib" | "linker"))
         {
-            self.parse_pragma_comment_lib(lib, site);
+            if kind == "lib" {
+                self.parse_pragma_comment_lib(operand, site);
+            } else {
+                self.parse_pragma_comment_linker(operand, site);
+            }
+            return Ok(());
+        }
+        if let Some(inner) =
+            (args.strip_prefix("detect_mismatch(")).and_then(|s| s.strip_suffix(')'))
+        {
+            self.parse_pragma_detect_mismatch(inner.trim(), site);
+            return Ok(());
+        }
+        // MSVC's `#pragma section("name", attributes)` declares a section a
+        // later `__declspec(allocate("name"))` places objects in; the section
+        // takes the kind of what it holds, as with GNU `section`.
+        if self.target.ms_extensions()
+            && args
+                .strip_prefix("section(")
+                .is_some_and(|s| s.trim_start().starts_with('"') && s.ends_with(')'))
+        {
             return Ok(());
         }
         if let Some(operand) = pragma_weak_operand(args) {
@@ -249,10 +293,9 @@ impl Preprocessor {
         // `push_options`, `loop`, ...) and the C99 6.10.6 `STDC` pragmas
         // (FP_CONTRACT, FENV_ACCESS, CX_LIMITED_RANGE) are compiler hints
         // / evaluation modes c5 does not act on, and `region` / `endregion`
-        // mark an editor's outline, which gcc and clang accept silently
-        // on every target. Accept them rather than warning on every
-        // occurrence; everything else falls through to the unknown-pragma
-        // warning.
+        // mark an editor's outline. Accept them on every target rather than
+        // warning on every occurrence; everything else falls through to the
+        // unknown-pragma warning.
         let directive = args.split('(').next().unwrap_or(args).trim();
         let head = directive.split_whitespace().next().unwrap_or("");
         if matches!(head, "GCC" | "clang") && self.parse_pragma_diagnostic(args, site) {
@@ -278,7 +321,7 @@ impl Preprocessor {
     /// accepts without a diagnostic.
     ///
     /// Actions: `push`, `pop`, and `ignored` / `warning` / `error`
-    /// with a quoted `-W` selector naming a catalogue row or a group.
+    /// with a quoted `-W` selector naming a catalog row or a group.
     fn parse_pragma_diagnostic(&mut self, args: &str, site: Site<'_>) -> bool {
         let mut tokens = args.split_whitespace();
         let Some(vendor) = tokens.next().filter(|t| matches!(*t, "GCC" | "clang")) else {
@@ -319,7 +362,7 @@ impl Preprocessor {
 
     /// The `"-W<selector>"` operand a diagnostic pragma takes. `None`
     /// when the operand is malformed or names nothing in the
-    /// catalogue; both are reported and the pragma covers nothing.
+    /// catalog; both are reported and the pragma covers nothing.
     fn diag_selector(
         &mut self,
         operand: &str,
@@ -345,6 +388,11 @@ impl Preprocessor {
         let selector = Selector::parse(name);
         if selector.is_some() {
             return selector;
+        }
+        if action == "ignored"
+            && let Some(code) = Code::leveled_row(name)
+        {
+            return Some(Selector::Diagnostic(code));
         }
         // A warning another compiler defines and badc does not implement is
         // never reported, so ignoring it already holds.
@@ -420,7 +468,7 @@ impl Preprocessor {
     /// * `#pragma warning(push)` / `#pragma warning(push, level)`
     /// * `#pragma warning(pop)`
     ///
-    /// Each ID resolves through the catalogue's MSVC aliases; the
+    /// Each ID resolves through the catalog's MSVC aliases; the
     /// overall level a `push, <level>` names has no badc counterpart
     /// and is accepted without effect. An ID no row lists is ignored:
     /// badc numbers its own diagnostics, and a source silencing an
@@ -484,7 +532,7 @@ impl Preprocessor {
                     PRAGMA_SYNTAX,
                     site,
                     format!(
-                        "unrecognised `#pragma warning({clause})` \
+                        "unrecognized `#pragma warning({clause})` \
                          -- expected `disable : N` / `enable : N` / \
                          `default : N` / `error : N` / `once : N` / \
                          `suppress : N` / `push` / `pop`"
@@ -522,7 +570,7 @@ impl Preprocessor {
                     PRAGMA_SYNTAX,
                     site,
                     format!(
-                        "unrecognised `#pragma warning` action `{action}` \
+                        "unrecognized `#pragma warning` action `{action}` \
                          -- expected `disable` / `enable` / `default` / \
                          `error` / `once` / `suppress` / a level 1 to 4"
                     ),
@@ -719,15 +767,9 @@ impl Preprocessor {
                     self.intrinsics.insert(item.to_string(), id);
                 } else if !builtins::is_builtin(item)
                     && !builtins::is_ms_intrinsic(item, self.target)
+                    && !self.in_system_header()
                 {
-                    self.warn(
-                        IGNORED_PRAGMA_INTRINSIC,
-                        site,
-                        format!(
-                            "`#pragma intrinsic({item})` names no builtin badc provides \
-                             -- ignored"
-                        ),
-                    );
+                    (self.unresolved_intrinsics).push((item.to_string(), site.loc()));
                 }
             } else {
                 return Err(C5Error::at(
@@ -840,9 +882,8 @@ impl Preprocessor {
 
     /// `#pragma push_macro("name")` saves the definition of `name`, or its
     /// absence, on a stack per name, and `#pragma pop_macro("name")`
-    /// reinstates the latest save, as gcc, clang and MSVC read the pair. A
-    /// pop with no save is reported, as clang and MSVC report it; gcc and
-    /// clang reject an operand other than one parenthesized string literal.
+    /// reinstates the latest save. A pop with no save is reported, and an
+    /// operand other than one parenthesized string literal is an error.
     pub(super) fn parse_pragma_macro_stack(
         &mut self,
         verb: &str,
@@ -899,7 +940,7 @@ impl Preprocessor {
         }
     }
 
-    /// `#pragma weak name`, or `name = target` for a weak alias, as gcc reads it.
+    /// `#pragma weak name`, or `name = target` for a weak alias.
     fn parse_pragma_weak(&mut self, operand: &str, site: Site<'_>) {
         let (name, target) = match operand.split_once('=') {
             Some((n, t)) => (n.trim(), Some(t.trim())),
@@ -916,31 +957,80 @@ impl Preprocessor {
             .push((ident::key(name).into_owned(), target));
     }
 
-    /// `#pragma comment(lib, "name")`, MSVC's default library (clang's
-    /// `/DEFAULTLIB:` on COFF, `.deplibs` on ELF); adjacent literals concatenate.
+    /// `#pragma comment(lib, "name")`, MSVC's default library (`/DEFAULTLIB:`
+    /// on COFF, the LLVM `.deplibs` section on ELF); adjacent literals
+    /// concatenate.
     fn parse_pragma_comment_lib(&mut self, operand: &str, site: Site<'_>) {
-        let mut name = String::new();
-        let mut rest = operand;
-        while let Some(body) = rest.strip_prefix('"') {
-            let Some(end) = body.find('"') else {
-                break;
-            };
-            name.push_str(&body[..end]);
-            rest = body[end + 1..].trim_start();
-        }
-        if !rest.is_empty() || name.is_empty() {
-            self.warn(
-                PRAGMA_SYNTAX,
-                site,
-                format!(
-                    "`#pragma comment(lib, ...)` expects a library name in quotes, got `{operand}`"
-                ),
-            );
+        let Some(name) = self.pragma_comment_string(operand, "lib", "a library name", site) else {
             return;
-        }
+        };
         if !self.default_libs.contains(&name) {
             self.default_libs.push(name);
         }
+    }
+
+    /// `#pragma comment(linker, "options")`: link.exe options the object
+    /// carries, as cl writes them to `.drectve`. They are taken on COFF
+    /// alone and ignored elsewhere with a warning.
+    fn parse_pragma_comment_linker(&mut self, operand: &str, site: Site<'_>) {
+        let Some(options) = self.pragma_comment_string(operand, "linker", "options", site) else {
+            return;
+        };
+        if self.target.binary_format() != crate::c5::codegen::BinaryFormat::Pe {
+            self.warn(
+                UNKNOWN_PRAGMA,
+                site,
+                "`#pragma comment(linker, ...)` takes effect in a PE link only -- ignored".into(),
+            );
+            return;
+        }
+        self.linker_directives.push(options);
+    }
+
+    /// `#pragma detect_mismatch("name", "value")`: cl's
+    /// `/FAILIFMISMATCH:"name=value"`, which a PE link checks across its
+    /// inputs.
+    fn parse_pragma_detect_mismatch(&mut self, inner: &str, site: Site<'_>) {
+        let expanded = self.substitute(inner, site.file, site.line);
+        let (name, rest) = quoted_strings(expanded.trim());
+        let (value, rest) = match rest.strip_prefix(',') {
+            Some(rest) => quoted_strings(rest.trim_start()),
+            None => (String::new(), rest),
+        };
+        if name.is_empty() || name.contains('=') || value.is_empty() || !rest.is_empty() {
+            let text = format!("malformed `#pragma detect_mismatch({inner})` -- ignored");
+            self.warn(PRAGMA_SYNTAX, site, text);
+            return;
+        }
+        if self.target.binary_format() != crate::c5::codegen::BinaryFormat::Pe {
+            let text = "`#pragma detect_mismatch` takes effect in a PE link only -- ignored";
+            self.warn(UNKNOWN_PRAGMA, site, text.into());
+            return;
+        }
+        (self.linker_directives).push(format!("/FAILIFMISMATCH:\"{name}={value}\""));
+    }
+
+    /// The concatenated string literals of a `#pragma comment(kind, ...)`
+    /// operand after macro expansion, as cl expands it; a warning
+    /// and `None` when it is not one.
+    fn pragma_comment_string(
+        &mut self,
+        operand: &str,
+        kind: &str,
+        what: &str,
+        site: Site<'_>,
+    ) -> Option<String> {
+        let expanded = self.substitute(operand, site.file, site.line);
+        let (text, rest) = quoted_strings(expanded.trim());
+        if !rest.is_empty() || text.is_empty() {
+            self.warn(
+                PRAGMA_SYNTAX,
+                site,
+                format!("`#pragma comment({kind}, ...)` expects {what} in quotes, got `{operand}`"),
+            );
+            return None;
+        }
+        Some(text)
     }
 
     /// `#pragma dylib(name, "path")` -- introduce a logical dylib
@@ -1080,6 +1170,7 @@ impl Preprocessor {
         };
         self.dylibs[at].bindings.push(Binding {
             is_variadic: false,
+            prototyped: false,
             fixed_args: 0,
             return_type_tag: None,
             param_types: Vec::new(),
@@ -1191,8 +1282,8 @@ pub(super) fn parse_pragma_operator_args(text: &str, start: usize) -> Option<(St
 /// Sub-classification of `#pragma` payloads. `dylib(...)` /
 /// `binding(...)` go to [`Preprocessor::parse_pragma`] and live in
 /// the dylib registry. `once` (it tags the *current* header) and
-/// `push_macro` / `pop_macro` act on the preprocessor's own state and,
-/// as with gcc and clang, leave nothing in `-E` output.
+/// `push_macro` / `pop_macro` act on the preprocessor's own state and
+/// leave nothing in `-E` output.
 pub(super) enum PragmaDirective<'a> {
     Once,
     /// The verb and its operand.
@@ -1259,7 +1350,7 @@ impl WarningAction {
 }
 
 /// The name a `push_macro` / `pop_macro` operand `("name")` spells: one
-/// string literal in parentheses, taken as written, as clang takes it.
+/// string literal in parentheses, taken as written.
 pub(super) fn macro_stack_name(operand: &str) -> Option<&str> {
     let literal = operand.strip_prefix('(')?.strip_suffix(')')?.trim();
     let body = literal.strip_prefix('"')?;
@@ -1280,6 +1371,21 @@ fn pragma_weak_operand(args: &str) -> Option<&str> {
     let rest = args.strip_prefix("weak")?;
     rest.starts_with(|c: char| c.is_ascii_whitespace())
         .then(|| rest.trim())
+}
+
+/// The adjacent string literals opening `operand`, concatenated, and the
+/// text after them.
+fn quoted_strings(operand: &str) -> (String, &str) {
+    let mut text = String::new();
+    let mut rest = operand;
+    while let Some(body) = rest.strip_prefix('"') {
+        let Some(end) = body.find('"') else {
+            break;
+        };
+        text.push_str(&body[..end]);
+        rest = body[end + 1..].trim_start();
+    }
+    (text, rest)
 }
 
 /// True when `args` is the head of a `pack(...)` pragma -- the

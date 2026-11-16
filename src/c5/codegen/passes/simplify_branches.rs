@@ -134,6 +134,23 @@ pub(crate) fn run_late(funcs: &mut [FunctionSsa]) {
     }
 }
 
+/// Thread phi-decided branches and prune what they orphan until neither
+/// changes the function. A thread whose line dies hands the function to the
+/// prune and returns, so this runs once per thread; the analyses of the
+/// enclosing round run once over the result rather than once per thread.
+fn thread_and_prune(func: &mut FunctionSsa) -> (bool, bool) {
+    let (mut threaded, mut pruned) = (false, false);
+    for _ in 0..=func.blocks.len() {
+        let t = super::thread_phi_branches::run_one(func);
+        pruned |= super::prune_unreachable::run_one(func);
+        threaded |= t;
+        if !t {
+            break;
+        }
+    }
+    (threaded, pruned)
+}
+
 fn run_one(func: &mut FunctionSsa, opts: &Opts<'_>) {
     // Each productive round folds at least one conditional terminator,
     // prunes at least one block, or rewrites at least one instruction to
@@ -162,18 +179,21 @@ fn run_one(func: &mut FunctionSsa, opts: &Opts<'_>) {
         let forwarded = opts
             .const_data
             .is_some_and(|cd| super::const_global_fold::fold_template_loads(func, cd));
+        let sized = opts
+            .const_data
+            .is_some_and(|cd| super::const_global_fold::fold_data_queries(func, cd));
         let ranged = opts.implied_ranges && super::value_range::run_one(func, opts.param_ranges);
         let stored = opts.const_stores && super::store_forward::fold_const_loads(func);
         let folded = super::constfold_branch::run_one(func)
             | (opts.converge_arms && super::constfold_branch::fold_converging_arms(func));
-        let threaded = super::thread_phi_branches::run_one(func);
-        let pruned = super::prune_unreachable::run_one(func);
+        let (threaded, pruned) = thread_and_prune(func);
         bound -= 1;
         if (!folded
             && !threaded
             && !pruned
             && !loaded
             && !forwarded
+            && !sized
             && !selected
             && !nulled
             && !ranged

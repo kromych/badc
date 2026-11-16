@@ -468,7 +468,13 @@ pub(crate) fn bind_phis(
         };
         let fp = matches!(
             kind,
-            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128
+            LoadKind::F32
+                | LoadKind::F64
+                | LoadKind::F80
+                | LoadKind::F128
+                | LoadKind::V128
+                | LoadKind::V256
+                | LoadKind::V512
         );
         let input = incoming.iter().find(|(from, _)| *from == pred).map(|i| i.1);
         let value = input.filter(|_| !fp).and_then(|src| {
@@ -927,7 +933,7 @@ fn expand(func: &mut FunctionSsa, plan: &Expansion) {
     }
 
     let mut new_insts: Vec<Inst> = Vec::new();
-    let mut new_inst_src: Vec<(u32, u32)> = Vec::new();
+    let mut new_inst_src: Vec<crate::c5::ir::InstSrc> = Vec::new();
     let mut new_f32: Vec<bool> = Vec::new();
     let mut new_blocks: Vec<Block> = Vec::new();
     // Running value remap. Loop instructions are overwritten per copy,
@@ -1031,7 +1037,7 @@ fn emit_region(
     clone_ids: &mut [Vec<ValueId>],
     cur: &mut [ValueId],
     new_insts: &mut Vec<Inst>,
-    new_inst_src: &mut Vec<(u32, u32)>,
+    new_inst_src: &mut Vec<crate::c5::ir::InstSrc>,
     new_f32: &mut Vec<bool>,
     new_blocks: &mut Vec<Block>,
 ) {
@@ -1063,7 +1069,7 @@ fn emit_region(
             cur[pc as usize] = id;
             clone_ids[k][plan.loop_pos[pc as usize] as usize] = id;
             new_insts.push(inst);
-            new_inst_src.push(func.inst_src.get(pc as usize).copied().unwrap_or((0, 0)));
+            new_inst_src.push(func.inst_src.get(pc as usize).copied().unwrap_or_default());
             new_f32.push(func.f32_values.get(pc as usize).copied().unwrap_or(false));
         }
         let last = i + 1 == plan.sched.len();
@@ -1127,7 +1133,7 @@ fn emit_outside(
     cur: &mut [ValueId],
     rebuilt: &mut BTreeMap<(BlockId, ValueId), ValueId>,
     new_insts: &mut Vec<Inst>,
-    new_inst_src: &mut Vec<(u32, u32)>,
+    new_inst_src: &mut Vec<crate::c5::ir::InstSrc>,
     new_f32: &mut Vec<bool>,
     new_blocks: &mut Vec<Block>,
 ) {
@@ -1138,7 +1144,7 @@ fn emit_outside(
         .clone()
         .next()
         .and_then(|pc| func.inst_src.get(pc as usize).copied())
-        .unwrap_or((0, 0));
+        .unwrap_or_default();
     // More than one exit edge reaching here means the copies rejoin,
     // and the value each carries is merged by a phi; a single edge
     // already delivers a clone that dominates the block.
@@ -1167,7 +1173,7 @@ fn emit_outside(
         }
         cur[pc as usize] = new_insts.len() as ValueId;
         new_insts.push(inst);
-        new_inst_src.push(func.inst_src.get(pc as usize).copied().unwrap_or((0, 0)));
+        new_inst_src.push(func.inst_src.get(pc as usize).copied().unwrap_or_default());
         new_f32.push(func.f32_values.get(pc as usize).copied().unwrap_or(false));
     }
     let mut terminator = old.terminator;
@@ -1202,7 +1208,7 @@ mod tests {
 
     fn func_with(insts: Vec<Inst>, blocks: Vec<Block>) -> FunctionSsa {
         FunctionSsa {
-            inst_src: vec![(0, 0); insts.len()],
+            inst_src: vec![crate::c5::ir::InstSrc::default(); insts.len()],
             f32_values: vec![false; insts.len()],
             insts,
             blocks,
@@ -1517,7 +1523,7 @@ mod tests {
                 bump(v);
             }
         }
-        f.inst_src = vec![(0, 0); f.insts.len()];
+        f.inst_src = vec![crate::c5::ir::InstSrc::default(); f.insts.len()];
         f.f32_values = vec![false; f.insts.len()];
         f
     }

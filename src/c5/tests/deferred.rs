@@ -99,8 +99,8 @@ fn c99_arith_common_width_full() {
     // After Add / Sub / Mul, c5 truncates the 64-bit accumulator
     // to the C99 6.3.1.8 common type's storage width:
     //   * unsigned common -> mask `(1 << N) - 1` (wrap-modulo-2^N).
-    //   * signed common (UB per C99 6.5p5) -> match clang / gcc
-    //     and truncate-and-sign-extend via `Shl K; Shr K`.
+    //   * signed common (UB per C99 6.5p5) -> truncate-and-sign-extend
+    //     via `Shl K; Shr K`.
     let exit = jit_fixture_exit("c99_arith_common_width.c");
     assert_eq!(exit, 0, "C99 arith common-type width regression");
 }

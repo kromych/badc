@@ -29,7 +29,7 @@
 //! A writable "fake GOT" region holds one `u64` slot per resolved
 //! import. POSIX populates it with `dlopen(NULL, RTLD_NOW)` +
 //! `dlsym` for each symbol; Windows walks each declared dylib with
-//! `GetModuleHandleA` / `LoadLibraryA` + `GetProcAddress`. The
+//! `LoadLibraryA` + `GetProcAddress`. The
 //! codegen's existing GOT relocations get patched against this
 //! region using the same instruction-encoding logic the AOT writers
 //! use. There's no `_start` libc-exit fixup -- Rust catches `main`'s
@@ -560,11 +560,18 @@ mod jit_impl {
     /// bind_imports time means every JIT'd `atexit` /
     /// `__cxa_atexit` / exit call lands on our thunks instead.
     fn atexit_thunk_addr(name: &str) -> u64 {
+        #[cfg(target_os = "windows")]
+        if let Some(addr) = handlers::thunk(name) {
+            return addr;
+        }
         match name {
             "atexit" => jit_atexit_thunk as *const () as usize as u64,
             "__cxa_atexit" => jit_cxa_atexit_thunk as *const () as usize as u64,
             "exit" => jit_exit_thunk as *const () as usize as u64,
-            "_exit" | "_Exit" => jit_immediate_exit_thunk as *const () as usize as u64,
+            // `ExitProcess` runs none of the program's atexit handlers.
+            "_exit" | "_Exit" | "ExitProcess" => {
+                jit_immediate_exit_thunk as *const () as usize as u64
+            }
             "quick_exit" => jit_quick_exit_thunk as *const () as usize as u64,
             "at_quick_exit" | "__cxa_at_quick_exit" => {
                 jit_at_quick_exit_thunk as *const () as usize as u64
@@ -617,6 +624,19 @@ mod jit_impl {
         sources: Sources<'_>,
         report: &mut dyn FnMut(&Diagnostic),
     ) -> Result<i32, C5Error> {
+        // The run calls its entry as `main(argc, argv)`; the Windows C
+        // runtime's other entries take other arguments.
+        if let Some(name) = (program.entry_name.as_deref())
+            .filter(|n| matches!(*n, "wmain" | "WinMain" | "wWinMain"))
+        {
+            return Err(C5Error::hard(
+                crate::c5::diag::Code::UNSUPPORTED,
+                alloc::format!(
+                    "JIT: the run calls its entry as `main(argc, argv)`, and `{name}` takes \
+                     other arguments; build an image to run it"
+                ),
+            ));
+        }
         // Reset the per-thread atexit chain so this invocation's
         // drain only processes its own entries. Any pre-existing
         // entries (from a nested `jit_run` further up the stack on
@@ -646,6 +666,14 @@ mod jit_impl {
     /// else the first weak one; the program's yields to no member's.
     type LinkTable = BTreeMap<String, (Remote, bool)>;
 
+    /// The C library's symbol for a name the program references and the
+    /// library exports under another name.
+    type Spellings = BTreeMap<String, String>;
+
+    fn spelled<'a>(spellings: &'a Spellings, name: &'a str) -> &'a str {
+        spellings.get(name).map_or(name, String::as_str)
+    }
+
     fn prepare_unit(
         program: &Program,
         target: Target,
@@ -658,7 +686,11 @@ mod jit_impl {
         // functions this build never emits. `segregate` is false --
         // the data region is one flat mapping with no zero-fill tail.
         let compacted = shadow::compact_program_data(program, target, false, options.optimize)?;
-        let program = compacted.program;
+        let mut program = compacted.program;
+        // The JIT fills each import's slot with the library's address, so
+        // `&puts` and a data slot naming it take that slot's value, as in an
+        // image whose loader binds the slots (C99 6.5.9p6).
+        program.bind_trampoline_slots = true;
         let mut build = lower_for_jit(&program, target, options.clone())?;
         for d in &build.diagnostics {
             report(d);
@@ -682,6 +714,9 @@ mod jit_impl {
         // defines binds ahead of the unit's C definitions, as in an image.
         use super::super::asm_fold::{bind_label_calls, fold_asm_sections};
         let mut defs = super::super::unit_definitions(&program, &build);
+        for (name, def) in super::super::section_bounds(&program, &build) {
+            defs.entry(name).or_insert(def);
+        }
         let labels = fold_asm_sections(&program, &mut build, target, &defs, "the JIT")?;
         bind_label_calls(&mut build, &labels, target.is_aarch64());
         defs.extend(labels.iter().map(|(name, at)| (name.clone(), at.as_def())));
@@ -758,23 +793,28 @@ mod jit_impl {
 
     /// The program, then the members a native link would pull for it: the
     /// pool is offered once a name stays undefined that the C library lacks.
+    /// With them, the C library's symbol for each name it exports as another.
     #[cfg(feature = "full")]
     fn join_on_demand(
         user: JitUnit,
         sources: Sources<'_>,
         target: Target,
         options: &NativeOptions,
-    ) -> Result<Vec<JitUnit>, C5Error> {
+    ) -> Result<(Vec<JitUnit>, Spellings), C5Error> {
         let mut undefined = user.undefined();
         let mut libc = crate::c5::linker::TargetCLibrary::new(target);
-        let stalled = undefined.iter().any(|n| {
-            !(n.starts_with("__imp_")
+        let mut stalled = false;
+        for n in &undefined {
+            stalled |= !(n.starts_with("__imp_")
                 || crate::c5::linker::link_resolves_symbol(n)
-                || libc.admit(n))
-        });
+                || libc.admit(n));
+        }
+        let spellings = (undefined.iter())
+            .filter_map(|n| Some((n.clone(), String::from(libc.export_symbol(n)?))))
+            .collect();
         let mut units = alloc::vec![user];
         let Some(sources) = sources.filter(|_| stalled) else {
-            return Ok(units);
+            return Ok((units, spellings));
         };
         let (strong, weak) = units[0].program.external_definitions();
         let mut defined: BTreeSet<String> = strong.into_iter().chain(weak).collect();
@@ -787,7 +827,7 @@ mod jit_impl {
             units.push(unit);
             Ok(refs)
         })?;
-        Ok(units)
+        Ok((units, spellings))
     }
 
     fn link_table(units: &[JitUnit]) -> LinkTable {
@@ -827,6 +867,7 @@ mod jit_impl {
         index: usize,
         unit: JitUnit,
         table: &LinkTable,
+        spellings: &Spellings,
         machine: super::super::Machine,
     ) -> Result<BoundUnit, C5Error> {
         let JitUnit {
@@ -841,7 +882,7 @@ mod jit_impl {
             (r.unit != index && !internal.contains(name)).then_some(r)
         };
         let mut remote_refs = Vec::new();
-        route_jit_data_imports(&mut build, &weak, machine, &mut |r| {
+        route_jit_data_imports(&mut build, &weak, machine, spellings, &mut |r| {
             let to = remote(&r.symbol_name).filter(|_| r.direct_pcrel.is_none());
             if let Some(to) = to {
                 remote_refs.push((r.instr_offset, to));
@@ -863,7 +904,7 @@ mod jit_impl {
             let to = remote(name);
             let addr = match (to, atexit_thunk_addr(name)) {
                 (Some(_), _) => 0,
-                (None, 0) => got.resolve_symbol(name),
+                (None, 0) => got.resolve_symbol(spelled(spellings, name)),
                 (None, a) => a,
             };
             let bound = if to.is_some() || addr != 0 {
@@ -908,7 +949,7 @@ mod jit_impl {
                 remote_data.push((r.data_offset as usize, to, r.addend));
                 return Ok(true);
             }
-            let host = bound.map_or(r.symbol_name.as_str(), |(_, host, _)| host.as_str());
+            let host = bound.map_or(spelled(spellings, &r.symbol_name), |(_, h, _)| h);
             let addr = got.resolve_symbol(host);
             let at = r.data_offset as usize;
             match build.data.get_mut(at..at + 8) {
@@ -952,14 +993,32 @@ mod jit_impl {
             None
         };
         let data_vmaddr = data.as_ref().map(|r| r.as_ptr() as u64).unwrap_or(0);
+        // A pc-relative word of the data image into the code bounds their
+        // distance.
+        let reach = build
+            .data_pcrel_relocs
+            .iter()
+            .filter(|r| !r.target_in_data)
+            .map(|r| match (r.branch26, r.width) {
+                (true, _) => 1u64 << 27,
+                (false, 4) => 1 << 31,
+                _ => u64::MAX,
+            })
+            .min()
+            .filter(|&r| r != u64::MAX);
+        let near = reach.filter(|_| data.is_some()).map(|reach| Near {
+            data: data_vmaddr,
+            span: build.data.len() as u64,
+            reach,
+        });
         let code = if build.rodata.bytes.is_empty() {
-            JitRegion::new(&build.text)?
+            JitRegion::new(&build.text, near)?
         } else {
             let mut blob = Vec::with_capacity(rodata_offset(build) + build.rodata.bytes.len());
             blob.extend_from_slice(&build.text);
             blob.resize(rodata_offset(build), 0);
             blob.extend_from_slice(&build.rodata.bytes);
-            JitRegion::new(&blob)?
+            JitRegion::new(&blob, near)?
         };
         let code_vmaddr = code.as_ptr() as u64;
         Ok(PlacedUnit {
@@ -989,15 +1048,15 @@ mod jit_impl {
         };
         let user = prepare_unit(program, target, &options, report)?;
         #[cfg(feature = "full")]
-        let units = join_on_demand(user, sources, target, &options)?;
+        let (units, spellings) = join_on_demand(user, sources, target, &options)?;
         #[cfg(not(feature = "full"))]
-        let units = {
+        let (units, spellings) = {
             let _ = sources;
-            alloc::vec![user]
+            (alloc::vec![user], Spellings::new())
         };
         let table = link_table(&units);
         let bound = (units.into_iter().enumerate())
-            .map(|(i, u)| bind_unit(i, u, &table, machine))
+            .map(|(i, u)| bind_unit(i, u, &table, &spellings, machine))
             .collect::<Result<Vec<_>, _>>()?;
         let mut placed = bound
             .iter()
@@ -1068,8 +1127,51 @@ mod jit_impl {
             v.sort_by_key(|&(p, _)| (p.is_none(), p.unwrap_or(0)));
             v.into_iter().map(|(_, addr)| addr).collect()
         };
-        let init_addrs = ordered_addrs(false);
-        let fini_addrs = ordered_addrs(true);
+        // The C runtime's `.CRT$X*` tables, ordered as link.exe orders a
+        // grouped section: by section name, then unit and slot. The
+        // initializers and constructors run ahead of the constructors above,
+        // the pre-terminators and terminators after the destructors, each
+        // table forward as the MSVC runtime calls it.
+        let mut crt: Vec<(&str, usize)> = Vec::new();
+        for (unit, at) in bound.iter().zip(&placed) {
+            let mut tables: Vec<_> = (unit.program.symbols.iter())
+                .filter(|s| s.class == crate::c5::token::Token::Glo as i64 && s.defined_here)
+                .filter_map(|s| Some((s.section_name.as_deref()?.strip_prefix(".CRT$X")?, s)))
+                .collect();
+            if let Some((t, _)) = tables.iter().find(|(t, _)| t.starts_with('L')) {
+                return Err(C5Error::hard(
+                    crate::c5::diag::Code::UNSUPPORTED,
+                    format!(
+                        "JIT: `.CRT$X{t}` holds TLS callbacks, which need an image's TLS directory"
+                    ),
+                ));
+            }
+            tables.retain(|(t, _)| matches!(t.as_bytes().first(), Some(b'I' | b'C' | b'P' | b'T')));
+            tables.sort_by_key(|(_, s)| s.val);
+            for (t, s) in tables {
+                for k in 0..s.data_byte_size.max(0) as usize / 8 {
+                    let slot = (at.data_vmaddr as usize + s.val as usize + k * 8) as *const usize;
+                    // SAFETY: the slot lies in the unit's mapped, patched data.
+                    let f = unsafe { slot.read_unaligned() };
+                    if f != 0 {
+                        crt.push((t, f));
+                    }
+                }
+            }
+        }
+        crt.sort_by_key(|&(t, _)| t);
+        let table = |t: u8| {
+            (crt.iter())
+                .filter(move |e| e.0.as_bytes()[0] == t)
+                .map(|e| e.1)
+        };
+        let init_addrs: Vec<usize> = (table(b'I').chain(table(b'C')))
+            .chain(ordered_addrs(false))
+            .collect();
+        let crt_exit: Vec<usize> = table(b'P').chain(table(b'T')).collect();
+        let fini_addrs: Vec<usize> = (crt_exit.into_iter().rev())
+            .chain(ordered_addrs(true))
+            .collect();
 
         let entry_ptr = unsafe { placed[0].code.as_ptr().add(bound[0].build.entry_offset) };
         // SAFETY: the JIT'd main was lowered with extern "C" / System V
@@ -1115,8 +1217,10 @@ mod jit_impl {
         // them in place against the mmap'd page's address.
         if let Some(region) = &mut at.data {
             let bytes = region.as_mut_slice(build.data.len());
+            // An address constant below its object (`buf - 1`) carries a
+            // target the offset wraps to, as the image writers apply it.
             for r in &build.data_relocs {
-                let absolute = data_vmaddr + r.target_offset;
+                let absolute = data_vmaddr.wrapping_add(r.target_offset);
                 let off = r.data_offset as usize;
                 if off + 8 > bytes.len() {
                     return Err(C5Error::internal(format!(
@@ -1152,7 +1256,7 @@ mod jit_impl {
                     code_vmaddr,
                     fx.code_offset as u64,
                     code_vmaddr + rodata_blob_off as u64 + fx.rodata_offset,
-                    AddrPart::Whole,
+                    fx.part,
                     "rodata fixup",
                 )?;
             }
@@ -1166,6 +1270,24 @@ mod jit_impl {
                 };
                 let off = rodata_blob_off + r.slot_offset as usize;
                 bytes[off..off + 4].copy_from_slice(&v.to_le_bytes());
+            }
+        }
+        // A slot naming a C-library function holds the import's own
+        // address, which its GOT slot carries, as `&f` in code takes it.
+        if !build.data_import_binds.is_empty()
+            && let Some(region) = &mut at.data
+        {
+            let bytes = region.as_mut_slice(build.data.len());
+            for b in &build.data_import_binds {
+                let value = unit.got.slot_value(b.import).wrapping_add_signed(b.addend);
+                let off = b.data_offset as usize;
+                let Some(slot) = bytes.get_mut(off..off + 8) else {
+                    return Err(C5Error::internal(format!(
+                        "JIT: import slot {off:#x} past end of data region ({})",
+                        bytes.len()
+                    )));
+                };
+                slot.copy_from_slice(&value.to_le_bytes());
             }
         }
         // Now that the code region's runtime address is known,
@@ -1213,7 +1335,23 @@ mod jit_impl {
                     code_vmaddr
                 };
                 let at = r.slot_data_offset as usize;
-                let value = (base + r.target_offset) as i64 - (data_vmaddr + at as u64) as i64;
+                let value =
+                    base.wrapping_add(r.target_offset) as i64 - (data_vmaddr + at as u64) as i64;
+                if r.branch26 {
+                    let word = bytes
+                        .get(at..at + 4)
+                        .map(|w| u32::from_le_bytes(w.try_into().unwrap()));
+                    let Some(word) = word
+                        .and_then(|w| crate::c5::codegen::aarch64::patch::branch26_word(w, value))
+                    else {
+                        return Err(C5Error::hard(
+                            Code::RELOCATION,
+                            format!("JIT: the branch at data slot {at:#x} cannot reach {value:#x}"),
+                        ));
+                    };
+                    bytes[at..at + 4].copy_from_slice(&word.to_le_bytes());
+                    continue;
+                }
                 let width = r.width as usize;
                 let fits = width == 8 || i32::try_from(value).is_ok();
                 let Some(slot) = bytes.get_mut(at..at + width).filter(|_| fits) else {
@@ -1538,14 +1676,16 @@ mod jit_impl {
     }
 
     /// Route `#pragma binding(data ...)` references, asm operands included,
-    /// through flat-lookup imports in the fake GOT. A leftover reference has
-    /// no binding and no definition anywhere: it is the null address if the
-    /// name is weak, and refused like the linker would otherwise. `remote`
-    /// takes the ones another unit defines.
+    /// through flat-lookup imports in the fake GOT. A reference with no
+    /// binding that no other unit (`remote`) defines takes the loaded C
+    /// library's export of its name, as a call does, unless the name is
+    /// weak, which is the null address; a name the library lacks is refused
+    /// once the imports bind.
     fn route_jit_data_imports(
         build: &mut Build,
         weak: &BTreeSet<String>,
         machine: super::super::Machine,
+        spellings: &Spellings,
         remote: &mut dyn FnMut(&super::super::UserExternDataRef) -> bool,
     ) -> Result<(), C5Error> {
         use crate::c5::asm::AsmSectionTarget;
@@ -1555,7 +1695,10 @@ mod jit_impl {
                 slots.route_ref(build, &r)?;
             } else if remote(&r) {
             } else if !weak.contains(r.symbol_name.as_str()) {
-                return Err(undefined_reference(&r.symbol_name));
+                if !slots.admit_flat(&r.symbol_name, spelled(spellings, &r.symbol_name)) {
+                    return Err(undefined_reference(&r.symbol_name));
+                }
+                slots.route_ref(build, &r)?;
             } else if !weak_undef::address_to_zero(machine, &mut build.text, r.instr_offset) {
                 return Err(C5Error::hard(
                     Code::RELOCATION,
@@ -1614,7 +1757,8 @@ mod jit_impl {
         build.imports = imports;
         build.abi = target.abi();
         build.data_relocs = program.data_relocs.clone();
-        build.code_relocs = program.code_relocs.clone();
+        (build.code_relocs, build.data_import_binds) =
+            crate::c5::codegen::split_import_slots(program, &build.imports, &program.code_relocs)?;
         crate::c5::codegen::bind_code_reloc_aliases(program, &mut build.code_relocs);
         build.extern_data_relocs = program.extern_data_relocs.clone();
         crate::c5::codegen::emit_ssa_dump(&mut build);
@@ -1672,6 +1816,20 @@ mod jit_impl {
         usize::MAX as *mut c_void
     }
 
+    /// Where the code must lie: every byte of it and of the `span`-byte
+    /// data region at `data` within `reach` bytes of each other, the data
+    /// holding a pc-relative word into the code (a B or BL a section of
+    /// file-scope asm places there reaches 128 MiB).
+    #[derive(Clone, Copy)]
+    struct Near {
+        data: u64,
+        span: u64,
+        reach: u64,
+    }
+
+    /// Addresses `JitRegion::map_near` tries on each side of the data.
+    const MAX_PLACEMENTS: u64 = 2048;
+
     /// RAII wrapper around an executable mmap region. Drop calls
     /// `munmap` so even early-return paths don't leak the mapping.
     struct JitRegion {
@@ -1680,8 +1838,11 @@ mod jit_impl {
     }
 
     impl JitRegion {
+        /// A writable mapping of `len` bytes at `hint`, or where the system
+        /// places it. Linux: RW now, mprotect to RX once written. macOS
+        /// arm64: RWX with MAP_JIT, the per-thread W^X bit toggled to write.
         #[cfg(any(target_os = "linux", target_os = "macos"))]
-        fn new(code: &[u8]) -> Result<Self, C5Error> {
+        fn map(hint: u64, len: usize) -> Option<*mut c_void> {
             unsafe extern "C" {
                 fn mmap(
                     addr: *mut c_void,
@@ -1692,13 +1853,6 @@ mod jit_impl {
                     offset: i64,
                 ) -> *mut c_void;
             }
-            let len = round_up_to_page(code.len().max(1));
-
-            // Linux: ask for RW now, mprotect to RX once we're
-            // done writing. macOS arm64: ask for RWX with MAP_JIT,
-            // then toggle the per-thread W^X bit to enable writes.
-            // The two paths converge at "writable region holding
-            // the JIT'd bytes" by the time we return.
             #[cfg(target_os = "linux")]
             let (prot, flags) = (PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS);
             #[cfg(target_os = "macos")]
@@ -1706,14 +1860,27 @@ mod jit_impl {
                 PROT_READ | PROT_WRITE | PROT_EXEC,
                 MAP_PRIVATE | MAP_ANONYMOUS | MAP_JIT,
             );
+            let ptr = unsafe { mmap(hint as *mut c_void, len, prot, flags, -1, 0) };
+            (ptr != map_failed()).then_some(ptr)
+        }
 
-            let ptr = unsafe { mmap(std::ptr::null_mut(), len, prot, flags, -1, 0) };
-            if ptr == map_failed() {
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        fn unmap(ptr: *mut c_void, len: usize) {
+            unsafe extern "C" {
+                fn munmap(addr: *mut c_void, len: usize) -> c_int;
+            }
+            unsafe { munmap(ptr, len) };
+        }
+
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        fn new(code: &[u8], near: Option<Near>) -> Result<Self, C5Error> {
+            let len = round_up_to_page(code.len().max(1));
+            let Some(ptr) = Self::map_near(len, near) else {
                 return Err(C5Error::internal(format!(
                     "JIT: mmap failed: {}",
                     std::io::Error::last_os_error()
                 )));
-            }
+            };
 
             // macOS: a freshly mmap'd MAP_JIT region defaults to RX
             // for the executing thread. Flip the per-thread toggle to
@@ -1740,22 +1907,32 @@ mod jit_impl {
         /// flips to PAGE_EXECUTE_READ via `make_executable`. No
         /// per-access W^X toggle; VirtualProtect is a one-shot.
         #[cfg(target_os = "windows")]
-        fn new(code: &[u8]) -> Result<Self, C5Error> {
-            let len = round_up_to_page(code.len().max(1));
+        fn map(hint: u64, len: usize) -> Option<*mut c_void> {
             let ptr = unsafe {
                 VirtualAlloc(
-                    std::ptr::null_mut(),
+                    hint as *mut c_void,
                     len,
                     MEM_COMMIT | MEM_RESERVE,
                     PAGE_READWRITE,
                 )
             };
-            if ptr.is_null() {
+            (!ptr.is_null()).then_some(ptr)
+        }
+
+        #[cfg(target_os = "windows")]
+        fn unmap(ptr: *mut c_void, _len: usize) {
+            unsafe { VirtualFree(ptr, 0, MEM_RELEASE) };
+        }
+
+        #[cfg(target_os = "windows")]
+        fn new(code: &[u8], near: Option<Near>) -> Result<Self, C5Error> {
+            let len = round_up_to_page(code.len().max(1));
+            let Some(ptr) = Self::map_near(len, near) else {
                 return Err(C5Error::internal(format!(
                     "JIT: VirtualAlloc failed: {}",
                     std::io::Error::last_os_error()
                 )));
-            }
+            };
             unsafe {
                 std::ptr::copy_nonoverlapping(code.as_ptr(), ptr as *mut u8, code.len());
             }
@@ -1763,6 +1940,37 @@ mod jit_impl {
                 ptr: ptr as *mut u8,
                 len,
             })
+        }
+
+        /// A mapping of `len` bytes within `near`'s reach of the data
+        /// region when there is one: tried at addresses stepping away from
+        /// the region on either side, an allocation granule apart, then
+        /// wherever the system places it -- the relocation then reports
+        /// the distance if it does not reach.
+        fn map_near(len: usize, near: Option<Near>) -> Option<*mut c_void> {
+            let Some(n) = near else {
+                return Self::map(0, len);
+            };
+            let gran = granularity() as u64;
+            let len64 = len as u64;
+            let fits = |p: u64| {
+                let (lo, hi) = (p.min(n.data), (p + len64).max(n.data + n.span));
+                hi - lo <= n.reach
+            };
+            let after = (n.data + n.span).next_multiple_of(gran);
+            let before = n.data.saturating_sub(len64) / gran * gran;
+            for k in 0..(n.reach / gran).min(MAX_PLACEMENTS) {
+                for at in [after + k * gran, before.saturating_sub(k * gran)] {
+                    let Some(p) = Self::map(at, len) else {
+                        continue;
+                    };
+                    if fits(p as u64) {
+                        return Some(p);
+                    }
+                    Self::unmap(p, len);
+                }
+            }
+            Self::map(0, len)
         }
 
         fn make_executable(&self) -> Result<(), C5Error> {
@@ -1848,7 +2056,6 @@ mod jit_impl {
         fn GetCurrentProcess() -> *mut c_void;
         fn GetSystemInfo(info: *mut SystemInfo);
         fn LoadLibraryA(name: *const c_char) -> *mut c_void;
-        fn GetModuleHandleA(name: *const c_char) -> *mut c_void;
         fn FreeLibrary(handle: *mut c_void) -> c_int;
         fn GetProcAddress(handle: *mut c_void, name: *const c_char) -> *mut c_void;
     }
@@ -1869,7 +2076,7 @@ mod jit_impl {
         _active_processor_mask: usize,
         _number_of_processors: u32,
         _processor_type: u32,
-        _allocation_granularity: u32,
+        allocation_granularity: u32,
         _processor_level: u16,
         _processor_revision: u16,
     }
@@ -2045,13 +2252,11 @@ mod jit_impl {
         // with MEM_RELEASE requires size = 0.
         len: usize,
         /// Loader handles for both import binding and extern-data
-        /// resolution, paired with whether Drop must release the handle.
-        /// POSIX opens each with `dlopen` (owned). Windows takes a
-        /// non-owned `GetModuleHandleA` handle for an already-loaded
-        /// module and an owned `LoadLibraryA` handle otherwise; a
-        /// `GetModuleHandleA` handle carries no refcount, so it must not
-        /// be freed. Both bind and resolve search the full set.
-        lib_handles: Vec<(*mut c_void, bool)>,
+        /// resolution, each holding a reference Drop releases: `dlopen`,
+        /// `LoadLibraryA`. A program's modules stay loaded while it runs,
+        /// whatever another program's region releases. Both bind and
+        /// resolve search the full set.
+        lib_handles: Vec<*mut c_void>,
     }
 
     impl GotRegion {
@@ -2140,7 +2345,7 @@ mod jit_impl {
                     "JIT: dlopen(NULL, RTLD_NOW) returned null -- can't resolve libc symbols",
                 ));
             }
-            self.lib_handles.push((handle, true));
+            self.lib_handles.push(handle);
 
             // `dlopen(NULL)` sees only what the host process already
             // loaded, which is not every library the unit's bindings
@@ -2157,7 +2362,7 @@ mod jit_impl {
                 if let Ok(cs) = CString::new(d.path.as_str()) {
                     let h = unsafe { dlopen(cs.as_ptr(), RTLD_NOW) };
                     if !h.is_null() {
-                        self.lib_handles.push((h, true));
+                        self.lib_handles.push(h);
                     }
                 }
             }
@@ -2183,7 +2388,7 @@ mod jit_impl {
                         Ok(cs) => cs,
                         Err(_) => continue, // unreachable: symbol names are static ASCII
                     };
-                    for (h, _) in &self.lib_handles {
+                    for h in &self.lib_handles {
                         let a = unsafe { dlsym(*h, cs.as_ptr()) } as u64;
                         if a != 0 {
                             addr = a;
@@ -2219,39 +2424,27 @@ mod jit_impl {
                         dylib.path
                     ))
                 })?;
-                // GetModuleHandleA first -- doesn't increment the
-                // refcount on already-loaded modules (kernel32, the
-                // process itself). LoadLibraryA as a fallback to
-                // bring in modules that weren't pre-loaded.
-                let mut h = unsafe { GetModuleHandleA(cs.as_ptr()) };
-                let mut owned = false;
+                // A counted reference, also to a module already loaded: an
+                // uncounted one would let another program's release unload
+                // the module under this one.
+                let h = unsafe { LoadLibraryA(cs.as_ptr()) };
                 if h.is_null() {
-                    h = unsafe { LoadLibraryA(cs.as_ptr()) };
-                    if h.is_null() {
-                        return Err(C5Error::internal(format!(
-                            "JIT: LoadLibraryA(\"{}\") failed: {}",
-                            dylib.path,
-                            std::io::Error::last_os_error()
-                        )));
-                    }
-                    owned = true;
+                    return Err(C5Error::internal(format!(
+                        "JIT: LoadLibraryA(\"{}\") failed: {}",
+                        dylib.path,
+                        std::io::Error::last_os_error()
+                    )));
                 }
                 handles.push(h);
                 // Every handle joins the shared set so extern-data
-                // resolution searches exactly what import binding used;
-                // `owned` gates release in Drop.
-                self.lib_handles.push((h, owned));
+                // resolution searches exactly what import binding used.
+                self.lib_handles.push(h);
             }
             // The C runtime joins the set as `dlopen(NULL)` does on POSIX,
             // for the calls `resolve_symbol` answers that no binding names.
-            let crt = c"msvcrt.dll".as_ptr();
-            let mut h = unsafe { GetModuleHandleA(crt) };
-            let owned = h.is_null();
-            if owned {
-                h = unsafe { LoadLibraryA(crt) };
-            }
+            let h = unsafe { LoadLibraryA(c"msvcrt.dll".as_ptr()) };
             if !h.is_null() {
-                self.lib_handles.push((h, owned));
+                self.lib_handles.push(h);
             }
             for (i, imp) in imports.imports.iter().enumerate() {
                 let mut addr = atexit_thunk_addr(imp.real_symbol.as_str());
@@ -2260,8 +2453,13 @@ mod jit_impl {
                         Ok(cs) => cs,
                         Err(_) => continue, // unreachable: symbol names are static ASCII
                     };
-                    let h = handles[imp.dylib_index];
-                    addr = unsafe { GetProcAddress(h, cs.as_ptr()) } as u64;
+                    if let Some(&h) = handles.get(imp.dylib_index) {
+                        addr = unsafe { GetProcAddress(h, cs.as_ptr()) } as u64;
+                    }
+                    // A flat lookup takes the name from any loaded module.
+                    if addr == 0 && imp.flat_lookup {
+                        addr = self.resolve_symbol(imp.real_symbol.as_str());
+                    }
                 }
                 let slot_off = i * 8;
                 unsafe {
@@ -2310,7 +2508,7 @@ mod jit_impl {
                 Ok(cs) => cs,
                 Err(_) => return 0,
             };
-            for &(h, _) in &self.lib_handles {
+            for &h in &self.lib_handles {
                 let a = unsafe { dlsym(h, cs.as_ptr()) } as u64;
                 if a != 0 {
                     return a;
@@ -2320,8 +2518,8 @@ mod jit_impl {
         }
 
         /// Windows resolver over the same handle set `bind_imports`
-        /// populated (both `GetModuleHandleA` and `LoadLibraryA`), so an
-        /// extern-data symbol in an already-loaded module resolves. 0
+        /// populated, so an extern-data symbol in an already-loaded module
+        /// resolves. 0
         /// means unresolved and the caller errors.
         #[cfg(target_os = "windows")]
         fn resolve_symbol(&self, name: &str) -> u64 {
@@ -2329,7 +2527,7 @@ mod jit_impl {
                 Ok(cs) => cs,
                 Err(_) => return 0,
             };
-            for &(h, _) in &self.lib_handles {
+            for &h in &self.lib_handles {
                 let a = unsafe { GetProcAddress(h, cs.as_ptr()) } as u64;
                 if a != 0 {
                     return a;
@@ -2347,7 +2545,7 @@ mod jit_impl {
                     fn munmap(addr: *mut c_void, len: usize) -> c_int;
                     fn dlclose(handle: *mut c_void) -> c_int;
                 }
-                for &(h, _) in &self.lib_handles {
+                for &h in &self.lib_handles {
                     if !h.is_null() {
                         dlclose(h);
                     }
@@ -2356,12 +2554,8 @@ mod jit_impl {
             }
             #[cfg(target_os = "windows")]
             unsafe {
-                // Release only owned handles; a `GetModuleHandleA` handle
-                // carries no refcount to drop.
-                for &(h, owned) in &self.lib_handles {
-                    if owned && !h.is_null() {
-                        FreeLibrary(h);
-                    }
+                for &h in &self.lib_handles {
+                    FreeLibrary(h);
                 }
                 VirtualFree(self.ptr as *mut c_void, 0, MEM_RELEASE);
             }
@@ -2433,8 +2627,8 @@ mod jit_impl {
         }
         for r in &build.text_pcrel_relocs {
             let at = r.site_text_offset as usize;
-            let value =
-                (data_vmaddr + r.target_data_offset) as i64 - (code_vmaddr + at as u64) as i64;
+            let value = data_vmaddr.wrapping_add(r.target_data_offset) as i64
+                - (code_vmaddr + at as u64) as i64;
             let width = r.width as usize;
             let fits = width == 8 || i32::try_from(value).is_ok();
             let Some(field) = code.get_mut(at..at + width).filter(|_| fits) else {
@@ -2720,8 +2914,122 @@ mod jit_impl {
             }
             #[cfg(target_os = "windows")]
             unsafe {
+                handlers::release(self.ptr as usize, self.ptr as usize + self.len);
                 VirtualFree(self.ptr as *mut c_void, 0, MEM_RELEASE);
             }
+        }
+    }
+
+    /// The exception handlers a program registers point into its code, which
+    /// its region frees when the run ends; the process keeps them past it.
+    /// The program's registrations bind to these thunks, which record them,
+    /// and freeing the region removes its vectored handlers and restores the
+    /// top-level filter its own replaced.
+    #[cfg(target_os = "windows")]
+    mod handlers {
+        use std::sync::Mutex;
+
+        unsafe extern "system" {
+            fn AddVectoredExceptionHandler(first: u32, handler: usize) -> usize;
+            fn AddVectoredContinueHandler(first: u32, handler: usize) -> usize;
+            fn RemoveVectoredExceptionHandler(handle: usize) -> u32;
+            fn RemoveVectoredContinueHandler(handle: usize) -> u32;
+            fn SetUnhandledExceptionFilter(filter: usize) -> usize;
+        }
+
+        /// Each vectored handler: its handle, its address, and whether it is
+        /// a continue handler.
+        static VECTORED: Mutex<Vec<(usize, usize, bool)>> = Mutex::new(Vec::new());
+        /// Each top-level filter installed, the one it replaced, and the one
+        /// the system holds after: a filter in code allocated at run time
+        /// reads back null (measured on Windows 11 x64).
+        static FILTERS: Mutex<Vec<(usize, usize, usize)>> = Mutex::new(Vec::new());
+
+        fn add(first: u32, handler: usize, continues: bool) -> usize {
+            let handle = unsafe {
+                match continues {
+                    true => AddVectoredContinueHandler(first, handler),
+                    false => AddVectoredExceptionHandler(first, handler),
+                }
+            };
+            if handle != 0 {
+                let mut v = VECTORED.lock().unwrap_or_else(|e| e.into_inner());
+                v.push((handle, handler, continues));
+            }
+            handle
+        }
+
+        fn remove(handle: usize, continues: bool) -> u32 {
+            let mut v = VECTORED.lock().unwrap_or_else(|e| e.into_inner());
+            v.retain(|e| e.0 != handle);
+            unsafe {
+                match continues {
+                    true => RemoveVectoredContinueHandler(handle),
+                    false => RemoveVectoredExceptionHandler(handle),
+                }
+            }
+        }
+
+        extern "system" fn add_exception(first: u32, handler: usize) -> usize {
+            add(first, handler, false)
+        }
+        extern "system" fn add_continue(first: u32, handler: usize) -> usize {
+            add(first, handler, true)
+        }
+        extern "system" fn remove_exception(handle: usize) -> u32 {
+            remove(handle, false)
+        }
+        extern "system" fn remove_continue(handle: usize) -> u32 {
+            remove(handle, true)
+        }
+        extern "system" fn set_filter(filter: usize) -> usize {
+            let mut f = FILTERS.lock().unwrap_or_else(|e| e.into_inner());
+            let prior = unsafe { SetUnhandledExceptionFilter(filter) };
+            let held = unsafe { SetUnhandledExceptionFilter(filter) };
+            f.push((filter, prior, held));
+            prior
+        }
+
+        /// The thunk a program's call to `name` binds to, if any.
+        pub(super) fn thunk(name: &str) -> Option<u64> {
+            let addr = match name {
+                "AddVectoredExceptionHandler" => add_exception as *const () as usize,
+                "AddVectoredContinueHandler" => add_continue as *const () as usize,
+                "RemoveVectoredExceptionHandler" => remove_exception as *const () as usize,
+                "RemoveVectoredContinueHandler" => remove_continue as *const () as usize,
+                "SetUnhandledExceptionFilter" => set_filter as *const () as usize,
+                _ => return None,
+            };
+            Some(addr as u64)
+        }
+
+        /// Undo the registrations whose handler lies in `[lo, hi)`.
+        pub(super) fn release(lo: usize, hi: usize) {
+            let inside = |a: usize| (lo..hi).contains(&a);
+            let mut v = VECTORED.lock().unwrap_or_else(|e| e.into_inner());
+            v.retain(|&(handle, handler, continues)| {
+                if inside(handler) {
+                    unsafe {
+                        match continues {
+                            true => RemoveVectoredContinueHandler(handle),
+                            false => RemoveVectoredExceptionHandler(handle),
+                        };
+                    }
+                }
+                !inside(handler)
+            });
+            // Walk back from the filter in place past each of the region's
+            // to the one the earliest replaced.
+            let mut f = FILTERS.lock().unwrap_or_else(|e| e.into_inner());
+            let current = unsafe { SetUnhandledExceptionFilter(0) };
+            let mut restore = current;
+            for &(filter, prior, held) in f.iter().rev() {
+                if held == restore && inside(filter) {
+                    restore = prior;
+                }
+            }
+            unsafe { SetUnhandledExceptionFilter(restore) };
+            f.retain(|&(filter, ..)| !inside(filter));
         }
     }
 
@@ -2732,6 +3040,21 @@ mod jit_impl {
     /// consistent.
     fn round_up_to_page(n: usize) -> usize {
         crate::c5::layout::round_up(n, page_size())
+    }
+
+    /// The boundary a mapping starts on: the page, or Windows' 64 KiB
+    /// allocation granularity.
+    fn granularity() -> usize {
+        #[cfg(target_os = "windows")]
+        {
+            let mut info: SystemInfo = unsafe { core::mem::zeroed() };
+            unsafe { GetSystemInfo(&mut info as *mut SystemInfo) };
+            (info.allocation_granularity as usize).max(page_size())
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            page_size()
+        }
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -2837,6 +3160,35 @@ mod jit_impl {
         unsafe {
             core::arch::asm!("dsb ish", options(nostack, preserves_flags));
             core::arch::asm!("isb", options(nostack, preserves_flags));
+        }
+    }
+
+    #[cfg(test)]
+    mod placement {
+        use super::{JitRegion, Near, page_size};
+
+        /// The code a data image branches into is mapped within the
+        /// branch's 128 MiB of the data wherever the data lies: here an
+        /// address far from where the system places a mapping by itself.
+        #[test]
+        fn code_is_mapped_within_reach_of_the_data_branching_into_it() {
+            let near = Near {
+                data: 0x3000_0000_0000,
+                span: 0x1_0000,
+                reach: 1 << 27,
+            };
+            let len = page_size();
+            let p = JitRegion::map_near(len, Some(near)).expect("map") as u64;
+            JitRegion::unmap(p as *mut core::ffi::c_void, len);
+            let (lo, hi) = (
+                p.min(near.data),
+                (p + len as u64).max(near.data + near.span),
+            );
+            assert!(
+                hi - lo <= near.reach,
+                "code at {p:#x}, data at {:#x}",
+                near.data
+            );
         }
     }
 }

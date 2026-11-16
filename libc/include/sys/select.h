@@ -11,11 +11,11 @@
 
 // `fd_set` as a fixed 128-byte bitmap, bit `fd` at byte `fd / 8`'s `1 << (fd
 // & 7)` on these little-endian targets; the macros below address it as bytes.
-// Linux declares it in `unsigned long` words (the kernel's __kernel_fd_set)
-// and the macOS SDK in 32-bit words; each gives the record its word's alignment.
+// glibc declares it in `long` words (its __fd_mask) and the macOS SDK in
+// 32-bit words; each gives the record its word's alignment.
 #ifdef __linux__
 typedef struct {
-    unsigned long fds_bits[FD_SETSIZE / (8 * sizeof(unsigned long))];
+    long fds_bits[FD_SETSIZE / (8 * sizeof(long))];
 } fd_set;
 #else
 typedef struct {

@@ -1,10 +1,6 @@
-// Struct returned by value. The c5 ABI for c5-to-c5 struct
-// returns uses a hidden out-pointer prepended to the argument
-// list: the caller allocates a temp for the result and pushes
-// its address as arg 0; the callee's `return s` writes to that
-// address via Mcpy and then leaves. The visible return value is
-// the same out-pointer (the caller already has it; convenient
-// when the result feeds straight into another call).
+// Struct returned by value, as the platform ABI returns an aggregate
+// of its size: in registers when it fits them, otherwise through the
+// result address the caller passes.
 
 struct Pair { int a; int b; };
 

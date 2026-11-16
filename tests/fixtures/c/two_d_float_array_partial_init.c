@@ -1,7 +1,7 @@
-// Regression: 2D float arrays initialised with one nested brace
+// Regression: 2D float arrays initialized with one nested brace
 // list per row, where each row provides fewer values than the
 // inner dimension. C99 6.7.8p21 says any aggregate sub-object
-// not explicitly initialised is initialised to zero, so the
+// not explicitly initialized is initialized to zero, so the
 // trailing slots of each short row must read back as 0.
 //
 // c5 used to flatten the nested brace lists without padding,

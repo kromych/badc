@@ -37,20 +37,17 @@ Disassembly of section .text:
                	ldr	x1, [x0]
                	ldr	x2, [x0, #0x8]
                	add	x1, x1, x2
-               	add	x2, x1, #0x7
-               	add	x1, x0, #0x10
-               	ldr	x3, [x1]
-               	ldr	x1, [x1, #0x8]
-               	add	x1, x3, x1
-               	add	x2, x2, x1
-               	add	x1, x0, #0x20
-               	ldr	x3, [x1]
-               	ldr	x1, [x1, #0x8]
-               	add	x1, x3, x1
-               	add	x1, x2, x1
-               	add	x0, x0, #0x30
-               	ldr	x2, [x0]
-               	ldr	x0, [x0, #0x8]
+               	add	x1, x1, #0x7
+               	ldr	x2, [x0, #0x10]
+               	ldr	x3, [x0, #0x18]
+               	add	x2, x2, x3
+               	add	x1, x1, x2
+               	ldr	x2, [x0, #0x20]
+               	ldr	x3, [x0, #0x28]
+               	add	x2, x2, x3
+               	add	x1, x1, x2
+               	ldr	x2, [x0, #0x30]
+               	ldr	x0, [x0, #0x38]
                	add	x0, x2, x0
                	add	x1, x1, x0
                	mov	x2, #0x3                // =3
@@ -60,9 +57,8 @@ Disassembly of section .text:
                	str	x2, [x0]
                	str	x3, [x0, #0x8]
                	add	x0, x1, #0x7
+               	mov	x1, #0x0                // =0
+               	mov	x2, #0x1                // =1
                	cmp	x0, #0x4e
-               	b.ne	<addr>
-               	mov	x0, #0x0                // =0
+               	csel	x0, x1, x2, eq
                	ret
-               	mov	x0, #0x1                // =1
-               	b	<addr>

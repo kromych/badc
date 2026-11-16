@@ -34,7 +34,6 @@ Disassembly of section .text:
                	movl	$0x22, %ecx
                	movq	$-0x1, %r8
                	movq	%rdi, %r9
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %rdi
                	cmpq	$-0x1, %rdi
@@ -50,7 +49,6 @@ Disassembly of section .text:
                	leaq	0x3000(%rdi), %rax
                	movb	$0x4, (%rax)
                	movl	$0x4000, %esi           # imm = 0x4000
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

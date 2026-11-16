@@ -2,7 +2,7 @@
 // bitfield is placed at the running bit cursor and bumped to the next
 // storage-unit boundary of its declared type only when it would
 // otherwise straddle one. A following bitfield of a smaller base type
-// shares the bits left in a larger neighbour's unit rather than opening
+// shares the bits left in a larger neighbor's unit rather than opening
 // a new unit -- the layout gcc and clang produce. The earlier code
 // opened a new unit on every base-type change, which shifted every
 // field after a mixed-base bitfield run (it mislaid a real-world
@@ -41,7 +41,7 @@ int main(void) {
     h.data[0] = 0xAB;
 
     // Each field round-trips with no overlap (a packing error would
-    // bleed a neighbour's bits into one of these reads).
+    // bleed a neighbor's bits into one of these reads).
     if (h.len != 0x7FFFFFFF) return 2;
     if (h.is_wide != 1) return 3;
     if (h.hash != 0x3FFFFFFF) return 4;

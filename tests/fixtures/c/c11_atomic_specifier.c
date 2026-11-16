@@ -1,7 +1,7 @@
 // C11 6.7.2.4 atomic type specifier `_Atomic ( type-name )` and 6.7.3
 // `_Atomic` type qualifier. c5 does not model atomicity, so both forms
 // reduce to the unqualified inner type: storage, arithmetic, and
-// pointer behaviour are identical to the same declaration without
+// pointer behavior are identical to the same declaration without
 // `_Atomic`. Verified by exact-value comparison so the result is
 // independent of the printf format-spec coverage of any one tier.
 

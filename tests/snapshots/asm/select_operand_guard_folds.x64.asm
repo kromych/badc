@@ -26,15 +26,16 @@ Disassembly of section .text:
                	int3
 
 <add_page>:
-               	cmpl	$0x0, <rip> # <addr>
-               	je	<addr>
-               	movl	$0x1, %eax
+               	movslq	<rip>, %rax # <addr>
+               	movl	$0x1, %ecx
+               	xorl	%edx, %edx
+               	testq	%rax, %rax
+               	movq	%rdx, %rax
+               	cmovneq	%rcx, %rax
                	orq	%rdi, %rax
                	movq	%rax, <rip> # <addr>
                	andq	$0x3, %rax
                	retq
-               	xorl	%eax, %eax
-               	jmp	<addr>
 
 <main>:
                	movq	$0x0, <rip> # <addr>
@@ -68,11 +69,9 @@ Disassembly of section .text:
                	movl	%eax, <rip> # <addr>
                	cmpl	$0x0, <rip> # <addr>
                	je	<addr>
-               	cmpl	$0x0, <rip> # <addr>
-               	je	<addr>
-               	movl	$0x7, %eax
-               	retq
                	movl	%eax, <rip> # <addr>
+               	retq
+               	movl	$0x7, %eax
                	retq
                	movl	$0x6, %eax
                	retq

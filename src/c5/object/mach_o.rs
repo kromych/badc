@@ -28,6 +28,7 @@ const CPU_SUBTYPE_ARM64_ALL: u32 = 0;
 
 const MH_EXECUTE: u32 = 0x2;
 const MH_DYLIB: u32 = 0x6;
+const MH_BUNDLE: u32 = 0x8;
 
 const MH_DYLDLINK: u32 = 0x4;
 const MH_TWOLEVEL: u32 = 0x80;
@@ -57,16 +58,19 @@ const PAGE_SIZE: u64 = crate::c5::layout::MACHO_PAGE_SIZE as u64;
 
 const PAGEZERO_VMSIZE: u64 = 0x1_0000_0000;
 
-const TEXT_VMADDR_BASE: u64 = PAGEZERO_VMSIZE;
-
 const MIN_MACOS: u32 = 11 << 16;
-const SDK_MACOS: u32 = 11 << 16;
+/// The SDK an image claims when the link declares none: libSystem gives
+/// an image the behaviors of the SDK it was built against (the allocator
+/// among them), and this is the current one.
+const SDK_MACOS: u32 = 26 << 16;
 
 const BIND_OPCODE_DONE: u8 = 0x00;
 const BIND_OPCODE_SET_DYLIB_ORDINAL_IMM: u8 = 0x10;
 const BIND_OPCODE_SET_DYLIB_ORDINAL_ULEB: u8 = 0x20;
 const BIND_OPCODE_SET_DYLIB_SPECIAL_IMM: u8 = 0x30;
 const BIND_SPECIAL_DYLIB_FLAT_LOOKUP_IMM: u8 = 0x0E;
+/// `BIND_SPECIAL_DYLIB_MAIN_EXECUTABLE` (-1) in the opcode's low nibble.
+const BIND_SPECIAL_DYLIB_MAIN_EXECUTABLE_IMM: u8 = 0x0F;
 const BIND_OPCODE_SET_SYMBOL_TRAILING_FLAGS_IMM: u8 = 0x40;
 const BIND_SYMBOL_FLAGS_WEAK_IMPORT: u8 = 0x01;
 const BIND_OPCODE_SET_TYPE_IMM: u8 = 0x50;
@@ -91,6 +95,7 @@ const N_WEAK_REF: u16 = 0x0040;
 const N_WEAK_DEF: u16 = 0x0080;
 const EXPORT_SYMBOL_FLAGS_WEAK_DEFINITION: u64 = 0x04;
 const DYNAMIC_LOOKUP_ORDINAL: u8 = 0xFE;
+const EXECUTABLE_ORDINAL: u8 = 0xFF;
 const SECT_INDEX_TEXT: u8 = 1;
 const SECT_INDEX_CONST: u8 = 2;
 /// Family whose region held a named section's bytes, hence the segment it
@@ -122,11 +127,6 @@ struct NamedCounts {
     konst: u8,
     data_const: u8,
     data: u8,
-}
-
-const SEG_INDEX_DATA_CONST: u8 = 2;
-fn seg_index_data(data_const: bool) -> u8 {
-    if data_const { 3 } else { 2 }
 }
 
 const SG_READ_ONLY: u32 = 0x10;
@@ -555,7 +555,7 @@ struct TlvSections {
     storage: SectionPlacement,
     /// log2 of the storage's alignment, the section header's `align`.
     storage_align: u32,
-    initialised: bool,
+    initialized: bool,
 }
 
 /// `LC_SEGMENT_64` for a segment with no sections (`__PAGEZERO`,
@@ -756,7 +756,7 @@ fn segment_data(
             3,
             S_THREAD_LOCAL_VARIABLES,
         ));
-        let (name, flags, offset) = if t.initialised {
+        let (name, flags, offset) = if t.initialized {
             ("__thread_data", S_THREAD_LOCAL_REGULAR, t.storage.offset)
         } else {
             ("__thread_bss", S_THREAD_LOCAL_ZEROFILL, 0)
@@ -903,7 +903,7 @@ fn uuid_command(text: &[u8], data: &[u8], rodata: &crate::c5::codegen::RodataBui
 }
 
 /// `LC_BUILD_VERSION` -- platform + min OS + SDK.
-fn build_version() -> Vec<u8> {
+fn build_version(sdk: u32) -> Vec<u8> {
     let mut out = Vec::with_capacity(BUILD_VERSION_COMMAND_SIZE);
     write_struct(
         &mut out,
@@ -912,7 +912,7 @@ fn build_version() -> Vec<u8> {
             cmdsize: BUILD_VERSION_COMMAND_SIZE as u32,
             platform: PLATFORM_MACOS,
             minos: MIN_MACOS,
-            sdk: SDK_MACOS,
+            sdk,
             ntools: 0,
         },
     );
@@ -1228,12 +1228,30 @@ fn build_rebase_opcodes(
     out
 }
 
-/// Source library a bind opcode selects: the flat-lookup pseudo-dylib or a
-/// 1-based LC_LOAD_DYLIB ordinal.
+/// Source library a bind opcode selects: the flat-lookup pseudo-dylib, the
+/// main executable a bundle loads into, or a 1-based LC_LOAD_DYLIB ordinal.
 #[derive(PartialEq, Clone, Copy)]
 enum BindSource {
     Flat,
+    MainExecutable,
     Dylib(u64),
+}
+
+impl BindSource {
+    /// Where `imp` binds. A bundle's loader is the last of `dylibs`, so
+    /// every library's ordinal is its position.
+    fn of(imp: &super::ResolvedImport, dylibs: &[crate::c5::codegen::ResolvedDylib]) -> Self {
+        if imp.flat_lookup {
+            BindSource::Flat
+        } else if dylibs
+            .get(imp.dylib_index)
+            .is_some_and(|d| d.main_executable)
+        {
+            BindSource::MainExecutable
+        } else {
+            BindSource::Dylib((imp.dylib_index + 1) as u64)
+        }
+    }
 }
 
 /// Emit the dylib-selection opcode for `source`.
@@ -1241,6 +1259,9 @@ fn push_bind_source(out: &mut Vec<u8>, source: BindSource) {
     match source {
         BindSource::Flat => {
             out.push(BIND_OPCODE_SET_DYLIB_SPECIAL_IMM | BIND_SPECIAL_DYLIB_FLAT_LOOKUP_IMM);
+        }
+        BindSource::MainExecutable => {
+            out.push(BIND_OPCODE_SET_DYLIB_SPECIAL_IMM | BIND_SPECIAL_DYLIB_MAIN_EXECUTABLE_IMM);
         }
         BindSource::Dylib(ord) if ord <= 0x0F => {
             out.push(BIND_OPCODE_SET_DYLIB_ORDINAL_IMM | (ord as u8));
@@ -1260,21 +1281,22 @@ struct DataBind {
 }
 
 /// The bind stream: each import's `__got` slot at the head of `segment` and
-/// the data slots naming it, then the TLV descriptors' bootstrap slots.
+/// the data slots naming it, then the TLV descriptors' bootstrap slots. A
+/// flat-namespace image names no library: every bind is a flat lookup.
 fn build_bind_opcodes(
     imports: &super::ResolvedImports,
     segment: u8,
     data_binds: &[DataBind],
     tlv_ctx: Option<TlvBindContext>,
+    flat_namespace: bool,
 ) -> Vec<u8> {
     let mut out = Vec::new();
     out.push(BIND_OPCODE_SET_TYPE_IMM | BIND_TYPE_POINTER);
     let mut current_source: Option<BindSource> = None;
     for (i, imp) in imports.imports.iter().enumerate() {
-        let source = if imp.flat_lookup {
-            BindSource::Flat
-        } else {
-            BindSource::Dylib((imp.dylib_index + 1) as u64)
+        let source = match flat_namespace {
+            true => BindSource::Flat,
+            false => BindSource::of(imp, &imports.dylibs),
         };
         if current_source != Some(source) {
             push_bind_source(&mut out, source);
@@ -1308,7 +1330,10 @@ fn build_bind_opcodes(
         }
     }
     if let Some(ctx) = tlv_ctx {
-        let bootstrap_source = BindSource::Dylib(ctx.bootstrap_ordinal);
+        let bootstrap_source = match flat_namespace {
+            true => BindSource::Flat,
+            false => BindSource::Dylib(ctx.bootstrap_ordinal),
+        };
         if current_source != Some(bootstrap_source) {
             push_bind_source(&mut out, bootstrap_source);
         }
@@ -1329,15 +1354,16 @@ fn build_bind_opcodes(
     out
 }
 
-/// The nlist library ordinal for an import, mirroring the bind stream's
-/// flat-lookup branch so the symbol table and the bind opcodes agree on the
-/// symbol's provenance: a flat-lookup import carries
-/// `DYNAMIC_LOOKUP_ORDINAL`, a two-level import its 1-based dylib ordinal.
-fn import_library_ordinal(imp: &super::ResolvedImport) -> u8 {
-    if imp.flat_lookup {
-        DYNAMIC_LOOKUP_ORDINAL
-    } else {
-        (imp.dylib_index + 1) as u8
+/// The nlist library ordinal for an import, the bind stream's source, so
+/// the symbol table and the bind opcodes agree on the symbol's provenance.
+fn import_library_ordinal(
+    imp: &super::ResolvedImport,
+    dylibs: &[crate::c5::codegen::ResolvedDylib],
+) -> u8 {
+    match BindSource::of(imp, dylibs) {
+        BindSource::Flat => DYNAMIC_LOOKUP_ORDINAL,
+        BindSource::MainExecutable => EXECUTABLE_ORDINAL,
+        BindSource::Dylib(ordinal) => ordinal as u8,
     }
 }
 
@@ -1434,6 +1460,8 @@ struct Commands {
 /// Where the image's regions land in the file and in memory.
 #[derive(Default)]
 struct Layout {
+    /// An executable's `__PAGEZERO`, which a library does without.
+    pagezero: bool,
     ro_len: u64,
     relro_total: u64,
     relro_size: u64,
@@ -1482,7 +1510,7 @@ struct Layout {
     thread_storage_size: u64,
     thread_storage_offset_in_segment: u64,
     thread_storage_align: u64,
-    thread_storage_initialised: bool,
+    thread_storage_initialized: bool,
     data_filesize: u64,
     data_vmsize: u64,
     bss_base_vmaddr: u64,
@@ -1500,8 +1528,19 @@ struct Layout {
 }
 
 impl Layout {
+    /// `__TEXT`'s address: past `__PAGEZERO` in an executable, 0 in a library.
+    fn text_base(&self) -> u64 {
+        if self.pagezero { PAGEZERO_VMSIZE } else { 0 }
+    }
+
+    /// The segment indices of `__DATA_CONST` and of `__DATA`.
+    fn data_segments(&self) -> (u8, u8) {
+        let data_const = u8::from(self.pagezero) + 1;
+        (data_const, data_const + u8::from(self.data_const_present))
+    }
+
     fn const_vmaddr(&self) -> u64 {
-        TEXT_VMADDR_BASE + self.const_fileoff
+        self.text_base() + self.const_fileoff
     }
 
     /// The unwind tables' sections, shifting every section index past them.
@@ -1510,7 +1549,7 @@ impl Layout {
     }
 
     fn data_const_vmaddr(&self) -> u64 {
-        TEXT_VMADDR_BASE + self.text_filesize
+        self.text_base() + self.text_filesize
     }
 
     fn data_vmaddr(&self) -> u64 {
@@ -1518,7 +1557,7 @@ impl Layout {
     }
 
     fn code_vmaddr_base(&self) -> u64 {
-        TEXT_VMADDR_BASE + self.entry_file_offset
+        self.text_base() + self.entry_file_offset
     }
 
     fn data_section_vmaddr(&self) -> u64 {
@@ -1740,7 +1779,7 @@ impl UnwindTables {
 
     /// `__unwind_info`, its offsets from the Mach header at `__TEXT`'s start.
     fn unwind_info(&self, l: &Layout, text_len: u64) -> Vec<u8> {
-        let image = |vmaddr: u64| (vmaddr - TEXT_VMADDR_BASE) as u32;
+        let image = |vmaddr: u64| (vmaddr - l.text_base()) as u32;
         let entries: Vec<UnwindEntry> = (self.functions.iter())
             .map(|&(text, f)| {
                 let index = f.personality.and_then(|p| {
@@ -1769,7 +1808,7 @@ impl UnwindTables {
     /// `__eh_frame`, each field holding its distance to its target.
     fn eh_frame_at(&self, l: &Layout, build: &Build) -> Result<Vec<u8>, C5Error> {
         let mut bytes = self.eh_frame.clone();
-        let section = TEXT_VMADDR_BASE + l.eh_frame_fileoff;
+        let section = l.text_base() + l.eh_frame_fileoff;
         for (block, &start) in build.eh_frame.iter().zip(&self.eh_frame_blocks) {
             for f in &block.fields {
                 let at = start as usize + f.offset as usize;
@@ -1984,18 +2023,30 @@ impl<'a> MachOWriter<'a> {
         } else {
             0
         };
-        c.dylinker = load_dylinker("/usr/lib/dyld");
+        // ld64 gives only an executable `__PAGEZERO` and a dynamic linker.
+        self.layout.pagezero = !self.is_dylib;
+        if !self.is_dylib {
+            c.dylinker = load_dylinker("/usr/lib/dyld");
+        }
         c.dylib_lcs = build
             .imports
             .dylibs
             .iter()
+            .filter(|d| !d.main_executable)
             .map(|d| load_dylib(&d.path))
             .collect();
-        c.build_version = build_version();
+        // dyld refuses an image built against SDK 15.4 or later that loads
+        // no library; one that binds none loads libSystem.
+        if c.dylib_lcs.is_empty() {
+            let runtime =
+                crate::c5::codegen::ResolvedDylib::runtime_default(crate::c5::Target::MacOSAarch64);
+            c.dylib_lcs.push(load_dylib(&runtime.path));
+        }
+        c.build_version = build_version(build.mach_o.sdk.unwrap_or(SDK_MACOS));
         c.uuid = uuid_command(&build.text, &build.data, &build.rodata);
         // The install name is `@rpath/<name>`, so a consumer linking by
         // name resolves it through its rpath at runtime.
-        c.id_dylib = self.is_dylib.then(|| {
+        c.id_dylib = (self.is_dylib && !build.mach_o.bundle).then(|| {
             let install_name = match build.shared_lib_name.as_deref() {
                 Some(name) => alloc::format!("@rpath/{name}"),
                 None => alloc::string::String::from("@rpath/c5-output.dylib"),
@@ -2005,9 +2056,10 @@ impl<'a> MachOWriter<'a> {
         let dylibs_total: u64 = c.dylib_lcs.iter().map(|lc| lc.len() as u64).sum();
         let entry_lc_size = match &c.id_dylib {
             Some(lc) => lc.len() as u64,
+            None if self.is_dylib => 0,
             None => ENTRY_POINT_COMMAND_SIZE as u64,
         };
-        c.sizeofcmds = SEGMENT_COMMAND_64_SIZE as u64
+        c.sizeofcmds = u64::from(self.layout.pagezero) * SEGMENT_COMMAND_64_SIZE as u64
             + c.text_seg_size
             + c.data_const_seg_size
             + c.data_seg_size
@@ -2082,9 +2134,9 @@ impl<'a> MachOWriter<'a> {
         } else {
             0
         };
-        l.thread_storage_initialised = build.tls_init_size > 0;
+        l.thread_storage_initialized = build.tls_init_size > 0;
         let data_segment_file_used: u64 = if self.tls_present {
-            if l.thread_storage_initialised {
+            if l.thread_storage_initialized {
                 l.thread_storage_offset_in_segment + l.thread_storage_size
             } else {
                 l.thread_vars_offset_in_segment + l.thread_vars_size
@@ -2213,10 +2265,10 @@ impl<'a> MachOWriter<'a> {
     fn build_linkedit_streams(&mut self) -> Result<(), C5Error> {
         let build = self.build;
         let l = &self.layout;
-        let seg_data = seg_index_data(l.data_const_present);
+        let (seg_data_const, seg_data) = l.data_segments();
         let data_slot = |off: u64| -> (u8, u64) {
             if off < l.relro_total {
-                (SEG_INDEX_DATA_CONST, off.saturating_sub(l.ro_len))
+                (seg_data_const, off.saturating_sub(l.ro_len))
             } else {
                 (
                     seg_data,
@@ -2247,6 +2299,7 @@ impl<'a> MachOWriter<'a> {
             } else {
                 None
             },
+            build.mach_o.flat_namespace,
         );
         self.linkedit.rebase_ops = build_rebase_opcodes(
             &build.data_relocs,
@@ -2279,7 +2332,7 @@ impl<'a> MachOWriter<'a> {
         let export_disk_names: Vec<String> = build
             .exports
             .iter()
-            .map(|e| format!("_{}", e.name))
+            .map(|e| crate::c5::mach_o_name::spelling(&e.name).into_owned())
             .collect();
         let plt_locals: Vec<(&str, usize)> = build
             .imports
@@ -2298,7 +2351,7 @@ impl<'a> MachOWriter<'a> {
             .collect();
         let dyn_export_disk_names: Vec<String> = dyn_exports_emit
             .iter()
-            .map(|d| format!("_{}", d.name))
+            .map(|d| crate::c5::mach_o_name::spelling(&d.name).into_owned())
             .collect();
         let n_locals = symbol_names.len();
         symbol_names.extend(export_disk_names.iter().map(|s| s.as_str()));
@@ -2331,7 +2384,8 @@ impl<'a> MachOWriter<'a> {
             }
             let n_value = code_vmaddr_base + native_off as u64;
             symtab.extend_from_slice(&nlist_defined(n_strx, n_value, SECT_INDEX_TEXT, false));
-            export_trie_entries.push((export_disk_names[i].clone(), n_value - TEXT_VMADDR_BASE, 0));
+            let image_off = n_value - self.layout.text_base();
+            export_trie_entries.push((export_disk_names[i].clone(), image_off, 0));
         }
         let dyn_export_str_base = n_locals + export_disk_names.len();
         for (i, d) in dyn_exports_emit.iter().enumerate() {
@@ -2354,7 +2408,7 @@ impl<'a> MachOWriter<'a> {
             symtab.extend_from_slice(&nlist_defined(n_strx, n_value, n_sect, d.weak));
             export_trie_entries.push((
                 dyn_export_disk_names[i].clone(),
-                n_value - TEXT_VMADDR_BASE,
+                n_value - self.layout.text_base(),
                 if d.weak {
                     EXPORT_SYMBOL_FLAGS_WEAK_DEFINITION
                 } else {
@@ -2364,11 +2418,17 @@ impl<'a> MachOWriter<'a> {
         }
         for (j, imp) in build.imports.imports.iter().enumerate() {
             let n_strx = str_indices[n_locals + n_exports + j];
-            let ordinal = import_library_ordinal(imp);
+            let ordinal = match build.mach_o.flat_namespace {
+                true => DYNAMIC_LOOKUP_ORDINAL,
+                false => import_library_ordinal(imp, &build.imports.dylibs),
+            };
             symtab.extend_from_slice(&nlist_undef(n_strx, ordinal, imp.weak));
         }
         if self.tls_present {
-            let bootstrap_dylib_ordinal = tlv_bootstrap_ordinal(&build.imports.dylibs)? as u8;
+            let bootstrap_dylib_ordinal = match build.mach_o.flat_namespace {
+                true => DYNAMIC_LOOKUP_ORDINAL,
+                false => tlv_bootstrap_ordinal(&build.imports.dylibs)? as u8,
+            };
             let bootstrap_strx = str_indices[symbol_names.len() - 1];
             symtab.extend_from_slice(&nlist_undef(bootstrap_strx, bootstrap_dylib_ordinal, false));
         }
@@ -2456,13 +2516,15 @@ impl<'a> MachOWriter<'a> {
             offset: offset as u32,
         };
         let mut lcs: Vec<Vec<u8>> = Vec::new();
-        lcs.push(segment_no_sections(
-            "__PAGEZERO",
-            place(0, PAGEZERO_VMSIZE, 0, 0),
-            0,
-        ));
+        if l.pagezero {
+            lcs.push(segment_no_sections(
+                "__PAGEZERO",
+                place(0, PAGEZERO_VMSIZE, 0, 0),
+                0,
+            ));
+        }
         let text_segment = segment_text(
-            place(TEXT_VMADDR_BASE, l.text_filesize, 0, l.text_filesize),
+            place(l.text_base(), l.text_filesize, 0, l.text_filesize),
             section(
                 l.code_vmaddr_base(),
                 build.text.len() as u64,
@@ -2473,14 +2535,14 @@ impl<'a> MachOWriter<'a> {
             &named_const_out,
             (l.unwind_size > 0).then(|| {
                 section(
-                    TEXT_VMADDR_BASE + l.unwind_fileoff,
+                    l.text_base() + l.unwind_fileoff,
                     l.unwind_size,
                     l.unwind_fileoff,
                 )
             }),
             (l.eh_frame_size > 0).then(|| {
                 section(
-                    TEXT_VMADDR_BASE + l.eh_frame_fileoff,
+                    l.text_base() + l.eh_frame_fileoff,
                     l.eh_frame_size,
                     l.eh_frame_fileoff,
                 )
@@ -2515,7 +2577,7 @@ impl<'a> MachOWriter<'a> {
                 l.thread_storage_fileoff(),
             ),
             storage_align: l.thread_storage_align.trailing_zeros(),
-            initialised: l.thread_storage_initialised,
+            initialized: l.thread_storage_initialized,
         });
         let data_segment = segment_data(
             place(
@@ -2605,12 +2667,16 @@ impl<'a> MachOWriter<'a> {
             le.n_exports as u32,
             le.n_undef as u32,
         ));
-        lcs.push(c.dylinker.clone());
+        if !c.dylinker.is_empty() {
+            lcs.push(c.dylinker.clone());
+        }
         lcs.extend(c.dylib_lcs.iter().cloned());
         lcs.push(c.build_version.clone());
         lcs.push(c.uuid.clone());
         match &c.id_dylib {
             Some(lc) => lcs.push(lc.clone()),
+            // A bundle names itself by its path and enters nowhere.
+            None if self.is_dylib => {}
             None => {
                 let entry_native =
                     c5_entry_native_offset(build).unwrap_or(build.entry_offset as u64);
@@ -2629,11 +2695,15 @@ impl<'a> MachOWriter<'a> {
         let le = &self.linkedit;
         let total_filesize = le.linkedit_fileoff + le.linkedit_filesize;
         let mut out: Vec<u8> = Vec::with_capacity(total_filesize as usize);
-        let ncmds: u32 = 11
-            + (l.data_const_present as u32)
-            + (self.emit_dwarf as u32)
-            + build.imports.dylibs.len() as u32;
-        let mut header_flags = MH_DYLDLINK | MH_TWOLEVEL | MH_PIE;
+        let ncmds: u32 = self.lcs.len() as u32;
+        // ASLR applies to an executable; a library loads where dyld puts it.
+        let mut header_flags = MH_DYLDLINK;
+        if !self.is_dylib {
+            header_flags |= MH_PIE;
+        }
+        if !build.mach_o.flat_namespace {
+            header_flags |= MH_TWOLEVEL;
+        }
         if self.tls_present {
             header_flags |= MH_HAS_TLV_DESCRIPTORS;
         }
@@ -2643,7 +2713,11 @@ impl<'a> MachOWriter<'a> {
                 magic: MH_MAGIC_64,
                 cputype: CPU_TYPE_ARM64,
                 cpusubtype: CPU_SUBTYPE_ARM64_ALL,
-                filetype: if self.is_dylib { MH_DYLIB } else { MH_EXECUTE },
+                filetype: match (self.is_dylib, build.mach_o.bundle) {
+                    (false, _) => MH_EXECUTE,
+                    (true, false) => MH_DYLIB,
+                    (true, true) => MH_BUNDLE,
+                },
                 ncmds,
                 sizeofcmds: self.commands.sizeofcmds as u32,
                 flags: header_flags,
@@ -2651,7 +2725,6 @@ impl<'a> MachOWriter<'a> {
             },
         );
         debug_assert_eq!(out.len(), MACH_HEADER_64_SIZE);
-        debug_assert_eq!(self.lcs.len() as u32, ncmds);
         for lc in &self.lcs {
             out.extend_from_slice(lc);
         }
@@ -2707,7 +2780,7 @@ impl<'a> MachOWriter<'a> {
                 code_vmaddr_base,
                 fx.code_offset,
                 const_vmaddr + l.jt_off + fx.rodata_offset,
-                AddrPart::Whole,
+                fx.part,
                 "table fixup",
             )?;
         }
@@ -2789,7 +2862,7 @@ impl<'a> MachOWriter<'a> {
             None,
             &|off| self.data_off_to_vaddr(off),
         )?;
-        let tls_sites = if self.tls_present && l.thread_storage_initialised {
+        let tls_sites = if self.tls_present && l.thread_storage_initialized {
             Some(self.tls_reloc_sites()?)
         } else {
             None
@@ -2882,6 +2955,7 @@ mod tests {
                 ordinal: None,
                 kind: crate::c5::codegen::ImportKind::Function,
                 is_variadic: false,
+                prototyped: false,
                 fixed_args: 3,
                 return_type_tag: None,
                 param_types: Vec::new(),
@@ -2889,6 +2963,7 @@ mod tests {
             dylibs: vec![ResolvedDylib {
                 name: "libc".into(),
                 path: "/usr/lib/libSystem.B.dylib".into(),
+                main_executable: false,
             }],
         };
         build.abi = super::super::Target::MacOSAarch64.abi();
@@ -2965,7 +3040,7 @@ mod tests {
         let (_, code_off, _) = section_header(&bytes, "__TEXT", "__text");
         let (got, _, _) = section_header(&bytes, "__DATA", "__got");
         let (data, _, _) = section_header(&bytes, "__DATA", "__data");
-        let image = |vmaddr: u64| (vmaddr - TEXT_VMADDR_BASE) as u32;
+        let image = |vmaddr: u64| (vmaddr - PAGEZERO_VMSIZE) as u32;
         let section = &bytes[sect_off..];
         let f = unwind_info::lookup(section, code_off as u32 + 4).unwrap();
         assert_eq!(f.encoding & UNWIND_ARM64_MODE_MASK, UNWIND_ARM64_MODE_FRAME);
@@ -3267,10 +3342,12 @@ mod tests {
             ResolvedDylib {
                 name: "libfoo".into(),
                 path: "/usr/lib/libfoo.dylib".into(),
+                main_executable: false,
             },
             ResolvedDylib {
                 name: "libSystem".into(),
                 path: "/usr/lib/libSystem.B.dylib".into(),
+                main_executable: false,
             },
         ];
         assert_eq!(tlv_bootstrap_ordinal(&dylibs).unwrap(), 2);
@@ -3305,6 +3382,7 @@ mod tests {
             ordinal: None,
             kind: crate::c5::codegen::ImportKind::Function,
             is_variadic: false,
+            prototyped: false,
             fixed_args: 0,
             return_type_tag: None,
             param_types: Vec::new(),
@@ -3322,6 +3400,7 @@ mod tests {
             .map(|i| ResolvedDylib {
                 name: format!("lib{i}"),
                 path: format!("/lib{i}.dylib"),
+                main_executable: false,
             })
             .collect();
         let imports = ResolvedImports {
@@ -3330,7 +3409,7 @@ mod tests {
             imports: (0..20).map(|i| sample_import(i, false)).collect(),
             dylibs,
         };
-        let out = build_bind_opcodes(&imports, 1, &[], None);
+        let out = build_bind_opcodes(&imports, 1, &[], None, false);
         assert!(
             out.windows(2)
                 .any(|w| w == [BIND_OPCODE_SET_DYLIB_ORDINAL_ULEB, 0x10]),
@@ -3349,12 +3428,40 @@ mod tests {
         // stream's flat-lookup provenance (DYNAMIC_LOOKUP_ORDINAL), not a
         // two-level ordinal pointing at the first dylib.
         let flat = sample_import(0, true);
-        assert_eq!(import_library_ordinal(&flat), DYNAMIC_LOOKUP_ORDINAL);
-        let bytes = nlist_undef(0, import_library_ordinal(&flat), false);
+        assert_eq!(import_library_ordinal(&flat, &[]), DYNAMIC_LOOKUP_ORDINAL);
+        let bytes = nlist_undef(0, import_library_ordinal(&flat, &[]), false);
         let n_desc = u16::from_le_bytes([bytes[6], bytes[7]]);
         assert_eq!((n_desc >> 8) as u8, DYNAMIC_LOOKUP_ORDINAL);
         let two_level = sample_import(0, false);
-        assert_eq!(import_library_ordinal(&two_level), 1);
+        assert_eq!(import_library_ordinal(&two_level, &[]), 1);
+    }
+
+    /// An import a bundle's loader supplies binds to the main executable:
+    /// `EXECUTABLE_ORDINAL` in the nlist, the special -1 in the bind stream.
+    #[test]
+    fn a_loader_import_binds_to_the_main_executable() {
+        use crate::c5::codegen::ResolvedDylib;
+        let dylibs = [
+            ResolvedDylib {
+                name: "libSystem".into(),
+                path: "/usr/lib/libSystem.B.dylib".into(),
+                main_executable: false,
+            },
+            ResolvedDylib {
+                name: "host".into(),
+                path: "host".into(),
+                main_executable: true,
+            },
+        ];
+        assert_eq!(import_library_ordinal(&sample_import(0, false), &dylibs), 1);
+        let from_host = sample_import(1, false);
+        assert_eq!(
+            import_library_ordinal(&from_host, &dylibs),
+            EXECUTABLE_ORDINAL
+        );
+        let mut out = Vec::new();
+        push_bind_source(&mut out, BindSource::of(&from_host, &dylibs));
+        assert_eq!(out, [0x3F]);
     }
 
     #[test]

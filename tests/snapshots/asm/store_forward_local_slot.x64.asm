@@ -43,15 +43,9 @@ Disassembly of section .text:
                	retq
 
 <aliased_kept>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	leaq	<rip>, %rcx # <addr>
-               	movl	$0x9, -0x8(%rbp)
-               	movl	$0xa, -0x8(%rbp)
                	movl	$0xa, %eax
                	jmpq	*%rcx
-               	leave
                	retq
 
 <cross_block>:

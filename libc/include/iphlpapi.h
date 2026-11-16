@@ -13,12 +13,18 @@
 #define IF_NAMESIZE             256
 
 // NET_IFINDEX is the 32-bit interface index; NET_LUID is the 64-bit
-// locally unique identifier (ifdef.h).
-typedef unsigned int NET_IFINDEX;
-typedef union _NET_LUID {
+// locally unique identifier (ifdef.h), which the SDK also names
+// NET_LUID_LH.
+typedef unsigned long NET_IFINDEX;
+typedef union _NET_LUID_LH {
     ULONG64 Value;
-    ULONG64 Info;
-} NET_LUID;
+    struct {
+        ULONG64 Reserved : 24;
+        ULONG64 NetLuidIndex : 24;
+        ULONG64 IfType : 16;
+    } Info;
+} NET_LUID, *PNET_LUID;
+typedef NET_LUID NET_LUID_LH, *PNET_LUID_LH;
 typedef NET_LUID IF_LUID;
 
 // MibIfTableLevel selector for GetIfTable2Ex (netioapi.h).

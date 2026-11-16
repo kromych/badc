@@ -28,7 +28,7 @@ the box remotes by name, the scratch and note paths -- are in
 - One issue at a time. When it is done and validated, update your note and end the
   turn with the report. The coordinator lands it and sends the next item.
 - Commits: one per logical change, in the style of `git log -30`. A subject naming
-  the behavior; a body with the C99 or ABI citation, the evidence before and after,
+  the behavior; a body with the C17 or ABI citation, the evidence before and after,
   the tests and the snapshot delta. No issue numbers in the subject or body (TODO
   markers only). Trailers, in this order: `Fixes: #N` when the commit completes the
   fix of a filed issue, then `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.

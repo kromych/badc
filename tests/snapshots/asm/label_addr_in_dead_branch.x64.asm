@@ -26,8 +26,7 @@ Disassembly of section .text:
                	int3
 
 <report>:
-               	movslq	%edi, %rdi
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	je	<addr>
                	movq	%rdi, %rax
                	negq	%rax

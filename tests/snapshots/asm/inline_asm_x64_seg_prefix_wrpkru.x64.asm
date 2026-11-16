@@ -34,15 +34,13 @@ Disassembly of section .text:
 
 <main>:
                	movl	%ds:<rip>, %eax
-               	movl	$0xa5a5a5a5, %r11d      # imm = 0xA5A5A5A5
-               	cmpl	%r11d, %eax
+               	cmpl	$0xa5a5a5a5, %eax       # imm = 0xA5A5A5A5
                	je	<addr>
                	movl	$0x1, %eax
                	retq
                	clflush	%ds:<rip>
                	movl	<rip>, %eax # <addr>
-               	movl	$0xa5a5a5a5, %r11d      # imm = 0xA5A5A5A5
-               	cmpl	%r11d, %eax
+               	cmpl	$0xa5a5a5a5, %eax       # imm = 0xA5A5A5A5
                	je	<addr>
                	movl	$0x2, %eax
                	retq

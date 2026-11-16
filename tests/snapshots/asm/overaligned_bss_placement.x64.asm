@@ -52,7 +52,7 @@ Disassembly of section .text:
                	movzbq	<rip>, %rdx # <addr>
                	addq	%rdx, %rcx
                	addq	$0x4, %rcx
+               	xorl	%edx, %edx
                	cmpl	$0xa, %ecx
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	cmoveq	%rdx, %rax
                	retq

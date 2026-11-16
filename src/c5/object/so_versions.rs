@@ -488,7 +488,7 @@ mod tests {
 
     /// A library with no version tables states no requirement, and a
     /// name the manifest does not carry resolves to none rather than to
-    /// a neighbouring library's version.
+    /// a neighboring library's version.
     #[test]
     fn an_unversioned_library_and_an_unknown_name_carry_no_requirement() {
         assert_eq!(

@@ -524,10 +524,7 @@ int access(const char *path, int mode);
 // Fill a buffer with random bytes (BSD / Linux). `size_t` is in
 // <stddef.h>, pulled in transitively.
 int getentropy(void *buf, unsigned long buflen);
-// POSIX: lseek returns off_t and takes an off_t offset; ftruncate takes an
-// off_t length. off_t is 64-bit, so `int` truncates offsets/lengths past
-// 2GB. `long` is off_t on LP64 (the POSIX targets lseek is declared for).
-long lseek(int fd, long offset, int whence);
+off_t lseek(int fd, off_t offset, int whence);
 int fsync(int fd);
 #endif
 int ftruncate(int fd, off_t len);
@@ -543,7 +540,7 @@ char *getcwd(char *buf, size_t n);
 #endif
 int chdir(const char *path);
 #ifndef _WIN32
-int chroot(char *path);
+int chroot(const char *path);
 uid_t getuid(void);
 uid_t geteuid(void);
 gid_t getgid(void);
@@ -557,7 +554,11 @@ pid_t gettid(void);
 #endif
 #ifndef _WIN32
 int gethostname(char *name, unsigned long len);
-int sethostname(const char *name, unsigned long len);
+#ifdef __APPLE__
+int sethostname(const char *name, int len);
+#else
+int sethostname(const char *name, size_t len);
+#endif
 #endif
 unsigned int sleep(unsigned int seconds);
 #ifndef _WIN32
@@ -621,7 +622,7 @@ int setuid(uid_t uid);
 // running the parent's exit handlers a second time.
 _Noreturn void _exit(int status);
 #ifdef _WIN32
-mode_t umask(mode_t mode);
+int umask(int mode);
 #else
 int fchown(int fd, uid_t uid, gid_t gid);
 int chown(const char *path, uid_t uid, gid_t gid);
@@ -650,7 +651,11 @@ char *getlogin(void);
 int getlogin_r(char *buf, unsigned long len);
 // Supplementary group lists.
 int getgroups(int size, gid_t *list);
-int setgroups(unsigned long size, const gid_t *list);
+#ifdef __APPLE__
+int setgroups(int size, const gid_t *list);
+#else
+int setgroups(size_t size, const gid_t *list);
+#endif
 // Darwin takes the base group and returns the list as `int`, glibc as gid_t.
 #ifdef __APPLE__
 int initgroups(const char *user, int group);
@@ -684,7 +689,11 @@ int tcsetpgrp(int fd, int pgrp);
 int nice(int inc);
 // Per-descriptor limits, advisory locks, and exec without a PATH search.
 long fpathconf(int fd, int name);
-int lockf(int fd, int cmd, long len);
+int lockf(int fd, int cmd, off_t len);
+#define F_ULOCK 0
+#define F_LOCK 1
+#define F_TLOCK 2
+#define F_TEST 3
 #endif
 int execv(const char *path, char *const argv[]);
 #ifdef __linux__
@@ -696,7 +705,7 @@ int fdatasync(int fd);
 #endif
 #ifndef _WIN32
 // POSIX: pathconf / sysconf return long; some limits exceed 32 bits.
-long pathconf(char *path, int name);
+long pathconf(const char *path, int name);
 long sysconf(int name);
 // Legacy BSD/POSIX page-size query; returns the system page size.
 int getpagesize(void);
@@ -705,7 +714,7 @@ int getdtablesize(void);
 // XSI password hashing. Bound to libSystem on Darwin; on Linux it is
 // libcrypt's, so the declaration is left unbound and the caller's -lcrypt
 // resolves it.
-char *crypt(char *key, char *salt);
+char *crypt(const char *key, const char *salt);
 int flock(int fd, int operation);
 #endif
 char *getenv(const char *name);
@@ -730,7 +739,7 @@ extern int opterr;
 extern int optopt;
 #ifndef _WIN32
 void sync(void);
-int confstr(int name, char *buf, int len);
+size_t confstr(int name, char *buf, size_t len);
 #endif
 
 #define LOCK_SH 1

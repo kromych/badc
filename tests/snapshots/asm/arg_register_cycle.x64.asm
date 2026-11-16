@@ -30,9 +30,21 @@ Disassembly of section .text:
                	je	<addr>
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	decq	%rdx
-               	xchgq	%rsi, %rdi
+               	movq	%rdx, %rax
+               	subl	$0x1, %eax
+               	jne	<addr>
+               	movq	%rsi, %rax
+               	subq	%rdi, %rax
                	popq	%rbp
+               	retq
+               	subl	$0x1, %eax
+               	jne	<addr>
+               	movq	%rdi, %rax
+               	subq	%rsi, %rax
+               	jmp	<addr>
+               	leaq	-0x1(%rax), %rdx
+               	xchgq	%rsi, %rdi
+               	callq	<addr>
                	jmp	<addr>
                	movslq	%edi, %rax
                	movslq	%esi, %r10

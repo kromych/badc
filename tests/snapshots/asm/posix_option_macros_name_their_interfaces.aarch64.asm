@@ -30,9 +30,8 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	ldr	x2, [x1, x0, lsl #3]
                	cbnz	x2, <addr>
+               	mov	x1, #0x0                // =0
+               	mov	x2, #0x63               // =99
                	cmp	w0, #0x0
-               	b.le	<addr>
-               	mov	x0, #0x0                // =0
+               	csel	x0, x1, x2, gt
                	ret
-               	mov	x0, #0x63               // =99
-               	b	<addr>

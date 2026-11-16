@@ -124,7 +124,7 @@ fn comparison_macros_raise_no_invalid() {
 
 #[test]
 fn bool_normalize_c99() {
-    // C99 6.3.1.2 `_Bool` 0/1 normalisation on every conversion.
+    // C99 6.3.1.2 `_Bool` 0/1 normalization on every conversion.
     assert_eq!(run_fixture("bool_normalize_c99.c"), 0);
 }
 
@@ -192,11 +192,10 @@ fn runtime_array_designator() {
 
 #[test]
 fn runtime_range_designator() {
-    // GNU `[lo ... hi] =` range in a runtime array initializer: the value
-    // is evaluated once and copied across the range (gcc semantics),
-    // positional entries resume after the range end, later designators
-    // override with the last entry winning, and a deferred size resolves
-    // to the range end + 1.
+    // GNU `[lo ... hi] =` range in a runtime array initializer: the value is
+    // evaluated once and copied across the range, positional entries resume
+    // after the range end, later designators override with the last entry
+    // winning, and a deferred size resolves to the range end + 1.
     assert_eq!(run_fixture("runtime_range_designator.c"), 0);
 }
 
@@ -306,7 +305,7 @@ fn init_paren_conditional_arith() {
 
 #[test]
 fn offsetof_runtime_subscript() {
-    // GCC extension: `__builtin_offsetof(T, m[i])` with a non-constant `i`
+    // GNU C extension: `__builtin_offsetof(T, m[i])` with a non-constant `i`
     // yields the runtime offset `offsetof(T, m) + i * stride`. A constant
     // subscript still folds.
     assert_eq!(run_fixture("offsetof_runtime_subscript.c"), 0);
@@ -314,10 +313,10 @@ fn offsetof_runtime_subscript() {
 
 #[test]
 fn offsetof_multi_runtime_subscript() {
-    // GCC extension: any number of runtime subscripts in an offsetof
-    // designator; each adds `(size_t)index * stride`. Mixed constant and
-    // runtime subscripts and member-subscript-member chains; all-constant
-    // designators still fold to integer constant expressions.
+    // Any number of runtime subscripts in an offsetof designator; each adds
+    // `(size_t)index * stride`. Mixed constant and runtime subscripts and
+    // member-subscript-member chains; all-constant designators still fold to
+    // integer constant expressions.
     assert_eq!(run_fixture("offsetof_multi_runtime_subscript.c"), 0);
 }
 
@@ -349,7 +348,7 @@ fn compound_literal_pointer_field() {
 
 #[test]
 fn zero_length_local_array() {
-    // GCC zero-length array `T x[0]` as a local (including inside a
+    // GNU C zero-length array `T x[0]` as a local (including inside a
     // statement expression) -- valid and empty, as compile-time-assert
     // idioms rely on; previously rejected as an incomplete array.
     assert_eq!(run_fixture("zero_length_local_array.c"), 0);
@@ -357,17 +356,16 @@ fn zero_length_local_array() {
 
 #[test]
 fn zero_length_array_sizeof() {
-    // GCC `T[0]` is a complete zero-size type: `sizeof(*p)` on
-    // `T (*p)[0]` (local, member, cast) and `sizeof(T[0])` fold to 0.
-    // Locks the size-keyed fifo-layout dispatch: a nonzero result
-    // selected a record layout that consumed payload bytes as length
-    // headers.
+    // `T[0]` is a complete zero-size type: `sizeof(*p)` on `T (*p)[0]`
+    // (local, member, cast) and `sizeof(T[0])` fold to 0. Locks the
+    // size-keyed fifo-layout dispatch: a nonzero result selected a record
+    // layout that consumed payload bytes as length headers.
     assert_eq!(run_fixture("zero_length_array_sizeof.c"), 0);
 }
 
 #[test]
 fn int128_type_layout() {
-    // GCC `__int128` / `__int128_t` / `__uint128_t` / `unsigned __int128`
+    // GNU C `__int128` / `__int128_t` / `__uint128_t` / `unsigned __int128`
     // as a 16-byte type: sizeof, struct / array layout (the aarch64
     // asm/sigcontext.h shape), and by-value copy. The operators are
     // covered by `int128_arithmetic`.
@@ -376,9 +374,9 @@ fn int128_type_layout() {
 
 #[test]
 fn int128_arithmetic() {
-    // GCC 128-bit integer arithmetic, expanded by the walker over the
-    // two 64-bit halves. Each fixture cross-checks against the values
-    // gcc / clang produce for the same expressions.
+    // 128-bit integer arithmetic, expanded by the walker over the two 64-bit
+    // halves. Each fixture cross-checks against the values gcc / clang
+    // produce for the same expressions.
     //   add / sub / neg / bitwise / ++ / -- with carry and borrow,
     //   compound-assignment chains, mixed scalar operands
     assert_eq!(run_fixture("int128_arith.c"), 0);
@@ -439,7 +437,7 @@ fn rdtsc_host_ticks() {
 fn inline_asm_fixed_reg_output_width() {
     // A fixed-register output stores back at the width of its C object:
     // a `long` operand of a 32-bit instruction takes all eight bytes, a
-    // 16-bit operand takes two and leaves its neighbours alone.
+    // 16-bit operand takes two and leaves its neighbors alone.
     assert_eq!(
         run_fixture_for(
             "inline_asm_fixed_reg_output_width.c",
@@ -559,6 +557,111 @@ fn the_interpreter_refuses_an_unmodelled_aarch64_template() {
     }
 }
 
+/// The interpreter keeps a signaling NaN `float` through a copy and quiets
+/// it, raising invalid, in a conversion and in arithmetic, as each target's
+/// processor does.
+#[test]
+fn the_interpreter_copies_a_signaling_nan_float_unchanged() {
+    use crate::{Compiler, Target};
+    let src = super::load_fixture("signaling_nan_float_copy_keeps_its_bits.c");
+    for target in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        let program = Compiler::with_options(src.clone(), target, Default::default())
+            .compile()
+            .expect("compile");
+        let rc = super::Vm::new(program).run().expect("run");
+        assert_eq!(rc, 0, "{target:?}: check {rc}");
+    }
+}
+
+/// On an AArch64 target the interpreter returns the NaN the Arm ARM ranks
+/// first: a signaling operand before a quiet one, and a fused
+/// multiply-add's addend before its factors.
+#[test]
+fn the_interpreter_ranks_nan_operands_as_aarch64_does() {
+    use crate::{Compiler, Target};
+    let src = super::load_fixture("aarch64_nan_operands_rank_signaling_and_addend_first.c");
+    for target in [Target::LinuxAarch64, Target::WindowsAarch64] {
+        let program = Compiler::with_options(src.clone(), target, Default::default())
+            .compile()
+            .expect("compile");
+        let rc = super::Vm::new(program).run().expect("run");
+        assert_eq!(rc, 0, "{target:?}: failing groups {rc:#x}");
+    }
+}
+
+/// The interpreter computes CRC32 as the instructions do: x86's CRC32 and
+/// AArch64's CRC32C* the CRC-32C, AArch64's CRC32* the IEEE CRC-32, each
+/// giving its check value over "123456789" from all ones, inverted at the end.
+#[test]
+fn the_interpreter_computes_crc32() {
+    use crate::{Compiler, Target};
+    let x86 = super::load_fixture("sse42_crc32_accumulates_castagnoli.c");
+    for target in [Target::LinuxX64, Target::WindowsX64] {
+        let program = Compiler::with_options(x86.clone(), target, Default::default())
+            .compile()
+            .expect("compile");
+        let rc = super::Vm::new(program).run().expect("run");
+        assert_eq!(rc, 0, "{target:?}: line {rc}");
+    }
+    for (insn, want) in [("crc32b", 0xCBF4_3926u32), ("crc32cb", 0xE306_9283)] {
+        let src = format!(
+            "int main(void) {{ const char *s = \"123456789\"; unsigned c = ~0u;\n\
+             for (int i = 0; i < 9; i++)\n\
+             __asm__(\"{insn} %w0, %w0, %w1\" : \"+r\"(c) : \"r\"((unsigned)(unsigned char)s[i]));\n\
+             return ~c == {want:#x}u ? 0 : 1; }}"
+        );
+        let program = Compiler::with_options(src.clone(), Target::LinuxAarch64, Default::default())
+            .compile()
+            .expect(&src);
+        assert_eq!(super::Vm::new(program).run().expect(&src), 0, "{insn}");
+    }
+}
+
+/// The interpreter rounds and raises only on its scalar floating-point
+/// path: an inline-asm template that would compute in a floating-point
+/// register is refused on either architecture, so none runs on the host's
+/// arithmetic under another rounding direction.
+#[test]
+fn the_interpreter_refuses_floating_point_inline_asm() {
+    use crate::{Compiler, Target};
+    for (target, asm, what) in [
+        (
+            Target::LinuxAarch64,
+            "__asm__(\"fadd %d0, %d0, %d1\" : \"+w\"(d) : \"w\"(e));",
+            "a SIMD / FP register operand",
+        ),
+        (
+            Target::LinuxAarch64,
+            "unsigned long r; __asm__(\"fmov d0, %1\\n\\tfadd d0, d0, d0\\n\\tfmov %0, d0\" \
+             : \"=r\"(r) : \"r\"(1UL));",
+            "`fadd`",
+        ),
+        (
+            Target::LinuxX64,
+            "__asm__(\"addsd %1, %0\" : \"+x\"(d) : \"x\"(e));",
+            "`x` (xmm) register operands",
+        ),
+        (
+            Target::LinuxX64,
+            "unsigned long r; __asm__(\"movq %1, %%xmm0\\n\\taddsd %%xmm0, %%xmm0\\n\\tmovq %%xmm0, %0\" \
+             : \"=r\"(r) : \"r\"(1UL));",
+            "SSE register ops",
+        ),
+    ] {
+        let src = format!("int main(void) {{ double d = 1.0, e = 0.1; {asm} return (int)d; }}");
+        let program = Compiler::with_options(src.clone(), target, Default::default())
+            .compile()
+            .expect(&src);
+        let err = super::Vm::new(program).run().expect_err(&src).to_string();
+        assert!(err.contains(what), "{src}: {err}");
+    }
+}
+
 #[test]
 fn cacheflush_asm() {
     // AArch64 `mrs ctr_el0` / `dc cvau` / `ic ivau` / `dsb ish` / `isb`
@@ -614,7 +717,7 @@ fn sizeof_builtin_result_shape() {
 
 #[test]
 fn alignof_expression() {
-    // GCC `__alignof__` accepts an expression operand (C11 `_Alignof` is
+    // GNU C `__alignof__` accepts an expression operand (C11 `_Alignof` is
     // type-only); the alignment is that of the operand's unevaluated type,
     // and the type-name form still works.
     assert_eq!(run_fixture("alignof_expression.c"), 0);
@@ -709,8 +812,8 @@ fn builtin_return_address_walks_to_a_callers_frame() {
 #[test]
 fn atomic_lock_free_widths() {
     // C11 7.17.5: the lock-free predicates report the widths the emit
-    // backs. A 16-byte object reports false, matching gcc and clang
-    // where no 16-byte compare-exchange is enabled.
+    // backs. A 16-byte object reports false, as no 16-byte
+    // compare-exchange is enabled.
     assert_eq!(run_fixture("atomic_lock_free_widths.c"), 0);
 }
 
@@ -771,7 +874,7 @@ fn deferred_struct_array_row_designator() {
 
 #[test]
 fn outer_range_designator_replicates_subarray() {
-    // A GCC range designator on the outer dimension of an array of
+    // A GNU C range designator on the outer dimension of an array of
     // aggregates (`[a ... b] = { ... }`) replicates the brace-enclosed
     // sub-array across every covered index, so the deferred outer size
     // resolves to `max index + 1` -- not the ragged element count that
@@ -801,10 +904,10 @@ fn outer_range_designator_replicates_subarray() {
 
 #[test]
 fn outer_range_designator_replicates_string_rows() {
-    // A GCC range designator whose value is a string literal
-    // (`[a ... b] = "..."`) replicates the row across every covered
-    // index of a 2-D character array, zero-padding each to the row
-    // width -- the string-row counterpart of the brace-list case above.
+    // A range designator whose value is a string literal
+    // (`[a ... b] = "..."`) replicates the row across every covered index of
+    // a 2-D character array, zero-padding each to the row width -- the
+    // string-row counterpart of the brace-list case above.
     let src = "
         static const char m[][6] = { [0 ... 2] = \"abc\", [4] = \"XY\" };
         int main(void) {
@@ -1021,7 +1124,7 @@ fn a_narrower_live_set_never_grows_the_packed_image() {
         .compile()
         .expect("compile");
     let funcs = produce_ssa_funcs(&program, crate::Target::LinuxX64, false, true).expect("ssa");
-    let graph = ReachGraph::new(&program);
+    let graph = ReachGraph::new(&program, crate::Target::LinuxX64);
     let sets = compute_live_sets(&funcs, &Default::default(), &graph, false, None);
     let addr = |out: &crate::c5::program::Program, name: &str| {
         out.symbols
@@ -1037,7 +1140,14 @@ fn a_narrower_live_set_never_grows_the_packed_image() {
         "the dead object lies between the page and the cache-line object"
     );
     let pack = |sets: &LiveSets| {
-        let (out, bss, _) = apply_data_liveness(program.clone(), sets, &sets.func_pcs, true, None);
+        let (out, bss, _) = apply_data_liveness(
+            program.clone(),
+            sets,
+            &sets.func_pcs,
+            crate::c5::codegen::ssa::shadow::ZeroFill::All,
+            false,
+            None,
+        );
         (out, bss)
     };
     let with_live = |live: &dyn Fn(usize) -> bool| LiveSets {
@@ -1119,7 +1229,7 @@ fn overaligned_type_placement() {
     // An object whose alignment comes from its type (an over-aligned
     // struct member raising the aggregate), with no attribute on the
     // declarator, is placed on that boundary for file-scope, block-scope
-    // static, and initialised storage. Runtime address checks, matched
+    // static, and initialized storage. Runtime address checks, matched
     // against GCC and clang on x86-64 and aarch64.
     assert_eq!(run_fixture("overaligned_type_placement.c"), 0);
 }
@@ -1166,7 +1276,7 @@ fn section_attr_flexible_array_tail() {
 #[test]
 fn max_alignment_placement() {
     // The widest static alignment badc honors for the target -- 64 KiB, 16 KiB
-    // on Mach-O -- lands on its boundary for bare, initialised, and
+    // on Mach-O -- lands on its boundary for bare, initialized, and
     // block-scope-static storage.
     assert_eq!(run_fixture("max_alignment_placement.c"), 0);
 }
@@ -1228,10 +1338,9 @@ fn builtin_bitcount_const() {
 
 #[test]
 fn builtin_bitcount_zero_const_fold() {
-    // clz / ctz at zero are undefined per the standard; badc folds them to the
-    // bit width, matching GCC and the walker's run-time lowering (clang instead
-    // refuses to fold the zero case). Locking the value keeps the constant path
-    // and the run-time path in agreement.
+    // clz / ctz at zero are undefined; badc folds them to the bit width, the
+    // value the walker's run-time lowering gives. Locking the value keeps the
+    // constant path and the run-time path in agreement.
     assert_eq!(
         run_str(
             "int a[__builtin_clz(0) + 1];\n\
@@ -1264,8 +1373,7 @@ fn const_cond_live_arm_still_a_vla() {
     // The short-circuit above must not over-accept: when the selected arm
     // is non-constant the bound is still a C99 6.7.6.2 VLA, rejected at
     // file scope, and an undeclared identifier in an unselected arm is a
-    // name-lookup violation regardless of evaluation (6.5.1). Matches gcc
-    // and clang.
+    // name-lookup violation regardless of evaluation (6.5.1).
     use crate::c5::Compiler;
     for src in [
         "int nc(void); int a[__builtin_constant_p(32) ? nc() : 5];", // selected arm non-constant
@@ -1322,7 +1430,7 @@ fn runtime_array_member() {
 
 #[test]
 fn builtin_type_macros() {
-    // GCC/Clang predefined `__SIZE_TYPE__` / `__PTRDIFF_TYPE__` /
+    // The GNU C predefined `__SIZE_TYPE__` / `__PTRDIFF_TYPE__` /
     // `__INTPTR_TYPE__` / `__UINTPTR_TYPE__`: width tracks the pointer
     // size and signedness is correct, as headers rely on for typedefs.
     assert_eq!(run_fixture("builtin_type_macros.c"), 0);
@@ -1330,7 +1438,7 @@ fn builtin_type_macros() {
 
 #[test]
 fn stmt_expr() {
-    // GCC statement expressions `({ ... })`: value from the last
+    // GNU C statement expressions `({ ... })`: value from the last
     // expression-statement, single-evaluation side effects, own block
     // scope, comma declarators, and nesting.
     assert_eq!(run_fixture("stmt_expr.c"), 0);
@@ -1426,7 +1534,7 @@ fn builtin_types_compatible() {
 fn builtin_types_compatible_array() {
     // C99 6.7.5.2p6: array type names as `__builtin_types_compatible_p`
     // arguments, including an omitted bound matching any bound, mismatched
-    // bounds, rank, and array-vs-pointer. Matches gcc and clang.
+    // bounds, rank, and array-vs-pointer.
     assert_eq!(run_fixture("builtin_types_compatible_array.c"), 0);
 }
 
@@ -1437,7 +1545,6 @@ fn builtin_types_compatible_ptr_array() {
     // bound is compatible with any bound. Pointer-to-array pairs compare
     // through the pointee (6.7.5.1p2), zero-length and multi-dimensional
     // bounds stay exact, and `_Generic` selects through the same rule.
-    // Matches gcc and clang.
     assert_eq!(run_fixture("builtin_types_compatible_ptr_array.c"), 0);
 }
 
@@ -1445,7 +1552,7 @@ fn builtin_types_compatible_ptr_array() {
 fn gnu_capability_macros_match_their_features() {
     use crate::{CompileOptions, Compiler, Target, Vm};
     // Every capability macro the `--gnu` predefine set claims, checked
-    // against the behaviour it promises: the atomic lock-free properties
+    // against the behavior it promises: the atomic lock-free properties
     // and test-and-set true value, the `__sync_*` widths, the byte-swap
     // builtins the version claim covers, and the UTF literal encodings.
     let src = super::load_fixture("gnu_capability_macros.c");
@@ -1462,7 +1569,7 @@ fn builtin_types_compatible_typedef() {
     // type-name position is that array type, `A *` over it names a
     // pointer to the array, and both compose through chained aliases,
     // qualifiers, deferred / zero-length / multi-dimensional bounds and
-    // aggregate elements. Matches gcc.
+    // aggregate elements.
     assert_eq!(run_fixture("builtin_types_compatible_typedef.c"), 0);
 }
 
@@ -1473,7 +1580,7 @@ fn builtin_types_compatible_fnptr() {
     // the address of a matching function, differing return types and
     // parameter lists, an unspecified parameter list against a prototype,
     // spelled or named through a typedef, `typeof` or `&`, and
-    // pointer-to-function versus function type. Matches gcc and clang.
+    // pointer-to-function versus function type.
     assert_eq!(run_fixture("builtin_types_compatible_fnptr.c"), 0);
 }
 
@@ -1503,9 +1610,8 @@ fn builtin_overflow() {
 /// MSVC's intrinsics with no library function, declared by the unit and
 /// enabled with `#pragma intrinsic`, lower at the call site on the PE
 /// targets: no `#pragma intrinsic` warning, no call left for the link,
-/// and the barrier emits nothing (clang for a windows-msvc triple emits no
-/// call for it either). The fixture runs under the interpreter here and
-/// natively in the PE tables.
+/// and the barrier emits nothing. The fixture runs under the interpreter
+/// here and natively in the PE tables.
 #[cfg(feature = "full")]
 #[test]
 fn msvc_intrinsics_lower_at_the_call_site() {
@@ -1540,16 +1646,15 @@ fn msvc_intrinsics_lower_at_the_call_site() {
 }
 
 /// MSVC's `__va_start`, which <vadefs.h> calls for `va_start`, lowers as
-/// `__builtin_va_start` on both PE targets, as clang lowers it: x64's
-/// `(&ap, last)` and arm64's `(&ap, &last, size, alignment, &last)` leave no
-/// call for the link, and the arguments read back. Off the PE targets the
-/// name is an ordinary function.
+/// `__builtin_va_start` on both PE targets: x64's `(&ap, last)` and arm64's
+/// `(&ap, &last, size, alignment, &last)` leave no call for the link, and the
+/// arguments read back. Off the PE targets the name is an ordinary function.
 #[cfg(feature = "full")]
 #[test]
 fn msvc_va_start_lowers_as_the_builtin() {
     use crate::{CompileOptions, Target};
     let unit = "typedef char *va_list;\nvoid __va_start(va_list *, ...);\n\
-                int f(int n, ...) { va_list ap; __va_start(&ap, n, 4, 4, &n);\n\
+                int f(int n, ...) { va_list ap; __va_start(&ap, &n, sizeof n, 4, &n);\n\
                 return *(int *)ap; }\n";
     for t in [Target::WindowsX64, Target::WindowsAarch64] {
         let dump = super::perf_codegen::ssa_dump_for(unit, "f", t, false);
@@ -1564,13 +1669,64 @@ fn msvc_va_start_lowers_as_the_builtin() {
     assert!(dump.contains("Call"), "LinuxX64:\n{dump}");
 }
 
-/// C99 7.15.1.4p1: `va_start` belongs to a function whose parameter list
-/// ends in `...`. As under gcc and clang, it is an error in a function with
-/// fixed arguments in every spelling: the `<stdarg.h>` macro,
-/// `__builtin_va_start` in a nested block, a statement expression and a K&R
-/// definition, and MSVC's `__va_start` in its x64 and arm64 forms on the PE
-/// targets, where it is no builtin elsewhere. `va_copy` and `va_end` of a
-/// `va_list` parameter stay allowed there.
+/// arm64's `__va_start(&ap, &v, slot size, alignment, &v)` goes unevaluated
+/// and is checked as clang checks it: the named argument's address, a
+/// pointer, and the slot size, a `size_t`, both present.
+#[test]
+fn arm64_msvc_va_start_checks_its_operands() {
+    use crate::{CompileOptions, Target};
+    let compile = |call: &str| {
+        let src = format!(
+            "typedef char *va_list;\nvoid __va_start(va_list *, ...);\n\
+             int f(int n, ...) {{ va_list ap; {call}; return 0; }}\n"
+        );
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        let compiled = crate::Compiler::with_options(src, Target::WindowsAarch64, opts).compile();
+        compiled.map(|_| ()).map_err(|e| e.to_string())
+    };
+    assert_eq!(
+        compile("__va_start(&ap, &n, sizeof(n), __alignof(n), &n)"),
+        Ok(())
+    );
+    assert_eq!(
+        compile("__va_start(&ap, &n, (sizeof(n) + 7) & ~7, 8, &n)"),
+        Ok(())
+    );
+    for (call, says) in [
+        ("__va_start(&ap, &n, 8, 8, &n)", "slot size as `size_t`"),
+        (
+            "__va_start(&ap, 1.5, sizeof(n), 8, &n)",
+            "named argument's address",
+        ),
+        ("__va_start(&ap, &n)", "address and slot size"),
+    ] {
+        let err = compile(call).expect_err(call);
+        assert!(err.contains(says), "{call}: {err}");
+    }
+}
+
+/// MSVC's Nand / Max / Min / UMax / UMin interlocked families, `_interlockedadd`
+/// and winnt.h's ordered spellings, on both PE targets at -O0 and -O.
+#[cfg(feature = "full")]
+#[test]
+fn msvc_interlocked_nand_max_min_families() {
+    use crate::{CompileOptions, Target};
+    for t in [Target::WindowsX64, Target::WindowsAarch64] {
+        for optimize in [false, true] {
+            let opts = CompileOptions::default().with_optimize(optimize);
+            let got = super::run_fixture_with("msvc_interlocked_nand_max_min.c", t, opts);
+            assert_eq!(got, 0, "{t:?} -O={optimize}");
+        }
+    }
+}
+
+/// C99 7.15.1.4p1: `va_start` belongs to a function whose parameter list ends
+/// in `...`. It is an error in a function with fixed arguments in every
+/// spelling: the `<stdarg.h>` macro, `__builtin_va_start` in a nested block,
+/// a statement expression and a K&R definition, and MSVC's `__va_start` in
+/// its x64 and arm64 forms on the PE targets, where it is no builtin
+/// elsewhere. `va_copy` and `va_end` of a `va_list` parameter stay allowed
+/// there.
 #[test]
 fn va_start_needs_a_variadic_function() {
     use crate::{CompileOptions, Target};
@@ -1594,7 +1750,8 @@ fn va_start_needs_a_variadic_function() {
     ];
     let ms = "typedef char *va_list;\nvoid __va_start(va_list *, ...);\n";
     let ms_x64 = format!("{ms}void f(int a) {{ va_list ap; __va_start(&ap, a); }}\n");
-    let ms_arm64 = format!("{ms}void f(int a) {{ va_list ap; __va_start(&ap, &a, 4, 4, &a); }}\n");
+    let ms_arm64 =
+        format!("{ms}void f(int a) {{ va_list ap; __va_start(&ap, &a, sizeof a, 4, &a); }}\n");
     let fixed = "`va_start` used in function with fixed arguments";
     for t in [
         Target::LinuxX64,
@@ -1624,8 +1781,7 @@ fn va_start_needs_a_variadic_function() {
 /// converts to. The fixture under the interpreter, for every target's data
 /// model, at -O0 and -O; the native and JIT tables run it on each backend.
 /// A `return` matching the function's type draws nothing, and one matching
-/// only the parameter's draws the function's conversion diagnostic, as in
-/// gcc 16 and clang 22.
+/// only the parameter's draws the function's conversion diagnostic.
 #[test]
 fn a_parameter_named_like_its_function_keeps_the_function_type() {
     use crate::{CompileOptions, Target};
@@ -1661,14 +1817,14 @@ fn a_parameter_named_like_its_function_keeps_the_function_type() {
 }
 
 /// `-Wvarargs`, on by default as in gcc 16 and clang 22 (C99 7.15.1.1p2,
-/// 7.15.1.4p4): `va_start` naming other than the last named parameter
-/// (both compilers), one declared `register` (both) or one of a type the
-/// default argument promotions change (clang), and `va_arg` of such a type
-/// (clang; gcc warns with no flag). The lines are clang 22's for the same
-/// unit; an array parameter, a parenthesized one and the arm64 form of
-/// MSVC's `__va_start` draw nothing, as in clang. Every target, in the
-/// `<stdarg.h>`, `__builtin_` and x64 `__va_start` spellings; `-Wno-varargs`
-/// silences each.
+/// 7.15.1.4p4): `va_start` naming other than the last named parameter (both
+/// compilers), one declared `register` (both) or one of a type the default
+/// argument promotions change (clang), and `va_arg` of such a type (clang;
+/// gcc warns with no flag). The lines are clang 22's for the same unit; an
+/// array parameter, a parenthesized one and the arm64 form of MSVC's
+/// `__va_start` draw nothing. Every target, in the `<stdarg.h>` and
+/// `__builtin_` spellings, and windows-x64 in its `__va_start` spelling;
+/// `-Wno-varargs` silences each.
 #[test]
 fn va_start_and_va_arg_operands_draw_varargs() {
     use crate::c5::diag::{Code, Config, Level};
@@ -1708,8 +1864,13 @@ fn va_start_and_va_arg_operands_draw_varargs() {
     let ms = format!(
         "typedef char *V;\nvoid __va_start(V *, ...);\n#define S(ap, v) __va_start(&ap, v)\n\
          #define E(ap) (void)(ap)\n{body}\
-         int arm64(char a, ...) {{ V ap; __va_start(&ap, &a, 1, 1, &a); return 0; }}\n"
+         int arm64(char a, ...) {{ V ap; __va_start(&ap, &a, sizeof a, 1, &a); return 0; }}\n"
     );
+    // arm64 takes only its own form, which draws nothing.
+    let arm64 = "typedef char *V;\nvoid __va_start(V *, ...);\n\
+                 int f(char a, ...) { V ap; __va_start(&ap, &a, sizeof a, 1, &a); return 0; }\n";
+    let target = Target::WindowsAarch64;
+    assert!(lines(arm64, target, Level::Warning).is_empty());
     // The first seven lines of `body` warn, and the `va_arg` line after it.
     let want = |src: &str| -> Vec<u32> {
         let first = src[..src.find(body).unwrap()].matches('\n').count() as u32 + 1;
@@ -1724,7 +1885,7 @@ fn va_start_and_va_arg_operands_draw_varargs() {
         Target::WindowsAarch64,
     ] {
         let mut units = alloc::vec![&stdarg, &builtin];
-        if t.is_windows() {
+        if t == Target::WindowsX64 {
             units.push(&ms);
         }
         for src in units {
@@ -1790,11 +1951,13 @@ fn msvc_instruction_intrinsics_encode_their_instructions() {
         object(traps, Target::WindowsX64),
     ]
     .concat();
-    // cpuid, rdtsc, pause, a gs-relative 8-byte load, int3, int $0x29.
-    let x64_seqs: [&[u8]; 6] = [
+    // cpuid, rdtsc, pause, lock or [rsp], 0, a gs-relative 8-byte load,
+    // int3, int $0x29.
+    let x64_seqs: [&[u8]; 7] = [
         &[0x0f, 0xa2],
         &[0x0f, 0x31],
         &[0xf3, 0x90],
+        &[0xf0, 0x83, 0x0c, 0x24, 0x00],
         &[0x65, 0x48, 0x8b],
         &[0xcc],
         &[0xcd, 0x29],
@@ -2024,6 +2187,11 @@ fn msvc_intrinsics_check_their_operands() {
             "argument 1 of `__dmb` is not an integer constant expression",
         ),
         (
+            "void f(void) { __break(0x10000); }",
+            a64,
+            "argument 1 of `__break` is 65536, not 0 to 65535",
+        ),
+        (
             "int f(unsigned long *i) { return _BitScanForward(i); }",
             x64,
             "too few arguments to `_BitScanForward` (expected 2, got 1)",
@@ -2042,6 +2210,11 @@ fn msvc_intrinsics_check_their_operands() {
             "int f(long *p) { return _InterlockedIncrement(p); }",
             Target::LinuxX64,
             "unknown",
+        ),
+        (
+            "#pragma function(__noop)\nvoid f(void) { __noop; }",
+            x64,
+            "undefined variable __noop",
         ),
     ];
     for (src, t, needle) in cases {
@@ -2062,6 +2235,55 @@ fn msvc_intrinsics_check_their_operands() {
             .unwrap_or_else(|e| panic!("{t:?}: {e}"));
         assert!(program.warnings.is_empty(), "{t:?}: {:?}", program.warnings);
     }
+}
+
+/// MSVC's C4163 for `#pragma intrinsic`: a name one of badc's intrinsic
+/// headers declares is an intrinsic, before or after the include, as MSVC's
+/// vector intrinsics are; a name nothing provides is reported at the pragma,
+/// under the `#pragma warning` state there. `_byteswap_*` lower to a byte swap
+/// once the pragma names them.
+#[test]
+fn pragma_intrinsic_reports_names_no_header_or_builtin_provides() {
+    let src = "#pragma intrinsic(_mm_getcsr, __int2c)\n#include <intrin.h>\n\
+               #pragma intrinsic(_mm_prefetch, _byteswap_ulong, _m_prefetchw)\n\
+               #pragma intrinsic(__none_such)\n\
+               #pragma warning(push)\n#pragma warning(disable: 4163)\n\
+               #pragma intrinsic(__silenced)\n#pragma warning(pop)\n\
+               unsigned long f(unsigned long x) { return _byteswap_ulong(x); }\n";
+    let opts = crate::CompileOptions::default().with_no_entry_point(true);
+    let program = crate::Compiler::with_options(src.to_string(), crate::Target::WindowsX64, opts)
+        .compile()
+        .expect("compiles");
+    let reported: Vec<String> = (program.warnings.iter())
+        .map(|w| w.to_string())
+        .filter(|w| w.contains("#pragma intrinsic"))
+        .collect();
+    assert_eq!(reported.len(), 1, "{reported:?}");
+    assert!(
+        reported[0].contains("__none_such") && reported[0].contains(":4:"),
+        "{reported:?}"
+    );
+}
+
+/// MSVC's `__break` on arm64 is `brk` of its constant, the comment field a
+/// debugger reads.
+#[cfg(feature = "full")]
+#[test]
+fn msvc_break_is_brk_of_its_constant() {
+    use crate::{CompileOptions, NativeOptions, OutputKind, Target};
+    let opts = CompileOptions::default().with_no_entry_point(true);
+    let src = "void f(void) { __break(0x1234); }\n".to_string();
+    let program = (crate::Compiler::with_options(src, Target::WindowsAarch64, opts).compile())
+        .expect("compiles");
+    let nopts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..NativeOptions::default()
+    };
+    let obj =
+        crate::emit_native_with_options(&program, Target::WindowsAarch64, nopts).expect("emit");
+    let bytes = super::codegen::function_bytes(&obj, "f");
+    let brk = (0xd420_0000u32 | 0x1234 << 5).to_le_bytes();
+    assert!(bytes.windows(4).any(|w| w == brk), "{bytes:02x?}");
 }
 
 #[test]
@@ -2176,7 +2398,7 @@ fn cpu_relax_hint() {
 
 #[test]
 fn empty_struct_member() {
-    // A complete empty `struct {}` member contributes zero storage (GCC),
+    // A complete empty `struct {}` member contributes zero storage (GNU C),
     // so the common flexible-array-in-union idiom lays a flexible array
     // over a union's first member; the PE targets take MSVC's 4 bytes.
     // Forward-declared members stay rejected.
@@ -2418,13 +2640,13 @@ fn flex_array_member_sizing() {
 #[test]
 fn bitfield_mixed_base_packing() {
     // C99 6.7.2.1p11: adjacent bitfields of different base types share a
-    // storage unit when the bits fit (the gcc/clang layout).
+    // storage unit when the bits fit.
     assert_eq!(run_fixture("bitfield_mixed_base_packing.c"), 0);
 }
 
 #[test]
 fn computed_goto() {
-    // GCC labels-as-values: `&&label` address, `goto *expr` indirect
+    // GNU C labels as values: `&&label` address, `goto *expr` indirect
     // branch, with a runtime label table, a back edge, and a scalar
     // target.
     assert_eq!(run_fixture("computed_goto.c"), 0);
@@ -2678,6 +2900,31 @@ fn socket_headers_abi() {
     assert_eq!(run_fixture("socket_headers_abi.c"), 0);
 }
 
+/// <stdlib.h> declares glibc's clearenv on the Linux targets; the ELF fixture
+/// tables run the fixture there.
+#[test]
+fn clearenv_is_declared_on_linux() {
+    use crate::{Compiler, Target};
+    let src = super::load_fixture("clearenv_empties_the_environment.c");
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let result = Compiler::with_options(src.clone(), target, Default::default()).compile();
+        assert!(result.is_ok(), "{target:?}: {:?}", result.err());
+    }
+}
+
+/// <netinet/in.h>, and on Windows <ws2tcpip.h> as mingw-w64's and the SDK's,
+/// define the IN6_IS_ADDR_* predicates and IN6_ARE_ADDR_EQUAL. The native
+/// fixture tables run the fixture on each target's host.
+#[test]
+fn in6_address_predicates_are_defined_on_every_target() {
+    use crate::{Compiler, Target};
+    let src = super::load_fixture("in6_address_predicates.c");
+    for target in Target::ALL {
+        let result = Compiler::with_options(src.clone(), target, Default::default()).compile();
+        assert!(result.is_ok(), "{target:?}: {:?}", result.err());
+    }
+}
+
 #[test]
 fn posix_utime_errno_headers() {
     // badc bundles POSIX <utime.h> (struct utimbuf) and the ENOTCONN errno.
@@ -2761,7 +3008,7 @@ fn float_literal_arith_single_precision() {
 
 #[test]
 fn array_range_designator() {
-    // GCC `[a ... b] = value` fills the inclusive range; covers constant
+    // GNU C `[a ... b] = value` fills the inclusive range; covers constant
     // data and a label-address dispatch table.
     assert_eq!(run_fixture("array_range_designator.c"), 0);
 }
@@ -2784,7 +3031,7 @@ fn flex_2d_member_index() {
 #[test]
 fn flex_array_member_static_init() {
     // A file-scope object initializing a flexible array member with
-    // trailing elements (C99 6.7.2.1p18 GCC/clang extension) must place
+    // trailing elements (a GNU C extension to C99 6.7.2.1p18) must place
     // the element bytes past the fixed struct size without corrupting
     // the next file-scope object.
     assert_eq!(run_fixture("flex_array_member_static_init.c"), 0);
@@ -2848,7 +3095,7 @@ fn local_struct_array_compound_literal_elements() {
 
 #[test]
 fn alignof_unparenthesized_expression_operand() {
-    // GCC's `__alignof__` (which shares the token with `_Alignof`) accepts
+    // GNU C `__alignof__` (which shares the token with `_Alignof`) accepts
     // an unparenthesized expression operand, whose alignment is that of its
     // type; it binds tighter than a following binary operator, like
     // `sizeof`. The parenthesized type-name and expression forms still work.
@@ -3034,7 +3281,7 @@ fn enum_unsigned_compatible() {
 #[test]
 fn enum_wide_compatible_long() {
     // An enum whose values need 64 bits is `long` / `unsigned long` where
-    // `long` has 64 bits, as gcc and clang type it.
+    // `long` has 64 bits.
     assert_eq!(run_fixture("enum_wide_compatible_long.c"), 0);
 }
 
@@ -3094,7 +3341,7 @@ fn weak_alias_call_not_inlined() {
 #[test]
 fn asm_label_rename() {
     // A GNU asm-label renames the emitted symbol without changing what the
-    // identifier denotes, so the program's behaviour is the same as it
+    // identifier denotes, so the program's behavior is the same as it
     // would be without the labels.
     assert_eq!(run_fixture("asm_label_rename.c"), 0);
 }
@@ -3181,7 +3428,7 @@ fn pragma_operator() {
 
 #[test]
 fn variadic_macro_named_rest() {
-    // The GCC named-rest variadic macro `#define foo(rest...)`: the named
+    // The GNU C named-rest variadic macro `#define foo(rest...)`: the named
     // tail behaves like `__VA_ARGS__`, including `#rest` and `, ##rest`.
     assert_eq!(run_fixture("variadic_macro_named_rest.c"), 0);
 }
@@ -3605,7 +3852,7 @@ fn tag_scopes() {
 fn a_zero_size_object_takes_a_frame_cell() {
     // GNU C's empty aggregate is an object: a local, a by-value argument's
     // copy and a returned temporary each take a cell of their own, so the
-    // interpreter reads their addresses and no neighbour shares one.
+    // interpreter reads their addresses and no neighbor shares one.
     let src = "struct E {};\n\
         static int f(struct E e, int y) { (void)e; return y; }\n\
         static struct E mk(void) { struct E e; return e; }\n\
@@ -3648,8 +3895,16 @@ fn type_name_function_of_function_pointer_typedef() {
 #[test]
 fn tentative_definition_completed_later() {
     // C99 6.9.2p2: an object declared while its type was incomplete is sized
-    // and aligned by the type the unit ends with.
-    assert_eq!(run_fixture("tentative_definition_completed_later.c"), 0);
+    // and aligned by the type the unit ends with. The Microsoft targets type
+    // an enum `int` until its definition, which may widen it.
+    for target in [
+        crate::Target::LinuxX64,
+        crate::Target::WindowsX64,
+        crate::Target::WindowsAarch64,
+    ] {
+        let name = "tentative_definition_completed_later.c";
+        assert_eq!(super::run_fixture_for(name, target), 0, "{target:?}");
+    }
 }
 
 #[test]
@@ -3789,8 +4044,7 @@ fn inline_switch_jump_table() {
 #[test]
 fn inline_section_mandatory() {
     // An explicit section holds a size-driven candidate out of line but not
-    // a mandatory request, which gcc and clang both splice into a caller in
-    // any section.
+    // a mandatory request, which inlines into a caller in any section.
     assert_eq!(run_fixture("inline_section_mandatory.c"), 0);
 }
 
@@ -3851,7 +4105,7 @@ fn store_forward_local_slot() {
 fn struct_return_reg_computed_goto() {
     // A one-word-struct return that carries a label address is promoted out
     // of its frame slot; the computed-goto terminator reading the field must
-    // be redirected to the stored word rather than the neutralised slot.
+    // be redirected to the stored word rather than the neutralized slot.
     assert_eq!(run_fixture("struct_return_reg_computed_goto.c"), 0);
 }
 
@@ -4013,7 +4267,7 @@ fn c11_atomic_ops() {
 
 #[test]
 fn inline_asm_hint() {
-    // GCC inline asm: the operand-free empty barrier and the
+    // GNU C inline asm: the operand-free empty barrier and the
     // pause / yield spin hint compile and leave the surrounding
     // computation unaffected.
     assert_eq!(run_fixture("inline_asm_hint.c"), 0);
@@ -4032,7 +4286,7 @@ fn inline_asm_raw_bytes() {
 #[test]
 fn inline_asm_x64_align_padding_opaque() {
     // `.align` / `.p2align` / `.balign` padding in the code stream has no
-    // modelled effect; the surrounding computation is unaffected.
+    // modeled effect; the surrounding computation is unaffected.
     assert_eq!(
         run_fixture_for("inline_asm_x64_align.c", crate::Target::LinuxX64),
         42
@@ -4103,7 +4357,7 @@ fn nested_compound_literal() {
 
 #[test]
 fn zero_length_array() {
-    // GCC zero-length array `T x[0]` as a struct's trailing member,
+    // GNU C zero-length array `T x[0]` as a struct's trailing member,
     // treated as a flexible array member (zero storage, real bytes
     // follow the fixed part).
     assert_eq!(run_fixture("zero_length_array.c"), 0);
@@ -4115,7 +4369,7 @@ fn x86intrin_umbrella_scalar_subset() {
     // <x86intrin.h> carries the scalar ia32 subset: byte swaps, bit
     // scans, rotates, rdtsc/rdtscp/rdpmc and pause. It compiles on the
     // x86 targets only; elsewhere the include reports the missing
-    // header, as gcc's per-target header set does.
+    // header.
     let compiles = |target: Target| -> bool {
         let src = "#include <x86intrin.h>\n\
                    unsigned long long f(unsigned int *aux) {\n\
@@ -4329,6 +4583,99 @@ fn linux_can_socket_and_block_headers() {
     assert!(!compiles(wrong), "a wrong constant should fail to compile");
 }
 
+/// The C library's integer types keep its signedness: char16_t's atomic
+/// type is unsigned everywhere (C17 7.17.6), the SDK's clockid_t is an
+/// unsigned enum, and msvcrt's dev_t and useconds_t are unsigned.
+#[test]
+fn library_integer_types_have_the_c_librarys_signedness() {
+    use crate::{CompileOptions, Compiler, Target};
+    let check = |src: &str, target: Target| {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        let r = Compiler::with_options(src.to_string(), target, opts).compile();
+        assert!(r.is_ok(), "{target:?}: {:?}", r.err());
+    };
+    let atomics = "#include <stdatomic.h>\n\
+                   _Static_assert((atomic_char16_t)-1 > 0 && (atomic_char32_t)-1 > 0, \"u\");\n";
+    for target in Target::ALL {
+        check(atomics, target);
+    }
+    check(
+        "#include <time.h>\n_Static_assert((clockid_t)-1 > 0, \"clockid_t\");\n",
+        Target::MacOSAarch64,
+    );
+    check(
+        "#include <sys/types.h>\n\
+         _Static_assert((dev_t)-1 > 0 && (useconds_t)-1 > 0, \"msvcrt\");\n",
+        Target::WindowsX64,
+    );
+}
+
+#[test]
+fn lockf_commands_nodev_and_j1939_header() {
+    use crate::{CompileOptions, Compiler, Target};
+    // POSIX defines F_ULOCK..F_TEST with lockf() in <unistd.h>; <sys/param.h>
+    // gives NODEV as (dev_t)-1 on Linux and macOS; <linux/can/j1939.h> is the
+    // uapi header with SOL_CAN_J1939 and struct j1939_filter.
+    let compiles = |src: &str, target: Target| -> bool {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), target, opts)
+            .compile()
+            .is_ok()
+    };
+    let posix = "#include <unistd.h>\n#include <sys/param.h>\n\
+                 int ck[(F_ULOCK==0 && F_LOCK==1 && F_TLOCK==2 && F_TEST==3 \
+                 && NODEV==(dev_t)-1)?1:-1];\n\
+                 int lk(int fd){ return lockf(fd, F_TLOCK, 0); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64, Target::MacOSAarch64] {
+        assert!(
+            compiles(posix, target),
+            "lockf commands and NODEV on {target:?}"
+        );
+    }
+    let j1939 = "#include <sys/socket.h>\n#include <linux/can.h>\n\
+                 #include <linux/can/j1939.h>\n\
+                 int ck[(SOL_CAN_J1939==107 && J1939_NO_NAME==0 && J1939_NO_ADDR==0xff \
+                 && J1939_NO_PGN==0x40000 && SO_J1939_ERRQUEUE==4 && SCM_J1939_PRIO==3 \
+                 && J1939_NLA_DEST_ADDR==7 && J1939_EE_INFO_RX_ABORT==4 \
+                 && sizeof(struct j1939_filter)==32 && sizeof(name_t)==8)?1:-1];\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        assert!(compiles(j1939, target), "linux/can/j1939.h on {target:?}");
+    }
+}
+
+#[test]
+fn linux_socket_family_prctl_and_statx_headers() {
+    use crate::{CompileOptions, Compiler, Target};
+    // glibc's AF_*/SOL_* set, the AF_PACKET, AF_ALG, AF_NETLINK, AF_TIPC and
+    // AF_QIPCRTR address headers, netfilter, CAN BCM and ISO-TP, the uapi
+    // <linux/prctl.h>, and statx() under _GNU_SOURCE; sizes match gcc's.
+    let src = "#define _GNU_SOURCE\n#include <fcntl.h>\n#include <sys/stat.h>\n\
+               #include <sys/socket.h>\n#include <sys/prctl.h>\n\
+               #include <asm/types.h>\n#include <netpacket/packet.h>\n#include <linux/if_alg.h>\n\
+               #include <linux/netlink.h>\n#include <linux/tipc.h>\n#include <linux/qrtr.h>\n\
+               #include <linux/netfilter_ipv4.h>\n#include <linux/can/bcm.h>\n\
+               #include <linux/can/isotp.h>\n\
+               int ck[(AF_NETLINK==16 && AF_PACKET==17 && AF_TIPC==30 && AF_ALG==38 \
+               && AF_QIPCRTR==42 && AF_MAX==46 && PF_PACKET==AF_PACKET && SOL_PACKET==263 \
+               && SOL_NETLINK==270 && SOL_TIPC==271 && SOL_ALG==279 && SOL_VSOCK==287 \
+               && sizeof(struct sockaddr_ll)==20 && sizeof(struct sockaddr_alg)==88 \
+               && sizeof(struct sockaddr_nl)==12 && NLMSG_HDRLEN==16 && NLMSG_SPACE(1)==20 \
+               && sizeof(struct sockaddr_tipc)==16 && SIOCGETNODEID==0x89E1 \
+               && sizeof(struct sockaddr_qrtr)==12 && sizeof(struct qrtr_ctrl_pkt)==20 \
+               && SO_ORIGINAL_DST==80 && sizeof(union nf_inet_addr)==16 \
+               && sizeof(struct bcm_msg_head)==56 && SOL_CAN_ISOTP==106 \
+               && sizeof(struct can_isotp_options)==12 && PR_SET_VMA==0x53564d41 \
+               && PR_SET_VMA_ANON_NAME==0 && sizeof(struct statx)==256 \
+               && STATX_BTIME==0x800 && AT_STATX_DONT_SYNC==0x4000)?1:-1];\n\
+               int use(struct statx *b){ return statx(AT_FDCWD, \".\", 0, \
+               STATX_BASIC_STATS, b) + (int)tipc_addr(1, 2, 3); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        let compiled = Compiler::with_options(src.to_string(), target, opts).compile();
+        assert!(compiled.is_ok(), "{target:?}: {:?}", compiled.err());
+    }
+}
+
 #[test]
 fn linux_block_device_and_file_headers() {
     use crate::{CompileOptions, Compiler, Target};
@@ -4403,8 +4750,8 @@ fn unnamed_typedef_name_members_promote() {
 #[test]
 fn dollar_signs_form_identifiers() {
     // C99 6.4.2.1p1 leaves other identifier characters to the
-    // implementation; gcc and clang take `$` (`-fdollars-in-identifiers`),
-    // in macro names as in objects, functions and members.
+    // implementation; `$` is one (`-fdollars-in-identifiers`), in macro
+    // names as in objects, functions and members.
     let src = "#define __$allowed_on_parameter\n\
                #define __allowed(p) __$allowed_##p\n\
                struct s { int $m, a$; };\n\
@@ -4769,7 +5116,7 @@ fn anon_member_brace_nesting() {
 
 #[test]
 fn compound_literal_array_init() {
-    // GCC compound literals: an array initialized by an array-typed
+    // GNU C compound literals: an array initialized by an array-typed
     // compound literal takes the literal's brace list.
     assert_eq!(run_fixture("compound_literal_array_init.c"), 0);
 }
@@ -5177,9 +5524,8 @@ fn bitfield_brace_init_packs_into_storage_unit() {
 
 #[test]
 fn vsnprintf_underscore_alias_resolves_to_libc() {
-    // Locks the c5 <stdio.h> alias so `#define vsnprintf _vsnprintf`
-    // (the standard MSVC-compatibility rewrite per C99 7.1.4 and CRT
-    // convention) resolves through the canonical `vsnprintf` to the
+    // Locks the c5 <stdio.h> alias so `#define vsnprintf _vsnprintf` (the
+    // MSVC CRT's spelling) resolves through the canonical `vsnprintf` to the
     // platform C library. The fixture self-checks the formatted bytes,
     // so the JIT run also confirms libc walks the forwarded c5 va_list
     // correctly.
@@ -5376,7 +5722,7 @@ fn static_init_accepts_paren_cast_of_string() {
     // use the cast-of-string-literal idiom
     // `((const T *)"...")`. The integer constant-expression
     // path would drop the data relocation; the init parser
-    // must recognise the shape and route through the
+    // must recognize the shape and route through the
     // string-literal branch so the slot is patched at load.
     assert_eq!(run_fixture("static_init_paren_cast_string.c"), 0);
 }
@@ -5532,7 +5878,7 @@ fn macro_argument_rescan_resolves_pasted_call() {
     // C99 6.10.3.4: the function-like macro's substituted body
     // is rescanned for further macro replacement. An object
     // identifier supplied as a parameter and immediately
-    // followed by `(` in the body must be recognised as a
+    // followed by `(` in the body must be recognized as a
     // function-like call in the rescan.
     assert_eq!(run_fixture("macro_argument_rescan.c"), 0);
 }
@@ -5599,7 +5945,7 @@ fn typedef_fn_ptr_struct_field_carries_lineage() {
     // comes from a `typedef RET (*fn_t)(args)` alias rather
     // than an inline fn-pointer declarator. The typedef's
     // `fn_ptr_indirection` must propagate into the StructField
-    // record so the post-load `(*g->cb)(args)` recognises the
+    // record so the post-load `(*g->cb)(args)` recognizes the
     // decay.
     assert_eq!(run_fixture("typedef_fn_ptr_struct_field.c"), 0);
 }
@@ -5610,7 +5956,7 @@ fn fp_nan_unordered_compare() {
     // 96: NaN compares unordered with everything. Relational
     // and equality ops yield 0 when either operand is NaN; `!=`
     // yields 1. Locks the post-UCOMISD AND-with-`setnp` /
-    // OR-with-`setp` masks the x86_64 backend needs to honour
+    // OR-with-`setp` masks the x86_64 backend needs to honor
     // the unordered case.
     assert_eq!(run_fixture("fp_nan_unordered_compare.c"), 0);
 }
@@ -5687,7 +6033,7 @@ fn designator_scopes() {
 
 #[test]
 fn overaligned_vector_object() {
-    // C11 6.7.5: `_Alignas(N)` places an object of a GCC `vector_size`
+    // C11 6.7.5: `_Alignas(N)` places an object of a GNU C `vector_size`
     // type on an N-byte boundary, at file scope, as a block-scope static
     // and as an automatic object.
     assert_eq!(run_fixture("overaligned_vector_object.c"), 0);
@@ -5708,7 +6054,7 @@ fn block_scope_object_alignment() {
     // the requested boundary -- a static local in the data image, an automatic
     // one in the over-aligned frame region -- while a thread-local keeps the
     // boundary its block is placed on. One function holds all three kinds with
-    // odd-sized neighbours between them, so a dropped request shows up in the
+    // odd-sized neighbors between them, so a dropped request shows up in the
     // address rather than being masked by a lucky offset.
     assert_eq!(run_fixture("block_scope_object_alignment.c"), 0);
 }
@@ -5724,11 +6070,11 @@ fn thread_local_tentative_array_is_completed_in_the_thread_local_image() {
     let (tls_program, plain_program) = (compile_str(tls), compile_str(plain));
     assert_eq!(
         tls_program.tls_data.len(),
-        8,
+        4,
         "one element in the thread-local image"
     );
     assert_eq!(
-        tls_program.data.len() + 8,
+        tls_program.data.len() + 4,
         plain_program.data.len(),
         "the element leaves `.data`"
     );
@@ -6199,7 +6545,7 @@ fn extern_declaration_inside_function_body() {
 
 #[test]
 fn va_copy_clones_va_list_cursor() {
-    // C99 7.15.1.2: `va_copy(dst, src)` initialises `dst` to the
+    // C99 7.15.1.2: `va_copy(dst, src)` initializes `dst` to the
     // same position in the variadic list as `src`. The fixture
     // builds a copy of the cursor immediately after `va_start`
     // and walks the copy; the sum must match the values passed
@@ -6290,7 +6636,7 @@ fn macro_paste_empty_arg_placemarker() {
 
 #[test]
 fn static_over_alignment() {
-    // C11 6.7.5 / GCC `aligned`: static objects (file-scope and block-scope
+    // C11 6.7.5 / GNU C `aligned`: static objects (file-scope and block-scope
     // static) are placed at the requested power-of-two alignment, up to a
     // page -- verified at runtime via the object address modulo alignment.
     assert_eq!(run_fixture("static_over_alignment.c"), 0);
@@ -6308,9 +6654,9 @@ fn pointer_local_ignores_type_alignment() {
 fn typedef_aligned_layout() {
     // GNU `aligned(N)` carried by a typedef: object placement (static and
     // automatic), member offsets, sizes, and `__alignof__` on types,
-    // objects and member lvalues all follow the gcc semantics, including
-    // a typedef lowering the alignment and a declarator attribute
-    // replacing the carrier.
+    // objects and member lvalues all follow it, including a typedef
+    // lowering the alignment and a declarator attribute replacing the
+    // carrier.
     assert_eq!(run_fixture("typedef_aligned_layout.c"), 0);
 }
 
@@ -6377,7 +6723,7 @@ fn local_multidim_struct_array_designator() {
 fn func_name_predeclared_identifier() {
     // C99 6.4.2.2 makes `__func__` an implicitly declared string
     // literal carrying the enclosing function's name. c5 mirrors
-    // the standard plus the GCC aliases `__FUNCTION__` and
+    // the standard plus the GNU C aliases `__FUNCTION__` and
     // `__PRETTY_FUNCTION__`. The fixture pins three properties:
     // each name resolves to the right function, the three
     // spellings agree byte-for-byte, and distinct functions
@@ -6402,7 +6748,7 @@ fn attribute_and_declspec_absorbed_as_no_op() {
     // as empty function-like macros so attribute-decorated
     // declarations parse without dragging in real attribute
     // semantics. Fixture exercises prefix attribute on a
-    // function declaration, postfix attribute (the GCC
+    // function declaration, postfix attribute (the GNU C
     // position), nested-paren payloads with comma arguments,
     // and `__declspec(align(...))` on a struct.
     assert_eq!(run_fixture("attribute_noop.c"), 0);
@@ -6444,7 +6790,7 @@ fn predefined_constants_are_visible() {
 #[test]
 fn c99_qualifiers_parse_as_no_ops() {
     // const, volatile, restrict, signed, unsigned, short, long, _Bool,
-    // register, auto, inline -- recognised by the lexer and consumed at
+    // register, auto, inline -- recognized by the lexer and consumed at
     // every declaration position the parser visits. Returns 0 if every
     // shape parsed and ran.
     assert_eq!(run_fixture("c99_qualifiers.c"), 0);
@@ -6474,7 +6820,7 @@ fn static_local_array_init_bounds() {
     // C99 6.7.8p2/p14/p21: a static-local array initializer fills the storage
     // reserved for the declared bound and no more -- an over-long list is
     // rejected (see `tests::parser`), and the legal shapes leave the
-    // neighbouring statics untouched.
+    // neighboring statics untouched.
     assert_eq!(run_fixture("static_local_array_init_bounds.c"), 0);
 }
 
@@ -6839,9 +7185,9 @@ fn struct_value_arithmetic_is_rejected() {
             .expect("valid struct pointer / member arithmetic must compile");
     }
 
-    // The GCC 128-bit integer shares the aggregate layout machinery but
-    // is an integer type: every operator above is valid on it. The
-    // rejection must key on the plain struct / union case alone.
+    // `__int128` shares the aggregate layout machinery but is an integer
+    // type: every operator above is valid on it. The rejection must key on
+    // the plain struct / union case alone.
     let int128_ok = [
         "int f(__int128 a, __int128 b){return (int)(a+b);}",
         "int f(__int128 a, __int128 b){return (int)(a*b);}",
@@ -7108,7 +7454,7 @@ fn const_expr_arithmetic() {
     // constant-expression grammar -- arithmetic, casts, comparisons,
     // conditionals, sizeof, bitwise / logical operators, and FP
     // operands as casts (folded at parse time and truncated at the
-    // integer boundary). Exercises enum initialisers, _Static_assert,
+    // integer boundary). Exercises enum initializers, _Static_assert,
     // array sizes (global + local), and nested combinations.
     assert_eq!(run_fixture("const_expr_arithmetic.c"), 0);
 }
@@ -7167,11 +7513,14 @@ fn darwin_enotsup_is_distinct_from_eopnotsupp() {
 }
 
 #[test]
-fn ndebug_optimize_predefine() {
+fn optimize_predefines_optimize_not_ndebug() {
     // The library harness never sets the driver's `-O`, so neither
     // NDEBUG nor __OPTIMIZE__ is predefined here; the CLI-level
     // `-O` semantics are locked by `tests/cli_fixture_smoke.rs`.
-    assert_eq!(run_fixture("ndebug_optimize_predefine.c"), 100);
+    assert_eq!(
+        run_fixture("optimize_predefines_optimize_not_ndebug.c"),
+        100
+    );
 }
 
 #[test]
@@ -7404,7 +7753,7 @@ fn minmax_signedness_chain() {
 #[test]
 fn empty_declaration() {
     // A stray `;` declares nothing: accepted in a struct/union member
-    // list and at file scope (gcc/clang extension), without opening a
+    // list and at file scope (a GNU C extension), without opening a
     // new field group or perturbing layout.
     assert_eq!(run_fixture("empty_declaration.c"), 0);
 }
@@ -7446,7 +7795,7 @@ fn builtin_constant_p_deferred() {
     assert_eq!(run_fixture("builtin_constant_p_deferred.c"), 0);
 }
 
-// GCC extended inline asm with operand lists (x86_64 register-operand
+// GNU C extended inline asm with operand lists (x86_64 register-operand
 // forms). The interpreter evaluates the template semantics, so these
 // round-trip on any host; the native x86_64 encoding is checked by the
 // snapshot suite and the box validation.
@@ -7716,7 +8065,7 @@ fn for_post_statement_expression_returns() {
     // closed. The walker must open a fresh block for that unreachable
     // back-edge instead of emitting it into no block. Runtime: the init
     // runs, the body runs once (i becomes 8), then the post's `return`
-    // yields steps * 100 + i == 108, matching gcc.
+    // yields steps * 100 + i == 108.
     let src = "
         int main(void) {
             int i = 3;
@@ -7734,7 +8083,7 @@ fn for_post_statement_expression_goto() {
     // to a label after the loop. The post back-edge is unreachable and
     // must not be emitted into a closed block. Runtime: body runs once
     // (i becomes 4), the post records log == 4 and jumps past the loop,
-    // so the result is log * 100 + i == 404, matching gcc.
+    // so the result is log * 100 + i == 404.
     let src = "
         int main(void) {
             int i = 1;
@@ -7817,7 +8166,7 @@ fn nested_anonymous_aggregate_fully_braced_init() {
 fn flexible_array_member_designated_init() {
     // A flexible array member initialized with a `[index] = value`
     // designator sizes the member to the highest index and zero-fills the
-    // gaps (GCC/clang extension over C99 6.7.2.1p18).
+    // gaps (a GNU C extension to C99 6.7.2.1p18).
     let src = "
         struct fam { int a; long long bm[]; };
         static struct fam fm = { .a = 5, .bm = { [2] = 77 } };
@@ -8371,7 +8720,7 @@ fn the_mach_process_inspection_headers_are_macos_only() {
     use crate::Target;
     // The include set a remote-memory reader pulls in: the process
     // introspection calls, the Mach-O fat and symbol-table layouts, and
-    // the 64-bit VM routines with their region-info flavours.
+    // the 64-bit VM routines with their region-info flavors.
     let src = "#include <libproc.h>\n\
         #include <mach-o/fat.h>\n\
         #include <mach-o/loader.h>\n\
@@ -8431,7 +8780,7 @@ fn the_mach_process_inspection_headers_are_macos_only() {
 #[test]
 fn vm_region_basic_info_keeps_the_kernel_packing() {
     use crate::Target;
-    // <mach/vm_region.h> is 4-byte packed. Without it the 64-bit flavour
+    // <mach/vm_region.h> is 4-byte packed. Without it the 64-bit flavor
     // pads to 40 bytes and VM_REGION_BASIC_INFO_COUNT_64 reports 10, so
     // mach_vm_region would be handed a reply size the kernel rejects.
     let src = "#include <mach/vm_region.h>\n\
@@ -8819,8 +9168,8 @@ fn integer_constant_added_to_an_address_constant() {
     // expression added to it in either order. A leading integer term --
     // including a cast or a `sizeof` of an anonymous bitfield struct,
     // the shape a compile-time type assertion expands to -- must still
-    // leave a relocation in the slot. That struct has gcc's size 0 and
-    // MSVC's 4, the PE targets' layout.
+    // leave a relocation in the slot. That struct has the GNU C size 0
+    // and MSVC's 4, the PE targets' layout.
     let src = "struct opts { int a; int b; int pad[4]; };\n\
                static struct opts opts;\n\
                struct row { void *value; };\n\
@@ -8842,9 +9191,9 @@ fn integer_constant_added_to_an_address_constant() {
 #[test]
 fn value_builtins_take_preprocessed_input() {
     use crate::{CompileOptions, Compiler, Target, Vm};
-    // gcc and clang keep the builtins as calls in `-E` output, so a `.i`
-    // unit reaches the parser with them. Dropping the fixture's directive
-    // lines keeps its ASCII-classification block.
+    // `-E` output keeps the builtins as calls, so a `.i` unit reaches the
+    // parser with them. Dropping the fixture's directive lines keeps its
+    // ASCII-classification block.
     assert_eq!(run_fixture("value_builtins.c"), 0);
     let text: String = super::load_fixture("value_builtins.c")
         .lines()

@@ -70,8 +70,7 @@ Disassembly of section .text:
                	movq	%r12, %rdx
                	callq	<addr>
                	xorl	%eax, %eax
-               	leaq	-0x40(%rbp), %rcx
-               	movzbq	(%rcx,%rax), %rcx
+               	movzbq	-0x40(%rbp,%rax), %rcx
                	movb	%cl, (%rbx,%rax)
                	incq	%rax
                	cmpl	$0x40, %eax
@@ -95,8 +94,7 @@ Disassembly of section .text:
                	movq	(%rcx), %r10
                	movq	%r10, (%rax)
                	xorl	%eax, %eax
-               	leaq	-0x60(%rbp), %rcx
-               	movb	%al, (%rcx,%rax)
+               	movb	%al, -0x60(%rbp,%rax)
                	incq	%rax
                	cmpl	$0x20, %eax
                	jl	<addr>
@@ -107,11 +105,10 @@ Disassembly of section .text:
                	leaq	-0x60(%rbp), %r8
                	callq	<addr>
                	movzbq	-0x40(%rbp), %rax
-               	xorq	$0x4d, %rax
-               	testl	%eax, %eax
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	xorl	%ecx, %ecx
+               	movl	$0x1, %edx
+               	cmpl	$0x4d, %eax
+               	cmovneq	%rdx, %rcx
+               	movq	%rcx, %rax
                	leave
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>

@@ -2,7 +2,7 @@
    preserve the caller's block ids: `Inst::BlockAddr` and the computed-goto
    target table reference them directly. The flat splice rebuilds the block
    array one-to-one, so dispatch stays correct. Both a one-word-struct
-   by-value helper and a scalar helper are called from labelled blocks. */
+   by-value helper and a scalar helper are called from labeled blocks. */
 typedef union {
     unsigned long bits;
 } SR;

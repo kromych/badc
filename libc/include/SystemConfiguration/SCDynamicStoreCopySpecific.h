@@ -7,7 +7,7 @@
 
 #include <CoreFoundation/CoreFoundation.h>
 
-typedef struct __SCDynamicStore *SCDynamicStoreRef;
+typedef const struct __SCDynamicStore *SCDynamicStoreRef;
 
 #pragma dylib(systemconfiguration, "/System/Library/Frameworks/SystemConfiguration.framework/SystemConfiguration")
 #pragma binding(systemconfiguration::SCDynamicStoreCopyProxies, "_SCDynamicStoreCopyProxies")

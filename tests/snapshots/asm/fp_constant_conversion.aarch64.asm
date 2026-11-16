@@ -73,8 +73,7 @@ Disassembly of section .text:
                	ldr	x9, [sp], #0x10
                	mov	x4, x16
                	ldr	d0, [x4]
-               	add	x4, x3, x0, lsl #3
-               	ldr	d1, [x4]
+               	ldr	d1, [x3, x0, lsl #3]
                	fcmp	d0, d1
                	cset	x4, ne
                	add	x1, x1, x4
@@ -108,8 +107,7 @@ Disassembly of section .text:
                	adrp	x16, <addr>
                	ldr	s1, [x16, #0x28]
                	fcmp	s1, s0
-               	b.eq	<addr>
-               	add	x0, x0, #0x1
+               	cinc	x0, x0, ne
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

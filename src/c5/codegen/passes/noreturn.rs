@@ -1,10 +1,11 @@
 //! Calls that do not return end their block.
 //!
 //! A call to a function declared `_Noreturn` (C11 6.7.4) does not return
-//! to its caller (6.7.4p8), whatever expression the call stands in. The
-//! walker seals a call statement; this pass seals the rest -- `return
-//! f(x);`, an initializer, an operand -- by ending the block after the
-//! call with `Terminator::Unreachable`. What followed the call moves to a
+//! to its caller (6.7.4p8), whatever expression the call stands in, nor
+//! does a trapping intrinsic (`__builtin_trap`, `__builtin_unreachable`).
+//! The walker seals a call statement; this pass seals the rest -- `return
+//! f(x);`, an initializer, an operand of `,` -- by ending the block after
+//! the call with `Terminator::Unreachable`. What followed the call moves to a
 //! block of its own no edge reaches, which `prune_unreachable` deletes.
 //!
 //! With `infer`, a function this unit defines does not return either when
@@ -110,6 +111,7 @@ fn seal(func: &mut FunctionSsa, ends: &Known) -> bool {
             None => ends.entries.contains(target_pc),
         },
         Inst::CallExt { binding_idx, .. } => ends.bindings.contains(binding_idx),
+        Inst::Intrinsic { kind, .. } => crate::c5::op::Intrinsic::is_noreturn(*kind),
         _ => false,
     };
     let mut split = false;

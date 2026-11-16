@@ -41,8 +41,8 @@ __attribute__((noinline)) static int long_output_fills_all_bytes(void) {
     return v == 0x99;
 }
 
-/* Store too wide: a 16-bit operand must leave its neighbours intact. */
-__attribute__((noinline)) static int short_output_keeps_neighbours(void) {
+/* Store too wide: a 16-bit operand must leave its neighbors intact. */
+__attribute__((noinline)) static int short_output_keeps_neighbors(void) {
     struct { unsigned short before, val, after; } s;
 
     s.before = 0xbeef;
@@ -64,7 +64,7 @@ int main(void) {
         return 2;
     if (!long_output_fills_all_bytes())
         return 3;
-    if (!short_output_keeps_neighbours())
+    if (!short_output_keeps_neighbors())
         return 4;
     return 0;
 }

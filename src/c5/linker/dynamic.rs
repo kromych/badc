@@ -55,6 +55,7 @@ pub const DT_PREINIT_ARRAY: u64 = 32;
 pub const DT_PREINIT_ARRAYSZ: u64 = 33;
 pub const DT_TEXTREL: u64 = 22;
 pub const DT_FLAGS: u64 = 30;
+pub const DT_AARCH64_VARIANT_PCS: u64 = 0x7000_0005;
 pub const DT_RELRSZ: u64 = 35;
 pub const DT_RELR: u64 = 36;
 pub const DT_RELRENT: u64 = 37;
@@ -526,6 +527,9 @@ pub struct DynAddrs {
     pub rpath: Option<(u32, bool)>,
     pub symbolic: bool,
     pub textrel: bool,
+    /// A `JUMP_SLOT` names a symbol marked `STO_AARCH64_VARIANT_PCS`:
+    /// `DT_AARCH64_VARIANT_PCS`, so the loader binds it eagerly (AAELF64).
+    pub variant_pcs: bool,
     /// A position-independent executable: `DF_1_PIE`.
     pub pie: bool,
     /// An executable rather than a shared object: `DT_DEBUG`, and none of
@@ -627,6 +631,10 @@ pub fn build_dynamic(a: &DynAddrs, class: ElfClass) -> Vec<u8> {
     if a.textrel {
         tags.push((DT_TEXTREL, 0));
         flags |= DF_TEXTREL;
+    }
+    // bfd adds the processor tags after the generic ones.
+    if a.variant_pcs {
+        tags.push((DT_AARCH64_VARIANT_PCS, 0));
     }
     flags |= a.flags;
     if flags != 0 {

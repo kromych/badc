@@ -5,11 +5,17 @@
  * drop the unreferenced section), and a stack- / frame-pointer register
  * variable read from functions. */
 
+#if defined(__APPLE__)
+#define CSYM(name) "_" name
+#else
+#define CSYM(name) name
+#endif
+
 int export_me(int v) { return v + 2; }
 extern typeof(export_me) export_me __attribute__((used));
 __asm__(".pushsection .export_tab,\"a\"\n"
         ".balign 8\n"
-        ".quad export_me\n"
+        ".quad " CSYM("export_me") "\n"
         ".asciz \"export_me\"\n"
         ".popsection");
 

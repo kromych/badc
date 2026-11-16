@@ -70,7 +70,7 @@ Disassembly of section .text:
                	stlr	x2, [x1]
                	ldapr	x1, [x1]
                	stur	x1, [x29, #-0x8]
-               	ldur	d1, [x29, #-0x8]
+               	fmov	d1, x1
                	fcmp	d1, d0
                	b.eq	<addr>
                	mov	x0, #0xd                // =13

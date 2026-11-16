@@ -46,7 +46,8 @@ was run to verify it. This page lists what that takes.
   fixture tables are in `src/c5/tests/fixture_tables.rs`: `NATIVE_FIXTURES`
   (macOS), `NATIVE_ELF_FIXTURES` and `NATIVE_ELF_X64_FIXTURES` (Linux),
   `NATIVE_PE_X64_FIXTURES` and `NATIVE_PE_ARM64_FIXTURES` (Windows), and
-  `JIT_FIXTURES`. A Windows fix tested only on Linux is not tested.
+  `JIT_FIXTURES` (the JIT on Linux and macOS; on Windows it runs the PE
+  tables). A Windows fix tested only on Linux is not tested.
 - Expected values come from a reference compiler (gcc, clang, or MSVC on
   Windows), not from badc's own output.
 - Cover the rule, not only the reported case: the other flags, widths, types,

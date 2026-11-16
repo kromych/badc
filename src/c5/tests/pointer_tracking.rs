@@ -123,7 +123,7 @@ fn calling_a_forged_code_pointer_is_refused() {
     );
 }
 
-/// GCC's labels as values: `goto *` must reach a label of the function
+/// GNU C labels as values: `goto *` must reach a label of the function
 /// that runs it. An integer whose bits decode to the entry block ran the
 /// function again forever; one decoding past the last block indexed out
 /// of range. A label of another function, a label's address moved by a

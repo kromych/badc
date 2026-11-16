@@ -14,35 +14,21 @@ Disassembly of section .text:
                	brk	#0x1
 
 <compute>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	add	x0, x0, x1
-               	str	x0, [sp]
-               	ldr	x0, [sp]
                	lsl	x0, x0, #1
                	mrs	x1, CNTVCT_EL0
-               	cbz	x1, <addr>
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	mov	x2, #0x0                // =0
+               	cmp	x1, #0x0
+               	csel	x0, x0, x2, ne
                	ret
-               	mov	x0, #0x0                // =0
-               	b	<addr>
 
 <main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	mov	x16, #0x14              // =20
                	mov	x17, #0x1               // =1
                	add	x0, x16, x17
-               	str	x0, [sp]
-               	ldr	x0, [sp]
                	lsl	x0, x0, #1
                	mrs	x1, CNTVCT_EL0
-               	cbz	x1, <addr>
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	mov	x2, #0x0                // =0
+               	cmp	x1, #0x0
+               	csel	x0, x0, x2, ne
                	ret
-               	mov	x0, #0x0                // =0
-               	b	<addr>

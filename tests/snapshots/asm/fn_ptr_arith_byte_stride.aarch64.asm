@@ -107,13 +107,12 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldur	x5, [x29, #-0x10]
                	mov	x0, #0x2                // =2
                	mov	x1, #0x3                // =3
                	mov	x2, #0x4                // =4
                	mov	x3, #0x5                // =5
                	mov	x4, #0x6                // =6
-               	blr	x5
+               	bl	<addr>
                	cmp	x0, #0x15
                	b.eq	<addr>
                	mov	x0, #0x14               // =20

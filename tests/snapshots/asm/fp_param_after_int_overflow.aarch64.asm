@@ -43,9 +43,9 @@ Disassembly of section .text:
                	mov	x5, #0x6                // =6
                	mov	x6, #0x7                // =7
                	mov	x7, #0x8                // =8
-               	mov	x8, #0x9                // =9
                	fmov	d0, #0.50000000
-               	str	x8, [sp]
+               	mov	x16, #0x9               // =9
+               	str	x16, [sp]
                	bl	<addr>
                	adrp	x16, <page>
                	ldr	d1, [x16]
@@ -63,9 +63,9 @@ Disassembly of section .text:
                	mov	x5, #0x3c               // =60
                	mov	x6, #0x46               // =70
                	mov	x7, #0x50               // =80
-               	mov	x8, #0x5a               // =90
                	fmov	d0, #0.25000000
-               	str	x8, [sp]
+               	mov	x16, #0x5a              // =90
+               	str	x16, [sp]
                	bl	<addr>
                	adrp	x16, <page>
                	ldr	d1, [x16, #0x8]

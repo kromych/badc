@@ -14,39 +14,17 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	mov	x0, #0x0                // =0
-               	str	x0, [sp]
-               	ldr	x0, [sp]
                	add	x0, x0, #0x1
-               	str	x0, [sp]
-               	ldr	x0, [sp]
                	add	x0, x0, #0x1
-               	str	x0, [sp]
-               	ldr	x0, [sp]
                	add	x0, x0, #0x1
-               	str	x0, [sp]
-               	ldr	x0, [sp]
                	add	x0, x0, #0x1
-               	str	x0, [sp]
-               	ldr	x0, [sp]
                	add	x0, x0, #0x1
-               	str	x0, [sp]
-               	ldr	x0, [sp]
                	add	x0, x0, #0x1
-               	str	x0, [sp]
-               	ldr	x0, [sp]
                	add	x0, x0, #0x1
-               	str	x0, [sp]
-               	ldr	x0, [sp]
                	add	x0, x0, #0x1
+               	mov	x1, #0x0                // =0
+               	mov	x2, #0x1                // =1
                	cmp	x0, #0x8
-               	b.ne	<addr>
-               	mov	x0, #0x0                // =0
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	csel	x0, x1, x2, eq
                	ret
-               	mov	x0, #0x1                // =1
-               	b	<addr>

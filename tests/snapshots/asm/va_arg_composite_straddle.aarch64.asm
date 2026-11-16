@@ -149,8 +149,8 @@ Disassembly of section .text:
                	mov	x4, #0x5                // =5
                	mov	x5, #0x6                // =6
                	mov	x6, #0x7                // =7
-               	mov	x8, #0x309              // =777
-               	str	x8, [sp, #0x10]
+               	mov	x16, #0x309             // =777
+               	str	x16, [sp, #0x10]
                	mov	x16, x7
                	ldr	x17, [x16]
                	str	x17, [sp]

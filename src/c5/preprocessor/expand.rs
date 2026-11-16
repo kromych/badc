@@ -243,8 +243,7 @@ const LINE_BUF: u32 = 0;
 /// What a substituted line is: program text, a directive's operand, a
 /// header name, whose spellings join as the source spaced them, or an
 /// `#if` / `#elif` expression, where `defined` is an operator (C99
-/// 6.10.1p1). `_Pragma` is an operator in program text only, as gcc
-/// reads it.
+/// 6.10.1p1). `_Pragma` is an operator in program text only.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum LineUse {
     Text,
@@ -798,8 +797,8 @@ impl<'a> Exp<'a> {
                     let inv = self.hs_with_name(common, name);
                     let at = self.src_pos;
                     let mut sub = self.subst(name, def, &raw_args, &sep_space, inv, depth);
-                    // The replacement is at the line of the macro name, as gcc
-                    // gives it; each argument was at its own.
+                    // The replacement is at the line of the macro name; each
+                    // argument was at its own.
                     self.src_pos = at;
                     if let Some(f) = sub.first_mut() {
                         f.space = tok.space;
@@ -843,9 +842,8 @@ impl<'a> Exp<'a> {
     /// How many of the next tokens form the operand, `NAME` or `( NAME )`,
     /// of a `defined` the outermost scan of an `#if` expression met. They
     /// pass through unexpanded, also when a replacement produced the
-    /// `defined`, which C99 6.10.1p4 leaves undefined and gcc and clang
-    /// read so; a macro argument's own scan expands them, as theirs does.
-    /// 0 when no identifier follows.
+    /// `defined`, which C99 6.10.1p4 leaves undefined; a macro argument's
+    /// own scan expands them. 0 when no identifier follows.
     fn defined_operand_len(&self, rest: &[Tok]) -> usize {
         let at = |k: usize| rest.len().checked_sub(k).map(|i| rest[i]);
         let paren = at(1).is_some_and(|t| self.is_punct(t, "("));
@@ -862,8 +860,8 @@ impl<'a> Exp<'a> {
         }
     }
 
-    /// `-Wexpansion-to-defined`, which gcc and clang raise outside a
-    /// system header for a `defined` a replacement produced.
+    /// `-Wexpansion-to-defined`, raised outside a system header for a
+    /// `defined` a replacement produced.
     fn note_produced_defined(&self) {
         if !self.pp.in_system_header() {
             let text = "`defined` produced by macro replacement; its behavior is \
@@ -924,10 +922,9 @@ impl<'a> Exp<'a> {
 
     /// A C99 6.10.9 `_Pragma ( string-literal )`, or MSVC `__pragma (
     /// tokens )`, whose pragma is `push_macro` or `pop_macro`: true when
-    /// `tok` opens one, which then moves to `out` whole. gcc and clang
-    /// execute such an operator where the rescan meets it, outside an
-    /// argument's own expansion, so the names after it expand under the
-    /// state it leaves.
+    /// `tok` opens one, which then moves to `out` whole. Such an operator
+    /// executes where the rescan meets it, outside an argument's own
+    /// expansion, so the names after it expand under the state it leaves.
     fn macro_state_operator(&mut self, tok: Tok, rest: &mut Vec<Tok>, out: &mut Vec<Tok>) -> bool {
         if tok.kind != TokKind::Ident || self.first_byte(tok) != b'_' {
             return false;
@@ -1650,7 +1647,7 @@ pub(super) fn is_dynamic_predefine(name: &str) -> bool {
 /// spelled `next_text` would re-lex as one preprocessing token. The
 /// serializer inserts one space at such boundaries -- white space
 /// between tokens never changes phase-7 semantics -- so substituted text
-/// cannot paste onto its neighbours (C99 6.10.3.3 reserves pasting for
+/// cannot paste onto its neighbors (C99 6.10.3.3 reserves pasting for
 /// `##`). `prev_kind` is the preceding token's kind, which decides
 /// whether the pp-number and encoding-prefix rules apply.
 ///
@@ -1885,7 +1882,7 @@ fn join_head(name: &str, pp: &Preprocessor) -> bool {
 pub(super) const MAX_MACRO_DEPTH: usize = 200;
 
 /// True when a body identifier names the variadic tail: the standard
-/// `__VA_ARGS__`, or the GCC named-rest parameter (`#define foo(rest...)`
+/// `__VA_ARGS__`, or the GNU C named-rest parameter (`#define foo(rest...)`
 /// reaches the tail through `rest`).
 pub(super) fn is_va_token(def: &FnMacro, word: &str) -> bool {
     word == "__VA_ARGS__" || def.va_name.as_deref() == Some(word)

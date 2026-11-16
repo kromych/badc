@@ -11,7 +11,7 @@
 // from `forward` and the program exited non-zero. Linux x86_64 and
 // the AArch64 lanes never carried a non-zero `scratch_bytes` on the
 // tail path, so the fixture is a no-op assertion there; the value
-// is to lock the Win64 behaviour against regression.
+// is to lock the Win64 behavior against regression.
 
 #include <stdio.h>
 

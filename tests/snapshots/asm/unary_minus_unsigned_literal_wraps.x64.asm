@@ -32,8 +32,7 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	movl	%eax, -0x18(%rbp)
                	movl	-0x18(%rbp), %ecx
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpl	%r11d, %ecx
+               	cmpl	$-0x1, %ecx
                	setne	%cl
                	movzbq	%cl, %rcx
                	cmpl	$0x1, %ecx
@@ -42,15 +41,13 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	-0x18(%rbp), %ecx
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpl	%r11d, %ecx
+               	cmpl	$-0x1, %ecx
                	jne	<addr>
                	movl	$0x4, %eax
                	leave
                	retq
                	movl	-0x18(%rbp), %ecx
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpl	%r11d, %ecx
+               	cmpl	$-0x1, %ecx
                	setb	%cl
                	movzbq	%cl, %rcx
                	cmpl	$0x1, %ecx
@@ -59,8 +56,7 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	-0x18(%rbp), %ecx
-               	movl	$0xfffffffe, %r11d      # imm = 0xFFFFFFFE
-               	cmpl	%r11d, %ecx
+               	cmpl	$-0x2, %ecx
                	setne	%cl
                	movzbq	%cl, %rcx
                	cmpl	$0x1, %ecx
@@ -69,8 +65,7 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	-0x18(%rbp), %ecx
-               	movl	$0x80000000, %r11d      # imm = 0x80000000
-               	cmpl	%r11d, %ecx
+               	cmpl	$0x80000000, %ecx       # imm = 0x80000000
                	setne	%cl
                	movzbq	%cl, %rcx
                	cmpl	$0x1, %ecx
@@ -79,15 +74,13 @@ Disassembly of section .text:
                	retq
                	movl	$0xffffffff, -0x10(%rbp) # imm = 0xFFFFFFFF
                	movl	-0x10(%rbp), %eax
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpl	%r11d, %eax
+               	cmpl	$-0x1, %eax
                	je	<addr>
                	movl	$0x8, %eax
                	leave
                	retq
                	movl	-0x10(%rbp), %eax
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpl	%r11d, %eax
+               	cmpl	$-0x1, %eax
                	je	<addr>
                	movl	$0x9, %eax
                	leave

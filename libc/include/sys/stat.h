@@ -67,15 +67,18 @@
 // struct now uses `short st_mode; short st_nlink;` directly --
 // reading those fields lands on the right libc bytes without any
 // dword splitting / mask ceremony.
+#if defined(__APPLE__) || defined(__linux__)
+#include <sys/types.h>
+#endif
 #ifdef __APPLE__
 struct stat {
-    int             st_dev;            /* offset  0, 4 bytes */
-    unsigned short  st_mode;           /* offset  4, 2 bytes */
-    unsigned short  st_nlink;          /* offset  6, 2 bytes */
-    long            st_ino;            /* offset  8, 8 bytes */
-    unsigned int    st_uid;            /* offset 16, 4 bytes, uid_t */
-    unsigned int    st_gid;            /* offset 20, 4 bytes, gid_t */
-    int             st_rdev;           /* offset 24, 4 bytes */
+    dev_t           st_dev;            /* offset  0, 4 bytes */
+    mode_t          st_mode;           /* offset  4, 2 bytes */
+    nlink_t         st_nlink;          /* offset  6, 2 bytes */
+    ino_t           st_ino;            /* offset  8, 8 bytes */
+    uid_t           st_uid;            /* offset 16, 4 bytes */
+    gid_t           st_gid;            /* offset 20, 4 bytes */
+    dev_t           st_rdev;           /* offset 24, 4 bytes */
     int             __pad28;           /* offset 28, 4 bytes */
     // The nanosecond timestamp fields, named both as a timespec
     // (st_atimespec, BSD) and as the historical flat tv_sec / tv_nsec
@@ -97,14 +100,13 @@ struct stat {
         struct timespec st_birthtimespec; /* offset 80 */
         struct { long st_birthtime; long st_birthtimensec; };
     };
-    long            st_size;           /* offset 96, 8 bytes */
-    long            st_blocks;         /* offset 104, 8 bytes */
-    int             st_blksize;        /* offset 112, 4 bytes */
+    off_t           st_size;           /* offset 96, 8 bytes */
+    blkcnt_t        st_blocks;         /* offset 104, 8 bytes */
+    blksize_t       st_blksize;        /* offset 112, 4 bytes */
     unsigned int    st_flags;          /* offset 116, 4 bytes */
-    int             st_gen;            /* offset 120, 4 bytes */
+    unsigned int    st_gen;            /* offset 120, 4 bytes */
     int             st_lspare;         /* offset 124, 4 bytes */
-    long            st_qspare0;        /* offset 128, 8 bytes */
-    long            st_qspare1;        /* offset 136, 8 bytes */
+    long long       st_qspare[2];      /* offset 128, 16 bytes */
 };
 #elif defined(__linux__) && defined(__x86_64__)
 // Linux x86_64 layout. See bits/struct_stat.h:
@@ -112,17 +114,17 @@ struct stat {
 // size, blksize, blocks each 8 bytes; three timespec slots;
 // trailing __unused[3] longs. 144 bytes total.
 struct stat {
-    long st_dev;             /* offset   0, 8 bytes */
-    long st_ino;             /* offset   8, 8 bytes */
-    long st_nlink;           /* offset  16, 8 bytes */
-    int  st_mode;            /* offset  24, 4 bytes */
-    unsigned int st_uid;     /* offset  28, 4 bytes, uid_t */
-    unsigned int st_gid;     /* offset  32, 4 bytes, gid_t */
+    dev_t st_dev;            /* offset   0, 8 bytes */
+    ino_t st_ino;            /* offset   8, 8 bytes */
+    nlink_t st_nlink;        /* offset  16, 8 bytes */
+    mode_t st_mode;          /* offset  24, 4 bytes */
+    uid_t st_uid;            /* offset  28, 4 bytes */
+    gid_t st_gid;            /* offset  32, 4 bytes */
     int  __pad0;             /* offset  36, 4 bytes */
-    long st_rdev;            /* offset  40, 8 bytes */
-    long st_size;            /* offset  48, 8 bytes */
-    long st_blksize;         /* offset  56, 8 bytes */
-    long st_blocks;          /* offset  64, 8 bytes */
+    dev_t st_rdev;           /* offset  40, 8 bytes */
+    off_t st_size;           /* offset  48, 8 bytes */
+    blksize_t st_blksize;    /* offset  56, 8 bytes */
+    blkcnt_t st_blocks;      /* offset  64, 8 bytes */
     union {
         struct timespec st_atim; /* offset  72 */
         struct { long st_atime; long st_atimensec; };
@@ -144,18 +146,18 @@ struct stat {
 // after a pair of 8-byte dev/ino. blksize is 4 bytes here. 128
 // bytes total.
 struct stat {
-    long st_dev;             /* offset   0, 8 bytes */
-    long st_ino;             /* offset   8, 8 bytes */
-    int  st_mode;            /* offset  16, 4 bytes */
-    int  st_nlink;           /* offset  20, 4 bytes */
-    unsigned int st_uid;     /* offset  24, 4 bytes, uid_t */
-    unsigned int st_gid;     /* offset  28, 4 bytes, gid_t */
-    long st_rdev;            /* offset  32, 8 bytes */
-    long __pad1;             /* offset  40, 8 bytes */
-    long st_size;            /* offset  48, 8 bytes */
-    int  st_blksize;         /* offset  56, 4 bytes */
+    dev_t st_dev;            /* offset   0, 8 bytes */
+    ino_t st_ino;            /* offset   8, 8 bytes */
+    mode_t st_mode;          /* offset  16, 4 bytes */
+    nlink_t st_nlink;        /* offset  20, 4 bytes */
+    uid_t st_uid;            /* offset  24, 4 bytes */
+    gid_t st_gid;            /* offset  28, 4 bytes */
+    dev_t st_rdev;           /* offset  32, 8 bytes */
+    dev_t __pad1;            /* offset  40, 8 bytes */
+    off_t st_size;           /* offset  48, 8 bytes */
+    blksize_t st_blksize;    /* offset  56, 4 bytes */
     int  __pad2;             /* offset  60, 4 bytes */
-    long st_blocks;          /* offset  64, 8 bytes */
+    blkcnt_t st_blocks;      /* offset  64, 8 bytes */
     union {
         struct timespec st_atim; /* offset  72 */
         struct { long st_atime; long st_atimensec; };
@@ -361,9 +363,14 @@ int fchflags(int fd, unsigned int flags);
 #define S_IWRITE S_IWUSR
 #define S_IEXEC  S_IXUSR
 
-// utimensat(2) special nanosecond values (C11 / POSIX.1-2008).
+// utimensat(2) special nanosecond values (POSIX.1-2008), the C library's.
+#ifdef __APPLE__
+#define UTIME_NOW  -1
+#define UTIME_OMIT -2
+#else
 #define UTIME_NOW  ((1L << 30) - 1L)
 #define UTIME_OMIT ((1L << 30) - 2L)
+#endif
 
 // statfs / statvfs -- filesystem-level metadata. The real layout
 // differs across platforms; this opaque buffer is wide enough for
@@ -436,21 +443,6 @@ struct statfs {
     long f_flags;
 };
 #endif
-
-struct statvfs {
-    int f_bsize;
-    int f_frsize;
-    int f_blocks;
-    int f_bfree;
-    int f_bavail;
-    int f_files;
-    int f_ffree;
-    int f_favail;
-    int f_fsid;
-    int f_flag;
-    int f_namemax;
-    char f_pad[64];
-};
 
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
@@ -526,4 +518,87 @@ int mkfifo(const char *path, mode_t mode);
 int mkfifoat(int fd, const char *path, mode_t mode);
 mode_t umask(mode_t cmask);
 int utimensat(int fd, const char *path, const struct timespec times[2], int flag);
+#endif
+
+#if defined(__linux__) && defined(_GNU_SOURCE)
+// statx(2), glibc 2.28: the extended attributes of a file, the fields
+// requested by the STATX_* mask, in the kernel uapi layout.
+#include <linux/types.h>
+
+struct statx_timestamp {
+    __s64 tv_sec;
+    __u32 tv_nsec;
+    __s32 __reserved;
+};
+
+struct statx {
+    __u32 stx_mask;
+    __u32 stx_blksize;
+    __u64 stx_attributes;
+    __u32 stx_nlink;
+    __u32 stx_uid;
+    __u32 stx_gid;
+    __u16 stx_mode;
+    __u16 __spare0[1];
+    __u64 stx_ino;
+    __u64 stx_size;
+    __u64 stx_blocks;
+    __u64 stx_attributes_mask;
+    struct statx_timestamp stx_atime;
+    struct statx_timestamp stx_btime;
+    struct statx_timestamp stx_ctime;
+    struct statx_timestamp stx_mtime;
+    __u32 stx_rdev_major;
+    __u32 stx_rdev_minor;
+    __u32 stx_dev_major;
+    __u32 stx_dev_minor;
+    __u64 stx_mnt_id;
+    __u32 stx_dio_mem_align;
+    __u32 stx_dio_offset_align;
+    __u64 stx_subvol;
+    __u32 stx_atomic_write_unit_min;
+    __u32 stx_atomic_write_unit_max;
+    __u32 stx_atomic_write_segments_max;
+    __u32 stx_dio_read_offset_align;
+    __u32 stx_atomic_write_unit_max_opt;
+    __u32 __spare2[1];
+    __u64 __spare3[8];
+};
+
+#define STATX_TYPE           0x00000001U
+#define STATX_MODE           0x00000002U
+#define STATX_NLINK          0x00000004U
+#define STATX_UID            0x00000008U
+#define STATX_GID            0x00000010U
+#define STATX_ATIME          0x00000020U
+#define STATX_MTIME          0x00000040U
+#define STATX_CTIME          0x00000080U
+#define STATX_INO            0x00000100U
+#define STATX_SIZE           0x00000200U
+#define STATX_BLOCKS         0x00000400U
+#define STATX_BASIC_STATS    0x000007ffU
+#define STATX_BTIME          0x00000800U
+#define STATX_MNT_ID         0x00001000U
+#define STATX_DIOALIGN       0x00002000U
+#define STATX_MNT_ID_UNIQUE  0x00004000U
+#define STATX_SUBVOL         0x00008000U
+#define STATX_WRITE_ATOMIC   0x00010000U
+#define STATX_DIO_READ_ALIGN 0x00020000U
+#define STATX__RESERVED      0x80000000U
+#define STATX_ALL            0x00000fffU
+
+#define STATX_ATTR_COMPRESSED   0x00000004
+#define STATX_ATTR_IMMUTABLE    0x00000010
+#define STATX_ATTR_APPEND       0x00000020
+#define STATX_ATTR_NODUMP       0x00000040
+#define STATX_ATTR_ENCRYPTED    0x00000800
+#define STATX_ATTR_AUTOMOUNT    0x00001000
+#define STATX_ATTR_MOUNT_ROOT   0x00002000
+#define STATX_ATTR_VERITY       0x00100000
+#define STATX_ATTR_DAX          0x00200000
+#define STATX_ATTR_WRITE_ATOMIC 0x00400000
+
+#pragma binding(libc::statx, "statx")
+int statx(int dirfd, const char *restrict path, int flags, unsigned int mask,
+          struct statx *restrict buf);
 #endif

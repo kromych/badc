@@ -30,11 +30,11 @@ Disassembly of section .text:
                	bl	<addr>
                	adrp	x16, <page>
                	ldr	d1, [x16]
-               	fcmp	d8, d1
+               	fcmpe	d8, d1
                	b.mi	<addr>
                	adrp	x16, <page>
                	ldr	d1, [x16, #0x8]
-               	fcmp	d8, d1
+               	fcmpe	d8, d1
                	b.le	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x20]
@@ -43,11 +43,11 @@ Disassembly of section .text:
                	ret
                	adrp	x16, <page>
                	ldr	d1, [x16, #0x10]
-               	fcmp	d9, d1
+               	fcmpe	d9, d1
                	b.mi	<addr>
                	adrp	x16, <page>
                	ldr	d1, [x16, #0x18]
-               	fcmp	d9, d1
+               	fcmpe	d9, d1
                	b.le	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x20]
@@ -64,11 +64,11 @@ Disassembly of section .text:
                	ret
                	adrp	x16, <page>
                	ldr	d1, [x16, #0x20]
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.mi	<addr>
                	adrp	x16, <page>
                	ldr	d1, [x16, #0x28]
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.le	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x20]

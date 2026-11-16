@@ -40,9 +40,8 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movl	<rip>, %eax # <addr>
-               	movl	%eax, -0x8(%rbp)
-               	movl	-0x8(%rbp), %eax
-               	movl	$0x0, -0x8(%rbp)
+               	movl	%eax, -0x10(%rbp)
+               	movl	-0x10(%rbp), %eax
                	movl	$0x1, -0x8(%rbp)
                	callq	<addr>
                	addq	$0x3, %rax

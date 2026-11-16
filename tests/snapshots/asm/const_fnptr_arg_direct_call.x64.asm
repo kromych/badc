@@ -22,8 +22,7 @@ Disassembly of section .text:
                	movl	$0x1a, %r13d
                	movl	$0xa, %ebx
                	jmp	<addr>
-               	decq	%rbx
-               	testq	%rbx, %rbx
+               	subq	$0x1, %rbx
                	je	<addr>
                	addl	$0x1, (%rip)            # <addr>
 		R_X86_64_PC32	nest_count-0x5
@@ -54,12 +53,9 @@ Disassembly of section .text:
 
 <enter_entry>:
                	endbr64
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	movq	%rdi, (%rsi)
                	xorl	%edi, %edi
                	movb	$0x1, (%rip)            # <addr>
 		R_X86_64_PC32	cache_dirty-0x5
-               	popq	%rbp
                	jmp	<addr>
 		R_X86_64_PLT32	entry_saved_ret-0x4

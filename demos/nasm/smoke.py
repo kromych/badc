@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""End-to-end smoke for badc against the NASM 2.16.03 assembler.
+"""End-to-end smoke for badc against the NASM 3.02 assembler.
 
 Builds the `nasm` program by compiling a fixed translation-unit list directly
 with badc -- no `make`, matching the python demo -- then runs NASM's own
@@ -22,6 +22,7 @@ binary via `$BADC` (default: `target/release/badc[.exe]`).
 
 from __future__ import annotations
 
+import json
 import os
 import platform
 import re
@@ -41,39 +42,34 @@ SRC = NASM_DEMO / "src"
 SOURCES = [
     "asm/assemble.c", "asm/directbl.c", "asm/directiv.c", "asm/error.c",
     "asm/eval.c", "asm/exprdump.c", "asm/exprlib.c", "asm/floats.c",
-    "asm/labels.c", "asm/listing.c", "asm/parser.c", "asm/pptok.c",
-    "asm/pragma.c", "asm/preproc.c", "asm/quote.c", "asm/rdstrnum.c",
-    "asm/segalloc.c", "asm/srcfile.c", "asm/stdscan.c", "asm/strfunc.c",
-    "asm/tokhash.c", "asm/warnings.c", "common/common.c", "disasm/disasm.c",
-    "disasm/sync.c", "macros/macros.c", "nasmlib/alloc.c", "nasmlib/asprintf.c",
-    "nasmlib/badenum.c", "nasmlib/bsi.c", "nasmlib/crc32.c", "nasmlib/crc64.c",
-    "nasmlib/errfile.c", "nasmlib/file.c", "nasmlib/filename.c",
+    "asm/getbool.c", "asm/labels.c", "asm/listing.c", "asm/parser.c",
+    "asm/pptok.c", "asm/pragma.c", "asm/preproc.c", "asm/quote.c",
+    "asm/rdstrnum.c", "asm/segalloc.c", "asm/srcfile.c", "asm/stdscan.c",
+    "asm/strfunc.c", "asm/tokhash.c", "asm/uncompress.c", "asm/warnings.c",
+    "common/common.c", "common/errstubs.c", "disasm/disasm.c",
+    "disasm/diserror.c", "disasm/prefix.c", "disasm/sync.c",
+    "macros/macros.c", "nasmlib/alloc.c", "nasmlib/asprintf.c",
+    "nasmlib/badenum.c", "nasmlib/bsi.c", "nasmlib/crc32b.c",
+    "nasmlib/crc64.c", "nasmlib/file.c", "nasmlib/fileio.c",
     "nasmlib/hashtbl.c", "nasmlib/ilog2.c", "nasmlib/md5c.c", "nasmlib/mmap.c",
     "nasmlib/nctype.c", "nasmlib/numstr.c", "nasmlib/path.c",
     "nasmlib/perfhash.c", "nasmlib/raa.c", "nasmlib/rbtree.c",
     "nasmlib/readnum.c", "nasmlib/realpath.c", "nasmlib/rlimit.c",
     "nasmlib/saa.c", "nasmlib/string.c", "nasmlib/strlist.c", "nasmlib/ver.c",
-    "nasmlib/zerobuf.c", "output/codeview.c", "output/legacy.c",
-    "output/nulldbg.c", "output/nullout.c", "output/outaout.c",
-    "output/outas86.c", "output/outbin.c", "output/outcoff.c",
-    "output/outdbg.c", "output/outelf.c", "output/outform.c",
-    "output/outieee.c", "output/outlib.c", "output/outmacho.c",
-    "output/outobj.c", "stdlib/snprintf.c", "stdlib/strlcpy.c",
-    "stdlib/strnlen.c", "stdlib/strrchrnul.c", "stdlib/vsnprintf.c",
-    "x86/disp8.c", "x86/iflag.c", "x86/insnsa.c", "x86/insnsb.c",
+    "nasmlib/zerobuf.c", "output/codeview.c", "output/nulldbg.c",
+    "output/nullout.c", "output/outaout.c", "output/outas86.c",
+    "output/outbin.c", "output/outcoff.c", "output/outdbg.c",
+    "output/outelf.c", "output/outform.c", "output/outieee.c",
+    "output/outlib.c", "output/outmacho.c", "output/outobj.c",
+    "stdlib/snprintf.c", "stdlib/strlcpy.c", "stdlib/strnlen.c",
+    "stdlib/vsnprintf.c", "x86/iflag.c", "x86/insnsa.c", "x86/insnsb.c",
     "x86/insnsd.c", "x86/insnsn.c", "x86/regdis.c", "x86/regflags.c",
-    "x86/regs.c", "x86/regvals.c",
+    "x86/regs.c", "x86/regvals.c", "zlib/adler32.c", "zlib/crc32.c",
+    "zlib/infback.c", "zlib/inffast.c", "zlib/inflate.c", "zlib/inftrees.c",
+    "zlib/zutil.c",
 ]
 MAIN = "asm/nasm.c"
-INC_DIRS = [".", "include", "config", "x86", "asm", "disasm", "output"]
-
-# `_version` embeds the assembler's compile date in its output, which a fresh
-# build here does not match the golden of; it is not a codegen signal. Other
-# platform-specific cases (e.g. `_file_` on Windows) are removed from the fetched
-# suite by `curate_fixtures` so the harness runs unmodified. Every remaining
-# golden case is deterministic once nasm is invoked with the base-dir prefix the
-# goldens were recorded with (`./travis/test/...`).
-SKIP_TESTS = {"_version"}
+INC_DIRS = [".", "include", "config", "x86", "asm", "disasm", "output", "zlib"]
 
 IS_WIN = sys.platform == "win32"
 EXE = ".exe" if IS_WIN else ""
@@ -110,8 +106,21 @@ def badc_target() -> str:
     return "linux-aarch64" if aarch else "linux-x64"
 
 
+def pinned_version() -> str:
+    """The NASM release setup.py pins."""
+    text = (NASM_DEMO / "setup.py").read_text(encoding="utf-8")
+    return re.search(r'^VERSION = "([^"]+)"', text, re.M).group(1)
+
+
 def ensure_source() -> None:
-    if (SRC / "x86" / "insnsa.c").is_file() and (SRC / "version.mac").is_file():
+    # A tree extracted for an earlier pin is replaced, not built.
+    stamp = SRC / "version"
+    if (
+        (SRC / "x86" / "insnsa.c").is_file()
+        and (SRC / "version.mac").is_file()
+        and stamp.is_file()
+        and stamp.read_text(encoding="utf-8").strip() == pinned_version()
+    ):
         return
     log("fetching NASM source via setup.py")
     subprocess.run([sys.executable, str(NASM_DEMO / "setup.py")], check=True)
@@ -123,6 +132,24 @@ def ensure_source() -> None:
 # NF_BINARY -- LF on every host -- and must not be touched. Their golden is
 # `<output>.t`; stderr/stdout diagnostics are always text (`<name>.stderr/.stdout`).
 TEXT_OUTPUT_EXTS = ("i", "lst", "ith", "srec", "dbg", "ieee")
+
+
+def preprocessed_goldens(tdir: Path) -> list[Path]:
+    """The goldens of `-E` / `-e` cases, whose output nasm writes as text
+    whatever its extension. A case naming `ref` takes that case's fields, as
+    nasm-t.py expands it."""
+    goldens = []
+    for path in tdir.glob("*.json"):
+        cases = json.loads(path.read_text())
+        cases = cases if isinstance(cases, list) else [cases]
+        ids = {c["id"]: c for c in cases if "id" in c}
+        for case in cases:
+            case = {**ids.get(case.get("ref"), {}), **case}
+            opts = case.get("option", "").split()
+            for t in case.get("target", []):
+                if "output" in t and {"-E", "-e"} & {*opts, *t.get("option", "").split()}:
+                    goldens.append(tdir / t.get("match", t["output"] + ".t"))
+    return goldens
 
 
 def adapt_fixtures(target: str) -> None:
@@ -148,27 +175,37 @@ def adapt_fixtures(target: str) -> None:
     goldens = list(tdir.glob("*.stderr")) + list(tdir.glob("*.stdout"))
     for ext in TEXT_OUTPUT_EXTS:
         goldens += tdir.glob(f"*.{ext}.t")
-    for p in goldens:
+    goldens += preprocessed_goldens(tdir)
+    for p in set(goldens):
         data = p.read_bytes()
         crlf = data.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
         if crlf != data:
             p.write_bytes(crlf)
 
 
+def write_version_golden() -> None:
+    """Write the `_version` golden, which the release does not ship, as
+    Makefile.in's `travis_version` rule does: the version, and `?` for the
+    compile date the case's filter replaces. It stays LF on Windows, where the
+    filter's `\\S.*$` also takes the CR."""
+    ver = (SRC / "version").read_text().strip()
+    golden = SRC / "travis" / "test" / "_version.stdout"
+    golden.write_bytes(f"NASM version {ver} compiled on ?\n".encode())
+
+
 def ensure_config(target: str) -> None:
     """Install src/config/config.h from a frozen per-target config -- no
     `./configure`, so no POSIX shell and no host cc are needed (native Windows
     included). `./configure`'s job is capability detection, but badc's profile
-    is fixed, so the answer is a committed constant. Two forms cover the five
-    targets: the POSIX form (macOS / Linux, each naming the byte-order header
-    its C library ships) and the Windows form, which is the POSIX form minus
-    the headers mingw-w64 does not ship (the byte-order ones, <sys/mman.h>,
-    <sys/resource.h>) and the five POSIX-only libc entries badc's msvcrt
-    binding does not provide (fseeko, ftruncate, getpagesize, mmap,
-    realpath); NASM falls back to its portable paths for those. Both forms also disable
-    `HAVE_FUNC_ATTRIBUTE_ERROR`: badc accepts but ignores attribute(error), so
-    NASM's `-O` compile-time-assert tripwire would otherwise leave a dead call
-    to an undefined symbol."""
+    is fixed, so the answer is a committed constant: `./configure CC=badc`
+    output. Two forms cover the five targets: the POSIX form (macOS / Linux,
+    each naming the byte-order headers its C library ships) and the Windows
+    form, which is the POSIX form minus the headers mingw-w64 does not ship
+    (<arpa/inet.h>, the byte-order ones and the htole/htobe functions they
+    declare, <sys/mman.h>, <sys/resource.h>) and the five POSIX-only libc
+    entries badc's msvcrt binding does not provide (fseeko, ftruncate,
+    getpagesize, mmap, realpath); NASM falls back to its portable paths for
+    those."""
     kind = "windows" if target.startswith("windows") else "posix"
     frozen = NASM_DEMO / "config" / f"config-{kind}.h"
     if not frozen.is_file():
@@ -208,17 +245,6 @@ def build_nasm(badc: Path, target: str, optimize: bool, workdir: Path) -> Path:
     return binp
 
 
-def build_hexdump(badc: Path, workdir: Path) -> str:
-    """Build the `hexdump -C` shim with badc. nasm-t.py `Popen`s the hexdump to
-    render byte diffs on a failing test; native Windows ships no hexdump, and a
-    batch wrapper is not directly `Popen`-able, so compile a real executable."""
-    workdir.mkdir(parents=True, exist_ok=True)
-    exe = workdir / ("hexdump" + EXE)
-    subprocess.run([str(badc), str(NASM_DEMO / "hexdump.c"), "-o", str(exe)],
-                   check=True, capture_output=True)
-    return str(exe)
-
-
 def build_nasm_wrapper(badc: Path, workdir: Path) -> str:
     """Build the `nasmw` launcher with badc (Windows only). nasm-t.py joins the
     source and output paths with `os.sep`; on native Windows that `\\` is echoed
@@ -234,14 +260,13 @@ def build_nasm_wrapper(badc: Path, workdir: Path) -> str:
     return str(exe)
 
 
-def run_golden_suite(nasm: Path, hexdump: str,
+def run_golden_suite(nasm: Path,
                      wrapper: "str | None" = None) -> tuple[int, list[str]]:
     """Run NASM's golden suite against `nasm`. The `./travis/test` base-dir
-    matches the source-path prefix the goldens were recorded with. `hexdump` is
-    the `hexdump -C` program nasm-t.py uses to render diffs. When `wrapper` is
+    matches the source-path prefix the goldens were recorded with. When `wrapper` is
     given (native Windows), the harness invokes it instead of nasm and it is
     pointed at the real nasm via $NASM_REAL; see `build_nasm_wrapper`. Returns
-    (pass count, failures outside SKIP_TESTS).
+    the pass count; a failed case or a harness error fails the smoke.
 
     `$NASM_TEST_PYTHON` selects the interpreter that runs the suite harness;
     pointing it at a badc-built CPython drives a badc-built assembler with a
@@ -265,7 +290,7 @@ def run_golden_suite(nasm: Path, hexdump: str,
     # twice (-O0, -O), so 2x300 s + builds stays inside the 12-min job backstop.
     try:
         r = subprocess.run(
-            [runner, "travis/nasm-t.py", "--nasm", harness_nasm, "--hexdump", hexdump,
+            [runner, "travis/nasm-t.py", "--nasm", harness_nasm,
              "-d", "./travis/test", "run"],
             cwd=SRC, env=env, capture_output=True, text=True, timeout=300)
     except subprocess.TimeoutExpired as e:
@@ -275,12 +300,15 @@ def run_golden_suite(nasm: Path, hexdump: str,
     passes = len(re.findall(r"=== Test \S+ PASS ===", out))
     # nasm-t.py prints the test path with the host separator (`\` on Windows).
     failed = re.findall(r"=== Test \./travis[\\/]test[\\/](\S+) (?:FAIL|ABORT) ===", out)
-    unexpected = sorted(f for f in set(failed) if f not in SKIP_TESTS)
-    # A valid run passes hundreds of cases; zero means the harness did not run
-    # them (not a clean sweep). Surface its output so the cause is visible.
-    if passes == 0:
-        fail(f"golden suite produced no passing checks:\n{out[-3000:]}")
-    return passes, unexpected
+    if failed:
+        fail(f"golden suite: {len(failed)} failure(s): {sorted(set(failed))[:20]}\n"
+             f"{out[-3000:]}")
+    # The harness exits non-zero on a failed case and on its own error, such as
+    # a missing golden; zero passes means it ran no case.
+    if r.returncode != 0 or passes == 0:
+        fail(f"golden suite exited {r.returncode} after {passes} passing "
+             f"checks:\n{out[-3000:]}")
+    return passes
 
 
 def main() -> int:
@@ -289,10 +317,10 @@ def main() -> int:
     log(f"badc={badc} target={target}")
     ensure_source()
     adapt_fixtures(target)
+    write_version_golden()
     ensure_config(target)
     with tempfile.TemporaryDirectory(prefix="nasm-smoke-") as d:
         work = Path(d)
-        hexdump = build_hexdump(badc, work / "hexdump")
         wrapper = build_nasm_wrapper(badc, work / "nasmw") if IS_WIN else None
         for optimize in (False, True):
             lane = "-O" if optimize else "-O0"
@@ -302,12 +330,8 @@ def main() -> int:
             if "NASM version" not in ver.stdout:
                 fail(f"badc-built nasm [{lane}] does not report a version")
             log(f"running NASM's golden test suite [{lane}]")
-            passes, unexpected = run_golden_suite(nasm, hexdump, wrapper)
-            if unexpected:
-                fail(f"golden suite [{lane}]: {len(unexpected)} unexpected "
-                     f"failure(s): {unexpected[:20]}")
-            log(f"golden suite [{lane}]: {passes} checks pass "
-                f"(skipped {sorted(SKIP_TESTS)})")
+            passes = run_golden_suite(nasm, wrapper)
+            log(f"golden suite [{lane}]: {passes} checks pass")
             log(f"smoke OK [{lane}]")
     log("all lanes green")
     return 0

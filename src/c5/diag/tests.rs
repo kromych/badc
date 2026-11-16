@@ -6,7 +6,7 @@ use alloc::vec::Vec;
 use super::*;
 
 fn code(selector: &str) -> Code {
-    Code::from_selector(selector).expect("catalogue row")
+    Code::from_selector(selector).expect("catalog row")
 }
 
 #[test]
@@ -193,7 +193,7 @@ fn command_line_levels_resolve_in_order() {
 
 #[test]
 fn no_option_moves_an_uncontrollable_row() {
-    for row in rows().filter(|r| r.class != Class::Controllable) {
+    for row in rows().filter(|r| r.class == Class::Hard) {
         let mut config = Config::new();
         config.set_level(row.code, Level::Ignore);
         config.inhibit_warnings(true);
@@ -201,6 +201,26 @@ fn no_option_moves_an_uncontrollable_row() {
         config.error_for(row.code, false);
         config.enable_group(Groups::ALL);
         assert_eq!(config.level(row.code), row.default_level, "{}", row.code);
+    }
+}
+
+/// A note is turned off by `-w` and by its own selector, and nothing
+/// raises it: not `-Werror`, `-Werror=<name>` or a group.
+#[test]
+fn a_note_is_turned_off_and_never_raised() {
+    for row in rows().filter(|r| r.class == Class::Note && r.status == Status::Live) {
+        let mut raised = Config::new();
+        raised.warnings_as_errors(true);
+        raised.error_for(row.code, true);
+        raised.set_level(row.code, Level::Error);
+        raised.enable_group(Groups::ALL);
+        assert_eq!(raised.level(row.code), row.default_level, "{}", row.code);
+        let mut off = Config::new();
+        off.set_level(row.code, Level::Ignore);
+        assert_eq!(off.level(row.code), Level::Ignore, "{}", row.code);
+        let mut quiet = Config::new();
+        quiet.inhibit_warnings(true);
+        assert_eq!(quiet.level(row.code), Level::Ignore, "{}", row.code);
     }
 }
 
@@ -493,6 +513,8 @@ fn the_named_codes_match_their_rows() {
         (Code::INLINE, "inline"),
         (Code::ALWAYS_INLINE, "always-inline"),
         (Code::FRAME_LARGER_THAN, "frame-larger-than"),
+        (Code::ATTRIBUTE_ERROR, "attribute-error"),
+        (Code::ATTRIBUTE_WARNING, "attribute-warning"),
         (Code::ASM_SYNTAX, "asm-syntax"),
         (Code::ASSEMBLER, "assembler"),
         (
@@ -520,11 +542,11 @@ fn the_echoed_source_line_follows_the_brackets() {
 }
 
 #[test]
-fn the_catalogue_matches_its_golden() {
+fn the_catalog_matches_its_golden() {
     let mut rendered = String::new();
     list_catalog(&mut rendered).unwrap();
     // A Windows checkout may carry the golden with CRLF endings, which says
-    // nothing about the catalogue; compare the lines, not the bytes.
+    // nothing about the catalog; compare the lines, not the bytes.
     let golden = include_str!("../../../tests/diagnostics/catalog.txt").replace("\r\n", "\n");
     assert_eq!(
         rendered, golden,

@@ -4,7 +4,7 @@
 One case is one generated program: csmith emits it from a recorded seed, the
 reference compiler and `badc -O0` / `badc -O` each build it, all three binaries
 run, and the checksum the program prints is compared. csmith's contract is that
-the program is free of undefined behaviour, so any disagreement, crash or
+the program is free of undefined behavior, so any disagreement, crash or
 compile failure is a defect in one of the compilers.
 
 The oracle is the reference compiler (`clang`, else `gcc`, else `cc`), for
@@ -36,7 +36,7 @@ does not hold yet, with `cvise` or `creduce` from PATH, else the in-tree
 `c_reduce.py`. The interestingness test the harness writes keeps a compile
 verdict's signature, and for a runtime verdict keeps the reference honest: it
 must build under `-Werror` for the constructs a reduction likes to leave
-undefined, run clean under the undefined-behaviour and address sanitizers,
+undefined, run clean under the undefined-behavior and address sanitizers,
 and compute the same checksum at `-O0`, at `-O2` and with automatic storage
 pre-filled with a pattern and with zeros. A reduction that trades one
 defect for another is refused by the same test.
@@ -99,7 +99,7 @@ BADC_FLAGS = ("--verify-ssa",)
 
 # The reference builds the case twice: once to gate and answer, once to confirm
 # a runtime finding. The gate is unoptimised because the question it settles is
-# whether the program terminates at all, and an optimiser answers a different
+# whether the program terminates at all, and an optimizer answers a different
 # one: a csmith program whose loop never ends is side-effect free, so `clang
 # -O2` deletes the loop and the binary exits at once while every honest build
 # of it runs forever. One such program reached a `run-timeout` finding against
@@ -173,6 +173,12 @@ LEGS = {
 }
 # The leg this run is: `--leg`.
 LEG = LEGS["default"]
+# `--keep`: case directories stay after their case. Otherwise each goes as
+# its case ends, so scratch use stays at the cases in flight.
+KEEP = False
+# What a compile prints when the scratch storage, not the program, stopped
+# it: ENOSPC and EDQUOT. Such a case is skipped, not a finding.
+STORAGE_FULL = ("No space left on device", "Disk quota exceeded")
 
 # The release used as the case store, and the label put on a weekly issue.
 CASE_STORE_TAG = "fuzz-cases-v1"
@@ -609,8 +615,25 @@ def run_case(
     limits: Limits,
     arch: str,
 ) -> CaseResult:
-    started = time.monotonic()
     workdir = root / f"case-{seed}"
+    try:
+        return run_case_in(seed, root, workdir, csmith, badc, reference, limits, arch)
+    finally:
+        if not KEEP:
+            shutil.rmtree(workdir, ignore_errors=True)
+
+
+def run_case_in(
+    seed: int,
+    root: Path,
+    workdir: Path,
+    csmith: Csmith,
+    badc: Path,
+    reference: Reference | None,
+    limits: Limits,
+    arch: str,
+) -> CaseResult:
+    started = time.monotonic()
     workdir.mkdir(parents=True, exist_ok=True)
     source = workdir / "case.c"
     steps: list[Step] = []
@@ -662,6 +685,10 @@ def run_case(
         )
         steps.extend(outcome.steps)
         outcomes[config] = outcome
+    if any(o.skip == "scratch storage full" for o in outcomes.values()):
+        return CaseResult(
+            seed, lines, time.monotonic() - started, "scratch storage full", steps=steps
+        )
 
     if expected is None:
         checksums = {c: o.checksum for c, o in outcomes.items() if o.checksum}
@@ -715,11 +742,19 @@ def build_and_run(
     built = run_command(argv, workdir, limits.compile, env)
     if not built.ok or not (workdir / binary).exists():
         reason = "compile timed out" if built.timed_out else "compile failed"
+        if storage_full(built):
+            reason = "scratch storage full"
         return Outcome(config, built, None, None, reason, [built])
     ran = run_command([f"./{binary}"], workdir, run_timeout, threads=1)
     checksum = extract_checksum(ran.stdout) if ran.ok else None
     skip = None if ran.ok else ("run timed out" if ran.timed_out else "run failed")
     return Outcome(config, built, ran, checksum, skip, [built, ran])
+
+
+def storage_full(step: Step) -> bool:
+    """Whether `step` failed because the scratch storage is full."""
+    text = step.stderr + step.stdout
+    return not step.ok and any(e in text for e in STORAGE_FULL)
 
 
 def classify(
@@ -881,10 +916,10 @@ def confirm(
     steps: list[Step],
 ) -> bool:
     """Drop a runtime finding the reference cannot reproduce at `-O2`, or
-    whose program the undefined-behaviour sanitizer stops at `-O0`.
+    whose program the undefined-behavior sanitizer stops at `-O0`.
 
     A reference that disagrees with itself between the two levels is either
-    optimising a program csmith did not keep free of undefined behaviour or
+    optimizing a program csmith did not keep free of undefined behavior or
     wrong itself; either way the case says nothing about badc. Agreeing is
     not enough: csmith 2.4.0's builtins pass 0 to `__builtin_clz`, and both
     levels can compute the same answer from it. A sanitizer build that does
@@ -927,7 +962,7 @@ def confirm(
 
 REDUCERS = ("cvise", "creduce")
 
-# The candidate must stay a program the reference has no licence to
+# The candidate must stay a program the reference has no license to
 # compute differently: no missing return or uninitialized scalar, no
 # implicit declaration, and nothing the sanitizers see. csmith's own
 # programs take the address of packed members, so alignment stays off.
@@ -2201,6 +2236,9 @@ def self_test() -> int:
     )
     findings = classify(1, "x86_64", outcomes, "AA", Path("case.c"), 10)
     check("a rejected program is a finding", [f.verdict for f in findings], ["compile-error"])
+    full = "badc: error: failed to write case-badc-O: Disk quota exceeded (os error 122)"
+    check("a full scratch is not the compiler's", storage_full(Step([], 1, 0.1, "", full, False)), True)
+    check("a diagnostic is the compiler's", storage_full(outcomes["-O"].compile_step), False)
     check("its signature names the diagnostic", "B2020" in findings[0].human, True)
     check("its detail quotes the diagnostic", "error: x" in findings[0].detail, True)
     outcomes["-O"] = Outcome(
@@ -2362,11 +2400,12 @@ def generator_lacks(csmith: Csmith, flags: tuple[str, ...]) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    global LEG
+    global LEG, KEEP
     args = parse_args(argv)
     if args.self_test:
         return self_test()
     LEG = LEGS[args.leg]
+    KEEP = args.keep
 
     csmith = find_csmith(args.csmith, args.csmith_include)
     if csmith is None:

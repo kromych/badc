@@ -32,10 +32,8 @@ Disassembly of section .text:
                	movabsq	$0x123456789abcdef, %rax # imm = 0x123456789ABCDEF
                	movq	%rax, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
-               	movq	%rax, %rcx
-               	rorq	$0x1c, %rcx
-               	movq	%rax, %rdx
-               	rorq	$0x22, %rdx
+               	rorxq	$0x1c, %rax, %rcx
+               	rorxq	$0x22, %rax, %rdx
                	xorq	%rdx, %rcx
                	rorq	$0x27, %rax
                	xorq	%rcx, %rax

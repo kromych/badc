@@ -151,6 +151,7 @@ def rewrite(argv: list[str], autoconf: str | None = None) -> list[str]:
     a reference build."""
     out: list[str] = []
     opt: str | None = None
+    sse_off = False  # the last of -mno-sse / -msse / -msse2, as with gcc
     i = 1
     while i < len(argv):
         a = argv[i]
@@ -172,8 +173,8 @@ def rewrite(argv: list[str], autoconf: str | None = None) -> list[str]:
             i += 1
         elif a in DROP_ARG:
             i += 2
-        elif a == "-mno-sse":
-            out.append(a)  # badc implements it; kernel code must stay off XMM
+        elif a in ("-mno-sse", "-msse", "-msse2"):
+            sse_off = a == "-mno-sse"  # kernel code stays off XMM
             i += 1
         elif a == "-mstrict-align":
             out.append(a)  # MMU-off units need naturally-aligned accesses
@@ -204,6 +205,8 @@ def rewrite(argv: list[str], autoconf: str | None = None) -> list[str]:
             i += 1  # positional: the source (added by the caller) or an object
     # Replay at the recorded optimization level: units the reference build
     # compiled -O0 (e.g. ones that #error under __OPTIMIZE__) stay plain.
+    if sse_off:
+        out.append("-mno-sse")
     if opt is not None and opt != "-O0":
         out.append("-O")
     return out

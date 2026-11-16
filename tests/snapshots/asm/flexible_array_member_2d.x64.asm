@@ -32,38 +32,31 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	retq
                	movzbq	<rip>, %rax # <addr>
-               	xorq	$0x7, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x7, %eax
                	jne	<addr>
                	movzbq	<rip>, %rax # <addr>
-               	xorq	$0xc, %rax
-               	testl	%eax, %eax
+               	cmpl	$0xc, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	retq
                	movzbq	<rip>, %rax # <addr>
-               	xorq	$0x1, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x1, %eax
                	jne	<addr>
                	movzbq	<rip>, %rax # <addr>
-               	xorq	$0x16, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x16, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	retq
                	movzbq	<rip>, %rax # <addr>
-               	xorq	$0x1, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x1, %eax
                	jne	<addr>
                	movzbq	<rip>, %rax # <addr>
-               	xorq	$0x5, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x4, %eax
                	retq
                	movzbq	<rip>, %rax # <addr>
-               	xorq	$0xa, %rax
-               	testl	%eax, %eax
+               	cmpl	$0xa, %eax
                	je	<addr>
                	movl	$0x5, %eax
                	retq

@@ -93,6 +93,11 @@ pub(crate) struct Frame {
     pub consecutive_pairs: bool,
     /// An integer division by zero raises an exception (Windows on ARM64).
     pub raises_divide_by_zero: bool,
+    /// Vector and predicate slots of the VL-scaled region below the static
+    /// frame (`super::sve`), and what they hold.
+    pub sve_z_slots: u32,
+    pub sve_p_slots: u32,
+    pub sve: super::sve::SveFrame,
 }
 
 /// One callee save: `r` alone, or with `r2` in the slot above it as one
@@ -142,6 +147,11 @@ pub(super) fn save_plan(alloc: &Allocation, frame: Frame) -> Vec<Save> {
 }
 
 impl Frame {
+    /// Vector lengths the VL-scaled region takes.
+    pub(super) fn sve_region_vls(&self) -> u32 {
+        self.sve_p_slots.div_ceil(8) + self.sve_z_slots
+    }
+
     /// fp-relative shift of the locals: the save block above them, then the
     /// canary region.
     pub(super) fn locals_shift(self) -> u32 {
@@ -201,6 +211,18 @@ pub(crate) fn compute_frame(
     target: Target,
     max_call_scratch: u32,
 ) -> Frame {
+    compute_frame_with_tail_calls(func, alloc, abi, target, (max_call_scratch, (0, 0)), &[])
+}
+
+/// [`compute_frame`] for a body whose calls at `tail_calls` are tail calls.
+pub(crate) fn compute_frame_with_tail_calls(
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    abi: super::Abi,
+    target: Target,
+    (max_call_scratch, sve_copies): (u32, (u32, u32)),
+    tail_calls: &[usize],
+) -> Frame {
     let base = super::ssa::emit_common::compute_frame_base(func, alloc);
     let (declared_locals_bytes, alloc_spill_bytes, saved_gpr_bytes) =
         (base.locals, base.spills, base.saved_gprs);
@@ -209,7 +231,12 @@ pub(crate) fn compute_frame(
     let canary_bytes = super::ssa::emit_common::canary_bytes(func, &base, abi.stack_protect);
     let locals_bytes = declared_locals_bytes + canary_bytes;
     let saved_fpr_bytes = super::ssa::emit_common::slots16(alloc.fp_used.len() as u32);
-    let dynamic_sp = super::ssa::emit_common::uses_dynamic_alloca(func) || func.frame_align > 16;
+    // sp lies below the VL-scaled region, a run-time distance from fp.
+    let count_fp = count_fp_register(func, alloc, abi, target);
+    let sve = super::sve::sve_frame(func, alloc, target, count_fp, sve_copies);
+    let vl_region = sve.z_slots() + sve.p_slots() > 0;
+    let dynamic_sp =
+        super::ssa::emit_common::uses_dynamic_alloca(func) || func.frame_align > 16 || vl_region;
     // The parameter cells sit below the locals, whose offsets they leave
     // alone; every region below them shifts by their size.
     let param_cells_bytes = param_cells_bytes(func, alloc, abi);
@@ -222,7 +249,9 @@ pub(crate) fn compute_frame(
     let fixed_regs = super::ssa::emit_common::fixed_for_function(func, target, abi.fixed_regs);
     let writes_third_scratch = writes_x19(func, alloc, abi);
     let local_base = !x19_overwritten(func, fixed_regs)
-        && (super::ssa::emit_common::uses_dynamic_alloca(func) || func.has_sp_moving_asm(target))
+        && (super::ssa::emit_common::uses_dynamic_alloca(func)
+            || func.has_sp_moving_asm(target)
+            || vl_region)
         && func.frame_align <= 16
         && !abi.fixed_regs.has_gpr(19)
         && local_base_wins(func, alloc, canary_bytes, upper_bytes) >= 4;
@@ -276,12 +305,15 @@ pub(crate) fn compute_frame(
         alloc_spill_base: upper_bytes,
         canary_bytes,
         uses_x19,
-        keeps_record: super::ssa::emit_common::body_keeps_frame_record(func, target, |i| {
-            intrinsic_keeps_frame(i, abi)
-        }),
+        keeps_record: super::ssa::emit_common::body_keeps_frame_record(
+            func,
+            target,
+            tail_calls,
+            |i| intrinsic_keeps_frame(i, abi),
+        ),
         fixed_regs,
         fp_scratch: alloc.fp_scratch,
-        count_fp: count_fp_register(func, alloc, abi, target),
+        count_fp,
         parts: super::ssa::emit_common::FrameStack {
             record: 0,
             locals: declared_locals_bytes,
@@ -330,6 +362,9 @@ pub(crate) fn compute_frame(
         saves_top: 0,
         consecutive_pairs: target == Target::WindowsAarch64,
         raises_divide_by_zero: target == Target::WindowsAarch64,
+        sve_z_slots: sve.z_slots(),
+        sve_p_slots: sve.p_slots(),
+        sve,
     };
     // A full leaf has nothing to address and no fp to restore sp from.
     frame.dynamic_sp |= func.has_sp_moving_asm(target) && !is_full_leaf(frame, alloc);
@@ -422,16 +457,24 @@ pub(super) fn outgoing_bytes(
     abi: super::Abi,
     variadic_targets: &alloc::collections::BTreeSet<usize>,
     imports: &super::ResolvedImports,
-) -> u32 {
+) -> (u32, (u32, u32)) {
     let mut max_out = 0u32;
     let note = |m: &mut u32, n: u32| {
         if n > *m {
             *m = n;
         }
     };
+    // The SVE arguments a call passes by reference take copies in the region.
+    let copies = core::cell::Cell::new((0u32, 0u32));
+    let note_copies = |plan: &super::CallPlan, args: &[u32]| {
+        let (z, p) = super::sve::arg_copies(func, plan, args);
+        let (mz, mp) = copies.get();
+        copies.set((mz.max(z), mp.max(p)));
+    };
     let call_scratch = |ops: super::CallOperands, callee_variadic: bool, fixed_args: usize| {
-        ops.plan(&func.agg_descs, abi, callee_variadic, fixed_args)
-            .scratch_bytes
+        let plan = ops.plan(func, abi, callee_variadic, fixed_args);
+        note_copies(&plan, ops.args);
+        plan.scratch_bytes
     };
     for block in &func.blocks {
         for v in block.inst_range.clone() {
@@ -458,6 +501,7 @@ pub(super) fn outgoing_bytes(
                             arg_aggs,
                             ret_agg: None,
                             ret_slot_off: 0,
+                            ends_path: false,
                         },
                         variadic_targets.contains(target_pc),
                         *fixed_args,
@@ -485,6 +529,7 @@ pub(super) fn outgoing_bytes(
                                 arg_aggs,
                                 ret_agg: None,
                                 ret_slot_off: 0,
+                                ends_path: false,
                             },
                             imp.is_variadic,
                             imp.fixed_args,
@@ -509,8 +554,10 @@ pub(super) fn outgoing_bytes(
                         arg_aggs,
                         ret_agg: *ret_agg,
                         ret_slot_off: 0,
+                        ends_path: false,
                     };
-                    let mut plan = ops.plan(&func.agg_descs, abi, *callee_variadic, *fixed_args);
+                    let mut plan = ops.plan(func, abi, *callee_variadic, *fixed_args);
+                    note_copies(&plan, args);
                     // Mirror `emit_call_indirect`'s register selection: a
                     // target no register can hold is staged in a cell above
                     // the argument slots.
@@ -565,7 +612,7 @@ pub(super) fn outgoing_bytes(
             }
         }
     }
-    max_out
+    (max_out, copies.get())
 }
 
 /// Frame scratch bytes of one inline-asm statement: 8 per operand
@@ -682,8 +729,8 @@ pub(super) fn asm_operand_regs(
 /// registers it writes -- the clobber list (minus x16 / x17 and bit 31)
 /// plus every operand register -- that `preserve` names as holding
 /// something across the block. A `w` operand is a scalar of 1 to 8 bytes
-/// or a 16-byte vector. A `-ffixed-` register holds nothing of the compiler's and is
-/// never saved, as under gcc.
+/// or a 16-byte vector. A `-ffixed-` register holds nothing of the
+/// compiler's and is never saved.
 pub(super) fn asm_save_masks(
     asm: &super::super::ir::AsmBlock,
     op_reg: &[Option<u8>],
@@ -788,12 +835,17 @@ pub(crate) fn asm_binds_directly(
             return false;
         }
         if op.is_output && !addressed {
-            if !op.value || op.is_rw || op.early_clobber {
+            if !op.value || op.early_clobber {
                 return false;
             }
+            // A read-write operand's register is loaded before the template,
+            // so its scratch is one no input shares.
+            let rw = usize::from(op.is_rw);
             match op.constraint {
-                C::Reg if op.width <= 8 => gp_out += 1,
-                C::Fp => fp_out += 1,
+                C::Reg if op.width <= 8 => (gp_out, gp_in) = (gp_out + 1, gp_in + rw),
+                C::Fp if !op.is_rw || op.width <= 8 || op.width == 16 => {
+                    (fp_out, fp_in) = (fp_out + 1, fp_in + rw)
+                }
                 _ => return false,
             }
             continue;
@@ -820,9 +872,7 @@ pub(crate) fn asm_binds_directly(
                     gp_in += 1;
                 }
             }
-            C::Fp if !op.static_arg && (op.width <= 8 || (op.width == 16 && op.value)) => {
-                fp_in += 1
-            }
+            C::Fp if !op.static_arg && (op.width <= 8 || op.width == 16) => fp_in += 1,
             _ => return false,
         }
     }
@@ -1005,6 +1055,7 @@ fn va_named_home_off(i: usize, func: &FunctionSsa, abi: super::Abi) -> Option<i6
         P::StructRegs { regs, .. } if regs[0].is_fp => vector(regs[0].reg),
         P::StructRegs { regs, .. } => 16 + regs[0].reg as i64 * 8,
         P::IntReg(r) | P::StructSplit { reg: r, .. } => 16 + r as i64 * 8,
+        P::PredReg(_) => unreachable!("ICE: a variadic definition takes no SVE parameter"),
     })
 }
 
@@ -1050,6 +1101,11 @@ fn param_home_masks(
     let mut elidable = alloc::vec![false; placements.len()];
     let mut store_dead = alloc::vec![false; placements.len()];
     for (i, p) in placements.iter().enumerate() {
+        // An SVE value is read through its `ParamRef` alone, its cell never.
+        if super::sve::sve_param(func, i) {
+            (elidable[i], store_dead[i]) = (true, true);
+            continue;
+        }
         if !matches!(
             p,
             super::ArgPlacement::IntReg(_) | super::ArgPlacement::FpReg(_)
@@ -1091,7 +1147,7 @@ fn param_home_needed(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) ->
     let elidable = param_elidable_mask(func, alloc, abi);
     placements.iter().enumerate().any(|(i, p)| match p {
         super::ArgPlacement::IntReg(_) | super::ArgPlacement::FpReg(_) => !elidable[i],
-        super::ArgPlacement::StructRegs { .. } => false,
+        super::ArgPlacement::StructRegs { .. } | super::ArgPlacement::PredReg(_) => false,
         _ => true,
     })
 }
@@ -1130,8 +1186,9 @@ pub(super) fn is_full_leaf(frame: Frame, alloc: &Allocation) -> bool {
     {
         return false;
     }
-    // Realigning sp needs fp to restore it on exit.
-    if frame.realign_align != 0 {
+    // Realigning sp or reserving the VL-scaled region needs fp to restore
+    // it on exit.
+    if frame.realign_align != 0 || frame.sve_region_vls() != 0 {
         return false;
     }
     if !alloc.gpr_used.is_empty() || !alloc.fp_used.is_empty() {

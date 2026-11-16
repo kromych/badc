@@ -30,7 +30,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
                	leaq	-0x18(%rbp), %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -39,10 +38,7 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x0, -0x10(%rbp)
-               	movw	$0x18, -0x8(%rbp)
-               	movw	$0x50, -0x6(%rbp)
-               	movw	$0x0, -0x4(%rbp)
-               	movw	$0x0, -0x2(%rbp)
+               	movq	$0x500018, -0x8(%rbp)   # imm = 0x500018
                	movl	-0x18(%rbp), %edi
                	movl	$0x5415, %esi           # imm = 0x5415
                	leaq	-0x10(%rbp), %rdx
@@ -66,10 +62,8 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	-0x18(%rbp), %edi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movl	-0x14(%rbp), %edi
-               	xorl	%eax, %eax
                	callq	<addr>
                	xorl	%eax, %eax
                	leave

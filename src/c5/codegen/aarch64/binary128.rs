@@ -5,26 +5,31 @@
 //! `f128_to_f64` / `f64_to_f128` step for step -- widening is exact,
 //! narrowing rounds to nearest with ties to even.
 //!
-//! Each sequence borrows integer registers other than `addr` and the
-//! `-ffixed-` ones ([`borrow_regs`]) and restores them before it ends;
-//! the saves live at `[sp, #0]`, in the outgoing argument area the
-//! prologue reserved or in bytes the sequence lowers sp by where the
-//! frame reserves none (`Frame::sp_lowering`). Nothing between the save
-//! and the restore addresses sp.
+//! In a function that saves its link register, an access to a naturally
+//! aligned object is a `bl` to a sequence the function holds once per
+//! direction ([`emit_helpers`]): the object's address in x16, the binary64
+//! bits in x16 or x17. Elsewhere the access converts in place. Each sequence borrows
+//! integer registers other than its operands and the `-ffixed-` ones
+//! ([`borrow_regs`]) and restores them before it ends; the saves live at
+//! `[sp, #0]`, in the outgoing argument area the prologue reserved or in
+//! bytes the sequence lowers sp by where the frame reserves none
+//! (`Frame::sp_lowering`). Nothing between the save and the restore
+//! addresses sp.
 
 use alloc::vec::Vec;
 
 use super::emit::{
-    Frame, borrow_regs, bound_base, emit_agg_load_int, emit_mem, enc_store_unit, object_base,
+    Frame, borrow_regs, bound_base, emit_agg_load_int, emit_mem, emit_reg_disp, enc_store_unit,
+    object_base,
 };
 use super::encode::RegShift::{Asr, Lsl, Lsr};
 use super::encode::{
     ADD_REG, BIC_REG, Cond, LDR_X, LogicalOp, ORR_REG, Reg, STR_X, emit, emit_add_sp_imm,
     emit_sub_sp_imm, enc_add_imm, enc_add_imm_lsl12, enc_add_reg, enc_and_reg, enc_b, enc_b_cond,
-    enc_cbnz, enc_cbz, enc_clz, enc_cmp_reg, enc_cset, enc_fmov_d_to_x, enc_fmov_x_to_d,
+    enc_bl, enc_cbnz, enc_cbz, enc_clz, enc_cmp_reg, enc_cset, enc_fmov_d_to_x, enc_fmov_x_to_d,
     enc_ldp_off, enc_ldr_imm, enc_logical_imm, enc_lsl_imm, enc_lslv, enc_lsr_imm, enc_lsrv,
-    enc_mov_reg, enc_movz, enc_orr_reg, enc_rrr_shifted, enc_stp_off, enc_str_imm, enc_sub_imm,
-    enc_sub_imm_lsl12, enc_sub_reg, enc_subs_imm,
+    enc_mov_reg, enc_movz, enc_orr_reg, enc_ret, enc_rrr_shifted, enc_stp_off, enc_str_imm,
+    enc_sub_imm, enc_sub_imm_lsl12, enc_sub_reg, enc_subs_imm,
 };
 use crate::c5::codegen::ssa::emit_common::Emit;
 
@@ -122,9 +127,41 @@ fn bias(code: &mut Vec<u8>, rd: Reg, sub: bool) {
     }
 }
 
+/// One direction of the conversion, held once per function.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Helper {
+    /// The object at `[x16]` to its binary64 bits in x16.
+    Narrow,
+    /// The binary64 bits in x17 to the object at `[x16]`.
+    Widen,
+}
+
+/// A `bl` placeholder at a code offset and the helper it reaches.
+pub(super) type HelperCall = (usize, Helper);
+
+/// The calls a function makes so far, or `None` where it keeps no frame
+/// record and so may not clobber its link register.
+pub(super) type HelperCalls = Option<Vec<HelperCall>>;
+
+/// `x16 = addr + disp`.
+fn address_in_x16(code: &mut Vec<u8>, addr: Reg, disp: i64) {
+    if addr == Reg::X16 && disp.unsigned_abs() >= 1 << 24 {
+        emit_reg_disp(code, Reg::X17, addr, disp);
+        emit(code, enc_mov_reg(Reg::X16, Reg::X17));
+    } else if addr != Reg::X16 || disp != 0 {
+        emit_reg_disp(code, Reg::X16, addr, disp);
+    }
+}
+
+/// A `bl` to `helper`, recorded in `calls`.
+fn call(code: &mut Vec<u8>, helper: Helper, calls: &mut Vec<HelperCall>) {
+    calls.push((code.len(), helper));
+    emit(code, enc_bl(0));
+}
+
 /// Load the binary128 object at `[addr + disp]` and narrow it into the
 /// d-register `dd`. `bound` caps the access width when the storage is
-/// under-aligned.
+/// under-aligned; such an access converts in place.
 pub(super) fn emit_narrow_load(
     code: &mut Vec<u8>,
     dd: u8,
@@ -132,13 +169,16 @@ pub(super) fn emit_narrow_load(
     disp: i64,
     bound: Option<u32>,
     frame: Frame,
+    calls: &mut HelperCalls,
 ) -> Emit {
-    let r = borrow_regs::<7>(
-        &[addr.0],
-        frame.fixed_regs,
-        "a binary128 `long double` load",
-    )?;
-    let (lo, hi, sgn, exp, tmp, acc, aux) = (r[0], r[1], r[2], r[3], r[4], r[5], r[6]);
+    if let (None, Some(calls)) = (bound, calls.as_mut()) {
+        address_in_x16(code, addr, disp);
+        call(code, Helper::Narrow, calls);
+        emit(code, enc_fmov_x_to_d(dd, Reg::X16));
+        return Ok(());
+    }
+    let r = narrow_regs(&[addr.0], frame)?;
+    let (lo, hi, tmp, acc, aux) = (r[0], r[1], r[4], r[5], r[6]);
     let lowered = save(code, &r, frame);
     match bound {
         Some(a) => {
@@ -153,6 +193,21 @@ pub(super) fn emit_narrow_load(
             emit_mem(code, LDR_X, hi.0, base, disp + 8, hi);
         }
     }
+    narrow(code, &r);
+    emit(code, enc_fmov_x_to_d(dd, acc));
+    restore(code, &r, lowered);
+    Ok(())
+}
+
+/// The seven registers [`narrow`] takes, none of `avoid`.
+fn narrow_regs(avoid: &[u8], frame: Frame) -> Emit<[Reg; 7]> {
+    borrow_regs::<7>(avoid, frame.fixed_regs, "a binary128 `long double` load")
+}
+
+/// Narrow the binary128 in `r[0]` (low half) and `r[1]` (high half) to
+/// binary64 bits in `r[5]`, rounding to nearest with ties to even.
+fn narrow(code: &mut Vec<u8>, r: &[Reg; 7]) {
+    let (lo, hi, sgn, exp, tmp, acc, aux) = (r[0], r[1], r[2], r[3], r[4], r[5], r[6]);
     emit(code, enc_lsr_imm(sgn, hi, 63));
     emit(code, enc_lsl_imm(sgn, sgn, 63));
     emit(code, enc_lsl_imm(exp, hi, 1));
@@ -225,14 +280,11 @@ pub(super) fn emit_narrow_load(
     patch(code, nan_done);
     patch(code, round_done);
     patch(code, inf_done);
-    emit(code, enc_fmov_x_to_d(dd, acc));
-    restore(code, &r, lowered);
-    Ok(())
 }
 
 /// Widen the f64 in `dn` into the binary128 object at `[addr + disp]`.
 /// `dn` is left untouched -- the c5 store rule keeps the stored value
-/// in the accumulator.
+/// in the accumulator. `bound` as for [`emit_narrow_load`].
 pub(super) fn emit_widen_store(
     code: &mut Vec<u8>,
     dn: u8,
@@ -240,15 +292,45 @@ pub(super) fn emit_widen_store(
     disp: i64,
     bound: Option<u32>,
     frame: Frame,
+    calls: &mut HelperCalls,
 ) -> Emit {
-    let r = borrow_regs::<5>(
-        &[addr.0],
-        frame.fixed_regs,
-        "a binary128 `long double` store",
-    )?;
-    let (lo, hi, exp, man, tmp) = (r[0], r[1], r[2], r[3], r[4]);
+    if let (None, Some(calls)) = (bound, calls.as_mut()) {
+        address_in_x16(code, addr, disp);
+        emit(code, enc_fmov_d_to_x(Reg::X17, dn));
+        call(code, Helper::Widen, calls);
+        return Ok(());
+    }
+    let r = widen_regs(&[addr.0], frame)?;
+    let (lo, hi, exp, tmp) = (r[0], r[1], r[2], r[4]);
     let lowered = save(code, &r, frame);
     emit(code, enc_fmov_d_to_x(lo, dn));
+    widen(code, &r);
+    match bound {
+        Some(a) => {
+            let (base, off) = bound_base(code, addr, disp, 16, 8, a, exp);
+            store_bounded(code, lo, base, off, a, tmp);
+            store_bounded(code, hi, base, off + 8, a, tmp);
+        }
+        None => {
+            let words = [(STR_X, 0), (STR_X, 8)].into_iter();
+            let (base, disp) = object_base(code, addr, disp, words, exp);
+            emit_mem(code, STR_X, lo.0, base, disp, exp);
+            emit_mem(code, STR_X, hi.0, base, disp + 8, exp);
+        }
+    }
+    restore(code, &r, lowered);
+    Ok(())
+}
+
+/// The five registers [`widen`] takes, none of `avoid`.
+fn widen_regs(avoid: &[u8], frame: Frame) -> Emit<[Reg; 5]> {
+    borrow_regs::<5>(avoid, frame.fixed_regs, "a binary128 `long double` store")
+}
+
+/// Widen the binary64 bits in `r[0]` to the binary128 in `r[0]` (low
+/// half) and `r[1]` (high half); exact.
+fn widen(code: &mut Vec<u8>, r: &[Reg; 5]) {
+    let (lo, hi, exp, man, tmp) = (r[0], r[1], r[2], r[3], r[4]);
     emit(code, enc_lsr_imm(hi, lo, 63));
     emit(code, enc_lsl_imm(hi, hi, 63));
     emit(code, enc_lsl_imm(exp, lo, 1));
@@ -290,20 +372,39 @@ pub(super) fn emit_widen_store(
     patch(code, to_store2);
     patch(code, to_store3);
     patch(code, to_store4);
-    match bound {
-        Some(a) => {
-            let (base, off) = bound_base(code, addr, disp, 16, 8, a, exp);
-            store_bounded(code, lo, base, off, a, tmp);
-            store_bounded(code, hi, base, off + 8, a, tmp);
+}
+
+/// Append the helpers `calls` reach and point each call at its helper.
+pub(super) fn emit_helpers(code: &mut Vec<u8>, frame: Frame, calls: &[HelperCall]) -> Emit {
+    for helper in [Helper::Narrow, Helper::Widen] {
+        if !calls.iter().any(|&(_, h)| h == helper) {
+            continue;
         }
-        None => {
-            let words = [(STR_X, 0), (STR_X, 8)].into_iter();
-            let (base, disp) = object_base(code, addr, disp, words, exp);
-            emit_mem(code, STR_X, lo.0, base, disp, exp);
-            emit_mem(code, STR_X, hi.0, base, disp + 8, exp);
+        let at = code.len();
+        match helper {
+            Helper::Narrow => {
+                let r = narrow_regs(&[16, 17], frame)?;
+                let lowered = save(code, &r, frame);
+                emit(code, enc_ldp_off(r[0], r[1], Reg::X16, 0));
+                narrow(code, &r);
+                emit(code, enc_mov_reg(Reg::X16, r[5]));
+                restore(code, &r, lowered);
+            }
+            Helper::Widen => {
+                let r = widen_regs(&[16, 17], frame)?;
+                let lowered = save(code, &r, frame);
+                emit(code, enc_mov_reg(r[0], Reg::X17));
+                widen(code, &r);
+                emit(code, enc_stp_off(r[0], r[1], Reg::X16, 0));
+                restore(code, &r, lowered);
+            }
+        }
+        emit(code, enc_ret(Reg::X30));
+        for &(site, _) in calls.iter().filter(|&&(_, h)| h == helper) {
+            let word = enc_bl(((at - site) / 4) as i32);
+            code[site..site + 4].copy_from_slice(&word.to_le_bytes());
         }
     }
-    restore(code, &r, lowered);
     Ok(())
 }
 

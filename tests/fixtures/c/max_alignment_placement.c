@@ -1,5 +1,5 @@
 // The largest static alignment badc honors (64 KiB) is placed on its
-// boundary for bare, initialised, and block-scope-static storage. This is
+// boundary for bare, initialized, and block-scope-static storage. This is
 // the top of the supported range; a global at this boundary is what a
 // page-and-multiple per-CPU allocation needs. Runtime addresses, matched
 // against GCC and clang on x86-64 and aarch64.

@@ -25,10 +25,9 @@ Disassembly of section .text:
                	movk	x17, #0x1, lsl #16
                	cmp	w20, w17
                	b.ge	<addr>
-               	ldrsh	x1, [x0]
-               	cmp	w1, #0x0
-               	b.lt	<addr>
                	ldrsh	x0, [x0]
+               	cmp	w0, #0x0
+               	b.lt	<addr>
                	cmp	w0, #0x9
                	b.gt	<addr>
                	add	x20, x20, #0x1

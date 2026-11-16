@@ -2,9 +2,10 @@
 // `__cpuid` leaf 0 gives a maximum leaf and a printable vendor string,
 // `__rdtsc` does not run backwards, the TEB's self pointer and last-error
 // field read the same through gs or x18 as through memory, the barriers
-// and hints execute, and on arm64 the CRC32 instructions give the check
-// values of "123456789" and FPCR reads back what is written to it. Each
-// failed check sets its bit; off the PE targets the unit checks nothing.
+// (`__faststorefence` among them) and hints execute, and on arm64 the
+// CRC32 instructions give the check values of "123456789" and FPCR reads
+// back what is written to it. Each failed check sets its bit; off the PE
+// targets the unit checks nothing.
 
 #ifdef _WIN32
 #include <intrin.h>
@@ -36,6 +37,7 @@ int main(void) {
     unsigned long long t0 = __rdtsc();
     _mm_pause();
     __nop();
+    __faststorefence();
     if (__rdtsc() < t0) r |= 4;
     unsigned long long teb = __readgsqword(0x30);
     if (teb == 0 || *(unsigned long long *)(teb + 0x30) != teb) r |= 8;

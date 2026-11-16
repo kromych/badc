@@ -27,12 +27,12 @@ Disassembly of section .text:
 
 <check>:
                	movsbq	%dil, %rax
+               	xorl	%ecx, %ecx
+               	movl	$0x1, %edx
                	cmpl	$0x2c, %eax
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	movq	%rdx, %rax
+               	cmoveq	%rcx, %rax
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>
 
 <main>:
                	xorl	%eax, %eax

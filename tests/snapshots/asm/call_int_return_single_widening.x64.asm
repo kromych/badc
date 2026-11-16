@@ -25,67 +25,37 @@ Disassembly of section .text:
                	int3
                	int3
 
-<via_int_slot>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	popq	%rbp
-               	retq
-
-<direct_libc_use>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	popq	%rbp
-               	retq
-
-<pointer_offset>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
-               	movq	%rdi, %rbx
-               	movq	%rsi, %rdi
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	addq	%rbx, %rax
-               	subq	%rbx, %rax
-               	popq	%rbx
-               	leave
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	leaq	<rip>, %rdi # <addr>
                	callq	<addr>
-               	cmpq	$-0x80000000, %rax      # imm = 0x80000000
+               	cmpl	$0x80000000, %eax       # imm = 0x80000000
                	je	<addr>
                	movl	$0x4, %eax
                	popq	%rbp
                	retq
                	leaq	<rip>, %rdi # <addr>
                	callq	<addr>
-               	cmpq	$0x2a, %rax
+               	cmpl	$0x2a, %eax
                	je	<addr>
                	movl	$0x5, %eax
                	popq	%rbp
                	retq
                	leaq	<rip>, %rdi # <addr>
                	callq	<addr>
+               	movslq	%eax, %rax
                	cmpq	$-0x1, %rax
                	je	<addr>
                	movl	$0x6, %eax
                	popq	%rbp
                	retq
                	leaq	<rip>, %rdi # <addr>
-               	leaq	<rip>, %rsi # <addr>
                	callq	<addr>
+               	movslq	%eax, %rax
+               	leaq	<rip>, %rcx # <addr>
+               	addq	%rcx, %rax
+               	subq	%rcx, %rax
                	cmpq	$0x3, %rax
                	je	<addr>
                	movl	$0x7, %eax

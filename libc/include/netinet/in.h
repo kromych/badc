@@ -39,7 +39,11 @@
 #define IPPROTO_UDPLITE  136
 #define IPPROTO_MPLS     137
 #define IPPROTO_RAW      255
+#ifdef __APPLE__
+#define IPPROTO_MAX      256
+#else
 #define IPPROTO_MAX      263
+#endif
 #ifdef __linux__
 #define IPPROTO_MPTCP 262 // Multipath TCP (Linux)
 #endif
@@ -168,7 +172,11 @@ struct sockaddr_in {
     unsigned short sin_family;
     unsigned short sin_port;
     struct in_addr sin_addr;
+#ifdef __linux__
+    unsigned char sin_zero[8];
+#else
     char sin_zero[8];
+#endif
 };
 #endif
 
@@ -259,64 +267,12 @@ struct in6_pktinfo {
 #endif
 #endif
 
-// IN6_ARE_ADDR_EQUAL compares two in6_addr by their 16 bytes. in6addr_any is
-// the all-zero unspecified address (POSIX guarantees its value), provided here
-// as a const object so callers can take its address without a libc data
-// import.
+// The IN6_IS_ADDR_* predicates and IN6_ARE_ADDR_EQUAL.
+#include <__badc_in6.h>
 
-// An IPv4-mapped IPv6 address is ::ffff:a.b.c.d -- bytes 0..9 zero, 10..11
-// 0xff, the low 4 the IPv4 address.
-#define IN6_IS_ADDR_V4MAPPED(a) ( \
-    ((const unsigned int *)(a))[0] == 0 && \
-    ((const unsigned int *)(a))[1] == 0 && \
-    ((const unsigned char *)(a))[8] == 0 && \
-    ((const unsigned char *)(a))[9] == 0 && \
-    ((const unsigned char *)(a))[10] == 0xff && \
-    ((const unsigned char *)(a))[11] == 0xff)
-
-#define IN6_ARE_ADDR_EQUAL(a, b) ( \
-    ((const unsigned int *)(a))[0] == ((const unsigned int *)(b))[0] && \
-    ((const unsigned int *)(a))[1] == ((const unsigned int *)(b))[1] && \
-    ((const unsigned int *)(a))[2] == ((const unsigned int *)(b))[2] && \
-    ((const unsigned int *)(a))[3] == ((const unsigned int *)(b))[3])
-
-// The remaining IPv6 address-class predicates, tested on the 16 address bytes
-// so the result is byte-order independent across targets.
-#define IN6_IS_ADDR_UNSPECIFIED(a) ( \
-    ((const unsigned int *)(a))[0] == 0 && ((const unsigned int *)(a))[1] == 0 && \
-    ((const unsigned int *)(a))[2] == 0 && ((const unsigned int *)(a))[3] == 0)
-
-#define IN6_IS_ADDR_LOOPBACK(a) ( \
-    ((const unsigned int *)(a))[0] == 0 && ((const unsigned int *)(a))[1] == 0 && \
-    ((const unsigned int *)(a))[2] == 0 && \
-    ((const unsigned char *)(a))[12] == 0 && ((const unsigned char *)(a))[13] == 0 && \
-    ((const unsigned char *)(a))[14] == 0 && ((const unsigned char *)(a))[15] == 1)
-
-#define IN6_IS_ADDR_MULTICAST(a) (((const unsigned char *)(a))[0] == 0xff)
-
-#define IN6_IS_ADDR_LINKLOCAL(a) ( \
-    ((const unsigned char *)(a))[0] == 0xfe && \
-    (((const unsigned char *)(a))[1] & 0xc0) == 0x80)
-
-#define IN6_IS_ADDR_SITELOCAL(a) ( \
-    ((const unsigned char *)(a))[0] == 0xfe && \
-    (((const unsigned char *)(a))[1] & 0xc0) == 0xc0)
-
-#define IN6_IS_ADDR_V4COMPAT(a) ( \
-    ((const unsigned int *)(a))[0] == 0 && ((const unsigned int *)(a))[1] == 0 && \
-    ((const unsigned int *)(a))[2] == 0 && ntohl(((const unsigned int *)(a))[3]) > 1)
-
-// Multicast scope is the low nibble of the second address byte.
-#define IN6_IS_ADDR_MC_NODELOCAL(a) \
-    (IN6_IS_ADDR_MULTICAST(a) && (((const unsigned char *)(a))[1] & 0xf) == 0x1)
-#define IN6_IS_ADDR_MC_LINKLOCAL(a) \
-    (IN6_IS_ADDR_MULTICAST(a) && (((const unsigned char *)(a))[1] & 0xf) == 0x2)
-#define IN6_IS_ADDR_MC_SITELOCAL(a) \
-    (IN6_IS_ADDR_MULTICAST(a) && (((const unsigned char *)(a))[1] & 0xf) == 0x5)
-#define IN6_IS_ADDR_MC_ORGLOCAL(a) \
-    (IN6_IS_ADDR_MULTICAST(a) && (((const unsigned char *)(a))[1] & 0xf) == 0x8)
-#define IN6_IS_ADDR_MC_GLOBAL(a) \
-    (IN6_IS_ADDR_MULTICAST(a) && (((const unsigned char *)(a))[1] & 0xf) == 0xe)
+// in6addr_any is the all-zero unspecified address (POSIX guarantees its
+// value), provided as a const object so callers can take its address without
+// a libc data import.
 static const struct in6_addr in6addr_any;
 
 #ifdef __APPLE__

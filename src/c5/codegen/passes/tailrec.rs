@@ -6,7 +6,7 @@
 //! after the inliner, on the promoted SSA (parameters read through
 //! `ParamRef`, scalar locals as phis).
 //!
-//! Two tail shapes are recognised in a block that ends in `Return`,
+//! Two tail shapes are recognized in a block that ends in `Return`,
 //! where the last effectful instruction is a direct self-call `C`
 //! (`Inst::Call { target_pc == ent_pc }`) whose dependent cone reaches
 //! only the terminator:
@@ -16,9 +16,10 @@
 //!     must name the same, which the loop exit then returns (a `void`
 //!     function's recursion names no value).
 //!   * integer accumulator: `Return([narrow](op(acc, C)))` with
-//!     `op` an integer `Add` / `Mul` (associative and commutative on
-//!     two's-complement, so the reassociation the loop performs is
-//!     exact) and the non-call operand defined independently of `C`.
+//!     `op` an integer `Add`, `Mul`, `Or`, `Xor` or `And` (associative
+//!     and commutative on two's-complement, so the reassociation the loop
+//!     performs is exact) and the non-call operand defined independently
+//!     of `C`.
 //!     A narrow return type re-narrows the sum -- a signed `Extend`, or
 //!     the mask an unsigned one takes -- and that narrowing is carried
 //!     onto the loop's accumulator; `C` may appear narrowed to at least
@@ -67,6 +68,9 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
 enum AccOp {
     Add,
     Mul,
+    Or,
+    Xor,
+    And,
 }
 
 impl AccOp {
@@ -74,19 +78,26 @@ impl AccOp {
         match self {
             AccOp::Add => BinOp::Add,
             AccOp::Mul => BinOp::Mul,
+            AccOp::Or => BinOp::Or,
+            AccOp::Xor => BinOp::Xor,
+            AccOp::And => BinOp::And,
         }
     }
-    /// Additive / multiplicative identity for the accumulator seed.
+    /// The operation's identity, the accumulator's seed.
     fn identity(self) -> i64 {
         match self {
-            AccOp::Add => 0,
+            AccOp::Add | AccOp::Or | AccOp::Xor => 0,
             AccOp::Mul => 1,
+            AccOp::And => -1,
         }
     }
     fn from_binop(op: BinOp) -> Option<AccOp> {
         match op {
             BinOp::Add => Some(AccOp::Add),
             BinOp::Mul => Some(AccOp::Mul),
+            BinOp::Or => Some(AccOp::Or),
+            BinOp::Xor => Some(AccOp::Xor),
+            BinOp::And => Some(AccOp::And),
             _ => None,
         }
     }
@@ -484,6 +495,7 @@ fn classify(func: &FunctionSsa, b: BlockId) -> Class {
 fn analyze(func: &FunctionSsa) -> Option<Plan> {
     if func.is_variadic
         || func.ret_is_fp
+        || func.sve_pcs.is_some()
         || func.ret_agg.is_some()
         || func.has_returns_twice_call
         || !func.param_fp_mask.is_empty()
@@ -680,7 +692,7 @@ fn rewrite(func: &mut FunctionSsa, plan: &Plan) {
     let mut acc_back = vec![NO_VALUE; plan.tail.len()];
 
     let mut new_insts: Vec<Inst> = Vec::with_capacity(n_old + 8);
-    let mut new_src: Vec<(u32, u32)> = Vec::new();
+    let mut new_src: Vec<crate::c5::ir::InstSrc> = Vec::new();
     let mut new_f32: Vec<bool> = Vec::new();
     let mut new_blocks: Vec<Block> = Vec::with_capacity(n_blocks + 1);
 
@@ -709,7 +721,7 @@ fn rewrite(func: &mut FunctionSsa, plan: &Plan) {
                 }
                 let id = new_insts.len() as u32;
                 new_insts.push(inst);
-                new_src.push(func.inst_src.get(pc as usize).copied().unwrap_or((0, 0)));
+                new_src.push(func.inst_src.get(pc as usize).copied().unwrap_or_default());
                 new_f32.push(func.f32_values.get(pc as usize).copied().unwrap_or(false));
                 remap[pc as usize] = id;
                 id
@@ -719,7 +731,7 @@ fn rewrite(func: &mut FunctionSsa, plan: &Plan) {
             ($inst:expr) => {{
                 let id = new_insts.len() as u32;
                 new_insts.push($inst);
-                new_src.push((0, 0));
+                new_src.push(crate::c5::ir::InstSrc::default());
                 new_f32.push(false);
                 id
             }};
@@ -904,6 +916,11 @@ fn rewrite(func: &mut FunctionSsa, plan: &Plan) {
     func.inst_src = new_src;
     func.f32_values = new_f32;
     func.blocks = new_blocks;
+    // The entry's test now ends the header, and its prediction with it.
+    if let Some(arm) = func.predicted.get_mut(0).and_then(Option::take) {
+        func.predicted.resize(n_blocks + 1, None);
+        func.predicted[header as usize] = Some(arm);
+    }
 }
 
 #[cfg(test)]

@@ -20,8 +20,7 @@ Disassembly of section .text:
                	mov	x0, #0xd                // =13
                	mov	x1, #0x1                // =1
                	bl	<addr>
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	b.ne	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x10
@@ -42,8 +41,7 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	mov	x2, #0x1                // =1
                	bl	<addr>
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x10

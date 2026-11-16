@@ -274,8 +274,8 @@ typedef struct {
 
 typedef struct {
     Elf32_Xword m_value;
-    Elf32_Xword m_info;
-    Elf32_Xword m_poffset;
+    Elf32_Word  m_info;
+    Elf32_Word  m_poffset;
     Elf32_Half  m_repeat;
     Elf32_Half  m_stride;
 } Elf32_Move;

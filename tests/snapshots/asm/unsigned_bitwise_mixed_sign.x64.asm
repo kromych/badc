@@ -37,32 +37,26 @@ Disassembly of section .text:
                	movswq	-0x18(%rbp), %rcx
                	movl	-0x10(%rbp), %edx
                	movl	-0x8(%rbp), %ecx
-               	movq	%rcx, %rsi
-               	xorq	%rax, %rsi
-               	testl	%esi, %esi
+               	cmpl	%eax, %ecx
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
                	movq	%rcx, %rsi
                	orq	%rax, %rsi
-               	movl	$0xffffffaa, %r11d      # imm = 0xFFFFFFAA
-               	cmpl	%r11d, %esi
+               	cmpl	$-0x56, %esi
                	je	<addr>
                	movl	$0x2, %eax
                	leave
                	retq
                	movq	%rcx, %rsi
                	andq	%rax, %rsi
-               	movl	$0xffffffaa, %r11d      # imm = 0xFFFFFFAA
-               	cmpl	%r11d, %esi
+               	cmpl	$-0x56, %esi
                	je	<addr>
                	movl	$0x3, %eax
                	leave
                	retq
-               	movl	$0xffffffaa, %r11d      # imm = 0xFFFFFFAA
-               	movq	%rdx, %rsi
-               	cmpl	%r11d, %edx
+               	cmpl	$-0x56, %edx
                	je	<addr>
                	movl	$0x7, %eax
                	leave
@@ -75,21 +69,18 @@ Disassembly of section .text:
                	leave
                	retq
                	orq	%rdx, %rcx
-               	movl	$0xffffffaa, %r11d      # imm = 0xFFFFFFAA
-               	cmpl	%r11d, %ecx
+               	cmpl	$-0x56, %ecx
                	je	<addr>
                	movl	$0x9, %eax
                	leave
                	retq
-               	movq	%rax, %rcx
-               	xorq	$-0x56, %rcx
-               	testq	%rcx, %rcx
+               	cmpl	$-0x56, %eax
                	je	<addr>
                	movl	$0xa, %eax
                	leave
                	retq
                	xorq	$0xffaa, %rax           # imm = 0xFFAA
-               	cmpq	$-0x10000, %rax         # imm = 0xFFFF0000
+               	cmpl	$0xffff0000, %eax       # imm = 0xFFFF0000
                	je	<addr>
                	movl	$0xb, %eax
                	leave

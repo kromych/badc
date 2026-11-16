@@ -6,6 +6,7 @@
 // `long` because glibc declares them so, and -1 stands for unset.
 
 #pragma once
+#include <stddef.h>
 
 #ifdef __linux__
 
@@ -30,10 +31,10 @@ struct spwd {
 #pragma binding(libc::lckpwdf, "lckpwdf")
 #pragma binding(libc::ulckpwdf, "ulckpwdf")
 
-struct spwd *getspnam(char *name);
+struct spwd *getspnam(const char *name);
 // Reentrant lookup, shaped like getpwnam_r: fills the caller's record
 // and scratch buffer, sets `*result` to it or NULL, returns 0 or errno.
-int getspnam_r(char *name, struct spwd *spbuf, char *buf, unsigned long buflen,
+int getspnam_r(const char *name, struct spwd *spbuf, char *buf, size_t buflen,
                struct spwd **result);
 struct spwd *getspent(void);
 void setspent(void);

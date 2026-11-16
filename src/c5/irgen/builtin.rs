@@ -2,14 +2,16 @@
 //! arithmetic, the constant-size memory transfers, and the bit-count
 //! forms built on `Inst::BitCount`.
 
-use super::access::{load_kind_for_width, store_kind_for, store_kind_for_width, store_place};
+use super::access::{
+    load_kind_for, load_kind_for_width, store_kind_for, store_kind_for_width, store_place,
+};
 use super::types::type_size_bytes;
 use super::*;
 use crate::c5::ast::expr_ty;
 use crate::c5::ir::BitCountOp;
 
 impl<'a> Walker<'a> {
-    /// Expand a GCC `__builtin_memcpy` / `__builtin_memmove` /
+    /// Expand a `__builtin_memcpy` / `__builtin_memmove` /
     /// `__builtin_memset` whose byte count is a constant. The copy rides
     /// `Inst::Mcpy`, which transfers forward in units and so carries the
     /// non-overlap requirement of C99 7.21.2.1. The move loads every unit
@@ -71,7 +73,7 @@ impl<'a> Walker<'a> {
         Ok(dst)
     }
 
-    /// Lower a GCC `__builtin_{add,sub,mul}_overflow(a, b, dst)`: store
+    /// Lower a `__builtin_{add,sub,mul}_overflow(a, b, dst)`: store
     /// the wrapped `a op b` through `dst` and yield the overflow flag.
     /// Under 8 bytes the operands are already extended in the register,
     /// so `a op b` is exact and overflow is exactly where truncation
@@ -248,8 +250,8 @@ impl<'a> Walker<'a> {
         (ty & UNSIGNED_BIT) == 0 && !is_pointer_ty(ty)
     }
 
-    /// 128-bit `__builtin_{add,sub,mul}_overflow`. GCC evaluates in
-    /// infinite precision and reports whether the result is
+    /// 128-bit `__builtin_{add,sub,mul}_overflow`. The builtin evaluates
+    /// in infinite precision and reports whether the result is
     /// representable in the destination type. The operation runs mod
     /// 2^128 with the discarded magnitude tracked exactly: as the
     /// extension word above bit 127 for add and sub, and in
@@ -374,8 +376,56 @@ impl<'a> Walker<'a> {
             if !self.optimize {
                 return Ok(b.imm(0));
             }
+            // A load lowers to its address and width, without the read.
+            if let Expr::Unary {
+                op: UnOp::Deref,
+                ty,
+                ..
+            }
+            | Expr::Index { ty, .. } = *self.ast.expr(args[0])
+            {
+                let width = match load_kind_for(ty, self.target) {
+                    LoadKind::I8 | LoadKind::U8 => 1,
+                    LoadKind::I16 | LoadKind::U16 => 2,
+                    LoadKind::I32 | LoadKind::U32 | LoadKind::F32 => 4,
+                    LoadKind::I64 | LoadKind::F64 => 8,
+                    _ => return Ok(b.imm(0)),
+                };
+                let addr = self.walk_expr_lvalue(b, args[0])?;
+                let w = b.imm(width);
+                return Ok(b.intrinsic(kind, alloc::vec![addr, w]));
+            }
             let v = self.walk_expr_rvalue(b, args[0])?;
             return Ok(b.intrinsic(kind, alloc::vec![v]));
+        }
+        // Deferred `__builtin_object_size`, alike: the type is a literal.
+        if kind == Intrinsic::ObjectSize as i64 {
+            let ty = match self.ast.expr(args[1]) {
+                crate::c5::ast::Expr::IntLit { val, .. } => *val,
+                _ => 0,
+            };
+            if !self.optimize {
+                return Ok(b.imm(crate::c5::compiler::object_size_fallback(ty)));
+            }
+            let v = self.walk_expr_rvalue(b, args[0])?;
+            let t = b.imm(ty);
+            return Ok(b.intrinsic(kind, alloc::vec![v, t]));
+        }
+        if kind == Intrinsic::BuiltinArg as i64 {
+            let v = self.walk_expr_rvalue(b, args[0])?;
+            return Ok(match self.optimize {
+                true => b.intrinsic(kind, alloc::vec![v]),
+                false => v,
+            });
+        }
+        if kind == Intrinsic::SubobjectBound as i64 {
+            let v = self.walk_expr_rvalue(b, args[0])?;
+            let bytes = match self.ast.expr(args[1]) {
+                crate::c5::ast::Expr::IntLit { val, .. } if self.optimize => *val,
+                _ => return Ok(v),
+            };
+            let n = b.imm(bytes);
+            return Ok(b.intrinsic(kind, alloc::vec![v, n]));
         }
         // The va_* intrinsics receive the address of the va_list
         // storage. Where `ap` is a va_list reached through a pointer,
@@ -416,8 +466,8 @@ impl<'a> Walker<'a> {
             }
             return Ok(v);
         }
-        // clz / ctz at zero are undefined in GCC; `Inst::BitCount` gives
-        // the bit width there.
+        // The clz / ctz builtins are undefined at zero; `Inst::BitCount`
+        // gives the bit width there.
         if let Some(i) = Intrinsic::from_i64(kind)
             && i.is_int_bit_unary()
         {
@@ -460,14 +510,14 @@ impl<'a> Walker<'a> {
         Ok(v)
     }
 
-    /// GCC extended inline asm in value position.
+    /// GNU C extended inline asm in value position.
     pub(super) fn walk_inline_asm(
         &mut self,
         b: &mut SsaBuilder,
         idx: u32,
     ) -> Result<ValueId, WalkError> {
-        // GCC extended asm: each operand is an output destination
-        // address, the parser having applied `&`, or an input value.
+        // Each operand is an output destination address, the parser
+        // having applied `&`, or an input value.
         let asm = self.ast.asm_blocks[idx as usize].clone();
         let mut args: alloc::vec::Vec<ValueId> =
             alloc::vec::Vec::with_capacity(asm.operand_exprs.len());
@@ -482,7 +532,7 @@ impl<'a> Walker<'a> {
     }
 }
 
-/// POSIX / GCC `ffs`: one plus the index of the least-significant set bit, 0
+/// POSIX `ffs`: one plus the index of the least-significant set bit, 0
 /// for 0. ctz is the bit width `w` only for 0, the one count with bit
 /// `log2(w)` set, so `(ctz >> log2(w)) - 1` clears `ctz + 1` there alone.
 fn lower_ffs(b: &mut SsaBuilder, x: ValueId, width: u8) -> ValueId {

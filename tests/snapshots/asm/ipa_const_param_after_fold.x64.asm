@@ -32,23 +32,16 @@ Disassembly of section .text:
                	retq
 
 <fill_first>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	movq	%rsi, -0x20(%rbp)
                	testq	%rsi, %rsi
                	je	<addr>
                	xorl	%esi, %esi
-               	leave
                	jmp	<addr>
                	movq	$-0x16, %rax
-               	leave
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	xorl	%eax, %eax
                	leaq	<rip>, %rcx # <addr>
                	movl	%eax, (%rcx,%rax,4)
@@ -56,16 +49,14 @@ Disassembly of section .text:
                	cmpl	$0x40, %eax
                	jl	<addr>
                	xorl	%esi, %esi
-               	movq	$0x1, -0x8(%rbp)
                	movl	$0x5, %edi
                	movq	%rsi, %rdx
                	callq	<addr>
                	cmpq	$0x5, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	popq	%rbp
                	retq
                	xorl	%eax, %eax
-               	movq	%rax, -0x8(%rbp)
-               	leave
+               	popq	%rbp
                	retq

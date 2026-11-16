@@ -26,7 +26,7 @@ Disassembly of section .text:
                	str	x16, [x1]
                	ldr	w16, [x3, #0x8]
                	str	w16, [x1, #0x8]
-               	str	w2, [x4, #0x60]
+               	str	w2, [x4, #0x48]
                	ldrsw	x2, [x1, #0x4]
                	cmp	w2, #0xf
                	b.eq	<addr>
@@ -53,7 +53,7 @@ Disassembly of section .text:
                	str	x16, [x1]
                	ldr	w16, [x3, #0x8]
                	str	w16, [x1, #0x8]
-               	strb	w5, [x2, #0x68]
+               	strb	w5, [x2, #0x4c]
                	ldrsw	x1, [x1, #0x4]
                	cmp	w1, #0xf
                	b.eq	<addr>

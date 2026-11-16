@@ -45,9 +45,17 @@ struct sockaddr_in {
     struct in_addr sin_addr;
     char           sin_zero[8];
 };
+// in6addr.h: the address as bytes or 16-bit words.
 struct in6_addr {
-    unsigned char s6_addr[16];
+    union {
+        unsigned char Byte[16];
+        unsigned short Word[8];
+    } u;
 };
+#define in_addr6 in6_addr
+#define s6_addr  u.Byte
+#define s6_bytes u.Byte
+#define s6_words u.Word
 struct sockaddr_in6 {
     short          sin6_family;
     unsigned short sin6_port;
@@ -94,6 +102,13 @@ typedef struct _WSANETWORKEVENTS {
     long lNetworkEvents;
     int  iErrorCode[FD_MAX_EVENTS];
 } WSANETWORKEVENTS, *LPWSANETWORKEVENTS;
+
+// The IPv4 string conversions predating inet_ntop / inet_pton, which the
+// SDK declares here.
+#pragma binding(ws2_32::inet_ntoa, "inet_ntoa")
+#pragma binding(ws2_32::inet_addr, "inet_addr")
+char *inet_ntoa(struct in_addr in);
+unsigned long inet_addr(const char *cp);
 
 #pragma binding(ws2_32::WSACreateEvent,  "WSACreateEvent")
 #pragma binding(ws2_32::WSACloseEvent,   "WSACloseEvent")
@@ -201,7 +216,7 @@ typedef enum {
 #define SO_SNDTIMEO    0x1005
 #define SO_RCVTIMEO    0x1006
 #define SO_TYPE        0x1008
-#define SO_EXCLUSIVEADDRUSE 0xfffffffb
+#define SO_EXCLUSIVEADDRUSE ((int)(~SO_REUSEADDR))
 
 // recv / send flags (winsock2.h).
 #define MSG_OOB       0x1

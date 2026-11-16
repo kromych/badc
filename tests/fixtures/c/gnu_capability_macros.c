@@ -1,6 +1,6 @@
 // snapshot-flags: --gnu
 // Each GNU capability macro the `--gnu` predefine set claims, checked
-// against the behaviour it promises. Compiled with `--gnu`; a macro that
+// against the behavior it promises. Compiled with `--gnu`; a macro that
 // is claimed without its feature, or a feature reported by the wrong
 // value, fails here. Distinct non-zero code per check.
 

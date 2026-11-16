@@ -55,6 +55,23 @@ impl<'a> Walker<'a> {
         if self.is_int128_value_ty(elem_ty) && segment_of_object_ty(elem_ty).is_none() {
             return self.walk_atomic16(b, kind, args, order);
         }
+        // The generic forms on any other size call the runtime's generic
+        // functions with the size.
+        if matches!(kind, AtomicKind::LoadInto | AtomicKind::StoreFrom)
+            && !matches!(width, 1 | 2 | 4 | 8)
+            && !self.target.is_windows()
+        {
+            let obj = self.walk_expr_rvalue(b, args[0])?;
+            let other = self.walk_expr_rvalue(b, args[1])?;
+            let name = match kind {
+                AtomicKind::LoadInto => "__atomic_load",
+                _ => "__atomic_store",
+            };
+            let size = self.value_size_align(elem_ty).0 as i64;
+            let args = alloc::vec![b.imm(size), obj, other, b.imm(order.to_c11())];
+            self.atomic_libcall(b, name, args)?;
+            return Ok(b.imm(0));
+        }
         if !matches!(width, 1 | 2 | 4 | 8) {
             return Err(WalkError::UnsupportedExpr {
                 id: args[0],
@@ -123,6 +140,34 @@ impl<'a> Walker<'a> {
                 let old = b.atomic_rmw(op, addr, value, width, order);
                 Ok(self.extend_atomic_result(b, old, elem_ty))
             }
+            AtomicKind::FetchNand | AtomicKind::FetchMax | AtomicKind::FetchMin => {
+                let value = self.walk_expr_rvalue(b, args[1])?;
+                let signed = !is_unsigned_ty(elem_ty);
+                Ok(
+                    self.cas_retry(b, addr, width, order, elem_ty, |b, old| match kind {
+                        AtomicKind::FetchNand => {
+                            let both = b.binop(BinOp::And, old, value);
+                            b.binop_imm(BinOp::Xor, both, -1)
+                        }
+                        // `old ^ ((old ^ v) & -(take v))`, taking `v` where it
+                        // is the greater (max) or the lesser (min).
+                        _ => {
+                            let (lt, l, r) = match (signed, kind) {
+                                (true, AtomicKind::FetchMax) => (BinOp::Lt, old, value),
+                                (true, _) => (BinOp::Lt, value, old),
+                                (false, AtomicKind::FetchMax) => (BinOp::Ult, old, value),
+                                (false, _) => (BinOp::Ult, value, old),
+                            };
+                            let take = b.binop(lt, l, r);
+                            let zero = b.imm(0);
+                            let mask = b.binop(BinOp::Sub, zero, take);
+                            let diff = b.binop(BinOp::Xor, old, value);
+                            let pick = b.binop(BinOp::And, diff, mask);
+                            b.binop(BinOp::Xor, old, pick)
+                        }
+                    }),
+                )
+            }
             AtomicKind::CompareExchangeStrong => {
                 // C11 7.17.7.4: on a match store `desired` and yield 1,
                 // else write the prior contents into `*expected` and yield
@@ -155,7 +200,7 @@ impl<'a> Walker<'a> {
             | AtomicKind::AndFetch
             | AtomicKind::OrFetch
             | AtomicKind::XorFetch => {
-                // GCC `__sync_*_and_fetch`: the read-modify-write yields the
+                // `__sync_*_and_fetch`: the read-modify-write yields the
                 // prior value; recompute the post-operation value in plain
                 // IR so a value with side effects is evaluated once.
                 let value = self.walk_expr_rvalue(b, args[1])?;
@@ -173,7 +218,7 @@ impl<'a> Walker<'a> {
                 Ok(self.extend_atomic_result(b, new, elem_ty))
             }
             AtomicKind::SyncCasVal | AtomicKind::SyncCasBool => {
-                // GCC `__sync_val/bool_compare_and_swap(p, old, new)`: the
+                // `__sync_val/bool_compare_and_swap(p, old, new)`: the
                 // prior `*p`, or whether it matched `old`.
                 let old_val = self.walk_expr_rvalue(b, args[1])?;
                 let old_val = self.atomic_bits_of(b, old_val, elem_ty);
@@ -205,6 +250,13 @@ impl<'a> Walker<'a> {
         let zero = |b: &mut SsaBuilder| (b.imm(0), b.imm(0));
         match kind {
             AtomicKind::Init => unreachable!("lowered by walk_atomic"),
+            // Only MSVC's intrinsics name these, at most 64 bits wide.
+            AtomicKind::FetchNand | AtomicKind::FetchMax | AtomicKind::FetchMin => {
+                Err(WalkError::UnsupportedExpr {
+                    id: args[0],
+                    kind: "a 128-bit nand, max or min exchange",
+                })
+            }
             AtomicKind::Load | AtomicKind::LoadInto => {
                 let prior = if matches!(kind, AtomicKind::Load) {
                     let z = zero(b);
@@ -317,6 +369,39 @@ impl<'a> Walker<'a> {
         b.branch_zero(ok, retry, done);
         b.switch_to(done);
         (prior, desired)
+    }
+
+    /// A read-modify-write as a compare-exchange retry: `next` maps the
+    /// object's value, normalized to `elem_ty`, to the value to store, and
+    /// the loop repeats while another writer changed the object between the
+    /// read and the exchange. The prior value, normalized.
+    fn cas_retry(
+        &mut self,
+        b: &mut SsaBuilder,
+        addr: ValueId,
+        width: u8,
+        order: MemOrder,
+        elem_ty: i64,
+        next: impl Fn(&mut SsaBuilder, ValueId) -> ValueId,
+    ) -> ValueId {
+        let slot = b.alloc_synthetic_local();
+        let first = b.load(addr, int_load_kind(width));
+        let seen_at = b.local_addr(slot);
+        b.store(seen_at, first, StoreKind::I64);
+        let (retry, done) = (b.new_block(), b.new_block());
+        b.jmp(retry);
+        b.switch_to(retry);
+        let seen_at = b.local_addr(slot);
+        let raw = b.load(seen_at, LoadKind::I64);
+        let old = self.extend_atomic_result(b, raw, elem_ty);
+        let new = next(b, old);
+        let prior = b.atomic_cas(addr, raw, new, width, order);
+        let seen_at = b.local_addr(slot);
+        b.store(seen_at, prior, StoreKind::I64);
+        let ok = self.cas_matched(b, prior, raw, width);
+        b.branch_zero(ok, retry, done);
+        b.switch_to(done);
+        old
     }
 
     /// The object a compare-exchange's `expected` operand points to, as a

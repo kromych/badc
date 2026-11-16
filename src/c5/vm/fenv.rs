@@ -8,6 +8,7 @@
 //! sticky bit for any part below -- and [`FpEnv::round`] rounds it once.
 
 use crate::c5::codegen::Target;
+use crate::c5::simd::RoundTo;
 
 pub(super) const INVALID: u8 = 1;
 pub(super) const DIVBYZERO: u8 = 2;
@@ -46,6 +47,59 @@ pub(super) const BINARY32: Format = Format {
     emin: -126,
     emax: 127,
 };
+/// The x87 extended format, whose 64-bit significand holds its integer bit.
+pub(super) const X87: Format = Format {
+    p: 64,
+    emin: -16382,
+    emax: 16383,
+};
+pub(super) const BINARY128: Format = Format {
+    p: 113,
+    emin: -16382,
+    emax: 16383,
+};
+
+/// A value rounded to a format: `kept * 2^q`, or past the largest finite
+/// value, which becomes infinity or that value.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) enum Rounded {
+    Finite(u128, i32),
+    Overflow { infinite: bool },
+}
+
+impl Format {
+    fn exponent_bits(self) -> u32 {
+        32 - ((2 * self.emax + 1) as u32).leading_zeros()
+    }
+
+    fn fraction_bits(self) -> u32 {
+        if self == X87 { 64 } else { self.p - 1 }
+    }
+
+    /// The encoding of `+/-r`: the interchange format's bits, or the x87
+    /// 80-bit image with the significand below the exponent and sign.
+    pub(super) fn encode(self, neg: bool, r: Rounded) -> u128 {
+        let all_ones = (1u128 << self.exponent_bits()) - 1;
+        let integer_bit = if self == X87 { 1u128 << 63 } else { 0 };
+        let (e, m) = match r {
+            Rounded::Overflow { infinite: true } => (all_ones, integer_bit),
+            Rounded::Overflow { infinite: false } => (all_ones - 1, (1u128 << self.p) - 1),
+            Rounded::Finite(kept, _) if kept >> (self.p - 1) == 0 => (0, kept),
+            Rounded::Finite(kept, q) => ((q + self.p as i32 - 1 + self.emax) as u128, kept),
+        };
+        let f = self.fraction_bits();
+        let m = if self == X87 { m } else { m & ((1 << f) - 1) };
+        u128::from(neg) << (f + self.exponent_bits()) | e << f | m
+    }
+
+    /// The quiet NaN of sign `neg` with no payload.
+    pub(super) fn quiet_nan(self, neg: bool) -> u128 {
+        let f = self.fraction_bits();
+        let quiet = if self == X87 { 3 << 62 } else { 1 << (f - 1) };
+        let e = (1u128 << self.exponent_bits()) - 1;
+        u128::from(neg) << (f + self.exponent_bits()) | e << f | quiet
+    }
+}
 
 /// An integer conversion's result for a NaN or an out-of-range value:
 /// x86-64's integer indefinite (the minimum), AArch64's nearest bound (0
@@ -68,6 +122,9 @@ pub(super) struct FpEnv {
     tiny_before_rounding: bool,
     /// The NaN an invalid operation delivers.
     default_nan: u64,
+    /// AArch64 returns the first signaling NaN operand before the first
+    /// quiet one (the Arm ARM's FPProcessNaNs), x86-64 the first NaN.
+    signaling_first: bool,
     convert_out_of_range: OutOfRange,
     lrint_out_of_range: OutOfRange,
 }
@@ -105,6 +162,29 @@ pub(super) fn is_nan(bits: u64) -> bool {
 
 fn is_snan(bits: u64) -> bool {
     is_nan(bits) && bits & QUIET == 0
+}
+
+/// A `float`'s register form, the binary64 pattern of its value; a NaN keeps
+/// its quiet bit and payload, as a copy of it does (IEC 60559 5.5.1).
+pub(super) fn f32_to_reg(bits: u32) -> u64 {
+    let f = f32::from_bits(bits);
+    if !f.is_nan() {
+        return f64::from(f).to_bits();
+    }
+    signed(
+        bits >> 31 != 0,
+        EXP_MASK | u64::from(bits & 0x7f_ffff) << 29,
+    )
+}
+
+/// The `float` a register holds, its NaN payload kept as [`f32_to_reg`] does.
+pub(super) fn reg_to_f32(reg: u64) -> u32 {
+    if !is_nan(reg) {
+        return (f64::from_bits(reg) as f32).to_bits();
+    }
+    let payload = ((reg & !(SIGN | EXP_MASK)) >> 29) as u32;
+    let sign = ((reg >> 32) as u32) & 0x8000_0000;
+    sign | 0x7f80_0000 | if payload == 0 { 0x40_0000 } else { payload }
 }
 
 fn signed(neg: bool, magnitude: u64) -> u64 {
@@ -197,6 +277,7 @@ impl FpEnv {
             } else {
                 0xfff8_0000_0000_0000
             },
+            signaling_first: aarch64,
             convert_out_of_range: if aarch64 {
                 OutOfRange::Saturate
             } else {
@@ -216,8 +297,23 @@ impl FpEnv {
     }
 
     /// Round `+/-sig * 2^exp`, plus a nonzero amount below `2^exp` when
-    /// `sticky`, to `f`; `sig` is nonzero.
+    /// `sticky`, to `f`, binary32 or binary64; `sig` is nonzero.
     pub(super) fn round(&mut self, neg: bool, sig: u128, exp: i32, sticky: bool, f: Format) -> u64 {
+        match self.round_to(neg, sig, exp, sticky, f) {
+            Rounded::Finite(kept, q) => pack(neg, kept, q),
+            Rounded::Overflow { infinite } => self.overflowed(neg, infinite, f),
+        }
+    }
+
+    /// [`Self::round`] to any format.
+    pub(super) fn round_to(
+        &mut self,
+        neg: bool,
+        sig: u128,
+        exp: i32,
+        sticky: bool,
+        f: Format,
+    ) -> Rounded {
         let top = top_bit(&(neg, sig, exp));
         let p = f.p as i32;
         let mut q = (top - (p - 1)).max(f.emin - (p - 1));
@@ -237,9 +333,15 @@ impl FpEnv {
         }
         if kept != 0 && q + 127 - kept.leading_zeros() as i32 > f.emax {
             self.flags |= OVERFLOW | INEXACT;
-            return self.overflowed(neg, f);
+            let infinite = match self.round {
+                Round::Nearest => true,
+                Round::Zero => false,
+                Round::Up => !neg,
+                Round::Down => neg,
+            };
+            return Rounded::Overflow { infinite };
         }
-        pack(neg, kept, q)
+        Rounded::Finite(kept, q)
     }
 
     /// Whether an exact value with top bit `top` is below the smallest
@@ -255,17 +357,11 @@ impl FpEnv {
         (kept + self.round_up(neg, kept, half, rest) as u128) >> f.p == 0
     }
 
-    fn overflowed(&self, neg: bool, f: Format) -> u64 {
+    fn overflowed(&self, neg: bool, infinite: bool, f: Format) -> u64 {
         let max = if f == BINARY64 {
             0x7fef_ffff_ffff_ffff
         } else {
             (f32::MAX as f64).to_bits()
-        };
-        let infinite = match self.round {
-            Round::Nearest => true,
-            Round::Zero => false,
-            Round::Up => !neg,
-            Round::Down => neg,
         };
         signed(neg, if infinite { EXP_MASK } else { max })
     }
@@ -275,12 +371,14 @@ impl FpEnv {
         self.default_nan
     }
 
-    /// The first NaN operand quieted; a signaling one raises invalid.
+    /// The first NaN operand quieted, or the first signaling one where
+    /// the target prefers it; a signaling one raises invalid.
     fn propagate(&mut self, a: u64, b: u64, f: Format) -> u64 {
         if is_snan(a) || is_snan(b) {
             self.flags |= INVALID;
         }
-        let n = if is_nan(a) { a } else { b } | QUIET;
+        let first = is_nan(a) && !(self.signaling_first && is_snan(b) && !is_snan(a));
+        let n = if first { a } else { b } | QUIET;
         if f == BINARY32 {
             (f64::from_bits(n) as f32 as f64).to_bits()
         } else {
@@ -448,6 +546,19 @@ impl FpEnv {
     /// `a * b + c` rounded once (C99 7.12.13.1).
     pub(super) fn fma(&mut self, a: u64, b: u64, c: u64, f: Format) -> u64 {
         let np = negative(a) != negative(b);
+        // AArch64 ranks the addend first (FPProcessNaNs3), and a quiet NaN
+        // addend to infinity times zero gives the default NaN.
+        if self.signaling_first && is_nan(c) {
+            let inf_zero = matches!(
+                (class(a), class(b)),
+                (Class::Inf, Class::Zero) | (Class::Zero, Class::Inf)
+            );
+            return match () {
+                _ if inf_zero && !is_snan(c) => self.invalid(),
+                _ if is_snan(c) || !(is_snan(a) || is_snan(b)) => self.propagate(c, c, f),
+                _ => self.propagate(a, b, f),
+            };
+        }
         match (class(a), class(b), class(c)) {
             (Class::Nan, ..) | (_, Class::Nan, _) => self.propagate(a, b, f),
             (.., Class::Nan) => self.propagate(c, c, f),
@@ -474,6 +585,16 @@ impl FpEnv {
     }
 
     /// A `double` converted to `float` (C99 6.3.1.5).
+    /// A `float` converted to `double`: exact, but a signaling NaN is
+    /// quieted and raises invalid (IEC 60559 5.4.2).
+    pub(super) fn widen(&mut self, a: u64) -> u64 {
+        if is_snan(a) {
+            self.flags |= INVALID;
+            return a | QUIET;
+        }
+        a
+    }
+
     pub(super) fn narrow(&mut self, a: u64) -> u64 {
         match class(a) {
             Class::Nan => self.propagate(a, a, BINARY32),
@@ -534,16 +655,29 @@ impl FpEnv {
     /// `rint`, which raises inexact, and `nearbyint`, which does not
     /// (C99 7.12.9.3-4).
     pub(super) fn round_integral(&mut self, a: u64, raise_inexact: bool) -> u64 {
+        self.round_integral_to(a, RoundTo::Current, raise_inexact)
+    }
+
+    /// `a` rounded to an integral value in direction `to`, raising inexact
+    /// when `raise_inexact` and the value changes.
+    pub(super) fn round_integral_to(&mut self, a: u64, to: RoundTo, raise_inexact: bool) -> u64 {
         match class(a) {
             Class::Nan => self.propagate(a, a, BINARY64),
             Class::Finite(s, e) if e < 0 => {
                 let neg = negative(a);
                 let (kept, half, rest) = shift_round(u128::from(s), -e, false);
-                let kept = kept + self.round_up(neg, kept, half, rest) as u128;
+                let up = match to {
+                    RoundTo::Current => self.round_up(neg, kept, half, rest),
+                    RoundTo::NearestEven => half && (rest || kept & 1 != 0),
+                    RoundTo::NearestAway => half,
+                    RoundTo::Up => !neg && (half || rest),
+                    RoundTo::Down => neg && (half || rest),
+                    RoundTo::Zero => false,
+                };
                 if raise_inexact && (half || rest) {
                     self.flags |= INEXACT;
                 }
-                pack(neg, kept, 0)
+                pack(neg, kept + u128::from(up), 0)
             }
             _ => a,
         }
@@ -567,6 +701,13 @@ impl FpEnv {
     /// A quiet comparison: only a signaling NaN raises invalid (5.11).
     pub(super) fn compare_operands(&mut self, a: u64, b: u64) {
         if is_snan(a) || is_snan(b) {
+            self.flags |= INVALID;
+        }
+    }
+
+    /// A signaling comparison: any NaN operand raises invalid (5.11).
+    pub(super) fn compare_signaling(&mut self, a: u64, b: u64) {
+        if f64::from_bits(a).is_nan() || f64::from_bits(b).is_nan() {
             self.flags |= INVALID;
         }
     }
@@ -627,6 +768,98 @@ impl FpEnv {
     pub(super) fn get_round(&self) -> i32 {
         let m = self.round_macros();
         m[self.round as usize]
+    }
+
+    /// SSE's MXCSR: the exception flags (but the unmodelled denormal flag),
+    /// every exception masked, and the rounding control.
+    pub(super) fn mxcsr(&self) -> u32 {
+        const BITS: [u32; 5] = [0x01, 0x04, 0x08, 0x10, 0x20];
+        let flags = (0..5).filter(|&i| self.flags & 1 << i != 0);
+        let rc = match self.round {
+            Round::Nearest => 0,
+            Round::Down => 1,
+            Round::Up => 2,
+            Round::Zero => 3,
+        };
+        flags.fold(0x1f80 | rc << 13, |acc, i| acc | BITS[i])
+    }
+
+    /// Load MXCSR, or the part of it this model lacks: an unmasked
+    /// exception, denormals-are-zero, flush-to-zero, and on linux-x64,
+    /// whose `long double` and `fegetround` follow the x87 control word, a
+    /// rounding direction apart from that word's.
+    pub(super) fn set_mxcsr(&mut self, v: u32) -> Result<(), &'static str> {
+        if v & !0x603f != 0x1f80 {
+            return Err("unmasks an exception or sets DAZ or FZ");
+        }
+        let round = [Round::Nearest, Round::Down, Round::Up, Round::Zero][(v >> 13 & 3) as usize];
+        if self.target == Target::LinuxX64 && round != self.round {
+            return Err("sets a rounding direction apart from the x87 control word's");
+        }
+        const BITS: [u32; 5] = [0x01, 0x04, 0x08, 0x10, 0x20];
+        self.flags = (0..5)
+            .filter(|&i| v & BITS[i] != 0)
+            .fold(0, |acc, i| acc | 1 << i);
+        self.round = round;
+        Ok(())
+    }
+
+    /// The x87 control word a process starts with: every exception masked,
+    /// and extended precision, or on Windows double precision.
+    fn x87_default_control(&self) -> u32 {
+        if self.target == Target::WindowsX64 {
+            0x027f
+        } else {
+            0x037f
+        }
+    }
+
+    /// The x87 control word: the default one with the rounding direction.
+    pub(super) fn x87_control(&self) -> u32 {
+        self.x87_default_control() | (self.mxcsr() >> 13 & 3) << 10
+    }
+
+    /// Load the x87 control word, or refuse one that unmasks an exception,
+    /// changes the precision, or on linux-x64, where `long double` and
+    /// `fegetround` follow it, rounds apart from MXCSR.
+    pub(super) fn set_x87_control(&mut self, fcw: u32) -> Result<(), &'static str> {
+        if fcw & !0xc00 != self.x87_default_control() {
+            return Err("x87 control word unmasks an exception or changes the precision");
+        }
+        if self.target == Target::LinuxX64 && fcw >> 10 & 3 != self.mxcsr() >> 13 & 3 {
+            return Err("x87 control word rounds apart from MXCSR");
+        }
+        Ok(())
+    }
+
+    /// FXSAVE's first 32 bytes: the x87 control word, a clear status
+    /// word (the flags are those of the SSE arithmetic `float` and `double`
+    /// take), an empty tag word, MXCSR and the mask of its writable bits.
+    pub(super) fn fxsave_header(&self) -> [u8; 32] {
+        let mut h = [0u8; 32];
+        let mxcsr = self.mxcsr();
+        h[0..2].copy_from_slice(&self.x87_control().to_le_bytes()[..2]);
+        h[24..28].copy_from_slice(&mxcsr.to_le_bytes());
+        h[28..32].copy_from_slice(&0xffffu32.to_le_bytes());
+        h
+    }
+
+    /// FXRSTOR of an FXSAVE header: an x87 control word that unmasks an
+    /// exception, sets a precision other than extended, or on linux-x64
+    /// rounds apart from MXCSR is refused, as MXCSR's own load is.
+    pub(super) fn fxrstor_header(&mut self, h: &[u8]) -> Result<(), &'static str> {
+        let fcw = u32::from(u16::from_le_bytes([h[0], h[1]]));
+        let fsw = u32::from(u16::from_le_bytes([h[2], h[3]]));
+        let mxcsr = u32::from_le_bytes([h[24], h[25], h[26], h[27]]);
+        let saved = (self.round, self.flags);
+        self.round =
+            [Round::Nearest, Round::Down, Round::Up, Round::Zero][(mxcsr >> 13 & 3) as usize];
+        let loaded =
+            (self.set_mxcsr(mxcsr | (fsw & 0x3f))).and_then(|()| self.set_x87_control(fcw));
+        if loaded.is_err() {
+            (self.round, self.flags) = saved;
+        }
+        loaded
     }
 
     /// `fesetround`; false for a value that names no direction.
@@ -708,6 +941,109 @@ impl FpEnv {
     pub(super) fn set_default_env(&mut self) {
         self.round = Round::Nearest;
         self.flags = 0;
+    }
+}
+
+/// The x86 SIMD rows' lanes compute in the program's environment, as its
+/// scalar operations do.
+impl crate::c5::simd::FloatEnv for FpEnv {
+    fn arith(&mut self, op: crate::c5::simd::FOp, a: u64, b: u64, single: bool) -> u64 {
+        use crate::c5::simd::FOp;
+        let f = if single { BINARY32 } else { BINARY64 };
+        match op {
+            FOp::Add => self.add(a, b, f),
+            FOp::Sub => self.sub(a, b, f),
+            FOp::Mul => self.mul(a, b, f),
+            FOp::Div => self.div(a, b, f),
+            FOp::Sqrt => self.sqrt(a, f),
+            // The row selects an operand by `compare`, or computes the
+            // operation from the others.
+            FOp::Min
+            | FOp::Max
+            | FOp::MaxNan
+            | FOp::MinNan
+            | FOp::MaxNum
+            | FOp::MinNum
+            | FOp::AbsDiff
+            | FOp::MulX => a,
+        }
+    }
+
+    fn fma(&mut self, a: u64, b: u64, c: u64, single: bool) -> u64 {
+        self.fma(a, b, c, if single { BINARY32 } else { BINARY64 })
+    }
+
+    fn negates_nan(&self) -> bool {
+        self.target.is_aarch64()
+    }
+
+    fn round_to_integral(&mut self, a: u64, to: RoundTo, exact: bool) -> u64 {
+        self.round_integral_to(a, to, exact)
+    }
+
+    fn compare(&mut self, a: u64, b: u64, signaling: bool) -> Option<core::cmp::Ordering> {
+        if signaling {
+            self.compare_signaling(a, b);
+        } else {
+            self.compare_operands(a, b);
+        }
+        f64::from_bits(a).partial_cmp(&f64::from_bits(b))
+    }
+
+    fn to_int(&mut self, a: u64, truncate: bool, bits: u32, signed: bool) -> i64 {
+        let min = i64::MIN >> (64 - bits);
+        let (low, high, indefinite) = match signed {
+            true => (min as f64, -(min as f64), min),
+            false => (0.0, (1u64 << bits) as f64, (1i64 << bits) - 1),
+        };
+        let x = f64::from_bits(a);
+        // Truncation keeps what lies above `low - 1`, which at 64 bits rounds
+        // to `low` itself; a NaN fails every bound.
+        let fits = match truncate {
+            true => x < high && (x > low - 1.0 || x == low),
+            false => {
+                let r = f64::from_bits(self.round_integral(a, false));
+                r >= low && r < high
+            }
+        };
+        if !fits {
+            self.flags |= INVALID;
+            return indefinite;
+        }
+        match truncate {
+            true => self.float_to_int(a, true),
+            false => self.lrint(a, 64),
+        }
+    }
+
+    fn integer_to_float(&mut self, n: i64, single: bool) -> u64 {
+        self.int_to_float(i128::from(n), if single { BINARY32 } else { BINARY64 })
+    }
+
+    fn to_single(&mut self, a: u64) -> u64 {
+        self.narrow(a)
+    }
+
+    fn narrow_odd(&mut self, a: u64) -> u64 {
+        let (round, inexact) = (self.round, self.flags & INEXACT);
+        self.round = Round::Zero;
+        self.flags &= !INEXACT;
+        let r = self.narrow(a);
+        self.round = round;
+        let odd = self.flags & INEXACT != 0;
+        self.flags |= inexact;
+        match odd {
+            true => f64::from(f32::from_bits(reg_to_f32(r) | 1)).to_bits(),
+            false => r,
+        }
+    }
+
+    fn widen(&mut self, a: u64) -> u64 {
+        if is_snan(a) {
+            self.flags |= INVALID;
+            return a | 0x0008_0000_0000_0000;
+        }
+        a
     }
 }
 

@@ -15,9 +15,9 @@
 //!   v = LoadIndexed { base, index=i, scale=width, kind }
 //! ```
 //!
-//! The fold fires when the shift amount matches the access width (the
-//! per-arch emit requires `scale == width`) and the shift feeds only its
-//! address. A byte subscript has no shift: `Binop(Add, base, i)` folds at
+//! The fold fires for an integer, single or double access when the shift
+//! amount matches the access width (the per-arch emit requires `scale ==
+//! width`) and the shift feeds only its address. A byte subscript has no shift: `Binop(Add, base, i)` folds at
 //! scale 1. A shared `base + i*scale` (one address feeding both the load
 //! and the store of a swapped element) folds into every use, provided
 //! every use is a load or store of the matching width, so the shared
@@ -25,12 +25,15 @@
 //! uses is left alone.
 //!
 //! The same pass folds a constant pointer offset (a struct field offset)
-//! into the load/store displacement: a `BinopI(Add, base, c)` address
-//! with an aligned, in-range `c` becomes `Load { addr=base, disp=c }`.
-//! Unlike the scaled-index fold this covers the floating kinds too.
+//! into the load/store displacement: a `BinopI(Add, base, c)` or
+//! `BinopI(Sub, base, -c)` address with an in-range `c` becomes
+//! `Load { addr=base, disp=c }`, added to the displacement the access
+//! already has.
+//! This covers the wider floating kinds as well.
 //! As with the scaled-index case this fires for a shared address too --
-//! the load and store of a read-modify-write of one field fold the
-//! offset into both accesses, provided every use is a same-width access.
+//! the accesses of a read-modify-write, or of several members, fold the
+//! offset into each, provided every use is an access the composed
+//! displacement reaches.
 
 use alloc::vec::Vec;
 
@@ -48,6 +51,9 @@ fn load_width(kind: LoadKind) -> u8 {
         LoadKind::I16 | LoadKind::U16 => 2,
         LoadKind::I8 | LoadKind::U8 => 1,
         LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => 16,
+        LoadKind::V256 => 32,
+        LoadKind::V512 => 64,
+        LoadKind::SveVector | LoadKind::SvePredicate => 0,
     }
 }
 
@@ -59,6 +65,8 @@ fn store_width(kind: StoreKind) -> u8 {
         StoreKind::I16 => 2,
         StoreKind::I8 => 1,
         StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => 16,
+        StoreKind::V256 => 32,
+        StoreKind::V512 => 64,
     }
 }
 
@@ -78,7 +86,7 @@ pub(crate) fn displacement_fits(disp: i64, w: u8) -> bool {
 }
 
 /// [`load_width`] restricted to the integer kinds, `None` for the
-/// floating kinds (the indexed emit handles integers only).
+/// floating kinds.
 fn int_load_width(kind: LoadKind) -> Option<u8> {
     match kind {
         LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => None,
@@ -92,6 +100,23 @@ fn int_store_width(kind: StoreKind) -> Option<u8> {
     match kind {
         StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 => None,
         k => Some(store_width(k)),
+    }
+}
+
+/// The widths the scaled-index fold takes: the integer kinds, a single and
+/// a double.
+fn scaled_load_width(kind: LoadKind) -> Option<u8> {
+    match kind {
+        LoadKind::F32 | LoadKind::F64 => Some(load_width(kind)),
+        k => int_load_width(k),
+    }
+}
+
+/// [`scaled_load_width`] for a store.
+fn scaled_store_width(kind: StoreKind) -> Option<u8> {
+    match kind {
+        StoreKind::F32 | StoreKind::F64 => Some(store_width(kind)),
+        k => int_store_width(k),
     }
 }
 
@@ -162,14 +187,28 @@ pub(crate) fn mark_pc_rel_accesses(func: &mut FunctionSsa, strict_align: bool) {
             } => {
                 data(*addr)
                     && (*align == 0 || !strict_align)
-                    && !matches!(kind, LoadKind::F80 | LoadKind::F128 | LoadKind::V128)
+                    && !matches!(
+                        kind,
+                        LoadKind::F80
+                            | LoadKind::F128
+                            | LoadKind::V128
+                            | LoadKind::V256
+                            | LoadKind::V512
+                    )
             }
             Inst::Store {
                 addr, kind, align, ..
             } => {
                 data(*addr)
                     && (*align == 0 || !strict_align)
-                    && !matches!(kind, StoreKind::F80 | StoreKind::F128 | StoreKind::V128)
+                    && !matches!(
+                        kind,
+                        StoreKind::F80
+                            | StoreKind::F128
+                            | StoreKind::V128
+                            | StoreKind::V256
+                            | StoreKind::V512
+                    )
             }
             _ => false,
         })
@@ -184,6 +223,12 @@ pub(crate) fn mark_pc_rel_accesses(func: &mut FunctionSsa, strict_align: bool) {
 
 /// Count uses of every value across instructions, terminators, and
 /// block exit accumulators.
+/// A pure value nothing reads, which [`use_counts`] does not count as a
+/// use of its operands.
+fn dead(counts: &[u32], inst: &Inst, i: usize) -> bool {
+    counts.get(i) == Some(&0) && inst.is_pure()
+}
+
 fn use_counts(func: &FunctionSsa) -> Vec<u32> {
     let mut counts = alloc::vec![0u32; func.insts.len()];
     let bump = |v: ValueId, counts: &mut [u32]| {
@@ -211,20 +256,36 @@ fn use_counts(func: &FunctionSsa) -> Vec<u32> {
             bump(block.exit_acc, &mut counts);
         }
     }
+    // A pure value nothing reads goes with the emit's dead-pure skip, and
+    // its operands lose that use.
+    let mut dead: Vec<usize> = (0..counts.len())
+        .filter(|&i| counts[i] == 0 && func.insts[i].is_pure())
+        .collect();
+    while let Some(i) = dead.pop() {
+        crate::c5::codegen::ssa::reg_alloc::for_each_operand(&func.insts[i], |v| {
+            if let Some(c) = counts.get_mut(v as usize)
+                && *c > 0
+            {
+                *c -= 1;
+                if *c == 0 && func.insts[v as usize].is_pure() {
+                    dead.push(v as usize);
+                }
+            }
+        });
+    }
     counts
 }
 
-/// `(base, index)` of `lhs + rhs` read as `base + index * scale`. Above
-/// scale 1 the index is the operand of a single-use `Shl` by `log2(scale)`;
-/// at scale 1 an extension or a mask is the index, an address constant the
-/// base.
+/// `(base, index, shift)` of `lhs + rhs` read as `base + index * scale`.
+/// Above scale 1 the index is the operand of `shift`, a `Shl` by
+/// `log2(scale)`; at scale 1 an extension or a mask is the index, an
+/// address constant the base, and there is no shift.
 fn split_address(
     func: &FunctionSsa,
-    counts: &[u32],
     lhs: ValueId,
     rhs: ValueId,
     scale: u8,
-) -> Option<(ValueId, ValueId)> {
+) -> Option<(ValueId, ValueId, Option<ValueId>)> {
     let inst = |v: ValueId| func.insts.get(v as usize);
     if scale == 1 {
         let index_like = |v: ValueId| {
@@ -245,7 +306,11 @@ fn split_address(
             )
         };
         let swap = (index_like(lhs) && !index_like(rhs)) || (address(rhs) && !address(lhs));
-        return Some(if swap { (rhs, lhs) } else { (lhs, rhs) });
+        return Some(if swap {
+            (rhs, lhs, None)
+        } else {
+            (lhs, rhs, None)
+        });
     }
     if !matches!(scale, 2 | 4 | 8) {
         return None;
@@ -258,17 +323,17 @@ fn split_address(
                 op: BinOp::Shl,
                 lhs: index,
                 rhs_imm,
-            }) if *rhs_imm == shift && counts.get(scaled as usize) == Some(&1) => {
-                Some((base, *index))
-            }
+            }) if *rhs_imm == shift => Some((base, *index, Some(scaled))),
             _ => None,
         })
 }
 
-/// Addresses whose every use is an integer load or store of one width,
-/// mapped to `(base, index, scale)` with `scale` that width. A shared
-/// address (the load and the store of a swapped element) folds into every
-/// access, so the add and the shift drop out.
+/// Addresses whose every use is a load or store of one width the fold
+/// takes, mapped to `(base, index, scale)` with `scale` that width. A
+/// shared address (the load and the store of a swapped element) folds into
+/// every access, so the add drops out; a shift every reader of which is
+/// such an address (`a[i] = b[i]`, the index scaled once for both arrays)
+/// drops out with them.
 fn foldable_scaled_addresses(
     func: &FunctionSsa,
     counts: &[u32],
@@ -278,7 +343,10 @@ fn foldable_scaled_addresses(
     // count; any other use leaves the count short of the total.
     let mut seen: alloc::collections::BTreeMap<ValueId, (u8, u32)> =
         alloc::collections::BTreeMap::new();
-    for inst in &func.insts {
+    for (i, inst) in func.insts.iter().enumerate() {
+        if dead(counts, inst, i) {
+            continue;
+        }
         let (addr, width) = match inst {
             Inst::Load {
                 addr,
@@ -287,7 +355,7 @@ fn foldable_scaled_addresses(
                 volatile: false,
                 align: 0,
                 ..
-            } => (*addr, int_load_width(*kind)),
+            } => (*addr, scaled_load_width(*kind)),
             Inst::Store {
                 addr,
                 disp: 0,
@@ -295,7 +363,7 @@ fn foldable_scaled_addresses(
                 volatile: false,
                 align: 0,
                 ..
-            } => (*addr, int_store_width(*kind)),
+            } => (*addr, scaled_store_width(*kind)),
             _ => continue,
         };
         let is_add = matches!(
@@ -308,7 +376,10 @@ fn foldable_scaled_addresses(
             e.1 += 1;
         }
     }
-    seen.into_iter()
+    // Per address: its `(base, index, scale)` and the shift it reads.
+    type Split = ((ValueId, ValueId, u8), Option<ValueId>);
+    let found: Vec<(ValueId, Split)> = seen
+        .into_iter()
         .filter_map(|(p, (w, valid))| {
             let total = counts.get(p as usize).copied().unwrap_or(0);
             if w == MIXED || valid != total {
@@ -317,8 +388,23 @@ fn foldable_scaled_addresses(
             let Some(Inst::Binop { lhs, rhs, .. }) = func.insts.get(p as usize) else {
                 return None;
             };
-            split_address(func, counts, *lhs, *rhs, w).map(|(base, index)| (p, (base, index, w)))
+            split_address(func, *lhs, *rhs, w)
+                .map(|(base, index, shift)| (p, ((base, index, w), shift)))
         })
+        .collect();
+    let mut folding: alloc::collections::BTreeMap<ValueId, u32> =
+        alloc::collections::BTreeMap::new();
+    for (_, (_, shift)) in &found {
+        if let Some(s) = shift {
+            *folding.entry(*s).or_default() += 1;
+        }
+    }
+    found
+        .into_iter()
+        .filter(|(_, (_, shift))| {
+            shift.is_none_or(|s| counts.get(s as usize).copied() == folding.get(&s).copied())
+        })
+        .map(|(p, (t, _))| (p, t))
         .collect()
 }
 
@@ -343,85 +429,99 @@ fn foldable_scaled_addresses(
 fn foldable_displaced_addresses(
     func: &FunctionSsa,
     counts: &[u32],
-) -> alloc::collections::BTreeMap<ValueId, (ValueId, i32)> {
+) -> alloc::collections::BTreeMap<ValueId, (ValueId, i64)> {
     let mut cand: alloc::collections::BTreeMap<ValueId, (ValueId, i64)> =
         alloc::collections::BTreeMap::new();
     for (p, inst) in func.insts.iter().enumerate() {
-        if let Inst::BinopI {
-            op: BinOp::Add,
-            lhs,
-            rhs_imm,
-        } = inst
-            && *rhs_imm > 0
-        {
-            cand.insert(p as ValueId, (*lhs, *rhs_imm));
+        let c = match inst {
+            Inst::BinopI {
+                op: BinOp::Add,
+                lhs,
+                rhs_imm,
+            } => Some((*lhs, *rhs_imm)),
+            Inst::BinopI {
+                op: BinOp::Sub,
+                lhs,
+                rhs_imm,
+            } => rhs_imm.checked_neg().map(|c| (*lhs, c)),
+            _ => None,
+        };
+        if let Some((lhs, c)) = c.filter(|&(_, c)| c != 0) {
+            cand.insert(p as ValueId, (lhs, c));
         }
     }
-    // Per candidate, require every use to be a same-width load or store
-    // with no existing displacement. `width_seen` records the first
-    // access width and marks `0xff` on a width conflict; `valid` counts
-    // the qualifying accesses so a non-access use (valid < total) drops
-    // the candidate.
-    let mut width_seen: alloc::collections::BTreeMap<ValueId, u8> =
+    // Per candidate, the width, displacement and alignment bound of each
+    // load or store through it; a use of another kind drops the candidate
+    // through the count below.
+    let mut uses: alloc::collections::BTreeMap<ValueId, Vec<(u8, i64, bool)>> =
         alloc::collections::BTreeMap::new();
-    let mut valid: alloc::collections::BTreeMap<ValueId, u32> = alloc::collections::BTreeMap::new();
-    // Addresses an access carries a proven alignment for: the lowering
-    // may split such an access into byte units, whose scaled immediate
-    // reaches only 4095 rather than the width-scaled range below.
-    let mut bounded: alloc::collections::BTreeSet<ValueId> = alloc::collections::BTreeSet::new();
-    for inst in &func.insts {
-        let (addr, w, align) = match inst {
-            Inst::Load {
-                addr,
-                disp: 0,
-                kind,
-                align,
-                ..
-            } => (*addr, load_width(*kind), *align),
-            Inst::Store {
-                addr,
-                disp: 0,
-                kind,
-                align,
-                ..
-            } => (*addr, store_width(*kind), *align),
-            _ => continue,
-        };
-        if !cand.contains_key(&addr) {
+    for (i, inst) in func.insts.iter().enumerate() {
+        if dead(counts, inst, i) {
             continue;
         }
-        let seen = width_seen.entry(addr).or_insert(0);
-        *seen = if *seen == 0 || *seen == w { w } else { 0xff };
-        *valid.entry(addr).or_insert(0) += 1;
-        if align != 0 {
-            bounded.insert(addr);
+        let (addr, w, disp, align) = match inst {
+            Inst::Load {
+                addr,
+                disp,
+                kind,
+                align,
+                pc_rel: false,
+                ..
+            } => (*addr, load_width(*kind), *disp, *align),
+            Inst::Store {
+                addr,
+                disp,
+                kind,
+                align,
+                pc_rel: false,
+                ..
+            } => (*addr, store_width(*kind), *disp, *align),
+            _ => continue,
+        };
+        if cand.contains_key(&addr) {
+            (uses.entry(addr).or_default()).push((w, i64::from(disp), align != 0));
         }
     }
     cand.into_iter()
-        .filter_map(|(p, (base, c))| {
-            let total = counts.get(p as usize).copied().unwrap_or(0);
-            let w = width_seen.get(&p).copied().unwrap_or(0);
-            if w == 0 || w == 0xff || valid.get(&p).copied().unwrap_or(0) != total {
-                return None;
-            }
-            let fits = if bounded.contains(&p) {
-                c + (w as i64) <= 4096
-            } else {
-                displacement_fits(c, w) || c < 256
-            };
-            if !fits {
-                return None;
-            }
-            i32::try_from(c).ok().map(|disp| (p, (base, disp)))
+        .filter(|(p, (_, c))| {
+            let total = counts.get(*p as usize).copied().unwrap_or(0);
+            uses.get(p).is_some_and(|u| {
+                u.len() == total as usize
+                    && u.iter().all(|&(w, d, bounded)| {
+                        displacement_reaches(c + d, w, bounded) && i32::try_from(c + d).is_ok()
+                    })
+            })
         })
         .collect()
 }
 
-/// The slot and displacement a frame address names, for an access the
-/// local forms can carry: no alignment bound below the natural one (they
-/// state none, so the strict-alignment lowering would widen the transfer).
-fn folded_slot(insts: &[Inst], addr: ValueId, disp: i32, align: u8) -> Option<(i64, i32)> {
-    if align != 0 {
+/// Whether a `w`-byte access reaches byte offset `off` through its
+/// displacement on both targets. A negative offset takes AArch64's
+/// unscaled form, whose 9-bit field reaches -256 at every width; an access
+/// with a proven alignment may be split into byte units, whose scaled
+/// immediate reaches only 4095.
+fn displacement_reaches(off: i64, w: u8, bounded: bool) -> bool {
+    if off < 0 {
+        off >= -256 && off + (w as i64) <= 256
+    } else if bounded {
+        off + (w as i64) <= 4096
+    } else {
+        displacement_fits(off, w) || off < 256
+    }
+}
+
+/// The slot and displacement a frame address names, for a `width`-byte
+/// access the local forms can carry: they state no alignment bound, which
+/// only the `strict_align` lowering reads, so there an access bounded below
+/// its width keeps its address.
+fn folded_slot(
+    insts: &[Inst],
+    addr: ValueId,
+    disp: i32,
+    (width, align): (u8, u8),
+    strict_align: bool,
+) -> Option<(i64, i32)> {
+    if strict_align && align != 0 && align < width {
         return None;
     }
     match insts.get(addr as usize)? {
@@ -436,7 +536,7 @@ fn folded_slot(insts: &[Inst], addr: ValueId, disp: i32, align: u8) -> Option<(i
 /// the duplicate `LocalAddr`s the builder emits per access -- it keeps
 /// them out of its own cache -- are already merged. The address itself
 /// is left in place for its other uses; the emit skips it once dead.
-pub(crate) fn fold_slot_addresses(funcs: &mut [FunctionSsa]) {
+pub(crate) fn fold_slot_addresses(funcs: &mut [FunctionSsa], strict_align: bool) {
     for func in funcs.iter_mut() {
         let mut rewrites: Vec<(usize, Inst)> = Vec::new();
         for (idx, inst) in func.insts.iter().enumerate() {
@@ -448,13 +548,18 @@ pub(crate) fn fold_slot_addresses(funcs: &mut [FunctionSsa]) {
                     volatile,
                     align,
                     ..
-                } => folded_slot(&func.insts, *addr, *disp, *align).map(|(off, disp)| {
-                    Inst::LoadLocal {
-                        off,
-                        disp,
-                        kind: *kind,
-                        volatile: *volatile,
-                    }
+                } => folded_slot(
+                    &func.insts,
+                    *addr,
+                    *disp,
+                    (load_width(*kind), *align),
+                    strict_align,
+                )
+                .map(|(off, disp)| Inst::LoadLocal {
+                    off,
+                    disp,
+                    kind: *kind,
+                    volatile: *volatile,
                 }),
                 Inst::Store {
                     addr,
@@ -464,15 +569,20 @@ pub(crate) fn fold_slot_addresses(funcs: &mut [FunctionSsa]) {
                     volatile,
                     align,
                     ..
-                } => folded_slot(&func.insts, *addr, *disp, *align).map(|(off, disp)| {
-                    Inst::StoreLocal {
-                        off,
-                        disp,
-                        value: *value,
-                        kind: *kind,
-                        volatile: *volatile,
-                        nsw: false,
-                    }
+                } => folded_slot(
+                    &func.insts,
+                    *addr,
+                    *disp,
+                    (store_width(*kind), *align),
+                    strict_align,
+                )
+                .map(|(off, disp)| Inst::StoreLocal {
+                    off,
+                    disp,
+                    value: *value,
+                    kind: *kind,
+                    volatile: *volatile,
+                    nsw: false,
                 }),
                 _ => None,
             };
@@ -486,7 +596,7 @@ pub(crate) fn fold_slot_addresses(funcs: &mut [FunctionSsa]) {
     }
 }
 
-/// Rewrite recognised scaled-index loads and stores in place.
+/// Rewrite recognized scaled-index loads and stores in place.
 /// When `v` is `Shr K` (arithmetic) or `Shru K` (logical) of `Shl K` of
 /// some `w`, return `w` if a store of `store_width` bytes keeps only the
 /// low bits the normalize leaves unchanged (`8 * store_width <= 64 - K`).
@@ -558,25 +668,153 @@ fn narrow_store_values(func: &mut FunctionSsa) {
 pub(crate) fn run(funcs: &mut [FunctionSsa]) {
     for func in funcs.iter_mut() {
         narrow_store_values(func);
+        // An offset folded into its accesses leaves the address it was
+        // added to read by accesses alone, which the next round folds.
+        for _ in 0..4 {
+            if !fold_round(func) {
+                break;
+            }
+        }
+    }
+}
+
+/// Rebase an access through `p` that follows `q = p + k` in its block onto
+/// `q`, its displacement less `k`, when `p` then dies at `q`: nothing else
+/// reads `p` past `q` in the block and `p` is not live out of it. The two
+/// then share a register, where a pointer stepped in a loop (`*p++`) took a
+/// copy on the back edge. A value set again rather than kept live is not
+/// rebased, nor onto a step nothing else reads.
+pub(crate) fn rebase_on_steps(func: &mut FunctionSsa) {
+    use crate::c5::codegen::ssa::liveness::{self, AT_END};
+    use crate::c5::codegen::ssa::mem2reg::{predecessors, successors};
+    use crate::c5::ir::BlockId;
+    let mut steps: Vec<(BlockId, ValueId, ValueId, i64)> = Vec::new();
+    for (b, block) in func.blocks.iter().enumerate() {
+        for q in block.inst_range.clone() {
+            let (p, k) = match func.insts[q as usize] {
+                Inst::BinopI {
+                    op: BinOp::Add,
+                    lhs,
+                    rhs_imm,
+                } => (lhs, rhs_imm),
+                Inst::BinopI {
+                    op: BinOp::Sub,
+                    lhs,
+                    rhs_imm,
+                } => match rhs_imm.checked_neg() {
+                    Some(k) => (lhs, k),
+                    None => continue,
+                },
+                _ => continue,
+            };
+            let set_again = |i: &Inst| crate::c5::codegen::ssa::remat::rematerializable(i, false);
+            if k != 0
+                && (p as usize) < func.insts.len()
+                && !set_again(&func.insts[p as usize])
+                && !steps.iter().any(|s| s.0 == b as BlockId && s.2 == p)
+            {
+                steps.push((b as BlockId, q, p, k));
+            }
+        }
+    }
+    // A step nothing reads would be set only for the rebased accesses.
+    let live = crate::c5::codegen::ssa::reg_alloc::compute_use_counts(func);
+    steps.retain(|s| live[s.1 as usize] > 0);
+    if steps.is_empty() {
+        return;
+    }
+    let stepped: alloc::collections::BTreeSet<ValueId> = steps.iter().map(|s| s.2).collect();
+    let (uses, def_block) = liveness::uses_of(func, &stepped);
+    let preds = predecessors(func);
+    let succs: Vec<Vec<BlockId>> = (func.blocks.iter())
+        .map(|b| {
+            successors(
+                &b.terminator,
+                &func.computed_goto_targets,
+                &func.jump_tables,
+            )
+        })
+        .collect();
+    let mut rewrites: Vec<(usize, ValueId, i32)> = Vec::new();
+    for &(b, q, p, k) in &steps {
+        let Some(us) = uses.get(&p) else {
+            continue;
+        };
+        let mut moved = Vec::new();
+        let rebasable = us.iter().all(|&(ub, at)| {
+            if ub != b || (at != AT_END && at <= q) {
+                return true;
+            }
+            let access = match func.insts.get(at as usize) {
+                Some(&Inst::Load {
+                    addr,
+                    disp,
+                    kind,
+                    align,
+                    pc_rel: false,
+                    ..
+                }) if addr == p => Some((disp, load_width(kind), align)),
+                Some(&Inst::Store {
+                    addr,
+                    disp,
+                    value,
+                    kind,
+                    align,
+                    pc_rel: false,
+                    ..
+                }) if addr == p && value != p => Some((disp, store_width(kind), align)),
+                _ => None,
+            };
+            access.is_some_and(|(disp, w, align)| {
+                let off = i64::from(disp) - k;
+                let ok = displacement_reaches(off, w, align != 0) && i32::try_from(off).is_ok();
+                if ok {
+                    moved.push((at as usize, q, off as i32));
+                }
+                ok
+            })
+        });
+        if !rebasable || moved.is_empty() {
+            continue;
+        }
+        let live = liveness::value_live_in(&preds, def_block[p as usize], us);
+        if succs[b as usize].iter().any(|&s| live[s as usize]) {
+            continue;
+        }
+        rewrites.extend(moved);
+    }
+    for (at, q, off) in rewrites {
+        match &mut func.insts[at] {
+            Inst::Load { addr, disp, .. } | Inst::Store { addr, disp, .. } => {
+                *addr = q;
+                *disp = off;
+            }
+            _ => unreachable!("an access"),
+        }
+    }
+}
+
+/// One round of the scaled-index and displacement folds; whether any
+/// access was rewritten.
+fn fold_round(func: &mut FunctionSsa) -> bool {
+    {
         let counts = use_counts(func);
         let scaled = foldable_scaled_addresses(func, &counts);
         let displaced = foldable_displaced_addresses(func, &counts);
-        let n = func.insts.len();
         let mut rewrites: Vec<(usize, Inst)> = Vec::new();
-        for idx in 0..n {
-            match &func.insts[idx] {
-                // A displacement already present means the address was
-                // folded once; leave it rather than compose for now.
+        for (idx, inst) in func.insts.iter().enumerate() {
+            match inst {
                 Inst::Load {
                     addr,
-                    disp: 0,
+                    disp,
                     kind,
                     volatile,
                     align,
                     ..
                 } => {
-                    if let (Some(width), Some(&(base, index, scale))) = (
-                        int_load_width(*kind),
+                    if let (0, Some(width), Some(&(base, index, scale))) = (
+                        *disp,
+                        scaled_load_width(*kind),
                         scaled.get(addr).filter(|_| *align == 0 && !*volatile),
                     ) {
                         debug_assert_eq!(scale, width);
@@ -591,12 +829,12 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
                                 abs_base: false,
                             },
                         ));
-                    } else if let Some(&(base, disp)) = displaced.get(addr) {
+                    } else if let Some(&(base, c)) = displaced.get(addr) {
                         rewrites.push((
                             idx,
                             Inst::Load {
                                 addr: base,
-                                disp,
+                                disp: (i64::from(*disp) + c) as i32,
                                 kind: *kind,
                                 volatile: *volatile,
                                 align: *align,
@@ -607,15 +845,16 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
                 }
                 Inst::Store {
                     addr,
-                    disp: 0,
+                    disp,
                     value,
                     kind,
                     volatile,
                     align,
                     ..
                 } => {
-                    if let (Some(width), Some(&(base, index, scale))) = (
-                        int_store_width(*kind),
+                    if let (0, Some(width), Some(&(base, index, scale))) = (
+                        *disp,
+                        scaled_store_width(*kind),
                         scaled.get(addr).filter(|_| *align == 0 && !*volatile),
                     ) {
                         debug_assert_eq!(scale, width);
@@ -631,12 +870,12 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
                                 abs_base: false,
                             },
                         ));
-                    } else if let Some(&(base, disp)) = displaced.get(addr) {
+                    } else if let Some(&(base, c)) = displaced.get(addr) {
                         rewrites.push((
                             idx,
                             Inst::Store {
                                 addr: base,
-                                disp,
+                                disp: (i64::from(*disp) + c) as i32,
                                 value: *value,
                                 kind: *kind,
                                 volatile: *volatile,
@@ -649,9 +888,11 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
                 _ => {}
             }
         }
+        let changed = !rewrites.is_empty();
         for (idx, inst) in rewrites {
             func.insts[idx] = inst;
         }
+        changed
     }
 }
 
@@ -715,7 +956,7 @@ mod tests {
     fn folded(insts: alloc::vec::Vec<Inst>) -> alloc::vec::Vec<Inst> {
         let n = insts.len() as u32;
         let mut funcs = vec![FunctionSsa {
-            inst_src: vec![(0, 0); insts.len()],
+            inst_src: vec![crate::c5::ir::InstSrc::default(); insts.len()],
             f32_values: vec![false; insts.len()],
             insts,
             blocks: vec![Block {
@@ -1008,6 +1249,56 @@ mod tests {
         assert!(matches!(shifted(true)[5], Inst::Load { addr: 4, .. }));
     }
 
+    /// `a[i] = b[i]` over doubles scales the index once for both arrays:
+    /// every reader of the shift is an address that folds, so both accesses
+    /// take the scaled-index form and the shift drops out with them.
+    #[test]
+    fn a_shift_every_reader_of_which_folds_drops_out() {
+        let mut insts = pointer_and_index();
+        insts.extend([
+            param(2, LoadKind::I64),
+            Inst::BinopI {
+                op: BinOp::Shl,
+                lhs: 2,
+                rhs_imm: 3,
+            },
+            add(0, 4),
+            add(3, 4),
+            load(6, LoadKind::F64),
+            store(5, 7, StoreKind::F64),
+        ]);
+        let out = folded(insts);
+        assert!(
+            matches!(
+                out[7],
+                Inst::LoadIndexed {
+                    base: 3,
+                    index: 2,
+                    scale: 8,
+                    kind: LoadKind::F64,
+                    ..
+                }
+            ),
+            "{:?}",
+            out[7]
+        );
+        assert!(
+            matches!(
+                out[8],
+                Inst::StoreIndexed {
+                    base: 0,
+                    index: 2,
+                    scale: 8,
+                    value: 7,
+                    kind: StoreKind::F64,
+                    ..
+                }
+            ),
+            "{:?}",
+            out[8]
+        );
+    }
+
     /// The address stays when a use is not a plain one-byte access or the
     /// access is wider than a byte and no shift supplies its scale.
     #[test]
@@ -1072,15 +1363,18 @@ mod tests {
         assert!(kept(&out, 4));
     }
 
-    /// The local forms carry the displacement and no alignment bound.
+    /// The local forms carry the displacement and no alignment bound, so
+    /// under `strict_align` an access with one keeps its address.
     #[test]
     fn a_local_address_folds_at_any_offset_and_natural_alignment() {
         let insts = vec![Inst::LocalAddr(-3)];
-        assert_eq!(folded_slot(&insts, 0, 0, 0), Some((-3, 0)));
-        assert_eq!(folded_slot(&insts, 0, 8, 0), Some((-3, 8)));
-        assert_eq!(folded_slot(&insts, 0, 0, 1), None);
+        assert_eq!(folded_slot(&insts, 0, 0, (8, 0), true), Some((-3, 0)));
+        assert_eq!(folded_slot(&insts, 0, 8, (8, 0), true), Some((-3, 8)));
+        assert_eq!(folded_slot(&insts, 0, 0, (8, 8), true), Some((-3, 0)));
+        assert_eq!(folded_slot(&insts, 0, 0, (8, 1), true), None);
+        assert_eq!(folded_slot(&insts, 0, 0, (8, 1), false), Some((-3, 0)));
         // Only a frame address folds; a computed one keeps its `Load`.
         let insts = vec![Inst::Imm(0)];
-        assert_eq!(folded_slot(&insts, 0, 0, 0), None);
+        assert_eq!(folded_slot(&insts, 0, 0, (8, 0), false), None);
     }
 }

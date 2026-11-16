@@ -34,35 +34,27 @@ Disassembly of section .text:
                	ldurb	w0, [x29, #-0x80]
                	orr	x0, x0, #0x1
                	sturb	w0, [x29, #-0x80]
-               	ldurb	w0, [x29, #-0x80]
                	orr	x0, x0, #0x80
                	sturb	w0, [x29, #-0x80]
-               	ldurb	w0, [x29, #-0x7f]
-               	orr	x0, x0, #0x1
-               	sturb	w0, [x29, #-0x7f]
-               	ldurb	w0, [x29, #-0x74]
-               	orr	x0, x0, #0x10
-               	sturb	w0, [x29, #-0x74]
-               	ldurb	w0, [x29, #-0x80]
+               	ldurb	w1, [x29, #-0x7f]
+               	orr	x1, x1, #0x1
+               	sturb	w1, [x29, #-0x7f]
+               	ldurb	w3, [x29, #-0x74]
+               	orr	x3, x3, #0x10
+               	sturb	w3, [x29, #-0x74]
                	tbnz	w0, #0x0, <addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldurb	w0, [x29, #-0x80]
-               	tbnz	w0, #0x7, <addr>
-               	mov	x0, #0x3                // =3
-               	add	sp, sp, #0x80
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	ldurb	w0, [x29, #-0x7f]
-               	tbnz	w0, #0x0, <addr>
+               	and	x1, x1, #0xff
+               	tbnz	w1, #0x0, <addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldurb	w0, [x29, #-0x74]
-               	tbnz	w0, #0x4, <addr>
+               	and	x3, x3, #0xff
+               	tbnz	w3, #0x4, <addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
@@ -73,64 +65,50 @@ Disassembly of section .text:
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldurb	w0, [x29, #-0x7a]
-               	tbz	w0, #0x2, <addr>
+               	ldurb	w4, [x29, #-0x7a]
+               	tbz	w4, #0x2, <addr>
                	mov	x0, #0x7                // =7
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldurb	w0, [x29, #-0x80]
-               	mov	x17, #0x81              // =129
-               	eor	x0, x0, x17
-               	cbz	w0, <addr>
+               	cmp	w0, #0x81
+               	b.eq	<addr>
                	mov	x0, #0xb                // =11
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldurb	w0, [x29, #-0x7f]
-               	eor	x0, x0, #0x1
-               	cbz	w0, <addr>
+               	cmp	w1, #0x1
+               	b.eq	<addr>
                	mov	x0, #0xc                // =12
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldurb	w0, [x29, #-0x74]
-               	eor	x0, x0, #0x10
-               	cbz	w0, <addr>
+               	cmp	w3, #0x10
+               	b.eq	<addr>
                	mov	x0, #0xd                // =13
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldurb	w0, [x29, #-0x80]
                	and	x0, x0, #0xffffffffffffff7f
                	sturb	w0, [x29, #-0x80]
-               	ldurb	w0, [x29, #-0x80]
                	tbz	w0, #0x7, <addr>
                	mov	x0, #0x15               // =21
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldurb	w0, [x29, #-0x80]
                	tbnz	w0, #0x0, <addr>
                	mov	x0, #0x16               // =22
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldurb	w0, [x29, #-0x7f]
-               	tbnz	w0, #0x0, <addr>
+               	ldurb	w1, [x29, #-0x7f]
+               	tbnz	w1, #0x0, <addr>
                	mov	x0, #0x17               // =23
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldurb	w0, [x29, #-0x80]
                	orr	x0, x0, #0x1
                	sturb	w0, [x29, #-0x80]
-               	ldurb	w0, [x29, #-0x80]
-               	tbnz	w0, #0x0, <addr>
-               	mov	x0, #0x18               // =24
-               	add	sp, sp, #0x80
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	mov	x1, #0x0                // =0
                	mov	x0, x1
                	strb	w1, [x2, x0]

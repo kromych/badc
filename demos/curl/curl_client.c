@@ -61,7 +61,7 @@ static int scenario_url(void)
     if(!u)
         return fail("curl_url alloc");
     /* CURLU_NON_SUPPORT_SCHEME so the structural parse succeeds whether or
-       not https is a compiled-in protocol (HTTP-only vs BearSSL builds). */
+       not https is a compiled-in protocol (HTTP-only vs TLS builds). */
     if(curl_url_set(u, CURLUPART_URL,
                     "https://bob@example.com:8443/dir/file?q=1&r=2",
                     CURLU_NON_SUPPORT_SCHEME)) {

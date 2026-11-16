@@ -106,13 +106,16 @@ fn elf_reloc_type_by_name(name: &str) -> Option<u32> {
         "R_AARCH64_PREL64" => 260,
         "R_AARCH64_PREL32" => 261,
         "R_AARCH64_PREL16" => 262,
+        "R_AARCH64_JUMP26" => 282,
+        "R_AARCH64_CALL26" => 283,
         _ => return None,
     })
 }
 
-/// Parse `.reloc offset, TYPE[, expression]`. The offset is measured from the
-/// start of the section the directive sits in, not from the location counter;
-/// the expression is a symbol with an optional constant addend, a bare
+/// Parse `.reloc offset, TYPE[, expression]`. The offset is a constant
+/// measured from the start of the section the directive sits in, or `.` and
+/// an optional constant, measured from the location counter, as GNU as takes
+/// both; the expression is a symbol with an optional constant addend, a bare
 /// constant (the section itself), or absent. The directive deposits no bytes.
 fn parse_reloc_directive(rest: &str) -> Result<AsmSectionItem, alloc::string::String> {
     let bad = || alloc::format!("inline asm: `.reloc {rest}` is not `offset, TYPE[, expr]`");
@@ -120,7 +123,22 @@ fn parse_reloc_directive(rest: &str) -> Result<AsmSectionItem, alloc::string::St
     let (Some(off), Some(ty)) = (args.next(), args.next()) else {
         return Err(bad());
     };
-    let offset = eval_const_expr(off).filter(|&v| (0..=u32::MAX as i64).contains(&v));
+    let off = off.trim();
+    let from_here = off.starts_with('.')
+        && off[1..]
+            .trim_start()
+            .chars()
+            .next()
+            .is_none_or(|c| c == '+' || c == '-');
+    let offset = match from_here {
+        true => match off[1..].trim() {
+            "" => Some(0),
+            rest => eval_const_expr(&alloc::format!("0{rest}")),
+        }
+        .and_then(|v| i32::try_from(v).ok())
+        .map(|v| v as u32 as i64),
+        false => eval_const_expr(off).filter(|&v| (0..=u32::MAX as i64).contains(&v)),
+    };
     let (Some(offset), Some(rtype)) = (offset, elf_reloc_type_by_name(ty)) else {
         return Err(bad());
     };
@@ -148,6 +166,7 @@ fn parse_reloc_directive(rest: &str) -> Result<AsmSectionItem, alloc::string::St
     };
     Ok(AsmSectionItem::Reloc {
         offset: offset as u32,
+        from_here,
         rtype,
         target,
         addend,
@@ -167,6 +186,7 @@ fn is_asm_sym_directive(tok: &str) -> bool {
             | ".hidden"
             | ".internal"
             | ".protected"
+            | ".variant_pcs"
             | ".private_extern"
             | ".type"
             | ".size"
@@ -188,6 +208,7 @@ fn asm_text_has_sym_directive(text: &str) -> bool {
         || text.contains(".hidden")
         || text.contains(".internal")
         || text.contains(".protected")
+        || text.contains(".variant_pcs")
         || text.contains(".private_extern")
         || text.contains(".type")
         || text.contains(".size")
@@ -1097,6 +1118,24 @@ pub(crate) fn parse_section_item(
         // `.cfi_*` describes unwind state to a DWARF consumer and deposits no
         // bytes in this section; it is carried to the frame-table builder,
         // which pairs it with the offset the materializer reaches it at.
+        // GNU as's `.def name; .scl n; .type n; .endef` block gives a COFF
+        // symbol its storage class and type, which the symbol's own
+        // definition and binding already decide here.
+        ".def" | ".scl" | ".endef" => Ok(AsmSectionItem::Bytes(alloc::vec::Vec::new())),
+        // `.seh_*` is a function's PE unwind information, carried as `.cfi_*`
+        // is, with the offset the materializer reaches it at.
+        _ if tok.starts_with(".seh_") => {
+            let ctx = AsmExprCtx {
+                resolve: &|_| None,
+                const_of: &|_| None,
+                lax_div: false,
+            };
+            let eval = |s: &str| eval_asm_value(s, &ctx).ok().and_then(|v| v.to_abs());
+            match cfi::parse_seh_directive(tok, rest.trim(), is_aarch64, &eval) {
+                Ok(op) => Ok(AsmSectionItem::Cfi(cfi::CfiOp::Seh(op))),
+                Err(m) => Err(alloc::format!("inline asm: {m}")),
+            }
+        }
         _ if tok.starts_with(".cfi_") => {
             // A frame operand is absolute: no leaf resolves, so an
             // expression naming a label folds to nothing and is rejected.
@@ -1148,6 +1187,15 @@ pub(crate) fn parse_section_item(
                 name: alloc::string::String::from(name),
                 vis,
             })
+        }
+        ".variant_pcs" if is_aarch64 => {
+            let name = rest.trim();
+            if !is_asm_symbol_name(name) {
+                return Err(alloc::format!("inline asm: bad `{tok}` operand `{rest}`"));
+            }
+            Ok(AsmSectionItem::VariantPcs(alloc::string::String::from(
+                name,
+            )))
         }
         ".reloc" => parse_reloc_directive(rest),
         // A `.set` / `.equ` names a symbol (`.set alias, target`, a unit-level
@@ -1476,6 +1524,10 @@ fn split_symbol_operand(rest: &str) -> (&str, &str) {
 /// an `STT_` spelling; badc's symbol model covers function, object, and
 /// untyped, and any other type is rejected.
 pub(crate) fn parse_type_directive(rest: &str) -> Result<AsmSectionItem, alloc::string::String> {
+    // COFF's `.type n` inside a `.def` block: see `.def`.
+    if !rest.is_empty() && rest.trim().bytes().all(|b| b.is_ascii_digit()) {
+        return Ok(AsmSectionItem::Bytes(alloc::vec::Vec::new()));
+    }
     let (name, ty) = split_symbol_operand(rest);
     if !is_asm_symbol_name(name) {
         return Err(alloc::format!("inline asm: bad `.type` symbol `{name}`"));

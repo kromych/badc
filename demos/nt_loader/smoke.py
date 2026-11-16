@@ -181,7 +181,7 @@ def run_codegen_canary(loader: Path, hello: Path) -> int:
     # And the gate-rejection status must be one of the documented
     # privilege-related codes. An AV-shaped status (0xC0000005)
     # or anything else means we got past the gate via a path we
-    # don't recognise.
+    # don't recognize.
     gate_line = next(
         (line for line in out.splitlines() if "NtCreateUserProcess failed:" in line),
         "",

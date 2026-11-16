@@ -7,7 +7,9 @@ The page shows the controls, a block per machine and the charts, and no prose:
 what the text below said is kept here, where it is read with the code.
 
 Each fixture under `tests/perf/` is compiled once by every compiler
-`tests/perf/run.py` finds on the machine and run three times. A run-time bar is
+`tests/perf/run.py` finds on the machine and run three times; on a Linux
+machine whose cores differ in capacity, every run is pinned to one fastest CPU,
+which the record names as `pinned_cpu`. A run-time bar is
 the median of the three times the program reports; a compile-time bar is the
 one compile; a size bar is the binary's size. Shorter is
 better in each chart. A bar carries its measured value and its multiple of
@@ -48,7 +50,7 @@ serves the runs as files.
   white-space: pre-wrap; overflow-wrap: break-word; }
 #perf .note { color: #57606a; font-size: 85%; margin: .3rem 0 1rem; }
 /* The site's stylesheet leaves a control at the engine's own defaults, which
-   is a different widget in each browser; these are the site's own colours. */
+   is a different widget in each browser; these are the site's own colors. */
 #perf .pick { display: flex; flex-wrap: wrap; gap: .4rem .5rem;
   align-items: center; margin: 0 0 1.2rem; }
 #perf .pick select, #perf .pick button { font: inherit; font-size: 90%;
@@ -255,7 +257,7 @@ serves the runs as files.
     return m;
   }
 
-  // The bar labelled against the rest of its chart. `badc -O` is the one the
+  // The bar labeled against the rest of its chart. `badc -O` is the one the
   // `vs badc -O` column of `tests/perf/run.py` uses; a chart that has no such
   // row takes its smallest bar instead and says which one it took.
   function reference(rows) {
@@ -700,7 +702,10 @@ The measurements come from the JSON mode of `tests/perf/run.py`, which
 compiles each fixture once, runs it three times and records the median of the
 run times the program reports, the compile's wall-clock and the size of the
 binary; the `benches` section beside it holds
-the CPython comparison's benchmark, on the Linux runners. `scripts/perf_publish.py`
+the CPython comparison's benchmark, on the Linux runners. Since 2906cb195d
+each bench is the median of nine rounds that interleave the builds, each run
+repeating the workload four times, so its values are about four times the
+earlier ones. `scripts/perf_publish.py`
 files a run under `runs/<sha[0:2]>/<sha[2:4]>/<sha>/<runner>.json` in the data
 repository, points `branches/<name>` at it and adds it to `index.json`.
 `tests/perf/*.c` states what each fixture exercises, and why the shape it takes

@@ -29,7 +29,7 @@
  * BZ_NO_STDIO turns off the stdio file API surface
  * (BZ2_bzReadOpen / BZ2_bzWriteOpen and friends) -- we only
  * need the buffer-to-buffer entry points, and the stdio API
- * pulls in `<sys/stat.h>` flavours that would fight the c5
+ * pulls in `<sys/stat.h>` flavors that would fight the c5
  * header set on Windows.
  *
  * Mirrors the layout of the sqlite / miniz / kissfft drivers:
@@ -44,7 +44,7 @@
 
 /* Provide the AssertH hook required by `BZ_NO_STDIO` builds.
  * Upstream bzip2 leaves this symbol to the embedder (the
- * stdio-disabled flavour can't do its own fprintf). We never
+ * stdio-disabled flavor can't do its own fprintf). We never
  * expect to trip a bzip2 internal assertion in the smoke
  * scenarios; if one fires, surface the code and exit hard. */
 void bz_internal_error(int errcode) {

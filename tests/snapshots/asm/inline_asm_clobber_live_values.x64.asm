@@ -104,11 +104,10 @@ Disassembly of section .text:
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	movslq	%esi, %rsi
                	leaq	(%rdi,%rdi,2), %rax
                	leaq	0x1(%rax), %r10
                	movq	%r10, 0x38(%rsp)
-               	testq	%rsi, %rsi
+               	testl	%esi, %esi
                	je	<addr>
                	xorl	%eax, %eax
                	xorl	%ecx, %ecx

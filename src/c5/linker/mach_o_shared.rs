@@ -20,10 +20,10 @@
 //!   file. The format is line-structured, so a purpose-built scanner
 //!   below reads it without a YAML dependency.
 //!
-//! C names carry the Mach-O leading underscore on disk; the readers
-//! strip one, matching the `MH_OBJECT` reader, so export names
-//! compare against link-level names directly, and keep the shipped
-//! spelling in `export_symbols` for the import that binds it.
+//! The readers name each export as the `MH_OBJECT` reader names a symbol
+//! ([`crate::c5::mach_o_name::name`]), so export names compare against
+//! link-level names directly, and keep the shipped spelling in
+//! `export_symbols` for the import that binds it.
 
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::format;
@@ -41,6 +41,7 @@ use crate::c5::diag::Code;
 const MODULE: &str = "linker::mach_o_shared";
 
 const MH_MAGIC_64: u32 = 0xFEED_FACF;
+const MH_EXECUTE: u32 = 0x2;
 const MH_DYLIB: u32 = 0x6;
 const MACH_HEADER_64_SIZE: usize = 32;
 
@@ -66,7 +67,7 @@ pub fn is_mach_o_dylib(bytes: &[u8]) -> bool {
 /// Read a dylib's install name and exported symbols. The install name
 /// comes from `LC_ID_DYLIB` (empty when absent -- the caller
 /// substitutes the file's base name); the exports are every terminal
-/// node of the dyld export trie, leading underscore stripped, with the
+/// node of the dyld export trie under badc's name for it, with the
 /// shipped spelling kept in `export_symbols`. The trie carries no
 /// object-vs-function distinction, so `data_exports` stays empty and a
 /// data reference relies on its GOT relocation kind.
@@ -78,6 +79,30 @@ pub fn parse_mach_o_dylib(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
             "not a 64-bit little-endian Mach-O dylib",
         ));
     }
+    parse_exports(bytes)
+}
+
+/// Read the executable a bundle loads into (ld64's `-bundle_loader`):
+/// its export trie, as a dylib's, lists what the bundle may bind to the
+/// main executable.
+pub fn parse_mach_o_loader(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
+    if bytes.len() < MACH_HEADER_64_SIZE
+        || u32le(bytes, 0) != Some(MH_MAGIC_64)
+        || u32le(bytes, 12) != Some(MH_EXECUTE)
+    {
+        return Err(link_err(
+            Code::MALFORMED_INPUT,
+            MODULE,
+            "not a 64-bit little-endian Mach-O executable",
+        ));
+    }
+    let mut lib = parse_exports(bytes)?;
+    lib.main_executable = true;
+    Ok(lib)
+}
+
+/// The install name and export trie of a 64-bit Mach-O image.
+fn parse_exports(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
     let need = |off: usize, what: &str| -> Result<u32, C5Error> {
         u32le(bytes, off).ok_or_else(|| {
             link_err(
@@ -185,20 +210,21 @@ pub fn parse_mach_o_dylib(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
         export_symbols,
         export_versions: alloc::collections::BTreeMap::new(),
         from_image: true,
+        main_executable: false,
         export_ordinals: Default::default(),
+        export_hints: Default::default(),
         references: Default::default(),
         protected_exports: Default::default(),
     })
 }
 
-/// The C name of each shipped symbol and, where the two differ, the
-/// symbol itself: one leading underscore is the Mach-O spelling of a C
-/// identifier, and the import must name what the loader resolves.
+/// badc's name of each shipped symbol and, where the two differ, the
+/// symbol itself: the import must name what the loader resolves.
 fn c_names(symbols: BTreeSet<String>) -> (BTreeSet<String>, BTreeMap<String, String>) {
     let mut exports = BTreeSet::new();
     let mut export_symbols = BTreeMap::new();
     for symbol in symbols {
-        let name = symbol.strip_prefix('_').unwrap_or(&symbol).to_string();
+        let name = crate::c5::mach_o_name::name(&symbol).into_owned();
         if name != symbol {
             export_symbols.insert(name.clone(), symbol);
         }
@@ -309,7 +335,7 @@ pub fn is_tbd(bytes: &[u8]) -> bool {
 /// One `!tapi-tbd` document after scanning: its install name, the
 /// `<arch>-<platform>` targets it covers, the reexported library
 /// install names, and the exported symbol names (targets already
-/// filtered, underscore not yet stripped).
+/// filtered, the symbols as shipped).
 struct TbdDoc {
     install_name: String,
     targets: Vec<String>,
@@ -413,7 +439,9 @@ pub fn parse_tbd(text: &str, arch: &str, platform: &str) -> Result<SharedLibrary
         export_symbols,
         export_versions: alloc::collections::BTreeMap::new(),
         from_image: true,
+        main_executable: false,
         export_ordinals: Default::default(),
+        export_hints: Default::default(),
         references: Default::default(),
         protected_exports: Default::default(),
     })
@@ -727,7 +755,8 @@ mod tests {
 
     /// Both trie-bearing load commands resolve, the trie round-trips
     /// through the image writer's builder, and names lose one leading
-    /// underscore while the shipped spelling is kept for the import.
+    /// underscore or are raw while the shipped spelling is kept for the
+    /// import.
     #[test]
     fn dylib_exports_read_from_either_trie_command() {
         let trie = build_trie(&[
@@ -742,7 +771,10 @@ mod tests {
             let lib = parse_mach_o_dylib(&img).expect("parse dylib");
             assert_eq!(lib.soname, "/usr/lib/libdemo.dylib");
             let names: Vec<&str> = lib.exports.iter().map(String::as_str).collect();
-            assert_eq!(names, ["dyld_stub_binder", "malloc", "print", "printf"]);
+            assert_eq!(
+                names,
+                ["\u{1}dyld_stub_binder", "malloc", "print", "printf"]
+            );
             let symbols: Vec<(&str, &str)> = lib
                 .export_symbols
                 .iter()
@@ -751,6 +783,7 @@ mod tests {
             assert_eq!(
                 symbols,
                 [
+                    ("\u{1}dyld_stub_binder", "dyld_stub_binder"),
                     ("malloc", "_malloc"),
                     ("print", "_print"),
                     ("printf", "_printf")
@@ -783,6 +816,9 @@ mod tests {
         exe[12..16].copy_from_slice(&2u32.to_le_bytes()); // MH_EXECUTE
         assert!(!is_mach_o_dylib(&exe));
         assert!(parse_mach_o_dylib(&exe).is_err());
+        // An executable is read as a bundle's loader, and a dylib is not.
+        assert!(parse_mach_o_loader(&exe).is_ok_and(|l| l.main_executable));
+        assert!(parse_mach_o_loader(&dylib("/usr/lib/x.dylib", &[], false)).is_err());
     }
 
     /// A malformed dylib is the user's input, not badc's invariant:

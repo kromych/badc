@@ -14,15 +14,8 @@ Disassembly of section .text:
                	brk	#0x1
 
 <is_ready>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	add	x0, x0, #0x38
                	ldaprb	w0, [x0]
-               	sturb	w0, [x29, #-0x8]
-               	ldurb	w0, [x29, #-0x8]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <main>:

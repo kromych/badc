@@ -30,7 +30,12 @@ void seekdir(DIR *dir, long loc);
 
 #include <sys/types.h>
 
+// The SDK's DIR is a 136-byte structure; glibc's is incomplete.
+#ifdef __APPLE__
+struct __c5_DIR { union { char __opaque[136]; long __align; }; };
+#else
 struct __c5_DIR { char __opaque[256]; };
+#endif
 typedef struct __c5_DIR DIR;
 
 // `struct dirent` -- the per-entry shape returned by `readdir`. The
@@ -40,8 +45,8 @@ typedef struct __c5_DIR DIR;
 // Linux at offset 19.
 #ifdef __APPLE__
 struct dirent {
-    unsigned long  d_ino;     /* offset  0 */
-    unsigned long  d_seekoff; /* offset  8 */
+    unsigned long long d_ino;     /* offset  0 */
+    unsigned long long d_seekoff; /* offset  8 */
     unsigned short d_reclen;  /* offset 16 */
     unsigned short d_namlen;  /* offset 18 */
     unsigned char  d_type;    /* offset 20 */
@@ -53,7 +58,7 @@ struct dirent {
     long           d_off;     /* offset  8 */
     unsigned short d_reclen;  /* offset 16 */
     unsigned char  d_type;    /* offset 18 */
-    char d_name[1024];        /* offset 19 */
+    char d_name[256];         /* offset 19 */
 };
 #endif
 
@@ -92,7 +97,7 @@ struct dirent {
 #pragma binding(libc::seekdir,  "seekdir")
 #endif
 
-DIR *opendir(char *path);
+DIR *opendir(const char *path);
 // POSIX: open a directory stream on an already-open descriptor.
 DIR *fdopendir(int fd);
 struct dirent *readdir(DIR *dir);

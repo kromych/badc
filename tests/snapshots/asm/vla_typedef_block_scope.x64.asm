@@ -136,23 +136,23 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
+               	subq	$0x10, %rsp
                	movl	$0x3, %edi
                	callq	<addr>
-               	movq	%rax, %rbx
-               	testl	%ebx, %ebx
+               	movq	%rax, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
                	movl	$0x28, %edi
                	callq	<addr>
-               	imulq	$0xa, %rax, %rbx
-               	testl	%ebx, %ebx
+               	imulq	$0xa, %rax, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
+               	movq	%rcx, 0x8(%rsp)
                	callq	<addr>
+               	movq	0x8(%rsp), %rcx
                	cmpl	$0x10, %eax
                	je	<addr>
-               	movl	$0x64, %ebx
-               	movq	%rbx, %rax
-               	popq	%rbx
+               	movl	$0x64, %ecx
+               	movq	%rcx, %rax
                	leave
                	retq

@@ -34,17 +34,15 @@ Disassembly of section .text:
                	movq	$0x0, (%rsp)
                	subq	$0x330, %rsp            # imm = 0x330
                	xorl	%eax, %eax
-               	leaq	-0x2330(%rbp), %rcx
                	movq	%rax, %rdx
                	andq	$0x7f, %rdx
-               	movb	%dl, (%rcx,%rax)
+               	movb	%dl, -0x2330(%rbp,%rax)
                	incq	%rax
                	cmpl	$0x2328, %eax           # imm = 0x2328
                	jl	<addr>
                	movl	$0x4d2, -0x8(%rbp)      # imm = 0x4D2
                	movzbq	-0x2330(%rbp), %rax
                	movzbq	-0x330(%rbp), %rcx
-               	movl	-0x8(%rbp), %edx
                	movsbq	%al, %rax
                	testl	%eax, %eax
                	jne	<addr>
@@ -54,17 +52,9 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	leave
                	retq
-               	cmpl	$0x4d2, %edx            # imm = 0x4D2
-               	je	<addr>
-               	movl	$0x4, %eax
-               	leave
-               	retq
                	xorl	%eax, %eax
                	leave
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	popq	%rbp
                	jmp	<addr>

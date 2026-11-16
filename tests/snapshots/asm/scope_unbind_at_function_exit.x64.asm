@@ -92,8 +92,8 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0xb, %eax
                	retq
-               	movl	<rip>, %eax # <addr>
-               	cmpl	$0x58, %eax
+               	movl	<rip>, %ecx # <addr>
+               	cmpl	$0x58, %ecx
                	je	<addr>
                	movl	$0xc, %eax
                	retq
@@ -102,19 +102,16 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0xd, %eax
                	retq
-               	movl	<rip>, %eax # <addr>
-               	cmpl	$0x58, %eax
+               	cmpl	$0x58, %ecx
                	je	<addr>
                	movl	$0xf, %eax
                	retq
-               	movl	<rip>, %eax # <addr>
                	movl	<rip>, %ecx # <addr>
-               	addq	%rcx, %rax
-               	cmpl	$0x6e, %eax
+               	addq	%rax, %rcx
+               	cmpl	$0x6e, %ecx
                	je	<addr>
                	movl	$0x10, %eax
                	retq
-               	movl	<rip>, %eax # <addr>
                	movl	<rip>, %ecx # <addr>
                	addq	%rcx, %rax
                	cmpl	$0x79, %eax

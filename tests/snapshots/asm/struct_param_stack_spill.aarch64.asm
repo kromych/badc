@@ -105,10 +105,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x8, x29, #0x20
-               	str	xzr, [x8]
-               	str	wzr, [x8, #0x8]
                	ldursw	x0, [x29, #-0x8]
+               	sub	x8, x29, #0x20
                	stur	w0, [x29, #-0x20]
                	mov	x2, #0x3                // =3
                	stur	w2, [x29, #-0x1c]

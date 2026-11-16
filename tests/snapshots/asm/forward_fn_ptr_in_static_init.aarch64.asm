@@ -18,8 +18,7 @@ Disassembly of section .text:
                	ret
 
 <times_three>:
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #1
                	ret
 
 <minus_seven>:

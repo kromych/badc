@@ -141,6 +141,24 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     newline();
 #endif
 
+#ifdef KERNEL_SEH
+    /* A `__try` scope in an image that imports nothing: its `__finally` runs
+     * on the way out and after `__leave`. */
+    int steps = 0;
+    __try {
+        steps = 1;
+    } __finally {
+        steps += 2;
+    }
+    __try {
+        __leave;
+    } __finally {
+        steps += 4;
+    }
+    print(steps == 7 ? "seh: finally ok" : "seh: finally wrong");
+    newline();
+#endif
+
     print("BADC-KERNEL-OK");
     newline();
     return EFI_SUCCESS;

@@ -268,7 +268,7 @@ impl Compiler {
         // that name's binding restores; the parameters record their own.
         let outer_prior = p.declarator_prior_shape.take();
         let outer_sizes = core::mem::take(&mut self.param_sizes);
-        let line = self.lex.line;
+        let at = self.site();
         self.tag_scopes.push();
         self.open_param_list_scope();
         let mut r = self.parse_function_params_inner();
@@ -276,18 +276,26 @@ impl Compiler {
             && params.form != ParamForm::Prototype
             && self.in_user_source()
         {
-            params.unprototyped = Some(self.note_unprototyped_list(line));
+            params.unprototyped = Some(self.note_unprototyped_list(at));
         }
         let enumerators = self.close_param_list_scope();
         let tags = self.tag_scopes.pop();
         for (name, id) in &tags {
+            // cl gives a tag a parameter list declares the enclosing scope
+            // (its warning C4115) instead of the list's own (C17 6.2.1p4).
+            if self.msvc {
+                if self.tag_scopes.find_in_current(name).is_none() {
+                    self.tag_scopes.bind(name, *id);
+                }
+                continue;
+            }
             if !self.structs[*id].is_anonymous {
                 let keyword = self.structs[*id].keyword();
                 let text = alloc::format!(
                     "`{keyword} {name}` declared inside parameter list will not be visible \
                      outside of this definition or declaration"
                 );
-                self.warn_at(Code::VISIBILITY, self.lex.line, text);
+                self.warn_at(Code::VISIBILITY, self.site(), text);
             }
         }
         let sizes = core::mem::replace(&mut self.param_sizes, outer_sizes);
@@ -319,15 +327,15 @@ impl Compiler {
     /// Record a parameter list that declares no prototype (C99 6.7.5.3p14)
     /// for gcc's `-Wstrict-prototypes`, reported with the declaration unless
     /// a cast's type name or a definition takes it back.
-    fn note_unprototyped_list(&mut self, line: usize) -> u32 {
+    fn note_unprototyped_list(&mut self, at: super::Site) -> u32 {
         let id = self.unprototyped_lists.last().map_or(0, |&(id, ..)| id + 1);
         self.unprototyped_lists
-            .push((id, self.lex.file.clone(), line));
+            .push((id, self.lex.file.clone(), at));
         id
     }
 
     /// A definition's own list: reported at the definition, and only when
-    /// no earlier declaration gave the function a prototype, as gcc does.
+    /// no earlier declaration gave the function a prototype.
     pub(super) fn claim_unprototyped_list(&mut self, params: &ParsedParams) {
         if let Some(id) = params.unprototyped {
             self.unprototyped_lists.retain(|&(i, ..)| i != id);
@@ -335,9 +343,9 @@ impl Compiler {
     }
 
     pub(super) fn report_unprototyped_lists(&mut self) {
-        for (_, file, line) in core::mem::take(&mut self.unprototyped_lists) {
+        for (_, file, at) in core::mem::take(&mut self.unprototyped_lists) {
             let text = alloc::string::String::from("function declaration is not a prototype");
-            self.warn_at_file(Code::STRICT_PROTOTYPES, &file, line, text);
+            self.warn_at_file(Code::STRICT_PROTOTYPES, &file, at, text);
         }
     }
 
@@ -351,13 +359,13 @@ impl Compiler {
         // the list keeps the one it saw.
         let outer_register = core::mem::take(&mut self.pending.saw_register_storage);
         let mut last_register = false;
-        // An empty list declares no prototype; `(void)` declares one with
-        // no parameters. A list is an identifier list until a parameter
-        // spells a type.
-        let mut form = if self.lex.tk == ')' {
-            ParamForm::Empty
-        } else {
-            ParamForm::IdentifierList
+        // An empty list declares no prototype before C23, and from C23 on
+        // the prototype `(void)` declares; a list is an identifier list until
+        // a parameter spells a type.
+        let mut form = match self.lex.tk == ')' {
+            true if self.std.prototypes_only() => ParamForm::Prototype,
+            true => ParamForm::Empty,
+            false => ParamForm::IdentifierList,
         };
         // `(void)` -- C's "no parameters" sigil. With `void` now
         // its own lexeme (`Token::Void`), the early-match below
@@ -398,7 +406,7 @@ impl Compiler {
             // (`__attribute__((unused)) int a`) or trailing its declarator.
             self.pending.attrs = super::DeclAttrs::default();
             let _ = self.take_base_spelling();
-            let param_line = self.lex.line;
+            let param_at = self.site();
             let (base, implicit_int) = if self.lex_is_type_start() {
                 form = ParamForm::Prototype;
                 let base = self.parse_decl_base_type()?;
@@ -496,7 +504,7 @@ impl Compiler {
                         fn_types.push((types.len(), f, depth));
                     }
                     if implicit_int {
-                        self.report_implicit_int(ImplicitInt::Declarator(usize::MAX), param_line)?;
+                        self.report_implicit_int(ImplicitInt::Declarator(usize::MAX), param_at)?;
                     }
                     self.ty = ty;
                     enum_tags.extend(base_enum_tag.map(|t| (types.len(), t)));
@@ -524,7 +532,7 @@ impl Compiler {
                     fn_types.push((types.len(), f, depth));
                 }
                 if implicit_int {
-                    self.report_implicit_int(ImplicitInt::Declarator(usize::MAX), param_line)?;
+                    self.report_implicit_int(ImplicitInt::Declarator(usize::MAX), param_at)?;
                 }
                 self.ty = ty;
                 enum_tags.extend(base_enum_tag.map(|t| (types.len(), t)));
@@ -547,7 +555,7 @@ impl Compiler {
             self.pending.param_decl_context = true;
             let (param_idx, mut full_ty, array_size, _) = self.parse_declarator(ty)?;
             if implicit_int {
-                self.report_implicit_int(ImplicitInt::Declarator(param_idx), param_line)?;
+                self.report_implicit_int(ImplicitInt::Declarator(param_idx), param_at)?;
             }
             // A parameter may carry a trailing attribute
             // (`T *op __attribute__((unused))`).
@@ -670,6 +678,13 @@ impl Compiler {
             }
         }
         self.pending.saw_register_storage = outer_register;
+        if form == ParamForm::IdentifierList && self.std.prototypes_only() {
+            return Err(self.compile_err(
+                Code::SYNTAX,
+                "an identifier list is no parameter list from C23 on, which removed \
+                 K&R function definitions; declare each parameter's type",
+            ));
+        }
         self.next()?;
         // A parameter whose type is an array typedef (`va_list` is
         // `__va_list_tag[1]` on the SysV/AAPCS ABIs) leaves the typedef-array

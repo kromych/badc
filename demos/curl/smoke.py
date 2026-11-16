@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""End-to-end smoke for badc against the curl 8.11.1 source.
+"""End-to-end smoke for badc against the curl 8.23.0 source.
 
 badc compiles the whole libcurl source tree (HTTP + file:// + WebSocket,
 threaded resolver, IPv6, no external dependencies) and the demo builds it
@@ -23,7 +23,6 @@ Override the badc binary via ``BADC`` (default ``target/release/badc[.exe]``).
 
 from __future__ import annotations
 
-import glob
 import http.server
 import os
 import shutil
@@ -36,7 +35,9 @@ from pathlib import Path
 
 CURL_DIR = Path(__file__).resolve().parent
 REPO_ROOT = CURL_DIR.parents[1]
-BEAR_DIR = CURL_DIR.parent / "bearssl"
+MBEDTLS_DIR = CURL_DIR / "mbedtls"
+# Both the library and libcurl's TLS units read the configuration.
+MBEDTLS_CONFIG = f'-DMBEDTLS_USER_CONFIG_FILE="{(CURL_DIR / "mbedtls_user_config.h").as_posix()}"'
 SRC = CURL_DIR / "src"
 INC = CURL_DIR / "include"
 WIN = sys.platform == "win32"
@@ -52,11 +53,10 @@ CURL_DISABLE = [
     "FTP", "TFTP", "TELNET", "DICT", "GOPHER", "POP3", "IMAP", "SMTP",
     "RTSP", "MQTT", "SMB", "LDAP", "LDAPS", "NTLM",
 ]
-# POSIX selects the hand-written curl_config.h via -DHAVE_CONFIG_H. Windows
-# leaves it undefined so curl_setup.h pulls curl's own lib/config-win32.h, and
-# defines __MINGW32__ so curl/system.h takes the LLP64 branch (correct
+# -DHAVE_CONFIG_H selects curl_config.h, which takes curl_config_win32.h on
+# Windows. There __MINGW32__ makes curl/system.h take the LLP64 branch (correct
 # curl_off_t) instead of the POSIX one.
-_CONFIG_DEFINES = ["-D__MINGW32__"] if WIN else ["-DHAVE_CONFIG_H"]
+_CONFIG_DEFINES = ["-DHAVE_CONFIG_H"] + (["-D__MINGW32__"] if WIN else [])
 # The client only includes the public <curl/curl.h>, whose system.h keys the
 # curl_off_t / curl_socket_t widths on __MINGW32__ on Windows. Without it the
 # __GNUC__ branch is taken, which resolves the types for x86_64 but leaves them
@@ -159,8 +159,7 @@ class LoopbackServer:
     """Threaded HTTP(S) server on 127.0.0.1 serving a fixed body at any path.
 
     Passing a (certfile, keyfile) pair wraps the listener in TLS, so the same
-    harness drives both the plain-HTTP flavours and the HTTPS (BearSSL /
-    system-TLS) lane."""
+    harness drives both the plain-HTTP flavors and the HTTPS lane."""
 
     def __init__(self, tls: tuple[str, str] | None = None) -> None:
         body = LOOPBACK_BODY.encode()
@@ -179,17 +178,6 @@ class LoopbackServer:
         self.httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         if tls is not None:
             ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-            # BearSSL negotiates TLS 1.2 at most with a fixed suite set. The
-            # platform default (notably Windows-Python's bundled OpenSSL) offers
-            # TLS 1.3 and a cipher list BearSSL can't match, so the handshake
-            # fails there while it succeeds on OpenSSL builds that still offer a
-            # compatible TLS 1.2 suite. Pin TLS 1.2 and an ECDHE-RSA-AES-GCM
-            # suite BearSSL implements so the handshake is identical on every
-            # host. Harmless on the lanes that already pass -- they negotiate the
-            # same suite today.
-            ctx.minimum_version = ssl.TLSVersion.TLSv1_2
-            ctx.maximum_version = ssl.TLSVersion.TLSv1_2
-            ctx.set_ciphers("ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384")
             ctx.load_cert_chain(tls[0], tls[1])
             self.httpd.socket = ctx.wrap_socket(self.httpd.socket, server_side=True)
         self.scheme = "https" if tls else "http"
@@ -209,14 +197,28 @@ class LoopbackServer:
         self.httpd.server_close()
 
 
+def find_openssl() -> str | None:
+    """The openssl command: on PATH, or on Windows the one Git for Windows
+    installs under its root."""
+    found = shutil.which("openssl")
+    git = shutil.which("git") if WIN and not found else None
+    if git:
+        root = Path(git).resolve().parents[1]
+        found = next((str(p) for p in (root / "usr" / "bin" / "openssl.exe",
+                                       root / "mingw64" / "bin" / "openssl.exe")
+                      if p.is_file()), None)
+    return found
+
+
 def make_self_signed_cert(work: Path) -> tuple[str, str] | None:
     """Generate a throwaway self-signed cert+key for 127.0.0.1 via openssl.
     Returns (certfile, keyfile), or None when openssl is unavailable."""
-    if not shutil.which("openssl"):
+    openssl = find_openssl()
+    if openssl is None:
         return None
     cert = work / "loopback_cert.pem"
     key = work / "loopback_key.pem"
-    r = run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-keyout", str(key),
+    r = run([openssl, "req", "-x509", "-newkey", "rsa:2048", "-keyout", str(key),
              "-out", str(cert), "-days", "2", "-nodes", "-subj", "/CN=127.0.0.1",
              "-addext", "subjectAltName=IP:127.0.0.1"], capture_output=True, text=True)
     if r.returncode != 0 or not cert.exists():
@@ -224,39 +226,42 @@ def make_self_signed_cert(work: Path) -> tuple[str, str] | None:
     return (str(cert), str(key))
 
 
-def build_bearssl_archive(badc: Path, work: Path) -> Path | None:
-    """Compile the vendored BearSSL sources into libbearssl.a."""
-    subprocess.run([sys.executable, str(BEAR_DIR / "setup.py")], check=True)
-    srcs = sorted(glob.glob(str(BEAR_DIR / "src" / "**" / "*.c"), recursive=True))
+def build_mbedtls_archive(badc: Path, work: Path) -> Path | None:
+    """Compile Mbed TLS's library units, in its default configuration less
+    what `mbedtls_user_config.h` turns off, into libmbedtls.a. `--gnu`
+    selects its GNU inline-assembly paths: the bignum multiply-accumulate
+    and, on x86-64, AES-NI."""
+    srcs = sorted((MBEDTLS_DIR / "library").glob("*.c"))
     if not srcs:
-        print("smoke FAIL: no BearSSL sources (setup.py)", file=sys.stderr)
+        print("smoke FAIL: no Mbed TLS sources (setup.py)", file=sys.stderr)
         return None
+    od = work / "mbedtls"
+    od.mkdir(exist_ok=True)
+    incs = [MBEDTLS_CONFIG, "-I", str(MBEDTLS_DIR / "include"),
+            "-I", str(MBEDTLS_DIR / "library")]
     objs = []
-    incs = ["-I", str(BEAR_DIR / "inc"), "-I", str(BEAR_DIR / "src")]
-    for i, src in enumerate(srcs):
-        obj = work / f"be_{i}.o"
-        # BearSSL auto-selects its RNG seeder: the Win32 CryptoAPI on Windows
-        # (needed for the TLS handshake), /dev/urandom on POSIX.
-        r = run([str(badc), "--gnu", *incs,
-                 "-c", "-o", str(obj), src], capture_output=True, text=True)
+    for src in srcs:
+        obj = od / (src.stem + ".o")
+        r = run([str(badc), "--gnu", *incs, "-c", "-o", str(obj), str(src)],
+                capture_output=True, text=True)
         if r.returncode != 0:
-            print(f"smoke FAIL: BearSSL {Path(src).name}\n{r.stderr[:500]}", file=sys.stderr)
+            print(f"smoke FAIL: Mbed TLS {src.name}\n{r.stderr[:500]}", file=sys.stderr)
             return None
         objs.append(obj)
-    archive = work / "libbearssl.a"
+    archive = od / "libmbedtls.a"
     if run([str(badc), "--ar", "-o", str(archive)] + [str(o) for o in objs],
            capture_output=True, text=True).returncode != 0:
-        print("smoke FAIL: libbearssl.a", file=sys.stderr)
+        print("smoke FAIL: libmbedtls.a", file=sys.stderr)
         return None
     return archive
 
 
-def build_tls_lane(badc: Path, work: Path, bearssl: Path, https_base: str) -> bool:
-    """Compile libcurl with USE_BEARSSL, link the driver against it plus
-    libbearssl, and run an HTTPS transfer against the TLS loopback."""
+def build_tls_lane(badc: Path, work: Path, mbedtls: Path, https_base: str) -> bool:
+    """Compile libcurl with USE_MBEDTLS, link the driver against it plus
+    libmbedtls, and run an HTTPS transfer against the TLS loopback."""
     od = work / "tls"
     od.mkdir(exist_ok=True)
-    defs = BASE_DEFINES + ["-DUSE_BEARSSL", "-I", str(BEAR_DIR / "inc")]
+    defs = BASE_DEFINES + ["-DUSE_MBEDTLS", MBEDTLS_CONFIG, "-I", str(MBEDTLS_DIR / "include")]
     objs = []
     for src in lib_sources():
         obj = od / (src.stem + ".o")
@@ -271,17 +276,17 @@ def build_tls_lane(badc: Path, work: Path, bearssl: Path, https_base: str) -> bo
            capture_output=True, text=True).returncode != 0:
         print("smoke FAIL: libcurl.a (TLS)", file=sys.stderr)
         return False
-    # Link against both archives (curl references BearSSL's br_* symbols).
+    # Link against both archives (curl references Mbed TLS's symbols).
     exe = od / f"curl_client_tls{EXE}"
     cmd = [str(badc), "--gnu", "-DCURL_STATICLIB", *CLIENT_PLATFORM_DEFINES,
            "-I", str(INC), "-I", str(CURL_DIR),
            str(CURL_DIR / "curl_client.c"), "-L", str(od), "-l", "curl",
-           "-L", str(bearssl.parent), "-l", "bearssl", "-o", str(exe)]
+           "-L", str(mbedtls.parent), "-l", "mbedtls", "-o", str(exe)]
     r = run(cmd, capture_output=True, text=True)
     if r.returncode != 0:
         print(f"smoke FAIL: link TLS client\n{r.stderr[:800]}", file=sys.stderr)
         return False
-    return run_and_check("bearssl-tls", exe, https_base)
+    return run_and_check("mbedtls-tls", exe, https_base)
 
 
 def run_and_check(label: str, exe: Path, base_url: str, env=None) -> bool:
@@ -391,29 +396,18 @@ def main() -> int:
         with LoopbackServer() as srv:
             ok &= build_and_run(badc, work, srv.base_url)
 
-        # HTTPS lane: the whole stack (libcurl + BearSSL TLS) is badc-built and
-        # fetches over TLS from a loopback server with a self-signed cert. The
-        # loopback server is Python's ssl module; on Windows that is the
-        # Windows-bundled OpenSSL, whose server-side handshake does not negotiate
-        # with BearSSL's TLS-1.2 suite set (a Python/OpenSSL-on-Windows harness
-        # limitation, not a badc defect -- the same badc-built curl+BearSSL
-        # client passes this lane on Linux and macOS). Skip it on Windows; the
-        # static / shared / system-curl lanes above still gate there.
-        if WIN:
-            print("smoke SKIP: BearSSL HTTPS lane not run on Windows -- the Python "
-                  "loopback TLS server (Windows OpenSSL) can't negotiate BearSSL's "
-                  "TLS-1.2 suites; the path is covered on Linux and macOS.")
+        # HTTPS lane: the whole stack (libcurl + Mbed TLS) is badc-built and
+        # fetches over TLS from a loopback server with a self-signed cert.
+        cert = make_self_signed_cert(work)
+        if cert is None:
+            print("smoke SKIP: openssl not found -- HTTPS (Mbed TLS) lane not run")
         else:
-            cert = make_self_signed_cert(work)
-            if cert is None:
-                print("smoke SKIP: openssl not found -- HTTPS (BearSSL) lane not run")
+            mbedtls = build_mbedtls_archive(badc, work)
+            if mbedtls is None:
+                ok = False
             else:
-                bearssl = build_bearssl_archive(badc, work)
-                if bearssl is None:
-                    ok = False
-                else:
-                    with LoopbackServer(tls=cert) as tsrv:
-                        ok &= build_tls_lane(badc, work, bearssl, tsrv.base_url)
+                with LoopbackServer(tls=cert) as tsrv:
+                    ok &= build_tls_lane(badc, work, mbedtls, tsrv.base_url)
         return 0 if ok else 1
 
 

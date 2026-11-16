@@ -91,25 +91,21 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	leaq	-0x10(%rbp), %r9
-               	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000
-               	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x10(%rbp)
-               	movabsq	$0x4002000000000000, %rax # imm = 0x4002000000000000
-               	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x8(%rbp)
+               	movsd	<rip>, %xmm0
+               	movsd	%xmm0, -0x10(%rbp)
+               	movsd	<rip>, %xmm0
+               	movsd	%xmm0, -0x8(%rbp)
                	movl	$0x1, %edi
                	movq	%r9, %r10
                	movsd	(%r10), %xmm0
                	movsd	0x8(%r10), %xmm1
                	movb	$0x2, %al
                	callq	<addr>
-               	movabsq	$0x400e000000000000, %rax # imm = 0x400E000000000000
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
-               	jp	<addr>
-               	jne	<addr>
+               	movsd	<rip>, %xmm1
                	xorl	%eax, %eax
+               	movl	$0x1, %ecx
+               	ucomisd	%xmm1, %xmm0
+               	cmovneq	%rcx, %rax
+               	cmovpq	%rcx, %rax
                	leave
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>

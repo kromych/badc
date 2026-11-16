@@ -13,24 +13,6 @@ Disassembly of section .text:
                	brk	#0x1
                	brk	#0x1
 
-<strtoimax>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0xa                // =10
-               	bl	<addr>
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-
-<strtoumax>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x10               // =16
-               	bl	<addr>
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp

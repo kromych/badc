@@ -16,9 +16,9 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x200
-               	sub	x0, x29, #0x200
+               	sub	sp, sp, #0x140
+               	sub	x0, x29, #0x138
                	bl	<addr>
-               	add	sp, sp, #0x200
+               	add	sp, sp, #0x140
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -69,14 +69,12 @@ Disassembly of section .text:
                	movq	%rcx, %r9
                	subq	%rdx, %r9
                	xorq	%r9, %rdx
-               	movslq	%edx, %rdx
                	leaq	<rip>, %r9 # <addr>
                	addq	%r9, %r8
-               	movslq	0x10(%r8), %r8
+               	movl	0x10(%r8), %r8d
                	imulq	%rdi, %rsi
-               	movslq	%esi, %rdi
-               	xorq	%r8, %rdi
-               	cmpq	%rdi, %rdx
+               	xorq	%rsi, %r8
+               	cmpl	%r8d, %edx
                	jne	<addr>
                	subq	%rsi, %rcx
                	leaq	<rip>, %rdx # <addr>

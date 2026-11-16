@@ -112,6 +112,15 @@ pub(crate) fn remap_block_ids(func: &mut FunctionSsa, new_id: &[BlockId]) {
         }
         func.block_seh = scopes;
     }
+    if !func.predicted.is_empty() {
+        let mut arms = alloc::vec![None; func.blocks.len()];
+        for (old, &new) in new_id.iter().enumerate() {
+            if let Some(slot) = arms.get_mut(new as usize) {
+                *slot = func.predicted.get(old).copied().flatten();
+            }
+        }
+        func.predicted = arms;
+    }
 }
 
 #[cfg(test)]
@@ -122,7 +131,7 @@ mod tests {
 
     fn func_with(insts: Vec<Inst>, blocks: Vec<Block>) -> FunctionSsa {
         FunctionSsa {
-            inst_src: vec![(0, 0); insts.len()],
+            inst_src: vec![crate::c5::ir::InstSrc::default(); insts.len()],
             f32_values: vec![false; insts.len()],
             insts,
             blocks,

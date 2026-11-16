@@ -50,14 +50,8 @@ Disassembly of section .text:
                	movl	$0x16, 0x6c(%rsp)
                	movq	$0x21, 0x40(%rsp)
                	movl	$0x2c, 0x80(%rsp)
-               	movsbq	(%rsp), %rcx
-               	cmpl	$0xb, %ecx
-               	jne	<addr>
                	movl	0x6c(%rsp), %ecx
                	cmpl	$0x16, %ecx
-               	jne	<addr>
-               	movq	0x40(%rsp), %rcx
-               	cmpq	$0x21, %rcx
                	jne	<addr>
                	leaq	0x40(%rsp), %rcx
                	andq	$0x3f, %rcx

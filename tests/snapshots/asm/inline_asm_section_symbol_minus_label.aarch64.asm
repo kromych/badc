@@ -24,12 +24,11 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldrh	w2, [x1, #0x8]
-               	mov	x17, #0x4d2             // =1234
-               	eor	x2, x2, x17
-               	cbnz	w2, <addr>
+               	cmp	w2, #0x4d2
+               	b.ne	<addr>
                	ldrh	w2, [x1, #0xa]
-               	eor	x2, x2, #0x7
-               	cbz	w2, <addr>
+               	cmp	w2, #0x7
+               	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp], #0x10
                	ret

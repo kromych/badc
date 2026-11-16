@@ -3,6 +3,12 @@
  * addend, and `adr` of a function -- each site resolved through a
  * per-instruction relocation. */
 
+#if defined(__APPLE__)
+#define CSYM(name) "_" name
+#else
+#define CSYM(name) name
+#endif
+
 static long s_qword = 0x0102030405060708;
 static short s_half = 0x1234;
 static char s_byte = 0x21;
@@ -16,47 +22,47 @@ __attribute__((used)) static int helper(void) { return 7; }
 /* The refused probe: an operand-reference base under `:lo12:`. */
 static int probe(void) {
     int v;
-    __asm__ volatile("adrp %x0, probe_target\n\t"
-                     "ldr %w0, [%x0, :lo12:probe_target]"
+    __asm__ volatile("adrp %x0, " CSYM("probe_target") "\n\t"
+                     "ldr %w0, [%x0, :lo12:" CSYM("probe_target") "]"
                      : "=r"(v));
     return v;
 }
 
 static long ldr_x(void) {
     long v;
-    __asm__("adrp %x0, s_qword\n\t"
-            "ldr %x0, [%x0, :lo12:s_qword]"
+    __asm__("adrp %x0, " CSYM("s_qword") "\n\t"
+            "ldr %x0, [%x0, :lo12:" CSYM("s_qword") "]"
             : "=r"(v));
     return v;
 }
 
 static int ldrh_h(void) {
     int v;
-    __asm__("adrp %x0, s_half\n\t"
-            "ldrh %w0, [%x0, :lo12:s_half]"
+    __asm__("adrp %x0, " CSYM("s_half") "\n\t"
+            "ldrh %w0, [%x0, :lo12:" CSYM("s_half") "]"
             : "=r"(v));
     return v;
 }
 
 static int ldrb_b(void) {
     int v;
-    __asm__("adrp %x0, s_byte\n\t"
-            "ldrb %w0, [%x0, :lo12:s_byte]"
+    __asm__("adrp %x0, " CSYM("s_byte") "\n\t"
+            "ldrb %w0, [%x0, :lo12:" CSYM("s_byte") "]"
             : "=r"(v));
     return v;
 }
 
 static int add_lo12_addend(void) {
     long p;
-    __asm__("adrp %x0, s_arr + 8\n\t"
-            "add %x0, %x0, :lo12:s_arr + 8"
+    __asm__("adrp %x0, " CSYM("s_arr") " + 8\n\t"
+            "add %x0, %x0, :lo12:" CSYM("s_arr") " + 8"
             : "=r"(p));
     return *(int *)p;
 }
 
 static void store_word(int v) {
-    __asm__("adrp x1, s_store\n\t"
-            "str %w0, [x1, :lo12:s_store]"
+    __asm__("adrp x1, " CSYM("s_store") "\n\t"
+            "str %w0, [x1, :lo12:" CSYM("s_store") "]"
             :
             : "r"(v)
             : "x1", "memory");
@@ -64,15 +70,15 @@ static void store_word(int v) {
 
 static int load_global(void) {
     int v;
-    __asm__("adrp %x0, g_sym_reloc_word\n\t"
-            "ldr %w0, [%x0, :lo12:g_sym_reloc_word]"
+    __asm__("adrp %x0, " CSYM("g_sym_reloc_word") "\n\t"
+            "ldr %w0, [%x0, :lo12:" CSYM("g_sym_reloc_word") "]"
             : "=r"(v));
     return v;
 }
 
 static long adr_helper(void) {
     long p;
-    __asm__("adr %x0, helper" : "=r"(p));
+    __asm__("adr %x0, " CSYM("helper") : "=r"(p));
     return p;
 }
 

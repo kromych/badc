@@ -70,15 +70,27 @@ fn build_and_run_outcome_bare(src: &str, stem: &str) -> RunOutcome {
 
 /// Emit `program` for macOS arm64, write, ad-hoc-sign, exec, classify.
 fn emit_sign_run(program: &crate::c5::Program, stem: &str, opts: NativeOptions) -> RunOutcome {
-    let bytes = match emit_native_with_options(program, Target::MacOSAarch64, opts) {
-        Ok(b) => b,
-        Err(e) => return RunOutcome::BuildError(format!("emit_native: {e}")),
-    };
+    match emit_native_with_options(program, Target::MacOSAarch64, opts) {
+        Ok(bytes) => sign_run(&bytes, stem),
+        Err(e) => RunOutcome::BuildError(format!("emit_native: {e}")),
+    }
+}
 
+/// [`emit_sign_run`] through the link the driver runs, which joins the
+/// on-demand runtime sources a fixture's library calls may need.
+fn link_sign_run(program: &crate::c5::Program, stem: &str, opts: NativeOptions) -> RunOutcome {
+    match super::link_executable_with_runtime(program, Target::MacOSAarch64, opts) {
+        Ok(bytes) => sign_run(&bytes, stem),
+        Err(e) => RunOutcome::BuildError(format!("link: {e}")),
+    }
+}
+
+/// Write the image `bytes`, ad-hoc-sign it, exec it, classify the outcome.
+fn sign_run(bytes: &[u8], stem: &str) -> RunOutcome {
     let path = super::unique_temp_path("badc-test", stem, ".bin");
     {
         let mut f = std::fs::File::create(&path).expect("create temp file");
-        f.write_all(&bytes).expect("write temp file");
+        f.write_all(bytes).expect("write temp file");
     }
     set_executable(&path);
     codesign(&path);
@@ -924,7 +936,11 @@ fn build_and_run_fixture_with_options(name: &str, opts: NativeOptions, suffix: &
     let src =
         std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
     let stem = name.trim_end_matches(".c");
-    build_and_run_outcome_with_options(&src, &format!("{stem}{suffix}"), opts)
+    let program = match Compiler::new(super::with_prelude(&src)).compile() {
+        Ok(p) => p,
+        Err(e) => return RunOutcome::BuildError(format!("compile: {e}")),
+    };
+    link_sign_run(&program, &format!("{stem}{suffix}"), opts)
 }
 
 /// Build a fixture, sign it, run it with the given args, and return
@@ -1062,68 +1078,6 @@ fn original_c4_compiles_and_runs_hello_natively() {
     );
 }
 
-/// libSystem exports no `strchrnul` / `memrchr` / `explicit_bzero`, so a
-/// macOS image takes them from `libc/lib/string_ext.c`, which joins the
-/// link only because the fixture leaves them undefined. `fixture_parity`
-/// emits one object and never links, so it cannot reach that path; this
-/// builds the fixture through the object-then-link writer instead.
-#[test]
-fn string_extensions_join_the_macos_link() {
-    let program = super::compile_str_bare_for(
-        &super::load_fixture("string_gnu_ext.c"),
-        Target::MacOSAarch64,
-    );
-    let bytes = super::link_executable_with_runtime(
-        &program,
-        Target::MacOSAarch64,
-        NativeOptions::default(),
-    )
-    .expect("link the fixture for MacOSAarch64");
-
-    let path = super::unique_temp_path("badc-test", "string-ext-link", ".bin");
-    std::fs::write(&path, &bytes).expect("write temp file");
-    set_executable(&path);
-    codesign(&path);
-    let output = super::output_when_not_busy(|| super::image_command(&path));
-    let _ = std::fs::remove_file(&path);
-    assert_eq!(
-        output.status.code(),
-        Some(0),
-        "string_gnu_ext.c must exit 0 once the bundled source is joined"
-    );
-}
-
-/// `copy_file_range` is a Linux system call with no libSystem export,
-/// so a macOS image takes the emulation from `libc/lib/unistd_ext.c`,
-/// which joins the link only because the fixture leaves the symbol
-/// undefined. Same reasoning as `string_extensions_join_the_macos_link`:
-/// `fixture_parity` emits one object and never links.
-#[test]
-fn unistd_extensions_join_the_macos_link() {
-    let program = super::compile_str_bare_for(
-        &super::load_fixture("copy_file_range_posix.c"),
-        Target::MacOSAarch64,
-    );
-    let bytes = super::link_executable_with_runtime(
-        &program,
-        Target::MacOSAarch64,
-        NativeOptions::default(),
-    )
-    .expect("link the fixture for MacOSAarch64");
-
-    let path = super::unique_temp_path("badc-test", "unistd-ext-link", ".bin");
-    std::fs::write(&path, &bytes).expect("write temp file");
-    set_executable(&path);
-    codesign(&path);
-    let output = super::output_when_not_busy(|| super::image_command(&path));
-    let _ = std::fs::remove_file(&path);
-    assert_eq!(
-        output.status.code(),
-        Some(0),
-        "copy_file_range_posix.c must exit 0 once the bundled source is joined"
-    );
-}
-
 /// Stack arguments past the scaled offsets reach their slots, at -O0 and -O.
 // Release-only: the call is large and its cost is in the emit, which
 // debug builds do not exercise for parity (see CLAUDE.md).
@@ -1196,6 +1150,22 @@ fn asm_reaches_an_imported_object_through_its_slot() {
     }
 }
 
+/// Asm text names a symbol as Mach-O spells it, and only a symbol takes
+/// badc's name: `.pushsection __DATA,__badc_words` keeps its segment and
+/// section names while `_pushed_word` is the C object `pushed_word`.
+#[test]
+fn a_pushed_section_keeps_its_segment_and_section_names() {
+    let src = r#"
+extern const int pushed_word[];
+__asm__(".pushsection __DATA,__badc_words\n.globl _pushed_word\n.p2align 2\n"
+        "_pushed_word: .long 42\n.popsection\n");
+int main(void) { return pushed_word[0] == 42 ? 0 : 1; }
+"#;
+    let outcome =
+        build_and_run_outcome_with_options(src, "pushed-section", NativeOptions::default());
+    assert!(outcome.matches(0), "{outcome:?}");
+}
+
 /// A `#pragma binding(data ...)` object the unit does not define is the C
 /// library's: the image binds every reference to it, asm operands included,
 /// and a definition under the binding's name is the unit's own object.
@@ -1206,7 +1176,7 @@ fn a_data_binding_reaches_the_library_object_or_the_units_definition() {
         extern char **my_env;
         int main(void) {
             char ***p;
-            __asm__("adrp %0, my_env\n\tadd %0, %0, :lo12:my_env" : "=r"(p));
+            __asm__("adrp %0, _my_env\n\tadd %0, %0, :lo12:_my_env" : "=r"(p));
             return !(p == &my_env && *p == environ && environ[0] != 0);
         }
     "#;

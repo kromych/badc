@@ -29,14 +29,13 @@ Disassembly of section .text:
                	ldursw	x1, [x29, #-0x8]
                	cmp	w1, #0x3
                	b.lt	<addr>
+               	mov	x1, #0x0                // =0
+               	mov	x2, #0x2                // =2
                	cmp	w0, #0x3
-               	b.ne	<addr>
-               	mov	x0, #0x0                // =0
+               	csel	x0, x1, x2, eq
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x2                // =2
-               	b	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

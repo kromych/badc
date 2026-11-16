@@ -15,12 +15,8 @@ fn ent_pc=2 n_params=2 variadic=false locals=0
     v9   Extend { value=v8, kind=I32 }                    -> x1
     v10  Extend { value=v8, kind=I32 }                    -> x1
     v11  BinopI { op=eq, lhs=v8, rhs_imm=0 }              -> x1
-    terminator Bnz { cond=v8, target=b2, fall=b1 }   (low word)   (exit_acc=v11)
+    terminator Bnz { cond=v8, target=b1, fall=b2 }   (low word)   (exit_acc=v11)
   block 1  start_pc=0
-    v12  Imm(0)                                           -> x0
-    v13  Imm(-14)                                         -> x0
-    terminator Return(v13)   (exit_acc=v13)
-  block 2  start_pc=0
     v14  InlineAsm { template="stac", ops=0, args=[] }    -> -
     v15  Imm(1)                                           -> x0
     v16  Imm(0)                                           -> x0
@@ -29,6 +25,10 @@ fn ent_pc=2 n_params=2 variadic=false locals=0
     v19  InlineAsm { template="clac", ops=0, args=[] }    -> -
     v20  Imm(0)                                           -> x0
     terminator Return(v20)   (exit_acc=v20)
+  block 2  start_pc=0
+    v12  Imm(0)                                           -> x0
+    v13  Imm(-14)                                         -> x0
+    terminator Return(v13)   (exit_acc=v13)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=put_user_pair
 fn ent_pc=3 n_params=3 variadic=false locals=0
@@ -48,31 +48,31 @@ fn ent_pc=3 n_params=3 variadic=false locals=0
     v11  Extend { value=v10, kind=I32 }                   -> x1
     v12  Extend { value=v10, kind=I32 }                   -> x1
     v13  BinopI { op=eq, lhs=v10, rhs_imm=0 }             -> x1
-    terminator Bnz { cond=v10, target=b2, fall=b1 }   (low word)   (exit_acc=v13)
+    terminator Bnz { cond=v10, target=b1, fall=b5 }   (low word)   (exit_acc=v13)
   block 1  start_pc=0
-    v23  Imm(0)                                           -> x0
-    v24  Imm(-14)                                         -> x0
-    terminator Return(v24)   (exit_acc=v24)
-  block 2  start_pc=0
     v25  InlineAsm { template="stac", ops=0, args=[] }    -> -
     v26  Imm(1)                                           -> x0
     v27  Imm(0)                                           -> x0
     v28  Imm(0)                                           -> x0
     v29  Imm(0)                                           -> x0
     v30  InlineAsm { template="1: movq %0, %1\n.pushsection __ex_table,\"a\"\n.long 1b - ., %l0 - .\n.popsection\n", ops=2, args=[v3, v1] } -> -
-    terminator AsmGoto { table=0 }   [b3, b5]
-  block 3  start_pc=0
+    terminator AsmGoto { table=0 }   [b2, b4]
+  block 2  start_pc=0
     v14  Imm(0)                                           -> x0
     v15  Imm(0)                                           -> x0
     v16  Imm(8)                                           -> x0
     v17  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x0
     v18  InlineAsm { template="1: movq %0, %1\n.pushsection __ex_table,\"a\"\n.long 1b - ., %l0 - .\n.popsection\n", ops=2, args=[v5, v17] } -> -
-    terminator AsmGoto { table=1 }   [b4, b5]
-  block 4  start_pc=0
+    terminator AsmGoto { table=1 }   [b3, b4]
+  block 3  start_pc=0
     v21  InlineAsm { template="clac", ops=0, args=[] }    -> -
     v22  Imm(0)                                           -> x0
     terminator Return(v22)   (exit_acc=v22)
-  block 5  start_pc=0
+  block 4  start_pc=0
     v19  InlineAsm { template="clac", ops=0, args=[] }    -> -
     v20  Imm(-14)                                         -> x0
     terminator Return(v20)   (exit_acc=v20)
+  block 5  start_pc=0
+    v23  Imm(0)                                           -> x0
+    v24  Imm(-14)                                         -> x0
+    terminator Return(v24)   (exit_acc=v24)

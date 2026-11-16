@@ -1,4 +1,5 @@
-// psapi.h -- process status API, the process-memory counters subset.
+// psapi.h -- process status API: the process-memory counters and the
+// module list.
 // Since PSAPI_VERSION 2 the SDK routes these through kernel32's K32*
 // exports; the binding goes there directly.
 
@@ -22,6 +23,8 @@ typedef struct _PROCESS_MEMORY_COUNTERS {
 
 #pragma dylib(kernel32, "kernel32.dll")
 #pragma binding(kernel32::GetProcessMemoryInfo, "K32GetProcessMemoryInfo")
+#pragma binding(kernel32::EnumProcessModules, "K32EnumProcessModules")
 
 BOOL GetProcessMemoryInfo(HANDLE Process, PPROCESS_MEMORY_COUNTERS ppsmemCounters, DWORD cb);
+BOOL EnumProcessModules(HANDLE hProcess, HMODULE *lphModule, DWORD cb, LPDWORD lpcbNeeded);
 #endif

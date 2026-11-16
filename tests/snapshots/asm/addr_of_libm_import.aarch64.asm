@@ -20,15 +20,15 @@ Disassembly of section .text:
                	ldr	x0, [x0, <lo12>]
                	movi	d0, #0000000000000000
                	blr	x0
-               	movi	d1, #0000000000000000
-               	fcmp	d0, d1
+               	fmov	d1, d0
+               	movi	d0, #0000000000000000
+               	fcmp	d1, d0
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
-               	fmov	d0, d1
                	blr	x0
                	fmov	d1, #1.00000000
                	fcmp	d0, d1
@@ -52,15 +52,15 @@ Disassembly of section .text:
                	ldr	x0, [x0, <lo12>]
                	movi	d0, #0000000000000000
                	blr	x0
-               	movi	d1, #0000000000000000
-               	fcmp	d0, d1
+               	fmov	d1, d0
+               	movi	d0, #0000000000000000
+               	fcmp	d1, d0
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
-               	fmov	d0, d1
                	blr	x0
                	fmov	d1, #1.00000000
                	fcmp	d0, d1

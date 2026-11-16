@@ -44,18 +44,17 @@ Disassembly of section .text:
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	je	<addr>
-               	leaq	<rip>, %rcx # <addr>
-               	movq	(%rcx,%rbx,8), %rdx
-               	movq	-0x8(%rbp), %rax
-               	cmpq	$0x186a0, %rax          # imm = 0x186A0
-               	movl	$0x1, %eax
-               	jl	<addr>
-               	movq	-0x8(%rbp), %rax
-               	cmpq	$0x19640, %rax          # imm = 0x19640
-               	setge	%al
-               	movzbq	%al, %rax
-               	addq	%rdx, %rax
-               	movq	%rax, (%rcx,%rbx,8)
+               	leaq	<rip>, %rax # <addr>
+               	movq	(%rax,%rbx,8), %rdx
+               	movq	-0x8(%rbp), %rcx
+               	movl	$0x1, %esi
+               	cmpq	$0x19640, %rcx          # imm = 0x19640
+               	setge	%dil
+               	movzbq	%dil, %rdi
+               	cmpq	$0x186a0, %rcx          # imm = 0x186A0
+               	cmovgeq	%rdi, %rsi
+               	leaq	(%rdx,%rsi), %rcx
+               	movq	%rcx, (%rax,%rbx,8)
                	leaq	<rip>, %rax # <addr>
                	movq	(%rax,%rbx,8), %rcx
                	movq	-0x8(%rbp), %rdx
@@ -85,13 +84,12 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	pushq	%r12
                	pushq	%rbx
-               	movslq	%edi, %r12
+               	movq	%rdi, %r12
                	movl	%r12d, <rip> # <addr>
                	movq	$0x0, <rip> # <addr>
                	movq	$0x0, <rip> # <addr>
                	movq	$0x0, <rip> # <addr>
                	movq	$0x0, <rip> # <addr>
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, <rip> # <addr>
                	testq	%rax, %rax
@@ -102,7 +100,7 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%ebx, %ebx
-               	testq	%r12, %r12
+               	testl	%r12d, %r12d
                	je	<addr>
                	movq	<rip>, %rdi # <addr>
                	leaq	<rip>, %rsi
@@ -125,13 +123,11 @@ Disassembly of section .text:
                	cmpl	$0xfa0, %ebx            # imm = 0xFA0
                	jl	<addr>
                	movq	<rip>, %rdi # <addr>
-               	xorl	%eax, %eax
                	callq	<addr>
                	xorl	%esi, %esi
                	leaq	-0x10(%rbp), %rdi
                	leaq	-<rip>, %rdx # <addr>
                	movq	%rsi, %rcx
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -146,21 +142,17 @@ Disassembly of section .text:
                	leaq	0x8(%rax), %rdi
                	xorl	%esi, %esi
                	leaq	-<rip>, %rdx # <addr>
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	movq	-0x10(%rbp), %rdi
                	xorl	%esi, %esi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	-0x8(%rbp), %rdi
                	xorl	%esi, %esi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movq	<rip>, %rdi # <addr>
-               	xorl	%eax, %eax
                	callq	<addr>
                	cmpq	$0x0, <rip> # <addr>
                	jne	<addr>
@@ -199,10 +191,8 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%ebx, %ebx
-               	leaq	-0xa0(%rbp), %r12
-               	xorl	%eax, %eax
                	callq	<addr>
-               	movq	%rax, (%r12,%rbx,8)
+               	movq	%rax, -0xa0(%rbp,%rbx,8)
                	testq	%rax, %rax
                	je	<addr>
                	incq	%rbx
@@ -224,9 +214,7 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%ebx, %ebx
-               	leaq	-0xa0(%rbp), %rax
-               	movq	(%rax,%rbx,8), %rdi
-               	xorl	%eax, %eax
+               	movq	-0xa0(%rbp,%rbx,8), %rdi
                	callq	<addr>
                	incq	%rbx
                	cmpl	$0x14, %ebx

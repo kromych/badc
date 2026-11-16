@@ -42,8 +42,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	movl	$0x7, %edi
                	callq	<addr>
-               	movl	$0x92000007, %r11d      # imm = 0x92000007
-               	cmpl	%r11d, %eax
+               	cmpl	$0x92000007, %eax       # imm = 0x92000007
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbp

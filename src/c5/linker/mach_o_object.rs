@@ -9,9 +9,9 @@
 //! instruction field and supplies it through a preceding
 //! `ARM64_RELOC_ADDEND`, and spells a label difference as an
 //! `ARM64_RELOC_SUBTRACTOR` / `ARM64_RELOC_UNSIGNED` pair, so both
-//! fold into the single addend AAELF64 carries. C names arrive with
-//! the Mach-O leading underscore, which the writer re-applies, so the
-//! reader strips one.
+//! fold into the single addend AAELF64 carries. Symbols take badc's
+//! names ([`crate::c5::mach_o_name::name`]), which the writer spells
+//! back.
 
 use alloc::collections::BTreeMap;
 use alloc::format;
@@ -27,9 +27,9 @@ use crate::c5::object::unwind_info::{UNWIND_ARM64_MODE_DWARF, UNWIND_ARM64_MODE_
 
 use super::link_err;
 use super::object::{
-    CompactUnwindEntry, EhFrameInput, EhFrameInputField, InputSection, NativeInitFunc,
-    NativeMachine, NativeObject, NativeReloc, NativeSymSection, NativeSymbol, STT_FUNC, STT_NOTYPE,
-    STT_OBJECT, SectionFamily, SymRef,
+    CompactUnwindEntry, EhFrameInput, EhFrameInputField, InitTable, InitTarget, InputSection,
+    NativeInitFunc, NativeMachine, NativeObject, NativeReloc, NativeSymSection, NativeSymbol,
+    STT_FUNC, STT_NOTYPE, STT_OBJECT, SectionFamily, SymRef,
 };
 use crate::c5::diag::Code;
 
@@ -94,6 +94,39 @@ pub fn is_mach_o_object(bytes: &[u8]) -> bool {
     bytes.len() >= MACH_HEADER_64_SIZE
         && u32le(bytes, 0) == Some(MH_MAGIC_64)
         && u32le(bytes, 12) == Some(MH_OBJECT)
+}
+
+/// The names `ranlib` indexes for a Mach-O object: each external symbol
+/// a section or `N_ABS` defines, spelled as the object spells it (the
+/// leading underscore kept), in table order. A common symbol is left
+/// out, as `ranlib` without `-c` leaves it.
+pub fn mach_o_archive_symbols(bytes: &[u8]) -> Result<Vec<String>, C5Error> {
+    let (_, _, (symoff, nsyms, stroff, strsize)) = read_load_commands(bytes)?;
+    let strtab = (bytes.get(stroff as usize..(stroff as usize).saturating_add(strsize as usize)))
+        .ok_or_else(|| {
+        link_err(
+            Code::MALFORMED_INPUT,
+            MODULE,
+            "LC_SYMTAB string table runs past end of file",
+        )
+    })?;
+    let mut names = Vec::new();
+    for i in 0..nsyms as usize {
+        let p = symoff as usize + i * NLIST_64_SIZE;
+        let n_strx = need_u32(bytes, p, "symbol")? as usize;
+        let n_type = *bytes.get(p + 4).ok_or_else(|| {
+            link_err(
+                Code::MALFORMED_INPUT,
+                MODULE,
+                "LC_SYMTAB symbol table runs past end of file",
+            )
+        })?;
+        if n_type & N_STAB == 0 && n_type & N_EXT != 0 && matches!(n_type & N_TYPE, N_SECT | N_ABS)
+        {
+            names.push(cstr(strtab, n_strx)?.to_string());
+        }
+    }
+    Ok(names)
 }
 
 fn u32le(bytes: &[u8], off: usize) -> Option<u32> {
@@ -530,8 +563,15 @@ pub fn parse_native_mach_o(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         unwind: Vec::new(),
         extern_data_names: Vec::new(),
         alternate_names: Vec::new(),
+        weak_aliases: Vec::new(),
+        export_aliases: Vec::new(),
+        includes: Vec::new(),
         comdats: Vec::new(),
         default_libs: Vec::new(),
+        mismatch_keys: Vec::new(),
+        section_merges: Vec::new(),
+        resources: Vec::new(),
+        export_forms: Vec::new(),
         debug_info: Vec::new(),
         debug_abbrev: Vec::new(),
         debug_line: Vec::new(),
@@ -1077,7 +1117,7 @@ fn decode_symbols(
             continue;
         }
         let name = cstr(strtab, n_strx)?;
-        let name = name.strip_prefix('_').unwrap_or(name).to_string();
+        let name = crate::c5::mach_o_name::name(name).into_owned();
         let ext = n_type & N_EXT != 0;
         let mut input_section = None;
         let (section, value, size) = match n_type & N_TYPE {
@@ -1267,17 +1307,15 @@ fn translate_relocs(
         }
         if is_init {
             init_entries.sort_by_key(|&(slot, _)| slot);
-            let is_destructor = kind == S_MOD_TERM_FUNC_POINTERS;
+            let table = match kind == S_MOD_TERM_FUNC_POINTERS {
+                true => InitTable::Fini(None),
+                false => InitTable::Init(None),
+            };
             out.init_funcs
-                .extend(
-                    init_entries
-                        .into_iter()
-                        .map(|(_, unit_text_offset)| NativeInitFunc {
-                            is_destructor,
-                            priority: None,
-                            unit_text_offset,
-                        }),
-                );
+                .extend(init_entries.into_iter().map(|(_, offset)| NativeInitFunc {
+                    table: table.clone(),
+                    target: InitTarget::Text(offset),
+                }));
         }
     }
     Ok(out)
@@ -1663,7 +1701,7 @@ mod tests {
     }
 
     #[test]
-    fn recognises_only_the_relocatable_filetype() {
+    fn recognizes_only_the_relocatable_filetype() {
         let obj = build(CPU_TYPE_ARM64, MH_OBJECT, &[], &[]);
         assert!(is_mach_o_object(&obj));
         let exe = build(CPU_TYPE_ARM64, 0x2, &[], &[]);
@@ -1901,10 +1939,14 @@ mod tests {
                 ("_zero", N_SECT | N_EXT, 2, 0, 8),
                 ("_abs", N_ABS | N_EXT, 0, 0, 0x1234),
                 ("ltmp0", N_SECT, 1, 0, 0),
+                // An asm label without the C underscore.
+                ("other_name", N_SECT | N_EXT, 1, 0, 0),
             ],
         ))
         .expect("parse");
         let by = |n: &str| o.symbols.iter().find(|s| s.name == n).expect(n).clone();
+        assert_eq!(by("\u{1}other_name").binding, STB_GLOBAL);
+        assert!(!o.symbols.iter().any(|s| s.name == "other_name"));
         let c = by("tentative");
         assert_eq!(c.section, NativeSymSection::Common);
         assert_eq!((c.value, c.size), (8, 32));
@@ -1914,7 +1956,7 @@ mod tests {
         assert_eq!(by("zero").value, 0);
         assert_eq!(by("abs").section, NativeSymSection::Abs);
         assert_eq!(by("abs").value, 0x1234);
-        assert_eq!(by("ltmp0").binding, STB_LOCAL);
+        assert_eq!(by("\u{1}ltmp0").binding, STB_LOCAL);
         assert_eq!(o.bss_size, 16);
         assert_eq!(by("tentative").kind, STT_OBJECT);
         assert_eq!(by("hidden").kind, STT_FUNC);
@@ -2126,8 +2168,8 @@ mod tests {
         ))
         .expect("parse");
         assert_eq!(o.init_funcs.len(), 1);
-        assert!(!o.init_funcs[0].is_destructor);
-        assert_eq!(o.init_funcs[0].unit_text_offset, 8);
+        assert_eq!(o.init_funcs[0].table, InitTable::Init(None));
+        assert_eq!(o.init_funcs[0].target, InitTarget::Text(8));
         assert!(o.data.is_empty());
     }
 

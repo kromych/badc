@@ -4,7 +4,7 @@
 // packed bit-field sits at the next bit, whatever unit it straddles; the PE
 // targets take the MS layout, where it takes a whole unit of its type at an
 // alignment of 1 (clang for the windows-msvc triples). Every write reads
-// back without disturbing a neighbour. Each failure returns a distinct code.
+// back without disturbing a neighbor. Each failure returns a distinct code.
 
 #include <stddef.h>
 #include <string.h>

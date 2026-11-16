@@ -11,7 +11,12 @@
 // C99 7.23.1p2: `<time.h>` declares `size_t`.
 #include <stddef.h>
 
+// The units of the target's `clock`: milliseconds in msvcrt and the UCRT.
+#ifdef __BADC_WINDOWS__
+#define CLOCKS_PER_SEC 1000
+#else
 #define CLOCKS_PER_SEC 1000000
+#endif
 
 // Per-target clockid_t values. POSIX leaves the integer assignments
 // implementation-defined and every libc picks its own; the constants
@@ -57,7 +62,7 @@
 #ifdef __BADC_WINDOWS__
 struct timespec {
     long long tv_sec;
-    long long tv_nsec;
+    long tv_nsec;
 };
 
 // The UCRT's <time.h> defines no `struct timeval`: the SDK's winsock.h and
@@ -91,26 +96,26 @@ struct tm {
     int tm_wday;
     int tm_yday;
     int tm_isdst;
-#ifndef _WIN32
+#ifdef __linux__
+    long tm_gmtoff;
+    const char *tm_zone;
+#elif !defined(_WIN32)
     long tm_gmtoff;
     char *tm_zone;
 #endif
 };
 
-// `time_t` and `clock_t` are 8-byte signed counts everywhere
-// 64-bit (Linux, macOS Darwin, Windows UCRT after Y2038
-// transitioned everything to `long long`). Storing them as
-// `int` means values past 2038 wrap silently; programs that
-// `time(NULL)` and arithmetic on the result lose 4 bytes.
-//
-// On Windows we're LLP64 (`long` = 32 bits), so these have to
-// be `long long` to keep 64-bit width and match the UCRT ABI.
-// On Linux/macOS LP64, `long` is already 64 bits.
+// `time_t` is a 64-bit signed count on every target (the UCRT's
+// `__time64_t`). `clock_t` is the C library's: `long`, 32 bits on
+// Windows, and `unsigned long` on Darwin.
 #ifdef __BADC_WINDOWS__
 typedef long long time_t;
-typedef long long clock_t;
 #else
 typedef long time_t;
+#endif
+#ifdef __APPLE__
+typedef unsigned long clock_t;
+#else
 typedef long clock_t;
 #endif
 
@@ -119,6 +124,7 @@ typedef long clock_t;
 #pragma binding(libc::time,          "_time")
 #pragma binding(libc::clock,         "_clock")
 #pragma binding(libc::clock_gettime, "_clock_gettime")
+#pragma binding(libc::timespec_get,  "_timespec_get")
 #pragma binding(libc::clock_settime, "_clock_settime")
 #pragma binding(libc::clock_getres,  "_clock_getres")
 #pragma binding(libc::nanosleep,     "_nanosleep")
@@ -147,6 +153,7 @@ typedef long clock_t;
 #pragma binding(libc::time,          "time")
 #pragma binding(libc::clock,         "clock")
 #pragma binding(libc::clock_gettime, "clock_gettime")
+#pragma binding(libc::timespec_get,  "timespec_get")
 #pragma binding(libc::clock_settime, "clock_settime")
 #pragma binding(libc::clock_getres,  "clock_getres")
 #pragma binding(libc::clock_nanosleep, "clock_nanosleep")
@@ -221,19 +228,29 @@ errno_t _strtime_s(char *_Buf, size_t _SizeInBytes);
 // POSIX: <time.h> defines clockid_t, as <sys/types.h> does.
 #ifndef __BADC_CLOCKID_T
 #define __BADC_CLOCKID_T
+// The SDK's is an enum of non-negative clocks, unsigned as gcc and clang
+// give such an enum.
+#ifdef __APPLE__
+typedef unsigned int clockid_t;
+#else
 typedef int clockid_t;
 #endif
+#endif
 
-// C99 7.23.2: time / clock / mktime return time_t / clock_t, which are
-// 64-bit. A return wider than the declared type is narrowed to it, so an
-// `int` declaration truncates: clock() overflows int after ~35 min of CPU
-// time (CLOCKS_PER_SEC == 1e6), and time_t past 2038 loses its high half.
+// C99 7.23.2: time / clock / mktime return time_t / clock_t. A return
+// wider than the declared type is narrowed to it, so an `int` declaration
+// truncates: a 64-bit clock() overflows int after ~35 min of CPU time
+// (CLOCKS_PER_SEC == 1e6), and time_t past 2038 loses its high half.
 // difftime takes two time_t by value; `int` parameters truncate them
 // before the subtraction. The time_t pointer parameters likewise carry a
 // 64-bit object, not an int.
 time_t time(time_t *out);
 clock_t clock(void);
 int clock_gettime(clockid_t clk_id, struct timespec *ts);
+// C17 7.27.2.5: the calendar time in `*ts` for the time base `TIME_UTC`;
+// libc/lib/time_ext.c defines it on Windows, whose msvcrt has none.
+#define TIME_UTC 1
+int timespec_get(struct timespec *ts, int base);
 #ifndef __APPLE__
 // Suspend until `request` (relative, or absolute under TIMER_ABSTIME);
 // `remain` receives the unslept interval on EINTR. libSystem has none.
@@ -250,7 +267,7 @@ int gettimeofday(struct timeval *restrict tv, void *restrict tz);
 double difftime(time_t t1, time_t t0);
 // C99 7.23.2.3: convert broken-down time to a `time_t`. The
 // caller's `struct tm` is updated in place (tm_wday / tm_yday and
-// any normalisation of out-of-range fields). Returns the seconds
+// any normalization of out-of-range fields). Returns the seconds
 // count or (time_t)-1 on failure.
 time_t mktime(struct tm *tm);
 struct tm *localtime(const time_t *t);

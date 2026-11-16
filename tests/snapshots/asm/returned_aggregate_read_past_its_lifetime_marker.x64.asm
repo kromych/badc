@@ -1,0 +1,45 @@
+
+returned_aggregate_read_past_its_lifetime_marker.x64:	file format elf64-x86-64
+
+Disassembly of section .text:
+
+<.text>:
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$<entry_off>, %esi
+               	callq	<addr>
+               	ud2
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+
+<k>:
+               	movswq	%si, %rsi
+               	movsbq	%dl, %rdx
+               	movl	$0x3, %eax
+               	movb	$0x0, <rip> # <addr>
+               	retq
+
+<main>:
+               	movq	<rip>, %rdx # <addr>
+               	movl	$0x3, %ecx
+               	xorl	%eax, %eax
+               	movb	%al, <rip> # <addr>
+               	movq	%rcx, (%rdx)
+               	movl	$0x1, %ecx
+               	movq	<rip>, %rdx # <addr>
+               	cmpq	$0x3, %rdx
+               	cmovneq	%rcx, %rax
+               	retq

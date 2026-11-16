@@ -30,15 +30,23 @@
 
 #ifdef __BADC_WINDOWS__
 typedef long long ssize_t;
-typedef long long off_t;
 typedef long long off64_t;
 typedef long long loff_t;
 #else
 typedef long ssize_t;
-typedef long off_t;
 typedef long off64_t;
 typedef long loff_t;
 #endif
+#ifndef __BADC_OFF_T
+#define __BADC_OFF_T
+// The file offset: the SDK's and msvcrt's 64-bit long long, glibc's long.
+#if defined(__BADC_WINDOWS__) || defined(__APPLE__)
+typedef long long off_t;
+#else
+typedef long off_t;
+#endif
+#endif
+
 typedef int pid_t;
 // glibc and Darwin make the user and group ids unsigned; the Windows CRT
 // defines neither.
@@ -64,8 +72,10 @@ typedef unsigned int mode_t;
 // matters in struct layout (it sits in stat and in libc runtime state):
 // 4 bytes on macOS (`int32_t`) and Windows (`unsigned int`), 8 on Linux
 // (glibc `__dev_t` is `unsigned long`).
-#if defined(__APPLE__) || defined(__BADC_WINDOWS__)
+#if defined(__APPLE__)
 typedef int dev_t;
+#elif defined(__BADC_WINDOWS__)
+typedef unsigned int dev_t;
 #else
 typedef unsigned long dev_t;
 #endif
@@ -91,16 +101,35 @@ typedef unsigned int u_int;
 typedef unsigned long u_long;
 typedef __INT64_TYPE__ quad_t;
 typedef __UINT64_TYPE__ u_quad_t;
+// The file serial number: msvcrt's _ino_t, the SDK's __uint64_t, glibc's
+// unsigned long.
 #ifdef __BADC_WINDOWS__
-typedef long long ino_t;
-typedef long long ino64_t;
+typedef unsigned short ino_t;
+typedef unsigned long long ino64_t;
+#elif defined(__APPLE__)
+typedef unsigned long long ino_t;
+typedef unsigned long long ino64_t;
 #else
-typedef long ino_t;
-typedef long ino64_t;
+typedef unsigned long ino_t;
+typedef unsigned long ino64_t;
 #endif
+// The link count and the I/O block size: the SDK's uint16_t and int32_t,
+// glibc's unsigned long and long on x86_64, unsigned int and int on aarch64.
+#if defined(__APPLE__)
+typedef unsigned short nlink_t;
+typedef int blksize_t;
+#elif defined(__linux__) && defined(__x86_64__)
+typedef unsigned long nlink_t;
+typedef long blksize_t;
+#elif defined(__linux__)
+typedef unsigned int nlink_t;
+typedef int blksize_t;
+#else
 typedef int nlink_t;
 typedef int blksize_t;
-#ifdef __BADC_WINDOWS__
+#endif
+// The block count: the SDK's __int64_t, glibc's long.
+#if defined(__BADC_WINDOWS__) || defined(__APPLE__)
 typedef long long blkcnt_t;
 typedef long long blkcnt64_t;
 #else
@@ -110,23 +139,38 @@ typedef long blkcnt64_t;
 // Unsigned 32-bit in glibc and Darwin; Winsock's socklen_t is `int`.
 #ifdef __BADC_WINDOWS__
 typedef int id_t;
-typedef int useconds_t;
+typedef unsigned int useconds_t;
 #else
 typedef unsigned int id_t;
 typedef unsigned int useconds_t;
 #endif
+#ifdef __linux__
+typedef long suseconds_t;
+#else
 typedef int suseconds_t;
+#endif
 #ifndef __BADC_CLOCKID_T
 #define __BADC_CLOCKID_T
+// The SDK's is an enum of non-negative clocks, unsigned as gcc and clang
+// give such an enum.
+#ifdef __APPLE__
+typedef unsigned int clockid_t;
+#else
 typedef int clockid_t;
 #endif
+#endif
 typedef int timer_id_t;
+// statvfs block and inode counts: the SDK's are 32-bit, glibc LP64's are
+// unsigned long.
 #ifdef __BADC_WINDOWS__
 typedef long long fsblkcnt_t;
 typedef long long fsfilcnt_t;
+#elif defined(__APPLE__)
+typedef unsigned int fsblkcnt_t;
+typedef unsigned int fsfilcnt_t;
 #else
-typedef long fsblkcnt_t;
-typedef long fsfilcnt_t;
+typedef unsigned long fsblkcnt_t;
+typedef unsigned long fsfilcnt_t;
 #endif
 #ifdef __BADC_WINDOWS__
 typedef int socklen_t;

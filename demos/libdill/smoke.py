@@ -14,8 +14,7 @@ Pipeline:
     linked against the archive, and run. Each is assert-based and
     must exit 0.
 
-Both -O0 and -O are exercised (with -UNDEBUG at -O so the predefined
-NDEBUG does not strip the tests' asserts). On x86-64 context switching
+Both -O0 and -O are exercised; the tests' asserts stay at -O. On x86-64 context switching
 runs upstream's native asm dill_setjmp/dill_longjmp and stack switch;
 elsewhere it runs sigsetjmp/siglongjmp (upstream's DILL_ARCH_FALLBACK)
 with the one-instruction inline-asm stack-pointer move setup.py adds in
@@ -82,7 +81,7 @@ def base_flags() -> list[str]:
 
 def build_and_run(badc: str, out: Path, optimize: bool) -> bool:
     label = "-O" if optimize else "-O0"
-    opt = ["-O", "-UNDEBUG"] if optimize else []
+    opt = ["-O"] if optimize else []
     flags = opt + base_flags()
 
     lib = out / "libdill.a"

@@ -30,7 +30,7 @@ const NO_BLOCK: BlockId = BlockId::MAX;
 const END: u32 = u32::MAX;
 
 /// Whether `inst` sets its value from its encoding alone, a TLS address where that is no call.
-fn rematerializable(inst: &Inst, tls_addr_is_call: bool) -> bool {
+pub(crate) fn rematerializable(inst: &Inst, tls_addr_is_call: bool) -> bool {
     match inst {
         Inst::Imm(_)
         | Inst::ImmData(_)
@@ -304,6 +304,25 @@ fn collect_uses(func: &FunctionSsa, layout: &Layout, cand: &[bool], reads: &[boo
     uses
 }
 
+/// Where a definition read at `at` goes: ahead of the reader, or of the
+/// condition in `block` whose flags a reading select takes, which no call
+/// separates from it.
+fn flags_reader_start(func: &FunctionSsa, layout: &Layout, block: BlockId, at: u32) -> u32 {
+    match func.insts[at as usize] {
+        Inst::Select { cond, .. }
+            if cond < at
+                && func.blocks[block as usize].inst_range.contains(&cond)
+                && layout.calls_in(cond, at) == 0
+                && crate::c5::codegen::passes::if_convert::flags_condition(
+                    &func.insts[cond as usize],
+                ) =>
+        {
+            cond
+        }
+        _ => at,
+    }
+}
+
 /// The runs of `uses` reached across a call; a value with such a run in a loop keeps every use.
 fn plan(func: &FunctionSsa, layout: &Layout, uses: &[Use]) -> Vec<Run> {
     let weights = block_weights(func);
@@ -350,7 +369,7 @@ fn plan(func: &FunctionSsa, layout: &Layout, uses: &[Use]) -> Vec<Run> {
             let at = if u.at == END {
                 end_position(func, layout, u.block)
             } else {
-                At::Before(u.at)
+                At::Before(flags_reader_start(func, layout, u.block, u.at))
             };
             // A reader that is a call ends the run: it clobbers what it read.
             let mut j = i + 1;
@@ -415,12 +434,13 @@ pub(crate) fn split_across_calls(func: &mut FunctionSsa, target: Target) {
                 at: runs[k].at,
                 inst: func.insts[m as usize].clone(),
                 is_f32: func.f32_values.get(m as usize).copied().unwrap_or(false),
+                copy_of: None,
             });
             members.push(m);
         }
     }
     first.push(ins.len());
-    let (rewrite, _undo) = super::tape::insert(func, &ins);
+    let rewrite = super::tape::insert(func, &ins);
     for (i, &k) in order.iter().enumerate() {
         let r = &runs[k];
         let ids = &rewrite.ids[first[i]..first[i + 1]];
@@ -486,7 +506,7 @@ mod tests {
     fn func_with(insts: Vec<Inst>, blocks: Vec<Block>) -> FunctionSsa {
         let n = insts.len();
         FunctionSsa {
-            inst_src: vec![(0, 0); n],
+            inst_src: vec![crate::c5::ir::InstSrc::default(); n],
             f32_values: vec![false; n],
             insts,
             blocks,

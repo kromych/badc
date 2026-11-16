@@ -85,43 +85,6 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	mov	x16, #0x4b800000        // =1266679808
-               	fmov	s0, w16
-               	fcmp	s0, s0
-               	b.eq	<addr>
-               	mov	x0, #0x9                // =9
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	adrp	x16, <page>
-               	ldr	d0, [x16]
-               	mov	x16, #0x4170000000000000 // =4715268809856909312
-               	fmov	d1, x16
-               	fcmp	d0, d1
-               	b.ne	<addr>
-               	mov	x0, #0xa                // =10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	adrp	x16, <page>
-               	ldr	d1, [x16, #0x8]
-               	adrp	x16, <page>
-               	ldr	d0, [x16, #0x10]
-               	fcmp	d0, d1
-               	b.ne	<addr>
-               	mov	x0, #0xb                // =11
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	fcmp	d0, d0
-               	b.eq	<addr>
-               	mov	x0, #0xc                // =12
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	adrp	x16, <page>
-               	ldr	d0, [x16, #0x18]
-               	fcmp	d0, d0
-               	b.eq	<addr>
-               	mov	x0, #0xd                // =13
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	mov	x0, #0x2                // =2
                	fmov	d0, #1.50000000
                	fmov	d1, #0.25000000
@@ -134,20 +97,13 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x1                // =1
                	adrp	x16, <page>
-               	ldr	d0, [x16, #0x10]
+               	ldr	d0, [x16]
                	bl	<addr>
                	adrp	x16, <page>
-               	ldr	d1, [x16, #0x10]
+               	ldr	d1, [x16]
                	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x10               // =16
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	adrp	x16, <page>
-               	ldr	s0, [x16, #0x20]
-               	fcmp	s0, s0
-               	b.eq	<addr>
-               	mov	x0, #0xf                // =15
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0

@@ -2,7 +2,7 @@
 // hashing of a small buffer via the TweetNaCl primitives. The hot path
 // is 64-bit integer mixing (adds, xors, rotations, shifts) with no I/O,
 // so the wall-clock reflects the codegen of the compression loop rather
-// than syscall or allocator behaviour. Self-times via bench_clock.h and
+// than syscall or allocator behavior. Self-times via bench_clock.h and
 // prints "in N ms".
 //
 // The TweetNaCl source is included directly so the fixture is a single

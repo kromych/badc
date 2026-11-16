@@ -14,38 +14,35 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	add	x1, x0, #0x8
                	mov	x0, #0x0                // =0
-               	add	x2, x1, #0x8
-               	ldr	x2, [x2, x0, lsl #3]
+               	ldr	x2, [x1, x0, lsl #3]
                	cbz	x2, <addr>
                	add	x0, x0, #0x1
-               	add	x2, x1, #0x8
-               	ldr	x2, [x2, x0, lsl #3]
+               	ldr	x2, [x1, x0, lsl #3]
                	cbnz	x2, <addr>
                	cbnz	w0, <addr>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	add	x1, x0, #0x8
                	mov	x0, #0x0                // =0
-               	add	x2, x1, #0x8
-               	ldr	x2, [x2, x0, lsl #3]
+               	ldr	x2, [x1, x0, lsl #3]
                	cbz	x2, <addr>
                	add	x0, x0, #0x1
-               	add	x2, x1, #0x8
-               	ldr	x2, [x2, x0, lsl #3]
+               	ldr	x2, [x1, x0, lsl #3]
                	cbnz	x2, <addr>
                	cmp	w0, #0x1
                	b.ne	<addr>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	add	x1, x0, #0x8
                	mov	x0, #0x0                // =0
-               	add	x2, x1, #0x8
-               	ldr	x2, [x2, x0, lsl #3]
+               	ldr	x2, [x1, x0, lsl #3]
                	cbz	x2, <addr>
                	add	x0, x0, #0x1
-               	add	x2, x1, #0x8
-               	ldr	x2, [x2, x0, lsl #3]
+               	ldr	x2, [x1, x0, lsl #3]
                	cbnz	x2, <addr>
                	cmp	w0, #0x2
                	b.eq	<addr>

@@ -25,47 +25,10 @@ Disassembly of section .text:
                	int3
                	int3
 
-<seven>:
-               	movl	$0x7, %eax
-               	retq
-
-<label_template>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movslq	%edi, %rdi
-               	leaq	-0x10(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	movups	(%rcx), %xmm14
-               	movups	%xmm14, (%rax)
-               	movq	(%rax,%rdi,8), %rax
-               	jmpq	*%rax
-               	movl	$0xa, %eax
-               	leave
-               	retq
-               	movl	$0x14, %eax
-               	leave
-               	retq
-
-<main>:
+<big_zero>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x200, %rsp            # imm = 0x200
-               	leaq	-0x10(%rbp), %rax
-               	movq	$0x0, (%rax)
-               	movl	$0x0, 0x8(%rax)
-               	leaq	<rip>, %rcx
-               	movq	(%rcx), %r10
-               	movq	%r10, (%rax)
-               	movl	0x8(%rcx), %r10d
-               	movl	%r10d, 0x8(%rax)
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
-               	movl	$0x9, -0x10(%rbp)
-               	xorl	%eax, %eax
-               	movl	%eax, -0xc(%rbp)
-               	movl	%eax, -0x8(%rbp)
-               	movl	%eax, -0x4(%rbp)
                	leaq	-0x200(%rbp), %rcx
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rcx)
@@ -100,20 +63,50 @@ Disassembly of section .text:
                	movups	%xmm14, 0x1d0(%rcx)
                	movups	%xmm14, 0x1e0(%rcx)
                	movups	%xmm14, 0x1f0(%rcx)
-               	cmpb	$0x0, (%rcx,%rax)
+               	xorl	%eax, %eax
+               	cmpb	$0x0, -0x200(%rbp,%rax)
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x200, %eax            # imm = 0x200
                	jl	<addr>
+               	movl	$0x1, %eax
+               	leave
+               	retq
+               	xorl	%eax, %eax
+               	leave
+               	retq
+
+<seven>:
+               	movl	$0x7, %eax
+               	retq
+
+<label_template>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x10, %rsp
+               	movslq	%edi, %rdi
                	leaq	-0x10(%rbp), %rax
                	leaq	<rip>, %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
-               	leaq	-<rip>, %rax # <addr>
-               	movq	%rax, -0x10(%rbp)
-               	movl	$0x0, -0x8(%rbp)
+               	movq	-0x10(%rbp,%rdi,8), %rax
+               	jmpq	*%rax
+               	movl	$0xa, %eax
+               	leave
+               	retq
+               	movl	$0x14, %eax
+               	leave
+               	retq
+
+<main>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	callq	<addr>
+               	testl	%eax, %eax
+               	jne	<addr>
+               	movl	$0x5, %eax
+               	popq	%rbp
+               	retq
                	callq	<addr>
                	cmpl	$0x7, %eax
                	jne	<addr>
@@ -122,21 +115,18 @@ Disassembly of section .text:
                	cmpl	$0xa, %eax
                	je	<addr>
                	movl	$0x8, %eax
-               	leave
+               	popq	%rbp
                	retq
                	movl	$0x1, %edi
                	callq	<addr>
                	cmpl	$0x14, %eax
                	je	<addr>
                	movl	$0x9, %eax
-               	leave
+               	popq	%rbp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	popq	%rbp
                	retq
                	movl	$0x7, %eax
-               	leave
-               	retq
-               	movl	$0x5, %eax
-               	leave
+               	popq	%rbp
                	retq

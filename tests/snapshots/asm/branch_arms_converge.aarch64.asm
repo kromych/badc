@@ -30,15 +30,14 @@ Disassembly of section .text:
                	ret
 
 <keeps_values>:
-               	sxtw	x1, w0
-               	mov	x0, #0x1                // =1
-               	cbz	x1, <addr>
-               	mov	x0, #0x2                // =2
+               	mov	x1, #0x1                // =1
+               	mov	x2, #0x2                // =2
+               	cmp	w0, #0x0
+               	csel	x0, x2, x1, ne
                	ret
 
 <keeps_store>:
-               	sxtw	x0, w0
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x1                // =1
                	str	w0, [x1]
                	mov	x0, #0x0                // =0

@@ -50,10 +50,12 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
-               	cmpq	%rcx, %rax
-               	jbe	<addr>
                	movq	%rax, %rdx
                	subq	%rcx, %rdx
+               	movq	%rcx, %rsi
+               	subq	%rax, %rsi
+               	cmpq	%rcx, %rax
+               	cmovbeq	%rsi, %rdx
                	cmpq	$0x10000, %rdx          # imm = 0x10000
                	jbe	<addr>
                	movl	$0x3, %eax
@@ -62,6 +64,3 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	popq	%rbp
                	retq
-               	movq	%rcx, %rdx
-               	subq	%rax, %rdx
-               	jmp	<addr>

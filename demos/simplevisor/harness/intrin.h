@@ -8,7 +8,10 @@
 
 #define SHV_HARNESS_SEGMENT_LIMIT 0x000FFFFFu
 
-static unsigned __segmentlimit(unsigned Selector) {
+/* A name of its own: on windows-x64 `__segmentlimit` is the compiler's
+ * intrinsic, which a definition does not replace. */
+static unsigned shv_harness_segment_limit(unsigned Selector) {
     (void)Selector;
     return SHV_HARNESS_SEGMENT_LIMIT;
 }
+#define __segmentlimit shv_harness_segment_limit

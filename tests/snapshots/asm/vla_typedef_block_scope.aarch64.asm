@@ -57,9 +57,8 @@ Disassembly of section .text:
                	cmp	w1, w3
                	b.ne	<addr>
                	ldrb	w1, [x2]
-               	mov	x17, #0x61              // =97
-               	eor	x1, x1, x17
-               	cbnz	w1, <addr>
+               	cmp	w1, #0x61
+               	b.ne	<addr>
                	add	x1, x2, x0
                	sub	x1, x1, x2
                	cmp	x1, x0

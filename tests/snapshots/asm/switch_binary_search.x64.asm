@@ -70,19 +70,13 @@ Disassembly of section .text:
 <classify_unsigned>:
                	cmpl	$0x7fffffff, %edi       # imm = 0x7FFFFFFF
                	jb	<addr>
-               	movl	$0x80000000, %r11d      # imm = 0x80000000
-               	movq	%rdi, %rax
-               	cmpl	%r11d, %edi
+               	cmpl	$0x80000000, %edi       # imm = 0x80000000
                	jb	<addr>
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	movq	%rdi, %rax
-               	cmpl	%r11d, %edi
+               	cmpl	$-0x1, %edi
                	jb	<addr>
                	movl	$0x5, %eax
                	retq
-               	movl	$0x80000000, %r11d      # imm = 0x80000000
-               	movq	%rdi, %rax
-               	cmpl	%r11d, %edi
+               	cmpl	$0x80000000, %edi       # imm = 0x80000000
                	je	<addr>
                	xorl	%eax, %eax
                	retq

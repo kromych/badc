@@ -25,33 +25,17 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	fmov	d1, #4.00000000
-               	fmov	d0, #2.00000000
-               	fdiv	d1, d1, d0
-               	fcmp	d1, d0
-               	b.eq	<addr>
-               	mov	x0, #0x2                // =2
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	mov	x0, #0x5                // =5
                	bl	<addr>
                	cmp	w0, #0xa
                	b.ne	<addr>
                	adrp	x0, <page>
-               	ldr	x1, [x0, #0x18]
+               	ldr	x1, [x0, #0x10]
                	mov	x0, #0x7                // =7
                	blr	x1
                	cmp	w0, #0xe
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	fmov	d1, #4.00000000
-               	fmov	d0, #2.00000000
-               	fdiv	d1, d1, d0
-               	fcmp	d1, d0
-               	b.eq	<addr>
-               	mov	x0, #0x5                // =5
                	ldp	x29, x30, [sp], #0x10
                	ret
                	fmov	d0, #8.00000000

@@ -26,13 +26,5 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
-               	movq	%rax, %xmm14
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	jp	<addr>
-               	je	<addr>
-               	movl	$0x1d, %eax
-               	retq
                	xorl	%eax, %eax
                	retq

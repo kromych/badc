@@ -1,6 +1,6 @@
 // Locks C99 6.7.8 -- an aggregate or union initializer is a
 // brace-enclosed list, and any member that is itself an
-// aggregate may be initialised with its own brace-enclosed
+// aggregate may be initialized with its own brace-enclosed
 // list. The fixture exercises array-of-struct fields nested
 // inside an outer struct initializer.
 //

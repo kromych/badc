@@ -90,7 +90,7 @@ fn add_contracts_in_either_operand_order() {
     }
 }
 
-/// A product with a second reader must still be materialised, so it
+/// A product with a second reader must still be materialized, so it
 /// does not contract.
 #[test]
 fn multi_use_product_stays() {

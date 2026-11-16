@@ -1,7 +1,7 @@
 //! End-to-end tests for the assembler driver, exercised through the
 //! actual badc binary.
 //!
-//! The surface follows gcc's: `.S` (and `.sx`) preprocess before
+//! The driver surface: `.S` (and `.sx`) preprocess before
 //! assembling and get `__ASSEMBLER__` predefined, `.s` is taken
 //! verbatim, `-c -o` names the object, the `-M` family describes the
 //! unit, and `-Wa,` / `-Xassembler` hand options to the assembler.
@@ -647,6 +647,37 @@ fn reloc_directive_places_a_relocation_of_the_named_type() {
     );
 }
 
+#[test]
+fn reloc_directive_offset_may_be_the_location_counter() {
+    // `.reloc .`, `. - 4` and `. + 4` measure from the location counter.
+    // GNU as 2.46.1 on this source emits, in `.rela.myrel`, the 32-bit
+    // pc-relative type at 8 with addend 0 and at 12 with 8, and the 64-bit
+    // absolute type at 20 with 1, on x86-64 and aarch64 alike.
+    let d = dir("reloc-here");
+    let (kind32, kind64, want32, want64) = if cfg!(target_arch = "aarch64") {
+        ("R_AARCH64_PREL32", "R_AARCH64_ABS64", 261, 257)
+    } else {
+        ("R_X86_64_PC32", "R_X86_64_64", 2, 1)
+    };
+    write(
+        &d,
+        "rel.s",
+        &format!(
+            "\t.section .myrel, \"a\"\n\t.globl tgt\n\t.quad 0\n\
+             \t.reloc ., {kind32}, tgt\n\t.quad 0\n\
+             \t.reloc . - 4, {kind32}, tgt + 8\n\
+             \t.reloc .+4, {kind64}, tgt + 1\n\t.quad 0\n"
+        ),
+    );
+    let target = format!("--target={TARGET}");
+    run_ok(&d, &["-q", "-c", &target, "rel.s", "-o", "rel.o"]);
+    let bytes = std::fs::read(d.join("rel.o")).unwrap();
+    assert_eq!(
+        relocs(&bytes, ".rela.myrel"),
+        [(8, want32, 0), (12, want32, 8), (20, want64, 1)]
+    );
+}
+
 /// `(offset, type, addend)` of every entry of a named RELA section.
 fn relocs(bytes: &[u8], want: &str) -> Vec<(u64, u32, i64)> {
     let u16at = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;
@@ -1271,7 +1302,7 @@ fn sse_quadword_move_refuses_a_special_register_operand() {
 }
 
 /// Opmask registers as first-class operands in a `.S` unit, where basic asm
-/// reads `%kN` under a single `%` as a register (extended asm keeps GCC's
+/// reads `%kN` under a single `%` as a register (extended asm keeps the GNU C
 /// `%k<N>` operand-modifier meaning). Bytes are GNU as 2.46.1's, and llvm-mc
 /// agrees on every instruction.
 #[test]
@@ -1492,10 +1523,10 @@ fn an_operand_difference_resolves_names_as_the_parse_defined_them() {
     );
 }
 
-/// gcc selects the preprocessor's predefines from the code model:
-/// `-m16` and `-m32` are i386 units, so `__i386__` is defined and
-/// `__x86_64__` is not. `-m16` is `-m32` code generation with a 16-bit
-/// default operand size, and gcc gives the two the same predefines.
+/// The preprocessor's predefines follow the code model: `-m16` and
+/// `-m32` are i386 units, so `__i386__` is defined and `__x86_64__` is
+/// not. `-m16` is `-m32` code generation with a 16-bit default operand
+/// size, and the two take the same predefines.
 #[test]
 fn m16_and_m32_preprocess_as_i386() {
     const SRC: &str = concat!(
@@ -1559,8 +1590,7 @@ fn m32_predefines_the_ilp32_data_model() {
 /// predefine pair narrows and a wide literal stages 16-bit elements, so
 /// an `unsigned short` array takes one (C99 6.7.8p15) where the default
 /// 4-byte `wchar_t` refuses it. `-fno-short-wchar` is the explicit
-/// default, as in gcc 16.1.1, and leaves the already-16-bit Windows
-/// targets alone.
+/// default and leaves the already-16-bit Windows targets alone.
 #[test]
 fn short_wchar_narrows_wchar_t_from_the_driver() {
     const PP: &str = concat!(
@@ -1630,8 +1660,7 @@ fn short_wchar_narrows_wchar_t_from_the_driver() {
 /// `-fsigned-char` / `-funsigned-char` reach the front end from the
 /// driver and move `__CHAR_UNSIGNED__` with the type, so `<limits.h>`
 /// and the compiler agree. Without either, the target ABI decides:
-/// unsigned on AArch64 ELF, signed elsewhere, as gcc 16.1.1 and
-/// clang 22.1.8 do on each.
+/// unsigned on AArch64 ELF, signed elsewhere.
 #[test]
 fn char_signedness_flags_reach_the_front_end() {
     const PP: &str = concat!(
@@ -1649,7 +1678,7 @@ fn char_signedness_flags_reach_the_front_end() {
         ("linux-x64", &["-fno-signed-char"][..], "plain unsigned"),
         ("linux-aarch64", &["-fsigned-char"][..], "plain signed"),
         ("linux-aarch64", &["-fno-unsigned-char"][..], "plain signed"),
-        // The last selection wins, as it does in gcc.
+        // The last selection wins.
         (
             "linux-x64",
             &["-funsigned-char", "-fsigned-char"][..],
@@ -1721,8 +1750,8 @@ fn the_code_model_macro_follows_mcmodel() {
     );
 }
 
-/// `-P` leaves the line markers out of `-E` output and nothing else, as
-/// gcc does; without `-E` it has no effect.
+/// `-P` leaves the line markers out of `-E` output and nothing else;
+/// without `-E` it has no effect.
 #[test]
 fn dash_p_drops_the_line_markers() {
     let d = dir("pp-no-markers");
@@ -1764,9 +1793,9 @@ fn preprocessed_output_compiles_again() {
     assert!(undefined.is_empty(), "{undefined:?}");
 }
 
-/// A `.i` unit is C that needs no preprocessing, as in gcc's suffix
-/// table: `-E` output compiles from one, and its text is not expanded a
-/// second time, so a `#define` in it names nothing.
+/// A `.i` unit is C that needs no preprocessing: `-E` output compiles
+/// from one, and its text is not expanded a second time, so a `#define`
+/// in it names nothing.
 #[test]
 fn a_dot_i_unit_compiles_without_preprocessing() {
     let d = dir("dot-i");
@@ -1791,8 +1820,8 @@ fn a_dot_i_unit_compiles_without_preprocessing() {
 }
 
 /// Which headers a unit opens depends on the predefine set, so the
-/// preprocess-only modes take the code model too, as gcc does. Refusing
-/// them would leave `-MM` describing a unit nobody builds.
+/// preprocess-only modes take the code model too. Refusing them would
+/// leave `-MM` describing a unit nobody builds.
 #[test]
 fn the_dependency_scan_follows_the_code_model() {
     let d = dir("m32-deps");
@@ -1854,8 +1883,8 @@ fn m16_selects_the_realmode_cpuid_check() {
     assert_eq!(text_bytes(&b), want, "the -m16 arm is the i386 one");
 }
 
-/// `-m16` / `-m32` name an x86 code model. gcc's AArch64 driver has no
-/// such option, and badc has neither an AArch32 encoder nor an AArch32
+/// `-m16` / `-m32` name an x86 code model. AArch64 has no such option,
+/// and badc has neither an AArch32 encoder nor an AArch32
 /// predefine set, so the flag is refused rather than producing an
 /// ELFCLASS32 AArch64 object.
 #[test]
@@ -2679,7 +2708,7 @@ fn a_set_alias_of_a_defined_name_takes_its_place() {
 }
 
 /// An `__attribute__((alias))` declarator's symbol takes the declarator's own
-/// linkage, as gcc 16.1 emits it: `static` binds it local,
+/// linkage: `static` binds it local,
 /// `__attribute__((weak))` weak, and external linkage global.
 #[test]
 fn an_attribute_alias_binds_as_its_declarator() {

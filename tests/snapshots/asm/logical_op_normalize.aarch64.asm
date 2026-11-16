@@ -14,10 +14,10 @@ Disassembly of section .text:
                	brk	#0x1
 
 <or_ll>:
-               	mov	x1, x0
-               	mov	x0, #0x1                // =1
-               	cbnz	x1, <addr>
-               	mov	x0, #0x0                // =0
+               	mov	x1, #0x1                // =1
+               	mov	x2, #0x0                // =0
+               	cmp	x0, #0x0
+               	csel	x0, x1, x2, ne
                	ret
 
 <or_rr>:
@@ -39,7 +39,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
                	adrp	x0, <page>
-               	ldrsw	x20, [x0, #0x18]
+               	ldrsw	x20, [x0, #0xc]
                	mov	x1, #0x0                // =0
                	mov	x0, x20
                	bl	<addr>

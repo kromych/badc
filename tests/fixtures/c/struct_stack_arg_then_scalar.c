@@ -5,7 +5,7 @@
    its source address; the callee must read the trailing scalar from the
    incoming offset past the struct, not from a plain eightbyte stride.
    The two compound-literal aggregates have an address only after they
-   are materialised, exercising the same marshal path. */
+   are materialized, exercising the same marshal path. */
 
 struct v {
     long u;

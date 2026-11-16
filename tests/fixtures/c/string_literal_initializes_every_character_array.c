@@ -2,7 +2,7 @@
  * initialized (C99 6.7.8p14, p15): a block-scope compound literal of
  * unknown size, which takes the string's length (p22), a member, bare,
  * braced or parenthesized, a row a string fills at a row boundary under
- * brace elision (p20), with constant and non-constant neighbours. Returns
+ * brace elision (p20), with constant and non-constant neighbors. Returns
  * 0. */
 #include <string.h>
 #include <wchar.h>

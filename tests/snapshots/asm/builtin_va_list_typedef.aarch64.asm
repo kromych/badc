@@ -291,20 +291,19 @@ Disassembly of section .text:
                	ldr	x3, [x29, #0x10]
                	mov	x0, #0x0                // =0
                	ldrb	w3, [x3]
-               	mov	x17, #0x74              // =116
-               	eor	x3, x3, x17
-               	cbnz	w3, <addr>
+               	cmp	w3, #0x74
+               	b.ne	<addr>
                	ldrb	w1, [x1]
-               	eor	x1, x1, #0x78
-               	cmp	w1, #0x0
+               	cmp	w1, #0x78
                	cset	x1, eq
                	cbz	x1, <addr>
                	fmov	d1, #2.50000000
                	fcmp	d0, d1
                	cset	x1, eq
-               	cbz	x1, <addr>
                	cmp	w2, #0x7
-               	cset	x0, eq
+               	cset	x2, eq
+               	cmp	x1, #0x0
+               	csel	x0, x2, x0, ne
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0xc0

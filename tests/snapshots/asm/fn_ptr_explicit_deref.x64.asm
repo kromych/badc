@@ -35,9 +35,8 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	leaq	-<rip>, %rax # <addr>
                	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
                	movl	$0x28, %edi
-               	callq	*%rax
+               	callq	<addr>
                	cmpl	$0x29, %eax
                	je	<addr>
                	movl	$0x3, %eax

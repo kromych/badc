@@ -13,37 +13,6 @@ Disassembly of section .text:
                	brk	#0x1
                	brk	#0x1
 
-<fill>:
-               	str	x20, [sp, #-0x20]!
-               	stp	x29, x30, [sp, #0x10]
-               	add	x29, sp, #0x10
-               	mov	x20, x0
-               	adrp	x0, <addr>
-               	add	x0, x0, <lo12>
-               	mov	x1, #0x1                // =1
-               	mov	x2, #0x10               // =16
-               	mov	x3, x20
-               	bl	<addr>
-               	cmp	x0, #0x10
-               	b.eq	<addr>
-               	mov	x0, #-0x1               // =-1
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x20, [sp], #0x20
-               	ret
-               	mov	x0, x20
-               	bl	<addr>
-               	sxtw	x0, w0
-               	cbz	x0, <addr>
-               	mov	x0, #-0x1               // =-1
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x20, [sp], #0x20
-               	ret
-               	mov	x0, x20
-               	bl	<addr>
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x20, [sp], #0x20
-               	ret
-
 <main>:
                	stp	x20, x21, [sp, #-0x60]!
                	stp	x22, x23, [sp, #0x10]
@@ -60,9 +29,15 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x60
                	ret
-               	mov	x0, x22
+               	adrp	x0, <addr>
+               	add	x0, x0, <lo12>
+               	mov	x1, #0x1                // =1
+               	mov	x2, #0x10               // =16
+               	mov	x3, x22
                	bl	<addr>
-               	mov	x21, x0
+               	cmp	x0, #0x10
+               	b.eq	<addr>
+               	mov	x21, #-0x1              // =-1
                	mov	x0, x23
                	bl	<addr>
                	mov	x20, x0
@@ -336,3 +311,13 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x60
                	ret
+               	mov	x0, x22
+               	bl	<addr>
+               	sxtw	x0, w0
+               	cbz	x0, <addr>
+               	mov	x21, #-0x1              // =-1
+               	b	<addr>
+               	mov	x0, x22
+               	bl	<addr>
+               	mov	x21, x0
+               	b	<addr>

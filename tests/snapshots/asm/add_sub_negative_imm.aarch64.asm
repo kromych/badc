@@ -30,8 +30,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldursw	x0, [x29, #-0x18]
-               	sub	x0, x0, #0xa
-               	cbz	w0, <addr>
+               	subs	w0, w0, #0xa
+               	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
@@ -62,8 +62,7 @@ Disassembly of section .text:
                	ret
                	ldursw	x0, [x29, #-0x18]
                	sub	x0, x0, #0xfff
-               	mov	x17, #-0xff5            // =-4085
-               	cmp	w0, w17
+               	cmn	w0, #0xff5
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0x20
@@ -71,8 +70,7 @@ Disassembly of section .text:
                	ret
                	ldursw	x0, [x29, #-0x18]
                	sub	x0, x0, #0x1, lsl #12   // =0x1000
-               	mov	x17, #-0xff6            // =-4086
-               	cmp	w0, w17
+               	cmn	w0, #0xff6
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	add	sp, sp, #0x20

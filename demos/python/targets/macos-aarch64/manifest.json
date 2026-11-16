@@ -244,6 +244,12 @@
 "includes": []
 },
 {
+"src": "Objects/lazyimportobject.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
 "src": "Objects/listobject.c",
 "class": "core",
 "defines": [],
@@ -316,6 +322,12 @@
 "includes": []
 },
 {
+"src": "Objects/sentinelobject.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
 "src": "Objects/setobject.c",
 "class": "core",
 "defines": [],
@@ -358,13 +370,31 @@
 "includes": []
 },
 {
-"src": "Objects/unicodeobject.c",
+"src": "Objects/unicode_format.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/unicode_formatter.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/unicode_writer.c",
 "class": "core",
 "defines": [],
 "includes": []
 },
 {
 "src": "Objects/unicodectype.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Objects/unicodeobject.c",
 "class": "core",
 "defines": [],
 "includes": []
@@ -648,6 +678,12 @@
 "includes": []
 },
 {
+"src": "Python/jit_publish.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
 "src": "Python/legacy_tracing.c",
 "class": "core",
 "defines": [],
@@ -768,6 +804,12 @@
 "includes": []
 },
 {
+"src": "Python/pystats.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
 "src": "Python/pythonrun.c",
 "class": "core",
 "defines": [],
@@ -793,6 +835,18 @@
 },
 {
 "src": "Python/specialize.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/slots.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
+"src": "Python/slots_generated.c",
 "class": "core",
 "defines": [],
 "includes": []
@@ -879,12 +933,6 @@
 "includes": []
 },
 {
-"src": "Python/formatter_unicode.c",
-"class": "core",
-"defines": [],
-"includes": []
-},
-{
 "src": "Python/fileutils.c",
 "class": "core",
 "defines": [],
@@ -909,6 +957,12 @@
 "includes": []
 },
 {
+"src": "Python/jit_unwind.c",
+"class": "core",
+"defines": [],
+"includes": []
+},
+{
 "src": "Python/remote_debugging.c",
 "class": "core",
 "defines": [],
@@ -918,7 +972,7 @@
 "src": "Python/dynload_shlib.c",
 "class": "core",
 "defines": [
-"SOABI=\"cpython-314-darwin\""
+"SOABI=\"cpython-315-darwin\""
 ],
 "includes": []
 },
@@ -942,12 +996,6 @@
 },
 {
 "src": "Modules/arraymodule.c",
-"class": "builtin",
-"defines": [],
-"includes": []
-},
-{
-"src": "Modules/_asynciomodule.c",
 "class": "builtin",
 "defines": [],
 "includes": []
@@ -989,6 +1037,12 @@
 "includes": []
 },
 {
+"src": "Modules/mathintegermodule.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
 "src": "Modules/_pickle.c",
 "class": "builtin",
 "defines": [],
@@ -1007,10 +1061,124 @@
 "includes": []
 },
 {
-"src": "Modules/_remote_debugging_module.c",
+"src": "Modules/_remote_debugging/module.c",
 "class": "builtin",
-"defines": [],
-"includes": []
+"defines": [
+"HAVE_ZSTD"
+],
+"includes": [
+"opt/homebrew/opt/zstd/include"
+]
+},
+{
+"src": "Modules/_remote_debugging/gc_stats.c",
+"class": "builtin",
+"defines": [
+"HAVE_ZSTD"
+],
+"includes": [
+"opt/homebrew/opt/zstd/include"
+]
+},
+{
+"src": "Modules/_remote_debugging/object_reading.c",
+"class": "builtin",
+"defines": [
+"HAVE_ZSTD"
+],
+"includes": [
+"opt/homebrew/opt/zstd/include"
+]
+},
+{
+"src": "Modules/_remote_debugging/code_objects.c",
+"class": "builtin",
+"defines": [
+"HAVE_ZSTD"
+],
+"includes": [
+"opt/homebrew/opt/zstd/include"
+]
+},
+{
+"src": "Modules/_remote_debugging/frames.c",
+"class": "builtin",
+"defines": [
+"HAVE_ZSTD"
+],
+"includes": [
+"opt/homebrew/opt/zstd/include"
+]
+},
+{
+"src": "Modules/_remote_debugging/frame_cache.c",
+"class": "builtin",
+"defines": [
+"HAVE_ZSTD"
+],
+"includes": [
+"opt/homebrew/opt/zstd/include"
+]
+},
+{
+"src": "Modules/_remote_debugging/threads.c",
+"class": "builtin",
+"defines": [
+"HAVE_ZSTD"
+],
+"includes": [
+"opt/homebrew/opt/zstd/include"
+]
+},
+{
+"src": "Modules/_remote_debugging/asyncio.c",
+"class": "builtin",
+"defines": [
+"HAVE_ZSTD"
+],
+"includes": [
+"opt/homebrew/opt/zstd/include"
+]
+},
+{
+"src": "Modules/_remote_debugging/binary_io_writer.c",
+"class": "builtin",
+"defines": [
+"HAVE_ZSTD"
+],
+"includes": [
+"opt/homebrew/opt/zstd/include"
+]
+},
+{
+"src": "Modules/_remote_debugging/binary_io_reader.c",
+"class": "builtin",
+"defines": [
+"HAVE_ZSTD"
+],
+"includes": [
+"opt/homebrew/opt/zstd/include"
+]
+},
+{
+"src": "Modules/_remote_debugging/subprocess.c",
+"class": "builtin",
+"defines": [
+"HAVE_ZSTD"
+],
+"includes": [
+"opt/homebrew/opt/zstd/include"
+]
+},
+{
+"src": "Modules/_remote_debugging/interpreters.c",
+"class": "builtin",
+"defines": [
+"HAVE_ZSTD"
+],
+"includes": [
+"opt/homebrew/opt/zstd/include"
+]
 },
 {
 "src": "Modules/_struct.c",
@@ -1069,6 +1237,12 @@
 "includes": [
 "Modules/_decimal/libmpdec"
 ]
+},
+{
+"src": "Modules/binascii.c",
+"class": "builtin",
+"defines": [],
+"includes": []
 },
 {
 "src": "Modules/md5module.c",
@@ -1297,6 +1471,12 @@
 "includes": []
 },
 {
+"src": "Modules/_asynciomodule.c",
+"class": "builtin",
+"defines": [],
+"includes": []
+},
+{
 "src": "Modules/atexitmodule.c",
 "class": "builtin",
 "defines": [],
@@ -1509,118 +1689,24 @@
 "includes": []
 },
 {
+"src": "Modules/getpath.c",
+"class": "core",
+"defines": [
+"PYTHONPATH=\"\"",
+"PREFIX=\"/usr/local\"",
+"EXEC_PREFIX=\"/usr/local\"",
+"VERSION=\"3.15\"",
+"VPATH=\"\"",
+"PLATLIBDIR=\"lib\"",
+"PYTHONFRAMEWORK=\"\""
+],
+"includes": []
+},
+{
 "src": "Python/frozen.c",
 "class": "core",
 "defines": [],
 "includes": []
-},
-{
-"src": "Modules/_hacl/Hacl_Hash_MD5.c",
-"class": "core",
-"defines": [
-"_BSD_SOURCE",
-"_DEFAULT_SOURCE"
-],
-"includes": [
-"Modules/_hacl",
-"Modules/_hacl/include"
-]
-},
-{
-"src": "Modules/_hacl/Hacl_Hash_SHA1.c",
-"class": "core",
-"defines": [
-"_BSD_SOURCE",
-"_DEFAULT_SOURCE"
-],
-"includes": [
-"Modules/_hacl",
-"Modules/_hacl/include"
-]
-},
-{
-"src": "Modules/_hacl/Hacl_Hash_SHA2.c",
-"class": "core",
-"defines": [
-"_BSD_SOURCE",
-"_DEFAULT_SOURCE"
-],
-"includes": [
-"Modules/_hacl",
-"Modules/_hacl/include"
-]
-},
-{
-"src": "Modules/_hacl/Hacl_Hash_SHA3.c",
-"class": "core",
-"defines": [
-"_BSD_SOURCE",
-"_DEFAULT_SOURCE"
-],
-"includes": [
-"Modules/_hacl",
-"Modules/_hacl/include"
-]
-},
-{
-"src": "Modules/_hacl/Hacl_Hash_Blake2s.c",
-"class": "core",
-"defines": [
-"_BSD_SOURCE",
-"_DEFAULT_SOURCE"
-],
-"includes": [
-"Modules/_hacl",
-"Modules/_hacl/include"
-]
-},
-{
-"src": "Modules/_hacl/Hacl_Hash_Blake2b.c",
-"class": "core",
-"defines": [
-"_BSD_SOURCE",
-"_DEFAULT_SOURCE"
-],
-"includes": [
-"Modules/_hacl",
-"Modules/_hacl/include"
-]
-},
-{
-"src": "Modules/_hacl/Lib_Memzero0.c",
-"class": "core",
-"defines": [
-"_BSD_SOURCE",
-"_DEFAULT_SOURCE"
-],
-"includes": [
-"Modules/_hacl",
-"Modules/_hacl/include"
-]
-},
-{
-"src": "Modules/_hacl/Hacl_HMAC.c",
-"class": "core",
-"defines": [
-"_BSD_SOURCE",
-"_DEFAULT_SOURCE"
-],
-"includes": [
-"Modules/_hacl",
-"Modules/_hacl/include"
-]
-},
-{
-"src": "Modules/_hacl/Hacl_Streaming_HMAC.c",
-"class": "core",
-"defines": [
-"_BSD_SOURCE",
-"_DEFAULT_SOURCE"
-],
-"includes": [
-"Modules/_hacl",
-"Modules/_hacl/include"
-]
 },
 {
 "src": "Modules/_decimal/libmpdec/basearith.c",
@@ -1763,6 +1849,122 @@
 ]
 },
 {
+"src": "Modules/_hacl/Hacl_Hash_MD5.c",
+"class": "core",
+"defines": [
+"_BSD_SOURCE",
+"_DEFAULT_SOURCE"
+],
+"includes": [
+"Modules/_hacl",
+"Modules/_hacl/include"
+]
+},
+{
+"src": "Modules/_hacl/Hacl_Hash_SHA1.c",
+"class": "core",
+"defines": [
+"_BSD_SOURCE",
+"_DEFAULT_SOURCE"
+],
+"includes": [
+"Modules/_hacl",
+"Modules/_hacl/include"
+]
+},
+{
+"src": "Modules/_hacl/Hacl_Hash_SHA2.c",
+"class": "core",
+"defines": [
+"_BSD_SOURCE",
+"_DEFAULT_SOURCE"
+],
+"includes": [
+"Modules/_hacl",
+"Modules/_hacl/include"
+]
+},
+{
+"src": "Modules/_hacl/Hacl_Hash_SHA3.c",
+"class": "core",
+"defines": [
+"_BSD_SOURCE",
+"_DEFAULT_SOURCE"
+],
+"includes": [
+"Modules/_hacl",
+"Modules/_hacl/include"
+]
+},
+{
+"src": "Modules/_hacl/Hacl_Hash_Blake2s.c",
+"class": "core",
+"defines": [
+"_BSD_SOURCE",
+"_DEFAULT_SOURCE"
+],
+"includes": [
+"Modules/_hacl",
+"Modules/_hacl/include"
+]
+},
+{
+"src": "Modules/_hacl/Hacl_Hash_Blake2b.c",
+"class": "core",
+"defines": [
+"_BSD_SOURCE",
+"_DEFAULT_SOURCE"
+],
+"includes": [
+"Modules/_hacl",
+"Modules/_hacl/include"
+]
+},
+{
+"src": "Modules/_hacl/Lib_Memzero0.c",
+"class": "core",
+"defines": [
+"_BSD_SOURCE",
+"_DEFAULT_SOURCE"
+],
+"includes": [
+"Modules/_hacl",
+"Modules/_hacl/include"
+]
+},
+{
+"src": "Modules/_hacl/Hacl_HMAC.c",
+"class": "core",
+"defines": [
+"_BSD_SOURCE",
+"_DEFAULT_SOURCE"
+],
+"includes": [
+"Modules/_hacl",
+"Modules/_hacl/include"
+]
+},
+{
+"src": "Modules/_hacl/Hacl_Streaming_HMAC.c",
+"class": "core",
+"defines": [
+"_BSD_SOURCE",
+"_DEFAULT_SOURCE"
+],
+"includes": [
+"Modules/_hacl",
+"Modules/_hacl/include"
+]
+},
+{
+"src": "Modules/expat/xcs.c",
+"class": "core",
+"defines": [],
+"includes": [
+"Modules/expat"
+]
+},
+{
 "src": "Modules/expat/xmlparse.c",
 "class": "core",
 "defines": [],
@@ -1785,25 +1987,5 @@
 "includes": [
 "Modules/expat"
 ]
-},
-{
-"src": "Modules/getpath.c",
-"class": "core",
-"includes": [],
-"defines": [
-"PREFIX=\"/usr/local\"",
-"EXEC_PREFIX=\"/usr/local\"",
-"PLATLIBDIR=\"lib\"",
-"VERSION=\"3.14\"",
-"VPATH=\"\"",
-"PYTHONPATH=\"\"",
-"PYTHONFRAMEWORK=\"\""
-]
-},
-{
-"src": "Modules/binascii.c",
-"class": "builtin",
-"defines": [],
-"includes": []
 }
 ]

@@ -27,7 +27,7 @@
 // written against: an unterminated `[` is a literal, an empty
 // alternation branch and an empty pattern are accepted, an ERE takes
 // stacked repetition operators, BRE `\|` is alternation, and an escaped
-// `/` does not open a new pathname component. Four glibc behaviours are
+// `/` does not open a new pathname component. Four glibc behaviors are
 // not reproduced, each a place where the strict reading and the BSD
 // libc agree against it: a `^` or `$` away from a pattern boundary is
 // an anchor rather than a newline assertion; REG_ICASE folds the

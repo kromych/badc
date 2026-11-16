@@ -14,7 +14,7 @@
 #define EFD_CLOEXEC   02000000
 #define EFD_NONBLOCK  00004000
 
-typedef unsigned long long eventfd_t;
+typedef unsigned long eventfd_t;
 
 #ifdef __linux__
 int eventfd(unsigned int initval, int flags);

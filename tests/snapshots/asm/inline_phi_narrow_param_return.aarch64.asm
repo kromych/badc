@@ -25,11 +25,10 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x32
                	b.lt	<addr>
+               	mov	x0, #0x0                // =0
+               	mov	x2, #0x1                // =1
                	mov	x17, #-0xdfba           // =-57274
                	movk	x17, #0xb8d7, lsl #16
                	cmp	x1, x17
-               	b.ne	<addr>
-               	mov	x0, #0x0                // =0
+               	csel	x0, x0, x2, eq
                	ret
-               	mov	x0, #0x1                // =1
-               	b	<addr>

@@ -2,8 +2,8 @@
 """End-to-end smoke for badc against the Monocypher 4.0.2 source.
 
 Builds monocypher.c + monocypher-ed25519.c + a hand-written
-driver through badc in four flavours (one invocation over every
-source / TU x -O / no-O) plus the archive flavour, and runs
+driver through badc in four flavors (one invocation over every
+source / TU x -O / no-O) plus the archive flavor, and runs
 each binary. Returns 0 on success, non-zero with a diagnostic
 on failure.
 

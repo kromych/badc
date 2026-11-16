@@ -2,7 +2,7 @@
 // internal linkage; the inline specifier permits the implementation
 // to inline the body at call sites. c5 treats `inline` as a no-op
 // function-specifier modifier (per the C99 "as if" rule -- the
-// observable behaviour matches a non-inlined call) and keeps the
+// observable behavior matches a non-inlined call) and keeps the
 // `static` internal-linkage attribute, so the function body is
 // emitted as a private definition in each TU that includes the
 // declaring header. Multi-TU builds therefore see one copy per TU,

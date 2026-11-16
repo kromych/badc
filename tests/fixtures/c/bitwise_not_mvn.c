@@ -1,5 +1,5 @@
 // Bitwise NOT `x ^ -1` folds to a single `mvn` on AArch64 instead of
-// materialising the all-ones constant and xoring. `volatile` keeps the
+// materializing the all-ones constant and xoring. `volatile` keeps the
 // operands runtime values. Returns 0 when every case matches the
 // reference.
 

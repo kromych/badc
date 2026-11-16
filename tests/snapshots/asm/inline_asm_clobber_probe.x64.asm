@@ -35,11 +35,10 @@ Disassembly of section .text:
                	movl	$0x0, %ebx
                	movl	$0x0, %ecx
                	movl	$0x0, %edx
-               	cmpl	$0x1234, %esi           # imm = 0x1234
-               	jne	<addr>
                	movl	$0x2a, %eax
+               	movl	$0x1, %ecx
+               	cmpl	$0x1234, %esi           # imm = 0x1234
+               	cmovneq	%rcx, %rax
                	popq	%rbx
                	leave
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>

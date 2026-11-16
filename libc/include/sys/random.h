@@ -1,4 +1,5 @@
 #pragma once
+#include <sys/types.h>
 
 // getrandom(2) -- fill a buffer with kernel-generated random bytes
 // (Linux 3.17+).
@@ -19,7 +20,7 @@
 #define GRND_NONBLOCK 0x0001
 
 #ifdef __linux__
-long getrandom(char *buf, unsigned long buflen, unsigned int flags);
+ssize_t getrandom(void *buf, size_t buflen, unsigned int flags);
 #endif
 #if defined(__linux__) || defined(__APPLE__)
 int getentropy(void *buf, unsigned long buflen);

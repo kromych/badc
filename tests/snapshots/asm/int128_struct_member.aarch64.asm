@@ -49,11 +49,10 @@ Disassembly of section .text:
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	ldr	x4, [x3]
-               	ldr	x5, [x3, #0x8]
-               	eor	x5, x5, #0x1000000000
+               	ldr	x3, [x3, #0x8]
+               	eor	x5, x3, #0x1000000000
                	orr	x4, x4, x5
                	cbnz	x4, <addr>
-               	ldr	x3, [x3, #0x8]
                	mov	x17, #0x1000000000      // =68719476736
                	cmp	x3, x17
                	b.eq	<addr>

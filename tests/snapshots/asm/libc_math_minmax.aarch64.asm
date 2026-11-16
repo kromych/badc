@@ -28,16 +28,14 @@ Disassembly of section .text:
                	fmov	d0, #2.00000000
                	fmov	d1, #3.00000000
                	bl	<addr>
-               	fmov	d1, #2.00000000
-               	fcmp	d0, d1
+               	fmov	d1, d0
+               	fmov	d0, #2.00000000
+               	fcmp	d1, d0
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	fmov	d0, #3.00000000
-               	fmov	d17, d1
-               	fmov	d1, d0
-               	fmov	d0, d17
+               	fmov	d1, #3.00000000
                	bl	<addr>
                	fmov	d1, #3.00000000
                	fcmp	d0, d1
@@ -79,16 +77,14 @@ Disassembly of section .text:
                	fmov	s0, #2.00000000
                	fmov	s1, #3.00000000
                	bl	<addr>
-               	fmov	s1, #2.00000000
-               	fcmp	s0, s1
+               	fmov	d1, d0
+               	fmov	s0, #2.00000000
+               	fcmp	s1, s0
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	fmov	s0, #3.00000000
-               	fmov	d17, d1
-               	fmov	d1, d0
-               	fmov	d0, d17
+               	fmov	s1, #3.00000000
                	bl	<addr>
                	fmov	s1, #3.00000000
                	fcmp	s0, s1

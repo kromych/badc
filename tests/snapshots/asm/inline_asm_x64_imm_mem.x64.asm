@@ -136,8 +136,7 @@ Disassembly of section .text:
                	testb	$0x1, (%rcx)
                	sete	%al
                	andq	$0xff, %rax
-               	xorq	$0x1, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0xc, %eax
                	leave
@@ -146,8 +145,7 @@ Disassembly of section .text:
                	cmpb	$0x2a, (%rcx)
                	sete	%al
                	andq	$0xff, %rax
-               	xorq	$0x1, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0xd, %eax
                	leave

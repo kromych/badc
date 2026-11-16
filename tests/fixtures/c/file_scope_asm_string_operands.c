@@ -5,11 +5,17 @@
 
 #include <string.h>
 
+#if defined(__APPLE__)
+#define CSYM(name) "_" name
+#else
+#define CSYM(name) name
+#endif
+
 extern const unsigned char str_probe[];
 
 asm(".pushsection .rodata.strprobe,\"a\"\n"
-    ".globl str_probe\n"
-    "str_probe:\n"
+    ".globl " CSYM("str_probe") "\n"
+    CSYM("str_probe") ":\n"
     ".ascii \"A\"\n"
     ".asciz \"B\"\n"
     ".ascii \"C\", \"D\"\n"

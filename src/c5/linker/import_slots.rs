@@ -1,7 +1,7 @@
-//! `__imp_X` names the import-address slot of `X` (PE/COFF; MSVC, mingw-w64
-//! gcc and clang read it for a dllimport entity). A reference to such a name
-//! no input defines becomes a reference to `X` through its GOT slot, which
-//! keeps the slot the loader fills -- the import's address, not its thunk.
+//! `__imp_X` names the import-address slot of `X`, the PE/COFF import
+//! convention for a dllimport entity. A reference to such a name no input
+//! defines becomes a reference to `X` through its GOT slot, which keeps the
+//! slot the loader fills -- the import's address, not its thunk.
 //! When the link defines `X` the reference resolves to the definition, with
 //! the warning lld and MSVC's link give (LNK4217).
 

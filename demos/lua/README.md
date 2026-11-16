@@ -32,7 +32,7 @@ python demos/lua/smoke.py        # builds + runs the test subset
 regression it names the failing script, prints the last few
 output lines, and returns 1.
 
-`smoke.py` honours `BADC=path/to/badc` if you want a debug or
+`smoke.py` honors `BADC=path/to/badc` if you want a debug or
 custom-built binary instead of `target/release/badc`.
 
 ## Selected tests
@@ -53,9 +53,9 @@ is registered on every state, which is what the `api`, `gc`,
 | `constructs.lua` | parser corner cases, statement layout                     |
 | `coroutine.lua`  | `coroutine.create` / `resume` / `yield` / `wrap`          |
 | `cstack.lua`     | recursion depth, error overflow handling                  |
-| `errors.lua`     | `pcall` / `xpcall`, tokenised error messages              |
+| `errors.lua`     | `pcall` / `xpcall`, tokenized error messages              |
 | `events.lua`     | metatables, `__add` / `__index` / friends                 |
-| `gc.lua`         | incremental GC sweeps + finalisers under `T` step control |
+| `gc.lua`         | incremental GC sweeps + finalizers under `T` step control |
 | `gengc.lua`      | generational GC mode + minor/major cycle accounting       |
 | `goto.lua`       | block-scope `goto`, global declarations                   |
 | `literals.lua`   | integer / hex / float / string escape coverage            |

@@ -282,8 +282,13 @@ def main() -> int:
     failures, costs = run_roster(roster, jobs)
 
     for entry, rc, out in failures:
-        print(f"--- {entry} FAILED (rc={rc}), last {FAIL_TAIL_LINES} lines:")
-        print("\n".join(out.splitlines()[-FAIL_TAIL_LINES:]), flush=True)
+        lines = out.splitlines()
+        cut = max(len(lines) - FAIL_TAIL_LINES, 0)
+        # A verdict line above the tail is kept whatever its length.
+        earlier = [ln for ln in lines[:cut] if "FAIL" in ln]
+        print(f"--- {entry} FAILED (rc={rc}), its earlier FAIL lines and last "
+              f"{FAIL_TAIL_LINES} lines:")
+        print("\n".join([*earlier, *lines[cut:]]), flush=True)
 
     # The last three lines are the whole report a green step shows.
     slowest = ", ".join(f"{n} {s:.0f}s" for s, n in sorted(costs, reverse=True)[:4])

@@ -1,8 +1,8 @@
 //! Object-layout authority.
 //!
 //! One description of how a compiled unit's static data is measured,
-//! aligned, serialised, and addressed. The image writers and the linker
-//! read it for record serialisation and section padding, the
+//! aligned, serialized, and addressed. The image writers and the linker
+//! read it for record serialization and section padding, the
 //! data-compaction pass for the offset surface it must rewrite, and the
 //! symbol table for each object's extent.
 //!
@@ -41,6 +41,13 @@ pub(crate) fn round_up<T: AlignInt>(n: T, align: T) -> T {
     n.round_up_to(align)
 }
 
+/// The first offset at or past `cursor` congruent to `old` modulo `align`:
+/// the base at which an object moved from `old` keeps its offset's residue.
+pub(crate) fn congruent_at(cursor: u64, old: u64, align: u64) -> u64 {
+    let align = align.max(1);
+    cursor + (old % align + align - cursor % align) % align
+}
+
 /// Append a `Copy` record as raw host-order bytes. Callers pass
 /// `#[repr(C)]` on-disk headers whose in-memory layout is the file
 /// layout; badc's targets are little-endian, so no byte swap is needed.
@@ -72,6 +79,11 @@ pub(crate) fn pad_to_align(out: &mut Vec<u8>, align: usize) {
 /// at an address suitable for its type, and 8 is the widest scalar badc
 /// places in `.data`.
 pub(crate) const DATA_ALIGN_MIN: usize = 8;
+
+/// Bytes `.data` opens with so that no object's offset is 0: an offset is
+/// an address in the interpreter and in constant folding, where 0 is the
+/// null pointer constant.
+pub(crate) const DATA_GUARD: usize = 1;
 
 /// Minimum alignment of the `.bss` image and of a compacted object's
 /// packed base. Covers `_Alignas(16)` and 16-byte aggregates.
@@ -109,10 +121,10 @@ pub(crate) fn bss_image_align(declared: usize) -> usize {
 /// sorted `starts`, capped at `cap`, the section's own alignment.
 ///
 /// C99 6.2.8: an object sits on a boundary suitable for its type. The
-/// layout pads every allocation to `DATA_ALIGN_MIN` and records anything
-/// stricter in the defining symbol's `data_align` and in
-/// `Program::data_align_marks`, which also covers objects no symbol
-/// surfaces at that point (a block-scope static). An interval runs to
+/// layout records each placement's boundary in the defining symbol's
+/// `data_align` and in `Program::data_align_marks`, which also covers
+/// objects no symbol surfaces at that point (a block-scope static, a
+/// wide string literal). An interval runs to
 /// the next recorded start, so every constraint recorded inside it binds
 /// it: a base congruent to the interval's start modulo the value here
 /// keeps each object in it on its boundary.
@@ -123,9 +135,9 @@ pub(crate) fn data_object_aligns(
 ) -> alloc::vec::Vec<i64> {
     let data_len = program.data.len() as i64;
     let cap = bss_image_align(cap) as i64;
-    let mut aligns = alloc::vec![DATA_ALIGN_MIN as i64; starts.len()];
+    let mut aligns = alloc::vec![1i64; starts.len()];
     let mut note = |off: i64, a: i64| {
-        if a <= DATA_ALIGN_MIN as i64 || !(0..data_len).contains(&off) {
+        if a <= 1 || !(0..data_len).contains(&off) {
             return;
         }
         let i = match starts.binary_search(&off) {
@@ -151,6 +163,52 @@ pub(crate) fn data_object_aligns(
     aligns
 }
 
+/// Each recorded object start in the first `len` bytes of the unit's data,
+/// ascending, with the alignment every writer places it on: its defining
+/// symbol's `data_align` or a `Program::data_align_marks` entry, the
+/// larger where both name it. The bytes up to the next start move with it.
+pub(crate) fn data_start_aligns(
+    program: &crate::c5::program::Program,
+    len: i64,
+) -> alloc::vec::Vec<(i64, i64)> {
+    use crate::c5::symbol::Linkage;
+    let syms = program.symbols.iter().filter(|s| {
+        s.class == crate::c5::token::Token::Glo as i64
+            && s.defined_here
+            && !s.is_alias
+            && !s.is_thread_local
+            && matches!(s.linkage, Linkage::External | Linkage::Internal)
+    });
+    let mut v: alloc::vec::Vec<(i64, i64)> = (syms.map(|s| (s.val, s.data_align.max(1))))
+        .chain(program.data_align_marks.iter().copied())
+        .filter(|&(off, a)| (0..len).contains(&off) && a > 0)
+        .collect();
+    v.sort_unstable();
+    let mut out: alloc::vec::Vec<(i64, i64)> = alloc::vec::Vec::with_capacity(v.len());
+    for (off, a) in v {
+        match out.last_mut() {
+            Some(last) if last.0 == off => last.1 = last.1.max(a),
+            _ => out.push((off, a)),
+        }
+    }
+    out
+}
+
+/// The alignment the byte at `off` keeps wherever the writers move the
+/// data: that of the last of `starts` ([`data_start_aligns`]) at or before
+/// it, reduced by its distance from that start. Ahead of every start it is
+/// the image's own.
+pub(crate) fn data_offset_align(starts: &[(i64, i64)], off: i64) -> i64 {
+    let i = starts.partition_point(|&(s, _)| s <= off);
+    let Some(&(s, a)) = i.checked_sub(1).and_then(|i| starts.get(i)) else {
+        return DATA_ALIGN_MIN as i64;
+    };
+    match off - s {
+        0 => a,
+        d => a.min(1 << d.trailing_zeros()),
+    }
+}
+
 // ------------------------------------------------------------------
 // Data-object extent.
 // ------------------------------------------------------------------
@@ -167,7 +225,6 @@ pub(crate) fn data_object_aligns(
 /// A zero-length array (`T x[] = {}`, `T x[0]`) is the one object whose
 /// recorded size is a real zero rather than an absent record, so it is
 /// answered before the fallback runs.
-#[cfg(feature = "native-emit")]
 pub(crate) fn data_object_byte_size(sym: &crate::c5::symbol::Symbol) -> u64 {
     use crate::c5::compiler::types::{is_pointer_ty, strip_unsigned};
     use crate::c5::token::Ty;
@@ -212,7 +269,6 @@ pub(crate) fn data_object_byte_size(sym: &crate::c5::symbol::Symbol) -> u64 {
 /// tentative-definition path applies (C99 6.9.2); `copy` is the object's
 /// own size, which is what moves when the object is carved out into a
 /// named section. They differ only in the trailing padding.
-#[cfg(feature = "native-emit")]
 pub(crate) struct DataObjectExtent {
     pub copy: u64,
     pub extent: u64,
@@ -220,7 +276,6 @@ pub(crate) struct DataObjectExtent {
 
 /// Measure a defined data global. Returns `None` for a symbol that
 /// reserved no storage.
-#[cfg(feature = "native-emit")]
 pub(crate) fn data_object_extent(sym: &crate::c5::symbol::Symbol) -> Option<DataObjectExtent> {
     let computed = data_object_byte_size(sym);
     let extent = (sym.reserved_data_bytes as u64).max(computed);

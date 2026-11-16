@@ -14,14 +14,12 @@ Disassembly of section .text:
                	brk	#0x1
 
 <msf>:
-               	mov	x17, #0x5               // =5
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #2
                	add	x0, x0, x1
                	ret
 
 <svf>:
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #1
                	sub	x0, x0, x1
                	ret
 
@@ -43,23 +41,19 @@ Disassembly of section .text:
 
 <ms5>:
                	add	x0, x0, x1, lsl #1
-               	mov	x17, #0x3               // =3
-               	mul	x1, x2, x17
+               	add	x1, x2, x2, lsl #1
                	add	x0, x0, x1
                	add	x0, x0, x3, lsl #2
-               	mov	x17, #0x5               // =5
-               	mul	x1, x4, x17
+               	add	x1, x4, x4, lsl #2
                	add	x0, x0, x1
                	ret
 
 <sv5>:
                	add	x0, x0, x1, lsl #1
-               	mov	x17, #0x3               // =3
-               	mul	x1, x2, x17
+               	add	x1, x2, x2, lsl #1
                	add	x0, x0, x1
                	add	x0, x0, x3, lsl #2
-               	mov	x17, #0x5               // =5
-               	mul	x1, x4, x17
+               	add	x1, x4, x4, lsl #2
                	add	x0, x0, x1
                	ret
 
@@ -71,9 +65,9 @@ Disassembly of section .text:
                	mov	x20, x0
                	mov	x21, x1
                	adrp	x0, <page>
-               	ldr	x2, [x0, #0x18]
+               	ldr	x2, [x0, #0x10]
                	adrp	x0, <page>
-               	ldr	x22, [x0, #0x20]
+               	ldr	x22, [x0, #0x18]
                	mov	x0, x20
                	mov	x1, x21
                	blr	x2
@@ -96,9 +90,9 @@ Disassembly of section .text:
                	mov	x20, x0
                	mov	x21, x1
                	adrp	x0, <page>
-               	ldr	x2, [x0, #0x18]
+               	ldr	x2, [x0, #0x10]
                	adrp	x0, <page>
-               	ldr	x22, [x0, #0x20]
+               	ldr	x22, [x0, #0x18]
                	mov	x0, x20
                	mov	x1, x21
                	blr	x2
@@ -142,10 +136,10 @@ Disassembly of section .text:
                	mov	x20, x0
                	mov	x21, x1
                	adrp	x0, <page>
-               	ldr	x2, [x0, #0x18]
+               	ldr	x2, [x0, #0x10]
                	adrp	x0, <page>
-               	ldr	x22, [x0, #0x28]
-               	ldr	x23, [x0, #0x28]
+               	ldr	x22, [x0, #0x20]
+               	ldr	x23, [x0, #0x20]
                	mov	x0, x20
                	mov	x1, x21
                	blr	x2
@@ -175,9 +169,9 @@ Disassembly of section .text:
                	mov	x20, x0
                	mov	x21, x1
                	adrp	x0, <page>
-               	ldr	x2, [x0, #0x28]
+               	ldr	x2, [x0, #0x20]
                	adrp	x0, <page>
-               	ldr	x22, [x0, #0x20]
+               	ldr	x22, [x0, #0x18]
                	mov	x0, x20
                	mov	x1, x21
                	blr	x2
@@ -188,7 +182,7 @@ Disassembly of section .text:
                	blr	x22
                	add	x22, x23, x0
                	adrp	x0, <page>
-               	ldr	x2, [x0, #0x18]
+               	ldr	x2, [x0, #0x10]
                	mov	x0, x20
                	mov	x1, x21
                	blr	x2
@@ -252,7 +246,7 @@ Disassembly of section .text:
                	mov	x20, x0
                	mov	x21, x1
                	adrp	x0, <page>
-               	ldr	x2, [x0, #0x18]
+               	ldr	x2, [x0, #0x10]
                	mov	x0, x20
                	mov	x1, x21
                	blr	x2

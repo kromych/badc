@@ -126,13 +126,13 @@ pub(crate) struct Symbol {
     /// match and the spelling diagnostics use -- while every emitted
     /// symbol and relocation uses [`Symbol::link_name`].
     ///
-    /// The label is the assembler name, taken as written: gcc and clang
-    /// emit it with no target user-label prefix. badc carries names
-    /// undecorated through the compiler and the linker, so ELF and PE
-    /// emit exactly the label. The Mach-O writer adds its leading
-    /// underscore where it decorates today -- the `--shared` dynamic
-    /// export table -- so a renamed symbol is exported there as
-    /// `_<label>`; nothing else on that path decorates.
+    /// The label is the assembler name, taken as written, with no
+    /// target user-label prefix. badc carries names undecorated through
+    /// the compiler and the linker, so ELF and PE emit exactly the
+    /// label. The Mach-O writer adds its leading underscore where it
+    /// decorates today -- the `--shared` dynamic export table -- so a
+    /// renamed symbol is exported there as `_<label>`; nothing else on
+    /// that path decorates.
     pub asm_name: Option<String>,
     /// Shadow slot for `asm_name` (see `h_class`). An inner binding
     /// that reuses the name starts with no rename of its own.
@@ -174,6 +174,13 @@ pub(crate) struct Symbol {
     /// `.bss` placement.
     pub section_name: Option<String>,
 
+    /// One bit per parameter whose subobject the body's `__builtin_object_size`
+    /// measures; a caller's argument to it carries the subobject's bound.
+    pub object_size_params: u32,
+    /// `__attribute__((error("message")))` (`true`) or `((warning(...)))`:
+    /// a call left in the emitted code is diagnosed with the message.
+    pub call_diagnostic: Option<(bool, String)>,
+
     /// `__attribute__((patchable_function_entry(N, M)))` seen on any
     /// declaration of the name: `N` NOPs at the entry, `M` of them ahead
     /// of the symbol, in place of `-fpatchable-function-entry=`.
@@ -192,7 +199,7 @@ pub(crate) struct Symbol {
     pub no_stack_protector: bool,
 
     /// `__attribute__((noinline))` seen on any declaration of the name.
-    /// Sticky like `is_constructor`: gcc binds the attribute to the
+    /// Sticky like `is_constructor`: the attribute binds to the
     /// function, so a prototype carrying it holds the later definition
     /// out of line, and a declaration of one name never speaks for the
     /// next declaration in the file.
@@ -306,8 +313,8 @@ pub(crate) struct Symbol {
 
     /// True for a `const`-qualified plain integer object with static
     /// storage (`static const int N = ...`, a file-scope `const`). C99 6.6
-    /// does not make it a constant expression, but GCC and common practice
-    /// fold its value; the constant-expression evaluator reads the value
+    /// does not make it a constant expression, but common practice folds
+    /// its value; the constant-expression evaluator reads the value
     /// back from the object's `.data` storage when this is set, so
     /// `char buf[N * 2 + 1]` is a fixed array rather than a VLA.
     pub is_const_qualified: bool,
@@ -344,6 +351,10 @@ pub(crate) struct Symbol {
     /// the storage. A second declaration that *also* carries an
     /// initializer is a real duplicate.
     pub has_initializer: bool,
+    /// A block-scope `static` record declared without an initializer: it
+    /// reads as initialized, to zero (C17 6.7.9p10), but no initializer
+    /// names the zero, which `-fno-zero-initialized-in-bss` tells apart.
+    pub implicit_zero: bool,
 
     /// True when the object's initial value comes from stores emitted at
     /// its declaration point rather than from the data image, which is
@@ -493,9 +504,9 @@ pub(crate) struct Symbol {
     /// [`inline_definition`].
     pub saw_noninline_decl: bool,
     /// A definition in this unit spelled without `inline`. Under the
-    /// GNU89 model an `extern inline` body is inline-only, and gcc's
-    /// gnu_inline contract lets the same unit provide the ordinary
-    /// definition; that definition is the external one.
+    /// GNU89 model an `extern inline` body is inline-only, and the same
+    /// unit may provide the ordinary definition; that definition is the
+    /// external one.
     pub saw_noninline_def: bool,
     pub saw_static_decl: bool,
     pub saw_plain_inline_decl: bool,
@@ -584,7 +595,7 @@ pub(crate) struct Symbol {
     /// final at parse time, so a constant subscript of the literal may
     /// fold by reading them back (which is not extended to named
     /// objects: `const int t[3]` indexed is not an integer constant
-    /// expression, matching gcc / clang).
+    /// expression).
     pub is_compound_literal: bool,
 
     /// Set beside `is_compound_literal` for the array of a string literal,
@@ -656,14 +667,17 @@ pub(crate) struct BindingInfo {
     /// also clear the list (conservatively; the analysis is
     /// intra-segment to avoid flow-sensitivity false positives).
     /// Drained at function exit to emit the dead-store
-    /// diagnostic for any line still present.
-    pub pending_stores: Vec<usize>,
+    /// diagnostic for any store still present.
+    pub pending_stores: Vec<crate::c5::compiler::Site>,
 
     /// Source line where this declaration was parsed. Captured at
     /// declaration time so unused-variable diagnostics can point
     /// at the declaration rather than the surrounding block's
     /// closing brace.
     pub decl_line: usize,
+    /// Unit offset of the declaration, where the diagnostic pragmas
+    /// governing its diagnostics resolve.
+    pub decl_offset: Option<u32>,
 
     /// `Compiler::source_files` index of the file the declaration
     /// was parsed from. Captured at declaration time alongside
@@ -675,7 +689,7 @@ pub(crate) struct BindingInfo {
     /// True if the declaration was parsed in the primary source or a
     /// header its directory, `-iquote` or `-I` supplied; false in a
     /// bundled or system header, whose bindings the unused-symbol
-    /// diagnostics do not report, as gcc and clang skip system headers.
+    /// diagnostics do not report.
     pub decl_in_user_source: bool,
 
     /// The declaration's position among the unit's declarations, the order
@@ -700,6 +714,17 @@ impl BindingInfo {
         self.was_read |= inner.was_read;
         self.was_written |= inner.was_written;
         self.address_escaped |= inner.address_escaped;
+    }
+
+    pub(crate) fn decl_site(&self) -> crate::c5::compiler::Site {
+        crate::c5::compiler::Site {
+            line: self.decl_line,
+            offset: self.decl_offset,
+        }
+    }
+
+    pub(crate) fn set_decl_site(&mut self, at: crate::c5::compiler::Site) {
+        (self.decl_line, self.decl_offset) = (at.line, at.offset);
     }
 }
 
@@ -780,7 +805,7 @@ pub enum AsmRegister {
 /// declarations and for the symbol-table predefines; file-scope
 /// declarations resolve to one of `Internal` (`static`) or
 /// `External` (everything else, including bare declarations and
-/// `extern T x;`). Materialised onto every symbol so the linker
+/// `extern T x;`). Materialized onto every symbol so the linker
 /// can decide whether to surface the name in the cross-TU symbol
 /// table or keep it private.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -831,7 +856,7 @@ pub fn inline_definition(sym: &Symbol, model: InlineModel) -> bool {
     }
     let gnu89 = sym.is_gnu_inline || model == InlineModel::Gnu89;
     if gnu89 {
-        // GCC's `gnu_inline` contract: `extern inline` is used only for
+        // The GNU89 `gnu_inline` rules: `extern inline` is used only for
         // inlining, a declaration spelling `inline` without `extern`
         // cancels that back to a standalone definition, and an ordinary
         // definition in the same unit is the external one.
@@ -979,6 +1004,8 @@ impl crate::c5::layout::DataOffsets for Symbol {
             visibility: _,
             visibility_stated: _,
             section_name,
+            object_size_params: _,
+            call_diagnostic: _,
             patchable_function_entry: _,
             code_align: _,
             no_instrument_function: _,
@@ -1011,6 +1038,7 @@ impl crate::c5::layout::DataOffsets for Symbol {
             storage_is_const: _,
             h_storage_is_const: _,
             has_initializer: _,
+            implicit_zero: _,
             runtime_initialized: _,
             h_runtime_initialized: _,
             fn_ptr_indirection: _,

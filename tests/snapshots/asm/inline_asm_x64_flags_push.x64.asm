@@ -48,8 +48,7 @@ Disassembly of section .text:
                	pushw	%r10w
                	popw	%ax
                	andq	$0xffff, %rax           # imm = 0xFFFF
-               	xorq	$0x1234, %rax           # imm = 0x1234
-               	testl	%eax, %eax
+               	cmpl	$0x1234, %eax           # imm = 0x1234
                	je	<addr>
                	movl	$0x3, %eax
                	retq
@@ -57,8 +56,7 @@ Disassembly of section .text:
                	pushw	%r10w
                	popw	%ax
                	andq	$0xffff, %rax           # imm = 0xFFFF
-               	xorq	$0xbeef, %rax           # imm = 0xBEEF
-               	testl	%eax, %eax
+               	cmpl	$0xbeef, %eax           # imm = 0xBEEF
                	je	<addr>
                	movl	$0x4, %eax
                	retq

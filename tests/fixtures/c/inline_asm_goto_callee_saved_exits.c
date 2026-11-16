@@ -11,6 +11,12 @@
  * trampoline stands on that edge. `main` seeds the same register, calls
  * it, and folds the surviving value into the result. */
 
+#if defined(__APPLE__)
+#define CSYM(name) "_" name
+#else
+#define CSYM(name) name
+#endif
+
 long leaves_by_patched_branch(long v);
 
 long leaves_by_patched_branch(long v) {
@@ -39,7 +45,7 @@ int main(void) {
 #if defined(__x86_64__)
     __asm__ volatile("movq $101, %%rbx\n\t"
                      "movq $6, %%rdi\n\t"
-                     "call leaves_by_patched_branch\n\t"
+                     "call " CSYM("leaves_by_patched_branch") "\n\t"
                      "addq %%rbx, %%rax\n\t"
                      "movq %%rax, %0"
                      : "=r"(sum)
@@ -49,7 +55,7 @@ int main(void) {
 #elif defined(__aarch64__)
     __asm__ volatile("mov x20, #101\n\t"
                      "mov x0, #6\n\t"
-                     "bl leaves_by_patched_branch\n\t"
+                     "bl " CSYM("leaves_by_patched_branch") "\n\t"
                      "add %0, x0, x20"
                      : "=r"(sum)
                      :

@@ -27,9 +27,11 @@ use crate::c5::error::C5Error;
 
 use super::got_relax::{self, is_x86_64_got_pcrel, is_x86_64_got_slot_ref};
 use super::object::{
-    EH_FRAME, ElfTpoffTarget, NativeMachine, NativeObject, NativeReloc, NativeSymSection,
-    NativeSymbol, RelocOrigin, RelocSite, SectionFamily, SharedLibrary, SymRef, reloc_desc,
+    EH_FRAME, ElfTpoffTarget, InitTable, InitTarget, NativeMachine, NativeObject, NativeReloc,
+    NativeSymSection, NativeSymbol, RelocOrigin, RelocSite, SectionFamily, SharedLibrary, SymRef,
+    reloc_desc,
 };
+use super::section_groups::SectionGroups;
 use crate::c5::codegen::{
     BinaryFormat, CompactUnwind, DataImportBind, EhFrameBlock, EhFrameField, EhFrameTarget,
     PointerSlot,
@@ -73,6 +75,9 @@ pub(crate) use crate::c5::object::elf_reloc_types::{GOT_BASE_SYMBOL, IMAGE_BASE_
 
 /// The slot the loader writes a PE image's TLS index to.
 pub(crate) const TLS_INDEX: &str = "_tls_index";
+
+/// A PE image's `IMAGE_TLS_DIRECTORY`, as the MSVC runtime names it.
+pub(crate) const TLS_DIRECTORY: &str = "_tls_used";
 
 /// A relocation whose site reads a GOT slot: the value it wants is the
 /// symbol's address, taken from storage the loader fills, not a
@@ -120,7 +125,7 @@ pub(crate) fn exports_definition(
 
 /// Result of merging N [`NativeObject`]s. Carries enough state
 /// for a final-image writer to lay out `.text` / `.data` at the
-/// target's expected virtual addresses, materialise the PLT
+/// target's expected virtual addresses, materialize the PLT
 /// pool against [`Self::imports`], and emit the dynamic
 /// symbol table.
 #[derive(Debug, Clone)]
@@ -216,6 +221,9 @@ pub struct MergedNative {
     /// SONAME, deduped on full path with insertion order preserved
     /// across units. Holds only the libraries an import binds through.
     pub dylibs: Vec<String>,
+    /// The entry of [`Self::dylibs`] that is the executable a bundle
+    /// loads into, always the last.
+    pub main_executable: Option<u32>,
     /// Per-import dylib routing: maps an import name (as it
     /// appears in [`Self::imports`]) to its index in [`Self::dylibs`].
     /// Populated from each unit's `NT_BADC_BINDING_MAP` note with
@@ -231,6 +239,8 @@ pub struct MergedNative {
     pub import_symbols: BTreeMap<String, String>,
     /// The ordinal a PE import names instead of a symbol.
     pub import_ordinals: BTreeMap<String, u16>,
+    /// A PE name import's hint, where the import library states one.
+    pub import_hints: BTreeMap<String, u16>,
     /// The symbol version an import binds, for a library the link read.
     /// `Some(None)` records a library that was read and versions nothing;
     /// an absent entry means no input supplied that library, and the
@@ -254,6 +264,8 @@ pub struct MergedNative {
     /// writer promotes each to the export table when emitting a
     /// shared library (resolving the name through [`Self::defined`]).
     pub exports: Vec<String>,
+    /// `/EXPORT:name=target` directives across units, first-seen by name.
+    pub export_aliases: Vec<super::object::ExportAlias>,
     /// The names a linked shared library defines or references, which an
     /// ELF executable defining one exports so the library binds to it.
     pub shared_names: BTreeSet<String>,
@@ -267,7 +279,7 @@ pub struct MergedNative {
     /// `_Thread_local` access.
     pub tls_index_fixups: Vec<usize>,
     /// Mach-O TLV descriptor offsets, concatenated across units. The
-    /// Mach-O writer materialises one `__thread_vars` descriptor per
+    /// Mach-O writer materializes one `__thread_vars` descriptor per
     /// entry. Empty on non-macOS links.
     pub macho_tlv_descriptors: Vec<u64>,
     /// Mach-O TLV fixups, each `(adrp_offset, descriptor_index)` with
@@ -366,7 +378,7 @@ pub struct MergedNative {
     /// defines, with the attributes its `.symtab` gave it.
     pub(crate) symbols: Vec<crate::c5::codegen::ImageSymbol>,
     /// Per-thread TLS image for the merged executable. The first
-    /// [`Self::tls_init_size`] bytes are the initialised `.tdata`
+    /// [`Self::tls_init_size`] bytes are the initialized `.tdata`
     /// template; the remainder is `.tbss` zero-fill. The per-format
     /// writers consume this as `Build::tls_data` / `tls_init_size`
     /// to lay out PT_TLS (ELF), the TLV section (Mach-O), or the
@@ -401,6 +413,13 @@ pub struct MergedNative {
     /// variable section list gives each its own output section; the
     /// rest leave the bytes in the family they were grouped into.
     pub named_sections: Vec<crate::c5::codegen::NamedSection>,
+    /// The same for code, as offsets in `text`.
+    pub named_code_sections: Vec<crate::c5::codegen::NamedSection>,
+    /// The inputs' resources, as compiled resource files, for a PE image's
+    /// `.rsrc`.
+    pub resources: Vec<Vec<u8>>,
+    /// The exports an ordinal, `NONAME` or `PRIVATE` shapes, one per name.
+    pub export_forms: Vec<super::object::ExportForm>,
 }
 
 /// One input section's placement within a merged output stream.
@@ -579,6 +598,20 @@ pub struct DataPcRel {
     pub width: u8,
     /// The slot holds `S + A - ImageBase`, PE's image-relative address.
     pub image_relative: bool,
+    /// The slot is an AArch64 branch word: `(S + A - P) >> 2` fills bits
+    /// 25:0 and the word's other bits stay (R_AARCH64_JUMP26, CALL26).
+    pub branch26: bool,
+}
+
+/// What a deferred data slot holds.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum DataSlot {
+    /// `S + A - P` at a width of 4 or 8 bytes.
+    PcRel(u8),
+    /// `S + A - ImageBase`, PE's image-relative address.
+    ImageRelative,
+    /// An AArch64 branch word's 26-bit field.
+    Branch26,
 }
 
 /// Where a defined symbol lives in the merged image, and the
@@ -605,7 +638,7 @@ pub struct MergedSymbol {
 }
 
 /// Call-site / address-of reloc the linker parks for the
-/// final-image writer to apply. Three flavours, discriminated
+/// final-image writer to apply. Three flavors, discriminated
 /// by `target_section`:
 ///
 ///   * `Undef`: a libc / dylib import. `import_index` selects
@@ -759,20 +792,6 @@ fn init_fini_frame(machine: NativeMachine) -> (&'static [u8], &'static [u8], &'s
 
 /// Every unit's `fam` sections grouped by name. Name order, then link
 /// order within a name, so the merge is a function of its inputs.
-fn named_group_order(
-    objs: &[NativeObject],
-    fam: SectionFamily,
-) -> Vec<(usize, &super::object::InputSection)> {
-    let mut v: Vec<(usize, &super::object::InputSection)> = objs
-        .iter()
-        .enumerate()
-        .flat_map(|(i, o)| o.sections.iter().map(move |s| (i, s)))
-        .filter(|(_, s)| s.family == fam && super::object::grouped_by_name(&s.name))
-        .collect();
-    v.sort_by(|a, b| a.1.name.cmp(&b.1.name).then(a.0.cmp(&b.0)));
-    v
-}
-
 /// The widest alignment the merged `.bss` answers to: each unit's `.bss`
 /// family, each named zero-fill section, and each common symbol, whose
 /// `st_value` is its alignment.
@@ -780,9 +799,9 @@ fn bss_alignment(objs: &[NativeObject]) -> usize {
     let units = objs
         .iter()
         .map(|o| crate::c5::layout::bss_image_align(o.bss_align));
-    let named = named_group_order(objs, SectionFamily::Bss)
-        .into_iter()
-        .map(|(_, s)| s.align.max(1) as usize);
+    let named = (objs.iter().flat_map(|o| &o.sections))
+        .filter(|s| s.family == SectionFamily::Bss && super::object::grouped_by_name(&s.name))
+        .map(|s| s.align.max(1) as usize);
     let commons = objs
         .iter()
         .flat_map(|o| &o.symbols)
@@ -793,6 +812,20 @@ fn bss_alignment(objs: &[NativeObject]) -> usize {
         .chain(commons)
         .max()
         .unwrap_or(crate::c5::layout::BSS_ALIGN_MIN)
+}
+
+/// The alignment a PE image's named code section, and the code behind them,
+/// start on in the text stream: a multiple of the section alignment the
+/// writer derives from the same inputs, so each section's RVA is one and the
+/// text keeps one offset space.
+fn pe_code_section_align(objs: &[NativeObject]) -> u64 {
+    let widest = (objs.iter())
+        .flat_map(|o| &o.sections)
+        .map(|s| s.align)
+        .chain(objs.iter().map(|o| o.text_align as u64))
+        .chain([bss_alignment(objs) as u64])
+        .fold(crate::c5::object::pe::SECTION_ALIGNMENT as u64, u64::max);
+    widest.next_power_of_two()
 }
 
 /// One grouped name's merged extent. `start` / `end` are offsets in
@@ -824,46 +857,88 @@ fn note_extent(extents: &mut Vec<NamedExtent>, e: NamedExtent) {
 /// starts on so a section of its own keeps every contribution's residue.
 fn named_group_aligns<'o>(
     order: &[(usize, &'o super::object::InputSection)],
+    groups: &'o SectionGroups,
 ) -> BTreeMap<&'o str, u64> {
     let mut widest: BTreeMap<&'o str, u64> = BTreeMap::new();
     for (_, s) in order {
-        let w = widest.entry(s.name.as_str()).or_insert(1);
+        let w = widest.entry(groups.output(&s.name)).or_insert(1);
         *w = (*w).max(s.align.max(1));
     }
     widest
 }
 
-/// Append the grouped named sections of `fam` to the merged data
-/// stream, recording each one's new offset in its unit's map.
+/// Append the grouped named sections of `fam` to the merged stream `data`,
+/// recording each one's new offset in its unit's map. A PE image's named
+/// code section starts on a section boundary.
+/// The blob maps a grouping pass records moved sections in: a group placed
+/// in a wider data family than some of its contributions keeps each in its
+/// own family's map.
+enum FamilyMaps<'m> {
+    One(&'m mut [BlobMap]),
+    Data {
+        ro: &'m mut [BlobMap],
+        relro: &'m mut [BlobMap],
+        rw: &'m mut [BlobMap],
+    },
+}
+
+impl FamilyMaps<'_> {
+    fn of(&mut self, fam: SectionFamily) -> &mut [BlobMap] {
+        match self {
+            FamilyMaps::One(m) => m,
+            FamilyMaps::Data { ro, relro, rw } => match fam {
+                SectionFamily::RoData => ro,
+                SectionFamily::RelRo => relro,
+                _ => rw,
+            },
+        }
+    }
+}
+
 fn group_named_bytes(
     data: &mut Vec<u8>,
     objs: &[NativeObject],
     fam: SectionFamily,
-    blob: impl Fn(&NativeObject) -> &Vec<u8>,
-    maps: &mut [BlobMap],
-    sec: NativeSymSection,
+    blob: impl Fn(&NativeObject, SectionFamily) -> &Vec<u8>,
+    mut maps: FamilyMaps<'_>,
     extents: &mut Vec<NamedExtent>,
+    groups: &SectionGroups,
 ) {
-    let order = named_group_order(objs, fam);
+    let open_align = match groups.pe() && fam == SectionFamily::Text {
+        true => pe_code_section_align(objs),
+        false => 1,
+    };
+    let sec = match fam {
+        SectionFamily::Text => NativeSymSection::Text,
+        _ => NativeSymSection::Data,
+    };
+    let order = groups.order(objs, fam);
     let any = !order.is_empty();
-    let write = fam != SectionFamily::RoData;
-    let widest = named_group_aligns(&order);
+    let write = matches!(fam, SectionFamily::RelRo | SectionFamily::Data);
+    let widest = named_group_aligns(&order, groups);
     let mut prev: Option<&str> = None;
     // The unwind table's previous contribution, `(start, end)` in `data`.
     let mut last_eh: Option<(usize, usize)> = None;
     for (i, s) in order {
+        let out = groups.output(&s.name);
         // A writer that gives each name a section of its own places
         // them apart, so an offset at one group's end must not name the
         // next group's first byte.
-        if let Some(p) = prev.filter(|&p| p != s.name) {
+        if let Some(p) = prev.filter(|&p| p != out) {
             close_named_group(data, p, extents);
             data.push(0);
         }
-        let opens = prev != Some(s.name.as_str());
-        prev = Some(&s.name);
+        let opens = prev != Some(out);
+        // A group folded into a standard section opens that section only
+        // behind a section of its own.
+        let open_align = match groups.folded(out) && !prev.is_some_and(|p| !groups.folded(p)) {
+            true => 1,
+            false => open_align,
+        };
+        prev = Some(out);
         let unpadded = data.len();
         let align = if opens {
-            widest[s.name.as_str()]
+            widest[out].max(open_align)
         } else {
             s.align.max(1)
         };
@@ -875,16 +950,18 @@ fn group_named_bytes(
             crate::c5::object::eh_frame::absorb_padding(data, start, end, pad);
         }
         let at = data.len() as u64;
-        let src = blob(&objs[i]);
+        let src = blob(&objs[i], s.family);
         data.extend_from_slice(&src[s.offset as usize..(s.offset + s.size) as usize]);
         if s.name == EH_FRAME {
             last_eh = Some((at as usize, data.len()));
         }
-        maps[i].moved.push(moved_section(&objs[i], s, at));
+        maps.of(s.family)[i]
+            .moved
+            .push(moved_section(&objs[i], s, at));
         note_extent(
             extents,
             NamedExtent {
-                name: s.name.clone(),
+                name: out.to_string(),
                 sec,
                 start: at,
                 end: at + s.size,
@@ -932,22 +1009,20 @@ fn group_named_zerofill(
     objs: &[NativeObject],
     maps: &mut [BlobMap],
     extents: &mut Vec<NamedExtent>,
+    groups: &SectionGroups,
 ) {
-    let order = named_group_order(objs, SectionFamily::Bss);
+    let order = groups.order(objs, SectionFamily::Bss);
     let any = !order.is_empty();
-    let widest = named_group_aligns(&order);
+    let widest = named_group_aligns(&order, groups);
     let mut prev: Option<&str> = None;
     for (i, s) in order {
-        if prev.is_some_and(|p| p != s.name) {
+        let out = groups.output(&s.name);
+        if prev.is_some_and(|p| p != out) {
             *bss_size += 1;
         }
-        let opens = prev != Some(s.name.as_str());
-        prev = Some(&s.name);
-        let align = if opens {
-            widest[s.name.as_str()]
-        } else {
-            s.align.max(1)
-        };
+        let opens = prev != Some(out);
+        prev = Some(out);
+        let align = if opens { widest[out] } else { s.align.max(1) };
         *bss_size = align_usize(*bss_size, align as usize);
         let at = *bss_size as u64;
         *bss_size += s.size as usize;
@@ -955,7 +1030,7 @@ fn group_named_zerofill(
         note_extent(
             extents,
             NamedExtent {
-                name: s.name.clone(),
+                name: out.to_string(),
                 sec: NativeSymSection::Bss,
                 start: at,
                 end: at + s.size,
@@ -989,6 +1064,13 @@ pub fn link_resolves_symbol(name: &str) -> bool {
         || name.starts_with("__stop_")
 }
 
+/// The PE image's TLS support the link supplies itself: the index slot and
+/// the directory. A runtime library's object defining them (the MSVC
+/// runtime's `tlssup.obj`) supplies the same, so it is not pulled for them.
+pub fn pe_link_supplies_tls_support(name: &str) -> bool {
+    name == TLS_INDEX || name == TLS_DIRECTORY
+}
+
 /// Merge `objs` into a single [`MergedNative`]. Per-unit
 /// section bases stack in the order the caller supplies; a
 /// future linker can pick a different layout (sorted by
@@ -1017,9 +1099,11 @@ pub fn link_native_objects_with_options(
 /// where it differs from the referenced name.
 struct MergedDylibs {
     dylibs: Vec<String>,
+    main_executable: Option<u32>,
     import_dylib_map: BTreeMap<String, u32>,
     import_symbols: BTreeMap<String, String>,
     import_ordinals: BTreeMap<String, u16>,
+    import_hints: BTreeMap<String, u16>,
     import_versions: BTreeMap<String, Option<String>>,
 }
 
@@ -1041,6 +1125,36 @@ pub fn link_native_objects_with_shared_libs<'a>(
     link_native_objects_with(objs, shared_libs, &opts)
 }
 
+/// What a reference to an import binds against.
+pub(crate) enum Supplier {
+    /// The DLL a unit's `#pragma binding` routes it to.
+    Routing,
+    /// The library at this index.
+    Library(usize),
+}
+
+/// A PE import names its DLL: an import library or DLL the link read that
+/// exports `name` supplies it ahead of a binding, as link.exe and GNU ld
+/// take the import from it. Otherwise a routed name keeps its routing and
+/// an unrouted one binds against the first library exporting it, as a
+/// system linker resolves it; `usable` admits a library by index.
+pub(crate) fn supplier(
+    name: &str,
+    routed: bool,
+    pe_image: bool,
+    libs: &[SharedLibrary],
+    usable: impl Fn(usize) -> bool,
+) -> Option<Supplier> {
+    let exports = |l: &SharedLibrary| l.exports.contains(name) || l.data_exports.contains(name);
+    let supplied = |l: &SharedLibrary| pe_image && l.from_image && exports(l);
+    if routed && !libs.iter().any(supplied) {
+        return Some(Supplier::Routing);
+    }
+    (libs.iter().enumerate())
+        .find(|&(i, l)| usable(i) && exports(l) && (!routed || supplied(l)))
+        .map(|(i, _)| Supplier::Library(i))
+}
+
 /// Which of an ELF shared library's exported default-visibility definitions
 /// its own references reach through `.dynsym`, so that one the loader finds
 /// first preempts them (System V gABI, symbol visibility): `All` by default,
@@ -1053,7 +1167,7 @@ pub enum Preemption {
     All,
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct LinkOptions {
     /// An unresolved reference is a load-time import the loader's global
     /// scope resolves, where the format has one: ELF and Mach-O. A PE
@@ -1068,6 +1182,8 @@ pub struct LinkOptions {
     /// The image's container: Mach-O and PE have no copy relocation, a
     /// PE link defines `__ImageBase`, and `.init` / `.fini` are ELF's.
     pub format: BinaryFormat,
+    /// The DLLs a PE image loads on the first call of an import from them.
+    pub delay_load: Vec<String>,
 }
 
 /// [`link_native_objects_with_shared_libs`] under `opts`.
@@ -1076,8 +1192,29 @@ pub fn link_native_objects_with<'a>(
     shared_libs: &'a [SharedLibrary],
     opts: &LinkOptions,
 ) -> Result<MergedNative, C5Error> {
+    check_mismatch_keys(objs)?;
+    let delayed = match opts.delay_load.is_empty() {
+        true => None,
+        false if opts.format != BinaryFormat::Pe => {
+            let text = "`--delayload` names a DLL, which only a PE image loads";
+            return Err(link_err(Code::LINK, MODULE, text));
+        }
+        false => Some(super::delay_load::delay_imports(
+            objs,
+            shared_libs,
+            &opts.delay_load,
+        )?),
+    };
+    let with_delayed: Option<Vec<NativeObject>> = (delayed.as_ref())
+        .and_then(|d| d.object.clone())
+        .map(|o| objs.iter().cloned().chain([o]).collect());
+    let objs = with_delayed.as_deref().unwrap_or(objs);
     let slot_reads = super::import_slots::bind_slot_reads(objs)?;
     let objs = slot_reads.as_ref().map_or(objs, |s| &s.objs[..]);
+    let routes = (opts.format == BinaryFormat::Pe)
+        .then(|| super::import_routes::split_routes(objs))
+        .flatten();
+    let objs = routes.as_deref().unwrap_or(objs);
     let mut link = Link::new(objs, opts, shared_libs)?;
     link.lay_out_tls()?;
     link.lay_out_sections();
@@ -1086,14 +1223,22 @@ pub fn link_native_objects_with<'a>(
         link.slot_reads = s.sites.iter().map(at).collect();
         link.warnings.extend(s.warnings.iter().cloned());
     }
-    link.lay_out_init_fini_arrays();
+    if let Some(d) = delayed {
+        link.warnings.extend(d.warnings);
+    }
+    link.lay_out_init_fini_arrays()?;
     link.collect_definitions()?;
+    link.resolve_named_init_entries()?;
     link.collect_prologue_anchors();
     link.collect_local_functions();
     link.coalesce_commons();
     link.allocate_copies()?;
     link.define_link_symbols();
+    if link.pe_image {
+        link.require_pe_exports_defined();
+    }
     link.collect_import_facts();
+    link.define_mach_o_host_names();
     link.collect_preemptible();
     link.allocate_got_slots();
     link.place_unwind_tables()?;
@@ -1105,6 +1250,28 @@ pub fn link_native_objects_with<'a>(
         return Err(err);
     }
     link.finish()
+}
+
+/// `/FAILIFMISMATCH`: a key two inputs give different values stops the link,
+/// naming both, as link.exe's LNK2038 does.
+fn check_mismatch_keys(objs: &[NativeObject]) -> Result<(), C5Error> {
+    let mut seen: BTreeMap<&str, (&str, &str)> = BTreeMap::new();
+    for o in objs {
+        for (key, value) in &o.mismatch_keys {
+            let (first, from) = *seen.entry(key).or_insert((value, &o.source));
+            if first != value {
+                return Err(link_err(
+                    Code::LINK,
+                    MODULE,
+                    &format!(
+                        "`/FAILIFMISMATCH` key `{key}` is `{first}` in {from} and `{value}` in {}",
+                        o.source
+                    ),
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Shared-library data objects an object reads directly: through a
@@ -1196,6 +1363,14 @@ enum TlsBinding<'a> {
     Library(&'a SharedLibrary),
 }
 
+/// The arrays the link lays out of constructor table entries.
+#[derive(Clone, Copy, Debug)]
+enum InitArray {
+    Init,
+    Fini,
+    TlsCallbacks,
+}
+
 /// The state one native link accumulates. Each pass is a method;
 /// [`link_native_objects_with_shared_libs`] states their order.
 ///
@@ -1218,6 +1393,10 @@ struct Link<'a> {
     export_data: bool,
     no_copy_relocs: bool,
     pe_image: bool,
+    /// The output section each grouped input section joins.
+    groups: SectionGroups,
+    /// A Mach-O image: a binding's host symbol carries the C underscore.
+    mach_o: bool,
     /// The image runs `.init` / `.fini` code: an ELF one.
     init_fini: bool,
     /// COFF COMDAT groups' sections, and those selection displaced.
@@ -1269,11 +1448,20 @@ struct Link<'a> {
     /// One `__start_` / `__stop_` pair per grouped name.
     start_stop_bounds: Vec<(String, NativeSymSection, u64)>,
     named_sections: Vec<crate::c5::codegen::NamedSection>,
+    named_code_sections: Vec<crate::c5::codegen::NamedSection>,
     section_map: SectionMap,
-    /// Constructors and destructors as `(priority, merged text
-    /// offset)`, in run order.
-    init_entries: Vec<(Option<u32>, u64)>,
-    fini_entries: Vec<(Option<u32>, u64)>,
+    /// The merged text offsets of the init and fini array slots.
+    init_entries: Vec<u64>,
+    fini_entries: Vec<u64>,
+    /// The PE TLS callbacks in call order, and the data offset of their
+    /// null-terminated array.
+    tls_callbacks: Vec<u64>,
+    /// The entries naming another unit's function, by array and index,
+    /// which take its address once the definitions are collected.
+    named_init_entries: Vec<(InitArray, usize, &'a str)>,
+    tls_callback_array: Option<u64>,
+    /// The data offset of the `_tls_used` directory a unit names.
+    tls_directory_slot: Option<u64>,
     /// The merged text offset of the `.init` and `.fini` functions.
     init_code: Option<u64>,
     fini_code: Option<u64>,
@@ -1310,6 +1498,9 @@ struct Link<'a> {
     extern_data_names: hashbrown::HashSet<&'a str>,
     /// Names with dylib routing from any unit's binding map.
     routed_import_names: hashbrown::HashSet<&'a str>,
+    /// Mach-O host names a definition's C name satisfies; resolution
+    /// reads them, and the image's symbols leave them out.
+    host_aliases: hashbrown::HashSet<&'a str>,
     /// `(name, host symbol)` of each shared-library data object the
     /// link gave a copy in `.bss`.
     copies: Vec<(String, String)>,
@@ -1388,6 +1579,8 @@ impl<'a> Link<'a> {
             export_data: opts.export_data,
             no_copy_relocs: opts.format != BinaryFormat::Elf,
             pe_image: opts.format == BinaryFormat::Pe,
+            groups: SectionGroups::new(objs, opts.format == BinaryFormat::Pe)?,
+            mach_o: opts.format == BinaryFormat::MachO,
             init_fini: opts.format == BinaryFormat::Elf,
             comdats: super::comdat::select_coff(objs)?,
             preemptible: hashbrown::HashSet::new(),
@@ -1420,9 +1613,14 @@ impl<'a> Link<'a> {
             bss_map: Vec::with_capacity(objs.len()),
             start_stop_bounds: Vec::new(),
             named_sections: Vec::new(),
+            named_code_sections: Vec::new(),
             section_map: SectionMap::default(),
             init_entries: Vec::new(),
             fini_entries: Vec::new(),
+            tls_callbacks: Vec::new(),
+            named_init_entries: Vec::new(),
+            tls_callback_array: None,
+            tls_directory_slot: None,
             init_code: None,
             fini_code: None,
             init_array: (0, 0),
@@ -1440,6 +1638,7 @@ impl<'a> Link<'a> {
             data_binding_locals: hashbrown::HashSet::new(),
             extern_data_names: hashbrown::HashSet::new(),
             routed_import_names: hashbrown::HashSet::new(),
+            host_aliases: hashbrown::HashSet::new(),
             copies: Vec::new(),
             got_slot_sites: BTreeMap::new(),
             got_slot_relocs: Vec::new(),
@@ -1597,6 +1796,9 @@ impl<'a> Link<'a> {
             .flat_map(|o| o.unique.iter().map(String::as_str))
             .collect();
         for (name, sym) in &self.defined {
+            if self.host_aliases.contains(name.as_ref()) {
+                continue;
+            }
             let place = match sym.section {
                 NativeSymSection::Text => SymbolPlace::Text(sym.value),
                 NativeSymSection::Data => SymbolPlace::Data(sym.value),
@@ -2172,20 +2374,42 @@ impl<'a> Link<'a> {
         // name and `.eh_frame` stays one table.
         let mut named_extents: Vec<NamedExtent> = Vec::new();
         for obj in objs {
-            align_up(&mut self.text, obj.text_align.max(16));
-            self.text_align = self.text_align.max(obj.text_align);
+            let named = named_prefix_len(obj, SectionFamily::Text, obj.text.len() as u64);
             let keep = match self.init_fini {
-                true => moved_prefix_len(
+                true => named.min(moved_prefix_len(
                     obj,
                     SectionFamily::Text,
-                    obj.text.len() as u64,
+                    named,
                     super::object::is_init_fini,
-                ),
-                false => obj.text.len() as u64,
+                )),
+                false => named,
             };
-            self.text_map
-                .push(BlobMap::new(self.text.len() as u64, keep));
-            self.text.extend_from_slice(&obj.text[..keep as usize]);
+            self.text_map.push(BlobMap::new(0, keep));
+        }
+        // A PE image opens the text stream with its named code sections, each
+        // on a section boundary, so the code behind them, the import stubs the
+        // link appends and the writer's entry stub share `.text`.
+        if self.pe_image {
+            group_named_bytes(
+                &mut self.text,
+                objs,
+                SectionFamily::Text,
+                |o, _| &o.text,
+                FamilyMaps::One(&mut self.text_map),
+                &mut named_extents,
+                &self.groups,
+            );
+            let last = (named_extents.iter()).rfind(|e| e.sec == NativeSymSection::Text);
+            if last.is_some_and(|e| !self.groups.folded(&e.name)) {
+                align_up(&mut self.text, pe_code_section_align(objs) as usize);
+            }
+        }
+        for (i, obj) in objs.iter().enumerate() {
+            align_up(&mut self.text, obj.text_align.max(16));
+            self.text_align = self.text_align.max(obj.text_align);
+            self.text_map[i].base = self.text.len() as u64;
+            let keep = self.text_map[i].prefix_len as usize;
+            self.text.extend_from_slice(&obj.text[..keep]);
             align_up(
                 &mut self.data,
                 crate::c5::layout::data_image_align(obj.rodata_align),
@@ -2201,15 +2425,34 @@ impl<'a> Link<'a> {
             self.init_code = self.group_init_fini(".init");
             self.fini_code = self.group_init_fini(".fini");
         }
+        if !self.pe_image {
+            group_named_bytes(
+                &mut self.text,
+                objs,
+                SectionFamily::Text,
+                |o, _| &o.text,
+                FamilyMaps::One(&mut self.text_map),
+                &mut named_extents,
+                &self.groups,
+            );
+        }
         self.keep_end_label_byte(SectionFamily::RoData);
         group_named_bytes(
             &mut self.data,
             objs,
             SectionFamily::RoData,
-            |o| &o.rodata,
-            &mut self.ro_map,
-            NativeSymSection::Data,
+            |o, f| match f {
+                SectionFamily::RoData => &o.rodata,
+                SectionFamily::RelRo => &o.relro,
+                _ => &o.data,
+            },
+            FamilyMaps::Data {
+                ro: &mut self.ro_map,
+                relro: &mut self.relro_map,
+                rw: &mut self.rw_map,
+            },
             &mut named_extents,
+            &self.groups,
         );
         // One alignment covers the whole data image: the writers place
         // every region from it, and each region starts at a multiple of
@@ -2240,10 +2483,18 @@ impl<'a> Link<'a> {
             &mut self.data,
             objs,
             SectionFamily::RelRo,
-            |o| &o.relro,
-            &mut self.relro_map,
-            NativeSymSection::Data,
+            |o, f| match f {
+                SectionFamily::RoData => &o.rodata,
+                SectionFamily::RelRo => &o.relro,
+                _ => &o.data,
+            },
+            FamilyMaps::Data {
+                ro: &mut self.ro_map,
+                relro: &mut self.relro_map,
+                rw: &mut self.rw_map,
+            },
             &mut named_extents,
+            &self.groups,
         );
         align_up(&mut self.data, self.data_align);
         self.data_relro_len = self.data.len();
@@ -2272,16 +2523,25 @@ impl<'a> Link<'a> {
             &mut self.data,
             objs,
             SectionFamily::Data,
-            |o| &o.data,
-            &mut self.rw_map,
-            NativeSymSection::Data,
+            |o, f| match f {
+                SectionFamily::RoData => &o.rodata,
+                SectionFamily::RelRo => &o.relro,
+                _ => &o.data,
+            },
+            FamilyMaps::Data {
+                ro: &mut self.ro_map,
+                relro: &mut self.relro_map,
+                rw: &mut self.rw_map,
+            },
             &mut named_extents,
+            &self.groups,
         );
         group_named_zerofill(
             &mut self.bss_size,
             objs,
             &mut self.bss_map,
             &mut named_extents,
+            &self.groups,
         );
         self.start_stop_bounds = named_extents
             .iter()
@@ -2295,16 +2555,22 @@ impl<'a> Link<'a> {
             .collect();
         // The same extents as output sections, for a writer that gives
         // each its own header rather than folding it into the family.
-        self.named_sections = named_extents
-            .iter()
-            .map(|e| crate::c5::codegen::NamedSection {
-                name: e.name.clone(),
-                offset: e.start,
-                size: e.end - e.start,
-                align: e.align,
-                bss: e.bss,
-                write: e.write,
-            })
+        let named = |e: &NamedExtent| crate::c5::codegen::NamedSection {
+            name: e.name.clone(),
+            offset: e.start,
+            size: e.end - e.start,
+            align: e.align,
+            bss: e.bss,
+            write: e.write,
+        };
+        let own = || (named_extents.iter()).filter(|e| !self.groups.folded(&e.name));
+        self.named_code_sections = own()
+            .filter(|e| e.sec == NativeSymSection::Text)
+            .map(named)
+            .collect();
+        self.named_sections = own()
+            .filter(|e| e.sec != NativeSymSection::Text)
+            .map(named)
             .collect();
 
         // Per-input-section placement: each record's stream offset is
@@ -2383,58 +2649,140 @@ impl<'a> Link<'a> {
     }
 
     /// `.init_array` / `.fini_array`: every unit's constructor and
-    /// destructor entries, rebased to merged `.text` offsets and
-    /// ordered prioritized ascending, then unprioritized in link order
-    /// (a stable sort over `(priority.is_none(), priority)` keeps each
-    /// unit's slot order). Two contiguous pointer arrays are appended
-    /// to `.data`; the startup runtime walks `[__init_array_start,
-    /// __init_array_end)` forward before `main` and the fini array
-    /// backward after. Each 8-byte slot is a `.text` pointer, so a
-    /// `DataAbsReloc` gives the PIE its load-time R_*_RELATIVE.
-    fn lay_out_init_fini_arrays(&mut self) {
-        for (i, obj) in self.objs.iter().enumerate() {
+    /// destructor entries, rebased to merged `.text` offsets. GNU tables
+    /// run prioritized ascending, then unprioritized, each in link order;
+    /// the C runtime's run ahead of them at startup and after them at
+    /// exit, ordered by section name, then link order. The pointer arrays
+    /// are appended to `.data`; the startup runtime walks
+    /// `[__init_array_start, __init_array_end)` forward before `main` and
+    /// the fini array backward after. A PE image's TLS callbacks and the
+    /// `_tls_used` directory a unit names follow them. Each 8-byte slot is
+    /// a `.text` pointer, so a `DataAbsReloc` gives the PIE its load-time
+    /// R_*_RELATIVE.
+    /// Point each entry naming another unit's function at its definition,
+    /// as GNU ld resolves an `.init_array` slot's relocation.
+    fn resolve_named_init_entries(&mut self) -> Result<(), C5Error> {
+        for (array, k, name) in core::mem::take(&mut self.named_init_entries) {
+            let at = match self.defined.get(name) {
+                Some(d) if d.section == NativeSymSection::Text => d.value,
+                _ => {
+                    let text = format!(
+                        "a constructor table entry names `{name}`, which no unit defines \
+                         as a function"
+                    );
+                    return Err(link_err(Code::UNDEFINED_SYMBOL, MODULE, &text));
+                }
+            };
+            let entries = match array {
+                InitArray::Init => &mut self.init_entries,
+                InitArray::Fini => &mut self.fini_entries,
+                InitArray::TlsCallbacks => &mut self.tls_callbacks,
+            };
+            entries[k] = at;
+        }
+        Ok(())
+    }
+
+    fn lay_out_init_fini_arrays(&mut self) -> Result<(), C5Error> {
+        let objs = self.objs;
+        let (mut init, mut fini, mut crt) = (Vec::new(), Vec::new(), Vec::new());
+        for (i, obj) in objs.iter().enumerate() {
             for f in &obj.init_funcs {
-                let off = self.text_map[i].at(f.unit_text_offset);
-                if f.is_destructor {
-                    self.fini_entries.push((f.priority, off));
-                } else {
-                    self.init_entries.push((f.priority, off));
+                let off = match &f.target {
+                    InitTarget::Text(at) => Ok(self.text_map[i].at(*at)),
+                    InitTarget::Named(name) => Err(name.as_str()),
+                };
+                match &f.table {
+                    InitTable::Init(p) => init.push((*p, off)),
+                    InitTable::Fini(p) => fini.push((*p, off)),
+                    InitTable::Crt(t) => crt.push((t.as_str(), off)),
                 }
             }
         }
-        self.init_entries
-            .sort_by_key(|&(p, _)| (p.is_none(), p.unwrap_or(0)));
-        self.fini_entries
-            .sort_by_key(|&(p, _)| (p.is_none(), p.unwrap_or(0)));
+        init.sort_by_key(|&(p, _)| (p.is_none(), p.unwrap_or(0)));
+        fini.sort_by_key(|&(p, _)| (p.is_none(), p.unwrap_or(0)));
+        crt.sort_by_key(|&(t, _)| t);
+        let table = |t: u8| {
+            (crt.iter())
+                .filter(move |e| e.0.as_bytes()[0] == t)
+                .map(|e| e.1)
+        };
         // The `.init` function runs before every constructor and the `.fini`
         // one after every destructor, as DT_INIT and DT_FINI run around
         // the arrays (gABI, Initialization and Termination Functions).
-        if let Some(off) = self.init_code {
-            self.init_entries.insert(0, (None, off));
+        let init_entries: Vec<_> = (self.init_code.map(Ok).into_iter())
+            .chain(table(b'I'))
+            .chain(table(b'C'))
+            .chain(init.iter().map(|e| e.1))
+            .collect();
+        let crt_exit: Vec<_> = table(b'P').chain(table(b'T')).collect();
+        let fini_entries: Vec<_> = (self.fini_code.map(Ok).into_iter())
+            .chain(crt_exit.into_iter().rev())
+            .chain(fini.iter().map(|e| e.1))
+            .collect();
+        let tls_callbacks: Vec<_> = table(b'L').collect();
+        let mut placed = |array: InitArray, entries: Vec<Result<u64, &'a str>>| {
+            for (k, e) in entries.iter().enumerate() {
+                if let &Err(name) = e {
+                    self.named_init_entries.push((array, k, name));
+                }
+            }
+            entries
+                .into_iter()
+                .map(|e| e.unwrap_or(0))
+                .collect::<Vec<u64>>()
+        };
+        let init_entries = placed(InitArray::Init, init_entries);
+        let fini_entries = placed(InitArray::Fini, fini_entries);
+        let tls_callbacks = placed(InitArray::TlsCallbacks, tls_callbacks);
+        (self.init_entries, self.fini_entries) = (init_entries, fini_entries);
+        self.tls_callbacks = tls_callbacks;
+        if !self.tls_callbacks.is_empty() && !self.pe_image {
+            let text = "a `.CRT$XL*` TLS callback applies to a PE image only";
+            return Err(link_err(Code::UNSUPPORTED, MODULE, text));
         }
-        if let Some(off) = self.fini_code {
-            self.fini_entries.insert(0, (None, off));
-        }
+        let syms = || objs.iter().flat_map(|o| &o.symbols);
+        let tls_directory = self.pe_image
+            && syms().any(|s| s.name == TLS_DIRECTORY && s.binding != 0)
+            && !syms().any(|s| {
+                s.name == TLS_DIRECTORY && s.binding != 0 && s.section != NativeSymSection::Undef
+            });
         // A program with no constructors gets no `.data` change (start
         // == end leaves the runtime's walk a no-op); only touch the
         // layout when there is something to lay out, so existing data
         // offsets are stable.
-        if self.init_entries.is_empty() && self.fini_entries.is_empty() {
-            let at = self.data.len() as u64;
-            self.init_array = (at, at);
-            self.fini_array = (at, at);
-        } else {
+        let at = self.data.len() as u64;
+        (self.init_array, self.fini_array) = ((at, at), (at, at));
+        let laid_out = !self.init_entries.is_empty()
+            || !self.fini_entries.is_empty()
+            || !self.tls_callbacks.is_empty()
+            || tls_directory;
+        if laid_out {
             align_up(&mut self.data, 8);
-            let init_start = self.data.len() as u64;
-            self.data
-                .resize(self.data.len() + self.init_entries.len() * 8, 0);
-            let init_end = self.data.len() as u64;
-            let fini_start = self.data.len() as u64;
-            self.data
-                .resize(self.data.len() + self.fini_entries.len() * 8, 0);
-            let fini_end = self.data.len() as u64;
-            self.init_array = (init_start, init_end);
-            self.fini_array = (fini_start, fini_end);
+            let data = &mut self.data;
+            let mut place = |slots: usize| {
+                let start = data.len() as u64;
+                data.resize(data.len() + slots * 8, 0);
+                (start, data.len() as u64)
+            };
+            self.init_array = place(self.init_entries.len());
+            self.fini_array = place(self.fini_entries.len());
+            let n = self.tls_callbacks.len();
+            let callbacks = (n > 0).then(|| place(n + 1));
+            let directory = tls_directory
+                .then(|| place(crate::c5::object::pe::IMAGE_TLS_DIRECTORY64_SIZE as usize / 8));
+            self.tls_callback_array = callbacks.map(|c| c.0);
+            self.tls_directory_slot = directory.map(|d| d.0);
+            for (name, place) in [(".CRT$XL", callbacks), (TLS_DIRECTORY, directory)] {
+                if let Some((start, end)) = place {
+                    self.section_map.data.push(SectionContribution {
+                        input: None,
+                        name: name.to_string(),
+                        offset: start,
+                        size: end - start,
+                    });
+                }
+            }
         }
         for (name, (start, end)) in [
             (".init_array", self.init_array),
@@ -2457,7 +2805,7 @@ impl<'a> Link<'a> {
         // `.data` and `.bss` the two addresses differ, so the walk
         // overruns the array into zero padding and calls a null
         // pointer. Keep the arrays strictly inside `.data`.
-        if self.fini_array.1 > self.init_array.0 {
+        if laid_out {
             self.data.resize(self.data.len() + 8, 0);
         }
         // The merged bss region begins at `data.len()` in the unified
@@ -2472,6 +2820,7 @@ impl<'a> Link<'a> {
                 crate::c5::layout::bss_image_align(self.data_align),
             );
         }
+        Ok(())
     }
 
     /// Every `STB_GLOBAL` symbol that lives in a `.text` / `.data` /
@@ -2535,7 +2884,7 @@ impl<'a> Link<'a> {
                 let Some(value) = self.symbol_offset(i, sym) else {
                     continue;
                 };
-                // `RoData` / `RelRo` normalise to `Data`: both payloads
+                // `RoData` / `RelRo` normalize to `Data`: both payloads
                 // lie in the data-byte space, so the merged table speaks
                 // one space.
                 let section = match sym.section {
@@ -2620,11 +2969,14 @@ impl<'a> Link<'a> {
             }
             for &(row, target, handler) in &obj.seh_rows {
                 let at = |at: u64| map.at(at) as u32;
-                (self.seh_rows).push((row.map(at), target.map(at), handler.map(at)));
+                // The range's exclusive end, by its last byte.
+                let row = [at(row[0]), at(row[1]), at(row[2].saturating_sub(1)) + 1];
+                (self.seh_rows).push((row, target.map(at), handler.map(at)));
             }
         }
-        // A scope table names its language handler, which the image imports.
-        if !self.seh_rows.is_empty() {
+        // A scope table names its language handler: an input's definition,
+        // else the one the image imports.
+        if !self.seh_rows.is_empty() && !self.defined.contains_key(LANGUAGE_HANDLER) {
             self.record_import(LANGUAGE_HANDLER);
         }
     }
@@ -2793,6 +3145,17 @@ impl<'a> Link<'a> {
                 },
             );
         }
+        if let Some(off) = self.tls_directory_slot {
+            let symbol = MergedSymbol {
+                section: NativeSymSection::Data,
+                value: off,
+                size: crate::c5::object::pe::IMAGE_TLS_DIRECTORY64_SIZE as u64,
+                kind: super::object::STT_OBJECT,
+                visibility: super::object::STV_HIDDEN,
+                weak: false,
+            };
+            self.defined.insert(Cow::Borrowed(TLS_DIRECTORY), symbol);
+        }
         // crti.o's names for the two functions, hidden as it defines them.
         for (name, code) in [("_init", self.init_code), ("_fini", self.fini_code)] {
             if let Some(off) = code
@@ -2906,6 +3269,25 @@ impl<'a> Link<'a> {
             .iter()
             .flat_map(|o| o.import_dylib_map.iter().map(|(n, _)| n.as_str()))
             .collect();
+    }
+
+    /// On Mach-O a binding names its import by the host symbol, `_strtod`,
+    /// whose name `strtod` is how badc's objects spell a definition: a
+    /// definition in the link satisfies the reference before the import
+    /// does, as ld64 binds it.
+    fn define_mach_o_host_names(&mut self) {
+        if !self.mach_o {
+            return;
+        }
+        let defined = &self.defined;
+        let aliases: Vec<(&'a str, MergedSymbol)> = (self.routed_import_names.iter())
+            .filter(|n| !defined.contains_key(**n))
+            .filter_map(|&n| Some((n, *defined.get(&*crate::c5::mach_o_name::name(n))?)))
+            .collect();
+        for (name, symbol) in aliases {
+            self.defined.insert(Cow::Borrowed(name), symbol);
+            self.host_aliases.insert(name);
+        }
     }
 
     /// The exported definitions [`Preemption`] leaves to the loader.
@@ -3356,16 +3738,13 @@ impl<'a> Link<'a> {
     }
 
     /// Whether any unit routes `name` to a dylib. A binding map keys an
-    /// entry by the host symbol, which on Mach-O carries the platform's
-    /// leading underscore that the object readers strip; test both
-    /// spellings so a reference from a foreign object matches. The
-    /// import is still recorded under the reference's own name -- the
-    /// per-format writer re-applies the platform prefix.
+    /// entry by the host symbol, which on Mach-O is the name's Mach-O
+    /// spelling; test both so a reference from a foreign object matches.
+    /// The import is still recorded under the reference's own name -- the
+    /// per-format writer spells it.
     fn is_routed_import(&self, name: &str) -> bool {
         self.routed_import_names.contains(name)
-            || self
-                .routed_import_names
-                .contains(alloc::format!("_{name}").as_str())
+            || (self.routed_import_names).contains(&*crate::c5::mach_o_name::spelling(name))
     }
 
     fn record_import(&mut self, name: &'a str) -> usize {
@@ -3376,6 +3755,28 @@ impl<'a> Link<'a> {
         self.imports.push(name.to_string());
         self.import_idx_for_name.insert(name, i);
         i
+    }
+
+    /// A PE image's exports and `/INCLUDE:` names name definitions, as
+    /// link.exe requires: an export, the target of one under another name,
+    /// or an included name that nothing in the link defines or imports is
+    /// undefined. A forwarder names another DLL.
+    fn require_pe_exports_defined(&mut self) {
+        let objs = self.objs;
+        for obj in objs {
+            let targets = (obj.export_aliases.iter())
+                .filter(|a| !a.target.contains('.'))
+                .map(|a| &a.target);
+            let named = (obj.exports.iter().chain(targets).map(|n| (n, "an export")))
+                .chain(obj.includes.iter().map(|n| (n, "an `/INCLUDE`")));
+            for (name, what) in named {
+                if !self.defined.contains_key(name.as_str())
+                    && !self.shlib_exports.contains(name.as_str())
+                {
+                    self.note_undefined_at(name, &format!(" ({what} of {})", obj.source));
+                }
+            }
+        }
     }
 
     /// Record a reference to the undefined `name`, left unpatched.
@@ -4053,19 +4454,19 @@ impl<'a> Link<'a> {
         // function pointer, so it needs the same absolute relocation as
         // a function-pointer data initializer -- an R_*_RELATIVE in the
         // PIE the final-image writer emits.
-        for (k, &(_, text_off)) in self.init_entries.iter().enumerate() {
-            self.data_abs_relocs.push(DataAbsReloc {
-                slot_offset: self.init_array.0 + (k * 8) as u64,
-                target: MergedTarget::Text(text_off as i64),
-                anchor: MergedTarget::Text(text_off as i64),
-            });
-        }
-        for (k, &(_, text_off)) in self.fini_entries.iter().enumerate() {
-            self.data_abs_relocs.push(DataAbsReloc {
-                slot_offset: self.fini_array.0 + (k * 8) as u64,
-                target: MergedTarget::Text(text_off as i64),
-                anchor: MergedTarget::Text(text_off as i64),
-            });
+        let arrays = [
+            (Some(self.init_array.0), &self.init_entries),
+            (Some(self.fini_array.0), &self.fini_entries),
+            (self.tls_callback_array, &self.tls_callbacks),
+        ];
+        for (start, entries) in arrays {
+            for (k, &text_off) in entries.iter().enumerate() {
+                self.data_abs_relocs.push(DataAbsReloc {
+                    slot_offset: start.unwrap_or_default() + (k * 8) as u64,
+                    target: MergedTarget::Text(text_off as i64),
+                    anchor: MergedTarget::Text(text_off as i64),
+                });
+            }
         }
         Ok(())
     }
@@ -4102,11 +4503,15 @@ impl<'a> Link<'a> {
                 | (NativeMachine::Aarch64, R_AARCH64_PREL64) => Some(8),
                 _ => None,
             };
-        if let Some(width) = pcrel_width {
-            return self.resolve_data_pcrel(unit, sym, reloc, slot_offset, in_tls, width, false);
-        }
-        if reloc.rtype == R_PE_ADDR32NB {
-            return self.resolve_data_pcrel(unit, sym, reloc, slot_offset, in_tls, 4, true);
+        let slot = match (self.machine, reloc.rtype) {
+            _ if reloc.rtype == R_PE_ADDR32NB => Some(DataSlot::ImageRelative),
+            (NativeMachine::Aarch64, R_AARCH64_JUMP26 | R_AARCH64_CALL26) => {
+                Some(DataSlot::Branch26)
+            }
+            _ => pcrel_width.map(DataSlot::PcRel),
+        };
+        if let Some(slot) = slot {
+            return self.resolve_data_pcrel(unit, sym, reloc, slot_offset, in_tls, slot);
         }
         // The remaining kinds are the 8-byte absolute pointer
         // initializers.
@@ -4327,8 +4732,8 @@ impl<'a> Link<'a> {
         Ok(())
     }
 
-    /// A pc-relative data slot, or with `image_relative` `S + A - ImageBase`.
-    #[allow(clippy::too_many_arguments)]
+    /// A data slot whose value is `S + A` less the slot's address or the
+    /// image base, in the form `slot` gives.
     fn resolve_data_pcrel(
         &mut self,
         unit: usize,
@@ -4336,13 +4741,17 @@ impl<'a> Link<'a> {
         reloc: &NativeReloc,
         slot_offset: u64,
         in_tls: bool,
-        width: u8,
-        image_relative: bool,
+        slot: DataSlot,
     ) -> Result<(), C5Error> {
-        let what = if image_relative {
-            "image-relative data slot"
-        } else {
-            "pc-relative data slot"
+        let image_relative = slot == DataSlot::ImageRelative;
+        let width = match slot {
+            DataSlot::PcRel(width) => width,
+            DataSlot::ImageRelative | DataSlot::Branch26 => 4,
+        };
+        let what = match slot {
+            DataSlot::ImageRelative => "image-relative data slot",
+            DataSlot::Branch26 => "branch in a data section",
+            DataSlot::PcRel(_) => "pc-relative data slot",
         };
         let (section, value) = match self.reference_section(unit, sym) {
             NativeSymSection::Undef | NativeSymSection::Common => {
@@ -4431,6 +4840,7 @@ impl<'a> Link<'a> {
             anchor: merged_target(section, value, 0, self.data.len())?,
             width,
             image_relative,
+            branch26: slot == DataSlot::Branch26,
         });
         Ok(())
     }
@@ -4559,42 +4969,42 @@ impl<'a> Link<'a> {
         routing.retain(|name, _| !self.preemptible.contains(name));
         let mut import_symbols: BTreeMap<String, String> = BTreeMap::new();
         let mut import_ordinals: BTreeMap<String, u16> = BTreeMap::new();
+        let mut import_hints: BTreeMap<String, u16> = BTreeMap::new();
         for name in (self.imports.iter()).filter(|n| !self.preemptible.contains(n.as_str())) {
-            // A PE import names its DLL: an import library or a DLL the
-            // link read that exports the name supplies it ahead of a
-            // binding, as link.exe and GNU ld take the import from it.
-            let supplied = |lib: &SharedLibrary| {
-                self.pe_image
-                    && lib.from_image
-                    && (lib.exports.contains(name) || lib.data_exports.contains(name))
-            };
-            if let Some(&idx) = routing.get(name.as_str())
-                && !self.shared_libs.iter().any(supplied)
-            {
-                bound[idx as usize] = true;
-                continue;
-            }
-            // Unrouted: the reference binds against the first shared
-            // library that exports it, as a system linker resolves it.
-            // That library becomes the import's routing -- a PE import
-            // names its DLL and nothing else states which -- and its
-            // spelling of the name is recorded where the two differ.
-            let routed = routing.contains_key(name.as_str());
-            for (lib, at) in self.shared_libs.iter().zip(&shlib_declared) {
-                if let Some(at) = at
-                    && (lib.exports.contains(name) || lib.data_exports.contains(name))
-                    && (!routed || supplied(lib))
-                {
-                    bound[*at] = true;
-                    routing.insert(name.as_str(), *at as u32);
+            let routed = routing.get(name.as_str()).copied();
+            let declared = |i: usize| shlib_declared[i].is_some();
+            match supplier(
+                name,
+                routed.is_some(),
+                self.pe_image,
+                self.shared_libs,
+                declared,
+            ) {
+                Some(Supplier::Routing) => bound[routed.unwrap_or_default() as usize] = true,
+                // The library becomes the import's routing -- a PE import
+                // names its DLL and nothing else states which -- and its
+                // spelling of the name is recorded where the two differ.
+                Some(Supplier::Library(i)) => {
+                    let (lib, at) = (&self.shared_libs[i], shlib_declared[i].unwrap_or_default());
+                    bound[at] = true;
+                    routing.insert(name.as_str(), at as u32);
                     if let Some(symbol) = lib.export_symbols.get(name) {
                         import_symbols.insert(name.clone(), symbol.clone());
                     }
                     if let Some(&ordinal) = lib.export_ordinals.get(name) {
                         import_ordinals.insert(name.clone(), ordinal);
                     }
-                    break;
+                    if let Some(&hint) = lib.export_hints.get(name) {
+                        import_hints.insert(name.clone(), hint);
+                    }
                 }
+                None => {}
+            }
+        }
+        // A name routed to a second DLL imports under its own spelling.
+        for key in routing.keys() {
+            if let Some(name) = super::import_routes::routed_name(key) {
+                import_symbols.insert(String::from(*key), String::from(name));
             }
         }
         // A copy is bound to the library whose object it copies.
@@ -4607,14 +5017,19 @@ impl<'a> Link<'a> {
                 bound[at] = true;
             }
         }
+        // A bundle's loader goes last: it takes no load command, so the
+        // libraries ahead of it keep their ordinals.
+        let main = (self.shared_libs.iter().zip(&shlib_declared))
+            .find_map(|(l, at)| at.filter(|_| l.main_executable));
         let mut merged_idx = alloc::vec![0u32; declared.len()];
         let mut dylibs: Vec<String> = Vec::new();
-        for (i, path) in declared.iter().enumerate() {
+        for i in (0..declared.len()).filter(|&i| Some(i) != main).chain(main) {
             if bound[i] {
                 merged_idx[i] = dylibs.len() as u32;
-                dylibs.push((*path).to_string());
+                dylibs.push(declared[i].to_string());
             }
         }
+        let main_executable = main.filter(|&i| bound[i]).map(|i| merged_idx[i]);
         let import_dylib_map: BTreeMap<String, u32> = routing
             .into_iter()
             .filter(|&(_, idx)| bound[idx as usize])
@@ -4639,9 +5054,11 @@ impl<'a> Link<'a> {
         }
         Ok(MergedDylibs {
             dylibs,
+            main_executable,
             import_dylib_map,
             import_symbols,
             import_ordinals,
+            import_hints,
             import_versions,
         })
     }
@@ -4658,6 +5075,33 @@ impl<'a> Link<'a> {
             }
         }
         exports
+    }
+
+    /// Each export's ordinal, `NONAME` and `PRIVATE` across the inputs; two
+    /// that give a name different forms, or one ordinal two names, stop the
+    /// link, as link.exe's LNK4197 and LNK1223 do.
+    fn merge_export_forms(&self) -> Result<Vec<super::object::ExportForm>, C5Error> {
+        let mut out: Vec<super::object::ExportForm> = Vec::new();
+        for f in self.objs.iter().flat_map(|o| &o.export_forms) {
+            let clash = (out.iter()).find(|g| {
+                (g.name == f.name && g != &f)
+                    || (g.name != f.name && f.ordinal.is_some() && g.ordinal == f.ordinal)
+            });
+            if let Some(g) = clash {
+                return Err(link_err(
+                    Code::LINK,
+                    MODULE,
+                    &format!(
+                        "exports `{}` and `{}` take conflicting ordinals or options",
+                        g.name, f.name
+                    ),
+                ));
+            }
+            if !out.contains(f) {
+                out.push(f.clone());
+            }
+        }
+        Ok(out)
     }
 
     /// Data-import copy relocations, deduplicated across units: the
@@ -5086,7 +5530,14 @@ impl<'a> Link<'a> {
     fn finish(mut self) -> Result<MergedNative, C5Error> {
         let merged_dylibs = self.merge_dylibs()?;
         let exports = self.merge_exports();
+        let mut export_aliases: Vec<super::object::ExportAlias> = Vec::new();
+        for a in self.objs.iter().flat_map(|o| &o.export_aliases) {
+            if !export_aliases.iter().any(|b| b.name == a.name) {
+                export_aliases.push(a.clone());
+            }
+        }
         let copy_relocs = self.merge_copy_relocs();
+        let export_forms = self.merge_export_forms()?;
         let tls_index_fixups = self.rebase_tls_index_fixups();
         let tlv = self.merge_tlv_descriptors()?;
         let mut dbg = self.merge_debug_sections();
@@ -5116,9 +5567,11 @@ impl<'a> Link<'a> {
         }
         let symbols = self.image_symbols();
         let exec_stack_input = (self.objs.iter().find(|o| o.exec_stack)).map(|o| o.source.clone());
+        let host_aliases = self.host_aliases;
         let defined: BTreeMap<String, MergedSymbol> = self
             .defined
             .into_iter()
+            .filter(|(name, _)| !host_aliases.contains(name.as_ref()))
             .map(|(name, sym)| (name.into_owned(), sym))
             .collect();
         // Admission marked every unrouted global flat before the routing
@@ -5151,6 +5604,12 @@ impl<'a> Link<'a> {
             data_align: self.data_align,
             bss_size: self.bss_size,
             named_sections: self.named_sections,
+            named_code_sections: self.named_code_sections,
+            resources: (self.objs.iter())
+                .filter(|o| !o.resources.is_empty())
+                .map(|o| o.resources.clone())
+                .collect(),
+            export_forms,
             defined,
             tls_defined: self.tls_defined,
             imports: self.imports,
@@ -5165,13 +5624,16 @@ impl<'a> Link<'a> {
             data_import_rva_refs: self.data_import_rva_refs,
             machine: self.machine,
             dylibs: merged_dylibs.dylibs,
+            main_executable: merged_dylibs.main_executable,
             import_dylib_map: merged_dylibs.import_dylib_map,
             import_symbols: merged_dylibs.import_symbols,
             import_ordinals: merged_dylibs.import_ordinals,
+            import_hints: merged_dylibs.import_hints,
             import_versions: merged_dylibs.import_versions,
             flat_imports,
             weak_imports,
             exports,
+            export_aliases,
             shared_names: (self.shared_libs.iter())
                 .flat_map(|l| l.exports.iter().chain(&l.references))
                 .cloned()
@@ -5227,6 +5689,8 @@ impl<'a> Link<'a> {
                     .then_some((self.init_array.0, self.init_array.1 - self.init_array.0)),
                 fini: (self.fini_array.1 > self.fini_array.0)
                     .then_some((self.fini_array.0, self.fini_array.1 - self.fini_array.0)),
+                tls_callbacks: self.tls_callback_array,
+                tls_directory: self.tls_directory_slot,
             },
             section_map: self.section_map,
             exec_stack_input,
@@ -5746,10 +6210,15 @@ fn emit_plt(
             anchor: MergedTarget::Text(stub_at as i64),
             width: 4,
             image_relative: true,
+            branch26: false,
         });
     }
-    // A `__try` scope table names the language handler by its stub's RVA.
-    if !merged.seh_rows.is_empty() && slots == DataImportSlots::Thunk {
+    // A `__try` scope table names an imported language handler by its
+    // stub's RVA.
+    if !merged.seh_rows.is_empty()
+        && slots == DataImportSlots::Thunk
+        && !merged.defined.contains_key(LANGUAGE_HANDLER)
+    {
         let handler =
             (0..merged.imports.len()).find(|&i| import_name(merged, i) == LANGUAGE_HANDLER);
         let Some(handler) = handler else {
@@ -6406,61 +6875,7 @@ mod tests {
     /// patcher directly.
     /// An object carrying nothing, for a test that fills in one aspect.
     fn blank_object(machine: NativeMachine) -> NativeObject {
-        NativeObject {
-            unique: Default::default(),
-            source: String::new(),
-            sections: Vec::new(),
-            discarded: Vec::new(),
-            exec_stack: false,
-            text_align: 16,
-            rodata: Vec::new(),
-            rodata_align: 8,
-            relro: Vec::new(),
-            relro_align: 1,
-            relro_relocs: Vec::new(),
-            machine,
-            text: Vec::new(),
-            data: Vec::new(),
-            data_align: 1,
-            bss_size: 0,
-            bss_align: 1,
-            tls_data: Vec::new(),
-            tls_relocs: Vec::new(),
-            tls_bss_size: 0,
-            tls_align: 1,
-            symbols: Vec::new(),
-            text_relocs: Vec::new(),
-            data_relocs: Vec::new(),
-            init_funcs: Vec::new(),
-            dylibs: Vec::new(),
-            import_dylib_map: Vec::new(),
-            exports: Vec::new(),
-            tls_index_fixups: Vec::new(),
-            macho_tlv_descriptors: Vec::new(),
-            macho_tlv_fixups: Vec::new(),
-            tls_symbols: Vec::new(),
-            macho_tlv_descriptor_syms: Vec::new(),
-            elf_tpoff_fixups: Vec::new(),
-            copy_relocs: Vec::new(),
-            prologue_ends: Vec::new(),
-            early_returns: Vec::new(),
-            seh_rows: Vec::new(),
-            unwind: Vec::new(),
-            extern_data_names: Vec::new(),
-            alternate_names: Vec::new(),
-            comdats: Vec::new(),
-            default_libs: Vec::new(),
-            debug_info: Vec::new(),
-            debug_abbrev: Vec::new(),
-            debug_line: Vec::new(),
-            debug_str: Vec::new(),
-            debug_info_relocs: Vec::new(),
-            debug_line_relocs: Vec::new(),
-            debug_other: Vec::new(),
-            compact_unwind: Vec::new(),
-            eh_frame: None,
-            pe_unwind: Vec::new(),
-        }
+        NativeObject::empty(machine)
     }
 
     fn site(machine: NativeMachine, rtype: u32, offset: u64) -> RelocSite<'static> {
@@ -6756,6 +7171,55 @@ mod tests {
         );
     }
 
+    /// One output section takes every contribution of its name: a read-only
+    /// one and a relocated one land together in the relocated region,
+    /// rather than an extent spanning both regions and what lies between.
+    #[test]
+    fn a_named_section_with_read_only_and_relocated_parts_is_one_region() {
+        use crate::c5::linker::object::{InputSection, NativeSymbol};
+        let sec = |name: &str, family, offset, size| InputSection {
+            name: name.to_string(),
+            family,
+            offset,
+            size,
+            align: 8,
+        };
+        let sym = |name: &str, section| NativeSymbol {
+            name: name.to_string(),
+            section,
+            value: 0,
+            size: 8,
+            binding: 1,
+            kind: 1,
+            visibility: 0,
+            input_section: None,
+        };
+        let mut a = NativeObject::empty(NativeMachine::X86_64);
+        a.rodata = alloc::vec![0x11; 8];
+        a.sections = alloc::vec![sec("grp", SectionFamily::RoData, 0, 8)];
+        a.symbols = alloc::vec![sym("a_part", NativeSymSection::RoData)];
+        let mut b = NativeObject::empty(NativeMachine::X86_64);
+        b.rodata = alloc::vec![0x22; 64];
+        b.relro = alloc::vec![0x33; 8];
+        b.sections = alloc::vec![
+            sec(".rodata", SectionFamily::RoData, 0, 64),
+            sec("grp", SectionFamily::RelRo, 0, 8),
+        ];
+        b.symbols = alloc::vec![sym("b_part", NativeSymSection::RelRo)];
+        let merged = link_native_objects(&[a, b]).expect("link");
+        let grp = (merged.named_sections.iter())
+            .find(|n| n.name == "grp")
+            .expect("grp");
+        assert!(grp.size <= 24, "{grp:?}");
+        let relro = merged.data_ro_len as u64..merged.data_relro_len as u64;
+        for name in ["a_part", "b_part"] {
+            let at = merged.defined[name].value;
+            assert!(relro.contains(&at) && (grp.offset..grp.offset + grp.size).contains(&at));
+        }
+        let at = merged.defined["a_part"].value as usize;
+        assert_eq!(merged.data[at..at + 8], [0x11; 8]);
+    }
+
     /// A section symbol has no name of its own; a diagnostic names the
     /// input section it stands for, as GNU ld does.
     #[test]
@@ -7049,7 +7513,9 @@ mod tests {
             export_symbols: alloc::collections::BTreeMap::new(),
             export_versions: alloc::collections::BTreeMap::new(),
             from_image: true,
+            main_executable: false,
             export_ordinals: Default::default(),
+            export_hints: Default::default(),
             references: Default::default(),
             protected_exports: Default::default(),
         };
@@ -7193,7 +7659,9 @@ mod tests {
             export_symbols: alloc::collections::BTreeMap::new(),
             export_versions: alloc::collections::BTreeMap::new(),
             from_image: true,
+            main_executable: false,
             export_ordinals: Default::default(),
+            export_hints: Default::default(),
             references: Default::default(),
             protected_exports: Default::default(),
         };
@@ -7235,7 +7703,9 @@ mod tests {
             export_symbols: alloc::collections::BTreeMap::new(),
             export_versions: alloc::collections::BTreeMap::new(),
             from_image: true,
+            main_executable: false,
             export_ordinals: Default::default(),
+            export_hints: Default::default(),
             references: Default::default(),
             protected_exports: Default::default(),
         };
@@ -7293,7 +7763,7 @@ mod tests {
         );
     }
 
-    /// `emit_x86_64_plt` materialises one trampoline per
+    /// `emit_x86_64_plt` materializes one trampoline per
     /// unique import the merged image reaches for, then
     /// patches each call site's disp32 to reach its
     /// trampoline. Pins the shape: one `printf` import + one
@@ -7301,7 +7771,7 @@ mod tests {
     /// `.text` payload, each starting with `FF 25` (jmp
     /// qword ptr [rip + disp32]).
     #[test]
-    fn emit_x86_64_plt_materialises_one_trampoline_per_import() {
+    fn emit_x86_64_plt_materializes_one_trampoline_per_import() {
         let target = Target::LinuxX64;
         let mut opts = NativeOptions::new().with_debug_info(false);
         opts.output_kind = OutputKind::Relocatable;
@@ -7400,7 +7870,7 @@ mod tests {
     /// unique import. `pending_imports` drains of every
     /// `R_AARCH64_CALL26` reloc; data-ref parks stay.
     #[test]
-    fn emit_aarch64_plt_materialises_one_trampoline_per_import() {
+    fn emit_aarch64_plt_materializes_one_trampoline_per_import() {
         let target = Target::LinuxAarch64;
         let mut opts = NativeOptions::new().with_debug_info(false);
         opts.output_kind = OutputKind::Relocatable;
@@ -7789,6 +8259,47 @@ mod tests {
         assert_eq!(merged.bss_size, 0, "Common dropped, no bss slot");
     }
 
+    /// The C runtime's tables run in section-name order across units, link
+    /// order within a name; the exit tables run forward, so the backward
+    /// fini walk reaches them reversed. TLS callbacks need a PE image.
+    #[test]
+    fn crt_tables_order_by_section_name_across_units() {
+        use super::super::object::{InitTable, NativeInitFunc};
+        let unit = |tables: &[(&str, u64)]| {
+            let mut o = NativeObject::empty(NativeMachine::X86_64);
+            o.text = alloc::vec![0xc3; 16];
+            o.init_funcs = (tables.iter())
+                .map(|&(t, at)| NativeInitFunc {
+                    table: InitTable::Crt(t.into()),
+                    target: InitTarget::Text(at),
+                })
+                .collect();
+            o
+        };
+        let a = unit(&[("CU", 0), ("TU", 1), ("PU", 2), ("IU", 3)]);
+        let b = unit(&[("CB", 0), ("IU", 1), ("TB", 2), ("PA", 3)]);
+        let merged = link_native_objects(&[a, b]).expect("link");
+        let slots = |(start, len): (u64, u64)| -> Vec<i64> {
+            (0..len / 8)
+                .map(|k| {
+                    let r = (merged.data_abs_relocs.iter())
+                        .find(|r| r.slot_offset == start + k * 8)
+                        .expect("slot relocation");
+                    match r.target {
+                        MergedTarget::Text(off) => off,
+                        MergedTarget::Data(_) => panic!("a data target"),
+                    }
+                })
+                .collect()
+        };
+        let arrays = merged.init_fini_arrays;
+        assert_eq!(slots(arrays.init.unwrap()), [3, 17, 16, 0]);
+        assert_eq!(slots(arrays.fini.unwrap()), [1, 18, 2, 19]);
+        assert_eq!(arrays.tls_callbacks, None);
+        let err = link_native_objects(&[unit(&[("LB", 0)])]).expect_err("refused");
+        assert!(format!("{err}").contains("PE image only"), "{err}");
+    }
+
     // STB_WEAK defined symbols from a foreign object must resolve a
     // reference rather than being dropped (ELF/SysV: a weak definition
     // is a real, overridable definition). A strong definition of the
@@ -7854,8 +8365,15 @@ mod tests {
                 unwind: alloc::vec::Vec::new(),
                 extern_data_names: alloc::vec::Vec::new(),
                 alternate_names: alloc::vec::Vec::new(),
+                weak_aliases: alloc::vec::Vec::new(),
+                export_aliases: alloc::vec::Vec::new(),
+                includes: alloc::vec::Vec::new(),
                 comdats: alloc::vec::Vec::new(),
                 default_libs: alloc::vec::Vec::new(),
+                mismatch_keys: Vec::new(),
+                section_merges: Vec::new(),
+                resources: Vec::new(),
+                export_forms: Vec::new(),
                 debug_info: alloc::vec::Vec::new(),
                 debug_abbrev: alloc::vec::Vec::new(),
                 debug_line: alloc::vec::Vec::new(),
@@ -8796,7 +9314,9 @@ mod tests {
             export_symbols: Default::default(),
             export_versions: Default::default(),
             from_image: true,
+            main_executable: false,
             export_ordinals: Default::default(),
+            export_hints: Default::default(),
             references: Default::default(),
             protected_exports: Default::default(),
         }
@@ -9190,7 +9710,9 @@ mod tests {
             export_symbols: Default::default(),
             export_versions: Default::default(),
             from_image: true,
+            main_executable: false,
             export_ordinals: Default::default(),
+            export_hints: Default::default(),
             references: Default::default(),
             protected_exports: Default::default(),
         };
@@ -9292,7 +9814,9 @@ mod tests {
             export_symbols: Default::default(),
             export_versions: Default::default(),
             from_image: true,
+            main_executable: false,
             export_ordinals: Default::default(),
+            export_hints: Default::default(),
             references: Default::default(),
             protected_exports: Default::default(),
         };
@@ -9342,6 +9866,37 @@ mod tests {
                 .iter()
                 .any(|r| matches!(r.target, MergedTarget::Data(at) if at as u64 == merged.data.len() as u64 + copy.value)),
             "the slot holds the copy's address"
+        );
+    }
+
+    /// `/FAILIFMISMATCH`: inputs that agree on a key link; two values for
+    /// one key stop the link, naming both inputs.
+    #[test]
+    fn a_mismatch_key_takes_one_value_across_the_link() {
+        let with = |source: &str, pairs: &[(&str, &str)]| NativeObject {
+            source: source.to_string(),
+            mismatch_keys: (pairs.iter())
+                .map(|&(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
+            ..blank_object(NativeMachine::X86_64)
+        };
+        let a = with(
+            "a.obj",
+            &[
+                ("_MSC_VER", "1900"),
+                ("RuntimeLibrary", "MD_DynamicRelease"),
+            ],
+        );
+        let b = with("b.obj", &[("_MSC_VER", "1900")]);
+        let c = with("c.obj", &[("RuntimeLibrary", "MT_StaticRelease")]);
+        assert!(check_mismatch_keys(&[a.clone(), b]).is_ok());
+        let err = check_mismatch_keys(&[a, c]).unwrap_err().to_string();
+        assert!(
+            err.contains(
+                "`/FAILIFMISMATCH` key `RuntimeLibrary` is `MD_DynamicRelease` in a.obj \
+                 and `MT_StaticRelease` in c.obj"
+            ),
+            "{err}"
         );
     }
 }

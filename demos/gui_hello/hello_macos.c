@@ -40,7 +40,7 @@
 #pragma binding(libobjc::objc_getClass,    "_objc_getClass")
 #pragma binding(libobjc::sel_registerName, "_sel_registerName")
 #pragma binding(libobjc::objc_msgSend,     "_objc_msgSend")
-/* Runtime-side primitives for synthesising a fresh ObjC class
+/* Runtime-side primitives for synthesizing a fresh ObjC class
  * at runtime. c5 has no `@interface`/`@implementation` syntax,
  * so the `NSApplicationDelegate` we need for "terminate when
  * the last window closes" is built through the C-level runtime
@@ -71,7 +71,7 @@ void *sel_registerName(char *name);
  * for receiver+selector-only call sites (`alloc`, `run`, ...)
  * where no further argument shape matters. */
 void *objc_msgSend(void *recv, void *sel, ...);
-/* Non-variadic specialisation for the NSWindow initWithContentRect
+/* Non-variadic specialization for the NSWindow initWithContentRect
  * shape: receiver + selector + four NSRect doubles + three
  * integer arguments. With a non-variadic prototype, c5 emits the
  * standard AAPCS64 register layout (d0..d3 for the NSRect
@@ -80,11 +80,11 @@ void *objc_msgSend(void *recv, void *sel, ...);
 void *objc_msgSend_rect(void *recv, void *sel,
                         double x, double y, double w, double h,
                         long long mask, long long backing, long long defer);
-/* Non-variadic specialisation for selectors that take a single
+/* Non-variadic specialization for selectors that take a single
  * `long long`-shaped argument (BOOL / NSUInteger). Examples:
  * `activateIgnoringOtherApps:`. */
 void *objc_msgSend_b(void *recv, void *sel, long long arg);
-/* Non-variadic specialisation for selectors that take a single
+/* Non-variadic specialization for selectors that take a single
  * pointer (`id` / `NSString *` / `char *`). Examples:
  * `setTitle:`, `makeKeyAndOrderFront:`,
  * `stringWithUTF8String:`. */
@@ -251,7 +251,7 @@ int main(int argc, char **argv) {
 
     /* [window setTitle:@"badc Cocoa hello"] -- @"..." is an
      * NSString literal in ObjC; since we don't have those,
-     * synthesise one from a UTF-8 byte string via the
+     * synthesize one from a UTF-8 byte string via the
      * NSString class method `stringWithUTF8String:`. */
     void *NSString = objc_getClass("NSString");
     void *swus     = sel_registerName("stringWithUTF8String:");

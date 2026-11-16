@@ -1,7 +1,7 @@
 //! Contract an integer multiply feeding an add or a subtract into a
 //! single multiply-accumulate (`Inst::MulAdd`).
 //!
-//! Recognised shapes, where `m = Binop(Mul, a, b)` is read by exactly
+//! Recognized shapes, where `m = Binop(Mul, a, b)` is read by exactly
 //! the add / sub being rewritten:
 //!
 //! ```text
@@ -81,7 +81,7 @@ fn match_mul_add(func: &FunctionSsa, counts: &[u32], idx: usize) -> Option<Inst>
     })
 }
 
-/// Walk every function, contracting recognised multiply-accumulates.
+/// Walk every function, contracting recognized multiply-accumulates.
 pub(crate) fn run(funcs: &mut [FunctionSsa]) {
     for func in funcs.iter_mut() {
         let counts = compute_use_counts(func);

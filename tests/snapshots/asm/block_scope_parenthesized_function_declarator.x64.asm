@@ -69,9 +69,9 @@ Disassembly of section .text:
                	addq	$0x898, %rax            # imm = 0x898
                	incq	%rax
                	addq	$0x30d40, %rax          # imm = 0x30D40
+               	xorl	%ecx, %ecx
+               	movl	$0x1, %edx
                	cmpq	$0x3161f, %rax          # imm = 0x3161F
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	movq	%rdx, %rax
+               	cmoveq	%rcx, %rax
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>

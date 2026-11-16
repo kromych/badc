@@ -17,7 +17,7 @@ use crate::c5::layout::{round_up, write_struct};
 use crate::c5::program::Program;
 
 const IMAGE_BASE: u64 = 0x1_4000_0000;
-const SECTION_ALIGNMENT: u32 = 0x1000;
+pub(crate) const SECTION_ALIGNMENT: u32 = 0x1000;
 /// The allocation granularity an image loads at, which an RVA's alignment keeps.
 const MAX_SECTION_ALIGNMENT: u32 = 0x1_0000;
 const FILE_ALIGNMENT: u32 = 0x200;
@@ -83,8 +83,10 @@ struct SectionPlan {
     data: bool,
     reloc: bool,
     edata: bool,
+    rsrc: bool,
     dwarf: usize,
     named: usize,
+    named_code: usize,
 }
 
 impl SectionPlan {
@@ -95,8 +97,10 @@ impl SectionPlan {
             + self.data as usize
             + self.reloc as usize
             + self.edata as usize
+            + self.rsrc as usize
             + self.dwarf
             + self.named
+            + self.named_code
     }
 }
 
@@ -166,12 +170,31 @@ const IMAGE_ORDINAL_FLAG64: u64 = 1 << 63;
 
 const DATA_DIRECTORY_EXPORT: usize = 0;
 const DATA_DIRECTORY_IMPORT: usize = 1;
+const DATA_DIRECTORY_RESOURCE: usize = 2;
 const DATA_DIRECTORY_EXCEPTION: usize = 3;
 const DATA_DIRECTORY_BASERELOC: usize = 5;
+const DATA_DIRECTORY_DEBUG: usize = 6;
 const DATA_DIRECTORY_TLS: usize = 9;
 const DATA_DIRECTORY_IAT: usize = 12;
+const DATA_DIRECTORY_DELAY_IMPORT: usize = 13;
 
-const IMAGE_TLS_DIRECTORY64_SIZE: u32 = 40;
+/// `SizeOfStackReserve` and `SizeOfStackCommit` without `--stack`: the
+/// initial thread's reserved range, which pages in on demand. link.exe
+/// reserves 1 MiB; 8 MiB matches the glibc and Apple main-thread stacks, so
+/// recursion tuned for Linux or macOS does not reach the guard page first.
+const DEFAULT_STACK: (u64, u64) = (0x80_0000, 0x1000);
+
+/// `IMAGE_DEBUG_DIRECTORY`, and the `RSDS` record's signature, GUID and
+/// age ahead of the PDB path.
+const IMAGE_DEBUG_DIRECTORY_SIZE: usize = 28;
+const IMAGE_DEBUG_TYPE_CODEVIEW: u32 = 2;
+const CV_RSDS_HEADER_SIZE: usize = 24;
+
+/// The `st_info` binding and type of an image symbol (ELF gABI 4.19).
+const STB_LOCAL: u8 = 0;
+const STT_FUNC: u8 = 2;
+
+pub(crate) const IMAGE_TLS_DIRECTORY64_SIZE: u32 = 40;
 
 const ARM64_PACKED_FUNCTION_MAX_BYTES: u32 = 2047 * 4;
 
@@ -222,6 +245,10 @@ struct PeLayout<'a> {
     xdata_base_in_rdata: u32,
     provenance: Vec<u8>,
     marker_base_in_rdata: u32,
+    /// The debug directory and its CodeView record, past the marker, when
+    /// the build names a PDB; filled once the PDB is written.
+    debug_dir: Vec<u8>,
+    debug_dir_base_in_rdata: u32,
     rdata_size: u32,
     rdata_present: bool,
     data_present: bool,
@@ -271,6 +298,10 @@ struct PeLayout<'a> {
     edata_file_off: u32,
     edata_bytes: Vec<u8>,
     edata_raw_size: u32,
+    rsrc_rva: u32,
+    rsrc_file_off: u32,
+    rsrc_bytes: Vec<u8>,
+    rsrc_raw_size: u32,
     pre_dwarf_end_file_off: u32,
     pre_dwarf_end_rva: u32,
     coff_strtab: Vec<u8>,
@@ -282,6 +313,28 @@ struct PeLayout<'a> {
     coff_strtab_file_off: u32,
     total_file_size: usize,
     image_size: u32,
+}
+
+impl PeLayout<'_> {
+    /// The RVA and file offset where the sections laid out before `.rsrc`
+    /// end.
+    fn end_before_rsrc(&self) -> (u32, u32) {
+        if self.edata_present {
+            let rva = self.edata_rva + self.edata_bytes.len() as u32;
+            (rva, self.edata_file_off + self.edata_raw_size)
+        } else if self.reloc_present {
+            let rva = self.reloc_rva + self.reloc_bytes.len() as u32;
+            (rva, self.reloc_file_off + self.reloc_raw_size)
+        } else if self.data_present || !self.named_out.is_empty() {
+            (self.named_rva_end, self.named_file_end)
+        } else if self.rdata_present {
+            let rva = self.rdata_rva + self.rdata_size;
+            (rva, self.rdata_file_off + self.rdata_raw_size)
+        } else {
+            let rva = self.idata_rva + self.idata.bytes.len() as u32;
+            (rva, self.rdata_file_off + self.rdata_raw_size)
+        }
+    }
 }
 
 /// One PE image's writer. [`write`] runs the phases in order: the entry
@@ -298,6 +351,8 @@ struct PeWriter<'a> {
     driver: bool,
     passthrough_entry: bool,
     stub: EntryStub,
+    /// The entry stub's offset in `.text`.
+    stub_at: u32,
     /// `(name, DLL, ordinal)` per import; an ordinal replaces the name.
     imports: Vec<(String, String, Option<u16>)>,
     dlls: Vec<DllGroup>,
@@ -311,12 +366,23 @@ struct PeWriter<'a> {
     out: Vec<u8>,
 }
 
+#[cfg(test)]
 pub(super) fn write(
     program: &Program,
     build: &Build,
     machine: Machine,
     target: super::Target,
 ) -> Result<Vec<u8>, C5Error> {
+    write_with_pdb(program, build, machine, target).map(|w| w.0)
+}
+
+/// The image, and the PDB `build.pdb_path` names.
+pub(super) fn write_with_pdb(
+    program: &Program,
+    build: &Build,
+    machine: Machine,
+    target: super::Target,
+) -> Result<(Vec<u8>, Option<Vec<u8>>), C5Error> {
     let mut w = PeWriter::new(program, build, machine, target)?;
     w.layout_code_sections()?;
     w.layout_data_sections()?;
@@ -324,12 +390,13 @@ pub(super) fn write(
     w.layout_dwarf_and_coff();
     w.build_text()?;
     w.emit_headers()?;
+    let pdb = w.build_pdb()?;
     let native = w.subsystem == IMAGE_SUBSYSTEM_NATIVE;
     let mut image = w.emit_sections()?;
     if native {
         store_checksum(&mut image);
     }
-    Ok(image)
+    Ok((image, pdb))
 }
 
 /// Offset of `OptionalHeader.CheckSum`: past the PE signature, the COFF
@@ -398,7 +465,12 @@ impl<'a> PeWriter<'a> {
         let imports = image_imports(build, native, machine == Machine::X86_64)?;
         let dlls = group_imports_by_dll(&imports);
         let text_align = build.text_align.max(16) as u32;
-        let text_prologue_len = round_up(stub.bytes.len() as u32, text_align);
+        // The entry stub opens `.text`, or follows the code where the named
+        // code sections open the text stream.
+        let (text_prologue_len, stub_at) = match build.named_code_sections.is_empty() {
+            true => (round_up(stub.bytes.len() as u32, text_align), 0),
+            false => (0, round_up(build.text.len() as u32, text_align)),
+        };
         Ok(PeWriter {
             program,
             build,
@@ -412,6 +484,7 @@ impl<'a> PeWriter<'a> {
             imports,
             dlls,
             text_prologue_len,
+            stub_at,
             layout: PeLayout::default(),
             text_bytes: Vec::new(),
             jt_bytes: Vec::new(),
@@ -474,6 +547,39 @@ impl<'a> PeWriter<'a> {
         }
     }
 
+    /// The TLS directory: the link's `_tls_used`, else the writer's place
+    /// past the index slot.
+    fn tls_directory_rva(&self) -> Option<u32> {
+        if !tls_directory_present(self.build) {
+            return None;
+        }
+        Some(match self.build.init_fini_arrays.tls_directory {
+            Some(off) => self.data_off_to_rva(off as u32),
+            None => self.layout.data_rva + self.layout.tls.directory_offset_in_data,
+        })
+    }
+
+    /// `IMAGE_TLS_DIRECTORY64`. The whole thread-local block is the
+    /// template, with no zero fill.
+    fn tls_directory(&self) -> [u8; IMAGE_TLS_DIRECTORY64_SIZE as usize] {
+        let l = &self.layout;
+        let va = |rva: u32| IMAGE_BASE + rva as u64;
+        let start = va(l.data_rva + l.tls.tls_init_offset_in_data);
+        let callbacks = (self.build.init_fini_arrays.tls_callbacks)
+            .map_or(0, |off| va(self.data_off_to_rva(off as u32)));
+        let mut out = [0; IMAGE_TLS_DIRECTORY64_SIZE as usize];
+        let fields = [
+            start,
+            start + self.build.tls_data.len() as u64,
+            va(self.tls_index_rva()),
+            callbacks,
+        ];
+        for (k, f) in fields.into_iter().enumerate() {
+            out[k * 8..k * 8 + 8].copy_from_slice(&f.to_le_bytes());
+        }
+        out
+    }
+
     /// The data families and which sections the image carries, the DWARF
     /// payloads (built first so the section-header count is known before
     /// the layout; empty blobs are dropped, since the loader rejects two
@@ -481,9 +587,8 @@ impl<'a> PeWriter<'a> {
     /// `.pdata` and `.idata`.
     fn layout_code_sections(&mut self) -> Result<(), C5Error> {
         let (program, build) = (self.program, self.build);
-        let section_align = build
-            .named_sections
-            .iter()
+        let section_align = (build.named_sections.iter())
+            .chain(&build.named_code_sections)
             .map(|n| n.align as usize)
             .chain([
                 build.text_align,
@@ -499,6 +604,16 @@ impl<'a> PeWriter<'a> {
                      bytes the loader places an image on"
                 ),
             ));
+        }
+        // A named code section takes a header of its own from a section
+        // boundary, which the link aligned it to.
+        if let Some(n) = (build.named_code_sections.iter())
+            .find(|n| !n.offset.is_multiple_of(section_align as u64))
+        {
+            return Err(Self::internal(format!(
+                "PE: code section `{}` at text offset {:#x} is off the {section_align:#x} section alignment",
+                n.name, n.offset
+            )));
         }
         let l = &mut self.layout;
         l.section_align = section_align as u32;
@@ -539,15 +654,18 @@ impl<'a> PeWriter<'a> {
             round_up(l.rdata_prefix_len, 8)
         };
         l.text_rva = l.section_align;
-        l.text_size = self.text_prologue_len + build.text.len() as u32;
-        // A scope table names `__C_specific_handler` by its stub in the image.
+        l.text_size = (self.text_prologue_len + build.text.len() as u32)
+            .max(self.stub_at + self.stub.bytes.len() as u32);
+        // A scope table names `__C_specific_handler` by its stub in the image,
+        // or an input's definition.
         let handler = (build
             .imports
             .imports
             .iter()
             .zip(&build.plt_trampoline_offsets))
         .find(|(i, _)| i.local_name == "__C_specific_handler")
-        .and_then(|(_, off)| *off);
+        .and_then(|(_, off)| *off)
+        .or(build.seh_handler);
         let seh = match handler {
             Some(stub) => Seh {
                 rows: &build.seh_rows,
@@ -565,11 +683,18 @@ impl<'a> PeWriter<'a> {
                 ));
             }
         };
+        // The stub's record spans the padding up to the code behind it.
+        let stub_len = match self.stub_at {
+            0 => self.text_prologue_len,
+            _ => self.stub.bytes.len() as u32,
+        };
+        let stub = (self.stub_at, stub_len, &self.stub.a64_prologue[..]);
         let pdata = build_pdata(
             self.machine,
             l.text_rva,
             l.text_size,
             self.text_prologue_len,
+            stub,
             &build.fn_unwind,
             &build.a64_unwind,
             &build.early_returns,
@@ -586,16 +711,24 @@ impl<'a> PeWriter<'a> {
         l.provenance = super::provenance_comment();
         l.marker_base_in_rdata = round_up(l.xdata_base_in_rdata + l.xdata.len() as u32, 8);
         l.rdata_size = l.marker_base_in_rdata + l.provenance.len() as u32;
+        if let Some(path) = &build.pdb_path {
+            l.debug_dir_base_in_rdata = round_up(l.rdata_size, 4);
+            l.debug_dir =
+                vec![0; IMAGE_DEBUG_DIRECTORY_SIZE + CV_RSDS_HEADER_SIZE + path.len() + 1];
+            l.rdata_size = l.debug_dir_base_in_rdata + l.debug_dir.len() as u32;
+        }
         l.rdata_present = l.rdata_size > 0;
         l.data_present = data_head_len + data_tail.len + bss_head + bss_tail.len > 0
-            || !build.tls_data.is_empty();
-        l.reloc_present = !build.tls_data.is_empty()
+            || tls_directory_present(build);
+        l.reloc_present = tls_directory_present(build)
             || !build.data_relocs.is_empty()
             || !build.code_relocs.is_empty()
             || !build.label_relocs.is_empty()
             || !build.text_abs_relocs.is_empty()
             || !build.image_base_slots.is_empty();
-        l.edata_present = !build.exports.is_empty() || !build.dynamic_exports.is_empty();
+        l.edata_present = !build.exports.is_empty()
+            || !build.dynamic_exports.is_empty()
+            || !build.forwarded_exports.is_empty();
         l.dwarf_present = build.debug_info;
         let text_vmaddr = IMAGE_BASE + (l.text_rva + self.text_prologue_len) as u64;
         let raw = image::image_dwarf(program, build, self.target, text_vmaddr, None, None)?;
@@ -624,8 +757,12 @@ impl<'a> PeWriter<'a> {
             data: l.data_present,
             reloc: l.reloc_present,
             edata: l.edata_present,
+            rsrc: !build.resources.is_empty(),
             dwarf: dwarf_section_count,
             named: build.named_sections.iter().filter(|n| n.size > 0).count(),
+            named_code: (build.named_code_sections.iter())
+                .filter(|n| n.size > 0)
+                .count(),
         };
         l.headers_size = headers_raw_size(&l.plan) as u32;
         l.text_file_off = l.headers_size;
@@ -635,7 +772,12 @@ impl<'a> PeWriter<'a> {
         l.pdata_raw_size = round_up(l.pdata_bytes.len() as u32, FILE_ALIGNMENT);
         l.idata_rva = round_up(l.pdata_rva + l.pdata_bytes.len() as u32, l.section_align);
         l.idata_file_off = l.pdata_file_off + l.pdata_raw_size;
-        l.idata = plan_idata(&self.dlls, &self.imports, l.idata_rva);
+        l.idata = plan_idata(
+            &self.dlls,
+            &self.imports,
+            &self.build.import_hints,
+            l.idata_rva,
+        );
         l.idata_raw_size = round_up(l.idata.bytes.len() as u32, FILE_ALIGNMENT);
         Ok(())
     }
@@ -860,7 +1002,8 @@ impl<'a> PeWriter<'a> {
                 l.data_rva,
                 &|off| self.data_off_to_rva(off),
                 &l.tls,
-                !build.tls_data.is_empty(),
+                self.tls_directory_rva(),
+                build.init_fini_arrays.tls_callbacks.is_some(),
                 &build.data_relocs,
                 &build.code_relocs,
                 &build.label_relocs,
@@ -946,7 +1089,13 @@ impl<'a> PeWriter<'a> {
                 };
                 entries.push((d.name.clone(), rva));
             }
-            build_export_directory(edata_rva, entries, build.shared_lib_name.as_deref())?
+            build_export_directory(
+                edata_rva,
+                entries,
+                &build.forwarded_exports,
+                &build.export_forms,
+                build.shared_lib_name.as_deref(),
+            )?
         } else {
             Vec::new()
         };
@@ -966,6 +1115,13 @@ impl<'a> PeWriter<'a> {
         l.edata_file_off = edata_file_off;
         l.edata_bytes = edata_bytes;
         l.edata_raw_size = edata_raw_size;
+        if l.plan.rsrc {
+            let (end_rva, end_file) = l.end_before_rsrc();
+            l.rsrc_rva = round_up(end_rva, l.section_align);
+            l.rsrc_file_off = end_file;
+            l.rsrc_bytes = super::pe_rsrc::build_rsrc(l.rsrc_rva, &build.resources)?;
+            l.rsrc_raw_size = round_up(l.rsrc_bytes.len() as u32, FILE_ALIGNMENT);
+        }
         Ok(())
     }
 
@@ -980,25 +1136,13 @@ impl<'a> PeWriter<'a> {
         let build = self.build;
         let text_body_rva = self.text_body_rva();
         let l = &mut self.layout;
-        l.pre_dwarf_end_file_off = if l.edata_present {
-            l.edata_file_off + l.edata_raw_size
-        } else if l.reloc_present {
-            l.reloc_file_off + l.reloc_raw_size
-        } else if l.data_present || !l.named_out.is_empty() {
-            l.named_file_end
+        (l.pre_dwarf_end_rva, l.pre_dwarf_end_file_off) = if l.plan.rsrc {
+            (
+                l.rsrc_rva + l.rsrc_bytes.len() as u32,
+                l.rsrc_file_off + l.rsrc_raw_size,
+            )
         } else {
-            l.rdata_file_off + l.rdata_raw_size
-        };
-        l.pre_dwarf_end_rva = if l.edata_present {
-            l.edata_rva + l.edata_bytes.len() as u32
-        } else if l.reloc_present {
-            l.reloc_rva + l.reloc_bytes.len() as u32
-        } else if l.data_present || !l.named_out.is_empty() {
-            l.named_rva_end
-        } else if l.rdata_present {
-            l.rdata_rva + l.rdata_size
-        } else {
-            l.idata_rva + l.idata.bytes.len() as u32
+            l.end_before_rsrc()
         };
         let emit_plt_coff_symbols = !build.plt_trampoline_offsets.is_empty();
         let need_coff_strtab = l.dwarf_present || emit_plt_coff_symbols;
@@ -1093,6 +1237,8 @@ impl<'a> PeWriter<'a> {
             (l.dwarf_end_file_off + coff_symbols.len() as u32 + coff_strtab.len() as u32) as usize;
         l.image_size = if l.dwarf_present {
             l.dwarf_end_rva
+        } else if l.plan.rsrc {
+            round_up(l.rsrc_rva + l.rsrc_bytes.len() as u32, l.section_align)
         } else if l.edata_present {
             round_up(l.edata_rva + l.edata_bytes.len() as u32, l.section_align)
         } else if l.reloc_present {
@@ -1116,10 +1262,10 @@ impl<'a> PeWriter<'a> {
         let l = &self.layout;
         let text_rva = l.text_rva;
         let prologue = self.text_prologue_len;
-        let mut text: Vec<u8> = Vec::with_capacity(l.text_size as usize);
-        text.extend_from_slice(&self.stub.bytes);
-        text.resize(prologue as usize, 0xCC);
-        text.extend_from_slice(&build.text);
+        let mut text: Vec<u8> = alloc::vec![0xCC; l.text_size as usize];
+        let (stub_at, body_at) = (self.stub_at as usize, prologue as usize);
+        text[stub_at..stub_at + self.stub.bytes.len()].copy_from_slice(&self.stub.bytes);
+        text[body_at..body_at + build.text.len()].copy_from_slice(&build.text);
         if !build.rodata.abs64.is_empty() {
             return Err(Self::internal(String::from(
                 "PE: absolute table slots reached a final-image build",
@@ -1129,13 +1275,18 @@ impl<'a> PeWriter<'a> {
             patch_direct_call(
                 machine,
                 &mut text,
-                call_off,
+                self.stub_at + call_off,
                 prologue + build.entry_offset as u32,
             )?;
         }
         for &(call_off, name) in &self.stub.direct_call_runtime {
             let target = runtime_symbol_offset(build, name)?;
-            patch_direct_call(machine, &mut text, call_off, prologue + target)?;
+            patch_direct_call(
+                machine,
+                &mut text,
+                self.stub_at + call_off,
+                prologue + target,
+            )?;
         }
         for f in &build.got_fixups {
             let instr_off = (f.instr_offset as u32) + prologue;
@@ -1265,14 +1416,7 @@ impl<'a> PeWriter<'a> {
         for f in &build.rodata.addr_fixups {
             let instr_off = (f.code_offset as u32) + prologue;
             let target_rva = i64::from(jt_rva + f.rodata_offset as u32);
-            patch_addr_load(
-                machine,
-                &mut text,
-                instr_off,
-                text_rva,
-                target_rva,
-                AddrPart::Whole,
-            )?;
+            patch_addr_load(machine, &mut text, instr_off, text_rva, target_rva, f.part)?;
         }
         let mut jt_bytes = build.rodata.bytes.clone();
         image::patch_jump_table(
@@ -1301,7 +1445,7 @@ impl<'a> PeWriter<'a> {
         Ok(())
     }
 
-    /// `AddressOfEntryPoint`: the stub at the start of `.text`, or the
+    /// `AddressOfEntryPoint`: the entry stub, or the
     /// user's body when `--shared` output defines `DllMain` or a
     /// passthrough subsystem invokes the entry directly.
     fn entry_rva(&self) -> Result<u32, C5Error> {
@@ -1319,8 +1463,93 @@ impl<'a> PeWriter<'a> {
         } else if self.passthrough_entry {
             Ok(l.text_rva + self.text_prologue_len + build.entry_offset as u32)
         } else {
-            Ok(l.text_rva)
+            Ok(l.text_rva + self.stub_at)
         }
+    }
+
+    /// The PDB of the image's DWARF and section table, when the build
+    /// names one, and the debug directory's `RSDS` record naming it.
+    fn build_pdb(&mut self) -> Result<Option<Vec<u8>>, C5Error> {
+        let Some(path) = self.build.pdb_path.as_deref() else {
+            return Ok(None);
+        };
+        let mut raw = Vec::new();
+        write_section_headers(&mut raw, &self.section_headers()?);
+        let blob = |name: &str| {
+            (self.layout.dwarf_blobs.iter())
+                .find(|(n, _)| n == name)
+                .map_or(&[][..], |(_, b)| b.as_slice())
+        };
+        let dwarf = super::dwarf_read::Sections {
+            info: blob(".debug_info"),
+            abbrev: blob(".debug_abbrev"),
+            str: blob(".debug_str"),
+            line: blob(".debug_line"),
+            line_str: blob(".debug_line_str"),
+        };
+        let info = super::dwarf_read::read(&dwarf, self.machine);
+        let image = super::pdb::Image {
+            machine: self.machine,
+            image_base: IMAGE_BASE,
+            sections: raw.as_chunks::<SECTION_HEADER_SIZE>().0.to_vec(),
+            publics: self.publics(&info),
+        };
+        let pdb = super::pdb::write(&info, &image);
+        let l = &mut self.layout;
+        let record_at = l.debug_dir_base_in_rdata + IMAGE_DEBUG_DIRECTORY_SIZE as u32;
+        let mut d = Vec::with_capacity(l.debug_dir.len());
+        for field in [0, 0, 0, IMAGE_DEBUG_TYPE_CODEVIEW] {
+            d.extend_from_slice(&u32::to_le_bytes(field));
+        }
+        d.extend_from_slice(&((CV_RSDS_HEADER_SIZE + path.len() + 1) as u32).to_le_bytes());
+        d.extend_from_slice(&(l.rdata_rva + record_at).to_le_bytes());
+        d.extend_from_slice(&(l.rdata_file_off + record_at).to_le_bytes());
+        d.extend_from_slice(b"RSDS");
+        d.extend_from_slice(&pdb.guid);
+        d.extend_from_slice(&pdb.age.to_le_bytes());
+        d.extend_from_slice(path.as_bytes());
+        d.push(0);
+        l.debug_dir = d;
+        Ok(Some(pdb.bytes))
+    }
+
+    /// The image's global symbols at their addresses; an image the link
+    /// gave no symbol table takes the external definitions `info` names.
+    fn publics(&self, info: &super::debug_model::DebugInfo) -> Vec<super::pdb::Public> {
+        use super::pdb::Public;
+        use crate::c5::codegen::SymbolPlace;
+        let build = self.build;
+        if build.image_symbols.is_empty() {
+            let units = info.units.iter();
+            let functions = (units.clone().flat_map(|u| &u.functions)).filter(|f| f.external);
+            let globals = units.flat_map(|u| &u.globals).filter(|g| g.external);
+            return (functions.map(|f| (&f.name, f.low, true)))
+                .chain(globals.map(|g| (&g.name, g.address, false)))
+                .map(|(name, va, function)| Public {
+                    name: name.clone(),
+                    va,
+                    function,
+                })
+                .collect();
+        }
+        let text = IMAGE_BASE + u64::from(self.text_body_rva());
+        let data = |off: u64| IMAGE_BASE + u64::from(self.data_off_to_rva(off as u32));
+        (build.image_symbols.iter())
+            .filter(|s| s.info >> 4 != STB_LOCAL && !s.name.is_empty())
+            .filter_map(|s| {
+                let va = match s.place {
+                    SymbolPlace::Text(o) => text + o,
+                    SymbolPlace::Data(o) => data(o),
+                    SymbolPlace::Bss(o) => data(build.data.len() as u64 + o),
+                    SymbolPlace::Tls(_) | SymbolPlace::Abs(_) => return None,
+                };
+                Some(Public {
+                    name: s.name.clone(),
+                    va,
+                    function: s.info & 0xf == STT_FUNC,
+                })
+            })
+            .collect()
     }
 
     /// The DOS header and stub, the PE signature, the COFF and optional
@@ -1343,13 +1572,15 @@ impl<'a> PeWriter<'a> {
             l.coff_strtab_file_off,
             self.is_dll,
         );
-        let (tls_table_rva, tls_table_size) = if !build.tls_data.is_empty() {
-            (
-                l.data_rva + l.tls.directory_offset_in_data,
-                IMAGE_TLS_DIRECTORY64_SIZE,
-            )
-        } else {
+        let (tls_table_rva, tls_table_size) = match self.tls_directory_rva() {
+            Some(rva) => (rva, IMAGE_TLS_DIRECTORY64_SIZE),
+            None => (0, 0),
+        };
+        let debug_dir = if l.debug_dir.is_empty() {
             (0, 0)
+        } else {
+            let rva = l.rdata_rva + l.debug_dir_base_in_rdata;
+            (rva, IMAGE_DEBUG_DIRECTORY_SIZE as u32)
         };
         let reloc_size = l.reloc_bytes.len() as u32;
         write_optional_header(
@@ -1373,10 +1604,18 @@ impl<'a> PeWriter<'a> {
                 base_reloc_size: reloc_size,
                 iat_rva: l.idata.iat_rva_base,
                 iat_size: l.idata.iat_size,
+                delay_import: (build.delay_import_table).map_or((0, 0), |(off, size)| {
+                    (self.data_off_to_rva(off as u32), size as u32)
+                }),
                 tls_table_rva,
                 tls_table_size,
                 export_table_rva: l.edata_rva,
                 export_table_size: l.edata_bytes.len() as u32,
+                resource_table_rva: l.rsrc_rva,
+                resource_table_size: l.rsrc_bytes.len() as u32,
+                stack: build.stack_size.unwrap_or(DEFAULT_STACK),
+                debug_rva: debug_dir.0,
+                debug_size: debug_dir.1,
                 subsystem: self.subsystem,
             },
         );
@@ -1402,16 +1641,31 @@ impl<'a> PeWriter<'a> {
         let reloc_size = l.reloc_bytes.len() as u32;
         let mut sections: Vec<SectionHeader> = Vec::with_capacity(l.plan.count());
         let ro = IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ | self.resident(b".rdata");
+        // The named code sections open the text bytes, each from a section
+        // boundary; `.text` takes the rest from the next one.
+        let code = |name: &[u8]| {
+            IMAGE_SCN_CNT_CODE | IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_MEM_READ | self.resident(name)
+        };
+        let named_code = (self.build.named_code_sections.iter()).filter(|n| n.size > 0);
+        for n in named_code.clone() {
+            sections.push(SectionHeader {
+                name: header_name(&n.name),
+                virtual_size: n.size as u32,
+                virtual_address: l.text_rva + n.offset as u32,
+                size_of_raw_data: round_up(n.size as u32, FILE_ALIGNMENT),
+                pointer_to_raw_data: l.text_file_off + n.offset as u32,
+                characteristics: code(n.name.as_bytes()),
+            });
+        }
+        let text_at = (named_code.map(|n| (n.offset + n.size) as u32).max())
+            .map_or(0, |end| round_up(end, l.section_align));
         sections.push(SectionHeader {
             name: *b".text\0\0\0",
-            virtual_size: l.text_size,
-            virtual_address: l.text_rva,
-            size_of_raw_data: l.text_raw_size,
-            pointer_to_raw_data: l.text_file_off,
-            characteristics: IMAGE_SCN_CNT_CODE
-                | IMAGE_SCN_MEM_EXECUTE
-                | IMAGE_SCN_MEM_READ
-                | self.resident(b".text"),
+            virtual_size: l.text_size - text_at,
+            virtual_address: l.text_rva + text_at,
+            size_of_raw_data: l.text_raw_size - text_at,
+            pointer_to_raw_data: l.text_file_off + text_at,
+            characteristics: code(b".text"),
         });
         sections.push(SectionHeader {
             name: *b".pdata\0\0",
@@ -1457,9 +1711,7 @@ impl<'a> PeWriter<'a> {
         // Read-only families keep `.rdata`'s protection, the writable ones
         // `.data`'s.
         for n in l.named_out.iter().filter(|n| n.size > 0) {
-            let mut name = [0u8; 8];
-            let bytes = n.name.as_bytes();
-            name[..bytes.len().min(8)].copy_from_slice(&bytes[..bytes.len().min(8)]);
+            let (name, bytes) = (header_name(n.name), n.name.as_bytes());
             let writable = matches!(n.family, NamedFamily::Data | NamedFamily::Bss);
             let zerofill = n.family == NamedFamily::Bss;
             sections.push(SectionHeader {
@@ -1496,6 +1748,16 @@ impl<'a> PeWriter<'a> {
                 virtual_address: l.edata_rva,
                 size_of_raw_data: l.edata_raw_size,
                 pointer_to_raw_data: l.edata_file_off,
+                characteristics: ro,
+            });
+        }
+        if l.plan.rsrc {
+            sections.push(SectionHeader {
+                name: *b".rsrc\0\0\0",
+                virtual_size: l.rsrc_bytes.len() as u32,
+                virtual_address: l.rsrc_rva,
+                size_of_raw_data: l.rsrc_raw_size,
+                pointer_to_raw_data: l.rsrc_file_off,
                 characteristics: ro,
             });
         }
@@ -1536,9 +1798,14 @@ impl<'a> PeWriter<'a> {
 
     fn emit_sections(mut self) -> Result<Vec<u8>, C5Error> {
         let build = self.build;
-        let data = self.bake_data_image()?;
+        let mut data = self.bake_data_image()?;
         let l = &self.layout;
         let ro_len = l.ro_len;
+        if let Some(off) = build.init_fini_arrays.tls_directory {
+            let at = off as usize - ro_len as usize;
+            data[at..at + IMAGE_TLS_DIRECTORY64_SIZE as usize]
+                .copy_from_slice(&self.tls_directory());
+        }
         let mut out = core::mem::take(&mut self.out);
         pad_to(&mut out, l.text_file_off as usize)?;
         out.extend_from_slice(&self.text_bytes);
@@ -1586,32 +1853,34 @@ impl<'a> PeWriter<'a> {
                 (l.rdata_file_off + l.marker_base_in_rdata) as usize,
             )?;
             out.extend_from_slice(&l.provenance);
+            if !l.debug_dir.is_empty() {
+                let at = l.rdata_file_off + l.debug_dir_base_in_rdata;
+                pad_to(&mut out, at as usize)?;
+                out.extend_from_slice(&l.debug_dir);
+            }
             pad_to(&mut out, (l.rdata_file_off + l.rdata_raw_size) as usize)?;
         }
         if l.data_present {
             let head = (l.relro_size + l.data_head_len) as usize;
             out.extend_from_slice(&data[l.relro_size as usize..head]);
             tail(&mut out, l.data_tail, l.data_file_off, &data, l.relro_size)?;
-            if !build.tls_data.is_empty() {
+            if tls_directory_present(build) {
                 pad_to(
                     &mut out,
                     (l.data_file_off + l.tls.tls_index_offset_in_data) as usize,
                 )?;
                 out.extend_from_slice(&[0u8; 4]);
+                if build.init_fini_arrays.tls_directory.is_none() {
+                    pad_to(
+                        &mut out,
+                        (l.data_file_off + l.tls.directory_offset_in_data) as usize,
+                    )?;
+                    out.extend_from_slice(&self.tls_directory());
+                }
                 pad_to(
                     &mut out,
-                    (l.data_file_off + l.tls.directory_offset_in_data) as usize,
+                    (l.data_file_off + l.tls.tls_init_offset_in_data) as usize,
                 )?;
-                let tls_init_start_va =
-                    IMAGE_BASE + (l.data_rva + l.tls.tls_init_offset_in_data) as u64;
-                let tls_init_end_va = tls_init_start_va + build.tls_data.len() as u64;
-                let tls_index_va = IMAGE_BASE + self.tls_index_rva() as u64;
-                out.extend_from_slice(&tls_init_start_va.to_le_bytes());
-                out.extend_from_slice(&tls_init_end_va.to_le_bytes());
-                out.extend_from_slice(&tls_index_va.to_le_bytes());
-                out.extend_from_slice(&0u64.to_le_bytes()); // AddressOfCallBacks
-                out.extend_from_slice(&0u32.to_le_bytes()); // SizeOfZeroFill
-                out.extend_from_slice(&0u32.to_le_bytes()); // Characteristics
                 let tls = image::bake_tls_template(
                     "PE",
                     "the TLS template",
@@ -1642,6 +1911,10 @@ impl<'a> PeWriter<'a> {
         if l.edata_present {
             pad_to(&mut out, l.edata_file_off as usize)?;
             out.extend_from_slice(&l.edata_bytes);
+        }
+        if l.plan.rsrc {
+            pad_to(&mut out, l.rsrc_file_off as usize)?;
+            out.extend_from_slice(&l.rsrc_bytes);
         }
         for slot in &l.dwarf_sections {
             pad_to(&mut out, slot.file_off as usize)?;
@@ -1687,28 +1960,57 @@ struct ImageExportDirectory {
 const IMAGE_EXPORT_DIRECTORY_SIZE: usize = 40;
 const _: () = assert!(core::mem::size_of::<ImageExportDirectory>() == IMAGE_EXPORT_DIRECTORY_SIZE);
 
-/// Build the `.edata` section bytes for an image with exports.
+/// Build the `.edata` section bytes for an image with exports. A
+/// forwarder's slot holds the RVA of its `dll.export` string, which the
+/// directory carries after the names. An export takes the ordinal `forms`
+/// gives it; the others take the lowest free ones from the lowest given
+/// ordinal, or from 1, in name order, as link.exe assigns them, and a
+/// `NONAME` one has no name table entry.
 fn build_export_directory(
     edata_rva: u32,
     exports: Vec<(String, u32)>,
+    forwards: &[(String, String)],
+    forms: &[crate::c5::codegen::ExportForm],
     image_name: Option<&str>,
 ) -> Result<Vec<u8>, C5Error> {
-    let n = exports.len() as u32;
+    let mut exports: Vec<(String, Option<u32>)> = (exports.into_iter())
+        .map(|(name, rva)| (name, Some(rva)))
+        .chain(forwards.iter().map(|(name, _)| (name.clone(), None)))
+        .collect();
+    exports.sort_by(|a, b| a.0.as_bytes().cmp(b.0.as_bytes()));
+    let form = |name: &str| forms.iter().find(|f| f.name == name);
+    let given: alloc::collections::BTreeSet<u32> = (exports.iter())
+        .filter_map(|(n, _)| form(n)?.ordinal.map(u32::from))
+        .collect();
+    let base = given.first().copied().unwrap_or(1);
+    let (mut taken, mut next) = (given.clone(), base);
+    let ordinals: Vec<u32> = (exports.iter())
+        .map(|(n, _)| match form(n).and_then(|f| f.ordinal) {
+            Some(o) => u32::from(o),
+            None => {
+                while !taken.insert(next) {
+                    next += 1;
+                }
+                next
+            }
+        })
+        .collect();
+    let named: Vec<usize> = (0..exports.len())
+        .filter(|&i| !form(&exports[i].0).is_some_and(|f| f.noname))
+        .collect();
+    let funcs = ordinals.iter().map(|o| o - base + 1).max().unwrap_or(0);
+    let names = named.len() as u32;
     let header_size = IMAGE_EXPORT_DIRECTORY_SIZE as u32;
     let funcs_off = header_size;
-    let names_off = funcs_off + 4 * n;
-    let ordinals_off = names_off + 4 * n;
-    let strings_off = ordinals_off + 2 * n;
+    let names_off = funcs_off + 4 * funcs;
+    let ordinals_off = names_off + 4 * names;
+    let strings_off = ordinals_off + 2 * names;
 
-    // The image-name string heads the string blob; per-export names follow,
-    // each NUL-terminated. We compute their RVAs as we go so the
-    // AddressOfNames entries match.
+    // The image-name string heads the string blob, the names follow, each
+    // NUL-terminated, then the forwarders' strings.
     let dll_name = image_name.unwrap_or("c5-output.dll");
     let strings_rva = edata_rva + strings_off;
-    let dll_name_rva = strings_rva;
-
     let mut out = Vec::with_capacity(strings_off as usize + dll_name.len() + 1);
-
     write_struct(
         &mut out,
         &ImageExportDirectory {
@@ -1716,41 +2018,50 @@ fn build_export_directory(
             time_date_stamp: 0,
             major_version: 0,
             minor_version: 0,
-            name_rva: dll_name_rva,
-            ordinal_base: 1,
-            number_of_functions: n,
-            number_of_names: n,
+            name_rva: strings_rva,
+            ordinal_base: base,
+            number_of_functions: funcs,
+            number_of_names: names,
             address_of_functions: edata_rva + funcs_off,
             address_of_names: edata_rva + names_off,
             address_of_name_ordinals: edata_rva + ordinals_off,
         },
     );
 
-    for (_, rva) in &exports {
-        out.extend_from_slice(&rva.to_le_bytes());
+    let names_len: u32 = named.iter().map(|&i| exports[i].0.len() as u32 + 1).sum();
+    let mut forward_rva = strings_rva + dll_name.len() as u32 + 1 + names_len;
+    let mut forward_strings = Vec::new();
+    let mut slots = alloc::vec![0u32; funcs as usize];
+    for ((name, rva), &ordinal) in exports.iter().zip(&ordinals) {
+        let rva = rva.unwrap_or_else(|| {
+            let (_, to) = (forwards.iter())
+                .find(|(n, _)| n == name)
+                .expect("forwarded export");
+            forward_strings.extend(to.bytes().chain([0]));
+            let at = forward_rva;
+            forward_rva += to.len() as u32 + 1;
+            at
+        });
+        slots[(ordinal - base) as usize] = rva;
     }
-
-    // The name pointer table must be lexically ordered; the parallel
-    // ordinal table maps each name back to its AddressOfFunctions slot.
-    let mut by_name: Vec<usize> = (0..exports.len()).collect();
-    by_name.sort_by(|&a, &b| exports[a].0.as_bytes().cmp(exports[b].0.as_bytes()));
-
+    out.extend(slots.iter().flat_map(|s| s.to_le_bytes()));
+    // The name pointer table is lexically ordered (the exports already
+    // are); the parallel ordinal table maps each name to its slot.
     let mut cur = strings_rva + dll_name.len() as u32 + 1;
-    for &i in &by_name {
+    for &i in &named {
         out.extend_from_slice(&cur.to_le_bytes());
         cur += exports[i].0.len() as u32 + 1;
     }
-
-    for &i in &by_name {
-        out.extend_from_slice(&(i as u16).to_le_bytes());
+    for &i in &named {
+        out.extend_from_slice(&((ordinals[i] - base) as u16).to_le_bytes());
     }
-
     out.extend_from_slice(dll_name.as_bytes());
     out.push(0);
-    for &i in &by_name {
+    for &i in &named {
         out.extend_from_slice(exports[i].0.as_bytes());
         out.push(0);
     }
+    out.extend(forward_strings);
 
     Ok(out)
 }
@@ -1781,7 +2092,8 @@ fn build_reloc_section(
     data_rva: u32,
     data_off_to_rva: &dyn Fn(u32) -> u32,
     tls_layout: &TlsLayout,
-    tls_present: bool,
+    tls_directory_rva: Option<u32>,
+    tls_callbacks: bool,
     data_relocs: &[crate::c5::program::DataReloc],
     code_relocs: &[crate::c5::program::CodeReloc],
     label_relocs: &[crate::c5::codegen::LabelReloc],
@@ -1797,13 +2109,12 @@ fn build_reloc_section(
             .or_default()
             .push((rva & 0xFFF, kind));
     };
-    if tls_present {
-        let dir_rva = data_rva + tls_layout.directory_offset_in_data;
-        // Sanity: the directory's three pointer fields must share a page.
-        debug_assert_eq!(dir_rva & !0xFFF, (dir_rva + 16) & !0xFFF);
-        add(dir_rva, IMAGE_REL_BASED_DIR64); // StartAddressOfRawData
-        add(dir_rva + 8, IMAGE_REL_BASED_DIR64); // EndAddressOfRawData
-        add(dir_rva + 16, IMAGE_REL_BASED_DIR64); // AddressOfIndex
+    if let Some(dir_rva) = tls_directory_rva {
+        // The data, index and callback addresses.
+        let fields = if tls_callbacks { 4 } else { 3 };
+        for k in 0..fields {
+            add(dir_rva + k * 8, IMAGE_REL_BASED_DIR64);
+        }
         let template_rva = data_rva + tls_layout.tls_init_offset_in_data;
         for &(off, _) in tls_sites {
             add(template_rva + off as u32, IMAGE_REL_BASED_DIR64);
@@ -1855,7 +2166,7 @@ fn build_reloc_section(
 }
 
 /// Per-`.data` offsets for the trio of TLS support structures (the
-/// `_tls_index` slot, the `IMAGE_TLS_DIRECTORY64`, and the initialised TLS
+/// `_tls_index` slot, the `IMAGE_TLS_DIRECTORY64`, and the initialized TLS
 /// image).
 #[derive(Default)]
 struct TlsLayout {
@@ -1865,8 +2176,15 @@ struct TlsLayout {
     tls_init_offset_in_data: u32,
 }
 
+/// Whether the image carries a TLS directory: for its thread-local data,
+/// its TLS callbacks, or a unit naming `_tls_used`.
+fn tls_directory_present(build: &Build) -> bool {
+    let f = &build.init_fini_arrays;
+    !build.tls_data.is_empty() || f.tls_callbacks.is_some() || f.tls_directory.is_some()
+}
+
 fn compute_tls_layout(build: &Build, writable_data_size: u32) -> TlsLayout {
-    if build.tls_data.is_empty() {
+    if !tls_directory_present(build) {
         return TlsLayout {
             tls_blob_size: 0,
             tls_index_offset_in_data: 0,
@@ -1877,7 +2195,11 @@ fn compute_tls_layout(build: &Build, writable_data_size: u32) -> TlsLayout {
     let user_data_end = writable_data_size;
     let tls_index_offset = round_up(user_data_end, 4);
     let directory_offset = round_up(tls_index_offset + 4, 8);
-    let tls_init_offset = directory_offset + IMAGE_TLS_DIRECTORY64_SIZE;
+    let own_directory = match build.init_fini_arrays.tls_directory {
+        Some(_) => 0,
+        None => IMAGE_TLS_DIRECTORY64_SIZE,
+    };
+    let tls_init_offset = directory_offset + own_directory;
     // We emit the entire `tls_data` as the template (see the long comment
     // in `write` next to the IMAGE_TLS_DIRECTORY64 emission), so the .data
     // tail contributed by TLS is `tls_data.len()` bytes regardless of
@@ -2095,10 +2417,18 @@ struct OptionalHeaderInputs {
     base_reloc_size: u32,
     iat_rva: u32,
     iat_size: u32,
+    /// The delay-load descriptor table's RVA and size.
+    delay_import: (u32, u32),
     tls_table_rva: u32,
     tls_table_size: u32,
     export_table_rva: u32,
     export_table_size: u32,
+    resource_table_rva: u32,
+    resource_table_size: u32,
+    /// `SizeOfStackReserve` and `SizeOfStackCommit`.
+    stack: (u64, u64),
+    debug_rva: u32,
+    debug_size: u32,
     subsystem: u16,
 }
 
@@ -2121,6 +2451,10 @@ fn write_optional_header(out: &mut Vec<u8>, inp: OptionalHeaderInputs) {
         rva: inp.export_table_rva,
         size: inp.export_table_size,
     };
+    data_directory[DATA_DIRECTORY_RESOURCE] = DataDirectoryEntry {
+        rva: inp.resource_table_rva,
+        size: inp.resource_table_size,
+    };
     data_directory[DATA_DIRECTORY_EXCEPTION] = DataDirectoryEntry {
         rva: inp.exception_table_rva,
         size: inp.exception_table_size,
@@ -2133,9 +2467,17 @@ fn write_optional_header(out: &mut Vec<u8>, inp: OptionalHeaderInputs) {
         rva: inp.tls_table_rva,
         size: inp.tls_table_size,
     };
+    data_directory[DATA_DIRECTORY_DEBUG] = DataDirectoryEntry {
+        rva: inp.debug_rva,
+        size: inp.debug_size,
+    };
     data_directory[DATA_DIRECTORY_IAT] = DataDirectoryEntry {
         rva: inp.iat_rva,
         size: inp.iat_size,
+    };
+    data_directory[DATA_DIRECTORY_DELAY_IMPORT] = DataDirectoryEntry {
+        rva: inp.delay_import.0,
+        size: inp.delay_import.1,
     };
 
     write_struct(
@@ -2171,18 +2513,8 @@ fn write_optional_header(out: &mut Vec<u8>, inp: OptionalHeaderInputs) {
             checksum: 0,
             subsystem: inp.subsystem,
             dll_characteristics: dll_chars,
-            // PE/COFF specifies `SizeOfStackReserve` as the
-            // committed-on-demand virtual range reserved for the initial
-            // thread's stack (cleared by the loader; no physical backing
-            // until each page faults in). MSVC's link.exe defaults to 1
-            // MiB; mingw's ld defaults to 8 MiB, matching glibc / Apple
-            // libc thread defaults. c5 uses the mingw default so portable
-            // programs that exercise recursion to a depth tuned for the
-            // Linux / macOS C stack budget don't fault the guard page on
-            // Windows before whatever in-program counter would otherwise
-            // enforce the recursion limit.
-            size_of_stack_reserve: 0x80_0000, // 8 MiB
-            size_of_stack_commit: 0x1000,
+            size_of_stack_reserve: inp.stack.0,
+            size_of_stack_commit: inp.stack.1,
             size_of_heap_reserve: 0x10_0000,
             size_of_heap_commit: 0x1000,
             loader_flags: 0,
@@ -2200,6 +2532,14 @@ struct SectionHeader {
     size_of_raw_data: u32,
     pointer_to_raw_data: u32,
     characteristics: u32,
+}
+
+/// A section header's name field: the name's first eight bytes.
+fn header_name(name: &str) -> [u8; 8] {
+    let mut out = [0u8; 8];
+    let n = name.len().min(8);
+    out[..n].copy_from_slice(&name.as_bytes()[..n]);
+    out
 }
 
 fn write_section_headers(out: &mut Vec<u8>, sections: &[SectionHeader]) {
@@ -2305,6 +2645,7 @@ struct IDataLayout {
 fn plan_idata(
     dlls: &[DllGroup],
     imports: &[(String, String, Option<u16>)],
+    hints: &alloc::collections::BTreeMap<String, u16>,
     base_rva: u32,
 ) -> IDataLayout {
     let n_dlls = dlls.len();
@@ -2400,9 +2741,11 @@ fn plan_idata(
         }
     }
 
+    // The hint the import library gives, which the loader tries first.
     for (i, (sym, _, _)) in imports.iter().enumerate().filter(|(_, i)| i.2.is_none()) {
         let off = hint_offsets[i];
-        bytes[off..off + 2].copy_from_slice(&0u16.to_le_bytes());
+        let hint = hints.get(sym).copied().unwrap_or(0);
+        bytes[off..off + 2].copy_from_slice(&hint.to_le_bytes());
         bytes[off + 2..off + 2 + sym.len()].copy_from_slice(sym.as_bytes());
     }
 
@@ -2446,6 +2789,8 @@ struct EntryStub {
     bytes: Vec<u8>,
     direct_call_runtime: Vec<(u32, &'static str)>,
     direct_call_main_offset: Option<u32>,
+    /// The arm64 steps of its prologue, one per instruction from its start.
+    a64_prologue: Vec<crate::c5::codegen::A64Step>,
 }
 
 impl EntryStub {
@@ -2454,6 +2799,7 @@ impl EntryStub {
             bytes: Vec::new(),
             direct_call_runtime: Vec::new(),
             direct_call_main_offset: None,
+            a64_prologue: Vec::new(),
         }
     }
 }
@@ -2505,6 +2851,7 @@ fn build_dllmain_stub(machine: Machine) -> EntryStub {
         bytes,
         direct_call_runtime: Vec::new(),
         direct_call_main_offset: None,
+        a64_prologue: Vec::new(),
     }
 }
 
@@ -2525,12 +2872,19 @@ fn build_entry_adapter(machine: Machine) -> EntryStub {
                 bytes,
                 direct_call_runtime: vec![(call_off, RT_ENTRY)],
                 direct_call_main_offset: None,
+                a64_prologue: Vec::new(),
             }
         }
+        // A frame record first, as the CRT's entry has one, so a stack walk
+        // from `__c5_entry` reaches the loader's caller; the call does not
+        // return, so the record states no epilogue.
         Machine::Aarch64 => {
             use super::aarch64 as a;
-            let mut bytes: Vec<u8> = Vec::with_capacity(16);
-            a::emit(&mut bytes, a::enc_add_imm(a::Reg::X0, a::Reg::SP, 0));
+            use crate::c5::codegen::A64Step;
+            let mut bytes: Vec<u8> = Vec::with_capacity(24);
+            a::emit(&mut bytes, 0xA9BF_7BFD); // stp x29, x30, [sp, #-16]!
+            a::emit(&mut bytes, 0x9100_03FD); // mov x29, sp
+            a::emit(&mut bytes, a::enc_add_imm(a::Reg::X0, a::Reg::SP, 16));
             a::emit(&mut bytes, a::enc_movz(a::Reg::X1, 0, 0));
             let bl_off = bytes.len() as u32;
             a::emit(&mut bytes, a::enc_bl(0)); // patched to __c5_entry
@@ -2539,6 +2893,7 @@ fn build_entry_adapter(machine: Machine) -> EntryStub {
                 bytes,
                 direct_call_runtime: vec![(bl_off, RT_ENTRY)],
                 direct_call_main_offset: None,
+                a64_prologue: vec![A64Step::SaveFpLrX(16), A64Step::SetFp],
             }
         }
     }
@@ -2567,6 +2922,7 @@ fn build_pdata(
     text_rva: u32,
     text_size: u32,
     text_prologue_len: u32,
+    stub: (u32, u32, &[crate::c5::codegen::A64Step]),
     fn_unwind: &[super::FnUnwind],
     a64_unwind: &[super::A64Unwind],
     early_returns: &[super::EarlyReturn],
@@ -2587,6 +2943,7 @@ fn build_pdata(
             text_rva,
             text_size,
             text_prologue_len,
+            stub,
             a64_unwind,
             early_returns,
             foreign,
@@ -2816,10 +3173,12 @@ fn build_x86_64_pdata(
 /// AArch64 `.pdata`: an entry with an `.xdata` record for each prologue `a64`
 /// describes, over the frame path alone where a return precedes the frame,
 /// the inputs' entries, packed frameless ones over the rest.
+#[allow(clippy::too_many_arguments)]
 fn build_aarch64_pdata(
     text_rva: u32,
     text_size: u32,
     text_prologue_len: u32,
+    stub: (u32, u32, &[crate::c5::codegen::A64Step]),
     a64: &[super::A64Unwind],
     early_returns: &[super::EarlyReturn],
     foreign: &[super::PeUnwindRange],
@@ -2873,6 +3232,15 @@ fn build_aarch64_pdata(
             x.extend(language);
         }
         rows.push((body + begin, body + end, Data::Xdata(x)));
+    }
+    // The entry stub's prologue, with no epilogue.
+    let (stub_at, stub_len, stub_steps) = stub;
+    if !stub_steps.is_empty() {
+        let codes = super::arm64_unwind::step_codes(stub_steps)
+            .ok_or_else(|| C5Error::internal(String::from("the entry stub's prologue codes")))?;
+        let x = super::arm64_unwind::xdata(stub_len, &codes, &[])
+            .ok_or_else(|| C5Error::internal(String::from("the entry stub's unwind record")))?;
+        rows.push((stub_at, stub_at + stub_len, Data::Xdata(x)));
     }
     rows.sort_by_key(|r| r.0);
     let mut entries: Vec<(u32, Data)> = Vec::new();
@@ -3167,7 +3535,8 @@ mod tests {
 
     /// The export name pointer table is binary-searched by GetProcAddress,
     /// so `build_export_directory` orders the entries lexically with the
-    /// ordinal table pointing back at each name's AddressOfFunctions slot.
+    /// ordinal table pointing back at each name's AddressOfFunctions slot;
+    /// the slots follow the names, as link.exe assigns ordinals.
     #[test]
     fn export_directory_sorts_names_lexically() {
         let bytes = build_export_directory(
@@ -3176,6 +3545,8 @@ mod tests {
                 ("zeta".to_string(), 0x1000u32),
                 ("alpha".to_string(), 0x2000u32),
             ],
+            &[],
+            &[],
             Some("t.dll"),
         )
         .expect("build export directory");
@@ -3186,11 +3557,11 @@ mod tests {
                 .expect("name present")
         };
         assert!(name_pos(b"alpha\0") < name_pos(b"zeta\0"));
-        // AddressOfFunctions stays in declaration order.
+        // AddressOfFunctions follows the names: `alpha` is ordinal 1.
         let funcs_off = IMAGE_EXPORT_DIRECTORY_SIZE;
         let rva0 = u32::from_le_bytes(bytes[funcs_off..funcs_off + 4].try_into().unwrap());
         let rva1 = u32::from_le_bytes(bytes[funcs_off + 4..funcs_off + 8].try_into().unwrap());
-        assert_eq!((rva0, rva1), (0x1000, 0x2000));
+        assert_eq!((rva0, rva1), (0x2000, 0x1000));
         let ordinals_off = funcs_off + 4 * 2 + 4 * 2;
         let ord0 = u16::from_le_bytes(bytes[ordinals_off..ordinals_off + 2].try_into().unwrap());
         let ord1 = u16::from_le_bytes(
@@ -3198,7 +3569,55 @@ mod tests {
                 .try_into()
                 .unwrap(),
         );
-        assert_eq!((ord0, ord1), (1, 0));
+        assert_eq!((ord0, ord1), (0, 1));
+    }
+
+    /// Ordinals as link.exe assigns them for a definition file giving `beta`
+    /// 2 (NONAME), `zeta` 5 and `epsilon` 9: the base is the lowest given
+    /// ordinal, the others take the free ones from it in name order, a gap
+    /// stays an empty slot, and `beta` has no name.
+    #[test]
+    fn export_directory_takes_given_ordinals() {
+        use crate::c5::codegen::ExportForm;
+        let form = |name: &str, ordinal: u16, noname: bool| ExportForm {
+            name: name.to_string(),
+            ordinal: Some(ordinal),
+            noname,
+            private: false,
+        };
+        let names = [
+            "zeta", "alpha", "beta", "gamma", "delta", "outer", "epsilon",
+        ];
+        let exports = (names.iter().enumerate())
+            .map(|(i, n)| (n.to_string(), 0x1000 + 0x10 * i as u32))
+            .collect();
+        let forms = [
+            form("zeta", 5, false),
+            form("beta", 2, true),
+            form("epsilon", 9, false),
+        ];
+        let bytes = build_export_directory(0x5000, exports, &[], &forms, Some("t.dll")).unwrap();
+        let u32_at = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+        let (base, funcs, nnames) = (u32_at(16), u32_at(20), u32_at(24));
+        assert_eq!((base, funcs, nnames), (2, 8, 6));
+        let slot =
+            |ordinal: u32| u32_at(IMAGE_EXPORT_DIRECTORY_SIZE + 4 * (ordinal - base) as usize);
+        let rva =
+            |name: &str| 0x1000 + 0x10 * names.iter().position(|n| *n == name).unwrap() as u32;
+        let expect = [
+            (2, "beta"),
+            (3, "alpha"),
+            (4, "delta"),
+            (5, "zeta"),
+            (6, "gamma"),
+            (7, "outer"),
+            (9, "epsilon"),
+        ];
+        for (ordinal, name) in expect {
+            assert_eq!(slot(ordinal), rva(name), "{name} at {ordinal}");
+        }
+        assert_eq!(slot(8), 0);
+        assert!(!bytes.windows(5).any(|w| w == b"beta\0"));
     }
 
     /// The packed AArch64 RUNTIME_FUNCTION encodes `FunctionLength` in 11
@@ -3210,7 +3629,7 @@ mod tests {
             rows: &[],
             handler: 0,
         };
-        let p = build_aarch64_pdata(0x1000, text_size, 0, &[], &[], &[], seh).unwrap();
+        let p = build_aarch64_pdata(0x1000, text_size, 0, (0, 0, &[]), &[], &[], &[], seh).unwrap();
         assert_eq!(p.bytes.len() % 8, 0);
         for entry in p.bytes.as_chunks::<8>().0.iter() {
             let unwind_data = u32::from_le_bytes([entry[4], entry[5], entry[6], entry[7]]);
@@ -3233,12 +3652,36 @@ mod tests {
         assert_eq!(&s.bytes[14..16], &[0x0F, 0x0B], "adapter must end in ud2");
     }
 
+    /// The arm64 adapter opens a frame record, which its unwind record
+    /// states with no epilogue, since the call does not return.
     #[test]
     fn entry_adapter_calls_c5_entry_aarch64() {
+        use crate::c5::codegen::A64Step;
         let s = build_entry_stub(Machine::Aarch64, false);
-        assert_eq!(s.bytes.len(), 16);
-        assert_eq!(s.direct_call_runtime, vec![(8, RT_ENTRY)]);
+        assert_eq!(s.bytes.len(), 24);
+        assert_eq!(s.direct_call_runtime, vec![(16, RT_ENTRY)]);
         assert_eq!(s.direct_call_main_offset, None);
+        assert_eq!(s.a64_prologue, [A64Step::SaveFpLrX(16), A64Step::SetFp]);
+        let seh = Seh {
+            rows: &[],
+            handler: 0,
+        };
+        let stub = (0, 24, &s.a64_prologue[..]);
+        let p = build_aarch64_pdata(0x1000, 0x40, 32, stub, &[], &[], &[], seh).unwrap();
+        // The stub's entry points at `.xdata` (low bits 0), whose header
+        // gives 6 words, no epilogue scope (E clear, count 0) and one code word.
+        assert_eq!(u32::from_le_bytes(p.bytes[..4].try_into().unwrap()), 0x1000);
+        assert_eq!(u32::from_le_bytes(p.bytes[4..8].try_into().unwrap()) & 3, 0);
+        let header = u32::from_le_bytes(p.xdata[..4].try_into().unwrap());
+        assert_eq!(
+            (
+                header & 0x3_FFFF,
+                (header >> 21) & 1,
+                (header >> 22) & 0x1F,
+                header >> 27
+            ),
+            (6, 0, 0, 1)
+        );
     }
 
     /// Offset within the Optional Header at which DataDirectory[i] begins.
@@ -3741,14 +4184,14 @@ mod tests {
         assert!(index_va >= IMAGE_BASE, "AddressOfIndex below ImageBase");
         assert_eq!(cb_va, 0, "AddressOfCallBacks should be NULL");
         assert_eq!(characteristics, 0, "Characteristics must be 0");
-        // The single `_Thread_local int counter` is 8 bytes (c5 globals are
-        // word-sized). We emit the whole TLS block as init template (zeros)
+        // The single `_Thread_local int counter` is 4 bytes. We emit the
+        // whole TLS block as init template (zeros)
         // rather than as SizeOfZeroFill, so a Windows ARM64 loader path
         // that skips empty-template directories still processes us.
         assert_eq!(
             end_va - start_va,
-            8,
-            "expected 8 bytes of init template (one TLS int slot)"
+            4,
+            "expected 4 bytes of init template (one TLS int)"
         );
         assert_eq!(
             zero_fill, 0,
@@ -4102,7 +4545,8 @@ mod tests {
             steps: alloc::vec![crate::c5::codegen::A64Step::SaveFpLr(512)],
             exits: Vec::new(),
         };
-        let arm64 = build_aarch64_pdata(0x1000, 16, 0, &[a64], &[], &[], seh).map(|_| ());
+        let arm64 =
+            build_aarch64_pdata(0x1000, 16, 0, (0, 0, &[]), &[a64], &[], &[], seh).map(|_| ());
         for (got, why) in [
             (x64, "has a frame and no recorded unwind steps"),
             (arm64, "no unwind code describes a step"),

@@ -1,7 +1,7 @@
 // Locks the SSA emit's `Op::Mcpy` lowering against a regression
 // where the scratch register chosen for the per-iteration word
 // copy aliased the source pointer. The pool path keeps src in
-// x19 and the SSA emit materialises src into whatever register
+// x19 and the SSA emit materializes src into whatever register
 // the allocator picked; if `pick_distinct_temp` only avoided the
 // destination, an allocator placing src in x10 (or wherever the
 // temp lands) corrupted the base on the first `ldr` and the rest

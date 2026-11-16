@@ -27,12 +27,8 @@ Disassembly of section .text:
 
 <chain>:
                	andq	$0x1, %rdi
-               	leaq	<rip>, %rax # <addr>
-               	movb	$0x0, (%rax)
-               	leaq	<rip>, %rcx # <addr>
                	movb	%dil, <rip> # <addr>
-               	movzbq	(%rax), %r10
-               	movb	%r10b, (%rcx)
+               	movb	%dil, <rip> # <addr>
                	retq
 
 <to_global>:
@@ -67,10 +63,9 @@ Disassembly of section .text:
                	movups	%xmm14, 0x30(%rdi)
                	movups	%xmm14, 0x40(%rdi)
                	movq	$0x0, 0x50(%rdi)
-               	leaq	0x44(%rdi), %rax
                	movl	%esi, 0x54(%rdi)
-               	leaq	0x1(%rsi), %rcx
-               	movl	%ecx, (%rax)
+               	leaq	0x1(%rsi), %rax
+               	movl	%eax, 0x44(%rdi)
                	retq
 
 <main>:

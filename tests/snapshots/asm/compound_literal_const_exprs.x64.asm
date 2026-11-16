@@ -51,8 +51,7 @@ Disassembly of section .text:
                	cmpl	$0x2a, %eax
                	jne	<addr>
                	movzbq	<rip>, %rax # <addr>
-               	xorq	$0xff, %rax
-               	testl	%eax, %eax
+               	cmpl	$0xff, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	retq

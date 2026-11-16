@@ -66,12 +66,6 @@ Disassembly of section .text:
                	retq
                	movl	$0x7, <rip> # <addr>
                	movl	<rip>, %eax # <addr>
-               	cmpl	$0x7, %eax
-               	je	<addr>
-               	movl	$0x5, %eax
-               	popq	%rbp
-               	retq
-               	movl	<rip>, %eax # <addr>
                	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x6, %eax

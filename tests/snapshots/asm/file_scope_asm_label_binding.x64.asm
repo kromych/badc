@@ -33,16 +33,14 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rdi
                	callq	<addr>
                	movl	-0x8(%rbp), %eax
-               	xorq	$0x1234, %rax           # imm = 0x1234
-               	testl	%eax, %eax
+               	cmpl	$0x1234, %eax           # imm = 0x1234
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
                	leaq	<rip>, %rax # <addr>
                	movl	(%rax), %ecx
-               	xorq	$0x5678, %rcx           # imm = 0x5678
-               	testl	%ecx, %ecx
+               	cmpl	$0x5678, %ecx           # imm = 0x5678
                	je	<addr>
                	movl	$0x2, %eax
                	leave
@@ -62,7 +60,6 @@ Disassembly of section .text:
                	movl	$0x2a, %eax
                	leave
                	retq
-               	addb	%al, (%rax)
                	addb	%al, (%rax)
 
 <asm_store_magic>:

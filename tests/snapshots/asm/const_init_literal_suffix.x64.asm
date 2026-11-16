@@ -26,16 +26,7 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	movl	$0x3dcccccd, %eax       # imm = 0x3DCCCCCD
-               	xorl	%ecx, %ecx
-               	movq	%rax, %xmm14
-               	movq	%rcx, %xmm15
-               	vaddss	%xmm15, %xmm14, %xmm0
-               	movabsq	$0x3fb999999999999a, %rax # imm = 0x3FB999999999999A
-               	xorl	%ecx, %ecx
-               	movq	%rax, %xmm14
-               	movq	%rcx, %xmm15
-               	vaddsd	%xmm15, %xmm14, %xmm1
+               	movsd	<rip>, %xmm0
                	movq	<rip>, %rax # <addr>
                	movabsq	$0xe77934880, %r11      # imm = 0xE77934880
                	cmpq	%r11, %rax
@@ -103,15 +94,15 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0xc, %eax
                	retq
-               	movsd	<rip>, %xmm2 # <addr>
-               	cvtss2sd	%xmm0, %xmm0
-               	ucomisd	%xmm0, %xmm2
+               	movsd	<rip>, %xmm1 # <addr>
+               	movsd	<rip>, %xmm2
+               	ucomisd	%xmm2, %xmm1
                	jp	<addr>
                	je	<addr>
                	movl	$0xd, %eax
                	retq
-               	movsd	<rip>, %xmm0 # <addr>
-               	ucomisd	%xmm1, %xmm0
+               	movsd	<rip>, %xmm1 # <addr>
+               	ucomisd	%xmm0, %xmm1
                	jp	<addr>
                	je	<addr>
                	movl	$0xe, %eax
@@ -139,7 +130,7 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	je	<addr>
                	retq
-               	movq	%rcx, %rax
+               	xorl	%eax, %eax
                	retq
                	movq	<rip>, %rax # <addr>
                	movabsq	$0x10000000000, %r11    # imm = 0x10000000000
@@ -151,5 +142,5 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x20, %eax
                	jmp	<addr>
-               	movq	%rcx, %rax
+               	xorl	%eax, %eax
                	jmp	<addr>

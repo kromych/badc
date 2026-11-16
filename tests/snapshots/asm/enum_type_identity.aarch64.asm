@@ -33,14 +33,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	x0, #0x2                // =2
                	stur	w0, [x29, #-0xc]
-               	ldur	w0, [x29, #-0xc]
-               	eor	x0, x0, #0x2
-               	cbnz	w0, <addr>
                	mov	x0, #0x0                // =0
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x0, #0x4                // =4
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

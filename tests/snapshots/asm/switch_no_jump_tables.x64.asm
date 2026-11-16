@@ -127,11 +127,10 @@ Disassembly of section .text:
                	jmp	<addr>
                	addq	$0x4, %rax
                	jmp	<addr>
+               	movl	$0x1, %ecx
                	cmpl	$0x1, %edi
-               	jl	<addr>
-               	addq	$0x2, %rax
-               	jmp	<addr>
-               	movl	$0x1, %eax
+               	cmovgeq	%rax, %rcx
+               	leaq	0x2(%rcx), %rax
                	jmp	<addr>
 
 <main>:
@@ -140,21 +139,26 @@ Disassembly of section .text:
                	pushq	%r12
                	pushq	%rbx
                	movl	$0x3, %ebx
+               	jmp	<addr>
+               	incq	%rbx
+               	cmpl	$0x13, %ebx
+               	jg	<addr>
                	cmpl	$0xf, %ebx
                	je	<addr>
+               	leaq	-0x2(%rbx), %rax
+               	leaq	-0x3(%rbx), %rcx
                	cmpl	$0xf, %ebx
-               	jge	<addr>
-               	leaq	-0x2(%rbx), %r12
+               	movq	%rcx, %r12
+               	cmovlq	%rax, %r12
                	movq	%rbx, %rdi
                	callq	<addr>
                	cmpl	%r12d, %eax
                	je	<addr>
-               	jmp	<addr>
-               	leaq	-0x3(%rbx), %r12
-               	jmp	<addr>
-               	incq	%rbx
-               	cmpl	$0x13, %ebx
-               	jle	<addr>
+               	movl	$0x1, %eax
+               	popq	%rbx
+               	popq	%r12
+               	popq	%rbp
+               	retq
                	movl	$0xf, %edi
                	callq	<addr>
                	cmpl	$-0x1, %eax
@@ -256,11 +260,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	xorl	%eax, %eax
-               	popq	%rbx
-               	popq	%r12
-               	popq	%rbp
-               	retq
-               	movl	$0x1, %eax
                	popq	%rbx
                	popq	%r12
                	popq	%rbp

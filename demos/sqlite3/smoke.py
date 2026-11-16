@@ -54,7 +54,7 @@ BUILD_DEFINES = (
 
 
 def resolve_badc() -> Path:
-    """Locate the badc binary, honouring `$BADC` then falling
+    """Locate the badc binary, honoring `$BADC` then falling
     back to ``target/release/badc[.exe]``."""
     env = os.environ.get("BADC")
     candidates = []
@@ -325,7 +325,7 @@ INMEM_SCENARIOS = (
 #     `tests/fixtures/c/unary_plus_preserves_float.c`.
 #   * 64-bit integer boundaries via shifts and bitwise ops.
 #   * INT64 overflow on `+` promotes to REAL (sqlite's per-spec
-#     behaviour).
+#     behavior).
 #   * `printf` SQL function: `%d` / `%u` / `%x` / `%X` widths,
 #     trailing-zero formatting on `%f`.
 #   * Cast round-trips between INTEGER, REAL, and TEXT.

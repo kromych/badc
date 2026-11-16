@@ -174,6 +174,9 @@ pub(super) fn load_kind_width(kind: LoadKind) -> u32 {
         LoadKind::I32 | LoadKind::U32 | LoadKind::F32 => 4,
         LoadKind::I64 | LoadKind::F64 => 8,
         LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => 16,
+        LoadKind::V256 => 32,
+        LoadKind::V512 => 64,
+        LoadKind::SveVector | LoadKind::SvePredicate => 0,
     }
 }
 
@@ -185,6 +188,8 @@ pub(super) fn store_kind_width(kind: StoreKind) -> u32 {
         StoreKind::I32 | StoreKind::F32 => 4,
         StoreKind::I64 | StoreKind::F64 => 8,
         StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => 16,
+        StoreKind::V256 => 32,
+        StoreKind::V512 => 64,
     }
 }
 

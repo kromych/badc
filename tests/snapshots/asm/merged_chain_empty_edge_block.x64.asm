@@ -28,16 +28,16 @@ Disassembly of section .text:
 <steps>:
                	xorl	%eax, %eax
                	leaq	-<rip>, %rcx # <addr>
+               	movl	$0x9, %edx
                	testq	%rcx, %rcx
-               	je	<addr>
-               	movl	$0x9, %eax
+               	cmovneq	%rdx, %rax
                	retq
 
 <main>:
                	leaq	-<rip>, %rax # <addr>
+               	xorl	%ecx, %ecx
+               	movl	$0x1, %edx
                	testq	%rax, %rax
-               	je	<addr>
-               	xorl	%eax, %eax
+               	movq	%rdx, %rax
+               	cmovneq	%rcx, %rax
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>

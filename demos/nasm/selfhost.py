@@ -49,21 +49,20 @@ def main() -> int:
     pysrc = srcs[-1]
     # Run the interpreter from a temp directory, not the checked-out workspace:
     # the hosted macOS runner refuses to execute binaries from the workspace
-    # (build.py runs its own tests the same way). The interpreter locates its
-    # stdlib via PYTHONHOME + a `Lib` symlink beside it; NASM_TEST_PYTHONHOME
-    # scopes that to the harness subprocess (smoke.py stays on the host python).
+    # (build.py runs its own tests the same way). The interpreter finds its
+    # stdlib as in a build tree: a `Lib` symlink and an empty pybuilddir.txt
+    # beside it (smoke.py stays on the host python).
     rundir = Path(tempfile.mkdtemp(prefix="badc-selfhost-"))
     try:
         exe = rundir / "python"
         shutil.copy2(pybin, exe)
         os.chmod(exe, 0o755)
         (rundir / "Lib").symlink_to(pysrc / "Lib")
+        (rundir / "pybuilddir.txt").write_text("")
 
         # 2 + 3. Build nasm with badc and run its golden suite, harness driven
         # by the badc-built interpreter.
-        env = dict(os.environ,
-                   NASM_TEST_PYTHON=str(exe),
-                   NASM_TEST_PYTHONHOME=str(rundir))
+        env = dict(os.environ, NASM_TEST_PYTHON=str(exe))
         run([sys.executable, str(HERE / "smoke.py")], env=env)
     finally:
         shutil.rmtree(rundir, ignore_errors=True)

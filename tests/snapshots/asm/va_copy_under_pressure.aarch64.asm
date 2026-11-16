@@ -35,8 +35,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x50]
                	add	x29, sp, #0x50
                	ldr	x0, [x29, #0x10]
-               	mov	x17, #0x3               // =3
-               	mul	x1, x0, x17
+               	add	x1, x0, x0, lsl #1
                	add	x2, x0, #0xb
                	mov	x17, #0x7               // =7
                	mul	x3, x0, x17
@@ -45,11 +44,9 @@ Disassembly of section .text:
                	mul	x5, x0, x17
                	add	x6, x0, #0x1d
                	add	x7, x0, #0x29
-               	mov	x17, #0x9               // =9
-               	mul	x8, x0, x17
+               	add	x8, x0, x0, lsl #3
                	add	x9, x0, #0x35
-               	mov	x17, #0x5               // =5
-               	mul	x10, x0, x17
+               	add	x10, x0, x0, lsl #2
                	add	x11, x0, #0x3d
                	mov	x17, #0xf               // =15
                	mul	x12, x0, x17
@@ -148,10 +145,9 @@ Disassembly of section .text:
                	mov	x1, #0xa                // =10
                	mov	x2, #0x14               // =20
                	bl	<addr>
+               	mov	x1, #0x0                // =0
+               	mov	x2, #0x1                // =1
                	cmp	x0, #0x160
-               	b.ne	<addr>
-               	mov	x0, #0x0                // =0
+               	csel	x0, x1, x2, eq
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x1                // =1
-               	b	<addr>

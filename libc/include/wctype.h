@@ -18,7 +18,7 @@ typedef __WINT_TYPE__ wint_t;
 // the value is passed back to the libc iswctype()/towctrans(); the
 // Windows C runtimes return both as `unsigned short`.
 #ifdef __APPLE__
-typedef unsigned long wctype_t;
+typedef unsigned int wctype_t;
 typedef int wctrans_t;
 #elif defined(_WIN32)
 typedef unsigned short wctype_t;

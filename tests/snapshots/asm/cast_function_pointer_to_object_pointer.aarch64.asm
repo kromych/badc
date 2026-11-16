@@ -23,15 +23,8 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	mov	x0, #0x5                // =5
                	stur	w0, [x29, #-0x8]
-               	ldursw	x0, [x29, #-0x8]
-               	cmp	w0, #0x5
-               	b.eq	<addr>
-               	mov	x0, #0x1                // =1
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x18]
+               	ldrsw	x0, [x0, #0xc]
                	cmp	w0, #0x7
                	b.eq	<addr>
                	mov	x0, #0x9                // =9

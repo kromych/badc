@@ -35,16 +35,15 @@ Disassembly of section .text:
                	add	x3, x3, #0x30
                	mov	x4, #0x2                // =2
                	strb	w4, [x3]
-               	ldr	x4, [x1]
+               	ldr	x3, [x1]
                	ldr	x1, [x1, #0x8]
-               	add	x1, x4, x1
+               	add	x1, x3, x1
                	cmp	x1, #0x7
                	b.eq	<addr>
                	add	x0, x0, #0x2
                	ret
                	ldrb	w1, [x2]
-               	ldrb	w2, [x3]
-               	add	x1, x1, x2
+               	add	x1, x1, #0x2
                	cmp	w1, #0x3
                	b.eq	<addr>
                	add	x0, x0, #0x3
@@ -61,10 +60,16 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
 
-<second_thread_result>:
+<main>:
                	stp	x20, x21, [sp, #-0x30]!
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
+               	mov	x0, #0x0                // =0
+               	bl	<addr>
+               	cbz	w0, <addr>
+               	ldp	x29, x30, [sp, #0x20]
+               	ldp	x20, x21, [sp], #0x30
+               	ret
                	mov	x0, #0x0                // =0
                	mov	x1, #0x2                // =2
                	bl	<addr>
@@ -91,16 +96,4 @@ Disassembly of section .text:
                	ldur	x0, [x29, #-0x8]
                	ldp	x29, x30, [sp, #0x20]
                	ldp	x20, x21, [sp], #0x30
-               	ret
-
-<main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	mov	x0, #0x0                // =0
-               	bl	<addr>
-               	cbz	w0, <addr>
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	bl	<addr>
-               	ldp	x29, x30, [sp], #0x10
                	ret

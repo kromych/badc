@@ -1,7 +1,7 @@
 /* C99 6.5.8: relational operators order pointers by address. Addresses
    compare as unsigned magnitudes, so a pointer with the top bit set is
    above a small one; a signed compare inverts every such pair. The
-   common-type rule that picks the signed/unsigned flavour for integers
+   common-type rule that picks the signed/unsigned flavor for integers
    does not apply, and it leaves most pointer types looking signed. */
 
 struct node {

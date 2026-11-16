@@ -66,14 +66,14 @@ Disassembly of section .text:
                	mov	x4, #0x5                // =5
                	mov	x5, #0x6                // =6
                	mov	x6, #0x7                // =7
-               	mov	x8, #0x9                // =9
-               	mov	x9, #0xa                // =10
-               	adrp	x10, <page>
-               	ldr	x10, [x10, <lo12>]
+               	adrp	x8, <page>
+               	ldr	x9, [x8, #0x10]
                	sub	sp, sp, #0x10
-               	str	x8, [sp]
-               	str	x9, [sp, #0x8]
-               	blr	x10
+               	mov	x16, #0x9               // =9
+               	str	x16, [sp]
+               	mov	x16, #0xa               // =10
+               	str	x16, [sp, #0x8]
+               	blr	x9
                	add	sp, sp, #0x10
                	cmp	w20, #0xf
                	b.eq	<addr>

@@ -8,7 +8,7 @@
  * computed the same frames.
  *
  * Input events name their target by the text of a widget drawn in the
- * previous frame; the event acts on the centre of that text's rectangle.
+ * previous frame; the event acts on the center of that text's rectangle.
  *
  * Usage: headless [dir]  -- with dir, the last frame of each scene is
  * written there as <scene>.ppm. Built with -DHEADLESS_TRACE it prints the
@@ -339,7 +339,7 @@ struct event {
     int frame;
     enum ev_kind kind;
     const char *target; /* label text, or the characters EV_TEXT types */
-    int dx, dy;         /* offset from the target's centre, or the drag step */
+    int dx, dy;         /* offset from the target's center, or the drag step */
 };
 
 enum scene_id { SC_DEMO, SC_OVERVIEW, SC_NODES, SC_CANVAS, SC_STYLE };

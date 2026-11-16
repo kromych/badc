@@ -4,7 +4,7 @@
 // aligned beyond its size moves to that alignment's next boundary; clang,
 // and so macOS, leaves such a field in place. The PE targets take the MS
 // layout, where only a raise counts. Every write reads back without
-// disturbing a neighbour. Each failure returns a distinct code.
+// disturbing a neighbor. Each failure returns a distinct code.
 
 #include <stddef.h>
 #include <string.h>

@@ -94,7 +94,7 @@ pub use jit::{jit_run, jit_run_with_options};
 pub use crate::c5::object::elf_class::ElfClass;
 
 /// Which native binary to produce. Adding a target is a structural
-/// change (new variant, new match arm in [`emit_native`]) rather than
+/// change (new variant, new match arm in [`crate::emit_native`]) rather than
 /// a silent string parse, and gives `--target=...` somewhere to grow.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Target {
@@ -249,7 +249,7 @@ impl WcharType {
     /// type is unsigned -- a 2-byte `wchar_t` promotes to `int` and its
     /// bounds are plain. The signed lower bound is spelled against
     /// `__WCHAR_MAX__` because `-2147483648` is not a constant of the
-    /// type; gcc spells both the same way.
+    /// type.
     pub fn bound_macros(self) -> (String, String) {
         let suffix = if self.max() > i32::MAX as i64 {
             "U"
@@ -346,14 +346,13 @@ impl Target {
     }
 
     /// Whether aggregates take the MS record layout, the PE targets' C ABI
-    /// (MSVC, and clang for a windows-msvc triple).
+    /// (MSVC).
     pub fn ms_layout(self) -> bool {
         self.is_windows()
     }
 
-    /// Whether the Microsoft C extensions apply, as clang enables them by
-    /// default for a windows-msvc triple (`-fms-extensions`), on the PE
-    /// targets.
+    /// Whether the Microsoft C extensions (`-fms-extensions`) apply: on the
+    /// PE targets.
     pub fn ms_extensions(self) -> bool {
         self.is_windows()
     }
@@ -381,10 +380,9 @@ impl Target {
     /// interoperate with the host toolchain and match the platform
     /// ABI, c5 follows the host C compiler: signed on x86_64 (all
     /// OSes), on Apple AArch64, and on Windows AArch64 (MSVC);
-    /// unsigned only on AArch64 ELF (the AAPCS64 default that the
-    /// Linux GCC/Clang toolchain keeps). The choice drives the
-    /// extension of an 8-bit `char` lvalue widened to a larger
-    /// integer.
+    /// unsigned only on AArch64 ELF (the AAPCS64 default). The choice
+    /// drives the extension of an 8-bit `char` lvalue widened to a
+    /// larger integer.
     pub fn plain_char_signed(self) -> bool {
         !matches!(self, Target::LinuxAarch64)
     }
@@ -426,7 +424,7 @@ impl Target {
     }
 
     /// Default target -- used when callers (mostly tests) construct a
-    /// [`Compiler`] without an explicit `--target` choice. Picks the
+    /// [`crate::Compiler`] without an explicit `--target` choice. Picks the
     /// target matching the host badc is running on; someone running
     /// `badc foo.c` without naming a target gets a binary that runs
     /// on this machine. Cross-compilation always goes through
@@ -576,7 +574,7 @@ pub(super) fn pc_extent_for_lowering(
     // Cross-TU function-import placeholders sit past the
     // highest `end_pc`; the codegen's per-`Inst::Call` fixup
     // pass uses the same dense `pc_to_native` table to
-    // recognise them as out-of-range, so the table has to
+    // recognize them as out-of-range, so the table has to
     // cover the placeholder range too.
     let from_imports = program
         .extern_function_imports
@@ -599,8 +597,10 @@ pub(crate) enum ArgPlacement {
     IntReg(u8),
     /// Goes into a floating-point arg register. Index is the
     /// register number (d0..d7 on aarch64, xmm0..xmm7 on
-    /// x86_64).
+    /// x86_64), or z0..z7 for an SVE vector.
     FpReg(u8),
+    /// An SVE predicate in p0..p3.
+    PredReg(u8),
     /// Goes onto the host outgoing-args stack at `[sp + offset]`
     /// (post-`shadow_space`, post-scratch-allocation). 8-byte
     /// stride.
@@ -821,6 +821,18 @@ pub(crate) struct ArgAgg {
 }
 
 impl ArgAgg {
+    /// An SVE vector, or predicate when `pred`, which the planner places
+    /// by [`abi_classify::AggClass::Scalable`]'s rule.
+    pub(crate) fn scalable(pred: bool) -> Self {
+        Self {
+            class: abi_classify::AggClass::Scalable { pred },
+            size: 8,
+            align: 8,
+            arg_align: 8,
+            int32: false,
+        }
+    }
+
     /// The classification every call site and callee entry takes for `desc`.
     pub(crate) fn new(desc: &crate::c5::ir::AggDesc, abi: Abi) -> Self {
         Self {
@@ -887,7 +899,31 @@ pub(super) fn plan_call_args_aggs(
         *stack_used = off + bytes;
         off
     };
+    let mut pred_idx = 0u8;
     for i in 0..arg_count {
+        // An SVE argument the registers do not take passes as the address
+        // of the caller's copy, an integer argument.
+        if let Some(Some(ArgAgg {
+            class: AggClass::Scalable { pred },
+            ..
+        })) = aggs.get(i)
+        {
+            let named = i < fixed_args;
+            let placement = if named && *pred && pred_idx < 4 {
+                pred_idx += 1;
+                ArgPlacement::PredReg(pred_idx - 1)
+            } else if named && !*pred && fp_idx < 8 {
+                fp_idx += 1;
+                ArgPlacement::FpReg(fp_idx as u8 - 1)
+            } else if int_idx < int_max {
+                int_idx += 1;
+                ArgPlacement::IntReg(abi.int_arg_regs[int_idx - 1])
+            } else {
+                ArgPlacement::Stack(scalar_slot(&mut stack_used, i))
+            };
+            placements.push(placement);
+            continue;
+        }
         // Aggregate argument: classify into registers / by-reference
         // / by-stack per the host ABI. A variadic aggregate on the
         // macOS AAPCS64 variadic ABI rides the overflow stack like
@@ -1017,12 +1053,20 @@ pub(super) fn plan_call_args_aggs(
                 placements.push(placement);
                 continue;
             }
-            let placement = match &agg.class {
+            // An unnamed 32-byte vector goes in memory, as gcc passes it.
+            let memory = AggClass::ByStack;
+            let class = match &agg.class {
+                AggClass::Regs(c) if i >= fixed_args && c[..] == [RegClass::Vector256] => &memory,
+                c => c,
+            };
+            let placement = match class {
                 AggClass::Regs(classes) => {
                     let need_int = classes.iter().filter(|c| **c == RegClass::Integer).count();
                     let need_fp = classes
                         .iter()
-                        .filter(|c| matches!(c, RegClass::Sse | RegClass::Vector))
+                        .filter(|c| {
+                            matches!(c, RegClass::Sse | RegClass::Vector | RegClass::Vector256)
+                        })
                         .count();
                     if need_int > 0 && need_fp == 0 {
                         int_idx = pair_align16(int_idx, int_max, agg, abi);
@@ -1046,7 +1090,7 @@ pub(super) fn plan_call_args_aggs(
                                 RegClass::X87 | RegClass::NoClass => {
                                     unreachable!("an argument register is never {c:?}")
                                 }
-                                RegClass::Sse | RegClass::Vector => {
+                                RegClass::Sse | RegClass::Vector | RegClass::Vector256 => {
                                     let r = fp_idx as u8;
                                     fp_idx += 1;
                                     ClassReg {
@@ -1125,6 +1169,7 @@ pub(super) fn plan_call_args_aggs(
                         align: agg.align,
                     }
                 }
+                AggClass::Scalable { .. } => unreachable!("placed above"),
                 AggClass::ReturnIndirect => {
                     // Not an argument classification; treat as
                     // by-stack defensively.
@@ -1369,6 +1414,8 @@ pub(crate) struct ResolvedImport {
     /// SysV `xor eax, eax`). Default `false` for bindings whose
     /// prototype the parser hasn't seen.
     pub is_variadic: bool,
+    /// [`crate::c5::preprocessor::Binding::prototyped`].
+    pub prototyped: bool,
     /// Number of fixed (non-variadic) parameters from the
     /// prototype -- the count *before* the trailing `...`.
     /// macOS arm64's variadic ABI passes these in `int_arg_regs`
@@ -1498,6 +1545,9 @@ pub(crate) struct ResolvedDylib {
     /// Loader-search-name or filesystem path. Goes verbatim into the
     /// LC_LOAD_DYLIB / DT_NEEDED / IMAGE_IMPORT_DESCRIPTOR Name field.
     pub path: String,
+    /// The executable a Mach-O bundle loads into: its imports bind to the
+    /// main executable, and no load command names it.
+    pub main_executable: bool,
 }
 
 impl ResolvedDylib {
@@ -1514,6 +1564,7 @@ impl ResolvedDylib {
         ResolvedDylib {
             name: name.to_string(),
             path: path.to_string(),
+            main_executable: false,
         }
     }
 }
@@ -1570,6 +1621,7 @@ impl ResolvedImports {
             ordinal: None,
             kind: ImportKind::Function,
             is_variadic: false,
+            prototyped: false,
             fixed_args: 4,
             return_type_tag: None,
             param_types: Vec::new(),
@@ -1635,6 +1687,7 @@ impl ResolvedImports {
                 self.dylibs.push(ResolvedDylib {
                     name: spec.name.clone(),
                     path: spec.path.clone(),
+                    main_executable: false,
                 });
                 self.dylibs.len() - 1
             }
@@ -1649,6 +1702,7 @@ impl ResolvedImports {
             ordinal: None,
             kind: crate::c5::codegen::ImportKind::Function,
             is_variadic: b.is_variadic,
+            prototyped: b.prototyped,
             fixed_args: b.fixed_args,
             return_type_tag: b.return_type_tag,
             param_types: b.param_types.clone(),
@@ -1677,6 +1731,7 @@ impl ResolvedImports {
             ordinal: None,
             kind: crate::c5::codegen::ImportKind::Function,
             is_variadic: false,
+            prototyped: true,
             fixed_args: 1,
             return_type_tag: Some(crate::c5::compiler::types::void_ty()),
             param_types: alloc::vec![super::token::Ty::Int as i64],
@@ -1699,6 +1754,7 @@ impl ResolvedImports {
             .map(|s| ResolvedDylib {
                 name: s.name.clone(),
                 path: s.path.clone(),
+                main_executable: false,
             })
             .unwrap_or_else(|| ResolvedDylib::runtime_default(target));
         self.dylibs.push(dylib);
@@ -1802,6 +1858,7 @@ impl ResolvedImports {
                     dylibs.push(ResolvedDylib {
                         name: spec.name.clone(),
                         path: spec.path.clone(),
+                        main_executable: false,
                     });
                     dylibs.len() - 1
                 }
@@ -1816,6 +1873,7 @@ impl ResolvedImports {
                 ordinal: None,
                 kind: crate::c5::codegen::ImportKind::Function,
                 is_variadic: b.is_variadic,
+                prototyped: b.prototyped,
                 fixed_args: b.fixed_args,
                 return_type_tag: b.return_type_tag,
                 param_types: b.param_types.clone(),
@@ -1848,6 +1906,7 @@ impl ResolvedImports {
                         dylibs.push(ResolvedDylib {
                             name: spec.name.clone(),
                             path: spec.path.clone(),
+                            main_executable: false,
                         });
                         dylibs.len() - 1
                     }
@@ -1876,6 +1935,7 @@ impl ResolvedImports {
                 dylibs.push(ResolvedDylib {
                     name: spec.name.clone(),
                     path: spec.path.clone(),
+                    main_executable: false,
                 });
             }
         }
@@ -2008,6 +2068,10 @@ pub(crate) enum DynamicExportSection {
 pub struct InitFiniArrays {
     pub init: Option<(u64, u64)>,
     pub fini: Option<(u64, u64)>,
+    /// The PE TLS directory's null-terminated callback array.
+    pub tls_callbacks: Option<u64>,
+    /// The PE TLS directory's own place, when a unit names `_tls_used`.
+    pub tls_directory: Option<u64>,
 }
 
 /// Stream a resolved relocation's site or target lives in. `Data`
@@ -2114,6 +2178,17 @@ pub struct NamedSection {
     pub write: bool,
 }
 
+/// The `/EXPORT:` options past a plain export: `@ordinal`, the name's slot
+/// in the export address table; `NONAME`, no entry in the name table;
+/// `PRIVATE`, none in the import library.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExportForm {
+    pub name: String,
+    pub ordinal: Option<u16>,
+    pub noname: bool,
+    pub private: bool,
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct Build {
     /// What the lowering's sink reported, at the level each row
@@ -2122,11 +2197,21 @@ pub(crate) struct Build {
     pub diagnostics: Vec<crate::c5::diag::Diagnostic>,
     /// Machine code, ready to be placed in `__TEXT,__text`.
     pub text: Vec<u8>,
-    /// Named sections a writer can emit in their own right. Only the
-    /// merged link path fills this; the ELF writer consumes it, and
-    /// the Mach-O and PE writers still fold the bytes into the family
-    /// segment they belong to.
+    /// Named data sections a writer can emit in their own right, as
+    /// offsets in the data stream. Only the merged link path fills this.
     pub named_sections: Vec<NamedSection>,
+    /// The exports an ordinal or `NONAME` shapes (PE).
+    pub export_forms: Vec<ExportForm>,
+    /// A PE name import's hint by its symbol, where an import library
+    /// states one.
+    pub import_hints: alloc::collections::BTreeMap<String, u16>,
+    /// The prologue steps an asm function's `.seh_*` directives give it,
+    /// keyed by its name.
+    pub asm_unwind: Vec<(String, UnwindSteps)>,
+    /// Named code sections, as offsets in `text`. Only the merged link path
+    /// fills this, and only the PE writer gives each a header; for it each
+    /// one starts on a multiple of the image's section alignment.
+    pub named_code_sections: Vec<NamedSection>,
     /// The linked Mach-O inputs' unwind tables; only the merged link path
     /// fills them.
     pub compact_unwind: Vec<CompactUnwind>,
@@ -2147,7 +2232,7 @@ pub(crate) struct Build {
     /// export at a local data/bss slot the image defines, bound with an
     /// `R_*_COPY` relocation. Empty on the single-TU and non-ELF paths.
     pub copy_relocs: Vec<CopyRelocReq>,
-    /// Initialised data segment: string literals + zero-initialised
+    /// Initialized data segment: string literals + zero-initialized
     /// globals. Copied into `__DATA,__data` by the writer; offsets
     /// into this buffer match the SSA emit's view of the data
     /// segment, so a `DataFixup { data_offset: K }` resolves to
@@ -2179,7 +2264,7 @@ pub(crate) struct Build {
     /// alignment padding holds absolutely. At the default 16 the
     /// writers keep their established placement byte-identically.
     pub text_align: usize,
-    /// Bytes of zero-initialised data placed past the file image, in the
+    /// Bytes of zero-initialized data placed past the file image, in the
     /// `[data.len(), data.len() + bss_size)` offset range. Carries no file
     /// storage: the loader zero-fills it (ELF `p_memsz > p_filesz`, PE
     /// `VirtualSize > SizeOfRawData`, Mach-O `vmsize > filesize`). A data
@@ -2230,7 +2315,7 @@ pub(crate) struct Build {
     /// Sparse map from SSA-tier PC (ent_pc / end_pc /
     /// block_start_pc / sentinel) to the byte offset within
     /// `Build::text` where that PC's emitted instructions start.
-    /// `usize::MAX` for indices that aren't a recognised PC. The
+    /// `usize::MAX` for indices that aren't a recognized PC. The
     /// last entry is the total code length, so `[i+1] - [i]` gives
     /// the byte length covered between PCs `i` and `i+1`.
     pub pc_to_native: Vec<usize>,
@@ -2256,6 +2341,9 @@ pub(crate) struct Build {
     pub early_returns: Vec<EarlyReturn>,
     /// The `__try` scope tables, in emission order.
     pub seh_rows: Vec<SehRow>,
+    /// The text offset of the language handler an input defines, which the
+    /// scope tables name instead of an imported one.
+    pub seh_handler: Option<usize>,
     /// Source-level function names parallel to `func_ent_pcs`,
     /// populated from `FunctionSsa::name` during the per-arch
     /// emit loop. Empty entries surface for archive-reloaded
@@ -2317,10 +2405,10 @@ pub(crate) struct Build {
     pub abi: Abi,
     /// Thread-local data segment, byte-for-byte copy of
     /// `Program::tls_data`. The writer routes the first
-    /// `tls_init_size` bytes to `.tdata` (initialised TLS image)
+    /// `tls_init_size` bytes to `.tdata` (initialized TLS image)
     /// and the remainder to `.tbss` (zero-fill TLS bss).
     pub tls_data: Vec<u8>,
-    /// Number of `tls_data` bytes that are statically initialised.
+    /// Number of `tls_data` bytes that are statically initialized.
     /// `tls_data.len() - tls_init_size` bytes are zero-fill.
     pub tls_init_size: usize,
     /// Alignment of `tls_data`, at least 8: the ELF writer's `PT_TLS`
@@ -2342,6 +2430,8 @@ pub(crate) struct Build {
     pub tls_index_fixups: Vec<TlsIndexFixup>,
     /// The data-byte offset of a link-defined `_tls_index` the TLS directory names.
     pub tls_index_slot: Option<u64>,
+    /// The data-byte offset and size of the delay-load descriptor table.
+    pub delay_import_table: Option<(u64, u64)>,
     /// macOS arm64 Thread-Local Variable fixups -- one entry per
     /// `Inst::TlsAddr` site on macOS. Each records an
     /// `adrp + add` pair to be patched with the address of the
@@ -2411,6 +2501,8 @@ pub(crate) struct Build {
     /// Mach-O output; empty for shared libraries (which use
     /// `exports`) and on other targets, whose writers ignore it.
     pub dynamic_exports: Vec<DynamicExport>,
+    /// A PE image's forwarded exports: `(name, "dll.export")`.
+    pub forwarded_exports: Vec<(String, String)>,
     /// The exports of protected visibility, which an ELF image states as
     /// `STV_PROTECTED` in `.dynsym`.
     pub protected_exports: alloc::collections::BTreeSet<String>,
@@ -2485,6 +2577,15 @@ pub(crate) struct Build {
     /// knows the final vmaddr layout.
     #[allow(dead_code)]
     pub merged_dwarf: Option<MergedDwarf>,
+    /// The path a PE image's debug directory names for its program
+    /// database; the PE writer then also writes the PDB.
+    pub pdb_path: Option<String>,
+    /// The compiled resource files (`.res`) a PE image carries in `.rsrc`.
+    pub resources: Vec<Vec<u8>>,
+    /// A PE image's `--stack` reserve and commit; `None` keeps the default.
+    pub stack_size: Option<(u64, u64)>,
+    /// A Mach-O image's form, see [`MachOImageOptions`].
+    pub mach_o: MachOImageOptions,
     /// Byte offset within `Build::text` of each import's PLT
     /// trampoline. Indexed by `ResolvedImports::imports` slot --
     /// `plt_trampoline_offsets[i]` is the local code address the
@@ -2518,7 +2619,7 @@ pub(crate) struct Build {
     /// `DW_CFA_advance_loc` so the post-prologue CFA / saved-reg
     /// rule installs at the right PC. Keyed by the function's own
     /// `ent_pc` (unique per function) rather than a derived PC slot
-    /// in `pc_to_native`, which a neighbouring function's PC can
+    /// in `pc_to_native`, which a neighboring function's PC can
     /// alias when both are small.
     pub func_prologue_native: alloc::collections::BTreeMap<usize, usize>,
     /// Frame slots mem2reg promoted to registers, keyed by the
@@ -2964,7 +3065,7 @@ pub(crate) struct PltCallFixup {
     pub(crate) import_index: usize,
     /// Tail jump (`JMP`/`B`) when true, else a call (`CALL`/`BL`).
     pub(crate) is_tail: bool,
-    /// Address-materialisation site (`LEA rip` / `adrp+add`) taking the
+    /// Address-materialization site (`LEA rip` / `adrp+add`) taking the
     /// import's address rather than transferring control; `is_tail` unused.
     pub(crate) is_addr: bool,
 }
@@ -3205,16 +3306,19 @@ pub(crate) enum AbsAddrTarget {
     Rodata(u64),
 }
 
-/// Address-materialisation site in `Build::text` reaching a byte of
+/// Address-materialization site in `Build::text` reaching a byte of
 /// `RodataBuild::bytes`: `lea reg, [rip+disp32]` on x86_64 (disp32 at
-/// `code_offset + 3`), `adrp + add` on aarch64. Same patch shape as
+/// `code_offset + 3`) or any rip-relative operand's displacement
+/// ([`AddrPart::Disp32`]), `adrp + add` on aarch64. Same patch shape as
 /// [`DataFixup`], resolved against the read-only blob's base instead.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct RodataAddrFixup {
-    /// Byte offset within `Build::text` of the instruction (pair).
+    /// Byte offset within `Build::text` of the instruction (pair), or of
+    /// the displacement for `Disp32`.
     pub code_offset: usize,
     /// Offset into `RodataBuild::bytes`.
     pub rodata_offset: u64,
+    pub part: AddrPart,
 }
 
 /// 4-byte slot inside `RodataBuild::bytes` holding a text-relative
@@ -3250,8 +3354,8 @@ pub(crate) struct RodataAbs64 {
     pub text_offset: u64,
 }
 
-/// A data-image slot holding the address of a labelled code location
-/// (GCC `&&label` in a static initializer), resolved once the owning
+/// A data-image slot holding the address of a labeled code location
+/// (GNU C `&&label` in a static initializer), resolved once the owning
 /// function's block layout is final. The relocatable writers emit one
 /// `R_*_64` against the `.text` section symbol with `addend =
 /// text_offset`, the same shape a function-pointer initializer takes;
@@ -3287,8 +3391,8 @@ pub(crate) struct RodataBuild {
 pub(crate) struct LiteralPool {
     slots: alloc::collections::BTreeMap<(u64, u8), u64>,
     runs: [Vec<u8>; 2],
-    /// `(code_offset, width, offset in run)` per load.
-    loads: Vec<(usize, u8, u64)>,
+    /// `(code_offset, width, offset in run, part)` per load.
+    loads: Vec<(usize, u8, u64, AddrPart)>,
     /// `(offset, len)` of each run in `RodataBuild::bytes` once placed.
     pub spans: [(u64, u64); 2],
 }
@@ -3300,13 +3404,23 @@ impl LiteralPool {
 
     /// The `adrp` + `ldr` pair at `code_offset` loads `width` bytes of `bits`.
     pub(crate) fn load(&mut self, code_offset: usize, bits: u64, width: u8) {
+        self.load_part(code_offset, bits, width, AddrPart::Whole);
+    }
+
+    /// The rip-relative operand whose displacement is at `field` reads
+    /// `width` bytes of `bits`.
+    pub(crate) fn load_disp32(&mut self, field: usize, bits: u64, width: u8) {
+        self.load_part(field, bits, width, AddrPart::Disp32);
+    }
+
+    fn load_part(&mut self, code_offset: usize, bits: u64, width: u8, part: AddrPart) {
         let run = &mut self.runs[Self::run(width)];
         let at = *self.slots.entry((bits, width)).or_insert_with(|| {
             let at = run.len() as u64;
             run.extend_from_slice(&bits.to_le_bytes()[..width.into()]);
             at
         });
-        self.loads.push((code_offset, width, at));
+        self.loads.push((code_offset, width, at, part));
     }
 }
 
@@ -3324,10 +3438,11 @@ impl RodataBuild {
             self.bytes.append(&mut pool.runs[k]);
             pool.spans[k] = (at as u64, (self.bytes.len() - at) as u64);
         }
-        for (code_offset, width, at) in pool.loads.drain(..) {
+        for (code_offset, width, at, part) in pool.loads.drain(..) {
             self.addr_fixups.push(RodataAddrFixup {
                 code_offset,
                 rodata_offset: pool.spans[LiteralPool::run(width)].0 + at,
+                part,
             });
         }
     }
@@ -3364,6 +3479,9 @@ pub(crate) struct DataPcRelReloc {
     pub width: u8,
     /// The slot holds the RVA `target_vaddr - image base`, not a distance.
     pub image_relative: bool,
+    /// The slot is an AArch64 branch word: the distance over 4 fills bits
+    /// 25:0 and the word's other bits stay.
+    pub branch26: bool,
 }
 
 /// Text-sited counterpart of [`DataPcRelReloc`]: a plain 4- or 8-byte
@@ -3419,7 +3537,7 @@ pub(crate) struct TextAbsReloc {
 // the per-target TLS offset (variant-1 TCB_HEAD + offset on
 // aarch64, variant-2 -(tls_size - offset) on x86_64) only depends
 // on the total TLS block size, which is known when the codegen
-// lowers `Inst::TlsAddr`. The codegen materialises the final
+// lowers `Inst::TlsAddr`. The codegen materializes the final
 // immediate inline; the writer just needs `Build::tls_data` /
 // `Build::tls_init_size` to lay out `.tdata` / `.tbss`.
 //
@@ -3466,7 +3584,7 @@ pub(crate) struct TlsOffsetFixup {
 }
 
 /// Relocation for a macOS arm64 Thread-Local Variable access.
-/// The codegen emits an `adrp + add` pair that materialises the
+/// The codegen emits an `adrp + add` pair that materializes the
 /// address of the variable's `__thread_vars` descriptor (a
 /// 24-byte triple of pointers); the Mach-O writer patches both
 /// halves with the descriptor's vmaddr once the
@@ -3479,7 +3597,7 @@ pub(crate) struct TlsOffsetFixup {
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct MachoTlvFixup {
     /// Byte offset within `Build::text` of the adrp instruction
-    /// that opens the descriptor-address materialisation. The
+    /// that opens the descriptor-address materialization. The
     /// matching `add` lives at `adrp_offset + 4`.
     pub adrp_offset: usize,
     /// Index into [`Build::macho_tlv_descriptors`]. The writer
@@ -3606,13 +3724,13 @@ pub(crate) struct UserExternCallSite {
 /// `lea` rip-rel (x86_64) shape as [`DataFixup`], but the
 /// target is a named symbol defined in another TU rather than
 /// a local `.data` byte offset. The writer emits one undefined
-/// `STT_NOTYPE STB_GLOBAL` symbol per unique name (untyped, as
-/// gcc emits extern references) and one reloc per ref pointing
-/// at that symbol; the name also enters the unit's
-/// `NT_BADC_EXTERN_DATA` note, which carries what the symbol type
-/// no longer does. A cross-TU function pointer rides this channel
-/// too -- materialising an address is the same lowering -- so the
-/// note names functions as well as data.
+/// `STT_NOTYPE STB_GLOBAL` symbol per unique name (untyped) and
+/// one reloc per ref pointing at that symbol; the name also
+/// enters the unit's `NT_BADC_EXTERN_DATA` note, which carries
+/// what the symbol type no longer does. A cross-TU function
+/// pointer rides this channel too -- materializing an address is
+/// the same lowering -- so the note names functions as well as
+/// data.
 #[derive(Debug, Clone)]
 #[allow(dead_code)] // consumed only by the std-only elf_reloc writer
 pub(crate) struct UserExternDataRef {
@@ -3769,6 +3887,58 @@ pub(crate) fn unit_definitions(program: &Program, build: &Build) -> UnitDefs {
     defs
 }
 
+/// The `__start_` / `__stop_` pair of each C-identifier section the unit's
+/// functions or objects name, which its own image defines as a link does:
+/// the lowering groups a section's functions and the layout its objects.
+pub(crate) fn section_bounds(program: &Program, build: &Build) -> Vec<(String, UnitDef)> {
+    use crate::c5::token::Token;
+    fn named(s: &crate::c5::symbol::Symbol) -> Option<&str> {
+        (s.section_name.as_deref()).filter(|n| crate::c5::ident::is_c_identifier(n))
+    }
+    let functions =
+        || (program.symbols.iter()).filter(|s| s.class == Token::Fun as i64 && s.defined_here);
+    let section_of: alloc::collections::BTreeMap<&str, Option<&str>> =
+        functions().map(|s| (s.def_link_name(), named(s))).collect();
+    let mut text: alloc::collections::BTreeMap<&str, (usize, usize)> = Default::default();
+    let mut current = None;
+    for (k, (&pc, name)) in build.func_ent_pcs.iter().zip(&build.func_names).enumerate() {
+        // A funclet, which no symbol names, follows its function.
+        current = section_of.get(name.as_str()).copied().unwrap_or(current);
+        let (Some(sec), Some(&start)) = (current, build.pc_to_native.get(pc)) else {
+            continue;
+        };
+        let next = (build.func_ent_pcs.get(k + 1)).and_then(|&p| build.pc_to_native.get(p));
+        let end = (build.func_ends.get(k).or(next).copied()).unwrap_or(build.text.len());
+        let e = text.entry(sec).or_insert((start, end));
+        *e = (e.0.min(start), e.1.max(end));
+    }
+    let mut data: alloc::collections::BTreeMap<&str, (u64, u64)> = Default::default();
+    for s in &program.symbols {
+        if s.class == Token::Glo as i64
+            && s.defined_here
+            && !s.is_thread_local
+            && let Some(sec) = named(s).filter(|sec| !text.contains_key(sec))
+        {
+            let (start, end) = (
+                s.val.max(0) as u64,
+                (s.val + s.data_byte_size).max(0) as u64,
+            );
+            let e = data.entry(sec).or_insert((start, end));
+            *e = (e.0.min(start), e.1.max(end));
+        }
+    }
+    let pair = |sec: &str, a: UnitDef, b: UnitDef| {
+        [(format!("__start_{sec}"), a), (format!("__stop_{sec}"), b)]
+    };
+    (text.into_iter())
+        .flat_map(|(sec, (a, b))| pair(sec, UnitDef::Text(a), UnitDef::Text(b)))
+        .chain(
+            (data.into_iter())
+                .flat_map(|(sec, (a, b))| pair(sec, UnitDef::Data(a), UnitDef::Data(b))),
+        )
+        .collect()
+}
+
 /// Whether the RIP-relative field at `field` is the operand of a `lea`.
 pub(crate) fn x86_64_lea_rip(code: &[u8], field: usize) -> bool {
     field >= 2 && code[field - 2] == 0x8D && code[field - 1] & 0xC7 == 0x05
@@ -3799,6 +3969,16 @@ impl DataImportSlots {
 
     pub(crate) fn binds(&self, name: &str) -> bool {
         self.hosts.contains_key(name)
+    }
+
+    /// Take `name`, which nothing binds, as the loaded libraries' export
+    /// `host`, as a dynamic linker's flat lookup finds it; false where the
+    /// lookup is not flat.
+    pub(crate) fn admit_flat(&mut self, name: &str, host: &str) -> bool {
+        if self.flat {
+            self.hosts.insert(name.into(), (host.into(), 0));
+        }
+        self.flat
     }
 
     /// Route `r` through its object's slot, which stands in for the address
@@ -3884,6 +4064,7 @@ impl DataImportSlots {
                 ImportKind::Object
             },
             is_variadic: false,
+            prototyped: false,
             fixed_args: 0,
             return_type_tag: None,
             param_types: Vec::new(),
@@ -3939,6 +4120,10 @@ pub struct Hardening {
     /// `-mbranch-protection=pac-ret+leaf`: a function that keeps its
     /// return address in the link register signs it as well.
     pub pac_ret_leaf: bool,
+    /// The return address is signed with key B (`pacibsp` / `autibsp`), as
+    /// on Windows, where unwind code `pac_sign_lr` names that key and MSVC
+    /// signs with it; key A elsewhere.
+    pub pac_b_key: bool,
     /// `-fcf-protection=branch`: x86_64 indirect-branch tracking. An
     /// `endbr64` opens every function and every indirect-branch target,
     /// which is the only instruction CET permits an indirect transfer to
@@ -3956,13 +4141,13 @@ impl Hardening {
         bti: false,
         pac_ret: false,
         pac_ret_leaf: false,
+        pac_b_key: false,
         cf_protection_branch: false,
     };
 }
 
-/// `-mindirect-branch=` lowering of an indirect call or jump
-/// (gcc's option space; `thunk`, which generates a comdat thunk body,
-/// is not implemented).
+/// `-mindirect-branch=` lowering of an indirect call or jump (`thunk`,
+/// which generates a comdat thunk body, is not implemented).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum IndirectBranch {
     /// `keep`: the plain `call *%reg` / `jmp *%reg` forms.
@@ -4029,8 +4214,7 @@ pub enum GuardSeg {
 
 impl GuardSeg {
     /// The segment a guard is read through when none is named: `%gs`
-    /// under the kernel code model, `%fs` otherwise, as gcc and clang
-    /// choose.
+    /// under the kernel code model, `%fs` otherwise.
     pub fn for_code_model(code_model: CodeModel) -> Self {
         match code_model {
             CodeModel::Kernel => GuardSeg::Gs,
@@ -4100,7 +4284,7 @@ pub struct StackProtect {
     pub mode: StackProtector,
     /// `--param ssp-buffer-size=`: least character-array size, in bytes,
     /// that makes a function eligible under [`StackProtector::Basic`].
-    /// gcc's default is 8.
+    /// The default is 8.
     pub buffer_size: u32,
     /// Where the canary value is read from.
     pub guard: StackGuard,
@@ -4331,7 +4515,7 @@ pub const DEFAULT_SSP_BUFFER_SIZE: u32 = 8;
 
 /// Byte offset of the canary from the guard segment's base: its slot in
 /// the System V x86-64 thread control block, which glibc and musl both
-/// honour, and in the per-CPU area Linux reaches through `%gs`.
+/// honor, and in the per-CPU area Linux reaches through `%gs`.
 pub const SYSV_TLS_GUARD_OFFSET: i32 = 0x28;
 
 /// The object a `global` stack guard is read from, and the name
@@ -4346,13 +4530,11 @@ pub(crate) const STACK_CHK_FAIL_SYMBOL: &str = "__stack_chk_fail";
 /// every region below keeps its alignment.
 pub(crate) const CANARY_REGION_BYTES: u32 = 16;
 
-/// User-controllable knobs for the native lowering pass. Distinct
-/// from [`TargetOptions`] (which encodes platform ABI -- not user
-/// choosable). Threaded through [`emit_native_with_options`],
-/// [`dump_native_listing_with_options`], and
-/// [`jit_run_with_options`]; the zero-arg public functions
-/// (`emit_native`, ...) construct `NativeOptions::default()` and
-/// delegate.
+/// User-controllable knobs for the native lowering pass; the platform
+/// ABI comes from the [`Target`]. Threaded through
+/// [`crate::emit_native_with_options`] and [`crate::jit_run_with_options`];
+/// the zero-arg public functions (`emit_native`, ...) construct
+/// `NativeOptions::default()` and delegate.
 #[derive(Debug, Clone)]
 pub struct NativeOptions {
     /// Run the SSA optimization passes before register allocation:
@@ -4371,8 +4553,7 @@ pub struct NativeOptions {
     /// Emit DWARF (`.debug_info` + `.debug_abbrev` + `.debug_line`
     /// + `.debug_str` + `.debug_frame`) into the output binary.
     ///
-    /// Off by default, matching gcc / clang, which emit no debug
-    /// info without `-g`. Enabling it via `-g` / `--debug` adds
+    /// Off by default. Enabling it via `-g` / `--debug` adds
     /// compile time (the type-catalog walk is non-trivial on big
     /// inputs) and artifact size (~10-30% on a large translation
     /// unit). The default keeps builds fast and binaries small;
@@ -4392,8 +4573,7 @@ pub struct NativeOptions {
     /// source marked `inline` is measured against a multiple of it, and
     /// a mandatory (`always_inline`) request against no bound. The
     /// `--inline-cap=N` CLI flag drives this; 0 leaves only the
-    /// mandatory requests. Default 64, matching gcc / clang `-O2`'s
-    /// `--param max-inline-insns-single=N` (gcc 70, clang ~50).
+    /// mandatory requests. Default 64.
     pub inline_cap: u32,
     /// `-Wframe-larger-than=<n>`: report a function whose stack frame --
     /// what its prologue reserves below the return address, saved
@@ -4412,10 +4592,17 @@ pub struct NativeOptions {
     /// On by default; under the `codegen_test` feature
     /// `BADC_NO_BSS_SEGREGATE` forces it off.
     pub bss_segregate: bool,
+    /// Whether an object whose initializer is all zeros takes zero-fill
+    /// storage as an uninitialized one does. `-fno-zero-initialized-in-bss`
+    /// clears it, which keeps such an object in `.data`.
+    pub zero_init_in_bss: bool,
     /// Keep compiler-generated code off the floating-point / SIMD
     /// register file (`-mno-sse` on x86_64, `-mgeneral-regs-only` on
     /// aarch64). See [`Abi::no_fp_regs`], which this sets.
     pub no_fp_regs: bool,
+    /// The x86 extensions `-m<ext>` and `-march=` select; under AVX the
+    /// 32-byte vectors are values in ymm registers.
+    pub x86_features: crate::c5::X86Features,
     /// Keep every compiler-generated memory access naturally aligned for
     /// its width (`-mstrict-align`). Code that runs with the MMU off maps
     /// memory as Device type, where an unaligned access raises an
@@ -4433,11 +4620,16 @@ pub struct NativeOptions {
     /// taken and no table reaches the image -- what a build under
     /// retpolines or indirect-branch tracking requires.
     pub jump_tables: bool,
+    /// `-fconserve-stack`: the inliner refuses an optional splice that
+    /// takes the caller's frame past 100 bytes and 400% growth over its
+    /// own, gcc's `large-stack-frame` and `large-stack-frame-growth` under
+    /// the option, in place of their defaults, 256 bytes and 1000%.
+    pub conserve_stack: bool,
     /// Whether a call whose result the function returns unchanged may
-    /// become a jump after the epilogue (gcc and clang
-    /// `-foptimize-sibling-calls`; `-fno-optimize-sibling-calls` clears
-    /// it). Cleared, every call returns into the frame that made it, which
-    /// a frame-pointer unwinder walking the call chain relies on.
+    /// become a jump after the epilogue (`-foptimize-sibling-calls`;
+    /// `-fno-optimize-sibling-calls` clears it). Cleared, every call
+    /// returns into the frame that made it, which a frame-pointer unwinder
+    /// walking the call chain relies on.
     pub sibling_calls: bool,
     /// Position-independent relocatable output (`-fPIC` / `-fpic`).
     /// A switch table then emits in the label-difference form the
@@ -4501,6 +4693,10 @@ pub struct NativeOptions {
     /// A symbol's `st_size`
     /// covers its code only; the fill belongs to no function.
     pub min_function_alignment: u32,
+    /// x86-64 `-mbranches-within-32B-boundaries`: function entries on 32
+    /// bytes, and no local jump or fused compare-and-jump crossing or ending
+    /// on a 32-byte boundary.
+    pub branches_within_32b: bool,
     /// Leave the program, the lowering and dead bodies unfreed to the process exit.
     pub freed_by_exit: bool,
     /// `-fpatchable-function-entry=N,M`: the NOP area at every function
@@ -4848,6 +5044,19 @@ pub struct ElfImageOptions {
     pub symbolic: bool,
 }
 
+/// The image forms ld64 selects with `-bundle`, a Mach-O image that only
+/// `dlopen` loads (`MH_BUNDLE`), and `-flat_namespace`, whose imports name
+/// no library and resolve in every image loaded (no `MH_TWOLEVEL`), and
+/// the SDK version `LC_BUILD_VERSION` records (`xxxx.yy.zz` in nibbles),
+/// by which libSystem selects its linked-on-or-after behaviors; none
+/// stamps the writer's default.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct MachOImageOptions {
+    pub bundle: bool,
+    pub flat_namespace: bool,
+    pub sdk: Option<u32>,
+}
+
 impl Default for NativeOptions {
     /// Defaults: executable output, DWARF off, optimizations off.
     fn default() -> Self {
@@ -4891,9 +5100,12 @@ impl NativeOptions {
             frame_larger_than: None,
             diag: crate::c5::diag::Config::new(),
             bss_segregate: true,
+            zero_init_in_bss: true,
             no_fp_regs: false,
+            x86_features: crate::c5::X86Features::NONE,
             strict_align: false,
             jump_tables: true,
+            conserve_stack: false,
             sibling_calls: true,
             pic: false,
             pie: false,
@@ -4905,6 +5117,7 @@ impl NativeOptions {
             stack_protect: StackProtect::OFF,
             fixed_regs: FixedRegs::NONE,
             min_function_alignment: 1,
+            branches_within_32b: false,
             freed_by_exit: false,
             patchable_function_entry: PatchableEntry::NONE,
             profiling: Profiling::OFF,
@@ -5001,6 +5214,14 @@ pub(crate) fn emit_ssa_dump(build: &mut Build) {
 #[cfg(not(feature = "std"))]
 pub(crate) fn emit_ssa_dump(build: &mut Build) {
     build.ssa_dump.clear();
+}
+
+/// Write out `--dump-ssa` text a caller kept until its build was final.
+pub(crate) fn print_ssa_dump(dump: &str) {
+    #[cfg(feature = "std")]
+    eprint!("{dump}");
+    #[cfg(not(feature = "std"))]
+    let _ = dump;
 }
 
 /// [`lower_for`] with the SSA bodies supplied instead of walked. Used by
@@ -5271,7 +5492,12 @@ pub(crate) fn reloc_callee_ctx(
     let mut sec_ids: alloc::collections::BTreeMap<&str, u32> = alloc::collections::BTreeMap::new();
     let mut ctx = empty;
     for f in funcs {
-        let sec = match section_of.get(f.name.as_str()) {
+        // A funclet, which no symbol names, carries its function's section.
+        let sec = match section_of
+            .get(f.name.as_str())
+            .copied()
+            .or(f.section.as_deref())
+        {
             Some(name) => {
                 let next = sec_ids.len() as u32 + 1;
                 *sec_ids.entry(name).or_insert(next)
@@ -5299,7 +5525,7 @@ pub(crate) fn reloc_callee_ctx(
 /// `relocs` without the slots naming a C-library function the loader
 /// binds, and those slots' import bindings, so every slot naming one holds
 /// the import's own address (C99 6.5.9p6).
-fn split_import_slots(
+pub(crate) fn split_import_slots(
     program: &Program,
     imports: &ResolvedImports,
     relocs: &[crate::c5::program::CodeReloc],
@@ -5465,7 +5691,7 @@ pub(crate) fn bind_named_slots(
 }
 
 /// Per-target ABI knobs that affect lowering, not just the final
-/// Architecture flavour the lowering pass picks. Mirrors
+/// Architecture flavor the lowering pass picks. Mirrors
 /// [`Machine`] but lives next to [`Abi`] so the per-target table
 /// can carry it directly without an extra cross-reference.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -5476,7 +5702,7 @@ pub(crate) enum Arch {
 
 /// Per-target ABI description. Replaces the old free-form
 /// `TargetOptions { variadic_on_stack, win64_abi }` with an
-/// explicit catalogue of every choice the lowering pass has to
+/// explicit catalog of every choice the lowering pass has to
 /// make: which registers carry integer arguments, how much
 /// shadow space the caller reserves, whether variadic calls go
 /// through the macOS-flavoured stack-packing path, and whether
@@ -5524,7 +5750,7 @@ pub(crate) struct Abi {
     /// on Aarch64, the saved-int area on x64), so an AAPCS64-
     /// or SysV-style FP-reg placement causes msvcrt's printf to
     /// see denormal garbage. Mutually exclusive with
-    /// `variadic_on_stack` (Apple's all-stack flavour).
+    /// `variadic_on_stack` (Apple's all-stack flavor).
     pub variadic_int_only: bool,
     /// Win64 places each arg in the register at its argument
     /// position (arg 0 -> int_arg_regs[0] / xmm0, arg 1 ->
@@ -5557,8 +5783,9 @@ pub(crate) struct Abi {
     /// `va_start` marks the FP area exhausted, so `va_arg` walks the
     /// general area then the overflow stack; the x86_64 zero fill keeps to
     /// integer stores and the aarch64 population count to the
-    /// general-register sequence. Floating-point argument
-    /// codegen is unaffected: such environments pass no FP varargs.
+    /// general-register sequence. A floating-point copy moves through a
+    /// general register and any other floating-point value is refused
+    /// (`passes::general_regs`).
     /// Per-run (from [`NativeOptions::no_fp_regs`]), not a `Target::abi`
     /// row property.
     pub no_fp_regs: bool,
@@ -5566,7 +5793,7 @@ pub(crate) struct Abi {
     /// for its width. Per-run (from [`NativeOptions::strict_align`]), not
     /// a `Target::abi` row property; see [`access_chunk`].
     pub strict_align: bool,
-    /// Speculative-execution mitigations the emitters must honour.
+    /// Speculative-execution mitigations the emitters must honor.
     /// Per-run (from [`NativeOptions::hardening`]), not a `Target::abi`
     /// row property; see [`Hardening`].
     pub hardening: Hardening,
@@ -5639,7 +5866,7 @@ impl Default for Abi {
 }
 
 /// Calling convention a function definition or a call site follows,
-/// when it is not the target's own. GCC spells the two x86_64
+/// when it is not the target's own. GNU C spells the two x86_64
 /// conventions `__attribute__((ms_abi))` and
 /// `__attribute__((sysv_abi))`; both are x86-only and inert on other
 /// architectures.
@@ -5658,6 +5885,11 @@ pub(crate) enum CallConv {
     Ms,
     /// System V AMD64 (`__attribute__((sysv_abi))`).
     SysV,
+    /// AArch64's SVE procedure call standard
+    /// (`__attribute__((aarch64_sve_pcs))`): the base standard's argument
+    /// placement, with z8-z23 and p4-p15 preserved whole (AAPCS64 6.1.3,
+    /// 6.1.4).
+    Sve,
 }
 
 impl Target {
@@ -5931,6 +6163,73 @@ mod abi_plan_tests {
             plan.placements[6],
             ArgPlacement::IntReg(abi.int_arg_regs[0])
         );
+    }
+
+    /// AAPCS64 6.8.2 places a named SVE vector in z[NSRN], the count the
+    /// floating-point arguments advance too, and a named predicate in
+    /// p[NPRN] while p0-p3 last; any other passes as the address of the
+    /// caller's copy, an integer argument, in x[NGRN] or on the stack.
+    #[test]
+    fn sve_arguments_take_z_and_p_registers_then_pass_by_reference() {
+        let abi = Target::LinuxAarch64.abi();
+        let (z, p) = (Some(ArgAgg::scalable(false)), Some(ArgAgg::scalable(true)));
+        // double, z, p, int, double, z, p, p, p, p (fifth predicate by reference)
+        let aggs = [
+            None,
+            z.clone(),
+            p.clone(),
+            None,
+            None,
+            z.clone(),
+            p.clone(),
+            p.clone(),
+            p.clone(),
+            p.clone(),
+        ];
+        let plan = plan_call_args_aggs(
+            10,
+            10,
+            &FpMask::from_bits(0b1_0001),
+            abi,
+            &aggs,
+            false,
+            ArgWidths::default(),
+        );
+        use ArgPlacement::{FpReg, IntReg, PredReg};
+        assert_eq!(
+            plan.placements,
+            [
+                FpReg(0),
+                FpReg(1),
+                PredReg(0),
+                IntReg(0),
+                FpReg(2),
+                FpReg(3),
+                PredReg(1),
+                PredReg(2),
+                PredReg(3),
+                IntReg(1)
+            ]
+        );
+        // Nine vectors: the ninth by reference; past x7 its address is on
+        // the stack; an unnamed vector goes by reference as well.
+        let mut aggs = alloc::vec![z.clone(); 9];
+        aggs.extend(alloc::vec![None; 7]);
+        aggs.extend([z.clone(), z.clone()]);
+        let plan = plan_call_args_aggs(
+            18,
+            17,
+            &FpMask::EMPTY,
+            abi,
+            &aggs,
+            false,
+            ArgWidths::default(),
+        );
+        assert_eq!(plan.placements[7], FpReg(7));
+        assert_eq!(plan.placements[8], IntReg(0));
+        assert_eq!(plan.placements[15], IntReg(7));
+        assert_eq!(plan.placements[16], ArgPlacement::Stack(0));
+        assert_eq!(plan.placements[17], ArgPlacement::Stack(8));
     }
 
     fn int128() -> ArgAgg {

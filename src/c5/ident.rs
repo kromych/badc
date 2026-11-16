@@ -125,9 +125,9 @@ fn utf8_at(bytes: &[u8], at: usize) -> Option<(u32, usize)> {
 }
 
 /// Whether `$` is an identifier character. C99 6.4.2.1p1 lets an
-/// identifier hold implementation-defined characters; gcc and clang take
-/// `$` in C (`-fdollars-in-identifiers`) and not in assembler-with-cpp,
-/// where it marks an immediate operand.
+/// identifier hold implementation-defined characters; `$` is one in C
+/// (`-fdollars-in-identifiers`) and not in assembler-with-cpp, where it
+/// marks an immediate operand.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum Dollar {
     Ident,
@@ -193,6 +193,13 @@ pub(crate) fn char_ends_at(bytes: &[u8], at: usize, dollar: Dollar) -> bool {
 /// Whether `s` is exactly one identifier.
 pub(crate) fn is_ident(s: &str, dollar: Dollar) -> bool {
     !s.is_empty() && ident_len(s.as_bytes(), 0, dollar) == s.len()
+}
+
+/// bfd's test for a section name a `__start_` / `__stop_` pair can be
+/// spliced onto: every byte alphanumeric or `_`, so no standard family
+/// name qualifies -- each carries a `.`.
+pub(crate) fn is_c_identifier(name: &str) -> bool {
+    !name.is_empty() && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
 }
 
 /// Whether identifier `s` is reserved for any use (C99 7.1.3p1): an

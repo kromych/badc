@@ -33,7 +33,7 @@ both -O and noO builds round-trip the input buffer and the CRC32 / Adler32 of
 `"123456789"` match RFC 1950 / 3309 reference values. Anything else returns 1
 with a diagnostic on stderr.
 
-`smoke.py` honours `BADC=path/to/badc`.
+`smoke.py` honors `BADC=path/to/badc`.
 
 ## Build defines
 

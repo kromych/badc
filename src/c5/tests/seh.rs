@@ -1,9 +1,9 @@
 //! Microsoft structured exception handling in the front end: `__try`,
 //! `__except`, `__finally` and `__leave` are keywords on the PE targets
-//! and identifiers elsewhere, as clang treats them, and each placement
-//! rule cl enforces (C2703, C2705, C2707, C2184) is an error, as are the
-//! jumps out of a `__finally` block cl warns about (C4532) and out of an
-//! `__except` filter, which is a function of its own.
+//! and identifiers elsewhere, and each placement rule cl enforces (C2703,
+//! C2705, C2707, C2184) is an error, as are the jumps out of a `__finally`
+//! block cl warns about (C4532) and out of an `__except` filter, which is
+//! a function of its own.
 
 use super::Compiler;
 use crate::Target;

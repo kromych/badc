@@ -306,7 +306,8 @@ fn every_exit_mirrors_the_prologue() {
     );
 }
 
-const FIB: &str = "long fib(int n) { if (n < 2) return n; return fib(n - 1) + fib(n - 2); }\n";
+/// Kept out of its own recursive calls, which would add levels to its frame.
+const FIB: &str = "__attribute__((noinline)) long fib(int n) { if (n < 2) return n; return fib(n - 1) + fib(n - 2); }\n";
 
 /// The pushes are the whole frame of `fib`: no `sub`, and `pop rbp` in place
 /// of `leave`.
@@ -516,8 +517,10 @@ fn a_lifetime_marker_after_the_call_keeps_the_tail_jump() {
         __attribute__((noinline)) long g(long v) { return v * 3; }\n\
         long f(long x) { struct p q = { x, x + 1 }; return g(q.a + q.b); }\n";
     let insns = insns_of(&optimized(SRC, Target::LinuxX64), "f");
+    // With no other call, the function keeps no frame to tear down first.
     assert!(
-        exits(&insns).iter().any(|&e| insns[e].is_jmp()),
+        insns.last().is_some_and(X64Insn::is_jmp)
+            || exits(&insns).iter().any(|&e| insns[e].is_jmp()),
         "{insns:x?}"
     );
 }

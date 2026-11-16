@@ -5,24 +5,31 @@
 // none of it -- and neither does it carry the glibc non-shared wrappers,
 // which is why these live apart from `compiler_rt.c`.
 //
-// Both forward to the C library: the handler so its diagnostic and abort
-// are libc's, and the guard so every unit in the image reads the object the
-// loader binds, whose value libc randomizes at startup. Linux/x86-64 reads
-// the canary from %fs:0x28 instead and reaches neither of them.
+// The guard is the C library's, so every unit in the image reads the object
+// the loader binds, whose value libc randomizes at startup; Linux/x86-64
+// reads the canary from %fs:0x28 instead. The handler cannot forward to the
+// library's handler: this definition takes every reference to its name in
+// the image, the forward's included. It writes glibc's diagnostic and
+// aborts through the C library.
+
+#if defined(__linux__) || defined(__APPLE__)
+#include <stdlib.h>
+#include <unistd.h>
+#endif
 
 #ifdef __linux__
 
 #pragma dylib(libc, "libc.so.6")
-#pragma binding(libc::__c5_stack_chk_fail, "__stack_chk_fail")
-extern void __c5_stack_chk_fail(void);
 #pragma binding(data libc::__stack_chk_guard, "__stack_chk_guard")
 extern unsigned long __stack_chk_guard;
 
 void __stack_chk_fail(void) {
+    static const char msg[] = "*** stack smashing detected ***: terminated\n";
     // Naming the guard here is what routes it to the loader's copy for
     // every unit in the image; without a reference the binding is unused.
     (void)__stack_chk_guard;
-    __c5_stack_chk_fail();
+    (void)write(2, msg, sizeof msg - 1);
+    abort();
 }
 
 // Some toolchains call the local alias so position-independent code reaches
@@ -31,16 +38,16 @@ void __stack_chk_fail_local(void) { __stack_chk_fail(); }
 
 #elif defined(__APPLE__)
 
-// libSystem exports both, spelled with the Mach-O leading underscore.
+// libSystem exports the guard spelled with the Mach-O leading underscore.
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
-#pragma binding(libc::__c5_stack_chk_fail, "___stack_chk_fail")
-extern void __c5_stack_chk_fail(void);
 #pragma binding(data libc::__stack_chk_guard, "___stack_chk_guard")
 extern unsigned long __stack_chk_guard;
 
 void __stack_chk_fail(void) {
+    static const char msg[] = "*** stack smashing detected ***: terminated\n";
     (void)__stack_chk_guard;
-    __c5_stack_chk_fail();
+    (void)write(2, msg, sizeof msg - 1);
+    abort();
 }
 
 #elif defined(_WIN32) && defined(__x86_64__)

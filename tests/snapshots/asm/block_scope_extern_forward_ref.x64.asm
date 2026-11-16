@@ -28,14 +28,12 @@ Disassembly of section .text:
 <main>:
                	movl	<rip>, %eax # <addr>
                	incq	%rax
-               	movl	%eax, <rip> # <addr>
                	addq	$0x4, %rax
                	movl	%eax, <rip> # <addr>
                	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	movl	<rip>, %eax # <addr>
                	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x2, %eax

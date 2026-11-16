@@ -1,7 +1,7 @@
 //! Table-driven AArch64 (A64) encoder.
 //!
 //! Every A64 instruction is one 32-bit little-endian word: a fixed base with
-//! named bit-fields spliced in. The catalogue in [`super::isa_a64_table`] is
+//! named bit-fields spliced in. The catalog in [`super::isa_a64_table`] is
 //! generated from an external instruction-set database (see
 //! `tools/gen_isa_a64.py`) as a base word plus a field list; this module packs
 //! concrete operand values into those fields. Some fields need a computed
@@ -9,12 +9,13 @@
 //! move-wide `hw` shift -- which the field kind selects.
 //!
 //! Register numbers are architectural (0..31, 31 = xzr/sp per context). The
-//! `sf` bit (W vs X) is baked into the two separate catalogue rows.
+//! `sf` bit (W vs X) is baked into the two separate catalog rows.
 
-#![allow(dead_code)] // Catalogue breadth runs ahead of lowering coverage.
+#![allow(dead_code)] // Catalog breadth runs ahead of lowering coverage.
 
 use alloc::format;
 use alloc::string::String;
+use alloc::vec::Vec;
 
 use super::encode::encode_logical_imm;
 
@@ -103,9 +104,95 @@ pub(crate) enum Field {
     /// signed saturating `Xdn, Wdn` pair -- which must name the same register
     /// and encodes nothing of its own.
     SameReg { op: u8, first: u8 },
+    /// A governing predicate in the three-bit field at `shift`: p0 to p7.
+    PLow { op: u8, shift: u8 },
+    /// The merging (`/m`) bit of a `/m`-or-`/z` predicate at `op`.
+    PredMerge { op: u8, shift: u8 },
+    /// The SVE element size: the value `k` at `shift` whose `sizes[k]` is
+    /// the size log2 of the operands in bitmask `a`, which agree, plus that
+    /// of the operands in `b` (a widening form's narrow ones) shifted by 4.
+    /// An unallocated value is 0xFF.
+    SveSize {
+        a: u8,
+        b: u8,
+        shift: u8,
+        sizes: [u8; 4],
+    },
+    /// The SVE 8-bit immediate at bit 5 and its `lsl #8` bit at 13. An
+    /// absent shift is taken when the value needs it; a byte element has
+    /// none. `zop` is an operand giving the element size.
+    SveImm8 {
+        op: u8,
+        shift_op: u8,
+        signed: bool,
+        zop: u8,
+    },
+    /// An SVE shift by an immediate: `tsz:imm3`, the low five bits at `lo`
+    /// and the high two at `hi`, from the element size of operand `zop`
+    /// and the shift, `2 * esize - shift` right and `esize + shift` left.
+    SveShiftImm {
+        op: u8,
+        zop: u8,
+        left: bool,
+        lo: u8,
+        hi: u8,
+    },
+    /// The 13-bit logical immediate at bit 5 of a value replicated across
+    /// the element size of operand `zop`, complemented first for `bic`.
+    SveLogicalImm { op: u8, zop: u8, invert: bool },
+    /// One bit at `shift` choosing the constant `one` over `zero`, as VFP
+    /// imm8 codes; 0xFF is 0.0.
+    SveFpPair {
+        op: u8,
+        shift: u8,
+        zero: u8,
+        one: u8,
+    },
+    /// A VFP imm8 constant at `shift`.
+    VfpImm8 { op: u8, shift: u8 },
+    /// A vector register in a field of `width` bits at `shift`, z0 up to
+    /// z(2^width - 1).
+    ZLow { op: u8, shift: u8, width: u8 },
+    /// The element index of operand `op`: its low `lo_w` bits at `lo` and
+    /// the next `hi_w` at `hi`.
+    SveIndex {
+        op: u8,
+        lo: u8,
+        lo_w: u8,
+        hi: u8,
+        hi_w: u8,
+    },
+    /// The indexed dup's imm2:tsz, `index << (size + 1) | 1 << size`: its
+    /// low five bits at `lo` and the high two at `hi`.
+    SveDupIndex { op: u8, lo: u8, hi: u8 },
+    /// An unsigned immediate split in two: its low `lo_w` bits at `lo` and
+    /// the next `hi_w` at `hi`.
+    SplitImm {
+        op: u8,
+        lo: u8,
+        lo_w: u8,
+        hi: u8,
+        hi_w: u8,
+    },
+    /// The operands in bitmask `a` agree on an element size of the
+    /// `sizes` bitmask, which the form's immediate encodes.
+    SveSizeAgree { a: u8, sizes: u8 },
+    /// The base at bit 5 and the signed 4-bit offset at `shift` of an
+    /// [`A64Op::MemVl`] operand, in multiples of `scale` vector lengths.
+    SveMemVl { op: u8, shift: u8, scale: u8 },
+    /// A vector base at bit 5 and its offset at 16, scaled by the memory
+    /// size log2 `msz`.
+    SveZMem { op: u8, msz: u8 },
+    /// A scalar base at bit 5 and a vector index at 16, the index's shift
+    /// the memory size log2 `msz`, and a `sxtw` index's bit at `xs`.
+    SveZMemReg { op: u8, msz: u8, xs: u8 },
+    /// The base at bit 5 and the index at 16 of a register-offset address
+    /// whose index is shifted left by the memory size log2 `msz`; `xzr`
+    /// admits the zero register as the index.
+    SveMemReg { op: u8, msz: u8, xzr: bool },
 }
 
-/// One catalogue entry: a base word and the fields spliced into it.
+/// One catalog entry: a base word and the fields spliced into it.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Form {
     pub mnemonic: &'static str,
@@ -151,6 +238,47 @@ pub(crate) enum A64Op {
     OptPattern,
     /// An optional SVE element-count multiplier `mul #imm`.
     OptMul,
+    /// An SVE vector register written without an element size.
+    Z,
+    /// An SVE vector register of the form's element size (`zN.T`).
+    Zt,
+    /// An SVE vector register of a fixed element size log2 (Q = 4).
+    Zs(u8),
+    /// An SVE predicate register written without an element size.
+    P,
+    /// An SVE predicate register of the form's element size (`pN.T`).
+    Pt,
+    /// An SVE predicate register of a fixed element size log2.
+    Ps(u8),
+    /// A merging governing predicate `pN/m`.
+    PgM,
+    /// A zeroing governing predicate `pN/z`.
+    PgZ,
+    /// A governing predicate `pN/m` or `pN/z`.
+    PgMZ,
+    /// A scalar SIMD&FP register of the element size log2 (`bN` .. `dN`).
+    Fpr(u8),
+    /// A list of a count of consecutive SVE vector registers of the
+    /// element size log2.
+    ZList(u8, u8),
+    /// An element `zN.T[i]` of an SVE vector of a fixed size log2.
+    ZElem(u8),
+    /// An element `zN.T[i]` of the form's element size.
+    ZtElem,
+    /// A floating-point immediate: an imm8 VFP constant or `#0.0`.
+    FImm,
+    /// An imm8 VFP constant.
+    FImm8,
+    /// `#0.0`.
+    Zero,
+    /// `[Xn|SP{, #imm, mul vl}]`: a base and an offset in vector lengths.
+    MemVl,
+    /// `[zN.T{, #imm}]`: a vector base of the element size log2.
+    ZMem(u8),
+    /// `[Xn|SP, zM.T{, <mod>}]`: a scalar base and a vector index of the
+    /// element size log2; the kind is 0 for a 64-bit index, 1 for one
+    /// shifted by `lsl`, 2 for a 32-bit `uxtw`/`sxtw` one, 3 scaled.
+    ZMemReg(u8, u8),
 }
 
 /// A resolved operand handed to [`encode`].
@@ -272,6 +400,38 @@ pub(crate) enum Opnd {
         num: u8,
         size: Option<u8>,
     },
+    /// A governing predicate `pN/m` (`merge`) or `pN/z`.
+    PRegQ {
+        num: u8,
+        merge: bool,
+    },
+    /// `[zN.T{, #off}]`: a vector base.
+    ZMem {
+        base: u8,
+        size: u8,
+        off: i64,
+    },
+    /// `[Xn|SP, zM.T{, <mod> {#amount}}]`: a scalar base and a vector
+    /// index; `ext` is 0 none, 1 `lsl`, 2 `uxtw`, 3 `sxtw`.
+    ZMemReg {
+        base: u8,
+        index: u8,
+        size: u8,
+        ext: u8,
+        amount: Option<u8>,
+    },
+    /// An element `zN.T[index]` of an SVE vector.
+    ZElem {
+        num: u8,
+        size: u8,
+        index: u8,
+    },
+    /// An SVE register list `{zN.T, ..}` of `count` consecutive registers.
+    ZList {
+        first: u8,
+        count: u8,
+        size: u8,
+    },
     /// `[base, #off, mul vl]`: an offset in vector or predicate lengths.
     MemVl {
         base: u8,
@@ -286,7 +446,14 @@ pub(crate) enum Opnd {
 
 fn reg(o: Opnd) -> Result<u8, String> {
     match o {
-        Opnd::Reg { num, .. } => Ok(num),
+        Opnd::Reg { num, .. }
+        | Opnd::ZReg { num, .. }
+        | Opnd::PReg { num, .. }
+        | Opnd::PRegQ { num, .. }
+        | Opnd::VReg { num, .. }
+        | Opnd::VScalar { num, .. }
+        | Opnd::ZElem { num, .. } => Ok(num),
+        Opnd::ZList { first, .. } => Ok(first),
         // A memory reference contributes its base register (the Rn field).
         Opnd::Mem { base, .. } | Opnd::MemReg { base, .. } => Ok(base),
         _ => Err(String::from("inline asm: register operand expected")),
@@ -328,13 +495,51 @@ fn op_matches(p: A64Op, o: Opnd) -> bool {
         (A64Op::OptShift, Opnd::Lsl(_) | Opnd::Shift { .. }) => true,
         (A64Op::OptExt, Opnd::Lsl(_) | Opnd::Extend { .. }) => true,
         (A64Op::Cond, Opnd::Cond(_)) => true,
-        // The offset and writeback addressing modes are distinct catalogue
+        // The offset and writeback addressing modes are distinct catalog
         // shapes, so a pre-index operand never takes an offset-only encoding.
         (A64Op::Mem, Opnd::Mem { pre, .. }) => !pre,
         (A64Op::MemPre, Opnd::Mem { pre, .. }) => pre,
         (A64Op::MemReg, Opnd::MemReg { .. }) => true,
         (A64Op::OptPattern, Opnd::SvePattern(_)) => true,
         (A64Op::OptMul, Opnd::SveMul(_)) => true,
+        (A64Op::Z, Opnd::ZReg { size: None, .. }) => true,
+        (A64Op::Zt, Opnd::ZReg { size: Some(_), .. })
+        | (A64Op::Pt, Opnd::PReg { size: Some(_), .. }) => true,
+        (A64Op::Zs(k), Opnd::ZReg { size: Some(s), .. })
+        | (A64Op::Ps(k), Opnd::PReg { size: Some(s), .. }) => s == k,
+        (A64Op::P, Opnd::PReg { size: None, .. }) => true,
+        (A64Op::PgM, Opnd::PRegQ { merge, .. }) => merge,
+        (A64Op::PgZ, Opnd::PRegQ { merge, .. }) => !merge,
+        (A64Op::PgMZ, Opnd::PRegQ { .. }) => true,
+        (A64Op::Fpr(k), Opnd::VReg { is_d, .. }) => k == 2 + u8::from(is_d),
+        (A64Op::Fpr(k), Opnd::VScalar { size, .. }) => k == size,
+        (A64Op::ZList(c, k), Opnd::ZList { count, size, .. }) => count == c && size == k,
+        (A64Op::FImm, Opnd::FpImm(_) | Opnd::Imm(0)) | (A64Op::FImm8, Opnd::FpImm(_)) => true,
+        (A64Op::ZElem(k), Opnd::ZElem { size, .. }) => size == k,
+        (A64Op::ZMem(k), Opnd::ZMem { size, .. }) => size == k,
+        (
+            A64Op::ZMemReg(k, kind),
+            Opnd::ZMemReg {
+                size, ext, amount, ..
+            },
+        ) => {
+            size == k
+                && match kind {
+                    0 => ext == 0,
+                    1 => ext == 1 && amount.is_some(),
+                    2 => ext >= 2 && amount.is_none(),
+                    _ => ext >= 2 && amount.is_some(),
+                }
+        }
+        (A64Op::ZtElem, Opnd::ZElem { .. }) => true,
+        (A64Op::Zero, Opnd::Imm(0)) => true,
+        (
+            A64Op::MemVl,
+            Opnd::MemVl { .. }
+            | Opnd::Mem {
+                off: 0, pre: false, ..
+            },
+        ) => true,
         _ => false,
     }
 }
@@ -466,14 +671,29 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         swapped[at] = Opnd::Imm(neg);
         return encode(opposite, &swapped);
     }
-    // A written `sp` is only ever a catalogue form's business: the bespoke
+    // A written `sp` is only ever a catalog form's business: the bespoke
     // arms below all encode register 31 as the zero register, so routing an sp
     // operand past them would silently drop the stack pointer.
     if ops.iter().any(|o| matches!(o, Opnd::Reg { sp: true, .. })) {
-        return encode_catalogue(mnemonic, ops);
+        return encode_catalog(mnemonic, ops);
     }
     if let Some(word) = encode_sve_state(mnemonic, ops) {
         return word;
+    }
+    // `mov Zd.T, #imm` is `dup` of an 8-bit immediate, else `dupm` of a
+    // logical one.
+    if mnemonic == "mov"
+        && let [Opnd::ZReg { .. }, Opnd::Imm(_), ..] = ops
+    {
+        return encode_catalog("dup", ops).or_else(|e| encode_catalog("dupm", ops).map_err(|_| e));
+    }
+    if ops.iter().any(|o| {
+        matches!(
+            o,
+            Opnd::ZReg { .. } | Opnd::PReg { .. } | Opnd::PRegQ { .. }
+        )
+    }) {
+        return encode_catalog(mnemonic, ops);
     }
     // System-register move: `mrs Xt, <sysreg>` / `msr <sysreg>, Xt`. The
     // register is always 64-bit; the 16-bit `op0:op1:CRn:CRm:op2` field sits at
@@ -676,7 +896,7 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             )),
         };
     }
-    // Scalar FP two-source: `<fadd|fsub|fmul|fdiv|fmax|fmin|fnmul> Dd|Sd, ...`,
+    // Scalar FP two-source: `<fadd|fsub|fmul|fdiv|fmax|fmin|fmaxnm|fminnm|fnmul> Dd|Sd, ...`,
     // one width. `type` bit 22 selects double; the opcode sits at bit 12. The
     // same mnemonics on vector (VecReg) operands fall through to the SIMD arm.
     if let Some(opc) = match mnemonic {
@@ -686,6 +906,8 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         "fsub" => Some(3),
         "fmax" => Some(4),
         "fmin" => Some(5),
+        "fmaxnm" => Some(6),
+        "fminnm" => Some(7),
         "fnmul" => Some(8),
         _ => None,
     } && let [
@@ -709,6 +931,17 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         "fabs" => Some(0x1E60_C000u32),
         "fneg" => Some(0x1E61_4000),
         "fsqrt" => Some(0x1E61_C000),
+        "frintn" => Some(0x1E64_4000),
+        "frintp" => Some(0x1E64_C000),
+        "frintm" => Some(0x1E65_4000),
+        "frintz" => Some(0x1E65_C000),
+        "frinta" => Some(0x1E66_4000),
+        "frintx" => Some(0x1E67_4000),
+        "frinti" => Some(0x1E67_C000),
+        "frint32z" => Some(0x1E68_4000),
+        "frint32x" => Some(0x1E68_C000),
+        "frint64z" => Some(0x1E69_4000),
+        "frint64x" => Some(0x1E69_C000),
         _ => None,
     } && let [
         Opnd::VReg { num: rd, is_d: d0 },
@@ -723,7 +956,7 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     }
     // FP compare `fcmp`/`fcmpe Vn, {Vm | #0.0}` sets the flags. The result field
     // is the compare opcode: the register form is zero, the `#0.0` form sets
-    // bit 3, and the exception-signalling `fcmpe` adds bit 4.
+    // bit 3, and the exception-signaling `fcmpe` adds bit 4.
     if let "fcmp" | "fcmpe" = mnemonic {
         let e = if mnemonic == "fcmpe" { 0x10u32 } else { 0 };
         return match *ops {
@@ -741,30 +974,60 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             _ => Err(String::from("inline asm: bad fcmp/fcmpe operands")),
         };
     }
-    // SIMD conversions `Vd.T, Vn.T` (T = 2s/4s/2d) between integer and FP
-    // lanes of one width; sz (bit 22) selects double.
-    if let Some(base) = match mnemonic {
-        "scvtf" => Some(0x0E21_D800u32),
-        "ucvtf" => Some(0x2E21_D800),
-        "fcvtzs" => Some(0x0EA1_B800),
-        "fcvtzu" => Some(0x2EA1_B800),
+    // SIMD conversions between integer and FP lanes of one width: the vector
+    // `Vd.T, Vn.T` (T = 2s/4s/2d) and the scalar `Rd, Rn` over the s or d
+    // view (bits 30 and 28 set); sz (bit 22) selects double. A `#fbits`
+    // operand makes the fixed-point form, whose immh:immb is 2 * esize -
+    // fbits.
+    if let Some((base, fixed)) = match mnemonic {
+        "scvtf" => Some((0x0E21_D800u32, Some(0x0F00_E400u32))),
+        "ucvtf" => Some((0x2E21_D800, Some(0x2F00_E400))),
+        "fcvtzs" => Some((0x0EA1_B800, Some(0x0F00_FC00))),
+        "fcvtzu" => Some((0x2EA1_B800, Some(0x2F00_FC00))),
+        "fcvtns" => Some((0x0E21_A800, None)),
+        "fcvtnu" => Some((0x2E21_A800, None)),
+        "fcvtms" => Some((0x0E21_B800, None)),
+        "fcvtmu" => Some((0x2E21_B800, None)),
+        "fcvtps" => Some((0x0EA1_A800, None)),
+        "fcvtpu" => Some((0x2EA1_A800, None)),
+        "fcvtas" => Some((0x0E21_C800, None)),
+        "fcvtau" => Some((0x2E21_C800, None)),
         _ => None,
-    } && let [
-        Opnd::VecReg { num: rd, size, q },
-        Opnd::VecReg {
-            num: rn,
-            size: s1,
-            q: q1,
-        },
-    ] = *ops
-    {
-        if size != s1 || q != q1 || size < 2 || (size == 3 && !q) {
+    } && let Some((rd, rn, size, q, fbits)) = match *ops {
+        [
+            Opnd::VecReg { num: rd, size, q },
+            Opnd::VecReg {
+                num: rn,
+                size: s1,
+                q: q1,
+            },
+            ref rest @ ..,
+        ] if size == s1 && q == q1 => Some((rd, rn, size, Some(q), rest.first().copied())),
+        [
+            Opnd::VReg { num: rd, is_d },
+            Opnd::VReg { num: rn, is_d: d1 },
+            ref rest @ ..,
+        ] if is_d == d1 => Some((rd, rn, 2 + u8::from(is_d), None, rest.first().copied())),
+        _ => None,
+    } {
+        if size < 2 || (size == 3 && q == Some(false)) {
             return Err(String::from(
                 "inline asm: vector conversions take 2s/4s/2d on both sides",
             ));
         }
-        let sz = if size == 3 { 0x40_0000u32 } else { 0 };
-        return Ok(base | (u32::from(q) << 30) | sz | ((rn as u32) << 5) | (rd as u32));
+        let form = match q {
+            Some(q) => u32::from(q) << 30,
+            None => 0x5000_0000,
+        };
+        let esize = 8i64 << size;
+        let word = match (fbits, fixed) {
+            (None, _) => base | if size == 3 { 0x40_0000 } else { 0 },
+            (Some(Opnd::Imm(f)), Some(fixed)) if (1..=esize).contains(&f) => {
+                fixed | ((2 * esize - f) as u32) << 16
+            }
+            _ => return Err(format!("inline asm: bad `{mnemonic}` fraction bits")),
+        };
+        return Ok(word | form | (u32::from(rn) << 5) | u32::from(rd));
     }
     // SIMD single <-> double: `fcvtl{2} Vd.2d, Vn.2s|4s` widens the lower (upper)
     // half, `fcvtn{2} Vd.2s|4s, Vn.2d` narrows into it.
@@ -773,6 +1036,8 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         "fcvtl2" => Some((0x0E61_7800, true, true)),
         "fcvtn" => Some((0x0E61_6800, false, false)),
         "fcvtn2" => Some((0x0E61_6800, true, false)),
+        "fcvtxn" => Some((0x2E61_6800, false, false)),
+        "fcvtxn2" => Some((0x2E61_6800, true, false)),
         _ => None,
     } {
         let [
@@ -913,7 +1178,7 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     }
     // SIMD `rbit Vd.T, Vn.T`: reverse the bits of every byte. Byte
     // arrangements only, so Q is the sole size input; the GP `rbit Wd, Wn`
-    // and `rbit Xd, Xn` stay in the catalogue.
+    // and `rbit Xd, Xn` stay in the catalog.
     if mnemonic == "rbit"
         && let [
             Opnd::VecReg { num: rd, size, q },
@@ -932,34 +1197,234 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | ((rn as u32) << 5)
             | (rd as u32));
     }
-    // SIMD three-same integer ops `Vd.T, Vn.T, Vm.T`, one arrangement. size at
-    // bit 22, Q at 30, U at 29, the opcode in the base word; `lo..=hi` bounds
-    // the element size (mul/min/max/mla/abd have no 64-bit form). GP add/sub/mul
-    // (Reg operands) fall through to the catalogue below.
-    if let Some((op_base, u, lo, hi)) = match mnemonic {
-        "add" => Some((0x0E20_8400u32, 0u32, 0u8, 3u8)),
-        "sub" => Some((0x0E20_8400, 1, 0, 3)),
-        "mul" => Some((0x0E20_9C00, 0, 0, 2)),
-        "pmul" => Some((0x0E20_9C00, 1, 0, 0)),
-        "cmeq" => Some((0x0E20_8C00, 1, 0, 3)),
-        "cmtst" => Some((0x0E20_8C00, 0, 0, 3)),
-        "cmgt" => Some((0x0E20_3400, 0, 0, 3)),
-        "cmge" => Some((0x0E20_3C00, 0, 0, 3)),
-        "cmhi" => Some((0x0E20_3400, 1, 0, 3)),
-        "cmhs" => Some((0x0E20_3C00, 1, 0, 3)),
-        "smax" => Some((0x0E20_6400, 0, 0, 2)),
-        "smin" => Some((0x0E20_6C00, 0, 0, 2)),
-        "umax" => Some((0x0E20_6400, 1, 0, 2)),
-        "umin" => Some((0x0E20_6C00, 1, 0, 2)),
-        "sqadd" => Some((0x0E20_0C00, 0, 0, 3)),
-        "uqadd" => Some((0x0E20_0C00, 1, 0, 3)),
-        "sqsub" => Some((0x0E20_2C00, 0, 0, 3)),
-        "uqsub" => Some((0x0E20_2C00, 1, 0, 3)),
-        "mla" => Some((0x0E20_9400, 0, 0, 2)),
-        "mls" => Some((0x0E20_9400, 1, 0, 2)),
-        "sabd" => Some((0x0E20_7400, 0, 0, 2)),
-        "uabd" => Some((0x0E20_7400, 1, 0, 2)),
-        "addp" => Some((0x0E20_BC00, 0, 0, 3)),
+    // The dot products `<sdot|udot|usdot> Vd.2s|4s, Vn.8b|16b, Vm.8b|16b`, by
+    // element `Vm.4b[i]` (an s element, H:L the index, M Vm's high bit;
+    // sudot only by element), and the FEAT_I8MM matrix products
+    // `<smmla|ummla|usmmla> Vd.4s, Vn.16b, Vm.16b`.
+    if let Some((vector, element, matrix)) = match mnemonic {
+        "sdot" => Some((Some(0x0E80_9400u32), Some(0x0F80_E000u32), false)),
+        "udot" => Some((Some(0x2E80_9400), Some(0x2F80_E000), false)),
+        "usdot" => Some((Some(0x0E80_9C00), Some(0x0F80_F000), false)),
+        "sudot" => Some((None, Some(0x0F00_F000), false)),
+        "smmla" => Some((Some(0x4E80_A400), None, true)),
+        "ummla" => Some((Some(0x6E80_A400), None, true)),
+        "usmmla" => Some((Some(0x4E80_AC00), None, true)),
+        _ => None,
+    } && let [
+        Opnd::VecReg {
+            num: rd,
+            size: 2,
+            q,
+        },
+        Opnd::VecReg {
+            num: rn,
+            size: 0,
+            q: q1,
+        },
+        m,
+    ] = *ops
+        && q == q1
+        && (q || !matrix)
+    {
+        let qbit = u32::from(q) << 30;
+        let word = match (m, vector, element) {
+            (
+                Opnd::VecReg {
+                    num: rm,
+                    size: 0,
+                    q: q2,
+                },
+                Some(base),
+                _,
+            ) if q2 == q => base | (u32::from(rm) << 16),
+            (
+                Opnd::VecElem {
+                    num: rm,
+                    size: 2,
+                    index: i @ 0..=3,
+                },
+                _,
+                Some(base),
+            ) => {
+                base | (u32::from(i & 1) << 21) | (u32::from(rm) << 16) | (u32::from(i >> 1) << 11)
+            }
+            _ => return Err(format!("inline asm: bad `{mnemonic}` operands")),
+        };
+        return Ok(word | qbit | (u32::from(rn) << 5) | u32::from(rd));
+    }
+    // SIMD high-half narrowing `<addhn|raddhn|subhn|rsubhn>{2} Vd.<Tb>, Vn.<Ta>,
+    // Vm.<Ta>`: size (bit 22) is the destination width, the sources one size
+    // wider; the `2` form writes the upper half (Q at 30).
+    if let Some((nmnem, upper)) = strip_widen2(mnemonic)
+        && let Some(base) = match nmnem {
+            "addhn" => Some(0x0E20_4000u32),
+            "raddhn" => Some(0x2E20_4000),
+            "subhn" => Some(0x0E20_6000),
+            "rsubhn" => Some(0x2E20_6000),
+            _ => None,
+        }
+        && let [
+            Opnd::VecReg {
+                num: rd,
+                size: ds,
+                q: dq,
+            },
+            Opnd::VecReg {
+                num: rn,
+                size: s1,
+                q: true,
+            },
+            Opnd::VecReg {
+                num: rm,
+                size: s2,
+                q: true,
+            },
+        ] = *ops
+        && s1 == s2
+        && s1 == ds + 1
+        && ds < 3
+        && dq == upper
+    {
+        return Ok(base
+            | (u32::from(upper) << 30)
+            | (u32::from(ds) << 22)
+            | (u32::from(rm) << 16)
+            | (u32::from(rn) << 5)
+            | u32::from(rd));
+    }
+    // SIMD by element `<op> Vd.T, Vn.T, Vm.Ts[i]`, and the FP forms' scalar
+    // `Rd, Rn, Vm.Ts[i]` (bits 30 and 28 set): size at 22 (1:sz for FP),
+    // opcode at 12 and U at 29 name the operation. The index is H:L:M for a
+    // halfword element, whose Vm is bounded to v0..v15, H:L for a word one
+    // and H for a doubleword, M carrying Vm's high bit.
+    if let Some((u, opcode, fp)) = match mnemonic {
+        "mul" => Some((0u32, 0b1000u32, false)),
+        "mla" => Some((1, 0b0000, false)),
+        "mls" => Some((1, 0b0100, false)),
+        "sqdmulh" => Some((0, 0b1100, false)),
+        "sqrdmulh" => Some((0, 0b1101, false)),
+        "sqrdmlah" => Some((1, 0b1101, false)),
+        "sqrdmlsh" => Some((1, 0b1111, false)),
+        "fmul" => Some((0, 0b1001, true)),
+        "fmulx" => Some((1, 0b1001, true)),
+        "fmla" => Some((0, 0b0001, true)),
+        "fmls" => Some((0, 0b0101, true)),
+        _ => None,
+    } && let [
+        dst,
+        src,
+        Opnd::VecElem {
+            num: rm,
+            size: es,
+            index,
+        },
+    ] = *ops
+    {
+        let (rd, rn, size, form) = match (dst, src) {
+            (
+                Opnd::VecReg { num: rd, size, q },
+                Opnd::VecReg {
+                    num: rn,
+                    size: s1,
+                    q: q1,
+                },
+            ) if size == s1 && q == q1 && (size < 3 || q) => (rd, rn, size, u32::from(q) << 30),
+            (Opnd::VReg { num: rd, is_d }, Opnd::VReg { num: rn, is_d: d1 })
+                if fp && is_d == d1 =>
+            {
+                (rd, rn, 2 + u8::from(is_d), 0x5000_0000)
+            }
+            _ => return Err(format!("inline asm: bad `{mnemonic}` by-element operands")),
+        };
+        let sizes = if fp { 2..=3 } else { 1..=2 };
+        if es != size || !sizes.contains(&size) || index >= 16 >> size {
+            return Err(format!("inline asm: bad `{mnemonic}` element"));
+        }
+        if size == 1 && rm > 15 {
+            return Err(String::from(
+                "inline asm: a halfword element selects Vm from v0..v15",
+            ));
+        }
+        let (h, l, m) = match size {
+            1 => (index >> 2 & 1, index >> 1 & 1, index & 1),
+            2 => (index >> 1 & 1, index & 1, rm >> 4 & 1),
+            _ => (index & 1, 0, rm >> 4 & 1),
+        };
+        let field = match fp {
+            true => (2 | u32::from(size == 3)) << 22,
+            false => u32::from(size) << 22,
+        };
+        return Ok(0x0F00_0000
+            | form
+            | (u << 29)
+            | field
+            | (u32::from(l) << 21)
+            | (u32::from(m) << 20)
+            | (u32::from(rm & 0xF) << 16)
+            | (opcode << 12)
+            | (u32::from(h) << 11)
+            | (u32::from(rn) << 5)
+            | u32::from(rd));
+    }
+    // The reciprocal exponent `frecpx Rd, Rn`, scalar only: sz (bit 22)
+    // selects the d view.
+    if mnemonic == "frecpx"
+        && let [
+            Opnd::VReg { num: rd, is_d },
+            Opnd::VReg { num: rn, is_d: d1 },
+        ] = *ops
+        && is_d == d1
+    {
+        return Ok(0x5EA1_F800 | (u32::from(is_d) << 22) | (u32::from(rn) << 5) | u32::from(rd));
+    }
+    // SIMD compares with zero `Vd.T, Vn.T, #0` (`#0.0` for the FP forms), and
+    // the scalar `Rd, Rn, #0` over the d view (s or d for FP): size at bit 22,
+    // or sz for FP, Q at 30, the scalar form at bits 30 and 28.
+    if let Some((base, fp)) = match mnemonic {
+        "cmgt" => Some((0x0E20_8800u32, false)),
+        "cmeq" => Some((0x0E20_9800, false)),
+        "cmlt" => Some((0x0E20_A800, false)),
+        "cmge" => Some((0x2E20_8800, false)),
+        "cmle" => Some((0x2E20_9800, false)),
+        "fcmgt" => Some((0x0EA0_C800, true)),
+        "fcmeq" => Some((0x0EA0_D800, true)),
+        "fcmlt" => Some((0x0EA0_E800, true)),
+        "fcmge" => Some((0x2EA0_C800, true)),
+        "fcmle" => Some((0x2EA0_D800, true)),
+        _ => None,
+    } && let [dst, src, Opnd::Imm(0)] = *ops
+    {
+        let field = |size: u8| match fp {
+            true => u32::from(size == 3) << 22,
+            false => u32::from(size) << 22,
+        };
+        return match (dst, src) {
+            (
+                Opnd::VecReg { num: rd, size, q },
+                Opnd::VecReg {
+                    num: rn,
+                    size: s1,
+                    q: q1,
+                },
+            ) if size == s1 && q == q1 && (size < 3 || q) && (!fp || size >= 2) => Ok(base
+                | (u32::from(q) << 30)
+                | field(size)
+                | (u32::from(rn) << 5)
+                | u32::from(rd)),
+            (Opnd::VReg { num: rd, is_d }, Opnd::VReg { num: rn, is_d: d1 })
+                if is_d == d1 && (fp || is_d) =>
+            {
+                let size = if is_d { 3 } else { 2 };
+                Ok(base | 0x5000_0000 | field(size) | (u32::from(rn) << 5) | u32::from(rd))
+            }
+            _ => Err(format!("inline asm: bad `{mnemonic}` compare with zero")),
+        };
+    }
+    // SIMD three-same extension `<sqrdmlah|sqrdmlsh> Vd.T, Vn.T, Vm.T`
+    // (FEAT_RDM) on halfword and word lanes: size at 22, Q at 30.
+    if let Some(base) = match mnemonic {
+        "sqrdmlah" => Some(0x2E00_8400u32),
+        "sqrdmlsh" => Some(0x2E00_8C00),
         _ => None,
     } && let [
         Opnd::VecReg { num: rd, size, q },
@@ -974,6 +1439,106 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             q: q2,
         },
     ] = *ops
+    {
+        if size != s1 || size != s2 || q != q1 || q != q2 || !(1..=2).contains(&size) {
+            return Err(format!("inline asm: bad `{mnemonic}` arrangement"));
+        }
+        return Ok(base
+            | (u32::from(q) << 30)
+            | (u32::from(size) << 22)
+            | (u32::from(rm) << 16)
+            | (u32::from(rn) << 5)
+            | u32::from(rd));
+    }
+    // SIMD three-same integer ops `Vd.T, Vn.T, Vm.T`, one arrangement. size at
+    // bit 22, Q at 30, U at 29, the opcode in the base word; `lo..=hi` bounds
+    // the element size (mul/min/max/mla/abd have no 64-bit form). GP add/sub/mul
+    // (Reg operands) fall through to the catalog below. `scalar` is the
+    // smallest element of the scalar form `Rd, Rn, Rm` over the s or d view
+    // (bits 30 and 28 set), where the instruction has one.
+    let three_same = match mnemonic {
+        "add" => Some((0x0E20_8400u32, 0u32, 0u8, 3u8, Some(3u8))),
+        "sub" => Some((0x0E20_8400, 1, 0, 3, Some(3))),
+        "mul" => Some((0x0E20_9C00, 0, 0, 2, None)),
+        "pmul" => Some((0x0E20_9C00, 1, 0, 0, None)),
+        "cmeq" => Some((0x0E20_8C00, 1, 0, 3, Some(3))),
+        "cmtst" => Some((0x0E20_8C00, 0, 0, 3, Some(3))),
+        "cmgt" => Some((0x0E20_3400, 0, 0, 3, Some(3))),
+        "cmge" => Some((0x0E20_3C00, 0, 0, 3, Some(3))),
+        "cmhi" => Some((0x0E20_3400, 1, 0, 3, Some(3))),
+        "cmhs" => Some((0x0E20_3C00, 1, 0, 3, Some(3))),
+        "smax" => Some((0x0E20_6400, 0, 0, 2, None)),
+        "smin" => Some((0x0E20_6C00, 0, 0, 2, None)),
+        "umax" => Some((0x0E20_6400, 1, 0, 2, None)),
+        "umin" => Some((0x0E20_6C00, 1, 0, 2, None)),
+        "sqadd" => Some((0x0E20_0C00, 0, 0, 3, Some(2))),
+        "uqadd" => Some((0x0E20_0C00, 1, 0, 3, Some(2))),
+        "sqsub" => Some((0x0E20_2C00, 0, 0, 3, Some(2))),
+        "uqsub" => Some((0x0E20_2C00, 1, 0, 3, Some(2))),
+        "mla" => Some((0x0E20_9400, 0, 0, 2, None)),
+        "mls" => Some((0x0E20_9400, 1, 0, 2, None)),
+        "sabd" => Some((0x0E20_7400, 0, 0, 2, None)),
+        "uabd" => Some((0x0E20_7400, 1, 0, 2, None)),
+        "saba" => Some((0x0E20_7C00, 0, 0, 2, None)),
+        "uaba" => Some((0x0E20_7C00, 1, 0, 2, None)),
+        "addp" => Some((0x0E20_BC00, 0, 0, 3, None)),
+        "smaxp" => Some((0x0E20_A400, 0, 0, 2, None)),
+        "umaxp" => Some((0x0E20_A400, 1, 0, 2, None)),
+        "sminp" => Some((0x0E20_AC00, 0, 0, 2, None)),
+        "uminp" => Some((0x0E20_AC00, 1, 0, 2, None)),
+        "shadd" => Some((0x0E20_0400, 0, 0, 2, None)),
+        "uhadd" => Some((0x0E20_0400, 1, 0, 2, None)),
+        "srhadd" => Some((0x0E20_1400, 0, 0, 2, None)),
+        "urhadd" => Some((0x0E20_1400, 1, 0, 2, None)),
+        "shsub" => Some((0x0E20_2400, 0, 0, 2, None)),
+        "uhsub" => Some((0x0E20_2400, 1, 0, 2, None)),
+        "sshl" => Some((0x0E20_4400, 0, 0, 3, Some(3))),
+        "ushl" => Some((0x0E20_4400, 1, 0, 3, Some(3))),
+        "sqshl" => Some((0x0E20_4C00, 0, 0, 3, Some(2))),
+        "uqshl" => Some((0x0E20_4C00, 1, 0, 3, Some(2))),
+        "sqrshl" => Some((0x0E20_5C00, 0, 0, 3, Some(2))),
+        "uqrshl" => Some((0x0E20_5C00, 1, 0, 3, Some(2))),
+        "sqdmulh" => Some((0x0E20_B400, 0, 1, 2, None)),
+        "sqrdmulh" => Some((0x0E20_B400, 1, 1, 2, None)),
+        "srshl" => Some((0x0E20_5400, 0, 0, 3, Some(3))),
+        "urshl" => Some((0x0E20_5400, 1, 0, 3, Some(3))),
+        _ => None,
+    };
+    if let Some((op_base, u, _, _, Some(lo))) = three_same
+        && let [
+            Opnd::VReg { num: rd, is_d },
+            Opnd::VReg { num: rn, is_d: b },
+            Opnd::VReg { num: rm, is_d: c },
+        ] = *ops
+        && is_d == b
+        && is_d == c
+    {
+        let size = if is_d { 3u32 } else { 2 };
+        if size < lo as u32 {
+            return Err(format!("inline asm: `{mnemonic}` has no s-register form"));
+        }
+        return Ok(op_base
+            | 0x5000_0000
+            | (u << 29)
+            | (size << 22)
+            | ((rm as u32) << 16)
+            | ((rn as u32) << 5)
+            | (rd as u32));
+    }
+    if let Some((op_base, u, lo, hi, _)) = three_same
+        && let [
+            Opnd::VecReg { num: rd, size, q },
+            Opnd::VecReg {
+                num: rn,
+                size: s1,
+                q: q1,
+            },
+            Opnd::VecReg {
+                num: rm,
+                size: s2,
+                q: q2,
+            },
+        ] = *ops
     {
         if size != s1 || size != s2 || q != q1 || q != q2 {
             return Err(String::from(
@@ -1000,7 +1565,7 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     }
     // SIMD logical `<and|bic|orr|orn|eor|bsl|bit|bif> Vd.T, Vn.T, Vm.T`, byte
     // arrangement only; the (U, size) fields select the operation. GP forms
-    // (Reg operands) fall through to the catalogue.
+    // (Reg operands) fall through to the catalog.
     if let Some(variant) = match mnemonic {
         "and" => Some(0u32),
         "bic" => Some(0x0040_0000),
@@ -1102,19 +1667,46 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     // `sli` counts from the left, holding `esize + shift` for 0..=esize-1.
     // Byte-identical to GNU as: `sri v1.4s, v17.4s, #20` is 0x6F2C4621 and
     // `sli v1.4s, v17.4s, #20` is 0x6F345621.
-    if let Some((base, right)) = match mnemonic {
+    let insert = match mnemonic {
         "sri" => Some((0x2F00_4400u32, true)),
         "sli" => Some((0x2F00_5400u32, false)),
         _ => None,
-    } && let [
-        Opnd::VecReg { num: rd, size, q },
-        Opnd::VecReg {
-            num: rn,
-            size: s1,
-            q: q1,
-        },
-        Opnd::Imm(shift),
-    ] = *ops
+    };
+    // The scalar form `Dd, Dn, #shift` (bits 30 and 28 set): a 64-bit element.
+    if let Some((base, right)) = insert
+        && let [
+            Opnd::VReg {
+                num: rd,
+                is_d: true,
+            },
+            Opnd::VReg {
+                num: rn,
+                is_d: true,
+            },
+            Opnd::Imm(shift),
+        ] = *ops
+    {
+        let field = match right {
+            true if (1..=64).contains(&shift) => 128 - shift,
+            false if (0..64).contains(&shift) => 64 + shift,
+            _ => {
+                return Err(format!(
+                    "inline asm: `{mnemonic}` shift {shift} out of range"
+                ));
+            }
+        };
+        return Ok(base | 0x5000_0000 | ((field as u32) << 16) | ((rn as u32) << 5) | (rd as u32));
+    }
+    if let Some((base, right)) = insert
+        && let [
+            Opnd::VecReg { num: rd, size, q },
+            Opnd::VecReg {
+                num: rn,
+                size: s1,
+                q: q1,
+            },
+            Opnd::Imm(shift),
+        ] = *ops
     {
         if size != s1 || q != q1 {
             return Err(String::from("inline asm: vector shift arrangements differ"));
@@ -1147,30 +1739,21 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     // take their two sources as q registers. Byte-identical to GNU as:
     // `sha1su0 v0.4s, v1.4s, v2.4s` is 0x5E023020 and `sha512h q3, q6, v7.2d`
     // is 0xCE6780C3.
-    // Scalar SIMD forms on the 64-bit view: `add`/`sub Dd, Dn, Dm` and the
-    // SHA1 hash update `sha1h Sd, Sn`. Byte-identical to GNU as: `add d7, d7,
-    // d16` is 0x5EF084E7 and `sha1h s14, s12` is 0x5E28098E.
-    if let Some((base, is_d)) = match mnemonic {
-        "add" => Some((0x5EE0_8400u32, true)),
-        "sub" => Some((0x7EE0_8400, true)),
-        "sha1h" => Some((0x5E28_0800, false)),
-        _ => None,
-    } {
-        let fields = match *ops {
-            [
-                Opnd::VReg { num: rd, is_d: a },
-                Opnd::VReg { num: rn, is_d: b },
-            ] if !is_d && !a && !b => Some((rd, rn, 0)),
-            [
-                Opnd::VReg { num: rd, is_d: a },
-                Opnd::VReg { num: rn, is_d: b },
-                Opnd::VReg { num: rm, is_d: c },
-            ] if is_d && a && b && c => Some((rd, rn, rm)),
-            _ => None,
-        };
-        if let Some((rd, rn, rm)) = fields {
-            return Ok(base | ((rm as u32) << 16) | ((rn as u32) << 5) | (rd as u32));
-        }
+    // The SHA1 hash update `sha1h Sd, Sn`. Byte-identical to GNU as: `sha1h
+    // s14, s12` is 0x5E28098E.
+    if mnemonic == "sha1h"
+        && let [
+            Opnd::VReg {
+                num: rd,
+                is_d: false,
+            },
+            Opnd::VReg {
+                num: rn,
+                is_d: false,
+            },
+        ] = *ops
+    {
+        return Ok(0x5E28_0800 | ((rn as u32) << 5) | (rd as u32));
     }
     if let Some((base, esize)) = match mnemonic {
         "sha1su0" => Some((0x5E00_3000u32, 2u8)),
@@ -1294,6 +1877,17 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         "fmls" => Some(0x0EA0_CC00),
         "fabd" => Some(0x2EA0_D400),
         "faddp" => Some(0x2E20_D400),
+        "frecps" => Some(0x0E20_FC00),
+        "frsqrts" => Some(0x0EA0_FC00),
+        "fmaxnm" => Some(0x0E20_C400),
+        "fminnm" => Some(0x0EA0_C400),
+        "fmaxp" => Some(0x2E20_F400),
+        "fminp" => Some(0x2EA0_F400),
+        "fmaxnmp" => Some(0x2E20_C400),
+        "fminnmp" => Some(0x2EA0_C400),
+        "fmulx" => Some(0x0E20_DC00),
+        "facge" => Some(0x2E20_EC00),
+        "facgt" => Some(0x2EA0_EC00),
         _ => None,
     } && let [
         Opnd::VecReg { num: rd, size, q },
@@ -1323,14 +1917,49 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | ((rn as u32) << 5)
             | (rd as u32));
     }
-    // SIMD shift by immediate `<shl|sshr|ushr> Vd.T, Vn.T, #shift`. The immh:immb
-    // field (bits 22..16) encodes both element size and amount: left shifts use
-    // esize+shift, right shifts use 2*esize-shift. U at bit 29 selects ushr; the
-    // .1d arrangement is reserved (only .2d exists for vectors).
+    // The Newton-Raphson steps, fmulx and fabd also have a scalar form over
+    // the s or d view (bits 30 and 28 set, sz at 22).
+    if let Some(base) = match mnemonic {
+        "frecps" => Some(0x5E20_FC00u32),
+        "frsqrts" => Some(0x5EA0_FC00),
+        "fmulx" => Some(0x5E20_DC00),
+        "fabd" => Some(0x7EA0_D400),
+        "facge" => Some(0x7E20_EC00),
+        "facgt" => Some(0x7EA0_EC00),
+        _ => None,
+    } && let [
+        Opnd::VReg { num: rd, is_d },
+        Opnd::VReg { num: rn, is_d: b },
+        Opnd::VReg { num: rm, is_d: c },
+    ] = *ops
+        && is_d == b
+        && is_d == c
+    {
+        return Ok(base
+            | if is_d { 0x40_0000 } else { 0 }
+            | ((rm as u32) << 16)
+            | ((rn as u32) << 5)
+            | (rd as u32));
+    }
+    // SIMD shift by immediate `<op> Vd.T, Vn.T, #shift`: the left shifts shl and
+    // [us]qshl, the right shifts [us]shr, the accumulating [us]sra, the
+    // rounding [us]rshr and [us]rsra. The immh:immb field (bits 22..16) encodes
+    // both element size and amount: left shifts use esize+shift, right shifts
+    // use 2*esize-shift. U at bit 29 selects the unsigned op; the .1d
+    // arrangement is reserved (only .2d exists for vectors).
     let shift_imm = match mnemonic {
         "shl" => Some((0x0F00_5400u32, 0u32, true)),
+        "sqshl" => Some((0x0F00_7400, 0, true)),
+        "uqshl" => Some((0x0F00_7400, 1, true)),
+        "sqshlu" => Some((0x0F00_6400, 1, true)),
         "sshr" => Some((0x0F00_0400, 0, false)),
         "ushr" => Some((0x0F00_0400, 1, false)),
+        "ssra" => Some((0x0F00_1400, 0, false)),
+        "usra" => Some((0x0F00_1400, 1, false)),
+        "srshr" => Some((0x0F00_2400, 0, false)),
+        "urshr" => Some((0x0F00_2400, 1, false)),
+        "srsra" => Some((0x0F00_3400, 0, false)),
+        "ursra" => Some((0x0F00_3400, 1, false)),
         _ => None,
     };
     // The scalar form `Dd, Dn, #shift` (bits 30 and 28 set) exists for the
@@ -1408,12 +2037,19 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     // #shift`: shift each wide element right and write the low half of the
     // result. immh:immb is 2*esize-shift over the DESTINATION element size, the
     // source being one size wider; opcode (15..11) is 10000, or 10001 for the
-    // rounding form. The `2` mnemonic writes the top half of a 128-bit
+    // rounding form, 1001x for the saturating sqshrn/uqshrn (U at 29), and
+    // sqshrun/sqrshrun are the 1000x opcodes with U set. The `2` mnemonic writes the top half of a 128-bit
     // destination (Q at 30).
     if let Some((nmnem, upper)) = strip_widen2(mnemonic)
-        && let Some(opcode) = match nmnem {
-            "shrn" => Some(0b10000u32),
-            "rshrn" => Some(0b10001),
+        && let Some((opcode, u)) = match nmnem {
+            "shrn" => Some((0b10000u32, 0u32)),
+            "rshrn" => Some((0b10001, 0)),
+            "sqshrun" => Some((0b10000, 1)),
+            "sqrshrun" => Some((0b10001, 1)),
+            "sqshrn" => Some((0b10010, 0)),
+            "sqrshrn" => Some((0b10011, 0)),
+            "uqshrn" => Some((0b10010, 1)),
+            "uqrshrn" => Some((0b10011, 1)),
             _ => None,
         }
         && let [
@@ -1447,6 +2083,7 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             ));
         }
         return Ok(0x0F00_0000
+            | (u << 29)
             | (opcode << 11)
             | (1u32 << 10)
             | (if upper { 1u32 << 30 } else { 0 })
@@ -1509,6 +2146,33 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | (((esize + shift) as u32) << 16)
             | ((rn as u32) << 5)
             | (rd as u32));
+    }
+    // SIMD shift left long by the element width `shll{2} Vd.<Ta>, Vn.<Tb>,
+    // #esize`: size (bit 22) is the source element, the destination one size
+    // wider and 128-bit; the `2` form reads the source's upper half.
+    if let Some(("shll", upper)) = strip_widen2(mnemonic)
+        && let [
+            Opnd::VecReg {
+                num: rd,
+                size: ds,
+                q: dq,
+            },
+            Opnd::VecReg {
+                num: rn,
+                size: ss,
+                q: sq,
+            },
+            Opnd::Imm(shift),
+        ] = *ops
+    {
+        if ds != ss + 1 || ss > 2 || !dq || sq != upper || shift != 8 << ss {
+            return Err(String::from("inline asm: bad `shll` operands"));
+        }
+        return Ok(0x2E21_3800
+            | (if upper { 1u32 << 30 } else { 0 })
+            | (u32::from(ss) << 22)
+            | (u32::from(rn) << 5)
+            | u32::from(rd));
     }
     // SIMD modified immediate `<movi|mvni|orr|bic> Vd.T, #imm{, lsl #s}`. The
     // 8-bit value splits abc:defgh across bits 18..16 and 9..5; cmode selects
@@ -1595,23 +2259,20 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | ((v & 0x1F) << 5)
             | (rd as u32));
     }
-    // SIMD two-register misc (one source): the sign ops abs/neg, bitwise
-    // not/mvn, popcount cnt, the reverses rev16/rev32/rev64, and the FP unary
-    // fabs/fneg/fsqrt. Each base word bakes U and the opcode; `lo..=hi` bounds
-    // the element size (byte-only for not/cnt/rev16, up to word for rev64, all
-    // sizes for abs/neg, 2s/4s/2d for the FP ops). GP neg/mvn and scalar
-    // fabs/fneg/fsqrt (Reg/VReg operands) fall through.
-    if let Some((base, lo, hi)) = match mnemonic {
-        "rev64" => Some((0x0E20_0800u32, 0u8, 2u8)),
-        "rev32" => Some((0x2E20_0800, 0, 1)),
-        "rev16" => Some((0x0E20_1800, 0, 0)),
-        "cnt" => Some((0x0E20_5800, 0, 0)),
-        "not" | "mvn" => Some((0x2E20_5800, 0, 0)),
-        "abs" => Some((0x0E20_B800, 0, 3)),
-        "neg" => Some((0x2E20_B800, 0, 3)),
-        "fabs" => Some((0x0E20_F800, 2, 3)),
-        "fneg" => Some((0x2E20_F800, 2, 3)),
-        "fsqrt" => Some((0x2E21_F800, 2, 3)),
+    // The vector FP roundings `frint<n|p|m|z|a|x|i|32z|32x|64z|64x> Vd.T, Vn.T`
+    // on 2s/4s/2d: sz at bit 22, the opcode's bit 23 in the base word.
+    if let Some(base) = match mnemonic {
+        "frintn" => Some(0x0E21_8800u32),
+        "frintm" => Some(0x0E21_9800),
+        "frintp" => Some(0x0EA1_8800),
+        "frintz" => Some(0x0EA1_9800),
+        "frinta" => Some(0x2E21_8800),
+        "frintx" => Some(0x2E21_9800),
+        "frinti" => Some(0x2EA1_9800),
+        "frint32z" => Some(0x0E21_E800),
+        "frint32x" => Some(0x2E21_E800),
+        "frint64z" => Some(0x0E21_F800),
+        "frint64x" => Some(0x2E21_F800),
         _ => None,
     } && let [
         Opnd::VecReg { num: rd, size, q },
@@ -1621,6 +2282,71 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             q: q1,
         },
     ] = *ops
+    {
+        if size != s1 || q != q1 || size < 2 || (size == 3 && !q) {
+            return Err(format!("inline asm: bad `{mnemonic}` arrangement"));
+        }
+        return Ok(base
+            | (if q { 1u32 << 30 } else { 0 })
+            | (if size == 3 { 1u32 << 22 } else { 0 })
+            | ((rn as u32) << 5)
+            | (rd as u32));
+    }
+    // SIMD two-register misc (one source): the sign ops abs/neg and their
+    // saturating sqabs/sqneg, bitwise not/mvn, popcount cnt, the leading-bit
+    // counts cls/clz, the reverses rev16/rev32/rev64, the FP unary
+    // fabs/fneg/fsqrt and the estimates frecpe/frsqrte/urecpe/ursqrte. Each base word bakes U
+    // and the opcode; `lo..=hi` bounds the element size (byte-only for
+    // not/cnt/rev16, up to word for rev64 and cls/clz, all sizes for the sign
+    // ops, 2s/4s/2d for the FP ops, whose sz lands at bit 22). GP neg/mvn/cls/
+    // clz and scalar fabs/fneg/fsqrt (Reg/VReg operands) fall through.
+    let misc = match mnemonic {
+        "rev64" => Some((0x0E20_0800u32, 0u8, 2u8, None)),
+        "rev32" => Some((0x2E20_0800, 0, 1, None)),
+        "rev16" => Some((0x0E20_1800, 0, 0, None)),
+        "cnt" => Some((0x0E20_5800, 0, 0, None)),
+        "not" | "mvn" => Some((0x2E20_5800, 0, 0, None)),
+        "cls" => Some((0x0E20_4800, 0, 2, None)),
+        "clz" => Some((0x2E20_4800, 0, 2, None)),
+        "abs" => Some((0x0E20_B800, 0, 3, Some(3u8))),
+        "neg" => Some((0x2E20_B800, 0, 3, Some(3))),
+        "sqabs" => Some((0x0E20_7800, 0, 3, Some(3))),
+        "sqneg" => Some((0x2E20_7800, 0, 3, Some(3))),
+        "fabs" => Some((0x0E20_F800, 2, 3, None)),
+        "fneg" => Some((0x2E20_F800, 2, 3, None)),
+        "fsqrt" => Some((0x2E21_F800, 2, 3, None)),
+        "frecpe" => Some((0x0E21_D800, 2, 3, Some(2))),
+        "frsqrte" => Some((0x2E21_D800, 2, 3, Some(2))),
+        "suqadd" => Some((0x0E20_3800, 0, 3, Some(0))),
+        "usqadd" => Some((0x2E20_3800, 0, 3, Some(0))),
+        "urecpe" => Some((0x0E21_C800, 2, 2, None)),
+        "ursqrte" => Some((0x2E21_C800, 2, 2, None)),
+        _ => None,
+    };
+    // The scalar form `Rd, Rn` over the s or d view (bits 30 and 28 set), from
+    // the element size `scalar` up, where the instruction has one.
+    if let Some((base, _, _, Some(lo))) = misc
+        && let [
+            Opnd::VReg { num: rd, is_d },
+            Opnd::VReg { num: rn, is_d: b },
+        ] = *ops
+        && is_d == b
+    {
+        let size = if is_d { 3u32 } else { 2 };
+        if size < lo as u32 {
+            return Err(format!("inline asm: `{mnemonic}` has no s-register form"));
+        }
+        return Ok(base | 0x5000_0000 | (size << 22) | ((rn as u32) << 5) | (rd as u32));
+    }
+    if let Some((base, lo, hi, _)) = misc
+        && let [
+            Opnd::VecReg { num: rd, size, q },
+            Opnd::VecReg {
+                num: rn,
+                size: s1,
+                q: q1,
+            },
+        ] = *ops
     {
         if size != s1 || q != q1 {
             return Err(String::from(
@@ -1691,6 +2417,80 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | (if *q { 1u32 << 30 } else { 0 })
             | ((*ss as u32) << 22)
             | ((*rn as u32) << 5)
+            | (rd as u32));
+    }
+    // The pairwise sum of a 2-lane doubleword vector into a scalar, `addp Dd,
+    // Vn.2d`.
+    if mnemonic == "addp"
+        && let [
+            Opnd::VReg {
+                num: rd,
+                is_d: true,
+            },
+            Opnd::VecReg {
+                num: rn,
+                size: 3,
+                q: true,
+            },
+        ] = *ops
+    {
+        return Ok(0x5EF1_B800 | ((rn as u32) << 5) | (rd as u32));
+    }
+    // SIMD FP across-lane reduction `<fmaxv|fminv|fmaxnmv|fminnmv> Sd, Vn.4s`.
+    if let Some(base) = match mnemonic {
+        "fmaxv" => Some(0x6E30_F800u32),
+        "fminv" => Some(0x6EB0_F800),
+        "fmaxnmv" => Some(0x6E30_C800),
+        "fminnmv" => Some(0x6EB0_C800),
+        _ => None,
+    } && let [
+        Opnd::VReg {
+            num: rd,
+            is_d: false,
+        },
+        Opnd::VecReg {
+            num: rn,
+            size: 2,
+            q: true,
+        },
+    ] = *ops
+    {
+        return Ok(base | (u32::from(rn) << 5) | u32::from(rd));
+    }
+    // SIMD long pairwise add `<saddlp|uaddlp> Vd.<Ta>, Vn.<Tb>`: each pair of
+    // adjacent elements summed into one of twice the width, so the
+    // destination has half the lanes in the same register size (.1d from .2s
+    // included); sadalp/uadalp add them into the destination. size (bit 22)
+    // is the source width, U at 29 the unsigned op.
+    if let Some((u, base)) = match mnemonic {
+        "saddlp" => Some((0u32, 0x0E20_2800u32)),
+        "uaddlp" => Some((1, 0x0E20_2800)),
+        "sadalp" => Some((0, 0x0E20_6800)),
+        "uadalp" => Some((1, 0x0E20_6800)),
+        _ => None,
+    } && let [
+        Opnd::VecReg {
+            num: rd,
+            size: ds,
+            q: dq,
+        },
+        Opnd::VecReg {
+            num: rn,
+            size: ss,
+            q: sq,
+        },
+    ] = *ops
+    {
+        if ss > 2 || ds != ss + 1 || dq != sq {
+            return Err(String::from(
+                "inline asm: long pairwise destination must be one element size wider",
+            ));
+        }
+        return Ok(base
+            | (u << 29)
+            | (if sq { 1u32 << 30 } else { 0 })
+            | ((ss as u32) << 22)
+            | ((rn as u32) << 5)
             | (rd as u32));
     }
     // Crypto two-register, fixed arrangement `<op> Vd.T, Vn.T`: the AES round
@@ -1799,6 +2599,13 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             "umlal" => Some((0x0E20_8000, 1)),
             "smlsl" => Some((0x0E20_A000, 0)),
             "umlsl" => Some((0x0E20_A000, 1)),
+            "sabal" => Some((0x0E20_5000, 0)),
+            "uabal" => Some((0x0E20_5000, 1)),
+            "sabdl" => Some((0x0E20_7000, 0)),
+            "uabdl" => Some((0x0E20_7000, 1)),
+            "sqdmull" => Some((0x0E20_D000, 0)),
+            "sqdmlal" => Some((0x0E20_9000, 0)),
+            "sqdmlsl" => Some((0x0E20_B000, 0)),
             _ => None,
         }
         && let [
@@ -1842,6 +2649,49 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | ((rn as u32) << 5)
             | (rd as u32));
     }
+    // SIMD wide add and subtract `<saddw|uaddw|ssubw|usubw>{2} Vd.<2T>,
+    // Vn.<2T>, Vm.<T>`: a wide vector and the widened elements of a narrow one.
+    // size (bit 22) is the narrow width; the `2` form reads the upper half of a
+    // 128-bit Vm (Q at 30).
+    if let Some((wmnem, upper)) = strip_widen2(mnemonic)
+        && let Some((base, u)) = match wmnem {
+            "saddw" => Some((0x0E20_1000u32, 0u32)),
+            "uaddw" => Some((0x0E20_1000, 1)),
+            "ssubw" => Some((0x0E20_3000, 0)),
+            "usubw" => Some((0x0E20_3000, 1)),
+            _ => None,
+        }
+        && let [
+            Opnd::VecReg {
+                num: rd,
+                size: ds,
+                q: dq,
+            },
+            Opnd::VecReg {
+                num: rn,
+                size: ns,
+                q: nq,
+            },
+            Opnd::VecReg {
+                num: rm,
+                size: ms,
+                q: mq,
+            },
+        ] = *ops
+    {
+        if !dq || !nq || ds != ns || ms > 2 || ds != ms + 1 || mq != upper {
+            return Err(String::from(
+                "inline asm: wide operands must be 8h/4s/2d over 8b/4h/2s (16b/8h/4s for `2`)",
+            ));
+        }
+        return Ok(base
+            | (u << 29)
+            | (if upper { 1u32 << 30 } else { 0 })
+            | ((ms as u32) << 22)
+            | ((rm as u32) << 16)
+            | ((rn as u32) << 5)
+            | (rd as u32));
+    }
     // SIMD widening multiply by element `Vd.<2T>, Vn.<T>, Vm.Ts[i]`: the same
     // widening products against one broadcast element of Vm. size (23..22) is
     // the source width and Q (30) the `2` form, as in the vector arm; opcode
@@ -1857,6 +2707,9 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             "umlal" => Some((0b0010, 1)),
             "smlsl" => Some((0b0110, 0)),
             "umlsl" => Some((0b0110, 1)),
+            "sqdmull" => Some((0b1011, 0)),
+            "sqdmlal" => Some((0b0011, 0)),
+            "sqdmlsl" => Some((0b0111, 0)),
             _ => None,
         }
         && let [
@@ -2507,42 +3360,102 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | ((base as u32) << 5)
             | (*first as u32));
     }
-    // SHA3 three-source xor `eor3 Vd.16b, Vn.16b, Vm.16b, Va.16b`
-    // (FEAT_SHA3): Vd = Vn ^ Vm ^ Va, .16b only.
-    if let (
-        "eor3",
-        [
-            Opnd::VecReg {
-                num: rd,
-                size: 0,
-                q: true,
-            },
-            Opnd::VecReg {
-                num: rn,
-                size: 0,
-                q: true,
-            },
-            Opnd::VecReg {
-                num: rm,
-                size: 0,
-                q: true,
-            },
-            Opnd::VecReg {
-                num: ra,
-                size: 0,
-                q: true,
-            },
-        ],
-    ) = (mnemonic, ops)
-    {
-        return Ok(0xCE00_0000
-            | ((*rm as u32) << 16)
-            | ((*ra as u32) << 10)
-            | ((*rn as u32) << 5)
-            | (*rd as u32));
+    // The four-register crypto forms `op Vd.T, Vn.T, Vm.T, Va.T`: the SHA3
+    // `eor3` (Vn ^ Vm ^ Va) and `bcax` (Vn ^ (Vm & ~Va)) on .16b, and
+    // `sm3ss1` on .4s.
+    if let Some((base, esize)) = match mnemonic {
+        "eor3" => Some((0xCE00_0000u32, 0u8)),
+        "bcax" => Some((0xCE20_0000, 0)),
+        "sm3ss1" => Some((0xCE40_0000, 2)),
+        _ => None,
+    } {
+        let reg = |o: &Opnd| match *o {
+            Opnd::VecReg { num, size, q: true } if size == esize => Some(num as u32),
+            _ => None,
+        };
+        let regs: Option<Vec<u32>> = ops.iter().map(reg).collect();
+        let [rd, rn, rm, ra] = regs.as_deref().unwrap_or(&[]) else {
+            return Err(format!(
+                "inline asm: `{mnemonic}` takes four {} registers",
+                if esize == 0 { ".16b" } else { ".4s" }
+            ));
+        };
+        return Ok(base | (rm << 16) | (ra << 10) | (rn << 5) | rd);
     }
-    if mnemonic == "eor3" {
-        return Err(String::from("inline asm: eor3 operands must be .16b"));
+    // The SHA3 and SM3/SM4 forms on whole registers: `rax1` / `xar` (with a
+    // rotate amount, 0..63) on .2d, `sm3partw1` / `sm3partw2` / `sm4ekey`
+    // and the two-register `sm4e` on .4s, and `sm3tt1a` .. `sm3tt2b`, whose
+    // third source is a .s element.
+    if let Some((base, esize)) = match mnemonic {
+        "rax1" => Some((0xCE60_8C00u32, 3u8)),
+        "xar" => Some((0xCE80_0000, 3)),
+        "sm3partw1" => Some((0xCE60_C000, 2)),
+        "sm3partw2" => Some((0xCE60_C400, 2)),
+        "sm4ekey" => Some((0xCE60_C800, 2)),
+        "sm4e" => Some((0xCEC0_8400, 2)),
+        "sm3tt1a" => Some((0xCE40_8000, 2)),
+        "sm3tt1b" => Some((0xCE40_8400, 2)),
+        "sm3tt2a" => Some((0xCE40_8800, 2)),
+        "sm3tt2b" => Some((0xCE40_8C00, 2)),
+        _ => None,
+    } {
+        let reg = |o: &Opnd| match *o {
+            Opnd::VecReg { num, size, q: true } if size == esize => Some(num as u32),
+            _ => None,
+        };
+        // The register fields and the immediate field: imm6 at bit 10 for
+        // `xar`, the element index at bit 12 for `sm3tt*`.
+        let fields = match (mnemonic, ops) {
+            ("sm4e", [d, n]) => reg(d).zip(reg(n)).map(|(d, n)| (d, n, 0, 0)),
+            ("xar", [d, n, m, Opnd::Imm(i @ 0..=63)]) => reg(d)
+                .zip(reg(n))
+                .zip(reg(m))
+                .map(|((d, n), m)| (d, n, m, (*i as u32) << 10)),
+            (
+                "sm3tt1a" | "sm3tt1b" | "sm3tt2a" | "sm3tt2b",
+                [
+                    d,
+                    n,
+                    Opnd::VecElem {
+                        num,
+                        size: 2,
+                        index: index @ 0..=3,
+                    },
+                ],
+            ) => reg(d)
+                .zip(reg(n))
+                .map(|(d, n)| (d, n, *num as u32, (*index as u32) << 12)),
+            ("rax1" | "sm3partw1" | "sm3partw2" | "sm4ekey", [d, n, m]) => reg(d)
+                .zip(reg(n))
+                .zip(reg(m))
+                .map(|((d, n), m)| (d, n, m, 0)),
+            _ => None,
+        };
+        let (rd, rn, rm, imm) = fields.ok_or_else(|| {
+            format!("inline asm: no A64 encoding for `{mnemonic}` with these operands")
+        })?;
+        return Ok(base | (rm << 16) | imm | (rn << 5) | rd);
+    }
+    // Javascript conversion `fjcvtzs Wd, Dn` (FEAT_JSCVT): the double to a
+    // 32-bit integer, rounding toward zero, modulo 2^32.
+    if mnemonic == "fjcvtzs" {
+        let [
+            Opnd::Reg {
+                num: rd,
+                is64: false,
+                ..
+            },
+            Opnd::VReg {
+                num: rn,
+                is_d: true,
+            },
+        ] = *ops
+        else {
+            return Err(String::from(
+                "inline asm: `fjcvtzs` takes a W and a D register",
+            ));
+        };
+        return Ok(0x1E7E_0000 | ((rn as u32) << 5) | (rd as u32));
     }
     // SIMD table lookup `<tbl|tbx> Vd.T, {Vn.16b, ..}, Vm.T` (T = 8b/16b): each
     // byte of the index Vm selects a byte from the table register list. `len`
@@ -2624,13 +3537,13 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         }
     }
     // `ror Rd, Rn, #n` is the immediate alias of `extr Rd, Rn, Rn, #n`; the
-    // register form (`rorv`) is in the catalogue under the same mnemonic.
+    // register form (`rorv`) is in the catalog under the same mnemonic.
     if mnemonic == "ror"
         && let [dst, src @ Opnd::Reg { .. }, imm @ Opnd::Imm(_)] = *ops
     {
-        return encode_catalogue("extr", &[dst, src, src, imm]);
+        return encode_catalog("extr", &[dst, src, src, imm]);
     }
-    encode_catalogue(mnemonic, ops)
+    encode_catalog(mnemonic, ops)
 }
 
 /// `mov Rd, #imm`: the move alias the value admits, in the order the
@@ -2647,7 +3560,7 @@ fn encode_mov_imm(dst: Opnd, is64: bool, v: i64) -> Result<u32, String> {
     ] {
         if let Some(hw) = chunk(x) {
             let imm = Opnd::Imm(((x >> (hw * 16)) & 0xFFFF) as i64);
-            return encode_catalogue(mnem, &[dst, imm, Opnd::Lsl(hw * 16)]);
+            return encode_catalog(mnem, &[dst, imm, Opnd::Lsl(hw * 16)]);
         }
     }
     if encode_logical_imm(value, is64).is_some() {
@@ -2656,22 +3569,22 @@ fn encode_mov_imm(dst: Opnd, is64: bool, v: i64) -> Result<u32, String> {
             is64,
             sp: false,
         };
-        return encode_catalogue("orr", &[dst, zr, Opnd::Imm(v)]);
+        return encode_catalog("orr", &[dst, zr, Opnd::Imm(v)]);
     }
     Err(String::from(
         "inline asm: mov immediate is not a move-wide or bitmask immediate",
     ))
 }
 
-/// Look the operand shape up in the generated catalogue and pack it. A form
+/// Look the operand shape up in the generated catalog and pack it. A form
 /// only matches when every written `sp` lands in a slot its `sp` mask marks,
 /// which is what selects the extended-register add/sub over the shifted one.
 /// The extended-register forms are tried second: an operand list that both
 /// can express (no `sp`, no written extend) takes the shifted encoding, as the
 /// assembler does.
-fn encode_catalogue(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
-    // The catalogue is sorted by mnemonic (enforced by the generator and the
-    // `catalogue_is_sorted` test): binary-search to the mnemonic's run of forms.
+fn encode_catalog(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
+    // The catalog is sorted by mnemonic (enforced by the generator and the
+    // `catalog_is_sorted` test): binary-search to the mnemonic's run of forms.
     let forms = super::isa_a64_table::FORMS;
     let start = forms.partition_point(|f| f.mnemonic < mnemonic);
     let mut sp_rejected = false;
@@ -2707,6 +3620,7 @@ fn encode_catalogue(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
                 .zip(ops.iter())
                 .all(|(&p, &o)| op_matches(p, o))
                 || !mem_offsets_consumed(f, ops)
+                || !sve_sizes_agree(f, ops)
             {
                 continue;
             }
@@ -2766,7 +3680,7 @@ static MOPS_FORMS: &[(&str, u32)] = &[
 ];
 
 /// The SVE and SME forms over vector, predicate and ZA operands, which the
-/// instruction database the catalogue is generated from does not carry: LDR
+/// instruction database the catalog is generated from does not carry: LDR
 /// and STR of a vector or predicate register at a vector-length-scaled
 /// offset, the FFR moves and `pfalse` (Arm ARM C8.2), and SME `rdsvl` and
 /// LDR/STR of a ZA array vector. `None` for any other mnemonic or shape.
@@ -3103,9 +4017,289 @@ fn pack(f: &Form, ops: &[Opnd]) -> Result<u32, String> {
                     ));
                 }
             }
+            Field::PLow { op, shift } => {
+                let num = reg(ops[op as usize])?;
+                if num > 7 {
+                    return Err(String::from(
+                        "inline asm: the governing predicate must be p0 to p7",
+                    ));
+                }
+                word |= u32::from(num) << shift;
+            }
+            Field::PredMerge { op, shift } => {
+                if let Opnd::PRegQ { merge: true, .. } = ops[op as usize] {
+                    word |= 1 << shift;
+                }
+            }
+            Field::SveSize { a, b, shift, sizes } => {
+                // `sve_sizes_agree` admitted the form.
+                word |= sve_size_code(a, b, sizes, ops).unwrap_or(0) << shift;
+            }
+            Field::SveShiftImm {
+                op,
+                zop,
+                left,
+                lo,
+                hi,
+            } => {
+                let esize = 8i64 << sve_size(1 << zop, ops).unwrap_or(0);
+                let shift = imm(ops[op as usize])?;
+                let range = if left { 0..esize } else { 1..esize + 1 };
+                if !range.contains(&shift) {
+                    return Err(format!(
+                        "inline asm: the shift must be {} to {}",
+                        range.start,
+                        range.end - 1
+                    ));
+                }
+                let v = if left {
+                    esize + shift
+                } else {
+                    2 * esize - shift
+                } as u32;
+                word |= (v & 31) << lo | (v >> 5) << hi;
+            }
+            Field::SveLogicalImm { op, zop, invert } => {
+                let bits = 8u32 << sve_size(1 << zop, ops).unwrap_or(0);
+                let v = imm(ops[op as usize])?;
+                let fits = bits == 64 || matches!(v >> bits, 0 | -1);
+                let mut rep = if bits == 64 {
+                    v as u64
+                } else {
+                    v as u64 & ((1 << bits) - 1)
+                };
+                let mut width = bits;
+                while width < 64 {
+                    rep |= rep << width;
+                    width *= 2;
+                }
+                let enc = encode_logical_imm(if invert { !rep } else { rep }, true)
+                    .filter(|_| fits)
+                    .ok_or_else(|| String::from("inline asm: not a logical immediate"))?;
+                word |= enc << 5;
+            }
+            Field::SveFpPair {
+                op,
+                shift,
+                zero,
+                one,
+            } => {
+                let code = match ops[op as usize] {
+                    Opnd::FpImm(c) => c,
+                    _ => 0xFF,
+                };
+                if code != zero && code != one {
+                    return Err(String::from(
+                        "inline asm: the floating-point immediate is not one of the form's two",
+                    ));
+                }
+                word |= u32::from(code == one) << shift;
+            }
+            Field::VfpImm8 { op, shift } => {
+                let Opnd::FpImm(code) = ops[op as usize] else {
+                    return Err(String::from(
+                        "inline asm: an 8-bit floating-point constant expected",
+                    ));
+                };
+                word |= u32::from(code) << shift;
+            }
+            Field::SveSizeAgree { .. } => {}
+            Field::ZLow { op, shift, width } => {
+                let num = reg(ops[op as usize])?;
+                if num >> width != 0 {
+                    return Err(format!(
+                        "inline asm: the indexed vector must be z0 to z{}",
+                        (1 << width) - 1
+                    ));
+                }
+                word |= u32::from(num) << shift;
+            }
+            Field::SveIndex {
+                op,
+                lo,
+                lo_w,
+                hi,
+                hi_w,
+            } => {
+                let Opnd::ZElem { index, .. } = ops[op as usize] else {
+                    return Err(String::from("inline asm: an indexed vector expected"));
+                };
+                let index = u32::from(index);
+                if index >> (lo_w + hi_w) != 0 {
+                    return Err(format!(
+                        "inline asm: the index must be 0 to {}",
+                        (1 << (lo_w + hi_w)) - 1
+                    ));
+                }
+                word |= (index & ((1 << lo_w) - 1)) << lo | (index >> lo_w) << hi;
+            }
+            Field::SveDupIndex { op, lo, hi } => {
+                let Opnd::ZElem { size, index, .. } = ops[op as usize] else {
+                    return Err(String::from("inline asm: an indexed vector expected"));
+                };
+                if u32::from(index) >= 64 >> size {
+                    return Err(format!(
+                        "inline asm: the index must be 0 to {}",
+                        (64 >> size) - 1
+                    ));
+                }
+                let v = u32::from(index) << (size + 1) | 1 << size;
+                word |= (v & 31) << lo | (v >> 5) << hi;
+            }
+            Field::SplitImm {
+                op,
+                lo,
+                lo_w,
+                hi,
+                hi_w,
+            } => {
+                let v = imm(ops[op as usize])?;
+                if !(0..1 << (lo_w + hi_w)).contains(&v) {
+                    return Err(format!(
+                        "inline asm: immediate out of range 0 to {}",
+                        (1 << (lo_w + hi_w)) - 1
+                    ));
+                }
+                let v = v as u32;
+                word |= (v & ((1 << lo_w) - 1)) << lo | (v >> lo_w) << hi;
+            }
+            Field::SveMemVl { op, shift, scale } => {
+                let (base, off) = match ops[op as usize] {
+                    Opnd::MemVl { base, off } => (base, off),
+                    Opnd::Mem { base, .. } => (base, 0),
+                    _ => return Err(String::from("inline asm: SVE address expected")),
+                };
+                let scale = i64::from(scale);
+                if off % scale != 0 || !(-8..=7).contains(&(off / scale)) {
+                    return Err(format!(
+                        "inline asm: the offset must be a multiple of {scale} from {} to {} vector lengths",
+                        -8 * scale,
+                        7 * scale
+                    ));
+                }
+                word |= u32::from(base) << 5 | ((off / scale) as u32 & 0xF) << shift;
+            }
+            Field::SveZMem { op, msz } => {
+                let Opnd::ZMem { base, off, .. } = ops[op as usize] else {
+                    return Err(String::from("inline asm: a vector base expected"));
+                };
+                let scale = 1i64 << msz;
+                if off % scale != 0 || !(0..=31).contains(&(off / scale)) {
+                    return Err(format!(
+                        "inline asm: the offset must be a multiple of {scale} from 0 to {}",
+                        31 * scale
+                    ));
+                }
+                word |= u32::from(base) << 5 | ((off / scale) as u32) << 16;
+            }
+            Field::SveZMemReg { op, msz, xs } => {
+                let Opnd::ZMemReg {
+                    base,
+                    index,
+                    ext,
+                    amount,
+                    ..
+                } = ops[op as usize]
+                else {
+                    return Err(String::from("inline asm: a vector index expected"));
+                };
+                if amount.is_some_and(|a| a != msz) {
+                    return Err(format!("inline asm: the index shift must be #{msz}"));
+                }
+                word |= u32::from(base) << 5 | u32::from(index) << 16 | u32::from(ext == 3) << xs;
+            }
+            Field::SveMemReg { op, msz, xzr } => {
+                let Opnd::MemReg {
+                    base,
+                    index,
+                    option: 3,
+                    shift,
+                } = ops[op as usize]
+                else {
+                    return Err(String::from("inline asm: SVE index must be `lsl`"));
+                };
+                if shift.unwrap_or(0) != msz || (index == 31 && !xzr) {
+                    return Err(format!(
+                        "inline asm: SVE index must be an X register shifted by lsl #{msz}"
+                    ));
+                }
+                word |= u32::from(base) << 5 | u32::from(index) << 16;
+            }
+            Field::SveImm8 {
+                op,
+                shift_op,
+                signed,
+                zop,
+            } => {
+                let v = imm(ops[op as usize])?;
+                let byte = matches!(ops[zop as usize], Opnd::ZReg { size: Some(0), .. });
+                let fits = |v: i64| {
+                    if signed {
+                        (-128..=127).contains(&v)
+                    } else {
+                        (0..=255).contains(&v)
+                    }
+                };
+                let sh = match ops.get(shift_op as usize) {
+                    None => !fits(v) && v & 0xFF == 0 && fits(v >> 8),
+                    Some(Opnd::Lsl(0)) => false,
+                    Some(Opnd::Lsl(8)) => true,
+                    Some(_) => {
+                        return Err(String::from(
+                            "inline asm: the SVE immediate shift must be lsl #0 or #8",
+                        ));
+                    }
+                };
+                let v = if sh && ops.get(shift_op as usize).is_none() {
+                    v >> 8
+                } else {
+                    v
+                };
+                if !fits(v) || (sh && byte) {
+                    return Err(String::from("inline asm: SVE immediate out of range"));
+                }
+                word |= ((v as u32 & 0xFF) << 5) | (u32::from(sh) << 13);
+            }
         }
     }
     Ok(word)
+}
+
+/// The element size of the operands in `mask`, when they all have one and
+/// it is the same.
+fn sve_size(mask: u8, ops: &[Opnd]) -> Option<u8> {
+    let mut size = None;
+    for (_, o) in ops.iter().enumerate().filter(|(i, _)| mask >> i & 1 != 0) {
+        let s = match *o {
+            Opnd::ZReg { size: Some(s), .. }
+            | Opnd::PReg { size: Some(s), .. }
+            | Opnd::ZElem { size: s, .. } => s,
+            _ => return None,
+        };
+        if size.is_some_and(|z| z != s) {
+            return None;
+        }
+        size = Some(s);
+    }
+    size
+}
+
+/// The size field value of an [`Field::SveSize`] for the operands.
+fn sve_size_code(a: u8, b: u8, sizes: [u8; 4], ops: &[Opnd]) -> Option<u32> {
+    let sa = sve_size(a, ops)?;
+    let sb = if b == 0 { 0 } else { sve_size(b, ops)? };
+    let code = sa | sb << 4;
+    sizes.iter().position(|&s| s == code).map(|k| k as u32)
+}
+
+/// A form with an SVE element size admits the operands when their sizes
+/// agree and are among the form's.
+fn sve_sizes_agree(f: &Form, ops: &[Opnd]) -> bool {
+    f.fields.iter().all(|fl| match *fl {
+        Field::SveSize { a, b, sizes, .. } => sve_size_code(a, b, sizes, ops).is_some(),
+        Field::SveSizeAgree { a, sizes } => sve_size(a, ops).is_some_and(|s| sizes >> s & 1 != 0),
+        _ => true,
+    })
 }
 
 #[cfg(test)]

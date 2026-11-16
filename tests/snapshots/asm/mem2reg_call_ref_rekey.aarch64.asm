@@ -18,15 +18,10 @@ Disassembly of section .text:
                	ret
 
 <f>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sxtw	x0, w0
-               	cbz	x0, <addr>
-               	mov	x0, #0x1                // =1
-               	bl	<addr>
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x0, #0x2                // =2
+               	mov	x1, #0x1                // =1
+               	mov	x2, #0x2                // =2
+               	cmp	w0, #0x0
+               	csel	x0, x1, x2, ne
                	b	<addr>
 
 <main>:

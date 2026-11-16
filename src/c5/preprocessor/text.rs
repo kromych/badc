@@ -1,5 +1,6 @@
 use crate::c5::ident::{self, Dollar};
 use alloc::string::String;
+use alloc::vec::Vec;
 
 /// Phase-3 comment removal: strip `/* ... */` block comments and
 /// `// ...` line comments from the entire source. Each comment is
@@ -17,22 +18,41 @@ pub(super) fn strip_c_comments(source: &str) -> String {
     // as one span rather than byte by byte keeps multi-byte UTF-8
     // sequences intact and skips a per-byte encode.
     let mut copied = 0;
+    // The current line's start and whether a comment was stripped on it,
+    // for the header-name rule.
+    let (mut line, mut commented) = (0, false);
     while i < bytes.len() {
         let c = bytes[i];
-        if !matches!(c, b'/' | b'"' | b'\'') {
+        if !matches!(c, b'/' | b'"' | b'\'' | b'<' | b'\n') {
             let rest = &bytes[i + 1..];
             i += 1 + rest
                 .iter()
-                .position(|&b| matches!(b, b'/' | b'"' | b'\''))
+                .position(|&b| matches!(b, b'/' | b'"' | b'\'' | b'<' | b'\n'))
                 .unwrap_or(rest.len());
+            continue;
+        }
+        if c == b'\n' {
+            (line, commented) = (i + 1, false);
+            i += 1;
+            continue;
+        }
+        if c == b'<' {
+            i += 1;
+            if !commented && opens_header_name(&bytes[line..i - 1]) {
+                i += bytes[i..]
+                    .iter()
+                    .position(|&b| matches!(b, b'>' | b'\n'))
+                    .unwrap_or(bytes.len() - i);
+            }
             continue;
         }
         if c == b'/' && bytes.get(i + 1) == Some(&b'*') {
             // Block comment.
+            commented = true;
             out.push_str(&source[copied..i]);
             i += 2;
-            // An unterminated comment runs to end of file, as in
-            // gcc / clang; the diagnostic is the lexer's.
+            // An unterminated comment runs to end of file; the diagnostic
+            // is the lexer's.
             while i < bytes.len() {
                 if bytes[i] == b'*' && bytes.get(i + 1) == Some(&b'/') {
                     i += 2;
@@ -49,6 +69,7 @@ pub(super) fn strip_c_comments(source: &str) -> String {
         }
         if c == b'/' && bytes.get(i + 1) == Some(&b'/') {
             // Line comment -- skip to next newline (don't consume it).
+            commented = true;
             out.push_str(&source[copied..i]);
             i += 2;
             while i < bytes.len() && bytes[i] != b'\n' {
@@ -72,7 +93,8 @@ pub(super) fn strip_c_comments(source: &str) -> String {
 
 /// Lexical context of a logical line at a given byte, used to decide
 /// whether it ends inside an open `/* */` block comment. `Line` is a
-/// `//` comment, which runs to the end of the assembled line.
+/// `//` comment, which runs to the end of the assembled line; `Header` a
+/// `<...>` header name ([`opens_header_name`]).
 #[derive(Clone, Copy, Default, PartialEq)]
 enum ScanMode {
     #[default]
@@ -81,6 +103,45 @@ enum ScanMode {
     Char,
     Block,
     Line,
+    Header,
+}
+
+/// Whether a `<` after `prefix`, the comment-free text of its logical line
+/// before it, opens a header name: the operand of `#include`,
+/// `#include_next`, `#import` or `#embed`, or of `__has_include`,
+/// `__has_include_next` or `__has_embed`. The name runs to `>` and its
+/// `//` and `/*` are characters of it (C17 6.4.7p3 leaves them undefined
+/// there).
+fn opens_header_name(prefix: &[u8]) -> bool {
+    let word = |s: &[u8]| {
+        s.iter()
+            .take_while(|b| b.is_ascii_alphanumeric() || **b == b'_')
+            .count()
+    };
+    if let Some(rest) = prefix.trim_ascii_start().strip_prefix(b"#") {
+        let rest = rest.trim_ascii_start();
+        let n = word(rest);
+        if matches!(
+            &rest[..n],
+            b"include" | b"include_next" | b"import" | b"embed"
+        ) && rest[n..].trim_ascii().is_empty()
+        {
+            return true;
+        }
+    }
+    let Some(t) = prefix.trim_ascii_end().strip_suffix(b"(") else {
+        return false;
+    };
+    let t = t.trim_ascii_end();
+    let n = t
+        .iter()
+        .rev()
+        .take_while(|b| b.is_ascii_alphanumeric() || **b == b'_')
+        .count();
+    matches!(
+        &t[t.len() - n..],
+        b"__has_include" | b"__has_include_next" | b"__has_embed"
+    )
 }
 
 /// Fused phases 2 and 3: one pass over `source` producing the bytes
@@ -106,6 +167,13 @@ struct Fuse<'a> {
     /// comment bounds and padding emission interrupt the span; plain
     /// line ends let it run on through the newline.
     copied: usize,
+    /// A comment opened on the logical line, which rules out a header name
+    /// after it.
+    commented: bool,
+    /// The logical line's spliced physical lines, and where the current one
+    /// starts: the text a `<` reads for [`opens_header_name`].
+    line_buf: Vec<u8>,
+    seg_start: usize,
 }
 
 impl<'a> Fuse<'a> {
@@ -129,12 +197,14 @@ impl<'a> Fuse<'a> {
                             self.copied = pos + 1;
                             self.mode = ScanMode::Block;
                             self.star = false;
+                            self.commented = true;
                             return;
                         }
                         b'/' => {
                             self.flush_to(self.slash_pos);
                             self.copied = pos + 1;
                             self.mode = ScanMode::Line;
+                            self.commented = true;
                             return;
                         }
                         // A pending `/` whose span was already flushed
@@ -156,7 +226,13 @@ impl<'a> Fuse<'a> {
                         self.mode = ScanMode::Char;
                         self.esc = false;
                     }
+                    b'<' if !self.commented && self.header_at(pos) => self.mode = ScanMode::Header,
                     _ => {}
+                }
+            }
+            ScanMode::Header => {
+                if c == b'>' {
+                    self.mode = ScanMode::Normal;
                 }
             }
             ScanMode::Str | ScanMode::Char => {
@@ -191,6 +267,17 @@ impl<'a> Fuse<'a> {
         }
     }
 
+    /// Whether the `<` at `pos` opens a header name.
+    fn header_at(&self, pos: usize) -> bool {
+        let tail = &self.src.as_bytes()[self.seg_start..pos];
+        if self.line_buf.is_empty() {
+            return opens_header_name(tail);
+        }
+        let mut prefix = self.line_buf.clone();
+        prefix.extend_from_slice(tail);
+        opens_header_name(&prefix)
+    }
+
     /// Scan the line content `bytes[from..to]` (no newline inside).
     fn scan(&mut self, bytes: &[u8], from: usize, to: usize) {
         let mut p = from;
@@ -198,13 +285,13 @@ impl<'a> Fuse<'a> {
             let c = bytes[p];
             match self.mode {
                 // Outside a literal or comment with no `/` pending,
-                // only `/`, `"` and `'` change state; skip to the next
-                // one. Skipped bytes stay in the open span.
-                ScanMode::Normal if !self.slash && !matches!(c, b'/' | b'"' | b'\'') => {
+                // only `/`, `"`, `'` and `<` change state; skip to the
+                // next one. Skipped bytes stay in the open span.
+                ScanMode::Normal if !self.slash && !matches!(c, b'/' | b'"' | b'\'' | b'<') => {
                     let rest = &bytes[p + 1..to];
                     p += 1 + rest
                         .iter()
-                        .position(|&b| matches!(b, b'/' | b'"' | b'\''))
+                        .position(|&b| matches!(b, b'/' | b'"' | b'\'' | b'<'))
                         .unwrap_or(rest.len());
                 }
                 // A `//` comment drops everything to the logical line
@@ -224,10 +311,53 @@ impl<'a> Fuse<'a> {
     fn feed_backslashes(&mut self, count: usize) {
         for _ in 0..count {
             self.step(b'\\', 0);
-            if matches!(self.mode, ScanMode::Normal | ScanMode::Str | ScanMode::Char) {
+            if matches!(
+                self.mode,
+                ScanMode::Normal | ScanMode::Str | ScanMode::Char | ScanMode::Header
+            ) {
                 self.out.push('\\');
             }
         }
+    }
+}
+
+/// C17 5.2.1.1, translation phase 1: each trigraph `??x` replaced by the
+/// character it stands for. Borrows `source` when it holds none.
+pub(super) fn replace_trigraphs(source: &str) -> alloc::borrow::Cow<'_, str> {
+    let of = |c: u8| match c {
+        b'=' => Some('#'),
+        b'(' => Some('['),
+        b'/' => Some('\\'),
+        b')' => Some(']'),
+        b'\'' => Some('^'),
+        b'<' => Some('{'),
+        b'!' => Some('|'),
+        b'>' => Some('}'),
+        b'-' => Some('~'),
+        _ => None,
+    };
+    let bytes = source.as_bytes();
+    let mut out: Option<String> = None;
+    let (mut copied, mut i) = (0, 0);
+    while let Some(k) = source[i..].find("??") {
+        let at = i + k;
+        match bytes.get(at + 2).copied().and_then(of) {
+            Some(c) => {
+                let o = out.get_or_insert_with(|| String::with_capacity(source.len()));
+                o.push_str(&source[copied..at]);
+                o.push(c);
+                copied = at + 3;
+                i = at + 3;
+            }
+            None => i = at + 1,
+        }
+    }
+    match out {
+        Some(mut o) => {
+            o.push_str(&source[copied..]);
+            alloc::borrow::Cow::Owned(o)
+        }
+        None => alloc::borrow::Cow::Borrowed(source),
     }
 }
 
@@ -246,6 +376,9 @@ pub(super) fn unfold_and_strip(source: &str) -> String {
         slash_pos: 0,
         star: false,
         copied: 0,
+        commented: false,
+        line_buf: Vec::new(),
+        seg_start: 0,
     };
     // Blank lines owed after the current logical line, one per spliced
     // or comment-joined physical line, preserving the line count.
@@ -279,6 +412,7 @@ pub(super) fn unfold_and_strip(source: &str) -> String {
             pend = 0;
         }
         pend += content_end - run_start;
+        f.seg_start = i;
         f.scan(bytes, i, run_start);
         if pend > 0 {
             // Splice: drop one trailing backslash with the newline.
@@ -291,9 +425,10 @@ pub(super) fn unfold_and_strip(source: &str) -> String {
                     };
                     f.flush_to(end);
                 }
-                ScanMode::Str | ScanMode::Char => f.flush_to(run_start),
+                ScanMode::Str | ScanMode::Char | ScanMode::Header => f.flush_to(run_start),
                 ScanMode::Block | ScanMode::Line => {}
             }
+            f.line_buf.extend_from_slice(&bytes[i..run_start]);
             pend -= 1;
             padding += 1;
             f.copied = next_start;
@@ -302,7 +437,9 @@ pub(super) fn unfold_and_strip(source: &str) -> String {
         }
         if f.mode == ScanMode::Block {
             // An open block comment joins the next line; the newline
-            // moves to the padding after the logical line.
+            // moves to the padding after the logical line. Only a splice
+            // joins `*` to a `/` on the next line (C99 5.1.1.2p1).
+            f.star = false;
             padding += 1;
             i = next_start;
             continue;
@@ -330,6 +467,8 @@ pub(super) fn unfold_and_strip(source: &str) -> String {
         f.esc = false;
         f.slash = false;
         f.star = false;
+        f.commented = false;
+        f.line_buf.clear();
         open = false;
         i = next_start;
     }
@@ -351,7 +490,7 @@ pub(super) fn unfold_and_strip(source: &str) -> String {
                     f.out.push('\n');
                 }
             }
-            ScanMode::Normal | ScanMode::Str | ScanMode::Char => {
+            ScanMode::Normal | ScanMode::Str | ScanMode::Char | ScanMode::Header => {
                 f.feed_backslashes(pend);
                 if f.mode == ScanMode::Normal && f.slash && f.slash_pos < f.copied {
                     f.out.push('/');
@@ -381,6 +520,8 @@ struct LineScan {
     slash: bool,
     star: bool,
     scanned: usize,
+    /// A comment opened on the line, which rules out a header name after it.
+    commented: bool,
 }
 
 #[cfg(test)]
@@ -397,12 +538,12 @@ impl LineScan {
             let c = joined[i];
             match self.mode {
                 // Outside a literal or comment with no `/` pending, only
-                // `/`, `"` and `'` change state; skip to the next one.
-                ScanMode::Normal if !self.slash && !matches!(c, b'/' | b'"' | b'\'') => {
+                // `/`, `"`, `'` and `<` change state; skip to the next one.
+                ScanMode::Normal if !self.slash && !matches!(c, b'/' | b'"' | b'\'' | b'<') => {
                     let rest = &joined[i + 1..];
                     i += 1 + rest
                         .iter()
-                        .position(|&b| matches!(b, b'/' | b'"' | b'\''))
+                        .position(|&b| matches!(b, b'/' | b'"' | b'\'' | b'<'))
                         .unwrap_or(rest.len());
                     continue;
                 }
@@ -412,11 +553,13 @@ impl LineScan {
                         match c {
                             b'*' => {
                                 self.mode = ScanMode::Block;
+                                self.commented = true;
                                 i += 1;
                                 continue;
                             }
                             b'/' => {
                                 self.mode = ScanMode::Line;
+                                self.commented = true;
                                 i += 1;
                                 continue;
                             }
@@ -427,7 +570,15 @@ impl LineScan {
                         b'/' => self.slash = true,
                         b'"' => self.mode = ScanMode::Str,
                         b'\'' => self.mode = ScanMode::Char,
+                        b'<' if !self.commented && opens_header_name(&joined[..i]) => {
+                            self.mode = ScanMode::Header;
+                        }
                         _ => {}
+                    }
+                }
+                ScanMode::Header => {
+                    if c == b'>' {
+                        self.mode = ScanMode::Normal;
                     }
                 }
                 ScanMode::Str | ScanMode::Char => {
@@ -503,7 +654,11 @@ pub(super) fn unfold_line_continuations(source: &str) -> String {
         loop {
             if joined.ends_with('\\') {
                 joined.pop();
-            } else if !scan.ends_in_open_block_comment(joined.as_bytes()) {
+            } else if scan.ends_in_open_block_comment(joined.as_bytes()) {
+                // The newline is comment text: a `*` before it does not
+                // close the comment with a `/` after it.
+                joined.push(' ');
+            } else {
                 break;
             }
             padding += 1;
@@ -558,9 +713,18 @@ fn ends_in_open_block_comment_ref(s: &str) -> bool {
     let mut in_str = false;
     let mut in_char = false;
     let mut in_block = false;
+    let mut commented = false;
     while i < b.len() {
         scan_step();
         let c = b[i];
+        if !in_str && !in_char && !in_block && c == b'<' && !commented && opens_header_name(&b[..i])
+        {
+            i += b[i..]
+                .iter()
+                .position(|&x| x == b'>')
+                .unwrap_or(b.len() - i);
+            continue;
+        }
         if in_block {
             if c == b'*' && b.get(i + 1) == Some(&b'/') {
                 in_block = false;
@@ -594,6 +758,7 @@ fn ends_in_open_block_comment_ref(s: &str) -> bool {
         }
         if c == b'/' && b.get(i + 1) == Some(&b'*') {
             in_block = true;
+            commented = true;
             i += 2;
             continue;
         }
@@ -618,9 +783,23 @@ pub(super) fn strip_c_comments_ref(source: &str) -> String {
     let mut out = String::with_capacity(source.len());
     let bytes = source.as_bytes();
     let mut i = 0;
+    let (mut line, mut commented) = (0, false);
     while i < bytes.len() {
         let c = bytes[i];
+        if c == b'\n' {
+            (line, commented) = (i + 1, false);
+        }
+        if c == b'<' && !commented && opens_header_name(&bytes[line..i]) {
+            let end = i + bytes[i..]
+                .iter()
+                .position(|&b| matches!(b, b'>' | b'\n'))
+                .unwrap_or(bytes.len() - i);
+            out.push_str(&source[i..end]);
+            i = end;
+            continue;
+        }
         if c == b'/' && bytes.get(i + 1) == Some(&b'*') {
+            commented = true;
             i += 2;
             while i < bytes.len() {
                 if bytes[i] == b'*' && bytes.get(i + 1) == Some(&b'/') {
@@ -636,6 +815,7 @@ pub(super) fn strip_c_comments_ref(source: &str) -> String {
             continue;
         }
         if c == b'/' && bytes.get(i + 1) == Some(&b'/') {
+            commented = true;
             i += 2;
             while i < bytes.len() && bytes[i] != b'\n' {
                 i += 1;
@@ -677,7 +857,9 @@ pub(super) fn unfold_ref(source: &str) -> String {
         loop {
             if joined.ends_with('\\') {
                 joined.pop();
-            } else if !ends_in_open_block_comment_ref(&joined) {
+            } else if ends_in_open_block_comment_ref(&joined) {
+                joined.push(' ');
+            } else {
                 break;
             }
             padding += 1;

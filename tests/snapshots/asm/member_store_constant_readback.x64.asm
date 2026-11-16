@@ -27,40 +27,30 @@ Disassembly of section .text:
 
 <main>:
                	xorl	%eax, %eax
-               	movb	$0x20, <rip> # <addr>
-               	movb	$-0x80, <rip> # <addr>
-               	movb	$-0x80, <rip> # <addr>
-               	movw	$0x8000, <rip> # imm = 0x8000
+               	movl	$0x80008080, <rip> # imm = 0x80008080
                                                 # <addr>
                	movw	$0x8000, <rip> # imm = 0x8000
                                                 # <addr>
-               	movl	$0x80000000, <rip> # imm = 0x80000000
-                                                # <addr>
-               	movl	$0x80000000, <rip> # imm = 0x80000000
-                                                # <addr>
+               	movabsq	$-0x7fffffff80000000, %rcx # imm = 0x8000000080000000
+               	movq	%rcx, <rip> # <addr>
                	movq	$-0x1, <rip> # <addr>
                	leaq	<rip>, %rcx # <addr>
-               	movb	$0x1, <rip> # <addr>
-               	movb	$0x2, <rip> # <addr>
-               	movb	$0x3, <rip> # <addr>
                	movq	%rcx, <rip> # <addr>
-               	movb	$0x4, <rip> # <addr>
-               	movb	$0x9, <rip> # <addr>
-               	movb	$0x4, <rip> # <addr>
-               	movb	$0x9, <rip> # <addr>
-               	movb	$0x5, <rip> # <addr>
+               	movw	$0x905, <rip> # imm = 0x905
+                                                # <addr>
                	movq	<rip>, %rcx # <addr>
                	movb	$0x7, (%rcx)
                	movl	<rip>, %ecx # <addr>
                	incq	%rcx
                	movl	%ecx, <rip> # <addr>
-               	movzbq	<rip>, %rcx # <addr>
-               	cmpl	$0x7, %ecx
-               	je	<addr>
-               	movl	$0x20, %eax
+               	movl	$0x20, %ecx
+               	movzbq	<rip>, %rdx # <addr>
+               	cmpl	$0x7, %edx
+               	cmovneq	%rcx, %rax
                	movb	$0x6, <rip> # <addr>
                	movzbq	<rip>, %rcx # <addr>
+               	movq	%rax, %rdx
+               	orq	$0x40, %rdx
                	cmpl	$0x6, %ecx
-               	je	<addr>
-               	orq	$0x40, %rax
+               	cmovneq	%rdx, %rax
                	retq

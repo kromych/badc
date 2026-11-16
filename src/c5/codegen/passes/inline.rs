@@ -54,7 +54,7 @@ use crate::c5::ir::{
     AsmConstraint, BinOp, Block, BlockId, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind,
     Terminator, ValueId,
 };
-use crate::c5::x86_simd;
+use crate::c5::simd;
 
 /// Outer candidacy fixpoint cap: re-evaluating candidacy after each
 /// substitution pass lets a helper that became a leaf inline on the
@@ -71,10 +71,10 @@ const MAX_MULTI_BLOCK_SPLICE_STEPS: usize = 64;
 /// raises the bound rather than removing it: an unbounded marked body is
 /// re-expanded at every site across the candidacy fixpoint, and a caller
 /// absorbing a chain of them reaches several times the size gcc emits
-/// from the same source. gcc bounds the two populations the same way,
-/// with a single-function limit for a marked body and a lower automatic
-/// one for a size-driven candidate. A mandatory (`always_inline`)
-/// request carries no size bound.
+/// from the same source. The two populations take separate bounds: a
+/// single-function limit for a marked body and a lower automatic one for
+/// a size-driven candidate. A mandatory (`always_inline`) request carries
+/// no size bound.
 const MARKED_CAP_FACTOR: usize = 2;
 
 /// Body-size bound for `func`: `cap` for a size-driven candidate,
@@ -96,16 +96,14 @@ fn body_cap(func: &FunctionSsa, cap: u32) -> usize {
 /// otherwise compound into a function that is large in both code and
 /// stack frame. Once a caller has grown by this much only callees the
 /// source explicitly marked `inline` are still inlined into it; a caller
-/// that is large on its own still absorbs small helpers up to it. Mirrors
-/// gcc's large-function-growth limit.
+/// that is large on its own still absorbs small helpers up to it.
 const CALLER_INST_BUDGET: usize = 2048;
 
 /// Body-size bound for a function only one call site reaches. Its
 /// out-of-line copy is dead once that site is spliced, so the unit shrinks
-/// by it, as with gcc's `-finline-functions-called-once`; gcc bounds the
-/// caller's growth (`large-function-growth`), and this bound keeps the
-/// kernel's count of functions over 4 KiB at gcc's for the same
-/// configuration (`demos/linux/verify.py`'s TEXT_BUDGETS).
+/// by it. The bound keeps the kernel's count of functions over 4 KiB at
+/// gcc's for the same configuration (`demos/linux/verify.py`'s
+/// TEXT_BUDGETS).
 const CALLED_ONCE_CAP: u32 = 512;
 
 /// Local-slot count past which a *self-recursive* caller stops absorbing
@@ -115,17 +113,14 @@ const CALLED_ONCE_CAP: u32 = 512;
 /// well above the frame a leaf helper contributes -- a recursion that
 /// only inlines a swap / partition-sized body stays small and is
 /// unaffected -- but far below the runaway growth an inline fixpoint can
-/// otherwise reach. Mirrors gcc's large-stack-frame limit. Each slot is
-/// 8 bytes, so this caps the inlined-frame growth at 256 bytes.
+/// otherwise reach. Each slot is 8 bytes, so this caps the inlined-frame
+/// growth at 256 bytes.
 const RECURSIVE_FRAME_SLOTS: i64 = 32;
 
 /// Local-slot count (2 KiB) a caller's frame must exceed -- together with
-/// `FRAME_GROWTH_FACTOR` times its pre-inline size -- before optional
-/// inlining into it stops; only a mandatory (`always_inline`) request is
-/// honoured past the bound. Region reuse and the post-inline slot
-/// compaction keep organic growth under this backstop. Mirrors gcc's
-/// large-stack-frame / large-stack-frame-growth pair, which a plain
-/// `inline` hint does not bypass.
+/// `FRAME_GROWTH_FACTOR` times its pre-inline size -- before the round
+/// offers it only candidates whose splice adds no frame slot. A pre-filter
+/// on the candidate set; the per-splice bounds below decide each splice.
 const CALLER_FRAME_SLOTS: i64 = 256;
 
 /// Relative growth bound for the caller frame gate.
@@ -151,6 +146,46 @@ const FRAME_GROWTH_FACTOR: i64 = 4;
 /// What keeps that safe is the probing prologue, not this bound.
 const CALLER_FRAME_ABS_SLOTS: i64 = 512;
 
+/// gcc's `large-stack-frame` and `large-stack-frame-growth`: an optional
+/// splice, a plain `inline` hint included, that takes the caller's frame
+/// past both is refused.
+#[derive(Clone, Copy)]
+pub(crate) struct StackGrowth {
+    /// Bytes.
+    frame: i64,
+    /// Percent over the caller's own frame.
+    growth: i64,
+}
+
+/// The bounds of the optional splices: the body cap (`--inline-cap`) and
+/// the stack growth; and whether slot coalescing repacks the caller's frame
+/// by lifetime after the pass (`-O`), which decides where splices put their
+/// locals ([`CallerRegions`]).
+#[derive(Clone, Copy)]
+pub(crate) struct Limits {
+    pub(crate) cap: u32,
+    pub(crate) stack: StackGrowth,
+    pub(crate) repacked: bool,
+}
+
+impl StackGrowth {
+    pub(crate) const DEFAULT: Self = Self {
+        frame: 256,
+        growth: 1000,
+    };
+    /// `-fconserve-stack`.
+    pub(crate) const CONSERVE: Self = Self {
+        frame: 100,
+        growth: 400,
+    };
+
+    /// Whether a frame of `cells` exceeds both bounds over a caller whose
+    /// own frame is `own` cells.
+    fn exceeded(self, cells: i64, own: i64) -> bool {
+        cells * 8 > self.frame && cells > own + own * self.growth / 100
+    }
+}
+
 #[derive(Clone, Copy)]
 enum RegionKey {
     Pool,
@@ -161,6 +196,13 @@ enum RegionKey {
 /// fixpoint: a splice places the callee's relocated locals (own slots plus
 /// materialized parameter cells) into a recorded region instead of
 /// appending a fresh one per call site, so N sites cost one region.
+///
+/// Where slot coalescing repacks the frame after the pass and may share its
+/// storage (`slot_coalesce::shares_storage`), the records size the frame
+/// budget alone and every splice appends slots of its own: a slot is one
+/// object to `mem2reg` and `sroa`, so splices sharing it would each keep the
+/// others' objects in memory whenever one escapes, and the repack shares
+/// the storage of splices whose lifetimes are disjoint anyway.
 ///
 /// A region may back at most one live activation: the spliced objects'
 /// lifetimes end when the inlined body exits (C99 6.2.4p2), so a non-UB
@@ -182,6 +224,37 @@ struct SlotPlacement<'a> {
     sp_tainted: &'a BTreeSet<usize>,
     /// The caller's frame before this pass spliced into it.
     orig_locals: i64,
+    /// The cells of that frame its live instructions name.
+    own_cells: i64,
+    /// The stack-growth bounds of an optional splice.
+    stack: StackGrowth,
+    /// The component of each function on a call cycle.
+    cycle_of: &'a BTreeMap<usize, usize>,
+    /// Per component, the optional splices of its members the caller
+    /// may still take.
+    cycle_budget: &'a mut BTreeMap<usize, usize>,
+    /// The widest vector one load or store moves: 32 bytes on x86-64.
+    whole_vector: u32,
+}
+
+impl SlotPlacement<'_> {
+    /// Whether an optional splice of `callee` fits the caller's budget for
+    /// its call cycle: as many splices as the caller made calls into the
+    /// cycle before the pass, so a spliced member's own call back into
+    /// the cycle stays a call and the recursion is never unrolled.
+    fn cycle_open(&self, callee: usize) -> bool {
+        self.cycle_of
+            .get(&callee)
+            .is_none_or(|c| self.cycle_budget.get(c).is_some_and(|&n| n > 0))
+    }
+
+    fn spend_cycle(&mut self, callee: usize) {
+        if let Some(c) = self.cycle_of.get(&callee)
+            && let Some(n) = self.cycle_budget.get_mut(c)
+        {
+            *n = n.saturating_sub(1);
+        }
+    }
 }
 
 #[derive(Default)]
@@ -191,6 +264,11 @@ struct CallerRegions {
     pool: Option<(i64, i64)>,
     /// One region per call-bearing off-cycle callee, keyed by ent_pc.
     per_callee: BTreeMap<usize, Option<(i64, i64)>>,
+    /// Splices append slots of their own, the records describing the
+    /// frame as shared regions would lay it out.
+    fresh: bool,
+    /// Cells the splices hold past that layout.
+    appended: i64,
 }
 
 /// Which region record backs a splice of `callee` into the caller at
@@ -306,7 +384,32 @@ impl CallerRegions {
         }
     }
 
+    fn new(repacked: bool) -> Self {
+        Self {
+            fresh: repacked,
+            ..Self::default()
+        }
+    }
+
+    /// The caller's frame of `locals` cells as the records lay it out.
+    fn pooled_locals(&self, locals: i64) -> i64 {
+        locals - self.appended
+    }
+
+    /// Slot-magnitude base of the splice's `needed` slots in a frame of
+    /// `locals`: the record's region, or fresh slots on top of the frame.
     fn place(&mut self, key: Option<RegionKey>, needed: i64, locals: i64) -> i64 {
+        if !self.fresh || key.is_none() {
+            return self.place_pooled(key, needed, locals);
+        }
+        let pooled = self.pooled_locals(locals);
+        let grows = self.growth(key, needed, pooled);
+        self.place_pooled(key, needed, pooled);
+        self.appended += needed - grows;
+        locals
+    }
+
+    fn place_pooled(&mut self, key: Option<RegionKey>, needed: i64, locals: i64) -> i64 {
         let rec: &mut Option<(i64, i64)> = match key {
             None => return locals,
             Some(RegionKey::Pool) => &mut self.pool,
@@ -621,6 +724,8 @@ fn store_width(kind: StoreKind) -> i64 {
         StoreKind::I32 | StoreKind::F32 => 4,
         StoreKind::I64 | StoreKind::F64 => 8,
         StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => 16,
+        StoreKind::V256 => 32,
+        StoreKind::V512 => 64,
     }
 }
 
@@ -634,7 +739,7 @@ fn addr_is_slot(func: &FunctionSsa, addr: ValueId, slot: i64) -> bool {
 /// disp folds it into the store) -- return the byte offset from the slot
 /// base. A second-eightbyte store of a two-register return reaches the
 /// candidate filter in the unfolded `Add` form, so the result-slot writes
-/// must be recognised through it.
+/// must be recognized through it.
 fn slot_base_offset(func: &FunctionSsa, addr: ValueId, slot: i64) -> Option<i64> {
     match func.insts.get(addr as usize) {
         Some(Inst::LocalAddr(s)) if *s == slot => Some(0),
@@ -667,7 +772,7 @@ struct OutPtrReturn {
     copy: ValueId,
 }
 
-/// Recognise [`OutPtrReturn`] in a single-block callee. The declared
+/// Recognize [`OutPtrReturn`] in a single-block callee. The declared
 /// return type must be a by-value structure the host-ABI classification
 /// left on this convention, which is what makes the destination the call
 /// site's own result temporary: every such site is the walker's, and it
@@ -770,7 +875,19 @@ fn is_inline_candidate(
     func: &FunctionSsa,
     cap: u32,
     abi: Abi,
+    reason_out: Option<&mut alloc::string::String>,
+) -> bool {
+    candidacy(func, cap, abi, reason_out, false)
+}
+
+/// [`is_inline_candidate`], with the self-recursion gate waived when
+/// `into_itself`: the splice of [`inline_self`] bounds the depth itself.
+fn candidacy(
+    func: &FunctionSsa,
+    cap: u32,
+    abi: Abi,
     mut reason_out: Option<&mut alloc::string::String>,
+    into_itself: bool,
 ) -> bool {
     #[cfg(feature = "codegen_test")]
     let trace = std::env::var("BADC_LOG_INLINE").is_ok();
@@ -795,9 +912,9 @@ fn is_inline_candidate(
         }
     };
 
-    // gcc's documented way to keep a body out of line, and the escape hatch
-    // its `__builtin_return_address` wording names. Checked before every
-    // other gate so the request holds whatever the body's shape.
+    // `noinline` keeps a body out of line, which the GNU C documentation of
+    // `__builtin_return_address` relies on. Checked before every other gate
+    // so the request holds whatever the body's shape.
     if func.is_noinline {
         say(format_args!("noinline"));
         return false;
@@ -823,33 +940,29 @@ fn is_inline_candidate(
         say(format_args!("naked function"));
         return false;
     }
+    // TODO: SVE values across the splice: the call's result is a `RetPart`
+    // of z0 or p0, and a parameter passed by reference is a copy's address.
+    if func.sve_pcs.is_some() {
+        say(format_args!("SVE procedure call standard"));
+        return false;
+    }
     // A weak definition is replaceable: the linker binds every reference to
     // a strong definition of the same name when one exists in another
     // object, so the body visible here need not be the one that runs.
-    // Splicing it in would commit the caller to this unit's copy. gcc and
-    // clang keep the out-of-line call for the same reason.
+    // Splicing it in would commit the caller to this unit's copy.
     if func.is_weak {
         say(format_args!("weak definition"));
-        return false;
-    }
-    // An automatic object aligned above 16 lives in the callee's prologue-
-    // realigned region; the splice cannot reproduce the sp realignment in the
-    // caller frame, so the body stays out of line. A 16-aligned region sits at
-    // a static frame offset and relocates with the callee's slots (the splice
-    // merges `over_aligned` into the caller's region).
-    if func.frame_align > 16 {
-        say(format_args!("automatic object aligned above 16"));
         return false;
     }
     // A self-recursive callee stays out of line: splicing it does not
     // remove the recursion -- the recursive calls come along -- so
     // inlining only unrolls the call tree one level per candidacy-fixpoint
-    // round, unbounded code growth for no call elimination. Matches gcc's
-    // -O2 default of not inlining recursive functions.
-    if func
-        .insts
-        .iter()
-        .any(|i| matches!(i, Inst::Call { target_pc, .. } if *target_pc == func.ent_pc))
+    // round, unbounded code growth for no call elimination.
+    if !into_itself
+        && func
+            .insts
+            .iter()
+            .any(|i| matches!(i, Inst::Call { target_pc, .. } if *target_pc == func.ent_pc))
     {
         say(format_args!("self-recursive"));
         return false;
@@ -974,13 +1087,12 @@ fn is_inline_candidate(
         }
     }
     // A call to a function that never returns ends the path it is on.
-    // gcc (PRED_NORETURN) and clang (the unreachable heuristic) predict
-    // that path cold and keep the call: the body would grow the caller
-    // for nothing on the paths that return, and the annotations that
-    // describe it name the out-of-line function. Held out of line for a
-    // callee declared `_Noreturn` (C11 6.7.4) and for one no path
-    // returns from -- every exit traps or calls a `_Noreturn` function --
-    // unless the request is mandatory.
+    // That path is predicted cold and the call is kept: the body would
+    // grow the caller for nothing on the paths that return, and the
+    // annotations that describe it name the out-of-line function. Held out
+    // of line for a callee declared `_Noreturn` (C11 6.7.4) and for one no
+    // path returns from -- every exit traps or calls a `_Noreturn`
+    // function -- unless the request is mandatory.
     if (func.is_noreturn || return_blocks == 0) && !func.is_always_inline {
         say(format_args!("never returns"));
         return false;
@@ -1009,7 +1121,7 @@ fn is_inline_candidate(
     // body that fits under it needs no count.
     let bound = body_cap(func, cap);
     if func.insts.len() + func.blocks.len() > bound {
-        let n = emitted_inst_count(func);
+        let n = emitted_after_cleanup(func, bound);
         if n > bound {
             say(format_args!("{n} insts > cap {bound}"));
             return false;
@@ -1120,8 +1232,8 @@ fn is_inline_candidate(
                 Inst::Mcpy { dst, size, .. } | Inst::Mzero { dst, size, .. } => {
                     stores[0] = Some((*dst, 0, *size))
                 }
-                Inst::X86Simd { op, args, .. } => {
-                    for (k, (i, width)) in x86_simd::get(*op).stores().enumerate() {
+                Inst::Simd { op, args, .. } => {
+                    for (k, (i, width)) in simd::get(*op).stores().enumerate() {
                         stores[k] = args.get(i).map(|&a| (a, 0, width as i64));
                     }
                 }
@@ -1169,6 +1281,13 @@ fn is_inline_candidate(
             | Inst::Load { .. }
             | Inst::LoadIndexed { .. }
             // Travels with its statement, admitted below on the reloc path.
+            | Inst::SimdVal { .. }
+            | Inst::VecBinop { .. }
+            | Inst::VecInsert { .. }
+            | Inst::VecSplat { .. }
+            | Inst::VecConst { .. }
+            | Inst::VecExtract { .. }
+            | Inst::Select { .. }
             | Inst::AsmOut { .. } => {}
             Inst::LocalAddr(s) => {
                 // On the reloc path the splice relocates a callee's own local
@@ -1256,9 +1375,9 @@ fn is_inline_candidate(
             // its pointer operand. Each store takes `Store`'s gate: on the
             // flat path with an aggregate in play, the redirected result
             // slot is the only reproducible write.
-            Inst::X86Simd { op, args, .. } => {
+            Inst::Simd { op, args, .. } => {
                 let reproducible = match redirect_slot {
-                    Some(rs) => x86_simd::get(*op)
+                    Some(rs) => simd::get(*op)
                         .stores()
                         .all(|(i, _)| args.get(i).is_some_and(|&a| addr_is_slot(func, a, rs))),
                     None => false,
@@ -1330,6 +1449,14 @@ fn is_inline_candidate(
                 // in a frame of its own -- so it constrains neither the
                 // frame-region choice nor cycle membership (`region_key`).
             }
+            // A library call is as opaque as a direct one. One that passes
+            // or returns an aggregate names descriptors of the callee's own
+            // table, which the splice does not translate.
+            Inst::CallExt {
+                ret_agg: None,
+                arg_aggs,
+                ..
+            } if arg_aggs.iter().all(Option::is_none) => {}
             // A phi merging values across the callee's own blocks. The
             // multi-block splice translates its incoming values through
             // `callee_remap` and shifts its predecessor block ids into the
@@ -1381,10 +1508,10 @@ fn is_inline_candidate(
                     say(format_args!("frame-bound intrinsic {i:?}"));
                     return false;
                 }
-                // An unrecognised opcode is declined for the same reason,
+                // An unrecognized opcode is declined for the same reason,
                 // but it is a different fact and reads as one.
                 None => {
-                    say(format_args!("unrecognised intrinsic opcode {kind}"));
+                    say(format_args!("unrecognized intrinsic opcode {kind}"));
                     return false;
                 }
                 Some(_) => {}
@@ -1695,9 +1822,8 @@ impl<'a> CandidatePool<'a> {
 /// callers placed in the same section: its placement is a contract (a
 /// linker script places by it, a reference check keys on it) that the
 /// splice moves the body out of. A mandatory (`always_inline`) request
-/// overrides it, as gcc and clang do -- both splice such a body into a
-/// caller in any section and emit no out-of-line copy at all -- so a
-/// call from `.text` never targets a helper in a section the image
+/// overrides it -- such a body is spliced into a caller in any section --
+/// so a call from `.text` never targets a helper in a section the image
 /// discards after startup.
 struct CandidateSet<'p, 'a> {
     pool: &'p CandidatePool<'a>,
@@ -1922,6 +2048,32 @@ fn emitted_inst_count(func: &FunctionSsa) -> usize {
         + func.blocks.len()
 }
 
+/// [`emitted_inst_count`] of a leaf `func` once the cleanup that follows
+/// this pass has run on it: constants folded into immediates and
+/// displacements, products fused into multiply-adds. The arena still
+/// holds each constant index's chain and the separate multiply and add,
+/// so a leaf measuring over `bound` is measured again on a cleaned copy;
+/// one past four times the bound is not worth the copy. A body that calls
+/// is measured as it stands: splicing it adds its calls' work to the
+/// caller, where a leaf's splice removes the only call.
+fn emitted_after_cleanup(func: &FunctionSsa, bound: usize) -> usize {
+    let n = emitted_inst_count(func);
+    let calls = (func.insts.iter()).any(|i| {
+        matches!(
+            i,
+            Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. }
+        )
+    });
+    if calls || n <= bound || n > bound.saturating_mul(4) {
+        return n;
+    }
+    let mut copy = [func.clone()];
+    super::constfold::run_one(&mut copy[0]);
+    super::fma::run(&mut copy, false);
+    super::index_fold::run(&mut copy);
+    emitted_inst_count(&copy[0]).min(n)
+}
+
 /// Code the emit issues for each function once this pass has spliced
 /// into it, per `funcs` index.
 ///
@@ -1958,7 +2110,7 @@ fn inlined_inst_counts(
         if !shape[i] {
             continue;
         }
-        let mut n = emitted_inst_count(&funcs[i]);
+        let mut n = emitted_after_cleanup(&funcs[i], body_cap(&funcs[i], cap));
         for inst in &funcs[i].insts {
             let Inst::Call { target_pc, .. } = inst else {
                 continue;
@@ -2125,7 +2277,7 @@ fn needs_param_agg_copy(c: &FunctionSsa) -> bool {
         Inst::Intrinsic { .. } => true,
         // The stores a SIMD instruction performs are the ones the table
         // names, each through an operand address.
-        Inst::X86Simd { op, args, .. } => x86_simd::get(*op)
+        Inst::Simd { op, args, .. } => simd::get(*op)
             .stores()
             .any(|(i, _)| !args.get(i).is_some_and(|&a| own(a))),
         Inst::Imm(_)
@@ -2154,6 +2306,13 @@ fn needs_param_agg_copy(c: &FunctionSsa) -> bool {
         | Inst::Bswap { .. }
         | Inst::BitCount { .. }
         | Inst::FpCast { .. }
+        | Inst::SimdVal { .. }
+        | Inst::VecBinop { .. }
+        | Inst::VecInsert { .. }
+        | Inst::VecSplat { .. }
+        | Inst::VecConst { .. }
+        | Inst::VecExtract { .. }
+        | Inst::Select { .. }
         | Inst::AllocaInit(_)
         | Inst::LifetimeEnd(_)
         | Inst::ParamRef { .. }
@@ -2320,8 +2479,9 @@ pub(super) fn remap_terminator(term: &mut Terminator, remap: &[ValueId]) {
 /// flat fields are used as-is so a caller's field read matches a piece
 /// exactly; overlapping fields (a union) fall back to power-of-two
 /// chunks of the merged ranges. A field whose size is not a load width is
-/// chunked the same way unless it is a 16-byte vector. Padding bytes are not
-/// copied; they hold unspecified values either way (C99 6.2.6.1p6).
+/// chunked the same way unless it is a 16-byte vector; a wider vector one
+/// load moves (`whole_vector`) is one piece. Padding bytes are not copied;
+/// they hold unspecified values either way (C99 6.2.6.1p6).
 /// Alignment an aggregate piece at `off` is proven to have, as
 /// [`Inst::Load`] records it: zero when the object's own alignment
 /// already covers the piece width.
@@ -2330,7 +2490,10 @@ fn piece_align(agg_align: u32, off: u32, size: u32) -> u8 {
     if at >= size { 0 } else { at as u8 }
 }
 
-fn agg_pieces(d: &crate::c5::ir::AggDesc) -> Vec<(u32, u32)> {
+fn agg_pieces(d: &crate::c5::ir::AggDesc, whole_vector: u32) -> Vec<(u32, u32)> {
+    if d.vector && d.size > 16 && d.size <= whole_vector {
+        return alloc::vec![(0, d.size)];
+    }
     let mut fields: Vec<(u32, u32)> = d.fields.iter().map(|f| (f.offset, f.size)).collect();
     fields.sort_unstable();
     fields.dedup();
@@ -2377,6 +2540,7 @@ fn agg_pieces(d: &crate::c5::ir::AggDesc) -> Vec<(u32, u32)> {
 
 fn piece_kinds(size: u32) -> (LoadKind, StoreKind) {
     match size {
+        32 => (LoadKind::V256, StoreKind::V256),
         16 => (LoadKind::V128, StoreKind::V128),
         1 => (LoadKind::U8, StoreKind::I8),
         2 => (LoadKind::U16, StoreKind::I16),
@@ -2449,6 +2613,7 @@ fn splice_multi_block(
         regions,
         cyclic,
         sp_tainted,
+        whole_vector,
         ..
     } = placement;
     let n_caller = caller.blocks.len();
@@ -2462,7 +2627,7 @@ fn splice_multi_block(
     // `remap[call_pc]` stays NO_VALUE.
     let ret_pieces: Option<Vec<(u32, u32)>> = callee
         .ret_agg
-        .map(|i| agg_pieces(&callee.agg_descs[i as usize]));
+        .map(|i| agg_pieces(&callee.agg_descs[i as usize], *whole_vector));
     // The pieces are read from the caller's object, so its own
     // alignment bounds each read; the return slot they land in is a
     // frame slot and needs no bound.
@@ -2481,7 +2646,7 @@ fn splice_multi_block(
     // mapped to (parameter index, layout). The cell relocates into the
     // caller frame with the callee's other own locals; the prefix copies
     // the argument into it, which is what the prologue does out of line.
-    // `splice_arg_addresses` normalised each such argument to the address
+    // `splice_arg_addresses` normalized each such argument to the address
     // of the caller's copy, so it is the copy's source. A cell the body
     // never names is unobservable and takes no copy.
     let names_slot = |s: i64| {
@@ -2625,12 +2790,40 @@ fn splice_multi_block(
         .enumerate()
         .map(|(i, &s)| (s, -(region_base + callee.locals + i as i64 + 1)))
         .collect();
+    // The callee's objects end when it returns (C99 6.2.4p2). In slots of
+    // their own, those reached through an address that state no end of
+    // their own state it at the head of the continuation, so the repack
+    // bounds them as the shared region did.
+    let returned_ends: Vec<i64> = if regions.fresh {
+        let marked: BTreeSet<i64> = callee
+            .insts
+            .iter()
+            .filter_map(|i| match *i {
+                Inst::LifetimeEnd(s) => Some(s),
+                _ => None,
+            })
+            .collect();
+        callee
+            .insts
+            .iter()
+            .filter_map(|i| match *i {
+                Inst::LocalAddr(s) if marked.contains(&s) || held_ends.contains(&s) => None,
+                Inst::LocalAddr(s) if s < 0 => Some(s - region_base),
+                Inst::LocalAddr(s) => param_cell_reloc.get(&s).copied(),
+                _ => None,
+            })
+            .collect::<BTreeSet<i64>>()
+            .into_iter()
+            .collect()
+    } else {
+        Vec::new()
+    };
     // Caller's own rows precede the callee's in `merged_jump_tables`; a
     // spliced callee's `table` re-indexes to `caller_jt_len + table`.
     let caller_jt_len = original.jump_tables.len() as u32;
 
     let mut new_insts: Vec<Inst> = Vec::with_capacity(original.insts.len() + callee.insts.len());
-    let mut new_inst_src: Vec<(u32, u32)> = Vec::with_capacity(new_insts.capacity());
+    let mut new_inst_src: Vec<crate::c5::ir::InstSrc> = Vec::with_capacity(new_insts.capacity());
     let mut new_f32: Vec<bool> = Vec::with_capacity(new_insts.capacity());
     let mut new_blocks: Vec<Block> = Vec::with_capacity(n_caller + n_callee + 1);
     let mut remap: Vec<ValueId> = vec![NO_VALUE; original.insts.len()];
@@ -2643,7 +2836,7 @@ fn splice_multi_block(
 
     let emit_caller_inst = |pc: u32,
                             new_insts: &mut Vec<Inst>,
-                            new_inst_src: &mut Vec<(u32, u32)>,
+                            new_inst_src: &mut Vec<crate::c5::ir::InstSrc>,
                             new_f32: &mut Vec<bool>,
                             remap: &mut [ValueId],
                             original: &mut FunctionSsa| {
@@ -2651,7 +2844,7 @@ fn splice_multi_block(
             .inst_src
             .get(pc as usize)
             .copied()
-            .unwrap_or((0, 0));
+            .unwrap_or_default();
         let f32 = original
             .f32_values
             .get(pc as usize)
@@ -2716,6 +2909,7 @@ fn splice_multi_block(
             pieces_base = at;
             at += 1 + 2 * pieces.len() as u32 + held_ends.len() as u32;
         }
+        at += returned_ends.len() as u32;
         for pc in (call_pc + 1)..splice_block.inst_range.end {
             count(pc, &mut remap, &mut at);
         }
@@ -2895,7 +3089,7 @@ fn splice_multi_block(
             let d = &callee.agg_descs[desc as usize];
             let dst = new_insts.len() as u32;
             new_insts.push(Inst::LocalAddr(slot - region_base));
-            new_inst_src.push((0, 0));
+            new_inst_src.push(crate::c5::ir::InstSrc::default());
             new_f32.push(false);
             // The type's alignment is the bound both endpoints are known
             // to meet: the destination is a frame slot and the source is
@@ -2906,7 +3100,7 @@ fn splice_multi_block(
                 size: d.size as i64,
                 align: d.align,
             });
-            new_inst_src.push((0, 0));
+            new_inst_src.push(crate::c5::ir::InstSrc::default());
             new_f32.push(false);
         }
         // The initializing store a materialized cell's missing prologue
@@ -2926,7 +3120,7 @@ fn splice_multi_block(
                 volatile: false,
                 nsw: false,
             });
-            new_inst_src.push((0, 0));
+            new_inst_src.push(crate::c5::ir::InstSrc::default());
             new_f32.push(false);
         }
         let callee_entry_new_id = callee_block_base;
@@ -2956,7 +3150,7 @@ fn splice_multi_block(
             debug_assert_eq!(postfix_start, pieces_base);
             let la = new_insts.len() as u32;
             new_insts.push(Inst::LocalAddr(ret_slot));
-            new_inst_src.push((0, 0));
+            new_inst_src.push(crate::c5::ir::InstSrc::default());
             new_f32.push(false);
             let mut loaded: Vec<ValueId> = Vec::with_capacity(pieces.len());
             for &(off, size) in pieces.iter() {
@@ -2970,7 +3164,7 @@ fn splice_multi_block(
                     align: piece_align(ret_align, off, size),
                     pc_rel: false,
                 });
-                new_inst_src.push((0, 0));
+                new_inst_src.push(crate::c5::ir::InstSrc::default());
                 new_f32.push(false);
             }
             for (&(off, size), &lv) in pieces.iter().zip(&loaded) {
@@ -2984,14 +3178,19 @@ fn splice_multi_block(
                     align: 0,
                     pc_rel: false,
                 });
-                new_inst_src.push((0, 0));
+                new_inst_src.push(crate::c5::ir::InstSrc::default());
                 new_f32.push(false);
             }
             for &s in &held_ends {
                 new_insts.push(Inst::LifetimeEnd(s - region_base));
-                new_inst_src.push((0, 0));
+                new_inst_src.push(crate::c5::ir::InstSrc::default());
                 new_f32.push(false);
             }
+        }
+        for &s in &returned_ends {
+            new_insts.push(Inst::LifetimeEnd(s));
+            new_inst_src.push(crate::c5::ir::InstSrc::default());
+            new_f32.push(false);
         }
         for pc in (call_pc + 1)..splice_block.inst_range.end {
             emit_caller_inst(
@@ -3078,7 +3277,7 @@ fn splice_multi_block(
                             incoming: new_incoming,
                             kind: *kind,
                         });
-                        new_inst_src.push((0, 0));
+                        new_inst_src.push(crate::c5::ir::InstSrc::default());
                         new_f32.push(
                             callee
                                 .f32_values
@@ -3098,7 +3297,7 @@ fn splice_multi_block(
                         callee_remap[ce_pc as usize] = splice_param_ref(
                             *kind,
                             arg,
-                            (0, 0),
+                            crate::c5::ir::InstSrc::default(),
                             &mut new_insts,
                             &mut new_inst_src,
                             &mut new_f32,
@@ -3118,7 +3317,7 @@ fn splice_multi_block(
                         callee_remap[ce_pc as usize] = splice_param_ref(
                             *kind,
                             arg,
-                            (0, 0),
+                            crate::c5::ir::InstSrc::default(),
                             &mut new_insts,
                             &mut new_inst_src,
                             &mut new_f32,
@@ -3148,7 +3347,7 @@ fn splice_multi_block(
                         };
                         callee_remap[ce_pc as usize] = new_insts.len() as u32;
                         new_insts.push(Inst::LocalAddr(slot));
-                        new_inst_src.push((0, 0));
+                        new_inst_src.push(crate::c5::ir::InstSrc::default());
                         new_f32.push(false);
                         continue;
                     }
@@ -3170,7 +3369,7 @@ fn splice_multi_block(
                             kind: *kind,
                             volatile: *volatile,
                         });
-                        new_inst_src.push((0, 0));
+                        new_inst_src.push(crate::c5::ir::InstSrc::default());
                         new_f32.push(
                             callee
                                 .f32_values
@@ -3202,14 +3401,14 @@ fn splice_multi_block(
                             volatile: *volatile,
                             nsw: false,
                         });
-                        new_inst_src.push((0, 0));
+                        new_inst_src.push(crate::c5::ir::InstSrc::default());
                         new_f32.push(false);
                         continue;
                     }
                     Inst::LifetimeEnd(off) if *off < 0 && !held_ends.contains(off) => {
                         callee_remap[ce_pc as usize] = new_insts.len() as u32;
                         new_insts.push(Inst::LifetimeEnd(off - region_base));
-                        new_inst_src.push((0, 0));
+                        new_inst_src.push(crate::c5::ir::InstSrc::default());
                         new_f32.push(false);
                         continue;
                     }
@@ -3232,7 +3431,7 @@ fn splice_multi_block(
                     let new_id = new_insts.len() as u32;
                     callee_remap[ce_pc as usize] = new_id;
                     new_insts.push(translated);
-                    new_inst_src.push((0, 0));
+                    new_inst_src.push(crate::c5::ir::InstSrc::default());
                     new_f32.push(
                         callee
                             .f32_values
@@ -3329,7 +3528,7 @@ fn splice_multi_block(
                 incoming: phi_incoming,
                 kind: LoadKind::I64,
             });
-            new_inst_src.push((0, 0));
+            new_inst_src.push(crate::c5::ir::InstSrc::default());
             new_f32.push(false);
             new_blocks.push(Block {
                 start_pc: 0,
@@ -3413,17 +3612,25 @@ fn splice_multi_block(
             merged_array_slots.push(rec);
         }
     }
-    // Merge the callee's over-aligned region (16-aligned only; the candidate
-    // filter rejects above 16) behind the caller's: the callee's packed
-    // offsets shift by the caller's region size, a 16-byte multiple, so every
-    // member keeps a 16-aligned base. A shared per-callee record replays the
-    // same relocated slots at a later site; those entries already exist and
-    // grow nothing.
+    let mut merged_vector_objects = original.vector_objects;
+    for &slot in &callee.vector_objects {
+        let rec = slot - region_base;
+        if !merged_vector_objects.contains(&rec) {
+            merged_vector_objects.push(rec);
+        }
+    }
+    // Merge the callee's over-aligned region behind the caller's, at the
+    // caller's region size rounded up to the callee's alignment, so every
+    // member keeps its alignment; the merged region takes the larger
+    // alignment, which the caller's prologue realigns sp to. A shared
+    // per-callee record replays the same relocated slots at a later site;
+    // those entries already exist and grow nothing.
     let mut merged_over_aligned = core::mem::take(&mut original.over_aligned);
     let mut merged_frame_align = original.frame_align;
     let mut merged_region_bytes = original.realign_region_bytes;
     if !callee.over_aligned.is_empty() {
-        let base_off = merged_region_bytes;
+        let align = callee.frame_align.max(16);
+        let base_off = (merged_region_bytes + align - 1) & !(align - 1);
         let mut appended = false;
         for m in &callee.over_aligned {
             let rec = crate::c5::ir::RegionMember {
@@ -3438,7 +3645,7 @@ fn splice_multi_block(
         }
         if appended {
             merged_frame_align = merged_frame_align.max(callee.frame_align);
-            merged_region_bytes += callee.realign_region_bytes;
+            merged_region_bytes = base_off + callee.realign_region_bytes;
         }
     }
 
@@ -3457,6 +3664,23 @@ fn splice_multi_block(
         merged_jump_tables.push(row.iter().map(|&b| shift_callee_bid(b)).collect());
     }
 
+    // The postfix block ends in the splice block's branch.
+    let mut predicted = alloc::vec![None; new_blocks.len()];
+    for b in 0..n_caller {
+        let to = if b == splice_block_idx {
+            postfix_id
+        } else {
+            shift_caller_bid(b as u32)
+        };
+        if let Some(slot) = predicted.get_mut(to as usize) {
+            *slot = original.predicted.get(b).copied().flatten();
+        }
+    }
+    for ci in 0..n_callee {
+        if let Some(slot) = predicted.get_mut(shift_callee_bid(ci as u32) as usize) {
+            *slot = callee.predicted.get(ci).copied().flatten();
+        }
+    }
     *caller = FunctionSsa {
         name: original.name,
         ent_pc: original.ent_pc,
@@ -3465,6 +3689,7 @@ fn splice_multi_block(
         // Neither side of an inline holds a `__try` region.
         seh_scopes: Vec::new(),
         block_seh: Vec::new(),
+        predicted,
         funclet_slots: Vec::new(),
         // The caller's frame now holds the callee's automatic objects, so it
         // inherits their stack-protector classification.
@@ -3511,6 +3736,7 @@ fn splice_multi_block(
 
         param_local_slots: original.param_local_slots,
         ret_agg: original.ret_agg,
+        sve_pcs: original.sve_pcs,
         ret_is_fp: original.ret_is_fp,
         ret_type_tag: original.ret_type_tag,
         indirect_result_slot: original.indirect_result_slot,
@@ -3533,6 +3759,9 @@ fn splice_multi_block(
         synthetic_base: original.synthetic_base,
         multi_cell_slots: merged_multi_cell,
         array_slots: merged_array_slots,
+        vector_objects: merged_vector_objects,
+        // The callee's parameters are the call's arguments here.
+        owned_params: original.owned_params,
         over_aligned: merged_over_aligned,
         frame_align: merged_frame_align,
         realign_region_bytes: merged_region_bytes,
@@ -3558,9 +3787,9 @@ fn splice_multi_block(
 fn splice_param_ref(
     kind: LoadKind,
     arg: ValueId,
-    src_pos: (u32, u32),
+    src_pos: crate::c5::ir::InstSrc,
     new_insts: &mut Vec<Inst>,
-    new_inst_src: &mut Vec<(u32, u32)>,
+    new_inst_src: &mut Vec<crate::c5::ir::InstSrc>,
     new_f32: &mut Vec<bool>,
 ) -> ValueId {
     let inst = match kind {
@@ -3583,7 +3812,11 @@ fn splice_param_ref(
         | LoadKind::F64
         | LoadKind::F80
         | LoadKind::F128
-        | LoadKind::V128 => {
+        | LoadKind::V128
+        | LoadKind::V256
+        | LoadKind::V512
+        | LoadKind::SveVector
+        | LoadKind::SvePredicate => {
             return arg;
         }
     };
@@ -3729,8 +3962,31 @@ fn inline_caller(
             (pc, merge_agg_descs(&mut caller.agg_descs, &descs))
         })
         .collect();
+    // The flat sites of a cycle member past the caller's budget, fixed
+    // before the walk so that every pass of it splices the same sites.
+    let mut budget = placement.cycle_budget.clone();
+    let mut over_budget: BTreeSet<u32> = BTreeSet::new();
+    for block in &caller.blocks {
+        for pc in block.inst_range.clone() {
+            if let Inst::Call { target_pc, .. } = &caller.insts[pc as usize]
+                && let Some(c) = callees.get(target_pc)
+                && !c.is_always_inline
+                && c.blocks.len() == 1
+                && !facts[target_pc].needs_reloc
+                && let Some(&k) = placement.cycle_of.get(target_pc)
+            {
+                let n = budget.entry(k).or_default();
+                if *n == 0 {
+                    over_budget.insert(pc);
+                } else {
+                    *n -= 1;
+                }
+            }
+        }
+    }
+    let mut spliced_optional: Vec<usize> = Vec::new();
     let mut new_insts: Vec<Inst> = Vec::with_capacity(caller.insts.len());
-    let mut new_inst_src: Vec<(u32, u32)> = Vec::with_capacity(caller.inst_src.len());
+    let mut new_inst_src: Vec<crate::c5::ir::InstSrc> = Vec::with_capacity(caller.inst_src.len());
     let mut new_f32: Vec<bool> = Vec::with_capacity(caller.insts.len());
     // `remap[old_id]` is the new ValueId in the spliced caller. An
     // inlined Call's slot maps to the callee's translated Return value.
@@ -3767,6 +4023,7 @@ fn inline_caller(
         spliced_data_refs.clear();
         spliced_code_refs.clear();
         spliced_tls_refs.clear();
+        spliced_optional.clear();
         let before = remap.clone();
         for block in &caller.blocks {
             new_block_starts.push(new_insts.len() as u32);
@@ -3775,7 +4032,7 @@ fn inline_caller(
                     .inst_src
                     .get(old_pc as usize)
                     .copied()
-                    .unwrap_or((0, 0));
+                    .unwrap_or_default();
                 let inst = &caller.insts[old_pc as usize];
                 let inlined = match inst {
                     Inst::Call {
@@ -3813,7 +4070,11 @@ fn inline_caller(
                 // runs once over the whole function.
                 let inlined =
                     inlined.filter(|(c, ..)| c.blocks.len() == 1 && !facts[&c.ent_pc].needs_reloc);
+                let inlined = inlined.filter(|_| !over_budget.contains(&old_pc));
                 if let Some((callee, call_args, ret_slot, callee_pc)) = inlined {
+                    if !callee.is_always_inline {
+                        spliced_optional.push(callee_pc);
+                    }
                     let agg_map: &[u32] = agg_maps
                         .get(&callee_pc)
                         .map(|m| m.as_slice())
@@ -4061,6 +4322,9 @@ fn inline_caller(
     // corrupt the caller. Leave the caller body untouched in that case and
     // let the multi-block splice loop below operate on the original body.
     if any_change {
+        for &pc in &spliced_optional {
+            placement.spend_cycle(pc);
+        }
         let mut new_blocks: Vec<Block> = Vec::with_capacity(caller.blocks.len());
         for (block_idx, block) in caller.blocks.iter().enumerate() {
             let start = new_block_starts[block_idx];
@@ -4142,8 +4406,7 @@ fn inline_caller(
     // `JumpTable` (switch) or `AsmGoto` terminator on the way out. So any
     // caller shape is spliceable.
     // Optional splices count toward the per-step cap; a mandatory
-    // (`always_inline`) request is spliced past it, as gcc honours one at
-    // any caller size.
+    // (`always_inline`) request is spliced past it at any caller size.
     let mut steps = 0usize;
     let mut spliced = false;
     // Callees this caller can no longer afford: every splice through this
@@ -4171,6 +4434,7 @@ fn inline_caller(
                 } = &caller.insts[pc as usize]
                     && let Some(c) = callees.get(target_pc)
                     && (optional_open || c.is_always_inline)
+                    && (c.is_always_inline || placement.cycle_open(*target_pc))
                     && !unaffordable.contains(target_pc)
                     && (c.blocks.len() > 1 || facts[target_pc].needs_reloc)
                     // The guards of the single-block path; an
@@ -4196,10 +4460,14 @@ fn inline_caller(
                         args,
                         &caller.insts,
                     );
-                    let charge = cost.min(placement.regions.growth(key, needed, caller.locals));
+                    let pooled = placement.regions.pooled_locals(caller.locals);
+                    let charge = cost.min(placement.regions.growth(key, needed, pooled));
+                    let grown = pooled - placement.orig_locals + charge;
+                    let frame = placement.own_cells + grown;
                     if !c.is_always_inline
                         && charge > 0
-                        && caller.locals - placement.orig_locals + charge > CALLER_FRAME_ABS_SLOTS
+                        && (grown > CALLER_FRAME_ABS_SLOTS
+                            || placement.stack.exceeded(frame, placement.own_cells))
                     {
                         unaffordable.insert(*target_pc);
                         continue;
@@ -4241,6 +4509,7 @@ fn inline_caller(
         spliced = true;
         if !callee.is_always_inline {
             steps += 1;
+            placement.spend_cycle(callee.ent_pc);
         }
     }
     any_change || spliced
@@ -4254,7 +4523,11 @@ fn inline_caller(
 /// reachable other than through the `Inst::Call` sites in `funcs`.
 pub(crate) fn run(
     funcs: &mut [FunctionSsa],
-    cap: u32,
+    Limits {
+        cap,
+        stack,
+        repacked,
+    }: Limits,
     abi: Abi,
     code_syms: &BTreeMap<u32, usize>,
     extern_fns: &BTreeMap<usize, ExternFnTarget>,
@@ -4287,10 +4560,33 @@ pub(crate) fn run(
     // and the devirt sweep admits no edge that reaches stack-pointer asm
     // or closes a cycle.
     let orig_locals: Vec<i64> = funcs.iter().map(|f| f.locals).collect();
+    let own_cells: Vec<i64> = funcs
+        .iter()
+        .map(|f| lasting_cells(f, &live_inst_mask(f), true, 0))
+        .collect();
     let orig_insts: Vec<usize> = funcs.iter().map(emitted_inst_count).collect();
     let sccs = call_graph_sccs(funcs);
     let cyclic = &sccs.cyclic;
     let mut regions: BTreeMap<usize, CallerRegions> = BTreeMap::new();
+    let cycle_of: BTreeMap<usize, usize> = funcs
+        .iter()
+        .enumerate()
+        .filter(|(_, f)| cyclic.contains(&f.ent_pc))
+        .map(|(i, f)| (f.ent_pc, sccs.comp[i]))
+        .collect();
+    let mut cycle_budgets: BTreeMap<usize, BTreeMap<usize, usize>> = BTreeMap::new();
+    for f in funcs.iter() {
+        let budget = cycle_budgets.entry(f.ent_pc).or_default();
+        for blk in &f.blocks {
+            for pc in blk.inst_range.clone() {
+                if let Inst::Call { target_pc, .. } = &f.insts[pc as usize]
+                    && let Some(&c) = cycle_of.get(target_pc)
+                {
+                    *budget.entry(c).or_default() += 1;
+                }
+            }
+        }
+    }
     // The size-driven rounds, then the rounds for the functions one call
     // site reaches (`CALLED_ONCE_CAP`). Those run last so that no other
     // splice copies the one site into a second caller.
@@ -4403,7 +4699,11 @@ pub(crate) fn run(
                 let recursive = caller.insts.iter().any(
                     |i| matches!(i, Inst::Call { target_pc, .. } if *target_pc == caller.ent_pc),
                 );
-                let only_marked = (recursive && caller.locals > RECURSIVE_FRAME_SLOTS)
+                // The frame as shared regions lay it out ([`CallerRegions`]).
+                let locals = regions
+                    .get(&caller.ent_pc)
+                    .map_or(caller.locals, |r| r.pooled_locals(caller.locals));
+                let only_marked = (recursive && locals > RECURSIVE_FRAME_SLOTS)
                     || (caller.insts.len() + caller.blocks.len()
                         > orig_insts[fi] + CALLER_INST_BUDGET
                         && emitted_inst_count(caller) > orig_insts[fi] + CALLER_INST_BUDGET);
@@ -4414,8 +4714,8 @@ pub(crate) fn run(
                 // The absolute bound is enforced per splice (see
                 // `inline_caller_multi_block`), where the growth is known
                 // exactly.
-                let only_frame_free = caller.locals > CALLER_FRAME_SLOTS
-                    && caller.locals > orig_locals[fi].saturating_mul(FRAME_GROWTH_FACTOR);
+                let only_frame_free = locals > CALLER_FRAME_SLOTS
+                    && locals > orig_locals[fi].saturating_mul(FRAME_GROWTH_FACTOR);
                 // Splicing a self-recursive call would expand indefinitely,
                 // so the caller's own entry is excluded from its view.
                 let local = pools[usize::from(only_marked) | (usize::from(only_frame_free) << 1)]
@@ -4438,10 +4738,26 @@ pub(crate) fn run(
                     &local,
                     &facts,
                     &mut SlotPlacement {
-                        regions: regions.entry(caller.ent_pc).or_default(),
+                        regions: regions.entry(caller.ent_pc).or_insert_with(|| {
+                            CallerRegions::new(
+                                repacked
+                                    && crate::c5::codegen::ssa::slot_coalesce::shares_storage(
+                                        caller,
+                                    ),
+                            )
+                        }),
                         cyclic,
                         sp_tainted: &sp_tainted,
                         orig_locals: orig_locals[fi],
+                        own_cells: own_cells[fi],
+                        stack,
+                        cycle_of: &cycle_of,
+                        cycle_budget: cycle_budgets.entry(caller.ent_pc).or_default(),
+                        whole_vector: if abi.arch == crate::c5::codegen::Arch::X86_64 {
+                            32
+                        } else {
+                            16
+                        },
                     },
                 );
                 if spliced {
@@ -4466,7 +4782,7 @@ pub(crate) fn run(
     }
     // Pairs the final round's splices created have had no sweep yet.
     devirtualize_indirect_calls(funcs, &sp_tainted, &regions, code_syms, extern_fns);
-    // Report each inline request the pass could not honour. The scan
+    // Report each inline request the pass could not honor. The scan
     // runs only for a row the level resolution leaves reportable; the
     // detection is factored into `unhonoured_inline` so it is
     // unit-testable apart from the sink.
@@ -4483,6 +4799,169 @@ pub(crate) fn run(
                     name = funcs[i].name,
                 ),
             );
+        }
+    }
+}
+
+/// Emitted instructions past which a self-recursive body is not spliced
+/// into itself ([`inline_self`]).
+const SELF_INLINE_BODY: usize = 48;
+
+/// Splice rounds [`inline_self`] runs: recursion levels one call covers
+/// beyond its own.
+const SELF_INLINE_DEPTH: usize = 3;
+
+/// Emitted instructions past which [`inline_self`] runs no further round.
+const SELF_INLINE_TOTAL: usize = 240;
+
+/// Multiple of its own size past which [`inline_self`] grows a function no
+/// further: a body with one recursive call left takes its levels, one with
+/// two, whose copies double each round, about one.
+const SELF_INLINE_GROWTH: usize = 4;
+
+/// The most values live across one of the function's own recursive calls.
+fn live_across_self_calls(f: &FunctionSsa) -> usize {
+    use crate::c5::codegen::ssa::{liveness::Liveness, reg_alloc};
+    let reads = reg_alloc::operands_read(f, &reg_alloc::compute_use_counts(f));
+    let ent = f.ent_pc;
+    let own = |i: &Inst| matches!(i, Inst::Call { target_pc, .. } if *target_pc == ent);
+    (Liveness::compute_reading(f, reads)
+        .values_live_after(f, &own)
+        .iter())
+    .map(|(site, live)| live.iter().filter(|&&v| v != *site).count())
+    .max()
+    .unwrap_or(0)
+}
+
+/// Splice a small self-recursive function into its own recursive call
+/// sites, a bounded number of levels deep, so each call does the work of
+/// several recursion levels and pays the call, the return and the frame
+/// once for them. Every round splices the body as it stood before the
+/// first, after tail calls became loops, so a body with one recursive call
+/// left grows by one copy a round; a round whose copies would take the
+/// function past [`SELF_INLINE_TOTAL`] instructions, or past
+/// [`SELF_INLINE_GROWTH`] times its own size, does not run. Each
+/// level adds the values live across a recursive call to those the
+/// innermost call crosses, so the levels stop where those values would
+/// outnumber the `callee_saved` registers and spill.
+pub(crate) fn inline_self(
+    funcs: &mut [FunctionSsa],
+    Limits {
+        cap,
+        stack,
+        repacked,
+    }: Limits,
+    abi: Abi,
+    callee_saved: usize,
+) {
+    if cap == 0 {
+        return;
+    }
+    let sp_tainted = crate::c5::ir::sp_asm_reachers(funcs);
+    let sccs = call_graph_sccs(funcs);
+    let cycle_of: BTreeMap<usize, usize> = funcs
+        .iter()
+        .enumerate()
+        .filter(|(_, f)| sccs.cyclic.contains(&f.ent_pc))
+        .map(|(i, f)| (f.ent_pc, sccs.comp[i]))
+        .collect();
+    let whole_vector = if abi.arch == crate::c5::codegen::Arch::X86_64 {
+        32
+    } else {
+        16
+    };
+    // A call whose block returns its result is a tail call, already a
+    // jump, which a splice would only copy.
+    let self_calls = |f: &FunctionSsa| {
+        let live = live_inst_mask(f);
+        (f.blocks.iter())
+            .flat_map(|b| b.inst_range.clone().map(move |v| (b, v)))
+            .filter(|&(b, v)| {
+                live[v as usize]
+                    && matches!(f.insts[v as usize], Inst::Call { target_pc, .. } if target_pc == f.ent_pc)
+                    && !matches!(b.terminator, crate::c5::ir::Terminator::Return(r) if r == v)
+            })
+            .count()
+    };
+    // A binary128 or x87 access lowers to a conversion sequence many times
+    // the one instruction the size counts.
+    let extended = |f: &FunctionSsa| {
+        f.insts.iter().any(|i| match i {
+            Inst::Load { kind, .. } | Inst::LoadLocal { kind, .. } => {
+                matches!(kind, LoadKind::F80 | LoadKind::F128)
+            }
+            Inst::Store { kind, .. } | Inst::StoreLocal { kind, .. } => {
+                matches!(kind, StoreKind::F80 | StoreKind::F128)
+            }
+            _ => false,
+        })
+    };
+    for f in funcs.iter_mut() {
+        let body_size = emitted_inst_count(f);
+        // A mandatory request is spliced wherever its call appears, its
+        // own recursive call included, with no level bound.
+        if self_calls(f) == 0
+            || f.is_always_inline
+            || extended(f)
+            || f.has_seh()
+            || f.locals > RECURSIVE_FRAME_SLOTS
+            || body_size > SELF_INLINE_BODY
+            || !candidacy(f, cap, abi, None, true)
+        {
+            continue;
+        }
+        let across = live_across_self_calls(f).max(1);
+        let depth = (callee_saved / across)
+            .saturating_sub(1)
+            .min(SELF_INLINE_DEPTH);
+        if depth == 0 {
+            continue;
+        }
+        let bodies = [f.clone()];
+        let facts: FactsMap = bodies.iter().map(|c| (c.ent_pc, callee_facts(c))).collect();
+        let pool = CandidatePool::build(&bodies, |_| true);
+        let orig_locals = f.locals;
+        let own_cells = lasting_cells(f, &live_inst_mask(f), true, 0);
+        let mut regions = CallerRegions::new(
+            repacked && crate::c5::codegen::ssa::slot_coalesce::shares_storage(f),
+        );
+        for _ in 0..depth {
+            let caller = &mut *f;
+            let sites = self_calls(caller);
+            let grown = emitted_inst_count(caller) + sites * body_size;
+            if sites == 0
+                || regions.pooled_locals(caller.locals) > RECURSIVE_FRAME_SLOTS
+                || grown > SELF_INLINE_TOTAL.min(SELF_INLINE_GROWTH * body_size)
+            {
+                break;
+            }
+            // Each site of the function's own cycle is spliced once a round.
+            let mut cycle_budget: BTreeMap<usize, usize> = BTreeMap::new();
+            if let Some(&k) = cycle_of.get(&caller.ent_pc) {
+                cycle_budget.insert(k, sites);
+            }
+            // No entry pc names nothing, so the view keeps the function's own.
+            let local = pool.view(usize::MAX, caller.section.clone());
+            let spliced = inline_caller(
+                caller,
+                &local,
+                &facts,
+                &mut SlotPlacement {
+                    regions: &mut regions,
+                    cyclic: &sccs.cyclic,
+                    sp_tainted: &sp_tainted,
+                    orig_locals,
+                    own_cells,
+                    stack,
+                    cycle_of: &cycle_of,
+                    cycle_budget: &mut cycle_budget,
+                    whole_vector,
+                },
+            );
+            if !spliced {
+                break;
+            }
+            caller.did_inline = true;
         }
     }
 }
@@ -4658,7 +5137,7 @@ mod tests {
         FunctionSsa {
             ent_pc,
             locals,
-            inst_src: alloc::vec![(0, 0); insts.len()],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -4696,7 +5175,7 @@ mod tests {
         FunctionSsa {
             ent_pc,
             locals,
-            inst_src: alloc::vec![(0, 0); insts.len()],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             blocks: alloc::vec![
                 Block {
@@ -4731,7 +5210,7 @@ mod tests {
         FunctionSsa {
             ent_pc,
             locals,
-            inst_src: alloc::vec![(0, 0); n as usize],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); n as usize],
             f32_values: alloc::vec![false; n as usize],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -4744,6 +5223,26 @@ mod tests {
         }
     }
 
+    /// `f` with an own object of `cells` cells its code stores to, so the
+    /// large-stack-frame bound measures growth against that frame.
+    fn with_own_object(mut f: FunctionSsa, cells: i64) -> FunctionSsa {
+        let n = f.insts.len() as u32;
+        f.insts.push(Inst::StoreLocal {
+            disp: 0,
+            off: -cells,
+            value: n - 1,
+            kind: StoreKind::I64,
+            volatile: false,
+            nsw: false,
+        });
+        f.inst_src.push(crate::c5::ir::InstSrc::default());
+        f.f32_values.push(false);
+        f.blocks[0].inst_range.end = n + 1;
+        f.locals = f.locals.max(cells);
+        f.multi_cell_slots.push((-cells, cells));
+        f
+    }
+
     /// A callee returning no value stays out of line where the caller reads
     /// the call's result, which the splice would leave undefined, and is
     /// spliced where the result is unread.
@@ -4752,7 +5251,7 @@ mod tests {
         let abi = Target::LinuxX64.abi();
         let callee = FunctionSsa {
             ent_pc: 100,
-            inst_src: alloc::vec![(0, 0)],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default()],
             f32_values: alloc::vec![false],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -4765,7 +5264,7 @@ mod tests {
         };
         let caller = |next: Inst| FunctionSsa {
             ent_pc: 1,
-            inst_src: alloc::vec![(0, 0); 2],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); 2],
             f32_values: alloc::vec![false; 2],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -4813,6 +5312,23 @@ mod tests {
             funcs[0].locals, 6,
             "8 splices of a 4-slot call-free callee must add one 4-slot region"
         );
+    }
+
+    /// In a frame repacked after the pass, each of the 8 splices takes slots
+    /// of its own, and the frame budget still charges the one region.
+    #[test]
+    fn repacked_splices_take_slots_of_their_own() {
+        let abi = Target::LinuxX64.abi();
+        let mut funcs = alloc::vec![multi_call_caller(1, 2, 100, 8), asm_callee(100, 4),];
+        run_repacked(&mut funcs, 32, abi, &BTreeMap::new(), true);
+        assert!(
+            funcs[0]
+                .insts
+                .iter()
+                .all(|i| !matches!(i, Inst::Call { .. })),
+            "all 8 sites must inline"
+        );
+        assert_eq!(funcs[0].locals, 2 + 8 * 4, "one 4-slot region per splice");
     }
 
     /// A call-bearing callee off every call cycle reuses one per-callee
@@ -4876,7 +5392,7 @@ mod tests {
         let callee = FunctionSsa {
             ent_pc: 200,
             locals: 3,
-            inst_src: alloc::vec![(0, 0); 5],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); 5],
             f32_values: alloc::vec![false; 5],
             blocks: alloc::vec![
                 Block {
@@ -4920,7 +5436,7 @@ mod tests {
             ent_pc: 400,
             is_variadic: true,
             insts: alloc::vec![call_to(300), Inst::Imm(0)],
-            inst_src: alloc::vec![(0, 0); 2],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); 2],
             f32_values: alloc::vec![false; 2],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -4950,7 +5466,7 @@ mod tests {
             ent_pc,
             locals,
             insts: alloc::vec![Inst::Imm(7)],
-            inst_src: alloc::vec![(0, 0)],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default()],
             f32_values: alloc::vec![false],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -5008,8 +5524,13 @@ mod tests {
             let mut callee = asm_callee_with_template(100, 4, b"mov %%rsp, (%0)");
             callee.is_inline = always;
             callee.is_always_inline = always;
+            // 64 splices of 4 slots stay within 11 times the caller's own
+            // 30 cells and carry it past both pre-filter bounds.
             let mut funcs = alloc::vec![
-                multi_call_caller(1, 2, 100, MAX_MULTI_BLOCK_SPLICE_STEPS + over),
+                with_own_object(
+                    multi_call_caller(1, 2, 100, MAX_MULTI_BLOCK_SPLICE_STEPS + over),
+                    30
+                ),
                 callee,
             ];
             run(&mut funcs, 32, abi, &BTreeMap::new());
@@ -5035,7 +5556,7 @@ mod tests {
         let optional_sites = MAX_MULTI_BLOCK_SPLICE_STEPS * INLINE_FIXPOINT_ITERS + 1;
         let mut caller = multi_call_caller(1, 2, 100, optional_sites);
         caller.insts.insert(optional_sites, call_to(200));
-        caller.inst_src.push((0, 0));
+        caller.inst_src.push(crate::c5::ir::InstSrc::default());
         caller.f32_values.push(false);
         let n = caller.insts.len() as u32;
         caller.blocks[0].inst_range = 0..n;
@@ -5145,7 +5666,7 @@ mod tests {
         insts.append(&mut caller.insts);
         caller.insts = insts;
         let total = caller.insts.len() as u32;
-        caller.inst_src = alloc::vec![(0, 0); total as usize];
+        caller.inst_src = alloc::vec![crate::c5::ir::InstSrc::default(); total as usize];
         caller.f32_values = alloc::vec![false; total as usize];
         caller.blocks[0].inst_range = 0..total;
         caller.blocks[0].terminator = Terminator::Return(total - 1);
@@ -5164,11 +5685,15 @@ mod tests {
         let half = CALLER_FRAME_ABS_SLOTS / 2 + 44;
         let mut caller = multi_call_caller(1, 0, 500, 1);
         caller.insts.insert(1, call_to(501));
-        caller.inst_src.push((0, 0));
+        caller.inst_src.push(crate::c5::ir::InstSrc::default());
         caller.f32_values.push(false);
         caller.blocks[0].inst_range = 0..3;
         caller.blocks[0].terminator = Terminator::Return(2);
         caller.blocks[0].exit_acc = 2;
+        // An own frame 11 times which holds both splices, so the absolute
+        // bound alone decides.
+        let factor = 1 + StackGrowth::DEFAULT.growth / 100;
+        let caller = with_own_object(caller, 2 * half / factor + 1);
         let wide = |pc: usize| {
             let mut c = calling_callee(pc, half, 600);
             // One object spans the whole frame, so the splice keeps every cell.
@@ -5182,6 +5707,62 @@ mod tests {
             1,
             "exactly one of the two fits the budget"
         );
+    }
+
+    /// The `StackGrowth` bounds: an optional splice whose growth
+    /// carries the caller's frame past 256 bytes and past 11 times the
+    /// caller's own frame stays a call; a mandatory one is spliced, and so
+    /// is one that stays under either bound.
+    #[test]
+    fn a_large_frame_callee_stays_out_of_a_small_caller() {
+        let abi = Target::LinuxX64.abi();
+        let wide = |cells: i64, always: bool| {
+            let mut c = calling_callee(500, cells, 600);
+            c.multi_cell_slots = alloc::vec![(-cells, cells)];
+            c.is_inline = always;
+            c.is_always_inline = always;
+            c
+        };
+        for (own, cells, always, spliced) in [
+            (2, 40, false, false),
+            (2, 40, true, true),
+            (4, 30, false, true),
+            (0, StackGrowth::DEFAULT.frame / 8, false, true),
+        ] {
+            let caller = multi_call_caller(1, 0, 500, 1);
+            let caller = if own > 0 {
+                with_own_object(caller, own)
+            } else {
+                caller
+            };
+            let mut funcs = alloc::vec![caller, wide(cells, always), leaf(600)];
+            run(&mut funcs, 32, abi, &BTreeMap::new());
+            assert_eq!(
+                calls_to(&funcs[0], 500) == 0,
+                spliced,
+                "own={own} callee={cells} always={always}"
+            );
+        }
+        // `-fconserve-stack`: 192 bytes is within 256 but past 100, and
+        // 24 cells past 400% over 4.
+        for (stack, spliced) in [(StackGrowth::DEFAULT, true), (StackGrowth::CONSERVE, false)] {
+            let caller = with_own_object(multi_call_caller(1, 0, 500, 1), 4);
+            let mut funcs = alloc::vec![caller, wide(20, false), leaf(600)];
+            super::run(
+                &mut funcs,
+                Limits {
+                    cap: 32,
+                    stack,
+                    repacked: false,
+                },
+                abi,
+                &BTreeMap::new(),
+                &BTreeMap::new(),
+                &BTreeSet::new(),
+                &mut Sink::default(),
+            );
+            assert_eq!(calls_to(&funcs[0], 500) == 0, spliced, "{}%", stack.growth);
+        }
     }
 
     /// `growth` is what `place` adds to the frame for the same request:
@@ -5214,7 +5795,7 @@ mod tests {
     /// carry the caller's region past one page is not spliced, even though
     /// the caller's frame has not grown relative to its pre-inline size,
     /// so the relative gate never fires. A mandatory request is still
-    /// honoured.
+    /// honored.
     #[test]
     fn caller_frame_absolute_bound_blocks_optional_inlining() {
         let abi = Target::LinuxX64.abi();
@@ -5233,7 +5814,7 @@ mod tests {
             let leaf = FunctionSsa {
                 ent_pc: 600,
                 insts: alloc::vec![Inst::Imm(7)],
-                inst_src: alloc::vec![(0, 0)],
+                inst_src: alloc::vec![crate::c5::ir::InstSrc::default()],
                 f32_values: alloc::vec![false],
                 blocks: alloc::vec![Block {
                     start_pc: 0,
@@ -5283,7 +5864,7 @@ mod tests {
         let abi = Target::LinuxX64.abi();
         let mut caller = multi_call_caller(1, 2, 100, 2);
         caller.insts.insert(0, call_to(999));
-        caller.inst_src.push((0, 0));
+        caller.inst_src.push(crate::c5::ir::InstSrc::default());
         caller.f32_values.push(false);
         let end = caller.insts.len() as u32;
         caller.blocks[0].inst_range = 0..end;
@@ -5368,7 +5949,7 @@ mod tests {
         let f = FunctionSsa {
             ent_pc: 5,
             insts: alloc::vec![call_self, Inst::Imm(0)],
-            inst_src: alloc::vec![(0, 0); 2],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); 2],
             f32_values: alloc::vec![false; 2],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -5413,10 +5994,12 @@ mod tests {
                 pc_rel: false,
             });
             let byte = insts.len() as ValueId - 1;
+            // In range and nonzero, so the cleanup the size is measured
+            // after keeps every shift.
             insts.push(Inst::BinopI {
                 op: BinOp::Shl,
                 lhs: byte,
-                rhs_imm: (8 * g) as i64,
+                rhs_imm: (8 * (g % 7 + 1)) as i64,
             });
             let shifted = insts.len() as ValueId - 1;
             acc = if acc == NO_VALUE {
@@ -5436,7 +6019,7 @@ mod tests {
         let n = insts.len() as u32;
         FunctionSsa {
             ent_pc,
-            inst_src: alloc::vec![(0, 0); insts.len()],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -5531,7 +6114,7 @@ mod tests {
                 FunctionSsa {
                     ent_pc: 1,
                     insts: alloc::vec![call_to(100)],
-                    inst_src: alloc::vec![(0, 0); 1],
+                    inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); 1],
                     f32_values: alloc::vec![false; 1],
                     blocks: alloc::vec![Block {
                         start_pc: 0,
@@ -5572,7 +6155,7 @@ mod tests {
         let mid = FunctionSsa {
             ent_pc: 2,
             insts: alloc::vec![call_to(1), call_to(1)],
-            inst_src: alloc::vec![(0, 0); 2],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); 2],
             f32_values: alloc::vec![false; 2],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -5607,7 +6190,7 @@ mod tests {
         let mutual = |ent_pc: usize, target: usize| FunctionSsa {
             ent_pc,
             insts: alloc::vec![Inst::Imm(0), call_to(target)],
-            inst_src: alloc::vec![(0, 0); 2],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); 2],
             f32_values: alloc::vec![false; 2],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -5637,7 +6220,7 @@ mod tests {
             let insts: Vec<Inst> = (0..n).map(|i| Inst::Imm(i as i64)).collect();
             FunctionSsa {
                 ent_pc: 5,
-                inst_src: alloc::vec![(0, 0); n],
+                inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); n],
                 f32_values: alloc::vec![false; n],
                 blocks: (0..n as u32)
                     .map(|i| Block {
@@ -5677,7 +6260,7 @@ mod tests {
         let caller = FunctionSsa {
             ent_pc: 1,
             insts: alloc::vec![arg, call],
-            inst_src: alloc::vec![(0, 0); 2],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); 2],
             f32_values: alloc::vec![false; 2],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -5716,7 +6299,7 @@ mod tests {
             incoming: alloc::vec![(0, 2)],
             kind: LoadKind::I64,
         });
-        callee.inst_src.push((0, 0));
+        callee.inst_src.push(crate::c5::ir::InstSrc::default());
         callee.f32_values.push(false);
         callee.blocks = alloc::vec![
             Block {
@@ -5743,7 +6326,7 @@ mod tests {
         let caller = FunctionSsa {
             ent_pc: 1,
             insts: alloc::vec![Inst::Imm(0), call],
-            inst_src: alloc::vec![(0, 0); 2],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); 2],
             f32_values: alloc::vec![false; 2],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -5793,7 +6376,7 @@ mod tests {
             n_params: 1,
             ret_is_fp,
             insts: alloc::vec![Inst::Imm(0), Inst::Imm(1), Inst::Imm(2)],
-            inst_src: alloc::vec![(0, 0); 3],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); 3],
             f32_values: alloc::vec![false; 3],
             blocks: alloc::vec![
                 Block {
@@ -5870,7 +6453,7 @@ mod tests {
         let abi = Target::LinuxX64.abi();
         let single = |insts: Vec<Inst>, ret: ValueId| FunctionSsa {
             n_params: 1,
-            inst_src: alloc::vec![(0, 0); insts.len()],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -6005,7 +6588,7 @@ mod tests {
             FunctionSsa {
                 locals: if slot < 0 { -slot } else { 0 },
                 n_params: usize::from(spill),
-                inst_src: alloc::vec![(0, 0); n as usize],
+                inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); n as usize],
                 f32_values: alloc::vec![false; n as usize],
                 blocks: alloc::vec![Block {
                     start_pc: 0,
@@ -6062,7 +6645,7 @@ mod tests {
                 },
                 Inst::Imm(0),
             ],
-            inst_src: alloc::vec![(0, 0); 3],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); 3],
             f32_values: alloc::vec![false; 3],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -6112,7 +6695,7 @@ mod tests {
                     seg: AsmSeg::Gs,
                 },
             ],
-            inst_src: alloc::vec![(0, 0); 4],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); 4],
             f32_values: alloc::vec![false; 4],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -6156,7 +6739,7 @@ mod tests {
                     seg: AsmSeg::Fs,
                 },
             ],
-            inst_src: alloc::vec![(0, 0); 5],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); 5],
             f32_values: alloc::vec![false; 5],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -6212,7 +6795,7 @@ mod tests {
                 },
                 Inst::Imm(0),
             ],
-            inst_src: alloc::vec![(0, 0); 2],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); 2],
             f32_values: alloc::vec![false; 2],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -6244,7 +6827,7 @@ mod tests {
                 is_always_inline,
                 ret_type_tag: Some(crate::c5::compiler::types::void_ty()),
                 insts: alloc::vec![Inst::Imm(0)],
-                inst_src: alloc::vec![(0, 0)],
+                inst_src: alloc::vec![crate::c5::ir::InstSrc::default()],
                 f32_values: alloc::vec![false],
                 blocks: alloc::vec![Block {
                     start_pc: 0,
@@ -6371,7 +6954,7 @@ mod tests {
     }
 
     /// The decline names the intrinsic rather than its opcode, and an
-    /// unrecognised opcode reads as that rather than as frame-bound.
+    /// unrecognized opcode reads as that rather than as frame-bound.
     #[test]
     fn unhonoured_names_the_intrinsic() {
         let abi = Target::LinuxX64.abi();
@@ -6430,7 +7013,7 @@ mod tests {
         assert!(reason_for_opt(crate::c5::op::Intrinsic::StackPointer as i64).is_none());
         assert_eq!(
             reason_for(1_000_000),
-            "unrecognised intrinsic opcode 1000000"
+            "unrecognized intrinsic opcode 1000000"
         );
     }
     /// A parameter past the ABI's argument registers has no prologue
@@ -6476,7 +7059,7 @@ mod tests {
             let n = insts.len() as u32;
             FunctionSsa {
                 n_params: 2,
-                inst_src: alloc::vec![(0, 0); n as usize],
+                inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); n as usize],
                 f32_values: alloc::vec![false; n as usize],
                 blocks: alloc::vec![Block {
                     start_pc: 0,
@@ -6515,7 +7098,14 @@ mod tests {
                 alloc::vec::Vec::new(),
                 alloc::vec::Vec::new(),
             );
-            let v = splice_param_ref(kind, 5, (0, 0), &mut i, &mut s, &mut f);
+            let v = splice_param_ref(
+                kind,
+                5,
+                crate::c5::ir::InstSrc::default(),
+                &mut i,
+                &mut s,
+                &mut f,
+            );
             assert_eq!(i.len(), param_read_insts(kind) as usize);
             (v, i)
         };
@@ -6639,7 +7229,7 @@ mod tests {
         let callee = FunctionSsa {
             ent_pc: 100,
             n_params: 1,
-            inst_src: alloc::vec![(0, 0); 4],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); 4],
             f32_values: alloc::vec![false; 4],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -6683,7 +7273,7 @@ mod tests {
         ];
         let caller = FunctionSsa {
             ent_pc: 1,
-            inst_src: alloc::vec![(0, 0); 5],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); 5],
             f32_values: alloc::vec![false; 5],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -6740,7 +7330,7 @@ mod tests {
         let insts = alloc::vec![Inst::Imm(ent_pc as i64)];
         FunctionSsa {
             ent_pc,
-            inst_src: alloc::vec![(0, 0); 1],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); 1],
             f32_values: alloc::vec![false; 1],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -6759,7 +7349,7 @@ mod tests {
         let n = insts.len() as u32;
         FunctionSsa {
             ent_pc,
-            inst_src: alloc::vec![(0, 0); insts.len()],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -6846,29 +7436,42 @@ mod tests {
         );
     }
 
-    /// A callee whose region alignment is above 16 needs the realigning
-    /// prologue the splice cannot reproduce; it stays out of line.
+    /// A callee whose region alignment is above 16 splices; its entry lands
+    /// behind the caller's 16-byte region at the next 32-byte offset, and
+    /// the caller's region takes the 32-byte alignment its prologue
+    /// realigns sp to.
     #[test]
-    fn region_above_16_callee_stays_out_of_line() {
+    fn region_above_16_callee_merges_at_its_alignment() {
         let abi = Target::LinuxX64.abi();
+        let member = |slot, off, align| crate::c5::ir::RegionMember {
+            slot,
+            off,
+            align,
+            size: align,
+        };
         let mut callee = asm_callee(100, 2);
-        callee.over_aligned = alloc::vec![crate::c5::ir::RegionMember {
-            slot: -1,
-            off: 0,
-            align: 32,
-            size: 32,
-        }];
+        callee.over_aligned = alloc::vec![member(-1, 0, 32)];
         callee.frame_align = 32;
         callee.realign_region_bytes = 32;
-        let mut funcs = alloc::vec![multi_call_caller(1, 2, 100, 1), callee];
+        let mut caller = multi_call_caller(1, 2, 100, 1);
+        caller.over_aligned = alloc::vec![member(-2, 0, 16)];
+        caller.frame_align = 16;
+        caller.realign_region_bytes = 16;
+        let mut funcs = alloc::vec![caller, callee];
         run(&mut funcs, 32, abi, &BTreeMap::new());
         assert!(
             funcs[0]
                 .insts
                 .iter()
-                .any(|i| matches!(i, Inst::Call { target_pc, .. } if *target_pc == 100)),
-            "an above-16 region callee must not inline"
+                .all(|i| !matches!(i, Inst::Call { .. })),
+            "an above-16 region callee must inline"
         );
+        assert_eq!(
+            funcs[0].over_aligned,
+            alloc::vec![member(-2, 0, 16), member(-3, 32, 32)]
+        );
+        assert_eq!(funcs[0].frame_align, 32);
+        assert_eq!(funcs[0].realign_region_bytes, 64);
     }
 
     /// Caller whose only call is indirect through an `ImmCode(k)`.
@@ -6893,7 +7496,7 @@ mod tests {
         ];
         FunctionSsa {
             ent_pc,
-            inst_src: alloc::vec![(0, 0); 3],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); 3],
             f32_values: alloc::vec![false; 3],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -6909,7 +7512,7 @@ mod tests {
     fn leaf(ent_pc: usize) -> FunctionSsa {
         FunctionSsa {
             ent_pc,
-            inst_src: alloc::vec![(0, 0)],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default()],
             f32_values: alloc::vec![false],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -6934,9 +7537,23 @@ mod tests {
     /// The pass entry points with no imported targets, the shape the
     /// tests below build; the imported path has its own tests.
     fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi, code_syms: &BTreeMap<u32, usize>) {
+        run_repacked(funcs, cap, abi, code_syms, false);
+    }
+
+    fn run_repacked(
+        funcs: &mut [FunctionSsa],
+        cap: u32,
+        abi: Abi,
+        code_syms: &BTreeMap<u32, usize>,
+        repacked: bool,
+    ) {
         super::run(
             funcs,
-            cap,
+            Limits {
+                cap,
+                stack: StackGrowth::DEFAULT,
+                repacked,
+            },
             abi,
             code_syms,
             &BTreeMap::new(),
@@ -6959,7 +7576,7 @@ mod tests {
 
     /// A call through the address of a function this unit imports
     /// becomes the direct call on the import's placeholder ent_pc, so
-    /// the address is never materialised. A prototype that disagrees
+    /// the address is never materialized. A prototype that disagrees
     /// with the import's, a reference naming another symbol, and an
     /// address that names no import each hold it back.
     #[test]

@@ -32,22 +32,20 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	$0x0, -0x8(%rbp)
                	callq	<addr>
                	movabsq	$0x123456789, %r11      # imm = 0x123456789
                	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0x5, %eax
-               	leave
+               	popq	%rbp
                	retq
                	callq	<addr>
                	movabsq	$0x123456789, %r11      # imm = 0x123456789
                	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0x6, %eax
-               	leave
+               	popq	%rbp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	popq	%rbp
                	retq

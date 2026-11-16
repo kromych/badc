@@ -1,9 +1,6 @@
-/* AArch64 inline asm: NEON lane transfer between vector elements and GP
- * registers. `ins` writes a GP value into a chosen lane; `umov` reads a lane
- * back zero-extended; `smov` reads it sign-extended. The lane index reaches
- * lanes a scalar `fmov` cannot. Native-only on AArch64 (the interpreter's
- * inline-asm evaluator is x86-only); on x86_64 the scalar equivalent runs in
- * plain C. */
+/* AArch64 inline asm: `ins`, `umov`, `smov` and `ld1` lane transfers, the
+ * lane a literal or an `i` operand (`%1.s[%2]`, `{%0.h}[%c2]`). Native-only
+ * on AArch64; elsewhere the scalar equivalent runs in plain C. */
 
 static int lane_roundtrip(int a, int b) {
     int r;
@@ -35,8 +32,23 @@ static int smov_byte(int w) {
     return r;
 }
 
+static int lane_by_operand(int a, short h) {
+    int r;
+#if defined(__aarch64__)
+    int __attribute__((vector_size(16))) v = {0, 0, 0, 0};
+    __asm__("ins %0.s[%2], %w1" : "+w"(v) : "r"(a), "i"(3));
+    __asm__("ld1 {%0.h}[%c2], [%1]" : "+w"(v) : "r"(&h), "i"(2 * sizeof(short)) : "memory");
+    __asm__("umov %w0, %1.s[%2]" : "=r"(r) : "w"(v), "i"(1 + 2));
+    r += v[2];
+#else
+    r = a + (unsigned short)h;
+#endif
+    return r;
+}
+
 int main(void) {
     if (lane_roundtrip(7, 42) != 42) return 1; /* insert lane 2, read it back */
     if (smov_byte(0xEE) != -18) return 2;      /* 0xEE as signed char = -18   */
+    if (lane_by_operand(1000, -2) != 1000 + 0xFFFE) return 3; /* lanes 3 and 4h */
     return 42;
 }

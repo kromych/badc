@@ -1,5 +1,5 @@
 // Anonymous struct / union members (C11 6.7.2.1p13) -- the
-// MSVC-style `LARGE_INTEGER` shape and a few generalisations.
+// MSVC-style `LARGE_INTEGER` shape and a few generalizations.
 //
 // "An unnamed member whose type specifier is a structure
 //  specifier with no tag is called an anonymous structure;

@@ -1,8 +1,9 @@
 /* GCC 128-bit integer unary operators and value contexts: `!`, `~`,
    unary minus, the controlling-expression truthiness test (which must
    read the value, not the object's address), a conditional yielding a
-   128-bit value, and the short-circuit operators. Exit 0 on success; a
-   distinct non-zero code per failing check. */
+   128-bit value, also against a narrower arm (C99 6.5.15p5: the usual
+   arithmetic conversions), and the short-circuit operators. Exit 0 on
+   success; a distinct non-zero code per failing check. */
 
 typedef unsigned long long u64;
 typedef unsigned __int128 u128;
@@ -49,6 +50,14 @@ int main(void) {
     /* A conditional whose arms are 128-bit values. */
     u128 pick = one ? nz : z;
     if ((r = chk(pick, 0, 0x0000001000000000ULL, 8)))
+        return r;
+    /* Against an `int` arm the result is the 128-bit type, so the
+       selected value keeps its high half. */
+    if (sizeof(one ? nz : 0) != 16 || sizeof(one ? 0 : -(s128)nz) != 16)
+        return 11;
+    if ((r = chk(one ? nz : 0, 0, 0x0000001000000000ULL, 12)))
+        return r;
+    if ((r = chk((u128)(one ? -(s128)nz : 0LL), 0, 0xfffffff000000000ULL, 13)))
         return r;
 
     /* Arithmetic right shift of a negative value sign-fills; the same

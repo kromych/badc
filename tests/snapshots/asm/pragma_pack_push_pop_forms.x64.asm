@@ -33,12 +33,12 @@ Disassembly of section .text:
                	movq	<rip>, %rax # <addr>
                	cmpq	$0x38, %rax
                	jae	<addr>
-               	movq	<rip>, %rax # <addr>
                	incq	%rax
                	movq	%rax, <rip> # <addr>
                	movq	<rip>, %rax # <addr>
                	cmpq	$0x38, %rax
                	jb	<addr>
+               	leaq	<rip>, %rdi # <addr>
                	movl	<rip>, %eax # <addr>
                	shlq	$0x2b, %rax
                	sarq	$0x2b, %rax
@@ -54,16 +54,12 @@ Disassembly of section .text:
                	movl	$0x8, %eax
                	leave
                	retq
-               	leaq	-0x18(%rbp), %rdi
-               	xorl	%esi, %esi
-               	movl	$0x18, %edx
-               	xorl	%eax, %eax
-               	callq	<addr>
                	leaq	-0x18(%rbp), %rsi
+               	movq	$0x0, -0x18(%rbp)
+               	movq	$0x0, -0x10(%rbp)
+               	movq	$0x0, -0x8(%rbp)
                	movb	$0x38, -0x10(%rbp)
-               	leaq	<rip>, %rdi # <addr>
                	movl	$0x18, %edx
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

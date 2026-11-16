@@ -23,17 +23,30 @@ impl Compiler {
         if !self.sink.may_emit(Code::IMPLICIT_FALLTHROUGH) {
             return;
         }
-        let mut lines = alloc::vec::Vec::new();
-        self.fallthrough_sites(body, true, &mut lines);
-        for line in lines {
+        let mut sites = alloc::vec::Vec::new();
+        self.fallthrough_sites(body, true, &mut sites);
+        for pos in sites {
             let text = "this statement may fall through".into();
-            self.warn_at(Code::IMPLICIT_FALLTHROUGH, line as usize, text);
+            self.warn_at(
+                Code::IMPLICIT_FALLTHROUGH,
+                super::Site {
+                    line: pos.line as usize,
+                    offset: Some(pos.offset),
+                },
+                text,
+            );
         }
     }
 
-    /// The lines of the statements in `id` falling into a label of its switch.
+    /// The positions of the statements in `id` falling into a label of its
+    /// switch.
     /// What precedes the first label of the switch body is never reached.
-    fn fallthrough_sites(&self, id: StmtId, body: bool, out: &mut alloc::vec::Vec<u32>) {
+    fn fallthrough_sites(
+        &self,
+        id: StmtId,
+        body: bool,
+        out: &mut alloc::vec::Vec<super::super::ast::SrcPos>,
+    ) {
         match self.ast.stmt(id) {
             Stmt::Compound(items) => {
                 let stmts: alloc::vec::Vec<StmtId> = items
@@ -54,7 +67,7 @@ impl Compiler {
                         && !self.lands_on_exit(pair[1], i + 2 == stmts.len())
                         && self.exit_of(pair[0]) == Exit::Falls
                     {
-                        out.push(self.last_line(pair[0]));
+                        out.push(self.last_src(pair[0]));
                     }
                 }
                 for &s in &stmts {
@@ -85,8 +98,8 @@ impl Compiler {
         }
     }
 
-    /// gcc passes over a label whose statement leaves at once by `break`,
-    /// `goto` or a bare `return`, and an empty one ending the switch.
+    /// The warning passes over a label whose statement leaves at once by
+    /// `break`, `goto` or a bare `return`, and an empty one ending the switch.
     fn lands_on_exit(&self, site: StmtId, last: bool) -> bool {
         match self.ast.stmt(site) {
             Stmt::Case { body, .. } | Stmt::Default { body } | Stmt::Labeled { body, .. } => {
@@ -110,12 +123,12 @@ impl Compiler {
     }
 
     /// The line of the statement control runs last in `id`.
-    fn last_line(&self, id: StmtId) -> u32 {
+    fn last_src(&self, id: StmtId) -> super::super::ast::SrcPos {
         match self.ast.stmt(id) {
             Stmt::Case { body, .. }
             | Stmt::Default { body }
             | Stmt::Labeled { body, .. }
-            | Stmt::Switch { body, .. } => self.last_line(*body),
+            | Stmt::Switch { body, .. } => self.last_src(*body),
             Stmt::Compound(items) => {
                 let synthetic = |s: StmtId| {
                     matches!(
@@ -127,11 +140,11 @@ impl Compiler {
                     BlockItem::Stmt(s) if !synthetic(*s) => Some(*s),
                     _ => None,
                 }) {
-                    Some(s) => self.last_line(s),
-                    None => self.ast.stmt_src[id as usize].line,
+                    Some(s) => self.last_src(s),
+                    None => self.ast.stmt_src[id as usize],
                 }
             }
-            _ => self.ast.stmt_src[id as usize].line,
+            _ => self.ast.stmt_src[id as usize],
         }
     }
 
@@ -165,8 +178,9 @@ impl Compiler {
                     then_exit.max_leaving(else_exit)
                 }
             }
-            // gcc's lowering ends an endless loop in its back edge, whatever
-            // `break` it holds, and a `do` loop in its body's last statement.
+            // As the warning is defined, an endless loop ends in its back edge,
+            // whatever `break` it holds, and a `do` loop in its body's last
+            // statement.
             Stmt::While { cond, .. } => falls(!self.always_true(Some(*cond))),
             Stmt::For { cond, .. } => falls(!self.always_true(*cond)),
             Stmt::DoWhile { body, cond } => {

@@ -39,13 +39,13 @@ The scripts used most:
 
 | script | what it does |
 |---|---|
-| `cargo_test.py` | runs `cargo test` and also fails a test binary that stops before reporting every test |
+| `cargo_test.py` | runs `cargo test`, fails a test binary that stops before reporting every test, and stops the run, naming the test, when one is still running 30 minutes after libtest reports it as slow |
 | `snapshots.py` | regenerates `tests/snapshots/`; `--check` fails on any difference |
 | `coverage.py` | line and function coverage of `src/` under the test suite |
 | `csmith_fuzz.py`, `c_reduce.py` | differential fuzzing with csmith, and reduction of a failing case |
 | `run_demos.py` | runs demo smoke tests concurrently |
 | `compile_throughput.py` | compile-time ratios over a fixed corpus, checked against ceilings |
-| `diagnostics_doc.py` | writes [diagnostics](diagnostics.md) from the diagnostic catalogue |
+| `diagnostics_doc.py` | writes [diagnostics](diagnostics.md) from the diagnostic catalog |
 | `install_hooks.py`, `validate_local_boxes.py` | the git hooks and the pre-push gate |
 | `perf_publish.py` | files a benchmark run in the data repository the performance page reads |
 

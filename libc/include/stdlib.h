@@ -26,7 +26,13 @@
 
 #define EXIT_SUCCESS 0
 #define EXIT_FAILURE 1
+// The largest value the target's `rand` returns: msvcrt's and the UCRT's
+// draw 15 bits.
+#ifdef __BADC_WINDOWS__
+#define RAND_MAX 0x7FFF
+#else
 #define RAND_MAX 0x7FFFFFFF
+#endif
 
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
@@ -88,7 +94,8 @@
 // mergesort: BSD stable sort, present in the macOS / BSD libc. glibc has no
 // such symbol, so portable code that reaches for it ships its own fallback
 // (which is what a Linux configure selects).
-int mergesort(char *base, int n, int size, int *cmp);
+int mergesort(void *base, size_t nel, size_t width,
+              int (*compar)(const void *, const void *));
 #pragma binding(libc::mergesort, "_mergesort")
 #endif
 
@@ -121,6 +128,7 @@ int mergesort(char *base, int n, int size, int *cmp);
 #pragma binding(libc::getenv,  "getenv")
 #pragma binding(libc::setenv,  "setenv")
 #pragma binding(libc::putenv,  "putenv")
+#pragma binding(libc::clearenv, "clearenv")
 #pragma binding(libc::mblen,    "mblen")
 #pragma binding(libc::mbtowc,   "mbtowc")
 #pragma binding(libc::wctomb,   "wctomb")
@@ -353,11 +361,11 @@ int wcstombs_s(size_t *pconverted, char *dst, size_t dstsz, const wchar_t *src,
 // that msvcrt's getenv / _putenv / _wgetenv never update. Reach the
 // vectors through msvcrt's own accessor functions; the wide vector
 // stays NULL until the first wide-environment use, matching the CRT's
-// initialize-on-demand behaviour.
+// initialize-on-demand behavior.
 #pragma binding(msvcrt::_get_environ,  "_get_environ")
 #pragma binding(msvcrt::_get_wenviron, "_get_wenviron")
-int _get_environ(char ***out);
-int _get_wenviron(unsigned short ***out);
+void _get_environ(char ***out);
+void _get_wenviron(unsigned short ***out);
 static inline char **__badc_environ(void) {
     char **v = 0;
     _get_environ(&v);
@@ -384,10 +392,23 @@ extern unsigned short **_wenviron;
 extern char **_environ;
 extern char **environ;
 #endif
+// The UCRT's <stdlib.h> defines `errno` itself, as <errno.h> does.
+#pragma binding(msvcrt::errno_location, "_errno")
+int *errno_location(void);
+#define errno (*errno_location())
+// The UCRT's comparison types and the context-taking sort and search.
+typedef int (*_CoreCrtSecureSearchSortCompareFunction)(void *, const void *, const void *);
+typedef int (*_CoreCrtNonSecureSearchSortCompareFunction)(const void *, const void *);
+#pragma binding(msvcrt::qsort_s,   "qsort_s")
+#pragma binding(msvcrt::bsearch_s, "bsearch_s")
+void qsort_s(void *base, rsize_t num, rsize_t size,
+             _CoreCrtSecureSearchSortCompareFunction compare, void *context);
+void *bsearch_s(const void *key, const void *base, rsize_t num, rsize_t size,
+                _CoreCrtSecureSearchSortCompareFunction compare, void *context);
 // `_doserrno` is an SDK macro over the exported accessor `__doserrno`,
 // which returns a pointer to the thread's OS error code.
 #pragma binding(msvcrt::__doserrno, "__doserrno")
-int *__doserrno(void);
+unsigned long *__doserrno(void);
 #define _doserrno (*__doserrno())
 extern int _sys_nerr;
 extern char *_sys_errlist[];
@@ -407,11 +428,13 @@ void *malloc(size_t size);
 void *calloc(size_t n, size_t size);
 void *realloc(void *ptr, size_t size);
 void free(void *ptr);
+// C17 7.22.3.1. On Windows libc/lib/stdlib_ext.c defines it over malloc,
+// for the alignments up to 16 that msvcrt's blocks have.
+void *aligned_alloc(size_t alignment, size_t size);
 #ifndef _WIN32
 // Aligned allocation. posix_memalign stores the block through memptr and
 // returns 0 or an errno value; memalign is a glibc extension.
 int posix_memalign(void **memptr, size_t alignment, size_t size);
-void *aligned_alloc(size_t alignment, size_t size);
 void *valloc(size_t size);
 #endif
 #ifdef __linux__
@@ -494,17 +517,16 @@ static inline lldiv_t lldiv(long long n, long long d) {
 _Noreturn void abort(void);
 _Noreturn void exit(int status);
 _Noreturn void _Exit(int status);
-#ifndef _WIN32
-// C11 7.22.4.7 and 7.22.4.3, where the C library defines them; msvcrt.dll
-// exports neither. The Linux C library's `at_quick_exit` is a static
-// wrapper over `__cxa_at_quick_exit`, reached as `atexit` is.
+// C17 7.22.4.7 and 7.22.4.3; msvcrt.dll exports neither, and
+// libc/lib/stdlib_ext.c defines both on Windows. The Linux C library's
+// `at_quick_exit` is a static wrapper over `__cxa_at_quick_exit`, reached as
+// `atexit` is.
 _Noreturn void quick_exit(int status);
 #ifdef __linux__
 int __cxa_at_quick_exit(void (*handler)(void), void *dso);
 #define at_quick_exit(handler) __cxa_at_quick_exit((handler), 0)
 #else
 int at_quick_exit(void (*handler)(void));
-#endif
 #endif
 int system(const char *cmd);
 char *getenv(const char *name);
@@ -517,7 +539,15 @@ _Noreturn void _exit(int status);
 #else
 int setenv(const char *name, const char *value, int overwrite);
 #endif
+#ifdef __linux__
+// glibc's, as its <stdlib.h> declares it: empties the environment.
+int clearenv(void);
+#endif
+#ifdef _WIN32
+int putenv(const char *string);
+#else
 int putenv(char *string);
+#endif
 // Multibyte / wide-character string conversion (C99 7.20.8). `wchar_t`
 // and `size_t` come from <stddef.h>.
 // Per-character conversion (C99 7.20.7): mblen reports the length of
@@ -563,7 +593,7 @@ unsigned long long _strtoui64(const char *s, char **endp, int base);
 // Resolves a relative path against the current directory and
 // writes the canonical absolute form into `absPath`.
 #pragma binding(msvcrt::_fullpath, "_fullpath")
-char *_fullpath(char *absPath, char *relPath, int maxLength);
+char *_fullpath(char *absPath, const char *relPath, size_t maxLength);
 #endif
 int mkstemp(char *templ);
 char *mkdtemp(char *templ);

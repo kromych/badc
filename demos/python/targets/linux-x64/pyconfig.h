@@ -33,10 +33,6 @@
 /* The Android API level. */
 /* #undef ANDROID_API_LEVEL */
 
-/* Define if C doubles are 64-bit IEEE 754 binary format, stored in ARM
-   mixed-endian order (byte order 45670123) */
-/* #undef DOUBLE_IS_ARM_MIXED_ENDIAN_IEEE754 */
-
 /* Define if C doubles are 64-bit IEEE 754 binary format, stored with the most
    significant byte first */
 /* #undef DOUBLE_IS_BIG_ENDIAN_IEEE754 */
@@ -142,6 +138,9 @@
 /* Define if you have the 'chroot' function. */
 #define HAVE_CHROOT 1
 
+/* Define to 1 if you have the 'clearenv' function. */
+#define HAVE_CLEARENV 1
+
 /* Define to 1 if you have the 'clock' function. */
 #define HAVE_CLOCK 1
 
@@ -187,8 +186,14 @@
 /* Define if you have the 'ctermid_r' function. */
 /* #undef HAVE_CTERMID_R */
 
+/* Define if you have the 'ESCDELAY' variable. */
+#define HAVE_CURSES_ESCDELAY 1
+
 /* Define if you have the 'filter' function. */
 #define HAVE_CURSES_FILTER 1
+
+/* Define if you have the 'getmouse' function with the X/Open signature. */
+#define HAVE_CURSES_GETMOUSE 1
 
 /* Define to 1 if you have the <curses.h> header file. */
 #define HAVE_CURSES_H 1
@@ -211,8 +216,17 @@
 /* Define if you have the 'resize_term' function. */
 #define HAVE_CURSES_RESIZE_TERM 1
 
+/* Define if you have the 'set_escdelay' function. */
+#define HAVE_CURSES_SET_ESCDELAY 1
+
+/* Define if you have the 'set_tabsize' function. */
+#define HAVE_CURSES_SET_TABSIZE 1
+
 /* Define if you have the 'syncok' function. */
 #define HAVE_CURSES_SYNCOK 1
+
+/* Define if you have the 'TABSIZE' variable. */
+#define HAVE_CURSES_TABSIZE 1
 
 /* Define if you have the 'typeahead' function. */
 #define HAVE_CURSES_TYPEAHEAD 1
@@ -225,6 +239,10 @@
 
 /* Define to 1 if you have the <db.h> header file. */
 /* #undef HAVE_DB_H */
+
+/* Define to 1 if you have the declaration of 'PR_SET_VMA_ANON_NAME', and to 0
+   if you don't. */
+#define HAVE_DECL_PR_SET_VMA_ANON_NAME 1
 
 /* Define to 1 if you have the declaration of 'RTLD_DEEPBIND', and to 0 if you
    don't. */
@@ -299,6 +317,9 @@
 
 /* Define to 1 if you have the 'dlopen' function. */
 #define HAVE_DLOPEN 1
+
+/* Define to 1 if you have the 'dl_iterate_phdr' function. */
+#define HAVE_DL_ITERATE_PHDR 1
 
 /* Define to 1 if you have the 'dup' function. */
 #define HAVE_DUP 1
@@ -728,6 +749,9 @@
 /* Define to 1 if you have the <linux/can.h> header file. */
 #define HAVE_LINUX_CAN_H 1
 
+/* Define to 1 if you have the <linux/can/isotp.h> header file. */
+#define HAVE_LINUX_CAN_ISOTP_H 1
+
 /* Define to 1 if you have the <linux/can/j1939.h> header file. */
 #define HAVE_LINUX_CAN_J1939_H 1
 
@@ -970,6 +994,9 @@
    function. */
 #define HAVE_POSIX_SPAWN_FILE_ACTIONS_ADDCLOSEFROM_NP 1
 
+/* Define to 1 if you have the 'ppoll' function. */
+#define HAVE_PPOLL 1
+
 /* Define to 1 if you have the 'pread' function. */
 #define HAVE_PREAD 1
 
@@ -1021,6 +1048,9 @@
 
 /* Define to 1 if you have the 'pthread_kill' function. */
 #define HAVE_PTHREAD_KILL 1
+
+/* Define to 1 if you have the <pthread_np.h> header file. */
+/* #undef HAVE_PTHREAD_NP_H */
 
 /* Define to 1 if you have the 'pthread_setname_np' function. */
 #define HAVE_PTHREAD_SETNAME_NP 1
@@ -1280,6 +1310,9 @@
 /* Define to 1 if you have the 'statvfs' function. */
 #define HAVE_STATVFS 1
 
+/* Define to 1 if you have the 'statx' function. */
+#define HAVE_STATX 1
+
 /* Define if you have struct stat.st_mtim.tv_nsec */
 #define HAVE_STAT_TV_NSEC 1
 
@@ -1322,6 +1355,27 @@
 /* Define to 1 if 'pw_passwd' is a member of 'struct passwd'. */
 #define HAVE_STRUCT_PASSWD_PW_PASSWD 1
 
+/* Define to 1 if 'stx_atomic_write_unit_max_opt' is a member of 'struct
+   statx'. */
+#define HAVE_STRUCT_STATX_STX_ATOMIC_WRITE_UNIT_MAX_OPT 1
+
+/* Define to 1 if 'stx_atomic_write_unit_min' is a member of 'struct statx'.
+   */
+#define HAVE_STRUCT_STATX_STX_ATOMIC_WRITE_UNIT_MIN 1
+
+/* Define to 1 if 'stx_dio_mem_align' is a member of 'struct statx'. */
+#define HAVE_STRUCT_STATX_STX_DIO_MEM_ALIGN 1
+
+/* Define to 1 if 'stx_dio_read_offset_align' is a member of 'struct statx'.
+   */
+#define HAVE_STRUCT_STATX_STX_DIO_READ_OFFSET_ALIGN 1
+
+/* Define to 1 if 'stx_mnt_id' is a member of 'struct statx'. */
+#define HAVE_STRUCT_STATX_STX_MNT_ID 1
+
+/* Define to 1 if 'stx_subvol' is a member of 'struct statx'. */
+#define HAVE_STRUCT_STATX_STX_SUBVOL 1
+
 /* Define to 1 if 'st_birthtime' is a member of 'struct stat'. */
 /* #undef HAVE_STRUCT_STAT_ST_BIRTHTIME */
 
@@ -1354,6 +1408,9 @@
 
 /* Define to 1 if you have the 'sysconf' function. */
 #define HAVE_SYSCONF 1
+
+/* Define to 1 if you have the 'sysctlbyname' function. */
+/* #undef HAVE_SYSCTLBYNAME */
 
 /* Define to 1 if you have the <sysexits.h> header file. */
 #define HAVE_SYSEXITS_H 1
@@ -1458,6 +1515,9 @@
 
 /* Define to 1 if you have the <sys/syscall.h> header file. */
 #define HAVE_SYS_SYSCALL_H 1
+
+/* Define to 1 if you have the <sys/sysctl.h> header file. */
+/* #undef HAVE_SYS_SYSCTL_H */
 
 /* Define to 1 if you have the <sys/sysmacros.h> header file. */
 #define HAVE_SYS_SYSMACROS_H 1
@@ -1700,6 +1760,9 @@
 /* Define as the preferred size in bits of long digits */
 /* #undef PYLONG_BITS_IN_DIGIT */
 
+/* Define to use huge pages for pymalloc arenas */
+/* #undef PYMALLOC_USE_HUGEPAGES */
+
 /* enabled builtin hash modules */
 #define PY_BUILTIN_HASHLIB_HASHES "md5,sha1,sha2,sha3,blake2"
 
@@ -1749,9 +1812,6 @@
 
 /* The version of SunOS/Solaris as reported by `uname -r' without the dot. */
 /* #undef Py_SUNOS_VERSION */
-
-/* Define if you want to use tail-calling interpreters in CPython. */
-/* #undef Py_TAIL_CALL_INTERP */
 
 /* Define if you want to enable tracing references for debugging purpose */
 /* #undef Py_TRACE_REFS */
@@ -1818,6 +1878,9 @@
 
 /* The size of '_Bool', as computed by sizeof. */
 #define SIZEOF__BOOL 1
+
+/* Platform tag, used in binary module extension filenames. */
+#define SOABI_PLATFORM "x86_64-linux-gnu"
 
 /* Define to 1 if you have the ANSI C header files. */
 #define STDC_HEADERS 1
@@ -1926,7 +1989,7 @@
 /* Enable X/Open extensions.  Define to 500 only if necessary
    to make mbstate_t available.  */
 #ifndef _XOPEN_SOURCE
-# define _XOPEN_SOURCE 700
+# define _XOPEN_SOURCE 800
 #endif
 
 
@@ -2003,8 +2066,8 @@
 /* Define on NetBSD to activate all library features */
 #define _NETBSD_SOURCE 1
 
-/* Define to activate features from IEEE Stds 1003.1-2008 */
-#define _POSIX_C_SOURCE 200809L
+/* Define to activate features from IEEE Std 1003.1-2024 */
+#define _POSIX_C_SOURCE 202405L
 
 /* Define if you have POSIX threads, and your system does not define that. */
 /* #undef _POSIX_THREADS */
@@ -2024,8 +2087,35 @@
 /* HACL* library can compile SIMD256 implementations */
 #define _Py_HACL_CAN_COMPILE_VEC256 1
 
+/* Define if compiler supports __builtin_shufflevector with 128-bit vectors
+   AND the target architecture has native SIMD (not just API availability) */
+#define _Py_HAVE_EFFICIENT_BUILTIN_SHUFFLEVECTOR 1
+
+/* Define to 1 if libgcc __register_frame and __deregister_frame are linkable.
+   */
+#define _Py_HAVE_LIBGCC_EH_FRAME_REGISTRATION 1
+
+/* Define if you have the 'PR_SET_VMA_ANON_NAME' constant. */
+#define _Py_HAVE_PR_SET_VMA_ANON_NAME 1
+
+/* Define if you have the 'pthread_attr_get_np' function. */
+/* #undef _Py_HAVE_PTHREAD_ATTR_GET_NP */
+
+/* Define if you have the 'strerror_r' function. */
+#define _Py_HAVE_STRERROR_R 1
+
+/* Thread stack size set by the linker (in bytes). */
+/* #undef _Py_LINKER_THREAD_STACK_SIZE */
+
 /* Define to 1 if the machine stack grows down (default); 0 if it grows up. */
 #define _Py_STACK_GROWS_DOWN 1
+
+/* Define if you want to use tail-calling interpreters in CPython. */
+/* #undef _Py_TAIL_CALL_INTERP */
+
+/* Define to 1 if frame unwinding via pointers is expected to work, 0 if not.
+   Leave undefined if unknown. */
+#define _Py_WITH_FRAME_POINTERS 1
 
 /* Define to force use of thread-safe errno, h_errno, and other functions */
 #define _REENTRANT 1
@@ -2040,7 +2130,7 @@
 /* #undef _WASI_EMULATED_SIGNAL */
 
 /* Define to the level of X/Open that your system supports */
-#define _XOPEN_SOURCE 700
+#define _XOPEN_SOURCE 800
 
 /* Define to activate Unix95-and-earlier features */
 #define _XOPEN_SOURCE_EXTENDED 1

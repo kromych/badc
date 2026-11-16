@@ -325,6 +325,61 @@ fn sdkroot_is_the_mach_o_default_root() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+// `LC_BUILD_VERSION` records the version the declared SDK's
+// `SDKSettings.json` names, by `--sysroot` or `$SDKROOT`; with none
+// declared, or none readable, the image claims SDK 26.0. The minimum OS
+// stays 11.0.
+#[test]
+fn mach_o_build_version_records_the_declared_sdk() {
+    const LC_BUILD_VERSION: u32 = 0x32;
+    let dir = tempdir("sdk-version");
+    let src = write(&dir, "m.c", "int main(void) { return 0; }\n");
+    let settings = |name: &str, version: &str| {
+        let body =
+            format!("{{\"DisplayName\":\"x\",\"Version\" : \"{version}\",\"VersionMap\":{{}}}}");
+        write(&dir, &format!("{name}/SDKSettings.json"), &body);
+        dir.join(name).to_str().unwrap().to_owned()
+    };
+    let (sdk15, sdk14, bad) = (
+        settings("a", "15.4"),
+        settings("b", "14.2.1"),
+        settings("c", "15.x"),
+    );
+    let u32le = |b: &[u8], o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap());
+    let stamped = |flags: &[&str], env: &[(&str, &str)]| {
+        let mut args = vec!["-q", "--target=macos-aarch64", "-o", "m"];
+        args.extend_from_slice(flags);
+        args.push(src.to_str().unwrap());
+        let out = run(&dir, &args, env);
+        assert!(out.status.success(), "{flags:?} {env:?}: {}", stderr(&out));
+        let image = std::fs::read(dir.join("m")).expect("read the image");
+        let mut off = 32;
+        for _ in 0..u32le(&image, 16) {
+            if u32le(&image, off) == LC_BUILD_VERSION {
+                return (u32le(&image, off + 12), u32le(&image, off + 16));
+            }
+            off += u32le(&image, off + 4) as usize;
+        }
+        panic!("{flags:?} {env:?}: no LC_BUILD_VERSION");
+    };
+    assert_eq!(stamped(&[], &[]), (11 << 16, 26 << 16));
+    assert_eq!(
+        stamped(&[], &[("SDKROOT", &sdk15)]),
+        (11 << 16, 0x000f_0400)
+    );
+    let sysroot = format!("--sysroot={sdk14}");
+    assert_eq!(
+        stamped(&[&sysroot], &[("SDKROOT", &sdk15)]),
+        (11 << 16, 0x000e_0201)
+    );
+    assert_eq!(
+        stamped(&["--sysroot="], &[("SDKROOT", &sdk15)]),
+        (11 << 16, 26 << 16)
+    );
+    assert_eq!(stamped(&[], &[("SDKROOT", &bad)]), (11 << 16, 26 << 16));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// Static data the image can drop and a wholly-zero object the writer
 /// can move to `.bss`: what the two data knobs decide.
 const KNOBBED: &str = "static int unused[64] = { 1, 2, 3 };\nstatic char zeros[4096];\n\

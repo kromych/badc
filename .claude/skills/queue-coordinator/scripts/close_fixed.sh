@@ -1,5 +1,7 @@
 #!/bin/bash
-# Close each open issue named by a `Fixes: #N` trailer in <base>..HEAD.
+# Close each open issue named by a `Fixes: #N` line in the messages of
+# <base>..HEAD. A line, not a git trailer: a message that keeps `Fixes:` in a
+# paragraph of its own above `Co-Authored-By` has no trailer by git's parse.
 # usage: close_fixed.sh <base> <remote-branch> <pr> local|pushed
 #   local:  commits not yet on <remote-branch> ("arrives with the next push")
 #   pushed: commits already on <remote-branch>
@@ -10,7 +12,7 @@ base=$1 remote=$2 pr=$3 mode=$4
 cd "$(git rev-parse --show-toplevel)" || exit 1
 branch=${remote#*/}
 for c in $(git rev-list --reverse "$base"..HEAD); do
-  for n in $(git log -1 --format='%(trailers:key=Fixes,valueonly,separator=%x20)' "$c" | /usr/bin/grep -oE '[0-9]+'); do
+  for n in $(git log -1 --format=%B "$c" | /usr/bin/grep -E '^Fixes: ' | /usr/bin/grep -oE '#[0-9]+' | tr -d '#'); do
     if git merge-base --is-ancestor "$c" "$remote"; then state=pushed; else state=local; fi
     [ "$state" = "$mode" ] || continue
     st=$(gh issue view "$n" --json state --jq .state)

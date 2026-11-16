@@ -88,7 +88,7 @@ fn match_shift_imm(func: &FunctionSsa, counts: &[u32], idx: usize) -> Option<[(u
     ])
 }
 
-/// Walk every function, folding recognised shifts into their readers.
+/// Walk every function, folding recognized shifts into their readers.
 pub(crate) fn run(funcs: &mut [FunctionSsa]) {
     for func in funcs.iter_mut() {
         let counts = compute_use_counts(func);

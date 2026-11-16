@@ -35,12 +35,11 @@ Disassembly of section .text:
 
 <main>:
                	adrp	x0, <page>
-               	ldrsw	x1, [x0, #0x18]
-               	cmp	w1, #0x7
+               	ldrsw	x0, [x0, #0x10]
+               	cmp	w0, #0x7
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	ldrsw	x0, [x0, #0x18]
                	cmp	w0, #0x7
                	b.eq	<addr>
                	mov	x0, #0x2                // =2

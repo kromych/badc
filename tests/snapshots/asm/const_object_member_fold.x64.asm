@@ -54,12 +54,12 @@ Disassembly of section .text:
                	je	<addr>
                	orq	$0x8, %rax
                	movsd	<rip>, %xmm0 # <addr>
-               	movabsq	$0x400e000000000000, %rcx # imm = 0x400E000000000000
-               	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm0
-               	jp	<addr>
-               	je	<addr>
-               	orq	$0x10, %rax
+               	movq	%rax, %rcx
+               	orq	$0x10, %rcx
+               	movsd	<rip>, %xmm1 # <addr>
+               	ucomisd	%xmm0, %xmm1
+               	cmovneq	%rcx, %rax
+               	cmovpq	%rcx, %rax
                	movl	<rip>, %ecx # <addr>
                	cmpl	$0x1020304, %ecx        # imm = 0x1020304
                	jne	<addr>
@@ -67,9 +67,9 @@ Disassembly of section .text:
                	cmpl	$0x6, %ecx
                	je	<addr>
                	orq	$0x20, %rax
-               	movl	<rip>, %ecx # <addr>
-               	cmpl	$0x1e, %ecx
-               	jne	<addr>
+               	movq	%rax, %rcx
+               	orq	$0x40, %rcx
+               	movl	<rip>, %edx # <addr>
+               	cmpl	$0x1e, %edx
+               	cmovneq	%rcx, %rax
                	retq
-               	orq	$0x40, %rax
-               	jmp	<addr>

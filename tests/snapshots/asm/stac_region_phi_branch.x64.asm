@@ -8,10 +8,7 @@ Disassembly of section .text:
                	leaq	0x8(%rdi), %rax
                	movabsq	$0x7ffffffff000, %r11   # imm = 0x7FFFFFFFF000
                	cmpq	%r11, %rax
-               	jbe	<addr>
-               	movq	$-0xe, %rax
-               	jmp	<addr>
-		R_X86_64_PLT32	__x86_return_thunk-0x4
+               	ja	<addr>
                	stac
                	movq	%rdi, %rax
                	movq	%rsi, %rcx
@@ -20,16 +17,16 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4
+               	movq	$-0xe, %rax
+               	jmp	<addr>
+		R_X86_64_PLT32	__x86_return_thunk-0x4
 
 <put_user_pair>:
                	endbr64
                	leaq	0x10(%rdi), %rax
                	movabsq	$0x7ffffffff000, %r11   # imm = 0x7FFFFFFFF000
                	cmpq	%r11, %rax
-               	jbe	<addr>
-               	movq	$-0xe, %rax
-               	jmp	<addr>
-		R_X86_64_PLT32	__x86_return_thunk-0x4
+               	ja	<addr>
                	stac
                	movq	%rsi, %rax
                	movq	%rdi, %rcx
@@ -43,6 +40,9 @@ Disassembly of section .text:
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4
                	clac
+               	movq	$-0xe, %rax
+               	jmp	<addr>
+		R_X86_64_PLT32	__x86_return_thunk-0x4
                	movq	$-0xe, %rax
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4

@@ -1538,7 +1538,7 @@ fn merge_string_addend_anchors_to_symbol_entry() {
             "SECTIONS { . = 0x1000; .text : { *(.text*) } .rodata : { *(.rodata*) } .data : { *(.data*) } }",
         )
         .expect("parses");
-    // gcc's .rodata.str1.8 shape: 8-aligned strings, NUL padding.
+    // A .rodata.str1.8 section: 8-aligned strings, NUL padding.
     let a = TestObj::new()
         .sec(
             ".text",
@@ -2509,7 +2509,7 @@ fn scriptless_shared_link_uses_the_default_script() {
 /// A `-shared` link whose script discards the dynamic tables gets no
 /// dynamic sections.
 #[test]
-fn shared_link_honours_discarding_the_dynamic_tables() {
+fn shared_link_honors_discarding_the_dynamic_tables() {
     let script = parse_linker_script(
         r#"
 SECTIONS {
@@ -3039,8 +3039,7 @@ fn a_shared_objects_direct_reference_to_imported_data_is_refused() {
     );
 }
 
-/// A `zR` CIE, the shape gcc emits for a unit needing no
-/// personality routine.
+/// A `zR` CIE for a unit needing no personality routine.
 fn eh_cie_zr() -> Vec<u8> {
     alloc::vec![
         0x14, 0, 0, 0, 0, 0, 0, 0, 1, b'z', b'R', 0, 1, 0x78, 0x10, 1, 0x1b, 0x0c, 0x07, 0x08,
@@ -3309,9 +3308,8 @@ fn eh_frame_gc_drops_a_collected_fde_and_its_last_cie() {
     assert_eq!(image_section(&plain.image, ".eh_frame").1.len(), 4 * 24);
 }
 
-/// The x86-64 psABI types `.eh_frame` SHT_X86_64_UNWIND, and gcc
-/// and clang emit it that way; pruning and dedup treat it exactly
-/// as a SHT_PROGBITS input.
+/// The x86-64 psABI types `.eh_frame` SHT_X86_64_UNWIND; pruning and
+/// dedup treat it exactly as a SHT_PROGBITS input.
 #[test]
 fn eh_frame_gc_prunes_unwind_typed_inputs() {
     let script = parse_linker_script(EH_GC_SCRIPT).expect("parses");
@@ -5473,6 +5471,11 @@ fn binding_opts(machine: u16, symbolic: Option<bool>) -> LdsOptions {
 /// the two pointers. Symtab: null(0), sections(1, 2), func(3),
 /// data(4), caller(5).
 fn preemption_unit(machine: u16) -> Vec<u8> {
+    preemption_unit_with(machine, STV_DEFAULT)
+}
+
+/// [`preemption_unit`] with `func`'s `st_other`.
+fn preemption_unit_with(machine: u16, func_other: u8) -> Vec<u8> {
     let mut text = [0u8; 20];
     let (call, got_page, got_lo, abs) = if machine == EM_AARCH64 {
         for (k, w) in [0x9400_0000u32, 0x9000_0000, 0xf940_0000, 0xd65f_03c0]
@@ -5503,6 +5506,7 @@ fn preemption_unit(machine: u16) -> Vec<u8> {
         .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 16, &text)
         .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0; 24])
         .sym("func", STB_GLOBAL, STT_FUNC, 0, 16, 4)
+        .vis(func_other)
         .sym("data", STB_GLOBAL, STT_OBJECT, 1, 0, 8)
         .sym("caller", STB_GLOBAL, STT_FUNC, 0, 0, 16)
         .reloc(0, call.0, 3, call.1, call.2)
@@ -6603,6 +6607,76 @@ fn aarch64_pointer_user() -> Vec<u8> {
         .reloc(0, 0, 4, rt::R_AARCH64_CALL26, 0)
         .reloc(1, 0, 4, rt::R_AARCH64_ABS64, 0)
         .build(EM_AARCH64)
+}
+
+/// AAELF64: a `JUMP_SLOT` naming a symbol marked
+/// `STO_AARCH64_VARIANT_PCS` sets `DT_AARCH64_VARIANT_PCS`, and the
+/// output's symbols keep the flag. As bfd merges it, either the
+/// reference in an object or the library's export marks the symbol; an
+/// unmarked import sets no tag.
+#[test]
+fn a_variant_pcs_import_marks_its_dynamic_symbol_and_the_dynamic_section() {
+    let script = parse_linker_script(&default_script(false)).expect("parses");
+    let marked_ref = || {
+        let mut text = Vec::new();
+        for w in [0x9400_0000u32, 0xd65f_03c0] {
+            text.extend_from_slice(&w.to_le_bytes());
+        }
+        TestObj::new()
+            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &text)
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 8)
+            .sym("foo", STB_GLOBAL, STT_FUNC, usize::MAX, 0, 0)
+            .vis(0x80)
+            .reloc(0, 0, 3, rt::R_AARCH64_CALL26, 0)
+            .build(EM_AARCH64)
+    };
+    for (obj, lib_marks, want) in [
+        (aarch64_pointer_user(), false, false),
+        (aarch64_pointer_user(), true, true),
+        (marked_ref(), false, true),
+    ] {
+        let objs = alloc::vec![parse_lds_object("a.o", obj).expect("parses")];
+        let mut lib = shared_input("libc.so.6", &["foo"], &[]);
+        lib.lib.machine = EM_AARCH64;
+        if lib_marks {
+            lib.lib.variant_pcs_exports.insert(String::from("foo"));
+        }
+        let opts = LdsOptions {
+            emit: LdsEmit::Dyn,
+            interp: Some(String::from("/lib/ld-linux-aarch64.so.1")),
+            shared_libs: alloc::vec![lib],
+            max_page_size: 0x10000,
+            ..LdsOptions::default()
+        };
+        let res = link_with_script(&script, objs, &opts).expect("links");
+        let foo = dynsym_entries(&res.image)
+            .into_iter()
+            .find(|s| s.0 == "foo")
+            .expect("foo in .dynsym");
+        assert_eq!(foo.2, if want { 0x80 } else { 0 }, "{lib_marks}");
+        let tagged = dyn_tags(&res.image).contains(&(dynamic::DT_AARCH64_VARIANT_PCS, 0));
+        assert_eq!(tagged, want, "{lib_marks}");
+    }
+}
+
+/// A shared object exports its marked function with the flag, and the
+/// `JUMP_SLOT` of its own preemptible call to it sets the tag.
+#[test]
+fn a_shared_objects_variant_pcs_function_keeps_its_flag() {
+    let script = parse_linker_script(SHARED_SCRIPT).expect("script parses");
+    let unit = preemption_unit_with(EM_AARCH64, 0x80);
+    let objs = alloc::vec![parse_lds_object("u.o", unit).expect("parses")];
+    let res = link_with_script(&script, objs, &binding_opts(EM_AARCH64, None)).expect("links");
+    let func = dynsym_entries(&res.image)
+        .into_iter()
+        .find(|s| s.0 == "func")
+        .expect("func in .dynsym");
+    assert_eq!(func.2, 0x80);
+    assert!(dyn_tags(&res.image).contains(&(dynamic::DT_AARCH64_VARIANT_PCS, 0)));
+    let data = dynsym_entries(&res.image)
+        .into_iter()
+        .find(|s| s.0 == "data");
+    assert_eq!(data.map(|d| d.2), Some(0));
 }
 
 /// GNU ld 2.46.1's aarch64 PLT (AAELF64, PLT sequences): a 32-byte

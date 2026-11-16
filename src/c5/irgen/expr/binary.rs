@@ -41,6 +41,7 @@ impl<'a> Walker<'a> {
         b.store_local(slot, short_val, kind_s);
         let rhs_blk = b.new_block();
         let after_blk = b.new_block();
+        b.expect(self.expected_truth(lhs));
         match op {
             // `a && b`: skip rhs when lhs == 0.
             ShortCircuitOp::Lan => b.branch_zero(lhs_t, after_blk, rhs_blk),
@@ -208,7 +209,7 @@ impl<'a> Walker<'a> {
         rhs: ExprId,
         ty: i64,
     ) -> Result<ValueId, WalkError> {
-        // A vector-typed node is element-wise (GCC vector extension),
+        // A vector-typed node is element-wise (GNU C vector extension),
         // and a 128-bit operand makes the node 128-bit whatever type it
         // carries: a comparison's result is `int`, and the parser spells
         // the unary operators as a binop against a literal.
@@ -232,7 +233,7 @@ impl<'a> Walker<'a> {
             return Ok(v);
         }
         // C99 6.6: a constant expression evaluates at translation time.
-        // The parser leaves the synthesised pointer-arithmetic scaling
+        // The parser leaves the synthesized pointer-arithmetic scaling
         // unfolded (`arr[K]` lowers to `arr + (K * sizeof(*arr))`).
         if imm_safe_binop(op)
             && let Expr::IntLit { val: lv_imm, .. } = *self.ast.expr(lhs)
@@ -368,6 +369,56 @@ impl<'a> Walker<'a> {
         Ok(self.store_into_bitfield(b, addr, bf, rhs_v, seg, vol, align))
     }
 
+    /// An SVE assignment: the destination's address and the value stored.
+    fn walk_sve_assign(
+        &mut self,
+        b: &mut SsaBuilder,
+        lhs: ExprId,
+        rhs: ExprId,
+        ty: i64,
+    ) -> Result<(ValueId, ValueId), WalkError> {
+        use crate::c5::op::Intrinsic as I;
+        let store = if self.sve_kind(ty) == Some(LoadKind::SveVector) {
+            I::SveStoreZ
+        } else {
+            I::SveStoreP
+        };
+        let dst = self.walk_expr_rvalue(b, lhs)?;
+        let value = self.walk_sve_value(b, rhs)?;
+        b.intrinsic(store as i64, alloc::vec![dst, value]);
+        Ok((dst, value))
+    }
+
+    /// The value of `id`, an expression of an SVE type: an object's whole
+    /// register, a call's result, an assignment's stored value.
+    pub(in crate::c5::irgen) fn walk_sve_value(
+        &mut self,
+        b: &mut SsaBuilder,
+        id: ExprId,
+    ) -> Result<ValueId, WalkError> {
+        use crate::c5::op::Intrinsic as I;
+        let ty = expr_ty(self.ast.expr(id)).unwrap_or(0);
+        let Some(kind) = self.sve_kind(ty) else {
+            return Err(WalkError::InvalidExpr {
+                id,
+                kind: "an SVE value of no SVE type",
+            });
+        };
+        match *self.ast.expr(id) {
+            Expr::Assign { lhs, rhs, ty } => Ok(self.walk_sve_assign(b, lhs, rhs, ty)?.1),
+            Expr::Call { .. } | Expr::Simd { .. } => self.walk_expr_rvalue(b, id),
+            _ => {
+                let load = if kind == LoadKind::SveVector {
+                    I::SveLoadZ
+                } else {
+                    I::SveLoadP
+                };
+                let addr = self.walk_expr_rvalue(b, id)?;
+                Ok(b.intrinsic(load as i64, alloc::vec![addr]))
+            }
+        }
+    }
+
     /// C99 6.5.16.1 simple assignment.
     pub(super) fn walk_assign(
         &mut self,
@@ -379,6 +430,11 @@ impl<'a> Walker<'a> {
         let lhs_ty = expr_ty(self.ast.expr(lhs)).unwrap_or(ty);
         if is_atomic_object_ty(lhs_ty) {
             return self.walk_atomic_assign(b, lhs, rhs, lhs_ty);
+        }
+        // An SVE value moves through a register of its kind into the
+        // destination, whose address is the expression's value.
+        if self.sve_kind(ty).is_some() {
+            return Ok(self.walk_sve_assign(b, lhs, rhs, ty)?.0);
         }
         // C99 6.5.16.1p1: a struct-typed assignment copies the bytes.
         // Both sides are address producers, and the expression's value

@@ -45,14 +45,14 @@ box is the `local-boxes` skill.
 
 ## Implementation choices
 
-Solutions must be generic and motivated by C99 or by the existing practice where
+Solutions must be generic and motivated by C17 or by the existing practice where
 the standards leave gaps. Look for ways to build a generic infrastructure rather
 than for wedging in quick hacks to get something compiling. Don't write lore,
 refer to unresolved issues and milestones with the TODO marker, no mentioning of
 milestones and issue numbers otherwise.
 
 Code, comments, test names and test comments describe the construct and the rule
-that governs it: a C99 clause, the platform ABI, or the documented behavior of gcc,
+that governs it: a C17 clause, the platform ABI, or the documented behavior of gcc,
 clang, GNU ld or gas. They do not name the projects badc builds (the Linux kernel,
 CPython, sqlite, edk2, ...) or their files, macros, configuration options and build
 steps: that reads as a patch aimed at one program. Platform references stay: the OS
@@ -68,6 +68,10 @@ needed but also takes time to get through without any benefit to the reader. Sav
 your time and the reader's time - be concise and precise. Make sure the same style
 applies throughout.
 
+Write US English in code, comments, docs, commit messages, and issues: US
+spelling (`-ize`, `-or`, `catalog`, `behavior`), the serial comma, and a
+closed em dash written `--`, as sources and docs are ASCII-only.
+
 Maintain the ratio of comment lines to line of code under 1:10. Requiring more means
 that the architecture has to be audited. For one-line changes use no more than
 3 lines of comments iff the change cannot be expressed in the self-explanatory way.
@@ -81,6 +85,15 @@ Keep the tool output terse to slow context growth.
 * Add a regression test for each bug or feature to lock the behaviors in
 * Analyze SSA and assembler delta's under `./tests/snapshots` for improvements.
 
+## Closing a milestone
+
+A milestone closes when no critical, high-severity, or miscompile issue is
+open in it, the rest have moved to the next milestone, the queues are
+drained, the release head is pushed with CI green, and the documentation and
+the open issues have been audited against that head. `doc/std-conformance.md`
+is the normative document and is audited first. The steps are the
+`milestone-close` skill.
+
 ## Issue labels
 
 Every issue carries:
@@ -92,7 +105,7 @@ Every issue carries:
   `preprocessor`, `parser`, `irgen`, `ssa`, `emission`, `object`, `linker`,
   `assembler`, `driver`, `archiver`, `libc`, `vm`, `jit`, `diagnostics`,
   `tooling`;
-* `conformance` for a C99 or POSIX deviation, `memory-safety` for memory
+* `conformance` for a C17 or POSIX deviation, `memory-safety` for memory
   corruption, and `os:` / `arch:` when only some targets are affected;
 * `upstream` for a defect in an upstream project (its code, its tests'
   timing, its build) that badc's validation runs into.

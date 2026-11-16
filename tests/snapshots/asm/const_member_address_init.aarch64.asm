@@ -22,14 +22,13 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	ldr	x2, [x0, #0x38]
-               	add	x1, x0, #0x28
-               	cmp	x2, x1
+               	ldr	x1, [x0, #0x38]
+               	add	x0, x0, #0x28
+               	cmp	x1, x0
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	ldr	x0, [x0, #0x38]
-               	cmp	x0, x1
+               	cmp	x1, x0
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret

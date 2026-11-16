@@ -123,10 +123,7 @@ Disassembly of section .text:
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x2c, %eax
                	jne	<addr>
-               	movl	<rip>, %eax # <addr>
-               	cmpl	$0x37, %eax
-               	je	<addr>
-               	movl	$0x17, %eax
-               	retq
                	xorl	%eax, %eax
+               	retq
+               	movl	$0x17, %eax
                	retq

@@ -4,6 +4,12 @@
  * resolved after substitution, which is what lets one template select
  * among a family of size-suffixed helpers. */
 
+#if defined(__APPLE__)
+#define CSYM(name) "_" name
+#else
+#define CSYM(name) name
+#endif
+
 int helper_1(void) { return 1; }
 int helper_2(void) { return 2; }
 int helper_4(void) { return 4; }
@@ -11,14 +17,14 @@ int helper_8(void) { return 8; }
 
 #if defined(__x86_64__)
 #define CALL_SIZED(r, n)                                                       \
-    __asm__ __volatile__("call helper_%c[sz]"                                  \
+    __asm__ __volatile__("call " CSYM("helper_") "%c[sz]"                                  \
                          : "=a"(r)                                             \
                          : [sz] "i"(n)                                         \
                          : "memory", "cc", "rdi", "rsi", "rdx", "rcx", "r8",   \
                            "r9", "r10", "r11")
 #elif defined(__aarch64__)
 #define CALL_SIZED(r, n)                                                       \
-    __asm__ __volatile__("bl helper_%c[sz]"                                    \
+    __asm__ __volatile__("bl " CSYM("helper_") "%c[sz]"                                    \
                          : "=r"(r)                                             \
                          : [sz] "i"(n)                                         \
                          : "memory", "cc", "x1", "x2", "x3", "x4", "x5", "x6", \

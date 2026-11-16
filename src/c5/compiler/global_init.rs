@@ -156,7 +156,7 @@ impl Compiler {
         &mut self,
         var_ty: i64,
         target_fn: &Option<(crate::c5::symbol::FnType, i64)>,
-        line: usize,
+        at: super::Site,
     ) -> Result<bool, C5Error> {
         if target_fn.is_none() {
             return Ok(false);
@@ -165,12 +165,7 @@ impl Compiler {
             return Ok(false);
         };
         let what = ("initializer", "declared", "init");
-        self.check_fn_pointer_conversion(
-            (var_ty, target_fn),
-            (init_ty, &Some(init_fn)),
-            line,
-            what,
-        )?;
+        self.check_fn_pointer_conversion((var_ty, target_fn), (init_ty, &Some(init_fn)), at, what)?;
         Ok(true)
     }
 
@@ -262,8 +257,8 @@ impl Compiler {
     /// Mark `tls_data[..off + 8]` as part of the loader's initialization
     /// template: a relocated slot must be file-backed `.tdata`, never
     /// `.tbss`.
-    fn note_tls_init(&mut self, off: i64) {
-        let end = off as usize + 8;
+    fn note_tls_init(&mut self, off: i64, bytes: usize) {
+        let end = off as usize + bytes;
         if end > self.tls_init_size {
             self.tls_init_size = end;
         }
@@ -283,8 +278,9 @@ impl Compiler {
         let kept = self.init_reloc_for(reloc, var_ty)?;
         let bits = self.to_storage_bits(value, reloc, var_ty);
         let at = off as usize;
-        self.tls_data[at..at + 8].copy_from_slice(&(bits as u64).to_le_bytes());
-        self.note_tls_init(off);
+        let width = self.size_of_type(var_ty).clamp(1, 16);
+        self.tls_data[at..at + width].copy_from_slice(&bits.to_le_bytes()[..width]);
+        self.note_tls_init(off, width);
         match kept {
             InitElemReloc::None | InitElemReloc::Float64Bits => {}
             InitElemReloc::Data(src_sym) => match src_sym {
@@ -333,7 +329,7 @@ impl Compiler {
         target_fn: &Option<(crate::c5::symbol::FnType, i64)>,
     ) -> Result<(), C5Error> {
         // A block-scope `const` scalar object folds into a static
-        // object's initializer, as GCC accepts. No-op at file scope.
+        // object's initializer (6.6p10). No-op at file scope.
         self.const_object_fold += 1;
         let r = self.with_nesting("initializer", |c| {
             c.parse_global_initializer_inner(var_ty, var_offset, is_thread_local, target_fn)
@@ -349,7 +345,7 @@ impl Compiler {
         is_thread_local: bool,
         target_fn: &Option<(crate::c5::symbol::FnType, i64)>,
     ) -> Result<(), C5Error> {
-        let line = self.lex.line;
+        let at = self.site();
         // C11 6.5.1.1 generic selection as a static initializer element:
         // select the association, initialize this slot from the winning
         // expression, then resume past the `_Generic(...)`.
@@ -368,7 +364,7 @@ impl Compiler {
             if self.lex.tk != '}' {
                 return Err(self.compile_err_at(
                     Code::INVALID_INITIALIZER,
-                    line,
+                    at.line,
                     "scalar initializer wrapped in `{ ... }` must hold a single value",
                 ));
             }
@@ -384,11 +380,11 @@ impl Compiler {
                 && !matches!(reloc, InitElemReloc::None)
             {
                 let text = "a `__ptr32` pointer's static initializer is not an integer constant";
-                return Err(self.compile_err_at(Code::UNSUPPORTED, line, text));
+                return Err(self.compile_err_at(Code::UNSUPPORTED, at.line, text));
             }
             self.restore_init_checkpoint(cp);
         }
-        let fn_checked = self.check_designator_initializer(var_ty, target_fn, line)?;
+        let fn_checked = self.check_designator_initializer(var_ty, target_fn, at)?;
         // C99 6.6p9 address constant, decided by the shared
         // constant-initializer evaluator, which sees the initializer
         // whole because a leading cast sets the stride of a trailing
@@ -410,13 +406,14 @@ impl Compiler {
                             target_fn,
                             ty,
                             (false, false),
-                            line,
+                            at,
                         )?;
                     }
                     if is_thread_local {
-                        self.write_tls_init_value(line, var_offset, value, reloc, var_ty)?;
+                        self.write_tls_init_value(at.line, var_offset, value, reloc, var_ty)?;
                     } else {
-                        self.write_init_value(var_offset as usize, 8, value, reloc, var_ty)?;
+                        let width = self.size_of_type(var_ty);
+                        self.write_init_value(var_offset as usize, width, value, reloc, var_ty)?;
                     }
                     return Ok(());
                 }
@@ -460,11 +457,17 @@ impl Compiler {
             if matches!(self.init_reloc_for(reloc, var_ty)?, InitElemReloc::None) {
                 let value = self.to_storage_bits(ent_pc as i128, reloc, var_ty);
                 return if is_thread_local {
-                    self.write_tls_init_value(line, var_offset, value, InitElemReloc::None, var_ty)
+                    self.write_tls_init_value(
+                        at.line,
+                        var_offset,
+                        value,
+                        InitElemReloc::None,
+                        var_ty,
+                    )
                 } else {
                     self.write_init_value(
                         var_offset as usize,
-                        8,
+                        self.size_of_type(var_ty),
                         value,
                         InitElemReloc::None,
                         var_ty,
@@ -474,7 +477,7 @@ impl Compiler {
             let bytes = (ent_pc as u64).to_le_bytes();
             if is_thread_local {
                 self.tls_data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
-                self.note_tls_init(var_offset);
+                self.note_tls_init(var_offset, 8);
             } else {
                 self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
                 self.note_init_reloc(var_offset as usize);
@@ -498,7 +501,7 @@ impl Compiler {
             // symbol itself, so the addend is zero.
             let target_offset = self.symbols[target_idx].val;
             if is_thread_local {
-                self.note_tls_init(var_offset);
+                self.note_tls_init(var_offset, 8);
             }
             self.emit_addr_reloc(var_offset, target_idx, target_offset, is_thread_local)?;
             return Ok(());
@@ -520,9 +523,9 @@ impl Compiler {
                 && a.is_array
                 && (self.lex.tk == ';' || self.lex.tk == ',')
             {
-                self.check_constant_init_conversion(var_ty, target_fn, a.ty, (false, false), line)?;
+                self.check_constant_init_conversion(var_ty, target_fn, a.ty, (false, false), at)?;
                 if is_thread_local {
-                    self.note_tls_init(var_offset);
+                    self.note_tls_init(var_offset, 8);
                 }
                 self.emit_addr_reloc(var_offset, a.sym_idx, a.off, is_thread_local)?;
                 return Ok(());
@@ -553,7 +556,7 @@ impl Compiler {
                 if is_thread_local {
                     self.tls_data[var_offset as usize..var_offset as usize + 8]
                         .copy_from_slice(&bytes);
-                    self.note_tls_init(var_offset);
+                    self.note_tls_init(var_offset, 8);
                     self.tls_data_relocs.push(reloc);
                 } else {
                     self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
@@ -580,11 +583,12 @@ impl Compiler {
                         value, reloc, ty, ..
                     } = leaf;
                     let flags = (leaf.is_zero_int(), false);
-                    self.check_constant_init_conversion(var_ty, target_fn, ty, flags, line)?;
+                    self.check_constant_init_conversion(var_ty, target_fn, ty, flags, at)?;
                     if is_thread_local {
-                        self.write_tls_init_value(line, var_offset, value, reloc, var_ty)?;
+                        self.write_tls_init_value(at.line, var_offset, value, reloc, var_ty)?;
                     } else {
-                        self.write_init_value(var_offset as usize, 8, value, reloc, var_ty)?;
+                        let width = self.size_of_type(var_ty);
+                        self.write_init_value(var_offset as usize, width, value, reloc, var_ty)?;
                     }
                     return Ok(());
                 }
@@ -592,7 +596,7 @@ impl Compiler {
             }
         }
 
-        self.write_global_scalar_initializer(var_ty, var_offset, is_thread_local, target_fn, line)
+        self.write_global_scalar_initializer(var_ty, var_offset, is_thread_local, target_fn, at)
     }
 
     /// The conversion check of a constant initializer of type `init_ty`
@@ -606,12 +610,12 @@ impl Compiler {
         target_fn: &Option<(crate::c5::symbol::FnType, i64)>,
         init_ty: i64,
         flags: (bool, bool),
-        line: usize,
+        at: super::Site,
     ) -> Result<(), C5Error> {
         let what = ("initializer", "declared", "init");
         let (declared, init) = ((var_ty, target_fn), (init_ty, &None));
-        if !self.check_function_conversion(declared, init, true, line, what)? {
-            self.check_initializer_conversion(declared, init, flags, line)?;
+        if !self.check_function_conversion(declared, init, true, at, what)? {
+            self.check_initializer_conversion(declared, init, flags, at)?;
         }
         Ok(())
     }
@@ -641,11 +645,14 @@ impl Compiler {
             // which handles the address and function-reference forms.
             let after_open = self.lex.snapshot();
             let mut depth: i64 = 1;
+            let mut commas = 0usize;
             while depth > 0 && self.lex.tk != 0 {
                 if self.lex.tk == '(' {
                     depth += 1;
                 } else if self.lex.tk == ')' {
                     depth -= 1;
+                } else if self.lex.tk == ',' && depth == 1 {
+                    commas += 1;
                 }
                 self.next()?;
             }
@@ -660,14 +667,12 @@ impl Compiler {
                 self.restore_lex(pre_paren);
             } else {
                 self.restore_lex(after_open);
-                self.parse_global_initializer(var_ty, var_offset, is_thread_local, target_fn)?;
-                // C99 6.6p3: the evaluated comma of `(a, b)`.
-                if self.lex.tk == ',' {
-                    return Err(self.compile_err(
-                        Code::CONSTANT_EXPRESSION,
-                        "a comma operator is evaluated in this constant expression",
-                    ));
+                // `(a, b)` takes the value of `b`; see `parse_const_expr_comma_val`.
+                for _ in 0..commas {
+                    self.parse_const_expr_discarded()?;
+                    self.accept(',')?;
                 }
+                self.parse_global_initializer(var_ty, var_offset, is_thread_local, target_fn)?;
                 self.accept(')')?;
                 return Ok(true);
             }
@@ -683,7 +688,7 @@ impl Compiler {
         var_offset: i64,
         is_thread_local: bool,
         target_fn: &Option<(crate::c5::symbol::FnType, i64)>,
-        line: usize,
+        at: super::Site,
     ) -> Result<(), C5Error> {
         // A floating destination takes the f64 folder: the integer
         // constant evaluator does not fold arithmetic on float
@@ -696,19 +701,19 @@ impl Compiler {
         // as if by assignment (6.7.8p11).
         let cv = self.parse_const_expr_cond_val()?;
         let zero = matches!(cv, ConstVal::Int { val: 0, .. });
-        self.check_constant_init_conversion(var_ty, target_fn, cv.expr_ty(), (zero, false), line)?;
+        self.check_constant_init_conversion(var_ty, target_fn, cv.expr_ty(), (zero, false), at)?;
         if let ConstVal::Int { val, ty, .. } = cv {
-            self.check_constant_conversion(val, ty, var_ty, 0, line);
+            self.check_constant_conversion(val, ty, var_ty, 0, at);
             if !self.initializes_as_is(ty, var_ty) {
-                self.check_enum_conversion(cv.enumeration().or(Some(ty)), var_ty, 0, line);
+                self.check_enum_conversion(cv.enumeration().or(Some(ty)), var_ty, 0, at);
             }
         }
         // C99 6.6 / 6.3.2.3: an address constant in a pointer-width
         // integer slot is a link-time relocation, and takes the one a
-        // pointer-typed slot would; gcc and clang accept it. Restricted
-        // to a bare designator, whose offset is the symbol's own address:
-        // a const-expr addend is not scaled by the pointee size here, so
-        // it stays rejected rather than stored at a wrong offset.
+        // pointer-typed slot would. Restricted to a bare designator, whose
+        // offset is the symbol's own address: a const-expr addend is not
+        // scaled by the pointee size here, so it stays rejected rather than
+        // stored at a wrong offset.
         if let ConstVal::Addr(a) = cv
             && let Some(sym_idx) = a.root.sym()
             && a.value == self.symbols[sym_idx].val
@@ -722,7 +727,7 @@ impl Compiler {
                 if is_thread_local {
                     self.tls_data[var_offset as usize..var_offset as usize + 8]
                         .copy_from_slice(&bytes);
-                    self.note_tls_init(var_offset);
+                    self.note_tls_init(var_offset, 8);
                 } else {
                     self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
                     self.note_init_reloc(var_offset as usize);
@@ -730,7 +735,7 @@ impl Compiler {
                 self.push_code_reloc(is_thread_local, var_offset as u64, sym_idx, ent_pc);
             } else {
                 if is_thread_local {
-                    self.note_tls_init(var_offset);
+                    self.note_tls_init(var_offset, 8);
                 }
                 self.emit_addr_reloc(var_offset, sym_idx, a.value, is_thread_local)?;
             }
@@ -760,13 +765,7 @@ impl Compiler {
         } else {
             self.to_storage_bits(cv.as_i128(), InitElemReloc::None, var_ty)
         };
-        // An integer slot is 8 bytes wide, so a 16-byte value needs
-        // both halves written.
-        let write_size = if var_is_float || self.is_int128_ty(var_ty) {
-            self.size_of_type(var_ty)
-        } else {
-            8
-        };
+        let write_size = self.size_of_type(var_ty).clamp(1, 16);
 
         let bytes = value.to_le_bytes();
         let segment = if is_thread_local {
@@ -775,14 +774,13 @@ impl Compiler {
             &mut self.data
         };
         let off = var_offset as usize;
-        // The slot is 8 preallocated zero bytes in either segment.
         debug_assert!(off + write_size <= segment.len());
         segment[off..off + write_size].copy_from_slice(&bytes[..write_size]);
 
         if is_thread_local {
             // A written slot has to be file-backed `.tdata`, so move
             // the boundary past it.
-            let end = off + 8;
+            let end = off + write_size;
             if end > self.tls_init_size {
                 self.tls_init_size = end;
             }

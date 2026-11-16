@@ -9,7 +9,11 @@ struct pollfd {
     short revents;
 };
 
+#ifdef __APPLE__
+typedef unsigned int nfds_t;
+#else
 typedef unsigned long nfds_t;
+#endif
 
 #define POLLIN  0x001
 #define POLLPRI 0x002
@@ -18,11 +22,16 @@ typedef unsigned long nfds_t;
 #define POLLHUP 0x010
 #define POLLNVAL 0x020
 
-// XSI normal/priority-band events; the values match macOS and Linux.
+// XSI normal/priority-band events. The SDK's POLLWRNORM is POLLOUT.
 #define POLLRDNORM 0x040
 #define POLLRDBAND 0x080
+#ifdef __APPLE__
+#define POLLWRNORM POLLOUT
+#define POLLWRBAND 0x100
+#else
 #define POLLWRNORM 0x100
 #define POLLWRBAND 0x200
+#endif
 
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
@@ -48,6 +57,7 @@ int poll(struct pollfd *fds, nfds_t nfds, int timeout);
 // struct timespec comes from <time.h> at the call site; the mask is passed by
 // address (sigset_t *, or NULL).
 struct timespec;
+#include <signal.h>
 int ppoll(struct pollfd *fds, nfds_t nfds, const struct timespec *tmo,
-          const void *sigmask);
+          const sigset_t *sigmask);
 #endif

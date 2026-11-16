@@ -36,11 +36,10 @@ Disassembly of section .text:
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldursw	x0, [x29, #-0x70]
+               	ldur	w0, [x29, #-0x70]
                	and	x0, x0, #0xf000
-               	mov	x17, #0x4000            // =16384
-               	cmp	w0, w17
-               	b.eq	<addr>
+               	eor	x0, x0, #0x4000
+               	cbz	w0, <addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10

@@ -1,0 +1,2059 @@
+# Function declarations the reference finds compatible on macos-aarch64,
+# written by scripts/measure_prototypes.py: `<header> y|p` (p: the unit
+# includes the base headers first), then `<name>\t<badc's type>`.
+
+mm_malloc.h y
+_Exit	void (*)(int)
+_mm_free	void (*)(void*)
+_mm_malloc	void* (*)(unsigned long, unsigned long)
+a64l	long (*)(const char*)
+abort	void (*)(void)
+abs	int (*)(int)
+aligned_alloc	void* (*)(unsigned long, unsigned long)
+at_quick_exit	int (*)(void (*)(void))
+atexit	int (*)(void (*)(void))
+atof	double (*)(const char*)
+atoi	int (*)(const char*)
+atol	long (*)(const char*)
+atoll	long long (*)(const char*)
+bsearch	void* (*)(const void*, const void*, unsigned long, unsigned long, int (*)(const void*, const void*))
+calloc	void* (*)(unsigned long, unsigned long)
+div	div_t (*)(int, int)
+drand48	double (*)(void)
+erand48	double (*)(unsigned short*)
+exit	void (*)(int)
+free	void (*)(void*)
+getenv	char* (*)(const char*)
+getloadavg	int (*)(double*, int)
+grantpt	int (*)(int)
+initstate	char* (*)(unsigned int, char*, unsigned long)
+jrand48	long (*)(unsigned short*)
+l64a	char* (*)(long)
+labs	long (*)(long)
+lcong48	void (*)(unsigned short*)
+ldiv	ldiv_t (*)(long, long)
+llabs	long long (*)(long long)
+lldiv	lldiv_t (*)(long long, long long)
+lrand48	long (*)(void)
+malloc	void* (*)(unsigned long)
+mblen	int (*)(const char*, unsigned long)
+mbstowcs	unsigned long (*)(int*, const char*, unsigned long)
+mbtowc	int (*)(int*, const char*, unsigned long)
+member div_t.quot	int*
+member div_t.rem	int*
+member ldiv_t.quot	long*
+member ldiv_t.rem	long*
+member lldiv_t.quot	long long*
+member lldiv_t.rem	long long*
+mergesort	int (*)(void*, unsigned long, unsigned long, int (*)(const void*, const void*))
+mkstemp	int (*)(char*)
+mktemp	char* (*)(char*)
+mrand48	long (*)(void)
+nrand48	long (*)(unsigned short*)
+posix_memalign	int (*)(void**, unsigned long, unsigned long)
+posix_openpt	int (*)(int)
+ptsname	char* (*)(int)
+ptsname_r	int (*)(int, char*, unsigned long)
+putenv	int (*)(char*)
+qsort	void (*)(void*, unsigned long, unsigned long, int (*)(const void*, const void*))
+quick_exit	void (*)(int)
+rand	int (*)(void)
+rand_r	int (*)(unsigned int*)
+random	long (*)(void)
+realloc	void* (*)(void*, unsigned long)
+realpath	char* (*)(const char*, char*)
+seed48	unsigned short* (*)(unsigned short*)
+setenv	int (*)(const char*, const char*, int)
+setkey	void (*)(const char*)
+setstate	char* (*)(const char*)
+srand	void (*)(unsigned int)
+srand48	void (*)(long)
+srandom	void (*)(unsigned int)
+strtod	double (*)(const char*, char**)
+strtof	float (*)(const char*, char**)
+strtol	long (*)(const char*, char**, int)
+strtold	long double (*)(const char*, char**)
+strtoll	long long (*)(const char*, char**, int)
+strtoul	unsigned long (*)(const char*, char**, int)
+strtoull	unsigned long long (*)(const char*, char**, int)
+system	int (*)(const char*)
+typedef size_t	unsigned long*
+typedef wchar_t	int*
+unlockpt	int (*)(int)
+valloc	void* (*)(unsigned long)
+wcstombs	unsigned long (*)(char*, const int*, unsigned long)
+wctomb	int (*)(char*, int)
+
+stddef.h y
+typedef max_align_t	long double*
+typedef ptrdiff_t	long*
+
+stdint.h y
+typedef int16_t	short*
+typedef int32_t	int*
+typedef int64_t	long long*
+typedef int8_t	signed char*
+typedef int_fast16_t	short*
+typedef int_fast32_t	int*
+typedef int_fast64_t	long long*
+typedef int_fast8_t	signed char*
+typedef int_least16_t	short*
+typedef int_least32_t	int*
+typedef int_least64_t	long long*
+typedef int_least8_t	signed char*
+typedef intmax_t	long*
+typedef intptr_t	long*
+typedef uint16_t	unsigned short*
+typedef uint32_t	unsigned int*
+typedef uint64_t	unsigned long long*
+typedef uint8_t	unsigned char*
+typedef uint_fast16_t	unsigned short*
+typedef uint_fast32_t	unsigned int*
+typedef uint_fast64_t	unsigned long long*
+typedef uint_fast8_t	unsigned char*
+typedef uint_least16_t	unsigned short*
+typedef uint_least32_t	unsigned int*
+typedef uint_least64_t	unsigned long long*
+typedef uint_least8_t	unsigned char*
+typedef uintmax_t	unsigned long*
+typedef uintptr_t	unsigned long*
+
+inttypes.h y
+imaxabs	long (*)(long)
+imaxdiv	imaxdiv_t (*)(long, long)
+member imaxdiv_t.quot	long*
+member imaxdiv_t.rem	long*
+strtoimax	long (*)(const char*, char**, int)
+strtoumax	unsigned long (*)(const char*, char**, int)
+
+setjmp.h y
+_longjmp	void (*)(int*, int)
+_setjmp	int (*)(int*)
+longjmp	void (*)(int*, int)
+setjmp	int (*)(int*)
+siglongjmp	void (*)(int*, int)
+sigsetjmp	int (*)(int*, int)
+typedef jmp_buf	int (*)[48]
+typedef sigjmp_buf	int (*)[49]
+
+string.h y
+bcmp	int (*)(const void*, const void*, unsigned long)
+bcopy	void (*)(const void*, void*, unsigned long)
+bzero	void (*)(void*, unsigned long)
+ffs	int (*)(int)
+index	char* (*)(const char*, int)
+memccpy	void* (*)(void*, const void*, int, unsigned long)
+memchr	void* (*)(const void*, int, unsigned long)
+memcmp	int (*)(const void*, const void*, unsigned long)
+memcpy	void* (*)(void*, const void*, unsigned long)
+memmem	void* (*)(const void*, unsigned long, const void*, unsigned long)
+memmove	void* (*)(void*, const void*, unsigned long)
+memset	void* (*)(void*, int, unsigned long)
+rindex	char* (*)(const char*, int)
+strcasecmp	int (*)(const char*, const char*)
+strcasestr	char* (*)(const char*, const char*)
+strcat	char* (*)(char*, const char*)
+strchr	char* (*)(const char*, int)
+strchrnul	char* (*)(const char*, int)
+strcmp	int (*)(const char*, const char*)
+strcoll	int (*)(const char*, const char*)
+strcpy	char* (*)(char*, const char*)
+strcspn	unsigned long (*)(const char*, const char*)
+strdup	char* (*)(const char*)
+strerror	char* (*)(int)
+strerror_r	int (*)(int, char*, unsigned long)
+strlcat	unsigned long (*)(char*, const char*, unsigned long)
+strlcpy	unsigned long (*)(char*, const char*, unsigned long)
+strlen	unsigned long (*)(const char*)
+strncasecmp	int (*)(const char*, const char*, unsigned long)
+strncat	char* (*)(char*, const char*, unsigned long)
+strncmp	int (*)(const char*, const char*, unsigned long)
+strncpy	char* (*)(char*, const char*, unsigned long)
+strndup	char* (*)(const char*, unsigned long)
+strnlen	unsigned long (*)(const char*, unsigned long)
+strpbrk	char* (*)(const char*, const char*)
+strrchr	char* (*)(const char*, int)
+strsep	char* (*)(char**, const char*)
+strsignal	char* (*)(int)
+strspn	unsigned long (*)(const char*, const char*)
+strstr	char* (*)(const char*, const char*)
+strtok	char* (*)(char*, const char*)
+strtok_r	char* (*)(char*, const char*, char**)
+strxfrm	unsigned long (*)(char*, const char*, unsigned long)
+
+sched.h y
+member struct sched_param.__opaque	char (*)[4]
+member struct sched_param.sched_priority	int*
+sched_get_priority_max	int (*)(int)
+sched_get_priority_min	int (*)(int)
+sched_yield	int (*)(void)
+
+spawn.h y
+posix_spawn	int (*)(int*, const char*, void* const *, void* const *, char* const *, char* const *)
+posix_spawn_file_actions_addclose	int (*)(void**, int)
+posix_spawn_file_actions_adddup2	int (*)(void**, int, int)
+posix_spawn_file_actions_addopen	int (*)(void**, int, const char*, int, unsigned short)
+posix_spawn_file_actions_destroy	int (*)(void**)
+posix_spawn_file_actions_init	int (*)(void**)
+posix_spawnattr_destroy	int (*)(void**)
+posix_spawnattr_init	int (*)(void**)
+posix_spawnattr_setflags	int (*)(void**, short)
+posix_spawnattr_setpgroup	int (*)(void**, int)
+posix_spawnattr_setsigdefault	int (*)(void**, const unsigned int*)
+posix_spawnattr_setsigmask	int (*)(void**, const unsigned int*)
+posix_spawnp	int (*)(int*, const char*, void* const *, void* const *, char* const *, char* const *)
+typedef mode_t	unsigned short*
+typedef pid_t	int*
+typedef posix_spawn_file_actions_t	void**
+typedef posix_spawnattr_t	void**
+typedef sigset_t	unsigned int*
+typedef u_int16_t	unsigned short*
+typedef u_int32_t	unsigned int*
+typedef u_int64_t	unsigned long long*
+typedef u_int8_t	unsigned char*
+
+stdio.h y
+__stderrp	FILE**
+__stdinp	FILE**
+__stdoutp	FILE**
+clearerr	void (*)(FILE*)
+dprintf	int (*)(int, const char*, ...)
+fclose	int (*)(FILE*)
+fdopen	FILE* (*)(int, const char*)
+feof	int (*)(FILE*)
+ferror	int (*)(FILE*)
+fflush	int (*)(FILE*)
+fgetc	int (*)(FILE*)
+fgetpos	int (*)(FILE*, long long*)
+fgets	char* (*)(char*, int, FILE*)
+fileno	int (*)(FILE*)
+flockfile	void (*)(FILE*)
+fmemopen	FILE* (*)(void*, unsigned long, const char*)
+fopen	FILE* (*)(const char*, const char*)
+fprintf	int (*)(FILE*, const char*, ...)
+fputc	int (*)(int, FILE*)
+fputs	int (*)(const char*, FILE*)
+fread	unsigned long (*)(void*, unsigned long, unsigned long, FILE*)
+freopen	FILE* (*)(const char*, const char*, FILE*)
+fscanf	int (*)(FILE*, const char*, ...)
+fseek	int (*)(FILE*, long, int)
+fseeko	int (*)(FILE*, long long, int)
+fsetpos	int (*)(FILE*, const long long*)
+ftell	long (*)(FILE*)
+ftello	long long (*)(FILE*)
+ftrylockfile	int (*)(FILE*)
+funlockfile	void (*)(FILE*)
+fwrite	unsigned long (*)(const void*, unsigned long, unsigned long, FILE*)
+getc	int (*)(FILE*)
+getc_unlocked	int (*)(FILE*)
+getchar	int (*)(void)
+getdelim	long (*)(char**, unsigned long*, int, FILE*)
+getline	long (*)(char**, unsigned long*, FILE*)
+open_memstream	FILE* (*)(char**, unsigned long*)
+pclose	int (*)(FILE*)
+perror	void (*)(const char*)
+popen	FILE* (*)(const char*, const char*)
+printf	int (*)(const char*, ...)
+putc	int (*)(int, FILE*)
+putc_unlocked	int (*)(int, FILE*)
+putchar	int (*)(int)
+puts	int (*)(const char*)
+remove	int (*)(const char*)
+rename	int (*)(const char*, const char*)
+renameat	int (*)(int, const char*, int, const char*)
+rewind	void (*)(FILE*)
+scanf	int (*)(const char*, ...)
+setbuf	void (*)(FILE*, char*)
+setbuffer	void (*)(FILE*, char*, int)
+setvbuf	int (*)(FILE*, char*, int, unsigned long)
+snprintf	int (*)(char*, unsigned long, const char*, ...)
+sprintf	int (*)(char*, const char*, ...)
+sscanf	int (*)(const char*, const char*, ...)
+tempnam	char* (*)(const char*, const char*)
+tmpfile	FILE* (*)(void)
+tmpnam	char* (*)(char*)
+typedef fpos_t	long long*
+typedef off_t	long long*
+ungetc	int (*)(int, FILE*)
+vdprintf	int (*)(int, const char*, char*)
+vfprintf	int (*)(FILE*, const char*, char*)
+vfscanf	int (*)(FILE*, const char*, char*)
+vprintf	int (*)(const char*, char*)
+vscanf	int (*)(const char*, char*)
+vsnprintf	int (*)(char*, unsigned long, const char*, char*)
+vsprintf	int (*)(char*, const char*, char*)
+vsscanf	int (*)(const char*, const char*, char*)
+
+alloca.h y
+alloca	void* (*)(unsigned long)
+
+stdarg.h y
+typedef va_list	char**
+
+stdatomic.h y
+member atomic_flag._Value	_Atomic _Bool*
+typedef atomic_bool	_Atomic _Bool*
+typedef atomic_char	_Atomic char*
+typedef atomic_char16_t	_Atomic unsigned short*
+typedef atomic_char32_t	_Atomic unsigned int*
+typedef atomic_int	_Atomic int*
+typedef atomic_int_fast16_t	_Atomic short*
+typedef atomic_int_fast32_t	_Atomic int*
+typedef atomic_int_fast64_t	_Atomic long long*
+typedef atomic_int_fast8_t	_Atomic signed char*
+typedef atomic_int_least16_t	_Atomic short*
+typedef atomic_int_least32_t	_Atomic int*
+typedef atomic_int_least64_t	_Atomic long long*
+typedef atomic_int_least8_t	_Atomic signed char*
+typedef atomic_intmax_t	_Atomic long*
+typedef atomic_intptr_t	_Atomic long*
+typedef atomic_llong	_Atomic long long*
+typedef atomic_long	_Atomic long*
+typedef atomic_ptrdiff_t	_Atomic long*
+typedef atomic_schar	_Atomic signed char*
+typedef atomic_short	_Atomic short*
+typedef atomic_size_t	_Atomic unsigned long*
+typedef atomic_uchar	_Atomic unsigned char*
+typedef atomic_uint	_Atomic unsigned int*
+typedef atomic_uint_fast16_t	_Atomic unsigned short*
+typedef atomic_uint_fast32_t	_Atomic unsigned int*
+typedef atomic_uint_fast64_t	_Atomic unsigned long long*
+typedef atomic_uint_fast8_t	_Atomic unsigned char*
+typedef atomic_uint_least16_t	_Atomic unsigned short*
+typedef atomic_uint_least32_t	_Atomic unsigned int*
+typedef atomic_uint_least64_t	_Atomic unsigned long long*
+typedef atomic_uint_least8_t	_Atomic unsigned char*
+typedef atomic_uintmax_t	_Atomic unsigned long*
+typedef atomic_uintptr_t	_Atomic unsigned long*
+typedef atomic_ullong	_Atomic unsigned long long*
+typedef atomic_ulong	_Atomic unsigned long*
+typedef atomic_ushort	_Atomic unsigned short*
+typedef atomic_wchar_t	_Atomic int*
+
+ctype.h y
+isalnum	int (*)(int)
+isalpha	int (*)(int)
+isascii	int (*)(int)
+isblank	int (*)(int)
+iscntrl	int (*)(int)
+isdigit	int (*)(int)
+isgraph	int (*)(int)
+islower	int (*)(int)
+isprint	int (*)(int)
+ispunct	int (*)(int)
+isspace	int (*)(int)
+isupper	int (*)(int)
+isxdigit	int (*)(int)
+toascii	int (*)(int)
+tolower	int (*)(int)
+toupper	int (*)(int)
+
+math.h y
+acos	double (*)(double)
+acosf	float (*)(float)
+acosh	double (*)(double)
+acoshf	float (*)(float)
+acoshl	long double (*)(long double)
+acosl	long double (*)(long double)
+asin	double (*)(double)
+asinf	float (*)(float)
+asinh	double (*)(double)
+asinhf	float (*)(float)
+asinhl	long double (*)(long double)
+asinl	long double (*)(long double)
+atan	double (*)(double)
+atan2	double (*)(double, double)
+atan2f	float (*)(float, float)
+atan2l	long double (*)(long double, long double)
+atanf	float (*)(float)
+atanh	double (*)(double)
+atanhf	float (*)(float)
+atanhl	long double (*)(long double)
+atanl	long double (*)(long double)
+cbrt	double (*)(double)
+cbrtf	float (*)(float)
+cbrtl	long double (*)(long double)
+ceil	double (*)(double)
+ceilf	float (*)(float)
+ceill	long double (*)(long double)
+copysign	double (*)(double, double)
+copysignf	float (*)(float, float)
+copysignl	long double (*)(long double, long double)
+cos	double (*)(double)
+cosf	float (*)(float)
+cosh	double (*)(double)
+coshf	float (*)(float)
+coshl	long double (*)(long double)
+cosl	long double (*)(long double)
+erf	double (*)(double)
+erfc	double (*)(double)
+erfcf	float (*)(float)
+erfcl	long double (*)(long double)
+erff	float (*)(float)
+erfl	long double (*)(long double)
+exp	double (*)(double)
+exp2	double (*)(double)
+exp2f	float (*)(float)
+exp2l	long double (*)(long double)
+expf	float (*)(float)
+expl	long double (*)(long double)
+expm1	double (*)(double)
+expm1f	float (*)(float)
+expm1l	long double (*)(long double)
+fabs	double (*)(double)
+fabsf	float (*)(float)
+fabsl	long double (*)(long double)
+fdim	double (*)(double, double)
+fdimf	float (*)(float, float)
+fdiml	long double (*)(long double, long double)
+floor	double (*)(double)
+floorf	float (*)(float)
+floorl	long double (*)(long double)
+fma	double (*)(double, double, double)
+fmaf	float (*)(float, float, float)
+fmal	long double (*)(long double, long double, long double)
+fmax	double (*)(double, double)
+fmaxf	float (*)(float, float)
+fmaxl	long double (*)(long double, long double)
+fmin	double (*)(double, double)
+fminf	float (*)(float, float)
+fminl	long double (*)(long double, long double)
+fmod	double (*)(double, double)
+fmodf	float (*)(float, float)
+fmodl	long double (*)(long double, long double)
+frexp	double (*)(double, int*)
+frexpf	float (*)(float, int*)
+frexpl	long double (*)(long double, int*)
+hypot	double (*)(double, double)
+hypotf	float (*)(float, float)
+hypotl	long double (*)(long double, long double)
+ilogb	int (*)(double)
+ilogbf	int (*)(float)
+ilogbl	int (*)(long double)
+j0	double (*)(double)
+j1	double (*)(double)
+jn	double (*)(int, double)
+ldexp	double (*)(double, int)
+ldexpf	float (*)(float, int)
+ldexpl	long double (*)(long double, int)
+lgamma	double (*)(double)
+lgammaf	float (*)(float)
+lgammal	long double (*)(long double)
+llrint	long long (*)(double)
+llrintf	long long (*)(float)
+llrintl	long long (*)(long double)
+llround	long long (*)(double)
+llroundf	long long (*)(float)
+llroundl	long long (*)(long double)
+log	double (*)(double)
+log10	double (*)(double)
+log10f	float (*)(float)
+log10l	long double (*)(long double)
+log1p	double (*)(double)
+log1pf	float (*)(float)
+log1pl	long double (*)(long double)
+log2	double (*)(double)
+log2f	float (*)(float)
+log2l	long double (*)(long double)
+logb	double (*)(double)
+logbf	float (*)(float)
+logbl	long double (*)(long double)
+logf	float (*)(float)
+logl	long double (*)(long double)
+lrint	long (*)(double)
+lrintf	long (*)(float)
+lrintl	long (*)(long double)
+lround	long (*)(double)
+lroundf	long (*)(float)
+lroundl	long (*)(long double)
+modf	double (*)(double, double*)
+modff	float (*)(float, float*)
+modfl	long double (*)(long double, long double*)
+nan	double (*)(const char*)
+nanf	float (*)(const char*)
+nanl	long double (*)(const char*)
+nearbyint	double (*)(double)
+nearbyintf	float (*)(float)
+nearbyintl	long double (*)(long double)
+nextafter	double (*)(double, double)
+nextafterf	float (*)(float, float)
+nextafterl	long double (*)(long double, long double)
+nexttoward	double (*)(double, long double)
+nexttowardf	float (*)(float, long double)
+nexttowardl	long double (*)(long double, long double)
+pow	double (*)(double, double)
+powf	float (*)(float, float)
+powl	long double (*)(long double, long double)
+remainder	double (*)(double, double)
+remainderf	float (*)(float, float)
+remainderl	long double (*)(long double, long double)
+remquo	double (*)(double, double, int*)
+remquof	float (*)(float, float, int*)
+remquol	long double (*)(long double, long double, int*)
+rint	double (*)(double)
+rintf	float (*)(float)
+rintl	long double (*)(long double)
+round	double (*)(double)
+roundf	float (*)(float)
+roundl	long double (*)(long double)
+scalbln	double (*)(double, long)
+scalblnf	float (*)(float, long)
+scalblnl	long double (*)(long double, long)
+scalbn	double (*)(double, int)
+scalbnf	float (*)(float, int)
+scalbnl	long double (*)(long double, int)
+sin	double (*)(double)
+sinf	float (*)(float)
+sinh	double (*)(double)
+sinhf	float (*)(float)
+sinhl	long double (*)(long double)
+sinl	long double (*)(long double)
+sqrt	double (*)(double)
+sqrtf	float (*)(float)
+sqrtl	long double (*)(long double)
+tan	double (*)(double)
+tanf	float (*)(float)
+tanh	double (*)(double)
+tanhf	float (*)(float)
+tanhl	long double (*)(long double)
+tanl	long double (*)(long double)
+tgamma	double (*)(double)
+tgammaf	float (*)(float)
+tgammal	long double (*)(long double)
+trunc	double (*)(double)
+truncf	float (*)(float)
+truncl	long double (*)(long double)
+y0	double (*)(double)
+y1	double (*)(double)
+yn	double (*)(int, double)
+
+locale.h y
+duplocale	struct _xlocale* (*)(struct _xlocale*)
+freelocale	int (*)(struct _xlocale*)
+localeconv	struct lconv* (*)(void)
+member struct lconv.currency_symbol	char**
+member struct lconv.decimal_point	char**
+member struct lconv.frac_digits	char*
+member struct lconv.grouping	char**
+member struct lconv.int_curr_symbol	char**
+member struct lconv.int_frac_digits	char*
+member struct lconv.int_n_cs_precedes	char*
+member struct lconv.int_n_sep_by_space	char*
+member struct lconv.int_n_sign_posn	char*
+member struct lconv.int_p_cs_precedes	char*
+member struct lconv.int_p_sep_by_space	char*
+member struct lconv.int_p_sign_posn	char*
+member struct lconv.mon_decimal_point	char**
+member struct lconv.mon_grouping	char**
+member struct lconv.mon_thousands_sep	char**
+member struct lconv.n_cs_precedes	char*
+member struct lconv.n_sep_by_space	char*
+member struct lconv.n_sign_posn	char*
+member struct lconv.negative_sign	char**
+member struct lconv.p_cs_precedes	char*
+member struct lconv.p_sep_by_space	char*
+member struct lconv.p_sign_posn	char*
+member struct lconv.positive_sign	char**
+member struct lconv.thousands_sep	char**
+newlocale	struct _xlocale* (*)(int, const char*, struct _xlocale*)
+setlocale	char* (*)(int, const char*)
+typedef locale_t	struct _xlocale**
+uselocale	struct _xlocale* (*)(struct _xlocale*)
+
+signal.h y
+kill	int (*)(int, int)
+killpg	int (*)(int, int)
+member siginfo_t.__pad	unsigned long (*)[7]
+member siginfo_t.si_addr	void**
+member siginfo_t.si_band	long*
+member siginfo_t.si_code	int*
+member siginfo_t.si_errno	int*
+member siginfo_t.si_pid	int*
+member siginfo_t.si_signo	int*
+member siginfo_t.si_status	int*
+member siginfo_t.si_uid	unsigned int*
+member siginfo_t.si_value	union sigval*
+member stack_t.ss_flags	int*
+member stack_t.ss_size	unsigned long*
+member stack_t.ss_sp	void**
+member struct sigaction.sa_flags	int*
+member struct sigaction.sa_handler	void (**)(int)
+member struct sigaction.sa_mask	unsigned int*
+member struct sigaction.sa_sigaction	void (**)(int, siginfo_t*, void*)
+member struct sigevent.sigev_notify	int*
+member struct sigevent.sigev_notify_attributes	pthread_attr_t**
+member struct sigevent.sigev_notify_function	void (**)(union sigval)
+member struct sigevent.sigev_signo	int*
+member struct sigevent.sigev_value	union sigval*
+member union sigval.sival_int	int*
+member union sigval.sival_ptr	void**
+pthread_sigmask	int (*)(int, const unsigned int*, unsigned int*)
+raise	int (*)(int)
+sigaction	int (*)(int, const struct sigaction*, struct sigaction*)
+sigaddset	int (*)(unsigned int*, int)
+sigaltstack	int (*)(const stack_t*, stack_t*)
+sigdelset	int (*)(unsigned int*, int)
+sigemptyset	int (*)(unsigned int*)
+sigfillset	int (*)(unsigned int*)
+sighold	int (*)(int)
+sigignore	int (*)(int)
+siginterrupt	int (*)(int, int)
+sigismember	int (*)(const unsigned int*, int)
+signal	void (*(*)(int, void (*)(int)))(int)
+sigpause	int (*)(int)
+sigpending	int (*)(unsigned int*)
+sigprocmask	int (*)(int, const unsigned int*, unsigned int*)
+sigrelse	int (*)(int)
+sigset	void (*(*)(int, void (*)(int)))(int)
+sigsuspend	int (*)(const unsigned int*)
+sigwait	int (*)(const unsigned int*, int*)
+typedef sig_atomic_t	int*
+typedef sig_t	void (**)(int)
+
+time.h y
+asctime	char* (*)(const struct tm*)
+asctime_r	char* (*)(const struct tm*, char*)
+clock	unsigned long (*)(void)
+clock_getres	int (*)(unsigned int, struct timespec*)
+clock_gettime	int (*)(unsigned int, struct timespec*)
+clock_settime	int (*)(unsigned int, const struct timespec*)
+ctime	char* (*)(const long*)
+ctime_r	char* (*)(const long*, char*)
+daylight	int*
+difftime	double (*)(long, long)
+getdate	struct tm* (*)(const char*)
+getdate_err	int*
+gmtime	struct tm* (*)(const long*)
+gmtime_r	struct tm* (*)(const long*, struct tm*)
+localtime	struct tm* (*)(const long*)
+localtime_r	struct tm* (*)(const long*, struct tm*)
+member struct timespec.tv_nsec	long*
+member struct timespec.tv_sec	long*
+member struct tm.tm_gmtoff	long*
+member struct tm.tm_hour	int*
+member struct tm.tm_isdst	int*
+member struct tm.tm_mday	int*
+member struct tm.tm_min	int*
+member struct tm.tm_mon	int*
+member struct tm.tm_sec	int*
+member struct tm.tm_wday	int*
+member struct tm.tm_yday	int*
+member struct tm.tm_year	int*
+member struct tm.tm_zone	char**
+mktime	long (*)(struct tm*)
+nanosleep	int (*)(const struct timespec*, struct timespec*)
+strftime	unsigned long (*)(char*, unsigned long, const char*, const struct tm*)
+strptime	char* (*)(const char*, const char*, struct tm*)
+time	long (*)(long*)
+timespec_get	int (*)(struct timespec*, int)
+timezone	long*
+typedef clock_t	unsigned long*
+typedef clockid_t	unsigned int*
+typedef time_t	long*
+tzname	char* (*)[2]
+tzset	void (*)(void)
+
+utime.h y
+member struct utimbuf.actime	long*
+member struct utimbuf.modtime	long*
+utime	int (*)(const char*, const struct utimbuf*)
+
+netdb.h y
+accept	int (*)(int, struct sockaddr*, unsigned int*)
+bind	int (*)(int, const struct sockaddr*, unsigned int)
+connect	int (*)(int, const struct sockaddr*, unsigned int)
+freeaddrinfo	void (*)(struct addrinfo*)
+gai_strerror	const char* (*)(int)
+getaddrinfo	int (*)(const char*, const char*, const struct addrinfo*, struct addrinfo**)
+gethostbyaddr	struct hostent* (*)(const void*, unsigned int, int)
+gethostbyname	struct hostent* (*)(const char*)
+getnameinfo	int (*)(const struct sockaddr*, unsigned int, char*, unsigned int, char*, unsigned int, int)
+getpeername	int (*)(int, struct sockaddr*, unsigned int*)
+getprotobyname	struct protoent* (*)(const char*)
+getprotobynumber	struct protoent* (*)(int)
+getservbyname	struct servent* (*)(const char*, const char*)
+getservbyport	struct servent* (*)(int, const char*)
+getsockname	int (*)(int, struct sockaddr*, unsigned int*)
+getsockopt	int (*)(int, int, int, void*, unsigned int*)
+h_errno	int*
+hstrerror	const char* (*)(int)
+listen	int (*)(int, int)
+member fd_set.fds_bits	int (*)[32]
+member struct addrinfo.ai_addr	struct sockaddr**
+member struct addrinfo.ai_addrlen	unsigned int*
+member struct addrinfo.ai_canonname	char**
+member struct addrinfo.ai_family	int*
+member struct addrinfo.ai_flags	int*
+member struct addrinfo.ai_next	struct addrinfo**
+member struct addrinfo.ai_protocol	int*
+member struct addrinfo.ai_socktype	int*
+member struct cmsghdr.cmsg_len	unsigned int*
+member struct cmsghdr.cmsg_level	int*
+member struct cmsghdr.cmsg_type	int*
+member struct hostent.h_addr_list	char***
+member struct hostent.h_addrtype	int*
+member struct hostent.h_aliases	char***
+member struct hostent.h_length	int*
+member struct hostent.h_name	char**
+member struct iovec.iov_base	void**
+member struct iovec.iov_len	unsigned long*
+member struct linger.l_linger	int*
+member struct linger.l_onoff	int*
+member struct msghdr.msg_control	void**
+member struct msghdr.msg_controllen	unsigned int*
+member struct msghdr.msg_flags	int*
+member struct msghdr.msg_iov	struct iovec**
+member struct msghdr.msg_iovlen	int*
+member struct msghdr.msg_name	void**
+member struct msghdr.msg_namelen	unsigned int*
+member struct protoent.p_aliases	char***
+member struct protoent.p_name	char**
+member struct protoent.p_proto	int*
+member struct servent.s_aliases	char***
+member struct servent.s_name	char**
+member struct servent.s_port	int*
+member struct servent.s_proto	char**
+member struct sf_hdtr.hdr_cnt	int*
+member struct sf_hdtr.headers	struct iovec**
+member struct sf_hdtr.trailers	struct iovec**
+member struct sf_hdtr.trl_cnt	int*
+member struct sockaddr.sa_data	char (*)[14]
+member struct sockaddr.sa_family	unsigned char*
+member struct sockaddr.sa_len	unsigned char*
+member struct sockaddr_storage.__ss_align	long long*
+member struct sockaddr_storage.__ss_pad1	char (*)[6]
+member struct sockaddr_storage.__ss_pad2	char (*)[112]
+member struct sockaddr_storage.ss_family	unsigned char*
+member struct sockaddr_storage.ss_len	unsigned char*
+recv	long (*)(int, void*, unsigned long, int)
+recvfrom	long (*)(int, void*, unsigned long, int, struct sockaddr*, unsigned int*)
+recvmsg	long (*)(int, struct msghdr*, int)
+send	long (*)(int, const void*, unsigned long, int)
+sendmsg	long (*)(int, const struct msghdr*, int)
+sendto	long (*)(int, const void*, unsigned long, int, const struct sockaddr*, unsigned int)
+setsockopt	int (*)(int, int, int, const void*, unsigned int)
+shutdown	int (*)(int, int)
+sockatmark	int (*)(int)
+socket	int (*)(int, int, int)
+socketpair	int (*)(int, int, int, int*)
+typedef blkcnt_t	long long*
+typedef blksize_t	int*
+typedef dev_t	int*
+typedef fsblkcnt_t	unsigned int*
+typedef fsfilcnt_t	unsigned int*
+typedef gid_t	unsigned int*
+typedef id_t	unsigned int*
+typedef ino64_t	unsigned long long*
+typedef ino_t	unsigned long long*
+typedef key_t	int*
+typedef nlink_t	unsigned short*
+typedef quad_t	long long*
+typedef sa_family_t	unsigned char*
+typedef socklen_t	unsigned int*
+typedef ssize_t	long*
+typedef suseconds_t	int*
+typedef u_char	unsigned char*
+typedef u_int	unsigned int*
+typedef u_long	unsigned long*
+typedef u_quad_t	unsigned long long*
+typedef u_short	unsigned short*
+typedef uid_t	unsigned int*
+typedef useconds_t	unsigned int*
+
+err.h y
+err	void (*)(int, const char*, ...)
+errx	void (*)(int, const char*, ...)
+verr	void (*)(int, const char*, char*)
+verrx	void (*)(int, const char*, char*)
+vwarn	void (*)(const char*, char*)
+vwarnx	void (*)(const char*, char*)
+warn	void (*)(const char*, ...)
+warnx	void (*)(const char*, ...)
+
+ucontext.h p
+getcontext	int (*)(ucontext_t*)
+makecontext	void (*)(ucontext_t*, void (*)(void), int, ...)
+member struct __darwin_arm_exception_state64.__esr	unsigned int*
+member struct __darwin_arm_exception_state64.__exception	unsigned int*
+member struct __darwin_arm_exception_state64.__far	unsigned long long*
+member struct __darwin_arm_neon_state64.__fpcr	unsigned int*
+member struct __darwin_arm_neon_state64.__fpsr	unsigned int*
+member struct __darwin_arm_thread_state64.__cpsr	unsigned int*
+member struct __darwin_arm_thread_state64.__fp	unsigned long long*
+member struct __darwin_arm_thread_state64.__lr	unsigned long long*
+member struct __darwin_arm_thread_state64.__pad	unsigned int*
+member struct __darwin_arm_thread_state64.__pc	unsigned long long*
+member struct __darwin_arm_thread_state64.__sp	unsigned long long*
+member struct __darwin_arm_thread_state64.__x	unsigned long long (*)[29]
+member struct __darwin_mcontext64.__es	struct __darwin_arm_exception_state64*
+member struct __darwin_mcontext64.__ns	struct __darwin_arm_neon_state64*
+member struct __darwin_mcontext64.__ss	struct __darwin_arm_thread_state64*
+member struct in6_addr.s6_addr	unsigned char (*)[16]
+member struct in6_pktinfo.ipi6_addr	struct in6_addr*
+member struct in6_pktinfo.ipi6_ifindex	unsigned int*
+member struct in_addr.s_addr	unsigned int*
+member struct in_pktinfo.ipi_addr	struct in_addr*
+member struct in_pktinfo.ipi_ifindex	unsigned int*
+member struct in_pktinfo.ipi_spec_dst	struct in_addr*
+member struct ip_mreq.imr_interface	struct in_addr*
+member struct ip_mreq.imr_multiaddr	struct in_addr*
+member struct ip_mreqn.imr_address	struct in_addr*
+member struct ip_mreqn.imr_ifindex	int*
+member struct ip_mreqn.imr_multiaddr	struct in_addr*
+member struct ipv6_mreq.ipv6mr_interface	unsigned int*
+member struct ipv6_mreq.ipv6mr_multiaddr	struct in6_addr*
+member struct sockaddr_in.sin_addr	struct in_addr*
+member struct sockaddr_in.sin_family	unsigned char*
+member struct sockaddr_in.sin_len	unsigned char*
+member struct sockaddr_in.sin_port	unsigned short*
+member struct sockaddr_in.sin_zero	char (*)[8]
+member struct sockaddr_in6.sin6_addr	struct in6_addr*
+member struct sockaddr_in6.sin6_family	unsigned char*
+member struct sockaddr_in6.sin6_flowinfo	unsigned int*
+member struct sockaddr_in6.sin6_len	unsigned char*
+member struct sockaddr_in6.sin6_port	unsigned short*
+member struct sockaddr_in6.sin6_scope_id	unsigned int*
+member ucontext_t.__mcontext_data	struct __darwin_mcontext64*
+member ucontext_t.uc_link	ucontext_t**
+member ucontext_t.uc_mcontext	struct __darwin_mcontext64**
+member ucontext_t.uc_mcsize	unsigned long*
+member ucontext_t.uc_onstack	int*
+member ucontext_t.uc_sigmask	unsigned int*
+member ucontext_t.uc_stack	stack_t*
+setcontext	int (*)(const ucontext_t*)
+swapcontext	int (*)(ucontext_t*, const ucontext_t*)
+typedef in_addr_t	unsigned int*
+typedef in_port_t	unsigned short*
+typedef mcontext_t	struct __darwin_mcontext64**
+
+sys/utsname.h y
+member struct utsname.machine	char (*)[256]
+member struct utsname.nodename	char (*)[256]
+member struct utsname.release	char (*)[256]
+member struct utsname.sysname	char (*)[256]
+member struct utsname.version	char (*)[256]
+uname	int (*)(struct utsname*)
+
+grp.h y
+endgrent	void (*)(void)
+getgrent	struct group* (*)(void)
+getgrgid	struct group* (*)(unsigned int)
+getgrgid_r	int (*)(unsigned int, struct group*, char*, unsigned long, struct group**)
+getgrnam	struct group* (*)(const char*)
+getgrnam_r	int (*)(const char*, struct group*, char*, unsigned long, struct group**)
+member struct group.gr_gid	unsigned int*
+member struct group.gr_mem	char***
+member struct group.gr_name	char**
+member struct group.gr_passwd	char**
+setgrent	void (*)(void)
+
+langinfo.h y
+nl_langinfo	char* (*)(int)
+typedef nl_item	int*
+
+iconv.h y
+iconv	unsigned long (*)(struct __tag_iconv_t*, char**, unsigned long*, char**, unsigned long*)
+iconv_close	int (*)(struct __tag_iconv_t*)
+iconv_open	struct __tag_iconv_t* (*)(const char*, const char*)
+typedef iconv_t	struct __tag_iconv_t**
+
+arpa/inet.h y
+inet_addr	unsigned int (*)(const char*)
+inet_aton	int (*)(const char*, struct in_addr*)
+inet_ntoa	char* (*)(struct in_addr)
+inet_ntop	const char* (*)(int, const void*, char*, unsigned int)
+inet_pton	int (*)(int, const char*, void*)
+
+dirent.h y
+closedir	int (*)(DIR*)
+dirfd	int (*)(DIR*)
+fdopendir	DIR* (*)(int)
+member struct dirent.d_ino	unsigned long long*
+member struct dirent.d_name	char (*)[1024]
+member struct dirent.d_namlen	unsigned short*
+member struct dirent.d_reclen	unsigned short*
+member struct dirent.d_seekoff	unsigned long long*
+member struct dirent.d_type	unsigned char*
+opendir	DIR* (*)(const char*)
+readdir	struct dirent* (*)(DIR*)
+readdir_r	int (*)(DIR*, struct dirent*, struct dirent**)
+rewinddir	void (*)(DIR*)
+seekdir	void (*)(DIR*, long)
+telldir	long (*)(DIR*)
+
+ftw.h y
+chflags	int (*)(const char*, unsigned int)
+chmod	int (*)(const char*, unsigned short)
+fchflags	int (*)(int, unsigned int)
+fchmod	int (*)(int, unsigned short)
+fchmodat	int (*)(int, const char*, unsigned short, int)
+fstat	int (*)(int, struct stat*)
+fstatat	int (*)(int, const char*, struct stat*, int)
+ftw	int (*)(const char*, int (*)(const char*, const struct stat*, int), int)
+futimens	int (*)(int, const struct timespec*)
+lchflags	int (*)(const char*, unsigned int)
+lstat	int (*)(const char*, struct stat*)
+member struct FTW.base	int*
+member struct FTW.level	int*
+member struct stat.st_atime	long*
+member struct stat.st_atimespec	struct timespec*
+member struct stat.st_birthtime	long*
+member struct stat.st_birthtimespec	struct timespec*
+member struct stat.st_blksize	int*
+member struct stat.st_blocks	long long*
+member struct stat.st_ctime	long*
+member struct stat.st_ctimespec	struct timespec*
+member struct stat.st_dev	int*
+member struct stat.st_flags	unsigned int*
+member struct stat.st_gen	unsigned int*
+member struct stat.st_gid	unsigned int*
+member struct stat.st_ino	unsigned long long*
+member struct stat.st_lspare	int*
+member struct stat.st_mode	unsigned short*
+member struct stat.st_mtime	long*
+member struct stat.st_mtimespec	struct timespec*
+member struct stat.st_nlink	unsigned short*
+member struct stat.st_qspare	long long (*)[2]
+member struct stat.st_rdev	int*
+member struct stat.st_size	long long*
+member struct stat.st_uid	unsigned int*
+mkdir	int (*)(const char*, unsigned short)
+mkdirat	int (*)(int, const char*, unsigned short)
+mkfifo	int (*)(const char*, unsigned short)
+mkfifoat	int (*)(int, const char*, unsigned short)
+mknod	int (*)(const char*, unsigned short, int)
+mknodat	int (*)(int, const char*, unsigned short, int)
+nftw	int (*)(const char*, int (*)(const char*, const struct stat*, int, struct FTW*), int, int)
+stat	int (*)(const char*, struct stat*)
+umask	unsigned short (*)(unsigned short)
+utimensat	int (*)(int, const char*, const struct timespec*, int)
+
+fts.h y
+fts_close	int (*)(FTS*)
+fts_open	FTS* (*)(char* const *, int, int (*)(const FTSENT**, const FTSENT**))
+fts_read	FTSENT* (*)(FTS*)
+member FTSENT.fts_info	unsigned short*
+member FTSENT.fts_path	char**
+member FTSENT.fts_pathlen	unsigned short*
+member FTSENT.fts_statp	struct stat**
+
+pwd.h y
+endpwent	void (*)(void)
+getpwent	struct passwd* (*)(void)
+getpwnam	struct passwd* (*)(const char*)
+getpwnam_r	int (*)(const char*, struct passwd*, char*, unsigned long, struct passwd**)
+getpwuid	struct passwd* (*)(unsigned int)
+getpwuid_r	int (*)(unsigned int, struct passwd*, char*, unsigned long, struct passwd**)
+member struct passwd.pw_change	long*
+member struct passwd.pw_class	char**
+member struct passwd.pw_dir	char**
+member struct passwd.pw_expire	long*
+member struct passwd.pw_gecos	char**
+member struct passwd.pw_gid	unsigned int*
+member struct passwd.pw_name	char**
+member struct passwd.pw_passwd	char**
+member struct passwd.pw_shell	char**
+member struct passwd.pw_uid	unsigned int*
+setpwent	void (*)(void)
+
+unistd.h y
+_exit	void (*)(int)
+access	int (*)(const char*, int)
+alarm	unsigned int (*)(unsigned int)
+chdir	int (*)(const char*)
+chown	int (*)(const char*, unsigned int, unsigned int)
+close	int (*)(int)
+confstr	unsigned long (*)(int, char*, unsigned long)
+crypt	char* (*)(const char*, const char*)
+dup	int (*)(int)
+dup2	int (*)(int, int)
+encrypt	void (*)(char*, int)
+execl	int (*)(const char*, const char*, ...)
+execle	int (*)(const char*, const char*, ...)
+execlp	int (*)(const char*, const char*, ...)
+execv	int (*)(const char*, char* const *)
+execve	int (*)(const char*, char* const *, char* const *)
+execvp	int (*)(const char*, char* const *)
+faccessat	int (*)(int, const char*, int, int)
+fchdir	int (*)(int)
+fchown	int (*)(int, unsigned int, unsigned int)
+fchownat	int (*)(int, const char*, unsigned int, unsigned int, int)
+fork	int (*)(void)
+fpathconf	long (*)(int, int)
+fsync	int (*)(int)
+ftruncate	int (*)(int, long long)
+getcwd	char* (*)(char*, unsigned long)
+getegid	unsigned int (*)(void)
+geteuid	unsigned int (*)(void)
+getgid	unsigned int (*)(void)
+getgrouplist	int (*)(const char*, int, int*, int*)
+getgroups	int (*)(int, unsigned int*)
+gethostid	long (*)(void)
+gethostname	int (*)(char*, unsigned long)
+getlogin	char* (*)(void)
+getlogin_r	int (*)(char*, unsigned long)
+getopt	int (*)(int, char* const *, const char*)
+getpgid	int (*)(int)
+getpgrp	int (*)(void)
+getpid	int (*)(void)
+getppid	int (*)(void)
+getsid	int (*)(int)
+getuid	unsigned int (*)(void)
+initgroups	int (*)(const char*, int)
+isatty	int (*)(int)
+lchown	int (*)(const char*, unsigned int, unsigned int)
+link	int (*)(const char*, const char*)
+linkat	int (*)(int, const char*, int, const char*, int)
+lockf	int (*)(int, int, long long)
+lseek	long long (*)(int, long long, int)
+member struct timeval.tv_sec	long*
+member struct timeval.tv_usec	int*
+nice	int (*)(int)
+optarg	char**
+opterr	int*
+optind	int*
+optopt	int*
+pathconf	long (*)(const char*, int)
+pause	int (*)(void)
+pipe	int (*)(int*)
+pread	long (*)(int, void*, unsigned long, long long)
+pselect	int (*)(int, fd_set*, fd_set*, fd_set*, const struct timespec*, const unsigned int*)
+pwrite	long (*)(int, const void*, unsigned long, long long)
+read	long (*)(int, void*, unsigned long)
+readlink	long (*)(const char*, char*, unsigned long)
+readlinkat	long (*)(int, const char*, char*, unsigned long)
+rmdir	int (*)(const char*)
+select	int (*)(int, fd_set*, fd_set*, fd_set*, struct timeval*)
+setegid	int (*)(unsigned int)
+seteuid	int (*)(unsigned int)
+setgid	int (*)(unsigned int)
+setgroups	int (*)(int, const unsigned int*)
+sethostname	int (*)(const char*, int)
+setpgid	int (*)(int, int)
+setpgrp	int (*)(void)
+setregid	int (*)(unsigned int, unsigned int)
+setreuid	int (*)(unsigned int, unsigned int)
+setsid	int (*)(void)
+setuid	int (*)(unsigned int)
+sleep	unsigned int (*)(unsigned int)
+swab	void (*)(const void*, void*, long)
+symlink	int (*)(const char*, const char*)
+symlinkat	int (*)(const char*, int, const char*)
+sync	void (*)(void)
+sysconf	long (*)(int)
+tcgetpgrp	int (*)(int)
+tcsetpgrp	int (*)(int, int)
+truncate	int (*)(const char*, long long)
+ttyname	char* (*)(int)
+ttyname_r	int (*)(int, char*, unsigned long)
+unlink	int (*)(const char*)
+unlinkat	int (*)(int, const char*, int)
+usleep	int (*)(unsigned int)
+vfork	int (*)(void)
+write	long (*)(int, const void*, unsigned long)
+
+getopt.h y
+getopt_long	int (*)(int, char* const *, const char*, const struct option*, int*)
+getopt_long_only	int (*)(int, char* const *, const char*, const struct option*, int*)
+member struct option.flag	int**
+member struct option.has_arg	int*
+member struct option.name	const char**
+member struct option.val	int*
+optreset	int*
+
+fcntl.h y
+creat	int (*)(const char*, unsigned short)
+fcntl	int (*)(int, int, ...)
+member struct flock.l_len	long long*
+member struct flock.l_pid	int*
+member struct flock.l_start	long long*
+member struct flock.l_type	short*
+member struct flock.l_whence	short*
+openat	int (*)(int, const char*, int, ...)
+
+syslog.h y
+closelog	void (*)(void)
+openlog	void (*)(const char*, int, int)
+setlogmask	int (*)(int)
+syslog	void (*)(int, const char*, ...)
+
+execinfo.h y
+backtrace	int (*)(void**, int)
+backtrace_symbols	char** (*)(void* const *, int)
+backtrace_symbols_fd	void (*)(void* const *, int, int)
+
+sys/uio.h y
+preadv	long (*)(int, const struct iovec*, int, long long)
+pwritev	long (*)(int, const struct iovec*, int, long long)
+readv	long (*)(int, const struct iovec*, int)
+writev	long (*)(int, const struct iovec*, int)
+
+sys/ipc.h y
+ftok	int (*)(const char*, int)
+member struct ipc_perm._key	int*
+member struct ipc_perm._seq	unsigned short*
+member struct ipc_perm.cgid	unsigned int*
+member struct ipc_perm.cuid	unsigned int*
+member struct ipc_perm.gid	unsigned int*
+member struct ipc_perm.mode	unsigned short*
+member struct ipc_perm.uid	unsigned int*
+
+sys/shm.h y
+member struct shmid_ds.shm_atime	long*
+member struct shmid_ds.shm_cpid	int*
+member struct shmid_ds.shm_ctime	long*
+member struct shmid_ds.shm_dtime	long*
+member struct shmid_ds.shm_internal	void**
+member struct shmid_ds.shm_lpid	int*
+member struct shmid_ds.shm_nattch	unsigned short*
+member struct shmid_ds.shm_perm	struct ipc_perm*
+member struct shmid_ds.shm_segsz	unsigned long*
+shmat	void* (*)(int, const void*, int)
+shmctl	int (*)(int, int, struct shmid_ds*)
+shmdt	int (*)(const void*)
+shmget	int (*)(int, unsigned long, int)
+typedef shmatt_t	unsigned short*
+
+sys/sem.h y
+member semun_t.array	unsigned short**
+member semun_t.buf	struct semid_ds**
+member semun_t.val	int*
+member struct sembuf.sem_flg	short*
+member struct sembuf.sem_num	unsigned short*
+member struct sembuf.sem_op	short*
+member struct semid_ds.sem_base	int*
+member struct semid_ds.sem_ctime	long*
+member struct semid_ds.sem_nsems	unsigned short*
+member struct semid_ds.sem_otime	long*
+member struct semid_ds.sem_pad1	int*
+member struct semid_ds.sem_pad2	int*
+member struct semid_ds.sem_pad3	int (*)[4]
+member struct semid_ds.sem_perm	struct ipc_perm*
+semctl	int (*)(int, int, int, ...)
+semget	int (*)(int, int, int)
+semop	int (*)(int, struct sembuf*, unsigned long)
+
+sys/msg.h y
+member struct msqid_ds.msg_cbytes	unsigned long*
+member struct msqid_ds.msg_ctime	long*
+member struct msqid_ds.msg_first	int*
+member struct msqid_ds.msg_last	int*
+member struct msqid_ds.msg_lrpid	int*
+member struct msqid_ds.msg_lspid	int*
+member struct msqid_ds.msg_pad1	int*
+member struct msqid_ds.msg_pad2	int*
+member struct msqid_ds.msg_pad3	int*
+member struct msqid_ds.msg_pad4	int (*)[4]
+member struct msqid_ds.msg_perm	struct ipc_perm*
+member struct msqid_ds.msg_qbytes	unsigned long*
+member struct msqid_ds.msg_qnum	unsigned long*
+member struct msqid_ds.msg_rtime	long*
+member struct msqid_ds.msg_stime	long*
+msgctl	int (*)(int, int, struct msqid_ds*)
+msgget	int (*)(int, int)
+msgrcv	long (*)(int, void*, unsigned long, long, int)
+msgsnd	int (*)(int, const void*, unsigned long, int)
+typedef msglen_t	unsigned long*
+typedef msgqnum_t	unsigned long*
+
+sys/un.h y
+member struct sockaddr_un.sun_family	unsigned char*
+member struct sockaddr_un.sun_len	unsigned char*
+member struct sockaddr_un.sun_path	char (*)[104]
+
+net/if.h y
+if_freenameindex	void (*)(struct if_nameindex*)
+if_indextoname	char* (*)(unsigned int, char*)
+if_nameindex	struct if_nameindex* (*)(void)
+if_nametoindex	unsigned int (*)(const char*)
+member struct if_nameindex.if_index	unsigned int*
+member struct if_nameindex.if_name	char**
+
+net/ethernet.h y
+member struct ether_addr.ether_addr_octet	unsigned char (*)[6]
+member struct ether_header.ether_dhost	unsigned char (*)[6]
+member struct ether_header.ether_shost	unsigned char (*)[6]
+member struct ether_header.ether_type	unsigned short*
+
+sys/file.h y
+flock	int (*)(int, int)
+
+CoreFoundation/CoreFoundation.h y
+CFGetTypeID	unsigned long (*)(const void*)
+CFRelease	void (*)(const void*)
+CFRetain	const void* (*)(const void*)
+typedef CFAllocatorRef	const struct __CFAllocator**
+typedef CFDictionaryRef	const struct __CFDictionary**
+typedef CFIndex	long*
+typedef CFStringRef	const struct __CFString**
+typedef CFTypeID	unsigned long*
+typedef CFTypeRef	const void**
+
+CommonCrypto/CommonCryptoError.h y
+typedef CCCryptorStatus	int*
+typedef CCStatus	int*
+
+CommonCrypto/CommonRandom.h y
+CCRandomGenerateBytes	int (*)(void*, unsigned long)
+typedef CCRNGStatus	int*
+
+CoreVideo/CoreVideo.h y
+CVGetCurrentHostTime	unsigned long long (*)(void)
+CVGetHostClockFrequency	double (*)(void)
+CVGetHostClockMinimumTimeDelta	unsigned int (*)(void)
+member CVSMPTETime.counter	unsigned int*
+member CVSMPTETime.flags	unsigned int*
+member CVSMPTETime.frames	short*
+member CVSMPTETime.hours	short*
+member CVSMPTETime.minutes	short*
+member CVSMPTETime.seconds	short*
+member CVSMPTETime.subframeDivisor	short*
+member CVSMPTETime.subframes	short*
+member CVSMPTETime.type	unsigned int*
+member CVTime.flags	int*
+member CVTime.timeScale	int*
+member CVTime.timeValue	long long*
+member CVTimeStamp.flags	unsigned long long*
+member CVTimeStamp.hostTime	unsigned long long*
+member CVTimeStamp.rateScalar	double*
+member CVTimeStamp.reserved	unsigned long long*
+member CVTimeStamp.smpteTime	CVSMPTETime*
+member CVTimeStamp.version	unsigned int*
+member CVTimeStamp.videoRefreshPeriod	long long*
+member CVTimeStamp.videoTime	long long*
+member CVTimeStamp.videoTimeScale	int*
+typedef CVOptionFlags	unsigned long long*
+typedef CVReturn	int*
+typedef CVSMPTETimeFlags	unsigned int*
+typedef CVSMPTETimeType	unsigned int*
+typedef CVTimeFlags	int*
+typedef CVTimeStampFlags	unsigned long long*
+
+SystemConfiguration/SCDynamicStoreCopySpecific.h y
+SCDynamicStoreCopyProxies	const struct __CFDictionary* (*)(const struct __SCDynamicStore*)
+typedef SCDynamicStoreRef	const struct __SCDynamicStore**
+
+sys/attr.h y
+member attribute_set_t.commonattr	unsigned int*
+member attribute_set_t.dirattr	unsigned int*
+member attribute_set_t.fileattr	unsigned int*
+member attribute_set_t.forkattr	unsigned int*
+member attribute_set_t.volattr	unsigned int*
+member attrreference_t.attr_dataoffset	int*
+member attrreference_t.attr_length	unsigned int*
+member fsobj_id_t.fid_generation	unsigned int*
+member fsobj_id_t.fid_objno	unsigned int*
+member struct attrlist.bitmapcount	unsigned short*
+member struct attrlist.commonattr	unsigned int*
+member struct attrlist.dirattr	unsigned int*
+member struct attrlist.fileattr	unsigned int*
+member struct attrlist.forkattr	unsigned int*
+member struct attrlist.reserved	unsigned short*
+member struct attrlist.volattr	unsigned int*
+typedef attrgroup_t	unsigned int*
+typedef fsfile_type_t	unsigned int*
+typedef fsobj_tag_t	unsigned int*
+typedef fsobj_type_t	unsigned int*
+typedef fsvolid_t	unsigned int*
+typedef text_encoding_t	unsigned int*
+
+copyfile.h y
+copyfile	int (*)(const char*, const char*, struct _copyfile_state*, unsigned int)
+fcopyfile	int (*)(int, int, struct _copyfile_state*, unsigned int)
+typedef copyfile_flags_t	unsigned int*
+typedef copyfile_state_t	struct _copyfile_state**
+
+mach/mach_time.h y
+mach_absolute_time	unsigned long long (*)(void)
+mach_approximate_time	unsigned long long (*)(void)
+mach_continuous_approximate_time	unsigned long long (*)(void)
+mach_continuous_time	unsigned long long (*)(void)
+mach_timebase_info	int (*)(mach_timebase_info_data_t*)
+mach_wait_until	int (*)(unsigned long long)
+member mach_timebase_info_data_t.denom	unsigned int*
+member mach_timebase_info_data_t.numer	unsigned int*
+typedef mach_timebase_info_t	mach_timebase_info_data_t**
+
+mach/mach.h y
+task_for_pid	int (*)(unsigned int, int, unsigned int*)
+task_threads	int (*)(unsigned int, unsigned int**, unsigned int*)
+typedef integer_t	int*
+typedef kern_return_t	int*
+typedef mach_msg_type_number_t	unsigned int*
+typedef mach_port_t	unsigned int*
+typedef mach_vm_address_t	unsigned long long*
+typedef mach_vm_size_t	unsigned long long*
+typedef natural_t	unsigned int*
+typedef task_t	unsigned int*
+typedef thread_array_t	unsigned int**
+typedef thread_t	unsigned int*
+
+mach/task.h y
+member task_vm_info_data_t.compressed	unsigned long long*
+member task_vm_info_data_t.compressed_lifetime	unsigned long long*
+member task_vm_info_data_t.compressed_peak	unsigned long long*
+member task_vm_info_data_t.decompressions	int*
+member task_vm_info_data_t.device	unsigned long long*
+member task_vm_info_data_t.device_peak	unsigned long long*
+member task_vm_info_data_t.external	unsigned long long*
+member task_vm_info_data_t.external_peak	unsigned long long*
+member task_vm_info_data_t.internal	unsigned long long*
+member task_vm_info_data_t.internal_peak	unsigned long long*
+member task_vm_info_data_t.ledger_phys_footprint_peak	long long*
+member task_vm_info_data_t.ledger_purgeable_nonvolatile	long long*
+member task_vm_info_data_t.ledger_purgeable_novolatile_compressed	long long*
+member task_vm_info_data_t.ledger_purgeable_volatile	long long*
+member task_vm_info_data_t.ledger_purgeable_volatile_compressed	long long*
+member task_vm_info_data_t.ledger_swapins	long long*
+member task_vm_info_data_t.ledger_tag_graphics_footprint	long long*
+member task_vm_info_data_t.ledger_tag_graphics_footprint_compressed	long long*
+member task_vm_info_data_t.ledger_tag_graphics_nofootprint	long long*
+member task_vm_info_data_t.ledger_tag_graphics_nofootprint_compressed	long long*
+member task_vm_info_data_t.ledger_tag_media_footprint	long long*
+member task_vm_info_data_t.ledger_tag_media_footprint_compressed	long long*
+member task_vm_info_data_t.ledger_tag_media_nofootprint	long long*
+member task_vm_info_data_t.ledger_tag_media_nofootprint_compressed	long long*
+member task_vm_info_data_t.ledger_tag_network_nonvolatile	long long*
+member task_vm_info_data_t.ledger_tag_network_nonvolatile_compressed	long long*
+member task_vm_info_data_t.ledger_tag_network_volatile	long long*
+member task_vm_info_data_t.ledger_tag_network_volatile_compressed	long long*
+member task_vm_info_data_t.ledger_tag_neural_footprint	long long*
+member task_vm_info_data_t.ledger_tag_neural_footprint_compressed	long long*
+member task_vm_info_data_t.ledger_tag_neural_nofootprint	long long*
+member task_vm_info_data_t.ledger_tag_neural_nofootprint_compressed	long long*
+member task_vm_info_data_t.ledger_tag_neural_nofootprint_peak	long long*
+member task_vm_info_data_t.ledger_tag_neural_nofootprint_total	long long*
+member task_vm_info_data_t.limit_bytes_remaining	unsigned long long*
+member task_vm_info_data_t.max_address	unsigned long long*
+member task_vm_info_data_t.min_address	unsigned long long*
+member task_vm_info_data_t.page_size	int*
+member task_vm_info_data_t.phys_footprint	unsigned long long*
+member task_vm_info_data_t.purgeable_volatile_pmap	unsigned long long*
+member task_vm_info_data_t.purgeable_volatile_resident	unsigned long long*
+member task_vm_info_data_t.purgeable_volatile_virtual	unsigned long long*
+member task_vm_info_data_t.region_count	int*
+member task_vm_info_data_t.resident_size	unsigned long long*
+member task_vm_info_data_t.resident_size_peak	unsigned long long*
+member task_vm_info_data_t.reusable	unsigned long long*
+member task_vm_info_data_t.reusable_peak	unsigned long long*
+member task_vm_info_data_t.virtual_size	unsigned long long*
+task_info	int (*)(unsigned int, unsigned int, int*, unsigned int*)
+typedef task_flavor_t	unsigned int*
+typedef task_info_t	int**
+typedef task_vm_info_t	task_vm_info_data_t**
+
+mach/machine.h y
+typedef cpu_subtype_t	int*
+typedef cpu_threadtype_t	int*
+typedef cpu_type_t	int*
+
+mach/vm_prot.h y
+typedef vm_prot_t	int*
+
+mach/vm_region.h y
+member vm_region_basic_info_data_64_t.behavior	int*
+member vm_region_basic_info_data_64_t.inheritance	unsigned int*
+member vm_region_basic_info_data_64_t.max_protection	int*
+member vm_region_basic_info_data_64_t.offset	unsigned long long*
+member vm_region_basic_info_data_64_t.protection	int*
+member vm_region_basic_info_data_64_t.reserved	int*
+member vm_region_basic_info_data_64_t.shared	int*
+member vm_region_basic_info_data_64_t.user_wired_count	unsigned short*
+member vm_region_basic_info_data_t.behavior	int*
+member vm_region_basic_info_data_t.inheritance	unsigned int*
+member vm_region_basic_info_data_t.max_protection	int*
+member vm_region_basic_info_data_t.offset	unsigned int*
+member vm_region_basic_info_data_t.protection	int*
+member vm_region_basic_info_data_t.reserved	int*
+member vm_region_basic_info_data_t.shared	int*
+member vm_region_basic_info_data_t.user_wired_count	unsigned short*
+typedef boolean_t	int*
+typedef memory_object_offset_t	unsigned long long*
+typedef vm_behavior_t	int*
+typedef vm_inherit_t	unsigned int*
+typedef vm_region_basic_info_64_t	vm_region_basic_info_data_64_t**
+typedef vm_region_basic_info_t	vm_region_basic_info_data_t**
+typedef vm_region_flavor_t	int*
+typedef vm_region_info_64_t	int**
+typedef vm_region_info_t	int**
+typedef vm_region_recurse_info_64_t	int**
+typedef vm_region_recurse_info_t	int**
+
+mach/mach_vm.h y
+mach_vm_allocate	int (*)(unsigned int, unsigned long long*, unsigned long long, int)
+mach_vm_copy	int (*)(unsigned int, unsigned long long, unsigned long long, unsigned long long)
+mach_vm_deallocate	int (*)(unsigned int, unsigned long long, unsigned long long)
+mach_vm_protect	int (*)(unsigned int, unsigned long long, unsigned long long, int, int)
+mach_vm_read	int (*)(unsigned int, unsigned long long, unsigned long long, unsigned long*, unsigned int*)
+mach_vm_read_overwrite	int (*)(unsigned int, unsigned long long, unsigned long long, unsigned long long, unsigned long long*)
+mach_vm_region	int (*)(unsigned int, unsigned long long*, unsigned long long*, int, int*, unsigned int*, unsigned int*)
+mach_vm_write	int (*)(unsigned int, unsigned long long, unsigned long, unsigned int)
+typedef vm_map_inspect_t	unsigned int*
+typedef vm_map_read_t	unsigned int*
+typedef vm_map_t	unsigned int*
+typedef vm_offset_t	unsigned long*
+typedef vm_size_t	unsigned long*
+
+libproc.h y
+proc_clear_dirty	int (*)(int, unsigned int)
+proc_get_dirty	int (*)(int, unsigned int*)
+proc_kmsgbuf	int (*)(void*, unsigned int)
+proc_libversion	int (*)(int*, int*)
+proc_listallpids	int (*)(void*, int)
+proc_listchildpids	int (*)(int, void*, int)
+proc_listpgrppids	int (*)(int, void*, int)
+proc_listpids	int (*)(unsigned int, unsigned int, void*, int)
+proc_name	int (*)(int, void*, unsigned int)
+proc_pidfdinfo	int (*)(int, int, int, void*, int)
+proc_pidfileportinfo	int (*)(int, unsigned int, int, void*, int)
+proc_pidinfo	int (*)(int, int, unsigned long long, void*, int)
+proc_pidpath	int (*)(int, void*, unsigned int)
+proc_regionfilename	int (*)(int, unsigned long long, void*, unsigned int)
+proc_set_dirty	int (*)(int, _Bool)
+proc_setpcontrol	int (*)(const int)
+proc_terminate	int (*)(int, int*)
+proc_track_dirty	int (*)(int, unsigned int)
+
+sys/sys_domain.h y
+member struct sockaddr_sys.ss_family	unsigned char*
+member struct sockaddr_sys.ss_len	unsigned char*
+member struct sockaddr_sys.ss_reserved	unsigned int (*)[7]
+member struct sockaddr_sys.ss_sysaddr	unsigned short*
+
+sys/sysctl.h y
+sysctl	int (*)(int*, unsigned int, void*, unsigned long*, void*, unsigned long)
+sysctlbyname	int (*)(const char*, void*, unsigned long*, void*, unsigned long)
+sysctlnametomib	int (*)(const char*, int*, unsigned long*)
+
+mach-o/dyld.h y
+_NSGetExecutablePath	int (*)(char*, unsigned int*)
+
+mach-o/loader.h y
+member struct load_command.cmd	unsigned int*
+member struct load_command.cmdsize	unsigned int*
+member struct mach_header.cpusubtype	int*
+member struct mach_header.cputype	int*
+member struct mach_header.filetype	unsigned int*
+member struct mach_header.flags	unsigned int*
+member struct mach_header.magic	unsigned int*
+member struct mach_header.ncmds	unsigned int*
+member struct mach_header.sizeofcmds	unsigned int*
+member struct mach_header_64.cpusubtype	int*
+member struct mach_header_64.cputype	int*
+member struct mach_header_64.filetype	unsigned int*
+member struct mach_header_64.flags	unsigned int*
+member struct mach_header_64.magic	unsigned int*
+member struct mach_header_64.ncmds	unsigned int*
+member struct mach_header_64.reserved	unsigned int*
+member struct mach_header_64.sizeofcmds	unsigned int*
+member struct section.addr	unsigned int*
+member struct section.align	unsigned int*
+member struct section.flags	unsigned int*
+member struct section.nreloc	unsigned int*
+member struct section.offset	unsigned int*
+member struct section.reloff	unsigned int*
+member struct section.reserved1	unsigned int*
+member struct section.reserved2	unsigned int*
+member struct section.sectname	char (*)[16]
+member struct section.segname	char (*)[16]
+member struct section.size	unsigned int*
+member struct section_64.addr	unsigned long long*
+member struct section_64.align	unsigned int*
+member struct section_64.flags	unsigned int*
+member struct section_64.nreloc	unsigned int*
+member struct section_64.offset	unsigned int*
+member struct section_64.reloff	unsigned int*
+member struct section_64.reserved1	unsigned int*
+member struct section_64.reserved2	unsigned int*
+member struct section_64.reserved3	unsigned int*
+member struct section_64.sectname	char (*)[16]
+member struct section_64.segname	char (*)[16]
+member struct section_64.size	unsigned long long*
+member struct segment_command.cmd	unsigned int*
+member struct segment_command.cmdsize	unsigned int*
+member struct segment_command.fileoff	unsigned int*
+member struct segment_command.filesize	unsigned int*
+member struct segment_command.flags	unsigned int*
+member struct segment_command.initprot	int*
+member struct segment_command.maxprot	int*
+member struct segment_command.nsects	unsigned int*
+member struct segment_command.segname	char (*)[16]
+member struct segment_command.vmaddr	unsigned int*
+member struct segment_command.vmsize	unsigned int*
+member struct segment_command_64.cmd	unsigned int*
+member struct segment_command_64.cmdsize	unsigned int*
+member struct segment_command_64.fileoff	unsigned long long*
+member struct segment_command_64.filesize	unsigned long long*
+member struct segment_command_64.flags	unsigned int*
+member struct segment_command_64.initprot	int*
+member struct segment_command_64.maxprot	int*
+member struct segment_command_64.nsects	unsigned int*
+member struct segment_command_64.segname	char (*)[16]
+member struct segment_command_64.vmaddr	unsigned long long*
+member struct segment_command_64.vmsize	unsigned long long*
+member struct symtab_command.cmd	unsigned int*
+member struct symtab_command.cmdsize	unsigned int*
+member struct symtab_command.nsyms	unsigned int*
+member struct symtab_command.stroff	unsigned int*
+member struct symtab_command.strsize	unsigned int*
+member struct symtab_command.symoff	unsigned int*
+
+mach-o/fat.h y
+member struct fat_arch.align	unsigned int*
+member struct fat_arch.cpusubtype	int*
+member struct fat_arch.cputype	int*
+member struct fat_arch.offset	unsigned int*
+member struct fat_arch.size	unsigned int*
+member struct fat_arch_64.align	unsigned int*
+member struct fat_arch_64.cpusubtype	int*
+member struct fat_arch_64.cputype	int*
+member struct fat_arch_64.offset	unsigned long long*
+member struct fat_arch_64.reserved	unsigned int*
+member struct fat_arch_64.size	unsigned long long*
+member struct fat_header.magic	unsigned int*
+member struct fat_header.nfat_arch	unsigned int*
+
+mach-o/nlist.h y
+member struct nlist.n_desc	short*
+member struct nlist.n_sect	unsigned char*
+member struct nlist.n_type	unsigned char*
+member struct nlist.n_value	unsigned int*
+member struct nlist_64.n_desc	unsigned short*
+member struct nlist_64.n_sect	unsigned char*
+member struct nlist_64.n_type	unsigned char*
+member struct nlist_64.n_value	unsigned long long*
+
+sys/mman.h y
+madvise	int (*)(void*, unsigned long, int)
+mincore	int (*)(const void*, unsigned long, char*)
+mlock	int (*)(const void*, unsigned long)
+mlockall	int (*)(int)
+mmap	void* (*)(void*, unsigned long, int, int, int, long long)
+mprotect	int (*)(void*, unsigned long, int)
+msync	int (*)(void*, unsigned long, int)
+munlock	int (*)(const void*, unsigned long)
+munlockall	int (*)(void)
+munmap	int (*)(void*, unsigned long)
+posix_madvise	int (*)(void*, unsigned long, int)
+shm_open	int (*)(const char*, int, ...)
+shm_unlink	int (*)(const char*)
+
+sys/random.h y
+getentropy	int (*)(void*, unsigned long)
+
+sys/xattr.h y
+fgetxattr	long (*)(int, const char*, void*, unsigned long, unsigned int, int)
+flistxattr	long (*)(int, char*, unsigned long, int)
+fremovexattr	int (*)(int, const char*, int)
+fsetxattr	int (*)(int, const char*, const void*, unsigned long, unsigned int, int)
+getxattr	long (*)(const char*, const char*, void*, unsigned long, unsigned int, int)
+listxattr	long (*)(const char*, char*, unsigned long, int)
+removexattr	int (*)(const char*, const char*, int)
+setxattr	int (*)(const char*, const char*, const void*, unsigned long, unsigned int, int)
+
+sys/statvfs.h y
+fstatvfs	int (*)(int, struct statvfs*)
+member struct statvfs.f_bavail	unsigned int*
+member struct statvfs.f_bfree	unsigned int*
+member struct statvfs.f_blocks	unsigned int*
+member struct statvfs.f_bsize	unsigned long*
+member struct statvfs.f_favail	unsigned int*
+member struct statvfs.f_ffree	unsigned int*
+member struct statvfs.f_files	unsigned int*
+member struct statvfs.f_flag	unsigned long*
+member struct statvfs.f_frsize	unsigned long*
+member struct statvfs.f_fsid	unsigned long*
+member struct statvfs.f_namemax	unsigned long*
+statvfs	int (*)(const char*, struct statvfs*)
+
+sys/wait.h y
+wait	int (*)(int*)
+wait3	int (*)(int*, int, struct rusage*)
+wait4	int (*)(int, int*, int, struct rusage*)
+waitid	int (*)(idtype_t, unsigned int, siginfo_t*, int)
+waitpid	int (*)(int, int*, int)
+
+sys/resource.h y
+getpriority	int (*)(int, unsigned int)
+getrlimit	int (*)(int, struct rlimit*)
+getrusage	int (*)(int, struct rusage*)
+member struct rlimit.rlim_cur	unsigned long long*
+member struct rlimit.rlim_max	unsigned long long*
+member struct rusage.ru_idrss	long*
+member struct rusage.ru_inblock	long*
+member struct rusage.ru_isrss	long*
+member struct rusage.ru_ixrss	long*
+member struct rusage.ru_majflt	long*
+member struct rusage.ru_maxrss	long*
+member struct rusage.ru_minflt	long*
+member struct rusage.ru_msgrcv	long*
+member struct rusage.ru_msgsnd	long*
+member struct rusage.ru_nivcsw	long*
+member struct rusage.ru_nsignals	long*
+member struct rusage.ru_nswap	long*
+member struct rusage.ru_nvcsw	long*
+member struct rusage.ru_oublock	long*
+member struct rusage.ru_stime	struct timeval*
+member struct rusage.ru_utime	struct timeval*
+setpriority	int (*)(int, unsigned int, int)
+setrlimit	int (*)(int, const struct rlimit*)
+typedef rlim_t	unsigned long long*
+
+wctype.h y
+iswalnum	int (*)(int)
+iswalpha	int (*)(int)
+iswblank	int (*)(int)
+iswcntrl	int (*)(int)
+iswctype	int (*)(int, unsigned int)
+iswdigit	int (*)(int)
+iswgraph	int (*)(int)
+iswlower	int (*)(int)
+iswprint	int (*)(int)
+iswpunct	int (*)(int)
+iswspace	int (*)(int)
+iswupper	int (*)(int)
+iswxdigit	int (*)(int)
+towctrans	int (*)(int, int)
+towlower	int (*)(int)
+towupper	int (*)(int)
+typedef wctrans_t	int*
+typedef wctype_t	unsigned int*
+typedef wint_t	int*
+wctrans	int (*)(const char*)
+wctype	unsigned int (*)(const char*)
+
+sys/ioctl.h y
+ioctl	int (*)(int, unsigned long, ...)
+member struct ttysize.ts_cols	unsigned short*
+member struct ttysize.ts_lines	unsigned short*
+member struct ttysize.ts_xxx	unsigned short*
+member struct ttysize.ts_yyy	unsigned short*
+member struct winsize.ws_col	unsigned short*
+member struct winsize.ws_row	unsigned short*
+member struct winsize.ws_xpixel	unsigned short*
+member struct winsize.ws_ypixel	unsigned short*
+
+sys/time.h y
+futimes	int (*)(int, const struct timeval*)
+getitimer	int (*)(int, struct itimerval*)
+gettimeofday	int (*)(struct timeval*, void*)
+lutimes	int (*)(const char*, const struct timeval*)
+member struct itimerval.it_interval	struct timeval*
+member struct itimerval.it_value	struct timeval*
+member struct timezone.tz_dsttime	int*
+member struct timezone.tz_minuteswest	int*
+setitimer	int (*)(int, const struct itimerval*, struct itimerval*)
+utimes	int (*)(const char*, const struct timeval*)
+
+sys/times.h y
+member struct tms.tms_cstime	unsigned long*
+member struct tms.tms_cutime	unsigned long*
+member struct tms.tms_stime	unsigned long*
+member struct tms.tms_utime	unsigned long*
+times	unsigned long (*)(struct tms*)
+
+termios.h y
+cfgetispeed	unsigned long (*)(const struct termios*)
+cfgetospeed	unsigned long (*)(const struct termios*)
+cfmakeraw	void (*)(struct termios*)
+cfsetispeed	int (*)(struct termios*, unsigned long)
+cfsetospeed	int (*)(struct termios*, unsigned long)
+member struct termios.c_cc	unsigned char (*)[20]
+member struct termios.c_cflag	unsigned long*
+member struct termios.c_iflag	unsigned long*
+member struct termios.c_ispeed	unsigned long*
+member struct termios.c_lflag	unsigned long*
+member struct termios.c_oflag	unsigned long*
+member struct termios.c_ospeed	unsigned long*
+tcdrain	int (*)(int)
+tcflow	int (*)(int, int)
+tcflush	int (*)(int, int)
+tcgetattr	int (*)(int, struct termios*)
+tcgetsid	int (*)(int)
+tcsendbreak	int (*)(int, int)
+tcsetattr	int (*)(int, int, const struct termios*)
+typedef cc_t	unsigned char*
+typedef speed_t	unsigned long*
+typedef tcflag_t	unsigned long*
+
+poll.h y
+member struct pollfd.events	short*
+member struct pollfd.fd	int*
+member struct pollfd.revents	short*
+poll	int (*)(struct pollfd*, unsigned int, int)
+typedef nfds_t	unsigned int*
+
+malloc/malloc.h y
+malloc_size	unsigned long (*)(const void*)
+
+libgen.h y
+basename	char* (*)(char*)
+dirname	char* (*)(char*)
+
+util.h y
+forkpty	int (*)(int*, char*, struct termios*, struct winsize*)
+login_tty	int (*)(int)
+openpty	int (*)(int*, int*, char*, struct termios*, struct winsize*)
+
+glob.h y
+glob	int (*)(const char*, int, int (*)(const char*, int), glob_t*)
+globfree	void (*)(glob_t*)
+member glob_t.gl_closedir	void (**)(void*)
+member glob_t.gl_errfunc	int (**)(const char*, int)
+member glob_t.gl_flags	int*
+member glob_t.gl_lstat	int (**)(const char*, struct stat*)
+member glob_t.gl_matchc	int*
+member glob_t.gl_offs	unsigned long*
+member glob_t.gl_opendir	void* (**)(const char*)
+member glob_t.gl_pathc	unsigned long*
+member glob_t.gl_pathv	char***
+member glob_t.gl_readdir	struct dirent* (**)(void*)
+member glob_t.gl_stat	int (**)(const char*, struct stat*)
+
+fnmatch.h y
+fnmatch	int (*)(const char*, const char*, int)
+
+regex.h y
+member regex_t.re_endp	const char**
+member regex_t.re_g	struct re_guts**
+member regex_t.re_magic	int*
+member regex_t.re_nsub	unsigned long*
+member regmatch_t.rm_eo	long long*
+member regmatch_t.rm_so	long long*
+regcomp	int (*)(regex_t*, const char*, int)
+regerror	unsigned long (*)(int, const regex_t*, char*, unsigned long)
+regexec	int (*)(const regex_t*, const char*, unsigned long, regmatch_t*, int)
+regfree	void (*)(regex_t*)
+typedef regoff_t	long long*
+
+pthread.h y
+member pthread_attr_t.__opaque	char (*)[56]
+member pthread_attr_t.__sig	long*
+member pthread_cond_t.__opaque	char (*)[40]
+member pthread_cond_t.__sig	long*
+member pthread_condattr_t.__opaque	char (*)[8]
+member pthread_condattr_t.__sig	long*
+member pthread_mutex_t.__opaque	char (*)[56]
+member pthread_mutex_t.__sig	long*
+member pthread_mutexattr_t.__opaque	char (*)[8]
+member pthread_mutexattr_t.__sig	long*
+member pthread_once_t.__opaque	char (*)[8]
+member pthread_once_t.__sig	long*
+member pthread_rwlock_t.__opaque	char (*)[192]
+member pthread_rwlock_t.__sig	long*
+member pthread_rwlockattr_t.__opaque	char (*)[16]
+member pthread_rwlockattr_t.__sig	long*
+pthread_atfork	int (*)(void (*)(void), void (*)(void), void (*)(void))
+pthread_attr_destroy	int (*)(pthread_attr_t*)
+pthread_attr_getdetachstate	int (*)(const pthread_attr_t*, int*)
+pthread_attr_getguardsize	int (*)(const pthread_attr_t*, unsigned long*)
+pthread_attr_getinheritsched	int (*)(const pthread_attr_t*, int*)
+pthread_attr_getschedparam	int (*)(const pthread_attr_t*, struct sched_param*)
+pthread_attr_getschedpolicy	int (*)(const pthread_attr_t*, int*)
+pthread_attr_getscope	int (*)(const pthread_attr_t*, int*)
+pthread_attr_getstack	int (*)(const pthread_attr_t*, void**, unsigned long*)
+pthread_attr_getstacksize	int (*)(const pthread_attr_t*, unsigned long*)
+pthread_attr_init	int (*)(pthread_attr_t*)
+pthread_attr_setdetachstate	int (*)(pthread_attr_t*, int)
+pthread_attr_setguardsize	int (*)(pthread_attr_t*, unsigned long)
+pthread_attr_setinheritsched	int (*)(pthread_attr_t*, int)
+pthread_attr_setschedparam	int (*)(pthread_attr_t*, const struct sched_param*)
+pthread_attr_setschedpolicy	int (*)(pthread_attr_t*, int)
+pthread_attr_setscope	int (*)(pthread_attr_t*, int)
+pthread_attr_setstack	int (*)(pthread_attr_t*, void*, unsigned long)
+pthread_attr_setstacksize	int (*)(pthread_attr_t*, unsigned long)
+pthread_cancel	int (*)(struct _opaque_pthread_t*)
+pthread_cond_broadcast	int (*)(pthread_cond_t*)
+pthread_cond_destroy	int (*)(pthread_cond_t*)
+pthread_cond_init	int (*)(pthread_cond_t*, const pthread_condattr_t*)
+pthread_cond_signal	int (*)(pthread_cond_t*)
+pthread_cond_timedwait	int (*)(pthread_cond_t*, pthread_mutex_t*, const struct timespec*)
+pthread_cond_timedwait_relative_np	int (*)(pthread_cond_t*, pthread_mutex_t*, const struct timespec*)
+pthread_cond_wait	int (*)(pthread_cond_t*, pthread_mutex_t*)
+pthread_condattr_destroy	int (*)(pthread_condattr_t*)
+pthread_condattr_getpshared	int (*)(const pthread_condattr_t*, int*)
+pthread_condattr_init	int (*)(pthread_condattr_t*)
+pthread_condattr_setpshared	int (*)(pthread_condattr_t*, int)
+pthread_create	int (*)(struct _opaque_pthread_t**, const pthread_attr_t*, void* (*)(void*), void*)
+pthread_detach	int (*)(struct _opaque_pthread_t*)
+pthread_equal	int (*)(struct _opaque_pthread_t*, struct _opaque_pthread_t*)
+pthread_exit	void (*)(void*)
+pthread_get_stackaddr_np	void* (*)(struct _opaque_pthread_t*)
+pthread_get_stacksize_np	unsigned long (*)(struct _opaque_pthread_t*)
+pthread_getconcurrency	int (*)(void)
+pthread_getname_np	int (*)(struct _opaque_pthread_t*, char*, unsigned long)
+pthread_getschedparam	int (*)(struct _opaque_pthread_t*, int*, struct sched_param*)
+pthread_getspecific	void* (*)(unsigned long)
+pthread_jit_write_protect_np	void (*)(int)
+pthread_join	int (*)(struct _opaque_pthread_t*, void**)
+pthread_key_create	int (*)(unsigned long*, void (*)(void*))
+pthread_key_delete	int (*)(unsigned long)
+pthread_kill	int (*)(struct _opaque_pthread_t*, int)
+pthread_mutex_destroy	int (*)(pthread_mutex_t*)
+pthread_mutex_getprioceiling	int (*)(const pthread_mutex_t*, int*)
+pthread_mutex_init	int (*)(pthread_mutex_t*, const pthread_mutexattr_t*)
+pthread_mutex_lock	int (*)(pthread_mutex_t*)
+pthread_mutex_setprioceiling	int (*)(pthread_mutex_t*, int, int*)
+pthread_mutex_trylock	int (*)(pthread_mutex_t*)
+pthread_mutex_unlock	int (*)(pthread_mutex_t*)
+pthread_mutexattr_destroy	int (*)(pthread_mutexattr_t*)
+pthread_mutexattr_getprioceiling	int (*)(const pthread_mutexattr_t*, int*)
+pthread_mutexattr_getprotocol	int (*)(const pthread_mutexattr_t*, int*)
+pthread_mutexattr_getpshared	int (*)(const pthread_mutexattr_t*, int*)
+pthread_mutexattr_gettype	int (*)(const pthread_mutexattr_t*, int*)
+pthread_mutexattr_init	int (*)(pthread_mutexattr_t*)
+pthread_mutexattr_setprioceiling	int (*)(pthread_mutexattr_t*, int)
+pthread_mutexattr_setprotocol	int (*)(pthread_mutexattr_t*, int)
+pthread_mutexattr_setpshared	int (*)(pthread_mutexattr_t*, int)
+pthread_mutexattr_settype	int (*)(pthread_mutexattr_t*, int)
+pthread_once	int (*)(pthread_once_t*, void (*)(void))
+pthread_rwlock_destroy	int (*)(pthread_rwlock_t*)
+pthread_rwlock_init	int (*)(pthread_rwlock_t*, const pthread_rwlockattr_t*)
+pthread_rwlock_rdlock	int (*)(pthread_rwlock_t*)
+pthread_rwlock_tryrdlock	int (*)(pthread_rwlock_t*)
+pthread_rwlock_trywrlock	int (*)(pthread_rwlock_t*)
+pthread_rwlock_unlock	int (*)(pthread_rwlock_t*)
+pthread_rwlock_wrlock	int (*)(pthread_rwlock_t*)
+pthread_rwlockattr_destroy	int (*)(pthread_rwlockattr_t*)
+pthread_rwlockattr_getpshared	int (*)(const pthread_rwlockattr_t*, int*)
+pthread_rwlockattr_init	int (*)(pthread_rwlockattr_t*)
+pthread_rwlockattr_setpshared	int (*)(pthread_rwlockattr_t*, int)
+pthread_self	struct _opaque_pthread_t* (*)(void)
+pthread_setcancelstate	int (*)(int, int*)
+pthread_setcanceltype	int (*)(int, int*)
+pthread_setconcurrency	int (*)(int)
+pthread_setname_np	int (*)(const char*)
+pthread_setschedparam	int (*)(struct _opaque_pthread_t*, int, const struct sched_param*)
+pthread_setspecific	int (*)(unsigned long, const void*)
+pthread_testcancel	void (*)(void)
+pthread_threadid_np	int (*)(struct _opaque_pthread_t*, unsigned long long*)
+typedef pthread_key_t	unsigned long*
+typedef pthread_t	struct _opaque_pthread_t**
+
+semaphore.h y
+sem_close	int (*)(int*)
+sem_destroy	int (*)(int*)
+sem_getvalue	int (*)(int*, int*)
+sem_init	int (*)(int*, int, unsigned int)
+sem_open	int* (*)(const char*, int, ...)
+sem_post	int (*)(int*)
+sem_trywait	int (*)(int*)
+sem_unlink	int (*)(const char*)
+sem_wait	int (*)(int*)
+typedef sem_t	int*
+
+aio.h y
+aio_cancel	int (*)(int, struct aiocb*)
+aio_error	int (*)(const struct aiocb*)
+aio_fsync	int (*)(int, struct aiocb*)
+aio_read	int (*)(struct aiocb*)
+aio_return	long (*)(struct aiocb*)
+aio_suspend	int (*)(const struct aiocb* const *, int, const struct timespec*)
+aio_write	int (*)(struct aiocb*)
+lio_listio	int (*)(int, struct aiocb* const *, int, struct sigevent*)
+member struct aiocb.aio_buf	volatile void**
+member struct aiocb.aio_fildes	int*
+member struct aiocb.aio_lio_opcode	int*
+member struct aiocb.aio_nbytes	unsigned long*
+member struct aiocb.aio_offset	long long*
+member struct aiocb.aio_reqprio	int*
+member struct aiocb.aio_sigevent	struct sigevent*
+
+nl_types.h y
+catclose	int (*)(struct __nl_cat_d*)
+catgets	char* (*)(struct __nl_cat_d*, int, int, const char*)
+catopen	struct __nl_cat_d* (*)(const char*, int)
+member struct __nl_cat_d.__data	void**
+member struct __nl_cat_d.__size	int*
+typedef nl_catd	struct __nl_cat_d**
+
+monetary.h y
+strfmon	long (*)(char*, unsigned long, const char*, ...)
+
+wordexp.h y
+member wordexp_t.we_offs	unsigned long*
+member wordexp_t.we_wordc	unsigned long*
+member wordexp_t.we_wordv	char***
+wordexp	int (*)(const char*, wordexp_t*, int)
+wordfree	void (*)(wordexp_t*)
+
+fmtmsg.h y
+fmtmsg	int (*)(long, const char*, int, const char*, const char*, const char*)
+
+search.h y
+hcreate	int (*)(unsigned long)
+hdestroy	void (*)(void)
+hsearch	ENTRY* (*)(ENTRY, ACTION)
+insque	void (*)(void*, void*)
+lfind	void* (*)(const void*, const void*, unsigned long*, unsigned long, int (*)(const void*, const void*))
+lsearch	void* (*)(const void*, void*, unsigned long*, unsigned long, int (*)(const void*, const void*))
+member ENTRY.data	void**
+member ENTRY.key	char**
+remque	void (*)(void*)
+tdelete	void* (*)(const void*, void**, int (*)(const void*, const void*))
+tfind	void* (*)(const void*, void* const *, int (*)(const void*, const void*))
+tsearch	void* (*)(const void*, void**, int (*)(const void*, const void*))
+twalk	void (*)(const void*, void (*)(const void*, VISIT, int))
+
+ulimit.h y
+ulimit	long (*)(int, ...)
+
+utmpx.h y
+endutxent	void (*)(void)
+endutxent_wtmp	void (*)(void)
+getlastlogx	struct lastlogx* (*)(unsigned int, struct lastlogx*)
+getlastlogxbyname	struct lastlogx* (*)(const char*, struct lastlogx*)
+getutmp	void (*)(const struct utmpx*, struct utmp*)
+getutmpx	void (*)(const struct utmp*, struct utmpx*)
+getutxent	struct utmpx* (*)(void)
+getutxent_wtmp	struct utmpx* (*)(void)
+getutxid	struct utmpx* (*)(const struct utmpx*)
+getutxline	struct utmpx* (*)(const struct utmpx*)
+member struct lastlogx.ll_host	char (*)[256]
+member struct lastlogx.ll_line	char (*)[32]
+member struct lastlogx.ll_tv	struct timeval*
+member struct utmpx.ut_host	char (*)[256]
+member struct utmpx.ut_id	char (*)[4]
+member struct utmpx.ut_line	char (*)[32]
+member struct utmpx.ut_pad	unsigned int (*)[16]
+member struct utmpx.ut_pid	int*
+member struct utmpx.ut_tv	struct timeval*
+member struct utmpx.ut_type	short*
+member struct utmpx.ut_user	char (*)[256]
+pututxline	struct utmpx* (*)(const struct utmpx*)
+setutxent	void (*)(void)
+setutxent_wtmp	void (*)(int)
+utmpxname	int (*)(const char*)
+wtmpxname	int (*)(const char*)
+
+ndbm.h y
+dbm_clearerr	int (*)(DBM*)
+dbm_close	void (*)(DBM*)
+dbm_delete	int (*)(DBM*, datum)
+dbm_dirfno	int (*)(DBM*)
+dbm_error	int (*)(DBM*)
+dbm_fetch	datum (*)(DBM*, datum)
+dbm_firstkey	datum (*)(DBM*)
+dbm_nextkey	datum (*)(DBM*)
+dbm_open	DBM* (*)(const char*, int, unsigned short)
+dbm_store	int (*)(DBM*, datum, datum, int)
+member DBM.__opaque	char (*)[68]
+member datum.dptr	void**
+member datum.dsize	unsigned long*
+
+dlfcn.h y
+dladdr	int (*)(const void*, Dl_info*)
+dlclose	int (*)(void*)
+dlerror	char* (*)(void)
+dlopen	void* (*)(const char*, int)
+dlsym	void* (*)(void*, const char*)
+member Dl_info.dli_fbase	void**
+member Dl_info.dli_fname	const char**
+member Dl_info.dli_saddr	void**
+member Dl_info.dli_sname	const char**
+
+fenv.h y
+feclearexcept	int (*)(int)
+fegetenv	int (*)(fenv_t*)
+fegetexceptflag	int (*)(unsigned short*, int)
+fegetround	int (*)(void)
+feholdexcept	int (*)(fenv_t*)
+feraiseexcept	int (*)(int)
+fesetenv	int (*)(const fenv_t*)
+fesetexceptflag	int (*)(const unsigned short*, int)
+fesetround	int (*)(int)
+fetestexcept	int (*)(int)
+feupdateenv	int (*)(const fenv_t*)
+member fenv_t.__fpcr	unsigned long long*
+member fenv_t.__fpsr	unsigned long long*
+typedef fexcept_t	unsigned short*
+
+os/log.h y
+_os_log_default	struct os_log_s*
+_os_log_internal	void (*)(void*, struct os_log_s*, unsigned char, const char*, ...)
+os_log_create	struct os_log_s* (*)(const char*, const char*)
+typedef os_log_t	struct os_log_s**
+typedef os_log_type_t	unsigned char*
+
+os/lock.h y
+member os_unfair_lock._os_unfair_lock_opaque	unsigned int*
+os_unfair_lock_lock	void (*)(os_unfair_lock*)
+os_unfair_lock_trylock	_Bool (*)(os_unfair_lock*)
+os_unfair_lock_unlock	void (*)(os_unfair_lock*)
+typedef os_unfair_lock_t	os_unfair_lock**
+
+crt_externs.h y
+_NSGetArgc	int* (*)(void)
+_NSGetArgv	char*** (*)(void)
+_NSGetEnviron	char*** (*)(void)
+_NSGetProgname	char** (*)(void)
+
+xlocale.h y
+_c_locale	struct _xlocale* const*
+localeconv_l	struct lconv* (*)(struct _xlocale*)
+querylocale	const char* (*)(int, struct _xlocale*)
+wcschr	int* (*)(const int*, int)
+wcscmp	int (*)(const int*, const int*)
+wcslen	unsigned long (*)(const int*)
+wcsncmp	int (*)(const int*, const int*, unsigned long)
+wmemchr	int* (*)(const int*, int, unsigned long)
+wmemcmp	int (*)(const int*, const int*, unsigned long)
+wmemcpy	int* (*)(int*, const int*, unsigned long)
+wmemmove	int* (*)(int*, const int*, unsigned long)
+
+wchar.h y
+btowc	int (*)(int)
+fgetwc	int (*)(FILE*)
+fgetws	int* (*)(int*, int, FILE*)
+fputwc	int (*)(int, FILE*)
+fputws	int (*)(const int*, FILE*)
+fwide	int (*)(FILE*, int)
+fwprintf	int (*)(FILE*, const int*, ...)
+fwscanf	int (*)(FILE*, const int*, ...)
+getwc	int (*)(FILE*)
+getwchar	int (*)(void)
+mbrlen	unsigned long (*)(const char*, unsigned long, mbstate_t*)
+mbrtowc	unsigned long (*)(int*, const char*, unsigned long, mbstate_t*)
+mbsinit	int (*)(const mbstate_t*)
+mbsrtowcs	unsigned long (*)(int*, const char**, unsigned long, mbstate_t*)
+member mbstate_t.__mbstate8	char (*)[128]
+member mbstate_t._mbstateL	long long*
+putwc	int (*)(int, FILE*)
+putwchar	int (*)(int)
+swprintf	int (*)(int*, unsigned long, const int*, ...)
+swscanf	int (*)(const int*, const int*, ...)
+ungetwc	int (*)(int, FILE*)
+vfwprintf	int (*)(FILE*, const int*, char*)
+vfwscanf	int (*)(FILE*, const int*, char*)
+vswprintf	int (*)(int*, unsigned long, const int*, char*)
+vswscanf	int (*)(const int*, const int*, char*)
+vwprintf	int (*)(const int*, char*)
+vwscanf	int (*)(const int*, char*)
+wcrtomb	unsigned long (*)(char*, int, mbstate_t*)
+wcscat	int* (*)(int*, const int*)
+wcscoll	int (*)(const int*, const int*)
+wcscpy	int* (*)(int*, const int*)
+wcscspn	unsigned long (*)(const int*, const int*)
+wcsftime	unsigned long (*)(int*, unsigned long, const int*, const struct tm*)
+wcsncat	int* (*)(int*, const int*, unsigned long)
+wcsncpy	int* (*)(int*, const int*, unsigned long)
+wcspbrk	int* (*)(const int*, const int*)
+wcsrchr	int* (*)(const int*, int)
+wcsrtombs	unsigned long (*)(char*, const int**, unsigned long, mbstate_t*)
+wcsspn	unsigned long (*)(const int*, const int*)
+wcsstr	int* (*)(const int*, const int*)
+wcstod	double (*)(const int*, int**)
+wcstof	float (*)(const int*, int**)
+wcstok	int* (*)(int*, const int*, int**)
+wcstol	long (*)(const int*, int**, int)
+wcstold	long double (*)(const int*, int**)
+wcstoll	long long (*)(const int*, int**, int)
+wcstoul	unsigned long (*)(const int*, int**, int)
+wcstoull	unsigned long long (*)(const int*, int**, int)
+wcswidth	int (*)(const int*, unsigned long)
+wcsxfrm	unsigned long (*)(int*, const int*, unsigned long)
+wctob	int (*)(int)
+wcwidth	int (*)(int)
+wmemset	int* (*)(int*, int, unsigned long)
+wprintf	int (*)(const int*, ...)
+wscanf	int (*)(const int*, ...)

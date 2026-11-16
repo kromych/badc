@@ -28,53 +28,48 @@ Disassembly of section .text:
                	ret
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	ldr	x1, [x1, #0x8]
+               	ldr	x2, [x1, #0x8]
                	mov	x17, #0x5a5a            // =23130
                	movk	x17, #0x5a5a, lsl #16
-               	cmp	x1, x17
+               	cmp	x2, x17
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	add	x0, x0, #0x10
-               	ldr	x1, [x0]
-               	cmp	x1, #0xa
+               	ldr	x2, [x0, #0x10]
+               	cmp	x2, #0xa
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	ldr	x1, [x0, #0x8]
-               	cmp	x1, #0xb
+               	ldr	x2, [x0, #0x18]
+               	cmp	x2, #0xb
                	b.ne	<addr>
-               	ldr	x1, [x0, #0x10]
-               	cmp	x1, #0xc
+               	ldr	x2, [x0, #0x20]
+               	cmp	x2, #0xc
                	b.ne	<addr>
-               	ldr	x1, [x0, #0x18]
-               	cmp	x1, #0xd
+               	ldr	x2, [x0, #0x28]
+               	cmp	x2, #0xd
                	b.ne	<addr>
-               	ldr	x1, [x0, #0x20]
-               	cmp	x1, #0xe
+               	ldr	x2, [x0, #0x30]
+               	cmp	x2, #0xe
                	b.ne	<addr>
-               	ldr	x1, [x0, #0x28]
-               	cmp	x1, #0xf
+               	ldr	x2, [x0, #0x38]
+               	cmp	x2, #0xf
                	b.ne	<addr>
-               	ldr	x1, [x0, #0x30]
-               	cmp	x1, #0x10
+               	ldr	x2, [x0, #0x40]
+               	cmp	x2, #0x10
                	b.ne	<addr>
-               	ldr	x1, [x0, #0x38]
-               	cmp	x1, #0x11
+               	ldr	x2, [x0, #0x48]
+               	cmp	x2, #0x11
                	b.ne	<addr>
-               	ldr	x1, [x0, #0x40]
-               	cmp	x1, #0x12
+               	ldr	x2, [x0, #0x50]
+               	cmp	x2, #0x12
                	b.ne	<addr>
-               	ldr	x1, [x0, #0x48]
-               	cmp	x1, #0x13
+               	ldr	x2, [x0, #0x58]
+               	cmp	x2, #0x13
                	b.ne	<addr>
-               	ldr	x0, [x0, #0x50]
-               	cmp	x0, #0x14
+               	ldr	x2, [x0, #0x60]
+               	cmp	x2, #0x14
                	b.ne	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
                	cmp	x0, x1
                	b.ne	<addr>
                	mov	x0, #0x3                // =3

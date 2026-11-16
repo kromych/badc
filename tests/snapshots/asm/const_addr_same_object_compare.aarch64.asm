@@ -30,5 +30,5 @@ Disassembly of section .text:
                	ret
                	adrp	x1, <page>
                	mov	x0, #0x0                // =0
-               	str	w0, [x1, #0x60]
+               	str	w0, [x1, #0x50]
                	ret

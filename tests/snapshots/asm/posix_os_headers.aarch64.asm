@@ -58,8 +58,8 @@ Disassembly of section .text:
                	ldursw	x1, [x29, #-0x68]
                	stur	w1, [x29, #-0x60]
                	mov	x1, #0x1                // =1
-               	sturh	w1, [x29, #-0x5c]
-               	sturh	wzr, [x29, #-0x5a]
+               	mov	x2, #0x1                // =1
+               	stur	w2, [x29, #-0x5c]
                	mov	x2, #0x3e8              // =1000
                	bl	<addr>
                	cmp	w0, #0x1

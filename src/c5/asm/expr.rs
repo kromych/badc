@@ -119,7 +119,7 @@ impl AsmExprValue {
     pub(crate) fn to_abs(&self) -> Option<i64> {
         (self.pos.is_none() && self.neg.is_none()).then_some(self.add)
     }
-    /// Combine `self + rhs` (`self - rhs` when `sub`), cancelling a positive
+    /// Combine `self + rhs` (`self - rhs` when `sub`), canceling a positive
     /// against a negative base defined in one space.
     pub(crate) fn combine(mut self, rhs: Self, sub: bool) -> Result<Self, alloc::string::String> {
         let (rpos, rneg) = if sub {

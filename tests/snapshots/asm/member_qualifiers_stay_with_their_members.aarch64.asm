@@ -24,14 +24,14 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	str	x1, [x0, #0x30]
+               	str	x1, [x0, #0x20]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	str	x1, [x2, #0x8]
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	str	x1, [x2]
-               	ldr	x1, [x0, #0x30]
+               	ldr	x1, [x0, #0x20]
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	blr	x1

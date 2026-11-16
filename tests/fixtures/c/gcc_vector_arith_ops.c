@@ -3,7 +3,7 @@
 // to every lane, and compound assignment is `v = v OP w` (C99 6.5.16.2p3).
 //
 // Every result is checked against a scalar loop over the lanes at the element
-// type, which is the semantics the extension defines. Both signedness flavours
+// type, which is the semantics the extension defines. Both signedness flavors
 // and all five integer element widths are covered, with lane values chosen so
 // the narrow widths wrap on add / sub / mul.
 //
@@ -154,7 +154,7 @@ int main(void) {
     CHECK(u32x8, unsigned int, 8, xa, xb, -, 48);
 
     // Shifts: vector count, and a scalar count on the right. The arithmetic
-    // flavour follows the element type, not the count's.
+    // flavor follows the element type, not the count's.
     u8x16 sc8 = {0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7};
     i16x8 sci16 = {0, 1, 5, 9, 12, 15, 3, 7};
     CHECK(u8x16, unsigned char, 16, a, sc8, <<, 49);

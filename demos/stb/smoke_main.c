@@ -34,13 +34,6 @@
 /* math.h pulled in below by stb_truetype / stb_hexwave -- no
  * direct uses in the driver itself. */
 
-/* `_lrotl` is an MSVC intrinsic. msvc_compat.h sets _MSC_VER on
- * Windows targets, which makes stb_image take the
- * `#define stbi_lrot(x,y) _lrotl(x,y)` branch; c5 has no
- * `_lrotl` binding, so shim it to the plain-C rotate the
- * non-MSVC branch uses. */
-#define _lrotl(x, n) (((x) << (n)) | ((x) >> (32 - (n))))
-
 /* msvc_compat.h also defines `__MINGW32__`, which makes
  * stb_leakcheck's dumpmem reporter call `__mingw_fprintf` (the
  * format-aware mingw printf wrapper). c5 binds the plain libc
@@ -701,7 +694,7 @@ static int scenario_truetype(void) {
 static int scenario_wang_tile(void) {
     /* The herringbone-wang generator is large; just check its
      * primary entry point produces a valid output buffer for a
-     * tiny request. The template pre-image is a synthesised
+     * tiny request. The template pre-image is a synthesized
      * 8-color wang-tile set; sending NULL would error out, so we
      * call into an introspection helper that doesn't require a
      * template. */

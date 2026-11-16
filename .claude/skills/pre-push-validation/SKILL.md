@@ -18,6 +18,9 @@ There are local boxes available via ssh, plus the macOS host itself, which is a 
 (`--box NAME=macos`) rather than a driver only: macOS is the matrix's only Mach-O and
 only SDK-libc target. `./scripts/validate_local_boxes.py` runs:
 
+  * on the Linux lanes, `cargo clippy` with `--features full` and
+    `scripts/harness_self_tests.py`, the demo and script harnesses' own
+    checks, as CI's `fmt + clippy` job runs both
   * `cargo test`
   * `cargo test --release` over all test targets (release exercises the JIT + native
     fixture-parity paths that debug builds skip; the integration suites under
@@ -83,8 +86,9 @@ only SDK-libc target. `./scripts/validate_local_boxes.py` runs:
 
 The macOS lane runs in the working tree with no transport, and runs the build,
 the release test suite and the POSIX demo set. It skips the kernel step (that
-corpus is Linux-only), the pressure rerun and the clippy step (CI runs both on
-Linux only, and the pre-push hook lints on this host already).
+corpus is Linux-only), the pressure rerun, the clippy step and the harness
+self-checks (CI runs them on Linux only, and the pre-push hook lints on this host
+already).
 
 Out of `GATING_DEMOS` by measurement, and covered by CI instead: `demos/yasm`
 and `demos/python`; the script records the measurement behind each.

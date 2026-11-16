@@ -3,7 +3,7 @@
 // and msvcrt) and POSIX `strndup` (absent from msvcrt). Where the
 // platform library has none, `libc/lib/string_ext.c` supplies it. The
 // cases below are the ones glibc and that source agree on, so a target
-// drifting from the Linux behaviour fails here.
+// drifting from the Linux behavior fails here.
 //
 // Returns 0 on success, otherwise the number of the failing check.
 
@@ -80,7 +80,7 @@ int main(void) {
         return 22;
     }
 
-    // explicit_bzero clears exactly the region named, neighbours intact.
+    // explicit_bzero clears exactly the region named, neighbors intact.
     for (i = 0; i < sizeof buf; i++) {
         buf[i] = 'x';
     }

@@ -179,14 +179,14 @@ SOURCES = [
         sha_kind="tarball-sha256",
     ),
     Source(
-        # CPython 3.14.6 source distribution from www.python.org.
+        # CPython 3.15.1 source distribution from www.python.org.
         # Pinned by the sha256 of the released .tgz (the vendored asset
         # is that file renamed to the `name-version-sha8` convention).
         name="python",
-        version="3.14.6",
-        url="https://www.python.org/ftp/python/3.14.6/Python-3.14.6.tgz",
+        version="3.15.1",
+        url="https://www.python.org/ftp/python/3.15.1/Python-3.15.1.tgz",
         ext=".tar.gz",
-        upstream_sha="74d0d71d0600e477651a077101d6e62d1e2e69b8e992ba18c993dd643b7ba222",
+        upstream_sha="133d85e118dc32621cda1d9d1d7d9694fe0c5e82bc339a7d528c109fe8b36387",
         sha_kind="tarball-sha256",
     ),
     Source(
@@ -202,25 +202,46 @@ SOURCES = [
         sha_kind="tarball-sha256",
     ),
     Source(
-        # curl 8.11.1 -- HTTP client library. Standalone release
+        # curl 8.23.0 -- HTTP client library. Standalone release
         # tarball from curl.se with no VCS identifier in the download
         # name, so pinned by the tarball sha256.
         name="curl",
-        version="8.11.1",
-        url="https://curl.se/download/curl-8.11.1.tar.gz",
+        version="8.23.0",
+        url="https://curl.se/download/curl-8.23.0.tar.gz",
         ext=".tar.gz",
-        upstream_sha="a889ac9dbba3644271bd9d1302b5c22a088893719b72be3487bc3d401e5c4e80",
+        upstream_sha="e3de77cfa6367083c776a26647fc9f633b538c06c3baa73d931a252ac8f72b49",
         sha_kind="tarball-sha256",
     ),
     Source(
-        # raylib 6.0 -- the asset is the upstream GitHub archive of the
-        # 6.0 tag (commit dbc56a87da87d973a9c5baa4e7438a9d20121d28),
+        # Mbed TLS 3.6.7 (LTS) -- the curl demo's TLS backend. The release
+        # archive published with the tag, pinned by its sha256.
+        name="mbedtls",
+        version="3.6.7",
+        url="https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-3.6.7/mbedtls-3.6.7.tar.bz2",
+        ext=".tar.bz2",
+        upstream_sha="a7e8bcbec0e6f761b4af24f25677626b35f762f68eef79c08677a363212d11f6",
+        sha_kind="tarball-sha256",
+    ),
+    Source(
+        # raylib 6.2 -- the asset is the upstream GitHub archive of the
+        # 6.2 tag (commit 02566453880e06bec97f5b8160fa6fe1e98397ca),
         # pinned by its own sha256.
         name="raylib",
-        version="6.0",
-        url="https://github.com/raysan5/raylib/archive/refs/tags/6.0.tar.gz",
+        version="6.2",
+        url="https://github.com/raysan5/raylib/archive/refs/tags/6.2.tar.gz",
         ext=".tar.gz",
-        upstream_sha="2b3ee1e2120c7a0796b33062c7e9a694dd8a8caa56a96319ac8c8ecf54a90d0b",
+        upstream_sha="df7a13129b1bec9e73a6962efff170beba310ee6eab8f94cd000b7316b4db5ee",
+        sha_kind="tarball-sha256",
+    ),
+    Source(
+        # NASM 3.02 -- the www.nasm.us release tarball, which ships the
+        # generated instruction tables and the golden suite. No VCS
+        # identifier in the download, so pinned by the tarball sha256.
+        name="nasm",
+        version="3.02",
+        url="https://www.nasm.us/pub/nasm/releasebuilds/3.02/nasm-3.02.tar.xz",
+        ext=".tar.xz",
+        upstream_sha="87336eba53b4acfe917424ab5d500d2b0054d9f5148d35c2273ccf2cfb712f0d",
         sha_kind="tarball-sha256",
     ),
     Source(

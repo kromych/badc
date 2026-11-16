@@ -82,8 +82,9 @@ Disassembly of section .text:
                	cmp	x0, #0x12c
                	cset	x1, eq
                	mov	x0, #0x0                // =0
-               	cbz	x1, <addr>
-               	mov	x1, #0x1                // =1
+               	mov	x2, #0x1                // =1
+               	cmp	x1, #0x0
+               	csel	x1, x2, x0, ne
                	cbz	x1, <addr>
                	mrs	x1, TPIDR_EL0
                	add	x1, x1, #0x0, lsl #12   // =0x0
@@ -112,15 +113,12 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	sub	x0, x0, x1
-               	mov	x17, #-0x2              // =-2
-               	cmp	x0, x17
+               	cmn	x0, #0x2
                	cset	x0, eq
                	cmp	w0, #0x0
                	cset	x0, eq
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, x0
-               	b	<addr>
                	mov	x1, x0
                	b	<addr>
                	mov	x1, x0

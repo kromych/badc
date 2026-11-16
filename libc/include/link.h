@@ -17,7 +17,7 @@
 struct link_map {
     unsigned long     l_addr;    // load bias added to the object's vaddrs
     char             *l_name;    // absolute pathname of the object
-    void             *l_ld;      // the object's PT_DYNAMIC table
+    ElfW(Dyn)        *l_ld;      // the object's PT_DYNAMIC table
     struct link_map  *l_next;
     struct link_map  *l_prev;
 };

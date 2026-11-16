@@ -22,14 +22,13 @@ Disassembly of section .text:
                	fadd	v0.4s, v0.4s, v0.4s
                	fmov	w0, s0
                	stur	w0, [x29, #-0x8]
-               	ldur	s0, [x29, #-0x8]
                	mov	x16, #0x42280000        // =1109917696
-               	fmov	s1, w16
-               	fcmp	s0, s1
-               	b.ne	<addr>
+               	fmov	s0, w16
                	mov	x0, #0x2a               // =42
+               	mov	x1, #0x0                // =0
+               	ldur	s1, [x29, #-0x8]
+               	fcmp	s1, s0
+               	csel	x0, x0, x1, eq
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x0                // =0
-               	b	<addr>

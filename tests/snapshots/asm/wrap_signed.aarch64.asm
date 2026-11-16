@@ -115,9 +115,9 @@ Disassembly of section .text:
 
 <guard_then_join>:
                	mov	x1, #0x0                // =0
+               	mov	x2, #0x1                // =1
                	cmp	w0, #0x64
-               	b.ge	<addr>
-               	mov	x1, #0x1                // =1
+               	csel	x1, x2, x1, lt
                	add	x0, x0, #0x1
                	sxtw	x0, w0
                	add	x0, x1, x0
@@ -181,8 +181,7 @@ Disassembly of section .text:
                	ldursw	x1, [x29, #-0x10]
                	mov	x2, #0x4                // =4
                	bl	<addr>
-               	mov	x17, #-0x2              // =-2
-               	cmp	x0, x17
+               	cmn	x0, #0x2
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x20
@@ -193,8 +192,7 @@ Disassembly of section .text:
                	ldursw	x1, [x29, #-0x8]
                	add	x1, x1, #0x2
                	bl	<addr>
-               	mov	x17, #-0x2              // =-2
-               	cmp	x0, x17
+               	cmn	x0, #0x2
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x20
@@ -238,8 +236,7 @@ Disassembly of section .text:
                	mov	x2, #0x5                // =5
                	sub	x3, x29, #0x18
                	bl	<addr>
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x8                // =8
                	add	sp, sp, #0x20

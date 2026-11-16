@@ -55,28 +55,5 @@ Disassembly of section .text:
                	b	<addr>
 
 <main>:
-               	fmov	d0, #2.50000000
-               	fmov	d1, #0.50000000
-               	fmov	d2, #3.50000000
-               	fmov	d3, #4.50000000
-               	fmov	d4, #1.25000000
-               	fcmp	d0, d0
-               	b.ne	<addr>
-               	fcmp	d1, d1
-               	b.eq	<addr>
-               	mov	x0, #0x3                // =3
-               	ret
-               	fcmp	d4, d4
-               	b.eq	<addr>
-               	mov	x0, #0x4                // =4
-               	b	<addr>
-               	fcmp	d2, d2
-               	b.ne	<addr>
-               	fcmp	d3, d3
-               	b.eq	<addr>
-               	mov	x0, #0x5                // =5
-               	b	<addr>
                	mov	x0, #0x0                // =0
-               	b	<addr>
-               	mov	x0, #0x1                // =1
-               	b	<addr>
+               	ret

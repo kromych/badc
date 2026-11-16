@@ -48,7 +48,6 @@ Disassembly of section .text:
                	ldur	x0, [x29, #-0x8]
                	cmp	x0, x20
                	b.lt	<addr>
-               	ldur	x0, [x29, #-0x8]
                	sub	x0, x0, x20
                	cmp	x0, #0x5
                	b.le	<addr>

@@ -25,7 +25,7 @@ The library source isn't committed: `setup.py` fetches the
 | `blocksort.c`       | no       | BWT + main sort. Produced by `setup.py`.                          |
 | `huffman.c`         | no       | Huffman coding pass. Same.                                        |
 | `crctable.c`        | no       | Static CRC32 table. Same.                                         |
-| `randtable.c`       | no       | Static randomisation table. Same.                                 |
+| `randtable.c`       | no       | Static randomization table. Same.                                 |
 | `compress.c`        | no       | Compression driver. Same.                                         |
 | `decompress.c`      | no       | Decompression driver. Same.                                       |
 | `bzlib.c`           | no       | Public API surface. Same.                                         |
@@ -56,7 +56,7 @@ builds pass every scenario:
 
 Anything else returns 1 with a diagnostic on stderr.
 
-`smoke.py` honours `BADC=path/to/badc`.
+`smoke.py` honors `BADC=path/to/badc`.
 
 ## Build defines
 

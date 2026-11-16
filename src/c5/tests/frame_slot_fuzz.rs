@@ -4,7 +4,7 @@
 //! A by-value aggregate parameter homed to the frame
 //! (`FunctionSsa::param_local_slots`), the hidden return pointer
 //! (`indirect_result_slot`), and the caller-side temporary an aggregate
-//! return materialises into (a call's `ret_slot_local`) all hold bytes
+//! return materializes into (a call's `ret_slot_local`) all hold bytes
 //! that no store in the owning function's instruction sequence names. A
 //! pass that concludes "nothing writes this slot" from the tape alone is
 //! wrong about all three, and such wrong code survives every pass-level
@@ -555,7 +555,7 @@ fn gen_types(r: &mut Rng, shape: &Shape) -> Vec<AggTy> {
 }
 
 /// Builds the object table every body starts with: parameters, then one
-/// zero-initialised aggregate per type, then the scalar variables. The
+/// zero-initialized aggregate per type, then the scalar variables. The
 /// per-type locals guarantee every call site can find an argument of the
 /// type it needs without a search that could fail.
 fn base_objs(params: &[PKind], types: &[AggTy], scalars: usize) -> (Vec<Obj>, u16) {
@@ -1776,7 +1776,7 @@ fn check(shape: &Shape, checks: Checks) -> Option<Divergence> {
 
 // --------------------------------------------------------------- reduce
 
-/// Greedy one-pass minimisation over the shape knobs. Each candidate is
+/// Greedy one-pass minimization over the shape knobs. Each candidate is
 /// regenerated from the same seed, so a kept step stays reproducible on
 /// its own.
 fn reduce(shape: &Shape, checks: Checks) -> Shape {

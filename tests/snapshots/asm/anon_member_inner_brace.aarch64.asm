@@ -136,11 +136,11 @@ Disassembly of section .text:
                	mov	x0, #0x5                // =5
                	ret
                	ldrb	w1, [x0, #0x8]
-               	eor	x1, x1, #0x7
-               	cbnz	w1, <addr>
+               	cmp	w1, #0x7
+               	b.ne	<addr>
                	ldrb	w1, [x0, #0x9]
-               	eor	x1, x1, #0x8
-               	cbnz	w1, <addr>
+               	cmp	w1, #0x8
+               	b.ne	<addr>
                	ldrb	w0, [x0, #0xa]
                	cbz	w0, <addr>
                	mov	x0, #0x6                // =6

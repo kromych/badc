@@ -37,7 +37,7 @@
 //
 //   * Linux:          DEFAULT = NULL,         NEXT = (void*)-1
 //   * macOS dyld:     DEFAULT = (void*)-2,    NEXT = (void*)-1
-//   * Windows:        not meaningful (LoadLibraryA wants a real path)
+//   * Windows:        DEFAULT = NULL,         NEXT = (void*)-1
 //
 // Get them right per-target -- a NULL handle on macOS dlsym hits
 // the slow "search every image" fallback instead of the dyld

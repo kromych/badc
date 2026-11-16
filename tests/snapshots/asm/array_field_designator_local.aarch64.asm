@@ -17,22 +17,21 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	w1, [x0]
-               	and	x1, x1, #0xff
-               	cmp	w1, #0x1
+               	and	x2, x1, #0xff
+               	cmp	w2, #0x1
                	b.ne	<addr>
-               	ldr	w1, [x0, #0x8]
-               	and	x1, x1, #0xff
-               	cmp	w1, #0x2
+               	ldr	w2, [x0, #0x8]
+               	and	x2, x2, #0xff
+               	cmp	w2, #0x2
                	b.ne	<addr>
-               	ldr	w1, [x0, #0x10]
-               	and	x1, x1, #0xff
-               	cbnz	w1, <addr>
-               	ldr	w1, [x0, #0x18]
-               	and	x1, x1, #0xff
-               	cbz	w1, <addr>
+               	ldr	w2, [x0, #0x10]
+               	and	x2, x2, #0xff
+               	cbnz	w2, <addr>
+               	ldr	w2, [x0, #0x18]
+               	and	x2, x2, #0xff
+               	cbz	w2, <addr>
                	mov	x0, #0x1                // =1
                	ret
-               	ldr	w1, [x0]
                	ubfx	x1, x1, #8, #8
                	cbnz	w1, <addr>
                	ldrsw	x0, [x0, #0x4]

@@ -9,6 +9,10 @@ impl<'a> Walker<'a> {
     /// struct id the parser's band scheme gives it. Zero when that id
     /// is out of range.
     pub(super) fn struct_size(&self, ty: i64) -> i64 {
+        debug_assert!(
+            self.sve_kind(ty).is_none(),
+            "an SVE value has no static size"
+        );
         let stripped = strip_unsigned(ty);
         if stripped < STRUCT_BASE {
             return 0;
@@ -19,6 +23,12 @@ impl<'a> Walker<'a> {
         } else {
             0
         }
+    }
+
+    /// The register kind of a value of the SVE type `ty`, `None` for any
+    /// other type.
+    pub(super) fn sve_kind(&self, ty: i64) -> Option<crate::c5::ir::LoadKind> {
+        sve_kind_of(self.structs, ty)
     }
 
     /// Alignment of the struct type encoded by `ty`, bounding the
@@ -44,7 +54,7 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// True when `ty` is the GCC 128-bit `__int128` as a value, not a
+    /// True when `ty` is the 128-bit `__int128` as a value, not a
     /// pointer to one. It shares the struct machinery, but a cast to or
     /// from a scalar converts the value rather than passing an
     /// address.
@@ -338,9 +348,28 @@ pub(super) fn lvalue_shape_label(expr: &Expr) -> &'static str {
         Expr::VlaSizeof { .. } => "VlaSizeof",
         Expr::StmtExpr { .. } => "StmtExpr",
         Expr::CheckedArith { .. } => "CheckedArith",
-        Expr::X86Simd { .. } => "X86Simd",
+        Expr::Simd { .. } => "Simd",
+        Expr::ShuffleVector { .. } => "ShuffleVector",
         Expr::MsIntrinsic { .. } => "MsIntrinsic",
         Expr::MemTransfer { .. } => "MemTransfer",
         Expr::InlineAsm(_) => "InlineAsm",
+    }
+}
+
+/// The register kind of a value of the SVE type `ty`, `None` for any
+/// other type.
+pub(super) fn sve_kind_of(
+    structs: &[crate::c5::compiler::StructDef],
+    ty: i64,
+) -> Option<crate::c5::ir::LoadKind> {
+    use crate::c5::compiler::SveType;
+    let stripped = strip_unsigned(ty);
+    if stripped < STRUCT_BASE || struct_ptr_depth(ty) != 0 {
+        return None;
+    }
+    let id = ((stripped - STRUCT_BASE) / STRUCT_STRIDE) as usize;
+    match structs.get(id)?.sve? {
+        SveType::Predicate => Some(crate::c5::ir::LoadKind::SvePredicate),
+        SveType::Vector { .. } => Some(crate::c5::ir::LoadKind::SveVector),
     }
 }

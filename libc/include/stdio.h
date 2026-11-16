@@ -40,60 +40,65 @@
 #define _IOFBF 0
 #endif
 
-#ifndef FILENAME_MAX
-#define FILENAME_MAX 4096
-#endif
-#ifndef FOPEN_MAX
-#define FOPEN_MAX    1024
-#endif
-#ifndef TMP_MAX
+// The C library's limits: tmpnam and ctermid write up to L_tmpnam and
+// L_ctermid bytes into the caller's buffer.
+#if defined(__APPLE__)
+#define FILENAME_MAX 1024
+#define FOPEN_MAX    20
 #define TMP_MAX      308915776
-#endif
-#ifndef BUFSIZ
-#define BUFSIZ       8192
-#endif
-#ifndef L_tmpnam
-#define L_tmpnam     20
-#endif
-// Buffer size for ctermid() (POSIX). macOS uses 1024; Linux uses 9, but
-// the larger value is safe everywhere since ctermid writes a short path.
-#ifndef L_ctermid
+#define BUFSIZ       1024
+#define L_tmpnam     1024
 #define L_ctermid    1024
+#elif defined(__linux__)
+#define FILENAME_MAX 4096
+#define FOPEN_MAX    16
+#define TMP_MAX      238328
+#define BUFSIZ       8192
+#define L_tmpnam     20
+#define L_ctermid    9
+#else
+#define FILENAME_MAX 260
+#define FOPEN_MAX    20
+#define TMP_MAX      32767
+#define BUFSIZ       512
+#define L_tmpnam     14
 #endif
 #ifndef PATH_MAX
+#if defined(__APPLE__)
+#define PATH_MAX     1024
+#elif defined(_WIN32)
+#define PATH_MAX     260
+#else
 #define PATH_MAX     4096
 #endif
+#endif
 
-// Opaque-buffer typedef for libc's `FILE`. Different libcs use
-// wildly different layouts; programs only ever pass `FILE *`
-// through bound libc routines, so the buffer just needs to
-// reserve enough storage.
-struct __c5_FILE { char __opaque[256]; };
-typedef struct __c5_FILE FILE;
-
-// C99 7.19.1: `fpos_t` records a stream position for `fgetpos` /
-// `fsetpos`. Like `FILE` it is opaque -- programs pass `fpos_t *`
-// through the bound libc routines and never inspect the bytes. The
-// buffer is sized for the widest host layout (the Linux `fpos_t` is 16
-// bytes; macOS and Windows use 8) and the union member forces the
-// 8-byte alignment the libc fields expect.
+// `FILE` and `fpos_t` (C17 7.21.1) in the C library's size and alignment:
+// the SDK's 152-byte FILE and 64-bit fpos_t, glibc's 216-byte FILE and
+// 16-byte fpos_t of a position and an mbstate_t, msvcrt's 48-byte FILE.
+#if defined(__APPLE__)
+struct __c5_FILE { union { char __opaque[152]; long __align; }; };
+typedef long long fpos_t;
+#elif defined(__linux__)
+struct __c5_FILE { union { char __opaque[216]; long __align; }; };
 struct __c5_fpos_t { union { char __opaque[16]; long long __align; } __u; };
 typedef struct __c5_fpos_t fpos_t;
+#else
+// msvcrt's _iobuf and 64-bit position.
+struct __c5_FILE {
+    char *_ptr;
+    int _cnt;
+    char *_base;
+    int _flag;
+    int _file;
+    int _charbuf;
+    int _bufsiz;
+    char *_tmpfname;
+};
+typedef long long fpos_t;
+#endif
+typedef struct __c5_FILE FILE;
 
-// Standard streams. These are real libc globals exported by the
-// platform's C runtime. c5 has no GOT-style data-symbol
-// trampoline, so reading `extern FILE *stdout;` directly would
-// give us an uninitialised c5-side shadow. Instead we resolve
-// each stream lazily via `dlsym` on first use -- the helper
-// below caches the result so repeated reads stay cheap. The
-// macros wrap the lookup so user code can keep writing
-// `printf` / `fprintf(stderr, ...)` / `setvbuf(stdout, ...)`
-// without any extra ceremony.
-//
-// `&stdout` / `&stderr` won't typecheck through this path;
-// callers that need an addressable `FILE *` lvalue have to
-// fall back to `fdopen(...)`.
-//
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
 #pragma binding(libc::printf,    "_printf")
@@ -145,7 +150,9 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(libc::remove,    "_remove")
 #pragma binding(libc::rename,    "_rename")
 #pragma binding(libc::renameat,  "_renameat")
-#pragma binding(libc::dlsym,     "_dlsym")
+#pragma binding(data libc::__stdinp,  "___stdinp")
+#pragma binding(data libc::__stdoutp, "___stdoutp")
+#pragma binding(data libc::__stderrp, "___stderrp")
 // POSIX.1-2008 `open_memstream` -- creates a FILE * backed
 // by a heap buffer the libc grows as the program writes
 // through it. The caller passes (char **buf, size_t *sz)
@@ -236,8 +243,6 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(libc::remove,    "remove")
 #pragma binding(libc::rename,    "rename")
 #pragma binding(libc::renameat,  "renameat")
-#pragma dylib(libdl_for_stdio, "libdl.so.2")
-#pragma binding(libdl_for_stdio::dlsym, "dlsym")
 // POSIX `open_memstream` -- same shape as on macOS, exported
 // directly by the Linux C library / musl.
 #pragma binding(libc::open_memstream, "open_memstream")
@@ -266,9 +271,6 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(libc::getdelim,  "getdelim")
 #pragma binding(libc::dprintf,   "dprintf")
 #pragma binding(libc::vdprintf,  "vdprintf")
-// The standard streams are C library data objects (C99 7.19.1). This
-// header reads them through `__c5_lazy_stream` below; the bindings state
-// them for an object from another compiler, which reads them directly.
 #pragma binding(data libc::stdin,  "stdin")
 #pragma binding(data libc::stdout, "stdout")
 #pragma binding(data libc::stderr, "stderr")
@@ -337,6 +339,7 @@ typedef struct __c5_fpos_t fpos_t;
 // wide file, directory, environment and process functions this header has
 // carried.
 #include <__badc_wstdio.h>
+#include <__badc_ucrt_stdio.h>
 #include <__badc_wio.h>
 #include <__badc_wdirect.h>
 #include <__badc_wstdlib.h>
@@ -398,15 +401,8 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(ucrtbase::_byteswap_ulong,  "_byteswap_ulong")
 #pragma binding(ucrtbase::_byteswap_uint64, "_byteswap_uint64")
 #pragma binding(ucrtbase::_byteswap_ushort, "_byteswap_ushort")
-// `__acrt_iob_func(int)` is the CRT helper that returns a
-// FILE * to the requested standard stream (0=stdin, 1=stdout,
-// 2=stderr). Used by `__c5_lazy_stream` above to back the
-// `stdin` / `stdout` / `stderr` macros on Windows -- msvcrt
-// doesn't export those as data symbols.
-// `__iob_func()` is the pre-UCRT spelling msvcrt.dll exports;
-// `__acrt_iob_func(int)` is the UCRT replacement. Wine's bundled
-// msvcrt is the legacy flavour, so bind the legacy spelling and
-// teach `__c5_lazy_stream` to walk the returned FILE-array slot.
+// msvcrt exports no stream objects: `__iob_func()` returns its `_iob` array,
+// whose first three FILEs are the standard streams.
 #pragma binding(msvcrt::__iob_func, "__iob_func")
 #endif
 
@@ -427,8 +423,8 @@ int vsnprintf(char *buf, size_t size, const char *fmt, __builtin_va_list ap);
 // spelling through a per-platform `#define`. The msvcrt path
 // binds both to the same `_snprintf` / `_vsnprintf` entry.
 #ifdef _WIN32
-int _snprintf(char *buf, int size, char *fmt, ...);
-int _vsnprintf(char *buf, int size, char *fmt, char *ap);
+int _snprintf(char *buf, size_t size, const char *fmt, ...);
+int _vsnprintf(char *buf, size_t size, const char *fmt, char *ap);
 #endif
 // C99 7.19.6.4 scanf, 7.19.6.2 fscanf -- formatted input from stdin
 // and from a stream. The string sibling sscanf reads from a buffer.
@@ -438,7 +434,7 @@ int sscanf(const char *src, const char *fmt, ...);
 #ifdef __linux__
 // GNU asprintf: allocate a buffer for the formatted result and store its
 // address through `strp`, and its `va_list` form.
-int asprintf(char **strp, char *fmt, ...);
+int asprintf(char **strp, const char *fmt, ...);
 int vasprintf(char **strp, const char *fmt, __builtin_va_list ap);
 #endif
 // C99 7.19.6.14 vsscanf, 7.19.6.9 vfscanf and 7.19.6.11 vscanf. On Windows
@@ -471,7 +467,7 @@ int fgetc(FILE *stream);
 // C99 7.19.7.5 / 7.19.7.8: `getc` / `putc` are functionally
 // equivalent to `fgetc` / `fputc`. Spec permits multiple
 // evaluations of the `stream` argument; libc implementations
-// honour the same signature, so the binding is a direct alias.
+// honor the same signature, so the binding is a direct alias.
 int getc(FILE *stream);
 int putc(int c, FILE *stream);
 // C99 7.19.7.11: push one byte back onto an input stream.
@@ -490,7 +486,11 @@ void setbuf(FILE *stream, char *buf);
 // BSD extension (glibc / macOS, not msvcrt): setvbuf with a caller-sized
 // buffer, fully-buffered when `buf` is non-null.
 #ifndef _WIN32
+#ifdef __linux__
+void setbuffer(FILE *stream, char *buf, size_t size);
+#else
 void setbuffer(FILE *stream, char *buf, int size);
+#endif
 #endif
 int puts(const char *s);
 void perror(const char *s);
@@ -501,8 +501,17 @@ long ftell(FILE *stream);
 // POSIX large-file variants (off_t is 64-bit). Not provided on Windows
 // msvcrt under these names (`_fseeki64` / `_ftelli64` differ).
 #ifndef _WIN32
-int fseeko(FILE *stream, long offset, int whence);
-long ftello(FILE *stream);
+#ifndef __BADC_OFF_T
+#define __BADC_OFF_T
+// The file offset: the SDK's and msvcrt's 64-bit long long, glibc's long.
+#if defined(__BADC_WINDOWS__) || defined(__APPLE__)
+typedef long long off_t;
+#else
+typedef long off_t;
+#endif
+#endif
+int fseeko(FILE *stream, off_t offset, int whence);
+off_t ftello(FILE *stream);
 #else
 int _fseeki64(FILE *stream, long long offset, int whence);
 long long _ftelli64(FILE *stream);
@@ -549,12 +558,12 @@ int vdprintf(int fd, const char *fmt, __builtin_va_list ap);
 #ifdef _WIN32
 FILE *_fsopen(const char *path, const char *mode, int shflag);
 int   freopen_s(FILE **pfile, const char *path, const char *mode, FILE *stream);
-FILE *_popen(char *cmd, char *mode);
+FILE *_popen(const char *cmd, const char *mode);
 int   _pclose(FILE *stream);
 int   _fileno(FILE *stream);
 int   _isatty(int fd);
 int   _setmode(int fd, int mode);
-int   _access(char *path, int mode);
+int   _access(const char *path, int mode);
 int   _findclose(long long handle);
 // The Windows SDK's prototypes: `errno_t` is `int`, and `time_t` the
 // 64-bit `long long` the CRT's `_*64_s` entries take.
@@ -584,15 +593,15 @@ int _open_osfhandle(long long osfhandle, int flags);
 int   _heapmin(void);
 int   _close(int fd);
 int   _read(int fd, void *buf, unsigned int n);
-int   _write(int fd, void *buf, unsigned int n);
+int   _write(int fd, const void *buf, unsigned int n);
 long  _lseek(int fd, long off, int whence);
 long long _lseeki64(int fd, long long off, int whence);
 int   _chsize(int fd, long long size);
 int   _chsize_s(int fd, long long size);
-int   _chmod(char *path, int mode);
-int   _unlink(char *path);
+int   _chmod(const char *path, int mode);
+int   _unlink(const char *path);
 char *_getcwd(char *buf, int n);
-int   _chdir(char *path);
+int   _chdir(const char *path);
 int   _getpid(void);
 int   _dup(int fd);
 int   _dup2(int fd, int newfd);
@@ -701,80 +710,29 @@ errno_t fopen_s(FILE **_File, const char *_Filename, const char *_Mode);
 #pragma binding(msvcrt::tmpnam_s, "tmpnam_s")
 errno_t tmpnam_s(char *_Buf, rsize_t _Size);
 #endif
-void *dlsym(void *__restrict handle, const char *__restrict name);
-
-// Lazy resolver for `stdin` / `stdout` / `stderr`. Index
-// 0 = stdin, 1 = stdout, 2 = stderr.
-//
-// macOS exports `___stdinp` / `___stdoutp` / `___stderrp` --
-// each is a `FILE *` (one indirection through the libc data
-// section). dlsym hands back the address of those slots, so we
-// dereference once to get the FILE* the caller actually wants.
-// Note: dlsym strips one leading underscore, so pass the
-// standard C name with two underscores -- not three even
-// though `nm /usr/lib/libSystem.B.dylib` shows `___stdoutp`.
-// macOS's RTLD_DEFAULT is `(void*)-2`, not `NULL` -- pass that
-// in as the handle so dyld uses its fast cross-image search
-// instead of the NULL-handle slow path that misses libc.
-//
-// Linux's symbols are spelled `stdin` / `stdout` / `stderr`
-// without underscores; same shape otherwise.  RTLD_DEFAULT is
-// the conventional NULL there.
-//
-// Windows msvcrt has `__iob_func()` returning an array of FILE
-// structs -- left as a TODO for the Windows port.
-//
-// `&stdout` / `&stderr` won't typecheck through the macros
-// below; callers that need an addressable `FILE *` lvalue
-// have to fall back to `fdopen(...)`.
-// Lazy resolver. char* return (rather than FILE*) keeps c5's
-// type system from tangling on a struct-pointer return value
-// inside a header. The macros below cast to `FILE *` at the
-// call site; users' code reads `stdout` as `FILE *` exactly
-// as on every other platform.
-static char *__c5_lazy_stream(int idx) {
-    static char *__c5_stream_cache[3];
-    if (__c5_stream_cache[idx]) return __c5_stream_cache[idx];
-#ifdef __APPLE__
-    char *names[3];
-    names[0] = "__stdinp";
-    names[1] = "__stdoutp";
-    names[2] = "__stderrp";
-    char **slot = (char **)dlsym((char *)-2, names[idx]);
-    if (slot) __c5_stream_cache[idx] = *slot;
+// The standard streams (C17 7.21.1): the C library's objects -- libSystem's
+// `__stdinp` family, as the SDK names them, glibc's `stdin` family -- and on
+// Windows the first three FILEs of msvcrt's `_iob` array, which it exports
+// through `__iob_func()` alone.
+#if defined(__APPLE__)
+extern FILE *__stdinp;
+extern FILE *__stdoutp;
+extern FILE *__stderrp;
+#define stdin  __stdinp
+#define stdout __stdoutp
+#define stderr __stderrp
+#elif defined(__linux__)
+extern FILE *stdin;
+extern FILE *stdout;
+extern FILE *stderr;
+#define stdin  stdin
+#define stdout stdout
+#define stderr stderr
+#elif defined(_WIN32)
+#define stdin  (&__iob_func()[0])
+#define stdout (&__iob_func()[1])
+#define stderr (&__iob_func()[2])
 #endif
-#ifdef __linux__
-    char *names[3];
-    names[0] = "stdin";
-    names[1] = "stdout";
-    names[2] = "stderr";
-    char **slot = (char **)dlsym((char *)0, names[idx]);
-    if (slot) __c5_stream_cache[idx] = *slot;
-#endif
-#ifdef _WIN32
-    // Windows msvcrt doesn't expose `stdin` / `stdout` / `stderr`
-    // as exported data symbols. Programs reach the underlying
-    // FILE * through the helper `__acrt_iob_func(int)`, which
-    // returns a pointer into the CRT's per-process `_iob` array.
-    // Older msvcrt (pre-UCRT) called the same helper `__iob_func`
-    // -- bind both spellings and let the CRT pick whichever it
-    // exports.
-    // msvcrt's `__iob_func()` returns a pointer to its 3-entry
-    // `_iob` array (stdin / stdout / stderr). On the legacy
-    // (pre-UCRT) wine / Windows msvcrt, `sizeof(_iobuf)` is 48
-    // bytes -- 8B _ptr + 4B _cnt (+4B padding) + 8B _base + 4B
-    // _flag + 4B _file + 4B _charbuf + 4B _bufsiz + 8B _tmpfname.
-    // We need the address of the requested entry, so cast the
-    // base to a byte pointer and step by 48 bytes per slot.
-    char *iob = (char *)__iob_func();
-    if (iob) __c5_stream_cache[idx] = iob + idx * 48;
-#endif
-    return __c5_stream_cache[idx];
-}
-
-#define stdin   ((FILE *)__c5_lazy_stream(0))
-#define stdout  ((FILE *)__c5_lazy_stream(1))
-#define stderr  ((FILE *)__c5_lazy_stream(2))
 
 // vfprintf / vprintf / vsprintf / vsnprintf bind directly to the
 // platform C library. c5's <stdarg.h> va_list is the host's own

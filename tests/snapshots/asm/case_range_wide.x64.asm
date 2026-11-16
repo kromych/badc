@@ -30,9 +30,7 @@ Disassembly of section .text:
                	jae	<addr>
                	cmpl	$0x7, %edi
                	jae	<addr>
-               	movl	$0xf0000000, %r11d      # imm = 0xF0000000
-               	movq	%rdi, %rax
-               	cmpl	%r11d, %edi
+               	cmpl	$0xf0000000, %edi       # imm = 0xF0000000
                	jae	<addr>
                	cmpl	$0x5, %edi
                	jb	<addr>

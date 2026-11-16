@@ -5,6 +5,12 @@
  * pair load/store. Native-only on AArch64 (the interpreter's inline-asm
  * evaluator is x86-only); on x86_64 the same call runs in plain C. */
 
+#if defined(__APPLE__)
+#define CSYM(name) "_" name
+#else
+#define CSYM(name) name
+#endif
+
 int g_val = 0;
 void bump(void) { g_val = 42; }
 
@@ -12,7 +18,7 @@ int main(void) {
 #if defined(__aarch64__)
     __asm__ volatile(
         "stp x29, x30, [sp, #-16]!\n\t"
-        "bl bump\n\t"
+        "bl " CSYM("bump") "\n\t"
         "ldp x29, x30, [sp], #16"
         : : : "x30", "memory");
 #else

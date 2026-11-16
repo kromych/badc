@@ -12,9 +12,6 @@
 // the dlsym'd target is variadic. `strlen` is non-variadic, so the
 // existing register-only arg lowering matches AAPCS64 / SysV
 // expectations everywhere POSIX.
-//
-// On Windows, `dlopen` lands on `LoadLibraryA`, which has different
-// flag values; this fixture is POSIX-only.
 int main() {
     int *h;
     int *fn;

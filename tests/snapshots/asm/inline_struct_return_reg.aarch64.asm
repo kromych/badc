@@ -39,12 +39,11 @@ Disassembly of section .text:
                	ldur	x1, [x29, #-0x28]
                	add	x0, x0, x1
                	add	x0, x0, #0x55
+               	mov	x1, #0x0                // =0
+               	mov	x2, #0x1                // =1
                	mov	x17, #0xa055            // =41045
                	cmp	x0, x17
-               	b.ne	<addr>
-               	mov	x0, #0x0                // =0
+               	csel	x0, x1, x2, eq
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x1                // =1
-               	b	<addr>

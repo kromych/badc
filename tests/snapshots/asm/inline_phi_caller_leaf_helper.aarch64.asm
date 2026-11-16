@@ -46,13 +46,12 @@ Disassembly of section .text:
                	b.lt	<addr>
                	eor	x0, x1, x2
                	eor	x0, x0, x3
+               	mov	x1, #0x0                // =0
+               	mov	x2, #0x1                // =1
                	mov	x17, #0xffef            // =65519
                	movk	x17, #0xff6f, lsl #16
                	cmp	w0, w17
-               	b.ne	<addr>
-               	mov	x0, #0x0                // =0
+               	csel	x0, x1, x2, eq
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x1                // =1
-               	b	<addr>

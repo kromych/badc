@@ -144,8 +144,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	fmov	s0, #-2.50000000
                	bl	<addr>
-               	mov	x17, #-0x3              // =-3
-               	cmp	x0, x17
+               	cmn	x0, #0x3
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0x40
@@ -158,8 +157,7 @@ Disassembly of section .text:
                	ldur	s0, [x29, #-0x8]
                	fneg	s0, s0
                	bl	<addr>
-               	mov	x17, #-0x3              // =-3
-               	cmp	x0, x17
+               	cmn	x0, #0x3
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	add	sp, sp, #0x40

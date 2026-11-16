@@ -56,16 +56,16 @@ Disassembly of section .text:
                	add	x1, x1, x2
                	str	x1, [x19, #0x20]
                	ldrb	w1, [x19, #0x30]
-               	eor	x1, x1, #0x1
-               	cbz	w1, <addr>
+               	cmp	w1, #0x1
+               	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldr	x19, [x19]
                	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrb	w0, [x0]
-               	eor	x0, x0, #0x3
-               	cbz	w0, <addr>
+               	cmp	w0, #0x3
+               	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldr	x19, [x19]
                	mov	sp, x29

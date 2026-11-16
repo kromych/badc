@@ -46,11 +46,14 @@ char **environ;
 #elif defined(__linux__)
 #pragma dylib(libc, "libc.so.6")
 #pragma binding(libc::exit, "exit")
-#elif defined(_WIN32)
+#elif defined(_WIN32) && !defined(__BADC_WIN_UCRT__)
 #pragma dylib(libc, "msvcrt.dll")
 #pragma binding(libc::exit, "exit")
 #endif
 
+// `__BADC_WIN_UCRT__`: the link's own libraries supply the UCRT, whose
+// startup interface the names below resolve through, as the VC startup
+// code calls it; msvcrt.dll is not loaded beside it.
 extern void exit(int);
 
 void __c5_exit(int rc) {
@@ -93,6 +96,18 @@ static void __c5_fini_trampoline(void *arg) {
 }
 static void __c5_register_fini(void) {
     __cxa_atexit(__c5_fini_trampoline, 0, 0);
+}
+#elif defined(_WIN32) && defined(__BADC_WIN_UCRT__)
+// The UCRT keeps the program's table behind `_crt_atexit`; its `exit` runs
+// it. The UCRT exports no `atexit`: the VC startup library defines it over
+// `_crt_atexit` for a program, as here, unless another input does.
+extern int _crt_atexit(void (*)(void));
+static void __c5_register_fini(void) {
+    _crt_atexit(__c5_run_fini_array);
+}
+
+__attribute__((weak)) int atexit(void (*fn)(void)) {
+    return _crt_atexit(fn);
 }
 #elif defined(_WIN32)
 // msvcrt exports `atexit` directly, taking a `void (*)(void)` handler.
@@ -176,6 +191,76 @@ int __c5_entry(int argc, char **argv) {
 //   `nShowCmd` is `SW_SHOWNORMAL` (1), not `SW_SHOWDEFAULT` (10);
 // `SW_SHOWDEFAULT` defers to `STARTUPINFOA::wShowWindow`, which is
 // `SW_HIDE` when a parent left it zero without `STARTF_USESHOWWINDOW`.
+// `__BADC_WIN_VCRT__`: the link names the static VC runtime (libvcruntime),
+// whose per-thread state a C++ throw reads. Its initialization runs first
+// and its uninitialization last, as the VC startup code orders them; a
+// failed initialization fails fast, as there.
+#ifdef __BADC_WIN_VCRT__
+extern _Bool __vcrt_initialize(void);
+extern _Bool __vcrt_uninitialize(_Bool terminating);
+extern int atexit(void (*)(void));
+
+static void __c5_vcrt_uninitialize(void) {
+    __vcrt_uninitialize(0);
+}
+
+static void __c5_vcrt_startup(void) {
+    if (!__vcrt_initialize())
+        __fastfail(7);
+    atexit(__c5_vcrt_uninitialize);
+}
+#else
+static void __c5_vcrt_startup(void) {}
+#endif
+
+#ifdef __BADC_WIN_UCRT__
+// The application type (`_crt_gui_app` for the WinMain shape, else
+// `_crt_console_app`), then the unexpanded argument vector and the
+// environment in the entry's character width.
+extern void _set_app_type(int);
+extern int _configure_narrow_argv(int);
+
+// The module's printf and scanf options, which the UCRT headers' inline
+// functions read from the same storage: one definition of each survives
+// the link. The VC startup code sets the legacy wide specifiers (`%s` of a
+// wide format is a wide string) and, for printf, standard rounding, as
+// measured with VC 14.44 and 14.52.
+__declspec(noinline) __inline unsigned long long *__local_stdio_printf_options(void) {
+    static unsigned long long __options;
+    return &__options;
+}
+
+__declspec(noinline) __inline unsigned long long *__local_stdio_scanf_options(void) {
+    static unsigned long long __options;
+    return &__options;
+}
+extern int _configure_wide_argv(int);
+extern int _initialize_narrow_environment(void);
+extern int _initialize_wide_environment(void);
+
+static void __c5_crt_startup(void) {
+    __c5_vcrt_startup();
+    *__local_stdio_printf_options() |= 4 | 32;
+    *__local_stdio_scanf_options() |= 2;
+#ifdef __BADC_WIN_WINMAIN__
+    _set_app_type(2);
+#else
+    _set_app_type(1);
+#endif
+#ifdef __BADC_WIN_WIDE__
+    _configure_wide_argv(1);
+    _initialize_wide_environment();
+#else
+    _configure_narrow_argv(1);
+    _initialize_narrow_environment();
+#endif
+}
+#else
+static void __c5_crt_startup(void) {
+    __c5_vcrt_startup();
+}
+#endif
+
 #ifdef __BADC_WIN_WINMAIN__
 
 // WinMain / wWinMain: (hInstance, hPrevInstance, lpCmdLine, nShowCmd).
@@ -195,13 +280,25 @@ extern unsigned short *GetCommandLineW(void);
 extern int __BADC_ENTRY__(void *instance, void *prev_instance,
                           unsigned short *cmd_line, int show_cmd);
 
+// `lpCmdLine` is the command line past the program name, as cl's CRT
+// passes it: the first token, quoted spans included, then its blanks.
 unsigned short *__c5_getcommandlinew(void) {
-    return GetCommandLineW();
+    unsigned short *p = GetCommandLineW();
+    int quoted = 0;
+    while (*p > ' ' || (*p && quoted)) {
+        if (*p == '"')
+            quoted = !quoted;
+        ++p;
+    }
+    while (*p && *p <= ' ')
+        ++p;
+    return p;
 }
 
 void __c5_entry(void *sp, long image_off) {
     (void)sp;
     (void)image_off;
+    __c5_crt_startup();
     __c5_run_init_array();
     __c5_exit(__BADC_ENTRY__(__c5_getmodulehandle(), 0, __c5_getcommandlinew(), 1));
 }
@@ -211,13 +308,25 @@ extern char *GetCommandLineA(void);
 extern int __BADC_ENTRY__(void *instance, void *prev_instance,
                           char *cmd_line, int show_cmd);
 
+// `lpCmdLine` is the command line past the program name, as cl's CRT
+// passes it: the first token, quoted spans included, then its blanks.
 char *__c5_getcommandline(void) {
-    return GetCommandLineA();
+    unsigned char *p = (unsigned char *)GetCommandLineA();
+    int quoted = 0;
+    while (*p > ' ' || (*p && quoted)) {
+        if (*p == '"')
+            quoted = !quoted;
+        ++p;
+    }
+    while (*p && *p <= ' ')
+        ++p;
+    return (char *)p;
 }
 
 void __c5_entry(void *sp, long image_off) {
     (void)sp;
     (void)image_off;
+    __c5_crt_startup();
     __c5_run_init_array();
     __c5_exit(__BADC_ENTRY__(__c5_getmodulehandle(), 0, __c5_getcommandline(), 1));
 }
@@ -225,6 +334,22 @@ void __c5_entry(void *sp, long image_off) {
 
 #else
 
+#ifdef __BADC_WIN_UCRT__
+// The UCRT holds the vectors `__c5_crt_startup` configured.
+extern int *__p___argc(void);
+extern char ***__p___argv(void);
+extern unsigned short ***__p___wargv(void);
+
+void __c5_getmainargs(int *argc, char ***argv) {
+    *argc = *__p___argc();
+    *argv = *__p___argv();
+}
+
+void __c5_wgetmainargs(int *argc, unsigned short ***argv) {
+    *argc = *__p___argc();
+    *argv = *__p___wargv();
+}
+#else
 // `__getmainargs` / `__wgetmainargs` populate argc/argv through
 // out-pointers. The fifth argument is a `_startupinfo` (`int
 // newmode`); zero requests the default. envp is filled but unused.
@@ -248,6 +373,7 @@ void __c5_wgetmainargs(int *argc, unsigned short ***argv) {
     int startup_info = 0;
     __wgetmainargs(argc, argv, &envp, 0, &startup_info);
 }
+#endif
 
 #ifdef __BADC_WIN_WIDE__
 extern int __BADC_ENTRY__(int argc, unsigned short **argv);
@@ -257,6 +383,7 @@ void __c5_entry(void *sp, long image_off) {
     (void)image_off;
     int argc;
     unsigned short **argv;
+    __c5_crt_startup();
     __c5_wgetmainargs(&argc, &argv);
     __c5_run_init_array();
     __c5_exit(__BADC_ENTRY__(argc, argv));
@@ -269,6 +396,7 @@ void __c5_entry(void *sp, long image_off) {
     (void)image_off;
     int argc;
     char **argv;
+    __c5_crt_startup();
     __c5_getmainargs(&argc, &argv);
     __c5_run_init_array();
     __c5_exit(__BADC_ENTRY__(argc, argv));

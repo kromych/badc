@@ -28,12 +28,12 @@ int main(void) {
     // is also legal C99 -- the unnamed enum's constants
     // promote into the surrounding scope.
     struct Inline {
-        enum { Red, Green, Blue } colour;
+        enum { Red, Green, Blue } color;
         int rank;
     } it;
-    it.colour = Green;
+    it.color = Green;
     it.rank = 7;
-    if (it.colour != 1) return 1;
+    if (it.color != 1) return 1;
     if (it.rank != 7) return 1;
     return 13;
 }

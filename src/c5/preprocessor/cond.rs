@@ -22,6 +22,7 @@ impl Preprocessor {
         let out = scan_operators(expr, |s, i, out| {
             resolve_has_operator(s, i, self.target, self.dollar(), out)
                 .or_else(|| self.resolve_has_include(s, i, filename, line_no, out))
+                .or_else(|| self.resolve_has_embed(s, i, filename, line_no, out))
         });
         // Expand the remaining identifiers, then strip comments from the
         // result: driver-predefined bodies never went through phase 3
@@ -106,6 +107,18 @@ impl Preprocessor {
         // via several layers of `#define`) expand before the
         // parser sees them; the substitution leaves a `defined`
         // operand as written.
+        let (value, _) = self.eval_integer(expr, line_no, filename)?;
+        Ok(value != 0)
+    }
+
+    /// The value of `expr` by the `#if` rules (C99 6.10.1p4) and whether it
+    /// is unsigned; also the operand of an `#embed` `limit`.
+    pub(super) fn eval_integer(
+        &self,
+        expr: &str,
+        line_no: usize,
+        filename: &str,
+    ) -> Result<(i64, bool), C5Error> {
         let prepared = self.expand_for_if(expr, line_no, filename);
         self.take_pending_error()?;
         let mut p = IfExprParser::new(&prepared, self, filename, line_no);
@@ -119,7 +132,7 @@ impl Preprocessor {
                 alloc::format!("trailing junk in `#if` expression: {:?}", p.tail()),
             ));
         }
-        p.bool_operand(&v, "#if")
+        Ok((p.int_operand(&v, "#if")?, v.is_unsigned()))
     }
 }
 
@@ -206,7 +219,7 @@ pub(super) struct IfExprParser<'a> {
     /// False while parsing a short-circuited (`&&`/`||`) or not-taken
     /// (`?:`) subexpression. C99 6.6p4 forbids division by zero in a
     /// constant expression, but an unevaluated operand must not trigger
-    /// the diagnostic (gcc/clang accept `1 ? 2 : 1/0`).
+    /// the diagnostic (`1 ? 2 : 1/0` is accepted).
     live: bool,
 }
 
@@ -715,9 +728,9 @@ impl<'a> IfExprParser<'a> {
     /// prefixed reading, which holds code points and keeps the last
     /// (6.4.4.4p11); an unprefixed constant packs execution bytes,
     /// first character most significant, the implementation-defined
-    /// value of 6.4.4.4p10 that gcc and clang also produce. Both
-    /// mirror the lexer, so a constant means the same inside a `#if`
-    /// and outside one, and evaluates in uintmax_t when its type is unsigned.
+    /// value of 6.4.4.4p10. Both mirror the lexer, so a constant means the
+    /// same inside a `#if` and outside one, and evaluates in uintmax_t when
+    /// its type is unsigned.
     fn parse_char_constant(&mut self, wide: Option<(usize, bool)>) -> Result<IfValue, C5Error> {
         let bytes = self.src.as_bytes();
         let mut packed: i64 = 0;
@@ -981,8 +994,8 @@ impl<'a> IfExprParser<'a> {
         };
         // 6.10.1p4: intmax_t is the signed widest type. A literal that
         // overflows it but fits u64 takes the unsigned interpretation,
-        // matching gcc/clang and keeping the unsigned bit-pattern probes
-        // (ULONG_MAX / UINT64_MAX) logical-shifting correctly.
+        // keeping the unsigned bit-pattern probes (ULONG_MAX / UINT64_MAX)
+        // logical-shifting correctly.
         let v = if digits.is_empty() {
             Ok((0i64, has_u))
         } else if let Ok(signed) = i64::from_str_radix(digits, raw_radix) {
@@ -1120,8 +1133,8 @@ impl<'a> IfExprParser<'a> {
             return Ok(IfValue::signed(i64::from(&*name == "true")));
         }
         // An identifier left after expansion -- undefined, or a macro
-        // whose unquoted body is no number -- is 0 (C99 6.10.1p4); gcc
-        // reports a function-like name with no arguments the same way.
+        // whose unquoted body is no number -- is 0 (C99 6.10.1p4); a
+        // function-like name with no arguments is reported the same way.
         if self.live {
             let text = format!("`{name}` is not defined, evaluates to 0");
             self.pp
@@ -1217,7 +1230,7 @@ fn operator_operand<'a>(
 /// Match `kw ( operand )` at `at`, the operand running to the balancing
 /// `)`. Returns the operand text and the index just past the call.
 /// String and char literals inside the operand are skipped opaquely.
-fn balanced_operand<'a>(
+pub(super) fn balanced_operand<'a>(
     s: &'a str,
     at: usize,
     kw: &str,
@@ -1280,74 +1293,13 @@ fn resolve_has_operator(
 }
 
 /// `__has_attribute(NAME)` on `target`: `dllimport` / `dllexport` are known
-/// on the PE targets only, as under gcc.
+/// on the PE targets only.
 pub(super) fn has_attribute(name: &str, target: Target) -> bool {
-    is_known_attribute(name)
-        || target.binary_format() == crate::c5::codegen::BinaryFormat::Pe
-            && matches!(name.trim_matches('_'), "dllimport" | "dllexport")
-}
-
-/// True when badc recognizes the GCC/Clang attribute NAME, so
-/// `__has_attribute(NAME)` reports 1. The name may be spelled bare or
-/// wrapped in `__` (`cleanup` / `__cleanup__`). badc parses every
-/// `__attribute__((...))` and acts on a subset (`packed`, `aligned`,
-/// `unused`, `noreturn`, `cleanup`, `alias`, `naked`); the rest are
-/// accepted and ignored, so reporting 1 lets feature-testing headers
-/// take their attribute path.
-fn is_known_attribute(name: &str) -> bool {
-    let core = name.trim_matches('_');
-    matches!(
-        core,
-        "cleanup"
-            | "uninitialized"
-            | "alias"
-            | "naked"
-            | "packed"
-            | "aligned"
-            | "unused"
-            | "maybe_unused"
-            | "used"
-            | "noreturn"
-            | "deprecated"
-            | "const"
-            | "pure"
-            | "malloc"
-            | "always_inline"
-            | "noinline"
-            | "gnu_inline"
-            | "flatten"
-            | "format"
-            | "format_arg"
-            | "sentinel"
-            | "nonnull"
-            | "returns_nonnull"
-            | "warn_unused_result"
-            | "alloc_size"
-            | "alloc_align"
-            | "assume_aligned"
-            | "cold"
-            | "hot"
-            | "weak"
-            | "visibility"
-            | "section"
-            | "constructor"
-            | "destructor"
-            | "may_alias"
-            | "transparent_union"
-            | "designated_init"
-            | "fallthrough"
-            | "nothrow"
-            | "no_instrument_function"
-            | "no_stack_protector"
-            | "patchable_function_entry"
-            | "returns_twice"
-            | "noclone"
-            | "error"
-            | "warning"
-            | "unavailable"
-            // Accepted and validated for its feature names; badc emits
-            // every instruction its intrinsic surface carries on x86-64,
-            // so the attribute selects nothing further.
-            | "target"
-    )
+    use crate::c5::attr::{Attr, gnu_attribute};
+    match gnu_attribute(name) {
+        Some(Attr::Dllimport | Attr::Dllexport) => {
+            target.binary_format() == crate::c5::codegen::BinaryFormat::Pe
+        }
+        found => found.is_some(),
+    }
 }

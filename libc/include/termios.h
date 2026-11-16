@@ -226,11 +226,11 @@ struct termios {
 
 #ifndef _WIN32
 int tcgetattr(int fd, struct termios *termios_p);
-unsigned int cfgetospeed(const struct termios *termios_p);
-unsigned int cfgetispeed(const struct termios *termios_p);
-int cfsetospeed(struct termios *termios_p, unsigned int speed);
-int cfsetispeed(struct termios *termios_p, unsigned int speed);
-int tcsetattr(int fd, int optional_actions, struct termios *termios_p);
+speed_t cfgetospeed(const struct termios *termios_p);
+speed_t cfgetispeed(const struct termios *termios_p);
+int cfsetospeed(struct termios *termios_p, speed_t speed);
+int cfsetispeed(struct termios *termios_p, speed_t speed);
+int tcsetattr(int fd, int optional_actions, const struct termios *termios_p);
 int tcsendbreak(int fd, int duration);
 int tcdrain(int fd);
 int tcflush(int fd, int queue_selector);

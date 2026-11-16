@@ -73,6 +73,11 @@ fn compile_unit(name: &str, body: &str) -> Unit {
 
 /// `compile_unit` for one `--target` spelling.
 fn compile_unit_for(name: &str, target: &str, body: &str) -> Unit {
+    compile_object_for(name, target, body).0
+}
+
+/// The parsed compile unit and the object's bytes.
+fn compile_object_for(name: &str, target: &str, body: &str) -> (Unit, Vec<u8>) {
     let dir = tempdir(name);
     let src = dir.join("a.c");
     std::fs::write(&src, body).expect("write source");
@@ -93,7 +98,10 @@ fn compile_unit_for(name: &str, target: &str, body: &str) -> Unit {
         "compile failed: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    parse_object(&obj)
+    (
+        parse_object(&obj),
+        std::fs::read(&obj).expect("read object"),
+    )
 }
 
 // ---- ELF + DWARF reading ----
@@ -936,8 +944,8 @@ fn no_member_is_dropped_and_enums_survive() {
 }
 
 /// An untagged enum is described like a tagged one, less the name:
-/// DW_AT_name is optional on an enumeration type (DWARF 4 5.7), and
-/// gcc and clang leave it out. The relocatable object carries the DIE
+/// DW_AT_name is optional on an enumeration type (DWARF 4 5.7) and left
+/// out. The relocatable object carries the DIE
 /// on both Linux targets and the linked image keeps it.
 #[test]
 fn anonymous_enum_has_a_die_without_a_name() {
@@ -1269,7 +1277,7 @@ fn unprototyped_function_pointers_are_not_marked_prototyped() {
         assert_eq!(kinds, [DW_TAG_UNSPECIFIED_PARAMETERS], "{what}");
     }
     assert!(pointee(child("cb")).at(DW_AT_TYPE).is_none(), "void return");
-    // A `(void)` prototype has no children, as gcc and clang state it.
+    // A `(void)` prototype has no children.
     for d in [u.member(ops, "mv"), child("lv")] {
         assert_eq!(pointee(d).at(DW_AT_PROTOTYPED).unwrap().as_uint(), 1);
         assert!(!pointee(d).has_children);
@@ -1444,6 +1452,74 @@ fn typedefs_get_their_own_die() {
     ] {
         assert_eq!(u.type_of(d).offset, td.offset, "one DIE per typedef");
     }
+}
+
+/// A typedef stands for the type its own declaration gives it, pointer
+/// levels included (C99 6.7.7p3): a declarator adds only the levels past
+/// those. A typedef spelling the return type of a function-pointer
+/// declarator names that return type, not the pointer.
+#[test]
+fn a_typedef_stands_for_its_own_pointer_levels() {
+    let u = compile_unit(
+        "typedef-levels",
+        "typedef struct node { int v; struct node *next; } Node;\n\
+         typedef struct node *NodeP;\n\
+         typedef NodeP (*maker)(int);\n\
+         typedef maker factory;\n\
+         typedef const char *str_t;\n\
+         struct holder {\n\
+           NodeP head;\n\
+           NodeP *tail;\n\
+           Node *(*first)(Node *);\n\
+           NodeP (*make)(int);\n\
+           maker m;\n\
+           maker *pm;\n\
+           factory f;\n\
+           str_t s;\n\
+         };\n\
+         struct holder h;\n",
+    );
+    // `u.named` finds one DIE per name: no alias sits over a type it does
+    // not name.
+    let node = u.named(DW_TAG_STRUCTURE_TYPE, "node");
+    let nodep = u.named(DW_TAG_TYPEDEF, "NodeP");
+    let ptr = u.type_of(nodep);
+    assert_eq!(ptr.tag, DW_TAG_POINTER_TYPE, "NodeP is a pointer");
+    assert_eq!(u.type_of(ptr).offset, node.offset);
+    assert_eq!(
+        u.type_of(u.named(DW_TAG_TYPEDEF, "Node")).offset,
+        node.offset
+    );
+
+    let holder = u.named(DW_TAG_STRUCTURE_TYPE, "holder");
+    let ty = |name: &str| u.type_of(u.member(holder, name));
+    assert_eq!(ty("head").offset, nodep.offset);
+    assert_eq!(ty("tail").tag, DW_TAG_POINTER_TYPE);
+    assert_eq!(u.type_of(ty("tail")).offset, nodep.offset);
+    // The return types: `Node *` and `NodeP`, under the declarator's pointer.
+    for (member, ret) in [("first", "Node"), ("make", "NodeP")] {
+        let fp = ty(member);
+        assert_eq!(fp.tag, DW_TAG_POINTER_TYPE, "{member}");
+        let sub = u.type_of(fp);
+        assert_eq!(sub.tag, DW_TAG_SUBROUTINE_TYPE, "{member}");
+        let mut r = u.type_of(sub);
+        if member == "first" {
+            assert_eq!(r.tag, DW_TAG_POINTER_TYPE);
+            r = u.type_of(r);
+        }
+        assert_eq!((r.tag, r.name()), (DW_TAG_TYPEDEF, Some(ret)), "{member}");
+    }
+    let maker = u.named(DW_TAG_TYPEDEF, "maker");
+    assert_eq!(u.type_of(maker).tag, DW_TAG_POINTER_TYPE);
+    assert_eq!(ty("m").offset, maker.offset);
+    assert_eq!(u.type_of(ty("pm")).offset, maker.offset);
+    // A typedef spelled through another names it; one's own qualifiers stay.
+    let factory = u.named(DW_TAG_TYPEDEF, "factory");
+    assert_eq!(ty("f").offset, factory.offset);
+    assert_eq!(u.type_of(factory).offset, maker.offset);
+    let str_t = u.type_of(u.named(DW_TAG_TYPEDEF, "str_t"));
+    assert_eq!(str_t.tag, DW_TAG_POINTER_TYPE);
+    assert_eq!(u.type_of(str_t).tag, DW_TAG_CONST_TYPE);
 }
 
 /// DWARF 4 5.2 describes a qualifier with a wrapper DIE. Which level it
@@ -1633,8 +1709,8 @@ fn cast_only_type_declared_in_a_statement_expression_keeps_its_die() {
 /// A cast type-name inside an unevaluated operand and a compound
 /// literal of an otherwise-unused type both name their type, and so
 /// does a cast in a static initializer. `sizeof` / `_Alignof` of a
-/// type-name fold to a constant and leave no type behind -- gcc and
-/// clang emit no DIE for those, and neither does badc.
+/// type-name fold to a constant and leave no type behind: no DIE
+/// describes them.
 #[test]
 fn only_cast_type_names_reach_debug_info() {
     let u = compile_unit(
@@ -1699,4 +1775,31 @@ fn cast_only_type_keeps_its_die_in_a_linked_image() {
     let d = u.named(DW_TAG_STRUCTURE_TYPE, "only_mentioned");
     let names: Vec<_> = u.members(d).iter().map(|m| m.name().unwrap()).collect();
     assert_eq!(names, ["a", "b"]);
+}
+
+/// A parameter's `DW_OP_fbreg` names the frame-pointer-relative home its
+/// prologue stores the argument register to (`mov %reg, disp8(%rbp)`), on
+/// both x86-64 calling conventions.
+#[test]
+fn parameter_locations_name_the_home_the_prologue_stores() {
+    let body = "int pick(int a, int b) { int s = a + b; return s; }\n";
+    // The ModR/M register field of each ABI's first two integer arguments.
+    for (target, regs) in [("linux-x64", [7u8, 6]), ("windows-x64", [1, 2])] {
+        let (u, elf) = compile_object_for("param-homes", target, body);
+        let text = section(&elf, ".text");
+        for (name, reg) in ["a", "b"].into_iter().zip(regs) {
+            let loc = u.named(DW_TAG_FORMAL_PARAMETER, name).at(DW_AT_LOCATION);
+            let Some(Val::Block(expr)) = loc else {
+                panic!("{target}: `{name}` has no exprloc: {loc:?}");
+            };
+            assert_eq!(expr[0], 0x91, "{target}: `{name}` is not DW_OP_fbreg");
+            let disp = Reader::new(&expr[1..]).sleb();
+            let disp8 = i8::try_from(disp).expect("an 8-bit displacement") as u8;
+            let store = [0x89, 0x45 | (reg << 3), disp8];
+            assert!(
+                text.windows(3).any(|w| w == store),
+                "{target}: no store of `{name}`'s register to {disp}(%rbp)"
+            );
+        }
+    }
 }

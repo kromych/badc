@@ -20,9 +20,9 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x1, x0
                	mov	x0, #0x1                // =1
-               	str	w0, [x1]
-               	mov	x2, #0x2                // =2
-               	str	w2, [x1, #0x4]
+               	mov	x2, #0x1                // =1
+               	movk	x2, #0x2, lsl #32
+               	str	x2, [x1]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	str	x2, [x1, #0x8]

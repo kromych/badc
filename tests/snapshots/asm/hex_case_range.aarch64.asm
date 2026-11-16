@@ -30,10 +30,5 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	fmov	d0, #12.00000000
-               	fcmp	d0, d0
-               	b.eq	<addr>
-               	mov	x0, #0x4                // =4
-               	ret
                	mov	x0, #0x0                // =0
                	ret

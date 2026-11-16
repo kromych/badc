@@ -27,12 +27,12 @@ Disassembly of section .text:
 
 <main>:
                	movl	$0x3, <rip> # <addr>
-               	movb	$0xa, <rip> # <addr>
-               	movb	$0x14, <rip> # <addr>
+               	movw	$0x140a, <rip> # imm = 0x140A
+                                                # <addr>
                	movb	$0x1e, <rip> # <addr>
                	movl	$0x1, <rip> # <addr>
-               	movb	$-0x55, <rip> # <addr>
-               	movb	$-0x33, <rip> # <addr>
+               	movw	$0xcdab, <rip> # imm = 0xCDAB
+                                                # <addr>
                	movzwq	<rip>, %rax # <addr>
                	andq	$0xff, %rax
                	cmpl	$0xab, %eax

@@ -754,6 +754,9 @@ pub struct LdsLinker<'a> {
     /// Global names some input entry, definition or reference, gives a
     /// visibility other than default: the most constraining of them.
     visibility: HashMap<String, u8>,
+    /// AArch64 globals some input, an object's entry or a shared library's
+    /// export, marks `STO_AARCH64_VARIANT_PCS`.
+    variant_pcs: HashSet<String>,
 
     // Per-pass state.
     placements: Vec<Placement>,
@@ -1073,6 +1076,7 @@ impl<'a> LdsLinker<'a> {
             commons: HashMap::new(),
             script_assigned: HashSet::new(),
             visibility: HashMap::new(),
+            variant_pcs: HashSet::new(),
             placements: Vec::new(),
             script_now: HashMap::new(),
             script_prev: HashMap::new(),

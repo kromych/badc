@@ -22,21 +22,14 @@ Disassembly of section .text:
                	ret
 
 <store_consumed_after_branch_is_silenced>:
-               	sxtw	x1, w0
-               	mov	x0, #0x1                // =1
-               	cbz	x1, <addr>
-               	mov	x0, #0x2                // =2
+               	mov	x1, #0x1                // =1
+               	mov	x2, #0x2                // =2
+               	cmp	w0, #0x0
+               	csel	x0, x2, x1, ne
                	ret
 
 <address_escapes_silences>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	mov	x0, #0x1                // =1
-               	stur	w0, [x29, #-0x8]
-               	mov	x0, #0x1                // =1
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <block_local_dies>:
@@ -49,12 +42,5 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	mov	x0, #0x1                // =1
-               	stur	w0, [x29, #-0x8]
                	mov	x0, #0xe                // =14
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret

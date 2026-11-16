@@ -19,10 +19,9 @@ pub(crate) fn declared_home(flag: Option<&Path>) -> Option<PathBuf> {
 }
 
 /// The directory `-print-file-name=include` names for the compiler's own
-/// headers: `lib/badc/include` under the prefix holding the executable, as
-/// gcc and clang keep theirs under their own. The `#include` search serves
-/// the headers from the binary wherever it names the directory, so nothing
-/// need be installed there.
+/// headers: `lib/badc/include` under the prefix holding the executable. The
+/// `#include` search serves the headers from the binary wherever it names
+/// the directory, so nothing need be installed there.
 pub(crate) fn compiler_include_dir() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     #[cfg(unix)]
@@ -32,7 +31,7 @@ pub(crate) fn compiler_include_dir() -> Option<PathBuf> {
 }
 
 /// gcc's `-print-file-name=<name>`: the path badc has for `name`, else
-/// `name` itself, as gcc prints a name it does not find.
+/// `name` itself.
 pub(crate) fn print_file_name(name: &str) -> String {
     match compiler_include_dir() {
         Some(dir) if name == "include" => dir.to_string_lossy().into_owned(),
@@ -66,6 +65,42 @@ pub(crate) fn declared_sysroot(flag: Option<&Path>, target: Target) -> Option<Pa
         }
         None => None,
     }
+}
+
+/// The version an SDK root declares in its `SDKSettings.json` (the
+/// `"Version"` member, `major[.minor[.patch]]`), encoded as
+/// `LC_BUILD_VERSION` records it; none when the file or the member is
+/// missing or malformed.
+pub(crate) fn sdk_version(root: &Path) -> Option<u32> {
+    let text = std::fs::read_to_string(root.join("SDKSettings.json")).ok()?;
+    let rest = &text[text.find("\"Version\"")? + "\"Version\"".len()..];
+    let rest = rest.trim_start().strip_prefix(':')?.trim_start();
+    let rest = rest.strip_prefix('"')?;
+    let version = &rest[..rest.find('"')?];
+    let mut parts = version.split('.').map(str::parse::<u32>);
+    let major = parts.next()?.ok().filter(|&m| m <= 0xffff)?;
+    let mut field = |shift: u32| match parts.next() {
+        None => Some(0),
+        Some(n) => n.ok().filter(|&n| n <= 0xff).map(|n| n << shift),
+    };
+    let (minor, patch) = (field(8)?, field(0)?);
+    parts
+        .next()
+        .is_none()
+        .then_some(major << 16 | minor | patch)
+}
+
+/// The directories of the `LIB` environment variable, which link.exe searches
+/// for every library a PE link names; none for another format.
+pub(crate) fn pe_lib_env_paths(target: badc::Target) -> Vec<String> {
+    if target.binary_format() != badc::BinaryFormat::Pe {
+        return Vec::new();
+    }
+    let lib = std::env::var("LIB").unwrap_or_default();
+    lib.split(';')
+        .filter(|d| !d.is_empty())
+        .map(str::to_string)
+        .collect()
 }
 
 /// The standard library directories under `sysroot` for the target's
@@ -125,7 +160,7 @@ fn existing_dirs(root: &Path, dirs: &[String]) -> Vec<String> {
 
 /// Default `-o` value for native compilation. Picks an
 /// extension matching the (target, mode) pair so the produced
-/// file is loader-recognisable on the destination OS:
+/// file is loader-recognizable on the destination OS:
 ///
 /// | mode     | target            | extension |
 /// |----------|-------------------|-----------|

@@ -13,11 +13,13 @@
 #pragma binding(libc::forkpty,   "_forkpty")
 #pragma binding(libc::login_tty, "_login_tty")
 
-// Allocate a pseudo-terminal pair. `name`, `termp` (struct termios) and
-// `winp` (struct winsize) are opaque to c5 and may be null.
-int openpty(int *amaster, int *aslave, char *name, char *termp, char *winp);
+// Allocate a pseudo-terminal pair; `name`, `termp` and `winp` may be null.
+struct termios;
+struct winsize;
+int openpty(int *amaster, int *aslave, char *name, struct termios *termp,
+            struct winsize *winp);
 // fork() with the child on a new pseudo-terminal; returns a pid.
-int forkpty(int *amaster, char *name, char *termp, char *winp);
+int forkpty(int *amaster, char *name, struct termios *termp, struct winsize *winp);
 // Make `fd` the controlling terminal of the calling session.
 int login_tty(int fd);
 #endif

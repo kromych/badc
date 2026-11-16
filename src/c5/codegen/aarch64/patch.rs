@@ -1,7 +1,7 @@
 //! Page-relative relocation patching.
 //!
 //! Every consumer that resolves an AArch64 page-relative address
-//! materialisation -- the three image writers, the linker, and the JIT --
+//! materialization -- the three image writers, the linker, and the JIT --
 //! rewrites the same two fields: an `adrp` carrying the signed page delta
 //! and a second instruction carrying the in-page offset. The field
 //! layouts come from [`super::encode`], which is byte-verified against a
@@ -13,7 +13,7 @@
 //! so a caller holding one relocation patches one site.
 //!
 //! Two kinds of reference, and a consumer must pick the one matching its
-//! site. [`patch_addr`] materialises an address and keeps the in-page
+//! site. [`patch_addr`] materializes an address and keeps the in-page
 //! instruction's form. [`patch_slot`] resolves a reference that reaches
 //! its target through a GOT / IAT slot the loader fills, so the in-page
 //! instruction becomes a load whatever form the input carried.
@@ -82,7 +82,7 @@ impl PairError {
 }
 
 /// Signed page delta and in-page offset for an `adrp` at `adrp_addr`
-/// materialising `target_addr`. Both addresses are in the same space
+/// materializing `target_addr`. Both addresses are in the same space
 /// (runtime vmaddr, image RVA, or section-relative offset).
 pub(crate) fn page_fields(adrp_addr: i64, target_addr: i64) -> Result<(i32, u32), PairError> {
     let delta = (target_addr & !0xFFF) - (adrp_addr & !0xFFF);
@@ -91,6 +91,14 @@ pub(crate) fn page_fields(adrp_addr: i64, target_addr: i64) -> Result<(i32, u32)
         return Err(PairError::PageRange(delta));
     }
     Ok((pages as i32, (target_addr & 0xFFF) as u32))
+}
+
+/// `word` with bits 25:0 holding `distance / 4`, the field of `b` and `bl`
+/// that R_AARCH64_JUMP26 and CALL26 fill; `None` for a distance that is
+/// unaligned or beyond 128 MiB either way.
+pub(crate) fn branch26_word(word: u32, distance: i64) -> Option<u32> {
+    (distance & 3 == 0 && (-(1 << 27)..1 << 27).contains(&distance))
+        .then_some((word & !0x03ff_ffff) | ((distance >> 2) as u32 & 0x03ff_ffff))
 }
 
 /// `adrp` word carrying `pages`, keeping `word`'s destination register.
@@ -288,7 +296,7 @@ pub(crate) fn patch_pair(
 /// A reference to an imported object reaches it through a slot the
 /// loader fills, so the second instruction must end up a load however
 /// the input spelled it -- an object referencing an extern data symbol
-/// carries `adrp` + `add`, which materialises the slot's address rather
+/// carries `adrp` + `add`, which materializes the slot's address rather
 /// than reading it.
 pub(crate) fn patch_slot_load(
     code: &mut [u8],
@@ -469,7 +477,7 @@ mod tests {
     /// slot's own address. Keeping the `add` yields the address of the
     /// import table entry wherever an object's address was wanted.
     #[test]
-    fn slot_load_turns_an_address_materialisation_into_a_load() {
+    fn slot_load_turns_an_address_materialization_into_a_load() {
         for rd in [0u8, 5, 16, 30] {
             let mut pair = Vec::new();
             pair.extend_from_slice(&enc_adrp(Reg(rd), 0).to_le_bytes());

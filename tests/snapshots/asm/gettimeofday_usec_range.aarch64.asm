@@ -27,7 +27,6 @@ Disassembly of section .text:
                	ldur	x0, [x29, #-0x8]
                	cmp	x0, #0x0
                	b.lt	<addr>
-               	ldur	x0, [x29, #-0x8]
                	mov	x17, #0x4240            // =16960
                	movk	x17, #0xf, lsl #16
                	cmp	x0, x17

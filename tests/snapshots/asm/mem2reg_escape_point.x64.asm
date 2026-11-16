@@ -26,9 +26,7 @@ Disassembly of section .text:
                	int3
 
 <bump>:
-               	movl	(%rdi), %eax
-               	addq	$0x7, %rax
-               	movl	%eax, (%rdi)
+               	addl	$0x7, (%rdi)
                	retq
 
 <noise>:
@@ -49,11 +47,8 @@ Disassembly of section .text:
                	movl	-0x8(%rbp), %edi
                	addq	%rdi, %rdx
                	testl	%eax, %eax
-               	jne	<addr>
-               	movq	%rsi, %rcx
-               	movl	(%rcx), %edi
-               	incq	%rdi
-               	movl	%edi, (%rcx)
+               	cmoveq	%rsi, %rcx
+               	addl	$0x1, (%rcx)
                	incq	%rax
                	cmpl	$0x3, %eax
                	jl	<addr>

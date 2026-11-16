@@ -46,7 +46,7 @@ name: kernel-packages
 # ci.yml's `kernel` job keeps the per-push gate -- same "badc compiles every
 # unit, zero fallbacks" contract, booted with a marker initramfs under the
 # badc-built emulator, and with badc as the tree's LD as well. This workflow
-# adds the distribution dimension on demand and on a labelled pull request.
+# adds the distribution dimension on demand and on a labeled pull request.
 #
 # It is also the linker contrast, which is why the push path does not carry
 # one. A `linker: reference` dispatch builds the same configuration but leaves
@@ -60,7 +60,7 @@ name: kernel-packages
 # CPU rather than the host's, so the kernel's KVM-guest paths (kvm-clock and
 # the paravirtualised spinlocks behind CONFIG_KVM_GUEST) stay unexercised,
 # and instruction timing differs. Everything this gate asserts is guest
-# behaviour whose instructions TCG executes.
+# behavior whose instructions TCG executes.
 
 on:
   # No architecture or format input: the four lanes run in parallel, so

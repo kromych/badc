@@ -29,7 +29,6 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	xorl	%ecx, %ecx
-               	xorl	%eax, %eax
                	callq	<addr>
                	popq	%rbp
                	retq
@@ -42,9 +41,9 @@ Disassembly of section .text:
                	incq	%rax
                	cmpq	$0x0, (%rcx,%rax,8)
                	jne	<addr>
+               	xorl	%ecx, %ecx
+               	movl	$0x63, %edx
                	testl	%eax, %eax
-               	jle	<addr>
-               	xorl	%eax, %eax
+               	movq	%rdx, %rax
+               	cmovgq	%rcx, %rax
                	retq
-               	movl	$0x63, %eax
-               	jmp	<addr>

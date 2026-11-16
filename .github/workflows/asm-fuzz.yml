@@ -6,7 +6,7 @@ name: asm-fuzz
 # in the normal suite already lock the encodings on every push. macOS runners
 # carry both an integrated-assembler clang that cross-encodes x86-64 and a
 # native AArch64 assembler, plus an objdump that prints A64 as 32-bit words, so
-# a single runner covers both catalogues. The tests self-skip if the tools are
+# a single runner covers both catalogs. The tests self-skip if the tools are
 # absent, so a runner without them stays green rather than failing spuriously.
 
 on:

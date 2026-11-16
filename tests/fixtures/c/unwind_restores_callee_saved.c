@@ -8,12 +8,6 @@
 #ifdef _WIN32
 #include <windows.h>
 
-#pragma binding(kernel32::RtlLookupFunctionEntry, "RtlLookupFunctionEntry")
-#pragma binding(kernel32::RtlVirtualUnwind, "RtlVirtualUnwind")
-PRUNTIME_FUNCTION RtlLookupFunctionEntry(DWORD64 pc, PDWORD64 base, PVOID history);
-PVOID RtlVirtualUnwind(DWORD type, DWORD64 base, DWORD64 pc, PRUNTIME_FUNCTION entry,
-                       PCONTEXT ctx, PVOID *handler_data, PDWORD64 establisher, PVOID pointers);
-
 #ifdef __aarch64__
 #define PC(c) ((c)->Pc)
 #define NGPR 10

@@ -630,10 +630,10 @@ fn lldb_backtrace_has_no_duplicate_caller_frame() {
     // A function's `.debug_frame` FDE must mark `DW_CFA_advance_loc`
     // at the real post-prologue offset. When the post-prologue marker
     // is stored per-`ent_pc` (not in a shared `pc_to_native` slot that
-    // a neighbouring small function's PC can alias), a tiny callee's
+    // a neighboring small function's PC can alias), a tiny callee's
     // FDE describes its body as established-frame. If it regresses to
     // a too-late prologue-end, the unwinder reads the return address
-    // from the live link register inside the callee and synthesises a
+    // from the live link register inside the callee and synthesizes a
     // phantom duplicate of the caller frame.
     let path = build_signed_mach_o_two_units(
         r#"
@@ -677,8 +677,9 @@ fn lldb_backtrace_has_no_duplicate_caller_frame() {
 /// the return lands in the calling `fib` with the returned value.
 #[test]
 fn lldb_steps_out_of_a_return_ahead_of_the_frame() {
+    // Kept out of its own recursive calls, so each call is one frame.
     const SRC: &str = r#"
-        long fib(int n) {
+        __attribute__((noinline)) long fib(int n) {
             if (n < 2) return n;
             return fib(n - 1) + fib(n - 2);
         }

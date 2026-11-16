@@ -1,6 +1,6 @@
 // C11 6.7.5 applies to a declaration in any block, not only the one that
 // opens a function body: a static local's data placement and an automatic
-// object's frame placement both honour the requested alignment, whether it
+// object's frame placement both honor the requested alignment, whether it
 // comes from the declarator or from the type.
 
 struct wide {

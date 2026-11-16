@@ -14,17 +14,8 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	mov	x0, #0x0                // =0
                	mov	x16, #0x2a00            // =10752
                	ubfx	x1, x16, #8, #8
-               	str	x0, [sp]
-               	str	x1, [sp, #0x8]
-               	ldr	x0, [sp]
-               	ldr	x1, [sp, #0x8]
                	bfxil	x0, x1, #0, #8
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret

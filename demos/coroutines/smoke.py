@@ -93,7 +93,7 @@ def main() -> int:
     ok = True
     for optimize in (False, True):
         label = "-O" if optimize else "-O0"
-        opt = ["-O", "-UNDEBUG"] if optimize else []
+        opt = ["-O"] if optimize else []
         flags = [*opt, "--target=linux-x64", "-I", str(SRC)]
 
         libobj = out / f"coroutine{'O' if optimize else ''}.o"

@@ -54,7 +54,7 @@ static int prefixed(void) {
 // A `case` label and an array bound run the constant through the
 // constant-expression evaluator rather than the expression parser; both
 // must read the same type.
-static int labelled(int x) {
+static int labeled(int x) {
     switch (x) {
         case '\xF0\x9F\x98\x80': return 1;
         case 'ab': return 2;
@@ -73,10 +73,10 @@ int main(void) {
     if ((r = value()) != 0) return r;
     if ((r = sign()) != 0) return r;
     if ((r = prefixed()) != 0) return r;
-    if (labelled(-257976192) != 1) return 16;
-    if (labelled(24930) != 2) return 17;
+    if (labeled(-257976192) != 1) return 16;
+    if (labeled(24930) != 2) return 17;
     if (sizeof(packed) != sizeof(int)) return 18;
-    if (labelled(65533) != 3) return 27;
+    if (labeled(65533) != 3) return 27;
     if (sizeof(packed_u16) != 2) return 28;
     if (sizeof(packed_u32) != 4) return 29;
     return 0;

@@ -5,7 +5,7 @@
 // The audit-token and rusage variants (proc_pidpath_audittoken,
 // proc_pid_rusage, the signal/terminate delegates) take types from
 // <bsm/audit.h> and <sys/resource.h> that badc does not bundle, and are
-// left out. The per-flavour info structures live in <sys/proc_info.h>,
+// left out. The per-flavor info structures live in <sys/proc_info.h>,
 // which is likewise not bundled: proc_pidinfo callers supply their own
 // buffer layout.
 

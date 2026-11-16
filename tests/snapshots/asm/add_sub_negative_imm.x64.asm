@@ -39,8 +39,7 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	-0x18(%rbp), %eax
-               	addq	$-0xa, %rax
-               	testl	%eax, %eax
+               	subl	$0xa, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	leave

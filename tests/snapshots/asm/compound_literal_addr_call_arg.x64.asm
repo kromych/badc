@@ -224,16 +224,14 @@ Disassembly of section .text:
                	movl	$0x16, %eax
                	leave
                	retq
-               	movsd	-0x10(%rbp), %xmm0
-               	movabsq	$0x3ff8000000000000, %rsi # imm = 0x3FF8000000000000
-               	movq	%rsi, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	movsd	<rip>, %xmm0
+               	movsd	<rip>, %xmm1
+               	ucomisd	%xmm1, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	movsd	-0x8(%rbp), %xmm0
-               	movabsq	$0x4004000000000000, %rsi # imm = 0x4004000000000000
-               	movq	%rsi, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	movsd	<rip>, %xmm0
+               	movsd	<rip>, %xmm1
+               	ucomisd	%xmm1, %xmm0
                	jp	<addr>
                	jne	<addr>
                	movq	%rcx, -0x80(%rbp)

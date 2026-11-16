@@ -88,10 +88,10 @@ Disassembly of section .text:
                	movl	$0x20, %edi
                	movl	$0x28, %esi
                	callq	<addr>
+               	movl	$0x2a, %ecx
+               	movl	$0x1, %edx
                	cmpq	$0x20f, %rax            # imm = 0x20F
-               	jne	<addr>
-               	movl	$0x2a, %eax
+               	cmovneq	%rdx, %rcx
+               	movq	%rcx, %rax
                	popq	%rbp
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>

@@ -33,12 +33,7 @@ Disassembly of section .text:
                	movq	%rax, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
                	movl	$0x1, (%rax)
-               	movl	$0x16, 0x4(%rax)
-               	movq	$0x14d, 0x8(%rax)       # imm = 0x14D
                	movw	$0x2c, 0x10(%rax)
-               	movb	$0x5, 0x12(%rax)
-               	movl	$0x63, 0x4(%rax)
-               	movq	$0x309, 0x8(%rax)       # imm = 0x309
                	movl	$0x64, 0x4(%rax)
                	movq	$0x313, 0x8(%rax)       # imm = 0x313
                	movb	$0x6, 0x12(%rax)

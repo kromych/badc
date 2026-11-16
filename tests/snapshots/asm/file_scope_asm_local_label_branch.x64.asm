@@ -51,8 +51,7 @@ Disassembly of section .text:
                	cmpl	$0x0, <rip> # <addr>
                	jne	<addr>
                	movl	<rip>, %eax # <addr>
-               	xorq	$0x1, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbp
@@ -60,6 +59,8 @@ Disassembly of section .text:
                	movl	$0x2a, %eax
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
+               	addb	%dl, -0x48(%rdx)
 
 <pv_unlock>:
                	pushq	%rdx

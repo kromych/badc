@@ -25,26 +25,6 @@ Disassembly of section .text:
                	int3
                	int3
 
-<strtoimax>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	xorl	%esi, %esi
-               	movl	$0xa, %edx
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	popq	%rbp
-               	retq
-
-<strtoumax>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	xorl	%esi, %esi
-               	movl	$0x10, %edx
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	popq	%rbp
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp

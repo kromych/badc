@@ -205,26 +205,272 @@ fn reg_number(name: &str, t: CfiTarget) -> Option<u64> {
 /// One `.cfi_*` directive, with operands parsed but registers unresolved.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum CfiOp {
-    StartProc { simple: bool },
+    StartProc {
+        simple: bool,
+    },
     EndProc,
     Sections(CfiSections),
     SignalFrame,
     ReturnColumn(CfiReg),
-    DefCfa { reg: CfiReg, off: i64 },
+    DefCfa {
+        reg: CfiReg,
+        off: i64,
+    },
     DefCfaRegister(CfiReg),
     DefCfaOffset(i64),
     AdjustCfaOffset(i64),
-    Offset { reg: CfiReg, off: i64 },
-    RelOffset { reg: CfiReg, off: i64 },
-    ValOffset { reg: CfiReg, off: i64 },
+    Offset {
+        reg: CfiReg,
+        off: i64,
+    },
+    RelOffset {
+        reg: CfiReg,
+        off: i64,
+    },
+    ValOffset {
+        reg: CfiReg,
+        off: i64,
+    },
     NegateRaState,
-    Register { reg: CfiReg, from: CfiReg },
+    Register {
+        reg: CfiReg,
+        from: CfiReg,
+    },
     Restore(CfiReg),
     Undefined(CfiReg),
     SameValue(CfiReg),
     RememberState,
     RestoreState,
     Escape(Vec<u8>),
+    /// A Windows x64 `.seh_*` directive, which the PE unwind table takes
+    /// and the DWARF tables skip.
+    Seh(SehOp),
+}
+
+/// GNU as's `.seh_*` directives: a function's start (`.seh_proc`) and end,
+/// its prologue steps as the PE unwind codes describe them, and on arm64
+/// each epilogue's.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum SehOp {
+    Proc(String),
+    Step(crate::c5::codegen::PrologueStep),
+    /// One arm64 instruction's step, in a prologue or an epilogue.
+    A64(crate::c5::codegen::A64Step),
+    EndPrologue,
+    StartEpilogue,
+    EndEpilogue,
+    EndProc,
+}
+
+/// Parse a `.seh_*` directive of x64 or `arm64`; `eval` folds a numeric
+/// operand.
+pub(crate) fn parse_seh_directive(
+    tok: &str,
+    rest: &str,
+    arm64: bool,
+    eval: &dyn Fn(&str) -> Option<i64>,
+) -> Result<SehOp, String> {
+    match tok {
+        ".seh_proc" if !rest.is_empty() => return Ok(SehOp::Proc(String::from(rest))),
+        ".seh_endprologue" => return Ok(SehOp::EndPrologue),
+        ".seh_endproc" => return Ok(SehOp::EndProc),
+        _ if arm64 => return parse_a64_seh(tok, rest, eval),
+        _ => {}
+    }
+    use crate::c5::codegen::PrologueStep as S;
+    const REGS: [&str; 16] = [
+        "rax", "rcx", "rdx", "rbx", "rsp", "rbp", "rsi", "rdi", "r8", "r9", "r10", "r11", "r12",
+        "r13", "r14", "r15",
+    ];
+    let ops: Vec<&str> = rest.split(',').map(str::trim).collect();
+    let reg = |s: &str, prefix: &str| -> Option<u8> {
+        let name = s.strip_prefix('%').unwrap_or(s);
+        match prefix {
+            "xmm" => name
+                .strip_prefix("xmm")?
+                .parse()
+                .ok()
+                .filter(|&n: &u8| n < 16),
+            _ => REGS.iter().position(|r| *r == name).map(|n| n as u8),
+        }
+    };
+    let num = |s: &str| eval(s).and_then(|v| u32::try_from(v).ok());
+    let bad = || alloc::format!("bad `{tok} {rest}`");
+    Ok(match tok {
+        ".seh_pushreg" => SehOp::Step(S::Push(reg(ops[0], "").ok_or_else(bad)?)),
+        ".seh_stackalloc" => SehOp::Step(S::Alloc(num(ops[0]).ok_or_else(bad)?)),
+        // The PE unwind codes name the frame register; badc's frames use rbp.
+        ".seh_setframe" if ops.len() == 2 && reg(ops[0], "") == Some(5) => {
+            let off = num(ops[1])
+                .filter(|o| o % 16 == 0 && *o <= 240)
+                .ok_or_else(bad)?;
+            SehOp::Step(S::SetFrame(off))
+        }
+        ".seh_savexmm" if ops.len() == 2 => {
+            let xmm = reg(ops[0], "xmm").ok_or_else(bad)?;
+            let off = num(ops[1]).filter(|o| o % 16 == 0).ok_or_else(bad)?;
+            SehOp::Step(S::SaveXmm { xmm, off })
+        }
+        _ => return Err(alloc::format!("`{tok}` is not supported")),
+    })
+}
+
+/// An arm64 `.seh_*` directive: the step of the instruction it follows, or
+/// an epilogue's bounds.
+fn parse_a64_seh(
+    tok: &str,
+    rest: &str,
+    eval: &dyn Fn(&str) -> Option<i64>,
+) -> Result<SehOp, String> {
+    use crate::c5::codegen::A64Step as S;
+    let ops: Vec<&str> = rest.split(',').map(str::trim).collect();
+    let bad = || alloc::format!("bad `{tok} {rest}`");
+    let num = |s: &str| eval(s).and_then(|v| u32::try_from(v).ok()).ok_or_else(bad);
+    // `x19`..`x30` (`fp`, `lr`) or `d8`..`d15`, and the offset after it.
+    let reg = |fp: bool| -> Result<(u8, u32), String> {
+        let r = match (fp, ops[0]) {
+            (false, "fp") => 29,
+            (false, "lr") => 30,
+            (false, r) => r
+                .strip_prefix('x')
+                .and_then(|n| n.parse().ok())
+                .ok_or_else(bad)?,
+            (true, r) => r
+                .strip_prefix('d')
+                .and_then(|n| n.parse().ok())
+                .ok_or_else(bad)?,
+        };
+        Ok((r, num(ops.get(1).ok_or_else(bad)?)?))
+    };
+    let save = |fp: bool, pair: bool, pre: bool| -> Result<SehOp, String> {
+        let (reg, bytes) = reg(fp)?;
+        let reg2 = pair.then_some(reg + 1);
+        Ok(SehOp::A64(S::SaveReg {
+            fp,
+            reg,
+            reg2,
+            pre,
+            bytes,
+        }))
+    };
+    Ok(match tok {
+        ".seh_startepilogue" => SehOp::StartEpilogue,
+        ".seh_endepilogue" => SehOp::EndEpilogue,
+        ".seh_nop" => SehOp::A64(S::Nop),
+        ".seh_pac_sign_lr" => SehOp::A64(S::PacSignLr),
+        ".seh_set_fp" => SehOp::A64(S::SetFp),
+        ".seh_add_fp" => SehOp::A64(S::AddFp(num(ops[0])?)),
+        ".seh_stackalloc" => SehOp::A64(S::Alloc(num(ops[0])?)),
+        ".seh_save_fplr" => SehOp::A64(S::SaveFpLr(num(ops[0])?)),
+        ".seh_save_fplr_x" => SehOp::A64(S::SaveFpLrX(num(ops[0])?)),
+        ".seh_save_reg" => save(false, false, false)?,
+        ".seh_save_reg_x" => save(false, false, true)?,
+        ".seh_save_regp" => save(false, true, false)?,
+        ".seh_save_regp_x" => save(false, true, true)?,
+        ".seh_save_freg" => save(true, false, false)?,
+        ".seh_save_freg_x" => save(true, false, true)?,
+        ".seh_save_fregp" => save(true, true, false)?,
+        ".seh_save_fregp_x" => save(true, true, true)?,
+        _ => return Err(alloc::format!("`{tok}` is not supported")),
+    })
+}
+
+/// Each `.seh_proc` function's prologue steps, keyed by its name, with
+/// each step's offset counted from the function's start.
+pub(crate) fn seh_unwind(
+    records: &[CfiRecord],
+) -> Result<Vec<(String, crate::c5::codegen::UnwindSteps)>, String> {
+    use crate::c5::codegen::{A64Exit, A64Step, PrologueStep, UnwindSteps};
+    /// The function open: its name and opening record, its x64 steps, its
+    /// arm64 prologue steps and exits, and the epilogue open.
+    struct Open<'r> {
+        name: &'r String,
+        start: &'r CfiRecord,
+        x64: Vec<(u32, PrologueStep)>,
+        a64: Vec<A64Step>,
+        exits: Vec<A64Exit>,
+        epilogue: Option<A64Exit>,
+        arm64: bool,
+    }
+    // An arm64 step follows its instruction, the one 4 bytes past the last.
+    let gap = |name: &String| {
+        alloc::format!(
+            "`.seh_proc {name}`: an instruction of its prologue or epilogue has no `.seh_*` directive (`.seh_nop` stands for one)"
+        )
+    };
+    let mut out = Vec::new();
+    let mut open: Option<Open<'_>> = None;
+    for r in records {
+        let CfiOp::Seh(op) = &r.op else { continue };
+        let at = |o: &Open<'_>| r.offset - o.start.offset;
+        match (op, open.as_mut()) {
+            (SehOp::Proc(name), None) => {
+                open = Some(Open {
+                    name,
+                    start: r,
+                    x64: Vec::new(),
+                    a64: Vec::new(),
+                    exits: Vec::new(),
+                    epilogue: None,
+                    arm64: false,
+                });
+            }
+            (_, Some(o)) if o.start.key != r.key => {
+                return Err(alloc::format!(
+                    "`.seh_proc {}` must end in its section",
+                    o.name
+                ));
+            }
+            (SehOp::Step(step), Some(o)) => o.x64.push((at(o), *step)),
+            (SehOp::A64(step), Some(o)) => {
+                let off = at(o);
+                o.arm64 = true;
+                match &mut o.epilogue {
+                    Some(e) if off == e.at + 4 * (e.steps.len() as u32 + 1) => e.steps.push(*step),
+                    None if off == 4 * (o.a64.len() as u32 + 1) => o.a64.push(*step),
+                    _ => return Err(gap(o.name)),
+                }
+            }
+            (SehOp::EndPrologue, Some(_)) => {}
+            (SehOp::StartEpilogue, Some(o)) if o.epilogue.is_none() => {
+                o.arm64 = true;
+                o.epilogue = Some(A64Exit {
+                    at: at(o),
+                    steps: Vec::new(),
+                });
+            }
+            (SehOp::EndEpilogue, Some(o)) if o.epilogue.is_some() => {
+                let e = o.epilogue.take().unwrap();
+                o.exits.push(e);
+            }
+            (SehOp::EndProc, Some(o)) if o.epilogue.is_none() => {
+                let o = open.take().unwrap();
+                let steps = match o.arm64 {
+                    true => UnwindSteps::A64 {
+                        steps: o.a64,
+                        exits: o.exits,
+                    },
+                    false => UnwindSteps::X64 {
+                        leaf: o.x64.is_empty(),
+                        steps: o.x64,
+                    },
+                };
+                out.push((o.name.clone(), steps));
+            }
+            _ => {
+                return Err(String::from(
+                    "a `.seh_*` directive out of `.seh_proc` order",
+                ));
+            }
+        }
+    }
+    match open {
+        Some(o) => Err(alloc::format!(
+            "`.seh_proc {}` has no `.seh_endproc`",
+            o.name
+        )),
+        None => Ok(out),
+    }
 }
 
 /// A directive at the point the assembler reached it: the section it was
@@ -402,7 +648,7 @@ fn collect_fdes(records: &[CfiRecord]) -> Result<(Vec<Fde>, CfiSections), String
     for r in records {
         match &r.op {
             CfiOp::Sections(s) => {
-                // GNU as honours the directive only before the first frame
+                // GNU as honors the directive only before the first frame
                 // opens; one inside a description leaves the choice alone.
                 if !saw_proc {
                     sections = *s;
@@ -448,6 +694,7 @@ fn collect_fdes(records: &[CfiRecord]) -> Result<(Vec<Fde>, CfiSections), String
                     ));
                 }
             },
+            CfiOp::Seh(_) => {}
             CfiOp::ReturnColumn(reg) => match open.as_mut() {
                 Some(f) => f.return_column = Some(reg.clone()),
                 None => {
@@ -607,6 +854,7 @@ fn encode_op(
         CfiOp::Escape(b) => out.extend_from_slice(b),
         CfiOp::StartProc { .. }
         | CfiOp::EndProc
+        | CfiOp::Seh(_)
         | CfiOp::Sections(_)
         | CfiOp::SignalFrame
         | CfiOp::ReturnColumn(_) => {}
@@ -985,5 +1233,97 @@ mod leb128_tests {
             assert_eq!(bytes.len(), uleb128_len(v), "uleb128({v}) length");
             assert_eq!(decode_uleb128(&bytes), (v, bytes.len()), "uleb128({v})");
         }
+    }
+}
+
+#[cfg(test)]
+mod seh_tests {
+    use super::*;
+
+    /// GNU as's x64 `.seh_*` directives give each `.seh_proc` function its
+    /// prologue steps at the offsets they follow; a function with none is
+    /// a leaf, and a directive outside a function is refused.
+    #[test]
+    fn seh_directives_give_each_function_its_steps() {
+        use crate::c5::codegen::{PrologueStep as S, UnwindSteps};
+        let eval = |s: &str| s.parse::<i64>().ok();
+        let at = |offset: u32, d: &str| {
+            let (tok, rest) = d.split_once(' ').unwrap_or((d, ""));
+            CfiRecord {
+                key: String::from(".text"),
+                offset,
+                op: CfiOp::Seh(parse_seh_directive(tok, rest, false, &eval).expect(d)),
+            }
+        };
+        let records = [
+            at(0, ".seh_proc f"),
+            at(1, ".seh_pushreg %rbp"),
+            at(5, ".seh_stackalloc 48"),
+            at(10, ".seh_setframe %rbp, 32"),
+            at(10, ".seh_endprologue"),
+            at(30, ".seh_endproc"),
+            at(32, ".seh_proc g"),
+            at(40, ".seh_endproc"),
+        ];
+        let got = seh_unwind(&records).unwrap();
+        let steps = alloc::vec![(1, S::Push(5)), (5, S::Alloc(48)), (10, S::SetFrame(32))];
+        assert_eq!(
+            got[0],
+            (String::from("f"), UnwindSteps::X64 { leaf: false, steps })
+        );
+        let leaf = UnwindSteps::X64 {
+            leaf: true,
+            steps: Vec::new(),
+        };
+        assert_eq!(got[1], (String::from("g"), leaf));
+        assert!(parse_seh_directive(".seh_setframe", "%rbx, 0", false, &eval).is_err());
+        assert!(parse_seh_directive(".seh_handler", "h, @except", false, &eval).is_err());
+        assert!(seh_unwind(&records[1..2]).is_err());
+    }
+
+    /// arm64's directives give each prologue instruction its step, an
+    /// epilogue its exit, and refuse an instruction none follows.
+    #[test]
+    fn arm64_seh_directives_give_steps_per_instruction() {
+        use crate::c5::codegen::{A64Exit, A64Step as S, UnwindSteps};
+        let eval = |s: &str| s.parse::<i64>().ok();
+        let at = |offset: u32, d: &str| {
+            let (tok, rest) = d.split_once(' ').unwrap_or((d, ""));
+            CfiRecord {
+                key: String::from(".text"),
+                offset,
+                op: CfiOp::Seh(parse_seh_directive(tok, rest, true, &eval).expect(d)),
+            }
+        };
+        let records = [
+            at(0, ".seh_proc f"),
+            at(4, ".seh_save_fplr_x 32"),
+            at(8, ".seh_save_regp x19, 16"),
+            at(12, ".seh_set_fp"),
+            at(12, ".seh_endprologue"),
+            at(20, ".seh_startepilogue"),
+            at(24, ".seh_save_fplr_x 32"),
+            at(24, ".seh_endepilogue"),
+            at(28, ".seh_endproc"),
+        ];
+        let pair = S::SaveReg {
+            fp: false,
+            reg: 19,
+            reg2: Some(20),
+            pre: false,
+            bytes: 16,
+        };
+        let exits = alloc::vec![A64Exit {
+            at: 20,
+            steps: alloc::vec![S::SaveFpLrX(32)]
+        }];
+        let steps = alloc::vec![S::SaveFpLrX(32), pair, S::SetFp];
+        assert_eq!(
+            seh_unwind(&records).unwrap()[0].1,
+            UnwindSteps::A64 { steps, exits }
+        );
+        let mut gap = records.to_vec();
+        gap[2].offset = 12;
+        assert!(seh_unwind(&gap).unwrap_err().contains("`.seh_nop`"));
     }
 }

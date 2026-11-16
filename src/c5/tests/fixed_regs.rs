@@ -183,10 +183,16 @@ fn a_reserved_register_leaves_the_banks_and_the_scratch_moves() {
     assert_eq!(banks.fp_scratch, [12, 11, 10]);
     assert_eq!(banks.callee_fprs, [8, 9]);
 
-    assert_eq!(RegBanks::for_target(x64).fp_scratch, [14, 15, 13]);
+    assert_eq!(
+        RegBanks::for_target(x64).fp_scratch,
+        [14, 15, NO_FP_SCRATCH]
+    );
     let banks = RegBanks::new(x64, reserve(x64, &["xmm14", "r12"]));
-    assert_eq!(banks.fp_scratch, [15, 13, 8]);
-    assert_eq!(banks.caller_fprs, [0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12]);
+    assert_eq!(banks.fp_scratch, [15, 8, NO_FP_SCRATCH]);
+    assert_eq!(
+        banks.caller_fprs,
+        [0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13]
+    );
     assert!(!banks.callee_gprs.contains(&12));
     let upper: Vec<String> = (8..16).map(|n| format!("xmm{n}")).collect();
     let names: Vec<&str> = upper.iter().map(String::as_str).collect();
@@ -195,20 +201,20 @@ fn a_reserved_register_leaves_the_banks_and_the_scratch_moves() {
     assert_eq!(banks.caller_fprs, [0, 1, 2, 3, 4, 5, 6, 7]);
 
     let default = RegBanks::for_target(win);
-    assert_eq!(default.fp_scratch, [4, 5, 15]);
+    assert_eq!(default.fp_scratch, [4, 5, NO_FP_SCRATCH]);
     assert_eq!(default.caller_fprs, [0, 1, 2, 3]);
-    assert_eq!(default.callee_fprs, [6, 7, 8, 9, 10, 11, 12, 13, 14]);
+    assert_eq!(default.callee_fprs, [6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
     // A reserved callee-saved xmm leaves the bank; the scratch stays.
     let banks = RegBanks::new(win, reserve(win, &["xmm12", "xmm13", "xmm14"]));
-    assert_eq!(banks.fp_scratch, [4, 5, 15]);
+    assert_eq!(banks.fp_scratch, default.fp_scratch);
     assert_eq!(banks.caller_fprs, default.caller_fprs);
-    assert_eq!(banks.callee_fprs, [6, 7, 8, 9, 10, 11]);
+    assert_eq!(banks.callee_fprs, [6, 7, 8, 9, 10, 11, 15]);
     // A reserved volatile scratch falls back to the callee-saved tail,
     // which the prologue then saves (fp_scratch_demand).
     let banks = RegBanks::new(win, reserve(win, &["xmm3", "xmm4", "xmm5"]));
-    assert_eq!(banks.fp_scratch, [15, 14, 13]);
+    assert_eq!(banks.fp_scratch, [15, 14, NO_FP_SCRATCH]);
     assert_eq!(banks.caller_fprs, [0, 1, 2]);
-    assert_eq!(banks.callee_fprs, [6, 7, 8, 9, 10, 11, 12]);
+    assert_eq!(banks.callee_fprs, [6, 7, 8, 9, 10, 11, 12, 13]);
 }
 
 /// Under register pressure the allocator uses every register of both
@@ -409,19 +415,19 @@ fn no_fp_scratch_left_is_a_diagnostic() {
 
 /// An AArch64 sequence that saves and restores the registers it borrows
 /// takes them from x0..x15 outside its operands and the reservations, and
-/// is refused by name when fewer remain: a binary128 load borrows seven
-/// beside its address in x0.
+/// is refused by name when fewer remain: the binary128 load's sequence
+/// borrows seven, its address in x16.
 #[test]
 fn too_few_registers_to_borrow_is_a_diagnostic() {
     let src = "double ld_load(long double *p) { return (double)p[0]; }\n\
                int main(void) { return 0; }\n";
     let a64 = Target::LinuxAarch64;
     let from = |first: u8| -> Vec<String> { (first..=15).map(|n| format!("x{n}")).collect() };
-    let eight = from(8);
-    let names: Vec<&str> = eight.iter().map(String::as_str).collect();
-    text_under(src, a64, reserve(a64, &names)).unwrap_or_else(|e| panic!("{e}"));
     let nine = from(7);
     let names: Vec<&str> = nine.iter().map(String::as_str).collect();
+    text_under(src, a64, reserve(a64, &names)).unwrap_or_else(|e| panic!("{e}"));
+    let ten = from(6);
+    let names: Vec<&str> = ten.iter().map(String::as_str).collect();
     let err = text_under(src, a64, reserve(a64, &names)).expect_err("six left for seven");
     assert!(
         err.contains("needs 7 of x0..x15") && err.contains("ld_load"),

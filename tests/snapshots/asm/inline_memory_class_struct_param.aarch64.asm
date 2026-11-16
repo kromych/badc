@@ -14,15 +14,8 @@ Disassembly of section .text:
                	brk	#0x1
 
 <weigh>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	stur	x0, [x29, #-0x20]
-               	ldur	x0, [x29, #-0x20]
                	ldr	x0, [x0, #0x8]
                	mul	x0, x0, x1
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <use_sum>:
@@ -38,25 +31,29 @@ Disassembly of section .text:
                	ret
 
 <use_forward>:
-               	str	x20, [sp, #-0x50]!
-               	stp	x29, x30, [sp, #0x40]
-               	add	x29, sp, #0x40
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x50
                	mov	x1, #0x7                // =7
-               	ldr	x20, [x0]
-               	ldr	x2, [x0, #0x8]
-               	ldr	x3, [x0, #0x10]
-               	ldr	x4, [x0, #0x18]
-               	ldr	x5, [x0, #0x20]
+               	sub	x2, x29, #0x50
+               	ldp	x16, x17, [x0]
+               	stp	x16, x17, [x2]
+               	ldp	x16, x17, [x0, #0x10]
+               	stp	x16, x17, [x2, #0x10]
+               	ldr	x16, [x0, #0x20]
+               	str	x16, [x2, #0x20]
                	sub	x0, x29, #0x28
-               	stur	x20, [x29, #-0x28]
-               	stur	x2, [x29, #-0x20]
-               	stur	x3, [x29, #-0x18]
-               	stur	x4, [x29, #-0x10]
-               	stur	x5, [x29, #-0x8]
+               	ldp	x16, x17, [x2]
+               	stp	x16, x17, [x0]
+               	ldp	x16, x17, [x2, #0x10]
+               	stp	x16, x17, [x0, #0x10]
+               	ldr	x16, [x2, #0x20]
+               	str	x16, [x0, #0x20]
                	bl	<addr>
-               	add	x0, x0, x20
-               	ldp	x29, x30, [sp, #0x40]
-               	ldr	x20, [sp], #0x50
+               	ldur	x1, [x29, #-0x50]
+               	add	x0, x0, x1
+               	add	sp, sp, #0x50
+               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <use_clobber>:
@@ -86,13 +83,11 @@ Disassembly of section .text:
                	ret
 
 <use_pick>:
-               	sxtw	x2, w2
                	ldr	x0, [x0, #0x10]
                	ldr	x1, [x1, #0x18]
-               	cbz	x2, <addr>
+               	cmp	w2, #0x0
+               	csel	x0, x0, x1, ne
                	ret
-               	mov	x0, x1
-               	b	<addr>
 
 <use_find>:
                	ldr	x2, [x0]

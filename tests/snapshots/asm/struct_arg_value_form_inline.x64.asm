@@ -58,8 +58,4 @@ Disassembly of section .text:
 <main>:
                	xorl	%eax, %eax
                	movl	%eax, <rip> # <addr>
-               	cmpl	$0x0, <rip> # <addr>
-               	je	<addr>
-               	movl	$0x8, %eax
-               	retq
                	retq

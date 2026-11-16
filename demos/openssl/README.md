@@ -31,7 +31,7 @@ python demos/openssl/smoke.py --asm        # with the assembler modules
 
 `smoke.py` prints one line per build and per suite pass and returns 0 when
 every recipe passes, 1 with the failing recipes and subtests otherwise. It
-honours `BADC=path/to/badc`; `--jobs N` sets both `make -j` and
+honors `BADC=path/to/badc`; `--jobs N` sets both `make -j` and
 `HARNESS_JOBS` (default: the CPU count); `--keep-going` passes `-k` to
 `make` so every unit that fails is listed. `BADC_OPENSSL_TESTS=untimed`
 builds and runs every recipe but the timer-bound ones (step 3), and

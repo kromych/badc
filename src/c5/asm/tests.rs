@@ -118,17 +118,23 @@ fn value_is_an_x86_two_byte_element() {
 }
 
 #[test]
-fn mach_o_names_lose_one_leading_underscore() {
-    // Apple's `_g` is the C name `g`; a string, a comment, a named operand
-    // reference and a `.section`'s segment and section names are not
-    // symbols, and an underscore inside a name is part of it.
-    let text = ".section __TEXT,__const\n.globl _h\n_h: b ___g // _c\n\
-                adrp x0, _t@PAGE ; ldr x1, [x0, _t@PAGEOFF]\n\
-                .asciz \"_s\"\nmov %[_v], x_1\n.L_x: .quad a+_b /* _d */\n";
-    let want = ".section __TEXT,__const\n.globl h\nh: b __g // _c\n\
-                adrp x0, t@PAGE ; ldr x1, [x0, t@PAGEOFF]\n\
-                .asciz \"_s\"\nmov %[_v], x_1\n.L_x: .quad a+b /* _d */\n";
-    assert_eq!(mach_o_symbol_names(text), want);
+fn a_mach_o_asm_name_loses_one_underscore_or_is_raw() {
+    // Apple's `_g` is the C name `g`; `g` names a symbol without the
+    // underscore. A numeric or `.L` label stays the assembler's own.
+    use crate::c5::codegen::BinaryFormat::{Elf, MachO};
+    for (written, name) in [
+        ("_g", "g"),
+        ("__g", "_g"),
+        ("other_name", "\u{1}other_name"),
+        ("Ltmp0", "\u{1}Ltmp0"),
+        (".Lx", ".Lx"),
+        ("1", "1"),
+        ("2b", "2b"),
+    ] {
+        assert_eq!(asm_symbol_name(MachO, written), name);
+        assert_eq!(asm_symbol_spelling(MachO, name), written);
+        assert_eq!(asm_symbol_name(Elf, written), written);
+    }
 }
 
 #[test]
@@ -1811,7 +1817,7 @@ fn section_type_object_and_bad_forms_rejected() {
     assert!(err.contains("unsupported `.type`"), "{err}");
     // `.type` on a name no section defines is the unit's, as in gas.
     let sink = materialize(".pushsection .t,\"a\"\n.type ext, @function\n.popsection\n").unwrap();
-    let (sections, decls) = sink.into_parts();
+    let (sections, decls) = sink.into_parts(crate::c5::codegen::BinaryFormat::Elf);
     assert!(sections[0].labels.is_empty());
     assert!(
         decls

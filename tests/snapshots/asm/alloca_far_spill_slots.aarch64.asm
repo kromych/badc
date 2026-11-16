@@ -44,18 +44,15 @@ Disassembly of section .text:
                	subs	x17, x17, #0x1
                	b.ne	<addr>
                	mov	sp, x20
-               	mov	x17, #0x3               // =3
-               	mul	x21, x0, x17
-               	mov	x17, #0x5               // =5
-               	mul	x22, x0, x17
+               	add	x21, x0, x0, lsl #1
+               	add	x22, x0, x0, lsl #2
                	mov	x17, #0x7               // =7
                	mul	x23, x0, x17
                	mov	x17, #0xb               // =11
                	mul	x24, x0, x17
                	mov	x17, #0xd               // =13
                	mul	x25, x0, x17
-               	mov	x17, #0x11              // =17
-               	mul	x26, x0, x17
+               	add	x26, x0, x0, lsl #4
                	mov	x17, #0x13              // =19
                	mul	x27, x0, x17
                	mov	x17, #0x17              // =23
@@ -141,10 +138,8 @@ Disassembly of section .text:
                	ret
 
 <expect>:
-               	mov	x17, #0x3               // =3
-               	mul	x1, x0, x17
-               	mov	x17, #0x5               // =5
-               	mul	x2, x0, x17
+               	add	x1, x0, x0, lsl #1
+               	add	x2, x0, x0, lsl #2
                	add	x4, x1, x2
                	mov	x17, #0x7               // =7
                	mul	x3, x0, x17
@@ -155,8 +150,7 @@ Disassembly of section .text:
                	mov	x17, #0xd               // =13
                	mul	x5, x0, x17
                	add	x7, x6, x5
-               	mov	x17, #0x11              // =17
-               	mul	x6, x0, x17
+               	add	x6, x0, x0, lsl #4
                	add	x8, x7, x6
                	mov	x17, #0x13              // =19
                	mul	x7, x0, x17

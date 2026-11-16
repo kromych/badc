@@ -93,21 +93,20 @@ Disassembly of section .text:
                	b.ne	<addr>
                	adrp	x16, <page>
                	ldr	s0, [x16, #0x20]
-               	frintz	s1, s0
-               	fmov	s0, #2.00000000
-               	fcmp	s1, s0
+               	frintz	s0, s0
+               	fmov	s1, #2.00000000
+               	fcmp	s0, s1
                	b.eq	<addr>
                	mov	x0, #0x9                // =9
                	ret
-               	fmov	s1, #-16.00000000
-               	fabs	s1, s1
-               	fsqrt	s1, s1
-               	fmov	s2, #4.00000000
-               	fcmp	s1, s2
+               	fmov	s0, #-16.00000000
+               	fabs	s0, s0
+               	fsqrt	s1, s0
+               	fmov	s0, #4.00000000
+               	fcmp	s1, s0
                	b.eq	<addr>
                	mov	x0, #0xa                // =10
                	ret
-               	fmul	s0, s0, s0
                	fsqrt	s0, s0
                	adrp	x16, <page>
                	ldr	s1, [x16, #0x24]

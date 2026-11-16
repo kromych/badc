@@ -24,17 +24,15 @@ Disassembly of section .text:
                	str	xzr, [x0, #0x30]
                	mov	x1, #0x46               // =70
                	stur	w1, [x29, #-0x24]
-               	mov	x1, #0xf                // =15
-               	stur	w1, [x29, #-0x2c]
-               	mov	x1, #0x4                // =4
-               	stur	w1, [x29, #-0x20]
-               	mov	x2, #0xe                // =14
-               	stur	w2, [x29, #-0x1c]
-               	mov	x2, #0xd                // =13
-               	stur	w2, [x29, #-0x30]
-               	stur	w1, [x29, #-0x34]
+               	mov	x1, #0xd                // =13
+               	movk	x1, #0xf, lsl #32
+               	mov	x2, #0x4                // =4
+               	movk	x2, #0xe, lsl #32
+               	stur	x2, [x29, #-0x20]
+               	stur	x1, [x29, #-0x30]
                	mov	x1, #0x5                // =5
-               	stur	w1, [x29, #-0x38]
+               	movk	x1, #0x4, lsl #32
+               	stur	x1, [x29, #-0x38]
                	adrp	x1, <page>
                	ldr	x1, [x1, <lo12>]
                	blr	x1
@@ -48,12 +46,14 @@ Disassembly of section .text:
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x58
-               	mov	x1, #0x78               // =120
-               	mov	x2, #0x1a               // =26
-               	bl	<addr>
-               	sub	x0, x29, #0x38
                	sub	x1, x29, #0x58
+               	mov	x0, #0x7878787878787878 // =8680820740569200760
+               	stur	x0, [x29, #-0x58]
+               	stur	x0, [x29, #-0x50]
+               	stur	x0, [x29, #-0x48]
+               	mov	x0, #0x7878             // =30840
+               	sturh	w0, [x29, #-0x40]
+               	sub	x0, x29, #0x38
                	bl	<addr>
                	mov	x1, x0
                	sub	x0, x29, #0x58

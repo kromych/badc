@@ -20,12 +20,12 @@ Disassembly of section .text:
                	ldr	x30, [x29, #0x8]
                	xpaclri
                	mov	x1, x30
-               	str	x1, [x0, #0x30]
+               	str	x1, [x0, #0x20]
                	adrp	x0, <page>
-               	ldr	x0, [x0, <lo12>]
-               	cbz	x0, <addr>
-               	mov	x0, #0x0                // =0
+               	mov	x1, #0x0                // =0
+               	mov	x2, #0x1                // =1
+               	ldr	x0, [x0, #0x20]
+               	cmp	x0, #0x0
+               	csel	x0, x1, x2, ne
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x1                // =1
-               	b	<addr>

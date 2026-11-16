@@ -7,6 +7,12 @@
 
 #include <stdio.h>
 
+#if defined(__APPLE__)
+#define CSYM(name) "_" name
+#else
+#define CSYM(name) name
+#endif
+
 extern void asm_store_magic(unsigned int *out);
 extern const unsigned int asm_magic_word[];
 /* The section stores the distance between its two labels, so the two
@@ -17,33 +23,33 @@ extern const int asm_label_delta[];
 #if defined(__x86_64__)
 asm(".pushsection .text.asmlbl,\"ax\",@progbits\n"
     ".balign 8\n"
-    ".type asm_store_magic,@function\n"
-    "asm_store_magic:\n"
+    ".type " CSYM("asm_store_magic") ",@function\n"
+    CSYM("asm_store_magic") ":\n"
     "\tmovl $0x1234, (%rdi)\n"
     "\tret\n"
-    ".size asm_store_magic, .-asm_store_magic\n"
+    ".size " CSYM("asm_store_magic") ", .-" CSYM("asm_store_magic") "\n"
     ".balign 8\n"
-    "asm_magic_word:\n"
+    CSYM("asm_magic_word") ":\n"
     ".long 0x5678\n"
     ".balign 8\n"
-    "asm_label_delta:\n"
-    ".long asm_magic_word - asm_store_magic\n"
+    CSYM("asm_label_delta") ":\n"
+    ".long " CSYM("asm_magic_word") " - " CSYM("asm_store_magic") "\n"
     ".popsection\n");
 #elif defined(__aarch64__)
 /* The A64 section encoder assembles data directives; the body rides in as
  * instruction words: mov w1, #0x1234 / str w1, [x0] / ret. */
 asm(".pushsection .text.asmlbl,\"ax\"\n"
     ".balign 8\n"
-    "asm_store_magic:\n"
+    CSYM("asm_store_magic") ":\n"
     ".long 0x52824681\n"
     ".long 0xb9000001\n"
     ".long 0xd65f03c0\n"
     ".balign 8\n"
-    "asm_magic_word:\n"
+    CSYM("asm_magic_word") ":\n"
     ".long 0x5678\n"
     ".balign 8\n"
-    "asm_label_delta:\n"
-    ".long asm_magic_word - asm_store_magic\n"
+    CSYM("asm_label_delta") ":\n"
+    ".long " CSYM("asm_magic_word") " - " CSYM("asm_store_magic") "\n"
     ".popsection\n");
 #endif
 

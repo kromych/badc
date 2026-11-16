@@ -7,7 +7,7 @@ displacement and not at another. verify.py therefore pins the displacements it
 boots at rather than taking whatever the machine draws.
 
 aarch64: the early boot code takes the displacement from `/chosen/kaslr-seed`
-in the device tree it is handed, and `-M virt` honours a tree passed with
+in the device tree it is handed, and `-M virt` honors a tree passed with
 `-dtb`. `-M virt,dumpdtb=` writes the machine's own tree; `set_kaslr_seed`
 overwrites the seed in it, and the result is passed back. Reusing one dumped
 tree also fixes `/chosen/rng-seed`, which the guest's RNG consumes.

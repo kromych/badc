@@ -30,7 +30,9 @@
 // a check such as `_MSC_VER >= 1300`. badc's runtime hits
 // msvcrt.dll anyway so this matches what the code is going to
 // call.
+#ifndef _MSC_VER
 #define _MSC_VER 1900
+#endif
 
 // MSVC defines `_MSC_EXTENSIONS` under its default /Ze, and clang does for a
 // windows-msvc triple with -fms-extensions; badc's Windows targets always
@@ -109,7 +111,7 @@
 
 // Function-like decorator macros (`__pragma(x)`, `_Pre_satisfies_(x)`,
 // ...) expand to nothing. `__declspec` is left to the compiler, which
-// honours align, thread, selectany, noreturn and dllimport / dllexport.
+// honors align, thread, selectany, noreturn and dllimport / dllexport.
 #define __pragma(x)
 #define _Pre_satisfies_(x)
 #define _Post_satisfies_(x)
@@ -137,7 +139,7 @@
 // `#pragma comment(lib, "...")` is an MSVC linker directive.
 // badc resolves imports through `#pragma binding(...)` (emitted
 // below) and the preprocessor emits an unknown-pragma warning
-// for the unrecognised spelling, so sources retaining it
+// for the unrecognized spelling, so sources retaining it
 // compile cleanly.
 
 // ---- kernel32 / msvcrt bindings -----------------------------

@@ -14,49 +14,5 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	fmov	s0, #-5.00000000
-               	fcmp	s0, s0
-               	b.eq	<addr>
-               	mov	x0, #0x1                // =1
-               	ret
-               	adrp	x16, <page>
-               	ldr	s0, [x16]
-               	fcmp	s0, s0
-               	b.eq	<addr>
-               	mov	x0, #0x2                // =2
-               	ret
-               	fmov	s0, #7.00000000
-               	fmov	s1, #2.00000000
-               	fmul	s0, s0, s1
-               	fcvtzs	x0, s0
-               	scvtf	s0, x0
-               	fmov	s1, #14.00000000
-               	fcmp	s0, s1
-               	b.eq	<addr>
-               	mov	x0, #0x5                // =5
-               	ret
-               	mov	x16, #0x4b800000        // =1266679808
-               	fmov	s0, w16
-               	fcmp	s0, s0
-               	b.eq	<addr>
-               	mov	x0, #0x6                // =6
-               	ret
-               	adrp	x16, <page>
-               	ldr	s0, [x16, #0x4]
-               	fcmp	s0, s0
-               	b.eq	<addr>
-               	mov	x0, #0x7                // =7
-               	ret
-               	movi	d0, #0000000000000000
-               	fcmp	s0, s0
-               	b.eq	<addr>
-               	mov	x0, #0x8                // =8
-               	ret
-               	mov	x16, #0x5f000000        // =1593835520
-               	fmov	s0, w16
-               	fcmp	s0, s0
-               	b.eq	<addr>
-               	mov	x0, #0x9                // =9
-               	ret
                	mov	x0, #0x0                // =0
                	ret

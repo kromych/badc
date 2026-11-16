@@ -43,9 +43,6 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x1, %eax
                	jne	<addr>
@@ -53,7 +50,6 @@ Disassembly of section .text:
                	cmpl	$0x2, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
                	retq
                	movsbq	<rip>, %rax # <addr>
                	cmpl	$0x4, %eax
@@ -64,7 +60,6 @@ Disassembly of section .text:
                	cmpb	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
                	retq
                	movsbq	<rip>, %rax # <addr>
                	cmpl	$0x68, %eax
@@ -75,7 +70,6 @@ Disassembly of section .text:
                	cmpb	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x4, %eax
-               	leave
                	retq
                	movsbq	<rip>, %rax # <addr>
                	cmpl	$0x68, %eax
@@ -83,14 +77,6 @@ Disassembly of section .text:
                	cmpb	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x5, %eax
-               	leave
                	retq
-               	leaq	-0x8(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	movl	(%rcx), %r10d
-               	movl	%r10d, (%rax)
-               	movzwq	0x4(%rcx), %r10
-               	movw	%r10w, 0x4(%rax)
                	xorl	%eax, %eax
-               	leave
                	retq

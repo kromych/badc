@@ -11,9 +11,9 @@ mod fenv;
 mod link;
 mod ssa;
 
-/// Whether the VM should emit a per-instruction trace to the host's
-/// stdout during `run`. Only honoured under the `std` feature; in
-/// `no_std` the trace branch is cfg'd out.
+/// Whether the VM prints each SSA instruction it executes to stderr --
+/// the function, the block and the instruction -- during `run`. Only
+/// honored under the `std` feature.
 ///
 /// Replaces what used to be a bare `bool` parameter to `Vm::new` --
 /// `Vm::new(prog, true)` left the reader guessing what the second
@@ -32,6 +32,8 @@ pub enum Trace {
 /// libdl through the [`Host`] trait.
 pub struct Vm<H: Host> {
     pub(crate) data: Vec<u8>,
+    /// The stdio block in `data`.
+    stdio: usize,
     entry_pc: usize,
     host: H,
     #[cfg_attr(not(feature = "std"), allow(dead_code))]
@@ -48,6 +50,8 @@ pub struct Vm<H: Host> {
     /// through the SSA-VM's allocations check; `free` validates
     /// its argument. Set by [`Vm::with_pointer_tracking`].
     track_pointers: bool,
+    /// The SVE vector length in bytes the run models.
+    sve_vl_bytes: usize,
     /// Base address (within `data`) of the thread-local block.
     /// `Inst::TlsAddr N` resolves to `tls_base + N`. The VM is
     /// single-threaded, so the per-thread isolation native
@@ -203,12 +207,14 @@ impl<H: Host> Vm<H> {
         };
         Self {
             data: linked.data,
+            stdio: linked.stdio,
             entry_pc: linked.entry_pc,
             host,
             trace: Trace::Off,
             args: Vec::new(),
             binding_names: linked.binding_names,
             track_pointers: false,
+            sve_vl_bytes: ssa::SVE_DEFAULT_VL_BYTES,
             tls_base: linked.tls_base,
             ssa_funcs,
             init_pcs: linked.init_pcs,
@@ -247,11 +253,22 @@ impl<H: Host> Vm<H> {
         self
     }
 
+    /// Model an SVE vector length of `bits`, a multiple of 128 from 128 to
+    /// 2048 (Arm ARM, SVE vector length), for the whole run.
+    pub fn with_sve_vector_bits(mut self, bits: usize) -> Self {
+        assert!(
+            bits.is_multiple_of(128) && (128..=2048).contains(&bits),
+            "SVE vector length {bits}"
+        );
+        self.sve_vl_bytes = bits / 8;
+        self
+    }
+
     /// Execute the program. Consumes the VM because `run` moves
     /// `data`, `host`, and the pre-lifted `ssa_funcs` into the
     /// interpreter; the resulting heap state is not retained
     /// on the `Vm` instance, so reusing it would re-run from
-    /// the program's static initialisers and double-invoke the
+    /// the program's static initializers and double-invoke the
     /// host's TLS / atexit hooks. Build a fresh `Vm` for each
     /// run.
     pub fn run(mut self) -> Result<i64, C5Error> {
@@ -265,13 +282,14 @@ impl<H: Host> Vm<H> {
         }
         ssa::run_program_with_args_tracked(
             funcs,
-            &self.data,
+            (&self.data, self.stdio),
             &self.binding_names,
             self.tls_base,
             self.entry_pc,
             &mut self.host,
             &self.args,
-            self.track_pointers,
+            (self.track_pointers, self.sve_vl_bytes),
+            self.trace == Trace::On,
             &self.init_pcs,
             &self.fini_pcs,
             self.target,

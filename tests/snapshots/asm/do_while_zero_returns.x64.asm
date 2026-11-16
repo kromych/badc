@@ -39,12 +39,11 @@ Disassembly of section .text:
                	jne	<addr>
                	xorl	%eax, %eax
                	retq
-               	testl	%edi, %edi
-               	jle	<addr>
                	movl	$0x1, %eax
+               	movq	$-0x1, %rcx
+               	testl	%edi, %edi
+               	cmovleq	%rcx, %rax
                	retq
-               	movq	$-0x1, %rax
-               	jmp	<addr>
 
 <main>:
                	xorl	%eax, %eax

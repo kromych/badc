@@ -45,7 +45,7 @@ Disassembly of section .text:
                	xorq	$-0x1, %r9
                	andq	%rsi, %r9
                	xorq	%r9, %r8
-               	movl	(%rdi,%rax,4), %esi
+               	movl	-0x20(%rbp,%rax,4), %esi
                	addq	%r8, %rsi
                	incq	%rax
                	xchgq	%rdx, %rsi
@@ -54,12 +54,9 @@ Disassembly of section .text:
                	jl	<addr>
                	xorq	%rdx, %rcx
                	xorq	%rsi, %rcx
-               	movl	$0xff6fffef, %r11d      # imm = 0xFF6FFFEF
-               	movq	%rcx, %rax
-               	cmpl	%r11d, %ecx
-               	jne	<addr>
                	xorl	%eax, %eax
+               	movl	$0x1, %edx
+               	cmpl	$0xff6fffef, %ecx       # imm = 0xFF6FFFEF
+               	cmovneq	%rdx, %rax
                	leave
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>

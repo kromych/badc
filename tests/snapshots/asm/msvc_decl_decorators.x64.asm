@@ -43,9 +43,9 @@ Disassembly of section .text:
                	movl	%ecx, (%rax)
                	movq	%rcx, %rax
                	cmpl	$0xb, %eax
-               	je	<addr>
-               	callq	<addr>
-               	ud2
+               	jne	<addr>
                	xorl	%eax, %eax
                	popq	%rbp
                	retq
+               	callq	<addr>
+               	ud2

@@ -25,11 +25,11 @@ Disassembly of section .text:
                	fsub	d2, d0, d1
                	adrp	x16, <page>
                	ldr	d0, [x16, #0x8]
-               	fcmp	d2, d0
+               	fcmpe	d2, d0
                	b.pl	<addr>
                	adrp	x16, <page>
                	ldr	d1, [x16, #0x10]
-               	fcmp	d2, d1
+               	fcmpe	d2, d1
                	b.gt	<addr>
                	mov	x0, #0x1                // =1
                	ret
@@ -37,27 +37,27 @@ Disassembly of section .text:
                	adrp	x16, <page>
                	ldr	d3, [x16, #0x18]
                	fsub	d2, d2, d3
-               	fcmp	d2, d0
+               	fcmpe	d2, d0
                	b.pl	<addr>
-               	fcmp	d2, d1
+               	fcmpe	d2, d1
                	b.gt	<addr>
                	mov	x0, #0x2                // =2
                	ret
                	ldr	d2, [x0, #0x10]
                	fmov	d3, #1.00000000
                	fsub	d2, d2, d3
-               	fcmp	d2, d0
+               	fcmpe	d2, d0
                	b.pl	<addr>
-               	fcmp	d2, d1
+               	fcmpe	d2, d1
                	b.gt	<addr>
                	mov	x0, #0x3                // =3
                	ret
                	ldr	d2, [x0, #0x18]
                	fmov	d3, #-2.00000000
                	fsub	d2, d2, d3
-               	fcmp	d2, d0
+               	fcmpe	d2, d0
                	b.pl	<addr>
-               	fcmp	d2, d1
+               	fcmpe	d2, d1
                	b.gt	<addr>
                	mov	x0, #0x4                // =4
                	ret
@@ -67,8 +67,7 @@ Disassembly of section .text:
                	cmp	w1, #0x5
                	b.ne	<addr>
                	ldrsw	x1, [x0, #0x4]
-               	mov	x17, #-0x3              // =-3
-               	cmp	w1, w17
+               	cmn	w1, #0x3
                	b.ne	<addr>
                	ldrsw	x1, [x0, #0x8]
                	cbnz	w1, <addr>

@@ -14,22 +14,19 @@ Disassembly of section .text:
                	brk	#0x1
 
 <load_le32>:
+               	mov	x2, x0
+               	sxtw	x1, w1
+               	mov	x0, #0x0                // =0
                	cmp	w1, #0x4
                	b.ge	<addr>
-               	str	x20, [sp, #-0x20]!
-               	stp	x29, x30, [sp, #0x10]
-               	add	x29, sp, #0x10
-               	ldrb	w2, [x0, w1, sxtw]
-               	lsl	x3, x1, #3
-               	sxtw	x3, w3
-               	lsl	x20, x2, x3
+               	ldrb	w3, [x2, x1]
+               	lsl	x4, x1, #3
+               	sxtw	x4, w4
+               	lsl	x3, x3, x4
                	add	x1, x1, #0x1
-               	bl	<addr>
-               	orr	x0, x20, x0
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x20, [sp], #0x20
-               	ret
-               	mov	x0, #0x0                // =0
+               	orr	x0, x0, x3
+               	cmp	w1, #0x4
+               	b.lt	<addr>
                	ret
 
 <get_long>:
@@ -50,26 +47,18 @@ Disassembly of section .text:
                	ret
 
 <load_alias>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
                	mov	x1, #0x0                // =0
-               	bl	<addr>
-               	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x2, #0xfe               // =254
                	sub	x0, x29, #0x8
                	mov	x1, #0x0                // =0
-               	sturb	w1, [x29, #-0x8]
-               	mov	x3, #0x10               // =16
-               	sturb	w3, [x29, #-0x7]
-               	mov	x3, #0xbf               // =191
-               	sturb	w3, [x29, #-0x6]
-               	sturb	w2, [x29, #-0x5]
+               	mov	x2, #0x1000             // =4096
+               	movk	x2, #0xfebf, lsl #16
+               	stur	w2, [x29, #-0x8]
                	bl	<addr>
                	mov	x17, #0x1000            // =4096
                	movk	x17, #0xfebf, lsl #16

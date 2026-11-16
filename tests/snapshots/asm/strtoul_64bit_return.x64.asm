@@ -32,7 +32,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	leaq	-0x8(%rbp), %rsi
                	movl	$0xa, %edx
-               	xorl	%eax, %eax
                	callq	<addr>
                	movabsq	$0x100000000, %r11      # imm = 0x100000000
                	cmpq	%r11, %rax
@@ -43,7 +42,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	leaq	-0x8(%rbp), %rsi
                	movl	$0xa, %edx
-               	xorl	%eax, %eax
                	callq	<addr>
                	movabsq	$0x100000000, %r11      # imm = 0x100000000
                	cmpq	%r11, %rax
@@ -52,7 +50,6 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rdi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movabsq	$0x12a05f200, %r11      # imm = 0x12A05F200
                	cmpq	%r11, %rax
@@ -63,7 +60,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	leaq	-0x8(%rbp), %rsi
                	movl	$0xa, %edx
-               	xorl	%eax, %eax
                	callq	<addr>
                	movabsq	$0x218711a00, %r11      # imm = 0x218711A00
                	cmpq	%r11, %rax

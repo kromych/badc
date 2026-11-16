@@ -13,41 +13,11 @@ Disassembly of section .text:
                	brk	#0x1
                	brk	#0x1
 
-<__c5_lazy_stream>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x1, [x0, #0x10]
-               	cbz	x1, <addr>
-               	ldr	x0, [x0, #0x10]
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x0, #0x0                // =0
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	bl	<addr>
-               	cbz	x0, <addr>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x0, [x0]
-               	str	x0, [x1, #0x10]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0, #0x10]
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-
 <main>:
                	adrp	x1, <page>
                	mov	x0, #0x0                // =0
-               	str	w0, [x1, #0x48]
                	mov	x2, #0x7                // =7
-               	str	w2, [x1, #0x48]
-               	mov	x2, #0x1                // =1
-               	str	w2, [x1, #0x48]
-               	mov	x2, #0xb                // =11
-               	str	w2, [x1, #0x48]
+               	str	w2, [x1, #0x20]
                	mov	x2, #0xd                // =13
-               	str	w2, [x1, #0x48]
+               	str	w2, [x1, #0x20]
                	ret

@@ -50,8 +50,7 @@ Disassembly of section .text:
                	ldur	x3, [x29, #-0x8]
                	ldur	x4, [x29, #-0x10]
                	add	x3, x3, x4
-               	mov	x17, #-0x1              // =-1
-               	cmp	x3, x17
+               	cmn	x3, #0x1
                	b.eq	<addr>
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10

@@ -58,7 +58,6 @@ Disassembly of section .text:
                	leaq	-<rip>, %rcx # <addr>
                	cmpq	%rcx, %rax
                	jne	<addr>
-               	movq	<rip>, %rax # <addr>
                	callq	*%rax
                	cmpl	$0x7, %eax
                	je	<addr>

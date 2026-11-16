@@ -64,21 +64,17 @@ Disassembly of section .text:
                	movups	%xmm14, 0x1e0(%rax)
                	movups	%xmm14, 0x1f0(%rax)
                	leaq	0x101(%rax), %rdi
-               	leaq	<rip>, %rsi
-               	movl	$0x6, %edx
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	leaq	-0x200(%rbp), %rax
-               	leaq	0x107(%rax), %rdi
-               	leaq	<rip>, %rsi
-               	movl	$0x2, %edx
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	leaq	-0x200(%rbp), %rax
+               	leaq	<rip>, %rcx
+               	movl	(%rcx), %r10d
+               	movl	%r10d, (%rdi)
+               	movzwq	0x4(%rcx), %r10
+               	movw	%r10w, 0x4(%rdi)
+               	addq	$0x107, %rax            # imm = 0x107
+               	leaq	<rip>, %rcx
+               	movzwq	(%rcx), %r10
+               	movw	%r10w, (%rax)
                	movb	$0x35, -0x164(%rbp)
-               	leaq	0x101(%rax), %rdi
                	leaq	<rip>, %rsi
-               	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

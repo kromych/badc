@@ -6,9 +6,11 @@
 //
 // `undefined_crypto_free` is declared and never defined, so linking is
 // the assertion -- it survives exactly when the guard stays out of line.
-// The frame is driven past the gate first: each `grow_*` helper both
-// holds a large array and makes a call, so its slots get a region of
-// their own instead of sharing the pooled one leaf callees reuse.
+// The frame is driven past the gate first: each `grow_*` helper is
+// `always_inline`, as the gate refuses an optional splice of its frame,
+// and both holds a large array and makes a call, so its slots get a
+// region of their own instead of sharing the pooled one leaf callees
+// reuse.
 
 extern void undefined_crypto_free(void *rq);
 
@@ -20,7 +22,7 @@ void consume(volatile long *p) {
 }
 
 #define GROW(n)                                                                                    \
-    static void grow_##n(int k) {                                                                  \
+    static inline __attribute__((always_inline)) void grow_##n(int k) {                            \
         volatile long buf[90];                                                                     \
         int i;                                                                                     \
         for (i = 0; i < 90; i++)                                                                   \

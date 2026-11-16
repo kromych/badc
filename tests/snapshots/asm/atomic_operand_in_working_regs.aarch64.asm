@@ -22,13 +22,14 @@ Disassembly of section .text:
                	casal	x10, x11, [x8]
                	cmp	x10, #0x64
                	cset	x11, eq
-               	cbz	x11, <addr>
-               	add	x10, x0, x1
-               	ldaddal	x10, x12, [x8]
+               	cmp	x11, #0x0
+               	csel	x10, x9, x10, ne
+               	add	x9, x0, x1
+               	ldaddal	x9, x12, [x8]
                	cbz	x11, <addr>
                	mov	x0, #0x1                // =1
                	ret
-               	cmp	x9, #0x9
+               	cmp	x10, #0x9
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
@@ -43,15 +44,13 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret
-               	add	x0, x10, x2
+               	add	x0, x9, x2
                	add	x0, x0, x3
                	add	x0, x0, x4
                	add	x0, x0, x5
                	add	x0, x0, x6
                	add	x0, x0, x7
                	ret
-               	mov	x9, x10
-               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
@@ -65,8 +64,8 @@ Disassembly of section .text:
                	mov	x6, #0x7                // =7
                	mov	x7, #0x8                // =8
                	bl	<addr>
+               	mov	x1, #0x0                // =0
                	cmp	x0, #0x24
-               	b.ne	<addr>
-               	mov	x0, #0x0                // =0
+               	csel	x0, x1, x0, eq
                	ldp	x29, x30, [sp], #0x10
                	ret

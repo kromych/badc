@@ -64,8 +64,10 @@
 #define WINBASEAPI
 #define WINAPI
 #define WINAPI_INLINE
+#define NTAPI
 #define APIENTRY
 #define CALLBACK
+#define DECLSPEC_ALIGN(x) __declspec(align(x))
 #define FAR
 #define NEAR
 #define VOID void
@@ -138,7 +140,7 @@ typedef LPSTR              PTSTR, LPTSTR;
 typedef LPCSTR             PCTSTR, LPCTSTR;
 #endif
 typedef long long          LONGLONG;
-typedef unsigned long long ULONGLONG;
+typedef unsigned long long ULONGLONG, *PULONGLONG;
 typedef ULONGLONG          DWORDLONG;
 typedef long long          INT_PTR, *PINT_PTR;
 typedef unsigned long long UINT_PTR, *PUINT_PTR;
@@ -325,12 +327,20 @@ typedef enum {
 #pragma binding(kernel32::VirtualAlloc,            "VirtualAlloc")
 #pragma binding(kernel32::VirtualProtect,          "VirtualProtect")
 #pragma binding(kernel32::VirtualFree,             "VirtualFree")
+#pragma binding(kernel32::VirtualLock,             "VirtualLock")
+#pragma binding(kernel32::VirtualUnlock,           "VirtualUnlock")
+#pragma binding(kernel32::GetLargePageMinimum,     "GetLargePageMinimum")
+#pragma binding(kernel32::GetCurrentProcessorNumber, "GetCurrentProcessorNumber")
+#pragma binding(kernel32::GetNumaHighestNodeNumber, "GetNumaHighestNodeNumber")
+#pragma binding(kernel32::GetNumaNodeProcessorMask, "GetNumaNodeProcessorMask")
 #pragma binding(kernel32::LoadLibraryA,            "LoadLibraryA")
 #pragma binding(kernel32::LoadLibraryExA,          "LoadLibraryExA")
 #pragma binding(kernel32::LoadLibraryExW,          "LoadLibraryExW")
 #pragma binding(kernel32::GetProcAddress,          "GetProcAddress")
 #pragma binding(kernel32::FreeLibrary,             "FreeLibrary")
 #pragma binding(kernel32::GetModuleFileNameA,      "GetModuleFileNameA")
+#pragma binding(kernel32::GetCommandLineA,         "GetCommandLineA")
+#pragma binding(kernel32::GetCommandLineW,         "GetCommandLineW")
 #pragma binding(kernel32::GetLastError,            "GetLastError")
 #pragma binding(kernel32::ExitProcess,             "ExitProcess")
 #pragma binding(kernel32::Sleep,                   "Sleep")
@@ -551,10 +561,28 @@ typedef RTL_RUN_ONCE INIT_ONCE;
 typedef PRTL_RUN_ONCE PINIT_ONCE, LPINIT_ONCE;
 #define INIT_ONCE_STATIC_INIT {0}
 
+typedef struct _LIST_ENTRY {
+    struct _LIST_ENTRY *Flink;
+    struct _LIST_ENTRY *Blink;
+} LIST_ENTRY, *PLIST_ENTRY, *PRLIST_ENTRY;
+
+typedef struct _RTL_CRITICAL_SECTION_DEBUG {
+    WORD Type;
+    WORD CreatorBackTraceIndex;
+    struct _RTL_CRITICAL_SECTION *CriticalSection;
+    LIST_ENTRY ProcessLocksList;
+    DWORD EntryCount;
+    DWORD ContentionCount;
+    DWORD Flags;
+    WORD CreatorBackTraceIndexHigh;
+    WORD Identifier;
+} RTL_CRITICAL_SECTION_DEBUG, *PRTL_CRITICAL_SECTION_DEBUG, RTL_RESOURCE_DEBUG,
+    *PRTL_RESOURCE_DEBUG;
+
 // Layout matches RTL_CRITICAL_SECTION so the type embeds at the right
 // size inside other structures (x64: 40 bytes).
 typedef struct _RTL_CRITICAL_SECTION {
-    PVOID     DebugInfo;
+    PRTL_CRITICAL_SECTION_DEBUG DebugInfo;
     LONG      LockCount;
     LONG      RecursionCount;
     HANDLE    OwningThread;
@@ -635,6 +663,20 @@ struct _SYSTEM_INFO {
 typedef struct _SYSTEM_INFO SYSTEM_INFO;
 typedef struct _SYSTEM_INFO *LPSYSTEM_INFO;
 
+// Processor groups (winnt.h): a group's affinity mask and a processor's
+// group and number.
+typedef ULONG_PTR KAFFINITY;
+typedef struct _GROUP_AFFINITY {
+    KAFFINITY Mask;
+    WORD Group;
+    WORD Reserved[3];
+} GROUP_AFFINITY, *PGROUP_AFFINITY;
+typedef struct _PROCESSOR_NUMBER {
+    WORD Group;
+    BYTE Number;
+    BYTE Reserved;
+} PROCESSOR_NUMBER, *PPROCESSOR_NUMBER;
+
 // Function-table entries (winnt.h): the x64 entry names its unwind info,
 // the AArch64 entry packs the unwind codes into the second word.
 typedef struct _IMAGE_RUNTIME_FUNCTION_ENTRY {
@@ -644,7 +686,7 @@ typedef struct _IMAGE_RUNTIME_FUNCTION_ENTRY {
         DWORD UnwindInfoAddress;
         DWORD UnwindData;
     };
-} IMAGE_RUNTIME_FUNCTION_ENTRY, *PIMAGE_RUNTIME_FUNCTION_ENTRY;
+} _IMAGE_RUNTIME_FUNCTION_ENTRY, *_PIMAGE_RUNTIME_FUNCTION_ENTRY;
 typedef struct _IMAGE_ARM64_RUNTIME_FUNCTION_ENTRY {
     DWORD BeginAddress;
     union {
@@ -661,10 +703,12 @@ typedef struct _IMAGE_ARM64_RUNTIME_FUNCTION_ENTRY {
     };
 } IMAGE_ARM64_RUNTIME_FUNCTION_ENTRY, *PIMAGE_ARM64_RUNTIME_FUNCTION_ENTRY;
 #ifdef __aarch64__
-typedef IMAGE_ARM64_RUNTIME_FUNCTION_ENTRY RUNTIME_FUNCTION, *PRUNTIME_FUNCTION;
+typedef IMAGE_ARM64_RUNTIME_FUNCTION_ENTRY IMAGE_RUNTIME_FUNCTION_ENTRY,
+    *PIMAGE_RUNTIME_FUNCTION_ENTRY;
 #else
-typedef IMAGE_RUNTIME_FUNCTION_ENTRY RUNTIME_FUNCTION, *PRUNTIME_FUNCTION;
+typedef _IMAGE_RUNTIME_FUNCTION_ENTRY IMAGE_RUNTIME_FUNCTION_ENTRY, *PIMAGE_RUNTIME_FUNCTION_ENTRY;
 #endif
+typedef IMAGE_RUNTIME_FUNCTION_ENTRY RUNTIME_FUNCTION, *PRUNTIME_FUNCTION;
 
 // FILETIME / SYSTEMTIME -- file timestamps and broken-down local
 // time. Layout
@@ -846,13 +890,24 @@ typedef struct _MEMORY_BASIC_INFORMATION {
 } MEMORY_BASIC_INFORMATION;
 typedef struct _MEMORY_BASIC_INFORMATION *PMEMORY_BASIC_INFORMATION;
 
-// COPYFILE2_EXTENDED_PARAMETERS (winbase.h) passed by pointer to CopyFile2.
+// COPYFILE2_EXTENDED_PARAMETERS (winbase.h) passed by pointer to CopyFile2,
+// whose progress routine takes the copy engine's message.
+typedef enum _COPYFILE2_MESSAGE_ACTION {
+    COPYFILE2_PROGRESS_CONTINUE = 0,
+    COPYFILE2_PROGRESS_CANCEL,
+    COPYFILE2_PROGRESS_STOP,
+    COPYFILE2_PROGRESS_QUIET,
+    COPYFILE2_PROGRESS_PAUSE
+} COPYFILE2_MESSAGE_ACTION;
+typedef struct COPYFILE2_MESSAGE COPYFILE2_MESSAGE;
+typedef COPYFILE2_MESSAGE_ACTION (*PCOPYFILE2_PROGRESS_ROUTINE)(
+    const COPYFILE2_MESSAGE *pMessage, PVOID pvCallbackContext);
 typedef struct _COPYFILE2_EXTENDED_PARAMETERS {
     DWORD  dwSize;
     DWORD  dwCopyFlags;
-    int   *pfCancel;
-    void  *pProgressRoutine;
-    void  *pvCallbackContext;
+    BOOL  *pfCancel;
+    PCOPYFILE2_PROGRESS_ROUTINE pProgressRoutine;
+    PVOID  pvCallbackContext;
 } COPYFILE2_EXTENDED_PARAMETERS;
 typedef struct _FILE_FS_PERSISTENT_VOLUME_INFORMATION {
     ULONG VolumeFlags;
@@ -1080,6 +1135,7 @@ typedef enum _COMPUTER_NAME_FORMAT {
 #define THREAD_QUERY_LIMITED_INFORMATION 0x0800
 #define FILE_ATTRIBUTE_VIRTUAL         0x00010000
 #define STATUS_CONTROL_C_EXIT          0xC000013A
+#define ERROR_SEVERITY_ERROR           0xC0000000
 #define CP_UTF7                        65000
 #define CP_UTF8                        65001
 #define IO_REPARSE_TAG_SYMLINK         0xA000000C
@@ -1262,7 +1318,7 @@ typedef enum _FILE_INFO_BY_HANDLE_CLASS {
 #define FSCTL_DELETE_REPARSE_POINT \
     CTL_CODE(FILE_DEVICE_FILE_SYSTEM, 43, METHOD_BUFFERED, FILE_SPECIAL_ACCESS)
 #define FSCTL_QUERY_PERSISTENT_VOLUME_STATE \
-    CTL_CODE(FILE_DEVICE_FILE_SYSTEM, 57, METHOD_BUFFERED, FILE_ANY_ACCESS)
+    CTL_CODE(FILE_DEVICE_FILE_SYSTEM, 143, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define PATHCCH_ALLOW_LONG_PATHS 0x00000001
 // winnt.h byte-offset of a struct member; equivalent to <stddef.h>
 // offsetof, which windows.h pulls in above.
@@ -1372,7 +1428,8 @@ typedef enum _FILE_INFO_BY_HANDLE_CLASS {
 #define REG_NOTIFY_CHANGE_ATTRIBUTES 2
 #define REG_NOTIFY_CHANGE_LAST_SET   4
 #define REG_NOTIFY_CHANGE_SECURITY   8
-#define REG_LEGAL_CHANGE_FILTER      0xF
+#define REG_NOTIFY_THREAD_AGNOSTIC   0x10000000
+#define REG_LEGAL_CHANGE_FILTER      0x1000000F
 #define REG_LEGAL_OPTION             0x1F
 #define WAIT_OBJECT_0_BASE             0
 #define INVALID_FILE_SIZE              0xFFFFFFFF
@@ -1833,6 +1890,70 @@ typedef struct _EXCEPTION_POINTERS {
 #pragma binding(kernel32::RtlCaptureContext, "RtlCaptureContext")
 VOID RtlCaptureContext(PCONTEXT ContextRecord);
 
+// winnt.h's table-based unwinding: the function entry covering a code
+// address, one frame's unwind from a context, and the image holding an
+// address.
+#define UNW_FLAG_NHANDLER  0x0
+#define UNW_FLAG_EHANDLER  0x1
+#define UNW_FLAG_UHANDLER  0x2
+#define UNW_FLAG_CHAININFO 0x4
+#define UNWIND_HISTORY_TABLE_SIZE 12
+typedef struct _UNWIND_HISTORY_TABLE_ENTRY {
+    DWORD64 ImageBase;
+    PRUNTIME_FUNCTION FunctionEntry;
+} UNWIND_HISTORY_TABLE_ENTRY, *PUNWIND_HISTORY_TABLE_ENTRY;
+typedef struct _UNWIND_HISTORY_TABLE {
+    DWORD Count;
+    BYTE LocalHint;
+    BYTE GlobalHint;
+    BYTE Search;
+    BYTE Once;
+    DWORD64 LowAddress;
+    DWORD64 HighAddress;
+    UNWIND_HISTORY_TABLE_ENTRY Entry[UNWIND_HISTORY_TABLE_SIZE];
+} UNWIND_HISTORY_TABLE, *PUNWIND_HISTORY_TABLE;
+#ifdef __aarch64__
+typedef struct _KNONVOLATILE_CONTEXT_POINTERS_ARM64 {
+    PDWORD64 X19, X20, X21, X22, X23, X24, X25, X26, X27, X28;
+    PDWORD64 Fp, Lr;
+    PDWORD64 D8, D9, D10, D11, D12, D13, D14, D15;
+} KNONVOLATILE_CONTEXT_POINTERS_ARM64, *PKNONVOLATILE_CONTEXT_POINTERS_ARM64;
+typedef KNONVOLATILE_CONTEXT_POINTERS_ARM64 KNONVOLATILE_CONTEXT_POINTERS,
+    *PKNONVOLATILE_CONTEXT_POINTERS;
+#else
+typedef struct _KNONVOLATILE_CONTEXT_POINTERS {
+    union {
+        PM128A FloatingContext[16];
+        struct {
+            PM128A Xmm0, Xmm1, Xmm2, Xmm3, Xmm4, Xmm5, Xmm6, Xmm7;
+            PM128A Xmm8, Xmm9, Xmm10, Xmm11, Xmm12, Xmm13, Xmm14, Xmm15;
+        };
+    };
+    union {
+        PDWORD64 IntegerContext[16];
+        struct {
+            PDWORD64 Rax, Rcx, Rdx, Rbx, Rsp, Rbp, Rsi, Rdi;
+            PDWORD64 R8, R9, R10, R11, R12, R13, R14, R15;
+        };
+    };
+} KNONVOLATILE_CONTEXT_POINTERS, *PKNONVOLATILE_CONTEXT_POINTERS;
+#endif
+typedef EXCEPTION_DISPOSITION EXCEPTION_ROUTINE(PEXCEPTION_RECORD ExceptionRecord,
+                                                PVOID EstablisherFrame,
+                                                PCONTEXT ContextRecord,
+                                                PVOID DispatcherContext);
+typedef EXCEPTION_ROUTINE *PEXCEPTION_ROUTINE;
+#pragma binding(kernel32::RtlLookupFunctionEntry, "RtlLookupFunctionEntry")
+#pragma binding(kernel32::RtlVirtualUnwind,       "RtlVirtualUnwind")
+#pragma binding(kernel32::RtlPcToFileHeader,      "RtlPcToFileHeader")
+PRUNTIME_FUNCTION RtlLookupFunctionEntry(DWORD64 ControlPc, PDWORD64 ImageBase,
+                                         PUNWIND_HISTORY_TABLE HistoryTable);
+PEXCEPTION_ROUTINE RtlVirtualUnwind(DWORD HandlerType, DWORD64 ImageBase, DWORD64 ControlPc,
+                                    PRUNTIME_FUNCTION FunctionEntry, PCONTEXT ContextRecord,
+                                    PVOID *HandlerData, PDWORD64 EstablisherFrame,
+                                    PKNONVOLATILE_CONTEXT_POINTERS ContextPointers);
+PVOID RtlPcToFileHeader(PVOID PcValue, PVOID *BaseOfImage);
+
 struct _SYSTEMTIME {
     WORD wYear;
     WORD wMonth;
@@ -1873,8 +1994,8 @@ typedef struct _WIN32_FILE_ATTRIBUTE_DATA *LPWIN32_FILE_ATTRIBUTE_DATA;
 
 // WIN32_FIND_DATAA / WIN32_FIND_DATAW -- output buffer for
 // FindFirstFile / FindNextFile. Layouts pinned to the Win64 ABI;
-// the ANSI flavour uses MAX_PATH bytes for the file name, the wide
-// flavour uses 260 unsigned shorts.
+// the ANSI flavor uses MAX_PATH bytes for the file name, the wide
+// flavor uses 260 unsigned shorts.
 #define MAX_PATH 260
 struct _WIN32_FIND_DATAA {
     DWORD    dwFileAttributes;
@@ -2041,6 +2162,12 @@ LPVOID VirtualAlloc(LPVOID lpAddress, SIZE_T dwSize, DWORD flAllocationType,
 BOOL VirtualProtect(LPVOID lpAddress, SIZE_T dwSize, DWORD flNewProtect,
                     PDWORD lpflOldProtect);
 BOOL VirtualFree(LPVOID lpAddress, SIZE_T dwSize, DWORD dwFreeType);
+BOOL VirtualLock(LPVOID lpAddress, SIZE_T dwSize);
+BOOL VirtualUnlock(LPVOID lpAddress, SIZE_T dwSize);
+SIZE_T GetLargePageMinimum(void);
+DWORD GetCurrentProcessorNumber(void);
+BOOL GetNumaHighestNodeNumber(PULONG HighestNodeNumber);
+BOOL GetNumaNodeProcessorMask(UCHAR Node, PULONGLONG ProcessorMask);
 HMODULE LoadLibraryA(LPCSTR lpLibFileName);
 // LoadLibraryExA: name, hFile (reserved, must be NULL), dwFlags.
 // dwFlags bits (LOAD_*) control search-path and binding semantics.
@@ -2110,6 +2237,137 @@ static __inline LONG64 InterlockedAdd64(LONG64 volatile *Addend, LONG64 Value)
 {
     return _InterlockedExchangeAdd64(Addend, Value) + Value;
 }
+#endif
+// winnt.h's Acquire / Release / NoFence spellings: arm64's ordered
+// intrinsics, and on x64, where each interlocked operation is a full
+// barrier, the plain ones, as winnt.h maps them for each target.
+#ifdef __aarch64__
+#define __BADC_ORDERED(plain, ordered) ordered
+#else
+#define __BADC_ORDERED(plain, ordered) plain
+#endif
+#define InterlockedAddAcquire __BADC_ORDERED(InterlockedAdd, _InterlockedAdd_acq)
+#define InterlockedAddAcquire64 __BADC_ORDERED(InterlockedAdd64, _InterlockedAdd64_acq)
+#define InterlockedAddNoFence __BADC_ORDERED(InterlockedAdd, _InterlockedAdd_nf)
+#define InterlockedAddNoFence64 __BADC_ORDERED(InterlockedAdd64, _InterlockedAdd64_nf)
+#define InterlockedAddRelease __BADC_ORDERED(InterlockedAdd, _InterlockedAdd_rel)
+#define InterlockedAddRelease64 __BADC_ORDERED(InterlockedAdd64, _InterlockedAdd64_rel)
+#define InterlockedAnd64Acquire __BADC_ORDERED(_InterlockedAnd64, _InterlockedAnd64_acq)
+#define InterlockedAnd64NoFence __BADC_ORDERED(_InterlockedAnd64, _InterlockedAnd64_nf)
+#define InterlockedAnd64Release __BADC_ORDERED(_InterlockedAnd64, _InterlockedAnd64_rel)
+#define InterlockedAndAcquire __BADC_ORDERED(_InterlockedAnd, _InterlockedAnd_acq)
+#define InterlockedAndAcquire16 __BADC_ORDERED(_InterlockedAnd16, _InterlockedAnd16_acq)
+#define InterlockedAndAcquire64 __BADC_ORDERED(_InterlockedAnd64, _InterlockedAnd64_acq)
+#define InterlockedAndAcquire8 __BADC_ORDERED(_InterlockedAnd8, _InterlockedAnd8_acq)
+#define InterlockedAndNoFence __BADC_ORDERED(_InterlockedAnd, _InterlockedAnd_nf)
+#define InterlockedAndNoFence16 __BADC_ORDERED(_InterlockedAnd16, _InterlockedAnd16_nf)
+#define InterlockedAndNoFence64 __BADC_ORDERED(_InterlockedAnd64, _InterlockedAnd64_nf)
+#define InterlockedAndNoFence8 __BADC_ORDERED(_InterlockedAnd8, _InterlockedAnd8_nf)
+#define InterlockedAndRelease __BADC_ORDERED(_InterlockedAnd, _InterlockedAnd_rel)
+#define InterlockedAndRelease16 __BADC_ORDERED(_InterlockedAnd16, _InterlockedAnd16_rel)
+#define InterlockedAndRelease64 __BADC_ORDERED(_InterlockedAnd64, _InterlockedAnd64_rel)
+#define InterlockedAndRelease8 __BADC_ORDERED(_InterlockedAnd8, _InterlockedAnd8_rel)
+#define InterlockedBitTestAndReset64Acquire __BADC_ORDERED(_interlockedbittestandreset64, _interlockedbittestandreset64_acq)
+#define InterlockedBitTestAndReset64NoFence __BADC_ORDERED(_interlockedbittestandreset64, _interlockedbittestandreset64_nf)
+#define InterlockedBitTestAndReset64Release __BADC_ORDERED(_interlockedbittestandreset64, _interlockedbittestandreset64_rel)
+#define InterlockedBitTestAndResetAcquire __BADC_ORDERED(_interlockedbittestandreset, _interlockedbittestandreset_acq)
+#define InterlockedBitTestAndResetNoFence __BADC_ORDERED(_interlockedbittestandreset, _interlockedbittestandreset_nf)
+#define InterlockedBitTestAndResetRelease __BADC_ORDERED(_interlockedbittestandreset, _interlockedbittestandreset_rel)
+#define InterlockedBitTestAndSet64Acquire __BADC_ORDERED(_interlockedbittestandset64, _interlockedbittestandset64_acq)
+#define InterlockedBitTestAndSet64NoFence __BADC_ORDERED(_interlockedbittestandset64, _interlockedbittestandset64_nf)
+#define InterlockedBitTestAndSet64Release __BADC_ORDERED(_interlockedbittestandset64, _interlockedbittestandset64_rel)
+#define InterlockedBitTestAndSetAcquire __BADC_ORDERED(_interlockedbittestandset, _interlockedbittestandset_acq)
+#define InterlockedBitTestAndSetNoFence __BADC_ORDERED(_interlockedbittestandset, _interlockedbittestandset_nf)
+#define InterlockedBitTestAndSetRelease __BADC_ORDERED(_interlockedbittestandset, _interlockedbittestandset_rel)
+#define InterlockedCompareExchangeAcquire __BADC_ORDERED(_InterlockedCompareExchange, _InterlockedCompareExchange_acq)
+#define InterlockedCompareExchangeAcquire128 __BADC_ORDERED(_InterlockedCompareExchange128, _InterlockedCompareExchange128_acq)
+#define InterlockedCompareExchangeAcquire16 __BADC_ORDERED(_InterlockedCompareExchange16, _InterlockedCompareExchange16_acq)
+#define InterlockedCompareExchangeAcquire64 __BADC_ORDERED(_InterlockedCompareExchange64, _InterlockedCompareExchange64_acq)
+#define InterlockedCompareExchangeNoFence __BADC_ORDERED(_InterlockedCompareExchange, _InterlockedCompareExchange_nf)
+#define InterlockedCompareExchangeNoFence128 __BADC_ORDERED(_InterlockedCompareExchange128, _InterlockedCompareExchange128_nf)
+#define InterlockedCompareExchangeNoFence16 __BADC_ORDERED(_InterlockedCompareExchange16, _InterlockedCompareExchange16_nf)
+#define InterlockedCompareExchangeNoFence64 __BADC_ORDERED(_InterlockedCompareExchange64, _InterlockedCompareExchange64_nf)
+#define InterlockedCompareExchangePointerAcquire __BADC_ORDERED(_InterlockedCompareExchangePointer, _InterlockedCompareExchangePointer_acq)
+#define InterlockedCompareExchangePointerNoFence __BADC_ORDERED(_InterlockedCompareExchangePointer, _InterlockedCompareExchangePointer_nf)
+#define InterlockedCompareExchangePointerRelease __BADC_ORDERED(_InterlockedCompareExchangePointer, _InterlockedCompareExchangePointer_rel)
+#define InterlockedCompareExchangeRelease __BADC_ORDERED(_InterlockedCompareExchange, _InterlockedCompareExchange_rel)
+#define InterlockedCompareExchangeRelease128 __BADC_ORDERED(_InterlockedCompareExchange128, _InterlockedCompareExchange128_rel)
+#define InterlockedCompareExchangeRelease16 __BADC_ORDERED(_InterlockedCompareExchange16, _InterlockedCompareExchange16_rel)
+#define InterlockedCompareExchangeRelease64 __BADC_ORDERED(_InterlockedCompareExchange64, _InterlockedCompareExchange64_rel)
+#define InterlockedDecrementAcquire __BADC_ORDERED(_InterlockedDecrement, _InterlockedDecrement_acq)
+#define InterlockedDecrementAcquire16 __BADC_ORDERED(_InterlockedDecrement16, _InterlockedDecrement16_acq)
+#define InterlockedDecrementAcquire64 __BADC_ORDERED(_InterlockedDecrement64, _InterlockedDecrement64_acq)
+#define InterlockedDecrementNoFence __BADC_ORDERED(_InterlockedDecrement, _InterlockedDecrement_nf)
+#define InterlockedDecrementNoFence16 __BADC_ORDERED(_InterlockedDecrement16, _InterlockedDecrement16_nf)
+#define InterlockedDecrementNoFence64 __BADC_ORDERED(_InterlockedDecrement64, _InterlockedDecrement64_nf)
+#define InterlockedDecrementRelease __BADC_ORDERED(_InterlockedDecrement, _InterlockedDecrement_rel)
+#define InterlockedDecrementRelease16 __BADC_ORDERED(_InterlockedDecrement16, _InterlockedDecrement16_rel)
+#define InterlockedDecrementRelease64 __BADC_ORDERED(_InterlockedDecrement64, _InterlockedDecrement64_rel)
+#define InterlockedExchangeAcquire __BADC_ORDERED(_InterlockedExchange, _InterlockedExchange_acq)
+#define InterlockedExchangeAcquire16 __BADC_ORDERED(_InterlockedExchange16, _InterlockedExchange16_acq)
+#define InterlockedExchangeAcquire64 __BADC_ORDERED(_InterlockedExchange64, _InterlockedExchange64_acq)
+#define InterlockedExchangeAcquire8 __BADC_ORDERED(_InterlockedExchange8, _InterlockedExchange8_acq)
+#define InterlockedExchangeAddAcquire __BADC_ORDERED(_InterlockedExchangeAdd, _InterlockedExchangeAdd_acq)
+#define InterlockedExchangeAddAcquire64 __BADC_ORDERED(_InterlockedExchangeAdd64, _InterlockedExchangeAdd64_acq)
+#define InterlockedExchangeAddNoFence __BADC_ORDERED(_InterlockedExchangeAdd, _InterlockedExchangeAdd_nf)
+#define InterlockedExchangeAddNoFence64 __BADC_ORDERED(_InterlockedExchangeAdd64, _InterlockedExchangeAdd64_nf)
+#define InterlockedExchangeAddRelease __BADC_ORDERED(_InterlockedExchangeAdd, _InterlockedExchangeAdd_rel)
+#define InterlockedExchangeAddRelease64 __BADC_ORDERED(_InterlockedExchangeAdd64, _InterlockedExchangeAdd64_rel)
+#define InterlockedExchangeNoFence __BADC_ORDERED(_InterlockedExchange, _InterlockedExchange_nf)
+#define InterlockedExchangeNoFence16 __BADC_ORDERED(_InterlockedExchange16, _InterlockedExchange16_nf)
+#define InterlockedExchangeNoFence64 __BADC_ORDERED(_InterlockedExchange64, _InterlockedExchange64_nf)
+#define InterlockedExchangeNoFence8 __BADC_ORDERED(_InterlockedExchange8, _InterlockedExchange8_nf)
+#define InterlockedExchangePointerAcquire __BADC_ORDERED(_InterlockedExchangePointer, _InterlockedExchangePointer_acq)
+#define InterlockedExchangePointerNoFence __BADC_ORDERED(_InterlockedExchangePointer, _InterlockedExchangePointer_nf)
+#define InterlockedExchangePointerRelease __BADC_ORDERED(_InterlockedExchangePointer, _InterlockedExchangePointer_rel)
+#define InterlockedIncrementAcquire __BADC_ORDERED(_InterlockedIncrement, _InterlockedIncrement_acq)
+#define InterlockedIncrementAcquire16 __BADC_ORDERED(_InterlockedIncrement16, _InterlockedIncrement16_acq)
+#define InterlockedIncrementAcquire64 __BADC_ORDERED(_InterlockedIncrement64, _InterlockedIncrement64_acq)
+#define InterlockedIncrementNoFence __BADC_ORDERED(_InterlockedIncrement, _InterlockedIncrement_nf)
+#define InterlockedIncrementNoFence16 __BADC_ORDERED(_InterlockedIncrement16, _InterlockedIncrement16_nf)
+#define InterlockedIncrementNoFence64 __BADC_ORDERED(_InterlockedIncrement64, _InterlockedIncrement64_nf)
+#define InterlockedIncrementRelease __BADC_ORDERED(_InterlockedIncrement, _InterlockedIncrement_rel)
+#define InterlockedIncrementRelease16 __BADC_ORDERED(_InterlockedIncrement16, _InterlockedIncrement16_rel)
+#define InterlockedIncrementRelease64 __BADC_ORDERED(_InterlockedIncrement64, _InterlockedIncrement64_rel)
+#define InterlockedOr64Acquire __BADC_ORDERED(_InterlockedOr64, _InterlockedOr64_acq)
+#define InterlockedOr64NoFence __BADC_ORDERED(_InterlockedOr64, _InterlockedOr64_nf)
+#define InterlockedOr64Release __BADC_ORDERED(_InterlockedOr64, _InterlockedOr64_rel)
+#define InterlockedOrAcquire __BADC_ORDERED(_InterlockedOr, _InterlockedOr_acq)
+#define InterlockedOrAcquire16 __BADC_ORDERED(_InterlockedOr16, _InterlockedOr16_acq)
+#define InterlockedOrAcquire64 __BADC_ORDERED(_InterlockedOr64, _InterlockedOr64_acq)
+#define InterlockedOrAcquire8 __BADC_ORDERED(_InterlockedOr8, _InterlockedOr8_acq)
+#define InterlockedOrNoFence __BADC_ORDERED(_InterlockedOr, _InterlockedOr_nf)
+#define InterlockedOrNoFence16 __BADC_ORDERED(_InterlockedOr16, _InterlockedOr16_nf)
+#define InterlockedOrNoFence64 __BADC_ORDERED(_InterlockedOr64, _InterlockedOr64_nf)
+#define InterlockedOrNoFence8 __BADC_ORDERED(_InterlockedOr8, _InterlockedOr8_nf)
+#define InterlockedOrRelease __BADC_ORDERED(_InterlockedOr, _InterlockedOr_rel)
+#define InterlockedOrRelease16 __BADC_ORDERED(_InterlockedOr16, _InterlockedOr16_rel)
+#define InterlockedOrRelease64 __BADC_ORDERED(_InterlockedOr64, _InterlockedOr64_rel)
+#define InterlockedOrRelease8 __BADC_ORDERED(_InterlockedOr8, _InterlockedOr8_rel)
+#define InterlockedXor64Acquire __BADC_ORDERED(_InterlockedXor64, _InterlockedXor64_acq)
+#define InterlockedXor64NoFence __BADC_ORDERED(_InterlockedXor64, _InterlockedXor64_nf)
+#define InterlockedXor64Release __BADC_ORDERED(_InterlockedXor64, _InterlockedXor64_rel)
+#define InterlockedXorAcquire __BADC_ORDERED(_InterlockedXor, _InterlockedXor_acq)
+#define InterlockedXorAcquire16 __BADC_ORDERED(_InterlockedXor16, _InterlockedXor16_acq)
+#define InterlockedXorAcquire64 __BADC_ORDERED(_InterlockedXor64, _InterlockedXor64_acq)
+#define InterlockedXorAcquire8 __BADC_ORDERED(_InterlockedXor8, _InterlockedXor8_acq)
+#define InterlockedXorNoFence __BADC_ORDERED(_InterlockedXor, _InterlockedXor_nf)
+#define InterlockedXorNoFence16 __BADC_ORDERED(_InterlockedXor16, _InterlockedXor16_nf)
+#define InterlockedXorNoFence64 __BADC_ORDERED(_InterlockedXor64, _InterlockedXor64_nf)
+#define InterlockedXorNoFence8 __BADC_ORDERED(_InterlockedXor8, _InterlockedXor8_nf)
+#define InterlockedXorRelease __BADC_ORDERED(_InterlockedXor, _InterlockedXor_rel)
+#define InterlockedXorRelease16 __BADC_ORDERED(_InterlockedXor16, _InterlockedXor16_rel)
+#define InterlockedXorRelease64 __BADC_ORDERED(_InterlockedXor64, _InterlockedXor64_rel)
+#define InterlockedXorRelease8 __BADC_ORDERED(_InterlockedXor8, _InterlockedXor8_rel)
+// winnt.h's spin-wait hint, and the current thread's environment block:
+// NT_TIB.Self at gs:0x30 on x64, x18 on arm64.
+struct _TEB;
+#ifdef __aarch64__
+#define YieldProcessor __yield
+static __inline struct _TEB *NtCurrentTeb(void) { return (struct _TEB *)__getReg(18); }
+#else
+#define YieldProcessor _mm_pause
+static __inline struct _TEB *NtCurrentTeb(void) { return (struct _TEB *)__readgsqword(0x30); }
 #endif
 
 // CreateThread returns a thread HANDLE (kernel object). Args
@@ -2481,6 +2739,8 @@ LSTATUS RegSetValueExA(HKEY hKey, LPCSTR lpValueName, DWORD Reserved, DWORD dwTy
 #pragma binding(kernel32::FlushViewOfFile,         "FlushViewOfFile")
 #pragma binding(kernel32::GetModuleHandleA,        "GetModuleHandleA")
 #pragma binding(kernel32::GetModuleHandleW,        "GetModuleHandleW")
+#pragma binding(kernel32::GetModuleHandleExA,      "GetModuleHandleExA")
+#pragma binding(kernel32::GetModuleHandleExW,      "GetModuleHandleExW")
 #pragma binding(kernel32::GetNativeSystemInfo,     "GetNativeSystemInfo")
 #pragma binding(kernel32::GetProcessHeap,          "GetProcessHeap")
 #pragma binding(kernel32::GetProcAddressA,         "GetProcAddress")
@@ -2683,6 +2943,11 @@ HANDLE CreateEventA(LPSECURITY_ATTRIBUTES lpEventAttributes, BOOL bManualReset,
 BOOL FlushViewOfFile(LPCVOID lpBaseAddress, SIZE_T dwNumberOfBytesToFlush);
 HMODULE GetModuleHandleA(LPCSTR lpModuleName);
 HMODULE GetModuleHandleW(LPCWSTR lpModuleName);
+#define GET_MODULE_HANDLE_EX_FLAG_PIN                0x1
+#define GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT 0x2
+#define GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS       0x4
+BOOL GetModuleHandleExA(DWORD dwFlags, LPCSTR lpModuleName, HMODULE *phModule);
+BOOL GetModuleHandleExW(DWORD dwFlags, LPCWSTR lpModuleName, HMODULE *phModule);
 VOID GetNativeSystemInfo(LPSYSTEM_INFO lpSystemInfo);
 HANDLE GetProcessHeap(VOID);
 FARPROC GetProcAddressA(HMODULE hModule, LPCSTR lpProcName);
@@ -2902,6 +3167,8 @@ DWORD ExpandEnvironmentStringsW(LPCWSTR lpSrc, LPWSTR lpDst, DWORD nSize);
 DWORD SearchPathA(LPCSTR lpPath, LPCSTR lpFileName, LPCSTR lpExtension,
                   DWORD nBufferLength, LPSTR lpBuffer, LPSTR *lpFilePart);
 DWORD GetModuleFileNameA(HMODULE hModule, LPSTR lpFilename, DWORD nSize);
+LPSTR GetCommandLineA(VOID);
+LPWSTR GetCommandLineW(VOID);
 DWORD SearchPathW(LPCWSTR lpPath, LPCWSTR lpFileName, LPCWSTR lpExtension,
                   DWORD nBufferLength, LPWSTR lpBuffer, LPWSTR *lpFilePart);
 BOOL CreateProcessA(LPCSTR lpApplicationName, LPSTR lpCommandLine,
@@ -3419,6 +3686,13 @@ typedef struct _IMAGE_THUNK_DATA32 {
 #define IMAGE_SNAP_BY_ORDINAL32(Ordinal) (((Ordinal) & IMAGE_ORDINAL_FLAG32) != 0)
 
 typedef VOID (WINAPI *PIMAGE_TLS_CALLBACK)(PVOID DllHandle, DWORD Reason, PVOID Reserved);
+
+// The reason a DLL entry point or a TLS callback is called for.
+#define DLL_PROCESS_DETACH   0
+#define DLL_PROCESS_ATTACH   1
+#define DLL_THREAD_ATTACH    2
+#define DLL_THREAD_DETACH    3
+#define DLL_PROCESS_VERIFIER 4
 
 typedef struct _IMAGE_TLS_DIRECTORY64 {
     ULONGLONG StartAddressOfRawData;
@@ -4343,6 +4617,52 @@ HGLOBAL GlobalFree(HGLOBAL hMem);
 LPVOID GlobalLock(HGLOBAL hMem);
 BOOL GlobalUnlock(HGLOBAL hMem);
 SIZE_T GlobalSize(HGLOBAL hMem);
+
+// A module's resources (libloaderapi.h) and the predefined types (winuser.h).
+#pragma binding(kernel32::FindResourceA,   "FindResourceA")
+#pragma binding(kernel32::FindResourceW,   "FindResourceW")
+#pragma binding(kernel32::FindResourceExA, "FindResourceExA")
+#pragma binding(kernel32::FindResourceExW, "FindResourceExW")
+#pragma binding(kernel32::LoadResource,    "LoadResource")
+#pragma binding(kernel32::LockResource,    "LockResource")
+#pragma binding(kernel32::SizeofResource,  "SizeofResource")
+#pragma binding(kernel32::FreeResource,    "FreeResource")
+#pragma binding(user32::LoadStringA,       "LoadStringA")
+#pragma binding(user32::LoadStringW,       "LoadStringW")
+HRSRC FindResourceA(HMODULE hModule, LPCSTR lpName, LPCSTR lpType);
+HRSRC FindResourceW(HMODULE hModule, LPCWSTR lpName, LPCWSTR lpType);
+HRSRC FindResourceExA(HMODULE hModule, LPCSTR lpType, LPCSTR lpName, WORD wLanguage);
+HRSRC FindResourceExW(HMODULE hModule, LPCWSTR lpType, LPCWSTR lpName, WORD wLanguage);
+HGLOBAL LoadResource(HMODULE hModule, HRSRC hResInfo);
+LPVOID LockResource(HGLOBAL hResData);
+DWORD SizeofResource(HMODULE hModule, HRSRC hResInfo);
+BOOL FreeResource(HGLOBAL hResData);
+int LoadStringA(HINSTANCE hInstance, UINT uID, LPSTR lpBuffer, int cchBufferMax);
+int LoadStringW(HINSTANCE hInstance, UINT uID, LPWSTR lpBuffer, int cchBufferMax);
+#define FindResource __MINGW_NAME_AW(FindResource)
+#define FindResourceEx __MINGW_NAME_AW(FindResourceEx)
+#define LoadString __MINGW_NAME_AW(LoadString)
+#define RT_CURSOR       MAKEINTRESOURCE(1)
+#define RT_BITMAP       MAKEINTRESOURCE(2)
+#define RT_ICON         MAKEINTRESOURCE(3)
+#define RT_MENU         MAKEINTRESOURCE(4)
+#define RT_DIALOG       MAKEINTRESOURCE(5)
+#define RT_STRING       MAKEINTRESOURCE(6)
+#define RT_FONTDIR      MAKEINTRESOURCE(7)
+#define RT_FONT         MAKEINTRESOURCE(8)
+#define RT_ACCELERATOR  MAKEINTRESOURCE(9)
+#define RT_RCDATA       MAKEINTRESOURCE(10)
+#define RT_MESSAGETABLE MAKEINTRESOURCE(11)
+#define RT_GROUP_CURSOR MAKEINTRESOURCE(12)
+#define RT_GROUP_ICON   MAKEINTRESOURCE(14)
+#define RT_VERSION      MAKEINTRESOURCE(16)
+#define RT_DLGINCLUDE   MAKEINTRESOURCE(17)
+#define RT_PLUGPLAY     MAKEINTRESOURCE(19)
+#define RT_VXD          MAKEINTRESOURCE(20)
+#define RT_ANICURSOR    MAKEINTRESOURCE(21)
+#define RT_ANIICON      MAKEINTRESOURCE(22)
+#define RT_HTML         MAKEINTRESOURCE(23)
+#define RT_MANIFEST     MAKEINTRESOURCE(24)
 
 // user32.dll window, message, input, monitor, and clipboard entry points.
 #pragma binding(user32::AdjustWindowRectEx,         "AdjustWindowRectEx")

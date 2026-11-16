@@ -14,39 +14,37 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	adrp	x0, <page>
-               	ldr	x1, [x0, #0x18]
-               	asr	x2, x1, #63
-               	eor	x1, x1, #0xfffffffffffffffd
+               	adrp	x1, <page>
+               	ldr	x0, [x1, #0x10]
+               	asr	x2, x0, #63
+               	eor	x3, x0, #0xfffffffffffffffd
                	mvn	x2, x2
-               	orr	x1, x1, x2
-               	cbz	x1, <addr>
+               	orr	x2, x3, x2
+               	cbz	x2, <addr>
                	mov	x0, #0x2                // =2
                	ret
-               	ldr	x1, [x0, #0x18]
-               	asr	x1, x1, #63
-               	asr	x2, x1, #63
-               	mvn	x1, x1
+               	asr	x0, x0, #63
+               	asr	x2, x0, #63
+               	mvn	x0, x0
                	mvn	x2, x2
-               	orr	x1, x1, x2
-               	cbz	x1, <addr>
+               	orr	x0, x0, x2
+               	cbz	w0, <addr>
                	mov	x0, #0x3                // =3
                	ret
-               	adrp	x1, <page>
-               	ldr	x1, [x1, <lo12>]
-               	mvn	x1, x1
-               	cbz	x1, <addr>
+               	adrp	x0, <page>
+               	ldr	x0, [x0, <lo12>]
+               	mvn	x0, x0
+               	cbz	x0, <addr>
                	mov	x0, #0x4                // =4
                	ret
-               	ldr	x1, [x0, #0x18]
-               	asr	x2, x1, #63
-               	eor	x1, x1, #0xfffffffffffffffd
-               	mvn	x2, x2
-               	orr	x1, x1, x2
+               	ldr	x0, [x1, #0x10]
+               	asr	x1, x0, #63
+               	eor	x2, x0, #0xfffffffffffffffd
+               	mvn	x1, x1
+               	orr	x1, x2, x1
                	cbz	x1, <addr>
                	mov	x0, #0x6                // =6
                	ret
-               	ldr	x0, [x0, #0x18]
                	add	x0, x0, #0x4
                	cmp	w0, #0x1
                	b.eq	<addr>

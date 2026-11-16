@@ -3,7 +3,7 @@
 // incoming register, or the marshal swaps the two sources through the
 // scratch. Here the vector parameter reads through the second integer
 // register, so the pointer's home moves there at entry and the
-// constants land in the neighbouring argument registers without a
+// constants land in the neighboring argument registers without a
 // swap. The check writes the scalar arguments back and compares.
 
 typedef float v1f __attribute__((vector_size(4)));

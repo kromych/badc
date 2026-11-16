@@ -33,14 +33,14 @@ Disassembly of section .text:
                	movsbq	%dl, %rsi
                	movswq	%dx, %rdi
                	xorl	%eax, %eax
-               	movl	%eax, -0x8(%rbp)
-               	movl	-0x8(%rbp), %ecx
+               	movl	%eax, -0x10(%rbp)
+               	movl	-0x10(%rbp), %ecx
                	addq	%rax, %rcx
-               	movl	%ecx, -0x8(%rbp)
+               	movl	%ecx, -0x10(%rbp)
                	incq	%rax
                	cmpl	$0x3, %eax
                	jl	<addr>
-               	movl	-0x8(%rbp), %eax
+               	movl	-0x10(%rbp), %eax
                	imulq	$0x186a0, %rsi, %rax    # imm = 0x186A0
                	imulq	$0xa, %rdi, %rcx
                	addq	%rcx, %rax

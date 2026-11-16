@@ -78,8 +78,7 @@ Disassembly of section .text:
                	movl	$0x8, %eax
                	retq
                	movl	%gs:0x8, %eax
-               	xorq	$0x1111, %rax           # imm = 0x1111
-               	testl	%eax, %eax
+               	cmpl	$0x1111, %eax           # imm = 0x1111
                	je	<addr>
                	movl	$0x9, %eax
                	retq

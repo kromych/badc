@@ -22,35 +22,32 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	ret
                	ldrb	w1, [x0, #0x5]
-               	eor	x1, x1, #0x7
-               	cbnz	w1, <addr>
+               	cmp	w1, #0x7
+               	b.ne	<addr>
                	ldrb	w1, [x0, #0x7]
-               	eor	x1, x1, #0xc
-               	cbz	w1, <addr>
+               	cmp	w1, #0xc
+               	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
                	ldrb	w1, [x0, #0xa]
-               	eor	x1, x1, #0x1
-               	cbnz	w1, <addr>
+               	cmp	w1, #0x1
+               	b.ne	<addr>
                	ldrb	w1, [x0, #0xb]
-               	mov	x17, #0x16              // =22
-               	eor	x1, x1, x17
-               	cbz	w1, <addr>
+               	cmp	w1, #0x16
+               	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
                	ldrb	w1, [x0, #0xc]
-               	eor	x1, x1, #0x1
-               	cbnz	w1, <addr>
+               	cmp	w1, #0x1
+               	b.ne	<addr>
                	ldrb	w1, [x0, #0xd]
-               	mov	x17, #0x5               // =5
-               	eor	x1, x1, x17
-               	cbz	w1, <addr>
+               	cmp	w1, #0x5
+               	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret
                	ldrb	w0, [x0, #0xf]
-               	mov	x17, #0xa               // =10
-               	eor	x0, x0, x17
-               	cbz	w0, <addr>
+               	cmp	w0, #0xa
+               	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ret
                	mov	x0, #0x0                // =0

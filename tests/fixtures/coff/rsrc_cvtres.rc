@@ -1,0 +1,5 @@
+// The resources of rsrc_cvtres.{x64,arm64}.coff beside it:
+// rc /fo rsrc_cvtres.res rsrc_cvtres.rc, then cvtres /machine:x64 and /machine:arm64.
+1 RCDATA { "badc-rsrc-probe" }
+ALPHA PROBE { "named-entry" }
+STRINGTABLE { 7, "seven" }

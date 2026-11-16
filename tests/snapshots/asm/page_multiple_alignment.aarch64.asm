@@ -85,19 +85,16 @@ Disassembly of section .text:
                	add	x0, x0, #0x14, lsl #12  // =0x14000
                	mov	x1, #0x2c               // =44
                	str	w1, [x0]
-               	ldrsw	x1, [x2]
-               	cmp	w1, #0xb
+               	ldrsw	x0, [x2]
+               	cmp	w0, #0xb
                	b.ne	<addr>
-               	ldrsw	x1, [x3]
-               	cmp	w1, #0x16
+               	ldrsw	x0, [x3]
+               	cmp	w0, #0x16
                	b.ne	<addr>
-               	ldrsw	x1, [x4]
-               	cmp	w1, #0x21
+               	ldrsw	x0, [x4]
+               	cmp	w0, #0x21
                	b.ne	<addr>
-               	ldrsw	x0, [x0]
-               	cmp	w0, #0x2c
-               	b.eq	<addr>
-               	mov	x0, #0x1e               // =30
-               	ret
                	mov	x0, #0x0                // =0
+               	ret
+               	mov	x0, #0x1e               // =30
                	ret

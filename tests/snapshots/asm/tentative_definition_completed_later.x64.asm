@@ -127,13 +127,8 @@ Disassembly of section .text:
                	movb	$0x2, <rip> # <addr>
                	movb	$0xc, <rip> # <addr>
                	movzbq	<rip>, %rcx # <addr>
-               	xorq	$0x2, %rcx
-               	testl	%ecx, %ecx
+               	cmpl	$0x2, %ecx
                	jne	<addr>
-               	movsbq	<rip>, %rcx # <addr>
-               	cmpl	$0xc, %ecx
-               	je	<addr>
-               	retq
                	movl	$0xd, %eax
                	movq	%rax, <rip> # <addr>
                	movq	<rip>, %rcx # <addr>
@@ -144,6 +139,7 @@ Disassembly of section .text:
                	je	<addr>
                	retq
                	xorl	%eax, %eax
+               	retq
                	retq
                	movl	$0x5, %eax
                	retq

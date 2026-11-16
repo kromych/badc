@@ -34,20 +34,14 @@ Disassembly of section .text:
                	retq
 
 <store_consumed_after_branch_is_silenced>:
-               	movslq	%edi, %rdi
                	movl	$0x1, %eax
-               	testq	%rdi, %rdi
-               	je	<addr>
-               	movl	$0x2, %eax
+               	movl	$0x2, %ecx
+               	testl	%edi, %edi
+               	cmovneq	%rcx, %rax
                	retq
 
 <address_escapes_silences>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	$0x1, -0x8(%rbp)
                	movl	$0x1, %eax
-               	leave
                	retq
 
 <block_local_dies>:
@@ -60,10 +54,5 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	$0x1, -0x8(%rbp)
                	movl	$0xe, %eax
-               	leave
                	retq

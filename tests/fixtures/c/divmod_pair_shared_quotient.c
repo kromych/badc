@@ -6,7 +6,7 @@
 //
 // Operands arrive from tables read at run time, so no case folds at
 // translation time. INT_MIN / -1 and LLONG_MIN / -1 are absent: the
-// quotient is not representable and the behaviour is undefined
+// quotient is not representable and the behavior is undefined
 // (6.5.5p6), trapping on x86-64.
 #include <limits.h>
 

@@ -22,8 +22,7 @@ Disassembly of section .text:
                	ret
                	mvni	v0.4s, #0x0
                	mov	w0, v0.s[0]
-               	mov	x17, #-0x1              // =-1
-               	cmp	w0, w17
+               	cmn	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret

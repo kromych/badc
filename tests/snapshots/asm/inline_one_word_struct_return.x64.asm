@@ -33,9 +33,8 @@ Disassembly of section .text:
                	addq	%rdx, %rcx
                	cmpl	$0x5, %eax
                	jl	<addr>
-               	cmpq	$0x96, %rcx
-               	jne	<addr>
                	xorl	%eax, %eax
+               	movl	$0x1, %edx
+               	cmpq	$0x96, %rcx
+               	cmovneq	%rdx, %rax
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>

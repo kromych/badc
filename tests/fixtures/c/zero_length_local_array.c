@@ -35,7 +35,7 @@ static int block_scope(void) {
     char c[0];
     char rows[0][4];
     static struct pt s[0];
-    int neighbour[3];
+    int neighbor[3];
 
     if (sizeof z != 0 || sizeof i != 0 || sizeof c != 0)
         return 1;
@@ -47,13 +47,13 @@ static int block_scope(void) {
     if (guard_body_ran)
         return 4;
 
-    neighbour[0] = 5;
-    neighbour[1] = 6;
-    neighbour[2] = 7;
+    neighbor[0] = 5;
+    neighbor[1] = 6;
+    neighbor[2] = 7;
     /* An empty object still has an address of its own. */
-    if ((const void *)z == (const void *)neighbour)
+    if ((const void *)z == (const void *)neighbor)
         return 5;
-    if (neighbour[0] + neighbour[1] + neighbour[2] != 18)
+    if (neighbor[0] + neighbor[1] + neighbor[2] != 18)
         return 6;
     return 0;
 }

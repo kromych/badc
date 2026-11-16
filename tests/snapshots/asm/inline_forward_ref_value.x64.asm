@@ -30,8 +30,8 @@ Disassembly of section .text:
                	movslq	%eax, %rdx
                	testq	%rdi, %rdi
                	je	<addr>
-               	leaq	0x64(%rdi), %rcx
-               	testq	%rcx, %rcx
+               	movq	%rdi, %rcx
+               	addq	$0x64, %rcx
                	jne	<addr>
                	movq	$-0x1, %rax
                	retq

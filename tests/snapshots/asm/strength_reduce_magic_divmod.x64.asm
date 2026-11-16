@@ -66,13 +66,9 @@ Disassembly of section .text:
                	movabsq	$0x1069e6a57e06665d, %rax # imm = 0x1069E6A57E06665D
                	movq	%rax, <rip> # <addr>
                	xorl	%eax, %eax
-               	leaq	<rip>, %rsi # <addr>
-               	movq	%rax, %rdx
-               	shlq	$0x3, %rdx
-               	addq	%rdx, %rsi
-               	addq	%rcx, %rdx
-               	movq	(%rdx), %rdx
-               	movq	%rdx, (%rsi)
+               	leaq	<rip>, %rdx # <addr>
+               	movq	(%rcx,%rax,8), %rsi
+               	movq	%rsi, (%rdx,%rax,8)
                	leaq	<rip>, %rdx # <addr>
                	movq	(%rcx,%rax,8), %rsi
                	movl	%esi, (%rdx,%rax,4)
@@ -849,9 +845,7 @@ Disassembly of section .text:
                	movl	$0x80000001, -0xe0(%rbp) # imm = 0x80000001
                	leaq	<rip>, %rax # <addr>
                	movl	(%rax,%rcx,4), %esi
-               	movl	$0x80000001, %r11d      # imm = 0x80000001
-               	movq	%rsi, %rdi
-               	cmpl	%r11d, %esi
+               	cmpl	$0x80000001, %esi       # imm = 0x80000001
                	setae	%dil
                	movzbq	%dil, %rdi
                	movl	-0xe0(%rbp), %r8d
@@ -880,9 +874,7 @@ Disassembly of section .text:
                	movl	$0xfffffffb, -0xd8(%rbp) # imm = 0xFFFFFFFB
                	leaq	<rip>, %rax # <addr>
                	movl	(%rax,%rcx,4), %esi
-               	movl	$0xfffffffb, %r11d      # imm = 0xFFFFFFFB
-               	movq	%rsi, %rdi
-               	cmpl	%r11d, %esi
+               	cmpl	$-0x5, %esi
                	setae	%dil
                	movzbq	%dil, %rdi
                	movl	-0xd8(%rbp), %r8d

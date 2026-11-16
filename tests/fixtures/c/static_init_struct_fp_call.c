@@ -1,7 +1,7 @@
 // Static-initializer dispatch table -- a `static struct Vtable v
 // = { do_add, do_sub };` whose fields hold function pointers, then
 // the call sites copy each field into a local and call through it.
-// Same shape as struct_initializers.c, minimised so a regression
+// Same shape as struct_initializers.c, minimized so a regression
 // shows up here without the surrounding designated/positional
 // initializer variants.
 //

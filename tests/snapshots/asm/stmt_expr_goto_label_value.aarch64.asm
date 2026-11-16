@@ -26,6 +26,10 @@ Disassembly of section .text:
                	mov	x4, x2
                	mov	x6, x2
                	mov	x5, x2
+               	b	<addr>
+               	add	x4, x4, #0x1
+               	cmp	w2, #0x64
+               	b.hs	<addr>
                	cmp	w4, #0xc8
                	b.hs	<addr>
                	add	x6, x6, #0x1
@@ -52,11 +56,8 @@ Disassembly of section .text:
                	clz	x1, x1
                	add	x0, x1, x0, lsl #6
                	cmp	x0, #0x64
-               	b.hi	<addr>
-               	mov	x2, x0
-               	add	x4, x4, #0x1
-               	cmp	w2, #0x64
-               	b.lo	<addr>
+               	csel	x2, x2, x0, hi
+               	b	<addr>
                	cmp	x6, #0x5
                	b.eq	<addr>
                	mov	x0, #0x7                // =7

@@ -146,12 +146,12 @@ Disassembly of section .text:
                	leaq	0x3(%rax), %rdi
                	callq	<addr>
                	addq	%rbx, %rax
+               	xorl	%ecx, %ecx
+               	movl	$0x1, %edx
                	movabsq	$0x1ac628adc, %r11      # imm = 0x1AC628ADC
                	cmpq	%r11, %rax
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	cmovneq	%rdx, %rcx
+               	movq	%rcx, %rax
                	popq	%rbx
                	leave
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>

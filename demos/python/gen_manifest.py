@@ -85,7 +85,7 @@ for m in manifest:
 if "Modules/getpath.c" not in bysrc:
     manifest.append({"src": "Modules/getpath.c", "class": "core", "includes": [],
                      "defines": ['PREFIX="/usr/local"', 'EXEC_PREFIX="/usr/local"',
-                                 'PLATLIBDIR="lib"', 'VERSION="3.14"', 'VPATH=""',
+                                 'PLATLIBDIR="lib"', 'VERSION="3.15"', 'VPATH=""',
                                  'PYTHONPATH=""', 'PYTHONFRAMEWORK=""']})
     missing = [m for m in missing if "getpath.o" not in m]
 # frozen.c (the frozen-module table) is built by a recipe that runs the freeze

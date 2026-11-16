@@ -3,7 +3,7 @@
 //
 // The address-space routines that need no further Mach types are
 // declared. mach_vm_map / mach_vm_remap take a memory entry port,
-// mach_vm_purgable_control and mach_vm_page_info take flavour enums
+// mach_vm_purgable_control and mach_vm_page_info take flavor enums
 // declared in headers badc does not bundle; those are left out.
 
 #pragma once

@@ -101,6 +101,7 @@
 #define ERROR_NO_DATA                  232
 #define ERROR_MORE_DATA                234
 #define ERROR_DIRECTORY                267
+#define ERROR_INVALID_ADDRESS          487
 #define ERROR_PIPE_CONNECTED           535
 #define ERROR_OPERATION_ABORTED        995
 #define ERROR_IO_INCOMPLETE            996
@@ -112,7 +113,7 @@
 #define ERROR_CONNECTION_REFUSED       1225
 #define ERROR_PORT_UNREACHABLE         1234
 #define ERROR_CONNECTION_ABORTED       1236
-#define ERROR_UNRECOGNIZED_VOLUME      1785
+#define ERROR_UNRECOGNIZED_VOLUME      1005
 #define ERROR_CANT_ACCESS_FILE         1920
 #define ERROR_TIMEOUT                  1460
 #define ERROR_NOT_ENOUGH_QUOTA         1816
@@ -172,3 +173,12 @@
 #define WSATRY_AGAIN                   11002
 #define WSANO_RECOVERY                 11003
 #define WSANO_DATA                     11004
+
+#define FACILITY_WIN32                 7
+#define FACILITY_VISUALCPP             109
+#ifndef S_OK
+#define S_OK ((HRESULT)0)
+#endif
+#define HRESULT_FROM_WIN32(x)                                                            \
+    ((HRESULT)(x) <= 0 ? (HRESULT)(x)                                                    \
+                       : (HRESULT)(((x) & 0x0000FFFF) | (FACILITY_WIN32 << 16) | 0x80000000))

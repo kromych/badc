@@ -11,7 +11,8 @@ use super::super::program::Program;
 use super::super::token::Ty;
 use super::Build;
 use super::dwarf::{
-    LineState, base_key_for_leaf, dwarf_file_numbers, push_file_entry, write_line_rows,
+    LineState, base_key_for_leaf, dwarf_file_numbers, frame_offset, push_file_entry,
+    write_fbreg_location, write_line_rows,
 };
 use super::elf_class::ElfClass;
 use crate::c5::codegen::ssa::cfi::{write_sleb128, write_uleb128};
@@ -556,7 +557,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
     },
     // subroutine_type -- the pointee of a function pointer (DWARF 4 5.7).
     // A function type without a prototype omits DW_AT_prototyped and has
-    // one unspecified_parameters child, as gcc and clang emit it.
+    // one unspecified_parameters child.
     AbbrevDecl {
         code: ABBREV_SUBROUTINE_TYPE,
         tag: DW_TAG_SUBROUTINE_TYPE,
@@ -1139,16 +1140,8 @@ impl RelocInfoUnit<'_> {
             }
             write_uleb128(&mut self.body, 1);
             self.body.push(self.frame_base_op);
-            let local_shift = build.local_shift_bytes.get(&ent_pc).copied().unwrap_or(0) as i64;
             for &(v, type_id) in &vars {
                 let type_off = self.type_offsets[type_id];
-                let eff = build
-                    .coalesced_slot_remap
-                    .get(&ent_pc)
-                    .and_then(|m| m.get(&v.fp_slot))
-                    .copied()
-                    .unwrap_or(v.fp_slot);
-                let fp_byte_offset = fp_byte_offset_for_slot(eff, local_shift);
                 let abbrev = if v.is_parameter {
                     ABBREV_FORMAL_PARAMETER
                 } else {
@@ -1156,19 +1149,7 @@ impl RelocInfoUnit<'_> {
                 };
                 write_uleb128(&mut self.body, abbrev);
                 self.strp(&v.name);
-                let promoted = build
-                    .promoted_local_slots
-                    .get(&ent_pc)
-                    .is_some_and(|slots| slots.contains(&v.fp_slot));
-                if promoted {
-                    write_uleb128(&mut self.body, 0);
-                } else {
-                    let mut expr: Vec<u8> = Vec::with_capacity(8);
-                    expr.push(DW_OP_FBREG);
-                    write_sleb128(&mut expr, fp_byte_offset);
-                    write_uleb128(&mut self.body, expr.len() as u64);
-                    self.body.extend_from_slice(&expr);
-                }
+                write_fbreg_location(&mut self.body, frame_offset(build, ent_pc, v.fp_slot));
                 self.body.extend_from_slice(&type_off.to_le_bytes());
                 write_uleb128(&mut self.body, v.decl_file as u64 + 1);
                 write_uleb128(&mut self.body, v.decl_line as u64);
@@ -1422,21 +1403,21 @@ struct Quals {
     restrict: bool,
 }
 
-/// A declaration's spelling resolved for the type catalog: the alias name
-/// to emit and the qualifiers at each of the two levels the declaration
-/// distinguishes.
+/// A declaration's spelling resolved for the type catalog: the symbol of
+/// the typedef its base type is named through and the qualifiers at each
+/// of the two levels the declaration distinguishes.
 #[derive(Clone, Copy, Default)]
-struct Spelled<'a> {
-    typedef: Option<&'a str>,
+struct Spelled {
+    typedef: Option<u32>,
     base: Quals,
     outer: Quals,
 }
 
-impl<'a> Spelled<'a> {
+impl Spelled {
     /// `volatile` rides the type tag rather than [`DeclSpelling`], and its
     /// level at the object's depth answers the same base-vs-object
     /// question the two `const` carriers do (C99 6.7.5.1p1).
-    fn of(tag: i64, spelling: DeclSpelling, typedef: Option<&'a str>) -> Self {
+    fn of(tag: i64, spelling: DeclSpelling, typedef: Option<u32>) -> Self {
         use crate::c5::compiler::types::{is_volatile_object_ty, is_volatile_ty};
         let volatile_object = is_volatile_object_ty(tag);
         let volatile_base = is_volatile_ty(tag) && !volatile_object;
@@ -1495,6 +1476,8 @@ struct TypeCatalog<'a> {
     nodes: Vec<TypeNode>,
     index: BTreeMap<TypeNode, TypeId>,
     pending: Vec<usize>,
+    /// The typedefs whose own type is being described.
+    open_typedefs: alloc::collections::BTreeSet<u32>,
 }
 
 impl<'a> TypeCatalog<'a> {
@@ -1512,6 +1495,7 @@ impl<'a> TypeCatalog<'a> {
             nodes: Vec::new(),
             index: BTreeMap::new(),
             pending: Vec::new(),
+            open_typedefs: alloc::collections::BTreeSet::new(),
         }
     }
 
@@ -1583,8 +1567,8 @@ impl<'a> TypeCatalog<'a> {
         }
     }
 
-    /// Wrap `inner` in one `DW_TAG_*_type` DIE per qualifier present, in
-    /// the order C99 6.7.3 gives them no significance and gcc emits them.
+    /// Wrap `inner` in one `DW_TAG_*_type` DIE per qualifier present, in a
+    /// fixed order, as C99 6.7.3 gives the order no significance.
     fn qualify(&mut self, inner: Option<TypeId>, q: Quals) -> Option<TypeId> {
         let mut cur = inner;
         for (present, qual) in [
@@ -1603,24 +1587,74 @@ impl<'a> TypeCatalog<'a> {
     /// declarator's pointer levels, then the qualifiers on the object
     /// itself.
     fn of_key_spelled(&mut self, key: TypeKey, sp: Spelled) -> TypeId {
-        let depth = key.depth();
-        let mut cur = self.of_key_base(key);
-        if let Some(name) = sp.typedef {
-            cur = Some(self.intern(TypeNode::Typedef {
-                name: String::from(name),
-                inner: cur,
-            }));
-        }
+        self.spelled(key, sp).unwrap_or_else(|| self.unspecified())
+    }
+
+    /// As [`Self::of_key_spelled`], `None` for `void`. A typedef stands
+    /// for the pointer levels of its own type (`typedef struct s *sp`),
+    /// so only the levels past those are the declarator's.
+    fn spelled(&mut self, key: TypeKey, sp: Spelled) -> Option<TypeId> {
+        let aliased = sp.typedef.and_then(|i| {
+            let own = decompose_pointer_chain(self.symbols[i as usize].type_)?.depth();
+            key.depth().checked_sub(own).map(|levels| (i, levels))
+        });
+        let (mut cur, levels) = match aliased {
+            Some((i, levels)) => (Some(self.of_typedef(i)), levels),
+            None => (self.of_key_base(key), key.depth()),
+        };
         cur = self.qualify(cur, sp.base);
-        for _ in 0..depth {
+        for _ in 0..levels {
             cur = Some(self.intern(TypeNode::Pointer(cur)));
         }
-        cur = self.qualify(cur, sp.outer);
-        cur.unwrap_or_else(|| self.unspecified())
+        self.qualify(cur, sp.outer)
     }
 
     fn of_key(&mut self, key: TypeKey) -> TypeId {
         self.of_key_spelled(key, Spelled::default())
+    }
+
+    /// The DIE of the typedef at symbol `i` over the type its own
+    /// declaration gives it (C99 6.7.7p3). A typedef reached again while
+    /// its own type is described names no type.
+    fn of_typedef(&mut self, i: u32) -> TypeId {
+        let symbols = self.symbols;
+        let sym = &symbols[i as usize];
+        let inner = if self.open_typedefs.insert(i) {
+            let inner = self.typedef_type(sym);
+            self.open_typedefs.remove(&i);
+            inner
+        } else {
+            None
+        };
+        self.intern(TypeNode::Typedef {
+            name: sym.name.clone(),
+            inner,
+        })
+    }
+
+    fn typedef_type(&mut self, sym: &'a crate::c5::symbol::Symbol) -> Option<TypeId> {
+        let spelling = sym.binding.decl_spelling;
+        if sym.is_function_type || sym.fn_ptr_indirection >= 1 {
+            let indirection = sym.fn_ptr_indirection.max(1);
+            let params = sym.params();
+            let (variadic, prototyped) = (sym.is_variadic(), sym.prototyped());
+            let fn_ptr = self.of_function_pointer(
+                sym.type_,
+                indirection,
+                params,
+                variadic,
+                prototyped,
+                spelling,
+            );
+            // A function type is the pointer's referent (`typedef int F(int)`).
+            return match (sym.is_function_type, &self.nodes[fn_ptr]) {
+                (true, TypeNode::Pointer(inner)) => *inner,
+                _ => Some(fn_ptr),
+            };
+        }
+        let key = decompose_pointer_chain(sym.type_)?;
+        let sp = Spelled::of(sym.type_, spelling, self.typedef_index(spelling));
+        self.spelled(key, sp)
     }
 
     fn of_tag(&mut self, tag: i64) -> TypeId {
@@ -1630,16 +1664,14 @@ impl<'a> TypeCatalog<'a> {
         }
     }
 
-    /// The alias name `spelling` names, unless the typedef is an array
+    /// The symbol of the typedef `spelling` names, unless it is an array
     /// type: an array typedef names the array rather than its element, and
     /// the declaration cannot say which of the two the dimensions on it
     /// came from.
-    fn typedef_name(&self, spelling: DeclSpelling) -> Option<&'a str> {
-        let sym = self.symbols.get(spelling.typedef? as usize)?;
-        if sym.array_size != 0 || sym.name.is_empty() {
-            return None;
-        }
-        Some(&sym.name)
+    fn typedef_index(&self, spelling: DeclSpelling) -> Option<u32> {
+        let i = spelling.typedef?;
+        let sym = self.symbols.get(i as usize)?;
+        (sym.array_size == 0 && !sym.name.is_empty()).then_some(i)
     }
 
     /// The declared type of an object or member: its tag decomposed, then
@@ -1648,7 +1680,7 @@ impl<'a> TypeCatalog<'a> {
         let Some(key) = decompose_pointer_chain(tag) else {
             return self.unspecified();
         };
-        let sp = Spelled::of(tag, spelling, self.typedef_name(spelling));
+        let sp = Spelled::of(tag, spelling, self.typedef_index(spelling));
         self.of_key_spelled(key, sp)
     }
 
@@ -1770,34 +1802,61 @@ impl<'a> TypeCatalog<'a> {
         let Some(key) = decompose_pointer_chain(tag) else {
             return self.unspecified();
         };
-        let ret = match key.peel(depth) {
-            None => Some(self.unspecified()),
-            Some(k) if k.is_void_value() => None,
-            Some(k) => Some(self.of_key(k)),
+        // The base type's qualifiers qualify what it names: the typedef,
+        // or the return type's base (`const char *(*f)(void)`).
+        let base = Quals {
+            constant: spelling.base_const,
+            volatile: false,
+            restrict: spelling.base_restrict,
         };
-        // A type without a prototype has no parameter types (C99 6.7.5.3p14).
-        let params: Vec<TypeId> = param_tags
-            .iter()
-            .copied()
-            .filter(|&p| prototyped && !crate::c5::compiler::types::is_void_ty(p))
-            .map(|p| self.of_tag(p))
-            .collect();
-        let fn_ty = self.intern(TypeNode::Subroutine {
-            ret,
-            params,
-            variadic,
-            prototyped,
+        // A typedef of the function type (`F *f`) or of the function
+        // pointer the object is or points to (`fn_t f`, `fn_t *pf`) carries
+        // the function; otherwise the declarator derives it and the typedef
+        // names the return type's base (`T *(*f)(void)`, `fn_t (*g)(void)`).
+        let alias = self.typedef_index(spelling);
+        let carried = alias.and_then(|i| {
+            let s = &self.symbols[i as usize];
+            if s.is_function_type {
+                return Some(depth);
+            }
+            let own = decompose_pointer_chain(s.type_)?.depth();
+            let levels = i64::from(depth) - s.fn_ptr_indirection;
+            (s.fn_ptr_indirection >= 1 && levels >= 0)
+                .then_some(levels)
+                .filter(|&l| i64::from(key.depth()) - i64::from(own) == l)
+                .map(|l| l as u8)
         });
-        // A function-pointer typedef names the pointer type as a whole
-        // (`typedef int (*fn_t)(int)`), so the alias sits over the finished
-        // chain rather than over the return type.
-        let mut cur = Some(self.pointer_chain(fn_ty, depth));
-        if let Some(name) = self.typedef_name(spelling) {
-            cur = Some(self.intern(TypeNode::Typedef {
-                name: String::from(name),
-                inner: cur,
-            }));
-        }
+        let cur = match (alias, carried) {
+            (Some(i), Some(levels)) => {
+                let named = self.of_typedef(i);
+                let named = self.qualify(Some(named), base).unwrap_or(named);
+                Some(self.pointer_chain(named, levels))
+            }
+            _ => {
+                let sp = Spelled {
+                    typedef: alias,
+                    base,
+                    outer: Quals::default(),
+                };
+                let ret = match key.peel(depth) {
+                    None => Some(self.unspecified()),
+                    Some(k) => self.spelled(k, sp),
+                };
+                // A type without a prototype has no parameter types (C99
+                // 6.7.5.3p14).
+                let params: Vec<TypeId> = (param_tags.iter().copied())
+                    .filter(|&p| prototyped && !crate::c5::compiler::types::is_void_ty(p))
+                    .map(|p| self.of_tag(p))
+                    .collect();
+                let fn_ty = self.intern(TypeNode::Subroutine {
+                    ret,
+                    params,
+                    variadic,
+                    prototyped,
+                });
+                Some(self.pointer_chain(fn_ty, depth))
+            }
+        };
         let outer = Quals {
             constant: spelling.outer_const,
             volatile: crate::c5::compiler::types::is_volatile_object_ty(tag),
@@ -2048,15 +2107,6 @@ fn build_type_die(catalog: &mut TypeCatalog, node: &TypeNode, strs: &mut StrPool
         TypeNode::Unspecified => write_uleb128(&mut die.bytes, ABBREV_UNSPECIFIED_TYPE),
     }
     die
-}
-
-/// c5's frame-slot index to native byte offset from the frame pointer.
-fn fp_byte_offset_for_slot(slot: i64, local_shift: i64) -> i64 {
-    if slot >= 2 {
-        (slot - 1) * 16
-    } else {
-        slot * 8 - local_shift
-    }
 }
 
 /// A type-catalog key: either a scalar leaf with pointer depth, or a

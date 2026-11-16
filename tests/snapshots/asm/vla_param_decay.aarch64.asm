@@ -17,32 +17,28 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
-               	sub	x3, x29, #0x20
+               	sub	x2, x29, #0x20
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldp	x16, x17, [x0]
+               	stp	x16, x17, [x2]
+               	sub	x3, x29, #0x10
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x3]
-               	sub	x4, x29, #0x10
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldp	x16, x17, [x0]
-               	stp	x16, x17, [x4]
                	mov	x0, #0x0                // =0
                	mov	x1, x0
-               	lsl	x2, x0, #2
-               	add	x5, x3, x2
-               	ldrsw	x5, [x5]
-               	add	x2, x4, x2
-               	ldrsw	x2, [x2]
-               	madd	x1, x5, x2, x1
+               	ldrsw	x4, [x2, x0, lsl #2]
+               	ldrsw	x5, [x3, x0, lsl #2]
+               	madd	x1, x4, x5, x1
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
                	b.lt	<addr>
-               	cmp	w1, #0x46
-               	b.ne	<addr>
                	mov	x0, #0x0                // =0
+               	mov	x2, #0x1                // =1
+               	cmp	w1, #0x46
+               	csel	x0, x0, x2, eq
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x1                // =1
-               	b	<addr>

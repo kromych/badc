@@ -27,18 +27,15 @@ Disassembly of section .text:
 
 <main>:
                	movzwq	<rip>, %rax # <addr>
-               	xorq	$0xc2c2, %rax           # imm = 0xC2C2
-               	testl	%eax, %eax
+               	cmpl	$0xc2c2, %eax           # imm = 0xC2C2
                	jne	<addr>
                	movzbq	<rip>, %rax # <addr>
-               	xorq	$0x2, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x2, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	retq
                	movzbq	<rip>, %rax # <addr>
-               	xorq	$0x8, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x8, %eax
                	jne	<addr>
                	movzbq	<rip>, %rax # <addr>
                	andq	$0x1, %rax
@@ -47,26 +44,22 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	retq
                	movl	<rip>, %eax # <addr>
-               	xorq	$0x2, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x2, %eax
                	jne	<addr>
                	cmpq	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x4, %eax
                	retq
                	movzwq	<rip>, %rax # <addr>
-               	xorq	$0xc4, %rax
-               	testl	%eax, %eax
+               	cmpl	$0xc4, %eax
                	jne	<addr>
                	movzbq	<rip>, %rax # <addr>
-               	xorq	$0x1, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x5, %eax
                	retq
                	movzbq	<rip>, %rax # <addr>
-               	xorq	$0x8, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x8, %eax
                	je	<addr>
                	movl	$0x6, %eax
                	retq

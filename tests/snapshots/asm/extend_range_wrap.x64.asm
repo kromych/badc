@@ -44,23 +44,19 @@ Disassembly of section .text:
 <guarded>:
                	movslq	%edi, %rdi
                	xorl	%eax, %eax
+               	leaq	0x1(%rdi), %rcx
                	cmpl	$0x64, %edi
-               	jge	<addr>
-               	leaq	0x1(%rdi), %rax
+               	cmovlq	%rcx, %rax
                	retq
 
 <uwrap>:
                	xorl	%eax, %eax
-               	movq	%rdi, %rcx
-               	xorq	$0x2, %rcx
-               	testl	%ecx, %ecx
+               	cmpl	$0x2, %edi
                	je	<addr>
                	movl	%edi, %ecx
                	addq	%rcx, %rax
                	incq	%rdi
-               	movq	%rdi, %rcx
-               	xorq	$0x2, %rcx
-               	testl	%ecx, %ecx
+               	cmpl	$0x2, %edi
                	jne	<addr>
                	retq
 
@@ -120,11 +116,8 @@ Disassembly of section .text:
                	retq
 
 <as_arg>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	leaq	0x2(%rdi), %rax
                	movl	%eax, %edi
-               	popq	%rbp
                	jmp	<addr>
 
 <index_of>:
@@ -151,12 +144,11 @@ Disassembly of section .text:
 
 <diff_zero>:
                	subq	%rsi, %rdi
-               	testl	%edi, %edi
-               	jne	<addr>
                	movl	$0x7, %eax
+               	movl	$0x9, %ecx
+               	testl	%edi, %edi
+               	cmovneq	%rcx, %rax
                	retq
-               	movl	$0x9, %eax
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp
@@ -250,8 +242,7 @@ Disassembly of section .text:
                	movl	$0x8, %esi
                	movl	$0x5, %edx
                	callq	<addr>
-               	xorq	$0x2, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x2, %eax
                	je	<addr>
                	movl	$0x15, %eax
                	leave
@@ -296,9 +287,8 @@ Disassembly of section .text:
                	movl	-0x10(%rbp), %edi
                	movl	$0x2, %esi
                	callq	<addr>
-               	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	movsd	<rip>, %xmm1 # <addr>
+               	ucomisd	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x1a, %eax

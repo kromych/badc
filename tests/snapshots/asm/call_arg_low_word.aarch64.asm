@@ -15,8 +15,7 @@ Disassembly of section .text:
 
 <scale>:
                	mov	w0, w0
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #1
                	ret
 
 <widen>:
@@ -51,67 +50,35 @@ Disassembly of section .text:
                	ret
 
 <via_scale>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
                	orr	x0, x0, #0x1
-               	bl	<addr>
-               	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
 
 <via_widen>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
                	add	x0, x0, #0x1
-               	bl	<addr>
-               	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
 
 <via_halve>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
                	eor	x0, x0, #0x2
-               	bl	<addr>
-               	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
 
 <via_sum>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
                	sub	x1, x1, #0x1
-               	bl	<addr>
-               	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
 
 <via_pick>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
                	sub	x1, x1, #0x5
-               	bl	<addr>
-               	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
 
 <via_pick_u>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
                	add	x1, x1, #0x1
-               	bl	<addr>
-               	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
 
 <via_byte>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	bl	<addr>
-               	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
 
 <via_half>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
                	and	x0, x0, #0xffff
-               	bl	<addr>
-               	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
@@ -135,8 +102,7 @@ Disassembly of section .text:
                	ret
                	ldur	x0, [x29, #-0x8]
                	bl	<addr>
-               	mov	x17, #-0x3              // =-3
-               	cmp	x0, x17
+               	cmn	x0, #0x3
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x10
@@ -153,8 +119,7 @@ Disassembly of section .text:
                	ldur	x0, [x29, #-0x10]
                	ldur	x1, [x29, #-0x8]
                	bl	<addr>
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
+               	cmn	x0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x10
@@ -185,8 +150,7 @@ Disassembly of section .text:
                	movk	x0, #0x5678, lsl #32
                	movk	x0, #0x1234, lsl #48
                	bl	<addr>
-               	mov	x17, #-0x7b             // =-123
-               	cmp	x0, x17
+               	cmn	x0, #0x7b
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	add	sp, sp, #0x10

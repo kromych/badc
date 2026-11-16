@@ -1,6 +1,6 @@
 // Add / Sub by a small negative immediate uses the other form's direct
 // 12-bit encoding on AArch64 (x + (-k) == x - k) instead of
-// materialising the sign-extended constant into a scratch register.
+// materializing the sign-extended constant into a scratch register.
 // `volatile` keeps the operands runtime values. Returns 0 on success.
 
 int main(void) {

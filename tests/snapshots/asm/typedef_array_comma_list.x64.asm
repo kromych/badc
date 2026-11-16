@@ -41,11 +41,6 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0xb, %eax
                	retq
-               	movq	<rip>, %rax # <addr>
-               	cmpq	$-0x1, %rax
-               	je	<addr>
-               	movl	$0xc, %eax
-               	retq
                	cmpq	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0xd, %eax

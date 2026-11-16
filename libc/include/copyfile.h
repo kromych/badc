@@ -31,7 +31,7 @@ typedef unsigned int copyfile_flags_t;
 #pragma binding(libc::copyfile, "_copyfile")
 #pragma binding(libc::fcopyfile, "_fcopyfile")
 
-int copyfile(char *from, char *to, copyfile_state_t state,
+int copyfile(const char *from, const char *to, copyfile_state_t state,
              copyfile_flags_t flags);
 // Same as copyfile() but between two open descriptors.
 int fcopyfile(int from, int to, copyfile_state_t state,

@@ -1,6 +1,7 @@
 //! The return a function takes ahead of its frame (`ssa::early_exit`): the
-//! test at the entry and the return it branches to, after the body, both
-//! evaluated from the argument registers. Temporaries are rax, r10 and r11
+//! test at the entry and the return it branches to, after the body or, where
+//! predicted, right after the test, both evaluated from the argument
+//! registers. Temporaries are rax, r10 and r11
 //! less the `-ffixed-` ones: caller-saved and no argument register under
 //! either convention, so the frame path finds every argument where the
 //! caller left it.
@@ -11,7 +12,7 @@ use super::*;
 const TEMPS: [Reg; 3] = [Reg(0), SCRATCH_R10, SCRATCH_R11];
 
 struct Shadow<'a> {
-    code: &'a mut Vec<u8>,
+    code: &'a mut CodeBuf,
     next: usize,
     fixed: FixedRegs,
 }
@@ -171,7 +172,9 @@ impl Shadow<'_> {
         Some(())
     }
 
-    /// The test and its branch; the offset of the branch's displacement.
+    /// The test and its branch, to the return or, where the return is
+    /// predicted, past it to the frame; the offset of the branch's
+    /// displacement.
     fn test(&mut self, exit: &EarlyExit) -> Option<usize> {
         let to_exit = match &exit.test {
             ShadowTest::Cmp {
@@ -194,16 +197,21 @@ impl Shadow<'_> {
                 if exit.exit_when { Cc::Ne } else { Cc::E }
             }
         };
-        emit_jcc_rel32(self.code, to_exit, 0);
+        let cc = if exit.predicted {
+            to_exit.flip()
+        } else {
+            to_exit
+        };
+        emit_jcc_rel32(self.code, cc, 0);
         Some(self.code.len() - 4)
     }
 }
 
-/// The entry's test of `exit`, branching to the early return. The offset of
-/// the branch's displacement, or `None`, with nothing emitted, where the
-/// test needs more temporaries than it has.
+/// The entry's test of `exit`, branching to the early return or past it.
+/// The offset of the branch's displacement, or `None`, with nothing
+/// emitted, where the test needs more temporaries than it has.
 pub(super) fn emit_early_test(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     exit: &EarlyExit,
     fixed: FixedRegs,
 ) -> Option<usize> {
@@ -223,7 +231,7 @@ pub(super) fn emit_early_test(
 /// The early return of `exit`: the returned value into rax, then the return.
 /// `false`, with nothing emitted, where it needs more temporaries than it has.
 pub(super) fn emit_early_return(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     exit: &EarlyExit,
     abi: super::Abi,
     fixed: FixedRegs,

@@ -1,5 +1,5 @@
 // x86-64 non-temporal store (movnti) plus a store fence (sfence) via inline
-// asm, reached through the catalogue passthrough. Store a value to memory
+// asm, reached through the catalog passthrough. Store a value to memory
 // non-temporally, order it, and read it back. Returns 42. Native x86-64 only.
 
 static int store_nt(int v) {

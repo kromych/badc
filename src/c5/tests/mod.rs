@@ -19,6 +19,7 @@ use super::symbol::Symbol;
 use super::token::{Tok, Token};
 use super::{C5Error, Compiler, Program, Vm};
 
+mod aarch64_simd;
 // These modules emit / link native images (via `emit_native*` and the
 // `link_*` helpers below), which require `native-emit` -- pulled in by
 // `full`. The host-only `--features std` build gates them out.
@@ -35,6 +36,7 @@ mod compound_assign;
 #[cfg(feature = "full")]
 mod computed_goto;
 mod deferred;
+mod diag_cases;
 mod divmod;
 #[cfg(feature = "full")]
 mod dwarf;
@@ -42,6 +44,7 @@ mod dwarf;
 mod fixed_regs;
 mod fixture_tables;
 mod frame_slot_fuzz;
+mod header_constants;
 mod inline_asm;
 #[cfg(feature = "full")]
 mod inline_linkage;
@@ -73,6 +76,8 @@ mod patchable_entry;
 mod perf_codegen;
 mod pointer_tracking;
 mod programs;
+mod prototypes;
+mod record_layouts;
 mod redeclaration;
 #[cfg(feature = "full")]
 mod reloc_golden;
@@ -811,7 +816,7 @@ fn parity_failures_hold_the_concurrency_bound() {
 /// Standard-library prelude prepended to every inline-source test.
 /// Replaces the auto-prepend the compiler used to do via the
 /// per-target umbrella header. Keeping it in the test helper means
-/// each test body stays focused on the behaviour under test instead
+/// each test body stays focused on the behavior under test instead
 /// of repeating five `#include` lines per snippet. Idempotent:
 /// fixtures that already pull headers in via their own
 /// `#include` lines just re-enter `#pragma once` and emit nothing.
@@ -846,6 +851,11 @@ pub fn with_prelude(src: &str) -> String {
 pub fn asm_pcrel_unit_definitions_source() -> &'static str {
     r#"
 #include <stdio.h>
+#if defined(__APPLE__)
+#define CSYM(name) "_" name
+#else
+#define CSYM(name) name
+#endif
 const long ro_first = 5;
 int first_fn(int x) { return x + 1; }
 int data_obj = 42;
@@ -853,14 +863,18 @@ int f(void) { return 7; }
 static int g(void) { return 9; }
 __attribute__((weak)) int w(void) { return 5; }
 __attribute__((aligned(16))) int vec4[4] = {1, 2, 3, 4};
+#ifdef _WIN32
+#pragma binding(data msvcrt::dup_env, "_environ")
+#else
 #pragma binding(data libc::dup_env, "environ")
+#endif
 char **dup_env = 0;
 #if defined(__x86_64__)
-#define ADDR(r, sym) __asm__("lea " sym "(%%rip), %0" : "=r"(r))
+#define ADDR(r, sym) __asm__("lea " CSYM(sym) "(%%rip), %0" : "=r"(r))
 #define F_OFF "f+1"
 #define OFF 1
 #else
-#define ADDR(r, sym) __asm__("adrp %0, " sym "\n\tadd %0, %0, :lo12:" sym : "=r"(r))
+#define ADDR(r, sym) __asm__("adrp %0, " CSYM(sym) "\n\tadd %0, %0, :lo12:" CSYM(sym) : "=r"(r))
 #define F_OFF "f+4"
 #define OFF 4
 #endif
@@ -868,17 +882,20 @@ char **dup_env = 0;
 int *fs_get(void);
 int (*fs_fn(void))(void);
 #if defined(__x86_64__)
-__asm__(".text\n.globl fs_get\nfs_get:\n\tleaq data_obj(%rip), %rax\n\tret\n"
-        ".globl fs_fn\nfs_fn:\n\tleaq f(%rip), %rax\n\tret\n");
+__asm__(".text\n.globl " CSYM("fs_get") "\n" CSYM("fs_get") ":\n\tleaq " CSYM("data_obj") "(%rip), %rax\n\tret\n"
+        ".globl " CSYM("fs_fn") "\n" CSYM("fs_fn") ":\n\tleaq " CSYM("f") "(%rip), %rax\n\tret\n");
 #else
-__asm__(".text\n.globl fs_get\nfs_get:\n\tadrp x0, data_obj\n\tadd x0, x0, :lo12:data_obj\n\tret\n"
-        ".globl fs_fn\nfs_fn:\n\tadrp x0, f\n\tadd x0, x0, :lo12:f\n\tret\n");
+__asm__(".text\n.globl " CSYM("fs_get") "\n" CSYM("fs_get") ":\n\tadrp x0, " CSYM("data_obj") "\n"
+        "\tadd x0, x0, :lo12:" CSYM("data_obj") "\n\tret\n"
+        ".globl " CSYM("fs_fn") "\n" CSYM("fs_fn") ":\n\tadrp x0, " CSYM("f") "\n"
+        "\tadd x0, x0, :lo12:" CSYM("f") "\n\tret\n");
 #endif
 #endif
 #ifdef ASM_DATA_END
 _Thread_local long tls_pad = 1;
 long bss_obj[2];
-__asm__(".data\n.globl asm_tbl, asm_tbl_end\n.p2align 3\nasm_tbl: .quad 3, 4\nasm_tbl_end:\n.text\n");
+__asm__(".data\n.globl " CSYM("asm_tbl") ", " CSYM("asm_tbl_end") "\n.p2align 3\n"
+        CSYM("asm_tbl") ": .quad 3, 4\n" CSYM("asm_tbl_end") ":\n.text\n");
 extern long asm_tbl[], asm_tbl_end[];
 #endif
 int main(void) {
@@ -905,11 +922,11 @@ int main(void) {
     if (pb != &dup_env || first_fn(1) != 2) return 7;
 #if defined(__x86_64__)
     int out[4], r;
-    __asm__ volatile("pshufd $0x1b, vec4(%%rip), %%xmm1\n\tmovdqu %%xmm1, %0" : "=m"(out) :: "xmm1");
+    __asm__ volatile("pshufd $0x1b, " CSYM("vec4") "(%%rip), %%xmm1\n\tmovdqu %%xmm1, %0" : "=m"(out) :: "xmm1");
     if (out[0] != 4 || out[3] != 1) return 8;
-    __asm__ volatile("movl $0, %0\n\tcmpl $3, vec4+8(%%rip)\n\tsete %b0" : "=&q"(r) :: "cc");
+    __asm__ volatile("movl $0, %0\n\tcmpl $3, " CSYM("vec4") "+8(%%rip)\n\tsete %b0" : "=&q"(r) :: "cc");
     if (r != 1) return 9;
-    __asm__ volatile("movl $77, vec4(%%rip)" ::: "memory");
+    __asm__ volatile("movl $77, " CSYM("vec4") "(%%rip)" ::: "memory");
     if (vec4[0] != 77) return 10;
 #endif
 #ifdef FILE_SCOPE_ASM
@@ -934,9 +951,14 @@ int main(void) {
 pub fn init_fini_beside_named_sections_source() -> &'static str {
     r#"
 #include <stdlib.h>
+#if defined(__APPLE__)
+#define CSYM(name) "_" name
+#else
+#define CSYM(name) name
+#endif
 static int ctor_ran;
 __attribute__((section("rgkc"))) long long gv[2] = {1, 2};
-__asm__(".section rgka,\"aw\"\n.globl ga\n.p2align 3\nga: .quad 3, 4\n.text\n");
+__asm__(".section rgka,\"aw\"\n.globl " CSYM("ga") "\n.p2align 3\n" CSYM("ga") ": .quad 3, 4\n.text\n");
 extern long long ga[2];
 __attribute__((constructor)) static void init(void) { ctor_ran = 1; }
 __attribute__((destructor)) static void fini(void) { _Exit(ctor_ran == 1 ? 0 : 3); }
@@ -955,18 +977,23 @@ int main(void) {
 pub fn asm_defined_names_source() -> &'static str {
     r#"
 #include <stdint.h>
-#if defined(__x86_64__)
-__asm__(".text\n.globl fs_seven\n.p2align 4\nfs_seven:\n\tmovl $7, %eax\n\tret\n");
-#define ADDR(r, sym) __asm__("lea " sym "(%%rip), %0" : "=r"(r))
+#if defined(__APPLE__)
+#define CSYM(name) "_" name
 #else
-__asm__(".text\n.globl fs_seven\n.p2align 2\nfs_seven:\n\tmov w0, #7\n\tret\n");
-#define ADDR(r, sym) __asm__("adrp %0, " sym "\n\tadd %0, %0, :lo12:" sym : "=r"(r))
+#define CSYM(name) name
 #endif
-__asm__(".data\n.globl fs_word\n.p2align 2\nfs_word:\n\t.long 0x1234\n.text\n");
+#if defined(__x86_64__)
+__asm__(".text\n.globl " CSYM("fs_seven") "\n.p2align 4\n" CSYM("fs_seven") ":\n\tmovl $7, %eax\n\tret\n");
+#define ADDR(r, sym) __asm__("lea " CSYM(sym) "(%%rip), %0" : "=r"(r))
+#else
+__asm__(".text\n.globl " CSYM("fs_seven") "\n.p2align 2\n" CSYM("fs_seven") ":\n\tmov w0, #7\n\tret\n");
+#define ADDR(r, sym) __asm__("adrp %0, " CSYM(sym) "\n\tadd %0, %0, :lo12:" CSYM(sym) : "=r"(r))
+#endif
+__asm__(".data\n.globl " CSYM("fs_word") "\n.p2align 2\n" CSYM("fs_word") ":\n\t.long 0x1234\n.text\n");
 int fs_seven(void);
 extern int fs_word;
 static int with_label(int x) {
-    __asm__ volatile(".globl body_label\nbody_label:\n");
+    __asm__ volatile(".globl " CSYM("body_label") "\n" CSYM("body_label") ":\n");
     return x + 1;
 }
 int main(void) {
@@ -994,11 +1021,16 @@ pub fn named_slots_source() -> &'static str {
 #ifndef _WIN32
 #include <unistd.h>
 #endif
-__asm__(".data\n.globl ns_words\n.p2align 3\nns_words:\n\t.quad 5, 6\n.text\n");
-#if defined(__x86_64__)
-__asm__(".text\n.globl ns_seven\n.p2align 4\nns_seven:\n\tmovl $7, %eax\n\tret\n");
+#if defined(__APPLE__)
+#define CSYM(name) "_" name
 #else
-__asm__(".text\n.globl ns_seven\n.p2align 2\nns_seven:\n\tmov w0, #7\n\tret\n");
+#define CSYM(name) name
+#endif
+__asm__(".data\n.globl " CSYM("ns_words") "\n.p2align 3\n" CSYM("ns_words") ":\n\t.quad 5, 6\n.text\n");
+#if defined(__x86_64__)
+__asm__(".text\n.globl " CSYM("ns_seven") "\n.p2align 4\n" CSYM("ns_seven") ":\n\tmovl $7, %eax\n\tret\n");
+#else
+__asm__(".text\n.globl " CSYM("ns_seven") "\n.p2align 2\n" CSYM("ns_seven") ":\n\tmov w0, #7\n\tret\n");
 #endif
 extern const long long ns_words[];
 int ns_seven(void);
@@ -1048,32 +1080,37 @@ int main(void) {
 pub fn asm_library_object_source(form: u32) -> String {
     let body = r#"
 #include <unistd.h>
+#if defined(__APPLE__)
+#define OPTIND "_optind"
+#else
+#define OPTIND "optind"
+#endif
 int main(void) {
 #if defined(__x86_64__)
 #if T == 1
     int *p;
-    __asm__("lea optind(%%rip), %0" : "=r"(p));
+    __asm__("lea " OPTIND "(%%rip), %0" : "=r"(p));
     return p != &optind || *p != optind;
 #elif T == 2
     int v;
-    __asm__("movl optind(%%rip), %0" : "=r"(v));
+    __asm__("movl " OPTIND "(%%rip), %0" : "=r"(v));
     return v != optind;
 #else
-    __asm__ volatile("movl $7, optind(%%rip)" ::: "memory");
+    __asm__ volatile("movl $7, " OPTIND "(%%rip)" ::: "memory");
     return optind != 7;
 #endif
 #else
 #if T == 1
     int *p;
-    __asm__("adrp %0, optind\n\tadd %0, %0, :lo12:optind" : "=r"(p));
+    __asm__("adrp %0, " OPTIND "\n\tadd %0, %0, :lo12:" OPTIND : "=r"(p));
     return p != &optind || *p != optind;
 #elif T == 2
     long v;
-    __asm__("adrp %0, optind\n\tldr %w0, [%0, :lo12:optind]" : "=r"(v));
+    __asm__("adrp %0, " OPTIND "\n\tldr %w0, [%0, :lo12:" OPTIND "]" : "=r"(v));
     return (int)v != optind;
 #else
     long t;
-    __asm__ volatile("mov w1, #7\n\tadrp %0, optind\n\tstr w1, [%0, :lo12:optind]"
+    __asm__ volatile("mov w1, #7\n\tadrp %0, " OPTIND "\n\tstr w1, [%0, :lo12:" OPTIND "]"
                      : "=&r"(t) :: "x1", "memory");
     return optind != 7;
 #endif
@@ -1084,7 +1121,8 @@ int main(void) {
 }
 
 /// Inline asm naming objects at the edges of `.rodata`, relro, `.data` and
-/// `.bss` with offsets before and past them, aliases of a function and an
+/// `.bss` with offsets before and past them (8-byte elements on every data
+/// model, for the asm's `q` forms), aliases of a function and an
 /// object, and on x86-64 fields an immediate trails; `WITH_TLS` adds a
 /// thread-local between `.data` and `.bss`, `WITH_WORDS` `.long sym - .`
 /// words in `.text`. Exits with the count of wrong addresses and values.
@@ -1093,29 +1131,34 @@ pub fn asm_region_edges_source() -> &'static str {
     r#"
 #include <stdio.h>
 #include <stdint.h>
-const long ro_first[2] = {0x1111, 0x2222};
+#if defined(__APPLE__)
+#define CSYM(name) "_" name
+#else
+#define CSYM(name) name
+#endif
+const long long ro_first[2] = {0x1111, 0x2222};
 const char *const relro_first[2] = {"p", "q"};
-long data_first[2] = {0x3333, 0x4444};
-long bss_first[2];
-static const long ro_static[2] = {5, 6};
-static long data_static[2] = {7, 8};
-static long bss_static[2];
+long long data_first[2] = {0x3333, 0x4444};
+long long bss_first[2];
+static const long long ro_static[2] = {5, 6};
+static long long data_static[2] = {7, 8};
+static long long bss_static[2];
 #ifdef WITH_TLS
-_Thread_local long tls_obj = 9;
+_Thread_local long long tls_obj = 9;
 #endif
 #ifdef WITH_WORDS
 extern const int edge_words[2];
-__asm__(".text\n.globl edge_words\n.p2align 2\nedge_words:\n"
-        ".long ro_first-8-.\n.long bss_first+16-.\n");
+__asm__(".text\n.globl " CSYM("edge_words") "\n.p2align 2\n" CSYM("edge_words") ":\n"
+        ".long " CSYM("ro_first") "-8-.\n.long " CSYM("bss_first") "+16-.\n");
 #endif
 int f(void) { return 7; }
 int wfa(void) __attribute__((weak, alias("f")));
 int sfa(void) __attribute__((alias("f")));
-long wda[2] __attribute__((weak, alias("data_first")));
+long long wda[2] __attribute__((weak, alias("data_first")));
 #if defined(__x86_64__)
-#define ADDR(r, sym) __asm__("lea " sym "(%%rip), %0" : "=r"(r))
+#define ADDR(r, sym) __asm__("lea " CSYM(sym) "(%%rip), %0" : "=r"(r))
 #else
-#define ADDR(r, sym) __asm__("adrp %0, " sym "\n\tadd %0, %0, :lo12:" sym : "=r"(r))
+#define ADDR(r, sym) __asm__("adrp %0, " CSYM(sym) "\n\tadd %0, %0, :lo12:" CSYM(sym) : "=r"(r))
 #endif
 static int bad;
 #define AT(sym, want) do { uintptr_t u_; ADDR(u_, sym); if (u_ != (uintptr_t)(want)) bad++; } while (0)
@@ -1402,6 +1445,56 @@ pub fn link_executable_with_runtime(
     link_executable_with_runtime_as(program, target, opts, crate::ExecForm::Pie)
 }
 
+/// Link `objs` as the driver links an executable for `target`: under the
+/// target's container format, a `hosted` link importing what the objects
+/// leave undefined from the target's C library.
+#[cfg(feature = "full")]
+fn link_for_target(
+    objs: &[crate::NativeObject],
+    target: crate::Target,
+    hosted: bool,
+) -> Result<crate::MergedNative, crate::C5Error> {
+    let opts = crate::LinkOptions {
+        format: target.binary_format(),
+        ..Default::default()
+    };
+    let mut libc = crate::TargetCLibrary::new(target);
+    if hosted {
+        for name in unresolved(objs, true) {
+            libc.admit(name.strip_prefix("__imp_").unwrap_or(&name));
+        }
+    }
+    let shared: Vec<_> = (libc.libraries())
+        .filter(|l| !l.exports.is_empty())
+        .cloned()
+        .collect();
+    crate::link_native_objects_with(objs, &shared, &opts)
+}
+
+/// The names `objs` reference and none defines; with `weak`, weak
+/// references too.
+#[cfg(feature = "full")]
+fn unresolved(objs: &[crate::NativeObject], weak: bool) -> alloc::collections::BTreeSet<String> {
+    let mut defined = alloc::collections::BTreeSet::new();
+    let mut undefined = alloc::collections::BTreeSet::new();
+    for o in objs {
+        for s in &o.symbols {
+            if s.binding == 0 {
+                continue;
+            }
+            if s.section == crate::NativeSymSection::Undef {
+                if (weak || s.binding == 1) && !defined.contains(&s.name) {
+                    undefined.insert(s.name.clone());
+                }
+            } else {
+                defined.insert(s.name.clone());
+                undefined.remove(&s.name);
+            }
+        }
+    }
+    undefined
+}
+
 /// [`link_executable_with_runtime`] for an executable of `form`.
 #[cfg(feature = "full")]
 pub fn link_executable_with_runtime_as(
@@ -1411,8 +1504,8 @@ pub fn link_executable_with_runtime_as(
     form: crate::ExecForm,
 ) -> Result<Vec<u8>, String> {
     use crate::{
-        ImageOptions, OutputKind, embedded_runtime, emit_native_with_options, link_native_objects,
-        parse_native_elf, write_native_image_from_merged_ex,
+        ImageOptions, OutputKind, embedded_runtime, emit_native_with_options, parse_native_elf,
+        write_native_image_from_merged_ex,
     };
     let mut reloc = opts;
     reloc.output_kind = OutputKind::Relocatable;
@@ -1429,14 +1522,30 @@ pub fn link_executable_with_runtime_as(
     // with argc/argv -- independent of the PE subsystem.
     let mut rt_defines: Vec<(String, String)> =
         vec![("__BADC_C5_START__".to_string(), "1".to_string())];
+    // A unit compiled without entry synthesis names no entry; a PE link then
+    // takes the first of `main`, `wmain`, `WinMain`, `wWinMain` it defines,
+    // as link.exe and the driver choose it.
+    let defined = |name: &str| {
+        objs[0]
+            .symbols
+            .iter()
+            .any(|s| s.name == name && s.binding != 0 && s.section == crate::NativeSymSection::Text)
+    };
+    let entry = program.entry_name.clone().or_else(|| {
+        (target.binary_format() == crate::BinaryFormat::Pe)
+            .then(|| {
+                ["main", "wmain", "WinMain", "wWinMain"]
+                    .into_iter()
+                    .find(|n| defined(n))
+            })
+            .flatten()
+            .map(str::to_string)
+    });
     rt_defines.push((
         "__BADC_ENTRY__".to_string(),
-        program
-            .entry_name
-            .clone()
-            .unwrap_or_else(|| "main".to_string()),
+        entry.clone().unwrap_or_else(|| "main".to_string()),
     ));
-    match program.entry_name.as_deref() {
+    match entry.as_deref() {
         Some("WinMain") => rt_defines.push(("__BADC_WIN_WINMAIN__".to_string(), "1".to_string())),
         Some("wWinMain") => {
             rt_defines.push(("__BADC_WIN_WINMAIN__".to_string(), "1".to_string()));
@@ -1454,10 +1563,10 @@ pub fn link_executable_with_runtime_as(
 
     append_on_demand_objects(&mut objs, target, reloc)?;
 
-    let mut merged = link_native_objects(&objs).map_err(|e| format!("link: {e}"))?;
+    let mut merged = link_for_target(&objs, target, true).map_err(|e| format!("link: {e}"))?;
     let plt =
         crate::emit_plt_for(&mut merged, target, form.placed()).map_err(|e| format!("plt: {e}"))?;
-    let entry_name = program.entry_name.as_deref().unwrap_or("main");
+    let entry_name = entry.as_deref().unwrap_or("main");
     write_native_image_from_merged_ex(
         &merged,
         &plt,
@@ -1485,26 +1594,7 @@ fn append_on_demand_objects(
     reloc: crate::NativeOptions,
 ) -> Result<(), String> {
     use crate::{NativeSymSection, embedded_compiler_rt, embedded_libc};
-    let unresolved = |objs: &[crate::NativeObject]| {
-        let mut defined = alloc::collections::BTreeSet::new();
-        let mut undefined = alloc::collections::BTreeSet::new();
-        for o in objs {
-            for s in &o.symbols {
-                if s.binding == 0 {
-                    continue;
-                }
-                if s.section == NativeSymSection::Undef {
-                    if s.binding == 1 && !defined.contains(&s.name) {
-                        undefined.insert(s.name.clone());
-                    }
-                } else {
-                    defined.insert(s.name.clone());
-                    undefined.remove(&s.name);
-                }
-            }
-        }
-        undefined
-    };
+    let unresolved = |objs: &[crate::NativeObject]| unresolved(objs, false);
     if unresolved(objs).is_empty() {
         return Ok(());
     }
@@ -1665,8 +1755,8 @@ pub fn link_executable_with_runtime_multi(
     opts: crate::NativeOptions,
 ) -> Result<Vec<u8>, String> {
     use crate::{
-        OutputKind, embedded_runtime, emit_native_with_options, link_native_objects,
-        parse_native_elf, write_native_image_from_merged,
+        OutputKind, embedded_runtime, emit_native_with_options, parse_native_elf,
+        write_native_image_from_merged,
     };
     let entry = programs[0];
     let mut reloc = opts;
@@ -1704,7 +1794,7 @@ pub fn link_executable_with_runtime_multi(
         objs.push(parse_native_elf(&bytes).map_err(|e| format!("parse user object {i}: {e}"))?);
     }
 
-    let mut merged = link_native_objects(&objs).map_err(|e| format!("link: {e}"))?;
+    let mut merged = link_for_target(&objs, target, true).map_err(|e| format!("link: {e}"))?;
     let plt = crate::emit_plt_for(&mut merged, target, false).map_err(|e| format!("plt: {e}"))?;
     let entry_name = entry.entry_name.as_deref().unwrap_or("main");
     write_native_image_from_merged(
@@ -1730,15 +1820,14 @@ pub fn link_freestanding(
     opts: crate::NativeOptions,
 ) -> Result<Vec<u8>, String> {
     use crate::{
-        OutputKind, emit_native_with_options, link_native_objects, parse_native_elf,
-        write_native_image_from_merged,
+        OutputKind, emit_native_with_options, parse_native_elf, write_native_image_from_merged,
     };
     let mut reloc = opts;
     reloc.output_kind = OutputKind::Relocatable;
     let prog_bytes = emit_native_with_options(program, target, reloc)
         .map_err(|e| format!("emit program object: {e}"))?;
     let objs = vec![parse_native_elf(&prog_bytes).map_err(|e| format!("parse: {e}"))?];
-    let mut merged = link_native_objects(&objs).map_err(|e| format!("link: {e}"))?;
+    let mut merged = link_for_target(&objs, target, false).map_err(|e| format!("link: {e}"))?;
     let plt = crate::emit_plt_for(&mut merged, target, false).map_err(|e| format!("plt: {e}"))?;
     write_native_image_from_merged(
         &merged,
@@ -1763,7 +1852,7 @@ pub fn compile_fixture(name: &str) -> Program {
 pub fn diag_config(selectors: &[&str]) -> crate::diag::Config {
     let mut config = crate::diag::Config::new();
     for sel in selectors {
-        match crate::diag::Selector::parse(sel).expect("a catalogue selector") {
+        match crate::diag::Selector::parse(sel).expect("a catalog selector") {
             crate::diag::Selector::Group(g) => config.enable_group(g),
             sel => {
                 for c in sel.codes() {

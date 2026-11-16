@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Fetch the CPython 3.14.6 source distribution from the badc vendor-deps mirror.
+"""Fetch the CPython 3.15.1 source distribution from the badc vendor-deps mirror.
 
-After this runs, ``demos/python/.cache/Python-3.14.6/`` holds the upstream
+After this runs, ``demos/python/.cache/Python-3.15.1/`` holds the upstream
 source tree (the interpreter, the standard library, and the test suite
 the smoke test runs).
 
@@ -25,9 +25,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "vendor_deps"))
 import _fetch  # noqa: E402
 
-VERSION = "3.14.6"
-# sha256 of the upstream `Python-3.14.6.tgz`.
-SHA256 = "74d0d71d0600e477651a077101d6e62d1e2e69b8e992ba18c993dd643b7ba222"
+VERSION = "3.15.1"
+# sha256 of the upstream `Python-3.15.1.tgz`, whose sigstore bundle verifies
+# against the release manager's identity, hugo@python.org.
+SHA256 = "133d85e118dc32621cda1d9d1d7d9694fe0c5e82bc339a7d528c109fe8b36387"
 ASSET = f"python-{VERSION}-{SHA256[:8]}.tar.gz"
 RELEASE_TAG = "vendor-deps-v1"
 # Directory the tarball unpacks into.
@@ -36,7 +37,7 @@ SRC_DIRNAME = f"Python-{VERSION}"
 # (Python/frozen_modules/*.h) a POSIX configure/make would generate. They are
 # platform-independent marshalled bytecode, so vendor them once and fetch here;
 # the build then needs no make on any target.
-FROZEN_SHA256 = "c04d5878dc61149e743eed163e867da65a508c64db4fe6b8e08bd4a6fe930ea3"
+FROZEN_SHA256 = "3add373a35587563469daff6c5b714f9e5f3e94984c66bfe7ee8238cd851be6c"
 FROZEN_ASSET = f"python-frozen-{VERSION}-{FROZEN_SHA256[:8]}.tar.gz"
 
 

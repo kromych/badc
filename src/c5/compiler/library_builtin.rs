@@ -1,5 +1,5 @@
-//! The library function a builtin calls, with the prototype gcc and clang
-//! give the builtin where no declaration is in scope.
+//! The library function a builtin calls, with the prototype the builtin
+//! takes where no declaration is in scope.
 
 use alloc::vec::Vec;
 
@@ -42,8 +42,8 @@ impl Compiler {
         Some(slot)
     }
 
-    /// Declare the generic `__atomic_*` functions of gcc's and clang's
-    /// runtime, through which an `_Atomic` object no instruction covers is
+    /// Declare the generic `__atomic_*` functions of the libatomic runtime,
+    /// through which an `_Atomic` object no instruction covers is
     /// accessed ([`super::types::AtomicAccess::Library`]), when the unit
     /// formed such a type. Each takes a slot no source name reaches; the
     /// walker finds it by [`ATOMIC_LIBCALLS`]' slot name.
@@ -56,7 +56,7 @@ impl Compiler {
         let library = formed.iter().any(|&ty| {
             complete(ty) && self.atomic_layout_of(ty).access == super::types::AtomicAccess::Library
         });
-        if !library {
+        if !library && !self.atomic_generic_libcalls {
             return;
         }
         for &(name, slot_name, proto) in ATOMIC_LIBCALLS {
@@ -152,9 +152,15 @@ impl Compiler {
             "wchar_t" => self
                 .prefixed_char_ty(crate::c5::lexer::StrPrefix::Wide)
                 .expect("wchar_t"),
-            // The bundled <wchar.h>'s, and the Windows C runtime's.
-            "wint_t" if self.target.is_windows() => Ty::Short as i64 | UNSIGNED_BIT,
-            "wint_t" => Ty::Int as i64,
+            // The platform C library's, as <wchar.h> declares it.
+            "wint_t" => {
+                use crate::c5::codegen::Target;
+                match self.target {
+                    Target::WindowsX64 | Target::WindowsAarch64 => Ty::Short as i64 | UNSIGNED_BIT,
+                    Target::LinuxX64 | Target::LinuxAarch64 => Ty::Int as i64 | UNSIGNED_BIT,
+                    Target::MacOSAarch64 => Ty::Int as i64,
+                }
+            }
             "va_list" => self.va_list_param_ty(),
             other => unreachable!("no base type `{other}` in the builtin prototypes"),
         }

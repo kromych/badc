@@ -1,7 +1,7 @@
 // Bitfields declared with the GCC 128-bit integer type. The storage
 // unit is 16 bytes and the width may reach 128 bits; a field that would
 // straddle the unit starts a new one. Covers layout, read / write,
-// truncation to the width, sign extension of a signed field, neighbour
+// truncation to the width, sign extension of a signed field, neighbor
 // preservation, static and runtime initializers, the compound
 // assignments and increments, and the C99 6.3.1.1p2 promotion that
 // makes a field of 32 bits or fewer read as `int`. Every expected value
@@ -278,7 +278,7 @@ int main(void) {
     if (ne.g != -5 || !(ne.g < 0)) {
         return 110;
     }
-    // The neighbour in the same unit is untouched by those writes.
+    // The neighbor in the same unit is untouched by those writes.
     if ((r = chk(nb.f, 0, 0, 111))) {
         return r;
     }
@@ -294,7 +294,7 @@ int main(void) {
     }
 
     // A 128-bit value in a unit of at most 8 bytes: read, written,
-    // updated in place, with its neighbours kept.
+    // updated in place, with its neighbors kept.
 #if defined(_WIN32)
     if (sizeof(struct H) != 18 || sizeof(struct I) != 16) {
         return 120;

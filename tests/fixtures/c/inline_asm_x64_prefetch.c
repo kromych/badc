@@ -1,5 +1,5 @@
 // x86-64 sizeless-memory prefetch hints via inline asm, reached through the
-// catalogue passthrough: the SSE read hints (prefetchnta / prefetcht0 /
+// catalog passthrough: the SSE read hints (prefetchnta / prefetcht0 /
 // prefetcht1 / prefetcht2, 0F 18 /0../3) and the 3DNow prefetch / write-
 // prefetch (prefetch / prefetchw, 0F 0D /0,/1). Each acts on the cache line
 // of a memory operand without changing its value. Compile-only: prefetch /

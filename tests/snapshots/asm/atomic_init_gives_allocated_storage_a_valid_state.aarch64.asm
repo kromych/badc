@@ -20,7 +20,7 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	bl	<addr>
                	mov	x20, x0
-               	sub	x0, x29, #0x20
+               	sub	x0, x29, #0x10
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldrh	w16, [x1]
@@ -33,40 +33,38 @@ Disassembly of section .text:
                	ldr	x20, [sp], #0x40
                	ret
                	mov	x1, #0xff               // =255
-               	mov	x2, #0x3                // =3
-               	mov	x0, x20
-               	bl	<addr>
-               	sub	x0, x29, #0x20
+               	mov	x2, #0xffff             // =65535
+               	strh	w2, [x20]
+               	strb	w1, [x20, #0x2]
                	ldrh	w16, [x0]
                	strh	w16, [x20]
                	ldrb	w16, [x0, #0x2]
                	strb	w16, [x20, #0x2]
-               	sub	x2, x29, #0x10
+               	sub	x2, x29, #0x8
                	mov	x0, #0x3                // =3
                	mov	x3, #0x5                // =5
                	mov	x1, x20
                	bl	<addr>
-               	ldurb	w0, [x29, #-0x10]
-               	ldurb	w1, [x29, #-0xe]
-               	eor	x0, x0, #0x1
-               	cbnz	w0, <addr>
-               	eor	x0, x1, #0x3
-               	cbz	w0, <addr>
+               	ldurb	w0, [x29, #-0x8]
+               	ldurb	w1, [x29, #-0x6]
+               	cmp	w0, #0x1
+               	b.ne	<addr>
+               	cmp	w1, #0x3
+               	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x20, [sp], #0x40
                	ret
-               	sub	x0, x29, #0x20
+               	sub	x2, x29, #0x10
                	sub	x1, x29, #0x18
-               	ldrh	w16, [x0]
+               	ldrh	w16, [x2]
                	strh	w16, [x1]
-               	ldrb	w16, [x0, #0x2]
+               	ldrb	w16, [x2, #0x2]
                	strb	w16, [x1, #0x2]
-               	sub	x2, x29, #0x8
                	mov	x0, #0x3                // =3
                	mov	x3, #0x5                // =5
                	bl	<addr>
-               	ldurb	w0, [x29, #-0x7]
+               	ldurb	w0, [x29, #-0xf]
                	cmp	w0, #0x2
                	b.eq	<addr>
                	mov	x0, #0x3                // =3

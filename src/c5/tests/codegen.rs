@@ -17253,6 +17253,57 @@ fn out_pointer_result_temporaries_share_their_storage() {
     }
 }
 
+/// Forty-eight arrays of a structure read through one pointer in loops
+/// nested in another: every array's address is invariant in both, more
+/// than the register file holds. The addresses that would be spilled are
+/// computed in the inner loops, so the frame takes no slot for them.
+#[test]
+fn invariant_addresses_past_the_register_file_take_no_frame_slots() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+    let fields: alloc::string::String = (0..48)
+        .map(|j| alloc::format!("double a{j}[1024]; "))
+        .collect();
+    let loops: alloc::string::String = (0..48)
+        .step_by(3)
+        .map(|j| {
+            alloc::format!(
+                "for (int k = 0; k < v->n; k++) v->a{j}[k] = v->a{}[k] * v->a{}[k] + i;\n",
+                j + 1,
+                j + 2
+            )
+        })
+        .collect();
+    let src = alloc::format!(
+        "struct s {{ int n, m; {fields}}};\n\
+         void f(struct s *v) {{ for (int i = 0; i < v->m; i++) {{\n{loops}}} }}\n"
+    );
+    for target in [Target::LinuxAarch64, Target::LinuxX64] {
+        let program = Compiler::with_options(
+            src.clone(),
+            target,
+            CompileOptions::default()
+                .with_no_entry_point(true)
+                .with_optimize(true),
+        )
+        .compile()
+        .expect("compile");
+        let mut opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new().with_optimize()
+        };
+        opts.frame_larger_than = Some(64);
+        let build = crate::c5::codegen::lower_for(&program, target, opts).expect("lower");
+        assert!(
+            build
+                .diagnostics
+                .iter()
+                .all(|d| !d.text.contains("function `f`")),
+            "{target:?}: {:?}",
+            build.diagnostics
+        );
+    }
+}
+
 /// The interpreter zeroes the destination's bytes and no byte beside them.
 #[test]
 fn the_interpreter_zero_fills_the_destination() {

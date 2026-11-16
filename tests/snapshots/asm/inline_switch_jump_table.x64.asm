@@ -180,7 +180,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x18, %rsp
+               	subq	$0x8, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
@@ -193,10 +193,7 @@ Disassembly of section .text:
                	addq	$0x64, %rax
                	incq	%rax
                	movslq	%eax, %r14
-               	imulq	$0x7, %r13, %rax
-               	movslq	%eax, %r15
-               	leaq	0x64(%r12), %r10
-               	movq	%r10, 0x38(%rsp)
+               	imulq	$0x7, %r13, %r15
                	movq	%r12, %rdi
                	movq	%rbx, %rsi
                	callq	<addr>
@@ -218,7 +215,8 @@ Disassembly of section .text:
                	jl	<addr>
                	cmpl	$0xc, %r13d
                	jge	<addr>
-               	leaq	(%rdi,%r15), %rdx
+               	movslq	%r15d, %rdx
+               	addq	%rdi, %rdx
                	leaq	0x1(%rdx), %r8
                	movq	%rcx, %rdx
                	subq	%r13, %rdx
@@ -232,7 +230,7 @@ Disassembly of section .text:
                	jl	<addr>
                	cmpl	$0xa, %r12d
                	jg	<addr>
-               	movq	0x38(%rsp), %rcx
+               	leaq	0x64(%r12), %rcx
                	addq	%rdx, %rcx
                	cmpq	%rcx, %rax
                	je	<addr>

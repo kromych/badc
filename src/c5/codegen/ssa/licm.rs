@@ -49,7 +49,12 @@
 //! outside a loop, or moved out of it, before the outermost such loop,
 //! under the same measure. Only an instruction that cannot trap moves, as
 //! the copy executes even when the loop runs no iteration; a comparison
-//! stays with the branch or select that fuses it.
+//! stays with the branch or select that fuses it. One destination takes
+//! no more copies than the register share, and a copy the allocation
+//! spills whose store and reloads cost no less than the instructions it
+//! removes leaves the plan, with every copy reading it, before the plan
+//! is measured: its reloads would stand where the instructions stood, and
+//! its slot would grow the frame.
 
 use alloc::vec;
 use alloc::vec::Vec;
@@ -59,7 +64,7 @@ use super::super::ir::{
     BinOp, BlockId, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, ValueId,
 };
 use super::mem2reg::{dominators, predecessors};
-use super::reg_alloc::Allocation;
+use super::reg_alloc::{Allocation, Place};
 use super::tape::{At, Insertion, Undo};
 use super::{FixedRegs, Target};
 use crate::c5::codegen::passes::drop_redundant_extend::{
@@ -405,14 +410,9 @@ fn cap_per_destination(
     fixed: FixedRegs,
     mut hoists: Vec<Hoist>,
 ) -> Vec<Hoist> {
-    let cap = (super::reg_alloc::usable_gpr_count(target, fixed) / 2).max(1);
+    let cap = register_share(target, fixed);
     // Destination block per hoist, read back off the insertion point.
-    let mut block_of = vec![NO_BLOCK; func.insts.len()];
-    for (b, block) in func.blocks.iter().enumerate() {
-        for v in block.inst_range.clone() {
-            block_of[v as usize] = b as BlockId;
-        }
-    }
+    let block_of = block_of(func);
     hoists.sort_by(|a, b| {
         b.profit
             .cmp(&a.profit)
@@ -429,6 +429,22 @@ fn cap_per_destination(
     });
     hoists.sort_by_key(|h| (h.at, h.key));
     hoists
+}
+
+/// How many copies one destination takes: half the register file.
+fn register_share(target: Target, fixed: FixedRegs) -> usize {
+    (super::reg_alloc::usable_gpr_count(target, fixed) / 2).max(1)
+}
+
+/// The block holding each instruction.
+fn block_of(func: &FunctionSsa) -> Vec<BlockId> {
+    let mut block_of = vec![NO_BLOCK; func.insts.len()];
+    for (b, block) in func.blocks.iter().enumerate() {
+        for v in block.inst_range.clone() {
+            block_of[v as usize] = b as BlockId;
+        }
+    }
+    block_of
 }
 
 /// A load placed before the loops that re-read it, with its sites.
@@ -680,12 +696,7 @@ fn plan_pure(func: &FunctionSsa) -> Vec<PureHoist> {
     if loops.is_empty() {
         return Vec::new();
     }
-    let mut block_of = vec![NO_BLOCK; func.insts.len()];
-    for (b, block) in func.blocks.iter().enumerate() {
-        for v in block.inst_range.clone() {
-            block_of[v as usize] = b as BlockId;
-        }
-    }
+    let block_of = block_of(func);
     let weights = super::reg_alloc::block_weights(func);
     let uses = super::reg_alloc::compute_use_counts(func);
     // Where each value is available once the plan stands: its block, or
@@ -775,8 +786,8 @@ fn plan_pure(func: &FunctionSsa) -> Vec<PureHoist> {
 }
 
 /// Place each pure instruction's copy, reading the copies of moved
-/// operands, and point its readers at it.
-fn apply_pure(func: &mut FunctionSsa, hoists: &[PureHoist]) -> Undo {
+/// operands, and point its readers at it. Returns the copies' ids.
+fn apply_pure(func: &mut FunctionSsa, hoists: &[PureHoist]) -> (Undo, Vec<ValueId>) {
     let n_old = func.insts.len() as ValueId;
     let mut copy_of = vec![NO_VALUE; func.insts.len()];
     let mut ins: Vec<Insertion> = Vec::with_capacity(hoists.len());
@@ -812,13 +823,15 @@ fn apply_pure(func: &mut FunctionSsa, hoists: &[PureHoist]) -> Undo {
     // The copies read each other by their new ids already; only the sites'
     // readers move.
     redirect_uses(func, &redirect);
-    undo
+    (undo, rewrite.ids)
 }
 
 /// Move the pure instructions of [`plan_pure`] when the spill traffic the
 /// longer ranges add stays below the instructions removed, as a reload
 /// costs no less than the instruction it replaces; `alloc` is `func`'s
-/// allocation as it stands.
+/// allocation as it stands. A destination takes the most profitable
+/// copies up to [`register_share`], and the plan is allocated again
+/// without the copies [`losing_copies`] names until it names none.
 fn hoist_pure(
     func: &mut FunctionSsa,
     target: Target,
@@ -829,15 +842,109 @@ fn hoist_pure(
     if hoists.is_empty() {
         return alloc;
     }
+    let mut hoists = within_share(func, hoists, register_share(target, fixed));
     let cost = placement_cost(func, &alloc, target);
-    let removed: u64 = hoists.iter().map(|h| h.profit).sum();
-    let undo = apply_pure(func, &hoists);
-    let alt = super::reg_alloc::allocate(func, target, fixed);
-    if placement_cost(func, &alt, target) < cost.saturating_add(removed) {
-        return alt;
+    while !hoists.is_empty() {
+        let removed: u64 = hoists.iter().map(|h| h.profit).sum();
+        let (undo, copies) = apply_pure(func, &hoists);
+        let alt = super::reg_alloc::allocate(func, target, fixed);
+        let losing = losing_copies(func, &alt, &hoists, &copies);
+        if !losing.contains(&true) {
+            if placement_cost(func, &alt, target) < cost.saturating_add(removed) {
+                return alt;
+            }
+            undo.restore(func);
+            break;
+        }
+        undo.restore(func);
+        hoists = without(func, hoists, &losing);
     }
-    undo.restore(func);
     alloc
+}
+
+/// The `cap` most profitable of `hoists` per destination block.
+fn within_share(func: &FunctionSsa, hoists: Vec<PureHoist>, cap: usize) -> Vec<PureHoist> {
+    let block_of = block_of(func);
+    let dest = |k: usize| block_of[hoists[k].at as usize];
+    let mut order: Vec<usize> = (0..hoists.len()).collect();
+    order.sort_by_key(|&k| (dest(k), core::cmp::Reverse(hoists[k].profit), k));
+    let mut over = vec![false; hoists.len()];
+    let mut run = (NO_BLOCK, 0);
+    for k in order {
+        run = if run.0 == dest(k) {
+            (run.0, run.1 + 1)
+        } else {
+            (dest(k), 1)
+        };
+        over[k] = run.1 > cap;
+    }
+    without(func, hoists, &over)
+}
+
+/// The copies `alloc` spills whose store and reloads cost no less than
+/// the loop-weighted instructions they remove: their sites', and those of
+/// the copies only they read. `func` carries the copies `copies` names.
+fn losing_copies(
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    hoists: &[PureHoist],
+    copies: &[ValueId],
+) -> Vec<bool> {
+    let weights = super::reg_alloc::block_weights(func);
+    let mut hoist_of = vec![usize::MAX; func.insts.len()];
+    for (k, &c) in copies.iter().enumerate() {
+        hoist_of[c as usize] = k;
+    }
+    let mut traffic = vec![0u64; copies.len()];
+    let mut charge = |v: ValueId, w: u64| {
+        if let Some(&k) = hoist_of.get(v as usize).filter(|&&k| k != usize::MAX) {
+            traffic[k] = traffic[k].saturating_add(w);
+        }
+    };
+    for (b, block) in func.blocks.iter().enumerate() {
+        for v in block.inst_range.clone() {
+            let inst = &func.insts[v as usize];
+            if super::emit_common::is_dead_pure_counts(inst, v, &alloc.use_counts) {
+                continue;
+            }
+            charge(v, weights[b]);
+            super::reg_alloc::for_each_operand(inst, |o| charge(o, weights[b]));
+        }
+        block.terminator.for_each_operand(|o| charge(o, weights[b]));
+    }
+    let mut gain: Vec<u64> = hoists.iter().map(|h| h.profit).collect();
+    for (k, &c) in copies.iter().enumerate() {
+        let mut fed = 0u64;
+        func.insts[c as usize].for_each_operand(|o| {
+            let j = hoist_of[o as usize];
+            if j != usize::MAX && alloc.use_counts[o as usize] == 1 {
+                fed = fed.saturating_add(gain[j]);
+            }
+        });
+        gain[k] = gain[k].saturating_add(fed);
+    }
+    (copies.iter().enumerate())
+        .map(|(k, &c)| matches!(alloc.places[c as usize], Place::Spill(_)) && traffic[k] >= gain[k])
+        .collect()
+}
+
+/// `hoists` less those `drop` marks and those reading a dropped copy. A
+/// copy's operands precede it in `hoists`, so one pass sees every drop.
+fn without(func: &FunctionSsa, hoists: Vec<PureHoist>, drop: &[bool]) -> Vec<PureHoist> {
+    let mut gone = vec![false; func.insts.len()];
+    let mut kept = Vec::with_capacity(hoists.len());
+    for (h, &d) in hoists.into_iter().zip(drop) {
+        let mut reads_gone = false;
+        func.insts[h.sites[0] as usize].for_each_operand(|o| reads_gone |= gone[o as usize]);
+        if d || reads_gone {
+            for &s in &h.sites {
+                gone[s as usize] = true;
+            }
+        } else {
+            kept.push(h);
+        }
+    }
+    kept
 }
 
 /// Place each load's copy and point its sites at it.
@@ -1829,5 +1936,122 @@ mod tests {
             assert!(plan_pure(&loop_func(body.clone())).is_empty(), "{body:?}");
         }
         assert_eq!(plan_pure(&loop_func(vec![div_by(3), sink(BODY)])).len(), 1);
+    }
+
+    /// `pre -> outer -> inner -> body -> inner`, `inner -> outer`: the outer
+    /// header tests `pre`'s value 0 and the inner one its value 2. The body
+    /// starts at `pre.len() + 2`.
+    fn nested_loops(pre: Vec<Inst>, body: Vec<Inst>) -> FunctionSsa {
+        let outer = pre.len() as u32;
+        let mut insts = pre;
+        for (lhs, rhs_imm) in [(0, 7), (2, 9)] {
+            insts.push(Inst::BinopI {
+                op: BinOp::Lt,
+                lhs,
+                rhs_imm,
+            });
+        }
+        insts.extend(body);
+        let end = insts.len() as u32;
+        let test = |cond, target, fall_through| Terminator::Bz {
+            cond,
+            target,
+            fall_through,
+        };
+        func_with(
+            insts,
+            vec![
+                block(0..outer, Terminator::Jmp(1)),
+                block(outer..outer + 1, test(outer, 2, 2)),
+                block(outer + 1..outer + 2, test(outer + 1, 1, 3)),
+                block(outer + 2..end, Terminator::Jmp(2)),
+            ],
+        )
+    }
+
+    /// The copies move before the outer of two loops and are live across
+    /// both, so twice as many as the register file holds overflow it: the
+    /// register share of them moves, without a spill, and the rest stay at
+    /// their sites in the inner loop.
+    #[test]
+    fn moved_arithmetic_takes_no_more_than_the_register_share() {
+        super::super::reg_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
+            let target = Target::LinuxAarch64;
+            let n = 2 * super::super::reg_alloc::usable_gpr_count(target, FixedRegs::NONE) as u32;
+            let body = (0..n).flat_map(|k| {
+                let add = Inst::BinopI {
+                    op: BinOp::Add,
+                    lhs: 1,
+                    rhs_imm: 8 * i64::from(k) + 8,
+                };
+                [add, sink(5 + 2 * k)]
+            });
+            let mut f = nested_loops(vec![local(2), local(3), local(4)], body.collect());
+            assert_eq!(plan_pure(&f).len(), n as usize);
+            let alloc = allocate_hoisted(&mut f, target);
+            assert_eq!(alloc.spill_count, 0);
+            let moved = (f.blocks[0].inst_range.clone())
+                .filter(|&v| matches!(f.insts[v as usize], Inst::BinopI { lhs: 1, .. }))
+                .count();
+            assert_eq!(moved, register_share(target, FixedRegs::NONE));
+        });
+    }
+
+    /// A register file's worth of values defined before the loops is read
+    /// twice per inner iteration, so the copies, read once, are what the
+    /// allocation spills: a copy of one instruction would be reloaded where
+    /// it stood and stays, while the last copy of a chain of three removes
+    /// the chain for its reload and moves.
+    #[test]
+    fn a_spilled_copy_moves_only_when_it_removes_more_than_its_reloads() {
+        super::super::reg_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
+            let target = Target::LinuxAarch64;
+            let live = super::super::reg_alloc::usable_gpr_count(target, FixedRegs::NONE) as u32;
+            let mut pre = vec![local(2), local(3), local(4)];
+            pre.extend((0..live).map(|k| local(10 + i64::from(k))));
+            let single = pre.len() as u32 + 2;
+            let chain = single + 2;
+            let mut body = vec![
+                Inst::BinopI {
+                    op: BinOp::Add,
+                    lhs: 1,
+                    rhs_imm: 8,
+                },
+                sink(single),
+                mul(0, 1),
+                Inst::BinopI {
+                    op: BinOp::Add,
+                    lhs: chain,
+                    rhs_imm: 3,
+                },
+                Inst::BinopI {
+                    op: BinOp::Xor,
+                    lhs: chain + 1,
+                    rhs_imm: 5,
+                },
+                sink(chain + 2),
+            ];
+            for _ in 0..2 {
+                body.extend((0..live).map(|k| sink(3 + k)));
+            }
+            let mut f = nested_loops(pre, body);
+            assert_eq!(plan_pure(&f).len(), 4);
+            allocate_hoisted(&mut f, target);
+            let in_pre = |pred: &dyn Fn(&Inst) -> bool| {
+                (f.blocks[0].inst_range.clone()).any(|v| pred(&f.insts[v as usize]))
+            };
+            assert!(!in_pre(&|i| matches!(
+                i,
+                Inst::BinopI {
+                    op: BinOp::Add,
+                    lhs: 1,
+                    ..
+                }
+            )));
+            assert!(in_pre(&|i| matches!(
+                i,
+                Inst::BinopI { op: BinOp::Xor, .. }
+            )));
+        });
     }
 }

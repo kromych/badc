@@ -521,6 +521,13 @@ def first_error_line(text: str) -> str:
     return ""
 
 
+def internal_error_shape(text: str) -> str | None:
+    """The message shape of an internal compiler error. Every one carries
+    the same diagnostic code, so the code alone names no defect."""
+    said = first_error_line(text)
+    return normalize_message(said) if "[internal-error]" in said else None
+
+
 def normalize_message(message: str) -> str:
     """Drop what varies between two hits of the same defect.
 
@@ -817,10 +824,11 @@ def classify(
                 text = built.stderr + built.stdout
                 code = diagnostic_code(text) or "no-code"
                 said = first_error_line(text) or f"exit {built.status}"
+                shape = internal_error_shape(text)
                 record(
                     "compile-error",
                     config,
-                    ["compile-error", code],
+                    ["compile-error", code, *([shape] if shape else [])],
                     f"rejected the program: {said}",
                     built,
                 )
@@ -1169,6 +1177,9 @@ def signature_regex(finding: Finding) -> str:
         # Each part anywhere in the output: the message precedes the
         # backtrace that names the frame.
         return "".join(rf"(?=[\s\S]*{part})" for part in wanted)
+    shape = internal_error_shape(finding.evidence)
+    if shape:
+        return message_pattern(shape)
     code = diagnostic_code(finding.evidence)
     return re.escape(f"[{code}]") if code else "error"
 
@@ -2241,6 +2252,20 @@ def self_test() -> int:
     check("a diagnostic is the compiler's", storage_full(outcomes["-O"].compile_step), False)
     check("its signature names the diagnostic", "B2020" in findings[0].human, True)
     check("its detail quotes the diagnostic", "error: x" in findings[0].detail, True)
+    ice = "badc: error: internal compiler error: ELF: data fixup: low-12 offset 0x2b not aligned to load/store size 8 [B9001] [internal-error]"
+    other = "case.c:3: error: internal compiler error: unexpected token [B9001] [internal-error]"
+    signatures = []
+    for said in (ice, ice.replace("0x2b", "0x4"), other):
+        outcomes["-O"] = Outcome(
+            "-O", Step([], 101, 0.1, "", said, False), None, None, "compile failed", []
+        )
+        found = classify(1, "x86_64", outcomes, "AA", Path("case.c"), 10)[0]
+        found.evidence = said
+        signatures.append((found.key, signature_regex(found)))
+    check("an internal error's signature keeps its message shape", signatures[0][0], signatures[1][0])
+    check("another internal error is another signature", signatures[0][0] != signatures[2][0], True)
+    check("a reduction keeps the internal error's message", bool(re.search(signatures[0][1], ice.replace("0x2b", "0x10"))), True)
+    check("a reduction does not take another internal error", bool(re.search(signatures[0][1], other)), False)
     outcomes["-O"] = Outcome(
         "-O",
         Step([], 0, 0.1, "", "", False),

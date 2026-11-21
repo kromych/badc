@@ -2957,14 +2957,23 @@ mod differential {
         h
     }
 
-    /// Assembler invocations to try in order: the native target first, then a
-    /// feature-maximal cross target for extension instructions (MTE, TME, CPA,
-    /// GCS) the native default rejects.
+    /// Assembler invocations to try in order: the native target first, then
+    /// cross targets with the extensions the native default rejects. An
+    /// assembler that does not know a feature name refuses its whole set, so
+    /// the newer names are a set of their own.
     const ARGSETS: &[&[&str]] = &[
         &["--target=arm64-apple-darwin"],
         &[
             "--target=aarch64-linux-gnu",
             "-march=armv9.5a+memtag+tme+cpa+gcs",
+        ],
+        &[
+            "--target=aarch64-linux-gnu",
+            "-march=armv9.5a+aes+sha3+sm4+sve2-aes+sve2-sm4+sve2-sha3+sve2-bitperm+f32mm+f64mm",
+        ],
+        &[
+            "--target=aarch64-linux-gnu",
+            "-march=armv9.5a+the+rcpc3+d128+lse128+lsui+ite",
         ],
     ];
 
@@ -3015,6 +3024,206 @@ mod differential {
         None
     }
 
+    /// The words of one assembler run over `lines`, one instruction per line;
+    /// `Err` holds the indices of the lines it rejected (empty when the run
+    /// failed without naming a line).
+    fn assemble_batch(lines: &[&str], args: &[&str]) -> Result<Vec<u32>, Vec<usize>> {
+        let mut src = String::from(".text\n");
+        for l in lines {
+            src.push_str(l);
+            src.push('\n');
+        }
+        let stem = alloc::format!("{:x}", hash(src.as_bytes()));
+        let base = crate::c5::tests::unique_temp_path("badc-a64b", &stem, "");
+        let (s, o) = (base.with_extension("s"), base.with_extension("o"));
+        std::fs::write(&s, &src).map_err(|_| Vec::new())?;
+        let out = Command::new("clang")
+            .args(args)
+            .arg("-c")
+            .arg(&s)
+            .arg("-o")
+            .arg(&o)
+            .output();
+        let _ = std::fs::remove_file(&s);
+        let out = out.map_err(|_| Vec::new())?;
+        if !out.status.success() {
+            // "<path>:<line>:<col>: error: ..."; line 1 is the `.text` directive.
+            let err = String::from_utf8_lossy(&out.stderr);
+            let mut rejected: Vec<usize> = err
+                .lines()
+                .filter(|l| l.contains(": error:"))
+                .filter_map(|l| l.split(':').nth(1)?.parse::<usize>().ok())
+                .filter_map(|n| n.checked_sub(2))
+                .filter(|&i| i < lines.len())
+                .collect();
+            rejected.dedup();
+            return Err(rejected);
+        }
+        let dis = Command::new("objdump").arg("-d").arg(&o).output();
+        let _ = std::fs::remove_file(&o);
+        let dis = dis.map_err(|_| Vec::new())?;
+        let text = String::from_utf8_lossy(&dis.stdout);
+        let mut words = Vec::new();
+        for line in text.lines() {
+            let Some(colon) = line.find(':') else {
+                continue;
+            };
+            let addr = line[..colon].trim();
+            let hexword: String = line[colon + 1..]
+                .trim_start()
+                .chars()
+                .take_while(|c| c.is_ascii_hexdigit())
+                .collect();
+            if hexword.len() == 8 && !addr.is_empty() && addr.bytes().all(|b| b.is_ascii_hexdigit())
+            {
+                words.push(u32::from_str_radix(&hexword, 16).map_err(|_| Vec::new())?);
+            }
+        }
+        Ok(words)
+    }
+
+    /// [`clang_word`] over many lines with one assembler run per argset and
+    /// pass: each pass drops the lines the previous one rejected. A `movprfx`
+    /// constrains the instruction after it, so it is assembled alone.
+    fn clang_words(txts: &[String]) -> Vec<Option<u32>> {
+        let mut out = alloc::vec![None; txts.len()];
+        let mut pending: Vec<usize> = Vec::new();
+        for (i, t) in txts.iter().enumerate() {
+            if t.starts_with("movprfx") {
+                out[i] = clang_word(t);
+            } else {
+                pending.push(i);
+            }
+        }
+        for args in ARGSETS {
+            let mut set = pending.clone();
+            while !set.is_empty() {
+                let lines: Vec<&str> = set.iter().map(|&i| txts[i].as_str()).collect();
+                match assemble_batch(&lines, args) {
+                    Ok(words) if words.len() == set.len() => {
+                        for (&i, w) in set.iter().zip(words) {
+                            out[i] = Some(w);
+                        }
+                        break;
+                    }
+                    Err(rejected) if !rejected.is_empty() => {
+                        let mut k = 0;
+                        set.retain(|_| {
+                            k += 1;
+                            !rejected.contains(&(k - 1))
+                        });
+                    }
+                    // A line that is not one word, or a run that names no
+                    // line: assemble each alone.
+                    _ => {
+                        for &i in &set {
+                            out[i] = clang_word_with(&txts[i], args);
+                        }
+                        break;
+                    }
+                }
+            }
+            pending.retain(|&i| out[i].is_none());
+        }
+        out
+    }
+
+    /// The `.T` suffix of an SVE element size log2.
+    fn sve_t(size: u8) -> char {
+        ['b', 'h', 's', 'd', 'q'][size as usize]
+    }
+
+    /// The assembler spelling of a VFP imm8 constant, `+-(16 + frac) / 16 *
+    /// 2^exp` with `exp` from the inverted-b:c:d exponent bits.
+    fn vfp_text(code: u8) -> String {
+        let cd = i32::from(code >> 4 & 3);
+        let exp = if code & 0x40 != 0 { cd - 3 } else { cd + 1 };
+        let v = f64::from(16 + (code & 15)) / 16.0 * 2f64.powi(exp);
+        alloc::format!("#{}{v:?}", if code & 0x80 != 0 { "-" } else { "" })
+    }
+
+    /// The element sizes `(a, b)` a form with element-sized slots is swept at:
+    /// its size field's allocated values, the sizes its agreement field
+    /// admits, or every size, the assembler deciding which exist.
+    fn form_sizes(f: &Form) -> Vec<(u8, u8)> {
+        if !f
+            .ops
+            .iter()
+            .any(|p| matches!(p, A64Op::Zt | A64Op::Pt | A64Op::ZtElem))
+        {
+            return alloc::vec![(0, 0)];
+        }
+        for fl in f.fields {
+            match *fl {
+                Field::SveSize { sizes, .. } => {
+                    return sizes
+                        .iter()
+                        .filter(|&&s| s != 0xFF)
+                        .map(|&s| (s & 15, s >> 4))
+                        .collect();
+                }
+                Field::SveSizeAgree { sizes, .. } => {
+                    return (0..5)
+                        .filter(|s| sizes >> s & 1 != 0)
+                        .map(|s| (s, s))
+                        .collect();
+                }
+                _ => {}
+            }
+        }
+        (0..4).map(|s| (s, s)).collect()
+    }
+
+    /// Each slot's element size log2 at the form sizes `(a, b)`.
+    fn slot_sizes(f: &Form, (sa, sb): (u8, u8)) -> Vec<u8> {
+        let b = f.fields.iter().find_map(|fl| match *fl {
+            Field::SveSize { b, .. } => Some(b),
+            _ => None,
+        });
+        f.ops
+            .iter()
+            .enumerate()
+            .map(|(i, p)| match *p {
+                A64Op::Zs(k)
+                | A64Op::Ps(k)
+                | A64Op::Fpr(k)
+                | A64Op::ZElem(k)
+                | A64Op::ZList(_, k)
+                | A64Op::ZMem(k)
+                | A64Op::ZMemReg(k, _) => k,
+                _ if b.is_some_and(|b| b >> i & 1 != 0) => sb,
+                _ => sa,
+            })
+            .collect()
+    }
+
+    /// The register number a slot takes from `regs`: a tied slot repeats the
+    /// slot it names, and a narrow register field limits the number.
+    fn slot_num(f: &Form, regs: &[u8; 4], i: usize) -> u8 {
+        let tied = f.fields.iter().find_map(|fl| match *fl {
+            Field::SameReg { op, first } if op as usize == i => Some(first as usize),
+            _ => None,
+        });
+        if let Some(first) = tied {
+            return slot_num(f, regs, first);
+        }
+        let mut n = regs[i % 4] + 4 * (i / 4) as u8;
+        for fl in f.fields {
+            match *fl {
+                Field::PLow { op, .. } if op as usize == i => n &= 7,
+                Field::ZLow { op, width, .. } if op as usize == i => n &= (1 << width) - 1,
+                _ => {}
+            }
+        }
+        if matches!(
+            f.ops[i],
+            A64Op::P | A64Op::Pt | A64Op::Ps(_) | A64Op::PgM | A64Op::PgZ | A64Op::PgMZ
+        ) {
+            n &= 15;
+        }
+        n
+    }
+
     fn xn(n: u8) -> Opnd {
         Opnd::Reg {
             num: n,
@@ -3048,7 +3257,19 @@ mod differential {
             | Field::Extend { op, .. }
             | Field::Cond { op, .. }
             | Field::SvePattern { op, .. }
-            | Field::SveMul { op, .. } => op as usize == idx,
+            | Field::SveMul { op, .. }
+            | Field::PredMerge { op, .. }
+            | Field::SveImm8 { op, .. }
+            | Field::SveShiftImm { op, .. }
+            | Field::SveLogicalImm { op, .. }
+            | Field::SveFpPair { op, .. }
+            | Field::VfpImm8 { op, .. }
+            | Field::SveIndex { op, .. }
+            | Field::SveDupIndex { op, .. }
+            | Field::SplitImm { op, .. }
+            | Field::SveMemVl { op, .. }
+            | Field::SveZMem { op, .. }
+            | Field::SveZMemReg { op, .. } => op as usize == idx,
             _ => false,
         })
     }
@@ -3068,9 +3289,29 @@ mod differential {
 
     /// Candidates for a non-register slot, derived from its field kind:
     /// rendered text plus the operand, `None` for an omitted optional shift.
-    fn slot_cands(f: &Form, idx: usize) -> Vec<Option<(String, Opnd)>> {
+    /// An index, a vector-base offset or an index extend is carried as an
+    /// `Imm` the register slot's rendering reads. `sz` is each slot's
+    /// element size log2.
+    fn slot_cands(f: &Form, idx: usize, sz: &[u8]) -> Vec<Option<(String, Opnd)>> {
         let is64 = matches!(f.ops.first(), Some(A64Op::X));
         let imm = |v: i64| Some((alloc::format!("#{v}"), Opnd::Imm(v)));
+        let fp = |code: u8| {
+            Some(if code == 0xFF {
+                (String::from("#0.0"), Opnd::Imm(0))
+            } else {
+                (vfp_text(code), Opnd::FpImm(code))
+            })
+        };
+        if f.fields
+            .iter()
+            .any(|fl| matches!(*fl, Field::SveImm8 { shift_op, .. } if shift_op as usize == idx))
+        {
+            return alloc::vec![
+                None,
+                Some((String::from("lsl #0"), Opnd::Lsl(0))),
+                Some((String::from("lsl #8"), Opnd::Lsl(8))),
+            ];
+        }
         // The add/sub-immediate shift slot is named by its value field, not by
         // a field of its own.
         if f.fields
@@ -3205,6 +3446,47 @@ mod differential {
                 Some((String::from("mul #16"), Opnd::SveMul(16))),
                 Some((String::from("mul #3"), Opnd::SveMul(3))),
             ],
+            Some(Field::PredMerge { .. }) => alloc::vec![imm(1), imm(0)],
+            Some(Field::SveImm8 { signed: true, .. }) => {
+                [-128i64, -1, 127, -256].iter().map(|&v| imm(v)).collect()
+            }
+            Some(Field::SveImm8 { .. }) => [0i64, 1, 255, 512].iter().map(|&v| imm(v)).collect(),
+            Some(Field::SveShiftImm { zop, left, .. }) => {
+                let es = 8i64 << sz[zop as usize];
+                let vs = if left { [0, 1, es - 1] } else { [1, 2, es] };
+                vs.iter().map(|&v| imm(v)).collect()
+            }
+            Some(Field::SveLogicalImm { .. }) => {
+                [1i64, 0xF0, 0x7E].iter().map(|&v| imm(v)).collect()
+            }
+            Some(Field::SveFpPair { zero, one, .. }) => alloc::vec![fp(zero), fp(one)],
+            Some(Field::VfpImm8 { .. }) => {
+                [0x70u8, 0x60, 0xF0, 0x7F].iter().map(|&c| fp(c)).collect()
+            }
+            Some(Field::SplitImm { lo_w, hi_w, .. } | Field::SveIndex { lo_w, hi_w, .. }) => {
+                [0i64, 1, (1 << (lo_w + hi_w)) - 1]
+                    .iter()
+                    .map(|&v| imm(v))
+                    .collect()
+            }
+            Some(Field::SveDupIndex { op, .. }) => [0i64, 1, (64 >> sz[op as usize]) - 1]
+                .iter()
+                .map(|&v| imm(v))
+                .collect(),
+            Some(Field::SveZMem { msz, .. }) => [0i64, 1 << msz, 31 << msz]
+                .iter()
+                .map(|&v| imm(v))
+                .collect(),
+            Some(Field::SveMemVl { scale, .. }) => {
+                let scale = i64::from(scale);
+                [0, -8 * scale, 7 * scale].iter().map(|&v| imm(v)).collect()
+            }
+            // The index modifier: 0 none, 1 `lsl`, 2 `uxtw`, 3 `sxtw`.
+            Some(Field::SveZMemReg { .. }) => match f.ops[idx] {
+                A64Op::ZMemReg(_, 0) => alloc::vec![imm(0)],
+                A64Op::ZMemReg(_, 1) => alloc::vec![imm(1)],
+                _ => alloc::vec![imm(2), imm(3)],
+            },
             _ => Vec::new(),
         }
     }
@@ -3283,213 +3565,357 @@ mod differential {
     }
 
     /// Sweep the catalog itself: synthesize operands for every form from its
-    /// operand pattern and require the encoded word to equal the assembler's.
-    /// Register numbers avoid 31, so no zr/sp alias re-canonicalization can
-    /// shift the assembler's word choice. `bad` (encoded, disagrees) and `gap`
-    /// (assembler accepts, encode refuses) both fail; `skip` counts forms the
-    /// local assemblers reject (extension spellings), reported per mnemonic.
+    /// operand pattern, at each element size it has, and require the encoded
+    /// word to equal the assembler's. Register numbers avoid 31, so no zr/sp
+    /// alias re-canonicalization can shift the assembler's word choice.
+    /// `bad` (encoded, disagrees) and `gap` (assembler accepts, encode
+    /// refuses) both fail, as does a form with a slot the sweep cannot
+    /// spell: an operand list short of the form's is no test of it. `skip`
+    /// counts cases the local assemblers reject; a mnemonic none of whose
+    /// cases assemble is reported.
     #[test]
     fn differential_sweep() {
         if !enabled() {
             return;
         }
+        type Case = (String, Vec<Opnd>, &'static str);
         let regsets: [[u8; 4]; 3] = [[1, 2, 3, 4], [9, 10, 11, 12], [20, 21, 22, 23]];
-        let mut cases: Vec<(String, Vec<Opnd>, &'static str)> = Vec::new();
-        let mut sp_cases: Vec<(String, Vec<Opnd>, &'static str)> = Vec::new();
+        let mut cases: Vec<Case> = Vec::new();
+        // An `sp` case with the text of the case it varies.
+        let mut sp_cases: Vec<(Case, String)> = Vec::new();
+        let mut unspelled: std::collections::BTreeSet<&'static str> = Default::default();
         for f in isa_a64_table::FORMS {
-            let cands: Vec<Vec<Option<(String, Opnd)>>> = f
-                .ops
-                .iter()
-                .enumerate()
-                .map(|(i, p)| match p {
-                    A64Op::X
-                    | A64Op::W
-                    | A64Op::RegAny
-                    | A64Op::Mem
-                    | A64Op::MemPre
-                    | A64Op::MemReg => Vec::new(),
-                    _ => slot_cands(f, i),
-                })
-                .collect();
-            let build = |regs: &[u8; 4], slot: usize, pick: usize, sp_slot: usize| {
-                let mut txt: Vec<String> = Vec::new();
-                let mut ops: Vec<Opnd> = Vec::new();
-                // The extended register's width follows the written extend.
-                let ext_is64 = f
+            for fsz in form_sizes(f) {
+                let sz = slot_sizes(f, fsz);
+                let cands: Vec<Vec<Option<(String, Opnd)>>> = f
                     .ops
                     .iter()
-                    .position(|p| matches!(p, A64Op::OptExt))
-                    .and_then(|e| cands[e].get(if e == slot { pick } else { 0 })?.as_ref())
-                    .is_some_and(|(_, o)| match o {
-                        Opnd::Extend { option, .. } => option & 3 == 3,
-                        _ => true, // `lsl` in an extended group is uxtx
-                    });
-                for (i, p) in f.ops.iter().enumerate() {
-                    match p {
-                        A64Op::X | A64Op::W | A64Op::RegAny => {
-                            let is64 = match p {
-                                A64Op::X => true,
-                                A64Op::W => false,
-                                _ => ext_is64,
-                            };
-                            let sp = i == sp_slot;
-                            // A second spelling of an earlier register slot
-                            // repeats its number.
-                            let num = f
-                                .fields
-                                .iter()
-                                .find_map(|fl| match *fl {
-                                    Field::SameReg { op, first } if op as usize == i => {
-                                        Some(regs[first as usize])
-                                    }
-                                    _ => None,
-                                })
-                                .unwrap_or(regs[i]);
-                            txt.push(match (sp, is64) {
-                                (true, true) => String::from("sp"),
-                                (true, false) => String::from("wsp"),
-                                (false, _) => {
-                                    alloc::format!("{}{}", if is64 { 'x' } else { 'w' }, num)
-                                }
-                            });
-                            ops.push(Opnd::Reg {
-                                num: if sp { 31 } else { num },
-                                is64,
-                                sp,
-                            });
-                        }
-                        A64Op::Mem => {
-                            let base = if i == sp_slot { 31 } else { regs[i] };
-                            let bt = if i == sp_slot {
-                                String::from("sp")
-                            } else {
-                                alloc::format!("x{}", regs[i])
-                            };
-                            let off = mem_off(f, i).unwrap_or(0);
-                            txt.push(if off == 0 {
-                                alloc::format!("[{bt}]")
-                            } else {
-                                alloc::format!("[{bt}, #{off}]")
-                            });
-                            ops.push(Opnd::Mem {
-                                base,
-                                off,
-                                pre: false,
-                            });
-                        }
-                        A64Op::MemPre => {
-                            let base = if i == sp_slot { 31 } else { regs[i] };
-                            let bt = if i == sp_slot {
-                                String::from("sp")
-                            } else {
-                                alloc::format!("x{}", regs[i])
-                            };
-                            let off = mem_off(f, i).unwrap_or(0);
-                            txt.push(alloc::format!("[{bt}, #{off}]!"));
-                            ops.push(Opnd::Mem {
-                                base,
-                                off,
-                                pre: true,
-                            });
-                        }
-                        // x7 is outside every regset, so the index never
-                        // collides with a base or data register.
-                        A64Op::MemReg => {
-                            let base = if i == sp_slot { 31 } else { regs[i] };
-                            let bt = if i == sp_slot {
-                                String::from("sp")
-                            } else {
-                                alloc::format!("x{}", regs[i])
-                            };
-                            txt.push(alloc::format!("[{bt}, x7]"));
-                            ops.push(Opnd::MemReg {
-                                base,
-                                index: 7,
-                                option: 0b011,
-                                shift: None,
-                            });
-                        }
-                        _ => {
-                            let c = cands[i].get(if i == slot { pick } else { 0 });
-                            if let Some(Some((t, o))) = c {
-                                txt.push(t.clone());
-                                ops.push(*o);
-                            }
-                        }
-                    }
-                }
-                let txt = if txt.is_empty() {
-                    String::from(f.mnemonic)
-                } else {
-                    alloc::format!("{} {}", f.mnemonic, txt.join(", "))
-                };
-                (txt, ops, f.mnemonic)
-            };
-            let has_regs = f
-                .ops
-                .iter()
-                .any(|p| matches!(p, A64Op::X | A64Op::W | A64Op::RegAny));
-            for regs in regsets.iter().take(if has_regs { 3 } else { 1 }) {
-                cases.push(build(regs, usize::MAX, 0, usize::MAX));
-            }
-            for (i, c) in cands.iter().enumerate() {
-                for pick in 1..c.len() {
-                    cases.push(build(&regsets[0], i, pick, usize::MAX));
-                }
-            }
-            // Every register and memory slot written as `sp`: the assembler
-            // and the encoder must agree on whether register 31 names the
-            // stack pointer there, and on the word when it does.
-            for (i, p) in f.ops.iter().enumerate() {
-                if matches!(
-                    p,
-                    A64Op::X
+                    .enumerate()
+                    .map(|(i, p)| match p {
+                        A64Op::X
                         | A64Op::W
                         | A64Op::RegAny
                         | A64Op::Mem
                         | A64Op::MemPre
-                        | A64Op::MemReg
-                ) {
-                    sp_cases.push(build(&regsets[0], usize::MAX, 0, i));
-                }
-            }
-            // Register-offset extend variants: every option, both S encodings.
-            if let Some(mi) = f.ops.iter().position(|p| matches!(p, A64Op::MemReg))
-                && let Some(sl2) = f.fields.iter().find_map(|fl| match *fl {
-                    Field::MemRegIdx { sl2, .. } => Some(sl2),
-                    _ => None,
-                })
-            {
-                let variants: [(String, u8, Option<u8>); 4] = [
-                    (alloc::format!("x7, lsl #{sl2}"), 0b011, Some(sl2)),
-                    (String::from("w7, uxtw"), 0b010, None),
-                    (alloc::format!("w7, sxtw #{sl2}"), 0b110, Some(sl2)),
-                    (String::from("x7, sxtx"), 0b111, None),
-                ];
-                for (itxt, option, shift) in variants {
-                    let (txt, mut ops, m) = build(&regsets[0], usize::MAX, 0, usize::MAX);
-                    let txt = txt.replace("x7]", &alloc::format!("{itxt}]"));
-                    ops[mi] = Opnd::MemReg {
-                        base: regsets[0][mi],
-                        index: 7,
-                        option,
-                        shift,
+                        | A64Op::MemReg => Vec::new(),
+                        _ => slot_cands(f, i, &sz),
+                    })
+                    .collect();
+                let build = |regs: &[u8; 4], slot: usize, pick: usize, sp_slot: usize| {
+                    let mut txt: Vec<String> = Vec::new();
+                    let mut ops: Vec<Opnd> = Vec::new();
+                    let cand = |i: usize| match cands[i].get(if i == slot { pick } else { 0 }) {
+                        Some(Some((t, o))) => Some((t.clone(), *o)),
+                        _ => None,
                     };
-                    cases.push((txt, ops, m));
+                    let carried = |i: usize| match cand(i) {
+                        Some((_, Opnd::Imm(v))) => Some(v),
+                        _ => None,
+                    };
+                    let base = |i: usize| {
+                        if i == sp_slot {
+                            (31, String::from("sp"))
+                        } else {
+                            (regs[i % 4], alloc::format!("x{}", regs[i % 4]))
+                        }
+                    };
+                    // The extended register's width follows the written extend.
+                    let ext_is64 = f
+                        .ops
+                        .iter()
+                        .position(|p| matches!(p, A64Op::OptExt))
+                        .and_then(|e| cands[e].get(if e == slot { pick } else { 0 })?.as_ref())
+                        .is_some_and(|(_, o)| match o {
+                            Opnd::Extend { option, .. } => option & 3 == 3,
+                            _ => true, // `lsl` in an extended group is uxtx
+                        });
+                    for (i, p) in f.ops.iter().enumerate() {
+                        let n = slot_num(f, regs, i);
+                        match *p {
+                            A64Op::X | A64Op::W | A64Op::RegAny => {
+                                let is64 = match p {
+                                    A64Op::X => true,
+                                    A64Op::W => false,
+                                    _ => ext_is64,
+                                };
+                                let sp = i == sp_slot;
+                                txt.push(match (sp, is64) {
+                                    (true, true) => String::from("sp"),
+                                    (true, false) => String::from("wsp"),
+                                    (false, _) => {
+                                        alloc::format!("{}{}", if is64 { 'x' } else { 'w' }, n)
+                                    }
+                                });
+                                ops.push(Opnd::Reg {
+                                    num: if sp { 31 } else { n },
+                                    is64,
+                                    sp,
+                                });
+                            }
+                            A64Op::Mem | A64Op::MemPre => {
+                                let pre = matches!(p, A64Op::MemPre);
+                                let (b, bt) = base(i);
+                                let off = mem_off(f, i).unwrap_or(0);
+                                txt.push(match (pre, off) {
+                                    (false, 0) => alloc::format!("[{bt}]"),
+                                    (false, _) => alloc::format!("[{bt}, #{off}]"),
+                                    (true, _) => alloc::format!("[{bt}, #{off}]!"),
+                                });
+                                ops.push(Opnd::Mem { base: b, off, pre });
+                            }
+                            // x7 is outside every regset, so the index never
+                            // collides with a base or data register. An SVE
+                            // index is shifted by its memory size.
+                            A64Op::MemReg => {
+                                let (b, bt) = base(i);
+                                let shift = f.fields.iter().find_map(|fl| match *fl {
+                                    Field::SveMemReg { op, msz, .. }
+                                        if op as usize == i && msz != 0 =>
+                                    {
+                                        Some(msz)
+                                    }
+                                    _ => None,
+                                });
+                                txt.push(match shift {
+                                    Some(s) => alloc::format!("[{bt}, x7, lsl #{s}]"),
+                                    None => alloc::format!("[{bt}, x7]"),
+                                });
+                                ops.push(Opnd::MemReg {
+                                    base: b,
+                                    index: 7,
+                                    option: 0b011,
+                                    shift,
+                                });
+                            }
+                            A64Op::Z | A64Op::Zt | A64Op::Zs(_) => {
+                                let size = (*p != A64Op::Z).then_some(sz[i]);
+                                txt.push(match size {
+                                    Some(s) => alloc::format!("z{n}.{}", sve_t(s)),
+                                    None => alloc::format!("z{n}"),
+                                });
+                                ops.push(Opnd::ZReg { num: n, size });
+                            }
+                            A64Op::P | A64Op::Pt | A64Op::Ps(_) => {
+                                let size = (*p != A64Op::P).then_some(sz[i]);
+                                txt.push(match size {
+                                    Some(s) => alloc::format!("p{n}.{}", sve_t(s)),
+                                    None => alloc::format!("p{n}"),
+                                });
+                                ops.push(Opnd::PReg { num: n, size });
+                            }
+                            A64Op::PgM | A64Op::PgZ | A64Op::PgMZ => {
+                                let merge = match p {
+                                    A64Op::PgM => true,
+                                    A64Op::PgZ => false,
+                                    _ => carried(i) != Some(0),
+                                };
+                                txt.push(alloc::format!("p{n}/{}", if merge { 'm' } else { 'z' }));
+                                ops.push(Opnd::PRegQ { num: n, merge });
+                            }
+                            A64Op::Fpr(k) => {
+                                txt.push(alloc::format!("{}{n}", sve_t(k)));
+                                ops.push(match k {
+                                    0 | 1 => Opnd::VScalar { num: n, size: k },
+                                    2 | 3 => Opnd::VReg {
+                                        num: n,
+                                        is_d: k == 3,
+                                    },
+                                    _ => Opnd::QReg(n),
+                                });
+                            }
+                            A64Op::ZList(count, k) => {
+                                let regs: Vec<String> = (0..count)
+                                    .map(|j| alloc::format!("z{}.{}", (n + j) % 32, sve_t(k)))
+                                    .collect();
+                                txt.push(alloc::format!("{{{}}}", regs.join(", ")));
+                                ops.push(Opnd::ZList {
+                                    first: n,
+                                    count,
+                                    size: k,
+                                });
+                            }
+                            A64Op::ZElem(_) | A64Op::ZtElem => {
+                                let index = carried(i).unwrap_or(0) as u8;
+                                txt.push(alloc::format!("z{n}.{}[{index}]", sve_t(sz[i])));
+                                ops.push(Opnd::ZElem {
+                                    num: n,
+                                    size: sz[i],
+                                    index,
+                                });
+                            }
+                            A64Op::ZMem(k) => {
+                                let off = carried(i).unwrap_or(0);
+                                txt.push(if off == 0 {
+                                    alloc::format!("[z{n}.{}]", sve_t(k))
+                                } else {
+                                    alloc::format!("[z{n}.{}, #{off}]", sve_t(k))
+                                });
+                                ops.push(Opnd::ZMem {
+                                    base: n,
+                                    size: k,
+                                    off,
+                                });
+                            }
+                            A64Op::ZMemReg(k, kind) => {
+                                let (b, bt) = base(i);
+                                let msz = f.fields.iter().find_map(|fl| match *fl {
+                                    Field::SveZMemReg { op, msz, .. } if op as usize == i => {
+                                        Some(msz)
+                                    }
+                                    _ => None,
+                                });
+                                let ext = carried(i).unwrap_or(0) as u8;
+                                let amount = if kind == 1 || kind == 3 { msz } else { None };
+                                let m = match (ext, amount) {
+                                    (0, _) => String::new(),
+                                    (1, Some(a)) => alloc::format!(", lsl #{a}"),
+                                    (e, a) => alloc::format!(
+                                        ", {}{}",
+                                        if e == 3 { "sxtw" } else { "uxtw" },
+                                        a.map_or(String::new(), |a| alloc::format!(" #{a}"))
+                                    ),
+                                };
+                                txt.push(alloc::format!("[{bt}, z7.{}{m}]", sve_t(k)));
+                                ops.push(Opnd::ZMemReg {
+                                    base: b,
+                                    index: 7,
+                                    size: k,
+                                    ext,
+                                    amount,
+                                });
+                            }
+                            A64Op::MemVl => {
+                                let (b, bt) = base(i);
+                                let off = carried(i).unwrap_or(0);
+                                txt.push(if off == 0 {
+                                    alloc::format!("[{bt}]")
+                                } else {
+                                    alloc::format!("[{bt}, #{off}, mul vl]")
+                                });
+                                ops.push(Opnd::MemVl { base: b, off });
+                            }
+                            A64Op::Zero => {
+                                txt.push(String::from("#0.0"));
+                                ops.push(Opnd::Imm(0));
+                            }
+                            A64Op::OptLsl
+                            | A64Op::OptShift
+                            | A64Op::OptExt
+                            | A64Op::OptPattern
+                            | A64Op::OptMul => {
+                                if let Some((t, o)) = cand(i) {
+                                    txt.push(t);
+                                    ops.push(o);
+                                }
+                            }
+                            _ => {
+                                let (t, o) = cand(i)?;
+                                txt.push(t);
+                                ops.push(o);
+                            }
+                        }
+                    }
+                    let txt = if txt.is_empty() {
+                        String::from(f.mnemonic)
+                    } else {
+                        alloc::format!("{} {}", f.mnemonic, txt.join(", "))
+                    };
+                    Some((txt, ops, f.mnemonic))
+                };
+                let Some(first) = build(&regsets[0], usize::MAX, 0, usize::MAX) else {
+                    unspelled.insert(f.mnemonic);
+                    continue;
+                };
+                let has_regs = f.ops.iter().any(|p| {
+                    !matches!(
+                        p,
+                        A64Op::Imm
+                            | A64Op::OptLsl
+                            | A64Op::OptShift
+                            | A64Op::OptExt
+                            | A64Op::Cond
+                            | A64Op::OptPattern
+                            | A64Op::OptMul
+                            | A64Op::FImm
+                            | A64Op::FImm8
+                            | A64Op::Zero
+                    )
+                });
+                let first_txt = first.0.clone();
+                cases.push(first);
+                for regs in regsets.iter().skip(1).take(if has_regs { 2 } else { 0 }) {
+                    cases.extend(build(regs, usize::MAX, 0, usize::MAX));
+                }
+                for (i, c) in cands.iter().enumerate() {
+                    for pick in 1..c.len() {
+                        cases.extend(build(&regsets[0], i, pick, usize::MAX));
+                    }
+                }
+                // Every register and memory slot written as `sp`: the assembler
+                // and the encoder must agree on whether register 31 names the
+                // stack pointer there, and on the word when it does.
+                for (i, p) in f.ops.iter().enumerate() {
+                    if matches!(
+                        p,
+                        A64Op::X
+                            | A64Op::W
+                            | A64Op::RegAny
+                            | A64Op::Mem
+                            | A64Op::MemPre
+                            | A64Op::MemReg
+                            | A64Op::MemVl
+                            | A64Op::ZMemReg(..)
+                    ) && let Some(c) = build(&regsets[0], usize::MAX, 0, i)
+                    {
+                        sp_cases.push((c, first_txt.clone()));
+                    }
+                }
+                // Register-offset extend variants: every option, both S encodings.
+                if let Some(mi) = f.ops.iter().position(|p| matches!(p, A64Op::MemReg))
+                    && let Some(sl2) = f.fields.iter().find_map(|fl| match *fl {
+                        Field::MemRegIdx { sl2, .. } => Some(sl2),
+                        _ => None,
+                    })
+                {
+                    let variants: [(String, u8, Option<u8>); 4] = [
+                        (alloc::format!("x7, lsl #{sl2}"), 0b011, Some(sl2)),
+                        (String::from("w7, uxtw"), 0b010, None),
+                        (alloc::format!("w7, sxtw #{sl2}"), 0b110, Some(sl2)),
+                        (String::from("x7, sxtx"), 0b111, None),
+                    ];
+                    for (itxt, option, shift) in variants {
+                        let (txt, mut ops, m) = build(&regsets[0], usize::MAX, 0, usize::MAX)
+                            .expect("the form spelled above");
+                        let txt = txt.replace("x7]", &alloc::format!("{itxt}]"));
+                        ops[mi] = Opnd::MemReg {
+                            base: regsets[0][mi],
+                            index: 7,
+                            option,
+                            shift,
+                        };
+                        cases.push((txt, ops, m));
+                    }
                 }
             }
         }
+        cases.sort_by(|a, b| a.0.cmp(&b.0));
+        cases.dedup_by(|a, b| a.0 == b.0);
 
         let (mut ok, mut bad, mut gap, mut skip) = (0, 0, 0, 0);
         let mut fails: Vec<String> = Vec::new();
         let mut gaps: Vec<String> = Vec::new();
-        let mut skipped: std::collections::BTreeSet<&'static str> = Default::default();
-        for (txt, ops, m) in &cases {
-            let Some(want) = clang_word(txt) else {
+        let mut accepted: std::collections::BTreeSet<&str> = Default::default();
+        let mut rejected: std::collections::BTreeSet<&'static str> = Default::default();
+        let mut assembled: std::collections::BTreeSet<String> = Default::default();
+        let txts: Vec<String> = cases.iter().map(|c| c.0.clone()).collect();
+        for ((txt, ops, m), want) in cases.iter().zip(clang_words(&txts)) {
+            let Some(want) = want else {
                 skip += 1;
-                skipped.insert(m);
+                rejected.insert(m);
                 continue;
             };
+            accepted.insert(m);
+            assembled.insert(txt.clone());
             match encode(m, ops) {
                 Ok(got) if got == want => ok += 1,
                 Ok(got) => {
@@ -3508,13 +3934,13 @@ mod differential {
         }
         // An `sp` operand must encode exactly where the assembler encodes one
         // and be rejected exactly where the assembler rejects it; a silently
-        // zero-register encoding is the failure this guards.
+        // zero-register encoding is the failure this guards. A case whose
+        // register-numbered spelling the assembler rejects says nothing.
+        sp_cases.retain(|(_, of)| assembled.contains(of));
         let (mut sp_ok, mut sp_bad) = (0, 0);
-        for (txt, ops, m) in &sp_cases {
-            if skipped.contains(m) {
-                continue;
-            }
-            match (clang_word(txt), encode(m, ops)) {
+        let sp_txts: Vec<String> = sp_cases.iter().map(|((t, ..), _)| t.clone()).collect();
+        for (((txt, ops, m), _), want) in sp_cases.iter().zip(clang_words(&sp_txts)) {
+            match (want, encode(m, ops)) {
                 (Some(want), Ok(got)) if got == want => sp_ok += 1,
                 (None, Err(_)) => sp_ok += 1,
                 (want, got) => {
@@ -3548,10 +3974,15 @@ mod differential {
             cases.len(),
             sp_cases.len()
         );
-        if !skipped.is_empty() {
-            let names: Vec<&str> = skipped.into_iter().collect();
-            std::eprintln!("  skipped (assembler rejects): {}", names.join(" "));
+        let never: Vec<&str> = rejected.difference(&accepted).copied().collect();
+        if !never.is_empty() {
+            std::eprintln!("  never assembled (assembler rejects): {}", never.join(" "));
         }
+        let unspelled: Vec<&str> = unspelled.into_iter().collect();
+        assert!(
+            unspelled.is_empty(),
+            "forms with an operand the sweep cannot spell: {unspelled:?}"
+        );
         assert_eq!(bad, 0, "A64 catalog words disagree with the assembler");
         assert_eq!(sp_bad, 0, "sp operands disagree with the assembler");
         assert_eq!(gap, 0, "synthesized catalog operands failed to encode");

@@ -84,14 +84,14 @@ pub(super) fn embedded_header(
     from_bundled: bool,
 ) -> Option<&'static str> {
     let &(_, ts, body) = registry_entry(name)?;
-    (from_bundled || ts.contains(target)).then_some(body)
+    (EMBEDDED && (from_bundled || ts.contains(target))).then_some(body)
 }
 
 /// Whether the registry carries `name` and does not serve it on `target`:
 /// the program's `#include` of it is not part of the compiler's set
 /// there, whichever header root holds a copy.
 pub(super) fn withheld(name: &str, target: Target) -> bool {
-    registry_entry(name).is_some_and(|&(_, ts, _)| !ts.contains(target))
+    EMBEDDED && registry_entry(name).is_some_and(|&(_, ts, _)| !ts.contains(target))
 }
 
 /// The headers served on targets whose reference toolchain lacks them,
@@ -200,12 +200,13 @@ pub(super) fn compiler_header(name: &str) -> bool {
 /// `--dump-headers` and `--install` can write the registry out, for every
 /// target, without reaching into the preprocessor.
 pub fn embedded_headers() -> &'static [(&'static str, TargetSet, &'static str)] {
-    EMBEDDED_HEADERS
+    if EMBEDDED { EMBEDDED_HEADERS } else { &[] }
 }
 
 /// A registry entry: the name, the targets it is served on and the body
 /// of `libc/include/<file>`, `<file>` being the name unless given, or of
 /// `libc/compiler/include/<name>` for one of the compiler's own headers.
+#[cfg(feature = "headers")]
 macro_rules! header {
     ($name:literal, $targets:expr) => {
         header!($name => $name, $targets)
@@ -217,6 +218,22 @@ macro_rules! header {
         ($name, $targets, include_str!(concat!("../../libc/include/", $file)))
     };
 }
+
+/// Without the `headers` feature the registry keeps the names and targets
+/// and no body: no header is embedded, and an `#include` searches the
+/// include path alone.
+#[cfg(not(feature = "headers"))]
+macro_rules! header {
+    ($name:literal, $targets:expr $(, compiler)?) => {
+        ($name, $targets, "")
+    };
+    ($name:literal => $file:literal, $targets:expr) => {
+        ($name, $targets, "")
+    };
+}
+
+/// Whether the header bodies are embedded.
+const EMBEDDED: bool = cfg!(feature = "headers");
 
 /// Every header the registry knows about, with the targets it is served
 /// on.

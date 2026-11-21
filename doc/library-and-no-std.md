@@ -35,8 +35,9 @@ driver prints it, and its `code` names a row of the catalog that
 | feature | adds |
 |---|---|
 | `std` (default) | the lexer, preprocessor, compiler, optimizer, interpreter and in-process JIT; the `StdHost` adapter for files, environment and standard streams |
+| `headers` | the bundled C library and compiler headers; without it an `#include` searches the include path alone |
 | `native-emit` | `emit_native` and the Mach-O, ELF and PE writers; requires `std` |
-| `full` | `native-emit`, plus objects, archives and the linker; the `badc` binary requires it |
+| `full` | `native-emit` and `headers`, plus objects, archives and the linker; the `badc` binary requires it |
 | `codegen_test` | register-allocator limits for tests (`BADC_MAX_GPR`, `BADC_MAX_FPR`) |
 
 ## `no_std`

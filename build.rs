@@ -298,6 +298,14 @@ fn emit_version_minimums() -> String {
 fn emit_binding_to_header_index() {
     let out_dir = env::var("OUT_DIR").expect("OUT_DIR set by cargo");
     let dest = Path::new(&out_dir).join("binding_to_header.rs");
+    // Without the `headers` feature no header is embedded, and no name
+    // resolves to one.
+    if env::var_os("CARGO_FEATURE_HEADERS").is_none() {
+        let empty = "pub(super) const BINDING_TO_HEADER: &[(&str, &[&str])] = &[];\n\
+                     pub(super) const HEADER_INCLUDERS: &[(&str, &[&str])] = &[];\n";
+        fs::write(&dest, empty).expect("write binding index");
+        return;
+    }
     let mut headers: Vec<(PathBuf, String)> = Vec::new();
     for root in ["libc/include", "libc/compiler/include"] {
         let root = Path::new(root);

@@ -880,8 +880,8 @@ impl<'a> Walker<'a> {
 
     /// Read-modify-write a 128-bit object in place, evaluating the
     /// lvalue once (C99 6.5.2.4p2 / 6.5.16.2p3). `update` derives the
-    /// new value from the old one. With `keep_old` the prior value is
-    /// copied out before the update and is the result, as the postfix
+    /// new value from the old one. Yielding the old value, the prior value
+    /// is copied out before the update and is the result, as the postfix
     /// operators require; otherwise the result is the stored value --
     /// the object's address for a whole object, and a fresh copy of the
     /// value for a bitfield.
@@ -889,7 +889,7 @@ impl<'a> Walker<'a> {
         &mut self,
         b: &mut SsaBuilder,
         lvalue: ExprId,
-        keep_old: bool,
+        yields: crate::c5::irgen::Yields,
         update: impl FnOnce(&mut Self, &mut SsaBuilder, Halves) -> Result<Halves, WalkError>,
     ) -> Result<ValueId, WalkError> {
         // The 128-bit halves are accessed through the generic space,
@@ -905,7 +905,8 @@ impl<'a> Walker<'a> {
         if let Some((unit, bf, align)) = self.bitfield_place(b, lvalue)? {
             let vol = self.expr_is_volatile(lvalue);
             let old = extract_halves(b, unit, bf, AsmSeg::None, vol, align);
-            let saved = keep_old.then(|| self.int128_materialize(b, old));
+            let saved =
+                (yields == crate::c5::irgen::Yields::Old).then(|| self.int128_materialize(b, old));
             let new = update(self, b, old)?;
             let masked = Self::int128_and_imm(b, new, bitfield_mask_halves(bf.bit_width, 0));
             insert_halves(b, unit, bf, masked, AsmSeg::None, vol, align);
@@ -916,7 +917,8 @@ impl<'a> Walker<'a> {
         let addr = self.walk_expr_lvalue(b, lvalue)?;
         let align = self.int128_align(lvalue);
         let old = Self::int128_load_at(b, addr, false, align);
-        let saved = keep_old.then(|| self.int128_materialize(b, old));
+        let saved =
+            (yields == crate::c5::irgen::Yields::Old).then(|| self.int128_materialize(b, old));
         let new = update(self, b, old)?;
         Self::int128_store_at(b, addr, new, false, align);
         Ok(saved.unwrap_or(addr))
@@ -930,9 +932,9 @@ impl<'a> Walker<'a> {
         b: &mut SsaBuilder,
         lvalue: ExprId,
         by: i64,
-        postfix: bool,
+        yields: crate::c5::irgen::Yields,
     ) -> Result<ValueId, WalkError> {
-        self.int128_rmw(b, lvalue, postfix, |_, b, old| {
+        self.int128_rmw(b, lvalue, yields, |_, b, old| {
             let lo = b.imm(by);
             let step = (lo, b.imm(by >> 63));
             Ok(Self::int128_add(b, old, step))
@@ -952,7 +954,7 @@ impl<'a> Walker<'a> {
         op_ty: i64,
     ) -> Result<ValueId, WalkError> {
         let signed = (ty & UNSIGNED_BIT) == 0;
-        self.int128_rmw(b, lhs, false, |this, b, a| {
+        self.int128_rmw(b, lhs, crate::c5::irgen::Yields::New, |this, b, a| {
             if !is_floating_scalar(op_ty) {
                 return this.int128_binary_pair(b, op, a, lhs, rhs);
             }

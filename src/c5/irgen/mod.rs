@@ -48,6 +48,15 @@ mod types;
 mod vector;
 
 pub(crate) use function::walk_function;
+
+/// Which value a read-modify-write expression yields: the object's value
+/// before the update (postfix `++` and `--`), or after it (the prefix
+/// forms and compound assignment).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Yields {
+    Old,
+    New,
+}
 pub(crate) use types::fold_const_int_binop;
 #[cfg(test)]
 pub(crate) use types::fold_int_binop;

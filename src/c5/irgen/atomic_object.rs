@@ -688,7 +688,7 @@ impl<'a> Walker<'a> {
         lvalue: ExprId,
         by: i64,
         ty: i64,
-        post: bool,
+        yields: crate::c5::irgen::Yields,
     ) -> Result<ValueId, WalkError> {
         let value_ty = non_atomic_ty(ty);
         let addr = self.atomic_lvalue_addr(b, lvalue, ty)?;
@@ -711,7 +711,10 @@ impl<'a> Walker<'a> {
                 })
             })?
         };
-        Ok(if post { old } else { new })
+        Ok(match yields {
+            crate::c5::irgen::Yields::Old => old,
+            crate::c5::irgen::Yields::New => new,
+        })
     }
 
     /// The instruction that performs `op` in place: its truncation is the

@@ -965,15 +965,15 @@ impl<'a> Walker<'a> {
         lvalue: ExprId,
         by: i64,
         ty: i64,
-        (post, nsw): (bool, bool),
+        (yields, nsw): (crate::c5::irgen::Yields, bool),
         check: Option<crate::c5::ast::SanitizeCheck>,
     ) -> Result<ValueId, WalkError> {
         let lvalue_ty = crate::c5::ast::expr_ty(self.ast.expr(lvalue)).unwrap_or(ty);
         if is_atomic_object_ty(lvalue_ty) {
-            return self.walk_atomic_inc(b, lvalue, by, lvalue_ty, post);
+            return self.walk_atomic_inc(b, lvalue, by, lvalue_ty, yields);
         }
         if self.is_int128_value_ty(ty) {
-            return self.walk_int128_inc(b, lvalue, by, post);
+            return self.walk_int128_inc(b, lvalue, by, yields);
         }
         let RmwOpen {
             place,
@@ -1000,10 +1000,13 @@ impl<'a> Walker<'a> {
         } = place
         {
             let stored = self.store_into_bitfield(b, addr, bf, stepped, seg, vol, align);
-            return Ok(if post { old } else { stored });
+            return Ok(match yields {
+                crate::c5::irgen::Yields::Old => old,
+                crate::c5::irgen::Yields::New => stored,
+            });
         }
         place.store_marked(b, stepped, store_kind, vol, nsw);
-        if post {
+        if yields == crate::c5::irgen::Yields::Old {
             return Ok(old);
         }
         // A sub-64-bit lvalue reloads through `kind`, so a surrounding

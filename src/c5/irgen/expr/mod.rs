@@ -16,6 +16,7 @@ use super::types::{
 use super::*;
 use crate::c5::ast::expr_ty;
 use crate::c5::ir::{imm_safe_binop, is_comparison_op};
+use crate::c5::irgen::Yields;
 use postfix::MemberRef;
 
 impl<'a> Walker<'a> {
@@ -130,7 +131,7 @@ impl<'a> Walker<'a> {
                 nsw,
             } => {
                 let check = self.ast.checks.get(&id).copied();
-                self.walk_inc(b, *lvalue, *by, *ty, (false, *nsw), check)
+                self.walk_inc(b, *lvalue, *by, *ty, (Yields::New, *nsw), check)
             }
             Expr::PostInc {
                 lvalue,
@@ -139,7 +140,7 @@ impl<'a> Walker<'a> {
                 nsw,
             } => {
                 let check = self.ast.checks.get(&id).copied();
-                self.walk_inc(b, *lvalue, *by, *ty, (true, *nsw), check)
+                self.walk_inc(b, *lvalue, *by, *ty, (Yields::Old, *nsw), check)
             }
             Expr::Sizeof(s) => Ok(b.imm(s.size_bytes)),
             // C99 6.3.2.1p3: a VLA lvalue decays to a pointer to its

@@ -2097,9 +2097,16 @@ pub(super) fn emit_flag_step(
 /// flags: the comparison's answer, or the step's own zero test.
 pub(super) fn flag_step_cc(
     steps: &[Option<FlagStep>],
+    block: &super::super::ir::Block,
     cond: super::super::ir::ValueId,
     negate: bool,
 ) -> Option<Cc> {
+    // [`flag_steps`] vouches for the flags at the branch ending the step's
+    // own block only; a branch of another block reading the same value
+    // follows code that may have set them.
+    if !block.inst_range.contains(&cond) {
+        return None;
+    }
     let cc = match steps.get(cond as usize).copied().flatten()? {
         FlagStep::Answered(cc) => cc,
         FlagStep::Sets { .. } => Cc::Ne,

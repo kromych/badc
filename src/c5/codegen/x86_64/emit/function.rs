@@ -1249,7 +1249,9 @@ impl FnEmit<'_, '_> {
                     negate,
                 } => (taken, other, negate),
             };
-        let stepped = flag_step_cc(&self.flag_steps, cond, negate).map(FusedBranch::Jcc);
+        let owner_block = &func.blocks[owner];
+        let stepped =
+            flag_step_cc(&self.flag_steps, owner_block, cond, negate).map(FusedBranch::Jcc);
         if let Some(fused) = stepped.or_else(|| fused_branch_cc(func, alloc, cond, negate)) {
             let first = self.open_branch_group(false);
             emit_fused_branch(

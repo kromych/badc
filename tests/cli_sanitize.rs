@@ -132,3 +132,63 @@ fn a_check_badc_does_not_implement_is_refused() {
         "{err}"
     );
 }
+
+const FORMS: &str = "#include <limits.h>
+#include <stdio.h>
+int main(int argc, char **argv) {
+    (void)argv;
+    int a = INT_MAX - 1 + argc;
+    a += argc;
+    int b = INT_MAX;
+    b++;
+    int c = INT_MIN + argc - 1;
+    c = -c;
+    long long d = LLONG_MIN + argc - 1;
+    d--;
+    int e = INT_MAX / 2 + argc;
+    e *= 2;
+    printf(\"%d %d %d %lld %d\\n\", a, b, c, d, e);
+    return 0;
+}
+";
+
+/// A compound assignment, `++`, `--` and unary `-` are checked as the
+/// binary operators are, each at its operator.
+#[test]
+fn compound_assignment_increment_and_negation_are_checked() {
+    let dir = TempDir::new("badc-sanitize-forms");
+    let src = dir.join("overflow.c");
+    std::fs::write(&src, FORMS).unwrap();
+    for opt in ["-O0", "-O"] {
+        let exe = dir.join(format!("forms{opt}"));
+        let built = Command::new(env!("CARGO_BIN_EXE_badc"))
+            .args(["-q", opt, "-fsanitize=signed-integer-overflow", "-o"])
+            .arg(&exe)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(
+            built.status.success(),
+            "{}",
+            String::from_utf8_lossy(&built.stderr)
+        );
+        let o = run(&exe, &[]);
+        assert!(o.status.success(), "{opt}: {o:?}");
+        assert_eq!(
+            reports(&o),
+            [
+                "6:7: runtime error: signed integer overflow: 2147483647 + 1 cannot be \
+                 represented in type 'int'",
+                "8:6: runtime error: signed integer overflow: 2147483647 + 1 cannot be \
+                 represented in type 'int'",
+                "10:9: runtime error: negation of -2147483648 cannot be represented in type \
+                 'int'; cast to an unsigned type to negate this value to itself",
+                "12:6: runtime error: signed integer overflow: -9223372036854775808 - 1 cannot \
+                 be represented in type 'long long'",
+                "14:7: runtime error: signed integer overflow: 1073741824 * 2 cannot be \
+                 represented in type 'int'",
+            ],
+            "{opt}"
+        );
+    }
+}

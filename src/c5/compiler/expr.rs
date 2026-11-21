@@ -4320,6 +4320,7 @@ impl Compiler {
     }
 
     fn parse_unary_minus(&mut self) -> Result<(), C5Error> {
+        let at = self.lex.position();
         self.next()?;
         // `-<integer constant>` folds; a floating constant does not, its
         // negation applies to the f64 bits.
@@ -4352,10 +4353,13 @@ impl Compiler {
                 // C99 6.5.3.3p3: the result has the promoted operand type.
                 self.ty = integer_promote(self.ty);
                 self.ast_neg();
+                self.operator_at = at;
+                let (acc, ty) = (self.ast_acc, self.ty);
+                let checked = acc.is_some_and(|id| self.sanitize_arith(id, None, ty));
                 // Negating the type minimum overflows the width, so a 32-bit
                 // result is renormalized for a later 64-bit read.
                 if self.size_of_type(self.ty) == 4 {
-                    self.renormalize_overflow(self.ty);
+                    self.renormalize(self.ty, !self.wrapv && !checked);
                 }
             }
         }
@@ -4365,8 +4369,10 @@ impl Compiler {
     /// C99 6.5.3.1: prefix `++` / `--`.
     fn parse_prefix_inc_dec(&mut self) -> Result<(), C5Error> {
         let is_inc = self.lex.tk == Token::Inc;
+        let at = self.lex.position();
         self.next()?;
         self.expr(Token::Inc as i64)?;
+        self.operator_at = at;
         self.require_modifiable(self.ty, if is_inc { "increment" } else { "decrement" })?;
         if let Some((lvalue, ty)) = self.direct_inc_lvalue() {
             return self.emit_direct_inc_dec(lvalue, ty, is_inc, false);
@@ -4983,8 +4989,10 @@ impl Compiler {
         let lhs_node = compound_lhs_ast.ok_or_else(|| {
             self.compile_err(Code::INVALID_OPERANDS, "bad lvalue in compound assignment")
         })?;
+        let at = self.lex.position();
         self.next()?;
         self.expr(Token::Assign as i64)?;
+        self.operator_at = at;
         let (bop, op_ty) = self.compound_assign_operation(binop, lhs_ty, false)?;
         let rhs_node = self.ast_acc.ok_or_else(|| {
             self.compile_err(Code::INVALID_OPERANDS, "bad rhs in compound assignment")
@@ -5043,6 +5051,7 @@ impl Compiler {
         binop: i64,
         compound_lhs_ast: Option<super::super::ast::ExprId>,
     ) -> Result<(), C5Error> {
+        let op_at = self.lex.position();
         self.next()?;
         let lhs_fn_ptr = self.value_is_function_pointer();
         self.rewrite_trailing_load_as_psh().ok_or_else(|| {
@@ -5077,6 +5086,7 @@ impl Compiler {
             let nsw = self.overflow_undefined(bop, op_ty)
                 && self.overflow_undefined(bop, lhs_ty)
                 && self.size_of_type(op_ty) == self.size_of_type(lhs_ty);
+            self.operator_at = op_at;
             self.ast_emit_compound_assign(bop, lhs, rhs, lhs_ty, op_ty, nsw);
         }
         Ok(())
@@ -5892,6 +5902,7 @@ impl Compiler {
             );
             self.ast_acc = Some(id);
         } else if let Some(lvalue) = lvalue {
+            self.operator_at = self.lex.position();
             self.ast_emit_post_inc(lvalue, if is_inc { step } else { -step }, ty);
         }
         self.next()

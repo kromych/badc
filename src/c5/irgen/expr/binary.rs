@@ -533,11 +533,10 @@ impl<'a> Walker<'a> {
         &mut self,
         b: &mut SsaBuilder,
         op: BinOp,
-        lhs: ExprId,
-        rhs: ExprId,
-        ty: i64,
-        op_ty: i64,
+        (lhs, rhs): (ExprId, ExprId),
+        (ty, op_ty): (i64, i64),
         nsw: bool,
+        check: Option<crate::c5::ast::SanitizeCheck>,
     ) -> Result<ValueId, WalkError> {
         let lhs_ty = expr_ty(self.ast.expr(lhs)).unwrap_or(ty);
         if is_atomic_object_ty(lhs_ty) {
@@ -567,6 +566,17 @@ impl<'a> Walker<'a> {
             let lv = self.convert_scalar_value(b, old, ty, op_ty);
             let res = self.walk_fp_operation(b, op, lv, rhs, op_ty)?;
             self.convert_scalar_value(b, res, op_ty, store_ty)
+        } else if let Some(check) = check {
+            // The checked operation runs in `op_ty`, both operands
+            // converted to it; the store narrows the result to `ty`.
+            let lv = self.convert_scalar_value(b, old, ty, op_ty);
+            let rhs_ty = expr_ty(self.ast.expr(rhs)).unwrap_or(op_ty);
+            let rv = self.walk_expr_rvalue(b, rhs)?;
+            let rv = self.convert_scalar_value(b, rv, rhs_ty, op_ty);
+            let raw = b.binop(op, lv, rv);
+            let flag = self.overflow_flag(b, op, (lv, rv), raw, op_ty);
+            self.report_failed_check(b, check, flag, &[lv, rv]);
+            raw
         } else {
             self.walk_int_binop(b, op, old, lhs, rhs, ty)?
         };

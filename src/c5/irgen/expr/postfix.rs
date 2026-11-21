@@ -965,8 +965,8 @@ impl<'a> Walker<'a> {
         lvalue: ExprId,
         by: i64,
         ty: i64,
-        post: bool,
-        nsw: bool,
+        (post, nsw): (bool, bool),
+        check: Option<crate::c5::ast::SanitizeCheck>,
     ) -> Result<ValueId, WalkError> {
         let lvalue_ty = crate::c5::ast::expr_ty(self.ast.expr(lvalue)).unwrap_or(ty);
         if is_atomic_object_ty(lvalue_ty) {
@@ -982,6 +982,14 @@ impl<'a> Walker<'a> {
             vol,
             old,
         } = self.rmw_open(b, lvalue, ty)?;
+        // A decrement reports `x - 1`, which its handler words.
+        if let Some(check) = check {
+            let step = b.imm(by);
+            let raw = b.binop(BinOp::Add, old, step);
+            let flag = self.overflow_flag(b, BinOp::Add, (old, step), raw, ty);
+            let shown = b.imm(by.abs());
+            self.report_failed_check(b, check, flag, &[old, shown]);
+        }
         let stepped = self.increment_value(b, old, by, ty);
         // C99 6.5.3.1p2: a bit-field's new value is the one it now holds.
         if let RmwPlace::Bitfield {

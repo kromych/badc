@@ -8,7 +8,7 @@ use alloc::string::String;
 
 use super::Compiler;
 use super::types::{is_bool_ty, is_integer_scalar_ty, is_unsigned_ty};
-use crate::c5::ast::SanitizeCheck;
+use crate::c5::ast::{ExprId, SanitizeCheck};
 use crate::c5::ir::BinOp;
 use crate::c5::program::DataReloc;
 use crate::c5::token::Token;
@@ -92,6 +92,21 @@ impl Compiler {
     /// computed in the common type `ty`, under `-fsanitize=
     /// signed-integer-overflow`; whether a check was attached.
     pub(super) fn sanitize_overflow(&mut self, ty: i64) -> bool {
+        let Some(id) = self.ast_acc else {
+            return false;
+        };
+        let op = match self.ast.expr(id) {
+            crate::c5::ast::Expr::Binary { op, .. } => Some(*op),
+            _ => return false,
+        };
+        self.sanitize_arith(id, op, ty)
+    }
+
+    /// Check the signed operation at node `id` -- `op` (`+`, `-`, `*`), or
+    /// a negation for `None` -- computed in `ty`, under
+    /// `-fsanitize=signed-integer-overflow`; whether a check was attached.
+    /// The operator is the last one [`Self::operator_at`] recorded.
+    pub(super) fn sanitize_arith(&mut self, id: ExprId, op: Option<BinOp>, ty: i64) -> bool {
         let check = Check::SignedIntegerOverflow;
         if !self.sanitize.runs(check)
             || !is_integer_scalar_ty(ty)
@@ -101,18 +116,17 @@ impl Compiler {
         {
             return false;
         }
-        let Some(id) = self.ast_acc else {
-            return false;
-        };
-        let handler = match self.ast.expr(id) {
-            crate::c5::ast::Expr::Binary { op: BinOp::Add, .. } => "__ubsan_handle_add_overflow",
-            crate::c5::ast::Expr::Binary { op: BinOp::Sub, .. } => "__ubsan_handle_sub_overflow",
-            crate::c5::ast::Expr::Binary { op: BinOp::Mul, .. } => "__ubsan_handle_mul_overflow",
+        let handler = match op {
+            Some(BinOp::Add) => "__ubsan_handle_add_overflow",
+            Some(BinOp::Sub) => "__ubsan_handle_sub_overflow",
+            Some(BinOp::Mul) => "__ubsan_handle_mul_overflow",
+            None => "__ubsan_handle_negate_overflow",
             _ => return false,
         };
         let types = [self.ubsan_type(ty)];
         let data = self.ubsan_site(&types);
-        let handler = self.ubsan_handler(check, handler);
+        let values = if op.is_some() { 2 } else { 1 };
+        let handler = self.ubsan_handler(check, handler, values);
         self.ast.checks.insert(
             id,
             SanitizeCheck {
@@ -124,19 +138,24 @@ impl Compiler {
         true
     }
 
-    /// The handler `name` declared for `check`'s recovery, or `None` where
-    /// the check traps.
-    fn ubsan_handler(&mut self, check: Check, name: &str) -> Option<u32> {
+    /// The handler `name`, taking the site data and `values` operands,
+    /// declared for `check`'s recovery, or `None` where the check traps.
+    fn ubsan_handler(&mut self, check: Check, name: &str, values: usize) -> Option<u32> {
         if self.sanitize.traps(check) {
             return None;
         }
+        let proto = match values {
+            1 => "void(void *, void *)",
+            _ => "void(void *, void *, void *)",
+        };
         let (name, proto) = if self.sanitize.recovers(check) {
-            (String::from(name), "void(void *, void *, void *)")
+            (String::from(name), proto)
         } else {
-            (
-                alloc::format!("{name}_abort"),
-                "_Noreturn void(void *, void *, void *)",
-            )
+            let noreturn = match values {
+                1 => "_Noreturn void(void *, void *)",
+                _ => "_Noreturn void(void *, void *, void *)",
+            };
+            (alloc::format!("{name}_abort"), noreturn)
         };
         let slot = self.resolve_symbol_named(&alloc::format!("{name}.libcall"));
         self.ubsan_handlers.insert(slot, (name, proto));

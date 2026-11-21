@@ -60,6 +60,14 @@ impl<'a> Walker<'a> {
                 *is_thread_local,
                 *array_size,
             ),
+            Expr::Unary {
+                op: crate::c5::ast::UnOp::Neg,
+                child,
+                ty,
+            } if self.ast.checks.contains_key(&id) => {
+                let check = self.ast.checks[&id];
+                self.walk_checked_neg(b, check, *child, *ty)
+            }
             Expr::Unary { op, child, ty } => self.walk_unary(b, *op, *child, *ty),
             Expr::Binary { op, lhs, rhs, ty } => match self.ast.checks.get(&id) {
                 Some(&check) => self.walk_checked_binary(b, check, *op, (*lhs, *rhs), *ty),
@@ -111,19 +119,28 @@ impl<'a> Walker<'a> {
                 ty,
                 op_ty,
                 nsw,
-            } => self.walk_compound_assign(b, *op, *lhs, *rhs, *ty, *op_ty, *nsw),
+            } => {
+                let check = self.ast.checks.get(&id).copied();
+                self.walk_compound_assign(b, *op, (*lhs, *rhs), (*ty, *op_ty), *nsw, check)
+            }
             Expr::PreInc {
                 lvalue,
                 by,
                 ty,
                 nsw,
-            } => self.walk_inc(b, *lvalue, *by, *ty, false, *nsw),
+            } => {
+                let check = self.ast.checks.get(&id).copied();
+                self.walk_inc(b, *lvalue, *by, *ty, (false, *nsw), check)
+            }
             Expr::PostInc {
                 lvalue,
                 by,
                 ty,
                 nsw,
-            } => self.walk_inc(b, *lvalue, *by, *ty, true, *nsw),
+            } => {
+                let check = self.ast.checks.get(&id).copied();
+                self.walk_inc(b, *lvalue, *by, *ty, (true, *nsw), check)
+            }
             Expr::Sizeof(s) => Ok(b.imm(s.size_bytes)),
             // C99 6.3.2.1p3: a VLA lvalue decays to a pointer to its
             // first element -- the runtime base pointer the matching

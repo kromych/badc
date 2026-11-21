@@ -1391,7 +1391,23 @@ impl Compiler {
             },
             pos,
         );
+        self.check_inc(id, by, ty);
         self.ast_acc = Some(id);
+    }
+
+    /// Check the `++` or `--` at node `id`, whose overflow is then not
+    /// assumed away.
+    fn check_inc(&mut self, id: ExprId, by: i64, ty: i64) {
+        let op = if by > 0 {
+            crate::c5::ir::BinOp::Add
+        } else {
+            crate::c5::ir::BinOp::Sub
+        };
+        if self.sanitize_arith(id, Some(op), ty)
+            && let Expr::PreInc { nsw, .. } | Expr::PostInc { nsw, .. } = self.ast.expr_mut(id)
+        {
+            *nsw = false;
+        }
     }
 
     /// Push `Expr::PostInc { lvalue, by, ty }`. Same shape as
@@ -1409,6 +1425,7 @@ impl Compiler {
             },
             pos,
         );
+        self.check_inc(id, by, ty);
         self.ast_acc = Some(id);
     }
 
@@ -1563,6 +1580,11 @@ impl Compiler {
             },
             pos,
         );
+        if self.sanitize_arith(id, Some(op), op_ty)
+            && let Expr::CompoundAssign { nsw, .. } = self.ast.expr_mut(id)
+        {
+            *nsw = false;
+        }
         self.ast_acc = Some(id);
     }
 

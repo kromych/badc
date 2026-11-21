@@ -57,6 +57,27 @@ static void __ubsan_overflow(struct __ubsan_overflow_data *d, uintptr_t lhs, uin
     fprintf(stderr, " cannot be represented in type %s\n", d->type->name);
 }
 
+static void __ubsan_negate(struct __ubsan_overflow_data *d, uintptr_t v) {
+    uint32_t column;
+    if (!__ubsan_claim(&d->loc, &column))
+        return;
+    fprintf(stderr, "%s:%u:%u: runtime error: negation of ", d->loc.file, d->loc.line, column);
+    __ubsan_print_int(d->type, v);
+    fprintf(stderr,
+            " cannot be represented in type %s; cast to an unsigned type to negate this value to "
+            "itself\n",
+            d->type->name);
+}
+
+void __ubsan_handle_negate_overflow(struct __ubsan_overflow_data *d, uintptr_t v) {
+    __ubsan_negate(d, v);
+}
+
+_Noreturn void __ubsan_handle_negate_overflow_abort(struct __ubsan_overflow_data *d, uintptr_t v) {
+    __ubsan_negate(d, v);
+    abort();
+}
+
 void __ubsan_handle_add_overflow(struct __ubsan_overflow_data *d, uintptr_t l, uintptr_t r) {
     __ubsan_overflow(d, l, r, "+");
 }

@@ -180,21 +180,51 @@ impl<'a> Walker<'a> {
         let va = self.walk_expr_rvalue(b, lhs)?;
         let vb = self.walk_expr_rvalue(b, rhs)?;
         let raw = b.binop(op, va, vb);
-        // Under 8 bytes the operands are extended in the register, so the
-        // value is exact and overflows where narrowing changes it.
-        let flag = if type_size_bytes(ty, self.target) < 8 {
-            let narrowed = self.extend_atomic_result(b, raw, ty);
-            b.binop(BinOp::Ne, raw, narrowed)
-        } else {
-            signed_overflow64(b, op, va, vb, raw)
-        };
+        let flag = self.overflow_flag(b, op, (va, vb), raw, ty);
         self.report_failed_check(b, check, flag, &[va, vb]);
         Ok(raw)
     }
 
+    /// `-x` under `-fsanitize=signed-integer-overflow`: `0 - x`, which
+    /// overflows for the type's minimum alone, reported with `x`.
+    pub(super) fn walk_checked_neg(
+        &mut self,
+        b: &mut SsaBuilder,
+        check: crate::c5::ast::SanitizeCheck,
+        child: ExprId,
+        ty: i64,
+    ) -> Result<ValueId, WalkError> {
+        let v = self.walk_expr_rvalue(b, child)?;
+        let zero = b.imm(0);
+        let raw = b.binop(BinOp::Sub, zero, v);
+        let flag = self.overflow_flag(b, BinOp::Sub, (zero, v), raw, ty);
+        self.report_failed_check(b, check, flag, &[v]);
+        Ok(raw)
+    }
+
+    /// Whether the signed `a op b` of type `ty`, whose 64-bit value is
+    /// `raw`, overflows `ty`. Under 8 bytes the operands are extended in
+    /// the register, so `raw` is exact and overflows where narrowing
+    /// changes it.
+    pub(super) fn overflow_flag(
+        &mut self,
+        b: &mut SsaBuilder,
+        op: BinOp,
+        (va, vb): (ValueId, ValueId),
+        raw: ValueId,
+        ty: i64,
+    ) -> ValueId {
+        if type_size_bytes(ty, self.target) < 8 {
+            let narrowed = self.extend_atomic_result(b, raw, ty);
+            b.binop(BinOp::Ne, raw, narrowed)
+        } else {
+            signed_overflow64(b, op, va, vb, raw)
+        }
+    }
+
     /// Where `flag` is set, call `check`'s handler with its site data and
     /// `values`, or trap; the failing path is the unlikely one.
-    fn report_failed_check(
+    pub(super) fn report_failed_check(
         &self,
         b: &mut SsaBuilder,
         check: crate::c5::ast::SanitizeCheck,

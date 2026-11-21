@@ -442,6 +442,11 @@ fn parse_reg(tok: &str) -> Option<(u8, bool, bool)> {
         "xzr" => return Some((31, true, false)),
         "wsp" => return Some((31, false, true)),
         "wzr" => return Some((31, false, false)),
+        // GNU as's names for the procedure-call registers (AAPCS64 6.2).
+        "ip0" => return Some((16, true, false)),
+        "ip1" => return Some((17, true, false)),
+        "fp" => return Some((29, true, false)),
+        "lr" => return Some((30, true, false)),
         _ => {}
     }
     let (is64, rest) = match tok.as_bytes().first()? {
@@ -2225,6 +2230,20 @@ mod tests {
             let text = alloc::format!("{}", f64::from_bits(bits));
             assert_eq!(parse_fp_imm(&text), Some(imm8), "{text}");
         }
+    }
+
+    /// GNU as's register aliases: `ip0`/`ip1` are x16/x17, `fp` x29 and
+    /// `lr` x30, each the 64-bit register.
+    #[test]
+    fn procedure_call_register_aliases_parse() {
+        let insns = parse_template(b"stp fp, lr, [sp, #-48]!\n\tadd ip0, ip1, #4").unwrap();
+        let reg = |num| AsmOpndA64::Reg {
+            num,
+            is64: true,
+            sp: false,
+        };
+        assert_eq!(insns[0].operands[..2], [reg(29), reg(30)]);
+        assert_eq!(insns[1].operands[..2], [reg(16), reg(17)]);
     }
 
     #[test]

@@ -729,7 +729,7 @@ impl<'a> PeWriter<'a> {
         l.edata_present = !build.exports.is_empty()
             || !build.dynamic_exports.is_empty()
             || !build.forwarded_exports.is_empty();
-        l.dwarf_present = build.debug_info;
+        l.dwarf_present = cfg!(feature = "debuginfo") && build.debug_info;
         let text_vmaddr = IMAGE_BASE + (l.text_rva + self.text_prologue_len) as u64;
         let raw = image::image_dwarf(program, build, self.target, text_vmaddr, None, None)?;
         l.dwarf_blobs = [
@@ -1470,7 +1470,12 @@ impl<'a> PeWriter<'a> {
     /// The PDB of the image's DWARF and section table, when the build
     /// names one, and the debug directory's `RSDS` record naming it.
     fn build_pdb(&mut self) -> Result<Option<Vec<u8>>, C5Error> {
-        let Some(path) = self.build.pdb_path.as_deref() else {
+        let Some(path) = self
+            .build
+            .pdb_path
+            .as_deref()
+            .filter(|_| cfg!(feature = "debuginfo"))
+        else {
             return Ok(None);
         };
         let mut raw = Vec::new();

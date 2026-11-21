@@ -5208,6 +5208,12 @@ pub(crate) fn lower_arch(
             "this build of badc has no optimizer (the `optimizer` feature)",
         ));
     }
+    if options.debug_info && !cfg!(feature = "debuginfo") {
+        return Err(C5Error::hard(
+            Code::UNSUPPORTED,
+            "this build of badc writes no debug information (the `debuginfo` feature)",
+        ));
+    }
     match target {
         #[cfg(any(feature = "target-aarch64", target_arch = "aarch64"))]
         Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
@@ -5400,7 +5406,7 @@ pub(crate) fn lower_for_with_prebuilt(
     build.exports = program.exports.clone();
     build.output_kind = options.output_kind;
     build.dllmain_pc = program.dllmain_pc;
-    build.debug_info = options.debug_info;
+    build.debug_info = cfg!(feature = "debuginfo") && options.debug_info;
     Ok(build)
 }
 

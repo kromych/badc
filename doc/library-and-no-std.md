@@ -50,7 +50,8 @@ features; `examples/emit_image.rs` writes an executable for any target.
 | `target-aarch64`, `target-x86_64` | the backend of an architecture other than the host's, which is always built; without it a lowering for that architecture fails |
 | `inline-asm` | `asm` statements; without it the compiler refuses one |
 | `assembler` | file-scope `asm`, with the GNU as directives, sections and macros; requires `inline-asm`; without it the compiler refuses file-scope `asm` |
-| `native-emit` | `emit_native` and the Mach-O, ELF and PE writers; requires `std` |
+| `native-emit` | `emit_native` and the Mach-O, ELF and PE writers; requires `std`. A call to a C library function binds through the bundled header that declares it (`headers`), or, with `linker`, by its name |
+| `debuginfo` | the DWARF and PDB writers `NativeOptions::debug_info` runs; requires `native-emit`; without it a lowering that asks for them fails |
 | `linker` | objects, archives, the native object readers and the linker, and the runtime they compile on demand; requires `native-emit` and `headers` |
 | `full` | every feature above; the `badc` binary requires it |
 | `codegen_test` | register-allocator limits for tests (`BADC_MAX_GPR`, `BADC_MAX_FPR`) |

@@ -1901,7 +1901,7 @@ impl<'a> MachOWriter<'a> {
             is_dylib: build.output_kind == super::OutputKind::SharedLibrary,
             tls_present: !build.macho_tlv_descriptors.is_empty(),
             n_tlv: build.macho_tlv_descriptors.len(),
-            emit_dwarf: build.debug_info,
+            emit_dwarf: cfg!(feature = "debuginfo") && build.debug_info,
             named: build.named_sections.iter().collect(),
             named_out: Vec::new(),
             unwind: UnwindTables::of(build)?,

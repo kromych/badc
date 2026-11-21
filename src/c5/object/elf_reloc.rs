@@ -1768,7 +1768,7 @@ impl<'a> RelocWriter<'a> {
         syms.debug_abbrev_sym_idx = syms.text_sym_idx + 4;
         syms.debug_str_sym_idx = syms.text_sym_idx + 5;
         let mut fixed_section_shndx = alloc::vec![SHIDX_TEXT, SHIDX_DATA, SHIDX_BSS];
-        if build.debug_info {
+        if cfg!(feature = "debuginfo") && build.debug_info {
             fixed_section_shndx.push(SHIDX_DEBUG_LINE);
             fixed_section_shndx.push(SHIDX_DEBUG_ABBREV);
             fixed_section_shndx.push(SHIDX_DEBUG_STR);
@@ -4093,7 +4093,7 @@ impl<'a> RelocWriter<'a> {
     /// tables.
     fn emit_debug_relocs(&mut self) -> Result<(), C5Error> {
         let (program, build) = (self.program, self.build);
-        let dwarf = if build.debug_info {
+        let dwarf = if cfg!(feature = "debuginfo") && build.debug_info {
             dwarf_reloc::emit(
                 program,
                 build,

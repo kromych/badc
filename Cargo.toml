@@ -83,6 +83,9 @@ std = []
 # in-memory JIT (`jit_run`) and the codegen passes but cannot write a
 # native binary. Requires `std`.
 native-emit = ["std"]
+# The DWARF and PDB writers `NativeOptions::debug_info` (`-g`) runs.
+# Without it a lowering that asks for them is refused.
+debuginfo = ["native-emit"]
 # The cross-translation-unit linker: writing and reading c5 bytecode
 # object files (ELF wrapper, `.o`) and ar(5) archives (`.a`), the native
 # object readers, and the `link_units` driver that merges objects into a
@@ -97,6 +100,7 @@ linker = ["native-emit", "headers"]
 full = [
     "linker",
     "native-emit",
+    "debuginfo",
     "headers",
     "optimizer",
     "target-aarch64",

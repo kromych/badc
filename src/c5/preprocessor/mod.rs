@@ -217,6 +217,11 @@ pub(crate) struct Preprocessor {
     /// there first, so a foreign header whose spelling collides with a
     /// bundled name keeps `-I` order -- and resumes `#include_next` past it.
     include_stack: Vec<include::IncludeFrame>,
+    /// The names of the files being read, the primary source first.
+    open_files: Vec<String>,
+    /// cl's quoted-include search (`--msvc`): after the including file's
+    /// directory, those of the files that include it, innermost first.
+    msvc_include_search: bool,
     /// `#include` search paths (the CLI's `-I` plus the driver's
     /// overlays), probed in order before the bundled in-binary headers,
     /// so an on-disk copy of a bundled header overrides it. Read only
@@ -1332,6 +1337,8 @@ impl Preprocessor {
             pragma_once_files: BTreeSet::new(),
             include_guards: HashMap::new(),
             include_stack: Vec::new(),
+            open_files: Vec::new(),
+            msvc_include_search: false,
             search_paths: SearchPaths::default(),
             own_header_roots: SearchPaths::default(),
             quote_search_paths: SearchPaths::default(),
@@ -1438,8 +1445,10 @@ impl Preprocessor {
 
     /// The identity cl 19.28 (the first with `/std:c17`) gives a C17 unit:
     /// `_MSC_VER` and its companions and the `_M_*` architecture macro, with
-    /// `__STDC__` undefined, as cl leaves it without `/Zc:__STDC__`.
+    /// `__STDC__` undefined, as cl leaves it without `/Zc:__STDC__`, and
+    /// cl's search for a quoted include.
     pub fn enable_msvc(&mut self, target: Target) {
+        self.msvc_include_search = true;
         self.macros.remove("__STDC__");
         let mut set = |name: &str, value: &str| {
             self.macros.insert(name.to_string(), value.to_string());
@@ -2150,9 +2159,11 @@ impl Preprocessor {
         // diagnostic depend on.
         let stripped = unfold_and_strip(&source);
         out.reserve(stripped.len());
+        self.open_files.push(filename.to_string());
         let mut pass = LinePass::new(self, out, filename, &stripped);
-        pass.run()?;
-        pass.finish()
+        let result = pass.run().and_then(|()| pass.finish());
+        self.open_files.pop();
+        result
     }
 
     /// Install an object-like macro definition.

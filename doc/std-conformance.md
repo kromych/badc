@@ -832,7 +832,7 @@ partial, `__ARM_FEATURE_SVE` stays undefined and `-march=` / `-mcpu=` refuse
   `_M_X64` / `_M_AMD64` or `_M_ARM64`. `__STDC__` is then undefined, as cl
   leaves it without `/Zc:__STDC__`, so the SDK headers that test it take their
   Microsoft layouts; `__STDC_VERSION__` stays, and `__STDC_NO_ATOMICS__` and
-  `__STDC_NO_VLA__` are `1`, as under cl's `/std:c17`. A tag a parameter
+  `__STDC_NO_VLA__` are `1`, as under cl's `/std:c17`. A quoted `#include` searches cl's way: the including file's directory, then those of the files that include it, innermost first, out to the primary source's, before the `-I` directories. A tag a parameter
   list declares takes the enclosing scope, as cl gives it (warning C4115),
   where C17 6.2.1p4 limits it to the list. Any two vector types of one size
   convert implicitly. The Microsoft extensions above apply with or without

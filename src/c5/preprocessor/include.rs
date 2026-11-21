@@ -119,8 +119,9 @@ impl IncludeFrame {
 
 /// Where a header search begins.
 enum SearchStart<'a> {
-    /// `#include "name"` in a file in this directory.
-    Quoted(String),
+    /// `#include "name"`: the including file's directory, then, under cl's
+    /// rule, those of the files including it.
+    Quoted(Vec<String>),
     Angle,
     /// `#include_next` in the file this frame describes.
     After(&'a IncludeFrame),
@@ -281,7 +282,15 @@ impl Preprocessor {
                 SearchStart::After(frame)
             }
             _ if form.quoted => {
-                SearchStart::Quoted(include_parent_dir(filename).unwrap_or_default())
+                let mut dirs = alloc::vec![include_parent_dir(filename).unwrap_or_default()];
+                if self.msvc_include_search {
+                    // cl searches the directories of the open files, from the
+                    // includer's parent out to the primary source's.
+                    let outer = self.open_files.iter().rev().skip(1);
+                    dirs.extend(outer.filter_map(|f| include_parent_dir(f)));
+                    dirs.dedup();
+                }
+                SearchStart::Quoted(dirs)
             }
             _ => SearchStart::Angle,
         };
@@ -523,8 +532,10 @@ impl Preprocessor {
             if std::path::Path::new(name).is_absolute() {
                 return probe_dir(name, "", SearchStep::Absolute);
             }
-            if let SearchStart::Quoted(dir) = &start
-                && let Some(found) = probe(SearchStep::SourceDir, dir)
+            if let SearchStart::Quoted(dirs) = &start
+                && let Some(found) = dirs
+                    .iter()
+                    .find_map(|dir| probe(SearchStep::SourceDir, dir))
             {
                 return Some(found);
             }

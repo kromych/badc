@@ -858,6 +858,55 @@ fn quoted_include_resolves_relative_to_including_file() {
     );
 }
 
+/// Under `--msvc` a quoted include searches cl's way: the including file's
+/// directory, then those of the files including it, innermost first, before
+/// the `-I` directories. Without it the search stops at the including file's
+/// directory, as gcc's and clang's does.
+#[test]
+fn msvc_quoted_include_searches_the_including_files_directories() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-msvc-qinc");
+    for (path, body) in [
+        (
+            "prog/main.c",
+            "#include \"inc/app.h\"\nint v = FROM_PROG + FROM_INNER;\n",
+        ),
+        ("prog/inc/app.h", "#include \"inner/deep.h\"\n"),
+        (
+            "prog/inc/inner/deep.h",
+            "#include \"near.h\"\n#include \"top.h\"\n",
+        ),
+        ("prog/inc/near.h", "#define FROM_INNER 2\n"),
+        ("prog/top.h", "#define FROM_PROG 1\n"),
+        ("other/top.h", "#define FROM_PROG 9\n"),
+    ] {
+        let path = dir.join(path);
+        std::fs::create_dir_all(path.parent().unwrap()).expect("create dir");
+        std::fs::write(path, body).expect("write file");
+    }
+    let run = |args: &[&str]| {
+        Command::new(badc)
+            .args(["-q", "-E", "--target=windows-x64"])
+            .args(args)
+            .arg("prog/main.c")
+            .current_dir(&dir)
+            .output()
+            .expect("run badc")
+    };
+    let cl = run(&["--msvc", "-I", "other"]);
+    let text = String::from_utf8_lossy(&cl.stdout);
+    assert!(
+        cl.status.success() && text.contains("int v = 1 + 2;"),
+        "{cl:?}"
+    );
+    let gnu = run(&[]);
+    assert!(!gnu.status.success(), "{gnu:?}");
+    assert!(
+        String::from_utf8_lossy(&gnu.stderr).contains("`near.h` not found"),
+        "{gnu:?}"
+    );
+}
+
 // Each [`DEAD_BRANCH_NEEDS_OPTIMIZE`] fixture calls a declared-but-
 // undefined function from a branch that is statically dead once the
 // enclosing helper inlines and its guard folds. Linking is the

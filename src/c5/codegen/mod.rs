@@ -5209,12 +5209,27 @@ pub(crate) fn lower_arch(
         ));
     }
     match target {
+        #[cfg(any(feature = "target-aarch64", target_arch = "aarch64"))]
         Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
             aarch64::lower(program, target, options, imports, prebuilt, mode)
         }
+        #[cfg(any(feature = "target-x86_64", target_arch = "x86_64"))]
         Target::LinuxX64 | Target::WindowsX64 => {
             x86_64::lower(program, target, options, imports, prebuilt, mode)
         }
+        #[allow(unreachable_patterns)]
+        _ => Err(C5Error::hard(
+            Code::UNSUPPORTED,
+            alloc::format!(
+                "this build of badc has no {} backend (the `target-{}` feature)",
+                target.id_str(),
+                if target.is_aarch64() {
+                    "aarch64"
+                } else {
+                    "x86_64"
+                }
+            ),
+        )),
     }
 }
 

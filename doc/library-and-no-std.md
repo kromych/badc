@@ -37,8 +37,9 @@ driver prints it, and its `code` names a row of the catalog that
 | `std` (default) | the lexer, preprocessor, compiler, interpreter and in-process JIT; the `StdHost` adapter for files, environment and standard streams |
 | `headers` | the bundled C library and compiler headers; without it an `#include` searches the include path alone |
 | `optimizer` | the SSA optimization passes `NativeOptions::optimize` runs; without it a lowering that asks for them fails |
+| `target-aarch64`, `target-x86_64` | the backend of an architecture other than the host's, which is always built; without it a lowering for that architecture fails |
 | `native-emit` | `emit_native` and the Mach-O, ELF and PE writers; requires `std` |
-| `full` | `native-emit`, `headers` and `optimizer`, plus objects, archives and the linker; the `badc` binary requires it |
+| `full` | `native-emit`, `headers`, `optimizer` and both backends, plus objects, archives and the linker; the `badc` binary requires it |
 | `codegen_test` | register-allocator limits for tests (`BADC_MAX_GPR`, `BADC_MAX_FPR`) |
 
 ## `no_std`

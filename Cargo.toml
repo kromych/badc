@@ -89,7 +89,7 @@ native-emit = ["std"]
 # `badc` binary (`-c`, `.o` / `.a` inputs, `-L`, `-l`). Library callers
 # that want only the host JIT can opt out with `default-features =
 # false, features = ["std"]`.
-full = ["native-emit", "headers", "optimizer"]
+full = ["native-emit", "headers", "optimizer", "target-aarch64", "target-x86_64"]
 # Embeds the bundled C library and compiler headers (`<stdio.h>`,
 # `<arm_neon.h>`, ...) and the index of the names each declares, which the
 # include search, the auto-include retry and the B2022 hint read. Without
@@ -98,6 +98,10 @@ headers = []
 # The SSA optimization passes `NativeOptions::optimize` (`-O`) runs. Without
 # it a lowering that asks for them is refused.
 optimizer = []
+# The backend of an architecture other than the host's; the host's is
+# always built.
+target-aarch64 = []
+target-x86_64 = []
 # Exposes the register-allocator pressure knobs (per-bank GPR / FP
 # count caps) to the test harness and the `badc` CLI (`--max-gpr=N`,
 # `--max-fpr=N`, and the `BADC_MAX_GPR` / `BADC_MAX_FPR` environment

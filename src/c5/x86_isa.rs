@@ -40,6 +40,7 @@ const AVX512DQ: u64 = 1 << 28;
 const AVX512VL: u64 = 1 << 29;
 const AVX512CD: u64 = 1 << 30;
 const AVX512VNNI: u64 = 1 << 31;
+const CX16: u64 = 1 << 32;
 
 /// An extension: its option name, its bit, its macro, the extensions
 /// enabling it enables, and those disabling it also disables beside its
@@ -92,6 +93,8 @@ const EXTS: &[Ext] = &[
     ext("clwb", CLWB, "__CLWB__", 0),
     ext("prfchw", PRFCHW, "__PRFCHW__", 0),
     ext("sahf", SAHF, "__LAHF_SAHF__", 0),
+    // CMPXCHG16B; the `--gnu` set names the 16-byte compare-and-swap.
+    ext("cx16", CX16, "", 0),
     ext("avx512f", AVX512F, "__AVX512F__", AVX2),
     ext("avx512bw", AVX512BW, "__AVX512BW__", AVX512F),
     ext("avx512dq", AVX512DQ, "__AVX512DQ__", AVX512F),
@@ -101,7 +104,7 @@ const EXTS: &[Ext] = &[
 ];
 
 /// The x86-64 psABI levels 2 and 3 within the set.
-const V2: u64 = SSE3 | SSSE3 | SSE4_1 | SSE4_2 | POPCNT | CRC32 | SAHF;
+const V2: u64 = SSE3 | SSSE3 | SSE4_1 | SSE4_2 | POPCNT | CRC32 | SAHF | CX16;
 const V3: u64 = V2 | AVX | AVX2 | FMA | F16C | BMI | BMI2 | LZCNT | XSAVE;
 /// The AVX-512 part of x86-64-v4 within the set.
 const V4: u64 = AVX512F | AVX512BW | AVX512DQ | AVX512VL | AVX512CD;
@@ -176,7 +179,6 @@ const ABSENT: &[&str] = &[
     "xsaveopt",
     "xsavec",
     "xsaves",
-    "cx16",
     "sgx",
     "pku",
     "rdpid",
@@ -314,7 +316,7 @@ impl X86Features {
     pub fn macros(self) -> impl Iterator<Item = &'static str> {
         let evex256 = (self.0 & AVX512VL != 0).then_some("__EVEX256__");
         EXTS.iter()
-            .filter(move |e| self.0 & e.bit != 0)
+            .filter(move |e| self.0 & e.bit != 0 && !e.mac.is_empty())
             .map(|e| e.mac)
             .chain(evex256)
     }
@@ -339,6 +341,11 @@ impl X86Features {
     /// AVX-512BW: the byte and word elements at 512 bits.
     pub fn avx512bw(self) -> bool {
         self.0 & AVX512BW != 0
+    }
+
+    /// The option names of x86-64-v3's extensions.
+    pub fn baseline_names() -> impl Iterator<Item = &'static str> {
+        EXTS.iter().filter(|e| e.bit & V3 != 0).map(|e| e.name)
     }
 
     /// Whether the set holds x86-64-v3, which the code generator assumes.
@@ -421,6 +428,18 @@ mod tests {
         assert!(!f.avx512f() && f.avx2() && f.biggest_alignment() == 32);
         assert!(X86Features::for_cpu("x86-64-v4").unwrap().avx512bw());
         assert!(!X86Features::for_cpu("alderlake").unwrap().avx512f());
+    }
+
+    /// CMPXCHG16B is x86-64-v2's, as in the psABI, and predefines nothing
+    /// of its own: the `--gnu` set names the 16-byte compare-and-swap.
+    #[test]
+    fn cx16_is_a_baseline_extension_without_a_macro() {
+        assert!(matches!(X86Features::classify("cx16"), X86ExtOption::Known));
+        assert_eq!(X86Features::baseline_ext("cx16"), Some(false));
+        let mut f = X86Features::NONE;
+        f.enable("cx16");
+        assert!(macros(f).is_empty());
+        assert!(X86Features::baseline_names().any(|n| n == "cx16"));
     }
 
     #[test]

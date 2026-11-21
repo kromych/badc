@@ -865,10 +865,12 @@ fn march(cpu: &str) -> Result<badc::X86Features, ParseError> {
         .ok_or_else(|| ParseError::diag(format!("badc: error: unknown CPU `{cpu}` (-march=)")))
 }
 
+/// Whether the host CPU has the x86 extension of option name `ext`; `None`
+/// for a name the map does not know.
 #[cfg(target_arch = "x86_64")]
-fn native_x86_features() -> Option<badc::X86Features> {
+fn host_x86_ext(ext: &str) -> Option<bool> {
     use std::arch::is_x86_feature_detected as has;
-    Some(badc::X86Features::for_host(|ext| match ext {
+    Some(match ext {
         "sse3" => has!("sse3"),
         "ssse3" => has!("ssse3"),
         "sse4.1" => has!("sse4.1"),
@@ -890,7 +892,25 @@ fn native_x86_features() -> Option<badc::X86Features> {
         "lzcnt" => has!("lzcnt"),
         "adx" => has!("adx"),
         "xsave" => has!("xsave"),
-        _ => false,
+        "cx16" => has!("cmpxchg16b"),
+        "sahf" => host_has_lahf_sahf(),
+        _ => return None,
+    })
+}
+
+/// LAHF and SAHF in 64-bit mode: CPUID leaf 0x80000001, ECX bit 0.
+#[cfg(target_arch = "x86_64")]
+#[allow(unused_unsafe)]
+fn host_has_lahf_sahf() -> bool {
+    use std::arch::x86_64::__cpuid;
+    let max = unsafe { __cpuid(0x8000_0000) }.eax;
+    max >= 0x8000_0001 && unsafe { __cpuid(0x8000_0001) }.ecx & 1 != 0
+}
+
+#[cfg(target_arch = "x86_64")]
+fn native_x86_features() -> Option<badc::X86Features> {
+    Some(badc::X86Features::for_host(|ext| {
+        host_x86_ext(ext).unwrap_or(false)
     }))
 }
 
@@ -5486,5 +5506,16 @@ mod tests {
             "a.c",
         ]);
         assert_eq!(abort.front.sanitize.recover & strict, 0);
+    }
+
+    /// `-march=native` reads each extension of the x86-64-v3 baseline from
+    /// the host; one the map does not know reads as absent and the option
+    /// fails on every CPU.
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn the_host_map_reads_every_baseline_extension() {
+        for name in badc::X86Features::baseline_names() {
+            assert!(host_x86_ext(name).is_some(), "{name}");
+        }
     }
 }

@@ -66,26 +66,15 @@ Disassembly of section .text:
                	ret
 
 <use_pick>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	sub	x2, x29, #0x20
-               	ldp	x16, x17, [x0]
-               	stp	x16, x17, [x2]
+               	ldr	x2, [x0]
                	ldr	x0, [x0, #0x8]
-               	sub	x3, x29, #0x10
-               	stur	x0, [x29, #-0x10]
-               	ldur	x0, [x29, #-0x20]
-               	stur	x0, [x29, #-0x8]
                	cmp	w1, #0x0
-               	csel	x0, x2, x3, ne
-               	ldr	x1, [x0]
-               	ldr	x0, [x0, #0x8]
+               	csel	x3, x0, x2, ne
+               	cmp	w1, #0x0
+               	csel	x0, x2, x0, ne
                	mov	x17, #0xa               // =10
-               	mul	x1, x1, x17
-               	add	x0, x1, x0
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
+               	mul	x0, x0, x17
+               	add	x0, x0, x3
                	ret
 
 <main>:

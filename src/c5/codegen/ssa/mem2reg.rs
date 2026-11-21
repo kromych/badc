@@ -1794,10 +1794,10 @@ fn copy_words(func: &mut FunctionSsa) {
 }
 
 /// A load through a phi of frame-object addresses becomes a load of each
-/// object in the predecessor that names it, merged by that phi: a
+/// object in the predecessor that names it, merged by a phi of its own: a
 /// conditional choosing between two objects, each written in its arm,
 /// reads the value its arm stored, and the objects' addresses, read by
-/// nothing else, no longer pin them to the frame. Each object is read at
+/// nothing but such loads, no longer pin them to the frame. Each object is read at
 /// the end of its predecessor, or ahead of the compare a conditional
 /// terminator reads, and nothing between that point and the load may
 /// write memory. The load is in the phi's block or in one that block
@@ -1879,7 +1879,7 @@ fn split_address_phi_loads(func: &mut FunctionSsa) {
             let Some(Inst::Phi { incoming, .. }) = func.insts.get(addr as usize) else {
                 continue;
             };
-            if !integer || uses.get(addr as usize) != Some(&1) || !reaches(b, addr) {
+            if !integer || !reaches(b, addr) {
                 continue;
             }
             let mut reads = Vec::with_capacity(incoming.len());
@@ -1907,6 +1907,15 @@ fn split_address_phi_loads(func: &mut FunctionSsa) {
             }
         }
     }
+    // The objects' reads replace every live use of the phi, or none. Each
+    // load, a dead one too, gets a phi of its own: one shared by two loads
+    // would merge the words of only one of them. The first takes the
+    // address phi itself, so no use of the objects' addresses is left.
+    let mut through: alloc::collections::BTreeMap<ValueId, u32> = Default::default();
+    for &(l, phi, _) in &plans {
+        *through.entry(phi).or_default() += u32::from(uses[l as usize] != 0);
+    }
+    plans.retain(|&(_, phi, _)| through[&phi] == uses[phi as usize]);
     if plans.is_empty() {
         return;
     }
@@ -1917,10 +1926,31 @@ fn split_address_phi_loads(func: &mut FunctionSsa) {
     let mut ins: Vec<Insertion> = Vec::new();
     // Per read, the insertion holding the value read.
     let mut values: Vec<usize> = Vec::new();
-    for &(l, _, ref reads) in &plans {
+    // Per load, the insertion of the phi merging its reads; `None` for the
+    // address phi.
+    let mut merges: Vec<Option<usize>> = Vec::new();
+    let mut taken: BTreeSet<ValueId> = BTreeSet::new();
+    for &(l, phi, ref reads) in &plans {
         let Inst::Load { disp, kind, .. } = func.insts[l as usize] else {
             unreachable!()
         };
+        let Inst::Phi { ref incoming, .. } = func.insts[phi as usize] else {
+            unreachable!()
+        };
+        if taken.insert(phi) {
+            merges.push(None);
+        } else {
+            merges.push(Some(ins.len()));
+            ins.push(Insertion {
+                at: At::Before(phi),
+                inst: Inst::Phi {
+                    incoming: incoming.iter().map(|&(p, _)| (p, NO_VALUE)).collect(),
+                    kind: LoadKind::I64,
+                },
+                is_f32: false,
+                copy_of: None,
+            });
+        }
         for &(off, at) in reads {
             let inst = if aggregate.contains(&off) {
                 ins.push(Insertion {
@@ -1956,16 +1986,17 @@ fn split_address_phi_loads(func: &mut FunctionSsa) {
     }
     let rewrite = super::tape::insert(func, &ins);
     let mut values = values.into_iter().map(|j| rewrite.ids[j]);
-    for (l, phi, reads) in plans {
-        let (l, phi) = (rewrite.remap[l as usize], rewrite.remap[phi as usize]);
-        if let Inst::Phi { incoming, kind } = &mut func.insts[phi as usize] {
+    for ((l, phi, reads), merge) in plans.into_iter().zip(merges) {
+        let l = rewrite.remap[l as usize];
+        let merge = merge.map_or(rewrite.remap[phi as usize], |j| rewrite.ids[j]);
+        if let Inst::Phi { incoming, kind } = &mut func.insts[merge as usize] {
             for (inc, _) in incoming.iter_mut().zip(&reads) {
                 inc.1 = values.next().expect("one value per read");
             }
             *kind = LoadKind::I64;
         }
         func.insts[l as usize] = Inst::Copy {
-            value: phi,
+            value: merge,
             is_fp: false,
         };
     }

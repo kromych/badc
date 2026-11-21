@@ -2838,15 +2838,14 @@ Disassembly of section .text:
                	add	x16, sp, #0x50
                	bl	<addr>
                	fmov	d2, x16
-               	sub	x0, x29, #0x100
-               	add	x16, sp, #0x50
+               	add	x16, sp, #0x90
                	fmov	x17, d2
                	bl	<addr>
-               	ldr	x1, [x0]
-               	ldr	x0, [x0, #0x8]
-               	stur	x1, [x29, #-0xe0]
-               	stur	x0, [x29, #-0xd8]
-               	add	x16, sp, #0x70
+               	ldur	x1, [x29, #-0xc0]
+               	ldur	x0, [x29, #-0xb8]
+               	stur	x1, [x29, #-0xc0]
+               	stur	x0, [x29, #-0xb8]
+               	add	x16, sp, #0x90
                	bl	<addr>
                	fmov	d2, x16
                	fcmp	d2, d0
@@ -2873,15 +2872,14 @@ Disassembly of section .text:
                	add	x16, sp, #0x50
                	bl	<addr>
                	fmov	d0, x16
-               	sub	x0, x29, #0x100
-               	add	x16, sp, #0x50
+               	add	x16, sp, #0x90
                	fmov	x17, d0
                	bl	<addr>
-               	ldr	x1, [x0]
-               	ldr	x0, [x0, #0x8]
-               	stur	x1, [x29, #-0xe0]
-               	stur	x0, [x29, #-0xd8]
-               	add	x16, sp, #0x70
+               	ldur	x1, [x29, #-0xc0]
+               	ldur	x0, [x29, #-0xb8]
+               	stur	x1, [x29, #-0xc0]
+               	stur	x0, [x29, #-0xb8]
+               	add	x16, sp, #0x90
                	bl	<addr>
                	fmov	d0, x16
                	fcmp	d0, d1
@@ -3105,18 +3103,20 @@ Disassembly of section .text:
                	add	x16, sp, #0x70
                	bl	<addr>
                	fmov	d0, x16
-               	sub	x0, x29, #0xc0
                	add	x16, sp, #0x90
                	fmov	x17, d0
                	bl	<addr>
+               	ldur	x1, [x29, #-0xc0]
+               	ldur	x0, [x29, #-0xb8]
                	b	<addr>
                	add	x16, sp, #0x70
                	bl	<addr>
                	fmov	d2, x16
-               	sub	x0, x29, #0xc0
                	add	x16, sp, #0x90
                	fmov	x17, d2
                	bl	<addr>
+               	ldur	x1, [x29, #-0xc0]
+               	ldur	x0, [x29, #-0xb8]
                	b	<addr>
                	stp	x9, x10, [sp]
                	stp	x11, x12, [sp, #0x10]

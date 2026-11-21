@@ -92,7 +92,6 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x1                // =1
                	bl	<addr>
-               	mov	x1, #0x0                // =0
                	lsl	x0, x0, #36
                	mov	x17, #0x1000000000      // =68719476736
                	cmp	x0, x17
@@ -102,7 +101,7 @@ Disassembly of section .text:
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x40
                	ret
-               	mov	x0, x1
+               	mov	x0, #0x0                // =0
                	bl	<addr>
                	mov	x0, #-0x8000000000000000 // =-9223372036854775808
                	bl	<addr>

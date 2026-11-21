@@ -67,24 +67,15 @@ Disassembly of section .text:
                	retq
 
 <use_pick>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	leaq	-0x20(%rbp), %rax
-               	movups	(%rdi), %xmm14
-               	movups	%xmm14, (%rax)
+               	movq	(%rdi), %rax
                	movq	0x8(%rdi), %rcx
-               	leaq	-0x10(%rbp), %rdx
-               	movq	%rcx, -0x10(%rbp)
-               	movq	-0x20(%rbp), %rcx
-               	movq	%rcx, -0x8(%rbp)
                	testl	%esi, %esi
-               	cmoveq	%rdx, %rax
-               	movq	(%rax), %rcx
-               	movq	0x8(%rax), %rax
-               	imulq	$0xa, %rcx, %rcx
-               	addq	%rcx, %rax
-               	leave
+               	movq	%rax, %rdx
+               	cmovneq	%rcx, %rdx
+               	testl	%esi, %esi
+               	cmoveq	%rcx, %rax
+               	imulq	$0xa, %rax, %rax
+               	addq	%rdx, %rax
                	retq
 
 <main>:

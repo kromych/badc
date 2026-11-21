@@ -107,7 +107,6 @@ Disassembly of section .text:
                	retq
                	movl	$0x1, %edi
                	callq	<addr>
-               	xorl	%edi, %edi
                	shlq	$0x24, %rax
                	movabsq	$0x1000000000, %r11     # imm = 0x1000000000
                	cmpq	%r11, %rax
@@ -115,6 +114,7 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	leave
                	retq
+               	xorl	%edi, %edi
                	callq	<addr>
                	movabsq	$-0x8000000000000000, %rdi # imm = 0x8000000000000000
                	callq	<addr>

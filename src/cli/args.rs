@@ -3335,14 +3335,22 @@ fn parse_stack(value: &str) -> Result<(u64, u64), ParseError> {
 /// Apply one of gcc's and clang's `-fsanitize` options to `s`, a check
 /// list naming checks or the group `undefined`. Enabling a check badc
 /// does not implement is refused; disabling one is accepted, as it is
-/// never on.
+/// never on. `all`, as an empty list, names every check where checks are
+/// turned off, trapped or recovered, and none can be turned on by it.
 fn sanitize_option(s: &mut badc::Sanitize, arg: &str) -> Result<(), ParseError> {
     let (flag, list) = arg.split_once('=').unwrap_or((arg, ""));
-    let every = badc::SanitizerCheck::named("undefined").unwrap_or(0);
+    let every = (badc::SanitizerCheck::ALL.iter()).fold(0, |m, c| m | c.bit());
     let mut bits = 0;
     for name in list.split(',').filter(|n| !n.is_empty()) {
         match badc::SanitizerCheck::named(name) {
             Some(b) => bits |= b,
+            None if name == "all" && flag == "-fsanitize" => {
+                return Err(ParseError::plain(String::from(
+                    "badc: -fsanitize=all: `all` names every check in -fno-sanitize=, \
+                     -fsanitize-trap= and -fsanitize-recover=, and enables none, as in gcc \
+                     and clang",
+                )));
+            }
             None if name == "all" => bits |= every,
             None if flag.starts_with("-fno-") => {}
             None => {
@@ -5450,5 +5458,33 @@ mod tests {
         ] {
             assert!(USAGE.contains(opt), "--help omits `{}`", opt.trim());
         }
+    }
+
+    /// `all` names every check where checks are turned off, trapped or
+    /// recovered, as gcc and clang have it, `bounds-strict` included, and
+    /// is no check to turn on: both refuse `-fsanitize=all`. A bare
+    /// `-fsanitize-trap` is `-fsanitize-trap=all`.
+    #[test]
+    fn sanitize_all_names_every_check_and_enables_none() {
+        let every = (badc::SanitizerCheck::ALL.iter()).fold(0, |m, c| m | c.bit());
+        let strict = badc::SanitizerCheck::named("bounds-strict").unwrap();
+        let (message, _) = reject(&["-fsanitize=all", "a.c"]);
+        assert!(message.contains("-fsanitize=all"), "{message}");
+        let off = parse(&["-fsanitize=bounds-strict", "-fno-sanitize=all", "a.c"]);
+        assert_eq!(off.front.sanitize.enabled, 0);
+        for trap in [
+            "-fsanitize-trap=all",
+            "-fsanitize-trap",
+            "-fsanitize-undefined-trap-on-error",
+        ] {
+            let cli = parse(&["-fsanitize=undefined,bounds-strict", trap, "a.c"]);
+            assert_eq!(cli.front.sanitize.trap & every, every, "{trap}");
+        }
+        let abort = parse(&[
+            "-fsanitize=bounds-strict",
+            "-fno-sanitize-recover=all",
+            "a.c",
+        ]);
+        assert_eq!(abort.front.sanitize.recover & strict, 0);
     }
 }

@@ -91,6 +91,8 @@ pub(crate) struct FrontEnd {
     /// language; any other input's comes from its file name.
     pub(crate) languages: std::collections::BTreeMap<String, SourceKind>,
     pub(crate) gnu: bool,
+    /// `-fgnuc-version=`: the GNU C version `gnu` claims.
+    pub(crate) gnuc_version: Option<[u32; 3]>,
     pub(crate) msvc: bool,
     pub(crate) gnu_dialect: bool,
     /// `-std=`'s edition.
@@ -700,6 +702,9 @@ struct Parser {
     /// `-arch <name>`, checked against the target once it is known.
     arch: Option<String>,
     mcpu: Option<String>,
+    /// `-v`, and the linker's `-v`, which reports its own version.
+    verbose: bool,
+    verbose_ld: bool,
     /// Options only the AArch64 targets take, checked once the target is known.
     aarch64_args: Vec<String>,
     /// `-march=`, `-mtune=` and the x86 `-m<ext>` / `-mno-<ext>` options
@@ -733,6 +738,19 @@ struct Parser {
 type Args<'a> = dyn Iterator<Item = String> + 'a;
 
 /// The operand of an option that takes a separate argument.
+/// A `major[.minor[.patch]]` version, the omitted parts zero.
+fn gnuc_version(spec: &str) -> Option<[u32; 3]> {
+    let mut out = [0u32; 3];
+    let parts: Vec<&str> = spec.split('.').collect();
+    if parts.len() > 3 {
+        return None;
+    }
+    for (slot, part) in out.iter_mut().zip(&parts) {
+        *slot = part.parse().ok()?;
+    }
+    Some(out)
+}
+
 fn operand(iter: &mut Args<'_>, missing: &str) -> Result<String, ParseError> {
     iter.next().ok_or_else(|| ParseError::diag(missing))
 }
@@ -1320,7 +1338,10 @@ impl Parser {
             // Silence informational output; errors and warnings stay.
             "-q" | "--quiet" => self.quiet = true,
             "-h" | "--help" => self.print = Some(USAGE),
-            "-v" | "--version" => self.print = Some(badc::BUILD_INFO),
+            // gcc's `-v` reports the version and goes on with the build;
+            // with no input it is all the run does. `--version` is.
+            "-v" => self.verbose = true,
+            "--version" => self.print = Some(badc::BUILD_INFO),
             "-o" => {
                 self.output_path = Some(PathBuf::from(operand(
                     iter,
@@ -1521,6 +1542,18 @@ impl Parser {
             // feature badc lacks on `__GNUC__` keeps compiling unless
             // this is requested.
             "--gnu" => front.gnu = true,
+            // clang's `-fgnuc-version=`: the GNU C version the identity
+            // macros claim, which turns the identity on; `0` turns it off.
+            s if s.starts_with("-fgnuc-version=") => {
+                let spec = &s["-fgnuc-version=".len()..];
+                let version = gnuc_version(spec).ok_or_else(|| {
+                    ParseError::diag(format!(
+                        "badc: error: `{spec}` is not a version (-fgnuc-version=major[.minor[.patch]])"
+                    ))
+                })?;
+                front.gnu = version != [0, 0, 0];
+                front.gnuc_version = front.gnu.then_some(version);
+            }
             // Trigraph replacement (C17 5.2.1.1); otherwise an ISO dialect
             // before C23, which removed them, turns it on.
             "-trigraphs" | "-ftrigraphs" => front.trigraphs = Some(true),
@@ -2183,6 +2216,7 @@ impl Parser {
             // The link records a `-l` shared library only when it
             // satisfies a reference, which is what `--as-needed` asks for.
             "--as-needed" => {}
+            "-v" => self.verbose_ld = true,
             "-(" | "-)" => self
                 .link
                 .markers
@@ -2523,7 +2557,17 @@ impl Parser {
         if let Some(text) = self.catalog_query(mode)? {
             return Ok(Parsed::Diagnostics(text));
         }
-        let diagnostics = self.report_option_requests(mode)?;
+        // `-v` with nothing to build reports the version, as gcc's does.
+        if (self.verbose || self.verbose_ld) && self.positional.len() <= 1 {
+            return Ok(Parsed::Print(badc::BUILD_INFO));
+        }
+        let mut diagnostics = self.report_option_requests(mode)?;
+        if self.verbose {
+            diagnostics.insert(0, String::from(badc::BUILD_INFO));
+        }
+        if self.verbose_ld {
+            diagnostics.push(badc::ld_identity());
+        }
         let target = Target::parse(self.target_spec.as_deref()).ok_or_else(|| {
             let names = Target::ALL
                 .iter()
@@ -3136,6 +3180,7 @@ impl FrontEnd {
     pub(crate) fn compile_options(&self, label: &str) -> badc::CompileOptions {
         badc::CompileOptions::default()
             .with_gnu(self.gnu)
+            .with_gnuc_version(self.gnuc_version)
             .with_msvc(self.msvc)
             .with_gnu89_inline(self.gnu89_inline.unwrap_or(self.std.gnu89_inline()))
             .with_strict_flex_arrays(self.strict_flex_arrays)
@@ -4901,11 +4946,55 @@ mod tests {
                 other => panic!("{flag}: expected the usage, got {}", outcome(&other)),
             }
         }
-        for flag in ["-v", "--version"] {
-            match parse_args(argv(&[flag, "--no-such-option"])) {
+        match parse_args(argv(&["--version", "--no-such-option"])) {
+            Ok(Parsed::Print(text)) => assert_eq!(text, badc::BUILD_INFO),
+            other => panic!(
+                "--version: expected the build info, got {}",
+                outcome(&other)
+            ),
+        }
+    }
+
+    /// gcc's `-v`: alone it reports the version; with inputs the build
+    /// goes on and reports it first. The linker's `-v` reports the
+    /// linker's own version line.
+    #[test]
+    fn v_reports_the_version_and_the_build_goes_on() {
+        for args in [&["-v"][..], &["-Wl,-v"][..]] {
+            match parse_args(argv(args)) {
                 Ok(Parsed::Print(text)) => assert_eq!(text, badc::BUILD_INFO),
-                other => panic!("{flag}: expected the build info, got {}", outcome(&other)),
+                other => panic!("{args:?}: expected the build info, got {}", outcome(&other)),
             }
+        }
+        let cli = parse(&["-v", "-Wl,-v", "-c", "a.c"]);
+        assert_eq!(
+            cli.diagnostics.first().map(String::as_str),
+            Some(badc::BUILD_INFO)
+        );
+        assert_eq!(cli.diagnostics.last(), Some(&badc::ld_identity()));
+        assert!(
+            reject(&["-v", "--no-such-option", "a.c"])
+                .0
+                .contains("unknown option")
+        );
+    }
+
+    /// clang's `-fgnuc-version=`: the claimed GNU C version, turning the
+    /// identity on; `0` turns it off; the last of it and `--gnu` wins.
+    #[test]
+    fn gnuc_version_sets_the_claimed_version() {
+        let front = parse(&["-fgnuc-version=4.7", "a.c"]).front;
+        assert!(front.gnu && front.gnuc_version == Some([4, 7, 0]));
+        let front = parse(&["--gnu", "-fgnuc-version=0", "a.c"]).front;
+        assert!(!front.gnu);
+        let front = parse(&["-fgnuc-version=0", "--gnu", "a.c"]).front;
+        assert!(front.gnu && front.gnuc_version.is_none());
+        for bad in ["4.x", "1.2.3.4", ""] {
+            let arg = format!("-fgnuc-version={bad}");
+            assert!(
+                reject(&[&arg, "a.c"]).0.contains("is not a version"),
+                "{bad}"
+            );
         }
     }
 

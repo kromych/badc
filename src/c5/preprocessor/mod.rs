@@ -165,6 +165,8 @@ pub(crate) struct Preprocessor {
     // source identifier, where a tree walk's log-N string-prefix
     // compares measured as the frontend's hot spot.
     macros: HashMap<String, String>,
+    /// `-fgnuc-version=`: the GNU C version the identity claims.
+    gnuc_version: Option<[u32; 3]>,
     /// Compilation target; Windows include resolution is
     /// case-insensitive, matching its filesystems.
     target: Target,
@@ -1315,6 +1317,7 @@ impl Preprocessor {
             .map(|(name, id)| (name.to_string(), id))
             .collect();
         Self {
+            gnuc_version: None,
             macros,
             target,
             wchar: target.wchar_type(false),
@@ -1469,6 +1472,11 @@ impl Preprocessor {
     /// key their inline declarations on. `__STRICT_ANSI__` accompanies
     /// `__GNUC__` as under `-std=c11`, so portable code takes the
     /// standard path for the GNU-only features badc lacks.
+    /// `-fgnuc-version=`: the version [`Self::enable_gnu`] claims.
+    pub fn set_gnuc_version(&mut self, version: [u32; 3]) {
+        self.gnuc_version = Some(version);
+    }
+
     pub fn enable_gnu(&mut self, gnu89_inline: bool, strict_ansi: bool) {
         // `crate::GNU_COMPAT_VERSION` claims 4.3.0, every feature of
         // which is backed. What 4.4 adds and real code selects on the
@@ -1478,9 +1486,13 @@ impl Preprocessor {
         // TODO: raise the claim. That needs a forced-claim measurement
         // over a corpus at each rung above 4.4, not only at the
         // intrinsic surface.
-        let mut compat = crate::GNU_COMPAT_VERSION.split('.');
+        let claim = match self.gnuc_version {
+            Some([major, minor, patch]) => alloc::format!("{major}.{minor}.{patch}"),
+            None => crate::GNU_COMPAT_VERSION.to_string(),
+        };
+        let mut compat = claim.split('.');
         for name in ["__GNUC__", "__GNUC_MINOR__", "__GNUC_PATCHLEVEL__"] {
-            let component = compat.next().expect("GNU_COMPAT_VERSION is x.y.z");
+            let component = compat.next().expect("the claim is x.y.z");
             self.macros.insert(name.to_string(), component.to_string());
         }
         let inline_model_macro = if gnu89_inline {
@@ -1496,7 +1508,7 @@ impl Preprocessor {
             "__VERSION__".to_string(),
             alloc::format!(
                 "\"{} Compatible badc {}\"",
-                crate::GNU_COMPAT_VERSION,
+                claim,
                 env!("CARGO_PKG_VERSION")
             ),
         );

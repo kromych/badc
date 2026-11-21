@@ -57,6 +57,10 @@ Output mode -- pick at most one (defaults to a native binary):
                            Merge the relocatable objects and print the
                            sections and the symbols the merge defines,
                            then exit.
+  -v                       Report the version on stderr and go on with
+                           the build; with no input, only report it.
+                           -Wl,-v reports the linker's.
+  --version                Print the version and exit.
   --install [<dir>]        Write every embedded header and the runtime
                            source under <dir> (default $BADC_HOME, else
                            ~/.badc), recreating the include/ + lib/
@@ -431,7 +435,11 @@ Compile knobs:
                            default: badc implements most but not all of
                            the GNU C surface, so code gating a feature
                            badc lacks (__int128) on __GNUC__ keeps
-                           compiling unless this is requested.
+                           compiling unless this is requested. They
+                           claim GNU C 4.3.0.
+  -fgnuc-version=V         Define the GNU C identity macros claiming
+                           version V (major[.minor[.patch]]); 0 defines
+                           none. The last of it and --gnu wins.
   --msvc                   Windows targets: define the MSVC identity
                            macros (_MSC_VER, _MSC_FULL_VER, _M_X64 /
                            _M_ARM64, ...) and leave __STDC__ undefined,

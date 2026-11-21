@@ -724,6 +724,9 @@ pub struct CompileOptions {
     /// most but not all of the GNU C surface, so it claims `__GNUC__`
     /// only when the caller opts in.
     pub gnu: bool,
+    /// `-fgnuc-version=`: the GNU C version the identity macros claim in
+    /// place of [`crate::GNU_COMPAT_VERSION`].
+    pub gnuc_version: Option<[u32; 3]>,
     /// `--msvc`: the MSVC identity predefines in place of `__STDC__`
     /// ([`Preprocessor::enable_msvc`]); the Windows targets only.
     pub msvc: bool,
@@ -923,6 +926,11 @@ impl CompileOptions {
     /// Enable the `--gnu` identity predefines.
     pub fn with_gnu(mut self, gnu: bool) -> Self {
         self.gnu = gnu;
+        self
+    }
+    /// Claim GNU C `version` in the identity macros (`-fgnuc-version=`).
+    pub fn with_gnuc_version(mut self, version: Option<[u32; 3]>) -> Self {
+        self.gnuc_version = version;
         self
     }
     /// Enable the `--msvc` MSVC identity predefines.
@@ -3130,6 +3138,9 @@ impl Compiler {
         }
         pp.set_plain_char_signed(opts.plain_char_signed(target));
         if opts.gnu {
+            if let Some(version) = opts.gnuc_version {
+                pp.set_gnuc_version(version);
+            }
             pp.enable_gnu(opts.gnu89_inline, !opts.gnu_dialect);
         }
         if opts.msvc && target.is_windows() {

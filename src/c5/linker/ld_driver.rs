@@ -307,13 +307,19 @@ fn print_ld_version() {
         .split_once('\n')
         .map(|(_, tail)| tail)
         .unwrap_or("");
-    println!(
-        "GNU ld (badc {}) {LD_COMPAT_VERSION}",
-        env!("CARGO_PKG_VERSION")
-    );
+    println!("{}", ld_identity());
     if !git_tail.is_empty() {
         println!("{git_tail}");
     }
+}
+
+/// The linker's `-v` line, also the answer to the compiler driver's
+/// `-Wl,-v`.
+pub fn ld_identity() -> alloc::string::String {
+    alloc::format!(
+        "GNU ld (badc {}) {LD_COMPAT_VERSION}",
+        env!("CARGO_PKG_VERSION")
+    )
 }
 
 impl LdArgs {

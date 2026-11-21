@@ -411,6 +411,19 @@ fn segment_and_utf_capability_macros_track_the_feature() {
     assert!(out.contains("U16 1") && out.contains("U32 1"), "{out}");
 }
 
+/// `-fgnuc-version=`: the identity claims the given version in the
+/// `__GNUC__` triple and in `__VERSION__`.
+#[test]
+fn gnu_identity_claims_a_set_version() {
+    let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    pp.set_gnuc_version([4, 7, 0]);
+    pp.enable_gnu(false, true);
+    let out = pp
+        .process("v __GNUC__ __GNUC_MINOR__ __GNUC_PATCHLEVEL__ __VERSION__\n")
+        .expect("preprocessor failed");
+    assert!(out.contains("v 4 7 0 \"4.7.0 Compatible badc "), "{out}");
+}
+
 #[test]
 fn gnu_identity_version_derives_from_the_shared_claim() {
     // The `__GNUC__` triple and `__VERSION__` must state

@@ -116,7 +116,7 @@ pub use linker::{
 };
 #[cfg(all(feature = "linker", feature = "std"))]
 #[allow(unused_imports)]
-pub use linker::{is_ld_invocation, os_error_text, run_ld, script_unreadable};
+pub use linker::{is_ld_invocation, ld_identity, os_error_text, run_ld, script_unreadable};
 #[cfg(all(feature = "linker", feature = "std"))]
 #[allow(unused_imports)]
 pub use linker::{read_archive_at, read_indexed_archive_at};

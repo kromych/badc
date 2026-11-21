@@ -718,7 +718,7 @@ impl<'a> PeWriter<'a> {
             0 => self.text_prologue_len,
             _ => self.stub.bytes.len() as u32,
         };
-        let stub = (self.stub_at, stub_len, &self.stub.a64_prologue[..]);
+        let stub = (self.stub_at, stub_len, &self.stub);
         let pdata = build_pdata(
             self.machine,
             l.text_rva,
@@ -2826,6 +2826,8 @@ struct EntryStub {
     direct_call_main_offset: Option<u32>,
     /// The arm64 steps of its prologue, one per instruction from its start.
     a64_prologue: Vec<crate::c5::codegen::A64Step>,
+    /// The x86_64 steps of its prologue, each with the offset past it.
+    x64_prologue: Vec<(u32, crate::c5::codegen::PrologueStep)>,
 }
 
 impl EntryStub {
@@ -2835,6 +2837,7 @@ impl EntryStub {
             direct_call_runtime: Vec::new(),
             direct_call_main_offset: None,
             a64_prologue: Vec::new(),
+            x64_prologue: Vec::new(),
         }
     }
 }
@@ -2887,6 +2890,7 @@ fn build_dllmain_stub(machine: Machine) -> EntryStub {
         direct_call_runtime: Vec::new(),
         direct_call_main_offset: None,
         a64_prologue: Vec::new(),
+        x64_prologue: Vec::new(),
     }
 }
 
@@ -2903,11 +2907,14 @@ fn build_entry_adapter(machine: Machine) -> EntryStub {
             let call_off = bytes.len() as u32;
             bytes.extend_from_slice(&[0xE8, 0, 0, 0, 0]); // call __c5_entry
             bytes.extend_from_slice(&[0x0F, 0x0B]); // ud2
+            // The unwinder steps out of the stub to the loader's caller
+            // only through a record of the allocation.
             EntryStub {
                 bytes,
                 direct_call_runtime: vec![(call_off, RT_ENTRY)],
                 direct_call_main_offset: None,
                 a64_prologue: Vec::new(),
+                x64_prologue: vec![(7, crate::c5::codegen::PrologueStep::Alloc(0x28))],
             }
         }
         // A frame record first, as the CRT's entry has one, so a stack walk
@@ -2929,6 +2936,7 @@ fn build_entry_adapter(machine: Machine) -> EntryStub {
                 direct_call_runtime: vec![(bl_off, RT_ENTRY)],
                 direct_call_main_offset: None,
                 a64_prologue: vec![A64Step::SaveFpLrX(16), A64Step::SetFp],
+                x64_prologue: Vec::new(),
             }
         }
     }
@@ -2957,18 +2965,20 @@ fn build_pdata(
     text_rva: u32,
     text_size: u32,
     text_prologue_len: u32,
-    stub: (u32, u32, &[crate::c5::codegen::A64Step]),
+    stub: (u32, u32, &EntryStub),
     fn_unwind: &[super::FnUnwind],
     a64_unwind: &[super::A64Unwind],
     early_returns: &[super::EarlyReturn],
     foreign: &[super::PeUnwindRange],
     seh: Seh,
 ) -> Result<Pdata, C5Error> {
+    let (stub_at, stub_len, stub) = stub;
     match machine {
         Machine::X86_64 => build_x86_64_pdata(
             text_rva,
             text_size,
             text_prologue_len,
+            (stub_at, stub_len, &stub.x64_prologue),
             fn_unwind,
             early_returns,
             foreign,
@@ -2978,7 +2988,7 @@ fn build_pdata(
             text_rva,
             text_size,
             text_prologue_len,
-            stub,
+            (stub_at, stub_len, &stub.a64_prologue),
             a64_unwind,
             early_returns,
             foreign,
@@ -3097,17 +3107,20 @@ fn build_unwind_codes(uw: &super::FnUnwind, frame_start: u32) -> (Vec<u8>, u8, u
 }
 
 /// x86_64 `.pdata` builder.
+#[allow(clippy::too_many_arguments)]
 fn build_x86_64_pdata(
     text_rva: u32,
     text_size: u32,
     text_prologue_len: u32,
+    stub: (u32, u32, &[(u32, crate::c5::codegen::PrologueStep)]),
     fn_unwind: &[super::FnUnwind],
     early_returns: &[super::EarlyReturn],
     foreign: &[super::PeUnwindRange],
     seh: Seh,
 ) -> Result<Pdata, C5Error> {
     const RUNTIME_FUNCTION_SIZE: u32 = 12;
-    if fn_unwind.is_empty() && foreign.is_empty() {
+    let (stub_at, stub_len, stub_steps) = stub;
+    if fn_unwind.is_empty() && foreign.is_empty() && stub_steps.is_empty() {
         let mut bytes = Vec::with_capacity(RUNTIME_FUNCTION_SIZE as usize);
         bytes.extend_from_slice(&text_rva.to_le_bytes());
         bytes.extend_from_slice(&(text_rva + text_size).to_le_bytes());
@@ -3146,21 +3159,16 @@ fn build_x86_64_pdata(
                 })
         })
         .collect();
-    let array_size = (entries.len() + foreign.len()) as u32 * RUNTIME_FUNCTION_SIZE;
+    let array_size = (entries.len() + foreign.len() + 1) as u32 * RUNTIME_FUNCTION_SIZE;
     let mut blobs: Vec<u8> = Vec::new();
-    let mut info_offsets: Vec<u32> = Vec::with_capacity(entries.len());
-    let body = text_rva + text_prologue_len;
-    for (uw, &(begin, _)) in entries.iter().zip(&spans) {
-        info_offsets.push(blobs.len() as u32);
-        let (codes, size_of_prolog, frame) = build_unwind_codes(uw, begin - uw.begin);
-        let count_of_codes = (codes.len() / 2) as u8;
-        let language = seh.language_data(uw.begin, body);
-        // Version 1, with the handler flags where a language handler follows.
-        let flags = language.as_ref().map_or(0, |l| l.0);
-        blobs.push(0x01 | flags << 3);
-        let language = language.map(|l| l.1);
+    // An UNWIND_INFO, version 1, with the handler flags where a language
+    // handler follows; its offset in `blobs`.
+    let mut info = |uw: &super::FnUnwind, frame_start: u32, language: Option<(u8, Vec<u8>)>| {
+        let at = blobs.len() as u32;
+        let (codes, size_of_prolog, frame) = build_unwind_codes(uw, frame_start);
+        blobs.push(0x01 | language.as_ref().map_or(0, |l| l.0) << 3);
         blobs.push(size_of_prolog);
-        blobs.push(count_of_codes);
+        blobs.push((codes.len() / 2) as u8);
         blobs.push(frame);
         blobs.extend_from_slice(&codes);
         // The codes array holds an even number of slots; each slot is 2
@@ -3168,8 +3176,13 @@ fn build_x86_64_pdata(
         while !blobs.len().is_multiple_of(4) {
             blobs.push(0);
         }
-        blobs.extend(language.unwrap_or_default());
-    }
+        blobs.extend(language.map(|l| l.1).unwrap_or_default());
+        at
+    };
+    let body = text_rva + text_prologue_len;
+    let info_offsets: Vec<u32> = (entries.iter().zip(&spans))
+        .map(|(uw, &(begin, _))| info(uw, begin - uw.begin, seh.language_data(uw.begin, body)))
+        .collect();
 
     // The loader binary-searches the array, so the inputs' entries take
     // their places among the writer's by start. Each row's unwind data is
@@ -3177,6 +3190,16 @@ fn build_x86_64_pdata(
     let mut rows: Vec<(u32, u32, Result<u32, Option<u64>>)> = (spans.iter().zip(&info_offsets))
         .map(|(&(begin, end), &info)| (body + begin, body + end, Ok(info)))
         .collect();
+    if !stub_steps.is_empty() {
+        let uw = super::FnUnwind {
+            begin: 0,
+            end: stub_len,
+            leaf: false,
+            steps: stub_steps.to_vec(),
+        };
+        let stub_rva = text_rva + stub_at;
+        rows.push((stub_rva, stub_rva + stub_len, Ok(info(&uw, 0, None))));
+    }
     rows.extend(foreign.iter().map(|r| {
         let info = match r.data {
             super::PeUnwindRef::Info(off) => Some(off),
@@ -3685,6 +3708,25 @@ mod tests {
         assert_eq!(s.direct_call_runtime, vec![(9, RT_ENTRY)]);
         assert_eq!(s.direct_call_main_offset, None);
         assert_eq!(&s.bytes[14..16], &[0x0F, 0x0B], "adapter must end in ud2");
+    }
+
+    /// The x86_64 adapter's record states its `sub rsp, 0x28`, so the
+    /// unwinder steps from `__c5_entry`'s return address to the loader's
+    /// caller rather than reading the shadow space as a return address.
+    #[test]
+    fn entry_adapter_unwind_record_x86_64() {
+        let s = build_entry_stub(Machine::X86_64, false);
+        let seh = Seh {
+            rows: &[],
+            handler: 0,
+        };
+        let stub = (0, 16, &s.x64_prologue[..]);
+        let p = build_x86_64_pdata(0x1000, 0x40, 16, stub, &[], &[], &[], seh).unwrap();
+        let word = |at: usize| u32::from_le_bytes(p.bytes[at..at + 4].try_into().unwrap());
+        assert_eq!((word(0), word(4)), (0x1000, 0x1010));
+        // Version 1, a 7-byte prologue, one UWOP_ALLOC_SMALL of 0x28 at 7,
+        // no frame register.
+        assert_eq!(&p.xdata[..6], &[0x01, 7, 1, 0, 7, 0x42]);
     }
 
     /// The arm64 adapter opens a frame record, which its unwind record
@@ -4295,9 +4337,9 @@ mod tests {
     }
 
     /// A multi-function Windows-x64 PE must carry one `RUNTIME_FUNCTION`
-    /// per emitted function -- sorted by `BeginAddress`, non-overlapping,
-    /// each pointing at a well-formed `UNWIND_INFO` (version 1) inside the
-    /// `.pdata` section.
+    /// per emitted function and one for the entry stub -- sorted by
+    /// `BeginAddress`, non-overlapping, each pointing at a well-formed
+    /// `UNWIND_INFO` (version 1) inside the `.pdata` section.
     #[test]
     fn pdata_has_one_runtime_function_per_function_x64() {
         use crate::Compiler;
@@ -4341,8 +4383,8 @@ mod tests {
         );
         assert_eq!(
             exc_size as usize / 12,
-            n_funcs,
-            "one RUNTIME_FUNCTION per emitted function (not a single coarse entry)"
+            n_funcs + 1,
+            "one RUNTIME_FUNCTION per emitted function and the entry stub's"
         );
 
         // The `.pdata` section must hold both the array and the trailing
@@ -4391,12 +4433,13 @@ mod tests {
                 rva_to_file_off(&bytes, info_rva).expect("UNWIND_INFO RVA inside a section");
             let ver_flags = bytes[info_off];
             assert_eq!(ver_flags & 0x07, 1, "entry {i}: UNWIND_INFO version != 1");
-            // The codes array length must match CountOfCodes, and the
-            // FrameRegister, when present, must name rbp (5).
+            // A function's codes name rbp (5) as the frame register; the
+            // entry stub opening `.text` allocates with no frame register.
             let count_of_codes = bytes[info_off + 2];
             let frame_reg = bytes[info_off + 3] & 0x0F;
             if count_of_codes > 0 {
-                assert_eq!(frame_reg, 5, "entry {i}: frame register must be rbp");
+                let want = if begin == text_lo { 0 } else { 5 };
+                assert_eq!(frame_reg, want, "entry {i}: frame register");
             }
             prev_end = end;
         }
@@ -4573,7 +4616,7 @@ mod tests {
             leaf: false,
             steps: Vec::new(),
         };
-        let x64 = build_x86_64_pdata(0x1000, 16, 0, &[uw], &[], &[], seh).map(|_| ());
+        let x64 = build_x86_64_pdata(0x1000, 16, 0, (0, 0, &[]), &[uw], &[], &[], seh).map(|_| ());
         let a64 = super::super::A64Unwind {
             begin: 0,
             end: 16,

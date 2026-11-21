@@ -2903,3 +2903,46 @@ fn an_address_constant_below_its_object_relocates() {
                int main(void) { return one_based + 4097 == buf + 1 ? 0 : 1; }\n";
     assert_eq!(jit_exit(src, &[]), 0);
 }
+
+/// A program loaded without running `main` -- it has none -- exposes each
+/// function and object it defines with external linkage: its constructor
+/// ran before `jit_load` returned, a call through a returned address reads
+/// an object the host wrote through another, an internal name is not
+/// listed, and dropping the module runs its destructor.
+#[test]
+fn a_loaded_program_exposes_its_external_definitions() {
+    const SRC: &str = "int bias; int *seen;\n\
+        static int hidden(int x) { return x; }\n\
+        int add(int a, int b) { return hidden(a) + b + bias; }\n\
+        __attribute__((constructor)) static void start(void) { bias = 100; }\n\
+        __attribute__((destructor)) static void stop(void) { if (seen) *seen = 7; }\n";
+    for optimize in [false, true] {
+        let front = crate::CompileOptions::default().with_no_entry_point(true);
+        let program = Compiler::with_options(SRC.into(), crate::Target::host(), front)
+            .compile()
+            .expect("compiles");
+        let options = NativeOptions {
+            optimize,
+            ..NativeOptions::default()
+        };
+        let module = crate::jit_load(&program, options, &mut |_| {}).expect("loads");
+        let names: Vec<&str> = module.symbols().map(|(n, _)| n).collect();
+        assert!(
+            names.contains(&"add") && names.contains(&"bias"),
+            "{names:?}"
+        );
+        assert!(module.symbol("hidden").is_none(), "{names:?}");
+        assert!(!module.code().is_empty());
+        let add: extern "C" fn(i32, i32) -> i32 =
+            unsafe { core::mem::transmute(module.symbol("add").expect("add")) };
+        assert_eq!(add(2, 3), 105, "the constructor set `bias`");
+        let bias = module.symbol("bias").expect("bias") as *mut i32;
+        unsafe { bias.write(1) };
+        assert_eq!(add(2, 3), 6);
+        let mut seen = 0i32;
+        let slot = module.symbol("seen").expect("seen") as *mut *mut i32;
+        unsafe { slot.write(&mut seen) };
+        drop(module);
+        assert_eq!(seen, 7, "dropping the module ran the destructor");
+    }
+}

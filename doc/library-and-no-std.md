@@ -15,6 +15,13 @@ with `CompileOptions`. From a `Program`:
 
 * `emit_native` and `emit_native_with_options` return the image as bytes;
 * `jit_run` and `jit_run_with_options` run it in-process on the host;
+* `jit_load` maps it into the process and runs its constructors without
+  running `main`; the `JitModule` it returns gives the address of each
+  function and object the program defines with external linkage
+  (`symbol`, `symbols`) and its machine code (`code`), and dropping it runs
+  the program's destructors and the `atexit` handlers registered on the
+  dropping thread, as `dlclose` does. A program without `main` is compiled
+  with `CompileOptions::with_no_entry_point(true)`;
 * `Vm::new(program).run()` runs it in the interpreter, and
   `with_pointer_tracking`, `with_trace`, `with_args`, and
   `with_sve_vector_bits` (128 bits by default) configure the run.
@@ -29,6 +36,9 @@ that stopped it. `C5Error::diagnostics()` returns them. A successful compile
 leaves its warnings in `Program::warnings`. A `Diagnostic` displays as the
 driver prints it, and its `code` names a row of the catalog that
 `badc --list-diagnostics` prints.
+
+`examples/jit_symbols.rs` calls into a program loaded with the default
+features; `examples/emit_image.rs` writes an executable for any target.
 
 ## Features
 

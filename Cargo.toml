@@ -26,6 +26,10 @@ include = [
 name = "badc"
 path = "src/lib.rs"
 
+[[example]]
+name = "emit_image"
+required-features = ["full"]
+
 [[bin]]
 name = "badc"
 path = "src/main.rs"

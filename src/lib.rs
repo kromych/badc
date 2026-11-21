@@ -146,12 +146,13 @@ pub use c5::{
     BinaryFormat, BuildId, C5Error, CStd, CodeModel, CompileOptions, Compiler,
     DEFAULT_SSP_BUFFER_SIZE, DWARF_FORMAT_BITS, DWARF_VERSION, ElfClass, ElfImageOptions, ExecForm,
     FixedReg, FixedRegs, FpContract, GuardSeg, GuardSymbol, Hardening, Host, IncludeOrigin,
-    IncludeRecord, IncludeStatus, IndirectBranch, LaxVectors, MachOImageOptions, NativeOptions,
-    OutputKind, Overwrite, PatchableEntry, PredefinedKind, PredefinedSymbol, Preprocessed,
-    Profiling, Program, SYSV_TLS_GUARD_OFFSET, StackGuard, StackProtect, StackProtector, StructDef,
-    SymVisibility, Target, TargetSet, Trace, VariableInfo, Vm, X86ExtOption, X86Features,
-    dep_escape, dep_prerequisites, dep_render, embedded_headers, fixed_register, jit_run,
-    jit_run_with_options, mach_o_symbol_name, predefined_symbols, stack_guard_sysreg,
+    IncludeRecord, IncludeStatus, IndirectBranch, JitModule, LaxVectors, MachOImageOptions,
+    NativeOptions, OutputKind, Overwrite, PatchableEntry, PredefinedKind, PredefinedSymbol,
+    Preprocessed, Profiling, Program, SYSV_TLS_GUARD_OFFSET, StackGuard, StackProtect,
+    StackProtector, StructDef, SymVisibility, Target, TargetSet, Trace, VariableInfo, Vm,
+    X86ExtOption, X86Features, dep_escape, dep_prerequisites, dep_render, embedded_headers,
+    fixed_register, jit_load, jit_run, jit_run_with_options, mach_o_symbol_name,
+    predefined_symbols, stack_guard_sysreg,
 };
 #[cfg(feature = "native-emit")]
 pub use c5::{

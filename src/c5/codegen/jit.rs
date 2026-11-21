@@ -145,6 +145,150 @@ pub fn jit_run_with_sources(
     }
 }
 
+/// A program the JIT mapped into this process, as a loader maps a shared
+/// object: [`jit_load`] runs its constructors, and dropping it runs the
+/// `atexit` handlers registered on the dropping thread and its destructors,
+/// last registered first, and unmaps it. The addresses it returns are valid
+/// while it lives; an `exit` the program calls ends the process.
+pub struct JitModule {
+    loaded: Loaded,
+}
+
+#[cfg(all(
+    feature = "std",
+    any(
+        target_os = "linux",
+        all(target_os = "macos", target_arch = "aarch64"),
+        target_os = "windows",
+    ),
+))]
+type Loaded = jit_impl::Loaded;
+#[cfg(not(all(
+    feature = "std",
+    any(
+        target_os = "linux",
+        all(target_os = "macos", target_arch = "aarch64"),
+        target_os = "windows",
+    ),
+)))]
+type Loaded = core::convert::Infallible;
+
+impl JitModule {
+    /// The address of the function or object the program defines with
+    /// external linkage as `name`.
+    pub fn symbol(&self, name: &str) -> Option<*const core::ffi::c_void> {
+        self.symbols().find(|&(n, _)| n == name).map(|(_, a)| a)
+    }
+
+    /// Each function and object the program defines with external
+    /// linkage, by name, with its address.
+    pub fn symbols(&self) -> impl Iterator<Item = (&str, *const core::ffi::c_void)> {
+        #[cfg(all(
+            feature = "std",
+            any(
+                target_os = "linux",
+                all(target_os = "macos", target_arch = "aarch64"),
+                target_os = "windows",
+            ),
+        ))]
+        return (self.loaded.symbols.iter())
+            .map(|(n, &a)| (n.as_str(), a as *const core::ffi::c_void));
+        #[cfg(not(all(
+            feature = "std",
+            any(
+                target_os = "linux",
+                all(target_os = "macos", target_arch = "aarch64"),
+                target_os = "windows",
+            ),
+        )))]
+        core::iter::empty()
+    }
+
+    /// The machine code of the program's unit, as mapped.
+    pub fn code(&self) -> &[u8] {
+        #[cfg(all(
+            feature = "std",
+            any(
+                target_os = "linux",
+                all(target_os = "macos", target_arch = "aarch64"),
+                target_os = "windows",
+            ),
+        ))]
+        return self.loaded.code();
+        #[cfg(not(all(
+            feature = "std",
+            any(
+                target_os = "linux",
+                all(target_os = "macos", target_arch = "aarch64"),
+                target_os = "windows",
+            ),
+        )))]
+        match self.loaded {}
+    }
+}
+
+impl Drop for JitModule {
+    fn drop(&mut self) {
+        #[cfg(all(
+            feature = "std",
+            any(
+                target_os = "linux",
+                all(target_os = "macos", target_arch = "aarch64"),
+                target_os = "windows",
+            ),
+        ))]
+        self.loaded.stop();
+    }
+}
+
+/// Map `program` into this process for the host and run its constructors,
+/// without running `main`; `report` takes each diagnostic the lowering
+/// produced. A program without `main` is compiled with
+/// `CompileOptions::with_no_entry_point`.
+pub fn jit_load(
+    program: &Program,
+    options: NativeOptions,
+    report: &mut dyn FnMut(&Diagnostic),
+) -> Result<JitModule, C5Error> {
+    #[cfg(all(
+        feature = "std",
+        any(
+            target_os = "linux",
+            all(target_os = "macos", target_arch = "aarch64"),
+            target_os = "windows",
+        ),
+    ))]
+    {
+        #[cfg(feature = "full")]
+        let sources = crate::c5::linker::OnDemandSources::new(
+            Target::host(),
+            crate::c5::compiler::CompileOptions::default().with_optimize(options.optimize),
+        );
+        #[cfg(feature = "full")]
+        let sources = Some(&sources);
+        #[cfg(not(feature = "full"))]
+        let sources = None;
+        let loaded = jit_impl::load(program, options, sources, report)?;
+        loaded.start();
+        Ok(JitModule { loaded })
+    }
+    #[cfg(not(all(
+        feature = "std",
+        any(
+            target_os = "linux",
+            all(target_os = "macos", target_arch = "aarch64"),
+            target_os = "windows",
+        ),
+    )))]
+    {
+        let _ = (program, options, report);
+        Err(C5Error::internal(
+            "JIT: requires the `std` feature on Linux (any arch), \
+             macOS/aarch64, or Windows (x86_64 / aarch64)",
+        ))
+    }
+}
+
 /// Pick the target appropriate for the current host. JIT only knows
 /// how to lower for the host arch -- there's no cross-arch JIT.
 #[allow(dead_code)]
@@ -1032,6 +1176,42 @@ mod jit_impl {
         (build.text.len() + 7) & !7
     }
 
+    /// A program mapped into this process: its units' code and data, the
+    /// address of each external definition, its constructors and
+    /// destructors in run order, and its entry.
+    pub(super) struct Loaded {
+        bound: Vec<BoundUnit>,
+        placed: Vec<PlacedUnit>,
+        pub(super) symbols: BTreeMap<String, usize>,
+        pub(super) init: Vec<usize>,
+        pub(super) fini: Vec<usize>,
+        entry: usize,
+    }
+
+    impl Loaded {
+        /// The machine code of the program's own unit, as mapped.
+        pub(super) fn code(&self) -> &[u8] {
+            let len = self.bound[0].build.text.len();
+            unsafe { core::slice::from_raw_parts(self.placed[0].code.as_ptr(), len) }
+        }
+
+        /// Register the destructors and run the constructors on this
+        /// thread, as a loader does for a shared object it maps.
+        pub(super) fn start(&self) {
+            register_dtors(&self.fini);
+            for &ctor in &self.init {
+                let ctor: extern "C" fn() = unsafe { core::mem::transmute(ctor as *const ()) };
+                ctor();
+            }
+        }
+
+        /// Run the `atexit` handlers registered on this thread and the
+        /// destructors, last registered first.
+        pub(super) fn stop(&self) {
+            drain_jit_atexit_chain();
+        }
+    }
+
     fn jit_run_inner(
         program: &Program,
         args: &[String],
@@ -1039,6 +1219,54 @@ mod jit_impl {
         sources: Sources<'_>,
         report: &mut dyn FnMut(&Diagnostic),
     ) -> Result<i32, C5Error> {
+        let loaded = load(program, options, sources, report)?;
+        // Build a System V argv: a NULL-terminated array of `char *`
+        // pointers. The CStrings live for the duration of the call;
+        // the function pointer table only needs to outlive the
+        // single `main_fn(...)` invocation.
+        let argv_cstrings: Vec<CString> = args
+            .iter()
+            .map(|s| CString::new(s.as_str()).unwrap_or_default())
+            .collect();
+        let mut argv_ptrs: Vec<*const c_char> =
+            argv_cstrings.iter().map(|cs| cs.as_ptr()).collect();
+        argv_ptrs.push(std::ptr::null());
+        // SAFETY: the JIT'd main was lowered with extern "C" / System V
+        // ABI conventions and reachable via a normal `call`-equivalent
+        // (transmuting + invoking is the same as the call instruction
+        // a parent function would make). main reads argc/argv from
+        // the System V argument registers and returns its exit code
+        // in rax / x0.
+        //
+        // Dispatch through a fresh `pthread_create` worker on POSIX
+        // hosts. The cargo test harness's parallel scheduler runs
+        // each lib test on a thread it owns; calling the JIT'd code
+        // directly on that thread exposes it to whatever signal mask,
+        // stack guard size, alternate-stack setup, and TLS the
+        // harness has installed for itself. A pthread worker has the
+        // kernel-defaulted register state, signal mask, and TLS, so
+        // the JIT'd code observes the environment a freshly-launched
+        // native binary would. Windows keeps the in-thread call: it
+        // has no concurrent native-fixture parity harness pressuring
+        // the same thread.
+        run_main_threaded(
+            loaded.entry as *const u8,
+            args.len() as c_int,
+            argv_ptrs.as_ptr(),
+            argv_cstrings,
+            loaded.init.clone(),
+            loaded.fini.clone(),
+        )
+    }
+
+    /// Lower `program` for the host, join the units it needs, and map and
+    /// bind them.
+    pub(super) fn load(
+        program: &Program,
+        options: NativeOptions,
+        sources: Sources<'_>,
+        report: &mut dyn FnMut(&Diagnostic),
+    ) -> Result<Loaded, C5Error> {
         let target = host_target()?;
         let machine = if target.is_aarch64() {
             super::super::Machine::Aarch64
@@ -1053,9 +1281,9 @@ mod jit_impl {
             let _ = sources;
             (alloc::vec![user], Spellings::new())
         };
-        let table = link_table(&units);
+        let links = link_table(&units);
         let bound = (units.into_iter().enumerate())
-            .map(|(i, u)| bind_unit(i, u, &table, &spellings, machine))
+            .map(|(i, u)| bind_unit(i, u, &links, &spellings, machine))
             .collect::<Result<Vec<_>, _>>()?;
         let mut placed = bound
             .iter()
@@ -1090,18 +1318,6 @@ mod jit_impl {
             at.code.make_executable()?;
             flush_icache(at.code.as_ptr(), at.code.len());
         }
-
-        // Build a System V argv: a NULL-terminated array of `char *`
-        // pointers. The CStrings live for the duration of the call;
-        // the function pointer table only needs to outlive the
-        // single `main_fn(...)` invocation.
-        let argv_cstrings: Vec<CString> = args
-            .iter()
-            .map(|s| CString::new(s.as_str()).unwrap_or_default())
-            .collect();
-        let mut argv_ptrs: Vec<*const c_char> =
-            argv_cstrings.iter().map(|cs| cs.as_ptr()).collect();
-        argv_ptrs.push(std::ptr::null());
 
         // Constructor / destructor addresses in `.init_array` layout
         // order (prioritized ascending, then unprioritized). Resolved
@@ -1172,34 +1388,18 @@ mod jit_impl {
             .chain(ordered_addrs(true))
             .collect();
 
-        let entry_ptr = unsafe { placed[0].code.as_ptr().add(bound[0].build.entry_offset) };
-        // SAFETY: the JIT'd main was lowered with extern "C" / System V
-        // ABI conventions and reachable via a normal `call`-equivalent
-        // (transmuting + invoking is the same as the call instruction
-        // a parent function would make). main reads argc/argv from
-        // the System V argument registers and returns its exit code
-        // in rax / x0.
-        //
-        // Dispatch through a fresh `pthread_create` worker on POSIX
-        // hosts. The cargo test harness's parallel scheduler runs
-        // each lib test on a thread it owns; calling the JIT'd code
-        // directly on that thread exposes it to whatever signal mask,
-        // stack guard size, alternate-stack setup, and TLS the
-        // harness has installed for itself. A pthread worker has the
-        // kernel-defaulted register state, signal mask, and TLS, so
-        // the JIT'd code observes the environment a freshly-launched
-        // native binary would. Windows keeps the in-thread call: it
-        // has no concurrent native-fixture parity harness pressuring
-        // the same thread.
-        let exit_code = run_main_threaded(
-            entry_ptr,
-            args.len() as c_int,
-            argv_ptrs.as_ptr(),
-            argv_cstrings,
-            init_addrs,
-            fini_addrs,
-        )?;
-        Ok(exit_code)
+        let symbols = (links.iter())
+            .map(|(name, &(r, _))| (name.clone(), address(r) as usize))
+            .collect();
+        let entry = placed[0].code.as_ptr() as usize + bound[0].build.entry_offset;
+        Ok(Loaded {
+            bound,
+            placed,
+            symbols,
+            init: init_addrs,
+            fini: fini_addrs,
+            entry,
+        })
     }
 
     /// Patch `unit`'s own fixups against its mapped addresses.

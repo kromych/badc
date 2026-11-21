@@ -1041,6 +1041,15 @@ jobs:
         run: cargo build --locked --verbose
       - name: --no-default-features --lib
         run: cargo build --locked --no-default-features --lib --verbose
+      # Each gate alone on top of the default, and the examples the
+      # default builds.
+      - name: each feature alone
+        run: |
+          for f in headers optimizer target-aarch64 target-x86_64 native-emit; do
+            cargo build --locked --lib --features "$f"
+          done
+      - name: examples
+        run: cargo build --locked --examples
       - name: --all-features
         run: cargo build --locked --all-features --verbose
       # `cargo publish` verifies the tarball with default features only;

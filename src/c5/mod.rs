@@ -58,10 +58,10 @@ pub use {
     aarch64_isa::{Aarch64ExtError, Aarch64Features},
     codegen::{
         BinaryFormat, BuildId, CodeModel, DEFAULT_SSP_BUFFER_SIZE, ElfImageOptions, ExecForm,
-        FixedReg, FixedRegs, GuardSeg, GuardSymbol, Hardening, IndirectBranch, MachOImageOptions,
-        NativeOptions, OutputKind, PatchableEntry, Profiling, SYSV_TLS_GUARD_OFFSET, StackGuard,
-        StackProtect, StackProtector, Target, fixed_register, jit_run, jit_run_with_options,
-        stack_guard_sysreg,
+        FixedReg, FixedRegs, GuardSeg, GuardSymbol, Hardening, IndirectBranch, JitModule,
+        MachOImageOptions, NativeOptions, OutputKind, PatchableEntry, Profiling,
+        SYSV_TLS_GUARD_OFFSET, StackGuard, StackProtect, StackProtector, Target, fixed_register,
+        jit_load, jit_run, jit_run_with_options, stack_guard_sysreg,
     },
     compiler::{
         AUTO_VAR_INIT_PATTERN_BYTE, AutoVarInit, CStd, CompileOptions, Compiler, FpContract,

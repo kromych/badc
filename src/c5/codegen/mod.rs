@@ -89,7 +89,7 @@ pub(crate) fn require_whole_addr(part: AddrPart, label: &str) -> Result<(), erro
 
 #[cfg(feature = "full")]
 pub use jit::jit_run_with_sources;
-pub use jit::{jit_run, jit_run_with_options};
+pub use jit::{JitModule, jit_load, jit_run, jit_run_with_options};
 
 pub use crate::c5::object::elf_class::ElfClass;
 

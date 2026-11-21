@@ -203,6 +203,7 @@ impl Compiler {
     /// instructions outside a named section are rejected.
     /// TODO: top-level instruction emission.
     fn parse_file_scope_asm(&mut self) -> Result<(), C5Error> {
+        let line = self.lex.line;
         let (template, tstart, _is_volatile, is_goto) = self.parse_asm_head()?;
         self.truncate_data(tstart);
         if is_goto {
@@ -226,7 +227,7 @@ impl Compiler {
             )
         })?;
         self.ingest_file_scope_asm(text, true)
-            .map_err(|e| self.compile_err(Code::ASSEMBLER, String::from(e)))
+            .map_err(|e| self.compile_err_at(Code::ASSEMBLER, line, String::from(e)))
     }
 
     /// Record a `.set` alias of the unit, a later assignment to the same name

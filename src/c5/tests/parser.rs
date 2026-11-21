@@ -3063,6 +3063,19 @@ fn asm_output_operand_lvalue_matrix() {
     );
 }
 
+/// A file-scope `asm` the assembler rejects is reported at its own line,
+/// not at the line after the `;` that ends it.
+#[test]
+fn a_file_scope_asm_error_names_its_line() {
+    let src =
+        "int x;\n__asm__(\".section .data\\n.bogus 1\\n.text\");\nint main(void) { return 0; }\n";
+    let e = Compiler::new(src.to_string()).compile().unwrap_err();
+    let lines: Vec<u32> = (e.diagnostics().iter())
+        .filter_map(|d| d.loc.as_ref().map(|l| l.line))
+        .collect();
+    assert_eq!(lines, [2], "{e}");
+}
+
 #[test]
 fn file_scope_asm_constraints() {
     // `asm("...")` between declarations accepts section data

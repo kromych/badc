@@ -1033,7 +1033,8 @@ pub(crate) struct Ast {
 /// trap.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct SanitizeCheck {
-    pub kind: crate::c5::compiler::sanitize::Check,
+    /// The [`crate::c5::compiler::sanitize::Check`] bits the node tests.
+    pub checks: u32,
     /// Data offset of the site's handler data.
     pub data: i64,
     /// The handler's symbol, or `None` where the check traps.

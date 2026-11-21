@@ -16,35 +16,53 @@ use crate::c5::token::Token;
 /// A runtime check, as `-fsanitize=` names it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Check {
-    /// A signed `+`, `-` or `*` whose value its type cannot represent
-    /// (C17 6.5p5).
+    /// A signed `+`, `-`, `*`, negation, or `/` or `%` of the type's
+    /// minimum by -1, whose value its type cannot represent (C17 6.5p5).
     SignedIntegerOverflow,
+    /// A left shift of a negative signed value, or of a value the result
+    /// type cannot represent shifted (C17 6.5.7p4).
+    ShiftBase,
+    /// A shift by a negative amount or by the promoted left operand's
+    /// width or more (C17 6.5.7p3).
+    ShiftExponent,
+    /// An integer `/` or `%` by zero (C17 6.5.5p5).
+    IntegerDivideByZero,
 }
 
 impl Check {
     /// Every check, in the order `-fsanitize=undefined` lists them.
-    pub const ALL: [Check; 1] = [Check::SignedIntegerOverflow];
+    pub const ALL: [Check; 4] = [
+        Check::SignedIntegerOverflow,
+        Check::ShiftBase,
+        Check::ShiftExponent,
+        Check::IntegerDivideByZero,
+    ];
 
     /// The spelling `-fsanitize=` takes.
     pub const fn name(self) -> &'static str {
         match self {
             Check::SignedIntegerOverflow => "signed-integer-overflow",
+            Check::ShiftBase => "shift-base",
+            Check::ShiftExponent => "shift-exponent",
+            Check::IntegerDivideByZero => "integer-divide-by-zero",
         }
     }
 
-    const fn bit(self) -> u32 {
+    pub const fn bit(self) -> u32 {
         1 << self as u32
     }
 
-    /// The checks a `-fsanitize=` list item names: one check, or the
-    /// group `undefined`; `None` for a name badc does not implement.
+    /// The checks a `-fsanitize=` list item names: one check, the group
+    /// `shift`, or the group `undefined`; `None` for a name badc does not
+    /// implement.
     pub fn named(name: &str) -> Option<u32> {
-        if name == "undefined" {
-            return Some(Check::ALL.iter().fold(0, |m, c| m | c.bit()));
+        match name {
+            "undefined" => Some(Check::ALL.iter().fold(0, |m, c| m | c.bit())),
+            "shift" => Some(Check::ShiftBase.bit() | Check::ShiftExponent.bit()),
+            _ => (Check::ALL.iter())
+                .find(|c| c.name() == name)
+                .map(|c| c.bit()),
         }
-        (Check::ALL.iter())
-            .find(|c| c.name() == name)
-            .map(|c| c.bit())
     }
 }
 
@@ -73,14 +91,6 @@ impl Sanitize {
     /// Whether `check` runs.
     pub const fn runs(&self, check: Check) -> bool {
         self.enabled & check.bit() != 0
-    }
-
-    const fn traps(&self, check: Check) -> bool {
-        self.trap & check.bit() != 0
-    }
-
-    const fn recovers(&self, check: Check) -> bool {
-        self.recover & check.bit() != 0
     }
 }
 
@@ -123,32 +133,93 @@ impl Compiler {
             None => "__ubsan_handle_negate_overflow",
             _ => return false,
         };
-        let types = [self.ubsan_type(ty)];
-        let data = self.ubsan_site(&types);
         let values = if op.is_some() { 2 } else { 1 };
-        let handler = self.ubsan_handler(check, handler, values);
+        self.attach_check(id, check.bit(), handler, &[ty], values);
+        true
+    }
+
+    /// Check the shift whose node the accumulator holds, of a left operand
+    /// promoted to `ty` by an amount of type `amount_ty`, under
+    /// `-fsanitize=shift-exponent` and, for a signed left shift,
+    /// `-fsanitize=shift-base`.
+    pub(super) fn sanitize_shift(&mut self, ty: i64, amount_ty: i64) {
+        let Some(id) = self.ast_acc else {
+            return;
+        };
+        let left = matches!(
+            self.ast.expr(id),
+            crate::c5::ast::Expr::Binary { op: BinOp::Shl, .. }
+        );
+        let base = if left && !is_unsigned_ty(ty) {
+            Check::ShiftBase.bit()
+        } else {
+            0
+        };
+        let checks = (Check::ShiftExponent.bit() | base) & self.sanitize.enabled;
+        if checks == 0 || !is_integer_scalar_ty(ty) || !matches!(self.size_of_type(ty), 4 | 8) {
+            return;
+        }
+        let handler = "__ubsan_handle_shift_out_of_bounds";
+        self.attach_check(id, checks, handler, &[ty, amount_ty], 2);
+    }
+
+    /// Check the `/` or `%` whose node the accumulator holds, computed in
+    /// `ty`, under `-fsanitize=integer-divide-by-zero` and, for a signed
+    /// type, `-fsanitize=signed-integer-overflow` (the type's minimum by
+    /// -1); whether a check was attached.
+    pub(super) fn sanitize_divide(&mut self, ty: i64) -> bool {
+        let Some(id) = self.ast_acc else {
+            return false;
+        };
+        let overflow = if is_unsigned_ty(ty) {
+            0
+        } else {
+            Check::SignedIntegerOverflow.bit()
+        };
+        let checks = (Check::IntegerDivideByZero.bit() | overflow) & self.sanitize.enabled;
+        if checks == 0 || !is_integer_scalar_ty(ty) || !matches!(self.size_of_type(ty), 4 | 8) {
+            return false;
+        }
+        self.attach_check(id, checks, "__ubsan_handle_divrem_overflow", &[ty], 2);
+        true
+    }
+
+    /// Attach `checks` to node `id`: the site data naming `types`, and
+    /// `handler` taking it and `values` operands.
+    fn attach_check(
+        &mut self,
+        id: ExprId,
+        checks: u32,
+        handler: &str,
+        types: &[i64],
+        values: usize,
+    ) {
+        let types: alloc::vec::Vec<i64> = types.iter().map(|&t| self.ubsan_type(t)).collect();
+        let data = self.ubsan_site(&types);
+        let handler = self.ubsan_handler(checks, handler, values);
         self.ast.checks.insert(
             id,
             SanitizeCheck {
-                kind: check,
+                checks,
                 data,
                 handler,
             },
         );
-        true
     }
 
     /// The handler `name`, taking the site data and `values` operands,
     /// declared for `check`'s recovery, or `None` where the check traps.
-    fn ubsan_handler(&mut self, check: Check, name: &str, values: usize) -> Option<u32> {
-        if self.sanitize.traps(check) {
+    /// A node's checks share one handler: it traps where every one of them
+    /// traps, and returns where every one recovers.
+    fn ubsan_handler(&mut self, checks: u32, name: &str, values: usize) -> Option<u32> {
+        if self.sanitize.trap & checks == checks {
             return None;
         }
         let proto = match values {
             1 => "void(void *, void *)",
             _ => "void(void *, void *, void *)",
         };
-        let (name, proto) = if self.sanitize.recovers(check) {
+        let (name, proto) = if self.sanitize.recover & checks == checks {
             (String::from(name), proto)
         } else {
             let noreturn = match values {

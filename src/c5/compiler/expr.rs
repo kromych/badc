@@ -5439,9 +5439,11 @@ impl Compiler {
         signed: super::super::ir::BinOp,
         unsigned: super::super::ir::BinOp,
     ) -> Result<(), C5Error> {
+        let at = self.lex.position();
         self.next()?;
         self.ast_psh();
         self.expr(op.rhs_lev as i64)?;
+        self.operator_at = at;
         self.check_binary_operands(lhs_ty, self.ty, op.name)?;
         if let Some(vty) = self.vector_binop_ty(lhs_ty, self.ty, op.name) {
             self.ty = vty;
@@ -5451,12 +5453,14 @@ impl Compiler {
         self.narrow_int128_shift_count(lhs_ty);
         // C99 6.5.7p3: the type of the promoted left operand.
         let result_ty = integer_promote(lhs_ty);
+        let amount_ty = integer_promote(self.ty);
         self.ty = result_ty;
         self.ast_binop(if is_unsigned_ty(lhs_ty) {
             unsigned
         } else {
             signed
         });
+        self.sanitize_shift(result_ty, amount_ty);
         if op.tok == Token::ShlOp && self.size_of_type(result_ty) == 4 {
             self.renormalize_to_width(result_ty);
             self.ty = result_ty;
@@ -5804,11 +5808,13 @@ impl Compiler {
         };
         if is_unsigned_ty(common) {
             self.emit_unsigned_division(lhs_ty, rhs_ty, unsigned, common);
+            self.sanitize_divide(common);
         } else {
             self.ty = common;
             self.ast_binop(signed);
+            let checked = self.sanitize_divide(common);
             // INT_MIN / -1 overflows the width, as `+ - *` can.
-            self.renormalize_after(signed, common);
+            self.renormalize(common, self.overflow_undefined(signed, common) && !checked);
         }
         self.ty = common;
         Ok(())

@@ -187,11 +187,6 @@ impl Compiler {
             && self.size_of_type(ty) >= 4
     }
 
-    /// [`Self::renormalize_to_width`] after `op`, marked per [`Self::overflow_undefined`].
-    pub(super) fn renormalize_after(&mut self, op: crate::c5::ir::BinOp, ty: i64) {
-        self.renormalize(ty, self.overflow_undefined(op, ty));
-    }
-
     /// Renormalize the 64-bit accumulator to the storage width of an
     /// integer type `ty` after an operation that can overflow that width.
     ///

@@ -179,10 +179,91 @@ impl<'a> Walker<'a> {
     ) -> Result<ValueId, WalkError> {
         let va = self.walk_expr_rvalue(b, lhs)?;
         let vb = self.walk_expr_rvalue(b, rhs)?;
+        if !matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul) {
+            let flag = match op {
+                BinOp::Shl | BinOp::Shr | BinOp::Shru => {
+                    self.shift_flag(b, check, op, (va, vb), ty)
+                }
+                _ => self.divide_flag(b, check, (va, vb), ty),
+            };
+            self.report_failed_check(b, check, flag, &[va, vb]);
+            let width = self.divmod_operand_width(op, ty, lhs, rhs);
+            let mask = self.operand_mask(op, ty, lhs, rhs);
+            return Ok(Self::int_binop_values(b, op, va, vb, width, mask));
+        }
         let raw = b.binop(op, va, vb);
         let flag = self.overflow_flag(b, op, (va, vb), raw, ty);
         self.report_failed_check(b, check, flag, &[va, vb]);
         Ok(raw)
+    }
+
+    /// Whether `va op vb`, a shift of a left operand promoted to `ty`,
+    /// fails `check`: an amount below 0 or at the width or above
+    /// (`shift-exponent`), or for a signed left shift, a negative value or
+    /// one whose bits at or above the result's sign bit, after the shift,
+    /// are not all zero (`shift-base`, C11 6.5.7p4).
+    fn shift_flag(
+        &mut self,
+        b: &mut SsaBuilder,
+        check: crate::c5::ast::SanitizeCheck,
+        op: BinOp,
+        (va, vb): (ValueId, ValueId),
+        ty: i64,
+    ) -> ValueId {
+        use crate::c5::compiler::sanitize::Check;
+        let bits = 8 * type_size_bytes(ty, self.target) as i64;
+        let width = b.imm(bits);
+        let too_far = b.binop(BinOp::Uge, vb, width);
+        let mut flag = if check.checks & Check::ShiftExponent.bit() != 0 {
+            too_far
+        } else {
+            b.imm(0)
+        };
+        if op == BinOp::Shl && check.checks & Check::ShiftBase.bit() != 0 {
+            // The value is sign-extended in the register, so shifting it
+            // right by `bits - 1 - amount` leaves the bits that land at or
+            // above the sign bit, the sign included.
+            let amount = b.binop_imm(BinOp::And, vb, bits - 1);
+            let top = b.imm(bits - 1);
+            let keep = b.binop(BinOp::Sub, top, amount);
+            let lost = b.binop(BinOp::Shr, va, keep);
+            let zero = b.imm(0);
+            let lost = b.binop(BinOp::Ne, lost, zero);
+            let one = b.imm(1);
+            let in_range = b.binop(BinOp::Xor, too_far, one);
+            let base = b.binop(BinOp::And, lost, in_range);
+            flag = b.binop(BinOp::Or, flag, base);
+        }
+        flag
+    }
+
+    /// Whether the `/` or `%` of `va` by `vb` in `ty` fails `check`: a zero
+    /// divisor (`integer-divide-by-zero`), or for a signed type the
+    /// type's minimum by -1 (`signed-integer-overflow`).
+    fn divide_flag(
+        &mut self,
+        b: &mut SsaBuilder,
+        check: crate::c5::ast::SanitizeCheck,
+        (va, vb): (ValueId, ValueId),
+        ty: i64,
+    ) -> ValueId {
+        use crate::c5::compiler::sanitize::Check;
+        let zero = b.imm(0);
+        let mut flag = if check.checks & Check::IntegerDivideByZero.bit() != 0 {
+            b.binop(BinOp::Eq, vb, zero)
+        } else {
+            b.imm(0)
+        };
+        if check.checks & Check::SignedIntegerOverflow.bit() != 0 {
+            let bits = 8 * type_size_bytes(ty, self.target) as u32;
+            let min = b.imm(i64::MIN >> (64 - bits));
+            let neg1 = b.imm(-1);
+            let is_min = b.binop(BinOp::Eq, va, min);
+            let by_neg1 = b.binop(BinOp::Eq, vb, neg1);
+            let overflow = b.binop(BinOp::And, is_min, by_neg1);
+            flag = b.binop(BinOp::Or, flag, overflow);
+        }
+        flag
     }
 
     /// `-x` under `-fsanitize=signed-integer-overflow`: `0 - x`, which

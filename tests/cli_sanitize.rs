@@ -192,3 +192,73 @@ fn compound_assignment_increment_and_negation_are_checked() {
         );
     }
 }
+
+const SHIFTS: &str = "#include <limits.h>
+#include <stdio.h>
+__attribute__((noinline)) int big(int a, int b) { return a << b; }
+__attribute__((noinline)) int neg(int a, int b) { return a >> b; }
+__attribute__((noinline)) int base(int a, int b) { return a << b; }
+__attribute__((noinline)) int lost(int a, int b) { return a << b; }
+__attribute__((noinline)) long long wide(long long a, int b) { return a << b; }
+__attribute__((noinline)) unsigned ushl(unsigned a, int b) { return a << b; }
+__attribute__((noinline)) int dv(int a, int b) { return a / b; }
+__attribute__((noinline)) long long md(long long a, long long b) { return a % b; }
+__attribute__((noinline)) unsigned udv(unsigned a, unsigned b) { return a / b; }
+int main(int argc, char **argv) {
+    (void)argv;
+    int k = argc;
+    printf(\"%u\\n\", ushl(3u, 30 + k));
+    big(1, 31 + k);
+    neg(1, -k);
+    base(-k, 1);
+    lost(3, 30 + k);
+    wide(1, 63 + k);
+    dv(INT_MIN, -k);
+    md(5, k - 1);
+    udv(5u, k - 1u);
+    return 0;
+}
+";
+
+/// Each site of a shift and a division reports what clang's runtime does:
+/// the amount negative or past the width, a negative or overflowing base
+/// of a signed left shift (an unsigned one has none), `INT_MIN / -1`, and
+/// a zero divisor, signed or unsigned.
+#[test]
+fn shifts_and_divisions_are_checked() {
+    let dir = TempDir::new("badc-sanitize-shifts");
+    let src = dir.join("overflow.c");
+    std::fs::write(&src, SHIFTS).unwrap();
+    for opt in ["-O0", "-O"] {
+        let exe = dir.join(format!("shifts{opt}"));
+        let built = Command::new(env!("CARGO_BIN_EXE_badc"))
+            .args(["-q", opt, "-fsanitize=undefined", "-o"])
+            .arg(&exe)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(
+            built.status.success(),
+            "{}",
+            String::from_utf8_lossy(&built.stderr)
+        );
+        let o = run(&exe, &[]);
+        assert!(o.status.success(), "{opt}: {o:?}");
+        assert_eq!(
+            reports(&o),
+            [
+                "3:60: runtime error: shift exponent 32 is too large for 32-bit type 'int'",
+                "4:60: runtime error: shift exponent -1 is negative",
+                "5:61: runtime error: left shift of negative value -1",
+                "6:61: runtime error: left shift of 3 by 31 places cannot be represented in \
+                 type 'int'",
+                "7:73: runtime error: shift exponent 64 is too large for 64-bit type 'long long'",
+                "9:59: runtime error: division of -2147483648 by -1 cannot be represented in \
+                 type 'int'",
+                "10:77: runtime error: division by zero",
+                "11:75: runtime error: division by zero",
+            ],
+            "{opt}"
+        );
+    }
+}

@@ -24,6 +24,9 @@ pub struct OnDemandSources {
     options: CompileOptions,
     /// Labels and texts in the native link's order.
     sources: Vec<(String, &'static str)>,
+    /// Names the run treats as referenced (`-u`), so the member defining
+    /// one is pulled.
+    required: Vec<String>,
     members: core::cell::OnceCell<Result<Vec<Member>, C5Error>>,
 }
 
@@ -43,8 +46,20 @@ impl OnDemandSources {
             target,
             options,
             sources,
+            required: Vec::new(),
             members: core::cell::OnceCell::new(),
         }
+    }
+
+    /// Treat `names` as referenced (`-u`).
+    pub fn with_required(mut self, names: Vec<String>) -> Self {
+        self.required = names;
+        self
+    }
+
+    /// The names a run treats as referenced.
+    pub(crate) fn required(&self) -> &[String] {
+        &self.required
     }
 
     #[cfg(test)]
@@ -53,6 +68,7 @@ impl OnDemandSources {
             target,
             options: CompileOptions::default(),
             sources: (sources.iter()).map(|&(l, b)| (l.to_string(), b)).collect(),
+            required: Vec::new(),
             members: core::cell::OnceCell::new(),
         }
     }

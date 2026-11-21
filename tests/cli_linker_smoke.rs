@@ -1312,6 +1312,58 @@ fn archive_members_are_pulled_on_demand() {
     );
 }
 
+/// gcc's and GNU ld's `-u <symbol>`: the archive member defining the
+/// symbol joins the link though nothing references it, so its constructor
+/// runs; without it the member stays out.
+#[test]
+fn minus_u_pulls_the_member_defining_the_symbol() {
+    let dir = tempdir("archive-u");
+    write_source(
+        &dir,
+        "member.c",
+        "#include <stdio.h>\nint pulled_in(void) { return 0; }\n\
+         __attribute__((constructor)) static void announce(void) { puts(\"pulled\"); }\n",
+    );
+    write_source(&dir, "main.c", "int main(void) { return 0; }\n");
+    run(
+        Command::new(badc())
+            .args(["--ar", "-o"])
+            .arg(dir.join("libu.a"))
+            .arg(dir.join("member.c"))
+            .current_dir(&dir),
+        "build archive",
+    );
+    let forms: [&[&str]; 5] = [
+        &[],
+        &["-u", "pulled_in"],
+        &["-upulled_in"],
+        &["--undefined=pulled_in"],
+        &["-Wl,-u,pulled_in"],
+    ];
+    for (k, form) in forms.into_iter().enumerate() {
+        let exe = dir.join(format!("prog{k}"));
+        run(
+            Command::new(badc())
+                .arg("-o")
+                .arg(&exe)
+                .arg(dir.join("main.c"))
+                .args(form)
+                .arg("-L")
+                .arg(&dir)
+                .arg("-lu")
+                .current_dir(&dir),
+            "link",
+        );
+        let out = Command::new(&exe).output().expect("run prog");
+        let expect = if form.is_empty() { "" } else { "pulled" };
+        assert_eq!(
+            String::from_utf8_lossy(&out.stdout).trim_end(),
+            expect,
+            "{form:?}"
+        );
+    }
+}
+
 // The embedded on-demand sources join the member pool only when
 // selection over the real archives stalls with a symbol still
 // undefined. Host-independent: cross-links windows-x64 PEs, where

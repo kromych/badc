@@ -1124,6 +1124,11 @@ fn select_archive_members(
         sel.undefined
             .insert(entry.to_string(), "<command line>".to_string());
     }
+    // So is a name `-u` lists, as gcc and GNU ld have it.
+    for name in &embedded.cli.link.required {
+        sel.undefined
+            .insert(name.clone(), "<command line>".to_string());
+    }
     let (mut depth, mut group) = (0usize, Vec::new());
     for k in 0..slots.len() {
         match &slots[k] {

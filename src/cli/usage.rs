@@ -126,6 +126,11 @@ Multi-TU knobs:
                            Searched in the -L directories, then in the
                            standard directories under --sysroot; no
                            other directory is read.
+  -u <symbol>, -u<symbol>, --undefined=<symbol>
+                           Treat <symbol> as referenced, so the archive
+                           member defining it joins the link, as gcc's
+                           and GNU ld's -u. Repeatable. Under --jit and
+                           --interp it reaches the runtime pool only.
   --whole-archive, --no-whole-archive
                            Load every member of the archives named
                            after --whole-archive, up to

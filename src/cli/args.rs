@@ -313,6 +313,9 @@ pub(crate) struct Link {
     pub(crate) pie: Option<bool>,
     /// ld64's `-undefined <treatment>`, the last one given.
     pub(crate) undefined: Option<Undefined>,
+    /// gcc's and GNU ld's `-u <symbol>`: names the link treats as
+    /// referenced, so an archive member defining one is pulled.
+    pub(crate) required: Vec<String>,
 }
 
 /// How a Mach-O link treats a reference no input defines, as ld64's
@@ -405,6 +408,7 @@ impl Default for Link {
             print_map: false,
             pie: None,
             undefined: None,
+            required: Vec::new(),
         }
     }
 }
@@ -2426,6 +2430,17 @@ impl Parser {
                 if self.target_spec.is_none() {
                     self.target_spec = Some(spec.to_string());
                 }
+            }
+            "-u" | "--undefined" => {
+                link.required
+                    .push(operand(iter, "badc: error: -u requires a symbol")?);
+            }
+            s if s.starts_with("--undefined=") => {
+                link.required.push(s["--undefined=".len()..].to_string());
+            }
+            // gcc's preprocessor `-undef` is not `-u ndef`.
+            s if s.starts_with("-u") && s.len() > 2 && s != "-undef" => {
+                link.required.push(s[2..].to_string())
             }
             "-m" => {
                 let emu = operand(iter, "badc: error: -m requires an emulation name")?;

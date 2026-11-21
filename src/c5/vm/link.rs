@@ -213,12 +213,17 @@ fn pull_members(
     sources: &crate::c5::linker::OnDemandSources,
 ) -> Result<Vec<VmUnit>, C5Error> {
     let mut undefined = user.undefined();
+    let (strong, weak) = user.program.external_definitions();
+    let mut defined: BTreeSet<String> = strong.into_iter().chain(weak).collect();
+    undefined.extend(
+        (sources.required().iter())
+            .filter(|n| !defined.contains(*n))
+            .cloned(),
+    );
     let mut units = alloc::vec![user];
     if undefined.is_empty() {
         return Ok(units);
     }
-    let (strong, weak) = units[0].program.external_definitions();
-    let mut defined: BTreeSet<String> = strong.into_iter().chain(weak).collect();
     let members = sources.members()?;
     crate::c5::linker::on_demand::select(members, &mut defined, &mut undefined, |i| {
         let unit = VmUnit::lift(members[i].program.clone())?;

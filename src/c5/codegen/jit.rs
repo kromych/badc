@@ -945,8 +945,16 @@ mod jit_impl {
         options: &NativeOptions,
     ) -> Result<(Vec<JitUnit>, Spellings), C5Error> {
         let mut undefined = user.undefined();
-        let mut libc = crate::c5::linker::TargetCLibrary::new(target);
+        // A name `-u` lists is one the run references; only a member can
+        // define it.
+        let (strong, weak) = user.program.external_definitions();
         let mut stalled = false;
+        for n in sources.map_or(&[][..], |s| s.required()) {
+            if !strong.contains(n) && !weak.contains(n) {
+                stalled |= undefined.insert(n.clone());
+            }
+        }
+        let mut libc = crate::c5::linker::TargetCLibrary::new(target);
         for n in &undefined {
             stalled |= !(n.starts_with("__imp_")
                 || crate::c5::linker::link_resolves_symbol(n)

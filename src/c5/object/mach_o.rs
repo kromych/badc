@@ -2405,6 +2405,24 @@ impl<'a> MachOWriter<'a> {
             .iter()
             .filter(|d| !pragma_export_names.contains(d.name.as_str()))
             .collect();
+        // Every other function is a local, as ld64 keeps them: dladdr and
+        // the profilers name code by the nearest symbol at or below it.
+        let named: alloc::collections::BTreeSet<usize> = (build.exports.iter())
+            .filter_map(|e| build.pc_to_native.get(e.ent_pc).copied())
+            .chain(dyn_exports_emit.iter().filter_map(|d| match d.section {
+                crate::c5::codegen::DynamicExportSection::Text => Some(d.offset as usize),
+                _ => None,
+            }))
+            .collect();
+        let fn_locals: Vec<(String, usize)> = (build.func_ent_pcs.iter().zip(&build.func_names))
+            .filter(|(_, name)| !name.is_empty())
+            .filter_map(|(&pc, name)| {
+                let native = *build.pc_to_native.get(pc)?;
+                (native != usize::MAX && !named.contains(&native))
+                    .then(|| (crate::c5::mach_o_name::spelling(name).into_owned(), native))
+            })
+            .collect();
+        symbol_names.extend(fn_locals.iter().map(|(name, _)| name.as_str()));
         let dyn_export_disk_names: Vec<String> = dyn_exports_emit
             .iter()
             .map(|d| crate::c5::mach_o_name::spelling(&d.name).into_owned())
@@ -2419,8 +2437,10 @@ impl<'a> MachOWriter<'a> {
         }
         let (strtab, str_indices) = build_strtab(&symbol_names);
         let mut symtab = Vec::with_capacity(NLIST_64_SIZE * symbol_names.len());
-        for (i, &(_, tramp_offset)) in plt_locals.iter().enumerate() {
-            let n_value = code_vmaddr_base + tramp_offset as u64;
+        let local_offsets =
+            (plt_locals.iter().map(|&(_, off)| off)).chain(fn_locals.iter().map(|&(_, off)| off));
+        for (i, offset) in local_offsets.enumerate() {
+            let n_value = code_vmaddr_base + offset as u64;
             symtab.extend_from_slice(&nlist_local(str_indices[i], n_value, SECT_INDEX_TEXT));
         }
         let mut export_trie_entries: Vec<(String, u64, u64)> = Vec::new();

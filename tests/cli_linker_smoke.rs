@@ -774,6 +774,14 @@ fn an_asm_template_binds_its_units_renamed_static_over_an_external_namesake() {
 
 /// The names in a Mach-O image's symbol table, as the file spells them.
 fn mach_o_symbol_names(image: &[u8]) -> Vec<String> {
+    mach_o_symbols(image)
+        .into_iter()
+        .map(|(name, _)| name)
+        .collect()
+}
+
+/// Each entry of a Mach-O image's symbol table: its name and `n_type`.
+fn mach_o_symbols(image: &[u8]) -> Vec<(String, u8)> {
     const LC_SYMTAB: usize = 0x2;
     let at = |o: usize| u32::from_le_bytes(image[o..o + 4].try_into().unwrap()) as usize;
     let mut cmd = 32;
@@ -784,13 +792,42 @@ fn mach_o_symbol_names(image: &[u8]) -> Vec<String> {
                 .map(|i| {
                     let name = &image[stroff + at(symoff + 16 * i)..];
                     let end = name.iter().position(|&b| b == 0).unwrap();
-                    String::from_utf8_lossy(&name[..end]).into_owned()
+                    let name = String::from_utf8_lossy(&name[..end]).into_owned();
+                    (name, image[symoff + 16 * i + 4])
                 })
                 .collect();
         }
         cmd += at(cmd + 4);
     }
     panic!("no LC_SYMTAB");
+}
+
+/// A static function has a local symbol (`N_SECT`, no `N_EXT`) in a Mach-O
+/// image, as ld64 keeps it: dladdr and the profilers name code by the
+/// nearest symbol at or below it, which would otherwise be the function
+/// laid out before it.
+#[test]
+fn a_mach_o_image_names_a_static_function_locally() {
+    let dir = tempdir("mach-o-static-symbol");
+    let src = write_source(
+        &dir,
+        "s.c",
+        "static __attribute__((noinline)) int hidden(int x) { return x * 3; }\n\
+         int main(int argc, char **argv) { (void)argv; return hidden(argc); }\n",
+    );
+    for opt in ["-O0", "-O"] {
+        let out = dir.join(format!("s{opt}"));
+        let mut cmd = Command::new(badc());
+        cmd.args(["-q", "--target=macos-aarch64", opt, "-o"])
+            .arg(&out)
+            .arg(&src);
+        run(cmd.current_dir(&dir), "build");
+        let symbols = mach_o_symbols(&std::fs::read(&out).unwrap());
+        assert!(
+            symbols.contains(&(String::from("_hidden"), 0x0e)),
+            "{opt}: {symbols:?}"
+        );
+    }
 }
 
 /// A unit defining `other_name` in file-scope asm, which branches to the

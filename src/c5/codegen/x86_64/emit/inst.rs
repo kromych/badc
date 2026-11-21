@@ -543,6 +543,9 @@ pub(super) fn emit_inst(
         Inst::VecConst { imm, kind, bytes } => {
             emit_vec_const(code, (*imm, *kind, *bytes), dst, frame)
         }
+        Inst::InlineAsm { .. } if !cfg!(feature = "inline-asm") => {
+            Err(Unsupported::new(crate::c5::asm::NO_INLINE_ASM))
+        }
         Inst::InlineAsm { asm, args } => emit_inline_asm(out, asm, args, v, fcx, None),
         Inst::Neg(value) => emit_neg(code, dst, *value, alloc, frame),
         Inst::Select { cond, a, b, kind } => {

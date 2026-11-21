@@ -48,8 +48,10 @@ features; `examples/emit_image.rs` writes an executable for any target.
 | `headers` | the bundled C library and compiler headers; without it an `#include` searches the include path alone |
 | `optimizer` | the SSA optimization passes `NativeOptions::optimize` runs; without it a lowering that asks for them fails |
 | `target-aarch64`, `target-x86_64` | the backend of an architecture other than the host's, which is always built; without it a lowering for that architecture fails |
+| `inline-asm` | `asm` statements; without it the compiler refuses one |
+| `assembler` | file-scope `asm`, with the GNU as directives, sections and macros; requires `inline-asm`; without it the compiler refuses file-scope `asm` |
 | `native-emit` | `emit_native` and the Mach-O, ELF and PE writers; requires `std` |
-| `full` | `native-emit`, `headers`, `optimizer` and both backends, plus objects, archives and the linker; the `badc` binary requires it |
+| `full` | `native-emit`, `headers`, `optimizer`, both backends, `inline-asm` and `assembler`, plus objects, archives and the linker; the `badc` binary requires it |
 | `codegen_test` | register-allocator limits for tests (`BADC_MAX_GPR`, `BADC_MAX_FPR`) |
 
 ## `no_std`

@@ -1047,6 +1047,7 @@ impl FnEmit<'_, '_> {
         // branch fixups, which `emit_inst` has no access to.
         if let Inst::InlineAsm { asm, args } = inst
             && let Terminator::AsmGoto { table } = block.terminator
+            && cfg!(feature = "inline-asm")
         {
             return emit_inline_asm(
                 &mut self.out,

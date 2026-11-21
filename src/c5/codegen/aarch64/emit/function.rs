@@ -1105,6 +1105,7 @@ impl FunctionEmitter<'_, '_> {
         }
         if let Inst::InlineAsm { asm, args } = inst
             && let Terminator::AsmGoto { table } = block.terminator
+            && cfg!(feature = "inline-asm")
         {
             return self.emit_asm_goto(asm, args, v, table);
         }

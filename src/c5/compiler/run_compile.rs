@@ -252,6 +252,9 @@ impl Compiler {
         text: &str,
         globl_shortcut: bool,
     ) -> Result<(), crate::c5::asm::AsmErrors> {
+        if !cfg!(feature = "assembler") {
+            return Err(crate::c5::asm::NO_ASSEMBLER.into());
+        }
         use crate::c5::asm::{AsmError, AsmErrors, AsmSectionItem};
         // Comment stripping, GNU as macro expansion, and the per-definition
         // rename of redefined numeric labels, once; the stored text is the

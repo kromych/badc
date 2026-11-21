@@ -27,6 +27,16 @@ pub(crate) use align::*;
 pub(crate) use directive::*;
 pub(crate) use expr::*;
 pub(crate) use gas::*;
+
+/// The error a build without the `inline-asm` feature gives an `asm`
+/// statement.
+pub(crate) const NO_INLINE_ASM: &str =
+    "this build of badc has no inline assembler (the `inline-asm` feature)";
+
+/// The error a build without the `assembler` feature gives file-scope
+/// `asm` and assembly source.
+pub(crate) const NO_ASSEMBLER: &str =
+    "this build of badc has no assembler (the `assembler` feature)";
 pub(crate) use layout::*;
 pub(crate) use operand::*;
 pub(crate) use section::*;

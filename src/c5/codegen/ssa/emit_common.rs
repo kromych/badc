@@ -2689,6 +2689,12 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // `crate::c5::asm::reset_asm_instance`.
     crate::c5::asm::reset_asm_instance();
     let mut st = LowerState::new();
+    if !cfg!(feature = "assembler") && !program.file_asm.is_empty() {
+        return Err(C5Error::hard(
+            Code::UNSUPPORTED,
+            crate::c5::asm::NO_ASSEMBLER,
+        ));
+    }
     crate::c5::asm::materialize_file_asm(
         &program.file_asm,
         B::FILE_ASM_ALIGN_POW2,

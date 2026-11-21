@@ -1681,6 +1681,9 @@ impl Compiler {
     /// (`pause` / `yield`, lowered to the target spin-loop hint).
     /// Operand constraints and other instructions are rejected.
     fn parse_asm_stmt(&mut self) -> Result<(), C5Error> {
+        if !cfg!(feature = "inline-asm") {
+            return Err(self.compile_err(Code::UNSUPPORTED, crate::c5::asm::NO_INLINE_ASM));
+        }
         let at = self.site();
         let (template, tstart, is_volatile, is_goto) = self.parse_asm_head()?;
         // `asm goto` takes the general extended-asm path directly: the

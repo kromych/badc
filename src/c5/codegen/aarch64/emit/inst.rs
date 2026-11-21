@@ -606,6 +606,9 @@ pub(super) fn emit_inst(
         // The predecessor-exit moves placed the value; nothing at the phi
         // position.
         Inst::Phi { .. } => Ok(()),
+        Inst::InlineAsm { .. } if !cfg!(feature = "inline-asm") => {
+            Err(Unsupported::new(crate::c5::asm::NO_INLINE_ASM))
+        }
         Inst::InlineAsm { asm, args } => emit_inline_asm_aarch64(
             code,
             asm,

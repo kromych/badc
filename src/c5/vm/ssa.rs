@@ -1134,10 +1134,14 @@ fn run_func<H: Host>(
                 ));
             }
             Terminator::Unreachable => {
-                // Sealed after a noreturn call; reaching it means the call
-                // returned when it should not have.
+                // Native code executes a trap instruction here: the seal of
+                // `__builtin_trap`, of a trapping `-fsanitize` check, of
+                // `__builtin_unreachable`, and of a noreturn call that
+                // returned.
                 break Err(C5Error::Runtime(
-                    "vm_ssa: reached Terminator::Unreachable".to_string(),
+                    "vm_ssa: the program trapped (`__builtin_trap`, a trapping check, or \
+                     an unreachable point reached)"
+                        .to_string(),
                 ));
             }
         }

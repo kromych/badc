@@ -27,15 +27,21 @@ pub enum Check {
     ShiftExponent,
     /// An integer `/` or `%` by zero (C17 6.5.5p5).
     IntegerDivideByZero,
+    /// A load of an enumerated type outside its values. A C enumeration
+    /// holds every value of its compatible integer type (C17 6.7.2.2p4), so
+    /// no C load is out of range and the check inserts nothing, as gcc's and
+    /// clang's do in C.
+    Enum,
 }
 
 impl Check {
     /// Every check, in the order `-fsanitize=undefined` lists them.
-    pub const ALL: [Check; 4] = [
+    pub const ALL: [Check; 5] = [
         Check::SignedIntegerOverflow,
         Check::ShiftBase,
         Check::ShiftExponent,
         Check::IntegerDivideByZero,
+        Check::Enum,
     ];
 
     /// The spelling `-fsanitize=` takes.
@@ -45,6 +51,7 @@ impl Check {
             Check::ShiftBase => "shift-base",
             Check::ShiftExponent => "shift-exponent",
             Check::IntegerDivideByZero => "integer-divide-by-zero",
+            Check::Enum => "enum",
         }
     }
 

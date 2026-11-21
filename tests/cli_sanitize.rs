@@ -435,3 +435,32 @@ fn compound_shifts_and_divisions_are_checked() {
         }
     }
 }
+
+/// `-fsanitize=enum` is taken and inserts nothing: a C enumeration holds
+/// every value of its compatible integer type (C17 6.7.2.2p4), so a load
+/// of one is never out of range, as gcc and clang have it in C.
+#[test]
+fn the_enum_check_inserts_nothing_in_c() {
+    let dir = TempDir::new("badc-sanitize-enum");
+    let src = dir.join("overflow.c");
+    std::fs::write(
+        &src,
+        "enum e { A, B };\nint main(int argc, char **argv) {\n    (void)argv;\n    \
+         enum e v = (enum e)(argc + 6);\n    return v == 7 ? 0 : 1;\n}\n",
+    )
+    .unwrap();
+    let exe = dir.join("enum");
+    let built = Command::new(env!("CARGO_BIN_EXE_badc"))
+        .args(["-q", "-fsanitize=enum", "-fsanitize-trap=enum", "-o"])
+        .arg(&exe)
+        .arg(&src)
+        .output()
+        .expect("run badc");
+    assert!(
+        built.status.success(),
+        "{}",
+        String::from_utf8_lossy(&built.stderr)
+    );
+    let o = run(&exe, &[]);
+    assert!(o.status.success() && o.stderr.is_empty(), "{o:?}");
+}

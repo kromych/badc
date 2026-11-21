@@ -22,12 +22,21 @@ use postfix::MemberRef;
 impl<'a> Walker<'a> {
     /// Walk an expression in rvalue position. Returns the
     /// `ValueId` whose runtime value is the C99 6.5p1 evaluation
-    /// of the expression.
+    /// of the expression, after the check `-fsanitize=` attached to its
+    /// value.
     pub(super) fn walk_expr_rvalue(
         &mut self,
         b: &mut SsaBuilder,
         id: ExprId,
     ) -> Result<ValueId, WalkError> {
+        let value = self.walk_expr_value(b, id)?;
+        if let Some(&check) = self.ast.value_checks.get(&id) {
+            self.check_value(b, check, value);
+        }
+        Ok(value)
+    }
+
+    fn walk_expr_value(&mut self, b: &mut SsaBuilder, id: ExprId) -> Result<ValueId, WalkError> {
         if let Some(ty) = self.atomic_lvalue_ty(id) {
             let addr = self.atomic_lvalue_addr(b, id, ty)?;
             return self.atomic_object_load(b, addr, ty);

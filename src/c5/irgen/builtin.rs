@@ -305,6 +305,25 @@ impl<'a> Walker<'a> {
 
     /// Where `flag` is set, call `check`'s handler with its site data and
     /// `values`, or trap; the failing path is the unlikely one.
+    /// Hold `value` to what `check` tests it against, reporting it where it
+    /// fails.
+    pub(super) fn check_value(
+        &mut self,
+        b: &mut SsaBuilder,
+        check: crate::c5::ast::ValueCheck,
+        value: ValueId,
+    ) {
+        use crate::c5::ast::ValueTest;
+        let flag = match check.test {
+            // A negative index, read unsigned, lies past every bound.
+            ValueTest::Index { len, one_past } => {
+                let limit = b.imm((len + u64::from(one_past)) as i64);
+                b.binop(BinOp::Uge, value, limit)
+            }
+        };
+        self.report_failed_check(b, check.check, flag, &[value]);
+    }
+
     pub(super) fn report_failed_check(
         &self,
         b: &mut SsaBuilder,

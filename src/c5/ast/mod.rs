@@ -1026,6 +1026,25 @@ pub(crate) struct Ast {
     /// The runtime check `-fsanitize=` attaches to an operation, keyed by
     /// its node.
     pub checks: alloc::collections::BTreeMap<ExprId, SanitizeCheck>,
+    /// The runtime check `-fsanitize=` attaches to the value a node yields
+    /// wherever it is read as an rvalue, keyed by the node.
+    pub value_checks: alloc::collections::BTreeMap<ExprId, ValueCheck>,
+}
+
+/// A runtime check of a node's value: the check, and what the value is
+/// held to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ValueCheck {
+    pub check: SanitizeCheck,
+    pub test: ValueTest,
+}
+
+/// What a checked value is held to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ValueTest {
+    /// A subscript of an array of `len` elements: below `len`, or up to it
+    /// where only the address one past the last element is formed.
+    Index { len: u64, one_past: bool },
 }
 
 /// A runtime check of the operation at a node (`-fsanitize=`): what it
@@ -1188,6 +1207,9 @@ impl Ast {
         for check in self.checks.values_mut() {
             f(&mut check.data);
         }
+        for value in self.value_checks.values_mut() {
+            f(&mut value.check.data);
+        }
         visit_data_offsets!(&mut self.exprs, &mut self.decls, f);
     }
 
@@ -1196,6 +1218,9 @@ impl Ast {
         let mut read = |off: &i64| f(*off);
         for check in self.checks.values() {
             read(&check.data);
+        }
+        for value in self.value_checks.values() {
+            read(&value.check.data);
         }
         visit_data_offsets!(&self.exprs, &self.decls, read);
     }

@@ -352,6 +352,8 @@ impl Compiler {
             records,
             at_end,
             element_of: None,
+            bound: None,
+            flexible: false,
         };
         if field.bit_width > 0 {
             // A bitfield has no address, and `offset` names its storage
@@ -362,7 +364,11 @@ impl Compiler {
         if field.array_size != 0 {
             // An array member's value is its address, whatever its bound.
             step.addr = true;
+            if field.array_size >= 0 || field.zero_len {
+                step.bound = Some(field.array_size.max(0) * self.size_of_type(field.ty) as i64);
+            }
             if base.via_pointer && self.member_is_unbounded(field, records, at_end) {
+                step.flexible = true;
                 return step;
             }
             if field.array_size < 0 && !field.zero_len {
@@ -427,6 +433,21 @@ impl Compiler {
     /// offsets move. The designator now sits inside an element, so a
     /// member step below it is not at the end of the object.
     pub(super) fn object_ref_subscript(
+        base: ObjectRef,
+        index: Option<i64>,
+        stride: i64,
+        decays: bool,
+    ) -> ObjectRef {
+        // An element that is a row is an array of the row's bound, whatever
+        // the index; a scalar element is none.
+        ObjectRef {
+            bound: decays.then_some(stride),
+            flexible: false,
+            ..Self::object_ref_element(base, index, stride, decays)
+        }
+    }
+
+    fn object_ref_element(
         base: ObjectRef,
         index: Option<i64>,
         stride: i64,

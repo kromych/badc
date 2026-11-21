@@ -33,6 +33,12 @@ struct __ubsan_shift_data {
     const struct __ubsan_type_descriptor *rhs_type;
 };
 
+struct __ubsan_out_of_bounds_data {
+    struct __ubsan_source_location loc;
+    const struct __ubsan_type_descriptor *array_type;
+    const struct __ubsan_type_descriptor *index_type;
+};
+
 // Whether the site at `loc` reports now: the first failure claims it.
 static int __ubsan_claim(struct __ubsan_source_location *loc, uint32_t *column) {
     *column = __atomic_exchange_n(&loc->column, 0xffffffffu, __ATOMIC_RELAXED);
@@ -103,6 +109,26 @@ void __ubsan_handle_shift_out_of_bounds(struct __ubsan_shift_data *d, uintptr_t 
 _Noreturn void __ubsan_handle_shift_out_of_bounds_abort(struct __ubsan_shift_data *d, uintptr_t l,
                                                         uintptr_t r) {
     __ubsan_shift(d, l, r);
+    abort();
+}
+
+static void __ubsan_out_of_bounds(struct __ubsan_out_of_bounds_data *d, uintptr_t index) {
+    uint32_t column;
+    if (!__ubsan_claim(&d->loc, &column))
+        return;
+    fprintf(stderr, "%s:%u:%u: runtime error: index ", d->loc.file, d->loc.line, column);
+    __ubsan_print_int(d->index_type, index);
+    fprintf(stderr, " out of bounds for type %s\n", d->array_type->name);
+    __ubsan_summary(&d->loc, column);
+}
+
+void __ubsan_handle_out_of_bounds(struct __ubsan_out_of_bounds_data *d, uintptr_t index) {
+    __ubsan_out_of_bounds(d, index);
+}
+
+_Noreturn void __ubsan_handle_out_of_bounds_abort(struct __ubsan_out_of_bounds_data *d,
+                                                  uintptr_t index) {
+    __ubsan_out_of_bounds(d, index);
     abort();
 }
 

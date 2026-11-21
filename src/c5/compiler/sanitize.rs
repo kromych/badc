@@ -8,7 +8,7 @@ use alloc::string::String;
 
 use super::Compiler;
 use super::types::{is_bool_ty, is_integer_scalar_ty, is_unsigned_ty};
-use crate::c5::ast::{ExprId, SanitizeCheck};
+use crate::c5::ast::{ExprId, SanitizeCheck, ValueCheck, ValueTest};
 use crate::c5::ir::BinOp;
 use crate::c5::program::DataReloc;
 use crate::c5::token::Token;
@@ -32,16 +32,24 @@ pub enum Check {
     /// no C load is out of range and the check inserts nothing, as gcc's and
     /// clang's do in C.
     Enum,
+    /// A subscript of an array of known bound past it (C17 6.5.6p8), but
+    /// for a trailing member gcc lets extend past its bound; clang's
+    /// `array-bounds`. An address one past the last element is in bounds.
+    Bounds,
+    /// [`Check::Bounds`] on those trailing members as well.
+    BoundsStrict,
 }
 
 impl Check {
     /// Every check, in the order `-fsanitize=undefined` lists them.
-    pub const ALL: [Check; 5] = [
+    pub const ALL: [Check; 7] = [
         Check::SignedIntegerOverflow,
         Check::ShiftBase,
         Check::ShiftExponent,
         Check::IntegerDivideByZero,
         Check::Enum,
+        Check::Bounds,
+        Check::BoundsStrict,
     ];
 
     /// The spelling `-fsanitize=` takes.
@@ -52,6 +60,8 @@ impl Check {
             Check::ShiftExponent => "shift-exponent",
             Check::IntegerDivideByZero => "integer-divide-by-zero",
             Check::Enum => "enum",
+            Check::Bounds => "bounds",
+            Check::BoundsStrict => "bounds-strict",
         }
     }
 
@@ -59,13 +69,19 @@ impl Check {
         1 << self as u32
     }
 
-    /// The checks a `-fsanitize=` list item names: one check, the group
-    /// `shift`, or the group `undefined`; `None` for a name badc does not
+    /// The checks a `-fsanitize=` list item names: one check, clang's name
+    /// for one, the group `shift`, or the group `undefined`, which leaves
+    /// out `bounds-strict` as gcc's does; `None` for a name badc does not
     /// implement.
     pub fn named(name: &str) -> Option<u32> {
         match name {
-            "undefined" => Some(Check::ALL.iter().fold(0, |m, c| m | c.bit())),
+            "undefined" => Some(
+                (Check::ALL.iter())
+                    .filter(|&&c| c != Check::BoundsStrict)
+                    .fold(0, |m, c| m | c.bit()),
+            ),
             "shift" => Some(Check::ShiftBase.bit() | Check::ShiftExponent.bit()),
+            "array-bounds" => Some(Check::Bounds.bit()),
             _ => (Check::ALL.iter())
                 .find(|c| c.name() == name)
                 .map(|c| c.bit()),
@@ -89,7 +105,7 @@ impl Default for Sanitize {
         Sanitize {
             enabled: 0,
             trap: 0,
-            recover: Check::named("undefined").unwrap_or(0),
+            recover: Check::ALL.iter().fold(0, |m, c| m | c.bit()),
         }
     }
 }
@@ -103,6 +119,8 @@ impl Sanitize {
 
 /// `TypeDescriptor::kind` of an integer type.
 const TK_INTEGER: u16 = 0;
+/// `TypeDescriptor::kind` of a type the handlers know by its name alone.
+const TK_UNKNOWN: u16 = 0xffff;
 
 impl Compiler {
     /// Check the signed `+`, `-` or `*` whose node the accumulator holds,
@@ -192,6 +210,75 @@ impl Compiler {
         true
     }
 
+    /// Whether the parse tracks the object an expression designates
+    /// ([`super::ObjectRef`]): inside a `__builtin_object_size` operand, and
+    /// under a bounds check, which holds a subscript to the array's bound.
+    pub(super) fn tracks_objects(&self) -> bool {
+        self.pending.object_size_operands > 0
+            || self.sanitize.enabled & (Check::Bounds.bit() | Check::BoundsStrict.bit()) != 0
+    }
+
+    /// Check the subscript at node `subscript`, by the index node `index`
+    /// of type `index_ty`, of the array `base` designates, whose elements
+    /// of type `elem_ty` are `stride` bytes, under `-fsanitize=bounds` or
+    /// `bounds-strict`. The site is where the subscripted expression
+    /// begins, `begin`.
+    pub(super) fn sanitize_subscript(
+        &mut self,
+        base: super::ObjectRef,
+        (subscript, index): (ExprId, ExprId),
+        (index_ty, elem_ty): (i64, i64),
+        stride: i64,
+        begin: (u32, u32),
+    ) {
+        let check = if self.sanitize.runs(Check::BoundsStrict) {
+            Check::BoundsStrict
+        } else if self.sanitize.runs(Check::Bounds) && !base.flexible {
+            Check::Bounds
+        } else {
+            return;
+        };
+        let Some(bytes) = base.bound.filter(|_| base.addr && stride > 0) else {
+            return;
+        };
+        let len = (bytes / stride) as u64;
+        let types = [
+            self.ubsan_array_type(elem_ty, len),
+            self.ubsan_type(index_ty),
+        ];
+        let data = self.ubsan_site_at(begin, &types);
+        let handler = self.ubsan_handler(check.bit(), "__ubsan_handle_out_of_bounds", 1);
+        let check = SanitizeCheck {
+            checks: check.bit(),
+            data,
+            handler,
+        };
+        let test = ValueTest::Index {
+            len,
+            one_past: false,
+        };
+        self.ast
+            .value_checks
+            .insert(index, ValueCheck { check, test });
+        self.bounds_subscript = Some((subscript, index));
+    }
+
+    /// `&` of the node `operand`: a subscript checked last admits the
+    /// address one past the last element (C17 6.5.6p8).
+    pub(super) fn sanitize_address_of(&mut self, operand: ExprId) {
+        let Some((subscript, index)) = self.bounds_subscript else {
+            return;
+        };
+        if subscript == operand
+            && let Some(ValueCheck {
+                test: ValueTest::Index { one_past, .. },
+                ..
+            }) = self.ast.value_checks.get_mut(&index)
+        {
+            *one_past = true;
+        }
+    }
+
     /// Attach `checks` to node `id`: the site data naming `types`, and
     /// `handler` taking it and `values` operands.
     fn attach_check(
@@ -261,8 +348,12 @@ impl Compiler {
     /// The data a handler reads for the operation at the last operator:
     /// its `SourceLocation`, then a pointer to each of `types`' descriptors.
     fn ubsan_site(&mut self, types: &[i64]) -> i64 {
+        self.ubsan_site_at(self.operator_at, types)
+    }
+
+    /// [`Self::ubsan_site`] at line and column `(line, column)`.
+    fn ubsan_site_at(&mut self, (line, column): (u32, u32), types: &[i64]) -> i64 {
         let file = self.ubsan_file();
-        let (line, column) = self.operator_at;
         self.align_data_to(8);
         let site = self.data.len() as i64;
         self.data.resize(self.data.len() + 16 + 8 * types.len(), 0);
@@ -308,6 +399,29 @@ impl Compiler {
     /// The `TypeDescriptor` of the integer type `ty`, once per type: the
     /// kind, the width's log2 shifted left by one with the signedness in
     /// bit 0, and the type's name in single quotes.
+    /// The `TypeDescriptor` of an array of `len` elements of `elem_ty`,
+    /// named as C spells the type: `'int[10]'`, `'int[3][5]'`.
+    fn ubsan_array_type(&mut self, elem_ty: i64, len: u64) -> i64 {
+        let elem =
+            super::types::format_type(super::types::unqualified_version_ty(elem_ty), &self.structs);
+        let name = match elem.find('[') {
+            Some(i) => alloc::format!("'{}[{len}]{}'", elem[..i].trim_end(), &elem[i..]),
+            None => alloc::format!("'{elem}[{len}]'"),
+        };
+        if let Some(&at) = self.ubsan_arrays.get(&name) {
+            return at;
+        }
+        self.align_data_to(2);
+        let at = self.data.len() as i64;
+        self.data.extend_from_slice(&TK_UNKNOWN.to_le_bytes());
+        self.data.extend_from_slice(&0u16.to_le_bytes());
+        self.data.extend_from_slice(name.as_bytes());
+        self.data.push(0);
+        self.data_object_starts.push(at);
+        self.ubsan_arrays.insert(name, at);
+        at
+    }
+
     fn ubsan_type(&mut self, ty: i64) -> i64 {
         if let Some(&at) = self.ubsan_types.get(&ty) {
             return at;

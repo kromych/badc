@@ -412,6 +412,15 @@ pub struct ObjectRef {
     /// array holding it from the element on: the closest subobject of the
     /// element's address, where the element read as a value is its own.
     pub element_of: Option<Extent>,
+    /// Byte size of the array currently designated by its declared type,
+    /// whatever the offset: the bound `-fsanitize=bounds` holds a subscript
+    /// to. `None` for a pointer's target and an array of no known bound.
+    pub bound: Option<i64>,
+    /// The array is a trailing member gcc lets extend past its bound
+    /// ([`Compiler::member_is_unbounded`] through a pointer):
+    /// `-fsanitize=bounds` leaves its subscripts alone, `bounds-strict`
+    /// checks them.
+    pub flexible: bool,
 }
 
 impl ObjectRef {
@@ -425,6 +434,8 @@ impl ObjectRef {
         records: 0,
         at_end: true,
         element_of: None,
+        bound: None,
+        flexible: false,
     };
 
     /// A chain starting at a declared object of `size` bytes, `array`
@@ -440,6 +451,8 @@ impl ObjectRef {
             records: 0,
             at_end: true,
             element_of: None,
+            bound: array,
+            flexible: false,
         }
     }
 
@@ -2755,6 +2768,12 @@ pub struct Compiler {
     ubsan_types: alloc::collections::BTreeMap<i64, i64>,
     /// Each source file's name for the handlers, by name.
     ubsan_files: alloc::collections::BTreeMap<String, i64>,
+    /// `TypeDescriptor`s of array types, by the name they carry.
+    ubsan_arrays: alloc::collections::BTreeMap<String, i64>,
+    /// The subscript node and index node of the last subscript a bounds
+    /// check was attached to, which a `&` applied to that subscript lets
+    /// reach one past the last element.
+    bounds_subscript: Option<(super::ast::ExprId, super::ast::ExprId)>,
     /// The handlers the unit's checks call, by symbol slot: the name and
     /// the prototype.
     ubsan_handlers: alloc::collections::BTreeMap<usize, (String, &'static str)>,
@@ -3549,6 +3568,8 @@ impl Compiler {
             sanitize: opts.sanitize,
             ubsan_types: alloc::collections::BTreeMap::new(),
             ubsan_files: alloc::collections::BTreeMap::new(),
+            ubsan_arrays: alloc::collections::BTreeMap::new(),
+            bounds_subscript: None,
             ubsan_handlers: alloc::collections::BTreeMap::new(),
             operator_at: (0, 0),
             fp_contract: opts.fp_contract,

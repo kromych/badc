@@ -2194,7 +2194,7 @@ impl Compiler {
             self.push_literal_nul();
         }
         self.pending.last_array_decay_bytes = (self.data.len() as i64) - start_offset;
-        if self.pending.object_size_operands > 0 {
+        if self.tracks_objects() {
             let bytes = self.pending.last_array_decay_bytes;
             self.pending.object_ref = Some(super::ObjectRef {
                 addr: true,
@@ -3720,7 +3720,7 @@ impl Compiler {
     /// without a `&`. A VLA and an array of unspecified bound (C99
     /// 6.7.5.2p4) have no extent this unit knows.
     fn declared_object_ref(&mut self, id_idx: usize) -> Option<super::ObjectRef> {
-        if self.pending.object_size_operands == 0 || self.symbols[id_idx].is_vla {
+        if !self.tracks_objects() || self.symbols[id_idx].is_vla {
             return None;
         }
         // A later declaration of the unit may still size the array.
@@ -4074,7 +4074,7 @@ impl Compiler {
         // `*e` is element 0 of what `e` points at: of the object the
         // operand designates when its value is that address, and of an
         // object reached through a pointer otherwise.
-        if self.pending.object_size_operands > 0 {
+        if self.tracks_objects() {
             let decays = row;
             self.pending.object_ref = Some(match operand_ref {
                 Some(r) if r.addr => {
@@ -4112,6 +4112,9 @@ impl Compiler {
         self.next()?;
         // The operand is designated, not read: `&*p` takes a `void *` `p`.
         self.expr_or_void(Token::Inc as i64)?;
+        if let Some(operand) = self.ast_acc {
+            self.sanitize_address_of(operand);
+        }
         if let Some(sym) = self.ast_acc.and_then(|id| self.register_object(id)) {
             return Err(self.register_address_err(sym, self.lex.line));
         }
@@ -5986,6 +5989,9 @@ impl Compiler {
     ) -> Result<(), C5Error> {
         let mut lhs_ty = lhs_ty;
         self.next()?;
+        // Where the subscripted operand begins, for a check's site: before
+        // the bracket, or inside it in the order `i[a]`.
+        let inner_begin = self.lex.position();
         self.pending.last_array_decay_dims.clear();
         self.pending.last_array_decay_vla = None;
         let index = self.peek_constant_index();
@@ -5999,12 +6005,18 @@ impl Compiler {
         let SubscriptIndex {
             base_ty,
             base_ast: array_ast,
+            swapped_ref,
             idx_ty,
             idx_ast,
             fn_ptr_chain_depth: saved_fn_ptr_chain,
             fn_ptr_depth_is_array_elem: saved_fn_ptr_elem,
         } = self.parse_subscript_index(lhs_ty)?;
         lhs_ty = base_ty;
+        let begin = match swapped_ref {
+            Some(_) => inner_begin,
+            None => self.lex.position_at(self.operand_start),
+        };
+        let object_ref = swapped_ref.unwrap_or(object_ref);
         // Subscripting a `register` array, as either operand, is accepted.
         self.take_register_decay(array_ast);
         self.take_register_decay(idx_ast);
@@ -6108,12 +6120,16 @@ impl Compiler {
                 self.ast_emit_index(array, idx, idx_ty);
             }
         }
+        if let (Some(r), Some(subscript), Some(index)) = (object_ref, self.ast_acc, idx_ast) {
+            let elem_ty = pointee_ty(lhs_ty);
+            self.sanitize_subscript(r, (subscript, index), (idx_ty, elem_ty), stride, begin);
+        }
         // `a[i]` is `*(a + i)`: it designates an element of the object
         // `a`'s value addresses, and one reached through a pointer when
         // that value was read out of an object instead.
         self.pending.object_ref = match object_ref {
             Some(r) if r.addr => Some(Self::object_ref_subscript(r, index, stride, decays)),
-            _ if self.pending.object_size_operands > 0 => Some(super::ObjectRef {
+            _ if self.tracks_objects() => Some(super::ObjectRef {
                 addr: decays,
                 ..super::ObjectRef::THROUGH_POINTER
             }),
@@ -6149,6 +6165,7 @@ impl Compiler {
             return Ok(SubscriptIndex {
                 base_ty: self.ty,
                 base_ast: idx_ast,
+                swapped_ref: Some(self.pending.object_ref),
                 idx_ty: lhs_ty,
                 idx_ast: lhs_ast,
                 fn_ptr_chain_depth: self.pending.fn_ptr_chain_depth,
@@ -6161,6 +6178,7 @@ impl Compiler {
         Ok(SubscriptIndex {
             base_ty: lhs_ty,
             base_ast: lhs_ast,
+            swapped_ref: None,
             idx_ty: self.ty,
             idx_ast,
             fn_ptr_chain_depth: saved_fn_ptr_chain,
@@ -6219,7 +6237,7 @@ impl Compiler {
         // operand does not (a call result, a compound literal).
         let base = if is_dot {
             object_ref
-        } else if self.pending.object_size_operands > 0 {
+        } else if self.tracks_objects() {
             Some(super::ObjectRef::THROUGH_POINTER)
         } else {
             None
@@ -7710,6 +7728,9 @@ impl DirectCallee {
 struct SubscriptIndex {
     base_ty: i64,
     base_ast: Option<super::super::ast::ExprId>,
+    /// The object the bracketed operand designates, where it is the
+    /// pointer (`i[a]`); `None` in the usual order.
+    swapped_ref: Option<Option<super::ObjectRef>>,
     idx_ty: i64,
     idx_ast: Option<super::super::ast::ExprId>,
     fn_ptr_chain_depth: i64,

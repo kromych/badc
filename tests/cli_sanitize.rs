@@ -464,3 +464,72 @@ fn the_enum_check_inserts_nothing_in_c() {
     let o = run(&exe, &[]);
     assert!(o.status.success() && o.stderr.is_empty(), "{o:?}");
 }
+
+const BOUNDS: &str = "#include <stdio.h>
+struct t { int n; int tail[2]; };
+int main(int argc, char **argv) {
+    (void)argv;
+    int a[4] = {0}, m[3][5] = {0};
+    struct t box = {0}, *p = &box;
+    unsigned u = argc + 3;
+    signed char c = -argc;
+    int r = a[u];
+    r += a[c];
+    r += m[argc + 1][2];
+    r += m[argc][argc + 4];
+    r += (argc + 3)[a];
+    r += p->tail[argc + 1];
+    int *end = &a[argc + 3];
+    printf(\"%d %d\\n\", r, end == a + 4);
+    return 0;
+}
+";
+
+/// A subscript of an array of known bound is held to it under
+/// `-fsanitize=bounds`, reported where its array operand begins as clang's
+/// `array-bounds` reports it: an unsigned or negative index, the inner
+/// bound of a row, the order `i[a]`; the address one past the end is in
+/// bounds. A trailing member reached through a pointer is left alone, as
+/// gcc leaves it, and `bounds-strict` checks it too, as clang does under
+/// -fstrict-flex-arrays=3.
+#[test]
+fn subscripts_are_held_to_the_array_bound() {
+    let dir = TempDir::new("badc-sanitize-bounds");
+    let src = dir.join("overflow.c");
+    std::fs::write(&src, BOUNDS).unwrap();
+    let common = [
+        "9:13: runtime error: index 4 out of bounds for type 'int[4]'",
+        "10:10: runtime error: index -1 out of bounds for type 'int[4]'",
+        "12:10: runtime error: index 5 out of bounds for type 'int[5]'",
+        "13:21: runtime error: index 4 out of bounds for type 'int[4]'",
+    ];
+    for (check, trailing) in [("bounds", false), ("bounds-strict", true)] {
+        let mut want: Vec<&str> = common.to_vec();
+        if trailing {
+            want.push("14:10: runtime error: index 2 out of bounds for type 'int[2]'");
+        }
+        for opt in ["-O0", "-O"] {
+            let exe = dir.join(format!("{check}{opt}"));
+            let built = Command::new(env!("CARGO_BIN_EXE_badc"))
+                .args(["-q", opt, &format!("-fsanitize={check}"), "-o"])
+                .arg(&exe)
+                .arg(&src)
+                .output()
+                .expect("run badc");
+            assert!(
+                built.status.success(),
+                "{}",
+                String::from_utf8_lossy(&built.stderr)
+            );
+            let o = run(&exe, &[]);
+            assert!(o.status.success(), "{check} {opt}: {o:?}");
+            assert_eq!(reports(&o), want, "{check} {opt}");
+            assert!(
+                String::from_utf8_lossy(&o.stdout)
+                    .trim_end()
+                    .ends_with(" 1"),
+                "{o:?}"
+            );
+        }
+    }
+}

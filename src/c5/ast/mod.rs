@@ -1023,6 +1023,21 @@ pub(crate) struct Ast {
     /// cross-TU relocation, rather than re-reading the restored slot.
     /// Sparse: empty unless a block-scope extern shadows a local.
     pub block_extern_refs: Vec<ExprId>,
+    /// The runtime check `-fsanitize=` attaches to an operation, keyed by
+    /// its node.
+    pub checks: alloc::collections::BTreeMap<ExprId, SanitizeCheck>,
+}
+
+/// A runtime check of the operation at a node (`-fsanitize=`): what it
+/// tests, the site data its handler reads, and the handler, or `None` to
+/// trap.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct SanitizeCheck {
+    pub kind: crate::c5::compiler::sanitize::Check,
+    /// Data offset of the site's handler data.
+    pub data: i64,
+    /// The handler's symbol, or `None` where the check traps.
+    pub handler: Option<u32>,
 }
 
 /// Every data-segment byte offset an AST's nodes hold, passed to `$f` through
@@ -1169,12 +1184,18 @@ impl Ast {
 
     /// Apply `f` to every data-segment byte offset stored on AST nodes.
     fn for_each_data_offset(&mut self, f: &mut impl FnMut(&mut i64)) {
+        for check in self.checks.values_mut() {
+            f(&mut check.data);
+        }
         visit_data_offsets!(&mut self.exprs, &mut self.decls, f);
     }
 
     /// The offsets [`Self::for_each_data_offset`] rewrites, read in place.
     pub(crate) fn data_offsets(&self, mut f: impl FnMut(i64)) {
         let mut read = |off: &i64| f(*off);
+        for check in self.checks.values() {
+            read(&check.data);
+        }
         visit_data_offsets!(&self.exprs, &self.decls, read);
     }
 

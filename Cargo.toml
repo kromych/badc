@@ -41,6 +41,11 @@ required-features = ["std", "full"]
 # default (host-JIT) features from compiling them, the same way the bin
 # is skipped.
 [[test]]
+name = "cli_sanitize"
+path = "tests/cli_sanitize.rs"
+required-features = ["full"]
+
+[[test]]
 name = "cli_linker_smoke"
 path = "tests/cli_linker_smoke.rs"
 required-features = ["full"]

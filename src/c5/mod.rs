@@ -66,6 +66,7 @@ pub use {
     compiler::{
         AUTO_VAR_INIT_PATTERN_BYTE, AutoVarInit, CStd, CompileOptions, Compiler, FpContract,
         LaxVectors, Preprocessed, StructDef, StructField,
+        sanitize::{Check as SanitizerCheck, Sanitize},
     },
     depfile::{escape as dep_escape, prerequisites as dep_prerequisites, render as dep_render},
     error::C5Error,

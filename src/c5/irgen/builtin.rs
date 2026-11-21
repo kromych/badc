@@ -145,26 +145,9 @@ impl<'a> Walker<'a> {
         let flag = match (op, unsigned) {
             // Unsigned add carries out iff the sum is below an addend.
             (0, true) => b.binop(BinOp::Ult, wrapped, va),
-            // Signed add overflows iff both addends share a sign that the
-            // sum does not: `(a ^ s) & (b ^ s)` has its sign bit set.
-            (0, false) => {
-                let ax = b.binop(BinOp::Xor, va, wrapped);
-                let bx = b.binop(BinOp::Xor, vb, wrapped);
-                let m = b.binop(BinOp::And, ax, bx);
-                let zero = b.imm(0);
-                b.binop(BinOp::Lt, m, zero)
-            }
+            (_, false) => signed_overflow64(b, bin, va, vb, wrapped),
             // Unsigned subtract borrows iff the minuend is the smaller.
             (1, true) => b.binop(BinOp::Ult, va, vb),
-            // Signed subtract overflows iff the operands differ in sign
-            // and the result's sign differs from the minuend's.
-            (1, false) => {
-                let ab = b.binop(BinOp::Xor, va, vb);
-                let aw = b.binop(BinOp::Xor, va, wrapped);
-                let m = b.binop(BinOp::And, ab, aw);
-                let zero = b.imm(0);
-                b.binop(BinOp::Lt, m, zero)
-            }
             // Unsigned multiply overflows iff `a != 0 && product/a != b`.
             // The divisor is forced non-zero so the unused `a == 0` lane
             // does not divide by zero.
@@ -177,29 +160,78 @@ impl<'a> Walker<'a> {
                 let mism = b.binop(BinOp::Ne, q, vb);
                 b.binop(BinOp::And, a_nz, mism)
             }
-            // Signed multiply: same division test, but the divisor is
-            // forced to 1 for `a == 0` and `a == -1` so the `INT_MIN / -1`
-            // trap is avoided; the `a == -1` overflow is `product == INT_MIN`.
-            (_, false) => {
-                let zero = b.imm(0);
-                let neg1 = b.imm(-1);
-                let one = b.imm(1);
-                let iszero = b.binop(BinOp::Eq, va, zero);
-                let isneg1 = b.binop(BinOp::Eq, va, neg1);
-                let special = b.binop(BinOp::Or, iszero, isneg1);
-                let not_special = b.binop(BinOp::Xor, special, one);
-                let scaled = b.binop(BinOp::Mul, va, not_special);
-                let safe = b.binop(BinOp::Add, scaled, special);
-                let q = b.binop(BinOp::Div, wrapped, safe);
-                let mism = b.binop(BinOp::Ne, q, vb);
-                let normal = b.binop(BinOp::And, not_special, mism);
-                let intmin = b.imm(i64::MIN);
-                let is_intmin = b.binop(BinOp::Eq, wrapped, intmin);
-                let neg1_ovf = b.binop(BinOp::And, isneg1, is_intmin);
-                b.binop(BinOp::Or, normal, neg1_ovf)
-            }
         };
         Ok(flag)
+    }
+
+    /// A signed `+`, `-` or `*` under `-fsanitize=signed-integer-overflow`:
+    /// the 64-bit value [`Self::walk_binary`] gives, which the parser's
+    /// renormalization narrows, and where the type cannot represent the
+    /// exact value, the check's handler called with the site and the
+    /// operands, or a trap.
+    pub(super) fn walk_checked_binary(
+        &mut self,
+        b: &mut SsaBuilder,
+        check: crate::c5::ast::SanitizeCheck,
+        op: BinOp,
+        (lhs, rhs): (ExprId, ExprId),
+        ty: i64,
+    ) -> Result<ValueId, WalkError> {
+        let va = self.walk_expr_rvalue(b, lhs)?;
+        let vb = self.walk_expr_rvalue(b, rhs)?;
+        let raw = b.binop(op, va, vb);
+        // Under 8 bytes the operands are extended in the register, so the
+        // value is exact and overflows where narrowing changes it.
+        let flag = if type_size_bytes(ty, self.target) < 8 {
+            let narrowed = self.extend_atomic_result(b, raw, ty);
+            b.binop(BinOp::Ne, raw, narrowed)
+        } else {
+            signed_overflow64(b, op, va, vb, raw)
+        };
+        self.report_failed_check(b, check, flag, &[va, vb]);
+        Ok(raw)
+    }
+
+    /// Where `flag` is set, call `check`'s handler with its site data and
+    /// `values`, or trap; the failing path is the unlikely one.
+    fn report_failed_check(
+        &self,
+        b: &mut SsaBuilder,
+        check: crate::c5::ast::SanitizeCheck,
+        flag: ValueId,
+        values: &[ValueId],
+    ) {
+        let (failed, join) = (b.new_block(), b.new_block());
+        b.expect(Some(false));
+        b.branch_zero(flag, join, failed);
+        b.expect(None);
+        b.switch_to(failed);
+        match check.handler {
+            None => b.unreachable(),
+            Some(sym) => {
+                let site = b.imm_data(check.data);
+                let mut args = alloc::vec![site];
+                args.extend_from_slice(values);
+                let n = args.len();
+                let conv = crate::c5::codegen::CallConv::Target;
+                let mask = crate::c5::ir::FpMask::EMPTY;
+                // The handler's import placeholder, as a library call's.
+                match crate::c5::irgen::live_fun_val(self.symbols, sym, 0) {
+                    0 => b.call_extern(sym, args, n, false, mask, conv),
+                    pc => b.call(pc as usize, args, n, false, mask, conv),
+                };
+                if self
+                    .symbols
+                    .get(sym as usize)
+                    .is_some_and(|s| s.is_noreturn)
+                {
+                    b.unreachable();
+                } else {
+                    b.jmp(join);
+                }
+            }
+        }
+        b.switch_to(join);
     }
 
     /// 128-bit multiply, returning the product mod 2^128 and whether the
@@ -541,4 +573,53 @@ fn lower_ffs(b: &mut SsaBuilder, x: ValueId, width: u8) -> ValueId {
     let at_zero = b.binop_imm(BinOp::Shru, ctz, if width == 8 { 6 } else { 5 });
     let keep = b.binop_imm(BinOp::Sub, at_zero, 1);
     b.binop(BinOp::And, cp1, keep)
+}
+
+/// Whether the signed 64-bit `a op b` (`+`, `-` or `*`) overflows, given its
+/// wrapped value. An add overflows where both addends share a sign the sum
+/// does not, a subtract where the operands differ in sign and the result's
+/// differs from the minuend's. A multiply divides the product by `a`, the
+/// divisor forced to 1 for `a == 0` and `a == -1` so `INT_MIN / -1` cannot
+/// trap; the `a == -1` overflow is `product == INT_MIN`.
+fn signed_overflow64(
+    b: &mut SsaBuilder,
+    op: BinOp,
+    va: ValueId,
+    vb: ValueId,
+    wrapped: ValueId,
+) -> ValueId {
+    match op {
+        BinOp::Add => {
+            let ax = b.binop(BinOp::Xor, va, wrapped);
+            let bx = b.binop(BinOp::Xor, vb, wrapped);
+            let m = b.binop(BinOp::And, ax, bx);
+            let zero = b.imm(0);
+            b.binop(BinOp::Lt, m, zero)
+        }
+        BinOp::Sub => {
+            let ab = b.binop(BinOp::Xor, va, vb);
+            let aw = b.binop(BinOp::Xor, va, wrapped);
+            let m = b.binop(BinOp::And, ab, aw);
+            let zero = b.imm(0);
+            b.binop(BinOp::Lt, m, zero)
+        }
+        _ => {
+            let zero = b.imm(0);
+            let neg1 = b.imm(-1);
+            let one = b.imm(1);
+            let iszero = b.binop(BinOp::Eq, va, zero);
+            let isneg1 = b.binop(BinOp::Eq, va, neg1);
+            let special = b.binop(BinOp::Or, iszero, isneg1);
+            let not_special = b.binop(BinOp::Xor, special, one);
+            let scaled = b.binop(BinOp::Mul, va, not_special);
+            let safe = b.binop(BinOp::Add, scaled, special);
+            let q = b.binop(BinOp::Div, wrapped, safe);
+            let mism = b.binop(BinOp::Ne, q, vb);
+            let normal = b.binop(BinOp::And, not_special, mism);
+            let intmin = b.imm(i64::MIN);
+            let is_intmin = b.binop(BinOp::Eq, wrapped, intmin);
+            let neg1_ovf = b.binop(BinOp::And, isneg1, is_intmin);
+            b.binop(BinOp::Or, normal, neg1_ovf)
+        }
+    }
 }

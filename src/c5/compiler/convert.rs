@@ -165,7 +165,9 @@ impl Compiler {
             return;
         }
         let common = self.arith_common_ty(lhs_ty, rhs_ty);
-        self.renormalize_overflow(common);
+        // A checked operation's overflow is reported, not assumed away.
+        let checked = self.sanitize_overflow(common);
+        self.renormalize(common, !self.wrapv && !checked);
     }
 
     /// Whether `op` in type `ty` overflows undefined: a `+ - *` without

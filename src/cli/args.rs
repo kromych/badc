@@ -112,6 +112,8 @@ pub(crate) struct FrontEnd {
     /// `-fwrapv` / `-fno-strict-overflow` against `-fno-wrapv` /
     /// `-fstrict-overflow`, the last one given winning.
     pub(crate) wrapv: bool,
+    /// `-fsanitize=` and its `-trap` and `-recover` companions.
+    pub(crate) sanitize: badc::Sanitize,
     pub(crate) auto_var_init: badc::AutoVarInit,
     pub(crate) fp_contract: badc::FpContract,
     /// `-fvisibility=`; `None` is default.
@@ -1590,6 +1592,12 @@ impl Parser {
             // badc derives nothing from pointer overflow (C99 6.5p5).
             "-fwrapv" | "-fno-strict-overflow" => front.wrapv = true,
             "-fno-wrapv" | "-fstrict-overflow" => front.wrapv = false,
+            s if s.starts_with("-fsanitize")
+                || s.starts_with("-fno-sanitize")
+                || s == "-fsanitize-undefined-trap-on-error" =>
+            {
+                sanitize_option(&mut front.sanitize, s)?
+            }
             s if s.starts_with("-fvisibility=") => {
                 let spec = &s["-fvisibility=".len()..];
                 front.default_visibility =
@@ -3100,6 +3108,7 @@ impl FrontEnd {
             .with_prototypes(self.prototypes)
             .with_char_signed(self.char_signed)
             .with_wrapv(self.wrapv)
+            .with_sanitize(self.sanitize)
             .with_fp_contract(self.fp_contract)
             .with_default_visibility(self.default_visibility)
             .with_auto_var_init(self.auto_var_init)
@@ -3206,6 +3215,43 @@ fn parse_stack(value: &str) -> Result<(u64, u64), ParseError> {
             "badc: error: --stack takes reserve[,commit] in bytes, got `{value}`"
         ))),
     }
+}
+
+/// Apply one of gcc's and clang's `-fsanitize` options to `s`, a check
+/// list naming checks or the group `undefined`. Enabling a check badc
+/// does not implement is refused; disabling one is accepted, as it is
+/// never on.
+fn sanitize_option(s: &mut badc::Sanitize, arg: &str) -> Result<(), ParseError> {
+    let (flag, list) = arg.split_once('=').unwrap_or((arg, ""));
+    let every = badc::SanitizerCheck::named("undefined").unwrap_or(0);
+    let mut bits = 0;
+    for name in list.split(',').filter(|n| !n.is_empty()) {
+        match badc::SanitizerCheck::named(name) {
+            Some(b) => bits |= b,
+            None if name == "all" => bits |= every,
+            None if flag.starts_with("-fno-") => {}
+            None => {
+                let known: Vec<&str> = (badc::SanitizerCheck::ALL.iter())
+                    .map(|c| c.name())
+                    .collect();
+                return Err(ParseError::plain(format!(
+                    "badc: {flag}={name}: the checks badc implements are {}",
+                    known.join(", ")
+                )));
+            }
+        }
+    }
+    let some = if list.is_empty() { every } else { bits };
+    match flag {
+        "-fsanitize" if !list.is_empty() => s.enabled |= bits,
+        "-fno-sanitize" => s.enabled &= !some,
+        "-fsanitize-trap" | "-fsanitize-undefined-trap-on-error" => s.trap |= some,
+        "-fno-sanitize-trap" => s.trap &= !some,
+        "-fsanitize-recover" => s.recover |= some,
+        "-fno-sanitize-recover" => s.recover &= !some,
+        _ => return Err(ParseError::plain(format!("badc: unknown option `{arg}`"))),
+    }
+    Ok(())
 }
 
 #[cfg(test)]

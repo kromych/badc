@@ -1543,6 +1543,13 @@ impl Lexer {
         self.tok_start
     }
 
+    /// The current token's line and 1-based column.
+    pub fn position(&self) -> (u32, u32) {
+        let at = self.tok_start.min(self.src.len());
+        let line_start = (self.src[..at].iter().rposition(|&c| c == b'\n')).map_or(0, |p| p + 1);
+        (self.line as u32, (at - line_start + 1) as u32)
+    }
+
     /// The source text from offset `start` up to the current token,
     /// without the white space before that token.
     pub fn text_from(&self, start: usize) -> &str {

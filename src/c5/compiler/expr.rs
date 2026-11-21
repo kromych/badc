@@ -5464,10 +5464,12 @@ impl Compiler {
         fp: super::super::ir::BinOp,
         object_ref: Option<super::ObjectRef>,
     ) -> Result<(), C5Error> {
+        let at = self.lex.position();
         self.next()?;
         let lhs_fn_ptr = self.value_is_function_pointer();
         self.ast_psh();
         self.expr(op.rhs_lev as i64)?;
+        self.operator_at = at;
         let displaced = self.additive_object_ref(lhs_ty, op.tok, object_ref);
         let fn_ptr_arith = lhs_fn_ptr || self.value_is_function_pointer();
         self.check_binary_operands(lhs_ty, self.ty, op.name)?;
@@ -5759,9 +5761,11 @@ impl Compiler {
         unsigned: Option<super::super::ir::BinOp>,
         fp: Option<super::super::ir::BinOp>,
     ) -> Result<(), C5Error> {
+        let at = self.lex.position();
         self.next()?;
         self.ast_psh();
         self.expr(op.rhs_lev as i64)?;
+        self.operator_at = at;
         self.check_binary_operands(lhs_ty, self.ty, op.name)?;
         if let Some(vty) = self.vector_binop_ty(lhs_ty, self.ty, op.name) {
             self.ty = vty;

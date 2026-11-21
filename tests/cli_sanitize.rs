@@ -1,0 +1,134 @@
+//! The runtime checks `-fsanitize=` inserts, run on the host: each failed
+//! check reports once, as clang's runtime words it at the operator's line
+//! and column, and the program goes on; `-fsanitize-trap` stops it at the
+//! failed check without a report; `-fno-sanitize-recover` reports and
+//! aborts. The expected lines are clang 21's for the same source.
+
+use std::path::Path;
+use std::process::{Command, Output};
+
+mod common;
+use common::TempDir;
+
+const OVERFLOW: &str = "#include <limits.h>
+#include <stdio.h>
+__attribute__((noinline)) int add(int a, int b) { return a + b; }
+__attribute__((noinline)) long long mul(long long a, long long b) { return a * b; }
+__attribute__((noinline)) int sub(int a, int b) { return a - b; }
+int main(int argc, char **argv) {
+    (void)argv;
+    printf(\"%d %lld %d\\n\", add(40, 2), mul(1LL << 31, 4), sub(2, 3));
+    for (int k = 0; k < 2; k++) {
+        if (argc > 1) printf(\"%d\\n\", add(INT_MAX, argc - 1));
+        if (argc > 2) printf(\"%lld\\n\", mul(LLONG_MAX / 2, argc));
+        if (argc > 3) printf(\"%d\\n\", sub(INT_MIN, argc - 3));
+    }
+    return 0;
+}
+";
+
+fn build(dir: &Path, flags: &[&str], opt: &str) -> std::path::PathBuf {
+    let src = dir.join("overflow.c");
+    std::fs::write(&src, OVERFLOW).unwrap();
+    let out = dir.join(format!("overflow{}{opt}", flags.join("").replace('=', "_")));
+    let built = Command::new(env!("CARGO_BIN_EXE_badc"))
+        .args(["-q", opt])
+        .args(flags)
+        .arg("-o")
+        .arg(&out)
+        .arg(&src)
+        .output()
+        .expect("run badc");
+    assert!(
+        built.status.success(),
+        "{}",
+        String::from_utf8_lossy(&built.stderr)
+    );
+    out
+}
+
+fn run(exe: &Path, args: &[&str]) -> Output {
+    Command::new(exe)
+        .args(args)
+        .output()
+        .expect("run the program")
+}
+
+/// The report lines, with the source path before `:<line>:` dropped.
+fn reports(o: &Output) -> Vec<String> {
+    (String::from_utf8_lossy(&o.stderr).lines())
+        .filter_map(|l| l.split_once("overflow.c:").map(|(_, r)| r.to_string()))
+        .collect()
+}
+
+#[test]
+fn a_failed_overflow_check_reports_once_and_the_program_goes_on() {
+    let dir = TempDir::new("badc-sanitize-recover");
+    for opt in ["-O0", "-O"] {
+        let exe = build(&dir, &["-fsanitize=signed-integer-overflow"], opt);
+        let quiet = run(&exe, &[]);
+        assert!(
+            quiet.status.success() && quiet.stderr.is_empty(),
+            "{opt}: {quiet:?}"
+        );
+        assert_eq!(String::from_utf8_lossy(&quiet.stdout), "42 8589934592 -1\n");
+        let o = run(&exe, &["a", "b", "c"]);
+        assert!(o.status.success(), "{opt}: {o:?}");
+        assert_eq!(
+            reports(&o),
+            [
+                "3:60: runtime error: signed integer overflow: 2147483647 + 3 cannot be \
+                 represented in type 'int'",
+                "4:78: runtime error: signed integer overflow: 4611686018427387903 * 4 cannot \
+                 be represented in type 'long long'",
+                "5:60: runtime error: signed integer overflow: -2147483648 - 1 cannot be \
+                 represented in type 'int'",
+            ],
+            "{opt}"
+        );
+    }
+}
+
+#[test]
+fn a_trapping_check_stops_the_program_without_a_report() {
+    let dir = TempDir::new("badc-sanitize-trap");
+    for opt in ["-O0", "-O"] {
+        let exe = build(
+            &dir,
+            &["-fsanitize=signed-integer-overflow", "-fsanitize-trap"],
+            opt,
+        );
+        assert!(run(&exe, &[]).status.success(), "{opt}");
+        let o = run(&exe, &["a"]);
+        assert!(
+            !o.status.success() && reports(&o).is_empty(),
+            "{opt}: {o:?}"
+        );
+    }
+}
+
+#[test]
+fn a_check_that_does_not_recover_reports_and_aborts() {
+    let dir = TempDir::new("badc-sanitize-abort");
+    let exe = build(
+        &dir,
+        &["-fsanitize=undefined", "-fno-sanitize-recover=all"],
+        "-O0",
+    );
+    let o = run(&exe, &["a"]);
+    assert!(!o.status.success(), "{o:?}");
+    assert_eq!(reports(&o).len(), 1, "{o:?}");
+}
+
+#[test]
+fn a_check_badc_does_not_implement_is_refused() {
+    let o = Command::new(env!("CARGO_BIN_EXE_badc"))
+        .args(["-fsanitize=address", "-c", "x.c"])
+        .output()
+        .expect("run badc");
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert!(
+        !o.status.success() && err.contains("signed-integer-overflow"),
+        "{err}"
+    );
+}

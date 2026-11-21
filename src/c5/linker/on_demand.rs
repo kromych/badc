@@ -66,9 +66,12 @@ impl OnDemandSources {
     fn compile(&self) -> Result<Vec<Member>, C5Error> {
         let (target, options) = (self.target, &self.options);
         let compile = |(label, body): &(String, &str)| {
+            // The runtime is compiled as a toolchain builds its own: a
+            // sanitizer handler running a check would recurse into it.
             let options = (options.clone())
                 .with_source_label(label.clone())
-                .with_no_entry_point(true);
+                .with_no_entry_point(true)
+                .with_sanitize(Default::default());
             let program = Compiler::with_options(body.to_string(), target, options).compile()?;
             let (strong, weak) = program.external_definitions();
             Ok(Member {

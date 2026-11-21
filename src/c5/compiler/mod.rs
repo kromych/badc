@@ -37,6 +37,7 @@ mod loop_idiom;
 mod ms_intrinsic;
 mod redeclaration;
 mod run_compile;
+pub(crate) mod sanitize;
 mod seh;
 mod sizeof_expr;
 pub(crate) use sizeof_expr::object_size_fallback;
@@ -785,6 +786,8 @@ pub struct CompileOptions {
     /// `++` or `--` is defined to wrap at its type's width. Off, its
     /// overflow is undefined (C99 6.5p5) and the result is marked so.
     pub wrapv: bool,
+    /// The runtime checks `-fsanitize=` inserts; see [`sanitize::Sanitize`].
+    pub sanitize: sanitize::Sanitize,
     /// `-ftrivial-auto-var-init=`: what an automatic object declared
     /// without an initializer holds on entry to its scope; see
     /// [`AutoVarInit`].
@@ -1023,6 +1026,12 @@ impl CompileOptions {
     /// Define signed overflow to wrap (`-fwrapv`). See [`Self::wrapv`].
     pub fn with_wrapv(mut self, on: bool) -> Self {
         self.wrapv = on;
+        self
+    }
+
+    /// The runtime checks to insert (`-fsanitize=`).
+    pub fn with_sanitize(mut self, sanitize: sanitize::Sanitize) -> Self {
+        self.sanitize = sanitize;
         self
     }
 
@@ -2732,6 +2741,18 @@ pub struct Compiler {
     preprocessed: bool,
     /// Mirror of [`CompileOptions::wrapv`].
     wrapv: bool,
+    /// The runtime checks `-fsanitize=` inserts.
+    sanitize: sanitize::Sanitize,
+    /// Each integer type's handler `TypeDescriptor`, by type.
+    ubsan_types: alloc::collections::BTreeMap<i64, i64>,
+    /// Each source file's name for the handlers, by name.
+    ubsan_files: alloc::collections::BTreeMap<String, i64>,
+    /// The handlers the unit's checks call, by symbol slot: the name and
+    /// the prototype.
+    ubsan_handlers: alloc::collections::BTreeMap<usize, (String, &'static str)>,
+    /// The line and column of the last binary operator, which a check's
+    /// site names.
+    operator_at: (u32, u32),
     /// Mirror of [`CompileOptions::fp_contract`].
     fp_contract: FpContract,
     /// Mirror of [`CompileOptions::auto_var_init`]. Read where an
@@ -3514,6 +3535,11 @@ impl Compiler {
             preprocessed: opts.preprocessed,
             auto_var_init: opts.auto_var_init,
             wrapv: opts.wrapv,
+            sanitize: opts.sanitize,
+            ubsan_types: alloc::collections::BTreeMap::new(),
+            ubsan_files: alloc::collections::BTreeMap::new(),
+            ubsan_handlers: alloc::collections::BTreeMap::new(),
+            operator_at: (0, 0),
             fp_contract: opts.fp_contract,
             no_builtin_fns: opts.no_builtin_fns.clone(),
             optimize: opts.optimize,
@@ -4062,6 +4088,7 @@ impl Compiler {
         let parse_start = std::time::Instant::now();
         self.run_compile().map_err(|e| self.failed(e))?;
         self.declare_atomic_libcalls();
+        self.declare_ubsan_handlers();
         #[cfg(feature = "codegen_test")]
         if std::env::var("BADC_TIME_PASSES").is_ok() {
             eprintln!(

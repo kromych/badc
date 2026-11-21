@@ -61,7 +61,10 @@ impl<'a> Walker<'a> {
                 *array_size,
             ),
             Expr::Unary { op, child, ty } => self.walk_unary(b, *op, *child, *ty),
-            Expr::Binary { op, lhs, rhs, ty } => self.walk_binary(b, *op, *lhs, *rhs, *ty),
+            Expr::Binary { op, lhs, rhs, ty } => match self.ast.checks.get(&id) {
+                Some(&check) => self.walk_checked_binary(b, check, *op, (*lhs, *rhs), *ty),
+                None => self.walk_binary(b, *op, *lhs, *rhs, *ty),
+            },
             Expr::BitfieldAssign {
                 obj,
                 field_off,

@@ -19,6 +19,8 @@ pub const DWARF_FORMAT_BITS: u8 = 32;
 #[cfg(feature = "native-emit")]
 pub(crate) mod arm64_unwind;
 #[cfg(feature = "native-emit")]
+pub(crate) mod code_signature;
+#[cfg(feature = "native-emit")]
 pub(crate) mod codeview;
 #[cfg(feature = "native-emit")]
 pub(crate) mod debug_model;
@@ -52,8 +54,8 @@ pub(crate) mod pe_rsrc;
 #[cfg(feature = "native-emit")]
 pub(crate) mod relr;
 pub(crate) mod section_table;
-#[cfg(feature = "native-emit")]
 pub(crate) mod sha1;
+pub(crate) mod sha256;
 #[cfg(feature = "std")]
 pub(crate) mod so_versions;
 #[cfg(feature = "std")]

@@ -51,12 +51,6 @@ fn build_signed_mach_o_opt(src: &str, stem: &str, optimize: bool) -> PathBuf {
     let mut perms = std::fs::metadata(&path).unwrap().permissions();
     perms.set_mode(perms.mode() | 0o111);
     std::fs::set_permissions(&path, perms).unwrap();
-    let status = Command::new("/usr/bin/codesign")
-        .args(["--sign", "-", "--force"])
-        .arg(&path)
-        .status()
-        .expect("codesign not available");
-    assert!(status.success(), "codesign failed for {path:?}");
     path
 }
 
@@ -498,12 +492,6 @@ fn build_signed_mach_o_two_units(
     let mut perms = std::fs::metadata(&path).unwrap().permissions();
     perms.set_mode(perms.mode() | 0o111);
     std::fs::set_permissions(&path, perms).unwrap();
-    let status = Command::new("/usr/bin/codesign")
-        .args(["--sign", "-", "--force"])
-        .arg(&path)
-        .status()
-        .expect("codesign not available");
-    assert!(status.success(), "codesign failed for {path:?}");
     path
 }
 

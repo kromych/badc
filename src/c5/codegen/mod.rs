@@ -9,8 +9,7 @@
 //! SSA + CFG, sourced from the walker / cached `user_ssa_funcs`) ->
 //! [`ssa_alloc::allocate`] (graph-coloring register allocation) ->
 //! per-arch SSA emit (`ssa_emit_aarch64` / `ssa_emit_x86_64`) ->
-//! raw machine code -> per-OS image writer -> bytes on disk ->
-//! (Apple Silicon only) shell to `codesign --sign -`.
+//! raw machine code -> per-OS image writer -> bytes on disk.
 //!
 //! ## What we trade away
 //!
@@ -99,8 +98,8 @@ pub use crate::c5::object::elf_class::ElfClass;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Target {
     /// macOS on Apple Silicon. Mach-O / arm64e-not-required, links
-    /// against `libSystem.B.dylib` for libc, signed ad-hoc with
-    /// `codesign --sign -` so dyld will load it.
+    /// against `libSystem.B.dylib` for libc, signed ad hoc by the
+    /// writer so the kernel and dyld accept it.
     MacOSAarch64,
     /// Linux on AArch64. ELF / EM_AARCH64, links against `libc.so.6`
     /// via `/lib/ld-linux-aarch64.so.1`. No code-signing step.

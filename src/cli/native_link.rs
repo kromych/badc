@@ -33,9 +33,8 @@ use super::stats::LinkStats;
 /// beside the inputs' `__eh_frame`,
 /// variadic libc imports, `#pragma` exports, and `_Thread_local`
 /// storage in each format's native shape: ELF PT_TLS, the PE TLS
-/// directory + `_tls_index`, the Mach-O TLV descriptors. Mach-O
-/// auto-codesigning lives in `post_write_native`. `--jit` / `--interp`
-/// and `-c` / `--ar` take their own paths.
+/// directory + `_tls_index`, the Mach-O TLV descriptors and code
+/// signature. `--jit` / `--interp` and `-c` / `--ar` take their own paths.
 pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
     let Inputs {
         sources,

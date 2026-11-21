@@ -3,6 +3,7 @@
 //! segments and the `__LINKEDIT` tables dyld binds from. The CLI shim
 //! signs the result; macOS refuses to exec an unsigned image.
 
+use super::code_signature;
 use crate::c5::codegen::{EhFrameTarget, PointerSlot};
 use crate::c5::diag::Code;
 use alloc::collections::BTreeMap;
@@ -46,6 +47,9 @@ const LC_DYLD_INFO_ONLY: u32 = 0x22 | LC_REQ_DYLD;
 const LC_MAIN: u32 = 0x28 | LC_REQ_DYLD;
 const LC_BUILD_VERSION: u32 = 0x32;
 const LC_UUID: u32 = 0x1b;
+const LC_CODE_SIGNATURE: u32 = 0x1d;
+/// `linkedit_data_command`: cmd, cmdsize, dataoff, datasize.
+const LINKEDIT_DATA_COMMAND_SIZE: u32 = 16;
 const UUID_COMMAND_SIZE: usize = 24;
 
 const VM_PROT_READ: u32 = 1;
@@ -864,6 +868,30 @@ fn dylib_command(cmd: u32, path: &str) -> Vec<u8> {
 }
 
 /// `LC_UUID` -- 16-byte module-identity blob.
+/// The identifier an image's code signature names: a library's install
+/// name, else the driver's default output name.
+fn signature_ident(build: &Build, is_dylib: bool) -> &str {
+    match build.shared_lib_name.as_deref() {
+        Some(name) if is_dylib => name,
+        _ if is_dylib => "c5-output.dylib",
+        _ => "a.out",
+    }
+}
+
+/// `LC_CODE_SIGNATURE` naming `size` bytes of signature at file offset `off`.
+fn code_signature_command(off: u64, size: u64) -> Vec<u8> {
+    let mut lc = Vec::with_capacity(LINKEDIT_DATA_COMMAND_SIZE as usize);
+    for v in [
+        LC_CODE_SIGNATURE,
+        LINKEDIT_DATA_COMMAND_SIZE,
+        off as u32,
+        size as u32,
+    ] {
+        lc.extend_from_slice(&v.to_le_bytes());
+    }
+    lc
+}
+
 fn uuid_command(text: &[u8], data: &[u8], rodata: &crate::c5::codegen::RodataBuild) -> Vec<u8> {
     fn fnv1a128(bytes: &[u8]) -> [u8; 16] {
         let mut h0: u64 = 0xcbf2_9ce4_8422_2325;
@@ -1642,6 +1670,9 @@ struct LinkEdit {
     linkedit_filesize: u64,
     linkedit_vmaddr: u64,
     linkedit_vmsize: u64,
+    /// The ad-hoc code signature at the end of `__LINKEDIT`.
+    signature_off: u64,
+    signature_size: u64,
 }
 
 /// A function start's encoding, less the personality and LSDA bits the
@@ -2072,7 +2103,8 @@ impl<'a> MachOWriter<'a> {
             + dylibs_total
             + c.build_version.len() as u64
             + c.uuid.len() as u64
-            + entry_lc_size;
+            + entry_lc_size
+            + LINKEDIT_DATA_COMMAND_SIZE as u64;
     }
 
     /// The file and vmaddr layout; the kernel slides an image by whole pages.
@@ -2483,6 +2515,11 @@ impl<'a> MachOWriter<'a> {
             + le.export_trie.len()
             + le.symtab.len()
             + le.strtab.len()) as u64;
+        // The signature covers every byte ahead of it, at a 16-byte offset.
+        le.signature_off = (le.linkedit_fileoff + le.linkedit_filesize).next_multiple_of(16);
+        let ident = signature_ident(self.build, self.is_dylib);
+        le.signature_size = code_signature::size(le.signature_off, ident);
+        le.linkedit_filesize = le.signature_off + le.signature_size - le.linkedit_fileoff;
         le.dwarf_vmaddr = l.data_vmaddr() + l.data_vmsize;
         le.dwarf_vmsize = if self.emit_dwarf {
             round_up(le.dwarf_filesize, PAGE_SIZE)
@@ -2683,6 +2720,7 @@ impl<'a> MachOWriter<'a> {
                 lcs.push(main_command(l.entry_file_offset + entry_native));
             }
         }
+        lcs.push(code_signature_command(le.signature_off, le.signature_size));
         self.lcs = lcs;
         Ok(())
     }
@@ -2912,6 +2950,11 @@ impl<'a> MachOWriter<'a> {
         out.extend_from_slice(&le.export_trie);
         out.extend_from_slice(&le.symtab);
         out.extend_from_slice(&le.strtab);
+        out.resize(le.signature_off as usize, 0);
+        let text = (0, self.layout.text_filesize);
+        let ident = signature_ident(self.build, self.is_dylib);
+        let signature = code_signature::write(out, ident, text, !self.is_dylib);
+        out.extend_from_slice(&signature);
         debug_assert_eq!(out.len() as u64, le.linkedit_fileoff + le.linkedit_filesize);
     }
 
@@ -3281,9 +3324,29 @@ mod tests {
     }
 
     #[test]
-    fn ncmds_baseline_is_twelve_plus_dylibs() {
+    fn ncmds_baseline_is_thirteen_plus_dylibs() {
         let bytes = write(&tiny_program(), &tiny_build()).unwrap();
-        assert_eq!(read_u32(&bytes, 16), 13);
+        assert_eq!(read_u32(&bytes, 16), 14);
+    }
+
+    /// The last load command is `LC_CODE_SIGNATURE`, naming the end of the
+    /// file, and its CodeDirectory hashes every page ahead of it.
+    #[test]
+    fn an_image_ends_in_an_ad_hoc_signature_over_its_bytes() {
+        let bytes = write(&tiny_program(), &tiny_build()).unwrap();
+        let (ncmds, mut at) = (read_u32(&bytes, 16), 32usize);
+        for _ in 1..ncmds {
+            at += read_u32(&bytes, at + 4) as usize;
+        }
+        assert_eq!(read_u32(&bytes, at), LC_CODE_SIGNATURE);
+        let (off, size) = (read_u32(&bytes, at + 8) as usize, read_u32(&bytes, at + 12));
+        assert_eq!(off + size as usize, bytes.len());
+        assert_eq!(off % 16, 0);
+        let expected = code_signature::write(&bytes[..off], "a.out", (0, 0), true);
+        let be = |b: &[u8], o: usize| u32::from_be_bytes(b[o..o + 4].try_into().unwrap());
+        let cd = be(&expected, 16) as usize;
+        let hashes = cd + be(&expected, cd + 16) as usize;
+        assert_eq!(&bytes[off + hashes..], &expected[hashes..]);
     }
 
     #[test]

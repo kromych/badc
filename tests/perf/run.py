@@ -468,10 +468,6 @@ def compile_one(c: Compiler, src: Path, out: Path) -> float | None:
             file=sys.stderr,
         )
         return None
-    # macOS sometimes refuses unsigned binaries with SIGKILL; sign with
-    # the ad-hoc identity if we just produced an aarch64 binary.
-    if sys.platform == "darwin" and platform.machine() == "arm64":
-        subprocess.run(["codesign", "-s", "-", str(out)], check=False)
     return compile_ms
 
 

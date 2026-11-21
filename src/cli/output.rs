@@ -2,11 +2,6 @@ use badc::Target;
 
 use super::diag::eprint_diagnostic;
 
-/// Where the AOT codesign tool lives on every macOS install. Hardcoded
-/// so we don't accidentally pick up a homebrew shim that signs differently.
-#[cfg(target_os = "macos")]
-const CODESIGN: &str = "/usr/bin/codesign";
-
 /// Write to standard output for [`out!`] / [`outln!`]. A closed pipe ends
 /// the run with a failure status and no message; any other write error is
 /// reported.
@@ -49,26 +44,19 @@ pub(crate) fn write_output(
     }
 }
 
-/// Post-write hooks for the native image: codesign Mach-O on macOS hosts
-/// so dyld accepts the binary, and report B7009 when the image's target is
-/// not the running host. `-q`, `-w` and `-Wno-cross-target-output` drop
-/// the report.
+/// Report B7009 when the native image's target is not the running host.
+/// `-q`, `-w` and `-Wno-cross-target-output` drop the report.
 pub(crate) fn post_write_native(
     out: &std::path::Path,
     target: Target,
     diag: &badc::diag::Config,
     quiet: bool,
 ) {
-    #[cfg(target_os = "macos")]
-    if target == Target::MacOSAarch64 {
-        codesign(out);
-    }
     let _ = out;
     let elsewhere = match target {
-        Target::MacOSAarch64 if !cfg!(target_os = "macos") => Some(
-            "a Mach-O on a non-macOS host; copy it to macOS and `codesign --sign - <path>` \
-             before running it",
-        ),
+        Target::MacOSAarch64 if !cfg!(all(target_os = "macos", target_arch = "aarch64")) => {
+            Some("a macOS/aarch64 Mach-O on a different host; it won't run here")
+        }
         Target::LinuxAarch64 if !cfg!(all(target_os = "linux", target_arch = "aarch64")) => {
             Some("a Linux/aarch64 ELF on a different host; it won't run here")
         }
@@ -95,30 +83,5 @@ pub(crate) fn post_write_native(
     let tty = std::io::IsTerminal::is_terminal(&std::io::stderr());
     for d in sink.diagnostics() {
         eprintln!("{}", super::diag::rendered(d, tty));
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn codesign(path: &std::path::Path) {
-    // `--` terminates option parsing so an output path that begins with
-    // `-` is treated as a path, not a flag. A signing failure is fatal:
-    // an unsigned Mach-O is rejected by dyld, so reporting success would
-    // hand back an unrunnable binary.
-    let status = std::process::Command::new(CODESIGN)
-        .args(["--sign", "-", "--force", "--"])
-        .arg(path)
-        .status();
-    match status {
-        Ok(s) if s.success() => {}
-        Ok(s) => {
-            eprint_diagnostic(format!(
-                "badc: error: codesign exited with status {s}; the macOS binary won't run"
-            ));
-            std::process::exit(1);
-        }
-        Err(e) => {
-            eprint_diagnostic(format!("badc: error: failed to invoke {CODESIGN}: {e}"));
-            std::process::exit(1);
-        }
     }
 }

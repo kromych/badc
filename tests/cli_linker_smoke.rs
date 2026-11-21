@@ -5481,8 +5481,7 @@ fn emit_native_then_link_native_resolves_cross_unit_call() {
 // macOS arm64 -.o link path through the synthesizer. Compiles
 // two sources with `-c`, links the two .o into a Mach-O
 // executable, and execs to verify the runtime behavior round-
-// trip works. The synth path auto-codesigns via
-// `post_write_native`, so no manual codesign step is needed.
+// trip works. The writer signs the image ad hoc.
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 #[test]
 fn macos_native_link_two_sources_with_libc() {

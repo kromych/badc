@@ -2426,7 +2426,7 @@ impl super::ssa::emit_common::LowerTarget for X64Lower<'_> {
             native.stack_protect.resolved_for(target, native.code_model),
             entry,
             native.fixed_regs,
-            native.optimize,
+            native.optimizes(),
             native.sibling_calls,
             native.branches_within_32b,
         )

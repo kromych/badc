@@ -89,12 +89,15 @@ native-emit = ["std"]
 # `badc` binary (`-c`, `.o` / `.a` inputs, `-L`, `-l`). Library callers
 # that want only the host JIT can opt out with `default-features =
 # false, features = ["std"]`.
-full = ["native-emit", "headers"]
+full = ["native-emit", "headers", "optimizer"]
 # Embeds the bundled C library and compiler headers (`<stdio.h>`,
 # `<arm_neon.h>`, ...) and the index of the names each declares, which the
 # include search, the auto-include retry and the B2022 hint read. Without
 # it an `#include` searches the include path alone.
 headers = []
+# The SSA optimization passes `NativeOptions::optimize` (`-O`) runs. Without
+# it a lowering that asks for them is refused.
+optimizer = []
 # Exposes the register-allocator pressure knobs (per-bank GPR / FP
 # count caps) to the test harness and the `badc` CLI (`--max-gpr=N`,
 # `--max-fpr=N`, and the `BADC_MAX_GPR` / `BADC_MAX_FPR` environment

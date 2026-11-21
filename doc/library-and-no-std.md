@@ -20,8 +20,8 @@ with `CompileOptions`. From a `Program`:
   `with_sve_vector_bits` (128 bits by default) configure the run.
 
 `NativeOptions::new().with_optimize()` runs the SSA optimizer during
-`emit_native_with_options` or `jit_run_with_options`; there is no separate
-optimization step.
+`emit_native_with_options` or `jit_run_with_options`, in a build with the
+`optimizer` feature; there is no separate optimization step.
 
 A failed `compile` returns `C5Error::Compile`, which holds the diagnostics of
 the phase that failed in the order they were reported, ending with the error
@@ -34,10 +34,11 @@ driver prints it, and its `code` names a row of the catalog that
 
 | feature | adds |
 |---|---|
-| `std` (default) | the lexer, preprocessor, compiler, optimizer, interpreter and in-process JIT; the `StdHost` adapter for files, environment and standard streams |
+| `std` (default) | the lexer, preprocessor, compiler, interpreter and in-process JIT; the `StdHost` adapter for files, environment and standard streams |
 | `headers` | the bundled C library and compiler headers; without it an `#include` searches the include path alone |
+| `optimizer` | the SSA optimization passes `NativeOptions::optimize` runs; without it a lowering that asks for them fails |
 | `native-emit` | `emit_native` and the Mach-O, ELF and PE writers; requires `std` |
-| `full` | `native-emit` and `headers`, plus objects, archives and the linker; the `badc` binary requires it |
+| `full` | `native-emit`, `headers` and `optimizer`, plus objects, archives and the linker; the `badc` binary requires it |
 | `codegen_test` | register-allocator limits for tests (`BADC_MAX_GPR`, `BADC_MAX_FPR`) |
 
 ## `no_std`

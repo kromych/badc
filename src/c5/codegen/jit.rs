@@ -182,7 +182,6 @@ mod jit_impl {
     use super::super::Target;
     use super::super::ssa::shadow;
     use super::super::{AddrPart, Build, NativeOptions, ResolvedImports, UnitDef, UnitDefs};
-    use super::super::{aarch64, x86_64};
     use super::host_target;
     use crate::c5::object::weak_undef;
     use alloc::collections::{BTreeMap, BTreeSet};
@@ -685,7 +684,7 @@ mod jit_impl {
         // reaches, so an uncompacted `.data` keeps relocations against
         // functions this build never emits. `segregate` is false --
         // the data region is one flat mapping with no zero-fill tail.
-        let compacted = shadow::compact_program_data(program, target, false, options.optimize)?;
+        let compacted = shadow::compact_program_data(program, target, false, options.optimizes())?;
         let mut program = compacted.program;
         // The JIT fills each import's slot with the library's address, so
         // `&puts` and a data slot naming it take that slot's value, as in an
@@ -1736,24 +1735,14 @@ mod jit_impl {
             in_process: true,
             ..options
         };
-        let mut build = match target {
-            Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => aarch64::lower(
-                program,
-                target,
-                options,
-                &imports,
-                None,
-                crate::c5::codegen::LowerMode::Full,
-            )?,
-            Target::LinuxX64 | Target::WindowsX64 => x86_64::lower(
-                program,
-                target,
-                options,
-                &imports,
-                None,
-                crate::c5::codegen::LowerMode::Full,
-            )?,
-        };
+        let mut build = crate::c5::codegen::lower_arch(
+            program,
+            target,
+            options,
+            &imports,
+            None,
+            crate::c5::codegen::LowerMode::Full,
+        )?;
         build.imports = imports;
         build.abi = target.abi();
         build.data_relocs = program.data_relocs.clone();

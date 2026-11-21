@@ -2727,7 +2727,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 super::shadow::produce_ssa_funcs_on(
                     graph(),
                     target,
-                    native.optimize,
+                    native.optimizes(),
                     native.jump_tables,
                 )
             })?,
@@ -2771,7 +2771,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // the retry runs it on the reported bodies.
     // An `always_inline` function inlines at every optimization level; at -O0
     // the inliner takes those calls alone.
-    if !native.optimize && walked && ssa_funcs.iter().any(|f| f.is_always_inline) {
+    if !native.optimizes() && walked && ssa_funcs.iter().any(|f| f.is_always_inline) {
         let code_syms = defined_fn_syms(program);
         let extern_fns = extern_fn_targets(program);
         pipeline.run("passes::inline::run mandatory", &mut ssa_funcs, |funcs| {
@@ -2790,7 +2790,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             );
         });
     }
-    if !native.optimize && mode != super::LowerMode::DataLivenessProbe {
+    if !native.optimizes() && mode != super::LowerMode::DataLivenessProbe {
         let coalesce_dwarf = pipeline.run("ssa::slot_coalesce::run", &mut ssa_funcs, |funcs| {
             super::slot_coalesce::run(funcs, false, native.stack_protect)
         });
@@ -2814,7 +2814,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // register allocation, dropping their frame load / store traffic.
     // Record the promoted slots per function so the debug-info emitter
     // can drop their now-stale frame location.
-    if native.optimize && walked {
+    if native.optimizes() && walked {
         // Every computed goto of a function through one dispatch block.
         pipeline.run("passes::factor_gotos::run", &mut ssa_funcs, |funcs| {
             super::super::passes::factor_gotos::run(funcs);
@@ -3196,7 +3196,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // compaction retry re-runs them and re-checks the report is empty.
     // A probe always reports: its caller compacts the program from this
     // set alone, so it needs the all-live one too.
-    if native.optimize || mode == super::LowerMode::DataLivenessProbe {
+    if native.optimizes() || mode == super::LowerMode::DataLivenessProbe {
         let sets = pipeline.run(
             "ssa::shadow::drop_unreachable_statics",
             &mut ssa_funcs,
@@ -3420,7 +3420,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     for f in ssa_funcs.iter_mut() {
         super::super::passes::constfold_branch::strip_zero_test_conds(f);
         super::super::passes::constfold_branch::low_word_xor_to_compare(f, target.is_x86_64());
-        if native.optimize {
+        if native.optimizes() {
             super::super::passes::constfold_branch::test_decrements(f);
         }
         crate::c5::asm::mark_static_operands(f);
@@ -3463,7 +3463,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                         super::vector_slots::fp_lane_loads(f);
                     }
                     super::mem2reg::zero_read_undefs(f);
-                    if native.optimize && !f.has_seh() {
+                    if native.optimizes() && !f.has_seh() {
                         super::remat::split_across_calls(f, target);
                         super::licm::allocate_hoisted(f, target, native.fixed_regs, data_len)
                     } else {

@@ -4542,6 +4542,7 @@ pub struct NativeOptions {
     /// inlining (bounded by `inline_cap`), rotate-idiom recognition,
     /// branch const-folding, and immediate deduplication. Off by
     /// default; the per-arch lowering runs these passes only when set.
+    /// A build without the `optimizer` feature refuses the lowering.
     pub optimize: bool,
     /// Pick the kind of binary the writer should produce.
     /// Default is [`OutputKind::Executable`] -- a normal
@@ -5156,6 +5157,12 @@ impl NativeOptions {
         self
     }
 
+    /// Whether the lowering runs the optimizer: [`Self::optimize`], in a
+    /// build with the `optimizer` feature.
+    pub(crate) const fn optimizes(&self) -> bool {
+        cfg!(feature = "optimizer") && self.optimize
+    }
+
     /// Set [`Self::output_kind`] = [`OutputKind::SharedLibrary`]
     /// and return self.
     pub const fn with_shared_library(mut self) -> Self {
@@ -5183,6 +5190,32 @@ pub(crate) fn lower_for(
     options: NativeOptions,
 ) -> Result<Build, C5Error> {
     lower_for_with_prebuilt(program, target, options, None, LowerMode::Full)
+}
+
+/// Lower `program` with the backend of `target`'s architecture, in a
+/// build that carries what `options` asks for.
+pub(crate) fn lower_arch(
+    program: &Program,
+    target: Target,
+    options: NativeOptions,
+    imports: &ResolvedImports,
+    prebuilt: Option<ssa::shadow::PrebuiltSsa>,
+    mode: LowerMode,
+) -> Result<Build, C5Error> {
+    if options.optimize && !options.optimizes() {
+        return Err(C5Error::hard(
+            Code::UNSUPPORTED,
+            "this build of badc has no optimizer (the `optimizer` feature)",
+        ));
+    }
+    match target {
+        Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
+            aarch64::lower(program, target, options, imports, prebuilt, mode)
+        }
+        Target::LinuxX64 | Target::WindowsX64 => {
+            x86_64::lower(program, target, options, imports, prebuilt, mode)
+        }
+    }
 }
 
 /// How far a lowering runs.
@@ -5323,14 +5356,7 @@ pub(crate) fn lower_for_with_prebuilt(
     if matches!(target, Target::MacOSAarch64) && !program.tls_data.is_empty() {
         imports.ensure_dylib("libSystem", program, target);
     }
-    let mut build = match target {
-        Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
-            aarch64::lower(program, target, options.clone(), &imports, prebuilt, mode)?
-        }
-        Target::LinuxX64 | Target::WindowsX64 => {
-            x86_64::lower(program, target, options.clone(), &imports, prebuilt, mode)?
-        }
-    };
+    let mut build = lower_arch(program, target, options.clone(), &imports, prebuilt, mode)?;
     if build.stopped_at_data_liveness {
         return Ok(build);
     }

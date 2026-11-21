@@ -3939,7 +3939,6 @@ fn to_table(
         | M::Rdtscp
         | M::Cpuid
         | M::Xgetbv
-        | M::Nop
         | M::Cli
         | M::Sti
         | M::Invd
@@ -3950,6 +3949,12 @@ fn to_table(
         | M::Monitor
         | M::Mwait
         | M::Hlt => Vec::new(),
+        // An operand selects the multi-byte NOP, 0F 1F /0, as GNU as encodes it.
+        M::Nop => match ops {
+            [] => Vec::new(),
+            [rm] => alloc::vec![cvt(rm)],
+            _ => return None,
+        },
         M::Bswap | M::Inc | M::Dec => match ops {
             [rm] => alloc::vec![cvt(rm)],
             _ => return None,
@@ -6599,6 +6604,27 @@ mod tests {
         // A constant-only directive stays on the raw-byte path.
         let insns = parse_template(b".long 42").unwrap();
         assert_eq!(insns[0].mnemonic, Mnemonic::RawBytes);
+    }
+
+    /// `nop` with an operand is the multi-byte NOP at the operand's width;
+    /// the bytes are GNU as's and clang's.
+    #[test]
+    fn nop_with_an_operand_is_the_multi_byte_form() {
+        assert_eq!(asm_bytes(b"nop"), [0x90]);
+        assert_eq!(
+            asm_bytes(b"nopw (%%rax,%%rax)"),
+            [0x66, 0x0F, 0x1F, 0x04, 0x00]
+        );
+        assert_eq!(asm_bytes(b"nopl (%%rax)"), [0x0F, 0x1F, 0x00]);
+        assert_eq!(
+            asm_bytes(b"nopl 8(%%rax,%%rax,1)"),
+            [0x0F, 0x1F, 0x44, 0x00, 0x08]
+        );
+        assert_eq!(asm_bytes(b"nopw %%ax"), [0x66, 0x0F, 0x1F, 0xC0]);
+        assert_eq!(
+            asm_bytes(b"nopq 8(%%rsp)"),
+            [0x48, 0x0F, 0x1F, 0x44, 0x24, 0x08]
+        );
     }
 
     #[test]

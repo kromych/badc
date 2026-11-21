@@ -363,6 +363,15 @@ native-subsystem `.sys` whose image and ntoskrnl imports the smoke checks;
 a user-mode harness runs its descriptor and MSR decode logic. The driver is
 never loaded. See [`simplevisor/README.md`](./simplevisor/README.md).
 
+## systeminformer/
+
+[System Informer](https://github.com/winsiderss/systeminformer)
+4.0.26241.138 built from its own CMake lists for windows-x64 and
+windows-arm64: badc compiles its C against the Windows SDK and MSVC headers
+and links the programs, the SDK's and MSVC's tools build the rest. The smoke
+runs phlib's self-test and starts System Informer and its PE viewer, at -O0
+and -O. See [`systeminformer/README.md`](./systeminformer/README.md).
+
 ## nt_loader/
 
 Launches user-mode NT-native programs (e.g. `nt_hello`) through a transacted

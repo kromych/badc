@@ -94,6 +94,7 @@ def kernel_release() -> str:
 ALL = frozenset({"linux", "windows", "macos"})
 POSIX = frozenset({"linux", "macos"})
 LINUX = frozenset({"linux"})
+WINDOWS = frozenset({"windows"})
 
 # Demos to run at a time per lane. Several drive their own thread pool
 # (demos/qemu takes cpu_count), so the width trades lane wall clock
@@ -193,6 +194,13 @@ GATING_DEMOS = (
     # PE subsystem bytes (CUI and NATIVE) and the ntdll HANDLE-returning
     # bindings, where a 64-bit return truncation would show.
     ("demos/nt_loader/smoke.py", ALL),
+    # A Windows GUI program of 456 C units built against the SDK's and MSVC's
+    # headers, linked with cl C++ objects, MASM / armasm objects, rc
+    # resources and the static VC runtime, at -O0 and -O, and phlib's
+    # self-test run. An x86-64 flag-reuse miscompile that formatted 1234 as
+    # "1234" at -O was caught only here while the board was green.
+    # 135 s on the x64 box and 217 s on the arm64 one.
+    ("demos/systeminformer/smoke.py", WINDOWS),
     # Fourteen boots of PE32+ EFI kernels under QEMU/OVMF, both arches at
     # -O0 and -O: the only cover for a naked-function ISR and the context
     # switch it performs. A prologue change that used the caller's register

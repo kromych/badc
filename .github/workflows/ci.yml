@@ -1447,6 +1447,35 @@ jobs:
       - name: symcrypt smoke (SymCrypt's CMake + symcryptunittest)
         run: python demos/symcrypt/smoke.py
 
+  # System Informer 4.0.26241.138 from its own CMake lists: badc compiles its
+  # C against the Windows SDK and MSVC headers and links the programs with
+  # cl's C++ objects, the assembler's objects and rc's resources; the smoke
+  # runs phlib's self-test and starts System Informer and its PE viewer, at
+  # -O0 and -O. Windows only: the build runs the SDK's and MSVC's tools.
+  systeminformer:
+    needs: build
+    name: systeminformer (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - windows-latest
+          - windows-11-arm
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: badc from the build job
+        uses: actions/download-artifact@v4
+        with:
+          name: badc-${{ matrix.os }}
+          path: target/release
+      - name: systeminformer smoke (CMake lists, phlib-test, the programs started)
+        run: python demos/systeminformer/smoke.py
+
   # Cooperative-concurrency demos: each library's context switch leans
   # on constructs the fixtures cover only piecemeal -- the upstream asm
   # setjmp/longjmp switch on x86-64 (sigsetjmp elsewhere) plus

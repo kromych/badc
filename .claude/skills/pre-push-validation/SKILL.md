@@ -35,7 +35,8 @@ only SDK-libc target. `./scripts/validate_local_boxes.py` runs:
     (Linux lanes, one configuration per box per run, below), sqlite3, lua,
     miniz, monocypher, stb, tweetnacl, quickjs, raylib, curl, libmill, libdill,
     coroutines, nasm, qemu at -O0 and at -O (`qemu@O`), edk2, symcrypt
-    (Linux lanes), bearssl, bzip2, kissfft, gui_hello, nt_loader, kernel,
+    (Linux lanes), bearssl, bzip2, kissfft, gui_hello, nt_loader, systeminformer (Windows
+    lanes), kernel,
     tinycc, chibicc, uemacs, picocom, tcl. Each entry names the lane kinds it runs on, and `scripts/run_demos.py`
     runs the lane's set concurrently; `run_demos.py --lane linux|windows|macos`
     runs the gate's set for that kind. An entry `path@config` runs a smoke in a

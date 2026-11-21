@@ -1414,6 +1414,39 @@ jobs:
       - name: openssl smoke (build + make test, -O0 and -O)
         run: python demos/openssl/smoke.py ${{ matrix.impl == 'asm' && '--asm' || '' }}
 
+  # SymCrypt 103.13.0 through its own CMake with badc as the C compiler,
+  # checked by its C++ unit test (symcryptunittest noperftests) linked
+  # against the badc-built static library. The aarch64 build assembles
+  # SymCrypt's own assembly; on x86_64 the portable C code makes RSA, DH
+  # and DSA most of the suite, and the smoke leaves them out. Linux only:
+  # SymCrypt's macOS configuration fixes the compiler to clang.
+  symcrypt:
+    needs: build
+    name: symcrypt (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: badc from the build job
+        uses: actions/download-artifact@v4
+        with:
+          name: badc-${{ matrix.os }}
+          path: target/release
+      - name: mark badc executable
+        shell: bash
+        run: chmod +x target/release/badc*
+      - name: symcrypt smoke (SymCrypt's CMake + symcryptunittest)
+        run: python demos/symcrypt/smoke.py
+
   # Cooperative-concurrency demos: each library's context switch leans
   # on constructs the fixtures cover only piecemeal -- the upstream asm
   # setjmp/longjmp switch on x86-64 (sigsetjmp elsewhere) plus

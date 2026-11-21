@@ -133,6 +133,13 @@ GATING_DEMOS = (
     # subsystem-10 header, which no hosted demo reaches. Boots the
     # images where QEMU and firmware are installed.
     ("demos/edk2/smoke.py", ALL),
+    # A library's own CMake with badc as the C compiler, the only demo
+    # where a build system identifies badc and probes its ABI, and its C++
+    # unit test linked against the badc-built library: every algorithm's
+    # known answers, on aarch64 over badc-assembled assembly. 267 s on the
+    # x86_64 box and 279 s on the aarch64 one, inside the phase openssl
+    # sets. Needs cmake and a C++ compiler.
+    ("demos/symcrypt/smoke.py", LINUX),
     # The widest corpus in the tree (1722 units on aarch64, 1518 on
     # x86_64) and the only pure self-link -- badc's own linker over
     # 100%-badc objects, no system linker. The two levels CI's qemu job

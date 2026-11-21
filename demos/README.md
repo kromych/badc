@@ -217,6 +217,13 @@ compiler. All five targets. See [`nuklear/README.md`](./nuklear/README.md).
 Waits on header gaps the build reaches; see
 [`openssl/README.md`](./openssl/README.md).
 
+## symcrypt/
+
+Microsoft's [SymCrypt](https://github.com/microsoft/SymCrypt) 103.13.0
+through its own CMake with badc as the C compiler, checked by its C++ unit
+test against the badc-built library; the aarch64 build assembles
+SymCrypt's own assembly. See [`symcrypt/README.md`](./symcrypt/README.md).
+
 ## gui_hello/
 
 Three "show a window with a label" demos -- Win32 (using the

@@ -34,9 +34,9 @@ only SDK-libc target. `./scripts/validate_local_boxes.py` runs:
   * the gating demos, enumerated in `GATING_DEMOS` in the script -- openssl
     (Linux lanes, one configuration per box per run, below), sqlite3, lua,
     miniz, monocypher, stb, tweetnacl, quickjs, raylib, curl, libmill, libdill,
-    coroutines, nasm, qemu at -O0 and at -O (`qemu@O`), edk2, bearssl, bzip2,
-    kissfft, gui_hello, nt_loader, kernel, tinycc, chibicc, uemacs, picocom,
-    tcl. Each entry names the lane kinds it runs on, and `scripts/run_demos.py`
+    coroutines, nasm, qemu at -O0 and at -O (`qemu@O`), edk2, symcrypt
+    (Linux lanes), bearssl, bzip2, kissfft, gui_hello, nt_loader, kernel,
+    tinycc, chibicc, uemacs, picocom, tcl. Each entry names the lane kinds it runs on, and `scripts/run_demos.py`
     runs the lane's set concurrently; `run_demos.py --lane linux|windows|macos`
     runs the gate's set for that kind. An entry `path@config` runs a smoke in a
     configuration the runner's `DEMO_ENV` and `DEMO_ARGS` define; the

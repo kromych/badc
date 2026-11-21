@@ -1466,6 +1466,8 @@ fn build_strtab(symbols: &[&str]) -> (Vec<u8>, Vec<u32>) {
 }
 
 const CODESIGN_LC_PAD: u64 = 64;
+/// MAXPATHLEN: the longest path `-headerpad_max_install_names` makes room for.
+const MAX_PATH_LEN: u64 = 1024;
 
 /// Byte sizes of the load-command stream and the variable-length commands
 /// that are built to be measured.
@@ -1483,6 +1485,8 @@ struct Commands {
     data_seg_size: u64,
     dwarf_seg_size: u64,
     sizeofcmds: u64,
+    /// Free space after the load commands.
+    header_pad: u64,
 }
 
 /// Where the image's regions land in the file and in memory.
@@ -2098,6 +2102,13 @@ impl<'a> MachOWriter<'a> {
             id_dylib(&install_name)
         });
         let dylibs_total: u64 = c.dylib_lcs.iter().map(|lc| lc.len() as u64).sum();
+        let paths = c.dylib_lcs.len() as u64 + u64::from(c.id_dylib.is_some());
+        c.header_pad = CODESIGN_LC_PAD.max(build.mach_o.header_pad).max(
+            match build.mach_o.header_pad_max_install_names {
+                true => paths * MAX_PATH_LEN,
+                false => 0,
+            },
+        );
         let entry_lc_size = match &c.id_dylib {
             Some(lc) => lc.len() as u64,
             None if self.is_dylib => 0,
@@ -2126,7 +2137,7 @@ impl<'a> MachOWriter<'a> {
         let l = &mut self.layout;
         l.header_plus_lcs = MACH_HEADER_64_SIZE as u64 + self.commands.sizeofcmds;
         l.text_align = build.text_align.max(16) as u64;
-        l.entry_file_offset = round_up(l.header_plus_lcs + CODESIGN_LC_PAD, l.text_align);
+        l.entry_file_offset = round_up(l.header_plus_lcs + self.commands.header_pad, l.text_align);
         l.lc_pad_bytes = (l.entry_file_offset - l.header_plus_lcs) as usize;
         let code_size = build.text.len() as u64;
         l.ro_align =
@@ -3360,6 +3371,27 @@ mod tests {
         let cd = be(&expected, 16) as usize;
         let hashes = cd + be(&expected, cd + 16) as usize;
         assert_eq!(&bytes[off + hashes..], &expected[hashes..]);
+    }
+
+    /// `-headerpad` and `-headerpad_max_install_names` leave their space
+    /// free between the load commands and the code: MAXPATHLEN for each
+    /// dylib path, here libSystem's.
+    #[test]
+    fn header_pad_options_leave_room_after_the_load_commands() {
+        let free = |build: &Build| {
+            let bytes = write(&tiny_program(), build).unwrap().image;
+            let (mut p, lc_end) = (32usize, 32 + read_u32(&bytes, 20) as usize);
+            while read_u32(&bytes, p) != LC_MAIN {
+                p += read_u32(&bytes, p + 4) as usize;
+            }
+            u64::from_le_bytes(bytes[p + 8..p + 16].try_into().unwrap()) - lc_end as u64
+        };
+        let mut build = tiny_build();
+        assert!(free(&build) < MAX_PATH_LEN);
+        build.mach_o.header_pad_max_install_names = true;
+        assert!(free(&build) >= MAX_PATH_LEN);
+        build.mach_o.header_pad = 0x3000;
+        assert!(free(&build) >= 0x3000);
     }
 
     #[test]

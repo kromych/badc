@@ -2186,6 +2186,20 @@ impl Parser {
         let link = &mut self.link;
         match arg {
             "-flat_namespace" => link.mach_o.flat_namespace = true,
+            "-headerpad_max_install_names" => link.mach_o.header_pad_max_install_names = true,
+            // ld64 reads the size as hexadecimal, with or without `0x`.
+            "-headerpad" => {
+                let size = operand(iter, "badc: error: -headerpad requires a size")?;
+                let digits = size.strip_prefix("0x").unwrap_or(&size);
+                link.mach_o.header_pad = u64::from_str_radix(digits, 16).map_err(|_| {
+                    ParseError::diag(format!(
+                        "badc: error: -headerpad size `{size}` is not hexadecimal"
+                    ))
+                })?;
+            }
+            // ld64 searches each directory for the dylib, then the archive,
+            // before the next one; `find_library` keeps that order.
+            "-search_paths_first" => {}
             "-bundle_loader" => {
                 let exe = operand(iter, "badc: error: -bundle_loader requires an executable")?;
                 link.bundle_loader = Some(PathBuf::from(exe));
@@ -4586,6 +4600,30 @@ mod tests {
         assert_eq!(parse(&["--shared", "a.c"]).mode, Mode::SharedLibrary);
         assert_eq!(parse(&["-shared", "a.c"]).mode, Mode::SharedLibrary);
         assert_eq!(parse(&["a.c"]).mode, Mode::NativeExecutable);
+    }
+
+    /// The ld64 options CMake's Darwin platform passes on every link:
+    /// `-search_paths_first` names the search order the link keeps, and
+    /// the header pads size the free space after the load commands.
+    #[test]
+    fn ld64_header_pad_and_search_order_options_parse() {
+        let mac = "--target=macos-aarch64";
+        let cli = parse(&[
+            mac,
+            "-Wl,-search_paths_first",
+            "-Wl,-headerpad_max_install_names",
+            "a.c",
+        ]);
+        assert!(cli.link.mach_o.header_pad_max_install_names);
+        let cli = parse(&[mac, "-Wl,-headerpad,0x2000", "a.c"]);
+        assert_eq!(cli.link.mach_o.header_pad, 0x2000);
+        let cli = parse(&[mac, "-Xlinker", "-headerpad", "-Xlinker", "100", "a.c"]);
+        assert_eq!(cli.link.mach_o.header_pad, 0x100);
+        assert!(
+            reject(&[mac, "-Wl,-headerpad,1k", "a.c"])
+                .0
+                .contains("not hexadecimal")
+        );
     }
 
     /// `-Wl,` and `-Xlinker` hand their arguments to the link options

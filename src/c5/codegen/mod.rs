@@ -5049,12 +5049,17 @@ pub struct ElfImageOptions {
 /// no library and resolve in every image loaded (no `MH_TWOLEVEL`), and
 /// the SDK version `LC_BUILD_VERSION` records (`xxxx.yy.zz` in nibbles),
 /// by which libSystem selects its linked-on-or-after behaviors; none
-/// stamps the writer's default.
+/// stamps the writer's default. `header_pad` (`-headerpad`) is the least
+/// free space after the load commands, and `header_pad_max_install_names`
+/// (`-headerpad_max_install_names`) reserves room for every dylib path to
+/// grow to MAXPATHLEN, as `install_name_tool` rewrites them in place.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct MachOImageOptions {
     pub bundle: bool,
     pub flat_namespace: bool,
     pub sdk: Option<u32>,
+    pub header_pad: u64,
+    pub header_pad_max_install_names: bool,
 }
 
 impl Default for NativeOptions {

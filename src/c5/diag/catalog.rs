@@ -202,7 +202,7 @@ catalog! {
     3010, "constant-conversion", ["overflow"], Warning, Controllable,
         [DEFAULT], Live,
         "an integer constant converted implicitly to an integer type or a bit-field whose width holds the value at neither signedness";
-    3011, "incompatible-pointer-types-discards-qualifiers", [], Warning, Controllable,
+    3011, "incompatible-pointer-types-discards-qualifiers", ["incompatible-pointer-types"], Warning, Controllable,
         [DEFAULT], Live,
         "a pointer assigned, initialized, passed or returned as a pointer to a type that differs from the one it points to only in the qualifiers of a type further down: `T **` as `const T **`";
     3012, "switch-bool", [], Warning, Controllable,

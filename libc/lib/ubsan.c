@@ -33,6 +33,11 @@ struct __ubsan_shift_data {
     const struct __ubsan_type_descriptor *rhs_type;
 };
 
+struct __ubsan_invalid_value_data {
+    struct __ubsan_source_location loc;
+    const struct __ubsan_type_descriptor *type;
+};
+
 struct __ubsan_out_of_bounds_data {
     struct __ubsan_source_location loc;
     const struct __ubsan_type_descriptor *array_type;
@@ -129,6 +134,26 @@ void __ubsan_handle_out_of_bounds(struct __ubsan_out_of_bounds_data *d, uintptr_
 _Noreturn void __ubsan_handle_out_of_bounds_abort(struct __ubsan_out_of_bounds_data *d,
                                                   uintptr_t index) {
     __ubsan_out_of_bounds(d, index);
+    abort();
+}
+
+static void __ubsan_invalid_value(struct __ubsan_invalid_value_data *d, uintptr_t value) {
+    uint32_t column;
+    if (!__ubsan_claim(&d->loc, &column))
+        return;
+    fprintf(stderr, "%s:%u:%u: runtime error: load of value ", d->loc.file, d->loc.line, column);
+    __ubsan_print_int(d->type, value);
+    fprintf(stderr, ", which is not a valid value for type %s\n", d->type->name);
+    __ubsan_summary(&d->loc, column);
+}
+
+void __ubsan_handle_load_invalid_value(struct __ubsan_invalid_value_data *d, uintptr_t value) {
+    __ubsan_invalid_value(d, value);
+}
+
+_Noreturn void __ubsan_handle_load_invalid_value_abort(struct __ubsan_invalid_value_data *d,
+                                                       uintptr_t value) {
+    __ubsan_invalid_value(d, value);
     abort();
 }
 

@@ -1370,6 +1370,7 @@ impl Compiler {
             self.ast.block_extern_refs.push(id);
         }
         self.record_ident_fn(id, idx);
+        self.sanitize_bool_load(id, ty);
         self.ast_acc = Some(id);
         id
     }
@@ -1512,6 +1513,10 @@ impl Compiler {
             },
             pos,
         );
+        // A `_Bool` bit-field holds one bit, so no load of it is invalid.
+        if bitfield.is_none() {
+            self.sanitize_bool_load(id, ty);
+        }
         self.ast_acc = Some(id);
     }
 
@@ -1551,6 +1556,7 @@ impl Compiler {
     pub(super) fn ast_emit_index(&mut self, array: ExprId, idx: ExprId, ty: i64) {
         let pos = self.ast_src_pos();
         let id = self.ast.push_expr(Expr::Index { array, idx, ty }, pos);
+        self.sanitize_bool_load(id, ty);
         self.ast_acc = Some(id);
     }
 
@@ -2214,6 +2220,9 @@ impl Compiler {
         let id = self
             .ast
             .push_expr(super::super::ast::Expr::Unary { op, child, ty }, pos);
+        if op == super::super::ast::UnOp::Deref {
+            self.sanitize_bool_load(id, ty);
+        }
         self.ast_acc = Some(id);
     }
 

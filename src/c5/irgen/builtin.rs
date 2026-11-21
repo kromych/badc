@@ -320,6 +320,10 @@ impl<'a> Walker<'a> {
                 let limit = b.imm((len + u64::from(one_past)) as i64);
                 b.binop(BinOp::Uge, value, limit)
             }
+            ValueTest::Bool => {
+                let one = b.imm(1);
+                b.binop(BinOp::Ugt, value, one)
+            }
         };
         self.report_failed_check(b, check.check, flag, &[value]);
     }

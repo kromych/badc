@@ -2780,6 +2780,10 @@ pub struct Compiler {
     /// The line and column of the last binary operator, which a check's
     /// site names.
     operator_at: (u32, u32),
+    /// The line and column of the designator of the lvalue node built next
+    /// (its identifier, member name, `*`, or a subscript's array operand),
+    /// which a load check's site names.
+    lvalue_at: (u32, u32),
     /// Mirror of [`CompileOptions::fp_contract`].
     fp_contract: FpContract,
     /// Mirror of [`CompileOptions::auto_var_init`]. Read where an
@@ -3572,6 +3576,7 @@ impl Compiler {
             bounds_subscript: None,
             ubsan_handlers: alloc::collections::BTreeMap::new(),
             operator_at: (0, 0),
+            lvalue_at: (0, 0),
             fp_contract: opts.fp_contract,
             no_builtin_fns: opts.no_builtin_fns.clone(),
             optimize: opts.optimize,

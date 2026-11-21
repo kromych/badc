@@ -533,3 +533,61 @@ fn subscripts_are_held_to_the_array_bound() {
         }
     }
 }
+
+const BOOLS: &str = "#include <stdio.h>
+#include <string.h>
+struct in { int v[2]; };
+struct s { _Bool flag; struct in in; int arr[3]; };
+int main(int argc, char **argv) {
+    (void)argv;
+    struct s st, *sp = &st;
+    memset(&st, 3, sizeof st);
+    _Bool bs[2], *bp = &bs[1];
+    memset(bs, 4, sizeof bs);
+    int r = st.flag;
+    r += sp->flag;
+    r += *bp;
+    r += bs[0];
+    _Bool ok = argc > 0;
+    r += ok;
+    printf(\"%d\\n\", r);
+    return 0;
+}
+";
+
+/// A `_Bool` loaded whose byte is neither 0 nor 1 is reported under
+/// `-fsanitize=bool`, at the lvalue's designator as clang reports it: the
+/// member name, the `*`, the array operand; a pointer to `_Bool` and a
+/// `_Bool` holding 1 are not.
+#[test]
+fn a_bool_load_holds_0_or_1() {
+    let dir = TempDir::new("badc-sanitize-bool");
+    let src = dir.join("overflow.c");
+    std::fs::write(&src, BOOLS).unwrap();
+    for opt in ["-O0", "-O"] {
+        let exe = dir.join(format!("bool{opt}"));
+        let built = Command::new(env!("CARGO_BIN_EXE_badc"))
+            .args(["-q", opt, "-fsanitize=bool", "-o"])
+            .arg(&exe)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(
+            built.status.success(),
+            "{}",
+            String::from_utf8_lossy(&built.stderr)
+        );
+        let o = run(&exe, &[]);
+        assert!(o.status.success(), "{opt}: {o:?}");
+        assert_eq!(
+            reports(&o),
+            [
+                "11:16: runtime error: load of value 3, which is not a valid value for type '_Bool'",
+                "12:14: runtime error: load of value 3, which is not a valid value for type '_Bool'",
+                "13:10: runtime error: load of value 4, which is not a valid value for type '_Bool'",
+                "14:10: runtime error: load of value 4, which is not a valid value for type '_Bool'",
+            ],
+            "{opt}"
+        );
+    }
+}

@@ -2275,6 +2275,7 @@ impl Compiler {
 
     fn parse_identifier(&mut self) -> Result<(), C5Error> {
         let id_idx = self.lex.curr_id_idx;
+        self.lvalue_at = self.lex.position();
         self.next()?;
         if self.lex.tk == '(' {
             self.next()?;
@@ -4009,8 +4010,10 @@ impl Compiler {
     }
 
     fn parse_deref(&mut self) -> Result<(), C5Error> {
+        let star_at = self.lex.position();
         self.next()?;
         self.expr(Token::Inc as i64)?;
+        self.lvalue_at = star_at;
         let operand_ref = self.pending.object_ref.take();
         // Whether `*e` is an array row, whose value is its address; any
         // other pointer result is a value loaded out of the object.
@@ -4065,6 +4068,7 @@ impl Compiler {
                     },
                     pos,
                 );
+                self.sanitize_bool_load(id, result_ty);
                 self.ast_acc = Some(id);
             }
             // `*arr` is the first element, not the array: an enclosing
@@ -6117,6 +6121,7 @@ impl Compiler {
             }
             if let (Some(array), Some(idx)) = (array_ast, idx_ast_scaled) {
                 let idx_ty = self.ty;
+                self.lvalue_at = begin;
                 self.ast_emit_index(array, idx, idx_ty);
             }
         }
@@ -6214,6 +6219,7 @@ impl Compiler {
             let op = if is_dot { "." } else { "->" };
             return Err(self.compile_err(Code::SYNTAX, format!("field name expected after {op}")));
         }
+        let member_at = self.lex.position();
         let field_name = self.symbols[self.lex.curr_id_idx].name.clone();
         self.next()?;
 
@@ -6295,6 +6301,7 @@ impl Compiler {
             && let Some(obj) = obj_ast
         {
             let mty = self.ty;
+            self.lvalue_at = member_at;
             self.ast_emit_member(obj, field.offset as i64, None, mty, field.array_size);
             if let Some(id) = self.ast_acc
                 && let Some((f, depth)) = self.field_fn_type(&field)

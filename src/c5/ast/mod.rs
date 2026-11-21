@@ -1045,6 +1045,8 @@ pub(crate) enum ValueTest {
     /// A subscript of an array of `len` elements: below `len`, or up to it
     /// where only the address one past the last element is formed.
     Index { len: u64, one_past: bool },
+    /// A `_Bool` loaded: its byte 0 or 1.
+    Bool,
 }
 
 /// A runtime check of the operation at a node (`-fsanitize=`): what it

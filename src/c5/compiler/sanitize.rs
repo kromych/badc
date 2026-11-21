@@ -38,11 +38,14 @@ pub enum Check {
     Bounds,
     /// [`Check::Bounds`] on those trailing members as well.
     BoundsStrict,
+    /// A load of a `_Bool` whose byte is neither 0 nor 1 (C17 6.2.6.1p5,
+    /// a trap representation).
+    Bool,
 }
 
 impl Check {
     /// Every check, in the order `-fsanitize=undefined` lists them.
-    pub const ALL: [Check; 7] = [
+    pub const ALL: [Check; 8] = [
         Check::SignedIntegerOverflow,
         Check::ShiftBase,
         Check::ShiftExponent,
@@ -50,6 +53,7 @@ impl Check {
         Check::Enum,
         Check::Bounds,
         Check::BoundsStrict,
+        Check::Bool,
     ];
 
     /// The spelling `-fsanitize=` takes.
@@ -62,6 +66,7 @@ impl Check {
             Check::Enum => "enum",
             Check::Bounds => "bounds",
             Check::BoundsStrict => "bounds-strict",
+            Check::Bool => "bool",
         }
     }
 
@@ -261,6 +266,26 @@ impl Compiler {
             .value_checks
             .insert(index, ValueCheck { check, test });
         self.bounds_subscript = Some((subscript, index));
+    }
+
+    /// Check the `_Bool` the node `id` of type `ty` loads wherever it is read
+    /// as an rvalue, under `-fsanitize=bool`; the site is
+    /// [`super::Compiler::lvalue_at`].
+    pub(super) fn sanitize_bool_load(&mut self, id: ExprId, ty: i64) {
+        let check = Check::Bool;
+        if !self.sanitize.runs(check) || !is_bool_ty(ty) || super::types::bool_ptr_depth(ty) != 0 {
+            return;
+        }
+        let types = [self.ubsan_type(ty)];
+        let data = self.ubsan_site_at(self.lvalue_at, &types);
+        let handler = self.ubsan_handler(check.bit(), "__ubsan_handle_load_invalid_value", 1);
+        let check = SanitizeCheck {
+            checks: check.bit(),
+            data,
+            handler,
+        };
+        let test = ValueTest::Bool;
+        self.ast.value_checks.insert(id, ValueCheck { check, test });
     }
 
     /// `&` of the node `operand`: a subscript checked last admits the

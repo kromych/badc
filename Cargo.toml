@@ -83,17 +83,19 @@ std = []
 # in-memory JIT (`jit_run`) and the codegen passes but cannot write a
 # native binary. Requires `std`.
 native-emit = ["std"]
-# The full standalone-compiler feature set the `badc` binary needs.
-# Pulls in `native-emit` and adds the cross-translation-unit linker:
-# writing and reading c5 bytecode object files (ELF wrapper, `.o`) and
-# ar(5) archives (`.a`), plus the `link_units` driver that merges
-# objects into a single Program ready for the native code emitters.
-# Adds storage-class linkage tracking (external vs internal) and the
-# corresponding undefined-symbol relocation machinery. Required by the
-# `badc` binary (`-c`, `.o` / `.a` inputs, `-L`, `-l`). Library callers
-# that want only the host JIT can opt out with `default-features =
-# false, features = ["std"]`.
+# The cross-translation-unit linker: writing and reading c5 bytecode
+# object files (ELF wrapper, `.o`) and ar(5) archives (`.a`), the native
+# object readers, and the `link_units` driver that merges objects into a
+# single Program ready for the native code emitters. Adds storage-class
+# linkage tracking (external vs internal) and the corresponding
+# undefined-symbol relocation machinery. The runtime it compiles on demand
+# includes the bundled headers.
+linker = ["native-emit", "headers"]
+# The full standalone-compiler feature set the `badc` binary needs
+# (`-c`, `.o` / `.a` inputs, `-L`, `-l`, `-O`, `asm`). Library callers that
+# want only the host JIT keep the default.
 full = [
+    "linker",
     "native-emit",
     "headers",
     "optimizer",

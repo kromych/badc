@@ -192,22 +192,22 @@ impl VmUnit {
 }
 
 /// The on-demand sources a run may join; there are none without the linker.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 pub(super) type Sources<'a> = Option<&'a crate::c5::linker::OnDemandSources>;
-#[cfg(not(feature = "full"))]
+#[cfg(not(feature = "linker"))]
 pub(super) type Sources<'a> = Option<&'a core::convert::Infallible>;
 
 /// The run's units: the program, then the on-demand sources a native link
 /// would join to it, offered once the program leaves a name undefined.
 pub(super) fn join_on_demand(user: VmUnit, sources: Sources<'_>) -> Result<Vec<VmUnit>, C5Error> {
     match sources {
-        #[cfg(feature = "full")]
+        #[cfg(feature = "linker")]
         Some(sources) => pull_members(user, sources),
         _ => Ok(alloc::vec![user]),
     }
 }
 
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn pull_members(
     user: VmUnit,
     sources: &crate::c5::linker::OnDemandSources,

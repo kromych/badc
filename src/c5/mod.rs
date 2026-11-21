@@ -16,7 +16,7 @@ mod ir;
 mod irgen;
 mod layout;
 mod lexer;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod linker;
 mod mach_o_name;
 mod ms_intrinsic;
@@ -26,7 +26,7 @@ mod op;
 mod output_file;
 mod preprocessor;
 mod program;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod runtime;
 mod segment_pragma;
 mod simd;
@@ -84,9 +84,9 @@ pub use host::StdHost;
 #[cfg(feature = "std")]
 pub use output_file::write_output_file;
 
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 pub use codegen::jit_run_with_sources;
-#[cfg(all(feature = "full", feature = "std"))]
+#[cfg(all(feature = "linker", feature = "std"))]
 #[allow(unused_imports)]
 pub use linker::{
     ArchiveInclusion, DataImportSlots, ExportForm, ImageOptions, LdsEmit, LdsObject, LdsOptions,
@@ -107,23 +107,23 @@ pub use linker::{
     write_import_library, write_native_image_and_pdb, write_native_image_from_merged,
     write_native_image_from_merged_ex,
 };
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[allow(unused_imports)]
 pub use linker::{
     ArchiveMember, IndexedArchive, elf_archive_symbols, is_arm64x_archive, read_archive,
     write_archive,
 };
-#[cfg(all(feature = "full", feature = "std"))]
+#[cfg(all(feature = "linker", feature = "std"))]
 #[allow(unused_imports)]
 pub use linker::{is_ld_invocation, os_error_text, run_ld, script_unreadable};
-#[cfg(all(feature = "full", feature = "std"))]
+#[cfg(all(feature = "linker", feature = "std"))]
 #[allow(unused_imports)]
 pub use linker::{read_archive_at, read_indexed_archive_at};
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 pub use preprocessor::{Binding, DylibSpec, Subsystem};
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 pub use runtime::{embedded_compiler_rt, embedded_libc, embedded_runtime, embedded_source_label};
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 pub use symbol::Linkage;
 
 /// Base offset that separates the code address space from the data /

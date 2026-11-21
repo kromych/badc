@@ -52,7 +52,7 @@ pub(crate) mod ssa;
 pub(crate) mod x86_64;
 
 /// The link tests check the emitter's recorded unwind steps against it.
-#[cfg(all(test, feature = "full"))]
+#[cfg(all(test, feature = "linker"))]
 pub(crate) use x86_64::decode_x86_64_prologue_unwind;
 
 /// Which fields of a page-relative reference a fixup record covers;
@@ -87,7 +87,7 @@ pub(crate) fn require_whole_addr(part: AddrPart, label: &str) -> Result<(), erro
     )))
 }
 
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 pub use jit::jit_run_with_sources;
 pub use jit::{JitModule, jit_load, jit_run, jit_run_with_options};
 

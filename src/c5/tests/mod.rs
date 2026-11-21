@@ -23,74 +23,74 @@ mod aarch64_simd;
 // These modules emit / link native images (via `emit_native*` and the
 // `link_*` helpers below), which require `native-emit` -- pulled in by
 // `full`. The host-only `--features std` build gates them out.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod atomics;
 mod auto_var_init;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod block_plan;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod branch_reach;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod codegen;
 mod compound_assign;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod computed_goto;
 mod deferred;
 mod diag_cases;
 mod divmod;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod dwarf;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod fixed_regs;
 mod fixture_tables;
 mod frame_slot_fuzz;
 mod header_constants;
 mod inline_asm;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod inline_linkage;
 mod intrinsics;
 mod jit;
 mod lexer;
 mod libc_layout;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod linker;
 mod loop_idiom;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod native;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod native_elf;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod native_elf_x64;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod native_pe_arm64;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod native_pe_x64;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod on_demand;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod overflow;
 mod parser;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod patchable_entry;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod perf_codegen;
 mod pointer_tracking;
 mod programs;
 mod prototypes;
 mod record_layouts;
 mod redeclaration;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod reloc_golden;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod relocatable;
 mod seh;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod stack_guard;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod static_init;
 mod types;
 mod vla;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod x64_frame;
 mod x86_simd;
 
@@ -1346,7 +1346,7 @@ int main(void) {{
 /// image places ahead of `.bss`. Its `main` returns a bitmask of the
 /// misplaced objects, 128 for a wrong value. Concatenated, they form one
 /// unit.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 pub fn over_aligned_objects_units(target: crate::Target) -> (String, &'static str) {
     let section = match target.binary_format() {
         crate::BinaryFormat::Elf => ".rodata.overaligned",
@@ -1436,7 +1436,7 @@ pub fn compile_str_bare_for(src: &str, target: crate::Target) -> Program {
 /// bundled headers under the wrong OS macros: on a Windows host the
 /// `<stdlib.h>` `_WIN32` branch then contributes an `environ` symbol
 /// that collides with the runtime's when the image is emitted as ELF.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 pub fn link_executable_with_runtime(
     program: &Program,
     target: crate::Target,
@@ -1448,7 +1448,7 @@ pub fn link_executable_with_runtime(
 /// Link `objs` as the driver links an executable for `target`: under the
 /// target's container format, a `hosted` link importing what the objects
 /// leave undefined from the target's C library.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn link_for_target(
     objs: &[crate::NativeObject],
     target: crate::Target,
@@ -1473,7 +1473,7 @@ fn link_for_target(
 
 /// The names `objs` reference and none defines; with `weak`, weak
 /// references too.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn unresolved(objs: &[crate::NativeObject], weak: bool) -> alloc::collections::BTreeSet<String> {
     let mut defined = alloc::collections::BTreeSet::new();
     let mut undefined = alloc::collections::BTreeSet::new();
@@ -1496,7 +1496,7 @@ fn unresolved(objs: &[crate::NativeObject], weak: bool) -> alloc::collections::B
 }
 
 /// [`link_executable_with_runtime`] for an executable of `form`.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 pub fn link_executable_with_runtime_as(
     program: &Program,
     target: crate::Target,
@@ -1587,7 +1587,7 @@ pub fn link_executable_with_runtime_as(
 /// link does: each joins only when it defines a symbol the object set
 /// still leaves undefined. Nothing is compiled when nothing is
 /// undefined.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn append_on_demand_objects(
     objs: &mut Vec<crate::NativeObject>,
     target: crate::Target,
@@ -1634,7 +1634,7 @@ fn append_on_demand_objects(
 /// predefined macros `defines` and the emit options `reloc`. Every link of
 /// one configuration gets the same objects, so each test process compiles
 /// them once and every caller takes a copy.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn compiled_sources(
     sources: &[(&str, &str)],
     target: crate::Target,
@@ -1676,7 +1676,7 @@ fn compiled_sources(
     .clone()
 }
 
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 thread_local! {
     /// Sources [`compiled_sources`] compiled on this thread.
     static SOURCES_COMPILED: core::cell::Cell<usize> = const { core::cell::Cell::new(0) };
@@ -1684,7 +1684,7 @@ thread_local! {
 
 /// A second link of one configuration takes the objects the first one
 /// compiled. The entry name makes the configuration this test's own.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn link_sources_compile_once_per_configuration() {
     let sources = crate::embedded_runtime();
@@ -1712,7 +1712,7 @@ fn link_sources_compile_once_per_configuration() {
 /// Link one translation unit into a shared library, the way the CLI's
 /// `--shared` does: no startup runtime, and an unresolved global becomes
 /// a load-time import the host supplies.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[allow(dead_code)] // used by the feature-gated shared-library tests
 pub fn link_shared_library(
     program: &Program,
@@ -1748,7 +1748,7 @@ pub fn link_shared_library(
 /// `programs[0]` carries the entry point and subsystem. Used to exercise
 /// cross-unit references the single-program helper can't, e.g. an
 /// `extern _Thread_local` defined in one unit and read from another.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 pub fn link_executable_with_runtime_multi(
     programs: &[&Program],
     target: crate::Target,
@@ -1813,7 +1813,7 @@ pub fn link_executable_with_runtime_multi(
 /// freestanding executable: the embedded runtime is not linked and the
 /// image entry is `__c5_entry`. Mirrors the CLI path when an input
 /// object defines `__c5_entry`.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 pub fn link_freestanding(
     program: &Program,
     target: crate::Target,

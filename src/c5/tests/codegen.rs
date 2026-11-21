@@ -3590,7 +3590,7 @@ fn pe_iat_slot_rva(image: &[u8], want: &str) -> Option<u32> {
 }
 
 /// `(sh_addr, contents)` of the named section of a linked ELF image.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn elf_section_addr_bytes(b: &[u8], want: &[u8]) -> Option<(u64, alloc::vec::Vec<u8>)> {
     let u16a = |o: usize| u16::from_le_bytes(b[o..o + 2].try_into().unwrap()) as usize;
     let u32a = |o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap()) as usize;
@@ -3612,7 +3612,7 @@ fn elf_section_addr_bytes(b: &[u8], want: &[u8]) -> Option<(u64, alloc::vec::Vec
 }
 
 /// `(addr, contents)` of the named section of a linked Mach-O image.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn macho_section_addr_bytes(b: &[u8], want: &[u8]) -> Option<(u64, alloc::vec::Vec<u8>)> {
     let u32a = |o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap()) as usize;
     let u64a = |o: usize| u64::from_le_bytes(b[o..o + 8].try_into().unwrap());
@@ -3640,7 +3640,7 @@ fn macho_section_addr_bytes(b: &[u8], want: &[u8]) -> Option<(u64, alloc::vec::V
 /// `(code address, code bytes, address range of the import slots)` of a
 /// linked image: the IAT entry named by `pe_import` for a PE, the `.got`
 /// / `__got` region for the other two formats.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn import_slot_layout(
     image: &[u8],
     target: crate::Target,
@@ -3670,7 +3670,7 @@ fn import_slot_layout(
 /// ones that materialize a slot's own address. Scans `code` for the
 /// two page-relative forms each machine uses; the resolved target has
 /// to land in `slots`, so an unaligned scan start cannot contribute.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn count_slot_references(
     target: crate::Target,
     code_va: u64,
@@ -3729,7 +3729,7 @@ fn count_slot_references(
 /// to code expecting its value, and every later dereference is off by
 /// one indirection. Each of the three image writers patches the site
 /// with its own helper, so the property is checked on every target.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn an_import_slot_reference_reads_the_slot_on_every_target() {
     use crate::{Compiler, NativeOptions, Target};
@@ -3777,7 +3777,7 @@ fn an_import_slot_reference_reads_the_slot_on_every_target() {
 /// returns instruction bytes -- with no diagnostic at link or load. The
 /// source materializes no other in-code address, so a page-relative
 /// address landing inside the code section is that misrouting.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn a_shared_library_data_import_reads_its_slot_on_every_target() {
     use crate::{Compiler, NativeOptions, Target};
@@ -10461,7 +10461,7 @@ fn library_builtins_need_no_auto_include_retry() {
 /// compiles with no note; the absolute values and the functions a header
 /// binds to an instruction leave no reference, and the rest call the
 /// library function. `cli_fixture_smoke` links and runs it.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn builtin_library_functions_need_no_declaration() {
     use crate::{CompileOptions, Compiler, NativeOptions, NativeSymSection, OutputKind, Target};
@@ -10532,7 +10532,7 @@ fn builtin_library_functions_need_no_declaration() {
 
 /// A freestanding unit that defines a library function after calling its
 /// builtin calls its own definition: the object holds the one symbol, defined.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn a_builtin_calls_the_units_later_definition() {
     use crate::{CompileOptions, Compiler, NativeOptions, NativeSymSection, OutputKind, Target};
@@ -10569,7 +10569,7 @@ fn a_builtin_calls_the_units_later_definition() {
 /// emits for it, in the caller at every optimization level, since the
 /// intrinsics are always inlined; the load and the store at -O. The masks
 /// clear the register fields.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn arm_neon_float_intrinsics_are_their_instructions() {
     const SRC: &str = "#include <arm_neon.h>\n\
@@ -10620,7 +10620,7 @@ fn arm_neon_float_intrinsics_are_their_instructions() {
 /// C99 7.12.14's comparison builtins lower to the quiet compares:
 /// `ucomisd` / `ucomiss` on x86-64 and `fcmp` on AArch64, never the
 /// signaling `comis*` or `fcmpe`, at -O0 and -O.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn c99_comparison_builtins_compare_quietly() {
     use crate::{Compiler, NativeOptions, Target};
@@ -10708,7 +10708,7 @@ fn absolute_value_builtins_fold_alongside_the_library_builtins() {
 /// declarations; the builtins are visible to it as to the main source,
 /// since they are visible before any input is read.
 #[test]
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn builtins_are_visible_to_a_forced_include_body() {
     use crate::{CompileOptions, Compiler, Target};
     let dir = std::env::temp_dir().join(format!("badc-force-include-{}", std::process::id()));
@@ -10739,7 +10739,7 @@ fn builtins_are_visible_to_a_forced_include_body() {
 }
 
 #[test]
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn auto_include_retry_emits_what_the_force_include_would() {
     // A call to a library function with no declaration in scope is
     // invalid (C17 6.5.1p2). The driver recovers by re-running the compile
@@ -10798,7 +10798,7 @@ fn auto_include_retry_emits_what_the_force_include_would() {
 /// Full source-pass count of `f`'s compile, from the preprocessor's
 /// per-thread hook. A reused pass re-runs only the preamble and does
 /// not count.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn counting_source_passes<T>(f: impl FnOnce() -> T) -> (T, usize) {
     use crate::c5::preprocessor::FULL_SOURCE_PASSES;
     let before = FULL_SOURCE_PASSES.with(|c| c.get());
@@ -10807,7 +10807,7 @@ fn counting_source_passes<T>(f: impl FnOnce() -> T) -> (T, usize) {
 }
 
 #[test]
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn auto_include_retry_reuses_the_first_preprocessor_pass() {
     // Nothing this unit observed overlaps what <string.h> installs, so
     // the retry must reuse the recorded first pass (one full source
@@ -10865,7 +10865,7 @@ fn auto_include_retry_reuses_the_first_preprocessor_pass() {
 }
 
 #[test]
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn auto_include_retry_falls_back_when_the_header_touches_observed_names() {
     // The unit tested `NULL` before the retry adds <string.h>, which
     // defines it: the recorded pass is not reusable, so the retry must
@@ -10915,7 +10915,7 @@ fn auto_include_retry_falls_back_when_the_header_touches_observed_names() {
 
 /// `.text`'s `sh_addralign` and every `STT_FUNC` symbol's
 /// `(name, st_value, st_size)` from a relocatable ELF64 object.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn elf_text_align_and_funcs(bytes: &[u8]) -> (u64, alloc::vec::Vec<(String, u64, u64)>) {
     let u16le = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap()) as usize;
     let u32le = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) as usize;
@@ -10955,7 +10955,7 @@ fn elf_text_align_and_funcs(bytes: &[u8]) -> (u64, alloc::vec::Vec<(String, u64,
 }
 
 #[test]
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn min_function_alignment_places_entries_without_growing_symbol_sizes() {
     // `-fmin-function-alignment=N` starts every function at a multiple of
     // N and raises `.text`'s own alignment to match, so the placement
@@ -11012,7 +11012,7 @@ fn min_function_alignment_places_entries_without_growing_symbol_sizes() {
 }
 
 #[test]
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn no_builtin_stops_the_library_name_folds_but_not_the_builtin_spellings() {
     // gcc's `-fno-builtin` bars the library spelling from folding and
     // leaves the `__builtin_` one alone. `-fno-builtin-<name>` does the
@@ -11095,7 +11095,7 @@ fn no_builtin_stops_the_library_name_folds_but_not_the_builtin_spellings() {
 /// A hosted POSIX unit calling `alloca` without its header gets the header
 /// from the auto-include recovery.
 #[test]
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn no_builtin_keeps_the_header_operations_no_library_defines() {
     use crate::{CompileOptions, Compiler, NativeOptions, NativeSymSection, OutputKind, Target};
     const SRC: &str = "#include <stdatomic.h>\n#include <setjmp.h>\n#include <malloc.h>\n\
@@ -11145,7 +11145,7 @@ fn no_builtin_keeps_the_header_operations_no_library_defines() {
 }
 
 /// Names of the `SHT_SYMTAB` entries with `st_shndx == SHN_UNDEF`.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn elf_undefined_names(bytes: &[u8]) -> alloc::vec::Vec<String> {
     let u16le = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap()) as usize;
     let u32le = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) as usize;
@@ -11263,7 +11263,7 @@ fn no_builtin_name_declines_the_auto_include_retry_for_that_name() {
 }
 
 #[test]
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn freestanding_builtin_mem_transfer_binds_its_own_fallback() {
     // The `__builtin_` spelling stays callable in every mode: a
     // transfer whose count is no small constant falls back to a call of
@@ -12753,7 +12753,7 @@ fn size_bound_keeps_the_object_in_memory() {
 /// `vzipq_s8` pair's temporary go once the copy out reads the stored
 /// values, as with gcc. One whose address reaches a call keeps them, the
 /// callee reading it.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn writes_to_an_object_nothing_reads_go() {
     const SRC: &str = "#include <arm_neon.h>\n\
@@ -16162,7 +16162,7 @@ pub(super) fn text_relocs(obj: &[u8]) -> alloc::vec::Vec<(u64, alloc::string::St
 }
 
 #[test]
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn stack_protector_modes_select_the_shapes_gcc_selects() {
     use crate::{StackProtect, StackProtector, Target};
     let expect = |mode, want: &[&str]| {
@@ -16205,7 +16205,7 @@ fn stack_protector_modes_select_the_shapes_gcc_selects() {
 /// return after `fib`'s body touches no memory, and the frame path still
 /// checks the canary.
 #[test]
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn an_early_return_leaves_without_the_canary() {
     use crate::{CompileOptions, NativeOptions, OutputKind, StackProtect, StackProtector, Target};
     const SRC: &str = "long fib(int n) { if (n < 2) return n; return fib(n - 1) + fib(n - 2); }\n";
@@ -16259,7 +16259,7 @@ fn an_early_return_leaves_without_the_canary() {
 }
 
 #[test]
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn ssp_buffer_size_moves_the_character_array_threshold() {
     use crate::{StackProtect, StackProtector, Target};
     let at = |n: u32| {
@@ -16286,7 +16286,7 @@ fn ssp_buffer_size_moves_the_character_array_threshold() {
 }
 
 #[test]
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn stack_protector_off_leaves_the_object_unchanged() {
     use crate::{StackProtect, Target};
     for target in [Target::LinuxX64, Target::LinuxAarch64] {
@@ -16299,7 +16299,7 @@ fn stack_protector_off_leaves_the_object_unchanged() {
 }
 
 #[test]
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn stack_protector_checks_every_return_path() {
     use crate::{StackProtect, StackProtector, Target};
     // Three source-level returns over one frame that holds an array.
@@ -16325,7 +16325,7 @@ fn stack_protector_checks_every_return_path() {
 }
 
 #[test]
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn stack_protector_canary_sits_between_the_locals_and_the_return_address() {
     use crate::{StackProtect, StackProtector, Target};
     // A single character array, so every frame byte below the canary
@@ -16365,7 +16365,7 @@ fn stack_protector_canary_sits_between_the_locals_and_the_return_address() {
 
 /// x86-64 `lea disp8(%rbp), r64` displacements: REX.W 8D with mod=01 and
 /// rm=rbp. Every frame address the body materializes is one of these.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn rbp_lea_disps(code: &[u8]) -> alloc::vec::Vec<i32> {
     code.windows(4)
         .filter(|w| w[0] & 0xF8 == 0x48 && w[1] == 0x8D && w[2] & 0xC7 == 0x45)
@@ -16375,7 +16375,7 @@ fn rbp_lea_disps(code: &[u8]) -> alloc::vec::Vec<i32> {
 
 /// aarch64 `sub xD, x29, #imm` immediates: SUB (immediate), 64-bit, no
 /// shift, base x29. The counterpart of [`rbp_lea_disps`].
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn fp_sub_imms(code: &[u8]) -> alloc::vec::Vec<i32> {
     code.as_chunks::<4>()
         .0
@@ -16387,7 +16387,7 @@ fn fp_sub_imms(code: &[u8]) -> alloc::vec::Vec<i32> {
 }
 
 #[test]
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn stack_protector_orders_arrays_above_the_other_locals() {
     use crate::{StackProtect, StackProtector, Target};
     // The pointer is declared first, so the parser's slot order puts it
@@ -16437,7 +16437,7 @@ fn stack_protector_orders_arrays_above_the_other_locals() {
 }
 
 #[test]
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn stack_guard_forms_reach_the_object() {
     use crate::{GuardSeg, GuardSymbol, StackGuard, StackProtect, StackProtector, Target};
     let src = "void snk(void *); void f(void) { char b[32]; snk(b); }\n";
@@ -16538,7 +16538,7 @@ fn stack_guard_forms_reach_the_object() {
 /// that names no guard register reads its canary at `%gs:0x28`. A named
 /// segment is kept under either model.
 #[test]
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn the_kernel_code_model_reads_the_default_guard_through_gs() {
     use crate::{CodeModel, GuardSeg, SYSV_TLS_GUARD_OFFSET, StackGuard, StackProtect};
     let src = "void snk(void *); void f(void) { char b[32]; snk(b); }\n";
@@ -16581,7 +16581,7 @@ fn the_kernel_code_model_reads_the_default_guard_through_gs() {
 }
 
 #[test]
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn stack_protector_moves_the_debug_info_frame_offsets_with_the_locals() {
     use crate::{
         CompileOptions, NativeOptions, OutputKind, StackProtect, StackProtector, Target,
@@ -19741,7 +19741,7 @@ fn win_arm64_unwind_codes_name_every_callee_save() {
 
 /// Each `.pdata` entry of a windows-arm64 image: its begin RVA, its length
 /// in bytes and, for an `.xdata` record, its unwind codes.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn a64_pe_unwind_entries(pe: &[u8]) -> alloc::vec::Vec<(u32, u32, Option<alloc::vec::Vec<u8>>)> {
     let word = |at: usize| u32::from_le_bytes(pe[at..at + 4].try_into().unwrap());
     let hdr = word(0x3C) as usize;
@@ -19779,7 +19779,7 @@ fn a64_pe_unwind_entries(pe: &[u8]) -> alloc::vec::Vec<(u32, u32, Option<alloc::
 
 /// Whether the unwind code opening `code` describes the instruction `w`
 /// (Microsoft, "ARM64 exception handling").
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn a64_code_describes(code: &[u8], w: u32) -> bool {
     let z = |b: u8| u32::from(b);
     match code[0] {
@@ -19802,7 +19802,7 @@ fn a64_code_describes(code: &[u8], w: u32) -> bool {
 /// frame where the test of an early return precedes it. `bti c` takes `nop`
 /// and `paciasp` `pac_sign_lr`, as the `.seh_nop` and `.seh_pac_sign_lr`
 /// directives record them.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn win_arm64_hardened_entries_take_their_own_unwind_records() {
     use crate::{Hardening, NativeOptions, OutputKind, Target};

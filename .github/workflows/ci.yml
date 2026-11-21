@@ -1045,7 +1045,7 @@ jobs:
       # default builds.
       - name: each feature alone
         run: |
-          for f in headers optimizer target-aarch64 target-x86_64 inline-asm assembler native-emit; do
+          for f in headers optimizer target-aarch64 target-x86_64 inline-asm assembler native-emit linker; do
             cargo build --locked --lib --features "$f"
           done
       - name: examples

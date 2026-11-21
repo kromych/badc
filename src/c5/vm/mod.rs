@@ -171,7 +171,7 @@ impl<H: Host> Vm<H> {
     /// want to stub IO. Trace defaults to off.
     /// The target's on-demand sources join as [`Vm::with_sources`] joins them.
     pub fn with_host(program: Program, host: H) -> Self {
-        #[cfg(feature = "full")]
+        #[cfg(feature = "linker")]
         {
             let sources = crate::c5::linker::OnDemandSources::new(
                 program.target,
@@ -179,13 +179,13 @@ impl<H: Host> Vm<H> {
             );
             Self::linked(program, host, Some(&sources))
         }
-        #[cfg(not(feature = "full"))]
+        #[cfg(not(feature = "linker"))]
         Self::linked(program, host, None)
     }
 
     /// [`Vm::with_host`] joining `sources` as a native link joins them, for
     /// the names the interpreter's own library does not supply.
-    #[cfg(feature = "full")]
+    #[cfg(feature = "linker")]
     pub fn with_sources(
         program: Program,
         host: H,

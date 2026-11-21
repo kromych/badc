@@ -7371,7 +7371,7 @@ fn unwind_step_records_round_trip() {
 /// as the emitter recorded them, keyed by its entry, on both targets. A
 /// function with a prologue and no recorded steps is an internal error, not
 /// a frameless record.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_pe_link_takes_the_recorded_unwind_steps() {
     use crate::c5::codegen::UnwindSteps;
@@ -15313,7 +15313,7 @@ fn call_to_weak_definition_resolves_to_the_strong_sibling() {
 
 /// `.text` length of an ET_REL object, used to tell which unit a merged
 /// symbol landed in.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn merged_weak_text_len(bytes: &[u8]) -> usize {
     crate::c5::linker::parse_native_elf(bytes)
         .expect("parse ET_REL")

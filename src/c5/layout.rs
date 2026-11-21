@@ -10,7 +10,7 @@
 //! destructures its type without `..`, so a new field holding a `.data`
 //! offset fails to compile until it is classified.
 
-#[cfg(any(feature = "native-emit", feature = "full"))]
+#[cfg(any(feature = "native-emit", feature = "linker"))]
 use alloc::vec::Vec;
 
 // ------------------------------------------------------------------
@@ -51,7 +51,7 @@ pub(crate) fn congruent_at(cursor: u64, old: u64, align: u64) -> u64 {
 /// Append a `Copy` record as raw host-order bytes. Callers pass
 /// `#[repr(C)]` on-disk headers whose in-memory layout is the file
 /// layout; badc's targets are little-endian, so no byte swap is needed.
-#[cfg(any(feature = "native-emit", feature = "full"))]
+#[cfg(any(feature = "native-emit", feature = "linker"))]
 pub(crate) fn write_struct<T: Copy>(out: &mut Vec<u8>, value: &T) {
     const _: () = assert!(
         cfg!(target_endian = "little"),
@@ -66,7 +66,7 @@ pub(crate) fn write_struct<T: Copy>(out: &mut Vec<u8>, value: &T) {
 }
 
 /// Zero-pad `out` up to the next multiple of `align`.
-#[cfg(any(feature = "native-emit", feature = "full"))]
+#[cfg(any(feature = "native-emit", feature = "linker"))]
 pub(crate) fn pad_to_align(out: &mut Vec<u8>, align: usize) {
     out.resize(round_up(out.len(), align), 0);
 }

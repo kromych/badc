@@ -22,7 +22,7 @@ const VEC: &str = "typedef long long __m128i __attribute__((vector_size(16))); \
 /// Every emitted unit needs an entry point.
 const MAIN: &str = " int main(void) { return 0; }";
 
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn emitted(src: &str) -> Vec<u8> {
     use crate::{NativeOptions, Target};
     let program = super::compile_str_bare_for(&format!("{VEC}{src}{MAIN}"), Target::LinuxX64);
@@ -34,7 +34,7 @@ fn emitted(src: &str) -> Vec<u8> {
     .expect("emit_native for linux-x64")
 }
 
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[track_caller]
 fn assert_emits(src: &str, expected: &[u8], what: &str) {
     let bytes = emitted(src);
@@ -47,7 +47,7 @@ fn assert_emits(src: &str, expected: &[u8], what: &str) {
 /// The 128-bit operands are memory-resident and 8-byte aligned, so every
 /// transfer is `movdqu`: `f3 44 0f 6f` (load into xmm14/xmm15) and
 /// `f3 44 0f 7f` (store).
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn transfers_use_unaligned_moves() {
     // movdqu (%rcx), %xmm15  f3 44 0f 6f 39
@@ -64,7 +64,7 @@ fn transfers_use_unaligned_moves() {
     );
 }
 
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn sse2_packed_ops_emit_their_instruction() {
     // Every two-operand form is `<op> %xmm14, %xmm15`, so the encodings
@@ -130,7 +130,7 @@ fn sse2_packed_ops_emit_their_instruction() {
     }
 }
 
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn shifts_take_the_immediate_form_for_a_constant_count() {
     // psllw  $0x3, %xmm15   66 41 0f 71 f7 03
@@ -172,7 +172,7 @@ fn shifts_take_the_immediate_form_for_a_constant_count() {
     );
 }
 
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn a_runtime_shift_count_takes_the_register_form() {
     // movq %rcx, %xmm14 then psrlq %xmm14, %xmm15   66 45 0f d3 fe
@@ -189,7 +189,7 @@ fn a_runtime_shift_count_takes_the_register_form() {
     );
 }
 
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn shuffles_carry_their_immediate() {
     // pshufd  $0x93, %xmm14, %xmm15   66 45 0f 70 fe 93
@@ -227,7 +227,7 @@ fn shuffles_carry_their_immediate() {
 /// A 128-bit row with no SSE encoding takes its VEX form at `-O0`, the
 /// first source loaded into the destination: `vpsllvd %xmm14, %xmm15,
 /// %xmm15` is `c4 42 01 47 fe`, `vpsrlvq` `c4 42 81 45 fe`.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn a_vex_only_row_takes_its_vex_form_in_memory() {
     let v4si = "typedef int __v4si_ __attribute__((vector_size(16))); ";
@@ -248,7 +248,7 @@ fn a_vex_only_row_takes_its_vex_form_in_memory() {
 
 /// The SSSE3 forms take the 0F38 map, `66 45 0f 38 <op> fe`; PALIGNR's
 /// builtin counts bits and the instruction bytes.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn ssse3_ops_emit_their_instruction() {
     for (builtin, opcode, unary) in [
@@ -284,7 +284,7 @@ fn ssse3_ops_emit_their_instruction() {
 }
 
 /// The SSE4.1 forms and PCMPGTQ take the 0F38 map, the immediate blends 0F3A.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn sse41_ops_emit_their_instruction() {
     for (builtin, opcode, unary) in [
@@ -340,7 +340,7 @@ fn sse41_ops_emit_their_instruction() {
     }
 }
 
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn element_access_uses_the_extract_and_insert_instructions() {
     // Alone in this file, these encodings name a general register, which
@@ -413,7 +413,7 @@ fn element_access_uses_the_extract_and_insert_instructions() {
     );
 }
 
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn aes_and_carryless_multiply_emit_their_instruction() {
     // aesenc     %xmm14, %xmm15   66 45 0f 38 dc fe
@@ -454,7 +454,7 @@ fn aes_and_carryless_multiply_emit_their_instruction() {
     );
 }
 
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn rdrand_reports_its_carry_flag() {
     // rdrandl %r10d     41 0f c7 f2
@@ -475,7 +475,7 @@ fn rdrand_reports_its_carry_flag() {
 
 /// The bundled headers reach the same instructions through the `_mm_*`
 /// spellings, including the macro forms that carry an immediate.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_bundled_headers_reach_the_instructions() {
     use crate::{NativeOptions, Target};
@@ -659,7 +659,7 @@ fn the_roundings_are_rows_the_interpreter_runs() {
 /// $0x19, %xmm14, %xmm15, %xmm15` is `c4 41 00 c2 fe 19`), and the
 /// interpreter gives each predicate's lanes and raises invalid for a
 /// signaling NaN under the quiet ones too, `_CMP_FALSE_OQ` included.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_avx_compares_are_rows_at_every_predicate() {
     assert_emits(
@@ -833,7 +833,7 @@ fn m64_forms_of_sse_sse2_and_ssse3_follow_the_sdm() {
 /// instruction on both x86-64 targets, `__builtin_ia32_xgetbv` with its
 /// operand in ecx; on the AArch64 targets `__has_builtin` reports none of
 /// them and a call is to an unknown function.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_x86_system_builtins_emit_their_instruction() {
     use crate::{Compiler, NativeOptions, Target};
@@ -906,7 +906,7 @@ fn the_x86_system_builtins_emit_their_instruction() {
 /// RFLAGS pair, with the builtins `rdtscp` and `writeeflags_u64`. `_xgetbv`
 /// is gcc's `long long` on Linux and MSVC's `unsigned __int64` intrinsic on
 /// Windows, where every name here is one.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_x86_system_wrappers_emit_their_instruction() {
     use crate::{Compiler, NativeOptions, Target};
@@ -960,7 +960,7 @@ fn the_x86_system_wrappers_emit_their_instruction() {
 /// holds one call; its opcode, and the ModRM reg field naming the register
 /// or the opcode extension, appear in it, a REX prefix aside. No other
 /// target knows the names.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_msvc_system_intrinsics_emit_their_instruction() {
     use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
@@ -1164,7 +1164,7 @@ fn the_msvc_system_intrinsics_emit_their_instruction() {
 /// `#pragma function(name)` makes the name a function, which calls reach,
 /// and `#pragma intrinsic(name)` takes that back. The name is free on a
 /// target where it is no intrinsic.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn a_definition_of_an_intrinsic_needs_pragma_function() {
     use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
@@ -1208,7 +1208,7 @@ fn a_definition_of_an_intrinsic_needs_pragma_function() {
 
 /// MSVC's x64 string intrinsics lower to their `rep stos` and `rep movs`
 /// forms on windows-x64, whatever declares them; windows-arm64 has none.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_msvc_string_intrinsics_emit_rep_stos_and_rep_movs() {
     use crate::{Compiler, NativeOptions, Target};
@@ -1258,7 +1258,7 @@ fn the_msvc_string_intrinsics_emit_rep_stos_and_rep_movs() {
 /// folding to a constant. The interpreter runs CPUID as zero in every
 /// register, so there the maximum is 0 and `__get_cpuid` rejects the leaf,
 /// leaving its outputs as they were.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn cpuid_h_executes_the_instruction() {
     use crate::{Compiler, NativeOptions, Target};
@@ -1871,7 +1871,7 @@ fn the_table_is_well_formed() {
 /// The floating-point rows emit their instruction: `<op> %xmm14, %xmm15`
 /// under its prefix, a compare with its predicate byte, and a conversion to
 /// an integer into `%r11d` or `%r11`.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn floating_rows_emit_their_instruction() {
     const PS: &str = "typedef float __v4sf __attribute__((vector_size(16))); ";
@@ -2362,7 +2362,7 @@ int main(void) {\n\
             "optimize={optimize}"
         );
     }
-    #[cfg(feature = "full")]
+    #[cfg(feature = "linker")]
     {
         let opts = CompileOptions::default().with_optimize(true);
         let program = Compiler::with_options(SRC.into(), Target::LinuxX64, opts)
@@ -2442,7 +2442,7 @@ int main(void) {\n\
             "optimize={optimize}"
         );
     }
-    #[cfg(feature = "full")]
+    #[cfg(feature = "linker")]
     {
         let opts = CompileOptions::default().with_optimize(true);
         let program = Compiler::with_options(SRC.into(), Target::LinuxX64, opts)
@@ -2464,7 +2464,7 @@ int main(void) {\n\
 
 /// A 64-byte GNU vector operation is one zmm instruction under AVX-512F,
 /// a byte or word one under AVX512BW too: `vpaddd` with an EVEX prefix.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn a_64_byte_vector_add_is_one_zmm_instruction_under_avx512f() {
     use crate::{CompileOptions, Compiler, NativeOptions, Target, X86Features};
@@ -2543,7 +2543,7 @@ fn avx_halves_are_their_instructions() {
             "optimize={optimize}"
         );
     }
-    #[cfg(feature = "full")]
+    #[cfg(feature = "linker")]
     {
         use super::perf_codegen::x64_at;
         const PARTS: &str = "#include <immintrin.h>\n\
@@ -2618,7 +2618,7 @@ int main(void) {\n\
             "optimize={optimize}"
         );
     }
-    #[cfg(feature = "full")]
+    #[cfg(feature = "linker")]
     {
         let opts = CompileOptions::default().with_optimize(true);
         let program = Compiler::with_options(SRC.into(), Target::LinuxX64, opts)
@@ -2697,7 +2697,7 @@ int main(void) {\n\
             "optimize={optimize}"
         );
     }
-    #[cfg(feature = "full")]
+    #[cfg(feature = "linker")]
     {
         let opts = CompileOptions::default().with_optimize(true);
         let program = Compiler::with_options(SRC.into(), Target::LinuxX64, opts)
@@ -2715,7 +2715,7 @@ int main(void) {\n\
 /// A GNU vector comparison and a shift by a constant count are one
 /// instruction on the whole vector (`simd::find`): the comparison the VEX
 /// three-operand form into the result's register.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_vector_operators_take_the_rows() {
     use crate::{NativeOptions, Target};
@@ -2747,7 +2747,7 @@ fn the_vector_operators_take_the_rows() {
 
 /// A lane of an 8-byte vector is read and written in its xmm register, as
 /// a 16-byte vector's is.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn an_8_byte_vector_lane_stays_in_its_register() {
     use crate::{NativeOptions, Target};
@@ -2787,7 +2787,7 @@ fn a_narrowing_row_stores_its_result_width() {
 
 /// The bundled intrinsics are inlined at every optimization level on both
 /// x86-64 ABIs, so the object defines none of them.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_intrinsics_are_inlined_at_every_level() {
     use crate::Target;

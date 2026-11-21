@@ -726,7 +726,7 @@ pub(crate) fn single_tu_image_for_test(
     Ok((write_for(program, &build, target)?, regions))
 }
 
-#[cfg(all(feature = "full", feature = "std"))]
+#[cfg(all(feature = "linker", feature = "std"))]
 pub(crate) fn write_native_image(
     program: &Program,
     build: &Build,
@@ -736,7 +736,7 @@ pub(crate) fn write_native_image(
 }
 
 /// [`write_native_image`] with the PDB a PE build's `pdb_path` asks for.
-#[cfg(all(feature = "full", feature = "std"))]
+#[cfg(all(feature = "linker", feature = "std"))]
 pub(crate) fn write_native_image_and_pdb(
     program: &Program,
     build: &Build,

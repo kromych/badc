@@ -1612,7 +1612,7 @@ fn builtin_overflow() {
 /// targets: no `#pragma intrinsic` warning, no call left for the link,
 /// and the barrier emits nothing. The fixture runs under the interpreter
 /// here and natively in the PE tables.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn msvc_intrinsics_lower_at_the_call_site() {
     use crate::Target;
@@ -1649,7 +1649,7 @@ fn msvc_intrinsics_lower_at_the_call_site() {
 /// `__builtin_va_start` on both PE targets: x64's `(&ap, last)` and arm64's
 /// `(&ap, &last, size, alignment, &last)` leave no call for the link, and the
 /// arguments read back. Off the PE targets the name is an ordinary function.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn msvc_va_start_lowers_as_the_builtin() {
     use crate::{CompileOptions, Target};
@@ -1707,7 +1707,7 @@ fn arm64_msvc_va_start_checks_its_operands() {
 
 /// MSVC's Nand / Max / Min / UMax / UMin interlocked families, `_interlockedadd`
 /// and winnt.h's ordered spellings, on both PE targets at -O0 and -O.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn msvc_interlocked_nand_max_min_families() {
     use crate::{CompileOptions, Target};
@@ -1895,7 +1895,7 @@ fn va_start_and_va_arg_operands_draw_varargs() {
     }
 }
 
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn msvc_scalar_intrinsics_give_the_documented_values() {
     use crate::{CompileOptions, Target};
@@ -2267,7 +2267,7 @@ fn pragma_intrinsic_reports_names_no_header_or_builtin_provides() {
 
 /// MSVC's `__break` on arm64 is `brk` of its constant, the comment field a
 /// debugger reads.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn msvc_break_is_brk_of_its_constant() {
     use crate::{CompileOptions, NativeOptions, OutputKind, Target};

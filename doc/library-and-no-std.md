@@ -51,7 +51,8 @@ features; `examples/emit_image.rs` writes an executable for any target.
 | `inline-asm` | `asm` statements; without it the compiler refuses one |
 | `assembler` | file-scope `asm`, with the GNU as directives, sections and macros; requires `inline-asm`; without it the compiler refuses file-scope `asm` |
 | `native-emit` | `emit_native` and the Mach-O, ELF and PE writers; requires `std` |
-| `full` | `native-emit`, `headers`, `optimizer`, both backends, `inline-asm` and `assembler`, plus objects, archives and the linker; the `badc` binary requires it |
+| `linker` | objects, archives, the native object readers and the linker, and the runtime they compile on demand; requires `native-emit` and `headers` |
+| `full` | every feature above; the `badc` binary requires it |
 | `codegen_test` | register-allocator limits for tests (`BADC_MAX_GPR`, `BADC_MAX_FPR`) |
 
 ## `no_std`

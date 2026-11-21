@@ -84,14 +84,14 @@ pub fn jit_run_with_options(
         ),
     ))]
     {
-        #[cfg(feature = "full")]
+        #[cfg(feature = "linker")]
         {
             let front =
                 crate::c5::compiler::CompileOptions::default().with_optimize(options.optimize);
             let sources = crate::c5::linker::OnDemandSources::new(Target::host(), front);
             jit_impl::jit_run(program, args, options, Some(&sources), report)
         }
-        #[cfg(not(feature = "full"))]
+        #[cfg(not(feature = "linker"))]
         jit_impl::jit_run(program, args, options, None, report)
     }
     #[cfg(not(all(
@@ -112,7 +112,7 @@ pub fn jit_run_with_options(
 }
 
 /// [`jit_run_with_options`] joining `sources` as a native link joins them.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 pub fn jit_run_with_sources(
     program: &Program,
     args: &[String],
@@ -259,14 +259,14 @@ pub fn jit_load(
         ),
     ))]
     {
-        #[cfg(feature = "full")]
+        #[cfg(feature = "linker")]
         let sources = crate::c5::linker::OnDemandSources::new(
             Target::host(),
             crate::c5::compiler::CompileOptions::default().with_optimize(options.optimize),
         );
-        #[cfg(feature = "full")]
+        #[cfg(feature = "linker")]
         let sources = Some(&sources);
-        #[cfg(not(feature = "full"))]
+        #[cfg(not(feature = "linker"))]
         let sources = None;
         let loaded = jit_impl::load(program, options, sources, report)?;
         loaded.start();
@@ -755,9 +755,9 @@ mod jit_impl {
     }
 
     /// The on-demand sources a run may join; none without the linker.
-    #[cfg(feature = "full")]
+    #[cfg(feature = "linker")]
     pub(super) type Sources<'a> = Option<&'a crate::c5::linker::OnDemandSources>;
-    #[cfg(not(feature = "full"))]
+    #[cfg(not(feature = "linker"))]
     pub(super) type Sources<'a> = Option<&'a core::convert::Infallible>;
 
     pub fn jit_run(
@@ -885,13 +885,13 @@ mod jit_impl {
     }
 
     impl JitUnit {
-        #[cfg(feature = "full")]
+        #[cfg(feature = "linker")]
         fn data_bound(&self, name: &str) -> bool {
             (self.build.imports.data_bindings.iter()).any(|(local, ..)| local == name)
         }
 
         /// The strong external names referenced, neither defined nor bound.
-        #[cfg(feature = "full")]
+        #[cfg(feature = "linker")]
         fn undefined(&self) -> BTreeSet<String> {
             use crate::c5::asm::AsmSectionTarget;
             let build = &self.build;
@@ -937,7 +937,7 @@ mod jit_impl {
     /// The program, then the members a native link would pull for it: the
     /// pool is offered once a name stays undefined that the C library lacks.
     /// With them, the C library's symbol for each name it exports as another.
-    #[cfg(feature = "full")]
+    #[cfg(feature = "linker")]
     fn join_on_demand(
         user: JitUnit,
         sources: Sources<'_>,
@@ -1274,9 +1274,9 @@ mod jit_impl {
             super::super::Machine::X86_64
         };
         let user = prepare_unit(program, target, &options, report)?;
-        #[cfg(feature = "full")]
+        #[cfg(feature = "linker")]
         let (units, spellings) = join_on_demand(user, sources, target, &options)?;
-        #[cfg(not(feature = "full"))]
+        #[cfg(not(feature = "linker"))]
         let (units, spellings) = {
             let _ = sources;
             (alloc::vec![user], Spellings::new())

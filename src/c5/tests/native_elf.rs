@@ -132,7 +132,7 @@ fn set_executable(path: &Path) {
 /// `write_native_image_from_merged`) and run the produced image.
 /// Exercises the merged stream layout -- the direct
 /// `emit_native` path above never produces a relro region.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn link_and_run_outcome(src: &str, stem: &str) -> RunOutcome {
     let program = match Compiler::with_target(src.to_string(), Target::LinuxAarch64).compile() {
         Ok(p) => p,
@@ -173,7 +173,7 @@ fn link_and_run_outcome(src: &str, stem: &str) -> RunOutcome {
 /// are re-protected (PT_GNU_RELRO), so a store faults while a
 /// writable global stays writable.
 #[test]
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn relro_const_store_faults() {
     let decls = "const unsigned char tab[2048] = {7, 7, 7, 7};\n\
                  const char *const cp = \"hello\";\n\

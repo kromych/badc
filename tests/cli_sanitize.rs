@@ -591,3 +591,98 @@ fn a_bool_load_holds_0_or_1() {
         );
     }
 }
+
+const CRASH: &str = "#include <stdio.h>
+static __attribute__((noinline)) int deep(int *p) { return *p + 1; }
+__attribute__((noinline)) int middle(int *p) { return deep(p) * 2; }
+int main(int argc, char **argv) {
+    (void)argv;
+    printf(\"%d\\n\", middle(argc > 1 ? 0 : &argc));
+    return 0;
+}
+";
+
+fn crashed(o: &Output) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        matches!(o.status.signal(), Some(10 | 11))
+    }
+    #[cfg(windows)]
+    {
+        o.status.code().map(|c| c as u32) == Some(0xC000_0005)
+    }
+}
+
+/// Under -fcrash-report, on by default with a -fsanitize check, a fault
+/// reports the signal, the registers and the frames, the program's own
+/// named by the symbol table or, on Windows, by a -g build's PDB, a static
+/// function's included; the program then ends by the same signal.
+#[test]
+fn a_fault_is_reported_with_the_frames_that_led_to_it() {
+    let dir = TempDir::new("badc-crash-report");
+    let src = dir.join("crash.c");
+    std::fs::write(&src, CRASH).unwrap();
+    let cases: [(&[&str], &str, bool); 5] = [
+        (&["-fcrash-report"], "-O0", true),
+        (&["-fcrash-report"], "-O", true),
+        (&["-fsanitize=undefined"], "-O0", true),
+        (&["-fsanitize=undefined", "-fno-crash-report"], "-O0", false),
+        (&[], "-O0", false),
+    ];
+    for (k, (flags, opt, reported)) in cases.into_iter().enumerate() {
+        let exe = dir.join(format!("crash{k}"));
+        let built = Command::new(env!("CARGO_BIN_EXE_badc"))
+            .args(["-q", "-g", opt])
+            .args(flags)
+            .arg("-o")
+            .arg(&exe)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(
+            built.status.success(),
+            "{}",
+            String::from_utf8_lossy(&built.stderr)
+        );
+        assert!(run(&exe, &[]).status.success(), "{flags:?} {opt}");
+        let o = run(&exe, &["a"]);
+        let text = String::from_utf8_lossy(&o.stderr);
+        assert!(crashed(&o), "{flags:?} {opt}: {o:?}");
+        assert_eq!(
+            text.contains("badc: the program took"),
+            reported,
+            "{flags:?} {opt}: {text}"
+        );
+        if !reported {
+            continue;
+        }
+        let signal = match cfg!(windows) {
+            true => "EXCEPTION_ACCESS_VIOLATION (0xc0000005) at address 0x0",
+            false => "SIG",
+        };
+        assert!(text.contains(signal), "{text}");
+        let frames: Vec<&str> = (text.lines())
+            .skip_while(|l| *l != "frames:")
+            .skip(1)
+            .collect();
+        // TODO(#878, #2144): the frame records Linux and macOS walk hold no
+        // frameless function's caller, which `deep` is at -O.
+        let chain: &[&str] = match opt == "-O" && !cfg!(windows) {
+            true => &["deep"],
+            false => &["deep", "middle", "main"],
+        };
+        for (at, name) in chain.iter().enumerate() {
+            let frame = frames.get(at).copied().unwrap_or_default();
+            assert!(
+                frame.starts_with(&format!("  #{at} 0x"))
+                    && frame.contains(&format!(" in {name}+0x")),
+                "{flags:?} {opt}: frame {at} is not {name}: {text}"
+            );
+        }
+        assert!(
+            frames.iter().any(|f| f.contains(" in main+0x")),
+            "{flags:?} {opt}: {text}"
+        );
+    }
+}

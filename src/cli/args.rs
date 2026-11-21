@@ -316,6 +316,9 @@ pub(crate) struct Link {
     /// gcc's and GNU ld's `-u <symbol>`: names the link treats as
     /// referenced, so an archive member defining one is pulled.
     pub(crate) required: Vec<String>,
+    /// `-fcrash-report` / `-fno-crash-report`, the last one given; `None`
+    /// leaves it to whether a `-fsanitize` check runs.
+    pub(crate) crash_report: Option<bool>,
 }
 
 /// How a Mach-O link treats a reference no input defines, as ld64's
@@ -409,6 +412,7 @@ impl Default for Link {
             pie: None,
             undefined: None,
             required: Vec::new(),
+            crash_report: None,
         }
     }
 }
@@ -2431,6 +2435,8 @@ impl Parser {
                     self.target_spec = Some(spec.to_string());
                 }
             }
+            "-fcrash-report" => link.crash_report = Some(true),
+            "-fno-crash-report" => link.crash_report = Some(false),
             "-u" | "--undefined" => {
                 link.required
                     .push(operand(iter, "badc: error: -u requires a symbol")?);
@@ -2575,6 +2581,17 @@ impl Parser {
         // `-v` with nothing to build reports the version, as gcc's does.
         if (self.verbose || self.verbose_ld) && self.positional.len() <= 1 {
             return Ok(Parsed::Print(badc::BUILD_INFO));
+        }
+        // A hosted executable badc links reports a fatal signal it takes
+        // under -fcrash-report, on by default while a -fsanitize check runs:
+        // the runtime's handler joins the link.
+        let crash_report = (self.link.crash_report).unwrap_or(self.front.sanitize.enabled != 0);
+        if crash_report
+            && mode == Mode::NativeExecutable
+            && !self.compile_only
+            && !self.freestanding
+        {
+            self.link.required.push(String::from("__badc_crash_report"));
         }
         let mut diagnostics = self.report_option_requests(mode)?;
         if self.verbose {

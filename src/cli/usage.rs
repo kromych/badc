@@ -494,6 +494,12 @@ Compile knobs:
                            the function returns is not turned into a
                            jump after the epilogue.
                            -foptimize-sibling-calls restores the default.
+  -fcrash-report           A hosted executable reports a fatal signal
+                           (an exception no handler takes, on Windows):
+                           the signal and its address, the registers,
+                           and the frames, named by the symbol table or
+                           a -g build's PDB. On with any -fsanitize
+                           check; -fno-crash-report turns it off.
   -fno-plt                 A call to a library function or to one the
                            unit declares without defining loads the
                            callee from its GOT entry and calls through

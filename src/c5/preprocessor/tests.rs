@@ -4612,6 +4612,8 @@ fn every_gcc_atomic_builtin_in_the_table_compiles() {
             "__atomic_store" => format!("{n}(p, &v, 5);"),
             "__atomic_exchange_n" => format!("r = {n}(p, v, 5);"),
             "__atomic_compare_exchange_n" => format!("r = {n}(p, &e, v, 0, 5, 5);"),
+            "__atomic_exchange" => format!("{n}(p, &v, &r, 5);"),
+            "__atomic_compare_exchange" => format!("r = {n}(p, &e, &v, 0, 5, 5);"),
             "__atomic_test_and_set" | "__atomic_clear" => format!("{n}(b, 5);"),
             "__atomic_thread_fence" | "__atomic_signal_fence" => format!("{n}(5);"),
             "__atomic_is_lock_free" | "__atomic_always_lock_free" => format!("r = {n}(4, 0);"),

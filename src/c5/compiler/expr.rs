@@ -249,6 +249,24 @@ impl Compiler {
         Ok(self.convert_operand(bytes, elem_ty))
     }
 
+    /// `*ptr` as an operand of type `ty`.
+    fn deref_node(
+        &mut self,
+        ptr: super::super::ast::ExprId,
+        ty: i64,
+        pos: super::super::ast::SrcPos,
+    ) -> super::super::ast::ExprId {
+        use super::super::ast::{Expr, UnOp};
+        self.ast.push_expr(
+            Expr::Unary {
+                op: UnOp::Deref,
+                child: ptr,
+                ty,
+            },
+            pos,
+        )
+    }
+
     /// Fetch a required builtin operand or report an arity error.
     fn require_gcc_arg(
         &self,
@@ -1394,6 +1412,7 @@ impl Compiler {
         let out_arg = match name {
             "__atomic_load" => Some(1),
             "__atomic_compare_exchange_n" | "__atomic_compare_exchange" => Some(1),
+            "__atomic_exchange" => Some(2),
             _ => None,
         };
         let out_ty = out_arg
@@ -1583,6 +1602,29 @@ impl Compiler {
             // `(p, expected, desired, weak, success, failure)`; a weak
             // exchange is lowered as a strong one, which C11 7.17.7.4p4
             // permits.
+            // gcc's generic forms pass the value through a pointer and
+            // otherwise act as the `_n` forms do.
+            "__atomic_compare_exchange" => {
+                let exp = self.require_gcc_arg(val1, name)?;
+                let des = self.require_gcc_arg(val2, name)?;
+                let des = self.deref_node(des, elem_ty, pos);
+                (
+                    AtomicKind::CompareExchangeStrong,
+                    alloc::vec![ptr, exp, des],
+                    int_ty,
+                    order_at(self, 4).with_failure(order_at(self, 5)),
+                )
+            }
+            "__atomic_exchange" => {
+                let v = self.require_gcc_arg(val1, name)?;
+                let v = self.deref_node(v, elem_ty, pos);
+                (
+                    AtomicKind::Exchange,
+                    alloc::vec![ptr, v],
+                    elem_ty,
+                    order_at(self, 3),
+                )
+            }
             "__atomic_compare_exchange_n" => {
                 let exp = self.require_gcc_arg(val1, name)?;
                 let des = self.gcc_atomic_value(val2, name, elem_ty)?;
@@ -1654,6 +1696,23 @@ impl Compiler {
             },
             pos,
         );
+        // The generic exchange writes the old value through its third
+        // pointer and yields nothing.
+        let id = if name == "__atomic_exchange" {
+            let ret = self.require_gcc_arg(args.get(2).copied(), name)?;
+            let lhs = self.deref_node(ret, elem_ty, pos);
+            self.ty = void_ty();
+            self.ast.push_expr(
+                Expr::Assign {
+                    lhs,
+                    rhs: id,
+                    ty: elem_ty,
+                },
+                pos,
+            )
+        } else {
+            id
+        };
         self.ast_acc = Some(id);
         Ok(())
     }
